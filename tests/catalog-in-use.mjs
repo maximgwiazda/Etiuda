@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 129;
+const EXPECTED = 131;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku: jego treść trafi do lidera tylko wtedy, gdy lider włączy w Studiu kopie katalogów spoza listy, a to stanowisko zostanie o tym powiadomione, zanim cokolwiek zostanie wysłane. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -53,7 +53,7 @@ fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true }
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
 const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "offerFile", "catalogChanged", "readCatalog",
   "tryCatalogAsk", "asksWatching", "catalogCopyNote", "watchCatalog", "askSignedBytes", "deskFileGenuine", "signedSha", "teamUse", "clearInUseFile", "deskTrustChecks", "teamKeyAt", "openAnswerLead", "answerLeadGenuine",
-  "writeAnswer", "openBranchLead", "branchLeadGenuine"];
+  "writeAnswer", "openBranchLead", "branchLeadGenuine", "tryHeldBranches"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -1673,6 +1673,49 @@ try {
         const pp = SRC.split("\n").map(l => l.indexOf("plant:s0b-branch-private") >= 0 ? "  /* plant:s0b-branch-private */" : l).join("\n");
         const q = pp !== SRC ? await copies("r2-copies-plant-private", pp) : null;
         check(!!q && !q.withheld, "r2n lifting plant:s0b-branch-private turns r2e red: a private copy is written (" + (q ? JSON.stringify(q) : "plant not found") + ")");
+      }
+    }
+    {
+      /* Board 974, condition C5: a copy held while the switch does not apply stays held once the lead takes the desk off the
+         roster, the folder still the team's: not written in the clear to the mirror, owed to nobody, nowhere on the share. */
+      const holdsText = (dir, mark) => {
+        let names = [];
+        try { names = fs.readdirSync(dir, { withFileTypes: true }); } catch { return false; }
+        return names.some(n => {
+          const p = path.join(dir, n.name);
+          if (n.isDirectory()) return holdsText(p, mark);
+          try { return fs.readFileSync(p, "utf8").indexOf(mark) >= 0; } catch { return false; }
+        });
+      };
+      const dropped = async (name, src) => {
+        const box = await arm(name, src);
+        join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["harbour-board"], undefined, true);
+        const first = await writeCopy(box, "99999999", "quay-held");
+        put(box.share, "etiuda-team.json", textOf(sign({
+          format: 1, kind: "etiuda-team", id: box.team, catalogs: ["harbour-board"], lead: Object.assign({}, LEAD, { box: BOX }),
+          sealed: true, exportsSealed: false, epoch: 1, roster: [], rev: 1, content: SWITCH,
+        }, lead.privateKey, LEAD)));
+        r2ms += 2000;
+        touch(path.join(box.share, "etiuda-team.json"), Date.now() + r2ms);
+        const left = box.D.api.teamUse().member === false;
+        box.D.api.tryHeldBranches();
+        syncMirror(box);
+        const mirror = syncerMod.folderMirrorOf(box.D.ud, box.team);
+        return {
+          held: !!first && first.held === true, left,
+          written: fs.existsSync(branchAt(box, "99999999")) || fs.existsSync(path.join(box.share, "desks", box.me.id, "quay-99999999.ec")),
+          owed: syncerMod.owedList(mirror).filter(o => o.rel.indexOf("desks/") === 0).length,
+          clear: holdsText(mirror, B0_MARK) || holdsText(box.share, B0_MARK),
+        };
+      };
+      const g = await dropped("c5-dropped");
+      check(g.held && g.left && !g.written && g.owed === 0 && !g.clear,
+        "974f a copy held while the lead's switch does not apply stays held after the roster drops the desk: nothing written to the mirror or the share, nothing owed, no clear text (" + JSON.stringify(g) + ")");
+      if (PLANTS_OFF) skip("974g lifting plant:team-write-hold turns 974f red");
+      else {
+        const pt = SRC.split("\n").map(l => l.indexOf("plant:team-write-hold") >= 0 ? "  /* plant:team-write-hold */" : l).join("\n");
+        const p = pt !== SRC ? await dropped("c5-dropped-plant", pt) : null;
+        check(!!p && (p.written || p.clear), "974g lifting plant:team-write-hold turns 974f red: the held copy is flushed in the clear (" + (p ? JSON.stringify(p) : "plant not found") + ")");
       }
     }
     {
