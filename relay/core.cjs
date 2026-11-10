@@ -1093,6 +1093,11 @@ function createCore(deps) {
     const lapsedBlob = lapseGate(false);
     if (lapsedBlob) return lapsedBlob; /* plant:lapse-blob */
     const now = clock();
+    /* An uploaded invitation is told one refusal for every id but its own, before a blob or a tomb is read. A quiet session
+       (a key removed earlier, through an invitation) is told removed for every id but its own, before the read as well, so it
+       never learns whether a blob it knew has expired (the test architect's hold of 934, 2026-11-10). */
+    if (!s.quiet && answerOnly(s) && id !== s.inv) return no("not-enrolled"); /* plant:answer-same */
+    if (s.quiet && id !== s.inv) return no("removed");
     const m = is(HEX32, id) ? store.get("blob:" + id) : undefined;
     if (m && expired(m, now)) return no("expired");
     /* The lead's answer to its own request reaches even a desk rejoining after its removal (the quiet session of board
@@ -1100,10 +1105,10 @@ function createCore(deps) {
     const ownAnswer = answerOnly(s) && isAnswer(m) && m.place === "answer:" + s.inv;
     if (ownAnswer) return { ok: true, meta: served(m), obj: m.obj };
     if (s.quiet) return no("removed");
-    if (answerOnly(s)) {
-      /* The answer itself, not written yet, is missing. Every other id is the same refusal. */
-      if (!m && is(HEX32, id) && id === s.inv) return no("missing");
-      return no("not-enrolled"); /* plant:answer-same */
+    if (answerOnly(s) && id === s.inv) {
+      /* The answer itself, not written yet, is missing. Anything else kept under this id is the same refusal. */
+      if (!m) return no("missing");
+      return no("not-enrolled");
     }
     if (m && isAnswer(m)) return no("missing");
     if (m) return { ok: true, meta: served(m), obj: m.obj };
