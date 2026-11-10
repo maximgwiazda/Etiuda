@@ -1744,8 +1744,8 @@ main{max-width:none;margin:16px 0 0;padding:0}
 #list{margin-bottom:80px}
 /* The count and the fold sit at the far end of the group's own rule, so the eye meets the
    name first and the control only when it is looking for one. See .list-sep.e-catsep::after. */
-.list-sep .sep-n{flex:none;margin-left:8px;font:600 11px var(--sans);color:var(--dim);
-  opacity:.75;font-variant-numeric:tabular-nums}
+.list-sep .sep-n{flex:none;margin-left:8px;font:600 12px var(--sans);color:var(--dim);
+  opacity:1;font-variant-numeric:tabular-nums;background:var(--bg);padding:0 2px 0 8px}
 .list-sep .sep-fold{flex:none;margin-left:6px;padding:2px;border:0;background:transparent;
   color:var(--dim);border-radius:6px;cursor:default;line-height:0}
 .list-sep .sep-fold:hover,.list-sep .sep-fold:focus-visible{color:var(--accent)}
@@ -2122,9 +2122,12 @@ body:not(.deck-off) #list .card,body:not(.deck-off) #list .list-sep{transition:o
    only one not the edge of something; the slab-as-card removes the card's own top border, so
    the premise is gone and the rule can be what a section rule should be. ONE GREY whatever it
    names - the hue already identifies a category on its icon and on every slab it holds. The
-   tier divider's own <i> pair wears the same line, in one voice. */
+   group rule is the stronger line. The tier divider's own <i> stays the quiet one. */
 .list-sep.e-catsep::after,.list-sep.e-favsep::after{content:"";flex:1;order:5;height:1px;
-  margin-left:10px;border-radius:0;align-self:center;background:var(--line)}
+  margin-left:10px;border-radius:0;align-self:center;background:var(--line-strong)}
+/* The name and the count sit on the page's ground, so the dot field stops at the word. */
+.list-sep.e-catsep>span:first-child,.list-sep.e-favsep>span:first-child{font-size:12px;
+  letter-spacing:.07em;color:var(--dim);opacity:1;background:var(--bg);padding:0 8px 0 0}
 .list-sep.e-catsep .sep-n,.list-sep.e-favsep .sep-n,
 .list-sep.e-catsep .sep-fold,.list-sep.e-favsep .sep-fold{order:9}
 .list-sep i{flex:1;height:1px;border-radius:0;background:var(--line)}
