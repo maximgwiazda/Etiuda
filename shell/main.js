@@ -10468,14 +10468,14 @@ function dispatchColdStartArgs(win, argv) {
    the lock every double-clicked catalog would open a second window with its own desk file, two
    copies writing the same desk. The second copy hands its path over and exits. The lock is keyed
    on the user-data folder, so a harness launch aimed at a lab of its own is unaffected. */
-/* A reset the page staged is finished here, before the lock writes SingletonLock into the desk's
-   folder and before Chromium opens the files a reset has to remove. */
-try { honourPendingReset({ userData: app.getPath("userData") }); }
-catch (e) { console.error("etiuda: a pending reset could not be finished - " + (e && e.message)); }
+/* The lock is taken first. Only the process that holds it finishes a pending reset, and it
+   does that before anything else in this folder is read. The lock's own files stay. */
 const theOnlyOne = app.requestSingleInstanceLock();
 if (!theOnlyOne || (Array.isArray(process.argv) && process.argv.includes("--update-close"))) {
   app.quit();
 } else {
+  try { honourPendingReset({ userData: app.getPath("userData"), holdsLock: true }); }
+  catch (e) { console.error("etiuda: a pending reset could not be finished - " + (e && e.message)); }
   registerEtiudaLink();
   app.on("second-instance", (e, argv) => { onSecondInstance(argv); });
   const link = linkArgFrom(process.argv);

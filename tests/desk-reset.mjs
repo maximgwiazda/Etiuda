@@ -396,7 +396,7 @@ function shellLeg(mod) {
     const staged = mod.stageReset({ userData: marked, catalogSetting: chosen, defaultCatalog: docs });
     check(staged.ok === true && fs.existsSync(path.join(marked, "desk.json")) && fs.existsSync(path.join(marked, mod.MARKER_NAME)),
       "4d6 staging writes the marker and deletes nothing while this copy is still running");
-    const honoured = mod.honourPendingReset({ userData: marked });
+    const honoured = mod.honourPendingReset({ userData: marked, holdsLock: true });
     check(honoured.ok === true && gone(path.join(marked, "desk.json")) && gone(path.join(marked, "tabs.json"))
       && gone(path.join(marked, mod.MARKER_NAME)) && bytes(path.join(marked, "etiuda-license.js")).equals(licence)
       && mod.wouldStartNew(marked) === true && fs.readFileSync(path.join(chosen, "shop.ec"), "utf8") === "not ours",
@@ -405,7 +405,7 @@ function shellLeg(mod) {
     fs.mkdirSync(bad, { recursive: true });
     write(path.join(bad, "desk.json"), "stay");
     write(path.join(bad, mod.MARKER_NAME), "{not json");
-    const badHonour = mod.honourPendingReset({ userData: bad });
+    const badHonour = mod.honourPendingReset({ userData: bad, holdsLock: true });
     check(badHonour.changed === false && fs.readFileSync(path.join(bad, "desk.json"), "utf8") === "stay" && gone(path.join(bad, mod.MARKER_NAME)),
       "4d6 a marker that will not parse changes nothing else");
   } finally {
@@ -416,9 +416,96 @@ function shellLeg(mod) {
   const pre = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
   const honourAt = main.indexOf("honourPendingReset(");
   const lockAt = main.indexOf("app.requestSingleInstanceLock(");
-  check(honourAt > 0 && lockAt > honourAt, "4d6 the shell honours a pending reset before the single-instance lock");
+  const between = lockAt >= 0 && honourAt > lockAt ? main.slice(lockAt, honourAt) : "";
+  const call = honourAt >= 0 ? main.slice(honourAt, honourAt + 160) : "";
+  check(lockAt > 0 && honourAt > lockAt && between.indexOf("!theOnlyOne") >= 0 && between.indexOf("app.quit()") >= 0
+    && call.indexOf("holdsLock: true") >= 0,
+    "4d6 the shell takes the single-instance lock, and only the process that holds it honours a pending reset");
   check(/ipcMain\.handle\(\s*"etiuda:desk-reset"[\s\S]{0,400}fromEngine\(/.test(main) && /resetDesk:\s*\(\)\s*=>\s*ipcRenderer\.invoke\(\s*"etiuda:desk-reset"\s*\)/.test(pre),
     "4d6 the page asks the shell, and the shell answers only its own engine");
+  lockLeg(mod);
+}
+
+const LOCK_NAMES = ["lockfile", "SingletonLock", "SingletonCookie", "SingletonSocket"];
+
+function markerBody(dir) {
+  return JSON.stringify({ v: 1, userData: dir, catalogSetting: "", defaultCatalog: "", attempts: 0 });
+}
+
+/* A process that does not hold the lock, a file that will not unlink, a marker
+   already tried, and the lock's own names. */
+function lockLeg(mod) {
+  if (!mod || typeof mod.honourPendingReset !== "function") {
+    check(false, "4d9 the reset is not there to leave a marker");
+    return;
+  }
+  const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-reset-lock-"));
+  const nodeFs = require("node:fs");
+  const origUnlink = nodeFs.unlinkSync;
+  try {
+    const quiet = path.join(lab, "quiet");
+    fs.mkdirSync(quiet);
+    write(path.join(quiet, "desk.json"), "stay");
+    write(path.join(quiet, mod.MARKER_NAME), markerBody(quiet));
+    const untouched = mod.honourPendingReset({ userData: quiet });
+    check(untouched && untouched.changed === false
+      && fs.readFileSync(path.join(quiet, "desk.json"), "utf8") === "stay"
+      && fs.readFileSync(path.join(quiet, mod.MARKER_NAME), "utf8") === markerBody(quiet),
+      "4d9 a process without the lock leaves the marker and every file");
+
+    const busy = path.join(lab, "busy");
+    fs.mkdirSync(busy);
+    write(path.join(busy, "desk.json"), "stay");
+    write(path.join(busy, mod.MARKER_NAME), markerBody(busy));
+    nodeFs.unlinkSync = function () {
+      const err = new Error("busy");
+      err.code = "EBUSY";
+      throw err;
+    };
+    let first = null;
+    try { first = mod.honourPendingReset({ userData: busy, holdsLock: true }); }
+    finally { nodeFs.unlinkSync = origUnlink; }
+    check(!!first && first.ok === false && first.changed === false
+      && fs.readFileSync(path.join(busy, "desk.json"), "utf8") === "stay"
+      && fs.existsSync(path.join(busy, mod.MARKER_NAME)),
+      "4d9 a busy file on the first pass leaves the marker");
+    const second = mod.honourPendingReset({ userData: busy, holdsLock: true });
+    check(!!second && second.ok === true && gone(path.join(busy, "desk.json"))
+      && gone(path.join(busy, mod.MARKER_NAME)),
+      "4d9 the next pass with the file free finishes and drops the marker");
+
+    const old = path.join(lab, "old");
+    fs.mkdirSync(old);
+    write(path.join(old, "desk.json"), "go");
+    const oldBody = JSON.stringify({ v: 1, userData: old, catalogSetting: "", defaultCatalog: "", attempts: 4 });
+    write(path.join(old, mod.MARKER_NAME), oldBody);
+    const again = mod.honourPendingReset({ userData: old, holdsLock: true });
+    check(!!again && again.ok === true && gone(path.join(old, "desk.json"))
+      && gone(path.join(old, mod.MARKER_NAME)),
+      "4d9 a marker that has already been tried still finishes when the files are free");
+
+    const held = path.join(lab, "held");
+    fs.mkdirSync(held);
+    write(path.join(held, "desk.json"), "go");
+    write(path.join(held, "etiuda-license.js"), "lic");
+    LOCK_NAMES.forEach(name => write(path.join(held, name), name));
+    write(path.join(held, mod.MARKER_NAME), markerBody(held));
+    const kept = mod.honourPendingReset({ userData: held, holdsLock: true });
+    const namesLeft = LOCK_NAMES.every(name => {
+      try { return fs.readFileSync(path.join(held, name), "utf8") === name; }
+      catch (e) { return false; }
+    });
+    const listed = Array.isArray(mod.LOCK_FILES) && mod.LOCK_FILES.length === LOCK_NAMES.length
+      && LOCK_NAMES.every(name => mod.LOCK_FILES.indexOf(name) >= 0);
+    check(listed && !!kept && kept.ok === true && gone(path.join(held, "desk.json"))
+      && gone(path.join(held, mod.MARKER_NAME))
+      && fs.readFileSync(path.join(held, "etiuda-license.js"), "utf8") === "lic"
+      && namesLeft && mod.wouldStartNew(held) === true,
+      "4d9 the lock's own files stay, with the licence, and the desk would start as a first run");
+  } finally {
+    nodeFs.unlinkSync = origUnlink;
+    fs.rmSync(lab, { recursive: true, force: true });
+  }
 }
 
 function lift(text, tag) {

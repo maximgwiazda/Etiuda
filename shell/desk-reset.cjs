@@ -1,23 +1,33 @@
 "use strict";
 
-/* The desk's reset, with no Electron in it. The page only asks. Deleting waits for the next
-   start, before the single-instance lock writes into this folder, because the running app
-   holds its own files open on Windows. A link is removed and never followed. The two licence
-   names are the spelling the sibling desk uses; only a regular file of that name is kept. */
+/* The desk's reset, with no Electron in it. The page only asks. Only the process that
+   holds the single-instance lock finishes it, on the next start. A link is removed and
+   never followed. The licence names are the sibling's spelling; only a regular file is kept. */
 
 const fs = require("node:fs");
 const path = require("node:path");
 
+/* Reset keeps these two. A ticked uninstall removes them; the lists differ on purpose. */
 const LICENCE_FILES = ["etiuda-license.js", "etiuda-revoked.json"];
 const MARKER_NAME = "reset-pending.json";
+/* The single-instance lock's own names in this folder. Windows writes the first.
+   Linux writes the other three, each a link. None of them is the desk's. */
+const LOCK_FILES = ["lockfile", "SingletonLock", "SingletonCookie", "SingletonSocket"];
 const OWNED = ["etiuda-ring.json", "etiuda-team.json", "etiuda-catalog.js"];
 const BUSY = { EPERM: 1, EBUSY: 1, EACCES: 1 };
 const PAUSE = new Int32Array(new SharedArrayBuffer(4));
-const ATTEMPTS = 3;
 
 function isLicenceName(name) {
   const n = String(name || "").toLowerCase();
   if (LICENCE_FILES.indexOf(n) >= 0) return true; /* plant:reset-keep-licence */
+  return false;
+}
+
+function isLockName(name) {
+  const n = String(name || "").toLowerCase();
+  for (let i = 0; i < LOCK_FILES.length; i++) {
+    if (LOCK_FILES[i].toLowerCase() === n) return true;
+  }
   return false;
 }
 
@@ -121,6 +131,7 @@ function planReset(opts) {
   const seen = new Set();
   namesOf(user).forEach(name => {
     if (name.toLowerCase() === MARKER_NAME.toLowerCase()) return;
+    if (isLockName(name)) return;
     const at = path.join(user, name);
     if (catalog && samePath(at, catalog)) return;
     const st = lstatOf(at);
@@ -196,7 +207,7 @@ function applyReset(plan) {
       return { ok: false, reason: "refused", changed: changed };
     if (plan.userData && samePath(remove[i], plan.userData)) continue;
     const err = removeEntry(remove[i]);
-    if (err) return { ok: false, reason: String(err.code || err.message || "refused"), changed: true };
+    if (err) return { ok: false, reason: String(err.code || err.message || "refused"), changed: changed };
     changed = true;
   }
   return { ok: true, changed: changed };
@@ -236,9 +247,10 @@ function dropMarker(marker) {
   try { fs.unlinkSync(marker); } catch (e) { /* already gone */ }
 }
 
-/* No marker, or no folder yet, changes nothing and creates nothing. A marker that will not
-   parse, or that names another folder, is dropped and nothing else moves. */
+/* Dropped only when the pass completes, or the marker will not parse, or it names another
+   folder. A failed pass leaves it. Without the lock, nothing here is read. */
 function honourPendingReset(opts) {
+  if (!opts || opts.holdsLock !== true) return { pending: false, changed: false };
   const raw = String((opts && opts.userData) || "");
   if (!path.isAbsolute(raw)) return { pending: false, changed: false };
   const user = path.resolve(raw);
@@ -262,13 +274,6 @@ function honourPendingReset(opts) {
     dropMarker(marker);
     return { pending: true, ok: false, changed: false };
   }
-  const attempts = Number(doc.attempts) || 0;
-  if (attempts > ATTEMPTS) {
-    dropMarker(marker);
-    return { pending: true, ok: false, changed: false };
-  }
-  doc.attempts = attempts + 1;
-  try { fs.writeFileSync(marker, JSON.stringify(doc)); } catch (e) { /* the old marker still counts */ }
   const done = commitReset({
     userData: user,
     catalogSetting: doc.catalogSetting,
@@ -277,10 +282,6 @@ function honourPendingReset(opts) {
   if (done && done.ok) {
     dropMarker(marker);
     return { pending: true, ok: true, changed: true };
-  }
-  if (done && done.ok === false && !done.changed) {
-    dropMarker(marker);
-    return { pending: true, ok: false, changed: false };
   }
   return { pending: true, ok: false, changed: !!(done && done.changed) };
 }
@@ -306,5 +307,6 @@ module.exports = {
   honourPendingReset: honourPendingReset,
   wouldStartNew: wouldStartNew,
   MARKER_NAME: MARKER_NAME,
-  LICENCE_FILES: LICENCE_FILES
+  LICENCE_FILES: LICENCE_FILES,
+  LOCK_FILES: LOCK_FILES
 };

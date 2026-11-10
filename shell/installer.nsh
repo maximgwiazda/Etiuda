@@ -134,9 +134,9 @@
   ${EndIf}
 !macroend
 
-# ONE SWITCH FOR THE LICENCE. Defined, a ticked Remove my data removes the desk's whole
-# folder, licence included. Comment this line out and the same tick keeps
-# etiuda-license.js and etiuda-revoked.json.
+# ONE SWITCH FOR THE LICENCE. Defined, a ticked box removes the whole folder, licence
+# included. Reset keeps those two files; the lists differ on purpose. Comment this
+# line out and the same tick keeps etiuda-license.js and etiuda-revoked.json.
 !define ETIUDA_REMOVE_LICENCE_WITH_DATA ; plant:uninstall-licence-goes
 
 !macro customUnInstall
@@ -175,6 +175,7 @@
       SetShellVarContext current
     ${EndIf}
     !ifdef ETIUDA_REMOVE_LICENCE_WITH_DATA
+      # Three folder names, licence included. Reset's keep list is the other one, on purpose.
       RMDir /r "$APPDATA\${APP_FILENAME}"
       !ifdef APP_PRODUCT_FILENAME
         RMDir /r "$APPDATA\${APP_PRODUCT_FILENAME}"
