@@ -192,7 +192,7 @@ function writeOutbox(mirror, st, io) {
   const tmp = file + "." + crypto.randomBytes(6).toString("hex") + ".tmp";
   try { io.mkdir(mirror); } catch {}
   io.writeFile(tmp, JSON.stringify({ kind: OUTBOX_KIND, v: 1, owe: st.owe, floors: st.floors }));
-  try { io.rename(tmp, file); } catch (e) { try { io.unlink(tmp); } catch {} throw e; }
+  try { renameRetrying(tmp, file, io); } catch (e) { try { io.unlink(tmp); } catch {} throw e; }
 }
 function owedRecord(mirror, rel, io) {
   let bytes = null;
@@ -220,15 +220,22 @@ function owedAt(mirror, rel, io) {
 }
 
 const RENAME_BUSY = ["EPERM", "EACCES", "EBUSY"];
+/* The same wait renamePatiently uses. Repeated here because this file is bundled into the worker and does not load the shell. */
+const RENAME_WAIT_MS = 50;
+const RENAME_LAND_TRIES = 60;
 function pause(ms) { try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch {} }
-function renameRetrying(from, to, io) {
+function renameBusy(from, to, io, tries) {
+  const n = tries || 20;
   for (let i = 1; ; i++) {
     try { io.rename(from, to); return; }
     catch (e) {
-      if (i >= 20 || RENAME_BUSY.indexOf(e && e.code) < 0) throw e;
-      pause(50);
+      if (i >= n || RENAME_BUSY.indexOf(e && e.code) < 0) throw e;
+      pause(RENAME_WAIT_MS);
     }
   }
+}
+function renameRetrying(from, to, io) {
+  renameBusy(from, to, io, 20);
 }
 /* Temp then rename beside the file, so the share never holds half a file under its name. */
 function writeWhole(file, bytes, io) {
@@ -481,6 +488,8 @@ function createFolderProgram(opts) {
   const missingCount = new Map(); // relPath -> number of consecutive answered listings missing
   const knownMtimes = new Map(); // relPath -> { size, mtimeMs }
   const refusedMtimes = new Map(); // relPath -> { size, mtimeMs, at, epoch, key }
+  const renameWait = new Map(); // relPath -> the staged item whose rename into the mirror was refused
+  const renameSaid = new Set();
   let judgedAt = 0; // moves with what a refusal is judged against: the pin, the team file and the ring
   const dropped = new Set(); // refusals let go since the worker was last told, so it copies those files again
   /* A refused or parked copy is held: not copied from the share again while its size and mtime stay, and, for a refusal, while
@@ -762,6 +771,43 @@ function createFolderProgram(opts) {
     return out;
   }
 
+  /* A rename refused for a moment is asked again, as renamePatiently does for the desk's own writes.
+     One that still refuses leaves this file staged and is said; the scan goes on and the next one tries it again. */
+  function landStaged(item, target, remember) {
+    ensureDir(target, io);
+    try { renameBusy(item.tmpPath, target, io, RENAME_LAND_TRIES); }
+    catch (e) {
+      if (!e || RENAME_BUSY.indexOf(e.code) < 0) throw e;
+      const rel = item.relPath;
+      if (remember !== false) {
+        const prev = renameWait.get(rel);
+        if (prev && prev.tmpPath && prev.tmpPath !== item.tmpPath) { try { io.unlink(prev.tmpPath); } catch {} }
+        renameWait.set(rel, item);
+      }
+      if (!renameSaid.has(rel)) {
+        renameSaid.add(rel);
+        logger("etiuda: " + path.join(folder, rel) + " stayed staged: the rename into the mirror was refused (" + e.code + "), and it is tried again");
+      }
+      return false;
+    }
+    renameWait.delete(item.relPath);
+    renameSaid.delete(item.relPath);
+    return true;
+  }
+  function takeWaiting(already) {
+    const extra = [];
+    for (const [rel, item] of Array.from(renameWait.entries())) {
+      if (already.has(rel)) {
+        if (already.get(rel) !== item.tmpPath) { try { io.unlink(item.tmpPath); } catch {} }
+        renameWait.delete(rel);
+        continue;
+      }
+      if (item.tmpPath && io.exists(item.tmpPath)) extra.push(item);
+      else { renameWait.delete(rel); renameSaid.delete(rel); }
+    }
+    return extra;
+  }
+
   function applyScan(scanData) {
     if (!scanData || !scanData.answers) {
       onStatus({ folder, answers: false });
@@ -773,6 +819,9 @@ function createFolderProgram(opts) {
     floorsDirty = null;
     const listing = scanData.listing || [];
     let staged = scanData.staged || [];
+    const stagedNow = new Map();
+    staged.forEach(s => { if (s && s.relPath) stagedNow.set(s.relPath, s.tmpPath); });
+    staged = staged.concat(takeWaiting(stagedNow));
 
     /* The team file and its conflict siblings staged together are one look: the desk says a lead key shown in two hands
        there (checks.forkSeen), and where the pin is handed to two keys none of them is taken, each read again at the next scan. */
@@ -842,13 +891,13 @@ function createFolderProgram(opts) {
               if (olderEpoch || olderRevAtEpoch) revOk = false; /* plant:syncer-team-rev */
               if (revOk) {
                 const mirrorTeamPath = path.join(mirror, "etiuda-team.json");
-                ensureDir(mirrorTeamPath, io);
-                io.rename(teamStaged.tmpPath, mirrorTeamPath); /* plant:syncer-team-atomic */
-                applied.push("etiuda-team.json");
-                judgedAt++;
-                refusedMtimes.delete(teamStaged.relPath);
-                mirrorEpoch = doc.epoch;
-                mirrorRev = rev;
+                if (landStaged(teamStaged, mirrorTeamPath)) { /* plant:syncer-team-atomic */
+                  applied.push("etiuda-team.json");
+                  judgedAt++;
+                  refusedMtimes.delete(teamStaged.relPath);
+                  mirrorEpoch = doc.epoch;
+                  mirrorRev = rev;
+                }
               } else {
                 const why = olderEpoch
                   ? "key number " + doc.epoch + ", below " + compEpoch
@@ -903,15 +952,15 @@ function createFolderProgram(opts) {
             const olderRevAtEpoch = doc.epoch === mirrorEpoch && rev < mirrorRev;
             if (!olderEpoch && !olderRevAtEpoch) {
               const target = path.join(mirror, sibItem.relPath);
-              ensureDir(target, io);
-              io.rename(sibItem.tmpPath, target);
-              applied.push(sibItem.relPath);
-              judgedAt++;
-              if (doc.epoch > mirrorEpoch) {
-                mirrorEpoch = doc.epoch;
-                mirrorRev = rev;
-              } else if (doc.epoch === mirrorEpoch && rev > mirrorRev) {
-                mirrorRev = rev;
+              if (landStaged(sibItem, target)) {
+                applied.push(sibItem.relPath);
+                judgedAt++;
+                if (doc.epoch > mirrorEpoch) {
+                  mirrorEpoch = doc.epoch;
+                  mirrorRev = rev;
+                } else if (doc.epoch === mirrorEpoch && rev > mirrorRev) {
+                  mirrorRev = rev;
+                }
               }
             } else {
               try { io.unlink(sibItem.tmpPath); } catch {}
@@ -947,9 +996,8 @@ function createFolderProgram(opts) {
           }
           if (allEditionsPresent) {
             const target = path.join(mirror, item.relPath);
-            ensureDir(target, io);
             if (item.tmpPath && io.exists(item.tmpPath)) {
-              io.rename(item.tmpPath, target);
+              if (!landStaged(item, target, false)) { stillPending.push(item); continue; }
             }
             applied.push(item.relPath);
           } else {
@@ -996,10 +1044,10 @@ function createFolderProgram(opts) {
             try { io.unlink(path.join(pendingDir, item.relPath)); } catch {}
           } else if (genuine) {
             const target = path.join(mirror, item.relPath);
-            ensureDir(target, io);
             if (item.tmpPath && io.exists(item.tmpPath)) {
-              io.rename(item.tmpPath, target);
+              if (!landStaged(item, target, false)) { stillPending.push(item); continue; }
             } else if (item.text) {
+              ensureDir(target, io);
               io.writeFile(target, item.text);
             }
             try { io.unlink(path.join(pendingDir, item.relPath)); } catch {}
@@ -1078,9 +1126,7 @@ function createFolderProgram(opts) {
             }
             if (!floorHolds(item, cat)) continue;
             const target = path.join(mirror, relPath);
-            ensureDir(target, io);
-            io.rename(tmpPath, target);
-            applied.push(relPath);
+            if (landStaged(item, target)) applied.push(relPath);
           }
         } else if (doc && +doc.format === 2 && doc.kind === "etiuda-catalog") {
           const parts = relPath.replace(/\\/g, "/").split("/");
@@ -1093,15 +1139,11 @@ function createFolderProgram(opts) {
             }
             if (!floorHolds(item, doc)) continue;
             const target = path.join(mirror, relPath);
-            ensureDir(target, io);
-            io.rename(tmpPath, target);
-            applied.push(relPath);
+            if (landStaged(item, target)) applied.push(relPath);
           } else if (parts.length === 1 && doc.desk && deskFileGenuine(doc, doc.desk.id)) {
             if (!floorHolds(item, doc)) continue;
             const target = path.join(mirror, relPath);
-            ensureDir(target, io);
-            io.rename(tmpPath, target);
-            applied.push(relPath);
+            if (landStaged(item, target)) applied.push(relPath);
           } else {
             // Unsigned shared catalog (no doc.sig) or signed catalog
             const authKeys = teamAuthorizedKeys(folder, mirror, io, pin, opts.authorizedKeys);
@@ -1112,16 +1154,12 @@ function createFolderProgram(opts) {
             }
             if (!floorHolds(item, doc)) continue;
             const target = path.join(mirror, relPath);
-            ensureDir(target, io);
-            io.rename(tmpPath, target);
-            applied.push(relPath);
+            if (landStaged(item, target)) applied.push(relPath);
           }
         } else if (leadAnswerAt(relPath, doc) || leadBranchAt(relPath, doc)) {
           /* Sealed to the lead's box, so no desk opens it: it lands unread, as stats.estat does. */
           const target = path.join(mirror, relPath);
-          ensureDir(target, io);
-          io.rename(tmpPath, target);
-          applied.push(relPath);
+          if (landStaged(item, target)) applied.push(relPath);
         } else {
           // Invalid or corrupt .ec file: drop copy
           try { io.unlink(tmpPath); } catch {}
@@ -1145,9 +1183,7 @@ function createFolderProgram(opts) {
             pushPending({ kind: "head", relPath, doc, tmpPath, size: item.size, mtimeMs: item.mtimeMs });
           } else {
             const target = path.join(mirror, relPath);
-            ensureDir(target, io);
-            io.rename(tmpPath, target);
-            applied.push(relPath);
+            if (landStaged(item, target)) applied.push(relPath);
           }
         } else {
           try { io.unlink(tmpPath); } catch {}
@@ -1163,10 +1199,10 @@ function createFolderProgram(opts) {
         try { doc = JSON.parse(text); } catch {}
         if (doc && +doc.format === 1 && doc.kind === "etiuda-ring" && Array.isArray(doc.keys)) {
           const target = path.join(mirror, relPath);
-          ensureDir(target, io);
-          io.rename(tmpPath, target);
-          applied.push(relPath);
-          judgedAt++;
+          if (landStaged(item, target)) {
+            applied.push(relPath);
+            judgedAt++;
+          }
         } else {
           try { io.unlink(tmpPath); } catch {}
         }
@@ -1175,9 +1211,7 @@ function createFolderProgram(opts) {
         try { doc = JSON.parse(text); } catch {}
         if (doc && +doc.format === 1 && doc.kind === "etiuda-team-pause" && doc.team === team && typeof doc.paused === "boolean") {
           const target = path.join(mirror, relPath);
-          ensureDir(target, io);
-          io.rename(tmpPath, target);
-          applied.push(relPath);
+          if (landStaged(item, target)) applied.push(relPath);
         } else {
           try { io.unlink(tmpPath); } catch {}
         }
@@ -1186,9 +1220,7 @@ function createFolderProgram(opts) {
         try { doc = JSON.parse(text); } catch {}
         if (doc && +doc.format === 1 && doc.kind === "etiuda-team-joins" && doc.team === team && doc.lead && Array.isArray(doc.open)) {
           const target = path.join(mirror, relPath);
-          ensureDir(target, io);
-          io.rename(tmpPath, target);
-          applied.push(relPath);
+          if (landStaged(item, target)) applied.push(relPath);
         } else {
           try { io.unlink(tmpPath); } catch {}
         }
@@ -1197,9 +1229,7 @@ function createFolderProgram(opts) {
         try { doc = JSON.parse(text); } catch {}
         if (doc && +doc.format === 1 && doc.kind === "etiuda-stats-span" && (typeof doc.span === "string" || Array.isArray(doc.spans))) {
           const target = path.join(mirror, relPath);
-          ensureDir(target, io);
-          io.rename(tmpPath, target);
-          applied.push(relPath);
+          if (landStaged(item, target)) applied.push(relPath);
         } else {
           try { io.unlink(tmpPath); } catch {}
         }
@@ -1214,9 +1244,7 @@ function createFolderProgram(opts) {
         }
         if (ok) {
           const target = path.join(mirror, relPath);
-          ensureDir(target, io);
-          io.rename(tmpPath, target);
-          applied.push(relPath);
+          if (landStaged(item, target)) applied.push(relPath);
         } else {
           try { io.unlink(tmpPath); } catch {}
         }
@@ -1229,9 +1257,7 @@ function createFolderProgram(opts) {
         const formatOk = !!doc && (+doc.format === 1 || (+doc.format === 2 && doc.kind === "etiuda-catalog-ask"));
         if (formatOk && kindOk) {
           const target = path.join(mirror, relPath);
-          ensureDir(target, io);
-          io.rename(tmpPath, target);
-          applied.push(relPath);
+          if (landStaged(item, target)) applied.push(relPath);
         } else {
           try { io.unlink(tmpPath); } catch {}
         }
@@ -1250,9 +1276,7 @@ function createFolderProgram(opts) {
           }
           if (ok) {
             const target = path.join(mirror, relPath);
-            ensureDir(target, io);
-            io.rename(tmpPath, target);
-            applied.push(relPath);
+            if (landStaged(item, target)) applied.push(relPath);
           } else {
             try { io.unlink(tmpPath); } catch {}
           }
@@ -1334,6 +1358,12 @@ function createFolderProgram(opts) {
       const hold = holds.get(relPath);
       if (hold && hold.size === st.size && hold.mtimeMs === st.mtimeMs) alreadyInMirror = true;
       else if (prev && prev.size === st.size && prev.mtimeMs === st.mtimeMs && io.exists(mirrorFile)) alreadyInMirror = true;
+      const waiting = renameWait.get(relPath);
+      if (waiting && (alreadyInMirror || waiting.size !== st.size || waiting.mtimeMs !== st.mtimeMs)) {
+        try { if (waiting.tmpPath) io.unlink(waiting.tmpPath); } catch {}
+        renameWait.delete(relPath);
+        renameSaid.delete(relPath);
+      } else if (waiting && waiting.tmpPath && io.exists(waiting.tmpPath)) alreadyInMirror = true;
 
       if (!alreadyInMirror) {
         const srcFile = path.join(folder, relPath);
