@@ -4518,7 +4518,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
        densest text on the empty screen, aimed at somebody whose next move is loading a
        catalog. -->
   <footer>
-    Created by <b>Maxim Gwiazda</b> © 2026 · Etiuda <b>v</b><b id="eVer"></b> · <b class="nw cut-peek">Etiuda Source-Available Licence 1.0</b> · free for personal use
+    Created by <b>Max Gwiazda</b> © 2026 · Etiuda <b>v</b><b id="eVer"></b> · <b class="nw cut-peek">Etiuda Source-Available Licence 1.0</b> · free for personal use
   </footer>
 </main>
 </div>
@@ -7195,7 +7195,7 @@ What you type stays in this browser only.`;
     "Hold Ctrl to show intents": "Przytrzymaj Ctrl, aby pokazać intencje",
     "English": "English",
     "Polski": "Polski",
-    "Maxim Gwiazda": "Maxim Gwiazda",
+    "Max Gwiazda": "Max Gwiazda",
     "Etiuda Source-Available Licence 1.0": "Etiuda Source-Available Licence 1.0",
     "Created by": "Autor:",
     "· free for personal use": "· bezpłatnie do użytku osobistego",
@@ -7218,7 +7218,6 @@ What you type stays in this browser only.`;
     "ROLE suggestions": "Podpowiedzi ROLE",
     "Catalog & data": "Katalog i dane",
     "Search the library": "Szukaj w Bibliotece",
-    "Categories and cards": "Kategorie i karty",
     "Each category with its cards, its place in the order, and whether it supports every intent.": "Każda kategoria z kartami, jej miejsce w kolejności i to, czy wspiera każdą intencję.",
     "Favourites first, hidden intents at the foot.": "Najpierw ulubione, ukryte intencje na końcu.",
     "Intents: {N}.": "Intencje: {N}.",
@@ -7968,7 +7967,8 @@ What you type stays in this browser only.`;
     "{KEYS} belongs to another program just now.": "{KEYS} należy teraz do innego programu.",
     "A combination of Etiuda's own, chosen in Settings, brings the replies over any window.": "Własna kombinacja Etiudy, wybrana w Ustawieniach, przywoła odpowiedzi nad dowolne okno.",
     "Choose a combination": "Wybierz kombinację",
-    "The replies beside the pointer, over any program; the combination is changed in Settings": "Odpowiedzi obok wskaźnika, nad każdym programem; kombinację zmienia się w Ustawieniach",
+    "The replies beside the pointer, over any program: {KEYS} brings them from anywhere, and Settings is where the combination is changed.": "Odpowiedzi obok wskaźnika, nad każdym programem: kombinacja {KEYS} przywołuje je z dowolnego miejsca, a zmienić ją można w Ustawieniach.",
+    "The replies beside the pointer, over any program; a combination that brings them from anywhere is chosen in Settings.": "Odpowiedzi obok wskaźnika, nad każdym programem; kombinację, która przywoła je z dowolnego miejsca, wybiera się w Ustawieniach.",
     "Replies over any window": "Odpowiedzi nad dowolnym oknem",
     "{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.": "{KEY} przywołuje te odpowiedzi obok wskaźnika, nad każdym programem: wystarczy wpisać słowo, a Enter skopiuje odpowiedź i wróci do poprzedniego okna. Można spróbować od razu, naciskając {KEY}; Esc zamyka listę.",
     "Bring the replies over any window": "Przywołaj odpowiedzi nad dowolne okno",
@@ -9629,7 +9629,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-10";
+  var E_BUILT = "2026-11-11";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -25240,9 +25240,8 @@ What you type stays in this browser only.`;
     if (!row2) return;
     row2.hidden = !hk || !h || typeof h.openPicker !== "function";
     if (row2.hidden) return;
-    const keys = hk.held ? eHotkeyLabel(hk.accel) : "";
-    row2.innerHTML = sxIcon("expand") + "<span>" + esc(t("Bring the replies over any window")) + "</span>" + (keys ? "<kbd data-i18n-skip>" + esc(keys) + "</kbd>" : "");
-    row2.title = t("The replies beside the pointer, over any program; the combination is changed in Settings");
+    row2.innerHTML = sxIcon("expand") + "<span>" + esc(t("Bring the replies over any window")) + "</span>";
+    row2.title = hk.held ? t("The replies beside the pointer, over any program: {KEYS} brings them from anywhere, and Settings is where the combination is changed.").replace("{KEYS}", eHotkeyLabel(hk.accel)) : t("The replies beside the pointer, over any program; a combination that brings them from anywhere is chosen in Settings.");
   }
   function syncSettingsMenu() {
     paintMenuIcons();
@@ -32667,7 +32666,7 @@ What you type stays in this browser only.`;
   var libQuery = "";
   var libFind = () => t("Search the library");
   var libSections = () => [
-    { key: "catmac", icon: "categories", name: t("Categories and cards"), lede: t("Each category with its cards, its place in the order, and whether it supports every intent.") },
+    { key: "catmac", icon: "categories", name: t("Categories & cards"), lede: t("Each category with its cards, its place in the order, and whether it supports every intent.") },
     { key: "intents", icon: "intents", name: t("Intents"), lede: t("Favourites first, hidden intents at the foot.") },
     { key: "who", icon: "user", name: t("ROLE suggestions"), lede: t("The names the ROLE wheel offers, separated by commas.") },
     { key: "data", icon: "cards", name: t("Catalog & data"), lede: t("The catalog in use on this desk, and loading another catalog file.") }

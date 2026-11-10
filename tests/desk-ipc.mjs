@@ -154,7 +154,7 @@ const mainTest = {};
 const desktopWas = process.env.XDG_CURRENT_DESKTOP;
 process.env.XDG_CURRENT_DESKTOP = "GNOME";
 new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
-  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal; __test.createWindow = createWindow; __test.CLOSE_WAIT_MS = CLOSE_WAIT_MS; if (typeof tabsFile === 'function') __test.tabsFile = tabsFile; if (typeof writeSavedTabs === 'function') __test.writeSavedTabs = writeSavedTabs; if (typeof readSavedTabs === 'function') __test.readSavedTabs = readSavedTabs; if (typeof sessionHeld !== 'undefined') __test.sessionHeld = sessionHeld; if (typeof handleUpdateClose === 'function') __test.handleUpdateClose = handleUpdateClose; __test.setQuitting = v => { quitting = !!v; }; __test.windowFile = windowFile; if (typeof setQuitOnClose === 'function') __test.setQuitOnClose = setQuitOnClose; if (typeof trayQuit === 'function') __test.trayQuit = trayQuit; if (typeof ensureTray === 'function') __test.ensureTray = ensureTray; if (typeof onSecondInstance === 'function') __test.onSecondInstance = onSecondInstance; if (typeof launchHidden === 'function') __test.launchHidden = launchHidden; if (typeof syncJumpList === 'function') __test.syncJumpList = syncJumpList; if (typeof catalogFolder === 'function') __test.catalogFolder = catalogFolder; if (typeof offerFile === 'function') __test.offerFile = offerFile; if (typeof recordRecentCatalog === 'function') __test.recordRecentCatalog = recordRecentCatalog; if (typeof rebuildTrayMenu === 'function') __test.rebuildTrayMenu = rebuildTrayMenu; if (typeof dispatchColdStartArgs === 'function') __test.dispatchColdStartArgs = dispatchColdStartArgs; if (typeof trayIcon === 'function') __test.trayIcon = trayIcon; if (typeof deskTray !== 'undefined') __test.resetTray = () => { deskTray = null; };")(
+  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal; __test.createWindow = createWindow; __test.CLOSE_WAIT_MS = CLOSE_WAIT_MS; if (typeof tabsFile === 'function') __test.tabsFile = tabsFile; if (typeof writeSavedTabs === 'function') __test.writeSavedTabs = writeSavedTabs; if (typeof readSavedTabs === 'function') __test.readSavedTabs = readSavedTabs; if (typeof sessionHeld !== 'undefined') __test.sessionHeld = sessionHeld; if (typeof handleUpdateClose === 'function') __test.handleUpdateClose = handleUpdateClose; __test.setQuitting = v => { quitting = !!v; }; __test.windowFile = windowFile; if (typeof setQuitOnClose === 'function') __test.setQuitOnClose = setQuitOnClose; if (typeof trayQuit === 'function') __test.trayQuit = trayQuit; if (typeof ensureTray === 'function') __test.ensureTray = ensureTray; if (typeof onSecondInstance === 'function') __test.onSecondInstance = onSecondInstance; if (typeof launchHidden === 'function') __test.launchHidden = launchHidden; if (typeof syncJumpList === 'function') __test.syncJumpList = syncJumpList; if (typeof catalogFolder === 'function') __test.catalogFolder = catalogFolder; if (typeof offerFile === 'function') __test.offerFile = offerFile; if (typeof recordRecentCatalog === 'function') __test.recordRecentCatalog = recordRecentCatalog; if (typeof rebuildTrayMenu === 'function') __test.rebuildTrayMenu = rebuildTrayMenu; if (typeof dispatchColdStartArgs === 'function') __test.dispatchColdStartArgs = dispatchColdStartArgs; if (typeof trayIcon === 'function') __test.trayIcon = trayIcon; if (typeof deskTray !== 'undefined') __test.resetTray = () => { deskTray = null; }; if (typeof resetTrayNotice === 'function') __test.resetTrayNotice = resetTrayNotice;")(
   fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, mainTest);
 const quitsAtBoot = appQuits;
 if (desktopWas === undefined) delete process.env.XDG_CURRENT_DESKTOP; else process.env.XDG_CURRENT_DESKTOP = desktopWas;
@@ -1661,12 +1661,23 @@ try {
     mainTest.closeHeld(w, e2);
     const title = note && note.opts && note.opts.title;
     const body = note && note.opts && note.opts.body;
-    d6Stay = held === true && e1.prevented === true && w.hides === 2 && w.shows === 1
-      && madeNotes.length === notesBefore + 1 && meta.x === 3 && meta.trayTold === true
+    const hidesSameRun = w.hides === 2;
+    const notesSameRun = madeNotes.length === notesBefore + 1;
+
+    const restartAsked = typeof mainTest.resetTrayNotice === "function" && (() => {
+      mainTest.resetTrayNotice();
+      const e3 = closeEv();
+      mainTest.closeHeld(w, e3);
+      return madeNotes.length === notesBefore + 2;
+    })();
+
+    d6Stay = held === true && e1.prevented === true && hidesSameRun && notesSameRun && w.shows === 1
+      && meta.x === 3 && meta.trayTold === undefined
+      && restartAsked
       && title === "Etiuda keeps running in the tray"
       && body === "Its shortcut still works and the team's updates still arrive. To quit, right-click the tray icon and choose Quit Etiuda; Settings, under General, can make closing the window quit instead."
       && Array.isArray(note.opts.actions) && note.opts.actions.length === 0;
-    if (!d6Stay) d6StayWhy = JSON.stringify({ held: held, prevented: e1.prevented, hides: w.hides, shows: w.shows, notes: madeNotes.length - notesBefore, title: title, x: meta.x, told: meta.trayTold });
+    if (!d6Stay) d6StayWhy = JSON.stringify({ held: held, prevented: e1.prevented, hidesSameRun: hidesSameRun, notesSameRun: notesSameRun, shows: w.shows, restartAsked: restartAsked, title: title, x: meta.x, told: meta.trayTold });
   } catch (e) { d6StayWhy = String(e && e.message || e).split("\n")[0]; }
   check(d6Stay, "D6-stay the first close hides and tells once, the click opens the window, and a later close does not tell again (" + d6StayWhy + ")");
 
@@ -1825,7 +1836,7 @@ try {
       w.isMinimized = () => false;
       const tray = mainTest.ensureTray();
       const labels = (tray && tray.menu && tray.menu.template || []).map(item => item.type === "separator" ? "|" : item.label);
-      const want = ["Open Etiuda", "Bring the replies over any window\tCtrl+Shift+Space", "Notifications: on", "Settings", "|", "Quit Etiuda"];
+      const want = ["Open Etiuda", "Bring the replies over any window", "Notifications: on", "Settings", "|", "Quit Etiuda"];
       const notes = (tray && tray.menu && tray.menu.template || []).find(item => item.label === "Notifications: on");
       if (notes && notes.click) notes.click();
       const labels2 = (tray && tray.menu && tray.menu.template || []).map(item => item.label);
