@@ -98,7 +98,7 @@ async function read(page) {
     const header = document.querySelector("header"), rail = document.getElementById("intentRail");
     const groundCss = getComputedStyle(header).backgroundColor, ground = rgb(groundCss);
     /* The region: from the window's edge to two pixels short of where the dot field begins (the card column's left
-       edge less one 12px pitch), from under the header to the window's foot. */
+       edge less the field's 12px inset), from under the header to the window's foot. */
     const x1 = Math.floor(document.querySelector("main").getBoundingClientRect().left) - 14;
     const y0 = Math.ceil(header.getBoundingClientRect().bottom), y1 = innerHeight;
     const holes = [...rail.querySelectorAll(".rail-item, .rail-head")].map(box);
