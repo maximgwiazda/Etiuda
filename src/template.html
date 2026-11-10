@@ -1398,14 +1398,17 @@ body.pills-off.pills-peek .pills-slot{display:block}
    and the naked input are every field's arrangement - see .fill input - so the pair needs
    only the share of the box the name takes. */
 .paxrole #pax{flex:1 1 auto}
-/* The drum: a slot wheel over whoOptions() plus an empty notch that clears - neighbours
-   peek at the edges so it reads as turnable. The wheel and the arrow keys turn it
-   (stepRoleDrum); the hidden roleSel stays the one value {ROLE} reads. */
+/* The drum: a slot wheel over whoOptions() plus an empty notch that clears. The neighbours
+   rest hidden and come in with the pointer or the keyboard, so it reads as turnable when it
+   is being used. The wheel and the arrow keys turn it (stepRoleDrum); the hidden roleSel
+   stays the one value {ROLE} reads. */
 /* 70px: the widest class word (purchaser, 56px at this font) plus the 6px insets - the
    drum earns no width beyond its longest word. */
 #roleDrum{position:relative;flex:0 0 auto;width:70px;border-right:1px solid var(--field-line);
   overflow:hidden;user-select:none;-webkit-user-select:none;outline:none;
-  border-radius:var(--radius-sm) 0 0 var(--radius-sm)}
+  border-radius:var(--radius-sm) 0 0 var(--radius-sm);
+  -webkit-mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000);
+  mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000)}
 /* The base rule kills the ring so a click does not flash one; :focus-visible puts it back
    for the keyboard, which now reaches this box through the tab order. */
 #roleDrum:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
@@ -1414,16 +1417,19 @@ body.role-waits #roleDrum{display:none}
 #roleDrum span{position:absolute;left:6px;right:6px;text-align:center;white-space:nowrap;
   overflow:hidden;color:var(--ink)}
 #roleDrum .rd-cur{top:50%;transform:translateY(-50%);font:600 12.5px var(--sans)}
-#roleDrum .rd-cur.rd-empty{color:var(--dim);font:italic 400 12.5px var(--sans)}
-#roleDrum .rd-prev{top:-1px;font:9px var(--sans);opacity:.35}
-#roleDrum .rd-next{bottom:-1px;font:9px var(--sans);opacity:.35}
+#roleDrum .rd-cur.rd-empty{color:var(--dim);font:400 12.5px var(--sans)}
+#roleDrum .rd-prev{top:2px;font:9px var(--sans);opacity:0;transition:opacity var(--m-tone) ease}
+#roleDrum .rd-next{bottom:2px;font:9px var(--sans);opacity:0;transition:opacity var(--m-tone) ease}
+#roleDrum:hover .rd-prev,#roleDrum:hover .rd-next,#roleDrum:focus-visible .rd-prev,#roleDrum:focus-visible .rd-next{opacity:.5}
 #roleDrum .rd-track.rd-up{animation:rd-up var(--m-move) var(--m-ease)}
 #roleDrum .rd-track.rd-down{animation:rd-down var(--m-move) var(--m-ease)}
 /* The gender glyph at the box's right end: grey when read from the name, ink and the accent's dot when
    set by hand. A click, the wheel and the arrow keys turn it (gender-turn.js). */
 #genderDrum{position:relative;flex:0 0 auto;width:var(--gender-glyph);border-left:1px solid var(--field-line);
   overflow:hidden;user-select:none;-webkit-user-select:none;outline:none;
-  border-radius:0 var(--radius-sm) var(--radius-sm) 0}
+  border-radius:0 var(--radius-sm) var(--radius-sm) 0;
+  -webkit-mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000);
+  mask-image:linear-gradient(#0000,#000 22%,#000 78%,#0000)}
 #genderDrum:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .paxrole .field-clear{right:calc(var(--gender-glyph) + 4px)}
 #genderDrum .gd-track{position:absolute;inset:0}
@@ -1431,7 +1437,8 @@ body.role-waits #roleDrum{display:none}
 #genderDrum .gd-cur{top:50%;width:15px;height:15px;transform:translate(-50%,-50%);stroke-width:1.65;color:var(--dim)}
 #genderDrum.gd-hand .gd-cur{color:var(--ink);stroke-width:1.9}
 #genderDrum .gd-prev,#genderDrum .gd-next{width:7px;height:7px;transform:translateX(-50%);stroke-width:2.4;
-  color:var(--ink);opacity:.35}
+  color:var(--ink);opacity:0;transition:opacity var(--m-tone) ease}
+#genderDrum:hover .gd-prev,#genderDrum:hover .gd-next,#genderDrum:focus-visible .gd-prev,#genderDrum:focus-visible .gd-next{opacity:.6}
 #genderDrum .gd-prev{top:0}
 #genderDrum .gd-next{bottom:0}
 #genderDrum.gd-hand::after{content:"";position:absolute;right:4px;top:50%;width:4px;height:4px;margin-top:-2px;
