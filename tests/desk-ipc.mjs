@@ -1641,7 +1641,7 @@ try {
     d6Stay = held === true && e1.prevented === true && w.hides === 2 && w.shows === 1
       && madeNotes.length === notesBefore + 1 && meta.x === 3 && meta.trayTold === true
       && title === "Etiuda keeps running in the tray"
-      && body === "Its shortcut still works and the team's updates still arrive. The tray icon quits it, and Settings, under General, changes this."
+      && body === "Its shortcut still works and the team's updates still arrive. Right-click the tray icon and choose Quit Etiuda. Settings, under General, changes this."
       && Array.isArray(note.opts.actions) && note.opts.actions.length === 0;
     if (!d6Stay) d6StayWhy = JSON.stringify({ held: held, prevented: e1.prevented, hides: w.hides, shows: w.shows, notes: madeNotes.length - notesBefore, title: title, x: meta.x, told: meta.trayTold });
   } catch (e) { d6StayWhy = String(e && e.message || e).split("\n")[0]; }

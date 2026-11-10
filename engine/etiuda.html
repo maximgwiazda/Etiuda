@@ -7833,6 +7833,8 @@ What you type stays in this browser only.`;
     "When the window closes": "Po zamknięciu okna",
     "Stay in the tray": "Zostaje w zasobniku",
     "Quit": "Kończy działanie",
+    // placeholder: Claudette
+    "The window will quit when it closes.": "Okno zakończy działanie przy zamknięciu.",
     "In the tray, Etiuda still answers its shortcut and shows notifications.": "W zasobniku Etiuda nadal reaguje na swój skrót i pokazuje powiadomienia.",
     "How the app looks and moves.": "Jak program wygląda i jak się porusza.",
     "How the screen is laid out.": "Jak rozłożony jest ekran.",
@@ -33364,7 +33366,7 @@ What you type stays in this browser only.`;
               } catch (e) {
               }
             }
-            toast(quit ? t("Quit") : t("Stay in the tray"));
+            toast(quit ? t("The window will quit when it closes.") : t("Stay in the tray"));
           } else if (seg3 === "notesmaster") {
             const host = eHost();
             if (host && typeof host.setTrayNotes === "function") {

@@ -648,7 +648,8 @@ function wirePage(box){
           if(quit) lsSet("eQuitOnClose","1"); else lsDel("eQuitOnClose");
           const host=closeHost();
           if(host){ try{ host.setClosePolicy(quit); }catch(e){} }
-          toast(quit?t("Quit"):t("Stay in the tray"));
+          // placeholder: Claudette
+          toast(quit?t("The window will quit when it closes."):t("Stay in the tray"));
         }
         else if(seg==="notesmaster"){
           const host=eHost();

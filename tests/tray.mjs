@@ -341,6 +341,24 @@ async function run() {
     && TOAST_BUTTON_PROBE.reason.length > 0,
     "toast-button probe result recorded with explanation");
 
+  /* 1110tr1. Quit's toast and the first-close notice name what actually quits. */
+  {
+    const mainSrc = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
+    const settingsSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
+    const langSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
+    const bodies = [...mainSrc.matchAll(/trayKeepsBody:\s*"([^"]*)"/g)].map(m => m[1]);
+    const noticeEn = "Its shortcut still works and the team's updates still arrive. Right-click the tray icon and choose Quit Etiuda. Settings, under General, changes this.";
+    const noticePl = "Skrót nadal działa, a aktualizacje od zespołu wciąż docierają. Pozycja Zakończ Etiudę w menu ikony zasobnika zamyka program, a to zachowanie zmienia się w Ustawieniach, w części Ogólne.";
+    const toastEn = "The window will quit when it closes.";
+    const toastPl = "Okno zakończy działanie przy zamknięciu.";
+    const toastWired = settingsSrc.includes('toast(quit?t("' + toastEn + '"):t("Stay in the tray"))');
+    const pair = langSrc.includes('"' + toastEn + '":"' + toastPl + '"');
+    const iconQuits = /tray icon quits|z ikony w zasobniku/.test(bodies.join("\n"));
+    check(bodies[0] === noticeEn && bodies[1] === noticePl && !iconQuits && toastWired && pair,
+      "1110tr1 the first-close notice names the Quit Etiuda row, in English and in Polish, and Quit's toast says the window will quit when it closes"
+      + " (" + JSON.stringify(bodies[0]) + " / " + JSON.stringify(bodies[1]) + ", toast " + toastWired + "/" + pair + ")");
+  }
+
   /* 9. Planted removal of --update-close rule in a scratch copy */
   {
     const originalSrc = fs.readFileSync(CJS_PATH, "utf8");

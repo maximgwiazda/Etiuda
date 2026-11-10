@@ -968,6 +968,8 @@ UI_STRINGS.pl={
   "When the window closes":"Po zamknięciu okna",
   "Stay in the tray":"Zostaje w zasobniku",
   "Quit":"Kończy działanie",
+  // placeholder: Claudette
+  "The window will quit when it closes.":"Okno zakończy działanie przy zamknięciu.",
   "In the tray, Etiuda still answers its shortcut and shows notifications.":"W zasobniku Etiuda nadal reaguje na swój skrót i pokazuje powiadomienia.",
   "How the app looks and moves.":"Jak program wygląda i jak się porusza.",
   "How the screen is laid out.":"Jak rozłożony jest ekran.",
