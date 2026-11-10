@@ -102,12 +102,7 @@ async function startShell() {
   const said = [];
   child.stdout.on("data", d => said.push(String(d).trim()));
   child.stderr.on("data", d => said.push(String(d).trim()));
-  let b;
-  for (let i = 0; i < 40 && !b; i++) {
-    await sleep(500);
-    try { b = await puppeteer.connect({ browserURL: "http://127.0.0.1:" + PORT, defaultViewport: null }); } catch (x) {}
-  }
-  if (!b) throw new Error("Electron did not answer on the debugging port within 20 s: " + said.join(" | "));
+  const b = await E.connectShell({ port: PORT, child, said });
   await require("./launch-wait.js").waitLaunchGone((await b.pages())[0], { who: "tests/catalog-watch.js startShell", ready: "typeof window.E_VERSION === \"string\"" });
   await sleep(3000);
   /* Asked once, of this file's own first launch, and asked of the machine rather than of the
@@ -228,7 +223,7 @@ async function page(b) { return (await b.pages())[0]; }
     console.log("#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
     if (!reachedEnd) {
       console.log("  SUITE DID NOT COMPLETE");
-      process.exit(78);
+      process.exit(E.shellStartFailed() ? 1 : 78);
     }
     console.log(fails ? "RESULT: " + fails + " of " + checks + " failed" : "RESULT: OK, " + checks + " checks");
     process.exit(E.exitOf(fails));

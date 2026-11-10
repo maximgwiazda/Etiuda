@@ -94,16 +94,25 @@ async function launch(theme, quiet) {
   const child = E.shellLaunch("tests/opening-frame.js", electronExe(), [APP, "--user-data-dir=" + UD],
     { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: path.join(APP, "documents"), [E.OFFSCREEN_KEY]: "2" }) });
   let out = "";
-  child.stdout.on("data", d => { out += d; });
-  child.stderr.on("data", () => {});
+  const said = [];
+  child.stdout.on("data", d => { out += d; said.push(String(d).trim()); });
+  child.stderr.on("data", d => { said.push(String(d).trim()); });
+  let died = null;
+  const noteExit = (code, signal) => { died = { code: code, signal: signal }; };
+  child.once("exit", noteExit);
   try {
     const t0 = Date.now();
-    while (Date.now() - t0 < 20000 && !/etiuda-page /.test(out)) await sleep(250);
+    while (Date.now() - t0 < 20000 && !/etiuda-page /.test(out) && !died) await sleep(250);
   } finally {
+    child.removeListener("exit", noteExit);
     const k = E.killTree(child.pid);
     console.log("       the app, pid " + child.pid + ": " + k.how);
   }
   const frame = /etiuda-first-frame (\{.*\})/.exec(out), page = /etiuda-page (\{.*\})/.exec(out);
+  if (!frame && died) {
+    const how = died.code !== null && died.code !== undefined ? died.code : died.signal;
+    E.shellDidNotStart("the shell exited " + how + (said.filter(Boolean).length ? ": " + said.filter(Boolean).join(" | ") : ""));
+  }
   if (!frame) throw new Error("no first frame was read in 20 s (" + theme + (quiet ? ", quiet" : "") + ")");
   return { frame: JSON.parse(frame[1]), page: page ? JSON.parse(page[1]) : null };
 }
@@ -146,5 +155,5 @@ async function launch(theme, quiet) {
   if (done && checks !== EXPECTED) { console.log("  FAIL ran " + checks + " checks, expected " + EXPECTED); fails++; }
   console.log((fails ? "FAIL " : "PASS ") + "opening-frame: " + (checks - Math.min(fails, checks)) + "/" + checks + " checks"
     + (done ? "" : " - SUITE DID NOT COMPLETE"));
-  process.exit(done ? E.exitOf(fails) : 78);
+  process.exit(E.shellStartFailed() ? 1 : (done ? E.exitOf(fails) : 78));
 })();

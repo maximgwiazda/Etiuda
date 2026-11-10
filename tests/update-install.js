@@ -200,7 +200,6 @@ let port = PORT_BASE;
 const live = new Set();
 let offscreenAsked = false;
 async function launch(exeDir) {
-  const puppeteer = require("puppeteer-core");
   port++;
   const child = E.shellLaunch(WHO, path.join(exeDir, PRODUCT + ".exe"),
     ["--remote-debugging-port=" + port, "--user-data-dir=" + UD],
@@ -209,12 +208,10 @@ async function launch(exeDir) {
   const said = [];
   child.stdout.on("data", d => said.push(String(d).trim()));
   child.stderr.on("data", d => said.push(String(d).trim()));
-  let b = null;
-  for (let i = 0; i < 40 && !b; i++) {
-    await sleep(500);
-    try { b = await puppeteer.connect({ browserURL: "http://127.0.0.1:" + port, defaultViewport: null }); } catch (x) { /* not up yet */ }
-  }
-  if (!b) { E.killTree(child.pid); live.delete(child.pid); throw new Error("the installed app did not answer on port " + port + ": " + said.join(" | ")); }
+  const b = await E.connectShell({
+    port, child, said,
+    beforeExit: () => { E.killTree(child.pid); live.delete(child.pid); },
+  });
   const p = (await b.pages())[0];
   await require("./launch-wait.js").waitLaunchGone(p, { who: "tests/update-install.js launch", ready: "typeof window.E_VERSION === \"string\"" });
   await sleep(3500);
@@ -517,5 +514,5 @@ process.on("exit", () => {
   console.log("\n#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
   console.log((reachedEnd ? "" : "  INCOMPLETE - ") + checks + " check(s), " + fails + " failed, "
     + Math.round((Date.now() - t0) / 1000) + "s" + (KEEP ? "; --keep: the lab stands at " + LAB : ""));
-  process.exit(reachedEnd ? E.exitOf(fails) : (fails ? E.exitOf(fails) : E.NO_VERDICT));
+  process.exit(E.shellStartFailed() ? 1 : (reachedEnd ? E.exitOf(fails) : (fails ? E.exitOf(fails) : E.NO_VERDICT)));
 });

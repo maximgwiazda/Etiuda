@@ -174,12 +174,7 @@ async function launch(dir, port) {
   const shellSaid = [];
   child.stdout.on("data", d => shellSaid.push(String(d).trim()));
   child.stderr.on("data", d => shellSaid.push(String(d).trim()));
-  let b;
-  for (let i = 0; i < 40 && !b; i++) {
-    await sleep(500);
-    try { b = await puppeteer.connect({ browserURL: "http://127.0.0.1:" + port, defaultViewport: null }); } catch (x) {}
-  }
-  if (!b) throw new Error("Electron did not answer on the debugging port " + port + " within 20 s");
+  const b = await E.connectShell({ port, child, said: shellSaid });
   const p = (await b.pages())[0];
   const said = [];
   p.on("console", m => { if (m.type() === "error") said.push(m.text()); });
@@ -357,5 +352,5 @@ let LAB2 = null, LAB3 = null;
   console.log("#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
   console.log((reachedEnd ? "" : "  INCOMPLETE - ") + checks + " check(s), " + fails
     + " failed, " + Math.round((Date.now() - t0) / 1000) + "s");
-  process.exit(reachedEnd ? E.exitOf(fails) : (fails ? E.exitOf(fails) : E.NO_VERDICT));
+  process.exit(E.shellStartFailed() ? 1 : (reachedEnd ? E.exitOf(fails) : (fails ? E.exitOf(fails) : E.NO_VERDICT)));
 });

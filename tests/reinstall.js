@@ -571,12 +571,7 @@ async function launch(dir, env) {
   const said = [];
   child.stdout.on("data", d => said.push(String(d).trim()));
   child.stderr.on("data", d => said.push(String(d).trim()));
-  let b = null;
-  for (let i = 0; i < 40 && !b; i++) {
-    await sleep(500);
-    try { b = await puppeteer.connect({ browserURL: "http://127.0.0.1:" + port, defaultViewport: null }); } catch (x) { /* not up yet */ }
-  }
-  if (!b) { killPid(child.pid); throw new Error("the installed app did not answer on the debugging port within 20 s: " + said.join(" | ")); }
+  const b = await E.connectShell({ port, child, said, beforeExit: () => killPid(child.pid) });
   const p = (await b.pages())[0];
   await require("./launch-wait.js").waitLaunchGone(p, { who: "tests/reinstall.js launch", ready: "typeof window.E_VERSION === \"string\"" });
   await sleep(3500);
@@ -1278,5 +1273,5 @@ let newKey = "", lnkSm = "", lnkDt = "";
   console.log("\n" + (reachedEnd ? "" : "  INCOMPLETE - ") + checks + " check(s), " + fails
     + " failed, " + Math.round((Date.now() - t0) / 1000) + "s");
   if (!reachedEnd) console.log("  SUITE DID NOT COMPLETE");
-  process.exit(reachedEnd ? E.exitOf(fails) : (fails ? E.exitOf(fails) : E.NO_VERDICT));
+  process.exit(E.shellStartFailed() ? 1 : (reachedEnd ? E.exitOf(fails) : (fails ? E.exitOf(fails) : E.NO_VERDICT)));
 });

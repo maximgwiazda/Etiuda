@@ -46,12 +46,8 @@ function electronExe() {
 }
 
 /* The desk's debugging port, waited for as tests/desk.js waits: a busy machine brings the window up late. */
-async function connected(port) {
-  for (let i = 0; i < 40; i++) {
-    await sleep(500);
-    try { return await puppeteer.connect({ browserURL: "http://127.0.0.1:" + port, defaultViewport: null }); } catch (x) { /* not up yet */ }
-  }
-  throw new Error("the desk did not answer on the debugging port within 20 s");
+async function connected(port, proc) {
+  return E.connectShell({ port: port, child: proc });
 }
 
 async function main() {
@@ -85,7 +81,7 @@ async function main() {
       stdio: ["ignore", "pipe", "pipe"],
       env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: docs })
     });
-    browser = await connected(port);
+    browser = await connected(port, child);
     E.lowerTree(child.pid);
 
     const pages = await browser.pages();
@@ -140,7 +136,7 @@ async function main() {
       stdio: ["ignore", "pipe", "pipe"],
       env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: docs })
     });
-    const browser2 = await connected(port);
+    const browser2 = await connected(port, child2);
     E.lowerTree(child2.pid);
     const pages2 = await browser2.pages();
     const page2 = pages2[0];
@@ -190,5 +186,6 @@ async function main() {
 
 main().catch(err => {
   console.error("  FAIL " + (err && err.message || err));
+  console.log("#counts checks=" + checks + " failed=" + fails);
   process.exit(1);
 });
