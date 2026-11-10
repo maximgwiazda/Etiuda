@@ -654,8 +654,12 @@ Var TurnReady
 Var InstalledVersion
 Var RecogniseMsg
 !endif
+# The uninstaller's own: the installer pass never reads them, and makensis's warning 6001 for an unused variable
+# is an error in this build.
+!ifdef BUILD_UNINSTALLER
 Var RemoveMyData
 Var RemoveDataBox
+!endif
 
 !macro TurnEmit UN
   !ifdef TURN_PFX

@@ -572,6 +572,22 @@ function clearDeskOnlyWhenCalled(text) {
   }
   return open !== null;
 }
+/* The uninstaller's variables are declared only in its pass: the installer pass never reads them, and makensis's warning
+   6001 for an unused variable fails the package. */
+function unVarsOnlyUninstaller(text) {
+  const t = String(text || "");
+  return ["RemoveMyData", "RemoveDataBox"].every(name => {
+    const at = t.search(new RegExp("^Var " + name + "\\b", "m"));
+    if (at < 0) return false;
+    const lines = t.slice(0, at).split(/\r?\n/).filter(l => /^[ \t]*!(if|endif)/.test(l));
+    let open = null, depth = 0;
+    for (const l of lines) {
+      if (/^[ \t]*!if/.test(l)) { depth++; if (/^[ \t]*!ifdef[ \t]+BUILD_UNINSTALLER\b/.test(l)) open = depth; }
+      else { if (open === depth) open = null; depth--; }
+    }
+    return open !== null;
+  });
+}
 function licenceDefine(text) {
   return /^[ \t]*!define ETIUDA_REMOVE_LICENCE_WITH_DATA\b.*plant:uninstall-licence-goes/m.test(text);
 }
@@ -581,6 +597,8 @@ function installLeg(decision) {
   try { nsh = fs.readFileSync(path.join(ROOT, "shell", "installer.nsh"), "utf8"); } catch (e) { nsh = ""; }
   check(nsh.indexOf(BOX_EN) >= 0 && nsh.indexOf(LINE_EN) >= 0 && nsh.indexOf(BOX_PL) >= 0 && nsh.indexOf(LINE_PL) >= 0 && boxOff(nsh),
     "4d7 the checkbox is off by default and carries the copywriter's line in both languages");
+  check(unVarsOnlyUninstaller(nsh) && !unVarsOnlyUninstaller(nsh.replace(/^!ifdef BUILD_UNINSTALLER\r?\n(Var RemoveMyData)/m, "$1")),
+    "4d13 Var RemoveMyData and Var RemoveDataBox are declared only under !ifdef BUILD_UNINSTALLER, so the installer pass leaves makensis no unused variable (warning 6001 fails the package)");
   check(clearDeskOnlyWhenCalled(nsh) && !clearDeskOnlyWhenCalled(nsh.replace(/^([ \t]*)!ifndef ETIUDA_REMOVE_LICENCE_WITH_DATA\r?\n([ \t]*Function un\.ClearDeskFolder)/m, "$2")),
     "4d12 un.ClearDeskFolder is compiled only under !ifndef ETIUDA_REMOVE_LICENCE_WITH_DATA, so the licence switch leaves makensis no unreferenced function (warning 6010 fails the package)");
   check(deskKeepsDataStep(nsh) && !deskKeepsDataStep(nsh.replace(/^(!macro customUnInstall)/m, "!define OWN_UNINSTALL_DATA_STEP\n$1")),
