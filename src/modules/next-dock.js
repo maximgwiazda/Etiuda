@@ -132,7 +132,7 @@ function syncNextDock(arrived){
   fab.hidden=!n && !now.path.length && !lanes;
   const badge=fab.querySelector(".fab-badge");
   if(badge) badge.textContent=n ? String(n) : "";
-  fab.title=t(lanes ? "Back to the cards" : "Show the conversation's path");
+  fab.title=t(lanes ? "Back to the cards" : "Show the timeline");
   fab.setAttribute("aria-label", t("Next replies")+": "+n);
   fab.setAttribute("aria-pressed", lanes ? "true" : "false");
   if(arrived===true && now.rows.some(r=>!r.used)){ fab.classList.remove("nudge"); void fab.offsetWidth; fab.classList.add("nudge"); }

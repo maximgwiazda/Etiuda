@@ -28,7 +28,7 @@ const EULA={en:"@EULA_EN@", pl:"@EULA_PL@"};
 const ABOUT_NEW=[
   {title:"The team's catalog in editions.", body:"When the catalog changes, the desk offers the new edition and shows, card by card, what changed, before anything is loaded."},
   {title:"Signed by the team's lead.", body:"A desk that joins a team keeps its lead's key and checks every later edition against it, and a file changed after signing never goes unnoticed."},
-  {title:"The conversation's path.", body:"Space turns from the cards to the conversation in front: the replies it has sent and those that can follow. Space again brings the cards back."},
+  {title:"The timeline.", body:"Space turns from the cards to the timeline of the conversation in front: what has been sent, the last reply whole, and what can follow it. Space again brings the cards back."},
   {title:"Next replies on {KEY1} to {KEY4}.", body:"After each reply sent, up to four that can follow wait one key each: the catalog's own first, then those this desk has learnt."}
 ];
 const ABOUT_EARLIER=[
