@@ -4557,6 +4557,16 @@ const CARD_B = {
           return eq(got, "true,true,false,true,true,false,true");
         } finally { w.restore(); }
       });
+    /* The peek's click is the resting deck's alone: a deck still dealing gives its slabs no pointer, so a press aimed at the
+       front card's controls mid-deal is not caught by a reply in flight (D3, the test architect's edit of 2026-11-10). */
+    check("deck.js", "1110dk7 a dealing deck's slabs take no pointer and a resting closed deck's peek does",
+      () => {
+        const css = fs.readFileSync(join(MODDIR, "..", "template.html"), "utf8");
+        const moving = css.match(/\.card\.deck\.deck-moving>\.txt\.deck-back\{[^}]*\}/);
+        const resting = css.match(/\.card\.deck:not\(\.deck-open\)>\.txt\.deck-back\{[^}]*\}/);
+        const got = [!!moving && /pointer-events:\s*none/.test(moving[0]), !!resting && !/pointer-events:\s*none/.test(resting[0])].join(",");
+        return eq(got, "true,true");
+      });
     check("settings.js", "1016dk3 Layout's switch pressed off in Settings lays an open deck flat at once: its classes, height and lengths gone, the card it faded given back, the scan it owed let go and the list no longer watched, with eDeckOff stored and a toast that says so; pressed on, every deck is tucked anew without a reload, the list watched again and the key forgotten",
       () => {
         const w = world();
