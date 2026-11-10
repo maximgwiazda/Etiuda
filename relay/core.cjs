@@ -1093,9 +1093,11 @@ function createCore(deps) {
     const lapsedBlob = lapseGate(false);
     if (lapsedBlob) return lapsedBlob; /* plant:lapse-blob */
     const now = clock();
-    /* An uploaded invitation is told one refusal for every id but its own, before a blob or a tomb is read.
-       A quiet session is left to the line below, which tells it removed. */
+    /* An uploaded invitation is told one refusal for every id but its own, before a blob or a tomb is read. A quiet session
+       (a key removed earlier, through an invitation) is told removed for every id but its own, before the read as well, so it
+       never learns whether a blob it knew has expired (the test architect's hold of 934, 2026-11-10). */
     if (!s.quiet && answerOnly(s) && id !== s.inv) return no("not-enrolled"); /* plant:answer-same */
+    if (s.quiet && id !== s.inv) return no("removed");
     const m = is(HEX32, id) ? store.get("blob:" + id) : undefined;
     if (m && expired(m, now)) return no("expired");
     /* The lead's answer to its own request reaches even a desk rejoining after its removal (the quiet session of board

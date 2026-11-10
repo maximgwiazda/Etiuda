@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 493;
+const EXPECTED = 494;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -1919,6 +1919,22 @@ async function main() {
       + " again, nor opens a key session after: token " + said(x.hello) + ", resume " + said(resumed) + ", upload " + said(up)
       + ", list " + said(quiet) + ", fetch " + said(fetched) + ", socket " + said(sock) + ", second " + said(second)
       + ", key after " + said(later) + (later.json && later.json.invite === true ? " (the invitation's session)" : "") + ", its list " + said(laterList) + ", first session " + (session ? "open" : "none"));
+    /* A quiet session hears removed for a deletion past its keep, never expired: whether a blob it knew has expired is not
+       its to learn (the test architect's hold of 934, 2026-11-10). */
+    {
+      const qs = laterSession || rs;
+      const leadS = await sessionOf(x.w, x.w.lead);
+      const del = sealAs(x.w, x.w.lead, "gone.ec", 50, { kind: "delete" });
+      const upDel = await put(x.w, leadS, del);
+      const store = x.w.R.stores.get(x.w.rt);
+      const row = store.get("blob:" + del.id);
+      if (row) { row.at = x.w.R.clock.now - C.KEEP_MS - 1; store.put("blob:" + del.id, row); }
+      const qHeard = await getBlob(x.w, qs, del.id);
+      const leadHeard = await getBlob(x.w, leadS, del.id);
+      check(upDel.status === 200 && !!row && refused(qHeard, "removed") && refused(leadHeard, "expired"),
+        "934x a quiet session asking for a deletion past its keep hears removed, not expired, while the lead is told expired: "
+        + said(qHeard) + ", lead " + said(leadHeard) + ", upload " + said(upDel));
+    }
     const early = await removedThen(false);
     const earlyBlob = sealJoin(early.w, early.w.desk, 1, "desk:" + early.w.deskId);
     const earlyUp = await put(early.w, early.hello.json && early.hello.json.session, earlyBlob, { extra: { pub: early.w.desk.pub } });
