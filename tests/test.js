@@ -4294,6 +4294,7 @@ function pageWatchTests() {
     reload() { log.push(recovering.delete(7) ? "reload marked" : "reload unmarked"); },
     forcefullyCrashRenderer() { log.push("kill"); } };
   const win = { webContents: wc, on: (t, fn) => { winOn[t] = fn; }, isDestroyed: () => false, close() { log.push("close"); },
+    quit() { log.push("quit"); },
     getBounds: () => ({ x: 0, y: 0, width: 1200, height: 800 }) };
   class Box {
     constructor(o) { const self = this; this.o = o; this.wcOn = {}; this.winOn = {}; this.closed = false;
@@ -4327,7 +4328,7 @@ function pageWatchTests() {
   eq("a second loss within a minute asks in the recovery window, and its Restart reloads, marked",
     step(gone("crashed")), ["asks gone", "reload marked"]);
   clock += 10000; answers.push(1);
-  eq("and its Close closes the window", step(gone("crashed")), ["asks gone", "close"]);
+  eq("choosing Close, index 1, records a quit, not a bare close", step(gone("crashed")), ["asks gone", "quit"]);
   eq("a page that closed on its own is left alone", step(gone("clean-exit")), []);
   answers.push(0);
   eq("the hang window's Wait leaves the page alone", step(() => winOn.unresponsive()), ["asks hung"]);
@@ -4400,9 +4401,13 @@ function recoveryWindowTests() {
   const stopped = [nav("https://example.com/"), nav(base + "?answer-7")];
   const unsettled = !a.p.settled;
   const chose = nav(base + "?answer-1");
+  const watchSrc = fs.readFileSync(path.join(E.ROOT, "shell", "page-watch.cjs"), "utf8");
+  const quitsOnClose = /response === 1\)/.test(watchSrc) && /o\.quit\(\)/.test(watchSrc) && !/response === 1\) win\.close\(\)/.test(watchSrc);
   eq("it shows when drawn, refuses every navigation and new window, passes over a query that is no choice, answers the chosen link's index, closes and takes its file away",
     [a.w.shown, stopped, a.w.opener && a.w.opener().action, unsettled, chose, a.p.value, a.w.closed, fs.existsSync(a.w.file)],
     ["show", [true, true], "deny", true, true, { response: 1 }, true, false]);
+  eq("choosing index 1 records a quit, not a bare close",
+    [a.p.value, quitsOnClose], [{ response: 1 }, true]);
 
   const b = ask(R, PL.gone, [PL.restart, PL.close]);
   b.w.wcOn["before-input-event"]({ preventDefault() {} }, { type: "keyDown", key: "Escape" });

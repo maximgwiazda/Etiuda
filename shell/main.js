@@ -7773,14 +7773,15 @@ function closeHeld(win, e) {
   /* Hide does not run the window's own place-keeping: a stay is not a close, and the place file stays as it was
      unless the first-close toast has something to remember. No tray is not a stay: hiding would leave the desk
      running with nothing to open it, so that close falls through. */
-  if (decision === "hide" && ensureTray()) {
+  const lost = win && win.webContents && win.webContents.etiudaLost;
+  /* A stopped page that has not come back is not hidden: the tray would show an empty pane. */
+  if (decision === "hide" && ensureTray() && !(lost && !lost.back)) {
     try { if (e && typeof e.preventDefault === "function") e.preventDefault(); } catch { /* already held */ }
     try { if (win && typeof win.hide === "function") win.hide(); } catch { /* this window cannot hide */ }
     try { maybeFirstClose(win); } catch { /* the toast is a courtesy */ }
     return true;
   }
   if (win && (win.etiudaInstallerClose || win.etiudaSessionEnd || win.etiudaRefusalClose)) return false;
-  const lost = win.webContents.etiudaLost;
   if (win.etiudaCloseOk || win.etiudaCloseAsking || quitting || PLACED_ASIDE || (lost && !lost.back)) return false;
   e.preventDefault();
   win.etiudaCloseAsking = true;
@@ -8801,6 +8802,12 @@ function pageWatchFor(win) {
     log: line => console.error("etiuda: " + line),
     lost: d => { win.webContents.etiudaLost = { reason: String(d.reason), exitCode: d.exitCode, at: Date.now() }; },
     reloading: () => { recovering.add(win.webContents.id); },
+    /* Close Etiuda quits. A bare close hides into the tray and the dead page comes back empty. */
+    quit: () => {
+      if (typeof win.quit === "function") { win.quit(); return; }
+      quitting = true;
+      try { app.quit(); } catch (e) { /* already leaving */ }
+    },
   };
 }
 /* ---- THE PICKER: the desk's replies over the window in use, by a hotkey -------------------------
