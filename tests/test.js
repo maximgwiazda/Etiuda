@@ -5962,8 +5962,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1385;
-const UI_STRINGS_SHA256 = "cbc0ada719c7c3309004574aaf1447659adddfc5e3536fd5a7b5486a6b98244a";
+const UI_STRINGS_COUNT = 1389;
+const UI_STRINGS_SHA256 = "ede34ef60da9d1e298783e69d17abebc4b744e73878c7de6611e74c33bac017f";
 
 /* WORDS OWED, the test architect's condition of 2026-11-09 on the Library and Maintenance layout.
    A table read through a variable ({key, icon, name, lede}) never reaches the census above or
@@ -5971,9 +5971,7 @@ const UI_STRINGS_SHA256 = "cbc0ada719c7c3309004574aaf1447659adddfc5e3536fd5a7b54
    and no count moves. Until the copywriter's words land in both languages, each is listed here,
    checked present, and printed as owed. A word that leaves the source leaves this list in the
    same commit, so the count only falls. */
-const OWED_WORDS = [
-  "Nothing in the library matches this search."
-];
+const OWED_WORDS = [];
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

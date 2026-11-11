@@ -12,6 +12,11 @@
  *   i6 between 420 and 520 px no chip shown and row is one line; under 420 px buttons stand on second line at right, name takes row width and wraps whole
  *   i7 no heading reads "Date modified"
  *   i8 the number's hover reads "Linked cards: {N}" with its own number
+ *   i9 the lede reads "Cards linked to every intent: {N}." with N the sample's cards marked allIntents; with those
+ *      cards put away, the sentence is gone
+ *   i10 in a 600 px box, a chevron outside the chips stands on exactly the rows whose chips overflow; pressing one
+ *      wraps that row's chips whole inside it, every chip pressable, the mark, name and number centred on the first chip
+ *      line within 2 px; pressing again closes it
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -418,6 +423,119 @@ try {
   });
   check(i8Res && i8Res.ok, "i8 the number's hover reads 'Linked cards: {N}' with its own number", i8Res);
 
+  /* --- i10: the chevron, in a box narrow enough that a row of two or more chips overflows --- */
+  await page.setViewport({ width: 1280, height: 900, deviceScaleFactor: 1 });
+  const i10Res = await page.evaluate(async () => {
+    const frames = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const box = document.querySelector(".sx-card:has(.mg-intents)");
+    if (!box) return { ok: false, reason: "no intents box" };
+    box.style.width = box.style.maxWidth = "600px";
+    await frames(); await frames();
+    const rows = [...document.querySelectorAll(".mg-intents .manage-row.mg-int")].filter(r => r.querySelector(".lw-chip"));
+    const wrong = [];
+    let over = 0, notOver = 0;
+    for (const r of rows) {
+      const mid = r.querySelector(".lw-mid"), more = r.querySelector("[data-chips-more]");
+      const o = mid.scrollWidth > mid.clientWidth + 1;
+      const shown = !!more && more.getClientRects().length > 0;
+      if (o) over++; else notOver++;
+      if (o !== shown) wrong.push({ row: r.getAttribute("data-introw"), over: o, shown });
+      if (more && mid.contains(more)) wrong.push({ row: r.getAttribute("data-introw"), inside: true });
+    }
+    const r = rows.find(x => { const m = x.querySelector("[data-chips-more]"); return m && m.getClientRects().length; });
+    let opened = null, closed = null;
+    if (r) {
+      const more = r.querySelector("[data-chips-more]"), mid = r.querySelector(".lw-mid"), name = r.querySelector(".mg-int-t");
+      const chipH = r.querySelector(".lw-chip").getBoundingClientRect().height;
+      more.click();
+      await frames();
+      r.scrollIntoView({ block: "center" });
+      await frames();
+      const mr = mid.getBoundingClientRect();
+      const chips = [...mid.querySelectorAll(".lw-chip")];
+      const outside = chips.filter(c => { const k = c.getBoundingClientRect(); return k.right > mr.right + 1 || k.bottom > mr.bottom + 1 || k.left < mr.left - 1; }).length;
+      const unpressable = chips.filter(c => { const k = c.getBoundingClientRect(); const e = document.elementFromPoint(k.left + k.width / 2, k.top + k.height / 2); return !e || !c.contains(e); }).length;
+      const firstChip = chips[0].getBoundingClientRect();
+      const mid1 = firstChip.top + firstChip.height / 2;
+      const centre = el => { const k = el.getBoundingClientRect(); return k.top + k.height / 2; };
+      const markEl = r.querySelector(".cat-slot");
+      const offTop = Math.max(Math.abs(centre(markEl) - mid1), Math.abs(centre(r.querySelector(".mg-int-n")) - mid1),
+        Math.abs(r.querySelector(".mg-int-t").getBoundingClientRect().top + 12 - mid1));
+      opened = { offTop: Math.round(offTop * 10) / 10, expanded: more.getAttribute("aria-expanded"), lines: Math.round(mr.height / chipH), outside, unpressable,
+        nameFirstLine: name.getBoundingClientRect().top < firstChip.bottom, tab: more.tabIndex, label: more.getAttribute("aria-label") };
+      more.click();
+      await frames();
+      closed = { expanded: more.getAttribute("aria-expanded"), height: Math.round(mid.getBoundingClientRect().height), chipH: Math.round(chipH),
+        shown: more.getClientRects().length > 0 };
+    }
+    box.style.width = box.style.maxWidth = "";
+    const ok = rows.length > 0 && over > 0 && !wrong.length && !!opened && opened.expanded === "true" && opened.lines >= 2
+      && opened.outside === 0 && opened.unpressable === 0 && opened.nameFirstLine && opened.offTop <= 2 && opened.tab >= 0
+      && closed.expanded === "false" && closed.height < closed.chipH * 1.5 && closed.shown;
+    return { ok, rows: rows.length, over, notOver, wrong: wrong.slice(0, 3), opened, closed };
+  });
+  check(i10Res && i10Res.ok, "i10 a chevron stands on exactly the overflowing rows; it opens that row's chips whole and pressable, name on the first line, and closes it", i10Res);
+
+  /* --- i9: the every-intent sentence, counted live from the catalog's own marks --- */
+  const sample = JSON.parse(fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8"));
+  const everyIds = (sample.cards || []).filter(c => c && c.allIntents === true).map(c => c.id);
+  const ledeText = () => page.evaluate(async () => {
+    if (window.openManage) window.openManage();
+    await new Promise(r => setTimeout(r, 100));
+    const s = document.querySelector('.sx-sec[data-lm="intents"]');
+    if (s) s.click();
+    await new Promise(r => setTimeout(r, 100));
+    const l = document.getElementById("libLede");
+    return l ? l.textContent : null;
+  });
+  const ledeOn = await ledeText();
+  const hid = await page.evaluate(async ids => {
+    const s = document.querySelector('.sx-sec[data-lm="catmac"]');
+    if (s) s.click();
+    await new Promise(r => setTimeout(r, 100));
+    let n = 0;
+    for (const id of ids) {
+      const b = [...document.querySelectorAll("[data-hide-card]")].find(x => x.getAttribute("data-hide-card") === id);
+      if (b) { b.click(); n++; await new Promise(r => setTimeout(r, 400)); }
+    }
+    return n;
+  }, everyIds);
+  const ledeOff = await ledeText();
+  const wantOn = "Cards linked to every intent: " + everyIds.length + ".";
+  check(everyIds.length > 0 && !!ledeOn && ledeOn.includes(wantOn) && hid === everyIds.length && !!ledeOff && !/every intent/.test(ledeOff),
+    "i9 the lede reads 'Cards linked to every intent: {N}.' with the catalog's own count, and drops it when those cards are put away",
+    { everyIds: everyIds.length, ledeOn, hid, ledeOff });
+
+  /* --- i11: a Library search for an intent's name shows the Intents section and that row (the filter once
+     named a class no intent row carries, so a search never showed Intents at all) --- */
+  const i11Res = await page.evaluate(async () => {
+    if (window.openManage) window.openManage();
+    await new Promise(r => setTimeout(r, 100));
+    const s = document.querySelector('.sx-sec[data-lm="intents"]');
+    if (s) s.click();
+    await new Promise(r => setTimeout(r, 150));
+    const nameOf = r => ((r.querySelector(".mg-int-t") || r).textContent || "").trim();
+    const rows = [...document.querySelectorAll(".manage-row[data-introw]")];
+    if (rows.length < 2) return { ok: false, rows: rows.length };
+    const target = rows.find(r => { const n = nameOf(r); return n.length > 3 && rows.filter(x => nameOf(x).indexOf(n) >= 0).length === 1; });
+    if (!target) return { ok: false, why: "no intent with a unique name" };
+    const id = target.getAttribute("data-introw"), name = nameOf(target);
+    const q = document.getElementById("libSearch");
+    if (!q) return { ok: false, why: "no search field" };
+    q.value = name; q.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise(r => setTimeout(r, 400));
+    const sec = document.querySelector('details.manage-sec[data-mg="intents"]');
+    const now = [...document.querySelectorAll(".manage-row[data-introw]")];
+    const t = now.find(r => r.getAttribute("data-introw") === id);
+    const shown = r => !!r && !r.hasAttribute("hidden") && !r.closest("[hidden]");
+    const otherHidden = now.filter(r => r !== t && r.hasAttribute("hidden")).length;
+    const q2 = document.getElementById("libSearch");
+    if (q2) { q2.value = ""; q2.dispatchEvent(new Event("input", { bubbles: true })); }
+    await new Promise(r => setTimeout(r, 200));
+    return { ok: !!sec && !sec.hasAttribute("hidden") && shown(t) && otherHidden > 0, name, sec: !!sec && !sec.hasAttribute("hidden"), row: shown(t), otherHidden };
+  });
+  check(i11Res && i11Res.ok, "i11 a Library search for an intent's name shows the Intents section with that row, and hides the rows it does not match", i11Res);
+
 } catch (e) {
   check(false, "run crashed: " + e.message, e.stack);
 } finally {
@@ -425,6 +543,6 @@ try {
   try { fs.rmSync(lab, { recursive: true, force: true }); } catch (e) {}
 }
 
-console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=8");
+console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=11");
 console.log(checks + " checks, " + fails + " failed");
-process.exit(fails || checks !== 8 ? 1 : 0);
+process.exit(fails || checks !== 11 ? 1 : 0);
