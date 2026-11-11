@@ -3672,14 +3672,12 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx-keys{display:inline-flex;gap:4px}
 .sx-keys kbd{font:600 12px var(--sans);padding:3px 8px;border-bottom-width:2px;border-radius:5px;background:var(--panel);color:var(--ink)}
 .sx-none{margin:12px 0;color:var(--dim)}
-/* The one page. The rail is a fixed width, so the page's box moves with the window: one column below
-   about 1000px of that box, two above it, three when the window is wide. A container query on the page
-   cannot choose this, because the columns' own width is what the query would measure. Keyboard shortcuts
-   take a column of their own while there is more than one. At two columns a break after that section
-   would open a third column and scroll sideways, so the shortcuts are placed in the second column and
-   every other section stacks in the first. At three columns the flow is ordinary columns, with the
-   shortcuts between the sections that come before them and the sections that come after. A line that
-   would overflow a narrow page stacks its control under the label. */
+/* The one page. The rail is a fixed width, so the count follows the window: one column below about
+   1000px of the page, two from there, three when the window is wide. A container query on the page
+   cannot choose this, because the columns' own width is what the query would measure. At two columns
+   a break after Keyboard shortcuts would open a third column and scroll sideways, so that section is
+   placed alone in the second column. At three, ordinary columns put it between what comes before and
+   what comes after. A line that would overflow a narrow page stacks its control under the label. */
 .sx:not(.lm) .sx-page{container-type:inline-size;container-name:sxpage}
 .sx:not(.lm) .sx-all{columns:1;column-gap:28px;column-fill:auto;width:100%}
 .sx:not(.lm) .sx-block{break-inside:avoid;margin:0 0 26px;min-width:0}

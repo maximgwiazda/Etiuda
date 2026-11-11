@@ -28,12 +28,11 @@ import { openMaintenance } from "./maintenance.js";
 import { E_VERSION } from "./env.js";
 import { sxIcon } from "./sx-icons.js";
 
-/* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name, in
-   columns that fill the width. Choosing a section shows that section alone: Appearance and Layout keep
-   their rows to the left of a small desk drawn from this page's own tokens, and every other section lays
+/* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name,
+   in columns that fill the width. Choosing a section shows that section alone: Appearance and Layout
+   keep their rows beside a small desk drawn from this page's own tokens, and every other section lays
    its rows out side by side. One test decides what belongs: would you set it once and forget it?
-   Anything touched weekly is a Menu item or a header control.
-   THE LOCKS LIVE HERE, hide/show does not: a lock is a standing preference, "hide it now" stays in the Menu.
+   Anything touched weekly is a Menu item or a header control. The locks live here, hide/show does not.
    A section is listed only while it holds a row, so no page is ever empty. */
 /* THE HOTKEY THAT BRINGS THE REPLIES OVER ANY WINDOW, where the host has one. The shell holds it,
    so the row asks the shell what is held, and a new combination is tried there before the desk
