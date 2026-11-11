@@ -172,8 +172,10 @@ try {
   check(S0.versionAbove("2.0.1", "2.0.0") && S0.versionAbove("2.10.0", "2.9.9") && !S0.versionAbove("2.0.1", "2.0.1")
     && !S0.versionAbove("2.0.0", "2.0.1") && !S0.versionAbove("2.0.1", ""), "u2h releases compare as three numbers, an equal one is not above");
   const wrongKeyId = note({}, root, n => { n.sig.keyId = "other-key"; return JSON.stringify(n); });
-  check(!S0.readNote(wrongKeyId).note && why(wrongKeyId) === "sig",
-    "u2i a correctly signed note with a wrong sig.keyId is refused: " + why(wrongKeyId));
+  /* sig.keyId lies outside the signed bytes and the format never uses it (the test architect, 23:43, refuting Argon's
+     finding 7): a correctly signed note is read whatever it names there, so a key file named otherwise never locks the desk out. */
+  check(!!S0.readNote(wrongKeyId).note,
+    "u2i a correctly signed note is read whatever its sig.keyId names, which is outside the signature: " + why(wrongKeyId));
 
   /* ---- u3: the bounded GET ----------------------------------------------------------------------------------------- */
   const f1 = serve(note());
