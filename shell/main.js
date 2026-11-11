@@ -27,12 +27,13 @@ const { watchPage } = require(path.join(__dirname, "page-watch.cjs"));
 const { decideClose, showNotification: showNotificationOf, notifyFirstClose: notifyFirstCloseOf, setLoginItemSettings: setLoginItemSettingsOf,
   createTray, buildTrayMenuTemplate, setJumpList: setJumpListOf, APP_IDS } = require(path.join(__dirname, "tray.cjs"));
 /* A HARNESS LAUNCH WRITES NOTHING THE ACCOUNT KEEPS OUTSIDE ITS LAB: no etiuda: handler, login item, jump list or toast.
-   Every harness launch carries a user-data folder of its own (the door refuses one without) or a test variable; a
-   customer's start carries neither. Each write below asks this first. */
+   Every harness launch carries a user-data folder of its own (the door refuses one without) or a test variable, and the
+   installer legs' build is one by what it is, whoever starts it; a customer's start is none of these. */
 function harnessLaunch() {
   const argv = Array.isArray(process.argv) ? process.argv : [];
   return argv.some(a => /^--user-data-dir(=|$)/.test(String(a)))
-    || ["ETIUDA_TEST_OFFSCREEN", "ETIUDA_TEST_DOCUMENTS", "ETIUDA_TEST_DEVTOOLS"].some(k => process.env[k] !== undefined);
+    || ["ETIUDA_TEST_OFFSCREEN", "ETIUDA_TEST_DOCUMENTS", "ETIUDA_TEST_DEVTOOLS"].some(k => process.env[k] !== undefined)
+    || testIdentityBuild(); /* plant:harness-test-build */
 }
 function setLoginItemSettings(electronApp, on) {
   if (harnessLaunch()) return null; /* plant:harness-login */
@@ -495,10 +496,14 @@ function handHeldLink(win) {
   }
   handPendingLink(win);
 }
-/* The installer legs' build (tools/test-identity.cjs) marks its package.json, and takes no scheme of the desk's at start. */
+/* The installer legs' build (tools/test-identity.cjs) marks its package.json; harnessLaunch reads it, once a run. */
+var testIdentityBuilt = null;
 function testIdentityBuild() {
-  try { return !!JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8")).etiudaTestBuild; }
-  catch (e) { return false; }
+  if (testIdentityBuilt === null) {
+    try { testIdentityBuilt = !!JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8")).etiudaTestBuild; }
+    catch (e) { testIdentityBuilt = false; }
+  }
+  return testIdentityBuilt;
 }
 /* An installed desk registers etiuda: on Windows. A dev start and a harness start leave the
    machine's registration as they found it, and a start that cannot take the scheme still opens.
@@ -506,7 +511,6 @@ function testIdentityBuild() {
 function registerEtiudaLink() {
   if (process.platform !== "win32" || typeof app.setAsDefaultProtocolClient !== "function") return;
   if (!app.isPackaged || process.env.ETIUDA_TEST_DOCUMENTS) return; /* plant:link-pack */
-  if (testIdentityBuild()) return;
   if (harnessLaunch()) return; /* plant:harness-link */
   let ok = false;
   try {

@@ -42,7 +42,7 @@ function judge(srcRaw) {
   const hl = fnText(src, "harnessLaunch");
   let marker = null;
   try {
-    const run = (argv, env) => new Function("process", hl + "\nreturn harnessLaunch();")({ argv, env });
+    const run = (argv, env, testBuild) => new Function("process", "testIdentityBuild", hl + "\nreturn harnessLaunch();")({ argv, env }, () => !!testBuild);
     marker = {
       plain: run(["Etiuda.exe"], {}),
       udd: run(["Etiuda.exe", "--user-data-dir=C:\\lab\\ud"], {}),
@@ -50,6 +50,7 @@ function judge(srcRaw) {
       docs: run(["Etiuda.exe"], { ETIUDA_TEST_DOCUMENTS: "C:\\lab\\d" }),
       devtools: run(["Etiuda.exe"], { ETIUDA_TEST_DEVTOOLS: "1" }),
       lookalike: run(["Etiuda.exe", "--user-data-dirx", "C:\\x\\--user-data-dir=y"], {}),
+      testBuild: run(["Etiuda QA.exe"], {}, true),
     };
   } catch (e) { marker = { error: e.message }; }
   out.marker = marker;
@@ -115,9 +116,10 @@ function regVerbs(srcRaw) {
 const mainSrc = fs.readFileSync(MAIN, "utf8");
 const now = judge(mainSrc);
 const m = now.marker || {};
-ok(m.plain === false && m.udd === true && m.offscreen === true && m.docs === true && m.devtools === true && m.lookalike === false,
+ok(m.plain === false && m.udd === true && m.offscreen === true && m.docs === true && m.devtools === true && m.lookalike === false
+   && m.testBuild === true,
   "hw1 the harness marker: a plain start is no harness launch; --user-data-dir, or any of ETIUDA_TEST_OFFSCREEN (even empty), "
-  + "ETIUDA_TEST_DOCUMENTS or ETIUDA_TEST_DEVTOOLS, is; a look-alike switch is not: " + JSON.stringify(m));
+  + "ETIUDA_TEST_DOCUMENTS or ETIUDA_TEST_DEVTOOLS, is, and so is the installer legs' build started bare; a look-alike switch is not: " + JSON.stringify(m));
 ok(Object.values(now.wrappers).every(v => v === "guarded"),
   "hw2 the login item (Start with Windows), the jump list, a toast and the first-close toast write nothing under the marker and once without: "
   + JSON.stringify(now.wrappers));
@@ -155,6 +157,10 @@ const markerLifted = judge(mainSrc.replace(/argv\.some\(a => \/\^--user-data-dir
 ok(markerLifted.marker && markerLifted.marker.udd === false, "hw9 control: the marker without its --user-data-dir clause reads a harness launch as plain");
 ok(regVerbs('execFileSync(REG_TOOL, ["add", "HKCU\\\\X"]); const qs = [\n ["query", "a"],\n ["delete", "b"]\n];\nexecFile(REG_TOOL, qs[i]);').join(",") === "add,query,delete",
   "hw10 control: the reg reader names a literal verb and every verb of an array it is handed");
+const testBuildLifted = judge(cut("harness-test-build"));
+ok(mainSrc.indexOf("plant:harness-test-build") > -1 && testBuildLifted.marker && testBuildLifted.marker.testBuild === false
+   && testBuildLifted.marker.plain === false,
+  "hw11 control: cutting plant:harness-test-build lets the installer legs' build, started with no switch or variable, read as a customer's start");
 
 console.log("\n#counts checks=" + checks + " failed=" + fails);
 process.exit(fails ? Math.min(fails, 63) : 0);
