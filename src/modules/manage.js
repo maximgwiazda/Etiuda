@@ -210,10 +210,10 @@ function mgCardRow(m, maxSent){
     '<span class="lw-c us lw-h-us"' + sentTipAttr + '>' + sent.inner + '</span>' +
     '<span class="lw-c sr lw-h-sr">' + src.html + '</span>' +
     '<span class="cacts">' +
-      '<button type="button" data-edit-card="' + esc(m.id) + '" title="Open the full editor" aria-label="Edit card">' + ICON_EDIT + '</button>' +
+      '<button type="button" data-edit-card="' + esc(m.id) + '" title="Open the full editor" aria-label="Edit card">'+ICON_EDIT+'</button>' +
       hideShow +
-      '<button type="button" class="danger mg-trash" data-remove-card="' + esc(m.id) + '" title="Delete this card" aria-label="Delete card">' + ICON_TRASH + '</button>' +
-      '<button type="button" class="star-btn' + (fav ? " on" : "") + '" data-fav-card="' + esc(m.id) + '" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + '</button>' +
+      '<button type="button" class="danger mg-trash" data-remove-card="' + esc(m.id) + '" title="Delete this card" aria-label="Delete card">'+ICON_TRASH+'</button>' +
+      '<button type="button" class="star-btn' + (fav ? " on" : "") + '" data-fav-card="' + esc(m.id) + '" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">'+(fav ? ICON_STAR_ON : ICON_STAR_OFF)+'</button>' +
     '</span></div>';
 }
 
@@ -295,7 +295,7 @@ function mgTreeHeadHtml(){
   }
 
   const hBtn = (col, cls, label) => {
-    return '<span class="' + cls + '" data-sort-col="' + col + '" role="button" tabindex="0" title="' + sortTip + '">' + esc(label) + '</span>';
+    return '<span class="' + cls + '" data-sort-col="' + col + '" role="button" tabindex="0" title="'+sortTip+'">' + esc(label) + '</span>';
   };
 
   return '<div class="lw-head" role="row">' +

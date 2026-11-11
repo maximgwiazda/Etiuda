@@ -7,7 +7,7 @@
  *   t1 at window widths 546, 700, 900, 1100, 1280, 1440, 1700, 2000 and 2560, with a category open:
  *      no horizontal scrollbar, no cell content past its row, buttons end inside list box
  *   t2 at each width, headings shown are exactly the columns the rule leaves for list box width; no Date modified
- *   t3 where box is under 420 px, card buttons stand on second line at right, name takes row width
+ *   t3 where box is under 420 px, card buttons stand on second line at right, name takes row width and starts under its category's name
  *   t4 at width where columns stand aside, card hover lists one line per hidden column in order, none for shown
  *   t5 node: 1d, 29d, 31d ago count 2 in Sent 30d, 1 in default 28d; page category shows sum, card with none empty
  *   t6 added card reads 'yours', edited 'changed here', untouched and only moved 'catalog'
@@ -291,13 +291,22 @@ try {
     const atRight = (rr.right - ar.right) < 20;
     // Name takes row width: nr.width >= rr.width - 40
     const nameFullWidth = nr.width >= (rr.width - 50);
+    // and the card's name starts under its category's name, within 6 px (the designer, 03:28: about 36 px in, not 67)
+    const lab = cardRow.querySelector(".mg-card-lab");
+    const catRow = cardRow.closest(".mg-cat") && cardRow.closest(".mg-cat").querySelector(".mg-cat-row");
+    const catName = catRow && (catRow.querySelector(".mg-cat-lab2") || catRow.querySelector(".mg-cat-fixed"));
+    const textLeft = el => { if (!el) return NaN; if (el.tagName === "INPUT") return el.getBoundingClientRect().left + parseFloat(getComputedStyle(el).paddingLeft) + parseFloat(getComputedStyle(el).borderLeftWidth);
+      const r = document.createRange(); r.selectNodeContents(el); return r.getBoundingClientRect().left; };
+    const cardTextLeft = textLeft(lab), catTextLeft = textLeft(catName);
+    const underCategory = Math.abs(cardTextLeft - catTextLeft) <= 6;
 
     cardBox.style.width = origWidth;
     cardBox.style.maxWidth = origMaxW;
     await new Promise(r => setTimeout(r, 60));
 
     return {
-      ok: secondLine && atRight && nameFullWidth,
+      ok: secondLine && atRight && nameFullWidth && underCategory,
+      cardTextLeft, catTextLeft,
       secondLine,
       atRight,
       nameFullWidth,
@@ -685,4 +694,4 @@ try {
 
 console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=10");
 console.log(checks + " checks, " + fails + " failed");
-process.exit(fails ? 1 : 0);
+process.exit(fails || checks !== 10 ? 1 : 0);
