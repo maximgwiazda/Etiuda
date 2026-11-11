@@ -209,16 +209,18 @@ function statsLift(n){
 /* HELD FOR THE DAY, per pack object: copies made while the agent works change no order until the
    date turns. A pack is replaced, never emptied, when a layer is loaded, so a new object is counted afresh. */
 const STATS_RECENT=new WeakMap();
-/** Copies per card id over the STATS_USE_DAYS days ending `today`, summed from the day buckets. */
-function statsRecentUse(pack, today){
+/** Copies per card id over the `windowDays` (default STATS_USE_DAYS) days ending `today`, summed from the day buckets. */
+function statsRecentUse(pack, today, windowDays){
   const out=new Map();
   if(!pack||typeof pack!=="object") return out;
   const day=STATS_YMD.test(String(today||"")) ? String(today) : statsYmd();
-  const held=STATS_RECENT.get(pack);
-  if(held&&held.day===day) return held.use;
+  const w=(typeof windowDays==="number" && windowDays>0) ? windowDays : STATS_USE_DAYS;
+  let held=STATS_RECENT.get(pack);
+  if(!held || held.day!==day) { held = { day: day, byW: new Map() }; STATS_RECENT.set(pack, held); }
+  if(held.byW.has(w)) return held.byW.get(w);
   const days=(pack.days&&typeof pack.days==="object"&&!Array.isArray(pack.days)) ? pack.days : {};
   const ids=Array.isArray(pack.dayIds) ? pack.dayIds : [];
-  const from=statsDayBefore(day, STATS_USE_DAYS-1);
+  const from=statsDayBefore(day, w-1);
   Object.keys(days).forEach(d=>{
     const c=STATS_YMD.test(d)&&d>=from&&d<=day&&days[d]&&days[d].c;
     if(c) Object.keys(c).forEach(k=>{
@@ -226,7 +228,7 @@ function statsRecentUse(pack, today){
       if(id!=null&&n>0) out.set(String(id),(out.get(String(id))||0)+n);
     });
   });
-  STATS_RECENT.set(pack,{day:day,use:out});
+  held.byW.set(w, out);
   return out;
 }
 const STATS_PAIR_DAYS=28;

@@ -1,10 +1,10 @@
 import { ensureCustomCat, openCardEditor, hideCard } from "./card-editor.js";
-import { baseCard, cardCommits, cardTitle, findCard, cardLang, cardText } from "./card-model.js";
+import { baseCard, cardCommits, cardTitle, findCard, cardLang, cardText, parts } from "./card-model.js";
 import { stampHtml } from "./card-chain.js";
 import { movedCardIds, cardOrderIdx, catSortIdx, ensureCardOrder, cardOrderTouched, moveCardWithin } from "./card-order.js";
 import { isAlwaysCat, setCatAlways } from "./cat-roles.js";
 import { importCatalogHere, catalogFileName } from "./catalog-file.js";
-import { CATS } from "./content-model.js";
+import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { catToggle, closeModal, dressDialogInputs, modalOpen, openCover, wireFolds } from "./dialog.js";
 import { markCutText } from "./cut-text.js";
 import { openIntentEditor, openCategoryEditor } from "./editors.js";
@@ -12,6 +12,7 @@ import { ICON_CHEVRON_R, ICON_EYE_SHUT, ICON_EYE_OPEN, ICON_EDIT, ICON_TRASH, IC
 import { intentNavName } from "./intent-text.js";
 import { askClearLocal, bringBackCleared, clearedHeld } from "./local-memory.js";
 import { mgReduceMotion, mgPinCard, E_EASE } from "./motion.js";
+import { statsRecentUse } from "./desk-stats.js";
 import { drawIntentRail } from "./rail-list.js";
 import { normWhoList, WHO_BASE } from "./stock.js";
 import { lySet } from "./storage.js";
@@ -78,54 +79,304 @@ function mgUsesTip(n){
   return eHost() ? counted(n,"Copied {N} time on this computer","Copied {N} times on this computer")
     : counted(n,"Copied {N} time in this browser","Copied {N} times in this browser");
 }
+
+let mgSent30Map = null;
+let mgSortCol = null;
+let mgSortDir = null;
+
+function stripLeadingGreetingAndPax(s){
+  let str = String(s || "").trim();
+  return str.replace(/^(?:\{(?:GREET|PAX)(?::[^{}]*)?\}[,\s.!?\-–—]*\s*)+/i, "");
+}
+
+function mgCardOpensWithText(m){
+  const l = cardLang(m);
+  const ps = parts(m, l);
+  const raw = (ps && ps[0]) || "";
+  if(!raw) return "";
+  const stripped = stripLeadingGreetingAndPax(raw);
+  return stripped.replace(/\s+/g, " ").replace(/\{([A-Z][A-Z0-9]*)(?::([^{}]*))?\}/g, "$1").trim();
+}
+
+function mgCardOpensWithHtml(m){
+  const l = cardLang(m);
+  const ps = parts(m, l);
+  const raw = (ps && ps[0]) || "";
+  if(!raw) return "";
+  const stripped = stripLeadingGreetingAndPax(raw);
+  const escStr = esc(stripped.replace(/\s+/g, " ").trim());
+  return escStr.replace(/\{([A-Z][A-Z0-9]*)(?::([^{}]*))?\}/g, (match, name) => '<span class="lw-tok">' + name + '</span>');
+}
+
+function mgCardLangsText(m){
+  return CONTENT_LANGS.filter(code => !!cardText(m, "body", code)).join(", ");
+}
+
+function mgCardLangsHtml(m){
+  return CONTENT_LANGS.filter(code => !!cardText(m, "body", code))
+    .map(code => '<i class="lw-lang">' + esc(code.toUpperCase()) + '</i>')
+    .join("");
+}
+
+function mgCardRepliesText(m){
+  const n = macroBlockCount(m);
+  if(n <= 1) return "";
+  const isSeq = !!(m.alt && m.seq);
+  return isSeq ? t("{N} steps").replace("{N}", n) : t("{N} alternatives").replace("{N}", n);
+}
+
+function mgCardRepliesHtml(m){
+  const txt = mgCardRepliesText(m);
+  return txt ? esc(txt) : "";
+}
+
+function mgCardIntentsText(m){
+  if(m.allIntents) return t("every intent");
+  const links = normalizeCardIntents(m);
+  if(!links.length) return "";
+  const firstIdx = intentIdxFromId(links[0]);
+  const firstName = firstIdx >= 0 ? intentNavName(firstIdx) : "";
+  if(!firstName) return "";
+  if(links.length > 1) return firstName + " +" + (links.length - 1);
+  return firstName;
+}
+
+function mgCardIntentsHtml(m){
+  if(m.allIntents) return '<i class="lw-src">' + esc(t("every intent")) + '</i>';
+  const links = normalizeCardIntents(m);
+  if(!links.length) return "";
+  const firstIdx = intentIdxFromId(links[0]);
+  const firstName = firstIdx >= 0 ? intentNavName(firstIdx) : "";
+  if(!firstName) return "";
+  if(links.length > 1){
+    return esc(firstName) + ' <b>+' + (links.length - 1) + '</b>';
+  }
+  return esc(firstName);
+}
+
+function mgCardSource(m){
+  let key = "catalog";
+  if(m._custom) key = "yours";
+  else if(m._overridden) key = "changed here";
+  const word = t(key);
+  const html = key === "catalog" ? '<u>' + esc(word) + '</u>' : '<i class="lw-src">' + esc(word) + '</i>';
+  return { key, word, html };
+}
+
+function mgCardSent(m, maxSent){
+  const sent30 = mgSent30Map ? (mgSent30Map.get(m.id) || 0) : 0;
+  const uses = (pack.useCounts && pack.useCounts[m.id]) | 0;
+  let tip = "";
+  if(sent30 > 0 || uses > 0){
+    tip = t("Sent, 30 days") + ": " + sent30;
+    if(uses > 0) tip += "\n" + mgUsesTip(uses);
+  }
+  let inner = "";
+  if(sent30 > 0){
+    const w = maxSent > 0 ? Math.max(1, Math.min(40, Math.round((sent30 / maxSent) * 40))) : 0;
+    inner = '<em style="width:' + w + 'px"></em>' + sent30;
+  }
+  return { inner, tip, val: sent30 };
+}
+
 /** A card inside the category tree. Hidden rows are greyed; the star is inert on them, so
  *  the only way back is the closed eye - the rule the intent rows already follow. */
-function mgCardRow(m){
-  const hid=!!m._hidden, fav=isFavourite(m.id);
-  const badge=(m._custom || m._overridden || movedCardIds().has(m.id))
-    ?'<span class="cbadge ed mg-badge" title="'+esc(t("Changed or added by you, not what the catalog shipped"))+'">'+esc(t("mod"))+'</span>':"";
-  // Local copy count - absent until the first copy, so unused rows stay quiet rather than
-  // wearing a "0" that reads as an accusation before anyone has worked a shift with it.
-  const uses=(pack.useCounts&&pack.useCounts[m.id])|0;
-  const useBadge=uses?'<span class="mg-uses" title="'+esc(mgUsesTip(uses))+'">'+uses+'×</span>':"";
-  const favTip=fav?"Remove from Favourites":"Add to Favourites";
-  const hideShow=hid
-    ?'<button type="button" data-show-card="'+esc(m.id)+'" title="Show this card again" aria-label="Show this card again">'+ICON_EYE_SHUT+'</button>'
-    :'<button type="button" data-hide-card="'+esc(m.id)+'" title="Put this card away: it greys out at the foot of this category" aria-label="Put this card away">'+ICON_EYE_OPEN+'</button>';
-  /* The title is plain text, not a field. Renaming lives behind ✎ and nowhere else: a card
-     already has a full editor, so a second path to the same value was two ways to do one thing,
-     and the row is cleaner as drag surface end to end. Categories keep their inline rename
-     because they have no editor to send you to. */
-  return '<div class="manage-row mg-card'+(hid?" is-hidden":"")+'" data-cardrow="'+esc(m.id)+'"'+
-      ' data-band="'+esc(mgCardBand(m))+'" title="Drag to reorder, or onto a category to move it there">'+
-    '<span class="mg-card-lab">'+esc(cardTitle(m)||"")+'</span>'+(cardCommits(m)?stampHtml("mg-stamp"):"")+badge+useBadge+
-    '<span class="cacts">'+
-      '<button type="button" data-edit-card="'+esc(m.id)+'" title="Open the full editor" aria-label="Edit card">'+ICON_EDIT+'</button>'+
-      hideShow+
-      '<button type="button" class="danger mg-trash" data-remove-card="'+esc(m.id)+'" title="Delete this card" aria-label="Delete card">'+ICON_TRASH+'</button>'+
-      '<button type="button" class="star-btn'+(fav?" on":"")+'" data-fav-card="'+esc(m.id)+'" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</button>'+
+function mgCardRow(m, maxSent){
+  const hid = !!m._hidden, fav = isFavourite(m.id);
+  const favTip = fav ? "Remove from Favourites" : "Add to Favourites";
+  const hideShow = hid
+    ? '<button type="button" data-show-card="'+esc(m.id)+'" title="Show this card again" aria-label="Show this card again">'+ICON_EYE_SHUT+'</button>'
+    : '<button type="button" data-hide-card="'+esc(m.id)+'" title="Put this card away: it greys out at the foot of this category" aria-label="Put this card away">'+ICON_EYE_OPEN+'</button>';
+
+  const openHtml = mgCardOpensWithHtml(m);
+  const langsHtml = mgCardLangsHtml(m);
+  const repHtml = mgCardRepliesHtml(m);
+  const intHtml = mgCardIntentsHtml(m);
+  const sent = mgCardSent(m, maxSent);
+  const src = mgCardSource(m);
+
+  const sentTipAttr = sent.tip ? ' title="' + esc(sent.tip) + '"' : '';
+
+  return '<div class="manage-row mg-card mg-card-row' + (hid ? " is-hidden" : "") + '" data-cardrow="' + esc(m.id) + '"' +
+      ' data-band="' + esc(mgCardBand(m)) + '" title="' + esc(t("Drag to reorder, or onto a category to move it there")) + '">' +
+    '<span class="lw-nm">' +
+      '<span class="mg-card-lab">' + esc(cardTitle(m) || "") + '</span>' +
+      (cardCommits(m) ? stampHtml("mg-stamp") : "") +
+    '</span>' +
+    '<span class="lw-c op lw-h-op cut-peek">' + openHtml + '</span>' +
+    '<span class="lw-c lg lw-h-lg">' + langsHtml + '</span>' +
+    '<span class="lw-c st lw-h-st">' + repHtml + '</span>' +
+    '<span class="lw-c in lw-h-in">' + intHtml + '</span>' +
+    '<span class="lw-c us lw-h-us"' + sentTipAttr + '>' + sent.inner + '</span>' +
+    '<span class="lw-c sr lw-h-sr">' + src.html + '</span>' +
+    '<span class="cacts">' +
+      '<button type="button" data-edit-card="' + esc(m.id) + '" title="Open the full editor" aria-label="Edit card">'+ICON_EDIT+'</button>' +
+      hideShow +
+      '<button type="button" class="danger mg-trash" data-remove-card="' + esc(m.id) + '" title="Delete this card" aria-label="Delete card">'+ICON_TRASH+'</button>' +
+      '<button type="button" class="star-btn' + (fav ? " on" : "") + '" data-fav-card="' + esc(m.id) + '" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">'+(fav ? ICON_STAR_ON : ICON_STAR_OFF)+'</button>' +
     '</span></div>';
 }
 
-/* The order cards take inside a category here. Named because the editor's arrows must
-   agree with the tree they were opened from - two views disagreeing about what "next"
-   means is the same fault the tiebreak comment below already describes. */
-function mgCardCmp(a,b){
-  return ((a.m._hidden?1:0)-(b.m._hidden?1:0)) ||
-         ((isFavourite(a.m.id)?0:1)-(isFavourite(b.m.id)?0:1)) ||
-         (cardOrderIdx(a.m.id)-cardOrderIdx(b.m.id)) ||
-         (a.i-b.i);
+function mgCardColVal(m, col){
+  if(col === "nm") return (cardTitle(m) || "").toLowerCase();
+  if(col === "op") return mgCardOpensWithText(m).toLowerCase();
+  if(col === "lg") return mgCardLangsText(m).toLowerCase();
+  if(col === "st") return macroBlockCount(m);
+  if(col === "in") return mgCardIntentsText(m).toLowerCase();
+  if(col === "us") return mgSent30Map ? (mgSent30Map.get(m.id) || 0) : 0;
+  if(col === "sr") {
+    if(m._custom) return "yours";
+    if(m._overridden) return "changed here";
+    return "catalog";
+  }
+  return "";
 }
+
+function mgCardCmp(a, b){
+  const hDiff = (a.m._hidden ? 1 : 0) - (b.m._hidden ? 1 : 0);
+  if(hDiff) return hDiff;
+
+  if(mgSortCol){
+    const va = mgCardColVal(a.m, mgSortCol);
+    const vb = mgCardColVal(b.m, mgSortCol);
+    let diff = 0;
+    if(typeof va === "number" && typeof vb === "number"){
+      diff = va - vb;
+    } else {
+      diff = String(va).localeCompare(String(vb));
+    }
+    if(diff !== 0){
+      return mgSortDir === "desc" ? -diff : diff;
+    }
+  } else {
+    const fDiff = (isFavourite(a.m.id) ? 0 : 1) - (isFavourite(b.m.id) ? 0 : 1);
+    if(fDiff) return fDiff;
+  }
+
+  return (cardOrderIdx(a.m.id) - cardOrderIdx(b.m.id)) || (a.i - b.i);
+}
+
 function mgCardsIn(k){
   return (cards||[]).map((m,i)=>({m,i})).filter(o=>o.m&&o.m.c===k)
     .sort(mgCardCmp).map(o=>o.m);
 }
+
+function mgSortClick(col){
+  if(mgSortCol !== col){
+    mgSortCol = col;
+    mgSortDir = (col === "st" || col === "us") ? "desc" : "asc";
+  } else if(mgSortDir === ((col === "st" || col === "us") ? "desc" : "asc")){
+    mgSortDir = (col === "st" || col === "us") ? "asc" : "desc";
+  } else {
+    mgSortCol = null;
+    mgSortDir = null;
+  }
+  paintLibrary();
+}
+
+function mgTreeHeadHtml(){
+  const sortTip = esc(t("Sorts the cards inside each category by this column"));
+  const sortColName = {
+    nm: t("Name"),
+    op: t("Opens with"),
+    lg: t("Languages"),
+    st: t("Replies"),
+    in: t("Intents"),
+    us: t("Sent, 30 days"),
+    sr: t("Source")
+  };
+  let sortLineHtml = "";
+  if(mgSortCol){
+    const colName = sortColName[mgSortCol] || mgSortCol;
+    const wayName = mgSortDir === "desc" ? t("descending") : t("ascending");
+    const lineText = t("Sorted by {COLUMN}, {WAY}. A third click on the heading brings back the catalog's order, and dragging with it.")
+      .replace("{COLUMN}", colName).replace("{WAY}", wayName);
+    sortLineHtml = '<div class="lw-sort-line">' + esc(lineText) + '</div>';
+  }
+
+  const hBtn = (col, cls, label) => {
+    return '<span class="' + cls + '" data-sort-col="' + col + '" role="button" tabindex="0" title="'+sortTip+'">' + esc(label) + '</span>';
+  };
+
+  return '<div class="lw-head" role="row">' +
+    hBtn("nm", "lw-nm lw-h-nm", t("Name")) +
+    hBtn("op", "lw-c op lw-h-op", t("Opens with")) +
+    hBtn("lg", "lw-c lg lw-h-lg", t("Languages")) +
+    hBtn("st", "lw-c st lw-h-st", t("Replies")) +
+    hBtn("in", "lw-c in lw-h-in", t("Intents")) +
+    hBtn("us", "lw-c us lw-h-us", t("Sent, 30 days")) +
+    hBtn("sr", "lw-c sr lw-h-sr", t("Source")) +
+    '<span class="lw-ac lw-h-ac"></span>' +
+    '</div>' + sortLineHtml;
+}
+
+function updateTreeHoverTitles(root){
+  const tree = (root || document).querySelector(".mg-tree");
+  if(!tree) return;
+  const head = tree.querySelector(".lw-head");
+  if(!head) return;
+  const isColShown = cls => {
+    const el = head.querySelector("." + cls);
+    return el && el.offsetParent && getComputedStyle(el).display !== "none";
+  };
+  const hiddenCols = {
+    op: !isColShown("lw-h-op"),
+    lg: !isColShown("lw-h-lg"),
+    st: !isColShown("lw-h-st"),
+    in: !isColShown("lw-h-in"),
+    us: !isColShown("lw-h-us"),
+    sr: !isColShown("lw-h-sr"),
+  };
+  const dragHint = t("Drag to reorder, or onto a category to move it there");
+  const cardRows = tree.querySelectorAll(".mg-cat-body .manage-row.mg-card");
+  cardRows.forEach(row => {
+    const cid = row.getAttribute("data-cardrow");
+    const m = (cards || []).find(c => c && c.id === cid);
+    if(!m) return;
+    const lines = [dragHint];
+    if(hiddenCols.op){
+      const op = mgCardOpensWithText(m);
+      if(op) lines.push(t("Opens with") + ": " + op);
+    }
+    if(hiddenCols.lg){
+      const lg = mgCardLangsText(m);
+      if(lg) lines.push(t("Languages") + ": " + lg);
+    }
+    if(hiddenCols.st){
+      const st = mgCardRepliesText(m);
+      if(st) lines.push(t("Replies") + ": " + st);
+    }
+    if(hiddenCols.in){
+      const ins = mgCardIntentsText(m);
+      if(ins) lines.push(t("Intents") + ": " + ins);
+    }
+    if(hiddenCols.us){
+      const us = mgSent30Map ? (mgSent30Map.get(m.id) || 0) : 0;
+      if(us > 0) lines.push(t("Sent, 30 days") + ": " + us);
+    }
+    if(hiddenCols.sr){
+      const src = mgCardSource(m);
+      if(src && src.word) lines.push(t("Source") + ": " + src.word);
+    }
+    row.setAttribute("title", lines.join("\n"));
+  });
+}
+
 /** The category -> card tree. Categories run in catOrder - dragging here and dragging
  *  a pill mean the same thing; inside a category, hidden sinks and favourites rise,
  *  matching the card list. Plain rows and an explicit toggle button, not <details>/
  *  <summary>: a summary hijacks every click inside it (an inline rename field could not
  *  take a caret) and is not a sane thing to drag. Disclosure lives in mgOpen either way. */
 function mgCatTree(){
+  mgSent30Map = statsRecentUse(pack, undefined, 30);
+  let maxCardSent = 0;
+  (cards || []).forEach(m => {
+    if(m){
+      const s = mgSent30Map.get(m.id) || 0;
+      if(s > maxCardSent) maxCardSent = s;
+    }
+  });
+
   const known=Object.keys(CATS);
   known.sort((a,b)=>catSortIdx(a)-catSortIdx(b));
   const byCat={};
@@ -135,12 +386,19 @@ function mgCatTree(){
     const row={m,i};
     if(byCat[m.c]) byCat[m.c].push(row); else orphans.push(row);
   });
+
+  let maxCatSent = 0;
+  known.forEach(k => {
+    const sum = (byCat[k] || []).reduce((acc, row) => acc + (mgSent30Map.get(row.m.id) || 0), 0);
+    if(sum > maxCatSent) maxCatSent = sum;
+  });
+
   /* The tiebreak is pack.cardOrder, NOT the position in `cards`: `cards` is filled in
      catalog order then customs and nothing re-sorts it by the user's arrangement, while
      cardOrder is the record the card list itself sorts by (cmpCardDisplay's final
      tiebreak). Reading `a.i-b.i` here made a drag persist for the list and snap back in
      Manage - two views disagreeing about what "order" means. One record, both views. */
-  const order=list=>list.sort(mgCardCmp).map(o=>mgCardRow(o.m)).join("");
+  const order=list=>list.sort(mgCardCmp).map(o=>mgCardRow(o.m, maxCardSent)).join("");
 
   const group=(k,rows,fixed,label)=>{
     const n=rows.length;                      // CARDS - guards the delete x below
@@ -174,14 +432,29 @@ function mgCatTree(){
         'title="'+(alwaysOn
           ? t("Supporting category, relevant regardless of the intent")
           : t("Make this a supporting category, relevant regardless of the intent"))+'" aria-label="'+esc(t("Supporting category"))+'">'+ICON_ROLE_ALWAYS+'</button>';
+
+    const catSent = rows.reduce((acc, row) => acc + (mgSent30Map.get(row.m.id) || 0), 0);
+    let catSentTip = "";
+    let catSentBar = "";
+    if(catSent > 0){
+      catSentTip = ' title="' + esc(t("Sent, 30 days") + ": " + catSent) + '"';
+      const bw = maxCatSent > 0 ? Math.max(1, Math.min(40, Math.round((catSent / maxCatSent) * 40))) : 0;
+      catSentBar = '<em style="width:' + bw + 'px"></em>';
+    }
+
     return '<div class="mg-cat'+(op?" is-open":"")+'" data-cat="'+esc(k)+'">'+
       '<div class="mg-cat-row"'+(k==="__orphan"?"":' data-crow="'+esc(k)+'" title="Drag to reorder"')+'>'+
-        '<button type="button" class="mg-tw" data-toggle="'+esc(key)+'" aria-expanded="'+(op?"true":"false")+'" '+
-          'title="'+esc(t(op?"Collapse":"Expand"))+'" aria-label="'+esc(t(op?"Collapse":"Expand"))+' '+esc(label)+'">'+ICON_CHEVRON_R+'</button>'+
-        name+'<span class="mg-cat-n">'+nMac+'</span>'+
-        /* Edit first, matching the card row (edit, hide, delete, star) - the primary action on
-           the thing this row names should sit in the same place in both. The role toggle follows
-           it rather than leading. */
+        '<span class="lw-nm">' +
+          '<button type="button" class="mg-tw" data-toggle="'+esc(key)+'" aria-expanded="'+(op?"true":"false")+'" '+
+            'title="'+esc(t(op?"Collapse":"Expand"))+'" aria-label="'+esc(t(op?"Collapse":"Expand"))+' '+esc(label)+'">'+ICON_CHEVRON_R+'</button>'+
+          name+'<span class="mg-cat-n">'+nMac+'</span>'+
+        '</span>'+
+        '<span class="lw-c op lw-h-op"></span>'+
+        '<span class="lw-c lg lw-h-lg"></span>'+
+        '<span class="lw-c st lw-h-st"></span>'+
+        '<span class="lw-c in lw-h-in">' + (alwaysOn ? '<i class="lw-src">' + esc(t("every intent")) + '</i>' : '') + '</span>'+
+        '<span class="lw-c us lw-h-us"' + catSentTip + '>' + catSentBar + (catSent ? catSent : '') + '</span>'+
+        '<span class="lw-c sr lw-h-sr"></span>'+
         '<span class="mg-cat-acts">'+editc+roles+add+x+'</span>'+
       '</div>'+
       '<div class="mg-cat-body"'+(op?"":" hidden")+'>'+
@@ -191,7 +464,8 @@ function mgCatTree(){
 
   const groups=known.map(k=>group(k,byCat[k],false,CATS[k])).join("");
   const stray=orphans.length ? group("__orphan",orphans,true,t("Uncategorised")) : "";
-  return '<div class="mg-tree">'+(groups+stray||'<div class="manage-empty">'+esc(t("No categories."))+'</div>')+'</div>';
+  const treeContent = groups + stray ? mgTreeHeadHtml() + groups + stray : '<div class="manage-empty">'+esc(t("No categories."))+'</div>';
+  return '<div class="mg-tree">' + treeContent + '</div>';
 }
 
 /* ---- Reordering inside Manage: pointer-based and bound to the document - the swap
@@ -388,7 +662,7 @@ function wireManageDrag(){
     const irow=e.target.closest(".manage-row[data-introw]");
     const wrow=e.target.closest(".lw-name[data-wrow]");
     if(crow) mgDrag={kind:"cat", key:crow.getAttribute("data-crow"), el:crow.closest(".mg-cat")};
-    else if(mrow) mgDrag={kind:"card", key:mrow.getAttribute("data-cardrow"), el:mrow};
+    else if(mrow && !mgSortCol) mgDrag={kind:"card", key:mrow.getAttribute("data-cardrow"), el:mrow};
     else if(irow) mgDrag={kind:"intent", key:irow.getAttribute("data-introw"), el:irow};
     else if(wrow) mgDrag={kind:"who", key:wrow.getAttribute("data-wrow"), el:wrow};
     else return;
@@ -1243,6 +1517,7 @@ function paintLibrary(host,body){
     applyLibView(page);
     dressDialogInputs(page);
     markCutText(page);
+    updateTreeHoverTitles(page);
   }
   // The tab takes the keyboard where its wiring left focus nowhere inside it, as a dialog does.
   const at=document.activeElement;
@@ -1297,8 +1572,33 @@ function wireLibrary(page){
       // pinned like the sections; catToggle does its own measuring inside modalResize
       mgPinCard();
       catToggle(btn.closest(".mg-cat"), btn.getAttribute("data-toggle"));
+      markCutText(btn.closest(".mg-cat"));
+      updateTreeHoverTitles(page);
     };
   });
+
+  page.querySelectorAll(".lw-head [data-sort-col]").forEach(btn=>{
+    btn.onclick=()=>{
+      mgSortClick(btn.getAttribute("data-sort-col"));
+    };
+    btn.onkeydown=e=>{
+      if(e.key==="Enter"||e.key===" "){
+        e.preventDefault();
+        mgSortClick(btn.getAttribute("data-sort-col"));
+      }
+    };
+  });
+  page.querySelectorAll(".mg-cat-body .manage-row.mg-card").forEach(r=>{
+    r.addEventListener("pointerenter", ()=>updateTreeHoverTitles(page), {passive:true});
+  });
+  const treeEl = page.querySelector(".mg-tree");
+  const cardBox = (treeEl && treeEl.closest(".sx-card")) || treeEl;
+  if(cardBox && typeof ResizeObserver !== "undefined"){
+    const ro = new ResizeObserver(() => {
+      updateTreeHoverTitles(page);
+    });
+    ro.observe(cardBox);
+  }
 
   // ---- card rows in the category tree
   /* Role toggles. Both repaint the pills and the cards, because the rings they control are on
@@ -1461,5 +1761,7 @@ export {
   libraryBodyHtml,
   openManage,
   wireManageDrag,
-  libraryActionsHtml
+  libraryActionsHtml,
+  paintLibrary,
+  mgSortClick
 };

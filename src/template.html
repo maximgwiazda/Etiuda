@@ -3701,6 +3701,89 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx.lm-lib .sx-card .mg-cat-body{padding:0 0 6px 30px}
 .sx.lm-lib .sx-card .mg-int{padding-top:8px;padding-bottom:8px;border-top:1px solid var(--line)}
 .sx.lm-lib .sx-card .mg-int:first-of-type{border-top:0}
+/* Finding 4: Library Categories & cards tree with columns (4F) */
+.sx.lm-lib .sx-card:has(.mg-tree){overflow:visible;container:lwtree / inline-size}
+.mg-tree{min-width:0;--cols:minmax(250px,330px) minmax(120px,1fr) 84px 112px 200px 104px 110px 124px}
+.lw-head,.sx.lm-lib .sx-card .mg-cat-row,.mg-cat-body .manage-row.mg-card{
+  display:grid!important;grid-template-columns:var(--cols)!important;align-items:center;gap:0 14px;box-sizing:border-box
+}
+.lw-head{
+  padding:9px 12px 9px 10px;font:600 11.5px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);
+  border-bottom:1px solid var(--line-strong);position:sticky;top:-24px;background:var(--panel);z-index:3;user-select:none
+}
+.lw-head .lw-c,.lw-head .lw-nm{color:var(--dim)!important;font:inherit!important;cursor:default;outline:none}
+.lw-head [data-sort-col]{cursor:default}
+.lw-head [data-sort-col]:hover{color:var(--ink)!important}
+.lw-sort-line{
+  padding:6px 12px;font:12.5px var(--sans);color:var(--accent);background:var(--accent-soft);border-bottom:1px solid var(--line);
+  position:sticky;top:15px;z-index:2
+}
+.lw-nm{display:flex;align-items:center;gap:6px;min-width:0}
+.lw-nm input{min-width:40px;flex:1 1 auto}
+.mg-cat-body .manage-row.mg-card{
+  padding:1px 12px 1px 10px!important;margin:0!important;border-top:1px solid color-mix(in srgb,var(--line) 60%,transparent)
+}
+.mg-cat-body .mg-card-lab{padding-left:34px;white-space:nowrap;overflow:hidden;font-size:13px}
+.sx.lm-lib .sx-card .mg-cat-row{background:color-mix(in srgb,var(--ink) 2.5%,transparent)}
+.lw-c{min-width:0;white-space:nowrap;overflow:hidden;font:13px var(--sans);color:var(--ink)}
+.lw-c.op{color:var(--dim)}
+.lw-c.us{display:flex;align-items:center;gap:7px;font-variant-numeric:tabular-nums}
+.lw-c.us em{height:5px;border-radius:3px;background:var(--accent);opacity:.75;flex:none}
+.lw-lang{font:600 10.5px var(--sans);font-style:normal;border:1px solid var(--line-strong);border-radius:5px;padding:0 4px;margin-right:4px;color:var(--dim)}
+.lw-src{font:600 11px var(--sans);font-style:normal;color:var(--accent);background:var(--accent-soft);border-radius:6px;padding:1px 7px}
+.lw-c u{text-decoration:none;color:var(--dim);opacity:.7}
+.lw-c b{font:600 11px var(--sans);color:var(--dim)}
+.lw-tok{font-family:var(--mono);color:inherit}
+.mg-cat-acts,.mg-card .cacts{justify-self:end}
+
+@container lwtree (max-width: 1560px){
+  .lw-head,.sx.lm-lib .sx-card .mg-cat-row,.mg-cat-body .manage-row.mg-card{
+    grid-template-columns:minmax(250px,330px) minmax(120px,1fr) 84px 112px 200px 104px 124px!important
+  }
+  .lw-c.sr{display:none!important}
+}
+@container lwtree (max-width: 1400px){
+  .lw-head,.sx.lm-lib .sx-card .mg-cat-row,.mg-cat-body .manage-row.mg-card{
+    grid-template-columns:minmax(240px,320px) minmax(120px,1fr) 84px 190px 104px 124px!important
+  }
+  .lw-c.sr,.lw-c.st{display:none!important}
+}
+@container lwtree (max-width: 1240px){
+  .lw-head,.sx.lm-lib .sx-card .mg-cat-row,.mg-cat-body .manage-row.mg-card{
+    grid-template-columns:minmax(220px,280px) minmax(120px,1fr) 150px 96px 124px!important
+  }
+  .lw-c.sr,.lw-c.st,.lw-c.lg{display:none!important}
+}
+@container lwtree (max-width: 860px){
+  .lw-head,.sx.lm-lib .sx-card .mg-cat-row,.mg-cat-body .manage-row.mg-card{
+    grid-template-columns:minmax(200px,290px) minmax(100px,1fr) 170px 124px!important
+  }
+  .lw-c.sr,.lw-c.st,.lw-c.lg,.lw-c.us{display:none!important}
+}
+@container lwtree (max-width: 700px){
+  .lw-head,.sx.lm-lib .sx-card .mg-cat-row,.mg-cat-body .manage-row.mg-card{
+    grid-template-columns:minmax(160px,1fr) 120px 124px!important
+  }
+  .lw-c.sr,.lw-c.st,.lw-c.lg,.lw-c.us,.lw-c.op{display:none!important}
+  .mg-cat-body .mg-card-lab{padding-left:22px}
+}
+@container lwtree (max-width: 560px){
+  .lw-head,.sx.lm-lib .sx-card .mg-cat-row,.mg-cat-body .manage-row.mg-card{
+    grid-template-columns:minmax(0,1fr) auto!important;gap:0 6px!important
+  }
+  .lw-c.sr,.lw-c.st,.lw-c.lg,.lw-c.us,.lw-c.op,.lw-c.in{display:none!important}
+  .lw-head .lw-ac{display:none!important}
+  .mg-cat-body .mg-card-lab{padding-left:22px}
+}
+@container lwtree (max-width: 420px){
+  .mg-cat-body .manage-row.mg-card{
+    grid-template-columns:minmax(0,1fr)!important;padding-top:5px!important
+  }
+  .sx.lm-lib .sx-card .mg-cat-body{padding-left:0}
+  .mg-cat-body .mg-card-lab{padding-left:26px;white-space:normal}
+  .mg-card .cacts{justify-self:end}
+}
+
 /* Finding 4: Library Intents width and linked cards (4E) */
 .sx.lm-lib .sx-card:has(.mg-intents){overflow:visible;container-type:inline-size}
 .lw-ihead{position:sticky;top:-24px;z-index:3;background:var(--panel);
