@@ -347,12 +347,50 @@ function keysGroups(){
       +'<button type="button" class="btn" id="setResetKeys">'+esc(t("Reset shortcuts"))+'</button></div>', rows:[]}
   ].filter(Boolean);
 }
+/* THE TEAM'S SIGN-IN (board 980, stage 3), only where the team names providers: a button for each, how it stands, and Cancel
+   while the browser is open. The shell does all of it, and nothing on this desk waits on it. */
+const SIGNIN_NAMES={microsoft:"Microsoft", google:"Google"};
+let signinHeard=false;
+function signinNow(){
+  const h=eHost();
+  if(!h || typeof h.signinState!=="function") return null;
+  try{ const v=h.signinState(); return v && typeof v==="object" ? v : null; }catch(e){ return null; }
+}
+function signinRow(){
+  const s=signinNow();
+  const offered=s && Array.isArray(s.offered) ? s.offered.filter(id=>Object.prototype.hasOwnProperty.call(SIGNIN_NAMES,id)) : [];
+  if(!offered.length) return null;
+  let note="";
+  if(s.busy) note=t("Finish signing in in the browser that opened. Etiuda is waiting for it."); // placeholder: Claudette
+  else if(s.ask) note=t("This desk could not renew its sign-in by itself. It can sign in again below."); // placeholder: Claudette
+  else if(s.signedIn && SIGNIN_NAMES[s.signedIn]) note=t("Signed in with {PROVIDER}.").split("{PROVIDER}").join(SIGNIN_NAMES[s.signedIn]); // placeholder: Claudette
+  else if(s.said && s.said!=="signin-done") note=t("The sign-in did not finish. Everything on this desk works as before."); // placeholder: Claudette
+  const ctl=s.busy ? '<button type="button" class="btn" data-signin-stop="1">'+esc(t("Cancel"))+'</button>'
+    : offered.map(id=>'<button type="button" class="btn" data-e-open="signin" data-e-provider="'+esc(id)+'">'
+      +esc(t("Sign in with {PROVIDER}").split("{PROVIDER}").join(SIGNIN_NAMES[id]))+'</button>').join(""); // placeholder: Claudette
+  return {key:"signin", html:'<div class="set-row" data-row="signin">'+sxIcon("desks")+'<div class="set-label">'+esc(t("Team sign-in")) // placeholder: Claudette
+    +(note?'<small>'+esc(note)+'</small>':'')+'</div><div class="set-ctl">'+ctl+'</div></div>'};
+}
+function wireSigninRow(box){
+  const h=eHost();
+  if(!h || !box.querySelector('[data-row="signin"]')) return;
+  const again=()=>{ if(document.getElementById("setBody")) paintSettings(); };
+  if(!signinHeard && typeof h.onSignin==="function"){ signinHeard=true; h.onSignin(again); }
+  box.querySelectorAll('[data-e-open="signin"]').forEach(b=>{
+    b.onclick=()=>{ if(typeof h.signIn==="function") Promise.resolve(h.signIn(b.getAttribute("data-e-provider"))).then(again,again); };
+  });
+  box.querySelectorAll("[data-signin-stop]").forEach(b=>{
+    b.onclick=()=>{ if(typeof h.signinStop==="function") Promise.resolve(h.signinStop()).catch(()=>{}); };
+  });
+}
 function teamsGroups(){
   const joinDoor=joinDoorButton("setJoinTeam");
   /* One row per team this desk trusts a lead for; what the lead sees is said once, on the first team that still lists it,
      and the way back after leaving once, on the first row that offers Leave. */
   const rows=teamLeads().map((l,i,all)=>({key:"team", html:teamRowHtml(l, i===all.findIndex(x=>!x.removed)?t("The team's lead can see which catalog this desk uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk, since copies of unlisted catalogs are off. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own."):"", i===all.findIndex(x=>!x.policy))}));
   if(joinDoor) rows.push({key:"join", html:'<div class="set-row" data-row="join">'+sxIcon("desks")+'<div class="set-label">'+esc(t("Team"))+'</div><div class="set-ctl">'+joinDoor+'</div></div>'});
+  const signin=signinRow();
+  if(signin) rows.push(signin);
   /* Under a host only: a browser has no catalog folder to share. */
   if(eHasShared() && !relayDesk()) rows.push(row("sharededit","teams",t("Edit the shared catalog directly"),
     t("For a team that keeps its catalog without Studio: each change is written into the catalog in the shared folder. A catalog the team's lead signed is never touched."),
@@ -660,6 +698,7 @@ function wirePage(box){
     };
   }
   wireTeamRows(box);
+  wireSigninRow(box);
   const joinBtn=box.querySelector("#setJoinTeam");
   if(joinBtn) joinBtn.onclick=()=>openJoinPaste();
   /* Stored on the keystroke, like every other row here: there is no Save on this screen. */
