@@ -3889,7 +3889,9 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx.lm-lib .mg-intents .manage-row.mg-int .cat-slot{flex:0 0 16px}
 .sx.lm-lib .mg-intents .manage-row.mg-int .mg-int-t{flex:0 0 250px;min-width:250px;max-width:250px;white-space:nowrap;overflow:hidden}
 .sx.lm-lib .mg-intents .manage-row.mg-int .mg-int-n{flex:0 0 26px;text-align:right;font:600 11px var(--mono);opacity:.65;cursor:default}
-.sx.lm-lib .mg-intents .manage-row.mg-int .lw-mid{flex:1 1 0;min-width:0;display:flex;gap:6px;overflow:hidden;align-items:center;
+.sx.lm-lib .mg-intents .manage-row.mg-int .lw-mid{flex:1 1 0;min-width:0;display:flex;gap:6px;overflow:hidden;align-items:center}
+/* The fade means there is more, so only a closed row whose chips overflow wears it. */
+.sx.lm-lib .mg-intents .manage-row.mg-int.chips-fade .lw-mid{
   -webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 60px),#0000);
   mask-image:linear-gradient(90deg,#000 calc(100% - 60px),#0000)}
 .sx.lm-lib .mg-intents .manage-row.mg-int .lw-chip{flex:none;font:12.5px var(--sans);color:var(--dim);
@@ -3913,6 +3915,11 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx.lm-lib .mg-intents .manage-row.mg-int.chips-open .mg-int-t,.sx.lm-lib .mg-intents .manage-row.mg-int.chips-open .mg-int-n{line-height:24px}
 .sx.lm-lib .mg-intents .manage-row.mg-int.chips-open .lw-mid{flex-wrap:wrap;row-gap:6px;-webkit-mask-image:none;mask-image:none}
 .sx.lm-lib .mg-intents .manage-row.mg-int.chips-open .lw-chip{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+/* Under about 320px of chip column, an open row's chips start on the next line and run from the
+   name's left edge to the row's right. 22px is the mark and the row's gap. A closed row stays. */
+.sx.lm-lib .mg-intents.chips-narrow .manage-row.mg-int.chips-open{flex-wrap:wrap}
+.sx.lm-lib .mg-intents.chips-narrow .manage-row.mg-int.chips-open .lw-mid{
+  order:1;flex:1 0 calc(100% - 22px);width:calc(100% - 22px);margin-left:22px}
 
 @container (max-width: 520px){
   .lw-ihead,.sx.lm-lib .mg-intents .manage-row.mg-int .lw-mid,.sx.lm-lib .mg-intents .manage-row.mg-int .lw-more{display:none!important}

@@ -1546,6 +1546,28 @@ function paintLibrary(host,body){
     try{ page.focus({preventScroll:true}); }catch(e){}
 }
 registerScreen(LIB_SCREEN,{ title:()=>t("Library"), render:host=>paintLibrary(host) });
+/* The chevron is drawn only where a closed row's chips overflow their one line, and that same
+   check wears the fade. Under about 320px of chip column an open row's chips leave the column.
+   One observer for the list: a new one on every paint kept each previous list. */
+const CHIP_COL_NARROW=320;
+let chipOverflowRO=null;
+function markChipOverflow(){
+  const intentsList=document.querySelector(".mg-intents");
+  if(!intentsList) return;
+  const probes=[];
+  intentsList.querySelectorAll(".manage-row.mg-int:not(.chips-open) .lw-mid").forEach(mid=>{
+    if(mid.clientWidth>0) probes.push(mid.clientWidth);
+  });
+  if(probes.length) intentsList.classList.toggle("chips-narrow", Math.min(...probes)<CHIP_COL_NARROW);
+  intentsList.querySelectorAll(".manage-row.mg-int").forEach(r=>{
+    const more=r.querySelector("[data-chips-more]"), mid=r.querySelector(".lw-mid");
+    if(!more||!mid) return;
+    const open=r.classList.contains("chips-open");
+    const over=mid.scrollWidth>mid.clientWidth+1;
+    more.hidden=!open && !over;
+    r.classList.toggle("chips-fade", !open && over);
+  });
+}
 function wireLibrary(page){
   wireLibShell(page);
   $("#mgAddIntent").onclick=()=>openIntentEditor(null, true);
@@ -1672,17 +1694,8 @@ function wireLibrary(page){
       if(cid) openCardEditor(cid, null, true);
     };
   });
-  /* The chevron is drawn only where a row's chips overflow their one line, measured at paint and on
-     resize; it opens that row alone, and an open row stays drawn so it can close. */
+  /* It opens that row alone, and an open row stays drawn so it can close. */
   const intentsList=page.querySelector(".mg-intents");
-  const markChipOverflow=()=>{
-    if(!intentsList) return;
-    intentsList.querySelectorAll(".manage-row.mg-int").forEach(r=>{
-      const more=r.querySelector("[data-chips-more]"), mid=r.querySelector(".lw-mid");
-      if(!more||!mid) return;
-      more.hidden=!r.classList.contains("chips-open") && !(mid.scrollWidth>mid.clientWidth+1);
-    });
-  };
   page.querySelectorAll("[data-chips-more]").forEach(btn=>{
     btn.onclick=e=>{
       e.stopPropagation();
@@ -1694,12 +1707,14 @@ function wireLibrary(page){
       btn.setAttribute("aria-expanded",open?"true":"false");
       btn.title=word;
       btn.setAttribute("aria-label",word+" "+btn.getAttribute("data-chips-more"));
-      if(!open) markChipOverflow();
+      markChipOverflow();
     };
   });
   if(intentsList){
+    if(!chipOverflowRO && typeof ResizeObserver!=="undefined")
+      chipOverflowRO=new ResizeObserver(()=>{ markChipOverflow(); });
+    if(chipOverflowRO){ chipOverflowRO.disconnect(); chipOverflowRO.observe(intentsList); }
     markChipOverflow();
-    if(typeof ResizeObserver!=="undefined") new ResizeObserver(markChipOverflow).observe(intentsList);
   }
   page.querySelectorAll("[data-edit-intent-mg]").forEach(btn=>{
     btn.onclick=()=>openIntentEditor(+btn.getAttribute("data-edit-intent-mg"), true);
