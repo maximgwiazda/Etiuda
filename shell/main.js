@@ -8920,13 +8920,16 @@ async function lookForNote(fetchFn) {
     if (got.note) {
       const kept = keptNote();
       const take = keepNote(got.note, kept);
+      /* A look reads only when its note stands at or above the running version: a note below it says nothing of newer
+         releases, kept or not (Argon's update-offer finding 1). */
+      const proves = !versionAbove(engineVersion(), got.note.version);
       if (take === "same") {
-        look = "read";
+        look = proves ? "read" : "failed";
       } else if (take === "taken") {
         try {
           writeReplacing(path.join(app.getPath("userData"), NOTE_FILE), body.toString("utf8"));
           noteKept = got.note;
-          look = !kept && !versionAbove(got.note.version, engineVersion()) ? "failed" : "read";
+          look = proves ? "read" : "failed";
         } catch (e) {
           console.error("etiuda: the version note could not be kept - " + e.message);
           look = "failed";

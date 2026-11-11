@@ -29,7 +29,7 @@ const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const PLANTS = 11;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 58 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 59 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -262,6 +262,11 @@ try {
   const lBelow = await S4fresh.lookForNote(serve(note({ serial: 1, version: "2.0.1" })));
   check(lBelow === "failed" && S4fresh.updateState().offer === "",
     "u4l with nothing kept, a note below the running version gives look \"failed\": " + lBelow);
+  /* u4l2: the same note looked at again, now kept, still proves nothing about newer releases: a look reads only when its
+     note stands at or above the running version (Argon's update-offer finding 1, its second half). */
+  const lAgain = await S4fresh.lookForNote(serve(note({ serial: 1, version: "2.0.1" })));
+  check(lAgain === "failed" && S4fresh.updateState().offer === "",
+    "u4l2 the same note below the running version, looked at again once kept, is still a failed look: " + lAgain);
   const S4ctrl = shellOf({ running: "2.0.2" });
   const lAbove = await S4ctrl.lookForNote(serve(note({ serial: 1, version: "2.0.3" })));
   check(lAbove === "read" && S4ctrl.updateState().offer === "2.0.3",
