@@ -458,8 +458,8 @@
 
 # ETIUDA IS ASKED TO CLOSE, NEVER STOPPED. The installer signals the running desk to seal its tabs and close, followed
 # by taskkill without /F; the desk keeps in-progress tabs sealed on disk without a modal, or asks where it cannot, and
-# the installer waits and says so. Still open after that, it asks for Retry; a silent install gives up there and leaves
-# the installed version as it was. Both sentences name ${PRODUCT_NAME}, so each app says its own.
+# the installer waits and says so. Still open after that, it asks for Retry; a silent install gives up there with 1618,
+# the retry-later code README.md lists, and leaves the installed version as it was. Both sentences name ${PRODUCT_NAME}.
 !macro customCheckAppRunning
   Push $R6
   Push $R7
@@ -493,7 +493,7 @@
       ${If} ${Cmd} `MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$R9" /SD IDCANCEL IDRETRY`
         StrCpy $R7 0
       ${Else}
-        SetErrorLevel 2
+        SetErrorLevel 1618
         Quit ; plant:installer-gives-up
       ${EndIf}
     ${Else}

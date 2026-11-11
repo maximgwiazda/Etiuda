@@ -3962,7 +3962,7 @@ function installerUpdateTests() {
     const m = macro(text, "customCheckAppRunning");
     return [!!m, /nsExec::Exec `"\$SYSDIR\\cmd\.exe" \/C taskkill \/IM "\$\{APP_EXECUTABLE_FILENAME\}" \/FI "USERNAME eq %USERNAME%"`/.test(m),
       !/\/F\b|Stop-Process|KILL_PROCESS|-Force/.test(m), /DetailPrint "\$R6"/.test(m),
-      /MessageBox MB_RETRYCANCEL\|MB_ICONEXCLAMATION "\$R9" \/SD IDCANCEL IDRETRY`/.test(m), /SetErrorLevel 2\r?\n\s*Quit\b/.test(m)];
+      /MessageBox MB_RETRYCANCEL\|MB_ICONEXCLAMATION "\$R9" \/SD IDCANCEL IDRETRY`/.test(m), /SetErrorLevel 1618\r?\n\s*Quit\b/.test(m)];
   };
   const keeps = text => {
     const m = macro(text, "customRemoveFiles");
@@ -3975,7 +3975,7 @@ function installerUpdateTests() {
     const check = tpl(path.join("include", "allowOnlyOneInstallerInstance.nsh"));
     got = asks(nsh).concat([/!ifmacrodef customCheckAppRunning\r?\n\s*!insertmacro customCheckAppRunning\r?\n\s*!else/.test(check)]);
   } catch (e) { got = "electron-builder's templates could not be read: " + e.message; }
-  eq("1152a the installer asks a running Etiuda to close with taskkill and no /F, the close its window's X sends, says so, asks for Retry where it stays open, and a silent install gives up with error level 2 rather than stopping it; electron-builder inserts this in place of its own check",
+  eq("1152a the installer asks a running Etiuda to close with taskkill and no /F, the close its window's X sends, says so, asks for Retry where it stays open, and a silent install gives up with 1618, the retry-later code, rather than stopping it; electron-builder inserts this in place of its own check",
     got, [true, true, true, true, true, true, true]);
   const words = macro(nsh, "customCheckAppRunning");
   const grab = head => {
