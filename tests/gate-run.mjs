@@ -32,7 +32,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 /* The floor: every leg below runs or is skipped by name, or the tally says so rather than reading as a short green. */
-const EXPECTED = 14;
+const EXPECTED = 16;  /* 14, +2 each step's own scratch (15a, 15b) */
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
   asserted++;
@@ -376,6 +376,60 @@ function main() {
     const leg13Ok = r13.exit !== 0
       && r13.out.indexOf("touched the real profile") >= 0;
     check(leg13Ok, "13 (3) no app running, the same change: hold red as today (the control)");
+
+    /* 15. EACH STEP'S SCRATCH IS ITS OWN AND GOES WITH IT. A leg that makes a lab under os.tmpdir() and leaves it, with a
+       read-only file deep inside and a junction to a folder outside, leaves nothing after the step: the lab sat in a folder the
+       runner made for that step, the folder is gone, and the junction's target is untouched. ETIUDA_KEEP_TMP=1 keeps it. */
+    {
+      const tmp = path.join(lab.root, "tmp"), outside = path.join(lab.root, "outside");
+      fs.mkdirSync(tmp, { recursive: true });
+      fs.mkdirSync(outside, { recursive: true });
+      fs.writeFileSync(path.join(outside, "sentinel.txt"), "stays\n");
+      fs.writeFileSync(path.join(lab.lab, "tests", "c.mjs"), [
+        'import fs from "node:fs";',
+        'import os from "node:os";',
+        'import path from "node:path";',
+        'const d = fs.mkdtempSync(path.join(os.tmpdir(), "leg-c-"));',
+        'fs.mkdirSync(path.join(d, "deep", "deeper"), { recursive: true });',
+        'const ro = path.join(d, "deep", "deeper", "ro.txt");',
+        'fs.writeFileSync(ro, "r");',
+        'fs.chmodSync(ro, 0o444);',
+        'fs.symlinkSync(process.env.LEG_C_OUTSIDE, path.join(d, "link"), "junction");',
+        'console.log("LEGC_TMP " + os.tmpdir());',
+        'console.log("LEGC_DIR " + d);',
+        'console.log("  ok   leg c");',
+        '',
+      ].join("\n"));
+      /* File mode runs a file a chain names: the lab names this one for the leg, and is put back after it. */
+      const pkgFile = path.join(lab.lab, "package.json"), pkgWas = fs.readFileSync(pkgFile, "utf8");
+      const pkgNow = JSON.parse(pkgWas);
+      pkgNow.scripts.c = "node tests/c.mjs";
+      fs.writeFileSync(pkgFile, JSON.stringify(pkgNow, null, 2) + "\n");
+      const env = { TEMP: tmp, TMP: tmp, TMPDIR: tmp, LEG_C_OUTSIDE: outside };
+      const said = (out, key) => { const m = new RegExp("^" + key + " (.+)$", "m").exec(out); return m ? m[1].trim() : ""; };
+      const r = runTool(lab, ["file", "tests/c.mjs"], env);
+      const legTmp = said(r.out, "LEGC_TMP"), legDir = said(r.out, "LEGC_DIR");
+      const own = !!legTmp && path.dirname(legTmp) === tmp && path.basename(legTmp).startsWith("egr-");
+      const left = fs.readdirSync(tmp);
+      const kept = fs.existsSync(path.join(outside, "sentinel.txt"));
+      check(r.exit === 0 && own && !!legDir && !fs.existsSync(legDir) && left.length === 0 && kept,
+        "15a a step's lab under os.tmpdir() sits in a folder the runner made for that step, and after the step that folder is gone,"
+        + " a read-only file and a junction inside it with it, the junction's target untouched: exit " + r.exit + ", the step's tmpdir "
+        + JSON.stringify(legTmp ? path.relative(lab.root, legTmp) : "") + ", the lab " + (legDir && fs.existsSync(legDir) ? "left" : "gone")
+        + ", " + left.length + " left in tmp, sentinel " + (kept ? "kept" : "GONE"));
+      const k = runTool(lab, ["file", "tests/c.mjs"], Object.assign({ ETIUDA_KEEP_TMP: "1" }, env));
+      const kDir = said(k.out, "LEGC_DIR");
+      check(k.exit === 0 && !!kDir && fs.existsSync(kDir) && /kept the step's scratch .*ETIUDA_KEEP_TMP=1/.test(k.out),
+        "15b with ETIUDA_KEEP_TMP=1 the step's scratch stays for a red being read, and the run names where: exit " + k.exit
+        + ", the lab " + (kDir && fs.existsSync(kDir) ? "kept" : "gone"));
+      /* A lab left standing loses its junction before the lab is cleared, so the clearing never reaches the folder outside. */
+      for (const d of [kDir, legDir]) {
+        if (!d) continue;
+        try { fs.unlinkSync(path.join(d, "link")); } catch { try { fs.rmdirSync(path.join(d, "link")); } catch {} }
+      }
+      fs.writeFileSync(pkgFile, pkgWas);
+      fs.rmSync(path.join(lab.lab, "tests", "c.mjs"), { force: true });
+    }
 
     /* 14 (4). A planted removal of the running-app check turns leg 1 red, by the tree's plant convention, honouring ETIUDA_PLANTS=off */
     if (PLANTS_OFF) {
