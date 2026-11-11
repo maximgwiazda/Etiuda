@@ -600,6 +600,124 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
   ok(codes(files.concat([["planted", "  SetErrorLevel 3"]])).stray.join() === "3", "12f control: a code set nowhere on the list reads red");
 }
 
+/* ---- 13. the machine-wide install a deployment tool runs, stage by stage ------------------------------------- */
+/* Read only, on a copy of the templates as the patch tool leaves them and on shell/installer.nsh: no leg here compiles or
+   runs NSIS, and no all-users install has run on any machine. Each row has a planted control beside it that must read red. */
+{
+  const osx = require("node:os");
+  const ROOT = path.join(__dirname, "..");
+  const patchTool = require(path.join(ROOT, "tools", "patch-nsis.cjs"));
+  const lab = fs.mkdtempSync(path.join(osx.tmpdir(), "etiuda-nsis-machine-"));
+  const to = path.dirname(patchTool.getPaths(lab).multiUserUi);
+  const T = {};
+  let status = {};
+  try {
+    fs.cpSync(path.dirname(patchTool.getPaths(ROOT).multiUserUi), to, { recursive: true });
+    status = patchTool.applyNsisPatches(lab);
+    for (const f of ["assistedInstaller.nsh", "include/extractAppPackage.nsh", "include/FileAssociation.nsh"]) T[f] = fs.readFileSync(path.join(to, f), "utf8");
+  } catch (e) { status = { error: e.message }; }
+  fs.rmSync(lab, { recursive: true, force: true });
+  const NSH = fs.readFileSync(path.join(ROOT, "shell", "installer.nsh"), "utf8");
+  const macro = (text, name) => (new RegExp("!macro " + name + "(?: [^\\r\\n]*)?\\r?\\n([\\s\\S]*?)!macroend").exec(String(text)) || [])[1] || "";
+
+  /* Stage 1. initMultiUser reads the two switches, then chooses the mode; the block sits between, in the installer only. */
+  const unattended = text => {
+    const m = macro(text, "initMultiUser");
+    const cur = m.indexOf('${GetOptions} $R0 "/currentuser" $R1'), choice = m.indexOf('${if} $hasPerUserInstallation == "1"');
+    const at = m.indexOf("!ifndef BUILD_UNINSTALLER", cur);
+    if (cur < 0 || choice < 0 || at < 0 || at > choice) return false;
+    const b = m.slice(at, choice);
+    return /^!ifndef BUILD_UNINSTALLER\s+\$\{If\} \$\{Silent\}\s+\$\{AndIf\} \$\{UAC_IsAdmin\}\s/.test(b)
+      && /\$\{GetOptions\} \$R0 "\/allusers" \$R1\s+\$\{If\} \$\{Errors\}\s+\$\{GetOptions\} \$R0 "\/currentuser" \$R1\s+\$\{If\} \$\{Errors\}\s+Push \$R2\s+Push \$R3\s+Push \$R4\s+StrCpy \$R4 "0"/.test(b)
+      && /whoami\.exe" \/user \/FO CSV \/NH \| "\$SYSDIR\\findstr\.exe" \/C:"\\"S-1-5-18\\""`\s+Pop \$R2\s+\$\{If\} \$R2 == "0"\s+StrCpy \$R4 "1"/.test(b)
+      && /GetCurrentProcessId\(\) i \.R2'\s+System::Call 'kernel32::ProcessIdToSessionId\(i R2, \*i \.R3\) i \.R2'\s+\$\{If\} \$R2 <> 0\s+\$\{AndIf\} \$R3 == "0"\s+StrCpy \$R4 "1"/.test(b)
+      && /\$\{If\} \$R4 == "1"\s+StrCpy \$hasPerMachineInstallation "1"\s+StrCpy \$hasPerUserInstallation "0"\s+\$\{EndIf\}\s+Pop \$R4\s+Pop \$R3\s+Pop \$R2\s/.test(b)
+      && (b.match(/\$hasPer\w+Installation/g) || []).length === 2 && /!endif\s*$/.test(b);
+  };
+  const A = T["assistedInstaller.nsh"] || "";
+  ok(unattended(A) && status.machineWidePatched === true && status.applied === true,
+    "13a a silent run with neither switch, by the system account or by an elevated administrator in session 0, where no person"
+    + " is signed in, chooses all users before the mode is set; every other run keeps today's choice: " + JSON.stringify({ machineWidePatched: status.machineWidePatched, applied: status.applied }));
+  ok(!unattended(A.replace("${AndIf} ${UAC_IsAdmin}", "")), "13a control: the administrator test taken out reads red");
+  ok(!unattended(A.replace(/(\$\{If\} \$\{Errors\}\s+)\$\{GetOptions\} \$R0 "\/currentuser" \$R1\s+\$\{If\} \$\{Errors\}(\s+Push \$R2)/, "$1${If} 1 == 1$2")),
+    "13a control: /currentuser no longer read inside the block, so it would lose to the block, reads red");
+  ok(!unattended(A.replace('${AndIf} $R3 == "0"', '${AndIf} $R3 == "1"')), "13a control: session 1, a person's own, taken for the unattended one reads red");
+  ok(!unattended(A.replace(/(\r?\n)(\s*)!ifndef BUILD_UNINSTALLER(\s+\$\{If\} \$\{Silent\})/, '$1$2${if} $hasPerUserInstallation == "1"$1$2!ifndef BUILD_UNINSTALLER$3')),
+    "13a control: the block after the mode is chosen reads red");
+
+  /* Stage 2, the locked extract: five automatic tries, then the box, whose silent answer is now Cancel, and Cancel ends 1618. */
+  const lockedExtract = text => /"\$\(appCannotBeClosed\)" \/SD IDCANCEL IDCANCEL AbortExtract7za/.test(String(text))
+    && /\n\s*AbortExtract7za:\r?\n\s*SetErrorLevel 1618\r?\n\s*Quit\b/.test(String(text));
+  const X = T["include/extractAppPackage.nsh"] || "";
+  ok(lockedExtract(X), "13b a file still locked after five tries ends a silent run with 1618 before the in-place overwrite that ignores errors");
+  ok(!lockedExtract(X.replace("/SD IDCANCEL IDCANCEL", "/SD IDRETRY IDCANCEL")), "13b control: the silent Retry put back, which overwrites in place and ends 0, reads red");
+  ok(!lockedExtract(X.replace(/(AbortExtract7za:\r?\n)\s*SetErrorLevel 1618\r?\n/, "$1")), "13b control: Cancel quitting with no code reads red");
+  /* The retry window before that 1618 (Claude alpha's ruling (2), 2026-11-11 18:49; the number the test architect's and the lead
+     engineer's): 30 tries 2 s apart, about a minute, so an antivirus scan of a freshly written file can let go first. */
+  const retryWindow = text => /\n\s*\$\{if\} \$R1 < 30\r?\n/.test(String(text)) && /\n\s*RetryExtract7za:\r?\n\s*Sleep 2000\r?\n/.test(String(text));
+  ok(retryWindow(X), "13b a locked file is tried 30 times 2 s apart, about a minute, before the 1618");
+  ok(!retryWindow(X.replace("${if} $R1 < 30", "${if} $R1 < 5")), "13b control: the template's five tries put back reads red");
+  ok(!retryWindow(X.replace(/(RetryExtract7za:\r?\n\s*)Sleep 2000/, "$1Sleep 1000")), "13b control: the template's one-second wait put back reads red");
+
+  /* Stage 2, the close check: every session's copy in an all-users install, one account's in a per-user one; the close
+     request only ever to the installing account's own. */
+  const closeCheck = text => {
+    const m = macro(text, "customCheckAppRunning");
+    const look = m.match(/nsExec::Exec `"\$SYSDIR\\cmd\.exe" \/C tasklist [^`]*`/g) || [];
+    const scope = /StrCpy \$R5 `\/FI "USERNAME eq %USERNAME%" `\s+\$\{If\} \$installMode == "all"\s+StrCpy \$R5 ""\s+\$\{EndIf\}/.test(m);
+    const sees = look.length === 2 && look[0].indexOf('tasklist $R5/FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}"') > -1
+      && look[1].indexOf('tasklist /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}"') > -1;
+    const ownAt = look[1] ? m.indexOf(look[1]) : -1, close = m.indexOf("--update-close"), kill = m.indexOf("taskkill");
+    const onlyOwn = ownAt > -1 && close > ownAt && kill > close
+      && /Pop \$R8\s+\$\{If\} \$R8 == 0\s+\$\{If\} \$\{FileExists\}/.test(m.slice(ownAt))
+      && /taskkill \/IM "\$\{APP_EXECUTABLE_FILENAME\}" \/FI "USERNAME eq %USERNAME%"/.test(m) && (m.match(/taskkill/g) || []).length === 1;
+    const skips = /\$\{Else\}\s+StrCpy \$R7 20\s+\$\{EndIf\}/.test(m.slice(kill));
+    const regs = /^\s*Push \$R5\r?\n/.test(m) && /Pop \$R5\s*$/.test(m);
+    return scope && sees && onlyOwn && skips && regs;
+  };
+  ok(closeCheck(NSH), "13c the close check sees a copy open in any session of an all-users install and ends another person's"
+    + " never: the close request goes to this account's copy alone, and with none of its own open a silent run ends 1618 at once");
+  ok(!closeCheck(NSH.replace(/(\$\{If\} \$installMode == "all"\s+)StrCpy \$R5 ""/, "$1StrCpy $R5 $R5")), "13c control: the all-users install still looking in one account reads red");
+  ok(!closeCheck(NSH.replace('taskkill /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"', 'taskkill /IM "${APP_EXECUTABLE_FILENAME}"')),
+    "13c control: the close request sent to every account's copy reads red");
+  ok(!closeCheck(NSH.replace(/\$\{Else\}(\s+)StrCpy \$R7 20(\s+\$\{EndIf\})/, "${Else}$1Nop$2")), "13c control: waiting on another person's copy reads red");
+
+  /* Stage 3. The link follows the mode as the .ec type does: SHELL_CONTEXT is HKLM for all users and HKCU for one. */
+  const OPEN = '`"$INSTDIR\\${APP_EXECUTABLE_FILENAME}" "%1"`';
+  const linkScope = text => {
+    const ins = macro(text, "customInstall"), un = macro(text, "customUnInstall");
+    const w = ins.split(/\r?\n/).map(l => l.trim()).filter(l => /^WriteReg\w+ \w+ "Software\\Classes\\etiuda/.test(l));
+    const del = hive => {
+      const r = un.indexOf('ReadRegStr $0 ' + hive + ' "Software\\Classes\\etiuda\\shell\\open\\command" ""');
+      const c = un.indexOf("${If} $0 == " + OPEN, r), d = un.indexOf('DeleteRegKey ' + hive + ' "Software\\Classes\\etiuda"', c);
+      return r > -1 && c > r && d > c && un.indexOf("${EndIf}", c) > d;
+    };
+    const code = (ins + "\n" + un).split(/\r?\n/).filter(l => !/^\s*[#;]/.test(l)).join("\n");
+    return w.length === 3 && w.every(l => l.startsWith("WriteRegStr SHELL_CONTEXT ")) && del("SHELL_CONTEXT") && del("HKCU") && !/HKLM/.test(code);
+  };
+  ok(linkScope(NSH), "13d the etiuda: link is written where the mode writes (HKLM for all users, HKCU for one), and the uninstall takes it"
+    + " from there and from the uninstalling account's HKCU, each only while it still opens this desk");
+  ok(!linkScope(NSH.replace('WriteRegStr SHELL_CONTEXT "Software\\Classes\\etiuda" "URL Protocol"', 'WriteRegStr HKCU "Software\\Classes\\etiuda" "URL Protocol"')),
+    "13d control: one of the three values left in HKCU reads red");
+  ok(!linkScope(NSH.replace('DeleteRegKey SHELL_CONTEXT "Software\\Classes\\etiuda"', "Nop")), "13d control: the all-users uninstall leaving the machine's link reads red");
+  const assoc = text => ["APP_ASSOCIATE", "APP_UNASSOCIATE"].every(n => {
+    const regs = macro(text, n).split(/\r?\n/).map(l => l.trim()).filter(l => /^(Write|Delete)Reg/.test(l));
+    return regs.length >= 2 && regs.every(l => /^\w+ SHELL_CONTEXT /.test(l));
+  }) && (NSH.match(/WriteRegStr SHELL_CONTEXT "Software\\Classes\\Etiuda catalog[^"]*"/g) || []).length === 2;
+  const F = T["include/FileAssociation.nsh"] || "";
+  ok(assoc(F), "13e the .ec type and its Polish name are written and removed in SHELL_CONTEXT too, so it follows the mode as the link does");
+  ok(!assoc(F.replace(/(!macro APP_UNASSOCIATE[\s\S]*?DeleteRegKey )SHELL_CONTEXT/, "$1HKCU")), "13e control: the type removed from HKCU in an all-users uninstall reads red");
+
+  /* Stages 0, 4 and 5: what IT reads, against what the installer does. */
+  const doc = (/## Installing silently\r?\n([\s\S]*?)(?=\r?\n## )/.exec(fs.readFileSync(path.join(ROOT, "README.md"), "utf8")) || [])[1] || "";
+  const key = id => "HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\" + P.appGuid(id);
+  const told = d => d.includes(key("app.etiuda.desktop")) && d.includes("/S /allusers") && d.includes("/S /currentuser")
+    && /no installer log/i.test(d) && /DisplayVersion/.test(d) && /session/.test(d);
+  ok(told(doc), "13f README's Installing silently gives IT both commands, the detection key the installer writes ("
+    + P.appGuid("app.etiuda.desktop") + "), DisplayVersion, the sessions the close check sees, and that there is no installer log");
+  ok(!told(doc.split(P.appGuid("app.etiuda.desktop")).join(P.appGuid("app.etiuda.studio"))), "13f control: Studio's key in the desk's notes reads red");
+}
+
 console.log("\n#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
 console.log("install-plan-selftest " + (fails ? "FAILED " + fails + " of " : "passed ") + checks + " check(s)");
 process.exit(fails ? Math.min(fails, 63) : 0);
