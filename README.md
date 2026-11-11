@@ -63,12 +63,14 @@ written out in full for a tool that does not expand variables. The exit code say
 | Code | Meaning | What to do |
 |---|---|---|
 | 0 | Installed, or uninstalled. A Windows older than 7, or a 32-bit Windows, is refused and can also end with 0 | Nothing, on a supported machine |
-| 1618 | Etiuda was still open after being asked to close for about 20 seconds, or open in another person's session, or one of its files stayed locked, or another Etiuda installer was running | Retry later |
+| 1618 | Etiuda was still open after being asked to close for about 20 seconds, or open in another person's session, or its folder or one of its files stayed locked, or another Etiuda installer was running | Retry later |
 | 740 | An all-users run could not get administrator rights | Run it elevated, or install per account with `/currentuser` |
-| 2 | An older version would not uninstall, its own 1618 included, or another failure the installer caught | Look at that machine |
+| 2 | The new files could not all be written beside the install, the folder is a drive root, the old version could not be moved back after a failed swap, or another failure the installer caught | Look at that machine |
 
-A locked file is tried for about a minute before the run ends with 1618. The installer removes the old version before it
-writes the new one, so a failed upgrade can leave the app absent until the deployment tool retries.
+An upgrade writes the new version into a folder beside the installed one, `<folder>.setup-staging`, while the old
+version stays installed, registered and startable. Only once every file is there does it close Etiuda and swap the two
+folders, so a failed upgrade leaves the old version as it was. A locked folder or file is tried for about a minute
+before the run ends with 1618.
 
 An all-users install looks for an open copy in every session, and asks only the installing account's own copy to
 close: another person's is never closed, so the run ends with 1618 and the deployment tool tries again later. A

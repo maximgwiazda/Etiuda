@@ -162,7 +162,7 @@ const updateFacts = {
   setupExit: 0, dir: PROG, exe: EXE, exeThere: true, installLocation: PROG,
   defaultDir: "C:\\lab\\home\\AppData\\Local\\Programs\\Etiuda", defaultDirExists: false,
   programOld: "a".repeat(64), programNew: "b".repeat(64), programTree: "b".repeat(64),
-  oldOnlyGone: true, appKeys: 1, keyName: G, keyBefore: G, version: "2.0.1", wantVersion: "2.0.1",
+  oldOnlyGone: true, besideClear: true, appKeys: 1, keyName: G, keyBefore: G, version: "2.0.1", wantVersion: "2.0.1",
   uninstallString: "\"" + PROG + "\\Uninstall Etiuda.exe\" /currentuser",
   shortcuts: { desktop: { count: 1, target: EXE, hotkey: "Ctrl+Alt+E" }, startMenu: { count: 1, target: EXE } },
   hotkeyWant: "Ctrl+Alt+E",
@@ -182,6 +182,7 @@ holdJudge("judgeUpdate", P.judgeUpdate, updateFacts, [
      `programNew !== programOld` was redundant and a plant removing it stayed green (2026-09-28). */
   ["the older copy is this tree's program, U0b bypassed", f => { f.programOld = f.programTree; }, "U3"],
   ["the old copy's own file survived", f => { f.oldOnlyGone = false; }, "U4"],
+  ["the older copy left aside beside the folder", f => { f.besideClear = false; }, "U4"],
   ["two uninstall keys", f => { f.appKeys = 2; }, "U5"],
   ["a different key", f => { f.keyName = "other"; }, "U5"],
   ["the older version on the key", f => { f.version = "2.0.0"; }, "U5"],
@@ -643,7 +644,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
 
   /* Stage 2, the locked extract: five automatic tries, then the box, whose silent answer is now Cancel, and Cancel ends 1618. */
   const lockedExtract = text => /"\$\(appCannotBeClosed\)" \/SD IDCANCEL IDCANCEL AbortExtract7za/.test(String(text))
-    && /\n\s*AbortExtract7za:\r?\n\s*SetErrorLevel 1618\r?\n\s*Quit\b/.test(String(text));
+    && /\n\s*AbortExtract7za:\r?\n\s*SetErrorLevel 1618\r?\n(?:!ifmacrodef etiudaStageAbort\r?\n\s*!insertmacro etiudaStageAbort\r?\n!endif\r?\n)?\s*Quit\b/.test(String(text));
   const X = T["include/extractAppPackage.nsh"] || "";
   ok(lockedExtract(X), "13b a file still locked after about a minute of tries ends a silent run with 1618 before the in-place overwrite that ignores errors");
   ok(!lockedExtract(X.replace("/SD IDCANCEL IDCANCEL", "/SD IDRETRY IDCANCEL")), "13b control: the silent Retry put back, which overwrites in place and ends 0, reads red");
@@ -743,6 +744,176 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
   ok(unRunValue(NSH), "13h the uninstall hook deletes this account's Start with Windows Run value only when not updating");
   ok(!unRunValue(NSH.split('${IfNot} ${isUpdated}').join('${If} ${isUpdated}')), "13h control: deleting on update reads red");
   ok(!unRunValue(NSH.split("${If} $0 == $R8\n      DeleteRegValue").join("DeleteRegValue")), "13h control: deleting without the program's check reads red");
+}
+
+/* ---- 14. an upgrade is all or nothing: staged beside the install, then swapped --------------------------------------- */
+/* Read only, on a copy of the templates as the patch tool leaves them and on shell/installer.nsh: nothing here compiles or
+   runs NSIS, and no upgrade has run anywhere with it (Claude alpha's remedy (b), 2026-11-11 22:45, on the machine-wide review's
+   finding 3). Each row has a control beside it that puts the old order or the old step back and must read red. */
+{
+  const osx = require("node:os");
+  const ROOT = path.join(__dirname, "..");
+  const patchTool = require(path.join(ROOT, "tools", "patch-nsis.cjs"));
+  const lab = fs.mkdtempSync(path.join(osx.tmpdir(), "etiuda-nsis-swap-"));
+  const to = path.dirname(patchTool.getPaths(lab).multiUserUi);
+  let S = "", X = "", status = {};
+  try {
+    fs.cpSync(path.dirname(patchTool.getPaths(ROOT).multiUserUi), to, { recursive: true });
+    status = patchTool.applyNsisPatches(lab);
+    S = fs.readFileSync(path.join(to, "installSection.nsh"), "utf8").replace(/\r\n/g, "\n");
+    X = fs.readFileSync(path.join(to, "include", "extractAppPackage.nsh"), "utf8").replace(/\r\n/g, "\n");
+  } catch (e) { status = { error: e.message }; }
+  fs.rmSync(lab, { recursive: true, force: true });
+  const NSH = fs.readFileSync(path.join(ROOT, "shell", "installer.nsh"), "utf8").replace(/\r\n/g, "\n");
+  const macro = (text, name) => (new RegExp("\\n!macro " + name + "(?: [^\\n]*)?\\n([\\s\\S]*?)\\n!macroend").exec("\n" + String(text)) || [])[1] || "";
+  const code = text => String(text).split("\n").filter(l => !/^\s*[#;]/.test(l)).join("\n");
+  const at = (text, s) => String(text).indexOf(s);
+  const defsOf = text => ["ETIUDA_STAGE_SUFFIX", "ETIUDA_ASIDE_SUFFIX"].map(n => (new RegExp("!define " + n + " \"([^\"]+)\"").exec(text) || [])[1] || "");
+
+  /* 14a. The extract goes into the stage: after the links are read, before the app is closed, and the template's own write
+     into the folder compiled only where no stage is defined. */
+  const stagedFirst = (s, nsh) => {
+    const stage = /\n!ifmacrodef etiudaStageBegin\n  !insertmacro etiudaStageBegin\n  !ifdef UNINSTALLER_ICON\n    File \/oname=uninstallerIcon\.ico "\$\{UNINSTALLER_ICON\}"\n  !endif\n  !insertmacro installApplicationFiles\n  !insertmacro etiudaStageEnd\n!endif\n/.exec(s);
+    const link = at(s, "!insertmacro setLinkVars"), close = at(s, "!insertmacro CHECK_APP_RUNNING");
+    const inPlaceOnlyWithout = /\nSetOutPath \$INSTDIR\n\n!ifmacrondef etiudaStageBegin\n  !ifdef UNINSTALLER_ICON\n[^\n]*\n  !endif\n\n  !insertmacro installApplicationFiles\n!endif\n/.test(s)
+      && (s.match(/!insertmacro installApplicationFiles/g) || []).length === 2;
+    const b = code(macro(nsh, "etiudaStageBegin"));
+    const outs = b.match(/SetOutPath [^\n]*/g) || [];
+    const into = outs[outs.length - 1] === "SetOutPath \"$etiudaStage\"" && /StrCpy \$etiudaBase \$INSTDIR\n/.test(b)
+      && /StrCpy \$etiudaStage "\$etiudaBase\$\{ETIUDA_STAGE_SUFFIX\}"/.test(b) && !!defsOf(nsh)[0];
+    return !!stage && link > -1 && stage.index > link && stage.index < close && inPlaceOnlyWithout && into;
+  };
+  ok(stagedFirst(S, NSH) && status.swapPatched === true,
+    "14a the new files are extracted into <folder>" + defsOf(NSH)[0] + " beside the install, after the links are read and before the"
+    + " app is closed, and the template's own write into the folder compiles only where no stage is defined: "
+    + JSON.stringify(status.swapMissing || status.error));
+  ok(!stagedFirst(S.replace("!ifmacrondef etiudaStageBegin", "!ifmacrodef etiudaStageBegin"), NSH),
+    "14a control: the template's write into the folder compiled beside the stage again reads red");
+  ok(!stagedFirst(S, NSH.replace("  SetOutPath \"$etiudaStage\"\n!macroend", "  SetOutPath \"$INSTDIR\"\n!macroend")),
+    "14a control: the extract pointed at the install folder again reads red");
+
+  /* 14b. The older copy's uninstaller runs after the stage is complete and the swap is made, and only where it still has a
+     folder of its own. */
+  const oldAfter = s => {
+    const end = at(s, "!insertmacro etiudaStageEnd"), swap = at(s, "!ifmacrodef etiudaSwap\n  !insertmacro etiudaSwap\n");
+    const un = /\n  \$\{if\} \$etiudaRunOld == "1"\n    !insertmacro uninstallOldVersion SHELL_CONTEXT\n    !insertmacro handleUninstallResult SHELL_CONTEXT\n  \$\{endIf\}\n!else\n/.exec(s);
+    const first = at(s, "!insertmacro uninstallOldVersion SHELL_CONTEXT");
+    return end > -1 && swap > end && !!un && un.index > swap && first > swap;
+  };
+  ok(oldAfter(S), "14b the older copy's uninstaller is not run before every file is staged and the folders are swapped, and then only"
+    + " while $etiudaRunOld is 1");
+  ok(!oldAfter(S.replace("!insertmacro setLinkVars\n", "!insertmacro setLinkVars\n!insertmacro uninstallOldVersion SHELL_CONTEXT\n!insertmacro handleUninstallResult SHELL_CONTEXT\n")),
+    "14b control: electron-builder's order put back, the uninstaller before the stage, reads red");
+
+  /* 14c. A failed extract leaves the install folder untouched: nothing writes it before the swap, every way out before the
+     swap takes back the stage and nothing else, and an incomplete stage is never swapped in. */
+  const untouched = (s, x, nsh) => {
+    const beforeSwap = s.slice(0, Math.max(0, at(s, "!ifmacrodef etiudaSwap")));
+    const noWrite = at(s, "!ifmacrodef etiudaSwap") > -1 && beforeSwap.indexOf("SetOutPath $INSTDIR") < 0;
+    const cancel = /\n\s*AbortExtract7za:\n\s*SetErrorLevel 1618\n!ifmacrodef etiudaStageAbort\n\s*!insertmacro etiudaStageAbort\n!endif\n\s*Quit\b/.test(x);
+    const retry = /"\$\(appCannotBeClosed\)" \/SD IDCANCEL IDCANCEL AbortExtract7za[\s\S]*?\n!ifmacrodef etiudaStageAbort\n\s*StrCpy \$R1 0\n\s*Goto RetryExtract7za\n!endif\n\s*RMDir \/r "\$PLUGINSDIR\\7z-out"\n/.test(x);
+    const close = /!ifmacrodef etiudaStageAbort\n\s*!insertmacro etiudaStageAbort\n\s*!endif\n\s*SetErrorLevel 1618\n\s*Quit\b/.test(macro(nsh, "customCheckAppRunning"));
+    return noWrite && cancel && retry && close;
+  };
+  ok(untouched(S, X, NSH), "14c nothing writes the install folder before the swap, and the three ways out before it (Cancel on a locked"
+    + " extract, the app still open, and Retry, which copies into the stage again rather than over the folder) keep the stage"
+    + " from being half-swapped");
+  ok(!untouched(S, X.replace(/(SetErrorLevel 1618\n)!ifmacrodef etiudaStageAbort\n\s*!insertmacro etiudaStageAbort\n!endif\n/, "$1"), NSH),
+    "14c control: Cancel on a locked extract leaving the stage reads red");
+  ok(!untouched(S, X.replace(/\n!ifmacrodef etiudaStageAbort\n\s*StrCpy \$R1 0\n\s*Goto RetryExtract7za\n!endif/, ""), NSH),
+    "14c control: Retry falling through to the in-place overwrite that ignores errors reads red");
+  ok(!untouched(S, X, NSH.replace(/(\n\s*)!ifmacrodef etiudaStageAbort\n\s*!insertmacro etiudaStageAbort\n\s*!endif(\n\s*SetErrorLevel 1618)/, "$2")),
+    "14c control: the app still open leaving the stage reads red");
+  const onlyStage = nsh => {
+    const ab = code(macro(nsh, "etiudaStageAbort"));
+    const gone = ab.match(/\b(RMDir|Delete|Rename|CopyFiles)\b[^\n]*/g) || [];
+    const b = code(macro(nsh, "etiudaStageBegin"));
+    const touched = (b.match(/\b(RMDir|Delete|Rename|CopyFiles)\b[^\n]*/g) || []).sort();
+    return gone.length === 3 && gone[0] === "RMDir /r \"$etiudaStage\"" && gone.slice(1).every(l => l.indexOf("$LOCALAPPDATA\\") > -1)
+      && JSON.stringify(touched) === JSON.stringify(["RMDir /r \"$etiudaAside\"", "RMDir /r \"$etiudaStage\"", "Rename \"$etiudaAside\" \"$etiudaBase\""])
+      && /\$\{IfNot\} \$\{FileExists\} "\$etiudaBase\\\*\.\*"\n\s*\$\{AndIf\} \$\{FileExists\} "\$etiudaAside\\\$\{APP_EXECUTABLE_FILENAME\}"\n\s*Rename "\$etiudaAside" "\$etiudaBase"/.test(b);
+  };
+  ok(onlyStage(NSH), "14c taking the stage back removes the stage and the updater's setup copy and nothing else, and the stage's start"
+    + " clears only what an earlier run left beside the folder, after moving an older copy back where a swap was cut short");
+  ok(!onlyStage(NSH.replace("    SetOutPath $PLUGINSDIR\n    RMDir /r \"$etiudaStage\"", "    SetOutPath $PLUGINSDIR\n    RMDir /r \"$INSTDIR\"")),
+    "14c control: taking the stage back by removing the install folder reads red");
+  const wholeOnly = nsh => {
+    const e = code(macro(nsh, "etiudaStageEnd"));
+    return /\$\{IfNot\} \$\{FileExists\} "\$etiudaStage\\\$\{APP_EXECUTABLE_FILENAME\}"/.test(e)
+      && /\$\{IfNot\} \$\{FileExists\} "\$etiudaStage\\\$\{UNINSTALL_FILENAME\}"/.test(e)
+      && /\$\{GetSize\} "\$etiudaStage" "\/S=0K" \$0 \$3 \$4\n\s*IntOp \$0 \$0 \* 100\n\s*IntOp \$3 \$\{APP_64_UNPACKED_SIZE\} \* 99\n\s*\$\{If\} \$0 < \$3\n\s*StrCpy \$1 "0"/.test(e)
+      && /\$\{If\} \$1 != "1"\n[\s\S]*?!insertmacro etiudaStageAbort\n[\s\S]*?SetErrorLevel 2\n\s*Quit\b/.test(e);
+  };
+  ok(wholeOnly(NSH), "14c a stage without the program, its uninstaller, or 99 per cent of the size electron-builder measured is taken"
+    + " back and the run ends 2 before the app is closed");
+  ok(!wholeOnly(NSH.replace("IntOp $3 ${APP_64_UNPACKED_SIZE} * 99", "IntOp $3 0 * 99")), "14c control: the size left unchecked reads red");
+
+  /* 14d. The swap: out of both folders, the older copy aside, the stage into its place, and the older copy put back where the
+     second rename will not go; each rename tried as a locked extract is. */
+  const swapRestores = nsh => {
+    const m = code(macro(nsh, "etiudaSwap"));
+    const cwd = at(m, "SetOutPath $PLUGINSDIR"), aside = at(m, "!insertmacro etiudaRenameRetry \"$etiudaBase\" \"$etiudaAside\"");
+    const into = at(m, "!insertmacro etiudaRenameRetry \"$etiudaStage\" \"$etiudaBase\""), back = at(m, "!insertmacro etiudaRenameRetry \"$etiudaAside\" \"$etiudaBase\"");
+    const guarded = /\$\{If\} \$\{FileExists\} "\$etiudaBase\\\$\{APP_EXECUTABLE_FILENAME\}"\n\s*!insertmacro etiudaRenameRetry "\$etiudaBase" "\$etiudaAside"\n\s*\$\{If\} \$0 != "moved"\n[\s\S]*?!insertmacro etiudaStageAbort\n\s*SetErrorLevel 1618\n\s*Quit\n\s*\$\{EndIf\}\n\s*StrCpy \$etiudaAsideMade "1"/.test(m);
+    const restore = /!insertmacro etiudaRenameRetry "\$etiudaStage" "\$etiudaBase"\n\s*\$\{If\} \$0 != "moved"\n\s*\$\{If\} \$etiudaAsideMade == "1"\n\s*!insertmacro etiudaRenameRetry "\$etiudaAside" "\$etiudaBase"\n\s*\$\{If\} \$0 != "moved"\n[\s\S]*?SetErrorLevel 2\n\s*Quit\n\s*\$\{EndIf\}\n\s*StrCpy \$etiudaAsideMade "0"\n\s*\$\{EndIf\}\n[\s\S]*?!insertmacro etiudaStageAbort\n\s*SetErrorLevel 1618\n\s*Quit\b/.test(m);
+    const r = code(macro(nsh, "etiudaRenameRetry"));
+    const tries = /Rename "\$\{FROM\}" "\$\{TO\}"/.test(r) && /\$\{If\} \$0 < 30\n\s*Sleep 2000/.test(r)
+      && /MessageBox MB_RETRYCANCEL\|MB_ICONEXCLAMATION "\$\(appCannotBeClosed\)" \/SD IDCANCEL IDRETRY/.test(r);
+    return cwd > -1 && cwd < aside && aside < into && into < back && guarded && restore && tries;
+  };
+  ok(swapRestores(NSH), "14d the swap leaves both folders first, sets the older copy aside, renames the stage into its place, and"
+    + " where that will not go puts the older copy back and ends 1618 (2 only if even that fails); each rename tried 30 times 2 s apart");
+  ok(!swapRestores(NSH.replace("        !insertmacro etiudaRenameRetry \"$etiudaAside\" \"$etiudaBase\"\n", "")),
+    "14d control: the older copy left aside when the stage cannot take its place reads red");
+  ok(!swapRestores(NSH.replace("  Push $0\n  SetOutPath $PLUGINSDIR\n  ${If} ${FileExists} \"$etiudaBase", "  Push $0\n  ${If} ${FileExists} \"$etiudaBase")),
+    "14d control: the installer still working inside the folder it renames reads red");
+
+  /* 14e. The registration is never removed where the older copy's folder is the one replaced, and written again at once where it
+     was elsewhere; the copy aside goes only after the new one is registered. */
+  const keepsRegistration = (s, nsh) => {
+    const m = code(macro(nsh, "etiudaSwap"));
+    const same = /ReadRegStr \$0 SHELL_CONTEXT "\$\{INSTALL_REGISTRY_KEY\}" InstallLocation\n\s*!insertmacro etiudaTrimSlashes \$0\n\s*\$\{If\} \$0 == \$etiudaBase\n\s*StrCpy \$etiudaRunOld "0"/.test(m)
+      && /StrCpy \$etiudaRunOld "1"/.test(code(macro(nsh, "etiudaStageBegin")));
+    const swap = at(s, "  !insertmacro etiudaSwap\n"), reg = at(s, "!insertmacro registryAddInstallInfo");
+    const cust = at(s, "!insertmacro customInstall\n"), drop = at(s, "  !insertmacro etiudaDropAside\n");
+    const order = swap > -1 && reg > swap && cust > reg && drop > cust;
+    const goesOn = ["customUnInstallCheck", "customUnInstallCheckCurrentUser"]
+      .every(n => { const b = code(macro(nsh, n)); return !!b.trim() && !/\b(Quit|Abort|SetErrorLevel)\b/.test(b); });
+    const d = code(macro(nsh, "etiudaDropAside"));
+    const dropOnly = /\$\{If\} \$etiudaAsideMade == "1"\n\s*RMDir \/r "\$etiudaAside"\n\s*\$\{EndIf\}/.test(d) && (d.match(/\b(RMDir|Delete|Rename)\b/g) || []).length === 1;
+    return same && order && goesOn && dropOnly;
+  };
+  ok(keepsRegistration(S, NSH), "14e where the older copy was in the folder replaced its uninstaller is not run, so its registration stands"
+    + " until written over; elsewhere it runs after the swap and a failure there is noted, not obeyed; the copy aside goes after customInstall");
+  ok(!keepsRegistration(S, NSH.replace("${If} $0 == $etiudaBase", "${If} $0 == $etiudaStage")),
+    "14e control: the uninstaller run over the folder just replaced reads red");
+  ok(!keepsRegistration(S, NSH.replace("    DetailPrint `The older copy's uninstaller ended with $R0.`", "    SetErrorLevel 2\n    Quit")),
+    "14e control: electron-builder's stop on an older uninstaller's failure put back reads red");
+  ok(!keepsRegistration(S.replace("!insertmacro registryAddInstallInfo\n", "!insertmacro etiudaDropAside\n!insertmacro registryAddInstallInfo\n")
+    .replace(/\n!ifmacrodef etiudaDropAside\n  !insertmacro etiudaDropAside\n!endif/, ""), NSH),
+    "14e control: the copy aside dropped before the new one is registered reads red");
+
+  /* 14f. Where the swap's macros live: the installer compile alone, and after Studio's five hooks, so its cut of this file (src/engine.mjs
+     installerHooksFrom) neither carries them nor stops at a macro it does not know. */
+  const placed = nsh => {
+    const un = at(nsh, "\n!macro customUnInstall\n"), block = at(nsh, "\n!ifndef BUILD_UNINSTALLER\n!define ETIUDA_STAGE_SUFFIX");
+    const last = at(nsh, "\n!macro etiudaDropAside\n"), end = last < 0 ? -1 : nsh.indexOf("\n!endif\n", last);
+    return un > -1 && block > un && end > block && ["etiudaTrimSlashes", "etiudaFailBox", "etiudaStageAbort", "etiudaStageBegin", "etiudaStageEnd",
+      "etiudaRenameRetry", "etiudaSwap", "customUnInstallCheck", "customUnInstallCheckCurrentUser", "etiudaDropAside"]
+      .every(n => { const i = at(nsh, "\n!macro " + n + "\n") > -1 ? at(nsh, "\n!macro " + n + "\n") : at(nsh, "\n!macro " + n + " "); return i > block && i < end; });
+  };
+  ok(placed(NSH), "14f the swap's macros are defined for the installer compile alone, after customUnInstall, the last of Studio's five hooks");
+  ok(!placed(NSH.replace("\n!ifndef BUILD_UNINSTALLER\n!define ETIUDA_STAGE_SUFFIX", "\n!define ETIUDA_STAGE_SUFFIX")),
+    "14f control: the block compiled into the uninstaller too reads red");
+
+  /* 14g. The gate looks where the installer writes, and IT is told what an upgrade now does. */
+  ok(JSON.stringify(defsOf(NSH)) === JSON.stringify(P.BESIDE),
+    "14g update-install looks beside the folder where the installer writes: " + JSON.stringify(defsOf(NSH)) + " against " + JSON.stringify(P.BESIDE));
+  ok(JSON.stringify(defsOf(NSH.replace("\".setup-previous\"", "\".old\""))) !== JSON.stringify(P.BESIDE), "14g control: another suffix reads red");
+  const doc = (/## Installing silently\r?\n([\s\S]*?)(?=\r?\n## )/.exec(fs.readFileSync(path.join(ROOT, "README.md"), "utf8")) || [])[1] || "";
+  const told = d => d.indexOf(P.BESIDE[0]) > -1 && /a failed upgrade leaves the old version as it was/.test(d) && !/leave the app absent/.test(d);
+  ok(told(doc), "14g README's Installing silently says an upgrade is staged in <folder>" + P.BESIDE[0] + " and a failed one leaves the old version as it was");
+  ok(!told(doc + "\na failed upgrade can leave the app absent until the deployment tool retries."), "14g control: the old sentence back reads red");
 }
 
 console.log("\n#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);

@@ -18,9 +18,11 @@
  *   - a newer setup finds the older copy through InstallLocation on the install key and installs
  *     into THAT folder unless /D is given (multiUser.nsh, setInstallModePerUser);
  *   - it runs the older copy's own uninstaller first, as `/S /KEEP_APP_DATA /currentuser --updated
- *     _?=<dir>` (installUtil.nsh, uninstallOldVersion), which removes the whole install folder
- *     and keeps the user-data folder; with KeepShortcuts on the install key it adds
- *     --keep-shortcuts and the shortcuts are neither deleted nor recreated (installer.nsh);
+ *     _?=<dir>` (installUtil.nsh, uninstallOldVersion), which keeps the user-data folder; with
+ *     KeepShortcuts on the install key it adds --keep-shortcuts and the shortcuts are neither
+ *     deleted nor recreated (installer.nsh). Since 2026-11-12 tools/patch-nsis.cjs (fix 6) stages
+ *     the new files beside the folder and swaps the two, and that uninstaller runs only for a copy
+ *     registered in another folder: the older copy's files go aside whole (BESIDE) and are removed;
  *   - /D must be the last argument and unquoted, and /allusers or /currentuser choose the context
  *     outright; with neither, a per-machine copy already registered makes the context all users,
  *     which is the exit 199 measured on 2026-09-17 when no elevation was there to ask for.
@@ -31,6 +33,10 @@ const path = require("node:path");
 
 /* electron-builder's namespace for the app GUID, NsisTarget.js ELECTRON_BUILDER_NS_UUID. */
 const BUILDER_NS = "50e065bc-3134-11e6-9bab-38c9862bdaf3";
+
+/* The two folders an upgrade makes beside the install, shell/installer.nsh ETIUDA_STAGE_SUFFIX and ETIUDA_ASIDE_SUFFIX:
+   the staged new files, and the older copy set aside until the new one is registered. Neither outlives a finished run. */
+const BESIDE = [".setup-staging", ".setup-previous"];
 
 /** UUID v5 (RFC 4122, SHA-1) of `name` in `ns`, written from the RFC rather than copied, so that
  *  the selftest's comparison with builder-util-runtime's own UUID.v5 is two implementations. */
@@ -166,9 +172,9 @@ function judgeUpdate(f) {
   row("U3", !!f.programNew && f.programNew === f.programTree && f.programNew !== f.programOld,
     "the program was replaced: the engine inside the installed asar is sha256 " + String(f.programNew).slice(0, 12)
     + ", the tree's is " + String(f.programTree).slice(0, 12) + " and the older copy's was " + String(f.programOld).slice(0, 12));
-  row("U4", f.oldOnlyGone === true,
-    "a file only the older copy had, planted in its folder, is gone (" + f.oldOnlyGone + "): the older copy was"
-    + " uninstalled, not written over");
+  row("U4", f.oldOnlyGone === true && f.besideClear === true,
+    "a file only the older copy had, planted in its folder, is gone (" + f.oldOnlyGone + "): the older copy's folder was"
+    + " replaced, not written over; and nothing is left beside it (" + f.besideClear + ")");
   row("U5", f.appKeys === 1 && f.keyName === f.keyBefore && f.version === f.wantVersion
     && /\/currentuser/.test(String(f.uninstallString || "")),
     "one uninstall key for the product (" + f.appKeys + "), the same one as before (" + JSON.stringify(f.keyName)
@@ -485,7 +491,7 @@ function uninstallDataDecision(opts) {
   return { remove: true, licence: o.removeLicence !== false, why: "ticked" };
 }
 
-module.exports = { BUILDER_NS, uuidV5, appGuid, registryKeys, badInstallDir, installArgs, uninstallArgs, plainArgs,
+module.exports = { BUILDER_NS, BESIDE, uuidV5, appGuid, registryKeys, badInstallDir, installArgs, uninstallArgs, plainArgs,
                    argsFault, scratchHome, userDataName, defaultUserInstallDir, samePath,
                    judgeUpdate, judgeUpdatedRun, judgeAllUsers,
                    compareSemver, recogniseOutcome, recogniseAction,

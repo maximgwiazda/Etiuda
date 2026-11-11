@@ -509,6 +509,10 @@
       ${If} ${Cmd} `MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$R9" /SD IDCANCEL IDRETRY`
         StrCpy $R7 0
       ${Else}
+        # The installer's files staged beside the install go with it (etiudaStageAbort, below; Studio has none).
+        !ifmacrodef etiudaStageAbort
+          !insertmacro etiudaStageAbort
+        !endif
         SetErrorLevel 1618
         Quit ; plant:installer-gives-up
       ${EndIf}
@@ -523,9 +527,10 @@
   Pop $R5
 !macroend
 
-# AN UPDATE LEAVES THE INSTALLED FILES WHERE THEY ARE: the new installer copies over them only once its own extraction to a
-# temporary folder has finished, so a run cut short before then leaves the old version whole. A plain uninstall removes
-# the folder, as electron-builder's own step does.
+# AN UPDATE'S UNINSTALL LEAVES THE FILES WHERE THEY ARE. This build's installer never runs it over the folder it replaces:
+# it stages the new files beside that folder and swaps the two whole (etiudaSwap, below). Run over another folder, an
+# install moved with /D or the per-user copy an all-users install replaces, it leaves that folder. A plain uninstall
+# removes the folder, as electron-builder's own step does.
 !macro customRemoveFiles
   ${IfNot} ${isUpdated} ; plant:update-keeps-files
     SetOutPath $TEMP
@@ -637,6 +642,242 @@
   ${EndIf}
   !endif
 !macroend
+
+# AN UPGRADE IS ALL OR NOTHING. tools/patch-nsis.cjs (fix 6) has electron-builder's install section call these: the new
+# files go into "<folder>.setup-staging" beside the install while the older copy stays installed, registered and
+# startable; only then is the app closed and the folder swapped by two renames, the older copy aside to
+# "<folder>.setup-previous" and back if the second rename will not go. A copy in that folder keeps its registration until
+# it is written over; the copy aside goes once the new one is registered. Installer only, and after Studio's five hooks.
+!ifndef BUILD_UNINSTALLER
+!define ETIUDA_STAGE_SUFFIX ".setup-staging"
+!define ETIUDA_ASIDE_SUFFIX ".setup-previous"
+Var etiudaBase
+Var etiudaStage
+Var etiudaAside
+Var etiudaAsideMade
+Var etiudaRunOld
+
+# A path's trailing backslashes go: "/D=C:\Apps\Etiuda\" would otherwise stage inside the folder it replaces.
+!macro etiudaTrimSlashes VAR
+  Push $R9
+  ${Do}
+    StrCpy $R9 ${VAR} 1 -1
+    ${If} $R9 != "\"
+    ${AndIf} $R9 != "/"
+      ${ExitDo}
+    ${EndIf}
+    StrCpy ${VAR} ${VAR} -1
+  ${Loop}
+  Pop $R9
+!macroend
+
+# What a failed run says before it ends, where a person is watching: the did-not-finish line, with the exit code.
+!macro etiudaFailBox CODE
+  ${IfNot} ${Silent}
+    Push $2
+    StrCpy $2 ${CODE}
+    MessageBox MB_OK|MB_ICONSTOP "$(etiudaSetupNotFinished)" /SD IDOK
+    Pop $2
+  ${EndIf}
+!macroend
+
+# A run that ends before the swap takes back what it wrote: the staged folder, and the setup copy installApplicationFiles
+# left for an updater this product does not have (customInstall takes it back on success). The installed copy is untouched.
+!macro etiudaStageAbort
+  ${If} $etiudaStage != ""
+    SetOutPath $PLUGINSDIR
+    RMDir /r "$etiudaStage"
+  ${EndIf}
+  ${if} $installMode == "all"
+    SetShellVarContext current
+  ${endif}
+  Delete "$LOCALAPPDATA\${APP_INSTALLER_STORE_FILE}"
+  RMDir "$LOCALAPPDATA\${UPDATER_CACHE_DIR}"
+  ${if} $installMode == "all"
+    SetShellVarContext all
+  ${endif}
+!macroend
+
+!macro etiudaStageBegin
+  Push $0
+  StrCpy $etiudaBase $INSTDIR
+  !insertmacro etiudaTrimSlashes $etiudaBase
+  StrCpy $etiudaStage ""
+  StrCpy $etiudaAside "$etiudaBase${ETIUDA_ASIDE_SUFFIX}"
+  StrCpy $etiudaAsideMade "0"
+  StrCpy $etiudaRunOld "1"
+  # A drive root has no folder beside it, and its uninstall would empty the drive.
+  StrLen $0 $etiudaBase
+  ${If} $0 < 4
+    DetailPrint `Not installing into "$INSTDIR", a drive root.`
+    !insertmacro etiudaFailBox 2
+    SetErrorLevel 2
+    Quit
+  ${EndIf}
+  StrCpy $etiudaStage "$etiudaBase${ETIUDA_STAGE_SUFFIX}"
+  # Out of the install folder before anything beside it moves: .onInit made it this process's working folder.
+  SetOutPath $PLUGINSDIR
+  # A swap cut short between its two renames left the older copy aside and nothing in its place: it goes back first.
+  ${IfNot} ${FileExists} "$etiudaBase\*.*"
+  ${AndIf} ${FileExists} "$etiudaAside\${APP_EXECUTABLE_FILENAME}"
+    Rename "$etiudaAside" "$etiudaBase"
+  ${EndIf}
+  RMDir /r "$etiudaAside"
+  RMDir /r "$etiudaStage"
+  ClearErrors
+  CreateDirectory "$etiudaStage"
+  ${If} ${Errors}
+  ${OrIfNot} ${FileExists} "$etiudaStage\*.*"
+    DetailPrint `Cannot write "$etiudaStage" beside the install.`
+    !insertmacro etiudaStageAbort
+    !insertmacro etiudaFailBox 2
+    SetErrorLevel 2
+    Quit
+  ${EndIf}
+  Pop $0
+  SetOutPath "$etiudaStage"
+!macroend
+
+# Nsis7z answers nothing, so the stage counts as whole only with the program, its uninstaller, and at least 99 per cent of
+# the size electron-builder measured (GetSize truncates, and the stage also holds the uninstaller).
+!macro etiudaStageEnd
+  Push $0
+  Push $1
+  Push $3
+  Push $4
+  SetOutPath $PLUGINSDIR
+  RMDir /r "$PLUGINSDIR\7z-out"
+  StrCpy $1 "1"
+  ${IfNot} ${FileExists} "$etiudaStage\${APP_EXECUTABLE_FILENAME}"
+    StrCpy $1 "0"
+  ${EndIf}
+  ${IfNot} ${FileExists} "$etiudaStage\${UNINSTALL_FILENAME}"
+    StrCpy $1 "0"
+  ${EndIf}
+  !ifdef APP_64_UNPACKED_SIZE
+    ${If} $packageArch == "64"
+      ${GetSize} "$etiudaStage" "/S=0K" $0 $3 $4
+      IntOp $0 $0 * 100
+      IntOp $3 ${APP_64_UNPACKED_SIZE} * 99
+      ${If} $0 < $3
+        StrCpy $1 "0"
+      ${EndIf}
+    ${EndIf}
+  !endif
+  ${If} $1 != "1"
+    DetailPrint `The files staged in "$etiudaStage" are not complete.`
+    !insertmacro etiudaStageAbort
+    !insertmacro etiudaFailBox 2
+    SetErrorLevel 2
+    Quit
+  ${EndIf}
+  Pop $4
+  Pop $3
+  Pop $1
+  Pop $0
+!macroend
+
+# One folder renamed, tried 30 times 2 s apart as a locked extract is, then Retry or Cancel; $0 answers "moved" or not.
+!macro etiudaRenameRetry FROM TO
+  StrCpy $0 0
+  ${Do}
+    ClearErrors
+    Rename "${FROM}" "${TO}"
+    ${IfNot} ${Errors}
+      StrCpy $0 "moved"
+      ${ExitDo}
+    ${EndIf}
+    IntOp $0 $0 + 1
+    ${If} $0 < 30
+      Sleep 2000
+    ${ElseIf} ${Cmd} `MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY`
+      StrCpy $0 0
+    ${Else}
+      StrCpy $0 "stuck"
+      ${ExitDo}
+    ${EndIf}
+  ${Loop}
+!macroend
+
+# The app is closed and every file staged. The older copy goes aside whole, the staged folder takes its name, and if that
+# will not go the older copy is put back and the run ends 1618, retry later. A folder holding no copy of the program (other
+# files, from a /D) has no older version to keep whole, so the staged files are copied into it.
+!macro etiudaSwap
+  Push $0
+  SetOutPath $PLUGINSDIR
+  ${If} ${FileExists} "$etiudaBase\${APP_EXECUTABLE_FILENAME}"
+    !insertmacro etiudaRenameRetry "$etiudaBase" "$etiudaAside"
+    ${If} $0 != "moved"
+      DetailPrint `"$etiudaBase" is locked; the installed copy stays as it was.`
+      !insertmacro etiudaStageAbort
+      SetErrorLevel 1618
+      Quit
+    ${EndIf}
+    StrCpy $etiudaAsideMade "1"
+  ${Else}
+    RMDir "$etiudaBase"
+  ${EndIf}
+  ${If} ${FileExists} "$etiudaBase\*.*"
+    ClearErrors
+    CopyFiles /SILENT "$etiudaStage\*.*" "$etiudaBase"
+    ${If} ${Errors}
+      DetailPrint `Cannot copy the staged files into "$etiudaBase".`
+      !insertmacro etiudaStageAbort
+      SetErrorLevel 1618
+      Quit
+    ${EndIf}
+    RMDir /r "$etiudaStage"
+  ${Else}
+    !insertmacro etiudaRenameRetry "$etiudaStage" "$etiudaBase"
+    ${If} $0 != "moved"
+      ${If} $etiudaAsideMade == "1"
+        !insertmacro etiudaRenameRetry "$etiudaAside" "$etiudaBase"
+        ${If} $0 != "moved"
+          DetailPrint `The installed copy is in "$etiudaAside" and could not be moved back; the next run moves it back first.`
+          !insertmacro etiudaStageAbort
+          !insertmacro etiudaFailBox 2
+          SetErrorLevel 2
+          Quit
+        ${EndIf}
+        StrCpy $etiudaAsideMade "0"
+      ${EndIf}
+      DetailPrint `The staged folder could not take the name "$etiudaBase"; the installed copy stays as it was.`
+      !insertmacro etiudaStageAbort
+      SetErrorLevel 1618
+      Quit
+    ${EndIf}
+  ${EndIf}
+  # The older copy's uninstaller has nothing left to do where its folder was the one replaced: its registration is the same
+  # keys, written over next. It still runs for a copy registered in another folder.
+  ReadRegStr $0 SHELL_CONTEXT "${INSTALL_REGISTRY_KEY}" InstallLocation
+  !insertmacro etiudaTrimSlashes $0
+  ${If} $0 == $etiudaBase
+    StrCpy $etiudaRunOld "0"
+  ${EndIf}
+  Pop $0
+!macroend
+
+# After the swap an older copy that would not uninstall is noted and the run goes on to register the new one; stopping
+# here, as electron-builder does, would leave the new files with neither copy registered.
+!macro customUnInstallCheck
+  ${If} ${Errors}
+    DetailPrint `The older copy's uninstaller could not be started.`
+  ${ElseIf} $R0 != 0
+    DetailPrint `The older copy's uninstaller ended with $R0.`
+  ${EndIf}
+  ClearErrors
+!macroend
+!macro customUnInstallCheckCurrentUser
+  !insertmacro customUnInstallCheck
+!macroend
+
+# The new copy is registered: the older copy aside goes.
+!macro etiudaDropAside
+  ${If} $etiudaAsideMade == "1"
+    RMDir /r "$etiudaAside"
+  ${EndIf}
+!macroend
+!endif
 
 # THE TURNING SIDEBAR AND HEADER. Looping frames, one every ${TURN_INTERVAL} ms. Frame 0 is the still
 # electron-builder shows from installerSidebar.bmp and installerHeader.bmp. The frames are

@@ -10,6 +10,7 @@
  * 3. Every template MessageBox: a silent default (/SD), so a silent run ends with an exit code (SILENT_DEFAULTS).
  * 4. The exit codes a deployment tool can act on (EXIT_CODES).
  * 5. A silent run with no switch that no person could start the app from installs for all users (MACHINE_WIDE).
+ * 6. An upgrade stages the new files beside the install and swaps the folders, all or nothing (SWAP_*, STAGE_EXTRACT).
  */
 "use strict";
 const fs = require("node:fs");
@@ -159,6 +160,76 @@ function retryWindowMissing(nsisDir) {
   }).map(([file, from]) => file + ": " + from);
 }
 
+/* 6. AN UPGRADE IS ALL OR NOTHING (Claude alpha's remedy (b), 2026-11-11 22:45, on the machine-wide review's finding 3).
+ *    The template runs the older copy's uninstaller, which takes its registration away, before it writes the new files
+ *    over that folder, so a failed write left a half-written app with nothing registered. installSection.nsh is reordered:
+ *    stage beside the folder before the app is closed, swap, run the older uninstaller only where its folder was not the
+ *    one replaced, drop the copy aside once registered (the etiuda* macros in shell/installer.nsh). Each step is guarded
+ *    by its macro, so an include without them (an older tree sharing these templates) keeps the template's order. */
+const SWAP_STAGE = ["# fix 6 (tools/patch-nsis.cjs): the new files are staged beside the install before the older copy is touched.",
+  "!ifmacrodef etiudaStageBegin", "  !insertmacro etiudaStageBegin", "  !ifdef UNINSTALLER_ICON",
+  "    File /oname=uninstallerIcon.ico \"${UNINSTALLER_ICON}\"", "  !endif", "  !insertmacro installApplicationFiles",
+  "  !insertmacro etiudaStageEnd", "!endif"];
+const SWAP_UNINSTALL = ["!ifmacrodef etiudaSwap", "  !insertmacro etiudaSwap", "  ${if} $etiudaRunOld == \"1\"",
+  "    !insertmacro uninstallOldVersion SHELL_CONTEXT", "    !insertmacro handleUninstallResult SHELL_CONTEXT", "  ${endIf}",
+  "!else", "  !insertmacro uninstallOldVersion SHELL_CONTEXT", "  !insertmacro handleUninstallResult SHELL_CONTEXT", "!endif"];
+const SWAP_FILES = ["SetOutPath $INSTDIR", "", "!ifmacrondef etiudaStageBegin", "  !ifdef UNINSTALLER_ICON",
+  "    File /oname=uninstallerIcon.ico \"${UNINSTALLER_ICON}\"", "  !endif", "", "  !insertmacro installApplicationFiles", "!endif"];
+const SWAP_DROP = ["!ifmacrodef etiudaDropAside", "  !insertmacro etiudaDropAside", "!endif"];
+/* The template's own lines each step replaces or follows, as regular expressions over LF text, each to match once. */
+const SWAP_FROM = {
+  link: /^!insertmacro setLinkVars[ \t]*$/m,
+  uninstall: /^!insertmacro uninstallOldVersion SHELL_CONTEXT[ \t]*\n!insertmacro handleUninstallResult SHELL_CONTEXT[ \t]*$/m,
+  files: /^SetOutPath \$INSTDIR[ \t]*\n\n!ifdef UNINSTALLER_ICON[ \t]*\n  File \/oname=uninstallerIcon\.ico "\$\{UNINSTALLER_ICON\}"[ \t]*\n!endif[ \t]*\n\n!insertmacro installApplicationFiles[ \t]*$/m,
+  custom: /^!ifmacrodef customInstall[ \t]*\n  !insertmacro customInstall[ \t]*\n!endif[ \t]*$/m,
+};
+const countOf = (text, re) => (text.match(new RegExp(re.source, "gm")) || []).length;
+
+function applySwapSection(nsisDir) {
+  const p = path.join(nsisDir, "installSection.nsh");
+  if (!fs.existsSync(p)) return;
+  const raw = fs.readFileSync(p, "utf8"), crlf = raw.indexOf("\r\n") > -1, t = raw.replace(/\r\n/g, "\n");
+  if (t.indexOf("etiudaStageBegin") > -1) return;
+  if (!Object.keys(SWAP_FROM).every(k => countOf(t, SWAP_FROM[k]) === 1)) return;
+  const s = t.replace(SWAP_FROM.link, m => m + "\n" + SWAP_STAGE.join("\n"))
+    .replace(SWAP_FROM.uninstall, () => SWAP_UNINSTALL.join("\n"))
+    .replace(SWAP_FROM.files, () => SWAP_FILES.join("\n"))
+    .replace(SWAP_FROM.custom, m => m + "\n" + SWAP_DROP.join("\n"));
+  fs.writeFileSync(p, crlf ? s.replace(/\n/g, "\r\n") : s, "utf8");
+}
+
+/* What is not as fix 6 leaves it: each block present once, in the order the install must run them. */
+function swapSectionMissing(nsisDir) {
+  const p = path.join(nsisDir, "installSection.nsh");
+  if (!fs.existsSync(p)) return ["installSection.nsh: no file"];
+  const t = fs.readFileSync(p, "utf8").replace(/\r\n/g, "\n");
+  /* The close check is in both branches of ONE_CLICK, so only its first place is held to the order. */
+  const steps = [
+    ["the stage after setLinkVars", "!insertmacro setLinkVars\n" + SWAP_STAGE.join("\n") + "\n", true],
+    ["the app closed after the stage", "!insertmacro CHECK_APP_RUNNING", false],
+    ["the swap before the older uninstaller", SWAP_UNINSTALL.join("\n"), true],
+    ["no in-place write where the stage runs", SWAP_FILES.join("\n"), true],
+    ["the registration after the swap", "!insertmacro registryAddInstallInfo", true],
+    ["the copy aside dropped after customInstall", "!insertmacro customInstall\n!endif\n" + SWAP_DROP.join("\n"), true],
+  ];
+  const missing = [];
+  let last = -1;
+  for (const [what, block, once] of steps) {
+    const at = t.indexOf(block), twice = at > -1 && t.indexOf(block, at + 1) > -1;
+    if (at < 0 || at < last || (once && twice)) missing.push(what);
+    last = Math.max(last, at);
+  }
+  return missing;
+}
+
+/* 6b. The extract itself, where the stage runs: Cancel takes the staged folder back before its 1618, and Retry tries the
+ *    copy into the stage again rather than overwriting in place with errors ignored, which nothing would then catch. */
+const STAGE_EXTRACT = [
+  ["include/extractAppPackage.nsh", "SetErrorLevel 1618", ["!ifmacrodef etiudaStageAbort", "  !insertmacro etiudaStageAbort", "!endif"]],
+  ["include/extractAppPackage.nsh", "RMDir /r \"$PLUGINSDIR\\7z-out\"", ["!ifmacrodef etiudaStageAbort", "  StrCpy $R1 0",
+    "  Goto RetryExtract7za", "!endif"], "before"],
+];
+
 /* 5. initMultiUser falls back to a per-user install when neither switch is given, so a silent run by the system account
  *    installs into that account's own profile, where no person can start the app. Such a run, and one by an elevated
  *    administrator in session 0, where no person's desktop is, installs for all users; a switch, an interactive run and
@@ -250,6 +321,7 @@ function verifyNsisPatches(rootDir) {
   const silentMissing = silentDefaultsMissing(nsisDir), unanswered = unansweredBoxes(nsisDir), exitMissing = exitCodesMissing(nsisDir);
   const machineWideMissing = exitCodesMissing(nsisDir, MACHINE_WIDE);
   const retryMissing = retryWindowMissing(nsisDir);
+  const swapMissing = swapSectionMissing(nsisDir).concat(exitCodesMissing(nsisDir, STAGE_EXTRACT));
   return {
     multiUserUiPatched: !!multiUserUiPatched,
     installSectionPatched: !!installSectionPatched,
@@ -262,8 +334,10 @@ function verifyNsisPatches(rootDir) {
     machineWideMissing,
     retryWindowPatched: retryMissing.length === 0,
     retryMissing,
+    swapPatched: swapMissing.length === 0,
+    swapMissing,
     applied: !!(multiUserUiPatched && installSectionPatched) && silentMissing.length === 0 && unanswered.length === 0
-      && exitMissing.length === 0 && machineWideMissing.length === 0 && retryMissing.length === 0,
+      && exitMissing.length === 0 && machineWideMissing.length === 0 && retryMissing.length === 0 && swapMissing.length === 0,
   };
 }
 
@@ -312,6 +386,8 @@ function applyNsisPatches(rootDir) {
   applyExitCodes(path.dirname(uiPath));
   applyExitCodes(path.dirname(uiPath), MACHINE_WIDE);
   applyRetryWindow(path.dirname(uiPath));
+  applySwapSection(path.dirname(uiPath));
+  applyExitCodes(path.dirname(uiPath), STAGE_EXTRACT);
   return verifyNsisPatches(rootDir);
 }
 

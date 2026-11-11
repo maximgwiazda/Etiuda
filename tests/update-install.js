@@ -401,6 +401,7 @@ async function updateLeg(newer) {
     defaultDirExists: fs.existsSync(P.defaultUserInstallDir(H.places.LocalApplicationData, PRODUCT)),
     programOld: oldEngine, programNew: engineIn(PROG), programTree: treeEngine,
     oldOnlyGone: !fs.existsSync(path.join(PROG, "left-by-the-older-copy.txt")),
+    besideClear: P.BESIDE.every(s => !fs.existsSync(PROG + s)),
     appKeys: namedKeys(KU.uninstallParent), keyName: regExists(KU.uninstall) ? GUID : "", keyBefore: GUID,
     version: regValue(KU.uninstall, "DisplayVersion"), wantVersion: WANT_VERSION,
     uninstallString: regValue(KU.uninstall, "UninstallString"),
