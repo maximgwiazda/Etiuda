@@ -2805,7 +2805,7 @@ async function main() {
       const o = await opened(w, goodWrap());
       const bytesOf = v => Buffer.byteLength(C.canon(v), "utf8");
       const ch = n => String.fromCharCode(n);
-      const pieces = ["é", "\u{1F600}", "\"", "\\", ch(10), ch(1), ch(0xd800), "a"];
+      const pieces = ["\u00e9", "\u{1F600}", "\"", "\\", ch(10), ch(1), ch(0xd800), "a"];
       /* A seeded draw (mulberry32), so every run judges the same wraps and a misjudged size can be found again. */
       let seed = 934;
       const rnd = n => {
