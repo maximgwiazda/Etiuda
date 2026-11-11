@@ -12,13 +12,14 @@
  *   da4 the key is never in what Settings is told, the person's or the policy's, while deskAiConfig does hand it on
  *   da5 deskAiConfig is null while the option is off or incomplete, a key stays with its address unless Settings moves it,
  *       and the connection test hands the door the fixed prompt and the config's five fields alone
+ *   da6 the services' published addresses are one table, shell/desk-ai.cjs's, which Settings and deskAiConfig read
  * THE PAGE'S PART runs the built engine in headless Chrome, beside a stand-in host that answers as the shell would:
  *   db1 the row's two states, built-in alone and the organisation's with its fields, the address only where the service
  *       has none of its own
  *   db2 set by policy, the row shows the choice, the host and "Set by the organisation", and takes no change
  *   db3 the mark beside the search box is there only while the organisation's model ranks, its words shed under 720 px with
- *       its sentence kept in its title, says when the shell has paused its asks or the median wait is over 4 seconds, and is
- *       absent while both switches are off
+ *       its sentence kept in its title, says when the shell has paused its asks or says the service is usually slower than
+ *       4 seconds (`slow`, from shell/desk-ai.cjs), and is absent while both switches are off
  *   db4 the sentences that say nothing leaves this computer are drawn only while the built-in model ranks, in both languages
  * No leg starts the desk app, reads the registry or reaches the network. The values are invented.
  */
@@ -64,6 +65,14 @@ function sliceDecl(src, marker) {
   throw new Error("an unterminated declaration: " + marker);
 }
 const SRC = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
+/* The adapter module, the one table of the services' published addresses, as the shell requires it; or a copy with one edit. */
+const DESK_AI_SRC = fs.readFileSync(path.join(ROOT, "shell", "desk-ai.cjs"), "utf8");
+function deskAiModule(src) {
+  const mod = { exports: {} };
+  new Function("require", "module", "exports", src)(require, mod, mod.exports);
+  return mod.exports;
+}
+const DESK_AI_MODULE = deskAiModule(DESK_AI_SRC);
 const POLICY = ["const POLICY_KEY =", "const POLICY_LEAD_RE =", "const POLICY_HEAD =", "const POLICY_EXPORT_LINE =",
   "function policyValues(", "function policyExpand(", "function policyRegSz(", "function policyFolderOk(", "function policyLeadOk(",
   "function policyNoUpdate(", "function joinPolicyFacts("];
@@ -96,11 +105,11 @@ function shell(policyText, opts) {
   const body = POLICY.concat(DESK_AI).map(m => sliceDecl(SRC, m)).join("\n");
   const policyRead = { values: null };
   const params = ["path", "app", "fs", "safeStorage", "Buffer", "branchSealable", "writeReplacing", "readJoinPolicy", "joinPolicyRead",
-    "deskAiProbe", "process"];
+    "deskAiProbe", "process", "harnessLaunch", "deskAi"];
   const S = new Function(...params, body + "\nreturn { " + NAMES.join(", ") + " };")(
     path, { getPath: () => dir }, fs, SEAL, Buffer, () => o.sealable !== false, (f, text) => fs.writeFileSync(f, text, "utf8"),
     () => ({}), policyRead, (config, prompt) => { asked.push({ config: config, prompt: prompt }); return Promise.resolve({ ok: true }); },
-    { env: {} });
+    { env: {} }, () => o.harness === true, o.deskAi || DESK_AI_MODULE);
   policyRead.values = policyText ? S.policyValues(policyText) : null;
   return Object.assign(S, { dir: dir, asked: asked, file: n => path.join(dir, n) });
 }
@@ -260,6 +269,33 @@ try { shell(""); } catch (e) { loadError = (e && e.message) || String(e); }
     + "the door the fixed prompt and five fields alone: " + (problems.join("; ") || "nine states, two tests"));
 }
 
+{ /* da6 */
+  const problems = [];
+  if (loadError) problems.push(loadError);
+  else {
+    const PLANTED = "https://planted.example/v1/";
+    const at = 'endpoint: "https://generativelanguage.googleapis.com/v1/"';
+    if (DESK_AI_SRC.split(at).length !== 2) problems.push("the module's Google line is not there once");
+    else {
+      const copy = deskAiModule(DESK_AI_SRC.replace(at, 'endpoint: "' + PLANTED + '"'));
+      const S = shell("", { deskAi: copy });
+      const listed = S.deskAiSettings().services || [];
+      const want = Object.keys(DESK_AI_MODULE.PROVIDERS);
+      if (listed.map(s => s.id).join() !== want.join()) problems.push("services " + listed.map(s => s.id).join());
+      const g = listed.find(s => s.id === "google");
+      if (!g || g.endpoint !== PLANTED) problems.push("Settings' Google address " + JSON.stringify(g && g.endpoint));
+      S.deskAiSave({ choice: "organisation", provider: "google", model: "m", key: KEY_PERSON });
+      const c = S.deskAiConfig();
+      if (!c || c.endpoint !== PLANTED) problems.push("deskAiConfig's Google address " + JSON.stringify(c && c.endpoint));
+    }
+    for (const host of ["api.openai.com", "api.anthropic.com", "generativelanguage.googleapis.com"]) {
+      if (SRC.indexOf(host) > -1) problems.push("shell/main.js names " + host);
+    }
+  }
+  check(!problems.length, "da6 the services' published addresses are one table, the adapter module's, and Settings and deskAiConfig read "
+    + "it: " + (problems.join("; ") || "an address planted in the module followed in both"));
+}
+
 /* ============================================================================================================================
    The page's part.
    ============================================================================================================================ */
@@ -406,11 +442,11 @@ try {
     if (!paused.there || !paused.dot || !/not answering/.test(paused.text) || !/built-in model ranks/.test(paused.title)) problems.push("paused " + JSON.stringify(paused));
     await ranked(page, { ranking: "organisation", failures: 0, pausedUntil: 0 });
     if ((await markNow(page)).dot) problems.push("the dot stayed after an answer");
-    await ranked(page, { ranking: "organisation", failures: 0, pausedUntil: 0, medianMs: 5200 });
+    await ranked(page, { ranking: "organisation", failures: 0, pausedUntil: 0, slow: true });
     const slow = await markNow(page);
     if (!slow.there || slow.dot || !/too slow to reorder/.test(slow.text) || !/more than 4 seconds/.test(slow.title)) problems.push("slow " + JSON.stringify(slow));
-    await ranked(page, { ranking: "organisation", failures: 0, pausedUntil: 0, medianMs: 1800 });
-    if (/too slow/.test((await markNow(page)).text)) problems.push("still too slow at a 1.8 s median");
+    await ranked(page, { ranking: "organisation", failures: 0, pausedUntil: 0, slow: false });
+    if (/too slow/.test((await markNow(page)).text)) problems.push("still too slow once the shell says slow is false");
     await page.evaluate(() => { localStorage.setItem("eAiOff", "1"); localStorage.setItem("eSearchAiOff", "1"); });
     await ranked(page);
     if ((await markNow(page)).there) problems.push("there with both switches off, when nothing is sent");
@@ -449,7 +485,7 @@ try {
   if (browser) await browser.close();
 }
 
-const EXPECTED = 9;
+const EXPECTED = 10;
 if (asserted !== EXPECTED) { failed++; asserted++; console.log("  FAIL ran " + asserted + " checks, expected " + EXPECTED); }
 console.log((failed ? "desk-own-ai: " + failed + " of " + asserted + " failed" : "desk-own-ai: all " + asserted + " passed"));
 process.exit(Math.min(failed, 63));

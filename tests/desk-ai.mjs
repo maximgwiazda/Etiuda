@@ -9,7 +9,10 @@
  * Each service's request and answer hold their recorded shape, and the door refuses what is not its own (da6). The page
  * keeps the order for its query and generation only (da7). The window follows the median of the real answer times inside
  * its floor and ceiling, a median over the ceiling is said as slow and unsaid below it, and the door's answer and the
- * connection test carry their time (da8). Each guard
+ * connection test carry their time (da8). After the join of the two halves: the outcome goes to the page on an event channel
+ * of its own, which the preload hears with on() and passes `slow` through (da9); Settings' connection test reaches the
+ * door and says how long it took (da10); the person's two switches gate the organisation's model too (da11); and the real
+ * reader is null on a harness launch, so no test start sends a query to a configured service (da12). Each guard
  * is lifted once, in a copy held in memory, and its leg must then fail. No leg reaches a network: every fetch is a
  * stand-in, and the global fetch throws.
  */
@@ -25,7 +28,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "shell");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 35;
+const EXPECTED = 44;
+/* The shell-to-page event that carries each re-order's outcome; the page-to-shell sync request "etiuda:ai-state" is another. */
+const RANKING_CH = "etiuda:ai-ranking";
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -82,7 +87,9 @@ const MAIN_TAIL = "\n__test.setWindow = w => { theWindow = w; }; __test.embedSug
   + " __test.setConfig = f => { if (typeof deskAiConfig === 'function') deskAiConfig = f; };"
   + " __test.deskReorder = typeof deskReorder === 'undefined' ? { ask: async () => null } : deskReorder;"
   + " __test.orgSearch = typeof orgSearch === 'function' ? orgSearch : async () => {};"
-  + " __test.deskAiTest = typeof deskAiTest === 'function' ? deskAiTest : async () => ({});";
+  + " __test.deskAiProbe = typeof deskAiProbe === 'function' ? deskAiProbe : async () => ({});"
+  /* Machine policy is read as none, so the real reader never runs reg.exe in a leg. */
+  + " if (typeof joinPolicyFacts === 'function') joinPolicyRead = joinPolicyFacts('');";
 const ENGINE = { sender: { id: 1, once: () => {} }, senderFrame: { parent: null, url: "file:///C:/lab/engine/etiuda.html" } };
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 
@@ -125,7 +132,7 @@ function loadMain(opts) {
     net: { fetch: (u, init) => fetch(u, init) }, protocol: inert, session: inert, screen: inert, shell: inert,
     systemPreferences: inert, nativeTheme: { themeSource: "system" }, clipboard: inert, globalShortcut: inert,
     nativeImage: { createFromPath: p => ({ path: p, isEmpty: () => false }) }, Tray: function () {}, Notification: function () {},
-    safeStorage: { isEncryptionAvailable: () => false, encryptString: () => { throw new Error("no"); }, decryptString: () => { throw new Error("no"); } },
+    safeStorage: o.safeStorage || { isEncryptionAvailable: () => false, encryptString: () => { throw new Error("no"); }, decryptString: () => { throw new Error("no"); } },
     utilityProcess: inert,
   };
   const aiCopy = o.aiSrc ? aiFrom(o.aiSrc) : null;
@@ -361,9 +368,9 @@ await block(async () => {
   const ctx = loadMain({ fetch: fetchOf(() => ({ status: 500, text: "" })) });
   ctx.T.setConfig(() => CONFIG);
   await ctx.T.deskReorder.ask("q", ["a", "b"]);
-  const sent = ctx.desk.sends.filter(s => s.ch === "etiuda:ai-state").map(s => s.args[0]);
+  const sent = ctx.desk.sends.filter(s => s.ch === RANKING_CH).map(s => s.args[0]);
   check(sent.length === 1 && sent[0].ranking === "builtin" && sent[0].failures === 1 && "pausedUntil" in sent[0],
-    "da4c the shell sends each outcome to the page on etiuda:ai-state: " + JSON.stringify(sent));
+    "da4c the shell sends each outcome to the page on " + RANKING_CH + ": " + JSON.stringify(sent));
 });
 
 /* ---- da5 INSTANT_FROM: the strip the agent sees at once, then the organisation's order --------------------------- */
@@ -588,10 +595,159 @@ await block(async () => {
   const res = await AI.door(slow, req, 1000);
   const test = AI.connectionTest ? await AI.connectionTest(slow, CONFIG) : {};
   const sent = slow.calls[1] ? Buffer.from(slow.calls[1].init.body).toString("utf8") : "";
-  const shell = await loadMain({ fetch: slow }).T.deskAiTest(CONFIG);
+  const shell = await loadMain({ fetch: slow }).T.deskAiProbe(CONFIG, AI.TEST_PROMPT);
   check(res.ms >= 35 && test.ok === true && test.ms >= 35 && shell.ok === true && shell.ms >= 35 && sent.indexOf(AI.TEST_PROMPT) > -1 && sent.indexOf("Items:") < 0,
     "da8e the door's answer carries the time it took, and the connection test answers {ok, ms} after sending its fixed prompt "
-    + "and nothing of a catalog, through the shell's deskAiTest too: door " + res.ms + " ms, test " + JSON.stringify(test) + ", shell " + JSON.stringify(shell));
+    + "and nothing of a catalog, through the shell's deskAiProbe too: door " + res.ms + " ms, test " + JSON.stringify(test) + ", shell " + JSON.stringify(shell));
+});
+
+/* ---- da9 the outcome's channel, and the preload that hears it ------------------------------------------------------- */
+function preloadHost() {
+  const listens = {}, syncs = [], invokes = [];
+  const ipcRenderer = {
+    sendSync: (ch) => { syncs.push(ch); return ch === "etiuda:host" ? { platform: "win32", backdrop: null } : null; },
+    send: () => {}, invoke: (ch) => { invokes.push(ch); return Promise.resolve(null); },
+    on: (ch, fn) => { (listens[ch] = listens[ch] || []).push(fn); },
+  };
+  const was = { window: globalThis.window, document: globalThis.document };
+  const exposed = {};
+  globalThis.window = { addEventListener: () => {}, removeEventListener: () => {} };
+  globalThis.document = { visibilityState: "visible", addEventListener: () => {}, removeEventListener: () => {} };
+  try {
+    new Function("require", fs.readFileSync(path.join(SHELL, "preload.js"), "utf8"))(n => (n === "electron"
+      ? { contextBridge: { exposeInMainWorld: (k, v) => { exposed[k] = v; }, executeInMainWorld: () => {} }, ipcRenderer, webUtils: {} } : nodeRequire(n)));
+  } finally { globalThis.window = was.window; globalThis.document = was.document; }
+  return { host: exposed.E_HOST || {}, listens, syncs, invokes };
+}
+await block(async () => {
+  const ctx = loadMain({ fetch: fetchOf(() => ({ status: 500, text: "" })) });
+  ctx.T.setConfig(() => CONFIG);
+  await ctx.T.deskReorder.ask("q", ["a", "b"]);
+  const chans = [...new Set(ctx.desk.sends.map(s => s.ch).filter(ch => /ai-(state|ranking)/.test(ch)))];
+  check(chans.length === 1 && chans[0] === RANKING_CH && RANKING_CH !== "etiuda:ai-state" && typeof ctx.on["etiuda:ai-state"] === "function",
+    "da9 each outcome goes to the page on " + RANKING_CH + " alone, and etiuda:ai-state stays the page's sync request of the shell: sent on "
+    + JSON.stringify(chans));
+  const P = preloadHost();
+  const got = [];
+  if (typeof P.host.onAiRanking === "function") P.host.onAiRanking(v => got.push(v));
+  for (const v of [{ ranking: "organisation", failures: 0, pausedUntil: 0, slow: true }, { ranking: "organisation", failures: 0, pausedUntil: 0, slow: false },
+    { ranking: "organisation", failures: 0, pausedUntil: 0, slow: "yes" }]) (P.listens[RANKING_CH] || []).forEach(fn => fn({}, v));
+  if (typeof P.host.aiState === "function") P.host.aiState();
+  check(Object.keys(P.listens).filter(ch => /ai-(state|ranking)/.test(ch)).join() === RANKING_CH && got.length === 3
+    && got[0].slow === true && got[1].slow === false && got[2].slow === false && P.syncs.indexOf("etiuda:ai-state") > -1,
+    "da9b the preload hears " + RANKING_CH + " with on() and passes slow through as a boolean, while aiState still asks etiuda:ai-state: heard "
+    + JSON.stringify(Object.keys(P.listens).filter(ch => /ai-/.test(ch))) + ", got " + JSON.stringify(got.map(v => v.slow)));
+});
+
+/* ---- da10 Settings' connection test, through the real reader and the door ----------------------------------------------- */
+const SEAL = {
+  isEncryptionAvailable: () => true,
+  encryptString: s => Buffer.from("sealed:" + Buffer.from(String(s), "utf8").toString("base64"), "utf8"),
+  decryptString: b => {
+    const t = Buffer.from(b).toString("utf8");
+    if (!t.startsWith("sealed:")) throw new Error("not sealed here");
+    return Buffer.from(t.slice(7), "base64").toString("utf8");
+  },
+};
+/* The person's setting as Settings writes it, the organisation's model chosen with OpenAI's own address and a key sealed for it. */
+function writeOrgSetting(ctx) {
+  const ud = ctx.electron.app.getPath("userData");
+  fs.writeFileSync(path.join(ud, "desk-ai.json"), JSON.stringify({ format: 1, kind: "etiuda-desk-ai", choice: "organisation", provider: "openai",
+    endpoint: "", model: "plant-model" }));
+  const sealed = SEAL.encryptString(JSON.stringify({ for: "https://api.openai.com/v1/", key: CONFIG.key })).toString("base64");
+  fs.writeFileSync(path.join(ud, "desk-ai-key.json"), JSON.stringify({ format: 1, kind: "etiuda-desk-ai-key", sealed }));
+}
+await block(async () => {
+  const fetch = fetchOf(() => tick(40).then(() => ({ status: 200, text: chatSaying("ok") })));
+  const ctx = loadMain({ fetch, safeStorage: SEAL });
+  writeOrgSetting(ctx);
+  const r = await ctx.handle["etiuda:desk-ai-test"](ENGINE);
+  const call = fetch.calls[0] || { url: "", init: {} };
+  const body = Buffer.from(call.init.body || []).toString("utf8");
+  check(r && r.ok === true && r.ms >= 35 && r.host === "api.openai.com" && r.model === "plant-model" && fetch.calls.length === 1
+    && call.url === "https://api.openai.com/v1/chat/completions" && body.indexOf(AI.TEST_PROMPT) > -1 && body.indexOf("Items:") < 0,
+    "da10 Settings' connection test reaches the service through the door, sending the fixed prompt alone, and answers with the time it took: "
+    + JSON.stringify(r) + ", fetches " + fetch.calls.length);
+  const whys = [];
+  for (const answer of [() => ({ status: 429, text: "" }), () => ({ status: 500, text: "" }), () => { throw new Error("refused"); }]) {
+    const c = loadMain({ fetch: fetchOf(answer), safeStorage: SEAL });
+    writeOrgSetting(c);
+    const t = await c.handle["etiuda:desk-ai-test"](ENGINE);
+    whys.push(t && t.ok === false ? t.why : "ok?");
+  }
+  check(whys[0] === "busy" && whys[1] !== "door" && whys[1] !== "busy" && whys[1] !== "unreached" && whys[2] === "unreached",
+    "da10b a refusal is named for its line: 429 busy, 500 an error, no answer unreached: " + JSON.stringify(whys));
+});
+
+/* ---- da11 the person's two switches gate the organisation's model as they gate the built-in one ------------------------ */
+async function switchDrive(opts) {
+  const o = opts || {};
+  const fetch = fetchOf(() => ({ status: 200, text: chatSaying("[2,1]") }));
+  const ctx = loadMain({ fetch, mainSrc: o.mainSrc, answer: (op, a) => op === "search-shortlist" ? { q: a.q, gen: 1, cards: ["c1", "c2"], intents: [] }
+    : op === "open" ? Object.assign(openAnswer(op), { ai: o.suggest !== false }) : openAnswer(op) });
+  builtinFrom(ctx.T, [{ id: "t:post", score: 0.9 }]);
+  ctx.T.setConfig(() => CONFIG);
+  let search = 0, pick = 0, shortlists = 0;
+  if (o.search !== undefined) {
+    ctx.on["etiuda:search-set"](ENGINE, o.search);
+    await ctx.handle["etiuda:search-prepare"](ENGINE, ROWS);
+    for (const q of ["lantern", "lantern wick", "kettle tea"]) { await ctx.handle["etiuda:search-rank"](ENGINE, q); await tick(AI.SETTLE_MS + 60); }
+    search = fetch.calls.length;
+    shortlists = ctx.asked.filter(a => a.op === "search-shortlist").length;
+  }
+  if (o.suggest !== undefined) {
+    const before = fetch.calls.length;
+    await openPicker(ctx, MESSAGE, 120);
+    pick = fetch.calls.length - before;
+  }
+  return { search, pick, shortlists };
+}
+await block(async () => {
+  const off = await switchDrive({ search: false }), on = await switchDrive({ search: true });
+  check(off.search === 0 && off.shortlists === 0 && on.search >= 1,
+    "da11 \"Search by meaning\" off, the organisation's model is not asked for the search either: off " + off.search + " fetch(es), "
+    + off.shortlists + " shortlist(s); on " + on.search);
+  const poff = await switchDrive({ suggest: false }), pon = await switchDrive({ suggest: true });
+  check(poff.pick === 0 && pon.pick >= 1,
+    "da11b \"Suggest intents\" off, the organisation's model is not asked for the suggestions either: off " + poff.pick + ", on " + pon.pick);
+  const noSearchGate = edited(edited(MAIN_SRC, "if (!orgSearchOn || !deskAiConfig())", "if (!deskAiConfig())"),
+    "if (!orgSearchOn || !deskReorder.active()", "if (!deskReorder.active()");
+  const noSuggestGate = edited(MAIN_SRC, "org && showed && aiOn ? orgSuggestRows", "org && showed ? orgSuggestRows");
+  const ls = await switchDrive({ search: false, mainSrc: noSearchGate }), lp = await switchDrive({ suggest: false, mainSrc: noSuggestGate });
+  check(ls.search >= 1 && lp.pick >= 1, "da11p with either switch's gate lifted, its leg above fails: search " + ls.search + ", suggestions " + lp.pick);
+});
+
+/* ---- da12 the real reader on a harness launch ---------------------------------------------------------------------- */
+const HARNESS_VARS = ["ETIUDA_TEST_OFFSCREEN", "ETIUDA_TEST_DOCUMENTS", "ETIUDA_TEST_DEVTOOLS"];
+async function readerDrive(harness, mainSrc) {
+  const kept = HARNESS_VARS.map(k => [k, process.env[k]]);
+  HARNESS_VARS.forEach(k => { delete process.env[k]; });
+  if (harness) process.env.ETIUDA_TEST_OFFSCREEN = "1";
+  try {
+    const fetch = fetchOf(() => ({ status: 200, text: chatSaying("[2,1]") }));
+    const ctx = loadMain({ fetch, mainSrc, safeStorage: SEAL,
+      answer: (op, a) => op === "search-shortlist" ? { q: a.q, gen: 1, cards: ["c1", "c2"], intents: [] } : openAnswer(op) });
+    builtinFrom(ctx.T, []);
+    writeOrgSetting(ctx);
+    const e = Object.assign({ returnValue: undefined }, ENGINE);
+    ctx.on["etiuda:ai-state"](e);
+    ctx.on["etiuda:search-set"](ENGINE, true);
+    await ctx.handle["etiuda:search-prepare"](ENGINE, ROWS);
+    await ctx.handle["etiuda:search-rank"](ENGINE, "lantern wick");
+    await tick(AI.SETTLE_MS + 80);
+    return { org: !!(e.returnValue && e.returnValue.org), fetches: fetch.calls.length };
+  } finally {
+    HARNESS_VARS.forEach(k => { delete process.env[k]; });
+    kept.forEach(([k, v]) => { if (v !== undefined) process.env[k] = v; });
+  }
+}
+await block(async () => {
+  const desk = await readerDrive(false), lab = await readerDrive(true);
+  check(desk.org === true && desk.fetches >= 1 && lab.org === false && lab.fetches === 0,
+    "da12 the real reader hands the person's setting on at a customer's start and is null on a harness launch, so no test start sends: "
+    + "customer " + JSON.stringify(desk) + ", harness " + JSON.stringify(lab));
+  const lifted = await readerDrive(true, edited(MAIN_SRC, "function deskAiConfig() {\n  if (harnessLaunch()) return null;\n", "function deskAiConfig() {\n"));
+  check(lifted.org === true && lifted.fetches >= 1, "da12p with the harness check lifted, the leg above fails: " + JSON.stringify(lifted));
 });
 
 check(wallHits === 0, "da0 no leg called the global fetch: " + wallHits);

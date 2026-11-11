@@ -460,7 +460,6 @@ function orgTestLine(r){
     : why==="keyAway" ? t("The organisation's Group Policy sets the AI service's key, and that key goes only to the address the policy sets or to the service's own, never to an address typed here, so nothing was sent.")
     : why==="late" ? t("The AI service did not answer in time, so the request was given up.")
     : why==="busy" ? t("The AI service is busy and asked Etiuda to wait; a later try may go through.")
-    : why==="door" ? t("This build cannot send the test yet, so nothing was sent.") // placeholder: Claudette
     : why==="unreached" ? at(t("Could not reach {HOST}.")) // placeholder: Claudette
     : at(t("{HOST} answered with an error, so the connection is not confirmed.")); // placeholder: Claudette
 }

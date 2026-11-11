@@ -8345,7 +8345,7 @@ What you type stays in this browser only.`;
     "Whoever manages Etiuda for the organisation can change this.": "Zmienić to może osoba, która zarządza Etiudą w organizacji.",
     "Group Policy names an AI service setting Etiuda cannot use, so it is ignored: {NAME}": "Zasady grupy ustawiają dla usługi AI wartość, której Etiuda nie może użyć, więc zostaje pominięta: {NAME}",
     "Service": "Usługa",
-    "Another OpenAI-compatible service": "Inny dostawca zgodny z OpenAI",
+    "Another OpenAI-compatible service": "Usługa zgodna z OpenAI",
     "Address": "Adres",
     "Left empty, the service's own address is used: {URL}": "Puste pole oznacza własny adres usługi: {URL}",
     "Needed for this service: the full https address the organisation gives for it.": "Wymagany dla tej usługi: pełny adres https, który podaje dla niej organizacja.",
@@ -8385,7 +8385,6 @@ What you type stays in this browser only.`;
     "That key could not be kept.": "Tego klucza nie udało się zachować.",
     "The setting could not be saved just now.": "Tego ustawienia nie udało się teraz zapisać.",
     "No key is kept for this address, so nothing was sent.": "Dla tego adresu nie zachowano klucza, więc nic nie zostało wysłane.",
-    "This build cannot send the test yet, so nothing was sent.": "Ta wersja nie potrafi jeszcze wysłać sprawdzenia, więc nic nie zostało wysłane.",
     "Could not reach {HOST}.": "Nie udało się połączyć z {HOST}.",
     "{HOST} answered with an error, so the connection is not confirmed.": "{HOST} odpowiedział błędem, więc połączenie nie zostało potwierdzone.",
     "General": "Ogólne",
@@ -25926,9 +25925,8 @@ What you type stays in this browser only.`;
     const s = st === void 0 ? orgModel() : st;
     return !!(s && s.on === true && s.ready === true);
   }
-  var orgOutcome = { ranking: "organisation", failures: 0, pausedUntil: 0 };
+  var orgOutcome = { ranking: "organisation", failures: 0, pausedUntil: 0, slow: false };
   var orgPauseT = 0;
-  var ORG_SLOW_MS = 4e3;
   function orgMarkWords(st, outcome, now) {
     const host = String(st && st.host || "");
     const o = outcome || {};
@@ -25942,7 +25940,7 @@ What you type stays in this browser only.`;
       label: t("organisation's model not answering, word matches only"),
       title: at(t("{HOST} has not answered three times in a row, so the search matches words alone, and the desk asks {HOST} again in a minute."))
     };
-    if (Number(o.medianMs) > ORG_SLOW_MS) return eAiModel() ? {
+    if (o.slow === true) return eAiModel() ? {
       paused: false,
       label: t("organisation's model too slow to reorder"),
       title: at(t("{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the built-in model's order stands."))
@@ -35367,7 +35365,7 @@ What you type stays in this browser only.`;
     const at = (s) => s.split("{HOST}").join(host).split("{MODEL}").join(model);
     if (r && r.ok && Number.isFinite(r.ms)) return at(t("Connected: {HOST} answered in {SECONDS} s, model {MODEL}.")).split("{SECONDS}").join((r.ms / 1e3).toFixed(1).replace(".", uiLang() === "pl" ? "," : "."));
     if (r && r.ok) return at(t("Connected: {HOST} answered, model {MODEL}."));
-    return why === "provider" ? t("No AI service is set up yet. One is chosen from the Menu, under Settings, then Data and defaults.") : why === "endpoint" ? t("Needed for this service: the full https address the organisation gives for it.") : why === "model" ? t("No model is named for the AI service, so nothing was sent. The model is named from the Menu, under Settings, then Data and defaults.") : why === "key" ? t("No key is kept for this address, so nothing was sent.") : why === "keyAway" ? t("The organisation's Group Policy sets the AI service's key, and that key goes only to the address the policy sets or to the service's own, never to an address typed here, so nothing was sent.") : why === "late" ? t("The AI service did not answer in time, so the request was given up.") : why === "busy" ? t("The AI service is busy and asked Etiuda to wait; a later try may go through.") : why === "door" ? t("This build cannot send the test yet, so nothing was sent.") : why === "unreached" ? at(t("Could not reach {HOST}.")) : at(t("{HOST} answered with an error, so the connection is not confirmed."));
+    return why === "provider" ? t("No AI service is set up yet. One is chosen from the Menu, under Settings, then Data and defaults.") : why === "endpoint" ? t("Needed for this service: the full https address the organisation gives for it.") : why === "model" ? t("No model is named for the AI service, so nothing was sent. The model is named from the Menu, under Settings, then Data and defaults.") : why === "key" ? t("No key is kept for this address, so nothing was sent.") : why === "keyAway" ? t("The organisation's Group Policy sets the AI service's key, and that key goes only to the address the policy sets or to the service's own, never to an address typed here, so nothing was sent.") : why === "late" ? t("The AI service did not answer in time, so the request was given up.") : why === "busy" ? t("The AI service is busy and asked Etiuda to wait; a later try may go through.") : why === "unreached" ? at(t("Could not reach {HOST}.")) : at(t("{HOST} answered with an error, so the connection is not confirmed."));
   }
   function orgModelHostCall() {
     const h = eHost();

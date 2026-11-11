@@ -223,14 +223,17 @@ function slowFor(times) {
   return kept.length >= TIMES_FIRST && medianOf(kept) > WINDOW_CEILING_MS;
 }
 
-/** THE CONNECTION TEST: the fixed prompt alone to `config`'s service, answered {ok, ms, status}, ms the door's own time. */
+/** THE CONNECTION TEST: the fixed prompt alone to `config`'s service, answered {ok, ms, status, why}, ms the door's own time
+ *  and why, where it failed, the line Settings says: "busy" (429), "answer" (another status, or an answer with no text),
+ *  "late" (none inside ANSWER_WAIT_MS), "unreached" (the request did not go or no answer came), "config". */
 async function connectionTest(fetchFn, config) {
   const req = requestOf(config, TEST_PROMPT, TEST_TEXT);
-  if (!req) return { ok: false, ms: 0, status: 0 };
+  if (!req) return { ok: false, ms: 0, status: 0, why: "config" };
   try {
     const res = await door(fetchFn, req, ANSWER_WAIT_MS);
-    return { ok: replyText(config.provider, res.status, res.bytes) !== null, ms: res.ms, status: res.status };
-  } catch { return { ok: false, ms: 0, status: 0 }; }
+    const ok = replyText(config.provider, res.status, res.bytes) !== null;
+    return { ok, ms: res.ms, status: res.status, why: ok ? "" : res.status === 429 ? "busy" : "answer" };
+  } catch (e) { return { ok: false, ms: 0, status: 0, why: e && e.message === "late" ? "late" : "unreached" }; }
 }
 
 /** The asks, their pause and their outcome. `config()` is the configuration in force or null; `onState` hears

@@ -4125,38 +4125,20 @@ const DESK_AI_FILE = "desk-ai.json";
 const DESK_AI_KEY_FILE = "desk-ai-key.json";
 const DESK_AI_KIND = "etiuda-desk-ai";
 const DESK_AI_KEY_KIND = "etiuda-desk-ai-key";
-/* Each service's own route and published address, the address used only where neither the person nor the policy named one;
-   "" means one must be given. */
-const DESK_AI_SERVICES = Object.freeze({
-  openai: Object.freeze({ route: "chat/completions", endpoint: "https://api.openai.com/v1/" }),
-  anthropic: Object.freeze({ route: "messages", endpoint: "https://api.anthropic.com/v1/" }),
-  google: Object.freeze({ route: "interactions", endpoint: "https://generativelanguage.googleapis.com/v1/" }),
-  azure: Object.freeze({ route: "chat/completions", endpoint: "" }),
-  compatible: Object.freeze({ route: "chat/completions", endpoint: "" }),
-});
+/* Each service's published address, the one used only where neither the person nor the policy named one, "" meaning one
+   must be given: the adapter module's table, the only one, so Settings, the policy and the requests cannot disagree. */
+const DESK_AI_SERVICES = deskAi.PROVIDERS;
 const DESK_AI_MODEL_MAX = 256;
 const DESK_AI_KEY_MAX = 8192;
 const DESK_AI_CONTROL_RE = /[\x00-\x1f\x7f]/;
-/* The connection test's whole question: a fixed prompt, and no catalog text with it. */
-const DESK_AI_TEST_PROMPT = "Answer with the single word ok.";
+/* The connection test's whole question: a fixed prompt, and no catalog text with it, the one the door sends. */
+const DESK_AI_TEST_PROMPT = deskAi.TEST_PROMPT;
 function deskAiService(provider) {
   return typeof provider === "string" && Object.prototype.hasOwnProperty.call(DESK_AI_SERVICES, provider) ? DESK_AI_SERVICES[provider] : null;
 }
 /** An https address in its canonical form, its path ending in "/", the service's own route taken off where it was pasted
  *  whole; "" where it is not https or carries a user, a password, a query or a fragment. */
-function deskAiEndpointShape(text, provider) {
-  let u = null;
-  try { u = new URL(String(text == null ? "" : text).trim()); } catch { return ""; }
-  if (u.protocol !== "https:" || u.username !== "" || u.password !== "" || u.search !== "" || u.hash !== "" || !u.hostname) return "";
-  const service = deskAiService(provider), route = service ? service.route : "";
-  let p = u.pathname;
-  const low = p.toLowerCase();
-  if (route && low.endsWith("/" + route)) p = p.slice(0, -route.length);
-  else if (route && low.endsWith("/" + route + "/")) p = p.slice(0, -route.length - 1);
-  if (!p.endsWith("/")) p += "/";
-  u.pathname = p;
-  return u.href;
-}
+function deskAiEndpointShape(text, provider) { return deskAi.endpointShape(text, provider); }
 /* MACHINE POLICY FOR THE OPTION, from policyValues' reading: AiProvider, AiEndpoint, AiModel and AiKey, the values Studio's
    template names, and the desk's own switch DeskOrganisationModel, 1 for on and 0 for off, either one fixed here, absent or
    empty leaving the choice to the person. Strings are taken as written, an expandable one too. A value that cannot be used is
@@ -4275,8 +4257,10 @@ function deskAiNow() {
   return { joined: joined, policy: policy, key: key };
 }
 /** THE ONE PLACE THE ADDRESS AND THE KEY ARE HANDED ON. Null while the option is off or anything a request needs is missing;
- *  else {provider, endpoint, model, key, managed}, endpoint the address a request goes to, as deskAiEndpointShape writes it. */
+ *  else {provider, endpoint, model, key, managed}, endpoint the address a request goes to, as deskAiEndpointShape writes it.
+ *  Null on a harness launch too, as the note look is, so no test start sends a query to a service configured on this desk. */
 function deskAiConfig() {
+  if (harnessLaunch()) return null;
   let now = null;
   try { now = deskAiNow(); } catch { return null; }
   const j = now.joined;
@@ -4323,9 +4307,12 @@ function deskAiSave(fields) {
   } catch { return { ok: false, why: "unwritten", settings: answer() }; }
   return { ok: true, why: "", settings: answer() };
 }
-/* The door's one ask of `config` with `prompt`, answered {ok, why}. Until the door is in this tree, nothing is sent. */
+/* The door's one ask of `config` with the test's fixed prompt (shell/desk-ai.cjs connectionTest), answered {ok, why, ms,
+   status}: why "busy", "late", "unreached" or "answer" (an error or an answer with no text), ms the service's own time. */
 function deskAiProbe(config, prompt) {
-  return Promise.resolve(config && prompt ? { ok: false, why: "door" } : { ok: false, why: "none" });
+  if (!config || prompt !== DESK_AI_TEST_PROMPT) return Promise.resolve({ ok: false, why: "none" });
+  return deskAi.connectionTest(deskAiFetch, config).then(r => ({ ok: r.ok === true, why: r.ok === true ? "" : String(r.why || "answer"),
+    ms: r.ms, status: r.status }));
 }
 /* The connection test, on the fields in force whether the option is on or not: the fixed prompt, through the door. Answers
    {ok, why, host, model, ms}, why naming what is missing before anything is asked and ms the wait for the answer. */
@@ -4343,7 +4330,7 @@ function deskAiTest() {
   const t0 = Date.now();
   return Promise.resolve().then(() => deskAiProbe(config, DESK_AI_TEST_PROMPT))
     .then(r => ({ ok: !!(r && r.ok === true), why: r && r.ok === true ? "" : String((r && r.why) || "failed"), host: a.host, model: j.model,
-      ms: Date.now() - t0 }),
+      ms: r && Number.isFinite(r.ms) && r.ms > 0 ? r.ms : Date.now() - t0 }),
       () => ({ ok: false, why: "failed", host: a.host, model: j.model }));
 }
 ipcMain.on("etiuda:desk-ai-settings", (e) => {
@@ -10367,20 +10354,18 @@ function warmSuggestSoon() {
   }).catch(() => {});
 }
 
-/* THE ORGANISATION'S MODEL (shell/desk-ai.cjs). deskAiConfig is the one reader of the configuration in force,
-   {provider, endpoint, model, key, managed}, or null while the option is off or not ready; this stand-in keeps it off. */
-function deskAiConfig() { return null; }
-/* The page hears each ask's outcome on etiuda:ai-state, {ranking, failures, pausedUntil, slow}, for the mark and its lines. */
+/* THE ORGANISATION'S MODEL (shell/desk-ai.cjs). deskAiConfig, above with Settings' part, is the one reader of the
+   configuration in force, {provider, endpoint, model, key, managed}, or null while the option is off or not ready.
+   The page hears each ask's outcome on etiuda:ai-ranking, {ranking, failures, pausedUntil, slow}, for the mark and its
+   lines: a channel of its own, since etiuda:ai-state is the page's sync request of the shell, the other way. */
 function deskAiState(state) {
   const win = theWindow;
-  if (win && !win.isDestroyed()) win.webContents.send("etiuda:ai-state", state);
+  if (win && !win.isDestroyed()) win.webContents.send("etiuda:ai-ranking", state);
 }
 function deskAiFetch(u, init) {
   return net && typeof net.fetch === "function" ? net.fetch(u, init) : Promise.reject(new Error("no network here"));
 }
 const deskReorder = deskAi.createReorder({ config: () => deskAiConfig(), fetch: deskAiFetch, onState: deskAiState });
-/* Settings' connection test for `config`: {ok, ms, status}, ms the time the service took. */
-function deskAiTest(config) { return deskAi.connectionTest(deskAiFetch, config); }
 /* An agent's key, click, wheel or scroll in each window, counted, so an order that comes after one is dropped. */
 let deskTouches = 0, pickTouches = 0;
 function countTouches(wc, bump) {
@@ -10626,7 +10611,8 @@ ipcMain.handle("etiuda:pick-copy", (e, what) => {
     return false;
   });
 });
-/* The embedded model's switch as Settings shows it: whether this desk carries the model, and the person turning it off or on. */
+/* The embedded model's switch as Settings shows it: whether this desk carries the model, whether the organisation's model is
+   in force (org), and the person turning it off or on. A sync request from the page; the outcomes go back on etiuda:ai-ranking. */
 ipcMain.on("etiuda:ai-state", (e) => {
   e.returnValue = fromEngine(e) ? { model: !!(embedSuggest && embedSuggest.installed()), org: !!deskAiConfig() } : null;
 });

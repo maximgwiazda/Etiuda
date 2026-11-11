@@ -23,11 +23,10 @@ function orgRanks(st){
   const s=st===undefined ? orgModel() : st;
   return !!(s && s.on===true && s.ready===true);
 }
-/* The last re-order's outcome as the shell sent it on etiuda:ai-state. */
-let orgOutcome={ranking:"organisation", failures:0, pausedUntil:0};
+/* The last re-order's outcome as the shell sent it on etiuda:ai-ranking. `slow` is the shell's: the median of the service's
+   last answer times over the 4 seconds the mark's words name (shell/desk-ai.cjs WINDOW_CEILING_MS). */
+let orgOutcome={ranking:"organisation", failures:0, pausedUntil:0, slow:false};
 let orgPauseT=0;
-/* The median wait above which the mark says the model is too slow to reorder: the 4 seconds its words name. */
-const ORG_SLOW_MS=4000;
 /* The mark's words at `now`: {label, title, paused}. Its sentence follows the two switches, so it never says text goes where it
    does not. Paused is the shell's pause after three failures in a row, while the built-in model, or the word matches where
    the desk carries none, rank meanwhile. */
@@ -41,7 +40,7 @@ function orgMarkWords(st, outcome, now){
     : {paused:true, label:t("organisation's model not answering, word matches only"),
       title:at(t("{HOST} has not answered three times in a row, so the search matches words alone, and the desk asks {HOST} again in a minute."))};
   /* Too slow keeps the quiet colour and no dot: nothing has failed. */
-  if(Number(o.medianMs)>ORG_SLOW_MS) return eAiModel()
+  if(o.slow===true) return eAiModel()
     ? {paused:false, label:t("organisation's model too slow to reorder"),
       title:at(t("{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the built-in model's order stands."))}
     : {paused:false, label:t("organisation's model too slow to reorder"),
