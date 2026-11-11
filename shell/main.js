@@ -31,7 +31,7 @@ try {
   tls.setDefaultCACertificates([...new Set([...tls.getCACertificates("default"), ...tls.getCACertificates("system")])]); /* plant:system-roots */
 } catch { /* the bundled roots stand */ }
 const { watchPage } = require(path.join(__dirname, "page-watch.cjs"));
-const { decideClose, showNotification: showNotificationOf, notifyFirstClose: notifyFirstCloseOf, setLoginItemSettings: setLoginItemSettingsOf,
+const { decideClose, showNotification: showNotificationOf, notifyFirstClose: notifyFirstCloseOf, setLoginItemSettings: setLoginItemSettingsOf, loginItemOn,
   createTray, buildTrayMenuTemplate, setJumpList: setJumpListOf, APP_IDS } = require(path.join(__dirname, "tray.cjs"));
 /* A HARNESS LAUNCH WRITES NOTHING THE ACCOUNT KEEPS OUTSIDE ITS LAB: no etiuda: handler, login item, jump list or toast.
    Every harness launch carries a user-data folder of its own (the door refuses one without) or a test variable, and the
@@ -41,6 +41,17 @@ function harnessLaunch() {
   return argv.some(a => /^--user-data-dir(=|$)/.test(String(a)))
     || ["ETIUDA_TEST_OFFSCREEN", "ETIUDA_TEST_DOCUMENTS", "ETIUDA_TEST_DEVTOOLS"].some(k => process.env[k] !== undefined)
     || testIdentityBuild(); /* plant:harness-test-build */
+}
+/* The name earlier builds' Run value carries: Electron's default id, "electron.app." and the app's name. */
+function legacyLoginName() {
+  let n = "";
+  try { n = String(app.getName() || ""); } catch { n = ""; }
+  return "electron.app." + (n || "Etiuda");
+}
+/* Off clears the desk's own Run value and an earlier build's; on writes the desk's own. */
+function setStartWithWindows(on) {
+  if (!on) setLoginItemSettings(app, false, { name: legacyLoginName() });
+  return setLoginItemSettings(app, !!on);
 }
 function setLoginItemSettings(electronApp, on, opts) {
   if (harnessLaunch()) return null; /* plant:harness-login */
@@ -52,8 +63,10 @@ function syncLoginItemPath() {
   let applied = null;
   try {
     if (typeof app.getLoginItemSettings === "function") {
-      const cur = app.getLoginItemSettings();
-      if (cur && cur.openAtLogin) {
+      const cur = app.getLoginItemSettings(), legacy = legacyLoginName(), old = loginItemOn(cur, legacy);
+      /* An earlier build's value, under Electron's default id, moves to the desk's own name: the old one cleared first. */
+      if (loginItemOn(cur) || old) {
+        if (old) setLoginItemSettings(app, false, { name: legacy });
         applied = setLoginItemSettings(app, true, { path: process.execPath });
       }
     }
@@ -7979,7 +7992,7 @@ ipcMain.on("etiuda:close-answer", (e, a) => {
 ipcMain.on("etiuda:login-item-set", (e, on) => {
   if (!fromEngine(e)) return;
   if (process.platform !== "win32") return;
-  try { setLoginItemSettings(app, !!on); }
+  try { setStartWithWindows(!!on); }
   catch (err) { console.error("etiuda: start with Windows could not be changed - " + err.message); }
 });
 ipcMain.on("etiuda:login-item-state", (e) => {
@@ -7989,7 +8002,7 @@ ipcMain.on("etiuda:login-item-state", (e) => {
   try {
     if (typeof app.getLoginItemSettings === "function") {
       const got = app.getLoginItemSettings();
-      openAtLogin = !!(got && got.openAtLogin);
+      openAtLogin = loginItemOn(got) || loginItemOn(got, legacyLoginName());
     }
   } catch { /* Windows did not answer */ }
   e.returnValue = { openAtLogin: openAtLogin };
@@ -8394,7 +8407,7 @@ ipcMain.handle("etiuda:desk-reset", (e) => {
   } catch (err) { catalogSetting = ""; }
   const staged = stageReset({ userData: userData, catalogSetting: catalogSetting, defaultCatalog: defaultCatalogFolder() });
   if (staged && staged.ok) {
-    try { setLoginItemSettings(app, false); } catch (err) { /* start with Windows could not be changed */ }
+    try { setStartWithWindows(false); } catch (err) { /* start with Windows could not be changed */ }
     relaunchAfterReset();
   }
   return staged;
@@ -10904,7 +10917,7 @@ if (!theOnlyOne || (Array.isArray(process.argv) && process.argv.includes("--upda
   try {
     const honoured = honourPendingReset({ userData: app.getPath("userData"), holdsLock: true });
     if (honoured && honoured.ok) {
-      try { setLoginItemSettings(app, false); } catch (err) { /* start with Windows could not be changed */ }
+      try { setStartWithWindows(false); } catch (err) { /* start with Windows could not be changed */ }
     }
     if (honoured && honoured.notice && Array.isArray(honoured.paths) && honoured.paths.length)
       resetNotice = { paths: honoured.paths.slice() };

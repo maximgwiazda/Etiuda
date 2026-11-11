@@ -545,11 +545,26 @@
   ${EndIf}
   !endif
 
-  # START WITH WINDOWS: removed on uninstall, kept on update.
-  # Electron's app.setLoginItemSettings writes this account's Run value under
-  # HKCU\Software\Microsoft\Windows\CurrentVersion\Run with the app's AppUserModelId().
+  # START WITH WINDOWS: this account's Run value goes with the desk (never on an update), and only while it still starts
+  # this install's program. Two names: the desk's own, which it writes since this build, and Electron's default id,
+  # "electron.app." and the product name, which earlier builds wrote under (the test architect's hold of 23:29).
   ${IfNot} ${isUpdated}
-    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${APP_ID}"
+    Push $R8
+    Push $R9
+    StrCpy $R8 `"$INSTDIR\${APP_EXECUTABLE_FILENAME}"`
+    StrLen $R9 $R8
+    ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${APP_ID}"
+    StrCpy $0 $0 $R9
+    ${If} $0 == $R8
+      DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${APP_ID}"
+    ${EndIf}
+    ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "electron.app.${PRODUCT_NAME}"
+    StrCpy $0 $0 $R9
+    ${If} $0 == $R8
+      DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "electron.app.${PRODUCT_NAME}"
+    ${EndIf}
+    Pop $R9
+    Pop $R8
   ${EndIf}
 
   # THE etiuda: LINK goes with the desk, and only while it still opens this desk: another program's is left as it is.

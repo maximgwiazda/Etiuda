@@ -732,10 +732,17 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const end = at >= 0 ? un.indexOf('${EndIf}', at) : -1;
     if (at < 0 || end < 0) return false;
     const block = un.slice(at, end);
-    return /DeleteRegValue\s+HKCU\s+"Software\\Microsoft\\Windows\\CurrentVersion\\Run"\s+"\$\{APP_ID\}"/.test(block);
+    /* Both names (the desk's own and Electron's default id earlier builds wrote under), each deleted only while its command
+       starts this install's program (the test architect's hold of 23:29). */
+    const guarded = (name) => new RegExp('ReadRegStr \\$0 HKCU "Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run" "' + name
+      + '"\\s+StrCpy \\$0 \\$0 \\$R9\\s+\\$\\{If\\} \\$0 == \\$R8\\s+DeleteRegValue HKCU "Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run" "' + name + '"');
+    const tail = un.slice(at);
+    return /StrCpy \$R8 `"\$INSTDIR\\\$\{APP_EXECUTABLE_FILENAME\}"`/.test(tail)
+      && guarded('\\$\\{APP_ID\\}').test(tail) && guarded('electron\\.app\\.\\$\\{PRODUCT_NAME\\}').test(tail);
   };
   ok(unRunValue(NSH), "13h the uninstall hook deletes this account's Start with Windows Run value only when not updating");
   ok(!unRunValue(NSH.split('${IfNot} ${isUpdated}').join('${If} ${isUpdated}')), "13h control: deleting on update reads red");
+  ok(!unRunValue(NSH.split("${If} $0 == $R8\n      DeleteRegValue").join("DeleteRegValue")), "13h control: deleting without the program's check reads red");
 }
 
 console.log("\n#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
