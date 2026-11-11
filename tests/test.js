@@ -5674,6 +5674,90 @@ function checkRawAttrs() {
    Scope is deliberately the text a PASSENGER receives - card bodies, the intent clauses that
    fill {INTENT}, the comment tokens, the ROLE list, quick facts. Engine comments are exempt:
    nobody outside this repository ever reads one. */
+/* TWO HALVES, AND THE SECOND USED TO DEPEND ON THE FIRST. The catalog half needs content this
+   repository does not hold; the engine half never did. A single early return above meant that
+   with no catalog on disk the interface's own dash guard did not run either, and 3d reported
+   clean. The caller is told which halves ran. */
+function checkTypeableChars() {
+  const NL = String.fromCharCode(10);
+  const out = [];
+  const ran = { catalog: false, engine: true };
+  if (HAVE_FIXTURES) catalogHalf();
+  function catalogHalf() {
+  // The same reader section 4 uses, so this half cannot be looking at a file that one refused.
+  const c = loadCatalog(CATALOG_PATH());
+  if (!c) return;
+  ran.catalog = true;
+  const SUS = {};
+  SUS[String.fromCharCode(0x2014)] = "em dash";
+  SUS[String.fromCharCode(0x2013)] = "en dash";
+  SUS[String.fromCharCode(0x2026)] = "ellipsis glyph";
+  SUS[String.fromCharCode(0x00a0)] = "no-break space";
+  SUS[String.fromCharCode(0x201c)] = "curly quote";
+  SUS[String.fromCharCode(0x201d)] = "curly quote";
+  SUS[String.fromCharCode(0x2018)] = "curly quote";
+  SUS[String.fromCharCode(0x2019)] = "curly apostrophe";
+  const look = (label, s) => {
+    for (const ch of String(s || "")) {
+      if (SUS[ch]) { out.push(label + " contains a " + SUS[ch]); return; }
+    }
+  };
+  (c.cards || []).forEach(m => {
+    look('card "' + m.t + '" (EN)', m.en);
+    look('card "' + m.t + '" (PL)', m.pl);
+  });
+  const it = c.intents || {};
+  ["en", "pl", "cmt", "topic"].forEach(k =>
+    (it[k] || []).forEach((s, i) => look("intent[" + i + "]." + k, s)));
+  (c.who || []).forEach((s, i) => look("ROLE option " + i, s));
+  look("quick facts", c.facts);
+  }
+
+  /* THE INTERFACE TOO, for the same reason one step removed: an agent who sees an em dash in
+     their own tool reads the tool as machine-written, and the joke about which machine writes
+     them is current. Narrower set than above - only the two dashes - because Polish UI copy
+     legitimately uses typographic quotation marks that a passenger never receives.
+     Comments are exempt: nobody outside this repository reads one. */
+  const engine = sourceText();
+  let code = "", i = 0;
+  while (i < engine.length) {          // strip comments AND regex literals, keep the rest
+    const a = engine[i], b = engine[i + 1];
+    if (a === "/" && b === "/") { const j = engine.indexOf(NL, i); i = j < 0 ? engine.length : j; continue; }
+    if (a === "/" && b === "*") { const j = engine.indexOf("*/", i + 2); i = j < 0 ? engine.length : j + 2; continue; }
+    if (a === "/") {
+      let k = code.length - 1;
+      while (k >= 0 && /\s/.test(code[k])) k--;
+      const prev = k >= 0 ? code[k] : "";
+      if (prev === "" || "(,=:[!&|?{};".indexOf(prev) > -1) {
+        let j = i + 1, cls = false;
+        while (j < engine.length) {
+          if (engine[j] === "\\") { j += 2; continue; }
+          if (engine[j] === "[") cls = true;
+          else if (engine[j] === "]") cls = false;
+          else if (engine[j] === "/" && !cls) { j++; break; }
+          else if (engine[j] === NL) break;
+          j++;
+        }
+        i = j; continue;
+      }
+    }
+    code += a; i++;
+  }
+  const UI_BAD = [[0x2014, "em dash"], [0x2013, "en dash"],
+                  [0x201e, "curly quote"], [0x201c, "curly quote"], [0x201d, "curly quote"],
+                  [0x2018, "curly apostrophe"], [0x2019, "curly apostrophe"]];
+  UI_BAD.forEach(pair => {
+    const ch = String.fromCharCode(pair[0]);
+    let at = code.indexOf(ch), n = 0;
+    while (at > -1 && n < 5) {
+      out.push("engine UI has a " + pair[1] + ": ..."
+        + code.slice(Math.max(0, at - 44), at + 22).replace(/\s+/g, " ") + "...");
+      at = code.indexOf(ch, at + 1); n++;
+    }
+  });
+  out.ran = ran;
+  return out;
+}
 /* Export writes an object literal; import copies a WHITELIST. A field added to one and not
    the other is lost in silence, and the file says so in a comment that has now failed twice
    - the Polish intent topics, then the Polish category names. Comparing the two lists beats
@@ -7476,6 +7560,16 @@ if (require.main === module) {
       + JSON.stringify(f.prefix) + " and swept by " + f.shape + " in both copies");
   } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
+  section("[3d/5] characters a keyboard cannot type");
+  try {
+    const p = checkTypeableChars();
+    p.forEach(x => console.error("  ERROR: " + x));
+    if (p.length) hardFail++;
+    else console.log("  no untypeable character in the engine's interface"
+      + (p.ran.catalog ? ", nor in anything a passenger receives" : "; the catalog half was NOT RUN"));
+    if (!p.ran.catalog) notRun.push("3d's catalog half");
+  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
+
   section("[3e/5] card list shapes");
   try {
     const p = checkColPlan();
@@ -7555,5 +7649,5 @@ if (require.main === module) {
   process.exit(hardFail ? 1 : 0);
 }
 
-module.exports = { lintCatalog, loadCatalog, catalogLintLine, checkEngineSyntax, checkStacking, checkTShadow, checkRawAttrs,
+module.exports = { lintCatalog, loadCatalog, catalogLintLine, checkEngineSyntax, checkStacking, checkTShadow, checkRawAttrs, checkTypeableChars,
                    searchFns, rankForQuery, runSearchEval, filledTokens };
