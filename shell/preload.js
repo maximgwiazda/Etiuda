@@ -240,6 +240,10 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   trayNotesState: () => ipcRenderer.sendSync("etiuda:tray-notes-state"),
   notify: (opts) => ipcRenderer.send("etiuda:notify", opts),
   onTrayGo: (fn) => ipcRenderer.on("etiuda:tray-go", (_e, kind) => { try { fn(String(kind || "")); } catch { /* the page has gone */ } }),
+  /* The version note: {offer, look} now and after each look, and the release page opened by the shell from the note it kept. */
+  updateState: () => ipcRenderer.sendSync("etiuda:update-state"),
+  onUpdate: (fn) => ipcRenderer.on("etiuda:update", (_e, v) => { try { fn(v && typeof v === "object" ? v : {}); } catch { /* the page has gone */ } }),
+  openUpdatePage: () => ipcRenderer.invoke("etiuda:update-open"),
   /* Returns this desk to a fresh install. The shell does the work on the next start. */
   resetDesk: () => ipcRenderer.invoke("etiuda:desk-reset"),
   /* A reset that could not finish. The page asks to try again, or to stop and keep the desk. */

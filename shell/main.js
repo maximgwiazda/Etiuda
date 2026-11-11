@@ -8756,6 +8756,165 @@ function openExternally(url) {
   } catch { /* not a URL this shell can open, and the navigation is refused either way */ }
 }
 
+/* ---- the version note (board 991) ----------------------------------------------------------------------------------------
+   One small document etiuda.dev serves for the desk, signed offline by the vendor's root key: the newest release and the
+   page about it. Read whole or refused whole, every check before the signature; the desk opens the note's address in the
+   browser and fetches nothing at it. The signed bytes are the note's own domain line, then its fields one per line, so no
+   other signed document reads as a note, and a note reads as nothing else. */
+const NOTE_KIND = "etiuda-update-note", NOTE_MAX = 1024, NOTE_TIMEOUT_MS = 30 * 1000;
+const NOTE_URL = "https://etiuda.dev/licence/v1/note/desk";
+/* The vendor's root key, public half, as relay/core.cjs's ROOT_PUB. Only a leg passes readNote another. */
+const NOTE_ROOT = "f78558260ad75c094052f936326a63bffb1a581ac8b91d898ae1fd01b61127ee";
+const NOTE_FIELDS = ["kind", "format", "app", "serial", "version", "released", "url", "sig"];
+const NOTE_VERSION_RE = /^(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})$/;
+const NOTE_URL_RE = /^https:\/\/etiuda\.dev(\/[A-Za-z0-9][A-Za-z0-9._-]{0,63}){1,8}\/?$/;
+function noteBytes(n) {
+  return Buffer.from([NOTE_KIND, String(n.format), n.app, String(n.serial), n.version, n.released, n.url].join("\n"), "utf8");
+}
+function noteDay(s) {
+  const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(s);
+  if (!m || +m[1] < 2020 || +m[1] > 2099) return false;
+  const at = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  return at.getUTCFullYear() === +m[1] && at.getUTCMonth() === +m[2] - 1 && at.getUTCDate() === +m[3];
+}
+/* The desk's note in `body`, a Buffer or a string: {note} where every check holds, else {why}, the first that failed. */
+function readNote(body, root) {
+  const key = root === undefined ? NOTE_ROOT : root;
+  const buf = Buffer.isBuffer(body) ? body : typeof body === "string" ? Buffer.from(body, "utf8") : null;
+  if (!buf) return { why: "shape" };
+  if (buf.length > NOTE_MAX) return { why: "size" }; /* plant:note-size */
+  for (const b of buf) if (!(b === 0x09 || b === 0x0a || b === 0x0d || (b >= 0x20 && b <= 0x7e))) return { why: "bytes" };
+  let n;
+  try { n = JSON.parse(buf.toString("utf8")); } catch { return { why: "json" }; }
+  const plainObj = v => !!v && typeof v === "object" && !Array.isArray(v);
+  const exactly = (o, names) => Object.keys(o).length === names.length && names.every(k => Object.prototype.hasOwnProperty.call(o, k));
+  if (!plainObj(n)) return { why: "json" };
+  if (!exactly(n, NOTE_FIELDS)) return { why: "fields" };
+  if (n.kind !== NOTE_KIND) return { why: "kind" };
+  if (n.format !== 1) return { why: "format" };
+  if (n.app !== "desk") return { why: "app" }; /* plant:note-app */
+  if (!Number.isSafeInteger(n.serial) || n.serial < 1 || n.serial > 999999999) return { why: "serial" };
+  if (typeof n.version !== "string" || !NOTE_VERSION_RE.test(n.version)) return { why: "version" };
+  if (typeof n.released !== "string" || !noteDay(n.released)) return { why: "released" };
+  if (typeof n.url !== "string" || n.url.length > 200 || !NOTE_URL_RE.test(n.url)) return { why: "url" }; /* plant:note-url */
+  const s = n.sig;
+  if (!plainObj(s) || !exactly(s, ["alg", "keyId", "value"]) || s.alg !== "ed25519" || typeof s.keyId !== "string"
+    || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(s.keyId) || typeof s.value !== "string" || !/^[0-9a-f]{128}$/.test(s.value)) return { why: "sig" };
+  let held = false;
+  try {
+    held = typeof key === "string" && /^[0-9a-f]{64}$/.test(key) && crypto.verify(null, noteBytes(n),
+      crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(key, "hex")]), format: "der", type: "spki" }),
+      Buffer.from(s.value, "hex")) === true;
+  } catch { held = false; }
+  if (!held) return { why: "signature" }; /* plant:note-sig */
+  return { note: n };
+}
+/* A note that held, against the one kept: "taken" over none or a lower serial, "same" for the same serial and signed bytes,
+   else "refused", which changes nothing. */
+function keepNote(note, kept) {
+  if (!kept) return "taken";
+  if (note.serial < kept.serial) return "refused"; /* plant:note-serial */
+  if (note.serial === kept.serial) return noteBytes(note).equals(noteBytes(kept)) ? "same" : "refused";
+  return "taken";
+}
+/* Whether release `a` is above release `b`, each three whole numbers; false where either is not. */
+function versionAbove(a, b) {
+  const x = NOTE_VERSION_RE.exec(String(a)), y = /^([0-9]+)\.([0-9]+)\.([0-9]+)$/.exec(String(b));
+  if (!x || !y) return false;
+  for (let i = 1; i <= 3; i++) if (+x[i] !== +y[i]) return +x[i] > +y[i];
+  return false; /* plant:note-equal */
+}
+/* The note's bytes through `fetchFn`: one GET over https to etiuda.dev, no redirect followed, nothing cached, no cookie,
+   a 200 alone answered, the body read up to NOTE_MAX bytes and refused past them, the whole within `ms`. Throws else. */
+async function fetchNote(fetchFn, url, ms) {
+  let u;
+  try { u = new URL(String(url)); } catch { throw new Error("not an address"); }
+  if (u.protocol !== "https:" || u.hostname !== "etiuda.dev" || u.port || u.username || u.password) throw new Error("the note is read from https://etiuda.dev only"); /* plant:note-origin */
+  const ctl = typeof AbortController === "function" ? new AbortController() : null;
+  let timer = null;
+  const late = new Promise((_, no) => {
+    timer = setTimeout(() => { try { if (ctl) ctl.abort(); } catch { /* gone */ } no(new Error("the note did not arrive in time")); },
+      ms === undefined ? NOTE_TIMEOUT_MS : ms);
+    if (timer.unref) timer.unref();
+  });
+  const read = (async () => {
+    const res = await fetchFn(u.href, { method: "GET", redirect: "error", cache: "no-store", credentials: "omit", signal: ctl ? ctl.signal : undefined }); /* plant:note-redirect */
+    if (!res || res.status !== 200) throw new Error("the note was answered " + (res ? res.status : "with nothing"));
+    const said = Number(res.headers && typeof res.headers.get === "function" ? res.headers.get("content-length") : NaN);
+    if (Number.isFinite(said) && said > NOTE_MAX) throw new Error("the note is longer than it may be");
+    if (res.body && typeof res.body.getReader === "function") {
+      const reader = res.body.getReader(), parts = [];
+      let got = 0;
+      for (;;) {
+        const step = await reader.read();
+        if (step.done) break;
+        got += step.value.length;
+        if (got > NOTE_MAX) { try { reader.cancel(); } catch { /* gone */ } throw new Error("the note is longer than it may be"); } /* plant:note-cap */
+        parts.push(Buffer.from(step.value));
+      }
+      return Buffer.concat(parts);
+    }
+    const all = Buffer.from(await res.arrayBuffer());
+    if (all.length > NOTE_MAX) throw new Error("the note is longer than it may be");
+    return all;
+  })();
+  try { return await Promise.race([read, late]); }
+  finally { clearTimeout(timer); read.catch(() => {}); late.catch(() => {}); }
+}
+/* The last note the desk took, in update-note.json beside desk.json, read back through the same checks; and how the latest
+   look went: "read" for a note that held, "failed" for anything else, "" before the first look ends. */
+const NOTE_FILE = "update-note.json", NOTE_FIRST_MS = 60 * 1000, NOTE_EVERY_MS = 60 * 60 * 1000;
+let noteKept, noteLook = "", noteTimer = null;
+function keptNote() {
+  if (noteKept !== undefined) return noteKept;
+  let got = null;
+  try { got = readNote(fs.readFileSync(path.join(app.getPath("userData"), NOTE_FILE))); } catch { got = null; }
+  noteKept = got && got.note ? got.note : null;
+  return noteKept;
+}
+/* What the page shows: the version offered where the kept note's is above this engine's, and how the latest look went. */
+function updateState() {
+  const kept = keptNote();
+  return { offer: kept && versionAbove(kept.version, engineVersion()) ? kept.version : "", look: noteLook };
+}
+async function lookForNote(fetchFn) {
+  let look = "failed";
+  try {
+    const body = await fetchNote(fetchFn, NOTE_URL), got = readNote(body);
+    if (got.note) {
+      look = "read";
+      if (keepNote(got.note, keptNote()) === "taken") {
+        try { writeReplacing(path.join(app.getPath("userData"), NOTE_FILE), body.toString("utf8")); }
+        catch (e) { console.error("etiuda: the version note could not be kept - " + e.message); }
+        noteKept = got.note;
+      }
+    }
+  } catch { look = "failed"; }
+  noteLook = look;
+  const win = theWindow;
+  if (win && !win.isDestroyed()) win.webContents.send("etiuda:update", updateState());
+  return look;
+}
+/* A first look a minute after the window opens, then hourly. Never from the harness's own window, so no leg reaches out. */
+function armNoteLook() {
+  if (PLACED_ASIDE || noteTimer || !net || typeof net.fetch !== "function") return;
+  const next = () => {
+    lookForNote((u, init) => net.fetch(u, init)).catch(() => {});
+    noteTimer = setTimeout(next, NOTE_EVERY_MS);
+    if (noteTimer.unref) noteTimer.unref();
+  };
+  noteTimer = setTimeout(next, NOTE_FIRST_MS);
+  if (noteTimer.unref) noteTimer.unref();
+}
+ipcMain.on("etiuda:update-state", (e) => { e.returnValue = fromEngine(e) ? updateState() : null; });
+/* The release page, opened in the browser from the kept note while an offer stands; the page never names an address. */
+ipcMain.handle("etiuda:update-open", async (e) => {
+  if (!fromEngine(e)) return false;
+  const kept = keptNote();
+  if (!kept || !updateState().offer) return false; /* plant:update-open-offer */
+  try { await shell.openExternal(kept.url); return true; } catch { return false; }
+});
+
 /* THE HARNESS'S OWN WINDOW, a contract of three values. Nothing else here reads the variable.
      1   placed beyond the far corner of every display, never shown, never focused.
      2   the same placement, shown without focus: a window with a frame and a rectangle to
@@ -10714,6 +10873,7 @@ if (!theOnlyOne || (Array.isArray(process.argv) && process.argv.includes("--upda
       if (!folderTeamHere() && sayJoinPolicy().folder && folderAnswers(sayJoinPolicy().folder)) heedTeam();
       return awaitFolderPrime().then(() => {
         createWindow();
+        armNoteLook();
         try { ensureTray(); } catch { /* the window still opens */ }
         try { syncJumpList(); } catch { /* the jump list still stands */ }
         hotkeyReady = true; syncHotkey();
