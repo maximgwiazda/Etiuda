@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 505;
+const EXPECTED = 509;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -4101,6 +4101,63 @@ async function main() {
       return { ok, detail: JSON.stringify({ listed, up, session: tail(s), reads, gone, rows, again, renewal: rn.r.status, yes }) };
     }
 
+    /* Board 987: a desk taken off leaves its blobs to the lead for REMOVED_KEEP_MS of time the team can read, so no rule about a lapse costs
+       the lead a removed desk's uploads it could have read had the team paid on time. The desk uploads at the until less 4 days and is taken
+       off at `off` from the until; with `prune`, a desk takes its request back at the until and 9 days, an upload whose commit prunes while
+       the team is lapsed; at `back` the team is renewed, handed to a new lead or made again by its lead (`how`). Answers what the lead then
+       sees of the blob just after, a minute before the `left` of its keep runs out, and a minute after. */
+    async function heldLapseScene(o) {
+      const w = await lapseWorld(false);
+      at(w, -4 * DAY);
+      const f = sealAs(w, w.desk, "desks/" + w.deskId + "/kept.ec", 1);
+      const steps = [tail(await put(w, await sessionOf(w, w.desk), f))];
+      let ask = null, who = null, place = null;
+      if (o.prune) {
+        at(w, -2 * DAY);
+        const token = hex(32), id = hex(16);
+        who = keyPair(true);
+        place = "desk:k-" + hex(8);
+        steps.push(tail(await invites(w, [{ id, hash: sha(token) }], [])));
+        const hello = await boundHello(w, who, id, token);
+        ask = sealJoin(w, who, 1, place);
+        steps.push(tail(await put(w, hello.json && hello.json.session, ask, { extra: { pub: who.pub } })));
+      }
+      at(w, o.off);
+      steps.push(tail(await devices(w, [w.devs[1]])));
+      const st = w.R.stores.get(w.rt), obj = (st.get("held:" + f.id) || {}).obj;
+      if (o.prune) {
+        at(w, 9 * DAY);
+        const s = await helloAs(w, who);
+        const del = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32), writer: { keyId: who.keyId, privateKey: who.privateKey },
+          path: "desks/" + place.slice(5) + "/join.json", body: "", counter: 2, place, kind: "delete", supersedes: ask.id });
+        steps.push(tail(await put(w, s.json && s.json.session, del)));
+        steps.push(!!st.get("held:" + f.id) && w.R.bucket.objects.has(obj));
+      }
+      at(w, o.back);
+      const backAt = w.R.clock.now;
+      let reader = w.lead, reopened = null;
+      if (o.how === "renew") reopened = (await renewWith(w, { grant: grantNow(w, { fields: { paid: true } }) })).r.status;
+      else if (o.how === "lead") {
+        const next = keyPair(false), to = { keyId: next.keyId, pub: next.pub };
+        reopened = (await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/lead", { json: { to, t: backAt,
+          sig: signHex(w.lead, C.leadBytes(w.rt, to.keyId, to.pub, backAt)), grant: K.grantFor(next.pub, backAt) } })).status;
+        reader = next;
+      } else reopened = (await create(w, w.lead, backAt)).status;
+      const look = async () => {
+        const s = await sessionOf(w, reader), list = await since(w, s);
+        return [Array.isArray(list.json) && list.json.some(e => e.meta.id === f.id), tail(await getBlob(w, s, f.id))];
+      };
+      const after = await look();
+      w.R.clock.now = backAt + o.left - MIN;
+      const before = await look();
+      w.R.clock.now = backAt + o.left + MIN;
+      const past = await look();
+      const gone = !!obj && !w.R.bucket.objects.has(obj) && st.get("held:" + f.id) === undefined;
+      const ok = steps.every(x => x === 200 || x === true) && reopened === 200 && sameJ(after, [true, 200]) && sameJ(before, [true, 200])
+        && sameJ(past, [false, "missing"]) && gone;
+      return { ok, detail: JSON.stringify({ how: o.how, steps, reopened, after, before, past, gone }) };
+    }
+
     const paid = await held(() => paidScene());
     check(paid.a === true, "977a a paid team at its grant's end and 29 days is working: hello answers its challenge alone, the lead's and a desk's sessions are each told"
       + " { state: working, until, readOnly: until + 30 d, swept: until + 90 d }, since carries the same in its etiuda-lapse header, and fetch, socket, states,"
@@ -4168,6 +4225,23 @@ async function main() {
     check(goWithdraw.ok === true, "977u a lapsed trial's desk takes its request back: a fresh hello opens the asked invitation's session, which reads nothing and"
       + " takes the withdrawal; the request is gone, the next hello is refused team-lapsed, and once renewed the lead's yes is refused withdrawn: "
       + (goWithdraw.detail || goWithdraw.failed));
+    const heldOff = await held(() => heldLapseScene({ how: "renew", off: DAY, back: 10 * DAY, left: 7 * DAY }));
+    check(heldOff.ok === true, "987a a lapsed trial's lead takes a desk off and renews 9 days later: the lead lists and fetches the removed desk's upload after the"
+      + " renewal, still at 7 days less a minute from it, and at 7 days and a minute it is deleted with its object (if the keep counts from the removal,"
+      + " the first list after the renewal deletes it unread): " + (heldOff.detail || heldOff.failed));
+    const heldRun = await held(() => heldLapseScene({ how: "renew", off: -3 * DAY, back: 20 * DAY, left: 4 * DAY }));
+    check(heldRun.ok === true, "987b a desk taken off 3 days before a trial's until, renewed 20 days after it: the 4 days of the keep the lapse took are given"
+      + " back from the renewal, so the lead lists and fetches the upload after it and at 4 days less a minute, and at 4 days and a minute it is deleted"
+      + " (if the keep counts through the lapse, it is deleted unread; if the lapse restarts it whole, it is still there): " + (heldRun.detail || heldRun.failed));
+    const heldPrune = await held(() => heldLapseScene({ how: "renew", prune: true, off: DAY, back: 12 * DAY, left: 7 * DAY }));
+    check(heldPrune.ok === true, "987c a lapsed trial's lead takes a desk off, and 8 days later a desk's withdrawal of its request, the one upload a lapse"
+      + " takes, prunes while reads are refused: the removed desk's upload and its object stay, and after a renewal the lead has its 7 days of it (if a"
+      + " prune releases a keep that ran out while reads were refused, it is gone before the renewal): " + (heldPrune.detail || heldPrune.failed));
+    const heldMove = await held(() => heldLapseScene({ how: "lead", off: DAY, back: 10 * DAY, left: 7 * DAY }));
+    const heldMade = await held(() => heldLapseScene({ how: "create", off: DAY, back: 10 * DAY, left: 7 * DAY }));
+    check(heldMove.ok === true && heldMade.ok === true, "987d a lapsed trial reopened 9 days after a removal by a handover to a new lead, or by its lead making"
+      + " the team again under a new grant, gives the new lead, or the lead, the removed desk's upload for 7 days from that moment (if only a renewal"
+      + " restarts the keep, the first list after the others deletes it unread): " + (heldMove.detail || heldMove.failed) + " " + (heldMade.detail || heldMade.failed));
 
     /* ---- 978: each line of the lapse lifted in a copy turns its leg red, and no product file is written ---- */
     const how2 = p => p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED");

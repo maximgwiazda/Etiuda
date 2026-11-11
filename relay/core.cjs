@@ -13,7 +13,8 @@ const CALL_SKEW_MS = 5 * 60 * 1000;
    (Maxim, 2026-10-20: a delegation from the root key to the licence service's key runs one year). */
 const DELEGATION_MAX_MS = 366 * 86400000;
 const KEEP_MS = 30 * 24 * 60 * 60 * 1000;
-/* How long a desk taken off leaves its blobs readable by the lead alone, counted toward nothing, before they are deleted. */
+/* How long a desk taken off leaves its blobs readable by the lead alone, counted toward nothing, before they are deleted. Only time the
+   team can read counts toward it. */
 const REMOVED_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 const TOKEN_TRIES = 20;
 /* Wrong tokens are counted per key, and a team keeps at most this many keys' counts for one invitation. */
@@ -250,6 +251,14 @@ function lapsedFrom(team) {
   return from < l.until + TRIAL_KEEP_MS ? from : null;
 }
 
+/* The first instant a team row refuses reads: lapsed, or gone with no lapse before it. A row with nothing to count from always refuses. */
+function readsEnd(team) {
+  const l = lapseOf(team, 0);
+  if (l.until === null) return -Infinity;
+  const from = lapsedFrom(team);
+  return from !== null ? from : l.swept;
+}
+
 /* What a team keeps from a grant: until, the latest end of any grant; paid, whether that end is a paid grant's; and paidUntil, the
    latest paid end, kept apart only where a later unpaid grant has set until past it, so an unpaid grant extends a paid team's lapse
    and never shortens it. One rule for a repeat create and a renewal. */
@@ -420,6 +429,7 @@ function createCore(deps) {
       Object.assign(row, paidApart);
       if (typeof row.secret !== "string") row.secret = random(32);
       store.put("team", row);
+      if (team) resumeHeld(team, clock());
       store.del("swept");
       if (made1st) { store.del("moved"); store.del("teamFile"); }
       if (takes) remember(b.grant);
@@ -465,6 +475,7 @@ function createCore(deps) {
         delete row.paidUntil;
         if (next.paidUntil !== undefined) row.paidUntil = next.paidUntil;
         store.put("team", row);
+        resumeHeld(team, clock());
       }
       if (clears) store.del("moved");
       remember(b.grant);
@@ -506,6 +517,7 @@ function createCore(deps) {
       delete row.paidUntil;
       if (next.paidUntil !== undefined) row.paidUntil = next.paidUntil;
       store.put("team", row);
+      resumeHeld(team, clock());
       for (const [k, s] of store.list("ses:")) if (s && s.key === oldLead.keyId) store.del(k); /* plant:lead-sessions-drop */
       store.del("moved");
       remember(b.grant);
@@ -579,8 +591,8 @@ function createCore(deps) {
       }
       for (const [id, v] of next) { store.put("dev:" + id, v); store.del("gone:" + id); }
       /* A key taken off gives back what it held: its blobs leave the team's counts at once, are listed and fetched by the lead
-         alone for REMOVED_KEEP_MS, and are deleted at the first list or upload after it. No tombstone is kept, so the key put
-         back starts its chains again. */
+         alone for REMOVED_KEEP_MS of time the team can read, and are deleted at the first list or upload after it. No tombstone
+         is kept, so the key put back starts its chains again. */
       const freed = [], heldUntil = clock() + REMOVED_KEEP_MS;
       let grace = false;
       grace = true; /* plant:removed-grace */
@@ -1390,7 +1402,7 @@ function createCore(deps) {
     store.del("seq:" + pad(m.seq));
     if (m.del) store.del(expiryKey(m.at + KEEP_MS, m.id));
     store.put("bytes", Math.max(0, (store.get("bytes") || 0) - m.size));
-    store.put("held:" + m.id, Object.assign({}, m, { heldUntil: until }));
+    store.put("held:" + m.id, Object.assign({}, m, { heldUntil: until, heldLeft: until - clock() }));
     store.put(expiryKey(until, m.id), "held");
   }
   function release(h, drop) {
@@ -1398,6 +1410,23 @@ function createCore(deps) {
     store.del(expiryKey(h.heldUntil, h.id));
     store.put("orphan:" + h.obj, 1);
     drop.push(h.obj);
+  }
+  /* A held row's keep counts from heldUntil - heldLeft to heldUntil, and is spent once that much time has passed with reads open. A row
+     whose heldUntil passed while reads were refused is not spent: its expiry row goes, and resumeHeld counts it again when reads reopen. */
+  const heldLeftOf = h => (Number.isSafeInteger(h.heldLeft) && h.heldLeft >= 0 ? h.heldLeft : REMOVED_KEEP_MS);
+  const heldSpent = (h, now) => h.heldUntil < now && h.heldUntil <= readsEnd(store.get("team"));
+  /* A grant replacing team row `was` at `now`, where `was` refused reads by then: each held row keeps what was left of its keep when reads
+     closed, counted from now. */
+  function resumeHeld(was, now) {
+    const end = readsEnd(was);
+    if (end >= now) return;
+    for (const [k, h] of store.list("held:")) {
+      const left = heldLeftOf(h), rest = left - Math.min(left, Math.max(0, end - (h.heldUntil - left)));
+      if (rest <= 0) continue;
+      store.del(expiryKey(h.heldUntil, h.id));
+      store.put(k, Object.assign({}, h, { heldUntil: now + rest, heldLeft: rest }));
+      store.put(expiryKey(now + rest, h.id), "held");
+    }
   }
 
   /* Deletion records past their keep, tombstones past theirs, a spent invitation's hash and times past its keep (its id and
@@ -1418,7 +1447,8 @@ function createCore(deps) {
           store.del(k);
           if (kind === "tomb") { store.del("tomb:" + id); continue; }
           const h = kind === "held" ? store.get("held:" + id) : undefined;
-          if (h) { release(h, drop); continue; } /* plant:held-expiry */
+          if (h && heldSpent(h, now)) { release(h, drop); continue; } /* plant:held-expiry */
+          if (h) continue;
           const m = store.get("blob:" + id);
           if (m && expired(m, now)) bury(m, "expired", now, drop);
         }
