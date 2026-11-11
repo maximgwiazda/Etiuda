@@ -1760,7 +1760,8 @@ const CARD_B = {
         M.reorderMacroBlocks("c-reorder", 2, 0);
         const o = P.pack.overrides["c-reorder"] || {};
         P.BASE_M.splice(P.BASE_M.indexOf(base), 1); delete P.pack.overrides["c-reorder"];
-        return eq(Object.keys(o).sort().join(",") + "|" + o["body:de"], "body:de,en,pl|" + three("D3", "D1", "D2"));
+        // The reorder is the agent's edit of the card, so the override is dated (board 982).
+        return eq(Object.keys(o).sort().join(",") + "|" + o["body:de"], "body:de,changedAt,en,pl|" + three("D3", "D1", "D2"));
       });
   } finally {
     CM.setContentLangs(hadLangs); AS.putLang(hadLang); AS.setCards(hadCards);
@@ -3261,13 +3262,16 @@ const CARD_B = {
       document.activeElement = body; LN.lanesKey();
       LP.bumpUseCount("c-ln-cat", "en");
       const wrote = LN.writeLaneList(["c-ln-c", "c-ln-b", "c-ln-d"]), mine = ov(), kept1 = kept() === catalogs;
+      // The edit is dated (board 982); the date is the clock's, so it is said and set aside.
+      const minePlain = (o => { if (!o) return "null"; const dated = typeof o.changedAt === "string"; delete o.changedAt;
+        return JSON.stringify(o) + (dated ? " dated" : ""); })(JSON.parse(mine));
       const back = { closest: s => (s === ".ln-back" ? back : null) };
       ((lanesBox.heard && lanesBox.heard.click) || []).forEach(fn => fn({ target: back }));
       const given = ov(), kept2 = kept() === catalogs, offered = !!(undoBtn && undoBtn.onclick);
       if (offered) undoBtn.onclick();
       check("lanes.js", "814ed3 a catalog card's list edited in the lanes is written to its override with the ids it replaced, the catalog's card and E_CATALOG stay as they were, and Back to the catalog's offers Undo, which restores the override",
-        () => eq([wrote, mine, kept1, given, kept2, offered, ov() === mine, kept() === catalogs].join("|"),
-          'true|{"next":[{"to":"c-ln-c"},{"to":"c-ln-b"},{"to":"c-ln-d"}],"nextWas":["c-ln-b","c-ln-c"]}|true|null|true|true|true|true'));
+        () => eq([wrote, minePlain, kept1, given, kept2, offered, ov() === mine, kept() === catalogs].join("|"),
+          'true|{"next":[{"to":"c-ln-c"},{"to":"c-ln-b"},{"to":"c-ln-d"}],"nextWas":["c-ln-b","c-ln-c"]} dated|true|null|true|true|true|true'));
     } finally {
       LN.toggleLanes(false);
       document.createElement = hadMake; delete body.appendChild;

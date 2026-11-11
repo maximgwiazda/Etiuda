@@ -51,7 +51,7 @@ function v2Fns() {
     "const V2_SHA_RE=", "function v2Missing(", "function v2FlagProblem(", "function v2NextProblems(",
     "function v2HeaderProblems(", "function v2VarProblems(", "function v2Problems(",
     "const V2_CARD_NAMED=", "const V2_HEAD_NAMED=", "function v2Copy(", "function v2Put(",
-    "function v2Extra(", "function v2Restore(",
+    "function v2Extra(", "function v2Restore(", "function v2ChangedAt(",
     "const CARD_KEY=", "const REQ_KEY=", "const V2_RUNTIME_FIELD=", "function v2ColKey(",
     "const CAT_LABEL_KEY=", "function v2CatKey(",
     'const CARD_FLAGS=["firstOnly"',

@@ -7,7 +7,7 @@ import { catalogLoaded } from "./catalog-boot.js";
 import { agentName } from "./agent.js";
 import { catalogToV2, v2SignedBytes, v2Problems, v2ContentHash, v2CatKey } from "./catalog-v2.js";
 import { directWrite } from "./catalog-merge.js";
-import { CATS, intentArr, intentFieldKey, intentCount, catalogLangs, CONTENT_LANGS } from "./content-model.js";
+import { CATS, intentArr, intentFieldKey, intentCount, catalogLangs, CONTENT_LANGS, tagChangedAt } from "./content-model.js";
 import { eHost, eCatalogTaken, eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile, eLoadedCatalogFile, eHasBranch, eBranchIdentity, eWriteBranch, eHasShared, eSharedRead, eSharedWrite } from "./host.js";
 import { CAT_LABELS_PL, CAT_LABELS_BY_LANG } from "./icons.js";
 import { fill } from "./intent-text.js";
@@ -179,6 +179,10 @@ function currentCatalog(opts){
   const wasIds=(origin&&Array.isArray(origin.intentIds))?origin.intentIds:[];
   const keptIds=keep.map(oldIdx=>(oldIdx<wasIds.length)?String(wasIds[oldIdx]||""):"");
   if(keptIds.some(x=>x)) out.intentIds=keptIds;
+  // The catalog's dates for the shelves and requests that survived, under the ids they arrived with.
+  const dates={};
+  Object.keys(cats).concat(keptIds).forEach(k=>{ const d=k ? tagChangedAt(k) : ""; if(d) dates[k]=d; });
+  if(Object.keys(dates).length) out.tagsChangedAt=dates;
   if(!Object.keys(out.categoriesPl).length) delete out.categoriesPl;
   Object.keys(catsOther).forEach(key=>{ out[key]=catsOther[key]; });
   return out;

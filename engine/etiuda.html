@@ -3793,6 +3793,10 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 /* Finding 4: Library Categories & cards tree with columns (4F) */
 .sx.lm-lib .sx-card:has(.mg-tree){overflow:visible;container:lwtree / inline-size}
 .mg-tree{min-width:0;--cols:minmax(250px,330px) minmax(120px,1fr) 84px 112px 200px 124px 110px 124px}
+/* DATE MODIFIED, drawn only while a row has a date (has-dates), before the buttons, giving way fourth: each step's
+   template with its track, at the specificity of the step's own rule, so the next step's rule still wins by order. */
+.mg-tree.has-dates{--cols:minmax(250px,330px) minmax(120px,1fr) 84px 112px 200px 124px 110px 110px 124px}
+.lw-c.dt{color:var(--dim);font-variant-numeric:tabular-nums}
 .lw-head,.sx.lm-lib .sx-card .mg-cat-row,.mg-cat-body .manage-row.mg-card{
   display:grid!important;grid-template-columns:var(--cols)!important;align-items:center;gap:0 14px;box-sizing:border-box
 }
@@ -3829,11 +3833,17 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
   .lw-head,.sx.lm-lib .sx-card .mg-cat-row,.mg-cat-body .manage-row.mg-card{
     grid-template-columns:minmax(250px,330px) minmax(120px,1fr) 84px 112px 200px 124px 124px!important
   }
+  :where(.mg-tree.has-dates) .lw-head,.sx.lm-lib .sx-card :where(.mg-tree.has-dates) .mg-cat-row,:where(.mg-tree.has-dates) .mg-cat-body .manage-row.mg-card{
+    grid-template-columns:minmax(250px,330px) minmax(120px,1fr) 84px 112px 200px 124px 110px 124px!important
+  }
   .lw-c.sr{display:none!important}
 }
 @container lwtree (max-width: 1400px){
   .lw-head,.sx.lm-lib .sx-card .mg-cat-row,.mg-cat-body .manage-row.mg-card{
     grid-template-columns:minmax(240px,320px) minmax(120px,1fr) 84px 190px 124px 124px!important
+  }
+  :where(.mg-tree.has-dates) .lw-head,.sx.lm-lib .sx-card :where(.mg-tree.has-dates) .mg-cat-row,:where(.mg-tree.has-dates) .mg-cat-body .manage-row.mg-card{
+    grid-template-columns:minmax(240px,320px) minmax(120px,1fr) 84px 190px 124px 110px 124px!important
   }
   .lw-c.sr,.lw-c.st{display:none!important}
 }
@@ -3841,7 +3851,16 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
   .lw-head,.sx.lm-lib .sx-card .mg-cat-row,.mg-cat-body .manage-row.mg-card{
     grid-template-columns:minmax(220px,280px) minmax(120px,1fr) 150px 124px 124px!important
   }
+  :where(.mg-tree.has-dates) .lw-head,.sx.lm-lib .sx-card :where(.mg-tree.has-dates) .mg-cat-row,:where(.mg-tree.has-dates) .mg-cat-body .manage-row.mg-card{
+    grid-template-columns:minmax(220px,280px) minmax(120px,1fr) 150px 124px 110px 124px!important
+  }
   .lw-c.sr,.lw-c.st,.lw-c.lg{display:none!important}
+}
+@container lwtree (max-width: 1040px){
+  :where(.mg-tree.has-dates) .lw-head,.sx.lm-lib .sx-card :where(.mg-tree.has-dates) .mg-cat-row,:where(.mg-tree.has-dates) .mg-cat-body .manage-row.mg-card{
+    grid-template-columns:minmax(220px,280px) minmax(120px,1fr) 150px 124px 124px!important
+  }
+  .lw-c.dt{display:none!important}
 }
 @container lwtree (max-width: 860px){
   .lw-head,.sx.lm-lib .sx-card .mg-cat-row,.mg-cat-body .manage-row.mg-card{
@@ -3884,6 +3903,13 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .lw-ih-int{flex:0 0 284px}
 .lw-ih-cards{flex:1 1 0;min-width:0}
 .lw-ih-acts{flex:0 0 118px}
+/* The row's cell stands the buttons' margin and a gap from them, six pixels further than the heading's gap. */
+.lw-ih-date{flex:0 0 110px;margin-right:6px}
+.sx.lm-lib .mg-intents .manage-row.mg-int .lw-date{flex:0 0 110px;min-width:0;white-space:nowrap;overflow:hidden;
+  font:13px var(--sans);color:var(--dim);font-variant-numeric:tabular-nums}
+@container (max-width: 900px){
+  .lw-ih-date,.sx.lm-lib .mg-intents .manage-row.mg-int .lw-date{display:none!important}
+}
 .sx.lm-lib .mg-intents .manage-row.mg-int{display:flex;align-items:center;flex-wrap:nowrap;gap:6px;padding:8px 4px;border-top:1px solid var(--line);box-sizing:border-box}
 .sx.lm-lib .mg-intents .manage-row.mg-int:first-of-type{border-top:0}
 .sx.lm-lib .mg-intents .manage-row.mg-int .cat-slot{flex:0 0 16px}
@@ -5305,7 +5331,9 @@ What you type stays in this browser only.`;
     resetContent: () => resetContent,
     setCommentLang: () => setCommentLang,
     setContentLangs: () => setContentLangs,
-    setIntentIds: () => setIntentIds
+    setIntentIds: () => setIntentIds,
+    setTagDates: () => setTagDates,
+    tagChangedAt: () => tagChangedAt
   });
   var STARTER_CATS = Object.freeze({ gen: "General" });
   var CATS = Object.assign({}, STARTER_CATS);
@@ -5314,6 +5342,18 @@ What you type stays in this browser only.`;
   function setIntentIds(ids) {
     SW_IDS.length = 0;
     (Array.isArray(ids) ? ids : []).forEach((v) => SW_IDS.push(String(v == null ? "" : v)));
+  }
+  var TAG_DATES = {};
+  function setTagDates(map) {
+    Object.keys(TAG_DATES).forEach((k) => {
+      delete TAG_DATES[k];
+    });
+    if (map && typeof map === "object") Object.keys(map).forEach((k) => {
+      if (typeof map[k] === "string") TAG_DATES[k] = map[k];
+    });
+  }
+  function tagChangedAt(id) {
+    return Object.prototype.hasOwnProperty.call(TAG_DATES, String(id)) ? TAG_DATES[String(id)] : "";
   }
   var SW_PL = [];
   var SW_CMT = [];
@@ -5386,6 +5426,7 @@ What you type stays in this browser only.`;
       else SW_STORE[k].length = 0;
     });
     SW_IDS.length = 0;
+    setTagDates(null);
     COMMENT_LANG = "";
   }
   function intentStoreKeys() {
@@ -7563,6 +7604,7 @@ What you type stays in this browser only.`;
     "Languages": "Języki",
     "Sent, 30 days": "Wysłane, 30 dni",
     "Source": "Źródło",
+    "Date modified": "Data zmiany",
     "catalog": "katalog",
     "changed here": "zmieniona tu",
     "one": "jedna",
@@ -10014,9 +10056,11 @@ What you type stays in this browser only.`;
     noteFor: () => noteFor,
     overrideAgainstBase: () => overrideAgainstBase,
     parts: () => parts,
+    putOverride: () => putOverride,
     reorderMacroBlocks: () => reorderMacroBlocks,
     reverseBlockIndex: () => reverseBlockIndex,
-    splitPartsRaw: () => splitPartsRaw
+    splitPartsRaw: () => splitPartsRaw,
+    stampChanged: () => stampChanged
   });
 
   // src/modules/catalog-v2.js
@@ -10044,6 +10088,7 @@ What you type stays in this browser only.`;
     isV2: () => isV2,
     v2AltLabel: () => v2AltLabel,
     v2CatKey: () => v2CatKey,
+    v2ChangedAt: () => v2ChangedAt,
     v2ContentHash: () => v2ContentHash,
     v2Mark: () => v2Mark,
     v2NeedsEngine: () => v2NeedsEngine,
@@ -10094,7 +10139,8 @@ What you type stays in this browser only.`;
     "requests",
     "retired",
     "next",
-    "commits"
+    "commits",
+    "changedAt"
   ];
   var V2_HEAD_NAMED = [
     "format",
@@ -10125,6 +10171,10 @@ What you type stays in this browser only.`;
   var DEFAULT_LANGS = [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }];
   function v2Str(v) {
     return String(v == null ? "" : v);
+  }
+  function v2ChangedAt(v) {
+    const s = typeof v === "string" ? v : "";
+    return /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(s) && Number.isFinite(Date.parse(s)) ? s : "";
   }
   function v2Copy(v) {
     return JSON.parse(JSON.stringify(v));
@@ -10708,6 +10758,11 @@ What you type stays in this browser only.`;
       if (Number.isFinite(hue)) colors[key] = hue;
       if (t2.supporting) always.push(key);
     });
+    const tagDates = {};
+    shelves.concat(requests).forEach((t2) => {
+      const d = v2ChangedAt(t2.changedAt);
+      if (d && v2Str(t2.id)) tagDates[v2Str(t2.id)] = d;
+    });
     const intents = {};
     const idxOf = {};
     requests.forEach((t2, i) => {
@@ -10751,6 +10806,7 @@ What you type stays in this browser only.`;
       if (links.length) m.intents = links;
       if (c.retired) m.retired = 1;
       if (c.commits) m.commits = 1;
+      if (v2ChangedAt(c.changedAt)) m.changedAt = c.changedAt;
       if (Array.isArray(c.next) && c.next.length) m.next = v2Copy(c.next);
       const more2 = v2Extra(c, V2_CARD_NAMED);
       if (more2) m.ext = more2;
@@ -10766,6 +10822,7 @@ What you type stays in this browser only.`;
       cards: cards2
     };
     if (intentIds.length) out.intentIds = intentIds;
+    if (Object.keys(tagDates).length) out.tagsChangedAt = tagDates;
     if (always.length) out.roles = { always };
     codes.slice(1).forEach((code) => {
       const k = v2CatKey(code, codes[0]);
@@ -10795,6 +10852,8 @@ What you type stays in this browser only.`;
     const codes = v2Codes(c);
     const cats2 = c.categories || {};
     const always = new Set((c.roles || {}).always || []);
+    const tagDates = c.tagsChangedAt && typeof c.tagsChangedAt === "object" ? c.tagsChangedAt : {};
+    const tagDate = (id) => Object.prototype.hasOwnProperty.call(tagDates, id) ? v2ChangedAt(tagDates[id]) : "";
     const tags = Object.keys(cats2).map((k) => {
       const label2 = {};
       codes.forEach((code, ci) => {
@@ -10807,6 +10866,7 @@ What you type stays in this browser only.`;
       const hue = parseInt((c.colors || {})[k], 10);
       if (Number.isFinite(hue)) tag.hue = hue;
       if (always.has(k)) tag.supporting = true;
+      if (tagDate(k)) tag.changedAt = tagDate(k);
       return tag;
     });
     const iv = c.intents || {};
@@ -10836,6 +10896,7 @@ What you type stays in this browser only.`;
       }
       taken[id] = 1;
       reqIds.push(id);
+      if (id === v2Str(declared[i]).trim() && tagDate(id)) row2.changedAt = tagDate(id);
       tags.push(Object.assign({ id, kind: "request" }, row2));
     }
     const cards2 = (c.cards || []).map((m, i) => {
@@ -10869,6 +10930,7 @@ What you type stays in this browser only.`;
       if (m.lockLang) card.lockLang = v2Str(m.lockLang);
       if (m.retired) card.retired = true;
       if (m.commits) card.commits = true;
+      if (v2ChangedAt(m.changedAt)) card.changedAt = m.changedAt;
       v2Restore(card, m.ext, V2_CARD_NAMED);
       return card;
     });
@@ -11040,6 +11102,28 @@ What you type stays in this browser only.`;
     if (o.next && Array.isArray(full.nextWas)) o.nextWas = full.nextWas.map(String);
     return o;
   }
+  function stampChanged(entry, was) {
+    const plain = (x) => {
+      const o = {};
+      Object.keys(x || {}).sort().forEach((k) => {
+        if (k !== "changedAt") o[k] = x[k];
+      });
+      return JSON.stringify(o);
+    };
+    if (was && plain(was) === plain(entry)) {
+      if (was.changedAt) entry.changedAt = was.changedAt;
+      else delete entry.changedAt;
+    } else entry.changedAt = (/* @__PURE__ */ new Date()).toISOString();
+    return entry;
+  }
+  function putOverride(id, o) {
+    if (!pack.overrides) pack.overrides = {};
+    if (!o || !Object.keys(o).some((k) => k !== "changedAt")) {
+      delete pack.overrides[id];
+      return null;
+    }
+    return pack.overrides[id] = stampChanged(o, pack.overrides[id]);
+  }
   function reorderMacroBlocks(id, fromVi, toVi) {
     const m = findCard(id);
     if (!m || !m.alt) return false;
@@ -11056,13 +11140,12 @@ What you type stays in this browser only.`;
     if (m._custom) {
       const ix = (pack.custom || []).findIndex((x) => x && x.id === id);
       if (ix < 0) return false;
-      Object.assign(pack.custom[ix], moved);
+      const was = Object.assign({}, pack.custom[ix]);
+      stampChanged(Object.assign(pack.custom[ix], moved), was);
     } else {
       const base = baseCard(id);
       if (!base) return false;
-      const o = overrideAgainstBase(base, Object.assign({}, m, moved));
-      if (Object.keys(o).length) pack.overrides[id] = o;
-      else delete pack.overrides[id];
+      putOverride(id, overrideAgainstBase(base, Object.assign({}, m, moved)));
     }
     savePack([id]);
     eMoveRecent(id, fromVi, toVi);
@@ -15663,6 +15746,7 @@ What you type stays in this browser only.`;
     if (m.retired) o.retired = 1;
     if (m.commits) o.commits = 1;
     if (Array.isArray(m.next) && m.next.length) o.next = plainCopy(m.next);
+    if (v2ChangedAt(m.changedAt)) o.changedAt = m.changedAt;
     if (m.ext && typeof m.ext === "object" && Object.keys(m.ext).length) o.ext = plainCopy(m.ext);
     return o;
   }
@@ -15732,6 +15816,7 @@ What you type stays in this browser only.`;
       }
       if (truthyFlag(rawM.retired)) entry.retired = 1;
       if (truthyFlag(rawM.commits)) entry.commits = 1;
+      if (v2ChangedAt(rawM.changedAt)) entry.changedAt = rawM.changedAt;
       if (Array.isArray(rawM.next)) {
         const next = rawM.next.filter((e) => e && typeof e === "object" && !Array.isArray(e) && String(e.to == null ? "" : e.to).trim());
         if (next.length) entry.next = plainCopy(next);
@@ -16057,6 +16142,12 @@ What you type stays in this browser only.`;
         cat.intents[key] = (SW_STORE[key] || []).slice();
       });
     }
+    const dates = {}, had = data && data.tagsChangedAt;
+    if (had && typeof had === "object" && !Array.isArray(had)) Object.keys(had).forEach((k) => {
+      const d = v2ChangedAt(had[k]);
+      if (d) dates[k] = d;
+    });
+    if (Object.keys(dates).length) cat.tagsChangedAt = dates;
     return cat;
   }
   var E_SIG_CACHE = typeof WeakMap === "function" ? /* @__PURE__ */ new WeakMap() : null;
@@ -16182,6 +16273,7 @@ What you type stays in this browser only.`;
     const ids = (Array.isArray(c.intentIds) ? c.intentIds : []).slice(0, n);
     while (ids.length < n) ids.push("");
     setIntentIds(ids);
+    setTagDates(c.tagsChangedAt);
     eApplyRoles(c.roles);
     M.length = 0;
     (c.cards || []).forEach((m) => M.push(m));
@@ -27509,7 +27601,7 @@ What you type stays in this browser only.`;
     const s = takenFor.get(c);
     return !!s && s.has(String(id));
   }
-  var UNSETTLED = ["intents", "next", "nextWas", "paxVoc", "paxOwn", "ext"];
+  var UNSETTLED = ["intents", "next", "nextWas", "paxVoc", "paxOwn", "ext", "changedAt"];
   function settleEdits(c, list2, was) {
     const ov = pack.overrides || {}, bases = pack.editBases || {}, takes = takenFor.get(c);
     const now = new Map(list2.map((m) => [catalogCardId(m), m])), old = new Map(was.map((m) => [m.id, m]));
@@ -27529,7 +27621,7 @@ What you type stays in this browser only.`;
           moved++;
         }
       });
-      if (!Object.keys(o).length) {
+      if (!Object.keys(o).some((k) => k !== "changedAt")) {
         delete ov[id];
         moved++;
       }
@@ -27541,7 +27633,10 @@ What you type stays in this browser only.`;
       Object.keys(own).forEach((k) => {
         if (k !== "id" && settled(k) && !same(k, own[k], m[k])) o[k] = own[k];
       });
-      if (Object.keys(o).length) ov[own.id] = o;
+      if (Object.keys(o).length) {
+        if (own.changedAt) o.changedAt = own.changedAt;
+        ov[own.id] = o;
+      }
       moved++;
       return false;
     });
@@ -27749,6 +27844,12 @@ What you type stays in this browser only.`;
     const wasIds = origin && Array.isArray(origin.intentIds) ? origin.intentIds : [];
     const keptIds = keep.map((oldIdx) => oldIdx < wasIds.length ? String(wasIds[oldIdx] || "") : "");
     if (keptIds.some((x) => x)) out.intentIds = keptIds;
+    const dates = {};
+    Object.keys(cats2).concat(keptIds).forEach((k) => {
+      const d = k ? tagChangedAt(k) : "";
+      if (d) dates[k] = d;
+    });
+    if (Object.keys(dates).length) out.tagsChangedAt = dates;
     if (!Object.keys(out.categoriesPl).length) delete out.categoriesPl;
     Object.keys(catsOther).forEach((key) => {
       out[key] = catsOther[key];
@@ -31035,6 +31136,7 @@ What you type stays in this browser only.`;
           if (!entry[k]) delete entry[k];
         });
         if (!entry.intents || !entry.intents.length) delete entry.intents;
+        stampChanged(entry, isNew ? null : pack.custom.find((x) => x && x.id === id));
         if (isNew) pack.custom.push(entry);
         else {
           const ix = pack.custom.findIndex((x) => x.id === id);
@@ -31054,9 +31156,7 @@ What you type stays in this browser only.`;
           lockLang,
           commits
         }, nx.fields());
-        const o = overrideAgainstBase(baseCard(id), full);
-        if (Object.keys(o).length) pack.overrides[id] = o;
-        else delete pack.overrides[id];
+        putOverride(id, overrideAgainstBase(baseCard(id), full));
       }
       if (!isNew) edMarkClean();
       afterPaint(() => {
@@ -31434,10 +31534,11 @@ What you type stays in this browser only.`;
       });
       return overrideAgainstBase(base, Object.assign(now, moved));
     };
-    const o = on ? set(h) : held ? held.before : set(base);
+    const o = on ? set(h) : held ? held.before : set(base), some = !!o && Object.keys(o).some((k) => k !== "changedAt");
+    if (some && (on || !held)) stampChanged(o, was);
     if (on) lookEdits.get(it.id).after = JSON.stringify(o || null);
     else lookEdits.delete(it.id);
-    if (o && Object.keys(o).length) pack.overrides[it.id] = o;
+    if (some) pack.overrides[it.id] = o;
     else delete pack.overrides[it.id];
     savePack();
     hooks.rebuildCards();
@@ -31486,6 +31587,7 @@ What you type stays in this browser only.`;
     });
     own.id = uid("u:");
     own.c = key;
+    stampChanged(own, null);
     const next = (Array.isArray(h.next) ? h.next : []).filter((e) => e && live.has(String(e.to)));
     if (next.length) own.next = next;
     if (!Array.isArray(pack.custom)) pack.custom = [];
@@ -32829,6 +32931,34 @@ What you type stays in this browser only.`;
   var mgSent30Map = null;
   var mgSortCol = null;
   var mgSortDir = null;
+  var mgDatesOn = false;
+  var mgIntentDatesOn = false;
+  function mgAt(iso) {
+    const v = Date.parse(v2ChangedAt(iso));
+    return Number.isFinite(v) ? v : null;
+  }
+  function mgCardAt(m) {
+    return mgAt(m && m.changedAt);
+  }
+  function mgCatAt(k, rows) {
+    return rows.reduce((best, row2) => {
+      const v = mgCardAt(row2.m);
+      return v != null && (best == null || v > best) ? v : best;
+    }, mgAt(tagChangedAt(k)));
+  }
+  function mgIntentAt(i) {
+    const id = String(intentIdAt(i));
+    return id.indexOf("t:") === 0 ? mgAt(tagChangedAt(id.slice(2))) : null;
+  }
+  function mgDay(ms) {
+    if (ms == null) return "";
+    const lang2 = uiLang();
+    try {
+      return new Intl.DateTimeFormat(lang2 === "en" ? "en-GB" : lang2, { day: "numeric", month: "short", year: "numeric" }).format(ms);
+    } catch (e) {
+      return new Date(ms).toISOString().slice(0, 10);
+    }
+  }
   function stripLeadingGreetingAndPax(s) {
     let str = String(s || "").trim();
     return str.replace(/^(?:\{(?:GREET|PAX)(?::[^{}]*)?\}[,\s.!?\-–—]*\s*)+/i, "");
@@ -32922,7 +33052,7 @@ What you type stays in this browser only.`;
     const sent = mgCardSent(m, maxSent);
     const src = mgCardSource(m);
     const sentTipAttr = sent.tip ? ' title="' + esc(sent.tip) + '"' : "";
-    return '<div class="manage-row mg-card mg-card-row' + (hid ? " is-hidden" : "") + '" data-cardrow="' + esc(m.id) + '" data-band="' + esc(mgCardBand(m)) + '" title="' + esc(mgCardDragTip()) + '"><span class="lw-nm"><span class="mg-card-lab">' + esc(cardTitle(m) || "") + "</span>" + (cardCommits(m) ? stampHtml("mg-stamp") : "") + '</span><span class="lw-c op lw-h-op cut-peek">' + openHtml + '</span><span class="lw-c lg lw-h-lg">' + langsHtml + '</span><span class="lw-c st lw-h-st">' + repHtml + '</span><span class="lw-c in lw-h-in">' + intHtml + '</span><span class="lw-c us lw-h-us"' + sentTipAttr + ">" + sent.inner + '</span><span class="lw-c sr lw-h-sr">' + src.html + '</span><span class="cacts"><button type="button" data-edit-card="' + esc(m.id) + '" title="Open the full editor" aria-label="Edit card">' + ICON_EDIT + "</button>" + hideShow + '<button type="button" class="danger mg-trash" data-remove-card="' + esc(m.id) + '" title="Delete this card" aria-label="Delete card">' + ICON_TRASH + '</button><button type="button" class="star-btn' + (fav ? " on" : "") + '" data-fav-card="' + esc(m.id) + '" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
+    return '<div class="manage-row mg-card mg-card-row' + (hid ? " is-hidden" : "") + '" data-cardrow="' + esc(m.id) + '" data-band="' + esc(mgCardBand(m)) + '" title="' + esc(mgCardDragTip()) + '"><span class="lw-nm"><span class="mg-card-lab">' + esc(cardTitle(m) || "") + "</span>" + (cardCommits(m) ? stampHtml("mg-stamp") : "") + '</span><span class="lw-c op lw-h-op cut-peek">' + openHtml + '</span><span class="lw-c lg lw-h-lg">' + langsHtml + '</span><span class="lw-c st lw-h-st">' + repHtml + '</span><span class="lw-c in lw-h-in">' + intHtml + '</span><span class="lw-c us lw-h-us"' + sentTipAttr + ">" + sent.inner + '</span><span class="lw-c sr lw-h-sr">' + src.html + "</span>" + (mgDatesOn ? '<span class="lw-c dt lw-h-dt" data-i18n-skip>' + esc(mgDay(mgCardAt(m))) + "</span>" : "") + '<span class="cacts"><button type="button" data-edit-card="' + esc(m.id) + '" title="Open the full editor" aria-label="Edit card">' + ICON_EDIT + "</button>" + hideShow + '<button type="button" class="danger mg-trash" data-remove-card="' + esc(m.id) + '" title="Delete this card" aria-label="Delete card">' + ICON_TRASH + '</button><button type="button" class="star-btn' + (fav ? " on" : "") + '" data-fav-card="' + esc(m.id) + '" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
   }
   function mgCardColVal(m, col) {
     if (col === "nm") return (cardTitle(m) || "").toLowerCase();
@@ -32931,6 +33061,7 @@ What you type stays in this browser only.`;
     if (col === "st") return macroBlockCount(m);
     if (col === "in") return mgCardIntentsText(m).toLowerCase();
     if (col === "us") return mgSent30Map ? mgSent30Map.get(m.id) || 0 : 0;
+    if (col === "dt") return mgCardAt(m);
     if (col === "sr") {
       if (m._custom) return "yours";
       if (m._overridden) return "changed here";
@@ -32945,6 +33076,7 @@ What you type stays in this browser only.`;
       const va = mgCardColVal(a.m, mgSortCol);
       const vb = mgCardColVal(b.m, mgSortCol);
       let diff = 0;
+      if (mgSortCol === "dt" && va == null !== (vb == null)) return va == null ? 1 : -1;
       if (typeof va === "number" && typeof vb === "number") {
         diff = va - vb;
       } else {
@@ -32963,11 +33095,12 @@ What you type stays in this browser only.`;
     return (cards || []).map((m, i) => ({ m, i })).filter((o) => o.m && o.m.c === k).sort(mgCardCmp).map((o) => o.m);
   }
   function mgSortClick(col) {
+    const most = col === "st" || col === "us" || col === "dt";
     if (mgSortCol !== col) {
       mgSortCol = col;
-      mgSortDir = col === "st" || col === "us" ? "desc" : "asc";
-    } else if (mgSortDir === (col === "st" || col === "us" ? "desc" : "asc")) {
-      mgSortDir = col === "st" || col === "us" ? "asc" : "desc";
+      mgSortDir = most ? "desc" : "asc";
+    } else if (mgSortDir === (most ? "desc" : "asc")) {
+      mgSortDir = most ? "asc" : "desc";
     } else {
       mgSortCol = null;
       mgSortDir = null;
@@ -32983,7 +33116,8 @@ What you type stays in this browser only.`;
       st: t("Replies"),
       in: t("Intents"),
       us: t("Sent, 30 days"),
-      sr: t("Source")
+      sr: t("Source"),
+      dt: t("Date modified")
     };
     let sortLineHtml = "";
     if (mgSortCol) {
@@ -32995,10 +33129,18 @@ What you type stays in this browser only.`;
     const hBtn = (col, cls, label2) => {
       return '<span class="' + cls + '" data-sort-col="' + col + '" role="button" tabindex="0" title="' + sortTip + '">' + esc(label2) + "</span>";
     };
-    return '<div class="lw-head" role="row">' + hBtn("nm", "lw-nm lw-h-nm", t("Name")) + hBtn("op", "lw-c op lw-h-op", t("Opens with")) + hBtn("lg", "lw-c lg lw-h-lg", t("Languages")) + hBtn("st", "lw-c st lw-h-st", t("Replies")) + hBtn("in", "lw-c in lw-h-in", t("Intents")) + hBtn("us", "lw-c us lw-h-us", t("Sent, 30 days")) + hBtn("sr", "lw-c sr lw-h-sr", t("Source")) + '<span class="lw-ac lw-h-ac"></span></div>' + sortLineHtml;
+    return '<div class="lw-head" role="row">' + hBtn("nm", "lw-nm lw-h-nm", t("Name")) + hBtn("op", "lw-c op lw-h-op", t("Opens with")) + hBtn("lg", "lw-c lg lw-h-lg", t("Languages")) + hBtn("st", "lw-c st lw-h-st", t("Replies")) + hBtn("in", "lw-c in lw-h-in", t("Intents")) + hBtn("us", "lw-c us lw-h-us", t("Sent, 30 days")) + hBtn("sr", "lw-c sr lw-h-sr", t("Source")) + (mgDatesOn ? hBtn("dt", "lw-c dt lw-h-dt", t("Date modified")) : "") + '<span class="lw-ac lw-h-ac"></span></div>' + sortLineHtml;
   }
   function mgCardDragTip() {
     return mgSortCol ? t("Dragging waits for the catalog's order: a third click on the sorted heading brings it back.") : t("Drag to reorder, or onto a category to move it there");
+  }
+  function updateIntentDateTitles(root) {
+    const head = (root || document).querySelector(".lw-ih-date");
+    const hidden = !head || !head.offsetParent || getComputedStyle(head).display === "none";
+    (root || document).querySelectorAll(".mg-intents .manage-row.mg-int[data-changed]").forEach((row2) => {
+      if (hidden) row2.setAttribute("title", t("Date modified") + ": " + row2.getAttribute("data-changed"));
+      else row2.removeAttribute("title");
+    });
   }
   function updateTreeHoverTitles(root) {
     const tree = (root || document).querySelector(".mg-tree");
@@ -33015,7 +33157,8 @@ What you type stays in this browser only.`;
       st: !isColShown("lw-h-st"),
       in: !isColShown("lw-h-in"),
       us: !isColShown("lw-h-us"),
-      sr: !isColShown("lw-h-sr")
+      sr: !isColShown("lw-h-sr"),
+      dt: !isColShown("lw-h-dt")
     };
     const dragHint = mgCardDragTip();
     const cardRows = tree.querySelectorAll(".mg-cat-body .manage-row.mg-card");
@@ -33048,6 +33191,10 @@ What you type stays in this browser only.`;
         const src = mgCardSource(m);
         if (src && src.word) lines.push(t("Source") + ": " + src.word);
       }
+      if (hiddenCols.dt) {
+        const dt = mgDay(mgCardAt(m));
+        if (dt) lines.push(t("Date modified") + ": " + dt);
+      }
       row2.setAttribute("title", lines.join("\n"));
     });
   }
@@ -33072,6 +33219,11 @@ What you type stays in this browser only.`;
       if (byCat[m.c]) byCat[m.c].push(row2);
       else orphans.push(row2);
     });
+    mgDatesOn = (cards || []).some((m) => m && mgCardAt(m) != null) || known.some((k) => mgAt(tagChangedAt(k)) != null);
+    if (!mgDatesOn && mgSortCol === "dt") {
+      mgSortCol = null;
+      mgSortDir = null;
+    }
     let maxCatSent = 0;
     known.forEach((k) => {
       const sum = (byCat[k] || []).reduce((acc, row2) => acc + (mgSent30Map.get(row2.m.id) || 0), 0);
@@ -33100,12 +33252,12 @@ What you type stays in this browser only.`;
         const bw = maxCatSent > 0 ? Math.max(1, Math.min(40, Math.round(catSent / maxCatSent * 40))) : 0;
         catSentBar = '<em style="width:' + bw + 'px"></em>';
       }
-      return '<div class="mg-cat' + (op ? " is-open" : "") + '" data-cat="' + esc(k) + '"><div class="mg-cat-row"' + (k === "__orphan" ? "" : ' data-crow="' + esc(k) + '" title="Drag to reorder"') + '><span class="lw-nm"><button type="button" class="mg-tw" data-toggle="' + esc(key) + '" aria-expanded="' + (op ? "true" : "false") + '" title="' + esc(t(op ? "Collapse" : "Expand")) + '" aria-label="' + esc(t(op ? "Collapse" : "Expand")) + " " + esc(label2) + '">' + ICON_CHEVRON_R + "</button>" + name + '<span class="mg-cat-n" role="img" title="' + nTip + '" aria-label="' + nTip + '">' + n + '</span></span><span class="lw-c op lw-h-op"></span><span class="lw-c lg lw-h-lg"></span><span class="lw-c st lw-h-st"></span><span class="lw-c in lw-h-in">' + (alwaysOn ? '<i class="lw-src">' + esc(t("every intent")) + "</i>" : "") + '</span><span class="lw-c us lw-h-us"' + catSentTip + ">" + catSentBar + (catSent ? catSent : "") + '</span><span class="lw-c sr lw-h-sr"></span><span class="mg-cat-acts">' + editc + roles + add + x + '</span></div><div class="mg-cat-body"' + (op ? "" : " hidden") + ">" + (n ? order(rows) : '<div class="manage-empty">' + esc(t("Empty.")) + "</div>") + "</div></div>";
+      return '<div class="mg-cat' + (op ? " is-open" : "") + '" data-cat="' + esc(k) + '"><div class="mg-cat-row"' + (k === "__orphan" ? "" : ' data-crow="' + esc(k) + '" title="Drag to reorder"') + '><span class="lw-nm"><button type="button" class="mg-tw" data-toggle="' + esc(key) + '" aria-expanded="' + (op ? "true" : "false") + '" title="' + esc(t(op ? "Collapse" : "Expand")) + '" aria-label="' + esc(t(op ? "Collapse" : "Expand")) + " " + esc(label2) + '">' + ICON_CHEVRON_R + "</button>" + name + '<span class="mg-cat-n" role="img" title="' + nTip + '" aria-label="' + nTip + '">' + n + '</span></span><span class="lw-c op lw-h-op"></span><span class="lw-c lg lw-h-lg"></span><span class="lw-c st lw-h-st"></span><span class="lw-c in lw-h-in">' + (alwaysOn ? '<i class="lw-src">' + esc(t("every intent")) + "</i>" : "") + '</span><span class="lw-c us lw-h-us"' + catSentTip + ">" + catSentBar + (catSent ? catSent : "") + '</span><span class="lw-c sr lw-h-sr"></span>' + (mgDatesOn ? '<span class="lw-c dt lw-h-dt" data-i18n-skip>' + esc(mgDay(mgCatAt(k, rows))) + "</span>" : "") + '<span class="mg-cat-acts">' + editc + roles + add + x + '</span></div><div class="mg-cat-body"' + (op ? "" : " hidden") + ">" + (n ? order(rows) : '<div class="manage-empty">' + esc(t("Empty.")) + "</div>") + "</div></div>";
     };
     const groups = known.map((k) => group(k, byCat[k], false, CATS[k])).join("");
     const stray = orphans.length ? group("__orphan", orphans, true, t("Uncategorised")) : "";
     const treeContent = groups + stray ? mgTreeHeadHtml() + groups + stray : '<div class="manage-empty">' + esc(t("No categories.")) + "</div>";
-    return '<div class="mg-tree">' + treeContent + "</div>";
+    return '<div class="mg-tree' + (mgDatesOn ? " has-dates" : "") + '">' + treeContent + "</div>";
   }
   var mgDrag = null;
   var mgSwapLock = 0;
@@ -33221,15 +33373,15 @@ What you type stays in this browser only.`;
     if (m._custom) {
       const ix = (pack.custom || []).findIndex((x) => x && x.id === id);
       if (ix < 0) return false;
+      const was = Object.assign({}, pack.custom[ix]);
       pack.custom[ix].c = catKey;
+      stampChanged(pack.custom[ix], was);
     } else {
       const base = baseCard(id);
-      if (!pack.overrides) pack.overrides = {};
-      const o = Object.assign({}, pack.overrides[id] || {});
+      const o = Object.assign({}, (pack.overrides || {})[id] || {});
       if (base && base.c === catKey) delete o.c;
       else o.c = catKey;
-      if (Object.keys(o).length) pack.overrides[id] = o;
-      else delete pack.overrides[id];
+      putOverride(id, o);
     }
     ensureCardOrder();
     const from = pack.cardOrder.indexOf(id);
@@ -33504,7 +33656,8 @@ What you type stays in this browser only.`;
         return '<button type="button" class="lw-chip" data-card-id="' + esc(o.m.id) + '" title="' + esc(t("Opens this card's editor")) + '" aria-label="' + esc(title) + " · " + esc(t("Opens this card's editor")) + '">' + esc(title) + "</button>";
       }).join("");
     }
-    return '<div class="manage-row mg-int' + (hid ? " is-hidden" : "") + '" data-introw="' + esc(iid) + '" data-band="' + (hid ? "h" : fav ? "f" : "r") + '">' + catMarkHtml(catOf.get(iid) || "") + '<span class="mg-int-t cut-peek" data-i18n-skip>' + esc(intentNavName(i) || "") + badge + '</span><span class="mg-int-n" title="' + esc(countHover) + '">' + count + '</span><div class="lw-mid">' + chipsHtml + "</div>" + (cardList.length ? '<button type="button" class="lw-more" data-chips-more="' + esc(intentNavName(i) || "") + '" aria-expanded="false" hidden title="' + esc(t("Expand")) + '" aria-label="' + esc(t("Expand")) + " " + esc(intentNavName(i) || "") + '">' + ICON_CHEVRON_R + "</button>" : "") + '<span class="cacts"><button type="button" data-edit-intent-mg="' + i + '" title="Edit intent" aria-label="Edit intent">' + ICON_EDIT + "</button>" + hideShow + trash + '<button type="button" class="star-btn' + (fav ? " on" : "") + '" data-fav-intent-mg="' + esc(iid) + '" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
+    const datesOn = typeof mgIntentDatesOn !== "undefined" && mgIntentDatesOn, day = datesOn ? mgDay(mgIntentAt(i)) : "";
+    return '<div class="manage-row mg-int' + (hid ? " is-hidden" : "") + '" data-introw="' + esc(iid) + '" data-band="' + (hid ? "h" : fav ? "f" : "r") + '"' + (day ? ' data-changed="' + esc(day) + '"' : "") + ">" + catMarkHtml(catOf.get(iid) || "") + '<span class="mg-int-t cut-peek" data-i18n-skip>' + esc(intentNavName(i) || "") + badge + '</span><span class="mg-int-n" title="' + esc(countHover) + '">' + count + '</span><div class="lw-mid">' + chipsHtml + "</div>" + (cardList.length ? '<button type="button" class="lw-more" data-chips-more="' + esc(intentNavName(i) || "") + '" aria-expanded="false" hidden title="' + esc(t("Expand")) + '" aria-label="' + esc(t("Expand")) + " " + esc(intentNavName(i) || "") + '">' + ICON_CHEVRON_R + "</button>" : "") + (datesOn ? '<span class="lw-date" data-i18n-skip>' + esc(day) + "</span>" : "") + '<span class="cacts"><button type="button" data-edit-intent-mg="' + i + '" title="Edit intent" aria-label="Edit intent">' + ICON_EDIT + "</button>" + hideShow + trash + '<button type="button" class="star-btn' + (fav ? " on" : "") + '" data-fav-intent-mg="' + esc(iid) + '" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
   }
   function normCatalogFolder(p) {
     return String(p || "").replace(/[\\/]+$/, "").toLowerCase();
@@ -33902,9 +34055,10 @@ What you type stays in this browser only.`;
     }).map((x) => x.i);
     const catOf = primaryCatKeys(), linked = intentCardCounts();
     mgIntentCardsCache = mgIntentCardsMap();
+    mgIntentDatesOn = mgIntentIdxs.some((i) => mgIntentAt(i) != null);
     const intentListRows = mgIntentIdxs.map((i) => mgIntentRow(i, catOf, linked)).join("") || '<div class="manage-empty">' + esc(t("No intents.")) + "</div>";
     mgIntentCardsCache = null;
-    const headingRow = '<div class="lw-ihead" aria-hidden="true"><span class="lw-ih-int">' + esc(t("Intent")) + '</span><span class="lw-ih-cards">' + esc(t("Linked cards")) + '</span><span class="lw-ih-acts"></span></div>';
+    const headingRow = '<div class="lw-ihead" aria-hidden="true"><span class="lw-ih-int">' + esc(t("Intent")) + '</span><span class="lw-ih-cards">' + esc(t("Linked cards")) + "</span>" + (mgIntentDatesOn ? '<span class="lw-ih-date">' + esc(t("Date modified")) + "</span>" : "") + '<span class="lw-ih-acts"></span></div>';
     const catCount = Object.keys(CATS).length;
     const hiddenCardCount = (cards || []).filter((m) => m && m._hidden).length;
     const hiddenIntentCount = mgIntentIdxs.filter((i) => isIntentHiddenIdx(i)).length;
@@ -33998,6 +34152,7 @@ What you type stays in this browser only.`;
       dressDialogInputs(page);
       markCutText(page);
       updateTreeHoverTitles(page);
+      updateIntentDateTitles(page);
     }
     if (fk) focusSame(host, fk);
     const at = document.activeElement;
@@ -34160,6 +34315,8 @@ What you type stays in this browser only.`;
       markChipOverflow();
       if (typeof ResizeObserver !== "undefined") new ResizeObserver(markChipOverflow).observe(intentsList);
     }
+    if (intentsList && intentsList.querySelector(".lw-ih-date") && typeof ResizeObserver !== "undefined")
+      new ResizeObserver(() => updateIntentDateTitles(page)).observe(intentsList);
     page.querySelectorAll("[data-edit-intent-mg]").forEach((btn) => {
       btn.onclick = () => openIntentEditor(+btn.getAttribute("data-edit-intent-mg"), true);
     });
@@ -36439,11 +36596,14 @@ What you type stays in this browser only.`;
     const was = base ? pack.overrides[card.id] ? JSON.stringify(pack.overrides[card.id]) : null : entry.next ? JSON.stringify(entry.next) : null;
     const live = new Set((cards || []).filter((m) => m && m.id).map((m) => String(m.id)));
     const w = nextListWrite(card, base, base ? pack.overrides[card.id] : null, ids, live);
-    if (base) {
-      if (w.override) pack.overrides[card.id] = w.override;
-      else delete pack.overrides[card.id];
-    } else if (w.own.length) entry.next = w.own;
-    else delete entry.next;
+    const wasAt = entry ? entry.changedAt : void 0;
+    if (base) putOverride(card.id, w.override);
+    else {
+      const before = Object.assign({}, entry);
+      if (w.own.length) entry.next = w.own;
+      else delete entry.next;
+      stampChanged(entry, before);
+    }
     savePack();
     hooks.rebuildCards();
     if (said) offerUndo(said, () => {
@@ -36455,6 +36615,8 @@ What you type stays in this browser only.`;
         if (e) {
           if (was) e.next = JSON.parse(was);
           else delete e.next;
+          if (wasAt) e.changedAt = wasAt;
+          else delete e.changedAt;
         }
       }
       savePack();

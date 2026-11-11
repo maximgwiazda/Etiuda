@@ -1,10 +1,11 @@
 import { ensureCustomCat, openCardEditor, hideCard } from "./card-editor.js";
-import { baseCard, cardCommits, cardTitle, findCard, cardLang, cardText, parts } from "./card-model.js";
+import { baseCard, cardCommits, cardTitle, findCard, cardLang, cardText, parts, putOverride, stampChanged } from "./card-model.js";
 import { stampHtml } from "./card-chain.js";
 import { movedCardIds, cardOrderIdx, catSortIdx, ensureCardOrder, cardOrderTouched, moveCardWithin } from "./card-order.js";
 import { isAlwaysCat, setCatAlways } from "./cat-roles.js";
 import { importCatalogHere, catalogFileName } from "./catalog-file.js";
-import { CATS, CONTENT_LANGS } from "./content-model.js";
+import { CATS, CONTENT_LANGS, tagChangedAt } from "./content-model.js";
+import { v2ChangedAt } from "./catalog-v2.js";
 import { catToggle, closeModal, dressDialogInputs, modalOpen, openCover, wireFolds } from "./dialog.js";
 import { markCutText } from "./cut-text.js";
 import { openIntentEditor, openCategoryEditor } from "./editors.js";
@@ -17,7 +18,7 @@ import { drawIntentRail } from "./rail-list.js";
 import { normWhoList, WHO_BASE } from "./stock.js";
 import { lySet } from "./storage.js";
 import { drawPills } from "./tabs.js";
-import { t, catalogCountsLine, counted, toast, translateTree, offerUndo } from "./ui-lang.js";
+import { t, catalogCountsLine, counted, toast, translateTree, offerUndo, uiLang } from "./ui-lang.js";
 import { isFavourite, isIntentFavourite, pack, whoOptions, savePack } from "./pack.js";
 import { removeCard, removeIntent, setIntentHidden, syncIntentOrder, toggleFavourite, toggleIntentFavourite } from "./favourites.js";
 import { primaryCatKeys, intentCardCounts, allIntentCardCount, normalizeCardIntents } from "./card-intent.js";
@@ -83,6 +84,24 @@ function mgUsesTip(n){
 let mgSent30Map = null;
 let mgSortCol = null;
 let mgSortDir = null;
+let mgDatesOn = false, mgIntentDatesOn = false;
+
+/* DATE MODIFIED: a card's own (its override's or own card's over the catalog's), a category's the newest of its own and
+   its cards', an intent's the catalog's for its request. A time in ms, or null where there is none, which draws an
+   empty cell; while no row of a list has one, that list draws no column. */
+function mgAt(iso){ const v=Date.parse(v2ChangedAt(iso)); return Number.isFinite(v) ? v : null; }
+function mgCardAt(m){ return mgAt(m && m.changedAt); }
+function mgCatAt(k, rows){
+  return rows.reduce((best, row)=>{ const v=mgCardAt(row.m); return v!=null && (best==null || v>best) ? v : best; }, mgAt(tagChangedAt(k)));
+}
+function mgIntentAt(i){ const id=String(intentIdAt(i)); return id.indexOf("t:")===0 ? mgAt(tagChangedAt(id.slice(2))) : null; }
+// The day as the interface's language writes it, as About writes a day.
+function mgDay(ms){
+  if(ms==null) return "";
+  const lang=uiLang();
+  try{ return new Intl.DateTimeFormat(lang==="en"?"en-GB":lang,{day:"numeric",month:"short",year:"numeric"}).format(ms); }
+  catch(e){ return new Date(ms).toISOString().slice(0,10); }
+}
 
 function stripLeadingGreetingAndPax(s){
   let str = String(s || "").trim();
@@ -209,6 +228,7 @@ function mgCardRow(m, maxSent){
     '<span class="lw-c in lw-h-in">' + intHtml + '</span>' +
     '<span class="lw-c us lw-h-us"' + sentTipAttr + '>' + sent.inner + '</span>' +
     '<span class="lw-c sr lw-h-sr">' + src.html + '</span>' +
+    (mgDatesOn ? '<span class="lw-c dt lw-h-dt" data-i18n-skip>' + esc(mgDay(mgCardAt(m))) + '</span>' : '') +
     '<span class="cacts">' +
       '<button type="button" data-edit-card="' + esc(m.id) + '" title="Open the full editor" aria-label="Edit card">'+ICON_EDIT+'</button>' +
       hideShow +
@@ -224,6 +244,7 @@ function mgCardColVal(m, col){
   if(col === "st") return macroBlockCount(m);
   if(col === "in") return mgCardIntentsText(m).toLowerCase();
   if(col === "us") return mgSent30Map ? (mgSent30Map.get(m.id) || 0) : 0;
+  if(col === "dt") return mgCardAt(m);
   if(col === "sr") {
     if(m._custom) return "yours";
     if(m._overridden) return "changed here";
@@ -240,6 +261,8 @@ function mgCardCmp(a, b){
     const va = mgCardColVal(a.m, mgSortCol);
     const vb = mgCardColVal(b.m, mgSortCol);
     let diff = 0;
+    // An undated card follows the dated ones whichever way the dates run.
+    if(mgSortCol === "dt" && (va == null) !== (vb == null)) return va == null ? 1 : -1;
     if(typeof va === "number" && typeof vb === "number"){
       diff = va - vb;
     } else {
@@ -262,11 +285,12 @@ function mgCardsIn(k){
 }
 
 function mgSortClick(col){
+  const most = col === "st" || col === "us" || col === "dt";
   if(mgSortCol !== col){
     mgSortCol = col;
-    mgSortDir = (col === "st" || col === "us") ? "desc" : "asc";
-  } else if(mgSortDir === ((col === "st" || col === "us") ? "desc" : "asc")){
-    mgSortDir = (col === "st" || col === "us") ? "asc" : "desc";
+    mgSortDir = most ? "desc" : "asc";
+  } else if(mgSortDir === (most ? "desc" : "asc")){
+    mgSortDir = most ? "asc" : "desc";
   } else {
     mgSortCol = null;
     mgSortDir = null;
@@ -283,7 +307,8 @@ function mgTreeHeadHtml(){
     st: t("Replies"),
     in: t("Intents"),
     us: t("Sent, 30 days"),
-    sr: t("Source")
+    sr: t("Source"),
+    dt: t("Date modified")
   };
   let sortLineHtml = "";
   if(mgSortCol){
@@ -306,6 +331,7 @@ function mgTreeHeadHtml(){
     hBtn("in", "lw-c in lw-h-in", t("Intents")) +
     hBtn("us", "lw-c us lw-h-us", t("Sent, 30 days")) +
     hBtn("sr", "lw-c sr lw-h-sr", t("Source")) +
+    (mgDatesOn ? hBtn("dt", "lw-c dt lw-h-dt", t("Date modified")) : '') +
     '<span class="lw-ac lw-h-ac"></span>' +
     '</div>' + sortLineHtml;
 }
@@ -315,6 +341,15 @@ function mgCardDragTip(){
   return mgSortCol
     ? t("Dragging waits for the catalog's order: a third click on the sorted heading brings it back.")
     : t("Drag to reorder, or onto a category to move it there");
+}
+/* An intent's date, in its row's hover while its column has stepped aside. */
+function updateIntentDateTitles(root){
+  const head=(root || document).querySelector(".lw-ih-date");
+  const hidden=!head || !head.offsetParent || getComputedStyle(head).display === "none";
+  (root || document).querySelectorAll(".mg-intents .manage-row.mg-int[data-changed]").forEach(row=>{
+    if(hidden) row.setAttribute("title", t("Date modified") + ": " + row.getAttribute("data-changed"));
+    else row.removeAttribute("title");
+  });
 }
 function updateTreeHoverTitles(root){
   const tree = (root || document).querySelector(".mg-tree");
@@ -332,6 +367,7 @@ function updateTreeHoverTitles(root){
     in: !isColShown("lw-h-in"),
     us: !isColShown("lw-h-us"),
     sr: !isColShown("lw-h-sr"),
+    dt: !isColShown("lw-h-dt"),
   };
   const dragHint = mgCardDragTip();
   const cardRows = tree.querySelectorAll(".mg-cat-body .manage-row.mg-card");
@@ -364,6 +400,10 @@ function updateTreeHoverTitles(root){
       const src = mgCardSource(m);
       if(src && src.word) lines.push(t("Source") + ": " + src.word);
     }
+    if(hiddenCols.dt){
+      const dt = mgDay(mgCardAt(m));
+      if(dt) lines.push(t("Date modified") + ": " + dt);
+    }
     row.setAttribute("title", lines.join("\n"));
   });
 }
@@ -392,6 +432,8 @@ function mgCatTree(){
     const row={m,i};
     if(byCat[m.c]) byCat[m.c].push(row); else orphans.push(row);
   });
+  mgDatesOn = (cards||[]).some(m=>m && mgCardAt(m)!=null) || known.some(k=>mgAt(tagChangedAt(k))!=null);
+  if(!mgDatesOn && mgSortCol === "dt"){ mgSortCol = null; mgSortDir = null; }
 
   let maxCatSent = 0;
   known.forEach(k => {
@@ -463,6 +505,7 @@ function mgCatTree(){
         '<span class="lw-c in lw-h-in">' + (alwaysOn ? '<i class="lw-src">' + esc(t("every intent")) + '</i>' : '') + '</span>'+
         '<span class="lw-c us lw-h-us"' + catSentTip + '>' + catSentBar + (catSent ? catSent : '') + '</span>'+
         '<span class="lw-c sr lw-h-sr"></span>'+
+        (mgDatesOn ? '<span class="lw-c dt lw-h-dt" data-i18n-skip>'+esc(mgDay(mgCatAt(k,rows)))+'</span>' : '')+
         '<span class="mg-cat-acts">'+editc+roles+add+x+'</span>'+
       '</div>'+
       '<div class="mg-cat-body"'+(op?"":" hidden")+'>'+
@@ -473,7 +516,7 @@ function mgCatTree(){
   const groups=known.map(k=>group(k,byCat[k],false,CATS[k])).join("");
   const stray=orphans.length ? group("__orphan",orphans,true,t("Uncategorised")) : "";
   const treeContent = groups + stray ? mgTreeHeadHtml() + groups + stray : '<div class="manage-empty">'+esc(t("No categories."))+'</div>';
-  return '<div class="mg-tree">' + treeContent + '</div>';
+  return '<div class="mg-tree' + (mgDatesOn ? ' has-dates' : '') + '">' + treeContent + '</div>';
 }
 
 /* ---- Reordering inside Manage: pointer-based and bound to the document - the swap
@@ -607,13 +650,14 @@ function mgMoveCardToCategory(id, catKey){
   if(m._custom){
     const ix=(pack.custom||[]).findIndex(x=>x&&x.id===id);
     if(ix<0) return false;
+    const was=Object.assign({},pack.custom[ix]);
     pack.custom[ix].c=catKey;
+    stampChanged(pack.custom[ix],was);
   } else {
     const base=baseCard(id);
-    if(!pack.overrides) pack.overrides={};
-    const o=Object.assign({},pack.overrides[id]||{});
+    const o=Object.assign({},(pack.overrides||{})[id]||{});
     if(base && base.c===catKey) delete o.c; else o.c=catKey;
-    if(Object.keys(o).length) pack.overrides[id]=o; else delete pack.overrides[id];
+    putOverride(id,o);
   }
   ensureCardOrder();
   const from=pack.cardOrder.indexOf(id);
@@ -936,14 +980,17 @@ function mgIntentRow(i,catOf,linked,intentCardsMap){
      the favourites - the same rule moveIntent() enforces for the panel, so the two surfaces
      cannot disagree about what order means. Checked again against live state in
      mgMoveIntentOrder, so a stale attribute cannot smuggle a row past its band. */
+  // Guarded as the cache above is: the harness slices this function out alone.
+  const datesOn=typeof mgIntentDatesOn!=="undefined" && mgIntentDatesOn, day=datesOn ? mgDay(mgIntentAt(i)) : "";
   return '<div class="manage-row mg-int'+(hid?" is-hidden":"")+'" data-introw="'+esc(iid)+'"'+
-    ' data-band="'+(hid?"h":(fav?"f":"r"))+'">'+
+    ' data-band="'+(hid?"h":(fav?"f":"r"))+'"'+(day?' data-changed="'+esc(day)+'"':'')+'>'+
     catMarkHtml(catOf.get(iid)||"")+
     '<span class="mg-int-t cut-peek" data-i18n-skip>'+esc(intentNavName(i)||"")+badge+'</span>'+
     '<span class="mg-int-n" title="'+esc(countHover)+'">'+count+'</span>'+
     '<div class="lw-mid">'+chipsHtml+'</div>'+
     (cardList.length?'<button type="button" class="lw-more" data-chips-more="'+esc(intentNavName(i)||"")+'" aria-expanded="false" hidden title="'+esc(t("Expand"))+'"'+
       ' aria-label="'+esc(t("Expand"))+' '+esc(intentNavName(i)||"")+'">'+ICON_CHEVRON_R+'</button>':"")+
+    (datesOn?'<span class="lw-date" data-i18n-skip>'+esc(day)+'</span>':'')+
     '<span class="cacts">'+
       '<button type="button" data-edit-intent-mg="'+i+'" title="Edit intent" aria-label="Edit intent">'+ICON_EDIT+'</button>'+
       hideShow+
@@ -1406,6 +1453,7 @@ function openManage(justHtml){
     .map(x=>x.i);
   const catOf=primaryCatKeys(), linked=intentCardCounts();
   mgIntentCardsCache=mgIntentCardsMap();
+  mgIntentDatesOn=mgIntentIdxs.some(i=>mgIntentAt(i)!=null);
   const intentListRows=mgIntentIdxs.map(i=>mgIntentRow(i,catOf,linked)).join("")
     ||'<div class="manage-empty">'+esc(t("No intents."))+'</div>';
   mgIntentCardsCache=null;
@@ -1413,6 +1461,7 @@ function openManage(justHtml){
   const headingRow='<div class="lw-ihead" aria-hidden="true">'+
     '<span class="lw-ih-int">'+esc(t("Intent"))+'</span>'+
     '<span class="lw-ih-cards">'+esc(t("Linked cards"))+'</span>'+
+    (mgIntentDatesOn?'<span class="lw-ih-date">'+esc(t("Date modified"))+'</span>':'')+
     '<span class="lw-ih-acts"></span>'+
     '</div>';
 
@@ -1538,6 +1587,7 @@ function paintLibrary(host,body){
     dressDialogInputs(page);
     markCutText(page);
     updateTreeHoverTitles(page);
+    updateIntentDateTitles(page);
   }
   if(fk) focusSame(host,fk);
   // The tab takes the keyboard where its wiring left focus nowhere inside it, as a dialog does.
@@ -1701,6 +1751,8 @@ function wireLibrary(page){
     markChipOverflow();
     if(typeof ResizeObserver!=="undefined") new ResizeObserver(markChipOverflow).observe(intentsList);
   }
+  if(intentsList && intentsList.querySelector(".lw-ih-date") && typeof ResizeObserver!=="undefined")
+    new ResizeObserver(()=>updateIntentDateTitles(page)).observe(intentsList);
   page.querySelectorAll("[data-edit-intent-mg]").forEach(btn=>{
     btn.onclick=()=>openIntentEditor(+btn.getAttribute("data-edit-intent-mg"), true);
   });

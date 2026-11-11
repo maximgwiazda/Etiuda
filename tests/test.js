@@ -1104,7 +1104,7 @@ function v2Fns() {
     /* CARD_FLAGS is spelled out to its first member: card-fields.js declares the same name
        and comes first in the source document, so the bare marker slices the wrong one. */
     "const V2_CARD_NAMED=", "const V2_HEAD_NAMED=", "function v2Copy(", "function v2Put(",
-    "function v2Extra(", "function v2Restore(",
+    "function v2Extra(", "function v2Restore(", "function v2ChangedAt(",
     "const CARD_KEY=", "const REQ_KEY=", "const V2_RUNTIME_FIELD=", "function v2ColKey(",
     "const CAT_LABEL_KEY=", "function v2CatKey(",
     'const CARD_FLAGS=["firstOnly"',
@@ -5962,8 +5962,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1389;
-const UI_STRINGS_SHA256 = "ede34ef60da9d1e298783e69d17abebc4b744e73878c7de6611e74c33bac017f";
+const UI_STRINGS_COUNT = 1390;
+const UI_STRINGS_SHA256 = "a4dce2f41c7fb5a56da9172a8d83e1620bea2268afe2f215352967dbdede5ec8";
 
 /* WORDS OWED, the test architect's condition of 2026-11-09 on the Library and Maintenance layout.
    A table read through a variable ({key, icon, name, lede}) never reaches the census above or
@@ -6786,7 +6786,7 @@ function langAgnosticTests() {
     "const CARD_SHARED_FIELDS=", "const CARD_KEY_ALIAS=", "function cardFieldKey(",
     "function cardFieldKeys(", "function cardStorageKeys(", "function cardRequiredKeys(",
     "function truthyFlag(", "function isMacrosJsonKind(", "function plainCopy(", "function parseMacrosData(",
-    "function v2Str(", "const CAT_LABEL_KEY=", "function v2CatKey(",
+    "function v2Str(", "const CAT_LABEL_KEY=", "function v2CatKey(", "function v2ChangedAt(",
     "function normaliseCatalog(",
   ].map(m => extractDecl(src, m)).join("\n");
   const whitelist = new Function("pack", "FACTS", "hueIsOffered", "normWhoList",

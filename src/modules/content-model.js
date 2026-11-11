@@ -16,6 +16,14 @@ function setIntentIds(ids){
   SW_IDS.length=0;
   (Array.isArray(ids)?ids:[]).forEach(v=>SW_IDS.push(String(v==null?"":v)));
 }
+/* THE CATALOG'S DATE FOR EACH SHELF AND REQUEST, keyed by tag id (a category's key, an intent's id less its "t:"),
+   filled at eApplyCatalog. Nothing on the desk writes one: only the agent's own cards are dated here. */
+const TAG_DATES={};
+function setTagDates(map){
+  Object.keys(TAG_DATES).forEach(k=>{ delete TAG_DATES[k]; });
+  if(map && typeof map==="object") Object.keys(map).forEach(k=>{ if(typeof map[k]==="string") TAG_DATES[k]=map[k]; });
+}
+function tagChangedAt(id){ return Object.prototype.hasOwnProperty.call(TAG_DATES,String(id)) ? TAG_DATES[String(id)] : ""; }
 const SW_PL=[];
 // SW_CMT = what was DONE; SW_TOPIC = the subject ("advised about X").
 const SW_CMT=[];
@@ -126,6 +134,7 @@ function resetContent(){
   setContentLangs([]);
   Object.keys(SW_STORE).forEach(k=>{ if(BUILT_IN_KEYS.indexOf(k)<0) delete SW_STORE[k]; else SW_STORE[k].length=0; });
   SW_IDS.length=0;
+  setTagDates(null);
   COMMENT_LANG="";
 }
 /* Every storage key the table names, in field then language order. */
@@ -153,6 +162,8 @@ export {
   resetContent,
   CATS,
   SW_IDS,
+  setTagDates,
+  tagChangedAt,
   SW_EN,
   SW_PL,
   SW_CMT,

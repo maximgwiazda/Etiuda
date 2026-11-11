@@ -1,12 +1,12 @@
 import { eApplyRoles } from "./cat-roles.js";
-import { intentStoreKeys, intentFieldKey, intentCount, catalogLangs, setContentLangs, setCommentLang, setIntentIds, resetContent, CATS, SW_STORE } from "./content-model.js";
+import { intentStoreKeys, intentFieldKey, intentCount, catalogLangs, setContentLangs, setCommentLang, setIntentIds, setTagDates, resetContent, CATS, SW_STORE } from "./content-model.js";
 import { CAT_ICONS, setCatalogCatLooks, setCatalogCatLabels } from "./icons.js";
 import { parseMacrosData } from "./macros-json.js";
 import { M, normWhoList, setCatalogFacts, setCatalogWho, resetStock } from "./stock.js";
 import { lsGet, lsSet, nsKey, nsGet, nsDel, E_LS_OK, eDeskFileShown } from "./storage.js";
 import { BASE_CATS } from "./pack.js";
 import { hueIsOffered } from "./cat-identity.js";
-import { catalogFromV2, isV2, v2CatKey, v2NeedsEngine } from "./catalog-v2.js";
+import { catalogFromV2, isV2, v2CatKey, v2NeedsEngine, v2ChangedAt } from "./catalog-v2.js";
 import { E_VERSION } from "./env.js";
 import { setCatalogGreet } from "./greeting.js";
 import { setCatalogVariables } from "./variables.js";
@@ -340,6 +340,11 @@ function normaliseCatalog(data){
     cat.intents={};
     intentStoreKeys().forEach(key=>{ cat.intents[key]=(SW_STORE[key]||[]).slice(); });
   }
+  /* Last and only when there is one, since eCatalogSignature hashes this object's JSON: a catalog with no date keeps
+     the signature it had. */
+  const dates={}, had=data&&data.tagsChangedAt;
+  if(had&&typeof had==="object"&&!Array.isArray(had)) Object.keys(had).forEach(k=>{ const d=v2ChangedAt(had[k]); if(d) dates[k]=d; });
+  if(Object.keys(dates).length) cat.tagsChangedAt=dates;
   return cat;
 }
 /* Full-content hash, not a count fingerprint: rewording a card must change the
@@ -480,6 +485,7 @@ function eApplyCatalog(c){
   const ids=(Array.isArray(c.intentIds)?c.intentIds:[]).slice(0,n);
   while(ids.length<n) ids.push("");
   setIntentIds(ids);
+  setTagDates(c.tagsChangedAt);
   // After the categories, never before: roles are resolved against what actually exists.
   eApplyRoles(c.roles);
   M.length=0; (c.cards||[]).forEach(m=>M.push(m));
