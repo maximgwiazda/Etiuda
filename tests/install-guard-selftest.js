@@ -71,16 +71,18 @@ try { I.testConfig(Object.assign({}, base, { appId: base.appId + "x" }), app, RO
 ok(/stale table/.test(stale), "t4 a base whose appId the table does not know builds nothing: " + stale.slice(0, 90));
 ok((cfg.fileAssociations || []).every(a => a.ext === I.TEST.desk.ext && a.name === I.TEST.desk.catalogClass),
   "t5 any association the test build registers is under its own extension and class: " + JSON.stringify(cfg.fileAssociations || []));
-const nshAt = base.fileAssociations && base.fileAssociations.length
-  ? path.join(ROOT, base.directories.buildResources, base.nsis.include) : "";
-if (nshAt) {
-  const own = I.ownNamesNsh(fs.readFileSync(nshAt, "utf8"));
-  ok(own.left.length === 0 && own.counts.klass > 0 && own.counts.link > 0 && own.counts.url > 0,
-    "t6 the installer script renamed for the test build names no shipped class or scheme: " + JSON.stringify(own.counts));
-  const planted = I.ownNamesNsh("  WriteRegStr HKCU \"Software\\Classes\\.ec\" \"\" \"x\"\n  WriteRegStr HKCU \"Software\\Classes\\ETIUDA\\x\" \"\" \"y\"");
-  ok(planted.left.length === 1 && /\.ec/.test(planted.left[0]) && /etiuda-qa/.test(planted.text),
-    "t7 control: a line writing the shipped .ec key is left and named, and the scheme in capitals is renamed: " + planted.left.join(" | "));
-} else console.log("  t6, t7 not run: this tree's build registers no .ec class, so its script is not renamed");
+const nshAt = path.join(ROOT, base.directories.buildResources, base.nsis.include);
+const own = I.ownNamesNsh(fs.readFileSync(nshAt, "utf8"));
+const renamed = own.counts.klass + own.counts.link + own.counts.url + own.counts.profile;
+ok(own.left.length === 0 && renamed > 0 && cfg.nsis.include !== base.nsis.include && typeof cfg.beforePack === "function",
+  "t6 " + base.nsis.include + " renamed for the test build names no shipped class, scheme or profile folder, and the test"
+  + " build includes the renamed copy: " + JSON.stringify(own.counts) + (own.left.length ? " LEFT: " + own.left.join(" | ") : ""));
+const planted = I.ownNamesNsh("  WriteRegStr HKCU \"Software\\Classes\\.ec\" \"\" \"x\"\n  WriteRegStr HKCU \"Software\\Classes\\ETIUDA\\x\" \"\" \"y\""
+  + "\n  RMDir /r \"$APPDATA\\etiuda-studio\\x\"\n  Delete \"$APPDATA\\etiuda-studio-license.js\"");
+ok(planted.left.length === 1 && /\.ec/.test(planted.left[0]) && /Classes\\etiuda-qa\\/.test(planted.text)
+   && /APPDATA\\etiuda-studio-qa\\x/.test(planted.text) && /etiuda-studio-license\.js/.test(planted.text),
+  "t7 control: a line writing the shipped .ec key is left and named; the scheme in capitals and the profile folder are"
+  + " renamed, a file merely named like the app is not: " + planted.left.join(" | "));
 
 /* ---- 3. the registry reader, on a stand-in reg ------------------------------------------------------------------------ */
 

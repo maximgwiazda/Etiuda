@@ -49,18 +49,22 @@ function shippedLeft(cfg) {
   return left;
 }
 
-/* The desk's installer.nsh with the shipped class and scheme renamed to the test build's: the same script, so the test
-   install still writes and removes the class and the link, under names no shipped install uses. */
+/* An installer script with the shipped names it spells out renamed to the test build's: the desk's class and scheme,
+   and either app's profile folder. The same script, so the test install still writes and removes them, under names no
+   shipped install uses; `left` is every line still naming a shipped one. */
 const CLASS_RE = /(Software\\Classes\\)Etiuda catalog(?=["\\])/gi;
 const LINK_RE = /(Software\\Classes\\)etiuda(?=["\\])/gi;
 const URL_RE = /"URL:etiuda"/gi;
-const LEFT_RE = /Classes\\(etiuda["\\]|etiuda catalog["\\]|\.ec["\\])|"URL:etiuda"/i;
+const PROFILE_RE = new RegExp("(\\$(?:LOCAL)?APPDATA\\\\)(" + Object.values(SHIPPED).map(s => s.packageName).join("|") + ")(?=[\"\\\\])", "gi");
+const LEFT_RE = new RegExp("Classes\\\\(etiuda[\"\\\\]|etiuda catalog[\"\\\\]|\\.ec[\"\\\\])|\"URL:etiuda\"|\\$(LOCAL)?APPDATA\\\\("
+  + Object.values(SHIPPED).map(s => s.packageName).join("|") + ")[\"\\\\]", "i");
 function ownNamesNsh(text) {
   const t = TEST.desk;
   const count = re => (String(text).match(re) || []).length;
-  const counts = { klass: count(CLASS_RE), link: count(LINK_RE), url: count(URL_RE) };
+  const counts = { klass: count(CLASS_RE), link: count(LINK_RE), url: count(URL_RE), profile: count(PROFILE_RE) };
+  const testOf = name => Object.keys(SHIPPED).map(k => [SHIPPED[k].packageName, TEST[k].packageName]).find(p => p[0] === name.toLowerCase())[1];
   const out = String(text).replace(CLASS_RE, "$1" + t.catalogClass).replace(LINK_RE, "$1" + t.scheme)
-    .replace(URL_RE, "\"URL:" + t.scheme + "\"");
+    .replace(URL_RE, "\"URL:" + t.scheme + "\"").replace(PROFILE_RE, (m, at, name) => at + testOf(name));
   const left = out.split(/\r?\n/).filter(l => LEFT_RE.test(l));
   return { text: out, counts, left };
 }
@@ -87,21 +91,19 @@ function testConfig(base, app, root) {
     nsis: Object.assign({}, base.nsis, { shortcutName: t.productName, uninstallDisplayName: t.productName,
       artifactName: t.packageName + "-${version}-setup.${ext}" }),
   });
-  /* An app that registers the .ec class gets its installer.nsh renamed into the output folder before packing. */
-  if (assoc.length) {
-    const from = path.join(root, (base.directories && base.directories.buildResources) || "build", base.nsis.include);
-    const to = path.join(path.resolve(root, (base.directories && base.directories.output) || "dist"), ".test-identity", "installer.nsh");
-    cfg.nsis.include = to;
-    cfg.beforePack = async context => {
-      const own = ownNamesNsh(fs.readFileSync(from, "utf8"));
-      if (own.left.length || !own.counts.klass || !own.counts.link)
-        throw new Error("test identity: " + from + " still names the shipped class or scheme after renaming ("
-          + JSON.stringify(own.counts) + "): " + own.left.join(" | "));
-      fs.mkdirSync(path.dirname(to), { recursive: true });
-      fs.writeFileSync(to, own.text);
-      if (typeof base.beforePack === "function") return base.beforePack(context);
-    };
-  }
+  /* The installer script is renamed into the output folder before packing, and the build refuses one still naming a
+     shipped class, scheme or profile folder. */
+  if (!base.nsis || !base.nsis.include) throw new Error("test identity: electron-builder.js names no nsis.include to rename");
+  const from = path.join(root, (base.directories && base.directories.buildResources) || "build", base.nsis.include);
+  const to = path.join(path.resolve(root, (base.directories && base.directories.output) || "dist"), ".test-identity", path.basename(base.nsis.include));
+  cfg.nsis.include = to;
+  cfg.beforePack = async context => {
+    const own = ownNamesNsh(fs.readFileSync(from, "utf8"));
+    if (own.left.length) throw new Error("test identity: " + from + " still names a shipped name after renaming: " + own.left.join(" | "));
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    fs.writeFileSync(to, own.text);
+    if (typeof base.beforePack === "function") return base.beforePack(context);
+  };
   const left = shippedLeft(cfg);
   if (left.length) throw new Error("test identity: the test build would still carry " + left.join(", "));
   return cfg;
