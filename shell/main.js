@@ -8907,12 +8907,20 @@ function armNoteLook() {
   if (noteTimer.unref) noteTimer.unref();
 }
 ipcMain.on("etiuda:update-state", (e) => { e.returnValue = fromEngine(e) ? updateState() : null; });
-/* The release page, opened in the browser from the kept note while an offer stands; the page never names an address. */
-ipcMain.handle("etiuda:update-open", async (e) => {
-  if (!fromEngine(e)) return false;
+/* The release page leaves as a link does, for a click on it: the preload names a trusted click on the page's button, which
+   stands for the kept note's address while an offer stands, and the open that follows goes through openExternally. The page
+   never names an address. */
+ipcMain.on("etiuda:update-click", (e) => {
+  e.returnValue = null;
   const kept = keptNote();
-  if (!kept || !updateState().offer) return false; /* plant:update-open-offer */
-  try { await shell.openExternal(kept.url); return true; } catch { return false; }
+  if (fromEngine(e) && kept && updateState().offer) linkClicked = { href: new URL(kept.url).href, at: Date.now() }; /* plant:update-open-offer */
+});
+ipcMain.handle("etiuda:update-open", (e) => {
+  const kept = keptNote(), c = linkClicked;
+  if (!fromEngine(e) || !kept) return false;
+  const ok = !!c && c.href === new URL(kept.url).href && Date.now() - c.at <= LINK_CLICK_MS;
+  openExternally(kept.url);
+  return ok;
 });
 
 /* THE HARNESS'S OWN WINDOW, a contract of three values. Nothing else here reads the variable.

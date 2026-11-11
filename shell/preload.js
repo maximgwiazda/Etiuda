@@ -28,6 +28,8 @@ if (!PICKER && typeof window !== "undefined" && typeof window.addEventListener =
     const at = e.composedPath().find(n => n && (n.localName === "a" || n.localName === "area"));
     const href = at && typeof at.href === "string" ? at.href : "";
     if (/^https?:/i.test(href)) ipcRenderer.sendSync("etiuda:link-click", href);
+    /* The release page's button names no address: main takes the one its signed version note holds. */
+    else if (e.type === "click" && e.composedPath().some(n => n && n.dataset && n.dataset.eOpen === "update")) ipcRenderer.sendSync("etiuda:update-click");
   };
   window.addEventListener("click", clicked, true);
   window.addEventListener("auxclick", clicked, true);

@@ -383,7 +383,7 @@ function dataGroups(){
 function aboutGroups(){
   /* Under a host, the running release over what the latest look found, and the release page's button while an offer stands. */
   const up=updateAbout(E_VERSION);
-  const see=up && up.offer ? '<button type="button" class="btn" id="setUpdateSee" title="'+esc(t("Opens the page of this release"))+'">'+esc(t("See what's new"))+'</button>' : "";
+  const see=up && up.offer ? '<button type="button" class="btn" id="setUpdateSee" data-e-open="update" title="'+esc(t("Opens the page of this release"))+'">'+esc(t("See what's new"))+'</button>' : "";
   return [{rows:[
     row("about","about","Etiuda",up ? up.lines.join("\n") : E_VERSION,
       see+'<button type="button" class="btn" id="setAbout" title="'+esc(t("This version of Etiuda, what is new in it, and its licence"))+'">'+esc(t("About Etiuda"))+'</button>'),

@@ -29,7 +29,7 @@ const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const PLANTS = 11;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 50 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 51 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -39,12 +39,15 @@ function check(ok, line) {
 }
 
 /* ---- the shell's section, sliced ------------------------------------------------------------------------------------ */
+/* From the link rule, which the release page leaves by, to the end of the version note's section. */
+const FROM = "/* A WEB ADDRESS LEAVES ONLY FOR A CLICK ON IT.";
 const HEAD = "/* ---- the version note (board 991)";
 const TAIL = "\n/* THE HARNESS'S OWN WINDOW";
 function section(src) {
-  const at = src.indexOf(HEAD), end = src.indexOf(TAIL, at);
-  if (at < 0 || src.indexOf(HEAD, at + 1) >= 0 || end < 0) throw new Error("the version note's section is not in shell/main.js once");
-  return src.slice(at, end);
+  const from = src.indexOf(FROM), at = src.indexOf(HEAD), end = src.indexOf(TAIL, at);
+  if (from < 0 || at < from || src.indexOf(HEAD, at + 1) >= 0 || src.indexOf(FROM, from + 1) >= 0 || end < 0)
+    throw new Error("the link rule and the version note's section are not in shell/main.js once, in that order");
+  return src.slice(from, end);
 }
 const SPKI = (() => {
   const m = /const SPKI_ED25519 = Buffer\.from\("([0-9a-f]+)", "hex"\);/.exec(MAIN);
@@ -150,7 +153,7 @@ try {
     [note({}, root, n => { delete n.released; return JSON.stringify(n); }), "fields"], [note({ kind: "etiuda-relay-grant" }), "kind"],
     [note({ format: 2 }), "format"], [note({ serial: 0 }), "serial"], [note({ serial: 1.5 }), "serial"], [note({ version: "2.0.1-beta" }), "version"],
     [note({ version: "02.0.1" }), "version"], [note({ released: "2026-02-30" }), "released"], [note({ released: "2019-12-01" }), "released"],
-    [note({}, root, n => JSON.stringify(n).replace("2.0.1/", "2.0.1/é")), "bytes"],
+    [note({}, root, n => JSON.stringify(n).replace("2.0.1/", "2.0.1/" + String.fromCharCode(0xe9))), "bytes"],
     [note({}, root, n => { n.sig.alg = "rsa"; return JSON.stringify(n); }), "sig"],
     [note({}, root, n => { n.sig.value = n.sig.value.toUpperCase(); return JSON.stringify(n); }), "sig"],
     [note({}, root, n => JSON.stringify(Object.assign(n, { version: "2.0.2" }))), "signature"]];
@@ -252,15 +255,23 @@ try {
     "u4k a higher serial naming 2.0.2 replaces the kept note and is offered");
 
   /* ---- u5: the release page, and the timer ------------------------------------------------------------------------- */
-  const open = S4e.handle["etiuda:update-open"];
-  const okOpen = await open({ engine: true });
-  const notEngine = await open({ engine: false });
-  check(okOpen === true && notEngine === false && S4e.opened.length === 1 && S4e.opened[0] === "https://etiuda.dev/desk/2.0.2/",
-    "u5a the release page opens from the kept note for the engine's own frame, at the note's address, and for no other frame");
+  const open = S4e.handle["etiuda:update-open"], click = ev => { const e = Object.assign({}, ev); S4e.on["etiuda:update-click"](e); return e; };
+  const unclicked = open({ engine: true }), openedBefore = S4e.opened.length;
+  click({ engine: false });
+  const otherFrameClick = open({ engine: true }), openedOther = S4e.opened.length;
+  click({ engine: true });
+  const notEngine = open({ engine: false });
+  const okOpen = open({ engine: true });
+  const spent = open({ engine: true });
+  check(unclicked === false && openedBefore === 0 && otherFrameClick === false && openedOther === 0 && notEngine === false
+    && okOpen === true && spent === false && S4e.opened.length === 1 && S4e.opened[0] === "https://etiuda.dev/desk/2.0.2/",
+    "u5a the release page leaves for a click on its button alone, from the engine's own frame, once a click, at the kept note's address: "
+    + JSON.stringify(S4e.opened));
   const S5 = shellOf({ running: "2.0.1" });
   await S5.lookForNote(serve(note({ serial: 5, version: "2.0.1" })));
-  check((await S5.handle["etiuda:update-open"]({ engine: true })) === false && S5.opened.length === 0,
-    "u5b with no offer standing, the page's ask opens nothing");
+  S5.on["etiuda:update-click"]({ engine: true });
+  check(S5.handle["etiuda:update-open"]({ engine: true }) === false && S5.opened.length === 0,
+    "u5b with no offer standing, a click on the button opens nothing");
   const stateEv = { engine: true }, otherEv = { engine: false };
   S4e.on["etiuda:update-state"](stateEv); S4e.on["etiuda:update-state"](otherEv);
   check(stateEv.returnValue && stateEv.returnValue.offer === "2.0.2" && otherEv.returnValue === null && Object.keys(stateEv.returnValue).sort().join() === "look,offer",
@@ -273,6 +284,32 @@ try {
   S5b.armNoteLook(); S5b.armNoteLook();
   check(timers.length === 1 && timers[0] === 60 * 1000 && S5b.NOTE_FIRST_MS === 60000,
     "u5d the first look is armed a minute after the window opens, once, and never from the harness's own window: " + JSON.stringify(timers));
+  /* The preload: a trusted click whose path holds the release page's button tells main so; an untrusted one, or a middle
+     click, does not; and E_HOST carries the three verbs. */
+  const pre = { sync: [], invoke: [], listeners: {} };
+  const savedWindow = globalThis.window;
+  globalThis.window = { addEventListener: (t, fn) => { pre.listeners[t] = fn; } };
+  const bridge = {};
+  new Function("require", "process", fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8"))(
+    n => (n === "electron" ? {
+      contextBridge: { exposeInMainWorld: (k, v) => { bridge[k] = v; }, executeInMainWorld: () => {} },
+      ipcRenderer: { sendSync: (ch, ...a) => { pre.sync.push(ch); return ch === "etiuda:host" ? { platform: "win32" } : null; },
+        invoke: (ch, ...a) => { pre.invoke.push(ch); return Promise.resolve(true); }, send: () => {}, on: () => {} },
+      webUtils: { getPathForFile: () => "" } } : null),
+    { argv: ["electron", "."] });
+  const button = { localName: "button", dataset: { eOpen: "update" } }, plainBtn = { localName: "button", dataset: {} };
+  const fire = (type, trusted, pathNodes, btn) => pre.listeners[type] && pre.listeners[type]({ type, isTrusted: trusted, button: btn || 0, composedPath: () => pathNodes });
+  const base = pre.sync.length;
+  fire("click", false, [button]); fire("click", true, [plainBtn]); fire("auxclick", true, [button], 1);
+  const quiet = pre.sync.slice(base).length;
+  fire("click", true, [{ localName: "span", dataset: {} }, button]);
+  const heard = pre.sync.slice(base);
+  const H = bridge.E_HOST || {};
+  H.updateState(); H.openUpdatePage();
+  globalThis.window = savedWindow;
+  check(quiet === 0 && heard.length === 1 && heard[0] === "etiuda:update-click" && pre.sync[pre.sync.length - 1] === "etiuda:update-state"
+    && pre.invoke[pre.invoke.length - 1] === "etiuda:update-open" && typeof H.onUpdate === "function",
+    "u5e the preload tells main of a trusted click on the release page's button alone, and E_HOST asks the state and the open");
 
   /* ---- u6: the page ------------------------------------------------------------------------------------------------ */
   const mem = new Map();
@@ -337,8 +374,8 @@ try {
   /* ---- u7: the markup the page draws into ------------------------------------------------------------------------- */
   const tpl = fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8");
   const menuAt = tpl.indexOf('<div class="menu" id="settingsMenu"'), firstBtn = tpl.indexOf("<button", menuAt), rowAt = tpl.indexOf('id="menuUpdate"', menuAt);
-  check(menuAt > 0 && rowAt > menuAt && rowAt < firstBtn && /<button type="button" role="menuitem" data-act="update-see" id="menuUpdateSee"><\/button><button type="button" role="menuitem" data-act="update-later" id="menuUpdateLater"><\/button>/.test(tpl),
-    "u7a the row stands first in the Menu, its two actions ordinary buttons the Menu's keys walk");
+  check(menuAt > 0 && rowAt > menuAt && rowAt < firstBtn && /<button type="button" role="menuitem" data-act="update-see" data-e-open="update" id="menuUpdateSee"><\/button><button type="button" role="menuitem" data-act="update-later" id="menuUpdateLater"><\/button>/.test(tpl),
+    "u7a the row stands first in the Menu, its two actions ordinary buttons the Menu's keys walk, See what's new marked for the preload");
   check(/id="settingsBtn"[^>]*>(?:(?!<\/button>)[\s\S])*<span class="upd-dot" id="updDot" role="img" data-i18n-skip hidden><\/span><\/button>/.test(tpl),
     "u7b the dot is inside the Menu button, hidden until an offer stands");
   const hm = fs.readFileSync(path.join(ROOT, "src", "modules", "header-menus.js"), "utf8");
@@ -380,9 +417,10 @@ try {
     let capLifted = false;
     try { capLifted = (await PC.fetchNote(fetchOf(() => ({ status: 200, body: "x".repeat(5000), stream: true })), PC.NOTE_URL)).length === 5000; } catch { capLifted = false; }
     check(capLifted, "u-plant note-cap lifted reads a 5000-byte stream whole");
-    const PU = lifted("plant:update-open-offer");
+    const PU = lifted("plant:update-open-offer", "  if (fromEngine(e) && kept) linkClicked = { href: new URL(kept.url).href, at: Date.now() };");
     await PU.lookForNote(serve(note({ serial: 5, version: "2.0.0" })));
-    check((await PU.handle["etiuda:update-open"]({ engine: true })) === true && PU.opened.length === 1, "u-plant update-open-offer lifted opens a page with no offer standing");
+    PU.on["etiuda:update-click"]({ engine: true });
+    check(PU.handle["etiuda:update-open"]({ engine: true }) === true && PU.opened.length === 1, "u-plant update-open-offer turned opens a page with no offer standing");
     const pageSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "update-offer.js"), "utf8");
     const fnAt = pageSrc.indexOf("function updateInMenu("), fnEnd = pageSrc.indexOf("\n}\n", fnAt) + 2;
     const fnText = pageSrc.slice(fnAt, fnEnd).split("\n").filter(l => l.indexOf("plant:later-holds") < 0).join("\n");
