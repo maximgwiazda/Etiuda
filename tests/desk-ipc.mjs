@@ -1817,6 +1817,22 @@ try {
   } catch (e) { d6LoginWhy = String(e && e.message || e).split("\n")[0]; }
   check(d6Login, "D6-login Reset's turn-off reaches Windows as a login item with no hidden argument (" + d6LoginWhy + ")");
 
+  let d6ResetLogin = false, d6ResetLoginWhy = "";
+  try {
+    if (typeof REAL_HOST.resetDesk !== "function") d6ResetLoginWhy = "no resetDesk";
+    else {
+      loginApplied = { openAtLogin: true, args: ["--hidden"] };
+      await REAL_HOST.resetDesk();
+      const after = electron.app.getLoginItemSettings();
+      d6ResetLogin = !!after && after.openAtLogin === false;
+      if (!d6ResetLogin) d6ResetLoginWhy = JSON.stringify(after);
+    }
+  } catch (e) { d6ResetLoginWhy = String(e && e.message || e).split("\n")[0]; }
+  finally {
+    try { fs.unlinkSync(path.join(UD, "reset-pending.json")); } catch {}
+  }
+  check(d6ResetLogin, "D6-reset-login after a Reset, the stand-in's login item reads openAtLogin false (" + d6ResetLoginWhy + ")");
+
   let d6Hidden = false, d6HiddenWhy = "";
   const realWatchD6 = fs.watch;
   fs.watch = watchStub;

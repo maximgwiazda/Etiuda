@@ -8310,7 +8310,10 @@ ipcMain.handle("etiuda:desk-reset", (e) => {
     catalogSetting = String(keys[CATALOG_FOLDER_KEY] || "");
   } catch (err) { catalogSetting = ""; }
   const staged = stageReset({ userData: userData, catalogSetting: catalogSetting, defaultCatalog: defaultCatalogFolder() });
-  if (staged && staged.ok) relaunchAfterReset();
+  if (staged && staged.ok) {
+    try { setLoginItemSettings(app, false); } catch (err) { /* start with Windows could not be changed */ }
+    relaunchAfterReset();
+  }
   return staged;
 });
 ipcMain.handle("etiuda:reset-retry", (e) => {
@@ -10646,6 +10649,9 @@ if (!theOnlyOne || (Array.isArray(process.argv) && process.argv.includes("--upda
 } else {
   try {
     const honoured = honourPendingReset({ userData: app.getPath("userData"), holdsLock: true });
+    if (honoured && honoured.ok) {
+      try { setLoginItemSettings(app, false); } catch (err) { /* start with Windows could not be changed */ }
+    }
     if (honoured && honoured.notice && Array.isArray(honoured.paths) && honoured.paths.length)
       resetNotice = { paths: honoured.paths.slice() };
   }
