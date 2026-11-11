@@ -24,7 +24,32 @@ const os = require("node:os");
 const crypto = require("node:crypto");
 const zlib = require("node:zlib");
 const { watchPage } = require(path.join(__dirname, "page-watch.cjs"));
-const { decideClose, showNotification, notifyFirstClose, setLoginItemSettings, createTray, buildTrayMenuTemplate, setJumpList, APP_IDS } = require(path.join(__dirname, "tray.cjs"));
+const { decideClose, showNotification: showNotificationOf, notifyFirstClose: notifyFirstCloseOf, setLoginItemSettings: setLoginItemSettingsOf,
+  createTray, buildTrayMenuTemplate, setJumpList: setJumpListOf, APP_IDS } = require(path.join(__dirname, "tray.cjs"));
+/* A HARNESS LAUNCH WRITES NOTHING THE ACCOUNT KEEPS OUTSIDE ITS LAB: no etiuda: handler, login item, jump list or toast.
+   Every harness launch carries a user-data folder of its own (the door refuses one without) or a test variable; a
+   customer's start carries neither. Each write below asks this first. */
+function harnessLaunch() {
+  const argv = Array.isArray(process.argv) ? process.argv : [];
+  return argv.some(a => /^--user-data-dir(=|$)/.test(String(a)))
+    || ["ETIUDA_TEST_OFFSCREEN", "ETIUDA_TEST_DOCUMENTS", "ETIUDA_TEST_DEVTOOLS"].some(k => process.env[k] !== undefined);
+}
+function setLoginItemSettings(electronApp, on) {
+  if (harnessLaunch()) return null; /* plant:harness-login */
+  return setLoginItemSettingsOf(electronApp, on);
+}
+function setJumpList(electronApp, opts) {
+  if (harnessLaunch()) return null; /* plant:harness-jump */
+  return setJumpListOf(electronApp, opts);
+}
+function showNotification(opts) {
+  if (harnessLaunch()) return null; /* plant:harness-toast */
+  return showNotificationOf(opts);
+}
+function notifyFirstClose(opts) {
+  if (harnessLaunch()) return null; /* plant:harness-first-close */
+  return notifyFirstCloseOf(opts);
+}
 const { readsLikeMessage, scoreSuggestions, MESSAGE_MAX_CHARS } = require(path.join(__dirname, "clip-suggest.cjs"));
 const { honourPendingReset, stageReset, deliverResetNotice, retryPendingReset, stopPendingReset } = require(path.join(__dirname, "desk-reset.cjs"));
 /* THE EMBEDDED MODEL, where the package carries it beside the asar; a copy of the shell without these files suggests by words. */
@@ -482,6 +507,7 @@ function registerEtiudaLink() {
   if (process.platform !== "win32" || typeof app.setAsDefaultProtocolClient !== "function") return;
   if (!app.isPackaged || process.env.ETIUDA_TEST_DOCUMENTS) return; /* plant:link-pack */
   if (testIdentityBuild()) return;
+  if (harnessLaunch()) return; /* plant:harness-link */
   let ok = false;
   try {
     ok = app.setAsDefaultProtocolClient("etiuda") === true;

@@ -161,6 +161,11 @@ function withArgv(argv, fn) {
   try { return fn(); }
   finally { process.argv = prev; }
 }
+/* No harness marker of the shell's own (shell/main.js harnessLaunch) but the ones a leg sets itself. */
+function bare(fn) {
+  return withEnv("ETIUDA_TEST_OFFSCREEN", undefined, () => withEnv("ETIUDA_TEST_DEVTOOLS", undefined,
+    () => withEnv("ETIUDA_TEST_DOCUMENTS", undefined, fn)));
+}
 function withEnv(name, value, fn) {
   const had = Object.prototype.hasOwnProperty.call(process.env, name);
   const prev = process.env[name];
@@ -339,9 +344,9 @@ try {
   }
   let packedNo = "", packedYes = "", loose = "", harness = "", regError = "";
   try {
-    const no = withEnv("ETIUDA_TEST_DOCUMENTS", undefined, () => loadShell({ lock: true, packaged: true, register: () => false }));
-    const yes = withEnv("ETIUDA_TEST_DOCUMENTS", undefined, () => loadShell({ lock: true, packaged: true, register: () => true }));
-    const dev = withEnv("ETIUDA_TEST_DOCUMENTS", undefined, () => loadShell({ lock: true, packaged: false, register: () => true }));
+    const no = bare(() => loadShell({ lock: true, packaged: true, register: () => false }));
+    const yes = bare(() => loadShell({ lock: true, packaged: true, register: () => true }));
+    const dev = bare(() => loadShell({ lock: true, packaged: false, register: () => true }));
     const lab = loadShell({ lock: true, packaged: true, register: () => true });
     packedNo = regLine(no);
     packedYes = regLine(yes);
@@ -352,6 +357,13 @@ try {
   const winOk = process.platform === "win32"
     ? packedNo === "1:etiuda:1:true" && packedYes === "1:etiuda:1:false" && loose === quiet && harness === quiet
     : packedNo === quiet && packedYes === quiet && loose === quiet && harness === quiet;
+  /* Any harness launch carries --user-data-dir (the door refuses one without), and that alone keeps the scheme. */
+  let udd = "", uddError = "";
+  try { udd = regLine(bare(() => withArgv(process.argv.concat(["--user-data-dir=" + path.join(LAB, "udd")]), () => loadShell({ lock: true, packaged: true, register: () => true })))); }
+  catch (e) { uddError = e && e.message ? e.message : String(e); }
+  check(udd === "0::0:false" && !uddError && (process.platform !== "win32" || packedYes === "1:etiuda:1:false"),
+    "3h8u a packaged start carrying --user-data-dir, no test variable set, asks for no scheme where the bare packaged start asks once ("
+    + udd + " / " + packedYes + ")" + (uddError ? " " + uddError : ""));
   check(winOk && !regError, "3h8 a packaged start asks once to open etiuda:, an unpackaged start does not, and a packaged start under the harness does not ("
     + process.platform + ", " + packedNo + " / " + packedYes + " / " + loose + " / " + harness + ")"
     + (regError ? " " + regError : ""));
@@ -371,7 +383,7 @@ try {
     + marked + " / " + packedYes + ")" + (markError ? " " + markError : ""));
 
   const packPlant = lift("plant:link-pack", src => {
-    const dev = withEnv("ETIUDA_TEST_DOCUMENTS", undefined, () => loadShell({ lock: true, packaged: false, register: () => true, src: src }));
+    const dev = bare(() => loadShell({ lock: true, packaged: false, register: () => true, src: src }));
     return process.platform === "win32" && dev.registered.length === 1;
   });
   const packLine = packPlant.detail !== "plant line absent";
