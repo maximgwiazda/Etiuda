@@ -10,7 +10,6 @@
  *   i4 clicking a chip opens that card's editor, showing that card
  *   i5 after the page scrolls by 600 px, the heading row's top is still at the top of the scrolling box, within 2 px
  *   i6 between 420 and 520 px no chip shown and row is one line; under 420 px buttons stand on second line at right, name takes row width and wraps whole
- *   i7 no heading reads "Date modified"
  *   i8 the number's hover reads "Linked cards: {N}" with its own number
  *   i9 the lede reads "Cards linked to every intent: {N}." with N the sample's cards marked allIntents; with those
  *      cards put away, the sentence is gone

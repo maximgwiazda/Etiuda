@@ -377,7 +377,7 @@ function main() {
   }
 
   /* ---- 5: every bad path, refused before anything is written ---- */
-  /* Each rule's id opens its own line, so tests/leg-ids.js reads it. */
+  /* Each rule's id opens its own line. */
   const RULES = [[
     "5a a .. segment", ["../outside.ec", "notes/../../outside.ec", "notes/..", ".."]], [
     "5b a drive", ["C:/outside.ec", "c:outside.ec", "Z:"]], [
