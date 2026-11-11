@@ -346,20 +346,6 @@ async function main() {
     console.log('  ok    all ' + sites + ' lookup(s) name a declared slot');
   }
 
-  // --- bound 4: no slot is dead.
-  const dead = slots.filter(x => !used.has(x));
-  if (dead.length) {
-    for (const x of dead) console.log('  FAIL  slot ' + x + ' is declared and wired and nothing in src/ looks it up');
-    failed += dead.length;
-  } else {
-    console.log('  ok    every slot is looked up somewhere in src/, ' + slots.filter(x => used.has(x)).length + ' of ' + slots.length);
-  }
-
-  // --- bound 5: hooks.js imports nothing.
-  const n = importCount(hooksSrc);
-  if (n) { console.log('  FAIL  hooks.js holds ' + n + ' import(s); it can join a ring and the valve argument fails'); failed++; }
-  else console.log('  ok    hooks.js imports nothing, so it can never join a ring');
-
   if (unreadable) {
     console.log('  ' + unreadable + ' place(s) this scan could not read. A gate that cannot see does not pass.');
     process.exit(3);

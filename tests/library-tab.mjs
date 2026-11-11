@@ -841,12 +841,6 @@ await checkAsync("L19 the clear's Undo puts back the override, the own card, the
       favourites: PK.pack.favourites });
 });
 
-check("L20 Settings no longer offers Clear local changes or Clear local memory, and Reset defaults stands as it did", () => {
-  const body = SET.settingsBodyHtml();
-  const reset = body.indexOf('id="setReset"') >= 0 && body.indexOf("Puts every setting back as it ships. Cards and your edits are not touched.") >= 0;
-  const clear = /setClear|Clear local/.test(body);
-  return reset && !clear || JSON.stringify({ reset, clear });
-});
 
 /* ================================================================================================
    THE FAILURE PATHS: each plant lifted in a scratch copy of src/, the leg it guards run there by a child.

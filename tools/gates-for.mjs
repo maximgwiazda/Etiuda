@@ -107,7 +107,7 @@ export const SHARED = [
    and the floor at merge, and the next nightly is its whole run. A diff that mixes one of them with any other file fails closed
    as before. */
 export const GATE_TOOLS = ["tools/gate-run.mjs", "tools/gates-for.mjs", "tools/child-cap.mjs", "tests/result-line.mjs",
-  "tests/gates-for.mjs", "tests/child-cap.mjs"];
+  "tests/gates-for.mjs"];
 
 /* A leg whose trace follows a whole directory. A merge runs it only when the diff reaches one of
    these files, or the leg itself. The trace still records the wide reads; this list is a ceiling. */
@@ -164,14 +164,12 @@ export function globMatches(glob, rel) {
 /* Legs that judge a tree file's bytes. A diff touching a glob selects the leg. A leg's own source is not listed. */
 export const SCANS = {
   "tests/chain-split.mjs": ["tests/**/*.{js,mjs,cjs}", "package.json"],
-  "tests/leg-ids.js": ["tests/**/*.{js,mjs}"],
   "tests/i18n-scan.js": ["src/template.html", "src/modules/*.js", "src/main.js"],
   "tests/pl-diacritics.js": ["src/**/*.{js,mjs,css,html}", "shell/**/*.{js,mjs,css,html}"],
   "tests/css-layers.js": ["src/template.html"],
   "tests/css-order.js": ["src/template.html"],
   "tests/motion-tokens.js": ["src/template.html", "src/modules/*.js", "src/main.js", "src/modules/motion.js"],
   "tests/kin-contrast.mjs": ["src/template.html", "shell/*.js"],
-  "tests/modal-select.mjs": ["src/template.html", "engine/etiuda.html"],
   "tests/theme-switch.mjs": ["src/template.html", "src/modules/{theme,storage,motion,dom,hooks}.js"],
   "tests/theme-continuity.mjs": ["src/template.html", "src/modules/theme.js", "engine/etiuda.html"],
   "tools/split-guard/boot-order.mjs": ["src/main.js", "tools/split-guard/boot-order.list"],

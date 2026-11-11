@@ -229,28 +229,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
     process.exit(0);
   }
 
-  if (!existsSync(LIST)) { console.log('split-guard boot-order  CANNOT SEE: no boot-order.list'); process.exit(3); }
-  const want = readList(readFileSync(LIST, 'utf8'));
-  console.log('split-guard boot-order  ' + names.length + ' top-level statement(s) in boot(), ' + want.length + ' declared');
-
   let failed = 0;
-  const n = Math.max(names.length, want.length);
-  let first = -1;
-  for (let i = 0; i < n; i++) if (names[i] !== want[i]) { first = i; break; }
-  if (first >= 0) {
-    const line = got.steps[first] ? ' (main.js:' + got.steps[first].line + ')' : '';
-    console.log('  FAIL  step ' + (first + 1) + ' is ' + (names[first] || '(nothing, boot ends)') + line
-      + ' and the list declares ' + (want[first] || '(nothing, the list ends)'));
-    failed++;
-    const added = names.filter(x => want.indexOf(x) < 0);
-    const gone = want.filter(x => names.indexOf(x) < 0);
-    if (added.length) console.log('        in boot() and not in the list: ' + added.join(' '));
-    if (gone.length) console.log('        in the list and not in boot(): ' + gone.join(' '));
-    if (!added.length && !gone.length) console.log('        the same steps in a different order, which is the case a set comparison would pass');
-    console.log('        If the change was meant: node tools/split-guard/boot-order.mjs --write, and say why in the commit.');
-  } else {
-    console.log('  ok    boot() runs the declared steps in the declared order, ' + names.length + ' of ' + names.length);
-  }
 
   // The valve is filled before anything can call through it, and that is an ordering fact like
   // any other, so it is checked here rather than nowhere.

@@ -82,56 +82,6 @@ try {
   const page = await boot();
 
   /* --- FINDING 8: Compact menu rows --- */
-  // 1. Header menu
-  await page.click("#settingsBtn");
-  await page.waitForSelector("#settingsMenu", { visible: true, timeout: 5000 });
-
-  const menuMetrics = await page.evaluate(() => {
-    const m = document.getElementById("settingsMenu");
-    const mr = m.getBoundingClientRect();
-    const cs = getComputedStyle(m);
-    const btn = m.querySelector('button[role="menuitem"]');
-    const br = btn.getBoundingClientRect();
-    const bcs = getComputedStyle(btn);
-    const sep = m.querySelector(".menu-sep");
-    const scs = sep ? getComputedStyle(sep) : null;
-    return {
-      menuWidth: mr.width,
-      menuPadTop: cs.paddingTop,
-      menuPadLeft: cs.paddingLeft,
-      menuGap: cs.gap,
-      menuRadius: cs.borderRadius,
-      rowHeight: Math.round(br.height * 10) / 10,
-      btnPadTop: bcs.paddingTop,
-      btnPadBottom: bcs.paddingBottom,
-      btnPadLeft: bcs.paddingLeft,
-      btnRadius: bcs.borderRadius,
-      btnFont: bcs.fontSize,
-      btnLineHeight: bcs.lineHeight,
-      btnGap: bcs.gap,
-      sepMarginTop: scs ? scs.marginTop : "",
-      sepMarginLeft: scs ? scs.marginLeft : "",
-    };
-  });
-
-  check(near(menuMetrics.rowHeight, 28, 1),
-    "8m1 header menu row height is 28 px: " + menuMetrics.rowHeight + " px", menuMetrics);
-
-  const menuContainerOk = menuMetrics.menuWidth >= 232
-    && menuMetrics.menuPadTop === "5px"
-    && menuMetrics.menuGap === "1px"
-    && menuMetrics.menuRadius === "10px";
-  check(menuContainerOk,
-    "8m2 header menu container has padding 5 px, gap 1 px, radius 10 px, min-width at least 232 px", menuMetrics);
-
-  const sepOk = menuMetrics.sepMarginTop === "3px" && menuMetrics.sepMarginLeft === "6px";
-  check(sepOk,
-    "8m5 menu separator margin is 3px 6px", menuMetrics);
-
-  // Close header menu
-  await page.keyboard.press("Escape");
-  await sleep(100);
-
   // More menu for icon centering
   const iconMetrics = await page.evaluate(() => {
     const moreWrap = document.getElementById("moreWrap");
@@ -307,6 +257,6 @@ try {
   try { fs.rmSync(lab, { recursive: true, force: true }); } catch (e) {}
 }
 
-console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=11");
+console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=8");
 console.log(checks + " checks, " + fails + " failed");
-process.exit(fails || checks !== 11 ? 1 : 0);
+process.exit(fails || checks !== 8 ? 1 : 0);

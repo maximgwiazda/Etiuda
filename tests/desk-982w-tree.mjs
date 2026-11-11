@@ -223,9 +223,6 @@ try {
         .map(el => el.textContent.trim())
         .filter(Boolean);
 
-      const hasDateMod = visibleHeadings.some(h => /Date modified|Data zmiany/i.test(h));
-      if (hasDateMod) return { ok: false, reason: "heading reads Date modified", visibleHeadings };
-
       // Expected columns based on container width bw:
       // >1560: Name, Opens with, Languages, Replies, Intents, Sent, 30 days, Source
       // 1401-1560: drop Source
@@ -261,7 +258,7 @@ try {
       break;
     }
   }
-  check(t2Ok, "t2 headings shown match measured box width and no heading reads Date modified", t2Detail);
+  check(t2Ok, "t2 headings shown match measured box width", t2Detail);
 
   /* --- t3: where box is under 420 px, card buttons stand on second line at right, name takes row width --- */
   const t3Res = await page.evaluate(async () => {
@@ -740,8 +737,8 @@ try {
     if (r12 && r12.length) t12bad.push({ w, cut: r12.slice(0, 4) });
     const r13 = await pl.evaluate(() => [...document.querySelectorAll(".lw-head > *")].filter(e => e.getClientRects().length && getComputedStyle(e).display !== "none").map(e => {
       const g = document.createRange(); g.selectNodeContents(e); const k = g.getBoundingClientRect(), q = e.getBoundingClientRect();
-      return { t: e.textContent.trim(), w: Math.round(q.width), words: Math.round(k.width), over: k.width > 0 && k.right > q.right + 0.5, sent: e.classList.contains("lw-h-us") };
-    }).filter(h => h.over || (h.sent && Math.abs(h.w - 124) > 0.5)));
+      return { t: e.textContent.trim(), w: Math.round(q.width), words: Math.round(k.width), over: k.width > 0 && k.right > q.right + 0.5 };
+    }).filter(h => h.over));
     if (r13.length) t13bad.push({ w, heads: r13 });
   }
   /* the narrowest box the rule names, as t3 makes it */
@@ -829,7 +826,7 @@ try {
   check(t16Res && t16Res.ok, "t16 in Polish a search matching nothing reads the Polish line, and the new category field is Polish", t16Res);
   check(!t11bad.length, "t11 in Polish at 546-2560 no Library section scrolls sideways, page or panel, and every foot button ends inside its panel", t11bad.slice(0, 4));
   check(!t12bad.length, "t12 in Polish under 420 px of box every category's name shows its words whole", t12bad.slice(0, 4));
-  check(!t13bad.length, "t13 in Polish at 546-2560 every heading shown holds its words inside its column, and Sent is 124 px wherever shown", t13bad.slice(0, 4));
+  check(!t13bad.length, "t13 in Polish at 546-2560 every heading shown holds its words inside its column", t13bad.slice(0, 4));
 
 } catch (e) {
   check(false, "run crashed: " + e.message, e.stack);

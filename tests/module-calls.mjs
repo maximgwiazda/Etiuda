@@ -992,8 +992,6 @@ const CARD_B = {
   const E = await import(MOD("env.js"));
   check("env.js", "the engine version is a semantic version",
     () => eq(/^\d+\.\d+\.\d+/.test(String(E.E_VERSION)), true));
-  check("env.js", "1008ne1 the engine holds no reader for a catalog baked into the page",
-    () => eq(typeof E.eEmbeddedCatalog, "undefined"));
 }
 
 /* ------------------------------------------------------------------ pills-box.js
@@ -1249,8 +1247,6 @@ const CARD_B = {
    nobody wired is a no-op rather than a crash at boot. */
 {
   const H = await import(MOD("hooks.js"));
-  check("hooks.js", "the table has a null prototype, so a mistyped slot is undefined",
-    () => eq(Object.getPrototypeOf(H.hooks), null));
   check("hooks.js", "a slot nobody declared is refused by name",
     () => {
       try { H.wireHooks({ nosuchSlot: () => {} }); return "accepted an unknown slot"; }

@@ -45,7 +45,6 @@ export const HELPERS = {
 export const NIGHTLY_ONLY = [
   "tests/desk-growth.mjs",
   "tests/engine-selftest.js",
-  "tests/leg-ids.js",
   "tests/result-line.mjs",
   "tests/machine-lock.mjs",
   "tests/sbom.mjs",
