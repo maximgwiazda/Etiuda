@@ -3618,8 +3618,9 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .screen-body{flex:1 1 auto;min-height:0}
 .screen-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding-top:16px;border-top:1px solid var(--line)}
 /* ---------- The Settings screen tab ---------- */
-/* On the desk's own tokens, never glass. Opening Settings shows every section on one page. Choosing a
-   section shows that section alone. The selected rail row is one class and the three --sx-sel tokens, so its treatment changes in one place:
+/* On the desk's own tokens, never glass. Opening Settings shows every section on one page. A section opened
+   alone keeps Appearance and Layout beside a small desk, and lays every other section's rows out as tiles.
+   The selected rail row is one class and the three --sx-sel tokens, so its treatment changes in one place:
    a soft fill of the accent with a fine ring of it, the name bold, the icon in the accent. */
 .sx{--sx-acc:var(--accent);--sx-sel-fill:color-mix(in srgb,var(--sx-acc) 11%,transparent);
   --sx-sel-ring:color-mix(in srgb,var(--sx-acc) 16%,transparent);--sx-hover:color-mix(in srgb,var(--ink) 3.5%,transparent);
@@ -3697,6 +3698,48 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx:not(.lm) .sx-block .set-row{min-height:54px;min-width:0}
 .sx:not(.lm) .sx-block .sx-card{border:0;box-shadow:inset 0 0 0 1px var(--line)}
 .sx:not(.lm) .sc-row{min-width:0}
+/* A section alone. Appearance and Layout: rows on the left, the desk on the rest. The others: rows as tiles. */
+.sx:not(.lm) .sx-look{display:grid;grid-template-columns:minmax(min(440px,100%),2fr) minmax(0,3fr);gap:28px;align-items:start}
+.sx:not(.lm) .sx-lookrows{min-width:0}
+.sx:not(.lm) .sx-lookside>h3{font:600 12px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin:0 0 8px}
+.sx:not(.lm) .sx-lookside>p{font-size:13px;color:var(--dim);margin:10px 0 0}
+.sx:not(.lm) a.sx-crumb{color:var(--dim);text-decoration:none}
+.sx-mini{border:1px solid var(--line-strong);border-radius:12px;overflow:hidden;background:var(--bg);aspect-ratio:16/9;
+  display:flex;flex-direction:column}
+.sx-mini,.sx-mini *{pointer-events:none}
+.sx-mini i,.sx-mini s,.sx-mini u,.sx-mini b{display:block;text-decoration:none;font-style:normal;font-weight:400}
+.sx-mini .bar{height:5%;background:var(--band);display:flex;gap:1%;padding:0 2%;align-items:flex-end}
+.sx-mini .bar i{width:12%;height:70%;background:var(--bg);border-radius:4px 4px 0 0}
+.sx-mini .bar i+i{background:color-mix(in srgb, var(--bg) 30%, transparent)}
+.sx-mini .hdr{display:flex;gap:1.2%;padding:1.5% 2%;background:var(--panel);border-bottom:1px solid var(--line)}
+.sx-mini .hdr i{flex:0 0 14%;height:14px;border:1px solid var(--line-strong);border-radius:6px}
+.sx-mini .hdr i.w{flex:1}
+.sx-mini .pills{display:flex;gap:1%;padding:1.5% 2%;background:var(--panel);border-bottom:1px solid var(--line)}
+.sx-mini .pills i{flex:0 0 7%;height:12px;border-radius:99px;border:1px solid var(--line-strong)}
+.sx-mini .pills i:first-child{background:var(--accent);border-color:var(--accent)}
+.sx-mini .body{flex:1;display:flex;min-height:0}
+.sx-mini .rail{flex:0 0 14%;border-right:1px solid var(--line);padding:2%;display:flex;flex-direction:column;gap:8px;
+  background:color-mix(in srgb, var(--panel) 70%, transparent);backdrop-filter:var(--glass-thin-filter)}
+.sx-mini .rail s{height:6px;border-radius:3px;background:var(--line-strong)}
+.sx-mini .rail s:first-child{background:var(--go)}
+.sx-mini .cols{flex:1;display:flex;gap:2%;padding:2%;min-width:0;
+  background-image:radial-gradient(var(--line-strong) 1px, transparent 1px);background-size:12px 12px}
+.sx-mini .cols span{flex:1 1 var(--sx-floor, 36px);min-width:0;display:flex;flex-direction:column;gap:8%}
+.sx-mini b{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:6% 6% 6% 8%;position:relative;
+  display:flex;flex-direction:column;gap:5px;min-height:var(--sx-floor, 36px)}
+.sx-mini b u{position:absolute;left:3%;top:14%;bottom:14%;width:2px;border-radius:2px;background:var(--accent)}
+.sx-mini b s{height:4px;border-radius:2px;background:var(--line-strong)}
+.sx:not(.lm) .sx-tiles .sx-card{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,520px),1fr));
+  gap:10px;background:none;border:0;overflow:visible;box-shadow:none}
+.sx:not(.lm) .sx-tiles .sx-card>.set-row,.sx:not(.lm) .sx-tiles .sx-card>.set-row:first-child{background:var(--panel);
+  border:1px solid var(--line);border-radius:10px;min-height:76px}
+.sx:not(.lm) .sx-tiles .sx-card:has(.sc-list){display:block}
+.sx:not(.lm) .sx-tiles .sc-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,520px),1fr));gap:10px}
+.sx:not(.lm) .sx-tiles .sc-row{background:var(--panel);border:1px solid var(--line);border-radius:10px;min-height:76px}
+.sx:not(.lm) .sx-tiles .sc-sep{grid-column:1 / -1}
+@container sxpage (max-width:720px){
+  .sx:not(.lm) .sx-look{grid-template-columns:minmax(0,1fr)}
+}
 @container sxpage (max-width:480px){
   .sx:not(.lm) .set-row{grid-template-columns:28px minmax(0,1fr)}
   .sx:not(.lm) .set-ctl{grid-column:1 / -1;grid-row:2;justify-content:flex-start;max-width:100%}
