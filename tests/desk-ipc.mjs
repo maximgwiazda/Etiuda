@@ -31,7 +31,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 127;
+const EXPECTED = 128;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -599,11 +599,17 @@ try {
   check(titleOf(d1, 0) === "Edited A" && titleOf(d1, 1) === "Card b za\u017c\u00f3\u0142\u0107" && (d1.cards || []).length === 3,
     "77i the file holds the layer's edit and the edition's other cards as they were");
 
-  edit("Edited A again");
+  /* The second edit carries the date the card editor stamps (card-model.js overrideAgainstBase), for 77j2. */
+  const DATED = "2026-11-11T20:00:00.000Z";
+  PK.pack.overrides = { "c-a": { t: "Edited A again", changedAt: DATED } }; PK.savePack(); RB.rebuildCards();
   const ok2 = await writeBranch();
   const d2 = readOwn();
   check(ok2 === true && d2.rev === 2 && titleOf(d2, 0) === "Edited A again" && verifies(d2) && listing(path.join(deskDir, myId)).join() === ownName,
     "77j a second edit raises rev to 2 in the same file, signed again (rev " + d2.rev + ", files " + listing(path.join(deskDir, myId)).join() + ")");
+  /* 77j2, Claude α's decision 12 (2026-11-11): nothing in the desk's own file tells the lead when the person edited a card. */
+  const datesIn = d => [...(d.cards || []), ...(d.tags || [])].filter(o => o && Object.prototype.hasOwnProperty.call(o, "changedAt")).length;
+  check(datesIn(d2) === 0 && (PK.pack.overrides["c-a"] || {}).changedAt === DATED,
+    "77j2 the desk's own file carries no changedAt on any card or tag, while the edit this desk keeps holds its date (" + datesIn(d2) + " in the file)");
 
   const before = bytesOwn(), mtime0 = timeOwn();
   await tick(20);
