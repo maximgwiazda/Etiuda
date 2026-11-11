@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 433;
+const EXPECTED = 440;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -81,7 +81,7 @@ function markPart(id) {
 }
 /* One part, or several separated by commas. Empty runs every part, which is the release run. */
 const ONLY = new Set(String(process.env.RELAY_CHANNEL_ONLY || "").split(",").map((s) => s.trim()).filter(Boolean));
-const DESK_PARTS = new Set(["pDesk", "p962s5", "p962s6", "p944g", "p921", "p961re", "p978", "p932m", "p939", "p987"]);
+const DESK_PARTS = new Set(["pDesk", "p962s5", "p962s6", "p944g", "p921", "p961re", "p978", "p989d", "p932m", "p939", "p987"]);
 function partOn(id) {
   return ONLY.size === 0 || ONLY.has(id);
 }
@@ -5587,6 +5587,112 @@ if (deskOn()) try {
     }
   }
 
+  if (partOn("p989d")) {
+  markPart("p989d");
+
+  /* ---- 989: a network whose gateway refuses the relay's push socket, at the desk. The desk's own shell on the relay of
+     this file, its WebSocket a stand-in that closes before it opens, as a socket refused at its handshake does: the team's
+     row in Settings says, in both languages, that updates arrive about once a minute, with its hover; once a socket opens,
+     the row says nothing of it. ---- */
+  {
+    const LINE_EN = "On this network the team's updates arrive about once a minute, not live.";
+    const LINE_PL = "W tej sieci aktualizacje zespołu docierają mniej więcej co minutę, a nie na bieżąco.";
+    const TIP_EN = "This network does not let the live connection to the relay through, so Etiuda asks the relay about once a minute instead. Nothing is lost, and nothing needs doing.";
+    const TIP_PL = "Ta sieć nie przepuszcza połączenia na żywo z przekaźnikiem, więc Etiuda pyta przekaźnik mniej więcej co minutę. Nic nie ginie i nic nie trzeba robić.";
+    const realNow = Date.now;
+    let jump = 0, opens = 0, tries = 0, refuse = true, desk = null;
+    const was = { WebSocket: globalThis.WebSocket, document: globalThis.document, window: globalThis.window, style: globalThis.getComputedStyle };
+    try {
+      Date.now = () => realNow() + jump;
+      globalThis.WebSocket = class {
+        constructor() {
+          tries++;
+          this.readyState = 0;
+          setImmediate(() => {
+            if (refuse) { this.readyState = 3; if (this.onerror) this.onerror({}); if (this.onclose) this.onclose({}); return; }
+            this.readyState = 1; opens++; if (this.onopen) this.onopen({});
+          });
+        }
+        send() {}
+        close() { this.readyState = 3; }
+      };
+      globalThis.window = globalThis.window || {};
+      const cls = { contains: () => false, add() {}, remove() {}, toggle() {} };
+      globalThis.document = { body: { appendChild: c => c, classList: cls }, documentElement: { classList: cls, dataset: {}, style: {} }, createElement: () => ({ style: {}, classList: { add() {}, remove() {} }, appendChild: c => c, setAttribute() {} }),
+        getElementById: () => null, querySelector: () => null, querySelectorAll: () => [], addEventListener() {}, removeEventListener() {} };
+      globalThis.getComputedStyle = () => ({ fontSize: "16px" });
+      let took = null;
+      window.E_HOST = { teamJoin: (...a) => (desk ? desk.ask("etiuda:team-join", ...a) : Promise.resolve(null)), onTeamJoin: fn => { took = fn; } };
+      const mod = n => import(pathToFileURL(path.join(ROOT, "src", "modules", n)).href);
+      const HK = await mod("hooks.js");
+      HK.hooks.render = () => {};
+      const ST = await mod("storage.js"), TJ = await mod("team-join.js"), SET = await mod("settings.js");
+      TJ.wireTeamJoin();
+      await wait(20);
+
+      const rt = hex(16), team = "t-" + hex(8);
+      const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
+      if (made.status !== 200) throw new Error("the team was not made: " + JSON.stringify(made.json));
+      const ud = path.join(LAB, "989-desk");
+      fs.mkdirSync(ud, { recursive: true });
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eUiLang: "en" },
+        teamPins: { [team]: { keyId: LEAD.keyId, public: LEAD.pub } }, teamPinFrom: { [team]: "invite" },
+        teamChannel: { [team]: { kind: "relay", rt, url: URLV1 } }, teamShown: { [team]: { lead: "Ada Quay" } } }), "utf8");
+      desk = loadDesk(ud);
+      const me = await desk.ask("etiuda:branch-identity", true);
+      const t = R.clock.now, keys = [{ id: me.id, pub: me.key, desk: me.id }];
+      const en = await admin("POST", "/relay/v1/t/" + rt + "/devices", { keys, rev: 1, t, sig: signHex(LEAD, core.devicesBytes(rt, 1, t, keys)) });
+      if (en.status !== 200) throw new Error("the desk was not enrolled: " + JSON.stringify(en.json));
+      const pump = async () => { const ch = desk.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); } await wait(30); return ch; };
+      const rowOf = async () => {
+        const v = await desk.ask("etiuda:team-join", "leads");
+        return ((v && v.leads) || []).filter(l => l && l.team === team)[0] || null;
+      };
+      const settings = async lang => {
+        took(await desk.ask("etiuda:team-join", "state"));
+        await wait(10);
+        ST.lsSet("eUiLang", lang);
+        const h = shownText(SET.settingsBodyHtml());
+        ST.lsSet("eUiLang", "en");
+        return h;
+      };
+      const says = (h, line, tip) => h.indexOf(line) >= 0 && h.indexOf('title="' + tip + '"') >= 0;
+
+      await pump(); await pump();
+      await until(async () => { const r = await rowOf(); return !!r && r.asking === true; }, 8000);
+      const ch = desk.api.relayRun();
+      const downRow = await rowOf(), downEn = await settings("en"), downPl = await settings("pl");
+      check(!!ch && ch.online() && opens === 0 && tries >= 1 && !!downRow && downRow.asking === true
+        && says(downEn, LINE_EN, TIP_EN) && says(downPl, LINE_PL, TIP_PL),
+        "989f a desk whose push socket is refused twice before it opens, while its asks are answered, says so on the team's row in"
+        + " Settings, in English and in Polish, with its hover: online " + !!(ch && ch.online()) + ", sockets tried " + tries
+        + ", opened " + opens + ", row " + (downRow ? (downRow.asking === true ? "asking" : "not asking") : "missing")
+        + ", en " + says(downEn, LINE_EN, TIP_EN) + ", pl " + says(downPl, LINE_PL, TIP_PL));
+
+      /* The gateway lets the socket through; the next minute's ask tries it again. */
+      refuse = false;
+      jump += 61 * 1000;
+      await pump();
+      const upRow = await rowOf(), upEn = await settings("en"), upPl = await settings("pl");
+      const wasSaid = !!downRow && downRow.asking === true && says(downEn, LINE_EN, TIP_EN);
+      check(wasSaid && opens >= 1 && !!upRow && upRow.asking !== true && upEn.indexOf(LINE_EN) < 0 && upEn.indexOf(TIP_EN) < 0
+        && upPl.indexOf(LINE_PL) < 0 && upPl.indexOf(TIP_PL) < 0,
+        "989g once a socket opens, the line the team's row said goes, in either language: said before " + wasSaid + ", opened " + opens
+        + ", row " + (upRow ? (upRow.asking === true ? "asking" : "not asking") : "missing")
+        + ", en " + (upEn.indexOf(LINE_EN) >= 0 ? "says it" : "clear") + ", pl " + (upPl.indexOf(LINE_PL) >= 0 ? "says it" : "clear"));
+    } catch (e) {
+      check(false, "989 the push socket at the desk: " + (e && e.stack ? e.stack : e));
+    } finally {
+      try { const c = desk && desk.api.relayRun(); if (c) await c.stop(); } catch { /* stopped */ }
+      Date.now = realNow;
+      globalThis.WebSocket = was.WebSocket;
+      globalThis.document = was.document;
+      globalThis.window = was.window;
+      globalThis.getComputedStyle = was.style;
+    }
+  }
+  }
+
   if (partOn("p932m")) {
   markPart("p932m");
 }
@@ -9275,6 +9381,102 @@ if (partOn("p960")) {
     await lead.ch.stop();
   } catch (e) {
     check(false, "harness (the leg 960a): " + (e && e.stack ? e.stack : e));
+  }
+}
+
+/* 989: a push socket refused before it opens, as behind a gateway that inspects encrypted traffic, or one that never opens.
+   After two such failures in a row the channel asks on its poll and tries the socket again with each ask, not in a loop of
+   its own; it says the socket is down while its asks are answered and up again once one opens. A connector that does not say when its socket opens keeps
+   the reconnect it had. */
+if (partOn("p989")) {
+  markPart("p989");
+  const scene = async (tag, mode, pollMs) => {
+    const deskKey = keyPair(true);
+    const tm = await freshTeam([deskKey]);
+    const k1 = crypto.randomBytes(32);
+    const s = { tries: 0, told: [], mode, handles: [] };
+    const connect = (url, headers, on) => {
+      s.tries++;
+      const m = s.mode;
+      const h = { send() {}, close() {} };
+      if (m !== "silent") h.opens = true;
+      if (m === "refuse" || m === "silent") setImmediate(() => on.close());
+      else if (m === "open") setImmediate(() => { if (typeof on.open === "function") on.open(); });
+      s.handles.push(h);
+      return h;
+    };
+    const name = "989-" + tag + "-" + tm.rt.slice(0, 8);
+    s.p = opened(C, name, tm, deskKey, "desk:" + deskKey.keyId, {
+      keyFor: e => (e === 1 ? k1 : null), sealEpoch: () => 1, connect, pollMs,
+      onSocket: () => s.told.push(typeof s.p.ch.pushDown === "function" ? s.p.ch.pushDown() : "none"),
+    });
+    s.asks = () => s.p.t.log.length;
+    s.down = () => typeof s.p.ch.pushDown === "function" ? s.p.ch.pushDown() : "none";
+    return s;
+  };
+  try {
+    {
+      const s = await scene("loop", "refuse", 1e9);
+      s.p.ch.start();
+      await settle(s.p);
+      await wait(7000);
+      const tries = s.tries, down = s.down(), online = s.p.ch.online(), asks = s.asks();
+      await s.p.ch.stop();
+      check(tries === 2 && down === true && online === true,
+        "989a a socket refused before it opens is tried once more and then not in a loop of its own, and after those two the"
+        + " channel says it is down while its asks are answered: tried " + tries + " time(s) and " + asks + " request(s) in 7 s with no"
+        + " poll due, online " + online + ", down " + down);
+    }
+    {
+      const s = await scene("poll", "refuse", 400);
+      s.p.ch.start();
+      await settle(s.p);
+      const asksAt = s.asks(), triesAt = s.tries;
+      await wait(1600);
+      const asked = s.asks() - asksAt, tried = s.tries - triesAt, down = s.down();
+      await s.p.ch.stop();
+      check(asked >= 3 && tried >= 2 && down === true,
+        "989b with the socket refused, the channel asks on its poll and tries the socket again with each ask: "
+        + asked + " request(s) and " + tried + " socket(s) in 1.6 s at a 400 ms poll, down " + down);
+    }
+    {
+      const s = await scene("hang", "hang", 400);
+      s.p.ch.start();
+      await settle(s.p);
+      const asksAt = s.asks();
+      await wait(1600);
+      const asked = s.asks() - asksAt, tries = s.tries, down = s.down();
+      await s.p.ch.stop();
+      check(asked >= 3 && tries >= 2 && down === true,
+        "989c a socket that never opens and never closes does not stop the asking, and is given up and tried again: "
+        + asked + " request(s) in 1.6 s at a 400 ms poll, " + tries + " socket(s), down " + down);
+    }
+    {
+      const s = await scene("back", "refuse", 300);
+      s.p.ch.start();
+      await settle(s.p);
+      const wasDown = await until(() => s.down() === true, 5000) && s.down();
+      s.mode = "open";
+      const up = await until(() => s.down() === false, 5000);
+      const told = s.told.join(",");
+      await s.p.ch.stop();
+      check(wasDown === true && up && /^true(,true)*,false$/.test(told),
+        "989d once a socket opens the channel says it is up, and tells the shell each turn: down first " + wasDown
+        + ", up " + up + ", told " + (told || "nothing"));
+    }
+    {
+      const s = await scene("old", "silent", 1e9);
+      s.p.ch.start();
+      await settle(s.p);
+      await wait(3000);
+      const tries = s.tries, down = s.down();
+      await s.p.ch.stop();
+      check(tries >= 2 && down === false,
+        "989e a connector that does not say when its socket opens keeps the reconnect after a close and is never said down: "
+        + "tried " + tries + " time(s) in 3 s, down " + down);
+    }
+  } catch (e) {
+    check(false, "harness (the leg 989a): " + (e && e.stack ? e.stack : e));
   }
 }
 

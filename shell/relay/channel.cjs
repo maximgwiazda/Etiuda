@@ -2008,6 +2008,10 @@ function createChannel(opts) {
   const base = String(o.url || "").replace(/\/+$/, "") + "/t/" + o.rt + "/";
   const pollMs = Number.isFinite(o.pollMs) ? o.pollMs : POLL_MS;
   let session = null, sock = null, running = false, busy = null, again = false, backoff = RETRY_MIN_MS, answerHeld = null, answerDue = null;
+  /* A socket whose connector says when it opens (`opens`): live once open; down after two closes in a row before opening, or a
+     whole poll unopened, until one opens; while down it is tried with each poll's ask, not on a loop of its own, timed by
+     this computer's clock, not `clock`. Studio's own watch says "not live" on the same two failures. */
+  let sockLive = false, sockDown = false, sockWaitFrom = 0, sockStale = false, sockTold = false, sockFails = 0;
   /* How long a join keeps asking after the relay says the team is not there yet, from the first such answer. */
   const ENROL_WAIT_MS = 5 * 60 * 1000;
   let enrolWaitFrom = 0, removedTold = false;
@@ -2526,9 +2530,11 @@ function createChannel(opts) {
   }
 
   function dropSocket() {
+    sockDown = false;
     if (!sock) return;
     const s = sock;
     sock = null;
+    sockLive = false;
     clearInterval(pingTimer);
     pingTimer = null;
     try { s.close(); } catch { /* gone */ }
@@ -2538,20 +2544,52 @@ function createChannel(opts) {
     /* After the one upload the invitation's session fetches its answer and does not listen. */
     if (session && session.by === "invite" && invitedNow()) { dropSocket(); return; }
     if (sock || !running || !session || typeof o.connect !== "function") return;
+    if (sockDown && sockWaitFrom && Date.now() - sockWaitFrom < pollMs) return;
     const url = base.replace(/^https:/, "wss:") + "socket";
     let s = null;
     const handlers = {
       message: onAnnounce,
-      close: () => { if (sock === s) { sock = null; clearInterval(pingTimer); pingTimer = null; if (running) setTimeout(kick, RETRY_MIN_MS); } },
+      open: () => { if (sock === s && s) { sockLive = true; sockDown = false; sockWaitFrom = 0; sockFails = 0; noteSocket(); } },
+      close: () => {
+        if (sock !== s) return;
+        const opened = sockLive;
+        sock = null; sockLive = false; clearInterval(pingTimer); pingTimer = null;
+        if (s && s.opens === true && !opened && ++sockFails >= 2) { socketDown(); return; }
+        if (running) setTimeout(kick, RETRY_MIN_MS);
+      },
     };
     try { s = o.connect(url, { authorization: "Bearer " + session.token }, handlers); } catch { s = null; }
     sock = s || null;
+    sockLive = false;
+    sockStale = false;
     if (sock && typeof sock.send === "function") {
       clearInterval(pingTimer);
       pingTimer = setInterval(() => { try { sock && sock.send(JSON.stringify({ type: "ping" })); } catch { /* the close says it */ } }, PING_MS);
       if (pingTimer.unref) pingTimer.unref();
     }
   }
+
+  function socketDown() {
+    sockDown = true;
+    sockWaitFrom = Date.now();
+    noteSocket();
+  }
+  const pushDown = () => running && !!session && sockDown;
+  function noteSocket() {
+    const now = pushDown();
+    if (now === sockTold) return;
+    sockTold = now;
+    if (typeof o.onSocket === "function") o.onSocket(now);
+  }
+  /* At each poll: a socket still unopened since the last one is given up, and a down socket is due to be tried again. */
+  function pollSocket() {
+    if (sock && sock.opens === true && !sockLive) {
+      if (sockStale) { const s = sock; sock = null; clearInterval(pingTimer); pingTimer = null; try { s.close(); } catch { /* gone */ } sockFails = 2; socketDown(); }
+      else sockStale = true;
+    }
+    if (sockDown) sockWaitFrom = 0;
+  }
+  const socketLive = () => !!sock && (sock.opens !== true || sockLive);
 
   /* The invitation's wrap, fetched once the session is open, and only until the invitation's one upload: after it the wrap
      is not asked for and its key is forgotten, since the relay deletes the wrap and an enrolled desk reads the team through
@@ -2800,7 +2838,7 @@ function createChannel(opts) {
           backoff = Math.min(backoff * 2, RETRY_MAX_MS);
         }
       } while (again && running);
-    })().finally(() => { busy = null; });
+    })().finally(() => { busy = null; noteSocket(); });
   }
 
   /* The mirror's watch: recursive where the platform has it (Windows; Linux on Node 20 and later), else one watch per
@@ -2851,7 +2889,7 @@ function createChannel(opts) {
     fs.mkdirSync(mirror, { recursive: true });
     running = true;
     watchMirror();
-    pollTimer = setInterval(() => { noteStep(); if (!sock) kick(); }, pollMs);
+    pollTimer = setInterval(() => { noteStep(); pollSocket(); if (!socketLive()) kick(); }, pollMs);
     if (pollTimer.unref) pollTimer.unref();
     kick();
   }
@@ -2863,6 +2901,7 @@ function createChannel(opts) {
     floorlessFile = null;
     floorlessTries = 0;
     if (sock) { try { sock.close(); } catch { /* gone */ } sock = null; }
+    sockLive = false; sockDown = false; sockTold = false; sockFails = 0;
     session = null;
     if (busy) await busy;
   }
@@ -2876,6 +2915,8 @@ function createChannel(opts) {
     /* The session is this key's own: the relay has enrolled it. */
     enrolled: () => !!session && session.by === "key",
     socketOpen: () => !!sock,
+    /* The push socket is down while the asks are answered, so updates come with each poll's ask. */
+    pushDown,
     writeAnswer,
     lapse: lapseView,
     fork: () => prog.fork(),

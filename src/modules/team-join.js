@@ -346,6 +346,7 @@ function joinTook(v,changed){
              if(head) row.head=head;
              const lapse=lapseKept(l.lapse);
              if(lapse) row.lapse=lapse;
+             if(l.asking===true) row.asking=true;
              const fork=forkKept(l.fork);
              if(fork) row.fork=fork;
              if(l.stranded && typeof l.stranded==="object") row.stranded={seen:l.stranded.seen===true};

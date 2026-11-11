@@ -1315,6 +1315,9 @@ UI_STRINGS.pl={
   "This catalog is no longer private, and the team's rules apply to it again.":"Ten katalog nie jest już prywatny i znów obowiązują go zasady zespołu.",
   "Newest edition {E}, published {WHEN}. The team's news: {AGE}.":"Najnowsze wydanie {E}, opublikowane {WHEN}. Wiadomość zespołu: {AGE}.",
   "This desk waits for the team's lead to publish a first edition.":"To stanowisko czeka na pierwsze wydanie od lidera zespołu.",
+  /* Claudette's words, 2026-11-11, board 989: a network that refuses the relay's push socket, on the team's row and its hover. */
+  "On this network the team's updates arrive about once a minute, not live.":"W tej sieci aktualizacje zespołu docierają mniej więcej co minutę, a nie na bieżąco.",
+  "This network does not let the live connection to the relay through, so Etiuda asks the relay about once a minute instead. Nothing is lost, and nothing needs doing.":"Ta sieć nie przepuszcza połączenia na żywo z przekaźnikiem, więc Etiuda pyta przekaźnik mniej więcej co minutę. Nic nie ginie i nic nie trzeba robić.",
   "Another catalog of the team has a newer edition.":"Inny katalog zespołu ma nowsze wydanie.",
   "Other catalogs of the team with a newer edition: {N}.":"Inne katalogi zespołu z nowszym wydaniem: {N}.",
   "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.":"Na prośbę Studia lidera zespołu przesłano zespołowi kopię katalogu używanego na tym stanowisku.",

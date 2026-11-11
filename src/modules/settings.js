@@ -176,10 +176,13 @@ function teamRowHtml(l,status,bar){
   if(l.head) notes.push(teamHeadNote(l.head)); /* plant:head-show */
   if(l.awaitsEdition) notes.push(t("This desk waits for the team's lead to publish a first edition."));
   if(l.lapse) notes.push(lapseNote(l.lapse)); /* plant:lapse-row */
+  /* The shell's push socket is down on this network while its asks are answered. */
+  if(l.asking) notes.push({text:t("On this network the team's updates arrive about once a minute, not live."),
+    tip:t("This network does not let the live connection to the relay through, so Etiuda asks the relay about once a minute instead. Nothing is lost, and nothing needs doing.")});
   if(l.needsFolder) notes.push(t("This team now works from a shared folder. The team's lead can say which one; once it is open here with Open a folder, everything carries on as before."));
   if(l.reading) notes.push(l.reading);
   return '<div class="set-row"><div class="set-label">'+esc(l.lead?t("{LEAD}'s team").split("{LEAD}").join(l.lead):t("Team"))
-    +notes.filter(Boolean).map(n=>'<small>'+esc(n)+'</small>').join("")+'</div><div class="set-ctl">'
+    +notes.filter(Boolean).map(n=>typeof n==="object"?'<small title="'+esc(n.tip)+'">'+esc(n.text)+'</small>':'<small>'+esc(n)+'</small>').join("")+'</div><div class="set-ctl">'
     +'<span class="e-lead-key">'+keySignHtml("studio",l.print)+'</span>'
     +(l.needsFolder?'<button type="button" class="btn" data-team-pick-folder="'+esc(l.team)+'">'+esc(t("Open a folder"))+'</button>':'') /* plant:needs-folder-button */
     +(l.policy?'':'<button type="button" class="btn danger" data-leave-team="'+esc(l.team)+'">'+esc(t("Leave this team"))+'</button>')
