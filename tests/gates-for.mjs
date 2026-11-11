@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const TOOL = path.join(ROOT, "tools", "gates-for.mjs");
-const EXPECTED = 31;  /* 23, +2 main's desk-trust ceiling and subject paths (gf24, gf25), +6 relay-channel-split (gf26 to gf31) */
+const EXPECTED = 32;  /* 23, +2 main's desk-trust ceiling and subject paths (gf24, gf25), +6 relay-channel-split (gf26 to gf31), +1 a fail-closed plan keeps the mapped legs (gf32) */
 
 /* GIT-ENV: git must use the throwaway tree, never a GIT_DIR the caller exported. */
 function gitEnv() {
@@ -471,6 +471,20 @@ try {
   const shellOnly = channelOnly(shellPlan).split(",").filter(Boolean);
   check(shellOnly.includes("p919") && shellOnly.includes("p940") && shellOnly.includes("p946") && !shellOnly.includes("p939"),
     "gf30 a shell change keeps the sealing and refusal parts and drops the live path: " + shellOnly.join(","));
+
+  /* A fail-closed plan is never narrower than the mapped one (the test architect, 2026-11-11): about.js maps to smoke.js, a node
+     leg on its own script and not on the test chain; with gates-for.mjs in the same diff the plan fails closed, and smoke still
+     runs. Fold 32's area left it out, and its red stood on main. */
+  {
+    const closed = await grTool.planAreaRun(ROOT, ["src/modules/about.js", "tools/gates-for.mjs"], pkgNow);
+    const files = (closed.steps || []).map(s => String(s.file || "").replace(/\\/g, "/"));
+    const alone = await grTool.planAreaRun(ROOT, ["src/modules/about.js"], pkgNow);
+    const aloneHas = (alone.steps || []).some(s => String(s.file || "").replace(/\\/g, "/") === "tests/smoke.js");
+    check(closed.failClosed === true && aloneHas && files.includes("tests/smoke.js") && files.includes("tests/shell-office.mjs"),
+      "gf32 a diff that fails closed still runs the node legs gates-for maps its other files to, off the test chain as well:"
+      + " about.js with gates-for.mjs fails closed " + closed.failClosed + ", smoke " + files.includes("tests/smoke.js")
+      + " (about.js alone " + aloneHas + "), shell-office " + files.includes("tests/shell-office.mjs"));
+  }
 
   check(asserted === EXPECTED - 1, "gf8 every leg ran: " + (asserted + 1) + " of " + EXPECTED);
 } catch (e) {
