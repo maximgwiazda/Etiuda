@@ -499,7 +499,7 @@ function handHeldLink(win) {
 /* The installer legs' build (tools/test-identity.cjs) marks its package.json; harnessLaunch reads it, once a run. */
 var testIdentityBuilt = null;
 function testIdentityBuild() {
-  if (testIdentityBuilt === null) {
+  if (testIdentityBuilt == null) { /* == null: a caller before line 500 reads undefined, and must still read the marker (the test architect, 2026-11-11) */
     try { testIdentityBuilt = !!JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8")).etiudaTestBuild; }
     catch (e) { testIdentityBuilt = false; }
   }
