@@ -2,7 +2,7 @@
  *
  *   node tests/desk-982w-tree.mjs     exit code is the number of failed checks, capped at 63
  *
- * Headless Chrome on the built engine page and the shipped sample catalog, no window (no ETIUDA_WINDOWS).
+ * Headless Chrome on the built engine page and the shipped sample catalog, no window.
  * What the eye and the hand find:
  *   t1 at window widths 546, 700, 900, 1100, 1280, 1440, 1700, 2000 and 2560, with a category open:
  *      no horizontal scrollbar, no cell content past its row, buttons end inside list box
