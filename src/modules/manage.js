@@ -1597,18 +1597,56 @@ function paintLibrary(host,body){
 }
 registerScreen(LIB_SCREEN,{ title:()=>t("Library"), render:host=>paintLibrary(host) });
 /* The chevron is drawn only where a closed row's chips overflow their one line, and that same
-   check wears the fade. Under about 320px of chip column an open row's chips leave the column.
-   One observer for the list: a new one on every paint kept each previous list. */
-const CHIP_COL_NARROW=320;
+   check wears the fade. Under about 320px of chip column an open row's chips leave the column, and
+   the date steps aside wherever drawing it would leave the chips under 520px (the product designer,
+   2026-11-11: at 1280 it cost the first row most of a chip). One observer for the list: a new one on
+   every paint kept each previous list. */
+const CHIP_COL_NARROW=320, CHIP_COL_DATE=520;
 let chipOverflowRO=null;
+/* The chips' column on the narrowest shown row without the date, the chevron's place taken from it,
+   and what the date would take besides. Read from the parts of a row that never move (its width less
+   the mark, name, number, buttons and gaps), never from its chips: with every row open there is no
+   closed row to read, and a reading that moved with the date or the chevron would undo the choice it
+   made. room is null where no row is shown; gone, where the chips are hidden outright (a box under
+   520px). */
+function chipRoom(list){
+  let room=null, gone=false, gap=0, more=null;
+  list.querySelectorAll(".manage-row.mg-int").forEach(r=>{
+    const mid=r.querySelector(".lw-mid");
+    if(!mid || !r.getClientRects().length) return;
+    if(!mid.getClientRects().length){ gone=true; return; }
+    const cs=getComputedStyle(r);
+    gap=parseFloat(cs.columnGap)||0;
+    let w=r.clientWidth-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight);
+    for(const c of r.children){
+      if(c===mid || c.matches(".lw-more,.lw-date") || !c.getClientRects().length) continue;
+      const k=getComputedStyle(c);
+      w-=c.getBoundingClientRect().width+parseFloat(k.marginLeft)+parseFloat(k.marginRight)+gap;
+    }
+    if(room===null || w<room) room=w;
+    if(!more) more=r.querySelector("[data-chips-more]");
+  });
+  if(room===null) return { room, gone, date:0 };
+  // Every chevron is one size; a hidden one is shown for the reading alone, before anything paints.
+  if(more){
+    const was=more.hidden;
+    more.hidden=false;
+    room-=more.getBoundingClientRect().width+gap;
+    more.hidden=was;
+  }
+  const cell=list.querySelector(".lw-date");
+  return { room, gone, date: cell ? (parseFloat(getComputedStyle(cell).flexBasis)||0)+gap : 0 };
+}
 function markChipOverflow(){
   const intentsList=document.querySelector(".mg-intents");
   if(!intentsList) return;
-  const probes=[];
-  intentsList.querySelectorAll(".manage-row.mg-int:not(.chips-open) .lw-mid").forEach(mid=>{
-    if(mid.clientWidth>0) probes.push(mid.clientWidth);
-  });
-  if(probes.length) intentsList.classList.toggle("chips-narrow", Math.min(...probes)<CHIP_COL_NARROW);
+  const c=chipRoom(intentsList);
+  if(c.room!==null){
+    const aside=c.room-c.date<CHIP_COL_DATE;
+    intentsList.classList.toggle("date-aside", aside);
+    intentsList.classList.toggle("chips-narrow", c.room-(aside?0:c.date)<CHIP_COL_NARROW);
+  } else if(c.gone) intentsList.classList.add("date-aside");
+  updateIntentDateTitles();
   intentsList.querySelectorAll(".manage-row.mg-int").forEach(r=>{
     const more=r.querySelector("[data-chips-more]"), mid=r.querySelector(".lw-mid");
     if(!more||!mid) return;
@@ -1766,8 +1804,6 @@ function wireLibrary(page){
     if(chipOverflowRO){ chipOverflowRO.disconnect(); chipOverflowRO.observe(intentsList); }
     markChipOverflow();
   }
-  if(intentsList && intentsList.querySelector(".lw-ih-date") && typeof ResizeObserver!=="undefined")
-    new ResizeObserver(()=>updateIntentDateTitles(page)).observe(intentsList);
   page.querySelectorAll("[data-edit-intent-mg]").forEach(btn=>{
     btn.onclick=()=>openIntentEditor(+btn.getAttribute("data-edit-intent-mg"), true);
   });

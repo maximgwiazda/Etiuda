@@ -3918,9 +3918,9 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .lw-ih-date{flex:0 0 110px;margin-right:6px}
 .sx.lm-lib .mg-intents .manage-row.mg-int .lw-date{flex:0 0 110px;min-width:0;white-space:nowrap;overflow:hidden;
   font:13px var(--sans);color:var(--dim);font-variant-numeric:tabular-nums}
-@container (max-width: 900px){
-  .lw-ih-date,.sx.lm-lib .mg-intents .manage-row.mg-int .lw-date{display:none!important}
-}
+/* The date steps aside where the chips would keep under 520px beside it: the list's date-aside, set by
+   markChipOverflow in manage.js from the row's width, since a box width cannot say how wide the buttons are. */
+.sx.lm-lib .mg-intents.date-aside .lw-ih-date,.sx.lm-lib .mg-intents.date-aside .manage-row.mg-int .lw-date{display:none!important}
 .sx.lm-lib .mg-intents .manage-row.mg-int{display:flex;align-items:center;flex-wrap:nowrap;gap:6px;padding:8px 4px;border-top:1px solid var(--line);box-sizing:border-box}
 .sx.lm-lib .mg-intents .manage-row.mg-int:first-of-type{border-top:0}
 .sx.lm-lib .mg-intents .manage-row.mg-int .cat-slot{flex:0 0 16px}

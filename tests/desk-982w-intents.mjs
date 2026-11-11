@@ -21,6 +21,8 @@
  *   i13 at a window whose chip column is under 320 px (the width is printed): an opened row's first chip starts below
  *      the name, the chips run from the name's left edge to the row's right edge, and a name that fits that span is not
  *      cut; a closed row at that width stays one line in the column
+ *   i15 with every shown row open (a search leaves one, opened), its chips stand below the name in a 700 px box and
+ *      beside it in a 1000 px box, as the box steps both ways (the test architect's note: no closed row to measure)
  *   i14 after several repaints, one ResizeObserver watches the intents list
  */
 import fs from "node:fs";
@@ -593,6 +595,63 @@ try {
   console.log("i13 chip column " + (i13Res && i13Res.column) + " px at viewport 960 (card " + (i13Res && i13Res.card) + " px)");
   check(i13Res && i13Res.ok, "i13 under 320px of chip column an opened row's chips run from the name to the row's edge, whole, and a closed row stays in the column", i13Res);
 
+  /* --- i15: with every shown row open there is no closed row to measure, and the layout still follows the width.
+     A search leaves one intent, the one with the most chips; it is opened in a 1000 px box, and the box then steps
+     to 700, 1000 and 700: under the 320 px line its chips stand below its name, above it beside the name --- */
+  await page.setViewport({ width: 1280, height: 900, deviceScaleFactor: 1 });
+  await sleep(80);
+  const i15Res = await page.evaluate(async () => {
+    const frames = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const q = document.getElementById("libSearch");
+    if (!document.querySelector(".sx-card:has(.mg-intents)") || !q) return { ok: false, reason: "no intents box or search" };
+    const nameOf = r => ((r.querySelector(".mg-int-t") || r).textContent || "").trim();
+    const search = async s => { q.value = s; q.dispatchEvent(new Event("input", { bubbles: true })); await wait(400); };
+    const setBox = async w => {
+      const box = document.querySelector(".sx-card:has(.mg-intents)");
+      box.style.width = box.style.maxWidth = w ? w + "px" : "";
+      await frames(); await frames();
+    };
+    await setBox(1000);
+    // The candidates, most chips first; the first whose name, searched, leaves its row alone and overflowing.
+    const wide = [...document.querySelectorAll(".mg-intents .manage-row.mg-int")].filter(r => r.querySelector("[data-chips-more]"))
+      .sort((a, b) => b.querySelector(".lw-mid").scrollWidth - a.querySelector(".lw-mid").scrollWidth)
+      .map(r => ({ id: r.getAttribute("data-introw"), name: nameOf(r) }));
+    let id = null, more = null, tried = 0;
+    const rowNow = () => document.querySelector('.mg-intents .manage-row.mg-int[data-introw="' + id + '"]');
+    for (const c of wide.slice(0, 12)) {
+      tried++;
+      await search(c.name);
+      const shown = [...document.querySelectorAll(".mg-intents .manage-row.mg-int")].filter(r => r.getClientRects().length);
+      const m = shown.length === 1 && shown[0].getAttribute("data-introw") === c.id && shown[0].querySelector("[data-chips-more]");
+      if (m && m.getClientRects().length) { id = c.id; more = m; break; }
+    }
+    if (!id) {
+      await search(""); await setBox(0);
+      return { ok: false, reason: "no searched name left one overflowing row alone", tried };
+    }
+    more.click();
+    await frames();
+    const read = w => {
+      const r = rowNow(), name = r.querySelector(".mg-int-t").getBoundingClientRect(), num = r.querySelector(".mg-int-n").getBoundingClientRect();
+      const first = r.querySelector(".lw-chip").getBoundingClientRect();
+      const open = r.classList.contains("chips-open");
+      const column = r.querySelector(".lw-mid").getBoundingClientRect().width;
+      return { box: w, open, below: first.top >= name.bottom - 2, beside: first.top < name.bottom && first.left > num.right - 2, column: Math.round(column) };
+    };
+    const steps = [];
+    steps.push(read(1000));
+    for (const w of [700, 1000, 700]) { await setBox(w); steps.push(read(w)); }
+    const closedRows = [...document.querySelectorAll(".mg-intents .manage-row.mg-int:not(.chips-open)")].filter(r => r.getClientRects().length).length;
+    more.click();
+    await frames();
+    await search("");
+    await setBox(0);
+    const ok = closedRows === 0 && steps.every(s => s.open) && steps.every(s => s.box === 700 ? s.below : s.beside);
+    return { ok, row: id, tried, closedRows, steps };
+  });
+  check(i15Res && i15Res.ok, "i15 with every shown row open, an open row's chips stand below its name under the 320 px line and beside it above, as the box steps", i15Res);
+
   /* --- i14: one live observer after several paints, not one per paint --- */
   const roPage = await boot({ width: 1280, height: 900 }, async p => {
     await p.evaluateOnNewDocument(() => {
@@ -705,6 +764,6 @@ try {
   try { fs.rmSync(lab, { recursive: true, force: true }); } catch (e) {}
 }
 
-console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=13");
+console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=14");
 console.log(checks + " checks, " + fails + " failed");
-process.exit(fails || checks !== 13 ? 1 : 0);
+process.exit(fails || checks !== 14 ? 1 : 0);

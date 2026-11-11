@@ -23,6 +23,8 @@
  *   d11 a save that changes nothing dates nothing: the date stands as it was
  *   d12 the card's text put back as the catalog has it leaves no edit behind, the date with it, and the cell reads the
  *      catalog's own date again
+ *   d13 Intents' date stands only where the chips keep at least 520 px beside it, on the narrowest row with every
+ *      chevron drawn (the product designer's edit, 2026-11-11): never at a 1280 window
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -35,7 +37,7 @@ const puppeteer = require("puppeteer-core");
 const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
 
-const EXPECTED = 12;
+const EXPECTED = 13;
 let fails = 0, checks = 0;
 const check = (ok, what, detail) => {
   checks++;
@@ -237,6 +239,50 @@ try {
   }
   console.log("       boxes: " + boxes.join("; "));
   check(!bad.length, "d9 with the column drawn, at 546 to 2560 no list's box or page scrolls sideways and no cell ends past its row", bad.slice(0, 4));
+
+  /* d13: Intents' date stands only where the chips keep 520 px beside it. The oracle does not trust the page's own
+     arithmetic: at each width the date and every row's chevron are drawn for a moment, the narrowest chip column is
+     read off the page, and both go back; the date must be shown exactly where that column is at least 520 px. Windows
+     of 1280 to 2560, then boxes stepped across the line at a 2000 window. */
+  await library(page, "intents");
+  const d13At = () => page.evaluate(async () => {
+    const frames = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await frames();
+    const list = document.querySelector(".mg-intents"), head = document.querySelector(".lw-ih-date");
+    const cellShown = [...list.querySelectorAll(".manage-row.mg-int .lw-date")].some(c => c.getClientRects().length > 0);
+    const shown = !!head && head.getClientRects().length > 0;
+    // Drawn by taking the list's date-aside off and every chevron's hidden, read, and put back before a frame paints.
+    // (A forcing style cannot: the engine's rules sit in cascade layers, whose !important beats an unlayered one.)
+    const aside = list.classList.contains("date-aside");
+    const hid = [...list.querySelectorAll("[data-chips-more][hidden]")];
+    list.classList.remove("date-aside");
+    hid.forEach(b => { b.hidden = false; });
+    const mids = [...list.querySelectorAll(".manage-row.mg-int")].filter(r => r.querySelector("[data-chips-more]") && r.getClientRects().length)
+      .map(r => r.querySelector(".lw-mid").getBoundingClientRect().width);
+    const drawn = [...list.querySelectorAll(".manage-row.mg-int .lw-date")].some(c => c.getClientRects().length > 0);
+    if (aside) list.classList.add("date-aside");
+    hid.forEach(b => { b.hidden = true; });
+    await frames();
+    return { box: list.closest(".sx-card").clientWidth, shown, cellShown, drawn,
+      room: mids.length ? Math.round(Math.min(...mids) * 10) / 10 : null };
+  });
+  const d13 = [], d13Bad = [];
+  for (const w of [1280, 1360, 1440, 1600, 2000, 2560]) {
+    await page.setViewport({ width: w, height: 900, deviceScaleFactor: 1 });
+    await sleep(120);
+    d13.push({ w, ...(await d13At()) });
+  }
+  await page.setViewport({ width: 2000, height: 900, deviceScaleFactor: 1 });
+  for (const bw of [1000, 1100, 1108, 1112, 1116, 1120, 1124, 1132, 1200]) {
+    await page.evaluate(bw => { const b = document.querySelector(".sx-card:has(.mg-intents)"); b.style.width = b.style.maxWidth = bw + "px"; }, bw);
+    d13.push({ bw, ...(await d13At()) });
+  }
+  await page.evaluate(() => { const b = document.querySelector(".sx-card:has(.mg-intents)"); b.style.width = b.style.maxWidth = ""; });
+  for (const r of d13) if (r.room == null || !r.drawn || r.shown !== r.cellShown || r.shown !== (r.room >= 519.5)) d13Bad.push(r);
+  console.log("       d13 " + d13.map(r => (r.w ? "window " + r.w : "box " + r.bw) + " chips " + r.room + (r.shown ? " date" : "")).join("; "));
+  const at1280 = d13.find(r => r.w === 1280);
+  check(!d13Bad.length && !at1280.shown && d13.some(r => r.shown) && d13.some(r => !r.shown),
+    "d13 Intents' date stands exactly where the narrowest chip column keeps 520 px beside it, not at 1280", { bad: d13Bad.slice(0, 4), at1280 });
 
   /* d10 to d12: the desk's date on the agent's own edit of a catalog card. */
   await page.setViewport({ width: 2000, height: 900, deviceScaleFactor: 1 });
