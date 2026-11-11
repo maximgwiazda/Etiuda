@@ -542,11 +542,11 @@ function createCore(deps) {
     const heldFrom = store.get("devfrom");
     if (plain(heldFrom) && from === undefined) return no("replay-rev"); /* plant:devices-unversioned */
     if (plain(heldFrom) && from !== undefined && olderFile(from, heldFrom)) return no("replay-rev"); /* plant:devices-behind */
-    /* A read-only team's lead may still take keys off it, so a departed desk is cut off; nothing is added or moved.
+    /* A team past its grant still lets its lead take keys off it, so a departed desk is cut off; nothing is added or moved.
        The lapse is asked after the signature: a key that signed nothing is not told the team has lapsed. */
     const lapsedDevices = lapseGate(true);
     let removing = false;
-    removing = lapseState() === "read-only" && onlyRemoves(b.keys); /* plant:lapse-withdraw */
+    removing = onlyRemoves(b.keys); /* plant:lapse-withdraw */
     if (lapsedDevices && !removing) return lapsedDevices; /* plant:lapse-devices */
     /* A key not enrolled yet whose invitation's desk withdrew its request is not let in, and nothing in the set changes. */
     for (const id of next.keys()) if (!store.get("dev:" + id) && withdrawnBy(id)) return no("withdrawn"); /* plant:e4-devices */
@@ -665,11 +665,11 @@ function createCore(deps) {
     if (!verified(team.lead.pub, bytes, b.sig)) return no("bad-signature"); /* plant:invites-sig */ /* plant:invites-unsigned */
     const seen = "seen:" + sha256(bytes);
     if (store.get(seen) !== undefined) return no("replay-counter"); /* plant:invites-replay */
-    /* A read-only team's lead may still drop invitations; nothing is added and no wrap is replaced.
+    /* A team past its grant still lets its lead drop invitations; nothing is added and no wrap is replaced.
        The lapse is asked after the signature, as on the devices route. */
     const lapsedInvites = lapseGate(true);
     let dropping = false;
-    dropping = lapseState() === "read-only" && onlyDrops(b.add, b.drop, wrapRows); /* plant:lapse-drop-invites */
+    dropping = onlyDrops(b.add, b.drop, wrapRows); /* plant:lapse-drop-invites */
     if (lapsedInvites && !dropping) return lapsedInvites; /* plant:lapse-invites */
     const drop = new Set(b.drop);
     const held = new Map(store.list("inv:").map(([k, v]) => [k.slice(4), v]));
@@ -900,7 +900,7 @@ function createCore(deps) {
       /* The invitation's session again, only where the lead registered it after this removal, for its one upload. */
       const held = boundInvite(b.key);
       if (held && registeredAfter(held.inv, gone) && held.inv.pub === b.pub)
-        return issue(b.challenge, { key: null, inv: held.id, bound: b.key }, () => {
+        return issue(b.challenge, { key: null, inv: held.id, bound: b.key, letGo: held.inv.uploaded === true }, () => {
           for (const [k, x] of store.list("ses:")) if (x.inv === held.id) store.del(k);
         });
       return no("removed"); /* plant:removed-key */
@@ -909,7 +909,7 @@ function createCore(deps) {
       /* A key on no list that a token hello bound: the invitation's session again, for its one upload and then its answer alone, and only one held. */
       const held = boundInvite(b.key);
       if (held && held.inv.pub === b.pub) /* plant:invite-resume */
-        return issue(b.challenge, { key: null, inv: held.id, bound: b.key }, () => {
+        return issue(b.challenge, { key: null, inv: held.id, bound: b.key, letGo: held.inv.uploaded === true }, () => {
           for (const [k, x] of store.list("ses:")) if (x.inv === held.id) store.del(k);
         });
       return no("not-enrolled"); /* plant:key-enrolled */
@@ -921,7 +921,10 @@ function createCore(deps) {
   /* The session is kept by its sha256, so the store holds nothing a reader could present. */
   function issue(nonce, who, also) {
     const lapsedSession = lapseGate(false);
-    if (lapsedSession) return lapsedSession; /* plant:lapse-session */
+    /* A lapsed team still opens an asked invitation's session, which can only take its request back: every read asks the lapse itself. */
+    let mayGo = false;
+    mayGo = who.letGo === true; /* plant:let-go-session */
+    if (lapsedSession && !mayGo) return lapsedSession; /* plant:lapse-session */
     const token = random(32), now = clock(), until = now + SESSION_MS;
     if (!roomForChallenge(now)) return no("rate");
     let keyShare = false;
@@ -1126,7 +1129,10 @@ function createCore(deps) {
     const s = sessionOf(token);
     if (!s.ok) return s; /* plant:put-session */
     const folderMove = !s.inv && m && m.writer === team.lead.keyId && m.place === "root" && !!(m.channel && m.channel.kind === "folder");
-    const lapsedPut = lapseGate(true, folderMove ? m.channel : null);
+    /* A desk taking its request back is let go whatever the lapse; admitWithdraw judges it as at any other time. */
+    let goes = false;
+    goes = !!s.inv && !!m && m.del === true && (store.get("inv:" + s.inv) || {}).uploaded === true; /* plant:let-go-withdraw */
+    const lapsedPut = goes ? null : lapseGate(true, folderMove ? m.channel : null);
     if (lapsedPut) return lapsedPut; /* plant:lapse-upload */
     const state = lapseOf(team, clock()).state;
     /* A read-only team's one move to a folder. Admitting it writes nothing: the commit marks the move made. */
