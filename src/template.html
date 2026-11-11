@@ -1467,14 +1467,19 @@ body.role-waits #roleDrum{display:none}
    selector was `.fill select` alone until Settings needed a language list; widened rather than
    copied, for the reason the rest of this release keeps repeating. A text field on that screen
    joins them: one dressing for anything in a settings row that takes a value. */
-.fill select,.set-row select,.set-row input[type=text]{padding:7px 9px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
+.fill select,.set-row select,.set-row input[type=text],.om-fields select,.om-fields input{padding:7px 9px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
   background:var(--field);color:var(--ink);font:13px var(--sans);cursor:default;outline:none;
   box-shadow:inset 0 -1px 0 0 var(--field-edge)}
-.fill select:focus,.set-row select:focus,.set-row input[type=text]:focus{border-color:var(--field-line);box-shadow:inset 0 -2px 0 0 var(--accent)}
+.fill select:focus,.set-row select:focus,.set-row input[type=text]:focus,.om-fields select:focus,.om-fields input:focus{border-color:var(--field-line);box-shadow:inset 0 -2px 0 0 var(--accent)}
 .set-row input[type=text]{width:var(--name-field);max-width:100%;cursor:text}
 /* {INTENT} combobox - a real dropdown that still accepts free text */
 .combo{position:relative;flex:1 1 auto;display:flex;min-width:0}
 .combo input{width:100%;min-width:0}
+/* THE ORGANISATION'S MODEL BESIDE THE SEARCH BOX (org-model.js): quiet words in the dim ink, never a warning colour but for
+   the dot while the shell has paused its asks. Under 720px of window the icon stands alone, its sentence in its title. */
+.org-mark{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;color:var(--dim);font:12.5px var(--sans);white-space:nowrap;cursor:default}
+.om-dot{width:7px;height:7px;border-radius:50%;background:var(--warn)}
+@media (max-width:719.98px){.org-mark .om-words{display:none}}
 /* 22x22 and centred, exactly like .field-clear: the tinted box only shows on hover, so
    its shape is the whole of what it communicates - one square for every clear. */
 .combo-clear{position:absolute;top:50%;transform:translateY(-50%);
@@ -3685,6 +3690,13 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx-keys{display:inline-flex;gap:4px}
 .sx-keys kbd{font:600 12px var(--sans);padding:3px 8px;border-bottom-width:2px;border-radius:5px;background:var(--panel);color:var(--ink)}
 .sx-none{margin:12px 0;color:var(--dim)}
+/* The organisation's model's fields, inside its row in Data and defaults while it is chosen, on a line of their own under
+   the words (settings.js); the values out-specify the settings row's one-field width. */
+.om-fields{flex:1 1 100%;margin-left:42px;display:grid;grid-template-columns:max-content minmax(0,440px);gap:8px 12px;align-items:center;padding:2px 0}
+.om-fields label{font:12.5px var(--sans);color:var(--dim)}
+.set-row .om-fields input[type=text],.set-row .om-fields input[type=password],.set-row .om-fields select{width:100%;max-width:none;min-width:0}
+.om-fields input{cursor:text}
+.om-test{grid-column:2;display:flex;flex-wrap:wrap;align-items:center;gap:10px;font:12.5px var(--sans);color:var(--dim)}
 /* The one page. The rail is a fixed width, so the count follows the window: one column below about
    1000px of the page, two from there, three when the window is wide. A container query on the page
    cannot choose this, because the columns' own width is what the query would measure. At two columns
@@ -4731,7 +4743,9 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
         <!-- Painted whole by updateIntentPlaceholder. Two sentences, and a sweep would translate the key names apart from them. -->
         <span id="intentPh" aria-hidden="true" data-i18n-skip></span>
         <button type="button" class="combo-clear" id="intentClear" title="Clear" aria-label="Clear"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
-      </div></div>
+      </div>
+      <!-- THE ORGANISATION'S MODEL, there only while it ranks: its words, title and dot are org-model.js's. -->
+      <span class="org-mark" id="orgMark" role="img" data-i18n-skip hidden><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4.5 16.5v-11a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v11M12.5 8.5h2a1 1 0 0 1 1 1v7M3 16.5h14M7.5 7.5h2M7.5 10.5h2M7.5 13.5h2"/></svg><span class="om-words"></span><span class="om-dot" hidden></span></span></div>
     <!-- THE FOUR TOOLS, in the box the agent's name used to hold. They left the band because
          the band is the window's top bar now: a title bar carries the window's own controls and
          the application's brand, and a language switch, a facts panel and two menus are the

@@ -3,7 +3,7 @@ import { loadShortcuts, formatActionChord } from "./shortcuts.js";
 import { scStopCapture, wireShortcutsList, shortcutsShown, scFold, scCaptureId } from "./shortcuts-list.js";
 import { lsGet, lsSet, lsDel, nsGet, nsSet, nsDel, nsKey } from "./storage.js";
 import { drawPills, drawTabs } from "./tabs.js";
-import { UI_LANGS, uiLang, offerUndo, t, toast, fileStamp, counted, translateTree } from "./ui-lang.js";
+import { UI_LANGS, uiLang, offerUndo, t, toast, toastRefusal, fileStamp, counted, translateTree } from "./ui-lang.js";
 import { setUiLang } from "./repaint.js";
 import { applyDefaultRailWidth, applyStoredRailWidth, railLocked, rebuildRailMQ, syncRailLayout, toggleRailLock } from "./rail-panel.js";
 import { esc } from "./esc.js";
@@ -29,6 +29,7 @@ import { openMaintenance } from "./maintenance.js";
 import { E_VERSION } from "./env.js";
 import { sxIcon } from "./sx-icons.js";
 import { focusKey, focusSame } from "./dom.js";
+import { orgModel, orgRanks, syncOrgMark } from "./org-model.js";
 
 /* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name,
    in columns that fill the width. Choosing a section shows that section alone: Appearance and Layout
@@ -216,9 +217,10 @@ function wireTeamRows(box){
 }
 /* The row hint says what the setting IS; the option tip says what THIS choice DOES, which is the half a
    two-word button cannot carry. */
-function seg(name,opts,cur){
+/* `fixed` draws every choice disabled, for a setting machine policy holds. */
+function seg(name,opts,cur,fixed){
   return '<div class="seg set-seg" data-seg="'+name+'" data-n="'+opts.length+'">'+
-    opts.map(o=>'<button type="button" data-val="'+esc(o.v)+'"'+
+    opts.map(o=>'<button type="button" data-val="'+esc(o.v)+'"'+(fixed?' disabled':'')+
       (o.tip?' title="'+esc(o.tip)+'"':'')+(o.v===cur?' class="on"':'')+'>'+esc(o.t)+'</button>').join("")+
     '</div>';
 }
@@ -361,27 +363,138 @@ function teamsGroups(){
       t("Each change stays in this desk's own file"))));
   return rows.length ? [{rows}] : [];
 }
+/* The two sentences that say nothing leaves this computer, drawn only while the built-in model ranks; while the
+   organisation's model does, each says where the text goes instead. */
+function aiSearchOnLine(st){
+  return orgRanks(st)
+    ? t("Your organisation's model ranks the search beside word matches; the search text is sent to {HOST}.").split("{HOST}").join(String(st.host||"")) // placeholder: Claudette
+    : t("The model ranks the search beside word matches; nothing leaves this computer");
+}
+function aiSuggestOnLine(st){
+  return orgRanks(st)
+    ? t("Your organisation's model ranks the suggestions; the message is sent to {HOST}.").split("{HOST}").join(String(st.host||"")) // placeholder: Claudette
+    : t("The model ranks the suggestions; nothing leaves this computer");
+}
 /* Drawn only where the desk carries the model: off, the picker suggests by words alone and the model is never loaded. */
 function aiGroups(){
   if(!eAiModel()) return [];
+  const st=orgModel();
   return [{rows:[
     row("aisuggest","ai",t("Suggest intents with the built-in model"),
       t("Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words."),
       onoff("aisuggest", eAiOn(),
-        t("The model ranks the suggestions; nothing leaves this computer"),
+        aiSuggestOnLine(st),
         t("Suggestions come from matching words, and the model stays unloaded"))),
     row("aisearch","ai",t("Search by meaning with the built-in model"),
       t("From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the model on this computer. Off, it matches words only."),
       onoff("aisearch", eSearchOn(),
-        t("The model ranks the search beside word matches; nothing leaves this computer"),
+        aiSearchOnLine(st),
         t("Off, it matches words only.")))
   ]}];
 }
+/* THE MODEL THAT RANKS SEARCH AND SUGGESTIONS, where the host can say: built-in, or the organisation's own service, whose
+   fields open under the row. What machine policy set is shown as set and takes no change. The key is never drawn back. */
+function orgModelRows(){
+  const st=orgModel();
+  if(!st) return [];
+  const m=st.managed||{}, org=st.choice==="organisation", set=t("Set by your organisation"); // placeholder: Claudette
+  const lines=[];
+  if(org && orgRanks(st)) lines.push(t("Your organisation's model at {HOST} ranks the search and the suggestions. The search text and the message the suggestions are made from are sent there.").split("{HOST}").join(String(st.host||""))); // placeholder: Claudette
+  else if(org) lines.push(t("Until the service, the model and the key are complete, the built-in model ranks and nothing is sent.")); // placeholder: Claudette
+  if(m.choice) lines.push(set);
+  (st.ignored||[]).forEach(n=>lines.push(t("Group Policy sets a value for the organisation's model that Etiuda cannot use, so it is left out: {NAME}").split("{NAME}").join(String(n)))); // placeholder: Claudette
+  const choice=seg("orgmodel",[{v:"builtin",t:t("Built-in, on this computer")},{v:"organisation",t:t("Your organisation's")}], org?"organisation":"builtin", !!m.choice); // placeholder: Claudette
+  let html='<div class="set-row" data-row="orgmodel">'+sxIcon("ai")+'<div class="set-label">'+esc(t("The model that ranks search and suggestions")) // placeholder: Claudette
+    +lines.map(l=>'<small>'+esc(l)+'</small>').join("")+'</div><div class="set-ctl">'+choice+'</div>'
+    +(org?orgModelFieldsHtml(st, set):"")+'</div>';
+  return [{key:"orgmodel", html}];
+}
+function orgModelFieldsHtml(st, set){
+  const m=st.managed||{};
+  const services=Array.isArray(st.services) ? st.services : [];
+  const name={openai:"OpenAI", anthropic:"Anthropic", google:"Google Gemini", azure:"Azure OpenAI", compatible:t("Another OpenAI-compatible service")}; // placeholder: Claudette
+  const own=(services.filter(s=>s.id===st.provider)[0]||{}).endpoint||"";
+  const opts=(st.provider?"":'<option value="" selected></option>')
+    +services.map(s=>'<option value="'+esc(s.id)+'"'+(s.id===st.provider?" selected":"")+'>'+esc(name[s.id]||s.id)+'</option>').join("");
+  const off=b=>b?' disabled title="'+esc(set)+'"':"";
+  const field=(id,label,ctl)=>'<label for="'+id+'">'+esc(label)+'</label>'+ctl;
+  let h='<div class="om-fields" data-row="orgmodel-fields">'
+    +field("omService",t("Service"),'<select id="omService"'+off(m.provider)+'>'+opts+'</select>');
+  /* The address only where the service has none of its own, or one was given in its place. */
+  if(st.provider && (!own || st.endpoint)) h+=field("omAddress",t("Address"),'<input type="text" id="omAddress" autocomplete="off" spellcheck="false"'
+    +' placeholder="'+esc(own||"https://")+'" value="'+esc(st.endpoint||"")+'"'+off(m.endpoint)+'>');
+  h+=field("omModel",t("Model"),'<input type="text" id="omModel" autocomplete="off" spellcheck="false" value="'+esc(st.model||"")+'"'
+    +(m.model?off(true):' title="'+esc(t("The model's name exactly as the service lists it."))+'"')+'>');
+  h+=field("omKey",t("Key"),'<input type="password" id="omKey" autocomplete="off" spellcheck="false" value=""'
+    +(m.key ? ' disabled placeholder="'+esc(set)+'"'
+      : st.keyKept ? ' placeholder="'+esc(t("A key is kept. Typing a new one replaces it."))+'"' : "")+'>');
+  h+='<div class="om-test"><button type="button" class="btn" id="omTest" title="'+esc(t("Asks the model for a one-word answer. No catalog text is sent."))+'">'
+    +esc(t("Test the connection"))+'</button><span id="omTestLine" role="status"></span></div></div>';
+  return h;
+}
+/* A refusal from the shell, in words. */
+function orgModelWhy(why){
+  return why==="managed" ? t("The organisation set this in Group Policy, so it cannot be changed here.") // placeholder: Claudette
+    : why==="provider" ? t("That service is not one Etiuda knows, so it was not kept.") // placeholder: Claudette
+    : why==="endpoint" ? t("The address must be a full https address with no user name, query or fragment, so it was not kept.") // placeholder: Claudette
+    : why==="model" ? t("That model name could not be kept.") // placeholder: Claudette
+    : why==="key" ? t("That key could not be kept.") // placeholder: Claudette
+    : why==="unsealed" ? t("This computer cannot keep the key for this account: no keyring is open to seal it, so the key was not kept.") // placeholder: Claudette
+    : t("The setting could not be saved just now."); // placeholder: Claudette
+}
+/* What the connection test came back with, in words: what is missing before anything was sent, or what the service said. */
+function orgTestLine(r){
+  const host=String(r && r.host || ""), model=String(r && r.model || ""), why=r && r.why;
+  const at=s=>s.split("{HOST}").join(host).split("{MODEL}").join(model);
+  if(r && r.ok) return at(t("Connected: {HOST} answered, model {MODEL}."));
+  return why==="provider" ? t("No service is chosen yet, so nothing was sent.") // placeholder: Claudette
+    : why==="endpoint" ? t("This service needs its address, so nothing was sent.") // placeholder: Claudette
+    : why==="model" ? t("No model is named, so nothing was sent.") // placeholder: Claudette
+    : why==="key" ? t("No key is kept for this address, so nothing was sent.") // placeholder: Claudette
+    : why==="keyAway" ? t("The organisation's Group Policy sets the key, and that key goes only to the address the policy sets or to the service's own, never to an address typed here, so nothing was sent.")
+    : why==="door" ? t("This build cannot send the test yet, so nothing was sent.") // placeholder: Claudette
+    : why==="unreached" ? at(t("Could not reach {HOST}.")) // placeholder: Claudette
+    : why==="late" ? at(t("No answer came from {HOST} in time.")) // placeholder: Claudette
+    : at(t("{HOST} answered with an error, so the connection is not confirmed.")); // placeholder: Claudette
+}
+function orgModelHostCall(){
+  const h=eHost();
+  return h && typeof h.deskAiSave==="function" ? h : null;
+}
+/* One field saved as it changes, as every row here is, then the screen and the mark drawn again from what the shell keeps. */
+function orgModelSave(fields){
+  const h=orgModelHostCall();
+  if(!h) return;
+  const was=document.activeElement && document.activeElement.id;
+  Promise.resolve().then(()=>h.deskAiSave(fields)).then(r=>{
+    if(!r || r.ok!==true) toastRefusal(orgModelWhy(r && r.why));
+    paintSettings();
+    syncOrgMark();
+    const host=settingsHost(), back=was && host && host.querySelector("#"+was);
+    if(back) try{ back.focus({preventScroll:true}); }catch(e){ back.focus(); }
+  }, ()=>toastRefusal(orgModelWhy("")));
+}
+function wireOrgModelRow(box){
+  const on=(id,ev,fn)=>{ const el=box.querySelector(id); if(el) el["on"+ev]=fn; };
+  on("#omService","change",e=>orgModelSave({provider:String(e.target.value||"")}));
+  on("#omAddress","change",e=>orgModelSave({endpoint:String(e.target.value||"")}));
+  on("#omModel","change",e=>orgModelSave({model:String(e.target.value||"")}));
+  on("#omKey","change",e=>{ const v=String(e.target.value||""); e.target.value=""; if(v.trim()) orgModelSave({key:v}); });
+  const test=box.querySelector("#omTest"), line=box.querySelector("#omTestLine"), h=eHost();
+  if(test && h && typeof h.deskAiTest==="function") test.onclick=()=>{
+    if(line) line.textContent=t("Testing…");
+    test.disabled=true;
+    Promise.resolve().then(()=>h.deskAiTest()).then(r=>{
+      test.disabled=false;
+      if(line) line.textContent=orgTestLine(r);
+    }, ()=>{ test.disabled=false; if(line) line.textContent=orgTestLine({}); });
+  };
+}
 function dataGroups(){
-  return [{rows:[
+  return [{rows:orgModelRows().concat([
     row("reset","refresh",t("Reset defaults"),t("Puts every setting back as it ships. Cards and your edits are not touched."),
       '<button type="button" class="btn" id="setReset">'+esc(t("Reset defaults"))+'</button>')
-  ]}];
+  ])}];
 }
 function aboutGroups(){
   /* Under a host, the running release over what the latest look found, and the release page's button while an offer stands. */
@@ -660,6 +773,7 @@ function wirePage(box){
     };
   }
   wireTeamRows(box);
+  wireOrgModelRow(box);
   const joinBtn=box.querySelector("#setJoinTeam");
   if(joinBtn) joinBtn.onclick=()=>openJoinPaste();
   /* Stored on the keystroke, like every other row here: there is no Save on this screen. */
@@ -736,8 +850,9 @@ function wirePage(box){
           if(on) armSearch(); else clearSearchMeaning();
           try{ render(); }catch(e){}
           try{ hooks.drawIntentRail(); }catch(e){}
-          toast(on?t("The model ranks the search beside word matches; nothing leaves this computer"):t("Off, it matches words only."));
+          toast(on?aiSearchOnLine(orgModel()):t("Off, it matches words only."));
         }
+        else if(seg==="orgmodel") orgModelSave({choice:v==="organisation"?"organisation":"builtin"});
         else if(seg==="raillock"){ if(railLocked()!==on) toggleRailLock(); }
         else if(seg==="pillslock"){ if(pillsLocked()!==on) togglePillsLock(); }
         else if(seg==="startwin"){

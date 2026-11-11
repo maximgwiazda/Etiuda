@@ -4046,8 +4046,8 @@ function policyNoUpdate(values) {
   return !((v.type === "dword" || v.type === "REG_SZ" || v.type === "REG_EXPAND_SZ") && (s === "" || s === "0"));
 }
 /* `text` is the text of reg export's file for the policy key, or empty where there is none.
-   Returns {folder, lead, bad, noUpdate}: folder and lead empty where unused, bad the names of the words to say, noUpdate
-   true where policy turns the version look off. */
+   Returns {folder, lead, bad, noUpdate, values}: folder and lead empty where unused, bad the names of the words to say, noUpdate
+   true where policy turns the version look off, values policyValues' reading for the readers of the key's other values. */
 function joinPolicyFacts(text) {
   const values = text ? policyValues(text) : null;
   const noUpdate = policyNoUpdate(values);
@@ -4076,9 +4076,9 @@ function joinPolicyFacts(text) {
   if ((folder.set || lead.set) && (!folderOk || !leadOk)) {
     if (folder.set && folderOk && !leadOk) bad.push("beside");
     if (lead.set && leadOk && !folderOk) bad.push("beside");
-    return { folder: "", lead: "", bad: bad, noUpdate: noUpdate };
+    return { folder: "", lead: "", bad: bad, noUpdate: noUpdate, values: values };
   }
-  return { folder: folderValue, lead: leadValue, bad: bad, noUpdate: noUpdate };
+  return { folder: folderValue, lead: leadValue, bad: bad, noUpdate: noUpdate, values: values };
 }
 /* The facts with their sentences in `lang`, "pl" or anything else for English: {folder, lead, said, noUpdate}. */
 function policyWords(facts, lang) {
@@ -4116,6 +4116,240 @@ function readJoinPolicy(lang) {
 function updateLookOff() {
   try { return readJoinPolicy("en").noUpdate === true; } catch { return false; }
 }
+/* THE DESK'S OPTIONAL CUSTOMER MODEL (board 992). Off by default; on, the organisation's own service ranks the search and the
+   suggestions, and deskAiConfig is the one place its address and key are handed on. The person's choice and fields are kept in
+   desk-ai.json beside desk.json, the key apart in desk-ai-key.json, sealed by safeStorage with the address it was given for,
+   and machine policy wins field by field. Nothing in this part makes a request. */
+const DESK_AI_FILE = "desk-ai.json";
+const DESK_AI_KEY_FILE = "desk-ai-key.json";
+const DESK_AI_KIND = "etiuda-desk-ai";
+const DESK_AI_KEY_KIND = "etiuda-desk-ai-key";
+/* Each service's own route and published address, the address used only where neither the person nor the policy named one;
+   "" means one must be given. */
+const DESK_AI_SERVICES = Object.freeze({
+  openai: Object.freeze({ route: "chat/completions", endpoint: "https://api.openai.com/v1/" }),
+  anthropic: Object.freeze({ route: "messages", endpoint: "https://api.anthropic.com/v1/" }),
+  google: Object.freeze({ route: "interactions", endpoint: "https://generativelanguage.googleapis.com/v1/" }),
+  azure: Object.freeze({ route: "chat/completions", endpoint: "" }),
+  compatible: Object.freeze({ route: "chat/completions", endpoint: "" }),
+});
+const DESK_AI_MODEL_MAX = 256;
+const DESK_AI_KEY_MAX = 8192;
+const DESK_AI_CONTROL_RE = /[\x00-\x1f\x7f]/;
+/* The connection test's whole question: a fixed prompt, and no catalog text with it. */
+const DESK_AI_TEST_PROMPT = "Answer with the single word ok.";
+function deskAiService(provider) {
+  return typeof provider === "string" && Object.prototype.hasOwnProperty.call(DESK_AI_SERVICES, provider) ? DESK_AI_SERVICES[provider] : null;
+}
+/** An https address in its canonical form, its path ending in "/", the service's own route taken off where it was pasted
+ *  whole; "" where it is not https or carries a user, a password, a query or a fragment. */
+function deskAiEndpointShape(text, provider) {
+  let u = null;
+  try { u = new URL(String(text == null ? "" : text).trim()); } catch { return ""; }
+  if (u.protocol !== "https:" || u.username !== "" || u.password !== "" || u.search !== "" || u.hash !== "" || !u.hostname) return "";
+  const service = deskAiService(provider), route = service ? service.route : "";
+  let p = u.pathname;
+  const low = p.toLowerCase();
+  if (route && low.endsWith("/" + route)) p = p.slice(0, -route.length);
+  else if (route && low.endsWith("/" + route + "/")) p = p.slice(0, -route.length - 1);
+  if (!p.endsWith("/")) p += "/";
+  u.pathname = p;
+  return u.href;
+}
+/* MACHINE POLICY FOR THE OPTION, from policyValues' reading: AiProvider, AiEndpoint, AiModel and AiKey, the values Studio's
+   template names, and the desk's own switch DeskOrganisationModel, 1 for on and 0 for off, either one fixed here, absent or
+   empty leaving the choice to the person. Strings are taken as written, an expandable one too. A value that cannot be used is
+   left out alone and named in `ignored`. Answers {on: true, false or null, provider, endpoint, model, key, ignored}. */
+function deskAiPolicyFrom(values) {
+  const out = { on: null, provider: "", endpoint: "", model: "", key: "", ignored: [] };
+  if (!values) return out;
+  const own = name => (Object.prototype.hasOwnProperty.call(values, name.toLowerCase()) ? values[name.toLowerCase()] : null);
+  const text = name => {
+    const v = own(name);
+    if (!v) return "";
+    if (v.type !== "REG_SZ" && v.type !== "REG_EXPAND_SZ") { out.ignored.push(name); return ""; }
+    return String(v.value).trim();
+  };
+  const held = (s, max) => s.length <= max && !DESK_AI_CONTROL_RE.test(s);
+  const sw = own("DeskOrganisationModel");
+  if (sw) {
+    const s = String(sw.value).trim(), str = sw.type === "REG_SZ" || sw.type === "REG_EXPAND_SZ";
+    if ((str || sw.type === "dword") && s === "1") out.on = true;
+    else if ((str || sw.type === "dword") && s === "0") out.on = false;
+    else if (!(str && s === "")) out.ignored.push("DeskOrganisationModel");
+  }
+  const provider = text("AiProvider").toLowerCase();
+  if (provider) { if (deskAiService(provider)) out.provider = provider; else out.ignored.push("AiProvider"); }
+  const endpoint = text("AiEndpoint");
+  if (endpoint) {
+    const shaped = deskAiEndpointShape(endpoint, out.provider);
+    if (shaped) out.endpoint = shaped; else out.ignored.push("AiEndpoint");
+  }
+  const model = text("AiModel");
+  if (model) { if (held(model, DESK_AI_MODEL_MAX)) out.model = model; else out.ignored.push("AiModel"); }
+  const key = text("AiKey");
+  if (key) { if (held(key, DESK_AI_KEY_MAX)) out.key = key; else out.ignored.push("AiKey"); }
+  return out;
+}
+/** The person's fields `me` ({choice, provider, endpoint, model}) under `org` (deskAiPolicyFrom's answer), policy first, field
+ *  by field: {on, provider, given, endpoint, model, managed, keyAway}, `given` the address written and `endpoint` the one a
+ *  request would go to. `keyAway` is true where the policy set a key and that address is neither the policy's own nor, with
+ *  none set, the service's published one, since the organisation's key never goes to an address typed here. Pure. */
+function deskAiJoin(me, org) {
+  const p = me || {}, o = org || {};
+  const pick = (a, b) => (a ? { value: a, managed: true } : { value: typeof b === "string" ? b : "", managed: false });
+  const choiceSet = o.on === true || o.on === false;
+  const provider = pick(o.provider, p.provider), model = pick(o.model, p.model);
+  /* The person's address belongs to the service the person chose, so it is not carried over to another the policy chose. */
+  const endpoint = pick(o.endpoint, o.provider && o.provider !== p.provider ? "" : p.endpoint);
+  const service = deskAiService(provider.value);
+  const at = !service ? "" : endpoint.value ? deskAiEndpointShape(endpoint.value, provider.value) : service.endpoint;
+  const home = endpoint.managed || (at !== "" && service && at === service.endpoint);
+  return {
+    on: choiceSet ? o.on : p.choice === "organisation",
+    provider: provider.value, given: endpoint.value, endpoint: at, model: model.value,
+    managed: { choice: choiceSet, provider: provider.managed, endpoint: endpoint.managed, model: model.managed, key: !!o.key },
+    keyAway: !!o.key && !home,
+  };
+}
+function deskAiReadyOf(j, key) { return !!(j && deskAiService(j.provider) && j.endpoint && j.model && key); }
+/** What Settings is told, the key never among it: whether one is in force, and nothing of it. Pure. */
+function deskAiAnswer(j, keyIn, ignored, sealable, stored) {
+  let host = "";
+  try { host = j.endpoint ? new URL(j.endpoint).host : ""; } catch { host = ""; }
+  return {
+    choice: j.on ? "organisation" : "builtin", on: !!j.on, ready: !!j.on && deskAiReadyOf(j, keyIn),
+    provider: j.provider, endpoint: j.given, at: j.endpoint, host: host, model: j.model,
+    keyKept: !!keyIn || !!stored, keyAway: !!j.keyAway, managed: Object.assign({}, j.managed),
+    ignored: Array.isArray(ignored) ? ignored.slice() : [], sealable: !!sealable,
+    services: Object.keys(DESK_AI_SERVICES).map(id => ({ id: id, endpoint: DESK_AI_SERVICES[id].endpoint })),
+  };
+}
+/** Why a save from Settings is refused, or "": a field machine policy set ("managed"), a choice, a service, an address, a model
+ *  or a key this desk cannot hold, each by its own name. `fields` holds only the strings the page sent. Pure. */
+function deskAiRefusal(fields, j) {
+  const f = fields || {}, has = k => typeof f[k] === "string";
+  if (["choice", "provider", "endpoint", "model", "key"].some(k => has(k) && j.managed[k])) return "managed";
+  if (has("choice") && f.choice !== "organisation" && f.choice !== "builtin") return "choice";
+  if (has("provider") && f.provider !== "" && !deskAiService(f.provider)) return "provider";
+  if (has("endpoint") && f.endpoint.trim() !== "" && !deskAiEndpointShape(f.endpoint, has("provider") ? f.provider : j.provider)) return "endpoint";
+  if (has("model") && (f.model.trim().length > DESK_AI_MODEL_MAX || DESK_AI_CONTROL_RE.test(f.model))) return "model";
+  if (has("key") && (f.key.trim().length > DESK_AI_KEY_MAX || DESK_AI_CONTROL_RE.test(f.key.trim()))) return "key";
+  return "";
+}
+function deskAiPath(name) { return path.join(app.getPath("userData"), name); }
+/* The person's own choice and fields, or the defaults, off, where the file is absent or not of this kind. */
+function deskAiPerson() {
+  const none = { choice: "builtin", provider: "", endpoint: "", model: "" };
+  let doc = null;
+  try { doc = JSON.parse(fs.readFileSync(deskAiPath(DESK_AI_FILE), "utf8")); } catch { return none; }
+  if (!doc || typeof doc !== "object" || doc.kind !== DESK_AI_KIND || doc.format !== 1) return none;
+  const str = v => (typeof v === "string" ? v : "");
+  return { choice: doc.choice === "organisation" ? "organisation" : "builtin", provider: str(doc.provider), endpoint: str(doc.endpoint), model: str(doc.model) };
+}
+/* The person's key as sealed, {for, key}, or null where there is none or this account cannot open it. ONLY A SAVE FROM SETTINGS
+   READS IT WHOLE, to carry the key to the address the person chose; a request takes it through deskAiKeyFor alone. */
+function deskAiKeyInner() {
+  try {
+    const doc = JSON.parse(fs.readFileSync(deskAiPath(DESK_AI_KEY_FILE), "utf8"));
+    if (!doc || doc.kind !== DESK_AI_KEY_KIND || doc.format !== 1 || typeof doc.sealed !== "string") return null;
+    const inner = JSON.parse(safeStorage.decryptString(Buffer.from(doc.sealed, "base64")));
+    return inner && typeof inner.for === "string" && typeof inner.key === "string" && inner.key ? inner : null;
+  } catch { return null; }
+}
+/* The person's key where it was given for `endpoint`, else "": a key goes only to the address it was sealed with. */
+function deskAiKeyFor(endpoint) {
+  if (!endpoint) return "";
+  const inner = deskAiKeyInner();
+  return inner && inner.for === endpoint ? inner.key : "";
+}
+function deskAiPolicy() {
+  try { readJoinPolicy("en"); } catch { /* no policy is read as none */ }
+  return deskAiPolicyFrom(joinPolicyRead && joinPolicyRead.values);
+}
+/* Everything in force now: {joined, policy, key}, the key the one a request would carry, "" where none would go. */
+function deskAiNow() {
+  const policy = deskAiPolicy(), joined = deskAiJoin(deskAiPerson(), policy);
+  const key = policy.key ? (joined.keyAway ? "" : policy.key) : deskAiKeyFor(joined.endpoint);
+  return { joined: joined, policy: policy, key: key };
+}
+/** THE ONE PLACE THE ADDRESS AND THE KEY ARE HANDED ON. Null while the option is off or anything a request needs is missing;
+ *  else {provider, endpoint, model, key, managed}, endpoint the address a request goes to, as deskAiEndpointShape writes it. */
+function deskAiConfig() {
+  let now = null;
+  try { now = deskAiNow(); } catch { return null; }
+  const j = now.joined;
+  if (!j.on || !deskAiReadyOf(j, now.key)) return null;
+  return { provider: j.provider, endpoint: j.endpoint, model: j.model, key: now.key, managed: Object.assign({}, j.managed) };
+}
+function deskAiSettings() {
+  const now = deskAiNow(), inner = now.policy.key ? null : deskAiKeyInner();
+  return deskAiAnswer(now.joined, !!now.key, now.policy.ignored, branchSealable(), !!(inner && inner.for === ""));
+}
+/* A save from Settings: only the fields sent change, and a key typed is sealed for the address the save leaves in force. A key
+   already kept moves only with a save that changes the service or the address. An empty key leaves the kept one as it is.
+   Answers {ok, why, settings}, settings as deskAiSettings, and writes nothing where it refuses. */
+function deskAiSave(fields) {
+  const f = {};
+  if (fields && typeof fields === "object") {
+    for (const k of ["choice", "provider", "endpoint", "model", "key"]) if (typeof fields[k] === "string") f[k] = fields[k];
+  }
+  let before = null;
+  try { before = deskAiNow(); } catch { return { ok: false, why: "unwritten", settings: null }; }
+  const answer = () => { try { return deskAiSettings(); } catch { return null; } };
+  const why = deskAiRefusal(f, before.joined);
+  if (why) return { ok: false, why: why, settings: answer() };
+  const me = deskAiPerson();
+  const provider = f.provider !== undefined ? f.provider : me.provider;
+  const next = {
+    choice: f.choice !== undefined ? f.choice : me.choice, provider: provider,
+    endpoint: f.endpoint !== undefined ? (f.endpoint.trim() ? deskAiEndpointShape(f.endpoint, provider) : "") : me.endpoint,
+    model: f.model !== undefined ? f.model.trim() : me.model,
+  };
+  const after = deskAiJoin(next, before.policy);
+  const typed = f.key !== undefined ? f.key.trim() : "";
+  const moves = f.provider !== undefined || f.endpoint !== undefined;
+  const kept = before.policy.key || !moves ? null : deskAiKeyInner();
+  const key = typed || (kept && after.endpoint && kept.for !== after.endpoint ? kept.key : "");
+  if (key && !branchSealable()) return { ok: false, why: "unsealed", settings: answer() };
+  try {
+    /* A key typed before its address is sealed for none, and the save that names the address carries it there. */
+    if (key) {
+      const sealed = safeStorage.encryptString(JSON.stringify({ for: after.endpoint, key: key })).toString("base64");
+      writeReplacing(deskAiPath(DESK_AI_KEY_FILE), JSON.stringify({ format: 1, kind: DESK_AI_KEY_KIND, sealed: sealed }));
+    }
+    writeReplacing(deskAiPath(DESK_AI_FILE), JSON.stringify(Object.assign({ format: 1, kind: DESK_AI_KIND }, next), null, 2) + "\n");
+  } catch { return { ok: false, why: "unwritten", settings: answer() }; }
+  return { ok: true, why: "", settings: answer() };
+}
+/* The door's one ask of `config` with `prompt`, answered {ok, why}. Until the door is in this tree, nothing is sent. */
+function deskAiProbe(config, prompt) {
+  return Promise.resolve(config && prompt ? { ok: false, why: "door" } : { ok: false, why: "none" });
+}
+/* The connection test, on the fields in force whether the option is on or not: the fixed prompt, through the door. Answers
+   {ok, why, host, model}, why naming what is missing before anything is asked. */
+function deskAiTest() {
+  let now = null;
+  try { now = deskAiNow(); } catch { return Promise.resolve({ ok: false, why: "none", host: "", model: "" }); }
+  const j = now.joined, a = deskAiAnswer(j, !!now.key, [], false);
+  const said = why => Promise.resolve({ ok: false, why: why, host: a.host, model: j.model });
+  if (!deskAiService(j.provider)) return said("provider");
+  if (!j.endpoint) return said("endpoint");
+  if (!j.model) return said("model");
+  if (j.keyAway) return said("keyAway");
+  if (!now.key) return said("key");
+  const config = { provider: j.provider, endpoint: j.endpoint, model: j.model, key: now.key, managed: Object.assign({}, j.managed) };
+  return Promise.resolve().then(() => deskAiProbe(config, DESK_AI_TEST_PROMPT))
+    .then(r => ({ ok: !!(r && r.ok === true), why: r && r.ok === true ? "" : String((r && r.why) || "failed"), host: a.host, model: j.model }),
+      () => ({ ok: false, why: "failed", host: a.host, model: j.model }));
+}
+ipcMain.on("etiuda:desk-ai-settings", (e) => {
+  let v = null;
+  try { v = fromEngine(e) ? deskAiSettings() : null; } catch { v = null; }
+  e.returnValue = v;
+});
+ipcMain.handle("etiuda:desk-ai-save", (e, fields) => (fromEngine(e) ? deskAiSave(fields) : { ok: false, why: "refused", settings: null }));
+ipcMain.handle("etiuda:desk-ai-test", (e) => (fromEngine(e) ? deskAiTest() : { ok: false, why: "refused", host: "", model: "" }));
 let joinPolicySaid = false;
 function sayJoinPolicy() {
   let lang = "en";
