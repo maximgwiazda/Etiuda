@@ -84,19 +84,16 @@ const phase = what => console.log("\n" + what);
 
 /* ---- what the build config and the tree say ------------------------------------------------- */
 
-const BUILDER = fs.readFileSync(path.join(E.ROOT, "electron-builder.js"), "utf8");
-const pick = (re, what) => {
-  const m = re.exec(BUILDER);
-  if (!m) E.refuse("electron-builder.js names no " + what, "this run reads it rather than typing it here.");
-  return m[1];
-};
-const APP_ID = pick(/appId:\s*"([^"]+)"/, "appId");
-const PRODUCT = pick(/productName:\s*"([^"]+)"/, "productName");
-const SHORTCUT = pick(/shortcutName:\s*"([^"]+)"/, "nsis.shortcutName") + ".lnk";
+/* THE TEST BUILD'S IDENTITY, never the shipped one (tools/test-identity.cjs): the keys, the shortcut and the folders this
+   leg installs and reads are the test build's, and tests/install-guard.cjs refuses while either shipped app is present. */
+const G = require("./install-guard.cjs");
+const T = require("../tools/test-identity.cjs").TEST.desk;
+const APP_ID = T.appId;
+const PRODUCT = T.productName;
+const SHORTCUT = require("../tools/electron-builder-test.cjs").nsis.shortcutName + ".lnk";
 const GUID = P.appGuid(APP_ID);
 const KU = P.registryKeys("user", GUID), KM = P.registryKeys("machine", GUID);
 const WANT_VERSION = (/E_VERSION\s*=\s*"([^"]+)"/.exec(fs.readFileSync(path.join(E.ROOT, "src", "modules", "env.js"), "utf8")) || [])[1] || "";
-const TREE_PKG = JSON.parse(fs.readFileSync(path.join(E.ROOT, "package.json"), "utf8"));
 const sha = buf => crypto.createHash("sha256").update(buf).digest("hex");
 const shaFile = f => { try { return sha(fs.readFileSync(f)); } catch (e) { return null; } };
 const listing = d => E.safeListing(d);
@@ -106,7 +103,7 @@ const listing = d => E.safeListing(d);
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-update-"));
 const H = P.scratchHome(LAB);
 const CHILD_ENV = Object.assign({}, process.env, H.env);
-const UD = path.join(H.places.ApplicationData, P.userDataName(TREE_PKG));
+const UD = path.join(H.places.ApplicationData, T.packageName);
 const DOCS_ETIUDA = path.join(H.documents, "Etiuda");
 E.realProfileGuard(UD);
 E.realProfileGuard(DOCS_ETIUDA);
@@ -151,7 +148,7 @@ function ask(k, args) {
 const regValue = (key, name) => ask("value", ["-Key", key, "-Name", name]);
 const regExists = key => ask("exists", ["-Key", key]) === "yes";
 const namedKeys = parent => Number(ask("named", ["-Parent", parent, "-Display", PRODUCT])) || 0;
-const assocCmd = root => ask("assoc", ["-Classes", root, "-Ext", ".ec"]);
+const assocCmd = root => ask("assoc", ["-Classes", root, "-Ext", "." + T.ext]);
 const lnkOf = file => { try { return JSON.parse(ask("lnk", ["-File", file]) || "{}"); } catch (e) { return {}; } };
 const shortcutAt = (dir) => { const f = path.join(dir, SHORTCUT); const l = lnkOf(f);
   return { count: fs.existsSync(f) ? 1 : 0, target: l.target || "", hotkey: l.hotkey || "" }; };
@@ -165,10 +162,12 @@ function newSetup() {
   const out = path.join(LAB, "dist");
   const cli = path.join(E.ROOT, "node_modules", "electron-builder", "out", "cli", "cli.js");
   if (!fs.existsSync(cli)) E.refuse("electron-builder is not installed; npm install first");
-  execFileSync(process.execPath, [cli, "--win"], { cwd: E.ROOT, stdio: "ignore",
+  execFileSync(process.execPath, [cli, "--win", "--config", path.join("tools", "electron-builder-test.cjs")], { cwd: E.ROOT, stdio: "ignore",
     env: E.unsignedEnv({ ETIUDA_DIST: out }) });
   const found = listing(out).filter(n => /-setup\.exe$/i.test(n));
   if (found.length !== 1) E.refuse(out + " holds " + found.length + " installers; expected 1");
+  const no = G.setupRefusal(G.setupIdentity(path.join(out, found[0])), "desk");
+  if (no) E.refuse("the setup this leg built is refused before it runs: " + no, "nothing was installed.");
   return path.join(out, found[0]);
 }
 /* EVERY VECTOR IS ASKED OF P.argsFault BEFORE IT RUNS, and a fault is a refusal: a vector NSIS
@@ -194,8 +193,15 @@ const asarText = (dir, file) => { try { return require("@electron/asar").extract
 
 /* ---- launching the installed app into the scratch home ---------------------------------------- */
 
+/* THE INSTALL GUARD, before the window wall and anything installed: read-only, and its refusals join the preflight's. */
+const GUARD = (() => {
+  try { return G.guardStart({ env: process.env }); }
+  catch (e) { E.refuse("the install guard could not read what the real install owns: " + e.message, "nothing was installed."); }
+})();
+let guardSaid = false;
+function guardEnd() { if (guardSaid) return null; guardSaid = true; return G.guardEnd(GUARD).diffs; }
 const PORT_BASE = DRY ? 0 : E.portBlock("update-install");
-if (!DRY) E.windowWall(WHO);
+if (!DRY && !GUARD.refusals.length) E.windowWall(WHO);
 let port = PORT_BASE;
 const live = new Set();
 let offscreenAsked = false;
@@ -293,6 +299,12 @@ function preflight() {
     if (old && given && fs.existsSync(old) && fs.existsSync(given) && shaFile(old) === shaFile(given))
       said.push("the older and the newer installer are the same file, sha256 " + shaFile(old).slice(0, 12) + ": an update between them proves nothing");
   }
+  /* Either shipped app present is a refusal, and so is any setup this leg is given that is not the test build. */
+  for (const r of GUARD.refusals) said.push(r);
+  for (const v of ["ETIUDA_SETUP_EXE", "ETIUDA_OLD_SETUP_EXE"]) {
+    const exe = process.env[v];
+    if (exe && fs.existsSync(exe)) { const no = G.setupRefusal(G.setupIdentity(exe), "desk"); if (no) said.push(v + " refused: " + no); }
+  }
   const held = E.deskLockHolder();
   if (held && held.alive && !held.mine) said.push("the desk lock is held by pid " + held.pid + " (" + held.who + "), which writes the same HKCU keys");
   return said;
@@ -302,9 +314,10 @@ function printPlan() {
   const newer = newSetup();
   const lines = [
     "appId " + APP_ID + " -> GUID " + GUID + " (UUID v5 in electron-builder's namespace)",
-    "keys it reads: " + [KU.uninstall, KU.install, KU.classes + "\\.ec", KM.uninstall, KM.install, KM.classes + "\\.ec"].join(", "),
+    "keys it reads: " + [KU.uninstall, KU.install, KU.classes + "\\." + T.ext, KM.uninstall, KM.install, KM.classes + "\\." + T.ext].join(", "),
+    "the install guard reads " + GUARD.reads,
     "scratch home " + H.HOME + ": " + Object.keys(H.places).map(k => k + " " + H.places[k]).join(", "),
-    "user-data folder given to every launch " + UD + " (Electron's rule: APPDATA + " + JSON.stringify(P.userDataName(TREE_PKG)) + ")",
+    "user-data folder given to every launch " + UD + " (Electron's rule: APPDATA + the test build's package name " + JSON.stringify(T.packageName) + ")",
     "machine-wide places: " + Object.keys(COMMON).map(k => k + " " + COMMON[k]).join(", "),
     "newer setup: " + newer,
   ];
@@ -318,8 +331,8 @@ function printPlan() {
     "1 all users: <newer> " + P.installArgs({ mode: "machine", dir: PM }).join(" ") + "   argsFault " + JSON.stringify(P.argsFault(P.installArgs({ mode: "machine", dir: PM }), "machine")),
     "2 uninstall: " + path.join(PM, "Uninstall " + PRODUCT + ".exe") + " " + P.uninstallArgs("machine").join(" "),
     "3 A10 plain: <newer> " + P.plainArgs(PU).join(" ") + ", then " + P.uninstallArgs("user").join(" "),
-    "caches that must not be left: " + path.join(H.places.LocalApplicationData, "etiuda-updater") + " and "
-      + path.join(COMMON.CommonApplicationData || "C:\\ProgramData", "etiuda-updater"));
+    "caches that must not be left: " + path.join(H.places.LocalApplicationData, T.packageName + "-updater") + " and "
+      + path.join(COMMON.CommonApplicationData || "C:\\ProgramData", T.packageName + "-updater"));
   for (const l of lines) note(l);
 }
 
@@ -347,9 +360,9 @@ async function updateLeg(newer) {
   const rename = src => /\bapp\.(setName|setPath\(\s*["']userData)/.test(String(src || "").replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, ""));
   const oldMainRenames = rename(asarText(PROG, "shell/main.js"));
   const treeMainRenames = rename(fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8"));
-  check(P.userDataName(oldPkg) === P.userDataName(TREE_PKG) && !!P.userDataName(oldPkg) && !oldMainRenames && !treeMainRenames,
-    "U0d both builds keep the desk in the same folder by Electron's rule: " + JSON.stringify(P.userDataName(oldPkg))
-    + " and " + JSON.stringify(P.userDataName(TREE_PKG)) + ", and neither main.js renames the app or moves userData ("
+  check(P.userDataName(oldPkg) === T.packageName && !oldMainRenames && !treeMainRenames,
+    "U0d both builds keep the desk in the same folder by Electron's rule: the older asar names " + JSON.stringify(P.userDataName(oldPkg))
+    + " and the test build " + JSON.stringify(T.packageName) + ", and neither main.js renames the app or moves userData ("
     + oldMainRenames + ", " + treeMainRenames + ")");
 
   phase("[2/5] the person's catalog and setting, made through the older copy");
@@ -394,7 +407,7 @@ async function updateLeg(newer) {
     shortcuts: { desktop: shortcutAt(H.places.Desktop), startMenu: shortcutAt(H.places.Programs) },
     hotkeyWant, assocCmd: assocCmd(KU.classes),
     deskBefore, deskAfter: shaFile(deskFile()), catalogsBefore, catalogsAfter: catalogs(),
-    cacheExists: fs.existsSync(path.join(H.places.LocalApplicationData, "etiuda-updater")),
+    cacheExists: fs.existsSync(path.join(H.places.LocalApplicationData, T.packageName + "-updater")),
   };
   rows(P.judgeUpdate(uf));
 
@@ -420,7 +433,7 @@ async function updateLeg(newer) {
 
 async function allUsersLeg(newer) {
   const userAssocBefore = assocCmd(KU.classes);
-  const machineCache = path.join(COMMON.CommonApplicationData || "C:\\ProgramData", "etiuda-updater");
+  const machineCache = path.join(COMMON.CommonApplicationData || "C:\\ProgramData", T.packageName + "-updater");
   const machineCacheBefore = fs.existsSync(machineCache);
   phase("[1/3] the all-users install, elevated and silent");
   const code = runSetup(newer, P.installArgs({ mode: "machine", dir: PM }), "machine");
@@ -433,7 +446,7 @@ async function allUsersLeg(newer) {
     commonDesktop: shortcutAt(COMMON.CommonDesktopDirectory).count, commonPrograms: shortcutAt(COMMON.CommonPrograms).count,
     userDesktop: shortcutAt(H.places.Desktop).count, userPrograms: shortcutAt(H.places.Programs).count,
     machineAssocCmd: assocCmd(KM.classes), userAssocChanged: assocCmd(KU.classes) !== userAssocBefore,
-    userCacheExists: fs.existsSync(path.join(H.places.LocalApplicationData, "etiuda-updater")),
+    userCacheExists: fs.existsSync(path.join(H.places.LocalApplicationData, T.packageName + "-updater")),
     machineCacheExists: !machineCacheBefore && fs.existsSync(machineCache),
   };
 
@@ -449,7 +462,7 @@ async function allUsersLeg(newer) {
   await s.stop();
   af.booted = seen.booted && drove.glass === true;
   af.userDataInHome = fs.existsSync(deskFile()) && !fs.existsSync(path.join(PM, "desk.json"))
-    && !fs.existsSync(path.join(COMMON.CommonApplicationData || "C:\\ProgramData", P.userDataName(TREE_PKG)));
+    && !fs.existsSync(path.join(COMMON.CommonApplicationData || "C:\\ProgramData", T.packageName));
   const deskSha = shaFile(deskFile());
 
   phase("[3/3] the all-users uninstall, and a plain install after it");
@@ -484,6 +497,8 @@ async function leftovers() {
 process.on("exit", () => {
   for (const pid of live) E.killTree(pid);
   if (lockHeld) E.releaseDeskLock();
+  const diffs = DRY ? null : guardEnd();
+  if (diffs && diffs.length) console.log("  FAIL Z9 what the real installs own CHANGED during this run: " + diffs.map(G.diffLine).join("; "));
   if (!KEEP) { try { fs.rmSync(LAB, { recursive: true, force: true }); } catch (x) { /* named by the last line */ } }
 });
 
@@ -511,6 +526,10 @@ process.on("exit", () => {
   fails++;
   await leftovers();
 }).finally(() => {
+  /* THE PROOF, read-only, after every setup this run ran is uninstalled: unequal names what changed; nothing is put back. */
+  const diffs = guardEnd();
+  check(diffs.length === 0, "Z9 what the real installs own is what it was before the run: "
+    + (diffs.length ? diffs.map(G.diffLine).join("; ") : GUARD.before.plan.length + " place(s) read again and equal"));
   console.log("\n#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
   console.log((reachedEnd ? "" : "  INCOMPLETE - ") + checks + " check(s), " + fails + " failed, "
     + Math.round((Date.now() - t0) / 1000) + "s" + (KEEP ? "; --keep: the lab stands at " + LAB : ""));

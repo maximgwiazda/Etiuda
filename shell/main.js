@@ -470,12 +470,18 @@ function handHeldLink(win) {
   }
   handPendingLink(win);
 }
+/* The installer legs' build (tools/test-identity.cjs) marks its package.json, and takes no scheme of the desk's at start. */
+function testIdentityBuild() {
+  try { return !!JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8")).etiudaTestBuild; }
+  catch (e) { return false; }
+}
 /* An installed desk registers etiuda: on Windows. A dev start and a harness start leave the
    machine's registration as they found it, and a start that cannot take the scheme still opens.
    The Ubuntu line is written from electron-builder.js. */
 function registerEtiudaLink() {
   if (process.platform !== "win32" || typeof app.setAsDefaultProtocolClient !== "function") return;
   if (!app.isPackaged || process.env.ETIUDA_TEST_DOCUMENTS) return; /* plant:link-pack */
+  if (testIdentityBuild()) return;
   let ok = false;
   try {
     ok = app.setAsDefaultProtocolClient("etiuda") === true;

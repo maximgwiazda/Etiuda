@@ -22,6 +22,7 @@ export const HELPERS = {
   "tests/engine.js": "the library every gate requires, not a gate",
   "tests/ghosts.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
   "tests/install-plan.js": "the library tests/update-install.js judges with",
+  "tests/install-guard.cjs": "the read-only guard the installer legs require, not a gate (its leg is tests/install-guard-selftest.js)",
   "tests/launch-wait.js": "a helper the window legs require, not a gate",
   "tests/quiet-lane.mjs": "the timing legs' busy-machine refusal, not a gate (its leg is tests/quiet-lane-selftest.mjs)",
   "tests/linux-desk.js": "a machine-window gate on Linux, not in either chain",

@@ -8,6 +8,7 @@
  * live in the same process npm started, or it is skipped the same way. Board 416.
  *
  *   node tools/package.mjs
+ *   node tools/package.mjs --test-identity   the installer legs' build, tools/electron-builder-test.cjs
  *   ETIUDA_DIST=<folder>  where the installer goes; dist/ when unset
  *
  * The two commands below are the old script, spawned as one cmd.exe chain so a
@@ -17,12 +18,17 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve, delimiter } from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { packagedFuseProblems, wantedFuses } from './fuses.mjs';
 import { prepareEmbed } from './model.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = resolve(ROOT, process.env.ETIUDA_DIST || 'dist');
+/* The test build differs in its program's name and its config, never in what is checked here. */
+const TEST_ID = process.argv.includes('--test-identity');
+const PROGRAM = (TEST_ID ? createRequire(import.meta.url)('./test-identity.cjs').TEST.desk.productName : 'Etiuda') + '.exe';
+const CONFIG = TEST_ID ? ' --config tools\\electron-builder-test.cjs' : '';
 
 /* Pack the turning frames into solid 7z and generate turning.nsh at build time */
 const turningTool = join(ROOT, 'tools', 'turning.mjs');
@@ -63,7 +69,7 @@ const before = new Set(installers(DIST));
 // WMI-started one) runs the config file instead of the tool, and the desk shows "Select an app to open this .js file"
 // (Maxim's screen, 2026-10-09 22:35; the test architect's diagnosis the same afternoon). Set it for the chain.
 const env = { ...process.env, NoDefaultCurrentDirectoryInExePath: '1', PATH: join(ROOT, 'node_modules', '.bin') + delimiter + (process.env.PATH || '') };
-const r = spawnSync('cmd.exe', ['/d', '/s', '/c', 'npm run build && electron-builder --win'], {
+const r = spawnSync('cmd.exe', ['/d', '/s', '/c', 'npm run build && electron-builder --win' + CONFIG], {
   cwd: ROOT,
   stdio: 'inherit',
   env,
@@ -78,14 +84,14 @@ if (fresh.length === 0) {
    tests/test.js can read only what electron-builder.js asks for. tests/fuses.mjs drives this
    step on planted programs. */
 if (r.status === 0) {
-  const bad = await packagedFuseProblems(DIST);
+  const bad = await packagedFuseProblems(DIST, undefined, PROGRAM);
   if (bad.length) {
     console.error('npm run package: the fuses of the program in ' + DIST + ' are not as electron-builder.js asks:');
     for (const line of bad) console.error('  ' + line);
     process.exit(1);
   }
   console.log('npm run package: ' + Object.keys(wantedFuses()).length + ' fuse(s) read back from '
-    + join(DIST, 'win-unpacked', 'Etiuda.exe') + ' as asked');
+    + join(DIST, 'win-unpacked', PROGRAM) + ' as asked');
   /* THE TRAY'S PICTURE IS IN THE ASAR. The shell reads it from there at run time (shell/main.js trayIcon), so a build
      without it makes a desk with no tray, which quits on close whatever Settings say (Max's finding, 2026-11-09). */
   const asarAt = join(DIST, 'win-unpacked', 'resources', 'app.asar');
