@@ -44,7 +44,7 @@ Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane,
       <string id="AiProvider_anthropic">Anthropic (anthropic)</string>
       <string id="AiProvider_google">Google Gemini (google)</string>
       <string id="AiProvider_azure">Azure OpenAI (azure)</string>
-      <string id="AiProvider_compatible">Inna usługa zgodna z OpenAI (compatible)</string>
+      <string id="AiProvider_compatible">Usługa zgodna z OpenAI (compatible)</string>
       <string id="AiEndpoint">Ustaw adres usługi AI dla Etiudy Studio</string>
       <string id="AiEndpoint_Explain">To ustawienie zasad określa adres, pod który Etiuda Studio wysyła zapytania do usługi AI, na przykład własną bramę organizacji.
 
