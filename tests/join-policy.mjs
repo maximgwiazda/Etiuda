@@ -27,7 +27,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
-const EXPECTED = 10;
+const EXPECTED = 11;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -62,7 +62,7 @@ function load(src, markers, names, params, args) {
 
 const POLICY_DECLS = ["const REG_TOOL =", "const POLICY_KEY =", "const POLICY_LEAD_RE =", "const POLICY_WORDS =",
   "const POLICY_HEAD =", "const POLICY_EXPORT_LINE =", "function policyValues(", "function policyExpand(",
-  "function policyRegSz(", "function policyFolderOk(", "function policyLeadOk(", "function joinPolicyFacts(",
+  "function policyRegSz(", "function policyFolderOk(", "function policyLeadOk(", "function policyNoUpdate(", "function joinPolicyFacts(",
   "function policyWords(", "function joinPolicyFrom(", "let joinPolicyRead =", "function readJoinPolicy("];
 const POLICY_NAMES = ["execFileSync", "process", "fs", "os", "path"];
 const MEMBER_DECLS = ["const HPKE_KEM =", "const HPKE_SUITE =", "const SPKI_X25519 =", "function hpkeLabeledExtract(",
@@ -952,6 +952,39 @@ function scratchGone(reg, problems, name) {
   check(problems.length === 0,
     "19j REG_EXPAND_SZ values are expanded for TeamFolder and LeadKey: environment variables are expanded case-insensitively and values taken, while unresolved variables and inherited names are bad: "
     + (problems.join("; ") || "expanded"));
+}
+
+/* 19k: DeskNoUpdateCheck, the administrator's switch for the hourly look for a new version (Claude α's decision 10,
+   2026-11-11): set to anything but 0, as a DWORD or a string, it turns the look off; absent, empty or 0 leaves it on; a DWORD
+   is read for its number, and the team values beside it are read as before. */
+{
+  const problems = [];
+  if (!P) problems.push(loadError);
+  else {
+    const off = rows => P.joinPolicyFrom(exportText(rows), "en").noUpdate;
+    const cases = [
+      [[], false, "absent"],
+      [[["DeskNoUpdateCheck", "REG_DWORD", 1]], true, "a DWORD of 1"],
+      [[["DeskNoUpdateCheck", "REG_DWORD", 7]], true, "a DWORD of 7"],
+      [[["DeskNoUpdateCheck", "REG_DWORD", 0]], false, "a DWORD of 0"],
+      [[["DeskNoUpdateCheck", "REG_SZ", "1"]], true, "the string 1"],
+      [[["DeskNoUpdateCheck", "REG_SZ", "0"]], false, "the string 0"],
+      [[["DeskNoUpdateCheck", "REG_SZ", ""]], false, "an empty string"],
+      [[["desknoupdatecheck", "REG_DWORD", 1]], true, "the name in lower case"],
+      [[["StudioNoUpdateCheck", "REG_DWORD", 1]], false, "Studio's own value"],
+    ];
+    for (const [rows, want, why] of cases) if (off(rows) !== want) problems.push(why + " reads " + off(rows));
+    const both = P.joinPolicyFrom(exportText([["DeskNoUpdateCheck", "REG_DWORD", 1], ["TeamFolder", "REG_SZ", "D:\\Quay\\team"],
+      ["LeadKey", "REG_SZ", HEX]]), "en");
+    if (!both.noUpdate || both.folder !== "D:\\Quay\\team" || both.lead !== HEX || both.said.length !== 0)
+      problems.push("beside the team values " + JSON.stringify(both));
+    const badBeside = P.joinPolicyFrom(exportText([["DeskNoUpdateCheck", "REG_DWORD", 1], ["LeadKey", "REG_SZ", "AB".repeat(32)]]), "en");
+    if (!badBeside.noUpdate) problems.push("a bad team value beside it voids the switch " + JSON.stringify(badBeside));
+    const dwordFolder = P.joinPolicyFrom(exportText([["TeamFolder", "REG_DWORD", 1]]), "en");
+    if (dwordFolder.folder !== "" || saidOf(dwordFolder) !== EN.folder) problems.push("a DWORD folder " + JSON.stringify(dwordFolder));
+  }
+  check(problems.length === 0, "19k DeskNoUpdateCheck turns the version look off for anything but 0, a DWORD read for its number: "
+    + (problems.join("; ") || "nine values and two beside the team pair as they should be"));
 }
 
 try { fs.rmSync(LAB, { recursive: true, force: true }); } catch { /* the temp folder's own to clear */ }

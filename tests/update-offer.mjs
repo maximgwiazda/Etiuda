@@ -29,7 +29,7 @@ const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const PLANTS = 11;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 52 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 54 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -85,6 +85,7 @@ function shellOf(o) {
     theWindow: { isDestroyed: () => false, webContents: { send: (ch, v) => sent.push([ch, v]) } },
     PLACED_ASIDE: !!opt.aside,
     harnessLaunch: () => !!opt.harness,
+    updateLookOff: () => !!opt.policyOff,
     net: opt.net === undefined ? { fetch: () => { throw new Error("no network in a leg"); } } : opt.net,
     ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { handle[ch] = fn; } },
     fromEngine: e => !!(e && e.engine),
@@ -291,6 +292,15 @@ try {
   const S5e = shellOf({ harness: true, setTimeout: (fn, ms) => { harnessTimers.push(ms); return { unref() {} }; }, net: { fetch: () => { throw new Error("reached"); } } });
   S5e.armNoteLook();
   check(harnessTimers.length === 0, "u5d2 a harness start arms no look at all: " + JSON.stringify(harnessTimers));
+  /* u5d3: machine policy turns the look off (DeskNoUpdateCheck, Claude α's decision 10 of 2026-11-11): no look is armed,
+     and a note kept before the policy was set offers nothing. */
+  const offTimers = [];
+  const S5f = shellOf({ policyOff: true, setTimeout: (fn, ms) => { offTimers.push(ms); return { unref() {} }; }, net: { fetch: () => { throw new Error("reached"); } } });
+  S5f.armNoteLook();
+  check(offTimers.length === 0, "u5d3 machine policy that turns the look off arms no look at all: " + JSON.stringify(offTimers));
+  const S5g = shellOf({ ud: S4.ud, policyOff: true });
+  check(S5g.updateState().offer === "" && shellOf({ ud: S4.ud }).updateState().offer === "2.0.1",
+    "u5d4 under that policy a note kept before offers nothing, and the same folder without it still offers 2.0.1");
   /* The preload: a trusted click whose path holds the release page's button tells main so; an untrusted one, or a middle
      click, does not; and E_HOST carries the three verbs. */
   const pre = { sync: [], invoke: [], listeners: {} };

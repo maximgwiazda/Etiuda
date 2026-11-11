@@ -3959,12 +3959,12 @@ const POLICY_HEAD = "HKEY_LOCAL_MACHINE" + POLICY_KEY.slice(4);
 const POLICY_EXPORT_LINE = "Windows Registry Editor Version 5.00\r\n";
 /* The key's own values in the text of reg export's file, by lower-case name as {type, value}: a string as
    the registry holds it, its two escapes undone and nothing trimmed, line breaks included, and an expandable
-   or multiple string as its UTF-16 text. Null where anything in the text is not what reg writes, a subkey's
+   or multiple string as its UTF-16 text, a DWORD as its number in decimal. Null where anything in the text is not what reg writes, a subkey's
    values aside, so no part of a read in doubt is used. */
 function policyValues(text) {
   const t = String(text), own = Object.create(null);
   const HEAD = /\[([^\r\n]*)\]\r\n/y;
-  const VALUE = /(?:@|"((?:[^"\\]|\\[\\"])*)")=(?:"((?:[^"\\]|\\[\\"])*)"|(dword):[0-9a-f]{8}|(hex(?:\([0-9a-f]{1,8}\))?):((?:[0-9a-f]{2}(?:,[0-9a-f]{2})*,?)?(?:\\\r\n {2}[0-9a-f]{2}(?:,[0-9a-f]{2})*,?)*))\r\n/y;
+  const VALUE = /(?:@|"((?:[^"\\]|\\[\\"])*)")=(?:"((?:[^"\\]|\\[\\"])*)"|(dword):([0-9a-f]{8})|(hex(?:\([0-9a-f]{1,8}\))?):((?:[0-9a-f]{2}(?:,[0-9a-f]{2})*,?)?(?:\\\r\n {2}[0-9a-f]{2}(?:,[0-9a-f]{2})*,?)*))\r\n/y;
   const plain = s => s.replace(/\\([\\"])/g, "$1");
   const WIDE = { "hex(2)": "REG_EXPAND_SZ", "hex(7)": "REG_MULTI_SZ" };
   const wide = hex => { const b = Buffer.from(hex.replace(/[^0-9a-f]/g, ""), "hex"); return b.length % 2 ? "" : b.toString("utf16le").replace(/\u0000+$/, ""); };
@@ -3988,7 +3988,8 @@ function policyValues(text) {
       const name = plain(m[1]).toLowerCase();
       if (name in own) return null;
       own[name] = m[2] !== undefined ? { type: "REG_SZ", value: plain(m[2]) }
-        : WIDE[m[4]] ? { type: WIDE[m[4]], value: wide(m[5]) } : { type: m[3] || m[4], value: "" };
+        : m[3] ? { type: "dword", value: String(parseInt(m[4], 16)) }
+        : WIDE[m[5]] ? { type: WIDE[m[5]], value: wide(m[6]) } : { type: m[5], value: "" };
     }
     at = VALUE.lastIndex;
   }
@@ -4035,10 +4036,21 @@ function policyFolderOk(s) {
   return parts.slice(2).every(segment);
 }
 function policyLeadOk(s) { return typeof s === "string" && POLICY_LEAD_RE.test(s); }
+/* AN ADMINISTRATOR TURNS THE HOURLY LOOK FOR A NEW VERSION OFF (Claude α's decision 10, 2026-11-11): DeskNoUpdateCheck in
+   this key, machine policy alone, read and never written. Set to anything but 0, as a DWORD or a string, the desk asks for
+   no version note and offers none; absent, empty or 0 leaves the look on. A key the parser cannot read is no policy. */
+function policyNoUpdate(values) {
+  const v = values ? values["desknoupdatecheck"] : undefined;
+  if (!v) return false;
+  const s = String(v.value).trim();
+  return !((v.type === "dword" || v.type === "REG_SZ" || v.type === "REG_EXPAND_SZ") && (s === "" || s === "0"));
+}
 /* `text` is the text of reg export's file for the policy key, or empty where there is none.
-   Returns {folder, lead, bad}: folder and lead empty where unused, bad the names of the words to say. */
+   Returns {folder, lead, bad, noUpdate}: folder and lead empty where unused, bad the names of the words to say, noUpdate
+   true where policy turns the version look off. */
 function joinPolicyFacts(text) {
   const values = text ? policyValues(text) : null;
+  const noUpdate = policyNoUpdate(values);
   const folder = policyRegSz(values, "TeamFolder");
   const lead = policyRegSz(values, "LeadKey");
   const bad = [];
@@ -4064,14 +4076,14 @@ function joinPolicyFacts(text) {
   if ((folder.set || lead.set) && (!folderOk || !leadOk)) {
     if (folder.set && folderOk && !leadOk) bad.push("beside");
     if (lead.set && leadOk && !folderOk) bad.push("beside");
-    return { folder: "", lead: "", bad: bad };
+    return { folder: "", lead: "", bad: bad, noUpdate: noUpdate };
   }
-  return { folder: folderValue, lead: leadValue, bad: bad };
+  return { folder: folderValue, lead: leadValue, bad: bad, noUpdate: noUpdate };
 }
-/* The facts with their sentences in `lang`, "pl" or anything else for English: {folder, lead, said}. */
+/* The facts with their sentences in `lang`, "pl" or anything else for English: {folder, lead, said, noUpdate}. */
 function policyWords(facts, lang) {
   const words = POLICY_WORDS[lang === "pl" ? "pl" : "en"];
-  return { folder: facts.folder, lead: facts.lead, said: facts.bad.map(k => words[k]) };
+  return { folder: facts.folder, lead: facts.lead, said: facts.bad.map(k => words[k]), noUpdate: facts.noUpdate === true };
 }
 function joinPolicyFrom(text, lang) { return policyWords(joinPolicyFacts(text), lang); }
 let joinPolicyRead = null;
@@ -4099,6 +4111,10 @@ function readJoinPolicy(lang) {
     joinPolicyRead = joinPolicyFacts(text);
   }
   return policyWords(joinPolicyRead, lang);
+}
+/* True where machine policy turns the version look off; read with the team values, once a run. */
+function updateLookOff() {
+  try { return readJoinPolicy("en").noUpdate === true; } catch { return false; }
 }
 let joinPolicySaid = false;
 function sayJoinPolicy() {
@@ -8889,10 +8905,11 @@ function keptNote() {
   noteKept = got && got.note ? got.note : null;
   return noteKept;
 }
-/* What the page shows: the version offered where the kept note's is above this engine's, and how the latest look went. */
+/* What the page shows: the version offered where the kept note's is above this engine's and machine policy leaves the look
+   on, and how the latest look went. */
 function updateState() {
   const kept = keptNote();
-  return { offer: kept && versionAbove(kept.version, engineVersion()) ? kept.version : "", look: noteLook };
+  return { offer: !updateLookOff() && kept && versionAbove(kept.version, engineVersion()) ? kept.version : "", look: noteLook };
 }
 async function lookForNote(fetchFn) {
   let look = "failed";
@@ -8915,7 +8932,7 @@ async function lookForNote(fetchFn) {
 /* A first look a minute after the window opens, then hourly. Never from the harness's own window, so no leg reaches out. */
 function armNoteLook() {
   /* Not from any harness start (harnessLaunch: --user-data-dir or a test variable), so no leg ever asks production etiuda.dev. */
-  if (PLACED_ASIDE || harnessLaunch() || noteTimer || !net || typeof net.fetch !== "function") return;
+  if (PLACED_ASIDE || harnessLaunch() || updateLookOff() || noteTimer || !net || typeof net.fetch !== "function") return;
   const next = () => {
     lookForNote((u, init) => net.fetch(u, init)).catch(() => {});
     noteTimer = setTimeout(next, NOTE_EVERY_MS);
