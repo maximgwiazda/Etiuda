@@ -20,6 +20,10 @@
  *   t11 in Polish at every width no Library section scrolls sideways, page or panel; every foot button ends inside its panel
  *   t12 in Polish under 420 px of box every category name shows its words whole
  *   t13 in Polish every heading shown holds its words in its column; Sent is 124 px wherever shown
+ *   t14 with a card put away, each category's number is the count of card rows drawn under it, and its hover and
+ *       accessible name read "Cards in this category: {N}"
+ *   t15 while a sort is on, every card's hover opens with "Dragging waits for the catalog's order..."; cleared, with "Drag to reorder"
+ *   t16 in Polish a search matching nothing reads the Polish line, and the new category field's placeholder and label are Polish
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -750,7 +754,79 @@ try {
     return cut;
   });
   if (t12narrow.length) t12bad.push({ box: 300, cut: t12narrow.slice(0, 4) });
+  /* t16 in Polish: both are written after the translation sweep, so only t() reaches them. */
+  const t16Res = await pl.evaluate(async () => {
+    const pause = () => new Promise(r => setTimeout(r, 60));
+    const find = document.getElementById("libSearch");
+    if (!find) return { ok: false, reason: "no #libSearch" };
+    find.value = "xyz_nic_takiego";
+    find.dispatchEvent(new Event("input", { bubbles: true }));
+    await pause();
+    const empty = document.getElementById("libEmptySearch");
+    const emptyText = empty ? empty.textContent : null;
+    const skip = !!(empty && empty.hasAttribute("data-i18n-skip"));
+    const f2 = document.getElementById("libSearch");
+    f2.value = "";
+    f2.dispatchEvent(new Event("input", { bubbles: true }));
+    await pause();
+    const sec = document.querySelector('.sx-sec[data-lm="catmac"]');
+    if (sec) sec.click();
+    await pause();
+    const add = document.getElementById("mgAddCat");
+    if (add) add.click();
+    await pause();
+    const inp = document.getElementById("mgNewCat");
+    const ph = inp ? inp.getAttribute("placeholder") : null, al = inp ? inp.getAttribute("aria-label") : null;
+    if (inp) inp.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    return { ok: emptyText === "Nic w Bibliotece nie pasuje do tego wyszukiwania." && !skip
+      && ph === "Nowa kategoria" && al === "Nazwa nowej kategorii", emptyText, skip, ph, al };
+  });
   await pl.close();
+
+  /* t14 and t15 on a fresh English desk. */
+  const en = await boot({ width: 1280, height: 900 }, [["eUiLang", "en"]]);
+  await openCatmac(en);
+  await en.evaluate(async () => {
+    const b = document.querySelector(".mg-cat-body [data-hide-card]");
+    if (b) b.click();
+    await new Promise(r => setTimeout(r, 400));
+  });
+  const t14Res = await en.evaluate(() => {
+    const bad = [];
+    let cats = 0, withPutAway = 0;
+    for (const cat of document.querySelectorAll(".mg-tree .mg-cat")) {
+      const nEl = cat.querySelector(".mg-cat-row .mg-cat-n");
+      if (!nEl) continue;
+      cats++;
+      const drawn = cat.querySelectorAll(".mg-cat-body .manage-row.mg-card").length;
+      if (cat.querySelector(".mg-cat-body .manage-row.mg-card.is-hidden")) withPutAway++;
+      const want = "Cards in this category: " + drawn;
+      if (nEl.textContent.trim() !== String(drawn) || nEl.getAttribute("title") !== want || nEl.getAttribute("aria-label") !== want)
+        bad.push({ cat: cat.getAttribute("data-cat"), shown: nEl.textContent.trim(), drawn, title: nEl.getAttribute("title"), aria: nEl.getAttribute("aria-label") });
+    }
+    return { ok: cats > 0 && withPutAway > 0 && !bad.length, cats, withPutAway, bad: bad.slice(0, 3) };
+  });
+  check(t14Res && t14Res.ok, "t14 with a card put away, each category's number is its card rows drawn, hover and accessible name read 'Cards in this category: {N}'", t14Res);
+  const t15Res = await en.evaluate(async () => {
+    const pause = () => new Promise(r => setTimeout(r, 60));
+    const clickSent = () => { const h = document.querySelector(".lw-head .lw-h-us"); if (h) h.click(); };
+    const titles = () => [...document.querySelectorAll(".mg-cat-body .manage-row.mg-card")].map(r => {
+      r.dispatchEvent(new PointerEvent("pointerenter"));
+      return r.getAttribute("title") || "";
+    });
+    const sorted = "Dragging waits for the catalog's order: a third click on the sorted heading brings it back.";
+    const plain = "Drag to reorder, or onto a category to move it there";
+    clickSent(); await pause();
+    const on = titles();
+    clickSent(); await pause(); clickSent(); await pause();
+    const off = titles();
+    const onBad = on.filter(x => !x.startsWith(sorted)), offBad = off.filter(x => !x.startsWith(plain));
+    return { ok: on.length > 0 && off.length > 0 && !onBad.length && !offBad.length, on: on.length, off: off.length,
+      onBad: onBad.slice(0, 2), offBad: offBad.slice(0, 2) };
+  });
+  check(t15Res && t15Res.ok, "t15 while a sort is on every card's hover opens with the sorted line; cleared, with the drag hint", t15Res);
+  await en.close();
+  check(t16Res && t16Res.ok, "t16 in Polish a search matching nothing reads the Polish line, and the new category field is Polish", t16Res);
   check(!t11bad.length, "t11 in Polish at 546-2560 no Library section scrolls sideways, page or panel, and every foot button ends inside its panel", t11bad.slice(0, 4));
   check(!t12bad.length, "t12 in Polish under 420 px of box every category's name shows its words whole", t12bad.slice(0, 4));
   check(!t13bad.length, "t13 in Polish at 546-2560 every heading shown holds its words inside its column, and Sent is 124 px wherever shown", t13bad.slice(0, 4));
@@ -762,6 +838,6 @@ try {
   try { fs.rmSync(lab, { recursive: true, force: true }); } catch (e) {}
 }
 
-console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=13");
+console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=16");
 console.log(checks + " checks, " + fails + " failed");
-process.exit(fails || checks !== 13 ? 1 : 0);
+process.exit(fails || checks !== 16 ? 1 : 0);

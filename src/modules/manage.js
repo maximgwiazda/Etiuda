@@ -20,7 +20,7 @@ import { drawPills } from "./tabs.js";
 import { t, catalogCountsLine, counted, toast, translateTree, offerUndo } from "./ui-lang.js";
 import { isFavourite, isIntentFavourite, pack, whoOptions, savePack } from "./pack.js";
 import { removeCard, removeIntent, setIntentHidden, syncIntentOrder, toggleFavourite, toggleIntentFavourite } from "./favourites.js";
-import { primaryCatKeys, intentCardCounts, normalizeCardIntents } from "./card-intent.js";
+import { primaryCatKeys, intentCardCounts, allIntentCardCount, normalizeCardIntents } from "./card-intent.js";
 import { catMarkHtml } from "./cat-identity.js";
 import { intentIdAt, intentIdxFromId, intentIsCustom, intentIsOverridden, intentOrder, isIntentHiddenIdx } from "./intent-id.js";
 import { applyCatsToGlobal, removeCategory } from "./cat-set.js";
@@ -198,7 +198,7 @@ function mgCardRow(m, maxSent){
   const sentTipAttr = sent.tip ? ' title="' + esc(sent.tip) + '"' : '';
 
   return '<div class="manage-row mg-card mg-card-row' + (hid ? " is-hidden" : "") + '" data-cardrow="' + esc(m.id) + '"' +
-      ' data-band="' + esc(mgCardBand(m)) + '" title="' + esc(t("Drag to reorder, or onto a category to move it there")) + '">' +
+      ' data-band="' + esc(mgCardBand(m)) + '" title="' + esc(mgCardDragTip()) + '">' +
     '<span class="lw-nm">' +
       '<span class="mg-card-lab">' + esc(cardTitle(m) || "") + '</span>' +
       (cardCommits(m) ? stampHtml("mg-stamp") : "") +
@@ -310,6 +310,12 @@ function mgTreeHeadHtml(){
     '</div>' + sortLineHtml;
 }
 
+/* A card drag is refused while a sort is on (wireManageDrag), so the row's hover says so in the sort line's terms. */
+function mgCardDragTip(){
+  return mgSortCol
+    ? t("Dragging waits for the catalog's order: a third click on the sorted heading brings it back.")
+    : t("Drag to reorder, or onto a category to move it there");
+}
 function updateTreeHoverTitles(root){
   const tree = (root || document).querySelector(".mg-tree");
   if(!tree) return;
@@ -327,7 +333,7 @@ function updateTreeHoverTitles(root){
     us: !isColShown("lw-h-us"),
     sr: !isColShown("lw-h-sr"),
   };
-  const dragHint = t("Drag to reorder, or onto a category to move it there");
+  const dragHint = mgCardDragTip();
   const cardRows = tree.querySelectorAll(".mg-cat-body .manage-row.mg-card");
   cardRows.forEach(row => {
     const cid = row.getAttribute("data-cardrow");
@@ -401,8 +407,10 @@ function mgCatTree(){
   const order=list=>list.sort(mgCardCmp).map(o=>mgCardRow(o.m, maxCardSent)).join("");
 
   const group=(k,rows,fixed,label)=>{
-    const n=rows.length;                      // CARDS - guards the delete x below
-    const nMac=rows.reduce((sum,o)=>sum+macroBlockCount(o.m),0);   // cards - what the badge shows
+    /* The rows drawn under the name, put-away cards included: the number beside the name, and the
+       guard on the delete x below. */
+    const n=rows.length;
+    const nTip=esc(t("Cards in this category: {N}").replace("{N}",n));
     const key="cat:"+k;
     const op=mgOpen.has(key);
     /* In the Library a category row's name field takes focus on F2, and inline renaming
@@ -447,7 +455,7 @@ function mgCatTree(){
         '<span class="lw-nm">' +
           '<button type="button" class="mg-tw" data-toggle="'+esc(key)+'" aria-expanded="'+(op?"true":"false")+'" '+
             'title="'+esc(t(op?"Collapse":"Expand"))+'" aria-label="'+esc(t(op?"Collapse":"Expand"))+' '+esc(label)+'">'+ICON_CHEVRON_R+'</button>'+
-          name+'<span class="mg-cat-n">'+nMac+'</span>'+
+          name+'<span class="mg-cat-n" role="img" title="'+nTip+'" aria-label="'+nTip+'">'+n+'</span>'+
         '</span>'+
         '<span class="lw-c op lw-h-op"></span>'+
         '<span class="lw-c lg lw-h-lg"></span>'+
@@ -812,8 +820,8 @@ function startMgCatAdd(){
   const wrap=document.createElement("div");
   wrap.className="mg-cat mg-cat-new";
   wrap.innerHTML='<div class="mg-cat-row"><span class="mg-tw" aria-hidden="true">'+ICON_CHEVRON_R+'</span>'+
-    '<input type="text" class="mg-cat-lab2" id="mgNewCat" placeholder="New category" '+
-    'spellcheck="false" autocomplete="off" aria-label="New category name"></div>';
+    '<input type="text" class="mg-cat-lab2" id="mgNewCat" placeholder="'+esc(t("New category"))+'" '+
+    'spellcheck="false" autocomplete="off" aria-label="'+esc(t("New category name"))+'"></div>';
   tree.appendChild(wrap);
   tree.scrollTop=tree.scrollHeight;
   const inp=wrap.querySelector("#mgNewCat");
@@ -934,6 +942,8 @@ function mgIntentRow(i,catOf,linked,intentCardsMap){
     '<span class="mg-int-t cut-peek" data-i18n-skip>'+esc(intentNavName(i)||"")+badge+'</span>'+
     '<span class="mg-int-n" title="'+esc(countHover)+'">'+count+'</span>'+
     '<div class="lw-mid">'+chipsHtml+'</div>'+
+    (cardList.length?'<button type="button" class="lw-more" data-chips-more="'+esc(intentNavName(i)||"")+'" aria-expanded="false" hidden title="'+esc(t("Expand"))+'"'+
+      ' aria-label="'+esc(t("Expand"))+' '+esc(intentNavName(i)||"")+'">'+ICON_CHEVRON_R+'</button>':"")+
     '<span class="cacts">'+
       '<button type="button" data-edit-intent-mg="'+i+'" title="Edit intent" aria-label="Edit intent">'+ICON_EDIT+'</button>'+
       hideShow+
@@ -1082,9 +1092,7 @@ function applyLibView(page){
       emptyP=document.createElement("p");
       emptyP.className="sx-none";
       emptyP.id="libEmptySearch";
-      emptyP.setAttribute("data-i18n-skip","");
-      // placeholder: Claudette
-      emptyP.textContent="Nothing in the library matches this search.";
+      emptyP.textContent=t("Nothing in the Library matches this search.");
       card.appendChild(emptyP);
     }
   } else if(emptyP){
@@ -1101,7 +1109,10 @@ function applyLibView(page){
   if(title) title.textContent=q?String(libQuery||"").trim():(sec?sec.name:"");
   if(lede){
     const n=countEl&&countEl.textContent?countEl.textContent.trim():"";
-    lede.textContent=!sec||q?"":(sec.key==="catmac"&&n)?(n+". "+sec.lede):(sec.key==="intents"&&n)?(t("Intents: {N}.").replace("{N}",n)+" "+sec.lede):sec.lede;
+    /* Cards linked to every intent are said once here, not on each row, and only when there are any. */
+    const every=sec&&sec.key==="intents"?allIntentCardCount():0;
+    const everyLine=every?t("Cards linked to every intent: {N}.").replace("{N}",every)+" ":"";
+    lede.textContent=!sec||q?"":(sec.key==="catmac"&&n)?(n+". "+sec.lede):(sec.key==="intents")?((n?t("Intents: {N}.").replace("{N}",n)+" ":"")+everyLine+sec.lede):sec.lede;
   }
 }
 function wireLibShell(page){
@@ -1661,6 +1672,35 @@ function wireLibrary(page){
       if(cid) openCardEditor(cid, null, true);
     };
   });
+  /* The chevron is drawn only where a row's chips overflow their one line, measured at paint and on
+     resize; it opens that row alone, and an open row stays drawn so it can close. */
+  const intentsList=page.querySelector(".mg-intents");
+  const markChipOverflow=()=>{
+    if(!intentsList) return;
+    intentsList.querySelectorAll(".manage-row.mg-int").forEach(r=>{
+      const more=r.querySelector("[data-chips-more]"), mid=r.querySelector(".lw-mid");
+      if(!more||!mid) return;
+      more.hidden=!r.classList.contains("chips-open") && !(mid.scrollWidth>mid.clientWidth+1);
+    });
+  };
+  page.querySelectorAll("[data-chips-more]").forEach(btn=>{
+    btn.onclick=e=>{
+      e.stopPropagation();
+      const r=btn.closest(".manage-row.mg-int");
+      if(!r) return;
+      const open=!r.classList.contains("chips-open");
+      r.classList.toggle("chips-open",open);
+      const word=t(open?"Collapse":"Expand");
+      btn.setAttribute("aria-expanded",open?"true":"false");
+      btn.title=word;
+      btn.setAttribute("aria-label",word+" "+btn.getAttribute("data-chips-more"));
+      if(!open) markChipOverflow();
+    };
+  });
+  if(intentsList){
+    markChipOverflow();
+    if(typeof ResizeObserver!=="undefined") new ResizeObserver(markChipOverflow).observe(intentsList);
+  }
   page.querySelectorAll("[data-edit-intent-mg]").forEach(btn=>{
     btn.onclick=()=>openIntentEditor(+btn.getAttribute("data-edit-intent-mg"), true);
   });

@@ -3899,9 +3899,21 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx.lm-lib .mg-intents .manage-row.mg-int .lw-chip:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .sx.lm-lib .mg-intents .manage-row.mg-int .lw-empty-chips{font:12.5px var(--sans);color:var(--dim);opacity:.7;padding:2px 0;white-space:nowrap;flex:none}
 .sx.lm-lib .mg-intents .manage-row.mg-int .cacts{flex:0 0 auto;margin-left:12px}
+/* The chevron takes the row's icon-button look (.cacts button), outside the chips' fade. Open, the row's
+   chips wrap with the fade off, and the row aligns to its top so the name keeps the first line. */
+.sx.lm-lib .mg-intents .manage-row.mg-int .lw-more{border:0;background:transparent;cursor:default;padding:2px 6px;margin:0;
+  color:var(--dim);flex:0 0 auto;border-radius:4px;min-width:1.4em;display:inline-flex;align-items:center;justify-content:center}
+.sx.lm-lib .mg-intents .manage-row.mg-int .lw-more:hover,.sx.lm-lib .mg-intents .manage-row.mg-int .lw-more:focus-visible{color:var(--accent);background:var(--accent-soft)}
+.sx.lm-lib .mg-intents .manage-row.mg-int .lw-more:focus-visible{box-shadow:inset 0 0 0 1px var(--accent)}
+.sx.lm-lib .mg-intents .manage-row.mg-int .lw-more svg{transform:rotate(90deg)}
+.sx.lm-lib .mg-intents .manage-row.mg-int .lw-more[aria-expanded=true]{color:var(--accent)}
+.sx.lm-lib .mg-intents .manage-row.mg-int .lw-more[aria-expanded=true] svg{transform:rotate(-90deg)}
+.sx.lm-lib .mg-intents .manage-row.mg-int.chips-open{align-items:flex-start}
+.sx.lm-lib .mg-intents .manage-row.mg-int.chips-open .lw-mid{flex-wrap:wrap;row-gap:6px;-webkit-mask-image:none;mask-image:none}
+.sx.lm-lib .mg-intents .manage-row.mg-int.chips-open .lw-chip{max-width:100%;overflow:hidden;text-overflow:ellipsis}
 
 @container (max-width: 520px){
-  .lw-ihead,.sx.lm-lib .mg-intents .manage-row.mg-int .lw-mid{display:none!important}
+  .lw-ihead,.sx.lm-lib .mg-intents .manage-row.mg-int .lw-mid,.sx.lm-lib .mg-intents .manage-row.mg-int .lw-more{display:none!important}
   .sx.lm-lib .mg-intents .manage-row.mg-int .mg-int-t{flex:1 1 auto!important;min-width:0!important;max-width:none!important}
   .sx.lm-lib .mg-intents .manage-row.mg-int .cacts{margin-left:auto!important}
 }
@@ -7538,6 +7550,9 @@ What you type stays in this browser only.`;
     "Each category with its cards, its place in the order, and whether it supports every intent.": "Każda kategoria z kartami, jej miejsce w kolejności i to, czy wspiera każdą intencję.",
     "Favourites first, hidden intents at the foot.": "Najpierw ulubione, ukryte intencje na końcu.",
     "Intents: {N}.": "Intencje: {N}.",
+    "Cards linked to every intent: {N}.": "Karty powiązane ze wszystkimi intencjami: {N}.",
+    "Cards in this category: {N}": "Karty w tej kategorii: {N}",
+    "Nothing in the Library matches this search.": "Nic w Bibliotece nie pasuje do tego wyszukiwania.",
     "Beside each, the cards linked to it.": "Przy każdej widać powiązane z nią karty.",
     "Linked cards": "Powiązane karty",
     "no cards yet": "jeszcze bez kart",
@@ -8177,7 +8192,8 @@ What you type stays in this browser only.`;
     "Lock the intent panel open": "Zablokuj panel intencji",
     "Double-click to reset the intent order": "Kliknij dwukrotnie, aby przywrócić kolejność intencji",
     "Drag to reorder": "Przeciągnij, aby zmienić kolejność",
-    "Drag to reorder, or onto a category to move it there": "Przeciągnij, aby zmienić kolejność, albo upuść na kategorii, aby przenieść tam kartę",
+    "Drag to reorder, or onto a category to move it there": "Przeciągnięcie zmienia kolejność, a upuszczenie na kategorii przenosi tam kartę.",
+    "Dragging waits for the catalog's order: a third click on the sorted heading brings it back.": "Przeciąganie wraca razem z kolejnością z katalogu, którą przywraca trzecie kliknięcie posortowanego nagłówka.",
     "Click to copy": "Kliknij, aby skopiować",
     "Click to copy full URL": "Kliknij, aby skopiować pełny adres",
     "Click to copy, or drag to reorder these": "Kliknij, aby skopiować, lub przeciągnij, aby zmienić kolejność",
@@ -11954,6 +11970,7 @@ What you type stays in this browser only.`;
   // src/modules/card-intent.js
   var card_intent_exports = {};
   __export(card_intent_exports, {
+    allIntentCardCount: () => allIntentCardCount,
     cardHitsAlwaysCat: () => cardHitsAlwaysCat,
     cardHitsSelectedIntent: () => cardHitsSelectedIntent,
     cardIntentLinks: () => cardIntentLinks,
@@ -12150,6 +12167,9 @@ What you type stays in this browser only.`;
       if (m && !m._hidden) new Set(normalizeCardIntents(m)).forEach((id) => n.set(id, (n.get(id) || 0) + 1));
     });
     return n;
+  }
+  function allIntentCardCount() {
+    return (cards || []).reduce((n, m) => n + (cardIntentLinks(m) === true ? 1 : 0), 0);
   }
 
   // src/modules/agent.js
@@ -32900,7 +32920,7 @@ What you type stays in this browser only.`;
     const sent = mgCardSent(m, maxSent);
     const src = mgCardSource(m);
     const sentTipAttr = sent.tip ? ' title="' + esc(sent.tip) + '"' : "";
-    return '<div class="manage-row mg-card mg-card-row' + (hid ? " is-hidden" : "") + '" data-cardrow="' + esc(m.id) + '" data-band="' + esc(mgCardBand(m)) + '" title="' + esc(t("Drag to reorder, or onto a category to move it there")) + '"><span class="lw-nm"><span class="mg-card-lab">' + esc(cardTitle(m) || "") + "</span>" + (cardCommits(m) ? stampHtml("mg-stamp") : "") + '</span><span class="lw-c op lw-h-op cut-peek">' + openHtml + '</span><span class="lw-c lg lw-h-lg">' + langsHtml + '</span><span class="lw-c st lw-h-st">' + repHtml + '</span><span class="lw-c in lw-h-in">' + intHtml + '</span><span class="lw-c us lw-h-us"' + sentTipAttr + ">" + sent.inner + '</span><span class="lw-c sr lw-h-sr">' + src.html + '</span><span class="cacts"><button type="button" data-edit-card="' + esc(m.id) + '" title="Open the full editor" aria-label="Edit card">' + ICON_EDIT + "</button>" + hideShow + '<button type="button" class="danger mg-trash" data-remove-card="' + esc(m.id) + '" title="Delete this card" aria-label="Delete card">' + ICON_TRASH + '</button><button type="button" class="star-btn' + (fav ? " on" : "") + '" data-fav-card="' + esc(m.id) + '" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
+    return '<div class="manage-row mg-card mg-card-row' + (hid ? " is-hidden" : "") + '" data-cardrow="' + esc(m.id) + '" data-band="' + esc(mgCardBand(m)) + '" title="' + esc(mgCardDragTip()) + '"><span class="lw-nm"><span class="mg-card-lab">' + esc(cardTitle(m) || "") + "</span>" + (cardCommits(m) ? stampHtml("mg-stamp") : "") + '</span><span class="lw-c op lw-h-op cut-peek">' + openHtml + '</span><span class="lw-c lg lw-h-lg">' + langsHtml + '</span><span class="lw-c st lw-h-st">' + repHtml + '</span><span class="lw-c in lw-h-in">' + intHtml + '</span><span class="lw-c us lw-h-us"' + sentTipAttr + ">" + sent.inner + '</span><span class="lw-c sr lw-h-sr">' + src.html + '</span><span class="cacts"><button type="button" data-edit-card="' + esc(m.id) + '" title="Open the full editor" aria-label="Edit card">' + ICON_EDIT + "</button>" + hideShow + '<button type="button" class="danger mg-trash" data-remove-card="' + esc(m.id) + '" title="Delete this card" aria-label="Delete card">' + ICON_TRASH + '</button><button type="button" class="star-btn' + (fav ? " on" : "") + '" data-fav-card="' + esc(m.id) + '" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
   }
   function mgCardColVal(m, col) {
     if (col === "nm") return (cardTitle(m) || "").toLowerCase();
@@ -32975,6 +32995,9 @@ What you type stays in this browser only.`;
     };
     return '<div class="lw-head" role="row">' + hBtn("nm", "lw-nm lw-h-nm", t("Name")) + hBtn("op", "lw-c op lw-h-op", t("Opens with")) + hBtn("lg", "lw-c lg lw-h-lg", t("Languages")) + hBtn("st", "lw-c st lw-h-st", t("Replies")) + hBtn("in", "lw-c in lw-h-in", t("Intents")) + hBtn("us", "lw-c us lw-h-us", t("Sent, 30 days")) + hBtn("sr", "lw-c sr lw-h-sr", t("Source")) + '<span class="lw-ac lw-h-ac"></span></div>' + sortLineHtml;
   }
+  function mgCardDragTip() {
+    return mgSortCol ? t("Dragging waits for the catalog's order: a third click on the sorted heading brings it back.") : t("Drag to reorder, or onto a category to move it there");
+  }
   function updateTreeHoverTitles(root) {
     const tree = (root || document).querySelector(".mg-tree");
     if (!tree) return;
@@ -32992,7 +33015,7 @@ What you type stays in this browser only.`;
       us: !isColShown("lw-h-us"),
       sr: !isColShown("lw-h-sr")
     };
-    const dragHint = t("Drag to reorder, or onto a category to move it there");
+    const dragHint = mgCardDragTip();
     const cardRows = tree.querySelectorAll(".mg-cat-body .manage-row.mg-card");
     cardRows.forEach((row2) => {
       const cid = row2.getAttribute("data-cardrow");
@@ -33055,7 +33078,7 @@ What you type stays in this browser only.`;
     const order = (list2) => list2.sort(mgCardCmp).map((o) => mgCardRow(o.m, maxCardSent)).join("");
     const group = (k, rows, fixed, label2) => {
       const n = rows.length;
-      const nMac = rows.reduce((sum, o) => sum + macroBlockCount(o.m), 0);
+      const nTip = esc(t("Cards in this category: {N}").replace("{N}", n));
       const key = "cat:" + k;
       const op = mgOpen.has(key);
       const name = fixed || k === "__orphan" ? '<span class="mg-cat-fixed">' + esc(label2) + "</span>" : '<textarea class="mg-cat-lab2" rows="1" data-rename="' + esc(k) + '" spellcheck="false" autocomplete="off" aria-label="' + esc(t("Category name")) + '">' + esc(label2) + "</textarea>";
@@ -33075,7 +33098,7 @@ What you type stays in this browser only.`;
         const bw = maxCatSent > 0 ? Math.max(1, Math.min(40, Math.round(catSent / maxCatSent * 40))) : 0;
         catSentBar = '<em style="width:' + bw + 'px"></em>';
       }
-      return '<div class="mg-cat' + (op ? " is-open" : "") + '" data-cat="' + esc(k) + '"><div class="mg-cat-row"' + (k === "__orphan" ? "" : ' data-crow="' + esc(k) + '" title="Drag to reorder"') + '><span class="lw-nm"><button type="button" class="mg-tw" data-toggle="' + esc(key) + '" aria-expanded="' + (op ? "true" : "false") + '" title="' + esc(t(op ? "Collapse" : "Expand")) + '" aria-label="' + esc(t(op ? "Collapse" : "Expand")) + " " + esc(label2) + '">' + ICON_CHEVRON_R + "</button>" + name + '<span class="mg-cat-n">' + nMac + '</span></span><span class="lw-c op lw-h-op"></span><span class="lw-c lg lw-h-lg"></span><span class="lw-c st lw-h-st"></span><span class="lw-c in lw-h-in">' + (alwaysOn ? '<i class="lw-src">' + esc(t("every intent")) + "</i>" : "") + '</span><span class="lw-c us lw-h-us"' + catSentTip + ">" + catSentBar + (catSent ? catSent : "") + '</span><span class="lw-c sr lw-h-sr"></span><span class="mg-cat-acts">' + editc + roles + add + x + '</span></div><div class="mg-cat-body"' + (op ? "" : " hidden") + ">" + (n ? order(rows) : '<div class="manage-empty">' + esc(t("Empty.")) + "</div>") + "</div></div>";
+      return '<div class="mg-cat' + (op ? " is-open" : "") + '" data-cat="' + esc(k) + '"><div class="mg-cat-row"' + (k === "__orphan" ? "" : ' data-crow="' + esc(k) + '" title="Drag to reorder"') + '><span class="lw-nm"><button type="button" class="mg-tw" data-toggle="' + esc(key) + '" aria-expanded="' + (op ? "true" : "false") + '" title="' + esc(t(op ? "Collapse" : "Expand")) + '" aria-label="' + esc(t(op ? "Collapse" : "Expand")) + " " + esc(label2) + '">' + ICON_CHEVRON_R + "</button>" + name + '<span class="mg-cat-n" role="img" title="' + nTip + '" aria-label="' + nTip + '">' + n + '</span></span><span class="lw-c op lw-h-op"></span><span class="lw-c lg lw-h-lg"></span><span class="lw-c st lw-h-st"></span><span class="lw-c in lw-h-in">' + (alwaysOn ? '<i class="lw-src">' + esc(t("every intent")) + "</i>" : "") + '</span><span class="lw-c us lw-h-us"' + catSentTip + ">" + catSentBar + (catSent ? catSent : "") + '</span><span class="lw-c sr lw-h-sr"></span><span class="mg-cat-acts">' + editc + roles + add + x + '</span></div><div class="mg-cat-body"' + (op ? "" : " hidden") + ">" + (n ? order(rows) : '<div class="manage-empty">' + esc(t("Empty.")) + "</div>") + "</div></div>";
     };
     const groups = known.map((k) => group(k, byCat[k], false, CATS[k])).join("");
     const stray = orphans.length ? group("__orphan", orphans, true, t("Uncategorised")) : "";
@@ -33384,7 +33407,7 @@ What you type stays in this browser only.`;
     if (!tree || tree.querySelector(".mg-cat-new")) return;
     const wrap = document.createElement("div");
     wrap.className = "mg-cat mg-cat-new";
-    wrap.innerHTML = '<div class="mg-cat-row"><span class="mg-tw" aria-hidden="true">' + ICON_CHEVRON_R + '</span><input type="text" class="mg-cat-lab2" id="mgNewCat" placeholder="New category" spellcheck="false" autocomplete="off" aria-label="New category name"></div>';
+    wrap.innerHTML = '<div class="mg-cat-row"><span class="mg-tw" aria-hidden="true">' + ICON_CHEVRON_R + '</span><input type="text" class="mg-cat-lab2" id="mgNewCat" placeholder="' + esc(t("New category")) + '" spellcheck="false" autocomplete="off" aria-label="' + esc(t("New category name")) + '"></div>';
     tree.appendChild(wrap);
     tree.scrollTop = tree.scrollHeight;
     const inp = wrap.querySelector("#mgNewCat");
@@ -33479,7 +33502,7 @@ What you type stays in this browser only.`;
         return '<button type="button" class="lw-chip" data-card-id="' + esc(o.m.id) + '" title="' + esc(t("Opens this card's editor")) + '" aria-label="' + esc(title) + " · " + esc(t("Opens this card's editor")) + '">' + esc(title) + "</button>";
       }).join("");
     }
-    return '<div class="manage-row mg-int' + (hid ? " is-hidden" : "") + '" data-introw="' + esc(iid) + '" data-band="' + (hid ? "h" : fav ? "f" : "r") + '">' + catMarkHtml(catOf.get(iid) || "") + '<span class="mg-int-t cut-peek" data-i18n-skip>' + esc(intentNavName(i) || "") + badge + '</span><span class="mg-int-n" title="' + esc(countHover) + '">' + count + '</span><div class="lw-mid">' + chipsHtml + '</div><span class="cacts"><button type="button" data-edit-intent-mg="' + i + '" title="Edit intent" aria-label="Edit intent">' + ICON_EDIT + "</button>" + hideShow + trash + '<button type="button" class="star-btn' + (fav ? " on" : "") + '" data-fav-intent-mg="' + esc(iid) + '" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
+    return '<div class="manage-row mg-int' + (hid ? " is-hidden" : "") + '" data-introw="' + esc(iid) + '" data-band="' + (hid ? "h" : fav ? "f" : "r") + '">' + catMarkHtml(catOf.get(iid) || "") + '<span class="mg-int-t cut-peek" data-i18n-skip>' + esc(intentNavName(i) || "") + badge + '</span><span class="mg-int-n" title="' + esc(countHover) + '">' + count + '</span><div class="lw-mid">' + chipsHtml + "</div>" + (cardList.length ? '<button type="button" class="lw-more" data-chips-more="' + esc(intentNavName(i) || "") + '" aria-expanded="false" hidden title="' + esc(t("Expand")) + '" aria-label="' + esc(t("Expand")) + " " + esc(intentNavName(i) || "") + '">' + ICON_CHEVRON_R + "</button>" : "") + '<span class="cacts"><button type="button" data-edit-intent-mg="' + i + '" title="Edit intent" aria-label="Edit intent">' + ICON_EDIT + "</button>" + hideShow + trash + '<button type="button" class="star-btn' + (fav ? " on" : "") + '" data-fav-intent-mg="' + esc(iid) + '" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
   }
   function normCatalogFolder(p) {
     return String(p || "").replace(/[\\/]+$/, "").toLowerCase();
@@ -33623,8 +33646,7 @@ What you type stays in this browser only.`;
         emptyP = document.createElement("p");
         emptyP.className = "sx-none";
         emptyP.id = "libEmptySearch";
-        emptyP.setAttribute("data-i18n-skip", "");
-        emptyP.textContent = "Nothing in the library matches this search.";
+        emptyP.textContent = t("Nothing in the Library matches this search.");
         card.appendChild(emptyP);
       }
     } else if (emptyP) {
@@ -33642,7 +33664,9 @@ What you type stays in this browser only.`;
     if (title) title.textContent = q ? String(libQuery || "").trim() : sec ? sec.name : "";
     if (lede) {
       const n = countEl && countEl.textContent ? countEl.textContent.trim() : "";
-      lede.textContent = !sec || q ? "" : sec.key === "catmac" && n ? n + ". " + sec.lede : sec.key === "intents" && n ? t("Intents: {N}.").replace("{N}", n) + " " + sec.lede : sec.lede;
+      const every = sec && sec.key === "intents" ? allIntentCardCount() : 0;
+      const everyLine = every ? t("Cards linked to every intent: {N}.").replace("{N}", every) + " " : "";
+      lede.textContent = !sec || q ? "" : sec.key === "catmac" && n ? n + ". " + sec.lede : sec.key === "intents" ? (n ? t("Intents: {N}.").replace("{N}", n) + " " : "") + everyLine + sec.lede : sec.lede;
     }
   }
   function wireLibShell(page) {
@@ -34107,6 +34131,33 @@ What you type stays in this browser only.`;
         if (cid) openCardEditor(cid, null, true);
       };
     });
+    const intentsList = page.querySelector(".mg-intents");
+    const markChipOverflow = () => {
+      if (!intentsList) return;
+      intentsList.querySelectorAll(".manage-row.mg-int").forEach((r) => {
+        const more = r.querySelector("[data-chips-more]"), mid = r.querySelector(".lw-mid");
+        if (!more || !mid) return;
+        more.hidden = !r.classList.contains("chips-open") && !(mid.scrollWidth > mid.clientWidth + 1);
+      });
+    };
+    page.querySelectorAll("[data-chips-more]").forEach((btn) => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const r = btn.closest(".manage-row.mg-int");
+        if (!r) return;
+        const open = !r.classList.contains("chips-open");
+        r.classList.toggle("chips-open", open);
+        const word = t(open ? "Collapse" : "Expand");
+        btn.setAttribute("aria-expanded", open ? "true" : "false");
+        btn.title = word;
+        btn.setAttribute("aria-label", word + " " + btn.getAttribute("data-chips-more"));
+        if (!open) markChipOverflow();
+      };
+    });
+    if (intentsList) {
+      markChipOverflow();
+      if (typeof ResizeObserver !== "undefined") new ResizeObserver(markChipOverflow).observe(intentsList);
+    }
     page.querySelectorAll("[data-edit-intent-mg]").forEach((btn) => {
       btn.onclick = () => openIntentEditor(+btn.getAttribute("data-edit-intent-mg"), true);
     });

@@ -120,12 +120,18 @@ function intentCardCounts(){
   (cards||[]).forEach(m=>{ if(m && !m._hidden) new Set(normalizeCardIntents(m)).forEach(id=>n.set(id,(n.get(id)||0)+1)); });
   return n;
 }
+/* The cards linked to every intent, read through cardIntentLinks as the conversation reads them, so a
+   put-away card is not counted. intentCardCounts leaves these out of every intent's own number. */
+function allIntentCardCount(){
+  return (cards||[]).reduce((n,m)=>n+(cardIntentLinks(m)===true?1:0),0);
+}
 
 export {
   intentTagCats,
   primaryCatLabel,
   primaryCatKeys,
   intentCardCounts,
+  allIntentCardCount,
   normalizeCardIntents,
   cardIntentLinks,
   cardLinksIntent,
