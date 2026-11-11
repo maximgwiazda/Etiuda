@@ -40,20 +40,30 @@ look at 2.0.0.
 
 ## Installing silently
 
-For a deployment tool: `etiuda-<version>-setup.exe /S` installs for the account it runs as and
-opens no window; `/S /allusers` installs for every account and needs an elevated caller. The
-uninstaller takes `/S` the same way, as the `QuietUninstallString` the installer registers, and
-keeps each person's data. The exit code says what to do next:
+Which command to use depends on the account the deployment tool runs as:
+
+- **In the person's own account:** `etiuda-<version>-setup.exe /S /currentuser` installs for that account alone and
+  opens no window. This is the path tested so far.
+- **From an elevated context, such as the system account:** `etiuda-<version>-setup.exe /S /allusers` installs once for
+  every account on the machine. It has not been tested here yet.
+- **Bare `/S` follows the account that runs it.** Run as the system account, it installs into that
+  account's own profile, where no person can start Etiuda. Pass `/currentuser` or `/allusers` rather
+  than leaving the choice to the account.
+
+The uninstaller takes `/S` the same way, as the `QuietUninstallString` the installer registers, and keeps
+each person's data. The exit code says what to do next:
 
 | Code | Meaning | What to do |
 |---|---|---|
-| 0 | Installed, or uninstalled | Nothing |
-| 1618 | Etiuda was still open after being asked to close for about 20 seconds, or another Etiuda installer was running | Retry later |
-| 740 | An all-users run could not get administrator rights | Run it elevated, as the system account for example, or install per account with `/currentuser` |
-| 2 | Anything else, an older version that would not uninstall for one | Look at that machine |
+| 0 | Installed, or uninstalled. A Windows older than 7, or a 32-bit Windows, is refused and can also end with 0 | Nothing, on a supported machine |
+| 1618 | Etiuda was still open in the installing account after being asked to close for about 20 seconds, or another Etiuda installer was running | Retry later |
+| 740 | An all-users run could not get administrator rights | Run it elevated, or install per account with `/currentuser` |
+| 2 | An older version would not uninstall, its own 1618 included, or another failure the installer caught | Look at that machine |
 
-1618 and 740 are the codes Windows itself uses for these two cases, so a tool that already knows
-them needs nothing more.
+The installer sees only the installing account's open copy. Run from the system account, it does not
+see a copy of Etiuda open in a person's session, so close it before an upgrade. 1618 and 740 are the codes
+Windows itself uses for these two cases; the deployment tool still needs them mapped, 1618 to a retry and
+740 and 2 to a failure.
 
 ## Licence
 
