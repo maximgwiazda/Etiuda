@@ -263,7 +263,7 @@ function wireGlobalKeydown(){
 
     // Nothing focused (e.g. clicked empty space): printable keys go straight into INTENT.
     // First character is inserted manually because focus alone would swallow this keydown.
-    if(e.ctrlKey||e.altKey||e.metaKey) return;
+    if(e.ctrlKey||e.altKey||e.metaKey||e.defaultPrevented) return;
     if(e.key.length!==1) return;
     if(!intentEl) return;
     e.preventDefault();

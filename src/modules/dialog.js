@@ -8,7 +8,7 @@ import { formatActionChord } from "./shortcuts.js";
 import { scStopCapture } from "./shortcuts-list.js";
 import { offerUndo, t, tc, translateTree } from "./ui-lang.js";
 import { esc } from "./esc.js";
-import { modalEl, modalCard, $ } from "./dom.js";
+import { modalEl, modalCard, $, focusKey, sameControl } from "./dom.js";
 
 function modalOpen(){ return !modalEl.hidden; }
 /* ---- SHARED MODAL BEHAVIOUR ---------------------------------------------------------------
@@ -153,6 +153,7 @@ function openDialog(cfg){
     const wrap=(from && from.closest) ? from.closest(".menu-wrap") : null;
     if(wrap) from=wrap.querySelector(":scope > button")||from;
     modalOpener=(from && from!==document.body && from!==document.documentElement) ? from : null;
+    modalOpenerKey=modalOpener ? focusKey(modalOpener,document.body) : null;
     modalOpenerKbd=lastInputWasKey;
   }
   setModalBack(cfg.back||null);
@@ -399,7 +400,7 @@ function mountModalBody(){
 function wireModalBody(){
   new MutationObserver(mountModalBody).observe(modalCard,{childList:true});
 }
-var modalOpener=null, modalOpenerKbd=false;
+var modalOpener=null, modalOpenerKbd=false, modalOpenerKey=null;
 /* THE DIALOG'S LEAVE: what it holds moves into a copy of its frame, which fades on the dismiss tier,
    and the dialog itself closes at once as it always has. Moved rather than cloned, so what was
    typed, drawn and scrolled leaves as it stood. */
@@ -423,9 +424,11 @@ function closeModal(){
   modalEl.hidden=true;
   modalCard.classList.remove("about-modal","about-page","mt-modal");
   modalCard.innerHTML="";
-  const back=modalOpener, kbd=modalOpenerKbd;
-  modalOpener=null; modalOpenerKbd=false;
-  // Gone if its own screen was rebuilt while the dialog stood over it.
+  let back=modalOpener;
+  const kbd=modalOpenerKbd, key=modalOpenerKey;
+  modalOpener=null; modalOpenerKbd=false; modalOpenerKey=null;
+  /* Its own screen rebuilt while the dialog stood over it: the control with the same identity stands in its place. */
+  if(back && !document.contains(back) && key) back=sameControl(document.body,key);
   if(back && document.contains(back) && typeof back.focus==="function"){
     /* The ring belongs to the hand that would use it: kept where the dialog was opened from the
        keyboard, suppressed where it was opened by pointer. focusVisible is honoured here and

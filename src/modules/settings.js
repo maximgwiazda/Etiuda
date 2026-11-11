@@ -27,6 +27,7 @@ import { openAbout } from "./about.js";
 import { openMaintenance } from "./maintenance.js";
 import { E_VERSION } from "./env.js";
 import { sxIcon } from "./sx-icons.js";
+import { focusKey, focusSame } from "./dom.js";
 
 /* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name,
    in columns that fill the width. Choosing a section shows that section alone: Appearance and Layout
@@ -535,7 +536,9 @@ function onSectionEscape(e){
   if(screenOn!=="settings" || !sxOn || sxOn==="all" || String(sxQuery||"").trim()) return;
   if(scCaptureId || hkListening) return;
   const target=e.target, tag=target && target.tagName;
-  if(tag==="INPUT" || tag==="TEXTAREA" || tag==="SELECT" || (target && target.isContentEditable)) return;
+  /* A field typed into keeps Escape; a slider, a box and a list do not take it. */
+  if(tag==="TEXTAREA" || (target && target.isContentEditable)) return;
+  if(tag==="INPUT" && !/^(range|checkbox|radio|button|color|submit|reset|image|file)$/i.test(String(target.type||"text"))) return;
   e.preventDefault();
   e.stopPropagation();
   showAll();
@@ -576,21 +579,35 @@ function paintNav(){
   if(secs) secs.innerHTML=settingsNavHtml(navOn());
 }
 function showAll(){
+  const was=sxOn;
   sxOn=""; sxQuery="";
   const host=settingsHost(), find=host && host.querySelector("#sxSearch");
   if(find) find.value="";
+  const fk=focusKey(document.activeElement,host);
   paintNav(); paintSettings();
   const page=host && host.querySelector("#setBody");
   if(page) page.scrollTop=0;
+  sxRefocus(host,fk,was?'[data-open="'+was+'"]':"");
 }
 function showSection(id){
   if(!id || id==="all"){ showAll(); return; }
   sxOn=id; sxQuery="";
   const host=settingsHost(), find=host && host.querySelector("#sxSearch");
   if(find) find.value="";
+  const fk=focusKey(document.activeElement,host);
   paintNav(); paintSettings();
   const page=host && host.querySelector("#setBody");
   if(page) page.scrollTop=0;
+  sxRefocus(host,fk,"a.sx-back");
+}
+/* Where the keyboard was in Settings it stays: a rail row keeps its own place, and a control on the page that the
+   page took away hands focus to the way back, the crumb into a section and the section's heading out of one. */
+function sxRefocus(host,fk,inPage){
+  if(!host || !fk) return;
+  const nav=host.querySelector("#sxSecs"), page=host.querySelector("#setBody");
+  if(nav && fk.k && fk.k.a==="data-sx"){ focusSame(nav,fk); return; }
+  const to=page && inPage && page.querySelector(inPage);
+  if(to) try{ to.focus({preventScroll:true}); }catch(e){ to.focus(); }
 }
 function paintSettings(){
   const host=settingsHost(), box=host && host.querySelector("#setBody");

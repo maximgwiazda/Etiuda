@@ -3643,8 +3643,9 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx-sec{display:flex;align-items:center;gap:11px;width:100%;padding:8px 10px;border:0;border-radius:var(--radius-xs);
   background:transparent;color:var(--ink);font:14px var(--sans);text-align:left}
 .sx-sec .sx-ic{color:var(--dim)}
-.sx-sec:hover{background:var(--sx-hover)}
+.sx-sec:hover,.sx-sec:focus-visible{background:var(--sx-hover)}
 .sx-sec.on{background:var(--sx-sel-fill);box-shadow:inset 0 0 0 1px var(--sx-sel-ring);font-weight:600}
+.sx-sec.on:focus-visible{box-shadow:inset 0 0 0 2px var(--sx-sel-ring)}
 .sx-sec.on .sx-ic{color:var(--sx-acc)}
 .sx-foot{margin-top:auto;padding-top:10px;border-top:1px solid var(--line)}
 .sx-maint{padding:6px 10px;border:0;border-radius:var(--radius-xs);background:transparent;color:var(--dim);font:12.5px var(--sans)}
@@ -3694,6 +3695,7 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 }
 .sx:not(.lm) .sx-block>h3{font:600 15px/1.3 var(--sans);letter-spacing:0;text-transform:none;color:var(--ink);margin:0 0 10px}
 .sx:not(.lm) .sx-block>h3 button{font:inherit;color:inherit;background:none;border:0;padding:0;text-align:left}
+.sx:not(.lm) .sx-block>h3 button:hover,.sx:not(.lm) .sx-block>h3 button:focus-visible{color:var(--accent)}
 .sx:not(.lm) .sx-block .sx-group{margin:0 0 10px}
 .sx:not(.lm) .sx-block .set-row{min-height:54px;min-width:0}
 .sx:not(.lm) .sx-block .sx-card{border:0;box-shadow:inset 0 0 0 1px var(--line)}
@@ -3800,7 +3802,7 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 }
 .lw-head .lw-c,.lw-head .lw-nm{color:var(--dim)!important;font:inherit!important;cursor:default;outline:none}
 .lw-head [data-sort-col]{cursor:default}
-.lw-head [data-sort-col]:hover{color:var(--ink)!important}
+.lw-head [data-sort-col]:hover,.lw-head [data-sort-col]:focus-visible{color:var(--ink)!important}
 .lw-sort-line{
   padding:6px 12px;font:12.5px var(--sans);color:var(--accent);background:var(--accent-soft);border-bottom:1px solid var(--line);
   position:sticky;top:15px;z-index:2
@@ -3927,7 +3929,7 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .lw-name .n{flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap}
 .lw-name button.lw-del{border:0;background:none;color:var(--dim);width:26px;height:26px;border-radius:7px;display:flex;
   align-items:center;justify-content:center;opacity:.6;cursor:default;flex:0 0 auto;padding:0}
-.lw-name button.lw-del:hover{opacity:1;color:var(--ink);background:var(--field-edge)}
+.lw-name button.lw-del:hover,.lw-name button.lw-del:focus-visible{opacity:1;color:var(--ink);background:var(--field-edge)}
 .lw-name.on{border-color:var(--accent);background:var(--accent-soft)}
 .lw-name.add{border-style:dashed;background:none}
 .lw-name.add input{flex:1 1 auto;min-width:0;border:0;background:none;font:14px var(--sans);color:var(--ink);outline:0;
@@ -3948,7 +3950,7 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .lw-ct{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel);display:flex;
   flex-direction:column;gap:4px;min-width:0;cursor:default;box-sizing:border-box;outline:none}
 .lw-ct:hover{border-color:var(--line-strong)}
-.lw-ct:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.lw-role .lw-ct:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .lw-ct .t{font:600 13.5px var(--sans);display:flex;align-items:center;gap:8px;color:var(--ink);overflow:hidden;white-space:nowrap}
 .lw-ct .r{font:13px/1.45 var(--sans);color:var(--ink);overflow-wrap:anywhere}
 .lw-role .fillx{background:var(--accent-soft);color:var(--accent);border-radius:5px;padding:0 4px;font-weight:600;text-decoration:none}
@@ -6834,6 +6836,8 @@ What you type stays in this browser only.`;
     cardTpl: () => cardTpl,
     cutInk: () => cutInk,
     cutRange: () => cutRange,
+    focusKey: () => focusKey,
+    focusSame: () => focusSame,
     grabDom: () => grabDom,
     intentEl: () => intentEl,
     list: () => list,
@@ -6842,6 +6846,7 @@ What you type stays in this browser only.`;
     pax: () => pax,
     pills: () => pills,
     roleSel: () => roleSel,
+    sameControl: () => sameControl,
     seg: () => seg
   });
   var $ = (s) => document.querySelector(s);
@@ -6856,6 +6861,61 @@ What you type stays in this browser only.`;
   var modalCard = null;
   var cutRange = null;
   var cutInk = null;
+  function focusKey(el, root) {
+    try {
+      return readFocusKey(el, root);
+    } catch (e) {
+      return null;
+    }
+  }
+  function readFocusKey(el, root) {
+    if (!el || !el.getAttribute || !el.attributes || el === document.body || root && !root.contains(el)) return null;
+    const own = (el2) => {
+      if (el2.id) return { a: "id", v: el2.id, tag: el2.tagName, cls: el2.classList[0] || "" };
+      const d = el2.attributes && Array.prototype.find.call(el2.attributes, (x) => x.name.indexOf("data-") === 0 && x.value);
+      return d ? { a: d.name, v: d.value, tag: el2.tagName, cls: el2.classList[0] || "" } : null;
+    };
+    const k = own(el);
+    let up = el.parentElement;
+    while (up && up !== root && !own(up)) up = up.parentElement;
+    const holder = up && up !== root ? own(up) : null;
+    const at = holder ? [...up.querySelectorAll(FOCUSABLE)].indexOf(el) : -1;
+    let sel = null;
+    try {
+      if (typeof el.selectionStart === "number") sel = [el.selectionStart, el.selectionEnd];
+    } catch (e) {
+    }
+    return k || holder ? { k, holder, at, sel } : null;
+  }
+  var FOCUSABLE = "button,a[href],input,select,textarea,[tabindex]:not([tabindex='-1'])";
+  function focusFind(root, k) {
+    if (!root || !k) return null;
+    return [...root.querySelectorAll("[" + k.a + "]")].find((e) => e.getAttribute(k.a) === k.v && e.tagName === k.tag && (!k.cls || e.classList.contains(k.cls))) || null;
+  }
+  function sameControl(root, key) {
+    if (!root || !key || typeof root.querySelectorAll !== "function") return null;
+    try {
+      const up = key.holder ? focusFind(root, key.holder) : null;
+      return up && focusFind(up, key.k) || focusFind(root, key.k) || (up && key.at >= 0 ? up.querySelectorAll(FOCUSABLE)[key.at] || null : null);
+    } catch (e) {
+      return null;
+    }
+  }
+  function focusSame(root, key) {
+    const el = sameControl(root, key);
+    if (el && typeof el.focus === "function") {
+      try {
+        el.focus({ preventScroll: true });
+      } catch (e) {
+        el.focus();
+      }
+    }
+    if (el && key.sel) try {
+      el.setSelectionRange(key.sel[0], key.sel[1]);
+    } catch (e) {
+    }
+    return el;
+  }
   function grabDom() {
     list = $("#list");
     pax = $("#pax");
@@ -17991,6 +18051,7 @@ What you type stays in this browser only.`;
       const wrap = from && from.closest ? from.closest(".menu-wrap") : null;
       if (wrap) from = wrap.querySelector(":scope > button") || from;
       modalOpener = from && from !== document.body && from !== document.documentElement ? from : null;
+      modalOpenerKey = modalOpener ? focusKey(modalOpener, document.body) : null;
       modalOpenerKbd = lastInputWasKey;
     }
     setModalBack(cfg.back || null);
@@ -18198,6 +18259,7 @@ What you type stays in this browser only.`;
   }
   var modalOpener = null;
   var modalOpenerKbd = false;
+  var modalOpenerKey = null;
   function leaveModal() {
     if (modalEl.hidden || !modalCard.firstChild || mgReduceMotion()) return;
     const g = document.createElement("div"), bg = document.createElement("div"), c = document.createElement("div");
@@ -18224,9 +18286,12 @@ What you type stays in this browser only.`;
     modalEl.hidden = true;
     modalCard.classList.remove("about-modal", "about-page", "mt-modal");
     modalCard.innerHTML = "";
-    const back = modalOpener, kbd = modalOpenerKbd;
+    let back = modalOpener;
+    const kbd = modalOpenerKbd, key = modalOpenerKey;
     modalOpener = null;
     modalOpenerKbd = false;
+    modalOpenerKey = null;
+    if (back && !document.contains(back) && key) back = sameControl(document.body, key);
     if (back && document.contains(back) && typeof back.focus === "function") {
       const how = kbd ? { preventScroll: true } : { preventScroll: true, focusVisible: false };
       try {
@@ -33685,8 +33750,10 @@ What you type stays in this browser only.`;
     page = page || libPage() || document;
     const sec = page.querySelector('details.manage-sec[data-mg="who"] .manage-secbody');
     if (!sec) return;
+    const fk = focusKey(document.activeElement, sec);
     sec.innerHTML = mgWhoSectionHtml();
     wireRolePage(page);
+    if (fk) focusSame(sec, fk);
     const cnt = page.querySelector('details.manage-sec[data-mg="who"] .mg-count');
     if (cnt) cnt.textContent = String(whoOptions().length);
     markCutText(page);
@@ -33719,7 +33786,7 @@ What you type stays in this browser only.`;
       };
       row2.onkeydown = (e) => {
         const name = row2.getAttribute("data-wrow");
-        if (!name) return;
+        if (!name || e.target !== row2) return;
         if (e.key === "Delete") {
           e.preventDefault();
           const delBtn2 = row2.querySelector(".lw-del");
@@ -33755,11 +33822,18 @@ What you type stays in this browser only.`;
           const current = whoOptions();
           const was = Array.isArray(pack.who) ? pack.who.slice() : null;
           const next = current.filter((n) => n !== name);
+          const at = current.indexOf(name);
           setWhoList(next);
           if (mgRoleMarked === name) {
             mgRoleMarked = next[0] || "";
           }
           refreshRolePage(page);
+          const rows = page.querySelectorAll(".lw-name[data-wrow]");
+          const to = rows[Math.min(at, rows.length - 1)] || page.querySelector("#mgAddWho");
+          if (to) try {
+            to.focus({ preventScroll: true });
+          } catch (_) {
+          }
           const undoMsg = t("Taken off the wheel: {NAME}.").replace("{NAME}", name);
           offerUndo(undoMsg, () => {
             pack.who = was;
@@ -33767,6 +33841,11 @@ What you type stays in this browser only.`;
             syncRoleDrum();
             mgRoleMarked = name;
             refreshRolePage(page);
+            const back = page.querySelector('.lw-name[data-wrow="' + esc(name) + '"]');
+            if (back) try {
+              back.focus({ preventScroll: true });
+            } catch (_) {
+            }
           });
         };
       }
@@ -33875,6 +33954,7 @@ What you type stays in this browser only.`;
     if (!host) return;
     const isHist = libView === "history";
     const name = catalogFileName();
+    const fk = focusKey(document.activeElement, host);
     host.innerHTML = '<div class="sx lm lm-lib lib-screen lib-list' + (isHist ? " is-history" : "") + '" tabindex="-1"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Library")) + '">' + libraryHeadHtml() + '<label class="sx-search">' + lmIcon("search") + '<input type="search" id="libSearch" autocomplete="off" spellcheck="false" placeholder="' + esc(libFind()) + '" aria-label="' + esc(libFind()) + '" value="' + esc(libQuery) + '"></label><div class="sx-secs" id="libSecs">' + libNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="libMaint">' + lmIcon("statistics") + esc(t("Maintenance")) + " <kbd>" + esc(formatActionChord("maintenance")) + "</kbd></button></div></nav>" + (isHist ? '<div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + " · <span data-i18n-skip>" + esc(t("Saved copies")) + '</span></div><div class="screen-head"><h2>' + esc(t("Saved copies")) + '</h2></div><div class="sx-card"><div id="ehView"></div></div></div>' : '<div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + (name ? " · <span data-i18n-skip>" + esc(name) + "</span>" : "") + '</div><h2 id="libTitle" data-i18n-skip></h2><p class="lede" id="libLede" data-i18n-skip></p><div class="sx-card">' + (body || openManage(true)) + "</div></div>") + "</div>" + (isHist ? '<div class="screen-actions"><div class="mf-left"></div><button type="button" class="btn primary" id="ehClose">' + esc(t("Back to the Library")) + "</button></div>" : "") + "</div>";
     const page = host.querySelector(".lib-list");
     if (isHist) {
@@ -33893,6 +33973,7 @@ What you type stays in this browser only.`;
       markCutText(page);
       updateTreeHoverTitles(page);
     }
+    if (fk) focusSame(host, fk);
     const at = document.activeElement;
     if (!page.contains(at) && !modalOpen() && !openCover() && !(at && at.closest && at.closest("#tourCard")))
       try {
@@ -33965,6 +34046,7 @@ What you type stays in this browser only.`;
       btn.onkeydown = (e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
+          e.stopPropagation();
           mgSortClick(btn.getAttribute("data-sort-col"));
         }
       };
@@ -34746,7 +34828,8 @@ What you type stays in this browser only.`;
     if (screenOn !== "settings" || !sxOn || sxOn === "all" || String(sxQuery || "").trim()) return;
     if (scCaptureId || hkListening) return;
     const target = e.target, tag = target && target.tagName;
-    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target && target.isContentEditable) return;
+    if (tag === "TEXTAREA" || target && target.isContentEditable) return;
+    if (tag === "INPUT" && !/^(range|checkbox|radio|button|color|submit|reset|image|file)$/i.test(String(target.type || "text"))) return;
     e.preventDefault();
     e.stopPropagation();
     showAll();
@@ -34797,14 +34880,17 @@ What you type stays in this browser only.`;
     if (secs) secs.innerHTML = settingsNavHtml(navOn());
   }
   function showAll() {
+    const was = sxOn;
     sxOn = "";
     sxQuery = "";
     const host = settingsHost(), find = host && host.querySelector("#sxSearch");
     if (find) find.value = "";
+    const fk = focusKey(document.activeElement, host);
     paintNav();
     paintSettings();
     const page = host && host.querySelector("#setBody");
     if (page) page.scrollTop = 0;
+    sxRefocus(host, fk, was ? '[data-open="' + was + '"]' : "");
   }
   function showSection(id) {
     if (!id || id === "all") {
@@ -34815,10 +34901,26 @@ What you type stays in this browser only.`;
     sxQuery = "";
     const host = settingsHost(), find = host && host.querySelector("#sxSearch");
     if (find) find.value = "";
+    const fk = focusKey(document.activeElement, host);
     paintNav();
     paintSettings();
     const page = host && host.querySelector("#setBody");
     if (page) page.scrollTop = 0;
+    sxRefocus(host, fk, "a.sx-back");
+  }
+  function sxRefocus(host, fk, inPage) {
+    if (!host || !fk) return;
+    const nav = host.querySelector("#sxSecs"), page = host.querySelector("#setBody");
+    if (nav && fk.k && fk.k.a === "data-sx") {
+      focusSame(nav, fk);
+      return;
+    }
+    const to = page && inPage && page.querySelector(inPage);
+    if (to) try {
+      to.focus({ preventScroll: true });
+    } catch (e) {
+      to.focus();
+    }
   }
   function paintSettings() {
     const host = settingsHost(), box = host && host.querySelector("#setBody");
@@ -36742,7 +36844,7 @@ What you type stays in this browser only.`;
           return;
         }
       }
-      if (e.ctrlKey || e.altKey || e.metaKey) return;
+      if (e.ctrlKey || e.altKey || e.metaKey || e.defaultPrevented) return;
       if (e.key.length !== 1) return;
       if (!intentEl) return;
       e.preventDefault();
