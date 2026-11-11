@@ -3733,7 +3733,8 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 }
 @container (max-width: 420px){
   .sx.lm-lib .mg-intents .manage-row.mg-int{flex-wrap:wrap!important}
-  .sx.lm-lib .mg-intents .manage-row.mg-int .mg-int-t{flex:1 1 calc(100% - 60px)!important;min-width:0!important}
+  .sx.lm-lib .mg-intents .manage-row.mg-int .mg-int-t{flex:1 1 calc(100% - 60px)!important;min-width:0!important;
+    white-space:normal!important;overflow-wrap:anywhere}
   .sx.lm-lib .mg-intents .manage-row.mg-int .cacts{flex:0 0 100%!important;justify-content:flex-end!important;margin-top:2px;margin-left:0!important}
 }
 .sx.lm-lib .sx-card .ec-list{margin:0}
@@ -33029,17 +33030,8 @@ What you type stays in this browser only.`;
     });
   }
   function fillCardReply(m, markedName) {
-    const l = cardLang(m);
-    const raw = cardText(m, "body", l);
-    const was = roleSel ? roleSel.value : "";
-    let res = "";
-    try {
-      if (roleSel) roleSel.value = markedName;
-      res = fill(raw, m, true, l);
-    } finally {
-      if (roleSel) roleSel.value = was;
-    }
-    return escFilled(res);
+    const raw = cardText(m, "body", cardLang(m));
+    return esc(raw).replace(/\{([A-Z]+)(?::[^{}]*)?\}/g, (all, k) => k === "ROLE" ? '<span class="fillx">' + esc(markedName) + "</span>" : '<span class="fillmiss">' + esc(t(k)) + "</span>");
   }
   function roleWheelHtml(names, markedName) {
     let prev = "", cur = "", next = "";

@@ -9,7 +9,7 @@
  *   w3 cross takes name off list and header wheel; Undo puts it back in place
  *   w4 Alt+ArrowDown moves name down and header wheel follows; pointer drag by grip moves name
  *   w5 typing two names separated by comma then Enter adds both at end; repeats dropped
- *   w6 clicking a name marks it: wheel shows neighbours, count reads words, replies hold marked name, header ROLE unchanged
+ *   w6 clicking a name marks it: wheel shows neighbours, count reads words, replies hold marked name and no other text in its colour, header ROLE unchanged
  *   w7 clicking a reply opens that card's editor
  *   w8 after move and removal, reload shows same list; restored list stores pack.who null
  *   w9 at 546 px no text on the ROLE page ends in dots, and every reply under How it reads shows whole
@@ -315,12 +315,18 @@ try {
 
     const replies = [...document.querySelectorAll(".lw-reads .lw-ct .r, .lw-reads .r")];
     const repliesHoldName = replies.length > 0 && replies.every(r => r.textContent.includes(targetName));
+    // only the ROLE takes the filled colour; any other token is a hole as an unfilled PAX is (the designer, 03:28)
+    const tint = el => getComputedStyle(el).color;
+    const roleTint = (() => { const x = replies.flatMap(r => [...r.querySelectorAll("span")]).find(el => el.textContent.trim() === targetName); return x ? tint(x) : null; })();
+    const otherTinted = replies.flatMap(r => [...r.querySelectorAll("span")])
+      .filter(el => el.textContent.trim() !== targetName && roleTint && tint(el) === roleTint).map(el => el.textContent.trim()).slice(0, 4);
 
     const headerRoleAfter = (document.querySelector("#roleSel") || {}).value || "";
     const headerUnchanged = headerRoleBefore === headerRoleAfter;
 
     return {
-      ok: wheelShowsMarked && wheelShowsNeighbours && countMatches && repliesHoldName && headerUnchanged,
+      ok: wheelShowsMarked && wheelShowsNeighbours && countMatches && repliesHoldName && headerUnchanged && !!roleTint && !otherTinted.length,
+      roleTint, otherTinted,
       wheelShowsMarked,
       wheelShowsNeighbours,
       countMatches,
@@ -415,4 +421,6 @@ try {
   try { fs.rmSync(lab, { recursive: true, force: true }); } catch (e) {}
 }
 
-process.exitCode = fails ? 1 : 0;
+console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=9");
+console.log(checks + " checks, " + fails + " failed");
+process.exit(fails || checks !== 9 ? 1 : 0);

@@ -9,7 +9,7 @@ import { catToggle, closeModal, dressDialogInputs, modalOpen, openCover, wireFol
 import { markCutText } from "./cut-text.js";
 import { openIntentEditor, openCategoryEditor } from "./editors.js";
 import { ICON_CHEVRON_R, ICON_EYE_SHUT, ICON_EYE_OPEN, ICON_EDIT, ICON_TRASH, ICON_STAR_ON, ICON_STAR_OFF, ICON_PLUS, ICON_ROLE_ALWAYS } from "./icons.js";
-import { intentNavName, fill, escFilled } from "./intent-text.js";
+import { intentNavName } from "./intent-text.js";
 import { askClearLocal, bringBackCleared, clearedHeld } from "./local-memory.js";
 import { mgReduceMotion, mgPinCard, E_EASE } from "./motion.js";
 import { drawIntentRail } from "./rail-list.js";
@@ -25,7 +25,7 @@ import { intentIdAt, intentIdxFromId, intentIsCustom, intentIsOverridden, intent
 import { applyCatsToGlobal, removeCategory } from "./cat-set.js";
 import { esc } from "./esc.js";
 import { syncRoleDrum } from "./role-drum.js";
-import { $, roleSel } from "./dom.js";
+import { $ } from "./dom.js";
 import { macroBlockCount, recountMacros, totalMacroCount } from "./card-counts.js";
 import { rebuildCards } from "./rebuild.js";
 import { render } from "./render.js";
@@ -885,18 +885,13 @@ function roleUsesCards(){
   });
 }
 
+/* Only {ROLE} is filled, with the marked name; every other token is shown by its name as a hole, the way the
+   desk draws a {PAX} it has no name for, so the page shows the ROLE and nothing the agent set elsewhere. */
 function fillCardReply(m, markedName){
-  const l = cardLang(m);
-  const raw = cardText(m, "body", l);
-  const was = roleSel ? roleSel.value : "";
-  let res = "";
-  try {
-    if(roleSel) roleSel.value = markedName;
-    res = fill(raw, m, true, l);
-  } finally {
-    if(roleSel) roleSel.value = was;
-  }
-  return escFilled(res);
+  const raw = cardText(m, "body", cardLang(m));
+  return esc(raw).replace(/\{([A-Z]+)(?::[^{}]*)?\}/g, (all, k) => k === "ROLE"
+    ? '<span class="fillx">' + esc(markedName) + '</span>'
+    : '<span class="fillmiss">' + esc(t(k)) + '</span>');
 }
 
 function roleWheelHtml(names, markedName){

@@ -9,7 +9,7 @@
  *   i3 an intent with no linked card reads "no cards yet"
  *   i4 clicking a chip opens that card's editor, showing that card
  *   i5 after the page scrolls by 600 px, the heading row's top is still at the top of the scrolling box, within 2 px
- *   i6 between 420 and 520 px no chip shown and row is one line; under 420 px buttons stand on second line at right, name takes row width
+ *   i6 between 420 and 520 px no chip shown and row is one line; under 420 px buttons stand on second line at right, name takes row width and wraps whole
  *   i7 no heading reads "Date modified"
  *   i8 the number's hover reads "Linked cards: {N}" with its own number
  */
@@ -337,8 +337,8 @@ try {
     const cardEl = listEl ? listEl.closest(".sx-card") : null;
     if (!cardEl) return { ok: false, reason: "missing cardEl" };
     const origWidth = cardEl.style.width;
-    // Driven to 380px to measure under 420px container query
-    cardEl.style.width = "380px";
+    // Driven to 230px, about the box a 546 px window gives (234 px measured), under the 420px container query
+    cardEl.style.width = "230px";
     await new Promise(r => setTimeout(r, 60));
 
     const row = document.querySelector(".mg-intents .manage-row.mg-int");
@@ -352,12 +352,16 @@ try {
     const buttonsBelow = ar.top >= nr.bottom - 4;
     const buttonsAtRight = Math.abs(ar.right - rr.right) <= 10;
     const nameTakesWidth = nr.width >= rr.width - 70; // accommodates mark, count, gaps and padding
+    // and every intent's name wraps whole there, never cut (the designer, 03:28)
+    const cutNames = [...document.querySelectorAll(".mg-intents .manage-row.mg-int .mg-int-t")]
+      .filter(el => el.offsetParent && el.scrollWidth > el.clientWidth + 1).map(el => el.textContent.trim()).slice(0, 3);
 
     cardEl.style.width = origWidth;
     await new Promise(r => setTimeout(r, 60));
 
     return {
-      ok: buttonsBelow && buttonsAtRight && nameTakesWidth,
+      ok: buttonsBelow && buttonsAtRight && nameTakesWidth && !cutNames.length,
+      cutNames,
       buttonsBelow,
       buttonsAtRight,
       nameTakesWidth,
@@ -423,4 +427,4 @@ try {
 
 console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=8");
 console.log(checks + " checks, " + fails + " failed");
-process.exit(fails ? 1 : 0);
+process.exit(fails || checks !== 8 ? 1 : 0);
