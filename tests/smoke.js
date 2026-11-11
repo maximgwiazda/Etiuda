@@ -1243,8 +1243,10 @@ const t0 = Date.now();
     setUiLang("en"); await new Promise(r => setTimeout(r, 400));
     return { en, pl };
   });
-  const TM_EN = /^© 2026 Maxim Gwiazda\. Etiuda is a (registered )?trademark of Maxim Gwiazda\.$/,
-    TM_PL = /^© 2026 Maxim Gwiazda\. Etiuda jest (zarejestrowanym )?znakiem towarowym Maxima Gwiazdy\.$/;
+  /* About names the person as he is known, Max Gwiazda, in the © line and the trademark sentence alike (Max, 2026-11-11);
+     the installer's licences keep the registered owner, and tests/test.js holds those. */
+  const TM_EN = /^© 2026 Max Gwiazda\. Etiuda is a (registered )?trademark of Max Gwiazda\.$/,
+    TM_PL = /^© 2026 Max Gwiazda\. Etiuda jest (zarejestrowanym )?znakiem towarowym Maxa Gwiazdy\.$/;
   const hits = (s, w) => s.split(w).length - 1;
   check(TM_EN.test(tm.en.last) && hits(tm.en.all, "trademark") === 1 && TM_PL.test(tm.pl.last)
         && hits(tm.pl.all, "znakiem towarowym") === 1 && hits(tm.pl.all, "trademark") === 0
