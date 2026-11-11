@@ -1,6 +1,6 @@
-import { colMode, colFloor, remPx, COL_FLOOR_MIN, COL_FLOOR_MAX, COL_FLOOR_STEP } from "./columns.js";
+import { colMode, colFloor, colCount, remPx, COL_FLOOR_MIN, COL_FLOOR_MAX, COL_FLOOR_STEP } from "./columns.js";
 import { loadShortcuts, formatActionChord } from "./shortcuts.js";
-import { scStopCapture, wireShortcutsList, shortcutsShown, scFold } from "./shortcuts-list.js";
+import { scStopCapture, wireShortcutsList, shortcutsShown, scFold, scCaptureId } from "./shortcuts-list.js";
 import { lsGet, lsSet, lsDel, nsGet, nsSet, nsDel, nsKey } from "./storage.js";
 import { drawPills, drawTabs } from "./tabs.js";
 import { UI_LANGS, uiLang, offerUndo, t, toast, fileStamp, counted, translateTree } from "./ui-lang.js";
@@ -28,9 +28,11 @@ import { openMaintenance } from "./maintenance.js";
 import { E_VERSION } from "./env.js";
 import { sxIcon } from "./sx-icons.js";
 
-/* THE SETTINGS SCREEN, a screen tab: the section list beside one section's page. One test decides what
-   belongs: would you set it once and forget it? Anything touched weekly is a Menu item or a header control.
-   THE LOCKS LIVE HERE, hide/show does not: a lock is a standing preference, "hide it now" stays in the Menu.
+/* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name,
+   in columns that fill the width. Choosing a section shows that section alone: Appearance and Layout
+   keep their rows beside a small desk drawn from this page's own tokens, and every other section lays
+   its rows out side by side. One test decides what belongs: would you set it once and forget it?
+   Anything touched weekly is a Menu item or a header control. The locks live here, hide/show does not.
    A section is listed only while it holds a row, so no page is ever empty. */
 /* THE HOTKEY THAT BRINGS THE REPLIES OVER ANY WINDOW, where the host has one. The shell holds it,
    so the row asks the shell what is held, and a new combination is tried there before the desk
@@ -429,9 +431,8 @@ function settingsBodyHtml(){
   return settingsSections().map(s=>s.groups.map(groupHtml).join("")).join("");
 }
 
-/* What the screen shows: a section, or what a search found. Kept while the tab is closed, so opening it again
-   with no section named comes back where it was. */
-let sxOn="general", sxQuery="";
+/* Empty is the one page. A section id is that section alone. A search narrows the rows and keeps the headings. */
+let sxOn="", sxQuery="";
 const SX_ALIAS={personal:"general"};
 /* The rows whose title or hint holds the search, section by section, and the shortcuts whose name or hint does. */
 function settingsFound(query){
@@ -441,22 +442,78 @@ function settingsFound(query){
     .filter(r=>r.key==="shortcuts" ? shortcutsShown(q)>0 : scFold(rowWords(r)).indexOf(q)>=0)}))
     .filter(x=>x.rows.length);
 }
+function navOn(){
+  if(sxQuery.trim()) return "";
+  return (!sxOn || sxOn==="all") ? "all" : sxOn;
+}
 function settingsNavHtml(on){
-  return settingsSections().map(s=>'<button type="button" class="sx-sec'+(s.id===on?" on":"")+'" data-sx="'+esc(s.id)+'"'
-    +(s.id===on?' aria-current="page"':'')+'>'+sxIcon(s.icon)+'<span>'+esc(s.name)+'</span></button>').join("");
+  const btn=(id,icon,name)=>{
+    const onThis=id===on;
+    return '<button type="button" class="sx-sec'+(onThis?" on":"")+'" data-sx="'+esc(id)+'"'
+      +(onThis?' aria-current="page"':'')+'>'+sxIcon(icon)+'<span>'+esc(name)+'</span></button>';
+  };
+  return btn("all","all",t("All settings"))+settingsSections().map(s=>btn(s.id, s.icon, s.name)).join("");
+}
+function sectionBlockHtml(s, link){
+  const h=link
+    ? '<h3><button type="button" data-open="'+esc(s.id)+'" title="'+esc(t("Opens this section alone"))+'">'+esc(s.name)+'</button></h3>'
+    : '<h3>'+esc(s.name)+'</h3>';
+  return '<section class="sx-block" data-sec="'+esc(s.id)+'">'+h+s.groups.map(groupHtml).join("")+'</section>';
+}
+function allColumnsHtml(secs, link){
+  return '<div class="sx-all">'+secs.map(s=>sectionBlockHtml(s, link)).join("")+'</div>';
+}
+function onePageHtml(){
+  return '<h2>'+esc(t("Settings"))+'</h2>'
+    +'<p class="lede">'+esc(t("Every setting Etiuda has, on one page."))+'</p>'
+    +allColumnsHtml(settingsSections(), true);
+}
+/* How many columns the desk itself is showing, so the picture can follow. A fixed 1 or 2 is that
+   number; Auto asks the same count the cards use. Anything the harness cannot measure stays at 3. */
+function lookCols(){
+  try{
+    const m=colMode();
+    if(m==="1" || m==="2") return +m;
+    const n=colCount();
+    if(n>=1 && n<=4) return n;
+  }catch(e){}
+  return 3;
+}
+function miniCard(){ return '<b><u></u><s></s><s></s><s style="width:60%"></s></b>'; }
+function miniCols(n){
+  const one='<span>'+miniCard()+miniCard()+miniCard()+'</span>';
+  let html="", i;
+  for(i=0;i<n;i++) html+=one;
+  return html;
+}
+function deskLookHtml(){
+  const n=lookCols();
+  return '<div class="sx-lookside"><h3>'+esc(t("As the desk will look"))+'</h3>'
+    +'<div class="sx-mini" aria-hidden="true" inert>'
+    +'<div class="bar"><i></i><i></i></div>'
+    +'<div class="hdr"><i></i><i class="w"></i><i></i></div>'
+    +'<div class="pills">'+'<i></i>'.repeat(11)+'</div>'
+    +'<div class="body"><div class="rail">'+'<s></s>'.repeat(9)+'</div>'
+    +'<div class="cols" data-n="'+n+'">'+miniCols(n)+'</div></div></div>'
+    +'<p>'+esc(t("A drawing that follows these settings as they change. It is only for looking at."))+'</p></div>';
 }
 function settingsPageHtml(on,query){
   const q=String(query||"").trim();
   if(q){
     const found=settingsFound(q);
-    return '<div class="sx-crumb">'+esc(t("Settings"))+'</div>'
-      +(found.length ? found.map(f=>'<div class="sx-group"><h3>'+esc(f.sec.name)+'</h3><div class="sx-card">'
-          +f.rows.map(rowHtml).join("")+'</div></div>').join("")
-        : '<p class="sx-none">'+esc(t("No setting matches this search."))+'</p>');
+    if(!found.length) return '<div class="sx-crumb">'+esc(t("Settings"))+'</div>'
+      +'<p class="sx-none">'+esc(t("No setting matches this search."))+'</p>';
+    const secs=found.map(f=>({id:f.sec.id, name:f.sec.name, groups:[{rows:f.rows}]}));
+    return '<div class="sx-crumb">'+esc(t("Settings"))+'</div>'+allColumnsHtml(secs, false);
   }
+  if(!on || on==="all") return onePageHtml();
   const secs=settingsSections(), s=secs.find(x=>x.id===on)||secs[0];
-  return '<div class="sx-crumb">'+esc(t("Settings"))+'</div><h2>'+esc(s.name)+'</h2><p class="lede">'+esc(s.lede)+'</p>'
-    +s.groups.map(groupHtml).join("");
+  const rows=s.groups.map(groupHtml).join("");
+  const body=(s.id==="appearance" || s.id==="layout")
+    ? '<div class="sx-look"><div class="sx-lookrows">'+rows+'</div>'+deskLookHtml()+'</div>'
+    : '<div class="sx-tiles">'+rows+'</div>';
+  return '<a class="sx-crumb sx-back" href="#settings">'+esc(t("All settings"))+'</a><h2>'+esc(s.name)+'</h2>'
+    +'<p class="lede">'+esc(s.lede)+'</p>'+body;
 }
 function settingsHost(){
   if(screenOn!=="settings" || typeof document==="undefined") return null;
@@ -467,12 +524,30 @@ function settingsScreenHtml(){
     +'<h1>'+esc(t("Settings"))+'</h1>'
     +'<label class="sx-search">'+sxIcon("search")+'<input type="search" id="sxSearch" autocomplete="off" spellcheck="false"'
     +' placeholder="'+esc(t("Search settings"))+'" aria-label="'+esc(t("Search settings"))+'" value="'+esc(sxQuery)+'"></label>'
-    +'<div class="sx-secs" id="sxSecs">'+settingsNavHtml(sxQuery.trim()?"":sxOn)+'</div>'
+    +'<div class="sx-secs" id="sxSecs">'+settingsNavHtml(navOn())+'</div>'
     +'<div class="sx-foot"><button type="button" class="sx-maint" id="sxMaint">'+esc(t("Maintenance"))+' <kbd>'
     +esc(formatActionChord("maintenance"))+'</kbd></button></div></nav>'
     +'<div class="sx-page" id="setBody"></div></div>';
 }
+let sxEscWired=false;
+function onSectionEscape(e){
+  if(e.key!=="Escape" || e.defaultPrevented) return;
+  if(screenOn!=="settings" || !sxOn || sxOn==="all" || String(sxQuery||"").trim()) return;
+  if(scCaptureId || hkListening) return;
+  const target=e.target, tag=target && target.tagName;
+  if(tag==="INPUT" || tag==="TEXTAREA" || tag==="SELECT" || (target && target.isContentEditable)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  showAll();
+}
+function wireSectionEscape(){
+  if(sxEscWired || typeof document==="undefined" || typeof document.addEventListener!=="function") return;
+  sxEscWired=true;
+  try{ document.addEventListener("keydown", onSectionEscape, true); }
+  catch(err){ sxEscWired=false; }
+}
 function renderSettings(host){
+  wireSectionEscape();
   scStopCapture();
   if(hkListening) hotkeyListen(null,false);
   host.innerHTML=settingsScreenHtml();
@@ -498,9 +573,18 @@ function renderSettings(host){
 }
 function paintNav(){
   const host=settingsHost(), secs=host && host.querySelector("#sxSecs");
-  if(secs) secs.innerHTML=settingsNavHtml(sxQuery.trim()?"":sxOn);
+  if(secs) secs.innerHTML=settingsNavHtml(navOn());
+}
+function showAll(){
+  sxOn=""; sxQuery="";
+  const host=settingsHost(), find=host && host.querySelector("#sxSearch");
+  if(find) find.value="";
+  paintNav(); paintSettings();
+  const page=host && host.querySelector("#setBody");
+  if(page) page.scrollTop=0;
 }
 function showSection(id){
+  if(!id || id==="all"){ showAll(); return; }
   sxOn=id; sxQuery="";
   const host=settingsHost(), find=host && host.querySelector("#sxSearch");
   if(find) find.value="";
@@ -517,7 +601,26 @@ function paintSettings(){
   wirePage(box);
   translateTree(box);
 }
+function syncDeskLook(){
+  const host=settingsHost(), cols=host && host.querySelector(".sx-mini .cols");
+  if(!cols) return;
+  let n=3;
+  try{ n=lookCols(); }catch(e){ n=3; }
+  if(String(cols.getAttribute("data-n"))!==String(n)){
+    cols.innerHTML=miniCols(n);
+    cols.setAttribute("data-n", String(n));
+  }
+  let floor=22.5;
+  try{ floor=colFloor(); }catch(e){}
+  cols.style.setProperty("--sx-floor", Math.round(28+((floor-12.5)/37.5)*36)+"px");
+}
 function wirePage(box){
+  box.querySelectorAll("a.sx-back").forEach(a=>{
+    a.onclick=e=>{ e.preventDefault(); showAll(); };
+  });
+  box.querySelectorAll("[data-open]").forEach(b=>{
+    b.onclick=()=>showSection(b.getAttribute("data-open"));
+  });
   /* Live while dragging: the whole point is watching the columns re-form. */
   syncColFloorRow();
   const cf=box.querySelector("#setColFloor"), cfo=box.querySelector("#setColFloorOut");
@@ -529,6 +632,7 @@ function wirePage(box){
       /* The floor is a term of the dock threshold, so the panel answers the new setting without a reload. */
       rebuildRailMQ(); syncRailLayout();
       render();
+      syncDeskLook();
     };
   }
   wireTeamRows(box);
@@ -564,6 +668,7 @@ function wirePage(box){
           rebuildRailMQ(); syncRailLayout();   // single column asks the panel for less room
           render();
           syncColFloorRow();
+          syncDeskLook();
           toast(v==="auto"?t("Columns fit the window"):(v==="1"?t("Single column"):t("Two columns")));
         }
         else if(seg==="glass"){
@@ -650,6 +755,7 @@ function wirePage(box){
     drawTabs();
     toast(t("Interface language")+": "+name);
   };
+  syncDeskLook();
 }
 function paintKeysInline(){
   const host=settingsHost(), box=host && host.querySelector("#scListInline");
@@ -740,11 +846,12 @@ registerScreen("settings", {
   title: () => t("Settings"),
   render: host => renderSettings(host)
 });
-/* Opened AT a section when something sends you there, the picker's notice for one, and where it was otherwise.
+/* Opened at a section when something sends you there, and on the one page when nothing is named.
    A second open fronts the one tab there is. */
 function openSettings(section){
   const id=SX_ALIAS[section]||section;
-  if(id){ sxOn=id; sxQuery=""; }
+  if(id && id!=="all"){ sxOn=id; sxQuery=""; }
+  else { sxOn=""; sxQuery=""; }
   openScreenTab("settings");
   const host=settingsHost(), on=host && host.querySelector(".sx-sec.on");
   if(on) try{ on.focus({preventScroll:true}); }catch(e){}

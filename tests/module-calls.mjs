@@ -5951,7 +5951,7 @@ const CARD_B = {
       const ids = [...n.matchAll(/data-sx="([^"]+)"/g)].map(m => m[1]);
       const empty = SET.settingsSections().filter(s => !/class="sx-card"><div class="(set-row|sc-list)/.test(SET.settingsPageHtml(s.id, ""))).map(s => s.id);
       return (ids.indexOf("ai") < 0 && !/>AI</.test(n) && !empty.length
-        && ids.join(",") === "general,appearance,layout,keys,notifications,teams,data,about") || ids.join(",") + " empty " + empty.join(",");
+        && ids.join(",") === "all,general,appearance,layout,keys,notifications,teams,data,about") || ids.join(",") + " empty " + empty.join(",");
     });
 
     check("settings.js", "D3-5 searching \"blur\" finds Blur effects, and \"zzz\" shows the empty line in both languages", () => {

@@ -1577,9 +1577,9 @@ const t0 = Date.now();
              title: h2 ? h2.textContent : "",
              rows: rows.map(r => (r.querySelector("input,select") || {}).id || "").filter(Boolean) };
   });
-  check(setSecs.ids.join(",") === "general,appearance,layout,keys,notifications,data,about" && setSecs.title === "General"
+  check(setSecs.ids.join(",") === "all,general,appearance,layout,keys,notifications,data,about" && setSecs.title === "General"
         && setSecs.rows.join(",") === "setAgentName,setUiLang" && setSecs.ids.indexOf("catalog") < 0,
-    "Settings holds General, Appearance, Layout, Keyboard shortcuts, Notifications, Data and defaults and About, the name above the"
+    "Settings holds All settings, then General, Appearance, Layout, Keyboard shortcuts, Notifications, Data and defaults and About, the name above the"
     + " language and nothing about catalogs: " + JSON.stringify(setSecs));
   await p.evaluate(() => closeScreenTab("settings")); await sleep(400);
   /* THE LIBRARY'S PAGES. Each section is a page, its fold's summary hidden, so a page whose fold is shut shows its
