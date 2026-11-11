@@ -1415,12 +1415,15 @@ async function parent() {
         + detail + ", sha " + (sameFile ? "restored" : "differs"));
     }
 
+    // A take is the agent's edit of the card, so it carries the time it was made (board 982); its text is what is compared.
+    const undated = o => { if (!o || typeof o !== "object") return o; const c = Object.assign({}, o); delete c.changedAt; return c; };
+    const dated = o => !!o && typeof o.changedAt === "string" && !isNaN(Date.parse(o.changedAt));
     const L2 = run(lab75, ["desk", "rows", "look:" + olaRow.at, "mine", "mine", "edback2"], true, { card: "c-warm" });
     const lk = rd(L2, "look"), m1 = ((L2.read || {}).mine || [])[0] || {}, m2 = ((L2.read || {}).mine || [])[1] || {};
     check(!!lk.title && lk.title === "Ola, a teammate" && lk.name === "lamp" && same(lk.heads, ["In the team's edition", "At Ola, a teammate"]) && lk.rows === 2
       && same(lk.mine, ["false"]) && same(lk.take, []) && lk.keep === "Back to the Library" && lk.load === "Work from this file",
       "75d Look stands the edition panel told it is a desk: its name, the catalog compared with, the two heads, the card changed and the one added, one take and no offer's pair: " + JSON.stringify(lk));
-    check(same(m1.pressed, ["true"]) && same(m1.over, { en: HERS }) && m1.rebuilt === 1 && /Now in your edits/.test((m1.row || [""])[0]),
+    check(same(m1.pressed, ["true"]) && same(undated(m1.over), { en: HERS }) && dated(m1.over) && m1.rebuilt === 1 && /Now in your edits/.test((m1.row || [""])[0]),
       "75e the take makes that desk's text of the changed field this desk's own edit at once, that field alone, and the cards are drawn again: " + JSON.stringify(m1));
     check(same(m2.pressed, ["false"]) && m2.over === null && rd(L2, "back").modal === false && rd(L2, "back").backs === 1,
       "75E THE CONTROL: pressed again, the edit is what it was before the take (none), and Back to the Library closes the panel and opens the Library: " + JSON.stringify([m2, rd(L2, "back")]));
@@ -1429,7 +1432,8 @@ async function parent() {
     const OWN = "My own wording.";
     const L2o = run(lab75, ["desk", "ownedit", "rows", "look:" + olaRow.at, "mine", "edback2", "look:" + olaRow.at, "mine", "mine", "ownclear", "settle"], true, { card: "c-warm", own: { en: OWN } });
     const w1 = ((L2o.read || {}).mine || [])[0] || {}, w2 = ((L2o.read || {}).mine || [])[1] || {}, w3 = ((L2o.read || {}).mine || [])[2] || {};
-    check(same(w1.over, { en: HERS }) && same(w2.pressed, ["false"]) && same(w2.over, { en: OWN }) && same(w3.pressed, ["true"]) && same(w3.over, { en: HERS }),
+    check(same(undated(w1.over), { en: HERS }) && same(w2.pressed, ["false"]) && same(w2.over, { en: OWN }) && same(w3.pressed, ["true"])
+      && same(undated(w3.over), { en: HERS }),
       "75l an earlier edit of the agent's is given back by a take given back after the panel was shut and Look opened again, and the take can be made again: "
       + JSON.stringify([w1.over, w2.over, w3.over]));
     const L2p = run(lab75, ["desk", "rows", "look:" + olaRow.at, "mine", "edback2", "look:" + olaRow.at, "mine", "settle"], true, { card: "c-warm" });
@@ -1451,7 +1455,7 @@ async function parent() {
     check(!errs75o.length, "75n those launches ran their acts without an error" + (errs75o.length ? ": " + errs75o.length + ", first " + errs75o[0] : ""));
     const L3 = run(lab75, ["desk", "rows", "look:" + olaRow.at, "mine", "settle"], true, { card: "c-warm" });
     const L4 = run(lab75, ["desk", "over"], true);
-    check(same((rd(L4, "over") || {})["c-warm"], { en: HERS }),
+    check(same(undated((rd(L4, "over") || {})["c-warm"]), { en: HERS }),
       "75f and the take is on disk: the next launch holds it as this desk's own edit (" + JSON.stringify((rd(L4, "over") || {})["c-warm"]) + ")");
     const L5 = run(lab75, ["desk", "rows", "look:" + p75.at], true);
     const lk5 = rd(L5, "look");
@@ -1479,7 +1483,7 @@ async function parent() {
       + JSON.stringify({ held: rd(L7, "heldId"), file: L7.fileAtStart, from: L7.fromAtEnd, rows: rows7.map(r => [r.name, r.loaded, r.mine]), over: rd(L7, "over") }));
     const L8 = run(lab75, ["desk", "rows", "load:lamp.ec", "settle", "yes", "settle"], true);
     const L9 = run(lab75, ["desk", "over"], true);
-    check(rd(L9, "heldId") === ID && same((rd(L9, "over") || {})["c-warm"], { en: HERS }),
+    check(rd(L9, "heldId") === ID && same(undated((rd(L9, "over") || {})["c-warm"]), { en: HERS }),
       "75i and loading the team's catalog again brings this desk's own edit of it back (" + JSON.stringify([rd(L9, "heldId"), (rd(L9, "over") || {})["c-warm"]]) + ")");
     /* The listing the shell sends is what repaints an open Library: a colleague's file written under it appears with no other paint. */
     const cyLab = lab75g, cyPair = crypto.generateKeyPairSync("ed25519"), cy = deskOf(grown("Good day, from Cy."), "Cy", cyPair, cyLab);
