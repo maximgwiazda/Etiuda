@@ -209,18 +209,9 @@ invisible to every other instrument here:
   must be the same text, and the shape is RUN over four keys this engine writes and five it does
   not, because on `file://` every local page shares one storage area and a bare `e` would sweep
   a neighbour. Move one without the other and the app comes up empty and correct.
-- **No key of the old regime.** After D4 the only `pb` in `src/` is the boot migration's own
-  pattern, which is a regex and not a string, so no string literal in the engine names a `pb`
-  key. A planted `lsSet("pbGhost",...)` is run through the same rule in the same pass: a rule
-  that can only pass is not a rule.
-- **Every user-visible string.** A digest of the 747 interface pairs, both halves, sorted. It is a
-  **ratchet**, like the comment budget: when the words change on purpose, `UI_STRINGS_COUNT` and
-  `UI_STRINGS_SHA256` change in the same commit. When they change and nobody meant it, something
-  mechanical has rewritten what people read.
-
-Every one of these was proved by rejection before it was kept: eleven falsifiers, one mutation
-each, all eleven failing the run, and one acceptance - the same strings in a different order,
-which is not a change to what anybody reads and does not fire.
+Each of these was proved by rejection before it was kept: a mutation of each fails the run. The
+old-key check, the interface-string digest and the comment budget were retired on 2026-11-11 by the harness audit:
+each could go red only on a deliberate change.
 
 ## The instruments that are not here
 
@@ -229,9 +220,9 @@ a name that no longer reaches across a module boundary, `split-guard/bridge.mjs`
 reaches the monolith as a stale copy rather than a live binding, `split-guard/cycles.mjs` for a
 load-time cycle the bundler would turn into a silent `undefined`, `split-guard/cycle-bounds.mjs`
 for the three bounds the import cycle is allowed to grow under, `same-program.mjs` for whether a
-rewrite is the same program, and `bundler-probe/` for the build options this project depends on.
-`npm run split-guard` runs `bundler-probe/constraints.mjs` first, then every self-test, then the
-gates themselves against `src/`. The count that stood here said four self-tests when there were
+rewrite is the same program. `bundler-probe/constraints.mjs`, which held facts about the bundler,
+was retired on 2026-11-11 by the harness audit.
+`npm run split-guard` runs every self-test, then the gates themselves against `src/`. The count that stood here said four self-tests when there were
 six, so read the script in `package.json` instead: it is one line and it cannot go stale.
 `npm test` runs the cycle bounds too, next to the sentinel.
 
@@ -244,8 +235,9 @@ six, so read the script in `package.json` instead: it is one line and it cannot 
 Maxim's rule of 2026-09-14 07:23 lets the closure-only import cycle grow as the extraction
 finishes, under three bounds: exactly one component, never a second even of two; the raw-load
 bite test clean at every commit, which is `cycles.mjs` and is not repeated here; and a cut whose
-membership delta is tens refused or rerouted. This gate holds the first and the third, and the
-property underneath all of them: **nothing in a member runs at load.**
+membership delta is tens refused or rerouted. This gate holds the third, and the property
+underneath all of them (the first, one component, was retired on 2026-11-11 by the harness audit;
+`cycles.mjs` still catches the load-time read that makes a cycle harmful): **nothing in a member runs at load.**
 
 That property is two checks, because one of them is not what a line rule can say.
 
@@ -317,15 +309,14 @@ folder has to carry: those calls are not imports, so **`cycle-bounds` cannot see
 cycle of calls can exist with the import graph at zero, and eight edges that used to be visible
 stopped being visible on the day the ring reached nothing.
 
-This leg reads the registry itself. Five bounds:
+This leg reads the registry itself. Three bounds (a fourth, every slot looked up, and a fifth, `hooks.js` importing
+nothing, were retired on 2026-11-11 by the harness audit):
 
 | bound | what it refuses | why the runtime does not already refuse it |
 |---|---|---|
 | SLOTS against the `wireHooks` literal, diffed **both ways** | a slot declared and unfilled, a key filled and undeclared, a key filled twice | `wireHooks` throws on both, but only when boot runs; a scan says so without a browser |
 | every value is `namespace.member`, and the module exports the member | `shed.shedSnapp` | it is `undefined`, and `undefined` reaches the type check only if boot is reached |
 | every `hooks.X` anywhere in `src/` names a declared slot | `hooks.typo()` | **nothing refuses this.** The object is frozen with a null prototype, so the lookup is `undefined` and stays silent until the day that line runs |
-| every declared slot is looked up somewhere | a slot nothing calls | nothing refuses it, and a contract nobody invokes is decoration |
-| `hooks.js` imports nothing | the valve joining a ring | nothing refuses it, and the whole valve argument rests on it |
 
 It exits **3**, which is not a pass, where it cannot see. A module that binds the import under
 another name is a note and is still read correctly, because the scan follows the local binding
@@ -334,37 +325,6 @@ form it does not recognise stop the leg rather than pass it.
 
 Check it in a minute: `node tools/split-guard/hooks-selftest.mjs` is 49/49, and every case marked
 `(grep)` there is one where a plain grep for the word gives the other answer.
-
-### Whether a slot is ever called, which is a run and not a scan
-
-    ETIUDA_FIXTURES=<folder> npm run hook-coverage
-    ETIUDA_FIXTURES=<folder> node tools/split-guard/hooks-coverage.mjs boot
-
-The guard above proves the contract on paper. It cannot prove a slot is ever reached, and a slot
-wired and never called is frozen, silent and green at every other instrument here. So this one
-runs `smoke.js` with the valve wrapped in counters and reads them back.
-
-The instrument is an opt-in block in `smoke.js`, inert without `ETIUDA_HOOK_COVERAGE`.
-`wireHooks` freezes the object as its last act, so standing in front of `Object.freeze` is the one
-place a driver can wrap all 54 slots without a line of `src/` changing. Two things it learned the
-hard way, both measured on 2026-09-14. The identification is checked rather than assumed: the
-wrapped object's keys must be exactly SLOTS or the leg exits 3, because otherwise it would be
-counting some other frozen object and reporting it as the valve. And **the counters are carried
-across a reload in `window.name`**: loading a catalog ends in `location.reload()`, the
-empty-catalog screen calls `sampleReady` eight times before that, and without the carry it read as
-zero. A flush through an exposed function on `pagehide` did not arrive, because the binding call is
-delivered asynchronously and the document was already gone.
-
-It is **in no script**, because it needs a browser and about two minutes, and because its list is
-debt rather than a pass: the slots the acceptance run does not reach are named in the file with the
-path nothing drives. A slot that starts being reached comes off that list, and a slot that stops
-being reached is a FAIL, so it is a ratchet in both directions.
-
-The `boot` argument is the **control**, not a shortcut. A counter that is not really counting
-reports the same set under a run that drives nothing as under the whole suite; one that is counting
-reports strictly more. Measured 2026-09-14 with the SAME instrument on both sides, which is the whole of the
-control: 18 of 54 slots called under boot alone against 38 under the 149 checks, 36 unreached
-against 16, and the 16 are a subset of the 36.
 
 ### The boot order, which no gate had ever read
 
@@ -377,8 +337,9 @@ the contract: a listener registered earlier runs earlier, and more than one line
 earlier one wrote. Nothing in this folder held an opinion about what that order was, so a statement
 moved, added or dropped changed the start-up sequence with every instrument green.
 
-The order is declared in `tools/split-guard/boot-order.list`, one step per line, and the leg
-refuses a tree that departs from it. **A step is not the source text**, and that is the whole
+The order was declared in `tools/split-guard/boot-order.list` and the leg refused a tree that departed
+from it; that check was retired on 2026-11-11 by the harness audit, since only a deliberate reorder could turn it red. The text
+below records how it read the order. **A step is not the source text**, and that is the whole
 design: it is the callee path of the statement, with its first argument where there is one and a
 shape tag where the statement is not a plain call. So `try{ if(storage.lsGet("eGlassOff")) ... }`
 is `try:storage.lsGet("eGlassOff")`, and the three statements that read a stored flag are told

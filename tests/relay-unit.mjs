@@ -6378,7 +6378,7 @@ async function main() {
       ["team", "put-release", "1168a", async T => redOf(await guarded(() => sizeScene(T))),
         "1168p lifting plant:put-release turns 1168a red (a committed upload keeps its reservation)"],
     ];
-    /* Each plant's id opens its own line, so tests/leg-ids.js holds it against duplicates (the test architect, 2026-11-01 16:42). */
+    /* Each plant's id opens its own line. */
     for (const [where, tag, leg, turns, said] of PLANTS) {
       const line = said + ", and the product file is never written";
       if (PLANTS_OFF) { skip(line); continue; }
