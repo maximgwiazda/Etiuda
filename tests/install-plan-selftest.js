@@ -756,12 +756,13 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
   const patchTool = require(path.join(ROOT, "tools", "patch-nsis.cjs"));
   const lab = fs.mkdtempSync(path.join(osx.tmpdir(), "etiuda-nsis-swap-"));
   const to = path.dirname(patchTool.getPaths(lab).multiUserUi);
-  let S = "", X = "", status = {};
+  let S = "", X = "", I = "", status = {};
   try {
     fs.cpSync(path.dirname(patchTool.getPaths(ROOT).multiUserUi), to, { recursive: true });
     status = patchTool.applyNsisPatches(lab);
     S = fs.readFileSync(path.join(to, "installSection.nsh"), "utf8").replace(/\r\n/g, "\n");
     X = fs.readFileSync(path.join(to, "include", "extractAppPackage.nsh"), "utf8").replace(/\r\n/g, "\n");
+    I = fs.readFileSync(path.join(to, "include", "installer.nsh"), "utf8").replace(/\r\n/g, "\n");
   } catch (e) { status = { error: e.message }; }
   fs.rmSync(lab, { recursive: true, force: true });
   const NSH = fs.readFileSync(path.join(ROOT, "shell", "installer.nsh"), "utf8").replace(/\r\n/g, "\n");
@@ -898,7 +899,8 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
   const placed = nsh => {
     const un = at(nsh, "\n!macro customUnInstall\n"), block = at(nsh, "\n!ifndef BUILD_UNINSTALLER\n!define ETIUDA_STAGE_SUFFIX");
     const last = at(nsh, "\n!macro etiudaDropAside\n"), end = last < 0 ? -1 : nsh.indexOf("\n!endif\n", last);
-    return un > -1 && block > un && end > block && ["etiudaTrimSlashes", "etiudaFailBox", "etiudaStageAbort", "etiudaStageBegin", "etiudaStageEnd",
+    const fn = at(nsh, "\nFunction etiudaDropOldFiles\n");
+    return un > -1 && block > un && end > block && (fn < 0 || (fn > block && fn < end)) && ["etiudaTrimSlashes", "etiudaFailBox", "etiudaStageAbort", "etiudaStageBegin", "etiudaStageEnd",
       "etiudaRenameRetry", "etiudaSwap", "customUnInstallCheck", "customUnInstallCheckCurrentUser", "etiudaDropAside"]
       .every(n => { const i = at(nsh, "\n!macro " + n + "\n") > -1 ? at(nsh, "\n!macro " + n + "\n") : at(nsh, "\n!macro " + n + " "); return i > block && i < end; });
   };
@@ -914,6 +916,121 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
   const told = d => d.indexOf(P.BESIDE[0]) > -1 && /a failed upgrade leaves the old version as it was/.test(d) && !/leave the app absent/.test(d);
   ok(told(doc), "14g README's Installing silently says an upgrade is staged in <folder>" + P.BESIDE[0] + " and a failed one leaves the old version as it was");
   ok(!told(doc + "\na failed upgrade can leave the app absent until the deployment tool retries."), "14g control: the old sentence back reads red");
+
+  /* 14h. The person's shortcuts on an upgrade (Claude alpha's ruling, 2026-11-12 00:41): kept where the folder is unchanged,
+     since their target still stands; made again where it changed. electron-builder's keep branch makes none and only renames
+     a link whose name changed; its other branch makes both again. */
+  const cfgText = fs.readFileSync(path.join(ROOT, "electron-builder.js"), "utf8");
+  const keepsShortcuts = (s, nsh, tpl) => {
+    const m = code(macro(nsh, "etiudaSwap"));
+    const same = /\$\{If\} \$0 == \$etiudaBase\n\s*StrCpy \$etiudaRunOld "0"\n\s*StrCpy \$keepShortcuts "true"\n\s*\$\{Else\}\n/.test(m)
+      && (m.match(/\$keepShortcuts/g) || []).length === 1;
+    const decided = at(s, "StrCpy $keepShortcuts \"false\""), swap = at(s, "  !insertmacro etiudaSwap\n");
+    const links = at(s, "!insertmacro addStartMenuLink $keepShortcuts"), desk = at(s, "!insertmacro addDesktopLink $keepShortcuts");
+    const order = decided > -1 && swap > decided && links > swap && desk > links;
+    const branches = ["addStartMenuLink", "addDesktopLink"].every(n => {
+      const b = macro(tpl, n), f = b.search(/\$keepShortcuts\s+==\s+"false"/), c = b.indexOf("CreateShortCut"), e = b.indexOf("${elseif}");
+      return f > -1 && c > f && e > c;
+    }) && !/createDesktopShortcut\s*:\s*["']always/.test(cfgText);
+    return same && order && branches;
+  };
+  ok(keepsShortcuts(S, NSH, I), "14h an upgrade into the folder already registered keeps the person's shortcuts as they are (the keep branch,"
+    + " decided after the template's own choice and before the links are made); one into another folder makes them again at the new target");
+  ok(!keepsShortcuts(S, NSH.replace("    StrCpy $keepShortcuts \"true\"\n", ""), I), "14h control: the shortcuts made again on an upgrade in place reads red");
+  ok(!keepsShortcuts(S, NSH.replace("    StrCpy $keepShortcuts \"true\"\n  ${Else}\n", "  ${Else}\n    StrCpy $keepShortcuts \"true\"\n"), I),
+    "14h control: the old shortcuts kept when the folder changed, their target gone, reads red");
+
+  /* 14i. The older folder after an upgrade that changed the folder (the same ruling, and the test architect's conditions as
+     relayed that night): only what the installer itself wrote goes, by its own list, the new folder it has just written; a folder only once
+     empty; nothing retried, nothing failing the run. Read as text, and the walk replayed: the function's own lines are run by
+     the small interpreter below over a folder pair in memory, a person's file planted beside the program's and one file
+     locked. The replay cannot show NSIS's own FindFirst order, Windows' file locks, or attributes: the spare-machine check
+     in the report covers those. */
+  const replayDrop = (nsh, fsys, locked) => {
+    const body = (/\nFunction etiudaDropOldFiles\n([\s\S]*?)\nFunctionEnd/.exec(nsh) || [])[1];
+    if (!body) return null;
+    const lines = code(body).split("\n").map(l => l.trim()).filter(Boolean);
+    const labels = {};
+    lines.forEach((l, i) => { if (/^\w+:$/.test(l)) labels[l.slice(0, -1)] = i; });
+    const V = { $etiudaBase: "N", $etiudaDropRoot: "O", $R0: "", $R1: "", $R2: "" }, stack = [], finds = [];
+    const val = tok => tok.replace(/^"|"$/g, "").replace(/\$(etiudaBase|etiudaDropRoot|R[0-9])/g, (m) => V[m]);
+    const isDir = p => fsys.dirs.has(p), kids = p => [...fsys.dirs, ...fsys.files].filter(q => q.startsWith(p + "\\") && q.slice(p.length + 1).indexOf("\\") < 0).map(q => q.slice(p.length + 1)).sort();
+    const toks = l => (l.match(/"[^"]*"|\S+/g) || []);
+    let steps = 0;
+    const run = () => {
+      for (let pc = 0; pc < lines.length; pc++) {
+        if (++steps > 20000) throw new Error("runaway");
+        const t = toks(lines[pc]), op = t[0], go = lab => { if (lab === "0" || lab === undefined) return; pc = labels[lab]; };
+        if (/^\w+:$/.test(op)) continue;
+        if (op === "Exch") { const top = stack.pop(); stack.push(V[t[1]]); V[t[1]] = top; }
+        else if (op === "Push") stack.push(val(t[1]));
+        else if (op === "Pop") V[t[1]] = stack.pop();
+        else if (op === "FindFirst") { const dir = val(t[3]).replace(/\\\*\.\*$/, ""); finds.push(isDir(dir) ? [".", ".."].concat(kids(dir)) : []); V[t[1]] = String(finds.length - 1); V[t[2]] = finds[finds.length - 1].shift() || ""; }
+        else if (op === "FindNext") V[t[2]] = finds[+V[t[1]]].shift() || "";
+        else if (op === "FindClose") { /* nothing held */ }
+        else if (op === "StrCmp") { if (val(t[1]) === val(t[2])) go(t[3]); else go(t[4]); }
+        else if (op === "IfFileExists") { if (isDir(val(t[1]).replace(/\\\*\.\*$/, ""))) go(t[2]); else go(t[3]); }
+        else if (op === "Goto") go(t[1]);
+        else if (op === "Call") run();
+        else if (op === "Delete") { const p = val(t[t.length - 1]); if (!locked.has(p)) fsys.files.delete(p); }
+        else if (op === "RMDir") {
+          const p = val(t[t.length - 1]);
+          if (t[1] === "/r") { [...fsys.files].concat([...fsys.dirs]).filter(q => q === p || q.startsWith(p + "\\")).forEach(q => { fsys.files.delete(q); fsys.dirs.delete(q); }); }
+          else if (isDir(p) && kids(p).length === 0) fsys.dirs.delete(p);
+        }
+        else throw new Error("the replay does not know " + op);
+      }
+    };
+    stack.push("");
+    run();
+    if (isDir("O") && kids("O").length === 0) fsys.dirs.delete("O");   /* etiudaDropOld's own RMDir of the folder, held as text below */
+    return fsys;
+  };
+  const tree = () => ({
+    dirs: new Set(["N", "N\\resources", "N\\locales", "O", "O\\resources", "O\\locales"]),
+    files: new Set(["N\\Etiuda.exe", "N\\Uninstall Etiuda.exe", "N\\resources\\app.asar", "N\\locales\\pl.pak",
+      "O\\Etiuda.exe", "O\\Uninstall Etiuda.exe", "O\\resources\\app.asar", "O\\resources\\gone-in-the-new.bin", "O\\locales\\pl.pak",
+      "O\\my-notes.txt"]),
+  });
+  const dropsOwnOnly = nsh => {
+    let r;
+    try { r = replayDrop(nsh, tree(), new Set(["O\\Uninstall Etiuda.exe"])); } catch (e) { return false; }
+    if (!r) return false;
+    const left = [...r.files].filter(f => f.startsWith("O\\")).sort();
+    const newKept = [...r.files].filter(f => f.startsWith("N\\")).length === 4 && ["N", "N\\resources", "N\\locales"].every(d => r.dirs.has(d));
+    const planted = JSON.stringify(left) === JSON.stringify(["O\\Uninstall Etiuda.exe", "O\\my-notes.txt", "O\\resources\\gone-in-the-new.bin"])
+      && !r.dirs.has("O\\locales") && r.dirs.has("O\\resources") && r.dirs.has("O");
+    let clean;
+    try { const t2 = tree(); ["O\\resources\\gone-in-the-new.bin", "O\\my-notes.txt"].forEach(f => t2.files.delete(f)); clean = replayDrop(nsh, t2, new Set()); } catch (e) { return false; }
+    const allGone = ![...clean.files].some(f => f.startsWith("O\\")) && ![...clean.dirs].some(d => d === "O" || d.startsWith("O\\"));
+    const d = code(macro(nsh, "etiudaDropOld"));
+    const root = /\$\{If\} \$\{DIR\} != ""\n\s*StrCpy \$etiudaDropRoot \$\{DIR\}\n\s*Push ""\n\s*Call etiudaDropOldFiles\n\s*RMDir "\$etiudaDropRoot"\n/.test(d)
+      && /ClearErrors/.test(d) && !/\/r\b|SetErrorLevel|Quit|Sleep|MessageBox/.test(d);
+    const fnText = (/\nFunction etiudaDropOldFiles\n([\s\S]*?)\nFunctionEnd/.exec(nsh) || [])[1] || "";
+    const quick = !/\b(Sleep|MessageBox|SetErrorLevel|Quit|Abort)\b|\/REBOOTOK/.test(code(fnText));
+    return newKept && planted && allGone && root && quick;
+  };
+  ok(dropsOwnOnly(NSH), "14i the older folder loses only the files the installer has just written by the same names: a person's file and a"
+    + " file the new version no longer has stay, a locked one stays without a retry or a failure, a folder goes only once empty,"
+    + " the new folder is never touched, and a folder holding nothing else goes whole");
+  ok(!dropsOwnOnly(NSH.replace("FindFirst $R1 $R2 \"$etiudaBase$R0\\*.*\"", "FindFirst $R1 $R2 \"$etiudaDropRoot$R0\\*.*\"")
+    .replace("IfFileExists \"$etiudaBase$R0\\$R2\\*.*\"", "IfFileExists \"$etiudaDropRoot$R0\\$R2\\*.*\"")),
+    "14i control: the older folder's own listing taken as the list, so the person's file goes, reads red");
+  ok(!dropsOwnOnly(NSH.replace("      RMDir \"$etiudaDropRoot$R0\\$R2\"", "      RMDir /r \"$etiudaDropRoot$R0\\$R2\"")),
+    "14i control: a subfolder removed whole, with what the person put in it, reads red");
+  const oldChosen = nsh => {
+    const o = code(macro(nsh, "etiudaOldFolder")), s = code(macro(nsh, "etiudaSwap")), a = code(macro(nsh, "etiudaDropAside"));
+    return /StrCpy \$\{OUT\} ""/.test(o) && /\$\{If\} \$3 >= 4\n\s*\$\{AndIf\} \$\{FileExists\} "\$\{DIR\}\\\$\{APP_EXECUTABLE_FILENAME\}"/.test(o)
+      && (o.match(/\$\{If\} \$4 != \$[12]\n/g) || []).length === 2
+      && /\$\{Else\}\n\s*!insertmacro etiudaOldFolder \$0 \$etiudaOldDir\n/.test(s)
+      && /ReadRegStr \$0 HKCU "\$\{INSTALL_REGISTRY_KEY\}" InstallLocation\n\s*!insertmacro etiudaTrimSlashes \$0\n\s*!insertmacro etiudaOldFolder \$0 \$etiudaOldUserDir/.test(s)
+      && /!insertmacro etiudaDropOld \$etiudaOldDir\n\s*!insertmacro etiudaDropOld \$etiudaOldUserDir/.test(a)
+      && /StrCpy \$etiudaOldDir ""\n\s*StrCpy \$etiudaOldUserDir ""/.test(code(macro(nsh, "etiudaStageBegin")));
+  };
+  ok(oldChosen(NSH), "14i the older folder is the one registered elsewhere (or this account's per-user copy an all-users install replaces),"
+    + " read before its uninstaller runs, and only if it held the program and is no drive root, not the new folder, not inside it, not"
+    + " holding it; it is emptied after the new copy is registered");
+  ok(!oldChosen(NSH.replace("    ${If} $4 != $1\n", "    ${If} 1 == 1\n")), "14i control: a folder holding the new one taken as the older folder reads red");
 }
 
 console.log("\n#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);

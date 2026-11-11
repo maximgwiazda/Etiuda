@@ -529,8 +529,8 @@
 
 # AN UPDATE'S UNINSTALL LEAVES THE FILES WHERE THEY ARE. This build's installer never runs it over the folder it replaces:
 # it stages the new files beside that folder and swaps the two whole (etiudaSwap, below). Run over another folder, an
-# install moved with /D or the per-user copy an all-users install replaces, it leaves that folder. A plain uninstall
-# removes the folder, as electron-builder's own step does.
+# install moved with /D or the per-user copy an all-users install replaces, it leaves that folder, and the installer then
+# deletes from it only its own files (etiudaDropOld). A plain uninstall removes the folder, as electron-builder's does.
 !macro customRemoveFiles
   ${IfNot} ${isUpdated} ; plant:update-keeps-files
     SetOutPath $TEMP
@@ -656,6 +656,9 @@ Var etiudaStage
 Var etiudaAside
 Var etiudaAsideMade
 Var etiudaRunOld
+Var etiudaOldDir
+Var etiudaOldUserDir
+Var etiudaDropRoot
 
 # A path's trailing backslashes go: "/D=C:\Apps\Etiuda\" would otherwise stage inside the folder it replaces.
 !macro etiudaTrimSlashes VAR
@@ -706,6 +709,9 @@ Var etiudaRunOld
   StrCpy $etiudaAside "$etiudaBase${ETIUDA_ASIDE_SUFFIX}"
   StrCpy $etiudaAsideMade "0"
   StrCpy $etiudaRunOld "1"
+  StrCpy $etiudaOldDir ""
+  StrCpy $etiudaOldUserDir ""
+  StrCpy $etiudaDropRoot ""
   # A drive root has no folder beside it, and its uninstall would empty the drive.
   StrLen $0 $etiudaBase
   ${If} $0 < 4
@@ -853,8 +859,89 @@ Var etiudaRunOld
   !insertmacro etiudaTrimSlashes $0
   ${If} $0 == $etiudaBase
     StrCpy $etiudaRunOld "0"
+    # Same folder, so every shortcut's target still stands: the person's own, moved, renamed or given a key, are kept
+    # (electron-builder's keep-shortcuts branch). A folder that changed has them made again, at the new target.
+    StrCpy $keepShortcuts "true"
+  ${Else}
+    !insertmacro etiudaOldFolder $0 $etiudaOldDir
+  ${EndIf}
+  # An all-users install also uninstalls this account's per-user copy (installSection.nsh), whose folder is left too.
+  ${If} $installMode == "all"
+    ReadRegStr $0 HKCU "${INSTALL_REGISTRY_KEY}" InstallLocation
+    !insertmacro etiudaTrimSlashes $0
+    !insertmacro etiudaOldFolder $0 $etiudaOldUserDir
   ${EndIf}
   Pop $0
+!macroend
+
+# An older copy's folder, read before its uninstaller runs, counts only if it holds the program, is no drive root, and is
+# neither the new folder nor inside it nor holding it; OUT is left empty otherwise, and nothing there is removed.
+!macro etiudaOldFolder DIR OUT
+  Push $1
+  Push $2
+  Push $3
+  Push $4
+  StrCpy ${OUT} ""
+  StrLen $3 ${DIR}
+  ${If} $3 >= 4
+  ${AndIf} ${FileExists} "${DIR}\${APP_EXECUTABLE_FILENAME}"
+    StrCpy $1 "${DIR}\"
+    StrCpy $2 "$etiudaBase\"
+    StrLen $3 $1
+    StrCpy $4 $2 $3
+    ${If} $4 != $1
+      StrLen $3 $2
+      StrCpy $4 $1 $3
+      ${If} $4 != $2
+        StrCpy ${OUT} ${DIR}
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
+  Pop $4
+  Pop $3
+  Pop $2
+  Pop $1
+!macroend
+
+# THE OLDER FOLDER, ONCE THE NEW COPY IS REGISTERED: its list is the files this installer has just written (the new
+# folder, walked), and each is deleted there by the same relative name, once, never retried. Folders go only when empty,
+# no RMDir /r, so a person's own file stays, as does anything locked, and the run still ends 0.
+# Plain jumps, not LogicLib: a function compiles where it stands, and LogicLib is not yet included where this file is read.
+Function etiudaDropOldFiles
+  Exch $R0
+  Push $R1
+  Push $R2
+  FindFirst $R1 $R2 "$etiudaBase$R0\*.*"
+  etiudaDropOldNext:
+    StrCmp $R2 "" etiudaDropOldDone
+    StrCmp $R2 "." etiudaDropOldSkip
+    StrCmp $R2 ".." etiudaDropOldSkip
+    IfFileExists "$etiudaBase$R0\$R2\*.*" 0 etiudaDropOldFile
+      Push "$R0\$R2"
+      Call etiudaDropOldFiles
+      RMDir "$etiudaDropRoot$R0\$R2"
+      Goto etiudaDropOldSkip
+    etiudaDropOldFile:
+      Delete "$etiudaDropRoot$R0\$R2"
+    etiudaDropOldSkip:
+      FindNext $R1 $R2
+      Goto etiudaDropOldNext
+  etiudaDropOldDone:
+  FindClose $R1
+  Pop $R2
+  Pop $R1
+  Pop $R0
+FunctionEnd
+
+!macro etiudaDropOld DIR
+  ${If} ${DIR} != ""
+    StrCpy $etiudaDropRoot ${DIR}
+    Push ""
+    Call etiudaDropOldFiles
+    RMDir "$etiudaDropRoot"
+    StrCpy $etiudaDropRoot ""
+  ${EndIf}
+  ClearErrors
 !macroend
 
 # After the swap an older copy that would not uninstall is noted and the run goes on to register the new one; stopping
@@ -871,11 +958,13 @@ Var etiudaRunOld
   !insertmacro customUnInstallCheck
 !macroend
 
-# The new copy is registered: the older copy aside goes.
+# The new copy is registered: the older copy aside goes, and an older copy's folder elsewhere loses the program's files.
 !macro etiudaDropAside
   ${If} $etiudaAsideMade == "1"
     RMDir /r "$etiudaAside"
   ${EndIf}
+  !insertmacro etiudaDropOld $etiudaOldDir
+  !insertmacro etiudaDropOld $etiudaOldUserDir
 !macroend
 !endif
 
