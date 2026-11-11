@@ -1337,16 +1337,57 @@ function countsOf(out, exit) {
   return { counts, from, clashed };
 }
 
+/* EACH STEP'S SCRATCH IS ITS OWN, AND GOES WITH IT (the test architect, 2026-11-11). A leg makes its labs under
+   os.tmpdir(), and most never remove them: one night left 757 folders in %TEMP%, one kind 89 MB apiece. So each step runs
+   with TEMP, TMP and TMPDIR set to a folder this runner makes for it (a step or a caller that names its own TEMP keeps it),
+   and that folder is removed when the step ends, pass or fail, by the literal path made here, a link inside it removed and
+   never followed. ETIUDA_KEEP_TMP=1 keeps it for a red being read, and the run names where. This is a wrapper's clean-up
+   of its own temporary files, which the office charter's "nothing is deleted" leaves outside its rule (section 6). */
+const STEP_SCRATCH_PREFIX = "egr-";
+const STEP_SCRATCH_BASE = os.tmpdir();
+function stepScratch() {
+  try { return fs.mkdtempSync(path.join(STEP_SCRATCH_BASE, STEP_SCRATCH_PREFIX)); } catch { return null; }
+}
+/* Removes what it can under p, never following a link or junction (lstat sees one as a link; it goes by unlink or
+   rmdir of the link itself), and answers how many entries stayed (a file a live process still holds). */
+function scratchRemove(p) {
+  let st;
+  try { st = fs.lstatSync(p); } catch { return 0; }
+  if (st.isSymbolicLink()) {
+    try { fs.unlinkSync(p); return 0; } catch { try { fs.rmdirSync(p); return 0; } catch { return 1; } }
+  }
+  if (st.isDirectory()) {
+    let left = 0, names = [];
+    try { names = fs.readdirSync(p); } catch { return 1; }
+    for (const n of names) left += scratchRemove(path.join(p, n));
+    try { fs.rmdirSync(p); } catch { left += 1; }
+    return left;
+  }
+  try { fs.unlinkSync(p); return 0; } catch {}
+  try { fs.chmodSync(p, 0o666); fs.unlinkSync(p); return 0; } catch { return 1; }
+}
+function stepScratchEnd(dir) {
+  if (!dir || path.dirname(dir) !== STEP_SCRATCH_BASE || !path.basename(dir).startsWith(STEP_SCRATCH_PREFIX)) return;
+  if (process.env.ETIUDA_KEEP_TMP === "1") { console.log("gate-run: kept the step's scratch " + dir + " (ETIUDA_KEEP_TMP=1)"); return; }
+  const left = scratchRemove(dir);
+  if (left) console.log("gate-run: the step's scratch " + dir + " kept " + left + " entr" + (left === 1 ? "y" : "ies") + " it could not remove");
+}
+
 function runStep(step, customEnv = {}) {
   return new Promise(resolve => {
     const t0 = Date.now();
-    const env = Object.assign({}, process.env, customEnv, step.env || {});
+    const scratch = stepScratch();
+    const own = scratch ? { TEMP: scratch, TMP: scratch, TMPDIR: scratch } : {};
+    const env = Object.assign({}, process.env, own, customEnv, step.env || {});
     const child = spawn(process.execPath, [step.file].concat(step.args),
       { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
     child.stdout.on("data", d => { out += d; process.stdout.write(d); });
     child.stderr.on("data", d => { out += d; process.stderr.write(d); });
-    child.on("close", code => resolve({ exit: code === null ? -1 : code, wallMs: Date.now() - t0, out }));
+    child.on("close", code => {
+      stepScratchEnd(scratch);
+      resolve({ exit: code === null ? -1 : code, wallMs: Date.now() - t0, out });
+    });
   });
 }
 
