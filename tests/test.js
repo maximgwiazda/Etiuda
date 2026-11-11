@@ -4639,8 +4639,8 @@ function shippedFlagTests() {
     [[1, 1, false], [1, 1, false], [1, 1, false]]);
   eq("control: the trademark line above the maker line is unchanged in each language, after the copyright",
     ["en", "pl", "de"].map(l => { const p = aboutParts(l); return typeof p === "string" ? p : p[p.length - 2]; }),
-    ["© 2026 Maxim Gwiazda. Etiuda is a trademark of Maxim Gwiazda.", "© 2026 Maxim Gwiazda. Etiuda jest znakiem towarowym Maxima Gwiazdy.",
-     "© 2026 Maxim Gwiazda. Etiuda is a trademark of Maxim Gwiazda."]);
+    ["© 2026 Max Gwiazda. Etiuda is a trademark of Maxim Gwiazda.", "© 2026 Max Gwiazda. Etiuda jest znakiem towarowym Maxima Gwiazdy.",
+     "© 2026 Max Gwiazda. Etiuda is a trademark of Maxim Gwiazda."]);
   eq("About names no catalog file: it reads none of the host's catalog answers",
     ["eCatalogFile", "eCatalogIn", "eCatalogBuiltIn", "./host.js"].filter(n => about.indexOf(n) > -1), []);
 

@@ -59,7 +59,8 @@ function aboutEarlierHtml(list){
 function aboutCredit(lang){
   const maker=esc(MAKER[lang]||MAKER.en).split("{STARDUST}")
     .join('<a href="'+STARDUST_URL+'" target="_blank" rel="noopener">Stardust</a>');
-  return "© 2026 Maxim Gwiazda. "+esc(TRADEMARK[lang]||TRADEMARK.en)+"<br>"+maker;
+  /* The copyright names the person as he is known; the trademark notice its registered owner (Max, 2026-11-11 00:57). */
+  return "© 2026 Max Gwiazda. "+esc(TRADEMARK[lang]||TRADEMARK.en)+"<br>"+maker;
 }
 /* A page within the About: its X, Escape and Back all return there. */
 function aboutPage(title, body){
