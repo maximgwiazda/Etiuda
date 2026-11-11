@@ -880,6 +880,9 @@ function closePlan(root, wholeChain, changed, gf, reason, extra, mapped) {
     if (!g || added.has(g)) continue;
     if (row.kind === "window") { if (!walled.includes(g)) walled.push(g); continue; }
     if (VISUAL_SET.has(g) || releaseOnly.has(g) || g === "tools/gate-run.mjs") continue;
+    /* A packaging tool is no merge gate here either, as on the mapped plan (the test architect, 2026-11-11): fold 37's
+       shared-diff plan ran package-linux on Windows, which failed and left a Linux dist that turned four legs red. */
+    if (NOT_MERGE_SET.has(g)) { console.log("gate-run area: " + g + " is a packaging tool, not a merge gate"); continue; }
     if (!fs.existsSync(path.join(root, g))) continue;
     steps.push({ script: "area", cmd: "node " + g, file: g, args: [], note: "mapped by gates-for, beside the whole chain" }); /* plant:closed-mapped */
     added.add(g);
