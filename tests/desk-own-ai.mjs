@@ -10,7 +10,9 @@
  *   da2 policy first, field by field; the policy's key never goes to an address typed here
  *   da3 a save that touches a field policy set is refused, and nothing is written
  *   da4 the key is never in what Settings is told, the person's or the policy's, while deskAiConfig does hand it on
- *   da5 deskAiConfig is null while the option is off or incomplete, a key stays with its address unless Settings moves it,
+ *   da5 deskAiConfig is null while the option is off or incomplete, a key stays with the address it was given for: a save
+ *       that moves the address forgets a key kept for another real address and says so, and only a key typed before any
+ *       address follows the first address named,
  *       and the connection test hands the door the fixed prompt and the config's five fields alone
  *   da6 the services' published addresses are one table, shell/desk-ai.cjs's, which Settings and deskAiConfig read
  * THE PAGE'S PART runs the built engine in headless Chrome, beside a stand-in host that answers as the shell would:
@@ -80,10 +82,12 @@ const DESK_AI = ["const DESK_AI_FILE =", "const DESK_AI_KEY_FILE =", "const DESK
   "const DESK_AI_SERVICES =", "const DESK_AI_MODEL_MAX =", "const DESK_AI_KEY_MAX =", "const DESK_AI_CONTROL_RE =",
   "const DESK_AI_TEST_PROMPT =", "function deskAiService(", "function deskAiEndpointShape(", "function deskAiPolicyFrom(",
   "function deskAiJoin(", "function deskAiReadyOf(", "function deskAiAnswer(", "function deskAiRefusal(", "function deskAiPath(",
-  "function deskAiPerson(", "function deskAiKeyInner(", "function deskAiKeyFor(", "function deskAiPolicy(", "function deskAiNow(",
+  "function deskAiPerson(", "function deskAiKeyInner(", "function deskAiKeyFor(", "function deskAiPolicy(", "let deskAiKept =", "function deskAiForget(", "function deskAiNow(",
   "function deskAiConfig(", "function deskAiSettings(", "function deskAiSave(", "function deskAiTest("];
 const NAMES = ["policyValues", "joinPolicyFacts", "deskAiPolicyFrom", "deskAiJoin", "deskAiConfig", "deskAiSettings", "deskAiSave",
   "deskAiTest", "DESK_AI_TEST_PROMPT", "DESK_AI_FILE", "DESK_AI_KEY_FILE"];
+/* The kept configuration and its forget, read where shell/main.js has them, so a tree without them fails da5 alone. */
+const OPTIONAL = ["let deskAiKept =", "function deskAiForget("];
 
 /* A stand-in for safeStorage: its sealed text is the plain text reversed and shifted, so it is never the key as typed. */
 const SEAL = {
@@ -102,11 +106,12 @@ function shell(policyText, opts) {
   const dir = path.join(scratch, "u" + (++dirN));
   fs.mkdirSync(dir);
   const asked = [];
-  const body = POLICY.concat(DESK_AI).map(m => sliceDecl(SRC, m)).join("\n");
+  const body = POLICY.concat(DESK_AI).filter(m => !OPTIONAL.includes(m) || SRC.indexOf(m) > -1).map(m => sliceDecl(SRC, m)).join("\n");
   const policyRead = { values: null };
   const params = ["path", "app", "fs", "safeStorage", "Buffer", "branchSealable", "writeReplacing", "readJoinPolicy", "joinPolicyRead",
     "deskAiProbe", "process", "harnessLaunch", "deskAi"];
-  const S = new Function(...params, body + "\nreturn { " + NAMES.join(", ") + " };")(
+  const S = new Function(...params, body + "\nreturn { " + NAMES.join(", ")
+    + ", deskAiForget: typeof deskAiForget === 'function' ? deskAiForget : () => {} };")(
     path, { getPath: () => dir }, fs, SEAL, Buffer, () => o.sealable !== false, (f, text) => fs.writeFileSync(f, text, "utf8"),
     () => ({}), policyRead, (config, prompt) => { asked.push({ config: config, prompt: prompt }); return Promise.resolve({ ok: true }); },
     { env: {} }, () => o.harness === true, o.deskAi || DESK_AI_MODULE);
@@ -246,10 +251,20 @@ try { shell(""); } catch (e) { loadError = (e && e.message) || String(e); }
       problems.push("on " + JSON.stringify(c && Object.keys(c)));
     const doc = JSON.parse(fs.readFileSync(S.file(S.DESK_AI_FILE), "utf8"));
     fs.writeFileSync(S.file(S.DESK_AI_FILE), JSON.stringify(Object.assign(doc, { endpoint: "https://moved.example/v1/" })));
+    /* The configuration is kept in memory between saves; a file edited behind the desk's back is read after a forget. */
+    S.deskAiForget();
     if (S.deskAiConfig() !== null) problems.push("an edited file moved the key with the address");
-    S.deskAiSave({ endpoint: "https://gateway.example/v1/chat/completions" });
+    /* A key kept for a real address never follows a changed one: Settings' own move forgets it and says to give it again. */
+    const mv = S.deskAiSave({ endpoint: "https://gateway.example/v1/chat/completions" });
     const moved = S.deskAiConfig();
-    if (!moved || moved.key !== KEY_PERSON || moved.endpoint !== "https://gateway.example/v1/") problems.push("Settings' own move " + JSON.stringify(moved && moved.endpoint));
+    if (moved !== null || !mv || mv.ok !== true || mv.keyDropped !== true || !mv.settings || mv.settings.keyKept !== false
+        || fs.existsSync(S.file(S.DESK_AI_KEY_FILE)))
+      problems.push("a kept key followed Settings' move " + JSON.stringify([moved && moved.endpoint, mv && mv.keyDropped, mv && mv.settings && mv.settings.keyKept]));
+    S.deskAiSave({ key: KEY_PERSON });
+    const given = S.deskAiConfig();
+    if (!given || given.key !== KEY_PERSON || given.endpoint !== "https://gateway.example/v1/") problems.push("the key given again " + JSON.stringify(given && given.endpoint));
+    const same = S.deskAiSave({ provider: "openai" });
+    if (!S.deskAiConfig() || same.keyDropped) problems.push("a save that leaves the address as it was dropped the key");
     const early = shell("");
     early.deskAiSave({ choice: "organisation", provider: "azure" }); early.deskAiSave({ key: KEY_PERSON }); early.deskAiSave({ model: "m" });
     if (early.deskAiConfig() !== null) problems.push("azure with no address");
@@ -265,7 +280,8 @@ try { shell(""); } catch (e) { loadError = (e && e.message) || String(e); }
     const tn = await none.deskAiTest();
     if (tn.ok || tn.why !== "key" || none.asked.length) problems.push("a test with no key asked " + none.asked.length);
   }
-  check(!problems.length, "da5 deskAiConfig is null while off or incomplete; a key stays with its address unless Settings moves it; the test hands "
+  check(!problems.length, "da5 deskAiConfig is null while off or incomplete; a kept key never follows a changed address, Settings' move forgets "
+    + "it and says to give it again, and a key typed before any address follows the first one named; the test hands "
     + "the door the fixed prompt and five fields alone: " + (problems.join("; ") || "nine states, two tests"));
 }
 
@@ -333,6 +349,8 @@ async function boot(lang) {
         if (Object.keys(f).some(k => s.managed[k])) return Promise.resolve({ ok: false, why: "managed", settings: s });
         if (f.choice) Object.assign(s, { choice: f.choice, on: f.choice === "organisation" });
         if (f.provider) s.provider = f.provider;
+        /* As the shell does: a move of the address forgets a key kept for another one. */
+        if (f.endpoint !== undefined && s.keyKept) { s.keyKept = false; return Promise.resolve({ ok: true, why: "", keyDropped: true, settings: s }); }
         return Promise.resolve({ ok: true, why: "", settings: s });
       },
       deskAiTest: () => Promise.resolve({ ok: true, why: "", host: "api.openai.com", model: "m-own" }),
@@ -392,8 +410,17 @@ try {
     await closeTab(); await page.evaluate(() => openSettings("data")); await sleep(150);
     const azure = await page.evaluate(() => !!document.getElementById("omAddress"));
     if (!azure) problems.push("azure shows no address");
+    const dropped = await page.evaluate(async () => {
+      const f = document.getElementById("omAddress");
+      if (!f) return { toast: "", placeholder: "" };
+      f.value = "https://res.example/openai/v1/";
+      f.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise(r => setTimeout(r, 300));
+      return { toast: (document.getElementById("toast") || {}).textContent || "", placeholder: (document.getElementById("omKey") || {}).placeholder || "" };
+    });
+    if (!/again/.test(dropped.toast) || /A key is kept/.test(dropped.placeholder)) problems.push("a key dropped by a move, said " + JSON.stringify(dropped));
     check(!problems.length, "db1 the row's two states: built-in alone, the organisation's with service, model, key and the test, the address only where "
-      + "the service has none of its own: " + (problems.join("; ") || "three states"));
+      + "the service has none of its own; a move that forgets the key says to give it again: " + (problems.join("; ") || "four states"));
   }
 
   /* db2 */

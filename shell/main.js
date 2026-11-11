@@ -4250,11 +4250,20 @@ function deskAiPolicy() {
   try { readJoinPolicy("en"); } catch { /* no policy is read as none */ }
   return deskAiPolicyFrom(joinPolicyRead && joinPolicyRead.values);
 }
+/* WHAT IS IN FORCE, KEPT IN MEMORY: every search, picker opening and the page's two-second look asks deskAiConfig, so the two
+   files are read and the key unsealed once, and again only after deskAiForget (every save or forget from Settings) or a new
+   reading of machine policy. A file edited behind the running desk's back is read at the next save or start. */
+let deskAiKept = null;
+function deskAiForget() { deskAiKept = null; }
 /* Everything in force now: {joined, policy, key}, the key the one a request would carry, "" where none would go. */
 function deskAiNow() {
-  const policy = deskAiPolicy(), joined = deskAiJoin(deskAiPerson(), policy);
+  const policy = deskAiPolicy();
+  if (deskAiKept && deskAiKept.from === joinPolicyRead) return deskAiKept.now;
+  const joined = deskAiJoin(deskAiPerson(), policy);
   const key = policy.key ? (joined.keyAway ? "" : policy.key) : deskAiKeyFor(joined.endpoint);
-  return { joined: joined, policy: policy, key: key };
+  const now = { joined: joined, policy: policy, key: key };
+  deskAiKept = { from: joinPolicyRead, now: now };
+  return now;
 }
 /** THE ONE PLACE THE ADDRESS AND THE KEY ARE HANDED ON. Null while the option is off or anything a request needs is missing;
  *  else {provider, endpoint, model, key, managed}, endpoint the address a request goes to, as deskAiEndpointShape writes it.
@@ -4272,16 +4281,17 @@ function deskAiSettings() {
   return deskAiAnswer(now.joined, !!now.key, now.policy.ignored, branchSealable(), !!(inner && inner.for === ""));
 }
 /* A save from Settings: only the fields sent change, and a key typed is sealed for the address the save leaves in force. A key
-   already kept moves only with a save that changes the service or the address. An empty key leaves the kept one as it is.
-   Answers {ok, why, settings}, settings as deskAiSettings, and writes nothing where it refuses. */
+   kept for one address is forgotten by a save that moves to another (below). An empty key leaves the kept one as it is.
+   Answers {ok, why, keyDropped, settings}, settings as deskAiSettings, and writes nothing where it refuses. */
 function deskAiSave(fields) {
   const f = {};
   if (fields && typeof fields === "object") {
     for (const k of ["choice", "provider", "endpoint", "model", "key"]) if (typeof fields[k] === "string") f[k] = fields[k];
   }
   let before = null;
+  deskAiForget();
   try { before = deskAiNow(); } catch { return { ok: false, why: "unwritten", settings: null }; }
-  const answer = () => { try { return deskAiSettings(); } catch { return null; } };
+  const answer = () => { deskAiForget(); try { return deskAiSettings(); } catch { return null; } };
   const why = deskAiRefusal(f, before.joined);
   if (why) return { ok: false, why: why, settings: answer() };
   const me = deskAiPerson();
@@ -4295,17 +4305,21 @@ function deskAiSave(fields) {
   const typed = f.key !== undefined ? f.key.trim() : "";
   const moves = f.provider !== undefined || f.endpoint !== undefined;
   const kept = before.policy.key || !moves ? null : deskAiKeyInner();
-  const key = typed || (kept && after.endpoint && kept.for !== after.endpoint ? kept.key : "");
+  /* A KEY NEVER FOLLOWS A CHANGED ADDRESS (Argon's finding 1 of the 992 review, as Studio's a9a3c5bc): a key kept for a real
+     address is forgotten by a save that moves to another and no key typed, and Settings says to give it again. Only a key
+     typed before any address was named, sealed for "", goes to the first address named. */
+  const carried = kept && kept.for === "" && after.endpoint ? kept.key : "";
+  const dropped = !typed && !carried && !!kept && kept.for !== "" && kept.for !== after.endpoint;
+  const key = typed || carried;
   if (key && !branchSealable()) return { ok: false, why: "unsealed", settings: answer() };
   try {
-    /* A key typed before its address is sealed for none, and the save that names the address carries it there. */
     if (key) {
       const sealed = safeStorage.encryptString(JSON.stringify({ for: after.endpoint, key: key })).toString("base64");
       writeReplacing(deskAiPath(DESK_AI_KEY_FILE), JSON.stringify({ format: 1, kind: DESK_AI_KEY_KIND, sealed: sealed }));
-    }
+    } else if (dropped) fs.unlinkSync(deskAiPath(DESK_AI_KEY_FILE));
     writeReplacing(deskAiPath(DESK_AI_FILE), JSON.stringify(Object.assign({ format: 1, kind: DESK_AI_KIND }, next), null, 2) + "\n");
   } catch { return { ok: false, why: "unwritten", settings: answer() }; }
-  return { ok: true, why: "", settings: answer() };
+  return { ok: true, why: "", keyDropped: dropped, settings: answer() };
 }
 /* The door's one ask of `config` with the test's fixed prompt (shell/desk-ai.cjs connectionTest), answered {ok, why, ms,
    status}: why "busy", "late", "unreached" or "answer" (an error or an answer with no text), ms the service's own time. */

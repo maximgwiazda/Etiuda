@@ -474,6 +474,8 @@ function orgModelSave(fields){
   const was=document.activeElement && document.activeElement.id;
   Promise.resolve().then(()=>h.deskAiSave(fields)).then(r=>{
     if(!r || r.ok!==true) toastRefusal(orgModelWhy(r && r.why, fields));
+    /* A key never follows a changed address: the shell forgot the one kept for the old one, so the key is asked for again. */
+    else if(r.keyDropped===true) toast(t("The key was given for the previous address, so it was not kept for this one. Give the key again.")); // placeholder: Claudette
     paintSettings();
     syncOrgMark();
     const host=settingsHost(), back=was && host && host.querySelector("#"+was);

@@ -28,7 +28,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "shell");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 44;
+const EXPECTED = 46;
 /* The shell-to-page event that carries each re-order's outcome; the page-to-shell sync request "etiuda:ai-state" is another. */
 const RANKING_CH = "etiuda:ai-ranking";
 
@@ -136,7 +136,8 @@ function loadMain(opts) {
     utilityProcess: inert,
   };
   const aiCopy = o.aiSrc ? aiFrom(o.aiSrc) : null;
-  const fakeRequire = n => (n === "electron" ? electron : aiCopy && /desk-ai\.cjs$/.test(String(n)) ? aiCopy : nodeRequire(n));
+  const fakeRequire = n => (n === "electron" ? electron : aiCopy && /desk-ai\.cjs$/.test(String(n)) ? aiCopy
+    : o.fs && n === "node:fs" ? o.fs : nodeRequire(n));
   const T = {};
   const quiet = { log: () => {}, error: () => {}, warn: () => {}, info: () => {} };
   new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test", (o.mainSrc || MAIN_SRC) + MAIN_TAIL)(
@@ -748,6 +749,37 @@ await block(async () => {
     + "customer " + JSON.stringify(desk) + ", harness " + JSON.stringify(lab));
   const lifted = await readerDrive(true, edited(MAIN_SRC, "function deskAiConfig() {\n  if (harnessLaunch()) return null;\n", "function deskAiConfig() {\n"));
   check(lifted.org === true && lifted.fetches >= 1, "da12p with the harness check lifted, the leg above fails: " + JSON.stringify(lifted));
+});
+
+/* ---- da13 the configuration is kept in memory: read once, read afresh after a save ------------------------------------ */
+async function cacheDrive(mainSrc) {
+  const reads = { setting: 0, key: 0 };
+  const counted = new Proxy(fs, { get: (t, k) => (k !== "readFileSync" ? t[k] : (p, ...a) => {
+    const s = String(p);
+    if (/desk-ai\.json$/.test(s)) reads.setting++; else if (/desk-ai-key\.json$/.test(s)) reads.key++;
+    return t.readFileSync(p, ...a);
+  }) });
+  const fetch = fetchOf(() => ({ status: 200, text: chatSaying("[2,1]") }));
+  const ctx = loadMain({ fetch, fs: counted, mainSrc, safeStorage: SEAL,
+    answer: (op, a) => op === "search-shortlist" ? { q: a.q, gen: 1, cards: ["c1", "c2"], intents: [] } : openAnswer(op) });
+  builtinFrom(ctx.T, []);
+  writeOrgSetting(ctx);
+  ctx.on["etiuda:search-set"](ENGINE, true);
+  await ctx.handle["etiuda:search-prepare"](ENGINE, ROWS);
+  for (const q of ["lantern wick", "kettle tea"]) { await ctx.handle["etiuda:search-rank"](ENGINE, q); await tick(AI.SETTLE_MS + 80); }
+  const two = Object.assign({}, reads), asked = fetch.calls.length;
+  const saved = await ctx.handle["etiuda:desk-ai-save"](ENGINE, { model: "plant-model-2" });
+  await ctx.handle["etiuda:search-rank"](ENGINE, "parcel post"); await tick(AI.SETTLE_MS + 80);
+  const last = fetch.calls[fetch.calls.length - 1];
+  const model = last ? JSON.parse(Buffer.from(last.init.body).toString("utf8")).model : "";
+  return { two, asked, saved: !!(saved && saved.ok), model, after: fetch.calls.length };
+}
+await block(async () => {
+  const r = await cacheDrive();
+  check(r.two.setting === 1 && r.two.key === 1 && r.asked === 2 && r.saved && r.after === 3 && r.model === "plant-model-2",
+    "da13 two searches read the setting and the key once between them, and a save makes the next read fresh: " + JSON.stringify(r));
+  const lifted = await cacheDrive(edited(MAIN_SRC, "  if (deskAiKept && deskAiKept.from === joinPolicyRead) return deskAiKept.now;\n", ""));
+  check(lifted.two.setting > 1, "da13p with the kept configuration lifted, the leg above fails: " + JSON.stringify(lifted.two));
 });
 
 check(wallHits === 0, "da0 no leg called the global fetch: " + wallHits);
