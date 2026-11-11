@@ -3682,9 +3682,10 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx:not(.lm) .sx-all{columns:1;column-gap:28px;column-fill:auto;width:100%}
 .sx:not(.lm) .sx-block{break-inside:avoid;margin:0 0 26px;min-width:0}
 @media (min-width:1100px) and (max-width:1699.98px){
-  .sx:not(.lm) .sx-all{display:grid;column-count:auto;column-width:auto;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px;align-items:start}
-  .sx:not(.lm) .sx-block{grid-column:1;margin:0}
-  .sx:not(.lm) .sx-block[data-sec="keys"]{grid-column:2;grid-row:1}
+  .sx:not(.lm) .sx-all{display:grid;column-count:auto;column-width:auto;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+    grid-template-rows:repeat(8,min-content) 1fr;gap:0 28px;align-items:start}
+  .sx:not(.lm) .sx-block{grid-column:1;margin:0 0 26px}
+  .sx:not(.lm) .sx-block[data-sec="keys"]{grid-column:2;grid-row:1 / -1}
 }
 @media (min-width:1700px){
   .sx:not(.lm) .sx-all{columns:3}
@@ -34507,7 +34508,7 @@ What you type stays in this browser only.`;
     return '<div class="sx-all">' + secs.map((s) => sectionBlockHtml(s, link)).join("") + "</div>";
   }
   function onePageHtml() {
-    return '<div class="sx-crumb">' + esc(t("Settings")) + "</div><h2>" + esc(t("Settings")) + '</h2><p class="lede">' + esc(t("Every setting Etiuda has, on one page.")) + "</p>" + allColumnsHtml(settingsSections(), true);
+    return "<h2>" + esc(t("Settings")) + '</h2><p class="lede">' + esc(t("Every setting Etiuda has, on one page.")) + "</p>" + allColumnsHtml(settingsSections(), true);
   }
   function lookCols() {
     try {
@@ -34544,7 +34545,7 @@ What you type stays in this browser only.`;
     const secs = settingsSections(), s = secs.find((x) => x.id === on) || secs[0];
     const rows = s.groups.map(groupHtml).join("");
     const body = s.id === "appearance" || s.id === "layout" ? '<div class="sx-look"><div class="sx-lookrows">' + rows + "</div>" + deskLookHtml() + "</div>" : '<div class="sx-tiles">' + rows + "</div>";
-    return '<a class="sx-crumb sx-back" href="#settings">' + esc(t("Settings")) + "</a><h2>" + esc(s.name) + '</h2><p class="lede">' + esc(s.lede) + "</p>" + body;
+    return '<a class="sx-crumb sx-back" href="#settings">' + esc(t("All settings")) + "</a><h2>" + esc(s.name) + '</h2><p class="lede">' + esc(s.lede) + "</p>" + body;
   }
   function settingsHost() {
     if (screenOn !== "settings" || typeof document === "undefined") return null;

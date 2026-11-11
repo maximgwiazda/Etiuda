@@ -14,7 +14,9 @@
  *      with As the desk will look on the right; General's rows sit side by side at 2000
  *   s5 the picture's ground follows Dark, its blur follows Blur effects, its cards follow
  *      Columns, and it takes no click and no Tab stop
- *   s6 a section heading opens that section; the crumb and All settings return; Escape returns
+ *   s6 a section heading opens that section; the crumb (All settings, absent on the one page) and All settings return; Escape returns
+ *   s9 from 1100 to 2560 px no row's words run under its control, on the one page and three sections opened alone
+ *   s10 at 1280 every section but the shortcuts stands in the first column, one under another
  *   s7 a search on the one page leaves only the matching rows, each under its heading
  *   s8 openSettings("general") opens General alone; openSettings() opens the one page
  */
@@ -352,12 +354,13 @@ try {
   });
   const s6crumb = await page.evaluate(() => {
     const box = document.getElementById("setBody");
-    const a = [...box.querySelectorAll("a")].find(x => x.textContent.trim() === "Settings");
+    const a = [...box.querySelectorAll("a")].find(x => x.textContent.trim() === "All settings");
     if (!a) return { ok: false, why: "crumb is not a link" };
     a.click();
     const h2 = (box.querySelector("h2") || {}).textContent || "";
     const heads = [...box.querySelectorAll("h3")].map(h => h.textContent.trim());
-    return { h2: h2.trim(), heads: heads.filter(t => t === "General" || t === "Appearance") };
+    const crumbOnOnePage = !!box.querySelector(".sx-crumb");
+    return { h2: h2.trim(), heads: heads.filter(t => t === "General" || t === "Appearance"), crumbOnOnePage };
   });
   await page.evaluate(() => {
     const b = [...document.querySelectorAll('nav[aria-label="Settings"] button')].find(x => x.textContent.trim() === "Appearance");
@@ -382,11 +385,47 @@ try {
   await sleep(80);
   const s6esc = await readPage(page);
   const s6ok = s6open && s6open.title === "Opens this section alone" && s6open.h2 === "Appearance" && !s6open.still
-    && s6crumb && s6crumb.h2 === "Settings" && s6crumb.heads.length === 2
+    && s6crumb && s6crumb.h2 === "Settings" && s6crumb.heads.length === 2 && !s6crumb.crumbOnOnePage
     && s6all && s6all.h2 === "Settings"
     && s6esc.h2 === "Settings" && s6esc.chosen.length === 1 && s6esc.chosen[0] === "All settings";
   check(s6ok, "s6 a section heading opens that section, and the crumb, All settings and Escape each return to the one page",
     { open: s6open, crumb: s6crumb, all: s6all, esc: { h2: s6esc.h2, chosen: s6esc.chosen } });
+  /* s9 (Claudius kappa, the designer 05:19): "A row's words wrap before its control, never under it, at every column
+     width." Every line of a row's words ends left of its control wherever the two share a band, on the one page and
+     on Appearance, Layout and General opened alone. s10: at two columns the first column's sections stand one under
+     another, with no gap left for the shortcuts' height. */
+  const s9bad = [];
+  for (const sec of ["", "appearance", "layout", "general"]) {
+    for (const w of [1100, 1280, 1440, 1700, 2000, 2560]) {
+      await page.setViewport({ width: w, height: 1000, deviceScaleFactor: 1 });
+      await page.evaluate(x => (x ? openSettings(x) : openSettings()), sec);
+      await sleep(80);
+      const bad = await page.evaluate(() => {
+        const out = [];
+        for (const row of document.querySelectorAll("#setBody .set-row")) {
+          const lab = row.querySelector(".set-label"), ctl = row.querySelector(".set-ctl");
+          if (!lab || !ctl || !ctl.offsetParent) continue;
+          const c = ctl.getBoundingClientRect(), r = document.createRange(); r.selectNodeContents(lab);
+          for (const b of r.getClientRects()) if (b.bottom > c.top + 1 && b.top < c.bottom - 1 && b.right > c.left + 0.5) { out.push(row.getAttribute("data-row")); break; }
+        }
+        return out;
+      });
+      if (bad.length) s9bad.push({ sec: sec || "all", w, rows: bad });
+    }
+  }
+  check(!s9bad.length, "s9 on the one page and on Appearance, Layout and General opened alone, from 1100 to 2560 px, no row's words run under its control", s9bad.slice(0, 4));
+  await page.setViewport({ width: 1280, height: 900, deviceScaleFactor: 1 });
+  await page.evaluate(() => openSettings());
+  await sleep(80);
+  const s10 = await page.evaluate(() => {
+    const blocks = [...document.querySelectorAll("#setBody .sx-block")].filter(b => b.getAttribute("data-sec") !== "keys");
+    const left = Math.min(...blocks.map(b => b.getBoundingClientRect().left));
+    const first = blocks.filter(b => Math.abs(b.getBoundingClientRect().left - left) < 2).map(b => b.getBoundingClientRect());
+    const gaps = first.slice(1).map((r, i) => Math.round(r.top - first[i].bottom));
+    return { n: blocks.length, inFirst: first.length, gaps };
+  });
+  check(s10.n > 1 && s10.inFirst === s10.n && s10.gaps.every(g => g >= 0 && g <= 40),
+    "s10 at 1280 every section but the shortcuts stands in the first column, one under another, at most 40 px apart", s10);
 
   /* s7. Search on the one page. */
   await page.evaluate(() => openSettings());
@@ -445,5 +484,5 @@ try {
 }
 
 console.log("RESULT checks=" + checks + " failed=" + fails);
-console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=8");
-process.exit(fails || checks !== 8 ? 1 : 0);
+console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=10");
+process.exit(fails || checks !== 10 ? 1 : 0);

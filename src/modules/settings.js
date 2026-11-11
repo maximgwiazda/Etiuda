@@ -464,7 +464,7 @@ function allColumnsHtml(secs, link){
   return '<div class="sx-all">'+secs.map(s=>sectionBlockHtml(s, link)).join("")+'</div>';
 }
 function onePageHtml(){
-  return '<div class="sx-crumb">'+esc(t("Settings"))+'</div><h2>'+esc(t("Settings"))+'</h2>'
+  return '<h2>'+esc(t("Settings"))+'</h2>'
     +'<p class="lede">'+esc(t("Every setting Etiuda has, on one page."))+'</p>'
     +allColumnsHtml(settingsSections(), true);
 }
@@ -512,7 +512,7 @@ function settingsPageHtml(on,query){
   const body=(s.id==="appearance" || s.id==="layout")
     ? '<div class="sx-look"><div class="sx-lookrows">'+rows+'</div>'+deskLookHtml()+'</div>'
     : '<div class="sx-tiles">'+rows+'</div>';
-  return '<a class="sx-crumb sx-back" href="#settings">'+esc(t("Settings"))+'</a><h2>'+esc(s.name)+'</h2>'
+  return '<a class="sx-crumb sx-back" href="#settings">'+esc(t("All settings"))+'</a><h2>'+esc(s.name)+'</h2>'
     +'<p class="lede">'+esc(s.lede)+'</p>'+body;
 }
 function settingsHost(){

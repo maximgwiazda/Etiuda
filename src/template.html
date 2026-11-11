@@ -3682,9 +3682,10 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx:not(.lm) .sx-all{columns:1;column-gap:28px;column-fill:auto;width:100%}
 .sx:not(.lm) .sx-block{break-inside:avoid;margin:0 0 26px;min-width:0}
 @media (min-width:1100px) and (max-width:1699.98px){
-  .sx:not(.lm) .sx-all{display:grid;column-count:auto;column-width:auto;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px;align-items:start}
-  .sx:not(.lm) .sx-block{grid-column:1;margin:0}
-  .sx:not(.lm) .sx-block[data-sec="keys"]{grid-column:2;grid-row:1}
+  .sx:not(.lm) .sx-all{display:grid;column-count:auto;column-width:auto;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+    grid-template-rows:repeat(8,min-content) 1fr;gap:0 28px;align-items:start}
+  .sx:not(.lm) .sx-block{grid-column:1;margin:0 0 26px}
+  .sx:not(.lm) .sx-block[data-sec="keys"]{grid-column:2;grid-row:1 / -1}
 }
 @media (min-width:1700px){
   .sx:not(.lm) .sx-all{columns:3}
