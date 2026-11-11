@@ -12,7 +12,8 @@ import { cutInk, cutRange, $ } from "./dom.js";
    the rest are measured when the scroll brings them in. */
 const CUT_SEL=".ctitle,.ccat,.modal-name,.mg-card-lab,.mg-int-t,.mg-count,.acc-note,.mf-sum,"
   +"#toast,#intentPh,#roleDrum span,.tab-label>span,.fills input,.cat-now .cn-name,"
-  +".mf input:not([type]),.mf input[type=text],.rail-t,footer .nw,.nx-t,.nx-hit>span,.nd-t,.nd-b,.nd-from";
+  +".mf input:not([type]),.mf input[type=text],.rail-t,footer .nw,.nx-t,.nx-hit>span,.nd-t,.nd-b,.nd-from,"
+  +".lw-name .n,.lw-drum span,.lw-drumfield,.lw-ct .t";
 const CUT_MARGIN=400;
 const CUT_EPS=.01;
 /* A CARET'S WIDTH OF SLACK, for the scroll geometry alone: a field scrolled hard against its

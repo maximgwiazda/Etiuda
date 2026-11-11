@@ -117,7 +117,7 @@ function primaryCatKeys(){
    them, whatever their category. */
 function intentCardCounts(){
   const n=new Map();
-  (cards||[]).forEach(m=>{ if(m) new Set(normalizeCardIntents(m)).forEach(id=>n.set(id,(n.get(id)||0)+1)); });
+  (cards||[]).forEach(m=>{ if(m && !m._hidden) new Set(normalizeCardIntents(m)).forEach(id=>n.set(id,(n.get(id)||0)+1)); });
   return n;
 }
 

@@ -1,5 +1,5 @@
 import { ensureCustomCat, openCardEditor, hideCard } from "./card-editor.js";
-import { baseCard, cardCommits, cardTitle, findCard } from "./card-model.js";
+import { baseCard, cardCommits, cardTitle, findCard, cardLang, cardText } from "./card-model.js";
 import { stampHtml } from "./card-chain.js";
 import { movedCardIds, cardOrderIdx, catSortIdx, ensureCardOrder, cardOrderTouched, moveCardWithin } from "./card-order.js";
 import { isAlwaysCat, setCatAlways } from "./cat-roles.js";
@@ -16,10 +16,10 @@ import { drawIntentRail } from "./rail-list.js";
 import { normWhoList, WHO_BASE } from "./stock.js";
 import { lySet } from "./storage.js";
 import { drawPills } from "./tabs.js";
-import { t, catalogCountsLine, counted, toast, translateTree } from "./ui-lang.js";
+import { t, catalogCountsLine, counted, toast, translateTree, offerUndo } from "./ui-lang.js";
 import { isFavourite, isIntentFavourite, pack, whoOptions, savePack } from "./pack.js";
 import { removeCard, removeIntent, setIntentHidden, syncIntentOrder, toggleFavourite, toggleIntentFavourite } from "./favourites.js";
-import { primaryCatKeys, intentCardCounts } from "./card-intent.js";
+import { primaryCatKeys, intentCardCounts, normalizeCardIntents } from "./card-intent.js";
 import { catMarkHtml } from "./cat-identity.js";
 import { intentIdAt, intentIdxFromId, intentIsCustom, intentIsOverridden, intentOrder, isIntentHiddenIdx } from "./intent-id.js";
 import { applyCatsToGlobal, removeCategory } from "./cat-set.js";
@@ -386,9 +386,11 @@ function wireManageDrag(){
     const crow=e.target.closest(".mg-cat-row[data-crow]");
     const mrow=e.target.closest(".manage-row.mg-card[data-cardrow]");
     const irow=e.target.closest(".manage-row[data-introw]");
+    const wrow=e.target.closest(".lw-name[data-wrow]");
     if(crow) mgDrag={kind:"cat", key:crow.getAttribute("data-crow"), el:crow.closest(".mg-cat")};
     else if(mrow) mgDrag={kind:"card", key:mrow.getAttribute("data-cardrow"), el:mrow};
     else if(irow) mgDrag={kind:"intent", key:irow.getAttribute("data-introw"), el:irow};
+    else if(wrow) mgDrag={kind:"who", key:wrow.getAttribute("data-wrow"), el:wrow};
     else return;
     mgClearDropTarget();   // a drag cancelled by the system never reaches pointerup; start clean
     mgDrag.x=e.clientX; mgDrag.y=e.clientY; mgDrag.moved=false; mgDrag.dropCat=null;
@@ -408,6 +410,21 @@ function wireManageDrag(){
     if(Date.now()-mgSwapLock<190) return;
     const under=document.elementFromPoint(e.clientX,e.clientY);
     if(!under||!under.closest) return;
+    if(mgDrag.kind==="who"){
+      const row=under.closest(".lw-name[data-wrow]");
+      if(!row||row===mgDrag.el) return;
+      if(row.parentNode!==mgDrag.el.parentNode) return;
+      const current=whoOptions().slice();
+      const fi=current.indexOf(mgDrag.key);
+      const ti=current.indexOf(row.getAttribute("data-wrow"));
+      if(fi<0||ti<0) return;
+      current.splice(fi,1);
+      current.splice(ti,0,mgDrag.key);
+      setWhoList(current);
+      mgSwapLock=Date.now();
+      mgDomMove(mgDrag.el,row);
+      return;
+    }
     if(mgDrag.kind==="intent"){
       /* The simplest of the three: one flat list, no groups to cross and nothing to re-parent, so
          a reorder is the only gesture and it is live all the way. */
@@ -478,6 +495,11 @@ function endMgDrag(){
   mgClearDropTarget();
   mgDrag=null;
   if(!moved) return;
+  if(kind==="who"){
+    const page=libPage();
+    if(page) refreshRolePage(page);
+    return;
+  }
   /* A category change rewrites the card's data, not just an order array, so it needs the full
      round: rebuild, repaint the list and the pills (the counts moved), and re-render the tree
      because the row now belongs under a different parent. The target is opened first, so the
@@ -559,10 +581,45 @@ function mgShowHiddenBtn(kind,n){
     ' title="'+esc(tipShowHidden(kind,n))+'">'+
     esc(t('Show all hidden'))+' ('+n+')</button>';
 }
+let mgIntentCardsCache=null;
+
+/* Builds a lookup of cards linked to each intent, ordered:
+   favourites first, then marked intentTop, then the Library tree's own order
+   (categories in bar order, then mgCardCmp). Hidden cards are excluded. */
+function mgIntentCardsMap(){
+  const map=new Map();
+  (cards||[]).forEach((m,idx)=>{
+    if(!m || m._hidden) return;
+    const links=normalizeCardIntents(m);
+    for(let j=0; j<links.length; j++){
+      const iid=links[j];
+      let arr=map.get(iid);
+      if(!arr){ arr=[]; map.set(iid, arr); }
+      arr.push({m, i:idx});
+    }
+  });
+  map.forEach(list=>{
+    list.sort((a,b)=>{
+      const fa=isFavourite(a.m.id)?0:1;
+      const fb=isFavourite(b.m.id)?0:1;
+      if(fa!==fb) return fa-fb;
+      const ta=a.m.intentTop?0:1;
+      const tb=b.m.intentTop?0:1;
+      if(ta!==tb) return ta-tb;
+      const ca=catSortIdx(a.m.c);
+      const cb=catSortIdx(b.m.c);
+      if(ca!==cb) return ca-cb;
+      return mgCardCmp(a,b);
+    });
+  });
+  return map;
+}
+
 /* AN INTENT IN THE RAIL'S FORM: its one dominant category's mark at the head, the name on one line
-   fading where it runs out, and beside it the number of cards linked to it, which the rail does
-   not carry. `catOf` and `linked` are primaryCatKeys() and intentCardCounts(), taken once a list. */
-function mgIntentRow(i,catOf,linked){
+   fading where it runs out, beside it the number of cards linked to it (hover reads Linked cards: {N}),
+   then the linked cards as quiet chips fading at the right (or "no cards yet" when none), and the buttons.
+   `catOf`, `linked` and `intentCardsMap` are taken once a list. */
+function mgIntentRow(i,catOf,linked,intentCardsMap){
   const iid=intentIdAt(i);
   const hid=isIntentHiddenIdx(i);
   const fav=isIntentFavourite(iid);
@@ -574,6 +631,22 @@ function mgIntentRow(i,catOf,linked){
     ?'<button type="button" data-show-intent="'+esc(iid)+'" title="Show this intent again" aria-label="Show this intent again">'+ICON_EYE_SHUT+'</button>'
     :'<button type="button" data-hide-intent="'+esc(iid)+'" title="Hide this intent: it greys out and drops to the bottom" aria-label="Hide this intent">'+ICON_EYE_OPEN+'</button>';
   const trash='<button type="button" class="danger mg-trash" data-remove-intent="'+esc(iid)+'" title="Delete this intent" aria-label="Delete this intent">'+ICON_TRASH+'</button>';
+
+  const count=linked.get(iid)||0;
+  const countHover=t("Linked cards: {N}").replace("{N}", count);
+
+  const cardMap=intentCardsMap || (typeof mgIntentCardsCache!=="undefined"?mgIntentCardsCache:null) || (typeof mgIntentCardsMap==="function"?mgIntentCardsMap():null);
+  const cardList=(cardMap && cardMap.get(iid))||[];
+  let chipsHtml="";
+  if(cardList.length===0){
+    chipsHtml='<span class="lw-empty-chips">'+esc(t("no cards yet"))+'</span>';
+  } else {
+    chipsHtml=cardList.map(o=>{
+      const title=(typeof cardTitle==="function"?cardTitle(o.m):"")||"";
+      return '<button type="button" class="lw-chip" data-card-id="'+esc(o.m.id)+'" title="'+esc(t("Opens this card's editor"))+'" aria-label="'+esc(title)+' · '+esc(t("Opens this card's editor"))+'">'+esc(title)+'</button>';
+    }).join("");
+  }
+
   /* data-introw so mgRefreshAround() can find this row again after openManage() has replaced
      every element - the same job data-cardrow does in the tree. */
   /* data-band mirrors the card rows: a drag may only swap inside its own band, so hidden
@@ -585,7 +658,8 @@ function mgIntentRow(i,catOf,linked){
     ' data-band="'+(hid?"h":(fav?"f":"r"))+'">'+
     catMarkHtml(catOf.get(iid)||"")+
     '<span class="mg-int-t cut-peek" data-i18n-skip>'+esc(intentNavName(i)||"")+badge+'</span>'+
-    '<span class="mg-int-n">'+(linked.get(iid)||0)+'</span>'+
+    '<span class="mg-int-n" title="'+esc(countHover)+'">'+count+'</span>'+
+    '<div class="lw-mid">'+chipsHtml+'</div>'+
     '<span class="cacts">'+
       '<button type="button" data-edit-intent-mg="'+i+'" title="Edit intent" aria-label="Edit intent">'+ICON_EDIT+'</button>'+
       hideShow+
@@ -620,8 +694,8 @@ let libQuery="";
 const libFind=()=>t("Search the library");
 const libSections=()=>[
   {key:"catmac", icon:"categories", name:t("Categories & cards"), lede:t("Each category with its cards, its place in the order, and whether it supports every intent.")},
-  {key:"intents", icon:"intents", name:t("Intents"), lede:t("Favourites first, hidden intents at the foot.")},
-  {key:"who", icon:"user", name:t("ROLE suggestions"), lede:t("The names the ROLE wheel offers, separated by commas.")},
+  {key:"intents", icon:"intents", name:t("Intents"), lede:t("Favourites first, hidden intents at the foot.")+" "+t("Beside each, the cards linked to it.")},
+  {key:"who", icon:"user", name:t("ROLE suggestions"), lede:t("The names the ROLE wheel offers, in the order it offers them. Dragging a name moves it.")},
   {key:"data", icon:"cards", name:t("Catalog & data"), lede:t("The catalog in use on this desk, and loading another catalog file.")}
 ];
 function libFold(s){
@@ -671,6 +745,8 @@ function applyLibView(page){
         });
       } else if(key==="intents"){
         d.querySelectorAll(".mg-intent-row").forEach(r=>r.removeAttribute("hidden"));
+      } else if(key==="who"){
+        d.querySelectorAll(".lw-name[data-wrow]").forEach(r=>r.removeAttribute("hidden"));
       }
     } else {
       let hit=false;
@@ -705,9 +781,13 @@ function applyLibView(page){
           else r.setAttribute("hidden","");
         });
       } else if(key==="who"){
-        const whoInput=d.querySelector("#mgWho");
-        const whoVal=whoInput?whoInput.value:"";
-        hit=libFold(d.textContent).indexOf(q)>=0 || libFold(whoVal).indexOf(q)>=0;
+        const names = whoOptions().join(" ");
+        hit=libFold(d.textContent).indexOf(q)>=0 || libFold(names).indexOf(q)>=0;
+        d.querySelectorAll(".lw-name[data-wrow]").forEach(r=>{
+          const name=r.getAttribute("data-wrow")||"";
+          if(!q || libFold(name).indexOf(q)>=0) r.removeAttribute("hidden");
+          else r.setAttribute("hidden","");
+        });
       } else {
         hit=libFold(d.textContent).indexOf(q)>=0;
       }
@@ -785,6 +865,226 @@ function wireLibShell(page){
   const mt=page.querySelector("#libMaint");
   if(mt) mt.onclick=()=>openMaintenance();
 }
+const ICON_GRIP = '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><circle cx="6" cy="4" r="1.2"/><circle cx="10" cy="4" r="1.2"/><circle cx="6" cy="8" r="1.2"/><circle cx="10" cy="8" r="1.2"/><circle cx="6" cy="12" r="1.2"/><circle cx="10" cy="12" r="1.2"/></svg>';
+const ICON_REMOVE = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
+
+let mgRoleMarked = "";
+
+function setWhoList(nextList){
+  const next = normWhoList(nextList);
+  pack.who = (next.join("\u0000") === WHO_BASE.join("\u0000")) ? null : next;
+  savePack();
+  syncRoleDrum();
+}
+
+function roleUsesCards(){
+  return (cards || []).filter(m => {
+    const l = cardLang(m);
+    const body = cardText(m, "body", l);
+    return body.indexOf("{ROLE}") >= 0;
+  });
+}
+
+/* Only {ROLE} is filled, with the marked name; every other token is shown by its name as a hole, the way the
+   desk draws a {PAX} it has no name for, so the page shows the ROLE and nothing the agent set elsewhere. */
+function fillCardReply(m, markedName){
+  const raw = cardText(m, "body", cardLang(m));
+  return esc(raw).replace(/\{([A-Z]+)(?::[^{}]*)?\}/g, (all, k) => k === "ROLE"
+    ? '<span class="fillx">' + esc(markedName) + '</span>'
+    : '<span class="fillmiss">' + esc(t(k)) + '</span>');
+}
+
+function roleWheelHtml(names, markedName){
+  let prev="", cur="", next="";
+  const n=names.length;
+  if(n>0){
+    let i=names.indexOf(markedName);
+    if(i<0) i=0;
+    cur=names[i]||"";
+    if(n===1){
+      prev=cur; next=cur;
+    } else {
+      prev=names[(i-1+n)%n]||"";
+      next=names[(i+1)%n]||"";
+    }
+  }
+  return '<div class="lw-wheel">'+
+    '<div class="lw-drum">'+
+      '<span class="rd-prev p">'+esc(prev)+'</span>'+
+      '<span class="rd-cur c">'+esc(cur)+'</span>'+
+      '<span class="rd-next q">'+esc(next)+'</span>'+
+    '</div>'+
+    '<div class="lw-drumfield">'+esc(t("customer's name"))+'</div>'+
+  '</div>';
+}
+
+function mgWhoRowsHtml(names, markedName){
+  const tiles = names.map(name => {
+    const on = name === markedName ? " on" : "";
+    const moveTitle = t("Move {NAME}").replace("{NAME}", name);
+    const takeTitle = t("Take {NAME} off the wheel").replace("{NAME}", name);
+    return '<div class="lw-name'+on+'" tabindex="0" role="listitem" data-wrow="'+esc(name)+'">'+
+      '<span class="g" aria-label="'+esc(moveTitle)+'" title="'+esc(moveTitle)+'">'+ICON_GRIP+'</span>'+
+      '<span class="n">'+esc(name)+'</span>'+
+      '<button type="button" class="lw-del" aria-label="'+esc(takeTitle)+'" title="'+esc(takeTitle)+'">'+ICON_REMOVE+'</button>'+
+    '</div>';
+  }).join("");
+
+  const addRow = '<div class="lw-name add">'+
+    '<span class="g">+</span>'+
+    '<input type="text" id="mgAddWho" placeholder="'+esc(t("Add a name"))+'" aria-label="'+esc(t("Add a name"))+'" title="'+esc(t("Enter adds it; commas between names add several"))+'" spellcheck="false" autocomplete="off">'+
+    '<kbd>Enter</kbd>'+
+  '</div>';
+
+  return tiles + addRow;
+}
+
+function mgWhoSideHtml(names, markedName){
+  const uses = roleUsesCards();
+  const wheel = roleWheelHtml(names, markedName);
+  const countStr = uses.length > 0
+    ? t("Cards that say the ROLE: {N}").replace("{N}", uses.length)
+    : t("No card says the ROLE yet.");
+
+  const reads = '<div class="lw-reads">'+
+    uses.map(m => {
+      const title = cardTitle(m);
+      const filled = fillCardReply(m, markedName);
+      return '<div class="lw-ct" role="button" tabindex="0" data-card-id="'+esc(m.id)+'" title="'+esc(t("Opens this card's editor"))+'" aria-label="'+esc(t("Opens this card's editor"))+'">'+
+        '<div class="t">'+esc(title)+'</div>'+
+        '<div class="r">'+filled+'</div>'+
+      '</div>';
+    }).join("")+
+  '</div>';
+
+  return '<div class="lw-side">'+
+    '<div class="lw-h">'+esc(t("On the wheel"))+'</div>'+
+    wheel+
+    '<div class="lw-h lw-h2">'+esc(t("How it reads"))+' · <span class="lw-role-count">'+esc(countStr)+'</span></div>'+
+    reads+
+  '</div>';
+}
+
+function mgWhoSectionHtml(){
+  const names = whoOptions();
+  if(!names.includes(mgRoleMarked)) mgRoleMarked = names[0] || "";
+  return '<div class="lw-role role-b">'+
+    '<div class="lw-main">'+
+      '<div class="lw-names">'+mgWhoRowsHtml(names, mgRoleMarked)+'</div>'+
+    '</div>'+
+    mgWhoSideHtml(names, mgRoleMarked)+
+  '</div>';
+}
+
+function refreshRolePage(page){
+  page = page || libPage() || document;
+  const sec = page.querySelector('details.manage-sec[data-mg="who"] .manage-secbody');
+  if(!sec) return;
+  sec.innerHTML = mgWhoSectionHtml();
+  wireRolePage(page);
+  const cnt = page.querySelector('details.manage-sec[data-mg="who"] .mg-count');
+  if(cnt) cnt.textContent = String(whoOptions().length);
+  markCutText(page);
+}
+
+function wireRolePage(page){
+  if(!page) return;
+  const addInput = page.querySelector("#mgAddWho");
+  if(addInput){
+    addInput.onkeydown = e => {
+      if(e.key === "Enter"){
+        e.preventDefault();
+        const val = addInput.value.trim();
+        if(!val) return;
+        const rawAdd = val.split(",").map(s => s.trim()).filter(Boolean);
+        const current = whoOptions();
+        const next = normWhoList(current.concat(rawAdd));
+        setWhoList(next);
+        addInput.value = "";
+        refreshRolePage(page);
+      }
+    };
+  }
+
+  page.querySelectorAll(".lw-name:not(.add)").forEach(row => {
+    row.onclick = e => {
+      if(e.target.closest(".lw-del")) return;
+      const name = row.getAttribute("data-wrow");
+      if(!name) return;
+      mgRoleMarked = name;
+      refreshRolePage(page);
+    };
+
+    row.onkeydown = e => {
+      const name = row.getAttribute("data-wrow");
+      if(!name) return;
+      if(e.key === "Delete"){
+        e.preventDefault();
+        const delBtn = row.querySelector(".lw-del");
+        if(delBtn) delBtn.click();
+        return;
+      }
+      if(e.altKey && (e.key === "ArrowDown" || e.key === "ArrowUp")){
+        e.preventDefault();
+        const current = whoOptions().slice();
+        const idx = current.indexOf(name);
+        if(idx < 0) return;
+        const targetIdx = e.key === "ArrowDown" ? idx + 1 : idx - 1;
+        if(targetIdx < 0 || targetIdx >= current.length) return;
+        current.splice(idx, 1);
+        current.splice(targetIdx, 0, name);
+        setWhoList(current);
+        refreshRolePage(page);
+        const newRow = page.querySelector('.lw-name[data-wrow="'+esc(name)+'"]');
+        if(newRow) newRow.focus();
+        return;
+      }
+      if(e.key === "Enter" || e.key === " "){
+        e.preventDefault();
+        row.click();
+      }
+    };
+
+    const delBtn = row.querySelector(".lw-del");
+    if(delBtn){
+      delBtn.onclick = e => {
+        e.stopPropagation();
+        const name = row.getAttribute("data-wrow");
+        if(!name) return;
+        const current = whoOptions();
+        const was = Array.isArray(pack.who) ? pack.who.slice() : null;
+        const next = current.filter(n => n !== name);
+        setWhoList(next);
+        if(mgRoleMarked === name){
+          mgRoleMarked = next[0] || "";
+        }
+        refreshRolePage(page);
+        const undoMsg = t("Taken off the wheel: {NAME}.").replace("{NAME}", name);
+        offerUndo(undoMsg, () => {
+          pack.who = was;
+          savePack();
+          syncRoleDrum();
+          mgRoleMarked = name;
+          refreshRolePage(page);
+        });
+      };
+    }
+  });
+
+  page.querySelectorAll(".lw-reads .lw-ct[data-card-id]").forEach(cardEl => {
+    cardEl.onclick = () => {
+      const cid = cardEl.getAttribute("data-card-id");
+      if(cid) openCardEditor(cid, null, true);
+    };
+    cardEl.onkeydown = e => {
+      if(e.key === "Enter" || e.key === " "){
+        e.preventDefault();
+        cardEl.click();
+      }
+    };
+  });
+}
+
 function openManage(justHtml){
   applyCatsToGlobal();
   /* The page follows whichever fold is open. A fold the person closed stays closed: the
@@ -812,8 +1112,16 @@ function openManage(justHtml){
     })
     .map(x=>x.i);
   const catOf=primaryCatKeys(), linked=intentCardCounts();
+  mgIntentCardsCache=mgIntentCardsMap();
   const intentListRows=mgIntentIdxs.map(i=>mgIntentRow(i,catOf,linked)).join("")
     ||'<div class="manage-empty">'+esc(t("No intents."))+'</div>';
+  mgIntentCardsCache=null;
+
+  const headingRow='<div class="lw-ihead" aria-hidden="true">'+
+    '<span class="lw-ih-int">'+esc(t("Intent"))+'</span>'+
+    '<span class="lw-ih-cards">'+esc(t("Linked cards"))+'</span>'+
+    '<span class="lw-ih-acts"></span>'+
+    '</div>';
 
   const catCount=Object.keys(CATS).length;
   /* Hiding is the one personal act with no way back at scale: hidden things are
@@ -845,7 +1153,7 @@ function openManage(justHtml){
       catalogCountsLine("{MACROS} in {CARDS}, {CATEGORIES}",
         (cards||[]).length, totalMacroCount(), 0, catCount))+
     mgSec("intents","Intents",
-      '<div class="mg-intents">'+intentListRows+'</div>'+
+      '<div class="mg-intents">'+headingRow+intentListRows+'</div>'+
       '<div class="cat-new" style="margin-top:8px">'+
         '<button type="button" class="btn" id="mgAddIntent" title="Write a new clause for {INTENT}">New intent…</button>'+
         mgShowHiddenBtn("intents",hiddenIntentCount)+'</div>',
@@ -854,12 +1162,7 @@ function openManage(justHtml){
        below. It is content in exactly the way categories, cards and intents are - the words a
        desk uses for who it is talking to - not a setting about the catalog file. */
     mgSec("who","ROLE suggestions",
-      '<div class="mf" style="margin-bottom:0">'+
-        '<input type="text" id="mgWho" spellcheck="false" autocomplete="off" '+
-          'placeholder="booker, customer, account holder" '+
-          'title="Notches for the ROLE wheel, comma-separated; blanks and repeats are dropped" '+
-          'value="'+esc(whoOptions().join(", "))+'">'+
-      '</div>',
+      mgWhoSectionHtml(),
       whoOptions().length)+
     /* Everything here acts on the whole library rather than on one entry - what is loaded,
        taking a copy out, bringing one in - which is exactly the line that separates it from
@@ -951,16 +1254,7 @@ function wireLibrary(page){
   wireLibShell(page);
   $("#mgAddIntent").onclick=()=>openIntentEditor(null, true);
   $("#mgAddCat").onclick=()=>startMgCatAdd();
-  /* Commit on change (blur or Enter), not per keystroke - a half-typed word is not a list.
-     Matching the catalog's own list stores null rather than a copy, so the entry keeps
-     following the catalog and a later import is not shadowed by a stale duplicate. */
-  if($("#mgWho")) $("#mgWho").onchange=function(){
-    const next=normWhoList(this.value);
-    pack.who = (next.join("\u0000")===WHO_BASE.join("\u0000")) ? null : next;
-    savePack();
-    this.value=whoOptions().join(", ");     // show what was actually kept
-    syncRoleDrum();   // the drum turns over the new list
-  };
+  wireRolePage(page);
   $("#mgImportCatalog").onclick=importCatalogHere;
   /* Join sits beside Load. It does not replace the catalog this desk has open. */
   const joinBtn=$("#mgJoinTeam");
@@ -1049,6 +1343,13 @@ function wireLibrary(page){
   });
   page.querySelectorAll("[data-fav-card]").forEach(btn=>{
     btn.onclick=()=>mgRefreshAround(()=>toggleFavourite(btn.getAttribute("data-fav-card")));
+  });
+  page.querySelectorAll(".lw-chip[data-card-id]").forEach(chip=>{
+    chip.onclick=e=>{
+      e.stopPropagation();
+      const cid=chip.getAttribute("data-card-id");
+      if(cid) openCardEditor(cid, null, true);
+    };
   });
   page.querySelectorAll("[data-edit-intent-mg]").forEach(btn=>{
     btn.onclick=()=>openIntentEditor(+btn.getAttribute("data-edit-intent-mg"), true);
