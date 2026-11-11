@@ -232,8 +232,8 @@ try {
       // 1241-1400: drop Replies
       // 861-1240: drop Languages
       // 701-860: drop Sent
-      // 561-700: drop Opens with
-      // <=560: drop Intents (only Name)
+      // 561-700: drop Intents (the product designer's swap, 2026-11-11 17:41: the card's opening words stay beside the name)
+      // <=560: drop Opens with (only Name)
       const hasName = visibleHeadings.some(h => /Name|Nazwa/i.test(h));
       const hasOpen = visibleHeadings.some(h => /Opens with|Początek/i.test(h));
       const hasLang = visibleHeadings.some(h => /Languages|Języki/i.test(h));
@@ -248,7 +248,7 @@ try {
       else if (bw > 1240) expected = { name: true, open: true, lang: true, rep: false, int: true, sent: true, src: false };
       else if (bw > 860) expected = { name: true, open: true, lang: false, rep: false, int: true, sent: true, src: false };
       else if (bw > 700) expected = { name: true, open: true, lang: false, rep: false, int: true, sent: false, src: false };
-      else if (bw > 560) expected = { name: true, open: false, lang: false, rep: false, int: true, sent: false, src: false };
+      else if (bw > 560) expected = { name: true, open: true, lang: false, rep: false, int: false, sent: false, src: false };
       else expected = { name: true, open: false, lang: false, rep: false, int: false, sent: false, src: false };
 
       const actual = { name: hasName, open: hasOpen, lang: hasLang, rep: hasRep, int: hasInt, sent: hasSent, src: hasSrc };
@@ -262,6 +262,24 @@ try {
     }
   }
   check(t2Ok, "t2 headings shown match measured box width and no heading reads Date modified", t2Detail);
+
+  /* --- t2b: a list box held at 640 px, between the 700 and 560 steps, keeps Name and Opens with and drops Intents --- */
+  const t2bRes = await page.evaluate(async () => {
+    const cardBox = document.querySelector(".sx-card:has(.mg-tree)") || document.querySelector(".mg-tree");
+    const head = document.querySelector(".lw-head");
+    if (!cardBox || !head) return { ok: false, reason: "missing cardBox or lw-head" };
+    const ow = cardBox.style.width, om = cardBox.style.maxWidth;
+    cardBox.style.width = "640px"; cardBox.style.maxWidth = "640px";
+    await new Promise(r => setTimeout(r, 120));
+    const shown = [...head.children].filter(el => el.offsetParent && getComputedStyle(el).display !== "none")
+      .map(el => el.textContent.trim()).filter(Boolean);
+    const bw = cardBox.clientWidth;
+    const open = shown.some(h => /Opens with|Początek/i.test(h)), int = shown.some(h => /Intents|Intencje/i.test(h));
+    cardBox.style.width = ow; cardBox.style.maxWidth = om;
+    await new Promise(r => setTimeout(r, 80));
+    return { ok: bw > 560 && bw <= 700 && open && !int, bw, open, int, shown };
+  });
+  check(t2bRes && t2bRes.ok, "t2b at a 640 px list box the card's opening words stay beside the name and Intents gives way", t2bRes);
 
   /* --- t3: where box is under 420 px, card buttons stand on second line at right, name takes row width --- */
   const t3Res = await page.evaluate(async () => {
@@ -838,6 +856,6 @@ try {
   try { fs.rmSync(lab, { recursive: true, force: true }); } catch (e) {}
 }
 
-console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=16");
+console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=17");
 console.log(checks + " checks, " + fails + " failed");
-process.exit(fails || checks !== 16 ? 1 : 0);
+process.exit(fails || checks !== 17 ? 1 : 0);
