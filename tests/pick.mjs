@@ -1638,9 +1638,14 @@ try {
   const btnEl = { classList: { add() {}, remove() {} }, setAttribute() {} };
   const elsWere = Object.assign({}, els), hostWas2 = globalThis.window.E_HOST, addWas2 = globalThis.addEventListener;
   let pickerOpened = 0;
-  const rowFor = st => { globalThis.window.E_HOST = st === undefined ? undefined : Object.assign({ hotkeyState: () => st },
-    st && st.noDoor ? {} : { openPicker: () => { pickerOpened++; } }); HM.syncSettingsMenu(); return mrow.hidden ? "hidden" : mrow.innerHTML; };
-  let rows7 = [], clicked = "";
+  let rows7 = [], titles7 = [], clicked = "";
+  const rowFor = st => {
+    globalThis.window.E_HOST = st === undefined ? undefined : Object.assign({ hotkeyState: () => st },
+      st && st.noDoor ? {} : { openPicker: () => { pickerOpened++; } });
+    HM.syncSettingsMenu();
+    titles7.push(mrow.title);
+    return mrow.hidden ? "hidden" : mrow.innerHTML;
+  };
   try {
     Object.assign(els, { "#menuPicker": mrow, "#settingsMenu": menuEl, "#settingsBtn": btnEl, "#moreBtn": {}, "#moreMenu": { hidden: true } });
     globalThis.addEventListener = () => {};
@@ -1657,10 +1662,13 @@ try {
     if (hostWas2 === undefined) delete globalThis.window.E_HOST; else globalThis.window.E_HOST = hostWas2;
   }
   const pickerMark = '<svg class="sx-ic" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4.5h6v6M20.5 4.5l-6 6M10.5 20.5h-6v-6M4.5 20.5l6-6"/></svg>';
-  check(rows7.join(" | ") === pickerMark + "<span>Bring the replies over any window</span><kbd data-i18n-skip>Ctrl+Shift+Space</kbd> | "
-    + pickerMark + "<span>Bring the replies over any window</span> | hidden | hidden" && clicked === "1/shut" && /Settings/.test(mrow.title),
-    "7m the Menu has a row for the picker where the host has one, showing the combination while it is held; a click shuts the Menu and"
-    + " opens the picker: " + rows7.join(" | ") + " / " + clicked);
+  const titleHeld = "The replies beside the pointer, over any program: Ctrl+Shift+Space brings them from anywhere, and Settings is where the combination is changed.";
+  const titleNotHeld = "The replies beside the pointer, over any program; a combination that brings them from anywhere is chosen in Settings.";
+  check(rows7.join(" | ") === pickerMark + "<span>Bring the replies over any window</span> | "
+    + pickerMark + "<span>Bring the replies over any window</span> | hidden | hidden"
+    && titles7[0] === titleHeld && titles7[1] === titleNotHeld && clicked === "1/shut",
+    "7m the Menu has a row for the picker without kbd, and its tooltip names the live combination when held ("
+    + rows7.join(" | ") + " / " + clicked + ")");
 
   /* THE TOUR'S STEP, the table and its helpers sliced out of tour.js and run over a scope of stand-ins, as tests/test.js runs it. */
   const TSRC = fs.readFileSync(path.join(ROOT, "src", "modules", "tour.js"), "utf8");

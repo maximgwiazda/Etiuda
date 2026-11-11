@@ -619,7 +619,7 @@ let libQuery="";
    strings legs count and the desk's language reaches. */
 const libFind=()=>t("Search the library");
 const libSections=()=>[
-  {key:"catmac", icon:"categories", name:t("Categories and cards"), lede:t("Each category with its cards, its place in the order, and whether it supports every intent.")},
+  {key:"catmac", icon:"categories", name:t("Categories & cards"), lede:t("Each category with its cards, its place in the order, and whether it supports every intent.")},
   {key:"intents", icon:"intents", name:t("Intents"), lede:t("Favourites first, hidden intents at the foot.")},
   {key:"who", icon:"user", name:t("ROLE suggestions"), lede:t("The names the ROLE wheel offers, separated by commas.")},
   {key:"data", icon:"cards", name:t("Catalog & data"), lede:t("The catalog in use on this desk, and loading another catalog file.")}

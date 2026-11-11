@@ -10445,16 +10445,16 @@ function setTrayNotes(on) {
   patchWindowMeta({ trayNotes: !!on });
   rebuildTrayMenu();
 }
+let trayNoticeTold = false;
 function maybeFirstClose(win) {
-  const meta = readWindowMeta();
   const w = trayWords();
   notifyFirstClose({
     electron: { Notification: Notification, app: app },
     appId: APP_IDS.desktop,
     title: w.trayKeepsRunning,
     body: w.trayKeepsBody,
-    told: meta.trayTold === true,
-    setTold: () => { patchWindowMeta({ trayTold: true }); },
+    told: trayNoticeTold === true,
+    setTold: () => { trayNoticeTold = true; },
     onClick: () => showDesk(win),
   });
 }
@@ -10475,12 +10475,7 @@ function trayQuit() {
   return true;
 }
 function repliesLabel(w) {
-  let shown = "";
-  try {
-    const want = hotkeyWanted();
-    if (want) shown = String(want).split("+").map(part => part === "Control" ? "Ctrl" : part).join("+");
-  } catch { shown = ""; }
-  return shown ? w.trayReplies + "\t" + shown : w.trayReplies;
+  return w.trayReplies;
 }
 function trayMenuItems() {
   const w = trayWords();
