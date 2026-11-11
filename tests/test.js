@@ -3919,7 +3919,7 @@ function installerUpdateTests() {
   const PL_RETRY = "Program ${PRODUCT_NAME} jest uruchomiony. Po jego zamknięciu wystarczy wybrać Ponów.";
   const asks = text => {
     const m = macro(text, "customCheckAppRunning");
-    return [!!m, /nsExec::Exec `"\$SYSDIR\\cmd\.exe" \/C taskkill \/IM "\$\{APP_EXECUTABLE_FILENAME\}" \/FI "USERNAME eq %USERNAME%"`/.test(m),
+    return [!!m, /nsExec::Exec `"\$SYSDIR\\cmd\.exe" \/C "\$SYSDIR\\taskkill\.exe" \/IM "\$\{APP_EXECUTABLE_FILENAME\}" \/FI "USERNAME eq %USERNAME%"`/.test(m),
       !/\/F\b|Stop-Process|KILL_PROCESS|-Force/.test(m), /DetailPrint "\$R6"/.test(m),
       /MessageBox MB_RETRYCANCEL\|MB_ICONEXCLAMATION "\$R9" \/SD IDCANCEL IDRETRY`/.test(m), /SetErrorLevel 1618\r?\n\s*Quit\b/.test(m)];
   };
@@ -3971,7 +3971,7 @@ function installerUpdateTests() {
     const out = String(r.stdout || "");
     const named = s => out.indexOf(s.split("${PRODUCT_NAME}").join("Etiuda Studio")) > -1;
     got = r.status !== 0 ? "makensis refused the script: " + String(r.stdout + r.stderr).trim().split(/\r?\n/).slice(-2).join(" / ")
-      : [/taskkill \/IM "Etiuda\.exe"/.test(out), named(EN_CLOSE), named(EN_RETRY), named(PL_CLOSE), named(PL_RETRY), /RMDir \/r \$INSTDIR/.test(out), /\bQuit\b/.test(out)];
+      : [/taskkill\.exe" \/IM "Etiuda\.exe"/.test(out), named(EN_CLOSE), named(EN_RETRY), named(PL_CLOSE), named(PL_RETRY), /RMDir \/r \$INSTDIR/.test(out), /\bQuit\b/.test(out)];
   } catch (e) { got = "makensis could not be asked: " + e.message; }
   eq("1152e makensis's preprocessor expands both macros where electron-builder inserts them, the command, the four lines with the product's name, the removal and the give-up intact",
     got, [true, true, true, true, true, true, true]);

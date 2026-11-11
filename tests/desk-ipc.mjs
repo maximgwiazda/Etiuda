@@ -154,7 +154,7 @@ const mainTest = {};
 const desktopWas = process.env.XDG_CURRENT_DESKTOP;
 process.env.XDG_CURRENT_DESKTOP = "GNOME";
 /* What the test reads from main.js, appended to its source; a second boot over the same folders appends it again. */
-const MAIN_TAIL = "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal; __test.createWindow = createWindow; __test.CLOSE_WAIT_MS = CLOSE_WAIT_MS; if (typeof tabsFile === 'function') __test.tabsFile = tabsFile; if (typeof writeSavedTabs === 'function') __test.writeSavedTabs = writeSavedTabs; if (typeof readSavedTabs === 'function') __test.readSavedTabs = readSavedTabs; if (typeof sessionHeld !== 'undefined') __test.sessionHeld = sessionHeld; if (typeof handleUpdateClose === 'function') __test.handleUpdateClose = handleUpdateClose; __test.setQuitting = v => { quitting = !!v; }; __test.windowFile = windowFile; if (typeof setQuitOnClose === 'function') __test.setQuitOnClose = setQuitOnClose; if (typeof trayQuit === 'function') __test.trayQuit = trayQuit; if (typeof ensureTray === 'function') __test.ensureTray = ensureTray; if (typeof onSecondInstance === 'function') __test.onSecondInstance = onSecondInstance; if (typeof launchHidden === 'function') __test.launchHidden = launchHidden; if (typeof syncJumpList === 'function') __test.syncJumpList = syncJumpList; if (typeof catalogFolder === 'function') __test.catalogFolder = catalogFolder; if (typeof offerFile === 'function') __test.offerFile = offerFile; if (typeof recordRecentCatalog === 'function') __test.recordRecentCatalog = recordRecentCatalog; if (typeof rebuildTrayMenu === 'function') __test.rebuildTrayMenu = rebuildTrayMenu; if (typeof dispatchColdStartArgs === 'function') __test.dispatchColdStartArgs = dispatchColdStartArgs; if (typeof trayIcon === 'function') __test.trayIcon = trayIcon; if (typeof deskTray !== 'undefined') __test.resetTray = () => { deskTray = null; };";
+const MAIN_TAIL = "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal; __test.createWindow = createWindow; __test.CLOSE_WAIT_MS = CLOSE_WAIT_MS; if (typeof tabsFile === 'function') __test.tabsFile = tabsFile; if (typeof writeSavedTabs === 'function') __test.writeSavedTabs = writeSavedTabs; if (typeof readSavedTabs === 'function') __test.readSavedTabs = readSavedTabs; if (typeof sessionHeld !== 'undefined') __test.sessionHeld = sessionHeld; if (typeof handleUpdateClose === 'function') __test.handleUpdateClose = handleUpdateClose; __test.setQuitting = v => { quitting = !!v; }; __test.windowFile = windowFile; if (typeof setQuitOnClose === 'function') __test.setQuitOnClose = setQuitOnClose; if (typeof trayQuit === 'function') __test.trayQuit = trayQuit; if (typeof ensureTray === 'function') __test.ensureTray = ensureTray; if (typeof onSecondInstance === 'function') __test.onSecondInstance = onSecondInstance; if (typeof launchHidden === 'function') __test.launchHidden = launchHidden; if (typeof syncJumpList === 'function') __test.syncJumpList = syncJumpList; if (typeof syncLoginItemPath === 'function') __test.syncLoginItemPath = syncLoginItemPath; if (typeof catalogFolder === 'function') __test.catalogFolder = catalogFolder; if (typeof offerFile === 'function') __test.offerFile = offerFile; if (typeof recordRecentCatalog === 'function') __test.recordRecentCatalog = recordRecentCatalog; if (typeof rebuildTrayMenu === 'function') __test.rebuildTrayMenu = rebuildTrayMenu; if (typeof dispatchColdStartArgs === 'function') __test.dispatchColdStartArgs = dispatchColdStartArgs; if (typeof trayIcon === 'function') __test.trayIcon = trayIcon; if (typeof deskTray !== 'undefined') __test.resetTray = () => { deskTray = null; };";
 new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
   shellSrc("main.js") + MAIN_TAIL)(
   fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, mainTest);
@@ -1838,6 +1838,42 @@ try {
     try { fs.unlinkSync(path.join(UD, "reset-pending.json")); } catch {}
   }
   check(d6ResetLogin, "D6-reset-login after a Reset, the stand-in's login item reads openAtLogin false (" + d6ResetLoginWhy + ")");
+
+  /* D6-start-login: at start, where login item is on, it is set again with current execPath; never under harness */
+  let d6StartLogin = false, d6StartLoginWhy = "";
+  try {
+    if (typeof mainTest.syncLoginItemPath !== "function") d6StartLoginWhy = "no syncLoginItemPath";
+    else {
+      loginApplied = { openAtLogin: true, args: ["--hidden"], path: "C:\\old\\Etiuda.exe" };
+      const origPlatform = process.platform;
+      const origArgv = process.argv.slice();
+      try {
+        Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+        // Under harness launch: returns null, loginApplied untouched
+        process.argv = ["Etiuda.exe", "--user-data-dir=" + UD];
+        const underHarness = mainTest.syncLoginItemPath();
+        const harnessUntouched = underHarness === null && loginApplied.path === "C:\\old\\Etiuda.exe";
+
+        // Plain start (non-harness): sets login item with current process.execPath
+        process.argv = ["Etiuda.exe"];
+        const plainResult = mainTest.syncLoginItemPath();
+        const plainUpdated = !!plainResult && loginApplied.openAtLogin === true
+          && loginApplied.path === process.execPath;
+
+        // When setting is off: not called
+        loginApplied = { openAtLogin: false, args: [] };
+        const offResult = mainTest.syncLoginItemPath();
+        const offUntouched = offResult === null && loginApplied.openAtLogin === false && !loginApplied.path;
+
+        d6StartLogin = harnessUntouched && plainUpdated && offUntouched;
+        if (!d6StartLogin) d6StartLoginWhy = JSON.stringify({ harnessUntouched, plainUpdated, offUntouched, loginApplied });
+      } finally {
+        Object.defineProperty(process, "platform", { value: origPlatform, configurable: true });
+        process.argv = origArgv;
+      }
+    }
+  } catch (e) { d6StartLoginWhy = String(e && e.message || e).split("\n")[0]; }
+  check(d6StartLogin, "D6-start-login at start the login item is refreshed with current path when on, and never from a harness start (" + d6StartLoginWhy + ")");
 
   let d6Hidden = false, d6HiddenWhy = "";
   const realWatchD6 = fs.watch;

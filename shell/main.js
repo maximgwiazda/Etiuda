@@ -42,9 +42,23 @@ function harnessLaunch() {
     || ["ETIUDA_TEST_OFFSCREEN", "ETIUDA_TEST_DOCUMENTS", "ETIUDA_TEST_DEVTOOLS"].some(k => process.env[k] !== undefined)
     || testIdentityBuild(); /* plant:harness-test-build */
 }
-function setLoginItemSettings(electronApp, on) {
+function setLoginItemSettings(electronApp, on, opts) {
   if (harnessLaunch()) return null; /* plant:harness-login */
-  return setLoginItemSettingsOf(electronApp, on);
+  return setLoginItemSettingsOf(electronApp, on, opts);
+}
+function syncLoginItemPath() {
+  if (harnessLaunch()) return null;
+  if (process.platform !== "win32") return null;
+  let applied = null;
+  try {
+    if (typeof app.getLoginItemSettings === "function") {
+      const cur = app.getLoginItemSettings();
+      if (cur && cur.openAtLogin) {
+        applied = setLoginItemSettings(app, true, { path: process.execPath });
+      }
+    }
+  } catch { /* start with Windows could not be refreshed */ }
+  return applied;
 }
 function setJumpList(electronApp, opts) {
   if (harnessLaunch()) return null; /* plant:harness-jump */
@@ -10897,6 +10911,7 @@ if (!theOnlyOne || (Array.isArray(process.argv) && process.argv.includes("--upda
   }
   catch (e) { console.error("etiuda: a pending reset could not be finished - " + (e && e.message)); }
   registerEtiudaLink();
+  syncLoginItemPath();
   app.on("second-instance", (e, argv) => { onSecondInstance(argv); });
   const link = linkArgFrom(process.argv);
   if (link) {

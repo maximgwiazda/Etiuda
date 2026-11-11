@@ -482,7 +482,7 @@
   ${EndIf}
   StrCpy $R7 0
   ${Do}
-    nsExec::Exec `"$SYSDIR\cmd.exe" /C tasklist $R5/FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
+    nsExec::Exec `"$SYSDIR\cmd.exe" /C "$SYSDIR\tasklist.exe" $R5/FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
     Pop $R8
     ${If} $R8 != 0
       ${ExitDo}
@@ -491,14 +491,14 @@
       DetailPrint "$R6"
       # Only this account's own copy is asked to close; another person's is never ended. With none of its own open there
       # is nothing to wait for, so the run goes straight to Retry, or to 1618 when silent.
-      nsExec::Exec `"$SYSDIR\cmd.exe" /C tasklist /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
+      nsExec::Exec `"$SYSDIR\cmd.exe" /C "$SYSDIR\tasklist.exe" /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
       Pop $R8
       ${If} $R8 == 0
         ${If} ${FileExists} "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
           nsExec::Exec /TIMEOUT=3000 `"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --update-close`
           Pop $R8
         ${EndIf}
-        nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"` ; plant:installer-asks-close
+        nsExec::Exec `"$SYSDIR\cmd.exe" /C "$SYSDIR\taskkill.exe" /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"` ; plant:installer-asks-close
         Pop $R8
       ${Else}
         StrCpy $R7 20
@@ -544,6 +544,13 @@
     Call un.RemoveStaleLinks
   ${EndIf}
   !endif
+
+  # START WITH WINDOWS: removed on uninstall, kept on update.
+  # Electron's app.setLoginItemSettings writes this account's Run value under
+  # HKCU\Software\Microsoft\Windows\CurrentVersion\Run with the app's AppUserModelId().
+  ${IfNot} ${isUpdated}
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${APP_ID}"
+  ${EndIf}
 
   # THE etiuda: LINK goes with the desk, and only while it still opens this desk: another program's is left as it is.
   # From where the install wrote it, then from the uninstalling account's HKCU, where the desk's own start writes it.
