@@ -1,5 +1,5 @@
 import { eHost, eHotkey, eHotkeyLabel, eAiOn } from "./host.js";
-import { armSearch } from "./search-meaning.js";
+import { armSearch, searchShortlist, searchReorder } from "./search-meaning.js";
 import { cards, intentIdxs, lang, wholeThingEmpty } from "./app-state.js";
 import { cardSearchTerms, catalogVocab } from "./spell.js";
 import { rankedCards } from "./render.js";
@@ -399,6 +399,9 @@ function answerPick(op,argText){
     return withIndex(Object.assign({words:pickWords(), who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length}, pickFound("")), "");
   }
   if(op==="find") return pickFound(a.q);
+  /* The main search, asked by the shell for the head of its list and then given an order of it. */
+  if(op==="search-shortlist") return searchShortlist(String(a.q==null?"":a.q));
+  if(op==="search-reorder") return searchReorder(a);
   if(op==="copy"){
     if(!a.last) return pickCopy(a.id,a.vi,a.other);
     const r=eLastRecent();

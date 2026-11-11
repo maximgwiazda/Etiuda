@@ -1,7 +1,7 @@
 /* THE MAIN SEARCH'S MEANING ORDER. Word matches stay in today's order. The model orders only the rows
    those matches missed, and only once the passages are ready. Under three letters the word order is the
    whole answer. An answer for an older query is dropped. */
-import { cards, railOrder } from "./app-state.js";
+import { cards, railOrder, shown } from "./app-state.js";
 import { BASE_CATS, ePackEpoch, pack } from "./pack.js";
 import { CAT_LABELS_PL } from "./icons.js";
 import { expandSearchPlaceholders, intentFieldAt } from "./intent-text.js";
@@ -35,6 +35,10 @@ function acceptSearchAnswer(ticket, live) {
 }
 
 let meaning = null, searchGen = 0, typed = null, boxDirty = false, askedQuery = null;
+/* The organisation's order of the list's head, and the generation it was given for: a new catalog, a cleared search or an
+   edited query moves orgGen, and the order then stops applying. */
+let orgOrder = null, orgGen = 0;
+const ORG_CARDS_MAX = 12, ORG_INTENTS_MAX = 6;
 const SEARCH_RETRY_MS = 5000, SEARCH_RETRY_MAX = 30;
 let retryQuery = null, retryCount = 0;
 let cheapSeen = "", sentText = "", sending = "", toasted = "", modelKnown = null;
@@ -47,6 +51,37 @@ function modelHere() {
     try { modelKnown = !!eAiModel(); } catch (e) { modelKnown = false; }
   }
   return modelKnown;
+}
+/* Asked again after ORG_READ_MS, since Settings can choose the organisation's model while the page is open, and every
+   render asks whether the shell ranks. */
+const ORG_READ_MS = 2000;
+let orgKnown = false, orgReadAt = -Infinity;
+function orgHere() {
+  const now = Date.now();
+  if (now - orgReadAt < ORG_READ_MS) return orgKnown;
+  orgReadAt = now;
+  try { const h = eHost(); const st = h && typeof h.aiState === "function" ? h.aiState() : null; orgKnown = !!(st && st.org); }
+  catch (e) { orgKnown = false; }
+  return orgKnown;
+}
+function shellRanks() { return modelHere() || orgHere(); }
+function orgLive() {
+  return !!(orgOrder && orgOrder.gen === orgGen && orgOrder.query === currentQuery());
+}
+/* The entries of `list` the order names keep the places they hold, filled in the order's sequence; the rest stay put. */
+function orgOrdered(list, ids, idOf) {
+  if (!orgLive() || !Array.isArray(list) || !Array.isArray(ids) || ids.length < 2) return null;
+  const rank = new Map();
+  for (let i = 0; i < ids.length; i++) if (!rank.has(ids[i])) rank.set(ids[i], i);
+  const places = [], named = [];
+  for (let i = 0; i < list.length; i++) {
+    if (rank.has(idOf(list[i]))) { places.push(i); named.push(list[i]); }
+  }
+  if (named.length < 2) return null;
+  named.sort((a, b) => rank.get(idOf(a)) - rank.get(idOf(b)));
+  const out = list.slice();
+  for (let i = 0; i < places.length; i++) out[places[i]] = named[i];
+  return out;
 }
 function meaningLive() {
   return !!(eSearchOn() && meaning && meaning.gen === searchGen && meaning.query === currentQuery()
@@ -158,7 +193,7 @@ function textStamp(rows) {
    does not embed again. Until the shell has them, the search stays the word order. The query already on
    screen is not ranked again when the vectors arrive; the next one is. */
 function noteCatalog() {
-  if (!eSearchOn() || !modelHere()) return;
+  if (!eSearchOn() || !shellRanks()) return;
   const cheap = cheapStamp();
   if (cheap === cheapSeen && (sentText || sending)) return;
   const rows = searchPassages();
@@ -179,10 +214,11 @@ function noteCatalog() {
   meaning = null;
   askedQuery = null;
   searchGen++;
+  orgGen++;
   cheapSeen = cheap;
 }
 
-function mixCards(wordHits, keep) {
+function meaningCards(wordHits, keep) {
   if (!meaningLive() || !Array.isArray(wordHits)) return null;
   const byId = new Map();
   const list = cards || [];
@@ -202,6 +238,19 @@ function mixCards(wordHits, keep) {
     tail.push(m);
   }
   return wordHits.concat(tail);
+}
+
+/* The organisation's order moves word matches among themselves and the model's cards among themselves, so the line
+   between the two still stands where it stood. */
+function mixCards(wordHits, keep) {
+  if (!Array.isArray(wordHits)) return null;
+  const ids = orgOrder && orgOrder.cards;
+  const idOf = m => String(m && m.id);
+  const words = orgOrdered(wordHits, ids, idOf);
+  const mixed = meaningCards(wordHits, keep);
+  if (!mixed) return words;
+  const tail = mixed.slice(wordHits.length);
+  return (words || wordHits).concat(orgOrdered(tail, ids, idOf) || tail);
 }
 
 function mixIntentRows(rows) {
@@ -228,12 +277,13 @@ function mixIntentRows(rows) {
     seen.add(row.id);
     tail.push(row);
   }
+  const meant = orgOrdered(tail, orgOrder && orgOrder.intents, r => String(r.id)) || tail;
   for (let i = 0; i < rows.length; i++) {
     if (seen.has(rows[i].id)) continue;
     seen.add(rows[i].id);
-    tail.push(rows[i]);
+    meant.push(rows[i]);
   }
-  return hits.concat(tail);
+  return hits.concat(meant);
 }
 
 /* The box moved. The settle paints the word order, then asks. */
@@ -245,7 +295,7 @@ function noteSearchTyping() {
 function searchOnSettle() {
   const q = currentQuery();
   if (!eSearchOn()) { meaning = null; askedQuery = null; boxDirty = false; typed = q; return; }
-  if (boxDirty) { meaning = null; askedQuery = null; boxDirty = false; }
+  if (boxDirty) { meaning = null; askedQuery = null; boxDirty = false; orgGen++; }
   typed = q;
 }
 
@@ -279,7 +329,7 @@ async function ask(q) {
 /* Word order is painted by the caller. This asks for the meaning order when the switch is on and the
    query is long enough, and does not ask again for a query already asked or already answered. */
 function scheduleSearchRank() {
-  if (!eSearchOn() || !modelHere()) return;
+  if (!eSearchOn() || !shellRanks()) return;
   noteCatalog();
   const q = currentQuery();
   if (searchAlnumLen(q) < 3) return;
@@ -294,12 +344,43 @@ function clearSearchMeaning() {
   askedQuery = null;
   boxDirty = false;
   searchGen++;
+  orgGen++;
 }
 
 function armSearch() {
   try { eTellSearch(); } catch (e) {}
-  if (!eSearchOn() || !modelHere()) return;
+  if (!eSearchOn() || !shellRanks()) return;
   noteCatalog();
+}
+
+/* THE SHELL ASKS for the head of the list on screen, for the query still in the box only: the cards as shown, and the
+   intents the model added after the matches, which the arrows do not walk. */
+function searchShortlist(q) {
+  if (!eSearchOn() || q !== currentQuery() || boxDirty || searchAlnumLen(q) < 3) return null;
+  const cardIds = [];
+  const list = Array.isArray(shown) ? shown : [];
+  for (let i = 0; i < list.length && cardIds.length < ORG_CARDS_MAX; i++) if (list[i] && list[i].id != null) cardIds.push(String(list[i].id));
+  const intentIds = [];
+  if (meaningLive()) {
+    const hit = new Set();
+    for (let i = 0; i < railOrder.length; i++) hit.add(String(intentIdAt(railOrder[i])));
+    for (let i = 0; i < meaning.intents.length && intentIds.length < ORG_INTENTS_MAX; i++) {
+      const id = String(meaning.intents[i]);
+      if (!hit.has(id) && intentIds.indexOf(id) < 0) intentIds.push(id);
+    }
+  }
+  return { q, gen: orgGen, cards: cardIds, intents: intentIds };
+}
+/* The organisation's order, taken once, while the query and the generation are the ones the shortlist was given for. */
+function searchReorder(a) {
+  const o = a || {};
+  if (!eSearchOn() || boxDirty || o.q !== currentQuery() || o.gen !== orgGen) return { ok: 0 };
+  if (orgOrder && orgOrder.gen === orgGen && orgOrder.query === o.q) return { ok: 0 };
+  orgOrder = { gen: orgGen, query: o.q, cards: (Array.isArray(o.cards) ? o.cards : []).map(String),
+    intents: (Array.isArray(o.intents) ? o.intents : []).map(String) };
+  try { hooks.render(); } catch (e) {}
+  try { hooks.drawIntentRail(); } catch (e) {}
+  return { ok: 1 };
 }
 
 export {
@@ -313,5 +394,7 @@ export {
   searchOnSettle,
   scheduleSearchRank,
   clearSearchMeaning,
-  armSearch
+  armSearch,
+  searchShortlist,
+  searchReorder
 };

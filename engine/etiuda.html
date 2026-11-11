@@ -21361,7 +21361,9 @@ What you type stays in this browser only.`;
     scheduleSearchRank: () => scheduleSearchRank,
     searchAlnumLen: () => searchAlnumLen,
     searchOnSettle: () => searchOnSettle,
-    searchPassages: () => searchPassages
+    searchPassages: () => searchPassages,
+    searchReorder: () => searchReorder,
+    searchShortlist: () => searchShortlist
   });
   function searchAlnumLen(text) {
     const m = String(text == null ? "" : text).match(/\p{L}|\p{N}/gu);
@@ -21382,6 +21384,10 @@ What you type stays in this browser only.`;
   var typed = null;
   var boxDirty = false;
   var askedQuery = null;
+  var orgOrder = null;
+  var orgGen = 0;
+  var ORG_CARDS_MAX = 12;
+  var ORG_INTENTS_MAX = 6;
   var SEARCH_RETRY_MS = 5e3;
   var SEARCH_RETRY_MAX = 30;
   var retryQuery = null;
@@ -21407,6 +21413,45 @@ What you type stays in this browser only.`;
       }
     }
     return modelKnown;
+  }
+  var ORG_READ_MS = 2e3;
+  var orgKnown = false;
+  var orgReadAt = -Infinity;
+  function orgHere() {
+    const now = Date.now();
+    if (now - orgReadAt < ORG_READ_MS) return orgKnown;
+    orgReadAt = now;
+    try {
+      const h = eHost();
+      const st = h && typeof h.aiState === "function" ? h.aiState() : null;
+      orgKnown = !!(st && st.org);
+    } catch (e) {
+      orgKnown = false;
+    }
+    return orgKnown;
+  }
+  function shellRanks() {
+    return modelHere() || orgHere();
+  }
+  function orgLive() {
+    return !!(orgOrder && orgOrder.gen === orgGen && orgOrder.query === currentQuery());
+  }
+  function orgOrdered(list2, ids, idOf) {
+    if (!orgLive() || !Array.isArray(list2) || !Array.isArray(ids) || ids.length < 2) return null;
+    const rank = /* @__PURE__ */ new Map();
+    for (let i = 0; i < ids.length; i++) if (!rank.has(ids[i])) rank.set(ids[i], i);
+    const places = [], named = [];
+    for (let i = 0; i < list2.length; i++) {
+      if (rank.has(idOf(list2[i]))) {
+        places.push(i);
+        named.push(list2[i]);
+      }
+    }
+    if (named.length < 2) return null;
+    named.sort((a, b) => rank.get(idOf(a)) - rank.get(idOf(b)));
+    const out = list2.slice();
+    for (let i = 0; i < places.length; i++) out[places[i]] = named[i];
+    return out;
   }
   function meaningLive() {
     return !!(eSearchOn() && meaning && meaning.gen === searchGen && meaning.query === currentQuery() && searchAlnumLen(currentQuery()) >= 3);
@@ -21506,7 +21551,7 @@ What you type stays in this browser only.`;
     return h.toString(16);
   }
   function noteCatalog() {
-    if (!eSearchOn() || !modelHere()) return;
+    if (!eSearchOn() || !shellRanks()) return;
     const cheap = cheapStamp();
     if (cheap === cheapSeen && (sentText || sending)) return;
     const rows = searchPassages();
@@ -21538,9 +21583,10 @@ What you type stays in this browser only.`;
     meaning = null;
     askedQuery = null;
     searchGen++;
+    orgGen++;
     cheapSeen = cheap;
   }
-  function mixCards(wordHits, keep) {
+  function meaningCards(wordHits, keep) {
     if (!meaningLive() || !Array.isArray(wordHits)) return null;
     const byId = /* @__PURE__ */ new Map();
     const list2 = cards || [];
@@ -21560,6 +21606,16 @@ What you type stays in this browser only.`;
       tail.push(m);
     }
     return wordHits.concat(tail);
+  }
+  function mixCards(wordHits, keep) {
+    if (!Array.isArray(wordHits)) return null;
+    const ids = orgOrder && orgOrder.cards;
+    const idOf = (m) => String(m && m.id);
+    const words = orgOrdered(wordHits, ids, idOf);
+    const mixed = meaningCards(wordHits, keep);
+    if (!mixed) return words;
+    const tail = mixed.slice(wordHits.length);
+    return (words || wordHits).concat(orgOrdered(tail, ids, idOf) || tail);
   }
   function mixIntentRows(rows) {
     if (!meaningLive() || !Array.isArray(rows)) return null;
@@ -21585,12 +21641,13 @@ What you type stays in this browser only.`;
       seen.add(row2.id);
       tail.push(row2);
     }
+    const meant = orgOrdered(tail, orgOrder && orgOrder.intents, (r) => String(r.id)) || tail;
     for (let i = 0; i < rows.length; i++) {
       if (seen.has(rows[i].id)) continue;
       seen.add(rows[i].id);
-      tail.push(rows[i]);
+      meant.push(rows[i]);
     }
-    return hits.concat(tail);
+    return hits.concat(meant);
   }
   function noteSearchTyping() {
     const q = currentQuery();
@@ -21610,6 +21667,7 @@ What you type stays in this browser only.`;
       meaning = null;
       askedQuery = null;
       boxDirty = false;
+      orgGen++;
     }
     typed = q;
   }
@@ -21649,7 +21707,7 @@ What you type stays in this browser only.`;
     }
   }
   function scheduleSearchRank() {
-    if (!eSearchOn() || !modelHere()) return;
+    if (!eSearchOn() || !shellRanks()) return;
     noteCatalog();
     const q = currentQuery();
     if (searchAlnumLen(q) < 3) return;
@@ -21663,14 +21721,51 @@ What you type stays in this browser only.`;
     askedQuery = null;
     boxDirty = false;
     searchGen++;
+    orgGen++;
   }
   function armSearch() {
     try {
       eTellSearch();
     } catch (e) {
     }
-    if (!eSearchOn() || !modelHere()) return;
+    if (!eSearchOn() || !shellRanks()) return;
     noteCatalog();
+  }
+  function searchShortlist(q) {
+    if (!eSearchOn() || q !== currentQuery() || boxDirty || searchAlnumLen(q) < 3) return null;
+    const cardIds = [];
+    const list2 = Array.isArray(shown) ? shown : [];
+    for (let i = 0; i < list2.length && cardIds.length < ORG_CARDS_MAX; i++) if (list2[i] && list2[i].id != null) cardIds.push(String(list2[i].id));
+    const intentIds = [];
+    if (meaningLive()) {
+      const hit = /* @__PURE__ */ new Set();
+      for (let i = 0; i < railOrder.length; i++) hit.add(String(intentIdAt(railOrder[i])));
+      for (let i = 0; i < meaning.intents.length && intentIds.length < ORG_INTENTS_MAX; i++) {
+        const id = String(meaning.intents[i]);
+        if (!hit.has(id) && intentIds.indexOf(id) < 0) intentIds.push(id);
+      }
+    }
+    return { q, gen: orgGen, cards: cardIds, intents: intentIds };
+  }
+  function searchReorder(a) {
+    const o = a || {};
+    if (!eSearchOn() || boxDirty || o.q !== currentQuery() || o.gen !== orgGen) return { ok: 0 };
+    if (orgOrder && orgOrder.gen === orgGen && orgOrder.query === o.q) return { ok: 0 };
+    orgOrder = {
+      gen: orgGen,
+      query: o.q,
+      cards: (Array.isArray(o.cards) ? o.cards : []).map(String),
+      intents: (Array.isArray(o.intents) ? o.intents : []).map(String)
+    };
+    try {
+      hooks.render();
+    } catch (e) {
+    }
+    try {
+      hooks.drawIntentRail();
+    } catch (e) {
+    }
+    return { ok: 1 };
   }
 
   // src/modules/rail-list.js
@@ -38752,6 +38847,8 @@ What you type stays in this browser only.`;
       return withIndex(Object.assign({ words: pickWords(), who: activeTabName(), name: paxVal, lang, langs: CONTENT_LANGS.length }, pickFound("")), "");
     }
     if (op === "find") return pickFound(a.q);
+    if (op === "search-shortlist") return searchShortlist(String(a.q == null ? "" : a.q));
+    if (op === "search-reorder") return searchReorder(a);
     if (op === "copy") {
       if (!a.last) return pickCopy(a.id, a.vi, a.other);
       const r = eLastRecent();

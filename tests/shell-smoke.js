@@ -673,8 +673,8 @@ const placeEc = (dir, from, as, minutesOld) => {
   const inAsar = crypto.createHash("sha256").update(asar.extractFile(ASAR, "engine/etiuda.html")).digest("hex");
   const inTree = E.sha256(E.ENGINE_PATH);
   console.log("       built in " + built + "s into " + LAB);
-  check(names.join(",") === "engine/etiuda.csp.json,engine/etiuda.html,package.json,shell/clip-suggest.cjs,shell/desk-reset.cjs,shell/embed/core.cjs,shell/embed/suggest.cjs,shell/embed/worker.cjs,shell/etiuda-tray.png,shell/etiuda.ico,shell/folder/syncer-worker.cjs,shell/folder/syncer.cjs,shell/main.js,shell/page-watch.cjs,shell/preload.js,shell/relay/blob.cjs,shell/relay/channel.cjs,shell/sample-catalog.ec,shell/tray.cjs,shell/win-proxy.cjs",
-    "the asar holds the twenty allowlisted files and nothing else: " + names.join(", "));
+  check(names.join(",") === "engine/etiuda.csp.json,engine/etiuda.html,package.json,shell/clip-suggest.cjs,shell/desk-ai.cjs,shell/desk-reset.cjs,shell/embed/core.cjs,shell/embed/suggest.cjs,shell/embed/worker.cjs,shell/etiuda-tray.png,shell/etiuda.ico,shell/folder/syncer-worker.cjs,shell/folder/syncer.cjs,shell/main.js,shell/page-watch.cjs,shell/preload.js,shell/relay/blob.cjs,shell/relay/channel.cjs,shell/sample-catalog.ec,shell/tray.cjs,shell/win-proxy.cjs",
+    "the asar holds the twenty-one allowlisted files and nothing else: " + names.join(", "));
   check(inAsar === inTree,
     "the engine inside the asar is the engine in the tree, sha256 " + inAsar.slice(0, 16)
     + (inAsar === inTree ? "" : " against the tree's " + inTree.slice(0, 16)));
