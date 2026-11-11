@@ -24,6 +24,7 @@
  */
 import fs from "node:fs";
 import os from "node:os";
+import tls from "node:tls";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -32,7 +33,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 /* The floor: every leg below runs or is skipped by name, or the tally says so rather than reading as a short green. */
-const EXPECTED = 16;  /* 14, +2 each step's own scratch (15a, 15b) */
+const EXPECTED = 18;  /* 14, +2 each step's own scratch (15a, 15b), +2 a customer's roots (15c, 15d) */
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
   asserted++;
@@ -442,6 +443,52 @@ function main() {
       }
       fs.writeFileSync(pkgFile, pkgWas);
       fs.rmSync(path.join(lab.lab, "tests", "c.mjs"), { force: true });
+    }
+
+    {
+      fs.writeFileSync(path.join(lab.lab, "tests", "roots-plain.mjs"), [
+        "import tls from \"node:tls\";",
+        "const names = Object.keys(process.env).filter(k => /^(NODE_USE_SYSTEM_CA|NODE_EXTRA_CA_CERTS)$/i.test(k)).map(k => k.toUpperCase()).sort();",
+        "const extra = typeof tls.getCACertificates === \"function\" ? tls.getCACertificates(\"extra\").length : -1;",
+        "console.log(\"ROOTS_ENV \" + (names.join(\",\") || \"none\"));",
+        "console.log(\"ROOTS_EXTRA \" + extra);",
+        "console.log(\"  ok   leg roots\");",
+        "",
+      ].join("\n"));
+      fs.writeFileSync(path.join(lab.lab, "tests", "roots-asks.mjs"), [
+        "/* run: system roots */",
+        "import tls from \"node:tls\";",
+        "const names = Object.keys(process.env).filter(k => /^(NODE_USE_SYSTEM_CA|NODE_EXTRA_CA_CERTS)$/i.test(k)).map(k => k.toUpperCase()).sort();",
+        "const extra = typeof tls.getCACertificates === \"function\" ? tls.getCACertificates(\"extra\").length : -1;",
+        "console.log(\"ROOTS_ENV \" + (names.join(\",\") || \"none\"));",
+        "console.log(\"ROOTS_EXTRA \" + extra);",
+        "console.log(\"  ok   leg roots\");",
+        "",
+      ].join("\n"));
+      const pkgFile = path.join(lab.lab, "package.json"), pkgWas = fs.readFileSync(pkgFile, "utf8");
+      const pkgNow = JSON.parse(pkgWas);
+      pkgNow.scripts["roots-plain"] = "node tests/roots-plain.mjs";
+      pkgNow.scripts["roots-asks"] = "node tests/roots-asks.mjs";
+      fs.writeFileSync(pkgFile, JSON.stringify(pkgNow, null, 2) + "\n");
+      /* 15c, 15d. A CUSTOMER'S ROOTS. A caller whose shell carries NODE_USE_SYSTEM_CA=1 and NODE_EXTRA_CA_CERTS naming a
+         stand-in root (one of Node's own, written to a file) hands neither to a step: the step sees no such variable and Node
+         loads no extra root. A leg that asks by name, the runner's ROOTS_MARKER in its head, keeps both (the control). */
+      const pem = path.join(lab.root, "stand-in-root.pem");
+      fs.writeFileSync(pem, tls.rootCertificates[0] + "\n");
+      const wide = { NODE_USE_SYSTEM_CA: "1", NODE_EXTRA_CA_CERTS: pem };
+      const said = (out, key) => { const m = new RegExp("^" + key + " (.+)$", "m").exec(out); return m ? m[1].trim() : ""; };
+      const p = runTool(lab, ["file", "tests/roots-plain.mjs"], wide);
+      const pEnv = said(p.out, "ROOTS_ENV"), pExtra = said(p.out, "ROOTS_EXTRA");
+      check(p.exit === 0 && pEnv === "none" && (pExtra === "0" || pExtra === "-1"),
+        "15c a step inherits no variable that widens Node's roots, so it trusts what a customer's install trusts: exit " + p.exit
+        + ", variables " + JSON.stringify(pEnv) + ", extra roots loaded " + JSON.stringify(pExtra));
+      const a = runTool(lab, ["file", "tests/roots-asks.mjs"], wide);
+      const aEnv = said(a.out, "ROOTS_ENV"), aExtra = said(a.out, "ROOTS_EXTRA");
+      check(a.exit === 0 && aEnv === "NODE_EXTRA_CA_CERTS,NODE_USE_SYSTEM_CA" && (aExtra === "1" || aExtra === "-1"),
+        "15d control: a leg that asks for the system roots by name keeps both variables and its extra root: exit " + a.exit
+        + ", variables " + JSON.stringify(aEnv) + ", extra roots loaded " + JSON.stringify(aExtra));
+      fs.writeFileSync(pkgFile, pkgWas);
+      for (const f of ["roots-plain", "roots-asks"]) fs.rmSync(path.join(lab.lab, "tests", f + ".mjs"), { force: true });
     }
 
     /* 14 (4). A planted removal of the running-app check turns leg 1 red, by the tree's plant convention, honouring ETIUDA_PLANTS=off */
