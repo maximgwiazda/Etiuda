@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const TOOL = path.join(ROOT, "tools", "gates-for.mjs");
-const EXPECTED = 32;  /* 23, +2 main's desk-trust ceiling and subject paths (gf24, gf25), +6 relay-channel-split (gf26 to gf31), +1 a fail-closed plan keeps the mapped legs (gf32) */
+const EXPECTED = 33;  /* 23, +2 main's desk-trust ceiling and subject paths (gf24, gf25), +6 relay-channel-split (gf26 to gf31), +1 a fail-closed plan keeps the mapped legs (gf32), +1 and runs no packaging tool (gf33) */
 
 /* GIT-ENV: git must use the throwaway tree, never a GIT_DIR the caller exported. */
 function gitEnv() {
@@ -484,6 +484,18 @@ try {
       "gf32 a diff that fails closed still runs the node legs gates-for maps its other files to, off the test chain as well:"
       + " about.js with gates-for.mjs fails closed " + closed.failClosed + ", smoke " + files.includes("tests/smoke.js")
       + " (about.js alone " + aloneHas + "), shell-office " + files.includes("tests/shell-office.mjs"));
+  }
+
+  /* A fail-closed plan runs no packaging tool (the test architect, 2026-11-11): shell/main.js maps to package.mjs,
+     package-linux.mjs and release.mjs, which the mapped plan drops as no merge gates; with tools/package.mjs (shared) in
+     the same diff the plan fails closed, and fold 37's kept package-linux beside the chain, which cannot build on Windows. */
+  {
+    const closed = await grTool.planAreaRun(ROOT, ["shell/main.js", "tools/package.mjs"], pkgNow);
+    const files = (closed.steps || []).map(s => String(s.file || "").replace(/\\/g, "/"));
+    const packaging = files.filter(f => grTool.NOT_MERGE_GATES.includes(f));
+    check(closed.failClosed === true && packaging.length === 0 && files.includes("tests/linux-package.mjs"),
+      "gf33 a diff that fails closed runs no packaging tool, and keeps the packaging tests: fails closed " + closed.failClosed
+      + ", packaging tools " + (packaging.join(", ") || "none") + ", linux-package " + files.includes("tests/linux-package.mjs"));
   }
 
   check(asserted === EXPECTED - 1, "gf8 every leg ran: " + (asserted + 1) + " of " + EXPECTED);
