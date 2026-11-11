@@ -43,7 +43,7 @@ function runShortcut(id){
       const a=typeof document!=="undefined" ? document.activeElement : null;
       const row=a && a.closest ? a.closest(".mg-cat-row, .mg-cat") : null;
       if(row){
-        const inp=row.querySelector("input.mg-cat-lab2[data-rename], input.mg-cat-lab2");
+        const inp=row.querySelector(".mg-cat-lab2[data-rename], .mg-cat-lab2");
         if(inp && inp.focus){
           inp.focus();
           try{ inp.select(); }catch(_){}

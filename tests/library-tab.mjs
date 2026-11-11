@@ -84,7 +84,7 @@ class El {
   set open(v) { if (v) this.setAttribute("open", ""); else this.removeAttribute("open"); }
   get tabIndex() { return +(this.attrs.get("tabindex") || -1); }
   set tabIndex(v) { this.setAttribute("tabindex", v); }
-  get value() { return this._value !== undefined ? this._value : (this.attrs.get("value") || ""); }
+  get value() { return this._value !== undefined ? this._value : this.tagName === "TEXTAREA" ? this.textContent : (this.attrs.get("value") || ""); }
   set value(v) { this._value = String(v); }
   setAttribute(k, v) { k = String(k).toLowerCase(); const had = this.attrs.has(k); this.attrs.set(k, String(v)); if (!had) detailsToggle(this, k, "closed"); }
   getAttribute(k) { const v = this.attrs.get(String(k).toLowerCase()); return v === undefined ? null : v; }

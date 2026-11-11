@@ -409,7 +409,7 @@ function mgCatTree(){
        updates the category directly. Fixed / orphan categories use a span. */
     const name=(fixed || k==="__orphan")
       ? '<span class="mg-cat-fixed">'+esc(label)+'</span>'
-      : '<input type="text" class="mg-cat-lab2" data-rename="'+esc(k)+'" value="'+esc(label)+'" spellcheck="false" autocomplete="off" aria-label="'+esc(t("Category name"))+'">';
+      : '<textarea class="mg-cat-lab2" rows="1" data-rename="'+esc(k)+'" spellcheck="false" autocomplete="off" aria-label="'+esc(t("Category name"))+'">'+esc(label)+'</textarea>';
     /* × only on an empty category - the same rule the header pill uses, so no route anywhere
        in the UI deletes a category with cards still in it. */
     const x=(!n && k!=="__orphan")
@@ -1693,11 +1693,11 @@ function wireLibrary(page){
   page.querySelectorAll("[data-remove-intent]").forEach(btn=>{
     btn.onclick=()=>{ if(removeIntent(btn.getAttribute("data-remove-intent"))) paintLibrary(); };
   });
-  page.querySelectorAll("input.mg-cat-lab2[data-rename]").forEach(inp=>{
+  page.querySelectorAll(".mg-cat-lab2[data-rename]").forEach(inp=>{
     const k=inp.getAttribute("data-rename");
     const orig=()=>CATS[k]||k;
     const apply=()=>{
-      const name=inp.value.trim();
+      const name=inp.value.replace(/\s+/g," ").trim();
       if(!name || name===orig()){ inp.value=orig(); return; }
       if(!pack.catLabels) pack.catLabels={};
       pack.catLabels[k]=name;

@@ -3304,7 +3304,7 @@ details.manage-sec>summary h3{margin:0}
 .mg-tw:hover,.mg-tw:focus-visible{color:var(--accent)}
 .mg-cat-lab2{margin:0;padding:1px 3px;border:1px solid transparent;border-radius:5px;
   background:transparent;color:var(--ink);font:600 13px var(--sans);min-width:2.5em;max-width:16em;
-  width:auto;field-sizing:content;cursor:text;user-select:text}
+  width:auto;field-sizing:content;cursor:text;user-select:text;resize:none;overflow:hidden;white-space:pre;vertical-align:middle}
 .mg-cat-lab2:hover{border-color:var(--line)}
 .mg-cat-lab2:focus{outline:none;border-color:var(--accent);background:var(--panel)}
 .mg-cat-fixed{font:600 13px var(--sans);color:var(--ink);padding:1px 3px}
@@ -3541,7 +3541,8 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 /* The action row sits below a CAPPED list that scrolls inside itself - the Library's own
    shape - so the row is always reachable without scrolling the whole dialog. */
 .acc-body .sc-list{max-height:min(38vh,300px)}
-.cat-new{display:flex;gap:6px;margin-top:8px}
+.cat-new{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.cat-new>.btn{max-width:100%}
 /* Replacing a mechanism means deleting the one it replaced: a leftover with equal
    specificity and a later position is not dead code, it IS the code. */
 /* COLUMNS THAT PACK, not a grid that aligns: a grid row costs the height of its taller cell
@@ -3739,11 +3740,22 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 @container sxpage (max-width:720px){
   .sx:not(.lm) .sx-look{grid-template-columns:minmax(0,1fr)}
 }
+/* A ROW'S CONTROL GOES UNDER ITS WORDS where they would get under 200px beside it, at the row's full width, its
+   options equal shares on one line. The words' basis is that 200px and their grow outweighs the control's 999 to 1,
+   so side by side the words take the room, and alone on its line the control takes the row. */
+.sx:not(.lm) .set-row{display:flex;flex-wrap:wrap;gap:8px 14px}
+.sx:not(.lm) .set-row>.sx-ic{flex:0 0 20px;margin-right:8px}
+.sx:not(.lm) .set-label{flex:999 1 min(200px,calc(100% - 42px))}
+.sx:not(.lm) .set-ctl{flex:1 1 auto;min-width:0;justify-content:flex-start}
+.sx:not(.lm) .set-ctl>.set-seg,.sx:not(.lm) .set-ctl>select,.sx:not(.lm) .set-ctl>input[type=text]{flex:1 1 auto;min-width:0}
+.sx:not(.lm) .set-seg{grid-auto-columns:minmax(0,1fr)}
+/* At the wide margins a 546px window's row cannot hold Light, Dark and System in Polish on one line. */
+@media (max-width:720px){
+  .sx:not(.lm) .sx-page{padding-left:20px;padding-right:20px}
+}
 @container sxpage (max-width:480px){
-  .sx:not(.lm) .set-row{grid-template-columns:28px minmax(0,1fr)}
-  .sx:not(.lm) .set-ctl{grid-column:1 / -1;grid-row:2;justify-content:flex-start;max-width:100%}
-  .sx:not(.lm) .set-seg{display:flex;flex-wrap:wrap;width:100%;max-width:100%}
-  .sx:not(.lm) .set-seg button{flex:1 1 auto;min-width:0}
+  .sx:not(.lm) .set-row{padding-left:12px;padding-right:12px}
+  .sx:not(.lm) .set-seg button{padding-left:4px;padding-right:4px}
 }
 .mt-moved{margin:12px 0 0;color:var(--dim);font-size:12.5px}
 /* ---------- Library and Maintenance, in the Settings shell ---------- */
@@ -3778,7 +3790,7 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx.lm-lib .sx-card .mg-int:first-of-type{border-top:0}
 /* Finding 4: Library Categories & cards tree with columns (4F) */
 .sx.lm-lib .sx-card:has(.mg-tree){overflow:visible;container:lwtree / inline-size}
-.mg-tree{min-width:0;--cols:minmax(250px,330px) minmax(120px,1fr) 84px 112px 200px 104px 110px 124px}
+.mg-tree{min-width:0;--cols:minmax(250px,330px) minmax(120px,1fr) 84px 112px 200px 124px 110px 124px}
 .lw-head,.sx.lm-lib .sx-card .mg-cat-row,.mg-cat-body .manage-row.mg-card{
   display:grid!important;grid-template-columns:var(--cols)!important;align-items:center;gap:0 14px;box-sizing:border-box
 }
@@ -3813,19 +3825,19 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 
 @container lwtree (max-width: 1560px){
   .lw-head,.sx.lm-lib .sx-card .mg-cat-row,.mg-cat-body .manage-row.mg-card{
-    grid-template-columns:minmax(250px,330px) minmax(120px,1fr) 84px 112px 200px 104px 124px!important
+    grid-template-columns:minmax(250px,330px) minmax(120px,1fr) 84px 112px 200px 124px 124px!important
   }
   .lw-c.sr{display:none!important}
 }
 @container lwtree (max-width: 1400px){
   .lw-head,.sx.lm-lib .sx-card .mg-cat-row,.mg-cat-body .manage-row.mg-card{
-    grid-template-columns:minmax(240px,320px) minmax(120px,1fr) 84px 190px 104px 124px!important
+    grid-template-columns:minmax(240px,320px) minmax(120px,1fr) 84px 190px 124px 124px!important
   }
   .lw-c.sr,.lw-c.st{display:none!important}
 }
 @container lwtree (max-width: 1240px){
   .lw-head,.sx.lm-lib .sx-card .mg-cat-row,.mg-cat-body .manage-row.mg-card{
-    grid-template-columns:minmax(220px,280px) minmax(120px,1fr) 150px 96px 124px!important
+    grid-template-columns:minmax(220px,280px) minmax(120px,1fr) 150px 124px 124px!important
   }
   .lw-c.sr,.lw-c.st,.lw-c.lg{display:none!important}
 }
@@ -3856,6 +3868,8 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
   }
   .sx.lm-lib .sx-card .mg-cat-body{padding-left:0}
   .mg-cat-body .mg-card-lab{padding-left:26px;white-space:normal}
+  .sx.lm-lib .sx-card .mg-cat-row{grid-template-columns:minmax(0,1fr)!important}
+  .mg-cat-row .mg-cat-lab2,.mg-cat-row .mg-cat-fixed{white-space:pre-wrap;overflow-wrap:anywhere;max-width:none}
   .mg-card .cacts{justify-self:end}
 }
 
@@ -32979,7 +32993,7 @@ What you type stays in this browser only.`;
       const nMac = rows.reduce((sum, o) => sum + macroBlockCount(o.m), 0);
       const key = "cat:" + k;
       const op = mgOpen.has(key);
-      const name = fixed || k === "__orphan" ? '<span class="mg-cat-fixed">' + esc(label2) + "</span>" : '<input type="text" class="mg-cat-lab2" data-rename="' + esc(k) + '" value="' + esc(label2) + '" spellcheck="false" autocomplete="off" aria-label="' + esc(t("Category name")) + '">';
+      const name = fixed || k === "__orphan" ? '<span class="mg-cat-fixed">' + esc(label2) + "</span>" : '<textarea class="mg-cat-lab2" rows="1" data-rename="' + esc(k) + '" spellcheck="false" autocomplete="off" aria-label="' + esc(t("Category name")) + '">' + esc(label2) + "</textarea>";
       const x = !n && k !== "__orphan" ? '<button type="button" class="mg-cat-x2 icbtn" data-delcat="' + esc(k) + '" title="Delete this empty category" aria-label="Delete category">' + ICON_TRASH + "</button>" : "";
       const add = k === "__orphan" ? "" : (function() {
         const tip = esc(t("Add a card to {CAT}").replace("{CAT}", label2));
@@ -34045,11 +34059,11 @@ What you type stays in this browser only.`;
         if (removeIntent(btn.getAttribute("data-remove-intent"))) paintLibrary();
       };
     });
-    page.querySelectorAll("input.mg-cat-lab2[data-rename]").forEach((inp) => {
+    page.querySelectorAll(".mg-cat-lab2[data-rename]").forEach((inp) => {
       const k = inp.getAttribute("data-rename");
       const orig = () => CATS[k] || k;
       const apply = () => {
-        const name = inp.value.trim();
+        const name = inp.value.replace(/\s+/g, " ").trim();
         if (!name || name === orig()) {
           inp.value = orig();
           return;
@@ -37283,7 +37297,7 @@ What you type stays in this browser only.`;
         const a = typeof document !== "undefined" ? document.activeElement : null;
         const row2 = a && a.closest ? a.closest(".mg-cat-row, .mg-cat") : null;
         if (row2) {
-          const inp = row2.querySelector("input.mg-cat-lab2[data-rename], input.mg-cat-lab2");
+          const inp = row2.querySelector(".mg-cat-lab2[data-rename], .mg-cat-lab2");
           if (inp && inp.focus) {
             inp.focus();
             try {
