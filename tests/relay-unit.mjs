@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 502;
+const EXPECTED = 505;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -2804,6 +2804,72 @@ async function main() {
         + " written (canon calls " + seen.overCalls + " and " + seen.deepCalls + "), where a signed re-seal under the same counting copy makes " + seen.signedCalls + ": "
         + (seen.over && seen.over.status) + " " + (seen.over && seen.over.json && seen.over.json.error) + ", " + (seen.deep && seen.deep.status) + " "
         + (seen.deep && seen.deep.json && seen.deep.json.error) + ", " + (spy.turned ? "counted on a copy" : spy.detail.split("\n")[0]) + ", product sha " + (spy.back ? "unchanged" : "CHANGED"));
+    }
+
+    /* Board 986: no unsigned input makes the relay answer 500 or write canonical JSON before it is refused. Each row the signature's canonical
+       JSON walks (a devices key, an invitation added, a re-seal) is refused bad-signature on a property it does not name. If a row's shape
+       check lets an extra property through again, its leg goes red: an unsigned call carrying one nested past canon's recursion answers 500,
+       one 200 KB wide is canonicalised before the signature fails, and the same row signed is taken. The row as the program sends it, signed,
+       under the same counting copy, makes canon calls, which is the counter's teeth. */
+    {
+      const junkSig = "00".repeat(64), DEPTH = 100000, WIDE = 200000;
+      const deepX = "[".repeat(DEPTH) + "]".repeat(DEPTH), wideX = JSON.stringify("a".repeat(WIDE));
+      const counted = async f => { globalThis.__relayCanonCalls = 0; const r = await f(); return { r, n: globalThis.__relayCanonCalls }; };
+      const said = x => (x && x.r ? x.r.status + " " + ((x.r.json && x.r.json.error) || "") + " canon " + x.n : String(x && x.status));
+      const seen = {};
+      const spy = await swapCore("function canon(v) {", "function canon(v) { globalThis.__relayCanonCalls = (globalThis.__relayCanonCalls || 0) + 1;", async () => {
+        const w = await world();
+        const route = name => "/relay/v1/t/" + w.rt + "/" + name;
+        const t = w.R.clock.now;
+        /* A key row as the program sends it, with one property more, written as text so a value deeper than JSON.stringify can go rides in it. */
+        const keyText = x => JSON.stringify(w.devs[0]).slice(0, -1) + ",\"x\":" + x + "}";
+        const devBody = x => "{\"keys\":[" + keyText(x) + "," + JSON.stringify(w.devs[1]) + "],\"rev\":" + (w.rev + 1) + ",\"t\":" + t + ",\"sig\":\"" + junkSig + "\"}";
+        seen.devDeep = await counted(() => call(w.R, "POST", route("devices"), { body: devBody(deepX) }));
+        seen.devWide = await counted(() => call(w.R, "POST", route("devices"), { body: devBody(wideX) }));
+        const revBefore = w.R.stores.get(w.rt).get("devrev");
+        seen.devSigned = await devices(w, [Object.assign({}, w.devs[0], { x: 1 }), w.devs[1]]);
+        seen.devKept = w.R.stores.get(w.rt).get("devrev") === revBefore;
+        seen.devOk = await counted(() => devices(w, w.devs));
+        const addBody = x => "{\"add\":[{\"id\":\"" + hex(16) + "\",\"hash\":\"" + sha(hex(32)) + "\",\"x\":" + x + "}],\"drop\":[],\"t\":" + t + ",\"sig\":\"" + junkSig + "\"}";
+        seen.addDeep = await counted(() => call(w.R, "POST", route("invites"), { body: addBody(deepX) }));
+        seen.addWide = await counted(() => call(w.R, "POST", route("invites"), { body: addBody(wideX) }));
+        const extraId = hex(16), okId = hex(16);
+        seen.addSigned = await invitesW(w, [{ id: extraId, hash: sha(hex(32)), x: 1 }], []);
+        seen.addKept = rowOf(w, extraId) === undefined;
+        seen.addOk = await counted(() => invitesW(w, [{ id: okId, hash: sha(hex(32)), until: t + DAY, wrap: goodWrap() }], [], undefined, { t: t + 1 }));
+        seen.addTaken = !!rowOf(w, okId);
+        const o = await opened(w, goodWrap()), before = o.ok ? rowOf(w, o.id).wrap : null;
+        const wrapBody = x => "{\"add\":[],\"drop\":[],\"t\":" + t + ",\"sig\":\"" + junkSig + "\",\"wraps\":[{\"id\":\"" + o.id
+          + "\",\"wrap\":{\"ct\":\"aa\",\"epoch\":1},\"x\":" + x + "}]}";
+        seen.wrapDeep = await counted(() => call(w.R, "POST", route("invites"), { body: wrapBody(deepX) }));
+        seen.wrapWide = await counted(() => call(w.R, "POST", route("invites"), { body: wrapBody(wideX) }));
+        seen.wrapSigned = await invitesW(w, [], [], [{ id: o.id, wrap: goodWrap(), x: 1 }], { t: t + 2 });
+        seen.wrapKept = o.ok && eq(rowOf(w, o.id).wrap, before);
+        const fresh = goodWrap();
+        seen.wrapOk = await counted(() => invitesW(w, [], [], [{ id: o.id, wrap: fresh }], { t: t + 3 }));
+        seen.wrapTaken = o.ok && eq(rowOf(w, o.id).wrap, fresh);
+        return true;
+      });
+      delete globalThis.__relayCanonCalls;
+      const quiet = x => !!x && refused(x.r, "bad-signature") && x.n === 0;
+      const how = spy.turned ? "counted on a copy" : spy.detail.split("\n")[0];
+      const shaSaid = ", product sha " + (spy.back ? "unchanged" : "CHANGED");
+      check(spy.turned && spy.back && quiet(seen.devDeep) && quiet(seen.devWide) && refused(seen.devSigned, "bad-signature") && seen.devKept
+        && seen.devOk && seen.devOk.r.status === 200 && seen.devOk.n > 0,
+      "986a an unsigned devices call whose key row carries a property it does not name, nested " + DEPTH + " deep or " + WIDE + " characters wide, is refused"
+        + " bad-signature with no canonical JSON written, and the same row signed is refused and changes nothing, where the row as the program sends it is taken: "
+        + [seen.devDeep, seen.devWide].map(said).join(", ") + ", signed " + said(seen.devSigned) + ", program's " + said(seen.devOk) + ", " + how + shaSaid);
+      check(spy.turned && spy.back && quiet(seen.addDeep) && quiet(seen.addWide) && refused(seen.addSigned, "bad-signature") && seen.addKept
+        && seen.addOk && seen.addOk.r.status === 200 && seen.addOk.n > 0 && seen.addTaken,
+      "986b an unsigned invitations call whose added invitation carries a property it does not name, nested " + DEPTH + " deep or " + WIDE + " characters wide,"
+        + " is refused bad-signature with no canonical JSON written, and the same row signed is refused and stores nothing, where an invitation as the program"
+        + " sends it (id, hash, until and wrap) is taken: " + [seen.addDeep, seen.addWide].map(said).join(", ") + ", signed " + said(seen.addSigned)
+        + ", program's " + said(seen.addOk) + ", " + how + shaSaid);
+      check(spy.turned && spy.back && quiet(seen.wrapDeep) && quiet(seen.wrapWide) && refused(seen.wrapSigned, "bad-signature") && seen.wrapKept
+        && seen.wrapOk && seen.wrapOk.r.status === 200 && seen.wrapOk.n > 0 && seen.wrapTaken,
+      "986c an unsigned re-seal whose row carries a property beside its id and wrap, nested " + DEPTH + " deep or " + WIDE + " characters wide, is refused"
+        + " bad-signature with no canonical JSON written, and the same row signed is refused and keeps the stored wrap, where a re-seal as the program sends it"
+        + " is taken: " + [seen.wrapDeep, seen.wrapWide].map(said).join(", ") + ", signed " + said(seen.wrapSigned) + ", program's " + said(seen.wrapOk) + ", " + how + shaSaid);
     }
 
     /* A wrap at the cap's edge is judged exactly as before: each of these, ASCII, two-byte, four-byte, escaped, a lone surrogate, extra keys

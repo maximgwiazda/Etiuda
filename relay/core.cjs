@@ -61,7 +61,8 @@ const no = B.refusal;
 /* What the relay keeps of a spent invitation past its keep, under its id: that it was spent, and no hash, try or time. */
 const SPENT = Object.freeze({ spent: true });
 
-/* The canonical JSON shell/main.js signs with (canonJson): keys sorted, an undefined value left out. */
+/* The canonical JSON shell/main.js signs with (canonJson): keys sorted, an undefined value left out. It walks all it is given, and a value
+   nested past the stack throws, so it is handed only rows whose every property a shape check has named or canonBytesWithin has measured. */
 function canon(v) {
   if (v === null || typeof v !== "object") return JSON.stringify(v);
   if (Array.isArray(v)) return "[" + v.map(canon).join(",") + "]";
@@ -546,7 +547,7 @@ function createCore(deps) {
     for (const k of b.keys) {
       /* The lead's key is no desk, under whichever of its two id forms the lead did not take for itself. */
       if (k && k.pub === team.lead.pub) return no("bad-signature"); /* plant:devices-lead-pub */
-      const shaped = !!k && typeof k === "object" && isId(k.id) && keyMatches(k.id, k.pub) && B.isDeskId(k.desk) && k.id !== team.lead.keyId;
+      const shaped = plain(k) && only(k, ["id", "pub", "desk"]) && isId(k.id) && keyMatches(k.id, k.pub) && B.isDeskId(k.desk) && k.id !== team.lead.keyId;
       if (!shaped || next.has(k.id)) return no("bad-signature"); /* plant:devices-shape */
       next.set(k.id, { pub: k.pub, desk: k.desk });
     }
@@ -654,10 +655,10 @@ function createCore(deps) {
     if (!Array.isArray(b.add) || !Array.isArray(b.drop) || !Number.isSafeInteger(b.t)) return no("bad-signature");
     if (b.wraps !== undefined && !Array.isArray(b.wraps)) return no("bad-signature");
     const wrapRows = b.wraps || [];
-    const shaped = b.add.every(a => !!a && typeof a === "object" && !Array.isArray(a) && is(HEX32, a.id) && is(HEX64, a.hash)
+    const shaped = b.add.every(a => plain(a) && only(a, ["id", "hash", "until", "wrap"]) && is(HEX32, a.id) && is(HEX64, a.hash)
       && (a.until === undefined || Number.isSafeInteger(a.until)))
       && b.drop.every(d => is(HEX32, d))
-      && wrapRows.every(w => !!w && typeof w === "object" && !Array.isArray(w) && is(HEX32, w.id));
+      && wrapRows.every(w => plain(w) && only(w, ["id", "wrap"]) && is(HEX32, w.id));
     if (!shaped) return no("bad-signature"); /* plant:invites-shape */
     if (!fresh(b.t)) return no("nonce-stale"); /* plant:invites-fresh */
     const prepared = [];
