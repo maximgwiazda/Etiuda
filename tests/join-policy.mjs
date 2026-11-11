@@ -645,6 +645,7 @@ const under = (el, name) => el.kids.reduce((out, k) => out.concat(k.name === nam
   const WANT = {
     TeamFolder: { text: "1024", desk: true }, LeadKey: { text: "64", desk: true },
     DeskNoUpdateCheck: { onOff: true, desk: true }, StudioNoUpdateCheck: { onOff: true },
+    DeskOrganisationModel: { onOff: true },
     AiProvider: { list: ["openai", "anthropic", "google", "azure", "compatible"] },
     AiEndpoint: { text: "2048" }, AiModel: { text: "256" }, AiKey: { text: "1024" },
   };

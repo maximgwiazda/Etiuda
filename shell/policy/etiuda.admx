@@ -101,5 +101,15 @@
         <text id="AiKeyBox" valueName="AiKey" required="true" maxLength="1024" />
       </elements>
     </policy>
+    <policy name="DeskOrganisationModel" class="Machine" displayName="$(string.DeskOrganisationModel)" explainText="$(string.DeskOrganisationModel_Explain)" key="Software\Policies\Etiuda" valueName="DeskOrganisationModel">
+      <parentCategory ref="Etiuda" />
+      <supportedOn ref="SUPPORTED_Etiuda" />
+      <enabledValue>
+        <decimal value="1" />
+      </enabledValue>
+      <disabledValue>
+        <decimal value="0" />
+      </disabledValue>
+    </policy>
   </policies>
 </policyDefinitions>

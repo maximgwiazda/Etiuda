@@ -34,8 +34,8 @@ Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane,
 Jeśli to ustawienie zasad zostanie włączone, Etiuda Studio nie pobiera informacji o wersji i nie proponuje nowej wersji. Przydaje się to tam, gdzie nowe wersje trafiają na komputery przez własną dystrybucję organizacji.
 
 Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, Etiuda Studio sprawdza to mniej więcej co godzinę, a gdy jest nowsza wersja, proponuje ją w Przeglądzie, na pasku stanu i w oknie O Etiudzie Studio.</string>
-      <string id="AiProvider">Ustaw usługę AI dla Etiudy Studio</string>
-      <string id="AiProvider_Explain">To ustawienie zasad określa usługę AI, z której Etiuda Studio może korzystać, by szkicować karty i wczytywać dawne odpowiedzi. Studio wysyła do niej tekst tylko wtedy, gdy lider zespołu rozpocznie takie zadanie i potwierdzi, co zostanie wysłane.
+      <string id="AiProvider">Ustaw usługę AI</string>
+      <string id="AiProvider_Explain">To ustawienie zasad określa usługę AI, z której Etiuda Studio może korzystać, by szkicować karty i wczytywać dawne odpowiedzi, a Etiuda wtedy, gdy włączone jest „Używaj modelu AI organizacji w wyszukiwaniu i propozycjach na stanowisku”. Studio wysyła do niej tekst tylko wtedy, gdy lider zespołu rozpocznie takie zadanie i potwierdzi, co zostanie wysłane.
 
 Jeśli to ustawienie zasad zostanie włączone, należy wybrać usługę albo wpisać jej nazwę: openai, anthropic, google, azure lub compatible. Ma ono pierwszeństwo przed usługą wybraną w Ustawieniach Studia, której nie można już tam zmienić. Każda inna wartość jest ignorowana.
 
@@ -45,26 +45,34 @@ Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane,
       <string id="AiProvider_google">Google Gemini (google)</string>
       <string id="AiProvider_azure">Azure OpenAI (azure)</string>
       <string id="AiProvider_compatible">Usługa zgodna z OpenAI (compatible)</string>
-      <string id="AiEndpoint">Ustaw adres usługi AI dla Etiudy Studio</string>
+      <string id="AiEndpoint">Ustaw adres usługi AI</string>
       <string id="AiEndpoint_Explain">To ustawienie zasad określa adres, pod który Etiuda Studio wysyła zapytania do usługi AI, na przykład własną bramę organizacji.
 
 Jeśli to ustawienie zasad zostanie włączone, należy podać pełny adres https, na przykład https://ai.example.com/v1/, bez nazwy użytkownika, zapytania i fragmentu. Ma ono pierwszeństwo przed adresem podanym w Ustawieniach Studia, a Studio nie wysyła pod żaden inny. Wartość w innej postaci jest ignorowana.
 
 Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, używany jest adres podany w Ustawieniach Studia, a gdy go nie podano, opublikowany adres OpenAI, Anthropic lub Google. Azure OpenAI i inne usługi zgodne wymagają podania adresu.</string>
-      <string id="AiModel">Ustaw model AI dla Etiudy Studio</string>
+      <string id="AiModel">Ustaw model AI</string>
       <string id="AiModel_Explain">To ustawienie zasad określa model, którego Etiuda Studio prosi usługę AI o użycie.
 
 Jeśli to ustawienie zasad zostanie włączone, należy podać nazwę modelu dokładnie taką, jak podaje ją usługa. Ma ono pierwszeństwo przed modelem wskazanym w Ustawieniach Studia.
 
 Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, model wskazuje się w Ustawieniach Studia. Gdy żaden model nie jest wskazany, Studio niczego nie wysyła.</string>
-      <string id="AiKey">Ustaw klucz usługi AI dla Etiudy Studio</string>
+      <string id="AiKey">Ustaw klucz usługi AI</string>
       <string id="AiKey_Explain">To ustawienie zasad określa klucz, który Etiuda Studio przedstawia usłudze AI.
 
-Jeśli to ustawienie zasad zostanie włączone, należy podać klucz. Ma ono pierwszeństwo przed kluczem zachowanym w Ustawieniach Studia. Studio wysyła ten klucz tylko pod adres ustawiony w „Ustaw adres usługi AI dla Etiudy Studio”, a gdy go nie ustawiono, pod opublikowany adres usługi, i nigdy pod adres podany na komputerze.
+Jeśli to ustawienie zasad zostanie włączone, należy podać klucz. Ma ono pierwszeństwo przed kluczem zachowanym w Ustawieniach Studia. Studio wysyła ten klucz tylko pod adres ustawiony w „Ustaw adres usługi AI”, a gdy go nie ustawiono, pod opublikowany adres usługi, i nigdy pod adres podany na komputerze.
 
 Uwaga: klucz ustawiony w zasadach komputera jest zapisany w rejestrze, gdzie może go odczytać każdy użytkownik tego komputera. Lepiej użyć adresu bramy, która nie wymaga klucza, albo klucza ograniczonego do tego zastosowania, który można unieważnić osobno.
 
 Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, klucz podaje się w Ustawieniach Studia i jest przechowywany zapieczętowany dla konta danego użytkownika.</string>
+      <string id="DeskOrganisationModel">Używaj modelu AI organizacji w wyszukiwaniu i propozycjach na stanowisku</string>
+      <string id="DeskOrganisationModel_Explain">To ustawienie zasad sprawia, że Etiuda ustala kolejność wyszukiwania i propozycji intencji przy użyciu modelu AI organizacji zamiast modelu wbudowanego w Etiudę.
+
+Jeśli to ustawienie zasad zostanie włączone, Etiuda korzysta z usługi, adresu, modelu i klucza określonych przez cztery ustawienia zasad usługi AI w tym szablonie. Tekst wyszukiwania i skopiowana wiadomość, z której powstają propozycje, trafiają pod ten adres, a znak w nagłówku Etiudy pokazuje to na każdym ekranie. Tego wyboru nie można zmienić w Ustawieniach Etiudy. Własne przełączniki osoby korzystającej z Etiudy, „Propozycje intencji” i „Wyszukiwanie według znaczenia”, nadal wyłączają porządkowanie według znaczenia, niezależnie od modelu. Gdy model organizacji nie odpowiada, kolejność ustala w tym czasie model wbudowany, niczego nie wysyłając.
+
+Jeśli to ustawienie zasad zostanie wyłączone, Etiuda korzysta wyłącznie z modelu wbudowanego, który działa tylko na tym komputerze i niczego z niego nie wysyła, a tego wyboru nie można zmienić w jej Ustawieniach.
+
+Jeśli to ustawienie zasad nie zostanie skonfigurowane, model wybiera się w Ustawieniach Etiudy. Model wbudowany, domyślny, działa wyłącznie na tym komputerze i niczego z niego nie wysyła.</string>
     </stringTable>
     <presentationTable>
       <presentation id="TeamFolder">
