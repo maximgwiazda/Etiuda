@@ -214,6 +214,11 @@ async function run() {
 
     const disabledSettings = buildLoginItemSettings(false);
     check(disabledSettings.openAtLogin === false, "login item disabled sets openAtLogin false");
+    /* Under this desk's own name, never Electron's default id, which follows an AppUserModelId the desk sets only when a
+       notification shows (the test architect, 23:29). */
+    check(enabledSettings.name === "app.etiuda.desktop" && disabledSettings.name === "app.etiuda.desktop"
+      && buildLoginItemSettings(false, { name: "electron.app.Etiuda" }).name === "electron.app.Etiuda",
+      "login item is written under the desk's own name, app.etiuda.desktop, unless another is named");
 
     const fake = makeFakeElectron();
     setLoginItemSettings(fake.app, true);

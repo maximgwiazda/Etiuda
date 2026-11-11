@@ -99,14 +99,25 @@ function notifyFirstClose(opts) {
 }
 
 /** Build start-with-Windows login item settings, including --hidden argument. */
+/* Under this desk's own name (Electron's `name` on Windows), never Electron's default id, which follows an AppUserModelId the
+   desk sets only when a notification shows (the test architect's hold of 23:29). `opts.name` names another, for clearing an
+   earlier build's value. */
 function buildLoginItemSettings(enabled, opts) {
   const openAtLogin = !!enabled;
   const out = {
     openAtLogin,
     args: openAtLogin ? ["--hidden"] : [],
+    name: (opts && opts.name) || APP_IDS.desktop,
   };
   if (opts && opts.path) out.path = opts.path;
   return out;
+}
+
+/** Whether a launch item named `name` (the desk's own by default) is on, from Electron's getLoginItemSettings answer. Its
+ *  openAtLogin compares the arguments too, and the desk writes --hidden, so the name is what is read. */
+function loginItemOn(got, name) {
+  const n = name || APP_IDS.desktop;
+  return !!(got && Array.isArray(got.launchItems) && got.launchItems.some((i) => i && i.name === n && i.enabled !== false));
 }
 
 /** Apply start-with-Windows settings to electron app. */
@@ -237,6 +248,7 @@ module.exports = {
   showNotification,
   notifyFirstClose,
   buildLoginItemSettings,
+  loginItemOn,
   setLoginItemSettings,
   buildTrayMenuTemplate,
   createTray,

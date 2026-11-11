@@ -117,8 +117,13 @@ const safeStorage = {
   decryptString: b => { if (!sealOk || (decryptFails && Buffer.from(b).toString("base64") === decryptFails)) throw new Error("cannot decrypt for this account"); return Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"); },
 };
 electron.safeStorage = safeStorage;
-electron.app.getLoginItemSettings = () => loginApplied || { openAtLogin: false, args: [] };
-electron.app.setLoginItemSettings = (s) => { loginApplied = s; };
+/* As Electron 44 answers on Windows: launchItems names each Run value; a settings object with no name stands for an earlier
+   build's, written under Electron's default id. Every set is kept in loginCalls. */
+let loginCalls = [];
+electron.app.getLoginItemSettings = () => { const s = loginApplied || { openAtLogin: false, args: [] };
+  return { openAtLogin: !!s.openAtLogin, args: s.args || [], launchItems: s.openAtLogin ? [{ name: s.name || "electron.app.Etiuda",
+    path: s.path || process.execPath, args: s.args || [], scope: "user", enabled: true }] : [] }; };
+electron.app.setLoginItemSettings = (s) => { loginApplied = s; loginCalls.push(s); };
 electron.app.setAppUserModelId = (id) => { electron.app._aumid = id; };
 electron.app.setJumpList = (categories) => { electron.app._jumpList = categories; return { result: "ok" }; };
 electron.app.getJumpListSettings = () => ({ minItems: 0 });
@@ -154,7 +159,7 @@ const mainTest = {};
 const desktopWas = process.env.XDG_CURRENT_DESKTOP;
 process.env.XDG_CURRENT_DESKTOP = "GNOME";
 /* What the test reads from main.js, appended to its source; a second boot over the same folders appends it again. */
-const MAIN_TAIL = "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal; __test.createWindow = createWindow; __test.CLOSE_WAIT_MS = CLOSE_WAIT_MS; if (typeof tabsFile === 'function') __test.tabsFile = tabsFile; if (typeof writeSavedTabs === 'function') __test.writeSavedTabs = writeSavedTabs; if (typeof readSavedTabs === 'function') __test.readSavedTabs = readSavedTabs; if (typeof sessionHeld !== 'undefined') __test.sessionHeld = sessionHeld; if (typeof handleUpdateClose === 'function') __test.handleUpdateClose = handleUpdateClose; __test.setQuitting = v => { quitting = !!v; }; __test.windowFile = windowFile; if (typeof setQuitOnClose === 'function') __test.setQuitOnClose = setQuitOnClose; if (typeof trayQuit === 'function') __test.trayQuit = trayQuit; if (typeof ensureTray === 'function') __test.ensureTray = ensureTray; if (typeof onSecondInstance === 'function') __test.onSecondInstance = onSecondInstance; if (typeof launchHidden === 'function') __test.launchHidden = launchHidden; if (typeof syncJumpList === 'function') __test.syncJumpList = syncJumpList; if (typeof catalogFolder === 'function') __test.catalogFolder = catalogFolder; if (typeof offerFile === 'function') __test.offerFile = offerFile; if (typeof recordRecentCatalog === 'function') __test.recordRecentCatalog = recordRecentCatalog; if (typeof rebuildTrayMenu === 'function') __test.rebuildTrayMenu = rebuildTrayMenu; if (typeof dispatchColdStartArgs === 'function') __test.dispatchColdStartArgs = dispatchColdStartArgs; if (typeof trayIcon === 'function') __test.trayIcon = trayIcon; if (typeof deskTray !== 'undefined') __test.resetTray = () => { deskTray = null; };";
+const MAIN_TAIL = "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal; __test.createWindow = createWindow; __test.CLOSE_WAIT_MS = CLOSE_WAIT_MS; if (typeof tabsFile === 'function') __test.tabsFile = tabsFile; if (typeof writeSavedTabs === 'function') __test.writeSavedTabs = writeSavedTabs; if (typeof readSavedTabs === 'function') __test.readSavedTabs = readSavedTabs; if (typeof sessionHeld !== 'undefined') __test.sessionHeld = sessionHeld; if (typeof handleUpdateClose === 'function') __test.handleUpdateClose = handleUpdateClose; __test.setQuitting = v => { quitting = !!v; }; __test.windowFile = windowFile; if (typeof setQuitOnClose === 'function') __test.setQuitOnClose = setQuitOnClose; if (typeof trayQuit === 'function') __test.trayQuit = trayQuit; if (typeof ensureTray === 'function') __test.ensureTray = ensureTray; if (typeof onSecondInstance === 'function') __test.onSecondInstance = onSecondInstance; if (typeof launchHidden === 'function') __test.launchHidden = launchHidden; if (typeof syncJumpList === 'function') __test.syncJumpList = syncJumpList; if (typeof syncLoginItemPath === 'function') __test.syncLoginItemPath = syncLoginItemPath; if (typeof catalogFolder === 'function') __test.catalogFolder = catalogFolder; if (typeof offerFile === 'function') __test.offerFile = offerFile; if (typeof recordRecentCatalog === 'function') __test.recordRecentCatalog = recordRecentCatalog; if (typeof rebuildTrayMenu === 'function') __test.rebuildTrayMenu = rebuildTrayMenu; if (typeof dispatchColdStartArgs === 'function') __test.dispatchColdStartArgs = dispatchColdStartArgs; if (typeof trayIcon === 'function') __test.trayIcon = trayIcon; if (typeof deskTray !== 'undefined') __test.resetTray = () => { deskTray = null; };";
 new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
   shellSrc("main.js") + MAIN_TAIL)(
   fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, mainTest);
@@ -1838,6 +1843,63 @@ try {
     try { fs.unlinkSync(path.join(UD, "reset-pending.json")); } catch {}
   }
   check(d6ResetLogin, "D6-reset-login after a Reset, the stand-in's login item reads openAtLogin false (" + d6ResetLoginWhy + ")");
+
+  /* D6-start-login: at start, where login item is on, it is set again with current execPath; never under harness */
+  let d6StartLogin = false, d6StartLoginWhy = "";
+  try {
+    if (typeof mainTest.syncLoginItemPath !== "function") d6StartLoginWhy = "no syncLoginItemPath";
+    else {
+      loginApplied = { openAtLogin: true, args: ["--hidden"], path: "C:\\old\\Etiuda.exe" };
+      const origPlatform = process.platform;
+      const origArgv = process.argv.slice();
+      try {
+        Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+        // Under harness launch: returns null, loginApplied untouched
+        process.argv = ["Etiuda.exe", "--user-data-dir=" + UD];
+        const underHarness = mainTest.syncLoginItemPath();
+        const harnessUntouched = underHarness === null && loginApplied.path === "C:\\old\\Etiuda.exe";
+
+        // Plain start (non-harness): sets login item with current process.execPath
+        process.argv = ["Etiuda.exe"];
+        const plainResult = mainTest.syncLoginItemPath();
+        const plainUpdated = !!plainResult && loginApplied.openAtLogin === true
+          && loginApplied.path === process.execPath;
+
+        // When setting is off: not called
+        loginApplied = { openAtLogin: false, args: [] };
+        const offResult = mainTest.syncLoginItemPath();
+        const offUntouched = offResult === null && loginApplied.openAtLogin === false && !loginApplied.path;
+
+        d6StartLogin = harnessUntouched && plainUpdated && offUntouched;
+        if (!d6StartLogin) d6StartLoginWhy = JSON.stringify({ harnessUntouched, plainUpdated, offUntouched, loginApplied });
+      } finally {
+        Object.defineProperty(process, "platform", { value: origPlatform, configurable: true });
+        process.argv = origArgv;
+      }
+    }
+  } catch (e) { d6StartLoginWhy = String(e && e.message || e).split("\n")[0]; }
+  check(d6StartLogin, "D6-start-login at start the login item is refreshed with current path when on, and never from a harness start (" + d6StartLoginWhy + ")");
+  /* D6-login-name: an earlier build's value, under Electron's default id, is moved to the desk's own name at start, the old one
+     cleared first; and the switch read back by name (the test architect's hold of 23:29). */
+  let d6Name = false, d6NameWhy = "";
+  try {
+    const origPlatform = process.platform, origArgv = process.argv.slice();
+    try {
+      Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+      process.argv = ["Etiuda.exe"];
+      loginApplied = { openAtLogin: true, args: ["--hidden"], path: "C:\\old\\Etiuda.exe" }; loginCalls = [];
+      mainTest.syncLoginItemPath();
+      const cleared = loginCalls.findIndex(s => s.openAtLogin === false && s.name === "electron.app.Etiuda");
+      const moved = loginCalls.findIndex(s => s.openAtLogin === true && s.name === "app.etiuda.desktop" && s.path === process.execPath);
+      const got = electron.app.getLoginItemSettings();
+      d6Name = cleared >= 0 && moved > cleared && got.launchItems.length === 1 && got.launchItems[0].name === "app.etiuda.desktop";
+      if (!d6Name) d6NameWhy = JSON.stringify(loginCalls);
+    } finally {
+      Object.defineProperty(process, "platform", { value: origPlatform, configurable: true });
+      process.argv = origArgv;
+    }
+  } catch (e) { d6NameWhy = String(e && e.message || e).split("\n")[0]; }
+  check(d6Name, "D6-login-name an earlier build's Run value is cleared and written again under the desk's own name at start (" + d6NameWhy + ")");
 
   let d6Hidden = false, d6HiddenWhy = "";
   const realWatchD6 = fs.watch;

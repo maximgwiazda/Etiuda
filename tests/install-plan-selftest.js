@@ -659,14 +659,14 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
      request only ever to the installing account's own. */
   const closeCheck = text => {
     const m = macro(text, "customCheckAppRunning");
-    const look = m.match(/nsExec::Exec `"\$SYSDIR\\cmd\.exe" \/C tasklist [^`]*`/g) || [];
+    const look = m.match(/nsExec::Exec `"\$SYSDIR\\cmd\.exe" \/C "\$SYSDIR\\tasklist\.exe" [^`]*`/g) || [];
     const scope = /StrCpy \$R5 `\/FI "USERNAME eq %USERNAME%" `\s+\$\{If\} \$installMode == "all"\s+StrCpy \$R5 ""\s+\$\{EndIf\}/.test(m);
-    const sees = look.length === 2 && look[0].indexOf('tasklist $R5/FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}"') > -1
-      && look[1].indexOf('tasklist /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}"') > -1;
-    const ownAt = look[1] ? m.indexOf(look[1]) : -1, close = m.indexOf("--update-close"), kill = m.indexOf("taskkill");
+    const sees = look.length === 2 && look[0].indexOf('"$SYSDIR\\tasklist.exe" $R5/FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}"') > -1
+      && look[1].indexOf('"$SYSDIR\\tasklist.exe" /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}"') > -1;
+    const ownAt = look[1] ? m.indexOf(look[1]) : -1, close = m.indexOf("--update-close"), kill = m.indexOf('"$SYSDIR\\taskkill.exe"');
     const onlyOwn = ownAt > -1 && close > ownAt && kill > close
       && /Pop \$R8\s+\$\{If\} \$R8 == 0\s+\$\{If\} \$\{FileExists\}/.test(m.slice(ownAt))
-      && /taskkill \/IM "\$\{APP_EXECUTABLE_FILENAME\}" \/FI "USERNAME eq %USERNAME%"/.test(m) && (m.match(/taskkill/g) || []).length === 1;
+      && /"\$SYSDIR\\taskkill\.exe" \/IM "\$\{APP_EXECUTABLE_FILENAME\}" \/FI "USERNAME eq %USERNAME%"/.test(m) && (m.match(/taskkill/g) || []).length === 1;
     const skips = /\$\{Else\}\s+StrCpy \$R7 20\s+\$\{EndIf\}/.test(m.slice(kill));
     const regs = /^\s*Push \$R5\r?\n/.test(m) && /Pop \$R5\s*$/.test(m);
     return scope && sees && onlyOwn && skips && regs;
@@ -674,7 +674,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
   ok(closeCheck(NSH), "13c the close check sees a copy open in any session of an all-users install and ends another person's"
     + " never: the close request goes to this account's copy alone, and with none of its own open a silent run ends 1618 at once");
   ok(!closeCheck(NSH.replace(/(\$\{If\} \$installMode == "all"\s+)StrCpy \$R5 ""/, "$1StrCpy $R5 $R5")), "13c control: the all-users install still looking in one account reads red");
-  ok(!closeCheck(NSH.replace('taskkill /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"', 'taskkill /IM "${APP_EXECUTABLE_FILENAME}"')),
+  ok(!closeCheck(NSH.replace('"$SYSDIR\\taskkill.exe" /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"', '"$SYSDIR\\taskkill.exe" /IM "${APP_EXECUTABLE_FILENAME}"')),
     "13c control: the close request sent to every account's copy reads red");
   ok(!closeCheck(NSH.replace(/\$\{Else\}(\s+)StrCpy \$R7 20(\s+\$\{EndIf\})/, "${Else}$1Nop$2")), "13c control: waiting on another person's copy reads red");
 
@@ -712,6 +712,37 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
   ok(told(doc), "13f README's Installing silently gives IT both commands, the detection key the installer writes ("
     + P.appGuid("app.etiuda.desktop") + "), DisplayVersion, the sessions the close check sees, and that there is no installer log");
   ok(!told(doc.split(P.appGuid("app.etiuda.desktop")).join(P.appGuid("app.etiuda.studio"))), "13f control: Studio's key in the desk's notes reads red");
+
+  /* Stage 2. System tools named by their system path, so cmd looks in System32 first. */
+  const systemPaths = text => {
+    const lines = text.split(/\r?\n/).filter(l => !/^\s*[#;]/.test(l));
+    const calls = lines.filter(l => /\btasklist\b|\btaskkill\b/.test(l));
+    return calls.length >= 3 && calls.every(l =>
+      (!/\btasklist\b/.test(l) || l.includes('"$SYSDIR\\tasklist.exe"')) &&
+      (!/\btaskkill\b/.test(l) || l.includes('"$SYSDIR\\taskkill.exe"'))
+    );
+  };
+  ok(systemPaths(NSH), "13g no line runs tasklist or taskkill except as \"$SYSDIR\\tasklist.exe\" and \"$SYSDIR\\taskkill.exe\"");
+  ok(!systemPaths(NSH.replace('"$SYSDIR\\tasklist.exe"', 'tasklist')), "13g control: one bare tasklist put back reads red");
+
+  /* Stage 3. Start with Windows Run key: removed on plain uninstall, kept on update. */
+  const unRunValue = text => {
+    const un = macro(text, "customUnInstall");
+    const at = un.indexOf('${IfNot} ${isUpdated}');
+    const end = at >= 0 ? un.indexOf('${EndIf}', at) : -1;
+    if (at < 0 || end < 0) return false;
+    const block = un.slice(at, end);
+    /* Both names (the desk's own and Electron's default id earlier builds wrote under), each deleted only while its command
+       starts this install's program (the test architect's hold of 23:29). */
+    const guarded = (name) => new RegExp('ReadRegStr \\$0 HKCU "Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run" "' + name
+      + '"\\s+StrCpy \\$0 \\$0 \\$R9\\s+\\$\\{If\\} \\$0 == \\$R8\\s+DeleteRegValue HKCU "Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run" "' + name + '"');
+    const tail = un.slice(at);
+    return /StrCpy \$R8 `"\$INSTDIR\\\$\{APP_EXECUTABLE_FILENAME\}"`/.test(tail)
+      && guarded('\\$\\{APP_ID\\}').test(tail) && guarded('electron\\.app\\.\\$\\{PRODUCT_NAME\\}').test(tail);
+  };
+  ok(unRunValue(NSH), "13h the uninstall hook deletes this account's Start with Windows Run value only when not updating");
+  ok(!unRunValue(NSH.split('${IfNot} ${isUpdated}').join('${If} ${isUpdated}')), "13h control: deleting on update reads red");
+  ok(!unRunValue(NSH.split("${If} $0 == $R8\n      DeleteRegValue").join("DeleteRegValue")), "13h control: deleting without the program's check reads red");
 }
 
 console.log("\n#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);

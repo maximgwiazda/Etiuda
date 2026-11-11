@@ -482,7 +482,7 @@
   ${EndIf}
   StrCpy $R7 0
   ${Do}
-    nsExec::Exec `"$SYSDIR\cmd.exe" /C tasklist $R5/FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
+    nsExec::Exec `"$SYSDIR\cmd.exe" /C "$SYSDIR\tasklist.exe" $R5/FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
     Pop $R8
     ${If} $R8 != 0
       ${ExitDo}
@@ -491,14 +491,14 @@
       DetailPrint "$R6"
       # Only this account's own copy is asked to close; another person's is never ended. With none of its own open there
       # is nothing to wait for, so the run goes straight to Retry, or to 1618 when silent.
-      nsExec::Exec `"$SYSDIR\cmd.exe" /C tasklist /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
+      nsExec::Exec `"$SYSDIR\cmd.exe" /C "$SYSDIR\tasklist.exe" /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
       Pop $R8
       ${If} $R8 == 0
         ${If} ${FileExists} "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
           nsExec::Exec /TIMEOUT=3000 `"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --update-close`
           Pop $R8
         ${EndIf}
-        nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"` ; plant:installer-asks-close
+        nsExec::Exec `"$SYSDIR\cmd.exe" /C "$SYSDIR\taskkill.exe" /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"` ; plant:installer-asks-close
         Pop $R8
       ${Else}
         StrCpy $R7 20
@@ -544,6 +544,28 @@
     Call un.RemoveStaleLinks
   ${EndIf}
   !endif
+
+  # START WITH WINDOWS: this account's Run value goes with the desk (never on an update), and only while it still starts
+  # this install's program. Two names: the desk's own, which it writes since this build, and Electron's default id,
+  # "electron.app." and the product name, which earlier builds wrote under (the test architect's hold of 23:29).
+  ${IfNot} ${isUpdated}
+    Push $R8
+    Push $R9
+    StrCpy $R8 `"$INSTDIR\${APP_EXECUTABLE_FILENAME}"`
+    StrLen $R9 $R8
+    ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${APP_ID}"
+    StrCpy $0 $0 $R9
+    ${If} $0 == $R8
+      DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${APP_ID}"
+    ${EndIf}
+    ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "electron.app.${PRODUCT_NAME}"
+    StrCpy $0 $0 $R9
+    ${If} $0 == $R8
+      DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "electron.app.${PRODUCT_NAME}"
+    ${EndIf}
+    Pop $R9
+    Pop $R8
+  ${EndIf}
 
   # THE etiuda: LINK goes with the desk, and only while it still opens this desk: another program's is left as it is.
   # From where the install wrote it, then from the uninstalling account's HKCU, where the desk's own start writes it.
