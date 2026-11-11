@@ -347,18 +347,28 @@ let assertMl17WaitLine = (s) => /every lane is held.*waiting for one, up to 4 h/
   const waiterCode = `import fs from "node:fs";
 import * as G from ${JSON.stringify(pathToFileURL(GATE_RUN).href)};
 const slots = ${JSON.stringify(slots)};
-const r = G.acquireLock(slots[0], "ml17-waiter", ${JSON.stringify(ROOT)}, undefined, { slots, pollMs: 200 });
+const r = G.acquireLock(slots[0], "ml17-waiter", ${JSON.stringify(ROOT)}, undefined, { slots, pollMs: 200, testIdleMinutes: 0 });
 const took = r.ok && fs.existsSync(slots[0]);
 process.stdout.write(JSON.stringify({ ok: r.ok, took }) + "\\n");
 process.exit(r.ok ? 0 : 1);
 `;
   fs.writeFileSync(runnerScript, waiterCode);
-  const childWaiter = spawn(process.execPath, [runnerScript], { stdio: ["ignore", "pipe", "pipe"] });
+  /* The waiter reads idle minutes from the lab's stand-in (machine-lock's isLabEnv needs a lab ETIUDA_LOCK_PATH): the real read
+     compiles C# in PowerShell, and its first pass with both slots held, beside the live-holder checks, ran past a fixed 3 s
+     under four heavy lanes, so the leg freed a slot before the wait line was printed (release profile on 6d9bdcae, the test
+     architect, 2026-11-11). */
+  const childWaiter = spawn(process.execPath, [runnerScript], { stdio: ["ignore", "pipe", "pipe"],
+    env: Object.assign({}, process.env, { ETIUDA_LOCK_PATH: slots[0], ETIUDA_TEST_IDLE_MINUTES: "0" }) });
   let waiterOut = "";
   childWaiter.stdout.on("data", (d) => { waiterOut += d; });
   childWaiter.stderr.on("data", (d) => { waiterOut += d; });
 
-  await new Promise((r) => setTimeout(r, 3000));
+  /* Wait for the wait line itself, up to 30 s, before freeing a slot: the leg asks that the waiter announces its wait and is
+     still waiting, not that it does so within a fixed time. */
+  const lineBy = Date.now() + 30000;
+  while (Date.now() < lineBy && !assertMl17WaitLine(waiterOut) && childWaiter.exitCode === null) {
+    await new Promise((r) => setTimeout(r, 200));
+  }
   const waitingAt3s = childWaiter.exitCode === null;
 
   free(slots, h1);
@@ -375,7 +385,7 @@ process.exit(r.ok ? 0 : 1);
 
   check(refused && waitingAt3s && hasWaitLine && tookFreed,
     "ml17 gate-run waits up to 4 h when every lane is held and prints the wait line, then takes a freed slot: refused 1s "
-    + refused + ", waiting at 3s " + waitingAt3s + ", printed wait line " + hasWaitLine + ", took freed " + tookFreed);
+    + refused + ", still waiting when its line came " + waitingAt3s + ", printed wait line " + hasWaitLine + ", took freed " + tookFreed);
 
   h1.kill(); h2.kill(); h3.kill();
 }
