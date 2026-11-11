@@ -433,12 +433,13 @@
   !endif
 
   # THE etiuda: LINK, so an invitation opened before the desk's first start still reaches it: the three values
-  # app.setAsDefaultProtocolClient("etiuda") writes at that start (registerEtiudaLink in shell/main.js), and under
-  # HKCU as it writes them, whatever the install mode. The desk is the build that registers the .ec type.
+  # app.setAsDefaultProtocolClient("etiuda") writes at that start (registerEtiudaLink in shell/main.js), where the .ec
+  # type goes: HKLM for an all-users install, so every account has it, HKCU for a per-user one. The desk is the build
+  # that registers the .ec type.
   !ifmacrodef registerFileAssociations
-  WriteRegStr HKCU "Software\Classes\etiuda" "" "URL:etiuda" # plant:f6-link-name
-  WriteRegStr HKCU "Software\Classes\etiuda" "URL Protocol" "" # plant:f6-link-flag
-  WriteRegStr HKCU "Software\Classes\etiuda\shell\open\command" "" `"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"` # plant:f6-link-open
+  WriteRegStr SHELL_CONTEXT "Software\Classes\etiuda" "" "URL:etiuda" # plant:f6-link-name
+  WriteRegStr SHELL_CONTEXT "Software\Classes\etiuda" "URL Protocol" "" # plant:f6-link-flag
+  WriteRegStr SHELL_CONTEXT "Software\Classes\etiuda\shell\open\command" "" `"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"` # plant:f6-link-open
   !endif
 
   # THE UPDATER'S CACHE, which nothing here will ever spend: installApplicationFiles copies the
@@ -461,6 +462,7 @@
 # the installer waits and says so. Still open after that, it asks for Retry; a silent install gives up there with 1618,
 # the retry-later code README.md lists, and leaves the installed version as it was. Both sentences name ${PRODUCT_NAME}.
 !macro customCheckAppRunning
+  Push $R5
   Push $R6
   Push $R7
   Push $R8
@@ -472,21 +474,35 @@
     StrCpy $R6 "${PRODUCT_NAME} is running, and the installer will close it before going on."
     StrCpy $R9 "${PRODUCT_NAME} is running. Close it, then choose Retry."
   ${EndIf}
+  # An all-users install looks in every session, since every account runs its files; a per-user install looks in this
+  # account's alone, since another account's copy runs from that account's own folder.
+  StrCpy $R5 `/FI "USERNAME eq %USERNAME%" `
+  ${If} $installMode == "all"
+    StrCpy $R5 ""
+  ${EndIf}
   StrCpy $R7 0
   ${Do}
-    nsExec::Exec `"$SYSDIR\cmd.exe" /C tasklist /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
+    nsExec::Exec `"$SYSDIR\cmd.exe" /C tasklist $R5/FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
     Pop $R8
     ${If} $R8 != 0
       ${ExitDo}
     ${EndIf}
     ${If} $R7 == 0
       DetailPrint "$R6"
-      ${If} ${FileExists} "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
-        nsExec::Exec /TIMEOUT=3000 `"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --update-close`
-        Pop $R8
-      ${EndIf}
-      nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"` ; plant:installer-asks-close
+      # Only this account's own copy is asked to close; another person's is never ended. With none of its own open there
+      # is nothing to wait for, so the run goes straight to Retry, or to 1618 when silent.
+      nsExec::Exec `"$SYSDIR\cmd.exe" /C tasklist /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
       Pop $R8
+      ${If} $R8 == 0
+        ${If} ${FileExists} "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
+          nsExec::Exec /TIMEOUT=3000 `"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --update-close`
+          Pop $R8
+        ${EndIf}
+        nsExec::Exec `"$SYSDIR\cmd.exe" /C taskkill /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"` ; plant:installer-asks-close
+        Pop $R8
+      ${Else}
+        StrCpy $R7 20
+      ${EndIf}
     ${EndIf}
     IntOp $R7 $R7 + 1
     ${If} $R7 > 20
@@ -504,6 +520,7 @@
   Pop $R8
   Pop $R7
   Pop $R6
+  Pop $R5
 !macroend
 
 # AN UPDATE LEAVES THE INSTALLED FILES WHERE THEY ARE: the new installer copies over them only once its own extraction to a
@@ -529,10 +546,15 @@
   !endif
 
   # THE etiuda: LINK goes with the desk, and only while it still opens this desk: another program's is left as it is.
+  # From where the install wrote it, then from the uninstalling account's HKCU, where the desk's own start writes it.
   !ifmacrodef unregisterFileAssociations
+  ReadRegStr $0 SHELL_CONTEXT "Software\Classes\etiuda\shell\open\command" ""
+  ${If} $0 == `"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"`
+    DeleteRegKey SHELL_CONTEXT "Software\Classes\etiuda" # plant:f6-link-gone
+  ${EndIf}
   ReadRegStr $0 HKCU "Software\Classes\etiuda\shell\open\command" ""
   ${If} $0 == `"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"`
-    DeleteRegKey HKCU "Software\Classes\etiuda" # plant:f6-link-gone
+    DeleteRegKey HKCU "Software\Classes\etiuda"
   ${EndIf}
   !endif
 

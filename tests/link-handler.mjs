@@ -536,14 +536,15 @@ try {
     "3h9 electron-builder.js protocols deep-compare to [{name:\"Etiuda\", schemes:[\"etiuda\"]}], and lifting plant:link-protocols drops the compare: "
     + protocolsPlant.detail + ", sha " + (protocolsPlant.back ? "restored" : "differs"));
 
-  /* The first day's F6: the Windows installer registers etiuda: per user at install, the three values
-     app.setAsDefaultProtocolClient("etiuda") writes at the desk's first start, and takes the key away at uninstall while it still
-     opens this desk; nothing it does about the link reaches outside HKCU. Read from the NSIS script, as makensis takes it. */
+  /* The first day's F6: the Windows installer registers etiuda: at install, the three values
+     app.setAsDefaultProtocolClient("etiuda") writes at the desk's first start, where the install mode writes (SHELL_CONTEXT, HKLM
+     for all users and HKCU for one), and takes the key away at uninstall, from there and from HKCU, while it still opens this desk;
+     no line of it names HKLM outright. Read from the NSIS script, as makensis takes it. */
   const NSH = path.join(ROOT, "shell", "installer.nsh");
   const OPEN_CMD = "`\"$INSTDIR\\${APP_EXECUTABLE_FILENAME}\" \"%1\"`";
-  const LINK_WRITES = ["WriteRegStr HKCU \"Software\\Classes\\etiuda\" \"\" \"URL:etiuda\"",
-    "WriteRegStr HKCU \"Software\\Classes\\etiuda\" \"URL Protocol\" \"\"",
-    "WriteRegStr HKCU \"Software\\Classes\\etiuda\\shell\\open\\command\" \"\" " + OPEN_CMD];
+  const LINK_WRITES = ["WriteRegStr SHELL_CONTEXT \"Software\\Classes\\etiuda\" \"\" \"URL:etiuda\"",
+    "WriteRegStr SHELL_CONTEXT \"Software\\Classes\\etiuda\" \"URL Protocol\" \"\"",
+    "WriteRegStr SHELL_CONTEXT \"Software\\Classes\\etiuda\\shell\\open\\command\" \"\" " + OPEN_CMD];
   function linkInNsh(src, mainSrc) {
     const body = name => (new RegExp("!macro " + name + "\\r?\\n([\\s\\S]*?)!macroend").exec(src) || [])[1] || "";
     const bare = l => l.trim().replace(/\s+[#;][^"'`]*$/, "");
@@ -552,22 +553,25 @@ try {
     const deskOnly = (s, macro) => Array.from(s.matchAll(new RegExp("!ifmacrodef " + macro + "\\r?\\n([\\s\\S]*?)!endif", "g")), m => m[1]).join("\n");
     const wrote = regLines(deskOnly(ins, "registerFileAssociations")).filter(l => /\\etiuda/.test(l));
     const unBody = deskOnly(un, "unregisterFileAssociations").split(/\r?\n/).map(bare);
-    const read = unBody.indexOf("ReadRegStr $0 HKCU \"Software\\Classes\\etiuda\\shell\\open\\command\" \"\"");
-    const when = unBody.indexOf("${If} $0 == " + OPEN_CMD);
-    const del = unBody.indexOf("DeleteRegKey HKCU \"Software\\Classes\\etiuda\"");
-    const end = unBody.indexOf("${EndIf}", when);
+    const takes = hive => {
+      const read = unBody.indexOf("ReadRegStr $0 " + hive + " \"Software\\Classes\\etiuda\\shell\\open\\command\" \"\"");
+      const when = unBody.indexOf("${If} $0 == " + OPEN_CMD, read);
+      const del = unBody.indexOf("DeleteRegKey " + hive + " \"Software\\Classes\\etiuda\"", when);
+      const end = unBody.indexOf("${EndIf}", when);
+      return read >= 0 && when > read && del > when && end > del;
+    };
     const everyLink = regLines(src).filter(l => /Classes\\etiuda(\\|")/.test(l));
     return {
       install: JSON.stringify(wrote) === JSON.stringify(LINK_WRITES),
-      uninstall: read >= 0 && when > read && del > when && end > del,
-      hkcu: everyLink.length >= 5 && everyLink.every(l => /^\w+ (\$\d+ )?HKCU "/.test(l)),
+      uninstall: takes("SHELL_CONTEXT") && takes("HKCU"),
+      hkcu: everyLink.length >= 7 && everyLink.every(l => /^\w+ (\$\d+ )?(HKCU|SHELL_CONTEXT) "/.test(l)),
       sameAsDesk: /app\.setAsDefaultProtocolClient\("etiuda"\)/.test(mainSrc),
     };
   }
   const nshNow = linkInNsh(fs.readFileSync(NSH, "utf8"), fs.readFileSync(MAIN, "utf8"));
   check(nshNow.install && nshNow.uninstall && nshNow.hkcu && nshNow.sameAsDesk,
-    "987p the desk's installer writes etiuda: under HKCU at install, the three values registerEtiudaLink's call writes, and takes the key at"
-    + " uninstall only while it opens this desk, every line of it in HKCU and in the desk's build alone: " + JSON.stringify(nshNow));
+    "987p the desk's installer writes etiuda: where the install mode writes, the three values registerEtiudaLink's call writes, and takes the"
+    + " key at uninstall from there and from HKCU only while it opens this desk, no line of it naming HKLM, in the desk's build alone: " + JSON.stringify(nshNow));
   const nshPlants = ["plant:f6-link-name", "plant:f6-link-flag", "plant:f6-link-open", "plant:f6-link-gone"].map(tag => {
     const r = lift(tag, src => { const v = linkInNsh(src, fs.readFileSync(MAIN, "utf8")); return !(v.install && v.uninstall); }, NSH);
     return tag + " " + (r.turned ? "turned" : r.detail) + (r.back ? "" : ", sha differs");

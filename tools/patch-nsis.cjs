@@ -9,6 +9,7 @@
  *    so elevated copy closes any running app before copying files.
  * 3. Every template MessageBox: a silent default (/SD), so a silent run ends with an exit code (SILENT_DEFAULTS).
  * 4. The exit codes a deployment tool can act on (EXIT_CODES).
+ * 5. A silent run with no switch that no person could start the app from installs for all users (MACHINE_WIDE).
  */
 "use strict";
 const fs = require("node:fs");
@@ -42,6 +43,9 @@ const SILENT_DEFAULTS = [
   ["multiUserUi.nsh", "MessageBox mb_IconStop|mb_TopMost|mb_SetForeground \"Logon service not running, aborting!\"", "IDOK"],
   ["multiUserUi.nsh", "MessageBox mb_IconStop|mb_TopMost|mb_SetForeground \"Unable to elevate, error $0\"", "IDOK"],
   ["uninstaller.nsh", "MessageBox MB_OKCANCEL \"$(areYouSureToUninstall)\"", "IDOK"],
+  /* The template answers Retry here, which falls through to an in-place overwrite that ignores a locked file and ends 0;
+     Cancel ends the run with 1618 (EXIT_CODES), so the deployment tool tries again later. */
+  ["include/extractAppPackage.nsh", "MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION \"$(appCannotBeClosed)\"", "IDCANCEL"],
 ];
 
 /* The index just past the box's quoted text, the first quote after `from` opening it; NSIS escapes a quote as $\".
@@ -73,8 +77,12 @@ function applySilentDefaults(nsisDir) {
     if (!fs.existsSync(p)) continue;
     const text = file in edited ? edited[file] : fs.readFileSync(p, "utf8");
     const row = silentRowLine(text, head);
-    if (row.why || row.close < 0 || /\/SD\s+ID[A-Z]+/i.test(row.line)) continue;
-    edited[file] = text.slice(0, row.start) + row.line.slice(0, row.close) + " /SD " + sd + row.line.slice(row.close) + text.slice(row.end);
+    if (row.why || row.close < 0) continue;
+    /* A default the template already gives just after the text is replaced by the row's; one elsewhere is left. */
+    const given = /^ \/SD (ID[A-Z]+)\b/.exec(row.line.slice(row.close));
+    if (given ? given[1] === sd : /\/SD\s+ID[A-Z]+/i.test(row.line)) continue;
+    const rest = row.line.slice(row.close + (given ? given[0].length : 0));
+    edited[file] = text.slice(0, row.start) + row.line.slice(0, row.close) + " /SD " + sd + rest + text.slice(row.end);
   }
   for (const file of Object.keys(edited)) fs.writeFileSync(path.join(nsisDir, file), edited[file], "utf8");
 }
@@ -120,6 +128,50 @@ const EXIT_CODES = [
   ["installer.nsi", "!insertmacro UAC_RunElevated", ELEVATION_CODE],
   ["multiUser.nsh", "!insertmacro UAC_RunElevated", ELEVATION_CODE],
   ["include/allowOnlyOneInstallerInstance.nsh", "notfound:", ["SetErrorLevel 1618"]],
+  ["include/extractAppPackage.nsh", "AbortExtract7za:", ["SetErrorLevel 1618"]],
+];
+
+/* 5. initMultiUser falls back to a per-user install when neither switch is given, so a silent run by the system account
+ *    installs into that account's own profile, where no person can start the app. Such a run, and one by an elevated
+ *    administrator in session 0, where no person's desktop is, installs for all users; a switch, an interactive run and
+ *    every other account keep the template's choice. The uninstaller is left as it is: its registered command names a
+ *    switch. Inserted before the mode is chosen, after the template has read the switches into $R0. */
+const MACHINE_WIDE = [
+  ["assistedInstaller.nsh", "${if} $hasPerUserInstallation == \"1\"", [
+    "!ifndef BUILD_UNINSTALLER",
+    "${If} ${Silent}",
+    "${AndIf} ${UAC_IsAdmin}",
+    "  ${GetOptions} $R0 \"/allusers\" $R1",
+    "  ${If} ${Errors}",
+    "    ${GetOptions} $R0 \"/currentuser\" $R1",
+    "    ${If} ${Errors}",
+    "      Push $R2",
+    "      Push $R3",
+    "      Push $R4",
+    "      StrCpy $R4 \"0\"",
+    "      nsExec::Exec `\"$SYSDIR\\cmd.exe\" /C \"$SYSDIR\\whoami.exe\" /user /FO CSV /NH | \"$SYSDIR\\findstr.exe\" /C:\"\\\"S-1-5-18\\\"\"`",
+    "      Pop $R2",
+    "      ${If} $R2 == \"0\"",
+    "        StrCpy $R4 \"1\"",
+    "      ${EndIf}",
+    "      System::Call 'kernel32::GetCurrentProcessId() i .R2'",
+    "      System::Call 'kernel32::ProcessIdToSessionId(i R2, *i .R3) i .R2'",
+    "      ${If} $R2 <> 0",
+    "      ${AndIf} $R3 == \"0\"",
+    "        StrCpy $R4 \"1\"",
+    "      ${EndIf}",
+    "      ${If} $R4 == \"1\"",
+    "        StrCpy $hasPerMachineInstallation \"1\"",
+    "        StrCpy $hasPerUserInstallation \"0\"",
+    "      ${EndIf}",
+    "      Pop $R4",
+    "      Pop $R3",
+    "      Pop $R2",
+    "    ${EndIf}",
+    "  ${EndIf}",
+    "${EndIf}",
+    "!endif",
+  ], "before"],
 ];
 
 /* The row's anchor as a line index, or why not: its trimmed line must occur exactly once. */
@@ -127,27 +179,32 @@ function exitRowAt(lines, anchor) {
   const hits = lines.map((l, i) => (l.trim() === anchor ? i : -1)).filter(i => i > -1);
   return hits.length === 1 ? hits[0] : (hits.length ? "found more than once" : "not found");
 }
-const exitRowDone = (lines, at, add) => add.every((a, k) => (lines[at + 1 + k] || "").trim() === a.trim());
+/* A row's lines go after its anchor, indented as the line after it, or "before" it, indented as the anchor; a compiler
+   directive (!ifndef, !endif) goes at the margin. */
+const insertAt = (at, add, where) => (where === "before" ? at - add.length : at + 1);
+const exitRowDone = (lines, at, add, where) => insertAt(at, add, where) >= 0
+  && add.every((a, k) => (lines[insertAt(at, add, where) + k] || "").trim() === a.trim());
 
-function applyExitCodes(nsisDir) {
-  for (const [file, anchor, add] of EXIT_CODES) {
+function applyExitCodes(nsisDir, rows = EXIT_CODES) {
+  for (const [file, anchor, add, where] of rows) {
     const p = path.join(nsisDir, file);
     if (!fs.existsSync(p)) continue;
     const lines = fs.readFileSync(p, "utf8").split("\n");
     const at = exitRowAt(lines, anchor);
-    if (typeof at === "string" || exitRowDone(lines, at, add)) continue;
-    const next = lines[at + 1] || "", indent = /^\s*/.exec(next)[0], cr = lines[at].endsWith("\r") ? "\r" : "";
-    lines.splice(at + 1, 0, ...add.map(a => indent + a + cr));
+    if (typeof at === "string" || exitRowDone(lines, at, add, where)) continue;
+    const near = where === "before" ? lines[at] : (lines[at + 1] || ""), indent = /^\s*/.exec(near)[0];
+    const cr = lines[at].endsWith("\r") ? "\r" : "";
+    lines.splice(where === "before" ? at : at + 1, 0, ...add.map(a => (a.startsWith("!") ? "" : indent) + a + cr));
     fs.writeFileSync(p, lines.join("\n"), "utf8");
   }
 }
 
-function exitCodesMissing(nsisDir) {
-  return EXIT_CODES.filter(([file, anchor, add]) => {
+function exitCodesMissing(nsisDir, rows = EXIT_CODES) {
+  return rows.filter(([file, anchor, add, where]) => {
     const p = path.join(nsisDir, file);
     if (!fs.existsSync(p)) return true;
     const lines = fs.readFileSync(p, "utf8").split("\n"), at = exitRowAt(lines, anchor);
-    return typeof at === "string" || !exitRowDone(lines, at, add);
+    return typeof at === "string" || !exitRowDone(lines, at, add, where);
   }).map(([file, anchor]) => file + ": " + anchor);
 }
 
@@ -163,6 +220,7 @@ function verifyNsisPatches(rootDir) {
 
   const nsisDir = path.dirname(uiPath);
   const silentMissing = silentDefaultsMissing(nsisDir), unanswered = unansweredBoxes(nsisDir), exitMissing = exitCodesMissing(nsisDir);
+  const machineWideMissing = exitCodesMissing(nsisDir, MACHINE_WIDE);
   return {
     multiUserUiPatched: !!multiUserUiPatched,
     installSectionPatched: !!installSectionPatched,
@@ -171,8 +229,10 @@ function verifyNsisPatches(rootDir) {
     unanswered,
     exitCodesPatched: exitMissing.length === 0,
     exitMissing,
+    machineWidePatched: machineWideMissing.length === 0,
+    machineWideMissing,
     applied: !!(multiUserUiPatched && installSectionPatched) && silentMissing.length === 0 && unanswered.length === 0
-      && exitMissing.length === 0,
+      && exitMissing.length === 0 && machineWideMissing.length === 0,
   };
 }
 
@@ -219,6 +279,7 @@ function applyNsisPatches(rootDir) {
 
   applySilentDefaults(path.dirname(uiPath));
   applyExitCodes(path.dirname(uiPath));
+  applyExitCodes(path.dirname(uiPath), MACHINE_WIDE);
   return verifyNsisPatches(rootDir);
 }
 
