@@ -704,7 +704,7 @@ await checkAsync("L16 every Library page holds its content when reached from ano
   const holds = {
     catmac: d => d.querySelectorAll(".mg-cat").length >= 2,
     intents: d => d.querySelectorAll(".manage-row.mg-int").length === 2,
-    who: d => /Concierge, Porter/.test((d.querySelector("#mgWho") || {}).value || ""),
+    who: d => /Concierge[\s\S]*Porter/.test(d.textContent),
     data: d => /3\scards[\s\S]*2\sintents/.test((d.querySelector("#mgCatList .ec-row.is-loaded") || {}).textContent || ""),
   };
   const seen = [];

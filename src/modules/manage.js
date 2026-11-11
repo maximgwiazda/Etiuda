@@ -1,5 +1,5 @@
 import { ensureCustomCat, openCardEditor, hideCard } from "./card-editor.js";
-import { baseCard, cardCommits, cardTitle, findCard } from "./card-model.js";
+import { baseCard, cardCommits, cardTitle, findCard, cardLang, cardText } from "./card-model.js";
 import { stampHtml } from "./card-chain.js";
 import { movedCardIds, cardOrderIdx, catSortIdx, ensureCardOrder, cardOrderTouched, moveCardWithin } from "./card-order.js";
 import { isAlwaysCat, setCatAlways } from "./cat-roles.js";
@@ -9,14 +9,14 @@ import { catToggle, closeModal, dressDialogInputs, modalOpen, openCover, wireFol
 import { markCutText } from "./cut-text.js";
 import { openIntentEditor, openCategoryEditor } from "./editors.js";
 import { ICON_CHEVRON_R, ICON_EYE_SHUT, ICON_EYE_OPEN, ICON_EDIT, ICON_TRASH, ICON_STAR_ON, ICON_STAR_OFF, ICON_PLUS, ICON_ROLE_ALWAYS } from "./icons.js";
-import { intentNavName } from "./intent-text.js";
+import { intentNavName, fill, escFilled } from "./intent-text.js";
 import { askClearLocal, bringBackCleared, clearedHeld } from "./local-memory.js";
 import { mgReduceMotion, mgPinCard, E_EASE } from "./motion.js";
 import { drawIntentRail } from "./rail-list.js";
 import { normWhoList, WHO_BASE } from "./stock.js";
 import { lySet } from "./storage.js";
 import { drawPills } from "./tabs.js";
-import { t, catalogCountsLine, counted, toast, translateTree } from "./ui-lang.js";
+import { t, catalogCountsLine, counted, toast, translateTree, offerUndo } from "./ui-lang.js";
 import { isFavourite, isIntentFavourite, pack, whoOptions, savePack } from "./pack.js";
 import { removeCard, removeIntent, setIntentHidden, syncIntentOrder, toggleFavourite, toggleIntentFavourite } from "./favourites.js";
 import { primaryCatKeys, intentCardCounts } from "./card-intent.js";
@@ -25,7 +25,7 @@ import { intentIdAt, intentIdxFromId, intentIsCustom, intentIsOverridden, intent
 import { applyCatsToGlobal, removeCategory } from "./cat-set.js";
 import { esc } from "./esc.js";
 import { syncRoleDrum } from "./role-drum.js";
-import { $ } from "./dom.js";
+import { $, roleSel } from "./dom.js";
 import { macroBlockCount, recountMacros, totalMacroCount } from "./card-counts.js";
 import { rebuildCards } from "./rebuild.js";
 import { render } from "./render.js";
@@ -386,9 +386,11 @@ function wireManageDrag(){
     const crow=e.target.closest(".mg-cat-row[data-crow]");
     const mrow=e.target.closest(".manage-row.mg-card[data-cardrow]");
     const irow=e.target.closest(".manage-row[data-introw]");
+    const wrow=e.target.closest(".lw-name[data-wrow]");
     if(crow) mgDrag={kind:"cat", key:crow.getAttribute("data-crow"), el:crow.closest(".mg-cat")};
     else if(mrow) mgDrag={kind:"card", key:mrow.getAttribute("data-cardrow"), el:mrow};
     else if(irow) mgDrag={kind:"intent", key:irow.getAttribute("data-introw"), el:irow};
+    else if(wrow) mgDrag={kind:"who", key:wrow.getAttribute("data-wrow"), el:wrow};
     else return;
     mgClearDropTarget();   // a drag cancelled by the system never reaches pointerup; start clean
     mgDrag.x=e.clientX; mgDrag.y=e.clientY; mgDrag.moved=false; mgDrag.dropCat=null;
@@ -408,6 +410,21 @@ function wireManageDrag(){
     if(Date.now()-mgSwapLock<190) return;
     const under=document.elementFromPoint(e.clientX,e.clientY);
     if(!under||!under.closest) return;
+    if(mgDrag.kind==="who"){
+      const row=under.closest(".lw-name[data-wrow]");
+      if(!row||row===mgDrag.el) return;
+      if(row.parentNode!==mgDrag.el.parentNode) return;
+      const current=whoOptions().slice();
+      const fi=current.indexOf(mgDrag.key);
+      const ti=current.indexOf(row.getAttribute("data-wrow"));
+      if(fi<0||ti<0) return;
+      current.splice(fi,1);
+      current.splice(ti,0,mgDrag.key);
+      setWhoList(current);
+      mgSwapLock=Date.now();
+      mgDomMove(mgDrag.el,row);
+      return;
+    }
     if(mgDrag.kind==="intent"){
       /* The simplest of the three: one flat list, no groups to cross and nothing to re-parent, so
          a reorder is the only gesture and it is live all the way. */
@@ -478,6 +495,11 @@ function endMgDrag(){
   mgClearDropTarget();
   mgDrag=null;
   if(!moved) return;
+  if(kind==="who"){
+    const page=libPage();
+    if(page) refreshRolePage(page);
+    return;
+  }
   /* A category change rewrites the card's data, not just an order array, so it needs the full
      round: rebuild, repaint the list and the pills (the counts moved), and re-render the tree
      because the row now belongs under a different parent. The target is opened first, so the
@@ -621,7 +643,7 @@ const libFind=()=>t("Search the library");
 const libSections=()=>[
   {key:"catmac", icon:"categories", name:t("Categories & cards"), lede:t("Each category with its cards, its place in the order, and whether it supports every intent.")},
   {key:"intents", icon:"intents", name:t("Intents"), lede:t("Favourites first, hidden intents at the foot.")},
-  {key:"who", icon:"user", name:t("ROLE suggestions"), lede:t("The names the ROLE wheel offers, separated by commas.")},
+  {key:"who", icon:"user", name:t("ROLE suggestions"), lede:t("The names the ROLE wheel offers, in the order it offers them. Dragging a name moves it.")},
   {key:"data", icon:"cards", name:t("Catalog & data"), lede:t("The catalog in use on this desk, and loading another catalog file.")}
 ];
 function libFold(s){
@@ -671,6 +693,8 @@ function applyLibView(page){
         });
       } else if(key==="intents"){
         d.querySelectorAll(".mg-intent-row").forEach(r=>r.removeAttribute("hidden"));
+      } else if(key==="who"){
+        d.querySelectorAll(".lw-name[data-wrow]").forEach(r=>r.removeAttribute("hidden"));
       }
     } else {
       let hit=false;
@@ -705,9 +729,13 @@ function applyLibView(page){
           else r.setAttribute("hidden","");
         });
       } else if(key==="who"){
-        const whoInput=d.querySelector("#mgWho");
-        const whoVal=whoInput?whoInput.value:"";
-        hit=libFold(d.textContent).indexOf(q)>=0 || libFold(whoVal).indexOf(q)>=0;
+        const names = whoOptions().join(" ");
+        hit=libFold(d.textContent).indexOf(q)>=0 || libFold(names).indexOf(q)>=0;
+        d.querySelectorAll(".lw-name[data-wrow]").forEach(r=>{
+          const name=r.getAttribute("data-wrow")||"";
+          if(!q || libFold(name).indexOf(q)>=0) r.removeAttribute("hidden");
+          else r.setAttribute("hidden","");
+        });
       } else {
         hit=libFold(d.textContent).indexOf(q)>=0;
       }
@@ -785,6 +813,230 @@ function wireLibShell(page){
   const mt=page.querySelector("#libMaint");
   if(mt) mt.onclick=()=>openMaintenance();
 }
+const ICON_GRIP = '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><circle cx="6" cy="4" r="1.2"/><circle cx="10" cy="4" r="1.2"/><circle cx="6" cy="8" r="1.2"/><circle cx="10" cy="8" r="1.2"/><circle cx="6" cy="12" r="1.2"/><circle cx="10" cy="12" r="1.2"/></svg>';
+const ICON_REMOVE = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
+
+let mgRoleMarked = "";
+
+function setWhoList(nextList){
+  const next = normWhoList(nextList);
+  pack.who = (next.join("\u0000") === WHO_BASE.join("\u0000")) ? null : next;
+  savePack();
+  syncRoleDrum();
+}
+
+function roleUsesCards(){
+  return (cards || []).filter(m => {
+    const l = cardLang(m);
+    const body = cardText(m, "body", l);
+    return body.indexOf("{ROLE}") >= 0;
+  });
+}
+
+function fillCardReply(m, markedName){
+  const l = cardLang(m);
+  const raw = cardText(m, "body", l);
+  const was = roleSel ? roleSel.value : "";
+  let res = "";
+  try {
+    if(roleSel) roleSel.value = markedName;
+    res = fill(raw, m, true, l);
+  } finally {
+    if(roleSel) roleSel.value = was;
+  }
+  return escFilled(res);
+}
+
+function roleWheelHtml(names, markedName){
+  let prev="", cur="", next="";
+  const n=names.length;
+  if(n>0){
+    let i=names.indexOf(markedName);
+    if(i<0) i=0;
+    cur=names[i]||"";
+    if(n===1){
+      prev=cur; next=cur;
+    } else {
+      prev=names[(i-1+n)%n]||"";
+      next=names[(i+1)%n]||"";
+    }
+  }
+  return '<div class="lw-wheel">'+
+    '<div class="lw-drum">'+
+      '<span class="rd-prev p">'+esc(prev)+'</span>'+
+      '<span class="rd-cur c">'+esc(cur)+'</span>'+
+      '<span class="rd-next q">'+esc(next)+'</span>'+
+    '</div>'+
+    '<div class="lw-drumfield">'+esc(t("customer's name"))+'</div>'+
+  '</div>';
+}
+
+function mgWhoRowsHtml(names, markedName){
+  const tiles = names.map(name => {
+    const on = name === markedName ? " on" : "";
+    const moveTitle = t("Move {NAME}").replace("{NAME}", name);
+    const takeTitle = t("Take {NAME} off the wheel").replace("{NAME}", name);
+    return '<div class="lw-name'+on+'" tabindex="0" role="listitem" data-wrow="'+esc(name)+'">'+
+      '<span class="g" aria-label="'+esc(moveTitle)+'" title="'+esc(moveTitle)+'">'+ICON_GRIP+'</span>'+
+      '<span class="n">'+esc(name)+'</span>'+
+      '<button type="button" class="lw-del" aria-label="'+esc(takeTitle)+'" title="'+esc(takeTitle)+'">'+ICON_REMOVE+'</button>'+
+    '</div>';
+  }).join("");
+
+  const addRow = '<div class="lw-name add">'+
+    '<span class="g">+</span>'+
+    '<input type="text" id="mgAddWho" placeholder="'+esc(t("Add a name"))+'" aria-label="'+esc(t("Add a name"))+'" title="'+esc(t("Enter adds it; commas between names add several"))+'" spellcheck="false" autocomplete="off">'+
+    '<kbd>Enter</kbd>'+
+  '</div>';
+
+  return tiles + addRow;
+}
+
+function mgWhoSideHtml(names, markedName){
+  const uses = roleUsesCards();
+  const wheel = roleWheelHtml(names, markedName);
+  const countStr = uses.length > 0
+    ? t("Cards that say the ROLE: {N}").replace("{N}", uses.length)
+    : t("No card says the ROLE yet.");
+
+  const reads = '<div class="lw-reads">'+
+    uses.map(m => {
+      const title = cardTitle(m);
+      const filled = fillCardReply(m, markedName);
+      return '<div class="lw-ct" role="button" tabindex="0" data-card-id="'+esc(m.id)+'" title="'+esc(t("Opens this card's editor"))+'" aria-label="'+esc(t("Opens this card's editor"))+'">'+
+        '<div class="t">'+esc(title)+'</div>'+
+        '<div class="r">'+filled+'</div>'+
+      '</div>';
+    }).join("")+
+  '</div>';
+
+  return '<div class="lw-side">'+
+    '<div class="lw-h">'+esc(t("On the wheel"))+'</div>'+
+    wheel+
+    '<div class="lw-h lw-h2">'+esc(t("How it reads"))+' · <span class="lw-role-count">'+esc(countStr)+'</span></div>'+
+    reads+
+  '</div>';
+}
+
+function mgWhoSectionHtml(){
+  const names = whoOptions();
+  if(!names.includes(mgRoleMarked)) mgRoleMarked = names[0] || "";
+  return '<div class="lw-role role-b">'+
+    '<div class="lw-main">'+
+      '<div class="lw-names">'+mgWhoRowsHtml(names, mgRoleMarked)+'</div>'+
+    '</div>'+
+    mgWhoSideHtml(names, mgRoleMarked)+
+  '</div>';
+}
+
+function refreshRolePage(page){
+  page = page || libPage() || document;
+  const sec = page.querySelector('details.manage-sec[data-mg="who"] .manage-secbody');
+  if(!sec) return;
+  sec.innerHTML = mgWhoSectionHtml();
+  wireRolePage(page);
+  const cnt = page.querySelector('details.manage-sec[data-mg="who"] .mg-count');
+  if(cnt) cnt.textContent = String(whoOptions().length);
+}
+
+function wireRolePage(page){
+  if(!page) return;
+  const addInput = page.querySelector("#mgAddWho");
+  if(addInput){
+    addInput.onkeydown = e => {
+      if(e.key === "Enter"){
+        e.preventDefault();
+        const val = addInput.value.trim();
+        if(!val) return;
+        const rawAdd = val.split(",").map(s => s.trim()).filter(Boolean);
+        const current = whoOptions();
+        const next = normWhoList(current.concat(rawAdd));
+        setWhoList(next);
+        addInput.value = "";
+        refreshRolePage(page);
+      }
+    };
+  }
+
+  page.querySelectorAll(".lw-name:not(.add)").forEach(row => {
+    row.onclick = e => {
+      if(e.target.closest(".lw-del")) return;
+      const name = row.getAttribute("data-wrow");
+      if(!name) return;
+      mgRoleMarked = name;
+      refreshRolePage(page);
+    };
+
+    row.onkeydown = e => {
+      const name = row.getAttribute("data-wrow");
+      if(!name) return;
+      if(e.key === "Delete"){
+        e.preventDefault();
+        const delBtn = row.querySelector(".lw-del");
+        if(delBtn) delBtn.click();
+        return;
+      }
+      if(e.altKey && (e.key === "ArrowDown" || e.key === "ArrowUp")){
+        e.preventDefault();
+        const current = whoOptions().slice();
+        const idx = current.indexOf(name);
+        if(idx < 0) return;
+        const targetIdx = e.key === "ArrowDown" ? idx + 1 : idx - 1;
+        if(targetIdx < 0 || targetIdx >= current.length) return;
+        current.splice(idx, 1);
+        current.splice(targetIdx, 0, name);
+        setWhoList(current);
+        refreshRolePage(page);
+        const newRow = page.querySelector('.lw-name[data-wrow="'+esc(name)+'"]');
+        if(newRow) newRow.focus();
+        return;
+      }
+      if(e.key === "Enter" || e.key === " "){
+        e.preventDefault();
+        row.click();
+      }
+    };
+
+    const delBtn = row.querySelector(".lw-del");
+    if(delBtn){
+      delBtn.onclick = e => {
+        e.stopPropagation();
+        const name = row.getAttribute("data-wrow");
+        if(!name) return;
+        const current = whoOptions();
+        const was = Array.isArray(pack.who) ? pack.who.slice() : null;
+        const next = current.filter(n => n !== name);
+        setWhoList(next);
+        if(mgRoleMarked === name){
+          mgRoleMarked = next[0] || "";
+        }
+        refreshRolePage(page);
+        const undoMsg = t("Taken off the wheel: {NAME}.").replace("{NAME}", name);
+        offerUndo(undoMsg, () => {
+          pack.who = was;
+          savePack();
+          syncRoleDrum();
+          mgRoleMarked = name;
+          refreshRolePage(page);
+        });
+      };
+    }
+  });
+
+  page.querySelectorAll(".lw-reads .lw-ct[data-card-id]").forEach(cardEl => {
+    cardEl.onclick = () => {
+      const cid = cardEl.getAttribute("data-card-id");
+      if(cid) openCardEditor(cid, null, true);
+    };
+    cardEl.onkeydown = e => {
+      if(e.key === "Enter" || e.key === " "){
+        e.preventDefault();
+        cardEl.click();
+      }
+    };
+  });
+}
+
 function openManage(justHtml){
   applyCatsToGlobal();
   /* The page follows whichever fold is open. A fold the person closed stays closed: the
@@ -854,12 +1106,7 @@ function openManage(justHtml){
        below. It is content in exactly the way categories, cards and intents are - the words a
        desk uses for who it is talking to - not a setting about the catalog file. */
     mgSec("who","ROLE suggestions",
-      '<div class="mf" style="margin-bottom:0">'+
-        '<input type="text" id="mgWho" spellcheck="false" autocomplete="off" '+
-          'placeholder="booker, customer, account holder" '+
-          'title="Notches for the ROLE wheel, comma-separated; blanks and repeats are dropped" '+
-          'value="'+esc(whoOptions().join(", "))+'">'+
-      '</div>',
+      mgWhoSectionHtml(),
       whoOptions().length)+
     /* Everything here acts on the whole library rather than on one entry - what is loaded,
        taking a copy out, bringing one in - which is exactly the line that separates it from
@@ -951,16 +1198,7 @@ function wireLibrary(page){
   wireLibShell(page);
   $("#mgAddIntent").onclick=()=>openIntentEditor(null, true);
   $("#mgAddCat").onclick=()=>startMgCatAdd();
-  /* Commit on change (blur or Enter), not per keystroke - a half-typed word is not a list.
-     Matching the catalog's own list stores null rather than a copy, so the entry keeps
-     following the catalog and a later import is not shadowed by a stale duplicate. */
-  if($("#mgWho")) $("#mgWho").onchange=function(){
-    const next=normWhoList(this.value);
-    pack.who = (next.join("\u0000")===WHO_BASE.join("\u0000")) ? null : next;
-    savePack();
-    this.value=whoOptions().join(", ");     // show what was actually kept
-    syncRoleDrum();   // the drum turns over the new list
-  };
+  wireRolePage(page);
   $("#mgImportCatalog").onclick=importCatalogHere;
   /* Join sits beside Load. It does not replace the catalog this desk has open. */
   const joinBtn=$("#mgJoinTeam");

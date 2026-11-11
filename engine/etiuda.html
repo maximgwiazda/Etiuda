@@ -3703,7 +3703,57 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx.lm-lib .sx-card .mg-int:first-child{border-top:0}
 .sx.lm-lib .sx-card .ec-list{margin:0}
 .sx.lm-lib .sx-card .ec-row{border:0;border-radius:0;margin:0;padding:14px 16px}
-.sx.lm-lib #mgWho{width:min(420px,100%)}
+/* Finding 3: ROLE suggestions width and layout (3B) */
+.sx.lm-lib:not(.is-find) .sx-card:has(details[data-mg="who"]:not([hidden])),
+.sx.lm-lib:not(.is-find) .sx-card:has(.lw-role){background:none;border:0;border-radius:0;overflow:visible;box-shadow:none}
+.sx.lm-lib .sx-page{container-type:inline-size}
+.lw-role{display:grid;grid-template-columns:minmax(280px,380px) minmax(0,1fr);gap:40px;align-items:start;width:100%;min-width:0}
+.lw-main{min-width:0;width:100%}
+.lw-names{display:grid;gap:6px;width:100%;min-width:0}
+.lw-name{display:flex;align-items:center;gap:8px;height:40px;padding:0 8px 0 10px;border:1px solid var(--line);
+  border-radius:10px;background:var(--panel);font:600 14px var(--sans);color:var(--ink);user-select:none;outline:none;
+  cursor:default;min-width:0;box-sizing:border-box}
+.lw-name:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.lw-name.dragging{opacity:.4}
+.lw-name .g{color:var(--dim);opacity:.55;cursor:default;display:flex;width:14px;justify-content:center;flex:0 0 auto}
+.lw-name .n{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lw-name button.lw-del{border:0;background:none;color:var(--dim);width:26px;height:26px;border-radius:7px;display:flex;
+  align-items:center;justify-content:center;opacity:.6;cursor:default;flex:0 0 auto;padding:0}
+.lw-name button.lw-del:hover{opacity:1;color:var(--ink);background:var(--field-edge)}
+.lw-name.on{border-color:var(--accent);background:var(--accent-soft)}
+.lw-name.add{border-style:dashed;background:none}
+.lw-name.add input{flex:1 1 auto;min-width:0;border:0;background:none;font:14px var(--sans);color:var(--ink);outline:0;
+  padding:0}
+.lw-name.add kbd{font:11px var(--mono);color:var(--dim);flex:0 0 auto}
+.lw-side{min-width:0;width:100%}
+.lw-h{font:600 12px var(--sans);letter-spacing:.07em;text-transform:uppercase;color:var(--dim);margin:0 0 10px}
+.lw-h2{margin-top:22px}
+.lw-wheel{display:flex;align-items:stretch;width:340px;max-width:100%;height:64px;border:1px solid var(--line-strong);
+  border-radius:10px;background:var(--panel);overflow:hidden;box-sizing:border-box}
+.lw-drum{width:120px;max-width:38%;border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;
+  justify-content:center;line-height:1.15;flex:0 0 auto;overflow:hidden}
+.lw-drum .p,.lw-drum .q{font-size:11px;color:var(--dim);opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90%}
+.lw-drum .c{font:600 15px var(--sans);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90%}
+.lw-drumfield{flex:1 1 auto;min-width:0;display:flex;align-items:center;padding:0 14px;color:var(--dim);font-size:14px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lw-reads{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:10px;width:100%;min-width:0}
+.lw-ct{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel);display:flex;
+  flex-direction:column;gap:4px;min-width:0;cursor:default;box-sizing:border-box;outline:none}
+.lw-ct:hover{border-color:var(--line-strong)}
+.lw-ct:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.lw-ct .t{font:600 13.5px var(--sans);display:flex;align-items:center;gap:8px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lw-ct .r{font:13px/1.45 var(--sans);color:var(--ink);display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;
+  overflow:hidden;word-break:break-word}
+.lw-role .fillx{background:var(--accent-soft);color:var(--accent);border-radius:5px;padding:0 4px;font-weight:600;text-decoration:none}
+.lw-role .fillmiss{font:11px var(--mono);border:1px solid var(--line-strong);border-radius:5px;padding:0 4px;color:var(--dim)}
+@container (max-width: 880px){
+  .lw-role{grid-template-columns:1fr;gap:24px}
+  .lw-names{max-width:380px}
+}
+@media (max-width: 960px){
+  .lw-role{grid-template-columns:1fr;gap:24px}
+  .lw-names{max-width:380px}
+}
 .sx.lm-lib .mg-tree,.sx.lm-lib .mg-intents{max-height:none;overflow:visible;border:0;padding:0;background:none;
   box-shadow:none;margin:0}
 .sx.lm-mt .mt-sub{margin:0 0 20px;font-size:14px}
@@ -7221,7 +7271,17 @@ What you type stays in this browser only.`;
     "Each category with its cards, its place in the order, and whether it supports every intent.": "Każda kategoria z kartami, jej miejsce w kolejności i to, czy wspiera każdą intencję.",
     "Favourites first, hidden intents at the foot.": "Najpierw ulubione, ukryte intencje na końcu.",
     "Intents: {N}.": "Intencje: {N}.",
-    "The names the ROLE wheel offers, separated by commas.": "Nazwy, które podpowiada pokrętło ROLE, oddzielone przecinkami.",
+    "The names the ROLE wheel offers, in the order it offers them. Dragging a name moves it.": "Nazwy, które podpowiada pokrętło ROLE, w kolejności, w jakiej je podaje. Przeciągnięcie nazwy zmienia jej miejsce.",
+    "Add a name": "Dodaj nazwę",
+    "Enter adds it; commas between names add several": "Enter dodaje; kilka nazw rozdziela się przecinkami",
+    "Take {NAME} off the wheel": "Usuń {NAME} z pokrętła",
+    "Move {NAME}": "Przesuń {NAME}",
+    "Taken off the wheel: {NAME}.": "Usunięto z pokrętła: {NAME}.",
+    "On the wheel": "Na pokrętle",
+    "How it reads": "Jak to brzmi",
+    "Cards that say the ROLE: {N}": "Karty z ROLE: {N}",
+    "No card says the ROLE yet.": "Żadna karta nie używa jeszcze ROLE.",
+    "Opens this card's editor": "Otwiera edycję tej karty",
     "The catalog in use on this desk, and loading another catalog file.": "Katalog używany na tym stanowisku i wczytanie innego pliku katalogu.",
     "Health": "Stan",
     "Engine and display": "Silnik i ekran",
@@ -7813,8 +7873,6 @@ What you type stays in this browser only.`;
     "{PAX} fills the first name even when the chat gives the full name.": "{PAX} wstawia samo imię, nawet gdy z czatu przychodzi imię i nazwisko.",
     "class": "klasa",
     "Who is on the chat, filling {ROLE} in internal comments": "Kto jest po drugiej stronie czatu. Wypełnia {ROLE} w komentarzach wewnętrznych.",
-    "booker, customer, account holder": "rezerwujący, klient, właściciel konta",
-    "Notches for the ROLE wheel, comma-separated; blanks and repeats are dropped": "Pozycje pokrętła ROLE po przecinku; puste i powtórzone są pomijane",
     "Intent list": "Lista intencji",
     "Click to pick, again to clear, and hold Ctrl for several": "Kliknij, aby wybrać, i ponownie, aby odznaczyć; z Ctrl można wybrać kilka",
     "Set {INTENT}": "Ustaw {INTENT}",
@@ -32482,9 +32540,11 @@ What you type stays in this browser only.`;
       const crow = e.target.closest(".mg-cat-row[data-crow]");
       const mrow = e.target.closest(".manage-row.mg-card[data-cardrow]");
       const irow = e.target.closest(".manage-row[data-introw]");
+      const wrow = e.target.closest(".lw-name[data-wrow]");
       if (crow) mgDrag = { kind: "cat", key: crow.getAttribute("data-crow"), el: crow.closest(".mg-cat") };
       else if (mrow) mgDrag = { kind: "card", key: mrow.getAttribute("data-cardrow"), el: mrow };
       else if (irow) mgDrag = { kind: "intent", key: irow.getAttribute("data-introw"), el: irow };
+      else if (wrow) mgDrag = { kind: "who", key: wrow.getAttribute("data-wrow"), el: wrow };
       else return;
       mgClearDropTarget();
       mgDrag.x = e.clientX;
@@ -32512,6 +32572,21 @@ What you type stays in this browser only.`;
       if (Date.now() - mgSwapLock < 190) return;
       const under = document.elementFromPoint(e.clientX, e.clientY);
       if (!under || !under.closest) return;
+      if (mgDrag.kind === "who") {
+        const row2 = under.closest(".lw-name[data-wrow]");
+        if (!row2 || row2 === mgDrag.el) return;
+        if (row2.parentNode !== mgDrag.el.parentNode) return;
+        const current = whoOptions().slice();
+        const fi = current.indexOf(mgDrag.key);
+        const ti = current.indexOf(row2.getAttribute("data-wrow"));
+        if (fi < 0 || ti < 0) return;
+        current.splice(fi, 1);
+        current.splice(ti, 0, mgDrag.key);
+        setWhoList(current);
+        mgSwapLock = Date.now();
+        mgDomMove(mgDrag.el, row2);
+        return;
+      }
       if (mgDrag.kind === "intent") {
         const row2 = under.closest(".manage-row[data-introw]");
         if (!row2 || row2 === mgDrag.el) return;
@@ -32568,6 +32643,11 @@ What you type stays in this browser only.`;
     mgClearDropTarget();
     mgDrag = null;
     if (!moved) return;
+    if (kind === "who") {
+      const page = libPage();
+      if (page) refreshRolePage(page);
+      return;
+    }
     if (kind === "card" && dropCat) {
       if (mgMoveCardToCategory(key, dropCat)) {
         savePack();
@@ -32668,7 +32748,7 @@ What you type stays in this browser only.`;
   var libSections = () => [
     { key: "catmac", icon: "categories", name: t("Categories & cards"), lede: t("Each category with its cards, its place in the order, and whether it supports every intent.") },
     { key: "intents", icon: "intents", name: t("Intents"), lede: t("Favourites first, hidden intents at the foot.") },
-    { key: "who", icon: "user", name: t("ROLE suggestions"), lede: t("The names the ROLE wheel offers, separated by commas.") },
+    { key: "who", icon: "user", name: t("ROLE suggestions"), lede: t("The names the ROLE wheel offers, in the order it offers them. Dragging a name moves it.") },
     { key: "data", icon: "cards", name: t("Catalog & data"), lede: t("The catalog in use on this desk, and loading another catalog file.") }
   ];
   function libFold(s) {
@@ -32725,6 +32805,8 @@ What you type stays in this browser only.`;
           });
         } else if (key === "intents") {
           d.querySelectorAll(".mg-intent-row").forEach((r) => r.removeAttribute("hidden"));
+        } else if (key === "who") {
+          d.querySelectorAll(".lw-name[data-wrow]").forEach((r) => r.removeAttribute("hidden"));
         }
       } else {
         let hit = false;
@@ -32761,9 +32843,13 @@ What you type stays in this browser only.`;
             } else r.setAttribute("hidden", "");
           });
         } else if (key === "who") {
-          const whoInput = d.querySelector("#mgWho");
-          const whoVal = whoInput ? whoInput.value : "";
-          hit = libFold(d.textContent).indexOf(q) >= 0 || libFold(whoVal).indexOf(q) >= 0;
+          const names = whoOptions().join(" ");
+          hit = libFold(d.textContent).indexOf(q) >= 0 || libFold(names).indexOf(q) >= 0;
+          d.querySelectorAll(".lw-name[data-wrow]").forEach((r) => {
+            const name = r.getAttribute("data-wrow") || "";
+            if (!q || libFold(name).indexOf(q) >= 0) r.removeAttribute("hidden");
+            else r.setAttribute("hidden", "");
+          });
         } else {
           hit = libFold(d.textContent).indexOf(q) >= 0;
         }
@@ -32843,6 +32929,180 @@ What you type stays in this browser only.`;
     const mt = page.querySelector("#libMaint");
     if (mt) mt.onclick = () => openMaintenance();
   }
+  var ICON_GRIP = '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><circle cx="6" cy="4" r="1.2"/><circle cx="10" cy="4" r="1.2"/><circle cx="6" cy="8" r="1.2"/><circle cx="10" cy="8" r="1.2"/><circle cx="6" cy="12" r="1.2"/><circle cx="10" cy="12" r="1.2"/></svg>';
+  var ICON_REMOVE = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
+  var mgRoleMarked = "";
+  function setWhoList(nextList) {
+    const next = normWhoList(nextList);
+    pack.who = next.join("\0") === WHO_BASE.join("\0") ? null : next;
+    savePack();
+    syncRoleDrum();
+  }
+  function roleUsesCards() {
+    return (cards || []).filter((m) => {
+      const l = cardLang(m);
+      const body = cardText(m, "body", l);
+      return body.indexOf("{ROLE}") >= 0;
+    });
+  }
+  function fillCardReply(m, markedName) {
+    const l = cardLang(m);
+    const raw = cardText(m, "body", l);
+    const was = roleSel ? roleSel.value : "";
+    let res = "";
+    try {
+      if (roleSel) roleSel.value = markedName;
+      res = fill(raw, m, true, l);
+    } finally {
+      if (roleSel) roleSel.value = was;
+    }
+    return escFilled(res);
+  }
+  function roleWheelHtml(names, markedName) {
+    let prev = "", cur = "", next = "";
+    const n = names.length;
+    if (n > 0) {
+      let i = names.indexOf(markedName);
+      if (i < 0) i = 0;
+      cur = names[i] || "";
+      if (n === 1) {
+        prev = cur;
+        next = cur;
+      } else {
+        prev = names[(i - 1 + n) % n] || "";
+        next = names[(i + 1) % n] || "";
+      }
+    }
+    return '<div class="lw-wheel"><div class="lw-drum"><span class="rd-prev p">' + esc(prev) + '</span><span class="rd-cur c">' + esc(cur) + '</span><span class="rd-next q">' + esc(next) + '</span></div><div class="lw-drumfield">' + esc(t("customer's name")) + "</div></div>";
+  }
+  function mgWhoRowsHtml(names, markedName) {
+    const tiles = names.map((name) => {
+      const on = name === markedName ? " on" : "";
+      const moveTitle = t("Move {NAME}").replace("{NAME}", name);
+      const takeTitle = t("Take {NAME} off the wheel").replace("{NAME}", name);
+      return '<div class="lw-name' + on + '" tabindex="0" role="listitem" data-wrow="' + esc(name) + '"><span class="g" aria-label="' + esc(moveTitle) + '" title="' + esc(moveTitle) + '">' + ICON_GRIP + '</span><span class="n">' + esc(name) + '</span><button type="button" class="lw-del" aria-label="' + esc(takeTitle) + '" title="' + esc(takeTitle) + '">' + ICON_REMOVE + "</button></div>";
+    }).join("");
+    const addRow = '<div class="lw-name add"><span class="g">+</span><input type="text" id="mgAddWho" placeholder="' + esc(t("Add a name")) + '" aria-label="' + esc(t("Add a name")) + '" title="' + esc(t("Enter adds it; commas between names add several")) + '" spellcheck="false" autocomplete="off"><kbd>Enter</kbd></div>';
+    return tiles + addRow;
+  }
+  function mgWhoSideHtml(names, markedName) {
+    const uses = roleUsesCards();
+    const wheel = roleWheelHtml(names, markedName);
+    const countStr = uses.length > 0 ? t("Cards that say the ROLE: {N}").replace("{N}", uses.length) : t("No card says the ROLE yet.");
+    const reads = '<div class="lw-reads">' + uses.map((m) => {
+      const title = cardTitle(m);
+      const filled = fillCardReply(m, markedName);
+      return '<div class="lw-ct" role="button" tabindex="0" data-card-id="' + esc(m.id) + '" title="' + esc(t("Opens this card's editor")) + '" aria-label="' + esc(t("Opens this card's editor")) + '"><div class="t">' + esc(title) + '</div><div class="r">' + filled + "</div></div>";
+    }).join("") + "</div>";
+    return '<div class="lw-side"><div class="lw-h">' + esc(t("On the wheel")) + "</div>" + wheel + '<div class="lw-h lw-h2">' + esc(t("How it reads")) + ' · <span class="lw-role-count">' + esc(countStr) + "</span></div>" + reads + "</div>";
+  }
+  function mgWhoSectionHtml() {
+    const names = whoOptions();
+    if (!names.includes(mgRoleMarked)) mgRoleMarked = names[0] || "";
+    return '<div class="lw-role role-b"><div class="lw-main"><div class="lw-names">' + mgWhoRowsHtml(names, mgRoleMarked) + "</div></div>" + mgWhoSideHtml(names, mgRoleMarked) + "</div>";
+  }
+  function refreshRolePage(page) {
+    page = page || libPage() || document;
+    const sec = page.querySelector('details.manage-sec[data-mg="who"] .manage-secbody');
+    if (!sec) return;
+    sec.innerHTML = mgWhoSectionHtml();
+    wireRolePage(page);
+    const cnt = page.querySelector('details.manage-sec[data-mg="who"] .mg-count');
+    if (cnt) cnt.textContent = String(whoOptions().length);
+  }
+  function wireRolePage(page) {
+    if (!page) return;
+    const addInput = page.querySelector("#mgAddWho");
+    if (addInput) {
+      addInput.onkeydown = (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const val = addInput.value.trim();
+          if (!val) return;
+          const rawAdd = val.split(",").map((s) => s.trim()).filter(Boolean);
+          const current = whoOptions();
+          const next = normWhoList(current.concat(rawAdd));
+          setWhoList(next);
+          addInput.value = "";
+          refreshRolePage(page);
+        }
+      };
+    }
+    page.querySelectorAll(".lw-name:not(.add)").forEach((row2) => {
+      row2.onclick = (e) => {
+        if (e.target.closest(".lw-del")) return;
+        const name = row2.getAttribute("data-wrow");
+        if (!name) return;
+        mgRoleMarked = name;
+        refreshRolePage(page);
+      };
+      row2.onkeydown = (e) => {
+        const name = row2.getAttribute("data-wrow");
+        if (!name) return;
+        if (e.key === "Delete") {
+          e.preventDefault();
+          const delBtn2 = row2.querySelector(".lw-del");
+          if (delBtn2) delBtn2.click();
+          return;
+        }
+        if (e.altKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+          e.preventDefault();
+          const current = whoOptions().slice();
+          const idx = current.indexOf(name);
+          if (idx < 0) return;
+          const targetIdx = e.key === "ArrowDown" ? idx + 1 : idx - 1;
+          if (targetIdx < 0 || targetIdx >= current.length) return;
+          current.splice(idx, 1);
+          current.splice(targetIdx, 0, name);
+          setWhoList(current);
+          refreshRolePage(page);
+          const newRow = page.querySelector('.lw-name[data-wrow="' + esc(name) + '"]');
+          if (newRow) newRow.focus();
+          return;
+        }
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          row2.click();
+        }
+      };
+      const delBtn = row2.querySelector(".lw-del");
+      if (delBtn) {
+        delBtn.onclick = (e) => {
+          e.stopPropagation();
+          const name = row2.getAttribute("data-wrow");
+          if (!name) return;
+          const current = whoOptions();
+          const was = Array.isArray(pack.who) ? pack.who.slice() : null;
+          const next = current.filter((n) => n !== name);
+          setWhoList(next);
+          if (mgRoleMarked === name) {
+            mgRoleMarked = next[0] || "";
+          }
+          refreshRolePage(page);
+          const undoMsg = t("Taken off the wheel: {NAME}.").replace("{NAME}", name);
+          offerUndo(undoMsg, () => {
+            pack.who = was;
+            savePack();
+            syncRoleDrum();
+            mgRoleMarked = name;
+            refreshRolePage(page);
+          });
+        };
+      }
+    });
+    page.querySelectorAll(".lw-reads .lw-ct[data-card-id]").forEach((cardEl) => {
+      cardEl.onclick = () => {
+        const cid = cardEl.getAttribute("data-card-id");
+        if (cid) openCardEditor(cid, null, true);
+      };
+      cardEl.onkeydown = (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          cardEl.click();
+        }
+      };
+    });
+  }
   function openManage(justHtml) {
     applyCatsToGlobal();
     if (!libFold(libQuery)) libOn = rememberedLib();
@@ -32885,7 +33145,7 @@ What you type stays in this browser only.`;
     mgSec(
       "who",
       "ROLE suggestions",
-      '<div class="mf" style="margin-bottom:0"><input type="text" id="mgWho" spellcheck="false" autocomplete="off" placeholder="booker, customer, account holder" title="Notches for the ROLE wheel, comma-separated; blanks and repeats are dropped" value="' + esc(whoOptions().join(", ")) + '"></div>',
+      mgWhoSectionHtml(),
       whoOptions().length
     ) + /* Everything here acts on the whole library rather than on one entry - what is loaded,
        taking a copy out, bringing one in - which is exactly the line that separates it from
@@ -32960,13 +33220,7 @@ What you type stays in this browser only.`;
     wireLibShell(page);
     $("#mgAddIntent").onclick = () => openIntentEditor(null, true);
     $("#mgAddCat").onclick = () => startMgCatAdd();
-    if ($("#mgWho")) $("#mgWho").onchange = function() {
-      const next = normWhoList(this.value);
-      pack.who = next.join("\0") === WHO_BASE.join("\0") ? null : next;
-      savePack();
-      this.value = whoOptions().join(", ");
-      syncRoleDrum();
-    };
+    wireRolePage(page);
     $("#mgImportCatalog").onclick = importCatalogHere;
     const joinBtn = $("#mgJoinTeam");
     if (joinBtn) joinBtn.onclick = () => openJoinPaste();

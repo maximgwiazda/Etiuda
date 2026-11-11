@@ -3703,7 +3703,57 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx.lm-lib .sx-card .mg-int:first-child{border-top:0}
 .sx.lm-lib .sx-card .ec-list{margin:0}
 .sx.lm-lib .sx-card .ec-row{border:0;border-radius:0;margin:0;padding:14px 16px}
-.sx.lm-lib #mgWho{width:min(420px,100%)}
+/* Finding 3: ROLE suggestions width and layout (3B) */
+.sx.lm-lib:not(.is-find) .sx-card:has(details[data-mg="who"]:not([hidden])),
+.sx.lm-lib:not(.is-find) .sx-card:has(.lw-role){background:none;border:0;border-radius:0;overflow:visible;box-shadow:none}
+.sx.lm-lib .sx-page{container-type:inline-size}
+.lw-role{display:grid;grid-template-columns:minmax(280px,380px) minmax(0,1fr);gap:40px;align-items:start;width:100%;min-width:0}
+.lw-main{min-width:0;width:100%}
+.lw-names{display:grid;gap:6px;width:100%;min-width:0}
+.lw-name{display:flex;align-items:center;gap:8px;height:40px;padding:0 8px 0 10px;border:1px solid var(--line);
+  border-radius:10px;background:var(--panel);font:600 14px var(--sans);color:var(--ink);user-select:none;outline:none;
+  cursor:default;min-width:0;box-sizing:border-box}
+.lw-name:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.lw-name.dragging{opacity:.4}
+.lw-name .g{color:var(--dim);opacity:.55;cursor:default;display:flex;width:14px;justify-content:center;flex:0 0 auto}
+.lw-name .n{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lw-name button.lw-del{border:0;background:none;color:var(--dim);width:26px;height:26px;border-radius:7px;display:flex;
+  align-items:center;justify-content:center;opacity:.6;cursor:default;flex:0 0 auto;padding:0}
+.lw-name button.lw-del:hover{opacity:1;color:var(--ink);background:var(--field-edge)}
+.lw-name.on{border-color:var(--accent);background:var(--accent-soft)}
+.lw-name.add{border-style:dashed;background:none}
+.lw-name.add input{flex:1 1 auto;min-width:0;border:0;background:none;font:14px var(--sans);color:var(--ink);outline:0;
+  padding:0}
+.lw-name.add kbd{font:11px var(--mono);color:var(--dim);flex:0 0 auto}
+.lw-side{min-width:0;width:100%}
+.lw-h{font:600 12px var(--sans);letter-spacing:.07em;text-transform:uppercase;color:var(--dim);margin:0 0 10px}
+.lw-h2{margin-top:22px}
+.lw-wheel{display:flex;align-items:stretch;width:340px;max-width:100%;height:64px;border:1px solid var(--line-strong);
+  border-radius:10px;background:var(--panel);overflow:hidden;box-sizing:border-box}
+.lw-drum{width:120px;max-width:38%;border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;
+  justify-content:center;line-height:1.15;flex:0 0 auto;overflow:hidden}
+.lw-drum .p,.lw-drum .q{font-size:11px;color:var(--dim);opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90%}
+.lw-drum .c{font:600 15px var(--sans);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90%}
+.lw-drumfield{flex:1 1 auto;min-width:0;display:flex;align-items:center;padding:0 14px;color:var(--dim);font-size:14px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lw-reads{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:10px;width:100%;min-width:0}
+.lw-ct{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel);display:flex;
+  flex-direction:column;gap:4px;min-width:0;cursor:default;box-sizing:border-box;outline:none}
+.lw-ct:hover{border-color:var(--line-strong)}
+.lw-ct:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.lw-ct .t{font:600 13.5px var(--sans);display:flex;align-items:center;gap:8px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lw-ct .r{font:13px/1.45 var(--sans);color:var(--ink);display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;
+  overflow:hidden;word-break:break-word}
+.lw-role .fillx{background:var(--accent-soft);color:var(--accent);border-radius:5px;padding:0 4px;font-weight:600;text-decoration:none}
+.lw-role .fillmiss{font:11px var(--mono);border:1px solid var(--line-strong);border-radius:5px;padding:0 4px;color:var(--dim)}
+@container (max-width: 880px){
+  .lw-role{grid-template-columns:1fr;gap:24px}
+  .lw-names{max-width:380px}
+}
+@media (max-width: 960px){
+  .lw-role{grid-template-columns:1fr;gap:24px}
+  .lw-names{max-width:380px}
+}
 .sx.lm-lib .mg-tree,.sx.lm-lib .mg-intents{max-height:none;overflow:visible;border:0;padding:0;background:none;
   box-shadow:none;margin:0}
 .sx.lm-mt .mt-sub{margin:0 0 20px;font-size:14px}
