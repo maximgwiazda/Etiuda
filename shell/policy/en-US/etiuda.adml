@@ -46,21 +46,21 @@ If you disable or do not configure this policy setting, the service is chosen in
       <string id="AiProvider_azure">Azure OpenAI (azure)</string>
       <string id="AiProvider_compatible">Another OpenAI-compatible service (compatible)</string>
       <string id="AiEndpoint">Set the AI service's address</string>
-      <string id="AiEndpoint_Explain">This policy setting specifies the address to which Etiuda Studio sends its requests to the AI service, such as your organisation's own gateway.
+      <string id="AiEndpoint_Explain">This policy setting specifies the address to which Etiuda Studio, and Etiuda where "Use the organisation's AI model for the desk's search and suggestions" is enabled, send their requests to the AI service, such as your organisation's own gateway.
 
 If you enable this policy setting, enter a full https address, such as https://ai.example.com/v1/, with no user name, query or fragment. It stands over the address entered in Studio's Settings, and Studio sends to no other. A value in any other form is ignored.
 
 If you disable or do not configure this policy setting, the address entered in Studio's Settings is used, or, where none is entered, the published address of OpenAI, Anthropic or Google. Azure OpenAI and other compatible services need an address.</string>
       <string id="AiModel">Set the AI model</string>
-      <string id="AiModel_Explain">This policy setting specifies the model Etiuda Studio asks the AI service to use.
+      <string id="AiModel_Explain">This policy setting specifies the model Etiuda Studio, and Etiuda where "Use the organisation's AI model for the desk's search and suggestions" is enabled, ask the AI service to use.
 
 If you enable this policy setting, enter the model's name exactly as the service lists it. It stands over the model named in Studio's Settings.
 
 If you disable or do not configure this policy setting, the model is named in Studio's Settings. With no model named, Studio sends nothing.</string>
       <string id="AiKey">Set the AI service's key</string>
-      <string id="AiKey_Explain">This policy setting specifies the key Etiuda Studio presents to the AI service.
+      <string id="AiKey_Explain">This policy setting specifies the key Etiuda Studio, and Etiuda where "Use the organisation's AI model for the desk's search and suggestions" is enabled, present to the AI service.
 
-If you enable this policy setting, enter the key. It stands over the key kept in Studio's Settings. Studio sends this key only to the address set by "Set the AI service's address", or, where that is not set, to the published address of the service, and never to an address entered on the computer.
+If you enable this policy setting, enter the key. It stands over the key kept in Studio's Settings. Both apps send this key only to the address set by "Set the AI service's address", or, where that is not set, to the published address of the service, and never to an address entered on the computer.
 
 Warning: a key set by machine policy is stored in the registry, where every user of this computer can read it. Prefer a gateway address that needs no key, or a key that is limited to this use and can be withdrawn on its own.
 
