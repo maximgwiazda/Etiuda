@@ -322,11 +322,11 @@ if (flag('--package')) {
      the scratch home's, parks what it finds there and puts it back, and the only real place it
      writes is HKCU. See the header of tests/reinstall.js, and the head of this file for why a
      scratch home, unlike a lab profile, still measures the uninstaller's reach. */
-  gate('the reinstall-survival loop: npm run reinstall, against the installer above', () => {
-    const exe = readdirSync(DIST).filter(f => /-setup\.exe$/i.test(f));
-    if (exe.length !== 1) return DIST + ' holds ' + exe.length + ' installers; expected 1';
-    return run('npm', ['run', 'reinstall'], { ETIUDA_SETUP_EXE: join(DIST, exe[0]) })
-      ? true : 'npm run reinstall failed: what a customer installs is what this gate drives';
+  gate('the reinstall-survival loop: npm run reinstall, against the test build of this tree', () => {
+    /* The test build, which tests/reinstall.js builds into its own lab, and never the installer above: an install keyed
+       by the shipped app id writes and removes the account's own registration (tools/test-identity.cjs). */
+    return run('npm', ['run', 'reinstall'], { ETIUDA_SETUP_EXE: '' })
+      ? true : 'npm run reinstall failed: the test build of what a customer installs is what this gate drives';
   });
 
   /* THE SIGNATURE of the installer and of the program inside it, required of a customer build

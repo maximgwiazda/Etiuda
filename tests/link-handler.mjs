@@ -32,7 +32,7 @@ if (process.env.ETIUDA_PLANTS_COPY !== "1") {
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 
-const EXPECTED = 30;
+const EXPECTED = 31;
 const LINK_FOLDER = "A folder invitation is pasted in Etiuda, not opened from a link.";
 const LINK_FOLDER_PL = "Zaproszenie do folderu wkleja się w Etiudzie; z odnośnika się go nie otwiera.";
 const LINK_FORM = "Etiuda cannot read this link, so nothing was opened or sent. The invitation can be pasted in Etiuda instead.";
@@ -355,6 +355,20 @@ try {
   check(winOk && !regError, "3h8 a packaged start asks once to open etiuda:, an unpackaged start does not, and a packaged start under the harness does not ("
     + process.platform + ", " + packedNo + " / " + packedYes + " / " + loose + " / " + harness + ")"
     + (regError ? " " + regError : ""));
+
+  /* The installer legs' build (tools/test-identity.cjs) marks its package.json and must take no scheme of the desk's;
+     3h8's packaged start, unmarked, is the control that asks once. */
+  let marked = "", markError = "";
+  const markFile = path.join(APP, "package.json");
+  try {
+    fs.mkdirSync(APP, { recursive: true });
+    fs.writeFileSync(markFile, JSON.stringify({ name: "etiuda-qa", etiudaTestBuild: "app.etiuda.desktop.qa" }));
+    marked = regLine(withEnv("ETIUDA_TEST_DOCUMENTS", undefined, () => loadShell({ lock: true, packaged: true, register: () => true })));
+  } catch (e) { markError = e && e.message ? e.message : String(e); }
+  finally { fs.rmSync(markFile, { force: true }); }
+  check(marked === quiet && !markError && !fs.existsSync(markFile) && (process.platform !== "win32" || packedYes === "1:etiuda:1:false"),
+    "3h8t a packaged start of the test build, its package.json marked, asks for no scheme where the unmarked one asks once ("
+    + marked + " / " + packedYes + ")" + (markError ? " " + markError : ""));
 
   const packPlant = lift("plant:link-pack", src => {
     const dev = withEnv("ETIUDA_TEST_DOCUMENTS", undefined, () => loadShell({ lock: true, packaged: false, register: () => true, src: src }));

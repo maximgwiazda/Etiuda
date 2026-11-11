@@ -147,6 +147,32 @@ const P = require("./install-plan.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const KEEP = process.argv.indexOf("--keep") > -1;
+/* THE INSTALL GUARD, FIRST OF ALL: the uninstall key, shortcuts and .ec class are the account's, keyed by the app id, so
+   no scratch home isolates them. This run installs only the test build (tools/test-identity.cjs), refuses before the
+   window wall, the lab or the build while either shipped app is present, and compares what they own at the end. */
+const G = require("./install-guard.cjs");
+const T = require("../tools/test-identity.cjs").TEST.desk;
+const EXE = T.productName + ".exe", UNINSTALLER = "Uninstall " + T.productName + ".exe";
+const GUARD = (() => {
+  let g;
+  try { g = G.guardStart({ env: process.env }); }
+  catch (e) { E.refuse("the install guard could not read what the real install owns: " + e.message, "nothing was installed."); }
+  const given = process.env.ETIUDA_SETUP_EXE;
+  const setupNo = !given ? "" : !fs.existsSync(given) ? "ETIUDA_SETUP_EXE names no file: " + given
+    : G.setupRefusal(G.setupIdentity(given), "desk");
+  const stop = g.refusals.concat(setupNo ? ["ETIUDA_SETUP_EXE refused: " + setupNo] : []);
+  console.log("       the install guard reads " + g.reads);
+  if (g.flagged) console.log("       " + G.ACCOUNT_FLAG + " names this account, " + g.account.said + ": presence is waived, the comparison is not");
+  if (stop.length) E.refuse(stop[0], ...stop.slice(1));
+  return g;
+})();
+let guardSaid = false;
+function guardEnd() {
+  if (guardSaid) return null;
+  guardSaid = true;
+  const end = G.guardEnd(GUARD);
+  return end.diffs;
+}
 /* THE PORT BLOCK AND THE LEASE, board item 628. A fixed debugging port is not a failed
    connect: two concurrent runs of tests/csp.js at 9422 were measured on 2026-09-20 reading ONE
    Electron, and the run that was there FIRST went red counting three inline refusals of two and
@@ -192,13 +218,13 @@ E.realProfileGuard(DOCS_ETIUDA);
 const SAMPLE = "sample-catalog.ec";
 const SAMPLE_KEY = "e~sampled";
 
-const USERDATA = path.join(H.places.ApplicationData, "etiuda");
+const USERDATA = path.join(H.places.ApplicationData, T.packageName);
 E.realProfileGuard(USERDATA);
 fs.mkdirSync(USERDATA, { recursive: true });
 
 const START_MENU = H.places.Programs;
 const DESKTOP = H.places.Desktop;
-const UPDATER = path.join(H.places.LocalApplicationData, "etiuda-updater");
+const UPDATER = path.join(H.places.LocalApplicationData, T.packageName + "-updater");
 const PARKED = path.join(USERDATA, "qa-parked");
 const EVIDENCE = path.join(USERDATA, "qa-evidence-" + new Date().toISOString().replace(/[:.]/g, "-"));
 
@@ -206,13 +232,11 @@ const EVIDENCE = path.join(USERDATA, "qa-evidence-" + new Date().toISOString().r
    A rename there would otherwise leave this run parking a file that no longer exists while the
    installer writes one this run never looks at, which is board item 514 again under a new name. */
 const SHORTCUT = (function () {
-  const f = path.join(E.ROOT, "electron-builder.js");
-  const m = /shortcutName:\s*"([^"]+)"/.exec(fs.readFileSync(f, "utf8"));
-  if (!m) E.refuse("electron-builder.js names no nsis.shortcutName",
-                   "this run parks the Desktop and Start Menu shortcuts of that name aside before"
-                   + " it installs, and cannot do it for a name it cannot read.",
-                   "looked in " + f + " for shortcutName.");
-  return m[1] + ".lnk";
+  const cfg = require("../tools/electron-builder-test.cjs");
+  if (!cfg.nsis || cfg.nsis.shortcutName !== T.productName)
+    E.refuse("the test build names no nsis.shortcutName of its own",
+             "this run parks the Desktop and Start Menu shortcuts of that name aside before it installs.");
+  return cfg.nsis.shortcutName + ".lnk";
 })();
 /* The two places the per-user installer writes that shortcut. `tag` keeps two files of one name
    apart inside the parking folder. The all-users Start Menu is not here on purpose: this run
@@ -501,25 +525,35 @@ process.on("exit", () => {
      machine has filled with abandoned labs from runs that did. rmSync on a folder already
      removed is a no-op, so the normal path is unaffected. */
   if (!KEEP) { try { fs.rmSync(LAB, { recursive: true, force: true }); } catch (x) { /* nothing left to try */ } }
+  /* A run that left by E.refuse() past the finally still says what the real installs own now. */
+  const diffs = guardEnd();
+  if (diffs && diffs.length) console.log("  FAIL 6f what the real installs own CHANGED during this run: " + diffs.map(G.diffLine).join("; "));
 });
 
 /* ---- the installer ------------------------------------------------------------------------- */
 
+/* Each setup is asked its identity before it runs, the given one again here, the built one first here. */
+function setupOrRefuse(exe) {
+  const id = G.setupIdentity(exe), no = G.setupRefusal(id, "desk");
+  if (no) E.refuse("the setup is refused before it runs: " + no, exe, "nothing was installed.");
+  return id;
+}
 function buildSetup() {
   const given = process.env.ETIUDA_SETUP_EXE;
   if (given) {
     if (!fs.existsSync(given)) throw new Error("ETIUDA_SETUP_EXE does not exist: " + given);
-    return { exe: given, built: 0 };
+    return { exe: given, built: 0, id: setupOrRefuse(given) };
   }
   const out = path.join(LAB, "dist");
   const cli = path.join(E.ROOT, "node_modules", "electron-builder", "out", "cli", "cli.js");
   if (!fs.existsSync(cli)) throw new Error("electron-builder is not installed; npm install first");
   const t = Date.now();
-  execFileSync(process.execPath, [cli, "--win"],
+  execFileSync(process.execPath, [cli, "--win", "--config", path.join("tools", "electron-builder-test.cjs")],
     { cwd: E.ROOT, env: E.unsignedEnv({ ETIUDA_DIST: out }), stdio: "ignore" });
   const found = listing(out).filter(n => /-setup\.exe$/i.test(n));
   if (found.length !== 1) throw new Error(out + " holds " + found.length + " installers; expected 1");
-  return { exe: path.join(out, found[0]), built: Math.round((Date.now() - t) / 100) / 10 };
+  const exe = path.join(out, found[0]);
+  return { exe, built: Math.round((Date.now() - t) / 100) / 10, id: setupOrRefuse(exe) };
 }
 
 /* /D must be the LAST parameter and must not be quoted, which is NSIS's rule and not node's, so
@@ -542,7 +576,7 @@ function installTo(setup, dir) {
 /* The uninstaller returns in under a second and finishes in its own time: measured 0.9 s to
    return and 4 s to the folder being gone. So the verdict is the folder, never the exit code. */
 async function uninstallFrom(dir, seconds) {
-  const un = path.join(dir, "Uninstall Etiuda.exe");
+  const un = path.join(dir, UNINSTALLER);
   if (!fs.existsSync(un)) return -1;
   execFileSync(un, ["/S", "/currentuser"], { env: CHILD_ENV, stdio: "ignore", windowsHide: true });
   const limit = seconds === undefined ? 40 : seconds;
@@ -564,7 +598,7 @@ async function launch(dir, env) {
      written into the lab instead. offscreenEnv merges it over the environment.
 
      The scratch home profile is passed via --user-data-dir into the lab's own folder. */
-  const child = E.shellLaunch("tests/reinstall.js", path.join(dir, "Etiuda.exe"),
+  const child = E.shellLaunch("tests/reinstall.js", path.join(dir, EXE),
     ["--remote-debugging-port=" + port, "--user-data-dir=" + USERDATA],
     { stdio: ["ignore", "pipe", "pipe"], env: Object.assign({}, CHILD_ENV, E.offscreenEnv(env)), ownsDesk: true });
   live.add(child.pid);
@@ -683,9 +717,10 @@ let newKey = "", lnkSm = "", lnkDt = "";
     + (parkedLinks.length ? ": " + parkedLinks.map(p => p.what).join(", ") : "; this desk had none"));
   const setup = buildSetup();
   note((setup.built ? "built the installer in " + setup.built + "s: " : "given the installer: ")
-    + setup.exe + ", " + fs.statSync(setup.exe).size + " bytes, sha256 " + sha256Of(setup.exe).slice(0, 16));
+    + setup.exe + ", " + fs.statSync(setup.exe).size + " bytes, sha256 " + sha256Of(setup.exe).slice(0, 16)
+    + "; it is the test build " + setup.id.productName + " / " + setup.id.appId);
   regBefore = uninstallKeys();
-  assocBefore = assoc(".ec");
+  assocBefore = assoc("." + T.ext);
   smBefore = listing(START_MENU);
   dtBefore = listing(DESKTOP);
   const updaterBefore = fs.existsSync(path.join(UPDATER, "installer.exe"));
@@ -760,11 +795,11 @@ let newKey = "", lnkSm = "", lnkDt = "";
   let t = Date.now();
   installTo(setup.exe, PROG1);
   const installed = listing(PROG1);
-  check(installed.indexOf("Etiuda.exe") > -1 && installed.indexOf("Uninstall Etiuda.exe") > -1
+  check(installed.indexOf(EXE) > -1 && installed.indexOf(UNINSTALLER) > -1
         && fs.existsSync(path.join(PROG1, "resources", "app.asar")),
     "1a a silent install put the app in a folder of this run's own in "
     + Math.round((Date.now() - t) / 100) / 10 + "s: " + installed.length + " entries in " + PROG1
-    + ", Etiuda.exe and the uninstaller among them");
+    + ", " + EXE + " and the uninstaller among them");
 
   const regNew = added(regBefore, uninstallKeys());
   const smNew = added(smBefore, listing(START_MENU));
@@ -793,9 +828,9 @@ let newKey = "", lnkSm = "", lnkDt = "";
     + " an empty place here is an installer that made no shortcut and never a file that was"
     + " already there. This is the control for 3b to 3d: those absences are a removal, not a thing"
     + " never made");
-  const assocAfter = assoc(".ec");
+  const assocAfter = assoc("." + T.ext);
   check(assocPointsAt(assocAfter, PROG1),
-    "1b2 and the installer registered .ec to this run's own copy: ProgId "
+    "1b2 and the installer registered ." + T.ext + " to this run's own copy: ProgId "
     + JSON.stringify(assocAfter.prog || null) + ", open command " + JSON.stringify(assocAfter.cmd || null)
     + (assocBefore.cmd ? "; this machine already carried " + JSON.stringify(assocBefore.cmd) + " before the run" : "")
     + ". This is the control for 3b2: that absence is a removal rather than a thing never made");
@@ -1054,9 +1089,9 @@ let newKey = "", lnkSm = "", lnkDt = "";
     "3a the install folder is gone " + gone + "s after a silent uninstall returned: " + PROG1);
   check(uninstallKeys().indexOf(newKey) < 0,
     "3b the HKCU uninstall key it made is gone: " + JSON.stringify(newKey));
-  const assocGone = assoc(".ec");
+  const assocGone = assoc("." + T.ext);
   check(!assocPointsAt(assocGone, PROG1),
-    "3b2 and no .ec double-click would start this run's copy any more: the open command is now "
+    "3b2 and no ." + T.ext + " double-click would start this run's copy any more: the open command is now "
     + JSON.stringify(assocGone.cmd || null) + ", which does not name " + PROG1);
   check(listing(START_MENU).indexOf(lnkSm) < 0,
     "3c the Start Menu entry is gone: " + JSON.stringify(lnkSm));
@@ -1080,7 +1115,7 @@ let newKey = "", lnkSm = "", lnkDt = "";
   phase("[4/6] the second install, and what the app finds");
   t = Date.now();
   installTo(setup.exe, PROG2);
-  check(fs.existsSync(path.join(PROG2, "Etiuda.exe")) && sha256Of(deskFile()) === sha2,
+  check(fs.existsSync(path.join(PROG2, EXE)) && sha256Of(deskFile()) === sha2,
     "4a the second install went into a folder of its own in " + Math.round((Date.now() - t) / 100) / 10
     + "s and did not touch the desk either: sha256 still " + String(sha256Of(deskFile())).slice(0, 16));
 
@@ -1200,10 +1235,10 @@ let newKey = "", lnkSm = "", lnkDt = "";
      it: two installs rewrote HKCU\Software\Classes\.ec and a desk that carried an association of
      its own before the run would have had it replaced and nothing would have said so. Compared
      against what check 0 read rather than against nothing. */
-  const assocEnd = assoc(".ec");
+  const assocEnd = assoc("." + T.ext);
   check(String(assocEnd.prog || "") === String(assocBefore.prog || "")
         && String(assocEnd.cmd || "") === String(assocBefore.cmd || ""),
-    "6b2 and the .ec association is what the run found: ProgId "
+    "6b2 and the ." + T.ext + " association is what the run found: ProgId "
     + JSON.stringify(assocEnd.prog || null) + " and open command "
     + JSON.stringify(assocEnd.cmd || null) + ", against " + JSON.stringify(assocBefore.prog || null)
     + " and " + JSON.stringify(assocBefore.cmd || null) + " before the first install");
@@ -1263,6 +1298,11 @@ let newKey = "", lnkSm = "", lnkDt = "";
   } else {
     check(E.removeLab(LAB), "6e the lab is gone: " + LAB);
   }
+  /* THE PROOF, read-only: each place the shipped apps own, read as at the start. Unequal names what changed; nothing
+     is put back. */
+  const diffs = guardEnd();
+  check(diffs.length === 0, "6f what the real installs own is what it was before the run: "
+    + (diffs.length ? diffs.map(G.diffLine).join("; ") : GUARD.before.plan.length + " place(s) read again and equal"));
   /* Board item 628: the not-run travels with the counts, so a run that could not look at
      the screen is not read as a run that looked and was happy. */
   if (notRun.length) console.log("       NOT RUN: " + notRun.join(", "));

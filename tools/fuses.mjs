@@ -43,11 +43,12 @@ export async function fuseProblems(exe, want) {
 }
 
 /** The packaging step's question of the program it has just written into `dist`. A program that
- *  is not there or cannot be read, and an ask of no fuses, are reasons to refuse and never a pass. */
-export async function packagedFuseProblems(dist, want) {
+ *  is not there or cannot be read, and an ask of no fuses, are reasons to refuse and never a pass.
+ *  `program` is the executable's name, the test build's under --test-identity. */
+export async function packagedFuseProblems(dist, want, program) {
   const ask = want || wantedFuses();
   if (!Object.keys(ask).length) return ["electron-builder.js asks for no fuse, so there is nothing to read the program against"];
-  const exe = join(dist, "win-unpacked", "Etiuda.exe");
+  const exe = join(dist, "win-unpacked", program || "Etiuda.exe");
   if (!existsSync(exe)) return [exe + " is not there, so no fuse was read from it"];
   try { return await fuseProblems(exe, ask); }
   catch (e) { return [exe + ": " + ((e && e.message) || e)]; }
