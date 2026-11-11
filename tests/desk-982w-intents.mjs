@@ -506,6 +506,36 @@ try {
     "i9 the lede reads 'Cards linked to every intent: {N}.' with the catalog's own count, and drops it when those cards are put away",
     { everyIds: everyIds.length, ledeOn, hid, ledeOff });
 
+  /* --- i11: a Library search for an intent's name shows the Intents section and that row (the filter once
+     named a class no intent row carries, so a search never showed Intents at all) --- */
+  const i11Res = await page.evaluate(async () => {
+    if (window.openManage) window.openManage();
+    await new Promise(r => setTimeout(r, 100));
+    const s = document.querySelector('.sx-sec[data-lm="intents"]');
+    if (s) s.click();
+    await new Promise(r => setTimeout(r, 150));
+    const nameOf = r => ((r.querySelector(".mg-int-t") || r).textContent || "").trim();
+    const rows = [...document.querySelectorAll(".manage-row[data-introw]")];
+    if (rows.length < 2) return { ok: false, rows: rows.length };
+    const target = rows.find(r => { const n = nameOf(r); return n.length > 3 && rows.filter(x => nameOf(x).indexOf(n) >= 0).length === 1; });
+    if (!target) return { ok: false, why: "no intent with a unique name" };
+    const id = target.getAttribute("data-introw"), name = nameOf(target);
+    const q = document.getElementById("libSearch");
+    if (!q) return { ok: false, why: "no search field" };
+    q.value = name; q.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise(r => setTimeout(r, 400));
+    const sec = document.querySelector('details.manage-sec[data-mg="intents"]');
+    const now = [...document.querySelectorAll(".manage-row[data-introw]")];
+    const t = now.find(r => r.getAttribute("data-introw") === id);
+    const shown = r => !!r && !r.hasAttribute("hidden") && !r.closest("[hidden]");
+    const otherHidden = now.filter(r => r !== t && r.hasAttribute("hidden")).length;
+    const q2 = document.getElementById("libSearch");
+    if (q2) { q2.value = ""; q2.dispatchEvent(new Event("input", { bubbles: true })); }
+    await new Promise(r => setTimeout(r, 200));
+    return { ok: !!sec && !sec.hasAttribute("hidden") && shown(t) && otherHidden > 0, name, sec: !!sec && !sec.hasAttribute("hidden"), row: shown(t), otherHidden };
+  });
+  check(i11Res && i11Res.ok, "i11 a Library search for an intent's name shows the Intents section with that row, and hides the rows it does not match", i11Res);
+
 } catch (e) {
   check(false, "run crashed: " + e.message, e.stack);
 } finally {
@@ -513,6 +543,6 @@ try {
   try { fs.rmSync(lab, { recursive: true, force: true }); } catch (e) {}
 }
 
-console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=10");
+console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=11");
 console.log(checks + " checks, " + fails + " failed");
-process.exit(fails || checks !== 10 ? 1 : 0);
+process.exit(fails || checks !== 11 ? 1 : 0);

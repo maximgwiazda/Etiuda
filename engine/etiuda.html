@@ -33583,7 +33583,7 @@ What you type stays in this browser only.`;
             cat.querySelectorAll(".mg-card-row").forEach((r) => r.removeAttribute("hidden"));
           });
         } else if (key === "intents") {
-          d.querySelectorAll(".mg-intent-row").forEach((r) => r.removeAttribute("hidden"));
+          d.querySelectorAll(".manage-row[data-introw]").forEach((r) => r.removeAttribute("hidden"));
         } else if (key === "who") {
           d.querySelectorAll(".lw-name[data-wrow]").forEach((r) => r.removeAttribute("hidden"));
         }
@@ -33614,7 +33614,7 @@ What you type stays in this browser only.`;
             }
           });
         } else if (key === "intents") {
-          d.querySelectorAll(".mg-intent-row").forEach((r) => {
+          d.querySelectorAll(".manage-row[data-introw]").forEach((r) => {
             const iHit = libFold(r.textContent).indexOf(q) >= 0;
             if (iHit) {
               hit = true;

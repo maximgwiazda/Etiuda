@@ -1028,7 +1028,7 @@ function applyLibView(page){
           cat.querySelectorAll(".mg-card-row").forEach(r=>r.removeAttribute("hidden"));
         });
       } else if(key==="intents"){
-        d.querySelectorAll(".mg-intent-row").forEach(r=>r.removeAttribute("hidden"));
+        d.querySelectorAll(".manage-row[data-introw]").forEach(r=>r.removeAttribute("hidden"));
       } else if(key==="who"){
         d.querySelectorAll(".lw-name[data-wrow]").forEach(r=>r.removeAttribute("hidden"));
       }
@@ -1059,7 +1059,7 @@ function applyLibView(page){
           }
         });
       } else if(key==="intents"){
-        d.querySelectorAll(".mg-intent-row").forEach(r=>{
+        d.querySelectorAll(".manage-row[data-introw]").forEach(r=>{
           const iHit=libFold(r.textContent).indexOf(q)>=0;
           if(iHit){ hit=true; r.removeAttribute("hidden"); }
           else r.setAttribute("hidden","");
