@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 432;
+const EXPECTED = 433;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -4746,10 +4746,11 @@ if (deskOn()) try {
         check(false, "995u threw: " + (e && e.stack ? e.stack : e));
       }
 
-      /* A withdrawal the relay will not take. `spent`: the invitation is past the relay's keep, so the deletion is refused for good.
-         `held`: the team is read-only, so the deletion waits and goes once the lead renews. The session that sends it is opened while
-         the relay will still open one, and the clock then steps across the line inside that session's half hour. */
-      async function lateWithdraw(kind) {
+      /* A withdrawal late in the invitation's life. `spent`: the invitation is past the relay's keep, so the deletion is refused for good.
+         `held`: the team is read-only, which this relay lets a withdrawal through; with `older`, the desk's uploads are answered
+         team-lapsed until the lead renews, as a relay from before that rule answers, so the deletion waits and goes after the renewal.
+         The session that sends it is opened while the team still works, and the clock then steps across the line inside its half hour. */
+      async function lateWithdraw(kind, older) {
         const MIN = 60 * 1000;
         const rt = hex(16), team = "t-" + hex(8), key = crypto.randomBytes(32);
         R.clock.now += 1;
@@ -4766,8 +4767,12 @@ if (deskOn()) try {
           channel: { kind: "relay", rt, url: URLV1 }, ring: RING, roster: [] }, LEAD), null, 1) + "\n";
         const live = [{ id: inv, key: C.inviteSealKey(secret) }];
         const wrapDoc = B.sealInviteWrap({ secret: secret, relayTeamId: rt, teamId: team, invitationId: inv, epoch: 1, key: key });
+        let refusing = false;
+        const lapsedSaid = Buffer.from(JSON.stringify({ error: "team-lapsed", said: B.REASONS["team-lapsed"] }), "utf8");
         const serve = (url, init) => (init && init.method === "GET" && String(url).endsWith("/wrap")
-          ? new Response(Buffer.from(JSON.stringify({ wrap: wrapDoc }), "utf8"), { status: 200, headers: { "content-type": "application/json" } }) : null);
+          ? new Response(Buffer.from(JSON.stringify({ wrap: wrapDoc }), "utf8"), { status: 200, headers: { "content-type": "application/json" } })
+          : refusing && init && init.method === "PUT" && /\/b\/[0-9a-f]{32}$/.test(String(url))
+            ? new Response(lapsedSaid, { status: 403, headers: { "content-type": "application/json" } }) : null);
         const studioT = transport("c5-" + kind), studioMirror = path.join(LAB, "c5-studio-" + kind + "-" + rt.slice(0, 4));
         const studio = C.createChannel({ rt, url: URLV1, mirror: studioMirror, stateFile: path.join(LAB, "c5-" + kind + "-" + rt.slice(0, 4) + ".json"),
           pin: () => pin, me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }),
@@ -4792,6 +4797,7 @@ if (deskOn()) try {
           R.clock.now = t0 + core.KEEP_MS + MIN;
         } else {
           R.clock.now = readOnlyAt + MIN;
+          refusing = older === true;
         }
         await D.ask("etiuda:team-join", "cancel");
         await both();
@@ -4801,6 +4807,7 @@ if (deskOn()) try {
         const owes = ch ? ch.program.owed({ keyId: me.id, place: "desk:" + me.id }, null).filter(op => /join\.json$/i.test(op.rel)).length : -1;
         let renewed = 0, after = null, gone = false;
         if (kind === "held") {
+          refusing = false;
           const grant = await admin("POST", "/relay/v1/t/" + rt + "/grant", { grant: K.grantFor(LEAD.pub, R.clock.now) });
           renewed = grant.status;
           gone = await until(async () => { await both(); return !fs.existsSync(asked); }, 30000);
@@ -4847,13 +4854,23 @@ if (deskOn()) try {
       }
       let held = null;
       try {
-        held = await lateWithdraw("held");
+        held = await lateWithdraw("held", true);
         const waiting = held.made === 200 && held.first && held.withdrawing && held.readonly && !held.unkept && !held.withdrawn
           && held.uploaded && !held.withdrawnAtRelay && held.owes === 1;
         const moved = waiting && held.renewed === 200 && held.gone && held.taken;
-        check(moved, "996c a withdrawal while the relay is read-only stays owed, and once the lead renews the relay takes it and the card moves on: " + JSON.stringify(held));
+        check(moved, "996c a withdrawal a relay from before the let-go rule refuses as read-only stays owed, and once the lead renews the relay takes it and"
+          + " the card moves on: " + JSON.stringify(held));
       } catch (e) {
         check(false, "996c threw: " + (e && e.stack ? e.stack : e));
+      }
+      try {
+        const now = await lateWithdraw("held");
+        const taken = now.made === 200 && now.first && now.withdrawn && !now.withdrawing && !now.readonly && !now.unkept
+          && !now.uploaded && now.withdrawnAtRelay && now.owes === 0 && !now.standing;
+        check(taken, "996j a withdrawal while the relay is read-only is taken at once, since a lapse never holds a desk letting itself go: the card says"
+          + " withdrawn, nothing is owed and the request is gone from the lead's mirror: " + JSON.stringify(now));
+      } catch (e) {
+        check(false, "996j threw: " + (e && e.stack ? e.stack : e));
       }
       try {
         const lifted = dropChannelLine("plant:c5-unkept");
@@ -4873,7 +4890,7 @@ if (deskOn()) try {
         const lifted = dropChannelLine("plant:c5-held");
         let turned = false, detail = "plant line absent";
         if (lifted !== null) {
-          const g = await withPlantedChannel(lifted, () => lateWithdraw("held"));
+          const g = await withPlantedChannel(lifted, () => lateWithdraw("held", true));
           turned = g.first && g.withdrawing && !g.readonly && !g.withdrawnAtRelay;
           detail = "readonly " + g.readonly + ", withdrawing " + g.withdrawing + ", at the relay " + g.withdrawnAtRelay;
         }

@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 496;
+const EXPECTED = 502;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -1819,8 +1819,8 @@ async function main() {
     const sw = await sweptWithdraw();
     check(sweptOk(sw), "995z a withdrawal after a sweep is not-enrolled, and after that lead makes the team again it is no-hello and the team carries no withdrawal: "
       + JSON.stringify(sw));
-    /* A withdrawal is a write. admit asks the lapse before the withdrawal, so once the team is read-only the deletion is refused
-       and the request stays. The session is opened while the team still works, inside the half hour a session lives. */
+    /* A withdrawal lets its desk go, so a lapse never holds it: once the team is read-only the deletion is taken, the lead reads the
+       request as superseded, and after a renewal the lead's yes enrols nothing. The session is opened while the team still works. */
     async function lapsedWithdraw() {
       const w = await world();
       w.R.clock.now = 60 * DAY - MIN;
@@ -1832,12 +1832,21 @@ async function main() {
       const still = a.ok && st.get("blob:" + a.ask.id);
       const row = a.ok ? inviteRow(w, a.id) : {};
       const team = st.get("team") || {};
+      const state = C.lapseOf(team, w.R.clock.now).state;
+      const old = a.ok ? (await getBlob(w, await sessionOf(w, w.lead), a.ask.id)).status : 0;
+      const renewed = (await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/grant", { json: { grant: K.grantFor(w.lead.pub, w.R.clock.now) } })).status;
+      const yes = a.ok ? await devices(w, w.devs.concat([{ id: a.who.keyId, pub: a.who.pub, desk: a.place.slice(5) }])) : { status: 0, json: null };
       return { ok: a.ok, opened, gone: gone.json && gone.json.error || gone.status,
-        still: !!still && still.del !== true, withdrawn: row.withdrawn === true, state: C.lapseOf(team, w.R.clock.now).state };
+        still: !!still && still.del !== true, withdrawn: row.withdrawn === true, state, old, renewed, yes: yes.json && yes.json.error || yes.status };
     }
-    const lapsedOk = x => x.ok && x.opened < 60 * DAY && x.state === "read-only" && x.gone === "team-lapsed" && x.still && !x.withdrawn;
+    const lapsedOk = x => x.ok && x.opened < 60 * DAY && x.state === "read-only" && x.gone === 200 && !x.still && x.withdrawn && x.old === 410
+      && x.renewed === 200 && x.yes === "withdrawn";
     const lw = await lapsedWithdraw();
-    check(lapsedOk(lw), "996a a withdrawal once the team is read-only is refused team-lapsed, and the request stays: " + JSON.stringify(lw));
+    check(lapsedOk(lw), "996a a withdrawal once the team is read-only is taken: the lead reads the request as superseded, the invitation reads withdrawn,"
+      + " and after a renewal the lead's yes is refused withdrawn: " + JSON.stringify(lw));
+    const roLift = await liftCore("plant:let-go-withdraw", async () => !lapsedOk(await lapsedWithdraw()));
+    check(lapsedOk(lw) && roLift.turned && roLift.back, "996i lifting plant:let-go-withdraw refuses a read-only team's withdrawal team-lapsed (FAIL 996a: the request"
+      + " stays): " + roLift.detail + ", sha " + (roLift.back ? "restored" : "differs"));
   }
   /* R's env with every object lookup the Worker makes counted: gets.n is the number of teams.get calls. */
   function counted(R) {
@@ -3917,8 +3926,8 @@ async function main() {
     }
 
     /* A read-only team's lead cancels an invitation: a drop of one the relay holds, with nothing added and no wrap replaced, is taken
-       and that row is gone. A call that adds, replaces a wrap, or drops nothing held is refused team-lapsed, and so is a drop once a
-       trial has lapsed. */
+       and that row is gone. A call that adds, replaces a wrap, or drops nothing held is refused team-lapsed. A drop once a trial has
+       lapsed is taken too. */
     async function cancelScene(T) {
       const w = await lapseWorld(true, { T });
       at(w, 31 * DAY);
@@ -3950,9 +3959,80 @@ async function main() {
         st.get("inv:" + w.inv.id) === undefined,
         !!v.R.stores.get(v.rt).get("inv:" + v.inv.id),
       ];
-      const ok = sameJ(asked, ["team-lapsed", "team-lapsed", "team-lapsed", "team-lapsed", "team-lapsed", 200, "team-lapsed"])
-        && sameJ(kept, [true, true, true, true, true, true]);
+      const ok = sameJ(asked, ["team-lapsed", "team-lapsed", "team-lapsed", "team-lapsed", "team-lapsed", 200, 200])
+        && sameJ(kept, [true, true, true, true, true, false]);
       return { ok, detail: JSON.stringify({ asked, kept }) };
+    }
+
+    /* A lapse never gates an act that takes access away or lets a person go. A lapsed trial's lead takes a desk off: a set that adds a
+       key is refused team-lapsed, one that only removes is taken, the key's row goes, its session held from before is refused removed,
+       and once the team is renewed the key's hello is refused removed while the kept desk reads. */
+    async function letGoDevicesScene(T) {
+      const w = await lapseWorld(false, { T });
+      at(w, -2 * MIN);
+      const os = await sessionOf(w, w.other);
+      at(w, 0);
+      const fresh = keyPair(true);
+      const asked = [tail(await devices(w, w.devs.concat([{ id: fresh.keyId, pub: fresh.pub, desk: "k-" + hex(8) }]))), tail(await devices(w, [w.devs[0]]))];
+      const st = w.R.stores.get(w.rt);
+      const rows = [st.get("dev:" + w.other.keyId) === undefined, !!st.get("gone:" + w.other.keyId), !!st.get("dev:" + w.desk.keyId), st.get("dev:" + fresh.keyId) === undefined];
+      const held1 = tail(await since(w, os));
+      at(w, 10 * DAY);
+      const rn = await renewWith(w, { grant: grantNow(w, { fields: { paid: true } }) });
+      const after = [tail(await helloAs(w, w.other)), tail(await since(w, await sessionOf(w, w.desk)))];
+      const ok = sameJ(asked, ["team-lapsed", 200]) && sameJ(rows, [true, true, true, true]) && held1 === "removed" && rn.r.status === 200
+        && sameJ(after, ["removed", 200]);
+      return { ok, detail: JSON.stringify({ asked, rows, held: held1, renewal: rn.r.status, after }) };
+    }
+
+    /* A lapsed trial's lead withdraws its invitations: a call that adds, alone or beside a drop, is refused team-lapsed; a drop-only call
+       is taken, both rows go, the session the used invitation held is gone, and once the team is renewed the used token is refused spent
+       and the unused one is not enrolled. */
+    async function letGoInvitesScene(T) {
+      const w = await lapseWorld(false, { T });
+      at(w, -2 * MIN);
+      const J = ((await tokenHello(w, w.inv.id, w.inv.token, null, keyPair(true))).json || {}).session;
+      at(w, 0);
+      const asked = [tail(await invites(w, [{ id: hex(16), hash: sha(hex(32)) }], [])), tail(await invites(w, [{ id: hex(16), hash: sha(hex(32)) }], [w.inv2.id])),
+        tail(await invites(w, [], [w.inv.id, w.inv2.id]))];
+      const st = w.R.stores.get(w.rt);
+      const rows = [st.get("inv:" + w.inv.id) === undefined, st.get("inv:" + w.inv2.id) === undefined, st.get("sp:" + w.inv.id) !== undefined,
+        !st.list("ses:").some(([, s]) => s && s.inv === w.inv.id)];
+      const wrapped = tail(await wrapOf(w, J));
+      at(w, 10 * DAY);
+      const rn = await renewWith(w, { grant: grantNow(w, { fields: { paid: true } }) });
+      const after = [tail(await tokenHello(w, w.inv.id, w.inv.token, null, keyPair(true))), tail(await tokenHello(w, w.inv2.id, w.inv2.token, null, keyPair(true)))];
+      const ok = !!J && sameJ(asked, ["team-lapsed", "team-lapsed", 200]) && sameJ(rows, [true, true, true, true]) && wrapped === "no-hello" && rn.r.status === 200
+        && sameJ(after, ["token-spent", "not-enrolled"]);
+      return { ok, detail: JSON.stringify({ asked, rows, wrapped, renewal: rn.r.status, after }) };
+    }
+
+    /* A lapsed trial's desk takes back the request it sent while the trial worked: a fresh hello opens its invitation's session, which
+       reads nothing (since answers it not-enrolled, a fetch and the wrap team-lapsed) and takes the withdrawal; the invitation reads withdrawn and
+       the request is gone, the next hello is refused team-lapsed, and once the team is renewed the lead's yes is refused withdrawn. */
+    async function letGoWithdrawScene(T) {
+      const w = await lapseWorld(false, { T });
+      at(w, -2 * DAY);
+      const token = hex(32), id = hex(16), who = keyPair(true), place = "desk:k-" + hex(8);
+      const listed = tail(await invites(w, [{ id, hash: sha(token) }], []));
+      const hello = await boundHello(w, who, id, token);
+      const ask = sealJoin(w, who, 1, place);
+      const up = tail(await put(w, hello.json && hello.json.session, ask, { extra: { pub: who.pub } }));
+      at(w, DAY);
+      const s = await helloAs(w, who), S = s.json && s.json.session;
+      const reads = [tail(await since(w, S)), tail(await getBlob(w, S, id)), tail(await wrapOf(w, S))];
+      const del = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32), writer: { keyId: who.keyId, privateKey: who.privateKey },
+        path: "desks/" + place.slice(5) + "/join.json", body: "", counter: 2, place, kind: "delete", supersedes: ask.id });
+      const gone = tail(await put(w, S, del));
+      const st = w.R.stores.get(w.rt), row = st.get("inv:" + id) || {};
+      const rows = [row.withdrawn === true, row.uploaded === false, st.get("blob:" + ask.id) === undefined];
+      const again = tail(await helloAs(w, who));
+      at(w, 10 * DAY);
+      const rn = await renewWith(w, { grant: grantNow(w, { fields: { paid: true } }) });
+      const yes = tail(await devices(w, w.devs.concat([{ id: who.keyId, pub: who.pub, desk: place.slice(5) }])));
+      const ok = listed === 200 && up === 200 && tail(s) === 200 && sameJ(reads, ["not-enrolled", "team-lapsed", "team-lapsed"]) && gone === 200
+        && sameJ(rows, [true, true, true]) && again === "team-lapsed" && rn.r.status === 200 && yes === "withdrawn";
+      return { ok, detail: JSON.stringify({ listed, up, session: tail(s), reads, gone, rows, again, renewal: rn.r.status, yes }) };
     }
 
     const paid = await held(() => paidScene());
@@ -4009,7 +4089,19 @@ async function main() {
     const cancel = await held(() => cancelScene());
     check(cancel.ok === true, "977r a read-only team's lead cancels an invitation with a drop-only call: the call is taken and that invitation's row is gone,"
       + " the other invitation stays; a call that adds, replaces a wrap, drops an id the relay does not hold or drops nothing is refused team-lapsed,"
-      + " and a drop once a trial has lapsed is refused team-lapsed: " + (cancel.detail || cancel.failed));
+      + " and a drop once a trial has lapsed is taken too: " + (cancel.detail || cancel.failed));
+    const goDevices = await held(() => letGoDevicesScene());
+    check(goDevices.ok === true, "977s a lapsed trial's lead takes a desk off with a devices call that only removes it: the call is taken, the key's row is gone and"
+      + " its session held from before refused removed; a call that adds a key is refused team-lapsed; once renewed, the removed key's hello is refused removed"
+      + " and the kept desk reads: " + (goDevices.detail || goDevices.failed));
+    const goInvites = await held(() => letGoInvitesScene());
+    check(goInvites.ok === true, "977t a lapsed trial's lead withdraws its invitations with a drop-only call: the call is taken, both rows are gone and the used"
+      + " invitation's session with them; a call that adds an invitation, alone or beside a drop, is refused team-lapsed; once renewed, the used token is refused"
+      + " spent and the unused one not enrolled: " + (goInvites.detail || goInvites.failed));
+    const goWithdraw = await held(() => letGoWithdrawScene());
+    check(goWithdraw.ok === true, "977u a lapsed trial's desk takes its request back: a fresh hello opens the asked invitation's session, which reads nothing and"
+      + " takes the withdrawal; the request is gone, the next hello is refused team-lapsed, and once renewed the lead's yes is refused withdrawn: "
+      + (goWithdraw.detail || goWithdraw.failed));
 
     /* ---- 978: each line of the lapse lifted in a copy turns its leg red, and no product file is written ---- */
     const how2 = p => p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED");
@@ -4112,6 +4204,12 @@ async function main() {
     const openAdd = await swapCore("if (add.length !== 0 || wraps.length !== 0) return false;", "if (false) return false;", async () => red(await held(() => cancelScene()), "ok"));
     check(base["977r"] && openAdd.turned && openAdd.back, label() + " treating every invitations call as a drop lets a read-only team add an invitation beside a drop,"
       + " which turns 977r red, and the product file is never written: " + how2(openAdd));
+    const goSession = await liftCore("plant:let-go-session", async () => red(await held(() => letGoWithdrawScene()), "ok"));
+    check(goWithdraw.ok === true && goSession.turned && goSession.back, "977v lifting plant:let-go-session refuses a lapsed trial's asked invitation its session,"
+      + " so its desk cannot take its request back, which turns 977u red, and the product file is never written: " + how2(goSession));
+    const goPut = await liftCore("plant:let-go-withdraw", async () => red(await held(() => letGoWithdrawScene()), "ok"));
+    check(goWithdraw.ok === true && goPut.turned && goPut.back, "977w lifting plant:let-go-withdraw refuses a lapsed trial's withdrawal team-lapsed, which turns"
+      + " 977u red, and the product file is never written: " + how2(goPut));
     const oneLift = await editTeam(lineLifted("plant:socket-one"), async T => {
       const p = await world({ team: T });
       const s = await sessionOf(p, p.desk);
