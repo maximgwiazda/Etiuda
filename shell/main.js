@@ -8798,6 +8798,7 @@ const NOTE_KIND = "etiuda-update-note", NOTE_MAX = 1024, NOTE_TIMEOUT_MS = 30 * 
 const NOTE_URL = "https://etiuda.dev/licence/v1/note/desk";
 /* The vendor's root key, public half, as relay/core.cjs's ROOT_PUB. Only a leg passes readNote another. */
 const NOTE_ROOT = "f78558260ad75c094052f936326a63bffb1a581ac8b91d898ae1fd01b61127ee";
+const NOTE_ROOT_ID = "etiuda-root";
 const NOTE_FIELDS = ["kind", "format", "app", "serial", "version", "released", "url", "sig"];
 const NOTE_VERSION_RE = /^(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})$/;
 const NOTE_URL_RE = /^https:\/\/etiuda\.dev(\/[A-Za-z0-9][A-Za-z0-9._-]{0,63}){1,8}\/?$/;
@@ -8811,8 +8812,9 @@ function noteDay(s) {
   return at.getUTCFullYear() === +m[1] && at.getUTCMonth() === +m[2] - 1 && at.getUTCDate() === +m[3];
 }
 /* The desk's note in `body`, a Buffer or a string: {note} where every check holds, else {why}, the first that failed. */
-function readNote(body, root) {
-  const key = root === undefined ? NOTE_ROOT : root;
+function readNote(body, root, rootId) {
+  const key = typeof root === "object" && root ? (root.key || root.public) : (root === undefined ? NOTE_ROOT : root);
+  const keyId = typeof root === "object" && root ? (root.id || root.keyId) : (rootId === undefined ? NOTE_ROOT_ID : rootId);
   const buf = Buffer.isBuffer(body) ? body : typeof body === "string" ? Buffer.from(body, "utf8") : null;
   if (!buf) return { why: "shape" };
   if (buf.length > NOTE_MAX) return { why: "size" }; /* plant:note-size */
@@ -8832,7 +8834,7 @@ function readNote(body, root) {
   if (typeof n.url !== "string" || n.url.length > 200 || !NOTE_URL_RE.test(n.url)) return { why: "url" }; /* plant:note-url */
   const s = n.sig;
   if (!plainObj(s) || !exactly(s, ["alg", "keyId", "value"]) || s.alg !== "ed25519" || typeof s.keyId !== "string"
-    || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(s.keyId) || typeof s.value !== "string" || !/^[0-9a-f]{128}$/.test(s.value)) return { why: "sig" };
+    || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(s.keyId) || s.keyId !== keyId || typeof s.value !== "string" || !/^[0-9a-f]{128}$/.test(s.value)) return { why: "sig" };
   let held = false;
   try {
     held = typeof key === "string" && /^[0-9a-f]{64}$/.test(key) && crypto.verify(null, noteBytes(n),
@@ -8916,11 +8918,19 @@ async function lookForNote(fetchFn) {
   try {
     const body = await fetchNote(fetchFn, NOTE_URL), got = readNote(body);
     if (got.note) {
-      look = "read";
-      if (keepNote(got.note, keptNote()) === "taken") {
-        try { writeReplacing(path.join(app.getPath("userData"), NOTE_FILE), body.toString("utf8")); }
-        catch (e) { console.error("etiuda: the version note could not be kept - " + e.message); }
-        noteKept = got.note;
+      const kept = keptNote();
+      const take = keepNote(got.note, kept);
+      if (take === "same") {
+        look = "read";
+      } else if (take === "taken") {
+        try {
+          writeReplacing(path.join(app.getPath("userData"), NOTE_FILE), body.toString("utf8"));
+          noteKept = got.note;
+          look = !kept && !versionAbove(got.note.version, engineVersion()) ? "failed" : "read";
+        } catch (e) {
+          console.error("etiuda: the version note could not be kept - " + e.message);
+          look = "failed";
+        }
       }
     }
   } catch { look = "failed"; }
