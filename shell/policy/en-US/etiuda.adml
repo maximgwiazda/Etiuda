@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <policyDefinitionResources revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
   <displayName>Etiuda</displayName>
-  <description>Team folder and team lead's key</description>
+  <description>Team folder, team lead's key, version checks and Etiuda Studio's AI service</description>
   <resources>
     <stringTable>
       <string id="SUPPORTED_Etiuda">Etiuda</string>
@@ -22,6 +22,49 @@ If you enable this policy setting, enter the lead's public key as 64 lowercase h
 If you disable or do not configure this policy setting, Etiuda trusts the lead of the team the desk joined.
 
 If both this setting and "Set the team folder" are configured and either value is not valid, Etiuda uses neither.</string>
+      <string id="DeskNoUpdateCheck">Turn off the check for a new version of Etiuda</string>
+      <string id="DeskNoUpdateCheck_Explain">This policy setting stops Etiuda from checking for a new version.
+
+If you enable this policy setting, Etiuda makes no request for its version note and shows no offer of a new version. Use this where new versions reach the computers by your own distribution.
+
+If you disable or do not configure this policy setting, Etiuda checks about once an hour and, when a newer version exists, offers it in the header's menu and in Settings.</string>
+      <string id="StudioNoUpdateCheck">Turn off the check for a new version of Etiuda Studio</string>
+      <string id="StudioNoUpdateCheck_Explain">This policy setting stops Etiuda Studio from checking for a new version.
+
+If you enable this policy setting, Etiuda Studio makes no request for its version note and shows no offer of a new version. Use this where new versions reach the computers by your own distribution.
+
+If you disable or do not configure this policy setting, Etiuda Studio checks about once an hour and, when a newer version exists, offers it on the Overview, in the status bar and in About.</string>
+      <string id="AiProvider">Set the AI service for Etiuda Studio</string>
+      <string id="AiProvider_Explain">This policy setting specifies the AI service Etiuda Studio may use to draft cards and bring in old replies. Studio sends text to it only when the lead starts such a job and confirms what will be sent.
+
+If you enable this policy setting, choose the service, or enter its name: openai, anthropic, google, azure or compatible. It stands over the service chosen in Studio's Settings, which then cannot be changed there. Any other value is ignored.
+
+If you disable or do not configure this policy setting, the service is chosen in Studio's Settings, and with none chosen Studio sends nothing to any AI service.</string>
+      <string id="AiProvider_openai">OpenAI (openai)</string>
+      <string id="AiProvider_anthropic">Anthropic (anthropic)</string>
+      <string id="AiProvider_google">Google Gemini (google)</string>
+      <string id="AiProvider_azure">Azure OpenAI (azure)</string>
+      <string id="AiProvider_compatible">Another OpenAI-compatible service (compatible)</string>
+      <string id="AiEndpoint">Set the AI service's address for Etiuda Studio</string>
+      <string id="AiEndpoint_Explain">This policy setting specifies the address to which Etiuda Studio sends its requests to the AI service, such as your organisation's own gateway.
+
+If you enable this policy setting, enter a full https address, such as https://ai.example.com/v1/, with no user name, query or fragment. It stands over the address entered in Studio's Settings, and Studio sends to no other. A value in any other form is ignored.
+
+If you disable or do not configure this policy setting, the address entered in Studio's Settings is used, or, where none is entered, the published address of OpenAI, Anthropic or Google. Azure OpenAI and other compatible services need an address.</string>
+      <string id="AiModel">Set the AI model for Etiuda Studio</string>
+      <string id="AiModel_Explain">This policy setting specifies the model Etiuda Studio asks the AI service to use.
+
+If you enable this policy setting, enter the model's name exactly as the service lists it. It stands over the model named in Studio's Settings.
+
+If you disable or do not configure this policy setting, the model is named in Studio's Settings. With no model named, Studio sends nothing.</string>
+      <string id="AiKey">Set the AI service's key for Etiuda Studio</string>
+      <string id="AiKey_Explain">This policy setting specifies the key Etiuda Studio presents to the AI service.
+
+If you enable this policy setting, enter the key. It stands over the key kept in Studio's Settings. Studio sends this key only to the address set by "Set the AI service's address for Etiuda Studio", or, where that is not set, to the published address of the service, and never to an address entered on the computer.
+
+Warning: a key set by machine policy is stored in the registry, where every user of this computer can read it. Prefer a gateway address that needs no key, or a key that is limited to this use and can be withdrawn on its own.
+
+If you disable or do not configure this policy setting, the key is entered in Studio's Settings and kept sealed for that user's account.</string>
     </stringTable>
     <presentationTable>
       <presentation id="TeamFolder">
@@ -32,6 +75,24 @@ If both this setting and "Set the team folder" are configured and either value i
       <presentation id="LeadKey">
         <textBox refId="LeadKeyBox">
           <label>Public key (64 lowercase hexadecimal characters):</label>
+        </textBox>
+      </presentation>
+      <presentation id="AiProvider">
+        <dropdownList refId="AiProviderList" noSort="true">Service:</dropdownList>
+      </presentation>
+      <presentation id="AiEndpoint">
+        <textBox refId="AiEndpointBox">
+          <label>Address (https):</label>
+        </textBox>
+      </presentation>
+      <presentation id="AiModel">
+        <textBox refId="AiModelBox">
+          <label>Model name:</label>
+        </textBox>
+      </presentation>
+      <presentation id="AiKey">
+        <textBox refId="AiKeyBox">
+          <label>Key:</label>
         </textBox>
       </presentation>
     </presentationTable>

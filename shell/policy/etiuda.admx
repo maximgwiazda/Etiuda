@@ -27,5 +27,79 @@
         <text id="LeadKeyBox" valueName="LeadKey" required="true" maxLength="64" />
       </elements>
     </policy>
+    <policy name="DeskNoUpdateCheck" class="Machine" displayName="$(string.DeskNoUpdateCheck)" explainText="$(string.DeskNoUpdateCheck_Explain)" key="Software\Policies\Etiuda" valueName="DeskNoUpdateCheck">
+      <parentCategory ref="Etiuda" />
+      <supportedOn ref="SUPPORTED_Etiuda" />
+      <enabledValue>
+        <decimal value="1" />
+      </enabledValue>
+      <disabledValue>
+        <decimal value="0" />
+      </disabledValue>
+    </policy>
+    <policy name="StudioNoUpdateCheck" class="Machine" displayName="$(string.StudioNoUpdateCheck)" explainText="$(string.StudioNoUpdateCheck_Explain)" key="Software\Policies\Etiuda" valueName="StudioNoUpdateCheck">
+      <parentCategory ref="Etiuda" />
+      <supportedOn ref="SUPPORTED_Etiuda" />
+      <enabledValue>
+        <decimal value="1" />
+      </enabledValue>
+      <disabledValue>
+        <decimal value="0" />
+      </disabledValue>
+    </policy>
+    <policy name="AiProvider" class="Machine" displayName="$(string.AiProvider)" explainText="$(string.AiProvider_Explain)" key="Software\Policies\Etiuda" presentation="$(presentation.AiProvider)">
+      <parentCategory ref="Etiuda" />
+      <supportedOn ref="SUPPORTED_Etiuda" />
+      <elements>
+        <enum id="AiProviderList" valueName="AiProvider" required="true">
+          <item displayName="$(string.AiProvider_openai)">
+            <value>
+              <string>openai</string>
+            </value>
+          </item>
+          <item displayName="$(string.AiProvider_anthropic)">
+            <value>
+              <string>anthropic</string>
+            </value>
+          </item>
+          <item displayName="$(string.AiProvider_google)">
+            <value>
+              <string>google</string>
+            </value>
+          </item>
+          <item displayName="$(string.AiProvider_azure)">
+            <value>
+              <string>azure</string>
+            </value>
+          </item>
+          <item displayName="$(string.AiProvider_compatible)">
+            <value>
+              <string>compatible</string>
+            </value>
+          </item>
+        </enum>
+      </elements>
+    </policy>
+    <policy name="AiEndpoint" class="Machine" displayName="$(string.AiEndpoint)" explainText="$(string.AiEndpoint_Explain)" key="Software\Policies\Etiuda" presentation="$(presentation.AiEndpoint)">
+      <parentCategory ref="Etiuda" />
+      <supportedOn ref="SUPPORTED_Etiuda" />
+      <elements>
+        <text id="AiEndpointBox" valueName="AiEndpoint" required="true" maxLength="2048" />
+      </elements>
+    </policy>
+    <policy name="AiModel" class="Machine" displayName="$(string.AiModel)" explainText="$(string.AiModel_Explain)" key="Software\Policies\Etiuda" presentation="$(presentation.AiModel)">
+      <parentCategory ref="Etiuda" />
+      <supportedOn ref="SUPPORTED_Etiuda" />
+      <elements>
+        <text id="AiModelBox" valueName="AiModel" required="true" maxLength="256" />
+      </elements>
+    </policy>
+    <policy name="AiKey" class="Machine" displayName="$(string.AiKey)" explainText="$(string.AiKey_Explain)" key="Software\Policies\Etiuda" presentation="$(presentation.AiKey)">
+      <parentCategory ref="Etiuda" />
+      <supportedOn ref="SUPPORTED_Etiuda" />
+      <elements>
+        <text id="AiKeyBox" valueName="AiKey" required="true" maxLength="1024" />
+      </elements>
+    </policy>
   </policies>
 </policyDefinitions>
