@@ -15,9 +15,9 @@
  * THE PAGE'S PART runs the built engine in headless Chrome, beside a stand-in host that answers as the shell would:
  *   db1 the row's two states, built-in alone and the organisation's with its fields, the address only where the service
  *       has none of its own
- *   db2 set by policy, the row shows the choice, the host and "Set by your organisation", and takes no change
+ *   db2 set by policy, the row shows the choice, the host and "Set by the organisation", and takes no change
  *   db3 the mark beside the search box is there only while the organisation's model ranks, its words shed under 720 px with
- *       its sentence kept in its title, and it says when the shell has paused its asks
+ *       its sentence kept in its title, says when the shell has paused its asks, and is absent while both switches are off
  *   db4 the sentences that say nothing leaves this computer are drawn only while the built-in model ranks, in both languages
  * No leg starts the desk app, reads the registry or reaches the network. The values are invented.
  */
@@ -375,12 +375,12 @@ try {
         fields: ["omService", "omAddress", "omModel", "omKey"].map(id => { const el = document.getElementById(id); return el ? el.disabled : null; }),
         at: r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null };
     });
-    if (!got.text.includes("Set by your organisation") || !got.text.includes("gateway.example") || !got.disabled) problems.push("row " + JSON.stringify(got));
+    if (!got.text.includes("Set by the organisation") || !got.text.includes("gateway.example") || !got.disabled) problems.push("row " + JSON.stringify(got));
     if (got.fields.some(x => x !== true)) problems.push("fields " + JSON.stringify(got.fields));
     if (got.at) { await page.mouse.click(got.at.x, got.at.y); await sleep(200); }
     const saves = await page.evaluate(() => window.__ai.saves.length);
     if (saves) problems.push("a disabled choice saved");
-    check(!problems.length, "db2 set by policy, the row shows the choice, the host and Set by your organisation, and its choice and fields take no change: "
+    check(!problems.length, "db2 set by policy, the row shows the choice, the host and Set by the organisation, and its choice and fields take no change: "
       + (problems.join("; ") || "two choices and four fields disabled, a click sends nothing"));
   }
 
@@ -405,8 +405,14 @@ try {
     if (!paused.there || !paused.dot || !/not answering/.test(paused.text) || !/built-in model ranks/.test(paused.title)) problems.push("paused " + JSON.stringify(paused));
     await ranked(page, { ranking: "organisation", failures: 0, pausedUntil: 0 });
     if ((await markNow(page)).dot) problems.push("the dot stayed after an answer");
+    await page.evaluate(() => { localStorage.setItem("eAiOff", "1"); localStorage.setItem("eSearchAiOff", "1"); });
+    await ranked(page);
+    if ((await markNow(page)).there) problems.push("there with both switches off, when nothing is sent");
+    await page.evaluate(() => { localStorage.removeItem("eAiOff"); localStorage.removeItem("eSearchAiOff"); });
+    await ranked(page);
+    if (!(await markNow(page)).there) problems.push("not back with the switches on");
     check(!problems.length, "db3 the mark is there only while the organisation's model ranks, an icon alone at 700 px with its sentence kept, and says "
-      + "when the asks are paused: " + (problems.join("; ") || "seven states"));
+      + "when the asks are paused, and is absent while both switches are off: " + (problems.join("; ") || "nine states"));
   }
 
   /* db4 */

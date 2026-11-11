@@ -363,48 +363,48 @@ function teamsGroups(){
       t("Each change stays in this desk's own file"))));
   return rows.length ? [{rows}] : [];
 }
-/* The two sentences that say nothing leaves this computer, drawn only while the built-in model ranks; while the
-   organisation's model does, each says where the text goes instead. */
-function aiSearchOnLine(st){
-  return orgRanks(st)
-    ? t("Your organisation's model ranks the search beside word matches; the search text is sent to {HOST}.").split("{HOST}").join(String(st.host||"")) // placeholder: Claudette
-    : t("The model ranks the search beside word matches; nothing leaves this computer");
-}
-function aiSuggestOnLine(st){
-  return orgRanks(st)
-    ? t("Your organisation's model ranks the suggestions; the message is sent to {HOST}.").split("{HOST}").join(String(st.host||"")) // placeholder: Claudette
-    : t("The model ranks the suggestions; nothing leaves this computer");
+/* THE AI SECTION'S WORDS, the built-in model's while it ranks and the organisation's while that one does, so the lines that say
+   nothing leaves this computer are drawn only while it is true; {HOST} in the second is filled from `st`, the shell's answer. */
+function aiWords(st, builtin, organisation){
+  return orgRanks(st) ? organisation.split("{HOST}").join(String(st.host||"")) : builtin;
 }
 /* Drawn only where the desk carries the model: off, the picker suggests by words alone and the model is never loaded. */
 function aiGroups(){
   if(!eAiModel()) return [];
-  const st=orgModel();
+  const st=orgModel(), w=(a,b)=>aiWords(st,a,b);
   return [{rows:[
-    row("aisuggest","ai",t("Suggest intents with the built-in model"),
-      t("Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words."),
+    row("aisuggest","ai",w(t("Suggest intents with the built-in model"),t("Suggest intents with the organisation's model")),
+      w(t("Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words."),
+        t("Sends a copied message to the organisation's model at {HOST} and suggests the intents it is closest to. Off, suggestions come from matching words.")),
       onoff("aisuggest", eAiOn(),
-        aiSuggestOnLine(st),
+        w(t("The model ranks the suggestions; nothing leaves this computer"),t("The organisation's model ranks the suggestions; the copied message is sent to {HOST}.")),
         t("Suggestions come from matching words, and the model stays unloaded"))),
-    row("aisearch","ai",t("Search by meaning with the built-in model"),
-      t("From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the model on this computer. Off, it matches words only."),
+    row("aisearch","ai",w(t("Search by meaning with the built-in model"),t("Search by meaning with the organisation's model")),
+      w(t("From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the model on this computer. Off, it matches words only."),
+        t("From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the organisation's model at {HOST}, to which the search text is sent. Off, it matches words only.")),
       onoff("aisearch", eSearchOn(),
         aiSearchOnLine(st),
         t("Off, it matches words only.")))
   ]}];
+}
+function aiSearchOnLine(st){
+  return aiWords(st, t("The model ranks the search beside word matches; nothing leaves this computer"),
+    t("The organisation's model ranks the search beside word matches; the search text is sent to {HOST}."));
 }
 /* THE MODEL THAT RANKS SEARCH AND SUGGESTIONS, where the host can say: built-in, or the organisation's own service, whose
    fields open under the row. What machine policy set is shown as set and takes no change. The key is never drawn back. */
 function orgModelRows(){
   const st=orgModel();
   if(!st) return [];
-  const m=st.managed||{}, org=st.choice==="organisation", set=t("Set by your organisation"); // placeholder: Claudette
+  const m=st.managed||{}, org=st.choice==="organisation", set=t("Set by the organisation");
   const lines=[];
-  if(org && orgRanks(st)) lines.push(t("Your organisation's model at {HOST} ranks the search and the suggestions. The search text and the message the suggestions are made from are sent there.").split("{HOST}").join(String(st.host||""))); // placeholder: Claudette
-  else if(org) lines.push(t("Until the service, the model and the key are complete, the built-in model ranks and nothing is sent.")); // placeholder: Claudette
-  if(m.choice) lines.push(set);
-  (st.ignored||[]).forEach(n=>lines.push(t("Group Policy sets a value for the organisation's model that Etiuda cannot use, so it is left out: {NAME}").split("{NAME}").join(String(n)))); // placeholder: Claudette
-  const choice=seg("orgmodel",[{v:"builtin",t:t("Built-in, on this computer")},{v:"organisation",t:t("Your organisation's")}], org?"organisation":"builtin", !!m.choice); // placeholder: Claudette
-  let html='<div class="set-row" data-row="orgmodel">'+sxIcon("ai")+'<div class="set-label">'+esc(t("The model that ranks search and suggestions")) // placeholder: Claudette
+  if(!org) lines.push(t("The built-in model sends nothing anywhere."));
+  else if(orgRanks(st)) lines.push(t("The search text and the copied message the suggestions are made from are sent to {HOST}, and nowhere else.").split("{HOST}").join(String(st.host||"")));
+  else lines.push(t("Until the service, the model and the key are complete, the built-in model ranks and nothing is sent.")); // placeholder: Claudette
+  if(m.choice) lines.push(set, t("Whoever manages Etiuda for the organisation can change this."));
+  (st.ignored||[]).forEach(n=>lines.push(t("Group Policy names an AI service setting Etiuda cannot use, so it is ignored: {NAME}").split("{NAME}").join(String(n))));
+  const choice=seg("orgmodel",[{v:"builtin",t:t("Built-in, on this computer")},{v:"organisation",t:t("The organisation's")}], org?"organisation":"builtin", !!m.choice);
+  const html='<div class="set-row" data-row="orgmodel">'+sxIcon("ai")+'<div class="set-label">'+esc(t("The model that ranks search and suggestions"))
     +lines.map(l=>'<small>'+esc(l)+'</small>').join("")+'</div><div class="set-ctl">'+choice+'</div>'
     +(org?orgModelFieldsHtml(st, set):"")+'</div>';
   return [{key:"orgmodel", html}];
@@ -412,34 +412,37 @@ function orgModelRows(){
 function orgModelFieldsHtml(st, set){
   const m=st.managed||{};
   const services=Array.isArray(st.services) ? st.services : [];
-  const name={openai:"OpenAI", anthropic:"Anthropic", google:"Google Gemini", azure:"Azure OpenAI", compatible:t("Another OpenAI-compatible service")}; // placeholder: Claudette
+  const name={openai:"OpenAI", anthropic:"Anthropic", google:"Google Gemini", azure:"Azure OpenAI", compatible:t("Another OpenAI-compatible service")};
   const own=(services.filter(s=>s.id===st.provider)[0]||{}).endpoint||"";
   const opts=(st.provider?"":'<option value="" selected></option>')
     +services.map(s=>'<option value="'+esc(s.id)+'"'+(s.id===st.provider?" selected":"")+'>'+esc(name[s.id]||s.id)+'</option>').join("");
-  const off=b=>b?' disabled title="'+esc(set)+'"':"";
+  const tip=(fixed,words)=>' title="'+esc(fixed?set:words)+'"'+(fixed?" disabled":"");
   const field=(id,label,ctl)=>'<label for="'+id+'">'+esc(label)+'</label>'+ctl;
   let h='<div class="om-fields" data-row="orgmodel-fields">'
-    +field("omService",t("Service"),'<select id="omService"'+off(m.provider)+'>'+opts+'</select>');
+    +field("omService",t("Service"),'<select id="omService"'+(m.provider?tip(true,""):"")+'>'+opts+'</select>');
   /* The address only where the service has none of its own, or one was given in its place. */
   if(st.provider && (!own || st.endpoint)) h+=field("omAddress",t("Address"),'<input type="text" id="omAddress" autocomplete="off" spellcheck="false"'
-    +' placeholder="'+esc(own||"https://")+'" value="'+esc(st.endpoint||"")+'"'+off(m.endpoint)+'>');
+    +' placeholder="'+esc(own||"https://")+'" value="'+esc(st.endpoint||"")+'"'
+    +tip(m.endpoint, own ? t("Left empty, the service's own address is used: {URL}").split("{URL}").join(own)
+      : t("Needed for this service: the full https address the organisation gives for it."))+'>');
   h+=field("omModel",t("Model"),'<input type="text" id="omModel" autocomplete="off" spellcheck="false" value="'+esc(st.model||"")+'"'
-    +(m.model?off(true):' title="'+esc(t("The model's name exactly as the service lists it."))+'"')+'>');
+    +tip(m.model, t("The model's name exactly as the service lists it."))+'>');
   h+=field("omKey",t("Key"),'<input type="password" id="omKey" autocomplete="off" spellcheck="false" value=""'
-    +(m.key ? ' disabled placeholder="'+esc(set)+'"'
-      : st.keyKept ? ' placeholder="'+esc(t("A key is kept. Typing a new one replaces it."))+'"' : "")+'>');
-  h+='<div class="om-test"><button type="button" class="btn" id="omTest" title="'+esc(t("Asks the model for a one-word answer. No catalog text is sent."))+'">'
+    +tip(m.key, t("Kept on this computer, sealed by the system for this account, and never written to a log."))
+    +(m.key ? ' placeholder="'+esc(set)+'"' : st.keyKept ? ' placeholder="'+esc(t("A key is kept. Typing a new one replaces it."))+'"' : "")+'>');
+  h+='<div class="om-test"><button type="button" class="btn" id="omTest" title="'+esc(t("Asks the model for a one-word answer. Nothing from the catalog or a conversation is sent."))+'">'
     +esc(t("Test the connection"))+'</button><span id="omTestLine" role="status"></span></div></div>';
   return h;
 }
-/* A refusal from the shell, in words. */
-function orgModelWhy(why){
-  return why==="managed" ? t("The organisation set this in Group Policy, so it cannot be changed here.") // placeholder: Claudette
-    : why==="provider" ? t("That service is not one Etiuda knows, so it was not kept.") // placeholder: Claudette
-    : why==="endpoint" ? t("The address must be a full https address with no user name, query or fragment, so it was not kept.") // placeholder: Claudette
+/* A refusal from the shell, in words; `fields` is what the save tried, for the frames that name it. */
+function orgModelWhy(why, fields){
+  const f=fields||{};
+  return why==="managed" ? t("The AI service is set by the organisation's Group Policy, so this setting cannot be changed here.")
+    : why==="provider" ? t("The AI service named in the settings is not one Etiuda knows, so nothing was sent: {NAME}").split("{NAME}").join(String(f.provider||""))
+    : why==="endpoint" ? t("The AI service's address must be a full https address with no user name, query or fragment, so nothing was sent: {URL}").split("{URL}").join(String(f.endpoint||""))
+    : why==="unsealed" ? t("This computer cannot keep the AI service's key for this account: no keyring is open to seal it, so the key was not kept.")
     : why==="model" ? t("That model name could not be kept.") // placeholder: Claudette
     : why==="key" ? t("That key could not be kept.") // placeholder: Claudette
-    : why==="unsealed" ? t("This computer cannot keep the key for this account: no keyring is open to seal it, so the key was not kept.") // placeholder: Claudette
     : t("The setting could not be saved just now."); // placeholder: Claudette
 }
 /* What the connection test came back with, in words: what is missing before anything was sent, or what the service said. */
@@ -447,14 +450,15 @@ function orgTestLine(r){
   const host=String(r && r.host || ""), model=String(r && r.model || ""), why=r && r.why;
   const at=s=>s.split("{HOST}").join(host).split("{MODEL}").join(model);
   if(r && r.ok) return at(t("Connected: {HOST} answered, model {MODEL}."));
-  return why==="provider" ? t("No service is chosen yet, so nothing was sent.") // placeholder: Claudette
-    : why==="endpoint" ? t("This service needs its address, so nothing was sent.") // placeholder: Claudette
-    : why==="model" ? t("No model is named, so nothing was sent.") // placeholder: Claudette
+  return why==="provider" ? t("No AI service is set up yet. One is chosen from the Menu, under Settings, then Data and defaults.")
+    : why==="endpoint" ? t("Needed for this service: the full https address the organisation gives for it.")
+    : why==="model" ? t("No model is named for the AI service, so nothing was sent. The model is named from the Menu, under Settings, then Data and defaults.")
     : why==="key" ? t("No key is kept for this address, so nothing was sent.") // placeholder: Claudette
-    : why==="keyAway" ? t("The organisation's Group Policy sets the key, and that key goes only to the address the policy sets or to the service's own, never to an address typed here, so nothing was sent.")
+    : why==="keyAway" ? t("The organisation's Group Policy sets the AI service's key, and that key goes only to the address the policy sets or to the service's own, never to an address typed here, so nothing was sent.")
+    : why==="late" ? t("The AI service did not answer in time, so the request was given up.")
+    : why==="busy" ? t("The AI service is busy and asked Etiuda to wait; a later try may go through.")
     : why==="door" ? t("This build cannot send the test yet, so nothing was sent.") // placeholder: Claudette
     : why==="unreached" ? at(t("Could not reach {HOST}.")) // placeholder: Claudette
-    : why==="late" ? at(t("No answer came from {HOST} in time.")) // placeholder: Claudette
     : at(t("{HOST} answered with an error, so the connection is not confirmed.")); // placeholder: Claudette
 }
 function orgModelHostCall(){
@@ -467,7 +471,7 @@ function orgModelSave(fields){
   if(!h) return;
   const was=document.activeElement && document.activeElement.id;
   Promise.resolve().then(()=>h.deskAiSave(fields)).then(r=>{
-    if(!r || r.ok!==true) toastRefusal(orgModelWhy(r && r.why));
+    if(!r || r.ok!==true) toastRefusal(orgModelWhy(r && r.why, fields));
     paintSettings();
     syncOrgMark();
     const host=settingsHost(), back=was && host && host.querySelector("#"+was);
@@ -842,11 +846,13 @@ function wirePage(box){
         else if(seg==="aisuggest"){
           if(on) lsDel(E_AI_OFF_KEY); else lsSet(E_AI_OFF_KEY,"1");
           eTellAi();
-          toast(on?t("Suggestions from the built-in model"):t("Suggestions from matching words"));
+          syncOrgMark();
+          toast(on?aiWords(orgModel(),t("Suggestions from the built-in model"),t("Suggestions from the organisation's model")):t("Suggestions from matching words"));
         }
         else if(seg==="aisearch"){
           if(on) lsDel(E_SEARCH_AI_OFF_KEY); else lsSet(E_SEARCH_AI_OFF_KEY,"1");
           eTellSearch();
+          syncOrgMark();
           if(on) armSearch(); else clearSearchMeaning();
           try{ render(); }catch(e){}
           try{ hooks.drawIntentRail(); }catch(e){}
