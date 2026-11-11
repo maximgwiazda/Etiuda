@@ -24,6 +24,7 @@ import { lapseNote, teamLeads, relayDesk, keySignHtml, forgetTeamLead, pickMoved
 import { pack } from "./pack.js";
 import { openScreenTab, registerScreen, screenOn, clearScreenOn } from "./screen-tabs.js";
 import { openAbout } from "./about.js";
+import { openUpdatePage, updateAbout } from "./update-offer.js";
 import { openMaintenance } from "./maintenance.js";
 import { E_VERSION } from "./env.js";
 import { sxIcon } from "./sx-icons.js";
@@ -383,9 +384,12 @@ function dataGroups(){
   ]}];
 }
 function aboutGroups(){
+  /* Under a host, the running release over what the latest look found, and the release page's button while an offer stands. */
+  const up=updateAbout(E_VERSION);
+  const see=up && up.offer ? '<button type="button" class="btn" id="setUpdateSee" data-e-open="update" title="'+esc(t("Opens the page of this release"))+'">'+esc(t("See what's new"))+'</button>' : "";
   return [{rows:[
-    row("about","about","Etiuda",E_VERSION,
-      '<button type="button" class="btn" id="setAbout" title="'+esc(t("This version of Etiuda, what is new in it, and its licence"))+'">'+esc(t("About Etiuda"))+'</button>'),
+    row("about","about","Etiuda",up ? up.lines.join("\n") : E_VERSION,
+      see+'<button type="button" class="btn" id="setAbout" title="'+esc(t("This version of Etiuda, what is new in it, and its licence"))+'">'+esc(t("About Etiuda"))+'</button>'),
     row("tour","forward",t("Show tour…"),t("The tour of Etiuda's controls, one at a time"),
       '<button type="button" class="btn" id="setTour">'+esc(t("Show tour…"))+'</button>'),
     row("maintenance","statistics",t("Maintenance"),t("What this computer reports, and ways to set things right."),
@@ -665,6 +669,7 @@ function wirePage(box){
   act("#setReset",resetAllSettings);
   act("#setResetKeys",resetShortcuts);
   act("#setAbout",()=>openAbout());
+  act("#setUpdateSee",()=>openUpdatePage());
   /* The tour runs on the conversation, so the conversation comes forward and the tab stays for coming back. */
   act("#setTour",()=>{ clearScreenOn(); hooks.startTour(); });
   act("#setMaint",()=>openMaintenance());

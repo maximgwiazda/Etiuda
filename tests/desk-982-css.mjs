@@ -90,10 +90,11 @@ try {
     const m = document.getElementById("settingsMenu");
     const mr = m.getBoundingClientRect();
     const cs = getComputedStyle(m);
-    const btn = m.querySelector('button[role="menuitem"]');
+    /* The first row shown: the update offer's row stands first, hidden while no offer stands. */
+    const btn = [...m.querySelectorAll('button[role="menuitem"]')].find(b => b.offsetParent !== null);
     const br = btn.getBoundingClientRect();
     const bcs = getComputedStyle(btn);
-    const sep = m.querySelector(".menu-sep");
+    const sep = [...m.querySelectorAll(".menu-sep")].find(x => x.offsetParent !== null);
     const scs = sep ? getComputedStyle(sep) : null;
     return {
       menuWidth: mr.width,

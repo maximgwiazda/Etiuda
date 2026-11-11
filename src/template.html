@@ -1257,6 +1257,15 @@ body.shed-segfold #seg::before{width:100%;transform:none}
 .menu.e-ctx:focus{outline:none}
 .menu.e-ctx button{display:flex;align-items:center;justify-content:space-between;width:100%}
 .menu.e-ctx button small{margin-left:auto;padding-left:14px;font:11.5px var(--sans);color:var(--dim)}
+/* The update offer (update-offer.js): a dot on the Menu button's corner, and the Menu's first row, its words over its
+   two actions. The dot takes no room, so the button and the row beside it never move. */
+#settingsBtn{position:relative}
+.upd-dot{position:absolute;top:3px;right:3px;width:7px;height:7px;border-radius:50%;background:var(--accent)}
+.menu-upd{display:flex;flex-direction:column}
+.menu-upd-t{padding:4px 10px 1px;font:600 13px/20px var(--sans);color:var(--ink)}
+.menu .menu-upd-acts{display:flex;gap:2px}
+.menu .menu-upd-acts button{width:auto}
+.menu #menuUpdateSee{color:var(--accent)}
 body.pills-off .pills-slot{display:none}
 /* The retreat is a fixed clone (see animatePillsBox). This class must not put the slot
    back into flow: the snap has already taken its final display. */
@@ -3440,6 +3449,8 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 .set-label small{display:block;margin-top:2px;font:12.5px var(--sans);color:var(--dim);
   line-height:1.45;text-wrap:balance}
 .set-ctl{flex:0 0 auto}
+/* About's release lines, one above the other (update-offer.js). */
+.set-row[data-row=about] .set-label small{white-space:pre-line}
 /* EQUAL COLUMNS the general way: "Light | Dark | System" cannot be halved by width:42px
    like EN/PL, so 1fr columns state the rule whatever the labels are - the thumb's 1/n
    lands on a button by construction. Grid, not flex:1: equal flex-basis still lets padding
@@ -4768,8 +4779,11 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
         <!-- NOT A GEAR: half of this is places to go, not settings. Spaced EXACTLY 5 units,
      the one step that is whole device pixels at 1x, 1.5x and 2x - verified by rasterising,
      not by reading the numbers. -->
-        <button class="btn icbtn" id="settingsBtn" type="button" title="Cards, the intent panel and the category bar" aria-haspopup="true" aria-expanded="false" aria-label="Menu"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4 5h12M4 10h12M4 15h12"/></svg></button>
+        <button class="btn icbtn" id="settingsBtn" type="button" title="Cards, the intent panel and the category bar" aria-haspopup="true" aria-expanded="false" aria-label="Menu"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4 5h12M4 10h12M4 15h12"/></svg><span class="upd-dot" id="updDot" role="img" data-i18n-skip hidden></span></button>
         <div class="menu" id="settingsMenu" hidden role="menu">
+          <!-- The update offer, first while one stands and Later has not put it off: words in update-offer.js. -->
+          <div class="menu-upd" id="menuUpdate" role="group" aria-labelledby="menuUpdateT" data-i18n-skip hidden><div class="menu-upd-t" id="menuUpdateT"></div><div class="menu-upd-acts"><button type="button" role="menuitem" data-act="update-see" data-e-open="update" id="menuUpdateSee"></button><button type="button" role="menuitem" data-act="update-later" id="menuUpdateLater"></button></div></div>
+          <div class="menu-sep" id="menuUpdateSep" hidden></div>
           <button type="button" role="menuitem" data-act="manage" title="Edit, hide or restore every card, intent and category">Library…</button>
           <button type="button" role="menuitem" data-act="settings" title="Interface language, appearance and keyboard shortcuts">Settings…</button>
           <button type="button" role="menuitem" data-act="join" id="menuJoin" hidden title="Paste the invitation from the team's lead.">Join a team</button>
