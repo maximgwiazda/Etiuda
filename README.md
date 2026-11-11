@@ -67,6 +67,9 @@ written out in full for a tool that does not expand variables. The exit code say
 | 740 | An all-users run could not get administrator rights | Run it elevated, or install per account with `/currentuser` |
 | 2 | An older version would not uninstall, its own 1618 included, or another failure the installer caught | Look at that machine |
 
+A locked file is tried for about a minute before the run ends with 1618. The installer removes the old version before it
+writes the new one, so a failed upgrade can leave the app absent until the deployment tool retries.
+
 An all-users install looks for an open copy in every session, and asks only the installing account's own copy to
 close: another person's is never closed, so the run ends with 1618 and the deployment tool tries again later. A
 per-user install looks in its own account alone, since another account's copy runs from that account's own folder.

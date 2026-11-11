@@ -652,6 +652,12 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
   ok(lockedExtract(X), "13b a file still locked after five tries ends a silent run with 1618 before the in-place overwrite that ignores errors");
   ok(!lockedExtract(X.replace("/SD IDCANCEL IDCANCEL", "/SD IDRETRY IDCANCEL")), "13b control: the silent Retry put back, which overwrites in place and ends 0, reads red");
   ok(!lockedExtract(X.replace(/(AbortExtract7za:\r?\n)\s*SetErrorLevel 1618\r?\n/, "$1")), "13b control: Cancel quitting with no code reads red");
+  /* The retry window before that 1618 (Claude alpha's ruling (2), 2026-11-11 18:49; the number the test architect's and the lead
+     engineer's): 30 tries 2 s apart, about a minute, so an antivirus scan of a freshly written file can let go first. */
+  const retryWindow = text => /\n\s*\$\{if\} \$R1 < 30\r?\n/.test(String(text)) && /\n\s*RetryExtract7za:\r?\n\s*Sleep 2000\r?\n/.test(String(text));
+  ok(retryWindow(X), "13b a locked file is tried 30 times 2 s apart, about a minute, before the 1618");
+  ok(!retryWindow(X.replace("${if} $R1 < 30", "${if} $R1 < 5")), "13b control: the template's five tries put back reads red");
+  ok(!retryWindow(X.replace(/(RetryExtract7za:\r?\n\s*)Sleep 2000/, "$1Sleep 1000")), "13b control: the template's one-second wait put back reads red");
 
   /* Stage 2, the close check: every session's copy in an all-users install, one account's in a per-user one; the close
      request only ever to the installing account's own. */

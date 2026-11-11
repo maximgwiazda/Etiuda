@@ -131,6 +131,34 @@ const EXIT_CODES = [
   ["include/extractAppPackage.nsh", "AbortExtract7za:", ["SetErrorLevel 1618"]],
 ];
 
+/* 4b. The retry window before a locked extract's 1618: the template tries five times a second apart, then the box; a
+ *    deployment tool's run waits about a minute instead, 30 tries 2 s apart, so an antivirus scan of a freshly written file
+ *    can let go (Claude alpha's ruling (2), 2026-11-11). Each row is [template, the line as the template has it, the line it
+ *    becomes], each line once in that file, its indentation kept. */
+const RETRY_WINDOW = [
+  ["include/extractAppPackage.nsh", "${if} $R1 < 5", "${if} $R1 < 30"],
+  ["include/extractAppPackage.nsh", "Sleep 1000", "Sleep 2000"],
+];
+function applyRetryWindow(nsisDir) {
+  for (const [file, from, to] of RETRY_WINDOW) {
+    const p = path.join(nsisDir, file);
+    if (!fs.existsSync(p)) continue;
+    const lines = fs.readFileSync(p, "utf8").split("\n");
+    const hits = lines.map((l, i) => (l.trim() === from ? i : -1)).filter(i => i > -1);
+    if (hits.length !== 1) continue;
+    lines[hits[0]] = lines[hits[0]].replace(from, to);
+    fs.writeFileSync(p, lines.join("\n"), "utf8");
+  }
+}
+function retryWindowMissing(nsisDir) {
+  return RETRY_WINDOW.filter(([file, from, to]) => {
+    const p = path.join(nsisDir, file);
+    if (!fs.existsSync(p)) return true;
+    const lines = fs.readFileSync(p, "utf8").split("\n").map(l => l.trim());
+    return lines.filter(l => l === to).length !== 1 || lines.includes(from);
+  }).map(([file, from]) => file + ": " + from);
+}
+
 /* 5. initMultiUser falls back to a per-user install when neither switch is given, so a silent run by the system account
  *    installs into that account's own profile, where no person can start the app. Such a run, and one by an elevated
  *    administrator in session 0, where no person's desktop is, installs for all users; a switch, an interactive run and
@@ -221,6 +249,7 @@ function verifyNsisPatches(rootDir) {
   const nsisDir = path.dirname(uiPath);
   const silentMissing = silentDefaultsMissing(nsisDir), unanswered = unansweredBoxes(nsisDir), exitMissing = exitCodesMissing(nsisDir);
   const machineWideMissing = exitCodesMissing(nsisDir, MACHINE_WIDE);
+  const retryMissing = retryWindowMissing(nsisDir);
   return {
     multiUserUiPatched: !!multiUserUiPatched,
     installSectionPatched: !!installSectionPatched,
@@ -231,8 +260,10 @@ function verifyNsisPatches(rootDir) {
     exitMissing,
     machineWidePatched: machineWideMissing.length === 0,
     machineWideMissing,
+    retryWindowPatched: retryMissing.length === 0,
+    retryMissing,
     applied: !!(multiUserUiPatched && installSectionPatched) && silentMissing.length === 0 && unanswered.length === 0
-      && exitMissing.length === 0 && machineWideMissing.length === 0,
+      && exitMissing.length === 0 && machineWideMissing.length === 0 && retryMissing.length === 0,
   };
 }
 
@@ -280,6 +311,7 @@ function applyNsisPatches(rootDir) {
   applySilentDefaults(path.dirname(uiPath));
   applyExitCodes(path.dirname(uiPath));
   applyExitCodes(path.dirname(uiPath), MACHINE_WIDE);
+  applyRetryWindow(path.dirname(uiPath));
   return verifyNsisPatches(rootDir);
 }
 
