@@ -989,6 +989,7 @@ function refreshRolePage(page){
   wireRolePage(page);
   const cnt = page.querySelector('details.manage-sec[data-mg="who"] .mg-count');
   if(cnt) cnt.textContent = String(whoOptions().length);
+  markCutText(page);
 }
 
 function wireRolePage(page){

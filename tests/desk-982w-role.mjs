@@ -12,6 +12,7 @@
  *   w6 clicking a name marks it: wheel shows neighbours, count reads words, replies hold marked name, header ROLE unchanged
  *   w7 clicking a reply opens that card's editor
  *   w8 after move and removal, reload shows same list; restored list stores pack.who null
+ *   w9 at 546 px no text on the ROLE page ends in dots, and every reply under How it reads shows whole
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -388,6 +389,24 @@ try {
     };
   });
   check(w8Res && w8Res.ok, "w8 move and removal persist across reload, restored list stores pack.who null", w8Res);
+
+  /* w9 (Claudius kappa): cut text fades and never ends in dots, the desk's rule at "CUT TEXT FADES" in
+     src/template.html; at the narrowest window every reply under "How it reads" shows whole. */
+  const p9 = await boot();
+  await openRoleSuggestions(p9);
+  await p9.setViewport({ width: 546, height: 900, deviceScaleFactor: 1 });
+  await sleep(300);
+  const w9Res = await p9.evaluate(() => {
+    const pageEl = document.querySelector(".sx-page");
+    if (!pageEl || !pageEl.querySelector(".lw-ct")) return { ok: false, reason: "no reply under How it reads" };
+    const who = pageEl.querySelector("details.manage-sec[data-mg=\"who\"]") || pageEl;
+    const dots = [...who.querySelectorAll("*")].filter(el => getComputedStyle(el).textOverflow === "ellipsis")
+      .map(el => (el.className || el.tagName) + " in " + ((el.parentElement && el.parentElement.className) || ""));
+    const clipped = [...pageEl.querySelectorAll(".lw-ct > *")].filter(el => el.scrollHeight > el.clientHeight + 1)
+      .map(el => el.className || el.tagName);
+    return { ok: !dots.length && !clipped.length, dots: dots.slice(0, 4), clipped: clipped.slice(0, 4) };
+  });
+  check(w9Res && w9Res.ok, "w9 at 546 px no text on the ROLE page ends in dots, and every reply under How it reads shows whole", w9Res);
 
 } catch (e) {
   check(false, "run crashed: " + e.message, e.stack);

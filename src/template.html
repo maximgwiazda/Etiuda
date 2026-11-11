@@ -3713,7 +3713,7 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx.lm-lib .mg-intents .manage-row.mg-int{display:flex;align-items:center;flex-wrap:nowrap;gap:6px;padding:8px 4px;border-top:1px solid var(--line);box-sizing:border-box}
 .sx.lm-lib .mg-intents .manage-row.mg-int:first-of-type{border-top:0}
 .sx.lm-lib .mg-intents .manage-row.mg-int .cat-slot{flex:0 0 16px}
-.sx.lm-lib .mg-intents .manage-row.mg-int .mg-int-t{flex:0 0 250px;min-width:250px;max-width:250px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sx.lm-lib .mg-intents .manage-row.mg-int .mg-int-t{flex:0 0 250px;min-width:250px;max-width:250px;white-space:nowrap;overflow:hidden}
 .sx.lm-lib .mg-intents .manage-row.mg-int .mg-int-n{flex:0 0 26px;text-align:right;font:600 11px var(--mono);opacity:.65;cursor:default}
 .sx.lm-lib .mg-intents .manage-row.mg-int .lw-mid{flex:1 1 0;min-width:0;display:flex;gap:6px;overflow:hidden;align-items:center;
   -webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 60px),#0000);
@@ -3751,7 +3751,7 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .lw-name:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .lw-name.dragging{opacity:.4}
 .lw-name .g{color:var(--dim);opacity:.55;cursor:default;display:flex;width:14px;justify-content:center;flex:0 0 auto}
-.lw-name .n{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lw-name .n{flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap}
 .lw-name button.lw-del{border:0;background:none;color:var(--dim);width:26px;height:26px;border-radius:7px;display:flex;
   align-items:center;justify-content:center;opacity:.6;cursor:default;flex:0 0 auto;padding:0}
 .lw-name button.lw-del:hover{opacity:1;color:var(--ink);background:var(--field-edge)}
@@ -3767,18 +3767,17 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
   border-radius:10px;background:var(--panel);overflow:hidden;box-sizing:border-box}
 .lw-drum{width:120px;max-width:38%;border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;
   justify-content:center;line-height:1.15;flex:0 0 auto;overflow:hidden}
-.lw-drum .p,.lw-drum .q{font-size:11px;color:var(--dim);opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90%}
-.lw-drum .c{font:600 15px var(--sans);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90%}
+.lw-drum .p,.lw-drum .q{font-size:11px;color:var(--dim);opacity:.7;white-space:nowrap;overflow:hidden;max-width:90%}
+.lw-drum .c{font:600 15px var(--sans);color:var(--ink);white-space:nowrap;overflow:hidden;max-width:90%}
 .lw-drumfield{flex:1 1 auto;min-width:0;display:flex;align-items:center;padding:0 14px;color:var(--dim);font-size:14px;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  overflow:hidden;white-space:nowrap}
 .lw-reads{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:10px;width:100%;min-width:0}
 .lw-ct{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel);display:flex;
   flex-direction:column;gap:4px;min-width:0;cursor:default;box-sizing:border-box;outline:none}
 .lw-ct:hover{border-color:var(--line-strong)}
 .lw-ct:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-.lw-ct .t{font:600 13.5px var(--sans);display:flex;align-items:center;gap:8px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.lw-ct .r{font:13px/1.45 var(--sans);color:var(--ink);display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;
-  overflow:hidden;word-break:break-word}
+.lw-ct .t{font:600 13.5px var(--sans);display:flex;align-items:center;gap:8px;color:var(--ink);overflow:hidden;white-space:nowrap}
+.lw-ct .r{font:13px/1.45 var(--sans);color:var(--ink);overflow-wrap:anywhere}
 .lw-role .fillx{background:var(--accent-soft);color:var(--accent);border-radius:5px;padding:0 4px;font-weight:600;text-decoration:none}
 .lw-role .fillmiss{font:11px var(--mono);border:1px solid var(--line-strong);border-radius:5px;padding:0 4px;color:var(--dim)}
 @container (max-width: 880px){
