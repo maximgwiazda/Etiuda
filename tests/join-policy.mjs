@@ -9,7 +9,7 @@
  * A free name fails here as it would in the shell.
  *
  * THE TEMPLATE IS READ AS A FILE AND AS A SHIPMENT (19f, 19i): the ADMX and its two ADMLs parse and agree, offer the
- * desk's two values and nothing else, and electron-builder.js copies that folder beside the Windows installer's files.
+ * desk's three values and Studio's five and nothing else, each in the control its kind takes, and electron-builder.js copies that folder beside the Windows installer's files.
  *
  * THE GLUE IS DRIVEN WHOLE (19g, 19h). The real shell/main.js runs under stubbed electron, as tests/team-desk.mjs
  * runs it, beside a stand-in for reg.exe that answers its export and its console print from one invented key,
@@ -629,11 +629,28 @@ const under = (el, name) => el.kids.reduce((out, k) => out.concat(k.name === nam
       doc[k] = parseXml(raw[k], k);
     } catch (e) { problems.push((e && e.message) || String(e)); }
   }
-  /* The key the desk reads, as the template must write it; the registry compares keys without case. Etiuda Studio's pair
-     (TeamAboveFolder, LeadKeyAbove) left the template on 2026-10-15, sense pass finding 17: nothing reads it, so it is
-     offered again only when Studio does. */
-  const DESK_KEY = "software\\policies\\etiuda";
-  const WANT = { TeamFolder: [DESK_KEY, "1024"], LeadKey: [DESK_KEY, "64"] };
+  /* What the template offers, each policy beside what reads it, so none is a setting nothing reads. All are machine policy
+     under the one key both programs read; the registry compares keys without case.
+     - The desk, shell/main.js: TeamFolder and LeadKey (joinPolicyFacts), DeskNoUpdateCheck (policyNoUpdate); checked
+       below against the shell's own text.
+     - Etiuda Studio, from its board 992 and update-check work (Claude α's decisions 10 and 11, 2026-11-11):
+       StudioNoUpdateCheck (src/update-note.mjs noUpdateFrom) and AiProvider, AiEndpoint, AiModel, AiKey
+       (src/customer-ai.mjs aiPolicyFrom). Studio's old pair (TeamAboveFolder, LeadKeyAbove) left on 2026-10-15, sense pass
+       finding 17, because nothing read it; it is not offered again.
+     A text is one required box writing REG_SZ, never expandable, since both readers take a string as written. A switch
+     writes the DWORD 1 when enabled and 0 when disabled, the value named on the policy itself: both readers take 0 as the
+     look left on. The service is a list of exactly the five ids Studio's PROVIDERS knows, in that order, since Studio
+     ignores any other value and a typed one is a typo waiting. */
+  const KEY = "software\\policies\\etiuda";
+  const WANT = {
+    TeamFolder: { text: "1024", desk: true }, LeadKey: { text: "64", desk: true },
+    DeskNoUpdateCheck: { onOff: true, desk: true }, StudioNoUpdateCheck: { onOff: true },
+    DeskOrganisationModel: { onOff: true },
+    AiProvider: { list: ["openai", "anthropic", "google", "azure", "compatible"] },
+    AiEndpoint: { text: "2048" }, AiModel: { text: "256" }, AiKey: { text: "1024" },
+  };
+  let deskText = "";
+  try { deskText = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").toLowerCase(); } catch (e) { problems.push("shell/main.js unread"); }
   const refs = { string: [], presentation: [] }, boxOf = {};
   if (doc.admx) {
     if (doc.admx.name !== "policyDefinitions") problems.push("admx root " + doc.admx.name);
@@ -646,14 +663,36 @@ const under = (el, name) => el.kids.reduce((out, k) => out.concat(k.name === nam
     const names = policies.map(p => p.attrs.name);
     if (JSON.stringify(names.slice().sort()) !== JSON.stringify(Object.keys(WANT).sort())) problems.push("policies " + names.join(","));
     for (const p of policies) {
-      const want = WANT[p.attrs.name], boxes = under(p, "text");
+      const name = p.attrs.name, want = WANT[name];
       if (!want) continue;
-      if (String(p.attrs.key).toLowerCase() !== want[0] || p.attrs.class !== "Machine" || boxes.length !== 1
-          || boxes[0].attrs.valueName !== p.attrs.name || boxes[0].attrs.maxLength !== want[1])
-        problems.push(p.attrs.name + " key " + p.attrs.key + " class " + p.attrs.class + " value "
-          + (boxes[0] && boxes[0].attrs.valueName) + " length " + (boxes[0] && boxes[0].attrs.maxLength));
+      const bad = what => problems.push(name + " " + what);
+      if (String(p.attrs.key).toLowerCase() !== KEY) bad("key " + p.attrs.key);
+      if (p.attrs.class !== "Machine") bad("class " + p.attrs.class);
+      if (want.desk && !deskText.includes("\"" + name.toLowerCase() + "\"")) bad("is not read by shell/main.js");
+      const elements = under(p, "elements"), parts = elements.length ? elements[0].kids : [];
       const shown = /^\$\(presentation\.([^)]+)\)$/.exec(p.attrs.presentation || "");
-      if (shown && boxes[0]) boxOf[shown[1]] = boxes[0].attrs.id;
+      if (want.onOff) {
+        const one = (tag, n) => { const v = under(p, tag); const d = v.length === 1 ? v[0].kids : [];
+          return d.length === 1 && d[0].name === "decimal" && d[0].attrs.value === n; };
+        if (p.attrs.valueName !== name) bad("valueName " + p.attrs.valueName);
+        if (!one("enabledValue", "1") || !one("disabledValue", "0")) bad("does not write 1 when enabled and 0 when disabled");
+        if (elements.length || p.attrs.presentation !== undefined) bad("carries elements or a presentation");
+        continue;
+      }
+      if (p.attrs.valueName !== undefined) bad("names its value on the policy");
+      if (parts.length !== 1) { bad(parts.length + " elements"); continue; }
+      const el = parts[0];
+      if (el.attrs.valueName !== name || el.attrs.required !== "true") bad("valueName " + el.attrs.valueName + " required " + el.attrs.required);
+      if (want.text) {
+        if (el.name !== "text" || el.attrs.maxLength !== want.text || el.attrs.expandable === "true")
+          bad(el.name + " length " + el.attrs.maxLength + " expandable " + el.attrs.expandable);
+        if (shown) boxOf[shown[1]] = ["textBox", el.attrs.id];
+      } else {
+        const items = el.name === "enum" ? el.kids : [];
+        const ids = items.map(i => { const s = under(i, "string"); return i.name === "item" && s.length === 1 ? s[0].text.trim() : "?"; });
+        if (JSON.stringify(ids) !== JSON.stringify(want.list)) bad(el.name + " offers " + ids.join(","));
+        if (shown) boxOf[shown[1]] = ["dropdownList", el.attrs.id];
+      }
     }
     const cats = under(doc.admx, "category").map(c => c.attrs.name).join(",");
     if (cats !== "Etiuda") problems.push("categories " + cats);
@@ -671,20 +710,24 @@ const under = (el, name) => el.kids.reduce((out, k) => out.concat(k.name === nam
       const missing = [...w].filter(x => !h.has(x)), spare = [...h].filter(x => !w.has(x));
       if (missing.length || spare.length) problems.push(lang + " " + what + " missing [" + missing.join(",") + "] unreferenced [" + spare.join(",") + "]");
     }
+    /* Each presentation is the one control its policy's element takes, bound to that element, with words to show:
+       a text box's label, a list's own text. */
     for (const p of shows) {
-      const boxes = under(p, "textBox");
-      if (boxes.length !== 1 || boxes[0].attrs.refId !== boxOf[p.attrs.id]) problems.push(lang + " presentation " + p.attrs.id);
+      const want = boxOf[p.attrs.id], c = p.kids, labels = c.length === 1 ? under(c[0], "label") : [];
+      const words = !want ? "" : want[0] === "textBox" ? (labels.length === 1 ? labels[0].text.trim() : "") : (c.length === 1 ? c[0].text.trim() : "");
+      if (!want || c.length !== 1 || c[0].name !== want[0] || c[0].attrs.refId !== want[1] || !words) problems.push(lang + " presentation " + p.attrs.id);
     }
+    for (const s of strings) if (!s.text.trim()) problems.push(lang + " string " + s.attrs.id + " is empty");
     const text = id => (strings.find(s => s.attrs.id === id) || { text: "" }).text;
     if (text("EtiudaCat") !== "Etiuda") problems.push(lang + " category name");
   }
   if (order.en && order.pl && order.en.join() !== order.pl.join()) problems.push("en and pl ids in another order");
   if (raw.pl && (!raw.pl.includes("stanowisko") || !/[ąćęłńóśźż]/i.test(raw.pl))) problems.push("polish copy");
   if (raw.en && !raw.en.includes("full path") && !raw.en.includes("Full path")) problems.push("english copy");
-  for (const [k, t] of Object.entries(raw)) if (/Studio|Above/.test(t)) problems.push(k + " still offers a setting for Etiuda Studio");
   check(problems.length === 0,
     "19f the template parses, its strings and presentations match the ADMX one for one in English and in Polish, each"
-    + " policy writes its own value under the key the desk reads, and none is a setting nothing reads: "
+    + " policy writes its own value under the key both programs read, as a text box, a 1-or-0 switch or the list of"
+    + " Studio's five services, and none is a setting nothing reads: "
     + (problems.join("; ") || "shell/policy"));
 }
 
