@@ -528,6 +528,78 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
   fs.rmSync(lab, { recursive: true, force: true });
 }
 
+/* ---- 12. the exit codes a deployment tool reads, each held to its path and to the list IT reads --------------- */
+/* The list is README.md's table. Every SetErrorLevel the patched templates and this tree's includes can set is in it or
+   named in INNER; portable.nsi is the portable target's, which this tree does not build. Each path is planted on a copy. */
+{
+  const osx = require("node:os");
+  const ROOT = path.join(__dirname, ".."), DOC = "README.md";
+  const APP_OPEN = { file: "shell/installer.nsh", text: () => fs.readFileSync(path.join(ROOT, "shell", "installer.nsh"), "utf8") };
+  const INNER = { "0x666666": "the elevated copy telling its outer copy it was not an administrator, which the outer copy answers with 740" };
+  const listed = {};
+  const docText = fs.existsSync(path.join(ROOT, DOC)) ? fs.readFileSync(path.join(ROOT, DOC), "utf8") : "";
+  for (const m of docText.matchAll(/^\|\s*(\d+)\s*\|\s*([^|]+)\|/gm)) listed[m[1]] = m[2].trim();
+  ok(Object.keys(listed).sort().join(",") === "0,1618,2,740", "12a the list IT reads (" + DOC + ") gives exactly 0, 1618, 740 and 2: "
+    + Object.keys(listed).join(", "));
+  ok(/still open/.test(listed["1618"] || "") && /another [\w ]*installer/.test(listed["1618"] || "") && /administrator/.test(listed["740"] || ""),
+    "12b and says 1618 for the app still open or another installer running, 740 for no administrator rights");
+
+  const patchTool = require(path.join(ROOT, "tools", "patch-nsis.cjs"));
+  const lab = fs.mkdtempSync(path.join(osx.tmpdir(), "etiuda-nsis-codes-"));
+  const to = path.dirname(patchTool.getPaths(lab).multiUserUi);
+  const T = {};
+  try {
+    fs.cpSync(path.dirname(patchTool.getPaths(ROOT).multiUserUi), to, { recursive: true });
+    patchTool.applyNsisPatches(lab);
+    const walk = d => fs.readdirSync(d, { withFileTypes: true }).forEach(e => e.isDirectory() ? walk(path.join(d, e.name))
+      : /\.(nsh|nsi)$/i.test(e.name) && (T[path.relative(to, path.join(d, e.name)).replace(/\\/g, "/")] = fs.readFileSync(path.join(d, e.name), "utf8")));
+    walk(to);
+  } catch (e) { console.log("  (the template copy failed: " + e.message + ")"); }
+  fs.rmSync(lab, { recursive: true, force: true });
+
+  /* After the elevation call, before its Quit: 740 for a failed or declined elevation, a runas by a non-administrator, and an
+     elevated copy that was not an administrator, and no other code set there. */
+  const elevation = text => {
+    const i = String(text).indexOf("!insertmacro UAC_RunElevated"), q = i < 0 ? -1 : text.indexOf("Quit", i);
+    if (q < 0) return false;
+    const s = text.slice(i, q);
+    return /\$\{If\} \$0 <> 0\s+SetErrorLevel 740/.test(s) && /\$\{ElseIf\} \$1 = 3\s+SetErrorLevel 740/.test(s)
+      && /\$\{ElseIf\} \$1 = 1\s+\$\{AndIf\} \$2 = 0x666666\s+SetErrorLevel 740/.test(s) && (s.match(/SetErrorLevel/g) || []).length === 3;
+  };
+  ok(elevation(T["installer.nsi"]) && elevation(T["multiUser.nsh"]),
+    "12c an all-users run that cannot get administrator rights ends with 740, in the silent installer and the uninstaller");
+  ok(!elevation(String(T["installer.nsi"]).replace(/SetErrorLevel 740/, "SetErrorLevel 2")),
+    "12c control: one of the three elevation paths left at 2 reads red");
+  const second = text => /\n\s*notfound:\r?\n\s*SetErrorLevel 1618\r?\n\s*Abort\b/.test(String(text));
+  const one = T["include/allowOnlyOneInstallerInstance.nsh"];
+  ok(second(one), "12d a second copy of the installer, started while one runs, ends with 1618");
+  ok(!second(String(one).replace(/\n\s*SetErrorLevel 1618/, "")), "12d control: the code taken out reads red");
+  const appOpen = text => {
+    const m = (/!macro customCheckAppRunning\r?\n([\s\S]*?)!macroend/.exec(String(text)) || [])[1] || "";
+    return /SetErrorLevel 1618\r?\n\s*Quit\b/.test(m) && (m.match(/SetErrorLevel/g) || []).length === 1;
+  };
+  const open = APP_OPEN.text();
+  ok(appOpen(open), "12e the app still open after the wait ends a silent run with 1618 (" + APP_OPEN.file + ", customCheckAppRunning)");
+  ok(!appOpen(open.replace("SetErrorLevel 1618", "SetErrorLevel 2")), "12e control: the old 2 put back reads red");
+
+  const codes = files => {
+    const sets = {};
+    for (const [name, text] of files) String(text).split(/\r?\n/).forEach((l, i) => {
+      const m = /^\s*SetErrorLevel\s+(\S+)/.exec(l);
+      if (m) (sets[m[1]] = sets[m[1]] || []).push(name + ":" + (i + 1));
+    });
+    return { sets, stray: Object.keys(sets).filter(v => !(v in listed) && !(v in INNER)) };
+  };
+  const own = fs.readdirSync(path.join(ROOT, "shell", "installer")).filter(f => /\.nsh$/i.test(f))
+    .map(f => ["shell/installer/" + f, fs.readFileSync(path.join(ROOT, "shell", "installer", f), "utf8")]);
+  const files = Object.keys(T).filter(f => f !== "portable.nsi").map(f => [f, T[f]]).concat([[APP_OPEN.file, open]], own);
+  const C = codes(files);
+  ok(Object.keys(T).length >= 10 && C.stray.length === 0 && ["740", "1618", "2"].every(v => v in C.sets),
+    "12f every code a silent run can end with is on the list or named here, and each listed failure code has its path: "
+    + Object.keys(C.sets).map(v => v + " at " + C.sets[v].join(" ")).join("; ") + (C.stray.length ? "; not listed: " + C.stray.join(", ") : ""));
+  ok(codes(files.concat([["planted", "  SetErrorLevel 3"]])).stray.join() === "3", "12f control: a code set nowhere on the list reads red");
+}
+
 console.log("\n#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
 console.log("install-plan-selftest " + (fails ? "FAILED " + fails + " of " : "passed ") + checks + " check(s)");
 process.exit(fails ? Math.min(fails, 63) : 0);

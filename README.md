@@ -38,6 +38,23 @@ the band 2.x is designed around, nothing is packaged or signed, and the engine i
 still the 1.x one. This is that engine with a desktop window around it rather than a first
 look at 2.0.0.
 
+## Installing silently
+
+For a deployment tool: `etiuda-<version>-setup.exe /S` installs for the account it runs as and
+opens no window; `/S /allusers` installs for every account and needs an elevated caller. The
+uninstaller takes `/S` the same way, as the `QuietUninstallString` the installer registers, and
+keeps each person's data. The exit code says what to do next:
+
+| Code | Meaning | What to do |
+|---|---|---|
+| 0 | Installed, or uninstalled | Nothing |
+| 1618 | Etiuda was still open after being asked to close for about 20 seconds, or another Etiuda installer was running | Retry later |
+| 740 | An all-users run could not get administrator rights | Run it elevated, as the system account for example, or install per account with `/currentuser` |
+| 2 | Anything else, an older version that would not uninstall for one | Look at that machine |
+
+1618 and 740 are the codes Windows itself uses for these two cases, so a tool that already knows
+them needs nothing more.
+
 ## Licence
 
 Etiuda 2.x is source-available under the Etiuda Source-Available Licence 1.0, and `LICENSE`

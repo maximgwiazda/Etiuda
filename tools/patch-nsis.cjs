@@ -8,6 +8,7 @@
  * 2. installSection.nsh: removes ${ifNot} ${UAC_IsInnerInstance} guard around CHECK_APP_RUNNING
  *    so elevated copy closes any running app before copying files.
  * 3. Every template MessageBox: a silent default (/SD), so a silent run ends with an exit code (SILENT_DEFAULTS).
+ * 4. The exit codes a deployment tool can act on (EXIT_CODES).
  */
 "use strict";
 const fs = require("node:fs");
@@ -108,6 +109,48 @@ function unansweredBoxes(nsisDir) {
   return out;
 }
 
+/* 4. Exit codes a deployment tool can act on, listed for IT in README.md (Installing silently): 740, Windows' code for elevation required,
+ *    where an all-users run could not get administrator rights (declined, failed, or the elevated copy was not an
+ *    administrator); 1618, Windows' code for another installation in progress, where another copy of this installer is
+ *    running. The app still open is 1618 too, set by the installer's own customCheckAppRunning. Each row is [template,
+ *    the line the lines follow, once in that file, the lines], indented as the line after the anchor. */
+const ELEVATION_CODE = ["${If} $0 <> 0", "  SetErrorLevel 740", "${ElseIf} $1 = 3", "  SetErrorLevel 740",
+  "${ElseIf} $1 = 1", "${AndIf} $2 = 0x666666", "  SetErrorLevel 740", "${EndIf}"];
+const EXIT_CODES = [
+  ["installer.nsi", "!insertmacro UAC_RunElevated", ELEVATION_CODE],
+  ["multiUser.nsh", "!insertmacro UAC_RunElevated", ELEVATION_CODE],
+  ["include/allowOnlyOneInstallerInstance.nsh", "notfound:", ["SetErrorLevel 1618"]],
+];
+
+/* The row's anchor as a line index, or why not: its trimmed line must occur exactly once. */
+function exitRowAt(lines, anchor) {
+  const hits = lines.map((l, i) => (l.trim() === anchor ? i : -1)).filter(i => i > -1);
+  return hits.length === 1 ? hits[0] : (hits.length ? "found more than once" : "not found");
+}
+const exitRowDone = (lines, at, add) => add.every((a, k) => (lines[at + 1 + k] || "").trim() === a.trim());
+
+function applyExitCodes(nsisDir) {
+  for (const [file, anchor, add] of EXIT_CODES) {
+    const p = path.join(nsisDir, file);
+    if (!fs.existsSync(p)) continue;
+    const lines = fs.readFileSync(p, "utf8").split("\n");
+    const at = exitRowAt(lines, anchor);
+    if (typeof at === "string" || exitRowDone(lines, at, add)) continue;
+    const next = lines[at + 1] || "", indent = /^\s*/.exec(next)[0], cr = lines[at].endsWith("\r") ? "\r" : "";
+    lines.splice(at + 1, 0, ...add.map(a => indent + a + cr));
+    fs.writeFileSync(p, lines.join("\n"), "utf8");
+  }
+}
+
+function exitCodesMissing(nsisDir) {
+  return EXIT_CODES.filter(([file, anchor, add]) => {
+    const p = path.join(nsisDir, file);
+    if (!fs.existsSync(p)) return true;
+    const lines = fs.readFileSync(p, "utf8").split("\n"), at = exitRowAt(lines, anchor);
+    return typeof at === "string" || !exitRowDone(lines, at, add);
+  }).map(([file, anchor]) => file + ": " + anchor);
+}
+
 function verifyNsisPatches(rootDir) {
   const { multiUserUi: uiPath, installSection: secPath } = getPaths(rootDir);
   const ui = fs.existsSync(uiPath) ? fs.readFileSync(uiPath, "utf8") : "";
@@ -119,14 +162,17 @@ function verifyNsisPatches(rootDir) {
     && /!insertmacro\s+CHECK_APP_RUNNING/i.test(sec);
 
   const nsisDir = path.dirname(uiPath);
-  const silentMissing = silentDefaultsMissing(nsisDir), unanswered = unansweredBoxes(nsisDir);
+  const silentMissing = silentDefaultsMissing(nsisDir), unanswered = unansweredBoxes(nsisDir), exitMissing = exitCodesMissing(nsisDir);
   return {
     multiUserUiPatched: !!multiUserUiPatched,
     installSectionPatched: !!installSectionPatched,
     silentDefaultsPatched: silentMissing.length === 0,
     silentMissing,
     unanswered,
-    applied: !!(multiUserUiPatched && installSectionPatched) && silentMissing.length === 0 && unanswered.length === 0,
+    exitCodesPatched: exitMissing.length === 0,
+    exitMissing,
+    applied: !!(multiUserUiPatched && installSectionPatched) && silentMissing.length === 0 && unanswered.length === 0
+      && exitMissing.length === 0,
   };
 }
 
@@ -172,6 +218,7 @@ function applyNsisPatches(rootDir) {
   }
 
   applySilentDefaults(path.dirname(uiPath));
+  applyExitCodes(path.dirname(uiPath));
   return verifyNsisPatches(rootDir);
 }
 
