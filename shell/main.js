@@ -23,6 +23,13 @@ const fs = require("node:fs");
 const os = require("node:os");
 const crypto = require("node:crypto");
 const zlib = require("node:zlib");
+/* Node's own connections, the relay's socket among them, trust only the roots bundled with Node; the system's are added
+   here, before any socket opens, so they trust what Chromium's calls trust. A store that cannot be read leaves the bundle
+   as it was, and the desk still starts. tests/system-roots.mjs holds it. */
+try {
+  const tls = require("node:tls");
+  tls.setDefaultCACertificates([...new Set([...tls.getCACertificates("default"), ...tls.getCACertificates("system")])]); /* plant:system-roots */
+} catch { /* the bundled roots stand */ }
 const { watchPage } = require(path.join(__dirname, "page-watch.cjs"));
 const { decideClose, showNotification: showNotificationOf, notifyFirstClose: notifyFirstCloseOf, setLoginItemSettings: setLoginItemSettingsOf,
   createTray, buildTrayMenuTemplate, setJumpList: setJumpListOf, APP_IDS } = require(path.join(__dirname, "tray.cjs"));
