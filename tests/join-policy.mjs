@@ -9,7 +9,7 @@
  * A free name fails here as it would in the shell.
  *
  * THE TEMPLATE IS READ AS A FILE AND AS A SHIPMENT (19f, 19i): the ADMX and its two ADMLs parse and agree, offer the
- * desk's two values and nothing else, and electron-builder.js copies that folder beside the Windows installer's files.
+ * desk's three values and Studio's five and nothing else, each in the control its kind takes, and electron-builder.js copies that folder beside the Windows installer's files.
  *
  * THE GLUE IS DRIVEN WHOLE (19g, 19h). The real shell/main.js runs under stubbed electron, as tests/team-desk.mjs
  * runs it, beside a stand-in for reg.exe that answers its export and its console print from one invented key,
