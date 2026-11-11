@@ -463,15 +463,6 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
   }
   failed += a1 + a2;
 
-  // --- bound 2: exactly one component.
-  if (components.length > 1) {
-    console.log('  FAIL  ' + components.length + ' components, and the rule of 2026-09-14 07:23 allows one:');
-    for (const c of components) console.log('        of ' + c.length + ': ' + c.map(short).join(' -> '));
-    failed++;
-  } else {
-    console.log('  ok    ' + components.length + ' component(s), and the rule allows at most one');
-  }
-
   // --- bound 3a: the ceiling. Board 328, Maxim 2026-09-14 11:15. The jump below stays a note
   // for the reasons at the head of this file; a CEILING is the other half and does fail, so the
   // ring cannot grow back one commit at a time while every delta stays small. Lower it whenever

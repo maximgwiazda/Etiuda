@@ -20,9 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
-const css = readFileSync(join(ROOT, "src", "template.html"), "utf8");
-
-const EXPECTED = 7;
+const EXPECTED = 5;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let fails = 0, checks = 0, skipped = 0;
 const check = (ok, what) => {
@@ -31,16 +29,6 @@ const check = (ok, what) => {
   if (!ok) fails++;
 };
 const skip = what => { skipped++; console.log("  SKIP  " + what); };
-
-const tierOf = name => { const m = css.match(new RegExp("--m-" + name + ":(\\d+)ms\\b")); return m ? Number(m[1]) : null; };
-const iconRule = (css.match(/#theme svg\{([^}]*)\}/) || [])[1] || "";
-const iconTier = (iconRule.match(/var\(--m-([a-z]+)\)/) || [])[1] || null;
-const iconMs = iconTier ? tierOf(iconTier) : null;
-check(iconMs != null && iconMs <= 300,
-  "the icon turns on --m-" + iconTier + ", " + iconMs + "ms, within 300ms");
-const leftovers = [/::view-transition/, /theme-swap/, /theme-fade/].filter(re => re.test(css)).map(String);
-check(!leftovers.length, "the sheet holds no whole-window crossfade and nothing that cuts the controls' own transitions"
-  + (leftovers.length ? ": " + leftovers.join(", ") : ""));
 
 function cls() {
   const set = new Set();

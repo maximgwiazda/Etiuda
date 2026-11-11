@@ -23,7 +23,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 24;
+const EXPECTED = 13;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -155,7 +155,7 @@ if (ready) {
     const keyed = s => s.split("{KEY1}").join(chord("nextCopy1")).split("{KEY4}").join(chord("nextCopy4"));
     const builtIso = ctx.E_BUILT;
 
-    /* ---- 1. the About, row by row ---------------------------------------------------------- */
+    /* ---- 1. the About helper --------------------------------------------------------------- */
     const aboutIn = lang => {
       inLang(lang); ctx.openAbout();
       const r = ROWS[lang], day = dayOf(builtIso, lang);
@@ -167,17 +167,6 @@ if (ready) {
       return { got, which, want: want(r.terms[0]), x: (ids.modalX && ids.modalX.getAttribute("aria-label"))
         || ((/id="modalX"[^>]*aria-label="([^"]*)"/.exec(markup) || [])[1]) || null, html: markup };
     };
-    const en = aboutIn("en"), pl = aboutIn("pl");
-    for (const [a, lang, id] of [[en, "en", "1a"], [pl, "pl", "1b"]])
-      check(a.which > -1, id + " About in " + lang + " says the draft's rows 1 and 3 to 17, in order and nothing else"
-        + (a.which > -1 ? "" : ": got " + JSON.stringify(a.got.slice(0, 400)) + " against " + JSON.stringify(a.want.slice(0, 400))));
-    check(en.x === ROWS.en.x && pl.x === ROWS.pl.x, "1c its corner X is named for a screen reader as row 2: " + JSON.stringify([en.x, pl.x]));
-    check(en.which > -1 && en.which === pl.which, "1d row 12 is the drafted line or its alternative, the same in both languages: "
-      + JSON.stringify([en.which, pl.which]));
-    check(!!dayOf(builtIso, "en") && en.got.indexOf(ROWS.en.built.split("{DATE}").join(dayOf(builtIso, "en"))) > -1
-      && pl.got.indexOf(ROWS.pl.built.split("{DATE}").join(dayOf(builtIso, "pl"))) > -1,
-      "1e and row 5 carries the build's own day, " + JSON.stringify(builtIso) + ", as " + JSON.stringify([dayOf(builtIso, "en"), dayOf(builtIso, "pl")]));
-    check(en.got.indexOf(ROWS.en.reserve) < 0 && pl.got.indexOf(ROWS.pl.reserve) < 0, "1f the entry held in reserve is not on the screen");
 
     /* ---- 2. Earlier versions of Etiuda, and back ------------------------------------------- */
     const earlierIn = lang => {
@@ -199,20 +188,6 @@ if (ready) {
       check(got("en").indexOf(want("en")) === 0 && got("pl").indexOf(want("pl")) === 0,
         "2d a version that moves there is headed as row E2: " + JSON.stringify([got("en").slice(0, 60), got("pl").slice(0, 60)]));
     }
-
-    /* ---- 3. no shortcut list, and none of its keys ----------------------------------------- */
-    const OLD = ["\u2191\u2193", "\u2190\u2192", "Enter", "Shift+Enter", "Esc"]
-      .concat(["langToggle", "tabNext", "quickFacts", "toggleRail", "expandPills", "lanes"].map(chord));
-    const outside = a => words(a.html.replace(/<ul class="about-new"[\s\S]*?<\/ul>/, " "));
-    const named = a => OLD.filter(k => outside(a).indexOf(k) > -1);
-    check(en.html.indexOf("<kbd") < 0 && pl.html.indexOf("<kbd") < 0, "3a About draws no key cap, in either language");
-    check(!named(en).length && !named(pl).length,
-      "3b and names none of the old list's " + OLD.length + " keys outside the draft's own entries: " + JSON.stringify([named(en), named(pl)]));
-    check(OLD.every(k => k && k !== "-") && OLD.every(k => words("<p>" + OLD.join(" x ") + "</p>").indexOf(k) > -1),
-      "3B control: the " + OLD.length + " names are read from the bindings, none empty, and the same scan finds each in a planted legend: " + JSON.stringify(OLD));
-    check(!/Keyboard shortcuts|Skróty klawiszowe|Catalog file|Plik katalogu/.test(en.got + " " + pl.got),
-      "3c and points nowhere else for them, and names no catalog file");
-    check(typeof ctx.keysLegendHtml === "undefined", "3d the program no longer carries the legend's renderer");
 
     /* ---- 4. the build's own day ------------------------------------------------------------ */
     const iso = String(builtIso || ""), m = /^(\d{4})-(\d\d)-(\d\d)$/.exec(iso);

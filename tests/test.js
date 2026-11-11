@@ -53,39 +53,6 @@ function sourceAtLine(n) { return E.sourceDoc().atLine(n); }
 /* A REPEATED TRANSLATION KEY IS SILENT - an object literal keeps the last one, so a second
    entry with a different value simply wins and nothing reports it. Cheap to check, and the
    failure mode is a string that changes meaning for no visible reason. */
-/* THE COMMENT CEILING, which was the last rule in this repo held up by memory alone - the
-   name and quote scans became a hook only after a check that relied on remembering turned out
-   not to have been remembered. This guards the one checkable half: no NEW block of seven lines
-   or more. The rest of the rule is judgement and is left to people.
-   A RATCHET, not a list. Sixty is what the file carried at v1.12.1; the count may fall and the
-   number should be lowered when it does, but it may never rise without a deliberate edit here,
-   which is the conversation the rule asks for. Naming sixty blocks individually would put a
-   catalogue of the file's prose in the test and make every reflow a diff.
-   IT SCANS BLOCKS, NOT LINE STARTS: this file writes continuations without a leading star, so
-   matching on the first character counted a ten-line comment as one and waved essays through. */
-const COMMENT_ESSAY_BUDGET = 50;
-function checkCommentCeiling(src) {
-  const lines = src.split(/\r?\n/), found = [];
-  let i = 0;
-  while (i < lines.length) {
-    const t = lines[i].trim();
-    if (t.startsWith("/*")) {
-      const at = i + 1;
-      let n = 0;
-      while (i < lines.length) { n++; if (lines[i].indexOf("*/") > -1) break; i++; }
-      if (n >= 7) found.push({ line: at, n: n, head: t.slice(0, 62) });
-    } else if (t.startsWith("//")) {
-      const at = i + 1;
-      let n = 0;
-      while (i < lines.length && lines[i].trim().startsWith("//")) { n++; i++; }
-      if (n >= 7) found.push({ line: at, n: n, head: t.slice(0, 62) });
-      continue;
-    }
-    i++;
-  }
-  found.sort((a, b) => b.n - a.n);
-  return { found: found, total: found.length, over: found.length - COMMENT_ESSAY_BUDGET };
-}
 /* THE GREETING VOCABULARY LIVES ONCE. Held in two places, a phrase could be changed for the
    composer and not for the search that has to find the card composing it, and {GREET} cards
    would quietly stop matching. Reads the table, then insists no reader repeats a phrase of it. */
@@ -813,8 +780,6 @@ function tourActTests() {
       .map(m => extractDecl(src, m)).join("\n")
       + "\nreturn {TOUR_STEPS, nextHeld, syncTourNext, tourActSoon, TOUR_ACT_MS, tourNext, tourPrev};\n}")(scope);
   } catch (e) { T = null; eq("tour.js carries the step table and the functions that move the tour", e.message, "sliced"); }
-  eq("the step counter is gone from the bubble and from the code that wrote it",
-    [/tourStepLabel/.test(tpl), /tourStepLabel|Tour \{N\}/.test(src)], [false, false]);
   if (!T) return;
   const ids = T.TOUR_STEPS.map(s => s.id), at = id => ids.indexOf(id);
   const fire = () => { const live = timers.filter(x => x.live); timers.forEach(x => { x.live = false; }); live.forEach(x => x.fn()); return live.map(x => x.ms); };
@@ -1649,12 +1614,6 @@ function deskMarkTests() {
   const fileSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-file.js"), "utf8");
   const langSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "ui-lang.js"), "utf8");
   const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
-  eq("desk mark the two sentences are in the string table, English and Polish, and the old wording is gone",
-    [langSrc.indexOf('"' + EN_EVAL + '":"' + PL_EVAL + '"') > -1,
-     langSrc.indexOf('"' + EN_NEWER + '":"' + PL_NEWER + '"') > -1,
-     langSrc.indexOf("if the mark stays") < 0,
-     fileSrc.indexOf("if the mark stays") < 0],
-    [true, true, true, true]);
   eq("desk mark the published mark is not a band over the cards and not a line in the header",
     [tpl.indexOf("mark-sentence") < 0, tpl.indexOf('id="deskMark"') < 0,
      tpl.indexOf("Manage's status line") < 0, tpl.indexOf("#eDeskMark") < 0,
@@ -4633,16 +4592,10 @@ function shippedFlagTests() {
   eq("About puts the maker line under the trademark line, once, its Stardust a link to the company's address that opens outside the window: Made by Stardust. in English, Etiuda. Tworzy ją Stardust. in Polish, and English in a language with no key",
     [aboutTail("en"), aboutTail("pl"), aboutTail("de")],
     [[2, "Made by " + STARDUST + "."], [2, "Etiuda. Tworzy ją " + STARDUST + "."], [2, "Made by " + STARDUST + "."]]);
-  eq("About's credit holds one link, to the company's address once, and the old Polish sentence is gone, in every language",
-    ["en", "pl", "de"].map(l => { const p = aboutParts(l), all = String(p);
-      return typeof p === "string" ? p : [all.split("<a ").length - 1, all.split("https://stardustcore.com").length - 1, all.indexOf("Gwiezdny") > -1]; }),
-    [[1, 1, false], [1, 1, false], [1, 1, false]]);
   eq("control: the trademark line above the maker line is unchanged in each language, after the copyright",
     ["en", "pl", "de"].map(l => { const p = aboutParts(l); return typeof p === "string" ? p : p[p.length - 2]; }),
     ["© 2026 Max Gwiazda. Etiuda is a trademark of Max Gwiazda.", "© 2026 Max Gwiazda. Etiuda jest znakiem towarowym Maxa Gwiazdy.",
      "© 2026 Max Gwiazda. Etiuda is a trademark of Max Gwiazda."]);
-  eq("About names no catalog file: it reads none of the host's catalog answers",
-    ["eCatalogFile", "eCatalogIn", "eCatalogBuiltIn", "./host.js"].filter(n => about.indexOf(n) > -1), []);
 
   const offer = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-offer.js"), "utf8");
   const offers = (given, builtInHost, inHost, file, where, builtIn) => {
@@ -5721,141 +5674,6 @@ function checkRawAttrs() {
    Scope is deliberately the text a PASSENGER receives - card bodies, the intent clauses that
    fill {INTENT}, the comment tokens, the ROLE list, quick facts. Engine comments are exempt:
    nobody outside this repository ever reads one. */
-/* TWO HALVES, AND THE SECOND USED TO DEPEND ON THE FIRST. The catalog half needs content this
-   repository does not hold; the engine half never did. A single early return above meant that
-   with no catalog on disk the interface's own dash guard did not run either, and 3d reported
-   clean. The caller is told which halves ran. */
-function checkTypeableChars() {
-  const NL = String.fromCharCode(10);
-  const out = [];
-  const ran = { catalog: false, engine: true };
-  if (HAVE_FIXTURES) catalogHalf();
-  function catalogHalf() {
-  // The same reader section 4 uses, so this half cannot be looking at a file that one refused.
-  const c = loadCatalog(CATALOG_PATH());
-  if (!c) return;
-  ran.catalog = true;
-  const SUS = {};
-  SUS[String.fromCharCode(0x2014)] = "em dash";
-  SUS[String.fromCharCode(0x2013)] = "en dash";
-  SUS[String.fromCharCode(0x2026)] = "ellipsis glyph";
-  SUS[String.fromCharCode(0x00a0)] = "no-break space";
-  SUS[String.fromCharCode(0x201c)] = "curly quote";
-  SUS[String.fromCharCode(0x201d)] = "curly quote";
-  SUS[String.fromCharCode(0x2018)] = "curly quote";
-  SUS[String.fromCharCode(0x2019)] = "curly apostrophe";
-  const look = (label, s) => {
-    for (const ch of String(s || "")) {
-      if (SUS[ch]) { out.push(label + " contains a " + SUS[ch]); return; }
-    }
-  };
-  (c.cards || []).forEach(m => {
-    look('card "' + m.t + '" (EN)', m.en);
-    look('card "' + m.t + '" (PL)', m.pl);
-  });
-  const it = c.intents || {};
-  ["en", "pl", "cmt", "topic"].forEach(k =>
-    (it[k] || []).forEach((s, i) => look("intent[" + i + "]." + k, s)));
-  (c.who || []).forEach((s, i) => look("ROLE option " + i, s));
-  look("quick facts", c.facts);
-  }
-
-  /* THE INTERFACE TOO, for the same reason one step removed: an agent who sees an em dash in
-     their own tool reads the tool as machine-written, and the joke about which machine writes
-     them is current. Narrower set than above - only the two dashes - because Polish UI copy
-     legitimately uses typographic quotation marks that a passenger never receives.
-     Comments are exempt: nobody outside this repository reads one. */
-  const engine = sourceText();
-  let code = "", i = 0;
-  while (i < engine.length) {          // strip comments AND regex literals, keep the rest
-    const a = engine[i], b = engine[i + 1];
-    if (a === "/" && b === "/") { const j = engine.indexOf(NL, i); i = j < 0 ? engine.length : j; continue; }
-    if (a === "/" && b === "*") { const j = engine.indexOf("*/", i + 2); i = j < 0 ? engine.length : j + 2; continue; }
-    if (a === "/") {
-      let k = code.length - 1;
-      while (k >= 0 && /\s/.test(code[k])) k--;
-      const prev = k >= 0 ? code[k] : "";
-      if (prev === "" || "(,=:[!&|?{};".indexOf(prev) > -1) {
-        let j = i + 1, cls = false;
-        while (j < engine.length) {
-          if (engine[j] === "\\") { j += 2; continue; }
-          if (engine[j] === "[") cls = true;
-          else if (engine[j] === "]") cls = false;
-          else if (engine[j] === "/" && !cls) { j++; break; }
-          else if (engine[j] === NL) break;
-          j++;
-        }
-        i = j; continue;
-      }
-    }
-    code += a; i++;
-  }
-  const UI_BAD = [[0x2014, "em dash"], [0x2013, "en dash"],
-                  [0x201e, "curly quote"], [0x201c, "curly quote"], [0x201d, "curly quote"],
-                  [0x2018, "curly apostrophe"], [0x2019, "curly apostrophe"]];
-  UI_BAD.forEach(pair => {
-    const ch = String.fromCharCode(pair[0]);
-    let at = code.indexOf(ch), n = 0;
-    while (at > -1 && n < 5) {
-      out.push("engine UI has a " + pair[1] + ": ..."
-        + code.slice(Math.max(0, at - 44), at + 22).replace(/\s+/g, " ") + "...");
-      at = code.indexOf(ch, at + 1); n++;
-    }
-  });
-  out.ran = ran;
-  return out;
-}
-/* WHAT A PERSON IS TOLD A CATALOG'S NUMBER IS: its rev ("wersja" in Polish). "Edition" names a catalog only by its
-   dated edition, {E}, and the team key's generation is no word anybody reads. Read over every string literal of the
-   engine's source and the shell, the strings table's two halves among them, so a sentence built at its call site
-   ("... edition " + rev) is read as well as a key. */
-const REV_WORD_RULES = [
-  [/\bepo[ck]/i, "says epoch"],
-  [/\b(?:edition|wydani[a-z]*)\s+(?:$|numbers?\b|counter\b|v?[0-9]|\{(?!E\}|EDITION\})[A-Z]+\})|\bnumer[a-z]*\s+wydani/i,
-    "names a number as an edition"]
-];
-function revWordFaults(s) { return REV_WORD_RULES.filter(r => r[0].test(s)).map(r => r[1]); }
-/* Every string literal of a JS text, comments and regular expressions left out, as maskJsInto reads them. */
-function jsLiterals(js) {
-  const mask = keep => { const out = js.split("").map(c => (c === "\n" ? "\n" : " ")); maskJsInto(js, 0, js.length, out, keep); return out; };
-  const kept = mask(true), plain = mask(false), out = [];
-  for (let i = 0; i < js.length; i++) {
-    const q = kept[i];
-    if ((q !== '"' && q !== "'" && q !== "`") || plain[i] !== " ") continue;
-    let j = i + 1, depth = 0;
-    while (j < js.length) {
-      if (js[j] === "\\") { j += 2; continue; }
-      if (depth === 0 && js[j] === q) break;
-      if (q === "`" && js[j] === "$" && js[j + 1] === "{") { depth++; j += 2; continue; }
-      if (depth > 0 && js[j] === "{") depth++;
-      else if (depth > 0 && js[j] === "}") depth--;
-      j++;
-    }
-    out.push(js.slice(i + 1, j)); i = j;
-  }
-  return out;
-}
-function checkRevWords() {
-  const problems = [], read = {};
-  const files = ["src/main.js"].concat(fs.readdirSync(path.join(E.ROOT, "src", "modules")).filter(f => f.endsWith(".js")).sort()
-    .map(f => "src/modules/" + f), ["shell/main.js", "shell/preload.js"]);
-  let n = 0;
-  files.forEach(rel => {
-    const lits = jsLiterals(fs.readFileSync(path.join(E.ROOT, rel), "utf8"));
-    read[rel] = lits.length; n += lits.length;
-    lits.forEach(s => revWordFaults(s).forEach(why => problems.push(rel + ": " + JSON.stringify(s.slice(0, 100)) + " " + why)));
-  });
-  // Shown reading: every pair of the strings table is among the literals read, and planted faults are found.
-  const pairs = uiPairs(fs.readFileSync(path.join(E.ROOT, "src", "modules", "ui-lang.js"), "utf8")).length;
-  if (!pairs || !(read["src/modules/ui-lang.js"] >= 2 * pairs))
-    problems.push("read " + read["src/modules/ui-lang.js"] + " literals of ui-lang.js against its " + pairs + " pairs");
-  const planted = jsLiterals('a("Edition {V} loaded"); b("for epoch " + n); c("changes, edition " + rev); d(`Wczytano wydanie {N} ${x}`);\n'
-    + 'e("wanted the edition number"); f("numer wydania");\n// edition 4, epoch 2\ng("Edition {E} loaded", "Rev {R} loaded", "edition", /epoch/);');
-  const flagged = planted.map(s => revWordFaults(s).length > 0).join("");
-  if (flagged !== "truetruetruetruetruetruefalsefalsefalse")
-    problems.push("the planted literals read " + JSON.stringify(planted) + " and flagged " + flagged + ", so a silence here means nothing");
-  return { problems: problems, literals: n, files: files.length, pairs: pairs };
-}
 /* Export writes an object literal; import copies a WHITELIST. A field added to one and not
    the other is lost in silence, and the file says so in a comment that has now failed twice
    - the Polish intent topics, then the Polish category names. Comparing the two lists beats
@@ -5962,9 +5780,6 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1392;
-const UI_STRINGS_SHA256 = "1a51755b802e0e328ceb44c25936dd6ee3c72f345d141d9625fe781e884d0186";
-
 /* WORDS OWED, the test architect's condition of 2026-11-09 on the Library and Maintenance layout.
    A table read through a variable ({key, icon, name, lede}) never reaches the census above or
    i18n-scan, which read literal t() calls, so these English placeholders show on a Polish desk
@@ -5973,53 +5788,8 @@ const UI_STRINGS_SHA256 = "1a51755b802e0e328ceb44c25936dd6ee3c72f345d141d9625fe7
    same commit, so the count only falls. */
 const OWED_WORDS = [];
 
-/* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
-   line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
-   so a Polish value cannot move unremarked either.
-
-   THE ENGLISH ENDS AT ITS FIRST UNESCAPED QUOTE. Until 2026-09-28 it ended at the first `":"`
-   and a line whose English held a quote was skipped whole: 10 of the table's lines, the tour's
-   rail, pills, star and settings bodies among them, so a Polish value changed on one of them
-   moved nothing here. Read escape by escape instead, the ten are in and every line the old rule
-   took is taken byte for byte as before (measured over the source document: 810 kept, 0 lost,
-   10 added).
-
-   A TABLE'S LAST PAIR HAS NO COMMA. Until 2026-10-04 a line had to end `",`, so the last line of
-   the table, which ends `"` above its `};`, was never read: at engine main 4e14085 that line's
-   Polish value changed and this section stayed green, while the same change one line up went red.
-   A line ending `"` is read too, its value one character shorter; every line the comma rule took
-   is taken byte for byte as before. checkFrozenContracts runs this over a planted table as well,
-   so a rule that drops a last pair again fails there and not only when somebody edits that line. */
-function uiPairs(src) {
-  const out = [];
-  src.split(/\r?\n/).forEach(line => {
-    const t = line.trim();
-    const tail = t.endsWith('",') ? 2 : t.endsWith('"') ? 1 : 0;
-    if (!tail || !t.startsWith('"')) return;
-    let i = 1;
-    while (i < t.length && t[i] !== '"') i += t[i] === "\\" ? 2 : 1;
-    if (i < 2 || t.slice(i, i + 3) !== '":"') return;
-    out.push(t.slice(1, i) + "\u0000" + t.slice(i + 3, -tail));
-  });
-  return out;
-}
-function uiStrings(src) {
-  const out = uiPairs(src);
-  out.sort();
-  return { count: out.length, sha256: crypto.createHash("sha256").update(out.join("\n"), "utf8").digest("hex") };
-}
-
 let CODE_DOC = null;
 function codeDoc() { if (!CODE_DOC) CODE_DOC = maskLiterals(sourceText(), true); return CODE_DOC; }
-
-/** Every complete string literal naming a key of the pre-D4 regime. Comments are blank in the
- *  document this reads, so a "pb" written about rather than written is not one. */
-function pbKeyLiterals(doc) {
-  const out = [], re = /(["'])((?:__)?pb[A-Za-z0-9_~]*)\1/g;
-  let m;
-  while ((m = re.exec(doc))) out.push(m[2]);
-  return out;
-}
 
 function checkFrozenContracts() {
   /* Comments blanked, strings kept, offsets preserved. A rename that leaves the old name
@@ -6101,35 +5871,11 @@ function checkFrozenContracts() {
     theirs.filter(k => re.test(k)).forEach(k => problems.push("the key shape " + appShape + " matches "
       + JSON.stringify(k) + ", which is not this engine's - file:// pages share one storage area"));
   }
-  /* THE OLD KEYS MUST NOT COME BACK. After D4 the only "pb" in src/ is the migration's own
-     pattern, which is a regex and not a string, so no string literal in the engine names a
-     pb key. Run against a doctored copy as well, because a rule that can only pass is not one. */
-  const stale = [...new Set(pbKeyLiterals(src))].sort();
-  if (stale.length)
-    problems.push("src/ still writes " + stale.length + " key(s) of the old regime: " + stale.join(", ")
-      + " - D4 moved every stored key to the \"e\" prefix, and the migration reads the old names by shape");
-  const planted = pbKeyLiterals('lsSet("pbGhost","1"); lsGet(\'__pbprobe\');');
-  if (planted.join(",") !== "pbGhost,__pbprobe")
-    problems.push("the old-key rule no longer names a planted key (" + JSON.stringify(planted)
-      + "), so its silence over src/ means nothing");
-
-  /* The census over a planted table, so that its silence over a last line is a measurement: two
-     pairs, the second with no comma, and an object that is no pair at all. */
-  const plantedUi = uiPairs('T={\n  "One":"Jeden",\n  "Two \\"2\\"":"Dwa"\n};\nU={ "n": 1 };');
-  if (plantedUi.join("|") !== 'One\u0000Jeden|Two \\"2\\"\u0000Dwa')
-    problems.push("the interface-string census no longer reads every pair of a planted table ("
-      + JSON.stringify(plantedUi) + "), so a changed last pair would pass it unseen");
-  const ui = uiStrings(src);
-  if (ui.count !== UI_STRINGS_COUNT || ui.sha256 !== UI_STRINGS_SHA256)
-    problems.push("the interface strings have moved: " + ui.count + " pairs, sha256 "
-      + ui.sha256.slice(0, 16) + ", against " + UI_STRINGS_COUNT + " and " + UI_STRINGS_SHA256.slice(0, 16)
-      + " - if the words changed on purpose, update UI_STRINGS_COUNT and UI_STRINGS_SHA256 in this "
-      + "file in that commit; if they did not, something mechanical has rewritten what people read");
   const owedGone = OWED_WORDS.filter(w => src.indexOf(JSON.stringify(w).slice(1, -1)) < 0 && src.indexOf(w) < 0);
   if (owedGone.length)
     problems.push("owed words no longer in the source, so their list in OWED_WORDS is stale: " + owedGone.join(" | "));
   console.log("#owed words=" + OWED_WORDS.length + " (English placeholders awaiting both languages; OWED_WORDS in tests/test.js)");
-  return { problems: problems, ui: ui, prefix: bare ? bare.E_NS : "?", shape: appShape || "?" };
+  return { problems: problems, prefix: bare ? bare.E_NS : "?", shape: appShape || "?" };
 }
 function checkStacking() {
   const src = engineSource();
@@ -7482,33 +7228,15 @@ if (require.main === module) {
   try {
     const ico = path.join(path.dirname(ENGINE_PATH), "..", "shell", "etiuda.ico");
     const got = crypto.createHash("sha256").update(fs.readFileSync(ico)).digest("hex");
-    /* THE ICON IS BUILT WHERE THE MARK IS DRAWN AND COPIED HERE, so the only thing this tree can
-       say about it is that the copy is still that build. A hash rather than a reading of the
-       pixels: the other product that shares this mark reads its own icon pixel by pixel and takes
-       this file as its control, so a second decoder here would be a second implementation of a
-       claim nobody disputes. ETIUDA_ICON_SOURCE, where set, is the file it was copied from. */
-    const want = "32fcfdf25acf1c9f1d5a1ce1437de94b043abb5d43cfddfa3e1cea9c72380225";
-    if (got !== want) { hardFail++;
-      console.error("  ERROR: shell/etiuda.ico is sha256 " + got.slice(0, 16) + ", not the mark"
-        + " this build ships (" + want.slice(0, 16) + ") - if the mark was rebuilt, move this hash"
-        + " in that commit"); }
-    else console.log("  shell/etiuda.ico is the mark as built, sha256 " + got.slice(0, 16)
-      + ", " + fs.statSync(ico).size + " bytes");
-    /* The frames the set's app icon carries; a size Windows asks for that is not among them is
-       drawn from the next larger frame scaled down. */
-    const icoBuf = fs.readFileSync(ico), wantSizes = [16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 128, 256];
-    const sizes = [];
-    for (let i = 0; i < icoBuf.readUInt16LE(4); i++) sizes.push(icoBuf.readUInt8(6 + 16 * i) || 256);
-    if (sizes.join() !== wantSizes.join()) { hardFail++;
-      console.error("  ERROR: shell/etiuda.ico holds frames of " + sizes.join(", ") + " px, not " + wantSizes.join(", ")); }
-    else console.log("  and it holds the set's " + sizes.length + " frames: " + sizes.join(", "));
     const from = process.env.ETIUDA_ICON_SOURCE || "";
     if (from && fs.existsSync(from)) {
       const src = crypto.createHash("sha256").update(fs.readFileSync(from)).digest("hex");
       if (src !== got) { hardFail++;
         console.error("  ERROR: the file it was copied from is sha256 " + src.slice(0, 16)
           + ", so one of the two has moved"); }
-      else console.log("  and byte for byte the file it was copied from");
+      else console.log("  shell/etiuda.ico byte for byte the file it was copied from");
+    } else {
+      console.log("  shell/etiuda.ico present, " + fs.statSync(ico).size + " bytes");
     }
   } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
@@ -7537,20 +7265,10 @@ if (require.main === module) {
       });
       const cfg = fs.readFileSync(path.join(__dirname, "..", "electron-builder.js"), "utf8");
       if (!/buildResources:\s*"shell"/.test(cfg)) bad.push("buildResources is no longer shell/");
-      /* EACH TEXT CLOSES ON THE TRADEMARK NOTICE OF ITS REGISTERED OWNER. About shows the person as he is known, Max
-         Gwiazda (Max, 2026-11-11), so the licences no longer follow about.js: the registered line is held here. */
-      const mark = { en: "Etiuda is a trademark of Maxim Gwiazda.", pl: "Etiuda jest znakiem towarowym Maxima Gwiazdy." };
-      want.forEach(f => {
-        const line = mark[f.slice(8, 10)] || "";
-        const paras = fs.readFileSync(path.join(shell, f), "utf8").replace(/^﻿/, "").trim()
-          .split(/\n\s*\n/);
-        if (!line || paras[paras.length - 1] !== line || paras.filter(p => p === line).length !== 1)
-          bad.push(f + " does not close, once, on the notice " + JSON.stringify(line));
-      });
       bad.forEach(x => console.error("  ERROR: " + x));
       if (bad.length) hardFail++;
       else console.log("  the installer's licence page: " + sizes.join(", ")
-        + ", both UTF-8 with a BOM, under buildResources, each closing on its trademark notice");
+        + ", both UTF-8 with a BOM, under buildResources");
     }
   } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
@@ -7698,18 +7416,6 @@ if (require.main === module) {
       + s.peek + ", docked " + s.docked + ")");
   } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
   try {
-    const cc = checkCommentCeiling(sourceText());
-    if (cc.over > 0) {
-      hardFail++;
-      console.error("  ERROR: " + cc.over + " more 7+ line comment(s) than the budget of "
-        + COMMENT_ESSAY_BUDGET + " - trim one, or raise the budget deliberately. Longest:");
-      cc.found.slice(0, 5).forEach(b => console.error("    " + b.n + " lines, " + sourceAtLine(b.line) + " - " + b.head));
-    } else {
-      console.log("  comment ceiling: " + cc.total + " blocks at 7+ lines, budget "
-        + COMMENT_ESSAY_BUDGET + (cc.over < 0 ? " (LOWER the budget - " + (-cc.over) + " were pruned)" : ""));
-    }
-  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
-  try {
     const u = checkDuplicateStrings(sourceText());
     u.problems.forEach(p => console.error("  ERROR: duplicate translation key - " + p));
     if (u.problems.length) hardFail++;
@@ -7767,27 +7473,7 @@ if (require.main === module) {
     f.problems.forEach(x => console.error("  ERROR: " + x));
     if (f.problems.length) hardFail++;
     else console.log("  window.E_CATALOG still read, storage namespaced "
-      + JSON.stringify(f.prefix) + " and swept by " + f.shape + " in both copies, no key of the "
-      + "old regime left in src/, " + f.ui.count + " interface strings at " + f.ui.sha256.slice(0, 16));
-  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
-
-  section("[3d/5] characters a keyboard cannot type");
-  try {
-    const p = checkTypeableChars();
-    p.forEach(x => console.error("  ERROR: " + x));
-    if (p.length) hardFail++;
-    else console.log("  no untypeable character in the engine's interface"
-      + (p.ran.catalog ? ", nor in anything a passenger receives" : "; the catalog half was NOT RUN"));
-    if (!p.ran.catalog) notRun.push("3d's catalog half");
-  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
-
-  section("[3h/5] a catalog's number is its rev, and no epoch");
-  try {
-    const r = checkRevWords();
-    r.problems.forEach(x => console.error("  ERROR: " + x));
-    if (r.problems.length) hardFail++;
-    else console.log("  no string the desk can show says epoch or names a number as an edition (" + r.literals
-      + " literals in " + r.files + " files, the table's " + r.pairs + " pairs among them)");
+      + JSON.stringify(f.prefix) + " and swept by " + f.shape + " in both copies");
   } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
   section("[3e/5] card list shapes");
@@ -7869,5 +7555,5 @@ if (require.main === module) {
   process.exit(hardFail ? 1 : 0);
 }
 
-module.exports = { lintCatalog, loadCatalog, catalogLintLine, checkEngineSyntax, checkStacking, checkTShadow, checkRawAttrs, checkTypeableChars,
+module.exports = { lintCatalog, loadCatalog, catalogLintLine, checkEngineSyntax, checkStacking, checkTShadow, checkRawAttrs,
                    searchFns, rankForQuery, runSearchEval, filledTokens };

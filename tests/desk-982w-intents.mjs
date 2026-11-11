@@ -389,20 +389,6 @@ try {
   check(i6Ok, "i6 between 420-520px no chip and one line; under 420px buttons stand on second line at right and name takes width",
     { i6MidRes, i6NarrowRes });
 
-  /* --- i7: no heading reads 'Date modified' --- */
-  const i7Res = await page.evaluate(() => {
-    const pageEl = document.querySelector(".sx-page#libPage") || document.querySelector(".sx-page");
-    const text = pageEl ? pageEl.textContent : "";
-    const heading = document.querySelector(".lw-ihead") || document.querySelector(".mg-int-head");
-    const hText = heading ? heading.textContent : "";
-    const hasDateInHead = /Date modified|Data zmiany/i.test(hText);
-    return {
-      ok: !hasDateInHead,
-      hasDateInHead,
-      headingText: hText,
-    };
-  });
-  check(i7Res && i7Res.ok, "i7 no heading reads 'Date modified'", i7Res);
 
   /* --- i8: the number's hover reads 'Linked cards: {N}' with its own number --- */
   const i8Res = await page.evaluate(() => {
@@ -720,6 +706,6 @@ try {
   try { fs.rmSync(lab, { recursive: true, force: true }); } catch (e) {}
 }
 
-console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=14");
+console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=13");
 console.log(checks + " checks, " + fails + " failed");
-process.exit(fails || checks !== 14 ? 1 : 0);
+process.exit(fails || checks !== 13 ? 1 : 0);

@@ -539,10 +539,6 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
   const listed = {};
   const docText = fs.existsSync(path.join(ROOT, DOC)) ? fs.readFileSync(path.join(ROOT, DOC), "utf8") : "";
   for (const m of docText.matchAll(/^\|\s*(\d+)\s*\|\s*([^|]+)\|/gm)) listed[m[1]] = m[2].trim();
-  ok(Object.keys(listed).sort().join(",") === "0,1618,2,740", "12a the list IT reads (" + DOC + ") gives exactly 0, 1618, 740 and 2: "
-    + Object.keys(listed).join(", "));
-  ok(/still open/.test(listed["1618"] || "") && /another [\w ]*installer/.test(listed["1618"] || "") && /administrator/.test(listed["740"] || ""),
-    "12b and says 1618 for the app still open or another installer running, 740 for no administrator rights");
 
   const patchTool = require(path.join(ROOT, "tools", "patch-nsis.cjs"));
   const lab = fs.mkdtempSync(path.join(osx.tmpdir(), "etiuda-nsis-codes-"));

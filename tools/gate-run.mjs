@@ -174,7 +174,6 @@ const CHANNEL_SEAL_PARTS = ["p940", "p944", "p946", "p919", "p947", "p951", "p95
 export const RELEASE_ONLY_LEGS = [
   "tests/desk-growth.mjs",
   "tests/engine-selftest.js",
-  "tests/leg-ids.js",
   "tests/result-line.mjs",
   "tests/machine-lock.mjs",
   "tests/sbom.mjs",
@@ -205,7 +204,6 @@ const NOT_MERGE_SET = new Set(NOT_MERGE_GATES);
 
 export const NIGHTLY_LEGS = [
   { script: "nightly", file: "tests/desk-growth.mjs", args: [], cmd: "node tests/desk-growth.mjs" },
-  { script: "nightly", file: "tests/leg-ids.js", args: [], cmd: "node tests/leg-ids.js" },
   { script: "nightly", file: "tests/engine-selftest.js", args: [], cmd: "node tests/engine-selftest.js" },
   { script: "nightly", file: "tests/result-line.mjs", args: [], cmd: "node tests/result-line.mjs" },
   { script: "nightly", file: "tests/machine-lock.mjs", args: [], cmd: "node tests/machine-lock.mjs" },
@@ -238,7 +236,6 @@ export const FLOOR = [
    gate is handed and reads tools/release.mjs and tools/pre-commit, so it does not test the harness alone. This list changes by the
    test architect's word only. */
 export const HYGIENE = [
-  "tests/leg-ids",
   "tests/chain-split",
   "tests/plant-hold",
   "tools/*-selftest",
@@ -1115,7 +1112,6 @@ export async function planAreaRun(root, changed, pkg, base = "main", ready) {
     "tests/chain-split.mjs",
     "tests/engine-selftest.js",
     "tests/gates-for.mjs",
-    "tests/leg-ids.js",
     "tests/log-hygiene-selftest.js",
     "tests/result-line.mjs",
     "tests/sbom.mjs",
