@@ -863,12 +863,27 @@ function appendTextScans(steps, addedFiles, windowGates, root, changed, gf) {
   }
 }
 
-function closePlan(root, wholeChain, changed, gf, reason, extra) {
+/* A FAIL-CLOSED PLAN IS NEVER NARROWER THAN THE MAPPED ONE (the test architect, 2026-11-11). The whole chain is the `test`
+   script, and a node leg on a script of its own (smoke.js, `npm run smoke`) is not on it: fold 32 touched gates-for.mjs, failed
+   closed, and left out the smoke run that about.js maps to, whose red then stood on main. So the legs gates-for maps the other
+   changed files to join the chain here, by the same rules as a mapped plan: a window gate stays walled, a visual leg and a
+   release-only leg stay with the release profile, and the runner is never its own leg. */
+function closePlan(root, wholeChain, changed, gf, reason, extra, mapped) {
   const visualOut = wholeChain.filter(s => VISUAL_SET.has(normRel(s.file)));
   if (visualOut.length) console.log("gate-run area: " + visualOut.length + " visual leg(s) left to the release profile");
   const steps = withFloor(root, wholeChain.filter(s => !VISUAL_SET.has(normRel(s.file))));
   const added = new Set(steps.map(s => normRel(s.file)));
   const walled = [];
+  const releaseOnly = new Set(RELEASE_ONLY_LEGS);
+  for (const row of mapped || []) {
+    const g = normRel(row.gate || "");
+    if (!g || added.has(g)) continue;
+    if (row.kind === "window") { if (!walled.includes(g)) walled.push(g); continue; }
+    if (VISUAL_SET.has(g) || releaseOnly.has(g) || g === "tools/gate-run.mjs") continue;
+    if (!fs.existsSync(path.join(root, g))) continue;
+    steps.push({ script: "area", cmd: "node " + g, file: g, args: [], note: "mapped by gates-for, beside the whole chain" }); /* plant:closed-mapped */
+    added.add(g);
+  }
   appendTextScans(steps, added, walled, root, changed, gf);
   return Object.assign({ failClosed: true, reason, steps, walled }, extra || {});
 }
@@ -960,8 +975,10 @@ export async function planAreaRun(root, changed, pkg, base = "main", ready) {
   for (const f of toolsOnly ? [] : changed) {
     if (isSharedCode(f)) {
       if (normRel(f) === "package.json" && acceptedScript) continue; /* plant:script-chain */
+      let mappedBeside = [];
+      try { mappedBeside = gatesFor(root, changed.filter(x => !isSharedCode(x)), ready); } catch { mappedBeside = []; }
       return closePlan(root, wholeChain, changed, gf, "fail-closed to whole chain: change in shared code " + f,
-        { plan: "fail-closed: " + normRel(f) });
+        { plan: "fail-closed: " + normRel(f) }, mappedBeside);
     }
   }
 

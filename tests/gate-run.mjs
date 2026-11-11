@@ -338,6 +338,19 @@ function main() {
       check(leg2TurnedRed, "10 (5) planted removal of method check turns leg 7 red: planted " + (plantedSrc !== toolSrc) + ", plant present " + hasPlant);
     }
 
+    /* The mutator leaves the lab's scripts in a commit of its own, so the area legs below plan the chain they were written for:
+       a fail-closed plan also runs the legs gates-for maps the diff's other files to, and the mutator, a gate that moves the tree,
+       would be one (the test architect, 2026-11-11). */
+    {
+      const pkgFile = path.join(lab.lab, "package.json");
+      const p = JSON.parse(fs.readFileSync(pkgFile, "utf8"));
+      delete p.scripts.mutator;
+      fs.writeFileSync(pkgFile, JSON.stringify(p, null, 2) + "\n");
+      fs.rmSync(path.join(lab.lab, "tests", "mutator.mjs"), { force: true });
+      fs.rmSync(path.join(lab.lab, "tests", "moved-sample.txt"), { force: true });
+      gitCmd(["add", "-A"], lab.lab, lab.gitEnv);
+      gitCmd(["-c", "user.name=lab", "-c", "user.email=lab@example.invalid", "commit", "-q", "-m", "drop mutator"], lab.lab, lab.gitEnv);
+    }
     /* Real profile attribution while installed app runs (2026-11-09) */
     const standIn = lab.standIn;
 
