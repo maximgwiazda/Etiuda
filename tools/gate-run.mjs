@@ -1390,12 +1390,32 @@ function stepScratchEnd(dir) {
   if (left) console.log("gate-run: the step's scratch " + dir + " kept " + left + " entr" + (left === 1 ? "y" : "ies") + " it could not remove");
 }
 
+/* A CUSTOMER'S ROOTS (the test architect, 2026-11-11, board 989). Every agent shell on this laptop carries
+   NODE_USE_SYSTEM_CA=1, so a leg run here trusted the Windows store (284 roots under Electron 44.3's Node), while a
+   customer's installed app starts with no such variable and trusts Node's bundled roots alone (118). A leg touching Node's
+   TLS could pass here and fail behind a customer's inspecting gateway. So no step inherits a variable that widens the
+   roots: NODE_USE_SYSTEM_CA and NODE_EXTRA_CA_CERTS, matched by name in any case, are cleared from what a step inherits.
+   A leg that means to test a widened store asks by name: ROOTS_MARKER within its first lines keeps them. */
+const ROOTS_MARKER = "/* run: system roots */";
+const ROOTS_WIDENERS = /^(NODE_USE_SYSTEM_CA|NODE_EXTRA_CA_CERTS)$/i;
+function asksSystemRoots(file) {
+  let text;
+  try { text = fs.readFileSync(path.resolve(ROOT, file), "utf8"); } catch { return false; }
+  return text.split(/\r?\n/).slice(0, 15).some(l => l.trim() === ROOTS_MARKER);
+}
+function inheritedEnv(step) {
+  const env = Object.assign({}, process.env);
+  if (asksSystemRoots(step.file)) return env;
+  for (const k of Object.keys(env)) if (ROOTS_WIDENERS.test(k)) delete env[k];
+  return env;
+}
+
 function runStep(step, customEnv = {}) {
   return new Promise(resolve => {
     const t0 = Date.now();
     const scratch = stepScratch();
     const own = scratch ? { TEMP: scratch, TMP: scratch, TMPDIR: scratch } : {};
-    const env = Object.assign({}, process.env, own, customEnv, step.env || {});
+    const env = Object.assign(inheritedEnv(step), own, customEnv, step.env || {});
     const child = spawn(process.execPath, [step.file].concat(step.args),
       { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
