@@ -1056,7 +1056,7 @@ UI_STRINGS.pl={
   "That key could not be kept.":"Tego klucza nie udało się zachować.",
   "The setting could not be saved just now.":"Tego ustawienia nie udało się teraz zapisać.",
   "No key is kept for this address, so nothing was sent.":"Dla tego adresu nie zachowano klucza, więc nic nie zostało wysłane.",
-  "The key was given for the previous address, so it was not kept for this one. Give the key again.":"Klucz podano dla poprzedniego adresu, więc nie został zachowany dla tego. Podaj klucz ponownie.", // placeholder: Claudette
+  "The key kept here was given for the previous service or address, so it was forgotten rather than sent to this one. A key for this one goes in the Key field.":"Zachowany klucz podano dla poprzedniej usługi lub adresu, więc został usunięty, zamiast trafić pod nowy. Klucz dla nowego wpisuje się w polu Klucz.", // placeholder: Claudette
   "Could not reach {HOST}.":"Nie udało się połączyć z {HOST}.",
   "{HOST} answered with an error, so the connection is not confirmed.":"{HOST} odpowiedział błędem, więc połączenie nie zostało potwierdzone.",
   "General":"Ogólne",

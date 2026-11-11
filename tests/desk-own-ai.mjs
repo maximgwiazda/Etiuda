@@ -418,7 +418,7 @@ try {
       await new Promise(r => setTimeout(r, 300));
       return { toast: (document.getElementById("toast") || {}).textContent || "", placeholder: (document.getElementById("omKey") || {}).placeholder || "" };
     });
-    if (!/again/.test(dropped.toast) || /A key is kept/.test(dropped.placeholder)) problems.push("a key dropped by a move, said " + JSON.stringify(dropped));
+    if (!/forgotten rather than sent to this one/.test(dropped.toast) || /A key is kept/.test(dropped.placeholder)) problems.push("a key dropped by a move, said " + JSON.stringify(dropped));
     check(!problems.length, "db1 the row's two states: built-in alone, the organisation's with service, model, key and the test, the address only where "
       + "the service has none of its own; a move that forgets the key says to give it again: " + (problems.join("; ") || "four states"));
   }
