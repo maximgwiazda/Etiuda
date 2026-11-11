@@ -67,7 +67,8 @@ function syncUpdateOffer(){
       dot.title=said;
     }
   }
-  if(btn){ if(v) btn.setAttribute("aria-describedby","updDot"); else btn.removeAttribute("aria-describedby"); }
+  // The desk's node page builds a Menu button without removeAttribute (as paintMenuIcons notes for insertAdjacentHTML).
+  if(btn && typeof btn.removeAttribute==="function"){ if(v) btn.setAttribute("aria-describedby","updDot"); else btn.removeAttribute("aria-describedby"); }
   if(row){
     row.hidden=!v;
     const head=$("#menuUpdateT"), see=$("#menuUpdateSee"), later=$("#menuUpdateLater");

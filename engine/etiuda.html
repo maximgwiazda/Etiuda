@@ -25595,7 +25595,7 @@ What you type stays in this browser only.`;
         dot.title = said;
       }
     }
-    if (btn) {
+    if (btn && typeof btn.removeAttribute === "function") {
       if (v) btn.setAttribute("aria-describedby", "updDot");
       else btn.removeAttribute("aria-describedby");
     }
