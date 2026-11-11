@@ -8358,6 +8358,10 @@ What you type stays in this browser only.`;
     "Asks the model for a one-word answer. Nothing from the catalog or a conversation is sent.": "Prosi model o odpowiedź jednym słowem. Nic z katalogu ani z rozmowy nie jest wysyłane.",
     "Testing…": "Sprawdzanie…",
     "Connected: {HOST} answered, model {MODEL}.": "Połączono: {HOST} odpowiada, model {MODEL}.",
+    "Connected: {HOST} answered in {SECONDS} s, model {MODEL}.": "Połączono: {HOST}, odpowiedź w {SECONDS} s, model {MODEL}.",
+    "organisation's model too slow to reorder": "model organizacji zbyt wolny, by zmieniać kolejność",
+    "{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the built-in model's order stands.": "{HOST} na ogół odpowiada dłużej niż 4 sekundy, za długo, by zmieniać kolejność listy, która jest już czytana, więc zostaje kolejność modelu wbudowanego.",
+    "{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the word matches' order stands.": "{HOST} na ogół odpowiada dłużej niż 4 sekundy, za długo, by zmieniać kolejność listy, która jest już czytana, więc zostaje kolejność dopasowań słów.",
     "The AI service is set by the organisation's Group Policy, so this setting cannot be changed here.": "Usługę AI ustawiono w zasadach grupy organizacji, więc tego ustawienia nie można tu zmienić.",
     "The AI service named in the settings is not one Etiuda knows, so nothing was sent: {NAME}": "Etiuda nie zna usługi AI wskazanej w ustawieniach, więc nic nie zostało wysłane: {NAME}",
     "The AI service's address must be a full https address with no user name, query or fragment, so nothing was sent: {URL}": "Adres usługi AI musi być pełnym adresem https, bez nazwy użytkownika, zapytania i fragmentu, więc nic nie zostało wysłane: {URL}",
@@ -25829,6 +25833,7 @@ What you type stays in this browser only.`;
   }
   var orgOutcome = { ranking: "organisation", failures: 0, pausedUntil: 0 };
   var orgPauseT = 0;
+  var ORG_SLOW_MS = 4e3;
   function orgMarkWords(st, outcome, now) {
     const host = String(st && st.host || "");
     const o = outcome || {};
@@ -25841,6 +25846,15 @@ What you type stays in this browser only.`;
       paused: true,
       label: t("organisation's model not answering, word matches only"),
       title: at(t("{HOST} has not answered three times in a row, so the search matches words alone, and the desk asks {HOST} again in a minute."))
+    };
+    if (Number(o.medianMs) > ORG_SLOW_MS) return eAiModel() ? {
+      paused: false,
+      label: t("organisation's model too slow to reorder"),
+      title: at(t("{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the built-in model's order stands."))
+    } : {
+      paused: false,
+      label: t("organisation's model too slow to reorder"),
+      title: at(t("{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the word matches' order stands."))
     };
     const search = eSearchOn(), suggest = eAiOn();
     const title = search && !suggest ? t("The organisation's model at {HOST} ranks the search. The search text is sent there.") : suggest && !search ? t("The organisation's model at {HOST} ranks the suggestions. The copied message they are made from is sent there.") : t("The organisation's model at {HOST} ranks the search and the suggestions. The search text and the copied message the suggestions are made from are sent there.");
@@ -35225,6 +35239,7 @@ What you type stays in this browser only.`;
   function orgTestLine(r) {
     const host = String(r && r.host || ""), model = String(r && r.model || ""), why = r && r.why;
     const at = (s) => s.split("{HOST}").join(host).split("{MODEL}").join(model);
+    if (r && r.ok && Number.isFinite(r.ms)) return at(t("Connected: {HOST} answered in {SECONDS} s, model {MODEL}.")).split("{SECONDS}").join((r.ms / 1e3).toFixed(1).replace(".", uiLang() === "pl" ? "," : "."));
     if (r && r.ok) return at(t("Connected: {HOST} answered, model {MODEL}."));
     return why === "provider" ? t("No AI service is set up yet. One is chosen from the Menu, under Settings, then Data and defaults.") : why === "endpoint" ? t("Needed for this service: the full https address the organisation gives for it.") : why === "model" ? t("No model is named for the AI service, so nothing was sent. The model is named from the Menu, under Settings, then Data and defaults.") : why === "key" ? t("No key is kept for this address, so nothing was sent.") : why === "keyAway" ? t("The organisation's Group Policy sets the AI service's key, and that key goes only to the address the policy sets or to the service's own, never to an address typed here, so nothing was sent.") : why === "late" ? t("The AI service did not answer in time, so the request was given up.") : why === "busy" ? t("The AI service is busy and asked Etiuda to wait; a later try may go through.") : why === "door" ? t("This build cannot send the test yet, so nothing was sent.") : why === "unreached" ? at(t("Could not reach {HOST}.")) : at(t("{HOST} answered with an error, so the connection is not confirmed."));
   }

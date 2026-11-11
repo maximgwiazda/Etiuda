@@ -17,7 +17,8 @@
  *       has none of its own
  *   db2 set by policy, the row shows the choice, the host and "Set by the organisation", and takes no change
  *   db3 the mark beside the search box is there only while the organisation's model ranks, its words shed under 720 px with
- *       its sentence kept in its title, says when the shell has paused its asks, and is absent while both switches are off
+ *       its sentence kept in its title, says when the shell has paused its asks or the median wait is over 4 seconds, and is
+ *       absent while both switches are off
  *   db4 the sentences that say nothing leaves this computer are drawn only while the built-in model ranks, in both languages
  * No leg starts the desk app, reads the registry or reaches the network. The values are invented.
  */
@@ -251,7 +252,7 @@ try { shell(""); } catch (e) { loadError = (e && e.message) || String(e); }
     const t = await S.deskAiTest();
     const a = S.asked[0] || {};
     if (S.asked.length !== 1 || a.prompt !== S.DESK_AI_TEST_PROMPT || Object.keys(a.config || {}).sort().join() !== "endpoint,key,managed,model,provider"
-        || !t.ok || t.host !== "gateway.example") problems.push("test " + JSON.stringify([S.asked.length, a.prompt, t]));
+        || !t.ok || t.host !== "gateway.example" || !Number.isFinite(t.ms)) problems.push("test " + JSON.stringify([S.asked.length, a.prompt, t]));
     const tn = await none.deskAiTest();
     if (tn.ok || tn.why !== "key" || none.asked.length) problems.push("a test with no key asked " + none.asked.length);
   }
@@ -405,6 +406,11 @@ try {
     if (!paused.there || !paused.dot || !/not answering/.test(paused.text) || !/built-in model ranks/.test(paused.title)) problems.push("paused " + JSON.stringify(paused));
     await ranked(page, { ranking: "organisation", failures: 0, pausedUntil: 0 });
     if ((await markNow(page)).dot) problems.push("the dot stayed after an answer");
+    await ranked(page, { ranking: "organisation", failures: 0, pausedUntil: 0, medianMs: 5200 });
+    const slow = await markNow(page);
+    if (!slow.there || slow.dot || !/too slow to reorder/.test(slow.text) || !/more than 4 seconds/.test(slow.title)) problems.push("slow " + JSON.stringify(slow));
+    await ranked(page, { ranking: "organisation", failures: 0, pausedUntil: 0, medianMs: 1800 });
+    if (/too slow/.test((await markNow(page)).text)) problems.push("still too slow at a 1.8 s median");
     await page.evaluate(() => { localStorage.setItem("eAiOff", "1"); localStorage.setItem("eSearchAiOff", "1"); });
     await ranked(page);
     if ((await markNow(page)).there) problems.push("there with both switches off, when nothing is sent");
@@ -412,7 +418,7 @@ try {
     await ranked(page);
     if (!(await markNow(page)).there) problems.push("not back with the switches on");
     check(!problems.length, "db3 the mark is there only while the organisation's model ranks, an icon alone at 700 px with its sentence kept, and says "
-      + "when the asks are paused, and is absent while both switches are off: " + (problems.join("; ") || "nine states"));
+      + "when the asks are paused or the median wait is too long, and is absent while both switches are off: " + (problems.join("; ") || "eleven states"));
   }
 
   /* db4 */

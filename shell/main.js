@@ -4327,7 +4327,7 @@ function deskAiProbe(config, prompt) {
   return Promise.resolve(config && prompt ? { ok: false, why: "door" } : { ok: false, why: "none" });
 }
 /* The connection test, on the fields in force whether the option is on or not: the fixed prompt, through the door. Answers
-   {ok, why, host, model}, why naming what is missing before anything is asked. */
+   {ok, why, host, model, ms}, why naming what is missing before anything is asked and ms the wait for the answer. */
 function deskAiTest() {
   let now = null;
   try { now = deskAiNow(); } catch { return Promise.resolve({ ok: false, why: "none", host: "", model: "" }); }
@@ -4339,8 +4339,10 @@ function deskAiTest() {
   if (j.keyAway) return said("keyAway");
   if (!now.key) return said("key");
   const config = { provider: j.provider, endpoint: j.endpoint, model: j.model, key: now.key, managed: Object.assign({}, j.managed) };
+  const t0 = Date.now();
   return Promise.resolve().then(() => deskAiProbe(config, DESK_AI_TEST_PROMPT))
-    .then(r => ({ ok: !!(r && r.ok === true), why: r && r.ok === true ? "" : String((r && r.why) || "failed"), host: a.host, model: j.model }),
+    .then(r => ({ ok: !!(r && r.ok === true), why: r && r.ok === true ? "" : String((r && r.why) || "failed"), host: a.host, model: j.model,
+      ms: Date.now() - t0 }),
       () => ({ ok: false, why: "failed", host: a.host, model: j.model }));
 }
 ipcMain.on("etiuda:desk-ai-settings", (e) => {

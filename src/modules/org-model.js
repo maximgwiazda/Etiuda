@@ -26,6 +26,8 @@ function orgRanks(st){
 /* The last re-order's outcome as the shell sent it on etiuda:ai-state. */
 let orgOutcome={ranking:"organisation", failures:0, pausedUntil:0};
 let orgPauseT=0;
+/* The median wait above which the mark says the model is too slow to reorder: the 4 seconds its words name. */
+const ORG_SLOW_MS=4000;
 /* The mark's words at `now`: {label, title, paused}. Its sentence follows the two switches, so it never says text goes where it
    does not. Paused is the shell's pause after three failures in a row, while the built-in model, or the word matches where
    the desk carries none, rank meanwhile. */
@@ -38,6 +40,12 @@ function orgMarkWords(st, outcome, now){
       title:at(t("{HOST} has not answered three times in a row, so the built-in model ranks on this computer, sending nothing, and the desk asks {HOST} again in a minute."))}
     : {paused:true, label:t("organisation's model not answering, word matches only"),
       title:at(t("{HOST} has not answered three times in a row, so the search matches words alone, and the desk asks {HOST} again in a minute."))};
+  /* Too slow keeps the quiet colour and no dot: nothing has failed. */
+  if(Number(o.medianMs)>ORG_SLOW_MS) return eAiModel()
+    ? {paused:false, label:t("organisation's model too slow to reorder"),
+      title:at(t("{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the built-in model's order stands."))}
+    : {paused:false, label:t("organisation's model too slow to reorder"),
+      title:at(t("{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the word matches' order stands."))};
   const search=eSearchOn(), suggest=eAiOn();
   const title=search && !suggest ? t("The organisation's model at {HOST} ranks the search. The search text is sent there.")
     : suggest && !search ? t("The organisation's model at {HOST} ranks the suggestions. The copied message they are made from is sent there.")

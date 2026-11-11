@@ -449,6 +449,9 @@ function orgModelWhy(why, fields){
 function orgTestLine(r){
   const host=String(r && r.host || ""), model=String(r && r.model || ""), why=r && r.why;
   const at=s=>s.split("{HOST}").join(host).split("{MODEL}").join(model);
+  /* The wait to one decimal place, with the decimal sign of the interface's language. */
+  if(r && r.ok && Number.isFinite(r.ms)) return at(t("Connected: {HOST} answered in {SECONDS} s, model {MODEL}."))
+    .split("{SECONDS}").join((r.ms/1000).toFixed(1).replace(".", uiLang()==="pl" ? "," : "."));
   if(r && r.ok) return at(t("Connected: {HOST} answered, model {MODEL}."));
   return why==="provider" ? t("No AI service is set up yet. One is chosen from the Menu, under Settings, then Data and defaults.")
     : why==="endpoint" ? t("Needed for this service: the full https address the organisation gives for it.")
