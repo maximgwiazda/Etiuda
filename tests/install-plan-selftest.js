@@ -649,7 +649,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
   const lockedExtract = text => /"\$\(appCannotBeClosed\)" \/SD IDCANCEL IDCANCEL AbortExtract7za/.test(String(text))
     && /\n\s*AbortExtract7za:\r?\n\s*SetErrorLevel 1618\r?\n\s*Quit\b/.test(String(text));
   const X = T["include/extractAppPackage.nsh"] || "";
-  ok(lockedExtract(X), "13b a file still locked after five tries ends a silent run with 1618 before the in-place overwrite that ignores errors");
+  ok(lockedExtract(X), "13b a file still locked after about a minute of tries ends a silent run with 1618 before the in-place overwrite that ignores errors");
   ok(!lockedExtract(X.replace("/SD IDCANCEL IDCANCEL", "/SD IDRETRY IDCANCEL")), "13b control: the silent Retry put back, which overwrites in place and ends 0, reads red");
   ok(!lockedExtract(X.replace(/(AbortExtract7za:\r?\n)\s*SetErrorLevel 1618\r?\n/, "$1")), "13b control: Cancel quitting with no code reads red");
   /* The retry window before that 1618 (Claude alpha's ruling (2), 2026-11-11 18:49; the number the test architect's and the lead
