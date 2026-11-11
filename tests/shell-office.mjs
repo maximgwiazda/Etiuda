@@ -1041,7 +1041,7 @@ try {
       const builder = nodeRequire(path.join(ROOT, "electron-builder.js"));
       const beside = [...SRC.matchAll(/require\(path\.join\(__dirname, "([^"]+)"\)\)/g)].map(m => "shell/" + m[1]);
       const notPacked = beside.filter(f => (builder.files || []).indexOf(f) < 0);
-      check(beside.length === 5 && notPacked.length === 0,
+      check(beside.length === 6 && notPacked.length === 0,
         "6n every file the shell requires from beside itself is in electron-builder.js's files, or the installed desk would not"
         + " start: " + JSON.stringify(beside) + (notPacked.length ? ", NOT PACKED " + JSON.stringify(notPacked) : ""));
       /* Windows proxy keys in real shape, planted per query. A key absent from the map fails as reg.exe does for a missing key. */

@@ -225,6 +225,26 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   /* The embedded model: {model} says whether this desk carries it, and the switch is told to the shell as it moves. */
   aiState: () => ipcRenderer.sendSync("etiuda:ai-state"),
   setAi: (on) => ipcRenderer.send("etiuda:ai-set", !!on),
+  /* The organisation's model in Settings: what is in force, never the key; a save of the fields named, each a string; the
+     connection test; and each re-order's outcome as the shell reports it on an event of its own, {ranking, failures,
+     pausedUntil, slow}, slow while the service usually answers too late to reorder. */
+  deskAiSettings: () => ipcRenderer.sendSync("etiuda:desk-ai-settings"),
+  deskAiSave: (fields) => {
+    const f = {};
+    if (fields && typeof fields === "object") {
+      for (const k of ["choice", "provider", "endpoint", "model", "key"]) if (typeof fields[k] === "string") f[k] = fields[k];
+    }
+    return ipcRenderer.invoke("etiuda:desk-ai-save", f);
+  },
+  deskAiTest: () => ipcRenderer.invoke("etiuda:desk-ai-test"),
+  onAiRanking: (fn) => ipcRenderer.on("etiuda:ai-ranking", (_e, v) => {
+    const s = v && typeof v === "object" ? v : {};
+    try {
+      fn({ ranking: s.ranking === "organisation" ? "organisation" : "builtin", failures: Number.isInteger(s.failures) && s.failures > 0 ? s.failures : 0,
+        pausedUntil: typeof s.pausedUntil === "number" && isFinite(s.pausedUntil) ? s.pausedUntil : 0,
+        slow: s.slow === true });
+    } catch { /* the page has gone */ }
+  }),
   /* The main search's own switch, the passages it should embed, and the ranking of one query. */
   setSearchAi: (on) => ipcRenderer.send("etiuda:search-set", !!on),
   searchPrepare: (rows) => ipcRenderer.invoke("etiuda:search-prepare", Array.isArray(rows) ? rows : []),

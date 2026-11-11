@@ -58,8 +58,9 @@ function notifyFirstClose(opts) {
   if (harnessLaunch()) return null; /* plant:harness-first-close */
   return notifyFirstCloseOf(opts);
 }
-const { readsLikeMessage, scoreSuggestions, MESSAGE_MAX_CHARS } = require(path.join(__dirname, "clip-suggest.cjs"));
+const { readsLikeMessage, scoreSuggestions, MESSAGE_MAX_CHARS, SUGGEST_LIMIT } = require(path.join(__dirname, "clip-suggest.cjs"));
 const { honourPendingReset, stageReset, deliverResetNotice, retryPendingReset, stopPendingReset } = require(path.join(__dirname, "desk-reset.cjs"));
+const deskAi = require(path.join(__dirname, "desk-ai.cjs"));
 /* THE EMBEDDED MODEL, where the package carries it beside the asar; a copy of the shell without these files suggests by words. */
 let embedLib = null;
 try { embedLib = require(path.join(__dirname, "embed", "suggest.cjs")); } catch (e) { embedLib = null; }
@@ -4046,8 +4047,8 @@ function policyNoUpdate(values) {
   return !((v.type === "dword" || v.type === "REG_SZ" || v.type === "REG_EXPAND_SZ") && (s === "" || s === "0"));
 }
 /* `text` is the text of reg export's file for the policy key, or empty where there is none.
-   Returns {folder, lead, bad, noUpdate}: folder and lead empty where unused, bad the names of the words to say, noUpdate
-   true where policy turns the version look off. */
+   Returns {folder, lead, bad, noUpdate, values}: folder and lead empty where unused, bad the names of the words to say, noUpdate
+   true where policy turns the version look off, values policyValues' reading for the readers of the key's other values. */
 function joinPolicyFacts(text) {
   const values = text ? policyValues(text) : null;
   const noUpdate = policyNoUpdate(values);
@@ -4076,9 +4077,9 @@ function joinPolicyFacts(text) {
   if ((folder.set || lead.set) && (!folderOk || !leadOk)) {
     if (folder.set && folderOk && !leadOk) bad.push("beside");
     if (lead.set && leadOk && !folderOk) bad.push("beside");
-    return { folder: "", lead: "", bad: bad, noUpdate: noUpdate };
+    return { folder: "", lead: "", bad: bad, noUpdate: noUpdate, values: values };
   }
-  return { folder: folderValue, lead: leadValue, bad: bad, noUpdate: noUpdate };
+  return { folder: folderValue, lead: leadValue, bad: bad, noUpdate: noUpdate, values: values };
 }
 /* The facts with their sentences in `lang`, "pl" or anything else for English: {folder, lead, said, noUpdate}. */
 function policyWords(facts, lang) {
@@ -4116,6 +4117,243 @@ function readJoinPolicy(lang) {
 function updateLookOff() {
   try { return readJoinPolicy("en").noUpdate === true; } catch { return false; }
 }
+/* THE DESK'S OPTIONAL CUSTOMER MODEL (board 992). Off by default; on, the organisation's own service ranks the search and the
+   suggestions, and deskAiConfig is the one place its address and key are handed on. The person's choice and fields are kept in
+   desk-ai.json beside desk.json, the key apart in desk-ai-key.json, sealed by safeStorage with the address it was given for,
+   and machine policy wins field by field. Nothing in this part makes a request. */
+const DESK_AI_FILE = "desk-ai.json";
+const DESK_AI_KEY_FILE = "desk-ai-key.json";
+const DESK_AI_KIND = "etiuda-desk-ai";
+const DESK_AI_KEY_KIND = "etiuda-desk-ai-key";
+/* Each service's published address, the one used only where neither the person nor the policy named one, "" meaning one
+   must be given: the adapter module's table, the only one, so Settings, the policy and the requests cannot disagree. */
+const DESK_AI_SERVICES = deskAi.PROVIDERS;
+const DESK_AI_MODEL_MAX = 256;
+const DESK_AI_KEY_MAX = 8192;
+const DESK_AI_CONTROL_RE = /[\x00-\x1f\x7f]/;
+/* The connection test's whole question: a fixed prompt, and no catalog text with it, the one the door sends. */
+const DESK_AI_TEST_PROMPT = deskAi.TEST_PROMPT;
+function deskAiService(provider) {
+  return typeof provider === "string" && Object.prototype.hasOwnProperty.call(DESK_AI_SERVICES, provider) ? DESK_AI_SERVICES[provider] : null;
+}
+/** An https address in its canonical form, its path ending in "/", the service's own route taken off where it was pasted
+ *  whole; "" where it is not https or carries a user, a password, a query or a fragment. */
+function deskAiEndpointShape(text, provider) { return deskAi.endpointShape(text, provider); }
+/* MACHINE POLICY FOR THE OPTION, from policyValues' reading: AiProvider, AiEndpoint, AiModel and AiKey, the values Studio's
+   template names, and the desk's own switch DeskOrganisationModel, 1 for on and 0 for off, either one fixed here, absent or
+   empty leaving the choice to the person. Strings are taken as written, an expandable one too. A value that cannot be used is
+   left out alone and named in `ignored`. Answers {on: true, false or null, provider, endpoint, model, key, ignored}. */
+function deskAiPolicyFrom(values) {
+  const out = { on: null, provider: "", endpoint: "", model: "", key: "", ignored: [] };
+  if (!values) return out;
+  const own = name => (Object.prototype.hasOwnProperty.call(values, name.toLowerCase()) ? values[name.toLowerCase()] : null);
+  const text = name => {
+    const v = own(name);
+    if (!v) return "";
+    if (v.type !== "REG_SZ" && v.type !== "REG_EXPAND_SZ") { out.ignored.push(name); return ""; }
+    return String(v.value).trim();
+  };
+  const held = (s, max) => s.length <= max && !DESK_AI_CONTROL_RE.test(s);
+  const sw = own("DeskOrganisationModel");
+  if (sw) {
+    const s = String(sw.value).trim(), str = sw.type === "REG_SZ" || sw.type === "REG_EXPAND_SZ";
+    if ((str || sw.type === "dword") && s === "1") out.on = true;
+    else if ((str || sw.type === "dword") && s === "0") out.on = false;
+    else if (!(str && s === "")) out.ignored.push("DeskOrganisationModel");
+  }
+  const provider = text("AiProvider").toLowerCase();
+  if (provider) { if (deskAiService(provider)) out.provider = provider; else out.ignored.push("AiProvider"); }
+  const endpoint = text("AiEndpoint");
+  if (endpoint) {
+    const shaped = deskAiEndpointShape(endpoint, out.provider);
+    if (shaped) out.endpoint = shaped; else out.ignored.push("AiEndpoint");
+  }
+  const model = text("AiModel");
+  if (model) { if (held(model, DESK_AI_MODEL_MAX)) out.model = model; else out.ignored.push("AiModel"); }
+  const key = text("AiKey");
+  if (key) { if (held(key, DESK_AI_KEY_MAX)) out.key = key; else out.ignored.push("AiKey"); }
+  return out;
+}
+/** The person's fields `me` ({choice, provider, endpoint, model}) under `org` (deskAiPolicyFrom's answer), policy first, field
+ *  by field: {on, provider, given, endpoint, model, managed, keyAway}, `given` the address written and `endpoint` the one a
+ *  request would go to. `keyAway` is true where the policy set a key and that address is neither the policy's own nor, with
+ *  none set, the service's published one, since the organisation's key never goes to an address typed here. Pure. */
+function deskAiJoin(me, org) {
+  const p = me || {}, o = org || {};
+  const pick = (a, b) => (a ? { value: a, managed: true } : { value: typeof b === "string" ? b : "", managed: false });
+  const choiceSet = o.on === true || o.on === false;
+  const provider = pick(o.provider, p.provider), model = pick(o.model, p.model);
+  /* The person's address belongs to the service the person chose, so it is not carried over to another the policy chose. */
+  const endpoint = pick(o.endpoint, o.provider && o.provider !== p.provider ? "" : p.endpoint);
+  const service = deskAiService(provider.value);
+  const at = !service ? "" : endpoint.value ? deskAiEndpointShape(endpoint.value, provider.value) : service.endpoint;
+  const home = endpoint.managed || (at !== "" && service && at === service.endpoint);
+  return {
+    on: choiceSet ? o.on : p.choice === "organisation",
+    provider: provider.value, given: endpoint.value, endpoint: at, model: model.value,
+    managed: { choice: choiceSet, provider: provider.managed, endpoint: endpoint.managed, model: model.managed, key: !!o.key },
+    keyAway: !!o.key && !home,
+  };
+}
+function deskAiReadyOf(j, key) { return !!(j && deskAiService(j.provider) && j.endpoint && j.model && key); }
+/** What Settings is told, the key never among it: whether one is in force, and nothing of it. Pure. */
+function deskAiAnswer(j, keyIn, ignored, sealable, stored) {
+  let host = "";
+  try { host = j.endpoint ? new URL(j.endpoint).host : ""; } catch { host = ""; }
+  return {
+    choice: j.on ? "organisation" : "builtin", on: !!j.on, ready: !!j.on && deskAiReadyOf(j, keyIn),
+    provider: j.provider, endpoint: j.given, at: j.endpoint, host: host, model: j.model,
+    keyKept: !!keyIn || !!stored, keyAway: !!j.keyAway, managed: Object.assign({}, j.managed),
+    ignored: Array.isArray(ignored) ? ignored.slice() : [], sealable: !!sealable,
+    services: Object.keys(DESK_AI_SERVICES).map(id => ({ id: id, endpoint: DESK_AI_SERVICES[id].endpoint })),
+  };
+}
+/** Why a save from Settings is refused, or "": a field machine policy set ("managed"), a choice, a service, an address, a model
+ *  or a key this desk cannot hold, each by its own name. `fields` holds only the strings the page sent. Pure. */
+function deskAiRefusal(fields, j) {
+  const f = fields || {}, has = k => typeof f[k] === "string";
+  if (["choice", "provider", "endpoint", "model", "key"].some(k => has(k) && j.managed[k])) return "managed";
+  if (has("choice") && f.choice !== "organisation" && f.choice !== "builtin") return "choice";
+  if (has("provider") && f.provider !== "" && !deskAiService(f.provider)) return "provider";
+  if (has("endpoint") && f.endpoint.trim() !== "" && !deskAiEndpointShape(f.endpoint, has("provider") ? f.provider : j.provider)) return "endpoint";
+  if (has("model") && (f.model.trim().length > DESK_AI_MODEL_MAX || DESK_AI_CONTROL_RE.test(f.model))) return "model";
+  if (has("key") && (f.key.trim().length > DESK_AI_KEY_MAX || DESK_AI_CONTROL_RE.test(f.key.trim()))) return "key";
+  return "";
+}
+function deskAiPath(name) { return path.join(app.getPath("userData"), name); }
+/* The person's own choice and fields, or the defaults, off, where the file is absent or not of this kind. */
+function deskAiPerson() {
+  const none = { choice: "builtin", provider: "", endpoint: "", model: "" };
+  let doc = null;
+  try { doc = JSON.parse(fs.readFileSync(deskAiPath(DESK_AI_FILE), "utf8")); } catch { return none; }
+  if (!doc || typeof doc !== "object" || doc.kind !== DESK_AI_KIND || doc.format !== 1) return none;
+  const str = v => (typeof v === "string" ? v : "");
+  return { choice: doc.choice === "organisation" ? "organisation" : "builtin", provider: str(doc.provider), endpoint: str(doc.endpoint), model: str(doc.model) };
+}
+/* The person's key as sealed, {for, key}, or null where there is none or this account cannot open it. ONLY A SAVE FROM SETTINGS
+   READS IT WHOLE, to carry the key to the address the person chose; a request takes it through deskAiKeyFor alone. */
+function deskAiKeyInner() {
+  try {
+    const doc = JSON.parse(fs.readFileSync(deskAiPath(DESK_AI_KEY_FILE), "utf8"));
+    if (!doc || doc.kind !== DESK_AI_KEY_KIND || doc.format !== 1 || typeof doc.sealed !== "string") return null;
+    const inner = JSON.parse(safeStorage.decryptString(Buffer.from(doc.sealed, "base64")));
+    return inner && typeof inner.for === "string" && typeof inner.key === "string" && inner.key ? inner : null;
+  } catch { return null; }
+}
+/* The person's key where it was given for `endpoint`, else "": a key goes only to the address it was sealed with. */
+function deskAiKeyFor(endpoint) {
+  if (!endpoint) return "";
+  const inner = deskAiKeyInner();
+  return inner && inner.for === endpoint ? inner.key : "";
+}
+function deskAiPolicy() {
+  try { readJoinPolicy("en"); } catch { /* no policy is read as none */ }
+  return deskAiPolicyFrom(joinPolicyRead && joinPolicyRead.values);
+}
+/* WHAT IS IN FORCE, KEPT IN MEMORY: every search, picker opening and the page's two-second look asks deskAiConfig, so the two
+   files are read and the key unsealed once, and again only after deskAiForget (every save or forget from Settings) or a new
+   reading of machine policy. A file edited behind the running desk's back is read at the next save or start. */
+let deskAiKept = null;
+function deskAiForget() { deskAiKept = null; }
+/* Everything in force now: {joined, policy, key}, the key the one a request would carry, "" where none would go. */
+function deskAiNow() {
+  const policy = deskAiPolicy();
+  if (deskAiKept && deskAiKept.from === joinPolicyRead) return deskAiKept.now;
+  const joined = deskAiJoin(deskAiPerson(), policy);
+  const key = policy.key ? (joined.keyAway ? "" : policy.key) : deskAiKeyFor(joined.endpoint);
+  const now = { joined: joined, policy: policy, key: key };
+  deskAiKept = { from: joinPolicyRead, now: now };
+  return now;
+}
+/** THE ONE PLACE THE ADDRESS AND THE KEY ARE HANDED ON. Null while the option is off or anything a request needs is missing;
+ *  else {provider, endpoint, model, key, managed}, endpoint the address a request goes to, as deskAiEndpointShape writes it.
+ *  Null on a harness launch too, as the note look is, so no test start sends a query to a service configured on this desk. */
+function deskAiConfig() {
+  if (harnessLaunch()) return null;
+  let now = null;
+  try { now = deskAiNow(); } catch { return null; }
+  const j = now.joined;
+  if (!j.on || !deskAiReadyOf(j, now.key)) return null;
+  return { provider: j.provider, endpoint: j.endpoint, model: j.model, key: now.key, managed: Object.assign({}, j.managed) };
+}
+function deskAiSettings() {
+  const now = deskAiNow(), inner = now.policy.key ? null : deskAiKeyInner();
+  return deskAiAnswer(now.joined, !!now.key, now.policy.ignored, branchSealable(), !!(inner && inner.for === ""));
+}
+/* A save from Settings: only the fields sent change, and a key typed is sealed for the address the save leaves in force. A key
+   kept for one address is forgotten by a save that moves to another (below). An empty key leaves the kept one as it is.
+   Answers {ok, why, keyDropped, settings}, settings as deskAiSettings, and writes nothing where it refuses. */
+function deskAiSave(fields) {
+  const f = {};
+  if (fields && typeof fields === "object") {
+    for (const k of ["choice", "provider", "endpoint", "model", "key"]) if (typeof fields[k] === "string") f[k] = fields[k];
+  }
+  let before = null;
+  deskAiForget();
+  try { before = deskAiNow(); } catch { return { ok: false, why: "unwritten", settings: null }; }
+  const answer = () => { deskAiForget(); try { return deskAiSettings(); } catch { return null; } };
+  const why = deskAiRefusal(f, before.joined);
+  if (why) return { ok: false, why: why, settings: answer() };
+  const me = deskAiPerson();
+  const provider = f.provider !== undefined ? f.provider : me.provider;
+  const next = {
+    choice: f.choice !== undefined ? f.choice : me.choice, provider: provider,
+    endpoint: f.endpoint !== undefined ? (f.endpoint.trim() ? deskAiEndpointShape(f.endpoint, provider) : "") : me.endpoint,
+    model: f.model !== undefined ? f.model.trim() : me.model,
+  };
+  const after = deskAiJoin(next, before.policy);
+  const typed = f.key !== undefined ? f.key.trim() : "";
+  const moves = f.provider !== undefined || f.endpoint !== undefined;
+  const kept = before.policy.key || !moves ? null : deskAiKeyInner();
+  /* A KEY NEVER FOLLOWS A CHANGED ADDRESS (Argon's finding 1 of the 992 review, as Studio's a9a3c5bc): a key kept for a real
+     address is forgotten by a save that moves to another and no key typed, and Settings says to give it again. Only a key
+     typed before any address was named, sealed for "", goes to the first address named. */
+  const carried = kept && kept.for === "" && after.endpoint ? kept.key : "";
+  const dropped = !typed && !carried && !!kept && kept.for !== "" && kept.for !== after.endpoint;
+  const key = typed || carried;
+  if (key && !branchSealable()) return { ok: false, why: "unsealed", settings: answer() };
+  try {
+    if (key) {
+      const sealed = safeStorage.encryptString(JSON.stringify({ for: after.endpoint, key: key })).toString("base64");
+      writeReplacing(deskAiPath(DESK_AI_KEY_FILE), JSON.stringify({ format: 1, kind: DESK_AI_KEY_KIND, sealed: sealed }));
+    } else if (dropped) fs.unlinkSync(deskAiPath(DESK_AI_KEY_FILE));
+    writeReplacing(deskAiPath(DESK_AI_FILE), JSON.stringify(Object.assign({ format: 1, kind: DESK_AI_KIND }, next), null, 2) + "\n");
+  } catch { return { ok: false, why: "unwritten", settings: answer() }; }
+  return { ok: true, why: "", keyDropped: dropped, settings: answer() };
+}
+/* The door's one ask of `config` with the test's fixed prompt (shell/desk-ai.cjs connectionTest), answered {ok, why, ms,
+   status}: why "busy", "late", "unreached" or "answer" (an error or an answer with no text), ms the service's own time. */
+function deskAiProbe(config, prompt) {
+  if (!config || prompt !== DESK_AI_TEST_PROMPT) return Promise.resolve({ ok: false, why: "none" });
+  return deskAi.connectionTest(deskAiFetch, config).then(r => ({ ok: r.ok === true, why: r.ok === true ? "" : String(r.why || "answer"),
+    ms: r.ms, status: r.status }));
+}
+/* The connection test, on the fields in force whether the option is on or not: the fixed prompt, through the door. Answers
+   {ok, why, host, model, ms}, why naming what is missing before anything is asked and ms the wait for the answer. */
+function deskAiTest() {
+  let now = null;
+  try { now = deskAiNow(); } catch { return Promise.resolve({ ok: false, why: "none", host: "", model: "" }); }
+  const j = now.joined, a = deskAiAnswer(j, !!now.key, [], false);
+  const said = why => Promise.resolve({ ok: false, why: why, host: a.host, model: j.model });
+  if (!deskAiService(j.provider)) return said("provider");
+  if (!j.endpoint) return said("endpoint");
+  if (!j.model) return said("model");
+  if (j.keyAway) return said("keyAway");
+  if (!now.key) return said("key");
+  const config = { provider: j.provider, endpoint: j.endpoint, model: j.model, key: now.key, managed: Object.assign({}, j.managed) };
+  const t0 = Date.now();
+  return Promise.resolve().then(() => deskAiProbe(config, DESK_AI_TEST_PROMPT))
+    .then(r => ({ ok: !!(r && r.ok === true), why: r && r.ok === true ? "" : String((r && r.why) || "failed"), host: a.host, model: j.model,
+      ms: r && Number.isFinite(r.ms) && r.ms > 0 ? r.ms : Date.now() - t0 }),
+      () => ({ ok: false, why: "failed", host: a.host, model: j.model }));
+}
+ipcMain.on("etiuda:desk-ai-settings", (e) => {
+  let v = null;
+  try { v = fromEngine(e) ? deskAiSettings() : null; } catch { v = null; }
+  e.returnValue = v;
+});
+ipcMain.handle("etiuda:desk-ai-save", (e, fields) => (fromEngine(e) ? deskAiSave(fields) : { ok: false, why: "refused", settings: null }));
+ipcMain.handle("etiuda:desk-ai-test", (e) => (fromEngine(e) ? deskAiTest() : { ok: false, why: "refused", host: "", model: "" }));
 let joinPolicySaid = false;
 function sayJoinPolicy() {
   let lang = "en";
@@ -10032,6 +10270,7 @@ function ensurePicker() {
   const win = pickWin;
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", e => e.preventDefault());
+  countTouches(win.webContents, () => { pickTouches++; });
   win.on("blur", () => hidePicker(false));
   win.on("closed", () => { if (pickWin === win) { pickWin = null; pickLoaded = null; } });
   pickLoaded = new Promise(done => win.webContents.once("did-finish-load", () => done(true)));
@@ -10129,6 +10368,76 @@ function warmSuggestSoon() {
   }).catch(() => {});
 }
 
+/* THE ORGANISATION'S MODEL (shell/desk-ai.cjs). deskAiConfig, above with Settings' part, is the one reader of the
+   configuration in force, {provider, endpoint, model, key, managed}, or null while the option is off or not ready.
+   The page hears each ask's outcome on etiuda:ai-ranking, {ranking, failures, pausedUntil, slow}, for the mark and its
+   lines: a channel of its own, since etiuda:ai-state is the page's sync request of the shell, the other way. */
+function deskAiState(state) {
+  const win = theWindow;
+  if (win && !win.isDestroyed()) win.webContents.send("etiuda:ai-ranking", state);
+}
+function deskAiFetch(u, init) {
+  return net && typeof net.fetch === "function" ? net.fetch(u, init) : Promise.reject(new Error("no network here"));
+}
+const deskReorder = deskAi.createReorder({ config: () => deskAiConfig(), fetch: deskAiFetch, onState: deskAiState });
+/* An agent's key, click, wheel or scroll in each window, counted, so an order that comes after one is dropped. */
+let deskTouches = 0, pickTouches = 0;
+function countTouches(wc, bump) {
+  if (wc && typeof wc.on === "function") wc.on("input-event", (e, ie) => { if (ie && deskAi.touches(ie.type)) bump(); });
+}
+/* The main search's passages by id, as the page last sent them, for the texts of a shortlist. */
+let orgRows = new Map(), orgSearchOn = true, orgSearchAsked = "";
+function keepOrgRows(rows) {
+  const by = new Map();
+  for (const r of Array.isArray(rows) ? rows : []) {
+    if (!r || typeof r.text !== "string" || (r.surface !== "card" && r.surface !== "intent")) continue;
+    const k = r.surface + ":" + String(r.id);
+    by.set(k, by.has(k) ? by.get(k) + " / " + r.text : r.text);
+  }
+  orgRows = by;
+  orgSearchAsked = "";
+}
+/* Once per settled query: the page's shortlist for it, the organisation's order of it, and that order back to the page,
+   which takes it only while the query and the list are still the ones it gave. A retry of the same query by the page,
+   with no key or click between, is not a second ask. */
+function orgSearchSoon(q) {
+  if (q + "\n" + deskTouches === orgSearchAsked) return;
+  deskReorder.settle(() => { orgSearch(q).catch(() => {}); });
+}
+async function orgSearch(q) {
+  const asked = q + "\n" + deskTouches;
+  if (!orgSearchOn || !deskReorder.active() || asked === orgSearchAsked) return;
+  orgSearchAsked = asked;
+  const list = await askDesk("search-shortlist", { q });
+  if (!list || list.q !== q) return;
+  const rows = [];
+  for (const [surface, ids] of [["card", list.cards], ["intent", list.intents]]) {
+    for (const id of Array.isArray(ids) ? ids : []) {
+      const text = orgRows.get(surface + ":" + String(id));
+      if (text && rows.length < deskAi.SHORTLIST_MAX) rows.push({ surface, id: String(id), text });
+    }
+  }
+  const touched = deskTouches;
+  const order = await deskReorder.ask(q, rows.map(r => r.text), () => deskTouches === touched);
+  if (!order) return;
+  const sorted = order.map(i => rows[i]);
+  askDesk("search-reorder", { q, gen: list.gen, cards: sorted.filter(r => r.surface === "card").map(r => r.id),
+    intents: sorted.filter(r => r.surface === "intent").map(r => r.id) }).catch(() => {});
+}
+/* The strip's shortlist, the rows it shows first and then the words' others, each by its passages; and the organisation's
+   order of it, which the picker takes only if it is still this opening's and the agent has not touched it. */
+function orgSuggestRows(shown, scored, profiles) {
+  const texts = new Map(((profiles && profiles.passages) || []).map(p => [String(p.id), (p.texts || []).join(" / ")]));
+  const rows = [], seen = new Set();
+  for (const r of [].concat(shown || [], scored || [])) {
+    const id = String(r && r.id);
+    if (!r || seen.has(id) || rows.length >= deskAi.SHORTLIST_MAX) continue;
+    seen.add(id);
+    rows.push({ id, name: String(r.name || ""), score: r.score, text: texts.get(id) || String(r.name || "") });
+  }
+  return rows;
+}
+
 function noteOwnText(text) {
   if (!text) return;
   lastOwnText = crypto.createHash("sha256").update(String(text).replace(/\r\n/g, "\n")).digest("hex");
@@ -10179,7 +10488,12 @@ function pickWithClip(press, which, text) {
      at the first opening of any kind. */
   const forModel = !!embedSuggest && embedSuggest.installed();
   const req = (want || forModel) ? (lastProfiles ? { epoch: lastProfilesEpoch } : { profiles: 1 }) : {};
-  const ranked = want && embedSuggest ? embedSuggest.rank(clip.slice(0, MESSAGE_MAX_CHARS), EMBED_BUDGET_MS) : Promise.resolve(null);
+  /* Where the organisation's model ranks, the built-in one still gives the instant strip unless INSTANT_FROM says words. */
+  const org = want && deskReorder.active();
+  const builtinNow = !(org && deskAi.INSTANT_FROM === "words");
+  let orgText = org ? clip.slice(0, MESSAGE_MAX_CHARS) : "";
+  let scoredAll = [];
+  const ranked = want && embedSuggest && builtinNow ? embedSuggest.rank(clip.slice(0, MESSAGE_MAX_CHARS), EMBED_BUDGET_MS) : Promise.resolve(null);
   askDesk("open", req).then(open => {
     if (!open) { focusDesk(); return null; }
     if (open.epoch != null && open.epoch !== lastProfilesEpoch) {
@@ -10195,6 +10509,7 @@ function pickWithClip(press, which, text) {
     if (profiles && want) {
       try {
         const scored = scoreSuggestions(clip, profiles);
+        scoredAll = scored;
         if (scored.length) {
           open.suggest = scored.map(r => ({ id: String(r.id), name: String(r.name || ""), score: r.score }));
           const labels = profiles.labels || {};
@@ -10210,12 +10525,18 @@ function pickWithClip(press, which, text) {
     clip = "";
     const aiOn = open.ai !== false;
     delete open.ai;
-    const byModel = showed && aiOn && !!embedSuggest && embedSuggest.readyFor(passagesKeyOf(profiles));
+    const byModel = showed && aiOn && builtinNow && !!embedSuggest && embedSuggest.readyFor(passagesKeyOf(profiles));
     if (embedSuggest) warmSuggest(profiles, aiOn);
     return (byModel ? ranked : Promise.resolve(null)).then(rows => {
       const names = new Map(((profiles && profiles.intents) || []).map(p => [String(p.id), String(p.name || "")]));
       const mine = (Array.isArray(rows) ? rows : []).filter(r => r && names.has(String(r.id)));
       if (mine.length) open.suggest = mine.map(r => ({ id: String(r.id), name: names.get(String(r.id)), score: r.score }));
+      const orgRowsNow = org && showed && aiOn ? orgSuggestRows(open.suggest, scoredAll, profiles) : [];
+      const touched = pickTouches;
+      const orgOrder = orgRowsNow.length > 1
+        ? deskReorder.ask(orgText, orgRowsNow.map(r => r.text), () => press === pickPress && pickTouches === touched) : null;
+      orgText = "";
+      scoredAll = [];
       if (showed && clipHash !== lastCountedText) {
         lastCountedText = clipHash;
         askDesk("suggest-open", {}).catch(() => {});
@@ -10235,7 +10556,16 @@ function pickWithClip(press, which, text) {
         const drawn = new Promise(done => { pickShown = done; setTimeout(done, 300); });
         win.webContents.send("etiuda:pick-open", JSON.stringify(open));
         const asked = Promise.race([which, new Promise(done => setTimeout(done, CARET_WAIT_MS))]);
-        return Promise.all([drawn, asked]).then(() => { pickShown = null; if (!win.isDestroyed()) { win.show(); win.focus(); } });
+        return Promise.all([drawn, asked]).then(() => {
+          pickShown = null;
+          if (!win.isDestroyed()) { win.show(); win.focus(); }
+          /* Not waited for: the opening ends here, and the order, if it comes and is still wanted, paints the strip again. */
+          if (orgOrder) orgOrder.then(order => {
+            if (!order || win.isDestroyed() || !win.isVisible() || press !== pickPress || pickTouches !== touched) return;
+            open.suggest = order.map(i => orgRowsNow[i]).slice(0, SUGGEST_LIMIT).map(r => ({ id: r.id, name: r.name, score: r.score }));
+            win.webContents.send("etiuda:pick-open", JSON.stringify(open));
+          }).catch(() => {});
+        });
       });
     });
   }).catch(e => console.error("etiuda: the picker could not open - " + e.message))
@@ -10295,9 +10625,10 @@ ipcMain.handle("etiuda:pick-copy", (e, what) => {
     return false;
   });
 });
-/* The embedded model's switch as Settings shows it: whether this desk carries the model, and the person turning it off or on. */
+/* The embedded model's switch as Settings shows it: whether this desk carries the model, whether the organisation's model is
+   in force (org), and the person turning it off or on. A sync request from the page; the outcomes go back on etiuda:ai-ranking. */
 ipcMain.on("etiuda:ai-state", (e) => {
-  e.returnValue = fromEngine(e) ? { model: !!(embedSuggest && embedSuggest.installed()) } : null;
+  e.returnValue = fromEngine(e) ? { model: !!(embedSuggest && embedSuggest.installed()), org: !!deskAiConfig() } : null;
 });
 ipcMain.on("etiuda:ai-set", (e, on) => {
   if (!fromEngine(e) || !embedSuggest) return;
@@ -10306,18 +10637,27 @@ ipcMain.on("etiuda:ai-set", (e, on) => {
 /* The main search's own switch, and the ranking it asks for. Preparation returns at once; the passages embed in the
    worker afterwards. A rank before they are ready, or under three letters, is null, and the page keeps the word order. */
 ipcMain.on("etiuda:search-set", (e, on) => {
-  if (!fromEngine(e) || !embedSuggest) return;
-  embedSuggest.setSearchOn(!!on);
+  if (!fromEngine(e)) return;
+  orgSearchOn = !!on;
+  if (embedSuggest) embedSuggest.setSearchOn(!!on);
 });
 ipcMain.handle("etiuda:search-prepare", (e, rows) => {
   if (!fromEngine(e)) return null;
-  if (!embedSuggest) return { ready: false, skipped: true };
+  keepOrgRows(rows);
+  if (!embedSuggest) return deskAiConfig() ? { ready: true } : { ready: false, skipped: true };
   try { return embedSuggest.prepareSearch(rows) || { ready: false, skipped: true }; }
   catch (err) { return { ready: false, skipped: true }; }
 });
+/* With the organisation's model chosen, an empty order stands where the built-in one gives none, so the page keeps its
+   words and does not ask again; the organisation's order follows the answer, through orgSearchSoon. */
 ipcMain.handle("etiuda:search-rank", (e, text) => {
-  if (!fromEngine(e) || !embedSuggest) return null;
-  return embedSuggest.searchRank(String(text == null ? "" : text));
+  if (!fromEngine(e)) return null;
+  const q = String(text == null ? "" : text);
+  const builtin = embedSuggest && !(deskReorder.active() && deskAi.INSTANT_FROM === "words") ? embedSuggest.searchRank(q) : null;
+  if (!orgSearchOn || !deskAiConfig()) return builtin;
+  const answer = builtin ? Promise.resolve(builtin) : Promise.resolve({ cards: [], intents: [] });
+  answer.then(() => orgSearchSoon(q), () => {});
+  return answer;
 });
 /* The page tells main the text it copied, so the strip never suggests from a reply the desk wrote. A string within the cap and
    nothing else: a longer one is no reply the desk wrote, and anything not a string is not noted at all. */
@@ -10502,6 +10842,7 @@ function createWindow() {
   });
 
   theWindow = win;
+  countTouches(win.webContents, () => { deskTouches++; });
   /* The picker is a second window, so it goes with the desk's or the app would outlive it. */
   win.on("closed", () => {
     if (theWindow === win) theWindow = null;
