@@ -447,6 +447,87 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     "10h control: the removal never called from the uninstall reads red");
 }
 
+/* ---- 11. every message box answers a silent run --------------------------------------------- */
+/* NSIS shows a MessageBox that has no /SD even under /S, so one such box hangs a silent push nobody watches. This scan is
+   its own, not the patch tool's: the whole template folder as the tool leaves it (on a copy) and every .nsh under shell/.
+   A box this leg should pass unanswered goes in EXEMPT as "file:line why"; none does. */
+{
+  const osx = require("node:os");
+  const EXEMPT = [];
+  const ANSWER = /\/SD\s+ID(?:OK|CANCEL|ABORT|RETRY|IGNORE|YES|NO)\b/i;
+  const boxes = (text, name) => {
+    const out = { total: 0, open: [] };
+    const lines = String(text).split(/\r?\n/);
+    let inBlock = false;
+    for (let i = 0; i < lines.length; i++) {
+      const at = i + 1;
+      let line = lines[i];
+      while (/\\\s*$/.test(line) && i + 1 < lines.length) line = line.replace(/\\\s*$/, " ") + lines[++i];
+      let t = line.trim();
+      if (inBlock) { const e = t.indexOf("*/"); if (e < 0) continue; inBlock = false; t = t.slice(e + 2).trim(); }
+      if (t.startsWith("/*")) { const e = t.indexOf("*/", 2); if (e < 0) { inBlock = true; continue; } t = t.slice(e + 2).trim(); }
+      if (/^[;#]/.test(t) || !/\bmessagebox\b/i.test(t)) continue;
+      out.total++;
+      if (!ANSWER.test(t) && !EXEMPT.some(x => x.split(" ")[0] === name + ":" + at)) out.open.push(name + ":" + at);
+    }
+    return out;
+  };
+  const walk = (dir, base) => fs.readdirSync(dir, { withFileTypes: true }).flatMap(d => d.isDirectory()
+    ? walk(path.join(dir, d.name), base) : /\.(nsh|nsi)$/i.test(d.name) ? [path.relative(base, path.join(dir, d.name)).replace(/\\/g, "/")] : []);
+  const sweep = (dir, files) => files.reduce((acc, f) => {
+    const r = boxes(fs.readFileSync(path.join(dir, f), "utf8"), f);
+    acc.total += r.total; acc.open.push(...r.open); return acc;
+  }, { total: 0, open: [] });
+
+  const patchTool = require("../tools/patch-nsis.cjs");
+  const ROOT = path.join(__dirname, "..");
+  const from = path.dirname(patchTool.getPaths(ROOT).multiUserUi);
+  const lab = fs.mkdtempSync(path.join(osx.tmpdir(), "etiuda-nsis-silent-"));
+  const to = path.dirname(patchTool.getPaths(lab).multiUserUi);
+  let status = {}, files = [], after = { total: 0, open: ["not read"] }, twice = false, text = {};
+  try {
+    fs.cpSync(from, to, { recursive: true });
+    status = patchTool.applyNsisPatches(lab);
+    files = walk(to, to);
+    for (const f of files) text[f] = fs.readFileSync(path.join(to, f), "utf8");
+    after = sweep(to, files);
+    patchTool.applyNsisPatches(lab);
+    twice = files.every(f => fs.readFileSync(path.join(to, f), "utf8") === text[f]);
+  } catch (e) { status = { error: e.message }; }
+
+  ok(files.length >= 10 && after.total >= 10 && after.open.length === 0,
+    "11a every MessageBox in the patched templates carries a silent default: " + files.length + " files, " + after.total
+    + " boxes, unanswered " + (after.open.join(", ") || "none"));
+  const own = walk(path.join(ROOT, "shell"), ROOT);
+  const mine = sweep(ROOT, own);
+  ok(own.includes("shell/installer.nsh") && mine.total >= 2 && mine.open.length === 0,
+    "11b and every box in the .nsh files this tree includes: " + own.join(", ") + ", " + mine.total + " boxes, unanswered "
+    + (mine.open.join(", ") || "none"));
+  const nsi = text["installer.nsi"] || "";
+  const plant = nsi.replace(/("Unable to elevate, error \$0")\s*\/SD IDOK/, "$1");
+  ok(plant !== nsi && boxes(plant, "installer.nsi").open.length === 1,
+    "11c control: the silent elevation box with its default taken out reads red");
+  const answers = [["installer.nsi", /"Unable to elevate, error \$0" \/SD IDOK\b/],
+    ["include/installUtil.nsh", /"\$\(uninstallFailed\): \$R0" \/SD IDOK\b/],
+    ["include/webPackage.nsh", /"Unable to download application package[^"]*" \/SD IDCANCEL IDRETRY download/],
+    ["uninstaller.nsh", /"\$\(areYouSureToUninstall\)" \/SD IDOK IDOK \+2/]];
+  const wrong = answers.filter(([f, re]) => !re.test(text[f] || "")).map(([f]) => f);
+  ok(wrong.length === 0, "11d each box answers with the choice that ends the run without losing data (OK where OK is the only"
+    + " button or goes on as the silent run already does, Cancel on the download retry, which retried would loop): "
+    + (wrong.join(", ") || "all as chosen"));
+  ok(status.silentDefaultsPatched === true && status.applied === true && twice,
+    "11e the patch tool reads its own boxes back answered, and applied a second time changes nothing: " + JSON.stringify(status));
+  let refused = null;
+  try {
+    fs.appendFileSync(path.join(to, "common.nsh"), "\n  MessageBox MB_OK \"a box no silent run answers\"\n");
+    refused = patchTool.verifyNsisPatches(lab);
+  } catch (e) { refused = { error: e.message }; }
+  ok(refused && refused.applied === false && (refused.unanswered || []).some(u => /^common\.nsh:/.test(u)),
+    "11f control: a new unanswered box in a template makes the patch tool refuse the build: "
+    + JSON.stringify(refused && refused.unanswered));
+  fs.rmSync(lab, { recursive: true, force: true });
+}
+
 console.log("\n#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
 console.log("install-plan-selftest " + (fails ? "FAILED " + fails + " of " : "passed ") + checks + " check(s)");
 process.exit(fails ? Math.min(fails, 63) : 0);
