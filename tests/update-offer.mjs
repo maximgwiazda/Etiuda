@@ -29,7 +29,7 @@ const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const PLANTS = 11;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 51 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 52 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -84,6 +84,7 @@ function shellOf(o) {
     writeReplacing: (f, t) => fs.writeFileSync(f, t, "utf8"),
     theWindow: { isDestroyed: () => false, webContents: { send: (ch, v) => sent.push([ch, v]) } },
     PLACED_ASIDE: !!opt.aside,
+    harnessLaunch: () => !!opt.harness,
     net: opt.net === undefined ? { fetch: () => { throw new Error("no network in a leg"); } } : opt.net,
     ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { handle[ch] = fn; } },
     fromEngine: e => !!(e && e.engine),
@@ -284,6 +285,12 @@ try {
   S5b.armNoteLook(); S5b.armNoteLook();
   check(timers.length === 1 && timers[0] === 60 * 1000 && S5b.NOTE_FIRST_MS === 60000,
     "u5d the first look is armed a minute after the window opens, once, and never from the harness's own window: " + JSON.stringify(timers));
+  /* u5d2: any harness start (--user-data-dir, ETIUDA_TEST_DOCUMENTS and the rest, harnessLaunch) arms no look, so a leg past a
+     minute never asks production etiuda.dev (the test architect's edit on 04147d77). */
+  const harnessTimers = [];
+  const S5e = shellOf({ harness: true, setTimeout: (fn, ms) => { harnessTimers.push(ms); return { unref() {} }; }, net: { fetch: () => { throw new Error("reached"); } } });
+  S5e.armNoteLook();
+  check(harnessTimers.length === 0, "u5d2 a harness start arms no look at all: " + JSON.stringify(harnessTimers));
   /* The preload: a trusted click whose path holds the release page's button tells main so; an untrusted one, or a middle
      click, does not; and E_HOST carries the three verbs. */
   const pre = { sync: [], invoke: [], listeners: {} };

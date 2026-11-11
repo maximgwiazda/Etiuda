@@ -8897,7 +8897,8 @@ async function lookForNote(fetchFn) {
 }
 /* A first look a minute after the window opens, then hourly. Never from the harness's own window, so no leg reaches out. */
 function armNoteLook() {
-  if (PLACED_ASIDE || noteTimer || !net || typeof net.fetch !== "function") return;
+  /* Not from any harness start (harnessLaunch: --user-data-dir or a test variable), so no leg ever asks production etiuda.dev. */
+  if (PLACED_ASIDE || harnessLaunch() || noteTimer || !net || typeof net.fetch !== "function") return;
   const next = () => {
     lookForNote((u, init) => net.fetch(u, init)).catch(() => {});
     noteTimer = setTimeout(next, NOTE_EVERY_MS);
