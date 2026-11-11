@@ -10134,16 +10134,17 @@ function warmSuggestSoon() {
 /* THE ORGANISATION'S MODEL (shell/desk-ai.cjs). deskAiConfig is the one reader of the configuration in force,
    {provider, endpoint, model, key, managed}, or null while the option is off or not ready; this stand-in keeps it off. */
 function deskAiConfig() { return null; }
-/* The page hears each ask's outcome on etiuda:ai-state, for the mark and its lines. */
+/* The page hears each ask's outcome on etiuda:ai-state, {ranking, failures, pausedUntil, slow}, for the mark and its lines. */
 function deskAiState(state) {
   const win = theWindow;
   if (win && !win.isDestroyed()) win.webContents.send("etiuda:ai-state", state);
 }
-const deskReorder = deskAi.createReorder({
-  config: () => deskAiConfig(),
-  fetch: (u, init) => (net && typeof net.fetch === "function" ? net.fetch(u, init) : Promise.reject(new Error("no network here"))),
-  onState: deskAiState,
-});
+function deskAiFetch(u, init) {
+  return net && typeof net.fetch === "function" ? net.fetch(u, init) : Promise.reject(new Error("no network here"));
+}
+const deskReorder = deskAi.createReorder({ config: () => deskAiConfig(), fetch: deskAiFetch, onState: deskAiState });
+/* Settings' connection test for `config`: {ok, ms, status}, ms the time the service took. */
+function deskAiTest(config) { return deskAi.connectionTest(deskAiFetch, config); }
 /* An agent's key, click, wheel or scroll in each window, counted, so an order that comes after one is dropped. */
 let deskTouches = 0, pickTouches = 0;
 function countTouches(wc, bump) {

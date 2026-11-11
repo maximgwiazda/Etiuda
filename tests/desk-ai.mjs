@@ -6,7 +6,10 @@
  * fetched carries the query and the shortlist's texts and nothing planted beside them (da2). A late answer, and an
  * answer after the agent's key, are dropped (da3). Three failures in a row pause the asks for a minute (da4). INSTANT_FROM
  * gives the built-in model's strip or the words' at once, and the organisation's order then paints the strip again (da5).
- * Each service's request and answer hold their recorded shape, and the door refuses what is not its own (da6). Each guard
+ * Each service's request and answer hold their recorded shape, and the door refuses what is not its own (da6). The page
+ * keeps the order for its query and generation only (da7). The window follows the median of the real answer times inside
+ * its floor and ceiling, a median over the ceiling is said as slow and unsaid below it, and the door's answer and the
+ * connection test carry their time (da8). Each guard
  * is lifted once, in a copy held in memory, and its leg must then fail. No leg reaches a network: every fetch is a
  * stand-in, and the global fetch throws.
  */
@@ -22,7 +25,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "shell");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 28;
+const EXPECTED = 35;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -78,7 +81,8 @@ const MAIN_TAIL = "\n__test.setWindow = w => { theWindow = w; }; __test.embedSug
   + " __test.bumpPress = () => ++pickPress; __test.pickWin = () => pickWin;"
   + " __test.setConfig = f => { if (typeof deskAiConfig === 'function') deskAiConfig = f; };"
   + " __test.deskReorder = typeof deskReorder === 'undefined' ? { ask: async () => null } : deskReorder;"
-  + " __test.orgSearch = typeof orgSearch === 'function' ? orgSearch : async () => {};";
+  + " __test.orgSearch = typeof orgSearch === 'function' ? orgSearch : async () => {};"
+  + " __test.deskAiTest = typeof deskAiTest === 'function' ? deskAiTest : async () => ({});";
 const ENGINE = { sender: { id: 1, once: () => {} }, senderFrame: { parent: null, url: "file:///C:/lab/engine/etiuda.html" } };
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 
@@ -274,8 +278,10 @@ await block(async () => {
   check(late.order === null && late.failures === 1 && late.fetches === 1 && late.ms < 110,
     "da3 an answer after the window is dropped, counted as a failure, and the ask gives up at the window: order " + JSON.stringify(late.order)
     + ", failures " + late.failures + ", " + late.ms + " ms");
-  const lifted = await lateLeg(edited(AI_SRC, "try { res = await door(o.fetch, req, windowMs); }", "try { res = await door(o.fetch, req, 1e9); }")
-    .replace("if (now() - began > windowMs) return failed();", ""));
+  const lifted = await lateLeg(AI_SRC.indexOf("done(null), windowMs)") > -1
+    ? edited(edited(AI_SRC, "done(null), windowMs)", "done(null), 1e9)"), "if (!res || now() - began > windowMs) return failed();", "if (!res) return failed();")
+    : edited(AI_SRC, "try { res = await door(o.fetch, req, windowMs); }", "try { res = await door(o.fetch, req, 1e9); }")
+      .replace("if (now() - began > windowMs) return failed();", ""));
   check(lifted.order !== null, "da3p with the window lifted, the late answer is taken and the leg above fails: " + JSON.stringify(lifted.order));
 
   const fetch = fetchOf(() => ({ status: 200, text: chatSaying("[2,1]") }));
@@ -468,7 +474,7 @@ await block(async () => {
   for (let i = 0; i < 200; i++) { const t0 = process.hrtime.bigint(); await r.ask("a query of a few words", twelve); times.push(Number(process.hrtime.bigint() - t0) / 1e6); }
   times.sort((a, b) => a - b);
   console.log("  info the stand-in ask, twelve rows of 400 characters, 200 runs: median " + times[100].toFixed(3) + " ms, p95 " + times[190].toFixed(3)
-    + " ms, max " + times[199].toFixed(3) + " ms; the window is " + AI.REORDER_WINDOW_MS + " ms");
+    + " ms, max " + times[199].toFixed(3) + " ms; the window starts at " + AI.REORDER_WINDOW_MS + " ms");
 });
 
 /* ---- da7 the page: its shortlist, the order taken once, and dropped once the query has moved ------------------- */
@@ -521,6 +527,71 @@ await block(async () => {
     "o.q !== currentQuery() || o.gen !== orgGen) return { ok: 0 };", "o.q !== currentQuery()) return { ok: 0 };"));
   const lifted = await pageLeg(lab);
   check(lifted.stale.ok === 1, "da7p with the generation check lifted, the earlier search's order is taken and the leg above fails: " + JSON.stringify(lifted.stale));
+});
+
+/* ---- da8 the window from the real answer times, slow, and the time a call took --------------------------------- */
+/* Asks whose stand-in answers take `ms` each on a clock the leg holds; the controller's own state after each. */
+async function timesLeg(A, list) {
+  let clock = 5000000;
+  const states = [];
+  const fetch = fetchOf(() => { clock += fetch.next; return { status: 200, text: chatSaying("[2,1]") }; });
+  const r = A.createReorder({ config: () => CONFIG, fetch, now: () => clock, onState: s => states.push(s) });
+  const windows = [];
+  for (const step of list) {
+    if (step === "rest") { clock += A.PAUSE_MS + 1; continue; }
+    fetch.next = step;
+    await r.ask("q", ["a", "b"]);
+    windows.push(r.state().window);
+  }
+  return { windows, states, state: r.state(), fetches: fetch.calls.length };
+}
+await block(async () => {
+  const W = AI.windowFor || (() => NaN);
+  const planted = [[[], 2000], [[800, 800], 2000], [[800, 800, 800], 1200], [[100, 100, 100], 1000], [[3000, 3000, 3000], 4000],
+    [[9000, 9000, 9000, 800, 800, 800, 800, 800, 800, 800, 800, 800], 1200], [[600, 900, 1500, 700, 800], 1200]];
+  const got = planted.map(([t]) => W(t));
+  check(JSON.stringify(got) === JSON.stringify(planted.map(p => p[1])),
+    "da8 the window is " + AI.WINDOW_FACTOR + " times the median of the last " + AI.TIMES_KEPT + " answer times, " + AI.REORDER_WINDOW_MS
+    + " ms before " + AI.TIMES_FIRST + " have come back, never under " + AI.WINDOW_FLOOR_MS + " nor over " + AI.WINDOW_CEILING_MS + " ms: "
+    + JSON.stringify(got));
+  const run = await timesLeg(AI, [800, 800, 800, 100, 100, 100, 100, 100]);
+  check(JSON.stringify(run.windows) === JSON.stringify([2000, 2000, 1200, 1200, 1200, 1000, 1000, 1000]),
+    "da8b the controller's window follows the times its own asks took, down to the floor: " + JSON.stringify(run.windows));
+  const floorLifted = aiFrom(edited(AI_SRC, "Math.max(WINDOW_FLOOR_MS, ", "("));
+  const ceilLifted = aiFrom(edited(AI_SRC, "Math.min(WINDOW_CEILING_MS, ", "("));
+  check(floorLifted.windowFor([100, 100, 100]) !== 1000 && ceilLifted.windowFor([3000, 3000, 3000]) !== 4000,
+    "da8p with the floor or the ceiling lifted, the legs above fail: " + floorLifted.windowFor([100, 100, 100]) + ", " + ceilLifted.windowFor([3000, 3000, 3000]));
+});
+await block(async () => {
+  const run = await timesLeg(AI, [5000, 5000, 5000, "rest", 500, 500, 500]);
+  const slowAt = run.states.findIndex(s => s.slow === true && s.failures === 3);
+  const last = run.states[run.states.length - 1];
+  check(slowAt > -1 && run.states[slowAt].pausedUntil > 0 && last && last.slow === false
+    && last.ranking === "organisation" && run.states.every(s => typeof s.slow === "boolean"),
+    "da8c three answers of 5000 ms, each late and timed, set slow with the pause as before; three of 500 ms bring the median under "
+    + AI.WINDOW_CEILING_MS + " ms and clear it: " + JSON.stringify(run.states.map(s => [s.ranking, s.failures, s.slow])));
+  const lifted = await timesLeg(aiFrom(edited(AI_SRC, "medianOf(kept) > WINDOW_CEILING_MS", "false")), [5000, 5000, 5000]);
+  check(!lifted.states.some(s => s.slow === true), "da8p with slow lifted, the leg above fails: " + JSON.stringify(lifted.states.map(s => s.slow)));
+});
+await block(async () => {
+  /* A late answer on the real clock: dropped at the window, then timed when it comes. */
+  const fetch = fetchOf(() => tick(120).then(() => ({ status: 200, text: chatSaying("[2,1]") })));
+  const r = AI.createReorder({ config: () => CONFIG, fetch, windowMs: 50 });
+  const order = await r.ask("q", ["a", "b"]);
+  const before = (r.state().times || []).length;
+  await until(() => (r.state().times || []).length > 0, 1000);
+  const t = (r.state().times || [])[0];
+  check(order === null && before === 0 && t >= 100,
+    "da8d a late answer is still timed when it comes back, at its real time: dropped at the window, then " + t + " ms kept");
+  const slow = fetchOf(() => tick(40).then(() => ({ status: 200, text: chatSaying("ok") })));
+  const req = AI.requestFor(CONFIG, "q", ["a", "b"]);
+  const res = await AI.door(slow, req, 1000);
+  const test = AI.connectionTest ? await AI.connectionTest(slow, CONFIG) : {};
+  const sent = slow.calls[1] ? Buffer.from(slow.calls[1].init.body).toString("utf8") : "";
+  const shell = await loadMain({ fetch: slow }).T.deskAiTest(CONFIG);
+  check(res.ms >= 35 && test.ok === true && test.ms >= 35 && shell.ok === true && shell.ms >= 35 && sent.indexOf(AI.TEST_PROMPT) > -1 && sent.indexOf("Items:") < 0,
+    "da8e the door's answer carries the time it took, and the connection test answers {ok, ms} after sending its fixed prompt "
+    + "and nothing of a catalog, through the shell's deskAiTest too: door " + res.ms + " ms, test " + JSON.stringify(test) + ", shell " + JSON.stringify(shell));
 });
 
 check(wallHits === 0, "da0 no leg called the global fetch: " + wallHits);

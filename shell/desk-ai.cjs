@@ -6,8 +6,17 @@
 /* Which result the agent sees at once while the organisation's model is asked: "builtin", the built-in model's where it
    ranks, or "words", word matching alone. Either way the organisation's order, when it comes in time, has the last word. */
 const INSTANT_FROM = "builtin";
-/* How long an ask may take, from the moment it is sent, before its answer is dropped and counted as a failure. */
+/* How long an ask may take, from the moment it is sent, before its answer is dropped and counted as a failure: WINDOW_FACTOR
+   times the median of the last TIMES_KEPT answer times, never under WINDOW_FLOOR_MS nor over WINDOW_CEILING_MS, and
+   REORDER_WINDOW_MS until TIMES_FIRST answers have come back. A late answer is still timed, up to ANSWER_WAIT_MS, so a
+   service slower than the window moves the median; a median over the ceiling is said as slow. */
 const REORDER_WINDOW_MS = 2000;
+const WINDOW_FLOOR_MS = 1000;
+const WINDOW_CEILING_MS = 4000;
+const WINDOW_FACTOR = 1.5;
+const TIMES_KEPT = 9;
+const TIMES_FIRST = 3;
+const ANSWER_WAIT_MS = 15000;
 /* The quiet after the last settled query before the ask goes, so one settle is one ask. */
 const SETTLE_MS = 150;
 /* Three failures in a row stop the asks for a minute; the next ask after it is tried as any other. */
@@ -41,6 +50,9 @@ const HEADERS = Object.freeze(["content-type", "authorization", "api-key", "x-ap
 const TOUCH_TYPES = new Set(["rawKeyDown", "keyDown", "char", "mouseDown", "contextMenu", "mouseWheel", "gestureScrollBegin",
   "gestureScrollUpdate", "gestureFlingStart", "gestureTap", "gestureTapDown", "touchStart", "pointerDown"]);
 
+/* The connection test in Settings sends this and nothing of a catalog. */
+const TEST_PROMPT = "Answer with the single word ok.";
+const TEST_TEXT = "ok";
 const ORDER_PROMPT = "You order a short list of candidate items by how well each one answers the query. "
   + "Reply with the item numbers only, best first, as a JSON array of integers such as [2,1,3]. Write nothing else.";
 
@@ -90,6 +102,11 @@ function orderText(query, items) {
 /** THE ONE BUILDER OF WHAT LEAVES: {url, headers, body} from `config`'s provider, endpoint, model and key, the query and
  *  the shortlist's texts. It reads no other field of anything. Null where the configuration cannot make a request. */
 function requestFor(config, query, items) {
+  const text = orderText(query, items);
+  return requestOf(config, ORDER_PROMPT, text);
+}
+/* The one shape per protocol, for the order and for the connection test alike. */
+function requestOf(config, system, text) {
   const p = config && PROVIDERS[config.provider];
   const at = p ? endpointFor(config) : "";
   const model = String((config && config.model) || "").trim();
@@ -97,15 +114,14 @@ function requestFor(config, query, items) {
   const key = String(config.key || "");
   const headers = { "content-type": "application/json" };
   if (key) headers[p.auth] = p.auth === "authorization" ? "Bearer " + key : key;
-  const text = orderText(query, items);
   let doc = null;
   if (p.protocol === "messages") {
     headers[MESSAGES_VERSION[0]] = MESSAGES_VERSION[1];
-    doc = { model, max_tokens: MESSAGES_MAX_TOKENS, system: ORDER_PROMPT, messages: [{ role: "user", content: text }] };
+    doc = { model, max_tokens: MESSAGES_MAX_TOKENS, system, messages: [{ role: "user", content: text }] };
   } else if (p.protocol === "interactions") {
-    doc = { model, system_instruction: ORDER_PROMPT, input: text, store: false };
+    doc = { model, system_instruction: system, input: text, store: false };
   } else {
-    doc = { model, messages: [{ role: "system", content: ORDER_PROMPT }, { role: "user", content: text }] };
+    doc = { model, messages: [{ role: "system", content: system }, { role: "user", content: text }] };
   }
   return { url: at + ROUTES[p.protocol], headers, body: Buffer.from(JSON.stringify(doc), "utf8") };
 }
@@ -150,7 +166,7 @@ function parseOrder(text, n) {
   return out;
 }
 
-/** THE DOOR: one POST of `req` through `fetchFn`, answered {status, bytes}. It refuses before sending anything but a
+/** THE DOOR: one POST of `req` through `fetchFn`, answered {status, bytes, ms}, ms the time from sending to the last byte. It refuses before sending anything but a
  *  canonical https address, a header off HEADERS or a body over SEND_MAX; follows no redirect, sends no cookie, reads at
  *  most ANSWER_MAX, and gives up at `ms`. */
 async function door(fetchFn, req, ms) {
@@ -158,6 +174,7 @@ async function door(fetchFn, req, ms) {
     && Object.keys(req.headers).every(h => HEADERS.indexOf(h) > -1) && Buffer.isBuffer(req.body) && req.body.length <= SEND_MAX;
   if (!ok) throw new Error("the organisation's model is reached at its https address only, with its own headers");
   const ctl = new AbortController();
+  const began = Date.now();
   let timer = null;
   const late = new Promise((_, no) => {
     timer = setTimeout(() => { try { ctl.abort(); } catch { /* gone */ } no(new Error("late")); }, ms);
@@ -182,24 +199,63 @@ async function door(fetchFn, req, ms) {
       if (all.length > ANSWER_MAX) throw new Error("too long");
       parts.push(all);
     }
-    return { status: res ? res.status : 0, bytes: Buffer.concat(parts) };
+    return { status: res ? res.status : 0, bytes: Buffer.concat(parts), ms: Date.now() - began };
   })();
   try { return await Promise.race([read, late]); }
   finally { clearTimeout(timer); read.catch(() => {}); late.catch(() => {}); }
 }
 
+function medianOf(times) {
+  const t = (Array.isArray(times) ? times : []).slice(-TIMES_KEPT).filter(Number.isFinite).sort((a, b) => a - b);
+  if (!t.length) return null;
+  const mid = t.length >> 1;
+  return t.length % 2 ? t[mid] : (t[mid - 1] + t[mid]) / 2;
+}
+/** The window for these answer times (ms, oldest first). */
+function windowFor(times) {
+  const kept = (Array.isArray(times) ? times : []).slice(-TIMES_KEPT);
+  if (kept.length < TIMES_FIRST) return REORDER_WINDOW_MS;
+  return Math.min(WINDOW_CEILING_MS, Math.max(WINDOW_FLOOR_MS, Math.round(WINDOW_FACTOR * medianOf(kept))));
+}
+/** True where the service is routinely slower than the ceiling. */
+function slowFor(times) {
+  const kept = (Array.isArray(times) ? times : []).slice(-TIMES_KEPT);
+  return kept.length >= TIMES_FIRST && medianOf(kept) > WINDOW_CEILING_MS;
+}
+
+/** THE CONNECTION TEST: the fixed prompt alone to `config`'s service, answered {ok, ms, status}, ms the door's own time. */
+async function connectionTest(fetchFn, config) {
+  const req = requestOf(config, TEST_PROMPT, TEST_TEXT);
+  if (!req) return { ok: false, ms: 0, status: 0 };
+  try {
+    const res = await door(fetchFn, req, ANSWER_WAIT_MS);
+    return { ok: replyText(config.provider, res.status, res.bytes) !== null, ms: res.ms, status: res.status };
+  } catch { return { ok: false, ms: 0, status: 0 }; }
+}
+
 /** The asks, their pause and their outcome. `config()` is the configuration in force or null; `onState` hears
- *  {ranking, failures, pausedUntil} after every outcome, ranking "organisation" when the model answered and "builtin"
- *  while it does not. */
+ *  {ranking, failures, pausedUntil, slow} after every outcome, ranking "organisation" when the model answered and "builtin"
+ *  while it does not, and slow while the median answer time is over WINDOW_CEILING_MS. */
 function createReorder(opts) {
   const o = opts || {};
   const now = typeof o.now === "function" ? o.now : () => Date.now();
   const later = typeof o.setTimer === "function" ? o.setTimer : (fn, ms) => setTimeout(fn, ms);
   const stopLater = typeof o.clearTimer === "function" ? o.clearTimer : t => clearTimeout(t);
   const config = () => { try { return o.config ? o.config() || null : null; } catch { return null; } };
-  const windowMs = Number.isFinite(o.windowMs) ? o.windowMs : REORDER_WINDOW_MS;
-  let failures = 0, pausedUntil = 0, settleTimer = null;
-  const tell = ranking => { try { if (o.onState) o.onState({ ranking, failures, pausedUntil }); } catch { /* the page has gone */ } };
+  const times = [];
+  const windowNow = () => (Number.isFinite(o.windowMs) ? o.windowMs : windowFor(times));
+  let failures = 0, pausedUntil = 0, settleTimer = null, ranking = "", saidSlow = false;
+  const tell = r => {
+    ranking = r;
+    saidSlow = slowFor(times);
+    try { if (o.onState) o.onState({ ranking, failures, pausedUntil, slow: saidSlow }); } catch { /* the page has gone */ }
+  };
+  /* An answer's time, the late ones' included once they come; slow said again where it turned. */
+  const timed = ms => {
+    times.push(ms);
+    if (times.length > TIMES_KEPT) times.shift();
+    if (ranking && slowFor(times) !== saidSlow) tell(ranking);
+  };
   const paused = () => pausedUntil > now();
   const failed = () => {
     failures++;
@@ -225,10 +281,15 @@ function createReorder(opts) {
       if (list.length < 2) return null;
       const req = requestFor(cfg, query, list);
       if (!req) return failed();
+      const windowMs = windowNow();
       const began = now();
+      const call = door(o.fetch, req, ANSWER_WAIT_MS).then(r => { timed(now() - began); return r; });
+      call.catch(() => {});
+      let timer = null;
+      const late = new Promise(done => { timer = setTimeout(() => done(null), windowMs); if (timer.unref) timer.unref(); });
       let res = null;
-      try { res = await door(o.fetch, req, windowMs); } catch { return failed(); }
-      if (now() - began > windowMs) return failed();
+      try { res = await Promise.race([call, late]); } catch { return failed(); } finally { clearTimeout(timer); }
+      if (!res || now() - began > windowMs) return failed();
       const order = parseOrder(replyText(cfg.provider, res.status, res.bytes), list.length);
       if (!order) return failed();
       failures = 0;
@@ -237,12 +298,13 @@ function createReorder(opts) {
       if (typeof wanted === "function" && !wanted()) return null;
       return order;
     },
-    state() { return { failures, pausedUntil }; },
+    state() { return { failures, pausedUntil, window: windowNow(), slow: slowFor(times), times: times.slice() }; },
   };
 }
 
 module.exports = {
-  INSTANT_FROM, REORDER_WINDOW_MS, SETTLE_MS, FAILS_TO_PAUSE, PAUSE_MS, SHORTLIST_MAX, SEND_MAX, ANSWER_MAX, PROVIDERS,
+  INSTANT_FROM, REORDER_WINDOW_MS, WINDOW_FLOOR_MS, WINDOW_CEILING_MS, WINDOW_FACTOR, TIMES_KEPT, TIMES_FIRST, ANSWER_WAIT_MS,
+  TEST_PROMPT, medianOf, windowFor, slowFor, connectionTest, SETTLE_MS, FAILS_TO_PAUSE, PAUSE_MS, SHORTLIST_MAX, SEND_MAX, ANSWER_MAX, PROVIDERS,
   HEADERS, ORDER_PROMPT, touches, endpointShape, endpointFor, admitted, orderText, requestFor, replyText, parseOrder, door,
   createReorder,
 };
