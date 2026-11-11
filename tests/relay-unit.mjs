@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 494;
+const EXPECTED = 496;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -2759,6 +2759,96 @@ async function main() {
       check(refused(refusedBig, "blob-size") && refused(refusedShape, "bad-signature") && refused(refusedLater, "bad-signature") && eq(rowOf(w, a.id).wrap, fresh),
       "970g a re-seal with a wrap over 1024 bytes, one that is no wrap, or a good one beside one that is no wrap is refused whole and the stored wrap is unchanged: "
         + refusedBig.status + "," + refusedShape.status + "," + refusedLater.status);
+    }
+
+    /* A wrap over the cap is refused on its size before the relay writes any canonical JSON (board 934 (10)). A copy of the core counts
+       its canon calls: an unsigned re-seal with a wrap one byte over, and one whose extra key nests deeper than canon's recursion can go,
+       are each refused blob-size with no call made, and a signed re-seal under the same copy makes some, which is the counter's teeth. */
+    {
+      const overhead = Buffer.byteLength(C.canon({ ct: "", epoch: 1 }), "utf8");
+      const junkSig = "00".repeat(64), DEPTH = 100000;
+      const deepBody = (t, id) => "{\"add\":[],\"drop\":[],\"t\":" + t + ",\"sig\":\"" + junkSig + "\",\"wraps\":[{\"id\":\"" + id
+        + "\",\"wrap\":{\"ct\":\"aa\",\"epoch\":1,\"x\":" + "[".repeat(DEPTH) + "]".repeat(DEPTH) + "}}]}";
+      const seen = {};
+      /* The world is made inside the copy, because a team's object keeps the core it was made with. */
+      const spy = await swapCore("function canon(v) {", "function canon(v) { globalThis.__relayCanonCalls = (globalThis.__relayCanonCalls || 0) + 1;", async () => {
+        const w = await world();
+        const o = await opened(w, goodWrap());
+        const route = "/relay/v1/t/" + w.rt + "/invites", t = w.R.clock.now;
+        globalThis.__relayCanonCalls = 0;
+        seen.over = await call(w.R, "POST", route, { json: { add: [], drop: [], t, sig: junkSig, wraps: [{ id: o.id, wrap: { epoch: 1, ct: "a".repeat(1025 - overhead) } }] } });
+        seen.overCalls = globalThis.__relayCanonCalls;
+        globalThis.__relayCanonCalls = 0;
+        seen.deep = await call(w.R, "POST", route, { body: deepBody(t, o.id) });
+        seen.deepCalls = globalThis.__relayCanonCalls;
+        globalThis.__relayCanonCalls = 0;
+        seen.signedWrap = goodWrap();
+        seen.signed = await invitesW(w, [], [], [{ id: o.id, wrap: seen.signedWrap }]);
+        seen.signedCalls = globalThis.__relayCanonCalls;
+        seen.kept = o.ok && eq(rowOf(w, o.id).wrap, seen.signedWrap);
+        return true;
+      });
+      delete globalThis.__relayCanonCalls;
+      check(spy.turned && spy.back && refused(seen.over, "blob-size") && seen.overCalls === 0 && refused(seen.deep, "blob-size") && seen.deepCalls === 0
+        && seen.signed && seen.signed.status === 200 && seen.signedCalls > 0 && seen.kept,
+      "934y an unsigned re-seal with a wrap one byte over 1024, or with an extra key nested " + DEPTH + " deep, is refused blob-size before any canonical JSON is"
+        + " written (canon calls " + seen.overCalls + " and " + seen.deepCalls + "), where a signed re-seal under the same counting copy makes " + seen.signedCalls + ": "
+        + (seen.over && seen.over.status) + " " + (seen.over && seen.over.json && seen.over.json.error) + ", " + (seen.deep && seen.deep.status) + " "
+        + (seen.deep && seen.deep.json && seen.deep.json.error) + ", " + (spy.turned ? "counted on a copy" : spy.detail.split("\n")[0]) + ", product sha " + (spy.back ? "unchanged" : "CHANGED"));
+    }
+
+    /* A wrap at the cap's edge is judged exactly as before: each of these, ASCII, two-byte, four-byte, escaped, a lone surrogate, extra keys
+       and nested ones, sized from 1018 to 1030 canonical bytes, is taken where its canonical JSON is at most 1024 bytes and refused blob-size
+       where it is over, and a taken one is kept as its epoch and ct alone. */
+    {
+      const w = await world();
+      const o = await opened(w, goodWrap());
+      const bytesOf = v => Buffer.byteLength(C.canon(v), "utf8");
+      const ch = n => String.fromCharCode(n);
+      const pieces = ["\u00e9", "\u{1F600}", "\"", "\\", ch(10), ch(1), ch(0xd800), "a"];
+      /* A seeded draw (mulberry32), so every run judges the same wraps and a misjudged size can be found again. */
+      let seed = 934;
+      const rnd = n => {
+        seed = (seed + 0x6d2b79f5) >>> 0;
+        let z = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        z = (z + Math.imul(z ^ (z >>> 7), 61 | z)) ^ z;
+        return Math.floor((((z ^ (z >>> 14)) >>> 0) / 4294967296) * n);
+      };
+      const word = () => Array.from({ length: 1 + rnd(6) }, () => pieces[rnd(pieces.length)]).join("");
+      const value = depth => {
+        const k = rnd(depth > 2 ? 4 : 6);
+        if (k === 0) return word();
+        if (k === 1) return rnd(2) ? rnd(100000) : -rnd(1000) / 8;
+        if (k === 2) return rnd(2) === 0 ? null : rnd(2) === 1;
+        if (k === 3) return word();
+        if (k === 4) return Array.from({ length: rnd(4) }, () => value(depth + 1));
+        const out = {};
+        for (let i = rnd(4); i > 0; i--) out[word()] = value(depth + 1);
+        return out;
+      };
+      const cases = [];
+      for (let i = 0; i < 48; i++) {
+        const wrap = { epoch: 1 + rnd(9), ct: i % 3 === 0 ? "" : word() };
+        if (i % 4 !== 0) for (let j = rnd(3) + 1; j > 0; j--) wrap["x" + j + word()] = value(0);
+        const target = 1018 + (i % 13);
+        const short = target - bytesOf(wrap);
+        if (short < 1) continue;
+        wrap.ct = "a".repeat(short) + wrap.ct;
+        cases.push(wrap);
+      }
+      const misjudged = [];
+      let taken = 0, over = 0;
+      for (const wrap of cases) {
+        w.R.clock.now += 1;
+        const r = await invitesW(w, [], [], [{ id: o.id, wrap }]);
+        const fits = bytesOf(wrap) <= 1024;
+        const right = fits ? r.status === 200 && eq(rowOf(w, o.id).wrap, { epoch: wrap.epoch, ct: wrap.ct }) : refused(r, "blob-size");
+        if (fits) taken++; else over++;
+        if (!right) misjudged.push(bytesOf(wrap) + ":" + r.status);
+      }
+      check(cases.length >= 40 && taken >= 10 && over >= 10 && misjudged.length === 0,
+      "934z a wrap at the cap's edge is taken where its canonical JSON is at most 1024 bytes and refused blob-size where it is over, as before, kept as its epoch and"
+        + " ct alone: " + cases.length + " wraps, " + taken + " taken, " + over + " over, misjudged " + (misjudged.join(" ") || "none"));
     }
 
     /* The end of an invitation: after its until a token hello is refused invite-ended, the token stays unspent, and the wrap is gone;
