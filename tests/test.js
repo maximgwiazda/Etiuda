@@ -4639,8 +4639,8 @@ function shippedFlagTests() {
     [[1, 1, false], [1, 1, false], [1, 1, false]]);
   eq("control: the trademark line above the maker line is unchanged in each language, after the copyright",
     ["en", "pl", "de"].map(l => { const p = aboutParts(l); return typeof p === "string" ? p : p[p.length - 2]; }),
-    ["© 2026 Max Gwiazda. Etiuda is a trademark of Maxim Gwiazda.", "© 2026 Max Gwiazda. Etiuda jest znakiem towarowym Maxima Gwiazdy.",
-     "© 2026 Max Gwiazda. Etiuda is a trademark of Maxim Gwiazda."]);
+    ["© 2026 Max Gwiazda. Etiuda is a trademark of Max Gwiazda.", "© 2026 Max Gwiazda. Etiuda jest znakiem towarowym Maxa Gwiazdy.",
+     "© 2026 Max Gwiazda. Etiuda is a trademark of Max Gwiazda."]);
   eq("About names no catalog file: it reads none of the host's catalog answers",
     ["eCatalogFile", "eCatalogIn", "eCatalogBuiltIn", "./host.js"].filter(n => about.indexOf(n) > -1), []);
 
@@ -7539,10 +7539,9 @@ if (require.main === module) {
       });
       const cfg = fs.readFileSync(path.join(__dirname, "..", "electron-builder.js"), "utf8");
       if (!/buildResources:\s*"shell"/.test(cfg)) bad.push("buildResources is no longer shell/");
-      /* EACH TEXT CLOSES ON THE TRADEMARK NOTICE About shows, read from its one line in about.js,
-         so a registration that edits that line reddens here until both texts follow it. */
-      const decl = extractDecl(sourceText(), "const TRADEMARK=");
-      const mark = new Function("return " + decl.slice(decl.indexOf("=") + 1, -1))();
+      /* EACH TEXT CLOSES ON THE TRADEMARK NOTICE OF ITS REGISTERED OWNER. About shows the person as he is known, Max
+         Gwiazda (Max, 2026-11-11), so the licences no longer follow about.js: the registered line is held here. */
+      const mark = { en: "Etiuda is a trademark of Maxim Gwiazda.", pl: "Etiuda jest znakiem towarowym Maxima Gwiazdy." };
       want.forEach(f => {
         const line = mark[f.slice(8, 10)] || "";
         const paras = fs.readFileSync(path.join(shell, f), "utf8").replace(/^﻿/, "").trim()
