@@ -147,6 +147,10 @@ const P = require("./install-plan.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const KEEP = process.argv.indexOf("--keep") > -1;
+/* THE PORT BLOCK IS READ FIRST, before the guard: a pure read of tests/engine.js's table that refuses a shift past the
+   harness's last port, so engine-selftest's 27f quotes this file's base as it does every other's. It builds nothing,
+   leases nothing and touches no account; the lease and the window wall stay below the guard. */
+const PORT_BASE = E.portBlock("reinstall");
 /* THE INSTALL GUARD, FIRST OF ALL: the uninstall key, shortcuts and .ec class are the account's, keyed by the app id, so
    no scratch home isolates them. This run installs only the test build (tools/test-identity.cjs), refuses before the
    window wall, the lab or the build while either shipped app is present, and compares what they own at the end. */
@@ -179,7 +183,6 @@ function guardEnd() {
    four sibling refusals of two. The base comes from the table in tests/engine.js, which is
    checked for overlaps at every call, and the block is leased by its base where the run was
    given a lease command, at load, before anything is built. */
-const PORT_BASE = E.portBlock("reinstall");
 E.windowWall("tests/reinstall.js");
 const LEASED = E.takeLeases(["ports:" + PORT_BASE], 45, "tests/reinstall.js");
 console.log("       debugging port(s) count up from " + PORT_BASE
