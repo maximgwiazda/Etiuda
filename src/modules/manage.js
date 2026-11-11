@@ -19,7 +19,7 @@ import { drawPills } from "./tabs.js";
 import { t, catalogCountsLine, counted, toast, translateTree, offerUndo } from "./ui-lang.js";
 import { isFavourite, isIntentFavourite, pack, whoOptions, savePack } from "./pack.js";
 import { removeCard, removeIntent, setIntentHidden, syncIntentOrder, toggleFavourite, toggleIntentFavourite } from "./favourites.js";
-import { primaryCatKeys, intentCardCounts } from "./card-intent.js";
+import { primaryCatKeys, intentCardCounts, normalizeCardIntents } from "./card-intent.js";
 import { catMarkHtml } from "./cat-identity.js";
 import { intentIdAt, intentIdxFromId, intentIsCustom, intentIsOverridden, intentOrder, isIntentHiddenIdx } from "./intent-id.js";
 import { applyCatsToGlobal, removeCategory } from "./cat-set.js";
@@ -581,10 +581,45 @@ function mgShowHiddenBtn(kind,n){
     ' title="'+esc(tipShowHidden(kind,n))+'">'+
     esc(t('Show all hidden'))+' ('+n+')</button>';
 }
+let mgIntentCardsCache=null;
+
+/* Builds a lookup of cards linked to each intent, ordered:
+   favourites first, then marked intentTop, then the Library tree's own order
+   (categories in bar order, then mgCardCmp). Hidden cards are excluded. */
+function mgIntentCardsMap(){
+  const map=new Map();
+  (cards||[]).forEach((m,idx)=>{
+    if(!m || m._hidden) return;
+    const links=normalizeCardIntents(m);
+    for(let j=0; j<links.length; j++){
+      const iid=links[j];
+      let arr=map.get(iid);
+      if(!arr){ arr=[]; map.set(iid, arr); }
+      arr.push({m, i:idx});
+    }
+  });
+  map.forEach(list=>{
+    list.sort((a,b)=>{
+      const fa=isFavourite(a.m.id)?0:1;
+      const fb=isFavourite(b.m.id)?0:1;
+      if(fa!==fb) return fa-fb;
+      const ta=a.m.intentTop?0:1;
+      const tb=b.m.intentTop?0:1;
+      if(ta!==tb) return ta-tb;
+      const ca=catSortIdx(a.m.c);
+      const cb=catSortIdx(b.m.c);
+      if(ca!==cb) return ca-cb;
+      return mgCardCmp(a,b);
+    });
+  });
+  return map;
+}
+
 /* AN INTENT IN THE RAIL'S FORM: its one dominant category's mark at the head, the name on one line
-   fading where it runs out, and beside it the number of cards linked to it, which the rail does
-   not carry. `catOf` and `linked` are primaryCatKeys() and intentCardCounts(), taken once a list. */
-function mgIntentRow(i,catOf,linked){
+   fading where it runs out, beside it the number of cards linked to it (hover reads Linked cards: {N}),
+   then the linked cards as quiet chips fading at the right (or "no cards yet" when none), and the buttons.
+   `catOf`, `linked` and `intentCardsMap` are taken once a list. */
+function mgIntentRow(i,catOf,linked,intentCardsMap){
   const iid=intentIdAt(i);
   const hid=isIntentHiddenIdx(i);
   const fav=isIntentFavourite(iid);
@@ -596,6 +631,22 @@ function mgIntentRow(i,catOf,linked){
     ?'<button type="button" data-show-intent="'+esc(iid)+'" title="Show this intent again" aria-label="Show this intent again">'+ICON_EYE_SHUT+'</button>'
     :'<button type="button" data-hide-intent="'+esc(iid)+'" title="Hide this intent: it greys out and drops to the bottom" aria-label="Hide this intent">'+ICON_EYE_OPEN+'</button>';
   const trash='<button type="button" class="danger mg-trash" data-remove-intent="'+esc(iid)+'" title="Delete this intent" aria-label="Delete this intent">'+ICON_TRASH+'</button>';
+
+  const count=linked.get(iid)||0;
+  const countHover=t("Linked cards: {N}").replace("{N}", count);
+
+  const cardMap=intentCardsMap || (typeof mgIntentCardsCache!=="undefined"?mgIntentCardsCache:null) || (typeof mgIntentCardsMap==="function"?mgIntentCardsMap():null);
+  const cardList=(cardMap && cardMap.get(iid))||[];
+  let chipsHtml="";
+  if(cardList.length===0){
+    chipsHtml='<span class="lw-empty-chips">'+esc(t("no cards yet"))+'</span>';
+  } else {
+    chipsHtml=cardList.map(o=>{
+      const title=(typeof cardTitle==="function"?cardTitle(o.m):"")||"";
+      return '<button type="button" class="lw-chip" data-card-id="'+esc(o.m.id)+'" title="'+esc(t("Opens this card's editor"))+'" aria-label="'+esc(title)+' · '+esc(t("Opens this card's editor"))+'">'+esc(title)+'</button>';
+    }).join("");
+  }
+
   /* data-introw so mgRefreshAround() can find this row again after openManage() has replaced
      every element - the same job data-cardrow does in the tree. */
   /* data-band mirrors the card rows: a drag may only swap inside its own band, so hidden
@@ -607,7 +658,8 @@ function mgIntentRow(i,catOf,linked){
     ' data-band="'+(hid?"h":(fav?"f":"r"))+'">'+
     catMarkHtml(catOf.get(iid)||"")+
     '<span class="mg-int-t cut-peek" data-i18n-skip>'+esc(intentNavName(i)||"")+badge+'</span>'+
-    '<span class="mg-int-n">'+(linked.get(iid)||0)+'</span>'+
+    '<span class="mg-int-n" title="'+esc(countHover)+'">'+count+'</span>'+
+    '<div class="lw-mid">'+chipsHtml+'</div>'+
     '<span class="cacts">'+
       '<button type="button" data-edit-intent-mg="'+i+'" title="Edit intent" aria-label="Edit intent">'+ICON_EDIT+'</button>'+
       hideShow+
@@ -642,7 +694,7 @@ let libQuery="";
 const libFind=()=>t("Search the library");
 const libSections=()=>[
   {key:"catmac", icon:"categories", name:t("Categories & cards"), lede:t("Each category with its cards, its place in the order, and whether it supports every intent.")},
-  {key:"intents", icon:"intents", name:t("Intents"), lede:t("Favourites first, hidden intents at the foot.")},
+  {key:"intents", icon:"intents", name:t("Intents"), lede:t("Favourites first, hidden intents at the foot.")+" "+t("Beside each, the cards linked to it.")},
   {key:"who", icon:"user", name:t("ROLE suggestions"), lede:t("The names the ROLE wheel offers, in the order it offers them. Dragging a name moves it.")},
   {key:"data", icon:"cards", name:t("Catalog & data"), lede:t("The catalog in use on this desk, and loading another catalog file.")}
 ];
@@ -1064,8 +1116,16 @@ function openManage(justHtml){
     })
     .map(x=>x.i);
   const catOf=primaryCatKeys(), linked=intentCardCounts();
+  mgIntentCardsCache=mgIntentCardsMap();
   const intentListRows=mgIntentIdxs.map(i=>mgIntentRow(i,catOf,linked)).join("")
     ||'<div class="manage-empty">'+esc(t("No intents."))+'</div>';
+  mgIntentCardsCache=null;
+
+  const headingRow='<div class="lw-ihead" aria-hidden="true">'+
+    '<span class="lw-ih-int">'+esc(t("Intent"))+'</span>'+
+    '<span class="lw-ih-cards">'+esc(t("Linked cards"))+'</span>'+
+    '<span class="lw-ih-acts"></span>'+
+    '</div>';
 
   const catCount=Object.keys(CATS).length;
   /* Hiding is the one personal act with no way back at scale: hidden things are
@@ -1097,7 +1157,7 @@ function openManage(justHtml){
       catalogCountsLine("{MACROS} in {CARDS}, {CATEGORIES}",
         (cards||[]).length, totalMacroCount(), 0, catCount))+
     mgSec("intents","Intents",
-      '<div class="mg-intents">'+intentListRows+'</div>'+
+      '<div class="mg-intents">'+headingRow+intentListRows+'</div>'+
       '<div class="cat-new" style="margin-top:8px">'+
         '<button type="button" class="btn" id="mgAddIntent" title="Write a new clause for {INTENT}">New intent…</button>'+
         mgShowHiddenBtn("intents",hiddenIntentCount)+'</div>',
@@ -1287,6 +1347,13 @@ function wireLibrary(page){
   });
   page.querySelectorAll("[data-fav-card]").forEach(btn=>{
     btn.onclick=()=>mgRefreshAround(()=>toggleFavourite(btn.getAttribute("data-fav-card")));
+  });
+  page.querySelectorAll(".lw-chip[data-card-id]").forEach(chip=>{
+    chip.onclick=e=>{
+      e.stopPropagation();
+      const cid=chip.getAttribute("data-card-id");
+      if(cid) openCardEditor(cid, null, true);
+    };
   });
   page.querySelectorAll("[data-edit-intent-mg]").forEach(btn=>{
     btn.onclick=()=>openIntentEditor(+btn.getAttribute("data-edit-intent-mg"), true);

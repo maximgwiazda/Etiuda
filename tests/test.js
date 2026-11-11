@@ -5962,8 +5962,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1363;
-const UI_STRINGS_SHA256 = "5db465254dcb3e6c9685c24631a904a62c87b46e8f1a29838ff4b47f623443fa";
+const UI_STRINGS_COUNT = 1367;
+const UI_STRINGS_SHA256 = "29a89ca4b097a429137b55e9196aaf6641ed36e71e32bbd9c07301a128120587";
 
 /* WORDS OWED, the test architect's condition of 2026-11-09 on the Library and Maintenance layout.
    A table read through a variable ({key, icon, name, lede}) never reaches the census above or
@@ -6842,7 +6842,7 @@ function libraryRowsTests() {
     } catch (e) { return "mgIntentRow did not run: " + e.message; }
   };
   const shape = h => {
-    const m = /^<div class="manage-row mg-int( is-hidden)?"[^>]*>(<mark [^>]*>)<span class="mg-int-t cut-peek" data-i18n-skip>([^<]*)<\/span><span class="mg-int-n">(\d+)<\/span><span class="cacts">/.exec(String(h));
+    const m = /^<div class="manage-row mg-int( is-hidden)?"[^>]*>(<mark [^>]*>)<span class="mg-int-t cut-peek" data-i18n-skip>([^<]*)<\/span><span class="mg-int-n"[^>]*>(\d+)<\/span>(?:<div class="lw-mid"[^>]*>.*?<\/div>)?<span class="cacts">/.exec(String(h));
     return m ? [m[2], m[3], m[4], !!m[1]].join(" ") : String(h).slice(0, 200);
   };
   eq("a Library intent row is the rail's: one dominant category's mark at its head, the name that fades, and the count of cards linked to it",

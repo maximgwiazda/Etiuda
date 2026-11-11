@@ -3700,7 +3700,42 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx.lm-lib .sx-card .mg-cat:first-child>.mg-cat-row{border-top:0}
 .sx.lm-lib .sx-card .mg-cat-body{padding:0 0 6px 30px}
 .sx.lm-lib .sx-card .mg-int{padding-top:8px;padding-bottom:8px;border-top:1px solid var(--line)}
-.sx.lm-lib .sx-card .mg-int:first-child{border-top:0}
+.sx.lm-lib .sx-card .mg-int:first-of-type{border-top:0}
+/* Finding 4: Library Intents width and linked cards (4E) */
+.sx.lm-lib .sx-card:has(.mg-intents){overflow:visible;container-type:inline-size}
+.lw-ihead{position:sticky;top:-24px;z-index:3;background:var(--panel);
+  display:flex;gap:8px;padding:9px 4px 9px 30px;
+  font:600 11.5px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);
+  border-bottom:1px solid var(--line-strong);user-select:none;box-sizing:border-box;border-radius:var(--radius-sm) var(--radius-sm) 0 0}
+.lw-ih-int{flex:0 0 284px}
+.lw-ih-cards{flex:1 1 0;min-width:0}
+.lw-ih-acts{flex:0 0 118px}
+.sx.lm-lib .mg-intents .manage-row.mg-int{display:flex;align-items:center;flex-wrap:nowrap;gap:6px;padding:8px 4px;border-top:1px solid var(--line);box-sizing:border-box}
+.sx.lm-lib .mg-intents .manage-row.mg-int:first-of-type{border-top:0}
+.sx.lm-lib .mg-intents .manage-row.mg-int .cat-slot{flex:0 0 16px}
+.sx.lm-lib .mg-intents .manage-row.mg-int .mg-int-t{flex:0 0 250px;min-width:250px;max-width:250px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sx.lm-lib .mg-intents .manage-row.mg-int .mg-int-n{flex:0 0 26px;text-align:right;font:600 11px var(--mono);opacity:.65;cursor:default}
+.sx.lm-lib .mg-intents .manage-row.mg-int .lw-mid{flex:1 1 0;min-width:0;display:flex;gap:6px;overflow:hidden;align-items:center;
+  -webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 60px),#0000);
+  mask-image:linear-gradient(90deg,#000 calc(100% - 60px),#0000)}
+.sx.lm-lib .mg-intents .manage-row.mg-int .lw-chip{flex:none;font:12.5px var(--sans);color:var(--dim);
+  border:1px solid var(--line);border-radius:7px;padding:1px 8px;white-space:nowrap;background:var(--bg);
+  cursor:default;line-height:20px;height:24px;box-sizing:border-box;outline:none}
+.sx.lm-lib .mg-intents .manage-row.mg-int .lw-chip:hover{border-color:var(--line-strong);color:var(--ink);background:var(--panel)}
+.sx.lm-lib .mg-intents .manage-row.mg-int .lw-chip:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.sx.lm-lib .mg-intents .manage-row.mg-int .lw-empty-chips{font:12.5px var(--sans);color:var(--dim);opacity:.7;padding:2px 0;white-space:nowrap;flex:none}
+.sx.lm-lib .mg-intents .manage-row.mg-int .cacts{flex:0 0 auto;margin-left:12px}
+
+@container (max-width: 520px){
+  .lw-ihead,.sx.lm-lib .mg-intents .manage-row.mg-int .lw-mid{display:none!important}
+  .sx.lm-lib .mg-intents .manage-row.mg-int .mg-int-t{flex:1 1 auto!important;min-width:0!important;max-width:none!important}
+  .sx.lm-lib .mg-intents .manage-row.mg-int .cacts{margin-left:auto!important}
+}
+@container (max-width: 420px){
+  .sx.lm-lib .mg-intents .manage-row.mg-int{flex-wrap:wrap!important}
+  .sx.lm-lib .mg-intents .manage-row.mg-int .mg-int-t{flex:1 1 calc(100% - 60px)!important;min-width:0!important}
+  .sx.lm-lib .mg-intents .manage-row.mg-int .cacts{flex:0 0 100%!important;justify-content:flex-end!important;margin-top:2px;margin-left:0!important}
+}
 .sx.lm-lib .sx-card .ec-list{margin:0}
 .sx.lm-lib .sx-card .ec-row{border:0;border-radius:0;margin:0;padding:14px 16px}
 /* Finding 3: ROLE suggestions width and layout (3B) */
