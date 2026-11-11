@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MAIN = path.join(ROOT, "shell", "main.js");
 const SHELL_FILES = ["shell/main.js", "shell/preload.js", "shell/tray.cjs", "shell/win-proxy.cjs", "shell/page-watch.cjs",
-  "shell/clip-suggest.cjs", "shell/desk-reset.cjs", "shell/relay/channel.cjs", "shell/relay/blob.cjs",
+  "shell/clip-suggest.cjs", "shell/desk-ai.cjs", "shell/desk-reset.cjs", "shell/relay/channel.cjs", "shell/relay/blob.cjs",
   "shell/folder/syncer.cjs", "shell/folder/syncer-worker.cjs", "shell/embed/suggest.cjs", "shell/embed/core.cjs",
   "shell/embed/worker.cjs", "shell/caret.cs"];
 let checks = 0, fails = 0;

@@ -58,8 +58,9 @@ function notifyFirstClose(opts) {
   if (harnessLaunch()) return null; /* plant:harness-first-close */
   return notifyFirstCloseOf(opts);
 }
-const { readsLikeMessage, scoreSuggestions, MESSAGE_MAX_CHARS } = require(path.join(__dirname, "clip-suggest.cjs"));
+const { readsLikeMessage, scoreSuggestions, MESSAGE_MAX_CHARS, SUGGEST_LIMIT } = require(path.join(__dirname, "clip-suggest.cjs"));
 const { honourPendingReset, stageReset, deliverResetNotice, retryPendingReset, stopPendingReset } = require(path.join(__dirname, "desk-reset.cjs"));
+const deskAi = require(path.join(__dirname, "desk-ai.cjs"));
 /* THE EMBEDDED MODEL, where the package carries it beside the asar; a copy of the shell without these files suggests by words. */
 let embedLib = null;
 try { embedLib = require(path.join(__dirname, "embed", "suggest.cjs")); } catch (e) { embedLib = null; }
@@ -10032,6 +10033,7 @@ function ensurePicker() {
   const win = pickWin;
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", e => e.preventDefault());
+  countTouches(win.webContents, () => { pickTouches++; });
   win.on("blur", () => hidePicker(false));
   win.on("closed", () => { if (pickWin === win) { pickWin = null; pickLoaded = null; } });
   pickLoaded = new Promise(done => win.webContents.once("did-finish-load", () => done(true)));
@@ -10129,6 +10131,78 @@ function warmSuggestSoon() {
   }).catch(() => {});
 }
 
+/* THE ORGANISATION'S MODEL (shell/desk-ai.cjs). deskAiConfig is the one reader of the configuration in force,
+   {provider, endpoint, model, key, managed}, or null while the option is off or not ready; this stand-in keeps it off. */
+function deskAiConfig() { return null; }
+/* The page hears each ask's outcome on etiuda:ai-state, {ranking, failures, pausedUntil, slow}, for the mark and its lines. */
+function deskAiState(state) {
+  const win = theWindow;
+  if (win && !win.isDestroyed()) win.webContents.send("etiuda:ai-state", state);
+}
+function deskAiFetch(u, init) {
+  return net && typeof net.fetch === "function" ? net.fetch(u, init) : Promise.reject(new Error("no network here"));
+}
+const deskReorder = deskAi.createReorder({ config: () => deskAiConfig(), fetch: deskAiFetch, onState: deskAiState });
+/* Settings' connection test for `config`: {ok, ms, status}, ms the time the service took. */
+function deskAiTest(config) { return deskAi.connectionTest(deskAiFetch, config); }
+/* An agent's key, click, wheel or scroll in each window, counted, so an order that comes after one is dropped. */
+let deskTouches = 0, pickTouches = 0;
+function countTouches(wc, bump) {
+  if (wc && typeof wc.on === "function") wc.on("input-event", (e, ie) => { if (ie && deskAi.touches(ie.type)) bump(); });
+}
+/* The main search's passages by id, as the page last sent them, for the texts of a shortlist. */
+let orgRows = new Map(), orgSearchOn = true, orgSearchAsked = "";
+function keepOrgRows(rows) {
+  const by = new Map();
+  for (const r of Array.isArray(rows) ? rows : []) {
+    if (!r || typeof r.text !== "string" || (r.surface !== "card" && r.surface !== "intent")) continue;
+    const k = r.surface + ":" + String(r.id);
+    by.set(k, by.has(k) ? by.get(k) + " / " + r.text : r.text);
+  }
+  orgRows = by;
+  orgSearchAsked = "";
+}
+/* Once per settled query: the page's shortlist for it, the organisation's order of it, and that order back to the page,
+   which takes it only while the query and the list are still the ones it gave. A retry of the same query by the page,
+   with no key or click between, is not a second ask. */
+function orgSearchSoon(q) {
+  if (q + "\n" + deskTouches === orgSearchAsked) return;
+  deskReorder.settle(() => { orgSearch(q).catch(() => {}); });
+}
+async function orgSearch(q) {
+  const asked = q + "\n" + deskTouches;
+  if (!orgSearchOn || !deskReorder.active() || asked === orgSearchAsked) return;
+  orgSearchAsked = asked;
+  const list = await askDesk("search-shortlist", { q });
+  if (!list || list.q !== q) return;
+  const rows = [];
+  for (const [surface, ids] of [["card", list.cards], ["intent", list.intents]]) {
+    for (const id of Array.isArray(ids) ? ids : []) {
+      const text = orgRows.get(surface + ":" + String(id));
+      if (text && rows.length < deskAi.SHORTLIST_MAX) rows.push({ surface, id: String(id), text });
+    }
+  }
+  const touched = deskTouches;
+  const order = await deskReorder.ask(q, rows.map(r => r.text), () => deskTouches === touched);
+  if (!order) return;
+  const sorted = order.map(i => rows[i]);
+  askDesk("search-reorder", { q, gen: list.gen, cards: sorted.filter(r => r.surface === "card").map(r => r.id),
+    intents: sorted.filter(r => r.surface === "intent").map(r => r.id) }).catch(() => {});
+}
+/* The strip's shortlist, the rows it shows first and then the words' others, each by its passages; and the organisation's
+   order of it, which the picker takes only if it is still this opening's and the agent has not touched it. */
+function orgSuggestRows(shown, scored, profiles) {
+  const texts = new Map(((profiles && profiles.passages) || []).map(p => [String(p.id), (p.texts || []).join(" / ")]));
+  const rows = [], seen = new Set();
+  for (const r of [].concat(shown || [], scored || [])) {
+    const id = String(r && r.id);
+    if (!r || seen.has(id) || rows.length >= deskAi.SHORTLIST_MAX) continue;
+    seen.add(id);
+    rows.push({ id, name: String(r.name || ""), score: r.score, text: texts.get(id) || String(r.name || "") });
+  }
+  return rows;
+}
+
 function noteOwnText(text) {
   if (!text) return;
   lastOwnText = crypto.createHash("sha256").update(String(text).replace(/\r\n/g, "\n")).digest("hex");
@@ -10179,7 +10253,12 @@ function pickWithClip(press, which, text) {
      at the first opening of any kind. */
   const forModel = !!embedSuggest && embedSuggest.installed();
   const req = (want || forModel) ? (lastProfiles ? { epoch: lastProfilesEpoch } : { profiles: 1 }) : {};
-  const ranked = want && embedSuggest ? embedSuggest.rank(clip.slice(0, MESSAGE_MAX_CHARS), EMBED_BUDGET_MS) : Promise.resolve(null);
+  /* Where the organisation's model ranks, the built-in one still gives the instant strip unless INSTANT_FROM says words. */
+  const org = want && deskReorder.active();
+  const builtinNow = !(org && deskAi.INSTANT_FROM === "words");
+  let orgText = org ? clip.slice(0, MESSAGE_MAX_CHARS) : "";
+  let scoredAll = [];
+  const ranked = want && embedSuggest && builtinNow ? embedSuggest.rank(clip.slice(0, MESSAGE_MAX_CHARS), EMBED_BUDGET_MS) : Promise.resolve(null);
   askDesk("open", req).then(open => {
     if (!open) { focusDesk(); return null; }
     if (open.epoch != null && open.epoch !== lastProfilesEpoch) {
@@ -10195,6 +10274,7 @@ function pickWithClip(press, which, text) {
     if (profiles && want) {
       try {
         const scored = scoreSuggestions(clip, profiles);
+        scoredAll = scored;
         if (scored.length) {
           open.suggest = scored.map(r => ({ id: String(r.id), name: String(r.name || ""), score: r.score }));
           const labels = profiles.labels || {};
@@ -10210,12 +10290,18 @@ function pickWithClip(press, which, text) {
     clip = "";
     const aiOn = open.ai !== false;
     delete open.ai;
-    const byModel = showed && aiOn && !!embedSuggest && embedSuggest.readyFor(passagesKeyOf(profiles));
+    const byModel = showed && aiOn && builtinNow && !!embedSuggest && embedSuggest.readyFor(passagesKeyOf(profiles));
     if (embedSuggest) warmSuggest(profiles, aiOn);
     return (byModel ? ranked : Promise.resolve(null)).then(rows => {
       const names = new Map(((profiles && profiles.intents) || []).map(p => [String(p.id), String(p.name || "")]));
       const mine = (Array.isArray(rows) ? rows : []).filter(r => r && names.has(String(r.id)));
       if (mine.length) open.suggest = mine.map(r => ({ id: String(r.id), name: names.get(String(r.id)), score: r.score }));
+      const orgRowsNow = org && showed && aiOn ? orgSuggestRows(open.suggest, scoredAll, profiles) : [];
+      const touched = pickTouches;
+      const orgOrder = orgRowsNow.length > 1
+        ? deskReorder.ask(orgText, orgRowsNow.map(r => r.text), () => press === pickPress && pickTouches === touched) : null;
+      orgText = "";
+      scoredAll = [];
       if (showed && clipHash !== lastCountedText) {
         lastCountedText = clipHash;
         askDesk("suggest-open", {}).catch(() => {});
@@ -10235,7 +10321,16 @@ function pickWithClip(press, which, text) {
         const drawn = new Promise(done => { pickShown = done; setTimeout(done, 300); });
         win.webContents.send("etiuda:pick-open", JSON.stringify(open));
         const asked = Promise.race([which, new Promise(done => setTimeout(done, CARET_WAIT_MS))]);
-        return Promise.all([drawn, asked]).then(() => { pickShown = null; if (!win.isDestroyed()) { win.show(); win.focus(); } });
+        return Promise.all([drawn, asked]).then(() => {
+          pickShown = null;
+          if (!win.isDestroyed()) { win.show(); win.focus(); }
+          /* Not waited for: the opening ends here, and the order, if it comes and is still wanted, paints the strip again. */
+          if (orgOrder) orgOrder.then(order => {
+            if (!order || win.isDestroyed() || !win.isVisible() || press !== pickPress || pickTouches !== touched) return;
+            open.suggest = order.map(i => orgRowsNow[i]).slice(0, SUGGEST_LIMIT).map(r => ({ id: r.id, name: r.name, score: r.score }));
+            win.webContents.send("etiuda:pick-open", JSON.stringify(open));
+          }).catch(() => {});
+        });
       });
     });
   }).catch(e => console.error("etiuda: the picker could not open - " + e.message))
@@ -10297,7 +10392,7 @@ ipcMain.handle("etiuda:pick-copy", (e, what) => {
 });
 /* The embedded model's switch as Settings shows it: whether this desk carries the model, and the person turning it off or on. */
 ipcMain.on("etiuda:ai-state", (e) => {
-  e.returnValue = fromEngine(e) ? { model: !!(embedSuggest && embedSuggest.installed()) } : null;
+  e.returnValue = fromEngine(e) ? { model: !!(embedSuggest && embedSuggest.installed()), org: !!deskAiConfig() } : null;
 });
 ipcMain.on("etiuda:ai-set", (e, on) => {
   if (!fromEngine(e) || !embedSuggest) return;
@@ -10306,18 +10401,27 @@ ipcMain.on("etiuda:ai-set", (e, on) => {
 /* The main search's own switch, and the ranking it asks for. Preparation returns at once; the passages embed in the
    worker afterwards. A rank before they are ready, or under three letters, is null, and the page keeps the word order. */
 ipcMain.on("etiuda:search-set", (e, on) => {
-  if (!fromEngine(e) || !embedSuggest) return;
-  embedSuggest.setSearchOn(!!on);
+  if (!fromEngine(e)) return;
+  orgSearchOn = !!on;
+  if (embedSuggest) embedSuggest.setSearchOn(!!on);
 });
 ipcMain.handle("etiuda:search-prepare", (e, rows) => {
   if (!fromEngine(e)) return null;
-  if (!embedSuggest) return { ready: false, skipped: true };
+  keepOrgRows(rows);
+  if (!embedSuggest) return deskAiConfig() ? { ready: true } : { ready: false, skipped: true };
   try { return embedSuggest.prepareSearch(rows) || { ready: false, skipped: true }; }
   catch (err) { return { ready: false, skipped: true }; }
 });
+/* With the organisation's model chosen, an empty order stands where the built-in one gives none, so the page keeps its
+   words and does not ask again; the organisation's order follows the answer, through orgSearchSoon. */
 ipcMain.handle("etiuda:search-rank", (e, text) => {
-  if (!fromEngine(e) || !embedSuggest) return null;
-  return embedSuggest.searchRank(String(text == null ? "" : text));
+  if (!fromEngine(e)) return null;
+  const q = String(text == null ? "" : text);
+  const builtin = embedSuggest && !(deskReorder.active() && deskAi.INSTANT_FROM === "words") ? embedSuggest.searchRank(q) : null;
+  if (!orgSearchOn || !deskAiConfig()) return builtin;
+  const answer = builtin ? Promise.resolve(builtin) : Promise.resolve({ cards: [], intents: [] });
+  answer.then(() => orgSearchSoon(q), () => {});
+  return answer;
 });
 /* The page tells main the text it copied, so the strip never suggests from a reply the desk wrote. A string within the cap and
    nothing else: a longer one is no reply the desk wrote, and anything not a string is not noted at all. */
@@ -10502,6 +10606,7 @@ function createWindow() {
   });
 
   theWindow = win;
+  countTouches(win.webContents, () => { deskTouches++; });
   /* The picker is a second window, so it goes with the desk's or the app would outlive it. */
   win.on("closed", () => {
     if (theWindow === win) theWindow = null;
