@@ -28,7 +28,7 @@ import { closeScreenTab, screenOn } from "./screen-tabs.js";
    anywhere never takes a step down. It starts by itself on a first run and from Menu, Show tour.
    Bump TOUR_VER to re-offer after a major layout change. */
 const TOUR_VER=3;
-let tourIdx=-1, tourRunning=false, tourRaf=0;
+let tourIdx=-1, tourRunning=false, tourRaf=0, tourGlideEl=null;
 function tourActive(){ return !!tourRunning; }
 function tourStorageKey(){ return "eTourDone_v"+TOUR_VER; }
 function tourInviteKey(){ return "eTourInvite_v"+TOUR_VER; }
@@ -453,28 +453,110 @@ function resolveTourTarget(step){
   if(el && el.getClientRects && el.getClientRects().length===0) return null;
   return el||null;
 }
-/** The box a step's spotlight has to cover - where the target will SETTLE, not where it is now.
- *
- *  A dialog arrives with a 180ms translate-and-scale, and getBoundingClientRect() reports the
- *  painted box, so a step that opens one framed the animation's first frame and then slid to the
- *  real geometry a third of a second later, dragging the arrow with it. That was the stutter.
- *  The transform is undone rather than waited out: the layout size is offsetWidth/Height, which
- *  no transform touches, and with the default centre origin a scale leaves the centre alone while
- *  a translate moves it by exactly the matrix's (e,f). So the settled box is available from the
- *  frame the element appears, and the later re-place finds nothing to move.
- *  Identity - every other step - returns the rect untouched. */
+/* A length from computed style: a percentage of `rel`, a keyword of the axis, or pixels. */
+function tourPx(tok, rel){
+  if(tok==null) return 0;
+  const s=String(tok).trim();
+  if(s==="" || s==="none") return 0;
+  if(s==="center" || s==="centre") return (rel||0)/2;
+  if(s==="left" || s==="top") return 0;
+  if(s==="right" || s==="bottom") return rel||0;
+  if(s.endsWith("%")) return (parseFloat(s)||0)/100*(rel||0);
+  return parseFloat(s)||0;
+}
+/** The box the ring has to cover: where the target settles, not the painted box.
+ *  A dialog arrives on transform, and a section switch glides the height on scale,
+ *  with translate free to move it. Layout size is offsetWidth and offsetHeight;
+ *  the transform origin puts that size back where the glide ends. Identity leaves
+ *  the rect as it is. */
 function tourTargetRect(el){
   if(!el||!el.getBoundingClientRect) return null;
   const r=el.getBoundingClientRect();
-  let m=null;
-  try{
-    const t=getComputedStyle(el).transform;
-    if(t && t!=="none" && typeof DOMMatrixReadOnly==="function") m=new DOMMatrixReadOnly(t);
-  }catch(_){ m=null; }
-  if(!m || m.isIdentity) return {top:r.top, left:r.left, width:r.width, height:r.height};
   const w=el.offsetWidth||r.width, h=el.offsetHeight||r.height;
-  const cx=r.left+r.width/2-m.e, cy=r.top+r.height/2-m.f;
-  return {top:cy-h/2, left:cx-w/2, width:w, height:h};
+  let sx=1, sy=1, tx=0, ty=0, a=1, d=1, e=0, f=0, rotated=false;
+  try{
+    const cs=getComputedStyle(el);
+    const sc=cs.scale;
+    if(sc && sc!=="none"){
+      const p=sc.trim().split(/\s+/);
+      sx=parseFloat(p[0]);
+      if(Number.isNaN(sx)) sx=1;
+      sy=p.length>1?parseFloat(p[1]):sx;
+      if(Number.isNaN(sy)) sy=sx;
+    }
+    const tr=cs.translate;
+    if(tr && tr!=="none"){
+      const p=tr.trim().split(/\s+/);
+      tx=tourPx(p[0], w);
+      ty=p.length>1?tourPx(p[1], h):0;
+    }
+    const t=cs.transform;
+    if(t && t!=="none" && typeof DOMMatrixReadOnly==="function"){
+      const m=new DOMMatrixReadOnly(t);
+      if(!m.isIdentity){
+        a=m.a; d=m.d; e=m.e; f=m.f;
+        rotated=Math.abs(m.b)>0.001 || Math.abs(m.c)>0.001;
+      }
+    }
+    if(rotated){
+      const cx=r.left+r.width/2-e, cy=r.top+r.height/2-f;
+      return {top:cy-h/2, left:cx-w/2, width:w, height:h};
+    }
+    const bare=Math.abs(sx-1)<0.001 && Math.abs(sy-1)<0.001 && Math.abs(tx)<0.5 && Math.abs(ty)<0.5
+      && Math.abs(a-1)<0.001 && Math.abs(d-1)<0.001 && Math.abs(e)<0.5 && Math.abs(f)<0.5;
+    if(bare) return {top:r.top, left:r.left, width:r.width, height:r.height};
+    const o=(cs.transformOrigin||"").trim().split(/\s+/);
+    let ox=w/2, oy=h/2;
+    if(o[0]) ox=tourPx(o[0], w);
+    if(o[1]) oy=tourPx(o[1], h);
+    return {
+      top:r.top-oy+sy*d*oy-sy*f-ty,
+      left:r.left-ox+sx*a*ox-sx*e-tx,
+      width:w, height:h
+    };
+  }catch(_){
+    return {top:r.top, left:r.left, width:r.width, height:r.height};
+  }
+}
+/* A dialog step's bubble never covers that dialog's action row. Where it already
+   misses the row it stays. Where it would lie on the row, it sits above the dialog,
+   or below it, or in the body with its foot clear of the row, and it is not pushed
+   back onto the row to stay on screen. */
+function placeTourBubble(card, dialog){
+  if(!card||!dialog) return;
+  const row=dialog.querySelector(":scope > .modal-actions");
+  if(!row) return;
+  const w=card.offsetWidth, h=card.offsetHeight;
+  const left0=parseFloat(card.style.left)||0, top0=parseFloat(card.style.top)||0;
+  const bub={left:left0, top:top0, right:left0+w, bottom:top0+h};
+  const rr=row.getBoundingClientRect();
+  const gapW=Math.min(bub.right, rr.right)-Math.max(bub.left, rr.left);
+  const gapH=Math.min(bub.bottom, rr.bottom)-Math.max(bub.top, rr.top);
+  if(!(gapW>0.5 && gapH>0.5)) return;
+  const m=12, gap=12, vw=window.innerWidth, vh=window.innerHeight;
+  const dr=dialog.getBoundingClientRect();
+  const above=dr.top-gap-h, below=dr.bottom+gap;
+  let top, side;
+  if(above>=m){ top=above; side="above"; }
+  else if(below+h<=vh-m){ top=below; side="below"; }
+  else { top=rr.top-gap-h; side="none"; }
+  card.style.top=top+"px";
+  const tip=card.querySelector(":scope > .bub-tip");
+  if(side==="above" || side==="below"){
+    const cx=dr.left+dr.width/2;
+    const left=Math.max(m, Math.min(cx-w/2, Math.max(m, vw-w-m)));
+    card.style.left=left+"px";
+    card.setAttribute("data-side", side);
+    if(tip){
+      const corner=Math.min(22, w/2);
+      const tx=Math.max(corner, Math.min(cx-left, Math.max(corner, w-corner)));
+      tip.style.left=(tx-6)+"px";
+      tip.style.top="";
+    }
+  } else {
+    card.setAttribute("data-side", "none");
+    if(tip){ tip.style.left=""; tip.style.top=""; }
+  }
 }
 function placeTourUI(){
   if(!tourRunning) return;
@@ -488,10 +570,10 @@ function placeTourUI(){
   const target=resolveTourTarget(step);
   const vw=window.innerWidth, vh=window.innerHeight;
   /* A step showing a whole dialog gets a narrower card and a tighter gap. The dialog is
-     560px and CENTRED - it must be, the step shows the real thing - leaving ~350px per
-     side: 360+34 does not fit, 320+14 does. Under ~1240px nothing fits either side and
-     the card lands over the dialog - legible, above it, the honest fallback. Width is
-     written before the height is read: a narrower card is a taller one. */
+     560px and centred, and it must stay so, the step shows the real thing, leaving about
+     350px a side: 360+34 does not fit, 320+14 does. Under about 1240px nothing fits either
+     side. Width is written before the height is read: a narrower card is a taller one.
+     Where the bubble would then lie on the dialog's action row, placeTourBubble moves it. */
   const modalStep=!!step.modal;
   const cardW=Math.min(modalStep?320:360, vw-28);
 
@@ -527,9 +609,9 @@ function placeTourUI(){
   /* THE BUBBLE GOES BELOW ITS TARGET WHERE IT CAN, and the routine decides the rest. A notice
      under a control leaves the control readable, which is the point of pointing at it; a dialog
      step's spotlight fills the middle of the screen, so that one lands beside; and a window too
-     narrow for either gets the bubble over the dialog with no pointer, which is what the
-     family's last fallback is for. The alternating sides the old callout used are gone with the
-     arrow: two dialog steps in a row now differ by their words, as every other pair does. */
+     narrow for either would leave the bubble over the dialog. A dialog step does not leave it
+     over that dialog's Save and Cancel: it sits above the dialog, below it, or in the body
+     clear of the row. */
   if(holeRect){
     const side=typeof step.side==="function" ? step.side() : step.side;
     placeBubble(els.card, holeRect, {width:cardW, gap:12, prefer:side||undefined});
@@ -539,6 +621,7 @@ function placeTourUI(){
     els.card.style.left=Math.max(14, (vw-cardW)/2)+"px";
     els.card.setAttribute("data-side","none");
   }
+  if(modalStep && target) placeTourBubble(els.card, target);
   syncTourNext();
 }
 function scheduleTourPlace(){
@@ -710,6 +793,9 @@ function endTour(completed){
   closeSettingsMenu();
   clearTourFocus();
   if(tourTargetRO){ try{ tourTargetRO.disconnect(); }catch(_){} }
+  /* The leaving-copy leg runs this function on its own. A helper it does not slice is
+     called only where this module actually has it; a bare name there throws. */
+  if(typeof clearTourGlide==="function") clearTourGlide();
   if(completed) markTourDone();
   else markTourInviteDismissed();
   ssDel(TOUR_AT);
@@ -782,9 +868,29 @@ function activateTourFocus(){
 function clearTourFocus(){
   tourButtons().forEach(b=>b.classList.remove("tour-sel"));
 }
-/* Watch the current target so the spotlight follows it when it resizes in place. */
+/* Watch the current target so the spotlight follows a resize, and place once more when a
+   glide on that target ends: clearing the scale does not change the layout size, so the
+   observer does not fire again. */
 let tourTargetRO=null;
+function clearTourGlide(){
+  if(!tourGlideEl) return;
+  tourGlideEl.removeEventListener("transitionend", tourOnGlideEnd);
+  tourGlideEl.removeEventListener("animationend", tourOnGlideEnd);
+  tourGlideEl=null;
+}
+function tourOnGlideEnd(e){
+  if(!tourRunning || !tourGlideEl || e.target!==tourGlideEl) return;
+  scheduleTourPlace();
+}
+function armTourGlide(el){
+  clearTourGlide();
+  if(!el || el.nodeType!==1) return;
+  tourGlideEl=el;
+  el.addEventListener("transitionend", tourOnGlideEnd);
+  el.addEventListener("animationend", tourOnGlideEnd);
+}
 function observeTourTarget(tb){
+  armTourGlide(tb && tb.nodeType===1 ? tb : null);
   if(typeof ResizeObserver!=="function") return;
   try{
     if(!tourTargetRO) tourTargetRO=new ResizeObserver(()=>{ if(tourRunning) scheduleTourPlace(); });

@@ -1741,6 +1741,7 @@ Module.prototype._compile = function (content, filename) {
     "motion.js": "legs tests/smoke.js requires and runs; alone it is the quick run of one leg",
     "badge-room.js": "the badge's room, a sweep tests/smoke.js requires and runs; alone it is the quick run of that sweep",
     "tour-walk.js": "the tour's walk tests/smoke.js requires and runs; its plan is held to the step table by tests/test.js",
+    "tour-ring.js": "a window leg for the ring and the bubble on the card editor, run through the gate runner; not on a chain",
     "install-plan.js": "the library tests/update-install.js judges with; every clause is held by tests/install-plan-selftest.js in npm test",
     "pick-desk.js": "a machine-window gate: it takes the real foreground and presses real keys, so it runs by hand with nobody at the keyboard; its node half is tests/pick.mjs in npm test",
     "update-install.js": "a machine-window gate: it needs an older installer, and for --all-users an elevated shell, so no chain can run it; its plan and verdicts are held by tests/install-plan-selftest.js",

@@ -9629,7 +9629,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-10";
+  var E_BUILT = "2026-11-11";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -25492,6 +25492,7 @@ What you type stays in this browser only.`;
   var tourIdx = -1;
   var tourRunning = false;
   var tourRaf = 0;
+  var tourGlideEl = null;
   function tourActive() {
     return !!tourRunning;
   }
@@ -25928,20 +25929,113 @@ What you type stays in this browser only.`;
     if (el && el.getClientRects && el.getClientRects().length === 0) return null;
     return el || null;
   }
+  function tourPx(tok, rel) {
+    if (tok == null) return 0;
+    const s = String(tok).trim();
+    if (s === "" || s === "none") return 0;
+    if (s === "center" || s === "centre") return (rel || 0) / 2;
+    if (s === "left" || s === "top") return 0;
+    if (s === "right" || s === "bottom") return rel || 0;
+    if (s.endsWith("%")) return (parseFloat(s) || 0) / 100 * (rel || 0);
+    return parseFloat(s) || 0;
+  }
   function tourTargetRect(el) {
     if (!el || !el.getBoundingClientRect) return null;
     const r = el.getBoundingClientRect();
-    let m = null;
-    try {
-      const t2 = getComputedStyle(el).transform;
-      if (t2 && t2 !== "none" && typeof DOMMatrixReadOnly === "function") m = new DOMMatrixReadOnly(t2);
-    } catch (_) {
-      m = null;
-    }
-    if (!m || m.isIdentity) return { top: r.top, left: r.left, width: r.width, height: r.height };
     const w = el.offsetWidth || r.width, h = el.offsetHeight || r.height;
-    const cx = r.left + r.width / 2 - m.e, cy = r.top + r.height / 2 - m.f;
-    return { top: cy - h / 2, left: cx - w / 2, width: w, height: h };
+    let sx = 1, sy = 1, tx = 0, ty = 0, a = 1, d = 1, e = 0, f = 0, rotated = false;
+    try {
+      const cs = getComputedStyle(el);
+      const sc = cs.scale;
+      if (sc && sc !== "none") {
+        const p = sc.trim().split(/\s+/);
+        sx = parseFloat(p[0]);
+        if (Number.isNaN(sx)) sx = 1;
+        sy = p.length > 1 ? parseFloat(p[1]) : sx;
+        if (Number.isNaN(sy)) sy = sx;
+      }
+      const tr = cs.translate;
+      if (tr && tr !== "none") {
+        const p = tr.trim().split(/\s+/);
+        tx = tourPx(p[0], w);
+        ty = p.length > 1 ? tourPx(p[1], h) : 0;
+      }
+      const t2 = cs.transform;
+      if (t2 && t2 !== "none" && typeof DOMMatrixReadOnly === "function") {
+        const m = new DOMMatrixReadOnly(t2);
+        if (!m.isIdentity) {
+          a = m.a;
+          d = m.d;
+          e = m.e;
+          f = m.f;
+          rotated = Math.abs(m.b) > 1e-3 || Math.abs(m.c) > 1e-3;
+        }
+      }
+      if (rotated) {
+        const cx = r.left + r.width / 2 - e, cy = r.top + r.height / 2 - f;
+        return { top: cy - h / 2, left: cx - w / 2, width: w, height: h };
+      }
+      const bare = Math.abs(sx - 1) < 1e-3 && Math.abs(sy - 1) < 1e-3 && Math.abs(tx) < 0.5 && Math.abs(ty) < 0.5 && Math.abs(a - 1) < 1e-3 && Math.abs(d - 1) < 1e-3 && Math.abs(e) < 0.5 && Math.abs(f) < 0.5;
+      if (bare) return { top: r.top, left: r.left, width: r.width, height: r.height };
+      const o = (cs.transformOrigin || "").trim().split(/\s+/);
+      let ox = w / 2, oy = h / 2;
+      if (o[0]) ox = tourPx(o[0], w);
+      if (o[1]) oy = tourPx(o[1], h);
+      return {
+        top: r.top - oy + sy * d * oy - sy * f - ty,
+        left: r.left - ox + sx * a * ox - sx * e - tx,
+        width: w,
+        height: h
+      };
+    } catch (_) {
+      return { top: r.top, left: r.left, width: r.width, height: r.height };
+    }
+  }
+  function placeTourBubble(card, dialog) {
+    if (!card || !dialog) return;
+    const row2 = dialog.querySelector(":scope > .modal-actions");
+    if (!row2) return;
+    const w = card.offsetWidth, h = card.offsetHeight;
+    const left0 = parseFloat(card.style.left) || 0, top0 = parseFloat(card.style.top) || 0;
+    const bub = { left: left0, top: top0, right: left0 + w, bottom: top0 + h };
+    const rr = row2.getBoundingClientRect();
+    const gapW = Math.min(bub.right, rr.right) - Math.max(bub.left, rr.left);
+    const gapH = Math.min(bub.bottom, rr.bottom) - Math.max(bub.top, rr.top);
+    if (!(gapW > 0.5 && gapH > 0.5)) return;
+    const m = 12, gap = 12, vw = window.innerWidth, vh = window.innerHeight;
+    const dr = dialog.getBoundingClientRect();
+    const above = dr.top - gap - h, below = dr.bottom + gap;
+    let top, side;
+    if (above >= m) {
+      top = above;
+      side = "above";
+    } else if (below + h <= vh - m) {
+      top = below;
+      side = "below";
+    } else {
+      top = rr.top - gap - h;
+      side = "none";
+    }
+    card.style.top = top + "px";
+    const tip = card.querySelector(":scope > .bub-tip");
+    if (side === "above" || side === "below") {
+      const cx = dr.left + dr.width / 2;
+      const left = Math.max(m, Math.min(cx - w / 2, Math.max(m, vw - w - m)));
+      card.style.left = left + "px";
+      card.setAttribute("data-side", side);
+      if (tip) {
+        const corner = Math.min(22, w / 2);
+        const tx = Math.max(corner, Math.min(cx - left, Math.max(corner, w - corner)));
+        tip.style.left = tx - 6 + "px";
+        tip.style.top = "";
+      }
+    } else {
+      card.setAttribute("data-side", "none");
+      if (tip) {
+        tip.style.left = "";
+        tip.style.top = "";
+      }
+    }
   }
   function placeTourUI() {
     if (!tourRunning) return;
@@ -25989,6 +26083,7 @@ What you type stays in this browser only.`;
       els.card.style.left = Math.max(14, (vw - cardW) / 2) + "px";
       els.card.setAttribute("data-side", "none");
     }
+    if (modalStep && target) placeTourBubble(els.card, target);
     syncTourNext();
   }
   function scheduleTourPlace() {
@@ -26187,6 +26282,7 @@ What you type stays in this browser only.`;
       } catch (_) {
       }
     }
+    if (typeof clearTourGlide === "function") clearTourGlide();
     if (completed) markTourDone();
     else markTourInviteDismissed();
     ssDel(TOUR_AT);
@@ -26264,7 +26360,25 @@ What you type stays in this browser only.`;
     tourButtons().forEach((b) => b.classList.remove("tour-sel"));
   }
   var tourTargetRO = null;
+  function clearTourGlide() {
+    if (!tourGlideEl) return;
+    tourGlideEl.removeEventListener("transitionend", tourOnGlideEnd);
+    tourGlideEl.removeEventListener("animationend", tourOnGlideEnd);
+    tourGlideEl = null;
+  }
+  function tourOnGlideEnd(e) {
+    if (!tourRunning || !tourGlideEl || e.target !== tourGlideEl) return;
+    scheduleTourPlace();
+  }
+  function armTourGlide(el) {
+    clearTourGlide();
+    if (!el || el.nodeType !== 1) return;
+    tourGlideEl = el;
+    el.addEventListener("transitionend", tourOnGlideEnd);
+    el.addEventListener("animationend", tourOnGlideEnd);
+  }
   function observeTourTarget(tb) {
+    armTourGlide(tb && tb.nodeType === 1 ? tb : null);
     if (typeof ResizeObserver !== "function") return;
     try {
       if (!tourTargetRO) tourTargetRO = new ResizeObserver(() => {
