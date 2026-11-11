@@ -10446,7 +10446,6 @@ function setTrayNotes(on) {
   rebuildTrayMenu();
 }
 let trayNoticeTold = false;
-function resetTrayNotice() { trayNoticeTold = false; }
 function maybeFirstClose(win) {
   const w = trayWords();
   notifyFirstClose({
