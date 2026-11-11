@@ -15,7 +15,8 @@
  *   i9 the lede reads "Cards linked to every intent: {N}." with N the sample's cards marked allIntents; with those
  *      cards put away, the sentence is gone
  *   i10 in a 600 px box, a chevron outside the chips stands on exactly the rows whose chips overflow; pressing one
- *      wraps that row's chips whole inside it, every chip pressable, the name on the first line; pressing again closes it
+ *      wraps that row's chips whole inside it, every chip pressable, the mark, name and number centred on the first chip
+ *      line within 2 px; pressing again closes it
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -455,7 +456,12 @@ try {
       const outside = chips.filter(c => { const k = c.getBoundingClientRect(); return k.right > mr.right + 1 || k.bottom > mr.bottom + 1 || k.left < mr.left - 1; }).length;
       const unpressable = chips.filter(c => { const k = c.getBoundingClientRect(); const e = document.elementFromPoint(k.left + k.width / 2, k.top + k.height / 2); return !e || !c.contains(e); }).length;
       const firstChip = chips[0].getBoundingClientRect();
-      opened = { expanded: more.getAttribute("aria-expanded"), lines: Math.round(mr.height / chipH), outside, unpressable,
+      const mid1 = firstChip.top + firstChip.height / 2;
+      const centre = el => { const k = el.getBoundingClientRect(); return k.top + k.height / 2; };
+      const markEl = r.querySelector(".cat-slot");
+      const offTop = Math.max(Math.abs(centre(markEl) - mid1), Math.abs(centre(r.querySelector(".mg-int-n")) - mid1),
+        Math.abs(r.querySelector(".mg-int-t").getBoundingClientRect().top + 12 - mid1));
+      opened = { offTop: Math.round(offTop * 10) / 10, expanded: more.getAttribute("aria-expanded"), lines: Math.round(mr.height / chipH), outside, unpressable,
         nameFirstLine: name.getBoundingClientRect().top < firstChip.bottom, tab: more.tabIndex, label: more.getAttribute("aria-label") };
       more.click();
       await frames();
@@ -464,7 +470,7 @@ try {
     }
     box.style.width = box.style.maxWidth = "";
     const ok = rows.length > 0 && over > 0 && !wrong.length && !!opened && opened.expanded === "true" && opened.lines >= 2
-      && opened.outside === 0 && opened.unpressable === 0 && opened.nameFirstLine && opened.tab >= 0
+      && opened.outside === 0 && opened.unpressable === 0 && opened.nameFirstLine && opened.offTop <= 2 && opened.tab >= 0
       && closed.expanded === "false" && closed.height < closed.chipH * 1.5 && closed.shown;
     return { ok, rows: rows.length, over, notOver, wrong: wrong.slice(0, 3), opened, closed };
   });
