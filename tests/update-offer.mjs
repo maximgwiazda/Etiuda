@@ -417,7 +417,7 @@ try {
     let capLifted = false;
     try { capLifted = (await PC.fetchNote(fetchOf(() => ({ status: 200, body: "x".repeat(5000), stream: true })), PC.NOTE_URL)).length === 5000; } catch { capLifted = false; }
     check(capLifted, "u-plant note-cap lifted reads a 5000-byte stream whole");
-    const PU = lifted("plant:update-open-offer", "  if (fromEngine(e) && kept) linkClicked = { href: new URL(kept.url).href, at: Date.now() };");
+    const PU = lifted("plant:update-open-offer", "  if (kept) linkClicked = { href: new URL(kept.url).href, at: Date.now() };");
     await PU.lookForNote(serve(note({ serial: 5, version: "2.0.0" })));
     PU.on["etiuda:update-click"]({ engine: true });
     check(PU.handle["etiuda:update-open"]({ engine: true }) === true && PU.opened.length === 1, "u-plant update-open-offer turned opens a page with no offer standing");

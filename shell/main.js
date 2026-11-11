@@ -8912,12 +8912,14 @@ ipcMain.on("etiuda:update-state", (e) => { e.returnValue = fromEngine(e) ? updat
    never names an address. */
 ipcMain.on("etiuda:update-click", (e) => {
   e.returnValue = null;
+  if (!fromEngine(e)) return;
   const kept = keptNote();
-  if (fromEngine(e) && kept && updateState().offer) linkClicked = { href: new URL(kept.url).href, at: Date.now() }; /* plant:update-open-offer */
+  if (kept && updateState().offer) linkClicked = { href: new URL(kept.url).href, at: Date.now() }; /* plant:update-open-offer */
 });
 ipcMain.handle("etiuda:update-open", (e) => {
+  if (!fromEngine(e)) return false;
   const kept = keptNote(), c = linkClicked;
-  if (!fromEngine(e) || !kept) return false;
+  if (!kept) return false;
   const ok = !!c && c.href === new URL(kept.url).href && Date.now() - c.at <= LINK_CLICK_MS;
   openExternally(kept.url);
   return ok;
