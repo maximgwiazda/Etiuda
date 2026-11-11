@@ -18,7 +18,6 @@ const SLOP = 2;
 function round1(n) { return Math.round(n * 10) / 10; }
 
 function main() {
-  E.windowWall("tests/tour-ring.js");
   const puppeteer = require("puppeteer-core");
   let browser = null, run = null, exitCode = 1;
   (async () => {
