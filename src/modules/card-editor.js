@@ -1,5 +1,5 @@
 import { cardFieldKey, cardStorageKeys, cardRequiredKeys, CARD_TEXT_FIELDS, CARD_FLAG_BOX, CARD_FLAGS, CARD_BOOL_FLAGS, carryUnwritten, paxVocOn, paxOwnOn, paxOwnShown, cardUsesPax, CARD_SHARED_FIELDS, PAX_ADDRESS_KEY, PAX_ADDRESS_FORMS, paxAddressOf } from "./card-fields.js";
-import { baseCard, cardCommits, cardText, cardTitle, findCard, overrideAgainstBase } from "./card-model.js";
+import { baseCard, cardCommits, cardText, cardTitle, findCard, overrideAgainstBase, putOverride, stampChanged } from "./card-model.js";
 import { nextReplies, stampToggleHtml, wireStampToggle } from "./card-chain.js";
 import { catSortIdx } from "./card-order.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
@@ -648,6 +648,7 @@ function openCardEditor(id, presetCat, fromManage){
       if(!entry.lockLang) delete entry.lockLang;
       Object.keys(addr).forEach(k=>{ if(!entry[k]) delete entry[k]; });
       if(!entry.intents||!entry.intents.length) delete entry.intents;
+      stampChanged(entry, isNew ? null : pack.custom.find(x=>x&&x.id===id));
       if(isNew) pack.custom.push(entry);
       else {
         const ix=pack.custom.findIndex(x=>x.id===id);
@@ -656,9 +657,8 @@ function openCardEditor(id, presetCat, fromManage){
     } else {
       const full=Object.assign({c},text,addr,{intents:intentsStored,
         alt:alt?1:0, seq:seq?1:0, firstOnly:firstOnly?1:0, paxVoc, paxOwn, allIntents, intentTop, lockLang, commits}, nx.fields());
-      const o=overrideAgainstBase(baseCard(id), full);
       // Nothing differs from the catalog any more - drop the override so the badge clears too
-      if(Object.keys(o).length) pack.overrides[id]=o; else delete pack.overrides[id];
+      putOverride(id, overrideAgainstBase(baseCard(id), full));
     }
     /* Saving no longer closes - that is the X's job alone. A NEW card is re-opened on
        itself, or a second Save would add a second copy of it. edMarkClean is NOT deferred:

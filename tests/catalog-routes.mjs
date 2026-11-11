@@ -226,6 +226,42 @@ check("18 control: the plain payload carries none of the new keys through either
   && boot.cat.cards.every(c => !["retired", "commits", "next", "ext"].some(k => k in c)),
   "none of notes, grew, desk, ext; no card holds retired, commits, next or ext");
 
+/* DATE MODIFIED (board 982): changedAt on a card, a shelf and a request is read into the runtime by both routes and
+   written back as it came; a value that is not an instant in UTC reads as no date, and the catalog still loads. */
+const DAY = "2026-11-11T00:23:01.000Z", SHELF_DAY = "2026-10-02T08:00:00.000Z", REQ_DAY = "2026-09-30T23:59:59Z";
+const OWN_DAY = "2026-11-05T12:00:00.000Z";
+function datedPayload() {
+  // Without the reserved shelf, whose card the whitelist strands, so the file written back can read clean.
+  const p = payload();
+  p.tags = p.tags.filter(t => t.id !== RESERVED_CAT); p.cards = p.cards.filter(c => c.shelf !== RESERVED_CAT);
+  p.tags[0].changedAt = SHELF_DAY; p.tags[1].changedAt = "2026-13-45T00:00:00Z"; p.tags[2].changedAt = REQ_DAY;
+  p.cards[0].changedAt = DAY; p.cards[1].changedAt = "yesterday";
+  return p;
+}
+const datedBoot = await bootRoute(datedPayload());
+const datedFile = await fileRoute(datedPayload());
+const runtimeDates = r => !!r.cat && JSON.stringify([r.cat.cards.map(c => c.changedAt || ""), r.cat.tagsChangedAt || null,
+  r.cat.cards.some(c => c.ext && "changedAt" in c.ext)]);
+const RUNTIME_WANT = JSON.stringify([[DAY, ""], { "t-op": SHELF_DAY, "t-a-refund": REQ_DAY }, false]);
+check("982d1 a card's, a shelf's and a request's date reach the runtime by the boot route and the picked-file route, a malformed one as none",
+  runtimeDates(datedBoot) === RUNTIME_WANT && runtimeDates(datedFile) === RUNTIME_WANT,
+  runtimeDates(datedBoot) + " | " + runtimeDates(datedFile));
+const datedOut = r => {
+  const out = V2.catalogToV2(JSON.parse(JSON.stringify(r.cat)));
+  const tag = id => (out.tags.find(t => t.id === id) || {}).changedAt;
+  return JSON.stringify([out.cards.map(c => c.changedAt || ""), tag("t-op"), tag("t-rt") || "", tag("t-a-refund"),
+    V2.v2Problems(out).length]);
+};
+const OUT_WANT = JSON.stringify([[DAY, ""], SHELF_DAY, "", REQ_DAY, 0]);
+check("982d2 and the writer gives each date back as it came, writes none for a malformed one, and the file reads back clean",
+  datedOut(datedBoot) === OUT_WANT && datedOut(datedFile) === OUT_WANT, datedOut(datedBoot) + " | " + datedOut(datedFile));
+check("982d3 and the two routes end at the same catalog, the dates included",
+  diffPaths(datedBoot.cat, datedFile.cat, "", []).length === 0 && datedBoot.sig === datedFile.sig,
+  diffPaths(datedBoot.cat, datedFile.cat, "", []).slice(0, 4).join(" ") || "equal");
+check("982d4 control: a catalog with no date gives the runtime none, on a card or a tag, by either route",
+  [boot, file].every(r => !("tagsChangedAt" in r.cat) && r.cat.cards.every(c => !("changedAt" in c))),
+  "tagsChangedAt " + ("tagsChangedAt" in boot.cat) + ", a dated card " + boot.cat.cards.some(c => "changedAt" in c));
+
 /* THE ROUTE OUT, driven for real. exportCatalog() runs end to end in bare node: the document is a
    stand-in that answers every question with another stand-in, the hooks are empty, and the save
    dialog is a function handing back a writer that keeps the text. What is asserted is the file
@@ -307,6 +343,34 @@ check("18 control: the plain payload carries none of the new keys through either
   check("24 and every card of it keeps the keys it always had, in the order it always had them",
     !!bare && bare.cards.every(c => Object.keys(c).join(",") === "id,shelf,title,body,bodyShape"),
     bare ? Object.keys(bare.cards[0]).join(",") : "nothing");
+  const datedDoc = () => {
+    const d = doc();
+    d.tags[0].changedAt = SHELF_DAY;
+    d.tags.push({ id: "t-a-refund", kind: "request", clause: { en: "a refund" }, changedAt: REQ_DAY });
+    d.cards[0].changedAt = DAY; d.cards[1].requests = ["t-a-refund"];
+    return d;
+  };
+  {
+    const cat = CT.parseCatalogFile(JSON.stringify(datedDoc()));
+    ST.lsSet(CT.E_CATALOG_STORE, JSON.stringify(cat), true);
+    CT.eApplyCatalog(cat);
+    // As a boot does after the catalog applies, so the rebuild the export makes keeps the catalog's intents; put back after.
+    const ID = await import(MOD("intent-id.js"));
+    ID.snapshotBaseIntents();
+    PK.resetPack();
+    PK.pack.baseCards = JSON.parse(JSON.stringify(cat.cards));
+    PK.pack.overrides = { "c-b": { en: "B mine.", changedAt: OWN_DAY } };
+    AP.setCards(cat.cards.slice());
+    written = null;
+    await CF.exportCatalog();
+    const out = written === null ? null : JSON.parse(written);
+    const got = out ? JSON.stringify([out.cards.map(c => c.changedAt || ""), (out.tags.find(t => t.id === "t-op") || {}).changedAt,
+      (out.tags.find(t => t.kind === "request") || {}).changedAt, V2R.v2Problems(out).length]) : "nothing";
+    check("982d5 the desk's export carries the shelf's and the request's dates, the catalog card's, and the agent's own over the catalog's",
+      got === JSON.stringify([[DAY, OWN_DAY, ""], SHELF_DAY, REQ_DAY, 0]),
+      got + (out ? " | tags " + out.tags.map(t => t.id + ":" + t.kind).join(",") : ""));
+    ID.resetIntentIds();
+  }
   /* A shelf name the category editor saved in a language past the primary, and not Polish, leaves in
      the export as written; one it was not given leaves as the catalog wrote it. */
   const triLang = () => Object.assign(doc(), {
@@ -666,6 +730,21 @@ check("18 control: the plain payload carries none of the new keys through either
   fresh(); land(next(d => bodyIs(d, "c-b", "lead text")));
   check("48 a field the lead changed otherwise stays the agent's", ovB() === JSON.stringify({ en: "my edit" }) && bodyOf("c-b") === "my edit",
     ovB() + " | " + bodyOf("c-b"));
+  fresh(); PK.pack.overrides["c-b"].changedAt = OWN_DAY; land(next(d => bodyIs(d, "c-b", "my edit")));
+  check("982d6 an edit the edition took word for word goes with its date: a date alone is no edit",
+    ovB() === "null", ovB());
+  fresh(); PK.pack.overrides["c-b"].changedAt = OWN_DAY; land(doc());
+  check("982d7 control: the same edition put down again keeps the edit and its date",
+    ovB() === JSON.stringify({ en: "my edit", changedAt: OWN_DAY }), ovB());
+  fresh(); CMD.putOverride("c-b", { changedAt: OWN_DAY });
+  const dateAlone = ovB();
+  fresh(); CMD.putOverride("c-b", { en: "my edit" });
+  const sameEdit = ovB();
+  CMD.putOverride("c-b", { en: "another edit" });
+  const newAt = (PK.pack.overrides["c-b"] || {}).changedAt || "";
+  const fresh8 = Math.abs(Date.parse(newAt) - Date.now()) < 60000 && V2.v2ChangedAt(newAt) === newAt;
+  check("982d8 an edit put down: nothing but a date goes, the same edit again is not dated, a changed one is dated now in UTC",
+    dateAlone === "null" && sameEdit === JSON.stringify({ en: "my edit" }) && fresh8, dateAlone + " | " + sameEdit + " | " + newAt);
   const takeLand = () => {
     const taken = read(next(d => bodyIs(d, "c-b", "lead text")));
     CC.takeTeamText(taken, "c-b", true);

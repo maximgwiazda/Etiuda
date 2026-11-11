@@ -108,6 +108,21 @@ function overrideAgainstBase(base, full){
   if(o.next && Array.isArray(full.nextWas)) o.nextWas=full.nextWas.map(String);
   return o;
 }
+/* THE AGENT'S DATE ON ITS OWN CARD. `entry`, an override or an own card, is dated now where it differs from `was` by
+   anything but the date, and keeps was's date, or none, where it does not: a save that changes nothing dates nothing. */
+function stampChanged(entry, was){
+  const plain=x=>{ const o={}; Object.keys(x||{}).sort().forEach(k=>{ if(k!=="changedAt") o[k]=x[k]; }); return JSON.stringify(o); };
+  if(was && plain(was)===plain(entry)){ if(was.changedAt) entry.changedAt=was.changedAt; else delete entry.changedAt; }
+  else entry.changedAt=new Date().toISOString();
+  return entry;
+}
+/* Every write of an agent's edit of a catalog card goes through here: an edit holding nothing but its date is no edit,
+   and goes, so the card reads as the catalog's again. */
+function putOverride(id, o){
+  if(!pack.overrides) pack.overrides={};
+  if(!o || !Object.keys(o).some(k=>k!=="changedAt")){ delete pack.overrides[id]; return null; }
+  return (pack.overrides[id]=stampChanged(o, pack.overrides[id]));
+}
 /* THE INDICES COUNT THE BLOCKS OF THE LANGUAGE ON SCREEN (cardLang), which is what a drag hands
    over. Every content language with that many blocks moves with it; one with another count is
    left as written, since nothing says which of its blocks was the one dragged. */
@@ -127,14 +142,14 @@ function reorderMacroBlocks(id, fromVi, toVi){
   if(m._custom){
     const ix=(pack.custom||[]).findIndex(x=>x&&x.id===id);
     if(ix<0) return false;
-    Object.assign(pack.custom[ix], moved);
+    const was=Object.assign({}, pack.custom[ix]);
+    stampChanged(Object.assign(pack.custom[ix], moved), was);
   } else {
     /* The editor's rule, so a reorder stores the order and nothing else: every field copied
        here would stand in front of the catalog's own for good, team fixes included. */
     const base=baseCard(id);
     if(!base) return false;
-    const o=overrideAgainstBase(base, Object.assign({}, m, moved));
-    if(Object.keys(o).length) pack.overrides[id]=o; else delete pack.overrides[id];
+    putOverride(id, overrideAgainstBase(base, Object.assign({}, m, moved)));
   }
   savePack([id]);
   eMoveRecent(id, fromVi, toVi);
@@ -164,6 +179,8 @@ export {
   altLabelAt,
   splitPartsRaw,
   overrideAgainstBase,
+  stampChanged,
+  putOverride,
   reorderMacroBlocks,
   reverseBlockIndex
 };

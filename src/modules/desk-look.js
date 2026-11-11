@@ -6,7 +6,7 @@ import { openEditionPanel, editionCountWords } from "./edition-panel.js";
 import { parseCatalogFile, storedCatalog, fileReadCode, fileReadLine } from "./catalog.js";
 import { eReadCatalogFile } from "./host.js";
 import { pack, savePack } from "./pack.js";
-import { baseCard, cardTitle, overrideAgainstBase } from "./card-model.js";
+import { baseCard, cardTitle, overrideAgainstBase, stampChanged } from "./card-model.js";
 import { leadKeyText } from "./team-join.js";
 import { hooks } from "./hooks.js";
 import { t, toast, toastRefusal, uiLang } from "./ui-lang.js";
@@ -87,9 +87,11 @@ function deskToggle(it,hers){
   const on=!deskTaken(it,hers), was=pack.overrides[it.id], held=lookEdits.get(it.id);
   if(on && (!held || held.after!==JSON.stringify(was||null))) lookEdits.set(it.id, {before:was ? JSON.parse(JSON.stringify(was)) : null, after:""});
   const set=from=>{ const moved={}; it.fields.forEach(f=>{ moved[f.key]=deskText(from[f.key]); }); return overrideAgainstBase(base,Object.assign(now,moved)); };
-  const o=on ? set(h) : held ? held.before : set(base);
+  // A take, or a giving back with no edit to return to, is the agent's edit; the edit given back keeps its own date.
+  const o=on ? set(h) : held ? held.before : set(base), some=!!o && Object.keys(o).some(k=>k!=="changedAt");
+  if(some && (on || !held)) stampChanged(o,was);
   if(on) lookEdits.get(it.id).after=JSON.stringify(o||null); else lookEdits.delete(it.id);
-  if(o && Object.keys(o).length) pack.overrides[it.id]=o; else delete pack.overrides[it.id];
+  if(some) pack.overrides[it.id]=o; else delete pack.overrides[it.id];
   savePack();
   hooks.rebuildCards();
   return true;
@@ -143,6 +145,7 @@ function deskTakeNew(it,hers,to){
   const own={}, live=new Set(BASE_M.map(m=>String(m.id)).concat((pack.custom||[]).map(m=>String(m&&m.id))));
   Object.keys(h).forEach(k=>{ if(k.charAt(0)!=="_" && TAKE_LEFT.indexOf(k)<0) own[k]=h[k]; });
   own.id=uid("u:"); own.c=key;
+  stampChanged(own,null);
   const next=(Array.isArray(h.next)?h.next:[]).filter(e=>e && live.has(String(e.to)));
   if(next.length) own.next=next;
   if(!Array.isArray(pack.custom)) pack.custom=[];

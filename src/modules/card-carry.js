@@ -235,7 +235,7 @@ function teamTextTaken(c,id){ const s=takenFor.get(c); return !!s && s.has(Strin
    changed otherwise stays the agent's unless the offer took the team's text; an own card the edition
    now holds becomes that card, with whatever still differs kept as the agent's edit of it. `was` is
    the edition being left, as far as it is known. Returns whether anything moved. */
-const UNSETTLED=["intents","next","nextWas","paxVoc","paxOwn","ext"];
+const UNSETTLED=["intents","next","nextWas","paxVoc","paxOwn","ext","changedAt"];
 function settleEdits(c,list,was){
   const ov=pack.overrides||{}, bases=pack.editBases||{}, takes=takenFor.get(c);
   const now=new Map(list.map(m=>[catalogCardId(m),m])), old=new Map(was.map(m=>[m.id,m]));
@@ -252,14 +252,15 @@ function settleEdits(c,list,was){
       if(!settled(k)) return;
       if(same(k,o[k],m[k]) || (took && text.has(k) && b && !same(k,b[k],m[k]))){ delete o[k]; moved++; }
     });
-    if(!Object.keys(o).length){ delete ov[id]; moved++; }
+    // The date stays with what is left of the edit, and alone is no edit.
+    if(!Object.keys(o).some(k=>k!=="changedAt")){ delete ov[id]; moved++; }
   });
   pack.custom=(pack.custom||[]).filter(own=>{
     const m=own && now.get(own.id);
     if(!m || old.has(own.id)) return true;
     const o={};
     Object.keys(own).forEach(k=>{ if(k!=="id" && settled(k) && !same(k,own[k],m[k])) o[k]=own[k]; });
-    if(Object.keys(o).length) ov[own.id]=o;
+    if(Object.keys(o).length){ if(own.changedAt) o.changedAt=own.changedAt; ov[own.id]=o; }
     moved++;
     return false;
   });

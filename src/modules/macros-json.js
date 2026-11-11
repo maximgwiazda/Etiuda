@@ -1,6 +1,7 @@
 import { cardStorageKeys, cardRequiredKeys, cardFieldKey, cardFieldKeys, CARD_PLAIN_FIELDS,
   CARD_KEY_ALIAS } from "./card-fields.js";
 import { catalogLangs, CONTENT_LANGS } from "./content-model.js";
+import { v2ChangedAt } from "./catalog-v2.js";
 
 // ---- Macros JSON (compliance access / backup) --------------------------------
 // Format v1 pretty-printed JSON (editable in Notepad / any text editor):
@@ -11,7 +12,7 @@ import { catalogLangs, CONTENT_LANGS } from "./content-model.js";
 //   "cards": [
 //     { "id","c","t","en","pl", optional: text fields per cardStorageKeys() - today
 //       "k","note","notePl","tPl" - plus "lockLang","addressEn","addressPl","alt","seq","firstOnly","paxVoc","paxOwn",
-//       "allIntents","intentTop","intents","retired","commits","next","ext" }
+//       "allIntents","intentTop","intents","retired","commits","next","changedAt","ext" }
 //   ]
 // }
 // Flag fields are 0/1. intents: numbers (base index) and/or strings ("i:0").
@@ -41,6 +42,7 @@ function cardToExportPlain(m){
   if(m.retired) o.retired=1;
   if(m.commits) o.commits=1;
   if(Array.isArray(m.next)&&m.next.length) o.next=plainCopy(m.next);
+  if(v2ChangedAt(m.changedAt)) o.changedAt=m.changedAt;
   // Fields this build does not name, carried whole: see V2_CARD_NAMED in catalog-v2.js.
   if(m.ext&&typeof m.ext==="object"&&Object.keys(m.ext).length) o.ext=plainCopy(m.ext);
   return o;
@@ -129,6 +131,7 @@ function parseMacrosData(data){
     }
     if(truthyFlag(rawM.retired)) entry.retired=1;
     if(truthyFlag(rawM.commits)) entry.commits=1;
+    if(v2ChangedAt(rawM.changedAt)) entry.changedAt=rawM.changedAt;
     if(Array.isArray(rawM.next)){
       const next=rawM.next.filter(e=>e&&typeof e==="object"&&!Array.isArray(e)&&String(e.to==null?"":e.to).trim());
       if(next.length) entry.next=plainCopy(next);

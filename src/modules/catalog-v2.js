@@ -46,7 +46,7 @@ const CARD_FLAGS=["firstOnly","allIntents","intentTop"];
    modified are named so they are never carried: an export re-makes them. So is name, which the
    format no longer has and no file of this build may give back. */
 const V2_CARD_NAMED=["id","shelf","title","body","note","bodyShape","k","firstOnly","allIntents","intentTop",
-  "paxVoc","paxOwn","address","lockLang","requests","retired","next","commits"];
+  "paxVoc","paxOwn","address","lockLang","requests","retired","next","commits","changedAt"];
 const V2_HEAD_NAMED=["format","kind","id","rev","date","langs","commentLang","tags","cards","role","facts",
   "greet","stop","sample","evaluation","modified","hash","sig","notes","grew","desk","name","variables"];
 // One phrase per part of the day, and the clock has three. A language whose greeting covers
@@ -55,6 +55,12 @@ const V2_GREET_PARTS=3;
 const DEFAULT_LANGS=[{code:"en",label:"EN"},{code:"pl",label:"PL"}];
 
 function v2Str(v){ return String(v==null?"":v); }
+/* WHEN A CARD OR A TAG WAS LAST CHANGED, an instant in UTC as toISOString writes one. Anything else reads as no date,
+   never as a refused file: the date only fills a column. */
+function v2ChangedAt(v){
+  const s=typeof v==="string" ? v : "";
+  return /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(s) && Number.isFinite(Date.parse(s)) ? s : "";
+}
 function v2Copy(v){ return JSON.parse(JSON.stringify(v)); }
 /* defineProperty, never assignment: a key named __proto__ would set the prototype and vanish. */
 function v2Put(into,k,v){
@@ -639,6 +645,9 @@ function catalogFromV2(data){
     const hue=parseInt(t.hue,10); if(Number.isFinite(hue)) colors[key]=hue;
     if(t.supporting) always.push(key);
   });
+  /* A shelf's and a request's date, by tag id: the key a category and an intent's id both are at runtime. */
+  const tagDates={};
+  shelves.concat(requests).forEach(t=>{ const d=v2ChangedAt(t.changedAt); if(d && v2Str(t.id)) tagDates[v2Str(t.id)]=d; });
   const intents={}; const idxOf={};
   requests.forEach((t,i)=>{ idxOf[v2Str(t.id)]=i; });
   /* The ids, index-aligned with the arrays below, so an export can give a request back the id
@@ -675,6 +684,7 @@ function catalogFromV2(data){
     if(links.length) m.intents=links;
     if(c.retired) m.retired=1;
     if(c.commits) m.commits=1;
+    if(v2ChangedAt(c.changedAt)) m.changedAt=c.changedAt;
     // The entries whole, so a key a later build adds to one survives; a 2.0 reader acts on `to` alone.
     if(Array.isArray(c.next)&&c.next.length) m.next=v2Copy(c.next);
     const more=v2Extra(c,V2_CARD_NAMED); if(more) m.ext=more;
@@ -683,6 +693,7 @@ function catalogFromV2(data){
   const out={ format:1, kind:"playbook-catalog",
               categories:catLabels.categories||{}, icons, colors, intents, cards };
   if(intentIds.length) out.intentIds=intentIds;
+  if(Object.keys(tagDates).length) out.tagsChangedAt=tagDates;
   if(always.length) out.roles={ always };
   codes.slice(1).forEach(code=>{
     const k=v2CatKey(code,codes[0]);
@@ -723,6 +734,8 @@ function catalogToV2(c,opts){
   const codes=v2Codes(c);
   const cats=c.categories||{};
   const always=new Set(((c.roles||{}).always)||[]);
+  const tagDates=(c.tagsChangedAt&&typeof c.tagsChangedAt==="object") ? c.tagsChangedAt : {};
+  const tagDate=id=>Object.prototype.hasOwnProperty.call(tagDates,id) ? v2ChangedAt(tagDates[id]) : "";
   const tags=Object.keys(cats).map(k=>{
     const label={};
     codes.forEach((code,ci)=>{
@@ -733,6 +746,7 @@ function catalogToV2(c,opts){
     const ic=v2Str((c.icons||{})[k]); if(ic) tag.icon=ic;
     const hue=parseInt((c.colors||{})[k],10); if(Number.isFinite(hue)) tag.hue=hue;
     if(always.has(k)) tag.supporting=true;
+    if(tagDate(k)) tag.changedAt=tagDate(k);
     return tag;
   });
   const iv=c.intents||{};
@@ -760,6 +774,8 @@ function catalogToV2(c,opts){
     if(!id||taken[id]) { let n2=i; id="t-r"+n2; while(taken[id]) id="t-r"+(++n2); }
     taken[id]=1;
     reqIds.push(id);
+    // The date the request arrived with, and only under the id it arrived with: a minted id is a request this desk made.
+    if(id===v2Str(declared[i]).trim() && tagDate(id)) row.changedAt=tagDate(id);
     tags.push(Object.assign({ id, kind:"request" }, row));
   }
   const cards=(c.cards||[]).map((m,i)=>{
@@ -792,6 +808,7 @@ function catalogToV2(c,opts){
     if(m.lockLang) card.lockLang=v2Str(m.lockLang);
     if(m.retired) card.retired=true;
     if(m.commits) card.commits=true;
+    if(v2ChangedAt(m.changedAt)) card.changedAt=m.changedAt;
     v2Restore(card,m.ext,V2_CARD_NAMED);
     return card;
   });
@@ -836,4 +853,4 @@ function catalogToV2(c,opts){
   return out;
 }
 
-export { isV2, v2NeedsEngine, catalogFromV2, catalogToV2, v2Mark, v2Unmark, v2AltLabel, v2PartText, v2Problems, v2CatKey, V2_GRAMMAR_LANGS, v2ContentHash, v2SignedBytes, v2SigState, v2RingRead, v2TeamRead, v2TeamSigState, V2_FORMAT, V2_KIND, V2_KNOWN_KEYS, V2_RING_FORMAT, V2_RING_KIND, V2_RING_FILE, V2_TEAM_FORMAT, V2_TEAM_KIND, V2_TEAM_FILE, V2_HARNESS_TEST_KEYID, V2_HARNESS_TEST_PUB, V2_SIG_NONE, V2_SIG_VALID, V2_SIG_INVALID, V2_SIG_UNKNOWN, V2_SIG_ALG };
+export { isV2, v2ChangedAt, v2NeedsEngine, catalogFromV2, catalogToV2, v2Mark, v2Unmark, v2AltLabel, v2PartText, v2Problems, v2CatKey, V2_GRAMMAR_LANGS, v2ContentHash, v2SignedBytes, v2SigState, v2RingRead, v2TeamRead, v2TeamSigState, V2_FORMAT, V2_KIND, V2_KNOWN_KEYS, V2_RING_FORMAT, V2_RING_KIND, V2_RING_FILE, V2_TEAM_FORMAT, V2_TEAM_KIND, V2_TEAM_FILE, V2_HARNESS_TEST_KEYID, V2_HARNESS_TEST_PUB, V2_SIG_NONE, V2_SIG_VALID, V2_SIG_INVALID, V2_SIG_UNKNOWN, V2_SIG_ALG };

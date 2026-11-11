@@ -3793,6 +3793,10 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 /* Finding 4: Library Categories & cards tree with columns (4F) */
 .sx.lm-lib .sx-card:has(.mg-tree){overflow:visible;container:lwtree / inline-size}
 .mg-tree{min-width:0;--cols:minmax(250px,330px) minmax(120px,1fr) 84px 112px 200px 124px 110px 124px}
+/* DATE MODIFIED, drawn only while a row has a date (has-dates), before the buttons, giving way fourth: each step's
+   template with its track, at the specificity of the step's own rule, so the next step's rule still wins by order. */
+.mg-tree.has-dates{--cols:minmax(250px,330px) minmax(120px,1fr) 84px 112px 200px 124px 110px 110px 124px}
+.lw-c.dt{color:var(--dim);font-variant-numeric:tabular-nums}
 .lw-head,.sx.lm-lib .sx-card .mg-cat-row,.mg-cat-body .manage-row.mg-card{
   display:grid!important;grid-template-columns:var(--cols)!important;align-items:center;gap:0 14px;box-sizing:border-box
 }
@@ -3829,11 +3833,17 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
   .lw-head,.sx.lm-lib .sx-card .mg-cat-row,.mg-cat-body .manage-row.mg-card{
     grid-template-columns:minmax(250px,330px) minmax(120px,1fr) 84px 112px 200px 124px 124px!important
   }
+  :where(.mg-tree.has-dates) .lw-head,.sx.lm-lib .sx-card :where(.mg-tree.has-dates) .mg-cat-row,:where(.mg-tree.has-dates) .mg-cat-body .manage-row.mg-card{
+    grid-template-columns:minmax(250px,330px) minmax(120px,1fr) 84px 112px 200px 124px 110px 124px!important
+  }
   .lw-c.sr{display:none!important}
 }
 @container lwtree (max-width: 1400px){
   .lw-head,.sx.lm-lib .sx-card .mg-cat-row,.mg-cat-body .manage-row.mg-card{
     grid-template-columns:minmax(240px,320px) minmax(120px,1fr) 84px 190px 124px 124px!important
+  }
+  :where(.mg-tree.has-dates) .lw-head,.sx.lm-lib .sx-card :where(.mg-tree.has-dates) .mg-cat-row,:where(.mg-tree.has-dates) .mg-cat-body .manage-row.mg-card{
+    grid-template-columns:minmax(240px,320px) minmax(120px,1fr) 84px 190px 124px 110px 124px!important
   }
   .lw-c.sr,.lw-c.st{display:none!important}
 }
@@ -3841,7 +3851,16 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
   .lw-head,.sx.lm-lib .sx-card .mg-cat-row,.mg-cat-body .manage-row.mg-card{
     grid-template-columns:minmax(220px,280px) minmax(120px,1fr) 150px 124px 124px!important
   }
+  :where(.mg-tree.has-dates) .lw-head,.sx.lm-lib .sx-card :where(.mg-tree.has-dates) .mg-cat-row,:where(.mg-tree.has-dates) .mg-cat-body .manage-row.mg-card{
+    grid-template-columns:minmax(220px,280px) minmax(120px,1fr) 150px 124px 110px 124px!important
+  }
   .lw-c.sr,.lw-c.st,.lw-c.lg{display:none!important}
+}
+@container lwtree (max-width: 1040px){
+  :where(.mg-tree.has-dates) .lw-head,.sx.lm-lib .sx-card :where(.mg-tree.has-dates) .mg-cat-row,:where(.mg-tree.has-dates) .mg-cat-body .manage-row.mg-card{
+    grid-template-columns:minmax(220px,280px) minmax(120px,1fr) 150px 124px 124px!important
+  }
+  .lw-c.dt{display:none!important}
 }
 @container lwtree (max-width: 860px){
   .lw-head,.sx.lm-lib .sx-card .mg-cat-row,.mg-cat-body .manage-row.mg-card{
@@ -3884,6 +3903,13 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .lw-ih-int{flex:0 0 284px}
 .lw-ih-cards{flex:1 1 0;min-width:0}
 .lw-ih-acts{flex:0 0 118px}
+/* The row's cell stands the buttons' margin and a gap from them, six pixels further than the heading's gap. */
+.lw-ih-date{flex:0 0 110px;margin-right:6px}
+.sx.lm-lib .mg-intents .manage-row.mg-int .lw-date{flex:0 0 110px;min-width:0;white-space:nowrap;overflow:hidden;
+  font:13px var(--sans);color:var(--dim);font-variant-numeric:tabular-nums}
+@container (max-width: 900px){
+  .lw-ih-date,.sx.lm-lib .mg-intents .manage-row.mg-int .lw-date{display:none!important}
+}
 .sx.lm-lib .mg-intents .manage-row.mg-int{display:flex;align-items:center;flex-wrap:nowrap;gap:6px;padding:8px 4px;border-top:1px solid var(--line);box-sizing:border-box}
 .sx.lm-lib .mg-intents .manage-row.mg-int:first-of-type{border-top:0}
 .sx.lm-lib .mg-intents .manage-row.mg-int .cat-slot{flex:0 0 16px}

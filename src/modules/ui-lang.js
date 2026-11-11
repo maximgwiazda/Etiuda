@@ -308,6 +308,7 @@ UI_STRINGS.pl={
   "Languages":"Języki",
   "Sent, 30 days":"Wysłane, 30 dni",
   "Source":"Źródło",
+  "Date modified":"Data zmiany",
   "catalog":"katalog",
   "changed here":"zmieniona tu",
   "one":"jedna",

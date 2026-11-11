@@ -1,5 +1,5 @@
 import { CATS } from "./content-model.js";
-import { baseCard, cardCommits, cardLang, cardTitle, parts } from "./card-model.js";
+import { baseCard, cardCommits, cardLang, cardTitle, parts, putOverride, stampChanged } from "./card-model.js";
 import { pack, savePack } from "./pack.js";
 import { cards, lang } from "./app-state.js";
 import { statsLearntAfter } from "./desk-stats.js";
@@ -361,12 +361,18 @@ function writeLaneList(ids, said){
   const was=base ? (pack.overrides[card.id] ? JSON.stringify(pack.overrides[card.id]) : null) : (entry.next ? JSON.stringify(entry.next) : null);
   const live=new Set((cards||[]).filter(m=>m&&m.id).map(m=>String(m.id)));
   const w=nextListWrite(card, base, base ? pack.overrides[card.id] : null, ids, live);
-  if(base){ if(w.override) pack.overrides[card.id]=w.override; else delete pack.overrides[card.id]; }
-  else if(w.own.length) entry.next=w.own; else delete entry.next;
+  const wasAt=entry ? entry.changedAt : undefined;
+  if(base) putOverride(card.id, w.override);
+  else {
+    const before=Object.assign({},entry);
+    if(w.own.length) entry.next=w.own; else delete entry.next;
+    stampChanged(entry,before);
+  }
   savePack(); hooks.rebuildCards();
   if(said) offerUndo(said, ()=>{
     if(base){ if(was) pack.overrides[card.id]=JSON.parse(was); else delete pack.overrides[card.id]; }
-    else { const e=(pack.custom||[]).find(x=>x&&String(x.id)===id); if(e){ if(was) e.next=JSON.parse(was); else delete e.next; } }
+    else { const e=(pack.custom||[]).find(x=>x&&String(x.id)===id); if(e){ if(was) e.next=JSON.parse(was); else delete e.next;
+      if(wasAt) e.changedAt=wasAt; else delete e.changedAt; } }
     savePack(); hooks.rebuildCards();
   });
   return true;
