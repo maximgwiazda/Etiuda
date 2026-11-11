@@ -390,6 +390,13 @@ function branchCatalog(who,origin){
   if(name) c.desk.name=name;
   return c;
 }
+/* NO DATE LEAVES IN THE DESK'S OWN FILE (Claude α's decision 12, 2026-11-11): nothing in it tells the lead when the person
+   edited a card or a tag. The lead's Studio dates what it accepts by its own record, so the dates stay on this desk. */
+function undatedBranch(doc){
+  (Array.isArray(doc&&doc.cards)?doc.cards:[]).forEach(c=>{ if(c&&typeof c==="object") delete c.changedAt; });
+  (Array.isArray(doc&&doc.tags)?doc.tags:[]).forEach(t=>{ if(t&&typeof t==="object") delete t.changedAt; });
+  return doc;
+}
 const BRANCH_WAIT_MS=1500;
 let branchTimer=0, branchBusy=null, branchAgain=false;
 /* A CATALOG MADE FROM NOTHING: the empty desk's own catalog id, minted at its first write and kept with the loose layer,
@@ -491,7 +498,7 @@ function writeDeskBranch(){
            grew read before. A catalog with no id keeps the empty desk's layer, so the loose case is asked apart. */
         if(!who || eLayer()!==layer || (loose && catalogLoaded())) return {ok:false};
         if(!origin) origin=looseOrigin(true);
-        return origin ? eWriteBranch(stemOf(origin),JSON.stringify(catalogToV2(branchCatalog(who,origin)))) : {ok:false};
+        return origin ? eWriteBranch(stemOf(origin),JSON.stringify(undatedBranch(catalogToV2(branchCatalog(who,origin))))) : {ok:false};
       })
     : eWriteBranch(origin ? stemOf(origin) : "","");
   const direct=writeShared(loose,origin,holds,layer);

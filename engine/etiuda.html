@@ -28248,6 +28248,15 @@ What you type stays in this browser only.`;
     if (name) c.desk.name = name;
     return c;
   }
+  function undatedBranch(doc) {
+    (Array.isArray(doc && doc.cards) ? doc.cards : []).forEach((c) => {
+      if (c && typeof c === "object") delete c.changedAt;
+    });
+    (Array.isArray(doc && doc.tags) ? doc.tags : []).forEach((t2) => {
+      if (t2 && typeof t2 === "object") delete t2.changedAt;
+    });
+    return doc;
+  }
   var BRANCH_WAIT_MS = 1500;
   var branchTimer = 0;
   var branchBusy = null;
@@ -28359,7 +28368,7 @@ What you type stays in this browser only.`;
     const own = (keep) => keep && holds ? eBranchIdentity().then((who) => {
       if (!who || eLayer() !== layer || loose && catalogLoaded()) return { ok: false };
       if (!origin) origin = looseOrigin(true);
-      return origin ? eWriteBranch(stemOf(origin), JSON.stringify(catalogToV2(branchCatalog(who, origin)))) : { ok: false };
+      return origin ? eWriteBranch(stemOf(origin), JSON.stringify(undatedBranch(catalogToV2(branchCatalog(who, origin))))) : { ok: false };
     }) : eWriteBranch(origin ? stemOf(origin) : "", "");
     const direct = writeShared(loose, origin, holds, layer);
     const run = direct ? direct.catch(() => ({ route: "branch" })).then((r) => {
