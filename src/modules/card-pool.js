@@ -2,7 +2,7 @@ import { nextContentLang } from "./content-model.js";
 import { cardBodyHtml } from "./card-body.js";
 import { cardHitsAlwaysCat, cardHitsSelectedIntent } from "./card-intent.js";
 import { holdFresh, parseCardHtml } from "./card-node.js";
-import { deckSettle, deckUnobserve } from "./deck.js";
+import { deckSettle, deckUnobserve, deckCarry } from "./deck.js";
 import { findCard } from "./card-model.js";
 import { displayBandKey } from "./card-order.js";
 import { isFavourite, ePackEpoch } from "./pack.js";
@@ -20,9 +20,10 @@ function dropCardPool(){ cardPool=new Map(); }
 /* Everything a PICK changes, and nothing else - the rest lives in the signature and forces a
    rebuild instead. It writes the bytes cardBodyHtml writes, which verifyPool checks. */
 function patchCard(el,it){
-  // className is assigned WHOLE: a class put on a card from outside the render dies at the next pick.
+  // className is assigned WHOLE: a class put on a card from outside the render dies at the next pick,
+  // all but the deck's own, which the same render reads again: see deckCarry.
   el.className="card"+(it.hidden?" is-hidden":"")+(it.hit?" intent-hit":"")
-    +(it.catHit?" cat-hit":"")+(it.dragging?" dragging":"");
+    +(it.catHit?" cat-hit":"")+(it.dragging?" dragging":"")+deckCarry(el);
   el.setAttribute("title",it.dragTip);
   el.setAttribute("data-i",it.i);
   el.setAttribute("data-rank",it.band);
@@ -187,5 +188,6 @@ export {
   rebuildCardsInPlace,
   runLangChunks,
   keepPoolAcross,
-  paintList
+  paintList,
+  patchCard
 };
