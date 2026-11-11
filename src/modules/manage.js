@@ -26,7 +26,7 @@ import { intentIdAt, intentIdxFromId, intentIsCustom, intentIsOverridden, intent
 import { applyCatsToGlobal, removeCategory } from "./cat-set.js";
 import { esc } from "./esc.js";
 import { syncRoleDrum } from "./role-drum.js";
-import { $ } from "./dom.js";
+import { $, focusKey, focusSame } from "./dom.js";
 import { macroBlockCount, recountMacros, totalMacroCount } from "./card-counts.js";
 import { rebuildCards } from "./rebuild.js";
 import { render } from "./render.js";
@@ -409,7 +409,7 @@ function mgCatTree(){
        updates the category directly. Fixed / orphan categories use a span. */
     const name=(fixed || k==="__orphan")
       ? '<span class="mg-cat-fixed">'+esc(label)+'</span>'
-      : '<input type="text" class="mg-cat-lab2" data-rename="'+esc(k)+'" value="'+esc(label)+'" spellcheck="false" autocomplete="off" aria-label="'+esc(t("Category name"))+'">';
+      : '<textarea class="mg-cat-lab2" rows="1" data-rename="'+esc(k)+'" spellcheck="false" autocomplete="off" aria-label="'+esc(t("Category name"))+'">'+esc(label)+'</textarea>';
     /* × only on an empty category - the same rule the header pill uses, so no route anywhere
        in the UI deletes a category with cards still in it. */
     const x=(!n && k!=="__orphan")
@@ -1254,8 +1254,10 @@ function refreshRolePage(page){
   page = page || libPage() || document;
   const sec = page.querySelector('details.manage-sec[data-mg="who"] .manage-secbody');
   if(!sec) return;
+  const fk = focusKey(document.activeElement, sec);
   sec.innerHTML = mgWhoSectionHtml();
   wireRolePage(page);
+  if(fk) focusSame(sec, fk);
   const cnt = page.querySelector('details.manage-sec[data-mg="who"] .mg-count');
   if(cnt) cnt.textContent = String(whoOptions().length);
   markCutText(page);
@@ -1291,7 +1293,7 @@ function wireRolePage(page){
 
     row.onkeydown = e => {
       const name = row.getAttribute("data-wrow");
-      if(!name) return;
+      if(!name || e.target !== row) return;
       if(e.key === "Delete"){
         e.preventDefault();
         const delBtn = row.querySelector(".lw-del");
@@ -1328,11 +1330,15 @@ function wireRolePage(page){
         const current = whoOptions();
         const was = Array.isArray(pack.who) ? pack.who.slice() : null;
         const next = current.filter(n => n !== name);
+        const at = current.indexOf(name);
         setWhoList(next);
         if(mgRoleMarked === name){
           mgRoleMarked = next[0] || "";
         }
         refreshRolePage(page);
+        const rows = page.querySelectorAll(".lw-name[data-wrow]");
+        const to = rows[Math.min(at, rows.length - 1)] || page.querySelector("#mgAddWho");
+        if(to) try{ to.focus({preventScroll:true}); }catch(_){}
         const undoMsg = t("Taken off the wheel: {NAME}.").replace("{NAME}", name);
         offerUndo(undoMsg, () => {
           pack.who = was;
@@ -1340,6 +1346,8 @@ function wireRolePage(page){
           syncRoleDrum();
           mgRoleMarked = name;
           refreshRolePage(page);
+          const back = page.querySelector('.lw-name[data-wrow="'+esc(name)+'"]');
+          if(back) try{ back.focus({preventScroll:true}); }catch(_){}
         });
       };
     }
@@ -1485,6 +1493,7 @@ function paintLibrary(host,body){
   if(!host) return;
   const isHist=libView==="history";
   const name=catalogFileName();
+  const fk=focusKey(document.activeElement,host);
   host.innerHTML='<div class="sx lm lm-lib lib-screen lib-list'+(isHist?' is-history':'')+'" tabindex="-1">'
     +'<div class="lm-split">'
     +'<nav class="sx-nav" aria-label="'+esc(t("Library"))+'">'+libraryHeadHtml()
@@ -1519,6 +1528,7 @@ function paintLibrary(host,body){
     markCutText(page);
     updateTreeHoverTitles(page);
   }
+  if(fk) focusSame(host,fk);
   // The tab takes the keyboard where its wiring left focus nowhere inside it, as a dialog does.
   const at=document.activeElement;
   if(!page.contains(at) && !modalOpen() && !openCover() && !(at && at.closest && at.closest("#tourCard")))
@@ -1583,7 +1593,7 @@ function wireLibrary(page){
     };
     btn.onkeydown=e=>{
       if(e.key==="Enter"||e.key===" "){
-        e.preventDefault();
+        e.preventDefault(); e.stopPropagation();
         mgSortClick(btn.getAttribute("data-sort-col"));
       }
     };
@@ -1693,11 +1703,11 @@ function wireLibrary(page){
   page.querySelectorAll("[data-remove-intent]").forEach(btn=>{
     btn.onclick=()=>{ if(removeIntent(btn.getAttribute("data-remove-intent"))) paintLibrary(); };
   });
-  page.querySelectorAll("input.mg-cat-lab2[data-rename]").forEach(inp=>{
+  page.querySelectorAll(".mg-cat-lab2[data-rename]").forEach(inp=>{
     const k=inp.getAttribute("data-rename");
     const orig=()=>CATS[k]||k;
     const apply=()=>{
-      const name=inp.value.trim();
+      const name=inp.value.replace(/\s+/g," ").trim();
       if(!name || name===orig()){ inp.value=orig(); return; }
       if(!pack.catLabels) pack.catLabels={};
       pack.catLabels[k]=name;

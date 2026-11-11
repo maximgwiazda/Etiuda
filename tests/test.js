@@ -4732,12 +4732,12 @@ function dialogFocusTests() {
     return { doc, N, modalEl, modalCard, x, field, save, tourBtn, cover, coverBtn, search, body };
   };
   const sliced = w => new Function("document", "modalEl", "modalCard", "cutLeaves", "setModalBack", "modalHead", "t",
-    "refreshDialogReset", "translateTree", "dressDialogInputs", "markCutText", "openCover",
-    "let modalOpener=null, modalOpenerKbd=false, modalNameFn=null, modalResetFn=null, modalResetOn=\"\", modalResetOff=\"\", lastInputWasKey=false;\n"
+    "refreshDialogReset", "translateTree", "dressDialogInputs", "markCutText", "openCover", "focusKey",
+    "let modalOpener=null, modalOpenerKbd=false, modalOpenerKey=null, modalNameFn=null, modalResetFn=null, modalResetOn=\"\", modalResetOff=\"\", lastInputWasKey=false;\n"
     + [extractDecl(dlg, "function openDialog("), extractDecl(dlg, "const MODAL_TABBABLE="), extractDecl(dlg, "function tabTargetIn(")].join("\n")
     + "\nreturn {openDialog, tabTargetIn};")(
     w.doc, w.modalEl, w.modalCard, () => {}, () => {}, () => "", s => s, () => {}, () => {}, () => {}, () => {},
-    () => (w.coverOn ? w.cover : null));
+    () => (w.coverOn ? w.cover : null), () => null);
   const open = (from, opts) => {
     const w = world(); Object.assign(w, opts || {});
     w.doc.activeElement = typeof from === "function" ? from(w) : w.body;

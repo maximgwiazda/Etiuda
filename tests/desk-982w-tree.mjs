@@ -17,6 +17,9 @@
  *      while sorted drag moves nothing and copywriter line shows; third click dragging works again
  *   t9 tree works: arrow opens/closes category; edit, put away, delete, star card; category edit, supporting, add; search finds card
  *   t10 after list scrolls by 600 px, heading top is at top of scrolling box within 2 px
+ *   t11 in Polish at every width no Library section scrolls sideways, page or panel; every foot button ends inside its panel
+ *   t12 in Polish under 420 px of box every category name shows its words whole
+ *   t13 in Polish every heading shown holds its words in its column; Sent is 124 px wherever shown
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -81,10 +84,10 @@ fs.writeFileSync(path.join(lab, "etiuda-catalog.js"),
 const url = "file:///" + path.join(lab, "etiuda.html").replace(/\\/g, "/");
 let browser = null;
 
-async function boot(viewport = { width: 1280, height: 900 }) {
+async function boot(viewport = { width: 1280, height: 900 }, more = []) {
   const page = await browser.newPage();
   await page.setViewport({ ...viewport, deviceScaleFactor: 1 });
-  await page.evaluateOnNewDocument(() => {
+  await page.evaluateOnNewDocument((more) => {
     try {
       for (const [k, v] of [
         ["eTourDone_v3", "1"],
@@ -93,9 +96,10 @@ async function boot(viewport = { width: 1280, height: 900 }) {
         ["eNameAsked", "1"],
         ["eTheme", "light"],
         ["eRail", "1"],
+        ...more,
       ]) localStorage.setItem(k, v);
     } catch (e) {}
-  });
+  }, more);
   await page.goto(url, { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   const yes = await page.$("#ecYes");
@@ -295,7 +299,7 @@ try {
     const lab = cardRow.querySelector(".mg-card-lab");
     const catRow = cardRow.closest(".mg-cat") && cardRow.closest(".mg-cat").querySelector(".mg-cat-row");
     const catName = catRow && (catRow.querySelector(".mg-cat-lab2") || catRow.querySelector(".mg-cat-fixed"));
-    const textLeft = el => { if (!el) return NaN; if (el.tagName === "INPUT") return el.getBoundingClientRect().left + parseFloat(getComputedStyle(el).paddingLeft) + parseFloat(getComputedStyle(el).borderLeftWidth);
+    const textLeft = el => { if (!el) return NaN; if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") return el.getBoundingClientRect().left + parseFloat(getComputedStyle(el).paddingLeft) + parseFloat(getComputedStyle(el).borderLeftWidth);
       const r = document.createRange(); r.selectNodeContents(el); return r.getBoundingClientRect().left; };
     const cardTextLeft = textLeft(lab), catTextLeft = textLeft(catName);
     const underCategory = Math.abs(cardTextLeft - catTextLeft) <= 6;
@@ -685,6 +689,72 @@ try {
   });
   check(t10Res && t10Res.ok, "t10 after list scrolls by 600 px, heading top is at top of scrolling box within 2 px", t10Res);
 
+  /* t11 to t13 (the designer, dark Polish, 2026-11-11), in Polish, where the words are longest. Max: "It's important to
+     me that there's no horizontal scrolling involved."
+     t11 on every Library section at every width, neither the page nor any panel scrolls sideways, and a foot's buttons
+         end inside their panel ("The foot's buttons wrap, one under another, when they do not fit.")
+     t12 under 420 px of box every category's name shows its words whole ("Under 420 px of box a category's name wraps
+         whole, as a card's does.")
+     t13 every heading shown holds its words inside its column, and Sent is 124 px wherever it is shown */
+  const pl = await boot({ width: 1280, height: 900 }, [["eUiLang", "pl"], ["eTheme", "dark"]]);
+  await openCatmac(pl);
+  const t11bad = [], t12bad = [], t13bad = [];
+  for (const w of widths) {
+    await pl.setViewport({ width: w, height: 900, deviceScaleFactor: 1 });
+    for (const sec of ["catmac", "intents", "who", "data"]) {
+      await pl.evaluate(s => { const e = document.querySelector('.sx-sec[data-lm="' + s + '"]'); if (e) e.click(); }, sec);
+      await sleep(60);
+      const r = await pl.evaluate(() => {
+        const out = [];
+        const de = document.documentElement, pg = document.querySelector("#libPage");
+        if (de.scrollWidth > de.clientWidth + 1) out.push("window " + de.scrollWidth + ">" + de.clientWidth);
+        if (pg && pg.scrollWidth > pg.clientWidth + 1) out.push("page " + pg.scrollWidth + ">" + pg.clientWidth);
+        for (const c of document.querySelectorAll("#libPage .sx-card")) {
+          if (!c.getClientRects().length) continue;
+          if (c.scrollWidth > c.clientWidth + 1) out.push("panel " + c.scrollWidth + ">" + c.clientWidth);
+          const cr = c.getBoundingClientRect();
+          for (const b of c.querySelectorAll(".cat-new>*")) {
+            if (b.getClientRects().length && b.getBoundingClientRect().right > cr.right + 1)
+              out.push((b.textContent || "").trim().slice(0, 30) + " +" + Math.round(b.getBoundingClientRect().right - cr.right));
+          }
+        }
+        return out;
+      });
+      if (r.length) t11bad.push({ w, sec, r: r.slice(0, 3) });
+    }
+    await pl.evaluate(() => { const e = document.querySelector('.sx-sec[data-lm="catmac"]'); if (e) e.click(); });
+    await sleep(60);
+    const r12 = await pl.evaluate(() => {
+      const box = document.querySelector(".sx-card:has(.mg-tree)");
+      if (!box || box.clientWidth >= 420) return null;
+      return [...document.querySelectorAll(".mg-cat-row .mg-cat-lab2,.mg-cat-row .mg-cat-fixed")].filter(e => e.getClientRects().length).map(e => {
+        if (e.tagName === "INPUT" || e.tagName === "TEXTAREA") return { t: e.value, cut: e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1 };
+        const g = document.createRange(); g.selectNodeContents(e); const k = g.getBoundingClientRect(), q = e.getBoundingClientRect();
+        return { t: e.textContent, cut: k.right > q.right + 0.5 || k.bottom > q.bottom + 0.5 };
+      }).filter(x => x.cut).map(x => x.t.slice(0, 24));
+    });
+    if (r12 && r12.length) t12bad.push({ w, cut: r12.slice(0, 4) });
+    const r13 = await pl.evaluate(() => [...document.querySelectorAll(".lw-head > *")].filter(e => e.getClientRects().length && getComputedStyle(e).display !== "none").map(e => {
+      const g = document.createRange(); g.selectNodeContents(e); const k = g.getBoundingClientRect(), q = e.getBoundingClientRect();
+      return { t: e.textContent.trim(), w: Math.round(q.width), words: Math.round(k.width), over: k.width > 0 && k.right > q.right + 0.5, sent: e.classList.contains("lw-h-us") };
+    }).filter(h => h.over || (h.sent && Math.abs(h.w - 124) > 0.5)));
+    if (r13.length) t13bad.push({ w, heads: r13 });
+  }
+  /* the narrowest box the rule names, as t3 makes it */
+  const t12narrow = await pl.evaluate(async () => {
+    const box = document.querySelector(".sx-card:has(.mg-tree)");
+    box.style.width = box.style.maxWidth = "300px";
+    await new Promise(r => setTimeout(r, 60));
+    const cut = [...document.querySelectorAll(".mg-cat-row .mg-cat-lab2")].filter(e => e.getClientRects().length && (e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1)).map(e => e.value.slice(0, 24));
+    box.style.width = box.style.maxWidth = "";
+    return cut;
+  });
+  if (t12narrow.length) t12bad.push({ box: 300, cut: t12narrow.slice(0, 4) });
+  await pl.close();
+  check(!t11bad.length, "t11 in Polish at 546-2560 no Library section scrolls sideways, page or panel, and every foot button ends inside its panel", t11bad.slice(0, 4));
+  check(!t12bad.length, "t12 in Polish under 420 px of box every category's name shows its words whole", t12bad.slice(0, 4));
+  check(!t13bad.length, "t13 in Polish at 546-2560 every heading shown holds its words inside its column, and Sent is 124 px wherever shown", t13bad.slice(0, 4));
+
 } catch (e) {
   check(false, "run crashed: " + e.message, e.stack);
 } finally {
@@ -692,6 +762,6 @@ try {
   try { fs.rmSync(lab, { recursive: true, force: true }); } catch (e) {}
 }
 
-console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=10");
+console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=13");
 console.log(checks + " checks, " + fails + " failed");
-process.exit(fails || checks !== 10 ? 1 : 0);
+process.exit(fails || checks !== 13 ? 1 : 0);

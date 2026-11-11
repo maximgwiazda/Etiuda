@@ -19,6 +19,8 @@
  *   s10 at 1280 every section but the shortcuts stands in the first column, one under another
  *   s7 a search on the one page leaves only the matching rows, each under its heading
  *   s8 openSettings("general") opens General alone; openSettings() opens the one page
+ *   s11 in Polish, 546 to 2560 px: a row's words keep 260 px beside their control or the control stands under them at
+ *       the row's width, its options one line in equal shares; nothing scrolls sideways
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -46,10 +48,10 @@ fs.writeFileSync(path.join(lab, "etiuda-catalog.js"),
 const url = "file:///" + path.join(lab, "etiuda.html").replace(/\\/g, "/");
 let browser = null;
 
-async function boot(viewport = { width: 1280, height: 900 }) {
+async function boot(viewport = { width: 1280, height: 900 }, more = []) {
   const page = await browser.newPage();
   await page.setViewport({ ...viewport, deviceScaleFactor: 1 });
-  await page.evaluateOnNewDocument(() => {
+  await page.evaluateOnNewDocument((more) => {
     try {
       for (const [k, v] of [
         ["eTourDone_v3", "1"],
@@ -58,9 +60,10 @@ async function boot(viewport = { width: 1280, height: 900 }) {
         ["eNameAsked", "1"],
         ["eTheme", "light"],
         ["eRail", "1"],
+        ...more,
       ]) localStorage.setItem(k, v);
     } catch (e) {}
-  });
+  }, more);
   await page.goto(url, { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   const yes = await page.$("#ecYes");
@@ -476,6 +479,68 @@ try {
     && s8res.chosen.length === 1 && s8res.chosen[0] === "All settings";
   check(s8ok, "s8 openSettings(\"general\") opens General alone and openSettings() opens the one page", s8res);
 
+  /* s11 (the designer, dark Polish, 2026-11-11): "where a row's words would get under 200 px beside its control, the
+     control goes under the words at the row's full width, its options equal shares on one line", at 260 px (the designer,
+     later the same day: "move the threshold from 200 px to 260 px"). In Polish, on the one
+     page and every section alone, from 546 to 2560 px: every row's words have 260 px beside their control or stand over
+     it; a control under its words spans the row, a choice's options sit on one line in equal shares with their words
+     whole; nothing scrolls sideways. */
+  const pl = await boot({ width: 1280, height: 1000 }, [["eUiLang", "pl"], ["eTheme", "dark"]]);
+  const s11bad = [];
+  for (const w of [546, 900, 1100, 1280, 1440, 2000, 2560]) {
+    await pl.setViewport({ width: w, height: 1000, deviceScaleFactor: 1 });
+    for (const sec of ["", "general", "appearance", "layout", "notifications", "teams", "data", "about", "ai"]) {
+      await pl.evaluate(x => (x ? openSettings(x) : openSettings()), sec);
+      await sleep(60);
+      const bad = await pl.evaluate(() => {
+        const out = [];
+        const box = document.getElementById("setBody");
+        if (!box) return ["no page"];
+        if (box.scrollWidth > box.clientWidth + 1 || document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)
+          out.push("scrolls sideways " + box.scrollWidth + ">" + box.clientWidth);
+        for (const row of box.querySelectorAll(".set-row")) {
+          const lab = row.querySelector(".set-label"), ctl = row.querySelector(".set-ctl");
+          if (!lab || !ctl || !ctl.offsetParent) continue;
+          const id = row.getAttribute("data-row") || (lab.textContent || "").trim().slice(0, 20);
+          const l = lab.getBoundingClientRect(), c = ctl.getBoundingClientRect(), r = row.getBoundingClientRect(), cs = getComputedStyle(row);
+          const under = c.top >= l.bottom - 1;
+          if (!under && l.width < 259.5) { out.push(id + ": words " + Math.round(l.width) + " px beside the control"); continue; }
+          const field = ctl.querySelector(":scope>.set-seg,:scope>select,:scope>input[type=text]");
+          if (under && field) {
+            const f = field.getBoundingClientRect();
+            const inL = r.left + parseFloat(cs.paddingLeft) + parseFloat(cs.borderLeftWidth), inR = r.right - parseFloat(cs.paddingRight) - parseFloat(cs.borderRightWidth);
+            if (Math.abs(f.left - inL) > 2 || Math.abs(f.right - inR) > 2) out.push(id + ": under its words but " + Math.round(f.width) + " of " + Math.round(inR - inL) + " px");
+          }
+          const opts = [...ctl.querySelectorAll(".set-seg>button")];
+          if (opts.length) {
+            const tops = new Set(opts.map(b => Math.round(b.getBoundingClientRect().top)));
+            const ws = opts.map(b => b.getBoundingClientRect().width);
+            const cut = opts.filter(b => { const g = document.createRange(); g.selectNodeContents(b); const k = g.getBoundingClientRect(), q = b.getBoundingClientRect(); return k.left < q.left - 0.5 || k.right > q.right + 0.5; });
+            if (tops.size > 1) out.push(id + ": options on " + tops.size + " lines");
+            if (Math.max(...ws) - Math.min(...ws) > 1) out.push(id + ": options " + ws.map(Math.round).join("/") + " px");
+            if (cut.length) out.push(id + ": " + cut.map(b => b.textContent.trim()).join(", ") + " cut");
+          }
+        }
+        return out;
+      });
+      if (bad.length) s11bad.push({ w, sec: sec || "all", bad: bad.slice(0, 3) });
+    }
+  }
+  /* her instance of it: on the one page at 1280 Theme, Blur effects and Animations stand under their words, and the
+     interface language, short words beside a short list, stays beside them */
+  await pl.setViewport({ width: 1280, height: 1000, deviceScaleFactor: 1 });
+  await pl.evaluate(() => openSettings());
+  await sleep(60);
+  const at1280 = await pl.evaluate(() => Object.fromEntries(["theme", "glass", "motion", "uilang"].map(k => {
+    const row = document.querySelector('#setBody .set-row[data-row="' + k + '"]');
+    if (!row) return [k, "missing"];
+    const l = row.querySelector(".set-label").getBoundingClientRect(), c = row.querySelector(".set-ctl").getBoundingClientRect();
+    return [k, c.top >= l.bottom - 1 ? "under" : "beside"];
+  })));
+  if (!(at1280.theme === "under" && at1280.glass === "under" && at1280.motion === "under" && at1280.uilang === "beside")) s11bad.push({ w: 1280, sec: "all", rows: at1280 });
+  await pl.close();
+  check(!s11bad.length, "s11 in Polish, 546 to 2560 px, every row's words keep 260 px beside their control or stand over it at the row's width, options one line in equal shares, no sideways scroll", s11bad.slice(0, 5));
+
 } catch (e) {
   check(false, "run crashed: " + (e && e.message ? e.message : e));
 } finally {
@@ -484,5 +549,5 @@ try {
 }
 
 console.log("RESULT checks=" + checks + " failed=" + fails);
-console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=10");
-process.exit(fails || checks !== 10 ? 1 : 0);
+console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=11");
+process.exit(fails || checks !== 11 ? 1 : 0);
