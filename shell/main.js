@@ -23,6 +23,13 @@ const fs = require("node:fs");
 const os = require("node:os");
 const crypto = require("node:crypto");
 const zlib = require("node:zlib");
+/* Node's own connections, the relay's socket among them, trust only the roots bundled with Node; the system's are added
+   here, before any socket opens, so they trust what Chromium's calls trust. A store that cannot be read leaves the bundle
+   as it was, and the desk still starts. tests/system-roots.mjs holds it. */
+try {
+  const tls = require("node:tls");
+  tls.setDefaultCACertificates([...new Set([...tls.getCACertificates("default"), ...tls.getCACertificates("system")])]); /* plant:system-roots */
+} catch { /* the bundled roots stand */ }
 const { watchPage } = require(path.join(__dirname, "page-watch.cjs"));
 const { decideClose, showNotification: showNotificationOf, notifyFirstClose: notifyFirstCloseOf, setLoginItemSettings: setLoginItemSettingsOf,
   createTray, buildTrayMenuTemplate, setJumpList: setJumpListOf, APP_IDS } = require(path.join(__dirname, "tray.cjs"));
@@ -6054,6 +6061,12 @@ function lapseShown(team) {
   if (!v) return null;
   return { step: v.step, until: v.until, readOnly: v.readOnly, swept: v.swept, seen: teamLapseSeen[team] === v.step + ":" + v.until };
 }
+/* This relay team's push socket is down while its asks are answered, so its updates come with the minute's ask. */
+function askingShown(team) {
+  const here = relayHere();
+  if (!here || here.team !== team || !relayChannel || typeof relayChannel.pushDown !== "function") return false;
+  try { return relayChannel.pushDown() === true; } catch { return false; }
+}
 /* The agent dismissed the notice of `step`: kept only while the team is still at that step, so a notice dismissed as the
    step moved on does not hide the next one. */
 function lapseSeen(team, step) {
@@ -6186,6 +6199,7 @@ function leadsView() {
     if (head) row.head = head;
     const lapse = lapseShown(t);
     if (lapse) row.lapse = lapse;
+    if (askingShown(t)) row.asking = true; /* plant:asking-row */
     const fork = forkShown(t);
     if (fork) row.fork = fork; /* plant:fork-row */
     const stranded = strandedShown(t);
@@ -6492,14 +6506,15 @@ async function relayRequest(method, url, headers, body) {
   return { status: res.status, header: n => res.headers.get(n), bytes: bytes };
 }
 /* The socket the relay announces new blobs on, with the session in its header; null where this runtime has none, and the
-   layer then asks on a timer. */
+   layer then asks on a timer. `opens` says the layer is told when it opens, so a close before that reads as refused. */
 function relayConnect(url, headers, on) {
   if (typeof WebSocket !== "function" || !/^wss:\/\//.test(String(url))) return null;
   const ws = new WebSocket(url, { headers: headers });
+  ws.onopen = () => { if (typeof on.open === "function") on.open(); };
   ws.onmessage = e => on.message(typeof e.data === "string" ? e.data : Buffer.from(e.data).toString("utf8"));
   ws.onclose = () => on.close();
   ws.onerror = () => {};
-  return { send: t => { if (ws.readyState === 1) ws.send(t); }, close: () => { try { ws.close(); } catch { /* gone */ } } };
+  return { opens: true, send: t => { if (ws.readyState === 1) ws.send(t); }, close: () => { try { ws.close(); } catch { /* gone */ } } };
 }
 let relayChannel = null, relayAt = "", relayAtPin = "", relaySaidFor = new Set(), relayTimer = null, relayProbeTimer = null;
 function relaySoon() {
@@ -6619,6 +6634,8 @@ function relayRun() {
     },
     /* The team's lapse moved a step, so the page is told now. */
     onLapse: () => sendJoin(theWindow),
+    /* The push socket went down while the asking works, or came back: the team's row says so. */
+    onSocket: () => sendJoin(theWindow),
     /* The team's lead key was seen in two hands, so the page is told now. */
     onFork: () => sendJoin(theWindow),
     /* This desk was left behind by a handover and the key change after it, so the page is told now. */

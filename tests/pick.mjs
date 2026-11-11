@@ -1152,6 +1152,8 @@ try {
   /* Board 945 stage 3 (b) slice 1: background syncer worker in shell/folder/syncer.cjs and node:worker_threads */
   const MODS = ["electron", "node:child_process", "node:path", "node:fs", "node:os", "node:crypto", "node:zlib",
     "node:worker_threads", "./folder/syncer.cjs",
+    /* Board 989: node:tls, only to add the system's roots to Node's own; it reaches no window, screen, clipboard or key. */
+    "node:tls",
     "./win-proxy.cjs", "./page-watch.cjs", "./clip-suggest.cjs", "./desk-reset.cjs", "./tray.cjs", "./embed/suggest.cjs", "./core.cjs", "./relay/channel.cjs", "./blob.cjs"];
   const reqs = (shellCode.match(/\brequire\s*\(\s*[^)]*\)/g) || []).map(r => r.replace(/^require\s*\(\s*|\s*\)$/g, "").replace(/^["']|["']$/g, ""))
     .map(r => { const m = /^path\.join\(__dirname,((?:"[\w.-]+",)*"[\w.-]+)$/.exec(r); return m ? "./" + m[1].replace(/"/g, "").split(",").join("/") : r; });
