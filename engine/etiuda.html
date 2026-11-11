@@ -1467,14 +1467,19 @@ body.role-waits #roleDrum{display:none}
    selector was `.fill select` alone until Settings needed a language list; widened rather than
    copied, for the reason the rest of this release keeps repeating. A text field on that screen
    joins them: one dressing for anything in a settings row that takes a value. */
-.fill select,.set-row select,.set-row input[type=text]{padding:7px 9px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
+.fill select,.set-row select,.set-row input[type=text],.om-fields select,.om-fields input{padding:7px 9px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
   background:var(--field);color:var(--ink);font:13px var(--sans);cursor:default;outline:none;
   box-shadow:inset 0 -1px 0 0 var(--field-edge)}
-.fill select:focus,.set-row select:focus,.set-row input[type=text]:focus{border-color:var(--field-line);box-shadow:inset 0 -2px 0 0 var(--accent)}
+.fill select:focus,.set-row select:focus,.set-row input[type=text]:focus,.om-fields select:focus,.om-fields input:focus{border-color:var(--field-line);box-shadow:inset 0 -2px 0 0 var(--accent)}
 .set-row input[type=text]{width:var(--name-field);max-width:100%;cursor:text}
 /* {INTENT} combobox - a real dropdown that still accepts free text */
 .combo{position:relative;flex:1 1 auto;display:flex;min-width:0}
 .combo input{width:100%;min-width:0}
+/* THE ORGANISATION'S MODEL BESIDE THE SEARCH BOX (org-model.js): quiet words in the dim ink, never a warning colour but for
+   the dot while the shell has paused its asks. Under 720px of window the icon stands alone, its sentence in its title. */
+.org-mark{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;color:var(--dim);font:12.5px var(--sans);white-space:nowrap;cursor:default}
+.om-dot{width:7px;height:7px;border-radius:50%;background:var(--warn)}
+@media (max-width:719.98px){.org-mark .om-words{display:none}}
 /* 22x22 and centred, exactly like .field-clear: the tinted box only shows on hover, so
    its shape is the whole of what it communicates - one square for every clear. */
 .combo-clear{position:absolute;top:50%;transform:translateY(-50%);
@@ -3685,6 +3690,13 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx-keys{display:inline-flex;gap:4px}
 .sx-keys kbd{font:600 12px var(--sans);padding:3px 8px;border-bottom-width:2px;border-radius:5px;background:var(--panel);color:var(--ink)}
 .sx-none{margin:12px 0;color:var(--dim)}
+/* The organisation's model's fields, inside its row in Data and defaults while it is chosen, on a line of their own under
+   the words (settings.js); the values out-specify the settings row's one-field width. */
+.om-fields{flex:1 1 100%;margin-left:42px;display:grid;grid-template-columns:max-content minmax(0,440px);gap:8px 12px;align-items:center;padding:2px 0}
+.om-fields label{font:12.5px var(--sans);color:var(--dim)}
+.set-row .om-fields input[type=text],.set-row .om-fields input[type=password],.set-row .om-fields select{width:100%;max-width:none;min-width:0}
+.om-fields input{cursor:text}
+.om-test{grid-column:2;display:flex;flex-wrap:wrap;align-items:center;gap:10px;font:12.5px var(--sans);color:var(--dim)}
 /* The one page. The rail is a fixed width, so the count follows the window: one column below about
    1000px of the page, two from there, three when the window is wide. A container query on the page
    cannot choose this, because the columns' own width is what the query would measure. At two columns
@@ -4731,7 +4743,9 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
         <!-- Painted whole by updateIntentPlaceholder. Two sentences, and a sweep would translate the key names apart from them. -->
         <span id="intentPh" aria-hidden="true" data-i18n-skip></span>
         <button type="button" class="combo-clear" id="intentClear" title="Clear" aria-label="Clear"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
-      </div></div>
+      </div>
+      <!-- THE ORGANISATION'S MODEL, there only while it ranks: its words, title and dot are org-model.js's. -->
+      <span class="org-mark" id="orgMark" role="img" data-i18n-skip hidden><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4.5 16.5v-11a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v11M12.5 8.5h2a1 1 0 0 1 1 1v7M3 16.5h14M7.5 7.5h2M7.5 10.5h2M7.5 13.5h2"/></svg><span class="om-words"></span><span class="om-dot" hidden></span></span></div>
     <!-- THE FOUR TOOLS, in the box the agent's name used to hold. They left the band because
          the band is the window's top bar now: a title bar carries the window's own controls and
          the application's brand, and a language switch, a facts panel and two menus are the
@@ -8314,6 +8328,66 @@ What you type stays in this browser only.`;
     "Preparing the catalog for search by meaning; word search works meanwhile.": "Trwa przygotowanie katalogu do wyszukiwania według znaczenia; w tym czasie działa wyszukiwanie po słowach.",
     "The model ranks the search beside word matches; nothing leaves this computer": "Model porządkuje wyniki obok dopasowań słów; nic nie opuszcza tego komputera",
     "Off, it matches words only.": "Wyłączone dopasowuje tylko słowa.",
+    /* The organisation's model (board 992): the copywriter's words, 2026-11-11, but for the lines marked as placeholders. */
+    "Suggest intents with the organisation's model": "Propozycje intencji przy użyciu modelu organizacji",
+    "Sends a copied message to the organisation's model at {HOST} and suggests the intents it is closest to. Off, suggestions come from matching words.": "Wysyła skopiowaną wiadomość do modelu organizacji pod adresem {HOST} i proponuje najbliższe jej intencje. Wyłączone: propozycje wynikają z dopasowania słów.",
+    "The organisation's model ranks the suggestions; the copied message is sent to {HOST}.": "Model organizacji ustala kolejność propozycji; skopiowana wiadomość trafia do {HOST}.",
+    "Suggestions from the organisation's model": "Propozycje z modelu organizacji",
+    "Search by meaning with the organisation's model": "Wyszukiwanie według znaczenia przy użyciu modelu organizacji",
+    "From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the organisation's model at {HOST}, to which the search text is sent. Off, it matches words only.": "Od trzeciej wpisanej litery główne wyszukiwanie pokazuje, po wynikach pasujących do słów, karty i intencje najbliższe znaczeniem, uporządkowane przez model organizacji pod adresem {HOST}, do którego trafia tekst wyszukiwania. Wyłączone dopasowuje tylko słowa.",
+    "The organisation's model ranks the search beside word matches; the search text is sent to {HOST}.": "Model organizacji porządkuje wyniki obok dopasowań słów; tekst wyszukiwania trafia do {HOST}.",
+    "The model that ranks search and suggestions": "Model, który ustala kolejność wyszukiwania i propozycji",
+    "Built-in, on this computer": "Wbudowany, na tym komputerze",
+    "The organisation's": "Model organizacji",
+    "The built-in model sends nothing anywhere.": "Wbudowany model niczego nigdzie nie wysyła.",
+    "The search text and the copied message the suggestions are made from are sent to {HOST}, and nowhere else.": "Tekst wyszukiwania i skopiowana wiadomość, z której powstają propozycje, trafiają do {HOST} i nigdzie indziej.",
+    "Set by the organisation": "Ustawione przez organizację",
+    "Whoever manages Etiuda for the organisation can change this.": "Zmienić to może osoba, która zarządza Etiudą w organizacji.",
+    "Group Policy names an AI service setting Etiuda cannot use, so it is ignored: {NAME}": "Zasady grupy ustawiają dla usługi AI wartość, której Etiuda nie może użyć, więc zostaje pominięta: {NAME}",
+    "Service": "Usługa",
+    "Another OpenAI-compatible service": "Inny dostawca zgodny z OpenAI",
+    "Address": "Adres",
+    "Left empty, the service's own address is used: {URL}": "Puste pole oznacza własny adres usługi: {URL}",
+    "Needed for this service: the full https address the organisation gives for it.": "Wymagany dla tej usługi: pełny adres https, który podaje dla niej organizacja.",
+    "Model": "Model",
+    "The model's name exactly as the service lists it.": "Nazwa modelu dokładnie taka, jak podaje ją usługa.",
+    "Key": "Klucz",
+    "Kept on this computer, sealed by the system for this account, and never written to a log.": "Przechowywany na tym komputerze, zapieczętowany przez system dla tego konta i nigdy niezapisywany w dzienniku.",
+    "A key is kept. Typing a new one replaces it.": "Klucz jest zachowany. Wpisanie nowego go zastępuje.",
+    "Test the connection": "Sprawdź połączenie",
+    "Asks the model for a one-word answer. Nothing from the catalog or a conversation is sent.": "Prosi model o odpowiedź jednym słowem. Nic z katalogu ani z rozmowy nie jest wysyłane.",
+    "Testing…": "Sprawdzanie…",
+    "Connected: {HOST} answered, model {MODEL}.": "Połączono: {HOST} odpowiada, model {MODEL}.",
+    "Connected: {HOST} answered in {SECONDS} s, model {MODEL}.": "Połączono: {HOST}, odpowiedź w {SECONDS} s, model {MODEL}.",
+    "organisation's model too slow to reorder": "model organizacji zbyt wolny, by zmieniać kolejność",
+    "{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the built-in model's order stands.": "{HOST} na ogół odpowiada dłużej niż 4 sekundy, za długo, by zmieniać kolejność listy, która jest już czytana, więc zostaje kolejność modelu wbudowanego.",
+    "{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the word matches' order stands.": "{HOST} na ogół odpowiada dłużej niż 4 sekundy, za długo, by zmieniać kolejność listy, która jest już czytana, więc zostaje kolejność dopasowań słów.",
+    "The AI service is set by the organisation's Group Policy, so this setting cannot be changed here.": "Usługę AI ustawiono w zasadach grupy organizacji, więc tego ustawienia nie można tu zmienić.",
+    "The AI service named in the settings is not one Etiuda knows, so nothing was sent: {NAME}": "Etiuda nie zna usługi AI wskazanej w ustawieniach, więc nic nie zostało wysłane: {NAME}",
+    "The AI service's address must be a full https address with no user name, query or fragment, so nothing was sent: {URL}": "Adres usługi AI musi być pełnym adresem https, bez nazwy użytkownika, zapytania i fragmentu, więc nic nie zostało wysłane: {URL}",
+    "This computer cannot keep the AI service's key for this account: no keyring is open to seal it, so the key was not kept.": "Na tym komputerze nie da się przechować klucza usługi AI dla tego konta: żaden magazyn kluczy nie jest otwarty, by go zapieczętować, więc klucz nie został zachowany.",
+    "No AI service is set up yet. One is chosen from the Menu, under Settings, then Data and defaults.": "Usługa AI nie jest jeszcze ustawiona. Wybiera się ją z menu, w Ustawieniach, w części Dane i ustawienia domyślne.",
+    "No model is named for the AI service, so nothing was sent. The model is named from the Menu, under Settings, then Data and defaults.": "Dla usługi AI nie wskazano modelu, więc nic nie zostało wysłane. Model wskazuje się z menu, w Ustawieniach, w części Dane i ustawienia domyślne.",
+    "The organisation's Group Policy sets the AI service's key, and that key goes only to the address the policy sets or to the service's own, never to an address typed here, so nothing was sent.": "Klucz usługi AI ustawiono w zasadach grupy organizacji, a ten klucz trafia tylko pod adres z tych zasad albo pod własny adres usługi, nigdy pod adres wpisany tutaj, więc nic nie zostało wysłane.",
+    "The AI service did not answer in time, so the request was given up.": "Usługa AI nie odpowiedziała na czas, więc zapytanie przerwano.",
+    "The AI service is busy and asked Etiuda to wait; a later try may go through.": "Usługa AI jest zajęta i poprosiła Etiudę o odczekanie; późniejsza próba może się udać.",
+    "organisation's model": "model organizacji",
+    "The organisation's model at {HOST} ranks the search and the suggestions. The search text and the copied message the suggestions are made from are sent there.": "Model organizacji pod adresem {HOST} ustala kolejność wyszukiwania i propozycji. Trafia tam tekst wyszukiwania i skopiowana wiadomość, z której powstają propozycje.",
+    "The organisation's model at {HOST} ranks the search. The search text is sent there.": "Model organizacji pod adresem {HOST} ustala kolejność wyszukiwania. Trafia tam tekst wyszukiwania.",
+    "The organisation's model at {HOST} ranks the suggestions. The copied message they are made from is sent there.": "Model organizacji pod adresem {HOST} ustala kolejność propozycji. Trafia tam skopiowana wiadomość, z której powstają.",
+    "organisation's model not answering, built-in model ranking": "model organizacji nie odpowiada, kolejność ustala model wbudowany",
+    "{HOST} has not answered three times in a row, so the built-in model ranks on this computer, sending nothing, and the desk asks {HOST} again in a minute.": "{HOST} nie odpowiedział trzy razy z rzędu, więc kolejność ustala model wbudowany na tym komputerze, niczego nie wysyłając, a stanowisko zapyta {HOST} ponownie za minutę.",
+    "organisation's model not answering, word matches only": "model organizacji nie odpowiada, tylko dopasowanie słów",
+    "{HOST} has not answered three times in a row, so the search matches words alone, and the desk asks {HOST} again in a minute.": "{HOST} nie odpowiedział trzy razy z rzędu, więc wyszukiwanie dopasowuje tylko słowa, a stanowisko zapyta {HOST} ponownie za minutę.",
+    // placeholder: Claudette, the eight lines below, which her words do not cover
+    "Until the service, the model and the key are complete, the built-in model ranks and nothing is sent.": "Dopóki usługa, model i klucz nie są uzupełnione, kolejność ustala model wbudowany i nic nie jest wysyłane.",
+    "That model name could not be kept.": "Tej nazwy modelu nie udało się zachować.",
+    "That key could not be kept.": "Tego klucza nie udało się zachować.",
+    "The setting could not be saved just now.": "Tego ustawienia nie udało się teraz zapisać.",
+    "No key is kept for this address, so nothing was sent.": "Dla tego adresu nie zachowano klucza, więc nic nie zostało wysłane.",
+    "This build cannot send the test yet, so nothing was sent.": "Ta wersja nie potrafi jeszcze wysłać sprawdzenia, więc nic nie zostało wysłane.",
+    "Could not reach {HOST}.": "Nie udało się połączyć z {HOST}.",
+    "{HOST} answered with an error, so the connection is not confirmed.": "{HOST} odpowiedział błędem, więc połączenie nie zostało potwierdzone.",
     "General": "Ogólne",
     "Notifications": "Powiadomienia",
     "Notifications from Etiuda, also while its window is closed.": "Powiadomienia od Etiudy, także gdy jej okno jest zamknięte.",
@@ -25824,6 +25898,95 @@ What you type stays in this browser only.`;
     syncUpdateOffer();
   }
 
+  // src/modules/org-model.js
+  var org_model_exports = {};
+  __export(org_model_exports, {
+    orgMarkWords: () => orgMarkWords,
+    orgModel: () => orgModel,
+    orgRanks: () => orgRanks,
+    syncOrgMark: () => syncOrgMark,
+    wireOrgModel: () => wireOrgModel
+  });
+  function orgModelHost() {
+    const h = eHost();
+    return h && typeof h.deskAiSettings === "function" ? h : null;
+  }
+  function orgModel() {
+    const h = orgModelHost();
+    if (!h) return null;
+    let s = null;
+    try {
+      s = h.deskAiSettings();
+    } catch (e) {
+      s = null;
+    }
+    return s && typeof s === "object" ? s : null;
+  }
+  function orgRanks(st) {
+    const s = st === void 0 ? orgModel() : st;
+    return !!(s && s.on === true && s.ready === true);
+  }
+  var orgOutcome = { ranking: "organisation", failures: 0, pausedUntil: 0 };
+  var orgPauseT = 0;
+  var ORG_SLOW_MS = 4e3;
+  function orgMarkWords(st, outcome, now) {
+    const host = String(st && st.host || "");
+    const o = outcome || {};
+    const at = (s) => s.split("{HOST}").join(host);
+    if (Number(o.pausedUntil) > now) return eAiModel() ? {
+      paused: true,
+      label: t("organisation's model not answering, built-in model ranking"),
+      title: at(t("{HOST} has not answered three times in a row, so the built-in model ranks on this computer, sending nothing, and the desk asks {HOST} again in a minute."))
+    } : {
+      paused: true,
+      label: t("organisation's model not answering, word matches only"),
+      title: at(t("{HOST} has not answered three times in a row, so the search matches words alone, and the desk asks {HOST} again in a minute."))
+    };
+    if (Number(o.medianMs) > ORG_SLOW_MS) return eAiModel() ? {
+      paused: false,
+      label: t("organisation's model too slow to reorder"),
+      title: at(t("{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the built-in model's order stands."))
+    } : {
+      paused: false,
+      label: t("organisation's model too slow to reorder"),
+      title: at(t("{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the word matches' order stands."))
+    };
+    const search = eSearchOn(), suggest = eAiOn();
+    const title = search && !suggest ? t("The organisation's model at {HOST} ranks the search. The search text is sent there.") : suggest && !search ? t("The organisation's model at {HOST} ranks the suggestions. The copied message they are made from is sent there.") : t("The organisation's model at {HOST} ranks the search and the suggestions. The search text and the copied message the suggestions are made from are sent there.");
+    return { paused: false, label: t("organisation's model"), title: at(title) };
+  }
+  function syncOrgMark(st) {
+    const mark = $("#orgMark");
+    if (!mark) return;
+    const s = st === void 0 ? orgModel() : st;
+    const on = orgRanks(s) && (eAiOn() || eSearchOn());
+    mark.hidden = !on;
+    clearTimeout(orgPauseT);
+    orgPauseT = 0;
+    if (!on) return;
+    const now = Date.now(), w = orgMarkWords(s, orgOutcome, now);
+    const words = mark.querySelector(".om-words"), dot = mark.querySelector(".om-dot");
+    if (words) words.textContent = w.label;
+    if (dot) dot.hidden = !w.paused;
+    mark.classList.toggle("om-paused", w.paused);
+    mark.title = w.title;
+    mark.setAttribute("aria-label", w.title);
+    if (w.paused) orgPauseT = setTimeout(() => syncOrgMark(), Math.min(Number(orgOutcome.pausedUntil) - now + 50, 12e4));
+  }
+  function wireOrgModel() {
+    const h = orgModelHost();
+    if (h && typeof h.onAiRanking === "function") {
+      try {
+        h.onAiRanking((v) => {
+          orgOutcome = v && typeof v === "object" ? v : orgOutcome;
+          syncOrgMark();
+        });
+      } catch (e) {
+      }
+    }
+    syncOrgMark();
+  }
+
   // src/modules/header-menus.js
   var MENU_ICON = {
     manage: "cards",
@@ -25864,6 +26027,7 @@ What you type stays in this browser only.`;
   function wireHeaderMenus() {
     paintMenuIcons();
     wireUpdateOffer();
+    wireOrgModel();
     const host = eHost(), canClose = !!(host && typeof host.close === "function");
     ["#menuQuit", "#menuQuitSep"].forEach((s) => {
       const el = $(s);
@@ -26010,6 +26174,7 @@ What you type stays in this browser only.`;
     paintMenuIcons();
     syncPickerRow();
     syncUpdateOffer();
+    syncOrgMark();
     const pillsBtn = $("#menuPills");
     const railBtn = $("#menuRail");
     if (pillsBtn) {
@@ -34904,8 +35069,8 @@ What you type stays in this browser only.`;
       });
     });
   }
-  function seg2(name, opts, cur) {
-    return '<div class="seg set-seg" data-seg="' + name + '" data-n="' + opts.length + '">' + opts.map((o) => '<button type="button" data-val="' + esc(o.v) + '"' + (o.tip ? ' title="' + esc(o.tip) + '"' : "") + (o.v === cur ? ' class="on"' : "") + ">" + esc(o.t) + "</button>").join("") + "</div>";
+  function seg2(name, opts, cur, fixed) {
+    return '<div class="seg set-seg" data-seg="' + name + '" data-n="' + opts.length + '">' + opts.map((o) => '<button type="button" data-val="' + esc(o.v) + '"' + (fixed ? " disabled" : "") + (o.tip ? ' title="' + esc(o.tip) + '"' : "") + (o.v === cur ? ' class="on"' : "") + ">" + esc(o.t) + "</button>").join("") + "</div>";
   }
   function onoff(name, on, tipOn, tipOff) {
     return seg2(name, [{ v: "off", t: t("Off"), tip: tipOff }, { v: "on", t: t("On"), tip: tipOn }], on ? "on" : "off");
@@ -35118,37 +35283,140 @@ What you type stays in this browser only.`;
     ));
     return rows.length ? [{ rows }] : [];
   }
+  function aiWords(st, builtin, organisation) {
+    return orgRanks(st) ? organisation.split("{HOST}").join(String(st.host || "")) : builtin;
+  }
   function aiGroups() {
     if (!eAiModel()) return [];
+    const st = orgModel(), w = (a, b) => aiWords(st, a, b);
     return [{ rows: [
       row(
         "aisuggest",
         "ai",
-        t("Suggest intents with the built-in model"),
-        t("Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words."),
+        w(t("Suggest intents with the built-in model"), t("Suggest intents with the organisation's model")),
+        w(
+          t("Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words."),
+          t("Sends a copied message to the organisation's model at {HOST} and suggests the intents it is closest to. Off, suggestions come from matching words.")
+        ),
         onoff(
           "aisuggest",
           eAiOn(),
-          t("The model ranks the suggestions; nothing leaves this computer"),
+          w(t("The model ranks the suggestions; nothing leaves this computer"), t("The organisation's model ranks the suggestions; the copied message is sent to {HOST}.")),
           t("Suggestions come from matching words, and the model stays unloaded")
         )
       ),
       row(
         "aisearch",
         "ai",
-        t("Search by meaning with the built-in model"),
-        t("From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the model on this computer. Off, it matches words only."),
+        w(t("Search by meaning with the built-in model"), t("Search by meaning with the organisation's model")),
+        w(
+          t("From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the model on this computer. Off, it matches words only."),
+          t("From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the organisation's model at {HOST}, to which the search text is sent. Off, it matches words only.")
+        ),
         onoff(
           "aisearch",
           eSearchOn(),
-          t("The model ranks the search beside word matches; nothing leaves this computer"),
+          aiSearchOnLine(st),
           t("Off, it matches words only.")
         )
       )
     ] }];
   }
+  function aiSearchOnLine(st) {
+    return aiWords(
+      st,
+      t("The model ranks the search beside word matches; nothing leaves this computer"),
+      t("The organisation's model ranks the search beside word matches; the search text is sent to {HOST}.")
+    );
+  }
+  function orgModelRows() {
+    const st = orgModel();
+    if (!st) return [];
+    const m = st.managed || {}, org = st.choice === "organisation", set = t("Set by the organisation");
+    const lines = [];
+    if (!org) lines.push(t("The built-in model sends nothing anywhere."));
+    else if (orgRanks(st)) lines.push(t("The search text and the copied message the suggestions are made from are sent to {HOST}, and nowhere else.").split("{HOST}").join(String(st.host || "")));
+    else lines.push(t("Until the service, the model and the key are complete, the built-in model ranks and nothing is sent."));
+    if (m.choice) lines.push(set, t("Whoever manages Etiuda for the organisation can change this."));
+    (st.ignored || []).forEach((n) => lines.push(t("Group Policy names an AI service setting Etiuda cannot use, so it is ignored: {NAME}").split("{NAME}").join(String(n))));
+    const choice = seg2("orgmodel", [{ v: "builtin", t: t("Built-in, on this computer") }, { v: "organisation", t: t("The organisation's") }], org ? "organisation" : "builtin", !!m.choice);
+    const html = '<div class="set-row" data-row="orgmodel">' + sxIcon("ai") + '<div class="set-label">' + esc(t("The model that ranks search and suggestions")) + lines.map((l) => "<small>" + esc(l) + "</small>").join("") + '</div><div class="set-ctl">' + choice + "</div>" + (org ? orgModelFieldsHtml(st, set) : "") + "</div>";
+    return [{ key: "orgmodel", html }];
+  }
+  function orgModelFieldsHtml(st, set) {
+    const m = st.managed || {};
+    const services = Array.isArray(st.services) ? st.services : [];
+    const name = { openai: "OpenAI", anthropic: "Anthropic", google: "Google Gemini", azure: "Azure OpenAI", compatible: t("Another OpenAI-compatible service") };
+    const own = (services.filter((s) => s.id === st.provider)[0] || {}).endpoint || "";
+    const opts = (st.provider ? "" : '<option value="" selected></option>') + services.map((s) => '<option value="' + esc(s.id) + '"' + (s.id === st.provider ? " selected" : "") + ">" + esc(name[s.id] || s.id) + "</option>").join("");
+    const tip = (fixed, words) => ' title="' + esc(fixed ? set : words) + '"' + (fixed ? " disabled" : "");
+    const field = (id, label2, ctl) => '<label for="' + id + '">' + esc(label2) + "</label>" + ctl;
+    let h = '<div class="om-fields" data-row="orgmodel-fields">' + field("omService", t("Service"), '<select id="omService"' + (m.provider ? tip(true, "") : "") + ">" + opts + "</select>");
+    if (st.provider && (!own || st.endpoint)) h += field("omAddress", t("Address"), '<input type="text" id="omAddress" autocomplete="off" spellcheck="false" placeholder="' + esc(own || "https://") + '" value="' + esc(st.endpoint || "") + '"' + tip(m.endpoint, own ? t("Left empty, the service's own address is used: {URL}").split("{URL}").join(own) : t("Needed for this service: the full https address the organisation gives for it.")) + ">");
+    h += field("omModel", t("Model"), '<input type="text" id="omModel" autocomplete="off" spellcheck="false" value="' + esc(st.model || "") + '"' + tip(m.model, t("The model's name exactly as the service lists it.")) + ">");
+    h += field("omKey", t("Key"), '<input type="password" id="omKey" autocomplete="off" spellcheck="false" value=""' + tip(m.key, t("Kept on this computer, sealed by the system for this account, and never written to a log.")) + (m.key ? ' placeholder="' + esc(set) + '"' : st.keyKept ? ' placeholder="' + esc(t("A key is kept. Typing a new one replaces it.")) + '"' : "") + ">");
+    h += '<div class="om-test"><button type="button" class="btn" id="omTest" title="' + esc(t("Asks the model for a one-word answer. Nothing from the catalog or a conversation is sent.")) + '">' + esc(t("Test the connection")) + '</button><span id="omTestLine" role="status"></span></div></div>';
+    return h;
+  }
+  function orgModelWhy(why, fields) {
+    const f = fields || {};
+    return why === "managed" ? t("The AI service is set by the organisation's Group Policy, so this setting cannot be changed here.") : why === "provider" ? t("The AI service named in the settings is not one Etiuda knows, so nothing was sent: {NAME}").split("{NAME}").join(String(f.provider || "")) : why === "endpoint" ? t("The AI service's address must be a full https address with no user name, query or fragment, so nothing was sent: {URL}").split("{URL}").join(String(f.endpoint || "")) : why === "unsealed" ? t("This computer cannot keep the AI service's key for this account: no keyring is open to seal it, so the key was not kept.") : why === "model" ? t("That model name could not be kept.") : why === "key" ? t("That key could not be kept.") : t("The setting could not be saved just now.");
+  }
+  function orgTestLine(r) {
+    const host = String(r && r.host || ""), model = String(r && r.model || ""), why = r && r.why;
+    const at = (s) => s.split("{HOST}").join(host).split("{MODEL}").join(model);
+    if (r && r.ok && Number.isFinite(r.ms)) return at(t("Connected: {HOST} answered in {SECONDS} s, model {MODEL}.")).split("{SECONDS}").join((r.ms / 1e3).toFixed(1).replace(".", uiLang() === "pl" ? "," : "."));
+    if (r && r.ok) return at(t("Connected: {HOST} answered, model {MODEL}."));
+    return why === "provider" ? t("No AI service is set up yet. One is chosen from the Menu, under Settings, then Data and defaults.") : why === "endpoint" ? t("Needed for this service: the full https address the organisation gives for it.") : why === "model" ? t("No model is named for the AI service, so nothing was sent. The model is named from the Menu, under Settings, then Data and defaults.") : why === "key" ? t("No key is kept for this address, so nothing was sent.") : why === "keyAway" ? t("The organisation's Group Policy sets the AI service's key, and that key goes only to the address the policy sets or to the service's own, never to an address typed here, so nothing was sent.") : why === "late" ? t("The AI service did not answer in time, so the request was given up.") : why === "busy" ? t("The AI service is busy and asked Etiuda to wait; a later try may go through.") : why === "door" ? t("This build cannot send the test yet, so nothing was sent.") : why === "unreached" ? at(t("Could not reach {HOST}.")) : at(t("{HOST} answered with an error, so the connection is not confirmed."));
+  }
+  function orgModelHostCall() {
+    const h = eHost();
+    return h && typeof h.deskAiSave === "function" ? h : null;
+  }
+  function orgModelSave(fields) {
+    const h = orgModelHostCall();
+    if (!h) return;
+    const was = document.activeElement && document.activeElement.id;
+    Promise.resolve().then(() => h.deskAiSave(fields)).then((r) => {
+      if (!r || r.ok !== true) toastRefusal(orgModelWhy(r && r.why, fields));
+      paintSettings();
+      syncOrgMark();
+      const host = settingsHost(), back = was && host && host.querySelector("#" + was);
+      if (back) try {
+        back.focus({ preventScroll: true });
+      } catch (e) {
+        back.focus();
+      }
+    }, () => toastRefusal(orgModelWhy("")));
+  }
+  function wireOrgModelRow(box) {
+    const on = (id, ev, fn) => {
+      const el = box.querySelector(id);
+      if (el) el["on" + ev] = fn;
+    };
+    on("#omService", "change", (e) => orgModelSave({ provider: String(e.target.value || "") }));
+    on("#omAddress", "change", (e) => orgModelSave({ endpoint: String(e.target.value || "") }));
+    on("#omModel", "change", (e) => orgModelSave({ model: String(e.target.value || "") }));
+    on("#omKey", "change", (e) => {
+      const v = String(e.target.value || "");
+      e.target.value = "";
+      if (v.trim()) orgModelSave({ key: v });
+    });
+    const test = box.querySelector("#omTest"), line = box.querySelector("#omTestLine"), h = eHost();
+    if (test && h && typeof h.deskAiTest === "function") test.onclick = () => {
+      if (line) line.textContent = t("Testing…");
+      test.disabled = true;
+      Promise.resolve().then(() => h.deskAiTest()).then((r) => {
+        test.disabled = false;
+        if (line) line.textContent = orgTestLine(r);
+      }, () => {
+        test.disabled = false;
+        if (line) line.textContent = orgTestLine({});
+      });
+    };
+  }
   function dataGroups() {
-    return [{ rows: [
+    return [{ rows: orgModelRows().concat([
       row(
         "reset",
         "refresh",
@@ -35156,7 +35424,7 @@ What you type stays in this browser only.`;
         t("Puts every setting back as it ships. Cards and your edits are not touched."),
         '<button type="button" class="btn" id="setReset">' + esc(t("Reset defaults")) + "</button>"
       )
-    ] }];
+    ]) }];
   }
   function aboutGroups() {
     const up = updateAbout(E_VERSION);
@@ -35468,6 +35736,7 @@ What you type stays in this browser only.`;
       };
     }
     wireTeamRows(box);
+    wireOrgModelRow(box);
     const joinBtn = box.querySelector("#setJoinTeam");
     if (joinBtn) joinBtn.onclick = () => openJoinPaste();
     const nameBox = box.querySelector("#setAgentName");
@@ -35535,11 +35804,13 @@ What you type stays in this browser only.`;
             if (on) lsDel(E_AI_OFF_KEY);
             else lsSet(E_AI_OFF_KEY, "1");
             eTellAi();
-            toast(on ? t("Suggestions from the built-in model") : t("Suggestions from matching words"));
+            syncOrgMark();
+            toast(on ? aiWords(orgModel(), t("Suggestions from the built-in model"), t("Suggestions from the organisation's model")) : t("Suggestions from matching words"));
           } else if (seg3 === "aisearch") {
             if (on) lsDel(E_SEARCH_AI_OFF_KEY);
             else lsSet(E_SEARCH_AI_OFF_KEY, "1");
             eTellSearch();
+            syncOrgMark();
             if (on) armSearch();
             else clearSearchMeaning();
             try {
@@ -35550,8 +35821,9 @@ What you type stays in this browser only.`;
               hooks.drawIntentRail();
             } catch (e) {
             }
-            toast(on ? t("The model ranks the search beside word matches; nothing leaves this computer") : t("Off, it matches words only."));
-          } else if (seg3 === "raillock") {
+            toast(on ? aiSearchOnLine(orgModel()) : t("Off, it matches words only."));
+          } else if (seg3 === "orgmodel") orgModelSave({ choice: v === "organisation" ? "organisation" : "builtin" });
+          else if (seg3 === "raillock") {
             if (railLocked() !== on) toggleRailLock();
           } else if (seg3 === "pillslock") {
             if (pillsLocked() !== on) togglePillsLock();
@@ -38910,7 +39182,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_margin_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, launch_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, deck_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports, edition_marks_exports, screen_tabs_exports, search_meaning_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_margin_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, launch_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, deck_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports, edition_marks_exports, screen_tabs_exports, search_meaning_exports, org_model_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
