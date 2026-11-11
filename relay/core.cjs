@@ -68,6 +68,23 @@ function canon(v) {
   return "{" + Object.keys(v).filter(k => v[k] !== undefined).sort().map(k => JSON.stringify(k) + ":" + canon(v[k])).join(",") + "}";
 }
 
+/* The UTF-8 length of canon(v) for a value JSON.parse made, where it is at most `max`, and max + 1 past it, found without writing the
+   text: a string is measured by its length before it is quoted, and brackets, commas and colons before what they hold, so no input
+   is walked further than `max` bytes of it. */
+function canonBytesWithin(v, max) {
+  let left = max;
+  const spend = n => (left -= n) >= 0;
+  const text = s => s.length + 2 <= left && spend(Buffer.byteLength(JSON.stringify(s), "utf8"));
+  const walk = x => {
+    if (typeof x === "string") return text(x);
+    if (x === null || typeof x !== "object") return spend(String(JSON.stringify(x)).length);
+    const list = Array.isArray(x), parts = list ? x : Object.keys(x).filter(k => x[k] !== undefined);
+    if (!spend(parts.length ? parts.length * (list ? 1 : 2) + 1 : 2)) return false;
+    return list ? parts.every(walk) : parts.every(k => text(k) && walk(x[k]));
+  };
+  return walk(v) ? max - left : max + 1;
+}
+
 const createBytes = (rt, keyId, t) => Buffer.from("etiuda-relay-create\n" + rt + "\n" + keyId + "\n" + t, "utf8");
 /* A create is signed over the hash of the grant it carries, so a grant lifted from another create does not fit. */
 const create2Bytes = (rt, keyId, t, grant) => Buffer.from("etiuda-relay-create-2\n" + rt + "\n" + keyId + "\n" + t + "\n" + sha256(grantBytes(grant)), "utf8");
@@ -614,7 +631,7 @@ function createCore(deps) {
   function takeWrap(wrap) {
     if (!wrap || typeof wrap !== "object" || Array.isArray(wrap)) return no("bad-signature");
     if (!Number.isSafeInteger(wrap.epoch) || wrap.epoch < 1 || typeof wrap.ct !== "string" || wrap.ct.length < 1) return no("bad-signature");
-    const size = Buffer.byteLength(canon(wrap), "utf8");
+    const size = canonBytesWithin(wrap, 1024);
     let over = size > 1025;
     over = size > 1024; /* plant:S3-wrap-cap */
     if (over) return no("blob-size");
