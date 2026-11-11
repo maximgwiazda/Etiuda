@@ -29,7 +29,7 @@ const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const PLANTS = 11;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 54 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 59 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -81,7 +81,7 @@ function shellOf(o) {
     SPKI_ED25519: SPKI,
     app: { getPath: () => ud },
     engineVersion: () => (opt.running === undefined ? "2.0.0" : opt.running),
-    writeReplacing: (f, t) => fs.writeFileSync(f, t, "utf8"),
+    writeReplacing: opt.writeReplacing || ((f, t) => fs.writeFileSync(f, t, "utf8")),
     theWindow: { isDestroyed: () => false, webContents: { send: (ch, v) => sent.push([ch, v]) } },
     PLACED_ASIDE: !!opt.aside,
     harnessLaunch: () => !!opt.harness,
@@ -171,6 +171,11 @@ try {
     "u2g against a kept serial 5: a lower serial and the same serial with other bytes are refused, the same bytes are the same, a higher serial is taken");
   check(S0.versionAbove("2.0.1", "2.0.0") && S0.versionAbove("2.10.0", "2.9.9") && !S0.versionAbove("2.0.1", "2.0.1")
     && !S0.versionAbove("2.0.0", "2.0.1") && !S0.versionAbove("2.0.1", ""), "u2h releases compare as three numbers, an equal one is not above");
+  const wrongKeyId = note({}, root, n => { n.sig.keyId = "other-key"; return JSON.stringify(n); });
+  /* sig.keyId lies outside the signed bytes and the format never uses it (the test architect, 23:43, refuting Argon's
+     finding 7): a correctly signed note is read whatever it names there, so a key file named otherwise never locks the desk out. */
+  check(!!S0.readNote(wrongKeyId).note,
+    "u2i a correctly signed note is read whatever its sig.keyId names, which is outside the signature: " + why(wrongKeyId));
 
   /* ---- u3: the bounded GET ----------------------------------------------------------------------------------------- */
   const f1 = serve(note());
@@ -224,10 +229,10 @@ try {
     && S4.sent.length === 1 && S4.sent[0][0] === "etiuda:update" && S4.sent[0][1].offer === "2.0.1" && S4.sent[0][1].look === "read",
     "u4b a valid note for 2.0.1 over the running 2.0.0 is offered, kept byte for byte beside desk.json, and sent to the page");
   const l2 = await S4.lookForNote(serve(note({ serial: 4, version: "2.0.2" })));
-  check(l2 === "read" && S4.updateState().offer === "2.0.1" && fs.readFileSync(file, "utf8") === note({ serial: 5, version: "2.0.1" }),
-    "u4c an older note served again, serial 4 naming 2.0.2, changes nothing: the kept 2.0.1 stands");
+  check(l2 === "failed" && S4.updateState().offer === "2.0.1" && fs.readFileSync(file, "utf8") === note({ serial: 5, version: "2.0.1" }),
+    "u4c an older note served again, serial 4 naming 2.0.2, gives look \"failed\": the kept 2.0.1 stands");
   const l2b = await S4.lookForNote(serve(note({ serial: 5, version: "2.0.3" })));
-  check(l2b === "read" && S4.updateState().offer === "2.0.1", "u4d the same serial with another release is refused, the kept note stands");
+  check(l2b === "failed" && S4.updateState().offer === "2.0.1", "u4d the same serial with another release is refused and gives look \"failed\", the kept note stands");
   const refusals = [];
   for (const [label, text] of [["another key", note({ serial: 7, version: "2.0.7" }, other)], ["Studio's", note({ serial: 7, version: "2.0.7", app: "studio" })],
     ["off etiuda.dev", note({ serial: 7, version: "2.0.7", url: "https://example.com/x" })], ["http", note({ serial: 7, version: "2.0.7", url: "http://etiuda.dev/x" })],
@@ -255,6 +260,26 @@ try {
   await S4e.lookForNote(serve(note({ serial: 6, version: "2.0.2", url: "https://etiuda.dev/desk/2.0.2/" })));
   check(S4e.updateState().offer === "2.0.2" && S4e.readNote(fs.readFileSync(path.join(S4e.ud, S4e.NOTE_FILE))).note.serial === 6,
     "u4k a higher serial naming 2.0.2 replaces the kept note and is offered");
+  const S4fresh = shellOf({ running: "2.0.2" });
+  const lBelow = await S4fresh.lookForNote(serve(note({ serial: 1, version: "2.0.1" })));
+  check(lBelow === "failed" && S4fresh.updateState().offer === "",
+    "u4l with nothing kept, a note below the running version gives look \"failed\": " + lBelow);
+  /* u4l2: the same note looked at again, now kept, still proves nothing about newer releases: a look reads only when its
+     note stands at or above the running version (Argon's update-offer finding 1, its second half). */
+  const lAgain = await S4fresh.lookForNote(serve(note({ serial: 1, version: "2.0.1" })));
+  check(lAgain === "failed" && S4fresh.updateState().offer === "",
+    "u4l2 the same note below the running version, looked at again once kept, is still a failed look: " + lAgain);
+  const S4ctrl = shellOf({ running: "2.0.2" });
+  const lAbove = await S4ctrl.lookForNote(serve(note({ serial: 1, version: "2.0.3" })));
+  check(lAbove === "read" && S4ctrl.updateState().offer === "2.0.3",
+    "u4m the control: a newer note gives \"read\" and offers it: " + lAbove);
+  let failWrite = false;
+  const Sw = shellOf({ writeReplacing: (f, t) => { if (failWrite) throw new Error("disk write failed"); fs.writeFileSync(f, t, "utf8"); } });
+  await Sw.lookForNote(serve(note({ serial: 5, version: "2.0.1" })));
+  failWrite = true;
+  const lThrow = await Sw.lookForNote(serve(note({ serial: 6, version: "2.0.2" })));
+  check(lThrow === "failed" && Sw.updateState().offer === "2.0.1",
+    "u4n a write that throws leaves the offer as it was and the look \"failed\": " + lThrow);
 
   /* ---- u5: the release page, and the timer ------------------------------------------------------------------------- */
   const open = S4e.handle["etiuda:update-open"], click = ev => { const e = Object.assign({}, ev); S4e.on["etiuda:update-click"](e); return e; };

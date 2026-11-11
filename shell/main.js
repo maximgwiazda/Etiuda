@@ -9077,7 +9077,7 @@ function noteDay(s) {
 }
 /* The desk's note in `body`, a Buffer or a string: {note} where every check holds, else {why}, the first that failed. */
 function readNote(body, root) {
-  const key = root === undefined ? NOTE_ROOT : root;
+  const key = typeof root === "object" && root ? (root.key || root.public) : (root === undefined ? NOTE_ROOT : root);
   const buf = Buffer.isBuffer(body) ? body : typeof body === "string" ? Buffer.from(body, "utf8") : null;
   if (!buf) return { why: "shape" };
   if (buf.length > NOTE_MAX) return { why: "size" }; /* plant:note-size */
@@ -9181,11 +9181,22 @@ async function lookForNote(fetchFn) {
   try {
     const body = await fetchNote(fetchFn, NOTE_URL), got = readNote(body);
     if (got.note) {
-      look = "read";
-      if (keepNote(got.note, keptNote()) === "taken") {
-        try { writeReplacing(path.join(app.getPath("userData"), NOTE_FILE), body.toString("utf8")); }
-        catch (e) { console.error("etiuda: the version note could not be kept - " + e.message); }
-        noteKept = got.note;
+      const kept = keptNote();
+      const take = keepNote(got.note, kept);
+      /* A look reads only when its note stands at or above the running version: a note below it says nothing of newer
+         releases, kept or not (Argon's update-offer finding 1). */
+      const proves = !versionAbove(engineVersion(), got.note.version);
+      if (take === "same") {
+        look = proves ? "read" : "failed";
+      } else if (take === "taken") {
+        try {
+          writeReplacing(path.join(app.getPath("userData"), NOTE_FILE), body.toString("utf8"));
+          noteKept = got.note;
+          look = proves ? "read" : "failed";
+        } catch (e) {
+          console.error("etiuda: the version note could not be kept - " + e.message);
+          look = "failed";
+        }
       }
     }
   } catch { look = "failed"; }

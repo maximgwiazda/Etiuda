@@ -86,8 +86,8 @@ retry and 740 and 2 to a failure.
   detect that the value exists rather than compare it, until releases carry numbers of their own.
 - **The package is the one setup file**, with nothing beside it, and the install reaches no host on the network.
 - **The hourly look for a new version is switched off** by the DWORD `DeskNoUpdateCheck` set to 1 under
-  `HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Etiuda`: the desk then asks for no version note and offers none. It reads the
-  value and never writes it, and a per-user value does nothing.
+  `HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Etiuda`: the desk then asks for no version note and offers none. The switch is
+  read on Windows only. It reads the value and never writes it, and a per-user value does nothing.
 - **The installer is unsigned until a certificate is in place**, so a machine that allows only signed publishers needs
   each build allowed by its hash.
 - **There is no installer log.** The NSIS build that electron-builder bundles is compiled without logging, so the exit
