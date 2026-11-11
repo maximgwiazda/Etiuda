@@ -445,4 +445,5 @@ try {
 }
 
 console.log("RESULT checks=" + checks + " failed=" + fails);
-process.exitCode = fails ? 1 : 0;
+console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=8");
+process.exit(fails || checks !== 8 ? 1 : 0);
