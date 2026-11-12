@@ -1548,8 +1548,7 @@ Var RemoveDataBox
 !macro TurnLang ID
   !if ${ID} == 1045
     LangString TurnWelcomeTitle ${ID} "Witamy w Etiudzie"
-    # placeholder: Claudette (the welcome names both installs the mode page offers; first-last triage item 1)
-    LangString TurnWelcomeText ${ID} "Etiuda trzyma odpowiedzi zespołu pod ręką, gotowe do skopiowania do każdej rozmowy z klientem.$\r$\n$\r$\nEtiudę można zainstalować dla tego konta Windows, co przy proponowanym folderze nie wymaga uprawnień administratora, albo dla wszystkich użytkowników tego komputera, co ich wymaga. Jeśli Etiuda jest otwarta, instalator poprosi o jej zamknięcie.$\r$\n$\r$\nAby kontynuować, wystarczy nacisnąć Dalej."
+    LangString TurnWelcomeText ${ID} "Etiuda trzyma odpowiedzi zespołu pod ręką, gotowe do skopiowania do każdej rozmowy z klientem.$\r$\n$\r$\nEtiudę można zainstalować dla tego konta Windows, bez uprawnień administratora w folderze proponowanym przez instalator, albo dla wszystkich użytkowników tego komputera, co ich wymaga. Jeśli Etiuda jest otwarta, instalator najpierw poprosi o jej zamknięcie.$\r$\n$\r$\nAby kontynuować, wystarczy nacisnąć Dalej."
     LangString TurnUnWelcomeTitle ${ID} "Usuwanie: Etiuda"
     LangString TurnUnWelcomeText ${ID} "Program Etiuda zostanie usunięty z tego komputera. Jego katalogi i ustawienia zostają na miejscu, więc po ponownej instalacji będą takie jak wcześniej.$\r$\n$\r$\nAby kontynuować, wystarczy nacisnąć Dalej."
 
@@ -1567,8 +1566,7 @@ Var RemoveDataBox
     LangString RemoveDataLine ${ID} "Usuwa również dane Etiudy z tego komputera: ustawienia, rozmowy, licencję, własne karty i gwiazdki oraz miejsce tego stanowiska w zespole, więc zapieczętowany katalog otworzy się dopiero po nowym zaproszeniu od lidera zespołu. Pliki katalogów zostają."
   !else
     LangString TurnWelcomeTitle ${ID} "Welcome to Etiuda"
-    # placeholder: Claudette (the welcome names both installs the mode page offers; first-last triage item 1)
-    LangString TurnWelcomeText ${ID} "Etiuda keeps a team's replies at hand, ready to copy into any conversation with a customer.$\r$\n$\r$\nEtiuda can be installed for this Windows account, which needs no administrator rights for the folder it suggests, or for everyone on this computer, which does. If Etiuda is open, Setup asks for it to be closed first.$\r$\n$\r$\nPress Next to go on."
+    LangString TurnWelcomeText ${ID} "Etiuda keeps a team's replies at hand, ready to copy into any conversation with a customer.$\r$\n$\r$\nEtiuda can be installed for this Windows account, with no administrator rights in the folder Setup suggests, or for everyone on this computer, which needs them. If Etiuda is open, Setup asks for it to be closed first.$\r$\n$\r$\nPress Next to go on."
     LangString TurnUnWelcomeTitle ${ID} "Removing Etiuda"
     LangString TurnUnWelcomeText ${ID} "This removes Etiuda from this computer. Its catalogs and settings stay where they are, so installing it again finds them as they were.$\r$\n$\r$\nPress Next to go on."
 
