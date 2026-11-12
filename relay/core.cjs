@@ -793,7 +793,11 @@ function createCore(deps) {
         let nameUsed = false;
         nameUsed = !!(was && was.spent); /* plant:S3-cancel */
         if (nameUsed) used.push(id);
-        if (was && was.spent) store.put("sp:" + id, SPENT); /* plant:spent-drop */
+        /* A door request's id was the relay's own and no token names it, so it leaves no spent marker; what is kept is that its
+           key and its person were dropped, held against the door until its keep ends, so a drop frees neither to knock again. */
+        const doorDrop = !!(was && was.door === true);
+        if (doorDrop) store.put("dd:" + id, { key: was.key, person: was.person, at: Number.isSafeInteger(was.spentAt) ? was.spentAt : now }); /* plant:door-drop-kept */
+        if (was && was.spent && !doorDrop) store.put("sp:" + id, SPENT); /* plant:spent-drop */
         for (const [t] of store.list("tf:" + id + ":")) store.del(t);
       }
       for (const [k, s] of store.list("ses:")) if (s.inv && drop.has(s.inv)) store.del(k); /* plant:drop-sessions */
@@ -1028,7 +1032,11 @@ function createCore(deps) {
      session reads the lead's answer alone from the start, so a stranger holding a certificate learns nothing of the team. A key
      the lead removed is never let back in by it: only an invitation registered after the removal takes such a key. */
   function byDoor(team, rt, b) {
-    const binds = isId(b.key) && keyMatches(b.key, b.pub) && is(HEX64, b.box) && is(HEX128, b.sig)
+    /* The key's id in its k- form alone, as doorSealKey binds it: removals and devices are kept by that id, so a desk naming itself
+       by its raw public half would pass by its own removal unseen and spend the door's caps. */
+    let named = true;
+    named = is(HEX64, b.pub) && b.key === "k-" + sha256(Buffer.from(b.pub, "hex")).slice(0, 16); /* plant:door-key-form */
+    const binds = isId(b.key) && named && keyMatches(b.key, b.pub) && is(HEX64, b.box) && is(HEX128, b.sig)
       && verified(b.pub, doorHelloBytes(rt, b.challenge, b.key, b.box), b.sig);
     if (!binds) return no("bad-signature"); /* plant:door-bind */
     const held = store.get("door"), refs = plain(held) && Array.isArray(held.refs) ? held.refs : [];
@@ -1042,6 +1050,14 @@ function createCore(deps) {
     const dev = store.get("dev:" + b.key);
     if (dev) return dev.pub === b.pub ? issue(b.challenge, { key: b.key, inv: null }) : no("bad-signature");
     if (store.get("gone:" + b.key)) return no("removed"); /* plant:door-removed */
+    /* A key whose door request the lead dropped is answered as a stranger is until that drop's keep ends. */
+    const dropped = store.list("dd:").filter(([, v]) => doorDropLive(v, clock()));
+    let droppedKey = false;
+    droppedKey = dropped.some(([, v]) => v.key === b.key); /* plant:door-drop-key */
+    if (droppedKey) {
+      if (!spendDoorTry(b.challenge)) return no("rate");
+      return no("not-enrolled");
+    }
     /* A key already bound to a request, by the door or by a token, opens that request's session again and asks nothing new. */
     const bound = boundInvite(b.key);
     if (bound && bound.inv.pub === b.pub)
@@ -1053,6 +1069,8 @@ function createCore(deps) {
     const now = clock(), mark = personMark(team, b.door.person);
     let live = 0, own = 0;
     for (const [, v] of store.list("inv:")) if (doorLive(v, now)) { live++; if (v.person === mark) own++; }
+    /* And the person's requests the lead dropped, inside their keep: a drop does not make room for that person. */
+    for (const [, v] of dropped) if (v.person === mark) own++; /* plant:door-drop-person */
     if (live >= DOOR_LIVE_MAX) return no("team-size"); /* plant:door-live */
     if (own >= DOOR_PER_PERSON) return no("team-size"); /* plant:door-person */
     const stamps = (Array.isArray(store.get("doorAt")) ? store.get("doorAt") : []).filter(at => Number.isSafeInteger(at) && now - at < DOOR_RATE_MS);
@@ -1066,6 +1084,10 @@ function createCore(deps) {
       store.put("doorAt", stamps.concat([now]));
       indexBinding(b.key, id);
     });
+  }
+  /* A door request the lead dropped, still held against its key and its person: inside the keep from when it was made. */
+  function doorDropLive(v, now) {
+    return !!v && Number.isSafeInteger(v.at) && now - v.at <= KEEP_MS;
   }
   /* A door request still held against the door's caps: inside its keep, its key neither enrolled nor removed. */
   function doorLive(v, now) {
@@ -1648,6 +1670,8 @@ function createCore(deps) {
         if (v.door === true) continue;
         store.put("sp:" + id, SPENT); /* plant:spent-kept */
       }
+      /* A dropped door request's key and person, past its keep: nothing of it stays. */
+      for (const [k, v] of store.list("dd:")) if (!doorDropLive(v, now)) store.del(k); /* plant:door-drop-prune */
       /* A put row no upload of this object holds was left by a request that died before its commit: its object is to be deleted. */
       for (const [k] of store.list("put:")) {
         let live = false;
