@@ -107,7 +107,7 @@ const FAIL_FIRST=["unreached","signin-unreached","signin-timeout","signin-browse
 /* In the sign-in preview (shell/main.js signinPreviewing) every moment carries the copywriter's line, drawn in the frame. */
 function signinDoor(v){
   const d=signinDoorOf(v);
-  if(d && v.preview) d.preview=t("Preview only. Sign-in is not set up yet, so nothing here is sent.");
+  if(d && v.preview) d.preview=t("Preview only.")+" "+t("Sign-in is not set up yet, so nothing here is sent.");
   return d;
 }
 function signinDoorOf(v){
@@ -169,17 +169,19 @@ function signinCodeHtml(code, label){
 function signinActsHtml(acts){
   return '<div class="sgn-acts">'+acts.map(a=>'<button type="button" class="btn'+(a.solid?' primary':'')+'" data-signin-act="'+esc(a.act)+'">'+esc(a.label)+'</button>').join("")+'</div>';
 }
-/* Form B's panel: the door's content in the panel's own type, the cannot-be-done moments as its heading and line, no box. */
-/* The preview's line, as the panel and Account draw it; "" outside the preview. */
+/* The preview's line, as the panel and Account draw it, its first sentence the bold one; "" outside the preview. */
 function signinPreviewHtml(v){
-  return v && v.preview ? '<p class="sgn-cap sgn-preview" data-signin-preview>'+esc(t("Preview only. Sign-in is not set up yet, so nothing here is sent."))+'</p>' : "";
+  return v && v.preview ? '<p class="sgn-cap sgn-preview" data-signin-preview><b>'+esc(t("Preview only."))+'</b> <span>'
+    +esc(t("Sign-in is not set up yet, so nothing here is sent."))+'</span></p>' : "";
 }
+/* Form B's panel: the door's content in the panel's own type, the cannot-be-done moments as its heading and line, no box. The
+   preview's line follows the heading and line, just before what they are about. */
 function signinPanelHtml(d){
   let h="";
-  if(d.preview) h+=signinPreviewHtml({preview:true});
   if(d.ident) h+=signinIdentHtml(d.ident);
   if(d.heading) h+='<h4>'+esc(d.heading)+'</h4>';
   if(d.line) h+='<p class="sgn-lede">'+esc(d.line)+'</p>';
+  if(d.preview) h+=signinPreviewHtml({preview:true});
   if(d.wait) h+='<div class="sgn-wait">'+esc(d.wait)+'</div><div class="sgn-run" aria-hidden="true"></div>';
   if(d.team) h+='<p class="sgn-ln">'+esc(d.team)+'</p>';
   if(d.code) h+=signinCodeHtml(d.code, "");
@@ -316,6 +318,7 @@ export {
   signinIdentHtml,
   signinNow,
   signinOnChange,
+  signinPanelHtml,
   signinParts,
   signinPreviewHtml,
   signinProvidersHtml,

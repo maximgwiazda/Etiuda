@@ -1361,8 +1361,12 @@ html.e-still .sgn-run::after{animation:none;transform:translateX(80%)}
 :root[data-theme=dark] .sgn-p.microsoft{background:#2f2f2f;border-color:#2f2f2f;color:#fff}
 :root[data-theme=dark] .sgn-p.google{background:#131314;border-color:#8e918f;color:#e3e3e3}
 .sgn-cap{font-size:12.5px;line-height:1.45;color:var(--dim);margin:10px 0 0;max-width:36em}
-/* The sign-in preview's line (src/modules/signin.js signinPreviewHtml), in the ink's colour and weight. */
-.sgn-cap.sgn-preview{color:var(--ink);font-weight:600}
+/* The sign-in preview's line (src/modules/signin.js signinPreviewHtml), the one-line form of the handoff's section 5 with no dot:
+   its first sentence in the ink at 600, the rest the caption's own. */
+.sgn-cap.sgn-preview b{color:var(--ink);font-weight:600}
+.sgn-lede:has(+ .sgn-preview){margin-bottom:12px}
+.sgn-panel .sgn-preview{margin:12px 0 10px}
+.sgn-top .sgn-preview{max-width:none;margin:0 0 10px}
 .sgn-ft{font-size:12px;line-height:1.4;color:var(--dim);margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line)}
 .sgn-code{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 12px;margin-top:10px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
 .sgn-code code,.sgn-mono{font:600 14.5px var(--mono);letter-spacing:.04em;color:var(--ink);white-space:nowrap}
@@ -8773,7 +8777,8 @@ What you type stays in this browser only.`;
     "The sign-in service cannot be reached just now. Etiuda keeps working with the catalog it has.": "Usługa logowania jest teraz nieosiągalna. Etiuda działa dalej na katalogu, który już ma.",
     "Use another account": "Użyj innego konta",
     "Not signed in": "Bez logowania",
-    "Preview only. Sign-in is not set up yet, so nothing here is sent.": "Tylko podgląd. Logowanie nie jest jeszcze uruchomione, więc nic stąd nie zostanie wysłane.",
+    "Preview only.": "Tylko podgląd.",
+    "Sign-in is not set up yet, so nothing here is sent.": "Logowanie nie jest jeszcze uruchomione, więc nic stąd nie zostanie wysłane.",
     "Sign-in is not set up yet, so nothing was sent. This is a preview.": "Logowanie nie jest jeszcze uruchomione, więc nic nie wysłano. To tylko podgląd.",
     "Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.": "Logowanie przenosi na ten komputer miejsce w licencji i zespół, który przyjął to konto. Etiuda do użytku prywatnego, poza pracą, nie wymaga logowania.",
     "Led by {LEAD}": "Prowadzi {LEAD}",
@@ -26260,7 +26265,7 @@ What you type stays in this browser only.`;
   var FAIL_FIRST = ["unreached", "signin-unreached", "signin-timeout", "signin-browser", "signin-notallowed", "desks", "token", "signin", "signin-refused", "signin-token", "signin-unbound", "signin-state", "signin-none", "signin-preview"];
   function signinDoor(v) {
     const d = signinDoorOf(v);
-    if (d && v.preview) d.preview = t("Preview only. Sign-in is not set up yet, so nothing here is sent.");
+    if (d && v.preview) d.preview = t("Preview only.") + " " + t("Sign-in is not set up yet, so nothing here is sent.");
     return d;
   }
   function signinDoorOf(v) {
@@ -26346,14 +26351,14 @@ What you type stays in this browser only.`;
     return '<div class="sgn-acts">' + acts.map((a) => '<button type="button" class="btn' + (a.solid ? " primary" : "") + '" data-signin-act="' + esc(a.act) + '">' + esc(a.label) + "</button>").join("") + "</div>";
   }
   function signinPreviewHtml(v) {
-    return v && v.preview ? '<p class="sgn-cap sgn-preview" data-signin-preview>' + esc(t("Preview only. Sign-in is not set up yet, so nothing here is sent.")) + "</p>" : "";
+    return v && v.preview ? '<p class="sgn-cap sgn-preview" data-signin-preview><b>' + esc(t("Preview only.")) + "</b> <span>" + esc(t("Sign-in is not set up yet, so nothing here is sent.")) + "</span></p>" : "";
   }
   function signinPanelHtml(d) {
     let h = "";
-    if (d.preview) h += signinPreviewHtml({ preview: true });
     if (d.ident) h += signinIdentHtml(d.ident);
     if (d.heading) h += "<h4>" + esc(d.heading) + "</h4>";
     if (d.line) h += '<p class="sgn-lede">' + esc(d.line) + "</p>";
+    if (d.preview) h += signinPreviewHtml({ preview: true });
     if (d.wait) h += '<div class="sgn-wait">' + esc(d.wait) + '</div><div class="sgn-run" aria-hidden="true"></div>';
     if (d.team) h += '<p class="sgn-ln">' + esc(d.team) + "</p>";
     if (d.code) h += signinCodeHtml(d.code, "");
