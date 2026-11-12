@@ -312,6 +312,10 @@ async function launch(plan) {
       try { const d = JSON.parse(fs.readFileSync(path.join(mirrorDeskDir, f), "utf8")); o[f] = { rev: d.rev, from: d.from }; } catch {}
       return o;
     }, {}),
+    mirrorWritable: mirrorFiles.reduce((o, f) => {
+      try { o[f] = (fs.statSync(path.join(mirrorDeskDir, f)).mode & 0o200) !== 0; } catch {}
+      return o;
+    }, {}),
     branchReachable: mirrorFiles.includes("branch-lamp.ec"),
     inUseReachable: mirrorFiles.includes("in-use.ec"),
     answerSurvived: mirrorFiles.includes("catalog-answer.ec"),
@@ -437,6 +441,11 @@ function makeScenario(kind, extra = {}) {
   }
   if (extra.folderHolds) {
     for (const [name, doc] of Object.entries(extra.folderHolds)) fs.writeFileSync(path.join(ownDesksFolder, name), JSON.stringify(doc));
+  }
+  for (const name of extra.readOnly || []) {
+    for (const dir of [ownDesksFolder, path.join(mirror, "desks", ownDesk.keyId)]) {
+      if (fs.existsSync(path.join(dir, name))) fs.chmodSync(path.join(dir, name), 0o444);
+    }
   }
 
   const heldStem = "branch-lamp-12345678";
@@ -755,8 +764,24 @@ async function main() {
     check(turned && p.shaSame, "945s18 lifting plant:changed-held turns 945s17 red: turned=" + turned + ", shaSame=" + p.shaSame);
   }
 
+  /* Scenario 9 (board 998): the folder's files are marked read-only, and so is the mirror's older copy of one of them. */
+  const s9 = makeScenario("read-only", {
+    mirrorHolds: { "fresh.ec": { format: 2, kind: "etiuda-catalog", id: "fresh", rev: 2, from: "mirror" } },
+    folderHolds: { "fresh.ec": { format: 2, kind: "etiuda-catalog", id: "fresh", rev: 3, from: "folder" } },
+    readOnly: ["fresh.ec", "branch-lamp.ec"],
+  });
+  fs.writeFileSync(path.join(s9.sharedFolder, "etiuda-team.json"), JSON.stringify(signTeamDoc(s9.movedTeamDoc, s9.lead), null, 2));
+  const r9 = runScenario(s9);
+  const s9Desk = path.join(s9.sharedFolder, "desks", s9.ownDeskId);
+  const shareKept = ["fresh.ec", "branch-lamp.ec"].every(n => { try { return (fs.statSync(path.join(s9Desk, n)).mode & 0o200) === 0; } catch { return false; } });
+  check(r9.channelCreated && r9.mirrorMarks["fresh.ec"] && r9.mirrorMarks["fresh.ec"].rev === 3 && r9.mirrorMarks["fresh.ec"].from === "folder"
+      && r9.mirrorWritable["fresh.ec"] === true && r9.branchReachable && r9.mirrorWritable["branch-lamp.ec"] === true && shareKept,
+    "998g a desk following its team to the relay copies the folder's files marked read-only into the mirror writable, over a copy"
+    + " the mirror held marked, and the folder's files keep their marks: " + JSON.stringify({ marks: r9.mirrorMarks, writable: r9.mirrorWritable, shareKept }));
+  for (const n of ["fresh.ec", "branch-lamp.ec"]) { try { fs.chmodSync(path.join(s9Desk, n), 0o666); } catch {} }
+
   // Clean up scenario temp dirs
-  [s1, s2, s3, s4, s6, s7, s8].forEach(s => {
+  [s1, s2, s3, s4, s6, s7, s8, s9].forEach(s => {
     try { fs.rmSync(s.lab, { recursive: true, force: true }); } catch {}
   });
 

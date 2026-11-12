@@ -20,7 +20,7 @@ import { agentName, setAgentName } from "./agent.js";
 import { eHost, eHasShared, E_AI_OFF_KEY, eAiOn, eAiModel, eTellAi, E_SEARCH_AI_OFF_KEY, eSearchOn, eTellSearch } from "./host.js";
 import { armSearch, clearSearchMeaning } from "./search-meaning.js";
 import { hooks } from "./hooks.js";
-import { lapseNote, teamLeads, relayDesk, keySignHtml, forgetTeamLead, pickMovedFolder, joinDoorButton, openJoinPaste, onJoinPainted } from "./team-join.js";
+import { lapseNote, shareRefusedNotes, teamLeads, relayDesk, keySignHtml, forgetTeamLead, pickMovedFolder, joinDoorButton, openJoinPaste, onJoinPainted } from "./team-join.js";
 import { pack } from "./pack.js";
 import { openScreenTab, registerScreen, screenOn, clearScreenOn } from "./screen-tabs.js";
 import { openAbout } from "./about.js";
@@ -187,6 +187,7 @@ function teamRowHtml(l,status,bar){
   if(l.head) notes.push(teamHeadNote(l.head)); /* plant:head-show */
   if(l.awaitsEdition) notes.push(t("This desk waits for the team's lead to publish a first edition."));
   if(l.lapse) notes.push(lapseNote(l.lapse)); /* plant:lapse-row */
+  notes.push(...shareRefusedNotes(l)); /* plant:share-refused-shown */
   /* The shell's push socket is down on this network while its asks are answered. */
   if(l.asking) notes.push({text:t("On this network the team's updates arrive about once a minute, not live."),
     tip:t("This network does not let the live connection to the relay through, so Etiuda asks the relay about once a minute instead. Nothing is lost, and nothing needs doing.")});
