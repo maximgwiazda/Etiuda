@@ -9540,20 +9540,30 @@ function signinCertOk(c, deskKey) {
 }
 /* THE DOORS THE SERVICE HANDS (board 980, the door-finding; Max, 2026-11-12 18:46 and 18:57): beside a certificate, the doors of
    the relay teams on its licence, each {team, rt, url, keyId, lead, box}. A door is kept only whole: the team id and relay id in
-   their shapes, the address in the channel's own (teamChannelOf's, restated here so this section stands alone), the lead's key and
+   their shapes, the address by signinDoorAddressOk on this desk's flag, the lead's key and
    box as hex, and its keyId the lead key's own canonical id ("studio-" and the first 16 hex of the SHA-256 of its public half, as
    leadPrint makes it), checked again here as the service checks it (the test architect's read), so the id this desk pins is never
    a claim. At most SIGNIN_DOORS_MAX; a list of any other shape is no list. The lead's keys come from here, never
    from the relay, so a relay cannot hand this desk a box or a lead of its own. */
 const SIGNIN_DOORS_MAX = 16;
-const SIGNIN_DOOR_URL_RE = /^https:\/\/[a-z0-9.-]+(?::[0-9]{1,5})?(?:\/[A-Za-z0-9._~-]+)*\/?$/;
-function signinDoorsOk(list) {
+/* THE RELAY ADDRESSES A DOOR MAY NAME, and a door naming any other is no door; an invitation's address stays teamChannelOf's alone.
+   `installed` holds on every desk, `unpackaged` also on a desk neither installed nor packaged. tests/door-relays.json holds the
+   samples, each address with its answer installed and unpackaged, which the licence service's door/set is held to as well. */
+const DOOR_RELAYS = Object.freeze({ installed: Object.freeze(["https://etiuda.dev/relay/v1"]), unpackaged: Object.freeze(["https://etiuda.dev/relay-staging/v1"]) });
+/* A door's relay address: a channel by teamChannelOf and one of DOOR_RELAYS. `packed` is the desk's flag, installed or packaged,
+   which takes the installed list alone; anything but false counts as packed. Asked where a door is kept, offered and knocked at. */
+function signinDoorAddressOk(d, packed) {
+  const c = d && typeof d === "object" ? teamChannelOf({ channel: { kind: "relay", rt: d.rt, url: d.url } }) : null; /* plant:door-address-rule */
+  if (!c || c.kind !== "relay") return false;
+  const at = c.url.replace(/\/$/, "");
+  return DOOR_RELAYS.installed.indexOf(at) >= 0 || (packed === false && DOOR_RELAYS.unpackaged.indexOf(at) >= 0); /* plant:door-address-trusted */
+}
+function signinDoorsOk(list, packed) {
   if (!Array.isArray(list) || list.length > SIGNIN_DOORS_MAX) return [];
   const out = [];
   for (const d of list) {
     if (!d || typeof d !== "object" || Array.isArray(d) || Object.keys(d).sort().join(",") !== "box,keyId,lead,rt,team,url") return [];
-    if (!SEALED_TEAM_RE.test(String(d.team)) || !/^[0-9a-f]{32}$/.test(String(d.rt)) || typeof d.url !== "string" || d.url.length > 256
-      || !SIGNIN_DOOR_URL_RE.test(d.url)
+    if (!SEALED_TEAM_RE.test(String(d.team)) || !/^[0-9a-f]{32}$/.test(String(d.rt)) || !signinDoorAddressOk(d, packed) /* plant:door-address-keep */
       || !/^[0-9a-f]{64}$/.test(String(d.lead)) || !/^[0-9a-f]{64}$/.test(String(d.box))) return [];
     if (d.keyId !== "studio-" + crypto.createHash("sha256").update(Buffer.from(d.lead, "hex")).digest("hex").slice(0, 16)) return []; /* plant:door-key-id */
     out.push({ team: String(d.team), rt: String(d.rt), url: String(d.url), keyId: String(d.keyId), lead: String(d.lead), box: String(d.box) });
@@ -9562,21 +9572,21 @@ function signinDoorsOk(list) {
 }
 /* The service's answer read: {ok, code, cert, doors} (cert null where no licence admits the person yet, and then no doors), or
    {ok: false, reason}, the reason "token", "signin", "full" or "desks" as the service says it, else "unreached", which every other
-   answer is. */
-function signinAnswer(res, deskKey) {
+   answer is. `packed` is signinDoorAddressOk's. */
+function signinAnswer(res, deskKey, packed) {
   let j = null;
   try { j = JSON.parse(Buffer.from(res && res.bytes ? res.bytes : []).toString("utf8")); } catch { j = null; }
   if (!j || typeof j !== "object" || Array.isArray(j)) return { ok: false, reason: "unreached" };
   if (res.status === 200 && j.ok === true && SIGNIN_CODE.test(String(j.code))) {
     if (j.certificate === null) return { ok: true, code: String(j.code), cert: null, doors: [] };
     if (signinCertOk(j.certificate, deskKey) && j.certificate.code === j.code)
-      return { ok: true, code: String(j.code), cert: j.certificate, doors: signinDoorsOk(j.doors) }; /* plant:door-read */
+      return { ok: true, code: String(j.code), cert: j.certificate, doors: signinDoorsOk(j.doors, packed) }; /* plant:door-read */
     return { ok: false, reason: "unreached" };
   }
   const said = { 403: ["token", "signin"], 409: ["full", "desks"] }[res.status];
   return { ok: false, reason: said && said.indexOf(j.reason) >= 0 ? j.reason : "unreached" };
 }
-/* One post to signin/desk with `idToken`: `seed` for a first sign-in, "" for a renewal. `io` {serviceAsk(url, body), sign(bytes)}. */
+/* One post to signin/desk with `idToken`: `seed` for a first sign-in, "" for a renewal. `io` {serviceAsk(url, body), sign(bytes), packed}. */
 async function signinSeat(io, provider, deskKey, idToken, seed, now) {
   const body = signinDeskBody(provider, idToken, deskKey, seed, now(), io.sign);
   if (!body) { signinTrace(io, provider, "service", "unreached", { detail: "the request did not form" }); return { ok: false, reason: "unreached" }; }
@@ -9584,7 +9594,7 @@ async function signinSeat(io, provider, deskKey, idToken, seed, now) {
   let res = null;
   try { res = await io.serviceAsk(SIGNIN_SERVICE, body); }
   catch (e) { signinTrace(io, provider, "service", "unreached", { detail: e && e.message }, hide); return { ok: false, reason: "unreached" }; }
-  const ans = signinAnswer(res, deskKey);
+  const ans = signinAnswer(res, deskKey, io.packed); /* plant:door-seat-packed */
   signinTrace(io, provider, "service", ans.ok ? "ok" : ans.reason, ans.ok ? { status: res.status, detail: "certificate " + (ans.cert ? "given" : "none") }
     : signinTraceSaid(res, hide), hide);
   return ans;
@@ -9634,9 +9644,9 @@ function signinDoorRequest(doc, deskId, deskKey, cert, door, now) {
 }
 /* The sign-in's file beside desk.json, read whole or not at all: {held: {provider, refresh, sub, seed, code, cert, at, checked,
    reached, said, ask, doors} or null}. `refresh` and `sub` are signinKeep's, "" where none is kept, and nothing else in it is a secret;
-   `ask` says the person's own sign-in is wanted again; a file of another format holds nothing. */
+   `ask` says the person's own sign-in is wanted again; a file of another format holds nothing. `packed` is signinDoorAddressOk's. */
 const SIGNIN_FILE = "signin.json";
-function signinFileRead(text) {
+function signinFileRead(text, packed) {
   let d = null;
   try { d = JSON.parse(String(text)); } catch { d = null; }
   const out = { held: null };
@@ -9647,7 +9657,7 @@ function signinFileRead(text) {
       seed: String(h.seed), code: SIGNIN_CODE.test(String(h.code)) ? String(h.code) : "",
       cert: h.cert && typeof h.cert === "object" && Number.isSafeInteger(h.cert.until) ? h.cert : null,
       at: num(h.at), checked: num(h.checked), reached: h.reached !== false, said: typeof h.said === "string" ? h.said : "", ask: h.ask === true,
-      doors: signinDoorsOk(h.doors) };
+      doors: signinDoorsOk(h.doors, packed) };
   return out;
 }
 function signinFileText(s) { return JSON.stringify({ format: 2, held: s.held || null }, null, 1) + "\n"; }
@@ -9663,6 +9673,8 @@ const SIGNIN_CHECK_GAP_MS = 10 * 1000;
 let signinStore, signinBusy = null, signinSaid = "", signinClick = null, signinTimer = null, signinWrote = "", signinCheckAt = 0;
 /* Google's client secret, where the package step put one beside the asar: read here once, at start, installed only. */
 if (INSTALLED) { try { signinPacked = signinSecretRead(fs.readFileSync(path.join(String(process.resourcesPath || ""), SIGNIN_SECRET_FILE), "utf8")); } catch { /* none packaged: every byte as before */ } }
+/* This desk's flag for the relays a door may name (signinDoorAddressOk): installed or packaged. */
+const SIGNIN_DESK_PACKED = INSTALLED || !!app.isPackaged; /* plant:door-packed */
 /* The sign-in lab's file, where ETIUDA_SIGNIN_LAB names one: read here once, at start, and never on a desk installed or packaged. */
 if (!INSTALLED && !app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) { /* plant:lab-packaged */
   let text = "";
@@ -9679,7 +9691,7 @@ function signinState() {
   if (signinStore !== undefined) return signinStore;
   let text = "";
   try { text = fs.readFileSync(path.join(app.getPath("userData"), SIGNIN_FILE), "utf8"); } catch { text = ""; }
-  signinStore = signinFileRead(text);
+  signinStore = signinFileRead(text, SIGNIN_DESK_PACKED); /* plant:door-file-packed */
   return signinStore;
 }
 function signinSave() {
@@ -9724,6 +9736,7 @@ function signinDoorInvite(team, rt) {
   if (!inv || inv.door !== true) return undefined;
   /* A door request the relay or the lead turned away, or refused as removed, knocks no more; Cancel forgets it. */
   if (inv.end !== undefined) return null; /* plant:door-ended-quiet */
+  if (!signinDoorAddressOk(inv, SIGNIN_DESK_PACKED)) return null; /* plant:door-address-knock */
   const held = signinState().held, cert = held && held.cert, me = branchIdentity(false);
   if (inv.rt !== rt || !me || !/^[0-9a-f]{64}$/.test(String(inv.box)) || !signinCertOk(cert, me.key) || !(cert.until > Date.now())) return null; /* plant:door-invite-cert */
   const out = { door: cert, box: inv.box };
@@ -9756,10 +9769,11 @@ function signinDoorsShown(held, now) {
   const me = branchIdentity(false);
   if (!held || !held.cert || !me || !signinCertOk(held.cert, me.key) || !(held.cert.until > now) || pinnedLead() || teamJoin) return []; /* plant:door-shown */
   return (held.doors || []).map((d, n) => {
+    if (!signinDoorAddressOk(d, SIGNIN_DESK_PACKED)) return null; /* plant:door-address-offer */
     let host = "";
     try { host = new URL(d.url).host; } catch { host = ""; }
     return { n: n, host: host, print: leadPrint(d.lead) };
-  });
+  }).filter(Boolean);
 }
 /* A JOIN AT A DOOR the person pressed (the door-finding): the join A4's knock already serves, `door: true` with the lead's key and
    box from the door, which came from the licence service over its own address, never from the relay. The lead is pinned as an
@@ -9834,6 +9848,7 @@ function signinIo(run) {
     keep: text => signinKeep(safeStorage, process.platform, text), kept: sealed => signinKept(safeStorage, sealed),
     page: ok => signinPageHtml(ok),
     trace: SIGNIN_TRACE_ASKED ? line => console.error(line) : null, /* plant:trace-wired */
+    packed: SIGNIN_DESK_PACKED, /* plant:door-io-packed */
   };
 }
 /* A first sign-in's outcome kept: the refresh token and the sub sealed where the system seals for real, the seed beside, and the
