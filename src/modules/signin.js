@@ -27,7 +27,10 @@ function signinRead(v){
     refused: typeof o.refused==="string" ? o.refused : "",
     busy: known(o.busy) ? o.busy : "",
     said: typeof o.said==="string" ? o.said : "",
-    preview: o.preview===true && Array.isArray(o.offered) && o.offered.some(known)
+    preview: o.preview===true && Array.isArray(o.offered) && o.offered.some(known),
+    /* The provider's page of the sign-in that waits, only while one does. */
+    link: known(o.busy) && typeof o.link==="string" && /^https:\/\/\S+$/.test(o.link) ? o.link : "",
+    keeps: o.keeps!==false
   };
 }
 let signinV=signinRead(null);
@@ -118,7 +121,7 @@ function signinDoorOf(v){
   if(v.busy) return {moment:"waiting", heading:t("Finish signing in in the browser"),
     line:named(t("The browser has opened {PROVIDER}'s sign-in page. Etiuda waits here and carries on by itself when you come back."),"{PROVIDER}",SIGNIN_NAMES[v.busy]),
     wait:named(t("Waiting for {PROVIDER}…"),"{PROVIDER}",SIGNIN_NAMES[v.busy]),
-    acts:[{act:"again", label:t("Open the browser again")}, {act:"stop", label:t("Cancel")}]};
+    acts:[{act:"again", label:t("Open the browser again")}, {act:"stop", label:t("Cancel")}], link:v.link};
   if(!v.signedIn){
     if(FAIL_FIRST.indexOf(v.said)>=0){
       const s=signinSay(v.said, v);
@@ -177,6 +180,15 @@ function signinPreviewHtml(v){
   return v && v.preview ? '<p class="sgn-cap sgn-preview" data-signin-preview><b>'+esc(t("Preview only."))+'</b> <span>'
     +esc(t("Sign-in is not set up yet, so nothing here is sent."))+'</span></p>' : "";
 }
+/* The sign-in link while the browser is awaited, last in the waiting state wherever it is drawn: the line in the preview line's
+   form, then the link in a read-only field that never wraps, a click selecting all of it, and the code's own Copy; "" with no link. */
+function signinLinkHtml(link){
+  if(!link) return "";
+  return '<div class="sgn-link" data-signin-link><p class="sgn-cap"><b>'+esc(t("Browser did not open?"))+'</b> <span>'
+    +esc(t("Paste this link into a browser on this computer."))+'</span></p><div class="sgn-link-row"><input type="text" class="sgn-link-f" readonly'
+    +' spellcheck="false" autocomplete="off" aria-label="'+esc(t("Paste this link into a browser on this computer."))+'" value="'+esc(link)+'">'
+    +'<button type="button" class="btn" data-signin-act="copylink">'+esc(t("Copy"))+'</button></div></div>';
+}
 /* Form B's panel: the door's content in the panel's own type, the cannot-be-done moments as its heading and line, no box. The
    preview's line follows the heading and line, just before what they are about. */
 function signinPanelHtml(d){
@@ -193,6 +205,7 @@ function signinPanelHtml(d){
   if(d.cap) h+='<p class="sgn-cap">'+esc(d.cap)+'</p>';
   if(d.privacy) h+='<p class="sgn-cap">'+esc(d.privacy)+'</p>';
   if(d.acts && d.acts.length) h+=signinActsHtml(d.acts);
+  if(d.link) h+=signinLinkHtml(d.link);
   if(d.foot) h+='<p class="sgn-ft">'+esc(d.foot)+'</p>';
   return h;
 }
@@ -260,8 +273,7 @@ function signinCall(name, arg){
   if(!h || typeof h[name]!=="function") return Promise.resolve(null);
   try{ return Promise.resolve(h[name](arg)).catch(()=>null); }catch(e){ return Promise.resolve(null); }
 }
-function signinCopy(){
-  const text=signinV.code;
+function signinCopy(text){
   if(!text) return;
   try{ const h=eHost(); if(h && typeof h.noteOwnText==="function") h.noteOwnText(text); }catch(e){}
   try{ if(navigator.clipboard&&window.isSecureContext) navigator.clipboard.writeText(text).catch(()=>{}); }catch(e){}
@@ -269,7 +281,8 @@ function signinCopy(){
 /* One act of the door or of Account, by its data-signin-act. */
 function signinAct(act){
   if(act==="account"){ closeSigninPanel(); if(typeof hooks.openSettings==="function") hooks.openSettings("account"); return; }
-  if(act==="copy"){ signinCopy(); return; }
+  if(act==="copy"){ signinCopy(signinV.code); return; }
+  if(act==="copylink"){ signinCopy(signinV.busy ? signinV.link : ""); return; }
   if(act==="choose"){ signinChoosing=true; signinV=Object.assign({}, signinV, {said:""}); paintSigninPanel(); signinTell(); return; }
   if(act==="stop"){ signinCall("signinStop"); return; }
   if(act==="again"){ signinCall("signinAgain"); return; }
@@ -278,15 +291,20 @@ function signinAct(act){
   if(act==="another"){ signinChoosing=true; signinTell(); return; }
   if(act==="keep"){ signinChoosing=false; signinTell(); }
 }
-/* A provider's button, anywhere: the preload has already named the trusted click; the shell runs the rest. */
-function signinStart(id){
+/* A provider's button, anywhere: the preload has already named the trusted click; the shell runs the rest. The answer opens the
+   header's panel only for a press made there: one made in Account (`here` "account") is answered in Account alone. */
+function signinStart(id, here){
   signinChoosing=false;
-  signinCall("signIn", id).then(v=>{ if(v) signinChanged(v, true); });
+  signinCall("signIn", id).then(v=>{ if(v) signinChanged(v, here!=="account"); });
 }
 function signinChoosingNow(){ return signinChoosing; }
+/* A click in the link's field selects all of it. */
+function signinLinkSelect(f){ try{ f.select(); }catch(e){ /* a field gone with the wait */ } }
 function signinClicks(root){
   if(!root) return;
   root.addEventListener("click", e=>{
+    const f=e.target && e.target.closest ? e.target.closest(".sgn-link-f") : null;
+    if(f){ signinLinkSelect(f); return; }
     const b=e.target && e.target.closest ? e.target.closest("button") : null;
     if(!b) return;
     if(b.dataset.eOpen==="signin"){ signinStart(b.dataset.eProvider); return; }
@@ -319,6 +337,8 @@ export {
   signinCodeText,
   signinDoor,
   signinIdentHtml,
+  signinLinkHtml,
+  signinLinkSelect,
   signinNow,
   signinOnChange,
   signinPanelHtml,

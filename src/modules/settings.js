@@ -31,7 +31,7 @@ import { sxIcon } from "./sx-icons.js";
 import { focusKey, focusSame } from "./dom.js";
 import { orgModel, orgRanks, syncOrgMark } from "./org-model.js";
 import { signinNow, signinShown, signinParts, signinSay, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow,
-  signinAct, signinStart, signinOnChange, signinPreviewHtml } from "./signin.js";
+  signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect } from "./signin.js";
 
 /* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name,
    in columns that fill the width. Choosing a section shows that section alone: Appearance and Layout
@@ -266,6 +266,8 @@ function accountCardHtml(v){
     let h='<div class="sgn-top"><div class="sgn-top-row">'+signinIdentHtml({initial:p.initial, name:p.name, sub:p.sub, off:p.off})
       +'<span class="sgn-acts"><button type="button" class="btn" data-signin-act="another">'+esc(t("Use another account"))+'</button>'
       +'<button type="button" class="btn" data-signin-act="out">'+esc(t("Sign out"))+'</button></span></div>';
+    /* Where the system seals nothing for real (shell/main.js signinKeep), no refresh token is kept, and the next renewal asks. */
+    if(!v.keeps) h+='<p class="sgn-cap" data-signin-unkept>'+esc(t("This computer has no keyring, so the sign-in is not kept: Etiuda will ask you to sign in again when it is due."))+'</p>'; // placeholder: Claudette
     if(v.ask){ const s=signinSay("ask", v); h+='<p class="sgn-say"><b>'+esc(s[0])+'</b><span>'+esc(s[1])+'</span></p>'+signinProvidersHtml(v.offered, true); }
     h+='<p class="sgn-ft">'+esc(t("Signing out ends this computer's sign-in and frees its place among the account's three; the seat stays the account's. The team's catalog and personal cards stay on the computer."))+'</p>';
     return h+'</div>';
@@ -276,7 +278,7 @@ function accountCardHtml(v){
     h+=signinIdentHtml({initial:"", name:t("Finish signing in in the browser"),
       sub:t("The browser has opened {PROVIDER}'s sign-in page. Etiuda waits here and carries on by itself when you come back.").split("{PROVIDER}").join(prov)})
       +'<span class="sgn-acts"><button type="button" class="btn" data-signin-act="again">'+esc(t("Open the browser again"))+'</button>'
-      +'<button type="button" class="btn" data-signin-act="stop">'+esc(t("Cancel"))+'</button></span>'+signinPreviewHtml(v);
+      +'<button type="button" class="btn" data-signin-act="stop">'+esc(t("Cancel"))+'</button></span>'+signinPreviewHtml(v)+signinLinkHtml(v.link);
     return h+'</div>';
   }
   const failed=v.said && v.said!=="signin-done" && v.said!=="signin-cancelled" && !v.signedIn;
@@ -314,8 +316,9 @@ function accountGroups(){
 let accountHeard=false;
 function wireAccountRows(box){
   if(!accountHeard){ accountHeard=true; signinOnChange(()=>{ if(document.getElementById("setBody")) paintSettings(); }); }
-  box.querySelectorAll('[data-e-open="signin"]').forEach(b=>{ b.onclick=()=>signinStart(b.getAttribute("data-e-provider")); });
+  box.querySelectorAll('[data-e-open="signin"]').forEach(b=>{ b.onclick=()=>signinStart(b.getAttribute("data-e-provider"), "account"); });
   box.querySelectorAll("[data-signin-act]").forEach(b=>{ b.onclick=()=>signinAct(b.getAttribute("data-signin-act")); });
+  box.querySelectorAll(".sgn-link-f").forEach(f=>{ f.onclick=()=>signinLinkSelect(f); });
 }
 function generalGroups(){
   const langSel='<select id="setUiLang" aria-label="'+esc(t("Interface language"))+'"'+

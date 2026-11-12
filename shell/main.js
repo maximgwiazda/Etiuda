@@ -9540,7 +9540,8 @@ function signinDoorKept(team, mirror, id) {
   catch (e) { console.error("etiuda: the request at the team's door could not be written - " + e.message); return false; }
 }
 /* What the page is told, no token and nothing from the provider: the providers offered by id, who is signed in by provider, the
-   code, the seat ("held", "lapsed" or "none"), when the service last answered and whether the last try reached it. */
+   code, the seat ("held", "lapsed" or "none"), when the service last answered and whether the last try reached it; the provider's
+   page of the sign-in that waits, and nothing once it ends; and whether this system keeps a sign-in (sealsForReal). */
 function signinView() {
   const real = signinOffered().map(p => p.id), held = signinState().held, now = Date.now(), preview = signinPreviewing();
   const offered = preview ? Object.keys(SIGNIN_PROVIDERS) : real;
@@ -9548,7 +9549,8 @@ function signinView() {
   return { offered: offered, preview: preview, signedIn: signedIn, code: signedIn ? held.code : "",
     seat: !signedIn ? "" : held.cert ? (signinLapsed(held, now) ? "lapsed" : "held") : "none",
     at: signedIn ? held.at : 0, reached: !signedIn || held.reached !== false, ask: !!signedIn && held.ask === true,
-    refused: signedIn ? held.said : "", busy: signinBusy ? signinBusy.provider : "", said: signinSaid };
+    refused: signedIn ? held.said : "", busy: signinBusy ? signinBusy.provider : "", said: signinSaid,
+    link: signinBusy && signinPageOk(signinBusy.url) ? signinBusy.url : "", keeps: sealsForReal(safeStorage, process.platform) }; /* plant:view-link */
 }
 function tellSignin() {
   const win = theWindow;
@@ -9564,7 +9566,9 @@ function signinPageHtml(ok) {
 function signinIo(run) {
   return {
     listen: (pageFor, takes) => signinListen(http, pageFor, SIGNIN_WAIT_MS, takes).then(l => { run.loop = l; return l; }),
-    openPage: url => signinPageOk(url) ? Promise.resolve(handOut(url)).then(() => { run.url = url; return true; }) : false, /* plant:signin-open */
+    /* The page is told the provider's page before the browser is asked, so a browser that does not open (Linux resolves
+       openExternal all the same) leaves the person its link to paste. */
+    openPage: url => { if (!signinPageOk(url)) return false; run.url = url; tellSignin(); return Promise.resolve(handOut(url)).then(() => true); }, /* plant:signin-open */
     tokenAsk: (url, form) => signinRequest((u, init) => net.fetch(u, init), url, form),
     serviceAsk: (url, body) => signinServiceAsk((u, init) => net.fetch(u, init), url, body),
     sign: signinSign,

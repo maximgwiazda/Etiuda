@@ -42,9 +42,9 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 45;
+const PLANTS = 48;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 67 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 73 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -79,7 +79,7 @@ const NAMES = ["SIGNIN_PROVIDERS", "signinOffered", "signinNonce", "signinAuthor
   "SIGNIN_SERVICE", "signinDeskBytes", "signinDeskBody", "signinServiceAsk", "signinCertOk", "signinAnswer", "signinSeat", "signinLapsed",
   "signinSettle", "signinRenewHeld", "seatFileText", "SEAT_NAME", "signinFileRead", "signinFileText", "branchIdOf", "inviteRead",
   "SIGNOUT_SERVICE", "signoutDeskBytes", "signoutDeskBody", "signoutAsk", "signinDoorRequest", "signinKnown", "signinPreviewing",
-  "signinCodeForm", "signinSecretRead", "SIGNIN_SECRET_FILE", "SIGNIN_SECRET_SHAPE"];
+  "signinCodeForm", "signinSecretRead", "SIGNIN_SECRET_FILE", "SIGNIN_SECRET_SHAPE", "sealsForReal", "SIGNIN_WAIT_MS"];
 /* The section, evaluated: `swap` is [from, to], put in place of the one line that holds `from`, for a plant. */
 function load(swap, where) {
   let sec = SECTION, inv = INVITE;
@@ -743,7 +743,8 @@ function ipcSlice(start) {
 /* The view and the two handlers a press goes through, over the section `sec`, every door out stood in and counted: the identity
    (which may make the desk's key), the browser and loopback (signinIo), the provider (signinRun), the service, a write, the network. */
 const PRESS_STANDS = ["ipcMain", "fromEngine", "LINK_CLICK_MS", "signinState", "signinLapsed", "signinOffered", "signinPreviewing", "signinKnown",
-  "SIGNIN_PROVIDERS", "branchIdentity", "net", "signinIo", "signinRun", "signinSeat", "signinTake", "signinFlush", "signinSave", "tellSignin"];
+  "SIGNIN_PROVIDERS", "branchIdentity", "net", "signinIo", "signinRun", "signinSeat", "signinTake", "signinFlush", "signinSave", "tellSignin",
+  "signinPageOk", "sealsForReal", "safeStorage"];
 function pressStand(sec, swap) {
   const st = { on: {}, handle: {}, out: 0, tells: 0 };
   const viewDecl = (() => { try { return decl(MAIN, "function signinView("); } catch { return ""; } })();
@@ -753,7 +754,8 @@ function pressStand(sec, swap) {
   const body = "let signinClick = null, signinBusy = null, signinSaid = \"\";\n" + text + "\nreturn { view: signinView };";
   const r = new Function(...PRESS_STANDS, body)({ on: (ch, fn) => { st.on[ch] = fn; }, handle: (ch, fn) => { st.handle[ch] = fn; } }, () => true, 2000,
     () => ({ held: null }), sec.signinLapsed, sec.signinOffered, sec.signinPreviewing, sec.signinKnown, sec.SIGNIN_PROVIDERS,
-    () => { st.out++; return { id: DESK_ID, key: DESK_KEY }; }, { fetch: out }, out, out, out, out, out, out, () => { st.tells++; });
+    () => { st.out++; return { id: DESK_ID, key: DESK_KEY }; }, { fetch: out }, out, out, out, out, out, out, () => { st.tells++; },
+    sec.signinPageOk, sec.sealsForReal, undefined);
   st.view = r.view;
   st.press = async id => {
     const e = { returnValue: undefined };
@@ -1044,6 +1046,191 @@ CASES.secretTree = () => {
     && secretsIn("clientSecret: " + q + STAND_IN + q).length === 0 && secretsIn("clientSecret: " + q + q).length === 0;
 };
 
+/* ---- the sign-in follow-ups (ds14): the link while the browser is awaited, Linux's preview launcher, no keyring, the press's place - */
+/* The shell around a real press with Microsoft configured: the view, the two press handlers and Cancel's, and signinIo, all sliced;
+   the browser a stand-in that resolves and opens nothing, the loopback one that waits until closed and records the wait it was
+   given; the provider, the service, a write and the network throw if reached. `storage` stands for safeStorage. */
+function waitStand(sec, swap, storage) {
+  const st = { on: {}, handle: {}, out: 0, told: [], handed: [], waits: [] };
+  const tryDecl = s => { try { return decl(MAIN, s); } catch { return ""; } };
+  let text = [tryDecl("function signinView("), tryDecl("function signinIo("), ipcSlice('ipcMain.on("etiuda:signin-click"'),
+    ipcSlice('ipcMain.handle("etiuda:signin",'), ipcSlice('ipcMain.handle("etiuda:signin-stop"')].join("\n");
+  if (swap && text.split(swap[0]).length === 2) text = text.replace(swap[0], swap[1]);
+  const out = () => { st.out++; throw new Error("a door out was reached"); };
+  const vals = {
+    ipcMain: { on: (ch, fn) => { st.on[ch] = fn; }, handle: (ch, fn) => { st.handle[ch] = fn; } }, fromEngine: () => true, LINK_CLICK_MS: 2000,
+    signinState: () => ({ held: null }), signinLapsed: sec.signinLapsed, signinOffered: () => [MS], signinPreviewing: () => false,
+    signinKnown: sec.signinKnown, SIGNIN_PROVIDERS: sec.SIGNIN_PROVIDERS, branchIdentity: () => ({ id: DESK_ID, key: DESK_KEY }), net: { fetch: out },
+    signinRun: sec.signinRun, signinSeat: out, signinTake: out, signinFlush: out, signinSave: out,
+    tellSignin: () => { st.told.push(st.view()); }, signinPageOk: sec.signinPageOk, sealsForReal: sec.sealsForReal,
+    safeStorage: storage === undefined ? { isEncryptionAvailable: () => true } : storage, http: {}, SIGNIN_WAIT_MS: sec.SIGNIN_WAIT_MS,
+    signinListen: (h, pageFor, ms) => {
+      st.waits.push(ms);
+      let no = null;
+      const caught = new Promise((yes, n) => { no = n; });
+      caught.catch(() => {});
+      return Promise.resolve({ port: 49152, caught, close: () => no({ closed: true }) });
+    },
+    handOut: url => { st.handed.push(url); return Promise.resolve(); },
+    signinRequest: out, signinServiceAsk: out, signinSign: out, signinKeep: () => "", signinKept: () => "", signinPageHtml: () => "",
+  };
+  const names = Object.keys(vals);
+  const body = "let signinClick = null, signinBusy = null, signinSaid = \"\";\n" + text + "\nreturn { view: signinView };";
+  st.view = new Function(...names, body)(...names.map(n => vals[n])).view;
+  st.press = id => { st.on["etiuda:signin-click"]({ returnValue: undefined }, id); return st.handle["etiuda:signin"]({}, id); };
+  return st;
+}
+const LINK_LINE = "Browser did not open? Paste this link into a browser on this computer.";
+const LINK_LINE_PL = "Przeglądarka się nie otworzyła? Łącze można wkleić w przeglądarkę na tym komputerze.";
+const UNKEPT_LINE = "This computer has no keyring, so the sign-in is not kept: Etiuda will ask you to sign in again when it is due.";
+/* The link while the browser is awaited, its browser call resolving and opening nothing: the view carries the provider's page the
+   browser was handed, told to the page as the hand-out is made; the loopback is given SIGNIN_WAIT_MS and still waits; Cancel
+   ends it as before and the link goes with the wait; no line written while it waited carries the link or its state. */
+CASES.linkWait = async (s, swap) => {
+  const st = waitStand(s, swap);
+  const lines = [], keep = {};
+  for (const k of ["log", "error", "warn", "info"]) { keep[k] = console[k]; console[k] = (...a) => { lines.push(a.map(String).join(" ")); }; }
+  const writes = { o: process.stdout.write, e: process.stderr.write };
+  process.stdout.write = (c, ...r) => { lines.push(String(c)); return true; };
+  process.stderr.write = (c, ...r) => { lines.push(String(c)); return true; };
+  let settled = false, during = null, ended = null, stopped = null, url = "";
+  try {
+    const press = st.press("microsoft");
+    press.then(() => { settled = true; }, () => { settled = true; });
+    await tick(40);
+    during = st.view();
+    url = st.handed[0] || "";
+    stopped = await st.handle["etiuda:signin-stop"]({});
+    ended = await press;
+  } finally {
+    for (const k of Object.keys(keep)) console[k] = keep[k];
+    process.stdout.write = writes.o; process.stderr.write = writes.e;
+  }
+  const state = url ? new URL(url).searchParams.get("state") : "";
+  const toldLink = st.told.filter(v => v.link === url);
+  return st.handed.length === 1 && s.signinPageOk(url) && !!during && during.busy === "microsoft" && during.link === url && toldLink.length === 1
+    && st.told.indexOf(toldLink[0]) <= 1 && st.waits.length === 1 && st.waits[0] === s.SIGNIN_WAIT_MS && s.SIGNIN_WAIT_MS === 5 * 60 * 1000
+    && stopped === true && !!ended && ended.said === "signin-cancelled" && ended.busy === "" && ended.link === "" && st.out === 0
+    && !!state && !lines.some(l => l.indexOf(url) >= 0 || l.indexOf(state) >= 0);
+};
+/* Settings, Account drawn as settings.js draws it over a host answering `v`, with desk-first-edition's empty document. */
+async function acctOf(v, host) {
+  const SET = await import(pathToFileURL(path.join(ROOT, "src", "modules", "settings.js")).href);
+  const quiet = { contains: () => false, add() {}, remove() {}, toggle() {} };
+  globalThis.window = { innerWidth: 1280, innerHeight: 800, addEventListener() {}, removeEventListener() {}, E_HOST: Object.assign({ signinState: () => v }, host || {}) };
+  globalThis.document = { querySelector: () => null, getElementById: () => null, querySelectorAll: () => [], documentElement: { dataset: {}, classList: quiet },
+    body: { classList: quiet }, addEventListener() {}, removeEventListener() {} };
+  globalThis.getComputedStyle = () => ({ getPropertyValue: () => "" });
+  try { return SET.settingsPageHtml("account", ""); } finally { delete globalThis.window; delete globalThis.document; delete globalThis.getComputedStyle; }
+}
+const LINK_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=" + MS_CLIENT + "&state=s1&nonce=n1";
+/* The block in every waiting place, last, from the view alone: the panel after its acts, Account's card after Cancel; the link
+   whole in the field, the line's two sentences, Copy; none outside a wait, none without a link, none in the preview's pressed state;
+   Polish too. Copy hands the shell the link (the code's Copy the code), and nothing once the wait has ended. */
+CASES.linkPage = async () => {
+  if (!P || typeof P.signinLinkHtml !== "function") return false;
+  const storage = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const words = h => String(h).replace(/<[^>]*>/g, "").replace(/&amp;/g, "&");
+  const waitV = { offered: ["microsoft", "google"], busy: "microsoft", link: LINK_URL };
+  const d = P.signinDoor(P.signinRead(waitV)), panel = P.signinPanelHtml(d);
+  const acct = await acctOf(waitV), acctNone = await acctOf({ offered: ["microsoft", "google"], busy: "microsoft" });
+  const none = [view({ link: LINK_URL }), view({ busy: "microsoft" }), view({ preview: true, said: "signin-preview", link: LINK_URL }),
+    view({ signedIn: "microsoft", code: CODE, seat: "held", link: LINK_URL })].map(v => P.signinPanelHtml(P.signinDoor(v)));
+  const field = '<input type="text" class="sgn-link-f" readonly spellcheck="false" autocomplete="off" aria-label="Paste this link into a browser on this computer." value="'
+    + LINK_URL.replace(/&/g, "&amp;") + '"><button type="button" class="btn" data-signin-act="copylink">Copy</button>';
+  storage.lsSet("eUiLang", "pl");
+  let pl = "";
+  try { pl = P.signinPanelHtml(P.signinDoor(P.signinRead(waitV))); } finally { storage.lsSet("eUiLang", "en"); }
+  /* Copy, through the host's own-text note the code's Copy uses. */
+  const copied = [];
+  globalThis.window = { E_HOST: { noteOwnText: x => copied.push(x) } };
+  globalThis.document = { querySelector: () => null };
+  try {
+    P.signinChanged(waitV, false); P.signinAct("copylink");
+    P.signinChanged({ offered: ["microsoft"], signedIn: "microsoft", code: CODE, seat: "held" }, false); P.signinAct("copylink"); P.signinAct("copy");
+    P.signinChanged({ offered: ["microsoft"] }, false);
+  } finally { delete globalThis.window; delete globalThis.document; }
+  return d.moment === "waiting" && d.link === LINK_URL && panel.indexOf('</button></div><div class="sgn-link" data-signin-link>') > 0
+    && panel.indexOf(field) > 0 && words(panel).indexOf(LINK_LINE) >= 0 && panel.lastIndexOf("data-signin-link") > panel.lastIndexOf('data-signin-act="stop"')
+    && none.every(h => !/data-signin-link/.test(h)) && /data-signin-act="stop">Cancel<\/button><\/span><div class="sgn-link" data-signin-link>/.test(acct)
+    && acct.indexOf(field) > 0 && !/data-signin-link/.test(acctNone) && words(pl).indexOf(LINK_LINE_PL) >= 0
+    && JSON.stringify(copied) === JSON.stringify([LINK_URL, CODE]);
+};
+/* As the product designer placed it: the line in the preview line's form, the field 6 px under it taking the width left, never
+   wrapping, mono at the caption's size; the panel's block after a hairline 12 px above and below, Account's 12 px under its acts
+   with the field at most 560 px; no colour, icon or box of its own; a click in the field selects all of it, in the panel and Account. */
+CASES.linkLook = async () => {
+  if (!P || typeof P.signinLinkSelect !== "function") return false;
+  const css = fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8");
+  const html = P.signinLinkHtml(LINK_URL);
+  let selected = 0;
+  P.signinLinkSelect({ select() { selected++; } });
+  P.signinLinkSelect(null);
+  const rule = sel => { const at = css.indexOf("\n" + sel + "{"); return at < 0 ? "" : css.slice(at + sel.length + 2, css.indexOf("}", at)); };
+  const own = rule(".sgn-link");
+  return /^<div class="sgn-link" data-signin-link><p class="sgn-cap"><b>Browser did not open\?<\/b> <span>Paste this link into a browser on this computer\.<\/span><\/p><div class="sgn-link-row"><input [^>]*readonly[^>]*><button/.test(html)
+    && !/<svg|<img/.test(html) && P.signinLinkHtml("") === "" && selected === 1
+    && rule(".sgn-link .sgn-cap b") === "color:var(--ink);font-weight:600" && /^margin:0;/.test(rule(".sgn-link .sgn-cap"))
+    && /margin-top:6px/.test(rule(".sgn-link-row")) && /display:flex/.test(rule(".sgn-link-row"))
+    && /flex:1 1 auto;min-width:0/.test(rule(".sgn-link-f")) && /white-space:nowrap/.test(rule(".sgn-link-f")) && /font:12\.5px var\(--mono\)/.test(rule(".sgn-link-f"))
+    && rule(".sgn-panel .sgn-link") === "margin-top:12px;padding-top:12px;border-top:1px solid var(--line)"
+    && rule(".sgn-top .sgn-link") === "margin-top:-2px" && /gap:14px/.test(rule(".sgn-top.col")) && rule(".sgn-top .sgn-link-f") === "max-width:560px"
+    && !/color|background|border|box-shadow/.test(own)
+    && /closest\("\.sgn-link-f"\)[\s\S]{0,40}signinLinkSelect\(f\)/.test(PAGE) && /querySelectorAll\("\.sgn-link-f"\)\.forEach\(f=>\{ f\.onclick=\(\)=>signinLinkSelect\(f\); \}\)/.test(SETTINGS);
+};
+/* Not shipped: tools/signin-preview.sh is outside electron-builder's files; read, never run (run, it starts the installed desk): the
+   installed .deb's program unless an AppImage is named, --where printing it and leaving before anything starts, the refusal where
+   the program is missing or the desk is open, then one exec with the variable for that start alone; LF, as sh needs. */
+CASES.previewSh = () => {
+  const { minimatch } = createRequire(import.meta.url)("minimatch");
+  const cfgText = fs.readFileSync(path.join(ROOT, "electron-builder.js"), "utf8"), fa = cfgText.indexOf("files: [");
+  const files = fa < 0 ? [] : new Function("return " + cfgText.slice(fa + 7, cfgText.indexOf("],", fa) + 1))();
+  const shipped = p => { let inc = false; for (const pat of files) { const neg = pat.startsWith("!"); if (minimatch(p, neg ? pat.slice(1) : pat, { dot: true })) inc = !neg; } return inc; };
+  const at = path.join(ROOT, "tools", "signin-preview.sh"), text = fs.existsSync(at) ? fs.readFileSync(at, "utf8") : "";
+  const lines = text.split("\n").map(l => l.trim()).filter(l => l && !/^#/.test(l));
+  const ORDER = ["set -u", 'if [ "${1:-}" = "--where" ]; then where=1; shift; fi', 'exe="${1:-/opt/Etiuda/etiuda}"', 'if [ ! -x "$exe" ]; then', "exit 1",
+    'if [ "$where" = 1 ]; then echo "$exe"; exit 0; fi', "if pgrep -x etiuda >/dev/null 2>&1; then", "exit 1", 'ETIUDA_SIGNIN_PREVIEW=1 exec "$exe"'];
+  let from = -1;
+  const inOrder = ORDER.every(s => { const i = lines.indexOf(s, from + 1); if (i < 0) return false; from = i; return true; });
+  return !!text && text.indexOf("\r") < 0 && /^#!\/bin\/sh\n/.test(text) && files.length > 5 && shipped("shell/main.js") && !shipped("tools/release.mjs")
+    && !shipped("tools/signin-preview.sh") && inOrder && lines[lines.length - 1] === 'ETIUDA_SIGNIN_PREVIEW=1 exec "$exe"'
+    && lines.filter(l => /\bexec\b/.test(l)).length === 1 && lines.filter(l => /ETIUDA_SIGNIN_PREVIEW/.test(l)).length === 1
+    && !lines.some(l => /\b(export|setx|reg|gsettings|xdg-open)\b/.test(l));
+};
+/* No keyring: the view says whether the system seals for real (sealsForReal over safeStorage), and Account's card, signed in, says
+   in one line that the sign-in is not kept where it does not, and nothing where it does. */
+CASES.keyringLine = async (s, swap) => {
+  const viewWith = storage => waitStand(s, swap, storage).view();
+  const real = viewWith({ isEncryptionAvailable: () => true }), none = viewWith({ isEncryptionAvailable: () => false }), absent = viewWith(null);
+  const signed = { offered: ["microsoft"], signedIn: "microsoft", code: CODE, seat: "held" };
+  const words = h => String(h).replace(/<[^>]*>/g, "");
+  const kept = await acctOf(Object.assign({ keeps: true }, signed)), unkept = await acctOf(Object.assign({ keeps: false }, signed));
+  const before = await acctOf({ offered: ["microsoft"], keeps: false });
+  return real.keeps === true && none.keeps === false && absent.keeps === false && !!P && P.signinRead({}).keeps === true
+    && words(unkept).indexOf(UNKEPT_LINE) >= 0 && /data-signin-unkept/.test(unkept) && !/data-signin-unkept/.test(kept) && !/data-signin-unkept/.test(before);
+};
+/* A provider pressed in Settings, Account is answered there alone: the header's panel stays shut; pressed in the panel, the answer
+   opens it as before. */
+CASES.accountPress = async () => {
+  if (!P) return false;
+  const el = () => ({ hidden: true, dataset: {}, innerHTML: "", title: "", classList: { toggle() {} }, setAttribute() {}, focus() {}, contains: () => false });
+  const dom = { "#signinWrap": el(), "#signinBtn": el(), "#signinPanel": el() };
+  const answer = { offered: ["microsoft", "google"], preview: true, said: "signin-preview" };
+  globalThis.window = { E_HOST: { signinState: () => ({ offered: ["microsoft", "google"], preview: true }), signIn: () => Promise.resolve(answer) } };
+  globalThis.document = { querySelector: q => dom[q] || null };
+  let fromAccount = null, fromPanel = null;
+  try {
+    P.signinChanged({ offered: ["microsoft", "google"], preview: true }, false);
+    P.signinStart("microsoft", "account");
+    await tick(5);
+    fromAccount = dom["#signinPanel"].hidden;
+    P.signinStart("google");
+    await tick(5);
+    fromPanel = dom["#signinPanel"].hidden;
+  } finally { delete globalThis.window; delete globalThis.document; }
+  return fromAccount === true && fromPanel === false && /signinStart\(b\.getAttribute\("data-e-provider"\), "account"\)/.test(SETTINGS);
+};
+
 /* ---- the cases on the branch ------------------------------------------------------------------------------------------- */
 const LEGS = [
   ["ds1a", "offered", "as shipped no client id is configured and nothing is offered; a configured table offers what it configures, in order"],
@@ -1102,6 +1289,12 @@ const LEGS = [
   ["ds13e", "secretWire", "the shell reads the package's file once at start, installed, beside the asar, and from no variable, IPC or page"],
   ["ds13f", "secretPackage", "the package step writes nothing and says absent without the variable, writes the file and says present with it, never the value; the file is git-ignored and copied only when set"],
   ["ds13g", "secretTree", "no tracked file carries a client secret's prefix or a client secret written as a value, the search shown to find both"],
+  ["ds14a", "linkWait", "with a browser call that resolves and opens nothing, the page is told the provider's page as it is handed out and the loopback waits SIGNIN_WAIT_MS as before; Cancel takes the link with the wait; no line written carries it"],
+  ["ds14b", "linkPage", "the link block stands last in every waiting place, the panel after its acts and Account after Cancel, and nowhere outside a wait or in the preview's pressed state; Polish too; its Copy copies the link"],
+  ["ds14c", "linkLook", "the link block as the designer placed it: the line in the preview line's form, the field 6 px under it, never wrapping, 12 px and a hairline in the panel, 12 px and 560 px in Account, no box; a click selects all"],
+  ["ds14d", "previewSh", "tools/signin-preview.sh is outside the packaged files: the .deb's program unless an AppImage is named, --where starts nothing, one exec with the variable for that start alone"],
+  ["ds14e", "keyringLine", "the view says whether the system seals for real, and Account says in one line that the sign-in is not kept where it does not, and nothing where it does"],
+  ["ds14f", "accountPress", "a provider pressed in Settings, Account is answered there alone and the header's panel stays shut; pressed in the panel, the answer opens it as before"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
@@ -1128,9 +1321,10 @@ check(at(renew, "/* plant:renew-offered */") > 0 && at(renew, "signinRenewHeld("
   "ds4f the quiet renewal sends nothing unless the provider it signed in with is still offered");
 check(/if \(PLACED_ASIDE \|\| harnessLaunch\(\) \|\|/.test(armRenew) && /armNoteLook\(\);\n\s*armSigninRenew\(\);/.test(MAIN),
   "ds4g the renewal is armed once the window opens and never from the harness's own window or any harness start");
-check(/openPage: url => signinPageOk\(url\) \?/.test(WIRING) && /if \(!run \|\| !run\.url \|\| !signinPageOk\(run\.url\)\) return false;/.test(WIRING)
+check(/openPage: url => \{ if \(!signinPageOk\(url\)\) return false; run\.url = url; tellSignin\(\); return Promise\.resolve\(handOut\(url\)\)/.test(WIRING)
+  && /if \(!run \|\| !run\.url \|\| !signinPageOk\(run\.url\)\) return false;/.test(WIRING)
   && (MAIN.match(/shell\.openExternal\(/g) || []).length === 1 && /function handOut\(url\) \{ return shell\.openExternal\(url\); \}/.test(MAIN)
-  && /signinPageOk\(url\) \? Promise\.resolve\(handOut\(url\)\)/.test(WIRING) && /plant:again-page \*\/\n  handOut\(run\.url\);/.test(WIRING),
+  && /plant:again-page \*\/\n  handOut\(run\.url\);/.test(WIRING),
   "ds4h the browser is handed only a provider's own authorize page, at the sign-in and at Open the browser again, through the shell's one way out (handOut, the call tests/links.js stubs)");
 check(/data-e-open="signin" data-e-provider=/.test(PAGE)
   && /eOpen === "signin"[\s\S]{0,40}\n\s*if \(b\) ipcRenderer\.sendSync\("etiuda:signin-click"/.test(PRELOAD),
@@ -1231,6 +1425,9 @@ if (!PLANTS_OFF) {
     "const SIGNIN_PREVIEW_ASKED = process.env.ETIUDA_SIGNIN_PREVIEW !== undefined;"], "previewOff");
   await plant("dsp45", ["function signinSecretPart(p) { return typeof p.clientSecret === \"string\" && p.clientSecret ? { client_secret: p.clientSecret } : {}; } /* plant:secret-present */",
     "function signinSecretPart(p) { return { client_secret: String(p.clientSecret || \"\") }; }"], "secretSent");
+  await plantWire("dsp47", ["link: signinBusy && signinPageOk(signinBusy.url) ? signinBusy.url : \"\",", "link: \"\","], "linkWait");
+  await plantWire("dsp48", ["run.url = url; tellSignin(); return Promise", "run.url = url; return Promise"], "linkWait");
+  await plantWire("dsp49", ["keeps: sealsForReal(safeStorage, process.platform) }; /* plant:view-link */", "keeps: true };"], "keyringLine");
   await plant("dsp46", ["return Object.freeze(typeof v === \"string\" && SIGNIN_SECRET_SHAPE.test(v) ? { google: v } : {}); /* plant:secret-shape */",
     "return Object.freeze(typeof v === \"string\" ? { google: v } : {});"], "secretPacked");
   /* A gate on a local act, put into the desk file's write in memory, is seen. */
