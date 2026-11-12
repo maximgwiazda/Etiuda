@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 509;
+const EXPECTED = 546;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -6384,6 +6384,342 @@ async function main() {
       if (PLANTS_OFF) { skip(line); continue; }
       const p = where === "core" ? await liftCore("plant:" + tag, turns) : await editTeamCopy(lineLifted("plant:" + tag), turns);
       check(base[leg] && p.turned && p.back, line + ": " + p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED"));
+    }
+  }
+
+  /* ---- a4: the standing door (board 980, A4). A desk carrying a seat certificate for a licence the lead registered asks to join
+     with no invitation; the relay judges the certificate, keeps the request as a bound invitation's, and cannot read it. ---- */
+  {
+    const CH = require(path.join(ROOT, "shell", "relay", "channel.cjs"));
+    const T0 = Date.UTC(2026, 10, 12, 12);
+    const X_SPKI = Buffer.from("302a300506032b656e032100", "hex");
+    const said = r => (r && r.json && r.json.error) || (r && r.status);
+    const boxPair = () => {
+      const p = crypto.generateKeyPairSync("x25519");
+      return { pub: p.publicKey.export({ type: "spki", format: "der" }).subarray(X_SPKI.length).toString("hex"), privateKey: p.privateKey };
+    };
+    const agree = (mine, theirPub) => crypto.diffieHellman({ privateKey: mine.privateKey,
+      publicKey: crypto.createPublicKey({ key: Buffer.concat([X_SPKI, Buffer.from(theirPub, "hex")]), format: "der", type: "spki" }) });
+    const signBy = (key, bytes) => crypto.sign(null, bytes, key.privateKey).toString("hex");
+    /* A certificate as the licence service signs one: under the test root's delegation, which may sign "licence". */
+    function certFor(deskPub, ref, now, o) {
+      const opts = o || {};
+      const c = Object.assign({ kind: "etiuda-seat-certificate", format: 1, licence: ref, desk: deskPub, person: opts.person || hex(32),
+        code: "ABCDEFGHJKMNPQRS", issued: now - K.HOUR, until: now + 20 * K.DAY,
+        via: opts.via || K.delegationFor(now, { fields: { may: ["licence"] } }) }, opts.fields || {});
+      c.sig = { alg: "Ed25519", keyId: opts.keyId || K.DELEGATE.id, value: "" };
+      c.sig.value = signBy(opts.signer || K.DELEGATE, C.certBytes(c));
+      return c;
+    }
+    async function doorWorld(o) {
+      const R = relayEnv();
+      R.clock.now = T0;
+      const w = await world({ R });
+      w.ref = hex(16);
+      if (!(o && o.closed)) w.opened = await doorSet(w, [w.ref]);
+      return w;
+    }
+    function doorSet(w, refs, o) {
+      const opts = o || {};
+      const t = opts.t != null ? opts.t : w.R.clock.now;
+      return call(w.R, "POST", "/relay/v1/t/" + w.rt + "/door", { json: { refs, t, sig: signHex(opts.signer || w.lead, C.doorBytes(w.rt, t, refs)) } });
+    }
+    async function doorHello(w, key, cert, o) {
+      const opts = o || {};
+      const n = opts.nonce || await challenge(w);
+      const box = opts.box || hex(32);
+      const bytes = opts.plain ? C.helloBytes(w.rt, n, key.keyId) : C.doorHelloBytes(w.rt, n, key.keyId, box);
+      return call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n, door: cert, key: key.keyId, pub: key.pub, box,
+        sig: signHex(opts.signer || key, bytes) } });
+    }
+    const doorRows = w => w.R.stores.get(w.rt).list("inv:").filter(([, v]) => v && v.door === true);
+    /* A scene that throws, on a tree without the door, is that leg red and the run goes on. */
+    const safe = async fn => { try { return await fn(); } catch (e) { return { ok: false, detail: "threw " + (e && e.message ? e.message : e) }; } };
+    const deskOf = w => "k-" + hex(8);
+
+    /* The slot takes a certified desk of the registered licence: a session marked as an invitation's naming its request's id, a
+       request bound to the key, and nothing of the certificate kept but a keyed hash of the person. */
+    async function takesScene() {
+      const w = await doorWorld();
+      const k = keyPair(true), cert = certFor(k.pub, w.ref, w.R.clock.now);
+      const r = await doorHello(w, k, cert);
+      const rows = doorRows(w), row = rows.length === 1 ? rows[0][1] : {};
+      const text = dumpText(w);
+      const ok = w.opened.status === 200 && w.opened.json.ok === true && r.status === 200 && r.json.invite === true
+        && /^[0-9a-f]{32}$/.test(String(r.json.door)) && rows.length === 1 && rows[0][0] === "inv:" + r.json.door && row.key === k.keyId
+        && row.spent === true && row.hash === undefined && row.wrap === undefined && text.indexOf(cert.person) < 0 && text.indexOf(cert.code) < 0
+        && text.indexOf(cert.sig.value) < 0;
+      return { ok, detail: JSON.stringify({ opened: said(w.opened), hello: said(r), door: r.json && r.json.door, rows: rows.length }) };
+    }
+    const taken = await safe(takesScene);
+    check(taken.ok, "a4a a desk whose certificate names the licence the lead registered, for its own key, is let in at the door: a session"
+      + " marked as an invitation's that names its request's id, the request bound to the key, and nothing of the certificate kept"
+      + " but a keyed hash of the person: " + taken.detail);
+
+    /* Every certificate that should not open the door is refused alike, the challenge spent, and nothing is kept. */
+    async function refusesScene() {
+      const w = await doorWorld();
+      const k = keyPair(true), now = w.R.clock.now, other = keyPair(false);
+      const cases = {
+        forged: certFor(k.pub, w.ref, now, { signer: { privateKey: other.privateKey } }),
+        expired: certFor(k.pub, w.ref, now, { fields: { issued: now - 9 * K.DAY, until: now - K.HOUR } }),
+        elsewhere: certFor(k.pub, hex(16), now),
+        otherKey: certFor(keyPair(true).pub, w.ref, now),
+        notLicence: certFor(k.pub, w.ref, now, { via: K.delegationFor(now) }),
+        rootless: certFor(k.pub, w.ref, now, { via: K.delegationFor(now, { fields: { may: ["licence"] }, signer: { id: K.ROOT.id, privateKey: other.privateKey } }) }),
+        tooLong: certFor(k.pub, w.ref, now, { fields: { until: now - K.HOUR + 31 * K.DAY } }),
+        ahead: certFor(k.pub, w.ref, now, { fields: { issued: now + 6 * MIN, until: now + 10 * K.DAY } }),
+        huge: certFor(k.pub, w.ref, now, { via: K.delegationFor(now, { fields: { may: ["licence", "x".repeat(5000)] } }) }),
+      };
+      const got = {};
+      for (const [name, cert] of Object.entries(cases)) got[name] = await doorHello(w, k, cert);
+      const ordinary = await doorHello(w, k, certFor(k.pub, w.ref, now), { plain: true });
+      const alike = Object.values(got).every(r => refused(r, "not-enrolled"));
+      const spent = w.R.stores.get(w.rt).list("chu:").filter(([, v]) => v && v.door === true).length;
+      const ok = alike && refused(ordinary, "bad-signature") && doorRows(w).length === 0 && spent === Object.keys(cases).length;
+      return { ok, detail: JSON.stringify(Object.assign({}, ...Object.entries(got).map(([n, r]) => ({ [n]: said(r) })), { ordinary: said(ordinary), spent })) };
+    }
+    const refusesAll = await safe(refusesScene);
+    check(refusesAll.ok, "a4b a forged certificate, an expired one, another licence's, one for another key, one whose delegation may not"
+      + " sign licences or is not the root's, one running past 30 days, one issued ahead of the clock and one past the size cap are each"
+      + " refused not-enrolled, alike, the challenge spent and nothing kept; an ordinary hello's signature opens no door: " + refusesAll.detail);
+
+    /* A team whose lead registered no licence, or closed its door, takes no certificate at all. */
+    async function closedScene() {
+      const w = await doorWorld({ closed: true });
+      const k = keyPair(true);
+      const none = await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now));
+      const opened = await doorSet(w, [w.ref]);
+      w.R.clock.now += 1;
+      const shut = await doorSet(w, []);
+      const after = await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now));
+      const ok = refused(none, "not-enrolled") && opened.status === 200 && shut.status === 200 && refused(after, "not-enrolled") && doorRows(w).length === 0;
+      return { ok, detail: JSON.stringify({ none: said(none), opened: said(opened), shut: said(shut), after: said(after) }) };
+    }
+    const closed = await safe(closedScene);
+    check(closed.ok, "a4c a team whose lead registered no licence refuses a good certificate not-enrolled, and so does one whose lead closed"
+      + " its door with an empty list: " + closed.detail);
+
+    /* The lead's registration: signed by the lead, fresh, later than the last, at most DOOR_REFS_MAX references. */
+    async function registerScene() {
+      const w = await doorWorld();
+      const now = w.R.clock.now;
+      const forged = await doorSet(w, [hex(16)], { signer: w.desk, t: now + 1 });
+      const older = await doorSet(w, [hex(16)], { t: now });
+      const stale = await doorSet(w, [hex(16)], { t: now - 6 * MIN });
+      const many = await doorSet(w, Array.from({ length: C.DOOR_REFS_MAX + 1 }, () => hex(16)), { t: now + 2 });
+      const twice = await doorSet(w, [w.ref, w.ref], { t: now + 3 });
+      const held = w.R.stores.get(w.rt).get("door");
+      const ok = refused(forged, "bad-signature") && refused(older, "replay-rev") && refused(stale, "nonce-stale") && refused(many, "team-size")
+        && refused(twice, "bad-signature") && !!held && JSON.stringify(held.refs) === JSON.stringify([w.ref]);
+      return { ok, detail: JSON.stringify({ forged: said(forged), older: said(older), stale: said(stale), many: said(many), twice: said(twice) }) };
+    }
+    const register = await safe(registerScene);
+    check(register.ok, "a4d the door's licences are set only by the lead's signature, fresh and later than the last, at most "
+      + C.DOOR_REFS_MAX + " and none twice; a desk's signature, a replay, a stale call and a list past the cap change nothing: " + register.detail);
+
+    /* The slot's own bounds: three requests a person, sixteen new ones an hour, sixty-four held from keys not enrolled. */
+    async function personScene() {
+      const w = await doorWorld();
+      const person = hex(32), got = [];
+      for (let i = 0; i < C.DOOR_PER_PERSON + 1; i++) {
+        const k = keyPair(true);
+        got.push(await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now, { person })));
+      }
+      const k = keyPair(true), another = await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now));
+      const ok = got.slice(0, C.DOOR_PER_PERSON).every(r => r.status === 200) && refused(got[C.DOOR_PER_PERSON], "team-size") && another.status === 200;
+      return { ok, detail: got.map(said).join(",") + " another " + said(another) };
+    }
+    async function rateScene() {
+      const w = await doorWorld();
+      const got = [];
+      for (let i = 0; i < C.DOOR_RATE_MAX + 1; i++) {
+        const k = keyPair(true);
+        got.push(await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now)));
+      }
+      w.R.clock.now += C.DOOR_RATE_MS;
+      const k = keyPair(true), later = await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now));
+      const ok = got.slice(0, C.DOOR_RATE_MAX).every(r => r.status === 200) && refused(got[C.DOOR_RATE_MAX], "rate") && later.status === 200;
+      return { ok, detail: "the " + (C.DOOR_RATE_MAX + 1) + "th " + said(got[C.DOOR_RATE_MAX]) + ", an hour on " + said(later) };
+    }
+    async function liveScene() {
+      const w = await doorWorld();
+      let taken = 0, last = null;
+      for (let i = 0; i < C.DOOR_LIVE_MAX + 1; i++) {
+        if (i > 0 && i % C.DOOR_RATE_MAX === 0) w.R.clock.now += C.DOOR_RATE_MS;
+        const k = keyPair(true);
+        last = await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now));
+        if (last.status === 200) taken++;
+      }
+      const ok = taken === C.DOOR_LIVE_MAX && refused(last, "team-size");
+      return { ok, detail: "taken " + taken + ", then " + said(last) };
+    }
+    async function tryScene() {
+      const w = await doorWorld();
+      const k = keyPair(true), bad = certFor(k.pub, hex(16), w.R.clock.now), got = [];
+      for (let i = 0; i < C.DOOR_TRY_SHARE + 1; i++) got.push(await doorHello(w, k, bad));
+      const desk = await helloAs(w, w.desk);
+      const ok = got.slice(0, C.DOOR_TRY_SHARE).every(r => refused(r, "not-enrolled")) && refused(got[C.DOOR_TRY_SHARE], "rate") && desk.status === 200;
+      return { ok, detail: "the " + (C.DOOR_TRY_SHARE + 1) + "th refused hello " + said(got[C.DOOR_TRY_SHARE]) + ", an enrolled desk's hello " + said(desk) };
+    }
+    const person = await safe(personScene), rated = await safe(rateScene), live = await safe(liveScene), tries = await safe(tryScene);
+    check(person.ok, "a4e a person holds at most " + C.DOOR_PER_PERSON + " requests at the door, the next refused team-size, and another"
+      + " person still asks: " + person.detail);
+    check(rated.ok, "a4f a team takes at most " + C.DOOR_RATE_MAX + " new door requests in an hour, the next refused rate, and one an hour"
+      + " later is taken: " + rated.detail);
+    check(live.ok, "a4g a team holds at most " + C.DOOR_LIVE_MAX + " door requests from keys it has not enrolled, the next refused"
+      + " team-size: " + live.detail);
+    check(tries.ok, "a4h refused door hellos hold at most " + C.DOOR_TRY_SHARE + " of the team's challenges, the next refused rate, while"
+      + " an enrolled desk still opens its session: " + tries.detail);
+
+    /* The request: sealed to the lead's box, read by nobody else, the session reading the answer alone, the lead's yes enrolling it. */
+    async function requestScene() {
+      const w = await doorWorld();
+      const lead = await sessionOf(w, w.lead);
+      const teamFile = sealAs(w, w.lead, "etiuda-team.json", 1, { epoch: 2 });
+      const upLead = await put(w, lead, teamFile);
+      const leadBox = boxPair(), deskBox = boxPair(), k = keyPair(true), place = deskOf(w);
+      const hello = await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now), { box: deskBox.pub });
+      const s = hello.json && hello.json.session, id = hello.json && hello.json.door;
+      const listed = await since(w, s), fetched = await getBlob(w, s, teamFile.id), heard = await socket(w, s);
+      const f = { rt: w.rt, leadKeyId: w.lead.keyId, leadBox: leadBox.pub, deskId: place, deskBox: deskBox.pub };
+      const sealKey = CH.doorSealKey(agree(deskBox, leadBox.pub), f);
+      const marker = "JoinRequest" + hex(6);
+      const ask = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: sealKey, writer: { keyId: k.keyId, privateKey: k.privateKey },
+        path: "desks/" + place + "/join.json", body: JSON.stringify({ marker }), counter: 1, place: "desk:" + place, kind: "file" });
+      const up = await put(w, s, ask, { extra: { pub: k.pub, box: hex(32) } });
+      const second = await put(w, s, B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: sealKey, writer: { keyId: k.keyId, privateKey: k.privateKey },
+        path: "desks/" + place + "/join.json", body: "again", counter: 2, place: "desk:" + place, kind: "file" }), { extra: { pub: k.pub } });
+      const seen = await getBlob(w, lead, ask.id);
+      const m = seen.meta || {};
+      const leadKey = CH.doorSealKey(agree(leadBox, String(m.box)), Object.assign({}, f, { deskBox: String(m.box) }));
+      let opened = null;
+      try {
+        const ct = seen.bytes, d = crypto.createDecipheriv("aes-256-gcm", leadKey, Buffer.from(m.nonce, "hex"), { authTagLength: B.TAG_BYTES });
+        d.setAAD(B.aadOf({ relayTeamId: w.rt, epoch: m.epoch, id: m.id, supersedes: m.supersedes, writerKeyId: m.writer, counter: m.counter }));
+        d.setAuthTag(ct.subarray(ct.length - B.TAG_BYTES));
+        opened = B.unframe(Buffer.concat([d.update(ct.subarray(0, ct.length - B.TAG_BYTES)), d.final()]));
+      } catch { opened = null; }
+      const swapped = CH.doorSealKey(agree(leadBox, boxPair().pub), Object.assign({}, f, { deskBox: boxPair().pub }));
+      const objects = [...w.R.bucket.objects.values()].map(b => b.toString("latin1")).join("");
+      const blind = dumpText(w).indexOf(marker) < 0 && objects.indexOf(marker) < 0;
+      const answer = B.seal({ relayTeamId: w.rt, epoch: 2, teamKey: crypto.randomBytes(32), writer: { keyId: w.lead.keyId, privateKey: w.lead.privateKey },
+        path: "join-answer.json", body: "joined", counter: 2, place: null, kind: "file", id });
+      answer.place = "answer:" + id;
+      const posted = await put(w, lead, answer);
+      const again = await helloAs(w, k);
+      const read = await getBlob(w, again.json && again.json.session, id);
+      const yes = await devices(w, w.devs.concat([{ id: k.keyId, pub: k.pub, desk: place }]));
+      const own = await helloAs(w, k);
+      const ok = upLead.status === 200 && hello.status === 200 && refused(listed, "not-enrolled") && refused(fetched, "not-enrolled")
+        && refused(heard, "not-enrolled") && up.status === 200 && refused(second, "token-spent") && seen.status === 200 && m.box === deskBox.pub
+        && m.pub === k.pub && !!opened && opened.path === "desks/" + place + "/join.json" && JSON.parse(opened.body).marker === marker
+        && !!swapped && !swapped.equals(sealKey) && blind && posted.status === 200 && again.status === 200 && again.json.door === id
+        && read.status === 200 && read.meta.place === "answer:" + id && yes.status === 200 && own.status === 200 && own.json.invite === undefined;
+      return { ok, detail: JSON.stringify({ lead: said(upLead), hello: said(hello), listed: said(listed), fetched: said(fetched), up: said(up),
+        second: said(second), box: m.box === deskBox.pub, opened: !!opened, blind, answer: said(read), yes: said(yes), own: own.json && own.json.invite }) };
+    }
+    const request = await safe(requestScene);
+    check(request.ok, "a4i the door's request is sealed to the lead's box: before and after its one upload the session reads nothing of the"
+      + " team, the request goes at epoch 1 on a team at epoch 2, a second is token-spent, the lead reads the desk's box beside it and"
+      + " opens it, a box swapped on the way makes another key, the relay's rows and bucket never hold its text, the desk reads the lead's"
+      + " answer by the id its session named, and the lead's yes makes it a device: " + request.detail);
+
+    /* A removed desk stays removed: its key is refused at the door whatever its certificate, and its request's sessions end. */
+    async function removedScene() {
+      const w = await doorWorld();
+      const k = keyPair(true), place = deskOf(w);
+      const hello = await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now));
+      await devices(w, w.devs.concat([{ id: k.keyId, pub: k.pub, desk: place }]));
+      const off = await devices(w, w.devs);
+      const back = await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now));
+      const stillDoor = await since(w, hello.json && hello.json.session);
+      const ok = hello.status === 200 && off.status === 200 && refused(back, "removed") && stillDoor.status >= 400;
+      return { ok, detail: JSON.stringify({ hello: said(hello), off: said(off), back: said(back), old: said(stillDoor) }) };
+    }
+    const removed = await safe(removedScene);
+    check(removed.ok, "a4j a desk the lead took off is refused removed at the door with a good certificate, and its old door session reads"
+      + " nothing: only an invitation registered after the removal takes that key again: " + removed.detail);
+
+    /* Invitations stand as they were beside the door, and the lead's states name invitations alone. */
+    async function invitesScene() {
+      const w = await doorWorld();
+      const t = hex(32), inv = hex(16);
+      const added = await invites(w, [{ id: inv, hash: sha(t) }], []);
+      const k = keyPair(true);
+      const door = await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now));
+      const token = await tokenHello(w, inv, t);
+      const states = await call(w.R, "GET", "/relay/v1/t/" + w.rt + "/states", { token: await sessionOf(w, w.lead) });
+      const rows = states.json && Array.isArray(states.json.states) ? states.json.states : [];
+      const ok = added.status === 200 && door.status === 200 && token.status === 200 && token.json.invite === true && token.json.door === undefined
+        && rows.length === 1 && rows[0].id === inv && rows[0].state === "used";
+      return { ok, detail: JSON.stringify({ door: said(door), token: said(token), states: rows.map(r => r.id === inv ? "inv " + r.state : "other") }) };
+    }
+    const invs = await safe(invitesScene);
+    check(invs.ok, "a4k beside an open door an invitation's token hello is answered as before, with no door id, and the lead's states name"
+      + " the invitation alone: " + invs.detail);
+
+    /* A lapsed team lets no one in at the door; a lead handover closes it until the new lead names its licences. */
+    async function lapseScene() {
+      const w = await doorWorld();
+      w.R.clock.now = T0 + 61 * K.DAY;
+      const k = keyPair(true);
+      const r = await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now));
+      const reopen = await doorSet(w, [w.ref]);
+      const shut = await doorSet(w, [], { t: w.R.clock.now + 1 });
+      const ok = refused(r, "team-lapsed") && refused(reopen, "team-lapsed") && shut.status === 200;
+      return { ok, detail: JSON.stringify({ hello: said(r), reopen: said(reopen), shut: said(shut) }) };
+    }
+    async function handoverScene() {
+      const w = await doorWorld();
+      const at = w.R.clock.now, next = keyPair(false), to = { keyId: next.keyId, pub: next.pub };
+      const moved = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/lead", { json: { to, t: at,
+        sig: signHex(w.lead, C.leadBytes(w.rt, to.keyId, to.pub, at)), grant: K.grantFor(next.pub, at) } });
+      const k = keyPair(true);
+      const r = await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now));
+      const ok = moved.status === 200 && refused(r, "not-enrolled");
+      return { ok, detail: JSON.stringify({ moved: said(moved), hello: said(r) }) };
+    }
+    const lapsed = await safe(lapseScene), handed = await safe(handoverScene);
+    check(lapsed.ok, "a4l a read-only team refuses a door hello and a door opened team-lapsed, and still lets its lead close the door: " + lapsed.detail);
+    check(handed.ok, "a4m a lead handover closes the door the old key opened, so a good certificate is not-enrolled until the new lead names"
+      + " its licences: " + handed.detail);
+
+    /* Each guard lifted in a copy of relay/core.cjs turns its leg red, and the product file is never written. */
+    const DOOR_PLANTS = [
+      ["door-bind", async () => { const w = await doorWorld(); const k = keyPair(true);
+        return (await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now), { plain: true })).status === 200; }, "a4b (an ordinary hello's signature opens the door)"],
+      ["door-cert", async () => !(await refusesScene()).ok, "a4b (a bad certificate opens the door)"],
+      ["cert-desk", async () => !(await refusesScene()).ok, "a4b (a certificate for another key opens the door)"],
+      ["cert-licence", async () => !(await refusesScene()).ok, "a4b (another licence's certificate opens the door)"],
+      ["cert-ended", async () => !(await refusesScene()).ok, "a4b (an expired certificate opens the door)"],
+      ["cert-sig", async () => !(await refusesScene()).ok, "a4b (a forged certificate opens the door)"],
+      ["cert-may", async () => !(await refusesScene()).ok, "a4b (a delegation that may not sign licences serves)"],
+      ["cert-root", async () => !(await refusesScene()).ok, "a4b (a delegation the root did not sign serves)"],
+      ["cert-span", async () => !(await refusesScene()).ok, "a4b (a certificate running past 30 days serves)"],
+      ["cert-future", async () => !(await refusesScene()).ok, "a4b (a certificate issued ahead of the clock serves)"],
+      ["cert-size", async () => !(await refusesScene()).ok, "a4b (a certificate past the size cap is walked and serves)"],
+      ["door-lead-sig", async () => !(await registerScene()).ok, "a4d (a desk sets the door's licences)"],
+      ["door-replay", async () => !(await registerScene()).ok, "a4d (an older registration replaces a later one)"],
+      ["door-refs-cap", async () => !(await registerScene()).ok, "a4d (a list past the cap is taken)"],
+      ["door-person", async () => !(await personScene()).ok, "a4e (one person fills the door)"],
+      ["door-rate", async () => !(await rateScene()).ok, "a4f (the door takes requests without an hourly bound)"],
+      ["door-live", async () => !(await liveScene()).ok, "a4g (the door holds requests without a cap)"],
+      ["door-try-share", async () => !(await tryScene()).ok, "a4h (refused door hellos fill the team's challenges)"],
+      ["door-answer-only", async () => !(await requestScene()).ok, "a4i (a door session lists the team before its upload)"],
+      ["door-removed", async () => !(await removedScene()).ok, "a4j (a removed key comes back by the door)"],
+      ["door-states", async () => !(await invitesScene()).ok, "a4k (door requests are told as invitations in the states)"],
+      ["door-lapse", async () => !(await lapseScene()).ok, "a4l (a read-only team takes a door request)"],
+      ["door-lapse-open", async () => !(await lapseScene()).ok, "a4l (a read-only team opens its door)"],
+      ["door-handover", async () => !(await handoverScene()).ok, "a4m (the old lead's door stands after a handover)"],
+    ];
+    const base = taken.ok && refusesAll.ok && closed.ok && register.ok && person.ok && rated.ok && live.ok && tries.ok && request.ok && removed.ok
+      && invs.ok && lapsed.ok && handed.ok;
+    for (const [tag, turns, what] of DOOR_PLANTS) {
+      const line = "a4p lifting plant:" + tag + " turns " + what + " red, and the product file is never written";
+      if (PLANTS_OFF) { skip(line); continue; }
+      const p = await liftCore("plant:" + tag, turns);
+      check(base && p.turned && p.back, line + ": " + p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED"));
     }
   }
 

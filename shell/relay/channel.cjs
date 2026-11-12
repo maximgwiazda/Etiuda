@@ -103,6 +103,8 @@ const DESK_COPY_INFO = "etiuda-relay-desk-copy";
 /* The label of the lead's answer to one invitation. One key, 32 bytes, and no place id: the blob's id is the invitation's. */
 const ANSWER_INFO = "etiuda-join-answer";
 const ANSWER_NAME = "join-answer.json";
+/* The label of the key a request at the team's standing door is sealed under (doorSealKey). */
+const DOOR_SEAL_INFO = "etiuda-relay-door-seal";
 /* A team's lead key shown in two hands: what the desk says once for each fork it sees, the copywriter's words. */
 const FORK_SAID = {
   later: "Someone has used this team's old lead key to hand the team to another key as well, so that key is evidently in someone else's hands. This desk stays with the key it already follows, and the catalogs on it stay as they are. Tell the team's lead about it.",
@@ -260,6 +262,20 @@ function answerKey(dh, f) {
   if (!table(f) || !HEX32.test(String(f.rt)) || !HEX32.test(String(f.inv)) || !/^k-[0-9a-f]{16}$/.test(String(f.deskId))
     || !HEX64.test(String(f.deskBox)) || !HEX64.test(String(f.leadBox))) return null;
   const info = Buffer.from([ANSWER_INFO, f.rt, f.inv, f.deskId, f.deskBox, f.leadBox].join("\n") + "\n", "utf8");
+  return Buffer.from(crypto.hkdfSync("sha256", d, Buffer.alloc(0), info, 32));
+}
+
+/* The key a desk asking at the team's standing door seals its one request under (relay/core.cjs byDoor): 32 bytes of HKDF-SHA256
+   over the X25519 agreement of the lead's box and the desk's, salt empty, so only the lead and that desk can make it and the relay
+   carries a request it cannot open. The desk takes the lead's key and box from what it trusts, never from the relay; the lead takes
+   the desk's box from the request's metadata, and a box swapped on the way makes another key, which opens nothing. The rest binds
+   it: the relay team, the lead's key id, the lead's box, the desk's id and the desk's box, all public. */
+function doorSealKey(dh, f) {
+  const d = toBytes(dh);
+  if (!d || d.length !== 32 || d.every(b => b === 0)) return null;
+  if (!table(f) || !HEX32.test(String(f.rt)) || !B.isId(f.leadKeyId) || !HEX64.test(String(f.leadBox))
+    || !/^k-[0-9a-f]{16}$/.test(String(f.deskId)) || !HEX64.test(String(f.deskBox))) return null;
+  const info = Buffer.from([DOOR_SEAL_INFO, f.rt, f.leadKeyId, f.leadBox, f.deskId, f.deskBox].join("\n") + "\n", "utf8");
   return Buffer.from(crypto.hkdfSync("sha256", d, Buffer.alloc(0), info, 32));
 }
 
@@ -2930,6 +2946,7 @@ module.exports = {
   TEAM_NAME, ECHO_MS, BRANCH_PREFIX, HEAD_PREFIX, INVITE_SEAL_INFO, DESK_COPY_INFO, ANSWER_INFO, ANSWER_NAME, INVITE_UPLOAD_MAX,
   SESSION_KEEP_MS, REMOVED_KEEP_MS, REMOVED_CLOCK_AHEAD_MS, WAITING_SAID, FORK_SAID, STRANDED_SAID, LAPSE_STATES, RELAY_CHALLENGE_MS,
   lapseKept, lapseStep,
+  DOOR_SEAL_INFO, doorSealKey,
   pathKey, canon, signedBytes, helloBytes, inviteSealKey, inviteWrapKey, deskCopyOf, answerKey, relayOf, rosterOf, branchIdOf, inPlace, diskIO, writeWhole, stateOf,
   inviteWrapAad: B.inviteWrapAad, sealInviteWrap: B.sealInviteWrap, openInviteWrap: B.openInviteWrap, openWrap: B.openWrap,
   inviteRefusedSignedBytes: B.inviteRefusedSignedBytes, inviteRefusedGenuine: B.inviteRefusedGenuine,
