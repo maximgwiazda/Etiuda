@@ -6132,7 +6132,7 @@ async function takeInvite(text, name, check) {
   persistDeskEnvelope();
   relayCatalogNamed.delete(parsed.team);
   const view = joinView();
-  catalogFolderChanged();
+  catalogFolderChanged(); /* plant:invite-folder-changed */
   if (theWindow && !theWindow.isDestroyed()) catalogChanged(theWindow);
   return view;
 }

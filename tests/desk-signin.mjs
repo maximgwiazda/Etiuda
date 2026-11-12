@@ -33,9 +33,9 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 31;
+const PLANTS = 33;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 48 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 49 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -490,6 +490,21 @@ CASES.flushCallers = () => {
     && /if \(!theWindow \|\| theWindow\.isDestroyed\(\)\) return;\n[^\n]*\n\s*setImmediate\(\(\) => signinFlush\(\)\);\n\s*if \(catalogFolder\(\) === watchedFolder\) return;/.test(changed);
 };
 function tryDeclText(s) { try { return decl(MAIN, s); } catch { return ""; } }
+/* The other two ways a desk signed in first comes to a team folder reach catalogFolderChanged, and so the flush: a folder invitation
+   taken (its join set, then the folder changed) and an admission heeded (finishJoin, its join cleared and the lead now pinned).
+   `swap` is put into the shell's text in memory, as a plant does. */
+CASES.flushJoinReach = (s, swap) => {
+  let main = MAIN;
+  if (swap) {
+    if (main.split(swap[0]).length !== 2) throw new Error("plant anchor not in the shell once: " + swap[0]);
+    main = main.replace(swap[0], swap[1]);
+  }
+  const text = d => { try { return decl(main, d); } catch { return ""; } };
+  const invite = text("async function takeInvite("), finish = text("function finishJoin(");
+  const after = (body, set) => { const at = body.lastIndexOf(set); return at >= 0 && /\n\s*catalogFolderChanged\(\);/.test(body.slice(at)); };
+  return after(invite, "\n  teamJoin = j;\n") && /\n\s*return view;\n\}$/.test(invite)
+    && after(finish, "\n  teamJoin = null;\n") && /\n\s*catalogFolderChanged\(\);[^\n]*\n[^\n]*\n\s*return true;\n\}$/.test(finish);
+};
 
 /* ---- the desk's Sign out at the service --------------------------------------------------------------------------------- */
 /* signout/desk's body has the interface's three names alone, signed by this desk's key over the service's bytes. */
@@ -634,6 +649,7 @@ const LEGS = [
   ["ds9e", "signoutDoor", "the service's door carries signout/desk at its own address alone, no redirect, nothing cached, no cookie"],
   ["ds10a", "flushJoin", "a desk signed in first writes its seat beside its request to join a folder team, and again where the file went or the folder changed"],
   ["ds10b", "flushCallers", "the seat is written when a request to join is written, and after a join taken or finished or a folder changed"],
+  ["ds10c", "flushJoinReach", "a folder invitation taken and an admission heeded both reach the folder change, and so the seat's write"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
@@ -744,6 +760,8 @@ if (!PLANTS_OFF) {
   await plantWire("dsp30", ["&& signinOffered().length) { /* plant:signout-offered */", ") {"], "signoutNone");
   await plantWire("dsp31", ["return !!teamJoin && !(teamJoin.invite && teamJoin.invite.relay); /* plant:flush-asking */", "return false;"], "flushJoin");
   await plantWire("dsp32", ["if (signinWrote === mark && fs.existsSync(file)) return false; /* plant:flush-mark */", "if (signinWrote === cert.sig.value) return false;"], "flushJoin");
+  await plantWire("dsp33", ["  catalogFolderChanged(); /* plant:invite-folder-changed */\n", ""], "flushJoinReach");
+  await plantWire("dsp34", ["  catalogFolderChanged(); /* plant:finish-join-watched */\n", ""], "flushJoinReach");
   /* A gate on a local act, put into the desk file's write in memory, is seen. */
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),
