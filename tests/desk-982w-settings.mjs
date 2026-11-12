@@ -11,14 +11,14 @@
  *      row is All settings and no section row is chosen
  *   s3 on the one page every row is as wide as its column, within 2 px
  *   s4 Appearance opened alone keeps its rows on the left, between 440 px and half the page,
- *      with As the desk will look on the right; General's rows sit side by side at 2000
+ *      with As the desk will look on the right; Notifications' rows sit side by side at 2000
  *   s5 the picture's ground follows Dark, its blur follows Blur effects, its cards follow
  *      Columns, and it takes no click and no Tab stop
  *   s6 a section heading opens that section; the crumb (All settings, absent on the one page) and All settings return; Escape returns
  *   s9 from 1100 to 2560 px no row's words run under its control, on the one page and three sections opened alone
  *   s10 at 1280 every section but the shortcuts stands in the first column, one under another
  *   s7 a search on the one page leaves only the matching rows, each under its heading
- *   s8 openSettings("general") opens General alone; openSettings() opens the one page
+ *   s8 openSettings("general") opens General alone, and the agent's name is in Account, not General; openSettings() opens the one page
  *   s11 in Polish, 546 to 2560 px: a row's words keep 260 px beside their control or the control stands under them at
  *       the row's width, its options one line in equal shares; nothing scrolls sideways
  */
@@ -87,7 +87,7 @@ async function readPage(page) {
       left: h.parentElement.getBoundingClientRect().left,
       width: h.parentElement.getBoundingClientRect().width,
     })).filter(h => h.name && h.name === h.name.replace(/\s+/g, " ")) : [];
-    const sectionNames = ["General", "Appearance", "Layout", "Keyboard shortcuts", "Notifications",
+    const sectionNames = ["Account", "General", "Appearance", "Layout", "Keyboard shortcuts", "Notifications",
       "Teams and keys", "Data and defaults", "About", "AI"];
     const blocks = heads.filter(h => sectionNames.indexOf(h.name) >= 0);
     const h2 = box && box.querySelector("h2");
@@ -204,7 +204,7 @@ try {
   });
   check(s3res && s3res.ok, "s3 on the one page every row is as wide as its column, within 2 px", s3res);
 
-  /* s4. Appearance with the picture, General as tiles, at 2000. */
+  /* s4. Appearance with the picture, Notifications as tiles, at 2000: General keeps one row in a browser since the name left it. */
   await page.evaluate(() => openSettings("appearance"));
   await sleep(80);
   const s4app = await page.evaluate(() => {
@@ -219,7 +219,7 @@ try {
     const beside = picture.getBoundingClientRect().left >= rowsBox.getBoundingClientRect().right - 2;
     return { ok: w >= 440 && w <= half + 1 && beside, w: Math.round(w), half: Math.round(half), beside, page: box.clientWidth };
   });
-  await page.evaluate(() => openSettings("general"));
+  await page.evaluate(() => openSettings("notifications"));
   await sleep(80);
   const s4gen = await page.evaluate(() => {
     const box = document.getElementById("setBody");
@@ -229,9 +229,9 @@ try {
       if (Math.abs(rows[i].top - rows[j].top) < 8 && Math.abs(rows[i].left - rows[j].left) > 80) side++;
     }
     const h2 = (box.querySelector("h2") || {}).textContent || "";
-    return { ok: side >= 1 && h2.trim() === "General", side, n: rows.length, h2: h2.trim() };
+    return { ok: side >= 1 && h2.trim() === "Notifications", side, n: rows.length, h2: h2.trim() };
   });
-  check(s4app && s4app.ok && s4gen && s4gen.ok, "s4 Appearance keeps its rows on the left between 440 px and half the page, with As the desk will look beside them, and General's rows sit side by side at 2000", { appearance: s4app, general: s4gen });
+  check(s4app && s4app.ok && s4gen && s4gen.ok, "s4 Appearance keeps its rows on the left between 440 px and half the page, with As the desk will look beside them, and Notifications' rows sit side by side at 2000", { appearance: s4app, notifications: s4gen });
 
   /* s5. The picture follows the settings and takes no click or Tab. */
   await page.evaluate(() => openSettings("appearance"));
@@ -462,7 +462,9 @@ try {
     const aloneBox = document.getElementById("setBody");
     const aloneH2 = (aloneBox.querySelector("h2") || {}).textContent.trim();
     const aloneHeads = [...aloneBox.querySelectorAll("h3")].map(h => h.textContent.trim());
-    const name = !!aloneBox.querySelector("#setAgentName");
+    const nameInGeneral = !!aloneBox.querySelector("#setAgentName");
+    openSettings("account");
+    const name = !nameInGeneral && !!document.getElementById("setBody").querySelector("#setAgentName");
     openSettings();
     const allBox = document.getElementById("setBody");
     const allH2 = (allBox.querySelector("h2") || {}).textContent.trim();
@@ -477,7 +479,7 @@ try {
     && s8res.allH2 === "Settings" && s8res.lede === "Every setting Etiuda has, on one page."
     && s8res.heads.indexOf("General") >= 0 && s8res.heads.indexOf("Appearance") >= 0
     && s8res.chosen.length === 1 && s8res.chosen[0] === "All settings";
-  check(s8ok, "s8 openSettings(\"general\") opens General alone and openSettings() opens the one page", s8res);
+  check(s8ok, "s8 openSettings(\"general\") opens General alone, the agent's name is in Account and not General, and openSettings() opens the one page", s8res);
 
   /* s11 (the designer, dark Polish, 2026-11-11): "where a row's words would get under 200 px beside its control, the
      control goes under the words at the row's full width, its options equal shares on one line", at 260 px (the designer,
