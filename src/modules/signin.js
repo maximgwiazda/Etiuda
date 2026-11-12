@@ -26,7 +26,8 @@ function signinRead(v){
     ask: o.ask===true,
     refused: typeof o.refused==="string" ? o.refused : "",
     busy: known(o.busy) ? o.busy : "",
-    said: typeof o.said==="string" ? o.said : ""
+    said: typeof o.said==="string" ? o.said : "",
+    preview: o.preview===true && Array.isArray(o.offered) && o.offered.some(known)
   };
 }
 let signinV=signinRead(null);
@@ -93,15 +94,23 @@ function signinSay(reason, v, p){
       return [t("This desk's seat is due for renewal."), t("It renews by itself the next time the sign-in service answers. Everything on this desk works as before.")];
     case "ask":
       return [t("This desk could not renew its sign-in by itself."), t("Signing in again below picks up where it stopped. Meanwhile everything on this desk works as before.")];
+    case "signin-preview":
+      return [t("Sign-in is not set up yet, so nothing was sent. This is a preview."), ""];
     default:
       return [t("The sign-in did not finish."), t("Nothing changed, and signing in can be tried again.")];
   }
 }
-const FAIL_FIRST=["unreached","signin-unreached","signin-timeout","signin-browser","signin-notallowed","desks","token","signin","signin-refused","signin-token","signin-unbound","signin-state","signin-none"];
+const FAIL_FIRST=["unreached","signin-unreached","signin-timeout","signin-browser","signin-notallowed","desks","token","signin","signin-refused","signin-token","signin-unbound","signin-state","signin-none","signin-preview"];
 /* THE DOOR'S CONTENT for the view `v`, whatever form draws it: {moment, ident, heading, line, say, calm, code, providers, cap, privacy, foot,
    acts: [{act, label, solid}]}; null where there is no door. The shell is separate from what it does: signinPanelHtml is the one
    form drawn today (a button in the header with a panel under it), and another form takes the same content. */
+/* In the sign-in preview (shell/main.js signinPreviewing) every moment carries the copywriter's line, drawn in the frame. */
 function signinDoor(v){
+  const d=signinDoorOf(v);
+  if(d && v.preview) d.preview=t("Preview only. Sign-in is not set up yet, so nothing here is sent.");
+  return d;
+}
+function signinDoorOf(v){
   if(!signinShown(v)) return null;
   const p=signinParts(v), acct={act:"account", label:t("Account settings")};
   const ident={initial:p.initial, name:p.name || (SIGNIN_NAMES[v.signedIn]||""), sub:p.sub, off:p.off};
@@ -161,8 +170,13 @@ function signinActsHtml(acts){
   return '<div class="sgn-acts">'+acts.map(a=>'<button type="button" class="btn'+(a.solid?' primary':'')+'" data-signin-act="'+esc(a.act)+'">'+esc(a.label)+'</button>').join("")+'</div>';
 }
 /* Form B's panel: the door's content in the panel's own type, the cannot-be-done moments as its heading and line, no box. */
+/* The preview's line, as the panel and Account draw it; "" outside the preview. */
+function signinPreviewHtml(v){
+  return v && v.preview ? '<p class="sgn-cap sgn-preview" data-signin-preview>'+esc(t("Preview only. Sign-in is not set up yet, so nothing here is sent."))+'</p>' : "";
+}
 function signinPanelHtml(d){
   let h="";
+  if(d.preview) h+=signinPreviewHtml({preview:true});
   if(d.ident) h+=signinIdentHtml(d.ident);
   if(d.heading) h+='<h4>'+esc(d.heading)+'</h4>';
   if(d.line) h+='<p class="sgn-lede">'+esc(d.line)+'</p>';
@@ -303,6 +317,7 @@ export {
   signinNow,
   signinOnChange,
   signinParts,
+  signinPreviewHtml,
   signinProvidersHtml,
   signinRead,
   signinSay,

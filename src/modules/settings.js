@@ -31,7 +31,7 @@ import { sxIcon } from "./sx-icons.js";
 import { focusKey, focusSame } from "./dom.js";
 import { orgModel, orgRanks, syncOrgMark } from "./org-model.js";
 import { signinNow, signinShown, signinParts, signinSay, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow,
-  signinAct, signinStart, signinOnChange } from "./signin.js";
+  signinAct, signinStart, signinOnChange, signinPreviewHtml } from "./signin.js";
 
 /* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name,
    in columns that fill the width. Choosing a section shows that section alone: Appearance and Layout
@@ -276,14 +276,14 @@ function accountCardHtml(v){
     h+=signinIdentHtml({initial:"", name:t("Finish signing in in the browser"),
       sub:t("The browser has opened {PROVIDER}'s sign-in page. Etiuda waits here and carries on by itself when you come back.").split("{PROVIDER}").join(prov)})
       +'<span class="sgn-acts"><button type="button" class="btn" data-signin-act="again">'+esc(t("Open the browser again"))+'</button>'
-      +'<button type="button" class="btn" data-signin-act="stop">'+esc(t("Cancel"))+'</button></span>';
+      +'<button type="button" class="btn" data-signin-act="stop">'+esc(t("Cancel"))+'</button></span>'+signinPreviewHtml(v);
     return h+'</div>';
   }
   const failed=v.said && v.said!=="signin-done" && v.said!=="signin-cancelled" && !v.signedIn;
   if(failed){ const s=signinSay(v.said, v); h+=signinIdentHtml({initial:"", name:s[0], sub:s[1]}); }
   else h+=signinIdentHtml({initial:"", name:t("Not signed in"),
     sub:t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.")});
-  h+='<div>'+signinProvidersHtml(v.offered, true)+'<p class="sgn-cap">'+esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account."))+'</p>'
+  h+='<div>'+signinPreviewHtml(v)+signinProvidersHtml(v.offered, true)+'<p class="sgn-cap">'+esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account."))+'</p>'
     +'<p class="sgn-cap">'+esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account."))+'</p></div>';
   if(choosing && v.signedIn) h+='<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">'+esc(t("Cancel"))+'</button></span>';
   return h+'</div>';

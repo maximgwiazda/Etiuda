@@ -16,6 +16,9 @@
  *
  * EVERY GUARD IS SHOWN RED (ds-plants): the line carrying its plant tag is put in another form in memory and the same case
  * is read again; nothing on disk is touched. Skipped under ETIUDA_PLANTS=off.
+ *
+ * THE SIGN-IN PREVIEW (ds12): ETIUDA_SIGNIN_PREVIEW=1 draws the door and Account with both providers while none has a client id.
+ * Its press is driven through the shell's own click and sign-in handlers, sliced, with every door out stood in and counted.
  */
 process.removeAllListeners("warning");
 process.on("warning", () => {});
@@ -33,9 +36,9 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 40;
+const PLANTS = 43;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 53 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 58 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -69,7 +72,7 @@ const NAMES = ["SIGNIN_PROVIDERS", "signinOffered", "signinNonce", "signinAuthor
   "signinRequest", "signinListen", "signinRun", "signinRenew", "signinKeep", "signinKept", "GOOGLE_HD_NEEDS_EMAIL", "signinRefreshForm",
   "SIGNIN_SERVICE", "signinDeskBytes", "signinDeskBody", "signinServiceAsk", "signinCertOk", "signinAnswer", "signinSeat", "signinLapsed",
   "signinSettle", "signinRenewHeld", "seatFileText", "SEAT_NAME", "signinFileRead", "signinFileText", "branchIdOf", "inviteRead",
-  "SIGNOUT_SERVICE", "signoutDeskBytes", "signoutDeskBody", "signoutAsk", "signinDoorRequest"];
+  "SIGNOUT_SERVICE", "signoutDeskBytes", "signoutDeskBody", "signoutAsk", "signinDoorRequest", "signinKnown", "signinPreviewing"];
 /* The section, evaluated: `swap` is [from, to], put in place of the one line that holds `from`, for a plant. */
 function load(swap, where) {
   let sec = SECTION, inv = INVITE;
@@ -713,6 +716,124 @@ CASES.pageNothingFromProvider = () => {
     && P.signinCodeText(CODE) === "7K3M Q9TV 2XRB HN4W";
 };
 
+/* ---- the sign-in preview (ds12) ----------------------------------------------------------------------------------------- */
+const PREVIEW_LINE = "Preview only. Sign-in is not set up yet, so nothing here is sent.";
+const PREVIEW_PRESSED = "Sign-in is not set up yet, so nothing was sent. This is a preview.";
+const PREVIEW_LINE_PL = "Tylko podgląd. Logowanie nie jest jeszcze uruchomione, więc nic stąd nie zostanie wysłane.";
+const PREVIEW_PRESSED_PL = "Logowanie nie jest jeszcze uruchomione, więc nic nie wysłano. To tylko podgląd.";
+/* The section loaded under ETIUDA_SIGNIN_PREVIEW `v` (null: absent), `swap` put in the section where its anchor is. */
+function loadEnv(v, swap) {
+  const was = process.env.ETIUDA_SIGNIN_PREVIEW;
+  if (v === null) delete process.env.ETIUDA_SIGNIN_PREVIEW; else process.env.ETIUDA_SIGNIN_PREVIEW = v;
+  try { return load(swap && SECTION.split(swap[0]).length === 2 ? swap : null); }
+  finally { if (was === undefined) delete process.env.ETIUDA_SIGNIN_PREVIEW; else process.env.ETIUDA_SIGNIN_PREVIEW = was; }
+}
+/* An IPC statement of the wiring, from its first line to its closing "});". */
+function ipcSlice(start) {
+  const a = WIRING.indexOf("\n" + start);
+  return a < 0 ? "" : WIRING.slice(a + 1, WIRING.indexOf("\n});", a) + 4);
+}
+/* The view and the two handlers a press goes through, over the section `sec`, every door out stood in and counted: the identity
+   (which may make the desk's key), the browser and loopback (signinIo), the provider (signinRun), the service, a write, the network. */
+const PRESS_STANDS = ["ipcMain", "fromEngine", "LINK_CLICK_MS", "signinState", "signinLapsed", "signinOffered", "signinPreviewing", "signinKnown",
+  "SIGNIN_PROVIDERS", "branchIdentity", "net", "signinIo", "signinRun", "signinSeat", "signinTake", "signinFlush", "signinSave", "tellSignin"];
+function pressStand(sec, swap) {
+  const st = { on: {}, handle: {}, out: 0, tells: 0 };
+  const viewDecl = (() => { try { return decl(MAIN, "function signinView("); } catch { return ""; } })();
+  let text = [viewDecl, ipcSlice('ipcMain.on("etiuda:signin-click"'), ipcSlice('ipcMain.handle("etiuda:signin",')].join("\n");
+  if (swap && text.split(swap[0]).length === 2) text = text.replace(swap[0], swap[1]);
+  const out = () => { st.out++; throw new Error("a door out was reached"); };
+  const body = "let signinClick = null, signinBusy = null, signinSaid = \"\";\n" + text + "\nreturn { view: signinView };";
+  const r = new Function(...PRESS_STANDS, body)({ on: (ch, fn) => { st.on[ch] = fn; }, handle: (ch, fn) => { st.handle[ch] = fn; } }, () => true, 2000,
+    () => ({ held: null }), sec.signinLapsed, sec.signinOffered, sec.signinPreviewing, sec.signinKnown, sec.SIGNIN_PROVIDERS,
+    () => { st.out++; return { id: DESK_ID, key: DESK_KEY }; }, { fetch: out }, out, out, out, out, out, out, () => { st.tells++; });
+  st.view = r.view;
+  st.press = async id => {
+    const e = { returnValue: undefined };
+    st.on["etiuda:signin-click"](e, id);
+    try { return await st.handle["etiuda:signin"]({}, id); } catch (err) { st.out++; return null; }
+  };
+  return st;
+}
+/* Off by default: absent, "0", "yes" or " 1", nothing is offered and nothing is a preview; "1" alone offers both as a preview. */
+CASES.previewOff = (s, swap) => {
+  const seen = [null, "0", "yes", " 1", "1"].map(v => { const sec = loadEnv(v, swap), w = pressStand(sec, swap).view(); return JSON.stringify([w.offered, w.preview]); });
+  return seen.slice(0, 4).every(x => x === "[[],false]") && seen[4] === '[["microsoft","google"],true]';
+};
+/* Inert with real ids: the section with Microsoft's client id filled in, the variable set, offers Microsoft alone and no preview, and a
+   press of Google is the ordinary "not offered", nothing reached; the decision alone: asked, and nothing configured. */
+CASES.previewInert = (s, swap) => {
+  const anchor = 'microsoft: Object.freeze({ clientId: "",';
+  if (SECTION.split(anchor).length !== 2) return false;
+  const keep = SECTION;
+  let real = null, withId = null;
+  try {
+    real = loadEnv("1", swap);
+    SECTION = keep.replace(anchor, 'microsoft: Object.freeze({ clientId: "' + MS_CLIENT + '",');
+    withId = loadEnv("1", swap);
+  } finally { SECTION = keep; }
+  const st = pressStand(withId, swap), w = st.view();
+  return real.signinPreviewing(true, configured(real)) === false && real.signinPreviewing(true) === true && real.signinPreviewing(false) === false
+    && withId.signinPreviewing() === false && JSON.stringify([w.offered, w.preview]) === '[["microsoft"],false]'
+    && st.press("google").then(v => !!v && v.said === "signin-none" && st.out === 0);
+};
+/* Nothing reaches out: a trusted press of either provider is answered "signin-preview" before the identity, the browser, the
+   loopback, the provider, the service, a write or the network; an untrusted press and an unknown provider are not the preview's. */
+CASES.previewPress = async (s, swap) => {
+  const st = pressStand(loadEnv("1", swap), swap);
+  const untrusted = await st.handle["etiuda:signin"]({}, "microsoft");
+  const ms = await st.press("microsoft"), g = await st.press("google"), odd = await st.press("elsewhere");
+  return !!untrusted && untrusted.said === "" && !!ms && ms.said === "signin-preview" && ms.busy === "" && ms.preview === true
+    && !!g && g.said === "signin-preview" && !!odd && odd.said === "signin-none" && st.out === 0 && st.tells >= 2;
+};
+/* Visibly a preview: the line in the door's content in every moment the preview reaches and in Account's card, the press's line as
+   the door's heading; none of it without the preview; Polish too. */
+CASES.previewPage = async () => {
+  if (!P) return false;
+  const storage = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const SET = await import(pathToFileURL(path.join(ROOT, "src", "modules", "settings.js")).href);
+  const word = v => { const d = P.signinDoor(P.signinRead(v)); return d ? d : {}; };
+  /* Account drawn as settings.js draws it, over a host answering the view and a document that holds nothing (desk-first-edition's). */
+  const quiet = { contains: () => false, add() {}, remove() {}, toggle() {} };
+  const acct = v => {
+    globalThis.window = { innerWidth: 1280, innerHeight: 800, addEventListener() {}, removeEventListener() {}, E_HOST: { signinState: () => v } };
+    globalThis.document = { querySelector: () => null, getElementById: () => null, querySelectorAll: () => [], documentElement: { dataset: {}, classList: quiet },
+      body: { classList: quiet }, addEventListener() {}, removeEventListener() {} };
+    globalThis.getComputedStyle = () => ({ getPropertyValue: () => "" });
+    try { return SET.settingsPageHtml("account", ""); } finally { delete globalThis.window; delete globalThis.document; delete globalThis.getComputedStyle; }
+  };
+  const on = { offered: ["microsoft", "google"], preview: true }, off = { offered: ["microsoft", "google"] };
+  const before = word(on), pressed = word(Object.assign({}, on, { said: "signin-preview" })), plain = word(off);
+  const a = acct(on), aPressed = acct(Object.assign({}, on, { said: "signin-preview" })), aOff = acct(off);
+  const html = typeof P.signinPreviewHtml === "function" ? P.signinPreviewHtml(P.signinRead(on)) : "";
+  storage.lsSet("eUiLang", "pl");
+  let pl = {}, plA = "";
+  try { pl = word(Object.assign({}, on, { said: "signin-preview" })); plA = acct(on); } finally { storage.lsSet("eUiLang", "en"); }
+  return before.moment === "before" && before.preview === PREVIEW_LINE && pressed.moment === "refused" && pressed.heading === PREVIEW_PRESSED
+    && !pressed.line && pressed.preview === PREVIEW_LINE && plain.preview === undefined && P.signinRead({ offered: [], preview: true }).preview === false
+    && /data-signin-preview/.test(html) && html.indexOf(PREVIEW_LINE) >= 0
+    && /data-signin-preview/.test(a) && a.indexOf(PREVIEW_LINE) >= 0 && aPressed.indexOf(PREVIEW_PRESSED) >= 0 && aPressed.indexOf(PREVIEW_LINE) >= 0
+    && !/data-signin-preview/.test(aOff) && /data-e-open="signin" data-e-provider="google"/.test(aOff)
+    && pl.heading === PREVIEW_PRESSED_PL && pl.preview === PREVIEW_LINE_PL && plA.indexOf(PREVIEW_LINE_PL) >= 0;
+};
+/* Not shipped: tools/signin-preview.cmd is outside electron-builder's files; read, never run (run, it starts the installed desk):
+   per-user first, then all-users, the variable set once for that one start, no setx, no registry. */
+CASES.previewCmd = () => {
+  const { minimatch } = createRequire(import.meta.url)("minimatch");
+  const cfgText = fs.readFileSync(path.join(ROOT, "electron-builder.js"), "utf8"), fa = cfgText.indexOf("files: [");
+  const files = fa < 0 ? [] : new Function("return " + cfgText.slice(fa + 7, cfgText.indexOf("],", fa) + 1))();
+  const shipped = p => { let inc = false; for (const pat of files) { const neg = pat.startsWith("!"); if (minimatch(p, neg ? pat.slice(1) : pat, { dot: true })) inc = !neg; } return inc; };
+  const at = path.join(ROOT, "tools", "signin-preview.cmd"), text = fs.existsSync(at) ? fs.readFileSync(at, "utf8") : "";
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l && !/^rem\b/i.test(l) && l !== "@echo off");
+  const ORDER = ["setlocal", 'set "EXE=%LOCALAPPDATA%\\Programs\\Etiuda\\Etiuda.exe"', 'if not exist "%EXE%" set "EXE=%ProgramFiles%\\Etiuda\\Etiuda.exe"',
+    'if not exist "%EXE%" exit /b 1', 'if /i "%~1"=="--where" exit /b 0', 'set "ETIUDA_SIGNIN_PREVIEW=1"', 'start "" "%EXE%"', "endlocal"];
+  const idx = ORDER.map(s => lines.indexOf(s));
+  return !!text && files.length > 5 && shipped("shell/main.js") && shipped("engine/etiuda.html") && !shipped("tools/release.mjs")
+    && !shipped("tools/signin-preview.cmd") && idx.every((i, k) => i >= 0 && (k === 0 || i > idx[k - 1]))
+    && lines.filter(l => /(^|[&|(]\s*)start\s/i.test(l)).length === 1 && lines.filter(l => /ETIUDA_SIGNIN_PREVIEW/.test(l)).length === 1
+    && !lines.some(l => /\b(setx|reg)\b/i.test(l));
+};
+
 /* ---- the cases on the branch ------------------------------------------------------------------------------------------- */
 const LEGS = [
   ["ds1a", "offered", "as shipped no client id is configured and nothing is offered; a configured table offers what it configures, in order"],
@@ -757,6 +878,11 @@ const LEGS = [
   ["ds11b", "doorInvite", "the channel knocks at the door with this desk's standing certificate and the lead's box, and with nothing else"],
   ["ds11c", "doorKept", "the id the relay names is kept and the request written once, with the seat and that id, signed as the desk's own"],
   ["ds11d", "doorChannel", "the desk's relay channel is given the door's invite() ahead of the invitation's, and onDoor"],
+  ["ds12a", "previewOff", "the sign-in preview is off by default: ETIUDA_SIGNIN_PREVIEW absent, \"0\", \"yes\" or \" 1\" offers nothing; \"1\" alone offers both as a preview"],
+  ["ds12b", "previewInert", "the preview changes nothing where a provider has a client id: that one offered, no preview, another provider's press the ordinary not offered"],
+  ["ds12c", "previewPress", "in the preview a trusted press of either provider is answered signin-preview with no identity, browser, loopback, provider, service, write or request"],
+  ["ds12d", "previewPage", "the preview's line stands in the door's content and Account's card, the press's line as the heading, none without the preview; Polish too"],
+  ["ds12e", "previewCmd", "tools/signin-preview.cmd is outside the packaged files and starts the installed desk, per-user first, with the variable for that start alone"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
@@ -879,6 +1005,11 @@ if (!PLANTS_OFF) {
   await plantWire("dsp39", ["if (had && had.door === id) return false; /* plant:door-once */", ""], "doorKept");
   await plantWire("dsp40", ["      const door = signinDoorInvite(team, want.rt); /* plant:door-invite */\n      if (door !== undefined) return door;\n", ""], "doorChannel");
   await plantWire("dsp41", ["    onDoor: id => { signinDoorKept(team, mirror, id); }, /* plant:door-on */\n", ""], "doorChannel");
+  await plantWire("dsp42", ["return (asked === undefined ? SIGNIN_PREVIEW_ASKED : asked) === true && signinOffered(table).length === 0; /* plant:preview-inert */",
+    "return (asked === undefined ? SIGNIN_PREVIEW_ASKED : asked) === true;"], "previewInert");
+  await plantWire("dsp43", ["if (!p && signinPreviewing() && signinKnown(id)) { signinSaid = \"signin-preview\"; tellSignin(); return signinView(); } /* plant:preview-press */", ""], "previewPress");
+  await plantWire("dsp44", ["const SIGNIN_PREVIEW_ASKED = process.env.ETIUDA_SIGNIN_PREVIEW === \"1\"; /* plant:preview-asked */",
+    "const SIGNIN_PREVIEW_ASKED = process.env.ETIUDA_SIGNIN_PREVIEW !== undefined;"], "previewOff");
   /* A gate on a local act, put into the desk file's write in memory, is seen. */
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),
