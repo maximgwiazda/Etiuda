@@ -49,7 +49,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const NO_VERDICT = 78;
-const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618", "all-move"];
+const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618", "all-move", "all-space-d"];
 let OUT = "";
 const say = (l) => { process.stdout.write(l + "\n"); if (OUT) fs.appendFileSync(path.join(OUT, "legs.txt"), l + "\n"); };
 const refuse = (why) => { say("#legs refused: " + why); process.exit(NO_VERDICT); };
@@ -386,6 +386,30 @@ async function allMove(rec) {
       + ", link target intact " + yes(facts.victim));
 }
 
+/* ---- (f) all-space-d: a silent all-users install with /D into a folder whose path holds spaces, as a deployment tool passes it ----
+   NSIS takes /D only as the last argument and unquoted, spaces and all. A spawned argument holding a space is quoted by node, so
+   the command line is written here and passed verbatim (windowsVerbatimArguments), as a deployment tool's would be. Green where the
+   run exits 0, the all-users entry names that folder exactly and it holds the program; the uninstall then takes it whole. */
+
+async function allSpaceD(rec) {
+  const dir = path.join(LAB, "with space", PRODUCT);
+  rec.after("uninstall", uninstallMachine);
+  const line = "/S /allusers /D=" + dir;
+  rec.f("command", "setup " + line);
+  /* windowsVerbatimArguments: node joins the arguments as they are, so /D's spaces reach NSIS unquoted and last. */
+  const run = spawnSync(NEWER, ["/S", "/allusers", "/D=" + dir], { windowsHide: true, windowsVerbatimArguments: true, timeout: 600000 });
+  const facts = {
+    exit: run.error ? "error " + oneLine(run.error.message) : run.status,
+    location: P.samePath(machineDir(), dir),
+    program: fs.existsSync(path.join(dir, PRODUCT + ".exe")),
+  };
+  rec.f("exit", facts.exit); rec.f("entry-names-folder", yes(facts.location)); rec.f("program-there", yes(facts.program));
+  rec.f("installlocation", machineDir());
+  const ok = facts.exit === 0 && facts.location && facts.program;
+  rec.end(ok, ok ? "a silent all-users install with /D into a folder holding spaces landed there and is registered there"
+    : "with /D into a folder holding spaces: exit " + facts.exit + ", entry names the folder " + yes(facts.location) + ", program there " + yes(facts.program));
+}
+
 /* ---- (b) running-1618 ------------------------------------------------------------------------------------------ */
 
 function installState(dir) {
@@ -550,7 +574,7 @@ function record(name) {
   rec.end = (ok, why) => { rec.verdict = ok ? "ok" : "fail"; rec.why = why; };
   return rec;
 }
-const LEGS = { "all-upgrade": allUpgrade, "running-1618": running1618, "system-bare": systemBare, "locked-1618": locked1618, "all-move": allMove };
+const LEGS = { "all-upgrade": allUpgrade, "running-1618": running1618, "system-bare": systemBare, "locked-1618": locked1618, "all-move": allMove, "all-space-d": allSpaceD };
 
 /* The newer setup, built once from this tree under the test identity, as the marker builds it. */
 const early = legPreflight();
