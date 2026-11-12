@@ -42,9 +42,9 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 48;
+const PLANTS = 57;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 76 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 83 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -79,7 +79,8 @@ const NAMES = ["SIGNIN_PROVIDERS", "signinOffered", "signinNonce", "signinAuthor
   "SIGNIN_SERVICE", "signinDeskBytes", "signinDeskBody", "signinServiceAsk", "signinCertOk", "signinAnswer", "signinSeat", "signinLapsed",
   "signinSettle", "signinRenewHeld", "seatFileText", "SEAT_NAME", "signinFileRead", "signinFileText", "branchIdOf", "inviteRead",
   "SIGNOUT_SERVICE", "signoutDeskBytes", "signoutDeskBody", "signoutAsk", "signinDoorRequest", "signinKnown", "signinPreviewing",
-  "signinCodeForm", "signinSecretRead", "SIGNIN_SECRET_FILE", "SIGNIN_SECRET_SHAPE", "sealsForReal", "SIGNIN_WAIT_MS"];
+  "signinCodeForm", "signinSecretRead", "SIGNIN_SECRET_FILE", "SIGNIN_SECRET_SHAPE", "sealsForReal", "SIGNIN_WAIT_MS", "signinLabAt", "signinLabRead",
+  "signinLabUse"];
 /* The section, evaluated: `swap` is [from, to], put in place of the one line that holds `from`, for a plant. */
 function load(swap, where) {
   let sec = SECTION, inv = INVITE;
@@ -90,7 +91,9 @@ function load(swap, where) {
     if (inSec) sec = text.replace(swap[0], swap[1]); else inv = text.replace(swap[0], swap[1]);
   }
   /* A name the slice lacks comes back undefined, so a case reaching for it fails alone rather than the whole file. */
-  const body = NEEDS + "\n" + sec + "\n" + inv + "\nreturn {" + NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "};";
+  const body = NEEDS + "\n" + sec + "\n" + inv + "\nreturn {" + NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
+    + ", live: () => ({ providers: SIGNIN_PROVIDERS, signin: SIGNIN_SERVICE, signout: SIGNOUT_SERVICE, on: typeof signinLabOn === \"undefined\" ? undefined : signinLabOn,"
+    + " packed: signinPacked }), setPacked: v => { signinPacked = v; } };";
   /* inviteRead's own readers stand in: a folder is taken as written, no place is kept, no relay channel is read. */
   return new Function("crypto", "Buffer", "URLSearchParams", "AbortController", "setTimeout", "clearTimeout",
     "inviteFolder", "placeKept", "teamChannelOf", body)(crypto, Buffer, URLSearchParams, AbortController, setTimeout, clearTimeout,
@@ -390,7 +393,7 @@ CASES.renewFail = async s => {
 /* ---- the renewal's wiring, evaluated with stand-ins for the shell around it --------------------------------------------- */
 const WIRE_DECLS = ["const SIGNIN_RENEW_MS =", "const SIGNIN_FIRST_MS =", "async function signinRenewNow(", "function armSigninRenew(", "function signinOutNow("];
 const WIRE_STANDS = ["harnessLaunch", "PLACED_ASIDE", "signinState", "signinOffered", "branchIdentity", "signinIo", "net", "signinRenewHeld",
-  "signinSave", "tellSignin", "setTimeout", "pinnedLead", "signinTeamHere", "fs", "path", "sharedFolderForWrite", "SEAT_NAME", "signinView", "signoutAsk", "stand"];
+  "signinSave", "tellSignin", "setTimeout", "pinnedLead", "signinTeamHere", "fs", "path", "sharedFolderForWrite", "SEAT_NAME", "signinView", "signoutAsk", "signinLabHeld", "stand"];
 function loadWire(st, swap) {
   let text = WIRE_DECLS.map(d => { try { return decl(MAIN, d); } catch { return ""; } }).filter(Boolean).join("\n");
   if (swap) {
@@ -406,7 +409,7 @@ function loadWire(st, swap) {
 function wireStand(s, reply, serve) {
   const st = { flushes: 0, saves: 0, tells: 0, asked: 0, posted: 0, offeredAsked: 0, timers: [], store: { held: null } };
   Object.assign(st, {
-    harnessLaunch: () => false, PLACED_ASIDE: false,
+    harnessLaunch: () => false, PLACED_ASIDE: false, signinLabHeld: () => false,
     signinState: () => st.store, signinOffered: () => { st.offeredAsked++; return [MS]; }, branchIdentity: () => ({ id: DESK_ID, key: DESK_KEY }),
     signinIo: () => ({ keep: t => t ? "sealed:" + t : "", kept: x => String(x || "").replace(/^sealed:/, ""), sign: signWith(signKey),
       tokenAsk: async () => { st.asked++; return reply ? reply() : answer({}); }, serviceAsk: async () => { st.posted++; return serve ? serve() : answer({}); } }),
@@ -966,13 +969,17 @@ CASES.secretNever = async s => {
     && [said.join("\n"), posted.join("\n"), kept, JSON.stringify(first), JSON.stringify(renewed)].every(t => t.indexOf(STAND_IN) < 0);
 };
 /* The shell reads the package's file once, at start, where it runs installed, beside the asar, through signinSecretRead, and takes
-   it from nowhere else: no environment variable, no IPC, no page. */
+   it from nowhere else: no IPC, no page, and the environment's variable only inside the sign-in lab's read, which a desk installed
+   or packaged never enters (ds16a). */
 CASES.secretWire = () => {
   const reads = WIRING.split("\n").filter(l => /SIGNIN_SECRET_FILE/.test(l));
+  const i = MAIN.indexOf("/* plant:lab-packaged */"), from = MAIN.lastIndexOf("\n", i) + 1, block = i < 0 ? "" : MAIN.slice(from, MAIN.indexOf("\n}\n", i));
+  const envLines = MAIN.split("\n").filter(l => new RegExp("process\\.env\\b[^\\n]*" + SECRET_VAR).test(l));
   return reads.length === 1
     && /^if \(INSTALLED\) \{ try \{ signinPacked = signinSecretRead\(fs\.readFileSync\(path\.join\(String\(process\.resourcesPath \|\| ""\), SIGNIN_SECRET_FILE\), "utf8"\)\); \}/.test(reads[0])
-    && (MAIN.match(/(?<!let )signinPacked = /g) || []).length === 1 && !new RegExp("process\\.env\\b[^\\n]*" + SECRET_VAR).test(MAIN)
-    && !/ipcMain\.(on|handle)\([^\n]*secret/i.test(MAIN);
+    && /^if \(!INSTALLED && !app\.isPackaged && process\.env\.ETIUDA_SIGNIN_LAB\) \{/.test(block)
+    && (MAIN.match(/(?<!let )signinPacked = /g) || []).length === 2 && (block.match(/signinPacked = /g) || []).length === 1
+    && envLines.length === 1 && block.indexOf(envLines[0]) > 0 && !/ipcMain\.(on|handle)\([^\n]*secret/i.test(MAIN);
 };
 /* THE PACKAGE STEP (tools/signin-secret.cjs): unset, it writes nothing, removes a stale file and says "absent"; set, it writes the
    file the shell reads and says "present", never the value; a value of no secret's shape stops the pack without printing it. The
@@ -1318,6 +1325,239 @@ CASES.panelOrder = () => {
   });
 };
 
+/* ---- the sign-in lab (ds15) ---------------------------------------------------------------------------------------------
+   ETIUDA_SIGNIN_LAB names a lab file, which a desk neither installed nor packaged takes at start: a third provider, "lab", and the
+   service's door at the lab's. Its addresses here are the provider double's as Studio's tools/oidc-lab.mjs makes them. */
+const LAB_ROOT = "d".repeat(64), LAB_CLIENT = "lab-client-0123456789";
+function labFile(port, over, pover) {
+  const at = "http://127.0.0.1:" + port, named = "https://oidc-lab.localhost:" + port;
+  return Object.assign({ provider: Object.assign({ id: "lab", issuer: named, authorize: at + "/authorize", token: at + "/token", jwks: named + "/jwks",
+    clientId: LAB_CLIENT, scope: "openid profile offline_access" }, pover), service: at + "/licence/v1/", root: LAB_ROOT }, over);
+}
+const labText = (port, over, pover) => JSON.stringify(labFile(port, over, pover));
+/* The file taken whole, its provider shaped as the shipped two are and the two doors under its service; refused whole where any
+   part is not its shape: the lab's addresses on any host but 127.0.0.1 (the issuer and the key set: or https on a .localhost name),
+   the service anywhere but http on 127.0.0.1 or https on etiuda.dev, a client id for any provider but the shipped two. */
+const STAGING = "https://etiuda.dev/licence-staging/v1/";
+const stagingText = over => JSON.stringify(Object.assign({ service: STAGING, clientIds: { microsoft: MS_CLIENT, google: G_CLIENT } }, over));
+CASES.labRead = s => {
+  const r = s.signinLabRead(labText(4567)), st = s.signinLabRead(stagingText());
+  const good = !!r && r.provider.clientId === LAB_CLIENT && r.provider.clientSecret === "" && r.provider.authorize === "http://127.0.0.1:4567/authorize"
+    && r.provider.token === "http://127.0.0.1:4567/token" && r.provider.issuer === "https://oidc-lab.localhost:4567" && r.provider.refreshScope === ""
+    && Object.keys(r.provider.extra).length === 0 && r.signin === "http://127.0.0.1:4567/licence/v1/signin/desk"
+    && r.signout === "http://127.0.0.1:4567/licence/v1/signout/desk" && Object.isFrozen(r) && Object.isFrozen(r.provider) && Object.keys(r.clientIds).length === 0
+    && !!st && st.provider === null && st.clientIds.microsoft === MS_CLIENT && st.clientIds.google === G_CLIENT && Object.isFrozen(st.clientIds)
+    && st.signin === STAGING + "signin/desk" && st.signout === STAGING + "signout/desk";
+  const also = [labText(4567, { root: undefined }), labText(4567, {}, { jwks: undefined }), labText(4567, {}, { clientSecret: "" }),
+    labText(4567, {}, { clientSecret: STAND_IN }), labText(4567, {}, { issuer: "http://127.0.0.1:4567" }), labText(4567, { service: "https://etiuda.dev/licence/v1/" }),
+    labText(4567, { clientIds: { google: G_CLIENT } }), stagingText({ clientIds: { microsoft: MS_CLIENT } }), stagingText({ clientIds: undefined }),
+    stagingText({ root: LAB_ROOT }), stagingText({ service: "https://staging.etiuda.dev/licence/v1/" })].every(t => !!s.signinLabRead(t));
+  const taken = [
+    "", "not json", "[]", JSON.stringify({ provider: null }), labText(4567, {}, { id: "microsoft" }), labText(4567, {}, { id: undefined }),
+    labText(4567, {}, { authorize: "http://192.168.1.20:4567/authorize" }), labText(4567, {}, { token: "http://localhost:4567/token" }),
+    labText(4567, {}, { token: "http://127.0.0.1.example.test:4567/token" }), labText(4567, {}, { authorize: "https://login.example.test/authorize" }),
+    labText(4567, { service: "http://10.0.0.5:4567/licence/v1/" }), labText(4567, { service: "http://etiuda.dev/licence/v1/" }),
+    labText(4567, { service: "https://elsewhere.example.test/licence/v1/" }), labText(4567, { service: "https://etiuda.dev.example.test/licence/v1/" }),
+    labText(4567, { service: "https://etiuda.dev:8443/licence/v1/" }), labText(4567, { service: "https://etiuda.dev/licence/v1" }),
+    labText(4567, { service: "http://127.0.0.1:4567/licence/v1" }), labText(4567, { service: undefined }), labText(4567, {}, { issuer: "http://192.168.1.20:4567" }),
+    labText(4567, {}, { issuer: "https://issuer.example.test" }), labText(4567, {}, { jwks: "http://192.168.1.20:4567/jwks" }),
+    labText(0), labText(65536), labText("04567"), labText(4567, {}, { authorize: "http://127.0.0.1/authorize" }),
+    labText(4567, {}, { clientId: "short" }), labText(4567, {}, { clientSecret: STAND_IN.slice(0, 5) }), labText(4567, {}, { clientSecret: 7 }),
+    labText(4567, {}, { scope: "profile" }), labText(4567, {}, { scope: "openid  profile" }), labText(4567, { root: "abc" }), labText(4567, { root: "D".repeat(64) }),
+    stagingText({ clientIds: { lab: MS_CLIENT } }), stagingText({ clientIds: { microsoft: "short" } }), stagingText({ clientIds: { google: 7 } }),
+    stagingText({ clientIds: [MS_CLIENT] }), stagingText({ clientIds: null }), stagingText({ provider: null }),
+  ].filter(t => s.signinLabRead(t) !== null);
+  return good && also && taken.length === 0;
+};
+const loadIn = swap => load(swap && SECTION.split(swap[0]).length === 2 ? swap : null);
+/* The wiring's read of the lab file, evaluated with the shell's facts stood in (`facts`: installed, packaged, the variable's file,
+   the environment's Google secret), `swap` put in its text: what it read and said; Google's secret it set is put in the section. */
+function labStart(s, facts, swap) {
+  const i = WIRING.indexOf("/* plant:lab-packaged */"), from = WIRING.lastIndexOf("\n", i) + 1, to = WIRING.indexOf("\n}\n", i) + 2;
+  let text = i < 0 || to < 2 ? "" : WIRING.slice(from, to);
+  if (swap && text.split(swap[0]).length === 2) text = text.replace(swap[0], swap[1]);
+  const reads = [], said = [], env = {};
+  if (facts.file !== undefined) env.ETIUDA_SIGNIN_LAB = facts.file;
+  if (facts.secret !== undefined) env[SECRET_VAR] = facts.secret;
+  const was = s.live().packed;
+  const packed = new Function("INSTALLED", "app", "process", "fs", "console", "signinLabUse", "signinLabRead", "signinSecretRead", "signinPacked",
+    text + "\nreturn signinPacked;")(facts.installed, { isPackaged: facts.packaged }, { env: env },
+    { readFileSync: (p, enc) => { reads.push(String(p)); return fs.readFileSync(p, enc); } }, { error: l => said.push(String(l)) },
+    s.signinLabUse, s.signinLabRead, s.signinSecretRead, was);
+  if (packed !== was) s.setPacked(packed);
+  return { reads, said, text };
+}
+/* THE FLOOR: installed, packaged or both, the variable naming a good lab file or a staging one and Google's secret in the
+   environment, nothing is read and the providers, what is offered, Google's secret and both doors are byte for byte the shipped
+   ones. Neither, the lab is taken; a staging file fills the shipped two's client ids alone, the environment's secret goes to Google
+   alone, and a file naming another host is refused as a whole, the secret with it. */
+CASES.labPackaged = async (s0, swap) => {
+  /* A plant in the section is put in every section loaded here, one in the wiring in its read. */
+  const load = () => loadIn(swap);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-signin-lab-"));
+  try {
+    const file = path.join(dir, "lab.json"), far = path.join(dir, "far.json"), staging = path.join(dir, "staging.json");
+    fs.writeFileSync(file, labText(4567));
+    fs.writeFileSync(far, labText(4567, {}, { token: "http://192.168.1.20:4567/token" }));
+    fs.writeFileSync(staging, stagingText());
+    const shipped = load().live(), json = o => JSON.stringify(o);
+    const asShipped = s => { const l = s.live(); return json(l.providers) === json(shipped.providers) && Object.keys(l.providers).join() === "microsoft,google"
+      && Object.isFrozen(l.providers) && l.signin === "https://etiuda.dev/licence/v1/signin/desk" && l.signout === "https://etiuda.dev/licence/v1/signout/desk"
+      && l.on === false && Object.keys(l.packed).length === 0 && s.signinOffered().length === 0 && s.signinKnown("lab") === null
+      && !s.signinPageOk("http://127.0.0.1:4567/authorize?client_id=x"); };
+    let inert = true;
+    for (const facts of [{ installed: true, packaged: false }, { installed: false, packaged: true }, { installed: true, packaged: true }]) {
+      for (const f of [file, staging]) {
+        const s = load(), r = labStart(s, Object.assign({ file: f, secret: STAND_IN }, facts), swap);
+        inert = inert && r.text !== "" && r.reads.length === 0 && r.said.length === 0 && asShipped(s);
+      }
+    }
+    const unset = load(), u = labStart(unset, { installed: false, packaged: false, secret: STAND_IN }, swap);
+    const lab = load(), t = labStart(lab, { installed: false, packaged: false, file: file }, swap), l = lab.live();
+    const refused = load(), f = labStart(refused, { installed: false, packaged: false, file: far, secret: STAND_IN }, swap);
+    const st = load(), g = labStart(st, { installed: false, packaged: false, file: staging, secret: STAND_IN }, swap), sl = st.live();
+    const sans = p => { const o = Object.assign({}, p); delete o.clientId; return json(o); };
+    return inert && u.reads.length === 0 && asShipped(unset)
+      && t.reads.length === 1 && t.said.length === 0 && l.on === true && Object.keys(l.providers).join() === "microsoft,google,lab"
+      && json(l.providers.microsoft) === json(shipped.providers.microsoft) && json(l.providers.google) === json(shipped.providers.google)
+      && l.signin === "http://127.0.0.1:4567/licence/v1/signin/desk" && l.signout === "http://127.0.0.1:4567/licence/v1/signout/desk"
+      && json(lab.signinOffered()) === json([{ id: "lab", clientId: LAB_CLIENT, clientSecret: "" }]) && Object.keys(l.packed).length === 0
+      && f.reads.length === 1 && f.said.length === 1 && asShipped(refused)
+      && g.reads.length === 1 && g.said.length === 0 && Object.keys(sl.providers).join() === "microsoft,google"
+      && sans(sl.providers.microsoft) === sans(shipped.providers.microsoft) && sans(sl.providers.google) === sans(shipped.providers.google)
+      && sl.signin === STAGING + "signin/desk" && sl.signout === STAGING + "signout/desk"
+      && json(st.signinOffered()) === json([{ id: "microsoft", clientId: MS_CLIENT, clientSecret: "" }, { id: "google", clientId: G_CLIENT, clientSecret: STAND_IN }]);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+};
+/* A provider double and a licence service on 127.0.0.1, test values made here: /authorize answers 302 to the desk's loopback, /token
+   an ID token for the lab's client (the code grant's carrying authorize's nonce), and signin/desk a certificate for DESK_KEY. */
+async function labDouble() {
+  const st = { nonce: "", forms: [], posts: [], port: 0 };
+  const server = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", c => { body += c; });
+    req.on("end", () => {
+      const u = new URL(req.url, "http://127.0.0.1"), now = Math.floor(Date.now() / 1000);
+      if (req.method === "GET" && u.pathname === "/authorize") {
+        st.nonce = u.searchParams.get("nonce");
+        res.writeHead(302, { location: u.searchParams.get("redirect_uri") + "/?code=lab-code&state=" + encodeURIComponent(u.searchParams.get("state")) });
+        return res.end();
+      }
+      if (req.method === "POST" && u.pathname === "/token") {
+        const form = new URLSearchParams(body), c = { iss: "https://oidc-lab.localhost:" + st.port, aud: LAB_CLIENT, sub: "lab-user", iat: now, exp: now + 3600 };
+        st.forms.push(form);
+        if (form.get("grant_type") === "authorization_code") c.nonce = st.nonce;
+        res.writeHead(200, { "content-type": "application/json" });
+        return res.end(JSON.stringify({ id_token: jwt(c), refresh_token: "lab-rt" }));
+      }
+      if (req.method === "POST" && /^\/licence\/v1\/sign(in|out)\/desk$/.test(u.pathname)) {
+        st.posts.push({ path: u.pathname, body: JSON.parse(body) });
+        res.writeHead(200, { "content-type": "application/json" });
+        return res.end(JSON.stringify(/signin/.test(u.pathname) ? { ok: true, code: CODE, certificate: cert({ issued: Date.now(), until: Date.now() + 86400000 }) } : { ok: true }));
+      }
+      res.writeHead(404);
+      res.end();
+    });
+  });
+  await new Promise(r => server.listen(0, "127.0.0.1", r));
+  st.port = server.address().port;
+  st.close = () => new Promise(r => { server.closeAllConnections(); server.close(r); });
+  return st;
+}
+/* The real path pointed at the lab, over real HTTP and node's own fetch: the browser alone stood in by a GET that follows the authorize
+   page's redirect to the desk's loopback. A sign-in, the certificate, a refresh and a sign out; the shipped service refused meanwhile. */
+CASES.labPath = async () => {
+  const d = await labDouble();
+  try {
+    const s = load();
+    if (!s.signinLabUse(s.signinLabRead(labText(d.port)))) return false;
+    const p = s.signinOffered().find(x => x.id === "lab");
+    let followed = 0;
+    const io = { listen: (pageFor, takes) => s.signinListen(http, pageFor, 10000, takes),
+      openPage: async url => { followed = (await fetch(url, { redirect: "follow" })).status; return true; },
+      tokenAsk: (u, f) => s.signinRequest(fetch, u, f), serviceAsk: (u, b) => s.signinServiceAsk(fetch, u, b), sign: signWith(signKey), page: ok => ok ? "ok" : "no" };
+    const got = await s.signinRun(io, p, DESK_KEY, Date.now);
+    const ans = got.ok ? await s.signinSeat(io, "lab", DESK_KEY, got.idToken, got.seed, Date.now) : { ok: false };
+    const renewed = got.ok ? await s.signinRenew(io, p, DESK_KEY, got.refreshToken, got.seed, got.sub, Date.now) : { ok: false };
+    const out = await s.signoutAsk(io, DESK_KEY, Date.now);
+    let elsewhere = 0;
+    for (const u of ["https://etiuda.dev/licence/v1/signin/desk", "http://127.0.0.1:" + (d.port + 1) + "/licence/v1/signin/desk"]) {
+      try { await s.signinServiceAsk(fetch, u, {}); } catch { elsewhere++; }
+    }
+    try { await s.signinRequest(fetch, "http://127.0.0.1:" + (d.port + 1) + "/token", Buffer.from("a=1")); } catch { elsewhere++; }
+    const code = d.forms[0] || new URLSearchParams(), again = d.forms[1] || new URLSearchParams();
+    return got.ok && followed === 200 && got.sub === "lab-user" && ans.ok && !!ans.cert && ans.code === CODE && renewed.ok && out === true
+      && code.get("grant_type") === "authorization_code" && code.get("client_id") === LAB_CLIENT && code.get("code") === "lab-code"
+      && !!code.get("code_verifier") && !code.has("client_secret") && again.get("grant_type") === "refresh_token" && again.get("refresh_token") === "lab-rt"
+      && !again.has("scope") && d.forms.length === 2 && d.posts.map(x => x.path).join() === "/licence/v1/signin/desk,/licence/v1/signout/desk"
+      && d.posts[0].body.provider === "lab" && d.posts[0].body.seed === got.seed && elsewhere === 3;
+  } finally { await d.close(); }
+};
+/* A harness start reaches a provider only while the lab is taken: signinLabHeld is true for a seat held then, and reads nothing while
+   no lab is taken; with it, the renewal asks and Sign out posts on a harness start, and without it neither does (ds7d, ds9d). */
+CASES.labHarness = async (s, swap) => {
+  let text = "";
+  try { text = decl(MAIN, "function signinLabHeld("); } catch { text = ""; }
+  if (swap) {
+    if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in signinLabHeld once: " + swap[0]);
+    text = text.replace(swap[0], swap[1]);
+  }
+  const held = (on, provider) => { let reads = 0; const r = new Function("signinLabOn", "signinState", text + "\nreturn signinLabHeld();")(on,
+    () => { reads++; return { held: provider ? { provider: provider } : null }; }); return { r, reads }; };
+  const a = held(true, "lab"), b = held(true, "microsoft"), c = held(false, "lab"), e = held(true, null);
+  const st = wireStand(s, () => answer({ id_token: jwt(msClaims(undefined, Date.now())) }));
+  st.harnessLaunch = () => true;
+  st.signinLabHeld = () => true;
+  st.store.held = heldOf();
+  await loadWire(st).signinRenewNow();
+  const o = outStand(s);
+  o.harnessLaunch = () => true;
+  o.signinLabHeld = () => true;
+  loadWire(o).signinOutNow();
+  await tick(5);
+  return !!text && a.r === true && b.r === true && c.r === false && c.reads === 0 && e.r === false && st.asked === 1 && o.sent.length === 1;
+};
+/* The page draws the lab's provider as it draws the shipped two, and keeps its loopback link while it waits; no other provider's. */
+CASES.labPage = () => {
+  if (!P) return false;
+  const v = P.signinRead({ offered: ["lab"], busy: "lab", link: "http://127.0.0.1:4567/authorize?client_id=x" });
+  const html = P.signinProvidersHtml(["lab"], true), door = P.signinDoor(P.signinRead({ offered: ["lab"] }));
+  return v.offered.join() === "lab" && v.link === "http://127.0.0.1:4567/authorize?client_id=x"
+    && P.signinRead({ offered: ["microsoft"], busy: "microsoft", link: "http://127.0.0.1:4567/authorize?x=1" }).link === ""
+    && P.signinRead({ offered: ["lab"], busy: "lab", link: "http://192.168.1.20:4567/authorize?x=1" }).link === ""
+    && /data-e-provider="lab"/.test(html) && /<span>Lab<\/span>/.test(html) && !/undefined/.test(html) && !!door && door.providers.join() === "lab";
+};
+/* Nothing else points the sign-in anywhere: the variable is read in the lab's read alone, and the table and both doors are assigned in
+   signinLabUse alone, which is called once; no IPC, preload or page module names the lab's file. */
+CASES.labOnly = () => {
+  const n = re => (MAIN.match(re) || []).length;
+  const i = MAIN.indexOf("/* plant:lab-packaged */"), block = i < 0 ? "" : MAIN.slice(MAIN.lastIndexOf("\n", i), MAIN.indexOf("\n}\n", i));
+  const pageNames = fs.readdirSync(path.join(ROOT, "src", "modules")).filter(f => /ETIUDA_SIGNIN_LAB/.test(fs.readFileSync(path.join(ROOT, "src", "modules", f), "utf8")));
+  const env = /process\.env\.ETIUDA_SIGNIN_LAB\b|process\.env\[/g;
+  return !!block && n(/process\.env\.ETIUDA_SIGNIN_LAB\b/g) === 2 && (block.match(env) || []).length === 2
+    && n(/(?<!let )\bSIGNIN_PROVIDERS = /g) === 1 && n(/(?<!let )\bSIGNIN_SERVICE = /g) === 1 && n(/(?<!let )\bSIGNOUT_SERVICE = /g) === 1
+    && n(/\bsigninLabUse\(/g) === 2 && n(/\bsigninLabOn = true/g) === 1 && /SIGNIN_PROVIDERS = [^\n]*\n  SIGNIN_SERVICE = lab\.signin;\n  SIGNOUT_SERVICE = lab\.signout;/.test(MAIN)
+    && !/ipcMain\.(on|handle)\([^\n]*(signinLab|SIGNIN_LAB)/.test(MAIN) &&!/ETIUDA_SIGNIN_LAB/.test(PRELOAD) && pageNames.length === 0;
+};
+
+/* tools/signin-staging.cmd is outside the packaged files and starts this tree's own Electron with a profile of its own, never the
+   installed Etiuda, ETIUDA_SIGNIN_LAB the argument's full path for that one start; --where starts nothing. */
+CASES.stagingCmd = () => {
+  const { minimatch } = createRequire(import.meta.url)("minimatch");
+  const cfgText = fs.readFileSync(path.join(ROOT, "electron-builder.js"), "utf8"), fa = cfgText.indexOf("files: [");
+  const files = fa < 0 ? [] : new Function("return " + cfgText.slice(fa + 7, cfgText.indexOf("],", fa) + 1))();
+  const shipped = p => { let inc = false; for (const pat of files) { const neg = pat.startsWith("!"); if (minimatch(p, neg ? pat.slice(1) : pat, { dot: true })) inc = !neg; } return inc; };
+  const at = path.join(ROOT, "tools", "signin-staging.cmd"), text = fs.existsSync(at) ? fs.readFileSync(at, "utf8") : "";
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l && !/^rem\b/i.test(l) && l !== "@echo off");
+  const ORDER = ["setlocal", 'set "ROOT=%~dp0.."', 'set "EXE=%ROOT%\\node_modules\\electron\\dist\\electron.exe"', 'set "PROFILE=%LOCALAPPDATA%\\Etiuda-signin-staging"',
+    'if /i "%~1"=="--where" exit /b 0', 'if not exist "%~f1" exit /b 1', 'if not exist "%EXE%" exit /b 1', 'set "ETIUDA_SIGNIN_LAB=%~f1"',
+    'start "" "%EXE%" "%ROOT%" "--user-data-dir=%PROFILE%"', "endlocal"];
+  const idx = ORDER.map(s => lines.indexOf(s));
+  return !!text && files.length > 5 && shipped("shell/main.js") && !shipped("tools/signin-staging.cmd") && idx.every((i, k) => i >= 0 && (k === 0 || i > idx[k - 1]))
+    && lines.filter(l => /(^|[&|(]\s*)start\s/i.test(l)).length === 1 && lines.filter(l => /ETIUDA_SIGNIN_LAB/.test(l)).length === 1
+    && !/Etiuda\.exe|Programs\\Etiuda|ProgramFiles/i.test(text) && !lines.some(l => /\b(setx|reg)\b/i.test(l));
+};
+
 /* ---- the cases on the branch ------------------------------------------------------------------------------------------- */
 const LEGS = [
   ["ds1a", "offered", "as shipped no client id is configured and nothing is offered; a configured table offers what it configures, in order"],
@@ -1373,7 +1613,7 @@ const LEGS = [
   ["ds13b", "secretSent", "client_secret goes with Google's code exchange and refresh only where a secret is present, and without one every byte is as before"],
   ["ds13c", "secretPacked", "the package's signin-secret.json gives Google's secret where it is {format: 1, google} of a secret's shape, and nothing else"],
   ["ds13d", "secretNever", "the stand-in secret is in the token forms and in no printed line, no licence service body (whose names are unchanged), no kept file, no outcome"],
-  ["ds13e", "secretWire", "the shell reads the package's file once at start, installed, beside the asar, and from no variable, IPC or page"],
+  ["ds13e", "secretWire", "the shell reads the package's file once at start, installed, beside the asar, from no IPC or page, and the variable only inside the sign-in lab's read"],
   ["ds13f", "secretPackage", "the package step writes nothing and says absent without the variable, writes the file and says present with it, never the value; the file is git-ignored and copied only when set"],
   ["ds13g", "secretTree", "no tracked file carries a client secret's prefix or a client secret written as a value, the search shown to find both"],
   ["ds14a", "linkWait", "with a browser call that resolves and opens nothing, the page is told the provider's page as it is handed out and the loopback waits SIGNIN_WAIT_MS as before; Cancel takes the link with the wait; no line written carries it"],
@@ -1385,6 +1625,13 @@ const LEGS = [
   ["ds14g", "copiedLabel", "the code's Copy and the link's read Copied for SIGNIN_COPIED_MS after a copy the clipboard took, then Copy, holding the wider width; a refused copy leaves it; Polish too"],
   ["ds15a", "identNoName", "with no name written the identity's bold line is \"Signed in with\" its provider and there is no second line, in the panel's every signed-in moment and in Account; a name written stands over it; Polish too"],
   ["ds15b", "panelOrder", "the panel tells no licence as it tells no team: the fact, its line, then the code's box, under the identity and above the acts"],
+  ["ds16a", "labPackaged", "THE LAB IS INERT PACKAGED: installed, packaged or both, ETIUDA_SIGNIN_LAB naming a lab or a staging file and Google's secret in the environment, nothing is read and the providers, what is offered, the secret and both doors are byte for byte the shipped ones; unpackaged, the lab is taken, a staging file fills the shipped two's client ids alone, the secret goes to Google alone, and a file naming another host is refused whole"],
+  ["ds16b", "labRead", "the lab file is taken whole or not at all: the service http on 127.0.0.1 or https on etiuda.dev; client ids for the shipped two alone; the provider \"lab\" optional, its authorize and token http on 127.0.0.1 alone, its issuer and key set also https on a .localhost name, openid; a root optional, of 64 hex"],
+  ["ds16c", "labPath", "pointed at a lab over real HTTP, the real path runs unchanged: the browser's redirect to the loopback, the code exchange with PKCE, the token checks, signin/desk's certificate, a refresh, a sign out; the shipped door and other ports refused"],
+  ["ds16d", "labHarness", "a harness start renews and signs out only while the lab is taken, and reads nothing for it while no lab is taken"],
+  ["ds16e", "labPage", "the page draws the lab's provider as it draws the shipped two and keeps its 127.0.0.1 link while it waits, no other provider's http link"],
+  ["ds16f", "labOnly", "nothing else points the sign-in: the variable read in the lab's read alone, the table and both doors assigned in signinLabUse alone, called once; no IPC, preload or page module names the file"],
+  ["ds16g", "stagingCmd", "tools/signin-staging.cmd is outside the packaged files and starts this tree's own Electron with a profile of its own, never the installed desk, with ETIUDA_SIGNIN_LAB for that start alone"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
@@ -1491,7 +1738,7 @@ if (!PLANTS_OFF) {
     try { red = !(await CASES[name](S, swap)); } catch { red = true; }
     check(red, id + " plant " + swap[0].replace(/\s+/g, " ").trim().slice(0, 50) + " turns " + name + " red");
   };
-  await plantWire("dsp24", ["  if (harnessLaunch()) return \"\"; /* plant:renew-now-harness */\n", ""], "renewHarness");
+  await plantWire("dsp24", ["  if (harnessLaunch() && !signinLabHeld()) return \"\"; /* plant:renew-now-harness */\n", ""], "renewHarness");
   await plantWire("dsp25", ["const SIGNIN_RENEW_MS = 24 * 60 * 60 * 1000; /* plant:renew-daily */", "const SIGNIN_RENEW_MS = 55 * 60 * 1000;"], "renewDaily");
   await plantWire("dsp26", ["if (!p || !me) return \"\"; /* plant:renew-offered */", "if (!me) return \"\";"], "renewWire");
   await plantWire("dsp29", ["signoutAsk(signinIo({ loop: null }), me.key, Date.now); /* plant:signout-post */", ""], "signoutPost");
@@ -1518,6 +1765,16 @@ if (!PLANTS_OFF) {
   await plantWire("dsp47", ["link: signinBusy && signinPageOk(signinBusy.url) ? signinBusy.url : \"\",", "link: \"\","], "linkWait");
   await plantWire("dsp48", ["run.url = url; tellSignin(); return Promise", "run.url = url; return Promise"], "linkWait");
   await plantWire("dsp49", ["keeps: sealsForReal(safeStorage, process.platform) }; /* plant:view-link */", "keeps: true };"], "keyringLine");
+  await plantWire("dsp50", ["if (!INSTALLED && !app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) {", "if (!INSTALLED && process.env.ETIUDA_SIGNIN_LAB) {"], "labPackaged");
+  await plantWire("dsp51", ["if (!INSTALLED && !app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) {", "if (!app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) {"], "labPackaged");
+  await plantWire("dsp52", ["return signinLabOn && !!signinState().held; /* plant:lab-held */", "return !!signinState().held;"], "labHarness");
+  await plant("dsp55", ["(?:[a-z0-9-]+\\.)*etiuda\\.dev(?:", "[a-z0-9.-]+(?:"], "labRead");
+  await plant("dsp56", ["|| Object.keys(ids).some(id => (id !== \"microsoft\" && id !== \"google\") || typeof ids[id] !== \"string\" || !SIGNIN_CLIENT.test(ids[id]))) return null; /* plant:lab-ids */",
+    ") return null;"], "labRead");
+  await plantWire("dsp57", ["t[id] = lab.clientIds[id] ? Object.freeze(", "t[id] = false ? Object.freeze("], "labPackaged");
+  await plantWire("dsp58", ["  else if (process.env.ETIUDA_GOOGLE_CLIENT_SECRET) signinPacked", "  else if (false) signinPacked"], "labPackaged");
+  await plant("dsp53", ["/^http:\\/\\/127\\.0\\.0\\.1:([0-9]{1,5})", "/^http:\\/\\/[a-z0-9.]+:([0-9]{1,5})"], "labRead");
+  await plant("dsp54", ["|| !(d.root === undefined || /^[0-9a-f]{64}$/.test(String(d.root)))) return null; /* plant:lab-shape */", ") return null;"], "labRead");
   await plant("dsp46", ["return Object.freeze(typeof v === \"string\" && SIGNIN_SECRET_SHAPE.test(v) ? { google: v } : {}); /* plant:secret-shape */",
     "return Object.freeze(typeof v === \"string\" ? { google: v } : {});"], "secretPacked");
   /* A gate on a local act, put into the desk file's write in memory, is seen. */

@@ -9059,8 +9059,9 @@ const GOOGLE_HD_NEEDS_EMAIL = false; /* plant:scope-email */
    A provider with no client id is not offered, so until the registrations exist nothing is drawn and nothing is sent. A desktop
    app is a public client, and clientSecret stays "" in this tree, which is public: Google's forum reports its token address
    refusing a Desktop client's code without client_secret, PKCE or not, so a package may carry Google's (signinPacked, below).
-   Microsoft's profile scope gives the directory's object id, which the service keeps keyed. */
-const SIGNIN_PROVIDERS = Object.freeze({
+   Microsoft's profile scope gives the directory's object id, which the service keeps keyed. The sign-in lab alone adds a third
+   (signinLabUse, below). */
+let SIGNIN_PROVIDERS = Object.freeze({
   microsoft: Object.freeze({ clientId: "", clientSecret: "", issuer: "https://login.microsoftonline.com/{tenantid}/v2.0",
     authorize: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     token: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
@@ -9094,6 +9095,50 @@ function signinSecretRead(text) {
   try { d = JSON.parse(String(text)); } catch { d = null; }
   const v = d && typeof d === "object" && !Array.isArray(d) && d.format === 1 ? d.google : undefined;
   return Object.freeze(typeof v === "string" && SIGNIN_SECRET_SHAPE.test(v) ? { google: v } : {}); /* plant:secret-shape */
+}
+/* THE SIGN-IN LAB, this whole path run from a development tree against a service other than production: the file ETIUDA_SIGNIN_LAB
+   names, read once at start by the wiring and only on a desk neither installed nor packaged. It names the service, http on 127.0.0.1
+   or https on etiuda.dev; it may fill the shipped providers' client ids, their addresses unchanged, and add a third provider, "lab",
+   whose addresses the desk fetches or hands out are http on 127.0.0.1 (its issuer, only compared, and key set, never read, may also
+   be https on a .localhost name). `root` is Studio's: the desk judges no certificate's signature (signinCertOk). */
+function signinLabAt(u, named) {
+  const m = typeof u !== "string" ? null : /^http:\/\/127\.0\.0\.1:([0-9]{1,5})(\/[A-Za-z0-9._~\/-]*)?$/.exec(u) /* plant:lab-loopback */
+    || (named ? /^https:\/\/(?:[a-z0-9-]+\.)*localhost(?::([0-9]{1,5}))?(\/[A-Za-z0-9._~\/-]*)?$/.exec(u) : null);
+  return !!m && (m[1] === undefined || (m[1][0] !== "0" && +m[1] <= 65535));
+}
+function signinLabService(u) {
+  return typeof u === "string" && /\/$/.test(u) && (signinLabAt(u) || /^https:\/\/(?:[a-z0-9-]+\.)*etiuda\.dev(?:\/[A-Za-z0-9._~-]+)*\/$/.test(u)); /* plant:lab-service */
+}
+/* The lab file whole, {provider (null where it names none), clientIds, signin, signout}, or null where any part is not its shape. */
+function signinLabRead(text) {
+  let d = null;
+  try { d = JSON.parse(String(text)); } catch { d = null; }
+  if (!d || typeof d !== "object" || Array.isArray(d) || !signinLabService(d.service)
+    || !(d.root === undefined || /^[0-9a-f]{64}$/.test(String(d.root)))) return null; /* plant:lab-shape */
+  const ids = d.clientIds === undefined ? {} : d.clientIds, p = d.provider;
+  if (!ids || typeof ids !== "object" || Array.isArray(ids)
+    || Object.keys(ids).some(id => (id !== "microsoft" && id !== "google") || typeof ids[id] !== "string" || !SIGNIN_CLIENT.test(ids[id]))) return null; /* plant:lab-ids */
+  if (p !== undefined && (!p || typeof p !== "object" || p.id !== "lab" || typeof p.clientId !== "string" || !SIGNIN_CLIENT.test(p.clientId)
+    || !(p.clientSecret === undefined || p.clientSecret === "" || (typeof p.clientSecret === "string" && SIGNIN_SECRET_SHAPE.test(p.clientSecret)))
+    || typeof p.scope !== "string" || p.scope.length > 200 || !/^[\x21-\x7e]+( [\x21-\x7e]+)*$/.test(p.scope) || p.scope.split(" ").indexOf("openid") < 0
+    || !signinLabAt(p.authorize) || !signinLabAt(p.token) || !signinLabAt(p.issuer, true) || !(p.jwks === undefined || signinLabAt(p.jwks, true)))) return null;
+  return Object.freeze({ provider: p === undefined ? null : Object.freeze({ clientId: p.clientId, clientSecret: p.clientSecret || "", issuer: p.issuer,
+    authorize: p.authorize, token: p.token, scope: p.scope, refreshScope: "", extra: Object.freeze({}) }), clientIds: Object.freeze(Object.assign({}, ids)),
+    signin: d.service + "signin/desk", signout: d.service + "signout/desk" });
+}
+/* The lab taken, once: the shipped providers with the lab's client ids, the provider "lab" where it names one, and the service's door. */
+let signinLabOn = false;
+function signinLabUse(lab) {
+  if (!lab || signinLabOn) return false;
+  const t = {};
+  for (const id of Object.keys(SIGNIN_PROVIDERS))
+    t[id] = lab.clientIds[id] ? Object.freeze(Object.assign({}, SIGNIN_PROVIDERS[id], { clientId: lab.clientIds[id] })) : SIGNIN_PROVIDERS[id]; /* plant:lab-fill */
+  if (lab.provider) t.lab = lab.provider;
+  SIGNIN_PROVIDERS = Object.freeze(t);
+  SIGNIN_SERVICE = lab.signin;
+  SIGNOUT_SERVICE = lab.signout;
+  signinLabOn = true;
+  return true;
 }
 /* The providers this desk offers, [{id, clientId, clientSecret}] in the table's order: those `table` configures with a client id.
    A provider's secret is the table's own where it holds one, else what `packed` (the package's, signinPacked) holds for it, else "". */
@@ -9327,7 +9372,7 @@ function signinKept(storage, sealed) {
    bytes the desk key signs are the service's own (requests.mjs signinDeskBytes): its line, then the provider, the SHA-256 of the
    ID token's characters, the desk's public half and t, one a line. A first sign-in sends the seed its token's nonce was made
    of; a renewal sends none. */
-const SIGNIN_SERVICE = "https://etiuda.dev/licence/v1/signin/desk";
+let SIGNIN_SERVICE = "https://etiuda.dev/licence/v1/signin/desk";
 const SIGNIN_BODY_MAX = 8 * 1024, SIGNIN_SERVICE_MAX = 32 * 1024;
 const SIGNIN_DESK_LINE = "etiuda-licence-signin-desk";
 function signinTokenHash(idToken) { return crypto.createHash("sha256").update(String(idToken), "utf8").digest("hex"); }
@@ -9355,7 +9400,7 @@ async function signinServiceAsk(fetchFn, url, body, ms) {
 /* THE DESK'S SIGN OUT at the service, through the same door: one POST to signout/desk, {desk, t, sig} and no other names, `sig` the
    desk key's signature over the service's own bytes (requests.mjs signoutDeskBytes): its line, then the desk's public half and t,
    one a line. It frees the desk's place there and touches nobody's seat on a licence. */
-const SIGNOUT_SERVICE = "https://etiuda.dev/licence/v1/signout/desk";
+let SIGNOUT_SERVICE = "https://etiuda.dev/licence/v1/signout/desk";
 const SIGNOUT_DESK_LINE = "etiuda-licence-signout-desk"; /* plant:signout-line */
 function signoutDeskBytes(o) {
   return Buffer.from(SIGNOUT_DESK_LINE + "\n" + [o.desk, o.t].map(String).join("\n"), "utf8");
@@ -9481,6 +9526,18 @@ const SIGNIN_CHECK_GAP_MS = 10 * 1000;
 let signinStore, signinBusy = null, signinSaid = "", signinClick = null, signinTimer = null, signinWrote = "", signinCheckAt = 0;
 /* Google's client secret, where the package step put one beside the asar: read here once, at start, installed only. */
 if (INSTALLED) { try { signinPacked = signinSecretRead(fs.readFileSync(path.join(String(process.resourcesPath || ""), SIGNIN_SECRET_FILE), "utf8")); } catch { /* none packaged: every byte as before */ } }
+/* The sign-in lab's file, where ETIUDA_SIGNIN_LAB names one: read here once, at start, and never on a desk installed or packaged. */
+if (!INSTALLED && !app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) { /* plant:lab-packaged */
+  let text = "";
+  try { text = fs.readFileSync(String(process.env.ETIUDA_SIGNIN_LAB), "utf8"); } catch { text = ""; }
+  if (!signinLabUse(signinLabRead(text))) console.error("etiuda: the sign-in lab's file was refused, and the sign-in stays as shipped");
+  /* Google's for the lab's run, from that one start's environment, read as the package's file is. */
+  else if (process.env.ETIUDA_GOOGLE_CLIENT_SECRET) signinPacked = signinSecretRead(JSON.stringify({ format: 1, google: process.env.ETIUDA_GOOGLE_CLIENT_SECRET })); /* plant:lab-secret */
+}
+/* A harness start asks no provider and posts nothing to the service, save while the sign-in lab is taken, whose file says where. */
+function signinLabHeld() {
+  return signinLabOn && !!signinState().held; /* plant:lab-held */
+}
 function signinState() {
   if (signinStore !== undefined) return signinStore;
   let text = "";
@@ -9658,7 +9715,7 @@ ipcMain.handle("etiuda:signin-stop", (e) => {
 function signinOutNow() {
   if (signinBusy) return signinView();
   const s = signinState(), me = branchIdentity(false);
-  if (s.held && me && !harnessLaunch() && net && typeof net.fetch === "function"
+  if (s.held && me && (!harnessLaunch() || signinLabHeld()) && net && typeof net.fetch === "function"
     && signinOffered().length) { /* plant:signout-offered */
     signoutAsk(signinIo({ loop: null }), me.key, Date.now); /* plant:signout-post */
   }
@@ -9685,9 +9742,10 @@ ipcMain.handle("etiuda:signin-check", async (e) => {
   return signinView();
 });
 /* The quiet renewal, for a desk holding a refresh token for a provider still offered: a new certificate kept and written, or the
-   last kept and the calm words. Never from the harness's own window or any harness start, so no leg reaches a provider. */
+   last kept and the calm words. Never from the harness's own window or any harness start, so no leg reaches a provider, save
+   while the sign-in lab is taken (signinLabHeld). */
 async function signinRenewNow() {
-  if (harnessLaunch()) return ""; /* plant:renew-now-harness */
+  if (harnessLaunch() && !signinLabHeld()) return ""; /* plant:renew-now-harness */
   signinFlush();
   const s = signinState(), held = s.held;
   if (!held || !held.refresh || signinBusy) return "";
