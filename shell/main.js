@@ -9042,15 +9042,17 @@ function policyFor(hashes) {
 /* Email is asked of nobody. Google is asked for it only if its hosted domain claim proves to need it, and then by this alone. */
 const GOOGLE_HD_NEEDS_EMAIL = false; /* plant:scope-email */
 /* THE PROVIDERS ARE CONFIGURATION: Etiuda's own registration with each, its client id, and the addresses and scopes Studio uses.
-   A provider with no client id is not offered, so until the registrations exist nothing is drawn and nothing is sent. No secret:
-   a desktop app is a public client. Microsoft's profile scope gives the directory's object id, which the service keeps keyed. */
+   A provider with no client id is not offered, so until the registrations exist nothing is drawn and nothing is sent. A desktop
+   app is a public client, and clientSecret stays "" in this tree, which is public: Google's forum reports its token address
+   refusing a Desktop client's code without client_secret, PKCE or not, so a package may carry Google's (signinPacked, below).
+   Microsoft's profile scope gives the directory's object id, which the service keeps keyed. */
 const SIGNIN_PROVIDERS = Object.freeze({
-  microsoft: Object.freeze({ clientId: "", issuer: "https://login.microsoftonline.com/{tenantid}/v2.0",
+  microsoft: Object.freeze({ clientId: "", clientSecret: "", issuer: "https://login.microsoftonline.com/{tenantid}/v2.0",
     authorize: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     token: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
     scope: "openid profile offline_access", refreshScope: "openid profile offline_access",
     extra: Object.freeze({ response_mode: "query", prompt: "select_account" }) }),
-  google: Object.freeze({ clientId: "", issuer: "https://accounts.google.com",
+  google: Object.freeze({ clientId: "", clientSecret: "", issuer: "https://accounts.google.com",
     authorize: "https://accounts.google.com/o/oauth2/v2/auth", token: "https://oauth2.googleapis.com/token",
     scope: GOOGLE_HD_NEEDS_EMAIL ? "openid email" : "openid", refreshScope: "", extra: Object.freeze({ prompt: "select_account" }) }),
 });
@@ -9066,11 +9068,26 @@ const SIGNIN_PREVIEW_ASKED = process.env.ETIUDA_SIGNIN_PREVIEW === "1"; /* plant
 function signinPreviewing(asked, table) {
   return (asked === undefined ? SIGNIN_PREVIEW_ASKED : asked) === true && signinOffered(table).length === 0; /* plant:preview-inert */
 }
-/* The providers this desk offers, [{id, clientId}] in the table's order: those `table` configures with a client id. */
-function signinOffered(table) {
-  const t = table === undefined ? SIGNIN_PROVIDERS : table;
+/* GOOGLE'S CLIENT SECRET, where the package carries one: written beside the asar by the package step (tools/signin-secret.cjs) from
+   ETIUDA_GOOGLE_CLIENT_SECRET at packaging, read once at start (the wiring, below) and from nowhere else. It goes to Google's token
+   address alone, with the code and the refresh, and is never kept, printed, shown or sent to the licence service. Without the
+   file, or with one not of its shape, there is none, and every byte the desk sends is as it was before the secret existed. */
+const SIGNIN_SECRET_FILE = "signin-secret.json";
+const SIGNIN_SECRET_SHAPE = /^[\x21-\x7e]{8,200}$/;
+let signinPacked = Object.freeze({});
+function signinSecretRead(text) {
+  let d = null;
+  try { d = JSON.parse(String(text)); } catch { d = null; }
+  const v = d && typeof d === "object" && !Array.isArray(d) && d.format === 1 ? d.google : undefined;
+  return Object.freeze(typeof v === "string" && SIGNIN_SECRET_SHAPE.test(v) ? { google: v } : {}); /* plant:secret-shape */
+}
+/* The providers this desk offers, [{id, clientId, clientSecret}] in the table's order: those `table` configures with a client id.
+   A provider's secret is the table's own where it holds one, else what `packed` (the package's, signinPacked) holds for it, else "". */
+function signinOffered(table, packed) {
+  const t = table === undefined ? SIGNIN_PROVIDERS : table, k = (packed === undefined ? signinPacked : packed) || {};
   return Object.keys(t || {}).filter(id => signinKnown(id) && typeof t[id].clientId === "string" && SIGNIN_CLIENT.test(t[id].clientId)) /* plant:offered-client */
-    .map(id => ({ id: id, clientId: t[id].clientId }));
+    .map(id => ({ id: id, clientId: t[id].clientId, clientSecret: typeof t[id].clientSecret === "string" && t[id].clientSecret ? t[id].clientSecret
+      : id === "google" && typeof k.google === "string" ? k.google : "" }));
 }
 /* The nonce bound to this desk's signing key, made as the licence service makes it (requests.mjs signinNonce): SHA-256, as
    lower-case hex, of its line, the key's public half and a fresh seed of 64 hex. */
@@ -9121,14 +9138,17 @@ function signinBack(query, pending) {
   if (!code || code.length > 8192) return { ok: false, reason: "signin-refused" };
   return { ok: true, code: code };
 }
+/* The provider's client secret beside its client id, only where it has one: the token forms below are otherwise byte for byte the
+   forms they were before a secret existed. */
+function signinSecretPart(p) { return typeof p.clientSecret === "string" && p.clientSecret ? { client_secret: p.clientSecret } : {}; } /* plant:secret-present */
 function signinCodeForm(p, pending, code) {
-  return Buffer.from(new URLSearchParams({ client_id: p.clientId, grant_type: "authorization_code", code: String(code),
-    redirect_uri: pending.redirect, code_verifier: pending.verifier }).toString(), "utf8");
+  return Buffer.from(new URLSearchParams(Object.assign({ client_id: p.clientId }, signinSecretPart(p), { grant_type: "authorization_code", code: String(code),
+    redirect_uri: pending.redirect, code_verifier: pending.verifier })).toString(), "utf8");
 }
 function signinRefreshForm(p, refreshToken) {
   const known = signinKnown(p.id);
-  return Buffer.from(new URLSearchParams(Object.assign({ client_id: p.clientId, grant_type: "refresh_token", refresh_token: String(refreshToken) },
-    known.refreshScope ? { scope: known.refreshScope } : {})).toString(), "utf8");
+  return Buffer.from(new URLSearchParams(Object.assign({ client_id: p.clientId }, signinSecretPart(p), { grant_type: "refresh_token",
+    refresh_token: String(refreshToken) }, known.refreshScope ? { scope: known.refreshScope } : {})).toString(), "utf8");
 }
 /* A JWT's claims, unverified: the licence service verifies the signature; the desk reads only what says the answer is its own. */
 function signinClaims(jwt) {
@@ -9445,6 +9465,8 @@ const SIGNIN_FIRST_MS = 2 * 60 * 1000;
 /* Check now asks at most this often, whatever is pressed. */
 const SIGNIN_CHECK_GAP_MS = 10 * 1000;
 let signinStore, signinBusy = null, signinSaid = "", signinClick = null, signinTimer = null, signinWrote = "", signinCheckAt = 0;
+/* Google's client secret, where the package step put one beside the asar: read here once, at start, installed only. */
+if (INSTALLED) { try { signinPacked = signinSecretRead(fs.readFileSync(path.join(String(process.resourcesPath || ""), SIGNIN_SECRET_FILE), "utf8")); } catch { /* none packaged: every byte as before */ } }
 function signinState() {
   if (signinStore !== undefined) return signinStore;
   let text = "";

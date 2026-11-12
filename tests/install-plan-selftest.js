@@ -970,7 +970,59 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     "14d control: the page left on Modern UI's fixed text reads red");
 }
 
-/* ---- 15. an upgrade is all or nothing: staged beside the install, then swapped --------------------------------------- */
+/* ---- 15. the NSIS that compiles the installer, read without fetching it ------------------------ */
+
+/* Board 996. makensis writes its stub into every installer, and before NSIS 3.12 that stub lets a standard user become
+   SYSTEM while an installer runs as SYSTEM. electron-builder 26 compiles with its legacy NSIS 3.04 unless the config's
+   top-level toolsets.nsis names a newer bundle; app-builder-lib maps each value to one archive by file name and pins it
+   by SHA-256. This reads the pin against that table and fetches nothing: tests/nsis-compile.mjs reads the version the
+   resolved makensis prints. */
+{
+  const ROOT = path.join(__dirname, "..");
+  let cfg = null, table = null;
+  try { cfg = require(path.join(ROOT, "electron-builder.js")); } catch (e) { cfg = null; }
+  try { table = require(require.resolve("app-builder-lib/out/toolsets/windows", { paths: [ROOT] })).nsisChecksums; } catch (e) { table = null; }
+  const bundleOf = (c, t) => {
+    const value = c && c.toolsets && c.toolsets.nsis;
+    const files = (value && t && t[value]) || {};
+    const file = Object.keys(files).find(f => /^nsis-bundle-\d+\.\d+\.tar\.gz$/.test(f));
+    if (!file) return null;
+    const [, major, minor] = /^nsis-bundle-(\d+)\.(\d+)/.exec(file);
+    return { value, file, major: Number(major), minor: Number(minor), sha: files[file] };
+  };
+  const fixed = (c, t) => {
+    const b = bundleOf(c, t);
+    return !!b && (b.major > 3 || (b.major === 3 && b.minor >= 12)) && /^[0-9a-f]{64}$/.test(String(b.sha));
+  };
+  if (!cfg || !table) {
+    notRun.push("15a, electron-builder.js or app-builder-lib could not be read");
+    console.log("  NOT RUN 15a: electron-builder.js or app-builder-lib could not be read");
+  } else {
+    const b = bundleOf(cfg, table);
+    ok(fixed(cfg, table), "15a the config pins electron-builder's NSIS toolset to a bundle of NSIS 3.12 or later, pinned by"
+      + " SHA-256 in app-builder-lib: " + (b ? "toolsets.nsis " + JSON.stringify(b.value) + ", " + b.file : "toolsets.nsis "
+      + JSON.stringify(cfg.toolsets && cfg.toolsets.nsis) + ", the legacy NSIS 3.04"));
+    ok(!fixed(Object.assign({}, cfg, { toolsets: undefined }), table),
+      "15a control: no toolsets key, electron-builder's legacy NSIS 3.04, reads red");
+    ok(!fixed(Object.assign({}, cfg, { toolsets: { nsis: "0.0.0" } }), table), "15a control: the legacy value \"0.0.0\" reads red");
+    ok(!b || !fixed(cfg, Object.assign({}, table, { [b.value]: { "nsis-bundle-3.11.tar.gz": b.sha } })),
+      "15a control: a bundle of 3.11 under the same value reads red");
+    ok(!b || !fixed(cfg, Object.assign({}, table, { [b.value]: { [b.file]: "" } })), "15a control: a bundle with no checksum reads red");
+  }
+  /* 15b: elevate.exe stays out of the install. electron-builder copies it to resources\ for electron-updater's per-machine
+     updates; neither this product nor its installer runs it (the all-users route is the UAC plug-in's, and the per-user
+     copy's uninstaller runs through UAC_AsUser_Call), and perMachine true would override the switch. */
+  const noElevate = c => !!c && !!c.nsis && c.nsis.packElevateHelper === false && c.nsis.perMachine !== true;
+  if (cfg) {
+    ok(noElevate(cfg), "15b the installer packs no elevate.exe: nsis.packElevateHelper is false and perMachine is not true");
+    ok(!noElevate(Object.assign({}, cfg, { nsis: Object.assign({}, cfg.nsis, { packElevateHelper: undefined }) })),
+      "15b control: the switch left at electron-builder's default reads red");
+    ok(!noElevate(Object.assign({}, cfg, { nsis: Object.assign({}, cfg.nsis, { perMachine: true }) })),
+      "15b control: perMachine true, which makes electron-builder ignore the switch, reads red");
+  }
+}
+
+/* ---- 16. an upgrade is all or nothing: staged beside the install, then swapped --------------------------------------- */
 /* Read only, on a copy of the templates as the patch tool leaves them and on shell/installer.nsh: nothing here compiles or
    runs NSIS, and no upgrade has run anywhere with it (Claude alpha's remedy (b), 2026-11-11 22:45, on the machine-wide review's
    finding 3). Each row has a control beside it that puts the old order or the old step back and must read red. */
@@ -997,7 +1049,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
   const at = (text, s) => String(text).indexOf(s);
   const defsOf = text => ["ETIUDA_STAGE_SUFFIX", "ETIUDA_ASIDE_SUFFIX"].map(n => (new RegExp("!define " + n + " \"([^\"]+)\"").exec(text) || [])[1] || "");
 
-  /* 15a. The extract goes into the stage: after the links are read, before the app is closed, and the template's own write
+  /* 16a. The extract goes into the stage: after the links are read, before the app is closed, and the template's own write
      into the folder compiled only where no stage is defined. */
   const stagedFirst = (s, nsh) => {
     const stage = /\n!ifmacrodef etiudaStageBegin\n  !insertmacro etiudaStageBegin\n  !ifdef UNINSTALLER_ICON\n    File \/oname=uninstallerIcon\.ico "\$\{UNINSTALLER_ICON\}"\n  !endif\n  !insertmacro installApplicationFiles\n  !insertmacro etiudaStageEnd\n!endif\n/.exec(s);
@@ -1011,15 +1063,15 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     return !!stage && link > -1 && stage.index > link && stage.index < close && inPlaceOnlyWithout && into;
   };
   ok(stagedFirst(S, NSH) && status.swapPatched === true,
-    "15a the new files are extracted into <folder>" + defsOf(NSH)[0] + " beside the install, after the links are read and before the"
+    "16a the new files are extracted into <folder>" + defsOf(NSH)[0] + " beside the install, after the links are read and before the"
     + " app is closed, and the template's own write into the folder compiles only where no stage is defined: "
     + JSON.stringify(status.swapMissing || status.error));
   ok(!stagedFirst(S.replace("!ifmacrondef etiudaStageBegin", "!ifmacrodef etiudaStageBegin"), NSH),
-    "15a control: the template's write into the folder compiled beside the stage again reads red");
+    "16a control: the template's write into the folder compiled beside the stage again reads red");
   ok(!stagedFirst(S, NSH.replace("  SetOutPath \"$etiudaStage\"\n!macroend", "  SetOutPath \"$INSTDIR\"\n!macroend")),
-    "15a control: the extract pointed at the install folder again reads red");
+    "16a control: the extract pointed at the install folder again reads red");
 
-  /* 15b. The older copy's uninstaller runs after the stage is complete and the swap is made, and only where it still has a
+  /* 16b. The older copy's uninstaller runs after the stage is complete and the swap is made, and only where it still has a
      folder of its own. */
   const oldAfter = s => {
     const end = at(s, "!insertmacro etiudaStageEnd"), swap = at(s, "!ifmacrodef etiudaSwap\n  !insertmacro etiudaSwap\n");
@@ -1027,12 +1079,12 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const first = at(s, "!insertmacro uninstallOldVersion SHELL_CONTEXT");
     return end > -1 && swap > end && !!un && un.index > swap && first > swap;
   };
-  ok(oldAfter(S), "15b the older copy's uninstaller is not run before every file is staged and the folders are swapped, and then only"
+  ok(oldAfter(S), "16b the older copy's uninstaller is not run before every file is staged and the folders are swapped, and then only"
     + " while $etiudaRunOld is 1");
   ok(!oldAfter(S.replace("!insertmacro setLinkVars\n", "!insertmacro setLinkVars\n!insertmacro uninstallOldVersion SHELL_CONTEXT\n!insertmacro handleUninstallResult SHELL_CONTEXT\n")),
-    "15b control: electron-builder's order put back, the uninstaller before the stage, reads red");
+    "16b control: electron-builder's order put back, the uninstaller before the stage, reads red");
 
-  /* 15c. A failed extract leaves the install folder untouched: nothing writes it before the swap, every way out before the
+  /* 16c. A failed extract leaves the install folder untouched: nothing writes it before the swap, every way out before the
      swap takes back the stage and nothing else, and an incomplete stage is never swapped in. */
   const untouched = (s, x, nsh) => {
     const beforeSwap = s.slice(0, Math.max(0, at(s, "!ifmacrodef etiudaSwap")));
@@ -1042,15 +1094,15 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const close = /!ifmacrodef etiudaStageAbort\n\s*!insertmacro etiudaStageAbort\n\s*!endif\n\s*SetErrorLevel 1618\n\s*Quit\b/.test(macro(nsh, "customCheckAppRunning"));
     return noWrite && cancel && retry && close;
   };
-  ok(untouched(S, X, NSH), "15c nothing writes the install folder before the swap, and the three ways out before it (Cancel on a locked"
+  ok(untouched(S, X, NSH), "16c nothing writes the install folder before the swap, and the three ways out before it (Cancel on a locked"
     + " extract, the app still open, and Retry, which copies into the stage again rather than over the folder) keep the stage"
     + " from being half-swapped");
   ok(!untouched(S, X.replace(/(SetErrorLevel 1618\n)!ifmacrodef etiudaStageAbort\n\s*!insertmacro etiudaStageAbort\n!endif\n/, "$1"), NSH),
-    "15c control: Cancel on a locked extract leaving the stage reads red");
+    "16c control: Cancel on a locked extract leaving the stage reads red");
   ok(!untouched(S, X.replace(/\n!ifmacrodef etiudaStageAbort\n\s*StrCpy \$R1 0\n\s*Goto RetryExtract7za\n!endif/, ""), NSH),
-    "15c control: Retry falling through to the in-place overwrite that ignores errors reads red");
+    "16c control: Retry falling through to the in-place overwrite that ignores errors reads red");
   ok(!untouched(S, X, NSH.replace(/(\n\s*)!ifmacrodef etiudaStageAbort\n\s*!insertmacro etiudaStageAbort\n\s*!endif(\n\s*SetErrorLevel 1618)/, "$2")),
-    "15c control: the app still open leaving the stage reads red");
+    "16c control: the app still open leaving the stage reads red");
   const onlyStage = nsh => {
     const ab = code(macro(nsh, "etiudaStageAbort"));
     const gone = ab.match(/\b(RMDir|Delete|Rename|CopyFiles)\b[^\n]*|!insertmacro etiudaRemoveTree [^\n]*/g) || [];
@@ -1061,11 +1113,11 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
       && JSON.stringify(touched) === JSON.stringify(["!insertmacro etiudaRemoveTree \"$etiudaAside\"", "!insertmacro etiudaRemoveTree \"$etiudaStage\"", "RMDir \"$etiudaBase\""])
       && (b.match(/!insertmacro etiudaRenameRetry [^\n]*/g) || []).join() === "!insertmacro etiudaRenameRetry \"$etiudaAside\" \"$etiudaBase\"";
   };
-  /* (The older copy's move back, and when the copy aside may go, are replayed in 15m.) */
-  ok(onlyStage(NSH), "15c taking the stage back removes the stage and the updater's setup copy and nothing else, and the stage's start"
+  /* (The older copy's move back, and when the copy aside may go, are replayed in 16m.) */
+  ok(onlyStage(NSH), "16c taking the stage back removes the stage and the updater's setup copy and nothing else, and the stage's start"
     + " clears only what an earlier run left beside the folder, after moving an older copy back where a swap was cut short");
   ok(!onlyStage(NSH.replace("    SetOutPath $PLUGINSDIR\n    !insertmacro etiudaRemoveTree \"$etiudaStage\"", "    SetOutPath $PLUGINSDIR\n    !insertmacro etiudaRemoveTree \"$INSTDIR\"")),
-    "15c control: taking the stage back by removing the install folder reads red");
+    "16c control: taking the stage back by removing the install folder reads red");
   const wholeOnly = nsh => {
     const e = code(macro(nsh, "etiudaStageEnd"));
     return /\$\{IfNot\} \$\{FileExists\} "\$etiudaStage\\\$\{APP_EXECUTABLE_FILENAME\}"/.test(e)
@@ -1073,11 +1125,11 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
       && /\$\{GetSize\} "\$etiudaStage" "\/S=0K" \$0 \$3 \$4\n\s*IntOp \$0 \$0 \* 100\n\s*IntOp \$3 \$\{APP_64_UNPACKED_SIZE\} \* 99\n\s*\$\{If\} \$0 < \$3\n\s*StrCpy \$1 "0"/.test(e)
       && /\$\{If\} \$1 != "1"\n[\s\S]*?!insertmacro etiudaStageAbort\n[\s\S]*?SetErrorLevel 2\n\s*Quit\b/.test(e);
   };
-  ok(wholeOnly(NSH), "15c a stage without the program, its uninstaller, or 99 per cent of the size electron-builder measured is taken"
+  ok(wholeOnly(NSH), "16c a stage without the program, its uninstaller, or 99 per cent of the size electron-builder measured is taken"
     + " back and the run ends 2 before the app is closed");
-  ok(!wholeOnly(NSH.replace("IntOp $3 ${APP_64_UNPACKED_SIZE} * 99", "IntOp $3 0 * 99")), "15c control: the size left unchecked reads red");
+  ok(!wholeOnly(NSH.replace("IntOp $3 ${APP_64_UNPACKED_SIZE} * 99", "IntOp $3 0 * 99")), "16c control: the size left unchecked reads red");
 
-  /* 15d. The swap: out of both folders, the older copy aside, the stage into its place, and the older copy put back where the
+  /* 16d. The swap: out of both folders, the older copy aside, the stage into its place, and the older copy put back where the
      second rename will not go; each rename tried as a locked extract is. */
   const swapRestores = nsh => {
     const m = code(macro(nsh, "etiudaSwap"));
@@ -1090,14 +1142,14 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
       && /MessageBox MB_RETRYCANCEL\|MB_ICONEXCLAMATION "\$\(appCannotBeClosed\)" \/SD IDCANCEL IDRETRY/.test(r);
     return cwd > -1 && cwd < aside && aside < into && into < back && guarded && restore && tries;
   };
-  ok(swapRestores(NSH), "15d the swap leaves both folders first, sets the older copy aside, renames the stage into its place, and"
+  ok(swapRestores(NSH), "16d the swap leaves both folders first, sets the older copy aside, renames the stage into its place, and"
     + " where that will not go puts the older copy back and ends 1618 (2 only if even that fails); each rename tried 30 times 2 s apart");
   ok(!swapRestores(NSH.replace("        !insertmacro etiudaRenameRetry \"$etiudaAside\" \"$etiudaBase\"\n", "")),
-    "15d control: the older copy left aside when the stage cannot take its place reads red");
+    "16d control: the older copy left aside when the stage cannot take its place reads red");
   ok(!swapRestores(NSH.replace("  Push $0\n  SetOutPath $PLUGINSDIR\n  ${If} ${FileExists} \"$etiudaBase", "  Push $0\n  ${If} ${FileExists} \"$etiudaBase")),
-    "15d control: the installer still working inside the folder it renames reads red");
+    "16d control: the installer still working inside the folder it renames reads red");
 
-  /* 15e. The registration is never removed where the older copy's folder is the one replaced, and written again at once where it
+  /* 16e. The registration is never removed where the older copy's folder is the one replaced, and written again at once where it
      was elsewhere; the copy aside goes only after the new one is registered. */
   const keepsRegistration = (s, nsh) => {
     const m = code(macro(nsh, "etiudaSwap"));
@@ -1113,17 +1165,17 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
       && (d.match(/\b(RMDir|Delete|Rename)\b|etiudaRemoveTree/g) || []).length === 1;
     return same && order && goesOn && dropOnly;
   };
-  ok(keepsRegistration(S, NSH), "15e where the older copy was in the folder replaced its uninstaller is not run, so its registration stands"
+  ok(keepsRegistration(S, NSH), "16e where the older copy was in the folder replaced its uninstaller is not run, so its registration stands"
     + " until written over; elsewhere it runs after the swap and a failure there is noted, not obeyed; the copy aside goes after customInstall");
   ok(!keepsRegistration(S, NSH.replace("${If} $0 == $etiudaBase", "${If} $0 == $etiudaStage")),
-    "15e control: the uninstaller run over the folder just replaced reads red");
+    "16e control: the uninstaller run over the folder just replaced reads red");
   ok(!keepsRegistration(S, NSH.replace("    DetailPrint `The older copy's uninstaller ended with $R0.`", "    SetErrorLevel 2\n    Quit")),
-    "15e control: electron-builder's stop on an older uninstaller's failure put back reads red");
+    "16e control: electron-builder's stop on an older uninstaller's failure put back reads red");
   ok(!keepsRegistration(S.replace("!insertmacro registryAddInstallInfo\n", "!insertmacro etiudaDropAside\n!insertmacro registryAddInstallInfo\n")
     .replace(/\n!ifmacrodef etiudaDropAside\n  !insertmacro etiudaDropAside\n!endif/, ""), NSH),
-    "15e control: the copy aside dropped before the new one is registered reads red");
+    "16e control: the copy aside dropped before the new one is registered reads red");
 
-  /* 15f. Where the swap's macros live: the installer compile alone, and after Studio's five hooks, so its cut of this file (src/engine.mjs
+  /* 16f. Where the swap's macros live: the installer compile alone, and after Studio's five hooks, so its cut of this file (src/engine.mjs
      installerHooksFrom) neither carries them nor stops at a macro it does not know. */
   const placed = nsh => {
     const un = at(nsh, "\n!macro customUnInstall\n"), block = at(nsh, "\n!ifndef BUILD_UNINSTALLER\n!define ETIUDA_STAGE_SUFFIX");
@@ -1133,20 +1185,20 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
       "etiudaRenameRetry", "etiudaSwap", "customUnInstallCheck", "customUnInstallCheckCurrentUser", "etiudaDropAside"]
       .every(n => { const i = at(nsh, "\n!macro " + n + "\n") > -1 ? at(nsh, "\n!macro " + n + "\n") : at(nsh, "\n!macro " + n + " "); return i > block && i < end; });
   };
-  ok(placed(NSH), "15f the swap's macros are defined for the installer compile alone, after customUnInstall, the last of Studio's five hooks");
+  ok(placed(NSH), "16f the swap's macros are defined for the installer compile alone, after customUnInstall, the last of Studio's five hooks");
   ok(!placed(NSH.replace("\n!ifndef BUILD_UNINSTALLER\n!define ETIUDA_STAGE_SUFFIX", "\n!define ETIUDA_STAGE_SUFFIX")),
-    "15f control: the block compiled into the uninstaller too reads red");
+    "16f control: the block compiled into the uninstaller too reads red");
 
-  /* 15g. The gate looks where the installer writes, and IT is told what an upgrade now does. */
+  /* 16g. The gate looks where the installer writes, and IT is told what an upgrade now does. */
   ok(JSON.stringify(defsOf(NSH)) === JSON.stringify(P.BESIDE),
-    "15g update-install looks beside the folder where the installer writes: " + JSON.stringify(defsOf(NSH)) + " against " + JSON.stringify(P.BESIDE));
-  ok(JSON.stringify(defsOf(NSH.replace("\".setup-previous\"", "\".old\""))) !== JSON.stringify(P.BESIDE), "15g control: another suffix reads red");
+    "16g update-install looks beside the folder where the installer writes: " + JSON.stringify(defsOf(NSH)) + " against " + JSON.stringify(P.BESIDE));
+  ok(JSON.stringify(defsOf(NSH.replace("\".setup-previous\"", "\".old\""))) !== JSON.stringify(P.BESIDE), "16g control: another suffix reads red");
   const doc = (/## Installing silently\r?\n([\s\S]*?)(?=\r?\n## )/.exec(fs.readFileSync(path.join(ROOT, "README.md"), "utf8")) || [])[1] || "";
   const told = d => d.indexOf(P.BESIDE[0]) > -1 && /a failed upgrade leaves the old version as it was/.test(d) && !/leave the app absent/.test(d);
-  ok(told(doc), "15g README's Installing silently says an upgrade is staged in <folder>" + P.BESIDE[0] + " and a failed one leaves the old version as it was");
-  ok(!told(doc + "\na failed upgrade can leave the app absent until the deployment tool retries."), "15g control: the old sentence back reads red");
+  ok(told(doc), "16g README's Installing silently says an upgrade is staged in <folder>" + P.BESIDE[0] + " and a failed one leaves the old version as it was");
+  ok(!told(doc + "\na failed upgrade can leave the app absent until the deployment tool retries."), "16g control: the old sentence back reads red");
 
-  /* 15h. The person's shortcuts on an upgrade (Claude alpha's ruling, 2026-11-12 00:41): kept where the folder is unchanged,
+  /* 16h. The person's shortcuts on an upgrade (Claude alpha's ruling, 2026-11-12 00:41): kept where the folder is unchanged,
      since their target still stands; made again where it changed. electron-builder's keep branch makes none and only renames
      a link whose name changed; its other branch makes both again. */
   const cfgText = fs.readFileSync(path.join(ROOT, "electron-builder.js"), "utf8");
@@ -1163,13 +1215,13 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     }) && !/createDesktopShortcut\s*:\s*["']always/.test(cfgText);
     return same && order && branches;
   };
-  ok(keepsShortcuts(S, NSH, I), "15h an upgrade into the folder already registered keeps the person's shortcuts as they are (the keep branch,"
+  ok(keepsShortcuts(S, NSH, I), "16h an upgrade into the folder already registered keeps the person's shortcuts as they are (the keep branch,"
     + " decided after the template's own choice and before the links are made); one into another folder makes them again at the new target");
-  ok(!keepsShortcuts(S, NSH.replace("    StrCpy $keepShortcuts \"true\"\n", ""), I), "15h control: the shortcuts made again on an upgrade in place reads red");
+  ok(!keepsShortcuts(S, NSH.replace("    StrCpy $keepShortcuts \"true\"\n", ""), I), "16h control: the shortcuts made again on an upgrade in place reads red");
   ok(!keepsShortcuts(S, NSH.replace("    StrCpy $keepShortcuts \"true\"\n  ${Else}\n", "  ${Else}\n    StrCpy $keepShortcuts \"true\"\n"), I),
-    "15h control: the old shortcuts kept when the folder changed, their target gone, reads red");
+    "16h control: the old shortcuts kept when the folder changed, their target gone, reads red");
 
-  /* 15i. The older folder after an upgrade that changed the folder (the same ruling, and the test architect's conditions as
+  /* 16i. The older folder after an upgrade that changed the folder (the same ruling, and the test architect's conditions as
      relayed that night): only what the installer itself wrote goes, by its own list, the new folder it has just written; a folder only once
      empty; nothing retried, nothing failing the run. Read as text, and the walk replayed: the function's own lines are run by
      the small interpreter below over a folder pair in memory, a person's file planted beside the program's and one file
@@ -1177,7 +1229,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
      in the report covers those. */
   /* The replay runs etiudaDropOld itself, with DIR the older folder "O", and the function its Call reaches; ${If}, ${Else} and
      ${EndIf} are followed as written. */
-  /* BLOCK, where given, is read in place of etiudaDropOld's own lines (15p replays etiudaSwap's take-back with it); "S" is the stage.
+  /* BLOCK, where given, is read in place of etiudaDropOld's own lines (16p replays etiudaSwap's take-back with it); "S" is the stage.
      fsys.links, where given, maps a junction's path to its target (repair 10): GetFileAttributesW reads the link itself, Delete,
      FindFirst and IfFileExists go through one as Windows does, RMDir removes the link, RMDir /r follows it as NSIS's does
      (the test architect's probe), and etiudaRemoveTree is ${ETIUDA_REMOVE_TREE}'s walk, whose own lines 14c holds. */
@@ -1312,14 +1364,14 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const quick = !/\b(Sleep|MessageBox|SetErrorLevel|Quit|Abort)\b|\/REBOOTOK|\/r\b/.test(code(fnText));
     return newUntouched(r) && newUntouched(clean) && planted && allGone && root && quick;
   };
-  ok(dropsOwnOnly(NSH), "15i the older folder loses only the files the installer has just written by the same names, outside the two trees"
-    + " that go whole (15l): a person's file and a file the new version no longer has stay, a locked one stays without a retry or a"
+  ok(dropsOwnOnly(NSH), "16i the older folder loses only the files the installer has just written by the same names, outside the two trees"
+    + " that go whole (16l): a person's file and a file the new version no longer has stay, a locked one stays without a retry or a"
     + " failure, a folder goes only once empty, the new folder is never touched, and a folder holding nothing else goes whole");
   ok(!dropsOwnOnly(NSH.replace("FindFirst $R1 $R2 \"$etiudaDropList$R0\\*.*\"", "FindFirst $R1 $R2 \"$etiudaDropRoot$R0\\*.*\"")
     .replace("IfFileExists \"$etiudaDropList$R0\\$R2\\*.*\"", "IfFileExists \"$etiudaDropRoot$R0\\$R2\\*.*\"")),
-    "15i control: the older folder's own listing taken as the list, so the person's file goes, reads red");
+    "16i control: the older folder's own listing taken as the list, so the person's file goes, reads red");
   ok(!dropsOwnOnly(NSH.replace("      RMDir \"$etiudaDropRoot$R0\\$R2\"", "      RMDir /r \"$etiudaDropRoot$R0\\$R2\"")),
-    "15i control: a subfolder removed whole, with what the person put in it, reads red");
+    "16i control: a subfolder removed whole, with what the person put in it, reads red");
   const oldChosen = nsh => {
     const o = code(macro(nsh, "etiudaOldFolder")), s = code(macro(nsh, "etiudaSwap")), a = code(macro(nsh, "etiudaDropAside"));
     return /StrCpy \$\{OUT\} ""/.test(o) && /\$\{If\} \$3 >= 4\n\s*\$\{AndIf\} \$\{FileExists\} "\$\{DIR\}\\\$\{APP_EXECUTABLE_FILENAME\}"/.test(o)
@@ -1329,12 +1381,12 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
       && /!insertmacro etiudaDropOld \$etiudaOldDir\n/.test(a) && /StrCpy \$R8 \$etiudaOldUserDir\n/.test(a)
       && /StrCpy \$etiudaOldDir ""\n\s*StrCpy \$etiudaOldUserDir ""/.test(code(macro(nsh, "etiudaStageBegin")));
   };
-  ok(oldChosen(NSH), "15i the older folder is the one registered elsewhere (or this account's per-user copy an all-users install replaces),"
+  ok(oldChosen(NSH), "16i the older folder is the one registered elsewhere (or this account's per-user copy an all-users install replaces),"
     + " read before its uninstaller runs, and only if it held the program and is no drive root, not the new folder, not inside it, not"
     + " holding it; it is emptied after the new copy is registered");
-  ok(!oldChosen(NSH.replace("    ${If} $4 != $1\n", "    ${If} 1 == 1\n")), "15i control: a folder holding the new one taken as the older folder reads red");
+  ok(!oldChosen(NSH.replace("    ${If} $4 != $1\n", "    ${If} 1 == 1\n")), "16i control: a folder holding the new one taken as the older folder reads red");
 
-  /* 15j. $INSTDIR trimmed once in init (Argon's review of 5bff2b4d, 5): GetDParameter (multiUser.nsh) copies "/D=C:\Apps\Etiuda\"
+  /* 16j. $INSTDIR trimmed once in init (Argon's review of 5bff2b4d, 5): GetDParameter (multiUser.nsh) copies "/D=C:\Apps\Etiuda\"
      into $INSTDIR whole, so installSection's $appExe, the etiuda: command and InstallLocation carried "\\", and the uninstaller,
      whose $INSTDIR has none, missed its compare and left the link and the Run value. customInit runs in .onInit after
      initMultiUser has read /D, before any page and the install section; the trim is its first line, silent or not. */
@@ -1354,14 +1406,14 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const meet = !!wrote && asks.length === 2 && asks.every(a => a === wrote);
     return first && order && loop && meet;
   };
-  ok(trimsInit(NSH, T), "15j $INSTDIR loses a trailing backslash once, as customInit's first line, in .onInit after initMultiUser has read"
+  ok(trimsInit(NSH, T), "16j $INSTDIR loses a trailing backslash once, as customInit's first line, in .onInit after initMultiUser has read"
     + " /D and before the install section sets $appExe, so the etiuda: command written and the one the uninstaller compares are one string");
   ok(!trimsInit(NSH.replace("  !insertmacro etiudaTrimSlashes $INSTDIR\n", ""), T),
-    "15j control: the trim taken out, \"/D=C:\\Apps\\Etiuda\\\" kept whole into $appExe, reads red");
+    "16j control: the trim taken out, \"/D=C:\\Apps\\Etiuda\\\" kept whole into $appExe, reads red");
   ok(!trimsInit(NSH.replace("  !insertmacro etiudaTrimSlashes $INSTDIR\n  ${IfNot} ${Silent}\n", "  ${IfNot} ${Silent}\n  !insertmacro etiudaTrimSlashes $INSTDIR\n"), T),
-    "15j control: the trim made for an interactive run alone, a silent /D left untrimmed, reads red");
+    "16j control: the trim made for an interactive run alone, a silent /D left untrimmed, reads red");
 
-  /* 15k. A stage that survives its removal is refused (Argon's review 5, 7): RMDir /r leaves a folder another account made and
+  /* 16k. A stage that survives its removal is refused (Argon's review 5, 7): RMDir /r leaves a folder another account made and
      holds open, CreateDirectory then succeeds on it, and the swap would rename it into place with that account's rights. Checked
      after the removal and before the folder is made, the run ends 1618 with nothing of its own written and the installed copy as
      it was; the survivor is not the run's to remove again. */
@@ -1374,17 +1426,17 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
       && !/\b(RMDir|Delete|Rename|CopyFiles|CreateDirectory|SetOutPath)\b|etiudaStageAbort/.test(block)
       && at(b, "SetOutPath $PLUGINSDIR") > -1 && at(b, "SetOutPath $PLUGINSDIR") < m.index;
   };
-  ok(refusesSurvivor(NSH), "15k a stage folder still there after its removal is refused before CreateDirectory: the run ends 1618, writes"
+  ok(refusesSurvivor(NSH), "16k a stage folder still there after its removal is refused before CreateDirectory: the run ends 1618, writes"
     + " nothing, and never renames another account's folder into place");
   ok(!refusesSurvivor(NSH.replace(/(\n  !insertmacro etiudaRemoveTree "\$etiudaStage"\n)(?:  #[^\n]*\n)*  \$\{If\} \$\{FileExists\} "\$etiudaStage\\\*\.\*"\n[\s\S]*?\n  \$\{EndIf\}\n/, "$1")),
-    "15k control: the surviving folder reused, as at 5bff2b4d, reads red");
+    "16k control: the surviving folder reused, as at 5bff2b4d, reads red");
   ok(!refusesSurvivor(NSH.replace(/(is still there after its removal[^\n]*\n    !insertmacro etiudaFailBox 1618\n)    SetErrorLevel 1618\n    Quit\n/, "$1")),
-    "15k control: the refusal noted and the run going on into that folder reads red");
+    "16k control: the refusal noted and the run going on into that folder reads red");
 
-  /* 15l. The older folder's resources and locales trees go whole where it held the program (Argon's review 5, 9): a file the older
+  /* 16l. The older folder's resources and locales trees go whole where it held the program (Argon's review 5, 9): a file the older
      version shipped and the new one does not (U4's resources\old-only.txt) kept both, and the folder, for ever. Held on the
      program's presence before the walk deletes it; the folder itself still goes only once empty. The two trees go by the walk
-     that never enters a link (repair 10, 15q). */
+     that never enters a link (repair 10, 16q). */
   const wholeTrees = nsh => {
     let r, bare;
     try {
@@ -1402,16 +1454,16 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const held = at(d, "${FileExists} \"$etiudaDropRoot\\${APP_EXECUTABLE_FILENAME}\""), walk = at(d, "Call etiudaDropOldFiles");
     return gone && rootKept && heldBack && only && held > -1 && held < walk && walk < at(d, rs[0] || "\u0000");
   };
-  ok(wholeTrees(NSH), "15l the older folder's resources and locales go whole where it held the program, a file only the older version"
+  ok(wholeTrees(NSH), "16l the older folder's resources and locales go whole where it held the program, a file only the older version"
     + " shipped with them; where it no longer holds the program they stay; the folder's own RMDir stays non-recursive");
   ok(!wholeTrees(NSH.replace("        !insertmacro etiudaRemoveTree \"$etiudaDropRoot\\resources\"\n        !insertmacro etiudaRemoveTree \"$etiudaDropRoot\\locales\"\n", "")),
-    "15l control: the two trees left to the walk, as at 5bff2b4d, an older version's file keeping them, reads red");
+    "16l control: the two trees left to the walk, as at 5bff2b4d, an older version's file keeping them, reads red");
   ok(!wholeTrees(NSH.replace("      ${If} ${FileExists} \"$etiudaDropRoot\\${APP_EXECUTABLE_FILENAME}\"\n        StrCpy $0 \"1\"\n      ${EndIf}\n", "      StrCpy $0 \"1\"\n")),
-    "15l control: the trees removed from a folder that no longer holds the program reads red");
+    "16l control: the trees removed from a folder that no longer holds the program reads red");
   ok(!wholeTrees(NSH.replace("      RMDir \"$etiudaDropRoot\"\n", "      RMDir /r \"$etiudaDropRoot\"\n")),
-    "15l control: the older folder removed whole, a person's file with it, reads red");
+    "16l control: the older folder removed whole, a person's file with it, reads red");
 
-  /* 15q. No link is entered in a folder another account may write (the test architect's hold on repair 9, repair 10): NSIS's
+  /* 16q. No link is entered in a folder another account may write (the test architect's hold on repair 9, repair 10): NSIS's
      RMDir /r follows a junction (his probe), and etiudaDropOld runs elevated over the per-user folder HKCU names, so a junction
      planted below resources made the next all-users install a delete wherever it pointed, as administrator; Delete through a
      junction the walk descended into did the same, file by file. Replayed over the older folder with three plants, each pointing
@@ -1443,21 +1495,21 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
       && whole(root, "SYS3\\Etiuda.exe", "SYS3\\resources\\app.asar", "SYS3\\locales\\pl.pak") && root.links.has("O")
       && newUntouched(below) && newUntouched(mid) && newUntouched(root);
   };
-  ok(noLinkEntered(NSH), "15q no junction in the older folder is entered: one below resources, one standing where the new version has"
+  ok(noLinkEntered(NSH), "16q no junction in the older folder is entered: one below resources, one standing where the new version has"
     + " a folder, and an older folder that is itself one are each removed as a link or left, the folders they point at whole");
   ok(!noLinkEntered(NSH.replace("        !insertmacro etiudaRemoveTree \"$etiudaDropRoot\\resources\"\n", "        RMDir /r \"$etiudaDropRoot\\resources\"\n")),
-    "15q control: resources removed with RMDir /r again, as at 9cb2a8ff, the junction below it followed, reads red");
+    "16q control: resources removed with RMDir /r again, as at 9cb2a8ff, the junction below it followed, reads red");
   ok(!noLinkEntered(NSH.replace(/(IfFileExists "\$etiudaDropList\$R0\\\$R2\\\*\.\*" 0 etiudaDropOldFile\n)[\s\S]*?\n      etiudaDropOldDir:\n/, "$1")),
-    "15q control: the walk descending wherever the list has a folder, as at abb9c4c2, a junction there entered, reads red");
+    "16q control: the walk descending wherever the list has a folder, as at abb9c4c2, a junction there entered, reads red");
   ok(!noLinkEntered(NSH.replace("    ${If} $0 = 0x10\n", "    ${If} 0x10 = 0x10\n")),
-    "15q control: an older folder that is itself a junction taken as a folder, the trees removed through it, reads red");
-  /* A small LogicLib reader for 15m to 15o (Argon's review of 5bff2b4d, repairs 3, 4 and 6): the block's own lines followed as
+    "16q control: an older folder that is itself a junction taken as a folder, the trees removed through it, reads red");
+  /* A small LogicLib reader for 16m to 16o (Argon's review of 5bff2b4d, repairs 3, 4 and 6): the block's own lines followed as
      written, ${If}, ${IfNot}, ${AndIf}, ${AndIfNot}, ${OrIf}, ${Else}, ${EndIf} and !ifmacrodef / !else over the macros named defined,
      over a folder tree and a registry in memory. A variable the world does not declare stops it, as makensis would (Studio declares
      no stage), and so does an instruction it does not know, or a macro inserted where it is not defined, so a block that grows one
      reads red until the reader learns it. w.expand names the macros whose own lines are read in place (from w.nsh); etiudaAsUser's
      RUN is read as the person where w.inner and w.outer (the unelevated instance reached), and every program run is recorded with
-     whether it ran as the person. etiudaRemoveTree removes the folder (this reader holds no links; 15q's replay does). Like the
+     whether it ran as the person. etiudaRemoveTree removes the folder (this reader holds no links; 16q's replay does). Like the
      walk's replay it cannot show NSIS's string handling, Windows' locks or attributes; the spare-machine check covers those. */
   const runLL = (text, w) => {
     const fsys = { dirs: new Set(w.dirs || []), files: new Set(w.files || []) };
@@ -1538,7 +1590,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
   const join = (...ws) => ({ dirs: [].concat(...ws.map(x => x.dirs || [])), files: [].concat(...ws.map(x => x.files || [])) });
   const holds = (r, d) => r.fsys.files.has(d + "\\Etiuda.exe") && r.fsys.files.has(d + "\\resources\\app.asar");
 
-  /* 15m. An older copy left aside goes back by the program's presence, with the swap's retry, and is never removed while it is
+  /* 16m. An older copy left aside goes back by the program's presence, with the swap's retry, and is never removed while it is
      the only copy (Argon's review of 5bff2b4d, 4; Claude alpha's repair 4): at 9cb2a8ff the move back ran only where the folder
      was wholly absent, once, and the copy aside was then removed whatever had happened. Removed only once the folder holds the
      program: a run cut short after its swap, before the copy aside went, leaves both, and that copy aside is the older one. */
@@ -1571,19 +1623,19 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
       && goesOn(r.both) && holds(r.both, "B") && !r.both.fsys.dirs.has("A")
       && goesOn(r.none) && holds(r.none, "B");
   };
-  ok(restoresAside(NSH), "15m an older copy aside with no program in the folder goes back with the swap's retry, into the folder only where"
+  ok(restoresAside(NSH), "16m an older copy aside with no program in the folder goes back with the swap's retry, into the folder only where"
     + " it is gone or empty; one that cannot go back (a file left in the folder, a lasting lock) ends the run 1618 with the copy aside as it"
     + " was; it is removed only where the folder holds the program");
   const asideAt9cb = "\n  ${IfNot} ${FileExists} \"$etiudaBase\\*.*\"\n  ${AndIf} ${FileExists} \"$etiudaAside\\${APP_EXECUTABLE_FILENAME}\"\n"
     + "    Rename \"$etiudaAside\" \"$etiudaBase\"\n  ${EndIf}";
   ok(!restoresAside(NSH.replace(/\n  \$\{If\} \$\{FileExists\} "\$etiudaAside\\\$\{APP_EXECUTABLE_FILENAME\}"\n[\s\S]*?(?=\n  !insertmacro etiudaRemoveTree "\$etiudaAside")/, () => asideAt9cb)),
-    "15m control: 9cb2a8ff's lines put back, the move back only into a folder wholly absent and the copy aside then removed regardless, reads red");
+    "16m control: 9cb2a8ff's lines put back, the move back only into a folder wholly absent and the copy aside then removed regardless, reads red");
   ok(!restoresAside(NSH.replace("      !insertmacro etiudaRenameRetry \"$etiudaAside\" \"$etiudaBase\"\n", "      Rename \"$etiudaAside\" \"$etiudaBase\"\n")),
-    "15m control: one plain Rename in place of the retry, a brief lock then ending the run, reads red");
+    "16m control: one plain Rename in place of the retry, a brief lock then ending the run, reads red");
   ok(!restoresAside(NSH.replace(/\n  \$\{If\} \$\{FileExists\} "\$etiudaAside\\\$\{APP_EXECUTABLE_FILENAME\}"\n  \$\{AndIfNot\} \$\{FileExists\} "\$etiudaBase\\\$\{APP_EXECUTABLE_FILENAME\}"\n    DetailPrint[\s\S]*?\n    Quit\n  \$\{EndIf\}/, "")),
-    "15m control: the refusal taken out, the only copy then removed with the copy aside, reads red");
+    "16m control: the refusal taken out, the only copy then removed with the copy aside, reads red");
 
-  /* 15n. The running desk is asked to close through a copy of the program the run can reach, and no program a non-administrator
+  /* 16n. The running desk is asked to close through a copy of the program the run can reach, and no program a non-administrator
      may write runs elevated (Argon's review 3, repair 3; the test architect's hold on it, repair 3b). At 9cb2a8ff only
      "$INSTDIR\<app>.exe" was asked, which an install into another folder, or all-users over a per-user copy, does not have yet,
      so taskkill without /F only hid the desk to the tray and the run ended 1618. f4cc93fb read HKCU's InstallLocation and ran that
@@ -1629,18 +1681,18 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
       && r.innerStale === "N.setup-staging\\Etiuda.exe (as the person)" && r.unreached === "" && r.emptyKey === ""
       && r.studio === "N\\Etiuda.exe" && r.studioMoved === "";
   };
-  ok(closesThrough(NSH), "15n --update-close goes, in the inner instance of an all-users install, from the unelevated one as the person"
+  ok(closesThrough(NSH), "16n --update-close goes, in the inner instance of an all-users install, from the unelevated one as the person"
     + " ($INSTDIR's program, else the one that person's HKCU names, else the staged one; nothing where it cannot be reached); in any other"
     + " run through $INSTDIR's program, else the staged one, never HKCU's; Studio's cut and the uninstaller through $INSTDIR's alone");
   ok(!closesThrough(NSH.replace("    !insertmacro etiudaAsUser etiudaAskCloseRun\n", "    !insertmacro etiudaAskCloseRun\n")),
-    "15n control: the HKCU program run in the elevated instance, as f4cc93fb did (board 995's class), reads red");
+    "16n control: the HKCU program run in the elevated instance, as f4cc93fb did (board 995's class), reads red");
   ok(!closesThrough(NSH.replace("        !ifmacrodef etiudaAskClose & _UAC_IsInnerInstance\n          !insertmacro etiudaAskClose\n        !else\n", "        !insertmacro etiudaAskClose\n        !ifmacrodef etiudaAskClose_none\n")),
-    "15n control: the desk's macro inserted unguarded, where Studio's cut does not define it and makensis refuses, reads red");
+    "16n control: the desk's macro inserted unguarded, where Studio's cut does not define it and makensis refuses, reads red");
   ok(!closesThrough(NSH.replace("    ${If} $R9 != \"\"\n    ${AndIf} ${FileExists} \"$R9\\${APP_EXECUTABLE_FILENAME}\"", "    ${If} ${FileExists} \"$R9\\${APP_EXECUTABLE_FILENAME}\"")),
-    "15n control: an empty InstallLocation taken as a folder, the program at the drive's root asked, reads red");
+    "16n control: an empty InstallLocation taken as a folder, the program at the drive's root asked, reads red");
   ok(!closesThrough(NSH.replace(/(!macro etiudaAskClose\n  \$\{If\} \$\{UAC_IsInnerInstance\}\n)    Push \$R9\n([\s\S]*?)    Pop \$R9\n/, "$1$2")),
-    "15n control: the close check's Retry text in $R9 left overwritten by the person's side, reads red");
-  /* 15o. An interactive Update goes back into the registered folder that instFilesPre nested (Argon's review 6; repair 6):
+    "16n control: the close check's Retry text in $R9 left overwritten by the person's side, reads red");
+  /* 16o. An interactive Update goes back into the registered folder that instFilesPre nested (Argon's review 6; repair 6):
      electron-builder's instFilesPre appends "\<name>" to a folder whose path lacks it, so an Update over "/D=C:\DeskApp" staged and
      swapped into C:\DeskApp\Etiuda, inside the older copy, which stayed whole. Where $INSTDIR is the registered folder plus the
      name, holds no program, and the registered folder does, the install goes back there with $appExe, before the stage is named;
@@ -1673,26 +1725,26 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     return r.nested.V.$INSTDIR === "D" && r.nested.V.$appExe === "D\\Etiuda.exe" && !r.nested.quit
       && kept(r.silent) && kept(r.realThere) && kept(r.noProgram) && kept(r.other);
   };
-  ok(unnests(NSH, S, A), "15o an interactive Update that instFilesPre nested into <registered folder>\\Etiuda installs into the registered folder,"
+  ok(unnests(NSH, S, A), "16o an interactive Update that instFilesPre nested into <registered folder>\\Etiuda installs into the registered folder,"
     + " $appExe with it, where that folder holds the program and the nested one does not; a silent /D, a real copy in the nested folder,"
     + " or a registered folder without the program keeps $INSTDIR");
   ok(!unnests(NSH.replace("      StrCpy $appExe \"$INSTDIR\\${APP_EXECUTABLE_FILENAME}\"\n", ""), S, A),
-    "15o control: $INSTDIR moved back and $appExe left on the nested path (the shortcuts' and DisplayIcon's target) reads red");
+    "16o control: $INSTDIR moved back and $appExe left on the nested path (the shortcuts' and DisplayIcon's target) reads red");
   ok(!unnests(NSH.replace("  ${IfNot} ${Silent}\n    ReadRegStr $0 SHELL_CONTEXT", "  ${If} 1 == 1\n    ReadRegStr $0 SHELL_CONTEXT"), S, A),
-    "15o control: a silent /D, the deployment tool's own choice, moved too reads red");
+    "16o control: a silent /D, the deployment tool's own choice, moved too reads red");
   ok(!unnests(NSH.replace("    ${AndIfNot} ${FileExists} \"$INSTDIR\\${APP_EXECUTABLE_FILENAME}\"\n", ""), S, A),
-    "15o control: a real copy in the nested folder taken over reads red");
+    "16o control: a real copy in the nested folder taken over reads red");
   /* The silent nested /D is left as it is (Claude alpha's ruling, 2026-11-12): the silent run has no log (README, There is no
      installer log), so IT is told in Installing silently that the old copy stays, and nothing is built to say it at run time. */
   const toldNested = d => /names a folder inside or above the registered one keeps the old copy there,\s+no longer registered, to be removed by hand\./.test(d);
-  ok(toldNested(doc), "15o README's Installing silently says a deployment tool naming a folder inside or above the registered one keeps the old copy there, unregistered");
-  ok(!toldNested(doc.replace("keeps the old copy there", "moves the old copy")), "15o control: the sentence gone or changed reads red");
+  ok(toldNested(doc), "16o README's Installing silently says a deployment tool naming a folder inside or above the registered one keeps the old copy there, unregistered");
+  ok(!toldNested(doc.replace("keeps the old copy there", "moves the old copy")), "16o control: the sentence gone or changed reads red");
 
-  /* 15p. A copy cut short is taken back by the staged names (Argon's review 8; repair 8): into a folder holding other files and no
+  /* 16p. A copy cut short is taken back by the staged names (Argon's review 8; repair 8): into a folder holding other files and no
      program, etiudaSwap copies rather than renames, and at 9cb2a8ff a failed copy left the half-written app there. The walk
      etiudaDropOld uses, its list the stage, deletes each staged name in the folder and each folder of the stage's once empty, before
      the stage is taken back; the folder is never set aside (Argon's own remedy), since removing the aside would take a person's
-     files with it. Replayed with the walk's own interpreter (15i), the person's files planted beside a half copy. */
+     files with it. Replayed with the walk's own interpreter (16i), the person's files planted beside a half copy. */
   const takesBack = nsh => {
     const m = code(macro(nsh, "etiudaSwap"));
     const blk = /CopyFiles \/SILENT "\$etiudaStage\\\*\.\*" "\$etiudaBase"\n\s*\$\{If\} \$\{Errors\}\n([\s\S]*?)\n\s*!insertmacro etiudaStageAbort\n\s*SetErrorLevel 1618\n\s*Quit\n/.exec(m);
@@ -1712,16 +1764,16 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
       && r.dirs.has("N") && r.dirs.has("N\\notes") && r.dirs.has("N\\resources") && !r.dirs.has("N\\locales")
       && [...r.files].filter(f => f.startsWith("S\\")).length === 4;
   };
-  ok(takesBack(NSH), "15p a copy into a folder holding no program that fails is taken back by the staged names before the stage goes: the"
+  ok(takesBack(NSH), "16p a copy into a folder holding no program that fails is taken back by the staged names before the stage goes: the"
     + " person's files there stay, the half-copied program goes, and such a folder is never set aside");
   ok(!takesBack(NSH.replace(/(      DetailPrint `Cannot copy the staged files into "\$etiudaBase"[^\n]*\n)[\s\S]*?(\n      !insertmacro etiudaStageAbort\n)/, "$1$2")),
-    "15p control: the failed copy left half-written, as at 9cb2a8ff, reads red");
+    "16p control: the failed copy left half-written, as at 9cb2a8ff, reads red");
   ok(!takesBack(NSH.replace("      StrCpy $etiudaDropList $etiudaStage\n", "      StrCpy $etiudaDropList $etiudaBase\n")),
-    "15p control: the folder's own listing taken as the list, the person's files deleted, reads red");
+    "16p control: the folder's own listing taken as the list, the person's files deleted, reads red");
   ok(!takesBack(NSH.replace("  ${If} ${FileExists} \"$etiudaBase\\${APP_EXECUTABLE_FILENAME}\"\n    !insertmacro etiudaRenameRetry \"$etiudaBase\" \"$etiudaAside\"",
     "  ${If} ${FileExists} \"$etiudaBase\\*.*\"\n    !insertmacro etiudaRenameRetry \"$etiudaBase\" \"$etiudaAside\"")),
-    "15p control: any folder with files set aside (Argon's remedy), a person's files then removed with the aside, reads red");
-  /* 15r. Nothing may Quit between the swap and the registration (Claude alpha's repair 1, on Argon's review 1): the old folder is
+    "16p control: any folder with files set aside (Argon's remedy), a person's files then removed with the aside, reads red");
+  /* 16r. Nothing may Quit between the swap and the registration (Claude alpha's repair 1, on Argon's review 1): the old folder is
      gone by then, so a Quit there leaves new files nobody registered. Read from the patched install section: every line from
      the swap to registryAddInstallInfo, every macro and function they reach expanded in turn (from this file and the templates,
      a !ifmacrodef followed by what this file defines, a macro's parameters put in), must hold no Quit or Abort. Two places in
@@ -1729,7 +1781,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
      SHELL_CONTEXT and HKEY_CURRENT_USER branches Return through customUnInstallCheck and customUnInstallCheckCurrentUser before
      its Quit (installUtil.nsh), and etiudaSwap itself, whose every Quit comes before the swap is made. The uninstaller the
      registration names is written into the stage by installApplicationFiles' last line, and the stage is not swapped without it
-     (15a, 15c). Read on the merge with 995's etiudaOldUserCopy: it holds already, so the leg reads red only under its controls. */
+     (16a, 16c). Read on the merge with 995's etiudaOldUserCopy: it holds already, so the leg reads red only under its controls. */
   const TPL = {};
   try {
     const lab2 = fs.mkdtempSync(path.join(osx.tmpdir(), "etiuda-nsis-quit-"));
@@ -1825,16 +1877,16 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     return { ok: quits.length === 0 && unknown.length === 0 && unStaged && seen.size > 0, quits, unknown, unStaged, reached: [...seen].map(k => k.split(" ")[0]) };
   };
   const nq = noQuitAfterSwap(NSH, TPL);
-  ok(nq.ok, "15r nothing between the swap and the registration can Quit, every macro and function in reach followed, and the uninstaller"
+  ok(nq.ok, "16r nothing between the swap and the registration can Quit, every macro and function in reach followed, and the uninstaller"
     + " the registration names is staged and checked before the swap: " + JSON.stringify({ quits: nq.quits, unknown: nq.unknown, unStaged: nq.unStaged, reached: nq.reached }));
   ok(!noQuitAfterSwap(NSH.replace("!macro customUnInstallCheckCurrentUser\n", "!macro customUnInstallCheckCurrentUserGone\n"), TPL).ok,
-    "15r control: this account's copy's failed uninstall left to the template's Quit, as Argon read it, reads red");
+    "16r control: this account's copy's failed uninstall left to the template's Quit, as Argon read it, reads red");
   ok(!noQuitAfterSwap(NSH.replace("  StrCpy $R9 \"ran\"\n  ${If} ${Errors}\n", "  StrCpy $R9 \"ran\"\n  Quit\n  ${If} ${Errors}\n"), TPL).ok,
-    "15r control: a Quit in what runs as the person after the swap (etiudaOldUserCopyRun) reads red");
+    "16r control: a Quit in what runs as the person after the swap (etiudaOldUserCopyRun) reads red");
   ok(!noQuitAfterSwap(NSH, Object.assign({}, TPL, { "include/installer.nsh": (TPL["include/installer.nsh"] || "").replace(/\n\s*File "\/oname=\$\{UNINSTALL_FILENAME\}" "\$\{UNINSTALLER_OUT_FILE\}"/, "") })).ok,
-    "15r control: the uninstaller no longer written by installApplicationFiles, so never staged, reads red");
+    "16r control: the uninstaller no longer written by installApplicationFiles, so never staged, reads red");
 
-  /* 15s. The older folder read from HKCU is emptied only as the person (the test architect's agreement of 12:2x on the open item
+  /* 16s. The older folder read from HKCU is emptied only as the person (the test architect's agreement of 12:2x on the open item
      of d30e0cbb): the walk's root check reads the folder itself, not a junction among the folders above it, and etiudaOldFolder
      compares strings, so with "U\j\Etiuda" registered in HKCU and j pointing at the new install's parent, an elevated drop
      deletes the fresh copy by its own names. Replayed in two steps: the reader follows etiudaDropAside and records each
@@ -1887,15 +1939,15 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
       && userDrops(d).length === 1 && userDrops(d)[0].asUser && !d.fsys.files.has("U\\Etiuda\\Etiuda.exe") && d.fsys.files.has("U\\Etiuda\\mine.txt") && freshWhole(d.fsys)
       && userDrops(f).length === 1 && !f.fsys.files.has("U\\Etiuda\\Etiuda.exe") && freshWhole(f.fsys);
   };
-  ok(dropsAsPerson(NSH), "15s the older folder HKCU names is emptied only as the person: through the unelevated instance in an all-users"
+  ok(dropsAsPerson(NSH), "16s the older folder HKCU names is emptied only as the person: through the unelevated instance in an all-users"
     + " install (none reached, or started elevated, it is left), in a per-user install only by an unelevated run; a junction above it"
     + " pointing at the new install's parent leaves the fresh copy whole, and a plain older folder is still emptied of the program");
   ok(!dropsAsPerson(NSH.replace(/(\n  \$\{If\} \$installMode == "all"\n[\s\S]*?)\n    \$\{If\} \$etiudaOldUserDir != ""\n[\s\S]*?\n    \$\{EndIf\}\n(  \$\{Else\}\n)/, "$1\n    !insertmacro etiudaDropOld $etiudaOldUserDir\n$2")),
-    "15s control: the per-user copy's folder emptied elevated, as at d30e0cbb, the fresh copy deleted through the junction, reads red");
+    "16s control: the per-user copy's folder emptied elevated, as at d30e0cbb, the fresh copy deleted through the junction, reads red");
   ok(!dropsAsPerson(NSH.replace(/(  \$\{Else\}\n)    \$\{IfNot\} \$\{UAC_IsAdmin\}\n      (!insertmacro etiudaDropOld \$etiudaOldDir\n)    \$\{EndIf\}\n/, "$1    $2")),
-    "15s control: a per-user install started elevated emptying HKCU's folder reads red");
+    "16s control: a per-user install started elevated emptying HKCU's folder reads red");
 
-  /* 15t. Statically: etiudaDropOld is inserted three times and no more: over HKLM's folder in an all-users install, over HKCU's in
+  /* 16t. Statically: etiudaDropOld is inserted three times and no more: over HKLM's folder in an all-users install, over HKCU's in
      a per-user one under ${IfNot} ${UAC_IsAdmin}, and in etiudaDropOldRun, which is inserted only as etiudaAsUser's RUN; the
      per-user copy's folder ($etiudaOldUserDir) reaches it only through that run. */
   const dropReachedAsPerson = nsh => {
@@ -1910,10 +1962,10 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     return JSON.stringify(inserts.sort()) === JSON.stringify(["!insertmacro etiudaDropOld $R8", "!insertmacro etiudaDropOld $etiudaOldDir", "!insertmacro etiudaDropOld $etiudaOldDir"])
       && runVia && allBranch && userVia && perUser && inRun && !/etiudaDropOld \$etiudaOldUserDir/.test(nsh);
   };
-  ok(dropReachedAsPerson(NSH), "15t etiudaDropOld runs over HKCU's folder only as the person: in etiudaDropOldRun, inserted only as"
+  ok(dropReachedAsPerson(NSH), "16t etiudaDropOld runs over HKCU's folder only as the person: in etiudaDropOldRun, inserted only as"
     + " etiudaAsUser's RUN, or in a per-user install under ${IfNot} ${UAC_IsAdmin}; HKLM's keeps its elevated drop");
   ok(!dropReachedAsPerson(NSH.replace("      !insertmacro etiudaAsUser etiudaDropOldRun\n", "      !insertmacro etiudaDropOldRun\n")),
-    "15t control: the run inserted straight into the elevated instance reads red");
+    "16t control: the run inserted straight into the elevated instance reads red");
 
 }
 

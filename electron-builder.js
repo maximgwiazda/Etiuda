@@ -59,6 +59,11 @@ function caretHelper() {
     "-r:System.dll", "-out:" + CARET, path.resolve(__dirname, "shell", "caret.cs")], { stdio: "inherit" });
 }
 
+// GOOGLE'S CLIENT SECRET (tools/signin-secret.cjs): copied into resources only when ETIUDA_GOOGLE_CLIENT_SECRET is set for the
+// packaging command, written by beforePack below; unset, both desks' resources are as before. Its value is never in this tree.
+const signinSecret = require("./tools/signin-secret.cjs");
+const SIGNIN_SECRET = signinSecret.signinSecretResources(process.env, output);
+
 // THE SIGNING HOOK: one route or none, chosen by which variables are set. With none the block is
 // absent and electron-builder packages unsigned, which SmartScreen warns about (spec 11.5). No route
 // holds a secret here: a .pfx's password is WIN_CSC_KEY_PASSWORD, read by electron-builder itself so
@@ -146,7 +151,7 @@ module.exports = {
     // THE GROUP POLICY TEMPLATE goes beside the program as it stands, resources/policy holding etiuda.admx and its
     // en-US and pl-PL etiuda.adml, so an administrator who installs a desk has the template that pins its team folder
     // and its lead's key (sense pass finding 17; tests/join-policy.mjs 19i). Windows only: no other system reads it.
-    extraResources: [{ from: CARET, to: "caret.exe" }, { from: "shell/policy", to: "policy" }, { from: EMBED, to: "embed" }],
+    extraResources: [{ from: CARET, to: "caret.exe" }, { from: "shell/policy", to: "policy" }, { from: EMBED, to: "embed" }, ...SIGNIN_SECRET],
     ...signing,
   },
   // THE LICENCE PAGE IS FOUND BY NAME rather than named here: electron-builder shows one when
@@ -174,7 +179,7 @@ module.exports = {
     desktop: { entry: { StartupWMClass: "etiuda" } },
     // Dictionaries are Linux only: Windows checks spelling with its own checker and fetches nothing (shell/main.js).
     // The model folder is the one the Windows block copies. The shell reads resources/embed once installed.
-    extraResources: [{ from: LINUX_DICTIONARIES, to: "dictionaries" }, { from: EMBED, to: "embed" }],
+    extraResources: [{ from: LINUX_DICTIONARIES, to: "dictionaries" }, { from: EMBED, to: "embed" }, ...SIGNIN_SECRET],
   },
   beforePack: async context => {
     const plat = context.electronPlatformName;
@@ -187,10 +192,17 @@ module.exports = {
       if (!status.applied) throw new Error("NSIS template patches not applied: " + JSON.stringify(status));
     }
     if (plat === "linux" || plat === "win32") {
+      console.log(signinSecret.signinSecretStep(process.env, output));
       const { prepareEmbed } = await import("./tools/model.mjs");
       await prepareEmbed({ dest: EMBED, platform: plat === "linux" ? "linux" : "win32" });
     }
   },
+  // THE NSIS THAT COMPILES THE INSTALLER. Without this key electron-builder 26 uses its legacy NSIS 3.04, whose stub,
+  // written into every installer and uninstaller, lets a standard user on the machine become SYSTEM while either runs as
+  // SYSTEM (CVE-2023-37378, CVE-2025-43715, CVE-2026-42171). "1.2.1" is app-builder-lib's bundle of NSIS 3.12, the first
+  // release with all three fixed, its makensis, plug-ins and stubs in one archive pinned by SHA-256 in app-builder-lib.
+  // tests/install-plan-selftest.js 15a reads the pin, tests/nsis-compile.mjs the version the compiler prints.
+  toolsets: { nsis: "1.2.1" },
   deb: { artifactName: "etiuda_${version}_amd64.${ext}" },
   appImage: { artifactName: "etiuda-${version}-x86_64.${ext}" },
   nsis: {
@@ -209,5 +221,9 @@ module.exports = {
     artifactName: "etiuda-${version}-setup.${ext}",
     shortcutName: "Etiuda",
     uninstallDisplayName: "Etiuda",
+    // NO elevate.exe IN THE INSTALL. electron-builder copies it to resources\ for electron-updater's per-machine updates,
+    // and this product has no electron-updater; the all-users route elevates through the UAC plug-in, and the per-user
+    // copy's uninstaller runs through UAC_AsUser_Call (shell/installer.nsh). perMachine true would override this.
+    packElevateHelper: false,
   },
 };

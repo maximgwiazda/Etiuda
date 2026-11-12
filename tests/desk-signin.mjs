@@ -19,6 +19,10 @@
  *
  * THE SIGN-IN PREVIEW (ds12): ETIUDA_SIGNIN_PREVIEW=1 draws the door and Account with both providers while none has a client id.
  * Its press is driven through the shell's own click and sign-in handlers, sliced, with every door out stood in and counted.
+ *
+ * GOOGLE'S CLIENT SECRET (ds13): optional, its value only ever in a package, never in this tree. Every value here is the stand-in
+ * STAND_IN, which no provider would issue; a leg that needs a value of a real secret's shape builds it from pieces at run time, so
+ * the tree's own scan (ds13g) and any outside scanner find nothing in this file.
  */
 process.removeAllListeners("warning");
 process.on("warning", () => {});
@@ -27,6 +31,8 @@ import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
 import crypto from "node:crypto";
+import os from "node:os";
+import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -36,9 +42,9 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 43;
+const PLANTS = 45;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 58 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 67 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -72,7 +78,8 @@ const NAMES = ["SIGNIN_PROVIDERS", "signinOffered", "signinNonce", "signinAuthor
   "signinRequest", "signinListen", "signinRun", "signinRenew", "signinKeep", "signinKept", "GOOGLE_HD_NEEDS_EMAIL", "signinRefreshForm",
   "SIGNIN_SERVICE", "signinDeskBytes", "signinDeskBody", "signinServiceAsk", "signinCertOk", "signinAnswer", "signinSeat", "signinLapsed",
   "signinSettle", "signinRenewHeld", "seatFileText", "SEAT_NAME", "signinFileRead", "signinFileText", "branchIdOf", "inviteRead",
-  "SIGNOUT_SERVICE", "signoutDeskBytes", "signoutDeskBody", "signoutAsk", "signinDoorRequest", "signinKnown", "signinPreviewing"];
+  "SIGNOUT_SERVICE", "signoutDeskBytes", "signoutDeskBody", "signoutAsk", "signinDoorRequest", "signinKnown", "signinPreviewing",
+  "signinCodeForm", "signinSecretRead", "SIGNIN_SECRET_FILE", "SIGNIN_SECRET_SHAPE"];
 /* The section, evaluated: `swap` is [from, to], put in place of the one line that holds `from`, for a plant. */
 function load(swap, where) {
   let sec = SECTION, inv = INVITE;
@@ -805,19 +812,60 @@ CASES.previewPage = async () => {
   const on = { offered: ["microsoft", "google"], preview: true }, off = { offered: ["microsoft", "google"] };
   const before = word(on), pressed = word(Object.assign({}, on, { said: "signin-preview" })), plain = word(off);
   const a = acct(on), aPressed = acct(Object.assign({}, on, { said: "signin-preview" })), aOff = acct(off);
+  /* The words as read, the markup that sets the first sentence apart taken away. */
+  const words = h => String(h).replace(/<[^>]*>/g, "");
   const html = typeof P.signinPreviewHtml === "function" ? P.signinPreviewHtml(P.signinRead(on)) : "";
   storage.lsSet("eUiLang", "pl");
   let pl = {}, plA = "";
   try { pl = word(Object.assign({}, on, { said: "signin-preview" })); plA = acct(on); } finally { storage.lsSet("eUiLang", "en"); }
   return before.moment === "before" && before.preview === PREVIEW_LINE && pressed.moment === "refused" && pressed.heading === PREVIEW_PRESSED
-    && !pressed.line && pressed.preview === PREVIEW_LINE && plain.preview === undefined && P.signinRead({ offered: [], preview: true }).preview === false
-    && /data-signin-preview/.test(html) && html.indexOf(PREVIEW_LINE) >= 0
-    && /data-signin-preview/.test(a) && a.indexOf(PREVIEW_LINE) >= 0 && aPressed.indexOf(PREVIEW_PRESSED) >= 0 && aPressed.indexOf(PREVIEW_LINE) >= 0
+    && !pressed.line && pressed.preview === undefined && plain.preview === undefined && P.signinRead({ offered: [], preview: true }).preview === false
+    && /data-signin-preview/.test(html) && words(html).indexOf(PREVIEW_LINE) >= 0
+    && /data-signin-preview/.test(a) && words(a).indexOf(PREVIEW_LINE) >= 0 && words(aPressed).indexOf(PREVIEW_PRESSED) >= 0 && words(aPressed).indexOf(PREVIEW_LINE) < 0
     && !/data-signin-preview/.test(aOff) && /data-e-open="signin" data-e-provider="google"/.test(aOff)
-    && pl.heading === PREVIEW_PRESSED_PL && pl.preview === PREVIEW_LINE_PL && plA.indexOf(PREVIEW_LINE_PL) >= 0;
+    && pl.heading === PREVIEW_PRESSED_PL && pl.preview === undefined && words(plA).indexOf(PREVIEW_LINE_PL) >= 0;
 };
 /* Not shipped: tools/signin-preview.cmd is outside electron-builder's files; read, never run (run, it starts the installed desk):
    per-user first, then all-users, the variable set once for that one start, no setx, no registry. */
+/* The line as the product designer placed it: "Preview only." in the ink at 600, the rest the caption's own; in the panel under its
+   line (or its heading after a press) and before the providers' buttons, 12 px above and 10 px below; in Account before the buttons
+   at the card's full measure, 10 px below. */
+CASES.previewLook = async () => {
+  if (!P || typeof P.signinPanelHtml !== "function") return false;
+  const SET = await import(pathToFileURL(path.join(ROOT, "src", "modules", "settings.js")).href);
+  const quiet = { contains: () => false, add() {}, remove() {}, toggle() {} };
+  globalThis.window = { innerWidth: 1280, innerHeight: 800, addEventListener() {}, removeEventListener() {},
+    E_HOST: { signinState: () => ({ offered: ["microsoft", "google"], preview: true }) } };
+  globalThis.document = { querySelector: () => null, getElementById: () => null, querySelectorAll: () => [], documentElement: { dataset: {}, classList: quiet },
+    body: { classList: quiet }, addEventListener() {}, removeEventListener() {} };
+  globalThis.getComputedStyle = () => ({ getPropertyValue: () => "" });
+  let acct = "";
+  try { acct = SET.settingsPageHtml("account", ""); } finally { delete globalThis.window; delete globalThis.document; delete globalThis.getComputedStyle; }
+  const on = { offered: ["microsoft", "google"], preview: true };
+  const before = P.signinPanelHtml(P.signinDoor(P.signinRead(on))), pressed = P.signinPanelHtml(P.signinDoor(P.signinRead(Object.assign({}, on, { said: "signin-preview" }))));
+  const LINE = '<p class="sgn-cap sgn-preview" data-signin-preview><b>Preview only.</b> <span>Sign-in is not set up yet, so nothing here is sent.</span></p>';
+  const css = fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8");
+  return before.indexOf('</p>' + LINE + '<div class="sgn-provs">') > 0 && /^<h4>[^<]*<\/h4><p class="sgn-lede">/.test(before)
+    && pressed.indexOf("<h4>" + PREVIEW_PRESSED + "</h4>") === 0 && pressed.indexOf("data-signin-preview") < 0
+    && acct.indexOf("<div>" + LINE + '<div class="sgn-provs sgn-row">') > 0
+    && css.indexOf(".sgn-cap.sgn-preview b{color:var(--ink);font-weight:600}") >= 0 && !/\.sgn-cap\.sgn-preview\{[^}]*font-weight:600/.test(css)
+    && css.indexOf(".sgn-lede:has(+ .sgn-preview){margin-bottom:12px}") >= 0 && css.indexOf(".sgn-panel .sgn-preview{margin:12px 0 10px}") >= 0
+    && css.indexOf(".sgn-top .sgn-preview{max-width:none;margin:0 0 10px}") >= 0;
+};
+/* After a press: the heading is the line, so no preview line under it, and its one act is Back, an ordinary button back to the door's
+   choice, never Try again. The providers' row in Account carries no class the header's own .row rules reach (its -10px top margin
+   swallowed the line's 10px below, measured 0px in a headless Chrome over the built CSS). */
+CASES.previewBack = () => {
+  if (!P) return false;
+  const on = { offered: ["microsoft", "google"], preview: true };
+  const pressed = P.signinDoor(P.signinRead(Object.assign({}, on, { said: "signin-preview" })));
+  const acts = pressed && pressed.acts ? pressed.acts : [];
+  const rowHtml = P.signinProvidersHtml(["microsoft", "google"], true);
+  const css = fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8");
+  return acts.length === 1 && acts[0].act === "choose" && acts[0].label === "Back" && !acts[0].solid
+    && !/class="(?:[^"]*\s)?row(?:\s[^"]*)?"/.test(rowHtml) && /class="sgn-provs sgn-row"/.test(rowHtml)
+    && css.indexOf(".sgn-provs.sgn-row{flex-direction:row;flex-wrap:wrap;width:auto}") >= 0 && css.indexOf(".sgn-provs.row") < 0;
+};
 CASES.previewCmd = () => {
   const { minimatch } = createRequire(import.meta.url)("minimatch");
   const cfgText = fs.readFileSync(path.join(ROOT, "electron-builder.js"), "utf8"), fa = cfgText.indexOf("files: [");
@@ -832,6 +880,168 @@ CASES.previewCmd = () => {
     && !shipped("tools/signin-preview.cmd") && idx.every((i, k) => i >= 0 && (k === 0 || i > idx[k - 1]))
     && lines.filter(l => /(^|[&|(]\s*)start\s/i.test(l)).length === 1 && lines.filter(l => /ETIUDA_SIGNIN_PREVIEW/.test(l)).length === 1
     && !lines.some(l => /\b(setx|reg)\b/i.test(l));
+};
+
+/* ---- Google's client secret (ds13) --------------------------------------------------------------------------------------- */
+const STAND_IN = "stand-in-not-a-secret";
+const SECRET_VAR = "ETIUDA_GOOGLE_CLIENT_SECRET";
+const STEP = (() => { try { return createRequire(import.meta.url)(path.join(ROOT, "tools", "signin-secret.cjs")); } catch { return null; } })();
+const G_SECRET = { id: "google", clientId: G_CLIENT, clientSecret: STAND_IN };
+const formOf = buf => new URLSearchParams(buf.toString());
+/* The tree as shipped holds no secret: every provider's clientSecret is "", and nothing is offered with one. */
+CASES.secretTable = s => {
+  const ids = Object.keys(s.SIGNIN_PROVIDERS || {});
+  return ids.length === 2 && ids.every(id => Object.prototype.hasOwnProperty.call(s.SIGNIN_PROVIDERS[id], "clientSecret") && s.SIGNIN_PROVIDERS[id].clientSecret === "")
+    && s.signinOffered(configured(s)).every(p => p.clientSecret === "");
+};
+/* Sent only when present: the code exchange and the refresh carry client_secret where the provider has one, and without one every
+   byte of the form is the one written here from the names the forms had before the secret existed. */
+CASES.secretSent = async s => {
+  const pending = { redirect: "http://127.0.0.1:50000", verifier: "v".repeat(43) };
+  const code = formOf(s.signinCodeForm(G_SECRET, pending, "c1")), refresh = formOf(s.signinRefreshForm(G_SECRET, "rt"));
+  const plainCode = s.signinCodeForm(G, pending, "c1").toString(), plainRefresh = s.signinRefreshForm(G, "rt").toString();
+  const emptyCode = s.signinCodeForm(Object.assign({}, G, { clientSecret: "" }), pending, "c1").toString();
+  const wantCode = new URLSearchParams({ client_id: G_CLIENT, grant_type: "authorization_code", code: "c1", redirect_uri: pending.redirect,
+    code_verifier: pending.verifier }).toString();
+  const wantRefresh = new URLSearchParams({ client_id: G_CLIENT, grant_type: "refresh_token", refresh_token: "rt" }).toString();
+  /* From the table and from a package: a table's own secret wins, a package's fills Google alone, Microsoft never takes one. */
+  const offered = s.signinOffered(configured(s), { google: STAND_IN, microsoft: STAND_IN });
+  const byTable = s.signinOffered({ google: Object.assign({}, configured(s).google, { clientSecret: STAND_IN + "-table" }) }, { google: STAND_IN });
+  let asked = null;
+  const io = {
+    listen: async pageFor => { let yes; const caught = new Promise(a => { yes = a; }); setTimeout(() => yes(io.loopQ), 5); return { port: 49999, caught, close: () => {} }; },
+    openPage: async url => { const q = new URL(url).searchParams; io.loopQ = "state=" + encodeURIComponent(q.get("state")) + "&code=abc"; io.nonce = q.get("nonce");
+      io.authorize = url; return true; },
+    tokenAsk: async (url, form) => { asked = formOf(form); return answer({ id_token: jwt(gClaims(io.nonce)) }); },
+    page: () => "",
+  };
+  const got = await s.signinRun(io, offered.find(p => p.id === "google"), DESK_KEY, () => NOW);
+  return code.get("client_secret") === STAND_IN && refresh.get("client_secret") === STAND_IN && code.get("code_verifier") === pending.verifier
+    && plainCode === wantCode && plainRefresh === wantRefresh && emptyCode === wantCode
+    && offered.find(p => p.id === "google").clientSecret === STAND_IN && offered.find(p => p.id === "microsoft").clientSecret === ""
+    && byTable[0].clientSecret === STAND_IN + "-table"
+    && got.ok === true && !!asked && asked.get("client_secret") === STAND_IN && io.authorize.indexOf(STAND_IN) < 0;
+};
+/* The package's file read: {format: 1, google} of a secret's shape gives Google's secret; anything else gives none. */
+CASES.secretPacked = s => {
+  const r = t => s.signinSecretRead(t);
+  const ok = r(JSON.stringify({ format: 1, google: STAND_IN }));
+  const spaced = "has a space", short = "short";
+  return s.SIGNIN_SECRET_FILE === "signin-secret.json" && ok.google === STAND_IN && Object.keys(ok).join() === "google"
+    && Object.keys(r(JSON.stringify({ format: 1, google: spaced }))).length === 0 && Object.keys(r(JSON.stringify({ format: 1, google: short }))).length === 0
+    && Object.keys(r(JSON.stringify({ format: 2, google: STAND_IN }))).length === 0 && Object.keys(r(JSON.stringify({ format: 1, microsoft: STAND_IN }))).length === 0
+    && Object.keys(r("")).length === 0 && Object.keys(r("not json")).length === 0 && Object.keys(r("[]")).length === 0
+    && s.signinOffered().length === 0 && s.signinOffered(configured(s)).find(p => p.id === "google").clientSecret === "";
+};
+/* Never logged, kept or sent elsewhere: a first sign-in and a quiet renewal with the stand-in, every console method captured, find it
+   in the token forms (so the search can find it) and nowhere else: not a line printed, not the service's bodies, which keep exactly
+   their names, not what is kept in signin.json, not the outcomes. No line of the section or its wiring that prints names it. */
+CASES.secretNever = async s => {
+  const said = [], saved = {};
+  for (const m of ["log", "error", "warn", "info", "debug"]) { saved[m] = console[m]; console[m] = (...a) => { said.push(a.map(String).join(" ")); }; }
+  const forms = [], posted = [], urls = [];
+  let first = null, renewed = null;
+  try {
+    const io = {
+      listen: async () => { let yes; const caught = new Promise(a => { yes = a; }); setTimeout(() => yes(io.loopQ), 5); return { port: 49998, caught, close: () => {} }; },
+      openPage: async url => { const q = new URL(url).searchParams; io.loopQ = "state=" + encodeURIComponent(q.get("state")) + "&code=abc"; io.nonce = q.get("nonce"); return true; },
+      tokenAsk: async (url, form) => { urls.push(url); forms.push(form.toString()); return answer({ id_token: jwt(Object.assign(gClaims(io.nonce), { sub: "s-1" })), refresh_token: "rt-1" }); },
+      serviceAsk: async (url, body) => { posted.push(JSON.stringify(body)); return answer({ ok: true, certificate: cert(), code: CODE }); },
+      sign: signWith(signKey), keep: t => t ? "sealed:" + t : "", kept: x => String(x || "").replace(/^sealed:/, ""), page: () => "",
+    };
+    first = await s.signinRun(io, G_SECRET, DESK_KEY, () => NOW);
+    const seat = first.ok ? await s.signinSeat(io, "google", DESK_KEY, first.idToken, first.seed, () => NOW) : null;
+    io.nonce = undefined;
+    renewed = await s.signinRenewHeld(io, G_SECRET, DESK_KEY, heldOf({ provider: "google" }), () => NOW);
+    first = { first, seat };
+  } finally { for (const m of Object.keys(saved)) console[m] = saved[m]; }
+  const bodies = posted.map(b => Object.keys(JSON.parse(b)).join());
+  const kept = s.signinFileText({ held: renewed && renewed.held });
+  const prints = (SECTION + WIRING).split("\n").filter(l => /console\.(log|error|warn|info|debug)\(/.test(l));
+  return forms.length === 2 && forms.every(f => formOf(f).get("client_secret") === STAND_IN) && urls.every(u => u === "https://oauth2.googleapis.com/token")
+    && posted.length === 2 && bodies.join("|") === "provider,idToken,desk,seed,t,sig|provider,idToken,desk,t,sig"
+    && renewed.said === "renewed" && prints.length > 0 && !prints.some(l => /secret|signinPacked/i.test(l))
+    && [said.join("\n"), posted.join("\n"), kept, JSON.stringify(first), JSON.stringify(renewed)].every(t => t.indexOf(STAND_IN) < 0);
+};
+/* The shell reads the package's file once, at start, where it runs installed, beside the asar, through signinSecretRead, and takes
+   it from nowhere else: no environment variable, no IPC, no page. */
+CASES.secretWire = () => {
+  const reads = WIRING.split("\n").filter(l => /SIGNIN_SECRET_FILE/.test(l));
+  return reads.length === 1
+    && /^if \(INSTALLED\) \{ try \{ signinPacked = signinSecretRead\(fs\.readFileSync\(path\.join\(String\(process\.resourcesPath \|\| ""\), SIGNIN_SECRET_FILE\), "utf8"\)\); \}/.test(reads[0])
+    && (MAIN.match(/(?<!let )signinPacked = /g) || []).length === 1 && !new RegExp("process\\.env\\b[^\\n]*" + SECRET_VAR).test(MAIN)
+    && !/ipcMain\.(on|handle)\([^\n]*secret/i.test(MAIN);
+};
+/* THE PACKAGE STEP (tools/signin-secret.cjs): unset, it writes nothing, removes a stale file and says "absent"; set, it writes the
+   file the shell reads and says "present", never the value; a value of no secret's shape stops the pack without printing it. The
+   config copies the file into resources only when the variable is set, both desks, and today's resources are otherwise unchanged.
+   The file is git-ignored where the build writes it, and the module itself is not. The summary is read from the packaged resources. */
+CASES.secretPackage = s => {
+  if (!STEP) return false;
+  const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-signin-secret-"));
+  try {
+    const out = path.join(lab, "dist"), at = STEP.signinSecretAt(out);
+    const absent = STEP.signinSecretStep({}, out);
+    const wroteNothing = !fs.existsSync(at) && !fs.existsSync(path.dirname(at));
+    const present = STEP.signinSecretStep({ [SECRET_VAR]: STAND_IN }, out);
+    const text = fs.existsSync(at) ? fs.readFileSync(at, "utf8") : "";
+    const readBack = s.signinSecretRead(text).google;
+    const stale = STEP.signinSecretStep({ [SECRET_VAR]: "" }, out);
+    const spaced = "has a space";
+    let refused = "";
+    try { STEP.signinSecretStep({ [SECRET_VAR]: spaced }, out); } catch (e) { refused = String(e && e.message); }
+    const res = path.join(lab, "resources");
+    fs.mkdirSync(res);
+    const sumAbsent = STEP.signinSecretSummary(res);
+    fs.writeFileSync(path.join(res, s.SIGNIN_SECRET_FILE), text);
+    const sumPresent = STEP.signinSecretSummary(res);
+    /* The config, loaded in a node of its own with and without the variable (it reads the environment once, at load). */
+    const cfgWith = v => {
+      const env = Object.assign({}, process.env, { ETIUDA_DIST: out });
+      delete env[SECRET_VAR];
+      if (v !== null) env[SECRET_VAR] = v;
+      const r = spawnSync(process.execPath, ["-e", "const c = require(\"./electron-builder.js\"); process.stdout.write(JSON.stringify([c.win.extraResources, c.linux.extraResources]))"],
+        { cwd: ROOT, env, encoding: "utf8" });
+      try { return JSON.parse(r.stdout); } catch { return null; }
+    };
+    const off = cfgWith(null), on = cfgWith(STAND_IN);
+    const entry = { from: at, to: s.SIGNIN_SECRET_FILE };
+    const J = JSON.stringify;
+    const ignored = p => spawnSync("git", ["check-ignore", "-q", p], { cwd: ROOT }).status === 0;
+    return STEP.SIGNIN_SECRET_FILE === s.SIGNIN_SECRET_FILE && STEP.SIGNIN_SECRET_VAR === SECRET_VAR && !!STEP.SHAPE && STEP.SHAPE.source === s.SIGNIN_SECRET_SHAPE.source
+      && absent === "Google sign-in secret: absent" && wroteNothing && present === "Google sign-in secret: present" && readBack === STAND_IN
+      && stale === "Google sign-in secret: absent" && !fs.existsSync(at) && !!refused && refused.indexOf(spaced) < 0 && !fs.existsSync(at)
+      && sumAbsent === "Google sign-in secret: absent" && sumPresent === "Google sign-in secret: present"
+      && !!off && !!on && J(on[0]) === J(off[0].concat([entry])) && J(on[1]) === J(off[1].concat([entry]))
+      && !J(off).includes(s.SIGNIN_SECRET_FILE) && !J(on).includes(STAND_IN)
+      && ignored("dist/.signin/" + s.SIGNIN_SECRET_FILE) && !ignored("tools/signin-secret.cjs");
+  } finally { fs.rmSync(lab, { recursive: true, force: true }); }
+};
+/* No committed file carries a secret: every tracked file is searched for a Google secret's prefix and for a client secret written
+   as a value, the stand-in alone allowed. The search is shown to find both shapes, built here at run time, before its silence counts. */
+const SECRET_SHAPES = [new RegExp("GOC" + "SPX-[A-Za-z0-9_-]{8,}"),
+  /\b(?:client_secret|clientSecret|ETIUDA_GOOGLE_CLIENT_SECRET)\b["']?\s*[:=]\s*["']([^"'\s]+)["']/g];
+function secretsIn(text) {
+  const hits = [];
+  if (SECRET_SHAPES[0].test(text)) hits.push("prefix");
+  for (const m of text.matchAll(SECRET_SHAPES[1])) if (m[1] !== STAND_IN) hits.push("value");
+  return hits;
+}
+CASES.secretTree = () => {
+  const ls = spawnSync("git", ["ls-files", "-z"], { cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  const files = ls.status === 0 ? ls.stdout.split("\0").filter(Boolean) : [];
+  const found = [];
+  for (const f of files) {
+    let text = "";
+    try { text = fs.readFileSync(path.join(ROOT, f), "latin1"); } catch { continue; }
+    if (secretsIn(text).length) found.push(f);
+  }
+  const q = "\"";
+  const controls = [["GOC", "SPX-", "x".repeat(12)].join(""), "clientSecret: " + q + "x".repeat(12) + q, "client_secret=" + q + "y".repeat(12) + q,
+    SECRET_VAR + "=" + q + "z".repeat(12) + q];
+  if (found.length) console.log("  (a secret's shape in: " + found.join(", ") + ")");
+  return files.length > 500 && found.length === 0 && controls.every(c => secretsIn(c).length > 0)
+    && secretsIn("clientSecret: " + q + STAND_IN + q).length === 0 && secretsIn("clientSecret: " + q + q).length === 0;
 };
 
 /* ---- the cases on the branch ------------------------------------------------------------------------------------------- */
@@ -883,6 +1093,15 @@ const LEGS = [
   ["ds12c", "previewPress", "in the preview a trusted press of either provider is answered signin-preview with no identity, browser, loopback, provider, service, write or request"],
   ["ds12d", "previewPage", "the preview's line stands in the door's content and Account's card, the press's line as the heading, none without the preview; Polish too"],
   ["ds12e", "previewCmd", "tools/signin-preview.cmd is outside the packaged files and starts the installed desk, per-user first, with the variable for that start alone"],
+  ["ds12f", "previewLook", "the preview's line as the designer placed it: \"Preview only.\" at 600, the rest the caption's; in the panel before the providers, in Account at the card's measure"],
+  ["ds12g", "previewBack", "after a press the preview's heading stands alone with one ordinary Back to the door; the providers' row in Account is no header row"],
+  ["ds13a", "secretTable", "the tree holds no client secret: every provider's clientSecret is \"\" and a configured table offers none"],
+  ["ds13b", "secretSent", "client_secret goes with Google's code exchange and refresh only where a secret is present, and without one every byte is as before"],
+  ["ds13c", "secretPacked", "the package's signin-secret.json gives Google's secret where it is {format: 1, google} of a secret's shape, and nothing else"],
+  ["ds13d", "secretNever", "the stand-in secret is in the token forms and in no printed line, no licence service body (whose names are unchanged), no kept file, no outcome"],
+  ["ds13e", "secretWire", "the shell reads the package's file once at start, installed, beside the asar, and from no variable, IPC or page"],
+  ["ds13f", "secretPackage", "the package step writes nothing and says absent without the variable, writes the file and says present with it, never the value; the file is git-ignored and copied only when set"],
+  ["ds13g", "secretTree", "no tracked file carries a client secret's prefix or a client secret written as a value, the search shown to find both"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
@@ -1010,6 +1229,10 @@ if (!PLANTS_OFF) {
   await plantWire("dsp43", ["if (!p && signinPreviewing() && signinKnown(id)) { signinSaid = \"signin-preview\"; tellSignin(); return signinView(); } /* plant:preview-press */", ""], "previewPress");
   await plantWire("dsp44", ["const SIGNIN_PREVIEW_ASKED = process.env.ETIUDA_SIGNIN_PREVIEW === \"1\"; /* plant:preview-asked */",
     "const SIGNIN_PREVIEW_ASKED = process.env.ETIUDA_SIGNIN_PREVIEW !== undefined;"], "previewOff");
+  await plant("dsp45", ["function signinSecretPart(p) { return typeof p.clientSecret === \"string\" && p.clientSecret ? { client_secret: p.clientSecret } : {}; } /* plant:secret-present */",
+    "function signinSecretPart(p) { return { client_secret: String(p.clientSecret || \"\") }; }"], "secretSent");
+  await plant("dsp46", ["return Object.freeze(typeof v === \"string\" && SIGNIN_SECRET_SHAPE.test(v) ? { google: v } : {}); /* plant:secret-shape */",
+    "return Object.freeze(typeof v === \"string\" ? { google: v } : {});"], "secretPacked");
   /* A gate on a local act, put into the desk file's write in memory, is seen. */
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),

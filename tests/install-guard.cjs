@@ -207,16 +207,25 @@ function setupRefusal(id, app) {
 
 /* ---- the legs' calls --------------------------------------------------------------------------------------------- */
 
+/* THE DESK SENTINEL (the lead engineer's find, 2026-11-12): a computer that must never run an installer carries this file in its
+   home folder, created once there and in no tree. Its presence refuses every leg, whatever ACCOUNT_FLAG names and whether or not
+   a shipped app is present, because "no shipped app present" is also true of a desk with neither installed. tools/runner/ reads
+   the same name. `home` is for the selftest; a leg passes none. */
+const DESK_SENTINEL = ".etiuda-no-installers";
+function deskSentinelAt(env, home) { return path.join(home || (env && env.USERPROFILE) || os.homedir(), DESK_SENTINEL); }
+
 /** Before anything is built or installed: the refusals, and the snapshot the end is compared with. */
 function guardStart(opts) {
   const o = opts || {}, env = o.env || process.env;
-  if (process.platform !== "win32" && !o.run) return { refusals: ["the install guard reads a Windows registry and this is " + process.platform], before: null };
+  const sentinel = deskSentinelAt(env, o.home);
+  const desk = fs.existsSync(sentinel) ? ["this computer carries " + sentinel + ", a desk where installers never run"] : [];
+  if (process.platform !== "win32" && !o.run) return { refusals: desk.concat(["the install guard reads a Windows registry and this is " + process.platform]), before: null };
   const places = placesOfAccount(o.run, env);
   const before = snapshot(places, o.run, o.extra);
   const acc = accountOf(env);
   const reasons = presence(before);
   const flagged = reasons.length > 0 && namesAccount(env[ACCOUNT_FLAG], acc);
-  return { places, before, account: acc, reasons, flagged, refusals: refusals(reasons, env, acc),
+  return { places, before, account: acc, reasons, flagged, refusals: desk.concat(refusals(reasons, env, acc)),
     reads: before.plan.length + " place(s): " + before.plan.map(p => p.label).join("; ") };
 }
 /** After the leg, the setups uninstalled: every place whose reading changed. Nothing is restored. */
@@ -228,4 +237,4 @@ function guardEnd(start, run) {
 
 module.exports = { BUILDER_NS, uuidV5, guidOf, ACCOUNT_FLAG, LAB_FLAG, KEY_OK, regQuery, regValues, placesOfAccount,
   ownedPlan, readPlace, snapshot, compare, diffLine, presence, accountOf, namesAccount, refusals, versionStrings,
-  setupIdentity, setupRefusal, guardStart, guardEnd };
+  setupIdentity, setupRefusal, guardStart, guardEnd, DESK_SENTINEL, deskSentinelAt };

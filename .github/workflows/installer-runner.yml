@@ -1,0 +1,164 @@
+# Installer legs on a hosted Windows runner, the throwaway machine the desk's rule keeps installers off.
+#
+# Dispatch only. A push, a pull request or a fork cannot start it. The job checks out the commit asked for; the runner's own
+# scripts (tools/runner/) always come from the workflow's commit and are written under RUNNER_TEMP, so a build never judges itself
+# with a runner it changed, as in verify.yml.
+#
+# Three stages, asked one at a time:
+#   probe   what the runner is: its account, groups and integrity, UAC, whether a standard account and a SYSTEM task can be
+#           started, a junction, csc. Installs nothing. Run it first: the legs' shape depends on its answers.
+#   marker  an all-users install must never run, with administrator rights, the file the installing account's HKCU uninstall
+#           entry names (tools/runner/hkcu-uninstaller-marker.mjs). Red on engine main at 82758c14.
+#   per-user  the tree's own tests/update-install.js --update: an older install for one account, the newer over it, the
+#           uninstall. old_sha builds the older installer; windows_date opens the window wall for its launches.
+#   legs    the four installer legs (tools/runner/installer-legs.mjs): an all-users upgrade, 1618 at a copy running in another
+#           session, a bare /S as SYSTEM, 1618 at a locked file, and an all-users move to another folder with a junction
+#           planted in the old one. old_sha builds the older installer for the upgrade and the move.
+#
+# Nothing secret is handed to the runner: no catalog, no name list, no token beyond contents: read, and the checkout keeps no
+# credential. The repository is public, so this log and the artifact are public: every script prints facts about the runner and
+# the test build only. Before anything from them is quoted elsewhere, they are downloaded and scanned against the private name list
+# off the runner.
+name: installer-runner
+
+run-name: installer-runner ${{ inputs.stage }} at ${{ inputs.sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit to check out and test
+        required: true
+        type: string
+      stage:
+        description: probe, per-user, marker or legs
+        required: true
+        type: string
+        default: probe
+      legs:
+        description: For the legs stage, leg names separated by spaces (all-upgrade running-1618 system-bare locked-1618 all-move); empty runs all five
+        required: false
+        type: string
+        default: ""
+      old_sha:
+        description: For the upgrade leg, the older commit whose installer is installed first
+        required: false
+        type: string
+        default: ""
+      windows_date:
+        description: The runner's date (UTC), for the one leg that starts the app (running-1618). Empty refuses that leg, as on the desk.
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - name: the stage asked
+        shell: bash
+        env:
+          STAGE: ${{ inputs.stage }}
+        run: |
+          case "$STAGE" in
+            probe|per-user|marker|legs) ;;
+            *) echo "stage is '$STAGE', want probe, per-user, marker or legs" >&2; exit 1 ;;
+          esac
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: the runner's files, always the workflow's own
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/runner/tools/runner"
+          git fetch --depth 1 origin "$GITHUB_SHA"
+          for f in installer-probe.ps1 hkcu-uninstaller-marker.mjs installer-legs.mjs; do
+            git show "FETCH_HEAD:tools/runner/$f" > "$RUNNER_TEMP/runner/tools/runner/$f" || echo "no tools/runner/$f at the workflow's commit"
+          done
+
+      - name: probe
+        if: inputs.stage == 'probe'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\out" | Out-Null
+          & "$env:RUNNER_TEMP\runner\tools\runner\installer-probe.ps1" -Out "$env:RUNNER_TEMP\out\probe.txt"
+
+      - uses: actions/setup-node@v4
+        if: inputs.stage != 'probe'
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: npm ci
+        if: inputs.stage != 'probe'
+        shell: bash
+        run: npm ci
+
+      - name: the older installer, for the upgrade leg
+        if: (inputs.stage == 'legs' || inputs.stage == 'per-user') && inputs.old_sha != ''
+        shell: bash
+        env:
+          OLD_SHA: ${{ inputs.old_sha }}
+        run: |
+          git worktree add "$RUNNER_TEMP/old" "$OLD_SHA"
+          cd "$RUNNER_TEMP/old"
+          npm ci
+          # Through the pack step, as every installer build here: it makes turning.7z and applies the NSIS template patches.
+          ETIUDA_DIST="$RUNNER_TEMP/old/dist" node tools/package.mjs --test-identity
+          f="$(ls "$RUNNER_TEMP/old/dist"/*-setup.exe 2>/dev/null | head -1)"
+          [ -n "$f" ] && echo "ETIUDA_OLD_SETUP_EXE=$f" >> "$GITHUB_ENV"
+
+      # The scripts run from the checkout's tools/runner, so they require the tree under test; the copies under RUNNER_TEMP are
+      # placed over them first, so the instrument is the workflow's own whatever the tested commit holds.
+      - name: the workflow's instrument over the checkout
+        if: inputs.stage != 'probe'
+        shell: bash
+        run: |
+          mkdir -p tools/runner
+          cp "$RUNNER_TEMP/runner/tools/runner/"*.mjs tools/runner/ 2>/dev/null || true
+
+      - name: marker
+        if: inputs.stage == 'marker'
+        continue-on-error: true
+        shell: bash
+        run: node tools/runner/hkcu-uninstaller-marker.mjs --out "$RUNNER_TEMP/out"
+
+      # The tree's own per-user update leg (tests/update-install.js --update): the older setup with /currentuser into a scratch home,
+      # the newer over it, the launches into that home, the uninstall. It launches the app, so it needs the window wall's date.
+      - name: per-user
+        if: inputs.stage == 'per-user'
+        continue-on-error: true
+        shell: bash
+        env:
+          ETIUDA_WINDOWS: ${{ inputs.windows_date }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          node tests/update-install.js --update 2>&1 | tee "$RUNNER_TEMP/out/per-user.txt"
+          exit "${PIPESTATUS[0]}"
+
+      - name: legs
+        if: inputs.stage == 'legs'
+        continue-on-error: true
+        shell: bash
+        env:
+          LEGS: ${{ inputs.legs }}
+          # Set on this step alone; tests/engine.js's window wall compares it with the process's own date and refuses otherwise.
+          ETIUDA_WINDOWS: ${{ inputs.windows_date }}
+        run: node tools/runner/installer-legs.mjs --out "$RUNNER_TEMP/out" $LEGS
+
+      - name: results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-runner-${{ inputs.stage }}
+          path: ${{ runner.temp }}/out
+          if-no-files-found: warn
+          retention-days: 7

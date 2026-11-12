@@ -1354,15 +1354,20 @@ html.e-still .sgn-run::after{animation:none;transform:translateX(80%)}
 .sgn-acts{display:flex;gap:8px;flex-wrap:wrap}
 .sgn-panel .sgn-acts{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
 .sgn-provs{display:flex;flex-direction:column;gap:10px;width:100%}
-.sgn-provs.row{flex-direction:row;flex-wrap:wrap;width:auto}
+/* Not .row, which is the header's band (margin -10px, nowrap) and reached Account's buttons. */
+.sgn-provs.sgn-row{flex-direction:row;flex-wrap:wrap;width:auto}
 .sgn-p{display:inline-flex;align-items:center;justify-content:center;height:41px;padding:0 12px;border:1px solid;border-radius:4px;white-space:nowrap;flex:none}
 .sgn-p.microsoft{gap:12px;font:600 15px/1 "Segoe UI",sans-serif;background:#fff;border-color:#8c8c8c;color:#5e5e5e}
 .sgn-p.google{gap:10px;font:500 14px/20px "Google Sans",Roboto,"Segoe UI",sans-serif;background:#fff;border-color:#747775;color:#1f1f1f}
 :root[data-theme=dark] .sgn-p.microsoft{background:#2f2f2f;border-color:#2f2f2f;color:#fff}
 :root[data-theme=dark] .sgn-p.google{background:#131314;border-color:#8e918f;color:#e3e3e3}
 .sgn-cap{font-size:12.5px;line-height:1.45;color:var(--dim);margin:10px 0 0;max-width:36em}
-/* The sign-in preview's line (src/modules/signin.js signinPreviewHtml), in the ink's colour and weight. */
-.sgn-cap.sgn-preview{color:var(--ink);font-weight:600}
+/* The sign-in preview's line (src/modules/signin.js signinPreviewHtml), the one-line form of the handoff's section 5 with no dot:
+   its first sentence in the ink at 600, the rest the caption's own. */
+.sgn-cap.sgn-preview b{color:var(--ink);font-weight:600}
+.sgn-lede:has(+ .sgn-preview){margin-bottom:12px}
+.sgn-panel .sgn-preview{margin:12px 0 10px}
+.sgn-top .sgn-preview{max-width:none;margin:0 0 10px}
 .sgn-ft{font-size:12px;line-height:1.4;color:var(--dim);margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line)}
 .sgn-code{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 12px;margin-top:10px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
 .sgn-code code,.sgn-mono{font:600 14.5px var(--mono);letter-spacing:.04em;color:var(--ink);white-space:nowrap}

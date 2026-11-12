@@ -100,7 +100,10 @@ const listing = d => E.safeListing(d);
 
 /* ---- the lab and the scratch home ----------------------------------------------------------- */
 
-const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-update-"));
+/* The lab's own path in its long form: a profile whose TEMP is an 8.3 short name (a hosted runner's RUNNER~1) would otherwise spell
+   every folder here one way and the shortcuts Windows writes another, and U6 compared the two spellings (installer-runner run
+   43229661219, 2026-11-12). */
+const LAB = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-update-")));
 const H = P.scratchHome(LAB);
 const CHILD_ENV = Object.assign({}, process.env, H.env);
 const UD = path.join(H.places.ApplicationData, T.packageName);
@@ -162,7 +165,10 @@ function newSetup() {
   const out = path.join(LAB, "dist");
   const cli = path.join(E.ROOT, "node_modules", "electron-builder", "out", "cli", "cli.js");
   if (!fs.existsSync(cli)) E.refuse("electron-builder is not installed; npm install first");
-  execFileSync(process.execPath, [cli, "--win", "--config", path.join("tools", "electron-builder-test.cjs")], { cwd: E.ROOT, stdio: "ignore",
+  /* Through tools/package.mjs --test-identity, never electron-builder directly: the pack step makes turning.7z (generated, git-ignored)
+     and applies the NSIS template patches, which a direct call skips; a desk hides that with leftovers, a clean runner does not
+     (run 43222136075, 2026-11-12). */
+  execFileSync(process.execPath, [path.join(E.ROOT, "tools", "package.mjs"), "--test-identity"], { cwd: E.ROOT, stdio: "ignore",
     env: E.unsignedEnv({ ETIUDA_DIST: out }) });
   const found = listing(out).filter(n => /-setup\.exe$/i.test(n));
   if (found.length !== 1) E.refuse(out + " holds " + found.length + " installers; expected 1");
@@ -188,8 +194,12 @@ async function uninstall(dir, mode) {
   for (let i = 1; i <= 60; i++) { await sleep(1000); if (!fs.existsSync(dir)) return i; }
   return -1;
 }
-const engineIn = dir => { try { return sha(require("@electron/asar").extractFile(path.join(dir, "resources", "app.asar"), "engine/etiuda.html")); } catch (e) { return null; } };
-const asarText = (dir, file) => { try { return require("@electron/asar").extractFile(path.join(dir, "resources", "app.asar"), file).toString("utf8"); } catch (e) { return null; } };
+/* @electron/asar keeps an archive's header by its path: the same path read again after an update would use the older header's
+   offsets against the new file and hash a slice of neither (U3 at 6545e0e7, installer-runner run 43229661219; shown on two desk
+   asars, e05ff4 then aca3a2 at one path, 81de39 once uncached). Every read here drops the cache first. */
+const asarRead = (file, inner) => { const A = require("@electron/asar"); A.uncacheAll(); return A.extractFile(file, inner); };
+const engineIn = dir => { try { return sha(asarRead(path.join(dir, "resources", "app.asar"), "engine/etiuda.html")); } catch (e) { return null; } };
+const asarText = (dir, file) => { try { return asarRead(path.join(dir, "resources", "app.asar"), file).toString("utf8"); } catch (e) { return null; } };
 
 /* ---- launching the installed app into the scratch home ---------------------------------------- */
 
@@ -399,7 +409,9 @@ async function updateLeg(newer) {
     installLocation: regValue(KU.install, "InstallLocation"),
     defaultDir: P.defaultUserInstallDir(H.places.LocalApplicationData, PRODUCT),
     defaultDirExists: fs.existsSync(P.defaultUserInstallDir(H.places.LocalApplicationData, PRODUCT)),
-    programOld: oldEngine, programNew: engineIn(PROG), programTree: treeEngine,
+    programOld: oldEngine, programNew: (() => { const n = engineIn(PROG); note("installed engine after the update " + String(n || "unread").slice(0, 12)
+      + ", app.asar " + (() => { try { return fs.statSync(path.join(PROG, "resources", "app.asar")).size + " bytes"; } catch (e) { return "unread"; } })()); return n; })(),
+    programTree: treeEngine,
     oldOnlyGone: !fs.existsSync(path.join(PROG, "left-by-the-older-copy.txt")),
     besideClear: P.BESIDE.every(s => !fs.existsSync(PROG + s)),
     appKeys: namedKeys(KU.uninstallParent), keyName: regExists(KU.uninstall) ? GUID : "", keyBefore: GUID,
@@ -520,6 +532,10 @@ process.on("exit", () => {
   lockHeld = true;
   const newer = newSetup();
   note("newer setup " + newer + ", " + fs.statSync(newer).size + " bytes, sha256 " + String(shaFile(newer)).slice(0, 16));
+  /* What the newer setup packed, read from the folder it was packed from (win-unpacked beside it), and the tree's page now: a U3 red
+     then says whether the difference came from the pack or from the update. */
+  note("newer setup's packed engine " + String(engineIn(path.join(path.dirname(newer), "win-unpacked")) || "unread").slice(0, 12)
+    + ", the tree's engine/etiuda.html " + String(shaFile(E.ENGINE_PATH) || "unread").slice(0, 12));
   if (LEG === "update") await updateLeg(newer); else await allUsersLeg(newer);
   reachedEnd = true;
 })().catch(async e => {

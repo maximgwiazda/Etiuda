@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { packagedFuseProblems, wantedFuses } from './fuses.mjs';
 import { prepareEmbed } from './model.mjs';
 
+const { signinSecretSummary, given: signinSecretGiven, SIGNIN_SECRET_VAR } = createRequire(import.meta.url)('./signin-secret.cjs');
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = resolve(ROOT, process.env.ETIUDA_DIST || 'dist');
 /* The test build differs in its program's name and its config, never in what is checked here. */
@@ -109,5 +110,13 @@ if (r.status === 0) {
     console.error('npm run package: ' + caret + ' is missing, so the picker would only copy');
     process.exit(1);
   }
+  /* GOOGLE'S CLIENT SECRET, read back from the package's resources and said as present or absent, never its value; a package that
+     lost the secret the variable gave it is refused (tools/signin-secret.cjs). */
+  const said = signinSecretSummary(join(DIST, 'win-unpacked', 'resources'));
+  if (signinSecretGiven(process.env) && !/present$/.test(said)) {
+    console.error('npm run package: ' + SIGNIN_SECRET_VAR + ' was set and the package says ' + said);
+    process.exit(1);
+  }
+  console.log('npm run package: ' + said);
 }
 process.exit(r.status == null ? 1 : r.status);

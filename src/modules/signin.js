@@ -104,10 +104,11 @@ const FAIL_FIRST=["unreached","signin-unreached","signin-timeout","signin-browse
 /* THE DOOR'S CONTENT for the view `v`, whatever form draws it: {moment, ident, heading, line, say, calm, code, providers, cap, privacy, foot,
    acts: [{act, label, solid}]}; null where there is no door. The shell is separate from what it does: signinPanelHtml is the one
    form drawn today (a button in the header with a panel under it), and another form takes the same content. */
-/* In the sign-in preview (shell/main.js signinPreviewing) every moment carries the copywriter's line, drawn in the frame. */
+/* In the sign-in preview (shell/main.js signinPreviewing) every moment carries the copywriter's line, drawn in the frame, but the
+   press's, whose heading is the line. */
 function signinDoor(v){
   const d=signinDoorOf(v);
-  if(d && v.preview) d.preview=t("Preview only. Sign-in is not set up yet, so nothing here is sent.");
+  if(d && v.preview && v.said!=="signin-preview") d.preview=t("Preview only.")+" "+t("Sign-in is not set up yet, so nothing here is sent.");
   return d;
 }
 function signinDoorOf(v){
@@ -122,7 +123,9 @@ function signinDoorOf(v){
     if(FAIL_FIRST.indexOf(v.said)>=0){
       const s=signinSay(v.said, v);
       return {moment:"refused", heading:s[0], line:s[1],
-        acts:[v.said==="signin-notallowed" ? {act:"choose", label:t("Use another account"), solid:true} : {act:"choose", label:t("Try again"), solid:true}]};
+        /* The preview's press stopped nothing, so its way on is Back to the choice, never Try again. */
+        acts:[v.said==="signin-notallowed" ? {act:"choose", label:t("Use another account"), solid:true}
+          : v.said==="signin-preview" ? {act:"choose", label:t("Back")} : {act:"choose", label:t("Try again"), solid:true}]};
     }
     return {moment:"before", heading:t("Sign in to Etiuda"),
       line:t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three."),
@@ -152,7 +155,7 @@ const LOGO={
 /* The providers' own buttons, the same size, in their own words; `row` side by side, else stacked. The trusted click the preload
    names is the button's data-e-open. */
 function signinProvidersHtml(ids, row){
-  return '<div class="sgn-provs'+(row?' row':'')+'">'+ids.map(id=>'<button type="button" class="sgn-p '+esc(id)+'" data-e-open="signin" data-e-provider="'+esc(id)+'">'
+  return '<div class="sgn-provs'+(row?' sgn-row':'')+'">'+ids.map(id=>'<button type="button" class="sgn-p '+esc(id)+'" data-e-open="signin" data-e-provider="'+esc(id)+'">'
     +LOGO[id]+'<span>'+esc(id==="microsoft" ? t("Sign in with Microsoft") : t("Sign in with Google"))+'</span></button>').join("")+'</div>';
 }
 function signinAvatarHtml(initial, off, big){
@@ -169,17 +172,19 @@ function signinCodeHtml(code, label){
 function signinActsHtml(acts){
   return '<div class="sgn-acts">'+acts.map(a=>'<button type="button" class="btn'+(a.solid?' primary':'')+'" data-signin-act="'+esc(a.act)+'">'+esc(a.label)+'</button>').join("")+'</div>';
 }
-/* Form B's panel: the door's content in the panel's own type, the cannot-be-done moments as its heading and line, no box. */
-/* The preview's line, as the panel and Account draw it; "" outside the preview. */
+/* The preview's line, as the panel and Account draw it, its first sentence the bold one; "" outside the preview. */
 function signinPreviewHtml(v){
-  return v && v.preview ? '<p class="sgn-cap sgn-preview" data-signin-preview>'+esc(t("Preview only. Sign-in is not set up yet, so nothing here is sent."))+'</p>' : "";
+  return v && v.preview ? '<p class="sgn-cap sgn-preview" data-signin-preview><b>'+esc(t("Preview only."))+'</b> <span>'
+    +esc(t("Sign-in is not set up yet, so nothing here is sent."))+'</span></p>' : "";
 }
+/* Form B's panel: the door's content in the panel's own type, the cannot-be-done moments as its heading and line, no box. The
+   preview's line follows the heading and line, just before what they are about. */
 function signinPanelHtml(d){
   let h="";
-  if(d.preview) h+=signinPreviewHtml({preview:true});
   if(d.ident) h+=signinIdentHtml(d.ident);
   if(d.heading) h+='<h4>'+esc(d.heading)+'</h4>';
   if(d.line) h+='<p class="sgn-lede">'+esc(d.line)+'</p>';
+  if(d.preview) h+=signinPreviewHtml({preview:true});
   if(d.wait) h+='<div class="sgn-wait">'+esc(d.wait)+'</div><div class="sgn-run" aria-hidden="true"></div>';
   if(d.team) h+='<p class="sgn-ln">'+esc(d.team)+'</p>';
   if(d.code) h+=signinCodeHtml(d.code, "");
@@ -316,6 +321,7 @@ export {
   signinIdentHtml,
   signinNow,
   signinOnChange,
+  signinPanelHtml,
   signinParts,
   signinPreviewHtml,
   signinProvidersHtml,

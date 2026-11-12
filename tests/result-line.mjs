@@ -43,7 +43,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 113;
+const EXPECTED = 121;  /* 113, +5 an area run carrying on after a test-only fix (ar1 to ar5), +3 what a test reads or starts by name (ar6 to ar8) */
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -63,6 +63,118 @@ const labs = [];
  *  repository of its own - `git init` and nothing else, since `git ls-files -co` lists an
  *  untracked file as readily as a tracked one and an index would add a step that can fail. Both
  *  are for section 9, where the subject is the tree rather than the output. */
+/* ---- 24 (a to e). AN AREA RUN CARRIES ON AFTER A TEST-ONLY FIX (planAreaResume; Claude alpha's question, 2026-11-12) ------------
+   A lab repository, a hand-written area chain line for its first commit (a, b, w, d and the floor's pick green, c the red
+   that ended it), and the lab's own copy of the tool asked, through a child that imports it, what a later commit carries.
+   b imports tests/helper.mjs; w lists a folder; d runs with an argument. ar1 one changed test: only b is carried. ar2 a changed
+   helper: nothing. ar3 a changed file outside tests/: no resume. ar4 a resumed line's own carried list is lent again. ar5 a base
+   whose recorded git tree is not its head's: no resume. */
+function areaResumeLegs() {
+  const OK = "process.exit(0);\n";
+  const l = makeLab("area-resume", { a: OK, c: OK, d: OK, w: 'import fs from "node:fs";\nfs.readdirSync(".");\n' + OK, "pick": OK }, {
+    git: true,
+    files: { "tests/b.mjs": 'import "./helper.mjs";\n' + OK, "tests/helper.mjs": "export const h = 1;\n", "src/leaf.mjs": "export const leaf = 1;\n" },
+  });
+  const g = (...args) => spawnSync("git", ["-c", "user.name=lab", "-c", "user.email=lab@example.invalid"].concat(args), { cwd: l.lab, encoding: "utf8", timeout: 30000 });
+  const commit = (files, msg) => {
+    for (const rel of Object.keys(files || {})) fs.writeFileSync(path.join(l.lab, rel), files[rel]);
+    g("add", "."); g("commit", "-q", "-m", msg);
+    return { head: g("rev-parse", "--short", "HEAD").stdout.trim(), tree: g("rev-parse", "HEAD^{tree}").stdout.trim() };
+  };
+  const first = commit(null, "base");
+  const chains = path.join(l.root, "chains.jsonl");
+  const STEPS = ["a", "b", "w", "d", "c", "pick"].map(n => ({ file: "tests/" + n + ".mjs", cmd: "node tests/" + n + ".mjs",
+    args: n === "d" ? ["--x"] : [] }));
+  const line = (b, extra) => JSON.stringify(Object.assign({ gate: "area", tree: l.lab, head: b.head, gitTree: b.tree,
+    counts: { exitCode: 1 }, gates: ["a", "b", "w", "d", "pick", "c"].map(n => ({ gate: "tests-" + n, exit: n === "c" ? 1 : 0 })) }, extra || {}));
+  const ask = () => {
+    const driver = path.join(l.root, "ask.mjs");
+    fs.writeFileSync(driver, "import { pathToFileURL } from 'node:url';\n"
+      + "const m = await import(pathToFileURL(" + JSON.stringify(path.join(l.lab, "tools", "gate-run.mjs")) + ").href);\n"
+      + "const r = m.planAreaResume(" + JSON.stringify(l.lab) + ", " + JSON.stringify(STEPS) + ", process.argv[2], " + JSON.stringify(chains) + ");\n"
+      + "console.log(JSON.stringify({ reason: r.reason || '', carried: r.carried || null, run: r.steps ? r.steps.map(x => x.file) : null }));\n");
+    const tree = g("rev-parse", "HEAD^{tree}").stdout.trim();
+    const r = spawnSync(process.execPath, [driver, tree], { cwd: l.lab, encoding: "utf8", timeout: 30000,
+      env: Object.assign({}, process.env, { ETIUDA_RUNS: l.runs, ETIUDA_CHAINS_PATH: chains }) });
+    try { return JSON.parse(String(r.stdout).trim().split(/\r?\n/).pop()); } catch (e) { return { reason: "no answer: " + String(r.stderr).slice(-200), carried: null }; }
+  };
+  const said = r => "carried " + JSON.stringify(r.carried) + (r.reason ? ", " + r.reason : "") + (r.run ? ", run " + JSON.stringify(r.run) : "");
+
+  fs.writeFileSync(chains, line(first) + "\n");
+  commit({ "tests/a.mjs": OK + "// fixed\n" }, "a fixed");
+  const a = ask();
+  check(JSON.stringify(a.carried) === '["tests-b"]' && !!a.run && a.run.length === 5,
+    "ar1 after one changed test only the green, untouched, plain, non-walking gate b is carried; a (changed), w (lists a folder), d (an argument), c (ended the run) and the floor run: " + said(a));
+
+  commit({ "tests/helper.mjs": "export const h = 2;\n" }, "helper");
+  const b = ask();
+  check(JSON.stringify(b.carried) === "[]", "ar2 a changed helper b imports carries nothing: " + said(b));
+
+  const third = commit({ "src/leaf.mjs": "export const leaf = 2;\n" }, "product");
+  const c = ask();
+  check(c.carried === null && /outside tests\//.test(c.reason), "ar3 a changed file outside tests/ carries nothing, the whole plan runs: " + said(c));
+
+  fs.writeFileSync(chains, line(third, { gates: [{ gate: "tests-a", exit: 0 }, { gate: "tests-w", exit: 0 }], counts: { exitCode: 0 }, carried: ["tests-b"] }) + "\n");
+  commit({ "tests/a.mjs": OK + "// again\n" }, "a again");
+  const d = ask();
+  check(JSON.stringify(d.carried) === '["tests-b"]', "ar4 a resumed run's own carried list is lent again: " + said(d));
+
+  fs.writeFileSync(chains, line({ head: first.head, tree: third.tree }) + "\n");
+  const e = ask();
+  check(e.carried === null && /no area run/.test(e.reason), "ar5 a base whose recorded git tree is not its head's is not carried on from: " + said(e));
+}
+
+
+/* ---- 24 (f to h). WHAT A TEST READS OR STARTS BY NAME IS REACHED (the lead engineer's read of area-resume, 2026-11-12) ---------
+   A second lab: fx reads tests/fixtures/x.json by readFileSync, sp starts tests/child.mjs by path, ar lists a folder with the
+   async readdir, and ok imports nothing. ar6 the fixture changed: fx runs, ok is carried. ar7 the started file changed: sp runs.
+   ar8 nothing that ar names changed and ar still runs, since it lists a folder; ok is carried in all three. */
+function areaResumeByNameLegs() {
+  const OK = "process.exit(0);\n";
+  const l = makeLab("area-resume-name", {
+    fx: 'import fs from "node:fs";\nimport path from "node:path";\nfs.readFileSync(path.join("tests", "fixtures", "x.json"));\n' + OK,
+    sp: 'import { spawnSync } from "node:child_process";\nspawnSync(process.execPath, ["tests/child.mjs"]);\n' + OK,
+    ar: 'import fs from "node:fs";\nfs.readdir(".", () => {});\n' + OK,
+    ok: OK, "pick": OK,
+  }, { git: true, files: { "tests/fixtures/x.json": "{}\n", "tests/child.mjs": OK } });
+  const g = (...args) => spawnSync("git", ["-c", "user.name=lab", "-c", "user.email=lab@example.invalid"].concat(args), { cwd: l.lab, encoding: "utf8", timeout: 30000 });
+  const commit = (files, msg) => {
+    for (const rel of Object.keys(files || {})) fs.writeFileSync(path.join(l.lab, rel), files[rel]);
+    g("add", "."); g("commit", "-q", "-m", msg);
+    return { head: g("rev-parse", "--short", "HEAD").stdout.trim(), tree: g("rev-parse", "HEAD^{tree}").stdout.trim() };
+  };
+  const chains = path.join(l.root, "chains.jsonl");
+  const NAMES = ["fx", "sp", "ar", "ok", "pick"];
+  const STEPS = NAMES.map(n => ({ file: "tests/" + n + ".mjs", cmd: "node tests/" + n + ".mjs", args: [] }));
+  const baseLine = b => JSON.stringify({ gate: "area", tree: l.lab, head: b.head, gitTree: b.tree, counts: { exitCode: 0 },
+    gates: NAMES.map(n => ({ gate: "tests-" + n, exit: 0 })) });
+  const ask = () => {
+    const driver = path.join(l.root, "ask.mjs");
+    fs.writeFileSync(driver, "import { pathToFileURL } from 'node:url';\n"
+      + "const m = await import(pathToFileURL(" + JSON.stringify(path.join(l.lab, "tools", "gate-run.mjs")) + ").href);\n"
+      + "const r = m.planAreaResume(" + JSON.stringify(l.lab) + ", " + JSON.stringify(STEPS) + ", process.argv[2], " + JSON.stringify(chains) + ");\n"
+      + "console.log(JSON.stringify({ reason: r.reason || '', carried: r.carried || null }));\n");
+    const r = spawnSync(process.execPath, [driver, g("rev-parse", "HEAD^{tree}").stdout.trim()], { cwd: l.lab, encoding: "utf8", timeout: 30000,
+      env: Object.assign({}, process.env, { ETIUDA_RUNS: l.runs, ETIUDA_CHAINS_PATH: chains }) });
+    try { return JSON.parse(String(r.stdout).trim().split(/\r?\n/).pop()); } catch (e) { return { reason: "no answer: " + String(r.stderr).slice(-200), carried: null }; }
+  };
+  const said = r => "carried " + JSON.stringify(r.carried) + (r.reason ? ", " + r.reason : "");
+  let base = commit(null, "base");
+  fs.writeFileSync(chains, baseLine(base) + "\n");
+  commit({ "tests/fixtures/x.json": '{"changed":true}\n' }, "fixture");
+  const f1 = ask();
+  check(JSON.stringify(f1.carried) === '["tests-sp","tests-ok"]',
+    "ar6 a changed fixture read by readFileSync reaches its reader: fx runs, sp and ok are carried, ar runs (lists a folder): " + said(f1));
+  base = { head: g("rev-parse", "--short", "HEAD").stdout.trim(), tree: g("rev-parse", "HEAD^{tree}").stdout.trim() };
+  fs.writeFileSync(chains, baseLine(base) + "\n");
+  commit({ "tests/child.mjs": OK + "// changed\n" }, "child");
+  const f2 = ask();
+  check(JSON.stringify(f2.carried) === '["tests-fx","tests-ok"]',
+    "ar7 a changed test started by path reaches the step that starts it: sp runs, fx and ok are carried: " + said(f2));
+  check(f1.carried && f2.carried && f1.carried.indexOf("tests-ar") < 0 && f2.carried.indexOf("tests-ar") < 0,
+    "ar8 a step that lists a folder with the async readdir is never carried: " + said(f1) + " | " + said(f2));
+}
+
 function makeLab(kind, stubs, opts) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-result-line-" + kind + "-"));
   labs.push(root);
@@ -2034,6 +2146,8 @@ async function main() {
 
   /* ---- 18 (e to h). A TEST-ONLY DIFF RERUNS ONLY THE CHANGED TESTS (see inheritLegs) ----------- */
   inheritLegs();
+  areaResumeLegs();
+  areaResumeByNameLegs();
 
   /* ---- 19. REAL PROFILE TOUCH DETECTION IN AREA AND PROFILE RUNS --------------------------------- */
   realProfileTouchLegs();

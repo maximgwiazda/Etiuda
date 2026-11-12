@@ -90,6 +90,10 @@ function testConfig(base, app, root) {
     fileAssociations: assoc,
     nsis: Object.assign({}, base.nsis, { shortcutName: t.productName, uninstallDisplayName: t.productName,
       artifactName: t.packageName + "-${version}-setup.${ext}" }),
+    /* A test build is never published. On a hosted runner electron-builder publishes by itself where nothing says otherwise ("Implicit
+       publishing triggered by CI detection"), finds no token and fails the pack after the installer is made (installer-runner runs
+       43227925391 and 43227936787, 2026-11-12). */
+    publish: null,
   });
   /* The installer script is renamed into the output folder before packing, and the build refuses one still naming a
      shipped class, scheme or profile folder. */
