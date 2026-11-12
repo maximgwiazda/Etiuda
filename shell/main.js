@@ -9298,10 +9298,35 @@ function signinDeskBody(provider, idToken, desk, seed, t, sign) {
   return body;
 }
 async function signinServiceAsk(fetchFn, url, body, ms) {
-  if (String(url) !== SIGNIN_SERVICE) throw new Error("the desk's sign-in is posted to the licence service's signin/desk only"); /* plant:service-host */
+  if (String(url) !== SIGNIN_SERVICE && String(url) !== SIGNOUT_SERVICE) throw new Error("the licence service's door takes signin/desk and signout/desk only"); /* plant:service-host */
   const bytes = Buffer.from(JSON.stringify(body), "utf8");
   if (bytes.length > SIGNIN_BODY_MAX) throw new Error("the body is longer than it may be");
-  return signinPost(fetchFn, SIGNIN_SERVICE, bytes, "application/json", SIGNIN_SERVICE_MAX, ms);
+  return signinPost(fetchFn, String(url), bytes, "application/json", SIGNIN_SERVICE_MAX, ms);
+}
+/* THE DESK'S SIGN OUT at the service, through the same door: one POST to signout/desk, {desk, t, sig} and no other names, `sig` the
+   desk key's signature over the service's own bytes (requests.mjs signoutDeskBytes): its line, then the desk's public half and t,
+   one a line. It frees the desk's place there and touches nobody's seat on a licence. */
+const SIGNOUT_SERVICE = "https://etiuda.dev/licence/v1/signout/desk";
+const SIGNOUT_DESK_LINE = "etiuda-licence-signout-desk"; /* plant:signout-line */
+function signoutDeskBytes(o) {
+  return Buffer.from(SIGNOUT_DESK_LINE + "\n" + [o.desk, o.t].map(String).join("\n"), "utf8");
+}
+/* The request's body, {desk, t, sig}, signed by `sign(bytes)` (hex); null where any part is not its shape. */
+function signoutDeskBody(desk, t, sign) {
+  if (!/^[0-9a-f]{64}$/.test(String(desk)) || !Number.isSafeInteger(t)) return null;
+  const sig = String(sign(signoutDeskBytes({ desk: desk, t: t })) || "");
+  if (!/^[0-9a-f]{128}$/.test(sig)) return null;
+  return { desk: String(desk), t: t, sig: sig };
+}
+/* One post to signout/desk, signed by `deskKey`'s private half through `io.sign`; `io.serviceAsk(url, body)` is the door. Resolves
+   true where the service answered 200, false for anything else, and never rejects: the caller never waits on it to clear. */
+async function signoutAsk(io, deskKey, now) {
+  try {
+    const body = signoutDeskBody(deskKey, now(), io.sign);
+    if (!body) return false;
+    const res = await io.serviceAsk(SIGNOUT_SERVICE, body);
+    return !!res && res.status === 200;
+  } catch { return false; }
 }
 /* THE SEAT CERTIFICATE as the desk takes it: the service's shape, for this desk's key, a window that ends after it begins. Its
    signature under the delegation is Studio's to check, as Studio checks a grant; the desk keeps it and writes it. */
@@ -9522,11 +9547,16 @@ ipcMain.handle("etiuda:signin-stop", (e) => {
   return !!run;
 });
 /* Sign out: this computer forgets the account, its tokens, its code and its certificate, and takes its seat.json back out of the
-   team's folder. The team, its catalog and everything else on the desk stay. */
-ipcMain.handle("etiuda:signin-out", (e) => {
-  if (!fromEngine(e)) return null;
+   team's folder. The team, its catalog and everything else on the desk stay. Where the desk was signed in and a provider is offered,
+   its place at the licence service is freed first by one signed signout/desk, which nothing here waits on or says anything of: if
+   the service is away or refuses, the place frees itself after 30 days unseen. The person's seat on the licence is not touched. */
+function signinOutNow() {
   if (signinBusy) return signinView();
   const s = signinState(), me = branchIdentity(false);
+  if (s.held && me && !harnessLaunch() && net && typeof net.fetch === "function"
+    && signinOffered().length) { /* plant:signout-offered */
+    signoutAsk(signinIo({ loop: null }), me.key, Date.now); /* plant:signout-post */
+  }
   if (s.held && me && pinnedLead()) {
     try { fs.unlinkSync(path.join(sharedFolderForWrite(), "desks", me.id, SEAT_NAME)); } catch { /* not written, or the folder is away */ }
   }
@@ -9536,6 +9566,10 @@ ipcMain.handle("etiuda:signin-out", (e) => {
   signinSave();
   tellSignin();
   return signinView();
+}
+ipcMain.handle("etiuda:signin-out", (e) => {
+  if (!fromEngine(e)) return null;
+  return signinOutNow();
 });
 /* Check now: one renewal at once, at most once per SIGNIN_CHECK_GAP_MS. */
 ipcMain.handle("etiuda:signin-check", async (e) => {

@@ -33,9 +33,9 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 25;
+const PLANTS = 29;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 40 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 46 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -68,7 +68,8 @@ const INVITE = ["const INVITE_HIDDEN_RE =", "function inviteRead(", "function in
 const NAMES = ["SIGNIN_PROVIDERS", "signinOffered", "signinNonce", "signinAuthorize", "signinPageOk", "signinBack", "signinRefusedWhy", "signinTokens",
   "signinRequest", "signinListen", "signinRun", "signinRenew", "signinKeep", "signinKept", "GOOGLE_HD_NEEDS_EMAIL", "signinRefreshForm",
   "SIGNIN_SERVICE", "signinDeskBytes", "signinDeskBody", "signinServiceAsk", "signinCertOk", "signinAnswer", "signinSeat", "signinLapsed",
-  "signinSettle", "signinRenewHeld", "seatFileText", "SEAT_NAME", "signinFileRead", "signinFileText", "branchIdOf", "inviteRead"];
+  "signinSettle", "signinRenewHeld", "seatFileText", "SEAT_NAME", "signinFileRead", "signinFileText", "branchIdOf", "inviteRead",
+  "SIGNOUT_SERVICE", "signoutDeskBytes", "signoutDeskBody", "signoutAsk"];
 /* The section, evaluated: `swap` is [from, to], put in place of the one line that holds `from`, for a plant. */
 function load(swap, where) {
   let sec = SECTION, inv = INVITE;
@@ -113,6 +114,9 @@ const serviceNonce = (key, seed) => crypto.createHash("sha256").update("etiuda-l
 const serviceBytes = (provider, idToken, desk, t) => Buffer.from("etiuda-licence-signin-desk\n" + [provider,
   crypto.createHash("sha256").update(idToken).digest("hex"), desk, t].join("\n"), "utf8");
 const signWith = k => bytes => crypto.sign(null, bytes, k.privateKey).toString("hex");
+/* The service's bytes for the desk's sign-out, written here from the interface: its line `etiuda-licence-signout-desk`, then the
+   desk's public half and t, one a line. */
+const serviceOutBytes = (desk, t) => Buffer.from("etiuda-licence-signout-desk\n" + [desk, t].join("\n"), "utf8");
 const CODE = "7K3MQ9TV2XRBHN4W";
 const cert = over => Object.assign({ kind: "etiuda-seat-certificate", format: 1, licence: "a".repeat(32), desk: DESK_KEY, person: "b".repeat(64),
   code: CODE, issued: NOW, until: NOW + 30 * 86400000, via: { kind: "etiuda-delegation" }, sig: { alg: "Ed25519", keyId: "svc-1", value: "c".repeat(128) } }, over);
@@ -374,17 +378,18 @@ CASES.renewFail = async s => {
 };
 
 /* ---- the renewal's wiring, evaluated with stand-ins for the shell around it --------------------------------------------- */
-const WIRE_DECLS = ["const SIGNIN_RENEW_MS =", "const SIGNIN_FIRST_MS =", "async function signinRenewNow(", "function armSigninRenew("];
+const WIRE_DECLS = ["const SIGNIN_RENEW_MS =", "const SIGNIN_FIRST_MS =", "async function signinRenewNow(", "function armSigninRenew(", "function signinOutNow("];
 const WIRE_STANDS = ["harnessLaunch", "PLACED_ASIDE", "signinState", "signinOffered", "branchIdentity", "signinIo", "net", "signinRenewHeld",
-  "signinSave", "tellSignin", "setTimeout", "stand"];
+  "signinSave", "tellSignin", "setTimeout", "pinnedLead", "fs", "path", "sharedFolderForWrite", "SEAT_NAME", "signinView", "signoutAsk", "stand"];
 function loadWire(st, swap) {
   let text = WIRE_DECLS.map(d => { try { return decl(MAIN, d); } catch { return ""; } }).filter(Boolean).join("\n");
   if (swap) {
     if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in the wiring once: " + swap[0]);
     text = text.replace(swap[0], swap[1]);
   }
-  const body = "let signinBusy = null, signinTimer = null;\nfunction signinFlush() { stand.flushes++; return true; }\n" + text
-    + "\nreturn { signinRenewNow, armSigninRenew, SIGNIN_RENEW_MS, SIGNIN_FIRST_MS };";
+  const body = "let signinBusy = stand.busy || null, signinTimer = null, signinWrote = \"kept\", signinSaid = \"\";\nfunction signinFlush() { stand.flushes++; return true; }\n" + text
+    + "\nreturn { signinRenewNow, armSigninRenew, SIGNIN_RENEW_MS, SIGNIN_FIRST_MS, signinOutNow: typeof signinOutNow === \"undefined\" ? undefined : signinOutNow,"
+    + " wrote: () => signinWrote, said: () => signinSaid };";
   return new Function(...WIRE_STANDS, body)(...WIRE_STANDS.map(n => n === "stand" ? st : st[n]));
 }
 /* The shell around the renewal: Microsoft configured, this desk's identity, the doors answering `reply()` and `serve()`. Real time. */
@@ -397,6 +402,8 @@ function wireStand(s, reply, serve) {
       tokenAsk: async () => { st.asked++; return reply ? reply() : answer({}); }, serviceAsk: async () => { st.posted++; return serve ? serve() : answer({}); } }),
     net: { fetch: () => { throw new Error("no network in a leg"); } },
     signinRenewHeld: s.signinRenewHeld, signinSave: () => { st.saves++; }, tellSignin: () => { st.tells++; },
+    pinnedLead: () => false, fs, path, sharedFolderForWrite: () => "", SEAT_NAME: "seat.json", signoutAsk: s.signoutAsk,
+    signinView: () => ({ offered: [], signedIn: st.store.held ? "microsoft" : "" }),
     setTimeout: (fn, ms) => { st.timers.push({ fn, ms }); return { unref() {} }; },
   });
   return st;
@@ -436,6 +443,79 @@ CASES.renewWire = async (s, swap) => {
   const saidGone = await loadWire(gone, swap).signinRenewNow();
   return said === "renewed" && ok.store.held.cert.issued === next.issued && ok.store.held.refresh === "sealed:rt-2" && ok.saves >= 1 && ok.tells >= 1
     && ok.flushes >= 2 && saidGone === "" && gone.asked === 0 && gone.posted === 0;
+};
+
+/* ---- the desk's Sign out at the service --------------------------------------------------------------------------------- */
+/* signout/desk's body has the interface's three names alone, signed by this desk's key over the service's bytes. */
+CASES.signoutBody = s => {
+  const t = NOW, b = s.signoutDeskBody(DESK_KEY, t, signWith(signKey)), bytes = serviceOutBytes(DESK_KEY, t);
+  const ok = !!b && crypto.verify(null, bytes, signKey.publicKey, Buffer.from(b.sig, "hex")) && !crypto.verify(null, bytes, otherKey.publicKey, Buffer.from(b.sig, "hex"));
+  return ok && Object.keys(b).join() === "desk,t,sig" && b.desk === DESK_KEY && b.t === t && s.signoutDeskBytes({ desk: DESK_KEY, t: t }).equals(bytes)
+    && s.SIGNOUT_SERVICE === "https://etiuda.dev/licence/v1/signout/desk"
+    && s.signoutDeskBody("short", t, signWith(signKey)) === null && s.signoutDeskBody(DESK_KEY, 1.5, signWith(signKey)) === null
+    && s.signoutDeskBody(DESK_KEY, t, () => "") === null;
+};
+/* The shell around the Sign out: a desk signed in with Microsoft configured, the service's door standing in, `serve()` its answer. */
+function outStand(s, serve) {
+  const st = wireStand(s);
+  st.store.held = heldOf();
+  st.sent = [];
+  st.signinIo = () => ({ sign: signWith(signKey), serviceAsk: (url, body) => {
+    st.sent.push({ url, body, heldThen: !!st.store.held });
+    return serve ? serve() : answer({ ok: true });
+  } });
+  return st;
+}
+/* Sign out posts exactly one signout/desk, three names, a fresh t, a signature that verifies, before the local sign-in is cleared. */
+CASES.signoutPost = async (s, swap) => {
+  const st = outStand(s), w = loadWire(st, swap);
+  const before = Date.now(), view = w.signinOutNow(), after = Date.now();
+  await tick(5);
+  const x = st.sent[0] || {}, b = x.body || {};
+  return st.sent.length === 1 && x.url === s.SIGNOUT_SERVICE && /\/signout\/desk$/.test(String(x.url)) && Object.keys(b).join() === "desk,t,sig" && b.desk === DESK_KEY
+    && b.t >= before && b.t <= after && crypto.verify(null, serviceOutBytes(DESK_KEY, b.t), signKey.publicKey, Buffer.from(b.sig, "hex"))
+    && x.heldThen === true && st.store.held === null && st.saves === 1 && st.tells === 1 && !!view && view.signedIn === "" && w.wrote() === "";
+};
+/* The service away or refusing changes nothing here: the sign-in is cleared, nothing new is said, nothing is left unhandled. */
+CASES.signoutAway = async (s, swap) => {
+  const serves = [() => { throw new Error("offline"); }, () => Promise.reject(new Error("offline")), () => answer({ ok: false, reason: "unavailable" }, 503),
+    () => answer({ ok: false, reason: "signin" }, 403), () => ({ status: 200, bytes: Buffer.from("<html>") })];
+  let every = true;
+  for (const serve of serves) {
+    const st = outStand(s, serve), w = loadWire(st, swap);
+    const view = w.signinOutNow();
+    await tick(5);
+    every = every && st.sent.length === 1 && st.store.held === null && st.saves === 1 && st.tells === 1 && !!view && view.signedIn === "" && w.said() === "" && w.wrote() === "";
+  }
+  return every;
+};
+/* Nothing is sent where no client id is configured, the desk was never signed in, or it has no identity, or on a harness start; the
+   sign-in is cleared all the same, except while a sign-in is in the browser, which Sign out leaves alone as before. */
+CASES.signoutNone = async (s, swap) => {
+  const run = async (tune) => { const st = outStand(s); tune(st); const w = loadWire(st, swap); const view = w.signinOutNow(); await tick(5); return { st, view }; };
+  const noClient = await run(st => { st.signinOffered = () => []; });
+  const never = await run(st => { st.store.held = null; });
+  const noId = await run(st => { st.branchIdentity = () => null; });
+  const harness = await run(st => { st.harnessLaunch = () => true; });
+  const busy = await run(st => { st.busy = { provider: "microsoft" }; });
+  const cleared = r => r.st.sent.length === 0 && r.st.store.held === null && !!r.view;
+  return cleared(noClient) && cleared(never) && cleared(noId) && cleared(harness) && busy.st.sent.length === 0 && busy.st.store.held !== null && busy.st.saves === 0;
+};
+/* The same door carries signout/desk and nothing else of the service's: its address, no redirect, nothing cached, no cookie. */
+CASES.signoutDoor = async s => {
+  const calls = [];
+  const fetchFn = async (u, init) => { calls.push({ u, init }); return { status: 200, headers: { get: () => null }, arrayBuffer: async () => Buffer.from("{\"ok\":true}") }; };
+  let refused = 0;
+  for (const u of ["https://etiuda.dev/licence/v1/signout", "https://evil.example.test/licence/v1/signout/desk", "http://etiuda.dev/licence/v1/signout/desk",
+    "https://etiuda.dev/licence/v1/signout/desk?x=1"]) {
+    try { await s.signinServiceAsk(fetchFn, u, { a: 1 }); } catch { refused++; }
+  }
+  const before = calls.length;
+  const res = await s.signinServiceAsk(fetchFn, s.SIGNOUT_SERVICE, { desk: DESK_KEY });
+  const init = calls.length ? calls[calls.length - 1].init : {};
+  return refused === 4 && before === 0 && calls.length === 1 && calls[0].u === "https://etiuda.dev/licence/v1/signout/desk" && res.status === 200
+    && init.method === "POST" && init.redirect === "error" && init.cache === "no-store" && init.credentials === "omit"
+    && init.headers["content-type"] === "application/json" && JSON.parse(init.body.toString()).desk === DESK_KEY;
 };
 
 /* ---- the page's door, imported ---------------------------------------------------------------------------------------- */
@@ -501,6 +581,11 @@ const LEGS = [
   ["ds8b", "pageMoments", "the door's content follows the view: before, waiting, refused, no licence, no team, no seat, sign in again"],
   ["ds8c", "pageTwoRefusals", "the organisation's refusal at its provider and no licence at our service are two moments, each in its own words"],
   ["ds8d", "pageNothingFromProvider", "the identity is the person's own name, the provider's name and the code in fours, nothing from the provider"],
+  ["ds9a", "signoutBody", "signout/desk's body has the interface's three names alone, signed by this desk's key over the service's bytes"],
+  ["ds9b", "signoutPost", "Sign out posts exactly one signout/desk, the three names, a fresh t and a signature that verifies, before the sign-in is cleared"],
+  ["ds9c", "signoutAway", "with the service unreached, throwing or answering 503 or a refusal, Sign out still clears the sign-in and says nothing new"],
+  ["ds9d", "signoutNone", "no signout/desk is sent where no client id is configured or the desk was never signed in; a sign-in in the browser is left alone"],
+  ["ds9e", "signoutDoor", "the service's door carries signout/desk at its own address alone, no redirect, nothing cached, no cookie"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
@@ -514,6 +599,11 @@ const handler = (() => { const a = at(WIRING, 'ipcMain.handle("etiuda:signin",')
 const tryDecl = s => { try { return decl(MAIN, s); } catch { return ""; } };
 const renew = tryDecl("async function signinRenewNow(");
 const armRenew = tryDecl("function armSigninRenew(");
+const outNow = tryDecl("function signinOutNow(");
+const outHandler = (() => { const a = at(WIRING, 'ipcMain.handle("etiuda:signin-out",'); return a < 0 ? "" : WIRING.slice(a, WIRING.indexOf("\n});", a)); })();
+check(!!outHandler && /^ipcMain\.handle\("etiuda:signin-out", \(e\) => \{\n  if \(!fromEngine\(e\)\) return null;\n  return signinOutNow\(\);/.test(outHandler)
+  && at(outNow, "signoutAsk(") > 0 && at(outNow, "signoutAsk(") < at(outNow, "s.held = null;"),
+  "ds9f Sign out is answered for the engine's own frame alone, and the desk's place is freed at the service before the sign-in is cleared");
 check(!!handler && at(handler, "/* plant:signin-click */") > 0 && at(handler, "/* plant:signin-offered */") > at(handler, "/* plant:signin-click */")
   && at(handler, "signinRun(") > at(handler, "/* plant:signin-offered */") && /signinOffered\(\)\.find\(x => x\.id === id\)/.test(handler)
   && at(handler, "signinSeat(") > at(handler, "signinRun("),
@@ -576,7 +666,9 @@ if (!PLANTS_OFF) {
   await plant("dsp9", ["const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t })) || \"\"); /* plant:desk-signed */",
     "const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t + 1 })) || \"\");"], "deskBody");
   await plant("dsp10", ["if (seed) body.seed = String(seed); /* plant:seed-first */", "body.seed = String(seed);"], "deskBody");
-  await plant("dsp11", ["if (String(url) !== SIGNIN_SERVICE) throw new Error(\"the desk's sign-in is posted to the licence service's signin/desk only\"); /* plant:service-host */", ""], "serviceDoor");
+  await plant("dsp11", ["if (String(url) !== SIGNIN_SERVICE && String(url) !== SIGNOUT_SERVICE) throw new Error(\"the licence service's door takes signin/desk and signout/desk only\"); /* plant:service-host */", ""], "serviceDoor");
+  await plant("dsp27", ["if (String(url) !== SIGNIN_SERVICE && String(url) !== SIGNOUT_SERVICE) throw new Error(\"the licence service's door takes signin/desk and signout/desk only\"); /* plant:service-host */", ""], "signoutDoor");
+  await plant("dsp28", ["const SIGNOUT_DESK_LINE = \"etiuda-licence-signout-desk\"; /* plant:signout-line */", "const SIGNOUT_DESK_LINE = \"etiuda-licence-signin-desk\";"], "signoutBody");
   await plant("dsp12", ["&& String(c.desk) === String(deskKey) && /^[0-9a-f]{64}$/.test(String(c.person)) && SIGNIN_CODE.test(String(c.code)) /* plant:cert-desk */",
     "&& /^[0-9a-f]{64}$/.test(String(c.person)) && SIGNIN_CODE.test(String(c.code))"], "answers");
   await plant("dsp13", ["    refresh: freed ? \"\" : held.refresh }); /* plant:settle-freed */", "    refresh: held.refresh });"], "settle");
@@ -599,6 +691,8 @@ if (!PLANTS_OFF) {
   await plantWire("dsp24", ["  if (harnessLaunch()) return \"\"; /* plant:renew-now-harness */\n", ""], "renewHarness");
   await plantWire("dsp25", ["const SIGNIN_RENEW_MS = 24 * 60 * 60 * 1000; /* plant:renew-daily */", "const SIGNIN_RENEW_MS = 55 * 60 * 1000;"], "renewDaily");
   await plantWire("dsp26", ["if (!p || !me) return \"\"; /* plant:renew-offered */", "if (!me) return \"\";"], "renewWire");
+  await plantWire("dsp29", ["signoutAsk(signinIo({ loop: null }), me.key, Date.now); /* plant:signout-post */", ""], "signoutPost");
+  await plantWire("dsp30", ["&& signinOffered().length) { /* plant:signout-offered */", ") {"], "signoutNone");
   /* A gate on a local act, put into the desk file's write in memory, is seen. */
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),
