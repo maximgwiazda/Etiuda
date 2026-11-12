@@ -545,37 +545,21 @@
       Pop $R8
       ${If} $R8 == 0
         ${If} ${FileExists} "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
-          StrCpy $R4 "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
+          StrCpy $R4 "instdir"
         ${Else}
-          # An install into another folder, or all-users over a per-user copy, has no program in $INSTDIR yet. The request
-          # goes through the copy registered in this mode, else this account's: the one running, so it speaks its own
-          # single-instance handshake. Last the staged copy, this build, which a first instance given --update-close
-          # leaves at once (tests/silent-update-desk.js 1152n). Studio and the uninstaller have no stage.
           StrCpy $R4 ""
-          ReadRegStr $R8 SHELL_CONTEXT "${INSTALL_REGISTRY_KEY}" InstallLocation
-          ${If} $R8 != ""
-          ${AndIf} ${FileExists} "$R8\${APP_EXECUTABLE_FILENAME}"
-            StrCpy $R4 "$R8\${APP_EXECUTABLE_FILENAME}"
-          ${EndIf}
-          ${If} $R4 == ""
-            ReadRegStr $R8 HKCU "${INSTALL_REGISTRY_KEY}" InstallLocation
-            ${If} $R8 != ""
-            ${AndIf} ${FileExists} "$R8\${APP_EXECUTABLE_FILENAME}"
-              StrCpy $R4 "$R8\${APP_EXECUTABLE_FILENAME}"
-            ${EndIf}
-          ${EndIf}
-          !ifmacrodef etiudaStageBegin
-          ${If} $R4 == ""
-          ${AndIf} $etiudaStage != ""
-          ${AndIf} ${FileExists} "$etiudaStage\${APP_EXECUTABLE_FILENAME}"
-            StrCpy $R4 "$etiudaStage\${APP_EXECUTABLE_FILENAME}"
-          ${EndIf}
-          !endif
         ${EndIf}
-        ${If} $R4 != ""
-          nsExec::Exec /TIMEOUT=3000 `"$R4" --update-close`
-          Pop $R8
-        ${EndIf}
+        # The desk's installer asks through etiudaAskClose (below): an install into another folder, or all-users over a
+        # per-user copy, has no program in $INSTDIR yet, and no program a non-administrator can write runs elevated.
+        # Studio's cut of this hook and the uninstaller ask through $INSTDIR's program alone, as before.
+        !ifmacrodef etiudaAskClose
+          !insertmacro etiudaAskClose
+        !else
+          ${If} $R4 == "instdir"
+            nsExec::Exec /TIMEOUT=3000 `"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --update-close`
+            Pop $R8
+          ${EndIf}
+        !endif
         nsExec::Exec `"$SYSDIR\cmd.exe" /C "$SYSDIR\taskkill.exe" /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"` ; plant:installer-asks-close
         Pop $R8
       ${Else}
@@ -744,6 +728,61 @@ Var etiudaOldDir
 Var etiudaOldUserDir
 Var etiudaDropRoot
 Var etiudaDropList
+# Every folder below is removed by the walk that never enters a link (customHeader's ${ETIUDA_REMOVE_TREE}, through
+# etiudaRemoveTree): beside a folder a non-administrator may write, or read from HKCU, each may hold one. This compiles the
+# walk into the installer as well.
+!define ETIUDA_REMOVE_TREE "etiudaRemoveTree"
+
+# THE CLOSE REQUEST (customCheckAppRunning, $R4 "instdir" where $INSTDIR holds the program). A program this run did not
+# write, or one a non-administrator may, never runs elevated. The inner instance of an all-users install asks from the
+# unelevated instance that started it, as the person whose copy is open (etiudaAsUser): $INSTDIR's program, else the
+# copy that person's HKCU names, read there, else the staged one; the copy that runs speaks its own single-instance
+# handshake, and the staged one, this build, leaves at once as a first instance (tests/silent-update-desk.js 1152n).
+# Unreachable, nothing is asked, and the USERNAME-filtered taskkill and 1618 follow. Any other run is the person's own or
+# an installer started elevated: $INSTDIR's program as before, else the staged one, never HKCU's.
+!macro etiudaAskCloseRun
+  ${If} $R4 == ""
+    ReadRegStr $R9 HKCU "${INSTALL_REGISTRY_KEY}" InstallLocation
+    ${If} $R9 != ""
+    ${AndIf} ${FileExists} "$R9\${APP_EXECUTABLE_FILENAME}"
+      StrCpy $R4 "$R9\${APP_EXECUTABLE_FILENAME}"
+    ${EndIf}
+  ${EndIf}
+  ${If} $R4 == ""
+    StrCpy $R4 $R8
+  ${EndIf}
+  ${If} $R4 != ""
+    nsExec::Exec /TIMEOUT=3000 `"$R4" --update-close`
+    Pop $R8
+  ${EndIf}
+  StrCpy $R9 "ran"
+!macroend
+!macro etiudaAskClose
+  ${If} ${UAC_IsInnerInstance}
+    Push $R9
+    ${If} $R4 == "instdir"
+      StrCpy $R4 "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
+    ${EndIf}
+    StrCpy $R8 ""
+    ${If} $etiudaStage != ""
+    ${AndIf} ${FileExists} "$etiudaStage\${APP_EXECUTABLE_FILENAME}"
+      StrCpy $R8 "$etiudaStage\${APP_EXECUTABLE_FILENAME}"
+    ${EndIf}
+    !insertmacro etiudaAsUser etiudaAskCloseRun
+    Pop $R9
+  ${Else}
+    ${If} $R4 == "instdir"
+      nsExec::Exec /TIMEOUT=3000 `"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --update-close`
+      Pop $R8
+    ${Else}
+      ${If} $etiudaStage != ""
+      ${AndIf} ${FileExists} "$etiudaStage\${APP_EXECUTABLE_FILENAME}"
+        nsExec::Exec /TIMEOUT=3000 `"$etiudaStage\${APP_EXECUTABLE_FILENAME}" --update-close`
+        Pop $R8
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
+!macroend
 
 # A path's trailing backslashes go: "/D=C:\Apps\Etiuda\" would otherwise stage inside the folder it replaces.
 !macro etiudaTrimSlashes VAR
@@ -774,7 +813,7 @@ Var etiudaDropList
 !macro etiudaStageAbort
   ${If} $etiudaStage != ""
     SetOutPath $PLUGINSDIR
-    RMDir /r "$etiudaStage"
+    !insertmacro etiudaRemoveTree "$etiudaStage"
   ${EndIf}
   ${if} $installMode == "all"
     SetShellVarContext current
@@ -842,8 +881,8 @@ Var etiudaDropList
     SetErrorLevel 1618
     Quit
   ${EndIf}
-  RMDir /r "$etiudaAside"
-  RMDir /r "$etiudaStage"
+  !insertmacro etiudaRemoveTree "$etiudaAside"
+  !insertmacro etiudaRemoveTree "$etiudaStage"
   # A stage folder that outlives its removal is another account's, made under a parent anyone may write to and held open: it
   # is never reused and renamed into place with that account's rights. Nothing of this run's is written yet; retry later.
   ${If} ${FileExists} "$etiudaStage\*.*"
@@ -962,7 +1001,7 @@ Var etiudaDropList
       SetErrorLevel 1618
       Quit
     ${EndIf}
-    RMDir /r "$etiudaStage"
+    !insertmacro etiudaRemoveTree "$etiudaStage"
   ${Else}
     !insertmacro etiudaRenameRetry "$etiudaStage" "$etiudaBase"
     ${If} $0 != "moved"
@@ -1038,17 +1077,38 @@ Var etiudaDropList
 # retried. Folders go only when empty, so a person's own file stays, as does anything locked, and the run still ends 0.
 # Electron's resources and locales trees are the one exception, removed whole where the folder still holds the program
 # (etiudaDropOld). The same walk takes back a copy cut short (etiudaSwap), its list the stage.
+# NO LINK IS ENTERED: the older folder is read from HKCU or is one a non-administrator may write, and Delete through a
+# junction deletes in its target. Each folder there is entered only where its attributes say a real folder; a link goes
+# as itself, as in ${ETIUDA_REMOVE_TREE}; a root that is itself a link is left whole.
 # Plain jumps, not LogicLib: a function compiles where it stands, and LogicLib is not yet included where this file is read.
 Function etiudaDropOldFiles
   Exch $R0
   Push $R1
   Push $R2
+  Push $R3
+  StrCmp $R0 "" 0 etiudaDropOldList
+    StrCpy $R3 "$etiudaDropRoot"
+    System::Call 'kernel32::GetFileAttributesW(w R3) i .R3'
+    IntCmp $R3 -1 etiudaDropOldOut
+    IntOp $R3 $R3 & 0x410
+    IntCmp $R3 0x10 0 etiudaDropOldOut etiudaDropOldOut
+  etiudaDropOldList:
   FindFirst $R1 $R2 "$etiudaDropList$R0\*.*"
   etiudaDropOldNext:
     StrCmp $R2 "" etiudaDropOldDone
     StrCmp $R2 "." etiudaDropOldSkip
     StrCmp $R2 ".." etiudaDropOldSkip
     IfFileExists "$etiudaDropList$R0\$R2\*.*" 0 etiudaDropOldFile
+      StrCpy $R3 "$etiudaDropRoot$R0\$R2"
+      System::Call 'kernel32::GetFileAttributesW(w R3) i .R3'
+      IntCmp $R3 -1 etiudaDropOldSkip
+      IntOp $R3 $R3 & 0x410
+      IntCmp $R3 0x10 etiudaDropOldDir
+      IntCmp $R3 0 etiudaDropOldSkip
+        RMDir "$etiudaDropRoot$R0\$R2"
+        Delete "$etiudaDropRoot$R0\$R2"
+        Goto etiudaDropOldSkip
+      etiudaDropOldDir:
       Push "$R0\$R2"
       Call etiudaDropOldFiles
       RMDir "$etiudaDropRoot$R0\$R2"
@@ -1060,6 +1120,8 @@ Function etiudaDropOldFiles
       Goto etiudaDropOldNext
   etiudaDropOldDone:
   FindClose $R1
+  etiudaDropOldOut:
+  Pop $R3
   Pop $R2
   Pop $R1
   Pop $R0
@@ -1070,20 +1132,26 @@ FunctionEnd
     Push $0
     StrCpy $etiudaDropList $etiudaBase
     StrCpy $etiudaDropRoot ${DIR}
-    # A file the older version shipped and this one does not would keep resources and locales, and the folder, for ever: the
-    # two trees go whole where the folder still holds the program, read before the walk deletes it. The folder itself goes
-    # only once empty.
-    StrCpy $0 "0"
-    ${If} ${FileExists} "$etiudaDropRoot\${APP_EXECUTABLE_FILENAME}"
-      StrCpy $0 "1"
+    # Only a real folder: one that is itself a link would lead every name below it, the two trees included, into its target.
+    StrCpy $0 $etiudaDropRoot
+    System::Call 'kernel32::GetFileAttributesW(w r0) i .r0'
+    IntOp $0 $0 & 0x410
+    ${If} $0 = 0x10
+      # A file the older version shipped and this one does not would keep resources and locales, and the folder, for ever:
+      # the two trees go whole where the folder still holds the program, read before the walk deletes it. The folder itself
+      # goes only once empty.
+      StrCpy $0 "0"
+      ${If} ${FileExists} "$etiudaDropRoot\${APP_EXECUTABLE_FILENAME}"
+        StrCpy $0 "1"
+      ${EndIf}
+      Push ""
+      Call etiudaDropOldFiles
+      ${If} $0 == "1"
+        !insertmacro etiudaRemoveTree "$etiudaDropRoot\resources"
+        !insertmacro etiudaRemoveTree "$etiudaDropRoot\locales"
+      ${EndIf}
+      RMDir "$etiudaDropRoot"
     ${EndIf}
-    Push ""
-    Call etiudaDropOldFiles
-    ${If} $0 == "1"
-      RMDir /r "$etiudaDropRoot\resources"
-      RMDir /r "$etiudaDropRoot\locales"
-    ${EndIf}
-    RMDir "$etiudaDropRoot"
     StrCpy $etiudaDropRoot ""
     Pop $0
   ${EndIf}
@@ -1107,12 +1175,13 @@ FunctionEnd
 # The new copy is registered: the older copy aside goes, and an older copy's folder elsewhere loses the program's files.
 !macro etiudaDropAside
   ${If} $etiudaAsideMade == "1"
-    RMDir /r "$etiudaAside"
+    !insertmacro etiudaRemoveTree "$etiudaAside"
   ${EndIf}
   !insertmacro etiudaDropOld $etiudaOldDir
   !insertmacro etiudaDropOld $etiudaOldUserDir
 !macroend
 !endif
+
 # RUN AS THE PERSON, from an elevated instance: the macro named by RUN runs in the unelevated instance that started this
 # one, and only the registers cross, both ways. $R9 reads "unreached" after unless RUN set it, so a caller can tell that
 # nothing ran: no such instance (an installer started elevated has none), or it could not be reached.

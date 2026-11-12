@@ -828,9 +828,16 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
       if (/^nsExec::Exec `"\$(SYSDIR\\[\w.]+\.exe|CmdPath|PowerShellPath)"/.test(l)) continue;
       stray.push(f + ":" + i + " " + l.slice(0, 70));
     }
+    /* Run as the person: the lines of a macro that is inserted only as etiudaAsUser's RUN, never straight into an instance
+       (the close request's etiudaAskCloseRun beside etiudaOldUserCopyRun; the swap's repair 3b). */
+    const viaAsUser = [...new Set((String(nsh).match(/!insertmacro etiudaAsUser (\w+)/g) || []).map(s => s.split(" ").pop()))]
+      .filter(n => !new RegExp("!insertmacro " + n + "\\b").test(nsh));
+    const asUserLines = macroLines(nsh, viaAsUser);
     for (const { f, i, l } of liveLines({ "shell/installer.nsh": nsh }, "")) {
       if (!EXEC.test(l)) continue;
-      if (/^nsExec::Exec(\s+\/TIMEOUT=\d+)? `"\$(SYSDIR\\[\w.]+\.exe|INSTDIR\\\$\{APP_EXECUTABLE_FILENAME\})"/.test(l)) continue;
+      if (asUserLines.has(i)) continue;
+      /* $INSTDIR's program, or the one this run has just staged beside it (the swap's etiudaStage). */
+      if (/^nsExec::Exec(\s+\/TIMEOUT=\d+)? `"\$(SYSDIR\\[\w.]+\.exe|INSTDIR\\\$\{APP_EXECUTABLE_FILENAME\}|etiudaStage\\\$\{APP_EXECUTABLE_FILENAME\})"/.test(l)) continue;
       stray.push(f + ":" + i + " " + l.slice(0, 70));
     }
     return stray;
@@ -890,6 +897,8 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     "14a control: a program named by a register, run from a hook, reads red");
   ok(execStray(Object.assign({}, T, { "installSection.nsh": T["installSection.nsh"] + "\nExec '\"$INSTDIR\\x.exe\"'\n" }), NSH).length === 1,
     "14a control: a program run from a template line the inventory does not know reads red");
+  ok(execStray(T, NSH.replace("    !insertmacro etiudaAsUser etiudaAskCloseRun\n", "    !insertmacro etiudaAskCloseRun\n")).length === 1,
+    "14a control: the close request's run (a program HKCU names) inserted straight into the elevated instance reads red");
 
   /* 14b: RMDir /r, which follows a junction, is used only over the installer's own $PLUGINSDIR. */
   const rmdirStray = (tpl, nsh) => liveLines(tpl, nsh).concat(liveLines({ "shell/installer.nsh": nsh }, ""))
@@ -900,7 +909,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     + " template's --delete-app-data removal go through the walk: " + JSON.stringify(rs));
   ok(rmdirStray(T, NSH.replace(/Push \$INSTDIR\r?\n\s*Call un\.etiudaRemoveTree/, "RMDir /r $INSTDIR")).length === 1,
     "14b control: main's RMDir /r $INSTDIR put back reads red");
-  ok(rmdirStray(T, NSH.replace(/!define ETIUDA_REMOVE_TREE\b/, "!define ETIUDA_REMOVE_TREE_GONE")).length === 3,
+  ok(rmdirStray(T, NSH.replace(/!define ETIUDA_REMOVE_TREE\b/g, "!define ETIUDA_REMOVE_TREE_GONE")).length === 3,
     "14b control: the walk's define gone, the template's three RMDir /r of $APPDATA compile again and read red");
   ok(rmdirStray(T, NSH.replace(/Push "\$APPDATA\\\$\{APP_FILENAME\}"\r?\n\s*Call un\.etiudaRemoveTree/, "RMDir /r \"$APPDATA\\${APP_FILENAME}\"")).length === 1,
     "14b control: main's RMDir /r of the roaming folder put back in the data step reads red");
@@ -1044,17 +1053,18 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     "15c control: the app still open leaving the stage reads red");
   const onlyStage = nsh => {
     const ab = code(macro(nsh, "etiudaStageAbort"));
-    const gone = ab.match(/\b(RMDir|Delete|Rename|CopyFiles)\b[^\n]*/g) || [];
+    const gone = ab.match(/\b(RMDir|Delete|Rename|CopyFiles)\b[^\n]*|!insertmacro etiudaRemoveTree [^\n]*/g) || [];
     const b = code(macro(nsh, "etiudaStageBegin"));
-    const touched = (b.match(/\b(RMDir|Delete|Rename|CopyFiles)\b[^\n]*/g) || []).sort();
-    return gone.length === 3 && gone[0] === "RMDir /r \"$etiudaStage\"" && gone.slice(1).every(l => l.indexOf("$LOCALAPPDATA\\") > -1)
-      && JSON.stringify(touched) === JSON.stringify(["RMDir \"$etiudaBase\"", "RMDir /r \"$etiudaAside\"", "RMDir /r \"$etiudaStage\""])
+    const touched = (b.match(/\b(RMDir|Delete|Rename|CopyFiles)\b[^\n]*|!insertmacro etiudaRemoveTree [^\n]*/g) || []).sort();
+    /* The stage and the copy aside go by the walk that never enters a link (repair 10); 14b holds that no RMDir /r is left. */
+    return gone.length === 3 && gone[0] === "!insertmacro etiudaRemoveTree \"$etiudaStage\"" && gone.slice(1).every(l => l.indexOf("$LOCALAPPDATA\\") > -1)
+      && JSON.stringify(touched) === JSON.stringify(["!insertmacro etiudaRemoveTree \"$etiudaAside\"", "!insertmacro etiudaRemoveTree \"$etiudaStage\"", "RMDir \"$etiudaBase\""])
       && (b.match(/!insertmacro etiudaRenameRetry [^\n]*/g) || []).join() === "!insertmacro etiudaRenameRetry \"$etiudaAside\" \"$etiudaBase\"";
   };
   /* (The older copy's move back, and when the copy aside may go, are replayed in 15m.) */
   ok(onlyStage(NSH), "15c taking the stage back removes the stage and the updater's setup copy and nothing else, and the stage's start"
     + " clears only what an earlier run left beside the folder, after moving an older copy back where a swap was cut short");
-  ok(!onlyStage(NSH.replace("    SetOutPath $PLUGINSDIR\n    RMDir /r \"$etiudaStage\"", "    SetOutPath $PLUGINSDIR\n    RMDir /r \"$INSTDIR\"")),
+  ok(!onlyStage(NSH.replace("    SetOutPath $PLUGINSDIR\n    !insertmacro etiudaRemoveTree \"$etiudaStage\"", "    SetOutPath $PLUGINSDIR\n    !insertmacro etiudaRemoveTree \"$INSTDIR\"")),
     "15c control: taking the stage back by removing the install folder reads red");
   const wholeOnly = nsh => {
     const e = code(macro(nsh, "etiudaStageEnd"));
@@ -1099,7 +1109,8 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const goesOn = ["customUnInstallCheck", "customUnInstallCheckCurrentUser"]
       .every(n => { const b = code(macro(nsh, n)); return !!b.trim() && !/\b(Quit|Abort|SetErrorLevel)\b/.test(b); });
     const d = code(macro(nsh, "etiudaDropAside"));
-    const dropOnly = /\$\{If\} \$etiudaAsideMade == "1"\n\s*RMDir \/r "\$etiudaAside"\n\s*\$\{EndIf\}/.test(d) && (d.match(/\b(RMDir|Delete|Rename)\b/g) || []).length === 1;
+    const dropOnly = /\$\{If\} \$etiudaAsideMade == "1"\n\s*!insertmacro etiudaRemoveTree "\$etiudaAside"\n\s*\$\{EndIf\}/.test(d)
+      && (d.match(/\b(RMDir|Delete|Rename)\b|etiudaRemoveTree/g) || []).length === 1;
     return same && order && goesOn && dropOnly;
   };
   ok(keepsRegistration(S, NSH), "15e where the older copy was in the folder replaced its uninstaller is not run, so its registration stands"
@@ -1166,34 +1177,71 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
      in the report covers those. */
   /* The replay runs etiudaDropOld itself, with DIR the older folder "O", and the function its Call reaches; ${If}, ${Else} and
      ${EndIf} are followed as written. */
-  /* BLOCK, where given, is read in place of etiudaDropOld's own lines (15p replays etiudaSwap's take-back with it); "S" is the stage. */
+  /* BLOCK, where given, is read in place of etiudaDropOld's own lines (15p replays etiudaSwap's take-back with it); "S" is the stage.
+     fsys.links, where given, maps a junction's path to its target (repair 10): GetFileAttributesW reads the link itself, Delete,
+     FindFirst and IfFileExists go through one as Windows does, RMDir removes the link, RMDir /r follows it as NSIS's does
+     (the test architect's probe), and etiudaRemoveTree is ${ETIUDA_REMOVE_TREE}'s walk, whose own lines 14c holds. */
   const replayDrop = (nsh, fsys, locked, block) => {
     const body = (/\nFunction etiudaDropOldFiles\n([\s\S]*?)\nFunctionEnd/.exec(nsh) || [])[1];
     const mbody = block === undefined ? macro(nsh, "etiudaDropOld") : block;
     if (!body || !mbody) return null;
+    const links = fsys.links || (fsys.links = new Map());
     const lines = code(body).split("\n").map(l => l.trim()).filter(Boolean);
     const mlines = code(mbody).split("\n").map(l => l.trim()).filter(Boolean);
     const labels = {};
     lines.forEach((l, i) => { if (/^\w+:$/.test(l)) labels[l.slice(0, -1)] = i; });
-    const V = { $etiudaBase: "N", $etiudaStage: "S", $etiudaDropRoot: "", $etiudaDropList: "", $R0: "", $R1: "", $R2: "", $0: "kept" }, stack = [], finds = [];
+    const V = { $etiudaBase: "N", $etiudaStage: "S", $etiudaDropRoot: "", $etiudaDropList: "", $R0: "", $R1: "", $R2: "", $R3: "", $0: "kept" }, stack = [], finds = [];
     const val = tok => tok.replace(/^"|"$/g, "").replace(/\$\{DIR\}/g, "O").replace(/\$\{APP_EXECUTABLE_FILENAME\}/g, "Etiuda.exe")
       .replace(/\$(etiudaBase|etiudaStage|etiudaDropRoot|etiudaDropList|R[0-9]|[0-9])/g, (m) => V[m]);
-    const isDir = p => fsys.dirs.has(p), kids = p => [...fsys.dirs, ...fsys.files].filter(q => q.startsWith(p + "\\") && q.slice(p.length + 1).indexOf("\\") < 0).map(q => q.slice(p.length + 1)).sort();
-    const toks = l => (l.match(/"[^"]*"|\S+/g) || []);
-    const rmdir = t => {
-      const p = val(t[t.length - 1]);
-      if (t[1] === "/r") { [...fsys.files].concat([...fsys.dirs]).filter(q => q === p || q.startsWith(p + "\\")).forEach(q => { fsys.files.delete(q); fsys.dirs.delete(q); }); }
-      else if (isDir(p) && kids(p).length === 0) fsys.dirs.delete(p);
+    /* A path with every link among its leading folders followed (parent), or every link followed, its last part too (full). */
+    const follow = (p, last) => {
+      for (let n = 0; n < 50; n++) {
+        let moved = false;
+        for (const [l, t] of links) {
+          if (p.startsWith(l + "\\")) { p = t + p.slice(l.length); moved = true; break; }
+          if (last && p === l) { p = t; moved = true; break; }
+        }
+        if (!moved) return p;
+      }
+      throw new Error("a link loop");
     };
+    const parentOf = p => follow(p, false), fullOf = p => follow(p, true);
+    const isDir = p => fsys.dirs.has(fullOf(p));
+    const kids = p => { const d = fullOf(p); return [...fsys.dirs, ...fsys.files, ...links.keys()].filter(q => q.startsWith(d + "\\") && q.slice(d.length + 1).indexOf("\\") < 0).map(q => q.slice(d.length + 1)).sort(); };
+    const attrs = p => { const q = parentOf(p); if (links.has(q)) return 0x410; const f = fullOf(p); return fsys.dirs.has(f) ? 0x10 : fsys.files.has(f) ? 0x20 : -1; };
+    const unlinkOr = (p, then) => { const q = parentOf(p); if (links.has(q)) { links.delete(q); return; } then(q); };
+    const del = p => unlinkOr(p, q => { if (!locked.has(q)) fsys.files.delete(q); });
+    const rmdirOne = p => unlinkOr(p, q => { if (fsys.dirs.has(q) && kids(q).length === 0) fsys.dirs.delete(q); });
+    const rmdirAll = p => {
+      const d = fullOf(p);
+      for (const [l, t] of [...links]) if (l.startsWith(d + "\\")) { links.delete(l); rmdirAll(t); }
+      [...fsys.files, ...fsys.dirs].filter(q => q === d || q.startsWith(d + "\\")).forEach(q => { fsys.files.delete(q); fsys.dirs.delete(q); });
+    };
+    const removeTree = p => {
+      const a = attrs(p);
+      if (a === -1) return;
+      if (a & 0x400) { unlinkOr(p, () => {}); return; }
+      if (!(a & 0x10)) { del(p); return; }
+      kids(p).forEach(k => removeTree(p + "\\" + k));
+      rmdirOne(p);
+    };
+    const reg = r => (/^r(\d)$/.test(r) ? "$" + r.slice(1) : "$" + r);
+    const sysAttr = l => { const m = /^System::Call 'kernel32::GetFileAttributesW\(w (\w+)\) i \.(\w+)'$/.exec(l); if (!m) return false; V[reg(m[2])] = String(attrs(V[reg(m[1])])); return true; };
+    const toks = l => (l.match(/"[^"]*"|\S+/g) || []);
+    const rmdir = t => (t[1] === "/r" ? rmdirAll(val(t[t.length - 1])) : rmdirOne(val(t[t.length - 1])));
     let steps = 0;
     const run = () => {
       for (let pc = 0; pc < lines.length; pc++) {
         if (++steps > 20000) throw new Error("runaway");
         const t = toks(lines[pc]), op = t[0], go = lab => { if (lab === "0" || lab === undefined) return; pc = labels[lab]; };
         if (/^\w+:$/.test(op)) continue;
+        if (sysAttr(lines[pc])) continue;
         if (op === "Exch") { const top = stack.pop(); stack.push(V[t[1]]); V[t[1]] = top; }
         else if (op === "Push") stack.push(val(t[1]));
         else if (op === "Pop") V[t[1]] = stack.pop();
+        else if (op === "StrCpy" && t.length === 3) V[t[1]] = val(t[2]);
+        else if (op === "IntOp" && t[3] === "&") V[t[1]] = String(Number(val(t[2])) & Number(t[4]));
+        else if (op === "IntCmp") { const a = Number(val(t[1])), b = Number(val(t[2])); go(a === b ? t[3] : a < b ? t[4] : t[5]); }
         else if (op === "FindFirst") { const dir = val(t[3]).replace(/\\\*\.\*$/, ""); finds.push(isDir(dir) ? [".", ".."].concat(kids(dir)) : []); V[t[1]] = String(finds.length - 1); V[t[2]] = finds[finds.length - 1].shift() || ""; }
         else if (op === "FindNext") V[t[2]] = finds[+V[t[1]]].shift() || "";
         else if (op === "FindClose") { /* nothing held */ }
@@ -1201,7 +1249,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
         else if (op === "IfFileExists") { if (isDir(val(t[1]).replace(/\\\*\.\*$/, ""))) go(t[2]); else go(t[3]); }
         else if (op === "Goto") go(t[1]);
         else if (op === "Call") run();
-        else if (op === "Delete") { const p = val(t[t.length - 1]); if (!locked.has(p)) fsys.files.delete(p); }
+        else if (op === "Delete") del(val(t[t.length - 1]));
         else if (op === "RMDir") rmdir(t);
         else throw new Error("the replay does not know " + op);
       }
@@ -1213,19 +1261,23 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
       if (op === "${If}") {
         const c = t.slice(1);
         let yes;
-        if (c[0] === "${FileExists}") { const p = val(c[1]); yes = /\\\*\.\*$/.test(p) ? isDir(p.replace(/\\\*\.\*$/, "")) : (fsys.files.has(p) || isDir(p)); }
+        if (c[0] === "${FileExists}") { const p = val(c[1]); yes = /\\\*\.\*$/.test(p) ? isDir(p.replace(/\\\*\.\*$/, "")) : (fsys.files.has(fullOf(p)) || isDir(p)); }
         else if (c[1] === "==" || c[1] === "!=") yes = (val(c[0]) === val(c[2])) === (c[1] === "==");
+        else if (c[1] === "=") yes = Number(val(c[0])) === Number(val(c[2]));
         else throw new Error("the replay does not know the test " + l);
-        live.push(yes);
+        live.push(on && yes);
         continue;
       }
-      if (op === "${Else}") { live.push(!live.pop()); continue; }
+      if (op === "${Else}") { const was = live.pop(); live.push(live.every(Boolean) && !was); continue; }
       if (op === "${EndIf}") { live.pop(); continue; }
       if (!on) continue;
+      if (sysAttr(l)) continue;
       if (op === "Push") stack.push(val(t[1]));
       else if (op === "Pop") V[t[1]] = stack.pop();
       else if (op === "StrCpy" && t.length === 3) V[t[1]] = val(t[2]);
+      else if (op === "IntOp" && t[3] === "&") V[t[1]] = String(Number(val(t[2])) & Number(t[4]));
       else if (op === "Call" && t[1] === "etiudaDropOldFiles") run();
+      else if (op === "!insertmacro" && t[1] === "etiudaRemoveTree") removeTree(val(t[2]));
       else if (op === "RMDir") rmdir(t);
       else if (op === "ClearErrors" || op === "DetailPrint") { /* no flag held, nothing shown */ }
       else throw new Error("the replay does not know " + l);
@@ -1315,7 +1367,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
      it was; the survivor is not the run's to remove again. */
   const refusesSurvivor = nsh => {
     const b = code(macro(nsh, "etiudaStageBegin"));
-    const m = /\n\s*RMDir \/r "\$etiudaStage"\n\s*\$\{If\} \$\{FileExists\} "\$etiudaStage\\\*\.\*"\n\s*\$\{OrIf\} \$\{FileExists\} "\$etiudaStage"\n([\s\S]*?)\n\s*\$\{EndIf\}\n\s*ClearErrors\n\s*CreateDirectory "\$etiudaStage"\n/.exec(b);
+    const m = /\n\s*!insertmacro etiudaRemoveTree "\$etiudaStage"\n\s*\$\{If\} \$\{FileExists\} "\$etiudaStage\\\*\.\*"\n\s*\$\{OrIf\} \$\{FileExists\} "\$etiudaStage"\n([\s\S]*?)\n\s*\$\{EndIf\}\n\s*ClearErrors\n\s*CreateDirectory "\$etiudaStage"\n/.exec(b);
     if (!m) return false;
     const block = m[1];
     return /!insertmacro etiudaFailBox 1618\n\s*SetErrorLevel 1618\n\s*Quit$/.test(block.trim())
@@ -1324,14 +1376,15 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
   };
   ok(refusesSurvivor(NSH), "15k a stage folder still there after its removal is refused before CreateDirectory: the run ends 1618, writes"
     + " nothing, and never renames another account's folder into place");
-  ok(!refusesSurvivor(NSH.replace(/(\n  RMDir \/r "\$etiudaStage"\n)(?:  #[^\n]*\n)*  \$\{If\} \$\{FileExists\} "\$etiudaStage\\\*\.\*"\n[\s\S]*?\n  \$\{EndIf\}\n/, "$1")),
+  ok(!refusesSurvivor(NSH.replace(/(\n  !insertmacro etiudaRemoveTree "\$etiudaStage"\n)(?:  #[^\n]*\n)*  \$\{If\} \$\{FileExists\} "\$etiudaStage\\\*\.\*"\n[\s\S]*?\n  \$\{EndIf\}\n/, "$1")),
     "15k control: the surviving folder reused, as at 5bff2b4d, reads red");
   ok(!refusesSurvivor(NSH.replace(/(is still there after its removal[^\n]*\n    !insertmacro etiudaFailBox 1618\n)    SetErrorLevel 1618\n    Quit\n/, "$1")),
     "15k control: the refusal noted and the run going on into that folder reads red");
 
   /* 15l. The older folder's resources and locales trees go whole where it held the program (Argon's review 5, 9): a file the older
      version shipped and the new one does not (U4's resources\old-only.txt) kept both, and the folder, for ever. Held on the
-     program's presence before the walk deletes it; the folder itself still goes only once empty. */
+     program's presence before the walk deletes it; the folder itself still goes only once empty. The two trees go by the walk
+     that never enters a link (repair 10, 15q). */
   const wholeTrees = nsh => {
     let r, bare;
     try {
@@ -1343,28 +1396,72 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const rootKept = r.dirs.has("O") && r.files.has("O\\my-notes.txt") && r.files.has("O\\swiftshader\\gone-in-the-new.dll");
     const heldBack = bare.files.has("O\\resources\\gone-in-the-new.bin") && bare.files.has("O\\locales\\gone-in-the-new.pak");
     const d = code(macro(nsh, "etiudaDropOld"));
-    const rs = d.match(/RMDir \/r [^\n]*/g) || [];
-    const only = JSON.stringify(rs) === JSON.stringify(["RMDir /r \"$etiudaDropRoot\\resources\"", "RMDir /r \"$etiudaDropRoot\\locales\""]);
+    const rs = d.match(/!insertmacro etiudaRemoveTree [^\n]*/g) || [];
+    const only = JSON.stringify(rs) === JSON.stringify(["!insertmacro etiudaRemoveTree \"$etiudaDropRoot\\resources\"", "!insertmacro etiudaRemoveTree \"$etiudaDropRoot\\locales\""])
+      && !/RMDir \/r/.test(d);
     const held = at(d, "${FileExists} \"$etiudaDropRoot\\${APP_EXECUTABLE_FILENAME}\""), walk = at(d, "Call etiudaDropOldFiles");
     return gone && rootKept && heldBack && only && held > -1 && held < walk && walk < at(d, rs[0] || "\u0000");
   };
   ok(wholeTrees(NSH), "15l the older folder's resources and locales go whole where it held the program, a file only the older version"
     + " shipped with them; where it no longer holds the program they stay; the folder's own RMDir stays non-recursive");
-  ok(!wholeTrees(NSH.replace("      RMDir /r \"$etiudaDropRoot\\resources\"\n      RMDir /r \"$etiudaDropRoot\\locales\"\n", "")),
+  ok(!wholeTrees(NSH.replace("        !insertmacro etiudaRemoveTree \"$etiudaDropRoot\\resources\"\n        !insertmacro etiudaRemoveTree \"$etiudaDropRoot\\locales\"\n", "")),
     "15l control: the two trees left to the walk, as at 5bff2b4d, an older version's file keeping them, reads red");
-  ok(!wholeTrees(NSH.replace("    ${If} ${FileExists} \"$etiudaDropRoot\\${APP_EXECUTABLE_FILENAME}\"\n      StrCpy $0 \"1\"\n    ${EndIf}\n", "    StrCpy $0 \"1\"\n")),
+  ok(!wholeTrees(NSH.replace("      ${If} ${FileExists} \"$etiudaDropRoot\\${APP_EXECUTABLE_FILENAME}\"\n        StrCpy $0 \"1\"\n      ${EndIf}\n", "      StrCpy $0 \"1\"\n")),
     "15l control: the trees removed from a folder that no longer holds the program reads red");
-  ok(!wholeTrees(NSH.replace("    RMDir \"$etiudaDropRoot\"\n", "    RMDir /r \"$etiudaDropRoot\"\n")),
+  ok(!wholeTrees(NSH.replace("      RMDir \"$etiudaDropRoot\"\n", "      RMDir /r \"$etiudaDropRoot\"\n")),
     "15l control: the older folder removed whole, a person's file with it, reads red");
 
+  /* 15q. No link is entered in a folder another account may write (the test architect's hold on repair 9, repair 10): NSIS's
+     RMDir /r follows a junction (his probe), and etiudaDropOld runs elevated over the per-user folder HKCU names, so a junction
+     planted below resources made the next all-users install a delete wherever it pointed, as administrator; Delete through a
+     junction the walk descended into did the same, file by file. Replayed over the older folder with three plants, each pointing
+     at a folder of the system's that must come through whole: a junction below resources, a junction where the new version has
+     a real folder (swiftshader), and an older folder that is itself a junction. 14b holds that no RMDir /r is left outside
+     $PLUGINSDIR; 14c holds the walk's own lines. */
+  const SYS = (n, ...f) => ({ dirs: [n], files: f.map(x => n + "\\" + x) });
+  const plant = (base, links, ...extra) => {
+    const t = base; t.links = new Map(links);
+    for (const e of extra) { e.dirs.forEach(d => t.dirs.add(d)); e.files.forEach(f => t.files.add(f)); }
+    return t;
+  };
+  const noLinkEntered = nsh => {
+    let below, mid, root;
+    try {
+      below = replayDrop(nsh, plant(tree(), [["O\\resources\\sub", "SYS1"]], SYS("SYS1", "keep.dll", "app.asar")), new Set());
+      const t2 = tree();
+      [...t2.files].filter(f => f.startsWith("O\\swiftshader\\")).forEach(f => t2.files.delete(f)); t2.dirs.delete("O\\swiftshader");
+      mid = replayDrop(nsh, plant(t2, [["O\\swiftshader", "SYS2"]], SYS("SYS2", "vk.dll", "keep.dll")), new Set());
+      const t3 = tree();
+      [...t3.files].filter(f => f.startsWith("O\\")).forEach(f => t3.files.delete(f)); [...t3.dirs].filter(d => d === "O" || d.startsWith("O\\")).forEach(d => t3.dirs.delete(d));
+      root = replayDrop(nsh, plant(t3, [["O", "SYS3"]], { dirs: ["SYS3", "SYS3\\resources", "SYS3\\locales"],
+        files: ["SYS3\\Etiuda.exe", "SYS3\\resources\\app.asar", "SYS3\\locales\\pl.pak"] }), new Set());
+    } catch (e) { return false; }
+    if (!below || !mid || !root) return false;
+    const whole = (r, ...f) => f.every(x => r.files.has(x));
+    return whole(below, "SYS1\\keep.dll", "SYS1\\app.asar") && !below.links.has("O\\resources\\sub") && !below.dirs.has("O\\resources")
+      && whole(mid, "SYS2\\vk.dll", "SYS2\\keep.dll") && !mid.links.has("O\\swiftshader")
+      && whole(root, "SYS3\\Etiuda.exe", "SYS3\\resources\\app.asar", "SYS3\\locales\\pl.pak") && root.links.has("O")
+      && newUntouched(below) && newUntouched(mid) && newUntouched(root);
+  };
+  ok(noLinkEntered(NSH), "15q no junction in the older folder is entered: one below resources, one standing where the new version has"
+    + " a folder, and an older folder that is itself one are each removed as a link or left, the folders they point at whole");
+  ok(!noLinkEntered(NSH.replace("        !insertmacro etiudaRemoveTree \"$etiudaDropRoot\\resources\"\n", "        RMDir /r \"$etiudaDropRoot\\resources\"\n")),
+    "15q control: resources removed with RMDir /r again, as at 9cb2a8ff, the junction below it followed, reads red");
+  ok(!noLinkEntered(NSH.replace(/(IfFileExists "\$etiudaDropList\$R0\\\$R2\\\*\.\*" 0 etiudaDropOldFile\n)[\s\S]*?\n      etiudaDropOldDir:\n/, "$1")),
+    "15q control: the walk descending wherever the list has a folder, as at abb9c4c2, a junction there entered, reads red");
+  ok(!noLinkEntered(NSH.replace("    ${If} $0 = 0x10\n", "    ${If} 0x10 = 0x10\n")),
+    "15q control: an older folder that is itself a junction taken as a folder, the trees removed through it, reads red");
   /* A small LogicLib reader for 15m to 15o (Argon's review of 5bff2b4d, repairs 3, 4 and 6): the block's own lines followed as
-     written, ${If}, ${IfNot}, ${AndIf}, ${AndIfNot}, ${OrIf}, ${Else}, ${EndIf} and !ifmacrodef over the macros named defined, over a
-     folder tree and a registry in memory. A variable the world does not declare stops it, as makensis would (Studio declares no
-     stage), and so does an instruction it does not know, so a block that grows one reads red until the reader learns it. Like the
+     written, ${If}, ${IfNot}, ${AndIf}, ${AndIfNot}, ${OrIf}, ${Else}, ${EndIf} and !ifmacrodef / !else over the macros named defined,
+     over a folder tree and a registry in memory. A variable the world does not declare stops it, as makensis would (Studio declares
+     no stage), and so does an instruction it does not know, or a macro inserted where it is not defined, so a block that grows one
+     reads red until the reader learns it. w.expand names the macros whose own lines are read in place (from w.nsh); etiudaAsUser's
+     RUN is read as the person where w.inner and w.outer (the unelevated instance reached), and every program run is recorded with
+     whether it ran as the person. etiudaRemoveTree removes the folder (this reader holds no links; 15q's replay does). Like the
      walk's replay it cannot show NSIS's string handling, Windows' locks or attributes; the spare-machine check covers those. */
   const runLL = (text, w) => {
     const fsys = { dirs: new Set(w.dirs || []), files: new Set(w.files || []) };
-    const V = Object.assign({}, w.V), locks = Object.assign({}, w.locks || {}), out = { exec: [], level: null, quit: false, V, fsys };
+    const V = Object.assign({}, w.V), locks = Object.assign({}, w.locks || {}), out = { exec: [], runs: [], level: null, quit: false, V, fsys };
     const lines = code(text).split("\n").map(l => l.trim()).filter(Boolean);
     const val = s => String(s).replace(/^"([\s\S]*)"$|^`([\s\S]*)`$/, (m, a, b) => (a !== undefined ? a : b))
       .replace(/\$\{APP_EXECUTABLE_FILENAME\}/g, "Etiuda.exe").replace(/\$\{APP_FILENAME\}/g, "Etiuda").replace(/\$\{INSTALL_REGISTRY_KEY\}/g, "KEY")
@@ -1383,19 +1480,35 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const test = c => {
       if (c[0] === "${FileExists}") return exists(val(c[1]));
       if (c[0] === "${Silent}") return !!w.silent;
+      if (c[0] === "${UAC_IsInnerInstance}") return !!w.inner;
       if (c[1] === "==" || c[1] === "!=") return (val(c[0]).toLowerCase() === val(c[2]).toLowerCase()) === (c[1] === "==");
       throw new Error("the reader does not know the test " + c.join(" "));
     };
     const frames = [], stack = [];
-    for (const l of lines) {
+    let asUser = 0, steps = 0;
+    for (let k = 0; k < lines.length; k++) {
+      if (++steps > 20000) throw new Error("runaway");
+      const l = lines[k];
+      if (l === "@asuser+") { asUser++; continue; }
+      if (l === "@asuser-") { asUser--; continue; }
       const t = l.match(/"[^"]*"|`[^`]*`|\S+/g) || [], op = t[0], on = frames.every(f => f.v);
       if (op === "${If}" || op === "${IfNot}") { frames.push({ v: on && (test(t.slice(1)) === (op === "${If}")), on }); continue; }
       if (op === "${AndIf}" || op === "${AndIfNot}") { const f = frames[frames.length - 1]; f.v = f.v && f.on && (test(t.slice(1)) === (op === "${AndIf}")); continue; }
       if (op === "${OrIf}") { const f = frames[frames.length - 1]; f.v = f.on && (f.v || test(t.slice(1))); continue; }
-      if (op === "${Else}") { const f = frames[frames.length - 1]; f.v = f.on && !f.v; continue; }
+      if (op === "${Else}" || op === "!else") { const f = frames[frames.length - 1]; f.v = f.on && !f.v; continue; }
       if (op === "${EndIf}" || op === "!endif") { frames.pop(); continue; }
       if (op === "!ifmacrodef") { frames.push({ v: (w.macros || []).includes(t[1]), on }); continue; }
       if (!on) continue;
+      if (op === "!insertmacro" && (w.expand || []).includes(t[1])) {
+        if (!(w.macros || []).includes(t[1])) throw new Error("no macro " + t[1]);
+        lines.splice(k + 1, 0, ...code(macro(w.nsh, t[1])).split("\n").map(x => x.trim()).filter(Boolean));
+        continue;
+      }
+      if (op === "!insertmacro" && t[1] === "etiudaAsUser") {
+        V.$R9 = "unreached";
+        if (w.inner && w.outer) lines.splice(k + 1, 0, "@asuser+", ...code(macro(w.nsh, t[2])).split("\n").map(x => x.trim()).filter(Boolean), "@asuser-");
+        continue;
+      }
       if (op === "Push") stack.push(val(t[1]));
       else if (op === "Pop") V[t[1]] = stack.pop();
       else if (op === "StrCpy" && t.length === 3) V[t[1]] = val(t[2]);
@@ -1407,9 +1520,11 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
         V.$0 = moved ? "moved" : "stuck";
       }
       else if (op === "Rename") rename(val(t[1]), val(t[2]));
-      else if (op === "RMDir" && t[1] === "/r") { const p = norm(val(t[2])); for (const set of [fsys.files, fsys.dirs]) [...set].filter(q => under(q, p)).forEach(q => set.delete(q)); }
+      else if ((op === "RMDir" && t[1] === "/r") || (op === "!insertmacro" && t[1] === "etiudaRemoveTree")) {
+        const p = norm(val(t[2])); for (const set of [fsys.files, fsys.dirs]) [...set].filter(q => under(q, p)).forEach(q => set.delete(q));
+      }
       else if (op === "RMDir") { const p = norm(val(t[1])); if (fsys.dirs.has(p) && ![...fsys.files, ...fsys.dirs].some(q => q.startsWith(p + "\\"))) fsys.dirs.delete(p); }
-      else if (op === "nsExec::Exec") { out.exec.push(val(t[t.length - 1])); stack.push("0"); }
+      else if (op === "nsExec::Exec") { const c = val(t[t.length - 1]); out.exec.push(c); out.runs.push({ cmd: c, asUser: asUser > 0 }); stack.push("0"); }
       else if (op === "SetErrorLevel") out.level = t[1];
       else if (op === "Quit") { out.quit = true; return out; }
       else if (op === "DetailPrint" || (op === "!insertmacro" && t[1] === "etiudaFailBox")) { /* nothing shown here */ }
@@ -1426,7 +1541,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
      was wholly absent, once, and the copy aside was then removed whatever had happened. Removed only once the folder holds the
      program: a run cut short after its swap, before the copy aside went, leaves both, and that copy aside is the older one. */
   const asideSeg = nsh => {
-    const b = code(macro(nsh, "etiudaStageBegin")), from = at(b, "SetOutPath $PLUGINSDIR"), to2 = at(b, "RMDir /r \"$etiudaStage\"");
+    const b = code(macro(nsh, "etiudaStageBegin")), from = at(b, "SetOutPath $PLUGINSDIR"), to2 = at(b, "!insertmacro etiudaRemoveTree \"$etiudaStage\"");
     return from > -1 && to2 > from ? b.slice(from + "SetOutPath $PLUGINSDIR".length, to2) : "";
   };
   const restoresAside = nsh => {
@@ -1459,17 +1574,21 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     + " was; it is removed only where the folder holds the program");
   const asideAt9cb = "\n  ${IfNot} ${FileExists} \"$etiudaBase\\*.*\"\n  ${AndIf} ${FileExists} \"$etiudaAside\\${APP_EXECUTABLE_FILENAME}\"\n"
     + "    Rename \"$etiudaAside\" \"$etiudaBase\"\n  ${EndIf}";
-  ok(!restoresAside(NSH.replace(/\n  \$\{If\} \$\{FileExists\} "\$etiudaAside\\\$\{APP_EXECUTABLE_FILENAME\}"\n[\s\S]*?(?=\n  RMDir \/r "\$etiudaAside")/, () => asideAt9cb)),
+  ok(!restoresAside(NSH.replace(/\n  \$\{If\} \$\{FileExists\} "\$etiudaAside\\\$\{APP_EXECUTABLE_FILENAME\}"\n[\s\S]*?(?=\n  !insertmacro etiudaRemoveTree "\$etiudaAside")/, () => asideAt9cb)),
     "15m control: 9cb2a8ff's lines put back, the move back only into a folder wholly absent and the copy aside then removed regardless, reads red");
   ok(!restoresAside(NSH.replace("      !insertmacro etiudaRenameRetry \"$etiudaAside\" \"$etiudaBase\"\n", "      Rename \"$etiudaAside\" \"$etiudaBase\"\n")),
     "15m control: one plain Rename in place of the retry, a brief lock then ending the run, reads red");
   ok(!restoresAside(NSH.replace(/\n  \$\{If\} \$\{FileExists\} "\$etiudaAside\\\$\{APP_EXECUTABLE_FILENAME\}"\n  \$\{AndIfNot\} \$\{FileExists\} "\$etiudaBase\\\$\{APP_EXECUTABLE_FILENAME\}"\n    DetailPrint[\s\S]*?\n    Quit\n  \$\{EndIf\}/, "")),
     "15m control: the refusal taken out, the only copy then removed with the copy aside, reads red");
 
-  /* 15n. The running desk is asked to close through a copy of the program the run can reach (Argon's review 3; repair 3): at
-     9cb2a8ff only "$INSTDIR\<app>.exe", which an install into another folder, or all-users over a per-user copy, does not have
-     yet, so --update-close was never sent, taskkill without /F only hid the desk to the tray, and the run ended 1618. Then the
-     copy registered in this mode, then this account's, then the stage (this build); Studio and the uninstaller have no stage. */
+  /* 15n. The running desk is asked to close through a copy of the program the run can reach, and no program a non-administrator
+     may write runs elevated (Argon's review 3, repair 3; the test architect's hold on it, repair 3b). At 9cb2a8ff only
+     "$INSTDIR\<app>.exe" was asked, which an install into another folder, or all-users over a per-user copy, does not have yet,
+     so taskkill without /F only hid the desk to the tray and the run ended 1618. f4cc93fb read HKCU's InstallLocation and ran that
+     program in the elevated instance, board 995's class. Now the inner instance of an all-users install asks as the person, from
+     the unelevated instance (etiudaAsUser): $INSTDIR's program, else the one that person's HKCU names, read there, else the
+     staged one; unreached, nothing is asked. Any other run asks $INSTDIR's program, else the staged one, never HKCU's. Studio's
+     cut and the uninstaller ask $INSTDIR's alone. */
   const closeSeg = nsh => {
     const m = code(macro(nsh, "customCheckAppRunning"));
     const own = at(m, "/FI \"USERNAME eq %USERNAME%\" /FI \"IMAGENAME eq");
@@ -1479,37 +1598,46 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
   };
   const closesThrough = nsh => {
     const seg = closeSeg(nsh);
-    if (!seg || (code(macro(nsh, "customCheckAppRunning")).match(/--update-close/g) || []).length !== 1) return false;
-    const desk = ["etiudaStageBegin"], V = { $INSTDIR: "N", $R4: "", $R8: "", $etiudaStage: "N.setup-staging", $0: "" };
-    const studioV = { $INSTDIR: "N", $R4: "", $R8: "", $0: "" };
-    /* The program asked, its doubled backslashes (an InstallLocation written with a trailing one) read as Windows reads them. */
-    const asked = r => ((r.exec.length === 1 && /^"([^"]*)" --update-close$/.exec(r.exec[0]) || [])[1] || (r.exec.length ? "?" : "")).replace(/\\{2,}/g, "\\");
-    let r;
+    if (!seg) return false;
+    const desk = ["etiudaAskClose", "etiudaStageBegin", "etiudaAsUser"], expand = ["etiudaAskClose"];
+    const V = { $INSTDIR: "N", $R4: "", $R8: "", $R9: "msg", $etiudaStage: "N.setup-staging", $0: "" };
+    const studioV = { $INSTDIR: "N", $R4: "", $R8: "", $R9: "msg", $0: "" };
+    const stage = withApp("N.setup-staging");
+    /* Each program asked, as "path" or "path (as the person)", its doubled backslashes read as Windows reads them. */
+    const asked = r => r.runs.map(x => ((/^"([^"]*)" --update-close$/.exec(x.cmd) || [])[1] || "?").replace(/\\{2,}/g, "\\") + (x.asUser ? " (as the person)" : "")).join(" + ");
+    const run = (o, fsw) => runLL(seg, Object.assign({ nsh, expand }, o, fsw));
+    let r, kept;
     try {
-      const stage = withApp("N.setup-staging");
+      const inner = run({ V, macros: desk, inner: true, outer: true, reg: { HKCU: "U" } }, join(withApp("U"), stage));
+      kept = inner.V.$R9 === "msg";
       r = {
-        inPlace: asked(runLL(seg, Object.assign({ V, macros: desk, reg: { SHELL_CONTEXT: "N" } }, join(withApp("N"), stage)))),
-        moved: asked(runLL(seg, Object.assign({ V, macros: desk, reg: { SHELL_CONTEXT: "O\\" } }, join(withApp("O"), stage)))),
-        toAllUsers: asked(runLL(seg, Object.assign({ V, macros: desk, reg: { HKCU: "U" } }, join(withApp("U"), stage)))),
-        stale: asked(runLL(seg, Object.assign({ V, macros: desk, reg: { SHELL_CONTEXT: "Gone", HKCU: "Gone" } }, stage))),
-        studio: asked(runLL(seg, Object.assign({ V: studioV, macros: [], reg: { SHELL_CONTEXT: "Gone" } }, withApp("O")))),
-        unregistered: asked(runLL(seg, Object.assign({ V: studioV, macros: [], reg: {} }, { files: ["\\Etiuda.exe"] }))),
+        inPlace: asked(run({ V, macros: desk }, join(withApp("N"), stage))),
+        moved: asked(run({ V, macros: desk, reg: { HKCU: "U" } }, join(withApp("U"), stage))),
+        toAllUsers: asked(inner),
+        innerInPlace: asked(run({ V, macros: desk, inner: true, outer: true, reg: { HKCU: "U" } }, join(withApp("N"), withApp("U"), stage))),
+        innerStale: asked(run({ V, macros: desk, inner: true, outer: true, reg: { HKCU: "Gone" } }, stage)),
+        unreached: asked(run({ V, macros: desk, inner: true, outer: false, reg: { HKCU: "U" } }, join(withApp("U"), stage))),
+        emptyKey: asked(run({ V, macros: desk, inner: true, outer: true, reg: {} }, { files: ["\\Etiuda.exe"] })),
+        studio: asked(run({ V: studioV, macros: [] }, withApp("N"))),
+        studioMoved: asked(run({ V: studioV, macros: [], reg: { HKCU: "U" } }, withApp("U"))),
       };
     } catch (e) { return false; }
-    return r.inPlace === "N\\Etiuda.exe" && r.moved === "O\\Etiuda.exe" && r.toAllUsers === "U\\Etiuda.exe"
-      && r.stale === "N.setup-staging\\Etiuda.exe" && r.studio === "" && r.unregistered === "";
+    return kept && r.inPlace === "N\\Etiuda.exe" && r.moved === "N.setup-staging\\Etiuda.exe"
+      && r.toAllUsers === "U\\Etiuda.exe (as the person)" && r.innerInPlace === "N\\Etiuda.exe (as the person)"
+      && r.innerStale === "N.setup-staging\\Etiuda.exe (as the person)" && r.unreached === "" && r.emptyKey === ""
+      && r.studio === "N\\Etiuda.exe" && r.studioMoved === "";
   };
-  ok(closesThrough(NSH), "15n --update-close goes through $INSTDIR's program where it has one, else the copy registered in this mode, else"
-    + " this account's (all-users over a per-user copy), else the staged one; never through an empty InstallLocation, and the stage is"
-    + " read only where the stage's macros are compiled (not in Studio's cut or the uninstaller)");
-  ok(!closesThrough(NSH.replace(/        \$\{If\} \$\{FileExists\} "\$INSTDIR\\\$\{APP_EXECUTABLE_FILENAME\}"\n          StrCpy \$R4[\s\S]*?--update-close`\n          Pop \$R8\n        \$\{EndIf\}\n/,
-    () => "        ${If} ${FileExists} \"$INSTDIR\\${APP_EXECUTABLE_FILENAME}\"\n          nsExec::Exec /TIMEOUT=3000 `\"$INSTDIR\\${APP_EXECUTABLE_FILENAME}\" --update-close`\n          Pop $R8\n        ${EndIf}\n")),
-    "15n control: 9cb2a8ff's lines put back, $INSTDIR's program or none, reads red");
-  ok(!closesThrough(NSH.replace(/\n {10}!ifmacrodef etiudaStageBegin\n([\s\S]*?)\n {10}!endif\n/, "\n$1\n")),
-    "15n control: the stage read where no stage is compiled (Studio's cut), which makensis refuses, reads red");
-  ok(!closesThrough(NSH.replace("          ${If} $R8 != \"\"\n          ${AndIf} ${FileExists} \"$R8\\${APP_EXECUTABLE_FILENAME}\"", "          ${If} ${FileExists} \"$R8\\${APP_EXECUTABLE_FILENAME}\"")),
+  ok(closesThrough(NSH), "15n --update-close goes, in the inner instance of an all-users install, from the unelevated one as the person"
+    + " ($INSTDIR's program, else the one that person's HKCU names, else the staged one; nothing where it cannot be reached); in any other"
+    + " run through $INSTDIR's program, else the staged one, never HKCU's; Studio's cut and the uninstaller through $INSTDIR's alone");
+  ok(!closesThrough(NSH.replace("    !insertmacro etiudaAsUser etiudaAskCloseRun\n", "    !insertmacro etiudaAskCloseRun\n")),
+    "15n control: the HKCU program run in the elevated instance, as f4cc93fb did (board 995's class), reads red");
+  ok(!closesThrough(NSH.replace("        !ifmacrodef etiudaAskClose\n          !insertmacro etiudaAskClose\n        !else\n", "        !insertmacro etiudaAskClose\n        !ifmacrodef etiudaAskClose_none\n")),
+    "15n control: the desk's macro inserted unguarded, where Studio's cut does not define it and makensis refuses, reads red");
+  ok(!closesThrough(NSH.replace("    ${If} $R9 != \"\"\n    ${AndIf} ${FileExists} \"$R9\\${APP_EXECUTABLE_FILENAME}\"", "    ${If} ${FileExists} \"$R9\\${APP_EXECUTABLE_FILENAME}\"")),
     "15n control: an empty InstallLocation taken as a folder, the program at the drive's root asked, reads red");
-
+  ok(!closesThrough(NSH.replace(/(!macro etiudaAskClose\n  \$\{If\} \$\{UAC_IsInnerInstance\}\n)    Push \$R9\n([\s\S]*?)    Pop \$R9\n/, "$1$2")),
+    "15n control: the close check's Retry text in $R9 left overwritten by the person's side, reads red");
   /* 15o. An interactive Update goes back into the registered folder that instFilesPre nested (Argon's review 6; repair 6):
      electron-builder's instFilesPre appends "\<name>" to a folder whose path lacks it, so an Update over "/D=C:\DeskApp" staged and
      swapped into C:\DeskApp\Etiuda, inside the older copy, which stayed whole. Where $INSTDIR is the registered folder plus the
@@ -1591,6 +1719,119 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
   ok(!takesBack(NSH.replace("  ${If} ${FileExists} \"$etiudaBase\\${APP_EXECUTABLE_FILENAME}\"\n    !insertmacro etiudaRenameRetry \"$etiudaBase\" \"$etiudaAside\"",
     "  ${If} ${FileExists} \"$etiudaBase\\*.*\"\n    !insertmacro etiudaRenameRetry \"$etiudaBase\" \"$etiudaAside\"")),
     "15p control: any folder with files set aside (Argon's remedy), a person's files then removed with the aside, reads red");
+  /* 15r. Nothing may Quit between the swap and the registration (Claude alpha's repair 1, on Argon's review 1): the old folder is
+     gone by then, so a Quit there leaves new files nobody registered. Read from the patched install section: every line from
+     the swap to registryAddInstallInfo, every macro and function they reach expanded in turn (from this file and the templates,
+     a !ifmacrodef followed by what this file defines, a macro's parameters put in), must hold no Quit or Abort. Two places in
+     reach would Quit as electron-builder wrote them and are read as this build compiles them: handleUninstallResult, whose
+     SHELL_CONTEXT and HKEY_CURRENT_USER branches Return through customUnInstallCheck and customUnInstallCheckCurrentUser before
+     its Quit (installUtil.nsh), and etiudaSwap itself, whose every Quit comes before the swap is made. The uninstaller the
+     registration names is written into the stage by installApplicationFiles' last line, and the stage is not swapped without it
+     (15a, 15c). Read on the merge with 995's etiudaOldUserCopy: it holds already, so the leg reads red only under its controls. */
+  const TPL = {};
+  try {
+    const lab2 = fs.mkdtempSync(path.join(osx.tmpdir(), "etiuda-nsis-quit-"));
+    const to2 = path.dirname(patchTool.getPaths(lab2).multiUserUi);
+    fs.cpSync(path.dirname(patchTool.getPaths(ROOT).multiUserUi), to2, { recursive: true });
+    patchTool.applyNsisPatches(lab2);
+    const walk = (d, rel) => fs.readdirSync(d, { withFileTypes: true }).forEach(e => {
+      const r = rel ? rel + "/" + e.name : e.name;
+      if (e.isDirectory()) return walk(path.join(d, e.name), r);
+      if (/\.(nsh|nsi)$/i.test(e.name)) TPL[r] = fs.readFileSync(path.join(d, e.name), "utf8").replace(/\r\n/g, "\n");
+    });
+    walk(to2, "");
+    fs.rmSync(lab2, { recursive: true, force: true });
+  } catch (e) { /* an empty TPL reads red below */ }
+  const noQuitAfterSwap = (nsh, tpl) => {
+    const sec = tpl["installSection.nsh"] || "", from = at(sec, "  !insertmacro etiudaSwap\n"), to3 = at(sec, "!insertmacro registryAddInstallInfo");
+    if (from < 0 || to3 < from) return { ok: false, why: "no region" };
+    const texts = [nsh].concat(Object.keys(tpl).filter(f => !/^(portable\.nsi|oneClick\.nsh)$/.test(f)).map(f => tpl[f]));
+    const defs = new Set(texts.flatMap(t => (t.match(/^[ \t]*!macro[ \t]+\w+/gm) || []).map(l => l.trim().split(/\s+/)[1])));
+    const nshMacros = new Set((nsh.match(/^[ \t]*!macro[ \t]+\w+/gm) || []).map(l => l.trim().split(/\s+/)[1]));
+    const findMacro = name => {
+      for (const t of texts) {
+        const m = new RegExp("\\n[ \\t]*!macro " + name + "((?:[ \\t]+\\w+)*)[ \\t]*\\n([\\s\\S]*?)\\n[ \\t]*!macroend").exec("\n" + t);
+        if (m) return { params: m[1].trim() ? m[1].trim().split(/\s+/) : [], body: m[2] };
+      }
+      return null;
+    };
+    const findFn = name => {
+      for (const t of texts) { const m = new RegExp("\\nFunction " + name + "\\n([\\s\\S]*?)\\nFunctionEnd").exec("\n" + t); if (m) return m[1]; }
+      return null;
+    };
+    /* Lines a !ifmacrodef / !ifmacrondef this build answers leaves out; any other directive keeps both branches, the cautious read. */
+    const live = body => {
+      const out = [], st = [];
+      for (const raw of String(body).split("\n")) {
+        const l = raw.trim();
+        if (!l || /^[#;]/.test(l)) continue;
+        const m = /^!(ifmacrodef|ifmacrondef|ifdef|ifndef|if)\b\s*(\S*)/.exec(l);
+        if (m) { st.push(m[1] === "ifmacrodef" ? defs.has(m[2]) : m[1] === "ifmacrondef" ? !defs.has(m[2]) : null); continue; }
+        if (/^!else\b/.test(l)) { const v = st.pop(); st.push(v === null ? null : !v); continue; }
+        if (/^!endif\b/.test(l)) { st.pop(); continue; }
+        if (st.every(v => v !== false)) out.push(l);
+      }
+      return out;
+    };
+    const quits = [], unknown = [], seen = new Set();
+    const handled = key => {
+      const fn = findFn("handleUninstallResult") || "";
+      const name = key === "SHELL_CONTEXT" ? "customUnInstallCheck" : "customUnInstallCheckCurrentUser";
+      const shape = new RegExp("\"\\$rootKey_uninstallResult\" == \"" + key + "\"\\n\\s*!ifmacrodef " + name + "\\n\\s*!insertmacro " + name + "\\n\\s*Return\\n").test(fn);
+      return shape && nshMacros.has(name) ? name : null;
+    };
+    const visit = (lines, depth, where) => {
+      if (depth > 14) { unknown.push("too deep at " + where); return; }
+      for (const l of lines) {
+        if (/^(Quit|Abort)\b/i.test(l) || /\$\{\|\}\s*(Quit|Abort)\b/i.test(l)) quits.push(where + ": " + l);
+        let m = /^!insertmacro\s+(\S+)\s*(.*)$/i.exec(l), name, args = [];
+        const c = /^Call\s+(\S+)$/i.exec(l);
+        if (m) { name = m[1]; args = (m[2].match(/"[^"]*"|`[^`]*`|\S+/g) || []); }
+        if (!m && !c) continue;
+        if (m && name === "handleUninstallResult") {
+          const via = handled(args[0]);
+          if (!via) { quits.push(where + ": handleUninstallResult " + args[0] + " reaches the template's Quit"); continue; }
+          name = via; args = [];
+        }
+        const key = (c ? "fn:" + c[1] : name + " " + args.join(" "));
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (c) {
+          if (/^:/.test(c[1]) || c[1] === "handleUninstallResult") continue;
+          const fb = findFn(c[1]);
+          if (fb === null) { unknown.push(where + ": Call " + c[1]); continue; }
+          visit(live(fb), depth + 1, c[1]);
+          continue;
+        }
+        const mm = findMacro(name);
+        if (!mm) { unknown.push(where + ": !insertmacro " + name); continue; }
+        let body = mm.body;
+        mm.params.forEach((p, k) => { body = body.split("${" + p + "}").join((args[k] || "").replace(/^"|"$/g, "")); });
+        visit(live(body), depth + 1, name);
+      }
+    };
+    visit(live(sec.slice(from + "  !insertmacro etiudaSwap\n".length, to3)), 0, "installSection.nsh");
+    /* etiudaSwap: every Quit before its first post-swap line. */
+    const sw = live(macro(nsh, "etiudaSwap")), post = sw.indexOf("ReadRegStr $0 SHELL_CONTEXT \"${INSTALL_REGISTRY_KEY}\" InstallLocation");
+    const swapQuits = sw.map((l, i) => (/^Quit\b/.test(l) ? i : -1)).filter(i => i > -1);
+    if (post < 0 || swapQuits.some(i => i > post)) quits.push("etiudaSwap: a Quit after the swap");
+    visit(sw.slice(post), 0, "etiudaSwap after the swap");
+    /* The uninstaller is in the stage before the swap: installApplicationFiles' last line, and the stage checked for it. */
+    const iaf = live((findMacro("installApplicationFiles") || {}).body || "");
+    const unStaged = iaf[iaf.length - 1] === "File \"/oname=${UNINSTALL_FILENAME}\" \"${UNINSTALLER_OUT_FILE}\""
+      && /\$\{IfNot\} \$\{FileExists\} "\$etiudaStage\\\$\{UNINSTALL_FILENAME\}"/.test(code(macro(nsh, "etiudaStageEnd")));
+    return { ok: quits.length === 0 && unknown.length === 0 && unStaged && seen.size > 0, quits, unknown, unStaged, reached: [...seen].map(k => k.split(" ")[0]) };
+  };
+  const nq = noQuitAfterSwap(NSH, TPL);
+  ok(nq.ok, "15r nothing between the swap and the registration can Quit, every macro and function in reach followed, and the uninstaller"
+    + " the registration names is staged and checked before the swap: " + JSON.stringify({ quits: nq.quits, unknown: nq.unknown, unStaged: nq.unStaged, reached: nq.reached }));
+  ok(!noQuitAfterSwap(NSH.replace("!macro customUnInstallCheckCurrentUser\n", "!macro customUnInstallCheckCurrentUserGone\n"), TPL).ok,
+    "15r control: this account's copy's failed uninstall left to the template's Quit, as Argon read it, reads red");
+  ok(!noQuitAfterSwap(NSH.replace("  StrCpy $R9 \"ran\"\n  ${If} ${Errors}\n", "  StrCpy $R9 \"ran\"\n  Quit\n  ${If} ${Errors}\n"), TPL).ok,
+    "15r control: a Quit in what runs as the person after the swap (etiudaOldUserCopyRun) reads red");
+  ok(!noQuitAfterSwap(NSH, Object.assign({}, TPL, { "include/installer.nsh": (TPL["include/installer.nsh"] || "").replace(/\n\s*File "\/oname=\$\{UNINSTALL_FILENAME\}" "\$\{UNINSTALLER_OUT_FILE\}"/, "") })).ok,
+    "15r control: the uninstaller no longer written by installApplicationFiles, so never staged, reads red");
+
 }
 
 console.log("\n#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
