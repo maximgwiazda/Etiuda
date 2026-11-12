@@ -9083,6 +9083,56 @@ const SIGNIN_PREVIEW_ASKED = process.env.ETIUDA_SIGNIN_PREVIEW === "1"; /* plant
 function signinPreviewing(asked, table) {
   return (asked === undefined ? SIGNIN_PREVIEW_ASKED : asked) === true && signinOffered(table).length === 0; /* plant:preview-inert */
 }
+/* THE SIGN-IN TRACE: ETIUDA_SIGNIN_TRACE=1, read once at the start and never from the page, an installed desk included, has every
+   sign-in, renewal and service answer write one line to this process's console (signinTraceLine), and nowhere else: nothing of
+   it is kept or sent. Without it nothing is written. */
+const SIGNIN_TRACE_ASKED = process.env.ETIUDA_SIGNIN_TRACE === "1"; /* plant:trace-asked */
+/* One trace line: the provider, the step and the reason the desk shows, then of `said` only the fields SIGNIN_TRACE_FIELDS names,
+   each cut short. Every value in `hide` (this sign-in's code, verifier, secret and tokens) and anything of a JWT's shape reads
+   [hidden] wherever it stands, before any cut. */
+const SIGNIN_TRACE_FIELDS = Object.freeze(["status", "error", "error_description", "error_codes", "reason", "detail"]);
+function signinTraceLine(provider, step, shown, said, hide) {
+  const s = said && typeof said === "object" ? said : {}, h = (Array.isArray(hide) ? hide : []).filter(v => typeof v === "string" && v.length >= 4);
+  const clean = text => {
+    let t = String(text);
+    for (const v of h) t = t.split(v).join("[hidden]"); /* plant:trace-hide */
+    t = t.replace(/eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*(\.[A-Za-z0-9_-]*)?/g, "[hidden]"); /* plant:trace-jwt */
+    return Array.from(t).map(ch => { const c = ch.charCodeAt(0); return c < 32 || c === 127 ? " " : ch; }).join("");
+  };
+  const parts = [];
+  for (const k of SIGNIN_TRACE_FIELDS) {
+    const v = s[k];
+    const text = Array.isArray(v) ? v.filter(n => Number.isSafeInteger(n)).slice(0, 8).join(",")
+      : typeof v === "number" || typeof v === "boolean" ? String(v) : typeof v === "string" ? clean(v).slice(0, 600) : "";
+    if (text) parts.push(k + "=" + text);
+  }
+  return "etiuda: sign-in " + clean(provider).slice(0, 20) + " " + clean(step).slice(0, 20) + ": " + clean(shown).slice(0, 40) + (parts.length ? " | " + parts.join(" | ") : "");
+}
+/* What an answer `res` ({status, bytes}) says of itself for the trace: its status and its JSON's own fields; the tokens it carries
+   join `hide`. */
+function signinTraceSaid(res, hide) {
+  let j = null;
+  try { j = JSON.parse(Buffer.from(res && res.bytes ? res.bytes : []).toString("utf8")); } catch { j = null; }
+  const o = j && typeof j === "object" && !Array.isArray(j) ? j : {};
+  for (const k of ["id_token", "access_token", "refresh_token"]) if (typeof o[k] === "string") hide.push(o[k]);
+  return { status: res ? res.status : undefined, error: o.error, error_description: o.error_description, error_codes: o.error_codes, reason: o.reason,
+    detail: j ? "" : "the answer is not JSON" };
+}
+/* The ID token's claims in a provider's answer `res`, as the trace names them when the desk refuses it: issuer, audience, tenant,
+   expiry against `now`, and whether its nonce is absent, this sign-in's (`nonce`), or another. */
+function signinTraceClaims(res, nonce, now) {
+  let j = null;
+  try { j = JSON.parse(Buffer.from(res && res.bytes ? res.bytes : []).toString("utf8")); } catch { j = null; }
+  const c = j && typeof j.id_token === "string" ? signinClaims(j.id_token) : null;
+  if (!c) return "no ID token that reads";
+  const n = c.nonce === undefined ? "none" : nonce && signinSame(c.nonce, nonce) ? "this sign-in's" : "another";
+  return "iss " + String(c.iss) + ", aud " + [].concat(c.aud).join(" ") + ", tid " + String(c.tid === undefined ? "none" : c.tid)
+    + ", expires in " + Math.round(Number(c.exp) - now / 1000) + " s, nonce " + n;
+}
+function signinTrace(io, provider, step, shown, said, hide) {
+  if (!io || typeof io.trace !== "function") return; /* plant:trace-off */
+  try { io.trace(signinTraceLine(provider, step, shown, said, hide)); } catch { /* the console has gone */ }
+}
 /* GOOGLE'S CLIENT SECRET, where the package carries one: written beside the asar by the package step (tools/signin-secret.cjs) from
    ETIUDA_GOOGLE_CLIENT_SECRET at packaging, read once at start (the wiring, below) and from nowhere else. It goes to Google's token
    address alone, with the code and the refresh, and is never kept, printed, shown or sent to the licence service. Without the
@@ -9183,9 +9233,11 @@ function signinOurs(query, pending) {
   return !!pending && typeof state === "string" && signinSame(state, pending.state);
 }
 /* A provider's refusal named: its organisation not consenting to Etiuda (Microsoft's consent and admin-consent codes, Google's
-   admin policy) is "signin-notallowed", the person's own Cancel "signin-cancelled", anything else "signin-refused". */
+   admin policy) is "signin-notallowed", the person's own Cancel "signin-cancelled", anything else "signin-refused". AADSTS65004 is
+   the person declining the consent page, a Cancel of their own, so it is read before the organisation's codes. */
 function signinRefusedWhy(error, said) {
-  if (error === "consent_required" || error === "admin_policy_enforced" || /\bAADSTS(65001|65004|90094|90095)\b/.test(String(said || ""))) return "signin-notallowed"; /* plant:not-allowed */
+  if (/\bAADSTS65004\b/.test(String(said || ""))) return "signin-cancelled"; /* plant:declined */
+  if (error === "consent_required" || error === "admin_policy_enforced" || /\bAADSTS(65001|90094|90095)\b/.test(String(said || ""))) return "signin-notallowed"; /* plant:not-allowed */
   return error === "access_denied" ? "signin-cancelled" : "signin-refused";
 }
 function signinBack(query, pending) {
@@ -9331,16 +9383,29 @@ async function signinRun(io, p, deskKey, now) {
     pending = signinAuthorize(p, loop.port, deskKey, io.rand);
     let opened = false;
     try { opened = signinPageOk(pending.url) && !!(await io.openPage(pending.url)); } catch { opened = false; }
-    if (!opened) return { ok: false, reason: "signin-browser" };
+    if (!opened) { signinTrace(io, p.id, "browser", "signin-browser"); return { ok: false, reason: "signin-browser" }; }
     let query = "";
-    try { query = await loop.caught; } catch (e) { return { ok: false, reason: e && e.closed ? "signin-cancelled" : "signin-timeout" }; }
+    try { query = await loop.caught; }
+    catch (e) { const why = e && e.closed ? "signin-cancelled" : "signin-timeout"; signinTrace(io, p.id, "browser", why); return { ok: false, reason: why }; }
     const back = signinBack(query, pending);
-    if (!back.ok) return back;
+    if (!back.ok) {
+      const q = new URLSearchParams(String(query || ""));
+      signinTrace(io, p.id, "authorize", back.reason, back.reason === "signin-state" ? {} : { error: q.get("error") || "", error_description: q.get("error_description") || "" },
+        [q.get("code") || "", pending.verifier, p.clientSecret]);
+      return back;
+    }
+    const hide = [back.code, pending.verifier, p.clientSecret];
     let res = null;
     try { res = await io.tokenAsk(signinKnown(p.id).token, signinCodeForm(p, pending, back.code)); }
-    catch { return { ok: false, reason: "signin-unreached" }; }
+    catch (e) { signinTrace(io, p.id, "token", "signin-unreached", { detail: e && e.message }, hide); return { ok: false, reason: "signin-unreached" }; }
     const got = signinTokens(res, p, pending.nonce, now());
-    if (!got.ok) return got;
+    const said = signinTraceSaid(res, hide);
+    if (!got.ok) {
+      if (said.status === 200 && !said.error && !said.detail) said.detail = signinTraceClaims(res, pending.nonce, now());
+      signinTrace(io, p.id, "token", got.reason, said, hide);
+      return got;
+    }
+    signinTrace(io, p.id, "token", "ok", { status: said.status, detail: "refresh token " + (got.refreshToken ? "given" : "none") }, hide);
     return { ok: true, provider: p.id, idToken: got.idToken, refreshToken: got.refreshToken, sub: got.sub, seed: pending.seed };
   } finally {
     loop.close();
@@ -9351,11 +9416,20 @@ async function signinRun(io, p, deskKey, now) {
    signinTokens' reason, "signin-unreached" where the provider could not be asked, or "signin-ask" where there is nothing to ask with. */
 async function signinRenew(io, p, deskKey, refreshToken, seed, sub, now) {
   if (!p || !signinKnown(p.id) || !refreshToken || !/^[0-9a-f]{64}$/.test(String(seed))) return { ok: false, reason: "signin-ask" };
+  const hide = [String(refreshToken), p.clientSecret, sub ? String(sub) : ""];
   let res = null;
   try { res = await io.tokenAsk(signinKnown(p.id).token, signinRefreshForm(p, refreshToken)); }
-  catch { return { ok: false, reason: "signin-unreached" }; }
-  const got = signinTokens(res, p, signinNonce(deskKey, seed), now(), sub ? String(sub) : undefined);
-  if (!got.ok) return got;
+  catch (e) { signinTrace(io, p.id, "refresh", "signin-unreached", { detail: e && e.message }, hide); return { ok: false, reason: "signin-unreached" }; }
+  const nonce = signinNonce(deskKey, seed);
+  const got = signinTokens(res, p, nonce, now(), sub ? String(sub) : undefined);
+  const said = signinTraceSaid(res, hide);
+  if (!got.ok) {
+    if (said.status === 200 && !said.error && !said.detail) said.detail = signinTraceClaims(res, nonce, now());
+    signinTrace(io, p.id, "refresh", got.reason, said, hide);
+    return got;
+  }
+  signinTrace(io, p.id, "refresh", "ok", { status: said.status, detail: signinTraceClaims(res, nonce, now()).replace(/^.*, nonce /, "nonce ")
+    + ", refresh token " + (got.refreshToken ? "replaced" : "kept") }, hide);
   return { ok: true, idToken: got.idToken, refreshToken: got.refreshToken || refreshToken, sub: got.sub };
 }
 /* The refresh token sealed by the system's store, as base64, or "" where the store seals nothing for real (sealsForReal: no
@@ -9449,9 +9523,15 @@ function signinAnswer(res, deskKey) {
 /* One post to signin/desk with `idToken`: `seed` for a first sign-in, "" for a renewal. `io` {serviceAsk(url, body), sign(bytes)}. */
 async function signinSeat(io, provider, deskKey, idToken, seed, now) {
   const body = signinDeskBody(provider, idToken, deskKey, seed, now(), io.sign);
-  if (!body) return { ok: false, reason: "unreached" };
-  try { return signinAnswer(await io.serviceAsk(SIGNIN_SERVICE, body), deskKey); }
-  catch { return { ok: false, reason: "unreached" }; }
+  if (!body) { signinTrace(io, provider, "service", "unreached", { detail: "the request did not form" }); return { ok: false, reason: "unreached" }; }
+  const hide = [String(idToken)];
+  let res = null;
+  try { res = await io.serviceAsk(SIGNIN_SERVICE, body); }
+  catch (e) { signinTrace(io, provider, "service", "unreached", { detail: e && e.message }, hide); return { ok: false, reason: "unreached" }; }
+  const ans = signinAnswer(res, deskKey);
+  signinTrace(io, provider, "service", ans.ok ? "ok" : ans.reason, ans.ok ? { status: res.status, detail: "certificate " + (ans.cert ? "given" : "none") }
+    : signinTraceSaid(res, hide), hide);
+  return ans;
 }
 /* THE CALM LAPSE: the kept certificate's `until` passed with no new one. It decides nothing on the desk but Account's words; the
    desk works on, and the next certificate ends it. */
@@ -9645,6 +9725,7 @@ function signinIo(run) {
     sign: signinSign,
     keep: text => signinKeep(safeStorage, process.platform, text), kept: sealed => signinKept(safeStorage, sealed),
     page: ok => signinPageHtml(ok),
+    trace: SIGNIN_TRACE_ASKED ? line => console.error(line) : null, /* plant:trace-wired */
   };
 }
 /* A first sign-in's outcome kept: the refresh token and the sub sealed where the system seals for real, the seed beside, and the
