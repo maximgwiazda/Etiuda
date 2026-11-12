@@ -1472,6 +1472,20 @@ function inheritedEnv(step) {
   return env;
 }
 
+/* THE WALL-CLOCK LIMIT ON ONE GATE (the test architect, 2026-11-12): a gate still running at STEP_WALL_MS is stopped with its whole
+   process tree, by its own PID, and reads red with exit STEP_WALL_EXIT and a line naming it. A ceiling inside a gate's own process
+   cannot be trusted for a hang: Studio's tmr10 stalled 27 minutes and more under load while the pinned syncer's synchronous retries
+   (Atomics.wait) held the event loop its 120 s timer needed. The limit is outside, here. ETIUDA_STEP_WALL_MS overrides it. */
+export const STEP_WALL_MS_DEFAULT = 25 * 60 * 1000;
+export const STEP_WALL_EXIT = 124;
+const stepWallMs = () => { const v = Number(process.env.ETIUDA_STEP_WALL_MS); return v > 0 ? v : STEP_WALL_MS_DEFAULT; };
+/** Stops `pid` and every process it started, by that PID: taskkill /T on Windows, the process itself elsewhere. */
+export function stopTree(pid) {
+  if (!pid) return;
+  if (process.platform === "win32") spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
+  else { try { process.kill(pid, "SIGKILL"); } catch { /* gone */ } }
+}
+
 function runStep(step, customEnv = {}) {
   return new Promise(resolve => {
     const t0 = Date.now();
@@ -1480,12 +1494,20 @@ function runStep(step, customEnv = {}) {
     const env = Object.assign(inheritedEnv(step), own, customEnv, step.env || {});
     const child = spawn(process.execPath, [step.file].concat(step.args),
       { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
-    let out = "";
+    let out = "", overWall = false;
+    const limit = stepWallMs();
+    const wall = setTimeout(() => { overWall = true; stopTree(child.pid); }, limit); /* plant:step-wall */
     child.stdout.on("data", d => { out += d; process.stdout.write(d); });
     child.stderr.on("data", d => { out += d; process.stderr.write(d); });
     child.on("close", code => {
+      clearTimeout(wall);
       stepScratchEnd(scratch);
-      resolve({ exit: code === null ? -1 : code, wallMs: Date.now() - t0, out });
+      if (overWall) {
+        const said = "  FAIL gate-run: " + step.file + " was still running at the wall-clock limit (" + Math.round(limit / 1000) + " s) and was stopped with its process tree";
+        out += "\n" + said + "\n";
+        process.stdout.write(said + "\n");
+      }
+      resolve({ exit: overWall ? STEP_WALL_EXIT : code === null ? -1 : code, wallMs: Date.now() - t0, out, overWall });
     });
   });
 }
@@ -1590,6 +1612,9 @@ async function main() {
     walled = plan.walled || [];
     customEnv.ETIUDA_PLANTS = "off";
     gateLabel = "area";
+    /* An area run takes a lane of the machine lock like any heavy run (Claude alpha's bound of 2026-11-12 19:35: at most four gate
+       runs alive at once, two while Max uses the laptop, area runs counted); nine ran at once that evening because area took none. */
+    isHeavy = true; /* plant:area-lane */
   } else if (mode === "release") {
     isHeavy = true;
     gateLabel = "release";

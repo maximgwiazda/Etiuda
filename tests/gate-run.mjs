@@ -26,14 +26,14 @@ import fs from "node:fs";
 import os from "node:os";
 import tls from "node:tls";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 /* The floor: every leg below runs or is skipped by name, or the tally says so rather than reading as a short green. */
-const EXPECTED = 18;  /* 14, +2 each step's own scratch (15a, 15b), +2 a customer's roots (15c, 15d) */
+const EXPECTED = 22;  /* 14, +2 each step's own scratch (15a, 15b), +2 a customer's roots (15c, 15d), +4 the gate wall and the area lane (16a to 16d) */
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
   asserted++;
@@ -515,6 +515,69 @@ function main() {
 
       const leg1TurnedRed = plantedSrc !== toolSrc && hasPlant && rPlant.exit !== 0 && rPlant.out.indexOf("touched the real profile") >= 0;
       check(leg1TurnedRed, "14 (4) planted removal of running-app check turns leg 1 red: planted " + (plantedSrc !== toolSrc) + ", plant present " + hasPlant);
+    }
+
+    /* ---- 16. the wall-clock limit on one gate, and an area run taking a lane (the test architect, 2026-11-12) ---------------- */
+    {
+      const toolFile = path.join(lab.lab, "tools", "gate-run.mjs"), toolSrc = fs.readFileSync(toolFile, "utf8");
+      const pidFile = path.join(lab.root, "grandchild.pid");
+      /* A gate that starts a child of its own and then does not end for 8 s: past a 2 s wall it is stopped with its child. */
+      fs.writeFileSync(path.join(lab.lab, "tests", "hang.mjs"), [
+        'import { spawn } from "node:child_process";',
+        'import fs from "node:fs";',
+        'const g = spawn(process.execPath, ["-e", "setTimeout(() => {}, 30000)"], { stdio: "ignore" });',
+        'fs.writeFileSync(process.env.HANG_PID_FILE, String(g.pid));',
+        'setTimeout(() => process.exit(0), 8000);',
+        '',
+      ].join("\n"));
+      const pkgFile = path.join(lab.lab, "package.json"), pkgWas = fs.readFileSync(pkgFile, "utf8");
+      const pkg = JSON.parse(pkgWas);
+      pkg.scripts.hang = "node tests/hang.mjs";
+      fs.writeFileSync(pkgFile, JSON.stringify(pkg, null, 2) + "\n");
+      const alive = (pid) => { try { process.kill(Number(pid), 0); return true; } catch { return false; } };
+      const runHang = () => { try { fs.rmSync(pidFile, { force: true }); } catch {} const t0 = Date.now();
+        const r = runTool(lab, ["hang"], { ETIUDA_STEP_WALL_MS: "2000", HANG_PID_FILE: pidFile });
+        const g = fs.existsSync(pidFile) ? fs.readFileSync(pidFile, "utf8").trim() : "";
+        const gone = !!g && !alive(g); if (g && !gone) { try { process.kill(Number(g)); } catch {} }
+        return { r, ms: Date.now() - t0, g, gone }; };
+      const h = runHang();
+      check(h.r.exit !== 0 && h.r.out.indexOf("was still running at the wall-clock limit (2 s)") >= 0 && h.gone && h.ms < 7500,
+        "16a a gate still running at the wall-clock limit is stopped with its own child and reads red: exit " + h.r.exit + ", " + h.ms + " ms, its child gone " + h.gone);
+      fs.writeFileSync(toolFile, toolSrc.replace(/^[^\n]*\/\*\s*plant:step-wall\s*\*\/[^\n]*$/m, "    const wall = null; /* plant:step-wall removed */"));
+      const hp = runHang();
+      fs.writeFileSync(toolFile, toolSrc);
+      check(hp.r.exit === 0 && hp.r.out.indexOf("wall-clock limit") < 0 && hp.ms >= 7500,
+        "16b control: lifting plant:step-wall lets the same gate run its 8 s and pass, no limit said: exit " + hp.r.exit + ", " + hp.ms + " ms");
+      fs.writeFileSync(pkgFile, pkgWas);
+
+      /* An area run waits for a lane: with the lab's one slot held by a live process and a 1.5 s wait, it is refused. */
+      /* A commit touching src/ alone, so the area plan is a narrow one and not the whole chain an earlier leg's package.json change
+         would fail it closed to (which is heavy whatever this change does, and would prove nothing). */
+      fs.writeFileSync(path.join(lab.lab, "src", "leaf.mjs"), "export const leaf = 16;" + String.fromCharCode(10));
+      gitCmd(["add", "src/leaf.mjs"], lab.lab, lab.gitEnv);
+      gitCmd(["commit", "-q", "-m", "leaf 16"], lab.lab, lab.gitEnv);
+      /* The held lane runs a script file: machine-lock run passes its command through a shell, which an inline -e script does not survive. */
+      fs.writeFileSync(path.join(lab.lab, "tests", "hold.mjs"), "setTimeout(() => process.exit(0), 30000);" + String.fromCharCode(10));
+      const holder = spawn(process.execPath, [path.join(lab.lab, "tools", "machine-lock.mjs"), "run", "--", process.execPath, path.join(lab.lab, "tests", "hold.mjs")],
+        { cwd: lab.lab, env: Object.assign({}, process.env, { ETIUDA_LOCK_PATH: path.join(lab.root, "machine.lock") }), stdio: "ignore", windowsHide: true });
+      const lockFile = path.join(lab.root, "machine.lock");
+      const t0 = Date.now();
+      while (!fs.existsSync(lockFile) && Date.now() - t0 < 15000) spawnSync(process.execPath, ["-e", "setTimeout(()=>{},200)"]);
+      let ra = null, rp = null;
+      try {
+        ra = runTool(lab, ["area", "HEAD~1...HEAD"], { ETIUDA_LOCK_TIMEOUT_MS: "1500" });
+      } finally {
+        if (process.platform === "win32") spawnSync("taskkill", ["/PID", String(holder.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+        else { try { holder.kill("SIGKILL"); } catch {} }
+      }
+      check(!!ra && ra.exit !== 0 && ra.out.indexOf("could not acquire machine lock") >= 0 && ra.out.indexOf("fail-closed") < 0,
+        "16c an area run takes a lane: with every lane held it is refused rather than run beside them: exit " + (ra && ra.exit));
+      /* The control: the lane freed, the same narrow area run takes it and runs green, so 16c's refusal was the held lane alone. A
+         planted copy of tools/gate-run.mjs cannot serve here: the copy is itself a change in shared code, which fails the plan closed
+         to the whole chain, heavy whatever the plant does. */
+      rp = runTool(lab, ["area", "HEAD~1...HEAD"], { ETIUDA_LOCK_TIMEOUT_MS: "1500" });
+      check(rp.exit === 0 && rp.out.indexOf("taking machine lock for heavy run (area)") >= 0 && rp.out.indexOf("fail-closed") < 0,
+        "16d control: with the lane free the same narrow area run takes it and runs green: exit " + rp.exit);
     }
   } finally {
     cleanLab(lab);
