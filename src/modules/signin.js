@@ -48,7 +48,7 @@ function signinWhen(at){
   if(!at) return "";
   const d=new Date(at), now=new Date(), lang=uiLang()==="pl" ? "pl-PL" : "en-GB";
   const time=d.toLocaleTimeString(lang,{hour:"2-digit", minute:"2-digit"});
-  if(d.toDateString()===now.toDateString()) return t("today, {TIME}").split("{TIME}").join(time); // placeholder: Claudette
+  if(d.toDateString()===now.toDateString()) return t("today, {TIME}").split("{TIME}").join(time);
   return d.toLocaleDateString(lang,{day:"numeric", month:"short"})+", "+time;
 }
 function signinTeam(){
@@ -84,17 +84,17 @@ function signinSay(reason, v, p){
     case "full":
       return p && p.team && p.team.lead
         ? [named(t("{TEAM} has no free seat."),"{TEAM}",p.teamName), named(named(t("You are signed in and in the team. {LEAD}, the team's lead, can free a seat or add one, and Etiuda checks again by itself."),"{LEAD}",p.team.lead),"{TEAM}",p.teamName)]
-        : [t("The licence has no free seat."), t("You are signed in. A seat can be freed or added on the licence, and Etiuda checks again by itself.")]; // placeholder: Claudette
+        : [t("This licence has no free seat."), t("The sign-in worked. The licence's owner can free a seat or add one, and Etiuda checks again by itself.")];
     case "nolicence":
       return [t("No Etiuda licence has a seat for this account."), t("The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.")];
     case "offline":
       return [t("The sign-in service cannot be reached just now."), named(t("Etiuda keeps working with the catalog it has. Last checked {WHEN}."),"{WHEN}",signinWhen(v.at))];
     case "lapsed":
-      return [t("This desk's seat waits to be renewed."), t("It renews by itself the next time the sign-in service answers. Everything on this desk works as before.")]; // placeholder: Claudette
+      return [t("This desk's seat is due for renewal."), t("It renews by itself the next time the sign-in service answers. Everything on this desk works as before.")];
     case "ask":
-      return [t("This desk could not renew its sign-in by itself."), t("Signing in again below carries on where it was. Everything on this desk works as before.")]; // placeholder: Claudette
+      return [t("This desk could not renew its sign-in by itself."), t("Signing in again below picks up where it stopped. Meanwhile everything on this desk works as before.")];
     default:
-      return [t("The sign-in did not finish."), t("Nothing changed: this computer is not signed in, and Etiuda works as before.")]; // placeholder: Claudette
+      return [t("The sign-in did not finish."), t("Nothing changed, and signing in can be tried again.")];
   }
 }
 const FAIL_FIRST=["unreached","signin-unreached","signin-timeout","signin-browser","signin-notallowed","desks","token","signin","signin-refused","signin-token","signin-unbound","signin-state","signin-none"];

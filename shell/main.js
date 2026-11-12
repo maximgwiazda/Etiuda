@@ -9446,8 +9446,8 @@ function tellSignin() {
 function signinPageHtml(ok) {
   const pl = (() => { try { return shellWords().lang === "pl"; } catch { return false; } })();
   const words = ok
-    ? (pl ? "Zalogowano. Tę kartę można już zamknąć i wrócić do Etiudy." : "Signed in. This tab can be closed now, and Etiuda has what it needs.") // placeholder: Claudette
-    : (pl ? "Logowanie nie zostało dokończone. Tę kartę można zamknąć i spróbować ponownie w Etiudzie." : "The sign-in did not finish. This tab can be closed, and Etiuda can try again."); // placeholder: Claudette
+    ? (pl ? "Logowanie dotarło do Etiudy. Tę kartę można zamknąć; Etiuda sama przejdzie dalej." : "The sign-in has reached Etiuda. This tab can be closed; Etiuda carries on by itself.")
+    : (pl ? "Logowanie nie zostało dokończone. Tę kartę można zamknąć; Etiuda pokazuje, co się stało i co dalej." : "The sign-in did not finish. This tab can be closed; Etiuda shows what happened and what comes next.");
   return "<!DOCTYPE html><html lang=\"" + (pl ? "pl" : "en") + "\"><meta charset=\"utf-8\"><title>Etiuda</title><p>" + words + "</p></html>";
 }
 function signinIo(run) {

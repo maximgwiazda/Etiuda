@@ -8781,13 +8781,14 @@ What you type stays in this browser only.`;
     "Signing out ends this computer's sign-in and frees its place among the account's three; the seat stays the account's. The team's catalog and personal cards stay on the computer.": "Wylogowanie kończy logowanie na tym komputerze i zwalnia jego miejsce wśród trzech komputerów konta; miejsce w licencji zostaje przy koncie. Katalog zespołu i własne karty zostają na komputerze.",
     // placeholder: Claudette, the eight lines below
     "today, {TIME}": "dziś, {TIME}",
-    "The licence has no free seat.": "Licencja nie ma wolnego miejsca.",
-    "You are signed in. A seat can be freed or added on the licence, and Etiuda checks again by itself.": "Logowanie się powiodło. Miejsce w licencji można zwolnić albo dodać, a Etiuda sama sprawdzi ponownie.",
-    "This desk's seat waits to be renewed.": "Miejsce tego stanowiska w licencji czeka na odnowienie.",
-    "It renews by itself the next time the sign-in service answers. Everything on this desk works as before.": "Odnowi się samo, gdy usługa logowania następnym razem odpowie. Wszystko na tym stanowisku działa jak dotąd.",
+    "This licence has no free seat.": "Ta licencja nie ma wolnego miejsca.",
+    "The sign-in worked. The licence's owner can free a seat or add one, and Etiuda checks again by itself.": "Logowanie się powiodło. Osoba, do której należy licencja, może zwolnić miejsce albo dodać nowe, a Etiuda sama sprawdzi ponownie.",
+    "This desk's seat is due for renewal.": "Miejsce w licencji dla tego stanowiska czeka na odnowienie.",
+    "It renews by itself the next time the sign-in service answers. Everything on this desk works as before.": "Odnowi się samo, gdy usługa logowania znów odpowie. Wszystko na tym stanowisku działa jak dotąd.",
     "This desk could not renew its sign-in by itself.": "To stanowisko nie mogło samo odnowić logowania.",
-    "Signing in again below carries on where it was. Everything on this desk works as before.": "Ponowne logowanie poniżej prowadzi dalej od tego miejsca. Wszystko na tym stanowisku działa jak dotąd.",
+    "Signing in again below picks up where it stopped. Meanwhile everything on this desk works as before.": "Ponowne logowanie poniżej wznowi je tam, gdzie się zatrzymało. Do tego czasu wszystko na tym stanowisku działa jak dotąd.",
     "The sign-in did not finish.": "Logowanie nie zostało dokończone.",
+    "Nothing changed, and signing in can be tried again.": "Nic się nie zmieniło, a logowanie można ponowić.",
     "This desk will leave this team.": "To stanowisko opuści ten zespół.",
     "After leaving a team, this desk can join it again with a new invitation from its lead.": "Po opuszczeniu zespołu to stanowisko może do niego wrócić z nowym zaproszeniem od lidera.",
     "This desk left this team on {DATE}. Join it again?": "To stanowisko opuściło ten zespół {DATE}. Dołączyć do niego ponownie?",
@@ -26234,20 +26235,17 @@ What you type stays in this browser only.`;
       case "desks":
         return [t("This account is already in use on three computers."), t("Signing out on one of them makes room here, and so does a computer left unused for 30 days; then Try again.")];
       case "full":
-        return p && p.team && p.team.lead ? [named(t("{TEAM} has no free seat."), "{TEAM}", p.teamName), named(named(t("You are signed in and in the team. {LEAD}, the team's lead, can free a seat or add one, and Etiuda checks again by itself."), "{LEAD}", p.team.lead), "{TEAM}", p.teamName)] : [t("The licence has no free seat."), t("You are signed in. A seat can be freed or added on the licence, and Etiuda checks again by itself.")];
-      // placeholder: Claudette
+        return p && p.team && p.team.lead ? [named(t("{TEAM} has no free seat."), "{TEAM}", p.teamName), named(named(t("You are signed in and in the team. {LEAD}, the team's lead, can free a seat or add one, and Etiuda checks again by itself."), "{LEAD}", p.team.lead), "{TEAM}", p.teamName)] : [t("This licence has no free seat."), t("The sign-in worked. The licence's owner can free a seat or add one, and Etiuda checks again by itself.")];
       case "nolicence":
         return [t("No Etiuda licence has a seat for this account."), t("The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.")];
       case "offline":
         return [t("The sign-in service cannot be reached just now."), named(t("Etiuda keeps working with the catalog it has. Last checked {WHEN}."), "{WHEN}", signinWhen(v.at))];
       case "lapsed":
-        return [t("This desk's seat waits to be renewed."), t("It renews by itself the next time the sign-in service answers. Everything on this desk works as before.")];
-      // placeholder: Claudette
+        return [t("This desk's seat is due for renewal."), t("It renews by itself the next time the sign-in service answers. Everything on this desk works as before.")];
       case "ask":
-        return [t("This desk could not renew its sign-in by itself."), t("Signing in again below carries on where it was. Everything on this desk works as before.")];
-      // placeholder: Claudette
+        return [t("This desk could not renew its sign-in by itself."), t("Signing in again below picks up where it stopped. Meanwhile everything on this desk works as before.")];
       default:
-        return [t("The sign-in did not finish."), t("Nothing changed: this computer is not signed in, and Etiuda works as before.")];
+        return [t("The sign-in did not finish."), t("Nothing changed, and signing in can be tried again.")];
     }
   }
   var FAIL_FIRST = ["unreached", "signin-unreached", "signin-timeout", "signin-browser", "signin-notallowed", "desks", "token", "signin", "signin-refused", "signin-token", "signin-unbound", "signin-state", "signin-none"];
