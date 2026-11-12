@@ -12,13 +12,14 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
+import { monitorEventLoopDelay } from "node:perf_hooks";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { createLab } from "./lab-owner.mjs";
 
 const SELF = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(SELF), "..");
 const nodeRequire = createRequire(import.meta.url);
-const EXPECTED = 9;
+const EXPECTED = 12;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -185,6 +186,93 @@ async function readOnlyScene(kind, syncerDir) {
       out.timeKept = (() => { try { return fs.statSync(to).mtimeMs === at; } catch { return false; } })();
       out.sourceStillMarked = writable(from) === false;
       out.noTemp = fs.readdirSync(mirror).filter(n => n.endsWith(".tmp")).length === 0;
+    } else if (kind === "stall" || kind === "transient") {
+      const cjsFs = nodeRequire("node:fs");
+      const edition = editionText();
+      fs.writeFileSync(path.join(share, CATALOG), edition, "utf8");
+      const realRename = cjsFs.renameSync;
+      let attempts = 0, firstAt = 0;
+      cjsFs.renameSync = function (from, to) {
+        if (path.basename(String(to)) === CATALOG) {
+          attempts++;
+          if (!firstAt) firstAt = Date.now();
+          if (kind === "stall" || attempts <= 2) throw busy("EPERM");
+        }
+        return realRename.call(cjsFs, from, to);
+      };
+      const hist = monitorEventLoopDelay({ resolution: 10 });
+      let lastTick = Date.now(), tickMaxGapMs = 0;
+      const ticker = setInterval(() => {
+        const now = Date.now();
+        const gap = now - lastTick;
+        if (gap > tickMaxGapMs) tickMaxGapMs = gap;
+        lastTick = now;
+      }, 10);
+      hist.enable();
+      const pollMs = 5000;
+      const ctl = new syncer.FolderSyncerController({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: crypto.randomBytes(32) }, checks, pollMs, logger: s => said.push(String(s)) });
+      try {
+        ctl.start();
+        if (kind === "stall") {
+          const end = Date.now() + 8000;
+          let kicked = false;
+          while ((attempts < 2 || Date.now() - firstAt < 600 || !kicked) && Date.now() < end) {
+            await sleep(25);
+            if (!kicked && firstAt && Date.now() - firstAt >= 200) { kicked = true; ctl.kick(); }
+          }
+          await sleep(100);
+          out.stagedKept = stagedTmps(mirror).length === 1;
+          out.catalogAbsent = !fs.existsSync(path.join(mirror, CATALOG));
+        } else {
+          out.landed = await until(() => fs.existsSync(path.join(mirror, CATALOG)) && fs.readFileSync(path.join(mirror, CATALOG), "utf8") === edition, 4000);
+          out.landAfterFirstMs = firstAt ? Date.now() - firstAt : null;
+          out.noTemp = stagedTmps(mirror).length === 0;
+        }
+        out.attempts = attempts;
+      } finally {
+        clearInterval(ticker);
+        hist.disable();
+        cjsFs.renameSync = realRename;
+        try { ctl.stop(); } catch {}
+      }
+      out.histMaxMs = Math.round(hist.max / 1e6);
+      out.tickMaxGapMs = tickMaxGapMs;
+      out.maxStallMs = Math.max(out.histMaxMs, out.tickMaxGapMs);
+    } else if (kind === "copy-stall") {
+      const cjsFs = nodeRequire("node:fs");
+      const from = path.join(share, "desk-file.ec"), to = path.join(mirror, "desk-file.ec");
+      fs.writeFileSync(from, "from the share", "utf8");
+      const realRename = cjsFs.renameSync;
+      let attempts = 0;
+      cjsFs.renameSync = function (a, b) {
+        if (path.resolve(String(b)) === path.resolve(to)) {
+          attempts++;
+          throw busy("EPERM");
+        }
+        return realRename.call(cjsFs, a, b);
+      };
+      const hist = monitorEventLoopDelay({ resolution: 10 });
+      let lastTick = Date.now(), tickMaxGapMs = 0;
+      const ticker = setInterval(() => {
+        const now = Date.now();
+        const gap = now - lastTick;
+        if (gap > tickMaxGapMs) tickMaxGapMs = gap;
+        lastTick = now;
+      }, 10);
+      hist.enable();
+      try {
+        await sleep(20);
+        try { syncer.copyClear(from, to); } catch (e) { out.threw = (e && e.code) || String(e); }
+        await sleep(20);
+      } finally {
+        clearInterval(ticker);
+        hist.disable();
+        cjsFs.renameSync = realRename;
+      }
+      out.attempts = attempts;
+      out.histMaxMs = Math.round(hist.max / 1e6);
+      out.tickMaxGapMs = tickMaxGapMs;
+      out.maxStallMs = Math.max(out.histMaxMs, out.tickMaxGapMs);
     }
     out.refusedSaid = said.filter(l => l.indexOf("stayed staged") >= 0).length;
   } finally {
@@ -221,7 +309,7 @@ const landGreen = r => r.landed === true && r.mirrorWritable === true && r.share
 const thawGreen = r => r.thawed === true && r.mirrorWritable === true && r.refusedSaid === 0;
 const copyGreen = r => !r.threw && r.bytes === true && r.copyWritable === true && r.timeKept === true && r.sourceStillMarked === true && r.noTemp === true;
 
-function main() {
+async function main() {
   const land = runScene("land");
   check(landGreen(land),
     "998a a share file marked read-only lands in the mirror writable, the share keeps its mark, and its next version lands over it, the team file and another desk's file on the share keeping their marks too: "
@@ -231,6 +319,17 @@ function main() {
   const copy = runScene("copy");
   check(copyGreen(copy), "998c a copy between the share and this computer replaces a copy marked read-only and hidden, and holds the bytes and"
     + " the last-write time without the mark, the source keeping its own: " + JSON.stringify(copy));
+  const stall = runScene("stall");
+  check(!stall.killed && !stall.noResult && stall.attempts >= 2 && stall.stagedKept === true && stall.catalogAbsent === true
+    && stall.refusedSaid === 1 && stall.maxStallMs < 50,
+    "998r a landing whose rename refuses for good keeps the main thread's longest stall under 50 ms across scans: " + JSON.stringify(stall));
+  const transient = runScene("transient");
+  check(!transient.killed && !transient.noResult && transient.landed === true && transient.noTemp === true
+    && transient.attempts === 3 && transient.landAfterFirstMs < 1500 && transient.maxStallMs < 50,
+    "998s a landing whose rename refuses twice still lands soon without waiting for the next scan and under 50 ms stall: " + JSON.stringify(transient));
+  const copyStall = runScene("copy-stall");
+  check(!copyStall.killed && !copyStall.noResult && copyStall.threw === "EPERM" && copyStall.maxStallMs < 50,
+    "998t copyClear refused on the main thread returns under 50 ms without blocking the event loop: " + JSON.stringify(copyStall));
   const plants = [
     ["stage-clear-mark", "syncer-worker.cjs", "land", landGreen, "998d lifting plant:stage-clear-mark lands a read-only share file read-only"],
     ["land-clear-mark", "syncer.cjs", "thaw", thawGreen, "998e lifting plant:land-clear-mark leaves a read-only mirror copy refusing every landing"],
@@ -268,6 +367,9 @@ function main() {
   });
   try { progA.syncOnce(); }
   catch (e) { threw = (e && e.code) || String(e); }
+  const endA = Date.now() + 2000;
+  while (!fs.existsSync(path.join(mirrorA, CATALOG)) && Date.now() < endA) await sleep(25);
+  if (typeof progA.stop === "function") progA.stop();
   const landed = fs.existsSync(path.join(mirrorA, CATALOG)) && fs.readFileSync(path.join(mirrorA, CATALOG), "utf8") === edition
     && fs.existsSync(path.join(mirrorA, "etiuda-team.json"));
   check(landed && !threw,
@@ -321,6 +423,7 @@ function main() {
     "974r a rename that keeps refusing leaves the worker alive, the file staged and the refusal said, and the next scan retries it: "
     + (after ? JSON.stringify(after) : "no result") + (threwB ? ", threw " + threwB : ""));
 
+  if (typeof progB.stop === "function") progB.stop();
   if (asserted !== EXPECTED) check(false, "completed " + asserted + " of " + EXPECTED + " checks");
   console.log("syncer-rename-busy: " + (asserted - failed) + " passed, " + failed + " failed, " + asserted + " of " + EXPECTED);
   process.exit(Math.min(failed, 63));
@@ -331,5 +434,5 @@ if (process.argv[2] === "--read-only-scene") {
     out => { process.stdout.write("#result " + JSON.stringify(out) + "\n"); process.exit(0); },
     e => { process.stderr.write(String(e && e.stack || e) + "\n"); process.exit(1); });
 } else {
-  main();
+  main().catch(e => { process.stderr.write(String(e && e.stack || e) + "\n"); process.exit(78); });
 }
