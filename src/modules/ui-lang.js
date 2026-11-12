@@ -1360,6 +1360,10 @@ UI_STRINGS.pl={
   "Signed in with {PROVIDER}":"Zalogowano przez {PROVIDER}",
   "Account settings":"Ustawienia konta",
   "Signed in. No team yet":"Zalogowano. Jeszcze bez zespołu",
+  /* The door-finding's words, the copywriter's to write: placeholder: Claudette */
+  "Join your team":"Dołącz do swojego zespołu",
+  "Your licence has a team on the relay. Ask to join it, and its lead's Studio lets you in if it knows you.":"Twoja licencja ma zespół na przekaźniku. Poproś o dołączenie, a Studio lidera wpuści Cię, jeśli Cię zna.",
+  "Join":"Dołącz",
   "No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.":"Żaden zespół nie przyjął jeszcze tego konta. Gdy lider zespołu przyjmie je po kodzie poniżej, katalog przyjdzie sam.",
   "Your sign-in code":"Kod logowania",
   "Not a secret. It tells a team's lead which account is yours.":"To nie tajemnica. Po nim lider zespołu rozpoznaje, czyje to konto.",

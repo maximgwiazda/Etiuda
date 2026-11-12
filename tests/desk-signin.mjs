@@ -20,6 +20,11 @@
  * THE SIGN-IN PREVIEW (ds12): ETIUDA_SIGNIN_PREVIEW=1 draws the door and Account with both providers while none has a client id.
  * Its press is driven through the shell's own click and sign-in handlers, sliced, with every door out stood in and counted.
  *
+ * THE DOOR-FINDING (ds17, board 980; Max, 2026-11-12 18:46 and 18:57): the doors the service hands beside a certificate are kept
+ * only whole, their lead key's id its canonical one (the test architect's read), kept with the certificate and in the file; a desk
+ * signed in with no team offers them by host and lead print, and a press makes the join A4's knock serves, the lead and the box
+ * from the door; the envelope keeps that join; the page draws the doors, Polish too.
+ *
  * GOOGLE'S CLIENT SECRET (ds13): optional, its value only ever in a package, never in this tree. Every value here is the stand-in
  * STAND_IN, which no provider would issue; a leg that needs a value of a real secret's shape builds it from pieces at run time, so
  * the tree's own scan (ds13g) and any outside scanner find nothing in this file.
@@ -42,9 +47,9 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 48;
+const PLANTS = 56;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 76 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 81 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -617,6 +622,120 @@ CASES.doorChannel = (s, swap) => {
   try { run = decl(main, "function relayRun("); } catch { run = ""; }
   return /\n    invite: \(\) => \{\n[^\n]*\n\s*const door = signinDoorInvite\(team, want\.rt\);[^\n]*\n\s*if \(door !== undefined\) return door;\n\s*const j = teamJoin/.test(run)
     && /\n    onDoor: id => \{ signinDoorKept\(team, mirror, id\); \},/.test(run);
+};
+
+/* ---- the door-finding (ds17) ------------------------------------------------------------------------------------------ */
+const DOOR_LEAD = rawPub(crypto.generateKeyPairSync("ed25519").publicKey);
+const DOOR_KEY_ID = "studio-" + crypto.createHash("sha256").update(Buffer.from(DOOR_LEAD, "hex")).digest("hex").slice(0, 16);
+const doorOf = over => Object.assign({ team: TEAM, rt: RT, url: "https://relay.example.test", keyId: DOOR_KEY_ID, lead: DOOR_LEAD, box: LEAD_BOX }, over);
+const DOORS_TWO = () => [doorOf(), doorOf({ team: "t-fedcba9876543210", rt: "b1".repeat(16), url: "https://relay.example.test/teams" })];
+/* The doors beside a certificate are kept whole, in order; any door out of shape, a key id not the lead key's canonical one among
+   them, makes no list at all; no certificate, no doors; an answer with none has none. */
+CASES.doorsRead = s => {
+  const c = cert();
+  const read = doors => s.signinAnswer(answer({ ok: true, code: CODE, certificate: c, doors }), DESK_KEY);
+  const two = read(DOORS_TWO()), none = read(undefined), noCert = s.signinAnswer(answer({ ok: true, code: CODE, certificate: null, doors: DOORS_TWO() }), DESK_KEY);
+  const bad = [[doorOf({ keyId: "studio-" + "0".repeat(16) })], [doorOf({ keyId: "studio-maxs-laptop-01" })], Array.from({ length: 17 }, () => doorOf()),
+    [doorOf({ url: "http://relay.example.test" })], [doorOf({ url: "https://relay.example.test/a b" })], [doorOf({ box: "short" })],
+    [Object.assign(doorOf(), { name: "Ops" })], [doorOf({ rt: "zz" })], [doorOf({ team: "team-1" })], [doorOf(), doorOf({ lead: "x" })], "doors"];
+  return two.ok === true && JSON.stringify(two.doors) === JSON.stringify(DOORS_TWO()) && none.ok === true && JSON.stringify(none.doors) === "[]"
+    && noCert.ok === true && noCert.cert === null && JSON.stringify(noCert.doors) === "[]"
+    && bad.every(b => { const r = read(b); return r.ok === true && !!r.cert && Array.isArray(r.doors) && r.doors.length === 0; });
+};
+/* Kept with the certificate: an answer's doors replace the last, an answer of no certificate leaves none, a refusal keeps them;
+   the file holds them and reads them back, and a door out of shape in the file is no list. */
+CASES.doorsKept = s => {
+  const c = cert();
+  const got = s.signinSettle(heldOf({ doors: [] }), { ok: true, code: CODE, cert: c, doors: DOORS_TWO() }, NOW);
+  const dropped = s.signinSettle(got, { ok: true, code: CODE, cert: null, doors: DOORS_TWO() }, NOW);
+  const refused = s.signinSettle(got, { ok: false, reason: "unreached" }, NOW);
+  const back = s.signinFileRead(s.signinFileText({ held: got })).held;
+  const forged = s.signinFileRead(s.signinFileText({ held: Object.assign({}, got, { doors: [doorOf({ keyId: "studio-" + "1".repeat(16) })] }) })).held;
+  return JSON.stringify(got.doors) === JSON.stringify(DOORS_TWO()) && JSON.stringify(dropped.doors) === "[]" && JSON.stringify(refused.doors) === JSON.stringify(DOORS_TWO())
+    && !!back && JSON.stringify(back.doors) === JSON.stringify(DOORS_TWO()) && !!forged && JSON.stringify(forged.doors) === "[]";
+};
+const DOORJOIN_DECLS = ["function signinDoorsShown(", "function signinDoorJoin("];
+const DOORJOIN_STANDS = ["init", "readDesk", "signinState", "branchIdentity", "signinCertOk", "pinnedLead", "joinView", "inviteBeforeFor", "joinCommit",
+  "newestEpoch", "teamPins", "teamSeen", "teamPinFrom", "relayMirrorOf", "teamShown", "teamRelayGone", "relayCatalogNamed", "persistDeskEnvelope",
+  "relayRun", "catalogFolderChanged", "leadPrint", "crypto", "URL", "Date"];
+/* The door's offer and its join with stand-ins: `st` {held, pinned, join, pins, counts}. */
+function loadDoorJoin(s, st, swap) {
+  let text = DOORJOIN_DECLS.map(d => tryDeclText(d)).filter(Boolean).join("\n");
+  if (swap) {
+    if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in the door's join once: " + swap[0]);
+    text = text.replace(swap[0], swap[1]);
+  }
+  const vals = { init: st, readDesk: () => ({}), signinState: () => ({ held: st.held }), branchIdentity: () => ({ id: DESK_ID, key: DESK_KEY, box: DESK_BOX }),
+    signinCertOk: s.signinCertOk, pinnedLead: () => st.pinned, joinView: () => ({ view: true }), inviteBeforeFor: () => ({ barred: false, epoch: 0 }),
+    joinCommit: JOIN_LIB.joinCommit, newestEpoch: () => 0, teamPins: st.pins, teamSeen: new Set(), teamPinFrom: st.from, relayMirrorOf: rt => "/relay/" + rt,
+    teamShown: st.shown, teamRelayGone: {}, relayCatalogNamed: new Set(), persistDeskEnvelope: () => { st.persists++; }, relayRun: () => { st.runs++; },
+    catalogFolderChanged: () => {}, leadPrint: pub => crypto.createHash("sha256").update(Buffer.from(String(pub), "hex")).digest("hex").slice(0, 16),
+    crypto, URL, Date: { now: () => NOW } };
+  const body = "let deskKeys = {}, teamJoin = init.join, teamStamp = \"x\", joinTold = true;\n" + text
+    + "\nreturn { signinDoorsShown, signinDoorJoin, join: () => teamJoin };";
+  return new Function(...DOORJOIN_STANDS, body)(...DOORJOIN_STANDS.map(n => vals[n]));
+}
+const doorJoinStand = over => Object.assign({ held: heldOf({ doors: DOORS_TWO() }), pinned: null, join: null, pins: {}, from: {}, shown: {}, persists: 0, runs: 0 }, over);
+/* Offered while signed in with a certificate that stands and no team: each door by host and print; nothing with a lead pinned, a join
+   asked, or a certificate ran out. A press makes the door's join: door true, the lead and box from the door, no invitation, the lead
+   pinned as an invitation pins it; a door not offered changes nothing. */
+CASES.doorJoin = (s, swap) => {
+  if (!JOIN_LIB) return false;
+  const print = crypto.createHash("sha256").update(Buffer.from(DOOR_LEAD, "hex")).digest("hex").slice(0, 16);
+  const st = doorJoinStand(), w = loadDoorJoin(s, st, swap);
+  const shown = w.signinDoorsShown(st.held, NOW);
+  const offered = JSON.stringify(shown) === JSON.stringify([{ n: 0, host: "relay.example.test", print }, { n: 1, host: "relay.example.test", print }]);
+  const quietShown = [doorJoinStand({ pinned: { keyId: "k" } }), doorJoinStand({ join: { team: TEAM } }), doorJoinStand({ held: heldOf({ doors: DOORS_TWO(), cert: cert({ until: NOW }) }) }),
+    doorJoinStand({ held: heldOf({ doors: DOORS_TWO(), cert: cert({ desk: OTHER_DESK_KEY }) }) })]
+    .every(q => JSON.stringify(loadDoorJoin(s, q, swap).signinDoorsShown(q.held, NOW)) === "[]");
+  const r = w.signinDoorJoin(1), j = w.join(), d = DOORS_TWO()[1];
+  const made = !!r && r.view === true && r.refused === undefined && !!j && j.team === d.team && j.file === "" && /^[0-9a-f]{64}$/.test(j.nonce)
+    && j.commit === JOIN_LIB.joinCommit(d.team, DESK_KEY, DESK_BOX, j.nonce) && j.name === "" && j.invite.id === undefined && j.invite.proof === undefined
+    && JSON.stringify(j.invite.lead) === JSON.stringify({ keyId: DOOR_KEY_ID, public: DOOR_LEAD, name: "" })
+    && JSON.stringify(j.invite.relay) === JSON.stringify({ rt: d.rt, url: d.url, door: true, box: LEAD_BOX })
+    && JSON.stringify(st.pins[d.team]) === JSON.stringify({ keyId: DOOR_KEY_ID, public: DOOR_LEAD }) && st.from[d.team] === "invite"
+    && st.shown[d.team].relay === "relay.example.test" && st.persists === 1 && st.runs === 1;
+  const refusedAlike = [doorJoinStand(), doorJoinStand({ pinned: { keyId: "k" } })].every((q, i) => {
+    const x = loadDoorJoin(s, q, swap), a = x.signinDoorJoin(i === 0 ? 5 : 0);
+    return !!a && a.refused === "door" && x.join() === null && Object.keys(q.pins).length === 0 && q.persists === 0 && q.runs === 0;
+  });
+  return offered && quietShown && made && refusedAlike;
+};
+/* The envelope keeps a join at the door, which names no invitation: its relay part with door true, the lead's box and the relay's
+   id once named, and no token, seal or wrap; without the box, or carrying a token, it is no join kept. */
+const KEPT_DECLS = ["function relayKept(", "function joinKept(", "function beforeKept(", "function teamChannelOf("];
+CASES.doorEnvelope = (s, swap) => {
+  let text = KEPT_DECLS.map(d => tryDeclText(d)).filter(Boolean).join("\n");
+  if (swap) {
+    if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in the envelope's readers once: " + swap[0]);
+    text = text.replace(swap[0], swap[1]);
+  }
+  const lib = new Function("SEALED_TEAM_RE", "JOIN_HEX_RE", text + "\nreturn { relayKept, joinKept };")(/^t-[0-9a-f]{16}$/, /^[0-9a-f]{64}$/);
+  const join = relay => ({ team: TEAM, file: "", nonce: "4".repeat(64), commit: "1".repeat(64), asked: NOW, held: 0, name: "",
+    invite: { lead: { keyId: DOOR_KEY_ID, public: DOOR_LEAD, name: "" }, pinned: true, before: { barred: false, epoch: 0 }, relay } });
+  const door = over => Object.assign({ rt: RT, url: "https://relay.example.test", door: true, box: LEAD_BOX }, over);
+  const kept = j => lib.joinKept(JSON.parse(JSON.stringify(j))) !== null;
+  return kept(join(door())) && kept(join(door({ inv: DOOR_ID }))) && !kept(join(door({ box: undefined }))) && !kept(join(door({ token: "x" })))
+    && !kept(join(door({ door: "yes" }))) && !kept(join(door({ inv: "short" })))
+    && !kept(Object.assign(join({ rt: RT, url: "https://relay.example.test", inv: DOOR_ID, token: "x", seal: "y" }), {}))
+    && lib.relayKept({ rt: RT, url: "https://relay.example.test", inv: DOOR_ID, token: "x", seal: "y" }) === true;
+};
+/* The page: signed in, a seat held and no team, the door shows each door by host and print with one Join; Account's row the same;
+   Polish too; a press asks the shell by the door's place. */
+CASES.doorPage = async () => {
+  if (!P) return false;
+  const L = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
+  const print = "0123456789abcdef";
+  const v = P.signinRead({ offered: ["microsoft"], signedIn: "microsoft", code: CODE, seat: "held", reached: true, keeps: true,
+    doors: [{ n: 0, host: "relay.example.test", print }, { n: 1, host: "x".repeat(300), print }, { n: "2", host: "a", print }] });
+  const d = P.signinDoor(v), html = d ? P.signinPanelHtml(d) : "";
+  const plain = P.signinRead({ offered: ["microsoft"], signedIn: "microsoft", code: CODE, seat: "held", reached: true, keeps: true });
+  return v.doors.length === 1 && !!d && d.moment === "doors" && html.indexOf('data-signin-act="door" data-signin-door="0"') > 0
+    && html.indexOf("relay.example.test") > 0 && html.indexOf(print) > 0 && P.signinDoor(plain).moment === "noteam"
+    && /\n  "Join your team":"[^"]+",/.test(L) && /\n  "Join":"[^"]+",/.test(L)
+    && /\n  "Your licence has a team on the relay\. Ask to join it, and its lead's Studio lets you in if it knows you\.":"[^"]+",/.test(L)
+    && /signinDoorsHtml\(v\.doors\)/.test(SETTINGS) && /signinDoor: \(n\) => ipcRenderer\.invoke\("etiuda:signin-door", n\)/.test(PRELOAD)
+    && /if\(act==="door"\)\{[^\n]*signinCall\("signinDoor", n\)/.test(PAGE);
 };
 
 /* ---- the desk's Sign out at the service --------------------------------------------------------------------------------- */
@@ -1382,6 +1501,11 @@ const LEGS = [
   ["ds14d", "previewSh", "tools/signin-preview.sh is outside the packaged files: the .deb's program unless an AppImage is named, --where starts nothing, one exec with the variable for that start alone"],
   ["ds14e", "keyringLine", "the view says whether the system seals for real, and Account says in one line that the sign-in is not kept where it does not, and nothing where it does"],
   ["ds14f", "accountPress", "a provider pressed in Settings, Account is answered there alone and the header's panel stays shut; pressed in the panel, the answer opens it as before"],
+  ["ds17a", "doorsRead", "the doors beside a certificate are kept whole and in order; a door out of shape, its key id not the lead key's canonical one among them, makes no list; no certificate, no doors"],
+  ["ds17b", "doorsKept", "the doors are kept with the certificate and in the file, dropped with it, kept through a refusal, and a door out of shape in the file is no list"],
+  ["ds17c", "doorJoin", "signed in with no team the doors are offered by host and lead print; a press makes the door's join, the lead and the box from the door and no invitation, the lead pinned; a door not offered changes nothing"],
+  ["ds17d", "doorEnvelope", "the envelope keeps a join at the door, its box and the relay's id, and not one without the box or carrying a token; an invitation's join is kept as before"],
+  ["ds17e", "doorPage", "the door's panel and Account draw each door by host and print with one Join, Polish too, and a press asks the shell by the door's place"],
   ["ds14g", "copiedLabel", "the code's Copy and the link's read Copied for SIGNIN_COPIED_MS after a copy the clipboard took, then Copy, holding the wider width; a refused copy leaves it; Polish too"],
   ["ds15a", "identNoName", "with no name written the identity's bold line is \"Signed in with\" its provider and there is no second line, in the panel's every signed-in moment and in Account; a name written stands over it; Polish too"],
   ["ds15b", "panelOrder", "the panel tells no licence as it tells no team: the fact, its line, then the code's box, under the identity and above the acts"],
@@ -1518,6 +1642,14 @@ if (!PLANTS_OFF) {
   await plantWire("dsp47", ["link: signinBusy && signinPageOk(signinBusy.url) ? signinBusy.url : \"\",", "link: \"\","], "linkWait");
   await plantWire("dsp48", ["run.url = url; tellSignin(); return Promise", "run.url = url; return Promise"], "linkWait");
   await plantWire("dsp49", ["keeps: sealsForReal(safeStorage, process.platform) }; /* plant:view-link */", "keeps: true };"], "keyringLine");
+  await plant("dsp50", ["if (d.keyId !== \"studio-\" + crypto.createHash(\"sha256\").update(Buffer.from(d.lead, \"hex\")).digest(\"hex\").slice(0, 16)) return []; /* plant:door-key-id */", ""], "doorsRead");
+  await plant("dsp51", ["return { ok: true, code: String(j.code), cert: j.certificate, doors: signinDoorsOk(j.doors) }; /* plant:door-read */", "return { ok: true, code: String(j.code), cert: j.certificate, doors: [] };"], "doorsRead");
+  await plant("dsp52", ["doors: ans.cert ? (ans.doors || []) : [],", "doors: ans.doors || [],"], "doorsKept");
+  await plantWire("dsp53", ["|| !(held.cert.until > now) || pinnedLead() || teamJoin) return []; /* plant:door-shown */", ") return [];"], "doorJoin");
+  await plantWire("dsp54", ["if (!d || !me) return Object.assign({}, joinView(), { refused: \"door\" }); /* plant:door-join-offered */", "if (!me) return joinView();"], "doorJoin");
+  await plantWire("dsp55", ["relay: { rt: d.rt, url: d.url, door: true, box: d.box } } }; /* plant:door-join-box */", "relay: { rt: d.rt, url: d.url, door: true, box: d.lead } } };"], "doorJoin");
+  await plantWire("dsp56", ["return !!c && c.kind === \"relay\" && r.door === true && /^[0-9a-f]{64}$/.test(String(r.box)) /* plant:door-kept-box */", "return !!c && c.kind === \"relay\" && r.door === true"], "doorEnvelope");
+  await plantWire("dsp57", ["&& inv.id === undefined && inv.proof === undefined; /* plant:door-envelope */", "&& false;"], "doorEnvelope");
   await plant("dsp46", ["return Object.freeze(typeof v === \"string\" && SIGNIN_SECRET_SHAPE.test(v) ? { google: v } : {}); /* plant:secret-shape */",
     "return Object.freeze(typeof v === \"string\" ? { google: v } : {});"], "secretPacked");
   /* A gate on a local act, put into the desk file's write in memory, is seen. */

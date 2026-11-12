@@ -5585,7 +5585,7 @@ function askAgain(j) {
 function cancelJoin() {
   if (deskKeys === undefined) deskKeys = readDesk();
   const j = teamJoin;
-  if (inviteAccepted(j)) return withdrawJoin(j); /* plant:h35-keep */
+  if (!(j && j.invite && j.invite.relay && j.invite.relay.door === true) && inviteAccepted(j)) return withdrawJoin(j); /* plant:h35-keep */
   if (j && deskBranch) { try { unlinkOwn(joinFile()); } catch { /* gone already, or the share is away */ } }
   teamJoin = null;
   joinTold = false;
@@ -5816,7 +5816,9 @@ function joinKept(j) {
   if (!ok) return null;
   if (j.invite === undefined) return j;
   const inv = j.invite, who = inv && inv.lead;
-  const inviteOk = !!inv && typeof inv === "object" && /^[0-9a-f]{16}$/.test(String(inv.id)) && JOIN_HEX_RE.test(String(inv.proof))
+  const atDoor = !!inv && typeof inv === "object" && !!inv.relay && typeof inv.relay === "object" && inv.relay.door === true
+    && inv.id === undefined && inv.proof === undefined; /* plant:door-envelope */
+  const inviteOk = !!inv && typeof inv === "object" && (atDoor || (/^[0-9a-f]{16}$/.test(String(inv.id)) && JOIN_HEX_RE.test(String(inv.proof))))
     && !Object.prototype.hasOwnProperty.call(inv, "secret")
     && !!who && typeof who === "object" && typeof who.keyId === "string" && who.keyId.length > 0 && who.keyId.length <= 80
     && JOIN_HEX_RE.test(String(who.public)) && typeof who.name === "string" && who.name.length <= 120
@@ -5844,6 +5846,14 @@ function beforeKept(b) {
    from 1), which Cancel forgets. */
 function relayKept(r) {
   const c = r && typeof r === "object" && !Array.isArray(r) ? teamChannelOf({ channel: { kind: "relay", rt: r.rt, url: r.url } }) : null;
+  /* A join at a team's standing door (the door-finding) holds no invitation's token, seal or wrap: its address, the lead's box from
+     the door, and the relay's id for its request once named. Without the box it is no door join. */
+  if (r && r.door !== undefined) {
+    return !!c && c.kind === "relay" && r.door === true && /^[0-9a-f]{64}$/.test(String(r.box)) /* plant:door-kept-box */
+      && (r.inv === undefined || /^[0-9a-f]{32}$/.test(String(r.inv))) && r.token === undefined && r.seal === undefined && r.wrap === undefined
+      && (r.withdrawn === undefined || r.withdrawn === true) && (r.withdrawing === undefined || r.withdrawing === true)
+      && (r.end === undefined || r.end === "used" || r.end === "ended" || r.end === "removed");
+  }
   return !!c && c.kind === "relay" && /^[0-9a-f]{32}$/.test(String(r.inv)) && typeof r.token === "string" && r.token !== ""
     && typeof r.seal === "string" && r.seal !== ""
     && (r.wrap === undefined || (typeof r.wrap === "string" && r.wrap !== ""))
@@ -9387,15 +9397,39 @@ function signinCertOk(c, deskKey) {
     && Number.isSafeInteger(c.issued) && Number.isSafeInteger(c.until) && c.until > c.issued && plainObj(c.via)
     && plainObj(c.sig) && c.sig.alg === "Ed25519" && typeof c.sig.keyId === "string" && /^[0-9a-f]{128}$/.test(String(c.sig.value));
 }
-/* The service's answer read: {ok, code, cert} (cert null where no licence admits the person yet), or {ok: false, reason}, the
-   reason "token", "signin", "full" or "desks" as the service says it, else "unreached", which every other answer is. */
+/* THE DOORS THE SERVICE HANDS (board 980, the door-finding; Max, 2026-11-12 18:46 and 18:57): beside a certificate, the doors of
+   the relay teams on its licence, each {team, rt, url, keyId, lead, box}. A door is kept only whole: the team id and relay id in
+   their shapes, the address in the channel's own (teamChannelOf's, restated here so this section stands alone), the lead's key and
+   box as hex, and its keyId the lead key's own canonical id ("studio-" and the first 16 hex of the SHA-256 of its public half, as
+   leadPrint makes it), checked again here as the service checks it (the test architect's read), so the id this desk pins is never
+   a claim. At most SIGNIN_DOORS_MAX; a list of any other shape is no list. The lead's keys come from here, never
+   from the relay, so a relay cannot hand this desk a box or a lead of its own. */
+const SIGNIN_DOORS_MAX = 16;
+const SIGNIN_DOOR_URL_RE = /^https:\/\/[a-z0-9.-]+(?::[0-9]{1,5})?(?:\/[A-Za-z0-9._~-]+)*\/?$/;
+function signinDoorsOk(list) {
+  if (!Array.isArray(list) || list.length > SIGNIN_DOORS_MAX) return [];
+  const out = [];
+  for (const d of list) {
+    if (!d || typeof d !== "object" || Array.isArray(d) || Object.keys(d).sort().join(",") !== "box,keyId,lead,rt,team,url") return [];
+    if (!SEALED_TEAM_RE.test(String(d.team)) || !/^[0-9a-f]{32}$/.test(String(d.rt)) || typeof d.url !== "string" || d.url.length > 256
+      || !SIGNIN_DOOR_URL_RE.test(d.url)
+      || !/^[0-9a-f]{64}$/.test(String(d.lead)) || !/^[0-9a-f]{64}$/.test(String(d.box))) return [];
+    if (d.keyId !== "studio-" + crypto.createHash("sha256").update(Buffer.from(d.lead, "hex")).digest("hex").slice(0, 16)) return []; /* plant:door-key-id */
+    out.push({ team: String(d.team), rt: String(d.rt), url: String(d.url), keyId: String(d.keyId), lead: String(d.lead), box: String(d.box) });
+  }
+  return out;
+}
+/* The service's answer read: {ok, code, cert, doors} (cert null where no licence admits the person yet, and then no doors), or
+   {ok: false, reason}, the reason "token", "signin", "full" or "desks" as the service says it, else "unreached", which every other
+   answer is. */
 function signinAnswer(res, deskKey) {
   let j = null;
   try { j = JSON.parse(Buffer.from(res && res.bytes ? res.bytes : []).toString("utf8")); } catch { j = null; }
   if (!j || typeof j !== "object" || Array.isArray(j)) return { ok: false, reason: "unreached" };
   if (res.status === 200 && j.ok === true && SIGNIN_CODE.test(String(j.code))) {
-    if (j.certificate === null) return { ok: true, code: String(j.code), cert: null };
-    if (signinCertOk(j.certificate, deskKey) && j.certificate.code === j.code) return { ok: true, code: String(j.code), cert: j.certificate };
+    if (j.certificate === null) return { ok: true, code: String(j.code), cert: null, doors: [] };
+    if (signinCertOk(j.certificate, deskKey) && j.certificate.code === j.code)
+      return { ok: true, code: String(j.code), cert: j.certificate, doors: signinDoorsOk(j.doors) }; /* plant:door-read */
     return { ok: false, reason: "unreached" };
   }
   const said = { 403: ["token", "signin"], 409: ["full", "desks"] }[res.status];
@@ -9416,7 +9450,7 @@ function signinLapsed(held, now) {
 /* `held` after the service's answer `ans` at `now`: a certificate replaces the last, an answer of none drops it, a refusal keeps it
    (until its own `until`) and is said; "signin", a seat freed, forgets the refresh token, since only a sign-in takes it again. */
 function signinSettle(held, ans, now) {
-  if (ans.ok) return Object.assign({}, held, { code: ans.code, cert: ans.cert, at: now, checked: now, reached: true, said: "", ask: false });
+  if (ans.ok) return Object.assign({}, held, { code: ans.code, cert: ans.cert, doors: ans.cert ? (ans.doors || []) : [], at: now, checked: now, reached: true, said: "", ask: false });
   if (ans.reason === "unreached") return Object.assign({}, held, { checked: now, reached: false });
   const freed = ans.reason === "signin";
   return Object.assign({}, held, { checked: now, reached: true, said: ans.reason, ask: freed || held.ask === true,
@@ -9452,7 +9486,7 @@ function signinDoorRequest(doc, deskId, deskKey, cert, door, now) {
   return Object.assign({}, doc, { seat: JSON.parse(seatFileText(deskId, cert)), door: String(door) }); /* plant:door-fields */
 }
 /* The sign-in's file beside desk.json, read whole or not at all: {held: {provider, refresh, sub, seed, code, cert, at, checked,
-   reached, said, ask} or null}. `refresh` and `sub` are signinKeep's, "" where none is kept, and nothing else in it is a secret;
+   reached, said, ask, doors} or null}. `refresh` and `sub` are signinKeep's, "" where none is kept, and nothing else in it is a secret;
    `ask` says the person's own sign-in is wanted again; a file of another format holds nothing. */
 const SIGNIN_FILE = "signin.json";
 function signinFileRead(text) {
@@ -9465,7 +9499,8 @@ function signinFileRead(text) {
     out.held = { provider: String(h.provider), refresh: typeof h.refresh === "string" ? h.refresh : "", sub: typeof h.sub === "string" ? h.sub : "",
       seed: String(h.seed), code: SIGNIN_CODE.test(String(h.code)) ? String(h.code) : "",
       cert: h.cert && typeof h.cert === "object" && Number.isSafeInteger(h.cert.until) ? h.cert : null,
-      at: num(h.at), checked: num(h.checked), reached: h.reached !== false, said: typeof h.said === "string" ? h.said : "", ask: h.ask === true };
+      at: num(h.at), checked: num(h.checked), reached: h.reached !== false, said: typeof h.said === "string" ? h.said : "", ask: h.ask === true,
+      doors: signinDoorsOk(h.doors) };
   return out;
 }
 function signinFileText(s) { return JSON.stringify({ format: 2, held: s.held || null }, null, 1) + "\n"; }
@@ -9553,6 +9588,54 @@ function signinDoorKept(team, mirror, id) {
   try { writeJoin(doc, file); return true; }
   catch (e) { console.error("etiuda: the request at the team's door could not be written - " + e.message); return false; }
 }
+/* THE DOORS OFFERED (the door-finding): while this desk is signed in with a certificate that stands, keeps no team (no lead pinned)
+   and asks to join none, each door it was handed, by the relay's host and the lead's print, the 16 hex Studio's Settings show, so
+   two doors of one team id from two leads are told apart (the test architect's T6) and the person presses one. */
+function signinDoorsShown(held, now) {
+  const me = branchIdentity(false);
+  if (!held || !held.cert || !me || !signinCertOk(held.cert, me.key) || !(held.cert.until > now) || pinnedLead() || teamJoin) return []; /* plant:door-shown */
+  return (held.doors || []).map((d, n) => {
+    let host = "";
+    try { host = new URL(d.url).host; } catch { host = ""; }
+    return { n: n, host: host, print: leadPrint(d.lead) };
+  });
+}
+/* A JOIN AT A DOOR the person pressed (the door-finding): the join A4's knock already serves, `door: true` with the lead's key and
+   box from the door, which came from the licence service over its own address, never from the relay. The lead is pinned as an
+   invitation pins it, kept with what the desk had before so Cancel puts it back; nothing is written now, since the request is
+   written once the relay names it (signinDoorKept). Refused alike, with nothing changed, where the door is not one offered now. */
+function signinDoorJoin(n) {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  const held = signinState().held, shown = signinDoorsShown(held, Date.now());
+  const d = Number.isInteger(n) && shown.some(x => x.n === n) ? held.doors[n] : null;
+  const me = d ? branchIdentity(true) : null;
+  if (!d || !me) return Object.assign({}, joinView(), { refused: "door" }); /* plant:door-join-offered */
+  const nonce = crypto.randomBytes(32).toString("hex");
+  const before = inviteBeforeFor(d.team, teamJoin);
+  teamJoin = { team: d.team, file: "", nonce: nonce, commit: joinCommit(d.team, me.key, me.box, nonce), asked: Date.now(), held: newestEpoch(d.team),
+    name: "", invite: { lead: { keyId: d.keyId, public: d.lead, name: "" }, pinned: !teamPins[d.team], before: before,
+      relay: { rt: d.rt, url: d.url, door: true, box: d.box } } }; /* plant:door-join-box */
+  if (!teamPins[d.team]) { teamPins[d.team] = { keyId: d.keyId, public: d.lead }; teamSeen.delete(d.team); }
+  teamPinFrom[d.team] = "invite";
+  let host = "";
+  try { host = new URL(d.url).host; } catch { host = ""; }
+  teamShown[d.team] = Object.assign({ folder: relayMirrorOf(d.rt) }, host ? { relay: host } : {});
+  delete teamRelayGone[d.team];
+  relayCatalogNamed.delete(d.team);
+  teamStamp = "";
+  joinTold = false;
+  persistDeskEnvelope();
+  relayRun();
+  catalogFolderChanged();
+  return joinView();
+}
+ipcMain.handle("etiuda:signin-door", (e, n) => {
+  if (!fromEngine(e)) return null;
+  const r = signinDoorJoin(Number(n));
+  tellSignin();
+  sendJoin(theWindow);
+  return r;
+});
 /* What the page is told, no token and nothing from the provider: the providers offered by id, who is signed in by provider, the
    code, the seat ("held", "lapsed" or "none"), when the service last answered and whether the last try reached it; the provider's
    page of the sign-in that waits, and nothing once it ends; and whether this system keeps a sign-in (sealsForReal). */
@@ -9564,6 +9647,7 @@ function signinView() {
     seat: !signedIn ? "" : held.cert ? (signinLapsed(held, now) ? "lapsed" : "held") : "none",
     at: signedIn ? held.at : 0, reached: !signedIn || held.reached !== false, ask: !!signedIn && held.ask === true,
     refused: signedIn ? held.said : "", busy: signinBusy ? signinBusy.provider : "", said: signinSaid,
+    doors: signedIn ? signinDoorsShown(held, now) : [],
     link: signinBusy && signinPageOk(signinBusy.url) ? signinBusy.url : "", keeps: sealsForReal(safeStorage, process.platform) }; /* plant:view-link */
 }
 function tellSignin() {
@@ -9596,7 +9680,7 @@ function signinTake(provider, got, ans, now) {
   const s = signinState();
   if (!ans.ok && ans.reason !== "full") return false; /* plant:take-refused */
   const base = { provider: provider, refresh: signinKeep(safeStorage, process.platform, got.refreshToken),
-    sub: signinKeep(safeStorage, process.platform, got.sub), seed: got.seed, code: "", cert: null, at: 0, checked: now, reached: true, said: "", ask: false };
+    sub: signinKeep(safeStorage, process.platform, got.sub), seed: got.seed, code: "", cert: null, at: 0, checked: now, reached: true, said: "", ask: false, doors: [] };
   s.held = signinSettle(base, ans, now);
   signinSave();
   return true;

@@ -30,7 +30,11 @@ function signinRead(v){
     preview: o.preview===true && Array.isArray(o.offered) && o.offered.some(known),
     /* The provider's page of the sign-in that waits, only while one does. */
     link: known(o.busy) && typeof o.link==="string" && /^https:\/\/\S+$/.test(o.link) ? o.link : "",
-    keeps: o.keeps!==false
+    keeps: o.keeps!==false,
+    /* The doors the sign-in handed, offered while the desk keeps no team (the door-finding): each by its place, the relay's host
+       and the lead's print, so two leads' doors of one team are told apart. */
+    doors: signedIn && Array.isArray(o.doors) ? o.doors.filter(d=>d && Number.isInteger(d.n) && typeof d.host==="string" && d.host.length<=256
+      && /^[0-9a-f]{16}$/.test(String(d.print))).slice(0,16).map(d=>({n:d.n, host:d.host, print:String(d.print)})) : []
   };
 }
 let signinV=signinRead(null);
@@ -140,6 +144,10 @@ function signinDoorOf(v){
   /* No certificate: the service found no licence with a seat for this account. The code still shows, since a lead admits by it. */
   if(v.seat==="none" || !v.seat) return {moment:"nolicence", ident, say:signinSay("nolicence", v), code:v.code,
     acts:[{act:"check", label:t("Check now"), solid:true}, acct]};
+  /* A team on the relay under this licence: one press asks to join it, and its lead's Studio lets a person it knows in. */
+  if(!p.team && v.seat==="held" && v.doors.length) return {moment:"doors", ident, heading:t("Join your team"), // placeholder: Claudette
+    line:t("Your licence has a team on the relay. Ask to join it, and its lead's Studio lets you in if it knows you."), // placeholder: Claudette
+    doors:v.doors, acts:[acct]};
   if(!p.team && v.reached && v.seat==="held") return {moment:"noteam", ident, heading:t("Signed in. No team yet"),
     line:t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."), code:v.code,
     acts:[{act:"check", label:t("Check now")}, acct]};
@@ -179,6 +187,11 @@ function signinCodeHtml(code, label){
   return '<div class="sgn-code">'+(label?'<span class="k">'+esc(label)+'</span>':'')+'<code>'+esc(signinCodeText(code))+'</code>'
     +signinCopyHtml("copy")+'</div>';
 }
+/* The doors offered, one row each in the code's own row: the relay's host, the lead's print, and Join. */
+function signinDoorsHtml(doors){
+  return doors.map(d=>'<div class="sgn-code" data-signin-door-row><span class="k">'+esc(d.host)+'</span><code>'+esc(d.print)+'</code>'
+    +'<button type="button" class="btn primary" data-signin-act="door" data-signin-door="'+esc(String(d.n))+'">'+esc(t("Join"))+'</button></div>').join(""); // placeholder: Claudette
+}
 function signinActsHtml(acts){
   return '<div class="sgn-acts">'+acts.map(a=>'<button type="button" class="btn'+(a.solid?' primary':'')+'" data-signin-act="'+esc(a.act)+'">'+esc(a.label)+'</button>').join("")+'</div>';
 }
@@ -208,6 +221,7 @@ function signinPanelHtml(d){
   if(d.team) h+='<p class="sgn-ln">'+esc(d.team)+'</p>';
   if(d.say) h+='<p class="sgn-say'+(d.calm?' calm':'')+'"><b>'+esc(d.say[0])+'</b><span>'+esc(d.say[1])+'</span></p>';
   if(d.code) h+=signinCodeHtml(d.code, "");
+  if(d.doors && d.doors.length) h+=signinDoorsHtml(d.doors);
   if(d.providers && d.providers.length) h+=signinProvidersHtml(d.providers, false);
   if(d.cap) h+='<p class="sgn-cap">'+esc(d.cap)+'</p>';
   if(d.privacy) h+='<p class="sgn-cap">'+esc(d.privacy)+'</p>';
@@ -306,6 +320,7 @@ function signinAct(act, btn){
   if(act==="again"){ signinCall("signinAgain"); return; }
   if(act==="check"){ signinCall("signinCheck").then(v=>{ if(v) signinChanged(v, false); }); return; }
   if(act==="out"){ signinCall("signinOut").then(v=>{ if(v) signinChanged(v, false); }); return; }
+  if(act==="door"){ const n=Number(btn && btn.getAttribute ? btn.getAttribute("data-signin-door") : NaN); if(Number.isInteger(n)) signinCall("signinDoor", n).then(()=>signinChanged(signinNow(), false)); return; }
   if(act==="another"){ signinChoosing=true; signinTell(); return; }
   if(act==="keep"){ signinChoosing=false; signinTell(); }
 }
@@ -362,6 +377,7 @@ export {
   signinNow,
   signinOnChange,
   signinPanelHtml,
+  signinDoorsHtml,
   signinParts,
   signinPreviewHtml,
   signinProvidersHtml,

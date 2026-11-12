@@ -30,7 +30,7 @@ import { E_VERSION } from "./env.js";
 import { sxIcon } from "./sx-icons.js";
 import { focusKey, focusSame } from "./dom.js";
 import { orgModel, orgRanks, syncOrgMark } from "./org-model.js";
-import { signinNow, signinShown, signinParts, signinSay, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow,
+import { signinNow, signinShown, signinParts, signinSay, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow, signinDoorsHtml,
   signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect, signinCopyHtml } from "./signin.js";
 
 /* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name,
@@ -300,6 +300,7 @@ function accountGroups(){
   if(v.signedIn && !signinChoosingNow()){
     const p=signinParts(v), val=x=>'<span class="sgn-val">'+esc(x)+'</span>', join=pair=>pair[0]+" "+pair[1];
     rows.push(p.team ? row("team","people",t("Team"),p.team.lead?t("Led by {LEAD}").split("{LEAD}").join(p.team.lead):"",val(p.teamName))
+      : v.doors.length && v.seat==="held" ? row("team","people",t("Join your team"),t("Your licence has a team on the relay. Ask to join it, and its lead's Studio lets you in if it knows you."),signinDoorsHtml(v.doors)) // placeholder: Claudette
       : row("team","people",t("No team yet"),t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."),""));
     if(v.code) rows.push(row("code","code",t("Your sign-in code"),t("Not a secret. It tells a team's lead which account is yours."),
       '<code class="sgn-mono">'+esc(signinCodeText(v.code))+'</code>'+signinCopyHtml("copy")));
