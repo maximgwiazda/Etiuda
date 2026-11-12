@@ -405,7 +405,9 @@ async function updateLeg(newer) {
     installLocation: regValue(KU.install, "InstallLocation"),
     defaultDir: P.defaultUserInstallDir(H.places.LocalApplicationData, PRODUCT),
     defaultDirExists: fs.existsSync(P.defaultUserInstallDir(H.places.LocalApplicationData, PRODUCT)),
-    programOld: oldEngine, programNew: engineIn(PROG), programTree: treeEngine,
+    programOld: oldEngine, programNew: (() => { const n = engineIn(PROG); note("installed engine after the update " + String(n || "unread").slice(0, 12)
+      + ", app.asar " + (() => { try { return fs.statSync(path.join(PROG, "resources", "app.asar")).size + " bytes"; } catch (e) { return "unread"; } })()); return n; })(),
+    programTree: treeEngine,
     oldOnlyGone: !fs.existsSync(path.join(PROG, "left-by-the-older-copy.txt")),
     appKeys: namedKeys(KU.uninstallParent), keyName: regExists(KU.uninstall) ? GUID : "", keyBefore: GUID,
     version: regValue(KU.uninstall, "DisplayVersion"), wantVersion: WANT_VERSION,
@@ -525,6 +527,10 @@ process.on("exit", () => {
   lockHeld = true;
   const newer = newSetup();
   note("newer setup " + newer + ", " + fs.statSync(newer).size + " bytes, sha256 " + String(shaFile(newer)).slice(0, 16));
+  /* What the newer setup packed, read from the folder it was packed from (win-unpacked beside it), and the tree's page now: a U3 red
+     then says whether the difference came from the pack or from the update. */
+  note("newer setup's packed engine " + String(engineIn(path.join(path.dirname(newer), "win-unpacked")) || "unread").slice(0, 12)
+    + ", the tree's engine/etiuda.html " + String(shaFile(E.ENGINE_PATH) || "unread").slice(0, 12));
   if (LEG === "update") await updateLeg(newer); else await allUsersLeg(newer);
   reachedEnd = true;
 })().catch(async e => {
