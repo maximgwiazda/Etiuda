@@ -1335,6 +1335,11 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     "14o control: a silent /D, the deployment tool's own choice, moved too reads red");
   ok(!unnests(NSH.replace("    ${AndIfNot} ${FileExists} \"$INSTDIR\\${APP_EXECUTABLE_FILENAME}\"\n", ""), S, A),
     "14o control: a real copy in the nested folder taken over reads red");
+  /* The silent nested /D is left as it is (Claude alpha's ruling, 2026-11-12): the silent run has no log (README, There is no
+     installer log), so IT is told in Installing silently that the old copy stays, and nothing is built to say it at run time. */
+  const toldNested = d => /names a folder inside or above the registered one keeps the old copy there,\s+no longer registered, to be removed by hand\./.test(d);
+  ok(toldNested(doc), "14o README's Installing silently says a deployment tool naming a folder inside or above the registered one keeps the old copy there, unregistered");
+  ok(!toldNested(doc.replace("keeps the old copy there", "moves the old copy")), "14o control: the sentence gone or changed reads red");
 
   /* 14p. A copy cut short is taken back by the staged names (Argon's review 8; repair 8): into a folder holding other files and no
      program, etiudaSwap copies rather than renames, and at 9cb2a8ff a failed copy left the half-written app there. The walk

@@ -73,7 +73,8 @@ folders, so a failed upgrade leaves the old version as it was. A locked folder o
 before the run ends with 1618. An upgrade in the same folder keeps each person's shortcuts as they left them; one that
 moves Etiuda to another folder makes them again there, and then deletes from the old folder the files the installer
 wrote, with its `resources` and `locales` folders whole, leaving anything else in it, and anything locked, without
-failing the run.
+failing the run. A deployment tool that names a folder inside or above the registered one keeps the old copy there,
+no longer registered, to be removed by hand.
 
 An all-users install looks for an open copy in every session, and asks only the installing account's own copy to
 close: another person's is never closed, so the run ends with 1618 and the deployment tool tries again later. A
