@@ -31,7 +31,7 @@ import { sxIcon } from "./sx-icons.js";
 import { focusKey, focusSame } from "./dom.js";
 import { orgModel, orgRanks, syncOrgMark } from "./org-model.js";
 import { signinNow, signinShown, signinParts, signinSay, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow,
-  signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect } from "./signin.js";
+  signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect, signinCopyHtml } from "./signin.js";
 
 /* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name,
    in columns that fill the width. Choosing a section shows that section alone: Appearance and Layout
@@ -302,7 +302,7 @@ function accountGroups(){
     rows.push(p.team ? row("team","people",t("Team"),p.team.lead?t("Led by {LEAD}").split("{LEAD}").join(p.team.lead):"",val(p.teamName))
       : row("team","people",t("No team yet"),t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."),""));
     if(v.code) rows.push(row("code","code",t("Your sign-in code"),t("Not a secret. It tells a team's lead which account is yours."),
-      '<code class="sgn-mono">'+esc(signinCodeText(v.code))+'</code><button type="button" class="btn" data-signin-act="copy">'+esc(t("Copy"))+'</button>'));
+      '<code class="sgn-mono">'+esc(signinCodeText(v.code))+'</code>'+signinCopyHtml("copy")));
     if(v.refused==="full") rows.push(row("seat","check",t("Seat"),join(signinSay("full", v, p)),""));
     else if(v.seat==="none") rows.push(row("seat","check",t("Seat"),join(signinSay("nolicence", v)),""));
     else rows.push(row("seat","check",t("Seat"),v.seat==="lapsed" ? join(signinSay("lapsed", v)) : t("On up to three computers; this is one of them."),val(t("Held by this account"))));
@@ -317,7 +317,7 @@ let accountHeard=false;
 function wireAccountRows(box){
   if(!accountHeard){ accountHeard=true; signinOnChange(()=>{ if(document.getElementById("setBody")) paintSettings(); }); }
   box.querySelectorAll('[data-e-open="signin"]').forEach(b=>{ b.onclick=()=>signinStart(b.getAttribute("data-e-provider"), "account"); });
-  box.querySelectorAll("[data-signin-act]").forEach(b=>{ b.onclick=()=>signinAct(b.getAttribute("data-signin-act")); });
+  box.querySelectorAll("[data-signin-act]").forEach(b=>{ b.onclick=()=>signinAct(b.getAttribute("data-signin-act"), b); });
   box.querySelectorAll(".sgn-link-f").forEach(f=>{ f.onclick=()=>signinLinkSelect(f); });
 }
 function generalGroups(){

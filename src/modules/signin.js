@@ -168,9 +168,14 @@ function signinIdentHtml(ident){
   return '<div class="sgn-id">'+signinAvatarHtml(ident.initial, ident.off, true)+'<div><b>'+esc(ident.name)+'</b>'
     +(ident.sub?'<small>'+esc(ident.sub)+'</small>':'')+'</div></div>';
 }
+/* The sign-in's Copy, the code's and the link's alike: both labels stacked in one cell, so the button keeps the wider of the two
+   and nothing moves when "Copied" stands in for SIGNIN_COPIED_MS after a copy (signinCopied). */
+function signinCopyHtml(act){
+  return '<button type="button" class="btn sgn-copy" data-signin-act="'+esc(act)+'"><span>'+esc(t("Copy"))+'</span><span>'+esc(t("Copied"))+'</span></button>';
+}
 function signinCodeHtml(code, label){
   return '<div class="sgn-code">'+(label?'<span class="k">'+esc(label)+'</span>':'')+'<code>'+esc(signinCodeText(code))+'</code>'
-    +'<button type="button" class="btn" data-signin-act="copy">'+esc(t("Copy"))+'</button></div>';
+    +signinCopyHtml("copy")+'</div>';
 }
 function signinActsHtml(acts){
   return '<div class="sgn-acts">'+acts.map(a=>'<button type="button" class="btn'+(a.solid?' primary':'')+'" data-signin-act="'+esc(a.act)+'">'+esc(a.label)+'</button>').join("")+'</div>';
@@ -187,7 +192,7 @@ function signinLinkHtml(link){
   return '<div class="sgn-link" data-signin-link><p class="sgn-cap"><b>'+esc(t("Browser did not open?"))+'</b> <span>'
     +esc(t("Paste this link into a browser on this computer."))+'</span></p><div class="sgn-link-row"><input type="text" class="sgn-link-f" readonly'
     +' spellcheck="false" autocomplete="off" aria-label="'+esc(t("Paste this link into a browser on this computer."))+'" value="'+esc(link)+'">'
-    +'<button type="button" class="btn" data-signin-act="copylink">'+esc(t("Copy"))+'</button></div></div>';
+    +signinCopyHtml("copylink")+'</div></div>';
 }
 /* Form B's panel: the door's content in the panel's own type, the cannot-be-done moments as its heading and line, no box. The
    preview's line follows the heading and line, just before what they are about. */
@@ -273,16 +278,27 @@ function signinCall(name, arg){
   if(!h || typeof h[name]!=="function") return Promise.resolve(null);
   try{ return Promise.resolve(h[name](arg)).catch(()=>null); }catch(e){ return Promise.resolve(null); }
 }
+/* `text` to the clipboard; resolves true once the clipboard took it, false otherwise. */
 function signinCopy(text){
-  if(!text) return;
+  if(!text) return Promise.resolve(false);
   try{ const h=eHost(); if(h && typeof h.noteOwnText==="function") h.noteOwnText(text); }catch(e){}
-  try{ if(navigator.clipboard&&window.isSecureContext) navigator.clipboard.writeText(text).catch(()=>{}); }catch(e){}
+  try{ if(navigator.clipboard&&window.isSecureContext) return navigator.clipboard.writeText(text).then(()=>true, ()=>false); }catch(e){}
+  return Promise.resolve(false);
 }
-/* One act of the door or of Account, by its data-signin-act. */
-function signinAct(act){
+const SIGNIN_COPIED_MS=1500;
+/* The Copy pressed reads "Copied" for SIGNIN_COPIED_MS, then "Copy" again. */
+function signinCopied(btn){
+  if(!btn || !btn.classList) return;
+  btn.classList.add("sgn-done");
+  clearTimeout(btn.sgnCopied);
+  btn.sgnCopied=setTimeout(()=>btn.classList.remove("sgn-done"), SIGNIN_COPIED_MS);
+}
+/* One act of the door or of Account, by its data-signin-act; `btn` the button pressed. */
+function signinAct(act, btn){
   if(act==="account"){ closeSigninPanel(); if(typeof hooks.openSettings==="function") hooks.openSettings("account"); return; }
-  if(act==="copy"){ signinCopy(signinV.code); return; }
-  if(act==="copylink"){ signinCopy(signinV.busy ? signinV.link : ""); return; }
+  if(act==="copy" || act==="copylink"){
+    return signinCopy(act==="copy" ? signinV.code : signinV.busy ? signinV.link : "").then(ok=>{ if(ok) signinCopied(btn); return ok; });
+  }
   if(act==="choose"){ signinChoosing=true; signinV=Object.assign({}, signinV, {said:""}); paintSigninPanel(); signinTell(); return; }
   if(act==="stop"){ signinCall("signinStop"); return; }
   if(act==="again"){ signinCall("signinAgain"); return; }
@@ -308,7 +324,7 @@ function signinClicks(root){
     const b=e.target && e.target.closest ? e.target.closest("button") : null;
     if(!b) return;
     if(b.dataset.eOpen==="signin"){ signinStart(b.dataset.eProvider); return; }
-    if(b.dataset.signinAct) signinAct(b.dataset.signinAct);
+    if(b.dataset.signinAct) signinAct(b.dataset.signinAct, b);
   });
 }
 function wireSignin(){
@@ -335,6 +351,8 @@ export {
   signinClicks,
   signinCodeHtml,
   signinCodeText,
+  signinCopyHtml,
+  SIGNIN_COPIED_MS,
   signinDoor,
   signinIdentHtml,
   signinLinkHtml,

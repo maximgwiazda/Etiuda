@@ -44,7 +44,7 @@ const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modul
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const PLANTS = 48;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 73 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 74 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1137,7 +1137,7 @@ CASES.linkPage = async () => {
   const none = [view({ link: LINK_URL }), view({ busy: "microsoft" }), view({ preview: true, said: "signin-preview", link: LINK_URL }),
     view({ signedIn: "microsoft", code: CODE, seat: "held", link: LINK_URL })].map(v => P.signinPanelHtml(P.signinDoor(v)));
   const field = '<input type="text" class="sgn-link-f" readonly spellcheck="false" autocomplete="off" aria-label="Paste this link into a browser on this computer." value="'
-    + LINK_URL.replace(/&/g, "&amp;") + '"><button type="button" class="btn" data-signin-act="copylink">Copy</button>';
+    + LINK_URL.replace(/&/g, "&amp;") + '"><button type="button" class="btn sgn-copy" data-signin-act="copylink"><span>Copy</span><span>Copied</span></button>';
   storage.lsSet("eUiLang", "pl");
   let pl = "";
   try { pl = P.signinPanelHtml(P.signinDoor(P.signinRead(waitV))); } finally { storage.lsSet("eUiLang", "en"); }
@@ -1167,12 +1167,14 @@ CASES.linkLook = async () => {
   P.signinLinkSelect({ select() { selected++; } });
   P.signinLinkSelect(null);
   const rule = sel => { const at = css.indexOf("\n" + sel + "{"); return at < 0 ? "" : css.slice(at + sel.length + 2, css.indexOf("}", at)); };
-  const own = rule(".sgn-link");
+  const own = rule(".sgn-link"), F = ".sgn-link input.sgn-link-f";
   return /^<div class="sgn-link" data-signin-link><p class="sgn-cap"><b>Browser did not open\?<\/b> <span>Paste this link into a browser on this computer\.<\/span><\/p><div class="sgn-link-row"><input [^>]*readonly[^>]*><button/.test(html)
     && !/<svg|<img/.test(html) && P.signinLinkHtml("") === "" && selected === 1
     && rule(".sgn-link .sgn-cap b") === "color:var(--ink);font-weight:600" && /^margin:0;/.test(rule(".sgn-link .sgn-cap"))
     && /margin-top:6px/.test(rule(".sgn-link-row")) && /display:flex/.test(rule(".sgn-link-row"))
-    && /flex:1 1 auto;min-width:0/.test(rule(".sgn-link-f")) && /white-space:nowrap/.test(rule(".sgn-link-f")) && /font:12\.5px var\(--mono\)/.test(rule(".sgn-link-f"))
+    && /flex:1 1 auto;width:auto;min-width:0/.test(rule(F)) && /white-space:nowrap/.test(rule(F))
+    /* Mono, 400, the dim ink, under a selector (0,2,1) the header's ".fill input" (0,1,1, which sets the sans face) cannot outrank. */
+    && /font:400 12\.5px var\(--mono\)/.test(rule(F)) && /color:var\(--dim\)/.test(rule(F)) && css.indexOf("\n.sgn-link-f{") < 0 && css.indexOf("\n.fill input{") >= 0
     && rule(".sgn-panel .sgn-link") === "margin-top:12px;padding-top:12px;border-top:1px solid var(--line)"
     && rule(".sgn-top .sgn-link") === "margin-top:-2px" && /gap:14px/.test(rule(".sgn-top.col")) && rule(".sgn-top .sgn-link-f") === "max-width:560px"
     && !/color|background|border|box-shadow/.test(own)
@@ -1229,6 +1231,50 @@ CASES.accountPress = async () => {
     fromPanel = dom["#signinPanel"].hidden;
   } finally { delete globalThis.window; delete globalThis.document; }
   return fromAccount === true && fromPanel === false && /signinStart\(b\.getAttribute\("data-e-provider"\), "account"\)/.test(SETTINGS);
+};
+/* "Copied" on screen (the product designer's edit to the built block): the code's Copy and the link's are one button, its two
+   labels stacked in one cell so it keeps the wider width; a copy the clipboard took turns it to "Copied" for SIGNIN_COPIED_MS, then
+   back; a copy refused leaves it; no toast, tick or colour; Polish "Skopiowano". */
+CASES.copiedLabel = async () => {
+  if (!P || typeof P.signinCopyHtml !== "function") return false;
+  const storage = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const css = fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8");
+  const rule = sel => { const at = css.indexOf("\n" + sel + "{"); return at < 0 ? null : css.slice(at + sel.length + 2, css.indexOf("}", at)); };
+  const BTN = act => '<button type="button" class="btn sgn-copy" data-signin-act="' + act + '"><span>Copy</span><span>Copied</span></button>';
+  const signed = { offered: ["microsoft"], signedIn: "microsoft", code: CODE, seat: "held" };
+  const noteam = P.signinPanelHtml(P.signinDoor(P.signinRead(signed))), acct = await acctOf(signed);
+  storage.lsSet("eUiLang", "pl");
+  let pl = "";
+  try { pl = P.signinCopyHtml("copy"); } finally { storage.lsSet("eUiLang", "en"); }
+  const nav = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  const btn = () => { const set = new Set(); return { set, classList: { add: c => set.add(c), remove: c => set.delete(c), contains: c => set.has(c) } }; };
+  let took = true;
+  Object.defineProperty(globalThis, "navigator", { value: { clipboard: { writeText: () => took ? Promise.resolve() : Promise.reject(new Error("refused")) } }, configurable: true, writable: true });
+  globalThis.window = { isSecureContext: true, E_HOST: { noteOwnText() {} } };
+  globalThis.document = { querySelector: () => null };
+  const code = btn(), refused = btn(), link = btn();
+  let during = false, after = true, linkDuring = false;
+  try {
+    P.signinChanged(signed, false);
+    await P.signinAct("copy", code);
+    during = code.set.has("sgn-done");
+    took = false; await P.signinAct("copy", refused); took = true;
+    P.signinChanged({ offered: ["microsoft"], busy: "microsoft", link: LINK_URL }, false);
+    await P.signinAct("copylink", link);
+    linkDuring = link.set.has("sgn-done");
+    await tick(P.SIGNIN_COPIED_MS + 80);
+    after = code.set.has("sgn-done") || link.set.has("sgn-done");
+    P.signinChanged({ offered: ["microsoft"] }, false);
+  } finally {
+    if (nav) Object.defineProperty(globalThis, "navigator", nav); else delete globalThis.navigator;
+    delete globalThis.window; delete globalThis.document;
+  }
+  return P.SIGNIN_COPIED_MS === 1500 && P.signinCopyHtml("copy") === BTN("copy") && noteam.indexOf(BTN("copy")) > 0 && acct.indexOf(BTN("copy")) > 0
+    && P.signinLinkHtml(LINK_URL).indexOf(BTN("copylink")) > 0 && pl.indexOf("<span>Kopiuj</span><span>Skopiowano</span>") > 0
+    && during && !refused.set.has("sgn-done") && linkDuring && !after
+    && rule(".sgn-copy") === "display:inline-grid;justify-items:center" && rule(".sgn-copy>span") === "grid-area:1/1"
+    && rule(".sgn-copy>span+span,.sgn-copy.sgn-done>span:first-child") === "visibility:hidden" && rule(".sgn-copy.sgn-done>span+span") === "visibility:visible"
+    && !/toast|offerUndo/.test(PAGE.slice(PAGE.indexOf("function signinCopied("), PAGE.indexOf("function signinAct(")));
 };
 
 /* ---- the cases on the branch ------------------------------------------------------------------------------------------- */
@@ -1295,6 +1341,7 @@ const LEGS = [
   ["ds14d", "previewSh", "tools/signin-preview.sh is outside the packaged files: the .deb's program unless an AppImage is named, --where starts nothing, one exec with the variable for that start alone"],
   ["ds14e", "keyringLine", "the view says whether the system seals for real, and Account says in one line that the sign-in is not kept where it does not, and nothing where it does"],
   ["ds14f", "accountPress", "a provider pressed in Settings, Account is answered there alone and the header's panel stays shut; pressed in the panel, the answer opens it as before"],
+  ["ds14g", "copiedLabel", "the code's Copy and the link's read Copied for SIGNIN_COPIED_MS after a copy the clipboard took, then Copy, holding the wider width; a refused copy leaves it; Polish too"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
