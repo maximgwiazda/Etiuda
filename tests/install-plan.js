@@ -420,7 +420,12 @@ function readInstallScopes(t, nsh) {
   const writes = ["DisplayName", "UninstallString", "DisplayVersion"].every(v =>
     new RegExp("WriteRegStr\\s+SHELL_CONTEXT\\s+\"\\$\\{UNINSTALL_REGISTRY_KEY\\}\"\\s+\"?" + v + "\\b").test(add));
   const modes = /SetShellVarContext\s+current/.test(perUser) && /SetShellVarContext\s+all/.test(perAll);
-  const iRun = at(sect, /!insertmacro\s+CHECK_APP_RUNNING/), iFiles = at(sect, /!insertmacro\s+installApplicationFiles/),
+  /* The files reach the install's folder at installApplicationFiles; where tools/patch-nsis.cjs fix 7 stages them beside it first
+     (etiudaStageBegin ... etiudaStageEnd, before the running app is closed), they reach it at the swap (etiudaSwap). So the
+     place is the first of the two after CHECK_APP_RUNNING, and the order reads the same on the templates as app-builder-lib ships
+     them and as the patch tool leaves them in node_modules after a pack (engine fold 59's red, 2026-11-12). */
+  const after = (text, re, from) => { if (from < 0) return -1; const i = at(text.slice(from), re); return i < 0 ? -1 : from + i; };
+  const iRun = at(sect, /!insertmacro\s+CHECK_APP_RUNNING/), iFiles = after(sect, /!insertmacro\s+(?:installApplicationFiles|etiudaSwap)\b/, iRun),
     iReg = at(sect, /!insertmacro\s+registryAddInstallInfo/), iLink = at(sect, /!insertmacro\s+addStartMenuLink/);
   const order = iRun > -1 && iFiles > iRun && iReg > iFiles && iLink > iReg;
   const unDeletes = /DeleteRegKey\s+SHELL_CONTEXT\s+"\$\{UNINSTALL_REGISTRY_KEY\}"/.test(unin);
