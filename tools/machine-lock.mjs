@@ -5,9 +5,9 @@
  *   node tools/machine-lock.mjs wait [--exclusive]                      wait until a slot is free (taking and freeing it at once)
  *   node tools/machine-lock.mjs status                                  say who holds each slot, and whether that holder is alive
  *
- * FOUR SLOTS: machine.lock, machine-2.lock, machine-3.lock and machine-4.lock. machine-3.lock and machine-4.lock are taken
- * only while Max is not using the laptop (idle input >= 20 min) or when the lane file sets 3 or 4. A taker takes the
- * first free slot up to the active count, or waits; release frees its own slot; status lists all four. --exclusive (exclusive: true to acquire) waits until all
+ * SIX SLOTS: machine.lock and machine-2.lock to machine-6.lock. machine-3.lock and machine-4.lock are taken
+ * only while Max is not using the laptop (idle input >= 20 min) or when the lane file sets 3 or more; machine-5.lock and machine-6.lock only when the lane file sets 5 or 6 (LANES_MAX). A taker takes the
+ * first free slot up to the active count, or waits; release frees its own slot; status lists them all. --exclusive (exclusive: true to acquire) waits until all
  * active slots are free and holds them, for a run that must not share the machine; nothing uses it by default. An exclusive
  * taker takes the slots in order and holds each as it gets it, and a plain taker leaves a free slot alone while any slot
  * carries a live exclusive record, so a waiting exclusive taker is not starved by plain ones. ETIUDA_LOCK_PATH, when set,
@@ -31,9 +31,12 @@ import { fileURLToPath } from "node:url";
 
 const DEFAULT_LOCK_PATH = "C:/Users/maxim/Workspace/etiuda-runs/machine.lock";
 export const LOCK_PATH = path.resolve(process.env.ETIUDA_LOCK_PATH || DEFAULT_LOCK_PATH);
-/* The slots, in the order they are taken: with ETIUDA_LOCK_PATH set the one file it names, otherwise the office's four. */
+/* The slots, in the order they are taken: with ETIUDA_LOCK_PATH set the one file it names, otherwise the office's six (machine.lock,
+   machine-2.lock to machine-6.lock). Five and six are taken only when the lane file says so (Claude alpha, 2026-11-12, on Max's word of
+   23:23: four while Max is at the laptop, and when he is away as many as the laptop is measured to take, set from the heartbeat). */
+export const LANES_MAX = 6;
 export const LOCK_PATHS = process.env.ETIUDA_LOCK_PATH ? [LOCK_PATH]
-  : [LOCK_PATH, path.join(path.dirname(LOCK_PATH), "machine-2.lock"), path.join(path.dirname(LOCK_PATH), "machine-3.lock"), path.join(path.dirname(LOCK_PATH), "machine-4.lock")];
+  : [LOCK_PATH].concat([2, 3, 4, 5, 6].map((n) => path.join(path.dirname(LOCK_PATH), "machine-" + n + ".lock")));
 
 /** The slot files a call works on: `slots` if given (a lab's own set), the tool's slots for the tool's own LOCK_PATH,
  *  otherwise the one file `lockPath` names, as before. */
@@ -113,7 +116,7 @@ function resolveLanePolicy(paths, opts = {}) {
   try {
     if (fs.existsSync(lanesFile)) {
       const val = fs.readFileSync(lanesFile, "utf8").trim();
-      if (val === "2" || val === "3" || val === "4") {
+      if (/^[2-6]$/.test(val)) /* plant:lanes-max */ {
         return { count: Number(val), reason: "the lane file" };
       }
     }
@@ -246,7 +249,7 @@ export function acquire({ lockPath = LOCK_PATH, slots = null, exclusive = false,
       try {
         if (fs.existsSync(lanesFile)) {
           const val = fs.readFileSync(lanesFile, "utf8").trim();
-          if (val === "2" || val === "3" || val === "4") hasLaneFile = true;
+          if (/^[2-6]$/.test(val)) /* plant:lanes-max */ hasLaneFile = true;
         }
       } catch (e) {}
 
