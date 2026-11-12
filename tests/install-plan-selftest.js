@@ -1497,7 +1497,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
       if (op === "${OrIf}") { const f = frames[frames.length - 1]; f.v = f.on && (f.v || test(t.slice(1))); continue; }
       if (op === "${Else}" || op === "!else") { const f = frames[frames.length - 1]; f.v = f.on && !f.v; continue; }
       if (op === "${EndIf}" || op === "!endif") { frames.pop(); continue; }
-      if (op === "!ifmacrodef") { frames.push({ v: (w.macros || []).includes(t[1]), on }); continue; }
+      if (op === "!ifmacrodef") { frames.push({ v: t.slice(1).filter(x => x !== "&").every(x => (w.macros || []).includes(x)), on }); continue; }
       if (!on) continue;
       if (op === "!insertmacro" && (w.expand || []).includes(t[1])) {
         if (!(w.macros || []).includes(t[1])) throw new Error("no macro " + t[1]);
@@ -1599,7 +1599,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
   const closesThrough = nsh => {
     const seg = closeSeg(nsh);
     if (!seg) return false;
-    const desk = ["etiudaAskClose", "etiudaStageBegin", "etiudaAsUser"], expand = ["etiudaAskClose"];
+    const desk = ["etiudaAskClose", "_UAC_IsInnerInstance", "etiudaStageBegin", "etiudaAsUser"], expand = ["etiudaAskClose"];
     const V = { $INSTDIR: "N", $R4: "", $R8: "", $R9: "msg", $etiudaStage: "N.setup-staging", $0: "" };
     const studioV = { $INSTDIR: "N", $R4: "", $R8: "", $R9: "msg", $0: "" };
     const stage = withApp("N.setup-staging");
@@ -1632,7 +1632,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     + " run through $INSTDIR's program, else the staged one, never HKCU's; Studio's cut and the uninstaller through $INSTDIR's alone");
   ok(!closesThrough(NSH.replace("    !insertmacro etiudaAsUser etiudaAskCloseRun\n", "    !insertmacro etiudaAskCloseRun\n")),
     "15n control: the HKCU program run in the elevated instance, as f4cc93fb did (board 995's class), reads red");
-  ok(!closesThrough(NSH.replace("        !ifmacrodef etiudaAskClose\n          !insertmacro etiudaAskClose\n        !else\n", "        !insertmacro etiudaAskClose\n        !ifmacrodef etiudaAskClose_none\n")),
+  ok(!closesThrough(NSH.replace("        !ifmacrodef etiudaAskClose & _UAC_IsInnerInstance\n          !insertmacro etiudaAskClose\n        !else\n", "        !insertmacro etiudaAskClose\n        !ifmacrodef etiudaAskClose_none\n")),
     "15n control: the desk's macro inserted unguarded, where Studio's cut does not define it and makensis refuses, reads red");
   ok(!closesThrough(NSH.replace("    ${If} $R9 != \"\"\n    ${AndIf} ${FileExists} \"$R9\\${APP_EXECUTABLE_FILENAME}\"", "    ${If} ${FileExists} \"$R9\\${APP_EXECUTABLE_FILENAME}\"")),
     "15n control: an empty InstallLocation taken as a folder, the program at the drive's root asked, reads red");

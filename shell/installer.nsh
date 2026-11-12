@@ -551,8 +551,9 @@
         ${EndIf}
         # The desk's installer asks through etiudaAskClose (below): an install into another folder, or all-users over a
         # per-user copy, has no program in $INSTDIR yet, and no program a non-administrator can write runs elevated.
-        # Studio's cut of this hook and the uninstaller ask through $INSTDIR's program alone, as before.
-        !ifmacrodef etiudaAskClose
+        # Studio's cut of this hook and the uninstaller ask through $INSTDIR's program alone, as before, and so does a script
+        # that has not read UAC.nsh (tests/test.js 1152e preprocesses this hook alone).
+        !ifmacrodef etiudaAskClose & _UAC_IsInnerInstance
           !insertmacro etiudaAskClose
         !else
           ${If} $R4 == "instdir"
