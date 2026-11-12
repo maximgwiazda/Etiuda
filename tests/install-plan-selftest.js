@@ -1996,6 +1996,40 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
 
 }
 
+/* ---- 17. the welcome says what the next page offers ---------------------------------------------------------------- */
+/* oneClick false and perMachine false make electron-builder's assisted installer draw its install-mode page (for this
+   account, or for everyone on this computer, which elevates), the route a company's machine-wide install takes. A welcome
+   that says the install is for this Windows account only is then untrue before the person's first choice (the first and
+   last minutes triage, item 1, 2026-11-10). The leg pins the meaning, both choices named and no "only", in both languages;
+   the words are the copywriter's, and a rewording of hers moves the patterns with it. */
+{
+  const ROOT = path.join(__dirname, "..");
+  const NSH = fs.readFileSync(path.join(ROOT, "shell", "installer.nsh"), "utf8");
+  let cfg = null, assisted = "";
+  try { cfg = require(path.join(ROOT, "electron-builder.js")); } catch (e) { cfg = null; }
+  try {
+    const lib = path.dirname(require.resolve("app-builder-lib/package.json", { paths: [ROOT] }));
+    assisted = fs.readFileSync(path.join(lib, "templates", "nsis", "assistedInstaller.nsh"), "utf8");
+  } catch (e) { assisted = ""; }
+  const modeOffered = c => !!c && !!c.nsis && c.nsis.oneClick === false && c.nsis.perMachine !== true
+    && /!ifndef INSTALL_MODE_PER_ALL_USERS\r?\n\s*!insertmacro PAGE_INSTALL_MODE/.test(assisted);
+  const welcomes = nsh => (String(nsh).match(/^\s*LangString TurnWelcomeText \$\{ID\} "[^"\n]*"/gm) || []);
+  const honest = (nsh, c) => {
+    const w = welcomes(nsh);
+    const pl = w.filter(l => /Dalej/.test(l)), en = w.filter(l => !/Dalej/.test(l));
+    return modeOffered(c) && w.length === 2 && en.length === 1 && pl.length === 1
+      && w.every(l => !/account only|only for this|tylko (dla )?tego konta/i.test(l))
+      && /everyone on this computer/i.test(en[0]) && /wszystkich użytkowników/i.test(pl[0]);
+  };
+  ok(honest(NSH, cfg), "17a the welcome names both installs the next page offers, this account or everyone on this computer, and no"
+    + " \"only\", in English and Polish: " + JSON.stringify({ modeOffered: modeOffered(cfg), welcomes: welcomes(NSH).map(l => l.slice(0, 170)) }));
+  const ONE = "Setup installs it for this Windows account only, so no administrator rights are needed for the folder it suggests. ";
+  ok(!honest(NSH.replace(/(LangString TurnWelcomeText \$\{ID\} "Etiuda keeps[^"\n]*?\$\\r\$\\n\$\\r\$\\n)[^"\n]*?(If Etiuda is open)/, "$1" + ONE + "$2"), cfg),
+    "17a control: the English sentence of 2026-11-10 put back reads red");
+  ok(!!cfg && !honest(NSH, Object.assign({}, cfg, { nsis: Object.assign({}, cfg.nsis, { perMachine: true }) })),
+    "17a control: with perMachine true there is no choice to name, and the leg reads red rather than pass on words alone");
+}
+
 console.log("\n#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
 console.log("install-plan-selftest " + (fails ? "FAILED " + fails + " of " : "passed ") + checks + " check(s)");
 process.exit(fails ? Math.min(fails, 63) : 0);

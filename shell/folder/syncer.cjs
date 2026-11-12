@@ -1419,6 +1419,7 @@ class FolderSyncerController {
     this.stopped = false;
     this.asked = 0;
     this.waits = new Map();
+    this.flushWaits = [];
 
     // The program runs on the main thread to perform verification and applying
     this.program = createFolderProgram({
@@ -1454,8 +1455,10 @@ class FolderSyncerController {
         } else if (msg.type === "scan") {
           this.program.applyScan(msg);
           this.sendHeld();
+          this.flushCheck();
         } else if (msg.type === "landed") {
           this.program.landed(msg.results);
+          this.flushCheck();
         } else if (msg.type === "read" || msg.type === "cas") {
           this.answer(msg);
         }
@@ -1490,6 +1493,45 @@ class FolderSyncerController {
     if (this.stopped) return true;
     this.kick();
     return true;
+  }
+
+  /* Sends what the outbox owes now, and answers once it owes nothing (true) or after `ms` (false). A quit waits on it before
+     stop, so the desk's last writes, its close-time statistics above all, reach the share at the quit rather than at that
+     desk's next start (Argon's folder-as-built review, finding 7, the desk's half). What the share has not taken by then stays
+     in the outbox on disk, as before. */
+  flushNow(ms) {
+    if (this.stopped) return Promise.resolve(false);
+    if (!this.owing()) return Promise.resolve(true);
+    if (!this.worker) {
+      try { this.program.syncOnce(); } catch {}
+      return Promise.resolve(!this.owing());
+    }
+    return new Promise(resolve => {
+      const w = { resolve, timer: null };
+      w.timer = setTimeout(() => this.flushDone(w, false), Math.max(0, Number(ms) || 0));
+      this.flushWaits.push(w);
+      this.worker.postMessage({ type: "kick" });
+    });
+  }
+  owing() {
+    try { return this.program.owed().length > 0; } catch { return false; }
+  }
+  /* After each scan and each landing while a flush waits: done once nothing is owed, else one more scan, since a scan already
+     running when the write was owed read the outbox before it. */
+  flushCheck() {
+    if (!this.flushWaits.length) return;
+    if (!this.owing()) {
+      for (const w of this.flushWaits.slice()) this.flushDone(w, true);
+      return;
+    }
+    if (this.worker && !this.stopped) this.worker.postMessage({ type: "kick" });
+  }
+  flushDone(w, ok) {
+    const at = this.flushWaits.indexOf(w);
+    if (at < 0) return;
+    this.flushWaits.splice(at, 1);
+    clearTimeout(w.timer);
+    w.resolve(ok);
   }
 
   ask(msg, judge) {
@@ -1557,6 +1599,7 @@ class FolderSyncerController {
   stop() {
     this.stopped = true;
     for (const id of Array.from(this.waits.keys())) this.settle(id, null);
+    for (const w of this.flushWaits.slice()) this.flushDone(w, false);
     if (this.worker) {
       try {
         this.worker.postMessage({ type: "stop" });
@@ -1591,6 +1634,16 @@ function startFolderSyncer(opts) {
   return syncer;
 }
 
+/* Whether any running syncer's outbox still owes the share a write, and the bounded flush a quit waits on before
+   stopAllFolderSyncers (flushNow). */
+function folderSyncersOwe() {
+  for (const s of syncerInstances.values()) if (!s.stopped && s.owing()) return true;
+  return false;
+}
+function flushFolderSyncers(ms) {
+  return Promise.all(Array.from(syncerInstances.values()).map(s => s.flushNow(ms).catch(() => false)));
+}
+
 function stopAllFolderSyncers() {
   for (const s of syncerInstances.values()) {
     s.stop();
@@ -1610,6 +1663,8 @@ module.exports = {
   createSyncer: startFolderSyncer,
   startFolderSyncer,
   stopAllFolderSyncers,
+  folderSyncersOwe,
+  flushFolderSyncers,
   folderMirrorOf,
   isAllowedPath,
   noteOwed,
