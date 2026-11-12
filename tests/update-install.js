@@ -194,8 +194,12 @@ async function uninstall(dir, mode) {
   for (let i = 1; i <= 60; i++) { await sleep(1000); if (!fs.existsSync(dir)) return i; }
   return -1;
 }
-const engineIn = dir => { try { return sha(require("@electron/asar").extractFile(path.join(dir, "resources", "app.asar"), "engine/etiuda.html")); } catch (e) { return null; } };
-const asarText = (dir, file) => { try { return require("@electron/asar").extractFile(path.join(dir, "resources", "app.asar"), file).toString("utf8"); } catch (e) { return null; } };
+/* @electron/asar keeps an archive's header by its path: the same path read again after an update would use the older header's
+   offsets against the new file and hash a slice of neither (U3 at 6545e0e7, installer-runner run 43229661219; shown on two desk
+   asars, e05ff4 then aca3a2 at one path, 81de39 once uncached). Every read here drops the cache first. */
+const asarRead = (file, inner) => { const A = require("@electron/asar"); A.uncacheAll(); return A.extractFile(file, inner); };
+const engineIn = dir => { try { return sha(asarRead(path.join(dir, "resources", "app.asar"), "engine/etiuda.html")); } catch (e) { return null; } };
+const asarText = (dir, file) => { try { return asarRead(path.join(dir, "resources", "app.asar"), file).toString("utf8"); } catch (e) { return null; } };
 
 /* ---- launching the installed app into the scratch home ---------------------------------------- */
 
