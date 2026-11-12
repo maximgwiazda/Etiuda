@@ -733,8 +733,8 @@ const under = (el, name) => el.kids.reduce((out, k) => out.concat(k.name === nam
 
 /* 19i: THE TEMPLATE REACHES AN ADMINISTRATOR WITH THE PROGRAM (sense pass finding 17). Read from the build config rather
    than from a built installer: the Windows build copies shell/policy, whole, to resources/policy beside the program, and
-   that folder holds the ADMX and its two ADMLs and nothing else. The Linux packages carry none, since only Windows reads
-   Group Policy. */
+   that folder holds the ADMX, its two ADMLs and readme.txt, where an all-users install belongs, and nothing else. The Linux
+   packages carry none, since only Windows reads Group Policy. */
 {
   const problems = [];
   const POLICY = path.join(ROOT, "shell", "policy");
@@ -750,12 +750,12 @@ const under = (el, name) => el.kids.reduce((out, k) => out.concat(k.name === nam
     const walk = (dir, rel) => fs.readdirSync(dir, { withFileTypes: true }).flatMap(d => d.isDirectory()
       ? walk(path.join(dir, d.name), rel + d.name + "/") : [rel + d.name]);
     const held = walk(POLICY, "").sort().join(",");
-    if (held !== "en-US/etiuda.adml,etiuda.admx,pl-PL/etiuda.adml") problems.push("shell/policy holds " + held);
+    if (held !== "en-US/etiuda.adml,etiuda.admx,pl-PL/etiuda.adml,readme.txt") problems.push("shell/policy holds " + held);
     if ([].concat((cfg.linux && cfg.linux.extraResources) || [], cfg.extraResources || []).some(copies)) problems.push("a Linux package carries it");
   } catch (e) { problems.push("electron-builder.js: " + ((e && e.message) || e)); }
   check(problems.length === 0,
     "19i the Windows installer carries the template beside the program, shell/policy copied whole to resources/policy, and"
-    + " that folder is the ADMX and its English and Polish ADML: " + (problems.join("; ") || "resources/policy"));
+    + " that folder is the ADMX, its English and Polish ADML and the readme: " + (problems.join("; ") || "resources/policy"));
 }
 
 /* ---- the whole shell, beside a stand-in reg.exe ------------------------------------------------------------- */

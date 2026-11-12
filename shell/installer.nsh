@@ -1690,3 +1690,7 @@ Var RemoveDataBox
   FunctionEnd
   UninstPage custom un.RemoveDataCreate un.RemoveDataLeave
 !macroend
+
+# The folder page's warning for an all-users install into a folder ordinary users can change: its macros only, which
+# tools/patch-nsis.cjs (fix 5b) inserts before the page.
+!include /CHARSET=UTF8 "${BUILD_RESOURCES_DIR}\installer\allusers-folder.nsh"

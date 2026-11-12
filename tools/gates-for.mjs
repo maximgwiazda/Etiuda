@@ -195,6 +195,7 @@ export const SCANS = {
   "tests/build-fresh.mjs": ["engine/etiuda.html", "engine/etiuda.csp.json", "engine/bubble.css"],
   "tests/test.js": ["src/template.html", "src/modules/*.js", "src/main.js", "engine/etiuda.html", "shell/etiuda.ico", "shell/license_en.txt", "shell/license_pl.txt", "electron-builder.js", "shell/installer.nsh"],
   "tests/join-policy.mjs": ["shell/policy/**"],
+  "tests/allusers-folder.mjs": ["shell/installer/allusers-folder.nsh", "shell/installer.nsh", "tools/patch-nsis.cjs", "README.md", "shell/policy/readme.txt", "package-lock.json"],
   "tests/catalog-shared.mjs": ["src/modules/catalog-file.js", "src/modules/catalog-offer.js", "src/modules/ui-lang.js"],
   "tests/catalog-in-use.mjs": ["src/modules/catalog-offer.js", "src/modules/catalog-file.js", "src/modules/catalog-history.js", "src/modules/settings.js", "src/modules/ui-lang.js", "src/modules/local-memory.js", "shell/preload.js"],
   "tests/desk-ipc.mjs": ["src/template.html", "src/modules/{hooks,theme,storage,motion,dom}.js"],
@@ -222,7 +223,7 @@ export const SCANS = {
   "tests/no-crash-dialog.mjs": ["tests/**/*.{js,mjs,cjs}"],
   "tests/swap.mjs": ["engine/etiuda.html", "shell/sample-catalog.ec"],
   "tests/shell-shipped.mjs": ["shell/**", "tools/release.mjs"],
-  "tests/nsis-compile.mjs": ["shell/installer.nsh", "shell/installer/turning.nsh", "electron-builder.js", "tools/patch-nsis.cjs", "tools/patch-nsis.mjs", "package-lock.json"],
+  "tests/nsis-compile.mjs": ["shell/installer.nsh", "shell/installer/turning.nsh", "shell/installer/allusers-folder.nsh", "electron-builder.js", "tools/patch-nsis.cjs", "tools/patch-nsis.mjs", "package-lock.json"],
 };
 
 /* A diff that adds, removes or renames a file under tests/ changes what the chains must list, so it selects chain-split,
