@@ -239,8 +239,8 @@ function lapseNote(l){ return lapseWords(l).title; }
 /* A write this desk owes the shared folder that the folder refuses as read-only, one sentence a file, until it lands. */
 function shareRefusedNotes(l){
   return (Array.isArray(l&&l.shareRefused)?l.shareRefused:[]).filter(r=>r&&typeof r.file==="string"&&r.file).map(r=>(r.kind==="folder"
-    ? t("The team's shared folder is read-only where {FILE} goes; this desk keeps the change and tries again.") // placeholder: Claudette
-    : t("{FILE} is read-only in the team's shared folder; this desk keeps the change and tries again.") // placeholder: Claudette
+    ? t("The team's shared folder is read-only where {FILE} goes, so this desk keeps the change and tries again at each check.")
+    : t("{FILE} is marked read-only in the team's shared folder, so this desk keeps the change and tries again at each check.")
   ).split("{FILE}").join(r.file));
 }
 const lapseKey=l=>l.team+"|"+l.lapse.step+"|"+l.lapse.until;

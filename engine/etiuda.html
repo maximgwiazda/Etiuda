@@ -8886,8 +8886,8 @@ What you type stays in this browser only.`;
     "The team's relay is due for renewal": "Przekaźnik zespołu czeka na odnowienie",
     "It fell due on {DATE}. Everything works as before until {READONLY}; after that the catalogs on this desk stay as they are, but nothing new passes between this desk and the team until the relay is renewed. The team's lead renews it in Studio; nothing is needed here.": "Termin odnowienia minął dnia {DATE}. Do dnia {READONLY} wszystko działa jak dotąd; potem katalogi na tym stanowisku zostaną bez zmian, ale do czasu odnowienia nic nowego nie przejdzie już między stanowiskiem a zespołem. Przekaźnik odnawia lider zespołu w Studiu; tutaj nic nie trzeba robić.",
     "The team's relay is read-only until renewed": "Przekaźnik zespołu działa tylko do odczytu do czasu odnowienia",
-    "The team's shared folder is read-only where {FILE} goes; this desk keeps the change and tries again.": "Folder współdzielony zespołu jest tylko do odczytu w miejscu pliku {FILE}; zmiana zostaje na tym stanowisku, które spróbuje ponownie.",
-    "{FILE} is read-only in the team's shared folder; this desk keeps the change and tries again.": "Plik {FILE} w folderze współdzielonym zespołu jest tylko do odczytu; zmiana zostaje na tym stanowisku, które spróbuje ponownie.",
+    "The team's shared folder is read-only where {FILE} goes, so this desk keeps the change and tries again at each check.": "Wspólny folder zespołu jest tylko do odczytu w miejscu, gdzie ma trafić {FILE}, więc to stanowisko zachowuje zmianę i próbuje ponownie przy każdym sprawdzeniu.",
+    "{FILE} is marked read-only in the team's shared folder, so this desk keeps the change and tries again at each check.": "Plik {FILE} we wspólnym folderze zespołu ma atrybut „tylko do odczytu”, więc to stanowisko zachowuje zmianę i próbuje ponownie przy każdym sprawdzeniu.",
     "The catalogs on this desk stay as they are and work as before; nothing new passes between this desk and the team.": "Katalogi na tym stanowisku zostają bez zmian i działają jak dotąd; nic nowego nie przechodzi już między stanowiskiem a zespołem.",
     "The relay keeps the team's copy until {DATE}.": "Przekaźnik przechowuje kopię zespołu do dnia {DATE}.",
     "The team's lead renews it in Studio.": "Odnowić go może lider zespołu w Studiu.",
@@ -17472,7 +17472,7 @@ What you type stays in this browser only.`;
     return lapseWords(l).title;
   }
   function shareRefusedNotes(l) {
-    return (Array.isArray(l && l.shareRefused) ? l.shareRefused : []).filter((r) => r && typeof r.file === "string" && r.file).map((r) => (r.kind === "folder" ? t("The team's shared folder is read-only where {FILE} goes; this desk keeps the change and tries again.") : t("{FILE} is read-only in the team's shared folder; this desk keeps the change and tries again.")).split("{FILE}").join(r.file));
+    return (Array.isArray(l && l.shareRefused) ? l.shareRefused : []).filter((r) => r && typeof r.file === "string" && r.file).map((r) => (r.kind === "folder" ? t("The team's shared folder is read-only where {FILE} goes, so this desk keeps the change and tries again at each check.") : t("{FILE} is marked read-only in the team's shared folder, so this desk keeps the change and tries again at each check.")).split("{FILE}").join(r.file));
   }
   var lapseKey = (l) => l.team + "|" + l.lapse.step + "|" + l.lapse.until;
   function syncLapseNotice() {

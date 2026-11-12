@@ -3549,8 +3549,8 @@ async function run() {
   /* 998i to 998l (board 998): a write this desk owes the share that the share refuses as read-only is said on the team's row in
      Settings, in both languages, and tried again until it lands; its own folder's file marked read-only is replaced, and another
      desk's file there keeps its mark. */
-  const LINE_998_FOLDER = "The team's shared folder is read-only where {FILE} goes; this desk keeps the change and tries again.";
-  const LINE_998_FOLDER_PL = "Folder współdzielony zespołu jest tylko do odczytu w miejscu pliku {FILE}; zmiana zostaje na tym stanowisku, które spróbuje ponownie.";
+  const LINE_998_FOLDER = "The team's shared folder is read-only where {FILE} goes, so this desk keeps the change and tries again at each check.";
+  const LINE_998_FOLDER_PL = "Wspólny folder zespołu jest tylko do odczytu w miejscu, gdzie ma trafić {FILE}, więc to stanowisko zachowuje zmianę i próbuje ponownie przy każdym sprawdzeniu.";
   async function refusedScene(name, src, syncerAt) {
     const mod = syncerAt ? nodeRequire(syncerAt) : syncerMod;
     const share = folder("share-" + name);
