@@ -44,7 +44,9 @@ const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modul
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const PLANTS = 48;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 74 + (PLANTS_OFF ? 0 : PLANTS);
+/* The trace and the declined consent (dt): their legs and plants, counted apart. */
+const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
+const EXPECTED = 74 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + TRACE_PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -80,6 +82,7 @@ const NAMES = ["SIGNIN_PROVIDERS", "signinOffered", "signinNonce", "signinAuthor
   "signinSettle", "signinRenewHeld", "seatFileText", "SEAT_NAME", "signinFileRead", "signinFileText", "branchIdOf", "inviteRead",
   "SIGNOUT_SERVICE", "signoutDeskBytes", "signoutDeskBody", "signoutAsk", "signinDoorRequest", "signinKnown", "signinPreviewing",
   "signinCodeForm", "signinSecretRead", "SIGNIN_SECRET_FILE", "SIGNIN_SECRET_SHAPE", "sealsForReal", "SIGNIN_WAIT_MS"];
+NAMES.push("SIGNIN_TRACE_ASKED", "signinTraceLine", "signinTraceSaid");
 /* The section, evaluated: `swap` is [from, to], put in place of the one line that holds `from`, for a plant. */
 function load(swap, where) {
   let sec = SECTION, inv = INVITE;
@@ -1073,6 +1076,7 @@ function waitStand(sec, swap, storage) {
     },
     handOut: url => { st.handed.push(url); return Promise.resolve(); },
     signinRequest: out, signinServiceAsk: out, signinSign: out, signinKeep: () => "", signinKept: () => "", signinPageHtml: () => "",
+    SIGNIN_TRACE_ASKED: sec.SIGNIN_TRACE_ASKED,
   };
   const names = Object.keys(vals);
   const body = "let signinClick = null, signinBusy = null, signinSaid = \"\";\n" + text + "\nreturn { view: signinView };";
@@ -1349,6 +1353,153 @@ for (let [id, name, line] of LEGS) {
   check(ok, id + " " + line);
 }
 
+/* ---- the sign-in trace and the declined consent (dt): the provider's own words on this desk's console under ETIUDA_SIGNIN_TRACE=1
+   alone, never a code, verifier, secret or token; AADSTS65004 read as the person's Cancel ---------------------------------------- */
+function loadTrace(v, swap) {
+  const was = process.env.ETIUDA_SIGNIN_TRACE;
+  if (v === null) delete process.env.ETIUDA_SIGNIN_TRACE; else process.env.ETIUDA_SIGNIN_TRACE = v;
+  try { return load(swap && SECTION.split(swap[0]).length === 2 ? swap : null); }
+  finally { if (was === undefined) delete process.env.ETIUDA_SIGNIN_TRACE; else process.env.ETIUDA_SIGNIN_TRACE = was; }
+}
+/* signinIo as the wiring has it, over `sec`, its console a stand-in that records each line. */
+function traceIo(sec, swap) {
+  let text = "";
+  try { text = decl(MAIN, "function signinIo("); } catch { return { io: {}, lines: [] }; }
+  if (swap && text.split(swap[0]).length === 2) text = text.replace(swap[0], swap[1]);
+  const lines = [], rec = (...a) => { lines.push(a.map(String).join(" ")); };
+  const names = ["http", "signinListen", "signinPageOk", "tellSignin", "handOut", "signinRequest", "net", "signinServiceAsk", "signinSign", "signinKeep",
+    "safeStorage", "signinKept", "signinPageHtml", "SIGNIN_TRACE_ASKED", "console"];
+  const no = () => { throw new Error("not in this leg"); };
+  const make = new Function(...names, text + "\nreturn signinIo;");
+  const io = make({}, no, no, no, no, no, {}, no, no, no, {}, no, no, sec.SIGNIN_TRACE_ASKED, { log: rec, error: rec, warn: rec, info: rec })({ loop: null });
+  return { io, lines };
+}
+/* Every write to this process's console and standard streams while `fn` runs. */
+async function consoleDuring(fn) {
+  const lines = [], keep = {}, writes = { o: process.stdout.write, e: process.stderr.write };
+  for (const k of ["log", "error", "warn", "info", "debug"]) { keep[k] = console[k]; console[k] = (...a) => { lines.push(a.map(String).join(" ")); }; }
+  process.stdout.write = c => { lines.push(String(c)); return true; };
+  process.stderr.write = c => { lines.push(String(c)); return true; };
+  try { await fn(); } finally {
+    for (const k of Object.keys(keep)) console[k] = keep[k];
+    process.stdout.write = writes.o; process.stderr.write = writes.e;
+  }
+  return lines;
+}
+/* One sign-in at Google with the package's secret: the loopback brings `loopQ(state)`, the token door answers `reply(seen)`; `trace`
+   records the trace's lines where given. */
+const T_CODE = "code-planted-" + "4".repeat(24), T_RT = "rt-planted-" + "5".repeat(24), T_AT = "at-planted-" + "6".repeat(24);
+async function traceFlow(s, loopQ, reply, withTrace) {
+  const lines = [], seen = {};
+  const io = {
+    listen: async () => { let yes; const caught = new Promise(a => { yes = a; }); setTimeout(() => yes(seen.q), 5); return { port: 49999, caught, close: () => {} }; },
+    openPage: async url => { const q = new URL(url).searchParams; seen.state = q.get("state"); seen.nonce = q.get("nonce"); seen.q = loopQ(seen.state); return true; },
+    tokenAsk: async (url, form) => { seen.form = new URLSearchParams(form.toString()); return reply(seen); },
+    page: () => "",
+  };
+  if (withTrace) io.trace = line => { lines.push(line); };
+  const got = await s.signinRun(io, G_SECRET, DESK_KEY, () => NOW);
+  return { got, lines, seen };
+}
+const okLoop = st => "state=" + encodeURIComponent(st) + "&code=" + T_CODE;
+const hidesAll = (line, seen, extra) => [T_CODE, T_RT, T_AT, STAND_IN, seen.form ? seen.form.get("code_verifier") : "no-form"].concat(extra || [])
+  .every(v => line.indexOf(v) < 0) && line.indexOf("eyJ") < 0;
+/* Off unless asked: absent, "0", "yes" or " 1" give signinIo no trace and a failing sign-in writes nothing anywhere; "1" alone
+   writes one line through console.error. */
+CASES.traceDefault = async (s, swap) => {
+  const seen = [null, "0", "yes", " 1", "1"].map(v => { const t = traceIo(loadTrace(v, swap), swap); if (typeof t.io.trace === "function") t.io.trace("probe"); return t.lines.length; });
+  const sec = load(swap && SECTION.split(swap[0]).length === 2 ? swap : null);
+  const refuse = () => answer({ error: "invalid_client", error_description: "AADSTS7000218: planted" }, 401);
+  let quiet = null, loud = null;
+  const writtenQuiet = await consoleDuring(async () => { quiet = await traceFlow(sec, okLoop, refuse, false); });
+  const writtenLoud = await consoleDuring(async () => { loud = await traceFlow(sec, okLoop, refuse, true); });
+  return seen.join() === "0,0,0,0,1" && quiet.got.reason === "signin-refused" && writtenQuiet.length === 0
+    && loud.got.reason === "signin-refused" && loud.lines.length === 1 && writtenLoud.length === 0;
+};
+/* The provider's refusal at the loopback: its error and error_description, the reason the desk shows; nothing of a reply whose
+   state is not this sign-in's. */
+CASES.traceAuthorize = async s => {
+  const q = (e, d) => st => "state=" + encodeURIComponent(st) + "&error=" + e + "&error_description=" + encodeURIComponent(d);
+  const declined = await traceFlow(s, q("access_denied", "AADSTS65004: User declined to consent to access the app. Trace ID: t-1"), () => answer({}), true);
+  const reply = await traceFlow(s, q("invalid_request", "AADSTS50011: The redirect URI does not match"), () => answer({}), true);
+  const stray = await traceFlow(s, () => "state=another&error=access_denied&error_description=AADSTS65004", () => answer({}), true);
+  const l1 = declined.lines[0] || "", l2 = reply.lines[0] || "", l3 = stray.lines[0] || "";
+  return declined.got.reason === "signin-cancelled" && declined.lines.length === 1 && l1.indexOf("authorize: signin-cancelled") > 0
+    && l1.indexOf("error=access_denied") > 0 && l1.indexOf("AADSTS65004: User declined") > 0
+    && reply.got.reason === "signin-refused" && l2.indexOf("error=invalid_request") > 0 && l2.indexOf("AADSTS50011") > 0
+    && stray.got.reason === "signin-state" && /authorize: signin-state$/.test(l3);
+};
+/* The token door's refusal: error, error_description and error_codes, with the code, the verifier, the secret, every token in the
+   answer and any JWT read [hidden], even where the description repeats them; a refused ID token names its claims; a success says
+   whether a refresh token came, and nothing of it. */
+CASES.traceToken = async s => {
+  const loose = jwt({ planted: "a JWT standing alone" });
+  const refuse = seen => answer({ error: "invalid_client", error_codes: [7000218], trace_id: "t-2",
+    error_description: "AADSTS7000218: The request body must contain client_secret. Echo " + T_CODE + " " + seen.form.get("code_verifier") + " "
+      + STAND_IN + " " + T_RT + " " + T_AT + " " + loose, id_token: jwt(gClaims(seen.nonce)), refresh_token: T_RT, access_token: T_AT }, 401);
+  const bad = await traceFlow(s, okLoop, refuse, true);
+  const good = await traceFlow(s, okLoop, seen => answer({ id_token: jwt(gClaims(seen.nonce)), refresh_token: T_RT, access_token: T_AT }), true);
+  const none = await traceFlow(s, okLoop, seen => answer({ id_token: jwt(gClaims(seen.nonce)) }), true);
+  const aud = await traceFlow(s, okLoop, seen => answer({ id_token: jwt(Object.assign(gClaims(seen.nonce), { aud: "someone-else-0000" })), refresh_token: T_RT }), true);
+  const lb = bad.lines[0] || "", lg = good.lines[0] || "", ln = none.lines[0] || "", la = aud.lines[0] || "";
+  return bad.got.reason === "signin-refused" && bad.lines.length === 1 && lb.indexOf("token: signin-refused") > 0 && lb.indexOf("status=401") > 0
+    && lb.indexOf("error=invalid_client") > 0 && lb.indexOf("AADSTS7000218: The request body") > 0 && lb.indexOf("error_codes=7000218") > 0
+    && hidesAll(lb, bad.seen, [loose]) && (lb.match(/\[hidden\]/g) || []).length >= 6
+    && good.got.ok === true && /token: ok \| status=200 \| detail=refresh token given$/.test(lg) && hidesAll(lg, good.seen)
+    && none.got.ok === true && /detail=refresh token none$/.test(ln)
+    && aud.got.reason === "signin-token" && la.indexOf("aud someone-else-0000") > 0 && la.indexOf("nonce this sign-in's") > 0 && hidesAll(la, aud.seen);
+};
+/* The quiet refresh: the provider's refusal with the refresh token and the secret hidden; a success says whether the new ID token
+   carries a nonce and whether the refresh token was replaced. */
+CASES.traceRenew = async s => {
+  const seed = "2".repeat(64), lines = [];
+  const io = reply => ({ tokenAsk: async () => reply, trace: line => { lines.push(line); } });
+  const expired = await s.signinRenew(io(answer({ error: "invalid_grant", error_description: "Token has been expired or revoked. " + T_RT + " " + STAND_IN }, 400)),
+    G_SECRET, DESK_KEY, T_RT, seed, "1001", () => NOW);
+  const renewed = await s.signinRenew(io(answer({ id_token: jwt(Object.assign(gClaims(undefined), { nonce: undefined })) })), G_SECRET, DESK_KEY, T_RT, seed, "1001", () => NOW);
+  const off = await s.signinRenew({ tokenAsk: async () => { throw new Error("net::ERR_PROXY_CONNECTION_FAILED"); }, trace: line => { lines.push(line); } },
+    G_SECRET, DESK_KEY, T_RT, seed, "1001", () => NOW);
+  const [le, lr, lo] = lines;
+  return lines.length === 3 && expired.reason === "signin-expired" && le.indexOf("refresh: signin-expired") > 0 && le.indexOf("error=invalid_grant") > 0
+    && le.indexOf("Token has been expired or revoked") > 0 && le.indexOf(T_RT) < 0 && le.indexOf(STAND_IN) < 0
+    && renewed.ok === true && /refresh: ok \| status=200 \| detail=nonce none, refresh token kept$/.test(lr)
+    && off.reason === "signin-unreached" && lo.indexOf("refresh: signin-unreached | detail=net::ERR_PROXY_CONNECTION_FAILED") > 0;
+};
+/* The licence service's answer: its status and its own reason where it refuses, the ID token hidden; a failed connection's message. */
+CASES.traceService = async s => {
+  const lines = [], idTok = jwt(gClaims("n")), seed = "3".repeat(64);
+  const io = serve => ({ serviceAsk: serve, sign: signWith(signKey), trace: line => { lines.push(line); } });
+  const stale = await s.signinSeat(io(async () => answer({ ok: false, reason: "stale", echo: idTok }, 403)), "google", DESK_KEY, idTok, seed, () => NOW);
+  const gone = await s.signinSeat(io(async () => { throw new Error("no answer in time"); }), "google", DESK_KEY, idTok, seed, () => NOW);
+  const ok = await s.signinSeat(io(async () => answer({ ok: true, code: CODE, certificate: null })), "google", DESK_KEY, idTok, seed, () => NOW);
+  const [ls, lg, lk] = lines;
+  return lines.length === 3 && stale.reason === "unreached" && /service: unreached \| status=403 \| reason=stale$/.test(ls) && ls.indexOf("eyJ") < 0
+    && gone.reason === "unreached" && /service: unreached \| detail=no answer in time$/.test(lg)
+    && ok.ok === true && /service: ok \| status=200 \| detail=certificate none$/.test(lk);
+};
+/* AADSTS65004, the person declining the consent page, is their Cancel; the organisation's consent codes stay "not allowed". */
+CASES.declined = s => {
+  const st = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ", pending = { state: st };
+  const back = q => s.signinBack("state=" + st + "&" + q, pending).reason;
+  const d = c => "&error_description=" + encodeURIComponent(c + ": planted");
+  return back("error=access_denied" + d("AADSTS65004")) === "signin-cancelled" && back("error=consent_required" + d("AADSTS65004")) === "signin-cancelled"
+    && back("error=access_denied" + d("AADSTS65001")) === "signin-notallowed"
+    && back("error=access_denied" + d("AADSTS90094")) === "signin-notallowed" && back("error=consent_required") === "signin-notallowed";
+};
+const TRACE_LEGS = [
+  ["dt1", "traceDefault", "the trace is off unless ETIUDA_SIGNIN_TRACE is \"1\": otherwise signinIo carries none and a refused sign-in writes nothing to the console or either stream; on, one line through console.error"],
+  ["dt2", "traceAuthorize", "a refusal at the loopback traces its error and error_description with the reason shown; a stray state traces nothing of the reply"],
+  ["dt3", "traceToken", "the token door's refusal traces status, error, error_description and error_codes, never the code, verifier, secret, a token or a JWT, even echoed; a refused ID token names its claims; a success says whether a refresh token came"],
+  ["dt4", "traceRenew", "the quiet refresh traces the provider's refusal with its token and the secret hidden, whether the new ID token carries a nonce, and a failed connection's message"],
+  ["dt5", "traceService", "the licence service's refusal traces its status and its own reason, the ID token hidden; a failed connection and a success are named"],
+  ["dt6", "declined", "AADSTS65004 at the loopback is signin-cancelled, whatever the error beside it, the person's own Cancel; AADSTS65001, 90094 and consent_required stay signin-notallowed"],
+];
+for (let [id, name, line] of TRACE_LEGS) {
+  let ok = false;
+  try { ok = await CASES[name](S); } catch (e) { ok = false; line += " (threw " + (e && e.message) + ")"; }
+  check(ok, id + " " + line);
+}
+
 /* ---- the wiring and the page, as text ---------------------------------------------------------------------------------- */
 const at = (text, s) => text.indexOf(s);
 const handler = (() => { const a = at(WIRING, 'ipcMain.handle("etiuda:signin",'); return a < 0 ? "" : WIRING.slice(a, WIRING.indexOf("\n});", a)); })();
@@ -1477,6 +1628,14 @@ if (!PLANTS_OFF) {
   await plantWire("dsp49", ["keeps: sealsForReal(safeStorage, process.platform) }; /* plant:view-link */", "keeps: true };"], "keyringLine");
   await plant("dsp46", ["return Object.freeze(typeof v === \"string\" && SIGNIN_SECRET_SHAPE.test(v) ? { google: v } : {}); /* plant:secret-shape */",
     "return Object.freeze(typeof v === \"string\" ? { google: v } : {});"], "secretPacked");
+  await plant("dtp1", ["if (/\\bAADSTS65004\\b/.test(String(said || \"\"))) return \"signin-cancelled\"; /* plant:declined */", ""], "declined");
+  await plant("dtp2", ["    for (const v of h) t = t.split(v).join(\"[hidden]\"); /* plant:trace-hide */", ""], "traceToken");
+  await plant("dtp3", ["    t = t.replace(/eyJ[A-Za-z0-9_-]*\\.[A-Za-z0-9_-]*(\\.[A-Za-z0-9_-]*)?/g, \"[hidden]\"); /* plant:trace-jwt */", ""], "traceToken");
+  await plantWire("dtp4", ["const SIGNIN_TRACE_ASKED = process.env.ETIUDA_SIGNIN_TRACE === \"1\"; /* plant:trace-asked */",
+    "const SIGNIN_TRACE_ASKED = process.env.ETIUDA_SIGNIN_TRACE !== undefined;"], "traceDefault");
+  await plantWire("dtp5", ["trace: SIGNIN_TRACE_ASKED ? line => console.error(line) : null, /* plant:trace-wired */", "trace: line => console.error(line),"], "traceDefault");
+  await plantWire("dtp6", ["if (!io || typeof io.trace !== \"function\") return; /* plant:trace-off */",
+    "if (!io || typeof io.trace !== \"function\") { console.error(signinTraceLine(provider, step, shown, said, hide)); return; }"], "traceDefault");
   /* A gate on a local act, put into the desk file's write in memory, is seen. */
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),
