@@ -383,6 +383,7 @@ export function appendChainLine(record, chainsPath = CHAINS_PATH) {
   if (record.gate === "area") line.plan = record.plan;
   /* A release run that inherited a base's other legs (the test architect's C3): the base's git tree. */
   if (record.inherits) line.inherits = record.inherits;
+  if (Array.isArray(record.carried) && record.carried.length) line.carried = record.carried;
   /* Every run records which files ran, so an area run can check coverage (the test architect's criterion, 2026-11-08). */
   if (Array.isArray(record.ran)) line.ran = record.ran;
   else if (record.inherits) line.ran = [];
@@ -629,6 +630,68 @@ export function planTestOnly(root, steps, tree, chainsPath = CHAINS_PATH) {
   for (const s of steps) scan.add(stepFile(s));
   const reaching = filesReaching(root, changed, [...scan]);
   return { base, changed, steps: steps.filter(s => reaching.has(stepFile(s)) || isFloorStep(s)) };
+}
+
+/* AN AREA RUN CARRIES ON AFTER A TEST-ONLY FIX (Claude alpha's question of 2026-11-12 04:35; the test architect's rule, the
+   same day). A red fixed by a change to files under tests/ alone used to restart the whole area plan. Now the newest area run on
+   this path, of a commit under HEAD whose git tree it recorded, lends the gates it passed: each green gate whose file, and every
+   file that file imports, is untouched since that commit is carried, and only the rest runs. Never carried, whatever the base
+   says: a step with arguments or its own environment (its name does not say which run it was), the floor, the hygiene legs, any
+   step that reads the tree as data (its source, or a file it imports, lists a folder or the index), and the gate that ended a run
+   that did not complete. A change outside tests/ carries nothing. Carried gates carry on: a resumed run's own carried list is
+   lent again, since the product is the same tree throughout. The chain line says "inherits" the base's git tree and "carried"
+   the gates it did not run. ETIUDA_AREA_RESUME=off runs the whole plan. */
+const WALKS_TREE = /\breaddir(Sync)?\b|\bopendir(Sync)?\b|\bglob(Sync)?\b|\bls-files\b|\bls-tree\b|["']grep["']|["']diff["']/;
+/* A FILE READ OR STARTED BY NAME is reached as an import is (the lead engineer's read of 2026-11-12): a test that names a changed
+   file under tests/, by its path, its file name or, for a file that is not a script, the folder it sits in, reads or starts it
+   and is not carried. Over-naming only reruns more. */
+function namersOf(root, changed, scanFiles) {
+  const names = new Set();
+  for (const f of changed) {
+    names.add(f); names.add(f.slice("tests/".length)); names.add(path.posix.basename(f));
+    if (!TEST_SOURCE.test(f)) { const dir = path.posix.basename(path.posix.dirname(f)); if (dir && dir !== "tests") names.add(dir); }
+  }
+  return scanFiles.filter(f => {
+    let text;
+    try { text = fs.readFileSync(path.join(root, f), "utf8"); } catch (e) { return true; }
+    for (const n of names) if (n && text.includes(n)) return true;
+    return false;
+  });
+}
+export function planAreaResume(root, steps, tree, chainsPath = CHAINS_PATH) {
+  if (!TREE_SHA.test(String(tree || ""))) return { reason: "the tree is not a clean commit (" + tree + ")" };
+  let base = null;
+  const lines = readChainLines(chainsPath);
+  for (let i = lines.length - 1; i >= 0 && !base; i--) {
+    const c = lines[i];
+    if (!c || c.gate !== "area" || !c.tree || !sameTreePath(c.tree, root) || !Array.isArray(c.gates)) continue;
+    if (!c.head || c.head === "no commit" || !TREE_SHA.test(String(c.gitTree || ""))) continue;
+    const t = gitIn(root, ["rev-parse", "--verify", "-q", c.head + "^{tree}"]);
+    if (!t.ok || t.out.trim() !== c.gitTree) continue;
+    if (!gitIn(root, ["merge-base", "--is-ancestor", c.head, "HEAD"]).ok) continue;
+    base = c;
+  }
+  if (!base) return { reason: "no area run on this path of a commit under HEAD to carry on from" };
+  const changed = changedSince(root, base.head);
+  if (!changed) return { reason: "git could not diff " + base.head + " against HEAD" };
+  const outside = changed.filter(f => !f.startsWith("tests/"));
+  if (outside.length) return { reason: outside.length + " changed file(s) outside tests/ since " + base.head + ", the first " + outside[0] };
+  const done = !!base.counts && base.counts.exitCode === 0;
+  const earned = (done ? base.gates : base.gates.slice(0, -1)).filter(g => g && g.exit === 0).map(g => g.gate);
+  const green = new Set(earned.concat(Array.isArray(base.carried) ? base.carried : []));
+  const scan = new Set(listTestSources(root));
+  for (const st of steps) scan.add(stepFile(st));
+  const reaching = filesReaching(root, changed.concat(namersOf(root, changed, [...scan])), [...scan]);
+  const walkers = [...scan].filter(f => { try { return WALKS_TREE.test(fs.readFileSync(path.join(root, f), "utf8")); } catch (e) { return true; } });
+  const walking = filesReaching(root, walkers, [...scan]);
+  const run = [], carried = [];
+  for (const st of steps) {
+    const file = stepFile(st), name = gateName(st.file);
+    const plain = !(st.args || []).length && !(st.env && Object.keys(st.env).length);
+    if (plain && green.has(name) && !reaching.has(file) && !walking.has(file) && !isFloorStep(st) && !isHygiene(file)) carried.push(name);
+    else run.push(st);
+  }
+  return { base, changed, steps: run, carried };
 }
 
 function showFile(root, base, file) {
@@ -1700,6 +1763,18 @@ async function main() {
       steps = plan.steps;
     } else console.log("gate-run release: the full profile: " + plan.reason);
   }
+  let carried = [];
+  if (mode === "area" && process.env.ETIUDA_AREA_RESUME !== "off") {
+    const plan = planAreaResume(ROOT, steps, tree);
+    if (plan.base && plan.carried.length) {
+      inherits = plan.base.gitTree;
+      carried = plan.carried;
+      console.log("gate-run area: only files under tests/ changed since the area run of " + plan.base.head + " (" + plan.changed.length
+        + " file(s)): " + plan.steps.length + " of " + steps.length + " gate(s) run, " + carried.length + " carried from git tree "
+        + inherits + ": " + carried.join(", "));
+      steps = plan.steps;
+    } else if (!plan.base) console.log("gate-run area: the whole plan: " + plan.reason);
+  }
 
   if (asked.includes("--dry-run") || asked.includes("--list")) {
     console.log("gate-run " + mode + " dry run: " + steps.length + " gate(s) to run:");
@@ -1966,6 +2041,7 @@ async function main() {
     gates: gatesList,
     walled,
     inherits,
+    carried,
     ran: ranFiles,
     repo,
     plan: areaPlan,
