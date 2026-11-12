@@ -38,6 +38,25 @@ function standInScript() {
   return abs;
 }
 
+/* THE COMPILER CARRIES THE FIXES (board 996). makensis writes its own stub into every installer and uninstaller, and
+   before NSIS 3.12 that stub lets a standard user on the machine become SYSTEM while either runs as SYSTEM, as a
+   deployment tool runs them (CVE-2023-37378, CVE-2025-43715, CVE-2026-42171; 3.12 is the first release with all three
+   fixed). A built installer keeps its stub for good, so the version is read from the makensis this leg compiles with,
+   the one electron-builder resolves from the config's toolsets pin: its legacy bundle prints v3.04. */
+const NSIS_FLOOR = [3, 12];
+function versionAtLeast(text, floor) {
+  const m = /^v?(\d+)\.(\d+)/.exec(String(text || "").trim());
+  if (!m) return false;
+  const major = Number(m[1]), minor = Number(m[2]);
+  return major > floor[0] || (major === floor[0] && minor >= floor[1]);
+}
+function makensisVersion(located) {
+  /* cross-spawn, as electron-builder spawns it: the 3.12 bundle's entry point is a .cmd, which Node will not start bare. */
+  const r = nodeRequire("cross-spawn").sync(located.path, ["-VERSION"],
+    { env: { ...process.env, ...(located.env || {}) }, encoding: "utf8", windowsHide: true, timeout: 30000 });
+  return String(r.stdout || "").trim() || "nothing (" + String(r.stderr || r.error || "").trim() + ")";
+}
+
 /* The real build runs the first executable so WriteUninstaller can emit the file the
    installer then includes. This leg never runs that executable, so a stand-in file
    satisfies File and the warnings still come from the compile. */
@@ -79,6 +98,11 @@ async function main() {
     noVerdict();
   }
   if (!located || !located.path || !fs.existsSync(located.path)) noVerdict();
+  const compilerVersion = makensisVersion(located);
+  /* The comparison's own control: 3.11 lacks the third fix and 3.04 all three, and both must read too old. */
+  const floorHolds = !versionAtLeast("v3.11", NSIS_FLOOR) && !versionAtLeast("v3.04", NSIS_FLOOR)
+    && versionAtLeast("v3.12", NSIS_FLOOR) && versionAtLeast("v4.0", NSIS_FLOOR);
+  const compilerFixed = floorHolds && versionAtLeast(compilerVersion, NSIS_FLOOR);
 
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "nsis-compile-"));
   let code = 0;
@@ -179,6 +203,10 @@ async function main() {
       })],
     ];
     let failures = 0;
+    const versionTitle = "the makensis that compiles is NSIS " + NSIS_FLOOR.join(".") + " or later, which carries the fixes for"
+      + " CVE-2023-37378, CVE-2025-43715 and CVE-2026-42171: it prints " + compilerVersion;
+    if (compilerFixed) console.log("  ok   " + versionTitle);
+    else { failures += 1; sayFail(versionTitle, floorHolds ? "" : "the version comparison itself reads 3.11 or 3.04 as fixed"); }
     for (const [title, isInstaller, defines] of passes) {
       delete defines.BUILD_UNINSTALLER;
       if (!isInstaller) defines.BUILD_UNINSTALLER = null;
@@ -191,7 +219,7 @@ async function main() {
         sayFail(title, err && err.message ? err.message : err);
       }
     }
-    console.log("#counts checks=2 failures=" + failures);
+    console.log("#counts checks=3 failures=" + failures);
     if (failures) code = 1;
   } catch (err) {
     sayFail(err && err.standIn ? "the stand-in script is not a file" : "the compile", err && err.message ? err.message : err);

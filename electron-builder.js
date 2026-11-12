@@ -197,6 +197,12 @@ module.exports = {
       await prepareEmbed({ dest: EMBED, platform: plat === "linux" ? "linux" : "win32" });
     }
   },
+  // THE NSIS THAT COMPILES THE INSTALLER. Without this key electron-builder 26 uses its legacy NSIS 3.04, whose stub,
+  // written into every installer and uninstaller, lets a standard user on the machine become SYSTEM while either runs as
+  // SYSTEM (CVE-2023-37378, CVE-2025-43715, CVE-2026-42171). "1.2.1" is app-builder-lib's bundle of NSIS 3.12, the first
+  // release with all three fixed, its makensis, plug-ins and stubs in one archive pinned by SHA-256 in app-builder-lib.
+  // tests/install-plan-selftest.js 15a reads the pin, tests/nsis-compile.mjs the version the compiler prints.
+  toolsets: { nsis: "1.2.1" },
   deb: { artifactName: "etiuda_${version}_amd64.${ext}" },
   appImage: { artifactName: "etiuda-${version}-x86_64.${ext}" },
   nsis: {
@@ -215,5 +221,9 @@ module.exports = {
     artifactName: "etiuda-${version}-setup.${ext}",
     shortcutName: "Etiuda",
     uninstallDisplayName: "Etiuda",
+    // NO elevate.exe IN THE INSTALL. electron-builder copies it to resources\ for electron-updater's per-machine updates,
+    // and this product has no electron-updater; the all-users route elevates through the UAC plug-in, and the per-user
+    // copy's uninstaller runs through UAC_AsUser_Call (shell/installer.nsh). perMachine true would override this.
+    packElevateHelper: false,
   },
 };

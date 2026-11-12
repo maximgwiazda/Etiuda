@@ -3868,10 +3868,12 @@ function nsisInstallWrites(root, cfg) {
   let mk;
   /* The answer is the last line: a first run downloads makensis and logs that on stdout above it. */
   try { mk = JSON.parse(String(where.stdout).trim().split(/\r?\n/).pop()); } catch (e) { return "electron-builder named no makensis: " + String(where.stderr).trim(); }
-  const r = cp.spawnSync(mk.path, ["-INPUTCHARSET", "UTF8", "-OUTPUTCHARSET", "UTF8", "-SAFEPPO", "-"],
+  /* cross-spawn, as electron-builder starts it: the NSIS 3.12 bundle's makensis is a .cmd, which Node will not start bare
+     (spawnSync answers EINVAL with no output, which read "refused the script: NaN" here, board 996). */
+  const r = require(path.join(root, "node_modules", "cross-spawn")).sync(mk.path, ["-INPUTCHARSET", "UTF8", "-OUTPUTCHARSET", "UTF8", "-SAFEPPO", "-"],
     /* Off Windows makensis prints in the locale's charset whatever -OUTPUTCHARSET says, and under C a Polish letter comes back "?". */
     { input: script, encoding: "utf8", env: Object.assign({}, process.env, process.platform === "win32" ? {} : { LC_ALL: "C.UTF-8" }, mk.env || {}) });
-  if (r.status !== 0) return "makensis refused the script: " + String(r.stdout + r.stderr).trim().split(/\r?\n/).slice(-2).join(" / ");
+  if (r.status !== 0) return "makensis refused the script: " + (String((r.stdout || "") + (r.stderr || "")).trim().split(/\r?\n/).slice(-2).join(" / ") || String(r.error || "no output"));
   const open = [], writes = [];
   /* makensis keeps a comment after a command, a plant's tag among them; one with no quote in it is the line's own end. */
   for (const line of r.stdout.split(/\r?\n/).map(l => l.trim().replace(/\s+[#;][^"'`]*$/, ""))) {

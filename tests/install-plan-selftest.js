@@ -960,6 +960,58 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     "14d control: the page left on Modern UI's fixed text reads red");
 }
 
+/* ---- 15. the NSIS that compiles the installer, read without fetching it ------------------------ */
+
+/* Board 996. makensis writes its stub into every installer, and before NSIS 3.12 that stub lets a standard user become
+   SYSTEM while an installer runs as SYSTEM. electron-builder 26 compiles with its legacy NSIS 3.04 unless the config's
+   top-level toolsets.nsis names a newer bundle; app-builder-lib maps each value to one archive by file name and pins it
+   by SHA-256. This reads the pin against that table and fetches nothing: tests/nsis-compile.mjs reads the version the
+   resolved makensis prints. */
+{
+  const ROOT = path.join(__dirname, "..");
+  let cfg = null, table = null;
+  try { cfg = require(path.join(ROOT, "electron-builder.js")); } catch (e) { cfg = null; }
+  try { table = require(require.resolve("app-builder-lib/out/toolsets/windows", { paths: [ROOT] })).nsisChecksums; } catch (e) { table = null; }
+  const bundleOf = (c, t) => {
+    const value = c && c.toolsets && c.toolsets.nsis;
+    const files = (value && t && t[value]) || {};
+    const file = Object.keys(files).find(f => /^nsis-bundle-\d+\.\d+\.tar\.gz$/.test(f));
+    if (!file) return null;
+    const [, major, minor] = /^nsis-bundle-(\d+)\.(\d+)/.exec(file);
+    return { value, file, major: Number(major), minor: Number(minor), sha: files[file] };
+  };
+  const fixed = (c, t) => {
+    const b = bundleOf(c, t);
+    return !!b && (b.major > 3 || (b.major === 3 && b.minor >= 12)) && /^[0-9a-f]{64}$/.test(String(b.sha));
+  };
+  if (!cfg || !table) {
+    notRun.push("15a, electron-builder.js or app-builder-lib could not be read");
+    console.log("  NOT RUN 15a: electron-builder.js or app-builder-lib could not be read");
+  } else {
+    const b = bundleOf(cfg, table);
+    ok(fixed(cfg, table), "15a the config pins electron-builder's NSIS toolset to a bundle of NSIS 3.12 or later, pinned by"
+      + " SHA-256 in app-builder-lib: " + (b ? "toolsets.nsis " + JSON.stringify(b.value) + ", " + b.file : "toolsets.nsis "
+      + JSON.stringify(cfg.toolsets && cfg.toolsets.nsis) + ", the legacy NSIS 3.04"));
+    ok(!fixed(Object.assign({}, cfg, { toolsets: undefined }), table),
+      "15a control: no toolsets key, electron-builder's legacy NSIS 3.04, reads red");
+    ok(!fixed(Object.assign({}, cfg, { toolsets: { nsis: "0.0.0" } }), table), "15a control: the legacy value \"0.0.0\" reads red");
+    ok(!b || !fixed(cfg, Object.assign({}, table, { [b.value]: { "nsis-bundle-3.11.tar.gz": b.sha } })),
+      "15a control: a bundle of 3.11 under the same value reads red");
+    ok(!b || !fixed(cfg, Object.assign({}, table, { [b.value]: { [b.file]: "" } })), "15a control: a bundle with no checksum reads red");
+  }
+  /* 15b: elevate.exe stays out of the install. electron-builder copies it to resources\ for electron-updater's per-machine
+     updates; neither this product nor its installer runs it (the all-users route is the UAC plug-in's, and the per-user
+     copy's uninstaller runs through UAC_AsUser_Call), and perMachine true would override the switch. */
+  const noElevate = c => !!c && !!c.nsis && c.nsis.packElevateHelper === false && c.nsis.perMachine !== true;
+  if (cfg) {
+    ok(noElevate(cfg), "15b the installer packs no elevate.exe: nsis.packElevateHelper is false and perMachine is not true");
+    ok(!noElevate(Object.assign({}, cfg, { nsis: Object.assign({}, cfg.nsis, { packElevateHelper: undefined }) })),
+      "15b control: the switch left at electron-builder's default reads red");
+    ok(!noElevate(Object.assign({}, cfg, { nsis: Object.assign({}, cfg.nsis, { perMachine: true }) })),
+      "15b control: perMachine true, which makes electron-builder ignore the switch, reads red");
+  }
+}
+
 console.log("\n#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
 console.log("install-plan-selftest " + (fails ? "FAILED " + fails + " of " : "passed ") + checks + " check(s)");
 process.exit(fails ? Math.min(fails, 63) : 0);
