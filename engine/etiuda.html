@@ -8783,6 +8783,10 @@ What you type stays in this browser only.`;
     "Signed in with {PROVIDER}": "Zalogowano przez {PROVIDER}",
     "Account settings": "Ustawienia konta",
     "Signed in. No team yet": "Zalogowano. Jeszcze bez zespołu",
+    /* The door-finding's words, the copywriter's to write: placeholder: Claudette */
+    "Join your team": "Dołącz do swojego zespołu",
+    "Your licence has a team on the relay. Ask to join it, and its lead's Studio lets you in if it knows you.": "Twoja licencja ma zespół na przekaźniku. Poproś o dołączenie, a Studio lidera wpuści Cię, jeśli Cię zna.",
+    "Join": "Dołącz",
     "No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.": "Żaden zespół nie przyjął jeszcze tego konta. Gdy lider zespołu przyjmie je po kodzie poniżej, katalog przyjdzie sam.",
     "Your sign-in code": "Kod logowania",
     "Not a secret. It tells a team's lead which account is yours.": "To nie tajemnica. Po nim lider zespołu rozpoznaje, czyje to konto.",
@@ -26219,7 +26223,10 @@ What you type stays in this browser only.`;
       preview: o.preview === true && Array.isArray(o.offered) && o.offered.some(known),
       /* The provider's page of the sign-in that waits, only while one does. */
       link: known(o.busy) && typeof o.link === "string" && /^https:\/\/\S+$/.test(o.link) ? o.link : "",
-      keeps: o.keeps !== false
+      keeps: o.keeps !== false,
+      /* The doors the sign-in handed, offered while the desk keeps no team (the door-finding): each by its place, the relay's host
+         and the lead's print, so two leads' doors of one team are told apart. */
+      doors: signedIn && Array.isArray(o.doors) ? o.doors.filter((d) => d && Number.isInteger(d.n) && typeof d.host === "string" && d.host.length <= 256 && /^[0-9a-f]{16}$/.test(String(d.print))).slice(0, 16).map((d) => ({ n: d.n, host: d.host, print: String(d.print) })) : []
     };
   }
   var signinV = signinRead(null);
@@ -26344,6 +26351,16 @@ What you type stays in this browser only.`;
       code: v.code,
       acts: [{ act: "check", label: t("Check now"), solid: true }, acct]
     };
+    if (!p.team && v.seat === "held" && v.doors.length) return {
+      moment: "doors",
+      ident,
+      heading: t("Join your team"),
+      // placeholder: Claudette
+      line: t("Your licence has a team on the relay. Ask to join it, and its lead's Studio lets you in if it knows you."),
+      // placeholder: Claudette
+      doors: v.doors,
+      acts: [acct]
+    };
     if (!p.team && v.reached && v.seat === "held") return {
       moment: "noteam",
       ident,
@@ -26387,6 +26404,9 @@ What you type stays in this browser only.`;
   function signinCodeHtml(code, label2) {
     return '<div class="sgn-code">' + (label2 ? '<span class="k">' + esc(label2) + "</span>" : "") + "<code>" + esc(signinCodeText(code)) + "</code>" + signinCopyHtml("copy") + "</div>";
   }
+  function signinDoorsHtml(doors) {
+    return doors.map((d) => '<div class="sgn-code" data-signin-door-row><span class="k">' + esc(d.host) + "</span><code>" + esc(d.print) + '</code><button type="button" class="btn primary" data-signin-act="door" data-signin-door="' + esc(String(d.n)) + '">' + esc(t("Join")) + "</button></div>").join("");
+  }
   function signinActsHtml(acts) {
     return '<div class="sgn-acts">' + acts.map((a) => '<button type="button" class="btn' + (a.solid ? " primary" : "") + '" data-signin-act="' + esc(a.act) + '">' + esc(a.label) + "</button>").join("") + "</div>";
   }
@@ -26407,6 +26427,7 @@ What you type stays in this browser only.`;
     if (d.team) h += '<p class="sgn-ln">' + esc(d.team) + "</p>";
     if (d.say) h += '<p class="sgn-say' + (d.calm ? " calm" : "") + '"><b>' + esc(d.say[0]) + "</b><span>" + esc(d.say[1]) + "</span></p>";
     if (d.code) h += signinCodeHtml(d.code, "");
+    if (d.doors && d.doors.length) h += signinDoorsHtml(d.doors);
     if (d.providers && d.providers.length) h += signinProvidersHtml(d.providers, false);
     if (d.cap) h += '<p class="sgn-cap">' + esc(d.cap) + "</p>";
     if (d.privacy) h += '<p class="sgn-cap">' + esc(d.privacy) + "</p>";
@@ -26557,6 +26578,11 @@ What you type stays in this browser only.`;
       signinCall("signinOut").then((v) => {
         if (v) signinChanged(v, false);
       });
+      return;
+    }
+    if (act === "door") {
+      const n = Number(btn && btn.getAttribute ? btn.getAttribute("data-signin-door") : NaN);
+      if (Number.isInteger(n)) signinCall("signinDoor", n).then(() => signinChanged(signinNow(), false));
       return;
     }
     if (act === "another") {
@@ -35787,7 +35813,7 @@ What you type stays in this browser only.`;
     const rows = [name];
     if (v.signedIn && !signinChoosingNow()) {
       const p = signinParts(v), val = (x) => '<span class="sgn-val">' + esc(x) + "</span>", join = (pair) => pair[0] + " " + pair[1];
-      rows.push(p.team ? row("team", "people", t("Team"), p.team.lead ? t("Led by {LEAD}").split("{LEAD}").join(p.team.lead) : "", val(p.teamName)) : row("team", "people", t("No team yet"), t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."), ""));
+      rows.push(p.team ? row("team", "people", t("Team"), p.team.lead ? t("Led by {LEAD}").split("{LEAD}").join(p.team.lead) : "", val(p.teamName)) : v.doors.length && v.seat === "held" ? row("team", "people", t("Join your team"), t("Your licence has a team on the relay. Ask to join it, and its lead's Studio lets you in if it knows you."), signinDoorsHtml(v.doors)) : row("team", "people", t("No team yet"), t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."), ""));
       if (v.code) rows.push(row(
         "code",
         "code",
