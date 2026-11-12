@@ -339,7 +339,9 @@ async function allUpgrade(rec) {
 
 async function allMove(rec) {
   const old = olderSetup(rec);
-  const A = path.join(LAB, "move-a", PRODUCT), B = path.join(LAB, "move-b", PRODUCT);
+  /* Folders with no space: /D must be last and unquoted, so P.installArgs refuses a path holding one, and the product's name has one
+     (installer-runner run 43242113686, 2026-11-12, where this leg threw before installing anything). */
+  const A = path.join(LAB, "move-a", "app"), B = path.join(LAB, "move-b", "app");
   rec.after("uninstall", uninstallMachine);
   const argsA = P.installArgs({ mode: "machine", dir: A });
   const badA = P.argsFault(argsA, "machine");
