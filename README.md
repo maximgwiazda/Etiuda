@@ -56,6 +56,10 @@ Which command to use depends on the account the deployment tool runs as:
 the `.ec` type and the `etiuda:` link, all under HKLM, and its uninstall takes them away; a per-user install keeps
 all three in that account's HKCU.
 
+Install for all users into Program Files, or into a folder that neither Users, Authenticated Users, Everyone nor
+INTERACTIVE (S-1-5-32-545, S-1-5-11, S-1-1-0, S-1-5-4) can write to, and whose parent folder they cannot write to either.
+A silent install gives no warning when this is not so.
+
 The uninstaller takes `/S` the same way, as the `QuietUninstallString` the installer registers, and keeps each
 person's data. For an all-users install that is `"C:\Program Files\Etiuda\Uninstall Etiuda.exe" /allusers /S`,
 written out in full for a tool that does not expand variables. The exit code says what to do next:

@@ -9,7 +9,8 @@
  *    so elevated copy closes any running app before copying files.
  * 3. Every template MessageBox: a silent default (/SD), so a silent run ends with an exit code (SILENT_DEFAULTS).
  * 4. The exit codes a deployment tool can act on (EXIT_CODES).
- * 5. A silent run with no switch that no person could start the app from installs for all users (MACHINE_WIDE).
+ * 5. A silent run with no switch that no person could start the app from installs for all users, and an all-users install
+ *    into a folder ordinary users can change asks first (MACHINE_WIDE).
  * 6. Nothing a non-administrator can write is run, or removed by a walk that follows a link, elevated (AS_ITS_OWNER).
  */
 "use strict";
@@ -201,6 +202,11 @@ const MACHINE_WIDE = [
     "${EndIf}",
     "!endif",
   ], "before"],
+  /* 5b. An all-users install into a folder ordinary users can change asks first, on the folder page's Next: the functions
+   *     of shell/installer/allusers-folder.nsh are compiled here, after electron-builder's !addplugindir, and the leave
+   *     function is the page's. An include without the macro keeps the template's page. */
+  ["assistedInstaller.nsh", "!insertmacro MUI_PAGE_DIRECTORY", ["!ifmacrodef etiudaFolderCheck",
+    "  !insertmacro etiudaFolderCheck", "  !define MUI_PAGE_CUSTOMFUNCTION_LEAVE etiudaFolderLeave", "!endif"], "before"],
 ];
 
 /* 6. An all-users install ran the uninstaller HKCU names, elevated; shell/installer.nsh's etiudaOldUserCopy runs it as
