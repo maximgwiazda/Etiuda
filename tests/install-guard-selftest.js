@@ -208,4 +208,19 @@ ok(/not the test build/.test(G.setupRefusal(idOf(I.TEST.studio.productName, "x "
   "s8 Studio's test build is refused for the desk's legs");
 ok(/not the test build/.test(G.setupRefusal(idOf(t.productName, "no mark"), "desk")), "s9 the test product name without the mark is refused");
 
+/* The desk sentinel: a home holding it refuses whatever else stands, the flag naming this account included; a home without it adds
+   nothing. Read in lab homes only, never the real one. */
+{
+  const homes = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "install-guard-sentinel-"));
+  const withIt = path.join(homes, "desk"), without = path.join(homes, "runner");
+  fs.mkdirSync(withIt); fs.mkdirSync(without);
+  fs.writeFileSync(path.join(withIt, G.DESK_SENTINEL), "lab");
+  const env = Object.assign({}, process.env, { [G.ACCOUNT_FLAG]: require("node:os").userInfo().username });
+  const a = G.guardStart({ home: withIt, env }), b = G.guardStart({ home: without, env });
+  ok(a.refusals.some(r => r.indexOf(G.DESK_SENTINEL) > -1), "d1 a home carrying " + G.DESK_SENTINEL + " refuses, the account flag set to this account notwithstanding");
+  ok(!b.refusals.some(r => r.indexOf(G.DESK_SENTINEL) > -1), "d2 control: a home without it adds no refusal of its own");
+  ok(G.deskSentinelAt({ USERPROFILE: without }) === path.join(without, G.DESK_SENTINEL), "d3 the sentinel is read in the account's home (USERPROFILE)");
+  try { fs.rmSync(homes, { recursive: true, force: true }); } catch (e) { /* held */ }
+}
+
 done();
