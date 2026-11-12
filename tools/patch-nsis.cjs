@@ -10,6 +10,7 @@
  * 3. Every template MessageBox: a silent default (/SD), so a silent run ends with an exit code (SILENT_DEFAULTS).
  * 4. The exit codes a deployment tool can act on (EXIT_CODES).
  * 5. A silent run with no switch that no person could start the app from installs for all users (MACHINE_WIDE).
+ * 6. Nothing a non-administrator can write is run, or removed by a walk that follows a link, elevated (AS_ITS_OWNER).
  */
 "use strict";
 const fs = require("node:fs");
@@ -202,6 +203,51 @@ const MACHINE_WIDE = [
   ], "before"],
 ];
 
+/* 6. An all-users install ran the uninstaller HKCU names, elevated; shell/installer.nsh's etiudaOldUserCopy runs it as
+ *    the account it belongs to. The uninstaller's three RMDir /r of $APPDATA under --delete-app-data follow a junction;
+ *    ETIUDA_REMOVE_TREE names the walk that does not. Each row is [template, its lines as the template has them, each
+ *    trimmed line once in that file and the lines consecutive, the lines before them, the lines after]: the template's
+ *    own lines stay as the !else, for a hook file that defines neither. */
+const AS_ITS_OWNER = [
+  ["installSection.nsh", ["!insertmacro uninstallOldVersion HKEY_CURRENT_USER", "!insertmacro handleUninstallResult HKEY_CURRENT_USER"],
+    ["!ifmacrodef etiudaOldUserCopy", "  !insertmacro etiudaOldUserCopy", "!else"], ["!endif"]],
+].concat(["APP_FILENAME", "APP_PRODUCT_FILENAME", "APP_PACKAGE_NAME"].map(name => ["uninstaller.nsh",
+  ["RMDir /r \"$APPDATA\\${" + name + "}\""],
+  ["!ifdef ETIUDA_REMOVE_TREE", "  Push \"$APPDATA\\${" + name + "}\"", "  Call ${ETIUDA_REMOVE_TREE}", "!else"], ["!endif"]]));
+
+/* The row's lines as an index, "done" when already wrapped, or why it cannot be read. */
+function wrapRowAt(lines, own, before, after) {
+  const t = lines.map(l => l.trim());
+  const at = t.indexOf(own[0]);
+  if (at < 0 || t.indexOf(own[0], at + 1) > -1) return at < 0 ? "not found" : "found more than once";
+  if (!own.every((o, k) => t[at + k] === o)) return "not consecutive";
+  const wrapped = before.every((b, k) => t[at - before.length + k] === b.trim())
+    && after.every((a, k) => t[at + own.length + k] === a.trim());
+  return wrapped ? "done" : at;
+}
+
+function applyWrapRows(nsisDir, rows = AS_ITS_OWNER) {
+  for (const [file, own, before, after] of rows) {
+    const p = path.join(nsisDir, file);
+    if (!fs.existsSync(p)) continue;
+    const lines = fs.readFileSync(p, "utf8").split("\n");
+    const at = wrapRowAt(lines, own, before, after);
+    if (typeof at === "string") continue;
+    const indent = /^\s*/.exec(lines[at])[0], cr = lines[at].endsWith("\r") ? "\r" : "";
+    const put = list => list.map(l => indent + l + cr);
+    const body = lines.slice(at, at + own.length).map(l => "  " + l);
+    lines.splice(at, own.length, ...put(before), ...body, ...put(after));
+    fs.writeFileSync(p, lines.join("\n"), "utf8");
+  }
+}
+
+function wrapRowsMissing(nsisDir, rows = AS_ITS_OWNER) {
+  return rows.filter(([file, own, before, after]) => {
+    const p = path.join(nsisDir, file);
+    return !fs.existsSync(p) || wrapRowAt(fs.readFileSync(p, "utf8").split("\n"), own, before, after) !== "done";
+  }).map(([file, own]) => file + ": " + own[0]);
+}
+
 /* The row's anchor as a line index, or why not: its trimmed line must occur exactly once. */
 function exitRowAt(lines, anchor) {
   const hits = lines.map((l, i) => (l.trim() === anchor ? i : -1)).filter(i => i > -1);
@@ -250,6 +296,7 @@ function verifyNsisPatches(rootDir) {
   const silentMissing = silentDefaultsMissing(nsisDir), unanswered = unansweredBoxes(nsisDir), exitMissing = exitCodesMissing(nsisDir);
   const machineWideMissing = exitCodesMissing(nsisDir, MACHINE_WIDE);
   const retryMissing = retryWindowMissing(nsisDir);
+  const ownerMissing = wrapRowsMissing(nsisDir);
   return {
     multiUserUiPatched: !!multiUserUiPatched,
     installSectionPatched: !!installSectionPatched,
@@ -262,8 +309,10 @@ function verifyNsisPatches(rootDir) {
     machineWideMissing,
     retryWindowPatched: retryMissing.length === 0,
     retryMissing,
+    asItsOwnerPatched: ownerMissing.length === 0,
+    ownerMissing,
     applied: !!(multiUserUiPatched && installSectionPatched) && silentMissing.length === 0 && unanswered.length === 0
-      && exitMissing.length === 0 && machineWideMissing.length === 0 && retryMissing.length === 0,
+      && exitMissing.length === 0 && machineWideMissing.length === 0 && retryMissing.length === 0 && ownerMissing.length === 0,
   };
 }
 
@@ -312,6 +361,7 @@ function applyNsisPatches(rootDir) {
   applyExitCodes(path.dirname(uiPath));
   applyExitCodes(path.dirname(uiPath), MACHINE_WIDE);
   applyRetryWindow(path.dirname(uiPath));
+  applyWrapRows(path.dirname(uiPath));
   return verifyNsisPatches(rootDir);
 }
 

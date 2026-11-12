@@ -402,6 +402,55 @@
   FunctionEnd
   !endif
   !endif
+
+  # A TREE REMOVED WITHOUT ENTERING A LINK: RMDir /r follows a junction into its target, so run elevated over a folder its
+  # user can write, it deletes wherever a link planted there points. Each entry's attributes are read before it is entered,
+  # and a link is removed as itself. The folder is on the stack; a drive root is refused, as RMDir /r refuses one.
+  !ifdef BUILD_UNINSTALLER
+    !define ETIUDA_REMOVE_TREE "un.etiudaRemoveTree"
+  !endif
+  # Compiled where the name is defined: an unreferenced function is warning 6010, so an installer-pass caller defines it too.
+  !ifdef ETIUDA_REMOVE_TREE
+  Function ${ETIUDA_REMOVE_TREE}
+    Exch $R0
+    Push $R1
+    Push $R2
+    StrLen $R1 $R0
+    ${If} $R1 < 4
+      Goto etiudaTreeDone
+    ${EndIf}
+    System::Call 'kernel32::GetFileAttributesW(w R0) i .R1'
+    ${If} $R1 = -1
+      Goto etiudaTreeDone
+    ${EndIf}
+    IntOp $R2 $R1 & 0x400
+    ${If} $R2 <> 0
+      RMDir $R0
+      Delete $R0
+      Goto etiudaTreeDone
+    ${EndIf}
+    IntOp $R2 $R1 & 0x10
+    ${If} $R2 = 0
+      Delete $R0
+      Goto etiudaTreeDone
+    ${EndIf}
+    FindFirst $R1 $R2 "$R0\*.*"
+    ${DoWhile} $R2 != ""
+      ${If} $R2 != "."
+      ${AndIf} $R2 != ".."
+        Push "$R0\$R2"
+        Call ${ETIUDA_REMOVE_TREE}
+      ${EndIf}
+      FindNext $R1 $R2
+    ${Loop}
+    FindClose $R1
+    RMDir $R0
+    etiudaTreeDone:
+    Pop $R2
+    Pop $R1
+    Pop $R0
+  FunctionEnd
+  !endif
 !macroend
 
 # The cache directory, taken from electron-builder's own define rather than spelled a second time
@@ -525,11 +574,12 @@
 
 # AN UPDATE LEAVES THE INSTALLED FILES WHERE THEY ARE: the new installer copies over them only once its own extraction to a
 # temporary folder has finished, so a run cut short before then leaves the old version whole. A plain uninstall removes
-# the folder, as electron-builder's own step does.
+# the folder, as electron-builder's own step does, without entering a link (un.etiudaRemoveTree).
 !macro customRemoveFiles
   ${IfNot} ${isUpdated} ; plant:update-keeps-files
     SetOutPath $TEMP
-    RMDir /r $INSTDIR
+    Push $INSTDIR
+    Call un.etiudaRemoveTree
   ${EndIf}
 !macroend
 
@@ -612,12 +662,15 @@
     ${EndIf}
     !ifdef ETIUDA_REMOVE_LICENCE_WITH_DATA
       # Three folder names, licence included. Reset's keep list is the other one, on purpose.
-      RMDir /r "$APPDATA\${APP_FILENAME}"
+      Push "$APPDATA\${APP_FILENAME}"
+      Call un.etiudaRemoveTree
       !ifdef APP_PRODUCT_FILENAME
-        RMDir /r "$APPDATA\${APP_PRODUCT_FILENAME}"
+        Push "$APPDATA\${APP_PRODUCT_FILENAME}"
+        Call un.etiudaRemoveTree
       !endif
       !ifdef APP_PACKAGE_NAME
-        RMDir /r "$APPDATA\${APP_PACKAGE_NAME}"
+        Push "$APPDATA\${APP_PACKAGE_NAME}"
+        Call un.etiudaRemoveTree
       !endif
     !else
       Push "$APPDATA\${APP_FILENAME}"
@@ -636,6 +689,67 @@
     ${EndIf}
   ${EndIf}
   !endif
+!macroend
+
+# RUN AS THE PERSON, from an elevated instance: the macro named by RUN runs in the unelevated instance that started this
+# one, and only the registers cross, both ways. $R9 reads "unreached" after unless RUN set it, so a caller can tell that
+# nothing ran: no such instance (an installer started elevated has none), or it could not be reached.
+!define ETIUDA_AS_USER_N 0
+!macro etiudaAsUser RUN
+  !define /redef /math ETIUDA_AS_USER_N ${ETIUDA_AS_USER_N} + 1
+  StrCpy $R9 "unreached"
+  ${If} ${UAC_IsInnerInstance}
+    Goto etiudaAsUserCall${ETIUDA_AS_USER_N}
+  etiudaAsUserRun${ETIUDA_AS_USER_N}:
+    !insertmacro ${RUN}
+    Return
+  etiudaAsUserCall${ETIUDA_AS_USER_N}:
+    !insertmacro UAC_AsUser_Call Label etiudaAsUserRun${ETIUDA_AS_USER_N} ${UAC_SYNCREGISTERS}
+  ${EndIf}
+!macroend
+
+# A folder removed without entering a link, from anywhere a function may be called: un.etiudaRemoveTree in customHeader.
+# The hooks call it directly, since Studio's cut of them stops before this macro.
+!macro etiudaRemoveTree FOLDER
+  Push `${FOLDER}`
+  Call ${ETIUDA_REMOVE_TREE}
+!macroend
+
+# A COPY INSTALLED FOR ONE ACCOUNT, met by an all-users install, is removed by its own uninstaller run as that account
+# (etiudaAsUser): the file, and the HKCU key naming it, are that account's to write. tools/patch-nsis.cjs inserts this
+# where the template ran it elevated. The error flag rides back in $R9; $appExe goes over in $R8.
+!macro etiudaOldUserCopyRun
+  StrCpy $appExe $R8
+  InitPluginsDir
+  !insertmacro uninstallOldVersion HKEY_CURRENT_USER
+  StrCpy $R9 "ran"
+  ${If} ${Errors}
+    StrCpy $R9 "failed"
+  ${EndIf}
+!macroend
+!macro etiudaOldUserCopy
+  ${If} ${UAC_IsInnerInstance}
+    Push $R8
+    Push $R9
+    StrCpy $R8 $appExe
+    !insertmacro etiudaAsUser etiudaOldUserCopyRun
+    ${If} $R9 == "unreached"
+      Pop $R9
+      Pop $R8
+    ${Else}
+      ClearErrors
+      ${If} $R9 == "failed"
+        SetErrors
+      ${EndIf}
+      Pop $R9
+      Pop $R8
+      !insertmacro handleUninstallResult HKEY_CURRENT_USER
+    ${EndIf}
+  ${Else}
+    # An installer started elevated has no unelevated instance to run it in, so here it still runs elevated.
+    !insertmacro uninstallOldVersion HKEY_CURRENT_USER
+    !insertmacro handleUninstallResult HKEY_CURRENT_USER
+  ${EndIf}
 !macroend
 
 # THE TURNING SIDEBAR AND HEADER. Looping frames, one every ${TURN_INTERVAL} ms. Frame 0 is the still
@@ -971,7 +1085,11 @@ Var RemoveDataBox
     Exch $R0
     Push $R1
     Push $R2
-    IfFileExists "$R0\*.*" 0 unClearDeskDone
+    # A folder only, never a link to one (un.etiudaRemoveTree).
+    System::Call 'kernel32::GetFileAttributesW(w R0) i .R1'
+    IntCmp $R1 -1 unClearDeskDone
+    IntOp $R1 $R1 & 0x410
+    IntCmp $R1 0x10 0 unClearDeskDone unClearDeskDone
     FindFirst $R1 $R2 "$R0\*.*"
     unClearDeskLoop:
       StrCmp $R2 "" unClearDeskClose
@@ -979,11 +1097,8 @@ Var RemoveDataBox
       StrCmp $R2 ".." unClearDeskNext
       StrCmp $R2 "etiuda-license.js" unClearDeskNext
       StrCmp $R2 "etiuda-revoked.json" unClearDeskNext
-      IfFileExists "$R0\$R2\*.*" 0 unClearDeskFile
-        RMDir /r "$R0\$R2"
-        Goto unClearDeskNext
-      unClearDeskFile:
-        Delete "$R0\$R2"
+      Push "$R0\$R2"
+      Call un.etiudaRemoveTree
       unClearDeskNext:
         FindNext $R1 $R2
         Goto unClearDeskLoop

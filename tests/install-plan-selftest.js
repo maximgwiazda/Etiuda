@@ -745,6 +745,184 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
   ok(!unRunValue(NSH.split("${If} $0 == $R8\n      DeleteRegValue").join("DeleteRegValue")), "13h control: deleting without the program's check reads red");
 }
 
+/* ---- 14. nothing a non-administrator can write is run, or removed by a walk that follows a link, elevated -------- */
+/* Read only, on a copy of the templates as the patch tool leaves them and on shell/installer.nsh. The question each row
+   answers: does anything recursive or executable run elevated inside a folder a non-admin can write? HKCU, the per-user
+   folder and the roaming folder are that account's to write; RMDir /r follows a junction, as the build's own makensis was probed to. */
+{
+  const osx = require("node:os");
+  const ROOT = path.join(__dirname, "..");
+  const patchTool = require(path.join(ROOT, "tools", "patch-nsis.cjs"));
+  const lab = fs.mkdtempSync(path.join(osx.tmpdir(), "etiuda-nsis-owner-"));
+  const to = path.dirname(patchTool.getPaths(lab).multiUserUi);
+  const T = {};
+  let status = {};
+  const walkDir = (d, rel = "") => fs.readdirSync(d, { withFileTypes: true }).forEach(e => {
+    const r = rel ? rel + "/" + e.name : e.name;
+    if (e.isDirectory()) return walkDir(path.join(d, e.name), r);
+    if (/\.(nsh|nsi)$/i.test(e.name)) T[r] = fs.readFileSync(path.join(d, e.name), "utf8");
+  });
+  try {
+    fs.cpSync(path.dirname(patchTool.getPaths(ROOT).multiUserUi), to, { recursive: true });
+    status = patchTool.applyNsisPatches(lab);
+    walkDir(to);
+  } catch (e) { status = { error: e.message }; }
+  fs.rmSync(lab, { recursive: true, force: true });
+  const NSH = fs.readFileSync(path.join(ROOT, "shell", "installer.nsh"), "utf8");
+  const macro = (text, name) => (new RegExp("!macro " + name + "(?: [^\\r\\n]*)?\\r?\\n([\\s\\S]*?)!macroend").exec(String(text)) || [])[1] || "";
+  const code = text => String(text).split(/\r?\n/).map(l => l.trim()).filter(l => l && !/^[#;]/.test(l));
+  /* The template files the desk's assisted build compiles: portable.nsi is another target, oneClick.nsh another mode. */
+  const built = tpl => Object.keys(tpl).filter(f => !/^(portable\.nsi|oneClick\.nsh)$/.test(f));
+  /* Lines inside the !else of a directive the hook file satisfies (the then-branch compiles, the else does not). */
+  const deadElse = (text, satisfied) => {
+    const dead = new Set(), stack = [];
+    String(text).split(/\r?\n/).forEach((raw, i) => {
+      const t = raw.trim();
+      const m = /^!(ifdef|ifmacrodef|ifndef|ifmacrondef|if)\b\s*(\S*)/.exec(t);
+      if (m) { stack.push({ sat: (m[1] === "ifdef" || m[1] === "ifmacrodef") && satisfied(m[1], m[2]), inElse: false }); return; }
+      if (/^!else\b/.test(t) && stack.length) { stack[stack.length - 1].inElse = true; return; }
+      if (/^!endif\b/.test(t)) { stack.pop(); return; }
+      if (stack.some(s => s.sat && s.inElse)) dead.add(i);
+    });
+    return dead;
+  };
+  const defines = nsh => new Set((String(nsh).match(/^[ \t]*!define[ \t]+(\w+)/gm) || []).map(l => l.trim().split(/\s+/)[1]));
+  const macros = nsh => new Set((String(nsh).match(/^[ \t]*!macro[ \t]+(\w+)/gm) || []).map(l => l.trim().split(/\s+/)[1]));
+  const satisfiedBy = nsh => { const d = defines(nsh), m = macros(nsh); return (kind, name) => (kind === "ifdef" ? d.has(name) : m.has(name)); };
+  const liveLines = (tpl, nsh) => {
+    const out = [];
+    for (const f of built(tpl)) {
+      const dead = deadElse(tpl[f], satisfiedBy(nsh));
+      String(tpl[f]).split(/\r?\n/).forEach((l, i) => { if (!dead.has(i) && l.trim() && !/^\s*[#;]/.test(l)) out.push({ f, i: i + 1, l: l.trim() }); });
+    }
+    return out;
+  };
+
+  /* 14a: every program run is a system tool, this install's own program, run as the person, or the old uninstaller;
+     and the uninstaller HKCU names is reached in an elevated instance only through the unelevated one. */
+  const EXEC = /\b(ExecWait|ExecShellWait|ExecShell|Exec|nsExec::Exec\w*)\b/;
+  /* The lines of the named macros in a template, as 1-based numbers. */
+  const macroLines = (text, names) => {
+    const out = new Set();
+    let open = false;
+    String(text || "").split(/\r?\n/).forEach((raw, i) => {
+      const t = raw.trim(), m = /^!macro\s+(\S+)/.exec(t);
+      if (m) open = names.indexOf(m[1]) > -1;
+      if (open) out.add(i + 1);
+      if (/^!macroend\b/.test(t)) open = false;
+    });
+    return out;
+  };
+  const execStray = (tpl, nsh) => {
+    const stray = [];
+    /* The template's own close check, inserted only where no customCheckAppRunning is, which the desk's hooks define. */
+    const unused = macros(nsh).has("customCheckAppRunning")
+      ? macroLines(tpl["include/allowOnlyOneInstallerInstance.nsh"], ["KILL_PROCESS", "FIND_PROCESS", "IS_POWERSHELL_AVAILABLE", "_CHECK_APP_RUNNING"])
+      : new Set();
+    for (const { f, i, l } of liveLines(tpl, nsh)) {
+      if (!EXEC.test(l) || /^!define\b/.test(l) || f === "include/StdUtils.nsh" || f === "include/UAC.nsh") continue;
+      if (f === "include/allowOnlyOneInstallerInstance.nsh" && unused.has(i)) continue;
+      if (/\$\{StdUtils\.ExecShellAsUser\}/.test(l)) continue;
+      if (f === "include/installUtil.nsh" && /^ExecWait '"\$uninstallerFileName(Temp)?" \/S \/KEEP_APP_DATA \$0 _\?=\$installationDir' \$R0$/.test(l)) continue;
+      if (/^nsExec::Exec `"\$(SYSDIR\\[\w.]+\.exe|CmdPath|PowerShellPath)"/.test(l)) continue;
+      stray.push(f + ":" + i + " " + l.slice(0, 70));
+    }
+    for (const { f, i, l } of liveLines({ "shell/installer.nsh": nsh }, "")) {
+      if (!EXEC.test(l)) continue;
+      if (/^nsExec::Exec(\s+\/TIMEOUT=\d+)? `"\$(SYSDIR\\[\w.]+\.exe|INSTDIR\\\$\{APP_EXECUTABLE_FILENAME\})"/.test(l)) continue;
+      stray.push(f + ":" + i + " " + l.slice(0, 70));
+    }
+    return stray;
+  };
+  const hkcuAsUser = (tpl, nsh) => {
+    const sec = code(tpl["installSection.nsh"] || "");
+    const call = "!insertmacro uninstallOldVersion HKEY_CURRENT_USER";
+    const guarded = sec.every((l, k) => l !== call
+      || (sec[k - 1] === "!else" && sec[k - 2] === "!insertmacro etiudaOldUserCopy" && sec[k - 3] === "!ifmacrodef etiudaOldUserCopy"));
+    const m = code(macro(nsh, "etiudaOldUserCopy"));
+    const inner = m.indexOf("${If} ${UAC_IsInnerInstance}"), outer = m.lastIndexOf("${Else}");
+    if (!guarded || !macros(nsh).has("etiudaOldUserCopy") || inner !== 0 || outer < 0) return { ok: false, open: 0 };
+    /* The inner branch runs it only inside etiudaAsUser, whose segment the elevated instance jumps over and reaches only
+       through UAC_AsUser_Call; the segment is the RUN macro and a Return. */
+    const body = m.slice(inner, outer);
+    const run = (body.map(l => /^!insertmacro etiudaAsUser (\w+)$/.exec(l)).find(Boolean) || [])[1] || "";
+    const asUser = asUserHolds(nsh);
+    const ranThere = code(macro(nsh, run)).filter(l => l === call).length === 1;
+    const ok = !!run && asUser && ranThere && !body.includes(call);
+    return { ok, open: m.slice(outer).filter(l => l === call).length };
+  };
+  const asUserHolds = nsh => {
+    const b = code(macro(nsh, "etiudaAsUser"));
+    const go = b.findIndex(l => /^Goto etiudaAsUserCall\$\{ETIUDA_AS_USER_N\}$/.test(l));
+    const seg = b.indexOf("etiudaAsUserRun${ETIUDA_AS_USER_N}:"), runAt = b.indexOf("!insertmacro ${RUN}");
+    const ret = b.indexOf("Return", seg), call = b.indexOf("etiudaAsUserCall${ETIUDA_AS_USER_N}:");
+    const via = b.indexOf("!insertmacro UAC_AsUser_Call Label etiudaAsUserRun${ETIUDA_AS_USER_N} ${UAC_SYNCREGISTERS}");
+    return b.indexOf("${If} ${UAC_IsInnerInstance}") > -1 && go > -1 && seg === go + 1 && runAt === seg + 1 && ret === runAt + 1
+      && call === ret + 1 && via === call + 1 && !b.some(l => /\b(Goto|Call)\s+:?etiudaAsUserRun/.test(l))
+      && /StrCpy \$R9 "unreached"/.test(b.slice(0, go).join("\n"));
+  };
+  const hk = hkcuAsUser(T, NSH), stray = execStray(T, NSH);
+  ok(status.asItsOwnerPatched === true && hk.ok && stray.length === 0,
+    "14a in an all-users install the uninstaller HKCU names runs only as its own account, through the unelevated instance"
+    + " (UAC_AsUser_Call), and every other program run is a system tool, this install's own program, or run as the person: "
+    + JSON.stringify({ asItsOwnerPatched: status.asItsOwnerPatched, asUser: hk.ok, stray }));
+  console.log("  OPEN 14a: an installer started already elevated has no unelevated instance, and still runs that uninstaller"
+    + " elevated, sites: " + hk.open + ", until that case is ruled");
+  const mainSec = T["installSection.nsh"] ? T["installSection.nsh"].replace(/!ifmacrodef etiudaOldUserCopy\r?\n\s*!insertmacro etiudaOldUserCopy\r?\n\s*!else\r?\n\s*(!insertmacro uninstallOldVersion HKEY_CURRENT_USER\r?\n\s*!insertmacro handleUninstallResult HKEY_CURRENT_USER)\r?\n\s*!endif/, "$1") : "";
+  ok(!hkcuAsUser(Object.assign({}, T, { "installSection.nsh": mainSec }), NSH).ok,
+    "14a control: the template's elevated run, as main's patch tool leaves it, reads red");
+  ok(!hkcuAsUser(T, NSH.replace(/\n\s*Goto etiudaAsUserCall\$\{ETIUDA_AS_USER_N\}\r?\n/, "\n")).ok,
+    "14a control: the elevated instance falling into the segment instead of jumping over it reads red");
+  ok(!hkcuAsUser(T, NSH.replace("!insertmacro UAC_AsUser_Call Label etiudaAsUserRun${ETIUDA_AS_USER_N} ${UAC_SYNCREGISTERS}", "Call :etiudaAsUserRun${ETIUDA_AS_USER_N}")).ok,
+    "14a control: the segment called in the elevated instance rather than through UAC_AsUser_Call reads red");
+  ok(!hkcuAsUser(T, NSH.replace(/(\n\s*)!insertmacro etiudaAsUser etiudaOldUserCopyRun/, "$1!insertmacro etiudaOldUserCopyRun")).ok,
+    "14a control: the run macro inserted straight into the elevated instance reads red");
+  ok(execStray(T, NSH.replace("!macro customInstall\n", "!macro customInstall\n  ExecWait '\"$R0\"'\n")).length === 1,
+    "14a control: a program named by a register, run from a hook, reads red");
+  ok(execStray(Object.assign({}, T, { "installSection.nsh": T["installSection.nsh"] + "\nExec '\"$INSTDIR\\x.exe\"'\n" }), NSH).length === 1,
+    "14a control: a program run from a template line the inventory does not know reads red");
+
+  /* 14b: RMDir /r, which follows a junction, is used only over the installer's own $PLUGINSDIR. */
+  const rmdirStray = (tpl, nsh) => liveLines(tpl, nsh).concat(liveLines({ "shell/installer.nsh": nsh }, ""))
+    .filter(({ l }) => /^RMDir\s+\/r\b/i.test(l) && !/^RMDir\s+\/r\s+"?\$PLUGINSDIR\\/i.test(l)).map(({ f, i, l }) => f + ":" + i + " " + l);
+  const rs = rmdirStray(T, NSH);
+  ok(rs.length === 0 && status.asItsOwnerPatched === true,
+    "14b no RMDir /r runs over anything but the installer's own $PLUGINSDIR: the install folder, the roaming folder and the"
+    + " template's --delete-app-data removal go through the walk: " + JSON.stringify(rs));
+  ok(rmdirStray(T, NSH.replace(/Push \$INSTDIR\r?\n\s*Call un\.etiudaRemoveTree/, "RMDir /r $INSTDIR")).length === 1,
+    "14b control: main's RMDir /r $INSTDIR put back reads red");
+  ok(rmdirStray(T, NSH.replace(/!define ETIUDA_REMOVE_TREE\b/, "!define ETIUDA_REMOVE_TREE_GONE")).length === 3,
+    "14b control: the walk's define gone, the template's three RMDir /r of $APPDATA compile again and read red");
+  ok(rmdirStray(T, NSH.replace(/Push "\$APPDATA\\\$\{APP_FILENAME\}"\r?\n\s*Call un\.etiudaRemoveTree/, "RMDir /r \"$APPDATA\\${APP_FILENAME}\"")).length === 1,
+    "14b control: main's RMDir /r of the roaming folder put back in the data step reads red");
+
+  /* 14c: the walk reads each entry's attributes before entering it, removes a link as itself, and is what removes. */
+  const walkHolds = nsh => {
+    const fn = (/Function \$\{ETIUDA_REMOVE_TREE\}\r?\n([\s\S]*?)FunctionEnd/.exec(nsh) || [])[1] || "";
+    const b = code(fn);
+    const attr = b.indexOf("System::Call 'kernel32::GetFileAttributesW(w R0) i .R1'");
+    const link = b.indexOf("IntOp $R2 $R1 & 0x400"), dir = b.indexOf("IntOp $R2 $R1 & 0x10"), find = b.findIndex(l => /^FindFirst\b/.test(l));
+    const linkArm = link > -1 ? b.slice(link, b.indexOf("${EndIf}", link)) : [];
+    const root = b.indexOf("StrLen $R1 $R0") > -1 && b.indexOf("StrLen $R1 $R0") < attr && b.includes("${If} $R1 < 4");
+    const recurse = b.filter(l => /^Call\b/.test(l));
+    const callers = [macro(nsh, "customRemoveFiles"), macro(nsh, "customUnInstall")].join("\n");
+    return attr === b.indexOf("${If} $R1 = -1") - 1 && attr > -1 && link > attr && dir > link && find > dir && root
+      && linkArm.includes("RMDir $R0") && linkArm.includes("Delete $R0") && linkArm.includes("Goto etiudaTreeDone") && !linkArm.some(l => /\/r\b|FindFirst/.test(l))
+      && recurse.length === 1 && recurse[0] === "Call ${ETIUDA_REMOVE_TREE}" && b.slice(find).includes("RMDir $R0")
+      && /Push \$INSTDIR\r?\n\s*Call un\.etiudaRemoveTree/.test(callers)
+      && (callers.match(/Push "\$APPDATA\\\$\{APP_\w+\}"\r?\n\s*Call un\.etiudaRemoveTree/g) || []).length === 3
+      && /!define ETIUDA_REMOVE_TREE "un\.etiudaRemoveTree"/.test(nsh);
+  };
+  ok(walkHolds(NSH), "14c the walk refuses a drive root, reads an entry's attributes before anything else, removes a junction or"
+    + " link as itself and leaves, enters only a real folder, and is what the uninstall and Remove my data call");
+  ok(!walkHolds(NSH.replace(/IntOp \$R2 \$R1 & 0x400\r?\n\s*\$\{If\} \$R2 <> 0\r?\n\s*RMDir \$R0\r?\n\s*Delete \$R0\r?\n\s*Goto etiudaTreeDone\r?\n\s*\$\{EndIf\}\r?\n/, "")),
+    "14c control: the link test taken out reads red");
+  ok(!walkHolds(NSH.replace(/(\n\s*)(FindFirst \$R1 \$R2 "\$R0\\\*\.\*")/, "$1FindClose $R1$1$2").replace(/(System::Call 'kernel32::GetFileAttributesW\(w R0\) i \.R1')/, "FindFirst $R1 $R2 \"$R0\\*.*\"\n    $1")),
+    "14c control: the folder entered before its attributes are read reads red");
+  ok(!walkHolds(NSH.replace(/(IntOp \$R2 \$R1 & 0x400\r?\n\s*\$\{If\} \$R2 <> 0\r?\n\s*)RMDir \$R0/, "$1RMDir /r $R0")),
+    "14c control: a link removed with RMDir /r reads red");
+}
+
 console.log("\n#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
 console.log("install-plan-selftest " + (fails ? "FAILED " + fails + " of " : "passed ") + checks + " check(s)");
 process.exit(fails ? Math.min(fails, 63) : 0);
