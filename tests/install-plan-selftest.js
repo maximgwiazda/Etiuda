@@ -984,6 +984,21 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const b = bundleOf(c, t);
     return !!b && (b.major > 3 || (b.major === 3 && b.minor >= 12)) && /^[0-9a-f]{64}$/.test(String(b.sha));
   };
+  if (!cfg || !table) {
+    notRun.push("15a, electron-builder.js or app-builder-lib could not be read");
+    console.log("  NOT RUN 15a: electron-builder.js or app-builder-lib could not be read");
+  } else {
+    const b = bundleOf(cfg, table);
+    ok(fixed(cfg, table), "15a the config pins electron-builder's NSIS toolset to a bundle of NSIS 3.12 or later, pinned by"
+      + " SHA-256 in app-builder-lib: " + (b ? "toolsets.nsis " + JSON.stringify(b.value) + ", " + b.file : "toolsets.nsis "
+      + JSON.stringify(cfg.toolsets && cfg.toolsets.nsis) + ", the legacy NSIS 3.04"));
+    ok(!fixed(Object.assign({}, cfg, { toolsets: undefined }), table),
+      "15a control: no toolsets key, electron-builder's legacy NSIS 3.04, reads red");
+    ok(!fixed(Object.assign({}, cfg, { toolsets: { nsis: "0.0.0" } }), table), "15a control: the legacy value \"0.0.0\" reads red");
+    ok(!b || !fixed(cfg, Object.assign({}, table, { [b.value]: { "nsis-bundle-3.11.tar.gz": b.sha } })),
+      "15a control: a bundle of 3.11 under the same value reads red");
+    ok(!b || !fixed(cfg, Object.assign({}, table, { [b.value]: { [b.file]: "" } })), "15a control: a bundle with no checksum reads red");
+  }
   /* 15b: elevate.exe stays out of the install. electron-builder copies it to resources\ for electron-updater's per-machine
      updates; neither this product nor its installer runs it (the all-users route is the UAC plug-in's, and the per-user
      copy's uninstaller runs through UAC_AsUser_Call), and perMachine true would override the switch. */
