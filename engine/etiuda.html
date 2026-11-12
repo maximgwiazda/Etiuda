@@ -1368,6 +1368,26 @@ html.e-still .sgn-run::after{animation:none;transform:translateX(80%)}
 .sgn-lede:has(+ .sgn-preview){margin-bottom:12px}
 .sgn-panel .sgn-preview{margin:12px 0 10px}
 .sgn-top .sgn-preview{max-width:none;margin:0 0 10px}
+/* The sign-in link while the browser is awaited (signinLinkHtml, the handoff's section 8): the line in the preview line's form, 6 px,
+   then the field, which takes the width left, never wraps and cuts the link's end. The panel's sits after a hairline, 12 px above
+   and below it; Account's 12 px under the acts (the card's 14 px gap less 2), the field at most 560 px. */
+.sgn-link{width:100%;min-width:0}
+.sgn-link .sgn-cap{margin:0;max-width:none}
+.sgn-link .sgn-cap b{color:var(--ink);font-weight:600}
+.sgn-link-row{display:flex;gap:8px;align-items:center;margin-top:6px;min-width:0}
+/* A reference, so in the ordinary weight and the dim ink; the input type in the selector outranks the header's .fill input. */
+.sgn-link input.sgn-link-f{flex:1 1 auto;width:auto;min-width:0;padding:5px 8px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
+  background:var(--field);color:var(--dim);font:400 12.5px var(--mono);white-space:nowrap;overflow:hidden;cursor:text;outline:none;
+  box-shadow:inset 0 -1px 0 0 var(--field-edge)}
+.sgn-link-row .btn{flex:none}
+/* The sign-in's Copy (signinCopyHtml): "Copy" and "Copied" share one cell, so the button holds the wider label's width. */
+.sgn-copy{display:inline-grid;justify-items:center}
+.sgn-copy>span{grid-area:1/1}
+.sgn-copy>span+span,.sgn-copy.sgn-done>span:first-child{visibility:hidden}
+.sgn-copy.sgn-done>span+span{visibility:visible}
+.sgn-panel .sgn-link{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.sgn-top .sgn-link{margin-top:-2px}
+.sgn-top .sgn-link-f{max-width:560px}
 .sgn-ft{font-size:12px;line-height:1.4;color:var(--dim);margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line)}
 .sgn-code{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 12px;margin-top:10px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
 .sgn-code code,.sgn-mono{font:600 14.5px var(--mono);letter-spacing:.04em;color:var(--ink);white-space:nowrap}
@@ -8781,6 +8801,11 @@ What you type stays in this browser only.`;
     "Preview only.": "Tylko podgląd.",
     "Sign-in is not set up yet, so nothing here is sent.": "Logowanie nie jest jeszcze uruchomione, więc nic stąd nie zostanie wysłane.",
     "Sign-in is not set up yet, so nothing was sent. This is a preview.": "Logowanie nie jest jeszcze uruchomione, więc nic nie wysłano. To tylko podgląd.",
+    "Copied": "Skopiowano",
+    "Browser did not open?": "Przeglądarka się nie otworzyła?",
+    "Paste this link into a browser on this computer.": "Łącze można wkleić w przeglądarkę na tym komputerze.",
+    "No keyring is open on this computer, so the sign-in is not kept: each renewal asks for it again.": "Na tym komputerze nie jest otwarty żaden magazyn kluczy, więc logowanie nie jest zachowywane: każde odnowienie wymaga ponownego logowania.",
+    // placeholder: Claudette
     "Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.": "Logowanie przenosi na ten komputer miejsce w licencji i zespół, który przyjął to konto. Etiuda do użytku prywatnego, poza pracą, nie wymaga logowania.",
     "Led by {LEAD}": "Prowadzi {LEAD}",
     "No team yet": "Jeszcze bez zespołu",
@@ -26186,7 +26211,10 @@ What you type stays in this browser only.`;
       refused: typeof o.refused === "string" ? o.refused : "",
       busy: known(o.busy) ? o.busy : "",
       said: typeof o.said === "string" ? o.said : "",
-      preview: o.preview === true && Array.isArray(o.offered) && o.offered.some(known)
+      preview: o.preview === true && Array.isArray(o.offered) && o.offered.some(known),
+      /* The provider's page of the sign-in that waits, only while one does. */
+      link: known(o.busy) && typeof o.link === "string" && /^https:\/\/\S+$/.test(o.link) ? o.link : "",
+      keeps: o.keeps !== false
     };
   }
   var signinV = signinRead(null);
@@ -26278,7 +26306,8 @@ What you type stays in this browser only.`;
       heading: t("Finish signing in in the browser"),
       line: named(t("The browser has opened {PROVIDER}'s sign-in page. Etiuda waits here and carries on by itself when you come back."), "{PROVIDER}", SIGNIN_NAMES[v.busy]),
       wait: named(t("Waiting for {PROVIDER}…"), "{PROVIDER}", SIGNIN_NAMES[v.busy]),
-      acts: [{ act: "again", label: t("Open the browser again") }, { act: "stop", label: t("Cancel") }]
+      acts: [{ act: "again", label: t("Open the browser again") }, { act: "stop", label: t("Cancel") }],
+      link: v.link
     };
     if (!v.signedIn) {
       if (FAIL_FIRST.indexOf(v.said) >= 0) {
@@ -26346,14 +26375,21 @@ What you type stays in this browser only.`;
   function signinIdentHtml(ident) {
     return '<div class="sgn-id">' + signinAvatarHtml(ident.initial, ident.off, true) + "<div><b>" + esc(ident.name) + "</b>" + (ident.sub ? "<small>" + esc(ident.sub) + "</small>" : "") + "</div></div>";
   }
+  function signinCopyHtml(act) {
+    return '<button type="button" class="btn sgn-copy" data-signin-act="' + esc(act) + '"><span>' + esc(t("Copy")) + "</span><span>" + esc(t("Copied")) + "</span></button>";
+  }
   function signinCodeHtml(code, label2) {
-    return '<div class="sgn-code">' + (label2 ? '<span class="k">' + esc(label2) + "</span>" : "") + "<code>" + esc(signinCodeText(code)) + '</code><button type="button" class="btn" data-signin-act="copy">' + esc(t("Copy")) + "</button></div>";
+    return '<div class="sgn-code">' + (label2 ? '<span class="k">' + esc(label2) + "</span>" : "") + "<code>" + esc(signinCodeText(code)) + "</code>" + signinCopyHtml("copy") + "</div>";
   }
   function signinActsHtml(acts) {
     return '<div class="sgn-acts">' + acts.map((a) => '<button type="button" class="btn' + (a.solid ? " primary" : "") + '" data-signin-act="' + esc(a.act) + '">' + esc(a.label) + "</button>").join("") + "</div>";
   }
   function signinPreviewHtml(v) {
     return v && v.preview ? '<p class="sgn-cap sgn-preview" data-signin-preview><b>' + esc(t("Preview only.")) + "</b> <span>" + esc(t("Sign-in is not set up yet, so nothing here is sent.")) + "</span></p>" : "";
+  }
+  function signinLinkHtml(link) {
+    if (!link) return "";
+    return '<div class="sgn-link" data-signin-link><p class="sgn-cap"><b>' + esc(t("Browser did not open?")) + "</b> <span>" + esc(t("Paste this link into a browser on this computer.")) + '</span></p><div class="sgn-link-row"><input type="text" class="sgn-link-f" readonly spellcheck="false" autocomplete="off" aria-label="' + esc(t("Paste this link into a browser on this computer.")) + '" value="' + esc(link) + '">' + signinCopyHtml("copylink") + "</div></div>";
   }
   function signinPanelHtml(d) {
     let h = "";
@@ -26369,6 +26405,7 @@ What you type stays in this browser only.`;
     if (d.cap) h += '<p class="sgn-cap">' + esc(d.cap) + "</p>";
     if (d.privacy) h += '<p class="sgn-cap">' + esc(d.privacy) + "</p>";
     if (d.acts && d.acts.length) h += signinActsHtml(d.acts);
+    if (d.link) h += signinLinkHtml(d.link);
     if (d.foot) h += '<p class="sgn-ft">' + esc(d.foot) + "</p>";
     return h;
   }
@@ -26457,29 +26494,37 @@ What you type stays in this browser only.`;
       return Promise.resolve(null);
     }
   }
-  function signinCopy() {
-    const text = signinV.code;
-    if (!text) return;
+  function signinCopy(text) {
+    if (!text) return Promise.resolve(false);
     try {
       const h = eHost();
       if (h && typeof h.noteOwnText === "function") h.noteOwnText(text);
     } catch (e) {
     }
     try {
-      if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).catch(() => {
-      });
+      if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text).then(() => true, () => false);
     } catch (e) {
     }
+    return Promise.resolve(false);
   }
-  function signinAct(act) {
+  var SIGNIN_COPIED_MS = 1500;
+  function signinCopied(btn) {
+    if (!btn || !btn.classList) return;
+    btn.classList.add("sgn-done");
+    clearTimeout(btn.sgnCopied);
+    btn.sgnCopied = setTimeout(() => btn.classList.remove("sgn-done"), SIGNIN_COPIED_MS);
+  }
+  function signinAct(act, btn) {
     if (act === "account") {
       closeSigninPanel();
       if (typeof hooks.openSettings === "function") hooks.openSettings("account");
       return;
     }
-    if (act === "copy") {
-      signinCopy();
-      return;
+    if (act === "copy" || act === "copylink") {
+      return signinCopy(act === "copy" ? signinV.code : signinV.busy ? signinV.link : "").then((ok) => {
+        if (ok) signinCopied(btn);
+        return ok;
+      });
     }
     if (act === "choose") {
       signinChoosing = true;
@@ -26518,25 +26563,36 @@ What you type stays in this browser only.`;
       signinTell();
     }
   }
-  function signinStart(id) {
+  function signinStart(id, here) {
     signinChoosing = false;
     signinCall("signIn", id).then((v) => {
-      if (v) signinChanged(v, true);
+      if (v) signinChanged(v, here !== "account");
     });
   }
   function signinChoosingNow() {
     return signinChoosing;
   }
+  function signinLinkSelect(f) {
+    try {
+      f.select();
+    } catch (e) {
+    }
+  }
   function signinClicks(root) {
     if (!root) return;
     root.addEventListener("click", (e) => {
+      const f = e.target && e.target.closest ? e.target.closest(".sgn-link-f") : null;
+      if (f) {
+        signinLinkSelect(f);
+        return;
+      }
       const b = e.target && e.target.closest ? e.target.closest("button") : null;
       if (!b) return;
       if (b.dataset.eOpen === "signin") {
         signinStart(b.dataset.eProvider);
         return;
       }
-      if (b.dataset.signinAct) signinAct(b.dataset.signinAct);
+      if (b.dataset.signinAct) signinAct(b.dataset.signinAct, b);
     });
   }
   function wireSignin() {
@@ -35687,6 +35743,7 @@ What you type stays in this browser only.`;
     const p = signinParts(v), choosing = signinChoosingNow();
     if (v.signedIn && !choosing) {
       let h2 = '<div class="sgn-top"><div class="sgn-top-row">' + signinIdentHtml({ initial: p.initial, name: p.name, sub: p.sub, off: p.off }) + '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="another">' + esc(t("Use another account")) + '</button><button type="button" class="btn" data-signin-act="out">' + esc(t("Sign out")) + "</button></span></div>";
+      if (!v.keeps) h2 += '<p class="sgn-cap" data-signin-unkept>' + esc(t("No keyring is open on this computer, so the sign-in is not kept: each renewal asks for it again.")) + "</p>";
       if (v.ask) {
         const s = signinSay("ask", v);
         h2 += '<p class="sgn-say"><b>' + esc(s[0]) + "</b><span>" + esc(s[1]) + "</span></p>" + signinProvidersHtml(v.offered, true);
@@ -35701,7 +35758,7 @@ What you type stays in this browser only.`;
         initial: "",
         name: t("Finish signing in in the browser"),
         sub: t("The browser has opened {PROVIDER}'s sign-in page. Etiuda waits here and carries on by itself when you come back.").split("{PROVIDER}").join(prov)
-      }) + '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="again">' + esc(t("Open the browser again")) + '</button><button type="button" class="btn" data-signin-act="stop">' + esc(t("Cancel")) + "</button></span>" + signinPreviewHtml(v);
+      }) + '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="again">' + esc(t("Open the browser again")) + '</button><button type="button" class="btn" data-signin-act="stop">' + esc(t("Cancel")) + "</button></span>" + signinPreviewHtml(v) + signinLinkHtml(v.link);
       return h + "</div>";
     }
     const failed = v.said && v.said !== "signin-done" && v.said !== "signin-cancelled" && !v.signedIn;
@@ -35730,7 +35787,7 @@ What you type stays in this browser only.`;
         "code",
         t("Your sign-in code"),
         t("Not a secret. It tells a team's lead which account is yours."),
-        '<code class="sgn-mono">' + esc(signinCodeText(v.code)) + '</code><button type="button" class="btn" data-signin-act="copy">' + esc(t("Copy")) + "</button>"
+        '<code class="sgn-mono">' + esc(signinCodeText(v.code)) + "</code>" + signinCopyHtml("copy")
       ));
       if (v.refused === "full") rows.push(row("seat", "check", t("Seat"), join(signinSay("full", v, p)), ""));
       else if (v.seat === "none") rows.push(row("seat", "check", t("Seat"), join(signinSay("nolicence", v)), ""));
@@ -35755,10 +35812,13 @@ What you type stays in this browser only.`;
       });
     }
     box.querySelectorAll('[data-e-open="signin"]').forEach((b) => {
-      b.onclick = () => signinStart(b.getAttribute("data-e-provider"));
+      b.onclick = () => signinStart(b.getAttribute("data-e-provider"), "account");
     });
     box.querySelectorAll("[data-signin-act]").forEach((b) => {
-      b.onclick = () => signinAct(b.getAttribute("data-signin-act"));
+      b.onclick = () => signinAct(b.getAttribute("data-signin-act"), b);
+    });
+    box.querySelectorAll(".sgn-link-f").forEach((f) => {
+      f.onclick = () => signinLinkSelect(f);
     });
   }
   function generalGroups() {
