@@ -100,7 +100,10 @@ const listing = d => E.safeListing(d);
 
 /* ---- the lab and the scratch home ----------------------------------------------------------- */
 
-const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-update-"));
+/* The lab's own path in its long form: a profile whose TEMP is an 8.3 short name (a hosted runner's RUNNER~1) would otherwise spell
+   every folder here one way and the shortcuts Windows writes another, and U6 compared the two spellings (installer-runner run
+   43229661219, 2026-11-12). */
+const LAB = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-update-")));
 const H = P.scratchHome(LAB);
 const CHILD_ENV = Object.assign({}, process.env, H.env);
 const UD = path.join(H.places.ApplicationData, T.packageName);
