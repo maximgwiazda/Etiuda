@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 553;
+const EXPECTED = 555;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -6660,7 +6660,8 @@ async function main() {
       + " opens no request, and so is any desk by that form: " + rawId.detail);
 
     /* The test architect's F2: a request the lead drops leaves no spent marker, and its key and person stay held against the door
-       for the request's keep, so a drop frees neither to knock again; past the keep nothing of it stays. */
+       for the door's rate window from the drop (his re-tune: not the 30-day keep), so a drop frees neither to knock again at once;
+       past the window nothing of it stays and the person's desk is taken again, as one the lead admitted after the drop would be. */
     async function dropScene() {
       const w = await doorWorld();
       const person = hex(32), store = w.R.stores.get(w.rt), k1 = keyPair(true);
@@ -6673,19 +6674,21 @@ async function main() {
       const got = [];
       for (let i = 0; i < 4; i++) { const k = keyPair(true); got.push(await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now, { person }))); }
       const held = got.slice(0, C.DOOR_PER_PERSON - 1).every(r => r.status === 200) && got.slice(C.DOOR_PER_PERSON - 1).every(r => refused(r, "team-size"));
-      w.R.clock.now += C.KEEP_MS + 1;
+      const inside = first.status === 200 && dropped.status === 200 && marker === undefined && refused(again, "not-enrolled") && held;
+      w.R.clock.now += C.DOOR_RATE_MS + 1;
       await since(w, await sessionOf(w, w.lead));
       const left = store.list("dd:").length;
-      const k = keyPair(true), later = await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now, { person }));
-      const ok = first.status === 200 && dropped.status === 200 && marker === undefined && refused(again, "not-enrolled") && held
-        && left === 0 && later.status === 200;
-      return { ok, detail: JSON.stringify({ first: said(first), drop: said(dropped), marker: marker !== undefined, again: said(again),
-        after: got.map(said), left, later: said(later) }) };
+      const later = await doorHello(w, k1, certFor(k1.pub, w.ref, w.R.clock.now, { person }));
+      const after = left === 0 && later.status === 200;
+      return { ok: inside && after, inside, after, detail: JSON.stringify({ first: said(first), drop: said(dropped), marker: marker !== undefined,
+        again: said(again), after: got.map(said), left, later: said(later) }) };
     }
     const drops = await safe(dropScene);
-    check(drops.ok, "a4o a door request the lead drops leaves no spent marker, its key is answered as a stranger's, and its person"
-      + " still counts it, so of four knocks after the drop " + (C.DOOR_PER_PERSON - 1) + " are taken and the rest refused team-size; past"
-      + " the keep nothing of it stays: " + drops.detail);
+    check(drops.inside === true, "a4o a door request the lead drops leaves no spent marker, its key is answered as a stranger's, and its"
+      + " person still counts it, so of four knocks after the drop " + (C.DOOR_PER_PERSON - 1) + " are taken and the rest refused team-size: "
+      + drops.detail);
+    check(drops.after === true, "a4q once the door's rate window has passed since the drop, nothing of the dropped request stays and the"
+      + " dropped person's desk is taken again, so a person the lead admits after the drop waits an hour at most: " + drops.detail);
 
     /* Invitations stand as they were beside the door, and the lead's states name invitations alone. */
     async function invitesScene() {
@@ -6762,7 +6765,8 @@ async function main() {
       ["door-drop-kept", async () => !(await dropScene()).ok, "a4o (a dropped door request frees its key and person)"],
       ["door-drop-key", async () => !(await dropScene()).ok, "a4o (a dropped door request's key knocks again at once)"],
       ["door-drop-person", async () => !(await dropScene()).ok, "a4o (a person's dropped request makes room at the door)"],
-      ["door-drop-prune", async () => !(await dropScene()).ok, "a4o (a dropped request is held past its keep)"],
+      ["door-drop-prune", async () => !(await dropScene()).ok, "a4q (a dropped request is held past its window)"],
+      ["door-drop-window", async () => !(await dropScene()).ok, "a4o (a dropped request is held for no time at all)"],
     ];
     const base = taken.ok && refusesAll.ok && closed.ok && register.ok && person.ok && rated.ok && live.ok && tries.ok && request.ok && removed.ok
       && invs.ok && lapsed.ok && handed.ok && rawId.ok && drops.ok;

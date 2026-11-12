@@ -794,9 +794,10 @@ function createCore(deps) {
         nameUsed = !!(was && was.spent); /* plant:S3-cancel */
         if (nameUsed) used.push(id);
         /* A door request's id was the relay's own and no token names it, so it leaves no spent marker; what is kept is that its
-           key and its person were dropped, held against the door until its keep ends, so a drop frees neither to knock again. */
+           key and its person were dropped, held against the door for the door's rate window from the drop, so a drop frees neither
+           to knock again at once, and a person the lead admits after the drop waits at most that window. */
         const doorDrop = !!(was && was.door === true);
-        if (doorDrop) store.put("dd:" + id, { key: was.key, person: was.person, at: Number.isSafeInteger(was.spentAt) ? was.spentAt : now }); /* plant:door-drop-kept */
+        if (doorDrop) store.put("dd:" + id, { key: was.key, person: was.person, at: now }); /* plant:door-drop-kept */
         if (was && was.spent && !doorDrop) store.put("sp:" + id, SPENT); /* plant:spent-drop */
         for (const [t] of store.list("tf:" + id + ":")) store.del(t);
       }
@@ -1050,7 +1051,7 @@ function createCore(deps) {
     const dev = store.get("dev:" + b.key);
     if (dev) return dev.pub === b.pub ? issue(b.challenge, { key: b.key, inv: null }) : no("bad-signature");
     if (store.get("gone:" + b.key)) return no("removed"); /* plant:door-removed */
-    /* A key whose door request the lead dropped is answered as a stranger is until that drop's keep ends. */
+    /* A key whose door request the lead dropped is answered as a stranger is for the rate window after the drop. */
     const dropped = store.list("dd:").filter(([, v]) => doorDropLive(v, clock()));
     let droppedKey = false;
     droppedKey = dropped.some(([, v]) => v.key === b.key); /* plant:door-drop-key */
@@ -1085,9 +1086,11 @@ function createCore(deps) {
       indexBinding(b.key, id);
     });
   }
-  /* A door request the lead dropped, still held against its key and its person: inside the keep from when it was made. */
+  /* A door request the lead dropped, still held against its key and its person: inside DOOR_RATE_MS from the drop, not the 30-day
+     keep, which would shut out for a month a person the lead admits by code after dropping their stranger's request (the test
+     architect's re-tune of F2). A repeat knocker then takes at most DOOR_PER_PERSON of the window's DOOR_RATE_MAX. */
   function doorDropLive(v, now) {
-    return !!v && Number.isSafeInteger(v.at) && now - v.at <= KEEP_MS;
+    return !!v && Number.isSafeInteger(v.at) && now - v.at <= DOOR_RATE_MS; /* plant:door-drop-window */
   }
   /* A door request still held against the door's caps: inside its keep, its key neither enrolled nor removed. */
   function doorLive(v, now) {
@@ -1670,7 +1673,7 @@ function createCore(deps) {
         if (v.door === true) continue;
         store.put("sp:" + id, SPENT); /* plant:spent-kept */
       }
-      /* A dropped door request's key and person, past its keep: nothing of it stays. */
+      /* A dropped door request's key and person, past its window: nothing of it stays. */
       for (const [k, v] of store.list("dd:")) if (!doorDropLive(v, now)) store.del(k); /* plant:door-drop-prune */
       /* A put row no upload of this object holds was left by a request that died before its commit: its object is to be deleted. */
       for (const [k] of store.list("put:")) {
