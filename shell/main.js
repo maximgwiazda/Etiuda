@@ -9719,7 +9719,8 @@ ipcMain.on("etiuda:link-click", (e, url) => {
 /* THE ONE WAY OUT OF THE SHELL: every web address the desk hands to the system's browser passes through this one call, a clicked
    link (openExternally, below) and the provider's page a sign-in opens, first and again, alike, each behind its own
    guard. A lab replaces this single call, so a test's press never reaches the real browser (tests/links.js, the test
-   architect's floor of 2026-10-28). */
+   architect's floor of 2026-10-28). That floor counts every occurrence of the browser call's name in this file, comments
+   included, and expects exactly the one on the next line, so a comment names it in words. */
 function handOut(url) { return shell.openExternal(url); }
 function openExternally(url) {
   try {
