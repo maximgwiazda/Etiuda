@@ -1,5 +1,6 @@
 /* A rename out of the mirror's .staging folder that the system refuses for a moment is asked again.
  * One that keeps refusing leaves that file staged, is said, and is tried at the next scan. The worker stays up.
+ * A share file marked read-only lands writable, and a mirror copy already marked takes the next landing (998).
  *
  *     node tests/syncer-rename-busy.mjs
  */
@@ -9,13 +10,15 @@ process.on("warning", () => {});
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { createLab } from "./lab-owner.mjs";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const SELF = fileURLToPath(import.meta.url);
+const ROOT = path.resolve(path.dirname(SELF), "..");
 const nodeRequire = createRequire(import.meta.url);
-const EXPECTED = 2;
+const EXPECTED = 8;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -111,7 +114,127 @@ function stagedTmps(mirror) {
   return fs.readdirSync(dir).filter(n => n.endsWith(".tmp")).map(n => path.join(dir, n));
 }
 
+/* The scenes of 998, each in a child the parent kills by the wall clock: a rename refused for good blocks the thread that lands
+   (Atomics.wait in renameBusy), so no timer in the same process can be trusted to end the leg. A scene may take the syncer's two
+   files from a folder of its own, where a plant is lifted. */
+const SCENE_KILL_MS = 45000;
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const ringText = note => JSON.stringify({ format: 1, kind: "etiuda-ring", keys: [], note }) + "\n";
+async function readOnlyScene(kind, syncerDir) {
+  const checks = loadChecks();
+  const syncer = nodeRequire(path.join(syncerDir || path.join(ROOT, "shell", "folder"), "syncer.cjs"));
+  const share = path.join(LAB, "ro-share-" + kind), mirror = path.join(LAB, "ro-mirror-" + kind);
+  fs.mkdirSync(share, { recursive: true });
+  fs.mkdirSync(mirror, { recursive: true });
+  fs.writeFileSync(path.join(share, "etiuda-team.json"), teamText(), "utf8");
+  const shareRing = path.join(share, "etiuda-ring.json"), mirrorRing = path.join(mirror, "etiuda-ring.json");
+  const writable = p => { try { return (fs.statSync(p).mode & 0o200) !== 0; } catch { return null; } };
+  const holds = (p, note) => { try { return fs.readFileSync(p, "utf8").indexOf('"' + note + '"') >= 0; } catch { return false; } };
+  const until = async (ok, ms) => { const end = Date.now() + ms; while (!ok() && Date.now() < end) await sleep(50); return ok(); };
+  const out = { kind };
+  const said = [];
+  const marked = [shareRing, mirrorRing];
+  try {
+    if (kind === "land") {
+      /* The worker's copy, as a desk runs it. */
+      fs.writeFileSync(shareRing, ringText("first"), "utf8");
+      fs.chmodSync(shareRing, 0o444);
+      const ctl = new syncer.FolderSyncerController({ team: TEAM, folder: share, mirror, pin: LEAD, checks, pollMs: 200, logger: s => said.push(String(s)) });
+      try {
+        ctl.start();
+        out.landed = await until(() => holds(mirrorRing, "first"), 10000);
+        out.mirrorWritable = writable(mirrorRing);
+        out.shareStillMarked = writable(shareRing) === false;
+        fs.chmodSync(shareRing, 0o666);
+        fs.writeFileSync(shareRing, ringText("second, longer"), "utf8");
+        out.next = await until(() => holds(mirrorRing, "second, longer"), 10000);
+      } finally {
+        try { ctl.stop(); } catch {}
+      }
+    } else if (kind === "thaw") {
+      /* One scan of the landing both paths share, so a refusal answers in its own bounded tries rather than a hang. */
+      fs.writeFileSync(mirrorRing, ringText("older"), "utf8");
+      fs.chmodSync(mirrorRing, 0o444);
+      fs.writeFileSync(shareRing, ringText("from the share"), "utf8");
+      const prog = syncer.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: crypto.randomBytes(32) }, checks, logger: s => said.push(String(s)) });
+      prog.syncOnce();
+      out.thawed = holds(mirrorRing, "from the share");
+      out.mirrorWritable = writable(mirrorRing);
+    } else if (kind === "copy") {
+      /* A copy between the share and this computer: a source marked read-only and hidden, over a copy already marked both. */
+      const from = path.join(share, "desk-file.ec"), to = path.join(mirror, "desk-file.ec");
+      marked.push(from, to);
+      fs.writeFileSync(from, "from the share", "utf8");
+      fs.writeFileSync(to, "older", "utf8");
+      for (const p of [from, to]) {
+        if (process.platform === "win32") spawnSync("attrib", ["+h", p]);
+        fs.chmodSync(p, 0o444);
+      }
+      const at = fs.statSync(from).mtimeMs;
+      try { syncer.copyClear(from, to); } catch (e) { out.threw = (e && e.code) || String(e); }
+      out.bytes = (() => { try { return fs.readFileSync(to, "utf8") === "from the share"; } catch { return false; } })();
+      out.copyWritable = writable(to);
+      out.timeKept = (() => { try { return fs.statSync(to).mtimeMs === at; } catch { return false; } })();
+      out.sourceStillMarked = writable(from) === false;
+      out.noTemp = fs.readdirSync(mirror).filter(n => n.endsWith(".tmp")).length === 0;
+    }
+    out.refusedSaid = said.filter(l => l.indexOf("stayed staged") >= 0).length;
+  } finally {
+    for (const p of marked) { try { fs.chmodSync(p, 0o666); } catch {} }
+  }
+  return out;
+}
+function runScene(kind, syncerDir) {
+  const t0 = Date.now();
+  const res = spawnSync(process.execPath, [SELF, "--read-only-scene", kind].concat(syncerDir ? [syncerDir] : []),
+    { encoding: "utf8", timeout: SCENE_KILL_MS, maxBuffer: 8 * 1024 * 1024 });
+  const ms = Date.now() - t0;
+  if (res.error || res.signal) return { killed: true, ms, why: String((res.error && res.error.code) || res.signal) };
+  const line = String(res.stdout || "").split(/\r?\n/).find(l => l.startsWith("#result "));
+  if (!line) return { noResult: true, ms, status: res.status, err: String(res.stderr || "").slice(-400) };
+  return Object.assign(JSON.parse(line.slice(8)), { ms });
+}
+/* The syncer's two files copied into the lab with the line holding plant:<tag> lifted from `file`; the checkout's file is read
+   again after, as folder-mirror's plants are. */
+function plantScene(tag, file, kind) {
+  const dir = fs.mkdtempSync(path.join(LAB, "plant-" + tag + "-"));
+  const src = path.join(ROOT, "shell", "folder");
+  const before = fs.readFileSync(path.join(src, file));
+  for (const f of ["syncer.cjs", "syncer-worker.cjs"]) fs.copyFileSync(path.join(src, f), path.join(dir, f));
+  const lines = before.toString("utf8").split("\n");
+  const at = lines.findIndex(l => l.includes("plant:" + tag));
+  if (at < 0) return { found: false };
+  lines.splice(at, 1);
+  fs.writeFileSync(path.join(dir, file), lines.join("\n"), "utf8");
+  const res = runScene(kind, dir);
+  return { found: true, res, same: fs.readFileSync(path.join(src, file)).equals(before) };
+}
+const landGreen = r => r.landed === true && r.mirrorWritable === true && r.shareStillMarked === true && r.next === true && r.refusedSaid === 0;
+const thawGreen = r => r.thawed === true && r.mirrorWritable === true && r.refusedSaid === 0;
+const copyGreen = r => !r.threw && r.bytes === true && r.copyWritable === true && r.timeKept === true && r.sourceStillMarked === true && r.noTemp === true;
+
 function main() {
+  const land = runScene("land");
+  check(landGreen(land),
+    "998a a share file marked read-only lands in the mirror writable, the share keeps its mark, and its next version lands over it: "
+    + JSON.stringify(land));
+  const thaw = runScene("thaw");
+  check(thawGreen(thaw), "998b a mirror copy left read-only by an older desk takes the next landing and is writable after it: " + JSON.stringify(thaw));
+  const copy = runScene("copy");
+  check(copyGreen(copy), "998c a copy between the share and this computer replaces a copy marked read-only and hidden, and holds the bytes and"
+    + " the last-write time without the mark, the source keeping its own: " + JSON.stringify(copy));
+  const plants = [
+    ["stage-clear-mark", "syncer-worker.cjs", "land", landGreen, "998d lifting plant:stage-clear-mark lands a read-only share file read-only"],
+    ["land-clear-mark", "syncer.cjs", "thaw", thawGreen, "998e lifting plant:land-clear-mark leaves a read-only mirror copy refusing every landing"],
+    ["copy-clear-mark", "syncer.cjs", "copy", copyGreen, "998f lifting plant:copy-clear-mark leaves a marked copy refusing the next"],
+  ];
+  for (const [tag, file, kind, green, line] of plants) {
+    if (PLANTS_OFF) { asserted++; console.log("  skip " + line); continue; }
+    const p = plantScene(tag, file, kind);
+    check(p.found && !green(p.res) && p.same, line + ": " + JSON.stringify(p));
+  }
+
   const checks = loadChecks();
   const syncer = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
   const shareA = path.join(LAB, "share-a");
@@ -193,4 +316,10 @@ function main() {
   process.exit(Math.min(failed, 63));
 }
 
-main();
+if (process.argv[2] === "--read-only-scene") {
+  readOnlyScene(process.argv[3], process.argv[4]).then(
+    out => { process.stdout.write("#result " + JSON.stringify(out) + "\n"); process.exit(0); },
+    e => { process.stderr.write(String(e && e.stack || e) + "\n"); process.exit(1); });
+} else {
+  main();
+}

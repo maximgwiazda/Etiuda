@@ -4691,7 +4691,7 @@ function heedTeam() {
                     const mine = deskFileRev(from), held = deskFileRev(to);
                     if (!(mine !== null && held !== null && mine > held)) continue; /* plant:follow-keep-rev */
                   }
-                  fs.copyFileSync(from, to); /* plant:follow-copy */
+                  FolderSyncer().copyClear(from, to); /* plant:follow-copy */
                 }
               }
             }
@@ -6656,7 +6656,7 @@ function copyDeskFilesToFolder(mirrorDir, targetFolder) {
       fs.mkdirSync(dstDir, { recursive: true });
       for (const f of fs.readdirSync(srcDir)) {
         if (/\.ec$/i.test(f)) {
-          fs.copyFileSync(path.join(srcDir, f), path.join(dstDir, f));
+          FolderSyncer().copyClear(path.join(srcDir, f), path.join(dstDir, f));
         }
       }
     }

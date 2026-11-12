@@ -25,7 +25,7 @@ const REAL_CORE = nodeRequire(path.join(ROOT, "relay", "core.cjs"));
 const REAL_BLOB = nodeRequire(path.join(ROOT, "shell", "relay", "blob.cjs"));
 
 const BUILTIN_RELAY = "https://etiuda.dev/relay/v1";
-const EXPECTED = 27;
+const EXPECTED = 28;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 const safeStorage = {
@@ -308,6 +308,11 @@ async function launch(plan) {
     leads,
     pickResults,
     currentFolderDeskFiles,
+    currentFolderDeskHeld: currentFolderDeskFiles.reduce((o, f) => {
+      const at = path.join(currentFolder, "desks", ownId, f);
+      try { o[f] = { writable: (fs.statSync(at).mode & 0o200) !== 0, sha: crypto.createHash("sha256").update(fs.readFileSync(at)).digest("hex").slice(0, 12) }; } catch {}
+      return o;
+    }, {}),
     branchReachable: currentFolderDeskFiles.includes("branch-lamp.ec"),
     inUseReachable: currentFolderDeskFiles.includes("in-use.ec"),
     heldBranchReached: plan.holdBranch ? currentFolderDeskFiles.includes(plan.holdBranch.stem + ".ec") : false,
@@ -615,6 +620,34 @@ async function main() {
     "945f3 on automatic switch to matching folder, desk branch and in-use reach the folder: "
     + JSON.stringify(r2.currentFolderDeskFiles)
   );
+
+  /* Scenario 2r (board 998): the same move with the mirror's own branch marked read-only, and the folder holding an older copy of
+     it marked the same. */
+  const s2r = makeScenario();
+  const knownFolderR = path.join(s2r.lab, "known-folder");
+  const folderDeskR = path.join(knownFolderR, "desks", s2r.ownDeskId);
+  fs.mkdirSync(folderDeskR, { recursive: true });
+  fs.writeFileSync(path.join(knownFolderR, "etiuda-team.json"), JSON.stringify(signTeamDoc(s2r.movedTeamDoc, s2r.lead), null, 2));
+  fs.writeFileSync(path.join(folderDeskR, "branch-lamp.ec"), "older");
+  const mirrorBranchR = path.join(s2r.mirrorFolder, "desks", s2r.ownDeskId, "branch-lamp.ec");
+  const branchShaR = crypto.createHash("sha256").update(fs.readFileSync(mirrorBranchR)).digest("hex").slice(0, 12);
+  fs.chmodSync(mirrorBranchR, 0o444);
+  fs.chmodSync(path.join(folderDeskR, "branch-lamp.ec"), 0o444);
+  const deskJsonR = path.join(s2r.lab, "userdata", "desk.json");
+  const deskEnvR = JSON.parse(fs.readFileSync(deskJsonR, "utf8"));
+  deskEnvR.teamJoin = {
+    team: s2r.teamId, file: "etiuda-join-" + s2r.teamId + ".json", nonce: crypto.randomBytes(32).toString("hex"),
+    commit: crypto.randomBytes(32).toString("hex"), asked: Date.now(), held: 0, name: "Desk",
+    invite: { id: crypto.randomBytes(8).toString("hex"), proof: crypto.randomBytes(32).toString("hex"),
+      lead: { keyId: s2r.lead.keyId, public: s2r.lead.public, name: "Lead" }, folder: knownFolderR },
+  };
+  fs.writeFileSync(deskJsonR, JSON.stringify(deskEnvR, null, 2));
+  const r2r = runScenario(Object.assign({}, s2r, { deliverTeamDoc: signTeamDoc(s2r.movedTeamDoc, s2r.lead) }));
+  const heldR = (r2r.currentFolderDeskHeld || {})["branch-lamp.ec"] || {};
+  check(path.resolve(r2r.openedDir) === path.resolve(knownFolderR) && heldR.sha === branchShaR && heldR.writable === true && r2r.inUseReachable,
+    "998h a desk moving to a folder copies its own branch, marked read-only in its mirror, over an older copy the folder held marked,"
+    + " and the folder's copy is writable: " + JSON.stringify({ opened: path.resolve(r2r.openedDir) === path.resolve(knownFolderR), held: r2r.currentFolderDeskHeld, want: branchShaR }));
+  try { fs.chmodSync(mirrorBranchR, 0o666); } catch {}
 
   /* Scenario 3: None found shows sentence and offers Open a folder (945f4) */
   const s3 = makeScenario();
@@ -1247,7 +1280,7 @@ async function main() {
   }
 
   // Cleanup scenario directories
-  [s1, s2, s3, s4, s5, s5p, s6].concat(plantSaw).forEach(s => {
+  [s1, s2, s2r, s3, s4, s5, s5p, s6].concat(plantSaw).forEach(s => {
     try { fs.rmSync(s.lab, { recursive: true, force: true }); } catch {}
   });
 

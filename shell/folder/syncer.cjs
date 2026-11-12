@@ -237,6 +237,25 @@ function renameBusy(from, to, io, tries) {
 function renameRetrying(from, to, io) {
   renameBusy(from, to, io, 20);
 }
+/* CopyFile keeps a source's read-only mark, and Windows refuses every rename or write over a file so marked, for good. What
+   lands on this computer, and what it replaces, has the mark cleared for its owner; hidden, system and alternate streams ride
+   CopyFile too and refuse no rename. */
+function clearReadOnly(file, io) {
+  try { const st = (io || defaultIO).stat(file); if (!(st.mode & 0o200)) fs.chmodSync(file, (st.mode & 0o777) | 0o200); } catch {}
+}
+/* A copy between the share and this computer, through a temp beside it and a rename: the bytes and the last-write time
+   CopyFile keeps, never the read-only mark (clearReadOnly), and an existing copy is replaced whatever marks it carries. */
+function copyClear(from, to) {
+  const tmp = to + "." + crypto.randomBytes(6).toString("hex") + ".tmp";
+  try {
+    fs.copyFileSync(from, tmp);
+    clearReadOnly(tmp); clearReadOnly(to); /* plant:copy-clear-mark */
+    renameRetrying(tmp, to, defaultIO);
+  } catch (e) {
+    try { fs.unlinkSync(tmp); } catch {}
+    throw e;
+  }
+}
 /* Temp then rename beside the file, so the share never holds half a file under its name. */
 function writeWhole(file, bytes, io) {
   const tmp = file + "." + crypto.randomBytes(6).toString("hex") + ".tmp";
@@ -775,6 +794,7 @@ function createFolderProgram(opts) {
      One that still refuses leaves this file staged and is said; the scan goes on and the next one tries it again. */
   function landStaged(item, target, remember) {
     ensureDir(target, io);
+    clearReadOnly(target, io); /* plant:land-clear-mark */
     try { renameBusy(item.tmpPath, target, io, RENAME_LAND_TRIES); }
     catch (e) {
       if (!e || RENAME_BUSY.indexOf(e.code) < 0) throw e;
@@ -1671,6 +1691,8 @@ module.exports = {
   owedAt,
   owedList,
   flushOwed,
+  clearReadOnly,
+  copyClear,
   shareReadFile,
   shareCasBegin,
   shareCasCommit,

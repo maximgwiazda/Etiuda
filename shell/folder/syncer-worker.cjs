@@ -171,6 +171,7 @@ function syncOnce() {
         const tmpFile = path.join(stagingDir, rand + ".tmp");
         try {
           fs.copyFileSync(srcFile, tmpFile);
+          S.clearReadOnly(tmpFile); /* plant:stage-clear-mark */
           const postSt = fs.statSync(srcFile);
           if (postSt.size !== st.size || postSt.mtimeMs !== st.mtimeMs) {
             try { fs.unlinkSync(tmpFile); } catch {}
