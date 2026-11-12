@@ -6900,6 +6900,9 @@ function relayRun() {
     keyFor: e => teamKeyAt(team, e),
     sealEpoch: () => newestEpoch(team) || null,
     invite: () => {
+      /* A join at the team's standing door knocks with this desk's certificate, not an invitation's token. */
+      const door = signinDoorInvite(team, want.rt); /* plant:door-invite */
+      if (door !== undefined) return door;
       const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
       if (!inv || inv.rt !== want.rt) return null;
       const token = relayOpened(inv.token), seal = relayOpened(inv.seal);
@@ -6912,6 +6915,8 @@ function relayRun() {
       if (/^[0-9a-f]{64}$/.test(String(inv.box))) out.box = inv.box; /* plant:f6-box-lent */
       return out;
     },
+    /* The relay named this desk's request at the standing door: kept, and the request written with its seat and that id. */
+    onDoor: id => { signinDoorKept(team, mirror, id); }, /* plant:door-on */
     onTeam: () => {
       const j = teamJoin;
       if (j && j.team === team && j.invite && j.invite.relay && (j.invite.relay.withdrawing === true || j.invite.relay.withdrawn === true)) return;
@@ -9396,6 +9401,15 @@ async function signinRenewHeld(io, p, deskKey, held, now) {
 /* seat.json as the desk writes it for its lead: {format: 2, desk, certificate}, unsealed, since it holds pseudonyms alone. */
 const SEAT_NAME = "seat.json";
 function seatFileText(deskId, cert) { return JSON.stringify({ format: 2, desk: String(deskId), certificate: cert }, null, 1) + "\n"; }
+/* THE STANDING DOOR's request (board 980, A4): at a relay team's door a desk with no invitation uploads its request alone, so its
+   seat rides inside it, shaped as seat.json, and `door` names the relay's id for the request, where the lead's answer is written.
+   Both sit under the desk's own signature over the whole request (writeJoin). Null where the id is not the relay's 32 hex, the
+   request names an invitation, or the certificate is not this desk's or has run out: then nothing is written. */
+function signinDoorRequest(doc, deskId, deskKey, cert, door, now) {
+  if (!doc || typeof doc !== "object" || doc.invite !== undefined || !/^[0-9a-f]{32}$/.test(String(door))) return null;
+  if (!signinCertOk(cert, deskKey) || !(cert.until > now)) return null; /* plant:door-cert */
+  return Object.assign({}, doc, { seat: JSON.parse(seatFileText(deskId, cert)), door: String(door) }); /* plant:door-fields */
+}
 /* The sign-in's file beside desk.json, read whole or not at all: {held: {provider, refresh, sub, seed, code, cert, at, checked,
    reached, said, ask} or null}. `refresh` and `sub` are signinKeep's, "" where none is kept, and nothing else in it is a secret;
    `ask` says the person's own sign-in is wanted again; a file of another format holds nothing. */
@@ -9463,6 +9477,38 @@ function signinFlush() {
     console.error("etiuda: the seat could not be written - " + e.message);
     return false;
   }
+}
+/* The relay's standing door from the desk's side (board 980, A4). A join begun at a relay team's door rather than by an invitation
+   marks its relay part `door: true`, with the lead's box from what the desk trusts, never from the relay. What the channel's
+   invite() is given for it: {door: this desk's certificate, box: the lead's box, inv: the relay's id once named}; null where no
+   certificate of this desk stands, so no knock is sent; undefined for any other join, which the invitation's reading answers. */
+function signinDoorInvite(team, rt) {
+  const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
+  if (!inv || inv.door !== true) return undefined;
+  const held = signinState().held, cert = held && held.cert, me = branchIdentity(false);
+  if (inv.rt !== rt || !me || !/^[0-9a-f]{64}$/.test(String(inv.box)) || !signinCertOk(cert, me.key) || !(cert.until > Date.now())) return null; /* plant:door-invite-cert */
+  const out = { door: cert, box: inv.box };
+  if (/^[0-9a-f]{32}$/.test(String(inv.inv))) out.inv = inv.inv;
+  return out;
+}
+/* The relay named this desk's door request (the channel's onDoor), before the request's one upload: the id is kept with the join,
+   and the request is written into the relay's mirror once, carrying the seat and that id, so the channel's flush in the same cycle
+   uploads it whole. The same id named again (a later key hello) writes nothing; a request withdrawn or being withdrawn is left
+   alone. */
+function signinDoorKept(team, mirror, id) {
+  const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
+  if (!inv || inv.door !== true || inv.withdrawn === true || inv.withdrawing === true || !/^[0-9a-f]{32}$/.test(String(id))) return false;
+  if (inv.inv !== id) { inv.inv = id; persistDeskEnvelope(); } /* plant:door-kept */
+  const me = branchIdentity(false), held = signinState().held;
+  if (!me) return false;
+  const file = path.join(mirror, "desks", me.id, "join.json");
+  let had = null;
+  try { had = JSON.parse(fs.readFileSync(file, "utf8")); } catch { had = null; }
+  if (had && had.door === id) return false; /* plant:door-once */
+  const doc = signinDoorRequest(memberRequestDoc(j, null, me, null), me.id, me.key, held && held.cert, id, Date.now());
+  if (!doc) return false;
+  try { writeJoin(doc, file); return true; }
+  catch (e) { console.error("etiuda: the request at the team's door could not be written - " + e.message); return false; }
 }
 /* What the page is told, no token and nothing from the provider: the providers offered by id, who is signed in by provider, the
    code, the seat ("held", "lapsed" or "none"), when the service last answered and whether the last try reached it. */

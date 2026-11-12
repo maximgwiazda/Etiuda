@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 444;
+const EXPECTED = 445;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -10604,7 +10604,9 @@ function certA4(deskPub, ref, now) {
   c.sig.value = crypto.sign(null, core.certBytes(c), K.DELEGATE.privateKey).toString("hex");
   return c;
 }
-async function sceneA4(mod) {
+/* `atDoor`: the desk writes its request only when the relay names its id (onDoor), carrying that id, as the desk shell does
+   (shell/main.js signinDoorKept); else the request stands in the mirror before the desk starts. */
+async function sceneA4(mod, atDoor) {
   const rt = hex(16), pinTeam = "t-" + hex(8), ref = hex(16), who = keyPair(true), leadBox = xPair(), deskBox = xPair();
   R.clock.now += 1;
   const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
@@ -10617,16 +10619,21 @@ async function sceneA4(mod) {
   const tD = transport("a4-desk"), tL = transport("a4-lead");
   const deskMirror = path.join(LAB, "a4-desk-" + rt), leadMirror = path.join(LAB, "a4-lead-" + rt);
   const JOIN = "{\"kind\":\"etiuda-join\",\"note\":\"" + "DoorAsk" + hex(6) + "\"}\n";
+  let doorJoin = "";
   const desk = mod.createChannel({ rt, url: URLV1, mirror: deskMirror, stateFile: deskMirror + ".json", pin: pinOf,
     me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId, box: deskBox.pub }),
     agree: peer => xAgree(deskBox, peer), keyFor: () => null, sealEpoch: () => null,
-    invite: () => door, onDoor: id => { door.inv = id; }, onAnswer: a => answers.push(a),
+    invite: () => door, onAnswer: a => answers.push(a),
+    onDoor: id => {
+      door.inv = id;
+      if (atDoor && !doorJoin) { doorJoin = JSON.stringify(Object.assign({ door: id }, JSON.parse(JOIN))) + "\n"; put(deskMirror, "desks/" + who.keyId + "/join.json", doorJoin); }
+    },
     request: tD.request, connect: tD.connect, pollMs: 1e9, watch: false, say: l => said.push(String(l)) });
   const lead = mod.createChannel({ rt, url: URLV1, mirror: leadMirror, stateFile: leadMirror + ".json", pin: pinOf,
     me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root", box: leadBox.pub }),
     agree: peer => xAgree(leadBox, peer), keyFor: e => (e === 1 ? K1 : null), sealEpoch: () => 1, inviteKeys: () => [],
     request: tL.request, connect: tL.connect, pollMs: 1e9, watch: false });
-  put(deskMirror, "desks/" + who.keyId + "/join.json", JOIN);
+  if (!atDoor) put(deskMirror, "desks/" + who.keyId + "/join.json", JOIN);
   const round = async ch => { for (let i = 0; i < 3; i++) { ch.kick(); await ch.idle(); } };
   desk.start();
   await round(desk);
@@ -10640,8 +10647,10 @@ async function sceneA4(mod) {
   try { await desk.stop(); } catch { /* already stopped */ }
   try { await lead.stop(); } catch { /* already stopped */ }
   const marker = JSON.parse(JOIN).note;
-  return { made: made.status, opened: opened.status, door: askedAt, reached: reached === JOIN, blind: text.indexOf(marker) < 0, wrote: !!wrote.ok,
-    answers, ok: made.status === 200 && opened.status === 200 && /^[0-9a-f]{32}$/.test(askedAt) && reached === JOIN && text.indexOf(marker) < 0
+  const want = atDoor ? doorJoin : JOIN;
+  const named = !atDoor || (want !== "" && JSON.parse(want).door === askedAt);
+  return { made: made.status, opened: opened.status, door: askedAt, reached: reached === want, named, blind: text.indexOf(marker) < 0, wrote: !!wrote.ok,
+    answers, ok: made.status === 200 && opened.status === 200 && /^[0-9a-f]{32}$/.test(askedAt) && reached === want && named && text.indexOf(marker) < 0
       && !!wrote.ok && answers.length === 1 && answers[0] === "joined" };
 }
 if (partOn("pA4")) {
@@ -10651,6 +10660,9 @@ if (partOn("pA4")) {
     check(a.ok, "a4c a desk whose person signed in knocks at the team's standing door with its seat certificate and no invitation: the relay"
       + " names its request, the request sealed to the lead's box reaches the lead's mirror, the relay's rows and bucket never hold its"
       + " text, and the lead's answer reaches the desk as joined: " + JSON.stringify(a));
+    const g = await sceneA4(C, true);
+    check(g.ok, "a4g the desk writes its request only when the relay names its id, carrying that id, and its one upload still reaches the"
+      + " lead's mirror whole and is answered joined, with no relay change: " + JSON.stringify(g));
     const A4_PLANTS = [
       ["plant:door-session", "a4d lifting plant:door-session, a desk with a certificate never knocks, and a4c goes red"],
       ["plant:door-wait", "a4e lifting plant:door-wait, a door session's refused list ends the cycle before the request goes, and a4c goes red"],

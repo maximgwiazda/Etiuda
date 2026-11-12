@@ -33,9 +33,9 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 33;
+const PLANTS = 40;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 49 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 53 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -69,7 +69,7 @@ const NAMES = ["SIGNIN_PROVIDERS", "signinOffered", "signinNonce", "signinAuthor
   "signinRequest", "signinListen", "signinRun", "signinRenew", "signinKeep", "signinKept", "GOOGLE_HD_NEEDS_EMAIL", "signinRefreshForm",
   "SIGNIN_SERVICE", "signinDeskBytes", "signinDeskBody", "signinServiceAsk", "signinCertOk", "signinAnswer", "signinSeat", "signinLapsed",
   "signinSettle", "signinRenewHeld", "seatFileText", "SEAT_NAME", "signinFileRead", "signinFileText", "branchIdOf", "inviteRead",
-  "SIGNOUT_SERVICE", "signoutDeskBytes", "signoutDeskBody", "signoutAsk"];
+  "SIGNOUT_SERVICE", "signoutDeskBytes", "signoutDeskBody", "signoutAsk", "signinDoorRequest"];
 /* The section, evaluated: `swap` is [from, to], put in place of the one line that holds `from`, for a plant. */
 function load(swap, where) {
   let sec = SECTION, inv = INVITE;
@@ -506,6 +506,109 @@ CASES.flushJoinReach = (s, swap) => {
     && after(finish, "\n  teamJoin = null;\n") && /\n\s*catalogFolderChanged\(\);[^\n]*\n[^\n]*\n\s*return true;\n\}$/.test(finish);
 };
 
+/* ---- the relay's standing door, from the desk (board 980, A4) ----------------------------------------------------------- */
+const DOOR_ID = "f".repeat(32), LEAD_BOX = "d".repeat(64), DESK_BOX = "e".repeat(64), RT = "a0".repeat(16);
+/* The engine's own request rules, read from the shell as Studio reads them from its pin (src/engine.mjs joinRulesFrom). */
+const JOIN_LIB = (() => {
+  try {
+    const text = ["const SEALED_TEAM_RE =", "const JOIN_PREFIX =", "const JOIN_KIND =", "const JOIN_HEX_RE =", "const SPKI_ED25519 =",
+      "function canonJson(", "function signedBytesOf(", "function joinHash(", "function joinCommit(", "function joinSignedBytes(",
+      "function joinGenuine(", "function branchIdOf(", "function memberRequestDoc("].map(d => decl(MAIN, d)).join("\n");
+    return new Function("crypto", "Buffer", text + "\nreturn { joinGenuine, joinSignedBytes, joinCommit, memberRequestDoc, JOIN_KIND };")(crypto, Buffer);
+  } catch (e) { console.log("  (the request rules did not load: " + e.message + ")"); return null; }
+})();
+const doorBase = () => ({ format: 1, kind: "etiuda-join", team: TEAM, desk: { id: DESK_ID, key: DESK_KEY, box: DESK_BOX }, date: new Date(NOW).toISOString(),
+  commit: "1".repeat(64) });
+/* The request at the door carries the seat as seat.json has it and the relay's id, beside the request's own fields, and names no
+   invitation; nothing where the id is not the relay's, the request names an invitation, or the certificate is another desk's or ran out. */
+CASES.doorRequest = s => {
+  const c = cert(), base = doorBase(), d = s.signinDoorRequest(base, DESK_ID, DESK_KEY, c, DOOR_ID, NOW);
+  const kept = !!d && Object.keys(base).every(k => JSON.stringify(d[k]) === JSON.stringify(base[k]));
+  return kept && d.door === DOOR_ID && JSON.stringify(d.seat) === JSON.stringify(JSON.parse(s.seatFileText(DESK_ID, c))) && d.seat.format === 2
+    && d.seat.desk === DESK_ID && d.invite === undefined && base.seat === undefined && base.door === undefined
+    && s.signinDoorRequest(base, DESK_ID, DESK_KEY, c, DOOR_ID.slice(1), NOW) === null
+    && s.signinDoorRequest(base, DESK_ID, DESK_KEY, c, DOOR_ID.toUpperCase(), NOW) === null
+    && s.signinDoorRequest(Object.assign({ invite: { id: "2".repeat(16), proof: "3".repeat(64) } }, base), DESK_ID, DESK_KEY, c, DOOR_ID, NOW) === null
+    && s.signinDoorRequest(base, DESK_ID, OTHER_DESK_KEY, c, DOOR_ID, NOW) === null
+    && s.signinDoorRequest(base, DESK_ID, DESK_KEY, c, DOOR_ID, c.until) === null
+    && s.signinDoorRequest(base, DESK_ID, DESK_KEY, null, DOOR_ID, NOW) === null;
+};
+const DOOR_DECLS = ["function signinDoorInvite(", "function signinDoorKept("];
+const DOOR_STANDS = ["teamJoin", "signinState", "branchIdentity", "signinCertOk", "signinDoorRequest", "persistDeskEnvelope", "memberRequestDoc",
+  "writeJoin", "fs", "path", "Date", "console"];
+/* `st`: {join, held, files (a Map of path to text), writes, persists}; the door's two wiring functions with stand-ins, the request
+   signed by this desk's key as writeJoin signs it. */
+function loadDoor(s, st, swap) {
+  let text = DOOR_DECLS.map(d => tryDeclText(d)).filter(Boolean).join("\n");
+  if (swap) {
+    if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in the door's wiring once: " + swap[0]);
+    text = text.replace(swap[0], swap[1]);
+  }
+  const vals = { teamJoin: st.join, signinState: () => ({ held: st.held }), branchIdentity: () => ({ id: DESK_ID, key: DESK_KEY, box: DESK_BOX }),
+    signinCertOk: s.signinCertOk, signinDoorRequest: s.signinDoorRequest, persistDeskEnvelope: () => { st.persists++; },
+    memberRequestDoc: JOIN_LIB.memberRequestDoc,
+    writeJoin: (doc, at) => {
+      doc.sig = { alg: "Ed25519", keyId: DESK_ID };
+      doc.sig.value = crypto.sign(null, JOIN_LIB.joinSignedBytes(doc), signKey.privateKey).toString("hex");
+      const t = JSON.stringify(doc, null, 1) + "\n";
+      st.files.set(at, t);
+      st.writes.push({ at, doc });
+      return t;
+    },
+    fs: { readFileSync: p => { if (!st.files.has(p)) throw new Error("ENOENT"); return st.files.get(p); } }, path,
+    Date: { now: () => NOW }, console: { error() {} } };
+  return new Function(...DOOR_STANDS, text + "\nreturn { signinDoorInvite, signinDoorKept };")(...DOOR_STANDS.map(n => vals[n]));
+}
+const doorJoin = over => ({ team: TEAM, nonce: "4".repeat(64), commit: "1".repeat(64), asked: NOW, held: 0, name: "Desk",
+  invite: { relay: Object.assign({ rt: RT, url: "https://relay.example.test", door: true, box: LEAD_BOX }, over) } });
+const doorStand = (join, held) => ({ join: join, held: held === undefined ? heldOf() : held, files: new Map(), writes: [], persists: 0 });
+/* The channel's invite() for a join at the door: the certificate and the lead's box, the relay's id once named; no knock without a
+   certificate of this desk that stands; another join (an invitation's, another team's or relay's) is not the door's to answer. */
+CASES.doorInvite = (s, swap) => {
+  const ask = (join, held, team, rt) => loadDoor(s, doorStand(join, held), swap).signinDoorInvite(team || TEAM, rt || RT);
+  const first = ask(doorJoin()), named = ask(doorJoin({ inv: DOOR_ID })), c = heldOf().cert;
+  const invitation = { team: TEAM, invite: { id: "2".repeat(16), relay: { rt: RT, inv: "5".repeat(32), token: "x", seal: "y" } } };
+  return !!first && JSON.stringify(first.door) === JSON.stringify(c) && first.box === LEAD_BOX && first.inv === undefined && Object.keys(first).join() === "door,box"
+    && !!named && named.inv === DOOR_ID
+    && ask(doorJoin(), null) === null && ask(doorJoin(), Object.assign(heldOf(), { cert: null })) === null
+    && ask(doorJoin(), Object.assign(heldOf(), { cert: cert({ desk: OTHER_DESK_KEY }) })) === null
+    && ask(doorJoin(), Object.assign(heldOf(), { cert: cert({ until: NOW }) })) === null
+    && ask(doorJoin({ box: "short" })) === null && ask(doorJoin(), undefined, TEAM, "9".repeat(32)) === null
+    && ask(invitation) === undefined && ask(doorJoin(), undefined, "t-fedcba9876543210") === undefined && ask(null) === undefined;
+};
+/* The relay named the id: kept with the join, and the request written once into the mirror, with the seat and that id, signed by
+   this desk as the engine's own rules (and Studio's, through its pin) take it; the same id again writes nothing, a request being
+   withdrawn is left alone, and nothing is written without a certificate. */
+CASES.doorKept = (s, swap) => {
+  if (!JOIN_LIB) return false;
+  const mirror = path.join("/relay", RT), at = path.join(mirror, "desks", DESK_ID, "join.json");
+  const st = doorStand(doorJoin()), w = loadDoor(s, st, swap);
+  const wrote = w.signinDoorKept(TEAM, mirror, DOOR_ID), again = w.signinDoorKept(TEAM, mirror, DOOR_ID);
+  const doc = st.writes.length ? JSON.parse(st.files.get(at)) : null;
+  const good = !!doc && JOIN_LIB.joinGenuine(doc, DESK_ID) && doc.door === DOOR_ID && doc.invite === undefined && doc.team === TEAM
+    && doc.commit === st.join.commit && doc.desk.box === DESK_BOX && doc.seat && doc.seat.desk === DESK_ID
+    && JSON.stringify(doc.seat.certificate) === JSON.stringify(heldOf().cert);
+  /* A seat changed after signing is no longer the desk's own request. */
+  const forged = doc ? JOIN_LIB.joinGenuine(Object.assign({}, doc, { seat: Object.assign({}, doc.seat, { desk: "k-0000000000000000" }) }), DESK_ID) : true;
+  const once = wrote === true && again === false && st.writes.length === 1 && st.writes[0].at === at && st.join.invite.relay.inv === DOOR_ID && st.persists === 1;
+  const quiet = (join, held, id) => { const q = doorStand(join, held); const r = loadDoor(s, q, swap).signinDoorKept(TEAM, mirror, id || DOOR_ID); return r === false && q.writes.length === 0; };
+  return good && !forged && once
+    && quiet(doorJoin({ withdrawing: true })) && quiet(doorJoin({ withdrawn: true })) && quiet(doorJoin(), null) && quiet(doorJoin(), undefined, "zz")
+    && quiet({ team: TEAM, invite: { relay: { rt: RT, inv: "5".repeat(32), token: "x" } } }) && quiet(null);
+};
+/* The relay channel on a desk is given both: the door's invite() ahead of the invitation's reading, and onDoor. */
+CASES.doorChannel = (s, swap) => {
+  let main = MAIN;
+  if (swap) {
+    if (main.split(swap[0]).length !== 2) throw new Error("plant anchor not in the shell once: " + swap[0]);
+    main = main.replace(swap[0], swap[1]);
+  }
+  let run = "";
+  try { run = decl(main, "function relayRun("); } catch { run = ""; }
+  return /\n    invite: \(\) => \{\n[^\n]*\n\s*const door = signinDoorInvite\(team, want\.rt\);[^\n]*\n\s*if \(door !== undefined\) return door;\n\s*const j = teamJoin/.test(run)
+    && /\n    onDoor: id => \{ signinDoorKept\(team, mirror, id\); \},/.test(run);
+};
+
 /* ---- the desk's Sign out at the service --------------------------------------------------------------------------------- */
 /* signout/desk's body has the interface's three names alone, signed by this desk's key over the service's bytes. */
 CASES.signoutBody = s => {
@@ -650,6 +753,10 @@ const LEGS = [
   ["ds10a", "flushJoin", "a desk signed in first writes its seat beside its request to join a folder team, and again where the file went or the folder changed"],
   ["ds10b", "flushCallers", "the seat is written when a request to join is written, and after a join taken or finished or a folder changed"],
   ["ds10c", "flushJoinReach", "a folder invitation taken and an admission heeded both reach the folder change, and so the seat's write"],
+  ["ds11a", "doorRequest", "a request at the relay's door carries the seat as seat.json has it and the relay's id, and names no invitation"],
+  ["ds11b", "doorInvite", "the channel knocks at the door with this desk's standing certificate and the lead's box, and with nothing else"],
+  ["ds11c", "doorKept", "the id the relay names is kept and the request written once, with the seat and that id, signed as the desk's own"],
+  ["ds11d", "doorChannel", "the desk's relay channel is given the door's invite() ahead of the invitation's, and onDoor"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
@@ -690,8 +797,9 @@ function outsideNames(main) {
   return rest.match(/\b(?:signin(?:[A-Z]\w*)?|armSignin\w*|seat(?:Doc|Open|Genuine|Info|SignedBytes|FileText)|SEAT_\w+|SIGNIN_\w+)\b/g) || [];
 }
 const outside = outsideNames(MAIN);
-/* And to write the seat after a request to join and a folder change (ds10b), which gates nothing. */
-const expectOutside = ["signinListen", "armSigninRenew", "signinFlush", "signinFlush"];
+/* And to write the seat after a request to join and a folder change (ds10b), and to knock at a relay team's door with the
+   certificate and write the request there (ds11d), none of which gates anything. */
+const expectOutside = ["signinListen", "armSigninRenew", "signinFlush", "signinFlush", "signinDoorInvite", "signinDoorKept"];
 check(outside.slice().sort().join() === expectOutside.slice().sort().join(),
   "ds5a nothing local is gated: outside its section the shell names the sign-in only to require its loopback, to arm the renewal and to write the seat after a join: " + outside.join(" "));
 const modules = fs.readdirSync(path.join(ROOT, "src", "modules")).filter(n => n.endsWith(".js"));
@@ -762,6 +870,14 @@ if (!PLANTS_OFF) {
   await plantWire("dsp32", ["if (signinWrote === mark && fs.existsSync(file)) return false; /* plant:flush-mark */", "if (signinWrote === cert.sig.value) return false;"], "flushJoin");
   await plantWire("dsp33", ["  catalogFolderChanged(); /* plant:invite-folder-changed */\n", ""], "flushJoinReach");
   await plantWire("dsp34", ["  catalogFolderChanged(); /* plant:finish-join-watched */\n", ""], "flushJoinReach");
+  await plant("dsp35", ["if (!signinCertOk(cert, deskKey) || !(cert.until > now)) return null; /* plant:door-cert */", "if (!signinCertOk(cert, deskKey)) return null;"], "doorRequest");
+  await plant("dsp36", ["return Object.assign({}, doc, { seat: JSON.parse(seatFileText(deskId, cert)), door: String(door) }); /* plant:door-fields */",
+    "return Object.assign({}, doc, { seat: JSON.parse(seatFileText(deskId, cert)) });"], "doorRequest");
+  await plantWire("dsp37", ["|| !signinCertOk(cert, me.key) || !(cert.until > Date.now())) return null; /* plant:door-invite-cert */", ") return null;"], "doorInvite");
+  await plantWire("dsp38", ["if (inv.inv !== id) { inv.inv = id; persistDeskEnvelope(); } /* plant:door-kept */", ""], "doorKept");
+  await plantWire("dsp39", ["if (had && had.door === id) return false; /* plant:door-once */", ""], "doorKept");
+  await plantWire("dsp40", ["      const door = signinDoorInvite(team, want.rt); /* plant:door-invite */\n      if (door !== undefined) return door;\n", ""], "doorChannel");
+  await plantWire("dsp41", ["    onDoor: id => { signinDoorKept(team, mirror, id); }, /* plant:door-on */\n", ""], "doorChannel");
   /* A gate on a local act, put into the desk file's write in memory, is seen. */
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),
