@@ -98,7 +98,7 @@ function signinSay(reason, v, p){
   }
 }
 const FAIL_FIRST=["unreached","signin-unreached","signin-timeout","signin-browser","signin-notallowed","desks","token","signin","signin-refused","signin-token","signin-unbound","signin-state","signin-none"];
-/* THE DOOR'S CONTENT for the view `v`, whatever form draws it: {moment, ident, heading, line, say, calm, code, providers, cap, foot,
+/* THE DOOR'S CONTENT for the view `v`, whatever form draws it: {moment, ident, heading, line, say, calm, code, providers, cap, privacy, foot,
    acts: [{act, label, solid}]}; null where there is no door. The shell is separate from what it does: signinPanelHtml is the one
    form drawn today (a button in the header with a panel under it), and another form takes the same content. */
 function signinDoor(v){
@@ -117,7 +117,7 @@ function signinDoor(v){
     }
     return {moment:"before", heading:t("Sign in to Etiuda"),
       line:t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three."),
-      providers:v.offered, cap:t("Microsoft: a work, school or personal account. Google: a Workspace or personal account."),
+      providers:v.offered, cap:t("Microsoft: a work, school or personal account. Google: a Workspace or personal account."), privacy:t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account."),
       foot:t("Etiuda for personal use, outside work, needs no sign-in.")};
   }
   if(v.ask) return {moment:"ask", ident, say:signinSay("ask", v), providers:v.offered, acts:[acct]};
@@ -172,6 +172,7 @@ function signinPanelHtml(d){
   if(d.say) h+='<p class="sgn-say'+(d.calm?' calm':'')+'"><b>'+esc(d.say[0])+'</b><span>'+esc(d.say[1])+'</span></p>';
   if(d.providers && d.providers.length) h+=signinProvidersHtml(d.providers, false);
   if(d.cap) h+='<p class="sgn-cap">'+esc(d.cap)+'</p>';
+  if(d.privacy) h+='<p class="sgn-cap">'+esc(d.privacy)+'</p>';
   if(d.acts && d.acts.length) h+=signinActsHtml(d.acts);
   if(d.foot) h+='<p class="sgn-ft">'+esc(d.foot)+'</p>';
   return h;

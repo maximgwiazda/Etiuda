@@ -8777,6 +8777,7 @@ What you type stays in this browser only.`;
     "On up to three computers; this is one of them.": "Na najwyżej trzech komputerach; to jeden z nich.",
     "Last checked": "Ostatnie sprawdzenie",
     "Sign out": "Wyloguj się",
+    "This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account.": "To stanowisko loguje się kontem Microsoft lub Google, aby zajmować swoje miejsce w licencji, i zleca sprawdzenie logowania na etiuda.dev. Lider zespołu nie widzi imienia, nazwiska ani adresu z tego konta.",
     "Signing out ends this computer's sign-in and frees its place among the account's three; the seat stays the account's. The team's catalog and personal cards stay on the computer.": "Wylogowanie kończy logowanie na tym komputerze i zwalnia jego miejsce wśród trzech komputerów konta; miejsce w licencji zostaje przy koncie. Katalog zespołu i własne karty zostają na komputerze.",
     // placeholder: Claudette, the eight lines below
     "today, {TIME}": "dziś, {TIME}",
@@ -26277,6 +26278,7 @@ What you type stays in this browser only.`;
         line: t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three."),
         providers: v.offered,
         cap: t("Microsoft: a work, school or personal account. Google: a Workspace or personal account."),
+        privacy: t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account."),
         foot: t("Etiuda for personal use, outside work, needs no sign-in.")
       };
     }
@@ -26342,6 +26344,7 @@ What you type stays in this browser only.`;
     if (d.say) h += '<p class="sgn-say' + (d.calm ? " calm" : "") + '"><b>' + esc(d.say[0]) + "</b><span>" + esc(d.say[1]) + "</span></p>";
     if (d.providers && d.providers.length) h += signinProvidersHtml(d.providers, false);
     if (d.cap) h += '<p class="sgn-cap">' + esc(d.cap) + "</p>";
+    if (d.privacy) h += '<p class="sgn-cap">' + esc(d.privacy) + "</p>";
     if (d.acts && d.acts.length) h += signinActsHtml(d.acts);
     if (d.foot) h += '<p class="sgn-ft">' + esc(d.foot) + "</p>";
     return h;
@@ -35687,7 +35690,7 @@ What you type stays in this browser only.`;
       name: t("Not signed in"),
       sub: t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.")
     });
-    h += "<div>" + signinProvidersHtml(v.offered, true) + '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + "</p></div>";
+    h += "<div>" + signinProvidersHtml(v.offered, true) + '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + '</p><p class="sgn-cap">' + esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account.")) + "</p></div>";
     if (choosing && v.signedIn) h += '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">' + esc(t("Cancel")) + "</button></span>";
     return h + "</div>";
   }

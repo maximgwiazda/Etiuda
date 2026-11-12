@@ -1388,6 +1388,7 @@ UI_STRINGS.pl={
   "On up to three computers; this is one of them.":"Na najwyżej trzech komputerach; to jeden z nich.",
   "Last checked":"Ostatnie sprawdzenie",
   "Sign out":"Wyloguj się",
+  "This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account.":"To stanowisko loguje się kontem Microsoft lub Google, aby zajmować swoje miejsce w licencji, i zleca sprawdzenie logowania na etiuda.dev. Lider zespołu nie widzi imienia, nazwiska ani adresu z tego konta.",
   "Signing out ends this computer's sign-in and frees its place among the account's three; the seat stays the account's. The team's catalog and personal cards stay on the computer.":"Wylogowanie kończy logowanie na tym komputerze i zwalnia jego miejsce wśród trzech komputerów konta; miejsce w licencji zostaje przy koncie. Katalog zespołu i własne karty zostają na komputerze.",
   // placeholder: Claudette, the eight lines below
   "today, {TIME}":"dziś, {TIME}",
