@@ -746,9 +746,19 @@
       !insertmacro handleUninstallResult HKEY_CURRENT_USER
     ${EndIf}
   ${Else}
-    # An installer started elevated has no unelevated instance to run it in, so here it still runs elevated.
-    !insertmacro uninstallOldVersion HKEY_CURRENT_USER
-    !insertmacro handleUninstallResult HKEY_CURRENT_USER
+    # An installer started elevated has no unelevated instance, and this one never runs that file: the copy stays
+    # registered, and the finish page says so wherever HKCU names an uninstaller, as uninstallOldVersion would read it.
+    Push $R9
+    ReadRegStr $R9 HKCU "${UNINSTALL_REGISTRY_KEY}" UninstallString
+    !ifdef UNINSTALL_REGISTRY_KEY_2
+      ${If} $R9 == ""
+        ReadRegStr $R9 HKCU "${UNINSTALL_REGISTRY_KEY_2}" UninstallString
+      ${EndIf}
+    !endif
+    ${If} $R9 != ""
+      StrCpy $etiudaFinishText "$(etiudaOldCopyLeft)"
+    ${EndIf}
+    Pop $R9
   ${EndIf}
 !macroend
 
@@ -764,6 +774,7 @@
 !include "${BUILD_RESOURCES_DIR}\installer\turning.nsh"
 
 !macro customInit
+  StrCpy $etiudaFinishText "$(MUI_TEXT_FINISH_INFO_TEXT)"
   ${IfNot} ${Silent}
     ${IfNot} ${UAC_IsInnerInstance}
       Call RecogniseExistingInstallation
@@ -811,6 +822,10 @@ Var TurnReady
 !ifndef BUILD_UNINSTALLER
 Var InstalledVersion
 Var RecogniseMsg
+# THE FINISH PAGE'S TEXT, Modern UI's own unless etiudaOldUserCopy left a copy registered. With the Run box on the page
+# the label is 195 by 40 dialog units, about five lines, so the case's text replaces the whole of it rather than adding.
+Var etiudaFinishText
+!define MUI_FINISHPAGE_TEXT "$etiudaFinishText"
 !endif
 # The uninstaller's own: the installer pass never reads them, and makensis's warning 6001 for an unused variable
 # is an error in this build.
@@ -1005,6 +1020,7 @@ Var RemoveDataBox
     LangString RecogniseSameText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME} w wersji $InstalledVersion, tej samej co w instalatorze. Zainstalować go ponownie?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
     LangString RecogniseNewerText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME} w wersji $InstalledVersion, nowszej niż wersja ${VERSION} z tego instalatora. Zainstalować w jej miejsce wersję ${VERSION}?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
     LangString RecogniseUnreadableText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME}, ale nie da się odczytać jego wersji. Zainstalować w jego miejsce wersję ${VERSION}?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
+    LangString etiudaOldCopyLeft ${ID} "Na tym komputerze została starsza kopia Etiudy, zainstalowana tylko dla jednego konta. Wszystko jest w porządku: można ją usunąć na tym koncie, z listy zainstalowanych aplikacji w Windows."
     !endif
     LangString etiudaSetupNotFinished ${ID} "Instalacja programu ${PRODUCT_NAME} nie została ukończona. Pomóc może ponowne uruchomienie instalatora; jeśli znów się zatrzyma, ten kod pomoże ustalić przyczynę: $2."
 
@@ -1022,6 +1038,7 @@ Var RemoveDataBox
     LangString RecogniseSameText ${ID} "${PRODUCT_NAME} $InstalledVersion is already installed on this computer, the same version as this installer. Reinstall it?$\r$\n$\r$\nData on this computer and the licence stay as they are."
     LangString RecogniseNewerText ${ID} "${PRODUCT_NAME} $InstalledVersion is installed on this computer, which is newer than this installer's ${VERSION}. Reinstall ${VERSION} in its place?$\r$\n$\r$\nData on this computer and the licence stay as they are."
     LangString RecogniseUnreadableText ${ID} "${PRODUCT_NAME} is already installed on this computer, but its version cannot be read. Reinstall ${VERSION} in its place?$\r$\n$\r$\nData on this computer and the licence stay as they are."
+    LangString etiudaOldCopyLeft ${ID} "An older copy of Etiuda, installed for one account only, is still on this computer. Nothing is wrong: it can be removed in that account, from the list of installed apps in Windows."
     !endif
     LangString etiudaSetupNotFinished ${ID} "The installation of ${PRODUCT_NAME} did not finish. Running the installer again may help; if it stops again, this code helps find the cause: $2."
 
