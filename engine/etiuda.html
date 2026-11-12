@@ -1354,7 +1354,8 @@ html.e-still .sgn-run::after{animation:none;transform:translateX(80%)}
 .sgn-acts{display:flex;gap:8px;flex-wrap:wrap}
 .sgn-panel .sgn-acts{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
 .sgn-provs{display:flex;flex-direction:column;gap:10px;width:100%}
-.sgn-provs.row{flex-direction:row;flex-wrap:wrap;width:auto}
+/* Not .row, which is the header's band (margin -10px, nowrap) and reached Account's buttons. */
+.sgn-provs.sgn-row{flex-direction:row;flex-wrap:wrap;width:auto}
 .sgn-p{display:inline-flex;align-items:center;justify-content:center;height:41px;padding:0 12px;border:1px solid;border-radius:4px;white-space:nowrap;flex:none}
 .sgn-p.microsoft{gap:12px;font:600 15px/1 "Segoe UI",sans-serif;background:#fff;border-color:#8c8c8c;color:#5e5e5e}
 .sgn-p.google{gap:10px;font:500 14px/20px "Google Sans",Roboto,"Segoe UI",sans-serif;background:#fff;border-color:#747775;color:#1f1f1f}
@@ -26265,7 +26266,7 @@ What you type stays in this browser only.`;
   var FAIL_FIRST = ["unreached", "signin-unreached", "signin-timeout", "signin-browser", "signin-notallowed", "desks", "token", "signin", "signin-refused", "signin-token", "signin-unbound", "signin-state", "signin-none", "signin-preview"];
   function signinDoor(v) {
     const d = signinDoorOf(v);
-    if (d && v.preview) d.preview = t("Preview only.") + " " + t("Sign-in is not set up yet, so nothing here is sent.");
+    if (d && v.preview && v.said !== "signin-preview") d.preview = t("Preview only.") + " " + t("Sign-in is not set up yet, so nothing here is sent.");
     return d;
   }
   function signinDoorOf(v) {
@@ -26286,7 +26287,8 @@ What you type stays in this browser only.`;
           moment: "refused",
           heading: s[0],
           line: s[1],
-          acts: [v.said === "signin-notallowed" ? { act: "choose", label: t("Use another account"), solid: true } : { act: "choose", label: t("Try again"), solid: true }]
+          /* The preview's press stopped nothing, so its way on is Back to the choice, never Try again. */
+          acts: [v.said === "signin-notallowed" ? { act: "choose", label: t("Use another account"), solid: true } : v.said === "signin-preview" ? { act: "choose", label: t("Back") } : { act: "choose", label: t("Try again"), solid: true }]
         };
       }
       return {
@@ -26336,7 +26338,7 @@ What you type stays in this browser only.`;
     google: '<svg class="sgn-lg" width="20" height="20" viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>'
   };
   function signinProvidersHtml(ids, row2) {
-    return '<div class="sgn-provs' + (row2 ? " row" : "") + '">' + ids.map((id) => '<button type="button" class="sgn-p ' + esc(id) + '" data-e-open="signin" data-e-provider="' + esc(id) + '">' + LOGO[id] + "<span>" + esc(id === "microsoft" ? t("Sign in with Microsoft") : t("Sign in with Google")) + "</span></button>").join("") + "</div>";
+    return '<div class="sgn-provs' + (row2 ? " sgn-row" : "") + '">' + ids.map((id) => '<button type="button" class="sgn-p ' + esc(id) + '" data-e-open="signin" data-e-provider="' + esc(id) + '">' + LOGO[id] + "<span>" + esc(id === "microsoft" ? t("Sign in with Microsoft") : t("Sign in with Google")) + "</span></button>").join("") + "</div>";
   }
   function signinAvatarHtml(initial, off, big) {
     return '<span class="sgn-av' + (big ? " l" : "") + (off ? " off" : "") + '" aria-hidden="true">' + (initial ? esc(initial) : ICON_PERSON) + "</span>";
@@ -35711,7 +35713,7 @@ What you type stays in this browser only.`;
       name: t("Not signed in"),
       sub: t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.")
     });
-    h += "<div>" + signinPreviewHtml(v) + signinProvidersHtml(v.offered, true) + '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + '</p><p class="sgn-cap">' + esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account.")) + "</p></div>";
+    h += "<div>" + (v.said === "signin-preview" ? "" : signinPreviewHtml(v)) + signinProvidersHtml(v.offered, true) + '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + '</p><p class="sgn-cap">' + esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account.")) + "</p></div>";
     if (choosing && v.signedIn) h += '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">' + esc(t("Cancel")) + "</button></span>";
     return h + "</div>";
   }

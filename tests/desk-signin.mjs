@@ -44,7 +44,7 @@ const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modul
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const PLANTS = 45;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 66 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 67 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -819,11 +819,11 @@ CASES.previewPage = async () => {
   let pl = {}, plA = "";
   try { pl = word(Object.assign({}, on, { said: "signin-preview" })); plA = acct(on); } finally { storage.lsSet("eUiLang", "en"); }
   return before.moment === "before" && before.preview === PREVIEW_LINE && pressed.moment === "refused" && pressed.heading === PREVIEW_PRESSED
-    && !pressed.line && pressed.preview === PREVIEW_LINE && plain.preview === undefined && P.signinRead({ offered: [], preview: true }).preview === false
+    && !pressed.line && pressed.preview === undefined && plain.preview === undefined && P.signinRead({ offered: [], preview: true }).preview === false
     && /data-signin-preview/.test(html) && words(html).indexOf(PREVIEW_LINE) >= 0
-    && /data-signin-preview/.test(a) && words(a).indexOf(PREVIEW_LINE) >= 0 && words(aPressed).indexOf(PREVIEW_PRESSED) >= 0 && words(aPressed).indexOf(PREVIEW_LINE) >= 0
+    && /data-signin-preview/.test(a) && words(a).indexOf(PREVIEW_LINE) >= 0 && words(aPressed).indexOf(PREVIEW_PRESSED) >= 0 && words(aPressed).indexOf(PREVIEW_LINE) < 0
     && !/data-signin-preview/.test(aOff) && /data-e-open="signin" data-e-provider="google"/.test(aOff)
-    && pl.heading === PREVIEW_PRESSED_PL && pl.preview === PREVIEW_LINE_PL && words(plA).indexOf(PREVIEW_LINE_PL) >= 0;
+    && pl.heading === PREVIEW_PRESSED_PL && pl.preview === undefined && words(plA).indexOf(PREVIEW_LINE_PL) >= 0;
 };
 /* Not shipped: tools/signin-preview.cmd is outside electron-builder's files; read, never run (run, it starts the installed desk):
    per-user first, then all-users, the variable set once for that one start, no setx, no registry. */
@@ -846,10 +846,25 @@ CASES.previewLook = async () => {
   const LINE = '<p class="sgn-cap sgn-preview" data-signin-preview><b>Preview only.</b> <span>Sign-in is not set up yet, so nothing here is sent.</span></p>';
   const css = fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8");
   return before.indexOf('</p>' + LINE + '<div class="sgn-provs">') > 0 && /^<h4>[^<]*<\/h4><p class="sgn-lede">/.test(before)
-    && pressed.indexOf("<h4>" + PREVIEW_PRESSED + "</h4>" + LINE) === 0 && acct.indexOf("<div>" + LINE + '<div class="sgn-provs row">') > 0
+    && pressed.indexOf("<h4>" + PREVIEW_PRESSED + "</h4>") === 0 && pressed.indexOf("data-signin-preview") < 0
+    && acct.indexOf("<div>" + LINE + '<div class="sgn-provs sgn-row">') > 0
     && css.indexOf(".sgn-cap.sgn-preview b{color:var(--ink);font-weight:600}") >= 0 && !/\.sgn-cap\.sgn-preview\{[^}]*font-weight:600/.test(css)
     && css.indexOf(".sgn-lede:has(+ .sgn-preview){margin-bottom:12px}") >= 0 && css.indexOf(".sgn-panel .sgn-preview{margin:12px 0 10px}") >= 0
     && css.indexOf(".sgn-top .sgn-preview{max-width:none;margin:0 0 10px}") >= 0;
+};
+/* After a press: the heading is the line, so no preview line under it, and its one act is Back, an ordinary button back to the door's
+   choice, never Try again. The providers' row in Account carries no class the header's own .row rules reach (its -10px top margin
+   swallowed the line's 10px below, measured 0px in a headless Chrome over the built CSS). */
+CASES.previewBack = () => {
+  if (!P) return false;
+  const on = { offered: ["microsoft", "google"], preview: true };
+  const pressed = P.signinDoor(P.signinRead(Object.assign({}, on, { said: "signin-preview" })));
+  const acts = pressed && pressed.acts ? pressed.acts : [];
+  const rowHtml = P.signinProvidersHtml(["microsoft", "google"], true);
+  const css = fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8");
+  return acts.length === 1 && acts[0].act === "choose" && acts[0].label === "Back" && !acts[0].solid
+    && !/class="(?:[^"]*\s)?row(?:\s[^"]*)?"/.test(rowHtml) && /class="sgn-provs sgn-row"/.test(rowHtml)
+    && css.indexOf(".sgn-provs.sgn-row{flex-direction:row;flex-wrap:wrap;width:auto}") >= 0 && css.indexOf(".sgn-provs.row") < 0;
 };
 CASES.previewCmd = () => {
   const { minimatch } = createRequire(import.meta.url)("minimatch");
@@ -1079,6 +1094,7 @@ const LEGS = [
   ["ds12d", "previewPage", "the preview's line stands in the door's content and Account's card, the press's line as the heading, none without the preview; Polish too"],
   ["ds12e", "previewCmd", "tools/signin-preview.cmd is outside the packaged files and starts the installed desk, per-user first, with the variable for that start alone"],
   ["ds12f", "previewLook", "the preview's line as the designer placed it: \"Preview only.\" at 600, the rest the caption's; in the panel before the providers, in Account at the card's measure"],
+  ["ds12g", "previewBack", "after a press the preview's heading stands alone with one ordinary Back to the door; the providers' row in Account is no header row"],
   ["ds13a", "secretTable", "the tree holds no client secret: every provider's clientSecret is \"\" and a configured table offers none"],
   ["ds13b", "secretSent", "client_secret goes with Google's code exchange and refresh only where a secret is present, and without one every byte is as before"],
   ["ds13c", "secretPacked", "the package's signin-secret.json gives Google's secret where it is {format: 1, google} of a secret's shape, and nothing else"],
