@@ -9524,7 +9524,8 @@ ipcMain.handle("etiuda:signin-stop", (e) => {
 /* Sign out: this computer forgets the account, its tokens, its code and its certificate, and takes its seat.json back out of the
    team's folder. The team, its catalog and everything else on the desk stay. */
 ipcMain.handle("etiuda:signin-out", (e) => {
-  if (!fromEngine(e) || signinBusy) return signinView();
+  if (!fromEngine(e)) return null;
+  if (signinBusy) return signinView();
   const s = signinState(), me = branchIdentity(false);
   if (s.held && me && pinnedLead()) {
     try { fs.unlinkSync(path.join(sharedFolderForWrite(), "desks", me.id, SEAT_NAME)); } catch { /* not written, or the folder is away */ }
