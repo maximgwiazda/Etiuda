@@ -9534,7 +9534,7 @@ function signinPageHtml(ok) {
 function signinIo(run) {
   return {
     listen: (pageFor, takes) => signinListen(http, pageFor, SIGNIN_WAIT_MS, takes).then(l => { run.loop = l; return l; }),
-    openPage: url => signinPageOk(url) ? Promise.resolve(shell.openExternal(url)).then(() => { run.url = url; return true; }) : false, /* plant:signin-open */
+    openPage: url => signinPageOk(url) ? Promise.resolve(handOut(url)).then(() => { run.url = url; return true; }) : false, /* plant:signin-open */
     tokenAsk: (url, form) => signinRequest((u, init) => net.fetch(u, init), url, form),
     serviceAsk: (url, body) => signinServiceAsk((u, init) => net.fetch(u, init), url, body),
     sign: signinSign,
@@ -9592,7 +9592,7 @@ ipcMain.handle("etiuda:signin-again", (e) => {
   if (!fromEngine(e)) return false;
   const run = signinBusy;
   if (!run || !run.url || !signinPageOk(run.url)) return false; /* plant:again-page */
-  shell.openExternal(run.url);
+  handOut(run.url);
   return true;
 });
 /* Cancel closes the loopback, and the sign-in ends as cancelled. */
@@ -9681,6 +9681,11 @@ ipcMain.on("etiuda:link-click", (e, url) => {
   try { if (fromEngine(e)) linkClicked = { href: new URL(String(url)).href, at: Date.now() }; }
   catch { linkClicked = null; }
 });
+/* THE ONE WAY OUT OF THE SHELL: every web address the desk hands to the system's browser passes through this one call, a clicked
+   link (openExternally, below) and the provider's page a sign-in opens, first and again, alike, each behind its own
+   guard. A lab replaces this single call, so a test's press never reaches the real browser (tests/links.js, the test
+   architect's floor of 2026-10-28). */
+function handOut(url) { return shell.openExternal(url); }
 function openExternally(url) {
   try {
     const u = new URL(url), c = linkClicked;
@@ -9690,7 +9695,7 @@ function openExternally(url) {
       return;
     }
     linkClicked = null;
-    shell.openExternal(url);
+    handOut(url);
   } catch { /* not a URL this shell can open, and the navigation is refused either way */ }
 }
 

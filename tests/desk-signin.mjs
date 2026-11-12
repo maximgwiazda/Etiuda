@@ -784,8 +784,9 @@ check(at(renew, "/* plant:renew-offered */") > 0 && at(renew, "signinRenewHeld("
 check(/if \(PLACED_ASIDE \|\| harnessLaunch\(\) \|\|/.test(armRenew) && /armNoteLook\(\);\n\s*armSigninRenew\(\);/.test(MAIN),
   "ds4g the renewal is armed once the window opens and never from the harness's own window or any harness start");
 check(/openPage: url => signinPageOk\(url\) \?/.test(WIRING) && /if \(!run \|\| !run\.url \|\| !signinPageOk\(run\.url\)\) return false;/.test(WIRING)
-  && (MAIN.match(/shell\.openExternal\(/g) || []).length === 3,
-  "ds4h the browser is handed only a provider's own authorize page, at the sign-in and at Open the browser again");
+  && (MAIN.match(/shell\.openExternal\(/g) || []).length === 1 && /function handOut\(url\) \{ return shell\.openExternal\(url\); \}/.test(MAIN)
+  && /signinPageOk\(url\) \? Promise\.resolve\(handOut\(url\)\)/.test(WIRING) && /plant:again-page \*\/\n  handOut\(run\.url\);/.test(WIRING),
+  "ds4h the browser is handed only a provider's own authorize page, at the sign-in and at Open the browser again, through the shell's one way out (handOut, the call tests/links.js stubs)");
 check(/data-e-open="signin" data-e-provider=/.test(PAGE)
   && /eOpen === "signin"[\s\S]{0,40}\n\s*if \(b\) ipcRenderer\.sendSync\("etiuda:signin-click"/.test(PRELOAD),
   "ds4i the preload names a trusted click on a provider's button, and the page's provider buttons are the only ones it hears");
