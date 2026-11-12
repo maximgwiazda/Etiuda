@@ -22,6 +22,9 @@ const SETTLE_MS = 150;
 /* Three failures in a row stop the asks for a minute; the next ask after it is tried as any other. */
 const FAILS_TO_PAUSE = 3;
 const PAUSE_MS = 60000;
+/* While the service is slow, one ask in this long at most: enough to keep its times current and to notice it recover, and
+   no query's text sent where its order would come too late to be used. */
+const SLOW_ASK_MS = 60000;
 /* What one ask sends at most: rows of the shortlist, characters of the query and of each row, and the request's bytes. */
 const SHORTLIST_MAX = 12;
 const QUERY_CHARS = 1500;
@@ -251,7 +254,7 @@ function createReorder(opts) {
   const config = () => { try { return o.config ? o.config() || null : null; } catch { return null; } };
   const times = [];
   const windowNow = () => (Number.isFinite(o.windowMs) ? o.windowMs : windowFor(times));
-  let failures = 0, pausedUntil = 0, settleTimer = null, ranking = "", saidSlow = false;
+  let failures = 0, pausedUntil = 0, settleTimer = null, ranking = "", saidSlow = false, lastSent = -Infinity;
   const tell = r => {
     ranking = r;
     saidSlow = slowFor(times);
@@ -264,6 +267,7 @@ function createReorder(opts) {
     if (ranking && slowFor(times) !== saidSlow) tell(ranking);
   };
   const paused = () => pausedUntil > now();
+  const throttled = () => slowFor(times) && now() - lastSent < SLOW_ASK_MS;
   const failed = () => {
     failures++;
     if (failures >= FAILS_TO_PAUSE) pausedUntil = now() + PAUSE_MS;
@@ -280,8 +284,8 @@ function createReorder(opts) {
     return null;
   };
   return {
-    /** A configuration is in force and the asks are not paused. */
-    active() { return !!config() && !paused(); },
+    /** A configuration is in force, and the asks are neither paused nor held back while the service is slow. */
+    active() { return !!config() && !paused() && !throttled(); },
     paused,
     /** `fn` after SETTLE_MS of quiet; a later call replaces an earlier one still waiting. */
     settle(fn) {
@@ -293,13 +297,14 @@ function createReorder(opts) {
      *  is not a valid order or none comes within ANSWER_WAIT_MS. */
     async ask(query, items, wanted) {
       const cfg = config();
-      if (!cfg || paused()) return null;
+      if (!cfg || paused() || throttled()) return null;
       const list = (Array.isArray(items) ? items : []).slice(0, SHORTLIST_MAX);
       if (list.length < 2) return null;
       const req = requestFor(cfg, query, list);
       if (!req) return failed();
       const windowMs = windowNow();
       const began = now();
+      lastSent = began;
       const call = door(o.fetch, req, ANSWER_WAIT_MS).then(r => { timed(now() - began); return r; });
       call.catch(() => {});
       let timer = null;
@@ -316,13 +321,13 @@ function createReorder(opts) {
       if (typeof wanted === "function" && !wanted()) return null;
       return order;
     },
-    state() { return { failures, pausedUntil, window: windowNow(), slow: slowFor(times), times: times.slice() }; },
+    state() { return { failures, pausedUntil, window: windowNow(), slow: slowFor(times), throttled: throttled(), times: times.slice() }; },
   };
 }
 
 module.exports = {
   INSTANT_FROM, REORDER_WINDOW_MS, WINDOW_FLOOR_MS, WINDOW_CEILING_MS, WINDOW_FACTOR, TIMES_KEPT, TIMES_FIRST, ANSWER_WAIT_MS,
-  TEST_PROMPT, medianOf, windowFor, slowFor, connectionTest, SETTLE_MS, FAILS_TO_PAUSE, PAUSE_MS, SHORTLIST_MAX, SEND_MAX, ANSWER_MAX, PROVIDERS,
+  TEST_PROMPT, medianOf, windowFor, slowFor, connectionTest, SETTLE_MS, FAILS_TO_PAUSE, PAUSE_MS, SLOW_ASK_MS, SHORTLIST_MAX, SEND_MAX, ANSWER_MAX, PROVIDERS,
   HEADERS, ORDER_PROMPT, touches, endpointShape, endpointFor, admitted, orderText, requestFor, replyText, parseOrder, door,
   createReorder,
 };

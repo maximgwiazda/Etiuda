@@ -491,24 +491,32 @@ try {
   }
 
   /* db4: every sentence that says the model's text stays on this computer or is never sent, found by search in the string
-     table, is drawn only while the built-in model ranks. The search: an English key that names this computer, leaving or
-     not being sent, and the model, the message or the search. What it finds is held to the list below, so a new sentence it
-     finds stops this leg until it is read and listed; the first group is the known positive, the claims a screen draws. */
+     table, is drawn only while the built-in model ranks. The search: a row whose English or Polish names this or the
+     agent's computer, staying, keeping, leaving or not being sent, or local, and names the model, the message or the search.
+     What it finds is held to the lists below, so a new sentence it finds stops this leg until it is read and listed; the
+     first list is the known positive, the claims a screen draws. */
   {
     const problems = [];
-    const LOCAL = /this computer|leaves|never kept|never sent|not sent|nothing is sent|sends nothing|sending nothing/i;
-    const SUBJECT = /model|message|search/i;
+    const LOCAL = /this computer|your computer|leaves|never kept|never sent|not sent|nothing is sent|sends nothing|sending nothing|stays|kept here|local/i;
+    const LOCAL_PL = /tym komputerze|tego komputera|twoim komputerze|nie opuszcza|nie jest wysyłan|niewysyłan|nie wysyła|nie trafia|zostaje|pozostaje|przechowywan|lokaln/i;
+    const SUBJECT = /model|message|search/i, SUBJECT_PL = /model|wiadomoś|wyszuk/i;
     const CLAIMS = ["Reads a copied message on this computer", "The model ranks the suggestions; nothing leaves this computer",
       "The model built into Etiuda, which works on this computer alone.", "From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the model on this computer.",
       "The model ranks the search beside word matches; nothing leaves this computer", "When the picker opens with a customer's message copied"];
-    /* True whenever they are drawn: the built-in choice's hint, the pause's line, the incomplete setting's line, both switches off. */
+    /* True whenever they are drawn, and not drawn while the organisation's model ranks with both switches on: the built-in
+       choice's hint, the pause's line, the too-slow line ("the built-in model's order stands"), the incomplete setting's line,
+       both switches off. */
     const TRUE_WHEN_DRAWN = ["The built-in model sends nothing anywhere.", "{HOST} has not answered three times in a row, so the built-in model ranks on this computer",
-      "Until the service, the model and the key are complete", "The organisation's model at {HOST} is set, and with both switches off"];
+      "{HOST} usually takes more than 4 seconds to answer", "Until the service, the model and the key are complete",
+      "The organisation's model at {HOST} is set, and with both switches off"];
+    /* True while the organisation's model ranks too, so they may be drawn then: the suggestion switch's off line (off, nothing
+       goes to either model for suggestions), and the connection test's hover (the test sends its fixed prompt alone). */
+    const TRUE_WITH_ORG = ["Suggestions come from matching words, and the model stays unloaded", "Asks the model for a one-word answer."];
     const found = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8").split("\n")
       .map(l => /^\s*"((?:[^"\\]|\\.)*)":"((?:[^"\\]|\\.)*)",?\s*$/.exec(l)).filter(Boolean)
       .map(m => ({ en: JSON.parse("\"" + m[1] + "\""), pl: JSON.parse("\"" + m[2] + "\"") }))
-      .filter(r => LOCAL.test(r.en) && SUBJECT.test(r.en));
-    const listed = CLAIMS.concat(TRUE_WHEN_DRAWN);
+      .filter(r => (LOCAL.test(r.en) || LOCAL_PL.test(r.pl)) && (SUBJECT.test(r.en) || SUBJECT_PL.test(r.pl)));
+    const listed = CLAIMS.concat(TRUE_WHEN_DRAWN, TRUE_WITH_ORG);
     const named = r => listed.find(p => r.en.indexOf(p) === 0);
     for (const r of found) if (!named(r)) problems.push("the search found a sentence to read and list: " + JSON.stringify(r.en.slice(0, 80)));
     for (const p of listed) if (!found.some(r => r.en.indexOf(p) === 0)) problems.push("the search missed a known one: " + JSON.stringify(p.slice(0, 60)));
@@ -527,7 +535,7 @@ try {
       if (claimsDrawn !== CLAIMS.length) problems.push(lang + " built-in drew " + claimsDrawn + " of the " + CLAIMS.length + " claims");
       await setHost(page, ORG_ON); await ranked(page);
       const text = await screens();
-      const org = drawn(text, lang);
+      const org = drawn(text, lang).filter(r => TRUE_WITH_ORG.indexOf(named(r)) < 0);
       if (org.length) problems.push(lang + " organisation drew " + JSON.stringify(org.map(r => r.en.slice(0, 60))));
       if (text.split("api.openai.com").length - 1 < 4) problems.push(lang + " organisation named its host " + (text.split("api.openai.com").length - 1) + " time(s)");
     }

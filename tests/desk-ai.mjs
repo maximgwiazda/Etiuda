@@ -16,7 +16,8 @@
  * a valid late answer is no failure, so a slow service is said as slow and not paused (da14); the order is the full list,
  * not a number the prose cites first (da15); the query and the items are quoted data in every adapter's prompt (da16); with
  * no built-in candidate the page still builds a shortlist and the organisation's order stands (da17, da18); and that order
- * repaints the picker's strip alone, so the row under the pointer keeps its mark (da19). Each guard
+ * repaints the picker's strip alone, so the row under the pointer keeps its mark (da19). While the service is slow it is asked
+ * once a minute at most (da20), and the picker's note names the cap the shell sends (da21). Each guard
  * is lifted once, in a copy held in memory, and its leg must then fail. No leg reaches a network: every fetch is a
  * stand-in, and the global fetch throws.
  */
@@ -32,7 +33,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "shell");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 57;
+const EXPECTED = 60;
 /* The shell-to-page event that carries each re-order's outcome; the page-to-shell sync request "etiuda:ai-state" is another. */
 const RANKING_CH = "etiuda:ai-ranking";
 
@@ -553,7 +554,7 @@ async function timesLeg(A, list) {
   const r = A.createReorder({ config: () => CONFIG, fetch, now: () => clock, onState: s => states.push(s) });
   const windows = [];
   for (const step of list) {
-    if (step === "rest") { clock += A.PAUSE_MS + 1; continue; }
+    if (step === "rest") { clock += Math.max(A.PAUSE_MS, A.SLOW_ASK_MS || 0) + 1; continue; }
     fetch.next = step;
     await r.ask("q", ["a", "b"]);
     windows.push(r.state().window);
@@ -578,12 +579,12 @@ await block(async () => {
     "da8p with the floor or the ceiling lifted, the legs above fail: " + floorLifted.windowFor([100, 100, 100]) + ", " + ceilLifted.windowFor([3000, 3000, 3000]));
 });
 await block(async () => {
-  const run = await timesLeg(AI, [5000, 5000, 5000, "rest", 500, 500, 500]);
+  const run = await timesLeg(AI, [5000, 5000, 5000, "rest", 500, "rest", 500, "rest", 500]);
   const slowAt = run.states.findIndex(s => s.slow === true);
   const last = run.states[run.states.length - 1];
   check(slowAt > -1 && run.states.every(s => s.pausedUntil === 0 && s.failures === 0) && last && last.slow === false
     && last.ranking === "organisation" && run.states.every(s => typeof s.slow === "boolean"),
-    "da8c three answers of 5000 ms, each late and timed, set slow and pause nothing, since each was a valid answer; three of 500 ms bring "
+    "da8c three answers of 5000 ms, each late and timed, set slow and pause nothing, since each was a valid answer; three of 500 ms, a minute apart while slow holds the asks back, bring "
     + "the median under " + AI.WINDOW_CEILING_MS + " ms and clear it: " + JSON.stringify(run.states.map(s => [s.ranking, s.failures, s.slow])));
   const lifted = await timesLeg(aiFrom(edited(AI_SRC, "medianOf(kept) > WINDOW_CEILING_MS", "false")), [5000, 5000, 5000]);
   check(!lifted.states.some(s => s.slow === true), "da8p with slow lifted, the leg above fails: " + JSON.stringify(lifted.states.map(s => s.slow)));
@@ -795,7 +796,7 @@ await block(async () => {
 await block(async () => {
   const healthy = await timesLeg(AI, [2500, 2500, 2500, 2500]);
   const lastH = healthy.states[healthy.states.length - 1];
-  const slow = await timesLeg(AI, [4500, 4500, 4500, 4500]);
+  const slow = await timesLeg(AI, [4500, 4500, 4500, "rest", 4500]);
   const lastS = slow.states[slow.states.length - 1];
   check(healthy.states.every(s => s.pausedUntil === 0 && s.failures === 0) && healthy.fetches === 4 && lastH.ranking === "organisation"
     && lastS && lastS.slow === true && lastS.pausedUntil === 0 && lastS.failures === 0 && slow.fetches === 4,
@@ -961,6 +962,42 @@ await block(async () => {
   const lifted = at(plain);
   check(lifted.after !== 2, "da19p with the repaint sent as a fresh opening again, the mark leaves the row under the pointer and the leg above fails: "
     + JSON.stringify(lifted));
+});
+
+/* da20 (Claude alpha's ruling of 01:24): while the service is slow, one ask a minute at most, and a fast answer that brings the
+   median under the ceiling ends it. "Text that leaves for no use should not leave." */
+async function throttleLeg(A) {
+  let clock = 9000000;
+  const fetch = fetchOf(() => { clock += fetch.next; return { status: 200, text: chatSaying("[2,1]") }; });
+  const r = A.createReorder({ config: () => CONFIG, fetch, now: () => clock });
+  const ask = async ms => { fetch.next = ms; await r.ask("q", ["a", "b"]); };
+  for (const ms of [100, 100, 5000, 5000, 5000]) await ask(ms);
+  const slowSet = r.state().slow, sentAtSlow = fetch.calls.length, lastSent = clock - 5000;
+  for (let i = 0; i < 10; i++) { clock += 1000; await ask(100); }
+  const within = fetch.calls.length - sentAtSlow, activeWithin = r.active();
+  clock = lastSent + (A.SLOW_ASK_MS || 60000);
+  await ask(100);
+  const afterMinute = fetch.calls.length - sentAtSlow, slowAfter = r.state().slow;
+  await ask(100);
+  return { slowSet, within, activeWithin, afterMinute, slowAfter, thenEach: fetch.calls.length - sentAtSlow };
+}
+await block(async () => {
+  const t = await throttleLeg(AI);
+  check(t.slowSet === true && t.within === 0 && t.activeWithin === false && t.afterMinute === 1 && t.slowAfter === false && t.thenEach === 2
+    && AI.SLOW_ASK_MS === 60000,
+    "da20 while the service is slow, ten queries within the minute send nothing and the shell holds back its shortlist (active false); after "
+    + AI.SLOW_ASK_MS + " ms one ask goes, and its fast answer, bringing the median under the ceiling, ends the hold: " + JSON.stringify(t));
+  const lifted = await throttleLeg(aiFrom(edited(AI_SRC, "const throttled = () => slowFor(times) && now() - lastSent < SLOW_ASK_MS;", "const throttled = () => false;")));
+  check(lifted.within > 0, "da20p with the hold lifted, every query is sent while slow and the leg above fails: " + JSON.stringify(lifted));
+});
+/* da21: the picker's note names the cap the shell sends, MESSAGE_MAX_CHARS, in both languages. */
+await block(async () => {
+  const { MESSAGE_MAX_CHARS } = await import(pathToFileURL(path.join(ROOT, "src", "modules", "clip-suggest.js")).href);
+  const lang = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
+  const line = lang.split("\n").find(l => l.indexOf("While the organisation's model is on, the copied message") > -1) || "";
+  const en = MESSAGE_MAX_CHARS.toLocaleString("en-GB"), pl = String(MESSAGE_MAX_CHARS);
+  check(line.indexOf("at most its first " + en + " characters") > -1 && line.indexOf("najwyżej " + pl + " pierwszych znaków") > -1,
+    "da21 the picker's note names the cap the shell sends, " + MESSAGE_MAX_CHARS + " characters, in English and Polish: " + (line ? "found" : "no line"));
 });
 
 check(wallHits === 0, "da0 no leg called the global fetch: " + wallHits);
