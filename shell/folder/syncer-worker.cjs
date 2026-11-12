@@ -27,6 +27,7 @@ const FOLDER_SYNC_CADENCE_MS = 3000;
 
 let folder = "";
 let mirror = "";
+let own = "";
 let pollTimer = null;
 let pollMs = FOLDER_SYNC_CADENCE_MS;
 let stopped = false;
@@ -113,7 +114,7 @@ function flushOutbox() {
   for (const rel of Array.from(sentNow.keys())) if (!rels.has(rel)) sentNow.delete(rel);
   const due = owed.filter(it => sentNow.get(it.rel) !== (it.del ? "del" : it.sha));
   if (due.length) {
-    const results = S.flushOwed(folder, mirror, due, null);
+    const results = S.flushOwed(folder, mirror, due, null, own);
     for (const r of results) {
       if (!r.ok) continue;
       sentNow.set(r.rel, r.del ? "del" : r.sha);
@@ -202,6 +203,7 @@ function syncOnce() {
 function init(data) {
   folder = data.folder;
   mirror = data.mirror;
+  own = data.own || "";
   pollMs = data.pollMs || FOLDER_SYNC_CADENCE_MS;
 
   try {

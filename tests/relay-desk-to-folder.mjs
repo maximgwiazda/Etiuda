@@ -25,7 +25,7 @@ const REAL_CORE = nodeRequire(path.join(ROOT, "relay", "core.cjs"));
 const REAL_BLOB = nodeRequire(path.join(ROOT, "shell", "relay", "blob.cjs"));
 
 const BUILTIN_RELAY = "https://etiuda.dev/relay/v1";
-const EXPECTED = 28;
+const EXPECTED = 32;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 const safeStorage = {
@@ -245,6 +245,7 @@ async function launch(plan) {
       if (n === "electron") return electron;
       if (n === "node:fs" || n === "fs") return watchedFs;
       if (typeof n === "string" && n.endsWith(path.join("relay", "channel.cjs"))) return mockRelay;
+      if (plan.syncerAt && typeof n === "string" && n.endsWith(path.join("folder", "syncer.cjs"))) return nodeRequire(plan.syncerAt);
       return nodeRequire(beside(n));
     },
     SHELL,
@@ -622,32 +623,88 @@ async function main() {
   );
 
   /* Scenario 2r (board 998): the same move with the mirror's own branch marked read-only, and the folder holding an older copy of
-     it marked the same. */
-  const s2r = makeScenario();
-  const knownFolderR = path.join(s2r.lab, "known-folder");
-  const folderDeskR = path.join(knownFolderR, "desks", s2r.ownDeskId);
-  fs.mkdirSync(folderDeskR, { recursive: true });
-  fs.writeFileSync(path.join(knownFolderR, "etiuda-team.json"), JSON.stringify(signTeamDoc(s2r.movedTeamDoc, s2r.lead), null, 2));
-  fs.writeFileSync(path.join(folderDeskR, "branch-lamp.ec"), "older");
-  const mirrorBranchR = path.join(s2r.mirrorFolder, "desks", s2r.ownDeskId, "branch-lamp.ec");
-  const branchShaR = crypto.createHash("sha256").update(fs.readFileSync(mirrorBranchR)).digest("hex").slice(0, 12);
-  fs.chmodSync(mirrorBranchR, 0o444);
-  fs.chmodSync(path.join(folderDeskR, "branch-lamp.ec"), 0o444);
-  const deskJsonR = path.join(s2r.lab, "userdata", "desk.json");
-  const deskEnvR = JSON.parse(fs.readFileSync(deskJsonR, "utf8"));
-  deskEnvR.teamJoin = {
-    team: s2r.teamId, file: "etiuda-join-" + s2r.teamId + ".json", nonce: crypto.randomBytes(32).toString("hex"),
-    commit: crypto.randomBytes(32).toString("hex"), asked: Date.now(), held: 0, name: "Desk",
-    invite: { id: crypto.randomBytes(8).toString("hex"), proof: crypto.randomBytes(32).toString("hex"),
-      lead: { keyId: s2r.lead.keyId, public: s2r.lead.public, name: "Lead" }, folder: knownFolderR },
+     it marked the same, beside another desk's file and the team file, both marked read-only, which keep their marks. `blocked`
+     puts a plain file where the desk's own folder goes, so the folder refuses the copy. */
+  const roMove = (extra = {}) => {
+    const sc = makeScenario();
+    const kf = path.join(sc.lab, "known-folder");
+    const own = path.join(kf, "desks", sc.ownDeskId);
+    const otherFile = path.join(kf, "desks", "k-" + crypto.randomBytes(8).toString("hex"), "o.ec");
+    const teamAt = path.join(kf, "etiuda-team.json");
+    fs.mkdirSync(path.dirname(otherFile), { recursive: true });
+    fs.writeFileSync(teamAt, JSON.stringify(signTeamDoc(sc.movedTeamDoc, sc.lead), null, 2));
+    fs.writeFileSync(otherFile, "another desk's");
+    if (extra.blocked) {
+      fs.mkdirSync(path.dirname(own), { recursive: true });
+      fs.writeFileSync(own, "not a folder");
+    } else {
+      fs.mkdirSync(own, { recursive: true });
+      fs.writeFileSync(path.join(own, "branch-lamp.ec"), "older");
+      fs.chmodSync(path.join(own, "branch-lamp.ec"), 0o444);
+    }
+    const mirrorBranch = path.join(sc.mirrorFolder, "desks", sc.ownDeskId, "branch-lamp.ec");
+    const want = crypto.createHash("sha256").update(fs.readFileSync(mirrorBranch)).digest("hex").slice(0, 12);
+    for (const p of [mirrorBranch, otherFile, teamAt]) fs.chmodSync(p, 0o444);
+    const deskJson = path.join(sc.lab, "userdata", "desk.json");
+    const env = JSON.parse(fs.readFileSync(deskJson, "utf8"));
+    env.teamJoin = {
+      team: sc.teamId, file: "etiuda-join-" + sc.teamId + ".json", nonce: crypto.randomBytes(32).toString("hex"),
+      commit: crypto.randomBytes(32).toString("hex"), asked: Date.now(), held: 0, name: "Desk",
+      invite: { id: crypto.randomBytes(8).toString("hex"), proof: crypto.randomBytes(32).toString("hex"),
+        lead: { keyId: sc.lead.keyId, public: sc.lead.public, name: "Lead" }, folder: kf },
+    };
+    fs.writeFileSync(deskJson, JSON.stringify(env, null, 2));
+    const r = runScenario(Object.assign({}, sc, { deliverTeamDoc: signTeamDoc(sc.movedTeamDoc, sc.lead) }, extra.plan || {}));
+    const marked = p => { try { return (fs.statSync(p).mode & 0o200) === 0; } catch { return null; } };
+    const outboxAt = path.join(sc.lab, "userdata", "folder-mirror", sc.teamId, ".outbox.json");
+    let owed = [];
+    try { owed = Object.keys(JSON.parse(fs.readFileSync(outboxAt, "utf8")).owe || {}); } catch { owed = []; }
+    const got = {
+      opened: path.resolve(r.openedDir) === path.resolve(kf),
+      held: r.currentFolderDeskHeld, want,
+      otherKept: marked(otherFile) === true && fs.readFileSync(otherFile, "utf8") === "another desk's",
+      teamKept: marked(teamAt) === true,
+      owed, ownRel: "desks/" + sc.ownDeskId + "/branch-lamp.ec", inUse: r.inUseReachable,
+    };
+    for (const p of [mirrorBranch, otherFile, teamAt, path.join(own, "branch-lamp.ec")]) { try { fs.chmodSync(p, 0o666); } catch {} }
+    try { fs.rmSync(sc.lab, { recursive: true, force: true }); } catch {}
+    return got;
   };
-  fs.writeFileSync(deskJsonR, JSON.stringify(deskEnvR, null, 2));
-  const r2r = runScenario(Object.assign({}, s2r, { deliverTeamDoc: signTeamDoc(s2r.movedTeamDoc, s2r.lead) }));
-  const heldR = (r2r.currentFolderDeskHeld || {})["branch-lamp.ec"] || {};
-  check(path.resolve(r2r.openedDir) === path.resolve(knownFolderR) && heldR.sha === branchShaR && heldR.writable === true && r2r.inUseReachable,
+  const ownReplaced = g => g.opened && !!g.held && !!g.held["branch-lamp.ec"] && g.held["branch-lamp.ec"].sha === g.want
+    && g.held["branch-lamp.ec"].writable === true && g.inUse;
+  const r2r = roMove();
+  check(ownReplaced(r2r),
     "998h a desk moving to a folder copies its own branch, marked read-only in its mirror, over an older copy the folder held marked,"
-    + " and the folder's copy is writable: " + JSON.stringify({ opened: path.resolve(r2r.openedDir) === path.resolve(knownFolderR), held: r2r.currentFolderDeskHeld, want: branchShaR }));
-  try { fs.chmodSync(mirrorBranchR, 0o666); } catch {}
+    + " and the folder's copy is writable: " + JSON.stringify(r2r));
+  check(r2r.opened && r2r.otherKept && r2r.teamKept,
+    "998n on that move another desk's file and the team file on the share, both marked read-only, keep their marks and bytes: " + JSON.stringify(r2r));
+  const blockedOwed = g => g.owed.indexOf(g.ownRel) >= 0;
+  const r2b = roMove({ blocked: true });
+  check(r2b.opened && blockedOwed(r2b) && r2b.otherKept && r2b.teamKept,
+    "998o where the folder refuses the desk's own copies, they are kept in the team's mirror and owed, so the outbox tries them at each"
+    + " scan (998i in folder-mirror shows the team's row saying a read-only refusal): " + JSON.stringify(r2b));
+  if (PLANTS_OFF) {
+    skip("998p control: a copy that clears marks across the whole share turns 998n red (ETIUDA_PLANTS=off)");
+    skip("998q lifting plant:move-owes leaves a refused copy of the desk's own off the outbox (ETIUDA_PLANTS=off)");
+  } else {
+    /* The control widens copyClear's thaw from the copy it replaces to every file in that share, in a copy of the shell's folder. */
+    const wide = fs.mkdtempSync(path.join(runParent, "wide-thaw-"));
+    const syncerSrc = fs.readFileSync(path.join(ROOT, "shell", "folder", "syncer.cjs"), "utf8");
+    const plantLine = syncerSrc.split("\n").find(l => l.includes("plant:copy-clear-mark")) || "";
+    const widened = plantLine + " (function wide(d, n) { if (n > 3) return; let es = []; try { es = fs.readdirSync(d, { withFileTypes: true }); }"
+      + " catch {} for (const e of es) { const p = path.join(d, e.name); if (e.isDirectory()) wide(p, n + 1); else clearReadOnly(p); } })"
+      + "(path.dirname(path.dirname(path.dirname(to))), 0);";
+    fs.writeFileSync(path.join(wide, "syncer.cjs"), syncerSrc.split(plantLine).join(widened));
+    fs.copyFileSync(path.join(ROOT, "shell", "folder", "syncer-worker.cjs"), path.join(wide, "syncer-worker.cjs"));
+    const rw = roMove({ plan: { syncerAt: path.join(wide, "syncer.cjs") } });
+    check(!!plantLine && rw.opened && !(rw.otherKept && rw.teamKept),
+      "998p control: a copy that clears marks across the whole share turns 998n red: " + JSON.stringify(rw));
+    const lines = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").split("\n");
+    const at = lines.findIndex(l => l.includes("plant:move-owes"));
+    if (at >= 0) lines.splice(at, 1);
+    const rq = roMove({ blocked: true, plan: { scratchMainSource: lines.join("\n") } });
+    check(at >= 0 && rq.opened && !blockedOwed(rq), "998q lifting plant:move-owes leaves a refused copy of the desk's own off the outbox: " + JSON.stringify(rq));
+  }
 
   /* Scenario 3: None found shows sentence and offers Open a folder (945f4) */
   const s3 = makeScenario();
@@ -1280,7 +1337,7 @@ async function main() {
   }
 
   // Cleanup scenario directories
-  [s1, s2, s2r, s3, s4, s5, s5p, s6].concat(plantSaw).forEach(s => {
+  [s1, s2, s3, s4, s5, s5p, s6].concat(plantSaw).forEach(s => {
     try { fs.rmSync(s.lab, { recursive: true, force: true }); } catch {}
   });
 

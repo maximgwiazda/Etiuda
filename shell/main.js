@@ -1033,6 +1033,8 @@ function folderSyncerRun(win) {
     /* The floor heedTeam keeps, so a team file put back from an older rev never reaches the mirror, a restart included. */
     floor: (t, pub) => (teamRevSeen[t] || {})[pub], /* plant:s0b-syncer-floor */
     checks: deskTrustChecks(), /* plant:syncer-checks */
+    own: deskBranch ? branchIdOf(deskBranch.sign.pub) : "",
+    onOwed: () => { if (theWindow && !theWindow.isDestroyed()) sendJoin(theWindow); },
     /* A team file in the share that is not the lead's is left aside and the desk works on the last genuine one, so it says
        so through teamSay, once a line (the test architect's C1 to slice 2): the old refusal of a write was the only alarm a
        tampered share gave. The syncer's other lines go to the log as before. */
@@ -6495,6 +6497,13 @@ function leadsView() {
       row.openFolder = shellWords().openFolder;
       row.meetsInFolder = shellWords().teamMeetsInFolder;
     }
+    /* What this desk owes the share and the share refuses as read-only, on the row until it lands: the outbox tries it at each scan. */
+    if (ftHere && t === ftHere.team) {
+      let owed = [];
+      try { owed = FolderSyncer().owedList(folderMirrorOf(t)); } catch { owed = []; }
+      const refused = owed.filter(o => o.readOnly).map(o => ({ file: o.rel, kind: o.readOnly })).slice(0, 3);
+      if (refused.length) row.shareRefused = refused; /* plant:share-refused-row */
+    }
     /* The same sentence the log says, on this team's row, until the listing lands. The page prints it. */
     if (reading && ftHere && t === ftHere.team) row.reading = reading; /* plant:still-reading-shown */
     if (admitted && !row.removed && awaitsFirstEdition(t)) row.awaitsEdition = true;
@@ -6646,22 +6655,31 @@ function stopRelayChannel(teamId) {
   persistDeskEnvelope();
 }
 
-function copyDeskFilesToFolder(mirrorDir, targetFolder) {
+/* A file the folder refuses is put in the team's mirror and owed, so the outbox tries it at each scan and the team's row says a
+   refusal for a read-only file or folder there. */
+function copyDeskFilesToFolder(mirrorDir, targetFolder, teamId) {
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "";
   if (!me || !mirrorDir) return;
   const srcDir = path.join(mirrorDir, "desks", me);
   const dstDir = path.join(targetFolder, "desks", me);
-  try {
-    if (fs.existsSync(srcDir)) {
-      fs.mkdirSync(dstDir, { recursive: true });
-      for (const f of fs.readdirSync(srcDir)) {
-        if (/\.ec$/i.test(f)) {
-          FolderSyncer().copyClear(path.join(srcDir, f), path.join(dstDir, f));
-        }
-      }
+  let names = [];
+  try { names = fs.existsSync(srcDir) ? fs.readdirSync(srcDir).filter(f => /\.ec$/i.test(f)) : []; } catch { names = []; }
+  let made = true;
+  if (names.length) { try { fs.mkdirSync(dstDir, { recursive: true }); } catch { made = false; } }
+  for (const f of names) {
+    try {
+      if (!made) throw new Error("the folder took no desks/" + me);
+      FolderSyncer().copyClear(path.join(srcDir, f), path.join(dstDir, f));
+    } catch (e) {
+      console.error("etiuda: " + f + " could not be copied to the team's folder - " + e.message);
+      if (!teamId) continue;
+      try {
+        const held = path.join(folderMirrorOf(teamId), "desks", me, f);
+        fs.mkdirSync(path.dirname(held), { recursive: true });
+        FolderSyncer().copyClear(path.join(srcDir, f), held);
+        FolderSyncer().noteOwed(folderMirrorOf(teamId), "desks/" + me + "/" + f); /* plant:move-owes */
+      } catch (e2) { console.error("etiuda: " + f + " could not be kept for the team's folder - " + e2.message); }
     }
-  } catch (e) {
-    console.error("etiuda: failed to copy desk files to folder - " + e.message);
   }
 }
 
@@ -6736,7 +6754,7 @@ function findMatchingFolderInKnownRoots(teamId, leadPub, minRev, currentRoot, do
 function switchToFolderTeam(targetFolder, teamId, mirrorDir) {
   deskSetOwn(CATALOG_FOLDER_KEY, targetFolder);
   persistDeskEnvelope();
-  copyDeskFilesToFolder(mirrorDir, targetFolder);
+  copyDeskFilesToFolder(mirrorDir, targetFolder, teamId);
   tryHeldBranches();
   if (teamId) {
     delete teamNeedsFolder[teamId];

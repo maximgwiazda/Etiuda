@@ -236,6 +236,13 @@ function lapseWords(l){
 }
 /* The team's row in Settings says the title, for as long as the step lasts. */
 function lapseNote(l){ return lapseWords(l).title; }
+/* A write this desk owes the shared folder that the folder refuses as read-only, one sentence a file, until it lands. */
+function shareRefusedNotes(l){
+  return (Array.isArray(l&&l.shareRefused)?l.shareRefused:[]).filter(r=>r&&typeof r.file==="string"&&r.file).map(r=>(r.kind==="folder"
+    ? t("The team's shared folder is read-only where {FILE} goes; this desk keeps the change and tries again.") // placeholder: Claudette
+    : t("{FILE} is read-only in the team's shared folder; this desk keeps the change and tries again.") // placeholder: Claudette
+  ).split("{FILE}").join(r.file));
+}
 const lapseKey=l=>l.team+"|"+l.lapse.step+"|"+l.lapse.until;
 /* One notice per step of each team's lapse, up until the agent dismisses it; a sync at the same step adds nothing. */
 function syncLapseNotice(){
@@ -782,4 +789,4 @@ function pickMovedFolder(team,then){
   });
 }
 
-export { lapseNote, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy };
+export { lapseNote, shareRefusedNotes, wireTeamJoin, teamJoinShown, joinStands, onJoinPainted, teamJoinEmptyHtml, teamReadingEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, relayDesk, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, pickMovedFolder, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy };

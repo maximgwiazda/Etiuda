@@ -211,7 +211,8 @@ function noteOwed(mirror, rel, io) {
 }
 function owedList(mirror, io) {
   const st = readOutbox(mirror, io || defaultIO);
-  return Object.keys(st.owe).filter(k => st.owe[k] && st.owe[k].owe).map(k => ({ rel: k, sha: st.owe[k].sha || null, del: !!st.owe[k].del }));
+  return Object.keys(st.owe).filter(k => st.owe[k] && st.owe[k].owe)
+    .map(k => ({ rel: k, sha: st.owe[k].sha || null, del: !!st.owe[k].del, readOnly: st.owe[k].readOnly || "" }));
 }
 function owedAt(mirror, rel, io) {
   const st = readOutbox(mirror, io || defaultIO);
@@ -243,8 +244,8 @@ function renameRetrying(from, to, io) {
 function clearReadOnly(file, io) {
   try { const st = (io || defaultIO).stat(file); if (!(st.mode & 0o200)) fs.chmodSync(file, (st.mode & 0o777) | 0o200); } catch {}
 }
-/* A copy between the share and this computer, through a temp beside it and a rename: the bytes and the last-write time
-   CopyFile keeps, never the read-only mark (clearReadOnly), and an existing copy is replaced whatever marks it carries. */
+/* A copy onto this computer, or into this desk's own folder on the share and nowhere else there, through a temp beside it and
+   a rename: the bytes and the last-write time CopyFile keeps, never the read-only mark, and the copy it replaces is cleared. */
 function copyClear(from, to) {
   const tmp = to + "." + crypto.randomBytes(6).toString("hex") + ".tmp";
   try {
@@ -259,20 +260,30 @@ function copyClear(from, to) {
 /* Temp then rename beside the file, so the share never holds half a file under its name. */
 function writeWhole(file, bytes, io) {
   const tmp = file + "." + crypto.randomBytes(6).toString("hex") + ".tmp";
+  let step = "write";
   try {
     io.writeFile(tmp, bytes);
+    step = "rename";
     renameRetrying(tmp, file, io);
   } catch (e) {
     try { io.unlink(tmp); } catch {}
+    if (e && typeof e === "object") e.step = step;
     throw e;
   }
+}
+/* "file" where the share's file is marked read-only, "folder" where the share would not take a new file there, "" otherwise. */
+function readOnlyOf(e, dest, io) {
+  if (!e || (e.code !== "EPERM" && e.code !== "EACCES")) return "";
+  if (e.step !== "rename") return "folder";
+  try { return (io.stat(dest).mode & 0o200) ? "" : "file"; } catch { return ""; }
 }
 
 /* The owed records written to the share: a file's bytes as the mirror holds them now, a removal as a removal. The share's
    folder must already be there, and only the folders below it are made, so a share that has gone away is never made again.
    A record whose bytes the mirror no longer holds is left: a later write is owed in its place. Off the main thread. */
-function flushOwed(folder, mirror, items, io) {
+function flushOwed(folder, mirror, items, io, own) {
   io = io || defaultIO;
+  own = /^k-[0-9a-f]{16}$/.test(String(own || "")) ? String(own) : "";
   const out = [];
   let rootCode = "";
   try { if (!io.stat(folder).isDirectory()) rootCode = "ENOTDIR"; } catch (e) { rootCode = (e && e.code) || "EIO"; }
@@ -295,12 +306,14 @@ function flushOwed(folder, mirror, items, io) {
       for (let i = 1; i < parts.length; i++) {
         try { fs.mkdirSync(path.join(folder, ...parts.slice(0, i))); } catch (e) { if (!e || e.code !== "EEXIST") throw e; }
       }
+      /* Only this desk writes its own folder on the share, so a read-only mark there is cleared; nothing else there is. */
+      if (own && parts.length === 3 && parts[0] === "desks" && parts[1] === own) clearReadOnly(dest, io); /* plant:outbox-own-clear */
       writeWhole(dest, bytes, io); /* plant:outbox-flush */
       let st = null;
       try { st = io.stat(dest); } catch {}
       out.push({ rel, sha, del: false, ok: true, size: st ? st.size : null, mtimeMs: st ? (st.mtimeMs || 0) : null });
     } catch (e) {
-      out.push({ rel, sha: del ? null : it.sha, del, ok: false, code: (e && e.code) || "EIO" });
+      out.push({ rel, sha: del ? null : it.sha, del, ok: false, code: (e && e.code) || "EIO", readOnly: readOnlyOf(e, dest, io) });
     }
   }
   return out;
@@ -473,6 +486,7 @@ function createFolderProgram(opts) {
   const logger = typeof opts.logger === "function" ? opts.logger : (msg) => console.log(msg);
   const onStatus = typeof opts.onStatus === "function" ? opts.onStatus : () => {};
   const onChange = typeof opts.onChange === "function" ? opts.onChange : () => {};
+  const onOwed = typeof opts.onOwed === "function" ? opts.onOwed : () => {};
 
   const checks = (opts && opts.checks) || {};
   const teamWhole = typeof checks.teamWhole === "function" ? checks.teamWhole : () => false;
@@ -613,8 +627,9 @@ function createFolderProgram(opts) {
         changed = true;
         if (saidWait.has(r.rel)) { saidWait.delete(r.rel); logger("etiuda: " + r.rel + " has reached the team's folder " + folder); }
         if (!r.del && r.size != null) knownMtimes.set(r.rel, { size: r.size, mtimeMs: r.mtimeMs });
-      } else if (rec.code !== r.code) {
+      } else if (rec.code !== r.code || (rec.readOnly || "") !== (r.readOnly || "")) {
         rec.code = r.code;
+        if (r.readOnly) rec.readOnly = r.readOnly; else delete rec.readOnly; /* plant:owed-read-only */
         changed = true;
         if (saidWait.get(r.rel) !== r.code) {
           saidWait.set(r.rel, r.code);
@@ -622,7 +637,7 @@ function createFolderProgram(opts) {
         }
       }
     }
-    if (changed) { try { writeOutbox(mirror, st, io); } catch {} }
+    if (changed) { try { writeOutbox(mirror, st, io); } catch {} onOwed(); }
   }
   /* A desk's catalog answer sealed to the lead's box for this team: judged by its place and its envelope alone, never opened. */
   function leadAnswerAt(relPath, doc) {
@@ -1355,7 +1370,7 @@ function createFolderProgram(opts) {
   function syncOnce() {
     if (typeof opts.pin === "function") setPin(opts.pin());
     const owing = owed();
-    if (owing.length) landed(flushOwed(folder, mirror, owing, io));
+    if (owing.length) landed(flushOwed(folder, mirror, owing, io, opts.own));
     const stillOwed = new Set(owed().map(x => x.rel));
     let foundFiles = null;
     try {
@@ -1452,8 +1467,11 @@ class FolderSyncerController {
       floor: opts.floor, /* plant:s0b-controller-floor */
       logger: opts.logger,
       onStatus: this.onStatus,
-      onChange: this.onChange
+      onChange: this.onChange,
+      onOwed: opts.onOwed,
+      own: opts.own
     });
+    this.own = opts.own || "";
   }
 
   start() {
@@ -1489,7 +1507,8 @@ class FolderSyncerController {
         data: {
           folder: this.folder,
           mirror: this.mirror,
-          pollMs: this.pollMs
+          pollMs: this.pollMs,
+          own: this.own
         }
       });
     }

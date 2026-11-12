@@ -18,7 +18,7 @@ import { createLab } from "./lab-owner.mjs";
 const SELF = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(SELF), "..");
 const nodeRequire = createRequire(import.meta.url);
-const EXPECTED = 8;
+const EXPECTED = 9;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -135,17 +135,24 @@ async function readOnlyScene(kind, syncerDir) {
   const out = { kind };
   const said = [];
   const marked = [shareRing, mirrorRing];
+  let othersKept = () => true;
   try {
     if (kind === "land") {
       /* The worker's copy, as a desk runs it. */
       fs.writeFileSync(shareRing, ringText("first"), "utf8");
       fs.chmodSync(shareRing, 0o444);
+      /* The boundary: the team file and another desk's file on the share, marked read-only, keep their marks. */
+      const otherFile = path.join(share, "desks", "k-" + crypto.randomBytes(8).toString("hex"), "x.ec");
+      fs.mkdirSync(path.dirname(otherFile), { recursive: true });
+      fs.writeFileSync(otherFile, "another desk's", "utf8");
+      for (const p of [path.join(share, "etiuda-team.json"), otherFile]) { fs.chmodSync(p, 0o444); marked.push(p); }
+      othersKept = () => writable(path.join(share, "etiuda-team.json")) === false && writable(otherFile) === false;
       const ctl = new syncer.FolderSyncerController({ team: TEAM, folder: share, mirror, pin: LEAD, checks, pollMs: 200, logger: s => said.push(String(s)) });
       try {
         ctl.start();
         out.landed = await until(() => holds(mirrorRing, "first"), 10000);
         out.mirrorWritable = writable(mirrorRing);
-        out.shareStillMarked = writable(shareRing) === false;
+        out.shareStillMarked = writable(shareRing) === false && othersKept();
         fs.chmodSync(shareRing, 0o666);
         fs.writeFileSync(shareRing, ringText("second, longer"), "utf8");
         out.next = await until(() => holds(mirrorRing, "second, longer"), 10000);
@@ -197,7 +204,7 @@ function runScene(kind, syncerDir) {
 }
 /* The syncer's two files copied into the lab with the line holding plant:<tag> lifted from `file`; the checkout's file is read
    again after, as folder-mirror's plants are. */
-function plantScene(tag, file, kind) {
+function plantScene(tag, file, kind, swap) {
   const dir = fs.mkdtempSync(path.join(LAB, "plant-" + tag + "-"));
   const src = path.join(ROOT, "shell", "folder");
   const before = fs.readFileSync(path.join(src, file));
@@ -205,7 +212,7 @@ function plantScene(tag, file, kind) {
   const lines = before.toString("utf8").split("\n");
   const at = lines.findIndex(l => l.includes("plant:" + tag));
   if (at < 0) return { found: false };
-  lines.splice(at, 1);
+  if (swap) lines[at] = swap(lines[at]); else lines.splice(at, 1);
   fs.writeFileSync(path.join(dir, file), lines.join("\n"), "utf8");
   const res = runScene(kind, dir);
   return { found: true, res, same: fs.readFileSync(path.join(src, file)).equals(before) };
@@ -217,7 +224,7 @@ const copyGreen = r => !r.threw && r.bytes === true && r.copyWritable === true &
 function main() {
   const land = runScene("land");
   check(landGreen(land),
-    "998a a share file marked read-only lands in the mirror writable, the share keeps its mark, and its next version lands over it: "
+    "998a a share file marked read-only lands in the mirror writable, the share keeps its mark, and its next version lands over it, the team file and another desk's file on the share keeping their marks too: "
     + JSON.stringify(land));
   const thaw = runScene("thaw");
   check(thawGreen(thaw), "998b a mirror copy left read-only by an older desk takes the next landing and is writable after it: " + JSON.stringify(thaw));
@@ -229,9 +236,12 @@ function main() {
     ["land-clear-mark", "syncer.cjs", "thaw", thawGreen, "998e lifting plant:land-clear-mark leaves a read-only mirror copy refusing every landing"],
     ["copy-clear-mark", "syncer.cjs", "copy", copyGreen, "998f lifting plant:copy-clear-mark leaves a marked copy refusing the next"],
   ];
-  for (const [tag, file, kind, green, line] of plants) {
+  plants.push(["stage-clear-mark", "syncer-worker.cjs", "land", landGreen,
+    "998m control: a worker that clears the share's file in place of its own staged copy turns 998a red",
+    l => l.replace("S.clearReadOnly(tmpFile)", "S.clearReadOnly(srcFile)")]);
+  for (const [tag, file, kind, green, line, swap] of plants) {
     if (PLANTS_OFF) { asserted++; console.log("  skip " + line); continue; }
-    const p = plantScene(tag, file, kind);
+    const p = plantScene(tag, file, kind, swap);
     check(p.found && !green(p.res) && p.same, line + ": " + JSON.stringify(p));
   }
 

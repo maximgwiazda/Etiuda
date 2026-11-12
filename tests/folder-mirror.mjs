@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 111;
+const EXPECTED = 115;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
@@ -59,7 +59,7 @@ fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true }
 function getShellSrc() {
   return fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 }
-const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder", "writeBranch", "branchDest", "branchIdentity", "deskRows", "settleFolder", "rawCatalogFolder", "sharedFolderForWrite", "folderSyncerRun", "heedTeam", "readAskFile", "checkInviteRefusal", "tryCatalogAsk", "teamKeyAt", "readDesk", "deskTrustChecks", "resumeFromSleep", "folderAnswers", "folderTeamHere", "awaitFolderPrime", "folderMirrorHere", "watchedFolder", "createWindow", "signedSha", "askSignedBytes", "sealAnswerLead", "writeReplacing"];
+const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder", "writeBranch", "branchDest", "branchIdentity", "deskRows", "settleFolder", "rawCatalogFolder", "sharedFolderForWrite", "folderSyncerRun", "heedTeam", "readAskFile", "checkInviteRefusal", "tryCatalogAsk", "teamKeyAt", "readDesk", "deskTrustChecks", "resumeFromSleep", "folderAnswers", "folderTeamHere", "awaitFolderPrime", "folderMirrorHere", "watchedFolder", "createWindow", "signedSha", "askSignedBytes", "sealAnswerLead", "writeReplacing", "leadsView"];
 const noop = () => {};
 const inert = new Proxy(function () {}, {
   get: (target, prop) => {
@@ -3544,6 +3544,101 @@ async function run() {
     });
     if (r) check(r.ok, "47b lifting plant:quit-flush-folders stops the syncer with the statistics still owed: " + JSON.stringify(r));
     else skip("47b lifting plant:quit-flush-folders stops the syncer with the statistics still owed");
+  }
+
+  /* 998i to 998l (board 998): a write this desk owes the share that the share refuses as read-only is said on the team's row in
+     Settings, in both languages, and tried again until it lands; its own folder's file marked read-only is replaced, and another
+     desk's file there keeps its mark. */
+  const LINE_998_FOLDER = "The team's shared folder is read-only where {FILE} goes; this desk keeps the change and tries again.";
+  const LINE_998_FOLDER_PL = "Folder współdzielony zespołu jest tylko do odczytu w miejscu pliku {FILE}; zmiana zostaje na tym stanowisku, które spróbuje ponownie.";
+  async function refusedScene(name, src, syncerAt) {
+    const mod = syncerAt ? nodeRequire(syncerAt) : syncerMod;
+    const share = folder("share-" + name);
+    const { ud, mirror } = teamDesk("desk-" + name, share);
+    fs.writeFileSync(path.join(mirror, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+    fs.writeFileSync(path.join(share, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+    const d = loadDesk(ud, src ? { src } : {});
+    const me = d.api.branchIdentity(true);
+    enrol(d, me, [mirror, share]);
+    const stem = "cat-" + name + "-4a4b4c4d", rel = "desks/" + me.id + "/" + stem + ".ec";
+    const onShare = path.join(share, "desks", me.id, stem + ".ec");
+    fs.mkdirSync(path.dirname(onShare), { recursive: true });
+    fs.writeFileSync(onShare, "an older copy", "utf8");
+    fs.chmodSync(onShare, 0o444);
+    d.api.writeBranch(stem, JSON.stringify(branchOf(me, "4a4b4c4d")));
+    const run = io => mod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks, own: me.id, logger: () => {}, io }).syncOnce();
+    const rowOf = () => ((typeof d.api.leadsView === "function" ? d.api.leadsView() : []).filter(r => r.team === TEAM)[0] || null);
+    const out = {};
+    try {
+      run(refusingIo(share, "EACCES"));
+      const row = rowOf();
+      out.refused = row && row.shareRefused ? row.shareRefused : null;
+      out.saysFolder = !!out.refused && out.refused.length === 1 && out.refused[0].file === rel && out.refused[0].kind === "folder";
+      const kit = await pageKitOnce();
+      const shown = lang => {
+        kit.ST.lsSet("eUiLang", lang);
+        const notes = kit.TJ.shareRefusedNotes(row || {});
+        kit.ST.lsSet("eUiLang", "en");
+        return notes;
+      };
+      out.en = shown("en");
+      out.pl = shown("pl");
+      out.pageSays = out.en.length === 1 && out.en[0] === LINE_998_FOLDER.split("{FILE}").join(rel)
+        && out.pl.length === 1 && out.pl[0] === LINE_998_FOLDER_PL.split("{FILE}").join(rel);
+      run(undefined);
+      const after = rowOf();
+      out.cleared = !!after && !after.shareRefused;
+      out.landed = (() => { try { return fs.readFileSync(onShare, "utf8").indexOf(me.id + "-4a4b4c4d") >= 0; } catch { return false; } })();
+      out.ownWritable = (() => { try { return (fs.statSync(onShare).mode & 0o200) !== 0; } catch { return null; } })();
+    } finally {
+      try { fs.chmodSync(onShare, 0o666); } catch {}
+    }
+    return out;
+  }
+  const refusedGreen = r => r.saysFolder && r.pageSays && r.cleared && r.landed && r.ownWritable === true;
+  {
+    let r = null, err = "";
+    try { r = await refusedScene("998i"); } catch (e) { err = String(e && e.stack || e); }
+    check(!!r && refusedGreen(r), "998i a write this desk owes that the shared folder refuses as read-only is said on the team's row in English and Polish, and once it"
+      + " lands the row says nothing of it; its own folder's copy marked read-only is replaced, writable: " + JSON.stringify(r) + (err ? " " + err : ""));
+  }
+  {
+    /* The other kind, and the boundary: another desk's file on the share, marked read-only, is refused as such and keeps its mark. */
+    const share = folder("share-998j"), mirror = folder("mirror-998j");
+    const other = "k-" + crypto.randomBytes(8).toString("hex"), mine = "k-" + crypto.randomBytes(8).toString("hex");
+    const rel = "desks/" + other + "/x.ec";
+    fs.mkdirSync(path.join(share, "desks", other), { recursive: true });
+    fs.mkdirSync(path.join(mirror, "desks", other), { recursive: true });
+    fs.writeFileSync(path.join(share, "desks", other, "x.ec"), "the other desk's", "utf8");
+    fs.chmodSync(path.join(share, "desks", other, "x.ec"), 0o444);
+    fs.writeFileSync(path.join(mirror, "desks", other, "x.ec"), "newer", "utf8");
+    const sha = crypto.createHash("sha256").update(Buffer.from("newer", "utf8")).digest("hex");
+    let got = null, kept = false, bytes = "";
+    try { got = syncerMod.flushOwed(share, mirror, [{ rel, sha, del: false }], null, mine)[0] || null; }
+    finally {
+      kept = (fs.statSync(path.join(share, "desks", other, "x.ec")).mode & 0o200) === 0;
+      bytes = fs.readFileSync(path.join(share, "desks", other, "x.ec"), "utf8");
+      fs.chmodSync(path.join(share, "desks", other, "x.ec"), 0o666);
+    }
+    check(!!got && got.ok === false && got.readOnly === "file" && kept && bytes === "the other desk's",
+      "998j a write refused by a read-only file on the share is told as the file's, and another desk's file keeps its mark and its bytes: "
+      + JSON.stringify({ got, kept, bytes }));
+  }
+  if (PLANTS_OFF) {
+    skip("998k lifting plant:share-refused-row leaves the refusal off the team's row");
+    skip("998l lifting plant:outbox-own-clear leaves this desk's own copy on the share refusing every write");
+  } else {
+    const k = await testPlant("share-refused-row", mainFile, async scratch => {
+      const r = await refusedScene("plant-998k", fs.readFileSync(scratch, "utf8"));
+      return !r.saysFolder && r.landed;
+    });
+    check(k.ok, "998k lifting plant:share-refused-row leaves the refusal off the team's row: " + JSON.stringify(k));
+    const l = await testPlant("outbox-own-clear", syncerFile, async scratch => {
+      fs.copyFileSync(path.join(ROOT, "shell", "folder", "syncer-worker.cjs"), path.join(path.dirname(scratch), "syncer-worker.cjs"));
+      const r = await refusedScene("plant-998l", "", scratch);
+      return r.saysFolder && !r.landed;
+    });
+    check(l.ok, "998l lifting plant:outbox-own-clear leaves this desk's own copy on the share refusing every write: " + JSON.stringify(l));
   }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {
