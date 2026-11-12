@@ -105,6 +105,7 @@ const ANSWER_INFO = "etiuda-join-answer";
 const ANSWER_NAME = "join-answer.json";
 /* The label of the key a request at the team's standing door is sealed under (doorSealKey). */
 const DOOR_SEAL_INFO = "etiuda-relay-door-seal";
+const DOOR_HELLO_LABEL = "etiuda-relay-door-hello";
 /* A team's lead key shown in two hands: what the desk says once for each fork it sees, the copywriter's words. */
 const FORK_SAID = {
   later: "Someone has used this team's old lead key to hand the team to another key as well, so that key is evidently in someone else's hands. This desk stays with the key it already follows, and the catalogs on it stay as they are. Tell the team's lead about it.",
@@ -269,14 +270,21 @@ function answerKey(dh, f) {
    over the X25519 agreement of the lead's box and the desk's, salt empty, so only the lead and that desk can make it and the relay
    carries a request it cannot open. The desk takes the lead's key and box from what it trusts, never from the relay; the lead takes
    the desk's box from the request's metadata, and a box swapped on the way makes another key, which opens nothing. The rest binds
-   it: the relay team, the lead's key id, the lead's box, the desk's id and the desk's box, all public. */
+   it: the relay team, the lead's key id, the lead's box, the desk's key id (the writer the request names, since the relay serves no
+   desk place) and the desk's box, all public. */
 function doorSealKey(dh, f) {
   const d = toBytes(dh);
   if (!d || d.length !== 32 || d.every(b => b === 0)) return null;
   if (!table(f) || !HEX32.test(String(f.rt)) || !B.isId(f.leadKeyId) || !HEX64.test(String(f.leadBox))
-    || !/^k-[0-9a-f]{16}$/.test(String(f.deskId)) || !HEX64.test(String(f.deskBox))) return null;
-  const info = Buffer.from([DOOR_SEAL_INFO, f.rt, f.leadKeyId, f.leadBox, f.deskId, f.deskBox].join("\n") + "\n", "utf8");
+    || !/^k-[0-9a-f]{16}$/.test(String(f.deskKeyId)) || !HEX64.test(String(f.deskBox))) return null;
+  const info = Buffer.from([DOOR_SEAL_INFO, f.rt, f.leadKeyId, f.leadBox, f.deskKeyId, f.deskBox].join("\n") + "\n", "utf8");
   return Buffer.from(crypto.hkdfSync("sha256", d, Buffer.alloc(0), info, 32));
+}
+
+/* The bytes a desk signs to knock at the door, the relay's doorHelloBytes restated: its own line, so an ordinary hello's signature
+   opens no door, and the desk's box, which the request's seal and the lead's answer are made with. */
+function doorHelloBytes(rt, nonce, keyId, box) {
+  return Buffer.from([DOOR_HELLO_LABEL, rt, nonce, keyId, box].join("\n") + "\n", "utf8");
 }
 
 /* The framed file of an envelope opened under `key` alone, its signature unchecked, or null: only for reading whom a team
@@ -1253,6 +1261,9 @@ function createProgram(opts) {
     if (!lead && asking && ctx && Array.isArray(ctx.inviteKeys) && typeof m.pub === "string" && HEX64.test(m.pub)
       && branchIdOf(m.pub) === m.writer) {
       for (const k of ctx.inviteKeys) out.push({ key: k.key, trust: leadTrust([{ deskId: m.writer, keyId: m.writer, public: m.pub }]), asked: true });
+      /* A request at the standing door: the relay serves the box its door hello signed, and this lead's own box makes the key. */
+      const door = doorKeyFor(m, ctx);
+      if (door) out.push({ key: door, trust: leadTrust([{ deskId: m.writer, keyId: m.writer, public: m.pub }]), asked: true }); /* plant:door-open-lead */
     }
     const grace = lead ? null : leadGrace(m.writer, m.epoch, ctx);
     const desks = known ? st.trust[m.epoch].desks : [];
@@ -1260,6 +1271,13 @@ function createProgram(opts) {
     else if (key && (lead || known)) out.push({ key, trust: leadTrust(desks) });
     else if (key) out.push({ key, refuse: "epoch" });
     return { tries: out, missing: !key };
+  }
+
+  function doorKeyFor(m, ctx) {
+    if (!HEX64.test(String(m.box)) || !ctx || typeof ctx.agree !== "function" || !ctx.self || !HEX64.test(String(ctx.self.box)) || !pin) return null;
+    let dh = null;
+    try { dh = ctx.agree(m.box); } catch { dh = null; }
+    return doorSealKey(dh, { rt: pin.rt, leadKeyId: pin.lead.keyId, leadBox: ctx.self.box, deskKeyId: m.writer, deskBox: m.box });
   }
 
   /* A desk blob waits for a key only at an epoch a verified lead blob has named, and only under a key the newest
@@ -2062,7 +2080,8 @@ function createChannel(opts) {
       self: who && typeof who.place === "string" ? { place: who.place, box: typeof who.box === "string" ? who.box : "" } : null,
       mine: mineId(),
       keyFor: e => (typeof o.keyFor === "function" ? o.keyFor(e) : null),
-      inviteSeal: inv && toBytes(inv.seal) && inv.seal.length === 32 ? toBytes(inv.seal) : null,
+      inviteSeal: inv && inv.door !== undefined ? doorSealOf(inv) : inv && toBytes(inv.seal) && inv.seal.length === 32 ? toBytes(inv.seal) : null,
+      door: !!(inv && inv.door !== undefined),
       inviteId: inv && HEX32.test(String(inv.inv)) ? inv.inv : null,
       inviteBox: inv && HEX64.test(String(inv.box)) ? inv.box : null,
       inviteKeys: typeof o.inviteKeys === "function" ? (o.inviteKeys() || [])
@@ -2072,6 +2091,21 @@ function createChannel(opts) {
     };
   }
   const me = () => (typeof o.me === "function" ? o.me() : null);
+  /* THE STANDING DOOR, on a desk (relay/core.cjs byDoor): invite() names it as {door: the seat certificate, box: the lead's box,
+     inv: the request's id once the relay has named it}, from what the desk trusts and never from the relay. The request is sealed
+     to the lead's box (doorSealKey); the rest is an invitation's request: its one upload, the lead's answer, its withdrawal. */
+  function doorSealOf(inv) {
+    const who = me(), p = typeof o.pin === "function" ? o.pin() : null;
+    if (!who || !HEX64.test(String(who.box)) || !HEX64.test(String(inv.box)) || !p || !table(p.lead) || typeof o.agree !== "function") return null;
+    let dh = null;
+    try { dh = o.agree(inv.box); } catch { dh = null; }
+    return doorSealKey(dh, { rt: o.rt, leadKeyId: p.lead.keyId, leadBox: inv.box, deskKeyId: who.keyId, deskBox: who.box });
+  }
+  /* The relay named this key's door request: spent at once, and the shell keeps its id, where the lead's answer is written. */
+  function doorKept(id) {
+    prog.markTokenUsed(id);
+    if (typeof o.onDoor === "function") o.onDoor(String(id));
+  }
   /* The key id of this program's own signing key, or null: a blob it names as writer is this key's. */
   function mineId() {
     const w = me();
@@ -2187,6 +2221,7 @@ function createChannel(opts) {
         sessionOpened(r.json);
         told(r.json.lapse); /* plant:lapse-cleared */
         if (session.by === "invite" && inv && HEX32.test(String(inv.inv))) session.inv = String(inv.inv);
+        if (session.by === "invite" && inv && inv.door !== undefined && HEX32.test(String(r.json.door))) { session.inv = String(r.json.door); doorKept(r.json.door); }
         return { ok: true };
       }
       if (!olderInvite) why = refusalOf(r);
@@ -2198,6 +2233,7 @@ function createChannel(opts) {
     }
     if (why.reason === "removed" && freshInvite) why = R("not-enrolled"); /* plant:removed-token */
     if (why.reason !== "not-enrolled") return why;
+    if (inv && inv.door !== undefined) return doorSession(ch, who, inv, why); /* plant:door-session */
     let spent = prog.state().tokenUsed === true;
     if (inv && prog.tokenSpent(inv.inv) === false && HEX32.test(String(inv.inv))) spent = false; /* plant:token-by-id */
     if (!inv || spent || !HEX32.test(String(inv.inv)) || typeof inv.token !== "string") return why;
@@ -2226,6 +2262,25 @@ function createChannel(opts) {
     return t;
   }
 
+  /* A session at the team's standing door, on the challenge the key's own hello did not spend: the certificate, this key and its
+     box, signed under the door's own line. The relay names the request's id; a refusal is the relay's word, and "removed" ends the
+     join as it ends an invitation's. */
+  async function doorSession(ch, who, inv, why) {
+    if (!who || !who.privateKey || !HEX64.test(String(who.public)) || !HEX64.test(String(who.box)) || !table(inv.door)) return why;
+    const sig = crypto.sign(null, doorHelloBytes(o.rt, ch.json.challenge, who.keyId, who.box), who.privateKey).toString("hex");
+    const r = await call("POST", "session", { json: { challenge: ch.json.challenge, door: inv.door, key: who.keyId, pub: who.public, box: who.box, sig } });
+    if (r.status !== 200 || !r.json || !HEX64.test(String(r.json.session)) || !HEX32.test(String(r.json.door))) {
+      const t = refusalOf(r);
+      if (t.reason === "removed") inviteEnd("removed");
+      return t;
+    }
+    session = { token: r.json.session, at: clock(), by: "invite", inv: String(r.json.door) };
+    doorKept(r.json.door);
+    sessionOpened(r.json);
+    told(r.json.lapse);
+    return { ok: true };
+  }
+
   /* The relay has refused this invitation's token, as spent ("used"), past its end ("ended"), or made before this desk
      was removed ("removed"). The shell keeps that with the request, which is where the page reads it. */
   function inviteEnd(kind) {
@@ -2249,6 +2304,7 @@ function createChannel(opts) {
     sessionOpened(r.json);
     told(r.json.lapse);
     if (!device && HEX32.test(String(ctx().inviteId || ""))) session.inv = String(ctx().inviteId);
+    if (!device && HEX32.test(String(r.json.door))) session.inv = String(r.json.door);
     return { ok: true };
   }
 
@@ -2305,6 +2361,8 @@ function createChannel(opts) {
         if (session && session.by === "invite" && why.reason === "removed") return { ok: true };
         /* The list is refused once that upload has landed. The retry still goes, and token-spent there counts as sent. */
         if (session && session.by === "invite" && why.reason === "not-enrolled" && prog.replyLost(session.inv)) return { ok: true };
+        /* A door request's session reads the lead's answer alone from the start: its list refused is the wait, and the request goes. */
+        if (session && session.by === "invite" && why.reason === "not-enrolled" && ctx().door) return { ok: true }; /* plant:door-wait */
         return why;
       }
       told(r.lapse); /* plant:lapse-since-told */
@@ -2429,7 +2487,8 @@ function createChannel(opts) {
       let sent = st.invited === true;
       if (c.inviteId && prog.inviteSent(c.inviteId) === false) sent = false; /* plant:invited-by-id */
       if (!inv || sent || op.kind !== "file" || op.rel.toLowerCase() !== mine || Buffer.byteLength(op.body, "utf8") > INVITE_UPLOAD_MAX) return null; /* plant:invite-join */
-      return { epoch: Math.max(1, st.leadEpoch), key: inv, byInvite: true };
+      /* A door request goes at epoch 1: it is sealed to the lead's box under no team key, and its desk has read no lead blob. */
+      return { epoch: c.door ? 1 : Math.max(1, st.leadEpoch), key: inv, byInvite: true };
     }
     const e = typeof o.sealEpoch === "function" ? o.sealEpoch() : null;
     const key = isCount(e) && typeof o.keyFor === "function" ? o.keyFor(e) : null;
@@ -2946,7 +3005,7 @@ module.exports = {
   TEAM_NAME, ECHO_MS, BRANCH_PREFIX, HEAD_PREFIX, INVITE_SEAL_INFO, DESK_COPY_INFO, ANSWER_INFO, ANSWER_NAME, INVITE_UPLOAD_MAX,
   SESSION_KEEP_MS, REMOVED_KEEP_MS, REMOVED_CLOCK_AHEAD_MS, WAITING_SAID, FORK_SAID, STRANDED_SAID, LAPSE_STATES, RELAY_CHALLENGE_MS,
   lapseKept, lapseStep,
-  DOOR_SEAL_INFO, doorSealKey,
+  DOOR_SEAL_INFO, DOOR_HELLO_LABEL, doorSealKey, doorHelloBytes,
   pathKey, canon, signedBytes, helloBytes, inviteSealKey, inviteWrapKey, deskCopyOf, answerKey, relayOf, rosterOf, branchIdOf, inPlace, diskIO, writeWhole, stateOf,
   inviteWrapAad: B.inviteWrapAad, sealInviteWrap: B.sealInviteWrap, openInviteWrap: B.openInviteWrap, openWrap: B.openWrap,
   inviteRefusedSignedBytes: B.inviteRefusedSignedBytes, inviteRefusedGenuine: B.inviteRefusedGenuine,

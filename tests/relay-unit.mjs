@@ -6448,7 +6448,7 @@ async function main() {
       const ok = w.opened.status === 200 && w.opened.json.ok === true && r.status === 200 && r.json.invite === true
         && /^[0-9a-f]{32}$/.test(String(r.json.door)) && rows.length === 1 && rows[0][0] === "inv:" + r.json.door && row.key === k.keyId
         && row.spent === true && row.hash === undefined && row.wrap === undefined && text.indexOf(cert.person) < 0 && text.indexOf(cert.code) < 0
-        && text.indexOf(cert.sig.value) < 0;
+        && text.indexOf(cert.sig.value) < 0 && C.doorHelloBytes(w.rt, "n", k.keyId, "b").equals(CH.doorHelloBytes(w.rt, "n", k.keyId, "b"));
       return { ok, detail: JSON.stringify({ opened: said(w.opened), hello: said(r), door: r.json && r.json.door, rows: rows.length }) };
     }
     const taken = await safe(takesScene);
@@ -6582,7 +6582,7 @@ async function main() {
       const hello = await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now), { box: deskBox.pub });
       const s = hello.json && hello.json.session, id = hello.json && hello.json.door;
       const listed = await since(w, s), fetched = await getBlob(w, s, teamFile.id), heard = await socket(w, s);
-      const f = { rt: w.rt, leadKeyId: w.lead.keyId, leadBox: leadBox.pub, deskId: place, deskBox: deskBox.pub };
+      const f = { rt: w.rt, leadKeyId: w.lead.keyId, leadBox: leadBox.pub, deskKeyId: k.keyId, deskBox: deskBox.pub };
       const sealKey = CH.doorSealKey(agree(deskBox, leadBox.pub), f);
       const marker = "JoinRequest" + hex(6);
       const ask = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: sealKey, writer: { keyId: k.keyId, privateKey: k.privateKey },
