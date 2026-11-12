@@ -15,7 +15,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { Worker } = require("node:worker_threads");
+const { Worker, isMainThread } = require("node:worker_threads");
 
 const FOLDER_SYNC_CADENCE_MS = 3000;
 const SPKI_ED25519 = Buffer.from("302a300506032b6570032100", "hex");
@@ -194,6 +194,41 @@ function writeOutbox(mirror, st, io) {
   io.writeFile(tmp, JSON.stringify({ kind: OUTBOX_KIND, v: 1, owe: st.owe, floors: st.floors }));
   try { renameRetrying(tmp, file, io); } catch (e) { try { io.unlink(tmp); } catch {} throw e; }
 }
+function writeOutboxRetrying(mirror, mutate, io, onDone, timerSet) {
+  io = io || defaultIO;
+  const applyOnce = () => {
+    const st = readOutbox(mirror, io);
+    mutate(st);
+    writeOutbox(mirror, st, io);
+  };
+  try {
+    applyOnce();
+    if (onDone) onDone();
+    return true;
+  } catch (e) {
+    if (!isMainThread || !e || RENAME_BUSY.indexOf(e.code) < 0) throw e;
+  }
+  let tries = 1;
+  let timer = null;
+  const step = () => {
+    if (timerSet) timerSet.delete(timer);
+    tries++;
+    try {
+      applyOnce();
+      if (onDone) onDone();
+    } catch (e) {
+      if (tries < 20 && e && RENAME_BUSY.indexOf(e.code) >= 0) {
+        timer = setTimeout(step, RENAME_WAIT_MS);
+        if (timer.unref) timer.unref();
+        if (timerSet) timerSet.add(timer);
+      }
+    }
+  };
+  timer = setTimeout(step, RENAME_WAIT_MS);
+  if (timer.unref) timer.unref();
+  if (timerSet) timerSet.add(timer);
+  return false;
+}
 function owedRecord(mirror, rel, io) {
   let bytes = null;
   try { bytes = io.readFile(path.join(mirror, rel)); } catch { bytes = null; }
@@ -204,9 +239,7 @@ function noteOwed(mirror, rel, io) {
   io = io || defaultIO;
   const norm = normRel(rel);
   if (!isAllowedPath(norm)) return false;
-  const st = readOutbox(mirror, io);
-  st.owe[norm] = owedRecord(mirror, norm, io);
-  writeOutbox(mirror, st, io);
+  writeOutboxRetrying(mirror, st => { st.owe[norm] = owedRecord(mirror, norm, io); }, io);
   return true;
 }
 function owedList(mirror, io) {
@@ -224,8 +257,13 @@ const RENAME_BUSY = ["EPERM", "EACCES", "EBUSY"];
 /* The same wait renamePatiently uses. Repeated here because this file is bundled into the worker and does not load the shell. */
 const RENAME_WAIT_MS = 50;
 const RENAME_LAND_TRIES = 60;
-function pause(ms) { try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch {} }
+function pause(ms) {
+  /* Synchronous sleep runs only on the worker thread; the main thread must never stall its event loop. */
+  if (isMainThread) return;
+  try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch {}
+}
 function renameBusy(from, to, io, tries) {
+  if (isMainThread) { io.rename(from, to); return; }
   const n = tries || 20;
   for (let i = 1; ; i++) {
     try { io.rename(from, to); return; }
@@ -522,7 +560,53 @@ function createFolderProgram(opts) {
   const knownMtimes = new Map(); // relPath -> { size, mtimeMs }
   const refusedMtimes = new Map(); // relPath -> { size, mtimeMs, at, epoch, key }
   const renameWait = new Map(); // relPath -> the staged item whose rename into the mirror was refused
+  const renameMeta = new Map(); // relPath -> { target, onLand, tries, exhausted }
   const renameSaid = new Set();
+  const outboxTimers = new Set();
+  let retryTimer = null;
+  let stopped = false;
+
+  function hasMoreRetries() {
+    for (const [rel, meta] of renameMeta.entries()) {
+      if (meta && !meta.exhausted && renameWait.has(rel)) return true;
+    }
+    for (const item of pending) {
+      if (item && item._landBusy && (item._landTries || 0) < RENAME_LAND_TRIES) return true;
+    }
+    return false;
+  }
+
+  function writeFloors(dirty) {
+    if (!dirty) return;
+    const updates = Object.assign({}, dirty.floors);
+    try {
+      writeOutboxRetrying(mirror, st => {
+        for (const k of Object.keys(updates)) {
+          if (!Number.isSafeInteger(st.floors[k]) || updates[k] > st.floors[k]) st.floors[k] = updates[k];
+        }
+      }, io, null, outboxTimers);
+    } catch {}
+  }
+
+  function scheduleRetry() {
+    if (!isMainThread || stopped || retryTimer || !hasMoreRetries()) return;
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      if (!stopped) runRetry();
+    }, RENAME_WAIT_MS);
+    if (retryTimer.unref) retryTimer.unref();
+  }
+
+  function applyTeamLand(doc, rev, force, refusedRel) {
+    judgedAt++;
+    if (refusedRel) refusedMtimes.delete(refusedRel);
+    if (force || doc.epoch > mirrorEpoch) {
+      mirrorEpoch = doc.epoch;
+      mirrorRev = rev;
+    } else if (doc.epoch === mirrorEpoch && rev > mirrorRev) {
+      mirrorRev = rev;
+    }
+  }
   let judgedAt = 0; // moves with what a refusal is judged against: the pin, the team file and the ring
   const dropped = new Set(); // refusals let go since the worker was last told, so it copies those files again
   /* A refused or parked copy is held: not copied from the share again while its size and mtime stay, and, for a refusal, while
@@ -616,28 +700,41 @@ function createFolderProgram(opts) {
   function isOwed(rel) { return owedAt(mirror, rel, io); }
   function landed(results) {
     if (!Array.isArray(results) || !results.length) return;
-    const st = readOutbox(mirror, io);
-    let changed = false;
+    const st0 = readOutbox(mirror, io);
+    const clearRels = [];
+    const updateRels = [];
     for (const r of results) {
-      const rec = r && st.owe[r.rel];
+      const rec = r && st0.owe[r.rel];
       if (!rec) continue;
       if (r.ok) {
         if (!!rec.del !== !!r.del || (!rec.del && rec.sha !== r.sha)) continue;
-        delete st.owe[r.rel];
-        changed = true;
+        clearRels.push(r);
         if (saidWait.has(r.rel)) { saidWait.delete(r.rel); logger("etiuda: " + r.rel + " has reached the team's folder " + folder); }
         if (!r.del && r.size != null) knownMtimes.set(r.rel, { size: r.size, mtimeMs: r.mtimeMs });
       } else if (rec.code !== r.code || (rec.readOnly || "") !== (r.readOnly || "")) {
-        rec.code = r.code;
-        if (r.readOnly) rec.readOnly = r.readOnly; else delete rec.readOnly; /* plant:owed-read-only */
-        changed = true;
+        updateRels.push(r);
         if (saidWait.get(r.rel) !== r.code) {
           saidWait.set(r.rel, r.code);
           logger("etiuda: " + r.rel + " is kept on this computer until the team's folder " + folder + " takes it (" + r.code + "), and is tried again");
         }
       }
     }
-    if (changed) { try { writeOutbox(mirror, st, io); } catch {} onOwed(); }
+    if (!clearRels.length && !updateRels.length) return;
+    try {
+      writeOutboxRetrying(mirror, st => {
+        for (const r of clearRels) {
+          const rec = st.owe[r.rel];
+          if (rec && !!rec.del === !!r.del && (rec.del || rec.sha === r.sha)) delete st.owe[r.rel];
+        }
+        for (const r of updateRels) {
+          const rec = st.owe[r.rel];
+          if (rec) {
+            rec.code = r.code;
+            if (r.readOnly) rec.readOnly = r.readOnly; else delete rec.readOnly; /* plant:owed-read-only */
+          }
+        }
+      }, io, () => { if (!stopped) onOwed(); }, outboxTimers);
+    } catch {}
   }
   /* A desk's catalog answer sealed to the lead's box for this team: judged by its place and its envelope alone, never opened. */
   function leadAnswerAt(relPath, doc) {
@@ -805,12 +902,16 @@ function createFolderProgram(opts) {
     return out;
   }
 
-  /* A rename refused for a moment is asked again, as renamePatiently does for the desk's own writes.
-     One that still refuses leaves this file staged and is said; the scan goes on and the next one tries it again. */
-  function landStaged(item, target, remember) {
+  function attemptLand(item, target) {
     ensureDir(target, io);
     clearReadOnly(target, io); /* plant:land-clear-mark */
-    try { renameBusy(item.tmpPath, target, io, RENAME_LAND_TRIES); }
+    renameBusy(item.tmpPath, target, io, RENAME_LAND_TRIES);
+  }
+
+  /* A rename refused for a moment is asked again, as renamePatiently does for the desk's own writes.
+     One that still refuses leaves this file staged and is said; the scan goes on and the next one tries it again. */
+  function landStaged(item, target, remember, onLand) {
+    try { attemptLand(item, target); }
     catch (e) {
       if (!e || RENAME_BUSY.indexOf(e.code) < 0) throw e;
       const rel = item.relPath;
@@ -818,29 +919,186 @@ function createFolderProgram(opts) {
         const prev = renameWait.get(rel);
         if (prev && prev.tmpPath && prev.tmpPath !== item.tmpPath) { try { io.unlink(prev.tmpPath); } catch {} }
         renameWait.set(rel, item);
+        renameMeta.set(rel, { target, onLand: onLand || null, tries: 1, exhausted: false });
+      } else {
+        item._landBusy = true;
+        item._landTries = (item._landTries || 0) + 1;
       }
       if (!renameSaid.has(rel)) {
         renameSaid.add(rel);
         logger("etiuda: " + path.join(folder, rel) + " stayed staged: the rename into the mirror was refused (" + e.code + "), and it is tried again");
       }
+      scheduleRetry();
       return false;
     }
-    renameWait.delete(item.relPath);
+    if (remember !== false) {
+      renameWait.delete(item.relPath);
+      renameMeta.delete(item.relPath);
+    }
+    delete item._landBusy;
+    delete item._landTries;
     renameSaid.delete(item.relPath);
+    if (onLand) onLand();
     return true;
   }
   function takeWaiting(already) {
     const extra = [];
     for (const [rel, item] of Array.from(renameWait.entries())) {
+      renameWait.delete(rel);
+      renameMeta.delete(rel);
       if (already.has(rel)) {
         if (already.get(rel) !== item.tmpPath) { try { io.unlink(item.tmpPath); } catch {} }
-        renameWait.delete(rel);
         continue;
       }
       if (item.tmpPath && io.exists(item.tmpPath)) extra.push(item);
-      else { renameWait.delete(rel); renameSaid.delete(rel); }
+      else renameSaid.delete(rel);
     }
     return extra;
+  }
+
+  function drainPending(applied, fromRetry) {
+    const stillPending = [];
+    for (const item of pending) {
+      if (!fromRetry && item && item._landBusy) {
+        delete item._landBusy;
+        delete item._landTries;
+      }
+      if (fromRetry && item && item._landBusy && (item._landTries || 0) >= RENAME_LAND_TRIES) {
+        stillPending.push(item);
+        continue;
+      }
+      if (isOwed(item.relPath)) {
+        if (item.tmpPath) { try { io.unlink(item.tmpPath); } catch {} }
+        try { io.unlink(path.join(pendingDir, item.relPath)); } catch {}
+        continue;
+      }
+      if (item.kind === "head") {
+        let allEditionsPresent = true;
+        if (item.doc && Array.isArray(item.doc.editions)) {
+          for (const ed of item.doc.editions) {
+            if (ed && ed.catalog && !mirrorHasCatalog(mirror, ed.catalog, io, keyFor, openSealed)) {
+              allEditionsPresent = false;
+              break;
+            }
+          }
+        }
+        if (allEditionsPresent) {
+          const target = path.join(mirror, item.relPath);
+          if (item.tmpPath && io.exists(item.tmpPath)) {
+            if (!landStaged(item, target, false)) { stillPending.push(item); continue; }
+          }
+          applied.push(item.relPath);
+        } else {
+          stillPending.push(item);
+        }
+        continue;
+      }
+
+      // Default: sealed .ec file waiting for epoch / live key
+      const key = typeof keyFor === "function" ? keyFor(item.epoch) : null;
+      if (item.epoch <= mirrorEpoch && key) {
+        let genuine = false, judged = null;
+        try {
+          const text = item.text || (item.tmpPath ? io.readFile(item.tmpPath, "utf8") : null);
+          if (text) {
+            const parsed = JSON.parse(text);
+            if (parsed.kind === "etiuda-sealed") {
+              const decrypted = openSealed(key, parsed);
+              if (decrypted) {
+                const cat = JSON.parse(decrypted);
+                judged = cat;
+                const parts = item.relPath.replace(/\\/g, "/").split("/");
+                if (parts[0] === "desks" && parts.length === 3) {
+                  const deskFolder = parts[1];
+                  if (parts[2] === "in-use.ec") {
+                    if (cat.kind === "etiuda-in-use" && deskFileGenuine(cat, deskFolder)) genuine = true;
+                  } else if (parts[2] === "catalog-answer.ec") {
+                    if (+cat.format === 1 && cat.kind === "etiuda-catalog-answer" && typeof cat.sha256 === "string" && cat.catalog) genuine = true;
+                  } else {
+                    if (deskFileGenuine(cat, deskFolder)) genuine = true;
+                  }
+                } else if (cat && cat.kind === "etiuda-catalog") {
+                  const authKeys = teamAuthorizedKeys(folder, mirror, io, pin, opts.authorizedKeys);
+                  if (authKeys.some(pub => catalogSigValid(cat, pub))) {
+                    genuine = true;
+                  }
+                }
+              }
+            }
+          }
+        } catch {}
+
+        if (genuine && !floorHolds(item, judged)) {
+          try { io.unlink(path.join(pendingDir, item.relPath)); } catch {}
+        } else if (genuine) {
+          const target = path.join(mirror, item.relPath);
+          if (item.tmpPath && io.exists(item.tmpPath)) {
+            if (!landStaged(item, target, false)) { stillPending.push(item); continue; }
+          } else if (item.text) {
+            ensureDir(target, io);
+            io.writeFile(target, item.text);
+          }
+          try { io.unlink(path.join(pendingDir, item.relPath)); } catch {}
+          applied.push(item.relPath);
+        } else {
+          if (item.tmpPath) { try { io.unlink(item.tmpPath); } catch {} }
+          try { io.unlink(path.join(pendingDir, item.relPath)); } catch {}
+          refuse(item, item.epoch);
+        }
+      } else {
+        stillPending.push(item);
+      }
+    }
+    pending = stillPending;
+  }
+
+  function runRetry() {
+    if (stopped) return;
+    const applied = [];
+    floorsDirty = null;
+    for (const [rel, item] of Array.from(renameWait.entries())) {
+      const meta = renameMeta.get(rel);
+      if (!item || !item.tmpPath || !io.exists(item.tmpPath)) {
+        renameWait.delete(rel);
+        renameMeta.delete(rel);
+        renameSaid.delete(rel);
+        continue;
+      }
+      if (!meta || meta.exhausted) continue;
+      if (isOwed(rel)) {
+        try { io.unlink(item.tmpPath); } catch {}
+        renameWait.delete(rel);
+        renameMeta.delete(rel);
+        renameSaid.delete(rel);
+        continue;
+      }
+      try {
+        attemptLand(item, meta.target);
+        renameWait.delete(rel);
+        renameMeta.delete(rel);
+        renameSaid.delete(rel);
+        if (meta.onLand) meta.onLand();
+        applied.push(rel);
+      } catch (e) {
+        if (!e || RENAME_BUSY.indexOf(e.code) < 0) {
+          renameWait.delete(rel);
+          renameMeta.delete(rel);
+        } else {
+          meta.tries++;
+          if (meta.tries >= RENAME_LAND_TRIES) meta.exhausted = true;
+        }
+      }
+    }
+    drainPending(applied, true);
+    if (floorsDirty) {
+      writeFloors(floorsDirty);
+      floorsDirty = null;
+    }
+    if (applied.length > 0) {
+      onChange({ team, applied });
+      if (typeof opts.onRetryApplied === "function") opts.onRetryApplied(applied);
+    }
+    scheduleRetry();
   }
 
   function applyScan(scanData) {
@@ -926,12 +1184,8 @@ function createFolderProgram(opts) {
               if (olderEpoch || olderRevAtEpoch) revOk = false; /* plant:syncer-team-rev */
               if (revOk) {
                 const mirrorTeamPath = path.join(mirror, "etiuda-team.json");
-                if (landStaged(teamStaged, mirrorTeamPath)) { /* plant:syncer-team-atomic */
+                if (landStaged(teamStaged, mirrorTeamPath, true, () => applyTeamLand(doc, rev, true, teamStaged.relPath))) { /* plant:syncer-team-atomic */
                   applied.push("etiuda-team.json");
-                  judgedAt++;
-                  refusedMtimes.delete(teamStaged.relPath);
-                  mirrorEpoch = doc.epoch;
-                  mirrorRev = rev;
                 }
               } else {
                 const why = olderEpoch
@@ -987,15 +1241,8 @@ function createFolderProgram(opts) {
             const olderRevAtEpoch = doc.epoch === mirrorEpoch && rev < mirrorRev;
             if (!olderEpoch && !olderRevAtEpoch) {
               const target = path.join(mirror, sibItem.relPath);
-              if (landStaged(sibItem, target)) {
+              if (landStaged(sibItem, target, true, () => applyTeamLand(doc, rev, false))) {
                 applied.push(sibItem.relPath);
-                judgedAt++;
-                if (doc.epoch > mirrorEpoch) {
-                  mirrorEpoch = doc.epoch;
-                  mirrorRev = rev;
-                } else if (doc.epoch === mirrorEpoch && rev > mirrorRev) {
-                  mirrorRev = rev;
-                }
               }
             } else {
               try { io.unlink(sibItem.tmpPath); } catch {}
@@ -1011,96 +1258,8 @@ function createFolderProgram(opts) {
       }
     }
 
-    function drainPending() {
-      const stillPending = [];
-      for (const item of pending) {
-        if (isOwed(item.relPath)) {
-          if (item.tmpPath) { try { io.unlink(item.tmpPath); } catch {} }
-          try { io.unlink(path.join(pendingDir, item.relPath)); } catch {}
-          continue;
-        }
-        if (item.kind === "head") {
-          let allEditionsPresent = true;
-          if (item.doc && Array.isArray(item.doc.editions)) {
-            for (const ed of item.doc.editions) {
-              if (ed && ed.catalog && !mirrorHasCatalog(mirror, ed.catalog, io, keyFor, openSealed)) {
-                allEditionsPresent = false;
-                break;
-              }
-            }
-          }
-          if (allEditionsPresent) {
-            const target = path.join(mirror, item.relPath);
-            if (item.tmpPath && io.exists(item.tmpPath)) {
-              if (!landStaged(item, target, false)) { stillPending.push(item); continue; }
-            }
-            applied.push(item.relPath);
-          } else {
-            stillPending.push(item);
-          }
-          continue;
-        }
-
-        // Default: sealed .ec file waiting for epoch / live key
-        const key = typeof keyFor === "function" ? keyFor(item.epoch) : null;
-        if (item.epoch <= mirrorEpoch && key) {
-          let genuine = false, judged = null;
-          try {
-            const text = item.text || (item.tmpPath ? io.readFile(item.tmpPath, "utf8") : null);
-            if (text) {
-              const parsed = JSON.parse(text);
-              if (parsed.kind === "etiuda-sealed") {
-                const decrypted = openSealed(key, parsed);
-                if (decrypted) {
-                  const cat = JSON.parse(decrypted);
-                  judged = cat;
-                  const parts = item.relPath.replace(/\\/g, "/").split("/");
-                  if (parts[0] === "desks" && parts.length === 3) {
-                    const deskFolder = parts[1];
-                    if (parts[2] === "in-use.ec") {
-                      if (cat.kind === "etiuda-in-use" && deskFileGenuine(cat, deskFolder)) genuine = true;
-                    } else if (parts[2] === "catalog-answer.ec") {
-                      if (+cat.format === 1 && cat.kind === "etiuda-catalog-answer" && typeof cat.sha256 === "string" && cat.catalog) genuine = true;
-                    } else {
-                      if (deskFileGenuine(cat, deskFolder)) genuine = true;
-                    }
-                  } else if (cat && cat.kind === "etiuda-catalog") {
-                    const authKeys = teamAuthorizedKeys(folder, mirror, io, pin, opts.authorizedKeys);
-                    if (authKeys.some(pub => catalogSigValid(cat, pub))) {
-                      genuine = true;
-                    }
-                  }
-                }
-              }
-            }
-          } catch {}
-
-          if (genuine && !floorHolds(item, judged)) {
-            try { io.unlink(path.join(pendingDir, item.relPath)); } catch {}
-          } else if (genuine) {
-            const target = path.join(mirror, item.relPath);
-            if (item.tmpPath && io.exists(item.tmpPath)) {
-              if (!landStaged(item, target, false)) { stillPending.push(item); continue; }
-            } else if (item.text) {
-              ensureDir(target, io);
-              io.writeFile(target, item.text);
-            }
-            try { io.unlink(path.join(pendingDir, item.relPath)); } catch {}
-            applied.push(item.relPath);
-          } else {
-            if (item.tmpPath) { try { io.unlink(item.tmpPath); } catch {} }
-            try { io.unlink(path.join(pendingDir, item.relPath)); } catch {}
-            refuse(item, item.epoch);
-          }
-        } else {
-          stillPending.push(item);
-        }
-      }
-      pending = stillPending;
-    }
-
     // Step 2: Pending queue re-evaluation
-    drainPending();
+    drainPending(applied, false);
 
     // Step 3: Process remaining staged files
     for (const item of staged) {
@@ -1234,9 +1393,8 @@ function createFolderProgram(opts) {
         try { doc = JSON.parse(text); } catch {}
         if (doc && +doc.format === 1 && doc.kind === "etiuda-ring" && Array.isArray(doc.keys)) {
           const target = path.join(mirror, relPath);
-          if (landStaged(item, target)) {
+          if (landStaged(item, target, true, () => { judgedAt++; })) {
             applied.push(relPath);
-            judgedAt++;
           }
         } else {
           try { io.unlink(tmpPath); } catch {}
@@ -1325,7 +1483,7 @@ function createFolderProgram(opts) {
     }
 
     // Drain pending again in case editions landed in Step 3
-    drainPending();
+    drainPending(applied, false);
 
     // Step 4: Removals (only after 2 answered listings absent)
     const currentMirrorFiles = walkMirror();
@@ -1349,11 +1507,7 @@ function createFolderProgram(opts) {
     }
 
     if (floorsDirty) {
-      const st = readOutbox(mirror, io);
-      for (const k of Object.keys(floorsDirty.floors)) {
-        if (!Number.isSafeInteger(st.floors[k]) || floorsDirty.floors[k] > st.floors[k]) st.floors[k] = floorsDirty.floors[k];
-      }
-      try { writeOutbox(mirror, st, io); } catch {}
+      writeFloors(floorsDirty);
       floorsDirty = null;
     }
     /* The mark that this mirror has taken one answered listing: until then a desk under machine policy reads its folder. */
@@ -1397,6 +1551,7 @@ function createFolderProgram(opts) {
       if (waiting && (alreadyInMirror || waiting.size !== st.size || waiting.mtimeMs !== st.mtimeMs)) {
         try { if (waiting.tmpPath) io.unlink(waiting.tmpPath); } catch {}
         renameWait.delete(relPath);
+        renameMeta.delete(relPath);
         renameSaid.delete(relPath);
       } else if (waiting && waiting.tmpPath && io.exists(waiting.tmpPath)) alreadyInMirror = true;
 
@@ -1432,6 +1587,12 @@ function createFolderProgram(opts) {
     setPin,
     held,
     noteShareStat: (rel, st) => { if (st && st.size != null) knownMtimes.set(normRel(rel), { size: st.size, mtimeMs: st.mtimeMs }); },
+    stop: () => {
+      stopped = true;
+      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+      for (const t of outboxTimers) clearTimeout(t);
+      outboxTimers.clear();
+    },
     state: () => ({ mirrorEpoch, mirrorRev, pendingLength: pending.length, missingCount: new Map(missingCount) })
   };
 }
@@ -1469,6 +1630,7 @@ class FolderSyncerController {
       onStatus: this.onStatus,
       onChange: this.onChange,
       onOwed: opts.onOwed,
+      onRetryApplied: () => { this.sendHeld(); this.flushCheck(); },
       own: opts.own
     });
     this.own = opts.own || "";
@@ -1637,6 +1799,7 @@ class FolderSyncerController {
 
   stop() {
     this.stopped = true;
+    if (this.program && this.program.stop) this.program.stop();
     for (const id of Array.from(this.waits.keys())) this.settle(id, null);
     for (const w of this.flushWaits.slice()) this.flushDone(w, false);
     if (this.worker) {
