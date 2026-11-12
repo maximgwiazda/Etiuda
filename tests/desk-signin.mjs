@@ -1082,7 +1082,7 @@ function waitStand(sec, swap, storage) {
 }
 const LINK_LINE = "Browser did not open? Paste this link into a browser on this computer.";
 const LINK_LINE_PL = "Przeglądarka się nie otworzyła? Łącze można wkleić w przeglądarkę na tym komputerze.";
-const UNKEPT_LINE = "This computer has no keyring, so the sign-in is not kept: Etiuda will ask you to sign in again when it is due.";
+const UNKEPT_LINE = "No keyring is open on this computer, so the sign-in is not kept: each renewal asks for it again.";
 /* The link while the browser is awaited, its browser call resolving and opening nothing: the view carries the provider's page the
    browser was handed, told to the page as the hand-out is made; the loopback is given SIGNIN_WAIT_MS and still waits; Cancel
    ends it as before and the link goes with the wait; no line written while it waited carries the link or its state. */

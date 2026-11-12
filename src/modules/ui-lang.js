@@ -1385,7 +1385,7 @@ UI_STRINGS.pl={
   "Sign-in is not set up yet, so nothing was sent. This is a preview.":"Logowanie nie jest jeszcze uruchomione, więc nic nie wysłano. To tylko podgląd.",
   "Browser did not open?":"Przeglądarka się nie otworzyła?",
   "Paste this link into a browser on this computer.":"Łącze można wkleić w przeglądarkę na tym komputerze.",
-  "This computer has no keyring, so the sign-in is not kept: Etiuda will ask you to sign in again when it is due.":"Ten komputer nie ma pęku kluczy, więc logowanie nie jest zachowywane: Etiuda poprosi o ponowne zalogowanie, gdy przyjdzie na to pora.", // placeholder: Claudette
+  "No keyring is open on this computer, so the sign-in is not kept: each renewal asks for it again.":"Na tym komputerze nie jest otwarty żaden magazyn kluczy, więc logowanie nie jest zachowywane: każde odnowienie wymaga ponownego logowania.", // placeholder: Claudette
   "Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.":"Logowanie przenosi na ten komputer miejsce w licencji i zespół, który przyjął to konto. Etiuda do użytku prywatnego, poza pracą, nie wymaga logowania.",
   "Led by {LEAD}":"Prowadzi {LEAD}",
   "No team yet":"Jeszcze bez zespołu",
