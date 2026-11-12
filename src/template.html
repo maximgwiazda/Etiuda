@@ -1346,7 +1346,9 @@ body.pills-off.pills-peek .pills-slot{display:block}
 .sgn-say.calm b{font-weight:400;font-size:13.5px}
 .sgn-wait{font-size:13.5px;color:var(--dim);margin-top:4px}
 .sgn-run{position:relative;height:2px;width:100%;background:var(--line);border-radius:2px;overflow:hidden;margin-top:8px}
-.sgn-run::after{content:"";position:absolute;top:0;bottom:0;left:0;width:34%;background:var(--accent);border-radius:2px;animation:sgnRun 1.6s ease-in-out infinite}
+/* The bar runs while a sign-in waits for the browser, and that wait ends by itself at SIGNIN_WAIT_MS (five minutes, shell/main.js):
+   150 passes of the nudge tier's 2 s are those five minutes, so it rests when the wait does, on a tier, and the switch stills it. */
+.sgn-run::after{content:"";position:absolute;top:0;bottom:0;left:0;width:34%;background:var(--accent);border-radius:2px;animation:sgnRun var(--m-nudge) ease-in-out 150}
 @keyframes sgnRun{from{transform:translateX(-100%)}to{transform:translateX(300%)}}
 html.e-still .sgn-run::after{animation:none;transform:translateX(80%)}
 .sgn-acts{display:flex;gap:8px;flex-wrap:wrap}
