@@ -22,7 +22,12 @@
  *   db3 the mark beside the search box is there only while the organisation's model ranks, its words shed under 720 px with
  *       its sentence kept in its title, says when the shell has paused its asks or says the service is usually slower than
  *       4 seconds (`slow`, from shell/desk-ai.cjs), and is absent while both switches are off
- *   db4 the sentences that say nothing leaves this computer are drawn only while the built-in model ranks, in both languages
+ *   db4 every sentence the string table holds that says the model's text stays on this computer or is never sent, found
+ *       by search and held to a read list, is drawn only while the built-in model ranks, on every screen that draws one, in
+ *       both languages
+ *   db5 the AI section is there wherever a model can rank, the built-in model absent and the organisation's on included
+ *   db6 the AI section's lede says what is sent by the two switches and follows a switch moved on the open page, as the
+ *       picker's note does
  * No leg starts the desk app, reads the registry or reaches the network. The values are invented.
  */
 process.removeAllListeners("warning");
@@ -340,7 +345,8 @@ async function boot(lang) {
     window.E_HOST = {
       platform: "win32", catalogFolder: "", catalogFile: "", catalogIn: "", catalogBuiltIn: false,
       catalogFiles: () => Promise.resolve([]), onCatalogFile: () => {}, onCatalogListing: () => {},
-      aiState: () => ({ model: true }), setAi: () => {}, setSearchAi: () => {},
+      aiState: () => ({ model: window.__ai.model !== false }), setAi: () => {}, setSearchAi: () => {},
+      hotkeyState: () => ({ accel: "Control+Shift+Space", taken: false, def: "Control+Shift+Space" }), setHotkey: () => Promise.resolve({ ok: true }),
       searchPrepare: () => Promise.resolve({ ready: false, skipped: true }), searchRank: () => Promise.resolve(null),
       deskAiSettings: () => JSON.parse(JSON.stringify(window.__ai.settings)),
       deskAiSave: f => {
@@ -484,26 +490,102 @@ try {
       + "when the asks are paused or the median wait is too long, and is absent while both switches are off: " + (problems.join("; ") || "eleven states"));
   }
 
-  /* db4 */
+  /* db4: every sentence that says the model's text stays on this computer or is never sent, found by search in the string
+     table, is drawn only while the built-in model ranks. The search: an English key that names this computer, leaving or
+     not being sent, and the model, the message or the search. What it finds is held to the list below, so a new sentence it
+     finds stops this leg until it is read and listed; the first group is the known positive, the claims a screen draws. */
   {
     const problems = [];
-    const NOTHING = { en: "nothing leaves this computer", pl: "nic nie opuszcza tego komputera" };
+    const LOCAL = /this computer|leaves|never kept|never sent|not sent|nothing is sent|sends nothing|sending nothing/i;
+    const SUBJECT = /model|message|search/i;
+    const CLAIMS = ["Reads a copied message on this computer", "The model ranks the suggestions; nothing leaves this computer",
+      "The model built into Etiuda, which works on this computer alone.", "From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the model on this computer.",
+      "The model ranks the search beside word matches; nothing leaves this computer", "When the picker opens with a customer's message copied"];
+    /* True whenever they are drawn: the built-in choice's hint, the pause's line, the incomplete setting's line, both switches off. */
+    const TRUE_WHEN_DRAWN = ["The built-in model sends nothing anywhere.", "{HOST} has not answered three times in a row, so the built-in model ranks on this computer",
+      "Until the service, the model and the key are complete", "The organisation's model at {HOST} is set, and with both switches off"];
+    const found = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8").split("\n")
+      .map(l => /^\s*"((?:[^"\\]|\\.)*)":"((?:[^"\\]|\\.)*)",?\s*$/.exec(l)).filter(Boolean)
+      .map(m => ({ en: JSON.parse("\"" + m[1] + "\""), pl: JSON.parse("\"" + m[2] + "\"") }))
+      .filter(r => LOCAL.test(r.en) && SUBJECT.test(r.en));
+    const listed = CLAIMS.concat(TRUE_WHEN_DRAWN);
+    const named = r => listed.find(p => r.en.indexOf(p) === 0);
+    for (const r of found) if (!named(r)) problems.push("the search found a sentence to read and list: " + JSON.stringify(r.en.slice(0, 80)));
+    for (const p of listed) if (!found.some(r => r.en.indexOf(p) === 0)) problems.push("the search missed a known one: " + JSON.stringify(p.slice(0, 60)));
+    /* The open page: the AI section, the Keyboard shortcuts section and the whole page, the mark's title beside them. */
+    const screens = async () => {
+      let all = "";
+      for (const sec of ["ai", "keys", "all"]) { await closeTab(); await page.evaluate(s => openSettings(s), sec); await sleep(150); all += " " + await bodyText(page); }
+      return all + " " + (await markNow(page)).title;
+    };
+    const drawn = (text, lang) => found.filter(r => text.indexOf((lang === "pl" ? r.pl : r.en).split("{HOST}").join("api.openai.com")) > -1);
     for (const lang of ["en", "pl"]) {
       await page.evaluate(l => { localStorage.setItem("eUiLang", l); try { setUiLang(l); } catch (e) {} }, lang);
-      await setHost(page, BUILTIN);
-      await closeTab(); await page.evaluate(() => openSettings("ai")); await sleep(150);
-      const builtin = await bodyText(page);
-      const nb = builtin.split(NOTHING[lang]).length - 1;
-      if (nb !== 2) problems.push(lang + " built-in drew " + nb);
-      await setHost(page, ORG_ON);
-      await closeTab(); await page.evaluate(() => openSettings("ai")); await sleep(150);
-      const org = await bodyText(page);
-      const no = org.split(NOTHING[lang]).length - 1;
-      if (no !== 0 || org.split("api.openai.com").length - 1 < 2) problems.push(lang + " organisation drew " + no);
+      await setHost(page, BUILTIN); await ranked(page);
+      const builtin = drawn(await screens(), lang).map(r => named(r));
+      const claimsDrawn = CLAIMS.filter(p => builtin.indexOf(p) > -1).length;
+      if (claimsDrawn !== CLAIMS.length) problems.push(lang + " built-in drew " + claimsDrawn + " of the " + CLAIMS.length + " claims");
+      await setHost(page, ORG_ON); await ranked(page);
+      const text = await screens();
+      const org = drawn(text, lang);
+      if (org.length) problems.push(lang + " organisation drew " + JSON.stringify(org.map(r => r.en.slice(0, 60))));
+      if (text.split("api.openai.com").length - 1 < 4) problems.push(lang + " organisation named its host " + (text.split("api.openai.com").length - 1) + " time(s)");
     }
     await page.evaluate(() => { localStorage.setItem("eUiLang", "en"); try { setUiLang("en"); } catch (e) {} });
-    check(!problems.length, "db4 the two sentences saying nothing leaves this computer are drawn only while the built-in model ranks, each replaced by "
-      + "where the text goes while the organisation's does, in English and Polish: " + (problems.join("; ") || "four screens"));
+    check(!problems.length, "db4 every sentence the string table holds that says the model's text stays on this computer or is never sent ("
+      + found.length + " found by search, " + CLAIMS.length + " of them claims a screen draws) is drawn only while the built-in model ranks, "
+      + "in the AI section, the Keyboard shortcuts note, the whole page and the mark, in English and Polish: " + (problems.join("; ") || "four screens each"));
+  }
+
+  /* db5: the AI section is there wherever a model can rank, the organisation's with the built-in model absent included. */
+  {
+    const problems = [];
+    const aiRows = async () => {
+      await closeTab(); await page.evaluate(() => openSettings("ai")); await sleep(150);
+      return page.evaluate(() => ["aisuggest", "aisearch"].filter(k => !!document.querySelector('#setBody [data-row="' + k + '"]')).length);
+    };
+    await page.evaluate(() => { window.__ai.model = false; });
+    await setHost(page, ORG_ON);
+    const orgOnly = await aiRows();
+    if (orgOnly !== 2) problems.push("the organisation's model on, the built-in absent: " + orgOnly + " row(s)");
+    const text = await bodyText(page);
+    if (text.indexOf("api.openai.com") < 0) problems.push("its host not named");
+    await setHost(page, BUILTIN);
+    const none = await aiRows();
+    if (none !== 0) problems.push("no model at all: " + none + " row(s)");
+    await page.evaluate(() => { window.__ai.model = true; });
+    const builtinOnly = await aiRows();
+    if (builtinOnly !== 2) problems.push("the built-in model alone: " + builtinOnly + " row(s)");
+    check(!problems.length, "db5 the AI section is shown whenever either model can rank, with the built-in model absent and the organisation's on "
+      + "included, and not where neither can: " + (problems.join("; ") || "three states"));
+  }
+
+  /* db6: while the organisation's model ranks, the AI section's lede says what is sent by the two switches, and follows a
+     switch moved on the open page, as does the picker's note on the whole page. */
+  {
+    const problems = [];
+    await setHost(page, ORG_ON);
+    const flip = (row, val) => page.evaluate((r, v) => { const b = document.querySelector('#setBody [data-row="' + r + '"] .set-seg button[data-val="' + v + '"]'); if (b) b.click(); return !!b; }, row, val);
+    const lede = () => page.evaluate(() => (document.querySelector("#setBody p.lede") || {}).textContent || "");
+    const note = () => page.evaluate(() => (document.querySelector("#setBody #setSuggestNote") || {}).textContent || "");
+    await closeTab(); await page.evaluate(() => openSettings("ai")); await sleep(150);
+    const both = await lede();
+    if (!/ranks the search and the suggestions/.test(both) || both.indexOf("api.openai.com") < 0) problems.push("both on: " + JSON.stringify(both));
+    if (!(await flip("aisuggest", "off"))) problems.push("no suggestion switch");
+    await sleep(100);
+    const searchOnly = await lede();
+    if (!/ranks the search\. The search text is sent there\./.test(searchOnly)) problems.push("suggestions off: " + JSON.stringify(searchOnly));
+    await flip("aisearch", "off"); await sleep(100);
+    const neither = await lede();
+    if (!/with both switches off nothing is sent to it/.test(neither)) problems.push("both off: " + JSON.stringify(neither));
+    await closeTab(); await page.evaluate(() => openSettings("all")); await sleep(150);
+    const offNote = await note();
+    await flip("aisuggest", "on"); await sleep(100);
+    const onNote = await note();
+    if (!/never kept or sent/.test(offNote) || !/is sent to api\.openai\.com/.test(onNote)) problems.push("the note " + JSON.stringify([offNote.slice(-60), onNote.slice(-120)]));
+    await page.evaluate(() => { localStorage.removeItem("eAiOff"); localStorage.removeItem("eSearchAiOff"); });
+    check(!problems.length, "db6 while the organisation's model ranks, the AI section's lede says what is sent by the two switches and follows a switch "
+      + "moved on the open page, and the picker's note follows the suggestion switch: " + (problems.join("; ") || "three ledes, two notes"));
   }
   await page.close();
 } catch (e) {
@@ -512,7 +594,7 @@ try {
   if (browser) await browser.close();
 }
 
-const EXPECTED = 10;
+const EXPECTED = 12;
 if (asserted !== EXPECTED) { failed++; asserted++; console.log("  FAIL ran " + asserted + " checks, expected " + EXPECTED); }
 console.log((failed ? "desk-own-ai: " + failed + " of " + asserted + " failed" : "desk-own-ai: all " + asserted + " passed"));
 process.exit(Math.min(failed, 63));

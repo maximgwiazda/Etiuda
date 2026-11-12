@@ -8375,6 +8375,7 @@ What you type stays in this browser only.`;
     "The organisation's model at {HOST} ranks the search and the suggestions. The search text and the copied message the suggestions are made from are sent there.": "Model organizacji pod adresem {HOST} ustala kolejność wyszukiwania i propozycji. Trafia tam tekst wyszukiwania i skopiowana wiadomość, z której powstają propozycje.",
     "The organisation's model at {HOST} ranks the search. The search text is sent there.": "Model organizacji pod adresem {HOST} ustala kolejność wyszukiwania. Trafia tam tekst wyszukiwania.",
     "The organisation's model at {HOST} ranks the suggestions. The copied message they are made from is sent there.": "Model organizacji pod adresem {HOST} ustala kolejność propozycji. Trafia tam skopiowana wiadomość, z której powstają.",
+    "The organisation's model at {HOST} is set, and with both switches off nothing is sent to it.": "Model organizacji pod adresem {HOST} jest ustawiony, a przy obu przełącznikach wyłączonych nic do niego nie trafia.",
     "organisation's model not answering, built-in model ranking": "model organizacji nie odpowiada, kolejność ustala model wbudowany",
     "{HOST} has not answered three times in a row, so the built-in model ranks on this computer, sending nothing, and the desk asks {HOST} again in a minute.": "{HOST} nie odpowiedział trzy razy z rzędu, więc kolejność ustala model wbudowany na tym komputerze, niczego nie wysyłając, a stanowisko zapyta {HOST} ponownie za minutę.",
     "organisation's model not answering, word matches only": "model organizacji nie odpowiada, tylko dopasowanie słów",
@@ -8488,6 +8489,7 @@ What you type stays in this browser only.`;
     "Suggestions taken: {N}": "Wybrane propozycje: {N}",
     "Openings with suggestions: {N}": "Otwarcia z propozycjami: {N}",
     "When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as the picker opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.": "Gdy wybór intencji otwiera się, a w schowku jest wiadomość klienta wyraźnie wskazująca na jakieś intencje, nad listą pojawia się do pięciu z nich. Żadna nie jest wybrana, dopóki się jej nie kliknie. Wiadomość jest odczytywana tylko przy otwarciu wyboru i nigdy nie jest zapisywana ani wysyłana; statystyki liczą jedynie, ile razy pojawiły się propozycje i ile z nich wybrano.",
+    "When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. While the organisation's model is on, the copied message, up to its first few thousand characters, is sent to {HOST} as the picker opens, so that the model there can suggest the intents; this desk keeps no copy of it. The statistics count only how often suggestions appeared and how many were taken.": "Gdy wybór intencji otwiera się, a w schowku jest wiadomość klienta wyraźnie wskazująca na jakieś intencje, nad listą pojawia się do pięciu z nich. Żadna nie jest wybrana, dopóki się jej nie kliknie. Gdy włączony jest model organizacji, skopiowana wiadomość, do kilku tysięcy pierwszych znaków, trafia przy otwarciu wyboru do {HOST}, aby tamtejszy model mógł zaproponować intencje; to stanowisko nie zachowuje jej kopii. Statystyki liczą jedynie, ile razy pojawiły się propozycje i ile z nich wybrano.",
     "Works from any program; Enter copies a reply and goes back to the window you were in.": "Działa w każdym programie; Enter kopiuje odpowiedź i wraca do poprzedniego okna.",
     "Another program uses this combination just now; a different one will do.": "Tej kombinacji używa teraz inny program; wybór innej to rozwiąże.",
     "{KEYS} already belongs to another program; a different combination will do.": "{KEYS} należy już do innego programu; wybór innej kombinacji to rozwiąże.",
@@ -10148,7 +10150,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-11";
+  var E_BUILT = "2026-11-12";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -21531,6 +21533,9 @@ What you type stays in this browser only.`;
   function meaningLive() {
     return !!(eSearchOn() && meaning && meaning.gen === searchGen && meaning.query === currentQuery() && searchAlnumLen(currentQuery()) >= 3);
   }
+  function builtinNone() {
+    return !meaningLive() || !meaning.cards.length && !meaning.intents.length;
+  }
   function catEnOf(key) {
     const over = pack.catLabels && pack.catLabels[key];
     if (over) return String(over).trim();
@@ -21682,23 +21687,39 @@ What you type stays in this browser only.`;
     }
     return wordHits.concat(tail);
   }
+  function orgCardsTail(wordHits, keep) {
+    if (!eSearchOn() || !orgLive() || searchAlnumLen(currentQuery()) < 3) return null;
+    const byId = /* @__PURE__ */ new Map();
+    for (const m of cards || []) if (m && m.id != null && !byId.has(String(m.id))) byId.set(String(m.id), m);
+    const seen = new Set(wordHits.map((m) => String(m && m.id)));
+    const tail = [];
+    for (const id of orgOrder.cards) {
+      const m = byId.get(id);
+      if (!m || seen.has(id) || keep && !keep(m)) continue;
+      seen.add(id);
+      tail.push(m);
+    }
+    return tail.length ? wordHits.concat(tail) : null;
+  }
   function mixCards(wordHits, keep) {
     if (!Array.isArray(wordHits)) return null;
     const ids = orgOrder && orgOrder.cards;
     const idOf = (m) => String(m && m.id);
     const words = orgOrdered(wordHits, ids, idOf);
-    const mixed = meaningCards(wordHits, keep);
+    const mixed = builtinNone() && orgCardsTail(wordHits, keep) || meaningCards(wordHits, keep);
     if (!mixed) return words;
     const tail = mixed.slice(wordHits.length);
     return (words || wordHits).concat(orgOrdered(tail, ids, idOf) || tail);
   }
   function mixIntentRows(rows) {
-    if (!meaningLive() || !Array.isArray(rows)) return null;
+    const fromOrg = builtinNone() && eSearchOn() && orgLive() && orgOrder.intents.length > 0 && searchAlnumLen(currentQuery()) >= 3;
+    if (!meaningLive() && !fromOrg || !Array.isArray(rows)) return null;
     const byIdx = /* @__PURE__ */ new Map();
     const byId = /* @__PURE__ */ new Map();
     for (let i = 0; i < rows.length; i++) {
       byIdx.set(rows[i].idx, rows[i]);
       if (!byId.has(rows[i].id)) byId.set(rows[i].id, rows[i]);
+      if (fromOrg && !byId.has(String(rows[i].id))) byId.set(String(rows[i].id), rows[i]);
     }
     const hits = [];
     const seen = /* @__PURE__ */ new Set();
@@ -21708,7 +21729,7 @@ What you type stays in this browser only.`;
       hits.push(row2);
       seen.add(row2.id);
     }
-    const restIds = hybridIds(hits.map((r) => r.id), meaning.intents);
+    const restIds = fromOrg ? hybridIds(hits.map((r) => String(r.id)), orgOrder.intents) : hybridIds(hits.map((r) => r.id), meaning.intents);
     const tail = [];
     for (let i = hits.length; i < restIds.length; i++) {
       const row2 = byId.get(restIds[i]);
@@ -21812,15 +21833,45 @@ What you type stays in this browser only.`;
     const list2 = Array.isArray(shown) ? shown : [];
     for (let i = 0; i < list2.length && cardIds.length < ORG_CARDS_MAX; i++) if (list2[i] && list2[i].id != null) cardIds.push(String(list2[i].id));
     const intentIds = [];
-    if (meaningLive()) {
-      const hit = /* @__PURE__ */ new Set();
-      for (let i = 0; i < railOrder.length; i++) hit.add(String(intentIdAt(railOrder[i])));
+    const hit = /* @__PURE__ */ new Set();
+    for (let i = 0; i < railOrder.length; i++) hit.add(String(intentIdAt(railOrder[i])));
+    if (builtinNone()) {
+      const loose = looseCandidates(q);
+      for (const id of loose.cards) if (cardIds.length < ORG_CARDS_MAX && cardIds.indexOf(id) < 0) cardIds.push(id);
+      for (const id of loose.intents) if (intentIds.length < ORG_INTENTS_MAX && !hit.has(id) && intentIds.indexOf(id) < 0) intentIds.push(id);
+    } else {
       for (let i = 0; i < meaning.intents.length && intentIds.length < ORG_INTENTS_MAX; i++) {
         const id = String(meaning.intents[i]);
         if (!hit.has(id) && intentIds.indexOf(id) < 0) intentIds.push(id);
       }
     }
     return { q, gen: orgGen, cards: cardIds, intents: intentIds };
+  }
+  function looseCandidates(q) {
+    const terms = cardSearchTerms(q).filter((term) => searchAlnumLen(term) >= 3);
+    const out = { cards: [], intents: [] };
+    if (!terms.length) return out;
+    const reach = (words) => terms.reduce((n, term) => n + (words.some((w) => w.indexOf(term) > -1 || wordMatchesTerm(w, term)) ? term.length : 0), 0);
+    const scored = [];
+    const list2 = cards || [];
+    for (let i = 0; i < list2.length; i++) {
+      const m = list2[i];
+      if (!m || m.id == null) continue;
+      const n = reach(cardSearchIndex(m).allWords);
+      if (n) scored.push({ id: String(m.id), n, i });
+    }
+    const byReach = (a, b) => b.n - a.n || a.i - b.i;
+    out.cards = scored.sort(byReach).slice(0, ORG_CARDS_MAX).map((s) => s.id);
+    const intents = [];
+    const count = intentCount();
+    for (let i = 0; i < count; i++) {
+      const words = [];
+      for (const lang2 of ["en", "pl"]) for (const f of ["topic", "clause"]) words.push(...splitWords(intentFieldAt(i, f, lang2)));
+      const n = reach(words);
+      if (n) intents.push({ id: String(intentIdAt(i)), n, i });
+    }
+    out.intents = intents.sort(byReach).slice(0, ORG_INTENTS_MAX * 2).map((s) => s.id);
+    return out;
   }
   function searchReorder(a) {
     const o = a || {};
@@ -34941,10 +34992,14 @@ What you type stays in this browser only.`;
   function suggestCountLine() {
     return t("Suggestions taken: {N}").split("{N}").join(String(pack.suggestTaken | 0)) + "  " + t("Openings with suggestions: {N}").split("{N}").join(String(pack.suggestOpen | 0));
   }
+  function suggestNoteText() {
+    const st = orgModel();
+    return orgRanks(st) && eAiOn() ? t("When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. While the organisation's model is on, the copied message, up to its first few thousand characters, is sent to {HOST} as the picker opens, so that the model there can suggest the intents; this desk keeps no copy of it. The statistics count only how often suggestions appeared and how many were taken.").split("{HOST}").join(String(st.host || "")) : t("When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as the picker opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.");
+  }
   function hotkeyRowHtml() {
     if (!hotkeyHost()) return "";
     const st = hotkeyState();
-    return '<div class="sc-list"><div class="sc-row" id="setHotkeyRow"><div class="sc-label">' + esc(t("Bring the replies over any window")) + '<small id="setHotkeyNote">' + esc(st.taken ? t("Another program uses this combination just now; a different one will do.") : t("Works from any program; Enter copies a reply and goes back to the window you were in.")) + '</small><small id="setSuggestNote">' + esc(t("When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as the picker opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.")) + '</small><small id="setSuggestCounts">' + esc(suggestCountLine()) + '</small></div><div class="sc-binds"><button type="button" class="sc-bind sc-long' + (st.accel ? "" : " sc-empty") + '" id="setHotkey" style="flex-basis:100%" title="' + esc(t("Click, then press the new key combo")) + '">' + esc(hotkeyLabel(st.accel)) + "</button></div></div></div>";
+    return '<div class="sc-list"><div class="sc-row" id="setHotkeyRow"><div class="sc-label">' + esc(t("Bring the replies over any window")) + '<small id="setHotkeyNote">' + esc(st.taken ? t("Another program uses this combination just now; a different one will do.") : t("Works from any program; Enter copies a reply and goes back to the window you were in.")) + '</small><small id="setSuggestNote">' + esc(suggestNoteText()) + '</small><small id="setSuggestCounts">' + esc(suggestCountLine()) + '</small></div><div class="sc-binds"><button type="button" class="sc-bind sc-long' + (st.accel ? "" : " sc-empty") + '" id="setHotkey" style="flex-basis:100%" title="' + esc(t("Click, then press the new key combo")) + '">' + esc(hotkeyLabel(st.accel)) + "</button></div></div></div>";
   }
   function syncHotkeyRow(box, now) {
     if (!box) return;
@@ -34956,7 +35011,7 @@ What you type stays in this browser only.`;
     b.textContent = hkListening ? t("Press keys…") : hotkeyLabel(st.accel);
     if (note) note.textContent = st.taken ? t("Another program uses this combination just now; a different one will do.") : t("Works from any program; Enter copies a reply and goes back to the window you were in.");
     const help = box.querySelector("#setSuggestNote"), counts2 = box.querySelector("#setSuggestCounts");
-    if (help) help.textContent = t("When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as the picker opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.");
+    if (help) help.textContent = suggestNoteText();
     if (counts2) counts2.textContent = suggestCountLine();
   }
   function hotkeyListen(box, on, now) {
@@ -35295,9 +35350,23 @@ What you type stays in this browser only.`;
   function aiWords(st, builtin, organisation) {
     return orgRanks(st) ? organisation.split("{HOST}").join(String(st.host || "")) : builtin;
   }
+  function aiLede() {
+    const st = orgModel();
+    if (!orgRanks(st)) return t("The model built into Etiuda, which works on this computer alone.");
+    const search = eSearchOn(), suggest = eAiOn();
+    const line = search && suggest ? t("The organisation's model at {HOST} ranks the search and the suggestions. The search text and the copied message the suggestions are made from are sent there.") : search ? t("The organisation's model at {HOST} ranks the search. The search text is sent there.") : suggest ? t("The organisation's model at {HOST} ranks the suggestions. The copied message they are made from is sent there.") : t("The organisation's model at {HOST} is set, and with both switches off nothing is sent to it.");
+    return line.split("{HOST}").join(String(st.host || ""));
+  }
+  function syncAiWords() {
+    const box = settingsHost();
+    if (!box) return;
+    const lede = sxOn === "ai" && !sxQuery ? box.querySelector("p.lede") : null, note = box.querySelector("#setSuggestNote");
+    if (lede) lede.textContent = aiLede();
+    if (note) note.textContent = suggestNoteText();
+  }
   function aiGroups() {
-    if (!eAiModel()) return [];
     const st = orgModel(), w = (a, b) => aiWords(st, a, b);
+    if (!eAiModel() && !orgRanks(st)) return [];
     return [{ rows: [
       row(
         "aisuggest",
@@ -35511,7 +35580,7 @@ What you type stays in this browser only.`;
       { id: "teams", icon: "teams", name: t("Teams and keys"), lede: t("The team this desk is on, and how its changes reach the team."), groups: teamsGroups() },
       { id: "data", icon: "data", name: t("Data and defaults"), lede: t("Putting settings back, and what the app keeps on this computer."), groups: dataGroups() },
       { id: "about", icon: "about", name: t("About"), lede: t("The version, the licence and the tour."), groups: aboutGroups() },
-      { id: "ai", icon: "ai", name: t("AI"), lede: t("The model built into Etiuda, which works on this computer alone."), groups: aiGroups() }
+      { id: "ai", icon: "ai", name: t("AI"), lede: aiLede(), groups: aiGroups() }
     ].filter((s) => s.groups.some((g) => g.rows.length));
   }
   function groupHtml(g) {
@@ -35815,12 +35884,14 @@ What you type stays in this browser only.`;
             else lsSet(E_AI_OFF_KEY, "1");
             eTellAi();
             syncOrgMark();
+            syncAiWords();
             toast(on ? aiWords(orgModel(), t("Suggestions from the built-in model"), t("Suggestions from the organisation's model")) : t("Suggestions from matching words"));
           } else if (seg3 === "aisearch") {
             if (on) lsDel(E_SEARCH_AI_OFF_KEY);
             else lsSet(E_SEARCH_AI_OFF_KEY, "1");
             eTellSearch();
             syncOrgMark();
+            syncAiWords();
             if (on) armSearch();
             else clearSearchMeaning();
             try {

@@ -9963,6 +9963,14 @@ function pickPage() {
   P.onOpen(text => {
     let o = {};
     try { o = JSON.parse(text) || {}; } catch (e) { o = {}; }
+    /* The organisation's order of the strip, after the opening: the strip alone is painted again, so the row under the
+       pointer, the scroll and the box stay as the agent left them. */
+    if (o.reorder === true) {
+      suggest = Array.isArray(o.suggest) ? o.suggest.filter(s => s && s.id) : [];
+      if (sgAt >= suggest.length) sgAt = -1;
+      paint(false);
+      return;
+    }
     const look = o.look || {}, root = document.documentElement;
     Object.keys(look.vars || {}).forEach(k => root.style.setProperty(k, look.vars[k]));
     root.dataset.theme = look.theme || "";
@@ -10601,7 +10609,7 @@ function pickWithClip(press, which, text) {
           if (orgOrder) orgOrder.then(order => {
             if (!order || win.isDestroyed() || !win.isVisible() || press !== pickPress || pickTouches !== touched) return;
             open.suggest = order.map(i => orgRowsNow[i]).slice(0, SUGGEST_LIMIT).map(r => ({ id: r.id, name: r.name, score: r.score }));
-            win.webContents.send("etiuda:pick-open", JSON.stringify(open));
+            win.webContents.send("etiuda:pick-open", JSON.stringify(Object.assign({}, open, { reorder: true })));
           }).catch(() => {});
         });
       });
@@ -10682,18 +10690,21 @@ ipcMain.on("etiuda:search-set", (e, on) => {
 ipcMain.handle("etiuda:search-prepare", (e, rows) => {
   if (!fromEngine(e)) return null;
   keepOrgRows(rows);
-  if (!embedSuggest) return deskAiConfig() ? { ready: true } : { ready: false, skipped: true };
-  try { return embedSuggest.prepareSearch(rows) || { ready: false, skipped: true }; }
-  catch (err) { return { ready: false, skipped: true }; }
+  let res = null;
+  try { res = embedSuggest ? embedSuggest.prepareSearch(rows) : null; } catch (err) { res = null; }
+  /* Where the built-in model cannot prepare, the organisation's model still ranks, so the passages are taken as they are. */
+  if (!res || res.skipped) return deskAiConfig() ? { ready: true } : { ready: false, skipped: true };
+  return res;
 });
-/* With the organisation's model chosen, an empty order stands where the built-in one gives none, so the page keeps its
-   words and does not ask again; the organisation's order follows the answer, through orgSearchSoon. */
+/* With the organisation's model chosen, its order follows the answer, through orgSearchSoon. The built-in model's answer
+   stands as it is, null while it prepares, so the page asks again; only where that model is absent or set aside by
+   INSTANT_FROM does an empty order stand, since none is coming. */
 ipcMain.handle("etiuda:search-rank", (e, text) => {
   if (!fromEngine(e)) return null;
   const q = String(text == null ? "" : text);
   const builtin = embedSuggest && !(deskReorder.active() && deskAi.INSTANT_FROM === "words") ? embedSuggest.searchRank(q) : null;
   if (!orgSearchOn || !deskAiConfig()) return builtin;
-  const answer = builtin ? Promise.resolve(builtin) : Promise.resolve({ cards: [], intents: [] });
+  const answer = builtin && embedSuggest.installed() ? Promise.resolve(builtin) : Promise.resolve({ cards: [], intents: [] });
   answer.then(() => orgSearchSoon(q), () => {});
   return answer;
 });

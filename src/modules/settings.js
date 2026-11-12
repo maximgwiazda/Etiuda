@@ -76,6 +76,13 @@ function suggestCountLine(){
   return t("Suggestions taken: {N}").split("{N}").join(String(pack.suggestTaken|0))
     +"  "+t("Openings with suggestions: {N}").split("{N}").join(String(pack.suggestOpen|0));
 }
+/* The picker's note on the copied message: while the organisation's model ranks the suggestions, the message goes to it. */
+function suggestNoteText(){
+  const st=orgModel();
+  return orgRanks(st) && eAiOn()
+    ? t("When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. While the organisation's model is on, the copied message, up to its first few thousand characters, is sent to {HOST} as the picker opens, so that the model there can suggest the intents; this desk keeps no copy of it. The statistics count only how often suggestions appeared and how many were taken.").split("{HOST}").join(String(st.host||""))
+    : t("When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as the picker opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.");
+}
 function hotkeyRowHtml(){
   if(!hotkeyHost()) return "";
   const st=hotkeyState();
@@ -84,7 +91,7 @@ function hotkeyRowHtml(){
     +'<small id="setHotkeyNote">'+esc(st.taken
       ? t("Another program uses this combination just now; a different one will do.")
       : t("Works from any program; Enter copies a reply and goes back to the window you were in."))+'</small>'
-    +'<small id="setSuggestNote">'+esc(t("When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as the picker opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken."))+'</small>'
+    +'<small id="setSuggestNote">'+esc(suggestNoteText())+'</small>'
     +'<small id="setSuggestCounts">'+esc(suggestCountLine())+'</small>'
     +'</div><div class="sc-binds"><button type="button" class="sc-bind sc-long'+(st.accel?"":" sc-empty")+'" id="setHotkey"'
     +' style="flex-basis:100%" title="'+esc(t("Click, then press the new key combo"))+'">'
@@ -103,7 +110,7 @@ function syncHotkeyRow(box,now){
     ? t("Another program uses this combination just now; a different one will do.")
     : t("Works from any program; Enter copies a reply and goes back to the window you were in.");
   const help=box.querySelector("#setSuggestNote"), counts=box.querySelector("#setSuggestCounts");
-  if(help) help.textContent=t("When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as the picker opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.");
+  if(help) help.textContent=suggestNoteText();
   if(counts) counts.textContent=suggestCountLine();
 }
 function hotkeyListen(box,on,now){
@@ -368,10 +375,29 @@ function teamsGroups(){
 function aiWords(st, builtin, organisation){
   return orgRanks(st) ? organisation.split("{HOST}").join(String(st.host||"")) : builtin;
 }
-/* Drawn only where the desk carries the model: off, the picker suggests by words alone and the model is never loaded. */
+/* The AI section's lede: the built-in model's, or while the organisation's ranks, the mark's sentence by the two switches. */
+function aiLede(){
+  const st=orgModel();
+  if(!orgRanks(st)) return t("The model built into Etiuda, which works on this computer alone.");
+  const search=eSearchOn(), suggest=eAiOn();
+  const line=search && suggest ? t("The organisation's model at {HOST} ranks the search and the suggestions. The search text and the copied message the suggestions are made from are sent there.")
+    : search ? t("The organisation's model at {HOST} ranks the search. The search text is sent there.")
+    : suggest ? t("The organisation's model at {HOST} ranks the suggestions. The copied message they are made from is sent there.")
+    : t("The organisation's model at {HOST} is set, and with both switches off nothing is sent to it.");
+  return line.split("{HOST}").join(String(st.host||""));
+}
+/* After either switch moves: the lede and the picker's note on the page already drawn say what is sent now. */
+function syncAiWords(){
+  const box=settingsHost();
+  if(!box) return;
+  const lede=sxOn==="ai" && !sxQuery ? box.querySelector("p.lede") : null, note=box.querySelector("#setSuggestNote");
+  if(lede) lede.textContent=aiLede();
+  if(note) note.textContent=suggestNoteText();
+}
+/* Drawn wherever a model can rank: the built-in one this desk carries, or the organisation's while it is on and ready. */
 function aiGroups(){
-  if(!eAiModel()) return [];
   const st=orgModel(), w=(a,b)=>aiWords(st,a,b);
+  if(!eAiModel() && !orgRanks(st)) return [];
   return [{rows:[
     row("aisuggest","ai",w(t("Suggest intents with the built-in model"),t("Suggest intents with the organisation's model")),
       w(t("Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words."),
@@ -548,7 +574,7 @@ function settingsSections(){
     {id:"teams", icon:"teams", name:t("Teams and keys"), lede:t("The team this desk is on, and how its changes reach the team."), groups:teamsGroups()},
     {id:"data", icon:"data", name:t("Data and defaults"), lede:t("Putting settings back, and what the app keeps on this computer."), groups:dataGroups()},
     {id:"about", icon:"about", name:t("About"), lede:t("The version, the licence and the tour."), groups:aboutGroups()},
-    {id:"ai", icon:"ai", name:t("AI"), lede:t("The model built into Etiuda, which works on this computer alone."), groups:aiGroups()}
+    {id:"ai", icon:"ai", name:t("AI"), lede:aiLede(), groups:aiGroups()}
   ].filter(s=>s.groups.some(g=>g.rows.length));
 }
 function groupHtml(g){
@@ -851,12 +877,14 @@ function wirePage(box){
           if(on) lsDel(E_AI_OFF_KEY); else lsSet(E_AI_OFF_KEY,"1");
           eTellAi();
           syncOrgMark();
+          syncAiWords();
           toast(on?aiWords(orgModel(),t("Suggestions from the built-in model"),t("Suggestions from the organisation's model")):t("Suggestions from matching words"));
         }
         else if(seg==="aisearch"){
           if(on) lsDel(E_SEARCH_AI_OFF_KEY); else lsSet(E_SEARCH_AI_OFF_KEY,"1");
           eTellSearch();
           syncOrgMark();
+          syncAiWords();
           if(on) armSearch(); else clearSearchMeaning();
           try{ render(); }catch(e){}
           try{ hooks.drawIntentRail(); }catch(e){}

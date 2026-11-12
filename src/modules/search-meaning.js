@@ -5,6 +5,9 @@ import { cards, railOrder, shown } from "./app-state.js";
 import { BASE_CATS, ePackEpoch, pack } from "./pack.js";
 import { CAT_LABELS_PL } from "./icons.js";
 import { expandSearchPlaceholders, intentFieldAt } from "./intent-text.js";
+import { cardSearchIndex } from "./card-search.js";
+import { cardSearchTerms } from "./spell.js";
+import { splitWords, wordMatchesTerm } from "./words.js";
 import { intentCount } from "./content-model.js";
 import { intentIdAt } from "./intent-id.js";
 import { intentEl } from "./dom.js";
@@ -86,6 +89,10 @@ function orgOrdered(list, ids, idOf) {
 function meaningLive() {
   return !!(eSearchOn() && meaning && meaning.gen === searchGen && meaning.query === currentQuery()
     && searchAlnumLen(currentQuery()) >= 3);
+}
+/* The built-in model gave no candidates for the query in the box: absent, set aside, still preparing, or empty. */
+function builtinNone() {
+  return !meaningLive() || (!meaning.cards.length && !meaning.intents.length);
 }
 
 function catEnOf(key) {
@@ -240,6 +247,23 @@ function meaningCards(wordHits, keep) {
   return wordHits.concat(tail);
 }
 
+/* Where the built-in model gave no candidates, the cards the organisation's model ordered beyond the word matches, in its
+   order, after them; null where it named none. */
+function orgCardsTail(wordHits, keep) {
+  if (!eSearchOn() || !orgLive() || searchAlnumLen(currentQuery()) < 3) return null;
+  const byId = new Map();
+  for (const m of cards || []) if (m && m.id != null && !byId.has(String(m.id))) byId.set(String(m.id), m);
+  const seen = new Set(wordHits.map(m => String(m && m.id)));
+  const tail = [];
+  for (const id of orgOrder.cards) {
+    const m = byId.get(id);
+    if (!m || seen.has(id) || (keep && !keep(m))) continue;
+    seen.add(id);
+    tail.push(m);
+  }
+  return tail.length ? wordHits.concat(tail) : null;
+}
+
 /* The organisation's order moves word matches among themselves and the model's cards among themselves, so the line
    between the two still stands where it stood. */
 function mixCards(wordHits, keep) {
@@ -247,19 +271,22 @@ function mixCards(wordHits, keep) {
   const ids = orgOrder && orgOrder.cards;
   const idOf = m => String(m && m.id);
   const words = orgOrdered(wordHits, ids, idOf);
-  const mixed = meaningCards(wordHits, keep);
+  const mixed = (builtinNone() && orgCardsTail(wordHits, keep)) || meaningCards(wordHits, keep);
   if (!mixed) return words;
   const tail = mixed.slice(wordHits.length);
   return (words || wordHits).concat(orgOrdered(tail, ids, idOf) || tail);
 }
 
 function mixIntentRows(rows) {
-  if (!meaningLive() || !Array.isArray(rows)) return null;
+  /* Where the built-in model gave no candidates, the intents the organisation's model ordered stand in for its tail. */
+  const fromOrg = builtinNone() && eSearchOn() && orgLive() && orgOrder.intents.length > 0 && searchAlnumLen(currentQuery()) >= 3;
+  if ((!meaningLive() && !fromOrg) || !Array.isArray(rows)) return null;
   const byIdx = new Map();
   const byId = new Map();
   for (let i = 0; i < rows.length; i++) {
     byIdx.set(rows[i].idx, rows[i]);
     if (!byId.has(rows[i].id)) byId.set(rows[i].id, rows[i]);
+    if (fromOrg && !byId.has(String(rows[i].id))) byId.set(String(rows[i].id), rows[i]);
   }
   const hits = [];
   const seen = new Set();
@@ -269,7 +296,7 @@ function mixIntentRows(rows) {
     hits.push(row);
     seen.add(row.id);
   }
-  const restIds = hybridIds(hits.map(r => r.id), meaning.intents);
+  const restIds = fromOrg ? hybridIds(hits.map(r => String(r.id)), orgOrder.intents) : hybridIds(hits.map(r => r.id), meaning.intents);
   const tail = [];
   for (let i = hits.length; i < restIds.length; i++) {
     const row = byId.get(restIds[i]);
@@ -361,15 +388,49 @@ function searchShortlist(q) {
   const list = Array.isArray(shown) ? shown : [];
   for (let i = 0; i < list.length && cardIds.length < ORG_CARDS_MAX; i++) if (list[i] && list[i].id != null) cardIds.push(String(list[i].id));
   const intentIds = [];
-  if (meaningLive()) {
-    const hit = new Set();
-    for (let i = 0; i < railOrder.length; i++) hit.add(String(intentIdAt(railOrder[i])));
+  const hit = new Set();
+  for (let i = 0; i < railOrder.length; i++) hit.add(String(intentIdAt(railOrder[i])));
+  if (builtinNone()) {
+    /* With no candidate from the built-in model, those that share any word of the query fill the shortlist, so the
+       organisation's model is asked where the words alone match fewer than two. */
+    const loose = looseCandidates(q);
+    for (const id of loose.cards) if (cardIds.length < ORG_CARDS_MAX && cardIds.indexOf(id) < 0) cardIds.push(id);
+    for (const id of loose.intents) if (intentIds.length < ORG_INTENTS_MAX && !hit.has(id) && intentIds.indexOf(id) < 0) intentIds.push(id);
+  } else {
     for (let i = 0; i < meaning.intents.length && intentIds.length < ORG_INTENTS_MAX; i++) {
       const id = String(meaning.intents[i]);
       if (!hit.has(id) && intentIds.indexOf(id) < 0) intentIds.push(id);
     }
   }
   return { q, gen: orgGen, cards: cardIds, intents: intentIds };
+}
+/* The cards and the intents that share at least one word of `q` (three letters or more, by the search's own word rule),
+   most shared letters first, then in catalog order. */
+function looseCandidates(q) {
+  const terms = cardSearchTerms(q).filter(term => searchAlnumLen(term) >= 3);
+  const out = { cards: [], intents: [] };
+  if (!terms.length) return out;
+  const reach = words => terms.reduce((n, term) => n + (words.some(w => w.indexOf(term) > -1 || wordMatchesTerm(w, term)) ? term.length : 0), 0);
+  const scored = [];
+  const list = cards || [];
+  for (let i = 0; i < list.length; i++) {
+    const m = list[i];
+    if (!m || m.id == null) continue;
+    const n = reach(cardSearchIndex(m).allWords);
+    if (n) scored.push({ id: String(m.id), n, i });
+  }
+  const byReach = (a, b) => b.n - a.n || a.i - b.i;
+  out.cards = scored.sort(byReach).slice(0, ORG_CARDS_MAX).map(s => s.id);
+  const intents = [];
+  const count = intentCount();
+  for (let i = 0; i < count; i++) {
+    const words = [];
+    for (const lang of ["en", "pl"]) for (const f of ["topic", "clause"]) words.push(...splitWords(intentFieldAt(i, f, lang)));
+    const n = reach(words);
+    if (n) intents.push({ id: String(intentIdAt(i)), n, i });
+  }
+  out.intents = intents.sort(byReach).slice(0, ORG_INTENTS_MAX * 2).map(s => s.id);
+  return out;
 }
 /* The organisation's order, taken once, while the query and the generation are the ones the shortlist was given for. */
 function searchReorder(a) {
