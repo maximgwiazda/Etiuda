@@ -848,8 +848,14 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const run = (body.map(l => /^!insertmacro etiudaAsUser (\w+)$/.exec(l)).find(Boolean) || [])[1] || "";
     const asUser = asUserHolds(nsh);
     const ranThere = code(macro(nsh, run)).filter(l => l === call).length === 1;
-    const ok = !!run && asUser && ranThere && !body.includes(call);
-    return { ok, open: m.slice(outer).filter(l => l === call).length };
+    /* Started elevated, with no unelevated instance: the file is not run at all, and the finish page says the copy stays
+       wherever HKCU names an uninstaller (decision 28's option b). */
+    const rest = m.slice(outer);
+    const left = !rest.includes(call) && !rest.some(l => /uninstallOldVersion|ExecWait|Exec\b/.test(l))
+      && rest.includes("ReadRegStr $R9 HKCU \"${UNINSTALL_REGISTRY_KEY}\" UninstallString")
+      && rest.indexOf("StrCpy $etiudaFinishText \"$(etiudaOldCopyLeft)\"") > rest.indexOf("${If} $R9 != \"\"");
+    const ok = !!run && asUser && ranThere && !body.includes(call) && left;
+    return { ok, left };
   };
   const asUserHolds = nsh => {
     const b = code(macro(nsh, "etiudaAsUser"));
@@ -866,8 +872,10 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     "14a in an all-users install the uninstaller HKCU names runs only as its own account, through the unelevated instance"
     + " (UAC_AsUser_Call), and every other program run is a system tool, this install's own program, or run as the person: "
     + JSON.stringify({ asItsOwnerPatched: status.asItsOwnerPatched, asUser: hk.ok, stray }));
-  console.log("  OPEN 14a: an installer started already elevated has no unelevated instance, and still runs that uninstaller"
-    + " elevated, sites: " + hk.open + ", until that case is ruled");
+  ok(!hkcuAsUser(T, NSH.replace(/(\$\{Else\}\r?\n)(\s*# An installer started elevated)/, "$1    !insertmacro uninstallOldVersion HKEY_CURRENT_USER\n$2")).ok,
+    "14a control: an installer started elevated running that uninstaller itself, as main's template did, reads red");
+  ok(!hkcuAsUser(T, NSH.replace("StrCpy $etiudaFinishText \"$(etiudaOldCopyLeft)\"", "Nop")).ok,
+    "14a control: the copy left registered without a word on the finish page reads red");
   const mainSec = T["installSection.nsh"] ? T["installSection.nsh"].replace(/!ifmacrodef etiudaOldUserCopy\r?\n\s*!insertmacro etiudaOldUserCopy\r?\n\s*!else\r?\n\s*(!insertmacro uninstallOldVersion HKEY_CURRENT_USER\r?\n\s*!insertmacro handleUninstallResult HKEY_CURRENT_USER)\r?\n\s*!endif/, "$1") : "";
   ok(!hkcuAsUser(Object.assign({}, T, { "installSection.nsh": mainSec }), NSH).ok,
     "14a control: the template's elevated run, as main's patch tool leaves it, reads red");
@@ -921,6 +929,35 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     "14c control: the folder entered before its attributes are read reads red");
   ok(!walkHolds(NSH.replace(/(IntOp \$R2 \$R1 & 0x400\r?\n\s*\$\{If\} \$R2 <> 0\r?\n\s*)RMDir \$R0/, "$1RMDir /r $R0")),
     "14c control: a link removed with RMDir /r reads red");
+
+  /* 14d: the finish page carries the case's sentence. Modern UI's own text is the default, so every other install shows
+     the page as before; the case's text is a language string in English and Polish, both in the installer pass only. */
+  const finishSays = nsh => {
+    const lines = String(nsh).split(/\r?\n/);
+    const at = lines.findIndex(l => l.trim() === "!define MUI_FINISHPAGE_TEXT \"$etiudaFinishText\"");
+    const head = at > -1 ? lines.slice(0, at).filter(l => /^\s*!(if|endif)/.test(l)) : [];
+    let open = null, depth = 0;
+    for (const l of head) {
+      if (/^\s*!if/.test(l)) { depth++; if (/^\s*!ifndef\s+BUILD_UNINSTALLER\b/.test(l)) open = depth; }
+      else { if (open === depth) open = null; depth--; }
+    }
+    const init = code(macro(nsh, "customInit"));
+    const lang = macro(nsh, "TurnLang ID") || (/!macro TurnLang ID\r?\n([\s\S]*?)!macroend/.exec(nsh) || [])[1] || "";
+    const defs = lang.split(/\r?\n/).map((l, i, all) => ({ l: l.trim(), guarded: all.slice(0, i).reverse().find(x => /^\s*!(ifndef|endif)\b/.test(x)) }))
+      .filter(x => /^LangString etiudaOldCopyLeft \$\{ID\} "[^"]+"$/.test(x.l));
+    return at > -1 && open !== null && /^Var etiudaFinishText$/m.test(nsh)
+      && init[0] === "StrCpy $etiudaFinishText \"$(MUI_TEXT_FINISH_INFO_TEXT)\""
+      && defs.length === 2 && defs.every(d => d.guarded && /!ifndef BUILD_UNINSTALLER/.test(d.guarded))
+      && /!define MUI_FINISHPAGE_RUN\b/.test(T["assistedInstaller.nsh"] || "");
+  };
+  ok(finishSays(NSH), "14d the finish page's text is Modern UI's own unless the copy was left, then the case's sentence, a"
+    + " language string in both languages; the page keeps its Run box, so the label stays 195 by 40 dialog units");
+  ok(!finishSays(NSH.replace(/^\s*StrCpy \$etiudaFinishText "\$\(MUI_TEXT_FINISH_INFO_TEXT\)"\r?\n/m, "")),
+    "14d control: no default, so every other install's finish page would be blank, reads red");
+  ok(!finishSays(NSH.replace(/(LangString RecogniseUnreadableText \$\{ID\} "Na tym[^\n]*\n)\s*LangString etiudaOldCopyLeft[^\n]*\n/, "$1")),
+    "14d control: the Polish branch without its string reads red");
+  ok(!finishSays(NSH.replace("!define MUI_FINISHPAGE_TEXT \"$etiudaFinishText\"", "")),
+    "14d control: the page left on Modern UI's fixed text reads red");
 }
 
 console.log("\n#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
