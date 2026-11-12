@@ -9567,7 +9567,7 @@ function signinIo(run) {
   return {
     listen: (pageFor, takes) => signinListen(http, pageFor, SIGNIN_WAIT_MS, takes).then(l => { run.loop = l; return l; }),
     /* The page is told the provider's page before the browser is asked, so a browser that does not open (Linux resolves
-       openExternal all the same) leaves the person its link to paste. */
+       the system browser call all the same) leaves the person its link to paste. */
     openPage: url => { if (!signinPageOk(url)) return false; run.url = url; tellSignin(); return Promise.resolve(handOut(url)).then(() => true); }, /* plant:signin-open */
     tokenAsk: (url, form) => signinRequest((u, init) => net.fetch(u, init), url, form),
     serviceAsk: (url, body) => signinServiceAsk((u, init) => net.fetch(u, init), url, body),
