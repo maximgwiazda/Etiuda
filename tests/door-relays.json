@@ -1,0 +1,29 @@
+{
+ "format": 1,
+ "kind": "etiuda-door-relays",
+ "about": "The relay addresses a door handed by the licence service may name. installed: the answer on a desk installed or packaged, and at the service everywhere it runs for customers. unpackaged: the answer on a desk neither installed nor packaged. invitation: whether an invitation naming the address is read (teamChannelOf, untouched). Read by tests/desk-signin.mjs ds17h; the licence service's door/set and Studio's licence-invariants read the same rows.",
+ "doors": [
+  { "url": "https://etiuda.dev/relay/v1", "installed": true, "unpackaged": true, "invitation": true },
+  { "url": "https://etiuda.dev/relay/v1/", "installed": true, "unpackaged": true, "invitation": true },
+  { "url": "https://etiuda.dev/relay-staging/v1", "installed": false, "unpackaged": true, "invitation": true },
+  { "url": "https://etiuda.dev/relay-staging/v1/", "installed": false, "unpackaged": true, "invitation": true },
+  { "url": "https://relay.example.test", "installed": false, "unpackaged": false, "invitation": true },
+  { "url": "https://relay.example.test/relay/v1/", "installed": false, "unpackaged": false, "invitation": true },
+  { "url": "https://etiuda.dev/relay/v2/", "installed": false, "unpackaged": false, "invitation": true },
+  { "url": "https://etiuda.dev/relay/v1/teams", "installed": false, "unpackaged": false, "invitation": true },
+  { "url": "https://etiuda.dev/relay", "installed": false, "unpackaged": false, "invitation": true },
+  { "url": "https://etiuda.dev/licence/v1/", "installed": false, "unpackaged": false, "invitation": true },
+  { "url": "https://etiuda.dev:8443/relay/v1/", "installed": false, "unpackaged": false, "invitation": true },
+  { "url": "https://www.etiuda.dev/relay/v1/", "installed": false, "unpackaged": false, "invitation": true },
+  { "url": "https://staging.etiuda.dev/relay-staging/v1/", "installed": false, "unpackaged": false, "invitation": true },
+  { "url": "https://etiuda.dev.example.test/relay/v1/", "installed": false, "unpackaged": false, "invitation": true },
+  { "url": "https://127.0.0.1/relay/v1/", "installed": false, "unpackaged": false, "invitation": true },
+  { "url": "http://etiuda.dev/relay/v1/", "installed": false, "unpackaged": false, "invitation": false },
+  { "url": "https://ETIUDA.dev/relay/v1/", "installed": false, "unpackaged": false, "invitation": false },
+  { "url": "https://user@etiuda.dev/relay/v1/", "installed": false, "unpackaged": false, "invitation": false },
+  { "url": "https://etiuda.dev/relay/v1/?team=1", "installed": false, "unpackaged": false, "invitation": false },
+  { "url": "https://etiuda.dev/relay/v1//", "installed": false, "unpackaged": false, "invitation": false },
+  { "url": "wss://etiuda.dev/relay/v1/", "installed": false, "unpackaged": false, "invitation": false },
+  { "url": " https://etiuda.dev/relay/v1", "installed": false, "unpackaged": false, "invitation": false }
+ ]
+}
