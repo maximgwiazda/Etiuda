@@ -12,6 +12,11 @@
 #   - whether a directory junction can be made, which the swap's repair 10 legs need.
 # The standard account's password is made here, used here and never printed or written; the account is removed at the end.
 param([Parameter(Mandatory = $true)][string]$Out)
+# THE WALL, as the node scripts': it makes and removes a local account, so it refuses (exit 78, nothing written) where the desk
+# sentinel .etiuda-no-installers stands in the home folder, and off a hosted Windows runner. The variables can be set by hand;
+# the sentinel is what holds a desk that carries it.
+if (Test-Path (Join-Path $HOME ".etiuda-no-installers")) { Write-Output "fact refused: this computer carries the desk sentinel"; exit 78 }
+if ($env:GITHUB_ACTIONS -ne "true" -or $env:RUNNER_ENVIRONMENT -ne "github-hosted" -or -not $env:RUNNER_TEMP) { Write-Output "fact refused: not a hosted runner"; exit 78 }
 $ErrorActionPreference = "Continue"
 $lines = New-Object System.Collections.Generic.List[string]
 function Fact([string]$name, [string]$value) { $l = "fact ${name}: $value"; $lines.Add($l); Write-Output $l }

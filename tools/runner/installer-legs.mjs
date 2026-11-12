@@ -30,14 +30,18 @@
  * it uninstalls what it installed, deletes the keys, tasks and accounts it made, and stops by pid what it started.
  * Exit: the number of failed legs; 78 where nothing ran or no leg reached a verdict.
  *
- * THE WALL. It refuses (exit 78, nothing written) unless GITHUB_ACTIONS is "true", RUNNER_OS is "Windows" and RUNNER_TEMP is
- * set, exactly as the marker does, and every leg refuses before doing anything while tests/install-guard.cjs finds a shipped
- * app present or the test build is already registered. running-1618 opens the installed app, so it also meets the harness's
+ * THE WALL. It refuses (exit 78, nothing written) where the file .etiuda-no-installers stands in the home folder, which a desk
+ * that must never run an installer creates once for itself; and unless GITHUB_ACTIONS is "true", RUNNER_ENVIRONMENT is
+ * "github-hosted", RUNNER_OS is "Windows" and RUNNER_TEMP is set; and unless tests/install-guard.cjs finds neither shipped app
+ * present. Those variables can be set by hand, so they only stop a run by accident; the sentinel is what holds a desk that
+ * carries it. A computer with neither the sentinel nor a shipped app, and the variables typed in, would run it.
+ * Every leg also refuses before doing anything while the test build is already registered. running-1618 opens the installed app, so it also meets the harness's
  * window wall, and gives no verdict where the wall refuses.
  */
 import { spawn, spawnSync, execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -50,8 +54,11 @@ let OUT = "";
 const say = (l) => { process.stdout.write(l + "\n"); if (OUT) fs.appendFileSync(path.join(OUT, "legs.txt"), l + "\n"); };
 const refuse = (why) => { say("#legs refused: " + why); process.exit(NO_VERDICT); };
 
-if (process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_OS !== "Windows" || !process.env.RUNNER_TEMP)
-  refuse("not a hosted Windows runner (GITHUB_ACTIONS, RUNNER_OS, RUNNER_TEMP); installers never run on a desk");
+const DESK_SENTINEL = path.join(os.homedir(), ".etiuda-no-installers");
+if (fs.existsSync(DESK_SENTINEL)) refuse("this computer carries " + DESK_SENTINEL + ", a desk where installers never run");
+if (process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted" || process.env.RUNNER_OS !== "Windows"
+  || !process.env.RUNNER_TEMP)
+  refuse("not a hosted Windows runner (GITHUB_ACTIONS, RUNNER_ENVIRONMENT, RUNNER_OS, RUNNER_TEMP); installers never run on a desk");
 const argv = process.argv.slice(2);
 const outAt = argv.indexOf("--out");
 if (outAt < 0 || !argv[outAt + 1]) refuse("--out <dir> is wanted");

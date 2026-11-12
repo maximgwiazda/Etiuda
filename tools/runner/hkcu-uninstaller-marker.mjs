@@ -16,12 +16,15 @@
  * (UAC off), "run without it" cannot happen, so there green means "not run"; the probe (installer-probe.ps1) says which runner
  * this is. Red on engine main 82758c14 is the expected first result: installSection.nsh 53 to 55 runs it.
  *
- * THE WALL. It refuses (exit 78, nothing written) unless GITHUB_ACTIONS is "true", RUNNER_OS is "Windows" and RUNNER_TEMP is set,
- * and unless tests/install-guard.cjs finds neither shipped app present. Rule 14 forbids an installer on Max's account; this file
- * cannot run there by construction, whatever is set by hand, because the runner's variables are the hosted runner's own.
+ * THE WALL. It refuses (exit 78, nothing written) where the file .etiuda-no-installers stands in the home folder, which a desk
+ * that must never run an installer creates once for itself; and unless GITHUB_ACTIONS is "true", RUNNER_ENVIRONMENT is
+ * "github-hosted", RUNNER_OS is "Windows" and RUNNER_TEMP is set; and unless tests/install-guard.cjs finds neither shipped app
+ * present. Those variables can be set by hand, so they only stop a run by accident; the sentinel is what holds a desk that
+ * carries it. A computer with neither the sentinel nor a shipped app, and the variables typed in, would run it.
  */
 import { spawnSync, execFileSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -32,8 +35,11 @@ const NO_VERDICT = 78;
 const say = (l) => process.stdout.write(l + "\n");
 const refuse = (why) => { say("#marker refused: " + why); process.exit(NO_VERDICT); };
 
-if (process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_OS !== "Windows" || !process.env.RUNNER_TEMP)
-  refuse("not a hosted Windows runner (GITHUB_ACTIONS, RUNNER_OS, RUNNER_TEMP); rule 14 keeps installers off the desk");
+const DESK_SENTINEL = path.join(os.homedir(), ".etiuda-no-installers");
+if (fs.existsSync(DESK_SENTINEL)) refuse("this computer carries " + DESK_SENTINEL + ", a desk where installers never run");
+if (process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted" || process.env.RUNNER_OS !== "Windows"
+  || !process.env.RUNNER_TEMP)
+  refuse("not a hosted Windows runner (GITHUB_ACTIONS, RUNNER_ENVIRONMENT, RUNNER_OS, RUNNER_TEMP); installers never run on a desk");
 const outAt = process.argv.indexOf("--out");
 const OUT = outAt > 0 ? path.resolve(process.argv[outAt + 1]) : refuse("--out <dir> is wanted");
 fs.mkdirSync(OUT, { recursive: true });
