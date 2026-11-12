@@ -467,6 +467,7 @@
   Push $R7
   Push $R8
   Push $R9
+  Push $R4
   ${If} $LANGUAGE == 1045
     StrCpy $R6 "Program ${PRODUCT_NAME} jest uruchomiony; instalator zamknie go przed kontynuacją."
     StrCpy $R9 "Program ${PRODUCT_NAME} jest uruchomiony. Po jego zamknięciu wystarczy wybrać Ponów."
@@ -495,7 +496,35 @@
       Pop $R8
       ${If} $R8 == 0
         ${If} ${FileExists} "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
-          nsExec::Exec /TIMEOUT=3000 `"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --update-close`
+          StrCpy $R4 "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
+        ${Else}
+          # An install into another folder, or all-users over a per-user copy, has no program in $INSTDIR yet. The request
+          # goes through the copy registered in this mode, else this account's: the one running, so it speaks its own
+          # single-instance handshake. Last the staged copy, this build, which a first instance given --update-close
+          # leaves at once (tests/silent-update-desk.js 1152n). Studio and the uninstaller have no stage.
+          StrCpy $R4 ""
+          ReadRegStr $R8 SHELL_CONTEXT "${INSTALL_REGISTRY_KEY}" InstallLocation
+          ${If} $R8 != ""
+          ${AndIf} ${FileExists} "$R8\${APP_EXECUTABLE_FILENAME}"
+            StrCpy $R4 "$R8\${APP_EXECUTABLE_FILENAME}"
+          ${EndIf}
+          ${If} $R4 == ""
+            ReadRegStr $R8 HKCU "${INSTALL_REGISTRY_KEY}" InstallLocation
+            ${If} $R8 != ""
+            ${AndIf} ${FileExists} "$R8\${APP_EXECUTABLE_FILENAME}"
+              StrCpy $R4 "$R8\${APP_EXECUTABLE_FILENAME}"
+            ${EndIf}
+          ${EndIf}
+          !ifmacrodef etiudaStageBegin
+          ${If} $R4 == ""
+          ${AndIf} $etiudaStage != ""
+          ${AndIf} ${FileExists} "$etiudaStage\${APP_EXECUTABLE_FILENAME}"
+            StrCpy $R4 "$etiudaStage\${APP_EXECUTABLE_FILENAME}"
+          ${EndIf}
+          !endif
+        ${EndIf}
+        ${If} $R4 != ""
+          nsExec::Exec /TIMEOUT=3000 `"$R4" --update-close`
           Pop $R8
         ${EndIf}
         nsExec::Exec `"$SYSDIR\cmd.exe" /C "$SYSDIR\taskkill.exe" /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"` ; plant:installer-asks-close
@@ -520,6 +549,7 @@
       Sleep 1000
     ${EndIf}
   ${Loop}
+  Pop $R4
   Pop $R9
   Pop $R8
   Pop $R7
@@ -659,6 +689,7 @@ Var etiudaRunOld
 Var etiudaOldDir
 Var etiudaOldUserDir
 Var etiudaDropRoot
+Var etiudaDropList
 
 # A path's trailing backslashes go: "/D=C:\Apps\Etiuda\" would otherwise stage inside the folder it replaces.
 !macro etiudaTrimSlashes VAR
@@ -703,6 +734,22 @@ Var etiudaDropRoot
 
 !macro etiudaStageBegin
   Push $0
+  # An interactive Update over a folder whose name lacks the product's: electron-builder's instFilesPre (assistedInstaller.nsh)
+  # appends "\" and APP_FILENAME, which would nest the new copy inside the older one and leave that one whole. Where $INSTDIR
+  # is the registered folder plus that name, holds no program, and the registered folder does, the install goes back into the
+  # registered folder, $appExe with it (installSection.nsh set it from the nested path). A silent /D is the deployment tool's
+  # own choice, and instFilesPre never ran on it.
+  ${IfNot} ${Silent}
+    ReadRegStr $0 SHELL_CONTEXT "${INSTALL_REGISTRY_KEY}" InstallLocation
+    !insertmacro etiudaTrimSlashes $0
+    ${If} $0 != ""
+    ${AndIf} $INSTDIR == "$0\${APP_FILENAME}"
+    ${AndIfNot} ${FileExists} "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
+    ${AndIf} ${FileExists} "$0\${APP_EXECUTABLE_FILENAME}"
+      StrCpy $INSTDIR $0
+      StrCpy $appExe "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
+    ${EndIf}
+  ${EndIf}
   StrCpy $etiudaBase $INSTDIR
   !insertmacro etiudaTrimSlashes $etiudaBase
   StrCpy $etiudaStage ""
@@ -723,10 +770,23 @@ Var etiudaDropRoot
   StrCpy $etiudaStage "$etiudaBase${ETIUDA_STAGE_SUFFIX}"
   # Out of the install folder before anything beside it moves: .onInit made it this process's working folder.
   SetOutPath $PLUGINSDIR
-  # A swap cut short between its two renames left the older copy aside and nothing in its place: it goes back first.
-  ${IfNot} ${FileExists} "$etiudaBase\*.*"
-  ${AndIf} ${FileExists} "$etiudaAside\${APP_EXECUTABLE_FILENAME}"
-    Rename "$etiudaAside" "$etiudaBase"
+  # A swap cut short between its two renames left the older copy aside and no program in its place: it goes back first,
+  # tried as the swap's renames are, where the folder is gone or empty (a non-recursive RMDir, so nothing in it is lost).
+  # The copy aside is then the only one, so it is removed only once the folder itself holds the program; one that cannot go
+  # back ends the run 1618 with the copy aside as it was, and the next run tries again.
+  ${If} ${FileExists} "$etiudaAside\${APP_EXECUTABLE_FILENAME}"
+  ${AndIfNot} ${FileExists} "$etiudaBase\${APP_EXECUTABLE_FILENAME}"
+    RMDir "$etiudaBase"
+    ${IfNot} ${FileExists} "$etiudaBase"
+      !insertmacro etiudaRenameRetry "$etiudaAside" "$etiudaBase"
+    ${EndIf}
+  ${EndIf}
+  ${If} ${FileExists} "$etiudaAside\${APP_EXECUTABLE_FILENAME}"
+  ${AndIfNot} ${FileExists} "$etiudaBase\${APP_EXECUTABLE_FILENAME}"
+    DetailPrint `The installed copy is in "$etiudaAside" and could not be moved back; it stays there as it was.`
+    !insertmacro etiudaFailBox 1618
+    SetErrorLevel 1618
+    Quit
   ${EndIf}
   RMDir /r "$etiudaAside"
   RMDir /r "$etiudaStage"
@@ -836,7 +896,14 @@ Var etiudaDropRoot
     ClearErrors
     CopyFiles /SILENT "$etiudaStage\*.*" "$etiudaBase"
     ${If} ${Errors}
-      DetailPrint `Cannot copy the staged files into "$etiudaBase".`
+      # A copy cut short is taken back by the staged names, the walk the older folder's clean-up uses (etiudaDropOldFiles),
+      # so the folder keeps what it held besides: never set aside, whose removal would take a person's files with it.
+      DetailPrint `Cannot copy the staged files into "$etiudaBase"; what was copied is taken back.`
+      StrCpy $etiudaDropList $etiudaStage
+      StrCpy $etiudaDropRoot $etiudaBase
+      Push ""
+      Call etiudaDropOldFiles
+      StrCpy $etiudaDropRoot ""
       !insertmacro etiudaStageAbort
       SetErrorLevel 1618
       Quit
@@ -912,21 +979,22 @@ Var etiudaDropRoot
   Pop $1
 !macroend
 
-# THE OLDER FOLDER, ONCE THE NEW COPY IS REGISTERED: its list is the files this installer has just written (the new
-# folder, walked), and each is deleted there by the same relative name, once, never retried. Folders go only when empty,
-# so a person's own file stays, as does anything locked, and the run still ends 0. Electron's resources and locales trees
-# are the one exception, removed whole where the folder still holds the program (etiudaDropOld).
+# THE OLDER FOLDER, ONCE THE NEW COPY IS REGISTERED: its list is the files this installer has just written
+# ($etiudaDropList, the new folder, walked), and each is deleted in $etiudaDropRoot by the same relative name, once, never
+# retried. Folders go only when empty, so a person's own file stays, as does anything locked, and the run still ends 0.
+# Electron's resources and locales trees are the one exception, removed whole where the folder still holds the program
+# (etiudaDropOld). The same walk takes back a copy cut short (etiudaSwap), its list the stage.
 # Plain jumps, not LogicLib: a function compiles where it stands, and LogicLib is not yet included where this file is read.
 Function etiudaDropOldFiles
   Exch $R0
   Push $R1
   Push $R2
-  FindFirst $R1 $R2 "$etiudaBase$R0\*.*"
+  FindFirst $R1 $R2 "$etiudaDropList$R0\*.*"
   etiudaDropOldNext:
     StrCmp $R2 "" etiudaDropOldDone
     StrCmp $R2 "." etiudaDropOldSkip
     StrCmp $R2 ".." etiudaDropOldSkip
-    IfFileExists "$etiudaBase$R0\$R2\*.*" 0 etiudaDropOldFile
+    IfFileExists "$etiudaDropList$R0\$R2\*.*" 0 etiudaDropOldFile
       Push "$R0\$R2"
       Call etiudaDropOldFiles
       RMDir "$etiudaDropRoot$R0\$R2"
@@ -946,6 +1014,7 @@ FunctionEnd
 !macro etiudaDropOld DIR
   ${If} ${DIR} != ""
     Push $0
+    StrCpy $etiudaDropList $etiudaBase
     StrCpy $etiudaDropRoot ${DIR}
     # A file the older version shipped and this one does not would keep resources and locales, and the folder, for ever: the
     # two trees go whole where the folder still holds the program, read before the walk deletes it. The folder itself goes

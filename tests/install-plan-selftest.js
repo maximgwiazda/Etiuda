@@ -756,11 +756,12 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
   const patchTool = require(path.join(ROOT, "tools", "patch-nsis.cjs"));
   const lab = fs.mkdtempSync(path.join(osx.tmpdir(), "etiuda-nsis-swap-"));
   const to = path.dirname(patchTool.getPaths(lab).multiUserUi);
-  let S = "", X = "", I = "", T = "", status = {};
+  let S = "", X = "", I = "", T = "", A = "", status = {};
   try {
     fs.cpSync(path.dirname(patchTool.getPaths(ROOT).multiUserUi), to, { recursive: true });
     status = patchTool.applyNsisPatches(lab);
     S = fs.readFileSync(path.join(to, "installSection.nsh"), "utf8").replace(/\r\n/g, "\n");
+    A = fs.readFileSync(path.join(to, "assistedInstaller.nsh"), "utf8").replace(/\r\n/g, "\n");
     X = fs.readFileSync(path.join(to, "include", "extractAppPackage.nsh"), "utf8").replace(/\r\n/g, "\n");
     I = fs.readFileSync(path.join(to, "include", "installer.nsh"), "utf8").replace(/\r\n/g, "\n");
     T = fs.readFileSync(path.join(to, "installer.nsi"), "utf8").replace(/\r\n/g, "\n");
@@ -832,9 +833,10 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const b = code(macro(nsh, "etiudaStageBegin"));
     const touched = (b.match(/\b(RMDir|Delete|Rename|CopyFiles)\b[^\n]*/g) || []).sort();
     return gone.length === 3 && gone[0] === "RMDir /r \"$etiudaStage\"" && gone.slice(1).every(l => l.indexOf("$LOCALAPPDATA\\") > -1)
-      && JSON.stringify(touched) === JSON.stringify(["RMDir /r \"$etiudaAside\"", "RMDir /r \"$etiudaStage\"", "Rename \"$etiudaAside\" \"$etiudaBase\""])
-      && /\$\{IfNot\} \$\{FileExists\} "\$etiudaBase\\\*\.\*"\n\s*\$\{AndIf\} \$\{FileExists\} "\$etiudaAside\\\$\{APP_EXECUTABLE_FILENAME\}"\n\s*Rename "\$etiudaAside" "\$etiudaBase"/.test(b);
+      && JSON.stringify(touched) === JSON.stringify(["RMDir \"$etiudaBase\"", "RMDir /r \"$etiudaAside\"", "RMDir /r \"$etiudaStage\""])
+      && (b.match(/!insertmacro etiudaRenameRetry [^\n]*/g) || []).join() === "!insertmacro etiudaRenameRetry \"$etiudaAside\" \"$etiudaBase\"";
   };
+  /* (The older copy's move back, and when the copy aside may go, are replayed in 14m.) */
   ok(onlyStage(NSH), "14c taking the stage back removes the stage and the updater's setup copy and nothing else, and the stage's start"
     + " clears only what an earlier run left beside the folder, after moving an older copy back where a swap was cut short");
   ok(!onlyStage(NSH.replace("    SetOutPath $PLUGINSDIR\n    RMDir /r \"$etiudaStage\"", "    SetOutPath $PLUGINSDIR\n    RMDir /r \"$INSTDIR\"")),
@@ -949,17 +951,18 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
      in the report covers those. */
   /* The replay runs etiudaDropOld itself, with DIR the older folder "O", and the function its Call reaches; ${If}, ${Else} and
      ${EndIf} are followed as written. */
-  const replayDrop = (nsh, fsys, locked) => {
+  /* BLOCK, where given, is read in place of etiudaDropOld's own lines (14p replays etiudaSwap's take-back with it); "S" is the stage. */
+  const replayDrop = (nsh, fsys, locked, block) => {
     const body = (/\nFunction etiudaDropOldFiles\n([\s\S]*?)\nFunctionEnd/.exec(nsh) || [])[1];
-    const mbody = macro(nsh, "etiudaDropOld");
+    const mbody = block === undefined ? macro(nsh, "etiudaDropOld") : block;
     if (!body || !mbody) return null;
     const lines = code(body).split("\n").map(l => l.trim()).filter(Boolean);
     const mlines = code(mbody).split("\n").map(l => l.trim()).filter(Boolean);
     const labels = {};
     lines.forEach((l, i) => { if (/^\w+:$/.test(l)) labels[l.slice(0, -1)] = i; });
-    const V = { $etiudaBase: "N", $etiudaDropRoot: "", $R0: "", $R1: "", $R2: "", $0: "kept" }, stack = [], finds = [];
+    const V = { $etiudaBase: "N", $etiudaStage: "S", $etiudaDropRoot: "", $etiudaDropList: "", $R0: "", $R1: "", $R2: "", $0: "kept" }, stack = [], finds = [];
     const val = tok => tok.replace(/^"|"$/g, "").replace(/\$\{DIR\}/g, "O").replace(/\$\{APP_EXECUTABLE_FILENAME\}/g, "Etiuda.exe")
-      .replace(/\$(etiudaBase|etiudaDropRoot|R[0-9]|[0-9])/g, (m) => V[m]);
+      .replace(/\$(etiudaBase|etiudaStage|etiudaDropRoot|etiudaDropList|R[0-9]|[0-9])/g, (m) => V[m]);
     const isDir = p => fsys.dirs.has(p), kids = p => [...fsys.dirs, ...fsys.files].filter(q => q.startsWith(p + "\\") && q.slice(p.length + 1).indexOf("\\") < 0).map(q => q.slice(p.length + 1)).sort();
     const toks = l => (l.match(/"[^"]*"|\S+/g) || []);
     const rmdir = t => {
@@ -1009,7 +1012,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
       else if (op === "StrCpy" && t.length === 3) V[t[1]] = val(t[2]);
       else if (op === "Call" && t[1] === "etiudaDropOldFiles") run();
       else if (op === "RMDir") rmdir(t);
-      else if (op === "ClearErrors") { /* no flag held */ }
+      else if (op === "ClearErrors" || op === "DetailPrint") { /* no flag held, nothing shown */ }
       else throw new Error("the replay does not know " + l);
     }
     if (stack.length || V.$0 !== "kept") throw new Error("the stack or $0 was not left as found");
@@ -1045,8 +1048,8 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
   ok(dropsOwnOnly(NSH), "14i the older folder loses only the files the installer has just written by the same names, outside the two trees"
     + " that go whole (14l): a person's file and a file the new version no longer has stay, a locked one stays without a retry or a"
     + " failure, a folder goes only once empty, the new folder is never touched, and a folder holding nothing else goes whole");
-  ok(!dropsOwnOnly(NSH.replace("FindFirst $R1 $R2 \"$etiudaBase$R0\\*.*\"", "FindFirst $R1 $R2 \"$etiudaDropRoot$R0\\*.*\"")
-    .replace("IfFileExists \"$etiudaBase$R0\\$R2\\*.*\"", "IfFileExists \"$etiudaDropRoot$R0\\$R2\\*.*\"")),
+  ok(!dropsOwnOnly(NSH.replace("FindFirst $R1 $R2 \"$etiudaDropList$R0\\*.*\"", "FindFirst $R1 $R2 \"$etiudaDropRoot$R0\\*.*\"")
+    .replace("IfFileExists \"$etiudaDropList$R0\\$R2\\*.*\"", "IfFileExists \"$etiudaDropRoot$R0\\$R2\\*.*\"")),
     "14i control: the older folder's own listing taken as the list, so the person's file goes, reads red");
   ok(!dropsOwnOnly(NSH.replace("      RMDir \"$etiudaDropRoot$R0\\$R2\"", "      RMDir /r \"$etiudaDropRoot$R0\\$R2\"")),
     "14i control: a subfolder removed whole, with what the person put in it, reads red");
@@ -1106,7 +1109,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     + " nothing, and never renames another account's folder into place");
   ok(!refusesSurvivor(NSH.replace(/(\n  RMDir \/r "\$etiudaStage"\n)(?:  #[^\n]*\n)*  \$\{If\} \$\{FileExists\} "\$etiudaStage\\\*\.\*"\n[\s\S]*?\n  \$\{EndIf\}\n/, "$1")),
     "14k control: the surviving folder reused, as at 5bff2b4d, reads red");
-  ok(!refusesSurvivor(NSH.replace("    !insertmacro etiudaFailBox 1618\n    SetErrorLevel 1618\n    Quit\n", "    !insertmacro etiudaFailBox 1618\n")),
+  ok(!refusesSurvivor(NSH.replace(/(is still there after its removal[^\n]*\n    !insertmacro etiudaFailBox 1618\n)    SetErrorLevel 1618\n    Quit\n/, "$1")),
     "14k control: the refusal noted and the run going on into that folder reads red");
 
   /* 14l. The older folder's resources and locales trees go whole where it held the program (Argon's review 5, 9): a file the older
@@ -1136,6 +1139,236 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     "14l control: the trees removed from a folder that no longer holds the program reads red");
   ok(!wholeTrees(NSH.replace("    RMDir \"$etiudaDropRoot\"\n", "    RMDir /r \"$etiudaDropRoot\"\n")),
     "14l control: the older folder removed whole, a person's file with it, reads red");
+
+  /* A small LogicLib reader for 14m to 14o (Argon's review of 5bff2b4d, repairs 3, 4 and 6): the block's own lines followed as
+     written, ${If}, ${IfNot}, ${AndIf}, ${AndIfNot}, ${OrIf}, ${Else}, ${EndIf} and !ifmacrodef over the macros named defined, over a
+     folder tree and a registry in memory. A variable the world does not declare stops it, as makensis would (Studio declares no
+     stage), and so does an instruction it does not know, so a block that grows one reads red until the reader learns it. Like the
+     walk's replay it cannot show NSIS's string handling, Windows' locks or attributes; the spare-machine check covers those. */
+  const runLL = (text, w) => {
+    const fsys = { dirs: new Set(w.dirs || []), files: new Set(w.files || []) };
+    const V = Object.assign({}, w.V), locks = Object.assign({}, w.locks || {}), out = { exec: [], level: null, quit: false, V, fsys };
+    const lines = code(text).split("\n").map(l => l.trim()).filter(Boolean);
+    const val = s => String(s).replace(/^"([\s\S]*)"$|^`([\s\S]*)`$/, (m, a, b) => (a !== undefined ? a : b))
+      .replace(/\$\{APP_EXECUTABLE_FILENAME\}/g, "Etiuda.exe").replace(/\$\{APP_FILENAME\}/g, "Etiuda").replace(/\$\{INSTALL_REGISTRY_KEY\}/g, "KEY")
+      .replace(/\$(INSTDIR|appExe|etiuda[A-Za-z]+|R[0-9]|[0-9])/g, m => { if (!(m in V)) throw new Error("undeclared " + m); return V[m]; });
+    const norm = p => p.replace(/\\{2,}/g, "\\").replace(/\\+$/, "");
+    const has = p => fsys.files.has(norm(p)) || fsys.dirs.has(norm(p));
+    const exists = p => (/\\\*\.\*$/.test(p) ? fsys.dirs.has(norm(p.replace(/\\\*\.\*$/, ""))) : has(p));
+    const under = (q, p) => q === p || q.startsWith(p + "\\");
+    const rename = (a, b) => {
+      a = norm(a); b = norm(b);
+      if (locks[a] > 0) { locks[a]--; return false; }
+      if (!has(a) || has(b)) return false;
+      for (const set of [fsys.files, fsys.dirs]) [...set].filter(q => under(q, a)).forEach(q => { set.delete(q); set.add(b + q.slice(a.length)); });
+      return true;
+    };
+    const test = c => {
+      if (c[0] === "${FileExists}") return exists(val(c[1]));
+      if (c[0] === "${Silent}") return !!w.silent;
+      if (c[1] === "==" || c[1] === "!=") return (val(c[0]).toLowerCase() === val(c[2]).toLowerCase()) === (c[1] === "==");
+      throw new Error("the reader does not know the test " + c.join(" "));
+    };
+    const frames = [], stack = [];
+    for (const l of lines) {
+      const t = l.match(/"[^"]*"|`[^`]*`|\S+/g) || [], op = t[0], on = frames.every(f => f.v);
+      if (op === "${If}" || op === "${IfNot}") { frames.push({ v: on && (test(t.slice(1)) === (op === "${If}")), on }); continue; }
+      if (op === "${AndIf}" || op === "${AndIfNot}") { const f = frames[frames.length - 1]; f.v = f.v && f.on && (test(t.slice(1)) === (op === "${AndIf}")); continue; }
+      if (op === "${OrIf}") { const f = frames[frames.length - 1]; f.v = f.on && (f.v || test(t.slice(1))); continue; }
+      if (op === "${Else}") { const f = frames[frames.length - 1]; f.v = f.on && !f.v; continue; }
+      if (op === "${EndIf}" || op === "!endif") { frames.pop(); continue; }
+      if (op === "!ifmacrodef") { frames.push({ v: (w.macros || []).includes(t[1]), on }); continue; }
+      if (!on) continue;
+      if (op === "Push") stack.push(val(t[1]));
+      else if (op === "Pop") V[t[1]] = stack.pop();
+      else if (op === "StrCpy" && t.length === 3) V[t[1]] = val(t[2]);
+      else if (op === "ReadRegStr" && val(t[3]) === "KEY" && t[4] === "InstallLocation") V[t[1]] = (w.reg || {})[t[2]] || "";
+      else if (op === "!insertmacro" && t[1] === "etiudaTrimSlashes") V[t[2]] = V[t[2]].replace(/[\\/]+$/, "");
+      else if (op === "!insertmacro" && t[1] === "etiudaRenameRetry") {
+        let moved = false;
+        for (let i = 0; i < 30 && !moved; i++) moved = rename(val(t[2]), val(t[3]));
+        V.$0 = moved ? "moved" : "stuck";
+      }
+      else if (op === "Rename") rename(val(t[1]), val(t[2]));
+      else if (op === "RMDir" && t[1] === "/r") { const p = norm(val(t[2])); for (const set of [fsys.files, fsys.dirs]) [...set].filter(q => under(q, p)).forEach(q => set.delete(q)); }
+      else if (op === "RMDir") { const p = norm(val(t[1])); if (fsys.dirs.has(p) && ![...fsys.files, ...fsys.dirs].some(q => q.startsWith(p + "\\"))) fsys.dirs.delete(p); }
+      else if (op === "nsExec::Exec") { out.exec.push(val(t[t.length - 1])); stack.push("0"); }
+      else if (op === "SetErrorLevel") out.level = t[1];
+      else if (op === "Quit") { out.quit = true; return out; }
+      else if (op === "DetailPrint" || (op === "!insertmacro" && t[1] === "etiudaFailBox")) { /* nothing shown here */ }
+      else throw new Error("the reader does not know " + l);
+    }
+    return out;
+  };
+  const withApp = d => ({ dirs: [d, d + "\\resources"], files: [d + "\\Etiuda.exe", d + "\\resources\\app.asar"] });
+  const join = (...ws) => ({ dirs: [].concat(...ws.map(x => x.dirs || [])), files: [].concat(...ws.map(x => x.files || [])) });
+  const holds = (r, d) => r.fsys.files.has(d + "\\Etiuda.exe") && r.fsys.files.has(d + "\\resources\\app.asar");
+
+  /* 14m. An older copy left aside goes back by the program's presence, with the swap's retry, and is never removed while it is
+     the only copy (Argon's review of 5bff2b4d, 4; Claude alpha's repair 4): at 9cb2a8ff the move back ran only where the folder
+     was wholly absent, once, and the copy aside was then removed whatever had happened. Removed only once the folder holds the
+     program: a run cut short after its swap, before the copy aside went, leaves both, and that copy aside is the older one. */
+  const asideSeg = nsh => {
+    const b = code(macro(nsh, "etiudaStageBegin")), from = at(b, "SetOutPath $PLUGINSDIR"), to2 = at(b, "RMDir /r \"$etiudaStage\"");
+    return from > -1 && to2 > from ? b.slice(from + "SetOutPath $PLUGINSDIR".length, to2) : "";
+  };
+  const restoresAside = nsh => {
+    const seg = asideSeg(nsh);
+    if (!seg) return false;
+    const V = { $etiudaBase: "B", $etiudaAside: "A", $etiudaStage: "S", $0: "x" };
+    let r;
+    try {
+      r = {
+        cutShort: runLL(seg, Object.assign({ V }, withApp("A"))),
+        emptyLeft: runLL(seg, Object.assign({ V }, join(withApp("A"), { dirs: ["B"] }))),
+        strayLeft: runLL(seg, Object.assign({ V }, join(withApp("A"), { dirs: ["B"], files: ["B\\stray.log"] }))),
+        stuck: runLL(seg, Object.assign({ V, locks: { A: 1000 } }, withApp("A"))),
+        briefLock: runLL(seg, Object.assign({ V, locks: { A: 3 } }, withApp("A"))),
+        both: runLL(seg, Object.assign({ V }, join(withApp("A"), withApp("B")))),
+        none: runLL(seg, Object.assign({ V }, withApp("B"))),
+      };
+    } catch (e) { return false; }
+    const goesOn = x => !x.quit, refused = x => x.quit && x.level === "1618";
+    return goesOn(r.cutShort) && holds(r.cutShort, "B") && !r.cutShort.fsys.dirs.has("A")
+      && goesOn(r.emptyLeft) && holds(r.emptyLeft, "B")
+      && refused(r.strayLeft) && holds(r.strayLeft, "A") && r.strayLeft.fsys.files.has("B\\stray.log")
+      && refused(r.stuck) && holds(r.stuck, "A")
+      && goesOn(r.briefLock) && holds(r.briefLock, "B")
+      && goesOn(r.both) && holds(r.both, "B") && !r.both.fsys.dirs.has("A")
+      && goesOn(r.none) && holds(r.none, "B");
+  };
+  ok(restoresAside(NSH), "14m an older copy aside with no program in the folder goes back with the swap's retry, into the folder only where"
+    + " it is gone or empty; one that cannot go back (a file left in the folder, a lasting lock) ends the run 1618 with the copy aside as it"
+    + " was; it is removed only where the folder holds the program");
+  const asideAt9cb = "\n  ${IfNot} ${FileExists} \"$etiudaBase\\*.*\"\n  ${AndIf} ${FileExists} \"$etiudaAside\\${APP_EXECUTABLE_FILENAME}\"\n"
+    + "    Rename \"$etiudaAside\" \"$etiudaBase\"\n  ${EndIf}";
+  ok(!restoresAside(NSH.replace(/\n  \$\{If\} \$\{FileExists\} "\$etiudaAside\\\$\{APP_EXECUTABLE_FILENAME\}"\n[\s\S]*?(?=\n  RMDir \/r "\$etiudaAside")/, () => asideAt9cb)),
+    "14m control: 9cb2a8ff's lines put back, the move back only into a folder wholly absent and the copy aside then removed regardless, reads red");
+  ok(!restoresAside(NSH.replace("      !insertmacro etiudaRenameRetry \"$etiudaAside\" \"$etiudaBase\"\n", "      Rename \"$etiudaAside\" \"$etiudaBase\"\n")),
+    "14m control: one plain Rename in place of the retry, a brief lock then ending the run, reads red");
+  ok(!restoresAside(NSH.replace(/\n  \$\{If\} \$\{FileExists\} "\$etiudaAside\\\$\{APP_EXECUTABLE_FILENAME\}"\n  \$\{AndIfNot\} \$\{FileExists\} "\$etiudaBase\\\$\{APP_EXECUTABLE_FILENAME\}"\n    DetailPrint[\s\S]*?\n    Quit\n  \$\{EndIf\}/, "")),
+    "14m control: the refusal taken out, the only copy then removed with the copy aside, reads red");
+
+  /* 14n. The running desk is asked to close through a copy of the program the run can reach (Argon's review 3; repair 3): at
+     9cb2a8ff only "$INSTDIR\<app>.exe", which an install into another folder, or all-users over a per-user copy, does not have
+     yet, so --update-close was never sent, taskkill without /F only hid the desk to the tray, and the run ended 1618. Then the
+     copy registered in this mode, then this account's, then the stage (this build); Studio and the uninstaller have no stage. */
+  const closeSeg = nsh => {
+    const m = code(macro(nsh, "customCheckAppRunning"));
+    const own = at(m, "/FI \"USERNAME eq %USERNAME%\" /FI \"IMAGENAME eq");
+    const from = own < 0 ? -1 : m.indexOf("${If} ${FileExists} \"$INSTDIR\\${APP_EXECUTABLE_FILENAME}\"", own);
+    const to2 = m.indexOf("nsExec::Exec `\"$SYSDIR\\cmd.exe\" /C \"$SYSDIR\\taskkill.exe\"", from);
+    return from > -1 && to2 > from ? m.slice(from, to2) : "";
+  };
+  const closesThrough = nsh => {
+    const seg = closeSeg(nsh);
+    if (!seg || (code(macro(nsh, "customCheckAppRunning")).match(/--update-close/g) || []).length !== 1) return false;
+    const desk = ["etiudaStageBegin"], V = { $INSTDIR: "N", $R4: "", $R8: "", $etiudaStage: "N.setup-staging", $0: "" };
+    const studioV = { $INSTDIR: "N", $R4: "", $R8: "", $0: "" };
+    /* The program asked, its doubled backslashes (an InstallLocation written with a trailing one) read as Windows reads them. */
+    const asked = r => ((r.exec.length === 1 && /^"([^"]*)" --update-close$/.exec(r.exec[0]) || [])[1] || (r.exec.length ? "?" : "")).replace(/\\{2,}/g, "\\");
+    let r;
+    try {
+      const stage = withApp("N.setup-staging");
+      r = {
+        inPlace: asked(runLL(seg, Object.assign({ V, macros: desk, reg: { SHELL_CONTEXT: "N" } }, join(withApp("N"), stage)))),
+        moved: asked(runLL(seg, Object.assign({ V, macros: desk, reg: { SHELL_CONTEXT: "O\\" } }, join(withApp("O"), stage)))),
+        toAllUsers: asked(runLL(seg, Object.assign({ V, macros: desk, reg: { HKCU: "U" } }, join(withApp("U"), stage)))),
+        stale: asked(runLL(seg, Object.assign({ V, macros: desk, reg: { SHELL_CONTEXT: "Gone", HKCU: "Gone" } }, stage))),
+        studio: asked(runLL(seg, Object.assign({ V: studioV, macros: [], reg: { SHELL_CONTEXT: "Gone" } }, withApp("O")))),
+        unregistered: asked(runLL(seg, Object.assign({ V: studioV, macros: [], reg: {} }, { files: ["\\Etiuda.exe"] }))),
+      };
+    } catch (e) { return false; }
+    return r.inPlace === "N\\Etiuda.exe" && r.moved === "O\\Etiuda.exe" && r.toAllUsers === "U\\Etiuda.exe"
+      && r.stale === "N.setup-staging\\Etiuda.exe" && r.studio === "" && r.unregistered === "";
+  };
+  ok(closesThrough(NSH), "14n --update-close goes through $INSTDIR's program where it has one, else the copy registered in this mode, else"
+    + " this account's (all-users over a per-user copy), else the staged one; never through an empty InstallLocation, and the stage is"
+    + " read only where the stage's macros are compiled (not in Studio's cut or the uninstaller)");
+  ok(!closesThrough(NSH.replace(/        \$\{If\} \$\{FileExists\} "\$INSTDIR\\\$\{APP_EXECUTABLE_FILENAME\}"\n          StrCpy \$R4[\s\S]*?--update-close`\n          Pop \$R8\n        \$\{EndIf\}\n/,
+    () => "        ${If} ${FileExists} \"$INSTDIR\\${APP_EXECUTABLE_FILENAME}\"\n          nsExec::Exec /TIMEOUT=3000 `\"$INSTDIR\\${APP_EXECUTABLE_FILENAME}\" --update-close`\n          Pop $R8\n        ${EndIf}\n")),
+    "14n control: 9cb2a8ff's lines put back, $INSTDIR's program or none, reads red");
+  ok(!closesThrough(NSH.replace(/\n {10}!ifmacrodef etiudaStageBegin\n([\s\S]*?)\n {10}!endif\n/, "\n$1\n")),
+    "14n control: the stage read where no stage is compiled (Studio's cut), which makensis refuses, reads red");
+  ok(!closesThrough(NSH.replace("          ${If} $R8 != \"\"\n          ${AndIf} ${FileExists} \"$R8\\${APP_EXECUTABLE_FILENAME}\"", "          ${If} ${FileExists} \"$R8\\${APP_EXECUTABLE_FILENAME}\"")),
+    "14n control: an empty InstallLocation taken as a folder, the program at the drive's root asked, reads red");
+
+  /* 14o. An interactive Update goes back into the registered folder that instFilesPre nested (Argon's review 6; repair 6):
+     electron-builder's instFilesPre appends "\<name>" to a folder whose path lacks it, so an Update over "/D=C:\DeskApp" staged and
+     swapped into C:\DeskApp\Etiuda, inside the older copy, which stayed whole. Where $INSTDIR is the registered folder plus the
+     name, holds no program, and the registered folder does, the install goes back there with $appExe, before the stage is named;
+     a silent run, whose /D instFilesPre never touched, keeps its folder. */
+  const nestSeg = nsh => {
+    const b = code(macro(nsh, "etiudaStageBegin")), to2 = at(b, "StrCpy $etiudaBase $INSTDIR");
+    return to2 > -1 ? b.slice(0, to2) : "";
+  };
+  const unnests = (nsh, s, a) => {
+    const seg = nestSeg(nsh);
+    const pre = (/\n\s*Function instFilesPre\n([\s\S]*?)\n\s*FunctionEnd/.exec(a) || [])[1] || "";
+    const nests = /\$\{StrContains\} \$0 "\$\{APP_FILENAME\}" \$INSTDIR\n\s*\$\{If\} \$0 == ""\n\s*StrCpy \$INSTDIR "\$INSTDIR\\\$\{APP_FILENAME\}"/.test(pre)
+      && /allowToChangeInstallationDirectory\s*:\s*true/.test(cfgText);
+    const order = at(s, "StrCpy $appExe \"$INSTDIR\\${APP_EXECUTABLE_FILENAME}\"") > -1
+      && at(s, "StrCpy $appExe \"$INSTDIR\\${APP_EXECUTABLE_FILENAME}\"") < at(s, "!insertmacro etiudaStageBegin");
+    if (!seg || !nests || !order) return false;
+    const V = { $INSTDIR: "D\\Etiuda", $appExe: "D\\Etiuda\\Etiuda.exe", $0: "x" };
+    const run = (o, fsw) => runLL(seg, Object.assign({ V }, o, fsw));
+    let r;
+    try {
+      r = {
+        nested: run({ reg: { SHELL_CONTEXT: "D\\" } }, join(withApp("D"), { dirs: ["D\\Etiuda"] })),
+        silent: run({ silent: true, reg: { SHELL_CONTEXT: "D" } }, withApp("D")),
+        realThere: run({ reg: { SHELL_CONTEXT: "D" } }, join(withApp("D"), withApp("D\\Etiuda"))),
+        noProgram: run({ reg: { SHELL_CONTEXT: "D" } }, { dirs: ["D"] }),
+        other: run({ reg: { SHELL_CONTEXT: "E" } }, withApp("E")),
+      };
+    } catch (e) { return false; }
+    const kept = x => x.V.$INSTDIR === "D\\Etiuda" && x.V.$appExe === "D\\Etiuda\\Etiuda.exe" && !x.quit;
+    return r.nested.V.$INSTDIR === "D" && r.nested.V.$appExe === "D\\Etiuda.exe" && !r.nested.quit
+      && kept(r.silent) && kept(r.realThere) && kept(r.noProgram) && kept(r.other);
+  };
+  ok(unnests(NSH, S, A), "14o an interactive Update that instFilesPre nested into <registered folder>\\Etiuda installs into the registered folder,"
+    + " $appExe with it, where that folder holds the program and the nested one does not; a silent /D, a real copy in the nested folder,"
+    + " or a registered folder without the program keeps $INSTDIR");
+  ok(!unnests(NSH.replace("      StrCpy $appExe \"$INSTDIR\\${APP_EXECUTABLE_FILENAME}\"\n", ""), S, A),
+    "14o control: $INSTDIR moved back and $appExe left on the nested path (the shortcuts' and DisplayIcon's target) reads red");
+  ok(!unnests(NSH.replace("  ${IfNot} ${Silent}\n    ReadRegStr $0 SHELL_CONTEXT", "  ${If} 1 == 1\n    ReadRegStr $0 SHELL_CONTEXT"), S, A),
+    "14o control: a silent /D, the deployment tool's own choice, moved too reads red");
+  ok(!unnests(NSH.replace("    ${AndIfNot} ${FileExists} \"$INSTDIR\\${APP_EXECUTABLE_FILENAME}\"\n", ""), S, A),
+    "14o control: a real copy in the nested folder taken over reads red");
+
+  /* 14p. A copy cut short is taken back by the staged names (Argon's review 8; repair 8): into a folder holding other files and no
+     program, etiudaSwap copies rather than renames, and at 9cb2a8ff a failed copy left the half-written app there. The walk
+     etiudaDropOld uses, its list the stage, deletes each staged name in the folder and each folder of the stage's once empty, before
+     the stage is taken back; the folder is never set aside (Argon's own remedy), since removing the aside would take a person's
+     files with it. Replayed with the walk's own interpreter (14i), the person's files planted beside a half copy. */
+  const takesBack = nsh => {
+    const m = code(macro(nsh, "etiudaSwap"));
+    const blk = /CopyFiles \/SILENT "\$etiudaStage\\\*\.\*" "\$etiudaBase"\n\s*\$\{If\} \$\{Errors\}\n([\s\S]*?)\n\s*!insertmacro etiudaStageAbort\n\s*SetErrorLevel 1618\n\s*Quit\n/.exec(m);
+    const asideOnce = (m.match(/etiudaRenameRetry "\$etiudaBase" "\$etiudaAside"/g) || []).length === 1
+      && /\$\{If\} \$\{FileExists\} "\$etiudaBase\\\$\{APP_EXECUTABLE_FILENAME\}"\n\s*!insertmacro etiudaRenameRetry "\$etiudaBase" "\$etiudaAside"/.test(m);
+    if (!blk || !asideOnce) return false;
+    const fsys = {
+      dirs: new Set(["S", "S\\resources", "S\\locales", "N", "N\\resources", "N\\locales", "N\\notes"]),
+      files: new Set(["S\\Etiuda.exe", "S\\Uninstall Etiuda.exe", "S\\resources\\app.asar", "S\\locales\\pl.pak",
+        "N\\Etiuda.exe", "N\\resources\\app.asar", "N\\locales\\pl.pak", "N\\resources\\mine.txt", "N\\deploy.log", "N\\notes\\mine.txt"]),
+    };
+    let r;
+    try { r = replayDrop(nsh, fsys, new Set(), blk[1]); } catch (e) { return false; }
+    if (!r) return false;
+    const left = [...r.files].filter(f => f.startsWith("N\\")).sort();
+    return JSON.stringify(left) === JSON.stringify(["N\\deploy.log", "N\\notes\\mine.txt", "N\\resources\\mine.txt"])
+      && r.dirs.has("N") && r.dirs.has("N\\notes") && r.dirs.has("N\\resources") && !r.dirs.has("N\\locales")
+      && [...r.files].filter(f => f.startsWith("S\\")).length === 4;
+  };
+  ok(takesBack(NSH), "14p a copy into a folder holding no program that fails is taken back by the staged names before the stage goes: the"
+    + " person's files there stay, the half-copied program goes, and such a folder is never set aside");
+  ok(!takesBack(NSH.replace(/(      DetailPrint `Cannot copy the staged files into "\$etiudaBase"[^\n]*\n)[\s\S]*?(\n      !insertmacro etiudaStageAbort\n)/, "$1$2")),
+    "14p control: the failed copy left half-written, as at 9cb2a8ff, reads red");
+  ok(!takesBack(NSH.replace("      StrCpy $etiudaDropList $etiudaStage\n", "      StrCpy $etiudaDropList $etiudaBase\n")),
+    "14p control: the folder's own listing taken as the list, the person's files deleted, reads red");
+  ok(!takesBack(NSH.replace("  ${If} ${FileExists} \"$etiudaBase\\${APP_EXECUTABLE_FILENAME}\"\n    !insertmacro etiudaRenameRetry \"$etiudaBase\" \"$etiudaAside\"",
+    "  ${If} ${FileExists} \"$etiudaBase\\*.*\"\n    !insertmacro etiudaRenameRetry \"$etiudaBase\" \"$etiudaAside\"")),
+    "14p control: any folder with files set aside (Argon's remedy), a person's files then removed with the aside, reads red");
 }
 
 console.log("\n#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);

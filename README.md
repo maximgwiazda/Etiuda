@@ -63,7 +63,7 @@ written out in full for a tool that does not expand variables. The exit code say
 | Code | Meaning | What to do |
 |---|---|---|
 | 0 | Installed, or uninstalled. A Windows older than 7, or a 32-bit Windows, is refused and can also end with 0 | Nothing, on a supported machine |
-| 1618 | Etiuda was still open after being asked to close for about 20 seconds, or open in another person's session, or its folder or one of its files stayed locked, or a folder left beside it could not be removed, or another Etiuda installer was running | Retry later |
+| 1618 | Etiuda was still open after being asked to close for about 20 seconds, or open in another person's session, or its folder or one of its files stayed locked, or a folder left beside it could not be removed or moved back, or another Etiuda installer was running | Retry later |
 | 740 | An all-users run could not get administrator rights | Run it elevated, or install per account with `/currentuser` |
 | 2 | The new files could not all be written beside the install, the folder is a drive root, the old version could not be moved back after a failed swap, or another failure the installer caught | Look at that machine |
 
