@@ -451,6 +451,14 @@
     Pop $R0
   FunctionEnd
   !endif
+
+  # The swap's walk over an older folder (etiudaDropOldFiles), in the installer only: here, after electron-builder's
+  # !addplugindir, because its System::Call compiled where this file is read breaks makensis 3.12's every later one.
+  !ifndef BUILD_UNINSTALLER
+  !ifmacrodef etiudaDropOldFilesFunction
+    !insertmacro etiudaDropOldFilesFunction
+  !endif
+  !endif
 !macroend
 
 # The cache directory, taken from electron-builder's own define rather than spelled a second time
@@ -1081,7 +1089,11 @@ Var etiudaDropList
 # NO LINK IS ENTERED: the older folder is read from HKCU or is one a non-administrator may write, and Delete through a
 # junction deletes in its target. Each folder there is entered only where its attributes say a real folder; a link goes
 # as itself, as in ${ETIUDA_REMOVE_TREE}; a root that is itself a link is left whole.
-# Plain jumps, not LogicLib: a function compiles where it stands, and LogicLib is not yet included where this file is read.
+# COMPILED FROM customHeader, NOT WHERE THIS FILE IS READ: electron-builder's !addplugindir comes after this file in its
+# script, and makensis 3.12 refuses every later System::Call ("conflicts with a plugin in another directory") once one has
+# been compiled before the bundle's own plug-in folder was added again (3.04 did not). Plain jumps, as written for a file
+# read before LogicLib.
+!macro etiudaDropOldFilesFunction
 Function etiudaDropOldFiles
   Exch $R0
   Push $R1
@@ -1127,6 +1139,7 @@ Function etiudaDropOldFiles
   Pop $R1
   Pop $R0
 FunctionEnd
+!macroend
 
 !macro etiudaDropOld DIR
   ${If} ${DIR} != ""

@@ -1967,6 +1967,33 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
   ok(!dropReachedAsPerson(NSH.replace("      !insertmacro etiudaAsUser etiudaDropOldRun\n", "      !insertmacro etiudaDropOldRun\n")),
     "16t control: the run inserted straight into the elevated instance reads red");
 
+  /* 16u. No plug-in command where this file is read (the swap's fold red under NSIS 3.12, board 996): electron-builder writes
+     its !addplugindir after the custom include, and makensis 3.12 refuses every System::Call after one was compiled before
+     that line ("Plugin command System::Call conflicts with a plugin in another directory!"; 3.04 let it pass). etiudaDropOldFiles
+     carried one at file level from repair 10; it now compiles from customHeader. Held as text over this file and the turning
+     include: every plug-in call sits inside a !macro body, inserted where electron-builder inserts the hooks. */
+  const pluginAtFileLevel = texts => {
+    const out = [];
+    for (const [name, text] of texts) {
+      let depth = 0;
+      String(text).split("\n").forEach((raw, i) => {
+        const l = raw.trim();
+        if (/^!macro\s/.test(l)) depth++;
+        else if (/^!macroend\b/.test(l)) depth--;
+        else if (depth === 0 && !/^[#;]/.test(l) && /^\S*\w+::\w+/.test(l.replace(/^\$\{\w+\}\s*/, ""))) out.push(name + ":" + (i + 1) + " " + l.slice(0, 60));
+      });
+    }
+    return out;
+  };
+  let TURN = "";
+  try { TURN = fs.readFileSync(path.join(ROOT, "shell", "installer", "turning.nsh"), "utf8").replace(/\r\n/g, "\n"); } catch (e) { TURN = ""; }
+  const pf = pluginAtFileLevel([["shell/installer.nsh", NSH], ["shell/installer/turning.nsh", TURN]]);
+  ok(pf.length === 0 && /!insertmacro etiudaDropOldFilesFunction/.test(macro(NSH, "customHeader")),
+    "16u no plug-in command is compiled where shell/installer.nsh is read, before electron-builder's !addplugindir (makensis 3.12"
+    + " refuses every later one); etiudaDropOldFiles compiles from customHeader: " + JSON.stringify(pf));
+  ok(pluginAtFileLevel([["shell/installer.nsh", NSH.replace("!macro etiudaDropOldFilesFunction\n", "!macro etiudaDropOldFilesFunction\n!macroend\n")]]).length > 0,
+    "16u control: the walk's function back at file level, as at 67c264e6, reads red");
+
 }
 
 console.log("\n#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
