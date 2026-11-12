@@ -10,7 +10,8 @@
 #   marker  an all-users install must never run, with administrator rights, the file the installing account's HKCU uninstall
 #           entry names (tools/runner/hkcu-uninstaller-marker.mjs). Red on engine main at 82758c14.
 #   legs    the four installer legs (tools/runner/installer-legs.mjs): an all-users upgrade, 1618 at a copy running in another
-#           session, a bare /S as SYSTEM, 1618 at a locked file. old_sha builds the older installer for the upgrade.
+#           session, a bare /S as SYSTEM, 1618 at a locked file, and an all-users move to another folder with a junction
+#           planted in the old one. old_sha builds the older installer for the upgrade and the move.
 #
 # Nothing secret is handed to the runner: no catalog, no name list, no token beyond contents: read, and the checkout keeps no
 # credential. The repository is public, so this log and the artifact are public: every script prints facts about the runner and
@@ -33,7 +34,7 @@ on:
         type: string
         default: probe
       legs:
-        description: For the legs stage, leg names separated by spaces; empty runs all four
+        description: For the legs stage, leg names separated by spaces (all-upgrade running-1618 system-bare locked-1618 all-move); empty runs all five
         required: false
         type: string
         default: ""

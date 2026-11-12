@@ -49,7 +49,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const NO_VERDICT = 78;
-const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618"];
+const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618", "all-move"];
 let OUT = "";
 const say = (l) => { process.stdout.write(l + "\n"); if (OUT) fs.appendFileSync(path.join(OUT, "legs.txt"), l + "\n"); };
 const refuse = (why) => { say("#legs refused: " + why); process.exit(NO_VERDICT); };
@@ -298,8 +298,9 @@ async function allUpgrade(rec) {
   const old = olderSetup(rec);
   const dir = await installMachine(rec, old, "n");
   const asarAt = path.join(dir, "resources", "app.asar"), asarOld = shaOr(asarAt);
+  /* The program may be the same bytes in N and N+1 (a change to the installer alone): the subject is the newer installer run over
+     the older install, and olderSetup has already required the two setups to differ. */
   const asarTree = newBuild()["resources\\app.asar"] || "";
-  if (asarTree && asarTree === asarOld) throw new NoVerdict("version N's program is this tree's (app.asar sha256 " + asarOld.slice(0, 12) + "), so no upgrade happens");
   const marker = path.join(dir, "planted-before-the-upgrade.txt");
   fs.writeFileSync(marker, "planted by " + WHO + "\n");
 
@@ -327,6 +328,60 @@ async function allUpgrade(rec) {
   rec.end(ok, ok ? "N with /allusers, then N+1 with /S: the all-users entry, both shortcuts and the " + T.scheme + ": link intact, the planted file gone"
     : "after N+1 with /S something is not intact: exit " + facts.exit + ", entry " + yes(facts.entry) + ", uninstaller " + yes(facts.uninstaller)
       + ", shortcuts " + facts.links.map(yes).join("/") + ", link " + yes(facts.link) + ", planted file gone " + yes(facts.markerGone) + ", a per-user entry " + yes(facts.perUser));
+}
+
+/* ---- (e) all-move: an all-users install moved to another folder by the newer setup, with a link planted in the old one -----
+   N is installed for all users into folder A, a person's own file is put in A, and a directory junction is planted at
+   A\resources\planted-link pointing at a folder outside both, holding a file. N+1 then installs silent for all users into B.
+   Green where: the run exits 0; the all-users entry names B and B holds the program; both shortcuts point at B; A no longer
+   holds the program, nor its resources and locales trees; the person's file in A stays; and the junction's target, and the file
+   in it, are untouched (the old folder's clean-up never enters a link). */
+
+async function allMove(rec) {
+  const old = olderSetup(rec);
+  const A = path.join(LAB, "move-a", PRODUCT), B = path.join(LAB, "move-b", PRODUCT);
+  rec.after("uninstall", uninstallMachine);
+  const argsA = P.installArgs({ mode: "machine", dir: A });
+  const badA = P.argsFault(argsA, "machine");
+  if (badA) throw new Error("refusing " + argsA.join(" ") + ": " + badA);
+  const r0 = await runExe(old, argsA, 600000);
+  rec.f("n-exit", r0.timedOut ? "timeout" : r0.code);
+  if (r0.code !== 0 || !fs.existsSync(path.join(A, PRODUCT + ".exe")) || !P.samePath(machineDir(), A))
+    throw new NoVerdict("N did not install for all users into " + A + " (exit " + r0.code + ", InstallLocation " + JSON.stringify(machineDir() || null) + ")");
+  const own = path.join(A, "a-persons-own-file.txt");
+  fs.writeFileSync(own, "planted by " + WHO + "\n");
+  const victimDir = path.join(LAB, "move-victim"), victim = path.join(victimDir, "must-stay.txt");
+  fs.mkdirSync(victimDir, { recursive: true });
+  fs.writeFileSync(victim, "must stay\n");
+  const link = path.join(A, "resources", "planted-link");
+  const mk = spawnSync("cmd.exe", ["/c", "mklink", "/J", link, victimDir], { encoding: "utf8", windowsHide: true, timeout: 30000 });
+  rec.after("junction", () => { if (fs.existsSync(link)) spawnSync("cmd.exe", ["/c", "rmdir", link], { windowsHide: true, timeout: 30000 }); return "checked"; });
+  if (mk.status !== 0 || !fs.existsSync(path.join(link, "must-stay.txt")))
+    throw new NoVerdict("the junction could not be planted (" + oneLine(mk.stderr || mk.stdout) + ")");
+
+  const argsB = P.installArgs({ mode: "machine", dir: B });
+  const badB = P.argsFault(argsB, "machine");
+  if (badB) throw new Error("refusing " + argsB.join(" ") + ": " + badB);
+  const r = await runExe(NEWER, argsB, 600000);
+  const facts = {
+    exit: r.timedOut ? "timeout" : r.code,
+    location: P.samePath(machineDir(), B),
+    program: fs.existsSync(path.join(B, PRODUCT + ".exe")),
+    links: commonLinks().map((x) => fs.existsSync(x) && P.samePath(ps("lnk", ["-File", x]), path.join(B, PRODUCT + ".exe"))),
+    oldProgram: fs.existsSync(path.join(A, PRODUCT + ".exe")),
+    oldTrees: fs.existsSync(path.join(A, "resources")) || fs.existsSync(path.join(A, "locales")),
+    own: fs.existsSync(own),
+    victim: fs.existsSync(victim) && fs.readFileSync(victim, "utf8") === "must stay\n",
+  };
+  rec.f("n1-exit", facts.exit); rec.f("entry-b", yes(facts.location)); rec.f("program-b", yes(facts.program));
+  rec.f("links-b", facts.links.map(yes).join("/")); rec.f("program-a", yes(facts.oldProgram)); rec.f("trees-a", yes(facts.oldTrees));
+  rec.f("own-file-a", yes(facts.own)); rec.f("junction-target-intact", yes(facts.victim));
+  const ok = facts.exit === 0 && facts.location && facts.program && facts.links.every(Boolean) && !facts.oldProgram && !facts.oldTrees
+    && facts.own && facts.victim;
+  rec.end(ok, ok ? "N in A, then N+1 into B: entry, program and shortcuts at B; A emptied of the program and its trees, the person's file kept, the planted link's target untouched"
+    : "after the move: exit " + facts.exit + ", entry at B " + yes(facts.location) + ", program at B " + yes(facts.program) + ", shortcuts " + facts.links.map(yes).join("/")
+      + ", program left in A " + yes(facts.oldProgram) + ", trees left in A " + yes(facts.oldTrees) + ", own file kept " + yes(facts.own)
+      + ", link target intact " + yes(facts.victim));
 }
 
 /* ---- (b) running-1618 ------------------------------------------------------------------------------------------ */
@@ -493,7 +548,7 @@ function record(name) {
   rec.end = (ok, why) => { rec.verdict = ok ? "ok" : "fail"; rec.why = why; };
   return rec;
 }
-const LEGS = { "all-upgrade": allUpgrade, "running-1618": running1618, "system-bare": systemBare, "locked-1618": locked1618 };
+const LEGS = { "all-upgrade": allUpgrade, "running-1618": running1618, "system-bare": systemBare, "locked-1618": locked1618, "all-move": allMove };
 
 /* The newer setup, built once from this tree under the test identity, as the marker builds it. */
 const early = legPreflight();
