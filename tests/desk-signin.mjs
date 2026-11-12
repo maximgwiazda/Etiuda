@@ -33,9 +33,9 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 25;
+const PLANTS = 27;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 40 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 42 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -438,6 +438,52 @@ CASES.renewWire = async (s, swap) => {
     && ok.flushes >= 2 && saidGone === "" && gone.asked === 0 && gone.posted === 0;
 };
 
+/* ---- the seat's write, evaluated with stand-ins: the folder, the team, the files ---------------------------------------- */
+const FLUSH_DECLS = ["function signinTeamHere(", "function signinFlush("];
+const FLUSH_STANDS = ["signinState", "branchIdentity", "pinnedLead", "teamJoin", "sharedFolderForWrite", "folderAnswers", "fs", "path", "writeReplacing",
+  "seatFileText", "SEAT_NAME", "console"];
+/* `st`: {held, lead, join, root, files (a Set of paths), writes}; the desk's flush as the wiring has it, its mark kept between calls. */
+function loadFlush(s, st, swap) {
+  let text = FLUSH_DECLS.map(d => { try { return decl(MAIN, d); } catch { return ""; } }).filter(Boolean).join("\n");
+  if (swap) {
+    if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in the flush once: " + swap[0]);
+    text = text.replace(swap[0], swap[1]);
+  }
+  const vals = { signinState: () => ({ held: st.held }), branchIdentity: () => ({ id: DESK_ID, key: DESK_KEY }), pinnedLead: () => st.lead,
+    sharedFolderForWrite: () => st.root, folderAnswers: () => true, path,
+    fs: { existsSync: p => st.files.has(p), mkdirSync: () => {} }, writeReplacing: (p, t) => { st.files.add(p); st.writes.push({ p, t }); },
+    seatFileText: s.seatFileText, SEAT_NAME: s.SEAT_NAME, console: { error() {} } };
+  return new Function(...FLUSH_STANDS, "let signinWrote = \"\";\n" + text + "\nreturn signinFlush;")(...FLUSH_STANDS.map(n => n === "teamJoin" ? st.join : vals[n]));
+}
+/* A desk signed in before it asked to join a folder team writes its seat beside the request at once, as it does where its lead is
+   pinned; a relay invitation's join and no team write nothing; the same certificate is written again where its file went or the
+   folder changed, and not otherwise. */
+CASES.flushJoin = async (s, swap) => {
+  const held = heldOf(), seatAt = root => path.join(root, "desks", DESK_ID, s.SEAT_NAME);
+  const run = (o, steps) => { const st = Object.assign({ held, lead: null, join: null, root: "/share/a", files: new Set(), writes: [] }, o); const f = loadFlush(s, st, swap);
+    return steps(st, f); };
+  const asking = run({ join: { team: TEAM } }, (st, f) => f() === true && st.writes.length === 1 && st.writes[0].p === seatAt("/share/a")
+    && JSON.parse(st.writes[0].t).certificate.sig.value === held.cert.sig.value);
+  const relay = run({ join: { team: TEAM, invite: { relay: { rt: "r" } } } }, (st, f) => f() === false && st.writes.length === 0);
+  const none = run({}, (st, f) => f() === false && st.writes.length === 0);
+  const pinned = run({ lead: { team: TEAM } }, (st, f) => {
+    const first = f(), again = f();
+    st.files.delete(seatAt("/share/a"));
+    const gone = f();
+    st.root = "/share/b";
+    const moved = f();
+    return first === true && again === false && gone === true && moved === true && st.writes.map(w => w.p).join() === [seatAt("/share/a"), seatAt("/share/a"), seatAt("/share/b")].join();
+  });
+  return asking && relay && none && pinned;
+};
+/* The flush's callers outside the wiring: a request to join written, and any join taken or finished or folder changed, deferred. */
+CASES.flushCallers = () => {
+  const ask = tryDeclText("function askJoin("), changed = tryDeclText("function catalogFolderChanged(");
+  return /teamJoin = j;\n\s*joinTold = false;\n\s*persistDeskEnvelope\(\);\n\s*signinFlush\(\);\n\s*return joinView\(\);/.test(ask)
+    && /if \(!theWindow \|\| theWindow\.isDestroyed\(\)\) return;\n[^\n]*\n\s*setImmediate\(\(\) => signinFlush\(\)\);\n\s*if \(catalogFolder\(\) === watchedFolder\) return;/.test(changed);
+};
+function tryDeclText(s) { try { return decl(MAIN, s); } catch { return ""; } }
+
 /* ---- the page's door, imported ---------------------------------------------------------------------------------------- */
 let P = null;
 /* The page's words in English: node here may report another language, and the cases read the English source. */
@@ -501,6 +547,8 @@ const LEGS = [
   ["ds8b", "pageMoments", "the door's content follows the view: before, waiting, refused, no licence, no team, no seat, sign in again"],
   ["ds8c", "pageTwoRefusals", "the organisation's refusal at its provider and no licence at our service are two moments, each in its own words"],
   ["ds8d", "pageNothingFromProvider", "the identity is the person's own name, the provider's name and the code in fours, nothing from the provider"],
+  ["ds9a", "flushJoin", "a desk signed in first writes its seat beside its request to join a folder team, and again where the file went or the folder changed"],
+  ["ds9b", "flushCallers", "the seat is written when a request to join is written, and after a join taken or finished or a folder changed"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
@@ -536,9 +584,10 @@ function outsideNames(main) {
   return rest.match(/\b(?:signin(?:[A-Z]\w*)?|armSignin\w*|seat(?:Doc|Open|Genuine|Info|SignedBytes|FileText)|SEAT_\w+|SIGNIN_\w+)\b/g) || [];
 }
 const outside = outsideNames(MAIN);
-const expectOutside = ["signinListen", "armSigninRenew"];
+/* And to write the seat after a request to join and a folder change (ds9b), which gates nothing. */
+const expectOutside = ["signinListen", "armSigninRenew", "signinFlush", "signinFlush"];
 check(outside.slice().sort().join() === expectOutside.slice().sort().join(),
-  "ds5a nothing local is gated: outside its section the shell names the sign-in only to require its loopback and to arm the renewal: " + outside.join(" "));
+  "ds5a nothing local is gated: outside its section the shell names the sign-in only to require its loopback, to arm the renewal and to write the seat after a join: " + outside.join(" "));
 const modules = fs.readdirSync(path.join(ROOT, "src", "modules")).filter(n => n.endsWith(".js"));
 const readers = modules.filter(n => /\bsignin(State|Stop|Out|Check|Again)\b|\bsignIn\(|onSignin/.test(fs.readFileSync(path.join(ROOT, "src", "modules", n), "utf8")));
 check(readers.join() === "signin.js" && /function signinShown\(v\)\{ return !!\(v && \(v\.offered\.length \|\| v\.signedIn\)\); \}/.test(PAGE)
@@ -599,6 +648,8 @@ if (!PLANTS_OFF) {
   await plantWire("dsp24", ["  if (harnessLaunch()) return \"\"; /* plant:renew-now-harness */\n", ""], "renewHarness");
   await plantWire("dsp25", ["const SIGNIN_RENEW_MS = 24 * 60 * 60 * 1000; /* plant:renew-daily */", "const SIGNIN_RENEW_MS = 55 * 60 * 1000;"], "renewDaily");
   await plantWire("dsp26", ["if (!p || !me) return \"\"; /* plant:renew-offered */", "if (!me) return \"\";"], "renewWire");
+  await plantWire("dsp27", ["return !!teamJoin && !(teamJoin.invite && teamJoin.invite.relay); /* plant:flush-asking */", "return false;"], "flushJoin");
+  await plantWire("dsp28", ["if (signinWrote === mark && fs.existsSync(file)) return false; /* plant:flush-mark */", "if (signinWrote === cert.sig.value) return false;"], "flushJoin");
   /* A gate on a local act, put into the desk file's write in memory, is seen. */
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),

@@ -1358,6 +1358,8 @@ function retryFolder(ms) {
    on, and the offer that may follow belongs after that call has returned. */
 function catalogFolderChanged() {
   if (!theWindow || theWindow.isDestroyed()) return;
+  /* A join taken or finished, or another folder: the seat follows, after the synchronous save has returned. */
+  setImmediate(() => signinFlush());
   if (catalogFolder() === watchedFolder) return;
   const win = theWindow;
   /* A different folder is a different team file. A wait begun for the one before must not hide a failure here. */
@@ -5528,6 +5530,7 @@ function askJoin(file, name) {
   teamJoin = j;
   joinTold = false;
   persistDeskEnvelope();
+  signinFlush();
   return joinView();
 }
 /* The relay has already accepted this invitation: it spent the token, or the invitation's wrap has given this desk a key.
@@ -9411,18 +9414,25 @@ function signinSign(bytes) {
   const key = deskBranch ? openPrivate(deskBranch.sign.priv) : null;
   return key ? crypto.sign(null, bytes, key).toString("hex") : "";
 }
-/* The kept certificate written into this desk's own folder of its team's, once per certificate, where the desk has a team and its
-   folder answers; nothing where it has none. */
+/* Whether this desk has a team folder to write its seat into: a team whose lead it pinned, or a folder team it asks to join, so the
+   lead's watch can read the seat beside the request. */
+function signinTeamHere() {
+  if (pinnedLead()) return true;
+  return !!teamJoin && !(teamJoin.invite && teamJoin.invite.relay); /* plant:flush-asking */
+}
+/* The kept certificate written into this desk's own folder of its team's, once per certificate and folder, and again where the
+   file is gone; nothing where the desk has no team folder or it does not answer. */
 function signinFlush() {
   const held = signinState().held, cert = held && held.cert, me = branchIdentity(false);
-  if (!cert || !me || !pinnedLead() || signinWrote === cert.sig.value) return false;
+  if (!cert || !me || !signinTeamHere()) return false;
   try {
     const root = sharedFolderForWrite();
     if (!folderAnswers(root)) return false;
-    const dir = path.join(root, "desks", me.id);
+    const dir = path.join(root, "desks", me.id), file = path.join(dir, SEAT_NAME), mark = file + "\n" + cert.sig.value;
+    if (signinWrote === mark && fs.existsSync(file)) return false; /* plant:flush-mark */
     for (const d of [path.join(root, "desks"), dir]) { try { fs.mkdirSync(d); } catch (e) { if (e.code !== "EEXIST") throw e; } }
-    writeReplacing(path.join(dir, SEAT_NAME), seatFileText(me.id, cert));
-    signinWrote = cert.sig.value;
+    writeReplacing(file, seatFileText(me.id, cert));
+    signinWrote = mark;
     return true;
   } catch (e) {
     console.error("etiuda: the seat could not be written - " + e.message);
@@ -9527,7 +9537,7 @@ ipcMain.handle("etiuda:signin-out", (e) => {
   if (!fromEngine(e)) return null;
   if (signinBusy) return signinView();
   const s = signinState(), me = branchIdentity(false);
-  if (s.held && me && pinnedLead()) {
+  if (s.held && me && signinTeamHere()) {
     try { fs.unlinkSync(path.join(sharedFolderForWrite(), "desks", me.id, SEAT_NAME)); } catch { /* not written, or the folder is away */ }
   }
   s.held = null;
