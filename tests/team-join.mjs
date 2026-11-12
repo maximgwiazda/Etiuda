@@ -33,7 +33,7 @@ const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 176;
+const EXPECTED = 177;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -1829,6 +1829,27 @@ try {
   check(removedSaid,
     "15co a relay invitation the relay refused because the team's lead removed this desk says a new invitation is needed, in English and in Polish, from the shell's own state: "
     + (removedSaid ? "said" : "not said"));
+  /* Board 980, the door-finding: a join at the team's standing door that the relay or the lead turned away ("turned"), or the relay
+     refused as removed, is kept by the envelope and said on its card in the copywriter's words, never as an invitation's. */
+  const TURNED_EN = "The team did not let this computer in. Its lead can send an invitation instead.";
+  const TURNED_PL = "Zespół nie wpuścił tego komputera. Jego lider może zamiast tego wysłać zaproszenie.";
+  const doorDesk = async (name, end) => {
+    const own = folder(name + "-own");
+    const join = { team: relayTeam, file: "", nonce: relayHex.h64, commit: relayHex.h64, asked: 1, held: 0, name: "Nia",
+      invite: { lead: { keyId: LEAD.keyId, public: LEAD.public, name: "" }, pinned: true,
+        relay: { rt: relayHex.h32, url: "https://relay.test/relay/v1", door: true, box: relayHex.h64, inv: relayHex.h32, end } } };
+    return deskWith(name, own, { teamJoin: join, teamPins: { [relayTeam]: { keyId: LEAD.keyId, public: LEAD.public } },
+      teamPinFrom: { [relayTeam]: "invite" }, teamShown: { [relayTeam]: { folder: own } } });
+  };
+  const turnedHtml = await bothLang(await doorDesk("door-turned-card", "turned"));
+  const doorRemovedHtml = await bothLang(await doorDesk("door-removed-card", "removed"));
+  const turnedSaid = [turnedHtml, doorRemovedHtml].every(h => cardSaid(h, TURNED_EN, TURNED_PL)
+    && h.en.indexOf('data-join="cancel"') >= 0 && h.en.indexOf('data-join="load"') >= 0 && h.en.indexOf("relay.test") >= 0
+    && h.en.indexOf(escPage(REMOVED_EN)) < 0 && h.en.indexOf(escPage(COPY.waitEn)) < 0 && h.en.indexOf("invitation was made") < 0);
+  if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+  check(turnedSaid,
+    "15fa a join at the team's standing door the relay or the lead turned away, or refused as removed, says the team did not let this computer in and its lead can send an invitation, in English and in Polish, from the shell's own state, with Cancel the request and Load another catalog: "
+    + (turnedSaid ? "said" : "not said: " + JSON.stringify(turnedHtml.en.replace(/<svg[\s\S]*?<\/svg>/g, "").slice(0, 240))));
   const keptKey = sealText(crypto.randomBytes(32).toString("base64"));
   const cancelDesk = await relayDesk("h35-cancel-card", { wrapped: [1] },
     { teamKeys: { [relayTeam]: { 1: keptKey } }, teamSeen: [relayTeam] });

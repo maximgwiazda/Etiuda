@@ -103,6 +103,8 @@ function signinSay(reason, v, p){
       return [t("This desk could not renew its sign-in by itself."), t("Signing in again below picks up where it stopped. Meanwhile everything on this desk works as before.")];
     case "signin-preview":
       return [t("Sign-in is not set up yet, so nothing was sent. This is a preview."), ""];
+    case "door":
+      return [t("This team is no longer offered here, or this computer is already in a team, so nothing was sent."), ""];
     default:
       return [t("The sign-in did not finish."), t("Nothing changed, and signing in can be tried again.")];
   }
@@ -115,6 +117,7 @@ const FAIL_FIRST=["unreached","signin-unreached","signin-timeout","signin-browse
    press's, whose heading is the line. */
 function signinDoor(v){
   const d=signinDoorOf(v);
+  if(d && v.signedIn && signinDoorRefused){ d.say=signinSay("door", v); d.calm=false; }
   if(d && v.preview && v.said!=="signin-preview") d.preview=t("Preview only.")+" "+t("Sign-in is not set up yet, so nothing here is sent.");
   return d;
 }
@@ -145,8 +148,8 @@ function signinDoorOf(v){
   if(v.seat==="none" || !v.seat) return {moment:"nolicence", ident, say:signinSay("nolicence", v), code:v.code,
     acts:[{act:"check", label:t("Check now"), solid:true}, acct]};
   /* A team on the relay under this licence: one press asks to join it, and its lead's Studio lets a person it knows in. */
-  if(!p.team && v.seat==="held" && v.doors.length) return {moment:"doors", ident, heading:t("Join your team"), // placeholder: Claudette
-    line:t("Your licence has a team on the relay. Ask to join it, and its lead's Studio lets you in if it knows you."), // placeholder: Claudette
+  if(!p.team && v.seat==="held" && v.doors.length) return {moment:"doors", ident, heading:t("A team on this licence"),
+    line:t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."),
     doors:v.doors, acts:[acct]};
   if(!p.team && v.reached && v.seat==="held") return {moment:"noteam", ident, heading:t("Signed in. No team yet"),
     line:t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."), code:v.code,
@@ -187,10 +190,10 @@ function signinCodeHtml(code, label){
   return '<div class="sgn-code">'+(label?'<span class="k">'+esc(label)+'</span>':'')+'<code>'+esc(signinCodeText(code))+'</code>'
     +signinCopyHtml("copy")+'</div>';
 }
-/* The doors offered, one row each in the code's own row: the relay's host, the lead's print, and Join. */
+/* The doors offered, one row each in the code's own row: the relay's host, the lead's print, and Ask to join. */
 function signinDoorsHtml(doors){
   return doors.map(d=>'<div class="sgn-code" data-signin-door-row><span class="k">'+esc(d.host)+'</span><code>'+esc(d.print)+'</code>'
-    +'<button type="button" class="btn primary" data-signin-act="door" data-signin-door="'+esc(String(d.n))+'">'+esc(t("Join"))+'</button></div>').join(""); // placeholder: Claudette
+    +'<button type="button" class="btn primary" data-signin-act="door" data-signin-door="'+esc(String(d.n))+'">'+esc(t("Ask to join"))+'</button></div>').join("");
 }
 function signinActsHtml(acts){
   return '<div class="sgn-acts">'+acts.map(a=>'<button type="button" class="btn'+(a.solid?' primary':'')+'" data-signin-act="'+esc(a.act)+'">'+esc(a.label)+'</button>').join("")+'</div>';
@@ -233,6 +236,8 @@ function signinPanelHtml(d){
 
 /* ---- form B: the header's button and its panel --------------------------------------------------------------------------- */
 let signinOpen=false, signinChoosing=false;
+/* A press at a door the shell refused, said where it was pressed until the next act or the panel closes. */
+let signinDoorRefused=false;
 /* Who else draws the view: Settings registers its repaint here, so this module imports nothing above it. */
 const signinTellers=[];
 function signinOnChange(fn){ if(typeof fn==="function") signinTellers.push(fn); }
@@ -276,6 +281,7 @@ function closeSigninPanel(back){
   const was=signinOpen;
   signinOpen=false;
   signinChoosing=false;
+  signinDoorRefused=false;
   if(panel) panel.hidden=true;
   if(btn){ btn.setAttribute("aria-expanded","false"); btn.classList.toggle("on", !!signinV.busy); }
   if(was && back && btn) try{ btn.focus({preventScroll:true}); }catch(e){}
@@ -311,6 +317,7 @@ function signinCopied(btn){
 }
 /* One act of the door or of Account, by its data-signin-act; `btn` the button pressed. */
 function signinAct(act, btn){
+  signinDoorRefused=false;
   if(act==="account"){ closeSigninPanel(); if(typeof hooks.openSettings==="function") hooks.openSettings("account"); return; }
   if(act==="copy" || act==="copylink"){
     return signinCopy(act==="copy" ? signinV.code : signinV.busy ? signinV.link : "").then(ok=>{ if(ok) signinCopied(btn); return ok; });
@@ -320,7 +327,11 @@ function signinAct(act, btn){
   if(act==="again"){ signinCall("signinAgain"); return; }
   if(act==="check"){ signinCall("signinCheck").then(v=>{ if(v) signinChanged(v, false); }); return; }
   if(act==="out"){ signinCall("signinOut").then(v=>{ if(v) signinChanged(v, false); }); return; }
-  if(act==="door"){ const n=Number(btn && btn.getAttribute ? btn.getAttribute("data-signin-door") : NaN); if(Number.isInteger(n)) signinCall("signinDoor", n).then(()=>signinChanged(signinNow(), false)); return; }
+  if(act==="door"){
+    const n=Number(btn && btn.getAttribute ? btn.getAttribute("data-signin-door") : NaN);
+    if(!Number.isInteger(n)) return;
+    return signinCall("signinDoor", n).then(r=>{ signinDoorRefused=!!(r && r.refused==="door"); signinChanged(signinNow(), false); });
+  }
   if(act==="another"){ signinChoosing=true; signinTell(); return; }
   if(act==="keep"){ signinChoosing=false; signinTell(); }
 }
@@ -331,6 +342,7 @@ function signinStart(id, here){
   signinCall("signIn", id).then(v=>{ if(v) signinChanged(v, here!=="account"); });
 }
 function signinChoosingNow(){ return signinChoosing; }
+function signinDoorRefusedNow(){ return signinDoorRefused; }
 /* A click in the link's field selects all of it. */
 function signinLinkSelect(f){ try{ f.select(); }catch(e){ /* a field gone with the wait */ } }
 function signinClicks(root){
@@ -371,6 +383,7 @@ export {
   signinCopyHtml,
   SIGNIN_COPIED_MS,
   signinDoor,
+  signinDoorRefusedNow,
   signinIdentHtml,
   signinLinkHtml,
   signinLinkSelect,

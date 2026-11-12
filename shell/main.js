@@ -5774,8 +5774,10 @@ function joinView() {
                   code: j.opened ? joinCode(j.team, me.key, me.box, j.opened.lead.public, j.nonce, j.opened.nonce) : "" };
     if (paused) view.join.paused = true;
     if (j.invite) view.join.invite = Object.assign({ lead: String(j.invite.lead && j.invite.lead.name || "") }, (j.invite.wrapped && j.invite.wrapped.length) ? { wrapped: true } : {});
-    /* A relay join names its relay's host, so the page words it as one; the state is "used", "ended" or "removed" where the relay refused the token. */
+    /* A relay join names its relay's host, so the page words it as one; the state is "used", "ended" or "removed" where the relay refused the token,
+       and "turned" where it or the lead turned a door request away. A join at the door says so, since it came by no invitation. */
     if (j.invite && j.invite.relay) { try { view.join.invite.relay = new URL(String(j.invite.relay.url)).host; } catch { view.join.invite.relay = ""; } }
+    if (j.invite && j.invite.relay && j.invite.relay.door === true) view.join.invite.door = true;
     if (j.invite && j.invite.relay && relayCatalogNamed.has(j.team)) view.join.invite.open = true;
     if (j.invite && !j.invite.relay && teamKeys[j.team] && Object.keys(teamKeys[j.team]).length) view.join.invite.open = true; /* plant:folder-join-open */
     const left = !!(j.invite && j.invite.relay && teamLeft[j.team] && !(teamKeys[j.team] && Object.keys(teamKeys[j.team]).length));
@@ -5852,7 +5854,7 @@ function relayKept(r) {
     return !!c && c.kind === "relay" && r.door === true && /^[0-9a-f]{64}$/.test(String(r.box)) /* plant:door-kept-box */
       && (r.inv === undefined || /^[0-9a-f]{32}$/.test(String(r.inv))) && r.token === undefined && r.seal === undefined && r.wrap === undefined
       && (r.withdrawn === undefined || r.withdrawn === true) && (r.withdrawing === undefined || r.withdrawing === true)
-      && (r.end === undefined || r.end === "used" || r.end === "ended" || r.end === "removed");
+      && (r.end === undefined || r.end === "used" || r.end === "ended" || r.end === "removed" || r.end === "turned");
   }
   return !!c && c.kind === "relay" && /^[0-9a-f]{32}$/.test(String(r.inv)) && typeof r.token === "string" && r.token !== ""
     && typeof r.seal === "string" && r.seal !== ""
@@ -6943,10 +6945,12 @@ function relayRun() {
     onStranded: () => sendJoin(theWindow),
     /* This desk was left behind and took the new lead's invitation: its files wait for "It matches". */
     holdOut: () => teamHeldOut.has(team),
-    /* The relay refused this invitation's token, as spent or past its end. Kept with the request, and the page told now. */
+    /* The relay refused this invitation's token, as spent or past its end, or turned a door request away. Kept with the request,
+       and the page told now. */
     onInviteEnd: kind => {
       const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
-      if ((kind !== "used" && kind !== "ended" && kind !== "removed") || !inv || inv.end === kind) return;
+      const known = kind === "used" || kind === "ended" || kind === "removed" || (kind === "turned" && !!inv && inv.door === true);
+      if (!known || !inv || inv.end === kind) return;
       inv.end = kind;
       persistDeskEnvelope();
       sendJoin(theWindow);
@@ -9563,6 +9567,8 @@ function signinFlush() {
 function signinDoorInvite(team, rt) {
   const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
   if (!inv || inv.door !== true) return undefined;
+  /* A door request the relay or the lead turned away, or refused as removed, knocks no more; Cancel forgets it. */
+  if (inv.end !== undefined) return null; /* plant:door-ended-quiet */
   const held = signinState().held, cert = held && held.cert, me = branchIdentity(false);
   if (inv.rt !== rt || !me || !/^[0-9a-f]{64}$/.test(String(inv.box)) || !signinCertOk(cert, me.key) || !(cert.until > Date.now())) return null; /* plant:door-invite-cert */
   const out = { door: cert, box: inv.box };

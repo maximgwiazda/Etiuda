@@ -47,9 +47,9 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 56;
+const PLANTS = 58;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 81 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 83 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -732,10 +732,79 @@ CASES.doorPage = async () => {
   const plain = P.signinRead({ offered: ["microsoft"], signedIn: "microsoft", code: CODE, seat: "held", reached: true, keeps: true });
   return v.doors.length === 1 && !!d && d.moment === "doors" && html.indexOf('data-signin-act="door" data-signin-door="0"') > 0
     && html.indexOf("relay.example.test") > 0 && html.indexOf(print) > 0 && P.signinDoor(plain).moment === "noteam"
-    && /\n  "Join your team":"[^"]+",/.test(L) && /\n  "Join":"[^"]+",/.test(L)
-    && /\n  "Your licence has a team on the relay\. Ask to join it, and its lead's Studio lets you in if it knows you\.":"[^"]+",/.test(L)
-    && /signinDoorsHtml\(v\.doors\)/.test(SETTINGS) && /signinDoor: \(n\) => ipcRenderer\.invoke\("etiuda:signin-door", n\)/.test(PRELOAD)
-    && /if\(act==="door"\)\{[^\n]*signinCall\("signinDoor", n\)/.test(PAGE);
+    && d.heading === "A team on this licence" && html.indexOf(">Ask to join</button>") > 0 && html.indexOf(">Join</button>") < 0
+    && /\n  "A team on this licence":"Zespół w tej licencji",/.test(L) && /\n  "Ask to join":"Poproś o dołączenie",/.test(L) && !/\n  "Join":/.test(L)
+    && /\n  "This licence has a team on the relay\. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation\.":"[^"]+",/.test(L)
+    && !/placeholder: Claudette/.test(PAGE) && /signinDoorsHtml\(v\.doors\)/.test(SETTINGS) && /signinDoor: \(n\) => ipcRenderer\.invoke\("etiuda:signin-door", n\)/.test(PRELOAD)
+    && /if\(act==="door"\)\{[\s\S]{0,200}signinCall\("signinDoor", n\)/.test(PAGE);
+};
+/* A press the shell refused at the door ({refused: "door"}: the door no longer offered, or this desk already in a team) is said
+   where it was pressed, the panel's door and Account's team row, Polish too; a press taken says nothing, and the next act clears it. */
+const DOOR_REFUSED = "This team is no longer offered here, or this computer is already in a team, so nothing was sent.";
+const DOOR_REFUSED_PL = "Ten zespół nie jest już tu proponowany albo ten komputer należy już do zespołu, więc nic nie wysłano.";
+CASES.doorRefusedSaid = async () => {
+  if (!P || typeof P.signinDoorRefusedNow !== "function") return false;
+  const storage = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const el = () => ({ hidden: true, dataset: {}, innerHTML: "", title: "", classList: { toggle() {} }, setAttribute() {}, focus() {}, contains: () => false });
+  const dom = { "#signinWrap": el(), "#signinBtn": el(), "#signinPanel": el() };
+  const signed = { offered: ["microsoft"], signedIn: "microsoft", code: CODE, seat: "held", reached: true, keeps: true };
+  const withDoor = Object.assign({ doors: [{ n: 0, host: "relay.example.test", print: "0123456789abcdef" }] }, signed);
+  const btn = { getAttribute: k => (k === "data-signin-door" ? "0" : null) };
+  const press = async answer => {
+    let now = withDoor;
+    const asked = [];
+    globalThis.window = { E_HOST: { signinState: () => now, signinDoor: n => { asked.push(n); now = signed; return Promise.resolve(answer); } } };
+    globalThis.document = { querySelector: q => dom[q] || null };
+    try { await P.signinAct("door", btn); return { asked, panel: P.signinPanelHtml(P.signinDoor(P.signinRead(now))) }; }
+    finally { delete globalThis.window; delete globalThis.document; }
+  };
+  const refused = await press({ view: true, refused: "door" });
+  const said = P.signinDoorRefusedNow() === true;
+  storage.lsSet("eUiLang", "pl");
+  let pl = "";
+  try { pl = P.signinPanelHtml(P.signinDoor(P.signinRead(signed))); } finally { storage.lsSet("eUiLang", "en"); }
+  const acct = await acctOf(signed);
+  globalThis.document = { querySelector: q => dom[q] || null };
+  try { P.signinAct("keep"); } finally { delete globalThis.document; }
+  const cleared = P.signinDoorRefusedNow() === false && P.signinPanelHtml(P.signinDoor(P.signinRead(signed))).indexOf(DOOR_REFUSED) < 0
+    && (await acctOf(signed)).indexOf(DOOR_REFUSED) < 0;
+  const taken = await press({ view: true });
+  return refused.asked.join() === "0" && said && refused.panel.indexOf("<b>" + DOOR_REFUSED + "</b>") > 0 && pl.indexOf("<b>" + DOOR_REFUSED_PL + "</b>") > 0
+    && acct.indexOf(DOOR_REFUSED) > 0 && cleared && taken.asked.join() === "0" && P.signinDoorRefusedNow() === false && taken.panel.indexOf(DOOR_REFUSED) < 0;
+};
+/* A join at the door the relay or the lead turned away ("turned", the channel's word for the relay's not-enrolled at the door), or
+   refused as removed, knocks no more; the channel's word is kept on a door join alone, never on an invitation's; the envelope keeps
+   it; the page is told. */
+CASES.doorEnded = (s, swap) => {
+  let main = MAIN;
+  if (swap) {
+    if (main.split(swap[0]).length !== 2) throw new Error("plant anchor not in the shell once: " + swap[0]);
+    main = main.replace(swap[0], swap[1]);
+  }
+  const lift = (src, start) => { try { return decl(src, start); } catch { return ""; } };
+  const doorText = ["function signinDoorInvite(", "function signinDoorKept("].map(d => lift(main, d)).filter(Boolean).join("\n");
+  const ask = join => new Function(...DOOR_STANDS, doorText + "\nreturn { signinDoorInvite };")(join, () => ({ held: heldOf() }),
+    () => ({ id: DESK_ID, key: DESK_KEY, box: DESK_BOX }), s.signinCertOk, s.signinDoorRequest, () => {}, null, null, fs, path, { now: () => NOW }, console)
+    .signinDoorInvite(TEAM, RT);
+  const knocks = !!ask(doorJoin()) && ask(doorJoin({ inv: DOOR_ID })) !== null;
+  const quiet = ask(doorJoin({ end: "turned" })) === null && ask(doorJoin({ inv: DOOR_ID, end: "removed" })) === null;
+  const run = lift(main, "function relayRun(");
+  const a = run.indexOf("\n    onInviteEnd: kind => {"), b = a < 0 ? -1 : run.indexOf("\n    },", a);
+  if (a < 0 || b < 0) return false;
+  const tells = [];
+  const endOf = join => {
+    const fn = new Function("teamJoin", "team", "persistDeskEnvelope", "sendJoin", "theWindow", "return (" + run.slice(a + 18, b + 6) + ");")(
+      join, TEAM, () => tells.push("kept"), () => tells.push("told"), null);
+    fn("turned");
+    return join.invite.relay.end;
+  };
+  const invitation = { team: TEAM, invite: { id: "2".repeat(16), relay: { rt: RT, inv: "5".repeat(32), token: "x", seal: "y" } } };
+  const kept = endOf(doorJoin({ inv: DOOR_ID })) === "turned" && tells.join() === "kept,told" && endOf(invitation) === undefined && tells.length === 2;
+  const lib = new Function("SEALED_TEAM_RE", "JOIN_HEX_RE", KEPT_DECLS.map(d => lift(main, d)).filter(Boolean).join("\n") + "\nreturn { relayKept };")(/^t-[0-9a-f]{16}$/, /^[0-9a-f]{64}$/);
+  const door = { rt: RT, url: "https://relay.example.test", door: true, box: LEAD_BOX, inv: DOOR_ID };
+  const envelope = lib.relayKept(Object.assign({}, door, { end: "turned" })) === true && lib.relayKept(Object.assign({}, door, { end: "gone" })) === false
+    && lib.relayKept({ rt: RT, url: "https://relay.example.test", inv: DOOR_ID, token: "x", seal: "y", end: "turned" }) === false;
+  return knocks && quiet && kept && envelope;
 };
 
 /* ---- the desk's Sign out at the service --------------------------------------------------------------------------------- */
@@ -1505,7 +1574,9 @@ const LEGS = [
   ["ds17b", "doorsKept", "the doors are kept with the certificate and in the file, dropped with it, kept through a refusal, and a door out of shape in the file is no list"],
   ["ds17c", "doorJoin", "signed in with no team the doors are offered by host and lead print; a press makes the door's join, the lead and the box from the door and no invitation, the lead pinned; a door not offered changes nothing"],
   ["ds17d", "doorEnvelope", "the envelope keeps a join at the door, its box and the relay's id, and not one without the box or carrying a token; an invitation's join is kept as before"],
-  ["ds17e", "doorPage", "the door's panel and Account draw each door by host and print with one Join, Polish too, and a press asks the shell by the door's place"],
+  ["ds17e", "doorPage", "the door's panel and Account draw each door by host and print with one Ask to join under the copywriter's heading and line, Polish too, no placeholder left, and a press asks the shell by the door's place"],
+  ["ds17f", "doorRefusedSaid", "a press the shell refused at the door is said where it was pressed, the panel and Account's team row, in the copywriter's sentence, Polish too; a press taken says nothing, and the next act clears it"],
+  ["ds17g", "doorEnded", "a join at the door the relay or the lead turned away, or refused as removed, knocks no more; \"turned\" is kept on a door join alone, the envelope keeps it, and the page is told"],
   ["ds14g", "copiedLabel", "the code's Copy and the link's read Copied for SIGNIN_COPIED_MS after a copy the clipboard took, then Copy, holding the wider width; a refused copy leaves it; Polish too"],
   ["ds15a", "identNoName", "with no name written the identity's bold line is \"Signed in with\" its provider and there is no second line, in the panel's every signed-in moment and in Account; a name written stands over it; Polish too"],
   ["ds15b", "panelOrder", "the panel tells no licence as it tells no team: the fact, its line, then the code's box, under the identity and above the acts"],
@@ -1650,6 +1721,8 @@ if (!PLANTS_OFF) {
   await plantWire("dsp55", ["relay: { rt: d.rt, url: d.url, door: true, box: d.box } } }; /* plant:door-join-box */", "relay: { rt: d.rt, url: d.url, door: true, box: d.lead } } };"], "doorJoin");
   await plantWire("dsp56", ["return !!c && c.kind === \"relay\" && r.door === true && /^[0-9a-f]{64}$/.test(String(r.box)) /* plant:door-kept-box */", "return !!c && c.kind === \"relay\" && r.door === true"], "doorEnvelope");
   await plantWire("dsp57", ["&& inv.id === undefined && inv.proof === undefined; /* plant:door-envelope */", "&& false;"], "doorEnvelope");
+  await plantWire("dsp58", ["if (inv.end !== undefined) return null; /* plant:door-ended-quiet */", ""], "doorEnded");
+  await plantWire("dsp59", ["|| (kind === \"turned\" && !!inv && inv.door === true);", "|| kind === \"turned\";"], "doorEnded");
   await plant("dsp46", ["return Object.freeze(typeof v === \"string\" && SIGNIN_SECRET_SHAPE.test(v) ? { google: v } : {}); /* plant:secret-shape */",
     "return Object.freeze(typeof v === \"string\" ? { google: v } : {});"], "secretPacked");
   /* A gate on a local act, put into the desk file's write in memory, is seen. */

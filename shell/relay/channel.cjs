@@ -2272,6 +2272,9 @@ function createChannel(opts) {
     if (r.status !== 200 || !r.json || !HEX64.test(String(r.json.session)) || !HEX32.test(String(r.json.door))) {
       const t = refusalOf(r);
       if (t.reason === "removed") inviteEnd("removed");
+      /* The relay answers a door shut to this licence, a certificate it does not take and a request the lead dropped alike: turned
+         away, by the relay or the lead, and the desk cannot tell which. */
+      else if (t.reason === "not-enrolled") inviteEnd("turned"); /* plant:door-turned */
       return t;
     }
     session = { token: r.json.session, at: clock(), by: "invite", inv: String(r.json.door) };
@@ -2282,7 +2285,8 @@ function createChannel(opts) {
   }
 
   /* The relay has refused this invitation's token, as spent ("used"), past its end ("ended"), or made before this desk
-     was removed ("removed"). The shell keeps that with the request, which is where the page reads it. */
+     was removed ("removed"), or turned a door request away ("turned"). The shell keeps that with the request, which is where the
+     page reads it. */
   function inviteEnd(kind) {
     if (typeof o.onInviteEnd === "function") o.onInviteEnd(kind);
   }

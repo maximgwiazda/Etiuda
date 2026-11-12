@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 445;
+const EXPECTED = 447;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -10653,6 +10653,40 @@ async function sceneA4(mod, atDoor) {
     answers, ok: made.status === 200 && opened.status === 200 && /^[0-9a-f]{32}$/.test(askedAt) && reached === want && named && text.indexOf(marker) < 0
       && !!wrote.ok && answers.length === 1 && answers[0] === "joined" };
 }
+/* A door request turned away (board 980, the door-finding's words): a desk knocking at a door shut to its licence is told "turned"
+   at once, and so is one whose request the lead dropped, at its next round; a desk let in at an open door is told nothing. */
+async function sceneA4Turned(mod) {
+  const rt = hex(16), pinTeam = "t-" + hex(8), ref = hex(16), leadBox = xPair();
+  R.clock.now += 1;
+  const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
+  R.clock.now += 1;
+  const t = R.clock.now;
+  const opened = await admin("POST", "/relay/v1/t/" + rt + "/door", { refs: [ref], t, sig: signHex(LEAD, core.doorBytes(rt, t, [ref])) });
+  const pinOf = () => ({ teamId: pinTeam, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } });
+  const deskAt = (name, licence) => {
+    const who = keyPair(true), box = xPair(), tr = transport("a4t-" + name), mirror = path.join(LAB, "a4t-" + name + "-" + rt);
+    const door = { door: certA4(who.pub, licence, R.clock.now), box: leadBox.pub, inv: "" }, ends = [];
+    const ch = mod.createChannel({ rt, url: URLV1, mirror, stateFile: mirror + ".json", pin: pinOf,
+      me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId, box: box.pub }),
+      agree: peer => xAgree(box, peer), keyFor: () => null, sealEpoch: () => null, invite: () => door, onDoor: id => { door.inv = id; },
+      onInviteEnd: kind => ends.push(kind), request: tr.request, connect: tr.connect, pollMs: 1e9, watch: false, say: () => {} });
+    return { ch, door, ends };
+  };
+  const round = async ch => { for (let i = 0; i < 3; i++) { ch.kick(); await ch.idle(); } };
+  const shut = deskAt("shut", hex(16)), open = deskAt("open", ref);
+  shut.ch.start(); open.ch.start();
+  await round(shut.ch); await round(open.ch);
+  const shutEnds = shut.ends.slice(), openNamed = /^[0-9a-f]{32}$/.test(open.door.inv), openQuiet = open.ends.length === 0;
+  R.clock.now += 1;
+  const at = R.clock.now;
+  const dropped = openNamed ? await admin("POST", "/relay/v1/t/" + rt + "/invites", { add: [], drop: [open.door.inv], t: at,
+    sig: signHex(LEAD, core.invitesBytes(rt, at, [], [open.door.inv])) }) : { status: 0 };
+  await round(open.ch);
+  for (const d of [shut, open]) { try { await d.ch.stop(); } catch { /* already stopped */ } }
+  const ok = made.status === 200 && opened.status === 200 && shutEnds.length >= 1 && shutEnds.every(k => k === "turned") && !shut.door.inv
+    && openNamed && openQuiet && dropped.status === 200 && open.ends.length >= 1 && open.ends.every(k => k === "turned");
+  return { made: made.status, opened: opened.status, shutEnds, openNamed, openQuiet, dropped: dropped.status, openEnds: open.ends, ok };
+}
 if (partOn("pA4")) {
   try {
     markPart("pA4");
@@ -10663,6 +10697,15 @@ if (partOn("pA4")) {
     const g = await sceneA4(C, true);
     check(g.ok, "a4g the desk writes its request only when the relay names its id, carrying that id, and its one upload still reaches the"
       + " lead's mirror whole and is answered joined, with no relay change: " + JSON.stringify(g));
+    const h = await sceneA4Turned(C);
+    check(h.ok, "a4h a desk knocking at a door shut to its licence is told turned at once, one whose door request the lead dropped is told"
+      + " turned at its next round, and one let in at an open door is told nothing: " + JSON.stringify(h));
+    if (PLANTS_OFF) skip("a4i lifting plant:door-turned, a door request turned away is never told, and a4h goes red");
+    else {
+      const p = await liftChannel("plant:door-turned", async mod => !(await sceneA4Turned(mod)).ok);
+      check(h.ok && p.turned && p.back, "a4i lifting plant:door-turned, a door request turned away is never told, and a4h goes red: "
+        + p.detail.split("\n")[0] + ", sha " + (p.back ? "restored" : "differs"));
+    }
     const A4_PLANTS = [
       ["plant:door-session", "a4d lifting plant:door-session, a desk with a certificate never knocks, and a4c goes red"],
       ["plant:door-wait", "a4e lifting plant:door-wait, a door session's refused list ends the cycle before the request goes, and a4c goes red"],
