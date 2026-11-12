@@ -44,7 +44,7 @@ const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modul
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const PLANTS = 48;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 74 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 76 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -866,7 +866,7 @@ CASES.previewBack = () => {
   const css = fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8");
   return acts.length === 1 && acts[0].act === "choose" && acts[0].label === "Back" && !acts[0].solid
     && !/class="(?:[^"]*\s)?row(?:\s[^"]*)?"/.test(rowHtml) && /class="sgn-provs sgn-row"/.test(rowHtml)
-    && css.indexOf(".sgn-provs.sgn-row{flex-direction:row;flex-wrap:wrap;width:auto}") >= 0 && css.indexOf(".sgn-provs.row") < 0;
+    && css.indexOf(".sgn-provs.sgn-row{flex-direction:row;flex-wrap:wrap;width:fit-content;max-width:100%}") >= 0 && css.indexOf(".sgn-provs.row") < 0;
 };
 CASES.previewCmd = () => {
   const { minimatch } = createRequire(import.meta.url)("minimatch");
@@ -1276,6 +1276,47 @@ CASES.copiedLabel = async () => {
     && rule(".sgn-copy>span+span,.sgn-copy.sgn-done>span:first-child") === "visibility:hidden" && rule(".sgn-copy.sgn-done>span+span") === "visibility:visible"
     && !/toast|offerUndo/.test(PAGE.slice(PAGE.indexOf("function signinCopied("), PAGE.indexOf("function signinAct(")));
 };
+/* The identity with no name written (the product designer): the bold line is "Signed in with <provider>" and there is no second
+   line, in the panel in every signed-in moment and in Account's card; with a name written, the name over that line. Every provider
+   alike, and Polish. */
+CASES.identNoName = async () => {
+  if (!P) return false;
+  const storage = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const lines = h => { const m = /<div class="sgn-id">[\s\S]*?<div>(<b>[^<]*<\/b>(?:<small>[^<]*<\/small>)?)<\/div><\/div>/.exec(String(h)); return m ? m[1] : ""; };
+  const NAMES = { microsoft: "Microsoft", google: "Google" };
+  const moments = { noteam: { seat: "held" }, nolicence: { seat: "none" }, noseat: { seat: "held", refused: "full" }, offline: { seat: "held", reached: false },
+    lapsed: { seat: "lapsed" }, ask: { seat: "held", ask: true } };
+  const was = storage.lsGet("eAgent");
+  const seen = [];
+  let named = [], pl = "";
+  try {
+    storage.lsDel("eAgent");
+    for (const id of Object.keys(NAMES)) for (const m of Object.keys(moments)) {
+      const v = Object.assign({ offered: [id], signedIn: id, code: CODE }, moments[m]);
+      const d = P.signinDoor(P.signinRead(v)), sub = "Signed in with " + NAMES[id] + (v.reached === false ? " · service not reached just now" : "");
+      seen.push(d.moment === m && lines(P.signinPanelHtml(d)) === "<b>" + sub + "</b>" && lines(await acctOf(v)) === "<b>" + sub + "</b>");
+    }
+    storage.lsSet("eUiLang", "pl");
+    try { pl = lines(P.signinPanelHtml(P.signinDoor(P.signinRead({ offered: ["microsoft"], signedIn: "microsoft", code: CODE, seat: "held" })))); } finally { storage.lsSet("eUiLang", "en"); }
+    storage.lsSet("eAgent", "Ada");
+    const v = { offered: ["google"], signedIn: "google", code: CODE, seat: "held" };
+    named = [lines(P.signinPanelHtml(P.signinDoor(P.signinRead(v)))), lines(await acctOf(v))];
+  } finally { if (was === null || was === undefined) storage.lsDel("eAgent"); else storage.lsSet("eAgent", was); }
+  return seen.length === 12 && seen.every(Boolean) && pl === "<b>Zalogowano przez Microsoft</b>"
+    && named.every(h => h === "<b>Ada</b><small>Signed in with Google</small>");
+};
+/* One order in the panel (the product designer): the fact, its line, then the code; no licence's refusal stands over the code's box
+   as no team's heading and line do, under the identity and above the acts. */
+CASES.panelOrder = () => {
+  if (!P) return false;
+  const inOrder = (h, keys) => keys.map(k => h.indexOf(k)).every((at, i, a) => at >= 0 && (i === 0 || at > a[i - 1]));
+  return ["microsoft", "google"].every(id => {
+    const nolicence = P.signinPanelHtml(P.signinDoor(view({ signedIn: id, code: CODE, seat: "none" })));
+    const noteam = P.signinPanelHtml(P.signinDoor(view({ signedIn: id, code: CODE, seat: "held" })));
+    return inOrder(nolicence, ['class="sgn-id"', 'class="sgn-say"', 'class="sgn-code"', 'class="sgn-acts"'])
+      && inOrder(noteam, ['class="sgn-id"', "<h4>", 'class="sgn-lede"', 'class="sgn-code"', 'class="sgn-acts"']);
+  });
+};
 
 /* ---- the cases on the branch ------------------------------------------------------------------------------------------- */
 const LEGS = [
@@ -1342,6 +1383,8 @@ const LEGS = [
   ["ds14e", "keyringLine", "the view says whether the system seals for real, and Account says in one line that the sign-in is not kept where it does not, and nothing where it does"],
   ["ds14f", "accountPress", "a provider pressed in Settings, Account is answered there alone and the header's panel stays shut; pressed in the panel, the answer opens it as before"],
   ["ds14g", "copiedLabel", "the code's Copy and the link's read Copied for SIGNIN_COPIED_MS after a copy the clipboard took, then Copy, holding the wider width; a refused copy leaves it; Polish too"],
+  ["ds15a", "identNoName", "with no name written the identity's bold line is \"Signed in with\" its provider and there is no second line, in the panel's every signed-in moment and in Account; a name written stands over it; Polish too"],
+  ["ds15b", "panelOrder", "the panel tells no licence as it tells no team: the fact, its line, then the code's box, under the identity and above the acts"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;

@@ -21,6 +21,9 @@
  *   s8 openSettings("general") opens General alone, and the agent's name is in Account, not General; openSettings() opens the one page
  *   s11 in Polish, 546 to 2560 px: a row's words keep 260 px beside their control or the control stands under them at
  *       the row's width, its options one line in equal shares; nothing scrolls sideways
+ *   s12 Account's sign-in card at 560 px in Polish, wherever the providers' buttons stand (not signed in, the preview's press,
+ *       the renewal that asks): nothing in the card reaches past it, nothing in it is cut, and buttons on lines of their own
+ *       take the card's width; at 1280 in English the two stand side by side at their own widths
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -543,6 +546,46 @@ try {
   await pl.close();
   check(!s11bad.length, "s11 in Polish, 546 to 2560 px, every row's words keep 260 px beside their control or stand over it at the row's width, options one line in equal shares, no sideways scroll", s11bad.slice(0, 5));
 
+  /* s12 (the designer, 2026-11-12, of the sweep at 560 px in Polish): "the block never wider than the card (min-width 0,
+     max-width 100%); each provider button the card's full width when the two do not fit side by side, its label wrapping to a
+     second line if it must; the captions wrap." The sign-in's view is a stand-in host's, as the shell would give it. */
+  const SGN = { offered: ["microsoft", "google"] }, SGN_IN = { ...SGN, signedIn: "microsoft", code: "7K3MQ9TV2XRBHN4W", seat: "held", at: Date.now(), reached: true };
+  const s12bad = [];
+  const sp = await browser.newPage();
+  await sp.evaluateOnNewDocument(() => {
+    try { for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eNameAsked", "1"], ["eTheme", "dark"], ["eUiLang", "pl"]]) localStorage.setItem(k, v); } catch (e) {}
+    window.E_HOST = { signinState: () => window.sgnView || { offered: [] }, signIn: async () => window.sgnView };
+  });
+  await sp.setViewport({ width: 560, height: 900, deviceScaleFactor: 1 });
+  await sp.goto(url, { waitUntil: "load", timeout: 60000 });
+  await sp.waitForFunction(() => typeof openSettings === "function" && !!document.getElementById("list"), { timeout: 30000 });
+  const sgnRead = (sp, view, w, lang) => sp.evaluate((view, lang) => {
+    try { localStorage.setItem("eUiLang", lang); } catch (e) {}
+    window.sgnView = view;
+    openSettings("account");
+    const card = document.querySelector("#setBody .sgn-top");
+    if (!card) return { why: "no card" };
+    const c = card.getBoundingClientRect(), cs = getComputedStyle(card);
+    const inner = c.width - parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth) - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const past = [...card.querySelectorAll("*")].filter(e => e.getClientRects().length && e.getBoundingClientRect().right > c.right + 0.5)
+      .map(e => (e.className && e.className.baseVal === undefined ? e.className + ": " : "") + (e.textContent || e.tagName).trim().slice(0, 30));
+    const cut = [...card.querySelectorAll("*")].filter(e => e.getClientRects().length && !e.children.length && e.tagName !== "INPUT"
+      && e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).overflowX !== "visible").map(e => (e.textContent || e.tagName).trim().slice(0, 30));
+    const btns = [...card.querySelectorAll(".sgn-p")].map(b => { const r = b.getBoundingClientRect(); return { top: Math.round(r.top), w: r.width }; });
+    return { inner, past: past.slice(0, 5), cut: cut.slice(0, 5), btns, label: (card.querySelector(".sgn-p span") || {}).textContent || "" };
+  }, view, lang);
+  for (const [name, view] of [["before", SGN], ["pv-press", { ...SGN, preview: true, said: "signin-preview" }], ["ask", { ...SGN_IN, ask: true }]]) {
+    const r = await sgnRead(sp, view, 560, "pl");
+    const stacked = r.btns && r.btns.length === 2 && r.btns[0].top !== r.btns[1].top;
+    if (r.why || r.past.length || r.cut.length || !stacked || !r.btns.every(b => Math.abs(b.w - r.inner) <= 1) || !/Microsoft/.test(r.label)) s12bad.push({ name, ...r });
+  }
+  await sp.setViewport({ width: 1280, height: 900, deviceScaleFactor: 1 });
+  await sleep(120);
+  const wide = await sgnRead(sp, SGN, 1280, "en");
+  if (wide.why || wide.past.length || wide.btns.length !== 2 || wide.btns[0].top !== wide.btns[1].top || wide.btns[0].w + wide.btns[1].w + 10 >= wide.inner - 1) s12bad.push({ name: "wide", ...wide });
+  await sp.close();
+  check(!s12bad.length, "s12 Account's sign-in card at 560 px in Polish (not signed in, the preview's press, the renewal that asks): nothing past the card, nothing cut, the buttons each on a line of their own at the card's width; at 1280 in English side by side at their own widths", s12bad);
+
 } catch (e) {
   check(false, "run crashed: " + (e && e.message ? e.message : e));
 } finally {
@@ -551,5 +594,5 @@ try {
 }
 
 console.log("RESULT checks=" + checks + " failed=" + fails);
-console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=11");
-process.exit(fails || checks !== 11 ? 1 : 0);
+console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=12");
+process.exit(fails || checks !== 12 ? 1 : 0);

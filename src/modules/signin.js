@@ -117,7 +117,7 @@ function signinDoor(v){
 function signinDoorOf(v){
   if(!signinShown(v)) return null;
   const p=signinParts(v), acct={act:"account", label:t("Account settings")};
-  const ident={initial:p.initial, name:p.name || (SIGNIN_NAMES[v.signedIn]||""), sub:p.sub, off:p.off};
+  const ident={initial:p.initial, name:p.name, sub:p.sub, off:p.off};
   if(v.busy) return {moment:"waiting", heading:t("Finish signing in in the browser"),
     line:named(t("The browser has opened {PROVIDER}'s sign-in page. Etiuda waits here and carries on by itself when you come back."),"{PROVIDER}",SIGNIN_NAMES[v.busy]),
     wait:named(t("Waiting for {PROVIDER}…"),"{PROVIDER}",SIGNIN_NAMES[v.busy]),
@@ -164,9 +164,11 @@ function signinProvidersHtml(ids, row){
 function signinAvatarHtml(initial, off, big){
   return '<span class="sgn-av'+(big?' l':'')+(off?' off':'')+'" aria-hidden="true">'+(initial ? esc(initial) : ICON_PERSON)+'</span>';
 }
+/* With no name written, the line under it ("Signed in with ...") is the bold one, alone. */
 function signinIdentHtml(ident){
-  return '<div class="sgn-id">'+signinAvatarHtml(ident.initial, ident.off, true)+'<div><b>'+esc(ident.name)+'</b>'
-    +(ident.sub?'<small>'+esc(ident.sub)+'</small>':'')+'</div></div>';
+  const bold=ident.name || ident.sub, under=ident.name ? ident.sub : "";
+  return '<div class="sgn-id">'+signinAvatarHtml(ident.initial, ident.off, true)+'<div><b>'+esc(bold)+'</b>'
+    +(under?'<small>'+esc(under)+'</small>':'')+'</div></div>';
 }
 /* The sign-in's Copy, the code's and the link's alike: both labels stacked in one cell, so the button keeps the wider of the two
    and nothing moves when "Copied" stands in for SIGNIN_COPIED_MS after a copy (signinCopied). */
@@ -204,8 +206,8 @@ function signinPanelHtml(d){
   if(d.preview) h+=signinPreviewHtml({preview:true});
   if(d.wait) h+='<div class="sgn-wait">'+esc(d.wait)+'</div><div class="sgn-run" aria-hidden="true"></div>';
   if(d.team) h+='<p class="sgn-ln">'+esc(d.team)+'</p>';
-  if(d.code) h+=signinCodeHtml(d.code, "");
   if(d.say) h+='<p class="sgn-say'+(d.calm?' calm':'')+'"><b>'+esc(d.say[0])+'</b><span>'+esc(d.say[1])+'</span></p>';
+  if(d.code) h+=signinCodeHtml(d.code, "");
   if(d.providers && d.providers.length) h+=signinProvidersHtml(d.providers, false);
   if(d.cap) h+='<p class="sgn-cap">'+esc(d.cap)+'</p>';
   if(d.privacy) h+='<p class="sgn-cap">'+esc(d.privacy)+'</p>';
