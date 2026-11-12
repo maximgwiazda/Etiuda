@@ -153,7 +153,7 @@ function joinShown(j){
   const row={file:String(j.file||""),state:String(j.state||""),code:String(j.code||""),
     asked:+j.asked||0,name:String(j.name||""),team:String(j.team||"")};
   if(j.invite && typeof j.invite==="object") row.invite=Object.assign({lead:String(j.invite.lead||""),relay:String(j.invite.relay||"")}, j.invite.wrapped ? {wrapped:true} : {},
-    j.invite.open===true ? {open:true} : {});
+    j.invite.open===true ? {open:true} : {}, j.invite.door===true ? {door:true} : {});
   if(j.withdrawn===true) row.withdrawn=true;
   if(j.withdrawing===true) row.withdrawing=true;
   if(j.unkept===true) row.unkept=true;
@@ -602,6 +602,12 @@ function joinParts(){
         :t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
       body:meta, acts:[["cancel",t("Cancel the request")]]};
   }
+  /* A request at the team's standing door the relay or the lead turned away, or the relay refused as removed: the desk cannot tell
+     which, nor why. Cancel the request clears it. */
+  if(j && j.invite && j.invite.relay && j.invite.door===true && (j.state==="turned" || j.state==="removed")) return {title:t("Join a team"),
+    line:t("The team did not let this computer in. Its lead can send an invitation instead."),
+    body:'<div class="e-join-meta">'+esc(t("Relay: {HOST}").split("{HOST}").join(j.invite.relay))+'</div>',
+    acts:[["cancel",t("Cancel the request")],["load",t("Load another catalog")]]};
   /* A relay invitation the relay refused: its token was spent by another desk, it ended unused, or it was made before
      the team's lead removed this desk. Cancel the request clears it. */
   if(j && j.invite && j.invite.relay && j.state==="removed") return {title:t("Join a team"),

@@ -276,6 +276,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   signIn: (provider) => ipcRenderer.invoke("etiuda:signin", String(provider || "")),
   signinStop: () => ipcRenderer.invoke("etiuda:signin-stop"),
   signinOut: () => ipcRenderer.invoke("etiuda:signin-out"),
+  /* A join at the door the person pressed among those the sign-in handed (board 980, the door-finding), by its place in the list. */
+  signinDoor: (n) => ipcRenderer.invoke("etiuda:signin-door", n),
   signinCheck: () => ipcRenderer.invoke("etiuda:signin-check"),
   signinAgain: () => ipcRenderer.invoke("etiuda:signin-again"),
   onSignin: (fn) => ipcRenderer.on("etiuda:signin", (_e, v) => { try { fn(v && typeof v === "object" ? v : {}); } catch { /* the page has gone */ } }),
