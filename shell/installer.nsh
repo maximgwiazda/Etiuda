@@ -1174,12 +1174,41 @@ FunctionEnd
 !macroend
 
 # The new copy is registered: the older copy aside goes, and an older copy's folder elsewhere loses the program's files.
+# AN OLDER FOLDER READ FROM HKCU IS EMPTIED ONLY AS THE PERSON (the test architect, on d30e0cbb): the walk reads the folder and
+# each entry, not a junction among the folders above it, and etiudaOldFolder compares strings, so "U\j\Etiuda" with j pointing
+# at the new install's parent would have an elevated run delete its own fresh copy. In an all-users install the per-user copy's
+# folder goes from the unelevated instance (etiudaAsUser), with that person's rights; none reached, or an installer started
+# elevated, it is left as it is (README: a deployment tool may leave one). A per-user install empties HKCU's folder only when it
+# runs unelevated. HKLM's InstallLocation, which only an administrator writes, keeps its drop. Only the registers cross, so the
+# run takes the new folder in $R7 and the older one in $R8.
+!macro etiudaDropOldRun
+  StrCpy $etiudaBase $R7
+  !insertmacro etiudaDropOld $R8
+  StrCpy $R9 "ran"
+!macroend
 !macro etiudaDropAside
   ${If} $etiudaAsideMade == "1"
     !insertmacro etiudaRemoveTree "$etiudaAside"
   ${EndIf}
-  !insertmacro etiudaDropOld $etiudaOldDir
-  !insertmacro etiudaDropOld $etiudaOldUserDir
+  ${If} $installMode == "all"
+    !insertmacro etiudaDropOld $etiudaOldDir
+    ${If} $etiudaOldUserDir != ""
+    ${AndIf} ${UAC_IsInnerInstance}
+      Push $R7
+      Push $R8
+      Push $R9
+      StrCpy $R7 $etiudaBase
+      StrCpy $R8 $etiudaOldUserDir
+      !insertmacro etiudaAsUser etiudaDropOldRun
+      Pop $R9
+      Pop $R8
+      Pop $R7
+    ${EndIf}
+  ${Else}
+    ${IfNot} ${UAC_IsAdmin}
+      !insertmacro etiudaDropOld $etiudaOldDir
+    ${EndIf}
+  ${EndIf}
 !macroend
 !endif
 

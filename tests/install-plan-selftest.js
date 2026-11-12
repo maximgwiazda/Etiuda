@@ -1181,7 +1181,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
      fsys.links, where given, maps a junction's path to its target (repair 10): GetFileAttributesW reads the link itself, Delete,
      FindFirst and IfFileExists go through one as Windows does, RMDir removes the link, RMDir /r follows it as NSIS's does
      (the test architect's probe), and etiudaRemoveTree is ${ETIUDA_REMOVE_TREE}'s walk, whose own lines 14c holds. */
-  const replayDrop = (nsh, fsys, locked, block) => {
+  const replayDrop = (nsh, fsys, locked, block, opt = {}) => {
     const body = (/\nFunction etiudaDropOldFiles\n([\s\S]*?)\nFunctionEnd/.exec(nsh) || [])[1];
     const mbody = block === undefined ? macro(nsh, "etiudaDropOld") : block;
     if (!body || !mbody) return null;
@@ -1190,8 +1190,8 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     const mlines = code(mbody).split("\n").map(l => l.trim()).filter(Boolean);
     const labels = {};
     lines.forEach((l, i) => { if (/^\w+:$/.test(l)) labels[l.slice(0, -1)] = i; });
-    const V = { $etiudaBase: "N", $etiudaStage: "S", $etiudaDropRoot: "", $etiudaDropList: "", $R0: "", $R1: "", $R2: "", $R3: "", $0: "kept" }, stack = [], finds = [];
-    const val = tok => tok.replace(/^"|"$/g, "").replace(/\$\{DIR\}/g, "O").replace(/\$\{APP_EXECUTABLE_FILENAME\}/g, "Etiuda.exe")
+    const V = { $etiudaBase: opt.base || "N", $etiudaStage: "S", $etiudaDropRoot: "", $etiudaDropList: "", $R0: "", $R1: "", $R2: "", $R3: "", $0: "kept" }, stack = [], finds = [];
+    const val = tok => tok.replace(/^"|"$/g, "").replace(/\$\{DIR\}/g, opt.dir || "O").replace(/\$\{APP_EXECUTABLE_FILENAME\}/g, "Etiuda.exe")
       .replace(/\$(etiudaBase|etiudaStage|etiudaDropRoot|etiudaDropList|R[0-9]|[0-9])/g, (m) => V[m]);
     /* A path with every link among its leading folders followed (parent), or every link followed, its last part too (full). */
     const follow = (p, last) => {
@@ -1326,7 +1326,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
       && (o.match(/\$\{If\} \$4 != \$[12]\n/g) || []).length === 2
       && /\$\{Else\}\n\s*!insertmacro etiudaOldFolder \$0 \$etiudaOldDir\n/.test(s)
       && /ReadRegStr \$0 HKCU "\$\{INSTALL_REGISTRY_KEY\}" InstallLocation\n\s*!insertmacro etiudaTrimSlashes \$0\n\s*!insertmacro etiudaOldFolder \$0 \$etiudaOldUserDir/.test(s)
-      && /!insertmacro etiudaDropOld \$etiudaOldDir\n\s*!insertmacro etiudaDropOld \$etiudaOldUserDir/.test(a)
+      && /!insertmacro etiudaDropOld \$etiudaOldDir\n/.test(a) && /StrCpy \$R8 \$etiudaOldUserDir\n/.test(a)
       && /StrCpy \$etiudaOldDir ""\n\s*StrCpy \$etiudaOldUserDir ""/.test(code(macro(nsh, "etiudaStageBegin")));
   };
   ok(oldChosen(NSH), "15i the older folder is the one registered elsewhere (or this account's per-user copy an all-users install replaces),"
@@ -1461,11 +1461,11 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
      walk's replay it cannot show NSIS's string handling, Windows' locks or attributes; the spare-machine check covers those. */
   const runLL = (text, w) => {
     const fsys = { dirs: new Set(w.dirs || []), files: new Set(w.files || []) };
-    const V = Object.assign({}, w.V), locks = Object.assign({}, w.locks || {}), out = { exec: [], runs: [], level: null, quit: false, V, fsys };
+    const V = Object.assign({}, w.V), locks = Object.assign({}, w.locks || {}), out = { exec: [], runs: [], drops: [], level: null, quit: false, V, fsys };
     const lines = code(text).split("\n").map(l => l.trim()).filter(Boolean);
     const val = s => String(s).replace(/^"([\s\S]*)"$|^`([\s\S]*)`$/, (m, a, b) => (a !== undefined ? a : b))
       .replace(/\$\{APP_EXECUTABLE_FILENAME\}/g, "Etiuda.exe").replace(/\$\{APP_FILENAME\}/g, "Etiuda").replace(/\$\{INSTALL_REGISTRY_KEY\}/g, "KEY")
-      .replace(/\$(INSTDIR|appExe|etiuda[A-Za-z]+|R[0-9]|[0-9])/g, m => { if (!(m in V)) throw new Error("undeclared " + m); return V[m]; });
+      .replace(/\$(INSTDIR|appExe|installMode|etiuda[A-Za-z]+|R[0-9]|[0-9])/g, m => { if (!(m in V)) throw new Error("undeclared " + m); return V[m]; });
     const norm = p => p.replace(/\\{2,}/g, "\\").replace(/\\+$/, "");
     const has = p => fsys.files.has(norm(p)) || fsys.dirs.has(norm(p));
     const exists = p => (/\\\*\.\*$/.test(p) ? fsys.dirs.has(norm(p.replace(/\\\*\.\*$/, ""))) : has(p));
@@ -1481,6 +1481,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
       if (c[0] === "${FileExists}") return exists(val(c[1]));
       if (c[0] === "${Silent}") return !!w.silent;
       if (c[0] === "${UAC_IsInnerInstance}") return !!w.inner;
+      if (c[0] === "${UAC_IsAdmin}") return !!w.admin;
       if (c[1] === "==" || c[1] === "!=") return (val(c[0]).toLowerCase() === val(c[2]).toLowerCase()) === (c[1] === "==");
       throw new Error("the reader does not know the test " + c.join(" "));
     };
@@ -1524,6 +1525,7 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
         const p = norm(val(t[2])); for (const set of [fsys.files, fsys.dirs]) [...set].filter(q => under(q, p)).forEach(q => set.delete(q));
       }
       else if (op === "RMDir") { const p = norm(val(t[1])); if (fsys.dirs.has(p) && ![...fsys.files, ...fsys.dirs].some(q => q.startsWith(p + "\\"))) fsys.dirs.delete(p); }
+      else if (op === "!insertmacro" && t[1] === "etiudaDropOld") out.drops.push({ dir: val(t[2]), asUser: asUser > 0 });
       else if (op === "nsExec::Exec") { const c = val(t[t.length - 1]); out.exec.push(c); out.runs.push({ cmd: c, asUser: asUser > 0 }); stack.push("0"); }
       else if (op === "SetErrorLevel") out.level = t[1];
       else if (op === "Quit") { out.quit = true; return out; }
@@ -1831,6 +1833,87 @@ ok(recogInfo && recogInfo.bringsInnerToFront === true,
     "15r control: a Quit in what runs as the person after the swap (etiudaOldUserCopyRun) reads red");
   ok(!noQuitAfterSwap(NSH, Object.assign({}, TPL, { "include/installer.nsh": (TPL["include/installer.nsh"] || "").replace(/\n\s*File "\/oname=\$\{UNINSTALL_FILENAME\}" "\$\{UNINSTALLER_OUT_FILE\}"/, "") })).ok,
     "15r control: the uninstaller no longer written by installApplicationFiles, so never staged, reads red");
+
+  /* 15s. The older folder read from HKCU is emptied only as the person (the test architect's agreement of 12:2x on the open item
+     of d30e0cbb): the walk's root check reads the folder itself, not a junction among the folders above it, and etiudaOldFolder
+     compares strings, so with "U\j\Etiuda" registered in HKCU and j pointing at the new install's parent, an elevated drop
+     deletes the fresh copy by its own names. Replayed in two steps: the reader follows etiudaDropAside and records each
+     etiudaDropOld it reaches and on whose side (elevated, or as the person through etiudaAsUser, or an unelevated run, which is
+     the person); the walk's replay then runs each drop with the person's rights, where the person cannot delete the
+     administrator's new folder, or with an administrator's. HKLM's InstallLocation, written by an administrator, keeps its
+     elevated drop. */
+  const freshT = () => ({
+    dirs: new Set(["T", "T\\Etiuda", "T\\Etiuda\\resources", "T\\Etiuda\\locales", "T\\Etiuda\\swiftshader", "U"]),
+    files: new Set(["T\\Etiuda\\Etiuda.exe", "T\\Etiuda\\Uninstall Etiuda.exe", "T\\Etiuda\\resources\\app.asar", "T\\Etiuda\\locales\\pl.pak",
+      "T\\Etiuda\\swiftshader\\vk.dll"]),
+    links: new Map([["U\\j", "T"]]),
+  });
+  const plainU = () => ({
+    dirs: new Set(["T", "T\\Etiuda", "T\\Etiuda\\resources", "U", "U\\Etiuda", "U\\Etiuda\\resources"]),
+    files: new Set(["T\\Etiuda\\Etiuda.exe", "T\\Etiuda\\resources\\app.asar", "U\\Etiuda\\Etiuda.exe", "U\\Etiuda\\resources\\app.asar", "U\\Etiuda\\mine.txt"]),
+    links: new Map(),
+  });
+  const freshWhole = r => ["T\\Etiuda\\Etiuda.exe", "T\\Etiuda\\resources\\app.asar"].every(f => r.files.has(f));
+  const dropsAsPerson = nsh => {
+    const body = macro(nsh, "etiudaDropAside");
+    if (!body) return false;
+    const V = { $etiudaAsideMade: "0", $etiudaAside: "A", $etiudaOldDir: "", $etiudaOldUserDir: "", $etiudaBase: "T\\Etiuda", $installMode: "all",
+      $R7: "", $R8: "", $R9: "msg", $0: "" };
+    const macros = ["etiudaAsUser", "etiudaDropOldRun", "etiudaDropOld", "etiudaRemoveTree"];
+    /* Each drop the reader reaches, replayed: the person (as the person, or an unelevated run) cannot delete under T. */
+    const replay = (w, tree) => {
+      const r = runLL(body, Object.assign({ nsh, expand: [], macros }, w));
+      const fsys = tree();
+      for (const d of r.drops) {
+        const person = d.asUser || !w.admin;
+        const locked = new Set(person ? [...fsys.files].filter(f => f.startsWith("T\\")) : []);
+        replayDrop(nsh, fsys, locked, undefined, { dir: d.dir, base: "T\\Etiuda" });
+      }
+      return { r, fsys };
+    };
+    let a, b, c, d, e, f;
+    try {
+      a = replay({ V: Object.assign({}, V, { $etiudaOldUserDir: "U\\j\\Etiuda" }), inner: true, outer: true, admin: true }, freshT);
+      b = replay({ V: Object.assign({}, V, { $etiudaOldUserDir: "U\\j\\Etiuda" }), inner: true, outer: false, admin: true }, freshT);
+      c = replay({ V: Object.assign({}, V, { $etiudaOldUserDir: "U\\j\\Etiuda" }), inner: false, admin: true }, freshT);
+      d = replay({ V: Object.assign({}, V, { $etiudaOldUserDir: "U\\Etiuda" }), inner: true, outer: true, admin: true }, plainU);
+      e = replay({ V: Object.assign({}, V, { $installMode: "CurrentUser", $etiudaOldDir: "U\\j\\Etiuda" }), admin: true }, freshT);
+      f = replay({ V: Object.assign({}, V, { $installMode: "CurrentUser", $etiudaOldDir: "U\\Etiuda" }), admin: false }, plainU);
+    } catch (x) { return false; }
+    const userDrops = x => x.r.drops.filter(q => /^U\\/.test(q.dir));
+    return [a, b, c, e].every(x => freshWhole(x.fsys))
+      && userDrops(a).length === 1 && userDrops(a)[0].asUser && a.r.V.$R9 === "msg"
+      && userDrops(b).length === 0 && userDrops(c).length === 0 && userDrops(e).length === 0
+      && userDrops(d).length === 1 && userDrops(d)[0].asUser && !d.fsys.files.has("U\\Etiuda\\Etiuda.exe") && d.fsys.files.has("U\\Etiuda\\mine.txt") && freshWhole(d.fsys)
+      && userDrops(f).length === 1 && !f.fsys.files.has("U\\Etiuda\\Etiuda.exe") && freshWhole(f.fsys);
+  };
+  ok(dropsAsPerson(NSH), "15s the older folder HKCU names is emptied only as the person: through the unelevated instance in an all-users"
+    + " install (none reached, or started elevated, it is left), in a per-user install only by an unelevated run; a junction above it"
+    + " pointing at the new install's parent leaves the fresh copy whole, and a plain older folder is still emptied of the program");
+  ok(!dropsAsPerson(NSH.replace(/(\n  \$\{If\} \$installMode == "all"\n[\s\S]*?)\n    \$\{If\} \$etiudaOldUserDir != ""\n[\s\S]*?\n    \$\{EndIf\}\n(  \$\{Else\}\n)/, "$1\n    !insertmacro etiudaDropOld $etiudaOldUserDir\n$2")),
+    "15s control: the per-user copy's folder emptied elevated, as at d30e0cbb, the fresh copy deleted through the junction, reads red");
+  ok(!dropsAsPerson(NSH.replace(/(  \$\{Else\}\n)    \$\{IfNot\} \$\{UAC_IsAdmin\}\n      (!insertmacro etiudaDropOld \$etiudaOldDir\n)    \$\{EndIf\}\n/, "$1    $2")),
+    "15s control: a per-user install started elevated emptying HKCU's folder reads red");
+
+  /* 15t. Statically: etiudaDropOld is inserted three times and no more: over HKLM's folder in an all-users install, over HKCU's in
+     a per-user one under ${IfNot} ${UAC_IsAdmin}, and in etiudaDropOldRun, which is inserted only as etiudaAsUser's RUN; the
+     per-user copy's folder ($etiudaOldUserDir) reaches it only through that run. */
+  const dropReachedAsPerson = nsh => {
+    const inserts = (String(nsh).match(/!insertmacro etiudaDropOld\b[^\n]*/g) || []).map(s => s.trim());
+    const a = code(macro(nsh, "etiudaDropAside")), run = code(macro(nsh, "etiudaDropOldRun"));
+    const runVia = (String(nsh).match(/!insertmacro etiudaDropOldRun\b[^\n]*/g) || []).length === 0
+      && (String(nsh).match(/!insertmacro etiudaAsUser etiudaDropOldRun\n/g) || []).length === 1;
+    const allBranch = /\$\{If\} \$installMode == "all"\n\s*!insertmacro etiudaDropOld \$etiudaOldDir\n/.test(a);
+    const userVia = /\$\{If\} \$etiudaOldUserDir != ""\n\s*\$\{AndIf\} \$\{UAC_IsInnerInstance\}\n[\s\S]*?StrCpy \$R8 \$etiudaOldUserDir\n[\s\S]*?!insertmacro etiudaAsUser etiudaDropOldRun\n/.test(a);
+    const perUser = /\$\{Else\}\n\s*\$\{IfNot\} \$\{UAC_IsAdmin\}\n\s*!insertmacro etiudaDropOld \$etiudaOldDir\n\s*\$\{EndIf\}\n\s*\$\{EndIf\}/.test(a);
+    const inRun = /StrCpy \$etiudaBase \$R7\n\s*!insertmacro etiudaDropOld \$R8\n/.test(run);
+    return JSON.stringify(inserts.sort()) === JSON.stringify(["!insertmacro etiudaDropOld $R8", "!insertmacro etiudaDropOld $etiudaOldDir", "!insertmacro etiudaDropOld $etiudaOldDir"])
+      && runVia && allBranch && userVia && perUser && inRun && !/etiudaDropOld \$etiudaOldUserDir/.test(nsh);
+  };
+  ok(dropReachedAsPerson(NSH), "15t etiudaDropOld runs over HKCU's folder only as the person: in etiudaDropOldRun, inserted only as"
+    + " etiudaAsUser's RUN, or in a per-user install under ${IfNot} ${UAC_IsAdmin}; HKLM's keeps its elevated drop");
+  ok(!dropReachedAsPerson(NSH.replace("      !insertmacro etiudaAsUser etiudaDropOldRun\n", "      !insertmacro etiudaDropOldRun\n")),
+    "15t control: the run inserted straight into the elevated instance reads red");
 
 }
 
