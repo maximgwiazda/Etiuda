@@ -1,6 +1,7 @@
-/* The desk's sign-in (board 980, stage 3): the hint a team names, the browser path with PKCE and a nonce bound to the desk's
- * own key, desks/<id>/seat.json sealed to the lead's box and signed by the desk, nothing where no hint stands, and nothing
- * local gated on any of it. Bare node, no window, no provider reached: the one socket is the loopback on 127.0.0.1.
+/* The desk's sign-in (board 980, stages 3 and H): the hint a team names, the browser path with PKCE and a nonce bound to the
+ * desk's own key, a loopback that waits for its own state, the scopes, desks/<id>/seat.json sealed to the lead's box and signed
+ * by the desk, the quiet renewal that rewrites it daily and at each start, nothing where no hint stands, and nothing local
+ * gated on any of it. Bare node, no window, no provider reached: the one socket is the loopback on 127.0.0.1.
  *
  *     node tests/desk-signin.mjs        exit code is the number of failed checks, capped at 63
  *
@@ -27,9 +28,9 @@ const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 14;
+const PLANTS = 23;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 23 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 32 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -64,7 +65,8 @@ const NEEDS = ["const SPKI_ED25519 =", "const SEALED_TEAM_RE =", "const HPKE_KEM
 const INVITE = ["const INVITE_HIDDEN_RE =", "function inviteRead(", "function inviteRelay("].map(s => decl(MAIN, s)).join("\n");
 const NAMES = ["SIGNIN_PROVIDERS", "signinHint", "signinOffer", "signinNonce", "signinAuthorize", "signinPageOk", "signinBack", "signinTokens",
   "signinRequest", "signinListen", "signinRun", "signinRenew", "signinKeep", "signinKept", "seatDoc", "seatGenuine", "seatOpen",
-  "seatSignedBytes", "SEAT_PREFIX", "SEAT_LABEL", "SEAT_NAME", "signinFileRead", "signinFileText", "hpkeSeal", "hpkeOpen", "canonJson", "branchIdOf", "inviteRead"];
+  "seatSignedBytes", "SEAT_PREFIX", "SEAT_LABEL", "SEAT_NAME", "signinFileRead", "signinFileText", "hpkeSeal", "hpkeOpen", "canonJson", "branchIdOf", "inviteRead",
+  "GOOGLE_HD_NEEDS_EMAIL", "signinRefreshForm", "signinRenewHeld"];
 /* The section, evaluated: `swap` is [from, to], put in place of the one line that holds `from`, for a plant. */
 function load(swap, where) {
   let sec = SECTION, inv = INVITE;
@@ -74,7 +76,8 @@ function load(swap, where) {
     if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in the slice once: " + swap[0]);
     if (inSec) sec = text.replace(swap[0], swap[1]); else inv = text.replace(swap[0], swap[1]);
   }
-  const body = NEEDS + "\n" + sec + "\n" + inv + "\nreturn {" + NAMES.join(", ") + "};";
+  /* A name the slice lacks comes back undefined, so a case reaching for it fails alone rather than the whole file. */
+  const body = NEEDS + "\n" + sec + "\n" + inv + "\nreturn {" + NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "};";
   /* inviteRead's own readers stand in: a folder is taken as written, no place is kept, no relay channel is read. */
   return new Function("crypto", "Buffer", "URLSearchParams", "AbortController", "setTimeout", "clearTimeout",
     "inviteFolder", "placeKept", "teamChannelOf", body)(crypto, Buffer, URLSearchParams, AbortController, setTimeout, clearTimeout,
@@ -100,8 +103,9 @@ const TEAM = "t-0123456789abcdef";
 /* An ID token of the documented shape (Microsoft's and Google's claims), unsigned: the desk reads claims and never a signature. */
 function jwt(claims) { return b64url(JSON.stringify({ alg: "RS256", kid: "k1", typ: "JWT" })) + "." + b64url(JSON.stringify(claims)) + "." + b64url(crypto.randomBytes(64)); }
 const NOW = Date.UTC(2026, 10, 11, 23, 0, 0);
-const msClaims = nonce => ({ iss: "https://login.microsoftonline.com/" + TENANT + "/v2.0", aud: MS_CLIENT, tid: TENANT, oid: "o-1", sub: "s-1",
-  iat: NOW / 1000, exp: NOW / 1000 + 3600, nonce: nonce });
+/* A nonce of undefined leaves the claim out, as a refreshed token may. */
+const msClaims = (nonce, at) => ({ iss: "https://login.microsoftonline.com/" + TENANT + "/v2.0", aud: MS_CLIENT, tid: TENANT, oid: "o-1", sub: "s-1",
+  iat: (at || NOW) / 1000, exp: (at || NOW) / 1000 + 3600, nonce: nonce });
 const gClaims = nonce => ({ iss: "https://accounts.google.com", aud: G_CLIENT, sub: "1001", email_verified: true, iat: NOW / 1000, exp: NOW / 1000 + 3600, nonce: nonce });
 const answer = (obj, status) => ({ status: status || 200, bytes: Buffer.from(JSON.stringify(obj)) });
 /* The service's own making of the nonce, written here from the line it names, not from the desk's function. */
@@ -115,7 +119,8 @@ CASES.hint = s => {
   const h = s.signinHint(HINT);
   return h.length === 2 && h[0].id === "microsoft" && h[0].clientId === MS_CLIENT && h[1].id === "google" && h[1].clientId === G_CLIENT
     && h[1].allow === "personal" && s.signinHint({}).length === 0 && s.signinHint({ signin: { providers: [{ id: "google", clientId: "x" }] } }).length === 0
-    && s.signinHint({ signin: { providers: [{ id: "google", issuer: "https://id.example.test", clientId: G_CLIENT }] } }).length === 0;
+    && s.signinHint({ signin: { providers: [{ id: "google", issuer: "https://id.example.test", clientId: G_CLIENT }] } }).length === 0
+    && s.signinHint({ signin: { providers: [{ id: "elsewhere", clientId: G_CLIENT }] } }).length === 0;
 };
 CASES.inviteHint = s => {
   const doc = { team: TEAM, folder: "\\\\server\\share\\team", secret: "0".repeat(32), lead: { keyId: "studio-1", public: "a".repeat(64), name: "Lead" } };
@@ -221,7 +226,7 @@ CASES.noHint = async s => {
     openPage: async () => { touched.push("open"); return true; }, tokenAsk: async () => { touched.push("token"); return answer({}); }, page: () => "" };
   const offered = s.signinOffer(null, {}, "");
   const got = await s.signinRun(io, offered[0], DESK_KEY, () => NOW);
-  const renewed = await s.signinRenew(io, offered[0], DESK_KEY, "rt", "5".repeat(64), () => NOW);
+  const renewed = await s.signinRenew(io, offered[0], DESK_KEY, "rt", "5".repeat(64), "s-1", () => NOW);
   return offered.length === 0 && got.reason === "signin-none" && renewed.reason === "signin-ask" && touched.length === 0;
 };
 CASES.door = async s => {
@@ -245,13 +250,15 @@ CASES.keep = s => {
   const win = s.signinKeep(vault("unknown"), "win32", "rt-9");
   return basic === "" && keyring !== "" && keyring.indexOf("rt-9") < 0 && s.signinKept(vault("gnome_libsecret"), keyring) === "rt-9" && win !== "";
 };
-/* The loopback answers its first GET of "/" and closes; a second asker finds nothing listening. */
+const get = (port, p) => new Promise(res => {
+  const req = http.get({ host: "127.0.0.1", port, path: p, agent: false }, r => { r.resume(); r.on("end", () => res(r.statusCode)); });
+  req.on("error", e => res(e.code || "error"));
+});
+const tick = ms => new Promise(r => setTimeout(r, ms));
+const stateIs = want => q => new URLSearchParams(q).get("state") === want;
+/* The loopback answers the GET of "/" it takes and closes; a second asker finds nothing listening. */
 CASES.loopOnce = async s => {
-  const get = (port, p) => new Promise(res => {
-    const req = http.get({ host: "127.0.0.1", port, path: p, agent: false }, r => { r.resume(); r.on("end", () => res(r.statusCode)); });
-    req.on("error", e => res(e.code || "error"));
-  });
-  const loop = await s.signinListen(http, q => "page " + q.length, 10000);
+  const loop = await s.signinListen(http, q => "page " + q.length, 10000, stateIs("a"));
   const stray = await get(loop.port, "/favicon.ico");
   const first = await get(loop.port, "/?state=a&code=b");
   const query = await loop.caught.catch(() => null);
@@ -259,6 +266,175 @@ CASES.loopOnce = async s => {
   const again = await get(loop.port, "/?state=a&code=b");
   loop.close();
   return stray === 404 && first === 200 && query === "state=a&code=b" && again !== 200 && again !== 404;
+};
+/* A GET of "/" with no state, and one with another state, are answered and ignored; the reply carrying the state ends it. */
+CASES.loopStray = async s => {
+  const loop = await s.signinListen(http, () => "page", 10000, stateIs("good"));
+  let settled = false;
+  loop.caught.then(() => { settled = true; }, () => { settled = true; });
+  const bare = await get(loop.port, "/"), wrong = await get(loop.port, "/?state=bad&code=x");
+  await tick(30);
+  const waiting = !settled;
+  const right = await get(loop.port, "/?state=good&code=y");
+  const query = await loop.caught.catch(() => null);
+  loop.close();
+  return bare === 400 && wrong === 400 && waiting && right === 200 && query === "state=good&code=y";
+};
+/* The same through signinRun on a real loopback: two strays first, then the browser's reply, and the code exchanged is the reply's. */
+CASES.loopFlow = async s => {
+  const p = s.signinHint(HINT)[1], codes = [];
+  let nonce = "", code = "";
+  const io = {
+    listen: (pageFor, takes) => s.signinListen(http, pageFor, 10000, takes),
+    openPage: async url => {
+      const q = new URL(url).searchParams, port = new URL(q.get("redirect_uri")).port;
+      nonce = q.get("nonce");
+      (async () => {
+        codes.push(await get(port, "/"));
+        codes.push(await get(port, "/?state=not-this-one&code=stray"));
+        codes.push(await get(port, "/?state=" + encodeURIComponent(q.get("state")) + "&code=abc"));
+      })();
+      return true;
+    },
+    tokenAsk: async (url, form) => { code = new URLSearchParams(form.toString()).get("code"); return answer({ id_token: jwt(gClaims(nonce)), refresh_token: "rt-1" }); },
+    page: ok => ok ? "yes" : "no",
+  };
+  const got = await s.signinRun(io, p, DESK_KEY, () => NOW);
+  await tick(50);
+  return got.ok === true && code === "abc" && codes.join() === "400,400,200";
+};
+/* Microsoft is asked for openid, profile and offline_access, at sign-in and refresh; Google for openid; email of nobody. */
+CASES.scopes = s => {
+  const ms = s.SIGNIN_PROVIDERS.microsoft, g = s.SIGNIN_PROVIDERS.google, want = "openid profile offline_access";
+  const scopeOf = i => new URL(s.signinAuthorize(s.signinHint(HINT)[i], 50000, DESK_KEY).url).searchParams.get("scope");
+  const refresh = new URLSearchParams(s.signinRefreshForm(s.signinHint(HINT)[0], "rt").toString()).get("scope");
+  return s.GOOGLE_HD_NEEDS_EMAIL === false && ms.scope === want && ms.refreshScope === want && scopeOf(0) === want && refresh === want
+    && g.scope === "openid" && scopeOf(1) === "openid" && !/email/.test(JSON.stringify(s.SIGNIN_PROVIDERS));
+};
+
+/* ---- the quiet renewal ------------------------------------------------------------------------------------------------- */
+const SEED = "6".repeat(64);
+/* The keyring stood in as a visible wrapper, and the provider's door as `reply` (an answer, or an Error thrown). */
+const vaultIo = reply => {
+  const io = { asked: [], keep: t => t ? "sealed:" + t : "", kept: x => String(x || "").replace(/^sealed:/, ""),
+    tokenAsk: async (url, form) => { io.asked.push({ url, form: new URLSearchParams(form.toString()) }); if (reply instanceof Error) throw reply; return reply; } };
+  return io;
+};
+const heldOf = over => Object.assign({ team: TEAM, provider: "microsoft", refresh: "sealed:rt-1", sub: "sealed:s-1", seed: SEED, at: 1, ask: false }, over);
+const kept = (r, h) => !r.proof && r.held.ask === true && r.held.team === h.team && r.held.provider === h.provider && r.held.seed === h.seed && r.held.sub === h.sub;
+/* A refreshed token with no nonce and the seat's sub is written, with the first sign-in's seed, into a seat.json the lead opens. */
+CASES.renewWrite = async s => {
+  const p = s.signinHint(HINT)[0], plain = jwt(msClaims(undefined)), held = heldOf();
+  const io = vaultIo(answer({ id_token: plain, refresh_token: "rt-2" }));
+  const r = await s.signinRenewHeld(io, p, DESK_KEY, held, () => NOW);
+  const doc = r.proof ? s.seatDoc(BOX, TEAM, LEAD_KEY_ID, DESK_ID, r.proof.idToken, r.proof.seed, signWith(signKey)) : null;
+  const opened = doc ? s.seatOpen(box.privateKey, doc, TEAM) : null;
+  const bound = jwt(msClaims(serviceNonce(DESK_KEY, SEED)));
+  const r2 = await s.signinRenewHeld(vaultIo(answer({ id_token: bound })), p, DESK_KEY, heldOf(), () => NOW);
+  const f = io.asked.length === 1 ? io.asked[0].form : new URLSearchParams();
+  return r.said === "renewed" && !!r.proof && r.proof.idToken === plain && r.proof.seed === SEED && r.proof.team === TEAM
+    && !!opened && opened.idToken === plain && opened.seed === SEED && s.seatGenuine(doc, DESK_KEY)
+    && r.held.refresh === "sealed:rt-2" && r.held.sub === "sealed:s-1" && r.held.ask === false && r.held.at === NOW && r.held.seed === SEED
+    && held.refresh === "sealed:rt-1" && f.get("grant_type") === "refresh_token" && f.get("refresh_token") === "rt-1"
+    && r2.said === "renewed" && !!r2.proof && r2.proof.idToken === bound && r2.held.refresh === "sealed:rt-1";
+};
+/* Another sub, another desk's nonce, or no nonce with no sub kept to compare: nothing written, the refresh token forgotten. */
+CASES.renewRefuse = async s => {
+  const p = s.signinHint(HINT)[0], run = (claims, over) => s.signinRenewHeld(vaultIo(answer({ id_token: jwt(claims) })), p, DESK_KEY, heldOf(over), () => NOW);
+  const other = await run(Object.assign(msClaims(undefined), { sub: "s-2" }));
+  const otherBound = await run(Object.assign(msClaims(serviceNonce(DESK_KEY, SEED)), { sub: "s-2" }));
+  const theirs = await run(msClaims(serviceNonce(OTHER_DESK_KEY, SEED)));
+  const unsure = await run(msClaims(undefined), { sub: "" });
+  const fresh = s.signinTokens(answer({ id_token: jwt(msClaims(undefined)) }), p, serviceNonce(DESK_KEY, SEED), NOW);
+  return other.said === "signin-other" && otherBound.said === "signin-other" && theirs.said === "signin-unbound" && unsure.said === "signin-unbound"
+    && [other, otherBound, theirs].every(r => kept(r, heldOf()) && r.held.refresh === "") && kept(unsure, heldOf({ sub: "" }))
+    && fresh.reason === "signin-unbound";
+};
+/* The provider refusing, the network failing or the provider busy: nothing written, everything held stays, the calm state set; the
+   refresh token is forgotten only where the provider no longer takes it. */
+CASES.renewFail = async s => {
+  const p = s.signinHint(HINT)[0], held = heldOf();
+  const refused = await s.signinRenewHeld(vaultIo(answer({ error: "invalid_grant" }, 400)), p, DESK_KEY, held, () => NOW);
+  const offline = await s.signinRenewHeld(vaultIo(new Error("offline")), p, DESK_KEY, held, () => NOW);
+  const busy = await s.signinRenewHeld(vaultIo(answer({ error: "temporarily_unavailable" }, 503)), p, DESK_KEY, held, () => NOW);
+  const none = vaultIo(answer({}));
+  const empty = await s.signinRenewHeld(none, p, DESK_KEY, heldOf({ refresh: "" }), () => NOW);
+  return refused.said === "signin-expired" && kept(refused, held) && refused.held.refresh === ""
+    && offline.said === "signin-unreached" && kept(offline, held) && offline.held.refresh === "sealed:rt-1"
+    && busy.said === "signin-refused" && kept(busy, held) && busy.held.refresh === "sealed:rt-1"
+    && empty.said === "signin-ask" && !empty.proof && none.asked.length === 0 && held.ask === false;
+};
+
+/* ---- the renewal's wiring, evaluated with stand-ins for the shell around it --------------------------------------------- */
+const WIRE_DECLS = ["const SIGNIN_RENEW_MS =", "const SIGNIN_FIRST_MS =", "async function signinRenewNow(", "function armSigninRenew("];
+const WIRE_STANDS = ["harnessLaunch", "PLACED_ASIDE", "signinWhere", "signinState", "branchIdentity", "signinRequest", "net", "safeStorage",
+  "signinKeep", "signinKept", "signinRenew", "signinRenewHeld", "signinSave", "tellSignin", "process", "setTimeout", "stand"];
+function loadWire(st, swap) {
+  let text = WIRE_DECLS.map(d => { try { return decl(MAIN, d); } catch { return ""; } }).filter(Boolean).join("\n");
+  if (swap) {
+    if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in the wiring once: " + swap[0]);
+    text = text.replace(swap[0], swap[1]);
+  }
+  const body = "let signinPending = null, signinBusy = null, signinTimer = null;\n"
+    + "function signinFlush(w) { stand.flushed.push(signinPending); signinPending = null; return true; }\n" + text
+    + "\nreturn { signinRenewNow, armSigninRenew, SIGNIN_RENEW_MS, SIGNIN_FIRST_MS };";
+  return new Function(...WIRE_STANDS, body)(...WIRE_STANDS.map(n => n === "stand" ? st : st[n]));
+}
+/* The shell around the renewal: a team naming Microsoft, this desk's identity, the keyring as a visible wrapper, the provider's
+   door answering `reply()`, and no network at all. Real time, since the wiring reads Date.now. */
+function wireStand(s, reply) {
+  const st = { flushed: [], saves: 0, tells: 0, wheres: 0, asked: 0, timers: [], store: { hints: {}, held: null } };
+  Object.assign(st, {
+    harnessLaunch: () => false, PLACED_ASIDE: false,
+    signinWhere: () => { st.wheres++; return { at: { team: TEAM }, providers: [s.signinHint(HINT)[0]] }; },
+    signinState: () => st.store, branchIdentity: () => ({ id: DESK_ID, key: DESK_KEY }),
+    signinRequest: async () => { st.asked++; return reply ? reply() : answer({}); },
+    net: { fetch: () => { throw new Error("no network in a leg"); } }, safeStorage: {},
+    signinKeep: (store, platform, t) => t ? "sealed:" + t : "", signinKept: (store, x) => String(x || "").replace(/^sealed:/, ""),
+    signinRenew: s.signinRenew, signinRenewHeld: s.signinRenewHeld, signinSave: () => { st.saves++; }, tellSignin: () => { st.tells++; },
+    process: { platform: "win32" }, setTimeout: (fn, ms) => { st.timers.push({ fn, ms }); return { unref() {} }; },
+  });
+  return st;
+}
+/* A harness start renews nothing: signinRenewNow returns before it reads anything. */
+CASES.renewHarness = async (s, swap) => {
+  const st = wireStand(s, () => answer({ id_token: jwt(msClaims(undefined, Date.now())) }));
+  st.harnessLaunch = () => true;
+  st.store.held = heldOf();
+  const said = await loadWire(st, swap).signinRenewNow();
+  return said === "" && st.wheres === 0 && st.asked === 0 && st.saves === 0 && st.flushed.length === 0;
+};
+/* Once at each start, soon after the window opens, then daily: a named constant of a day, and never from a harness start. */
+CASES.renewDaily = async (s, swap) => {
+  const st = wireStand(s), w = loadWire(st, swap);
+  w.armSigninRenew();
+  const first = st.timers.length === 1 ? st.timers[0].ms : -1;
+  if (st.timers.length === 1) st.timers[0].fn();
+  await tick(5);
+  if (st.timers.length === 2) st.timers[1].fn();
+  await tick(5);
+  const later = st.timers.slice(1).map(t => t.ms);
+  const h = wireStand(s);
+  h.harnessLaunch = () => true;
+  loadWire(h, swap).armSigninRenew();
+  return w.SIGNIN_RENEW_MS === 24 * 60 * 60 * 1000 && first === w.SIGNIN_FIRST_MS && first > 0 && first <= 10 * 60 * 1000
+    && later.join() === [w.SIGNIN_RENEW_MS, w.SIGNIN_RENEW_MS].join() && st.wheres === 2 && h.timers.length === 0;
+};
+/* The wiring end to end: a renewal flushes the refreshed token for seat.json and clears the calm state; a refused one flushes
+   nothing, keeps the team, the provider and the seed, sets it, and tells the page. */
+CASES.renewWire = async (s, swap) => {
+  const fresh = jwt(msClaims(undefined, Date.now()));
+  const ok = wireStand(s, () => answer({ id_token: fresh, refresh_token: "rt-2" }));
+  ok.store.held = heldOf({ ask: true });
+  const said = await loadWire(ok, swap).signinRenewNow();
+  const no = wireStand(s, () => answer({ error: "invalid_grant" }, 400));
+  no.store.held = heldOf();
+  const saidNo = await loadWire(no, swap).signinRenewNow();
+  const h = no.store.held;
+  return said === "renewed" && ok.flushed.length === 1 && !!ok.flushed[0] && ok.flushed[0].idToken === fresh && ok.flushed[0].seed === SEED
+    && ok.store.held.ask === false && ok.store.held.refresh === "sealed:rt-2" && ok.saves >= 1
+    && saidNo === "signin-expired" && no.flushed.length === 0 && h.ask === true && h.team === TEAM && h.provider === "microsoft" && h.seed === SEED
+    && h.refresh === "" && no.saves >= 1 && no.tells >= 1;
 };
 
 /* ---- the cases on the branch ------------------------------------------------------------------------------------------- */
@@ -277,9 +453,18 @@ const LEGS = [
   ["ds4a", "noHint", "with no hint nothing is listened on, opened or sent, at a sign-in or a renewal"],
   ["ds4b", "door", "the door asks only a provider's own token address, by POST, no redirect followed, nothing cached, no cookie"],
   ["ds4c", "keep", "the refresh token is sealed by a real keyring and never kept on Linux's basic_text"],
-  ["ds4d", "loopOnce", "the loopback answers 404 to anything but GET /, answers the first GET / once, and then closes"],
+  ["ds4d", "loopOnce", "the loopback answers 404 to anything but GET /, answers the GET / it takes once, and then closes"],
+  ["ds6a", "loopStray", "a GET / with no state or another state is answered 400 and ignored, the sign-in still waiting, and the reply with the state ends it"],
+  ["ds6b", "loopFlow", "through signinRun on a real loopback, two strays leave the sign-in waiting and the browser's reply completes it with its own code"],
+  ["ds6c", "scopes", "Microsoft is asked for openid profile offline_access at sign-in and refresh, Google for openid, email of nobody (the named constant false)"],
+  ["ds7a", "renewWrite", "a refreshed token with no nonce and the seat's sub, or this desk's nonce, is written into seat.json with the first seed, and the lead opens it"],
+  ["ds7b", "renewRefuse", "another sub, another desk's nonce, or no nonce with no sub to compare writes nothing and forgets the refresh token"],
+  ["ds7c", "renewFail", "a refused refresh, a network failure or a busy provider writes nothing, keeps everything held and sets the calm state"],
+  ["ds7d", "renewHarness", "signinRenewNow returns at once on a harness start, reading and asking nothing"],
+  ["ds7e", "renewDaily", "the renewal runs once at each start, soon after the window, then daily by a named constant, and never from a harness start"],
+  ["ds7f", "renewWire", "the wiring flushes a renewed token for seat.json and clears the calm state; a refused one flushes nothing, keeps the seat and tells the page"],
 ];
-for (const [id, name, line] of LEGS) {
+for (let [id, name, line] of LEGS) {
   let ok = false;
   try { ok = await CASES[name](S); } catch (e) { ok = false; line += " (threw " + (e && e.message) + ")"; }
   check(ok, id + " " + line);
@@ -293,7 +478,7 @@ const armRenew = decl(MAIN, "function armSigninRenew(");
 check(!!handler && at(handler, "/* plant:signin-click */") > 0 && at(handler, "/* plant:signin-offered */") > at(handler, "/* plant:signin-click */")
   && at(handler, "signinRun(") > at(handler, "/* plant:signin-offered */") && /w\.providers\.find\(x => x\.id === id\)/.test(handler),
   "ds4e the sign-in runs only for a trusted click on an offered provider's button, both asked before the loopback or the browser");
-check(at(renew, "/* plant:renew-offered */") > 0 && at(renew, "signinRenew(") > at(renew, "/* plant:renew-offered */") && /w\.providers\.find\(/.test(renew),
+check(at(renew, "/* plant:renew-offered */") > 0 && at(renew, "signinRenewHeld(") > at(renew, "/* plant:renew-offered */") && /w\.providers\.find\(/.test(renew),
   "ds4f the quiet renewal sends nothing unless the team still names the provider it signed in with");
 check(/if \(PLACED_ASIDE \|\| harnessLaunch\(\) \|\|/.test(armRenew) && /armNoteLook\(\);\n\s*armSigninRenew\(\);/.test(MAIN),
   "ds4g the renewal is armed once the window opens and never from the harness's own window or any harness start");
@@ -329,13 +514,13 @@ if (!PLANTS_OFF) {
     try { const s = load(swap, where); red = !(await CASES[name](s)); } catch { red = true; }
     check(red, id + " plant " + swap[0].replace(/\s+/g, " ").trim().slice(0, 50) + " turns " + name + " red");
   };
-  await plant("dsp1", ["const known = signinKnown(p.id);", "const known = signinKnown(p.id) || SIGNIN_PROVIDERS.google;"], "hint");
+  await plant("dsp1", ["    const known = signinKnown(p.id);", "    const known = signinKnown(p.id) || SIGNIN_PROVIDERS.google;"], "hint");
   await plant("dsp2", ["if (signin && signin.length) out.signin = signin.slice(0, 8); /* plant:hint-invite */", "/* plant:hint-invite */"], "inviteHint", "invite");
   await plant("dsp3", ["if (teamDoc && typeof teamDoc === \"object\") return signinHint(teamDoc); /* plant:offer-team-file */", "if (teamDoc && typeof teamDoc === \"object\" && signinHint(teamDoc).length) return signinHint(teamDoc);"], "offer");
   await plant("dsp4", ["const challenge = signinB64url(crypto.createHash(\"sha256\").update(verifier).digest()); /* plant:pkce */", "const challenge = verifier;"], "pkce");
   await plant("dsp5", ["const nonce = signinNonce(deskKey, seed); /* plant:nonce-bound */", "const nonce = signinB64url(r(32));"], "nonceBound");
-  await plant("dsp6", ["if (typeof c.nonce !== \"string\" || !signinSame(c.nonce, nonce)) return { ok: false, reason: \"signin-unbound\" }; /* plant:token-nonce */", ""], "tokenNonce");
-  await plant("dsp7", ["if (!pending || typeof state !== \"string\" || !signinSame(state, pending.state)) return { ok: false, reason: \"signin-state\" }; /* plant:state */", ""], "state");
+  await plant("dsp6", ["if (!renewal && (typeof c.nonce !== \"string\" || !signinSame(c.nonce, nonce))) return { ok: false, reason: \"signin-unbound\" }; /* plant:token-nonce */", ""], "tokenNonce");
+  await plant("dsp7", ["if (!signinOurs(query, pending)) return { ok: false, reason: \"signin-state\" }; /* plant:state */", ""], "state");
   await plant("dsp8", ["const w = hpkeSeal(Buffer.from(String(box), \"hex\"), seatInfo(teamId, deskId), Buffer.alloc(0), inner); /* plant:seat-sealed */",
     "const w = hpkeSeal(Buffer.from(String(box), \"hex\"), seatInfo(teamId, \"k-0000000000000000\"), Buffer.alloc(0), inner);"], "seatSealed");
   await plant("dsp9", ["doc.sig = { alg: \"Ed25519\", keyId: String(deskId), value: value }; /* plant:seat-signed */", "doc.sig = { alg: \"Ed25519\", keyId: String(deskId), value: (value[0] === \"0\" ? \"1\" : \"0\") + value.slice(1) };"], "seatSigned");
@@ -344,6 +529,22 @@ if (!PLANTS_OFF) {
     "body: form, redirect: \"follow\", cache: \"no-store\", credentials: \"omit\", signal: ctl ? ctl.signal : undefined });"], "door");
   await plant("dsp12", ["if (!token || !sealsForReal(storage, platform)) return \"\"; /* plant:keep-real */", "if (!token) return \"\";"], "keep");
   await plant("dsp13", ["      shut();\n      caughtYes(query);", "      caughtYes(query);"], "loopOnce");
+  await plant("dsp15", ["if (!ours) { res.writeHead(400, { \"content-type\": \"text/html; charset=utf-8\", \"cache-control\": \"no-store\" }); res.end(page); return; } /* plant:loop-state */", ""], "loopStray");
+  await plant("dsp16", ["query => signinOurs(query, pending)); /* plant:loop-takes */", "() => true);"], "loopFlow");
+  await plant("dsp17", ["const GOOGLE_HD_NEEDS_EMAIL = false; /* plant:scope-email */", "const GOOGLE_HD_NEEDS_EMAIL = true;"], "scopes");
+  await plant("dsp18", ["const renewal = sub !== undefined && c.nonce === undefined; /* plant:renew-none */", "const renewal = false;"], "renewWrite");
+  await plant("dsp19", ["if (sub !== undefined && !signinSame(c.sub, sub)) return { ok: false, reason: \"signin-other\" }; /* plant:renew-sub */", ""], "renewRefuse");
+  await plant("dsp20", ["refresh: lost ? \"\" : held.refresh, ask: true }), proof: null, said: got.reason }; /* plant:renew-ask */",
+    "refresh: lost ? \"\" : held.refresh }), proof: null, said: got.reason };"], "renewFail");
+  /* The wiring's plants, put into the evaluated wiring in memory. */
+  const plantWire = async (id, swap, name) => {
+    let red = false;
+    try { red = !(await CASES[name](S, swap)); } catch { red = true; }
+    check(red, id + " plant " + swap[0].replace(/\s+/g, " ").trim().slice(0, 50) + " turns " + name + " red");
+  };
+  await plantWire("dsp21", ["  if (harnessLaunch()) return \"\"; /* plant:renew-now-harness */\n", ""], "renewHarness");
+  await plantWire("dsp22", ["const SIGNIN_RENEW_MS = 24 * 60 * 60 * 1000; /* plant:renew-daily */", "const SIGNIN_RENEW_MS = 55 * 60 * 1000;"], "renewDaily");
+  await plantWire("dsp23", ["signinTimer = setTimeout(next, SIGNIN_FIRST_MS); /* plant:renew-start */", "signinTimer = setTimeout(next, SIGNIN_RENEW_MS);"], "renewDaily");
   /* A gate on a local act, put into the desk file's write in memory, is seen. */
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),

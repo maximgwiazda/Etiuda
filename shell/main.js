@@ -8771,17 +8771,20 @@ function policyFor(hashes) {
    at it. The desk signs in as the lead's Studio does: the system browser, a loopback on 127.0.0.1 at a port the system picks,
    PKCE, a state, and a nonce bound to this desk's signing key. The ID token and the nonce's seed go into desks/<id>/seat.json,
    sealed to the lead's box and signed by the desk, for the lead's Studio to forward. Nothing on the desk waits on any of it. */
+/* Email is asked of nobody. Google is asked for it only if its hosted domain claim proves to need it, and then by this alone. */
+const GOOGLE_HD_NEEDS_EMAIL = false; /* plant:scope-email */
 /* The providers this desk can reach, each with the address, scopes and prompt the lead's Studio uses for it. A hint naming any
-   other id is passed over; the issuer is always this table's, whatever a hint says. */
+   other id is passed over; the issuer is always this table's, whatever a hint says. Microsoft's profile scope gives the
+   directory's object id, which the licence service keeps beside the seat. */
 const SIGNIN_PROVIDERS = Object.freeze({
   microsoft: Object.freeze({ issuer: "https://login.microsoftonline.com/{tenantid}/v2.0",
     authorize: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     token: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-    scope: "openid profile email offline_access", refreshScope: "openid profile email offline_access",
+    scope: "openid profile offline_access", refreshScope: "openid profile offline_access",
     extra: Object.freeze({ response_mode: "query", prompt: "select_account" }) }),
   google: Object.freeze({ issuer: "https://accounts.google.com",
     authorize: "https://accounts.google.com/o/oauth2/v2/auth", token: "https://oauth2.googleapis.com/token",
-    scope: "openid email profile", refreshScope: "", extra: Object.freeze({ prompt: "select_account" }) }),
+    scope: GOOGLE_HD_NEEDS_EMAIL ? "openid email" : "openid", refreshScope: "", extra: Object.freeze({ prompt: "select_account" }) }),
 });
 const SIGNIN_TENANT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SIGNIN_CLIENT = /^[A-Za-z0-9][A-Za-z0-9._-]{7,199}$/;
@@ -8843,10 +8846,13 @@ function signinPageOk(url) {
 }
 /* What the browser brought back to the loopback, read against the request it answers: {ok, code}, or {ok: false, reason}. The
    state is compared first, so nothing else of a reply that is not this sign-in's is read. */
+function signinOurs(query, pending) {
+  const state = new URLSearchParams(String(query || "")).get("state");
+  return !!pending && typeof state === "string" && signinSame(state, pending.state);
+}
 function signinBack(query, pending) {
   const q = new URLSearchParams(String(query || ""));
-  const state = q.get("state");
-  if (!pending || typeof state !== "string" || !signinSame(state, pending.state)) return { ok: false, reason: "signin-state" }; /* plant:state */
+  if (!signinOurs(query, pending)) return { ok: false, reason: "signin-state" }; /* plant:state */
   const error = q.get("error");
   if (error) return { ok: false, reason: error === "access_denied" ? "signin-cancelled" : "signin-refused" };
   const code = q.get("code");
@@ -8876,19 +8882,22 @@ function signinIssuerOk(p, c) {
   if (known.issuer.indexOf("{tenantid}") >= 0) return SIGNIN_TENANT.test(String(c.tid || "")) && iss === known.issuer.replace("{tenantid}", String(c.tid));
   return iss === known.issuer || iss === known.issuer.replace(/^https:\/\//, "");
 }
-/* The token answer `res` ({status, bytes}) read: {ok, idToken, refreshToken} where it holds an ID token for this client from this
-   provider, unexpired, carrying `nonce`; else {ok: false, reason}. A refreshed token is held to its first nonce, since one
-   without it binds nothing to this desk's key: "signin-unbound". */
-function signinTokens(res, p, nonce, now) {
+/* The token answer `res` ({status, bytes}) read: {ok, idToken, refreshToken, sub} where it holds an ID token for this client from
+   this provider, unexpired, with a sub, carrying `nonce`; else {ok: false, reason}. For a renewal `sub` is the seat's: the token
+   must carry it ("signin-other"), and one with no nonce at all is taken as the renewal; a nonce present must still be `nonce`. */
+function signinTokens(res, p, nonce, now, sub) {
   let json = null;
   try { json = JSON.parse(Buffer.from(res && res.bytes ? res.bytes : []).toString("utf8")); } catch { json = null; }
   if (!json || typeof json !== "object") return { ok: false, reason: "signin-unreached" };
   if (res.status !== 200 || typeof json.id_token !== "string") return { ok: false, reason: json.error === "invalid_grant" ? "signin-expired" : "signin-refused" };
   const c = signinClaims(json.id_token);
   const aud = c ? [].concat(c.aud) : [];
-  if (!c || aud.indexOf(p.clientId) < 0 || !signinIssuerOk(p, c) || !(Number(c.exp) * 1000 > now - SIGNIN_SKEW_MS)) return { ok: false, reason: "signin-token" };
-  if (typeof c.nonce !== "string" || !signinSame(c.nonce, nonce)) return { ok: false, reason: "signin-unbound" }; /* plant:token-nonce */
-  return { ok: true, idToken: json.id_token, refreshToken: typeof json.refresh_token === "string" ? json.refresh_token : "" };
+  if (!c || aud.indexOf(p.clientId) < 0 || !signinIssuerOk(p, c) || !(Number(c.exp) * 1000 > now - SIGNIN_SKEW_MS)
+    || typeof c.sub !== "string" || !c.sub) return { ok: false, reason: "signin-token" };
+  if (sub !== undefined && !signinSame(c.sub, sub)) return { ok: false, reason: "signin-other" }; /* plant:renew-sub */
+  const renewal = sub !== undefined && c.nonce === undefined; /* plant:renew-none */
+  if (!renewal && (typeof c.nonce !== "string" || !signinSame(c.nonce, nonce))) return { ok: false, reason: "signin-unbound" }; /* plant:token-nonce */
+  return { ok: true, idToken: json.id_token, refreshToken: typeof json.refresh_token === "string" ? json.refresh_token : "", sub: c.sub };
 }
 /* The token request through `fetchFn`: one POST of a form to a token address SIGNIN_PROVIDERS names, no redirect followed, nothing
    cached, no cookie, the answer read up to SIGNIN_ANSWER_MAX bytes, the whole within `ms`. {status, bytes}; throws else. */
@@ -8928,10 +8937,11 @@ async function signinRequest(fetchFn, url, form, ms) {
   try { return await Promise.race([read, late]); }
   finally { clearTimeout(timer); read.catch(() => {}); late.catch(() => {}); }
 }
-/* The loopback the browser comes back to, opened only for one sign-in: 127.0.0.1 at a port the system picks. The first GET of "/"
-   is answered with `pageFor(query)` and the loopback closes; any other path or verb is answered 404. It also closes after `ms` or
-   on close(), and `caught` then rejects, with {closed: true} for a close. Resolves {port, caught, close}. */
-function signinListen(httpMod, pageFor, ms) {
+/* The loopback the browser comes back to, opened only for one sign-in: 127.0.0.1 at a port the system picks. It waits for the
+   GET of "/" whose query `takes(query)` owns, answers it with `pageFor(query)` and closes; any other GET of "/" is answered 400
+   with `pageFor(query)` and ignored, any other path or verb 404. It also closes after `ms` or on close(), and `caught` then
+   rejects, with {closed: true} for a close. Resolves {port, caught, close}. */
+function signinListen(httpMod, pageFor, ms, takes) {
   return new Promise((resolve, reject) => {
     let done = false, timer = null, up = false, caughtYes = null, caughtNo = null;
     const caught = new Promise((yes, no) => { caughtYes = yes; caughtNo = no; });
@@ -8939,10 +8949,12 @@ function signinListen(httpMod, pageFor, ms) {
     const server = httpMod.createServer((req, res) => {
       const u = String(req.url || ""), at = u.indexOf("?"), where = at < 0 ? u : u.slice(0, at);
       if (done || req.method !== "GET" || where !== "/") { res.writeHead(404, { "content-type": "text/plain", "cache-control": "no-store" }); res.end(); return; } /* plant:loop-once */
-      done = true;
       const query = at < 0 ? "" : u.slice(at + 1);
-      let page = "";
+      let page = "", ours = false;
       try { page = String(pageFor(query)); } catch { page = ""; }
+      try { ours = typeof takes === "function" && !!takes(query); } catch { ours = false; }
+      if (!ours) { res.writeHead(400, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }); res.end(page); return; } /* plant:loop-state */
+      done = true;
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", connection: "close" });
       res.end(page);
       shut();
@@ -8963,12 +8975,12 @@ function signinListen(httpMod, pageFor, ms) {
     });
   });
 }
-/* One sign-in, the person's own act. `io` {listen(pageFor), openPage(url), tokenAsk(url, form), page(ok), rand?}: the shell's door,
-   loopback and browser, or a leg's stand-ins. {ok, provider, idToken, refreshToken, seed}, or {ok: false, reason}. */
+/* One sign-in, the person's own act. `io` {listen(pageFor, takes), openPage(url), tokenAsk(url, form), page(ok), rand?}: the
+   shell's door, loopback and browser, or a leg's stand-ins. {ok, provider, idToken, refreshToken, sub, seed}, or {ok: false, reason}. */
 async function signinRun(io, p, deskKey, now) {
   if (!p || !signinKnown(p.id) || !/^[0-9a-f]{64}$/.test(String(deskKey))) return { ok: false, reason: "signin-none" };
   let pending = null;
-  const loop = await io.listen(query => io.page(signinBack(query, pending).ok));
+  const loop = await io.listen(query => io.page(signinBack(query, pending).ok), query => signinOurs(query, pending)); /* plant:loop-takes */
   try {
     pending = signinAuthorize(p, loop.port, deskKey, io.rand);
     let opened = false;
@@ -8983,22 +8995,36 @@ async function signinRun(io, p, deskKey, now) {
     catch { return { ok: false, reason: "signin-unreached" }; }
     const got = signinTokens(res, p, pending.nonce, now());
     if (!got.ok) return got;
-    return { ok: true, provider: p.id, idToken: got.idToken, refreshToken: got.refreshToken, seed: pending.seed };
+    return { ok: true, provider: p.id, idToken: got.idToken, refreshToken: got.refreshToken, sub: got.sub, seed: pending.seed };
   } finally {
     loop.close();
   }
 }
-/* The quiet renewal: the refresh token exchanged for a fresh ID token, nothing shown. {ok, idToken, refreshToken} where the
-   new token still carries this desk's nonce; "signin-ask" where the provider no longer takes the refresh token or the token it
-   gives binds nothing, so the person is asked; "signin-unreached" where it could not be asked, and the refresh token is kept. */
-async function signinRenew(io, p, deskKey, refreshToken, seed, now) {
+/* The quiet renewal: the refresh token exchanged for a fresh ID token, nothing shown. {ok, idToken, refreshToken, sub} where the
+   new token is the seat's (signinTokens with `sub`, the last token's; "" holds it to this desk's nonce alone); else signinTokens'
+   reason, "signin-unreached" where the provider could not be asked, or "signin-ask" where there is nothing to ask with. */
+async function signinRenew(io, p, deskKey, refreshToken, seed, sub, now) {
   if (!p || !signinKnown(p.id) || !refreshToken || !/^[0-9a-f]{64}$/.test(String(seed))) return { ok: false, reason: "signin-ask" };
   let res = null;
   try { res = await io.tokenAsk(signinKnown(p.id).token, signinRefreshForm(p, refreshToken)); }
   catch { return { ok: false, reason: "signin-unreached" }; }
-  const got = signinTokens(res, p, signinNonce(deskKey, seed), now());
-  if (!got.ok) return got.reason === "signin-unreached" ? got : { ok: false, reason: "signin-ask" };
-  return { ok: true, idToken: got.idToken, refreshToken: got.refreshToken || refreshToken };
+  const got = signinTokens(res, p, signinNonce(deskKey, seed), now(), sub ? String(sub) : undefined);
+  if (!got.ok) return got;
+  return { ok: true, idToken: got.idToken, refreshToken: got.refreshToken || refreshToken, sub: got.sub };
+}
+/* The reasons a renewal forgets the refresh token: the provider no longer takes it, or the token it gives is not this seat's. */
+const SIGNIN_LOST = Object.freeze(["signin-ask", "signin-expired", "signin-other", "signin-unbound"]);
+/* One quiet renewal of `held` (signin.json's), `io` {tokenAsk, keep(text), kept(sealed)}: {held, proof, said}, `held` the new
+   record and `proof` {team, idToken, seed} for seat.json, the seed the first sign-in's. A failure gives no proof and sets `ask`;
+   the team, the provider and the seed stay, so the desk keeps working on what it has. */
+async function signinRenewHeld(io, p, deskKey, held, now) {
+  if (!held) return { held: null, proof: null, said: "signin-ask" };
+  const token = held.refresh ? io.kept(held.refresh) : "", sub = held.sub ? io.kept(held.sub) : "";
+  const got = token ? await signinRenew(io, p, deskKey, token, held.seed, sub, now) : { ok: false, reason: "signin-ask" };
+  if (got.ok) return { held: Object.assign({}, held, { refresh: io.keep(got.refreshToken) || held.refresh, sub: held.sub || io.keep(got.sub),
+    at: now(), ask: false }), proof: { team: held.team, idToken: got.idToken, seed: held.seed }, said: "renewed" };
+  const lost = SIGNIN_LOST.indexOf(got.reason) >= 0;
+  return { held: Object.assign({}, held, { refresh: lost ? "" : held.refresh, ask: true }), proof: null, said: got.reason }; /* plant:renew-ask */
 }
 /* The refresh token sealed by the system's store, as base64, or "" where the store seals nothing for real (sealsForReal: no
    keyring, or Linux's basic_text): no refresh token is kept there, and the next fresh proof asks the person. */
@@ -9057,7 +9083,8 @@ function seatOpen(skR, doc, teamId) {
   } catch { return null; }
 }
 /* The sign-in's file beside desk.json, read whole or not at all: {hints: team id -> providers an invitation named, held: {team,
-   provider, refresh, seed, at} or null}. `refresh` is signinKeep's, "" where none is kept. Nothing in it is a secret but that. */
+   provider, refresh, sub, seed, at, ask} or null}. `refresh` and the seat's `sub` are signinKeep's, "" where none is kept, and
+   nothing else in it is a secret; `ask` says the last quiet renewal did not succeed. */
 const SIGNIN_FILE = "signin.json";
 function signinFileRead(text) {
   let d = null;
@@ -9068,16 +9095,19 @@ function signinFileRead(text) {
     for (const k of Object.keys(d.hints)) if (SEALED_TEAM_RE.test(k) && Array.isArray(d.hints[k])) out.hints[k] = signinHint({ signin: { providers: d.hints[k] } });
   const h = d.held;
   if (h && typeof h === "object" && SEALED_TEAM_RE.test(String(h.team)) && signinKnown(h.provider) && /^[0-9a-f]{64}$/.test(String(h.seed)))
-    out.held = { team: String(h.team), provider: String(h.provider), refresh: typeof h.refresh === "string" ? h.refresh : "", seed: String(h.seed),
-      at: Number.isFinite(h.at) ? h.at : 0 };
+    out.held = { team: String(h.team), provider: String(h.provider), refresh: typeof h.refresh === "string" ? h.refresh : "",
+      sub: typeof h.sub === "string" ? h.sub : "", seed: String(h.seed), at: Number.isFinite(h.at) ? h.at : 0, ask: h.ask === true };
   return out;
 }
 function signinFileText(s) { return JSON.stringify({ format: 1, hints: s.hints || {}, held: s.held || null }, null, 1) + "\n"; }
 
 /* The sign-in's wiring: the person's click, the browser, seat.json, the quiet renewal and the page's row. Every act asks
    signinWhere first, so a desk with no team, or a team that names no provider, opens nothing and sends nothing. */
-const SIGNIN_RENEW_MS = 55 * 60 * 1000, SIGNIN_FIRST_MS = 2 * 60 * 1000;
-let signinStore, signinBusy = null, signinSaid = "", signinAsk = false, signinClick = null, signinPending = null, signinTimer = null;
+/* The quiet renewal runs SIGNIN_FIRST_MS after the window opens at each start, then daily while the desk runs; each asks the
+   provider once. The lead's Studio has the refreshed token's first hour to forward it. */
+const SIGNIN_RENEW_MS = 24 * 60 * 60 * 1000; /* plant:renew-daily */
+const SIGNIN_FIRST_MS = 2 * 60 * 1000;
+let signinStore, signinBusy = null, signinSaid = "", signinClick = null, signinPending = null, signinTimer = null;
 function signinState() {
   if (signinStore !== undefined) return signinStore;
   let text = "";
@@ -9144,7 +9174,7 @@ function signinFlush(where) {
 function signinView() {
   const w = signinWhere(), held = signinState().held;
   const signedIn = held && w.at && held.team === w.at.team && w.providers.some(p => p.id === held.provider) ? held.provider : "";
-  return { offered: w.providers.map(p => p.id), signedIn: signedIn, busy: !!signinBusy, ask: signinAsk && !!w.providers.length, said: signinSaid };
+  return { offered: w.providers.map(p => p.id), signedIn: signedIn, busy: !!signinBusy, ask: !!signedIn && held.ask === true, said: signinSaid };
 }
 function tellSignin() {
   const win = theWindow;
@@ -9159,17 +9189,17 @@ function signinPageHtml(ok) {
 }
 function signinIo(run) {
   return {
-    listen: pageFor => signinListen(http, pageFor, SIGNIN_WAIT_MS).then(l => { run.loop = l; return l; }),
+    listen: (pageFor, takes) => signinListen(http, pageFor, SIGNIN_WAIT_MS, takes).then(l => { run.loop = l; return l; }),
     openPage: url => signinPageOk(url) ? Promise.resolve(shell.openExternal(url)).then(() => true) : false, /* plant:signin-open */
     tokenAsk: (url, form) => signinRequest((u, init) => net.fetch(u, init), url, form),
     page: ok => signinPageHtml(ok),
   };
 }
-/* A fresh proof, kept and written: the refresh token sealed where the system seals for real, the seed beside it. */
+/* A fresh proof, kept and written: the refresh token and the seat's sub sealed where the system seals for real, the seed beside. */
 function signinTake(team, provider, got) {
   const s = signinState(), was = s.held && s.held.team === team && s.held.provider === provider ? s.held.refresh : "";
   s.held = { team: team, provider: provider, refresh: signinKeep(safeStorage, process.platform, got.refreshToken) || (got.refreshToken ? "" : was),
-    seed: got.seed, at: Date.now() };
+    sub: signinKeep(safeStorage, process.platform, got.sub), seed: got.seed, at: Date.now(), ask: false };
   signinSave();
   signinPending = { team: team, idToken: got.idToken, seed: got.seed };
 }
@@ -9198,7 +9228,6 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
     const got = await signinRun(signinIo(run), p, me.key, Date.now);
     if (got.ok) {
       signinTake(w.at.team, p.id, got);
-      signinAsk = false;
       signinFlush(signinWhere());
       signinSaid = "signin-done";
     } else signinSaid = got.reason;
@@ -9214,31 +9243,26 @@ ipcMain.handle("etiuda:signin-stop", (e) => {
   if (run && run.loop) run.loop.close();
   return !!run;
 });
-/* The quiet renewal, hourly once the window is open, for a desk holding a refresh token for a team that still names its provider.
-   Never from the harness's own window or any harness start, so no leg reaches a provider. */
+/* The quiet renewal, for a desk holding a refresh token for a team that still names its provider: seat.json rewritten with the
+   seat's refreshed token, or nothing written and the row's calm sentence. Never from the harness's own window or any harness
+   start, so no leg reaches a provider. */
 async function signinRenewNow() {
+  if (harnessLaunch()) return ""; /* plant:renew-now-harness */
   const w = signinWhere();
   if (signinPending) signinFlush(w);
   const s = signinState(), held = s.held;
   if (!held || !held.refresh || signinBusy || !w.at || w.at.team !== held.team) return "";
   const p = w.providers.find(x => x.id === held.provider), me = branchIdentity(false);
   if (!p || !me) return ""; /* plant:renew-offered */
-  const token = signinKept(safeStorage, held.refresh);
-  const got = token ? await signinRenew({ tokenAsk: (url, form) => signinRequest((u, init) => net.fetch(u, init), url, form) }, p, me.key, token, held.seed, Date.now)
-    : { ok: false, reason: "signin-ask" };
-  if (got.ok) {
-    held.refresh = signinKeep(safeStorage, process.platform, got.refreshToken) || held.refresh;
-    held.at = Date.now();
-    signinSave();
-    signinPending = { team: held.team, idToken: got.idToken, seed: held.seed };
-    signinFlush(signinWhere());
-  } else if (got.reason === "signin-ask") {
-    held.refresh = "";
-    signinSave();
-    signinAsk = true;
-    tellSignin();
-  }
-  return got.ok ? "renewed" : got.reason;
+  const io = { tokenAsk: (url, form) => signinRequest((u, init) => net.fetch(u, init), url, form),
+    keep: text => signinKeep(safeStorage, process.platform, text), kept: sealed => signinKept(safeStorage, sealed) };
+  const r = await signinRenewHeld(io, p, me.key, held, Date.now);
+  if (s.held !== held) return ""; /* a sign-in took its place meanwhile */
+  s.held = r.held;
+  signinSave();
+  if (r.proof) { signinPending = r.proof; signinFlush(signinWhere()); }
+  tellSignin();
+  return r.said;
 }
 function armSigninRenew() {
   if (PLACED_ASIDE || harnessLaunch() || signinTimer || !net || typeof net.fetch !== "function") return; /* plant:renew-harness */
@@ -9247,7 +9271,7 @@ function armSigninRenew() {
     signinTimer = setTimeout(next, SIGNIN_RENEW_MS);
     if (signinTimer.unref) signinTimer.unref();
   };
-  signinTimer = setTimeout(next, SIGNIN_FIRST_MS);
+  signinTimer = setTimeout(next, SIGNIN_FIRST_MS); /* plant:renew-start */
   if (signinTimer.unref) signinTimer.unref();
 }
 
