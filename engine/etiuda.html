@@ -8674,6 +8674,13 @@ What you type stays in this browser only.`;
     "If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays. Joining again takes a new invitation, which shows the lead's key to compare once more.": "Jeśli klucz widoczny u lidera zespołu nie zgadza się z tym, stanowisko zapomni lidera zespołu i wszystkie klucze przechowywane pod nim, więc nic nowego od tego zespołu już tu nie dotrze. Używany katalog zostaje. Ponowne dołączenie wymaga nowego zaproszenia, które znów pokaże klucz lidera do porównania.",
     "{LEAD}'s team": "Zespół osoby {LEAD}",
     "Leave this team": "Opuść ten zespół",
+    // placeholder: Claudette, the six lines below
+    "Team sign-in": "Logowanie do zespołu",
+    "Sign in with {PROVIDER}": "Zaloguj się przez {PROVIDER}",
+    "Finish signing in in the browser that opened. Etiuda is waiting for it.": "Logowanie trwa w przeglądarce, która się otworzyła. Etiuda czeka na jego koniec.",
+    "Signed in with {PROVIDER}.": "Zalogowano przez {PROVIDER}.",
+    "This desk could not renew its sign-in by itself. It can sign in again below.": "To stanowisko nie mogło samo odnowić logowania. Można zalogować się ponownie poniżej.",
+    "The sign-in did not finish. Everything on this desk works as before.": "Logowanie nie zostało dokończone. Wszystko na tym stanowisku działa jak dotąd.",
     "This desk will leave this team.": "To stanowisko opuści ten zespół.",
     "After leaving a team, this desk can join it again with a new invitation from its lead.": "Po opuszczeniu zespołu to stanowisko może do niego wrócić z nowym zaproszeniem od lidera.",
     "This desk left this team on {DATE}. Join it again?": "To stanowisko opuściło ten zespół {DATE}. Dołączyć do niego ponownie?",
@@ -35329,10 +35336,58 @@ What you type stays in this browser only.`;
       { after: '<div class="sx-note"><span>' + esc(t("A shortcut can be changed to an F key or a combination with Ctrl or Alt, since keys needed for typing stay with typing; the keys Etiuda itself needs are shown as fixed.")) + '</span><button type="button" class="btn" id="setResetKeys">' + esc(t("Reset shortcuts")) + "</button></div>", rows: [] }
     ].filter(Boolean);
   }
+  var SIGNIN_NAMES = { microsoft: "Microsoft", google: "Google" };
+  var signinHeard = false;
+  function signinNow() {
+    const h = eHost();
+    if (!h || typeof h.signinState !== "function") return null;
+    try {
+      const v = h.signinState();
+      return v && typeof v === "object" ? v : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  function signinRow() {
+    const s = signinNow();
+    const offered = s && Array.isArray(s.offered) ? s.offered.filter((id) => Object.prototype.hasOwnProperty.call(SIGNIN_NAMES, id)) : [];
+    if (!offered.length) return null;
+    let note = "";
+    if (s.busy) note = t("Finish signing in in the browser that opened. Etiuda is waiting for it.");
+    else if (s.ask) note = t("This desk could not renew its sign-in by itself. It can sign in again below.");
+    else if (s.signedIn && SIGNIN_NAMES[s.signedIn]) note = t("Signed in with {PROVIDER}.").split("{PROVIDER}").join(SIGNIN_NAMES[s.signedIn]);
+    else if (s.said && s.said !== "signin-done") note = t("The sign-in did not finish. Everything on this desk works as before.");
+    const ctl = s.busy ? '<button type="button" class="btn" data-signin-stop="1">' + esc(t("Cancel")) + "</button>" : offered.map((id) => '<button type="button" class="btn" data-e-open="signin" data-e-provider="' + esc(id) + '">' + esc(t("Sign in with {PROVIDER}").split("{PROVIDER}").join(SIGNIN_NAMES[id])) + "</button>").join("");
+    return { key: "signin", html: '<div class="set-row" data-row="signin">' + sxIcon("desks") + '<div class="set-label">' + esc(t("Team sign-in")) + (note ? "<small>" + esc(note) + "</small>" : "") + '</div><div class="set-ctl">' + ctl + "</div></div>" };
+  }
+  function wireSigninRow(box) {
+    const h = eHost();
+    if (!h || !box.querySelector('[data-row="signin"]')) return;
+    const again = () => {
+      if (document.getElementById("setBody")) paintSettings();
+    };
+    if (!signinHeard && typeof h.onSignin === "function") {
+      signinHeard = true;
+      h.onSignin(again);
+    }
+    box.querySelectorAll('[data-e-open="signin"]').forEach((b) => {
+      b.onclick = () => {
+        if (typeof h.signIn === "function") Promise.resolve(h.signIn(b.getAttribute("data-e-provider"))).then(again, again);
+      };
+    });
+    box.querySelectorAll("[data-signin-stop]").forEach((b) => {
+      b.onclick = () => {
+        if (typeof h.signinStop === "function") Promise.resolve(h.signinStop()).catch(() => {
+        });
+      };
+    });
+  }
   function teamsGroups() {
     const joinDoor = joinDoorButton("setJoinTeam");
     const rows = teamLeads().map((l, i, all) => ({ key: "team", html: teamRowHtml(l, i === all.findIndex((x) => !x.removed) ? t("The team's lead can see which catalog this desk uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk, since copies of unlisted catalogs are off. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own.") : "", i === all.findIndex((x) => !x.policy)) }));
     if (joinDoor) rows.push({ key: "join", html: '<div class="set-row" data-row="join">' + sxIcon("desks") + '<div class="set-label">' + esc(t("Team")) + '</div><div class="set-ctl">' + joinDoor + "</div></div>" });
+    const signin = signinRow();
+    if (signin) rows.push(signin);
     if (eHasShared() && !relayDesk()) rows.push(row(
       "sharededit",
       "teams",
@@ -35816,6 +35871,7 @@ What you type stays in this browser only.`;
     }
     wireTeamRows(box);
     wireOrgModelRow(box);
+    wireSigninRow(box);
     const joinBtn = box.querySelector("#setJoinTeam");
     if (joinBtn) joinBtn.onclick = () => openJoinPaste();
     const nameBox = box.querySelector("#setAgentName");

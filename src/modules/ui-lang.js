@@ -1343,6 +1343,13 @@ UI_STRINGS.pl={
   "If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays. Joining again takes a new invitation, which shows the lead's key to compare once more.":"Jeśli klucz widoczny u lidera zespołu nie zgadza się z tym, stanowisko zapomni lidera zespołu i wszystkie klucze przechowywane pod nim, więc nic nowego od tego zespołu już tu nie dotrze. Używany katalog zostaje. Ponowne dołączenie wymaga nowego zaproszenia, które znów pokaże klucz lidera do porównania.",
   "{LEAD}'s team":"Zespół osoby {LEAD}",
   "Leave this team":"Opuść ten zespół",
+  // placeholder: Claudette, the six lines below
+  "Team sign-in":"Logowanie do zespołu",
+  "Sign in with {PROVIDER}":"Zaloguj się przez {PROVIDER}",
+  "Finish signing in in the browser that opened. Etiuda is waiting for it.":"Logowanie trwa w przeglądarce, która się otworzyła. Etiuda czeka na jego koniec.",
+  "Signed in with {PROVIDER}.":"Zalogowano przez {PROVIDER}.",
+  "This desk could not renew its sign-in by itself. It can sign in again below.":"To stanowisko nie mogło samo odnowić logowania. Można zalogować się ponownie poniżej.",
+  "The sign-in did not finish. Everything on this desk works as before.":"Logowanie nie zostało dokończone. Wszystko na tym stanowisku działa jak dotąd.",
   "This desk will leave this team.":"To stanowisko opuści ten zespół.",
   "After leaving a team, this desk can join it again with a new invitation from its lead.":"Po opuszczeniu zespołu to stanowisko może do niego wrócić z nowym zaproszeniem od lidera.",
   "This desk left this team on {DATE}. Join it again?":"To stanowisko opuściło ten zespół {DATE}. Dołączyć do niego ponownie?",
