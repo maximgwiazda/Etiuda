@@ -10,7 +10,8 @@ import { agentName } from "./agent.js";
 import { teamLeads } from "./team-join.js";
 import { hooks } from "./hooks.js";
 
-const SIGNIN_NAMES={microsoft:"Microsoft", google:"Google"};
+/* "lab" is offered only by the sign-in lab (shell/main.js signinLabRead), never by a desk installed or packaged. */
+const SIGNIN_NAMES={microsoft:"Microsoft", google:"Google", lab:"Lab"}; // placeholder: Claudette, "Lab"
 /* The shell's answer as the page keeps it; every field checked, so a missing host reads as nothing offered. */
 function signinRead(v){
   const o=v && typeof v==="object" ? v : {};
@@ -29,7 +30,7 @@ function signinRead(v){
     said: typeof o.said==="string" ? o.said : "",
     preview: o.preview===true && Array.isArray(o.offered) && o.offered.some(known),
     /* The provider's page of the sign-in that waits, only while one does. */
-    link: known(o.busy) && typeof o.link==="string" && /^https:\/\/\S+$/.test(o.link) ? o.link : "",
+    link: known(o.busy) && typeof o.link==="string" && (/^https:\/\/\S+$/.test(o.link) || (o.busy==="lab" && /^http:\/\/127\.0\.0\.1:[0-9]+\/\S*$/.test(o.link))) ? o.link : "",
     keeps: o.keeps!==false
   };
 }
@@ -159,7 +160,7 @@ const LOGO={
    names is the button's data-e-open. */
 function signinProvidersHtml(ids, row){
   return '<div class="sgn-provs'+(row?' sgn-row':'')+'">'+ids.map(id=>'<button type="button" class="sgn-p '+esc(id)+'" data-e-open="signin" data-e-provider="'+esc(id)+'">'
-    +LOGO[id]+'<span>'+esc(id==="microsoft" ? t("Sign in with Microsoft") : t("Sign in with Google"))+'</span></button>').join("")+'</div>';
+    +(LOGO[id]||"")+'<span>'+esc(id==="microsoft" ? t("Sign in with Microsoft") : id==="google" ? t("Sign in with Google") : SIGNIN_NAMES[id])+'</span></button>').join("")+'</div>';
 }
 function signinAvatarHtml(initial, off, big){
   return '<span class="sgn-av'+(big?' l':'')+(off?' off':'')+'" aria-hidden="true">'+(initial ? esc(initial) : ICON_PERSON)+'</span>';

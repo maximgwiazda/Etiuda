@@ -30,7 +30,7 @@ import { E_VERSION } from "./env.js";
 import { sxIcon } from "./sx-icons.js";
 import { focusKey, focusSame } from "./dom.js";
 import { orgModel, orgRanks, syncOrgMark } from "./org-model.js";
-import { signinNow, signinShown, signinParts, signinSay, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow,
+import { SIGNIN_NAMES, signinNow, signinShown, signinParts, signinSay, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow,
   signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect, signinCopyHtml } from "./signin.js";
 
 /* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name,
@@ -274,7 +274,7 @@ function accountCardHtml(v){
   }
   let h='<div class="sgn-top col">';
   if(v.busy){
-    const prov=v.busy==="google" ? "Google" : "Microsoft";
+    const prov=SIGNIN_NAMES[v.busy]||"Microsoft";
     h+=signinIdentHtml({initial:"", name:t("Finish signing in in the browser"),
       sub:t("The browser has opened {PROVIDER}'s sign-in page. Etiuda waits here and carries on by itself when you come back.").split("{PROVIDER}").join(prov)})
       +'<span class="sgn-acts"><button type="button" class="btn" data-signin-act="again">'+esc(t("Open the browser again"))+'</button>'
