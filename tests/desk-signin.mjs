@@ -44,7 +44,7 @@ const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modul
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const PLANTS = 45;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 65 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 66 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -812,19 +812,45 @@ CASES.previewPage = async () => {
   const on = { offered: ["microsoft", "google"], preview: true }, off = { offered: ["microsoft", "google"] };
   const before = word(on), pressed = word(Object.assign({}, on, { said: "signin-preview" })), plain = word(off);
   const a = acct(on), aPressed = acct(Object.assign({}, on, { said: "signin-preview" })), aOff = acct(off);
+  /* The words as read, the markup that sets the first sentence apart taken away. */
+  const words = h => String(h).replace(/<[^>]*>/g, "");
   const html = typeof P.signinPreviewHtml === "function" ? P.signinPreviewHtml(P.signinRead(on)) : "";
   storage.lsSet("eUiLang", "pl");
   let pl = {}, plA = "";
   try { pl = word(Object.assign({}, on, { said: "signin-preview" })); plA = acct(on); } finally { storage.lsSet("eUiLang", "en"); }
   return before.moment === "before" && before.preview === PREVIEW_LINE && pressed.moment === "refused" && pressed.heading === PREVIEW_PRESSED
     && !pressed.line && pressed.preview === PREVIEW_LINE && plain.preview === undefined && P.signinRead({ offered: [], preview: true }).preview === false
-    && /data-signin-preview/.test(html) && html.indexOf(PREVIEW_LINE) >= 0
-    && /data-signin-preview/.test(a) && a.indexOf(PREVIEW_LINE) >= 0 && aPressed.indexOf(PREVIEW_PRESSED) >= 0 && aPressed.indexOf(PREVIEW_LINE) >= 0
+    && /data-signin-preview/.test(html) && words(html).indexOf(PREVIEW_LINE) >= 0
+    && /data-signin-preview/.test(a) && words(a).indexOf(PREVIEW_LINE) >= 0 && words(aPressed).indexOf(PREVIEW_PRESSED) >= 0 && words(aPressed).indexOf(PREVIEW_LINE) >= 0
     && !/data-signin-preview/.test(aOff) && /data-e-open="signin" data-e-provider="google"/.test(aOff)
-    && pl.heading === PREVIEW_PRESSED_PL && pl.preview === PREVIEW_LINE_PL && plA.indexOf(PREVIEW_LINE_PL) >= 0;
+    && pl.heading === PREVIEW_PRESSED_PL && pl.preview === PREVIEW_LINE_PL && words(plA).indexOf(PREVIEW_LINE_PL) >= 0;
 };
 /* Not shipped: tools/signin-preview.cmd is outside electron-builder's files; read, never run (run, it starts the installed desk):
    per-user first, then all-users, the variable set once for that one start, no setx, no registry. */
+/* The line as the product designer placed it: "Preview only." in the ink at 600, the rest the caption's own; in the panel under its
+   line (or its heading after a press) and before the providers' buttons, 12 px above and 10 px below; in Account before the buttons
+   at the card's full measure, 10 px below. */
+CASES.previewLook = async () => {
+  if (!P || typeof P.signinPanelHtml !== "function") return false;
+  const SET = await import(pathToFileURL(path.join(ROOT, "src", "modules", "settings.js")).href);
+  const quiet = { contains: () => false, add() {}, remove() {}, toggle() {} };
+  globalThis.window = { innerWidth: 1280, innerHeight: 800, addEventListener() {}, removeEventListener() {},
+    E_HOST: { signinState: () => ({ offered: ["microsoft", "google"], preview: true }) } };
+  globalThis.document = { querySelector: () => null, getElementById: () => null, querySelectorAll: () => [], documentElement: { dataset: {}, classList: quiet },
+    body: { classList: quiet }, addEventListener() {}, removeEventListener() {} };
+  globalThis.getComputedStyle = () => ({ getPropertyValue: () => "" });
+  let acct = "";
+  try { acct = SET.settingsPageHtml("account", ""); } finally { delete globalThis.window; delete globalThis.document; delete globalThis.getComputedStyle; }
+  const on = { offered: ["microsoft", "google"], preview: true };
+  const before = P.signinPanelHtml(P.signinDoor(P.signinRead(on))), pressed = P.signinPanelHtml(P.signinDoor(P.signinRead(Object.assign({}, on, { said: "signin-preview" }))));
+  const LINE = '<p class="sgn-cap sgn-preview" data-signin-preview><b>Preview only.</b> <span>Sign-in is not set up yet, so nothing here is sent.</span></p>';
+  const css = fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8");
+  return before.indexOf('</p>' + LINE + '<div class="sgn-provs">') > 0 && /^<h4>[^<]*<\/h4><p class="sgn-lede">/.test(before)
+    && pressed.indexOf("<h4>" + PREVIEW_PRESSED + "</h4>" + LINE) === 0 && acct.indexOf("<div>" + LINE + '<div class="sgn-provs row">') > 0
+    && css.indexOf(".sgn-cap.sgn-preview b{color:var(--ink);font-weight:600}") >= 0 && !/\.sgn-cap\.sgn-preview\{[^}]*font-weight:600/.test(css)
+    && css.indexOf(".sgn-lede:has(+ .sgn-preview){margin-bottom:12px}") >= 0 && css.indexOf(".sgn-panel .sgn-preview{margin:12px 0 10px}") >= 0
+    && css.indexOf(".sgn-top .sgn-preview{max-width:none;margin:0 0 10px}") >= 0;
+};
 CASES.previewCmd = () => {
   const { minimatch } = createRequire(import.meta.url)("minimatch");
   const cfgText = fs.readFileSync(path.join(ROOT, "electron-builder.js"), "utf8"), fa = cfgText.indexOf("files: [");
@@ -1052,6 +1078,7 @@ const LEGS = [
   ["ds12c", "previewPress", "in the preview a trusted press of either provider is answered signin-preview with no identity, browser, loopback, provider, service, write or request"],
   ["ds12d", "previewPage", "the preview's line stands in the door's content and Account's card, the press's line as the heading, none without the preview; Polish too"],
   ["ds12e", "previewCmd", "tools/signin-preview.cmd is outside the packaged files and starts the installed desk, per-user first, with the variable for that start alone"],
+  ["ds12f", "previewLook", "the preview's line as the designer placed it: \"Preview only.\" at 600, the rest the caption's; in the panel before the providers, in Account at the card's measure"],
   ["ds13a", "secretTable", "the tree holds no client secret: every provider's clientSecret is \"\" and a configured table offers none"],
   ["ds13b", "secretSent", "client_secret goes with Google's code exchange and refresh only where a secret is present, and without one every byte is as before"],
   ["ds13c", "secretPacked", "the package's signin-secret.json gives Google's secret where it is {format: 1, google} of a secret's shape, and nothing else"],
