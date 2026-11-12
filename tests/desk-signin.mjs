@@ -23,7 +23,8 @@
  * THE DOOR-FINDING (ds17, board 980; Max, 2026-11-12 18:46 and 18:57): the doors the service hands beside a certificate are kept
  * only whole, their lead key's id its canonical one (the test architect's read), kept with the certificate and in the file; a desk
  * signed in with no team offers them by host and lead print, and a press makes the join A4's knock serves, the lead and the box
- * from the door; the envelope keeps that join; the page draws the doors, Polish too.
+ * from the door; the envelope keeps that join; the page draws the doors, Polish too. A door's relay address is the desk's own rule
+ * for one, teamChannelOf's, which an invitation's address meets, at the keep, the offer and the knock (ds17h; the Hydrogen review's third).
  *
  * GOOGLE'S CLIENT SECRET (ds13): optional, its value only ever in a package, never in this tree. Every value here is the stand-in
  * STAND_IN, which no provider would issue; a leg that needs a value of a real secret's shape builds it from pieces at run time, so
@@ -47,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 67;
+const PLANTS = 71;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 90 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + TRACE_PLANTS);
+const EXPECTED = 91 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + TRACE_PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -80,17 +81,18 @@ function decl(src, start) {
   return src.slice(at + 1, end + 2);
 }
 const NEEDS = ["const SEALED_TEAM_RE =", "const LINUX_KEYRINGS =", "function sealsForReal(", "function branchIdOf("].map(s => decl(MAIN, s)).join("\n");
-const INVITE = ["const INVITE_HIDDEN_RE =", "function inviteRead(", "function inviteRelay("].map(s => decl(MAIN, s)).join("\n");
+const INVITE = ["const INVITE_HIDDEN_RE =", "function inviteRead(", "function inviteRelay(", "function teamChannelOf("].map(s => decl(MAIN, s)).join("\n");
 const NAMES = ["SIGNIN_PROVIDERS", "signinOffered", "signinNonce", "signinAuthorize", "signinPageOk", "signinBack", "signinRefusedWhy", "signinTokens",
   "signinRequest", "signinListen", "signinRun", "signinRenew", "signinKeep", "signinKept", "GOOGLE_HD_NEEDS_EMAIL", "signinRefreshForm",
   "SIGNIN_SERVICE", "signinDeskBytes", "signinDeskBody", "signinServiceAsk", "signinCertOk", "signinAnswer", "signinSeat", "signinLapsed",
   "signinSettle", "signinRenewHeld", "seatFileText", "SEAT_NAME", "signinFileRead", "signinFileText", "branchIdOf", "inviteRead",
   "SIGNOUT_SERVICE", "signoutDeskBytes", "signoutDeskBody", "signoutAsk", "signinDoorRequest", "signinKnown", "signinPreviewing",
   "signinCodeForm", "signinSecretRead", "SIGNIN_SECRET_FILE", "SIGNIN_SECRET_SHAPE", "sealsForReal", "SIGNIN_WAIT_MS", "signinLabAt", "signinLabRead",
-  "signinLabUse"];
+  "signinLabUse", "signinDoorAddressOk"];
 NAMES.push("SIGNIN_TRACE_ASKED", "signinTraceLine", "signinTraceSaid");
-/* The section, evaluated: `swap` is [from, to], put in place of the one line that holds `from`, for a plant. */
-function load(swap, where) {
+/* The section, evaluated: `swap` is [from, to], put in place of the one line that holds `from`, for a plant; `invSwap` the same in the
+   invitation's slice as well. */
+function load(swap, where, invSwap) {
   let sec = SECTION, inv = INVITE;
   if (swap) {
     const inSec = where !== "invite";
@@ -98,14 +100,18 @@ function load(swap, where) {
     if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in the slice once: " + swap[0]);
     if (inSec) sec = text.replace(swap[0], swap[1]); else inv = text.replace(swap[0], swap[1]);
   }
+  if (invSwap) {
+    if (inv.split(invSwap[0]).length !== 2) throw new Error("plant anchor not in the invitation's slice once: " + invSwap[0]);
+    inv = inv.replace(invSwap[0], invSwap[1]);
+  }
   /* A name the slice lacks comes back undefined, so a case reaching for it fails alone rather than the whole file. */
   const body = NEEDS + "\n" + sec + "\n" + inv + "\nreturn {" + NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
     + ", live: () => ({ providers: SIGNIN_PROVIDERS, signin: SIGNIN_SERVICE, signout: SIGNOUT_SERVICE, on: typeof signinLabOn === \"undefined\" ? undefined : signinLabOn,"
     + " packed: signinPacked }), setPacked: v => { signinPacked = v; } };";
-  /* inviteRead's own readers stand in: a folder is taken as written, no place is kept, no relay channel is read. */
+  /* inviteRead's own readers stand in: a folder is taken as written and no place is kept; a relay's address is the desk's own rule. */
   return new Function("crypto", "Buffer", "URLSearchParams", "AbortController", "setTimeout", "clearTimeout",
-    "inviteFolder", "placeKept", "teamChannelOf", body)(crypto, Buffer, URLSearchParams, AbortController, setTimeout, clearTimeout,
-    f => String(f || ""), () => null, () => null);
+    "inviteFolder", "placeKept", body)(crypto, Buffer, URLSearchParams, AbortController, setTimeout, clearTimeout,
+    f => String(f || ""), () => null);
 }
 let S = {};
 try { S = load(); } catch (e) { console.log("  (the section did not load: " + e.message + ")"); }
@@ -556,7 +562,7 @@ CASES.doorRequest = s => {
 };
 const DOOR_DECLS = ["function signinDoorInvite(", "function signinDoorKept("];
 const DOOR_STANDS = ["teamJoin", "signinState", "branchIdentity", "signinCertOk", "signinDoorRequest", "persistDeskEnvelope", "memberRequestDoc",
-  "writeJoin", "fs", "path", "Date", "console"];
+  "writeJoin", "fs", "path", "Date", "console", "signinDoorAddressOk"];
 /* `st`: {join, held, files (a Map of path to text), writes, persists}; the door's two wiring functions with stand-ins, the request
    signed by this desk's key as writeJoin signs it. */
 function loadDoor(s, st, swap) {
@@ -577,7 +583,7 @@ function loadDoor(s, st, swap) {
       return t;
     },
     fs: { readFileSync: p => { if (!st.files.has(p)) throw new Error("ENOENT"); return st.files.get(p); } }, path,
-    Date: { now: () => NOW }, console: { error() {} } };
+    Date: { now: () => NOW }, console: { error() {} }, signinDoorAddressOk: st.addressOk || s.signinDoorAddressOk };
   return new Function(...DOOR_STANDS, text + "\nreturn { signinDoorInvite, signinDoorKept };")(...DOOR_STANDS.map(n => vals[n]));
 }
 const doorJoin = over => ({ team: TEAM, nonce: "4".repeat(64), commit: "1".repeat(64), asked: NOW, held: 0, name: "Desk",
@@ -663,7 +669,7 @@ CASES.doorsKept = s => {
 const DOORJOIN_DECLS = ["function signinDoorsShown(", "function signinDoorJoin("];
 const DOORJOIN_STANDS = ["init", "readDesk", "signinState", "branchIdentity", "signinCertOk", "pinnedLead", "joinView", "inviteBeforeFor", "joinCommit",
   "newestEpoch", "teamPins", "teamSeen", "teamPinFrom", "relayMirrorOf", "teamShown", "teamRelayGone", "relayCatalogNamed", "persistDeskEnvelope",
-  "relayRun", "catalogFolderChanged", "leadPrint", "crypto", "URL", "Date"];
+  "relayRun", "catalogFolderChanged", "leadPrint", "crypto", "URL", "Date", "signinDoorAddressOk"];
 /* The door's offer and its join with stand-ins: `st` {held, pinned, join, pins, counts}. */
 function loadDoorJoin(s, st, swap) {
   let text = DOORJOIN_DECLS.map(d => tryDeclText(d)).filter(Boolean).join("\n");
@@ -676,7 +682,7 @@ function loadDoorJoin(s, st, swap) {
     joinCommit: JOIN_LIB.joinCommit, newestEpoch: () => 0, teamPins: st.pins, teamSeen: new Set(), teamPinFrom: st.from, relayMirrorOf: rt => "/relay/" + rt,
     teamShown: st.shown, teamRelayGone: {}, relayCatalogNamed: new Set(), persistDeskEnvelope: () => { st.persists++; }, relayRun: () => { st.runs++; },
     catalogFolderChanged: () => {}, leadPrint: pub => crypto.createHash("sha256").update(Buffer.from(String(pub), "hex")).digest("hex").slice(0, 16),
-    crypto, URL, Date: { now: () => NOW } };
+    crypto, URL, Date: { now: () => NOW }, signinDoorAddressOk: st.addressOk || s.signinDoorAddressOk };
   const body = "let deskKeys = {}, teamJoin = init.join, teamStamp = \"x\", joinTold = true;\n" + text
     + "\nreturn { signinDoorsShown, signinDoorJoin, join: () => teamJoin };";
   return new Function(...DOORJOIN_STANDS, body)(...DOORJOIN_STANDS.map(n => vals[n]));
@@ -791,7 +797,8 @@ CASES.doorEnded = (s, swap) => {
   const lift = (src, start) => { try { return decl(src, start); } catch { return ""; } };
   const doorText = ["function signinDoorInvite(", "function signinDoorKept("].map(d => lift(main, d)).filter(Boolean).join("\n");
   const ask = join => new Function(...DOOR_STANDS, doorText + "\nreturn { signinDoorInvite };")(join, () => ({ held: heldOf() }),
-    () => ({ id: DESK_ID, key: DESK_KEY, box: DESK_BOX }), s.signinCertOk, s.signinDoorRequest, () => {}, null, null, fs, path, { now: () => NOW }, console)
+    () => ({ id: DESK_ID, key: DESK_KEY, box: DESK_BOX }), s.signinCertOk, s.signinDoorRequest, () => {}, null, null, fs, path, { now: () => NOW }, console,
+    s.signinDoorAddressOk)
     .signinDoorInvite(TEAM, RT);
   const knocks = !!ask(doorJoin()) && ask(doorJoin({ inv: DOOR_ID })) !== null;
   const quiet = ask(doorJoin({ end: "turned" })) === null && ask(doorJoin({ inv: DOOR_ID, end: "removed" })) === null;
@@ -812,6 +819,41 @@ CASES.doorEnded = (s, swap) => {
   const envelope = lib.relayKept(Object.assign({}, door, { end: "turned" })) === true && lib.relayKept(Object.assign({}, door, { end: "gone" })) === false
     && lib.relayKept({ rt: RT, url: "https://relay.example.test", inv: DOOR_ID, token: "x", seal: "y", end: "turned" }) === false;
   return knocks && quiet && kept && envelope;
+};
+
+/* A door's relay address is the desk's one rule for a relay address, teamChannelOf's, which an invitation's address meets (the
+   Hydrogen review's third): over a table of addresses a door is kept, filed, offered and knocked at exactly where an invitation on
+   that address is read; with that rule narrowed in memory to etiuda.dev, a door elsewhere is dropped whole from the answer and the
+   file, never offered, and a join at it knocks no more, while a door on etiuda.dev stands. A plant in the section or in the door's
+   wiring is put where its anchor is. */
+const DOOR_RULE_TIGHT = ["c.url.length > 512 || !/^https:\\/\\/[a-z0-9.-]+(?::", "c.url.length > 512 || !/^https:\\/\\/etiuda\\.dev(?::"];
+CASES.doorAddress = (s, swap) => {
+  if (!JOIN_LIB) return false;
+  const inSec = !!swap && SECTION.split(swap[0]).length === 2;
+  const base = inSec ? load(swap) : s, tight = load(inSec ? swap : null, undefined, DOOR_RULE_TIGHT);
+  const wire = inSec ? null : swap;
+  const holds = decls => !!wire && decls.map(d => tryDeclText(d)).join("\n").split(wire[0]).length === 2;
+  const doorWire = holds(DOOR_DECLS) ? wire : null, joinWire = holds(DOORJOIN_DECLS) ? wire : null;
+  if (wire && !doorWire && !joinWire) throw new Error("plant anchor not in the section or the door's wiring once: " + wire[0]);
+  const lead = { keyId: "studio-1", public: "a".repeat(64), name: "Lead" };
+  const invited = (t, url) => !!t.inviteRead("etiuda-join:" + b64url(JSON.stringify({ team: TEAM, secret: "0".repeat(32), lead,
+    relay: { rt: RT, url, token: "c".repeat(64), inv: "5".repeat(32) } })), false);
+  const kept = (t, url) => { const r = t.signinAnswer(answer({ ok: true, code: CODE, certificate: cert(), doors: [doorOf({ url })] }), DESK_KEY); return r.ok === true && r.doors.length === 1; };
+  const filed = (t, url) => { const h = t.signinFileRead(t.signinFileText({ held: heldOf({ doors: [doorOf({ url })] }) })).held; return !!h && h.doors.length === 1; };
+  const offered = (t, url) => {
+    const st = doorJoinStand({ held: heldOf({ doors: [doorOf({ url })] }), addressOk: t.signinDoorAddressOk });
+    return loadDoorJoin(base, st, joinWire).signinDoorsShown(st.held, NOW).length === 1;
+  };
+  const knocks = (t, url) => { const st = doorStand(doorJoin({ url })); st.addressOk = t.signinDoorAddressOk; return !!loadDoor(base, st, doorWire).signinDoorInvite(TEAM, RT); };
+  const at = "https://relay.example.test", home = "https://etiuda.dev/relay/v1";
+  const table = [at, at + "/teams/", "https://relay.example.test:8443/r/v1", home, "http://relay.example.test", "https://RELAY.example.test",
+    "https://user@relay.example.test", at + "/?team=1", at + "/a b", "wss://relay.example.test", at + "#x", at + "/" + "a".repeat(300), at + "/" + "a".repeat(600)];
+  const agree = table.map(url => { const i = invited(base, url); return [kept, filed, offered, knocks].every(fn => fn(base, url) === i) ? i : null; });
+  const agreed = agree.every(v => v !== null) && agree.slice(0, 4).every(v => v === true) && agree.slice(4, 11).every(v => v === false)
+    && agree[11] === true && agree[12] === false;
+  const narrowed = !invited(tight, at) && invited(tight, home) && [kept, filed, offered, knocks].every(fn => fn(tight, at) === false && fn(tight, home) === true);
+  const both = tight.signinAnswer(answer({ ok: true, code: CODE, certificate: cert(), doors: [doorOf({ url: home }), doorOf({ url: at })] }), DESK_KEY);
+  return agreed && narrowed && both.ok === true && !!both.cert && both.doors.length === 0;
 };
 
 /* ---- the desk's Sign out at the service --------------------------------------------------------------------------------- */
@@ -1821,6 +1863,7 @@ const LEGS = [
   ["ds17d", "doorEnvelope", "the envelope keeps a join at the door, its box and the relay's id, and not one without the box or carrying a token; an invitation's join is kept as before"],
   ["ds17e", "doorPage", "the door's panel and Account draw each door by host and print with one Ask to join under the copywriter's heading and line, Polish too, no placeholder left, and a press asks the shell by the door's place"],
   ["ds17f", "doorRefusedSaid", "a press the shell refused at the door is said where it was pressed, the panel and Account's team row, in the copywriter's sentence, Polish too; a press taken says nothing, and the next act clears it"],
+  ["ds17h", "doorAddress", "a door's relay address meets the desk's one rule for a relay address, the invitation's: kept, offered and knocked at exactly where an invitation on that address is read, and with that rule narrowed in memory a door elsewhere is dropped whole, never offered, and knocks no more"],
   ["ds17g", "doorEnded", "a join at the door the relay or the lead turned away, or refused as removed, knocks no more; \"turned\" is kept on a door join alone, the envelope keeps it, and the page is told"],
   ["ds14g", "copiedLabel", "the code's Copy and the link's read Copied for SIGNIN_COPIED_MS after a copy the clipboard took, then Copy, holding the wider width; a refused copy leaves it; Polish too"],
   ["ds15a", "identNoName", "with no name written the identity's bold line is \"Signed in with\" its provider and there is no second line, in the panel's every signed-in moment and in Account; a name written stands over it; Polish too"],
@@ -2131,6 +2174,11 @@ if (!PLANTS_OFF) {
   await plantWire("dsp65", ["return !!c && c.kind === \"relay\" && r.door === true && /^[0-9a-f]{64}$/.test(String(r.box)) /* plant:door-kept-box */", "return !!c && c.kind === \"relay\" && r.door === true"], "doorEnvelope");
   await plantWire("dsp66", ["&& inv.id === undefined && inv.proof === undefined; /* plant:door-envelope */", "&& false;"], "doorEnvelope");
   await plantWire("dsp67", ["if (inv.end !== undefined) return null; /* plant:door-ended-quiet */", ""], "doorEnded");
+  await plantWire("dsp69", ["|| !signinDoorAddressOk(d) /* plant:door-address-keep */", ""], "doorAddress");
+  await plantWire("dsp70", ["teamChannelOf({ channel: { kind: \"relay\", rt: d.rt, url: d.url } }) : null; /* plant:door-address-rule */",
+    "(String(d.url).length <= 256 && /^https:\\/\\/[a-z0-9.-]+(?::[0-9]{1,5})?(?:\\/[A-Za-z0-9._~-]+)*\\/?$/.test(String(d.url)) ? { kind: \"relay\" } : null) : null;"], "doorAddress");
+  await plantWire("dsp71", ["    if (!signinDoorAddressOk(d)) return null; /* plant:door-address-offer */\n", ""], "doorAddress");
+  await plantWire("dsp72", ["  if (!signinDoorAddressOk(inv)) return null; /* plant:door-address-knock */\n", ""], "doorAddress");
   await plantWire("dsp68", ["|| (kind === \"turned\" && !!inv && inv.door === true);", "|| kind === \"turned\";"], "doorEnded");
   await plant("dsp46", ["return Object.freeze(typeof v === \"string\" && SIGNIN_SECRET_SHAPE.test(v) ? { google: v } : {}); /* plant:secret-shape */",
     "return Object.freeze(typeof v === \"string\" ? { google: v } : {});"], "secretPacked");

@@ -9540,20 +9540,24 @@ function signinCertOk(c, deskKey) {
 }
 /* THE DOORS THE SERVICE HANDS (board 980, the door-finding; Max, 2026-11-12 18:46 and 18:57): beside a certificate, the doors of
    the relay teams on its licence, each {team, rt, url, keyId, lead, box}. A door is kept only whole: the team id and relay id in
-   their shapes, the address in the channel's own (teamChannelOf's, restated here so this section stands alone), the lead's key and
+   their shapes, the address by signinDoorAddressOk, the lead's key and
    box as hex, and its keyId the lead key's own canonical id ("studio-" and the first 16 hex of the SHA-256 of its public half, as
    leadPrint makes it), checked again here as the service checks it (the test architect's read), so the id this desk pins is never
    a claim. At most SIGNIN_DOORS_MAX; a list of any other shape is no list. The lead's keys come from here, never
    from the relay, so a relay cannot hand this desk a box or a lead of its own. */
 const SIGNIN_DOORS_MAX = 16;
-const SIGNIN_DOOR_URL_RE = /^https:\/\/[a-z0-9.-]+(?::[0-9]{1,5})?(?:\/[A-Za-z0-9._~-]+)*\/?$/;
+/* A door's relay address meets the desk's one rule for a relay address, teamChannelOf's, the rule an invitation's address meets;
+   never a rule of its own. Checked where a door is kept, offered and knocked at. */
+function signinDoorAddressOk(d) {
+  const c = d && typeof d === "object" ? teamChannelOf({ channel: { kind: "relay", rt: d.rt, url: d.url } }) : null; /* plant:door-address-rule */
+  return !!c && c.kind === "relay";
+}
 function signinDoorsOk(list) {
   if (!Array.isArray(list) || list.length > SIGNIN_DOORS_MAX) return [];
   const out = [];
   for (const d of list) {
     if (!d || typeof d !== "object" || Array.isArray(d) || Object.keys(d).sort().join(",") !== "box,keyId,lead,rt,team,url") return [];
-    if (!SEALED_TEAM_RE.test(String(d.team)) || !/^[0-9a-f]{32}$/.test(String(d.rt)) || typeof d.url !== "string" || d.url.length > 256
-      || !SIGNIN_DOOR_URL_RE.test(d.url)
+    if (!SEALED_TEAM_RE.test(String(d.team)) || !/^[0-9a-f]{32}$/.test(String(d.rt)) || !signinDoorAddressOk(d) /* plant:door-address-keep */
       || !/^[0-9a-f]{64}$/.test(String(d.lead)) || !/^[0-9a-f]{64}$/.test(String(d.box))) return [];
     if (d.keyId !== "studio-" + crypto.createHash("sha256").update(Buffer.from(d.lead, "hex")).digest("hex").slice(0, 16)) return []; /* plant:door-key-id */
     out.push({ team: String(d.team), rt: String(d.rt), url: String(d.url), keyId: String(d.keyId), lead: String(d.lead), box: String(d.box) });
@@ -9724,6 +9728,7 @@ function signinDoorInvite(team, rt) {
   if (!inv || inv.door !== true) return undefined;
   /* A door request the relay or the lead turned away, or refused as removed, knocks no more; Cancel forgets it. */
   if (inv.end !== undefined) return null; /* plant:door-ended-quiet */
+  if (!signinDoorAddressOk(inv)) return null; /* plant:door-address-knock */
   const held = signinState().held, cert = held && held.cert, me = branchIdentity(false);
   if (inv.rt !== rt || !me || !/^[0-9a-f]{64}$/.test(String(inv.box)) || !signinCertOk(cert, me.key) || !(cert.until > Date.now())) return null; /* plant:door-invite-cert */
   const out = { door: cert, box: inv.box };
@@ -9756,10 +9761,11 @@ function signinDoorsShown(held, now) {
   const me = branchIdentity(false);
   if (!held || !held.cert || !me || !signinCertOk(held.cert, me.key) || !(held.cert.until > now) || pinnedLead() || teamJoin) return []; /* plant:door-shown */
   return (held.doors || []).map((d, n) => {
+    if (!signinDoorAddressOk(d)) return null; /* plant:door-address-offer */
     let host = "";
     try { host = new URL(d.url).host; } catch { host = ""; }
     return { n: n, host: host, print: leadPrint(d.lead) };
-  });
+  }).filter(Boolean);
 }
 /* A JOIN AT A DOOR the person pressed (the door-finding): the join A4's knock already serves, `door: true` with the lead's key and
    box from the door, which came from the licence service over its own address, never from the relay. The lead is pinned as an
