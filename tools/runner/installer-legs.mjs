@@ -556,7 +556,10 @@ if (early.length) refuse("before anything is built: " + early.join("; "));
 try {
   const cli = path.join(ROOT, "node_modules", "electron-builder", "out", "cli", "cli.js");
   if (!fs.existsSync(cli)) refuse("electron-builder is not installed; npm ci first");
-  execFileSync(process.execPath, [cli, "--win", "--config", path.join("tools", "electron-builder-test.cjs")],
+  /* Through tools/package.mjs --test-identity, never electron-builder directly: the pack step makes turning.7z (generated, git-ignored)
+     and applies the NSIS template patches, which a direct call skips; a desk hides that with leftovers, a clean runner does not
+     (run 43222136075, 2026-11-12). */
+  execFileSync(process.execPath, [path.join(ROOT, "tools", "package.mjs"), "--test-identity"],
     { cwd: ROOT, stdio: "inherit", env: E.unsignedEnv({ ETIUDA_DIST: DIST }) });
 } catch (e) { refuse("the test build's installer could not be built: " + oneLine(e.message)); }
 const setups = fs.readdirSync(DIST).filter((n) => /-setup\.exe$/i.test(n));

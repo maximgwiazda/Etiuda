@@ -162,7 +162,10 @@ function newSetup() {
   const out = path.join(LAB, "dist");
   const cli = path.join(E.ROOT, "node_modules", "electron-builder", "out", "cli", "cli.js");
   if (!fs.existsSync(cli)) E.refuse("electron-builder is not installed; npm install first");
-  execFileSync(process.execPath, [cli, "--win", "--config", path.join("tools", "electron-builder-test.cjs")], { cwd: E.ROOT, stdio: "ignore",
+  /* Through tools/package.mjs --test-identity, never electron-builder directly: the pack step makes turning.7z (generated, git-ignored)
+     and applies the NSIS template patches, which a direct call skips; a desk hides that with leftovers, a clean runner does not
+     (run 43222136075, 2026-11-12). */
+  execFileSync(process.execPath, [path.join(E.ROOT, "tools", "package.mjs"), "--test-identity"], { cwd: E.ROOT, stdio: "ignore",
     env: E.unsignedEnv({ ETIUDA_DIST: out }) });
   const found = listing(out).filter(n => /-setup\.exe$/i.test(n));
   if (found.length !== 1) E.refuse(out + " holds " + found.length + " installers; expected 1");

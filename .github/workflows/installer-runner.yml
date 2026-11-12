@@ -111,7 +111,8 @@ jobs:
           git worktree add "$RUNNER_TEMP/old" "$OLD_SHA"
           cd "$RUNNER_TEMP/old"
           npm ci
-          node node_modules/electron-builder/out/cli/cli.js --win --config tools/electron-builder-test.cjs
+          # Through the pack step, as every installer build here: it makes turning.7z and applies the NSIS template patches.
+          ETIUDA_DIST="$RUNNER_TEMP/old/dist" node tools/package.mjs --test-identity
           f="$(ls "$RUNNER_TEMP/old/dist"/*-setup.exe 2>/dev/null | head -1)"
           [ -n "$f" ] && echo "ETIUDA_OLD_SETUP_EXE=$f" >> "$GITHUB_ENV"
 
