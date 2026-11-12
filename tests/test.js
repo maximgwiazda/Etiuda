@@ -3925,8 +3925,8 @@ function installerUpdateTests() {
   };
   const keeps = text => {
     const m = macro(text, "customRemoveFiles");
-    return [!!m, /\$\{IfNot\} \$\{isUpdated\}[^\n]*\r?\n\s*SetOutPath \$TEMP\r?\n\s*RMDir \/r \$INSTDIR\r?\n\s*\$\{EndIf\}/.test(m),
-      (m.match(/RMDir|Delete|Rename/g) || []).length];
+    return [!!m, /\$\{IfNot\} \$\{isUpdated\}[^\n]*\r?\n\s*SetOutPath \$TEMP\r?\n\s*Push \$INSTDIR\r?\n\s*Call un\.etiudaRemoveTree\r?\n\s*\$\{EndIf\}/.test(m),
+      (m.match(/RMDir|Delete|Rename|etiudaRemoveTree/g) || []).length];
   };
   let nsh = "", got;
   try { nsh = fs.readFileSync(path.join(root, "shell", "installer.nsh"), "utf8"); } catch (e) { nsh = ""; }
@@ -3971,7 +3971,7 @@ function installerUpdateTests() {
     const out = String(r.stdout || "");
     const named = s => out.indexOf(s.split("${PRODUCT_NAME}").join("Etiuda Studio")) > -1;
     got = r.status !== 0 ? "makensis refused the script: " + String(r.stdout + r.stderr).trim().split(/\r?\n/).slice(-2).join(" / ")
-      : [/taskkill\.exe" \/IM "Etiuda\.exe"/.test(out), named(EN_CLOSE), named(EN_RETRY), named(PL_CLOSE), named(PL_RETRY), /RMDir \/r \$INSTDIR/.test(out), /\bQuit\b/.test(out)];
+      : [/taskkill\.exe" \/IM "Etiuda\.exe"/.test(out), named(EN_CLOSE), named(EN_RETRY), named(PL_CLOSE), named(PL_RETRY), /Push \$INSTDIR\r?\n\s*Call un\.etiudaRemoveTree/.test(out), /\bQuit\b/.test(out)];
   } catch (e) { got = "makensis could not be asked: " + e.message; }
   eq("1152e makensis's preprocessor expands both macros where electron-builder inserts them, the command, the four lines with the product's name, the removal and the give-up intact",
     got, [true, true, true, true, true, true, true]);

@@ -1315,6 +1315,63 @@ body.pills-off.pills-peek .pills-slot{display:block}
          --scrim-filter:none; --mark-filter:none; }
 }
 }@layer base{
+/* THE SIGN-IN (board 980): the header's door and its panel, and Account's card. The providers' buttons keep their own colours,
+   type and size, light on the light theme and dark on the dark. Nothing here is a notice box: a refusal is the place's own heading
+   and line. */
+.signin-wrap{position:relative;display:inline-flex}
+.signin-wrap[hidden]{display:none}
+.sgn-btn{display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 10px;font-weight:600;font-size:12.5px;white-space:nowrap}
+.sgn-btn .ic{width:16px;height:16px}
+.sgn-btn.on{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 26%,transparent)}
+.sgn-btn:has(.sgn-av){padding:0 8px}
+@media (max-width:1099.98px){ .sgn-btn .sgn-w{display:none} .sgn-btn{padding:0 9px} }
+.sgn-av{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;flex:none;position:relative;
+  background:color-mix(in srgb,var(--accent) 24%,var(--panel));color:var(--ink);font:700 10px/1 var(--sans)}
+.sgn-av.l{width:44px;height:44px;font-size:15px}
+.sgn-av .ic{width:58%;height:58%}
+.sgn-av.off::after{content:"";position:absolute;right:-2px;bottom:-2px;width:8px;height:8px;border-radius:50%;border:2px solid var(--dim);background:var(--panel)}
+.sgn-panel{position:absolute;right:0;top:calc(100% + 8px);z-index:86;width:min(372px,calc(100vw - 28px));padding:14px;
+  border:1px solid var(--line);border-radius:12px;background:var(--panel-raised,var(--panel));box-shadow:var(--bevel),var(--shadow-pop);
+  font-size:13.5px;color:var(--ink);text-align:left;white-space:normal}
+.sgn-panel h4{font:600 16px/1.3 var(--sans);margin:0 0 4px}
+.sgn-lede{font-size:13px;line-height:1.45;color:var(--dim);margin:0 0 14px}
+.sgn-id{display:flex;gap:13px;align-items:center;min-width:0}
+.sgn-id b{display:block;font-size:16px;line-height:1.3}
+.sgn-id small{display:block;font-size:13px;line-height:1.45;color:var(--dim)}
+.sgn-panel .sgn-id{margin-bottom:12px}
+.sgn-ln{display:flex;gap:8px;color:var(--dim);line-height:1.4;margin:6px 0 0}
+.sgn-say{margin:12px 0 0;padding-top:12px;border-top:1px solid var(--line);font-size:13.5px;line-height:1.45}
+.sgn-say b{display:block;font-size:14.5px;color:var(--ink)}
+.sgn-say span{color:var(--dim)}
+.sgn-say.calm b{font-weight:400;font-size:13.5px}
+.sgn-wait{font-size:13.5px;color:var(--dim);margin-top:4px}
+.sgn-run{position:relative;height:2px;width:100%;background:var(--line);border-radius:2px;overflow:hidden;margin-top:8px}
+/* The bar runs while a sign-in waits for the browser, and that wait ends by itself at SIGNIN_WAIT_MS (five minutes, shell/main.js):
+   150 passes of the nudge tier's 2 s are those five minutes, so it rests when the wait does, on a tier, and the switch stills it. */
+.sgn-run::after{content:"";position:absolute;top:0;bottom:0;left:0;width:34%;background:var(--accent);border-radius:2px;animation:sgnRun var(--m-nudge) ease-in-out 150}
+@keyframes sgnRun{from{transform:translateX(-100%)}to{transform:translateX(300%)}}
+html.e-still .sgn-run::after{animation:none;transform:translateX(80%)}
+.sgn-acts{display:flex;gap:8px;flex-wrap:wrap}
+.sgn-panel .sgn-acts{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.sgn-provs{display:flex;flex-direction:column;gap:10px;width:100%}
+.sgn-provs.row{flex-direction:row;flex-wrap:wrap;width:auto}
+.sgn-p{display:inline-flex;align-items:center;justify-content:center;height:41px;padding:0 12px;border:1px solid;border-radius:4px;white-space:nowrap;flex:none}
+.sgn-p.microsoft{gap:12px;font:600 15px/1 "Segoe UI",sans-serif;background:#fff;border-color:#8c8c8c;color:#5e5e5e}
+.sgn-p.google{gap:10px;font:500 14px/20px "Google Sans",Roboto,"Segoe UI",sans-serif;background:#fff;border-color:#747775;color:#1f1f1f}
+:root[data-theme=dark] .sgn-p.microsoft{background:#2f2f2f;border-color:#2f2f2f;color:#fff}
+:root[data-theme=dark] .sgn-p.google{background:#131314;border-color:#8e918f;color:#e3e3e3}
+.sgn-cap{font-size:12.5px;line-height:1.45;color:var(--dim);margin:10px 0 0;max-width:36em}
+/* The sign-in preview's line (src/modules/signin.js signinPreviewHtml), in the ink's colour and weight. */
+.sgn-cap.sgn-preview{color:var(--ink);font-weight:600}
+.sgn-ft{font-size:12px;line-height:1.4;color:var(--dim);margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line)}
+.sgn-code{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 12px;margin-top:10px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.sgn-code code,.sgn-mono{font:600 14.5px var(--mono);letter-spacing:.04em;color:var(--ink);white-space:nowrap}
+.sgn-code code{flex:1 1 auto;font-size:13px;letter-spacing:.02em}
+.sgn-val{font-size:13.5px;color:var(--ink)}
+.sgn-top{padding:16px 18px;border:1px solid var(--line);border-radius:10px;background:var(--panel);margin:0 0 12px}
+.sgn-top-row{display:flex;gap:14px 20px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.sgn-top.col{display:flex;flex-direction:column;align-items:flex-start;gap:14px}
+.sgn-top .sgn-id small{max-width:44em}
 .facts-panel{position:absolute;right:0;top:calc(100% + 6px);z-index:85;
   /* The width cap is the room actually there (--facts-maxw from syncFactsGeometry), not
      the viewport's: the panel is pinned to the facts BUTTON a hundred-odd px in from the
@@ -4772,6 +4829,11 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
           <textarea id="factsEdit" spellcheck="false" autocomplete="rc-facts" autocorrect="off" autocapitalize="off"
                     data-lpignore="true" data-1p-ignore="true" data-form-type="other" aria-label="Edit quick facts"></textarea>
         </div>
+      </div>
+      <!-- THE SIGN-IN'S DOOR, there only while a provider is offered or somebody is signed in: its words and states are signin.js's. -->
+      <div class="signin-wrap" id="signinWrap" data-i18n-skip hidden>
+        <button class="btn sgn-btn" id="signinBtn" type="button" aria-haspopup="true" aria-expanded="false"></button>
+        <div class="sgn-panel" id="signinPanel" hidden role="dialog"></div>
       </div>
       <button class="btn icbtn" id="theme" type="button" title="Switch between the light and dark themes" aria-label="Switch between the light and dark themes"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><g><circle cx="10" cy="10" r="6.6"/><path d="M10 3.4a6.6 6.6 0 0 1 0 13.2z" fill="currentColor" stroke="none"/></g></svg></button>
       <!-- THE CHEVRON - displaced controls get their own door: it exists exactly when the ladder

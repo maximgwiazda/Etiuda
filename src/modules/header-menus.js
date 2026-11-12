@@ -19,6 +19,7 @@ import { openJoinPaste } from "./team-join.js";
 import { sxIcon } from "./sx-icons.js";
 import { openUpdatePage, syncUpdateOffer, updateLater, wireUpdateOffer } from "./update-offer.js";
 import { syncOrgMark, wireOrgModel } from "./org-model.js";
+import { wireSignin } from "./signin.js";
 
 /* The glyph Settings already uses for the same idea. Quit has none: the set has no close mark,
    and the delete mark is a different act. The picker takes expand, the nearest mark for a window
@@ -64,6 +65,7 @@ function wireHeaderMenus(){
   paintMenuIcons();
   wireUpdateOffer();
   wireOrgModel();
+  wireSignin();
   /* Close Etiuda stands in the Menu where there is a window to close, and closes it as the band's own button does. */
   const host=eHost(), canClose=!!(host && typeof host.close==="function");
   ["#menuQuit","#menuQuitSep"].forEach(s=>{ const el=$(s); if(el) el.hidden=!canClose; });

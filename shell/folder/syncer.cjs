@@ -146,7 +146,7 @@ function isAllowedPath(rel) {
     const file = parts[2];
     if (!/^k-[0-9a-f]{16}$/.test(deskId)) return false;
     if (file.endsWith(".ec")) return true;
-    if (file === "stats.estat" || file === "join.json") return true;
+    if (file === "stats.estat" || file === "join.json" || file === "seat.json") return true; /* plant:seat-carried */
     return false;
   }
   return false;

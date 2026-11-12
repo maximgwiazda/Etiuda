@@ -1315,6 +1315,63 @@ body.pills-off.pills-peek .pills-slot{display:block}
          --scrim-filter:none; --mark-filter:none; }
 }
 }@layer base{
+/* THE SIGN-IN (board 980): the header's door and its panel, and Account's card. The providers' buttons keep their own colours,
+   type and size, light on the light theme and dark on the dark. Nothing here is a notice box: a refusal is the place's own heading
+   and line. */
+.signin-wrap{position:relative;display:inline-flex}
+.signin-wrap[hidden]{display:none}
+.sgn-btn{display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 10px;font-weight:600;font-size:12.5px;white-space:nowrap}
+.sgn-btn .ic{width:16px;height:16px}
+.sgn-btn.on{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 26%,transparent)}
+.sgn-btn:has(.sgn-av){padding:0 8px}
+@media (max-width:1099.98px){ .sgn-btn .sgn-w{display:none} .sgn-btn{padding:0 9px} }
+.sgn-av{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;flex:none;position:relative;
+  background:color-mix(in srgb,var(--accent) 24%,var(--panel));color:var(--ink);font:700 10px/1 var(--sans)}
+.sgn-av.l{width:44px;height:44px;font-size:15px}
+.sgn-av .ic{width:58%;height:58%}
+.sgn-av.off::after{content:"";position:absolute;right:-2px;bottom:-2px;width:8px;height:8px;border-radius:50%;border:2px solid var(--dim);background:var(--panel)}
+.sgn-panel{position:absolute;right:0;top:calc(100% + 8px);z-index:86;width:min(372px,calc(100vw - 28px));padding:14px;
+  border:1px solid var(--line);border-radius:12px;background:var(--panel-raised,var(--panel));box-shadow:var(--bevel),var(--shadow-pop);
+  font-size:13.5px;color:var(--ink);text-align:left;white-space:normal}
+.sgn-panel h4{font:600 16px/1.3 var(--sans);margin:0 0 4px}
+.sgn-lede{font-size:13px;line-height:1.45;color:var(--dim);margin:0 0 14px}
+.sgn-id{display:flex;gap:13px;align-items:center;min-width:0}
+.sgn-id b{display:block;font-size:16px;line-height:1.3}
+.sgn-id small{display:block;font-size:13px;line-height:1.45;color:var(--dim)}
+.sgn-panel .sgn-id{margin-bottom:12px}
+.sgn-ln{display:flex;gap:8px;color:var(--dim);line-height:1.4;margin:6px 0 0}
+.sgn-say{margin:12px 0 0;padding-top:12px;border-top:1px solid var(--line);font-size:13.5px;line-height:1.45}
+.sgn-say b{display:block;font-size:14.5px;color:var(--ink)}
+.sgn-say span{color:var(--dim)}
+.sgn-say.calm b{font-weight:400;font-size:13.5px}
+.sgn-wait{font-size:13.5px;color:var(--dim);margin-top:4px}
+.sgn-run{position:relative;height:2px;width:100%;background:var(--line);border-radius:2px;overflow:hidden;margin-top:8px}
+/* The bar runs while a sign-in waits for the browser, and that wait ends by itself at SIGNIN_WAIT_MS (five minutes, shell/main.js):
+   150 passes of the nudge tier's 2 s are those five minutes, so it rests when the wait does, on a tier, and the switch stills it. */
+.sgn-run::after{content:"";position:absolute;top:0;bottom:0;left:0;width:34%;background:var(--accent);border-radius:2px;animation:sgnRun var(--m-nudge) ease-in-out 150}
+@keyframes sgnRun{from{transform:translateX(-100%)}to{transform:translateX(300%)}}
+html.e-still .sgn-run::after{animation:none;transform:translateX(80%)}
+.sgn-acts{display:flex;gap:8px;flex-wrap:wrap}
+.sgn-panel .sgn-acts{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.sgn-provs{display:flex;flex-direction:column;gap:10px;width:100%}
+.sgn-provs.row{flex-direction:row;flex-wrap:wrap;width:auto}
+.sgn-p{display:inline-flex;align-items:center;justify-content:center;height:41px;padding:0 12px;border:1px solid;border-radius:4px;white-space:nowrap;flex:none}
+.sgn-p.microsoft{gap:12px;font:600 15px/1 "Segoe UI",sans-serif;background:#fff;border-color:#8c8c8c;color:#5e5e5e}
+.sgn-p.google{gap:10px;font:500 14px/20px "Google Sans",Roboto,"Segoe UI",sans-serif;background:#fff;border-color:#747775;color:#1f1f1f}
+:root[data-theme=dark] .sgn-p.microsoft{background:#2f2f2f;border-color:#2f2f2f;color:#fff}
+:root[data-theme=dark] .sgn-p.google{background:#131314;border-color:#8e918f;color:#e3e3e3}
+.sgn-cap{font-size:12.5px;line-height:1.45;color:var(--dim);margin:10px 0 0;max-width:36em}
+/* The sign-in preview's line (src/modules/signin.js signinPreviewHtml), in the ink's colour and weight. */
+.sgn-cap.sgn-preview{color:var(--ink);font-weight:600}
+.sgn-ft{font-size:12px;line-height:1.4;color:var(--dim);margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line)}
+.sgn-code{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 12px;margin-top:10px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.sgn-code code,.sgn-mono{font:600 14.5px var(--mono);letter-spacing:.04em;color:var(--ink);white-space:nowrap}
+.sgn-code code{flex:1 1 auto;font-size:13px;letter-spacing:.02em}
+.sgn-val{font-size:13.5px;color:var(--ink)}
+.sgn-top{padding:16px 18px;border:1px solid var(--line);border-radius:10px;background:var(--panel);margin:0 0 12px}
+.sgn-top-row{display:flex;gap:14px 20px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.sgn-top.col{display:flex;flex-direction:column;align-items:flex-start;gap:14px}
+.sgn-top .sgn-id small{max-width:44em}
 .facts-panel{position:absolute;right:0;top:calc(100% + 6px);z-index:85;
   /* The width cap is the room actually there (--facts-maxw from syncFactsGeometry), not
      the viewport's: the panel is pinned to the facts BUTTON a hundred-odd px in from the
@@ -4772,6 +4829,11 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
           <textarea id="factsEdit" spellcheck="false" autocomplete="rc-facts" autocorrect="off" autocapitalize="off"
                     data-lpignore="true" data-1p-ignore="true" data-form-type="other" aria-label="Edit quick facts"></textarea>
         </div>
+      </div>
+      <!-- THE SIGN-IN'S DOOR, there only while a provider is offered or somebody is signed in: its words and states are signin.js's. -->
+      <div class="signin-wrap" id="signinWrap" data-i18n-skip hidden>
+        <button class="btn sgn-btn" id="signinBtn" type="button" aria-haspopup="true" aria-expanded="false"></button>
+        <div class="sgn-panel" id="signinPanel" hidden role="dialog"></div>
       </div>
       <button class="btn icbtn" id="theme" type="button" title="Switch between the light and dark themes" aria-label="Switch between the light and dark themes"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><g><circle cx="10" cy="10" r="6.6"/><path d="M10 3.4a6.6 6.6 0 0 1 0 13.2z" fill="currentColor" stroke="none"/></g></svg></button>
       <!-- THE CHEVRON - displaced controls get their own door: it exists exactly when the ladder
@@ -8375,6 +8437,7 @@ What you type stays in this browser only.`;
     "The organisation's model at {HOST} ranks the search and the suggestions. The search text and the copied message the suggestions are made from are sent there.": "Model organizacji pod adresem {HOST} ustala kolejność wyszukiwania i propozycji. Trafia tam tekst wyszukiwania i skopiowana wiadomość, z której powstają propozycje.",
     "The organisation's model at {HOST} ranks the search. The search text is sent there.": "Model organizacji pod adresem {HOST} ustala kolejność wyszukiwania. Trafia tam tekst wyszukiwania.",
     "The organisation's model at {HOST} ranks the suggestions. The copied message they are made from is sent there.": "Model organizacji pod adresem {HOST} ustala kolejność propozycji. Trafia tam skopiowana wiadomość, z której powstają.",
+    "The organisation's model at {HOST} is set, and with both switches off nothing is sent to it.": "Model organizacji pod adresem {HOST} jest ustawiony, a przy obu przełącznikach wyłączonych nic do niego nie trafia.",
     "organisation's model not answering, built-in model ranking": "model organizacji nie odpowiada, kolejność ustala model wbudowany",
     "{HOST} has not answered three times in a row, so the built-in model ranks on this computer, sending nothing, and the desk asks {HOST} again in a minute.": "{HOST} nie odpowiedział trzy razy z rzędu, więc kolejność ustala model wbudowany na tym komputerze, niczego nie wysyłając, a stanowisko zapyta {HOST} ponownie za minutę.",
     "organisation's model not answering, word matches only": "model organizacji nie odpowiada, tylko dopasowanie słów",
@@ -8414,7 +8477,6 @@ What you type stays in this browser only.`;
     "Opens this section alone": "Otwiera tylko tę sekcję",
     "No setting matches this search.": "Żadne ustawienie nie pasuje do tego wyszukiwania.",
     "Open": "Otwórz",
-    "Your name, the language, and how Etiuda starts and closes.": "Imię agenta, język oraz sposób uruchamiania i zamykania Etiudy.",
     "Starting and closing": "Uruchamianie i zamykanie",
     "Start with Windows": "Uruchamiaj razem z systemem Windows",
     "Etiuda starts in the tray when this Windows account signs in.": "Etiuda uruchamia się w zasobniku po zalogowaniu do tego konta Windows.",
@@ -8488,6 +8550,7 @@ What you type stays in this browser only.`;
     "Suggestions taken: {N}": "Wybrane propozycje: {N}",
     "Openings with suggestions: {N}": "Otwarcia z propozycjami: {N}",
     "When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as the picker opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.": "Gdy wybór intencji otwiera się, a w schowku jest wiadomość klienta wyraźnie wskazująca na jakieś intencje, nad listą pojawia się do pięciu z nich. Żadna nie jest wybrana, dopóki się jej nie kliknie. Wiadomość jest odczytywana tylko przy otwarciu wyboru i nigdy nie jest zapisywana ani wysyłana; statystyki liczą jedynie, ile razy pojawiły się propozycje i ile z nich wybrano.",
+    "When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. While the organisation's model is on, the copied message, at most its first 1,500 characters, is sent to {HOST} as the picker opens, so that the model there can suggest the intents; this desk keeps no copy of it. The statistics count only how often suggestions appeared and how many were taken.": "Gdy wybór intencji otwiera się, a w schowku jest wiadomość klienta wyraźnie wskazująca na jakieś intencje, nad listą pojawia się do pięciu z nich. Żadna nie jest wybrana, dopóki się jej nie kliknie. Gdy włączony jest model organizacji, skopiowana wiadomość, najwyżej 1500 pierwszych znaków, trafia przy otwarciu wyboru do {HOST}, aby tamtejszy model mógł zaproponować intencje; to stanowisko nie zachowuje jej kopii. Statystyki liczą jedynie, ile razy pojawiły się propozycje i ile z nich wybrano.",
     "Works from any program; Enter copies a reply and goes back to the window you were in.": "Działa w każdym programie; Enter kopiuje odpowiedź i wraca do poprzedniego okna.",
     "Another program uses this combination just now; a different one will do.": "Tej kombinacji używa teraz inny program; wybór innej to rozwiąże.",
     "{KEYS} already belongs to another program; a different combination will do.": "{KEYS} należy już do innego programu; wybór innej kombinacji to rozwiąże.",
@@ -8672,6 +8735,66 @@ What you type stays in this browser only.`;
     "If the key the team's lead sees does not match this one, this desk forgets the team's lead and every key kept under it, so nothing new from this team reaches it. The catalog in use stays. Joining again takes a new invitation, which shows the lead's key to compare once more.": "Jeśli klucz widoczny u lidera zespołu nie zgadza się z tym, stanowisko zapomni lidera zespołu i wszystkie klucze przechowywane pod nim, więc nic nowego od tego zespołu już tu nie dotrze. Używany katalog zostaje. Ponowne dołączenie wymaga nowego zaproszenia, które znów pokaże klucz lidera do porównania.",
     "{LEAD}'s team": "Zespół osoby {LEAD}",
     "Leave this team": "Opuść ten zespół",
+    // The sign-in (board 980): the copywriter's words.
+    "Account": "Konto",
+    "Who is signed in on this computer, and your name.": "Kto jest zalogowany na tym komputerze, oraz imię agenta.",
+    "The language, and how Etiuda starts and closes.": "Język oraz sposób uruchamiania i zamykania Etiudy.",
+    "Sign in": "Zaloguj się",
+    "Sign in with Microsoft": "Zaloguj się za pomocą konta Microsoft",
+    "Sign in with Google": "Zaloguj się przez Google",
+    "Microsoft: a work, school or personal account. Google: a Workspace or personal account.": "Microsoft: konto służbowe, szkolne lub osobiste. Google: konto Workspace lub osobiste.",
+    "Sign in to Etiuda": "Logowanie do Etiudy",
+    "Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three.": "Miejsce w licencji należy do konta, więc przechodzi z nim na każdy komputer, na którym to konto się zaloguje, najwyżej na trzy.",
+    "Etiuda for personal use, outside work, needs no sign-in.": "Etiuda do użytku prywatnego, poza pracą, nie wymaga logowania.",
+    "Finish signing in in the browser": "Logowanie trwa w przeglądarce",
+    "The browser has opened {PROVIDER}'s sign-in page. Etiuda waits here and carries on by itself when you come back.": "W przeglądarce otworzyła się strona logowania {PROVIDER}. Etiuda czeka tutaj i sama przejdzie dalej po powrocie.",
+    "Waiting for {PROVIDER}…": "Oczekiwanie na {PROVIDER}…",
+    "Open the browser again": "Otwórz przeglądarkę ponownie",
+    "Signed in with {PROVIDER}": "Zalogowano przez {PROVIDER}",
+    "Account settings": "Ustawienia konta",
+    "Signed in. No team yet": "Zalogowano. Jeszcze bez zespołu",
+    "No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.": "Żaden zespół nie przyjął jeszcze tego konta. Gdy lider zespołu przyjmie je po kodzie poniżej, katalog przyjdzie sam.",
+    "Your sign-in code": "Kod logowania",
+    "Not a secret. It tells a team's lead which account is yours.": "To nie tajemnica. Po nim lider zespołu rozpoznaje, czyje to konto.",
+    "Check now": "Sprawdź teraz",
+    "The sign-in service could not be reached.": "Nie udało się połączyć z usługą logowania.",
+    "Nothing changed: this computer is not signed in, and Etiuda works as before.": "Nic się nie zmieniło: ten komputer nie jest zalogowany, a Etiuda działa jak dotąd.",
+    "{TEAM} has no free seat.": "W zespole {TEAM} nie ma wolnego miejsca.",
+    "You are signed in and in the team. {LEAD}, the team's lead, can free a seat or add one, and Etiuda checks again by itself.": "Logowanie się powiodło i to konto należy do zespołu. Lider zespołu, {LEAD}, może zwolnić miejsce albo dodać nowe, a Etiuda sama sprawdzi ponownie.",
+    "This account is already in use on three computers.": "To konto działa już na trzech komputerach.",
+    "Signing out on one of them makes room here, and so does a computer left unused for 30 days; then Try again.": "Wylogowanie na jednym z nich zwalnia tu miejsce, podobnie jak komputer nieużywany przez 30 dni; potem wystarczy spróbować ponownie.",
+    "This account's organisation has not allowed Etiuda at its sign-in provider.": "Organizacja tego konta nie dopuściła Etiudy u swojego dostawcy logowania.",
+    "Its IT department can allow it; another account can be used meanwhile.": "Może to zmienić jej dział IT; do tego czasu można użyć innego konta.",
+    "No Etiuda licence has a seat for this account.": "Żadna licencja Etiudy nie ma miejsca dla tego konta.",
+    "The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.": "Logowanie się powiodło. Miejsce daje okres próbny, zakup albo przyjęcie konta przez lidera zespołu; do tego czasu można użyć innego konta.",
+    "The sign-in service cannot be reached just now.": "Usługa logowania jest teraz nieosiągalna.",
+    "Etiuda keeps working with the catalog it has. Last checked {WHEN}.": "Etiuda działa dalej na katalogu, który już ma. Ostatnie sprawdzenie: {WHEN}.",
+    "service not reached just now": "usługa chwilowo nieosiągalna",
+    "The sign-in service cannot be reached just now. Etiuda keeps working with the catalog it has.": "Usługa logowania jest teraz nieosiągalna. Etiuda działa dalej na katalogu, który już ma.",
+    "Use another account": "Użyj innego konta",
+    "Not signed in": "Bez logowania",
+    "Preview only. Sign-in is not set up yet, so nothing here is sent.": "Tylko podgląd. Logowanie nie jest jeszcze uruchomione, więc nic stąd nie zostanie wysłane.",
+    "Sign-in is not set up yet, so nothing was sent. This is a preview.": "Logowanie nie jest jeszcze uruchomione, więc nic nie wysłano. To tylko podgląd.",
+    "Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.": "Logowanie przenosi na ten komputer miejsce w licencji i zespół, który przyjął to konto. Etiuda do użytku prywatnego, poza pracą, nie wymaga logowania.",
+    "Led by {LEAD}": "Prowadzi {LEAD}",
+    "No team yet": "Jeszcze bez zespołu",
+    "Seat": "Miejsce w licencji",
+    "Held by this account": "Przypisane do tego konta",
+    "On up to three computers; this is one of them.": "Na najwyżej trzech komputerach; to jeden z nich.",
+    "Last checked": "Ostatnie sprawdzenie",
+    "Sign out": "Wyloguj się",
+    "This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account.": "To stanowisko loguje się kontem Microsoft lub Google, aby zajmować swoje miejsce w licencji, i zleca sprawdzenie logowania na etiuda.dev. Lider zespołu nie widzi imienia, nazwiska ani adresu z tego konta.",
+    "Signing out ends this computer's sign-in and frees its place among the account's three; the seat stays the account's. The team's catalog and personal cards stay on the computer.": "Wylogowanie kończy logowanie na tym komputerze i zwalnia jego miejsce wśród trzech komputerów konta; miejsce w licencji zostaje przy koncie. Katalog zespołu i własne karty zostają na komputerze.",
+    // placeholder: Claudette, the eight lines below
+    "today, {TIME}": "dziś, {TIME}",
+    "This licence has no free seat.": "Ta licencja nie ma wolnego miejsca.",
+    "The sign-in worked. The licence's owner can free a seat or add one, and Etiuda checks again by itself.": "Logowanie się powiodło. Osoba, do której należy licencja, może zwolnić miejsce albo dodać nowe, a Etiuda sama sprawdzi ponownie.",
+    "This desk's seat is due for renewal.": "Miejsce w licencji dla tego stanowiska czeka na odnowienie.",
+    "It renews by itself the next time the sign-in service answers. Everything on this desk works as before.": "Odnowi się samo, gdy usługa logowania znów odpowie. Wszystko na tym stanowisku działa jak dotąd.",
+    "This desk could not renew its sign-in by itself.": "To stanowisko nie mogło samo odnowić logowania.",
+    "Signing in again below picks up where it stopped. Meanwhile everything on this desk works as before.": "Ponowne logowanie poniżej wznowi je tam, gdzie się zatrzymało. Do tego czasu wszystko na tym stanowisku działa jak dotąd.",
+    "The sign-in did not finish.": "Logowanie nie zostało dokończone.",
+    "Nothing changed, and signing in can be tried again.": "Nic się nie zmieniło, a logowanie można ponowić.",
     "This desk will leave this team.": "To stanowisko opuści ten zespół.",
     "After leaving a team, this desk can join it again with a new invitation from its lead.": "Po opuszczeniu zespołu to stanowisko może do niego wrócić z nowym zaproszeniem od lidera.",
     "This desk left this team on {DATE}. Join it again?": "To stanowisko opuściło ten zespół {DATE}. Dołączyć do niego ponownie?",
@@ -10148,7 +10271,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-11";
+  var E_BUILT = "2026-11-12";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -10289,19 +10412,19 @@ What you type stays in this browser only.`;
   function v2Put(into, k, v) {
     Object.defineProperty(into, k, { value: v2Copy(v), enumerable: true, writable: true, configurable: true });
   }
-  function v2Extra(src, named) {
+  function v2Extra(src, named2) {
     let out = null;
     Object.keys(src).forEach((k) => {
-      if (named.indexOf(k) > -1 || src[k] === void 0) return;
+      if (named2.indexOf(k) > -1 || src[k] === void 0) return;
       if (!out) out = {};
       v2Put(out, k, src[k]);
     });
     return out;
   }
-  function v2Restore(into, extra, named) {
+  function v2Restore(into, extra, named2) {
     if (!extra || typeof extra !== "object") return;
     Object.keys(extra).forEach((k) => {
-      if (named.indexOf(k) < 0 && !Object.prototype.hasOwnProperty.call(into, k)) v2Put(into, k, extra[k]);
+      if (named2.indexOf(k) < 0 && !Object.prototype.hasOwnProperty.call(into, k)) v2Put(into, k, extra[k]);
     });
   }
   function v2Codes(c) {
@@ -17237,10 +17360,10 @@ What you type stays in this browser only.`;
     if (edition.length < 1 || edition.length > 120 || published.length < 1 || published.length > 80 || !Number.isFinite(h.t)) return null;
     if (/[\u0000-\u001f\u007f]/.test(edition + published)) return null;
     const kept = { edition, published, t: h.t };
-    const list2 = headEntriesKept(h.editions), named = list2 ? headNamed(list2, edition, published) : null;
-    if (named) {
+    const list2 = headEntriesKept(h.editions), named2 = list2 ? headNamed(list2, edition, published) : null;
+    if (named2) {
       kept.editions = list2;
-      kept.catalog = named.catalog;
+      kept.catalog = named2.catalog;
     }
     return kept;
   }
@@ -21515,21 +21638,24 @@ What you type stays in this browser only.`;
     if (!orgLive() || !Array.isArray(list2) || !Array.isArray(ids) || ids.length < 2) return null;
     const rank = /* @__PURE__ */ new Map();
     for (let i = 0; i < ids.length; i++) if (!rank.has(ids[i])) rank.set(ids[i], i);
-    const places = [], named = [];
+    const places = [], named2 = [];
     for (let i = 0; i < list2.length; i++) {
       if (rank.has(idOf(list2[i]))) {
         places.push(i);
-        named.push(list2[i]);
+        named2.push(list2[i]);
       }
     }
-    if (named.length < 2) return null;
-    named.sort((a, b) => rank.get(idOf(a)) - rank.get(idOf(b)));
+    if (named2.length < 2) return null;
+    named2.sort((a, b) => rank.get(idOf(a)) - rank.get(idOf(b)));
     const out = list2.slice();
-    for (let i = 0; i < places.length; i++) out[places[i]] = named[i];
+    for (let i = 0; i < places.length; i++) out[places[i]] = named2[i];
     return out;
   }
   function meaningLive() {
     return !!(eSearchOn() && meaning && meaning.gen === searchGen && meaning.query === currentQuery() && searchAlnumLen(currentQuery()) >= 3);
+  }
+  function builtinNone() {
+    return !meaningLive() || !meaning.cards.length && !meaning.intents.length;
   }
   function catEnOf(key) {
     const over = pack.catLabels && pack.catLabels[key];
@@ -21682,23 +21808,39 @@ What you type stays in this browser only.`;
     }
     return wordHits.concat(tail);
   }
+  function orgCardsTail(wordHits, keep) {
+    if (!eSearchOn() || !orgLive() || searchAlnumLen(currentQuery()) < 3) return null;
+    const byId = /* @__PURE__ */ new Map();
+    for (const m of cards || []) if (m && m.id != null && !byId.has(String(m.id))) byId.set(String(m.id), m);
+    const seen = new Set(wordHits.map((m) => String(m && m.id)));
+    const tail = [];
+    for (const id of orgOrder.cards) {
+      const m = byId.get(id);
+      if (!m || seen.has(id) || keep && !keep(m)) continue;
+      seen.add(id);
+      tail.push(m);
+    }
+    return tail.length ? wordHits.concat(tail) : null;
+  }
   function mixCards(wordHits, keep) {
     if (!Array.isArray(wordHits)) return null;
     const ids = orgOrder && orgOrder.cards;
     const idOf = (m) => String(m && m.id);
     const words = orgOrdered(wordHits, ids, idOf);
-    const mixed = meaningCards(wordHits, keep);
+    const mixed = builtinNone() && orgCardsTail(wordHits, keep) || meaningCards(wordHits, keep);
     if (!mixed) return words;
     const tail = mixed.slice(wordHits.length);
     return (words || wordHits).concat(orgOrdered(tail, ids, idOf) || tail);
   }
   function mixIntentRows(rows) {
-    if (!meaningLive() || !Array.isArray(rows)) return null;
+    const fromOrg = builtinNone() && eSearchOn() && orgLive() && orgOrder.intents.length > 0 && searchAlnumLen(currentQuery()) >= 3;
+    if (!meaningLive() && !fromOrg || !Array.isArray(rows)) return null;
     const byIdx = /* @__PURE__ */ new Map();
     const byId = /* @__PURE__ */ new Map();
     for (let i = 0; i < rows.length; i++) {
       byIdx.set(rows[i].idx, rows[i]);
       if (!byId.has(rows[i].id)) byId.set(rows[i].id, rows[i]);
+      if (fromOrg && !byId.has(String(rows[i].id))) byId.set(String(rows[i].id), rows[i]);
     }
     const hits = [];
     const seen = /* @__PURE__ */ new Set();
@@ -21708,7 +21850,7 @@ What you type stays in this browser only.`;
       hits.push(row2);
       seen.add(row2.id);
     }
-    const restIds = hybridIds(hits.map((r) => r.id), meaning.intents);
+    const restIds = fromOrg ? hybridIds(hits.map((r) => String(r.id)), orgOrder.intents) : hybridIds(hits.map((r) => r.id), meaning.intents);
     const tail = [];
     for (let i = hits.length; i < restIds.length; i++) {
       const row2 = byId.get(restIds[i]);
@@ -21812,15 +21954,45 @@ What you type stays in this browser only.`;
     const list2 = Array.isArray(shown) ? shown : [];
     for (let i = 0; i < list2.length && cardIds.length < ORG_CARDS_MAX; i++) if (list2[i] && list2[i].id != null) cardIds.push(String(list2[i].id));
     const intentIds = [];
-    if (meaningLive()) {
-      const hit = /* @__PURE__ */ new Set();
-      for (let i = 0; i < railOrder.length; i++) hit.add(String(intentIdAt(railOrder[i])));
+    const hit = /* @__PURE__ */ new Set();
+    for (let i = 0; i < railOrder.length; i++) hit.add(String(intentIdAt(railOrder[i])));
+    if (builtinNone()) {
+      const loose = looseCandidates(q);
+      for (const id of loose.cards) if (cardIds.length < ORG_CARDS_MAX && cardIds.indexOf(id) < 0) cardIds.push(id);
+      for (const id of loose.intents) if (intentIds.length < ORG_INTENTS_MAX && !hit.has(id) && intentIds.indexOf(id) < 0) intentIds.push(id);
+    } else {
       for (let i = 0; i < meaning.intents.length && intentIds.length < ORG_INTENTS_MAX; i++) {
         const id = String(meaning.intents[i]);
         if (!hit.has(id) && intentIds.indexOf(id) < 0) intentIds.push(id);
       }
     }
     return { q, gen: orgGen, cards: cardIds, intents: intentIds };
+  }
+  function looseCandidates(q) {
+    const terms = cardSearchTerms(q).filter((term) => searchAlnumLen(term) >= 3);
+    const out = { cards: [], intents: [] };
+    if (!terms.length) return out;
+    const reach = (words) => terms.reduce((n, term) => n + (words.some((w) => w.indexOf(term) > -1 || wordMatchesTerm(w, term)) ? term.length : 0), 0);
+    const scored = [];
+    const list2 = cards || [];
+    for (let i = 0; i < list2.length; i++) {
+      const m = list2[i];
+      if (!m || m.id == null) continue;
+      const n = reach(cardSearchIndex(m).allWords);
+      if (n) scored.push({ id: String(m.id), n, i });
+    }
+    const byReach = (a, b) => b.n - a.n || a.i - b.i;
+    out.cards = scored.sort(byReach).slice(0, ORG_CARDS_MAX).map((s) => s.id);
+    const intents = [];
+    const count = intentCount();
+    for (let i = 0; i < count; i++) {
+      const words = [];
+      for (const lang2 of ["en", "pl"]) for (const f of ["topic", "clause"]) words.push(...splitWords(intentFieldAt(i, f, lang2)));
+      const n = reach(words);
+      if (n) intents.push({ id: String(intentIdAt(i)), n, i });
+    }
+    out.intents = intents.sort(byReach).slice(0, ORG_INTENTS_MAX * 2).map((s) => s.id);
+    return out;
   }
   function searchReorder(a) {
     const o = a || {};
@@ -24018,9 +24190,9 @@ What you type stays in this browser only.`;
     const startLeft = /* @__PURE__ */ new Map();
     kids.forEach((el) => startLeft.set(el, el.getBoundingClientRect().left));
     const ease2 = "var(--m-move) " + E_EASE;
-    const named = ["width", ease2].join(" ");
+    const named2 = ["width", ease2].join(" ");
     grew.forEach((g, el) => {
-      el.style.transition = named;
+      el.style.transition = named2;
       el.style.width = g.w1 + "px";
     });
     grew.forEach((g, el) => {
@@ -25789,6 +25961,10 @@ What you type stays in this browser only.`;
     "search": '<circle cx="11" cy="11" r="6.5"/><path d="M15.6 15.6L20.5 20.5"/>',
     "all": '<path d="M5 7.5h14M5 12.5h14M5 17.5h10"/>',
     "user": '<circle cx="12.5" cy="8.5" r="3.5"/><path d="M5.5 20.5v-1.5a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v1.5"/>',
+    "people": '<circle cx="9" cy="9" r="3.2"/><circle cx="17" cy="10" r="2.6"/><path d="M3.5 19.5c.6-3.3 2.8-5 5.5-5s4.9 1.7 5.5 5M16 14.8c2.6 0 4.4 1.5 5 4.7"/>',
+    "code": '<rect x="3.5" y="6.5" width="18" height="12" rx="2.4"/><path d="M8 12.5h.01M12.5 12.5h.01M17 12.5h.01"/>',
+    "check": '<path d="M5 13l4.5 4.5L20 7"/>',
+    "clock": '<circle cx="12.5" cy="12.5" r="8"/><path d="M12.5 7.5v5l3.3 2.4"/>',
     "translate": '<path d="M4.5 19.5l4-10 4 10M6 15.5h5M14.5 8.5h6M18.5 6.5l2 2-2 2M20.5 15.5h-6M16.5 13.5l-2 2 2 2"/>',
     "expand": '<path d="M14.5 4.5h6v6M20.5 4.5l-6 6M10.5 20.5h-6v-6M4.5 20.5l6-6"/>',
     "refresh": '<path d="M20.5 12.5a8 8 0 1 1-2.3-5.7L20.5 9M20.5 4.5v4.5h-4.5"/>',
@@ -25987,6 +26163,399 @@ What you type stays in this browser only.`;
     syncOrgMark();
   }
 
+  // src/modules/signin.js
+  var SIGNIN_NAMES = { microsoft: "Microsoft", google: "Google" };
+  function signinRead(v) {
+    const o = v && typeof v === "object" ? v : {};
+    const known = (id) => Object.prototype.hasOwnProperty.call(SIGNIN_NAMES, id);
+    const signedIn = known(o.signedIn) ? o.signedIn : "";
+    return {
+      offered: Array.isArray(o.offered) ? o.offered.filter(known) : [],
+      signedIn,
+      code: signedIn && /^[0-9A-Z]{16}$/.test(String(o.code)) ? String(o.code) : "",
+      seat: o.seat === "held" || o.seat === "lapsed" || o.seat === "none" ? o.seat : "",
+      at: Number.isFinite(o.at) ? o.at : 0,
+      reached: o.reached !== false,
+      ask: o.ask === true,
+      refused: typeof o.refused === "string" ? o.refused : "",
+      busy: known(o.busy) ? o.busy : "",
+      said: typeof o.said === "string" ? o.said : "",
+      preview: o.preview === true && Array.isArray(o.offered) && o.offered.some(known)
+    };
+  }
+  var signinV = signinRead(null);
+  function signinHost() {
+    const h = eHost();
+    return h && typeof h.signinState === "function" ? h : null;
+  }
+  function signinNow() {
+    const h = signinHost();
+    if (!h) return signinRead(null);
+    try {
+      signinV = signinRead(h.signinState());
+    } catch (e) {
+      signinV = signinRead(null);
+    }
+    return signinV;
+  }
+  function signinShown(v) {
+    return !!(v && (v.offered.length || v.signedIn));
+  }
+  function signinCodeText(code) {
+    return String(code || "").replace(/(.{4})(?=.)/g, "$1 ");
+  }
+  function signinWhen(at) {
+    if (!at) return "";
+    const d = new Date(at), now = /* @__PURE__ */ new Date(), lang2 = uiLang() === "pl" ? "pl-PL" : "en-GB";
+    const time = d.toLocaleTimeString(lang2, { hour: "2-digit", minute: "2-digit" });
+    if (d.toDateString() === now.toDateString()) return t("today, {TIME}").split("{TIME}").join(time);
+    return d.toLocaleDateString(lang2, { day: "numeric", month: "short" }) + ", " + time;
+  }
+  function signinTeam() {
+    const l = teamLeads().find((x) => !x.removed);
+    return l ? { lead: String(l.lead || "") } : null;
+  }
+  var named = (s, k, v) => String(s).split(k).join(v);
+  function signinParts(v) {
+    const name = String(agentName() || "").trim(), prov = SIGNIN_NAMES[v.signedIn] || "";
+    const team = signinTeam();
+    return {
+      initial: name ? name[0].toUpperCase() : "",
+      name,
+      sub: prov ? named(t("Signed in with {PROVIDER}"), "{PROVIDER}", prov) + (v.reached ? "" : " · " + t("service not reached just now")) : "",
+      off: !v.reached,
+      code: v.code,
+      team,
+      teamName: team ? team.lead ? named(t("{LEAD}'s team"), "{LEAD}", team.lead) : t("Team") : ""
+    };
+  }
+  function signinSay(reason, v, p) {
+    const prov = SIGNIN_NAMES[v.busy || v.signedIn] || "";
+    switch (reason) {
+      case "unreached":
+      case "signin-unreached":
+      case "signin-timeout":
+      case "signin-browser":
+        return [t("The sign-in service could not be reached."), t("Nothing changed: this computer is not signed in, and Etiuda works as before.")];
+      case "signin-notallowed":
+        return [t("This account's organisation has not allowed Etiuda at its sign-in provider."), t("Its IT department can allow it; another account can be used meanwhile.")];
+      case "desks":
+        return [t("This account is already in use on three computers."), t("Signing out on one of them makes room here, and so does a computer left unused for 30 days; then Try again.")];
+      case "full":
+        return p && p.team && p.team.lead ? [named(t("{TEAM} has no free seat."), "{TEAM}", p.teamName), named(named(t("You are signed in and in the team. {LEAD}, the team's lead, can free a seat or add one, and Etiuda checks again by itself."), "{LEAD}", p.team.lead), "{TEAM}", p.teamName)] : [t("This licence has no free seat."), t("The sign-in worked. The licence's owner can free a seat or add one, and Etiuda checks again by itself.")];
+      case "nolicence":
+        return [t("No Etiuda licence has a seat for this account."), t("The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.")];
+      case "offline":
+        return [t("The sign-in service cannot be reached just now."), named(t("Etiuda keeps working with the catalog it has. Last checked {WHEN}."), "{WHEN}", signinWhen(v.at))];
+      case "lapsed":
+        return [t("This desk's seat is due for renewal."), t("It renews by itself the next time the sign-in service answers. Everything on this desk works as before.")];
+      case "ask":
+        return [t("This desk could not renew its sign-in by itself."), t("Signing in again below picks up where it stopped. Meanwhile everything on this desk works as before.")];
+      case "signin-preview":
+        return [t("Sign-in is not set up yet, so nothing was sent. This is a preview."), ""];
+      default:
+        return [t("The sign-in did not finish."), t("Nothing changed, and signing in can be tried again.")];
+    }
+  }
+  var FAIL_FIRST = ["unreached", "signin-unreached", "signin-timeout", "signin-browser", "signin-notallowed", "desks", "token", "signin", "signin-refused", "signin-token", "signin-unbound", "signin-state", "signin-none", "signin-preview"];
+  function signinDoor(v) {
+    const d = signinDoorOf(v);
+    if (d && v.preview) d.preview = t("Preview only. Sign-in is not set up yet, so nothing here is sent.");
+    return d;
+  }
+  function signinDoorOf(v) {
+    if (!signinShown(v)) return null;
+    const p = signinParts(v), acct = { act: "account", label: t("Account settings") };
+    const ident = { initial: p.initial, name: p.name || (SIGNIN_NAMES[v.signedIn] || ""), sub: p.sub, off: p.off };
+    if (v.busy) return {
+      moment: "waiting",
+      heading: t("Finish signing in in the browser"),
+      line: named(t("The browser has opened {PROVIDER}'s sign-in page. Etiuda waits here and carries on by itself when you come back."), "{PROVIDER}", SIGNIN_NAMES[v.busy]),
+      wait: named(t("Waiting for {PROVIDER}…"), "{PROVIDER}", SIGNIN_NAMES[v.busy]),
+      acts: [{ act: "again", label: t("Open the browser again") }, { act: "stop", label: t("Cancel") }]
+    };
+    if (!v.signedIn) {
+      if (FAIL_FIRST.indexOf(v.said) >= 0) {
+        const s = signinSay(v.said, v);
+        return {
+          moment: "refused",
+          heading: s[0],
+          line: s[1],
+          acts: [v.said === "signin-notallowed" ? { act: "choose", label: t("Use another account"), solid: true } : { act: "choose", label: t("Try again"), solid: true }]
+        };
+      }
+      return {
+        moment: "before",
+        heading: t("Sign in to Etiuda"),
+        line: t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three."),
+        providers: v.offered,
+        cap: t("Microsoft: a work, school or personal account. Google: a Workspace or personal account."),
+        privacy: t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account."),
+        foot: t("Etiuda for personal use, outside work, needs no sign-in.")
+      };
+    }
+    if (v.ask) return { moment: "ask", ident, say: signinSay("ask", v), providers: v.offered, acts: [acct] };
+    if (v.refused === "full") return { moment: "noseat", ident, say: signinSay("full", v, p), acts: [{ act: "check", label: t("Check now"), solid: true }, acct] };
+    if (v.seat === "none" || !v.seat) return {
+      moment: "nolicence",
+      ident,
+      say: signinSay("nolicence", v),
+      code: v.code,
+      acts: [{ act: "check", label: t("Check now"), solid: true }, acct]
+    };
+    if (!p.team && v.reached && v.seat === "held") return {
+      moment: "noteam",
+      ident,
+      heading: t("Signed in. No team yet"),
+      line: t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."),
+      code: v.code,
+      acts: [{ act: "check", label: t("Check now") }, acct]
+    };
+    const out = { moment: "signed", ident, team: p.team ? p.teamName + (p.team.lead ? " · " + named(t("Led by {LEAD}"), "{LEAD}", p.team.lead) : "") : t("No team yet"), acts: [acct] };
+    if (!v.reached) {
+      out.moment = "offline";
+      out.say = signinSay("offline", v);
+      out.calm = true;
+      out.acts = [{ act: "check", label: t("Check now") }, acct];
+    } else if (v.seat === "lapsed") {
+      out.moment = "lapsed";
+      out.say = signinSay("lapsed", v);
+      out.calm = true;
+      out.acts = [{ act: "check", label: t("Check now") }, acct];
+    }
+    return out;
+  }
+  var ICON_PERSON = '<svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="6.8" r="3.2"/><path d="M3.6 17c.7-3.2 3.3-5 6.4-5s5.7 1.8 6.4 5"/></svg>';
+  var LOGO = {
+    microsoft: '<svg class="sgn-lg" width="21" height="21" viewBox="0 0 21 21" aria-hidden="true" focusable="false"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>',
+    google: '<svg class="sgn-lg" width="20" height="20" viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>'
+  };
+  function signinProvidersHtml(ids, row2) {
+    return '<div class="sgn-provs' + (row2 ? " row" : "") + '">' + ids.map((id) => '<button type="button" class="sgn-p ' + esc(id) + '" data-e-open="signin" data-e-provider="' + esc(id) + '">' + LOGO[id] + "<span>" + esc(id === "microsoft" ? t("Sign in with Microsoft") : t("Sign in with Google")) + "</span></button>").join("") + "</div>";
+  }
+  function signinAvatarHtml(initial, off, big) {
+    return '<span class="sgn-av' + (big ? " l" : "") + (off ? " off" : "") + '" aria-hidden="true">' + (initial ? esc(initial) : ICON_PERSON) + "</span>";
+  }
+  function signinIdentHtml(ident) {
+    return '<div class="sgn-id">' + signinAvatarHtml(ident.initial, ident.off, true) + "<div><b>" + esc(ident.name) + "</b>" + (ident.sub ? "<small>" + esc(ident.sub) + "</small>" : "") + "</div></div>";
+  }
+  function signinCodeHtml(code, label2) {
+    return '<div class="sgn-code">' + (label2 ? '<span class="k">' + esc(label2) + "</span>" : "") + "<code>" + esc(signinCodeText(code)) + '</code><button type="button" class="btn" data-signin-act="copy">' + esc(t("Copy")) + "</button></div>";
+  }
+  function signinActsHtml(acts) {
+    return '<div class="sgn-acts">' + acts.map((a) => '<button type="button" class="btn' + (a.solid ? " primary" : "") + '" data-signin-act="' + esc(a.act) + '">' + esc(a.label) + "</button>").join("") + "</div>";
+  }
+  function signinPreviewHtml(v) {
+    return v && v.preview ? '<p class="sgn-cap sgn-preview" data-signin-preview>' + esc(t("Preview only. Sign-in is not set up yet, so nothing here is sent.")) + "</p>" : "";
+  }
+  function signinPanelHtml(d) {
+    let h = "";
+    if (d.preview) h += signinPreviewHtml({ preview: true });
+    if (d.ident) h += signinIdentHtml(d.ident);
+    if (d.heading) h += "<h4>" + esc(d.heading) + "</h4>";
+    if (d.line) h += '<p class="sgn-lede">' + esc(d.line) + "</p>";
+    if (d.wait) h += '<div class="sgn-wait">' + esc(d.wait) + '</div><div class="sgn-run" aria-hidden="true"></div>';
+    if (d.team) h += '<p class="sgn-ln">' + esc(d.team) + "</p>";
+    if (d.code) h += signinCodeHtml(d.code, "");
+    if (d.say) h += '<p class="sgn-say' + (d.calm ? " calm" : "") + '"><b>' + esc(d.say[0]) + "</b><span>" + esc(d.say[1]) + "</span></p>";
+    if (d.providers && d.providers.length) h += signinProvidersHtml(d.providers, false);
+    if (d.cap) h += '<p class="sgn-cap">' + esc(d.cap) + "</p>";
+    if (d.privacy) h += '<p class="sgn-cap">' + esc(d.privacy) + "</p>";
+    if (d.acts && d.acts.length) h += signinActsHtml(d.acts);
+    if (d.foot) h += '<p class="sgn-ft">' + esc(d.foot) + "</p>";
+    return h;
+  }
+  var signinOpen = false;
+  var signinChoosing = false;
+  var signinTellers = [];
+  function signinOnChange(fn) {
+    if (typeof fn === "function") signinTellers.push(fn);
+  }
+  function signinTell() {
+    signinTellers.forEach((fn) => {
+      try {
+        fn();
+      } catch (e) {
+      }
+    });
+  }
+  function paintSigninButton() {
+    const wrap = $("#signinWrap"), btn = $("#signinBtn");
+    if (!wrap || !btn) return;
+    const v = signinV, show = signinShown(v);
+    wrap.hidden = !show;
+    if (!show) {
+      closeSigninPanel();
+      return;
+    }
+    const p = signinParts(v), word = t("Sign in");
+    btn.classList.toggle("on", signinOpen || !!v.busy);
+    if (v.signedIn) {
+      btn.innerHTML = signinAvatarHtml(p.initial, p.off, false);
+      btn.setAttribute("aria-label", t("Account"));
+      btn.title = t("Account");
+    } else {
+      btn.innerHTML = ICON_PERSON + '<span class="sgn-w">' + esc(word) + "</span>";
+      btn.setAttribute("aria-label", word);
+      btn.title = word;
+    }
+  }
+  function paintSigninPanel() {
+    const panel = $("#signinPanel");
+    if (!panel) return;
+    const d = signinChoosing && !signinV.busy ? signinDoor(Object.assign({}, signinV, { signedIn: "", said: "" })) : signinDoor(signinV);
+    if (!d) {
+      closeSigninPanel();
+      return;
+    }
+    panel.dataset.moment = d.moment;
+    panel.innerHTML = signinPanelHtml(d);
+    panel.hidden = !signinOpen;
+  }
+  function openSigninPanel() {
+    signinOpen = true;
+    paintSigninPanel();
+    paintSigninButton();
+    const btn = $("#signinBtn");
+    if (btn) btn.setAttribute("aria-expanded", "true");
+  }
+  function closeSigninPanel(back) {
+    const panel = $("#signinPanel"), btn = $("#signinBtn");
+    const was = signinOpen;
+    signinOpen = false;
+    signinChoosing = false;
+    if (panel) panel.hidden = true;
+    if (btn) {
+      btn.setAttribute("aria-expanded", "false");
+      btn.classList.toggle("on", !!signinV.busy);
+    }
+    if (was && back && btn) try {
+      btn.focus({ preventScroll: true });
+    } catch (e) {
+    }
+  }
+  function signinChanged(v, answered) {
+    signinV = signinRead(v);
+    paintSigninButton();
+    if (answered && signinShown(signinV) && !signinV.busy) signinOpen = true;
+    if (signinOpen) paintSigninPanel();
+    signinTell();
+  }
+  function signinCall(name, arg) {
+    const h = signinHost();
+    if (!h || typeof h[name] !== "function") return Promise.resolve(null);
+    try {
+      return Promise.resolve(h[name](arg)).catch(() => null);
+    } catch (e) {
+      return Promise.resolve(null);
+    }
+  }
+  function signinCopy() {
+    const text = signinV.code;
+    if (!text) return;
+    try {
+      const h = eHost();
+      if (h && typeof h.noteOwnText === "function") h.noteOwnText(text);
+    } catch (e) {
+    }
+    try {
+      if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).catch(() => {
+      });
+    } catch (e) {
+    }
+  }
+  function signinAct(act) {
+    if (act === "account") {
+      closeSigninPanel();
+      if (typeof hooks.openSettings === "function") hooks.openSettings("account");
+      return;
+    }
+    if (act === "copy") {
+      signinCopy();
+      return;
+    }
+    if (act === "choose") {
+      signinChoosing = true;
+      signinV = Object.assign({}, signinV, { said: "" });
+      paintSigninPanel();
+      signinTell();
+      return;
+    }
+    if (act === "stop") {
+      signinCall("signinStop");
+      return;
+    }
+    if (act === "again") {
+      signinCall("signinAgain");
+      return;
+    }
+    if (act === "check") {
+      signinCall("signinCheck").then((v) => {
+        if (v) signinChanged(v, false);
+      });
+      return;
+    }
+    if (act === "out") {
+      signinCall("signinOut").then((v) => {
+        if (v) signinChanged(v, false);
+      });
+      return;
+    }
+    if (act === "another") {
+      signinChoosing = true;
+      signinTell();
+      return;
+    }
+    if (act === "keep") {
+      signinChoosing = false;
+      signinTell();
+    }
+  }
+  function signinStart(id) {
+    signinChoosing = false;
+    signinCall("signIn", id).then((v) => {
+      if (v) signinChanged(v, true);
+    });
+  }
+  function signinChoosingNow() {
+    return signinChoosing;
+  }
+  function signinClicks(root) {
+    if (!root) return;
+    root.addEventListener("click", (e) => {
+      const b = e.target && e.target.closest ? e.target.closest("button") : null;
+      if (!b) return;
+      if (b.dataset.eOpen === "signin") {
+        signinStart(b.dataset.eProvider);
+        return;
+      }
+      if (b.dataset.signinAct) signinAct(b.dataset.signinAct);
+    });
+  }
+  function wireSignin() {
+    const h = signinHost();
+    if (!h) return;
+    signinNow();
+    if (typeof h.onSignin === "function") h.onSignin((v) => signinChanged(v, false));
+    const btn = $("#signinBtn"), panel = $("#signinPanel"), wrap = $("#signinWrap");
+    if (btn) btn.onclick = (e) => {
+      e.stopPropagation();
+      if (signinOpen) closeSigninPanel(true);
+      else openSigninPanel();
+    };
+    signinClicks(panel);
+    addEventListener("pointerdown", (e) => {
+      if (signinOpen && wrap && !wrap.contains(e.target)) closeSigninPanel(false);
+    });
+    addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && signinOpen && wrap && wrap.contains(document.activeElement)) {
+        e.stopPropagation();
+        closeSigninPanel(true);
+      }
+    }, true);
+    paintSigninButton();
+  }
+
   // src/modules/header-menus.js
   var MENU_ICON = {
     manage: "cards",
@@ -26028,6 +26597,7 @@ What you type stays in this browser only.`;
     paintMenuIcons();
     wireUpdateOffer();
     wireOrgModel();
+    wireSignin();
     const host = eHost(), canClose = !!(host && typeof host.close === "function");
     ["#menuQuit", "#menuQuitSep"].forEach((s) => {
       const el = $(s);
@@ -27545,10 +28115,10 @@ What you type stays in this browser only.`;
       return "mine";
     };
     const scope = sharedScope(touched, M2, F, B, all);
-    const named = (pre) => Object.keys(fileSeen).concat(Array.from(held)).filter((l) => l.indexOf(pre) === 0).map((l) => l.slice(pre.length).split(SHARED_SEP)[0]);
+    const named2 = (pre) => Object.keys(fileSeen).concat(Array.from(held)).filter((l) => l.indexOf(pre) === 0).map((l) => l.slice(pre.length).split(SHARED_SEP)[0]);
     const mergeList = (key, scoped, keysOf) => {
       const fm = sharedById(F[key]), bm = sharedById(B[key]), mm = sharedById(M2[key]), mOrder = (Array.isArray(M2[key]) ? M2[key] : []).map((x) => String(x && x.id));
-      new Set(Array.from(scoped).concat(named(key + SHARED_SEP))).forEach((id) => {
+      new Set(Array.from(scoped).concat(named2(key + SHARED_SEP))).forEach((id) => {
         const at = key + SHARED_SEP + id, mc = mm.get(id), fc = fm.get(id), bc = bm.get(id), keys = keysOf(id), whole = scoped.has(id) && !keys;
         const keyList = (...docs) => {
           const s = /* @__PURE__ */ new Set();
@@ -27557,7 +28127,7 @@ What you type stays in this browser only.`;
               if (k !== "id" && (!keys || keys.indexOf(k) > -1)) s.add(k);
             });
           });
-          named(at + SHARED_SEP).forEach((k) => s.add(k));
+          named2(at + SHARED_SEP).forEach((k) => s.add(k));
           return Array.from(s);
         };
         const movedFile = (c, ks) => ks.some((k) => sharedCanon(c && c[k]) !== refFile(at + SHARED_SEP + k, bc && bc[k]));
@@ -27599,7 +28169,7 @@ What you type stays in this browser only.`;
     };
     mergeList("tags", scope.tags, () => null);
     mergeList("cards", new Set(scope.cards.keys()), (id) => scope.cards.get(id) || null);
-    new Set(Array.from(scope.head).concat(named("head" + SHARED_SEP))).forEach((k) => {
+    new Set(Array.from(scope.head).concat(named2("head" + SHARED_SEP))).forEach((k) => {
       if (SHARED_OWN_KEYS.indexOf(k) > -1) return;
       if (decide("head" + SHARED_SEP + k, M2[k], F[k], B[k], scope.head.has(k)) !== "mine") return;
       if (M2[k] === void 0) delete out[k];
@@ -31067,11 +31637,11 @@ What you type stays in this browser only.`;
       const count = counted(ids.length, "{N} intent", "{N} intents");
       let txt = t("none");
       if (ids.length) {
-        const named = ids.length <= 2 ? ids.map((id) => {
+        const named2 = ids.length <= 2 ? ids.map((id) => {
           const i = intentIdxOfId(id);
           return i > -1 ? intentNavName(i) : "";
         }).filter(Boolean) : [];
-        txt = named.length === ids.length ? named.join(" · ") : count;
+        txt = named2.length === ids.length ? named2.join(" · ") : count;
       }
       sum.textContent = txt;
     }
@@ -32484,10 +33054,10 @@ What you type stays in this browser only.`;
           print: heldCatalogPrint(),
           extra: mineLine
         }) });
-      const under = tops.map(() => []), alone = [], named = /* @__PURE__ */ new Map(), nested = [];
+      const under = tops.map(() => []), alone = [], named2 = /* @__PURE__ */ new Map(), nested = [];
       desks.forEach((f) => {
         const n = deskName(f);
-        named.set(n, (named.get(n) || 0) + 1);
+        named2.set(n, (named2.get(n) || 0) + 1);
       });
       desks.forEach((f, i) => {
         const g = f.grew, on = i === deskOn, stamp = catalogStamp(f.edition, f.mtime, f.rev);
@@ -32500,7 +33070,7 @@ What you type stays in this browser only.`;
           loaded: on,
           meta,
           extra: extraFor(f.id, on),
-          twin: named.get(deskName(f)) > 1 ? deskKey(f).slice(0, 4) : ""
+          twin: named2.get(deskName(f)) > 1 ? deskKey(f).slice(0, 4) : ""
         }));
         if (p != null && !on) nested.push(i);
       });
@@ -32574,7 +33144,7 @@ What you type stays in this browser only.`;
       const forCat = ring && ring[String(c.id || "")];
       const pub = forCat && typeof forCat === "object" ? String(forCat[kid] || "") : "";
       if (state === V2_SIG_VALID || !prints.length || !/^[0-9a-f]{64}$/.test(pub)) return;
-      return v2SigState(doc, ring).then((named) => named === V2_SIG_VALID ? keyPrintOf(pub) : "").then((print) => {
+      return v2SigState(doc, ring).then((named2) => named2 === V2_SIG_VALID ? keyPrintOf(pub) : "").then((print) => {
         if (!print || prints.indexOf(print) >= 0 || !wrap.isConnected || wrap.querySelector(".ec-signer")) return;
         const line = t("This file is signed with the key {KEY}, which is not the team lead's.").split("{KEY}").join(leadKeyText(print));
         wrap.querySelectorAll(".ec-trust").forEach((n) => n.remove());
@@ -34941,10 +35511,14 @@ What you type stays in this browser only.`;
   function suggestCountLine() {
     return t("Suggestions taken: {N}").split("{N}").join(String(pack.suggestTaken | 0)) + "  " + t("Openings with suggestions: {N}").split("{N}").join(String(pack.suggestOpen | 0));
   }
+  function suggestNoteText() {
+    const st = orgModel();
+    return orgRanks(st) && eAiOn() ? t("When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. While the organisation's model is on, the copied message, at most its first 1,500 characters, is sent to {HOST} as the picker opens, so that the model there can suggest the intents; this desk keeps no copy of it. The statistics count only how often suggestions appeared and how many were taken.").split("{HOST}").join(String(st.host || "")) : t("When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as the picker opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.");
+  }
   function hotkeyRowHtml() {
     if (!hotkeyHost()) return "";
     const st = hotkeyState();
-    return '<div class="sc-list"><div class="sc-row" id="setHotkeyRow"><div class="sc-label">' + esc(t("Bring the replies over any window")) + '<small id="setHotkeyNote">' + esc(st.taken ? t("Another program uses this combination just now; a different one will do.") : t("Works from any program; Enter copies a reply and goes back to the window you were in.")) + '</small><small id="setSuggestNote">' + esc(t("When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as the picker opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.")) + '</small><small id="setSuggestCounts">' + esc(suggestCountLine()) + '</small></div><div class="sc-binds"><button type="button" class="sc-bind sc-long' + (st.accel ? "" : " sc-empty") + '" id="setHotkey" style="flex-basis:100%" title="' + esc(t("Click, then press the new key combo")) + '">' + esc(hotkeyLabel(st.accel)) + "</button></div></div></div>";
+    return '<div class="sc-list"><div class="sc-row" id="setHotkeyRow"><div class="sc-label">' + esc(t("Bring the replies over any window")) + '<small id="setHotkeyNote">' + esc(st.taken ? t("Another program uses this combination just now; a different one will do.") : t("Works from any program; Enter copies a reply and goes back to the window you were in.")) + '</small><small id="setSuggestNote">' + esc(suggestNoteText()) + '</small><small id="setSuggestCounts">' + esc(suggestCountLine()) + '</small></div><div class="sc-binds"><button type="button" class="sc-bind sc-long' + (st.accel ? "" : " sc-empty") + '" id="setHotkey" style="flex-basis:100%" title="' + esc(t("Click, then press the new key combo")) + '">' + esc(hotkeyLabel(st.accel)) + "</button></div></div></div>";
   }
   function syncHotkeyRow(box, now) {
     if (!box) return;
@@ -34956,7 +35530,7 @@ What you type stays in this browser only.`;
     b.textContent = hkListening ? t("Press keys…") : hotkeyLabel(st.accel);
     if (note) note.textContent = st.taken ? t("Another program uses this combination just now; a different one will do.") : t("Works from any program; Enter copies a reply and goes back to the window you were in.");
     const help = box.querySelector("#setSuggestNote"), counts2 = box.querySelector("#setSuggestCounts");
-    if (help) help.textContent = t("When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as the picker opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.");
+    if (help) help.textContent = suggestNoteText();
     if (counts2) counts2.textContent = suggestCountLine();
   }
   function hotkeyListen(box, on, now) {
@@ -35102,10 +35676,87 @@ What you type stays in this browser only.`;
     const h = eHost();
     return h && typeof h.setClosePolicy === "function" && typeof h.setLoginItem === "function" && typeof h.loginItemState === "function" ? h : null;
   }
+  function accountCardHtml(v) {
+    const p = signinParts(v), choosing = signinChoosingNow();
+    if (v.signedIn && !choosing) {
+      let h2 = '<div class="sgn-top"><div class="sgn-top-row">' + signinIdentHtml({ initial: p.initial, name: p.name, sub: p.sub, off: p.off }) + '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="another">' + esc(t("Use another account")) + '</button><button type="button" class="btn" data-signin-act="out">' + esc(t("Sign out")) + "</button></span></div>";
+      if (v.ask) {
+        const s = signinSay("ask", v);
+        h2 += '<p class="sgn-say"><b>' + esc(s[0]) + "</b><span>" + esc(s[1]) + "</span></p>" + signinProvidersHtml(v.offered, true);
+      }
+      h2 += '<p class="sgn-ft">' + esc(t("Signing out ends this computer's sign-in and frees its place among the account's three; the seat stays the account's. The team's catalog and personal cards stay on the computer.")) + "</p>";
+      return h2 + "</div>";
+    }
+    let h = '<div class="sgn-top col">';
+    if (v.busy) {
+      const prov = v.busy === "google" ? "Google" : "Microsoft";
+      h += signinIdentHtml({
+        initial: "",
+        name: t("Finish signing in in the browser"),
+        sub: t("The browser has opened {PROVIDER}'s sign-in page. Etiuda waits here and carries on by itself when you come back.").split("{PROVIDER}").join(prov)
+      }) + '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="again">' + esc(t("Open the browser again")) + '</button><button type="button" class="btn" data-signin-act="stop">' + esc(t("Cancel")) + "</button></span>" + signinPreviewHtml(v);
+      return h + "</div>";
+    }
+    const failed = v.said && v.said !== "signin-done" && v.said !== "signin-cancelled" && !v.signedIn;
+    if (failed) {
+      const s = signinSay(v.said, v);
+      h += signinIdentHtml({ initial: "", name: s[0], sub: s[1] });
+    } else h += signinIdentHtml({
+      initial: "",
+      name: t("Not signed in"),
+      sub: t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.")
+    });
+    h += "<div>" + signinPreviewHtml(v) + signinProvidersHtml(v.offered, true) + '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + '</p><p class="sgn-cap">' + esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account.")) + "</p></div>";
+    if (choosing && v.signedIn) h += '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">' + esc(t("Cancel")) + "</button></span>";
+    return h + "</div>";
+  }
+  function accountGroups() {
+    const name = row("name", "user", t("Your name"), "", '<input type="text" id="setAgentName" autocomplete="off" spellcheck="false" placeholder="' + esc(t("first name")) + '" value="' + esc(agentName()) + '">');
+    const v = signinNow(), groups = [];
+    if (signinShown(v)) groups.push({ rows: [], after: accountCardHtml(v) });
+    const rows = [name];
+    if (v.signedIn && !signinChoosingNow()) {
+      const p = signinParts(v), val = (x) => '<span class="sgn-val">' + esc(x) + "</span>", join = (pair) => pair[0] + " " + pair[1];
+      rows.push(p.team ? row("team", "people", t("Team"), p.team.lead ? t("Led by {LEAD}").split("{LEAD}").join(p.team.lead) : "", val(p.teamName)) : row("team", "people", t("No team yet"), t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."), ""));
+      if (v.code) rows.push(row(
+        "code",
+        "code",
+        t("Your sign-in code"),
+        t("Not a secret. It tells a team's lead which account is yours."),
+        '<code class="sgn-mono">' + esc(signinCodeText(v.code)) + '</code><button type="button" class="btn" data-signin-act="copy">' + esc(t("Copy")) + "</button>"
+      ));
+      if (v.refused === "full") rows.push(row("seat", "check", t("Seat"), join(signinSay("full", v, p)), ""));
+      else if (v.seat === "none") rows.push(row("seat", "check", t("Seat"), join(signinSay("nolicence", v)), ""));
+      else rows.push(row("seat", "check", t("Seat"), v.seat === "lapsed" ? join(signinSay("lapsed", v)) : t("On up to three computers; this is one of them."), val(t("Held by this account"))));
+      rows.push(row(
+        "checked",
+        "clock",
+        t("Last checked"),
+        v.reached ? "" : t("The sign-in service cannot be reached just now. Etiuda keeps working with the catalog it has."),
+        (v.at ? val(signinWhen(v.at)) : "") + '<button type="button" class="btn" data-signin-act="check">' + esc(t("Check now")) + "</button>"
+      ));
+    }
+    groups.push({ rows });
+    return groups;
+  }
+  var accountHeard = false;
+  function wireAccountRows(box) {
+    if (!accountHeard) {
+      accountHeard = true;
+      signinOnChange(() => {
+        if (document.getElementById("setBody")) paintSettings();
+      });
+    }
+    box.querySelectorAll('[data-e-open="signin"]').forEach((b) => {
+      b.onclick = () => signinStart(b.getAttribute("data-e-provider"));
+    });
+    box.querySelectorAll("[data-signin-act]").forEach((b) => {
+      b.onclick = () => signinAct(b.getAttribute("data-signin-act"));
+    });
+  }
   function generalGroups() {
     const langSel = '<select id="setUiLang" aria-label="' + esc(t("Interface language")) + '" title="' + esc(t("Changes every label in Etiuda, never the cards themselves")) + '">' + UI_LANGS.map((l) => '<option value="' + esc(l.code) + '"' + (l.code === uiLang() ? " selected" : "") + ">" + esc(l.label) + "</option>").join("") + "</select>";
     const groups = [{ rows: [
-      row("name", "user", t("Your name"), "", '<input type="text" id="setAgentName" autocomplete="off" spellcheck="false" placeholder="' + esc(t("first name")) + '" value="' + esc(agentName()) + '">'),
       row(
         "uilang",
         "translate",
@@ -35295,9 +35946,23 @@ What you type stays in this browser only.`;
   function aiWords(st, builtin, organisation) {
     return orgRanks(st) ? organisation.split("{HOST}").join(String(st.host || "")) : builtin;
   }
+  function aiLede() {
+    const st = orgModel();
+    if (!orgRanks(st)) return t("The model built into Etiuda, which works on this computer alone.");
+    const search = eSearchOn(), suggest = eAiOn();
+    const line = search && suggest ? t("The organisation's model at {HOST} ranks the search and the suggestions. The search text and the copied message the suggestions are made from are sent there.") : search ? t("The organisation's model at {HOST} ranks the search. The search text is sent there.") : suggest ? t("The organisation's model at {HOST} ranks the suggestions. The copied message they are made from is sent there.") : t("The organisation's model at {HOST} is set, and with both switches off nothing is sent to it.");
+    return line.split("{HOST}").join(String(st.host || ""));
+  }
+  function syncAiWords() {
+    const box = settingsHost();
+    if (!box) return;
+    const lede = sxOn === "ai" && !sxQuery ? box.querySelector("p.lede") : null, note = box.querySelector("#setSuggestNote");
+    if (lede) lede.textContent = aiLede();
+    if (note) note.textContent = suggestNoteText();
+  }
   function aiGroups() {
-    if (!eAiModel()) return [];
     const st = orgModel(), w = (a, b) => aiWords(st, a, b);
+    if (!eAiModel() && !orgRanks(st)) return [];
     return [{ rows: [
       row(
         "aisuggest",
@@ -35503,7 +36168,8 @@ What you type stays in this browser only.`;
   }
   function settingsSections() {
     return [
-      { id: "general", icon: "general", name: t("General"), lede: t("Your name, the language, and how Etiuda starts and closes."), groups: generalGroups() },
+      { id: "account", icon: "user", name: t("Account"), lede: t("Who is signed in on this computer, and your name."), groups: accountGroups() },
+      { id: "general", icon: "general", name: t("General"), lede: t("The language, and how Etiuda starts and closes."), groups: generalGroups() },
       { id: "appearance", icon: "appearance", name: t("Appearance"), lede: t("How the app looks and moves."), groups: appearanceGroups() },
       { id: "layout", icon: "layout", name: t("Layout"), lede: t("How the screen is laid out."), groups: layoutGroups() },
       { id: "keys", icon: "keys", name: t("Keyboard shortcuts"), lede: t("Every shortcut, and how to change it."), groups: keysGroups() },
@@ -35511,7 +36177,7 @@ What you type stays in this browser only.`;
       { id: "teams", icon: "teams", name: t("Teams and keys"), lede: t("The team this desk is on, and how its changes reach the team."), groups: teamsGroups() },
       { id: "data", icon: "data", name: t("Data and defaults"), lede: t("Putting settings back, and what the app keeps on this computer."), groups: dataGroups() },
       { id: "about", icon: "about", name: t("About"), lede: t("The version, the licence and the tour."), groups: aboutGroups() },
-      { id: "ai", icon: "ai", name: t("AI"), lede: t("The model built into Etiuda, which works on this computer alone."), groups: aiGroups() }
+      { id: "ai", icon: "ai", name: t("AI"), lede: aiLede(), groups: aiGroups() }
     ].filter((s) => s.groups.some((g) => g.rows.length));
   }
   function groupHtml(g) {
@@ -35522,7 +36188,7 @@ What you type stays in this browser only.`;
   }
   var sxOn = "";
   var sxQuery = "";
-  var SX_ALIAS = { personal: "general" };
+  var SX_ALIAS = { personal: "account" };
   function settingsFound(query) {
     const q = scFold(query).trim();
     if (!q) return [];
@@ -35747,6 +36413,7 @@ What you type stays in this browser only.`;
     }
     wireTeamRows(box);
     wireOrgModelRow(box);
+    wireAccountRows(box);
     const joinBtn = box.querySelector("#setJoinTeam");
     if (joinBtn) joinBtn.onclick = () => openJoinPaste();
     const nameBox = box.querySelector("#setAgentName");
@@ -35815,12 +36482,14 @@ What you type stays in this browser only.`;
             else lsSet(E_AI_OFF_KEY, "1");
             eTellAi();
             syncOrgMark();
+            syncAiWords();
             toast(on ? aiWords(orgModel(), t("Suggestions from the built-in model"), t("Suggestions from the organisation's model")) : t("Suggestions from matching words"));
           } else if (seg3 === "aisearch") {
             if (on) lsDel(E_SEARCH_AI_OFF_KEY);
             else lsSet(E_SEARCH_AI_OFF_KEY, "1");
             eTellSearch();
             syncOrgMark();
+            syncAiWords();
             if (on) armSearch();
             else clearSearchMeaning();
             try {

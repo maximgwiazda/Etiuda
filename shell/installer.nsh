@@ -402,6 +402,55 @@
   FunctionEnd
   !endif
   !endif
+
+  # A TREE REMOVED WITHOUT ENTERING A LINK: RMDir /r follows a junction into its target, so run elevated over a folder its
+  # user can write, it deletes wherever a link planted there points. Each entry's attributes are read before it is entered,
+  # and a link is removed as itself. The folder is on the stack; a drive root is refused, as RMDir /r refuses one.
+  !ifdef BUILD_UNINSTALLER
+    !define ETIUDA_REMOVE_TREE "un.etiudaRemoveTree"
+  !endif
+  # Compiled where the name is defined: an unreferenced function is warning 6010, so an installer-pass caller defines it too.
+  !ifdef ETIUDA_REMOVE_TREE
+  Function ${ETIUDA_REMOVE_TREE}
+    Exch $R0
+    Push $R1
+    Push $R2
+    StrLen $R1 $R0
+    ${If} $R1 < 4
+      Goto etiudaTreeDone
+    ${EndIf}
+    System::Call 'kernel32::GetFileAttributesW(w R0) i .R1'
+    ${If} $R1 = -1
+      Goto etiudaTreeDone
+    ${EndIf}
+    IntOp $R2 $R1 & 0x400
+    ${If} $R2 <> 0
+      RMDir $R0
+      Delete $R0
+      Goto etiudaTreeDone
+    ${EndIf}
+    IntOp $R2 $R1 & 0x10
+    ${If} $R2 = 0
+      Delete $R0
+      Goto etiudaTreeDone
+    ${EndIf}
+    FindFirst $R1 $R2 "$R0\*.*"
+    ${DoWhile} $R2 != ""
+      ${If} $R2 != "."
+      ${AndIf} $R2 != ".."
+        Push "$R0\$R2"
+        Call ${ETIUDA_REMOVE_TREE}
+      ${EndIf}
+      FindNext $R1 $R2
+    ${Loop}
+    FindClose $R1
+    RMDir $R0
+    etiudaTreeDone:
+    Pop $R2
+    Pop $R1
+    Pop $R0
+  FunctionEnd
+  !endif
 !macroend
 
 # The cache directory, taken from electron-builder's own define rather than spelled a second time
@@ -560,11 +609,13 @@
 # AN UPDATE'S UNINSTALL LEAVES THE FILES WHERE THEY ARE. This build's installer never runs it over the folder it replaces:
 # it stages the new files beside that folder and swaps the two whole (etiudaSwap, below). Run over another folder, an
 # install moved with /D or the per-user copy an all-users install replaces, it leaves that folder, and the installer then
-# deletes from it only its own files (etiudaDropOld). A plain uninstall removes the folder, as electron-builder's does.
+# deletes from it only its own files (etiudaDropOld). A plain uninstall removes the folder, as electron-builder's does,
+# without entering a link (un.etiudaRemoveTree).
 !macro customRemoveFiles
   ${IfNot} ${isUpdated} ; plant:update-keeps-files
     SetOutPath $TEMP
-    RMDir /r $INSTDIR
+    Push $INSTDIR
+    Call un.etiudaRemoveTree
   ${EndIf}
 !macroend
 
@@ -647,12 +698,15 @@
     ${EndIf}
     !ifdef ETIUDA_REMOVE_LICENCE_WITH_DATA
       # Three folder names, licence included. Reset's keep list is the other one, on purpose.
-      RMDir /r "$APPDATA\${APP_FILENAME}"
+      Push "$APPDATA\${APP_FILENAME}"
+      Call un.etiudaRemoveTree
       !ifdef APP_PRODUCT_FILENAME
-        RMDir /r "$APPDATA\${APP_PRODUCT_FILENAME}"
+        Push "$APPDATA\${APP_PRODUCT_FILENAME}"
+        Call un.etiudaRemoveTree
       !endif
       !ifdef APP_PACKAGE_NAME
-        RMDir /r "$APPDATA\${APP_PACKAGE_NAME}"
+        Push "$APPDATA\${APP_PACKAGE_NAME}"
+        Call un.etiudaRemoveTree
       !endif
     !else
       Push "$APPDATA\${APP_FILENAME}"
@@ -673,7 +727,7 @@
   !endif
 !macroend
 
-# AN UPGRADE IS ALL OR NOTHING. tools/patch-nsis.cjs (fix 6) has electron-builder's install section call these: the new
+# AN UPGRADE IS ALL OR NOTHING. tools/patch-nsis.cjs (fix 7) has electron-builder's install section call these: the new
 # files go into "<folder>.setup-staging" beside the install while the older copy stays installed, registered and
 # startable; only then is the app closed and the folder swapped by two renames, the older copy aside to
 # "<folder>.setup-previous" and back if the second rename will not go. A copy in that folder keeps its registration until
@@ -1059,6 +1113,76 @@ FunctionEnd
   !insertmacro etiudaDropOld $etiudaOldUserDir
 !macroend
 !endif
+# RUN AS THE PERSON, from an elevated instance: the macro named by RUN runs in the unelevated instance that started this
+# one, and only the registers cross, both ways. $R9 reads "unreached" after unless RUN set it, so a caller can tell that
+# nothing ran: no such instance (an installer started elevated has none), or it could not be reached.
+!define ETIUDA_AS_USER_N 0
+!macro etiudaAsUser RUN
+  !define /redef /math ETIUDA_AS_USER_N ${ETIUDA_AS_USER_N} + 1
+  StrCpy $R9 "unreached"
+  ${If} ${UAC_IsInnerInstance}
+    Goto etiudaAsUserCall${ETIUDA_AS_USER_N}
+  etiudaAsUserRun${ETIUDA_AS_USER_N}:
+    !insertmacro ${RUN}
+    Return
+  etiudaAsUserCall${ETIUDA_AS_USER_N}:
+    !insertmacro UAC_AsUser_Call Label etiudaAsUserRun${ETIUDA_AS_USER_N} ${UAC_SYNCREGISTERS}
+  ${EndIf}
+!macroend
+
+# A folder removed without entering a link, from anywhere a function may be called: un.etiudaRemoveTree in customHeader.
+# The hooks call it directly, since Studio's cut of them stops before this macro.
+!macro etiudaRemoveTree FOLDER
+  Push `${FOLDER}`
+  Call ${ETIUDA_REMOVE_TREE}
+!macroend
+
+# A COPY INSTALLED FOR ONE ACCOUNT, met by an all-users install, is removed by its own uninstaller run as that account
+# (etiudaAsUser): the file, and the HKCU key naming it, are that account's to write. tools/patch-nsis.cjs inserts this
+# where the template ran it elevated. The error flag rides back in $R9; $appExe goes over in $R8.
+!macro etiudaOldUserCopyRun
+  StrCpy $appExe $R8
+  InitPluginsDir
+  !insertmacro uninstallOldVersion HKEY_CURRENT_USER
+  StrCpy $R9 "ran"
+  ${If} ${Errors}
+    StrCpy $R9 "failed"
+  ${EndIf}
+!macroend
+!macro etiudaOldUserCopy
+  ${If} ${UAC_IsInnerInstance}
+    Push $R8
+    Push $R9
+    StrCpy $R8 $appExe
+    !insertmacro etiudaAsUser etiudaOldUserCopyRun
+    ${If} $R9 == "unreached"
+      Pop $R9
+      Pop $R8
+    ${Else}
+      ClearErrors
+      ${If} $R9 == "failed"
+        SetErrors
+      ${EndIf}
+      Pop $R9
+      Pop $R8
+      !insertmacro handleUninstallResult HKEY_CURRENT_USER
+    ${EndIf}
+  ${Else}
+    # An installer started elevated has no unelevated instance, and this one never runs that file: the copy stays
+    # registered, and the finish page says so wherever HKCU names an uninstaller, as uninstallOldVersion would read it.
+    Push $R9
+    ReadRegStr $R9 HKCU "${UNINSTALL_REGISTRY_KEY}" UninstallString
+    !ifdef UNINSTALL_REGISTRY_KEY_2
+      ${If} $R9 == ""
+        ReadRegStr $R9 HKCU "${UNINSTALL_REGISTRY_KEY_2}" UninstallString
+      ${EndIf}
+    !endif
+    ${If} $R9 != ""
+      StrCpy $etiudaFinishText "$(etiudaOldCopyLeft)"
+    ${EndIf}
+    Pop $R9
+  ${EndIf}
+!macroend
 
 # THE TURNING SIDEBAR AND HEADER. Looping frames, one every ${TURN_INTERVAL} ms. Frame 0 is the still
 # electron-builder shows from installerSidebar.bmp and installerHeader.bmp. The frames are
@@ -1072,6 +1196,7 @@ FunctionEnd
 !include "${BUILD_RESOURCES_DIR}\installer\turning.nsh"
 
 !macro customInit
+  StrCpy $etiudaFinishText "$(MUI_TEXT_FINISH_INFO_TEXT)"
   # "/D=C:\Apps\Etiuda\" keeps its backslash: GetDParameter (multiUser.nsh) copies it into $INSTDIR past NSIS's own trim, and
   # $appExe, the etiuda: command and InstallLocation would carry "\\", which the uninstaller's compare then misses. Trimmed
   # once here, in .onInit after initMultiUser has read /D, before any page and the install section, silent or not.
@@ -1123,6 +1248,10 @@ Var TurnReady
 !ifndef BUILD_UNINSTALLER
 Var InstalledVersion
 Var RecogniseMsg
+# THE FINISH PAGE'S TEXT, Modern UI's own unless etiudaOldUserCopy left a copy registered. With the Run box on the page
+# the label is 195 by 40 dialog units, about five lines, so the case's text replaces the whole of it rather than adding.
+Var etiudaFinishText
+!define MUI_FINISHPAGE_TEXT "$etiudaFinishText"
 !endif
 # The uninstaller's own: the installer pass never reads them, and makensis's warning 6001 for an unused variable
 # is an error in this build.
@@ -1317,6 +1446,7 @@ Var RemoveDataBox
     LangString RecogniseSameText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME} w wersji $InstalledVersion, tej samej co w instalatorze. Zainstalować go ponownie?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
     LangString RecogniseNewerText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME} w wersji $InstalledVersion, nowszej niż wersja ${VERSION} z tego instalatora. Zainstalować w jej miejsce wersję ${VERSION}?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
     LangString RecogniseUnreadableText ${ID} "Na tym komputerze jest już program ${PRODUCT_NAME}, ale nie da się odczytać jego wersji. Zainstalować w jego miejsce wersję ${VERSION}?$\r$\n$\r$\nDane na tym komputerze i licencja zostają bez zmian."
+    LangString etiudaOldCopyLeft ${ID} "Etiuda jest zainstalowana. Na tym komputerze jest też inna kopia, zainstalowana tylko dla jednego konta. Wszystko jest w porządku: można ją usunąć na tym koncie, z listy zainstalowanych aplikacji w Windows."
     !endif
     LangString etiudaSetupNotFinished ${ID} "Instalacja programu ${PRODUCT_NAME} nie została ukończona. Pomóc może ponowne uruchomienie instalatora; jeśli znów się zatrzyma, ten kod pomoże ustalić przyczynę: $2."
 
@@ -1334,6 +1464,7 @@ Var RemoveDataBox
     LangString RecogniseSameText ${ID} "${PRODUCT_NAME} $InstalledVersion is already installed on this computer, the same version as this installer. Reinstall it?$\r$\n$\r$\nData on this computer and the licence stay as they are."
     LangString RecogniseNewerText ${ID} "${PRODUCT_NAME} $InstalledVersion is installed on this computer, which is newer than this installer's ${VERSION}. Reinstall ${VERSION} in its place?$\r$\n$\r$\nData on this computer and the licence stay as they are."
     LangString RecogniseUnreadableText ${ID} "${PRODUCT_NAME} is already installed on this computer, but its version cannot be read. Reinstall ${VERSION} in its place?$\r$\n$\r$\nData on this computer and the licence stay as they are."
+    LangString etiudaOldCopyLeft ${ID} "Etiuda is installed. Another copy, installed for one account only, is also on this computer. Nothing is wrong: it can be removed in that account, from the list of installed apps in Windows."
     !endif
     LangString etiudaSetupNotFinished ${ID} "The installation of ${PRODUCT_NAME} did not finish. Running the installer again may help; if it stops again, this code helps find the cause: $2."
 
@@ -1397,7 +1528,11 @@ Var RemoveDataBox
     Exch $R0
     Push $R1
     Push $R2
-    IfFileExists "$R0\*.*" 0 unClearDeskDone
+    # A folder only, never a link to one (un.etiudaRemoveTree).
+    System::Call 'kernel32::GetFileAttributesW(w R0) i .R1'
+    IntCmp $R1 -1 unClearDeskDone
+    IntOp $R1 $R1 & 0x410
+    IntCmp $R1 0x10 0 unClearDeskDone unClearDeskDone
     FindFirst $R1 $R2 "$R0\*.*"
     unClearDeskLoop:
       StrCmp $R2 "" unClearDeskClose
@@ -1405,11 +1540,8 @@ Var RemoveDataBox
       StrCmp $R2 ".." unClearDeskNext
       StrCmp $R2 "etiuda-license.js" unClearDeskNext
       StrCmp $R2 "etiuda-revoked.json" unClearDeskNext
-      IfFileExists "$R0\$R2\*.*" 0 unClearDeskFile
-        RMDir /r "$R0\$R2"
-        Goto unClearDeskNext
-      unClearDeskFile:
-        Delete "$R0\$R2"
+      Push "$R0\$R2"
+      Call un.etiudaRemoveTree
       unClearDeskNext:
         FindNext $R1 $R2
         Goto unClearDeskLoop

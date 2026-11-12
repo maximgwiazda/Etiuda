@@ -20,7 +20,7 @@
  *   - it runs the older copy's own uninstaller first, as `/S /KEEP_APP_DATA /currentuser --updated
  *     _?=<dir>` (installUtil.nsh, uninstallOldVersion), which keeps the user-data folder; with
  *     KeepShortcuts on the install key it adds --keep-shortcuts and the shortcuts are neither
- *     deleted nor recreated (installer.nsh). Since 2026-11-12 tools/patch-nsis.cjs (fix 6) stages
+ *     deleted nor recreated (installer.nsh). Since 2026-11-12 tools/patch-nsis.cjs (fix 7) stages
  *     the new files beside the folder and swaps the two, and that uninstaller runs only for a copy
  *     registered in another folder: the older copy's files go aside whole (BESIDE) and are removed;
  *   - /D must be the last argument and unquoted, and /allusers or /currentuser choose the context

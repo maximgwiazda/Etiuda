@@ -30,6 +30,11 @@ if (!PICKER && typeof window !== "undefined" && typeof window.addEventListener =
     if (/^https?:/i.test(href)) ipcRenderer.sendSync("etiuda:link-click", href);
     /* The release page's button names no address: main takes the one its signed version note holds. */
     else if (e.type === "click" && e.composedPath().some(n => n && n.dataset && n.dataset.eOpen === "update")) ipcRenderer.sendSync("etiuda:update-click");
+    /* A sign-in button names its provider; main opens the provider's page only after a click on one. */
+    else if (e.type === "click") {
+      const b = e.composedPath().find(n => n && n.dataset && n.dataset.eOpen === "signin");
+      if (b) ipcRenderer.sendSync("etiuda:signin-click", String(b.dataset.eProvider || ""));
+    }
   };
   window.addEventListener("click", clicked, true);
   window.addEventListener("auxclick", clicked, true);
@@ -266,6 +271,14 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   updateState: () => ipcRenderer.sendSync("etiuda:update-state"),
   onUpdate: (fn) => ipcRenderer.on("etiuda:update", (_e, v) => { try { fn(v && typeof v === "object" ? v : {}); } catch { /* the page has gone */ } }),
   openUpdatePage: () => ipcRenderer.invoke("etiuda:update-open"),
+  /* The person's own sign-in (board 980): the providers offered and how it stands, never a token or a name. */
+  signinState: () => ipcRenderer.sendSync("etiuda:signin-state"),
+  signIn: (provider) => ipcRenderer.invoke("etiuda:signin", String(provider || "")),
+  signinStop: () => ipcRenderer.invoke("etiuda:signin-stop"),
+  signinOut: () => ipcRenderer.invoke("etiuda:signin-out"),
+  signinCheck: () => ipcRenderer.invoke("etiuda:signin-check"),
+  signinAgain: () => ipcRenderer.invoke("etiuda:signin-again"),
+  onSignin: (fn) => ipcRenderer.on("etiuda:signin", (_e, v) => { try { fn(v && typeof v === "object" ? v : {}); } catch { /* the page has gone */ } }),
   /* Returns this desk to a fresh install. The shell does the work on the next start. */
   resetDesk: () => ipcRenderer.invoke("etiuda:desk-reset"),
   /* A reset that could not finish. The page asks to try again, or to stop and keep the desk. */

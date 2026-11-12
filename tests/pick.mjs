@@ -1154,6 +1154,8 @@ try {
     "node:worker_threads", "./folder/syncer.cjs",
     /* Board 989: node:tls, only to add the system's roots to Node's own; it reaches no window, screen, clipboard or key. */
     "node:tls",
+    /* Board 980 stage 3: node:http, only for the sign-in's loopback on 127.0.0.1 while the person signs in (tests/desk-signin.mjs). */
+    "node:http",
     "./win-proxy.cjs", "./page-watch.cjs", "./clip-suggest.cjs", "./desk-ai.cjs", "./desk-reset.cjs", "./tray.cjs", "./embed/suggest.cjs", "./core.cjs", "./relay/channel.cjs", "./blob.cjs"];
   const reqs = (shellCode.match(/\brequire\s*\(\s*[^)]*\)/g) || []).map(r => r.replace(/^require\s*\(\s*|\s*\)$/g, "").replace(/^["']|["']$/g, ""))
     .map(r => { const m = /^path\.join\(__dirname,((?:"[\w.-]+",)*"[\w.-]+)$/.exec(r); return m ? "./" + m[1].replace(/"/g, "").split(",").join("/") : r; });

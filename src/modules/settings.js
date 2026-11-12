@@ -30,6 +30,8 @@ import { E_VERSION } from "./env.js";
 import { sxIcon } from "./sx-icons.js";
 import { focusKey, focusSame } from "./dom.js";
 import { orgModel, orgRanks, syncOrgMark } from "./org-model.js";
+import { signinNow, signinShown, signinParts, signinSay, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow,
+  signinAct, signinStart, signinOnChange, signinPreviewHtml } from "./signin.js";
 
 /* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name,
    in columns that fill the width. Choosing a section shows that section alone: Appearance and Layout
@@ -76,6 +78,13 @@ function suggestCountLine(){
   return t("Suggestions taken: {N}").split("{N}").join(String(pack.suggestTaken|0))
     +"  "+t("Openings with suggestions: {N}").split("{N}").join(String(pack.suggestOpen|0));
 }
+/* The picker's note on the copied message: while the organisation's model ranks the suggestions, the message goes to it. */
+function suggestNoteText(){
+  const st=orgModel();
+  return orgRanks(st) && eAiOn()
+    ? t("When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. While the organisation's model is on, the copied message, at most its first 1,500 characters, is sent to {HOST} as the picker opens, so that the model there can suggest the intents; this desk keeps no copy of it. The statistics count only how often suggestions appeared and how many were taken.").split("{HOST}").join(String(st.host||""))
+    : t("When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as the picker opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.");
+}
 function hotkeyRowHtml(){
   if(!hotkeyHost()) return "";
   const st=hotkeyState();
@@ -84,7 +93,7 @@ function hotkeyRowHtml(){
     +'<small id="setHotkeyNote">'+esc(st.taken
       ? t("Another program uses this combination just now; a different one will do.")
       : t("Works from any program; Enter copies a reply and goes back to the window you were in."))+'</small>'
-    +'<small id="setSuggestNote">'+esc(t("When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as the picker opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken."))+'</small>'
+    +'<small id="setSuggestNote">'+esc(suggestNoteText())+'</small>'
     +'<small id="setSuggestCounts">'+esc(suggestCountLine())+'</small>'
     +'</div><div class="sc-binds"><button type="button" class="sc-bind sc-long'+(st.accel?"":" sc-empty")+'" id="setHotkey"'
     +' style="flex-basis:100%" title="'+esc(t("Click, then press the new key combo"))+'">'
@@ -103,7 +112,7 @@ function syncHotkeyRow(box,now){
     ? t("Another program uses this combination just now; a different one will do.")
     : t("Works from any program; Enter copies a reply and goes back to the window you were in.");
   const help=box.querySelector("#setSuggestNote"), counts=box.querySelector("#setSuggestCounts");
-  if(help) help.textContent=t("When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as the picker opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.");
+  if(help) help.textContent=suggestNoteText();
   if(counts) counts.textContent=suggestCountLine();
 }
 function hotkeyListen(box,on,now){
@@ -249,15 +258,71 @@ function closeHost(){
   const h=eHost();
   return (h && typeof h.setClosePolicy==="function" && typeof h.setLoginItem==="function" && typeof h.loginItemState==="function") ? h : null;
 }
+/* ACCOUNT (board 980): the person's own name, and the sign-in where a provider is offered. The identity card is not a row; the rows
+   after it are Settings' own, so search finds them by their labels. With no provider offered and nobody signed in, the name alone. */
+function accountCardHtml(v){
+  const p=signinParts(v), choosing=signinChoosingNow();
+  if(v.signedIn && !choosing){
+    let h='<div class="sgn-top"><div class="sgn-top-row">'+signinIdentHtml({initial:p.initial, name:p.name, sub:p.sub, off:p.off})
+      +'<span class="sgn-acts"><button type="button" class="btn" data-signin-act="another">'+esc(t("Use another account"))+'</button>'
+      +'<button type="button" class="btn" data-signin-act="out">'+esc(t("Sign out"))+'</button></span></div>';
+    if(v.ask){ const s=signinSay("ask", v); h+='<p class="sgn-say"><b>'+esc(s[0])+'</b><span>'+esc(s[1])+'</span></p>'+signinProvidersHtml(v.offered, true); }
+    h+='<p class="sgn-ft">'+esc(t("Signing out ends this computer's sign-in and frees its place among the account's three; the seat stays the account's. The team's catalog and personal cards stay on the computer."))+'</p>';
+    return h+'</div>';
+  }
+  let h='<div class="sgn-top col">';
+  if(v.busy){
+    const prov=v.busy==="google" ? "Google" : "Microsoft";
+    h+=signinIdentHtml({initial:"", name:t("Finish signing in in the browser"),
+      sub:t("The browser has opened {PROVIDER}'s sign-in page. Etiuda waits here and carries on by itself when you come back.").split("{PROVIDER}").join(prov)})
+      +'<span class="sgn-acts"><button type="button" class="btn" data-signin-act="again">'+esc(t("Open the browser again"))+'</button>'
+      +'<button type="button" class="btn" data-signin-act="stop">'+esc(t("Cancel"))+'</button></span>'+signinPreviewHtml(v);
+    return h+'</div>';
+  }
+  const failed=v.said && v.said!=="signin-done" && v.said!=="signin-cancelled" && !v.signedIn;
+  if(failed){ const s=signinSay(v.said, v); h+=signinIdentHtml({initial:"", name:s[0], sub:s[1]}); }
+  else h+=signinIdentHtml({initial:"", name:t("Not signed in"),
+    sub:t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.")});
+  h+='<div>'+signinPreviewHtml(v)+signinProvidersHtml(v.offered, true)+'<p class="sgn-cap">'+esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account."))+'</p>'
+    +'<p class="sgn-cap">'+esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account."))+'</p></div>';
+  if(choosing && v.signedIn) h+='<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">'+esc(t("Cancel"))+'</button></span>';
+  return h+'</div>';
+}
+function accountGroups(){
+  /* NO LINE UNDER THE NAME: the placeholder names the field and the cards show what the name does. */
+  const name=row("name","user",t("Your name"),"",'<input type="text" id="setAgentName" autocomplete="off" spellcheck="false"'
+    +' placeholder="'+esc(t("first name"))+'" value="'+esc(agentName())+'">');
+  const v=signinNow(), groups=[];
+  if(signinShown(v)) groups.push({rows:[], after:accountCardHtml(v)});
+  const rows=[name];
+  if(v.signedIn && !signinChoosingNow()){
+    const p=signinParts(v), val=x=>'<span class="sgn-val">'+esc(x)+'</span>', join=pair=>pair[0]+" "+pair[1];
+    rows.push(p.team ? row("team","people",t("Team"),p.team.lead?t("Led by {LEAD}").split("{LEAD}").join(p.team.lead):"",val(p.teamName))
+      : row("team","people",t("No team yet"),t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."),""));
+    if(v.code) rows.push(row("code","code",t("Your sign-in code"),t("Not a secret. It tells a team's lead which account is yours."),
+      '<code class="sgn-mono">'+esc(signinCodeText(v.code))+'</code><button type="button" class="btn" data-signin-act="copy">'+esc(t("Copy"))+'</button>'));
+    if(v.refused==="full") rows.push(row("seat","check",t("Seat"),join(signinSay("full", v, p)),""));
+    else if(v.seat==="none") rows.push(row("seat","check",t("Seat"),join(signinSay("nolicence", v)),""));
+    else rows.push(row("seat","check",t("Seat"),v.seat==="lapsed" ? join(signinSay("lapsed", v)) : t("On up to three computers; this is one of them."),val(t("Held by this account"))));
+    rows.push(row("checked","clock",t("Last checked"),v.reached ? "" : t("The sign-in service cannot be reached just now. Etiuda keeps working with the catalog it has."),
+      (v.at ? val(signinWhen(v.at)) : "")+'<button type="button" class="btn" data-signin-act="check">'+esc(t("Check now"))+'</button>'));
+  }
+  groups.push({rows});
+  return groups;
+}
+/* The card's and the rows' buttons: a provider's goes to the shell as the person's trusted click; the rest are the door's own acts. */
+let accountHeard=false;
+function wireAccountRows(box){
+  if(!accountHeard){ accountHeard=true; signinOnChange(()=>{ if(document.getElementById("setBody")) paintSettings(); }); }
+  box.querySelectorAll('[data-e-open="signin"]').forEach(b=>{ b.onclick=()=>signinStart(b.getAttribute("data-e-provider")); });
+  box.querySelectorAll("[data-signin-act]").forEach(b=>{ b.onclick=()=>signinAct(b.getAttribute("data-signin-act")); });
+}
 function generalGroups(){
   const langSel='<select id="setUiLang" aria-label="'+esc(t("Interface language"))+'"'+
     ' title="'+esc(t("Changes every label in Etiuda, never the cards themselves"))+'">'+
     UI_LANGS.map(l=>'<option value="'+esc(l.code)+'"'+(l.code===uiLang()?" selected":"")+'>'+esc(l.label)+'</option>').join("")+
     '</select>';
-  /* NO LINE UNDER THE NAME: the placeholder names the field and the cards show what the name does. */
   const groups=[{rows:[
-    row("name","user",t("Your name"),"",'<input type="text" id="setAgentName" autocomplete="off" spellcheck="false"'
-      +' placeholder="'+esc(t("first name"))+'" value="'+esc(agentName())+'">'),
     row("uilang","translate",t("Interface language"),
       t("The language of the buttons and menus, not of the replies: those follow EN|PL in the header"),langSel)
   ]}];
@@ -368,10 +433,29 @@ function teamsGroups(){
 function aiWords(st, builtin, organisation){
   return orgRanks(st) ? organisation.split("{HOST}").join(String(st.host||"")) : builtin;
 }
-/* Drawn only where the desk carries the model: off, the picker suggests by words alone and the model is never loaded. */
+/* The AI section's lede: the built-in model's, or while the organisation's ranks, the mark's sentence by the two switches. */
+function aiLede(){
+  const st=orgModel();
+  if(!orgRanks(st)) return t("The model built into Etiuda, which works on this computer alone.");
+  const search=eSearchOn(), suggest=eAiOn();
+  const line=search && suggest ? t("The organisation's model at {HOST} ranks the search and the suggestions. The search text and the copied message the suggestions are made from are sent there.")
+    : search ? t("The organisation's model at {HOST} ranks the search. The search text is sent there.")
+    : suggest ? t("The organisation's model at {HOST} ranks the suggestions. The copied message they are made from is sent there.")
+    : t("The organisation's model at {HOST} is set, and with both switches off nothing is sent to it.");
+  return line.split("{HOST}").join(String(st.host||""));
+}
+/* After either switch moves: the lede and the picker's note on the page already drawn say what is sent now. */
+function syncAiWords(){
+  const box=settingsHost();
+  if(!box) return;
+  const lede=sxOn==="ai" && !sxQuery ? box.querySelector("p.lede") : null, note=box.querySelector("#setSuggestNote");
+  if(lede) lede.textContent=aiLede();
+  if(note) note.textContent=suggestNoteText();
+}
+/* Drawn wherever a model can rank: the built-in one this desk carries, or the organisation's while it is on and ready. */
 function aiGroups(){
-  if(!eAiModel()) return [];
   const st=orgModel(), w=(a,b)=>aiWords(st,a,b);
+  if(!eAiModel() && !orgRanks(st)) return [];
   return [{rows:[
     row("aisuggest","ai",w(t("Suggest intents with the built-in model"),t("Suggest intents with the organisation's model")),
       w(t("Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words."),
@@ -540,7 +624,8 @@ function notificationsGroups(){
 /* Every section in its order, each with the groups it holds now; a section without a row is left out. */
 function settingsSections(){
   return [
-    {id:"general", icon:"general", name:t("General"), lede:t("Your name, the language, and how Etiuda starts and closes."), groups:generalGroups()},
+    {id:"account", icon:"user", name:t("Account"), lede:t("Who is signed in on this computer, and your name."), groups:accountGroups()},
+    {id:"general", icon:"general", name:t("General"), lede:t("The language, and how Etiuda starts and closes."), groups:generalGroups()},
     {id:"appearance", icon:"appearance", name:t("Appearance"), lede:t("How the app looks and moves."), groups:appearanceGroups()},
     {id:"layout", icon:"layout", name:t("Layout"), lede:t("How the screen is laid out."), groups:layoutGroups()},
     {id:"keys", icon:"keys", name:t("Keyboard shortcuts"), lede:t("Every shortcut, and how to change it."), groups:keysGroups()},
@@ -548,7 +633,7 @@ function settingsSections(){
     {id:"teams", icon:"teams", name:t("Teams and keys"), lede:t("The team this desk is on, and how its changes reach the team."), groups:teamsGroups()},
     {id:"data", icon:"data", name:t("Data and defaults"), lede:t("Putting settings back, and what the app keeps on this computer."), groups:dataGroups()},
     {id:"about", icon:"about", name:t("About"), lede:t("The version, the licence and the tour."), groups:aboutGroups()},
-    {id:"ai", icon:"ai", name:t("AI"), lede:t("The model built into Etiuda, which works on this computer alone."), groups:aiGroups()}
+    {id:"ai", icon:"ai", name:t("AI"), lede:aiLede(), groups:aiGroups()}
   ].filter(s=>s.groups.some(g=>g.rows.length));
 }
 function groupHtml(g){
@@ -562,7 +647,7 @@ function settingsBodyHtml(){
 
 /* Empty is the one page. A section id is that section alone. A search narrows the rows and keeps the headings. */
 let sxOn="", sxQuery="";
-const SX_ALIAS={personal:"general"};
+const SX_ALIAS={personal:"account"};
 /* The rows whose title or hint holds the search, section by section, and the shortcuts whose name or hint does. */
 function settingsFound(query){
   const q=scFold(query).trim();
@@ -782,6 +867,7 @@ function wirePage(box){
   }
   wireTeamRows(box);
   wireOrgModelRow(box);
+  wireAccountRows(box);
   const joinBtn=box.querySelector("#setJoinTeam");
   if(joinBtn) joinBtn.onclick=()=>openJoinPaste();
   /* Stored on the keystroke, like every other row here: there is no Save on this screen. */
@@ -851,12 +937,14 @@ function wirePage(box){
           if(on) lsDel(E_AI_OFF_KEY); else lsSet(E_AI_OFF_KEY,"1");
           eTellAi();
           syncOrgMark();
+          syncAiWords();
           toast(on?aiWords(orgModel(),t("Suggestions from the built-in model"),t("Suggestions from the organisation's model")):t("Suggestions from matching words"));
         }
         else if(seg==="aisearch"){
           if(on) lsDel(E_SEARCH_AI_OFF_KEY); else lsSet(E_SEARCH_AI_OFF_KEY,"1");
           eTellSearch();
           syncOrgMark();
+          syncAiWords();
           if(on) armSearch(); else clearSearchMeaning();
           try{ render(); }catch(e){}
           try{ hooks.drawIntentRail(); }catch(e){}
