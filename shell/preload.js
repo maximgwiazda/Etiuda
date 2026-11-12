@@ -271,10 +271,13 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   updateState: () => ipcRenderer.sendSync("etiuda:update-state"),
   onUpdate: (fn) => ipcRenderer.on("etiuda:update", (_e, v) => { try { fn(v && typeof v === "object" ? v : {}); } catch { /* the page has gone */ } }),
   openUpdatePage: () => ipcRenderer.invoke("etiuda:update-open"),
-  /* The team's sign-in (board 980, stage 3): the providers offered and how it stands, never a token. */
+  /* The person's own sign-in (board 980): the providers offered and how it stands, never a token or a name. */
   signinState: () => ipcRenderer.sendSync("etiuda:signin-state"),
   signIn: (provider) => ipcRenderer.invoke("etiuda:signin", String(provider || "")),
   signinStop: () => ipcRenderer.invoke("etiuda:signin-stop"),
+  signinOut: () => ipcRenderer.invoke("etiuda:signin-out"),
+  signinCheck: () => ipcRenderer.invoke("etiuda:signin-check"),
+  signinAgain: () => ipcRenderer.invoke("etiuda:signin-again"),
   onSignin: (fn) => ipcRenderer.on("etiuda:signin", (_e, v) => { try { fn(v && typeof v === "object" ? v : {}); } catch { /* the page has gone */ } }),
   /* Returns this desk to a fresh install. The shell does the work on the next start. */
   resetDesk: () => ipcRenderer.invoke("etiuda:desk-reset"),

@@ -30,6 +30,8 @@ import { E_VERSION } from "./env.js";
 import { sxIcon } from "./sx-icons.js";
 import { focusKey, focusSame } from "./dom.js";
 import { orgModel, orgRanks, syncOrgMark } from "./org-model.js";
+import { signinNow, signinShown, signinParts, signinSay, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow,
+  signinAct, signinStart, signinOnChange } from "./signin.js";
 
 /* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name,
    in columns that fill the width. Choosing a section shows that section alone: Appearance and Layout
@@ -256,15 +258,70 @@ function closeHost(){
   const h=eHost();
   return (h && typeof h.setClosePolicy==="function" && typeof h.setLoginItem==="function" && typeof h.loginItemState==="function") ? h : null;
 }
+/* ACCOUNT (board 980): the person's own name, and the sign-in where a provider is offered. The identity card is not a row; the rows
+   after it are Settings' own, so search finds them by their labels. With no provider offered and nobody signed in, the name alone. */
+function accountCardHtml(v){
+  const p=signinParts(v), choosing=signinChoosingNow();
+  if(v.signedIn && !choosing){
+    let h='<div class="sgn-top"><div class="sgn-top-row">'+signinIdentHtml({initial:p.initial, name:p.name, sub:p.sub, off:p.off})
+      +'<span class="sgn-acts"><button type="button" class="btn" data-signin-act="another">'+esc(t("Use another account"))+'</button>'
+      +'<button type="button" class="btn" data-signin-act="out">'+esc(t("Sign out"))+'</button></span></div>';
+    if(v.ask){ const s=signinSay("ask", v); h+='<p class="sgn-say"><b>'+esc(s[0])+'</b><span>'+esc(s[1])+'</span></p>'+signinProvidersHtml(v.offered, true); }
+    h+='<p class="sgn-ft">'+esc(t("Signing out ends this computer's sign-in and frees its place among the account's three; the seat stays the account's. The team's catalog and personal cards stay on the computer."))+'</p>';
+    return h+'</div>';
+  }
+  let h='<div class="sgn-top col">';
+  if(v.busy){
+    const prov=v.busy==="google" ? "Google" : "Microsoft";
+    h+=signinIdentHtml({initial:"", name:t("Finish signing in in the browser"),
+      sub:t("The browser has opened {PROVIDER}'s sign-in page. Etiuda waits here and carries on by itself when you come back.").split("{PROVIDER}").join(prov)})
+      +'<span class="sgn-acts"><button type="button" class="btn" data-signin-act="again">'+esc(t("Open the browser again"))+'</button>'
+      +'<button type="button" class="btn" data-signin-act="stop">'+esc(t("Cancel"))+'</button></span>';
+    return h+'</div>';
+  }
+  const failed=v.said && v.said!=="signin-done" && v.said!=="signin-cancelled" && !v.signedIn;
+  if(failed){ const s=signinSay(v.said, v); h+=signinIdentHtml({initial:"", name:s[0], sub:s[1]}); }
+  else h+=signinIdentHtml({initial:"", name:t("Not signed in"),
+    sub:t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.")});
+  h+='<div>'+signinProvidersHtml(v.offered, true)+'<p class="sgn-cap">'+esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account."))+'</p></div>';
+  if(choosing && v.signedIn) h+='<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">'+esc(t("Cancel"))+'</button></span>';
+  return h+'</div>';
+}
+function accountGroups(){
+  /* NO LINE UNDER THE NAME: the placeholder names the field and the cards show what the name does. */
+  const name=row("name","user",t("Your name"),"",'<input type="text" id="setAgentName" autocomplete="off" spellcheck="false"'
+    +' placeholder="'+esc(t("first name"))+'" value="'+esc(agentName())+'">');
+  const v=signinNow(), groups=[];
+  if(signinShown(v)) groups.push({rows:[], after:accountCardHtml(v)});
+  const rows=[name];
+  if(v.signedIn && !signinChoosingNow()){
+    const p=signinParts(v), val=x=>'<span class="sgn-val">'+esc(x)+'</span>', join=pair=>pair[0]+" "+pair[1];
+    rows.push(p.team ? row("team","people",t("Team"),p.team.lead?t("Led by {LEAD}").split("{LEAD}").join(p.team.lead):"",val(p.teamName))
+      : row("team","people",t("No team yet"),t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."),""));
+    if(v.code) rows.push(row("code","code",t("Your sign-in code"),t("Not a secret. It tells a team's lead which account is yours."),
+      '<code class="sgn-mono">'+esc(signinCodeText(v.code))+'</code><button type="button" class="btn" data-signin-act="copy">'+esc(t("Copy"))+'</button>'));
+    if(v.refused==="full") rows.push(row("seat","check",t("Seat"),join(signinSay("full", v, p)),""));
+    else if(v.seat==="none") rows.push(row("seat","check",t("Seat"),join(signinSay("nolicence", v)),""));
+    else rows.push(row("seat","check",t("Seat"),v.seat==="lapsed" ? join(signinSay("lapsed", v)) : t("On up to three computers; this is one of them."),val(t("Held by this account"))));
+    rows.push(row("checked","clock",t("Last checked"),v.reached ? "" : t("The sign-in service cannot be reached just now. Etiuda keeps working with the catalog it has."),
+      (v.at ? val(signinWhen(v.at)) : "")+'<button type="button" class="btn" data-signin-act="check">'+esc(t("Check now"))+'</button>'));
+  }
+  groups.push({rows});
+  return groups;
+}
+/* The card's and the rows' buttons: a provider's goes to the shell as the person's trusted click; the rest are the door's own acts. */
+let accountHeard=false;
+function wireAccountRows(box){
+  if(!accountHeard){ accountHeard=true; signinOnChange(()=>{ if(document.getElementById("setBody")) paintSettings(); }); }
+  box.querySelectorAll('[data-e-open="signin"]').forEach(b=>{ b.onclick=()=>signinStart(b.getAttribute("data-e-provider")); });
+  box.querySelectorAll("[data-signin-act]").forEach(b=>{ b.onclick=()=>signinAct(b.getAttribute("data-signin-act")); });
+}
 function generalGroups(){
   const langSel='<select id="setUiLang" aria-label="'+esc(t("Interface language"))+'"'+
     ' title="'+esc(t("Changes every label in Etiuda, never the cards themselves"))+'">'+
     UI_LANGS.map(l=>'<option value="'+esc(l.code)+'"'+(l.code===uiLang()?" selected":"")+'>'+esc(l.label)+'</option>').join("")+
     '</select>';
-  /* NO LINE UNDER THE NAME: the placeholder names the field and the cards show what the name does. */
   const groups=[{rows:[
-    row("name","user",t("Your name"),"",'<input type="text" id="setAgentName" autocomplete="off" spellcheck="false"'
-      +' placeholder="'+esc(t("first name"))+'" value="'+esc(agentName())+'">'),
     row("uilang","translate",t("Interface language"),
       t("The language of the buttons and menus, not of the replies: those follow EN|PL in the header"),langSel)
   ]}];
@@ -356,50 +413,12 @@ function keysGroups(){
       +'<button type="button" class="btn" id="setResetKeys">'+esc(t("Reset shortcuts"))+'</button></div>', rows:[]}
   ].filter(Boolean);
 }
-/* THE TEAM'S SIGN-IN (board 980, stage 3), only where the team names providers: a button for each, how it stands, and Cancel
-   while the browser is open. The shell does all of it, and nothing on this desk waits on it. */
-const SIGNIN_NAMES={microsoft:"Microsoft", google:"Google"};
-let signinHeard=false;
-function signinNow(){
-  const h=eHost();
-  if(!h || typeof h.signinState!=="function") return null;
-  try{ const v=h.signinState(); return v && typeof v==="object" ? v : null; }catch(e){ return null; }
-}
-function signinRow(){
-  const s=signinNow();
-  const offered=s && Array.isArray(s.offered) ? s.offered.filter(id=>Object.prototype.hasOwnProperty.call(SIGNIN_NAMES,id)) : [];
-  if(!offered.length) return null;
-  let note="";
-  if(s.busy) note=t("Finish signing in in the browser that opened. Etiuda is waiting for it."); // placeholder: Claudette
-  else if(s.ask) note=t("This desk could not renew its sign-in by itself. It can sign in again below."); // placeholder: Claudette
-  else if(s.signedIn && SIGNIN_NAMES[s.signedIn]) note=t("Signed in with {PROVIDER}.").split("{PROVIDER}").join(SIGNIN_NAMES[s.signedIn]); // placeholder: Claudette
-  else if(s.said && s.said!=="signin-done") note=t("The sign-in did not finish. Everything on this desk works as before."); // placeholder: Claudette
-  const ctl=s.busy ? '<button type="button" class="btn" data-signin-stop="1">'+esc(t("Cancel"))+'</button>'
-    : offered.map(id=>'<button type="button" class="btn" data-e-open="signin" data-e-provider="'+esc(id)+'">'
-      +esc(t("Sign in with {PROVIDER}").split("{PROVIDER}").join(SIGNIN_NAMES[id]))+'</button>').join(""); // placeholder: Claudette
-  return {key:"signin", html:'<div class="set-row" data-row="signin">'+sxIcon("desks")+'<div class="set-label">'+esc(t("Team sign-in")) // placeholder: Claudette
-    +(note?'<small>'+esc(note)+'</small>':'')+'</div><div class="set-ctl">'+ctl+'</div></div>'};
-}
-function wireSigninRow(box){
-  const h=eHost();
-  if(!h || !box.querySelector('[data-row="signin"]')) return;
-  const again=()=>{ if(document.getElementById("setBody")) paintSettings(); };
-  if(!signinHeard && typeof h.onSignin==="function"){ signinHeard=true; h.onSignin(again); }
-  box.querySelectorAll('[data-e-open="signin"]').forEach(b=>{
-    b.onclick=()=>{ if(typeof h.signIn==="function") Promise.resolve(h.signIn(b.getAttribute("data-e-provider"))).then(again,again); };
-  });
-  box.querySelectorAll("[data-signin-stop]").forEach(b=>{
-    b.onclick=()=>{ if(typeof h.signinStop==="function") Promise.resolve(h.signinStop()).catch(()=>{}); };
-  });
-}
 function teamsGroups(){
   const joinDoor=joinDoorButton("setJoinTeam");
   /* One row per team this desk trusts a lead for; what the lead sees is said once, on the first team that still lists it,
      and the way back after leaving once, on the first row that offers Leave. */
   const rows=teamLeads().map((l,i,all)=>({key:"team", html:teamRowHtml(l, i===all.findIndex(x=>!x.removed)?t("The team's lead can see which catalog this desk uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk, since copies of unlisted catalogs are off. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own."):"", i===all.findIndex(x=>!x.policy))}));
   if(joinDoor) rows.push({key:"join", html:'<div class="set-row" data-row="join">'+sxIcon("desks")+'<div class="set-label">'+esc(t("Team"))+'</div><div class="set-ctl">'+joinDoor+'</div></div>'});
-  const signin=signinRow();
-  if(signin) rows.push(signin);
   /* Under a host only: a browser has no catalog folder to share. */
   if(eHasShared() && !relayDesk()) rows.push(row("sharededit","teams",t("Edit the shared catalog directly"),
     t("For a team that keeps its catalog without Studio: each change is written into the catalog in the shared folder. A catalog the team's lead signed is never touched."),
@@ -604,7 +623,8 @@ function notificationsGroups(){
 /* Every section in its order, each with the groups it holds now; a section without a row is left out. */
 function settingsSections(){
   return [
-    {id:"general", icon:"general", name:t("General"), lede:t("Your name, the language, and how Etiuda starts and closes."), groups:generalGroups()},
+    {id:"account", icon:"user", name:t("Account"), lede:t("Who is signed in on this computer, and your name."), groups:accountGroups()},
+    {id:"general", icon:"general", name:t("General"), lede:t("The language, and how Etiuda starts and closes."), groups:generalGroups()},
     {id:"appearance", icon:"appearance", name:t("Appearance"), lede:t("How the app looks and moves."), groups:appearanceGroups()},
     {id:"layout", icon:"layout", name:t("Layout"), lede:t("How the screen is laid out."), groups:layoutGroups()},
     {id:"keys", icon:"keys", name:t("Keyboard shortcuts"), lede:t("Every shortcut, and how to change it."), groups:keysGroups()},
@@ -626,7 +646,7 @@ function settingsBodyHtml(){
 
 /* Empty is the one page. A section id is that section alone. A search narrows the rows and keeps the headings. */
 let sxOn="", sxQuery="";
-const SX_ALIAS={personal:"general"};
+const SX_ALIAS={personal:"account"};
 /* The rows whose title or hint holds the search, section by section, and the shortcuts whose name or hint does. */
 function settingsFound(query){
   const q=scFold(query).trim();
@@ -846,7 +866,7 @@ function wirePage(box){
   }
   wireTeamRows(box);
   wireOrgModelRow(box);
-  wireSigninRow(box);
+  wireAccountRows(box);
   const joinBtn=box.querySelector("#setJoinTeam");
   if(joinBtn) joinBtn.onclick=()=>openJoinPaste();
   /* Stored on the keystroke, like every other row here: there is no Save on this screen. */

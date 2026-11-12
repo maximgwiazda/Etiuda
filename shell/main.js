@@ -5435,10 +5435,6 @@ function inviteRead(text, posix) {
   if (box !== "" && !/^[0-9a-f]{64}$/.test(box)) return null; /* plant:f6-box-shape */
   const out = { team: String(doc.team), folder: folder, lead: { keyId: keyId, public: pub, name: name }, secret: secret };
   if (box) out.lead.box = box; /* plant:f6-box-read */
-  /* The providers the team admits by, where it names any, as given: signinHintKeep reads them before the desk keeps any, so the
-     desk can offer its sign-in before it can read the team file. */
-  const signin = doc.signin && typeof doc.signin === "object" && !Array.isArray(doc.signin) && Array.isArray(doc.signin.providers) ? doc.signin.providers : null;
-  if (signin && signin.length) out.signin = signin.slice(0, 8); /* plant:hint-invite */
   if (relay) out.relay = relay;
   else {
     const keptPlace = placeKept(doc.place);
@@ -6121,7 +6117,6 @@ async function takeInvite(text, name, check) {
     try { fs.unlinkSync(path.join(previous, "desks", branchIdOf(deskBranch.sign.pub), "join.json")); } catch (e) { /* already gone */ }
   }
   teamJoin = j;
-  signinHintKeep(parsed.team, parsed.signin);
   joinTold = false;
   if (teamLeft[parsed.team]) { delete teamLeft[parsed.team]; teamBarred.delete(parsed.team); }
   delete teamRelayGone[parsed.team];
@@ -6214,7 +6209,6 @@ function takeRelayInvite(parsed, name, me, ahead) {
   relayCatalogNamed.delete(parsed.team);
   /* A left-behind desk's own files wait for "It matches", and go nowhere on "It does not match" (the test architect, 2026-11-01 11:51). */
   if (ahead) teamHeldOut.add(parsed.team);
-  signinHintKeep(parsed.team, parsed.signin);
   teamStamp = "";
   joinTold = false;
   persistDeskEnvelope();
@@ -9031,23 +9025,24 @@ function policyFor(hashes) {
   ].join("; ");
 }
 
-/* ---- the desk's sign-in (board 980, stage 3) ----------------------------------------------------------------------------
-   A team whose invitation or team file says `signin: {providers: [{id, issuer, clientId, allow}]}` lets its desk prove who works
-   at it. The desk signs in as the lead's Studio does: the system browser, a loopback on 127.0.0.1 at a port the system picks,
-   PKCE, a state, and a nonce bound to this desk's signing key. The ID token and the nonce's seed go into desks/<id>/seat.json,
-   sealed to the lead's box and signed by the desk, for the lead's Studio to forward. Nothing on the desk waits on any of it. */
+/* ---- the desk's sign-in (board 980, the person's own) ---------------------------------------------------------------------
+   The person signs this desk in with their own account, with a team or without one: the system browser, a loopback on 127.0.0.1
+   at a port the system picks, PKCE, a state, and a nonce bound to this desk's signing key. The ID token goes to the licence
+   service's signin/desk, signed by the desk's key, and the answer is the person's sign-in code and, where a licence admits them,
+   a seat certificate the service signed, which the desk keeps and writes as desks/<id>/seat.json. Nothing on the desk waits on
+   any of it, and no token or name reaches a lead. */
 /* Email is asked of nobody. Google is asked for it only if its hosted domain claim proves to need it, and then by this alone. */
 const GOOGLE_HD_NEEDS_EMAIL = false; /* plant:scope-email */
-/* The providers this desk can reach, each with the address, scopes and prompt the lead's Studio uses for it. A hint naming any
-   other id is passed over; the issuer is always this table's, whatever a hint says. Microsoft's profile scope gives the
-   directory's object id, which the licence service keeps beside the seat. */
+/* THE PROVIDERS ARE CONFIGURATION: Etiuda's own registration with each, its client id, and the addresses and scopes Studio uses.
+   A provider with no client id is not offered, so until the registrations exist nothing is drawn and nothing is sent. No secret:
+   a desktop app is a public client. Microsoft's profile scope gives the directory's object id, which the service keeps keyed. */
 const SIGNIN_PROVIDERS = Object.freeze({
-  microsoft: Object.freeze({ issuer: "https://login.microsoftonline.com/{tenantid}/v2.0",
+  microsoft: Object.freeze({ clientId: "", issuer: "https://login.microsoftonline.com/{tenantid}/v2.0",
     authorize: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     token: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
     scope: "openid profile offline_access", refreshScope: "openid profile offline_access",
     extra: Object.freeze({ response_mode: "query", prompt: "select_account" }) }),
-  google: Object.freeze({ issuer: "https://accounts.google.com",
+  google: Object.freeze({ clientId: "", issuer: "https://accounts.google.com",
     authorize: "https://accounts.google.com/o/oauth2/v2/auth", token: "https://oauth2.googleapis.com/token",
     scope: GOOGLE_HD_NEEDS_EMAIL ? "openid email" : "openid", refreshScope: "", extra: Object.freeze({ prompt: "select_account" }) }),
 });
@@ -9056,33 +9051,14 @@ const SIGNIN_CLIENT = /^[A-Za-z0-9][A-Za-z0-9._-]{7,199}$/;
 const SIGNIN_FORM_MAX = 16 * 1024, SIGNIN_ANSWER_MAX = 256 * 1024, SIGNIN_TIMEOUT_MS = 30 * 1000, SIGNIN_WAIT_MS = 5 * 60 * 1000;
 const SIGNIN_SKEW_MS = 5 * 60 * 1000;
 function signinKnown(id) { return Object.prototype.hasOwnProperty.call(SIGNIN_PROVIDERS, String(id)) ? SIGNIN_PROVIDERS[String(id)] : null; }
-/* The providers a team file or an invitation names: [{id, clientId, allow?}] for each this desk can reach, at most one per id, in
-   the order named; [] where none. `allow` is the licence's to judge, so it is carried in its shape and never decides anything here. */
-function signinHint(doc) {
-  const s = doc && typeof doc === "object" && !Array.isArray(doc) ? doc.signin : null;
-  const list = s && typeof s === "object" && !Array.isArray(s) && Array.isArray(s.providers) ? s.providers : [];
-  const out = [];
-  for (const p of list.slice(0, 8)) {
-    if (!p || typeof p !== "object" || Array.isArray(p)) continue;
-    const known = signinKnown(p.id);
-    if (!known || typeof p.clientId !== "string" || !SIGNIN_CLIENT.test(p.clientId) || out.some(o => o.id === p.id)) continue; /* plant:hint-known */
-    if (p.issuer !== undefined && [].concat(p.issuer).indexOf(known.issuer) < 0) continue;
-    const one = { id: String(p.id), clientId: p.clientId };
-    if (p.allow === "personal") one.allow = "personal";
-    else if (Array.isArray(p.allow) && p.allow.length <= 64 && p.allow.every(a => typeof a === "string" && a.length <= 253 && /^[0-9A-Za-z.-]+$/.test(a))) one.allow = p.allow.slice();
-    out.push(one);
-  }
-  return out;
+/* The providers this desk offers, [{id, clientId}] in the table's order: those `table` configures with a client id. */
+function signinOffered(table) {
+  const t = table === undefined ? SIGNIN_PROVIDERS : table;
+  return Object.keys(t || {}).filter(id => signinKnown(id) && typeof t[id].clientId === "string" && SIGNIN_CLIENT.test(t[id].clientId)) /* plant:offered-client */
+    .map(id => ({ id: id, clientId: t[id].clientId }));
 }
-/* The providers this desk offers: the team file's, where the desk reads one, else what the invitation gave for the team it is
-   joining (`hints` by team id). [] for a desk with no team, or a team that names none. */
-function signinOffer(teamDoc, hints, team) {
-  if (teamDoc && typeof teamDoc === "object") return signinHint(teamDoc); /* plant:offer-team-file */
-  const h = hints && typeof hints === "object" && team && Object.prototype.hasOwnProperty.call(hints, team) ? hints[team] : null;
-  return Array.isArray(h) ? signinHint({ signin: { providers: h } }) : [];
-}
-/* The nonce bound to this desk's signing key, made as the licence service makes the lead's: SHA-256,
-   as lower-case hex, of its line, the key's public half and a fresh seed of 64 hex. The lead forwards the seed beside the token. */
+/* The nonce bound to this desk's signing key, made as the licence service makes it (requests.mjs signinNonce): SHA-256, as
+   lower-case hex, of its line, the key's public half and a fresh seed of 64 hex. */
 const SIGNIN_NONCE_LINE = "etiuda-licence-signin-nonce";
 function signinNonce(deskKey, seed) {
   return crypto.createHash("sha256").update(SIGNIN_NONCE_LINE + "\n" + String(deskKey) + "\n" + String(seed), "utf8").digest("hex");
@@ -9115,11 +9091,17 @@ function signinOurs(query, pending) {
   const state = new URLSearchParams(String(query || "")).get("state");
   return !!pending && typeof state === "string" && signinSame(state, pending.state);
 }
+/* A provider's refusal named: its organisation not consenting to Etiuda (Microsoft's consent and admin-consent codes, Google's
+   admin policy) is "signin-notallowed", the person's own Cancel "signin-cancelled", anything else "signin-refused". */
+function signinRefusedWhy(error, said) {
+  if (error === "consent_required" || error === "admin_policy_enforced" || /\bAADSTS(65001|65004|90094|90095)\b/.test(String(said || ""))) return "signin-notallowed"; /* plant:not-allowed */
+  return error === "access_denied" ? "signin-cancelled" : "signin-refused";
+}
 function signinBack(query, pending) {
   const q = new URLSearchParams(String(query || ""));
   if (!signinOurs(query, pending)) return { ok: false, reason: "signin-state" }; /* plant:state */
   const error = q.get("error");
-  if (error) return { ok: false, reason: error === "access_denied" ? "signin-cancelled" : "signin-refused" };
+  if (error) return { ok: false, reason: signinRefusedWhy(error, q.get("error_description")) };
   const code = q.get("code");
   if (!code || code.length > 8192) return { ok: false, reason: "signin-refused" };
   return { ok: true, code: code };
@@ -9164,23 +9146,20 @@ function signinTokens(res, p, nonce, now, sub) {
   if (!renewal && (typeof c.nonce !== "string" || !signinSame(c.nonce, nonce))) return { ok: false, reason: "signin-unbound" }; /* plant:token-nonce */
   return { ok: true, idToken: json.id_token, refreshToken: typeof json.refresh_token === "string" ? json.refresh_token : "", sub: c.sub };
 }
-/* The token request through `fetchFn`: one POST of a form to a token address SIGNIN_PROVIDERS names, no redirect followed, nothing
-   cached, no cookie, the answer read up to SIGNIN_ANSWER_MAX bytes, the whole within `ms`. {status, bytes}; throws else. */
-async function signinRequest(fetchFn, url, form, ms) {
-  const u = String(url);
-  if (!Object.keys(SIGNIN_PROVIDERS).some(id => SIGNIN_PROVIDERS[id].token === u)) throw new Error("a token is asked only at a provider's own token address"); /* plant:door-host */
-  if (!Buffer.isBuffer(form) || form.length > SIGNIN_FORM_MAX) throw new Error("the form is longer than it may be");
+/* One POST of `form` through `fetchFn` to `url`, no redirect followed, nothing cached, no cookie, the answer read up to `max`
+   bytes, the whole within `ms`: {status, bytes}; throws else. The provider's token door and the service's door both use it. */
+async function signinPost(fetchFn, url, form, type, max, ms) {
   const ctl = typeof AbortController === "function" ? new AbortController() : null;
   let timer = null;
   const late = new Promise((_, no) => {
-    timer = setTimeout(() => { try { if (ctl) ctl.abort(); } catch { /* gone */ } no(new Error("the provider did not answer in time")); },
+    timer = setTimeout(() => { try { if (ctl) ctl.abort(); } catch { /* gone */ } no(new Error("no answer in time")); },
       ms === undefined ? SIGNIN_TIMEOUT_MS : ms);
     if (timer.unref) timer.unref();
   });
   const read = (async () => {
-    const res = await fetchFn(u, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
+    const res = await fetchFn(String(url), { method: "POST", headers: { "content-type": type, accept: "application/json" },
       body: form, redirect: "error", cache: "no-store", credentials: "omit", signal: ctl ? ctl.signal : undefined }); /* plant:door-redirect */
-    if (!res) throw new Error("the provider answered nothing");
+    if (!res) throw new Error("answered nothing");
     const parts = [];
     let got = 0;
     if (res.body && typeof res.body.getReader === "function") {
@@ -9189,18 +9168,25 @@ async function signinRequest(fetchFn, url, form, ms) {
         const step = await reader.read();
         if (step.done) break;
         got += step.value.length;
-        if (got > SIGNIN_ANSWER_MAX) { try { reader.cancel(); } catch { /* gone */ } throw new Error("the answer is longer than it may be"); }
+        if (got > max) { try { reader.cancel(); } catch { /* gone */ } throw new Error("the answer is longer than it may be"); }
         parts.push(Buffer.from(step.value));
       }
     } else {
       const all = Buffer.from(await res.arrayBuffer());
-      if (all.length > SIGNIN_ANSWER_MAX) throw new Error("the answer is longer than it may be");
+      if (all.length > max) throw new Error("the answer is longer than it may be");
       parts.push(all);
     }
     return { status: res.status, bytes: Buffer.concat(parts) };
   })();
   try { return await Promise.race([read, late]); }
   finally { clearTimeout(timer); read.catch(() => {}); late.catch(() => {}); }
+}
+/* The token request: a form, to a token address SIGNIN_PROVIDERS names and no other. */
+async function signinRequest(fetchFn, url, form, ms) {
+  const u = String(url);
+  if (!Object.keys(SIGNIN_PROVIDERS).some(id => SIGNIN_PROVIDERS[id].token === u)) throw new Error("a token is asked only at a provider's own token address"); /* plant:door-host */
+  if (!Buffer.isBuffer(form) || form.length > SIGNIN_FORM_MAX) throw new Error("the form is longer than it may be");
+  return signinPost(fetchFn, u, form, "application/x-www-form-urlencoded", SIGNIN_ANSWER_MAX, ms);
 }
 /* The loopback the browser comes back to, opened only for one sign-in: 127.0.0.1 at a port the system picks. It waits for the
    GET of "/" whose query `takes(query)` owns, answers it with `pageFor(query)` and closes; any other GET of "/" is answered 400
@@ -9240,8 +9226,9 @@ function signinListen(httpMod, pageFor, ms, takes) {
     });
   });
 }
-/* One sign-in, the person's own act. `io` {listen(pageFor, takes), openPage(url), tokenAsk(url, form), page(ok), rand?}: the
-   shell's door, loopback and browser, or a leg's stand-ins. {ok, provider, idToken, refreshToken, sub, seed}, or {ok: false, reason}. */
+/* One sign-in at the provider, the person's own act. `io` {listen(pageFor, takes), openPage(url), tokenAsk(url, form), page(ok),
+   rand?}: the shell's door, loopback and browser, or a leg's stand-ins. {ok, provider, idToken, refreshToken, sub, seed}, or
+   {ok: false, reason}. */
 async function signinRun(io, p, deskKey, now) {
   if (!p || !signinKnown(p.id) || !/^[0-9a-f]{64}$/.test(String(deskKey))) return { ok: false, reason: "signin-none" };
   let pending = null;
@@ -9265,9 +9252,9 @@ async function signinRun(io, p, deskKey, now) {
     loop.close();
   }
 }
-/* The quiet renewal: the refresh token exchanged for a fresh ID token, nothing shown. {ok, idToken, refreshToken, sub} where the
-   new token is the seat's (signinTokens with `sub`, the last token's; "" holds it to this desk's nonce alone); else signinTokens'
-   reason, "signin-unreached" where the provider could not be asked, or "signin-ask" where there is nothing to ask with. */
+/* The quiet refresh at the provider: the refresh token exchanged for a fresh ID token, nothing shown. {ok, idToken, refreshToken,
+   sub} where the new token is the seat's (signinTokens with `sub`, the last token's; "" holds it to this desk's nonce alone); else
+   signinTokens' reason, "signin-unreached" where the provider could not be asked, or "signin-ask" where there is nothing to ask with. */
 async function signinRenew(io, p, deskKey, refreshToken, seed, sub, now) {
   if (!p || !signinKnown(p.id) || !refreshToken || !/^[0-9a-f]{64}$/.test(String(seed))) return { ok: false, reason: "signin-ask" };
   let res = null;
@@ -9277,22 +9264,8 @@ async function signinRenew(io, p, deskKey, refreshToken, seed, sub, now) {
   if (!got.ok) return got;
   return { ok: true, idToken: got.idToken, refreshToken: got.refreshToken || refreshToken, sub: got.sub };
 }
-/* The reasons a renewal forgets the refresh token: the provider no longer takes it, or the token it gives is not this seat's. */
-const SIGNIN_LOST = Object.freeze(["signin-ask", "signin-expired", "signin-other", "signin-unbound"]);
-/* One quiet renewal of `held` (signin.json's), `io` {tokenAsk, keep(text), kept(sealed)}: {held, proof, said}, `held` the new
-   record and `proof` {team, idToken, seed} for seat.json, the seed the first sign-in's. A failure gives no proof and sets `ask`;
-   the team, the provider and the seed stay, so the desk keeps working on what it has. */
-async function signinRenewHeld(io, p, deskKey, held, now) {
-  if (!held) return { held: null, proof: null, said: "signin-ask" };
-  const token = held.refresh ? io.kept(held.refresh) : "", sub = held.sub ? io.kept(held.sub) : "";
-  const got = token ? await signinRenew(io, p, deskKey, token, held.seed, sub, now) : { ok: false, reason: "signin-ask" };
-  if (got.ok) return { held: Object.assign({}, held, { refresh: io.keep(got.refreshToken) || held.refresh, sub: held.sub || io.keep(got.sub),
-    at: now(), ask: false }), proof: { team: held.team, idToken: got.idToken, seed: held.seed }, said: "renewed" };
-  const lost = SIGNIN_LOST.indexOf(got.reason) >= 0;
-  return { held: Object.assign({}, held, { refresh: lost ? "" : held.refresh, ask: true }), proof: null, said: got.reason }; /* plant:renew-ask */
-}
 /* The refresh token sealed by the system's store, as base64, or "" where the store seals nothing for real (sealsForReal: no
-   keyring, or Linux's basic_text): no refresh token is kept there, and the next fresh proof asks the person. */
+   keyring, or Linux's basic_text): no refresh token is kept there, and the next renewal asks the person to sign in again. */
 function signinKeep(storage, platform, token) {
   if (!token || !sealsForReal(storage, platform)) return ""; /* plant:keep-real */
   try { return storage.encryptString(String(token)).toString("base64"); } catch { return ""; }
@@ -9300,79 +9273,129 @@ function signinKeep(storage, platform, token) {
 function signinKept(storage, sealed) {
   try { return sealed ? String(storage.decryptString(Buffer.from(String(sealed), "base64"))) : ""; } catch { return ""; }
 }
-/* desks/<id>/seat.json, the desk's proof for its lead, in the shape the lead's Studio reads:
-   {format: 1, desk, sealed: {kind, team, keyId, enc, ct}, sig: {alg: "Ed25519", keyId: desk, value}}. `sealed` is HPKE (hpkeSeal)
-   to the lead's box, `keyId` the lead's, its info SEAT_LABEL, the team id, a newline and the desk id, over the JSON {idToken, seed};
-   `sig` is the desk key's signature over SEAT_PREFIX and format, desk, kind, team, keyId, enc and ct, one a line. */
-const SEAT_NAME = "seat.json", SEAT_KIND = "etiuda-seat-sealed", SEAT_PREFIX = "etiuda-desk-seat\n", SEAT_LABEL = "etiuda-seat-lead\n";
-function seatInfo(teamId, deskId) { return Buffer.from(SEAT_LABEL + String(teamId) + "\n" + String(deskId), "utf8"); }
-function seatSignedBytes(doc) {
-  const s = doc && doc.sealed && typeof doc.sealed === "object" ? doc.sealed : {};
-  return Buffer.from(SEAT_PREFIX + [doc && doc.format, doc && doc.desk, s.kind, s.team, s.keyId, s.enc, s.ct].map(String).join("\n"), "utf8");
+
+/* THE LICENCE SERVICE'S DOOR for the desk, beside fetchNote's: one POST of JSON to signin/desk alone, the body at most 8 KiB. The
+   bytes the desk key signs are the service's own (requests.mjs signinDeskBytes): its line, then the provider, the SHA-256 of the
+   ID token's characters, the desk's public half and t, one a line. A first sign-in sends the seed its token's nonce was made
+   of; a renewal sends none. */
+const SIGNIN_SERVICE = "https://etiuda.dev/licence/v1/signin/desk";
+const SIGNIN_BODY_MAX = 8 * 1024, SIGNIN_SERVICE_MAX = 32 * 1024;
+const SIGNIN_DESK_LINE = "etiuda-licence-signin-desk";
+function signinTokenHash(idToken) { return crypto.createHash("sha256").update(String(idToken), "utf8").digest("hex"); }
+function signinDeskBytes(o) {
+  return Buffer.from(SIGNIN_DESK_LINE + "\n" + [o.provider, o.tokenHash, o.desk, o.t].map(String).join("\n"), "utf8");
 }
-/* The seat file for `deskId` of `teamId` under the lead `leadKeyId`, signed by `sign(bytes)` (hex), or null where the box, the
-   team, the lead's key id, the desk or the signature is not that shape. */
-function seatDoc(box, teamId, leadKeyId, deskId, idToken, seed, sign) {
-  if (!/^[0-9a-f]{64}$/.test(String(box)) || !SEALED_TEAM_RE.test(String(teamId)) || !/^k-[0-9a-f]{16}$/.test(String(deskId))) return null;
-  if (typeof leadKeyId !== "string" || !leadKeyId || /\n/.test(leadKeyId)) return null;
-  if (typeof idToken !== "string" || !idToken || !/^[0-9a-f]{64}$/.test(String(seed))) return null;
-  const inner = Buffer.from(JSON.stringify({ idToken: idToken, seed: String(seed) }), "utf8");
-  const w = hpkeSeal(Buffer.from(String(box), "hex"), seatInfo(teamId, deskId), Buffer.alloc(0), inner); /* plant:seat-sealed */
-  const doc = { format: 1, desk: String(deskId),
-    sealed: { kind: SEAT_KIND, team: String(teamId), keyId: leadKeyId, enc: w.enc.toString("hex"), ct: w.ct.toString("hex") } };
-  const value = String(sign(seatSignedBytes(doc)) || "");
-  if (!/^[0-9a-f]{128}$/.test(value)) return null;
-  doc.sig = { alg: "Ed25519", keyId: String(deskId), value: value }; /* plant:seat-signed */
-  return doc;
+/* The request's body, {provider, idToken, desk, seed?, t, sig}, signed by `sign(bytes)` (hex); null where any part is not its shape. */
+function signinDeskBody(provider, idToken, desk, seed, t, sign) {
+  if (!signinKnown(provider) || typeof idToken !== "string" || !idToken || !/^[0-9a-f]{64}$/.test(String(desk)) || !Number.isSafeInteger(t)) return null;
+  if (seed && !/^[0-9a-f]{64}$/.test(String(seed))) return null;
+  const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t })) || ""); /* plant:desk-signed */
+  if (!/^[0-9a-f]{128}$/.test(sig)) return null;
+  const body = { provider: String(provider), idToken: idToken, desk: String(desk) };
+  if (seed) body.seed = String(seed); /* plant:seed-first */
+  body.t = t;
+  body.sig = sig;
+  return body;
 }
-/* Whether a seat file is that desk's own: `keyHex` the roster's desk.key, whose id is the file's desk and its sig.keyId. */
-function seatGenuine(doc, keyHex) {
-  const sig = doc && doc.sig;
-  try {
-    return !!doc && typeof doc === "object" && +doc.format === 1 && /^k-[0-9a-f]{16}$/.test(String(doc.desk))
-      && /^[0-9a-f]{64}$/.test(String(keyHex)) && branchIdOf(String(keyHex)) === doc.desk
-      && !!doc.sealed && doc.sealed.kind === SEAT_KIND && SEALED_TEAM_RE.test(String(doc.sealed.team))
-      && /^[0-9a-f]{64}$/.test(String(doc.sealed.enc)) && /^(?:[0-9a-f]{2}){17,}$/.test(String(doc.sealed.ct))
-      && !!sig && sig.alg === "Ed25519" && sig.keyId === doc.desk && /^[0-9a-f]{128}$/.test(String(sig.value))
-      && crypto.verify(null, seatSignedBytes(doc), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(String(keyHex), "hex")]),
-        format: "der", type: "spki" }), Buffer.from(String(sig.value), "hex"));
-  } catch { return false; }
+async function signinServiceAsk(fetchFn, url, body, ms) {
+  if (String(url) !== SIGNIN_SERVICE) throw new Error("the desk's sign-in is posted to the licence service's signin/desk only"); /* plant:service-host */
+  const bytes = Buffer.from(JSON.stringify(body), "utf8");
+  if (bytes.length > SIGNIN_BODY_MAX) throw new Error("the body is longer than it may be");
+  return signinPost(fetchFn, SIGNIN_SERVICE, bytes, "application/json", SIGNIN_SERVICE_MAX, ms);
 }
-/* What a seat file holds, {idToken, seed}, opened with the lead's box private key `skR` for `teamId`, or null. */
-function seatOpen(skR, doc, teamId) {
-  try {
-    if (!doc || !doc.sealed || doc.sealed.kind !== SEAT_KIND || doc.sealed.team !== teamId) return null;
-    const pt = hpkeOpen(skR, Buffer.from(String(doc.sealed.enc), "hex"), seatInfo(teamId, doc.desk), Buffer.alloc(0), Buffer.from(String(doc.sealed.ct), "hex"));
-    const v = pt ? JSON.parse(pt.toString("utf8")) : null;
-    return v && typeof v.idToken === "string" && /^[0-9a-f]{64}$/.test(String(v.seed)) ? { idToken: v.idToken, seed: v.seed } : null;
-  } catch { return null; }
+/* THE SEAT CERTIFICATE as the desk takes it: the service's shape, for this desk's key, a window that ends after it begins. Its
+   signature under the delegation is Studio's to check, as Studio checks a grant; the desk keeps it and writes it. */
+const SIGNIN_CODE = /^[0-9A-HJKMNP-TV-Z]{16}$/;
+function signinCertOk(c, deskKey) {
+  const plainObj = v => !!v && typeof v === "object" && !Array.isArray(v);
+  return plainObj(c) && c.kind === "etiuda-seat-certificate" && c.format === 1 && /^[0-9a-f]{32}$/.test(String(c.licence))
+    && String(c.desk) === String(deskKey) && /^[0-9a-f]{64}$/.test(String(c.person)) && SIGNIN_CODE.test(String(c.code)) /* plant:cert-desk */
+    && Number.isSafeInteger(c.issued) && Number.isSafeInteger(c.until) && c.until > c.issued && plainObj(c.via)
+    && plainObj(c.sig) && c.sig.alg === "Ed25519" && typeof c.sig.keyId === "string" && /^[0-9a-f]{128}$/.test(String(c.sig.value));
 }
-/* The sign-in's file beside desk.json, read whole or not at all: {hints: team id -> providers an invitation named, held: {team,
-   provider, refresh, sub, seed, at, ask} or null}. `refresh` and the seat's `sub` are signinKeep's, "" where none is kept, and
-   nothing else in it is a secret; `ask` says the last quiet renewal did not succeed. */
+/* The service's answer read: {ok, code, cert} (cert null where no licence admits the person yet), or {ok: false, reason}, the
+   reason "token", "signin", "full" or "desks" as the service says it, else "unreached", which every other answer is. */
+function signinAnswer(res, deskKey) {
+  let j = null;
+  try { j = JSON.parse(Buffer.from(res && res.bytes ? res.bytes : []).toString("utf8")); } catch { j = null; }
+  if (!j || typeof j !== "object" || Array.isArray(j)) return { ok: false, reason: "unreached" };
+  if (res.status === 200 && j.ok === true && SIGNIN_CODE.test(String(j.code))) {
+    if (j.certificate === null) return { ok: true, code: String(j.code), cert: null };
+    if (signinCertOk(j.certificate, deskKey) && j.certificate.code === j.code) return { ok: true, code: String(j.code), cert: j.certificate };
+    return { ok: false, reason: "unreached" };
+  }
+  const said = { 403: ["token", "signin"], 409: ["full", "desks"] }[res.status];
+  return { ok: false, reason: said && said.indexOf(j.reason) >= 0 ? j.reason : "unreached" };
+}
+/* One post to signin/desk with `idToken`: `seed` for a first sign-in, "" for a renewal. `io` {serviceAsk(url, body), sign(bytes)}. */
+async function signinSeat(io, provider, deskKey, idToken, seed, now) {
+  const body = signinDeskBody(provider, idToken, deskKey, seed, now(), io.sign);
+  if (!body) return { ok: false, reason: "unreached" };
+  try { return signinAnswer(await io.serviceAsk(SIGNIN_SERVICE, body), deskKey); }
+  catch { return { ok: false, reason: "unreached" }; }
+}
+/* THE CALM LAPSE: the kept certificate's `until` passed with no new one. It decides nothing on the desk but Account's words; the
+   desk works on, and the next certificate ends it. */
+function signinLapsed(held, now) {
+  return !!held && !!held.cert && now >= held.cert.until; /* plant:lapse-until */
+}
+/* `held` after the service's answer `ans` at `now`: a certificate replaces the last, an answer of none drops it, a refusal keeps it
+   (until its own `until`) and is said; "signin", a seat freed, forgets the refresh token, since only a sign-in takes it again. */
+function signinSettle(held, ans, now) {
+  if (ans.ok) return Object.assign({}, held, { code: ans.code, cert: ans.cert, at: now, checked: now, reached: true, said: "", ask: false });
+  if (ans.reason === "unreached") return Object.assign({}, held, { checked: now, reached: false });
+  const freed = ans.reason === "signin";
+  return Object.assign({}, held, { checked: now, reached: true, said: ans.reason, ask: freed || held.ask === true,
+    refresh: freed ? "" : held.refresh }); /* plant:settle-freed */
+}
+/* The reasons a provider's refresh forgets its token: it no longer takes it, or the token it gives is not this seat's. */
+const SIGNIN_LOST = Object.freeze(["signin-ask", "signin-expired", "signin-other", "signin-unbound"]);
+/* One quiet renewal of `held`: the provider's refresh, then signin/desk with no seed. `io` {tokenAsk, serviceAsk, sign, keep(text),
+   kept(sealed)}. {held, said}; whatever fails, the code, the certificate and the provider stay, so the desk works on. */
+async function signinRenewHeld(io, p, deskKey, held, now) {
+  if (!held) return { held: null, said: "signin-ask" };
+  const token = held.refresh ? io.kept(held.refresh) : "", sub = held.sub ? io.kept(held.sub) : "";
+  const got = token ? await signinRenew(io, p, deskKey, token, held.seed, sub, now) : { ok: false, reason: "signin-ask" };
+  if (!got.ok) {
+    const lost = SIGNIN_LOST.indexOf(got.reason) >= 0;
+    return { held: Object.assign({}, held, { refresh: lost ? "" : held.refresh, ask: lost || held.ask === true, checked: now(),
+      reached: lost ? held.reached : false }), said: got.reason }; /* plant:renew-ask */
+  }
+  const fresh = Object.assign({}, held, { refresh: io.keep(got.refreshToken) || held.refresh, sub: held.sub || io.keep(got.sub) });
+  const ans = await signinSeat(io, p.id, deskKey, got.idToken, "", now); /* plant:renew-seedless */
+  return { held: signinSettle(fresh, ans, now()), said: ans.ok ? "renewed" : ans.reason };
+}
+/* seat.json as the desk writes it for its lead: {format: 2, desk, certificate}, unsealed, since it holds pseudonyms alone. */
+const SEAT_NAME = "seat.json";
+function seatFileText(deskId, cert) { return JSON.stringify({ format: 2, desk: String(deskId), certificate: cert }, null, 1) + "\n"; }
+/* The sign-in's file beside desk.json, read whole or not at all: {held: {provider, refresh, sub, seed, code, cert, at, checked,
+   reached, said, ask} or null}. `refresh` and `sub` are signinKeep's, "" where none is kept, and nothing else in it is a secret;
+   `ask` says the person's own sign-in is wanted again; a file of another format holds nothing. */
 const SIGNIN_FILE = "signin.json";
 function signinFileRead(text) {
   let d = null;
   try { d = JSON.parse(String(text)); } catch { d = null; }
-  const out = { hints: {}, held: null };
-  if (!d || typeof d !== "object" || +d.format !== 1) return out;
-  if (d.hints && typeof d.hints === "object" && !Array.isArray(d.hints))
-    for (const k of Object.keys(d.hints)) if (SEALED_TEAM_RE.test(k) && Array.isArray(d.hints[k])) out.hints[k] = signinHint({ signin: { providers: d.hints[k] } });
-  const h = d.held;
-  if (h && typeof h === "object" && SEALED_TEAM_RE.test(String(h.team)) && signinKnown(h.provider) && /^[0-9a-f]{64}$/.test(String(h.seed)))
-    out.held = { team: String(h.team), provider: String(h.provider), refresh: typeof h.refresh === "string" ? h.refresh : "",
-      sub: typeof h.sub === "string" ? h.sub : "", seed: String(h.seed), at: Number.isFinite(h.at) ? h.at : 0, ask: h.ask === true };
+  const out = { held: null };
+  if (!d || typeof d !== "object" || +d.format !== 2) return out;
+  const h = d.held, num = v => Number.isFinite(v) ? v : 0;
+  if (h && typeof h === "object" && signinKnown(h.provider) && /^[0-9a-f]{64}$/.test(String(h.seed)))
+    out.held = { provider: String(h.provider), refresh: typeof h.refresh === "string" ? h.refresh : "", sub: typeof h.sub === "string" ? h.sub : "",
+      seed: String(h.seed), code: SIGNIN_CODE.test(String(h.code)) ? String(h.code) : "",
+      cert: h.cert && typeof h.cert === "object" && Number.isSafeInteger(h.cert.until) ? h.cert : null,
+      at: num(h.at), checked: num(h.checked), reached: h.reached !== false, said: typeof h.said === "string" ? h.said : "", ask: h.ask === true };
   return out;
 }
-function signinFileText(s) { return JSON.stringify({ format: 1, hints: s.hints || {}, held: s.held || null }, null, 1) + "\n"; }
+function signinFileText(s) { return JSON.stringify({ format: 2, held: s.held || null }, null, 1) + "\n"; }
 
-/* The sign-in's wiring: the person's click, the browser, seat.json, the quiet renewal and the page's row. Every act asks
-   signinWhere first, so a desk with no team, or a team that names no provider, opens nothing and sends nothing. */
-/* The quiet renewal runs SIGNIN_FIRST_MS after the window opens at each start, then daily while the desk runs; each asks the
-   provider once. The lead's Studio has the refreshed token's first hour to forward it. */
+/* The sign-in's wiring: the person's click, the browser, the service, seat.json, the quiet renewal and what the page is told.
+   With no provider configured nothing is offered, opened or sent. */
+/* The quiet renewal runs SIGNIN_FIRST_MS after the window opens at each start, then daily while the desk runs, and on Check now;
+   each asks the provider once and posts at once, inside the service's ten minutes. */
 const SIGNIN_RENEW_MS = 24 * 60 * 60 * 1000; /* plant:renew-daily */
 const SIGNIN_FIRST_MS = 2 * 60 * 1000;
-let signinStore, signinBusy = null, signinSaid = "", signinClick = null, signinPending = null, signinTimer = null;
+/* Check now asks at most this often, whatever is pressed. */
+const SIGNIN_CHECK_GAP_MS = 10 * 1000;
+let signinStore, signinBusy = null, signinSaid = "", signinClick = null, signinTimer = null, signinWrote = "", signinCheckAt = 0;
 function signinState() {
   if (signinStore !== undefined) return signinStore;
   let text = "";
@@ -9384,62 +9407,37 @@ function signinSave() {
   try { writeReplacing(path.join(app.getPath("userData"), SIGNIN_FILE), signinFileText(signinState())); }
   catch (e) { console.error("etiuda: the sign-in could not be kept - " + e.message); }
 }
-/* An invitation's hint, kept for its team until the desk reads the team file itself. */
-function signinHintKeep(team, providers) {
-  const read = Array.isArray(providers) ? signinHint({ signin: { providers: providers } }) : [];
-  if (!SEALED_TEAM_RE.test(String(team)) || !read.length) return;
-  signinState().hints[String(team)] = read;
-  signinSave();
-}
-/* The team this desk would prove itself to, {team, doc, box, keyId}, and the providers it offers; null and [] for a desk with no team.
-   `doc` is the team file where the pinned lead signed a whole one, else null and the invitation's hint stands. */
-function signinWhere() {
-  let at = null;
-  const lead = pinnedLead();
-  if (lead) {
-    const doc = teamTextChosen(catalogFolder()).doc;
-    const whole = !!doc && teamWhole(doc);
-    at = { team: lead.team, doc: whole ? doc : null, box: whole && typeof doc.lead.box === "string" ? doc.lead.box : "", keyId: lead.keyId };
-  } else if (teamJoin && SEALED_TEAM_RE.test(String(teamJoin.team))) {
-    const inv = teamJoin.invite, r = inv && inv.relay;
-    at = { team: String(teamJoin.team), doc: null, box: r && /^[0-9a-f]{64}$/.test(String(r.box)) ? String(r.box) : "",
-      keyId: inv && inv.lead && typeof inv.lead.keyId === "string" ? inv.lead.keyId : "" };
-  }
-  return { at: at, providers: at ? signinOffer(at.doc, signinState().hints, at.team) : [] };
-}
 function signinSign(bytes) {
   const key = deskBranch ? openPrivate(deskBranch.sign.priv) : null;
   return key ? crypto.sign(null, bytes, key).toString("hex") : "";
 }
-/* The proof written into this desk's own folder of the team's, or kept for the next try where the lead's box or the folder is not
-   there yet. A proof whose token has expired is let go: the lead could forward nothing with it. */
-function signinFlush(where) {
-  const proof = signinPending;
-  if (!proof) return false;
-  const c = signinClaims(proof.idToken);
-  if (!c || !(Number(c.exp) * 1000 > Date.now())) { signinPending = null; return false; }
-  const at = where && where.at, me = branchIdentity(false);
-  if (!at || at.team !== proof.team || !at.box || !me) return false;
+/* The kept certificate written into this desk's own folder of its team's, once per certificate, where the desk has a team and its
+   folder answers; nothing where it has none. */
+function signinFlush() {
+  const held = signinState().held, cert = held && held.cert, me = branchIdentity(false);
+  if (!cert || !me || !pinnedLead() || signinWrote === cert.sig.value) return false;
   try {
     const root = sharedFolderForWrite();
     if (!folderAnswers(root)) return false;
-    const doc = seatDoc(at.box, at.team, at.keyId, me.id, proof.idToken, proof.seed, signinSign);
-    if (!doc) return false;
     const dir = path.join(root, "desks", me.id);
     for (const d of [path.join(root, "desks"), dir]) { try { fs.mkdirSync(d); } catch (e) { if (e.code !== "EEXIST") throw e; } }
-    writeReplacing(path.join(dir, SEAT_NAME), JSON.stringify(doc, null, 1) + "\n");
-    signinPending = null;
+    writeReplacing(path.join(dir, SEAT_NAME), seatFileText(me.id, cert));
+    signinWrote = cert.sig.value;
     return true;
   } catch (e) {
-    console.error("etiuda: the sign-in's proof could not be written - " + e.message);
+    console.error("etiuda: the seat could not be written - " + e.message);
     return false;
   }
 }
-/* What the page is told: the providers offered, by id alone, and how the sign-in stands. No token, no client id. */
+/* What the page is told, no token and nothing from the provider: the providers offered by id, who is signed in by provider, the
+   code, the seat ("held", "lapsed" or "none"), when the service last answered and whether the last try reached it. */
 function signinView() {
-  const w = signinWhere(), held = signinState().held;
-  const signedIn = held && w.at && held.team === w.at.team && w.providers.some(p => p.id === held.provider) ? held.provider : "";
-  return { offered: w.providers.map(p => p.id), signedIn: signedIn, busy: !!signinBusy, ask: !!signedIn && held.ask === true, said: signinSaid };
+  const offered = signinOffered().map(p => p.id), held = signinState().held, now = Date.now();
+  const signedIn = held && offered.indexOf(held.provider) >= 0 ? held.provider : "";
+  return { offered: offered, signedIn: signedIn, code: signedIn ? held.code : "",
+    seat: !signedIn ? "" : held.cert ? (signinLapsed(held, now) ? "lapsed" : "held") : "none",
+    at: signedIn ? held.at : 0, reached: !signedIn || held.reached !== false, ask: !!signedIn && held.ask === true,
+    refused: signedIn ? held.said : "", busy: signinBusy ? signinBusy.provider : "", said: signinSaid };
 }
 function tellSignin() {
   const win = theWindow;
@@ -9455,27 +9453,33 @@ function signinPageHtml(ok) {
 function signinIo(run) {
   return {
     listen: (pageFor, takes) => signinListen(http, pageFor, SIGNIN_WAIT_MS, takes).then(l => { run.loop = l; return l; }),
-    openPage: url => signinPageOk(url) ? Promise.resolve(shell.openExternal(url)).then(() => true) : false, /* plant:signin-open */
+    openPage: url => signinPageOk(url) ? Promise.resolve(shell.openExternal(url)).then(() => { run.url = url; return true; }) : false, /* plant:signin-open */
     tokenAsk: (url, form) => signinRequest((u, init) => net.fetch(u, init), url, form),
+    serviceAsk: (url, body) => signinServiceAsk((u, init) => net.fetch(u, init), url, body),
+    sign: signinSign,
+    keep: text => signinKeep(safeStorage, process.platform, text), kept: sealed => signinKept(safeStorage, sealed),
     page: ok => signinPageHtml(ok),
   };
 }
-/* A fresh proof, kept and written: the refresh token and the seat's sub sealed where the system seals for real, the seed beside. */
-function signinTake(team, provider, got) {
-  const s = signinState(), was = s.held && s.held.team === team && s.held.provider === provider ? s.held.refresh : "";
-  s.held = { team: team, provider: provider, refresh: signinKeep(safeStorage, process.platform, got.refreshToken) || (got.refreshToken ? "" : was),
-    sub: signinKeep(safeStorage, process.platform, got.sub), seed: got.seed, at: Date.now(), ask: false };
+/* A first sign-in's outcome kept: the refresh token and the sub sealed where the system seals for real, the seed beside, and the
+   service's answer. A refusal other than a full licence keeps nothing, so the desk is as it was. */
+function signinTake(provider, got, ans, now) {
+  const s = signinState();
+  if (!ans.ok && ans.reason !== "full") return false; /* plant:take-refused */
+  const base = { provider: provider, refresh: signinKeep(safeStorage, process.platform, got.refreshToken),
+    sub: signinKeep(safeStorage, process.platform, got.sub), seed: got.seed, code: "", cert: null, at: 0, checked: now, reached: true, said: "", ask: false };
+  s.held = signinSettle(base, ans, now);
   signinSave();
-  signinPending = { team: team, idToken: got.idToken, seed: got.seed };
+  return true;
 }
-/* The person's sign-in, for a trusted click on one of the row's buttons (the preload's signin-click), one at a time. */
+/* The person's sign-in, for a trusted click on one of the page's provider buttons (the preload's signin-click), one at a time. */
 ipcMain.on("etiuda:signin-click", (e, provider) => {
   e.returnValue = null;
   if (fromEngine(e)) signinClick = { provider: String(provider || ""), at: Date.now() };
 });
 ipcMain.on("etiuda:signin-state", (e) => {
   if (!fromEngine(e)) { e.returnValue = null; return; }
-  if (signinPending) signinFlush(signinWhere());
+  signinFlush();
   e.returnValue = signinView();
 });
 ipcMain.handle("etiuda:signin", async (e, provider) => {
@@ -9483,49 +9487,77 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
   const id = String(provider || ""), c = signinClick;
   signinClick = null;
   if (!c || c.provider !== id || Date.now() - c.at > LINK_CLICK_MS || signinBusy) return signinView(); /* plant:signin-click */
-  const w = signinWhere(), p = w.providers.find(x => x.id === id), me = w.at ? branchIdentity(true) : null;
+  const p = signinOffered().find(x => x.id === id), me = p ? branchIdentity(true) : null;
   if (!p || !me || !net || typeof net.fetch !== "function") { signinSaid = "signin-none"; return signinView(); } /* plant:signin-offered */
-  const run = { loop: null };
+  const run = { loop: null, provider: p.id, url: "" }, io = signinIo(run);
   signinBusy = run;
   signinSaid = "";
   tellSignin();
   try {
-    const got = await signinRun(signinIo(run), p, me.key, Date.now);
+    const got = await signinRun(io, p, me.key, Date.now);
     if (got.ok) {
-      signinTake(w.at.team, p.id, got);
-      signinFlush(signinWhere());
-      signinSaid = "signin-done";
+      const ans = await signinSeat(io, p.id, me.key, got.idToken, got.seed, Date.now);
+      signinTake(p.id, got, ans, Date.now());
+      signinFlush();
+      signinSaid = ans.ok ? "signin-done" : ans.reason;
     } else signinSaid = got.reason;
-  } catch { signinSaid = "signin-unreached"; }
+  } catch { signinSaid = "unreached"; }
   finally { signinBusy = null; }
   tellSignin();
   return signinView();
 });
-/* The row's Cancel closes the loopback, and the sign-in ends as cancelled. */
+/* Open the browser again: the same provider page, while that sign-in still waits for it, and no other address. */
+ipcMain.handle("etiuda:signin-again", (e) => {
+  if (!fromEngine(e)) return false;
+  const run = signinBusy;
+  if (!run || !run.url || !signinPageOk(run.url)) return false; /* plant:again-page */
+  shell.openExternal(run.url);
+  return true;
+});
+/* Cancel closes the loopback, and the sign-in ends as cancelled. */
 ipcMain.handle("etiuda:signin-stop", (e) => {
   if (!fromEngine(e)) return false;
   const run = signinBusy;
   if (run && run.loop) run.loop.close();
   return !!run;
 });
-/* The quiet renewal, for a desk holding a refresh token for a team that still names its provider: seat.json rewritten with the
-   seat's refreshed token, or nothing written and the row's calm sentence. Never from the harness's own window or any harness
-   start, so no leg reaches a provider. */
+/* Sign out: this computer forgets the account, its tokens, its code and its certificate, and takes its seat.json back out of the
+   team's folder. The team, its catalog and everything else on the desk stay. */
+ipcMain.handle("etiuda:signin-out", (e) => {
+  if (!fromEngine(e) || signinBusy) return signinView();
+  const s = signinState(), me = branchIdentity(false);
+  if (s.held && me && pinnedLead()) {
+    try { fs.unlinkSync(path.join(sharedFolderForWrite(), "desks", me.id, SEAT_NAME)); } catch { /* not written, or the folder is away */ }
+  }
+  s.held = null;
+  signinWrote = "";
+  signinSaid = "";
+  signinSave();
+  tellSignin();
+  return signinView();
+});
+/* Check now: one renewal at once, at most once per SIGNIN_CHECK_GAP_MS. */
+ipcMain.handle("etiuda:signin-check", async (e) => {
+  if (!fromEngine(e)) return null;
+  if (Date.now() - signinCheckAt < SIGNIN_CHECK_GAP_MS) return signinView(); /* plant:check-gap */
+  signinCheckAt = Date.now();
+  await signinRenewNow().catch(() => "");
+  return signinView();
+});
+/* The quiet renewal, for a desk holding a refresh token for a provider still offered: a new certificate kept and written, or the
+   last kept and the calm words. Never from the harness's own window or any harness start, so no leg reaches a provider. */
 async function signinRenewNow() {
   if (harnessLaunch()) return ""; /* plant:renew-now-harness */
-  const w = signinWhere();
-  if (signinPending) signinFlush(w);
+  signinFlush();
   const s = signinState(), held = s.held;
-  if (!held || !held.refresh || signinBusy || !w.at || w.at.team !== held.team) return "";
-  const p = w.providers.find(x => x.id === held.provider), me = branchIdentity(false);
+  if (!held || !held.refresh || signinBusy) return "";
+  const p = signinOffered().find(x => x.id === held.provider), me = branchIdentity(false);
   if (!p || !me) return ""; /* plant:renew-offered */
-  const io = { tokenAsk: (url, form) => signinRequest((u, init) => net.fetch(u, init), url, form),
-    keep: text => signinKeep(safeStorage, process.platform, text), kept: sealed => signinKept(safeStorage, sealed) };
-  const r = await signinRenewHeld(io, p, me.key, held, Date.now);
-  if (s.held !== held) return ""; /* a sign-in took its place meanwhile */
+  const r = await signinRenewHeld(signinIo({ loop: null }), p, me.key, held, Date.now);
+  if (s.held !== held) return ""; /* a sign-in or a sign out took its place meanwhile */
   s.held = r.held;
   signinSave();
-  if (r.proof) { signinPending = r.proof; signinFlush(signinWhere()); }
+  signinFlush();
   tellSignin();
   return r.said;
 }
