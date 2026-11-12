@@ -9,6 +9,8 @@
 #           started, a junction, csc. Installs nothing. Run it first: the legs' shape depends on its answers.
 #   marker  an all-users install must never run, with administrator rights, the file the installing account's HKCU uninstall
 #           entry names (tools/runner/hkcu-uninstaller-marker.mjs). Red on engine main at 82758c14.
+#   per-user  the tree's own tests/update-install.js --update: an older install for one account, the newer over it, the
+#           uninstall. old_sha builds the older installer; windows_date opens the window wall for its launches.
 #   legs    the four installer legs (tools/runner/installer-legs.mjs): an all-users upgrade, 1618 at a copy running in another
 #           session, a bare /S as SYSTEM, 1618 at a locked file, and an all-users move to another folder with a junction
 #           planted in the old one. old_sha builds the older installer for the upgrade and the move.
@@ -29,7 +31,7 @@ on:
         required: true
         type: string
       stage:
-        description: probe, marker or legs
+        description: probe, per-user, marker or legs
         required: true
         type: string
         default: probe
@@ -63,8 +65,8 @@ jobs:
           STAGE: ${{ inputs.stage }}
         run: |
           case "$STAGE" in
-            probe|marker|legs) ;;
-            *) echo "stage is '$STAGE', want probe, marker or legs" >&2; exit 1 ;;
+            probe|per-user|marker|legs) ;;
+            *) echo "stage is '$STAGE', want probe, per-user, marker or legs" >&2; exit 1 ;;
           esac
 
       - uses: actions/checkout@v4
@@ -101,7 +103,7 @@ jobs:
         run: npm ci
 
       - name: the older installer, for the upgrade leg
-        if: inputs.stage == 'legs' && inputs.old_sha != ''
+        if: (inputs.stage == 'legs' || inputs.stage == 'per-user') && inputs.old_sha != ''
         shell: bash
         env:
           OLD_SHA: ${{ inputs.old_sha }}
@@ -127,6 +129,19 @@ jobs:
         continue-on-error: true
         shell: bash
         run: node tools/runner/hkcu-uninstaller-marker.mjs --out "$RUNNER_TEMP/out"
+
+      # The tree's own per-user update leg (tests/update-install.js --update): the older setup with /currentuser into a scratch home,
+      # the newer over it, the launches into that home, the uninstall. It launches the app, so it needs the window wall's date.
+      - name: per-user
+        if: inputs.stage == 'per-user'
+        continue-on-error: true
+        shell: bash
+        env:
+          ETIUDA_WINDOWS: ${{ inputs.windows_date }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          node tests/update-install.js --update 2>&1 | tee "$RUNNER_TEMP/out/per-user.txt"
+          exit "${PIPESTATUS[0]}"
 
       - name: legs
         if: inputs.stage == 'legs'
