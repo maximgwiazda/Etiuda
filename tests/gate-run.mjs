@@ -57,6 +57,9 @@ function runTool(lab, args, customEnv = {}) {
     ETIUDA_RUNS: lab.runs,
     ETIUDA_CHAINS_PATH: lab.chainsPath,
     ETIUDA_LOCK_PATH: path.join(lab.root, "machine.lock"),
+    /* Every leg here asks the tool for a run of its own, and several legs run area on one lab's tree in turn; area resume (fold 45)
+       would carry the second of them whole from the first and run nothing, so it is off unless a leg names it. */
+    ETIUDA_AREA_RESUME: "off",
   }, customEnv);
   const r = spawnSync(process.execPath, [path.join(lab.lab, "tools", "gate-run.mjs"), ...args], {
     cwd: lab.lab,
