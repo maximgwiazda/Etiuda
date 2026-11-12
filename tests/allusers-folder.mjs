@@ -9,19 +9,23 @@
  * icacls adds is left out.
  *   af1 the SID reading decides each recorded case: a locked folder, made and not yet made; a writable parent; a parent that
  *       lets them delete the folder; files they can change; Program Files, local and over a share; ProgramData; a drive's
- *       root; a share they can write; a per-user install; a path with nothing readable above it
+ *       root; a share they can write; a per-user install; Domain Users of the machine's domain and of another, and a share
+ *       only a named domain group can change, on stand-in listings of a domain-joined machine (no real domain SID); a folder
+ *       that cannot be read, alone and under a parent that lets them delete it; a path with nothing readable above it
  *   af2 a reading by group name decides every case as af1 over the English names, and misses each writable case over the
  *       Polish ones: the control that af1 is red on a name-matching version
  *   af3 the mask, inherit-only flag, entry types and SIDs the model reads out of allusers-folder.nsh are the rights the brief
- *       names, the flag, the allowed types and the four groups, each compared
+ *       names, the flag, the allowed types and the four groups, each compared, and Domain Users matched by its shape
+ *       (authority 5, five subauthorities, the first 21, the last 513) since its SID is the domain's own
  * THE INSTALLER'S TEXT, read and never compiled (tests/nsis-compile.mjs compiles it):
  *   af4 the patched template compiles the check and makes etiudaFolderLeave the folder page's leave function, in the
  *       installer pass alone, and nothing else calls it, so a silent run, which shows no page, proceeds
  *   af5 the check runs only for an all-users install and outside Program Files; it never refuses and writes nothing: one box,
- *       Yes and No, silent default Yes, No staying on the page; its words are the copywriter's in both languages
+ *       Yes and No, silent default Yes, No staying on the page, asked where they can change it or where it cannot be told;
+ *       its two sentences are the copywriter's in both languages
  *   af6 README.md's Installing silently and shell/policy/readme.txt carry the administrator's line
- *   af7 lifting the all-users condition, the silent default, the No, the Program Files skip, the patch row or the mask, or
- *       adding a Quit, turns its leg red
+ *   af7 lifting the all-users condition, the silent default, the No, the Program Files skip, the patch row, the mask, the
+ *       Domain Users RID or the unreadable folder's box, or adding a Quit, turns its leg red
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -50,10 +54,20 @@ const functionOf = (text, name) => {
   return m ? m[1] : "";
 };
 function readFrom(text) {
-  const def = name => { const m = new RegExp("^!define " + name + " (0x[0-9A-Fa-f]+)\\s*$", "m").exec(text); return m ? parseInt(m[1], 16) : NaN; };
-  const open = functionOf(macroOf(text, "etiudaFolderCheck"), "etiudaFolderOpen");
+  const def = name => { const m = new RegExp("^!define " + name + " (0x[0-9A-Fa-f]+|\\d+)\\s*$", "m").exec(text); return m ? Number(m[1]) : NaN; };
+  const macro = macroOf(text, "etiudaFolderCheck");
+  const open = functionOf(macro, "etiudaFolderOpen"), leaveFn = functionOf(macro, "etiudaFolderLeave");
   const types = /\$\{If\} \$6 = (\d+)\r?\n\s*\$\{OrIf\} \$6 = (\d+)\r?\n/.exec(open);
-  return { mask: def("ETIUDA_CHANGE_MASK"), inheritOnly: def("ETIUDA_INHERIT_ONLY"), open,
+  /* Domain Users by shape: five subauthorities, authority 0,0,0,0,0,5, the first subauthority 21, the last the RID. */
+  const shape = [/GetSidSubAuthorityCount\(p r5\) p \.r6'\r?\n\s*System::Call '\*\$6\(&i1 \.r6\)'\r?\n\s*\$\{If\} \$6 = 5\r?\n/,
+    /GetSidIdentifierAuthority\(p r5\) p \.r6'\r?\n\s*System::Call '\*\$6\(&i4 \.r7, &i1 \.r8, &i1 \.r9\)'/,
+    /GetSidSubAuthority\(p r5, i 0\) p \.r6'\r?\n\s*System::Call '\*\$6\(i \.r6\)'\r?\n\s*\$\{If\} \$7 = 0\r?\n\s*\$\{AndIf\} \$8 = 0\r?\n\s*\$\{AndIf\} \$9 = 5\r?\n\s*\$\{AndIf\} \$6 = 21\r?\n/,
+    /GetSidSubAuthority\(p r5, i 4\) p \.r6'\r?\n\s*System::Call '\*\$6\(i \.r6\)'\r?\n\s*\$\{If\} \$6 = \$\{ETIUDA_DOMAIN_USERS_RID\}\r?\n\s*StrCpy \$2 1\r?\n/]
+    .every(r => r.test(open));
+  return { mask: def("ETIUDA_CHANGE_MASK"), inheritOnly: def("ETIUDA_INHERIT_ONLY"), open, shape,
+    domainRid: shape ? def("ETIUDA_DOMAIN_USERS_RID") : NaN,
+    unread: /StrCpy \$R6 "\?"\r?\n\s*System::Call 'advapi32::GetNamedSecurityInfoW/.test(open) ? "?" : "1",
+    noneAbove: /\$\{If\} \$1 == ""\r?\n\s*StrCpy \$2 "\?"/.test(leaveFn) ? "?" : "1",
     types: types ? [Number(types[1]), Number(types[2])] : [], sids: [...open.matchAll(/ConvertStringSidToSidW\(w "([^"]+)"/g)].map(m => m[1]) };
 }
 const FROM = readFrom(NSH);
@@ -69,8 +83,10 @@ const SDDL_RIGHTS = { GA: 0x10000000, GR: 0x80000000, GW: 0x40000000, GX: 0x2000
   WO: 0x80000, CC: 0x1, DC: 0x2, LC: 0x4, SW: 0x8, RP: 0x10, WP: 0x20, DT: 0x40, LO: 0x80, CR: 0x100, FA: 0x1f01ff };
 const SDDL_FLAGS = { OI: 0x1, CI: 0x2, NP: 0x4, IO: 0x8, ID: 0x10, SA: 0x40, FA: 0x80 };
 const SDDL_TYPES = { A: 0, D: 1, XA: 9, XD: 10 };
+/* A stand-in domain, no real one: SDDL written on a machine of that domain names its groups DU and DA. */
+const DOMAIN = "S-1-5-21-1000000001-1000000002-1000000003", OTHER_DOMAIN = "S-1-5-21-2000000001-2000000002-2000000003";
 const SDDL_SIDS = { BU: "S-1-5-32-545", AU: "S-1-5-11", WD: "S-1-1-0", IU: "S-1-5-4", BA: "S-1-5-32-544", SY: "S-1-5-18",
-  CO: "S-1-3-0", AC: "S-1-15-2-1", SU: "S-1-5-6" };
+  CO: "S-1-3-0", AC: "S-1-15-2-1", SU: "S-1-5-6", DU: DOMAIN + "-513", DA: DOMAIN + "-512" };
 function parseSddl(sddl) {
   const dacl = /D:[A-Z]*((?:\([^)]*\))*)/.exec(sddl);
   if (!dacl) throw new Error("no DACL in " + sddl);
@@ -87,27 +103,27 @@ function parseSddl(sddl) {
       mask: /^0x/i.test(rights) ? parseInt(rights, 16) : letters(rights, SDDL_RIGHTS), sid: id };
   });
 }
-/* etiudaFolderOpen, entry by entry: "1" where an allowed entry for one of the four holds a right in the mask. */
+/* etiudaFolderOpen, entry by entry: "1" where an allowed entry for one of the four, or for a domain's Domain Users, holds a
+   right in the mask. */
+const domainUsers = sid => { const m = /^S-1-5-21-\d+-\d+-\d+-(\d+)$/.exec(sid); return !!m && Number(m[1]) === FROM.domainRid; };
 function openBySid(sddl, mode) {
-  if (sddl == null) return "1";
   return parseSddl(sddl).some(a => FROM.types.indexOf(a.type) > -1 && (mode === "any" || !(a.flags & FROM.inheritOnly))
-    && (a.mask & FROM.mask) && FROM.sids.indexOf(a.sid) > -1) ? "1" : "0";
+    && (a.mask & FROM.mask) && (FROM.sids.indexOf(a.sid) > -1 || domainUsers(a.sid))) ? "1" : "0";
 }
 /* The same decision made from icacls's printed lines by the groups' English names. */
 const NAMES = ["BUILTIN\\Users", "NT AUTHORITY\\Authenticated Users", "Everyone", "NT AUTHORITY\\INTERACTIVE"];
 const NAMED_CHANGE = ["F", "M", "W", "D", "DE", "WDAC", "WO", "GA", "GW", "WD", "AD", "DC"];
 function openByName(lines, mode) {
-  if (lines == null) return "1";
   return lines.some(l => {
     const m = /^(.+?):((?:\([^)]*\))+)$/.exec(l.trim());
-    if (!m || NAMES.indexOf(m[1]) < 0) return false;
+    if (!m || (NAMES.indexOf(m[1]) < 0 && !/\\Domain Users$/.test(m[1]))) return false;
     const groups = [...m[2].matchAll(/\(([^)]*)\)/g)].map(g => g[1]);
     if (mode !== "any" && groups.indexOf("IO") > -1) return false;
     return groups.some(g => g.split(",").some(r => NAMED_CHANGE.indexOf(r) > -1));
   }) ? "1" : "0";
 }
 
-/* etiudaFolderLeave over a tree of recorded folders: "skip", "go" or "ask". */
+/* etiudaFolderLeave over a tree of recorded folders: "skip", "go", "ask" (they can change it) or "unread" (it cannot be told). */
 const PF64 = "C:\\Program Files", PF32 = "C:\\Program Files (x86)", APP = "Etiuda";
 const parentOf = p => { const t = p.replace(/\\+$/, ""), i = t.lastIndexOf("\\"); return i < 0 ? "" : t.slice(0, i); };
 const asRoot = p => (p.length === 2 && p[1] === ":" ? p + "\\" : p);
@@ -127,15 +143,15 @@ function leave(c, reader) {
     level = up; here = false;
   }
   let open;
-  if (!level) open = "1";
+  if (!level) open = FROM.noneAbove;
   else {
     open = at(level)("any");
-    if (open === "0" && here) {
-      const up = parentOf(dir);
-      open = up ? (key(up) ? at(up)("self") : "1") : "1";
+    if (open !== "1" && here) {
+      const up = parentOf(dir), above = up && key(up) ? at(up)("self") : "?";
+      if (above !== "0") open = above;
     }
   }
-  return open === "1" ? "ask" : "go";
+  return open === "1" ? "ask" : open === "?" ? "unread" : "go";
 }
 
 /* ---- the recordings ---- */
@@ -186,6 +202,17 @@ const R = {
       "ZARZĄDZANIE NT\\INTERAKTYWNA:(OI)(CI)(IO)(M,DC)", "ZARZĄDZANIE NT\\INTERAKTYWNA:(RX,WD,AD)",
       "ZARZĄDZANIE NT\\USŁUGA:(OI)(CI)(IO)(M,DC)", "ZARZĄDZANIE NT\\USŁUGA:(RX,WD,AD)",
       "ZARZĄDZANIE NT\\WSADOWY:(OI)(CI)(IO)(M,DC)", "ZARZĄDZANIE NT\\WSADOWY:(RX,WD,AD)"] },
+  /* Stand-ins for a domain-joined machine's shares, written as that machine's SDDL and icacls would write them. */
+  domainShare: { sddl: "D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;DA)(A;OICI;0x1301bf;;;DU)",
+    pl: ["ZARZĄDZANIE NT\\SYSTEM:(OI)(CI)(F)", "BUILTIN\\Administratorzy:(OI)(CI)(F)", "EXAMPLE\\Administratorzy domeny:(OI)(CI)(F)",
+      "EXAMPLE\\Użytkownicy domeny:(OI)(CI)(M)"] },
+  otherDomain: { sddl: `D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1301bf;;;${OTHER_DOMAIN}-513)`,
+    pl: ["ZARZĄDZANIE NT\\SYSTEM:(OI)(CI)(F)", "BUILTIN\\Administratorzy:(OI)(CI)(F)", "OTHER\\Użytkownicy domeny:(OI)(CI)(M)"] },
+  domainGroup: { sddl: `D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;DA)(A;OICI;0x1200a9;;;DU)(A;OICI;0x1301bf;;;${DOMAIN}-1104)`,
+    pl: ["ZARZĄDZANIE NT\\SYSTEM:(OI)(CI)(F)", "BUILTIN\\Administratorzy:(OI)(CI)(F)", "EXAMPLE\\Administratorzy domeny:(OI)(CI)(F)",
+      "EXAMPLE\\Użytkownicy domeny:(OI)(CI)(RX)", "EXAMPLE\\Payroll:(OI)(CI)(M)"] },
+  /* GetNamedSecurityInfoW refuses (access denied, a share that does not answer). */
+  unread: { unreadable: true },
 };
 /* The same folders as an English Windows names their groups, the names swapped by the SID each stands for. */
 const EN_NAMES = [
@@ -196,8 +223,10 @@ const EN_NAMES = [
   ["ZARZĄDZANIE NT\\INTERAKTYWNA", "NT AUTHORITY\\INTERACTIVE"], ["ZARZĄDZANIE NT\\USŁUGA", "NT AUTHORITY\\SERVICE"],
   ["ZARZĄDZANIE NT\\WSADOWY", "NT AUTHORITY\\BATCH"], ["ZARZĄDZANIE NT\\SYSTEM", "NT AUTHORITY\\SYSTEM"],
   ["BUILTIN\\Administratorzy", "BUILTIN\\Administrators"], ["BUILTIN\\Użytkownicy", "BUILTIN\\Users"],
-  ["TWÓRCA-WŁAŚCICIEL", "CREATOR OWNER"], ["Wszyscy", "Everyone"]];
-for (const r of Object.values(R)) {
+  ["TWÓRCA-WŁAŚCICIEL", "CREATOR OWNER"], ["Wszyscy", "Everyone"],
+  ["EXAMPLE\\Administratorzy domeny", "EXAMPLE\\Domain Admins"], ["EXAMPLE\\Użytkownicy domeny", "EXAMPLE\\Domain Users"],
+  ["OTHER\\Użytkownicy domeny", "OTHER\\Domain Users"]];
+for (const r of Object.values(R).filter(r => !r.unreadable)) {
   r.en = r.pl.map(l => { const n = EN_NAMES.find(([pl]) => l.startsWith(pl + ":")); return n ? n[1] + l.slice(n[0].length) : l; });
 }
 
@@ -217,10 +246,20 @@ const CASES = [
   ["a share they can write", { mode: "all", instdir: "\\\\server\\c$\\Users\\Public\\Etiuda",
     tree: { "\\\\server\\c$\\Users\\Public": R.public } }, "ask"],
   ["a per-user install into a writable folder", { mode: "CurrentUser", instdir: "D:\\Shared\\Etiuda", tree: { "D:\\Shared": R.open } }, "skip"],
-  ["a path with nothing readable above it", { mode: "all", instdir: "Q:\\Gone\\Etiuda", tree: {} }, "ask"],
+  ["a share whose Domain Users can change it", { mode: "all", instdir: "\\\\files\\apps\\Etiuda",
+    tree: { "\\\\files\\apps": R.domainShare } }, "ask"],
+  ["a share of another domain whose Domain Users can change it", { mode: "all", instdir: "\\\\other\\apps\\Etiuda",
+    tree: { "\\\\other\\apps": R.otherDomain } }, "ask"],
+  ["a domain share only a named group can change", { mode: "all", instdir: "\\\\files\\tools\\Etiuda",
+    tree: { "\\\\files\\tools": R.domainGroup } }, "go"],
+  ["a folder whose permissions cannot be read", { mode: "all", instdir: "D:\\Apps\\Etiuda",
+    tree: { "D:\\Apps": R.locked, "D:\\Apps\\Etiuda": R.unread } }, "unread"],
+  ["an unreadable folder whose parent lets them delete it", { mode: "all", instdir: "D:\\Kept\\Etiuda",
+    tree: { "D:\\Kept": R.deleteChild, "D:\\Kept\\Etiuda": R.unread } }, "ask"],
+  ["a path with nothing readable above it", { mode: "all", instdir: "Q:\\Gone\\Etiuda", tree: {} }, "unread"],
 ];
-const bySid = r => mode => openBySid(r.sddl, mode);
-const byName = lang => r => mode => openByName(r[lang], mode);
+const bySid = r => mode => (r.unreadable ? FROM.unread : openBySid(r.sddl, mode));
+const byName = lang => r => mode => (r.unreadable ? "?" : openByName(r[lang], mode));
 const decide = reader => CASES.map(([name, c]) => [name, leave(c, reader)]);
 const misses = got => got.filter(([name, d], i) => d !== CASES[i][2]).map(([name, d]) => name + " read " + d);
 
@@ -256,10 +295,14 @@ function constantsHeld(text) {
   if (!/IntOp \$8 \$8 & \$\{ETIUDA_CHANGE_MASK\}/.test(got.open) || !/IntOp \$9 \$7 & \$\{ETIUDA_INHERIT_ONLY\}/.test(got.open))
     problems.push("the mask or the flag is not what the entry is read against");
   if (!/GetNamedSecurityInfoW\(w R0, i 1, i 4,/.test(got.open)) problems.push("the DACL is not read as a file's (1) DACL (4)");
+  if (!got.shape) problems.push("Domain Users is not matched by its shape");
+  if (got.domainRid !== 513) problems.push("the Domain Users RID is " + got.domainRid + ", not 513");
+  if (got.unread !== "?" || got.noneAbove !== "?") problems.push("a folder that cannot be read is not told apart");
   return problems;
 }
 check(constantsHeld(NSH).length === 0, "af3 the mask the model reads out of shell/installer/allusers-folder.nsh is the named rights' (0x" + CHANGE_MASK.toString(16)
-  + "), the flag inherit-only, the entry types the allowed ones and the SIDs the four, each compared", constantsHeld(NSH).join("; "));
+  + "), the flag inherit-only, the entry types the allowed ones and the SIDs the four, each compared, Domain Users by its shape"
+  + " with RID 513, and a folder that cannot be read told apart", constantsHeld(NSH).join("; "));
 
 const ROW = ["!ifmacrodef etiudaFolderCheck", "!insertmacro etiudaFolderCheck",
   "!define MUI_PAGE_CUSTOMFUNCTION_LEAVE etiudaFolderLeave", "!endif"];
@@ -312,6 +355,10 @@ const EN_BOX = "This folder, or the one above it, can be changed by people who a
   + " ${PRODUCT_NAME} runs for everyone. Program Files, or a folder they cannot change, is safer. Install here anyway?";
 const PL_BOX = "Ten folder lub folder nad nim mogą zmieniać osoby bez uprawnień administratora, a wraz z nim to, co ${PRODUCT_NAME}"
   + " uruchamia dla wszystkich. Bezpieczniej w Program Files lub w folderze, którego nie mogą zmieniać. Zainstalować mimo to?";
+const EN_UNREAD = "Setup could not tell who can change this folder, or the one above it. Program Files, or a folder only administrators"
+  + " can change, is safer. Install here anyway?";
+const PL_UNREAD = "Nie udało się ustalić, kto może zmieniać ten folder ani folder nad nim. Bezpieczniej w Program Files lub w folderze,"
+  + " który mogą zmieniać tylko administratorzy. Zainstalować mimo to?";
 function asksOnly(text) {
   const problems = [];
   const macro = macroOf(text, "etiudaFolderCheck"), fn = functionOf(macro, "etiudaFolderLeave");
@@ -331,26 +378,30 @@ function asksOnly(text) {
   }
   if (!/\$\{If\} \$2 != "skip"/.test(fn)) problems.push("the reading is not passed over under Program Files");
   const boxes = macro.match(/MessageBox[^\r\n]*/g) || [];
-  if (boxes.length !== 1 || !/^[ \t]*\$\{If\} \$\{Cmd\} `MessageBox MB_YESNO "\$1" \/SD IDYES IDNO`\r?\n\s*StrCpy \$etiudaFolderBack "1"$/m
+  if (boxes.length !== 1 || !/^[ \t]*\$\{If\} \$2 != "0"\r?\n\s*\$\{If\} \$\{Cmd\} `MessageBox MB_YESNO "\$1" \/SD IDYES IDNO`\r?\n\s*StrCpy \$etiudaFolderBack "1"$/m
     .test(fn)) problems.push("the box is not one Yes and No box, silent Yes, whose No alone goes back: " + boxes.join(" | "));
   const refusal = /^\s*(Quit|SetErrorLevel|Delete|RMDir|Rename|CopyFiles|SetOutPath|Exec|ExecWait|ExecShell|nsExec::\S+|Write\w+|DeleteReg\w+)\b/m
     .exec(macro);
   if (refusal) problems.push("it " + refusal[1]);
   const words = [...fn.matchAll(/StrCpy \$1 "([^"]+)"/g)].map(m => m[1]);
-  if (words.join("\n") !== [PL_BOX, EN_BOX].join("\n") || !/\$\{If\} \$LANGUAGE == 1045\r?\n\s*StrCpy \$1 "Ten folder/.test(fn))
-    problems.push("the words are not the copywriter's, Polish under 1045 and English otherwise");
+  if (words.join("\n") !== [PL_BOX, EN_BOX, PL_UNREAD, EN_UNREAD].join("\n")
+    || !/\$\{If\} \$2 == "1"\r?\n\s*\$\{If\} \$LANGUAGE == 1045\r?\n\s*StrCpy \$1 "Ten folder/.test(fn)
+    || !/\$\{ElseIf\} \$2 == "\?"\r?\n\s*\$\{If\} \$LANGUAGE == 1045\r?\n\s*StrCpy \$1 "Nie udało/.test(fn))
+    problems.push("the words are not the copywriter's, the warning where they can change it and the other where it cannot be"
+      + " told, Polish under 1045 and English otherwise");
   return problems;
 }
 check(asksOnly(NSH).length === 0, "af5 the check runs only for an all-users install outside Program Files, never refuses and writes"
-  + " nothing: one Yes and No box, silent default Yes, No staying on the page, the copywriter's words in both languages",
+  + " nothing: one Yes and No box, silent default Yes, No staying on the page, asked where they can change it or where it cannot"
+  + " be told, the copywriter's two sentences in both languages",
   asksOnly(NSH).join("; "));
 
-const ADMIN_EN = "Install for all users into Program Files, or into a folder that neither Users, Authenticated Users, Everyone nor"
-  + " INTERACTIVE (S-1-5-32-545, S-1-5-11, S-1-1-0, S-1-5-4) can write to, and whose parent folder they cannot write to either."
-  + " A silent install gives no warning when this is not so.";
+const ADMIN_EN = "Install for all users into Program Files, or into a folder that neither Users, Authenticated Users, Everyone,"
+  + " INTERACTIVE nor Domain Users (S-1-5-32-545, S-1-5-11, S-1-1-0, S-1-5-4, and the domain's own SID ending -513) can write to,"
+  + " and whose parent folder they cannot write to either. A silent install gives no warning when this is not so.";
 const ADMIN_PL = "Instalację dla wszystkich użytkowników umieszcza się w Program Files albo w folderze, do którego, ani do jego folderu"
-  + " nadrzędnego, nie mogą zapisywać grupy Users, Authenticated Users, Everyone ani INTERACTIVE (S-1-5-32-545, S-1-5-11, S-1-1-0,"
-  + " S-1-5-4). Instalacja w trybie cichym nie ostrzega, gdy tak nie jest.";
+  + " nadrzędnego, nie mogą zapisywać grupy Users, Authenticated Users, Everyone, INTERACTIVE ani Domain Users (S-1-5-32-545,"
+  + " S-1-5-11, S-1-1-0, S-1-5-4 oraz SID domeny zakończony na -513). Instalacja w trybie cichym nie ostrzega, gdy tak nie jest.";
 {
   const problems = [];
   const readme = read("README.md").replace(/\r\n/g, "\n");
@@ -373,14 +424,16 @@ const ADMIN_PL = "Instalację dla wszystkich użytkowników umieszcza się w Pro
       ["the Program Files skip", asksOnly(plant("StrLen $3 $PROGRAMFILES64", "StrLen $3 $PROGRAMFILES32"))],
       ["a Quit", asksOnly(plant("      StrCpy $etiudaFolderBack \"1\"\n", "      StrCpy $etiudaFolderBack \"1\"\n      Quit\n"))],
       ["the mask", constantsHeld(plant("!define ETIUDA_CHANGE_MASK 0x500D0046", "!define ETIUDA_CHANGE_MASK 0x500D0006"))],
+      ["the Domain Users RID", constantsHeld(plant("!define ETIUDA_DOMAIN_USERS_RID 513", "!define ETIUDA_DOMAIN_USERS_RID 512"))],
+      ["the unreadable folder's box", asksOnly(plant("${If} $2 != \"0\"", "${If} $2 == \"1\""))],
     ];
     for (const [what, found] of p) if (!found.length) problems.push(what + " stays green");
     const assisted = fs.readFileSync(path.join(ROOT, "node_modules", "app-builder-lib", "templates", "nsis", "assistedInstaller.nsh"), "utf8")
       .split(/\r?\n/).filter(l => ROW.indexOf(l.trim()) < 0).join("\n");
     if (!patchedPage(assisted).length) problems.push("the template without the row stays green");
   } catch (e) { problems.push(e.message); }
-  check(problems.length === 0, "af7 lifting the all-users condition, the silent default, the No, the Program Files skip, the patch row"
-    + " or the mask, or adding a Quit, turns its leg red", problems.join("; "));
+  check(problems.length === 0, "af7 lifting the all-users condition, the silent default, the No, the Program Files skip, the patch row,"
+    + " the mask, the Domain Users RID or the unreadable folder's box, or adding a Quit, turns its leg red", problems.join("; "));
 }
 
 const EXPECTED = 7;
