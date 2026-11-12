@@ -114,6 +114,9 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   let packed = [];
   try { packed = (await import('@electron/asar')).listPackage(join(DIST, 'linux-unpacked', 'resources', 'app.asar')).map(p => p.replace(/\\/g, '/')); } catch {}
   if (packed.indexOf('/shell/etiuda-tray.png') < 0) bad.push('the asar lacks /shell/etiuda-tray.png, so the desk would have no tray');
+  /* Google's client secret, read back from the package's resources as present or absent, never its value (tools/signin-secret.cjs). */
+  const secret = require('./signin-secret.cjs'), secretSaid = secret.signinSecretSummary(join(DIST, 'linux-unpacked', 'resources'));
+  if (secret.given(process.env) && !/present$/.test(secretSaid)) bad.push(secret.SIGNIN_SECRET_VAR + ' was set and the package says ' + secretSaid);
   const deb = fresh.find(n => n.endsWith('.deb'));
   if (deb) {
     const tree = mkdtempSync(join(tmpdir(), 'etiuda-deb-'));
@@ -131,4 +134,5 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   console.log('npm run package:linux: ' + fresh.join(', ') + ' in ' + DIST + '; ' + Object.keys(wantedFuses()).length
     + ' fuse(s) read back from ' + exe + ' as asked; the .deb carries its AppArmor profile, its .desktop entry, its MIME type'
     + ' and the ' + ask.dictionaries.length + ' pinned dictionary file(s) with their notice');
+  console.log('npm run package:linux: ' + secretSaid);
 }

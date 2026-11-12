@@ -59,6 +59,11 @@ function caretHelper() {
     "-r:System.dll", "-out:" + CARET, path.resolve(__dirname, "shell", "caret.cs")], { stdio: "inherit" });
 }
 
+// GOOGLE'S CLIENT SECRET (tools/signin-secret.cjs): copied into resources only when ETIUDA_GOOGLE_CLIENT_SECRET is set for the
+// packaging command, written by beforePack below; unset, both desks' resources are as before. Its value is never in this tree.
+const signinSecret = require("./tools/signin-secret.cjs");
+const SIGNIN_SECRET = signinSecret.signinSecretResources(process.env, output);
+
 // THE SIGNING HOOK: one route or none, chosen by which variables are set. With none the block is
 // absent and electron-builder packages unsigned, which SmartScreen warns about (spec 11.5). No route
 // holds a secret here: a .pfx's password is WIN_CSC_KEY_PASSWORD, read by electron-builder itself so
@@ -146,7 +151,7 @@ module.exports = {
     // THE GROUP POLICY TEMPLATE goes beside the program as it stands, resources/policy holding etiuda.admx and its
     // en-US and pl-PL etiuda.adml, so an administrator who installs a desk has the template that pins its team folder
     // and its lead's key (sense pass finding 17; tests/join-policy.mjs 19i). Windows only: no other system reads it.
-    extraResources: [{ from: CARET, to: "caret.exe" }, { from: "shell/policy", to: "policy" }, { from: EMBED, to: "embed" }],
+    extraResources: [{ from: CARET, to: "caret.exe" }, { from: "shell/policy", to: "policy" }, { from: EMBED, to: "embed" }, ...SIGNIN_SECRET],
     ...signing,
   },
   // THE LICENCE PAGE IS FOUND BY NAME rather than named here: electron-builder shows one when
@@ -174,7 +179,7 @@ module.exports = {
     desktop: { entry: { StartupWMClass: "etiuda" } },
     // Dictionaries are Linux only: Windows checks spelling with its own checker and fetches nothing (shell/main.js).
     // The model folder is the one the Windows block copies. The shell reads resources/embed once installed.
-    extraResources: [{ from: LINUX_DICTIONARIES, to: "dictionaries" }, { from: EMBED, to: "embed" }],
+    extraResources: [{ from: LINUX_DICTIONARIES, to: "dictionaries" }, { from: EMBED, to: "embed" }, ...SIGNIN_SECRET],
   },
   beforePack: async context => {
     const plat = context.electronPlatformName;
@@ -187,6 +192,7 @@ module.exports = {
       if (!status.applied) throw new Error("NSIS template patches not applied: " + JSON.stringify(status));
     }
     if (plat === "linux" || plat === "win32") {
+      console.log(signinSecret.signinSecretStep(process.env, output));
       const { prepareEmbed } = await import("./tools/model.mjs");
       await prepareEmbed({ dest: EMBED, platform: plat === "linux" ? "linux" : "win32" });
     }
