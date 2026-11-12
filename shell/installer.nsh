@@ -730,6 +730,15 @@ Var etiudaDropRoot
   ${EndIf}
   RMDir /r "$etiudaAside"
   RMDir /r "$etiudaStage"
+  # A stage folder that outlives its removal is another account's, made under a parent anyone may write to and held open: it
+  # is never reused and renamed into place with that account's rights. Nothing of this run's is written yet; retry later.
+  ${If} ${FileExists} "$etiudaStage\*.*"
+  ${OrIf} ${FileExists} "$etiudaStage"
+    DetailPrint `"$etiudaStage" is still there after its removal; the installed copy stays as it was.`
+    !insertmacro etiudaFailBox 1618
+    SetErrorLevel 1618
+    Quit
+  ${EndIf}
   ClearErrors
   CreateDirectory "$etiudaStage"
   ${If} ${Errors}
@@ -905,7 +914,8 @@ Var etiudaDropRoot
 
 # THE OLDER FOLDER, ONCE THE NEW COPY IS REGISTERED: its list is the files this installer has just written (the new
 # folder, walked), and each is deleted there by the same relative name, once, never retried. Folders go only when empty,
-# no RMDir /r, so a person's own file stays, as does anything locked, and the run still ends 0.
+# so a person's own file stays, as does anything locked, and the run still ends 0. Electron's resources and locales trees
+# are the one exception, removed whole where the folder still holds the program (etiudaDropOld).
 # Plain jumps, not LogicLib: a function compiles where it stands, and LogicLib is not yet included where this file is read.
 Function etiudaDropOldFiles
   Exch $R0
@@ -935,11 +945,24 @@ FunctionEnd
 
 !macro etiudaDropOld DIR
   ${If} ${DIR} != ""
+    Push $0
     StrCpy $etiudaDropRoot ${DIR}
+    # A file the older version shipped and this one does not would keep resources and locales, and the folder, for ever: the
+    # two trees go whole where the folder still holds the program, read before the walk deletes it. The folder itself goes
+    # only once empty.
+    StrCpy $0 "0"
+    ${If} ${FileExists} "$etiudaDropRoot\${APP_EXECUTABLE_FILENAME}"
+      StrCpy $0 "1"
+    ${EndIf}
     Push ""
     Call etiudaDropOldFiles
+    ${If} $0 == "1"
+      RMDir /r "$etiudaDropRoot\resources"
+      RMDir /r "$etiudaDropRoot\locales"
+    ${EndIf}
     RMDir "$etiudaDropRoot"
     StrCpy $etiudaDropRoot ""
+    Pop $0
   ${EndIf}
   ClearErrors
 !macroend
@@ -980,6 +1003,10 @@ FunctionEnd
 !include "${BUILD_RESOURCES_DIR}\installer\turning.nsh"
 
 !macro customInit
+  # "/D=C:\Apps\Etiuda\" keeps its backslash: GetDParameter (multiUser.nsh) copies it into $INSTDIR past NSIS's own trim, and
+  # $appExe, the etiuda: command and InstallLocation would carry "\\", which the uninstaller's compare then misses. Trimmed
+  # once here, in .onInit after initMultiUser has read /D, before any page and the install section, silent or not.
+  !insertmacro etiudaTrimSlashes $INSTDIR
   ${IfNot} ${Silent}
     ${IfNot} ${UAC_IsInnerInstance}
       Call RecogniseExistingInstallation
