@@ -9966,7 +9966,7 @@ function pickPage() {
     /* The organisation's order of the strip, after the opening: the strip alone is painted again, so the row under the
        pointer, the scroll and the box stay as the agent left them. */
     if (o.reorder === true) {
-      suggest = Array.isArray(o.suggest) ? o.suggest.filter(s => s && s.id) : [];
+      suggest = (Array.isArray(o.suggest) ? o.suggest : []).filter(s => s && s.id);
       if (sgAt >= suggest.length) sgAt = -1;
       paint(false);
       return;
