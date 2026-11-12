@@ -209,5 +209,9 @@ module.exports = {
     artifactName: "etiuda-${version}-setup.${ext}",
     shortcutName: "Etiuda",
     uninstallDisplayName: "Etiuda",
+    // NO elevate.exe IN THE INSTALL. electron-builder copies it to resources\ for electron-updater's per-machine updates,
+    // and this product has no electron-updater; the all-users route elevates through the UAC plug-in, and the per-user
+    // copy's uninstaller runs through UAC_AsUser_Call (shell/installer.nsh). perMachine true would override this.
+    packElevateHelper: false,
   },
 };
