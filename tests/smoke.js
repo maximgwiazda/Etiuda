@@ -1546,9 +1546,10 @@ const t0 = Date.now();
   const acc = await p.evaluate(async () => {
     const nav = [...document.querySelectorAll("#screenHost [data-sx]")];
     if (nav.length < 2) return { n: nav.length };
-    const general = document.querySelector('#screenHost [data-sx="general"]');
-    /* The tab reopens at the section last shown (the theme leg leaves it at Appearance), and each click redraws the list. */
-    if (general) general.click();
+    /* The name lives in Account since the desk's sign-in became the person's own (Max, 2026-11-12 02:07: the agent name "to
+       Account"). The tab reopens at the section last shown (the theme leg leaves it at Appearance), and each click redraws the list. */
+    const account = document.querySelector('#screenHost [data-sx="account"]');
+    if (account) account.click();
     await new Promise(r => setTimeout(r, 450));
     const hadName = !!document.getElementById("setAgentName");
     document.querySelector('#screenHost [data-sx="appearance"]').click();
@@ -1561,10 +1562,11 @@ const t0 = Date.now();
     await new Promise(r => setTimeout(r, 450));
     return { n: nav.length, hadName, appOn, nameGone, glass,
       genOn: !!document.querySelector('#screenHost [data-sx="general"].on'),
-      nameBack: !!document.getElementById("setAgentName") };
+      nameOnlyInAccount: !document.getElementById("setAgentName") };
   });
-  check(acc.n >= 2 && acc.hadName && acc.appOn && acc.nameGone && acc.glass && acc.genOn && acc.nameBack,
-    "Settings shows one section at a time, and Appearance is the one that holds Blur (" + acc.n + " sections)");
+  check(acc.n >= 2 && acc.hadName && acc.appOn && acc.nameGone && acc.glass && acc.genOn && acc.nameOnlyInAccount,
+    "Settings shows one section at a time: the name in Account and not in General, and Appearance is the one that holds Blur ("
+    + acc.n + " sections)");
   /* WHAT THE SCREEN IS MADE OF, board 452: the sections it holds, in order, and the two rows the
      first of them holds. Read as a list rather than asserted one at a time, so a section
      arriving as well as a section leaving is a failure. A section with no row is left out of
@@ -1577,10 +1579,10 @@ const t0 = Date.now();
              title: h2 ? h2.textContent : "",
              rows: rows.map(r => (r.querySelector("input,select") || {}).id || "").filter(Boolean) };
   });
-  check(setSecs.ids.join(",") === "all,general,appearance,layout,keys,notifications,data,about" && setSecs.title === "General"
-        && setSecs.rows.join(",") === "setAgentName,setUiLang" && setSecs.ids.indexOf("catalog") < 0,
-    "Settings holds All settings, then General, Appearance, Layout, Keyboard shortcuts, Notifications, Data and defaults and About, the name above the"
-    + " language and nothing about catalogs: " + JSON.stringify(setSecs));
+  check(setSecs.ids.join(",") === "all,account,general,appearance,layout,keys,notifications,data,about" && setSecs.title === "General"
+        && setSecs.rows.join(",") === "setUiLang" && setSecs.ids.indexOf("catalog") < 0,
+    "Settings holds All settings, then Account, General, Appearance, Layout, Keyboard shortcuts, Notifications, Data and defaults and About,"
+    + " General holding the language (the name moved to Account) and nothing about catalogs: " + JSON.stringify(setSecs));
   await p.evaluate(() => closeScreenTab("settings")); await sleep(400);
   /* THE LIBRARY'S PAGES. Each section is a page, its fold's summary hidden, so a page whose fold is shut shows its
      title and nothing under it (Max's finding of 2026-11-09). What is asserted is what is on screen after a redraw:

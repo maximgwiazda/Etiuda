@@ -9059,6 +9059,13 @@ const SIGNIN_CLIENT = /^[A-Za-z0-9][A-Za-z0-9._-]{7,199}$/;
 const SIGNIN_FORM_MAX = 16 * 1024, SIGNIN_ANSWER_MAX = 256 * 1024, SIGNIN_TIMEOUT_MS = 30 * 1000, SIGNIN_WAIT_MS = 5 * 60 * 1000;
 const SIGNIN_SKEW_MS = 5 * 60 * 1000;
 function signinKnown(id) { return Object.prototype.hasOwnProperty.call(SIGNIN_PROVIDERS, String(id)) ? SIGNIN_PROVIDERS[String(id)] : null; }
+/* THE SIGN-IN PREVIEW: ETIUDA_SIGNIN_PREVIEW=1, read once at the start and never from the page, an installed desk included, names
+   both providers on the door and in Account, drawn as a preview, while none has a client id; a press is answered "signin-preview"
+   and nothing is opened, sent or written. Where any provider has a client id it changes nothing. */
+const SIGNIN_PREVIEW_ASKED = process.env.ETIUDA_SIGNIN_PREVIEW === "1"; /* plant:preview-asked */
+function signinPreviewing(asked, table) {
+  return (asked === undefined ? SIGNIN_PREVIEW_ASKED : asked) === true && signinOffered(table).length === 0; /* plant:preview-inert */
+}
 /* The providers this desk offers, [{id, clientId}] in the table's order: those `table` configures with a client id. */
 function signinOffered(table) {
   const t = table === undefined ? SIGNIN_PROVIDERS : table;
@@ -9513,9 +9520,10 @@ function signinDoorKept(team, mirror, id) {
 /* What the page is told, no token and nothing from the provider: the providers offered by id, who is signed in by provider, the
    code, the seat ("held", "lapsed" or "none"), when the service last answered and whether the last try reached it. */
 function signinView() {
-  const offered = signinOffered().map(p => p.id), held = signinState().held, now = Date.now();
-  const signedIn = held && offered.indexOf(held.provider) >= 0 ? held.provider : "";
-  return { offered: offered, signedIn: signedIn, code: signedIn ? held.code : "",
+  const real = signinOffered().map(p => p.id), held = signinState().held, now = Date.now(), preview = signinPreviewing();
+  const offered = preview ? Object.keys(SIGNIN_PROVIDERS) : real;
+  const signedIn = held && real.indexOf(held.provider) >= 0 ? held.provider : "";
+  return { offered: offered, preview: preview, signedIn: signedIn, code: signedIn ? held.code : "",
     seat: !signedIn ? "" : held.cert ? (signinLapsed(held, now) ? "lapsed" : "held") : "none",
     at: signedIn ? held.at : 0, reached: !signedIn || held.reached !== false, ask: !!signedIn && held.ask === true,
     refused: signedIn ? held.said : "", busy: signinBusy ? signinBusy.provider : "", said: signinSaid };
@@ -9534,7 +9542,7 @@ function signinPageHtml(ok) {
 function signinIo(run) {
   return {
     listen: (pageFor, takes) => signinListen(http, pageFor, SIGNIN_WAIT_MS, takes).then(l => { run.loop = l; return l; }),
-    openPage: url => signinPageOk(url) ? Promise.resolve(shell.openExternal(url)).then(() => { run.url = url; return true; }) : false, /* plant:signin-open */
+    openPage: url => signinPageOk(url) ? Promise.resolve(handOut(url)).then(() => { run.url = url; return true; }) : false, /* plant:signin-open */
     tokenAsk: (url, form) => signinRequest((u, init) => net.fetch(u, init), url, form),
     serviceAsk: (url, body) => signinServiceAsk((u, init) => net.fetch(u, init), url, body),
     sign: signinSign,
@@ -9569,6 +9577,7 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
   signinClick = null;
   if (!c || c.provider !== id || Date.now() - c.at > LINK_CLICK_MS || signinBusy) return signinView(); /* plant:signin-click */
   const p = signinOffered().find(x => x.id === id), me = p ? branchIdentity(true) : null;
+  if (!p && signinPreviewing() && signinKnown(id)) { signinSaid = "signin-preview"; tellSignin(); return signinView(); } /* plant:preview-press */
   if (!p || !me || !net || typeof net.fetch !== "function") { signinSaid = "signin-none"; return signinView(); } /* plant:signin-offered */
   const run = { loop: null, provider: p.id, url: "" }, io = signinIo(run);
   signinBusy = run;
@@ -9592,7 +9601,7 @@ ipcMain.handle("etiuda:signin-again", (e) => {
   if (!fromEngine(e)) return false;
   const run = signinBusy;
   if (!run || !run.url || !signinPageOk(run.url)) return false; /* plant:again-page */
-  shell.openExternal(run.url);
+  handOut(run.url);
   return true;
 });
 /* Cancel closes the loopback, and the sign-in ends as cancelled. */
@@ -9681,6 +9690,11 @@ ipcMain.on("etiuda:link-click", (e, url) => {
   try { if (fromEngine(e)) linkClicked = { href: new URL(String(url)).href, at: Date.now() }; }
   catch { linkClicked = null; }
 });
+/* THE ONE WAY OUT OF THE SHELL: every web address the desk hands to the system's browser passes through this one call, a clicked
+   link (openExternally, below) and the provider's page a sign-in opens, first and again, alike, each behind its own
+   guard. A lab replaces this single call, so a test's press never reaches the real browser (tests/links.js, the test
+   architect's floor of 2026-10-28). */
+function handOut(url) { return shell.openExternal(url); }
 function openExternally(url) {
   try {
     const u = new URL(url), c = linkClicked;
@@ -9690,7 +9704,7 @@ function openExternally(url) {
       return;
     }
     linkClicked = null;
-    shell.openExternal(url);
+    handOut(url);
   } catch { /* not a URL this shell can open, and the navigation is refused either way */ }
 }
 

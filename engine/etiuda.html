@@ -1346,7 +1346,9 @@ body.pills-off.pills-peek .pills-slot{display:block}
 .sgn-say.calm b{font-weight:400;font-size:13.5px}
 .sgn-wait{font-size:13.5px;color:var(--dim);margin-top:4px}
 .sgn-run{position:relative;height:2px;width:100%;background:var(--line);border-radius:2px;overflow:hidden;margin-top:8px}
-.sgn-run::after{content:"";position:absolute;top:0;bottom:0;left:0;width:34%;background:var(--accent);border-radius:2px;animation:sgnRun 1.6s ease-in-out infinite}
+/* The bar runs while a sign-in waits for the browser, and that wait ends by itself at SIGNIN_WAIT_MS (five minutes, shell/main.js):
+   150 passes of the nudge tier's 2 s are those five minutes, so it rests when the wait does, on a tier, and the switch stills it. */
+.sgn-run::after{content:"";position:absolute;top:0;bottom:0;left:0;width:34%;background:var(--accent);border-radius:2px;animation:sgnRun var(--m-nudge) ease-in-out 150}
 @keyframes sgnRun{from{transform:translateX(-100%)}to{transform:translateX(300%)}}
 html.e-still .sgn-run::after{animation:none;transform:translateX(80%)}
 .sgn-acts{display:flex;gap:8px;flex-wrap:wrap}
@@ -1359,6 +1361,8 @@ html.e-still .sgn-run::after{animation:none;transform:translateX(80%)}
 :root[data-theme=dark] .sgn-p.microsoft{background:#2f2f2f;border-color:#2f2f2f;color:#fff}
 :root[data-theme=dark] .sgn-p.google{background:#131314;border-color:#8e918f;color:#e3e3e3}
 .sgn-cap{font-size:12.5px;line-height:1.45;color:var(--dim);margin:10px 0 0;max-width:36em}
+/* The sign-in preview's line (src/modules/signin.js signinPreviewHtml), in the ink's colour and weight. */
+.sgn-cap.sgn-preview{color:var(--ink);font-weight:600}
 .sgn-ft{font-size:12px;line-height:1.4;color:var(--dim);margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line)}
 .sgn-code{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 12px;margin-top:10px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
 .sgn-code code,.sgn-mono{font:600 14.5px var(--mono);letter-spacing:.04em;color:var(--ink);white-space:nowrap}
@@ -8769,6 +8773,8 @@ What you type stays in this browser only.`;
     "The sign-in service cannot be reached just now. Etiuda keeps working with the catalog it has.": "Usługa logowania jest teraz nieosiągalna. Etiuda działa dalej na katalogu, który już ma.",
     "Use another account": "Użyj innego konta",
     "Not signed in": "Bez logowania",
+    "Preview only. Sign-in is not set up yet, so nothing here is sent.": "Tylko podgląd. Logowanie nie jest jeszcze uruchomione, więc nic stąd nie zostanie wysłane.",
+    "Sign-in is not set up yet, so nothing was sent. This is a preview.": "Logowanie nie jest jeszcze uruchomione, więc nic nie wysłano. To tylko podgląd.",
     "Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.": "Logowanie przenosi na ten komputer miejsce w licencji i zespół, który przyjął to konto. Etiuda do użytku prywatnego, poza pracą, nie wymaga logowania.",
     "Led by {LEAD}": "Prowadzi {LEAD}",
     "No team yet": "Jeszcze bez zespołu",
@@ -26173,7 +26179,8 @@ What you type stays in this browser only.`;
       ask: o.ask === true,
       refused: typeof o.refused === "string" ? o.refused : "",
       busy: known(o.busy) ? o.busy : "",
-      said: typeof o.said === "string" ? o.said : ""
+      said: typeof o.said === "string" ? o.said : "",
+      preview: o.preview === true && Array.isArray(o.offered) && o.offered.some(known)
     };
   }
   var signinV = signinRead(null);
@@ -26244,12 +26251,19 @@ What you type stays in this browser only.`;
         return [t("This desk's seat is due for renewal."), t("It renews by itself the next time the sign-in service answers. Everything on this desk works as before.")];
       case "ask":
         return [t("This desk could not renew its sign-in by itself."), t("Signing in again below picks up where it stopped. Meanwhile everything on this desk works as before.")];
+      case "signin-preview":
+        return [t("Sign-in is not set up yet, so nothing was sent. This is a preview."), ""];
       default:
         return [t("The sign-in did not finish."), t("Nothing changed, and signing in can be tried again.")];
     }
   }
-  var FAIL_FIRST = ["unreached", "signin-unreached", "signin-timeout", "signin-browser", "signin-notallowed", "desks", "token", "signin", "signin-refused", "signin-token", "signin-unbound", "signin-state", "signin-none"];
+  var FAIL_FIRST = ["unreached", "signin-unreached", "signin-timeout", "signin-browser", "signin-notallowed", "desks", "token", "signin", "signin-refused", "signin-token", "signin-unbound", "signin-state", "signin-none", "signin-preview"];
   function signinDoor(v) {
+    const d = signinDoorOf(v);
+    if (d && v.preview) d.preview = t("Preview only. Sign-in is not set up yet, so nothing here is sent.");
+    return d;
+  }
+  function signinDoorOf(v) {
     if (!signinShown(v)) return null;
     const p = signinParts(v), acct = { act: "account", label: t("Account settings") };
     const ident = { initial: p.initial, name: p.name || (SIGNIN_NAMES[v.signedIn] || ""), sub: p.sub, off: p.off };
@@ -26331,8 +26345,12 @@ What you type stays in this browser only.`;
   function signinActsHtml(acts) {
     return '<div class="sgn-acts">' + acts.map((a) => '<button type="button" class="btn' + (a.solid ? " primary" : "") + '" data-signin-act="' + esc(a.act) + '">' + esc(a.label) + "</button>").join("") + "</div>";
   }
+  function signinPreviewHtml(v) {
+    return v && v.preview ? '<p class="sgn-cap sgn-preview" data-signin-preview>' + esc(t("Preview only. Sign-in is not set up yet, so nothing here is sent.")) + "</p>" : "";
+  }
   function signinPanelHtml(d) {
     let h = "";
+    if (d.preview) h += signinPreviewHtml({ preview: true });
     if (d.ident) h += signinIdentHtml(d.ident);
     if (d.heading) h += "<h4>" + esc(d.heading) + "</h4>";
     if (d.line) h += '<p class="sgn-lede">' + esc(d.line) + "</p>";
@@ -35676,7 +35694,7 @@ What you type stays in this browser only.`;
         initial: "",
         name: t("Finish signing in in the browser"),
         sub: t("The browser has opened {PROVIDER}'s sign-in page. Etiuda waits here and carries on by itself when you come back.").split("{PROVIDER}").join(prov)
-      }) + '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="again">' + esc(t("Open the browser again")) + '</button><button type="button" class="btn" data-signin-act="stop">' + esc(t("Cancel")) + "</button></span>";
+      }) + '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="again">' + esc(t("Open the browser again")) + '</button><button type="button" class="btn" data-signin-act="stop">' + esc(t("Cancel")) + "</button></span>" + signinPreviewHtml(v);
       return h + "</div>";
     }
     const failed = v.said && v.said !== "signin-done" && v.said !== "signin-cancelled" && !v.signedIn;
@@ -35688,7 +35706,7 @@ What you type stays in this browser only.`;
       name: t("Not signed in"),
       sub: t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.")
     });
-    h += "<div>" + signinProvidersHtml(v.offered, true) + '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + '</p><p class="sgn-cap">' + esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account.")) + "</p></div>";
+    h += "<div>" + signinPreviewHtml(v) + signinProvidersHtml(v.offered, true) + '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + '</p><p class="sgn-cap">' + esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account.")) + "</p></div>";
     if (choosing && v.signedIn) h += '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">' + esc(t("Cancel")) + "</button></span>";
     return h + "</div>";
   }
