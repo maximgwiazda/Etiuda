@@ -7493,6 +7493,50 @@ if (require.main === module) {
       + Object.keys(cfg).map(k => k + " " + cfg[k]).join(", "));
   } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
+  section("[2g/5] the licence page denies nothing the code does");
+  try {
+    /* Each denial below stands against a fact read from the code, and a fact not found where this reads it refuses
+       rather than passes. While the relay exists, both pages also name it, its sealing and the EU. */
+    const root = path.join(__dirname, "..");
+    const main = fs.readFileSync(path.join(root, "shell", "main.js"), "utf8");
+    const cfg = fs.readFileSync(path.join(root, "electron-builder.js"), "utf8");
+    const facts = {
+      relay: /const BUILTIN_RELAY_URL = "https:\/\/etiuda\.dev\/relay\/v1"/.test(main),
+      licence: /"https:\/\/etiuda\.dev\/licence\/v1\//.test(main),
+      caret: /to:\s*"caret\.exe"/.test(cfg),
+      clipboard: /clipboard\.readText\(/.test(main),
+    };
+    const DENY = [
+      ["relay", /\bno network (request|call|connection|access)|makes no (network )?connection|(never|does not|doesn't) (connect|contact)s?\b|works (entirely |fully )?offline|(asks|sends) (anything|nothing) over a network/i],
+      ["relay", /bez (połączenia z |dostępu do )?(sieci|internetu)|nie łączy się|nie (nawiązuje|wykonuje|wysyła) żadnych (połączeń|zapytań)|przez sieć o nic|działa (całkowicie |wyłącznie )?offline/i],
+      ["licence", /no (online )?licen[cs]e (check|call|service)|checks no licen[cs]e/i],
+      ["licence", /nie sprawdza (żadnej )?licencji|bez (sprawdzania|kontroli) licencji/i],
+      ["caret", /no (other |background )?(helper|executable)|nothing else runs/i],
+      ["caret", /programów pomocniczych|programu pomocniczego|nie uruchamia (żadnych )?innych programów/i],
+      ["clipboard", /(never|does not|doesn't) reads? the clipboard|only writes? (to )?the clipboard/i],
+      ["clipboard", /nie (czyta|odczytuje) schowka|do schowka tylko zapisuje/i],
+    ];
+    const NAME = { en: [/\brelay\b/i, /\bsealed\b/i, /European Union/], pl: [/przekaźnik/i, /zapieczętowan/i, /Unii Europejskiej/] };
+    const said = (text, lang) => DENY.filter(([f, re]) => facts[f] && re.test(text)).map(([f, re]) => f + " denied (" + text.match(re)[0] + ")")
+      .concat(facts.relay ? NAME[lang].filter(re => !re.test(text)).map(re => "the relay's " + re.source + " not named") : []);
+    const bad = Object.keys(facts).filter(f => !facts[f]).map(f => "the code fact " + f + " is not where this check reads it");
+    const pages = { en: fs.readFileSync(path.join(root, "shell", "license_en.txt"), "utf8"),
+                    pl: fs.readFileSync(path.join(root, "shell", "license_pl.txt"), "utf8") };
+    ["en", "pl"].forEach(l => said(pages[l], l).forEach(x => bad.push("license_" + l + ".txt: " + x)));
+    /* The control, on a clean sentence: it passes, and one planted denial in each language and the relay struck are each found. */
+    const CLEAN = { en: "Files pass through the relay sealed and are stored in the European Union.",
+                    pl: "Pliki przechodzą przez przekaźnik zapieczętowane i są przechowywane w Unii Europejskiej." };
+    const planted = [said(CLEAN.en, "en").length, said(CLEAN.pl, "pl").length,
+                     said(CLEAN.en + " The program makes no network connection.", "en").length,
+                     said(CLEAN.pl + " Program nie łączy się z siecią.", "pl").length,
+                     said(CLEAN.en.replace(/relay/gi, "service"), "en").length];
+    if (planted.join() !== "0,0,1,1,1") bad.push("the control reads " + planted.join() + ", not 0,0,1,1,1");
+    bad.forEach(x => console.error("  ERROR: " + x));
+    if (bad.length) hardFail++;
+    else console.log("  both licence pages deny none of " + Object.keys(facts).join(", ")
+      + " and name the relay, its sealing and the EU; a planted denial in each language and the relay struck are each found");
+  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
+
   section("[3/5] stacking invariants");
   try {
     const s = checkStacking();
