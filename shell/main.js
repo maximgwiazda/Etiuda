@@ -8135,17 +8135,31 @@ ipcMain.on("etiuda:window", (e, act) => {
 const CLOSE_WAIT_MS = 1500;
 let quitting = false;
 let quitDrained = false;
+/* The longest a quit waits for a folder team's share to take what the outbox owes, as Studio's FOLDER_QUIT_MS. */
+const FOLDER_QUIT_MS = 2000;
+/* A quit drains the writes still running, then gives the folder syncers up to FOLDER_QUIT_MS to send what their outbox owes
+   (the close-time statistics just flushed among it), and only then stops them: a syncer stopped first left that owed until
+   the desk's next start (Argon's folder-as-built review, finding 7, the desk's half). Whatever is not sent stays owed on disk. */
 app.on("before-quit", (e) => {
   quitting = true;
   try { flushHeldStats(); } catch { /* the last sealed answer stays */ }
-  try { FolderSyncer().stopAllFolderSyncers(); } catch {}
-  if (!quitDrained && activeWrites.size > 0) {
+  if (quitDrained) { try { FolderSyncer().stopAllFolderSyncers(); } catch {} return; }
+  let owes = false;
+  try { owes = !!folderSyncerLayer && folderSyncerLayer.folderSyncersOwe(); } catch { owes = false; }
+  if (activeWrites.size > 0 || owes) {
     if (e && typeof e.preventDefault === "function") e.preventDefault();
-    drainWrites(WRITE_DRAIN_BOUND_MS).finally(() => {
+    drainWrites(WRITE_DRAIN_BOUND_MS).then(() => {
+      let flushing = Promise.resolve(true);
+      flushing = FolderSyncer().flushFolderSyncers(FOLDER_QUIT_MS); /* plant:quit-flush-folders */
+      return flushing;
+    }).catch(() => {}).finally(() => {
+      try { FolderSyncer().stopAllFolderSyncers(); } catch {}
       quitDrained = true;
       app.quit();
     });
+    return;
   }
+  try { FolderSyncer().stopAllFolderSyncers(); } catch {}
 });
 /* Quit on close is the desk key eQuitOnClose === "1". Absent, the window stays in the tray. */
 const QUIT_ON_CLOSE_KEY = "eQuitOnClose";

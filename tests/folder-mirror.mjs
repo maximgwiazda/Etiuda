@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 109;
+const EXPECTED = 111;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
@@ -59,7 +59,7 @@ fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true }
 function getShellSrc() {
   return fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 }
-const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder", "writeBranch", "branchDest", "branchIdentity", "deskRows", "settleFolder", "rawCatalogFolder", "sharedFolderForWrite", "folderSyncerRun", "heedTeam", "readAskFile", "checkInviteRefusal", "tryCatalogAsk", "teamKeyAt", "readDesk", "deskTrustChecks", "resumeFromSleep", "folderAnswers", "folderTeamHere", "awaitFolderPrime", "folderMirrorHere", "watchedFolder", "createWindow", "signedSha", "askSignedBytes", "sealAnswerLead"];
+const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName", "readRing", "catalogFolder", "writeBranch", "branchDest", "branchIdentity", "deskRows", "settleFolder", "rawCatalogFolder", "sharedFolderForWrite", "folderSyncerRun", "heedTeam", "readAskFile", "checkInviteRefusal", "tryCatalogAsk", "teamKeyAt", "readDesk", "deskTrustChecks", "resumeFromSleep", "folderAnswers", "folderTeamHere", "awaitFolderPrime", "folderMirrorHere", "watchedFolder", "createWindow", "signedSha", "askSignedBytes", "sealAnswerLead", "writeReplacing"];
 const noop = () => {};
 const inert = new Proxy(function () {}, {
   get: (target, prop) => {
@@ -74,7 +74,7 @@ const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
 const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
 
 function loadDesk(ud, overrides = {}) {
-  const said = [], on = {}, invoke = [], openedPaths = [], dialogOpts = [];
+  const said = [], on = {}, invoke = [], openedPaths = [], dialogOpts = [], appOn = {};
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop };
   const safeStorage = {
     isEncryptionAvailable: () => true,
@@ -84,7 +84,7 @@ function loadDesk(ud, overrides = {}) {
   const shell = { openPath: async p => { openedPaths.push(p); return ""; } };
   const dialog = { showOpenDialog: async opts => { dialogOpts.push(opts); return { canceled: false, filePaths: [opts && opts.defaultPath] }; } };
   const electron = {
-    app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop, getVersion: () => "0.0.0",
+    app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: (ev, fn) => { appOn[ev] = fn; }, getVersion: () => "0.0.0",
            whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
     ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
     BrowserWindow: inert, Menu: inert, dialog, net: inert, protocol: inert, session: inert, shell,
@@ -98,7 +98,7 @@ function loadDesk(ud, overrides = {}) {
   const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
   const ipc = (ch, ...args) => { const e = eventFor(); on[ch](e, ...args); return e.returnValue; };
   const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
-  return { api, ask, ipc, on, invoke, said, ud, envelope, electron, openedPaths, dialogOpts };
+  return { api, ask, ipc, on, invoke, said, ud, envelope, electron, openedPaths, dialogOpts, appOn };
 }
 
 function newDesk(name, folder, extraKeys = {}) {
@@ -3489,6 +3489,61 @@ async function run() {
     });
     if (r) check(r.ok, "45r lifting plant:syncer-ask-withdrawn answers the returned ask on a folder team: " + JSON.stringify(r));
     else skip("45r lifting plant:syncer-ask-withdrawn answers the returned ask on a folder team");
+  }
+
+  /* 47: THE DESK'S LAST WRITE REACHES THE SHARE AT QUIT (Argon's folder-as-built review, finding 7, the desk's half; board
+     955 item 7). A quit flushes the close-time statistics into the mirror, and the outbox owes them to the share; a quit that
+     stops the syncer at once leaves them owed until that desk's next start, so the lead's figures miss the day's last hours.
+     The leg writes a desk's statistics file into the mirror as the shell does (writeReplacing, which owes it), quits through
+     the shell's own before-quit, and reads the share. */
+  async function quitScene(name, src) {
+    const share = folder(name + "-share");
+    const T = "t-" + crypto.randomBytes(8).toString("hex");
+    const tmp = path.join(share, "etiuda-team.json.tmp");
+    fs.writeFileSync(tmp, JSON.stringify(teamFile({ team: T, epoch: 1, rev: 1 })), "utf8");
+    fs.renameSync(tmp, path.join(share, "etiuda-team.json"));
+    const ud = folder(name + "-desk");
+    const env = { kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" }, teamPins: { [T]: LEAD }, teamShown: { [T]: { lead: "Lead", folder: share } } };
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(env), "utf8");
+    const d = loadDesk(ud, src ? { src } : {});
+    const s = d.api.folderSyncerRun(null);
+    const out = { s: !!s };
+    if (!s) return out;
+    const mirror = path.join(ud, "folder-mirror", T);
+    try {
+      let until = Date.now() + 15000;
+      while (!fs.existsSync(path.join(mirror, "etiuda-team.json")) && Date.now() < until) await sleep(50);
+      out.primed = fs.existsSync(path.join(mirror, "etiuda-team.json"));
+      const rel = path.join("desks", "k-0123456789abcdef", "stats.estat");
+      fs.mkdirSync(path.dirname(path.join(mirror, rel)), { recursive: true });
+      d.api.writeReplacing(path.join(mirror, rel), "{\"close\":true}\n");
+      let prevented = false;
+      (d.appOn["before-quit"] || noop)({ preventDefault() { prevented = true; } });
+      out.prevented = prevented;
+      until = Date.now() + 4000;
+      while (!fs.existsSync(path.join(share, rel)) && Date.now() < until) await sleep(50);
+      out.onShare = fs.existsSync(path.join(share, rel));
+      until = Date.now() + 4000;
+      while (!s.stopped && Date.now() < until) await sleep(50);
+      out.stopped = s.stopped === true;
+    } finally {
+      try { s.stop(); } catch {}
+    }
+    return out;
+  }
+  {
+    const r = await quitScene("quit-flush");
+    check(r.s && r.primed && r.onShare && r.prevented && r.stopped,
+      "47a a quit waits for the outbox: the desk's statistics written into the mirror at close are on the share before the syncer"
+      + " stops, and the quit is held for it: " + JSON.stringify(r));
+  }
+  {
+    const r = PLANTS_OFF ? null : await testPlant("quit-flush-folders", mainFile, async (scratchMain) => {
+      const res = await quitScene("plant-quit-flush", fs.readFileSync(scratchMain, "utf8"));
+      return res.s && res.primed && !res.onShare;
+    });
+    if (r) check(r.ok, "47b lifting plant:quit-flush-folders stops the syncer with the statistics still owed: " + JSON.stringify(r));
+    else skip("47b lifting plant:quit-flush-folders stops the syncer with the statistics still owed");
   }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {
