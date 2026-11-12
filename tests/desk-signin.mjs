@@ -742,7 +742,7 @@ CASES.doorPage = async () => {
     && /\n  "A team on this licence":"Zespół w tej licencji",/.test(L) && /\n  "Ask to join":"Poproś o dołączenie",/.test(L) && !/\n  "Join":/.test(L)
     && /\n  "This licence has a team on the relay\. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation\.":"[^"]+",/.test(L)
     /* No placeholder left on the door's own lines; another feature's (the sign-in lab's "Lab") is not this case's. */
-    && !PAGE.split("\n").some(l => /placeholder: Claudette/.test(l) && /door/i.test(l)) && /signinDoorsHtml\(v\.doors\)/.test(SETTINGS) && /signinDoor: \(n\) => ipcRenderer\.invoke\("etiuda:signin-door", n\)/.test(PRELOAD)
+    && !PAGE.split("\n").some(l => /placeholder: Claudette/.test(l) && !/^const SIGNIN_NAMES=/.test(l.trim())) && /signinDoorsHtml\(v\.doors\)/.test(SETTINGS) && /signinDoor: \(n\) => ipcRenderer\.invoke\("etiuda:signin-door", n\)/.test(PRELOAD)
     && /if\(act==="door"\)\{[\s\S]{0,200}signinCall\("signinDoor", n\)/.test(PAGE);
 };
 /* A press the shell refused at the door ({refused: "door"}: the door no longer offered, or this desk already in a team) is said
