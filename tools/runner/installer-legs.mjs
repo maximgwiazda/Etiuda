@@ -815,12 +815,15 @@ async function tsCycle(rec) {
         + ", the row says " + JSON.stringify(shown) + " (want " + JSON.stringify(wantName) + "), its shortcuts to it " + yes(linksOk)
         + ", the other build's shortcuts left " + strayLinks.length };
   };
-  /* One start of the installed program as this account, with no argument, stopped by pid once `done` holds or 90 s pass. */
+  /* One start of the installed program as this account, stopped by pid once `done` holds or 90 s pass. Its user-data folder is
+     named, as the one Electron picks for this package by its own rule (%APPDATA%\<package name>), because the launch door refuses
+     a start that leaves it to the machine (first ts-cycle run with the config in place, 2026-11-13). */
   const start = async (prog, tag, done) => {
     const opts = { stdio: "ignore", windowsHide: true, env: E.offscreenEnv({}) };
-    const no = E.shellLaunchRefusal(WHO, [], opts);
+    const args = ["--user-data-dir=" + ud];
+    const no = E.shellLaunchRefusal(WHO, args, opts);
     if (no) throw new NoVerdict("the start is refused: " + no[0]);
-    const child = E.shellLaunch(WHO, prog, [], opts);
+    const child = E.shellLaunch(WHO, prog, args, opts);
     let gone = false;
     child.on("exit", () => { gone = true; });
     let held = false, s = -1;
