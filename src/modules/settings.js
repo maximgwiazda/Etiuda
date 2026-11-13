@@ -267,8 +267,6 @@ function accountCardHtml(v){
     let h='<div class="sgn-top"><div class="sgn-top-row">'+signinIdentHtml({initial:p.initial, name:p.name, sub:p.sub, off:p.off})
       +'<span class="sgn-acts"><button type="button" class="btn" data-signin-act="another">'+esc(t("Use another account"))+'</button>'
       +'<button type="button" class="btn" data-signin-act="out">'+esc(t("Sign out"))+'</button></span></div>';
-    /* Where the system seals nothing for real (shell/main.js signinKeep), no refresh token is kept, and the next renewal asks. */
-    if(!v.keeps) h+='<p class="sgn-cap" data-signin-unkept>'+esc(t("No keyring is open on this computer, so the sign-in is not kept: each renewal asks for it again."))+'</p>';
     if(v.ask){ const s=signinSay("ask", v); h+='<p class="sgn-say"><b>'+esc(s[0])+'</b><span>'+esc(s[1])+'</span></p>'+signinProvidersHtml(v.offered, true); }
     h+='<p class="sgn-ft">'+esc(t("Signing out ends this computer's sign-in and frees its place among the account's three; the seat stays the account's. The team's catalog and personal cards stay on the computer."))+'</p>';
     return h+'</div>';

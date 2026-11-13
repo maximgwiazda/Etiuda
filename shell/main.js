@@ -9880,9 +9880,12 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
   const id = String(provider || ""), c = signinClick;
   signinClick = null;
   if (!c || c.provider !== id || Date.now() - c.at > LINK_CLICK_MS || signinBusy) return signinView(); /* plant:signin-click */
-  const p = signinOffered().find(x => x.id === id), me = p ? branchIdentity(true) : null;
+  const p = signinOffered().find(x => x.id === id);
   if (!p && signinPreviewing() && signinKnown(id)) { signinSaid = "signin-preview"; tellSignin(); return signinView(); } /* plant:preview-press */
-  if (!p || !me || !net || typeof net.fetch !== "function") { signinSaid = "signin-none"; return signinView(); } /* plant:signin-offered */
+  if (!p || !net || typeof net.fetch !== "function") { signinSaid = "signin-none"; return signinView(); } /* plant:signin-offered */
+  if (!sealsForReal(safeStorage, process.platform)) { signinSaid = "signin-keyring"; tellSignin(); return signinView(); } /* plant:signin-keyring */
+  const me = branchIdentity(true);
+  if (!me) { signinSaid = "signin-none"; return signinView(); }
   const run = { loop: null, provider: p.id, url: "" }, io = signinIo(run);
   signinBusy = run;
   signinSaid = "";

@@ -8813,8 +8813,8 @@ What you type stays in this browser only.`;
     "Copied": "Skopiowano",
     "Browser did not open?": "Przeglądarka się nie otworzyła?",
     "Paste this link into a browser on this computer.": "Łącze można wkleić w przeglądarkę na tym komputerze.",
-    "No keyring is open on this computer, so the sign-in is not kept: each renewal asks for it again.": "Na tym komputerze nie jest otwarty żaden magazyn kluczy, więc logowanie nie jest zachowywane: każde odnowienie wymaga ponownego logowania.",
-    // placeholder: Claudette
+    "Signing in needs a keyring, and none is open on this computer.": "Logowanie wymaga magazynu kluczy, a na tym komputerze żaden nie jest otwarty.",
+    "Installing or unlocking GNOME Keyring or KDE Wallet, then reopening Etiuda, lets this computer sign in.": "Po zainstalowaniu lub odblokowaniu GNOME Keyring albo Portfela KDE i ponownym otwarciu Etiudy ten komputer będzie mógł się zalogować.",
     "Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.": "Logowanie przenosi na ten komputer miejsce w licencji i zespół, który przyjął to konto. Etiuda do użytku prywatnego, poza pracą, nie wymaga logowania.",
     "Led by {LEAD}": "Prowadzi {LEAD}",
     "No team yet": "Jeszcze bez zespołu",
@@ -26315,6 +26315,8 @@ What you type stays in this browser only.`;
         return [t("Sign-in is not set up yet, so nothing was sent. This is a preview."), ""];
       case "door":
         return [t("This team is no longer offered here, or this computer is already in a team, so nothing was sent."), ""];
+      case "signin-keyring":
+        return [t("Signing in needs a keyring, and none is open on this computer."), t("Installing or unlocking GNOME Keyring or KDE Wallet, then reopening Etiuda, lets this computer sign in.")];
       default:
         return [t("The sign-in did not finish."), t("Nothing changed, and signing in can be tried again.")];
     }
@@ -26322,7 +26324,7 @@ What you type stays in this browser only.`;
   function signinNoSeat(v) {
     return v.refused === "waiting" || v.refused === "full";
   }
-  var FAIL_FIRST = ["unreached", "signin-unreached", "signin-timeout", "signin-browser", "signin-notallowed", "desks", "token", "signin", "signin-refused", "signin-token", "signin-unbound", "signin-state", "signin-none", "signin-preview"];
+  var FAIL_FIRST = ["unreached", "signin-unreached", "signin-timeout", "signin-browser", "signin-notallowed", "desks", "token", "signin", "signin-refused", "signin-token", "signin-unbound", "signin-state", "signin-none", "signin-preview", "signin-keyring"];
   function signinDoor(v) {
     const d = signinDoorOf(v);
     if (d && v.signedIn && signinDoorRefused) {
@@ -35806,7 +35808,6 @@ What you type stays in this browser only.`;
     const p = signinParts(v), choosing = signinChoosingNow();
     if (v.signedIn && !choosing) {
       let h2 = '<div class="sgn-top"><div class="sgn-top-row">' + signinIdentHtml({ initial: p.initial, name: p.name, sub: p.sub, off: p.off }) + '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="another">' + esc(t("Use another account")) + '</button><button type="button" class="btn" data-signin-act="out">' + esc(t("Sign out")) + "</button></span></div>";
-      if (!v.keeps) h2 += '<p class="sgn-cap" data-signin-unkept>' + esc(t("No keyring is open on this computer, so the sign-in is not kept: each renewal asks for it again.")) + "</p>";
       if (v.ask) {
         const s = signinSay("ask", v);
         h2 += '<p class="sgn-say"><b>' + esc(s[0]) + "</b><span>" + esc(s[1]) + "</span></p>" + signinProvidersHtml(v.offered, true);
