@@ -2249,6 +2249,12 @@ Module.prototype._compile = function (content, filename) {
     fs.mkdirSync(path.dirname(cli), { recursive: true });
     fs.writeFileSync(cli, ['const fs = require("fs"), names = ' + JSON.stringify(VARS) + ".map(n => n.toUpperCase());",
       "fs.writeFileSync(" + JSON.stringify(rec) + ", JSON.stringify(Object.keys(process.env).filter(k => names.indexOf(k.toUpperCase()) > -1)));", ""].join("\n"));
+    /* tests/update-install.js builds through tools/package.mjs --test-identity since 37e4a612 (the pack step makes turning.7z and
+       applies the NSIS patches), so the lab carries a stub of that script too, recording as the CLI's stub does: the build a caller
+       starts is what must be handed no signing variable. 35f holds that tools/package.mjs adds none on its way to electron-builder. */
+    fs.mkdirSync(path.join(lab, "tools"), { recursive: true });
+    fs.writeFileSync(path.join(lab, "tools", "package.mjs"), ['import fs from "node:fs";', "const names = " + JSON.stringify(VARS) + ".map(n => n.toUpperCase());",
+      "fs.writeFileSync(" + JSON.stringify(rec) + ", JSON.stringify(Object.keys(process.env).filter(k => names.indexOf(k.toUpperCase()) > -1)));", ""].join("\n"));
     const realExec = require("child_process").execFileSync;
     const exec = (cmd, args, opts) => realExec(cmd, args, Object.assign({}, opts, { stdio: "ignore" }));
     const fakeE = () => Object.assign({}, E, { ROOT: lab, refuse: m => { throw new Error(m); } });
@@ -2287,6 +2293,12 @@ Module.prototype._compile = function (content, filename) {
     delete process.env.ETIUDA_SETUP_EXE;
     ok(given.length === 2 && given.every(g => g[1] === null),
        "35e and a launch handed ETIUDA_SETUP_EXE builds nothing, so it reaches no CLI at all: " + given.map(g => g[0].replace("tests/", "") + " " + (g[1] === null ? "built nothing" : JSON.stringify(g[1]))).join(", "));
+    /* 35g: tools/package.mjs, the build tests/update-install.js starts (35c's stub stands in for it), hands electron-builder the
+       environment it was given and names no signing variable of its own, by the text of the script. */
+    const packText = fs.readFileSync(path.join(E.ROOT, "tools", "package.mjs"), "utf8").toUpperCase();
+    const packNames = VARS.filter(v => packText.indexOf(v.toUpperCase()) > -1);
+    ok(packNames.length === 0, "35g and tools/package.mjs, the build update-install.js starts, names none of the " + VARS.length
+       + " signing variables, so it adds none on its way to electron-builder: " + (packNames.length ? "names " + packNames.join(", ") : "none named"));
 
     /* One list, and the release keeps its own environment (text, since the release runs whole gates). */
     const listed = ["tests", "tools"].flatMap(d => fs.readdirSync(path.join(E.ROOT, d)).filter(f => /\.(m?js)$/.test(f)).map(f => d + "/" + f))
