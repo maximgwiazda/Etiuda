@@ -754,7 +754,7 @@ function tourActTests() {
     /* The card editor is the pop-up. The Library and Settings are screen tabs: libraryOpen and
        settingsOpen are the module's own, over this page, so a tab that is not the window they
        name leaves their inside step off. */
-    modalOpen: () => page.win === "editor", closeModal: () => { page.win = null; },
+    modalOpen: () => page.win === "editor", closeModal: () => { page.win = null; }, closeAllDialogs: () => { page.win = null; },
     get screenOn() { return page.win === "library" || page.win === "settings" ? page.win : ""; },
     closeScreenTab: id => { if (page.win === id) page.win = null; },
     document: {

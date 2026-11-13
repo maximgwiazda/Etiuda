@@ -1,7 +1,8 @@
 /* The document's own keydown, in two listeners: the capture pass that belongs to the
    shortcuts screen while a chord is being rebound, and the pass every other key goes
    through. */
-import { dismissModal, edToDesk, modalFront, modalOpen, modalTabTarget, openCover, tabTargetIn } from "./dialog.js";
+import { dismissModal, edF6, modalFront, modalOpen, modalTabTarget, openCover, tabTargetIn } from "./dialog.js";
+import { ctxEditorAct } from "./context-menu.js";
 import { closeFactsPanel, factsPanelOpen } from "./facts.js";
 import { openMaintenance } from "./maintenance.js";
 import { openSettings } from "./settings.js";
@@ -168,7 +169,8 @@ function wireGlobalKeydown(){
          has nothing to do, and letting it through would be the browser leaving the editor. */
       else if(eventMatchesAction(e,"edPrevLang")){ e.preventDefault(); hooks.runShortcut("edPrevLang"); }
       else if(eventMatchesAction(e,"edNextLang")){ e.preventDefault(); hooks.runShortcut("edNextLang"); }
-      else if(eventMatchesAction(e,"edSwitch")){ e.preventDefault(); edToDesk(); }
+      else if(eventMatchesAction(e,"edSwitch")){ e.preventDefault(); edF6(); }
+      else if(eventMatchesAction(e,"rename") && ctxEditorAct(document.activeElement)) e.preventDefault();
       else if(e.key==="Tab" && !e.ctrlKey && !e.altKey && !e.metaKey){
         const to=modalTabTarget(e.shiftKey);
         if(to){ e.preventDefault(); try{ to.focus({preventScroll:true}); }catch(x){ to.focus(); } }

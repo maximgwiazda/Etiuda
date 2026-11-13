@@ -16,6 +16,9 @@ import { entrySel, intentIdxs, cats } from "./app-state.js";
 import { isCollapsed } from "./collapse.js";
 import { animateFoldAll } from "./list-pointer.js";
 import { tabs, addTab, closeTabById, closeOtherTabs, reopenClosedTab, closedTabCount, beginTabRename, clearTabRename } from "./tabs.js";
+import { edOpenBeside } from "./dialog.js";
+import { intentIdxOfId } from "./intent-id.js";
+import { hooks } from "./hooks.js";
 
 let ctxEl=null, ctxBack=null;
 
@@ -28,9 +31,29 @@ function press(el, mods){
 }
 const label=(el, fallback)=>(el && el.getAttribute("aria-label")) || fallback;
 
+/* WHAT AN EDITOR LISTS: a category chip, a linked intent, a next reply, each with the desk's own row for its kind; the
+   editor it opens stands beside the one in hand (dialog.js, edOpenBeside). A field keeps the shell's edit menu. */
+function editorRows(target){
+  const chip=target.closest(".cat-chip[data-k]");
+  if(chip) return [{label:t("Edit this category"), key:"F2", act:()=>{ edOpenBeside(); hooks.openCategoryEditor(chip.getAttribute("data-k"), true); }}];
+  const ir=target.closest("#meIntents label"), inp=ir && ir.querySelector("input");
+  const at=inp ? intentIdxOfId(inp.value) : -1;
+  if(at>-1) return [{label:t("Edit this intent"), key:"F2", act:()=>{ edOpenBeside(); hooks.openIntentEditor(at); }}];
+  const nx=target.closest(".nx-row[data-to]");
+  if(nx) return [{label:t("Edit this card"), key:"F2", act:()=>{ edOpenBeside(); hooks.openCardEditor(nx.getAttribute("data-to"), null, false); }}];
+  return null;
+}
+/* F2 on a focused thing an editor lists does what its menu's row does. */
+function ctxEditorAct(el){
+  const rows=(el && el.closest && el.closest("#modalCard")) ? editorRows(el) : null;
+  if(!rows) return false;
+  rows[0].act();
+  return true;
+}
 /* The rows for what the event landed on, or null where nothing here has a menu. A row is {label, act}, or "-". */
 function ctxRowsFor(target){
   if(!target || !target.closest) return null;
+  if(target.closest("#modalCard")) return editorRows(target);
   const card=target.closest("#list .card[data-id]");
   if(card) return replyRows(card, target);
   const sep=target.closest("#list .list-sep");
@@ -131,12 +154,14 @@ function closeCtxMenu(giveBack){
   if(giveBack && to && typeof to.focus==="function" && document.contains(to)) try{ to.focus({preventScroll:true}); }catch(_){}
 }
 function ctxMenuOpen(){ return !!ctxEl; }
-function openCtxMenu(rows, x, y, byKey){
+function openCtxMenu(rows, x, y, byKey, over){
   closeCtxMenu(false);
   const a=document.activeElement;
   ctxBack=(a && a!==document.body) ? a : null;
   const m=document.createElement("div");
   m.className="menu e-ctx";
+  /* Asked for inside an editor, the menu stands above every editor. */
+  if(over) m.classList.add("e-ctx-ed");
   m.setAttribute("role","menu");
   m.tabIndex=-1;
   const items=[];
@@ -180,7 +205,9 @@ function wireContextMenus(){
   document.addEventListener("contextmenu",e=>{
     if(e.defaultPrevented) return;
     let target=e.target;
-    if(target && target.closest && target.closest("input,textarea,select,[contenteditable='true'],[contenteditable='']")) return;
+    /* A linked intent's checkbox is a named thing, not a field. */
+    if(target && target.closest && target.closest("input,textarea,select,[contenteditable='true'],[contenteditable='']")
+      && !(target.matches && target.matches("#meIntents input[type=checkbox]"))) return;
     const sel=window.getSelection ? window.getSelection() : null;
     if(sel && !sel.isCollapsed && String(sel) && sel.containsNode && sel.containsNode(target,true)) return;
     /* The keyboard's menu with nothing focused is the marked reply's, as Enter's copy is. */
@@ -193,7 +220,7 @@ function wireContextMenus(){
     e.preventDefault();
     let x=e.clientX, y=e.clientY;
     if(byKey && target && target.getBoundingClientRect){ const r=target.getBoundingClientRect(); x=r.left+8; y=r.bottom; }
-    openCtxMenu(rows, x, y, byKey);
+    openCtxMenu(rows, x, y, byKey, !!(target && target.closest && target.closest("#modal")));
   });
   addEventListener("pointerdown",e=>{ if(ctxEl && !ctxEl.contains(e.target)) closeCtxMenu(false); }, true);
   addEventListener("blur",()=>closeCtxMenu(false));
@@ -203,6 +230,7 @@ function wireContextMenus(){
 
 export {
   wireContextMenus,
+  ctxEditorAct,
   ctxRowsFor,
   openCtxMenu,
   closeCtxMenu,

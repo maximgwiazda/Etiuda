@@ -6,7 +6,7 @@ import { toggleFactsPanel, factsPanelOpen, closeFactsPanel } from "./facts.js";
 import { $, intentEl, pax } from "./dom.js";
 import { toggleRail } from "./rail-panel.js";
 import { togglePills } from "./pills-box.js";
-import { edResting, edStepLang, edToFront } from "./dialog.js";
+import { edF6, edResting, edStepLang } from "./dialog.js";
 import { clearIntents, pickIntent } from "./intent-pick.js";
 import { captureRail, railRelKeys, railEchoRedraw, railDecorate } from "./rail-list.js";
 import { render } from "./render.js";
@@ -28,7 +28,7 @@ import { hooks } from "./hooks.js";
 // ---- running a shortcut: the dispatcher reaches the whole app, so it stays here -------
 function runShortcut(id){
   /* Whichever screen is in front: a resting editor stands above them all. */
-  if(id==="edSwitch") return edToFront(true);
+  if(id==="edSwitch") return edF6();
   if(typeof document!=="undefined" && document.body && document.body.classList && document.body.classList.contains("screen-on")){
     if(id==="tabNext"){ stepTab(1); return true; }
     if(id==="tabPrev"){ stepTab(-1); return true; }

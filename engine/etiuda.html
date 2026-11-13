@@ -1263,6 +1263,7 @@ body.shed-segfold #seg::before{width:100%;transform:none}
 #menuPicker kbd{margin-left:auto;font:11.5px var(--mono);color:var(--dim)}
 /* An object's own menu (context-menu.js) stands where it was asked for, over the page and under a dialog. */
 .menu.e-ctx{position:fixed;right:auto;top:0;left:0;z-index:150;max-width:min(320px,calc(100vw - 8px))}
+.menu.e-ctx.e-ctx-ed{z-index:230}
 .menu.e-ctx:focus{outline:none}
 .menu.e-ctx button{display:flex;align-items:center;justify-content:space-between;width:100%}
 .menu.e-ctx button small{margin-left:auto;padding-left:14px;font:11.5px var(--sans);color:var(--dim)}
@@ -2899,6 +2900,15 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
 .modal.ed-rest:not([hidden]) .modal-bg{animation:none;opacity:0;transition:opacity var(--m-scrim) ease}
 /* An editor's scrim takes the click over the band too, which brings the desk in front (the band's rule above). */
 body.e-host .modal.ed-win:not(.ed-rest) .modal-bg{app-region:no-drag;-webkit-app-region:no-drag}
+/* THE OTHER EDITORS (dialog.js, edShelve) stand where they were, resting, above the scrim and under the one in hand; a
+   dialog of another kind over them puts them under its scrim with the desk. With more than one open, the one in hand
+   wears the accent line, and in the dark theme the rim that would cover it gives way. */
+.modal .modal-card.ed-shell{position:absolute;margin:0;z-index:1;pointer-events:auto;border-color:var(--line-strong);box-shadow:0 8px 20px rgba(0,0,0,.12)}
+.modal:not([hidden]) .modal-card.ed-shell{animation:none}
+.modal .modal-card.ed-shell h2 .modal-t{color:var(--dim)}
+.modal.ed-held .modal-card.ed-shell{z-index:-1}
+.modal.ed-multi:not(.ed-rest) #modalCard{border-color:var(--accent)}
+:root:not([data-theme=light]) .modal.ed-multi:not(.ed-rest) #modalCard::after{display:none}
 body:has(.modal.ed-rest:not([hidden])) header:has(.menu:not([hidden]):not(.e-warm),.facts-panel:not([hidden]),.sgn-panel:not([hidden])){z-index:57}
 /* The intent panel, the dialogs, the menus, Quick facts and the opened pill bar wear the rim inside their
    border; their bevel gives way to it. A surface that scrolls as a whole carries the ring with its content. */
@@ -18344,14 +18354,18 @@ What you type stays in this browser only.`;
     accHtml: () => accHtml,
     accOpen: () => accOpen,
     catToggle: () => catToggle,
+    closeAllDialogs: () => closeAllDialogs,
     closeModal: () => closeModal,
     dismissModal: () => dismissModal,
     dressDialogInputs: () => dressDialogInputs,
+    edAlreadyOpen: () => edAlreadyOpen,
     edCanSave: () => edCanSave,
     edCatalogTaken: () => edCatalogTaken,
     edDirty: () => edDirty,
+    edF6: () => edF6,
     edMarkClean: () => edMarkClean,
     edNavHtml: () => edNavHtml,
+    edOpenBeside: () => edOpenBeside,
     edResting: () => edResting,
     edStepLang: () => edStepLang,
     edSubjectCheck: () => edSubjectCheck,
@@ -18597,24 +18611,26 @@ What you type stays in this browser only.`;
   var edBaseline = null;
   var edBaseTyped = null;
   var edReturn = null;
-  function edFormState() {
-    if (!modalCard) return "";
+  function edFormState(root) {
+    root = root || modalCard;
+    if (!root) return "";
     const out = [];
-    modalCard.querySelectorAll("input,textarea,select").forEach((el) => {
+    root.querySelectorAll("input,textarea,select").forEach((el) => {
       out.push(el.type === "checkbox" || el.type === "radio" ? el.checked ? "1" : "0" : String(el.value || ""));
     });
-    modalCard.querySelectorAll(".on[data-v]").forEach((el) => out.push(String(el.dataset.v || "")));
+    root.querySelectorAll(".on[data-v]").forEach((el) => out.push(String(el.dataset.v || "")));
     return out.join("");
   }
   function edMarkClean() {
     edBaseline = edFormState();
     edBaseTyped = edTyped();
   }
-  function edTyped() {
-    if (!modalCard) return null;
+  function edTyped(root) {
+    root = root || modalCard;
+    if (!root) return null;
     return {
-      fields: Array.from(modalCard.querySelectorAll("input,textarea,select")).map((el) => el.type === "checkbox" || el.type === "radio" ? el.checked : String(el.value || "")),
-      segs: Array.from(modalCard.querySelectorAll("[data-v]")).map((el) => el.classList.contains("on"))
+      fields: Array.from(root.querySelectorAll("input,textarea,select")).map((el) => el.type === "checkbox" || el.type === "radio" ? el.checked : String(el.value || "")),
+      segs: Array.from(root.querySelectorAll("[data-v]")).map((el) => el.classList.contains("on"))
     };
   }
   function edRetype(was) {
@@ -18787,6 +18803,28 @@ What you type stays in this browser only.`;
       edRestore();
       return;
     }
+    if (edActiveWin && edWins.length > 1) {
+      const gone = edActiveWin;
+      edWins = edWins.filter((r) => r !== gone);
+      edHist = edHist.filter((r) => r !== gone);
+      leaveModal();
+      edActiveWin = null;
+      edWinClear();
+      edUnstand();
+      const next = edHist[edHist.length - 1] || edWins[edWins.length - 1];
+      edUnshelve(next);
+      edFrontHist(next);
+      edMulti();
+      if (!edRest) edFocusOn(edEdFocus && modalCard.contains(edEdFocus) ? edEdFocus : modalCard);
+      return;
+    }
+    edWins = [];
+    edHist = [];
+    edActiveWin = null;
+    edPlaceNow = null;
+    edEntry = null;
+    edRefresh = null;
+    modalEl.classList.remove("ed-multi");
     const wasRest = edRest;
     leaveModal();
     modalEl.hidden = true;
@@ -18897,7 +18935,7 @@ What you type stays in this browser only.`;
       edToFront(true);
       return;
     }
-    const open = edPlaceKind && !modalEl.hidden, p = open ? edPlaces()[edPlaceKind] : null;
+    const open = edPlaceKind && !modalEl.hidden, p = open ? edPlaceNow || edPlaces()[edPlaceKind] : null;
     const floor = open && edRest ? edHeaderFloor() : 0;
     if (p) edStandAt(p.x, p.y, floor);
     else if (floor && modalEl.clientHeight / 2 - modalCard.offsetHeight / 2 < floor) edStandAt(0, -modalCard.offsetHeight / 2, floor);
@@ -18937,6 +18975,7 @@ What you type stays in this browser only.`;
       const all = edPlaces();
       all[edPlaceKind] = d.at;
       edPlacesWrite(all);
+      edPlaceNow = d.at;
     };
     ["pointerup", "pointercancel", "lostpointercapture"].forEach((k) => modalCard.addEventListener(k, end));
     modalCard.addEventListener("dblclick", (e) => {
@@ -18945,6 +18984,7 @@ What you type stays in this browser only.`;
       if (!all[edPlaceKind]) return;
       delete all[edPlaceKind];
       edPlacesWrite(all);
+      edPlaceNow = null;
       const t0 = modalCard.offsetTop, l0 = modalCard.offsetLeft;
       edUnstand();
       const dx = l0 - modalCard.offsetLeft, dy = t0 - modalCard.offsetTop;
@@ -19007,6 +19047,7 @@ What you type stays in this browser only.`;
     const at = document.activeElement;
     if (at && at !== document.body && !modalCard.contains(at)) edDeskFocus = at;
     edRestEnd();
+    edRefreshNow();
     if (keys) {
       edPlaceSync();
       edFocusOn(edEdFocus && modalCard.contains(edEdFocus) ? edEdFocus : modalCard);
@@ -19020,13 +19061,27 @@ What you type stays in this browser only.`;
     if (place && edHeld) {
       const h = edHeld;
       edHeld = null;
+      modalEl.classList.remove("ed-held");
       return h.dirty && h.again ? { was: h.typed, again: h.again } : null;
+    }
+    const beside = edBeside;
+    edBeside = null;
+    if (place && !modalEl.hidden && edPlaceKind) {
+      const w = edWinOf(cfg.place);
+      if (w && w !== edActiveWin) edActivate(w, true);
+      else if (!w && modalEl.clientWidth >= ED_REST_MIN) {
+        edBesideFrom = beside;
+        edShelve();
+        edNewWin = true;
+        return null;
+      }
     }
     if (modalEl.hidden || !edPlaceKind) return null;
     if (!place) {
       if (!edHeld) {
         edHold();
         edHeld.editionReset = edition;
+        modalEl.classList.add("ed-held");
       }
       return null;
     }
@@ -19036,8 +19091,24 @@ What you type stays in this browser only.`;
     const place = ED_PLACE_KINDS.indexOf(cfg.place) >= 0;
     if (place && modalEl.hidden === false && !edPlaceKind) edDeskFocus = modalOpener;
     edAgain = place && typeof cfg.again === "function" ? cfg.again : null;
+    if (place) {
+      if (!edActiveWin) {
+        edActiveWin = { kind: cfg.place, seq: ++edSeq, shell: null, state: null, cause: "" };
+        edWins.push(edActiveWin);
+        edPlaceNow = null;
+      }
+      edActiveWin.kind = cfg.place;
+      edFrontHist(edActiveWin);
+      edEntry = cfg.entry == null ? null : cfg.entry;
+      edRefresh = typeof cfg.refresh === "function" ? cfg.refresh : null;
+      edMulti();
+    }
     if (!edStepping) edRestEnd();
     placeDialog(cfg.place);
+    if (place && edNewWin) {
+      edNewWin = false;
+      edPlaceNewWin();
+    }
     if (edPlaceKind && edBaseline === null) edMarkClean();
     edSubjectOpen(cfg);
     if (leaving) offerUndo("Moved on without saving the changes", () => edGo(() => {
@@ -19057,25 +19128,15 @@ What you type stays in this browser only.`;
     let at = document.activeElement;
     const wrap = at && at.closest ? at.closest(".menu-wrap") : null;
     if (wrap) at = wrap.querySelector(":scope > button") || at;
-    edHeld = {
+    edHeld = Object.assign(edWinState(), {
       kids: Array.prototype.slice.call(modalCard.childNodes),
-      cls: modalCard.className,
       css: modalCard.style.cssText,
-      kind: edPlaceKind,
       rest: edRest,
-      again: edAgain,
       dirty: edDirty(),
       typed: edTyped(),
-      nameFn: modalNameFn,
-      resetFn: modalResetFn,
-      resetOn: modalResetOn,
-      resetOff: modalResetOff,
-      baseline: edBaseline,
-      ret: edReturn,
-      back: modalBack,
-      focus: at && modalCard.contains(at) && at !== modalCard ? at : edEdFocus,
-      desk: edRest ? at : edDeskFocus
-    };
+      desk: edRest ? at : edDeskFocus,
+      placeNow: edPlaceNow
+    });
     edHeld.kids.forEach((k) => modalCard.removeChild(k));
     edPlaceKind = null;
     modalEl.classList.remove("ed-win");
@@ -19090,19 +19151,10 @@ What you type stays in this browser only.`;
     modalCard.style.cssText = h.css;
     ["top", "left", "--ed-room", "transform-origin"].forEach((k) => modalCard.style.removeProperty(k));
     h.kids.forEach((k) => modalCard.appendChild(k));
-    modalNameFn = h.nameFn;
-    modalResetFn = h.resetFn;
-    modalResetOn = h.resetOn;
-    modalResetOff = h.resetOff;
-    edBaseline = h.baseline;
-    edReturn = h.ret;
-    modalBack = h.back;
-    edAgain = h.again;
-    edEdFocus = h.focus;
+    edWinApply(h);
     edDeskFocus = h.desk;
-    edPlaceKind = h.kind;
-    edPlaced = null;
-    edEditionReset = !!h.editionReset;
+    edPlaceNow = h.placeNow || null;
+    modalEl.classList.remove("ed-held");
     refreshDialogReset();
     if (h.rest && modalEl.clientWidth >= ED_REST_MIN) {
       edRest = true;
@@ -19184,6 +19236,9 @@ What you type stays in this browser only.`;
   }
   function edCatalogTaken(sameLayer) {
     edCause = sameLayer ? "edition" : "layer";
+    edWins.forEach((r) => {
+      if (r !== edActiveWin) r.cause = sameLayer ? r.cause || "edition" : "layer";
+    });
   }
   function edCanSave() {
     return !edGone && edCause !== "layer";
@@ -19195,6 +19250,7 @@ What you type stays in this browser only.`;
     });
   }
   function edSubjectCheck() {
+    edRefreshShells();
     const cause = edCause;
     edCause = "";
     if (!edPlaceKind || modalEl.hidden || !edSubject || edStepping || edGoneLayer) return;
@@ -19274,6 +19330,272 @@ What you type stays in this browser only.`;
     p.querySelector(".modal-note-t").textContent = text;
     h.after(p);
     translateTree(p);
+  }
+  var ED_CHROME_IDS = ["modalTitle", "modalX", "edPrev", "edNext"];
+  var edWins = [];
+  var edHist = [];
+  var edActiveWin = null;
+  var edSeq = 0;
+  var edPlaceNow = null;
+  var edBeside = null;
+  var edBesideFrom = null;
+  var edNewWin = false;
+  var edEntry = null;
+  var edRefresh = null;
+  function edWinOf(kind) {
+    return edWins.filter((r) => r.kind === kind)[0] || null;
+  }
+  function edFrontHist(rec) {
+    edHist = edHist.filter((r) => r !== rec);
+    edHist.push(rec);
+  }
+  function edMulti() {
+    modalEl.classList.toggle("ed-multi", edWins.length > 1);
+  }
+  function edScrolls(root) {
+    return Array.prototype.filter.call(root.querySelectorAll("*"), (x) => x.scrollTop > 0).map((x) => [x, x.scrollTop]);
+  }
+  function edWinState() {
+    const at = document.activeElement;
+    return {
+      kind: edPlaceKind,
+      again: edAgain,
+      nameFn: modalNameFn,
+      resetFn: modalResetFn,
+      resetOn: modalResetOn,
+      resetOff: modalResetOff,
+      baseline: edBaseline,
+      baseTyped: edBaseTyped,
+      ret: edReturn,
+      back: modalBack,
+      editionReset: edEditionReset,
+      subject: edSubject,
+      sig: edSubjectSig,
+      gone: edGone,
+      goneLayer: edGoneLayer,
+      entry: edEntry,
+      refresh: edRefresh,
+      focus: at && modalCard.contains(at) && at !== modalCard ? at : edEdFocus,
+      cls: modalCard.className
+    };
+  }
+  function edWinApply(h) {
+    modalNameFn = h.nameFn;
+    modalResetFn = h.resetFn;
+    modalResetOn = h.resetOn;
+    modalResetOff = h.resetOff;
+    edBaseline = h.baseline;
+    edBaseTyped = h.baseTyped || null;
+    edReturn = h.ret;
+    modalBack = h.back;
+    edAgain = h.again;
+    edEditionReset = !!h.editionReset;
+    edSubject = h.subject || null;
+    edSubjectSig = h.sig;
+    edGone = !!h.gone;
+    edGoneLayer = !!h.goneLayer;
+    edEntry = h.entry == null ? null : h.entry;
+    edRefresh = h.refresh || null;
+    edEdFocus = h.focus;
+    edPlaceKind = h.kind;
+    edPlaced = null;
+  }
+  function edWinClear() {
+    edPlaceKind = null;
+    edAgain = null;
+    edBaseline = null;
+    edBaseTyped = null;
+    edReturn = null;
+    modalBack = null;
+    edEditionReset = false;
+    edSubject = null;
+    edSubjectSig = null;
+    edGone = false;
+    edGoneLayer = false;
+    edEntry = null;
+    edRefresh = null;
+    edEdFocus = null;
+    edPlaceNow = null;
+    edPlaced = null;
+    modalNameFn = null;
+    modalResetFn = null;
+  }
+  function edShelve() {
+    const rec = edActiveWin;
+    if (!rec || !edPlaceKind) return null;
+    const st = edWinState();
+    const box = { left: modalCard.offsetLeft, top: modalCard.offsetTop, width: modalCard.offsetWidth, height: modalCard.offsetHeight };
+    const kept = edScrolls(modalCard);
+    const sh = document.createElement("div");
+    sh.className = modalCard.className + " ed-shell";
+    sh.setAttribute("role", "dialog");
+    sh.tabIndex = -1;
+    sh.style.left = box.left + "px";
+    sh.style.top = box.top + "px";
+    sh.style.width = box.width + "px";
+    sh.style.maxHeight = box.height + "px";
+    Array.from(modalCard.childNodes || []).forEach((k) => sh.appendChild(k));
+    sh.querySelectorAll("[id]").forEach((el) => {
+      if (ED_CHROME_IDS.indexOf(el.id) < 0) return;
+      el.setAttribute("data-ed-id", el.id);
+      el.removeAttribute("id");
+    });
+    modalEl.insertBefore(sh, modalCard);
+    kept.forEach((k) => {
+      k[0].scrollTop = k[1];
+    });
+    sh.addEventListener("pointerdown", () => {
+      if (rec.shell === sh) edActivate(rec, false);
+    }, true);
+    sh.addEventListener("focusin", () => {
+      if (rec.shell === sh) edActivate(rec, false);
+    });
+    rec.shell = sh;
+    rec.state = st;
+    edActiveWin = null;
+    edWinClear();
+    modalCard.className = "modal-card";
+    edUnstand();
+    return rec;
+  }
+  function edUnshelve(rec) {
+    const sh = rec.shell, st = rec.state;
+    const x = sh.offsetLeft + sh.offsetWidth / 2 - modalEl.clientWidth / 2, y = sh.offsetTop - modalEl.clientHeight / 2;
+    const kept = edScrolls(sh);
+    modalCard.innerHTML = "";
+    modalCard.className = st.cls;
+    sh.querySelectorAll("[data-ed-id]").forEach((el) => {
+      el.id = el.getAttribute("data-ed-id");
+      el.removeAttribute("data-ed-id");
+    });
+    Array.from(sh.childNodes || []).forEach((k) => modalCard.appendChild(k));
+    sh.remove();
+    rec.shell = null;
+    rec.state = null;
+    edWinApply(st);
+    edActiveWin = rec;
+    edPlaceNow = { x: Math.round(x), y: Math.round(y) };
+    edPlaceSync();
+    kept.forEach((k) => {
+      k[0].scrollTop = k[1];
+    });
+    refreshDialogReset();
+    edRefreshNow();
+    edCause = rec.cause || "";
+    rec.cause = "";
+    edSubjectCheck();
+  }
+  function edActivate(rec, keys) {
+    if (!rec || rec === edActiveWin || !rec.shell) return;
+    const at = document.activeElement;
+    if (edRest && at && at !== document.body && !modalEl.contains(at)) edDeskFocus = at;
+    edShelve();
+    edUnshelve(rec);
+    edFrontHist(rec);
+    edMulti();
+    edRestEnd();
+    if (keys) edFocusOn(edEdFocus && modalCard.contains(edEdFocus) ? edEdFocus : modalCard);
+  }
+  function edF6() {
+    if (modalEl.hidden || !edActiveWin || edHeld) return false;
+    const list2 = edWins.slice().sort((a, b) => a.seq - b.seq);
+    if (edRest) {
+      if (list2[0] === edActiveWin) return edToFront(true);
+      edActivate(list2[0], true);
+      return true;
+    }
+    const i = list2.indexOf(edActiveWin);
+    if (i >= 0 && i < list2.length - 1) {
+      edActivate(list2[i + 1], true);
+      return true;
+    }
+    return edToDesk();
+  }
+  function edRefreshNow() {
+    if (!edRefresh) return;
+    const clean = !edDirty();
+    try {
+      edRefresh();
+    } catch (e) {
+    }
+    if (clean) edMarkClean();
+  }
+  function edRefreshShells() {
+    edWins.forEach((r) => {
+      if (!r.shell || !r.state || !r.state.refresh) return;
+      const clean = r.state.baseline === null || edFormState(r.shell) === r.state.baseline;
+      try {
+        r.state.refresh();
+      } catch (e) {
+      }
+      if (clean && r.state.baseline !== null) {
+        r.state.baseline = edFormState(r.shell);
+        r.state.baseTyped = edTyped(r.shell);
+      }
+    });
+  }
+  function edOpenBeside() {
+    edBeside = edActiveWin && !modalEl.hidden ? { left: modalCard.offsetLeft, top: modalCard.offsetTop, width: modalCard.offsetWidth } : null;
+  }
+  function edBesideRect(r, w, W) {
+    const GAP = 12;
+    if (r.left + r.width + GAP + w <= W - ED_EDGE) return { left: r.left + r.width + GAP, top: r.top, slide: null };
+    if (r.left - GAP - w >= ED_EDGE) return { left: r.left - GAP - w, top: r.top, slide: null };
+    if (r.width + GAP + w <= W - 2 * ED_EDGE) {
+      const l0 = Math.max(ED_EDGE, Math.round((W - (r.width + GAP + w)) / 2));
+      return { left: l0 + r.width + GAP, top: r.top, slide: l0 };
+    }
+    return { left: r.left + 28, top: r.top + 52, slide: null };
+  }
+  var ED_TITLE_H = 52;
+  function edPlaceNewWin() {
+    mountModalBody();
+    const W = modalEl.clientWidth, H = modalEl.clientHeight, w = modalCard.offsetWidth;
+    const from = edBesideFrom;
+    edBesideFrom = null;
+    const shells = edWins.filter((r) => r.shell).map((r) => r.shell);
+    if (from) {
+      const b = edBesideRect(from, w, W);
+      if (b.slide != null) {
+        const sh = shells.filter((s) => s.offsetLeft === from.left && s.offsetTop === from.top)[0] || shells[shells.length - 1];
+        if (sh) {
+          if (!mgReduceMotion()) sh.style.transition = "left var(--m-scrim) var(--m-ease)";
+          sh.style.left = b.slide + "px";
+        }
+      }
+      edPlaceNow = { x: Math.round(b.left + w / 2 - W / 2), y: Math.round(b.top - H / 2) };
+      edPlaceSync();
+      return;
+    }
+    const l = modalCard.offsetLeft, t2 = modalCard.offsetTop;
+    const hit = shells.filter((s) => l < s.offsetLeft + s.offsetWidth && s.offsetLeft < l + w && t2 < s.offsetTop + ED_TITLE_H && s.offsetTop < t2 + ED_TITLE_H)[0];
+    if (hit) {
+      edPlaceNow = { x: Math.round(hit.offsetLeft + 28 + w / 2 - W / 2), y: Math.round(hit.offsetTop + 52 - H / 2) };
+      edPlaceSync();
+    }
+  }
+  function edAlreadyOpen(kind, entry) {
+    if (entry == null || edStepping || modalEl.hidden) return false;
+    const w = edWinOf(kind);
+    if (!w) return false;
+    if (w === edActiveWin) {
+      if (edEntry !== entry || !edRest) return false;
+      edToFront(true);
+      return true;
+    }
+    if (w.state.entry !== entry) return false;
+    edActivate(w, true);
+    return true;
+  }
+  function closeAllDialogs() {
+    edWins.forEach((r) => {
+      if (r.shell) r.shell.remove();
+      r.shell = null;
+    });
+    edWins = edActiveWin ? [edActiveWin] : [];
+    edHist = edWins.slice();
+    edMulti();
+    if (!modalEl.hidden) closeModal();
   }
   var MODAL_TABBABLE = "a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex='-1'])";
   function modalTabTarget(back) {
@@ -27892,7 +28214,7 @@ What you type stays in this browser only.`;
     tourPress(menuTarget(act), '[data-act="' + act + '"]');
   }
   function shutTourWindow() {
-    if (modalOpen()) closeModal();
+    if (modalOpen()) closeAllDialogs();
     else if (screenOn === "library") closeScreenTab("library");
     else if (screenOn === "settings") closeScreenTab("settings");
     if (factsPanelOpen()) closeFactsPanel();
@@ -28438,7 +28760,7 @@ What you type stays in this browser only.`;
     if (!auto) {
       closeSettingsMenu();
       closeFactsPanel();
-      if (modalOpen()) closeModal();
+      if (modalOpen()) closeAllDialogs();
     }
     const els = tourEls();
     if (!els.root) return;
@@ -31474,6 +31796,7 @@ What you type stays in this browser only.`;
   // src/modules/editors.js
   function openCategoryEditor(k, fromPill) {
     if (!k || k === "__orphan") return;
+    if (edAlreadyOpen("category", k)) return;
     applyCatsToGlobal();
     const leave = () => {
       if (fromPill) closeModal();
@@ -31492,6 +31815,7 @@ What you type stays in this browser only.`;
       back: fromPill ? null : () => hooks.openManage(),
       title: "Edit category",
       place: "category",
+      entry: k,
       again: () => openCategoryEditor(k, fromPill),
       subject: () => CATS[k] == null ? null : JSON.stringify([
         CATS[k],
@@ -31672,6 +31996,7 @@ What you type stays in this browser only.`;
     const i = isNew ? -1 : +idx;
     const isCustom = !isNew && intentIsCustom(i);
     const id = isNew ? null : intentIdAt(i);
+    if (edAlreadyOpen("intent", id)) return;
     const backToManage = !!fromManage;
     function doneIntentEditor() {
       if (backToManage) hooks.openManage();
@@ -31695,6 +32020,7 @@ What you type stays in this browser only.`;
       back: fromManage ? () => doneIntentEditor() : null,
       title: isNew ? "New intent" : "Edit intent",
       place: "intent",
+      entry: id,
       again: () => openIntentEditor(isNew ? null : intentIdxOfId(id), fromManage),
       subject: () => {
         if (isNew) return "";
@@ -32569,6 +32895,7 @@ What you type stays in this browser only.`;
     b.onclick = () => openCardEditor(null, one);
   }
   function openCardEditor(id, presetCat, fromManage) {
+    if (edAlreadyOpen("card", id || null)) return;
     const isNew = !id;
     let savedId = id;
     const existing = id ? findCard(id) : null;
@@ -32590,6 +32917,13 @@ What you type stays in this browser only.`;
       back: backToManage ? doneCardEditor : null,
       title: isNew ? "New card" : "Edit card",
       place: "card",
+      entry: savedId,
+      /* What another editor saved shows here: the category chips and the linked intents, the picks kept. */
+      refresh: () => {
+        const box = $("#meCatPick");
+        if (box) box.innerHTML = cardCatPickHtml(readCardCatPick());
+        if ($("#meIntents")) refreshMeIntentList(readMeIntentIds());
+      },
       again: () => openCardEditor(savedId, presetCat, fromManage),
       /* The card as stored, its own fields only: a star, putting it away or moving it is not an edit. */
       subject: () => {
@@ -38008,6 +38342,250 @@ What you type stays in this browser only.`;
     wireGlobalKeydown: () => wireGlobalKeydown
   });
 
+  // src/modules/context-menu.js
+  var ctxEl = null;
+  var ctxBack = null;
+  function press(el, mods) {
+    if (!el) return;
+    const o = Object.assign({ bubbles: true, cancelable: true }, mods || {});
+    el.dispatchEvent(new MouseEvent("click", o));
+  }
+  var label = (el, fallback2) => el && el.getAttribute("aria-label") || fallback2;
+  function editorRows(target) {
+    const chip = target.closest(".cat-chip[data-k]");
+    if (chip) return [{ label: t("Edit this category"), key: "F2", act: () => {
+      edOpenBeside();
+      hooks.openCategoryEditor(chip.getAttribute("data-k"), true);
+    } }];
+    const ir = target.closest("#meIntents label"), inp = ir && ir.querySelector("input");
+    const at = inp ? intentIdxOfId(inp.value) : -1;
+    if (at > -1) return [{ label: t("Edit this intent"), key: "F2", act: () => {
+      edOpenBeside();
+      hooks.openIntentEditor(at);
+    } }];
+    const nx = target.closest(".nx-row[data-to]");
+    if (nx) return [{ label: t("Edit this card"), key: "F2", act: () => {
+      edOpenBeside();
+      hooks.openCardEditor(nx.getAttribute("data-to"), null, false);
+    } }];
+    return null;
+  }
+  function ctxEditorAct(el) {
+    const rows = el && el.closest && el.closest("#modalCard") ? editorRows(el) : null;
+    if (!rows) return false;
+    rows[0].act();
+    return true;
+  }
+  function ctxRowsFor(target) {
+    if (!target || !target.closest) return null;
+    if (target.closest("#modalCard")) return editorRows(target);
+    const card = target.closest("#list .card[data-id]");
+    if (card) return replyRows(card, target);
+    const sep = target.closest("#list .list-sep");
+    if (sep) return headingRows(sep);
+    const row2 = target.closest("#intentRail .rail-item[data-si]");
+    if (row2) return intentRows2(row2);
+    const pill = target.closest("#pills .pill[data-k]");
+    if (pill) return pill.dataset.k ? pillRows(pill) : null;
+    const tab = target.closest("#tabsBar .tab[data-tid]");
+    if (tab) return tabRows(tab);
+    return null;
+  }
+  function replyRows(card, target) {
+    const id = card.dataset.id, m = findCard(id);
+    if (!m) return null;
+    const block = target.closest(".txt[data-v]");
+    const vi = block ? +block.dataset.v : entrySel && entrySel.id === id ? entrySel.vi | 0 : 0;
+    const anchor = block || card.querySelector('.txt[data-v="' + vi + '"]') || card;
+    const rows = [{ label: t("Copy"), act: () => {
+      setEntrySel(id, vi);
+      copyCardPart(id, vi, anchor, false);
+    } }];
+    if (CONTENT_LANGS.length > 1) {
+      const other = nextContentLang(cardLang(m));
+      rows.push({
+        label: t("Copy the {LANG} version").replace("{LANG}", String(other).toUpperCase()),
+        act: () => {
+          setEntrySel(id, vi);
+          copyCardPart(id, vi, anchor, true);
+        }
+      });
+    }
+    const btn = (a) => card.querySelector('.cacts [data-act="' + a + '"]');
+    const note = btn("note"), edit = btn("edit"), fav = btn("fav"), hide = btn("hide");
+    rows.push("-");
+    if (edit) rows.push({ label: label(edit, t("Edit this card")), act: () => press(edit), key: "F2" });
+    if (fav) rows.push({ label: label(fav, t("Add to Favourites")), act: () => press(fav) });
+    if (note) rows.push({ label: t("Show the note"), act: () => press(note) });
+    if (hide) rows.push({ label: t(card.classList.contains("is-hidden") ? "Show this card again" : "Put this card away"), act: () => press(hide) });
+    return rows;
+  }
+  function headingRows(sep) {
+    const fold = sep.querySelector(".sep-fold[data-fold-key]");
+    if (!fold) return null;
+    const keys = list ? Array.prototype.map.call(list.querySelectorAll(".sep-fold[data-fold-key]"), (b) => b.getAttribute("data-fold-key")) : [];
+    const shut = isCollapsed(fold.getAttribute("data-fold-key"));
+    const rows = [{ label: t(shut ? "Show these cards" : "Fold this group away"), act: () => press(fold) }];
+    const anyOpen = keys.some((k) => !isCollapsed(k)), anyShut = keys.some((k) => isCollapsed(k));
+    if (anyOpen || anyShut) rows.push("-");
+    if (anyOpen) rows.push({ label: t("Fold every group"), act: () => animateFoldAll(true) });
+    if (anyShut) rows.push({ label: t("Unfold every group"), act: () => animateFoldAll(false) });
+    return rows;
+  }
+  function intentRows2(row2) {
+    const si = +row2.dataset.si, picked = intentIdxs.indexOf(si) > -1;
+    const rows = [{ label: t(picked ? "Drop this intent" : "Pick this intent"), act: () => press(row2) }];
+    if (!picked && intentIdxs.length) rows.push({ label: t("Pick it with the others"), act: () => press(row2, { ctrlKey: true }) });
+    const show = row2.querySelector("[data-show-intent]");
+    rows.push("-");
+    if (show) {
+      rows.push({ label: label(show, t("Show this intent again")), act: () => press(show) });
+      return rows;
+    }
+    const fav = row2.querySelector("[data-fav-intent]"), edit = row2.querySelector("[data-edit-intent]"), hide = row2.querySelector("[data-hide-intent]");
+    if (fav) rows.push({ label: label(fav, t("Add to Favourites")), act: () => press(fav) });
+    if (edit) rows.push({ label: label(edit, t("Edit this intent")), act: () => press(edit, { ctrlKey: true }), key: "F2" });
+    if (hide) rows.push({ label: label(hide, t("Hide this intent")), act: () => press(hide, { shiftKey: true }) });
+    return rows;
+  }
+  function pillRows(pill) {
+    const k = pill.dataset.k, only = cats.length === 1 && cats[0] === k, inFilter = cats.indexOf(k) > -1;
+    const rows = [{ label: t(only ? "Show every category" : "Show only this category"), act: () => press(pill) }];
+    if (cats.length && !only) rows.push({ label: t(inFilter ? "Take it out of the filter" : "Add it to the filter"), act: () => press(pill, { ctrlKey: true }) });
+    const ed = pill.querySelector("[data-editcat]");
+    if (ed) {
+      rows.push("-");
+      rows.push({ label: t("Edit this category"), act: () => press(ed), key: "F2" });
+    }
+    return rows;
+  }
+  function tabRows(tab) {
+    const id = tab.dataset.tid;
+    const tb = tabs.find((x) => x.id === id);
+    const rows = [];
+    rows.push({ label: t("Rename tab"), act: () => beginTabRename(id) });
+    if (tb && (tb.customName && tb.customName.trim() || tb.title && tb.title.trim())) {
+      rows.push({
+        label: t("Use the automatic name"),
+        hint: t("Names the tab after the customer's first name, or New chat while there is none."),
+        act: () => clearTabRename(id)
+      });
+    }
+    rows.push("-");
+    rows.push({ label: t("New tab"), act: () => addTab() });
+    rows.push("-");
+    rows.push({ label: t("Close this tab"), act: () => closeTabById(id) });
+    if (tabs.length > 1) rows.push({ label: t("Close the other tabs"), act: () => closeOtherTabs(id) });
+    if (closedTabCount()) rows.push({ label: t("Reopen the last closed tab"), act: () => reopenClosedTab() });
+    return rows;
+  }
+  function closeCtxMenu(giveBack) {
+    const el = ctxEl;
+    ctxEl = null;
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+    const to = ctxBack;
+    ctxBack = null;
+    if (giveBack && to && typeof to.focus === "function" && document.contains(to)) try {
+      to.focus({ preventScroll: true });
+    } catch (_) {
+    }
+  }
+  function openCtxMenu(rows, x, y, byKey, over) {
+    closeCtxMenu(false);
+    const a = document.activeElement;
+    ctxBack = a && a !== document.body ? a : null;
+    const m = document.createElement("div");
+    m.className = "menu e-ctx";
+    if (over) m.classList.add("e-ctx-ed");
+    m.setAttribute("role", "menu");
+    m.tabIndex = -1;
+    const items = [];
+    rows.forEach((r, i) => {
+      if (r === "-") {
+        if (i && i < rows.length - 1 && rows[i - 1] !== "-") {
+          const s = document.createElement("div");
+          s.className = "menu-sep";
+          m.appendChild(s);
+        }
+        return;
+      }
+      const b = document.createElement("button");
+      b.type = "button";
+      b.setAttribute("role", "menuitem");
+      if (r.hint) b.title = r.hint;
+      if (r.key) {
+        b.innerHTML = "<span>" + esc(r.label) + "</span><small>" + esc(r.key) + "</small>";
+      } else {
+        b.textContent = r.label;
+      }
+      b.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeCtxMenu(false);
+        r.act();
+      };
+      m.appendChild(b);
+      items.push(b);
+    });
+    m.addEventListener("keydown", (e) => {
+      const n = items.length, at = items.indexOf(document.activeElement);
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        closeCtxMenu(true);
+        return;
+      }
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+      if (["ArrowDown", "ArrowUp", "Home", "End", "Tab"].indexOf(e.key) < 0 || !n) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const back = e.key === "ArrowUp" || e.key === "Tab" && e.shiftKey;
+      const to = e.key === "Home" ? 0 : e.key === "End" ? n - 1 : ((at < 0 ? back ? 0 : -1 : at) + (back ? -1 : 1) + n) % n;
+      items[to].focus();
+    });
+    document.body.appendChild(m);
+    const w = m.offsetWidth || 220, h = m.offsetHeight || 200;
+    const vw = window.innerWidth || 1280, vh = window.innerHeight || 800;
+    m.style.left = Math.max(4, Math.min(x, vw - w - 4)) + "px";
+    m.style.top = Math.max(4, y + h > vh - 4 ? y - h : y) + "px";
+    ctxEl = m;
+    try {
+      (byKey && items[0] ? items[0] : m).focus({ preventScroll: true });
+    } catch (_) {
+    }
+  }
+  function wireContextMenus() {
+    document.addEventListener("contextmenu", (e) => {
+      if (e.defaultPrevented) return;
+      let target = e.target;
+      if (target && target.closest && target.closest("input,textarea,select,[contenteditable='true'],[contenteditable='']") && !(target.matches && target.matches("#meIntents input[type=checkbox]"))) return;
+      const sel = window.getSelection ? window.getSelection() : null;
+      if (sel && !sel.isCollapsed && String(sel) && sel.containsNode && sel.containsNode(target, true)) return;
+      const byKey = e.button !== 2;
+      if (byKey && (!target || target === document.body || target === document.documentElement) && entrySel && list) {
+        target = list.querySelector('.card[data-id="' + cssEsc(String(entrySel.id)) + '"] .txt[data-v="' + (entrySel.vi | 0) + '"]') || target;
+      }
+      const rows = ctxRowsFor(target);
+      if (!rows) return;
+      e.preventDefault();
+      let x = e.clientX, y = e.clientY;
+      if (byKey && target && target.getBoundingClientRect) {
+        const r = target.getBoundingClientRect();
+        x = r.left + 8;
+        y = r.bottom;
+      }
+      openCtxMenu(rows, x, y, byKey, !!(target && target.closest && target.closest("#modal")));
+    });
+    addEventListener("pointerdown", (e) => {
+      if (ctxEl && !ctxEl.contains(e.target)) closeCtxMenu(false);
+    }, true);
+    addEventListener("blur", () => closeCtxMenu(false));
+    addEventListener("resize", () => closeCtxMenu(false));
+    addEventListener("wheel", (e) => {
+      if (ctxEl && !ctxEl.contains(e.target)) closeCtxMenu(false);
+    }, { passive: true, capture: true });
+  }
+
   // src/modules/lanes.js
   var lanes_exports = {};
   __export(lanes_exports, {
@@ -39009,8 +39587,9 @@ What you type stays in this browser only.`;
           hooks.runShortcut("edNextLang");
         } else if (eventMatchesAction(e, "edSwitch")) {
           e.preventDefault();
-          edToDesk();
-        } else if (e.key === "Tab" && !e.ctrlKey && !e.altKey && !e.metaKey) {
+          edF6();
+        } else if (eventMatchesAction(e, "rename") && ctxEditorAct(document.activeElement)) e.preventDefault();
+        else if (e.key === "Tab" && !e.ctrlKey && !e.altKey && !e.metaKey) {
           const to = modalTabTarget(e.shiftKey);
           if (to) {
             e.preventDefault();
@@ -39171,223 +39750,6 @@ What you type stays in this browser only.`;
       }
       intentEl.dispatchEvent(new Event("input", { bubbles: true }));
     });
-  }
-
-  // src/modules/context-menu.js
-  var ctxEl = null;
-  var ctxBack = null;
-  function press(el, mods) {
-    if (!el) return;
-    const o = Object.assign({ bubbles: true, cancelable: true }, mods || {});
-    el.dispatchEvent(new MouseEvent("click", o));
-  }
-  var label = (el, fallback2) => el && el.getAttribute("aria-label") || fallback2;
-  function ctxRowsFor(target) {
-    if (!target || !target.closest) return null;
-    const card = target.closest("#list .card[data-id]");
-    if (card) return replyRows(card, target);
-    const sep = target.closest("#list .list-sep");
-    if (sep) return headingRows(sep);
-    const row2 = target.closest("#intentRail .rail-item[data-si]");
-    if (row2) return intentRows2(row2);
-    const pill = target.closest("#pills .pill[data-k]");
-    if (pill) return pill.dataset.k ? pillRows(pill) : null;
-    const tab = target.closest("#tabsBar .tab[data-tid]");
-    if (tab) return tabRows(tab);
-    return null;
-  }
-  function replyRows(card, target) {
-    const id = card.dataset.id, m = findCard(id);
-    if (!m) return null;
-    const block = target.closest(".txt[data-v]");
-    const vi = block ? +block.dataset.v : entrySel && entrySel.id === id ? entrySel.vi | 0 : 0;
-    const anchor = block || card.querySelector('.txt[data-v="' + vi + '"]') || card;
-    const rows = [{ label: t("Copy"), act: () => {
-      setEntrySel(id, vi);
-      copyCardPart(id, vi, anchor, false);
-    } }];
-    if (CONTENT_LANGS.length > 1) {
-      const other = nextContentLang(cardLang(m));
-      rows.push({
-        label: t("Copy the {LANG} version").replace("{LANG}", String(other).toUpperCase()),
-        act: () => {
-          setEntrySel(id, vi);
-          copyCardPart(id, vi, anchor, true);
-        }
-      });
-    }
-    const btn = (a) => card.querySelector('.cacts [data-act="' + a + '"]');
-    const note = btn("note"), edit = btn("edit"), fav = btn("fav"), hide = btn("hide");
-    rows.push("-");
-    if (edit) rows.push({ label: label(edit, t("Edit this card")), act: () => press(edit), key: "F2" });
-    if (fav) rows.push({ label: label(fav, t("Add to Favourites")), act: () => press(fav) });
-    if (note) rows.push({ label: t("Show the note"), act: () => press(note) });
-    if (hide) rows.push({ label: t(card.classList.contains("is-hidden") ? "Show this card again" : "Put this card away"), act: () => press(hide) });
-    return rows;
-  }
-  function headingRows(sep) {
-    const fold = sep.querySelector(".sep-fold[data-fold-key]");
-    if (!fold) return null;
-    const keys = list ? Array.prototype.map.call(list.querySelectorAll(".sep-fold[data-fold-key]"), (b) => b.getAttribute("data-fold-key")) : [];
-    const shut = isCollapsed(fold.getAttribute("data-fold-key"));
-    const rows = [{ label: t(shut ? "Show these cards" : "Fold this group away"), act: () => press(fold) }];
-    const anyOpen = keys.some((k) => !isCollapsed(k)), anyShut = keys.some((k) => isCollapsed(k));
-    if (anyOpen || anyShut) rows.push("-");
-    if (anyOpen) rows.push({ label: t("Fold every group"), act: () => animateFoldAll(true) });
-    if (anyShut) rows.push({ label: t("Unfold every group"), act: () => animateFoldAll(false) });
-    return rows;
-  }
-  function intentRows2(row2) {
-    const si = +row2.dataset.si, picked = intentIdxs.indexOf(si) > -1;
-    const rows = [{ label: t(picked ? "Drop this intent" : "Pick this intent"), act: () => press(row2) }];
-    if (!picked && intentIdxs.length) rows.push({ label: t("Pick it with the others"), act: () => press(row2, { ctrlKey: true }) });
-    const show = row2.querySelector("[data-show-intent]");
-    rows.push("-");
-    if (show) {
-      rows.push({ label: label(show, t("Show this intent again")), act: () => press(show) });
-      return rows;
-    }
-    const fav = row2.querySelector("[data-fav-intent]"), edit = row2.querySelector("[data-edit-intent]"), hide = row2.querySelector("[data-hide-intent]");
-    if (fav) rows.push({ label: label(fav, t("Add to Favourites")), act: () => press(fav) });
-    if (edit) rows.push({ label: label(edit, t("Edit this intent")), act: () => press(edit, { ctrlKey: true }), key: "F2" });
-    if (hide) rows.push({ label: label(hide, t("Hide this intent")), act: () => press(hide, { shiftKey: true }) });
-    return rows;
-  }
-  function pillRows(pill) {
-    const k = pill.dataset.k, only = cats.length === 1 && cats[0] === k, inFilter = cats.indexOf(k) > -1;
-    const rows = [{ label: t(only ? "Show every category" : "Show only this category"), act: () => press(pill) }];
-    if (cats.length && !only) rows.push({ label: t(inFilter ? "Take it out of the filter" : "Add it to the filter"), act: () => press(pill, { ctrlKey: true }) });
-    const ed = pill.querySelector("[data-editcat]");
-    if (ed) {
-      rows.push("-");
-      rows.push({ label: t("Edit this category"), act: () => press(ed), key: "F2" });
-    }
-    return rows;
-  }
-  function tabRows(tab) {
-    const id = tab.dataset.tid;
-    const tb = tabs.find((x) => x.id === id);
-    const rows = [];
-    rows.push({ label: t("Rename tab"), act: () => beginTabRename(id) });
-    if (tb && (tb.customName && tb.customName.trim() || tb.title && tb.title.trim())) {
-      rows.push({
-        label: t("Use the automatic name"),
-        hint: t("Names the tab after the customer's first name, or New chat while there is none."),
-        act: () => clearTabRename(id)
-      });
-    }
-    rows.push("-");
-    rows.push({ label: t("New tab"), act: () => addTab() });
-    rows.push("-");
-    rows.push({ label: t("Close this tab"), act: () => closeTabById(id) });
-    if (tabs.length > 1) rows.push({ label: t("Close the other tabs"), act: () => closeOtherTabs(id) });
-    if (closedTabCount()) rows.push({ label: t("Reopen the last closed tab"), act: () => reopenClosedTab() });
-    return rows;
-  }
-  function closeCtxMenu(giveBack) {
-    const el = ctxEl;
-    ctxEl = null;
-    if (el && el.parentNode) el.parentNode.removeChild(el);
-    const to = ctxBack;
-    ctxBack = null;
-    if (giveBack && to && typeof to.focus === "function" && document.contains(to)) try {
-      to.focus({ preventScroll: true });
-    } catch (_) {
-    }
-  }
-  function openCtxMenu(rows, x, y, byKey) {
-    closeCtxMenu(false);
-    const a = document.activeElement;
-    ctxBack = a && a !== document.body ? a : null;
-    const m = document.createElement("div");
-    m.className = "menu e-ctx";
-    m.setAttribute("role", "menu");
-    m.tabIndex = -1;
-    const items = [];
-    rows.forEach((r, i) => {
-      if (r === "-") {
-        if (i && i < rows.length - 1 && rows[i - 1] !== "-") {
-          const s = document.createElement("div");
-          s.className = "menu-sep";
-          m.appendChild(s);
-        }
-        return;
-      }
-      const b = document.createElement("button");
-      b.type = "button";
-      b.setAttribute("role", "menuitem");
-      if (r.hint) b.title = r.hint;
-      if (r.key) {
-        b.innerHTML = "<span>" + esc(r.label) + "</span><small>" + esc(r.key) + "</small>";
-      } else {
-        b.textContent = r.label;
-      }
-      b.onclick = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        closeCtxMenu(false);
-        r.act();
-      };
-      m.appendChild(b);
-      items.push(b);
-    });
-    m.addEventListener("keydown", (e) => {
-      const n = items.length, at = items.indexOf(document.activeElement);
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        closeCtxMenu(true);
-        return;
-      }
-      if (e.ctrlKey || e.altKey || e.metaKey) return;
-      if (["ArrowDown", "ArrowUp", "Home", "End", "Tab"].indexOf(e.key) < 0 || !n) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const back = e.key === "ArrowUp" || e.key === "Tab" && e.shiftKey;
-      const to = e.key === "Home" ? 0 : e.key === "End" ? n - 1 : ((at < 0 ? back ? 0 : -1 : at) + (back ? -1 : 1) + n) % n;
-      items[to].focus();
-    });
-    document.body.appendChild(m);
-    const w = m.offsetWidth || 220, h = m.offsetHeight || 200;
-    const vw = window.innerWidth || 1280, vh = window.innerHeight || 800;
-    m.style.left = Math.max(4, Math.min(x, vw - w - 4)) + "px";
-    m.style.top = Math.max(4, y + h > vh - 4 ? y - h : y) + "px";
-    ctxEl = m;
-    try {
-      (byKey && items[0] ? items[0] : m).focus({ preventScroll: true });
-    } catch (_) {
-    }
-  }
-  function wireContextMenus() {
-    document.addEventListener("contextmenu", (e) => {
-      if (e.defaultPrevented) return;
-      let target = e.target;
-      if (target && target.closest && target.closest("input,textarea,select,[contenteditable='true'],[contenteditable='']")) return;
-      const sel = window.getSelection ? window.getSelection() : null;
-      if (sel && !sel.isCollapsed && String(sel) && sel.containsNode && sel.containsNode(target, true)) return;
-      const byKey = e.button !== 2;
-      if (byKey && (!target || target === document.body || target === document.documentElement) && entrySel && list) {
-        target = list.querySelector('.card[data-id="' + cssEsc(String(entrySel.id)) + '"] .txt[data-v="' + (entrySel.vi | 0) + '"]') || target;
-      }
-      const rows = ctxRowsFor(target);
-      if (!rows) return;
-      e.preventDefault();
-      let x = e.clientX, y = e.clientY;
-      if (byKey && target && target.getBoundingClientRect) {
-        const r = target.getBoundingClientRect();
-        x = r.left + 8;
-        y = r.bottom;
-      }
-      openCtxMenu(rows, x, y, byKey);
-    });
-    addEventListener("pointerdown", (e) => {
-      if (ctxEl && !ctxEl.contains(e.target)) closeCtxMenu(false);
-    }, true);
-    addEventListener("blur", () => closeCtxMenu(false));
-    addEventListener("resize", () => closeCtxMenu(false));
-    addEventListener("wheel", (e) => {
-      if (ctxEl && !ctxEl.contains(e.target)) closeCtxMenu(false);
-    }, { passive: true, capture: true });
   }
 
   // src/modules/role-turn.js
@@ -39666,7 +40028,7 @@ What you type stays in this browser only.`;
     runShortcut: () => runShortcut
   });
   function runShortcut(id) {
-    if (id === "edSwitch") return edToFront(true);
+    if (id === "edSwitch") return edF6();
     if (typeof document !== "undefined" && document.body && document.body.classList && document.body.classList.contains("screen-on")) {
       if (id === "tabNext") {
         stepTab(1);

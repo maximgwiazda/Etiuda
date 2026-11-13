@@ -1263,6 +1263,7 @@ body.shed-segfold #seg::before{width:100%;transform:none}
 #menuPicker kbd{margin-left:auto;font:11.5px var(--mono);color:var(--dim)}
 /* An object's own menu (context-menu.js) stands where it was asked for, over the page and under a dialog. */
 .menu.e-ctx{position:fixed;right:auto;top:0;left:0;z-index:150;max-width:min(320px,calc(100vw - 8px))}
+.menu.e-ctx.e-ctx-ed{z-index:230}
 .menu.e-ctx:focus{outline:none}
 .menu.e-ctx button{display:flex;align-items:center;justify-content:space-between;width:100%}
 .menu.e-ctx button small{margin-left:auto;padding-left:14px;font:11.5px var(--sans);color:var(--dim)}
@@ -2899,6 +2900,15 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
 .modal.ed-rest:not([hidden]) .modal-bg{animation:none;opacity:0;transition:opacity var(--m-scrim) ease}
 /* An editor's scrim takes the click over the band too, which brings the desk in front (the band's rule above). */
 body.e-host .modal.ed-win:not(.ed-rest) .modal-bg{app-region:no-drag;-webkit-app-region:no-drag}
+/* THE OTHER EDITORS (dialog.js, edShelve) stand where they were, resting, above the scrim and under the one in hand; a
+   dialog of another kind over them puts them under its scrim with the desk. With more than one open, the one in hand
+   wears the accent line, and in the dark theme the rim that would cover it gives way. */
+.modal .modal-card.ed-shell{position:absolute;margin:0;z-index:1;pointer-events:auto;border-color:var(--line-strong);box-shadow:0 8px 20px rgba(0,0,0,.12)}
+.modal:not([hidden]) .modal-card.ed-shell{animation:none}
+.modal .modal-card.ed-shell h2 .modal-t{color:var(--dim)}
+.modal.ed-held .modal-card.ed-shell{z-index:-1}
+.modal.ed-multi:not(.ed-rest) #modalCard{border-color:var(--accent)}
+:root:not([data-theme=light]) .modal.ed-multi:not(.ed-rest) #modalCard::after{display:none}
 body:has(.modal.ed-rest:not([hidden])) header:has(.menu:not([hidden]):not(.e-warm),.facts-panel:not([hidden]),.sgn-panel:not([hidden])){z-index:57}
 /* The intent panel, the dialogs, the menus, Quick facts and the opened pill bar wear the rim inside their
    border; their bevel gives way to it. A surface that scrolls as a whole carries the ring with its content. */

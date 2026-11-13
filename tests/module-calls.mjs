@@ -7577,15 +7577,27 @@ const CARD_B = {
     return st;
   };
   const heard = {}, captured = [], animated = [];
-  const modalEl = { id: "modal", hidden: true, classList: classes(),
+  /* A shell: an editor standing aside, at the box its style names. */
+  const mkShell = () => { const sh = { kids: [], style: {}, className: "", attrs: {}, heard: {}, gone: false,
+    get childNodes() { return this.kids; }, get firstChild() { return this.kids[0] || null; },
+    appendChild(k) { if (k.parent) k.parent.kids = k.parent.kids.filter(x => x !== k); k.parent = this; this.kids.push(k); return k; },
+    setAttribute(k, v) { this.attrs[k] = v; }, querySelectorAll: () => [],
+    addEventListener(k, fn, cap) { const at = cap ? "capture:" + k : k; (this.heard[at] = this.heard[at] || []).push(fn); },
+    remove() { this.gone = true; modalEl.shells = modalEl.shells.filter(x => x !== this); },
+    get offsetLeft() { return parseFloat(this.style.left) || 0; }, get offsetTop() { return parseFloat(this.style.top) || 0; },
+    get offsetWidth() { return parseFloat(this.style.width) || 0; }, get offsetHeight() { return parseFloat(this.style.maxHeight) || 0; },
+    fields() { return this.kids.flatMap(k => k.fields || []); } }; return sh; };
+  const modalEl = { id: "modal", hidden: true, classList: classes(), shells: [], insertBefore(sh) { this.shells.push(sh); return sh; },
+    contains(el) { return el === modalCard || modalCard.contains(el) || this.shells.some(s => s.fields().indexOf(el) >= 0); },
     get clientWidth() { return view.W; }, get clientHeight() { return view.H; } };
   const rel = v => parseFloat(v) || 0;
   const placed = () => modalEl.classList.contains("ed-placed");
   /* What the card holds is one node per render carrying that render's fields, so holding and giving back move them. */
   const modalCard = { id: "modalCard", className: "", style: style(), children: [], _h: "", kids: [], attrs: { "aria-modal": "true" },
-    get innerHTML() { return this._h; }, set innerHTML(v) { this._h = String(v || ""); this.kids = this._h ? [{ html: this._h, fields: [] }] : []; },
+    get innerHTML() { return this._h; }, set innerHTML(v) { this._h = String(v || ""); this.kids = this._h ? [{ html: this._h, fields: [], parent: this }] : []; },
     get childNodes() { return this.kids; }, get firstChild() { return this.kids[0] || null; },
-    removeChild(k) { this.kids = this.kids.filter(x => x !== k); return k; }, appendChild(k) { this.kids.push(k); return k; },
+    removeChild(k) { this.kids = this.kids.filter(x => x !== k); k.parent = null; return k; },
+    appendChild(k) { if (k.parent) k.parent.kids = k.parent.kids.filter(x => x !== k); k.parent = this; this.kids.push(k); return k; },
     setAttribute(k, v) { this.attrs[k] = String(v); }, removeAttribute(k) { delete this.attrs[k]; }, getAttribute(k) { return this.attrs[k] == null ? null : this.attrs[k]; },
     fields() { return this.kids.flatMap(k => k.fields || []); },
     get offsetWidth() { return Math.min(560, view.W - 32); },
@@ -7623,7 +7635,10 @@ const CARD_B = {
       : s === "#eUndo" ? bubbles.filter(b => !b.gone).pop() || null : null,
     querySelectorAll: () => [], getElementById: id => (id === "eUndo" ? bubbles.filter(b => !b.gone).pop() || null : null), contains: () => true,
     createRange: () => ({}),
-    createElement: () => {
+    createElement: tag => {
+      if (tag === "div") { const sh = mkShell(), btn = { onclick: null };
+        return Object.assign(sh, { id: "", innerHTML: "", hidden: false, isConnected: true, classList: classes(), getContext: () => ({}), removeAttribute() {},
+          querySelector: q => (q === "#eUndoBtn" ? btn : null), remove() { this.gone = true; modalEl.shells = modalEl.shells.filter(x => x !== this); } }); }
       const btn = { onclick: null };
       return { getContext: () => ({}), className: "", id: "", innerHTML: "", hidden: false, isConnected: true, style: {}, classList: classes(),
         setAttribute() {}, removeAttribute() {}, addEventListener() {}, querySelector: q => (q === "#eUndoBtn" ? btn : null),
@@ -7653,7 +7668,7 @@ const CARD_B = {
   let T = 1e6;
   const fresh = () => {
     if (unwired) throw new Error(unwired);
-    DL.closeModal(); ST.lsDel("eEdPlace"); ST.lsSet("eMotionOff", "1");
+    DL.closeAllDialogs(); ST.lsDel("eEdPlace"); ST.lsSet("eMotionOff", "1");
     Object.assign(view, { W: 1280, H: 800, band: 36, tools: 85, ch: 500 }); animated.length = 0; captured.length = 0; T += 10000;
     winHeard.pointerup = []; globalThis.document.activeElement = deskBtn;
   };
@@ -7850,8 +7865,8 @@ const CARD_B = {
         const kd = rd("keydown.js"), rs = rd("run-shortcut.js"), sc = rd("shortcuts.js"), ul = rd("ui-lang.js"), dl = rd("dialog.js");
         const got = [
           /\n\s*if\(modalFront\(\)\)\{\n\s*\/\/ Escape is the keyboard's X/.test(kd),
-          kd.indexOf('else if(eventMatchesAction(e,"edSwitch")){ e.preventDefault(); edToDesk(); }') >= 0,
-          /function runShortcut\(id\)\{\n[^\n]*\n\s*if\(id==="edSwitch"\) return edToFront\(true\);/.test(rs),
+          kd.indexOf('else if(eventMatchesAction(e,"edSwitch")){ e.preventDefault(); edF6(); }') >= 0,
+          /function runShortcut\(id\)\{\n[^\n]*\n\s*if\(id==="edSwitch"\) return edF6\(\);/.test(rs),
           /if\(id==="edPrevEntry"\|\|id==="edNextEntry"\)\{\n\s*if\(edResting\(\)\) return false;/.test(rs),
           /function edStepLang\(dir\)\{\n\s*if\(edRest\) return false;/.test(dl),
           sc.indexOf('{id:"edSwitch",label:"Switch between the desk and the editor",hint:"Moves the keyboard between the cards and an open editor",\n    def:{code:"F6",key:"F6",ctrl:0,alt:0,shift:0,meta:0},inField:1}') >= 0,
@@ -8004,6 +8019,108 @@ const CARD_B = {
       });
     modalCard.querySelector = qs0; modalCard.querySelectorAll = qsa0; globalThis.document.createElement = ce0;
 
+    /* ---- Stage 3 (board 983): several editors, one window for each kind. */
+    const titleOf = el => ((el.kids || [])[0] || {}).title || "";
+    const openK = (kind, entry, more) => DL.openDialog(Object.assign({ title: "Edit " + kind, place: kind, entry: entry,
+      wire: () => { modalCard.kids[0].title = "Edit " + kind; modalCard.kids[0].fields = [mkField(kind + " text")]; } }, more || {}));
+    const shellAt = () => modalEl.shells.map(s => [titleOf(s), s.offsetLeft, s.offsetTop].join(" ")).join(" + ");
+
+    check("dialog.js", "983w1 another kind opens a window of its own: the one in hand stands aside whole, resting, typing and all; the one kind takes its own window again",
+      () => {
+        fresh(); openK("card", "c1");
+        modalCard.fields()[0].value = "typed in the card";
+        const kid = modalCard.kids[0];
+        openK("intent", "i1");
+        const two = [modalEl.shells.length, modalEl.shells[0].kids[0] === kid, kid.fields[0].value, titleOf(modalCard), modalEl.classList.contains("ed-multi")].join("|");
+        openK("intent", "i2");
+        return eq([two, modalEl.shells.length, titleOf(modalCard)].join(" || "), "1|true|typed in the card|Edit intent|true || 1 || Edit intent");
+      });
+
+    check("dialog.js", "983w2 from inside an editor the next stands beside it, tops level, 12 px apart: right if it fits whole, else left, else the one in hand slides aside, else stepped 52 px down and 28 px right",
+      () => {
+        const beside = (W, dragTo) => {
+          fresh(); view.W = W; view.H = 900; openK("card", "c1");
+          if (dragTo != null) drag(600, 160, 600 + dragTo, 160);
+          const from = at();
+          DL.edOpenBeside(); openK("category", "k1");
+          return [from.join(","), at().join(","), shellAt()].join(" > ");
+        };
+        return eq([beside(1800), beside(1800, 600), beside(1280), beside(1000)].join(" || "),
+          "620,200 > 1192,200 > Edit card 620 200 || 1220,200 > 648,200 > Edit card 1220 200 || 360,200 > 646,200 > Edit card 74 200 || 220,200 > 248,252 > Edit card 220 200");
+      });
+
+    check("dialog.js", "983w3 from the desk a new window stands at its kind's place, stepped where it would cover another's title bar",
+      () => {
+        fresh(); openK("card", "c1");
+        openK("intent", "i1");
+        return eq([at().join(","), shellAt()].join(" | "), "388,202 | Edit card 360 150");
+      });
+
+    check("dialog.js", "983w4 a press on an editor standing aside brings it forward where it stood; F6 walks the desk, then each editor in the order opened; closing hands the keyboard to the one in front before it",
+      () => {
+        fresh(); view.W = 1800; openK("card", "c1"); DL.edOpenBeside(); openK("category", "k1");
+        const sh = modalEl.shells[0];
+        (sh.heard["capture:pointerdown"] || []).forEach(fn => fn({ button: 0 }));
+        const pressed = [titleOf(modalCard), at().join(","), shellAt()].join(" ");
+        const walk = [];
+        DL.edF6(); walk.push(DL.edResting() ? "desk" : titleOf(modalCard));
+        DL.edF6(); walk.push(DL.edResting() ? "desk" : titleOf(modalCard));
+        DL.edF6(); walk.push(DL.edResting() ? "desk" : titleOf(modalCard));
+        DL.edF6(); walk.push(DL.edResting() ? "desk" : titleOf(modalCard));
+        DL.closeModal();
+        const closed = [titleOf(modalCard), modalEl.shells.length, modalEl.classList.contains("ed-multi"), modalCard.contains(globalThis.document.activeElement)].join("|");
+        return eq([pressed, walk.join(","), closed].join(" || "), "Edit card 620,150 Edit category 1192 150 || Edit category,desk,Edit card,Edit category || Edit card|0|false|true");
+      });
+
+    check("dialog.js", "983w5 asked for an entry already open, its window comes forward untouched, from the desk too; another entry of an open kind takes that kind's window, in its place, with the Undo",
+      () => {
+        fresh(); view.W = 1800; openK("card", "c1", { again: () => openK("card", "c1") }); DL.edOpenBeside(); openK("category", "k1");
+        const kid = modalEl.shells[0].kids[0]; kid.fields[0].value = "typed";
+        const forward = [DL.edAlreadyOpen("card", "c1"), titleOf(modalCard), modalCard.kids[0] === kid, kid.fields[0].value].join("|");
+        scrim();
+        const fromDesk = [DL.edAlreadyOpen("card", "c1"), DL.edResting(), DL.edAlreadyOpen("card", "c2")].join("|");
+        const n = bubbles.length, place = at().join(",");
+        openK("card", "c2", { again: () => openK("card", "c2") });
+        return eq([forward, fromDesk, bubbles.length - n, at().join(",") === place, modalEl.shells.length].join(" || "), "true|Edit card|true|typed || true|false|false || 1 || true || 1");
+      });
+
+    check("dialog.js", "983w6 what another editor saved shows in the ones standing aside at once, typed fields untouched; a catalog of another layer reaches them when they come forward",
+      () => {
+        fresh(); view.W = 1800;
+        let shown = "old name", drawn = "";
+        openK("card", "c1", { refresh: () => { drawn = shown; }, subject: () => "s" });
+        DL.edOpenBeside(); openK("category", "k1");
+        shown = "renamed"; DL.edSubjectCheck();
+        const aside = drawn;
+        subj = "x";
+        DL.edCatalogTaken(false); DL.edSubjectCheck();
+        (modalEl.shells[0].heard["capture:pointerdown"] || []).forEach(fn => fn({ button: 0 }));
+        return eq([aside, titleOf(modalCard), DL.edCanSave()].join("|"), "renamed|Edit card|false");
+      });
+
+    check("dialog.js", "983w7 below 800 px one window stays: another kind takes it, as before",
+      () => {
+        fresh(); view.W = 760; openK("card", "c1"); openK("intent", "i1");
+        return eq([modalEl.shells.length, titleOf(modalCard), modalEl.classList.contains("ed-multi")].join("|"), "0|Edit intent|false");
+      });
+
+    check("dialog.js", "983w8 every named thing an editor lists has the desk's own row with F2, F2 and the menu keys on a focused one too, the menu above every editor; the tour closes every editor; the one in hand wears the accent line",
+      () => {
+        const rd = n => fs.readFileSync(join(MODDIR, n), "utf8");
+        const cm = rd("context-menu.js"), kd = rd("keydown.js"), tu = rd("tour.js"), tpl = fs.readFileSync(join(HERE, "..", "src", "template.html"), "utf8");
+        const got = [
+          /if\(target\.closest\("#modalCard"\)\) return editorRows\(target\);/.test(cm),
+          (cm.match(/edOpenBeside\(\); hooks\.open(Category|Intent|Card)Editor\(/g) || []).length,
+          ['label:t("Edit this category"), key:"F2"', 'label:t("Edit this intent"), key:"F2"', 'label:t("Edit this card"), key:"F2"'].every(s => cm.indexOf(s) >= 0),
+          cm.indexOf('!(target.matches && target.matches("#meIntents input[type=checkbox]"))') >= 0,
+          kd.indexOf('else if(eventMatchesAction(e,"rename") && ctxEditorAct(document.activeElement)) e.preventDefault();') >= 0,
+          tpl.indexOf(".menu.e-ctx.e-ctx-ed{z-index:230}") >= 0,
+          tpl.indexOf(".modal.ed-multi:not(.ed-rest) #modalCard{border-color:var(--accent)}") >= 0,
+          tpl.indexOf(".modal.ed-held .modal-card.ed-shell{z-index:-1}") >= 0,
+          (tu.match(/if\(modalOpen\(\)\) closeAllDialogs\(\);/g) || []).length];
+        return eq(got.join(","), "true,3,true,true,true,true,true,true,2");
+      });
+
     check("dialog.js", "983b its buttons, a field, touch and the right button never start a drag; the name inside the bar does",
       () => {
         fresh(); open("card");
@@ -8059,9 +8176,10 @@ const CARD_B = {
         const cardBack = at().join(",") === card;
         open("intent");
         const intentBack = at().join(",") === intent;
+        DL.closeAllDialogs();
         open("category");
         const catCentred = !placed();
-        DL.closeModal();
+        DL.closeAllDialogs();
         /* A restart: nothing in memory, the store as a previous run left it. */
         ST.lsSet("eEdPlace", JSON.stringify({ category: { x: -200, y: -150 } }));
         open("category");
