@@ -9631,18 +9631,28 @@ function signinDoorsOk(list, packed) {
   }
   return out;
 }
-/* The service's answer read: {ok, code, cert, doors} (cert null where no licence admits the person yet, and then no doors; `waiting`
-   where a licence admits them and has no free seat, so a quiet renewal seats the desk once one frees), or {ok: false, reason}, the
-   reason "token", "signin", "full" or "desks" as the service says it, else "unreached", which every other answer is. `packed` is
-   signinDoorAddressOk's. */
+/* THE DOORS' SIGNATURE (decision 35): doors are the service's only where the key that signed the certificate beside them, one
+   signinCertOk took, signed them: the line "etiuda-seat-doors", the certificate's signature value, their number, then each door's
+   six fields one a line, in the order handed (Studio's service/licence/requests.mjs seatDoorsBytes). An answer without it has none. */
+function signinDoorsSigned(doors, sig, cert) {
+  if (!Array.isArray(doors) || !doors.length || !/^[0-9a-f]{128}$/.test(String(sig)) || !cert || !cert.via || !cert.via.key || !cert.sig) return false;
+  const fields = [cert.sig.value, doors.length].concat(...doors.map(d => [d.team, d.rt, d.url, d.keyId, d.lead, d.box]));
+  return signinVerified(cert.via.key.pub, Buffer.from("etiuda-seat-doors\n" + fields.map(String).join("\n"), "utf8"), sig); /* plant:doors-sig */
+}
+/* The service's answer read: {ok, code, cert, doors, doorsSig} (the doors only under signinDoorsSigned; cert null where no licence
+   admits the person yet, and then no doors; `waiting` where a licence admits them and has no free seat, so a quiet renewal seats the
+   desk once one frees), or {ok: false, reason}, the reason "token", "signin", "full" or "desks" as the service says it, else
+   "unreached", which every other answer is. `packed` is signinDoorAddressOk's. */
 function signinAnswer(res, deskKey, packed) {
   let j = null;
   try { j = JSON.parse(Buffer.from(res && res.bytes ? res.bytes : []).toString("utf8")); } catch { j = null; }
   if (!j || typeof j !== "object" || Array.isArray(j)) return { ok: false, reason: "unreached" };
   if (res.status === 200 && j.ok === true && SIGNIN_CODE.test(String(j.code))) {
     if (j.certificate === null) return { ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === "waiting" }; /* plant:wait-read */
-    if (signinCertOk(j.certificate, deskKey) && j.certificate.code === j.code)
-      return { ok: true, code: String(j.code), cert: j.certificate, doors: signinDoorsOk(j.doors, packed) }; /* plant:door-read */
+    if (signinCertOk(j.certificate, deskKey) && j.certificate.code === j.code) {
+      const doors = signinDoorsOk(j.doors, packed), signed = signinDoorsSigned(doors, j.doorsSig, j.certificate); /* plant:door-signed-read */
+      return { ok: true, code: String(j.code), cert: j.certificate, doors: signed ? doors : [], doorsSig: signed ? String(j.doorsSig) : "" }; /* plant:door-read */
+    }
     return { ok: false, reason: "unreached" };
   }
   const said = { 403: ["token", "signin"], 409: ["full", "desks"] }[res.status];
@@ -9670,7 +9680,7 @@ function signinLapsed(held, now) {
    "waiting"), a refusal keeps it (until its own `until`) and is said; "signin", a seat freed, forgets the refresh token, since only a
    sign-in takes it again. */
 function signinSettle(held, ans, now) {
-  if (ans.ok) return Object.assign({}, held, { code: ans.code, cert: ans.cert, doors: ans.cert ? (ans.doors || []) : [], at: now, checked: now, reached: true,
+  if (ans.ok) return Object.assign({}, held, { code: ans.code, cert: ans.cert, doors: ans.cert ? (ans.doors || []) : [], doorsSig: ans.cert ? String(ans.doorsSig || "") : "", at: now, checked: now, reached: true,
     said: ans.waiting === true ? "waiting" : "", ask: false }); /* plant:wait-settle */
   if (ans.reason === "unreached") return Object.assign({}, held, { checked: now, reached: false });
   const freed = ans.reason === "signin";
@@ -9707,8 +9717,9 @@ function signinDoorRequest(doc, deskId, deskKey, cert, door, now) {
   return Object.assign({}, doc, { seat: JSON.parse(seatFileText(deskId, cert)), door: String(door) }); /* plant:door-fields */
 }
 /* The sign-in's file beside desk.json, read whole or not at all: {held: {provider, refresh, sub, seed, code, cert, at, checked,
-   reached, said, ask, doors} or null}. `refresh` and `sub` are signinKeep's, "" where none is kept, and nothing else in it is a secret;
-   `ask` says the person's own sign-in is wanted again; a file of another format holds nothing. `packed` is signinDoorAddressOk's. */
+   reached, said, ask, doors, doorsSig} or null}, the certificate only under signinCertOk and the doors under signinDoorsSigned.
+   `refresh` and `sub` are signinKeep's, "" where none is kept, and nothing else in it is a secret; `ask` says the person's own
+   sign-in is wanted again; a file of another format holds nothing. `packed` is signinDoorAddressOk's. */
 const SIGNIN_FILE = "signin.json";
 function signinFileRead(text, packed) {
   let d = null;
@@ -9721,7 +9732,11 @@ function signinFileRead(text, packed) {
       seed: String(h.seed), code: SIGNIN_CODE.test(String(h.code)) ? String(h.code) : "",
       cert: h.cert && typeof h.cert === "object" && signinCertOk(h.cert, h.cert.desk) ? h.cert : null, /* plant:file-cert */
       at: num(h.at), checked: num(h.checked), reached: h.reached !== false, said: typeof h.said === "string" ? h.said : "", ask: h.ask === true,
-      doors: signinDoorsOk(h.doors, packed) };
+      doors: [], doorsSig: "" };
+  if (out.held && out.held.cert) {
+    const doors = signinDoorsOk(h.doors, packed), sig = typeof h.doorsSig === "string" ? h.doorsSig : "";
+    if (signinDoorsSigned(doors, sig, out.held.cert)) Object.assign(out.held, { doors: doors, doorsSig: sig }); /* plant:file-doors-signed */
+  }
   /* The desk key whose sign out the service has not taken yet: asked again at the renewal's next turn (signinOutAgain). */
   if (/^[0-9a-f]{64}$/.test(String(d.out))) out.out = String(d.out); /* plant:out-kept */
   return out;
@@ -9841,6 +9856,7 @@ function signinDoorsShown(held, now) {
   const me = branchIdentity(false);
   if (!held || !held.cert || !me || !signinCertOk(held.cert, me.key) || !(held.cert.until > now) || pinnedLead() || teamJoin) return []; /* plant:door-shown */
   if (Object.keys(teamPins).some(teamPinStands)) return []; /* plant:door-pin-stands */
+  if (!signinDoorsSigned(held.doors, held.doorsSig, held.cert)) return []; /* plant:door-shown-signed */
   return (held.doors || []).map((d, n) => {
     if (!signinDoorAddressOk(d, SIGNIN_DESK_PACKED)) return null; /* plant:door-address-offer */
     /* Machine policy binds a door as it binds an invitation (inviteDoor); a team pinned under another lead is no door, as it is no
