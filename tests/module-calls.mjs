@@ -7614,6 +7614,7 @@ const CARD_B = {
   const Dom = await import(MOD("dom.js"));
   const ST = await import(MOD("storage.js"));
   const UL = await import(MOD("ui-lang.js"));
+  const HK = await import(MOD("hooks.js"));
   const hadDoc = globalThis.document, hadAdd = globalThis.addEventListener, hadNow = Date.now, hadGcs = globalThis.getComputedStyle;
   const view = { W: 1280, H: 800, band: 36, tools: 85, ch: 500 };
   const classes = () => {
@@ -7634,7 +7635,7 @@ const CARD_B = {
   const mkShell = () => { const sh = { kids: [], style: { props: {}, setProperty(k, v) { this.props[k] = String(v); }, removeProperty(k) { delete this.props[k]; } }, className: "", attrs: {}, heard: {}, gone: false,
     get childNodes() { return this.kids; }, get firstChild() { return this.kids[0] || null; },
     appendChild(k) { if (k.parent) k.parent.kids = k.parent.kids.filter(x => x !== k); k.parent = this; this.kids.push(k); return k; },
-    setAttribute(k, v) { this.attrs[k] = v; }, querySelectorAll: () => [],
+    setAttribute(k, v) { this.attrs[k] = v; }, querySelectorAll(sel) { return sel === "input,textarea,select" ? this.fields() : []; },
     addEventListener(k, fn, cap) { const at = cap ? "capture:" + k : k; (this.heard[at] = this.heard[at] || []).push(fn); },
     remove() { this.gone = true; modalEl.shells = modalEl.shells.filter(x => x !== this); },
     get offsetLeft() { return parseFloat(this.style.left) || 0; },
@@ -8256,6 +8257,56 @@ const CARD_B = {
         fire("pointermove", { clientX: 1300, clientY: 500 }); fire("pointerup", {});
         return eq([dragged, titleOf(modalCard), at().join(",") === before].join(" || "), "Edit card|620,250|true || Edit category || true");
       });
+
+    /* ---- every editor closed at once (the tour's start): one Undo for the ones that held typing. */
+    const tourWith = (fn) => {
+      const was = [HK.hooks.tourActive, HK.hooks.endTour], ends = [];
+      HK.hooks.tourActive = () => true; HK.hooks.endTour = done => { ends.push(done); };
+      try { return fn(ends); } finally { HK.hooks.tourActive = was[0]; HK.hooks.endTour = was[1]; }
+    };
+    const twoTyped = () => {
+      fresh(); view.W = 1800;
+      const card = () => openK("card", "c1", { again: card });
+      const intent = () => openK("intent", "i1", { again: intent });
+      card(); modalCard.fields()[0].value = "typed in the card";
+      DL.edOpenBeside(); intent(); modalCard.fields()[0].value = "typed in the intent";
+      return at().join(",");
+    };
+
+    check("dialog.js", "983t1 closing every editor at once leaves one Undo, which brings back each editor that held typing, with it, at its place, the one in hand in front again",
+      () => tourWith(() => {
+        const intentAt = twoTyped(), n = bubbles.length;
+        DL.closeAllDialogs();
+        const closed = [modalEl.hidden, bubbles.length - n, /Moved on without saving the changes/.test(bubbles[bubbles.length - 1].innerHTML)].join("|");
+        UL.takeStandingUndo(false);
+        const back = [titleOf(modalCard), modalCard.fields()[0].value, at().join(",") === intentAt, modalEl.shells.length,
+          modalEl.shells[0] && titleOf(modalEl.shells[0]), modalEl.shells[0] && modalEl.shells[0].kids[0].fields[0].value].join("|");
+        return eq([closed, back].join(" || "), "true|1|true || Edit intent|typed in the intent|true|1|Edit card|typed in the card");
+      }));
+
+    check("dialog.js", "983t2 that Undo stands above the tour, its first step up",
+      () => tourWith(() => {
+        twoTyped(); DL.closeAllDialogs();
+        const tpl = fs.readFileSync(join(HERE, "..", "src", "template.html"), "utf8");
+        const tour = +(/#tourRoot\{[^}]*z-index:(\d+)/.exec(tpl) || [])[1], undo = +(/\.bub-ask\.e-undo-top\{z-index:(\d+)\}/.exec(tpl) || [])[1];
+        return eq([bubbles[bubbles.length - 1].classList.contains("e-undo-top"), undo > tour].join("|"), "true|true");
+      }));
+
+    check("dialog.js", "983t3 pressing that Undo ends the tour",
+      () => tourWith(ends => {
+        twoTyped(); DL.closeAllDialogs();
+        const before = ends.length;
+        UL.takeStandingUndo(false);
+        return eq([before, ends.join(",")].join("|"), "0|false");
+      }));
+
+    check("dialog.js", "983t4 editors with nothing typed just close, as before, with no Undo",
+      () => tourWith(() => {
+        fresh(); view.W = 1800; openK("card", "c1", { again: () => {} }); DL.edOpenBeside(); openK("intent", "i1", { again: () => {} });
+        const n = bubbles.length;
+        DL.closeAllDialogs();
+        return eq([modalEl.hidden, bubbles.length - n].join("|"), "true|0");
+      }));
 
     check("dialog.js", "983w8 every named thing an editor lists has the menu its own panel gives, by the same builder, its edit row opening the editor beside, F2 at its right, F2 and the menu keys on a focused one too, the menu above every editor; the tour closes every editor; the one in hand wears the accent line",
       () => {

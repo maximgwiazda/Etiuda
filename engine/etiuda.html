@@ -4299,6 +4299,8 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 /* THE QUESTIONS THAT HANG FROM A CONTROL, the catalog offer and the name: the family's bubble with
    the tour card's type, over the dialogs and under the tour. */
 .bub-ask{z-index:235;width:min(340px,calc(100vw - 24px));animation:eModalCardIn var(--m-surface) var(--m-ease) both}
+/* The Undo of editors the tour's start closed (dialog.js, closeAllDialogs) stands above the tour, which it ends. */
+.bub-ask.e-undo-top{z-index:245}
 .bub-ask h3{margin:0 0 6px;font:700 15.5px var(--sans-display);letter-spacing:-.2px}
 .bub-ask p{margin:0 0 8px;font-size:13.5px;line-height:1.5;color:var(--bub-dim);text-wrap:pretty}
 .bub-ask b{color:var(--bub-ink);font-weight:600}
@@ -19703,6 +19705,7 @@ What you type stays in this browser only.`;
     }
   }
   function closeAllDialogs() {
+    const kept = edDirtyWins();
     edWins.forEach((r) => {
       if (r.shell) r.shell.remove();
       r.shell = null;
@@ -19711,6 +19714,39 @@ What you type stays in this browser only.`;
     edHist = edWins.slice();
     edMulti();
     if (!modalEl.hidden) closeModal();
+    if (!kept.length) return;
+    offerUndo("Moved on without saving the changes", () => edBringBack(kept));
+    const u = document.getElementById("eUndo");
+    if (u) u.classList.add("e-undo-top");
+  }
+  function edDirtyWins() {
+    const out = [];
+    edWins.forEach((r) => {
+      if (r === edActiveWin) {
+        if (edAgain && edDirty()) out.push({ seq: r.seq, again: edAgain, typed: edTyped(), place: edPlaceNow, front: 1 });
+        return;
+      }
+      const sh = r.shell, st = r.state;
+      if (!sh || !st || !st.again || st.baseline === null || edFormState(sh) === st.baseline) return;
+      const place = sh.classList.contains("ed-bar") ? r.winPlace || null : { x: Math.round(sh.offsetLeft + sh.offsetWidth / 2 - modalEl.clientWidth / 2), y: Math.round(sh.offsetTop - modalEl.clientHeight / 2) };
+      out.push({ seq: r.seq, again: st.again, typed: edTyped(sh), place, front: 0 });
+    });
+    return out.sort((a, b) => a.front - b.front || a.seq - b.seq);
+  }
+  function edBringBack(kept) {
+    if (hooks.tourActive && hooks.tourActive() && hooks.endTour) hooks.endTour(false);
+    kept.forEach((k) => {
+      edStepping = true;
+      try {
+        k.again();
+      } finally {
+        edStepping = false;
+      }
+      edRetype(k.typed);
+      edPlaceNow = k.place;
+      edPlaced = null;
+      edPlaceSync();
+    });
   }
   var MODAL_TABBABLE = "a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex='-1'])";
   function modalTabTarget(back) {

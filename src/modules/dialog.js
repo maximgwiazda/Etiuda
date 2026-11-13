@@ -8,6 +8,7 @@ import { lsGet, lsSet, lsDel } from "./storage.js";
 import { formatActionChord } from "./shortcuts.js";
 import { scStopCapture } from "./shortcuts-list.js";
 import { offerUndo, t, tc, translateTree } from "./ui-lang.js";
+import { hooks } from "./hooks.js";
 import { esc } from "./esc.js";
 import { modalEl, modalCard, $, focusKey, sameControl } from "./dom.js";
 
@@ -1155,12 +1156,46 @@ function edBars(){
   }
 }
 /* The tour and a catalog taken whole close every editor, not only the one in hand. */
+/* No close the person did not press loses typing silently: one Undo, the one a closed editor leaves, brings back every editor
+   that held typing, each with it at its place, the one in hand in front again. It stands above the tour, whose start is one
+   of the acts that close them all, and pressing it ends the tour. */
 function closeAllDialogs(){
+  const kept=edDirtyWins();
   edWins.forEach(r=>{ if(r.shell) r.shell.remove(); r.shell=null; });
   edWins=edActiveWin ? [edActiveWin] : [];
   edHist=edWins.slice();
   edMulti();
   if(!modalEl.hidden) closeModal();
+  if(!kept.length) return;
+  offerUndo("Moved on without saving the changes", ()=>edBringBack(kept));
+  const u=document.getElementById("eUndo");
+  if(u) u.classList.add("e-undo-top");
+}
+function edDirtyWins(){
+  const out=[];
+  edWins.forEach(r=>{
+    if(r===edActiveWin){
+      if(edAgain && edDirty()) out.push({seq:r.seq, again:edAgain, typed:edTyped(), place:edPlaceNow, front:1});
+      return;
+    }
+    const sh=r.shell, st=r.state;
+    if(!sh || !st || !st.again || st.baseline===null || edFormState(sh)===st.baseline) return;
+    const place=sh.classList.contains("ed-bar") ? (r.winPlace||null)
+      : {x:Math.round(sh.offsetLeft+sh.offsetWidth/2-modalEl.clientWidth/2), y:Math.round(sh.offsetTop-modalEl.clientHeight/2)};
+    out.push({seq:r.seq, again:st.again, typed:edTyped(sh), place:place, front:0});
+  });
+  return out.sort((a,b)=>(a.front-b.front) || (a.seq-b.seq));
+}
+function edBringBack(kept){
+  if(hooks.tourActive && hooks.tourActive() && hooks.endTour) hooks.endTour(false);
+  kept.forEach(k=>{
+    edStepping=true;
+    try{ k.again(); }finally{ edStepping=false; }
+    edRetype(k.typed);
+    edPlaceNow=k.place;
+    edPlaced=null;
+    edPlaceSync();
+  });
 }
 /* THE CARD IS THE WHOLE KEYBOARD while it is up: the markup says aria-modal, and the scrim
    takes the mouse, but Tab walked off the card and into the header behind it - reachable and

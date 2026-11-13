@@ -4299,6 +4299,8 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 /* THE QUESTIONS THAT HANG FROM A CONTROL, the catalog offer and the name: the family's bubble with
    the tour card's type, over the dialogs and under the tour. */
 .bub-ask{z-index:235;width:min(340px,calc(100vw - 24px));animation:eModalCardIn var(--m-surface) var(--m-ease) both}
+/* The Undo of editors the tour's start closed (dialog.js, closeAllDialogs) stands above the tour, which it ends. */
+.bub-ask.e-undo-top{z-index:245}
 .bub-ask h3{margin:0 0 6px;font:700 15.5px var(--sans-display);letter-spacing:-.2px}
 .bub-ask p{margin:0 0 8px;font-size:13.5px;line-height:1.5;color:var(--bub-dim);text-wrap:pretty}
 .bub-ask b{color:var(--bub-ink);font-weight:600}
