@@ -1411,6 +1411,7 @@ UI_STRINGS.pl={
   /* words: copywriter and product designer, a managed computer (decision 49) */
   "Your organisation has not given this account access to Etiuda.":"Organizacja nie przyznała temu kontu dostępu do Etiudy.",
   "Its IT department can: asking them to assign the account is enough. Etiuda keeps working with the catalog it has.":"Może to zrobić jej dział IT: wystarczy poprosić o przypisanie konta. Etiuda działa dalej z katalogiem, który ma.",
+  // placeholder: Claudette
   "Whom to ask: {CONTACT}. Etiuda keeps working with the catalog it has.":"Kogo poprosić: {CONTACT}. Etiuda działa dalej z katalogiem, który ma.",
   "This account has no Etiuda role in its organisation, so it holds no seat.":"To konto nie ma w swojej organizacji żadnej roli w Etiudzie, więc nie zajmuje miejsca w licencji.",
   "Its IT department assigns the roles.":"Role przydziela dział IT organizacji.",

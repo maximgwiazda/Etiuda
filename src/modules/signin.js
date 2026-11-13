@@ -58,7 +58,7 @@ function signinCapHolds(v){ return !(v && v.managed && (v.managed.on || v.manage
 function signinRefusedWords(v){
   const c=v && v.managed ? v.managed.contact : "";
   return [t("Your organisation has not given this account access to Etiuda."),
-    c ? named(t("Whom to ask: {CONTACT}. Etiuda keeps working with the catalog it has."),"{CONTACT}",c) // placeholder: Claudette, the SupportContact line
+    c ? named(t("Whom to ask: {CONTACT}. Etiuda keeps working with the catalog it has."),"{CONTACT}",c)
       : t("Its IT department can: asking them to assign the account is enough. Etiuda keeps working with the catalog it has.")]; /* plant:refused-contact */
 }
 /* The reasons that sentence answers: a sign-in outside the pinned tenant always, and the organisation's refusals on a managed computer. */

@@ -1922,7 +1922,9 @@ CASES.labOnly = () => {
   const pageNames = fs.readdirSync(path.join(ROOT, "src", "modules")).filter(f => /ETIUDA_SIGNIN_LAB/.test(fs.readFileSync(path.join(ROOT, "src", "modules", f), "utf8")));
   const env = /process\.env\.ETIUDA_SIGNIN_LAB\b|process\.env\[/g;
   return !!block && n(/process\.env\.ETIUDA_SIGNIN_LAB\b/g) === 2 && (block.match(env) || []).length === 2
-    && n(/(?<!let )\bSIGNIN_PROVIDERS = /g) === 1 && n(/(?<!let )\bSIGNIN_SERVICE = /g) === 1 && n(/(?<!let )\bSIGNOUT_SERVICE = /g) === 1
+    /* The one other assignment is machine policy's pin (decision 49, tests/desk-managed.mjs), which narrows the table and never names one. */
+    && n(/(?<!let )\bSIGNIN_PROVIDERS = /g) === 2 && n(/\n  SIGNIN_PROVIDERS = signinPinTable\(SIGNIN_PROVIDERS, managed\); \/\* plant:pin-taken \*\/\n/g) === 1
+    && n(/(?<!let )\bSIGNIN_SERVICE = /g) === 1 && n(/(?<!let )\bSIGNOUT_SERVICE = /g) === 1
     && n(/\bsigninLabUse\(/g) === 3 && /\(testServiceOn = signinLabUse\(signinLabRead\(JSON\.stringify\(fields\)\)\)\)/.test(MAIN) && n(/\bsigninLabOn = true/g) === 1 && /SIGNIN_PROVIDERS = [^\n]*\n  SIGNIN_SERVICE = lab\.signin;\n  SIGNOUT_SERVICE = lab\.signout;/.test(MAIN)
     && !/ipcMain\.(on|handle)\([^\n]*(signinLab|SIGNIN_LAB)/.test(MAIN) &&!/ETIUDA_SIGNIN_LAB/.test(PRELOAD) && pageNames.length === 0;
 };

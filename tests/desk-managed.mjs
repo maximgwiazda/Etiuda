@@ -205,9 +205,9 @@ function wiringHolds(src) {
     && at("  signinStore.managed = managed;\n")
     && at("if (m && m.any) view.managed = {")
     && at("  if (s.managed && s.managed.managed && !s.managed.shared) return signinView(); /* plant:out-managed */")
-    && at("    if (got.ok && signinOtherHeld(st, got.sub)) got = { ok: false, reason: \"signin-other\" }; /* plant:managed-same */")
+    && at("    if (got.ok && managed && signinOtherHeld(st, got.sub)) got = { ok: false, reason: \"signin-other\" }; /* plant:managed-same */")
     && at("  if (buyManaged(v)) return \"\"; /* plant:buy-managed */")
-    && at("{ offer: !buyManaged(signinView()) && !!orderAddress(ORDER_PAGE, \"\") }");
+    && at("{ offer: !!buyAddress() }");
 }
 
 /* ---- the page --------------------------------------------------------------------------------------------------------- */

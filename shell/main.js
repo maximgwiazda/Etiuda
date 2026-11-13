@@ -10321,7 +10321,7 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
   let landing = "appfail";
   try {
     let got = await signinRun(io, p, me.key, Date.now);
-    if (got.ok && signinOtherHeld(st, got.sub)) got = { ok: false, reason: "signin-other" }; /* plant:managed-same */
+    if (got.ok && managed && signinOtherHeld(st, got.sub)) got = { ok: false, reason: "signin-other" }; /* plant:managed-same */
     if (got.ok) {
       const ans = await signinSeat(io, p.id, me.key, got.idToken, got.seed, Date.now);
       signinTake(p.id, got, ans, Date.now());
@@ -10470,7 +10470,7 @@ function buyAddress() {
   if (buyManaged(v)) return ""; /* plant:buy-managed */
   return orderAddress(ORDER_PAGE, v && v.code);
 }
-ipcMain.on("etiuda:buy-state", (e) => { e.returnValue = fromEngine(e) ? { offer: !buyManaged(signinView()) && !!orderAddress(ORDER_PAGE, "") } : null; }); /* plant:buy-state-managed */
+ipcMain.on("etiuda:buy-state", (e) => { e.returnValue = fromEngine(e) ? { offer: !!buyAddress() } : null; }); /* plant:buy-state-managed */
 /* Buy leaves as the release page does (etiuda:update-click): the preload names a trusted click on it, which stands for the address
    the shell builds now, and the open goes through openExternally. The page never names an address. */
 ipcMain.on("etiuda:buy-click", (e) => {
