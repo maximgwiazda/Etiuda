@@ -73,21 +73,24 @@ const sellerAddress = require("./tools/seller-address.cjs");
 // holds a secret here: a .pfx's password is WIN_CSC_KEY_PASSWORD, read by electron-builder itself so
 // it stays out of a process listing; a token keeps its key and asks for its own PIN; Artifact
 // Signing signs in through Azure's own credentials. Two routes at once, or half of one, refuses.
+// ETIUDA_SIGN=esigner reads its account from the Windows keyring as it signs (tools/esigner.cjs).
 const SIGN_TIMESTAMP = { signingHashAlgorithms: ["sha256"], rfc3161TimeStampServer: "http://timestamp.digicert.com" };
 const ARTIFACT = { endpoint: "ETIUDA_SIGNING_ENDPOINT", codeSigningAccountName: "ETIUDA_SIGNING_ACCOUNT",
   certificateProfileName: "ETIUDA_SIGNING_PROFILE", publisherName: "ETIUDA_SIGNING_PUBLISHER" };
 const given = name => process.env[name] || "";
 const cert = given("ETIUDA_CERT"), sha1 = given("ETIUDA_CERT_SHA1"), subject = given("ETIUDA_CERT_SUBJECT");
 const artifact = Object.values(ARTIFACT).filter(given);
+const esigner = require("./tools/esigner.cjs");
+const esignerKind = esigner.mode(process.env);
 const routes = [cert && "ETIUDA_CERT", (sha1 || subject) && "ETIUDA_CERT_SHA1 or ETIUDA_CERT_SUBJECT",
-  artifact.length && "ETIUDA_SIGNING_*"].filter(Boolean);
+  artifact.length && "ETIUDA_SIGNING_*", esignerKind && esigner.SIGN_VAR].filter(Boolean);
 if (routes.length > 1) throw new Error("signing: " + routes.join(" and ") + " are set; set one route or none");
 if (artifact.length && artifact.length < 4)
   throw new Error("signing: Artifact Signing needs " + Object.values(ARTIFACT).filter(n => !given(n)).join(", ") + " too");
 const signing = cert ? { signtoolOptions: { certificateFile: cert, ...SIGN_TIMESTAMP } }
   : sha1 || subject ? { signtoolOptions: { ...(sha1 && { certificateSha1: sha1 }), ...(subject && { certificateSubjectName: subject }), ...SIGN_TIMESTAMP } }
   : artifact.length ? { azureSignOptions: Object.fromEntries(Object.entries(ARTIFACT).map(([key, name]) => [key, given(name)])) }
-  : {};
+  : esigner.esignerSigning(process.env, __dirname, output) || {};
 
 module.exports = sellerAddress.sellerConfig(testService.testServiceConfig({
   appId: "app.etiuda.desktop",

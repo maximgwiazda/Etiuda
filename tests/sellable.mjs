@@ -19,6 +19,9 @@
  *   6  tools/release.mjs stops a customer build at gate 2 and lets a preview through, driven
  *   9  a test service build (tools/test-service.cjs) is never released: the variable stops any release at gate 2, a package
  *      carrying its file is refused, and in the release profile this tree's own package is read for it
+ *  10  the eSigner route (tools/esigner.cjs), its effects replaced: unset it gives no block, the hook is handed each file once,
+ *      the account's values reach the tool only through an argument file, the exit code is not the answer, and a demo-signed
+ *      build is never released
  *
  * The expected values below were written from the rule in tools/sellable.mjs before any run. */
 process.removeAllListeners('warning');
@@ -37,7 +40,7 @@ import { customerVersion, versionProblems, placeholders, licencePages, licencePr
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 46;
+const EXPECTED = 55;
 
 let asserted = 0, failed = 0;
 const notRun = [];
@@ -395,7 +398,7 @@ try {
     const runs = path.join(root, 'runs');
     fs.mkdirSync(runs, { recursive: true });
     for (const d of ['tools', 'tests', 'shell', path.join('src', 'modules')]) fs.mkdirSync(path.join(dir, d), { recursive: true });
-    for (const f of ['tools/release.mjs', 'tools/sellable.mjs', 'tools/sbom.mjs', 'tests/engine.js', 'electron-builder.js', 'tools/signin-secret.cjs', 'tools/test-service.cjs', 'tools/seller-address.cjs', 'package.json', 'shell/main.js'])
+    for (const f of ['tools/release.mjs', 'tools/sellable.mjs', 'tools/sbom.mjs', 'tests/engine.js', 'electron-builder.js', 'tools/signin-secret.cjs', 'tools/test-service.cjs', 'tools/seller-address.cjs', 'tools/esigner.cjs', 'package.json', 'shell/main.js'])
       fs.copyFileSync(path.join(ROOT, f), path.join(dir, f));
     fs.writeFileSync(path.join(dir, 'src', 'modules', 'env.js'), 'const E_VERSION="' + version + '";\n');
     fs.writeFileSync(path.join(dir, 'shell', 'license_en.txt'), licence);
@@ -428,8 +431,9 @@ try {
     return { root, dir, runs, tree, git };
   };
   const release = (l, argv, cert, extraEnv = {}) => {
-    const env = { ...process.env, ETIUDA_RELEASE_HOME_ROOT: l.root, ETIUDA_RUNS: l.runs, ...extraEnv };
+    const env = { ...process.env, ETIUDA_RELEASE_HOME_ROOT: l.root, ETIUDA_RUNS: l.runs };
     for (const k of SIGNING_VARS) delete env[k];
+    Object.assign(env, extraEnv);
     if (cert) env.ETIUDA_CERT = cert;
     const res = spawnSync(process.execPath, ['tools/release.mjs', ...argv], { cwd: l.dir, env, encoding: 'utf8', timeout: 60000 });
     return { status: res.status, out: String(res.stdout || '') + String(res.stderr || '') };
@@ -589,7 +593,7 @@ try {
   const sellLift = sell9.split('\n').map(l => /plant:sell-ts-file/.test(l) ? '    if (false) out.push(""); /* plant:sell-ts-file */' : l).join('\n');
   const sellAt = path.join(TMP, 'sellable-planted.mjs');
   fs.writeFileSync(sellAt, sellLift);
-  fs.copyFileSync(path.join(ROOT, 'tools', 'test-service.cjs'), path.join(TMP, 'test-service.cjs'));
+  for (const f of ['test-service.cjs', 'esigner.cjs']) fs.copyFileSync(path.join(ROOT, 'tools', f), path.join(TMP, f));
   const planted9 = await import(pathToFileURL(sellAt).href);
   const varLift = sell9.split('\n').map(l => /plant:sell-ts-var/.test(l) ? '    void 0; /* plant:sell-ts-var */' : l).join('\n');
   const varAt = path.join(TMP, 'sellable-planted-var.mjs');
@@ -615,6 +619,181 @@ try {
     const ownSaid = testServiceProblems({ resources: own });
     check(ownSaid.length === 0, '9f the release profile finds no test service package in ' + own + (ownSaid.length ? ': ' + ownSaid.join('; ') : ''));
   } else check(true, '9f outside the release profile, this tree\'s own package is not read (ETIUDA_PROFILE is not release or nightly)');
+  /* ---- 10. the eSigner route (tools/esigner.cjs) ---------------------------------------------------------------------- */
+  /* Its effects are replaced for every leg here (ES.io), so nothing is started, read from the keyring or reached. */
+  const ES = require(path.join(ROOT, 'tools', 'esigner.cjs'));
+  const IO = { ...ES.io };
+  const U16 = s => Buffer.from(s, 'utf16le').toString('base64');
+  /* Planted values, the password holding what an argument file must escape: a hash, a quote and a backslash. */
+  const VAL = { username: 'planted-user', password: 'pl#nted"pa\\ss', 'credential-id': 'planted-credential', 'totp-secret': 'plantedTotpSecret+/=' };
+  const THUMB10 = 'AB'.repeat(20), WHO10 = 'CN=Example Publisher';
+  const calls10 = [], logs10 = [];
+  let readBack = null;
+  const fakeIo = {
+    /* python-keyring's layout after storing the four in order: the last under the service, the rest under name@service. */
+    readCredentials: targets => targets.map(t => t === ES.KEYRING_SERVICE ? ['totp-secret', U16(VAL['totp-secret'])]
+      : /^(username|password|credential-id)@/.test(t) ? [t.split('@')[0], U16(VAL[t.split('@')[0]])] : null),
+    run: (file, args, opts) => {
+      const at = args.find(a => a[0] === '@'), arg = k => (args.find(a => a.startsWith(k + '=')) || '').slice(k.length + 1);
+      calls10.push({ file, args, env: opts.env, argText: at && fs.existsSync(at.slice(1)) ? fs.readFileSync(at.slice(1), 'utf8') : null, argFile: at && at.slice(1) });
+      if (args.includes('sign') && !process.env.ES_PLANT_NO_OUTPUT)
+        fs.writeFileSync(path.join(arg('-output_dir_path'), path.basename(arg('-input_file_path'))), 'signed by the planted tool');
+      return { status: 0, stdout: 'Code signed successfully', stderr: '' };
+    },
+    leaf: () => ({ thumbprint: THUMB10, subject: WHO10 }),
+    readSignature: () => readBack || { status: 'Valid', timestamped: true, thumbprint: THUMB10, subject: WHO10 },
+    now: (() => { let n = 0; return () => (n += 1000); })(),
+    log: line => logs10.push(line),
+  };
+  Object.assign(ES.io, fakeIo);
+  /* A planted CodeSignTool folder, pinned for these legs by its own files' hashes; 10f puts the real pins back on a copy. */
+  const TOOL_ROOT = path.join(TMP, 'es-root', 'tree'), TOOL_AT = path.join(TMP, 'es-root', 'tools-external', ES.TOOL.folder);
+  const realPins = { ...ES.TOOL.sha256 };
+  for (const rel of [ES.TOOL.jar, ES.TOOL.java, 'conf/code_sign_tool.properties']) {
+    fs.mkdirSync(path.dirname(path.join(TOOL_AT, rel)), { recursive: true });
+    fs.writeFileSync(path.join(TOOL_AT, rel), 'planted ' + rel + '\n');
+  }
+  fs.mkdirSync(TOOL_ROOT, { recursive: true });
+  for (const rel of Object.keys(ES.TOOL.sha256))
+    ES.TOOL.sha256[rel] = require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(TOOL_AT, rel))).digest('hex');
+  const OUT10 = path.join(TMP, 'es-dist');
+  const target = name => { const f = path.join(TMP, name); fs.writeFileSync(f, 'unsigned ' + name); return f; };
+  const hookFor = kind => ES.esignerSigning({ ETIUDA_SIGN: kind }, TOOL_ROOT, OUT10).signtoolOptions.sign;
+  const thrown = async run => { try { await run(); return ''; } catch (e) { return String(e.message); } };
+  try {
+    /* 10a: unset, electron-builder.js takes no block from the route; set, the block is the hook alone, sha256 once a file. The
+       control is plant:esigner-default lifted on the same module, which then hands the unset build a block. */
+    const unset10 = winWith(null), set10 = winWith({ ETIUDA_SIGN: 'esigner' }), st10 = set10.signtoolOptions || {};
+    const esText = fs.readFileSync(path.join(ROOT, 'tools', 'esigner.cjs'), 'utf8');
+    const esLift = esText.split('\n').map(l => /plant:esigner-default/.test(l) ? '  if (!kind) return { signtoolOptions: { signingHashAlgorithms: ["sha256"] } }; /* plant:esigner-default */' : l).join('\n');
+    const esWas = ES.esignerSigning;
+    const planted10 = new Function('require', '__dirname', 'module', esLift + '\nreturn module.exports;')(require, path.join(ROOT, 'tools'), { exports: {} });
+    ES.esignerSigning = planted10.esignerSigning;
+    let unsetPlanted;
+    try { unsetPlanted = winWith(null); } finally { ES.esignerSigning = esWas; }
+    check(routeOf(unset10) === '{}' && typeof st10.sign === 'function' && JSON.stringify(st10.signingHashAlgorithms) === '["sha256"]'
+      && Object.keys(st10).length === 2 && !set10.azureSignOptions && signingConfigured(set10, {}) && !signingConfigured(unset10, {})
+      && esLift !== esText && routeOf(unsetPlanted) !== '{}',
+      '10a with ETIUDA_SIGN unset the real builder takes no block from the route and signs nothing; set to esigner its block is the hook'
+      + ' alone, sha256 once a file; and with plant:esigner-default lifted the unset build would carry a block (' + routeOf(unsetPlanted) + ')');
+
+    /* 10b: two routes at once, or a value the route does not know, refuse by name. */
+    const refusal10 = vars => { try { winWith(vars); return ''; } catch (e) { return String(e.message); } };
+    const e1 = refusal10({ ETIUDA_SIGN: 'esigner', ETIUDA_CERT: PFX }), e2 = refusal10({ ETIUDA_SIGN: 'esigner-demo', ...AZ });
+    const e3 = refusal10({ ETIUDA_SIGN: 'esigner-live' });
+    check(/ETIUDA_CERT and ETIUDA_SIGN are set/.test(e1) && /ETIUDA_SIGNING_\* and ETIUDA_SIGN are set/.test(e2) && /takes esigner or esigner-demo$/.test(e3),
+      '10b ETIUDA_SIGN beside another route refuses naming both, and a value it does not know names the two it takes: ' + JSON.stringify([e1, e2, e3]));
+
+    /* 10c: electron-builder's own signing path, sealed, hands the hook each file once; the file then holds what the tool wrote,
+       read back where it stands; the session asked for the account's certificate once. */
+    if (!EB) skip('10c needs app-builder-lib in node_modules to ask electron-builder itself', 1);
+    else {
+      const mark = ESCAPES.length, signsAt = calls10.length;
+      const block = { signtoolOptions: { sign: hookFor('esigner'), signingHashAlgorithms: ['sha256'] } };
+      const eb10 = await wouldSign(block);
+      const setupAt = path.join(TMP, 'etiuda-setup.exe');
+      const made = calls10.slice(signsAt);
+      check(eb10.signs === true && ESCAPES.length === mark && made.map(c => c.args[3]).join() === 'get_certs,sign'
+        && made[1].args.includes('-input_file_path=' + setupAt) && logs10.length === 1 && /signing 1 of this build/.test(logs10[0]),
+        '10c electron-builder\'s signing path, sealed, hands the hook the file once (sha256 alone), which asks CodeSignTool for the'
+        + ' account\'s certificate once and signs once, nothing escaping the seal: ' + made.map(c => c.args[3]).join(', ') + (eb10.why ? ' (' + eb10.why + ')' : ''));
+    }
+
+    /* 10d: the four values never on a command line or in an environment; each call's argument file held them, escaped for
+       picocli, and was gone once the call returned. */
+    const before10 = calls10.length;
+    const f10 = target('probe-d.exe');
+    await hookFor('esigner')({ path: f10 });
+    const d10 = calls10.slice(before10), secrets = Object.values(VAL);
+    const onLine = d10.some(c => c.args.some(a => secrets.some(s => a.includes(s))));
+    const inEnv = d10.some(c => Object.values(c.env || {}).some(v => secrets.some(s => String(v).includes(s))));
+    const escaped = d10.every(c => c.argText && c.argText.includes('-password\n"pl#nted\\"pa\\\\ss"\n') && c.argText.includes('-username\n"planted-user"\n'))
+      && d10[1].argText.includes('-totp_secret\n"plantedTotpSecret+/="\n') && !d10[0].argText.includes('-totp_secret');
+    check(!onLine && !inEnv && escaped && d10.every(c => !fs.existsSync(c.argFile)) && fs.readFileSync(f10, 'utf8') === 'signed by the planted tool',
+      '10d no value is on a command line (' + onLine + ') or in an environment (' + inEnv + '); each call\'s argument file held them quoted,'
+      + ' the hash, quote and backslash escaped (' + escaped + '), the TOTP secret only for sign, and every file was gone after its call');
+
+    /* 10e: the exit code is not the answer. A file read back unsigned, untimestamped, by another certificate, or (for the live
+       account) chained to no trusted root stops the build; the demo account's untrusted chain is its expected reading. */
+    const refusals = [];
+    for (const [name, reading, kind] of [['NotSigned', { status: 'NotSigned', timestamped: false, thumbprint: '', subject: '' }, 'esigner'],
+      ['no timestamp', { status: 'Valid', timestamped: false, thumbprint: THUMB10, subject: WHO10 }, 'esigner'],
+      ['another certificate', { status: 'Valid', timestamped: true, thumbprint: 'CD'.repeat(20), subject: WHO10 }, 'esigner'],
+      ['UnknownError, live', { status: 'UnknownError', timestamped: true, thumbprint: THUMB10, subject: WHO10 }, 'esigner']]) {
+      readBack = reading;
+      refusals.push([name, await thrown(() => hookFor(kind)({ path: target('probe-e.exe') }))]);
+    }
+    readBack = null;
+    process.env.ES_PLANT_NO_OUTPUT = '1';
+    refusals.push(['exit 0, no file', await thrown(() => hookFor('esigner')({ path: target('probe-e.exe') }))]);
+    delete process.env.ES_PLANT_NO_OUTPUT;
+    const demoLeaf = ES.io.leaf;
+    ES.io.leaf = () => ({ thumbprint: THUMB10, subject: 'C=US\nOU=Cloud Signing Demo\nO=Esigner LLC' });
+    readBack = { status: 'UnknownError', timestamped: true, thumbprint: THUMB10, subject: 'OU=Cloud Signing Demo, O=Esigner LLC' };
+    const demoOk = await thrown(() => hookFor('esigner-demo')({ path: target('probe-e.exe') }));
+    const demoAsLive = await thrown(() => hookFor('esigner')({ path: target('probe-e.exe') }));
+    ES.io.leaf = demoLeaf;
+    readBack = null;
+    const liveAsDemo = await thrown(() => hookFor('esigner-demo')({ path: target('probe-e.exe') }));
+    check(refusals.every(r => /^signing: /.test(r[1])) && /reads Authenticode NotSigned/.test(refusals[0][1]) && /has no timestamp/.test(refusals[1][1])
+      && /is signed by CDCD/.test(refusals[2][1]) && /reads Authenticode UnknownError/.test(refusals[3][1]) && /wrote no/.test(refusals[4][1])
+      && demoOk === '' && /certificate is the demo one/.test(demoAsLive) && /certificate is not the demo one/.test(liveAsDemo),
+      '10e with the tool saying success every time, the build stops on ' + refusals.map(r => r[0] + (r[1] ? '' : ' (PASSED)')).join(', ')
+      + '; the demo account\'s untrusted chain passes as demo, and the demo certificate under esigner, or another under esigner-demo, stops the session');
+
+    /* 10f: the keyring read by python-keyring's rule (10d read all four), a missing name named and no value printed; and the tool
+       found only where its pinned files match, so a changed byte under the real pins is refused. */
+    const realRead = ES.io.readCredentials;
+    ES.io.readCredentials = targets => targets.map(t => /^password@/.test(t) ? null : fakeIo.readCredentials([t])[0]);
+    const short = await thrown(() => ES.fromKeyring());
+    ES.io.readCredentials = realRead;
+    const got = ES.fromKeyring();
+    Object.assign(ES.TOOL.sha256, realPins);
+    const pin = await thrown(() => ES.findTool(TOOL_ROOT));
+    check(JSON.stringify(got) === JSON.stringify(VAL) && /holds no password;/.test(short) && !secrets.some(s => short.includes(s))
+      && /is not the pinned CodeSignTool file/.test(pin),
+      '10f the keyring\'s four come back by python-keyring\'s rule, one missing is named with no value shown (' + short + '), and a tool folder'
+      + ' whose files are not the pinned ones is refused (' + pin.split(' (')[0] + ')');
+
+    /* 10g: a demo-signed build is never released: the variable, and a file carrying the demo certificate's subject even where
+       Windows read it Valid; plant:sell-demo-var and plant:sell-demo-subject lifted each let it through. */
+    const SELL10 = await import(pathToFileURL(path.join(ROOT, 'tools', 'sellable.mjs')).href);
+    const demoRead = [{ file: 'C:/x/etiuda-setup.exe', status: 'Valid', timestamped: true, subject: 'CN=Esigner LLC, OU=Cloud Signing Demo, O=Esigner LLC' }];
+    const fineRead = [{ file: 'C:/x/etiuda-setup.exe', status: 'Valid', timestamped: true, subject: WHO10 }];
+    const asks = typeof SELL10.demoSigningProblems === 'function';
+    const v10 = signatureVerdict({ setup: EN_FILE, program: EN_FILE, customer: false, win: {}, read: () => demoRead, log: () => {} });
+    const v10ok = signatureVerdict({ setup: EN_FILE, program: EN_FILE, customer: true, win: {}, read: () => fineRead, log: () => {} });
+    const sellText = fs.readFileSync(path.join(ROOT, 'tools', 'sellable.mjs'), 'utf8');
+    const lift10 = (marker, line) => {
+      const t = sellText.split('\n').map(l => l.includes('plant:' + marker) ? line + ' /* plant:' + marker + ' */' : l).join('\n');
+      const at = path.join(TMP, 'sellable-' + marker + '.mjs');
+      fs.writeFileSync(at, t);
+      return t === sellText ? null : at;
+    };
+    const varAt10 = lift10('sell-demo-var', '  void 0;'), subjAt10 = lift10('sell-demo-subject', '  void 0;');
+    const pv = varAt10 && await import(pathToFileURL(varAt10).href), ps = subjAt10 && await import(pathToFileURL(subjAt10).href);
+    check(asks && SELL10.demoSigningProblems({ env: { ETIUDA_SIGN: 'esigner-demo' } }).length === 1 && SELL10.demoSigningProblems({ env: { ETIUDA_SIGN: 'esigner' } }).length === 0
+      && typeof v10 === 'string' && /etiuda-setup\.exe is signed by SSL\.com's demo certificate/.test(v10) && v10ok === true
+      && pv && pv.demoSigningProblems({ env: { ETIUDA_SIGN: 'esigner-demo' } }).length === 0 && ps && ps.demoSigningProblems({ readings: demoRead }).length === 0,
+      '10g a demo-signed build is refused by the variable and, read Valid or not, by the demo certificate\'s subject (' + v10 + '), a real subject'
+      + ' passes, and plant:sell-demo-var and plant:sell-demo-subject lifted each let it through');
+    const l10 = lab('esigner-demo', '2.0.0-dev', FILLED);
+    const r10 = release(l10, [], null, { ETIUDA_SIGN: 'esigner-demo' });
+    check(stopped2(r10) && /ETIUDA_SIGN is esigner-demo/.test(r10.out),
+      '10h a preview released with ETIUDA_SIGN=esigner-demo stops at gate 2, naming it, exit ' + r10.status);
+    const l10p = lab('esigner-demo-plant', '2.0.0-dev', FILLED);
+    const rel10 = path.join(l10p.dir, 'tools', 'release.mjs'), rel10Code = fs.readFileSync(rel10, 'utf8');
+    const lift10r = rel10Code.replace(/const demoSigned = demoSigningProblems\(\{ env: process\.env \}\); \/\* plant:release-demo-var \*\//,
+      'const demoSigned = []; /* plant:release-demo-var */');
+    fs.writeFileSync(rel10, lift10r);
+    l10p.git('commit', '-am', 'lift plant:release-demo-var');
+    const r10p = release(l10p, [], null, { ETIUDA_SIGN: 'esigner-demo' });
+    check(lift10r !== rel10Code && past2(r10p), '10i lifting plant:release-demo-var lets the same release past gate 2, exit ' + r10p.status);
+  } finally {
+    Object.assign(ES.io, IO);
+    Object.assign(ES.TOOL.sha256, realPins);
+  }
+
   /* The real tree as it stands, through the same function gate 2 calls: a preview today, and
      what stands between it and a sale is printed rather than asserted, so this leg does not
      redden on the day the seller or the certificate arrives. */

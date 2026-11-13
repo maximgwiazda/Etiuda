@@ -1,0 +1,13 @@
+{
+  "about": "SSL.com's published eSigner sandbox account (https://www.ssl.com/guide/esigner-demo-credentials-and-certificates/), public and not ours; tools/esigner.cjs uses it for ETIUDA_SIGN=esigner-demo, whose signature no release takes.",
+  "username": "esigner_demo",
+  "password": "esignerDemo#1",
+  "credentialId": "8b072e22-7685-4771-b5c6-48e46614915f",
+  "totpSecret": "RDXYgV9qju+6/7GnMf1vCbKexXVJmUVr+86Wq/8aIGg=",
+  "properties": {
+    "CLIENT_ID": "qOUeZCCzSqgA93acB3LYq6lBNjgZdiOxQc-KayC3UMw",
+    "OAUTH2_ENDPOINT": "https://oauth-sandbox.ssl.com/oauth2/token",
+    "CSC_API_ENDPOINT": "https://cs-try.ssl.com",
+    "TSA_URL": "http://ts.ssl.com"
+  }
+}
