@@ -1120,7 +1120,7 @@ const SHARE_STAT_MS = 30000;
 let shareStatTimer = null, shareStatBusy = false, shareStatOut = null, shareStatPrimed = false, shareStatGen = 0;
 let shareStatSeen = new Map();
 let shareStatPrime = null;
-function shareDropsWatch(dir) { return !folderHost(dir).local; }
+function shareDropsWatch(dir, env, opts) { return !folderHost(dir, env, opts).local; }
 function shareStatStop() {
   if (shareStatTimer) clearInterval(shareStatTimer);
   shareStatTimer = null;
@@ -5454,9 +5454,10 @@ function inviteRelay(r) {
   if (!c || c.kind !== "relay" || !/^[0-9a-f]{64}$/.test(String(r.token)) || !/^[0-9a-f]{32}$/.test(String(r.inv))) return null;
   return { rt: c.rt, url: c.url, token: String(r.token), inv: String(r.inv) };
 }
-/* Where a folder sits, from its text alone: a UNC host, a cloud client named by the path, or this
-   computer's system drive. Another drive letter may be a mapped share, so it is none of those. */
-function folderHost(folder, env) {
+/* Where a folder sits, from its text alone: a UNC host, a cloud client named by the path, this
+   computer's system drive on Windows, or on Linux a path on one of this computer's own filesystems
+   (never a network mount, FUSE mount or failed mounts read). Another drive letter may be a mapped share. */
+function folderHost(folder, env, opts) {
   const raw = String(folder || "");
   const e = env && typeof env === "object" ? env : {};
   let host = "";
@@ -5483,7 +5484,95 @@ function folderHost(folder, env) {
   }
   const sys = String(e.SystemDrive || "C:").slice(0, 2).toLowerCase();
   const drive = /^[a-zA-Z]:/.test(raw) ? raw.slice(0, 2).toLowerCase() : "";
-  const local = !host && !cloud && drive !== "" && drive === sys;
+  let local = !host && !cloud && drive !== "" && drive === sys;
+  const plat = (opts && typeof opts.platform === "string") ? opts.platform
+    : (typeof process !== "undefined" && process.platform ? process.platform : "");
+  if (!host && !cloud && drive === "" && plat === "linux" && raw.charAt(0) === "/") {
+    const normPosix = function (p) {
+      const parts = String(p || "").split("/");
+      const out = [];
+      for (let i = 0; i < parts.length; i++) {
+        const s = parts[i];
+        if (!s || s === ".") continue;
+        if (s === "..") { if (out.length) out.pop(); }
+        else out.push(s);
+      }
+      return "/" + out.join("/");
+    };
+    let real = "";
+    if (opts && typeof opts.realpath === "function") {
+      try {
+        const got = String(opts.realpath(raw) || "");
+        real = got.charAt(0) === "/" ? normPosix(got) : "";
+      } catch (err) { real = ""; }
+    } else if (opts && (opts.mounts !== undefined || opts.readMounts !== undefined)) {
+      real = normPosix(raw);
+    } else if (typeof process !== "undefined" && process.platform === "linux" && typeof fs !== "undefined" && typeof fs.realpathSync === "function") {
+      let cur = normPosix(raw);
+      const tail = [];
+      while (true) {
+        try {
+          const base = normPosix(fs.realpathSync(cur));
+          real = tail.length ? normPosix(base + "/" + tail.join("/")) : base;
+          break;
+        } catch (err) {
+          const code = err && err.code;
+          if ((code === "ENOENT" || code === "ENOTDIR") && cur !== "/") {
+            const cut = cur.lastIndexOf("/");
+            tail.unshift(cur.slice(cut + 1));
+            cur = cut <= 0 ? "/" : cur.slice(0, cut);
+            continue;
+          }
+          real = "";
+          break;
+        }
+      }
+    }
+    let mountsText = null;
+    if (real) {
+      if (opts && opts.mounts !== undefined) {
+        mountsText = typeof opts.mounts === "string" ? opts.mounts : null;
+      } else if (opts && typeof opts.readMounts === "function") {
+        try {
+          const got = opts.readMounts();
+          mountsText = typeof got === "string" ? got : null;
+        } catch (err) { mountsText = null; }
+      } else if (typeof fs !== "undefined" && typeof fs.readFileSync === "function") {
+        try { mountsText = fs.readFileSync("/proc/self/mounts", "utf8"); }
+        catch (err) {
+          try { mountsText = fs.readFileSync("/proc/mounts", "utf8"); }
+          catch (err2) { mountsText = null; }
+        }
+      }
+    }
+    if (real && mountsText) {
+      const unescapeMount = function (s) {
+        return s.replace(/\\([0-7]{3})/g, function (_, oct) { return String.fromCharCode(parseInt(oct, 8)); });
+      };
+      let bestLen = -1;
+      let fsType = "";
+      const lines = mountsText.split(/\r?\n/);
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line || line.charAt(0) === "#") continue;
+        const cols = line.split(/[ \t]+/);
+        if (cols.length < 3) continue;
+        let mp = unescapeMount(cols[1]);
+        if (mp.charAt(0) !== "/") continue;
+        if (mp.length > 1) mp = mp.replace(/\/+$/, "");
+        if (mp === "") mp = "/";
+        const matches = mp === "/" || real === mp || real.indexOf(mp + "/") === 0;
+        if (matches && mp.length >= bestLen) { /* plant:f2-linux-mount */
+          bestLen = mp.length;
+          fsType = cols[2];
+        }
+      }
+      const LOCAL_FS = ["ext2", "ext3", "ext4", "xfs", "btrfs", "f2fs", "zfs", "jfs", "reiserfs", "reiser4",
+        "nilfs2", "bcachefs", "tmpfs", "ramfs", "ecryptfs", "overlay", "squashfs", "erofs",
+        "vfat", "exfat", "ntfs3", "hfs", "hfsplus", "ufs", "minix"];
+      if (LOCAL_FS.indexOf(fsType) >= 0) local = true; /* plant:f2-linux-local */
+    }
+  }
   return { host: host, local: local, cloud: cloud };
 }
 /* The request a member writes. `me` is {id, key, box}, `j` the join this desk keeps, `reveal` the lead's

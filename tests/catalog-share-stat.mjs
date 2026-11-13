@@ -22,7 +22,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 7;
+const EXPECTED = 9;
 const WORK = path.join(ROOT, "shell", "main.js");
 const GOOD = fs.readFileSync(WORK);
 const GOOD_HASH = crypto.createHash("sha256").update(GOOD).digest("hex");
@@ -72,8 +72,8 @@ function loadDesk(ud) {
   };
   process.env.XDG_CURRENT_DESKTOP = "GNOME";
   const tail = src.includes("function shareStatTick(")
-    ? "return { watchCatalog, shareStatTick, catalogChanged, SHARE_STAT_MS, get shareStatPrime() { return shareStatPrime; }, get folderDown() { return folderDown; }, liftDown() { folderDown = \"\"; folderSaidDown = \"\"; } };"
-    : "return { watchCatalog, catalogChanged };";
+    ? "return { watchCatalog, shareStatTick, catalogChanged, SHARE_STAT_MS, folderHost, shareDropsWatch, get shareStatPrime() { return shareStatPrime; }, get folderDown() { return folderDown; }, liftDown() { folderDown = \"\"; folderSaidDown = \"\"; } };"
+    : "return { watchCatalog, catalogChanged, folderHost, shareDropsWatch };";
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console", src + "\n" + tail)(
     n => (n === "electron" ? electron : nodeRequire(n)),
     APP, COPY, { exports: {} }, {}, quiet);
@@ -169,6 +169,50 @@ try {
     return { ok: red && green === true, why: why, red: red };
   }
 
+  function linuxMountChecks(api) {
+    const baseMounts = [
+      "rootfs / rootfs rw 0 0",
+      "/dev/nvme0n1p2 / ext4 rw,relatime 0 0",
+      "rclone:team /home/alice/rclone fuse.rclone rw 0 0",
+      "//nas/share /home/alice/cifs cifs rw 0 0"
+    ].join("\n");
+    const rcloneOverHome = [
+      "/dev/nvme0n1p2 / ext4 rw,relatime 0 0",
+      "rclone:team /home/alice/catalogs fuse.rclone rw 0 0"
+    ].join("\n");
+    const cifsOverHome = [
+      "/dev/nvme0n1p2 / ext4 rw,relatime 0 0",
+      "//nas/share /home/alice/catalogs cifs rw 0 0"
+    ].join("\n");
+    const home = "/home/alice/catalogs";
+    const ext4Host = api.folderHost(home, {}, { platform: "linux", mounts: baseMounts });
+    const ext4Watch = api.shareDropsWatch(home, {}, { platform: "linux", mounts: baseMounts });
+    const rcloneHost = api.folderHost(home, {}, { platform: "linux", mounts: rcloneOverHome });
+    const rcloneWatch = api.shareDropsWatch(home, {}, { platform: "linux", mounts: rcloneOverHome });
+    const cifsHost = api.folderHost(home, {}, { platform: "linux", mounts: cifsOverHome });
+    const cifsWatch = api.shareDropsWatch(home, {}, { platform: "linux", mounts: cifsOverHome });
+    const nestedHost = api.folderHost("/home/alice/rclone/team", {}, { platform: "linux", mounts: baseMounts });
+    const cloudHost = api.folderHost("/home/alice/OneDrive/team", {}, { platform: "linux", mounts: baseMounts });
+    const failNull = api.folderHost(home, {}, { platform: "linux", mounts: null });
+    const failThrow = api.folderHost(home, {}, { platform: "linux", readMounts: () => { throw new Error("ENOENT"); } });
+    const failWatch = api.shareDropsWatch(home, {}, { platform: "linux", mounts: null });
+    const winSys = api.folderHost("C:\\Users\\alice\\catalogs", { SystemDrive: "C:" }, { platform: "win32" });
+    const winOther = api.folderHost("D:\\catalogs", { SystemDrive: "C:" }, { platform: "win32" });
+    const winUnc = api.folderHost("\\\\nas\\catalogs", { SystemDrive: "C:" }, { platform: "win32" });
+    return {
+      ok: ext4Host.local === true && ext4Host.host === "" && ext4Host.cloud === "" && ext4Watch === false
+        && rcloneHost.local === false && rcloneWatch === true
+        && cifsHost.local === false && cifsWatch === true
+        && nestedHost.local === false
+        && cloudHost.local === false && cloudHost.cloud === "onedrive"
+        && failNull.local === false && failThrow.local === false && failWatch === true
+        && winSys.local === true && winOther.local === false && winUnc.local === false && winUnc.host === "nas",
+      ext4: ext4Host.local, rclone: rcloneHost.local, cifs: cifsHost.local,
+      nested: nestedHost.local, cloud: cloudHost.local, failNull: failNull.local, failThrow: failThrow.local,
+      winSys: winSys.local, winOther: winOther.local
+    };
+  }
+
   /* ---- f2a: a cloud-shaped folder is stat'd; a folder on this disk is not -------------------------- */
   try {
     const cloud = await watchOf("f2a-cloud", true);
@@ -178,12 +222,15 @@ try {
     await pause(450);
     const quiet = offers(local.D) === before;
     silence(cloud.from);
+    const lx = linuxMountChecks(local.D.api);
     check(cloud.interval.length === 1 && String(cloud.interval[0].fn).includes("shareStatTick")
       && cloud.watched && local.interval.length === 0 && local.watched && quiet
-      && cloud.D.api.SHARE_STAT_MS === SHARE_WANT && local.dir.slice(0, 2).toLowerCase() === "c:",
+      && cloud.D.api.SHARE_STAT_MS === SHARE_WANT
+      && (process.platform !== "win32" || local.dir.slice(0, 2).toLowerCase() === "c:")
+      && lx.ok,
       "f2a a cloud-shaped folder arms a 30s stat and a folder on this disk does not, and a silent watch offers nothing there"
       + " (cloud " + cloud.interval.length + ", local " + local.interval.length + ", watched " + cloud.watched + "/" + local.watched
-      + ", quiet " + quiet + ")");
+      + ", quiet " + quiet + ", linux " + JSON.stringify(lx) + ")");
   } catch (e) {
     check(false, "f2a the leg did not finish: " + (e && e.message || e));
   }
@@ -310,6 +357,26 @@ try {
         return r.one && r.marked && r.opened && r.again;
       });
     check(g.ok, "f2g removing the hold at the ask's limit starts a read per tick, and restoring it keeps the one read"
+      + (g.why ? ": " + g.why.split("\n")[0] : "") + (g.red === false ? " (plant did not fail)" : ""));
+  }
+
+  /* ---- f2h: removing the local-fs guard turns fuse/cifs/failed-mounts local -------------------------- */
+  {
+    const g = await prove("f2h",
+      "if (LOCAL_FS.indexOf(fsType) >= 0) local = true; /* plant:f2-linux-local */",
+      "local = true; /* plant:f2-linux-local */",
+      async () => linuxMountChecks(loadDesk(LAB).api).ok);
+    check(g.ok, "f2h removing the Linux local-fs guard marks fuse, cifs and failed reads local, and restoring it rejects them"
+      + (g.why ? ": " + g.why.split("\n")[0] : "") + (g.red === false ? " (plant did not fail)" : ""));
+  }
+
+  /* ---- f2i: taking the first matching mount instead of the longest hides nested mounts --------------- */
+  {
+    const g = await prove("f2i",
+      "if (matches && mp.length >= bestLen) { /* plant:f2-linux-mount */",
+      "if (matches && bestLen < 0) { /* plant:f2-linux-mount */",
+      async () => linuxMountChecks(loadDesk(LAB).api).ok);
+    check(g.ok, "f2i picking the first matching mount instead of the longest hides nested fuse/cifs mounts, and restoring it catches them"
       + (g.why ? ": " + g.why.split("\n")[0] : "") + (g.red === false ? " (plant did not fail)" : ""));
   }
 

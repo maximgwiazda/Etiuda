@@ -283,12 +283,15 @@ function clearReadOnly(file, io) {
   try { const st = (io || defaultIO).stat(file); if (!(st.mode & 0o200)) fs.chmodSync(file, (st.mode & 0o777) | 0o200); } catch {}
 }
 /* A copy onto this computer, or into this desk's own folder on the share and nowhere else there, through a temp beside it and
-   a rename: the bytes and the last-write time CopyFile keeps, never the read-only mark, and the copy it replaces is cleared. */
+   a rename: the bytes and the last-write time CopyFile keeps on Windows (restored from the source's stat off Windows), never
+   the read-only mark, and the copy it replaces is cleared. */
 function copyClear(from, to) {
   const tmp = to + "." + crypto.randomBytes(6).toString("hex") + ".tmp";
   try {
+    const st = fs.statSync(from);
     fs.copyFileSync(from, tmp);
     clearReadOnly(tmp); clearReadOnly(to); /* plant:copy-clear-mark */
+    if (process.platform !== "win32") fs.utimesSync(tmp, st.atimeMs / 1000, st.mtimeMs / 1000); /* plant:copy-clear-time */
     renameRetrying(tmp, to, defaultIO);
   } catch (e) {
     try { fs.unlinkSync(tmp); } catch {}
