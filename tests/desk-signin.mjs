@@ -2329,12 +2329,16 @@ CASES.certSigned = s => {
   const forged = certForgeries();
   return ok(cert()) && ok(cert({ issued: NOW - DAY_MS, until: NOW - 1 })) && Object.keys(forged).every(k => !ok(forged[k]));
 };
-/* The desk and the relay's door judge every sample alike, the genuine one taken by both. */
+/* The desk and the relay's door judge every sample alike, the genuine one taken by both, with ONE NAMED EXCEPTION: a genuine
+   desk-only certificate, which the desk takes and the door refuses as "shape" (certWhy holds exactly ten fields). A desk-only
+   licence hands no doors, so none reaches a door. */
 CASES.certAsDoor = s => {
   const R = createRequire(import.meta.url)(path.join(ROOT, "relay", "core.cjs"));
   const samples = Object.assign({ genuine: cert() }, certForgeries());
-  const door = c => R.certWhy(c, DESK_KEY, [String(c.licence)], NOW, [TEST_ROOT]) === null;
-  return door(samples.genuine) && Object.keys(samples).every(k => door(samples[k]) === (s.signinCertOk(samples[k], DESK_KEY) === true));
+  const why = c => R.certWhy(c, DESK_KEY, [String(c.licence)], NOW, [TEST_ROOT]), door = c => why(c) === null;
+  const deskOnly = cert({ deskOnly: true });
+  return door(samples.genuine) && Object.keys(samples).every(k => door(samples[k]) === (s.signinCertOk(samples[k], DESK_KEY) === true))
+    && why(deskOnly) === "shape" && s.signinCertOk(deskOnly, DESK_KEY) === true;
 };
 /* The review's own sequence: a forged answer with a made-up signature and a stranger's door on the trusted relay is no seat and
    offers no door; signin.json edited to hold a forged certificate holds no seat, and a genuine one, lapsed too, stays. */
@@ -2523,7 +2527,7 @@ const LEGS = [
   ["ds20a", "renewAsk", "Google authorizes with access_type=offline and select_account alone; a renewal with no refresh token or an unopenable sub asks for sign-in again without reaching the provider, in the copywriter's English and Polish words"],
   ["ds20b", "noKeyring", "pressing a provider with no keyring open makes no identity and tells the person plainly in the copywriter's English and Polish words; Account's unkept line is retired"],
   ["ds22a", "certSigned", "a seat certificate is taken only where a delegation from the shipped root, one that may sign licences on the day it was issued, names the key that signed it, for this desk, thirty days at most; each forgery of signature, signer, root, licence right, window, field or key id is not"],
-  ["ds22b", "certAsDoor", "the desk takes a certificate exactly where the relay's door takes it (relay/core.cjs certWhy), sample by sample, the genuine one by both"],
+  ["ds22b", "certAsDoor", "the desk takes a certificate exactly where the relay's door takes it (relay/core.cjs certWhy), sample by sample, the genuine one by both, with one named exception: a genuine desk-only certificate, which the door refuses as \"shape\" and the desk takes (no desk-only licence hands a door)"],
   ["ds22c", "certForgedAnswer", "a forged answer, a made-up signature or a stranger's root with a door on the trusted relay, is no seat and offers no door; signin.json edited to a forged certificate holds no seat, while a genuine one, lapsed too, stays"],
   ["ds22d", "certRoot", "the root the desk checks a certificate against is the vendor's, the relay's ROOT_PUB, and the check names it"],
   ["ds22i", "deskOnlyCert", "a desk-only licence's certificate carries deskOnly: true under the signature, as the line \"desk-only\" after the key id; the field taken off, put on, false or of another value is no certificate; signin.json keeps it; an older certificate without it reads as not desk-only, in the view as well"],
