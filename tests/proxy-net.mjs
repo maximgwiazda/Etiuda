@@ -35,7 +35,7 @@ const nodeRequire = createRequire(import.meta.url);
 const NET_FILE = process.env.PROXY_NET_FILE || path.join(ROOT, "shell", "proxy-net.cjs");
 const MAIN_FILE = process.env.PROXY_MAIN_FILE || path.join(ROOT, "shell", "main.js");
 const ONLY = process.env.PROXY_NET_ONLY || "";
-const EXPECTED = 54;
+const EXPECTED = 56;
 const USER = "proxy-person", PASS = "invented-" + crypto.randomBytes(4).toString("hex");
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -360,6 +360,14 @@ async function p6() {
       asker: { heldFor: () => ({ username: USER, password: "stale" }), refused: () => refusedCalled++, tell: () => {} } });
   await sleep(150);
   check(ev5.close === 1 && refusedCalled === 1, "p6f an answer the proxy refuses is handed back as refused, so it is asked again");
+  const thenable = new Proxy(function () {}, { get: () => thenable, apply: () => thenable });
+  let viaDirect = 0;
+  P.proxiedConnect("wss://etiuda.dev/relay/v1/socket", {}, { message: () => {}, close: () => {} },
+    { resolve: () => thenable, direct: () => { viaDirect++; return { send() {}, close() {} }; } });
+  P.proxiedConnect("wss://etiuda.dev/relay/v1/socket", {}, { message: () => {}, close: () => {} },
+    { resolve: () => new Promise(() => {}), resolveWaitMs: 50, direct: () => { viaDirect++; return { send() {}, close() {} }; } });
+  await sleep(150);
+  check(viaDirect === 2, "p6g a resolver answering with no Promise, or not in time, leaves the runtime's own socket: " + viaDirect + " of 2");
   for (const s of [S, basic, win]) s.server.close();
 }
 
@@ -412,6 +420,7 @@ const PLANTS = [
   ["shell/proxy-net.cjs", "plant:proxy-basic", "p4"],
   ["shell/proxy-net.cjs", "plant:ws-accept", "p5"],
   ["shell/proxy-net.cjs", "plant:ws-unmasked", "p5"],
+  ["shell/proxy-net.cjs", "plant:proxy-resolve-bound", "p6"],
   ["shell/main.js", "plant:desk-fetch-login", "p7"],
   ["shell/main.js", "plant:relay-socket-proxy", "p7"],
   ["shell/main.js", "plant:relay-fetch-proxy", "p7"],

@@ -19,6 +19,7 @@ const crypto = require("node:crypto");
 const HEAD_MAX = 16 * 1024;
 const FRAME_MAX = 1024 * 1024;
 const TUNNEL_WAIT_MS = 15 * 1000;
+const RESOLVE_WAIT_MS = 20 * 1000;
 /* How long one request waits on the person before it is let go unanswered; the question itself stays open. */
 const ASK_WAIT_MS = 2 * 60 * 1000;
 /* How long "Not now" holds for one proxy before a call through it may ask again. */
@@ -275,7 +276,13 @@ function proxiedConnect(url, headers, on, o) {
   const handlers = { open: () => { if (!gone && typeof on.open === "function") on.open(); }, message: t => { if (!gone) on.message(t); }, close: closeOnce };
   (async () => {
     const u = new URL(String(url));
-    const list = parseProxyList(await opts.resolve("https://" + u.host + u.pathname));
+    /* Electron's resolveProxy answers with a Promise; anything else, or no answer in time, is DIRECT, the socket it was. */
+    const asked = opts.resolve("https://" + u.host + u.pathname);
+    let bound = null;
+    const late = new Promise(r => { bound = setTimeout(() => r("DIRECT"), opts.resolveWaitMs || RESOLVE_WAIT_MS); if (bound.unref) bound.unref(); });
+    const answer = asked instanceof Promise ? await Promise.race([asked.catch(() => "DIRECT"), late]) : "DIRECT"; /* plant:proxy-resolve-bound */
+    clearTimeout(bound);
+    const list = parseProxyList(typeof answer === "string" ? answer : "DIRECT");
     const first = list[0] || { type: "DIRECT" };
     if (gone) return closeOnce();
     if (first.type === "DIRECT") {
