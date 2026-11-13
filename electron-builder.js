@@ -122,11 +122,13 @@ module.exports = sellerAddress.sellerConfig(testService.testServiceConfig({
   asar: true,
   // THE FUSES, flipped in the binary before signing. Off: running the executable as plain Node,
   // NODE_OPTIONS, and --inspect, none of which the shell or the harness uses. On: the app is read
-  // from app.asar alone. Asar integrity stays off while tests/shell-smoke.js rewrites the asar in
-  // place for its variants; the file protocol keeps its extra privileges, since the engine is
-  // served from file:// and nothing has been measured without them.
+  // from app.asar alone, and cookies on disk are encrypted with the system's key (DPAPI on Windows), one way
+  // only, since a store written so does not read with the fuse off. Asar integrity stays off while
+  // tests/shell-smoke.js rewrites the asar in place for its variants; the file protocol keeps its extra
+  // privileges, since the engine is served from file:// and nothing has been measured without them.
   electronFuses: {
     runAsNode: false,
+    enableCookieEncryption: true, /* plant:fuse-cookie */
     enableNodeOptionsEnvironmentVariable: false,
     enableNodeCliInspectArguments: false,
     enableEmbeddedAsarIntegrityValidation: false,

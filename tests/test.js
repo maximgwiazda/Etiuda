@@ -7558,7 +7558,7 @@ if (require.main === module) {
        reads it, in its own generateFuseConfig, and the value the config gives it is checked.
        This is the ask only; the built program is read by tools/package.mjs, held by tests/fuses.mjs. */
     const root = path.join(__dirname, "..");
-    const want = { runAsNode: false, enableNodeOptionsEnvironmentVariable: false,
+    const want = { runAsNode: false, enableCookieEncryption: true, enableNodeOptionsEnvironmentVariable: false,
                    enableNodeCliInspectArguments: false, enableEmbeddedAsarIntegrityValidation: false,
                    onlyLoadAppFromAsar: true, grantFileProtocolExtraPrivileges: true };
     const cfg = require(path.join(root, "electron-builder.js")).electronFuses || {};
