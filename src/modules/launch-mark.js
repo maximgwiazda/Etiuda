@@ -225,6 +225,7 @@ function getGroundRgb(doc) {
 /* ---- Backward compatibility stubs for figure & lattice ---- */
 const LM_A = 96, LM_FINE = 4000, LM_INK = 150, LM_BOX = 256, LM_T0 = 3 * Math.PI / 4, LM_T1 = 7 * Math.PI / 4, LM_FAR = 0.6;
 const LM_SPACING = 0.6, LM_PX = 280, LM_STEP = 3.5, LM_FEATHER = LM_STEP / 2, LM_DOT = 1.05, LM_PHI0 = Math.PI / 4;
+// The archived flat mark's group transform; anything drawn from this lattice takes the agreed figure instead.
 const LM_G = { a: 1.0581, b: 0, c: 0, d: 1.0581, e: -7.441, f: -7.441 };
 
 function launchFigure(R) {

@@ -51,7 +51,7 @@ import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXPECTED = 13;
+const EXPECTED = 14;
 const DT = 1000 / 60;
 const SETTLE = 400;
 const WINDOW = 1700;
@@ -453,6 +453,23 @@ const standInner = (/^<svg[^>]*>([\s\S]*)<\/svg>$/.exec(tileSvg) || [])[1] || ""
 const standSha = crypto.createHash("sha256").update(standInner, "utf8").digest("hex");
 check(standSha === STAND_SHA && viewBox === "-17.4545 -17.4545 290.9091 290.9091",
   "441g the standing svg is the agreed cut byte for byte: sha256 " + standSha.slice(0, 16) + ", viewBox " + viewBox);
+
+/* ABOUT'S MARK (board 441): the header's cut and viewBox byte for byte but for its mask's id, depth-about, which the page
+   holds once beside the header's depth; its path filled currentColor through that mask; the tile 40 px with no ground,
+   border, radius or shadow of its own. */
+const aboutSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "about.js"), "utf8");
+const aboutTile = (/TILE_MARK='(<svg[^']*<\/svg>)'/.exec(aboutSrc) || [])[1] || "";
+const aboutVb = (/^<svg[^>]*viewBox="([^"]+)"/.exec(aboutTile) || [])[1] || "";
+const aboutInner = (/^<svg[^>]*>([\s\S]*)<\/svg>$/.exec(aboutTile) || [])[1] || "";
+const aboutPaths = aboutTile.match(/<path\b[^>]*>/g) || [];
+const aboutCss = (/\.about-tile\{([^}]*)\}/.exec(tpl) || [])[1] || "";
+const aboutIds = s => (s.match(/\bid="depth-about"/g) || []).length;
+check(aboutVb === viewBox && aboutInner !== standInner && aboutInner.split('"depth-about"').join('"depth"').split("#depth-about)").join("#depth)") === standInner
+  && aboutIds(aboutSrc) === 1 && aboutIds(built) === 1 && depthIds(built) === 1 && aboutPaths.length === 1
+  && /\bfill="currentColor"/.test(aboutPaths[0]) && /\bmask="url\(#depth-about\)"/.test(aboutPaths[0])
+  && /\bwidth:40px/.test(aboutCss) && /\bheight:40px/.test(aboutCss) && !/background|border|box-shadow|radius/.test(aboutCss + tileCss),
+  "441h About's mark is the header's cut and viewBox (" + aboutVb + ") under its own mask id, depth-about " + aboutIds(built)
+  + " time(s) beside depth " + depthIds(built) + " in the built page, filled currentColor through it, in a 40 px tile with no ground");
 
 if (asserted !== EXPECTED) {
   failed++;
