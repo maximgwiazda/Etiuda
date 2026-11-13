@@ -57,7 +57,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const NO_VERDICT = 78;
-const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618", "all-move", "all-space-d", "system-push", "ext-claimed", "ts-cycle", "shipped-detect"];
+const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618", "all-move", "all-space-d", "system-push", "ext-claimed", "ts-cycle", "shipped-detect", "nonpersistent"];
 let OUT = "";
 const say = (l) => { process.stdout.write(l + "\n"); if (OUT) fs.appendFileSync(path.join(OUT, "legs.txt"), l + "\n"); };
 const refuse = (why) => { say("#legs refused: " + why); process.exit(NO_VERDICT); };
@@ -1006,6 +1006,84 @@ async function shippedDetect(rec) {
     : "the uninstall the QuietUninstallString names: exit " + u.code + ", folder gone " + yes(goneIn > 0) + ", the rule afterwards " + (after ? "still finds " + after : "finds nothing"));
 }
 
+/* ---- nonpersistent: a profile reset between sessions, measured ----------------------------------------------------- */
+
+/* Claude α's corporate-readiness list, row 6d (2026-11-13): "a non-persistent profile measured", against the folder list of
+   state/briefs/lead-engineer-gamma-4prime-2026-11-13-data-flow-facts.md table 3 (6b). The program installed for all users, as
+   that table advises; Documents kept as a redirected folder keeps it; the profile's data folder lost between sessions:
+     (A) the whole user-data folder gone, as a non-persistent desktop discards it at logoff;
+     (B) Local State alone gone, desk.json kept, as where the profile roams but the sealing key's wrap does not.
+   Green only where the desk starts in every session and the person's Documents come through byte for byte (their own catalog
+   and the first run's sample, neither changed nor duplicated). What is lost is recorded, never judged: the desk's id after each
+   reset, a desk file set aside as unreadable, and whether the first run's sample was written again. */
+async function nonPersistent(rec) {
+  const wall = E.windowWallRefusal(WHO);
+  if (wall) throw new NoVerdict("the leg starts the installed desk and the window wall refuses: " + wall[0]);
+  if (!process.env.APPDATA) throw new NoVerdict("APPDATA is not set, so the profile's data folder cannot be named");
+  const dir = await installMachine(rec, NEWER, "install");
+  const prog = path.join(dir, PRODUCT + ".exe");
+  const ud = path.join(process.env.APPDATA, T.packageName), docsRoot = path.join(LAB, "np-documents"), docs = path.join(docsRoot, "Etiuda");
+  if (fs.existsSync(ud)) throw new NoVerdict(ud + " is already there, so this account is not a fresh one to measure");
+  fs.mkdirSync(docsRoot, { recursive: true });
+  rec.after("profile", () => { try { if (fs.existsSync(ud)) fs.renameSync(ud, path.join(LAB, "np-ud-left")); return "moved aside"; } catch (e) { return "left: " + e.code; } });
+  const deskFile = path.join(ud, "desk.json"), sample = path.join(docs, path.basename(SAMPLE));
+  const deskId = () => { try { const d = JSON.parse(fs.readFileSync(deskFile, "utf8")); return typeof d.desk === "string" ? d.desk : ""; } catch (e) { return ""; } };
+  const sampled = () => { try { return /"e~sampled"/.test(fs.readFileSync(deskFile, "utf8")); } catch (e) { return false; } };
+  const unread = () => { try { return fs.readdirSync(ud).filter((n) => /^desk\.unread-[0-9a-f]+\.json$/.test(n)).length; } catch (e) { return 0; } };
+  /* One session: the installed program, its user-data folder the one Electron's own rule picks, stopped by pid once `done` holds
+     and the copy has stayed up a further 10 s, or 90 s pass. */
+  const session = async (tag, done) => {
+    const opts = { stdio: "ignore", windowsHide: true, env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: docsRoot, ETIUDA_TEST_DEVTOOLS: "1" }) };
+    const args = ["--user-data-dir=" + ud];
+    const no = E.shellLaunchRefusal(WHO, args, opts);
+    if (no) throw new NoVerdict("the start is refused: " + no[0]);
+    const t0 = Date.now(), child = E.shellLaunch(WHO, prog, args, opts);
+    let gone = false, code = null;
+    child.on("exit", (c) => { gone = true; code = c; });
+    let held = -1;
+    for (let i = 0; i < 45 && !gone; i++) { await sleep(2000); if (done()) { held = Math.round((Date.now() - t0) / 1000); break; } }
+    if (held >= 0) for (let i = 0; i < 5 && !gone; i++) await sleep(2000);
+    const up = !gone;
+    if (!gone) E.killTree(child.pid);
+    for (const p of procsOf(prog)) E.killTree(p.pid);
+    for (let i = 0; i < 15 && procsOf(prog).length; i++) await sleep(1000);
+    rec.f(tag + "-started", yes(up)); rec.f(tag + "-ready-s", held); if (!up) rec.f(tag + "-exit", code);
+    return { up, ready: held >= 0 };
+  };
+
+  /* Session 1: a fresh profile; the first run writes the sample and desk.json. Then the person's own catalog beside it. */
+  const s1 = await session("s1", () => sampled() && fs.existsSync(sample) && !!deskId());
+  if (!s1.ready) throw new NoVerdict("the first session did not write desk.json with its mark and the sample, so there is nothing to carry");
+  const id1 = deskId(), mine = path.join(docs, "my-own-catalog.ec");
+  fs.copyFileSync(SAMPLE, mine);
+  const docsBefore = manifest(docsRoot);
+  rec.f("s1-desk", id1.slice(0, 9));
+
+  /* (A) the whole user-data folder discarded, as at a non-persistent logoff. */
+  fs.renameSync(ud, path.join(LAB, "np-ud-after-s1"));
+  const a = await session("a", () => !!deskId());
+  const idA = deskId(), docsA = manifest(docsRoot), dA = manifestDiff(docsBefore, docsA);
+  rec.f("a-desk", idA ? (idA === id1 ? "same" : "new") : "none"); rec.f("a-docs-changed", dA.changed.length ? few(dA.changed) : 0);
+  rec.f("a-docs-gone", dA.gone.length ? few(dA.gone) : 0); rec.f("a-docs-added", dA.added.length ? few(dA.added) : 0); rec.f("a-resampled", yes(sampled()));
+
+  /* (B) Local State alone discarded, desk.json kept: the sealing key's wrap lost, the desk file roaming. */
+  const ls = path.join(ud, "Local State");
+  const hadLs = fs.existsSync(ls);
+  if (hadLs) fs.renameSync(ls, path.join(LAB, "np-local-state-after-a"));
+  rec.f("b-local-state-removed", yes(hadLs));
+  const b = await session("b", () => !!deskId());
+  const idB = deskId(), docsB = manifest(docsRoot), dB = manifestDiff(docsA, docsB);
+  rec.f("b-desk", idB ? (idB === idA ? "same" : "new") : "none"); rec.f("b-unread-set-aside", unread());
+  rec.f("b-docs-changed", dB.changed.length ? few(dB.changed) : 0); rec.f("b-docs-gone", dB.gone.length ? few(dB.gone) : 0); rec.f("b-docs-added", dB.added.length ? few(dB.added) : 0);
+
+  const docsOk = !dA.changed.length && !dA.gone.length && !dA.added.length && !dB.changed.length && !dB.gone.length && !dB.added.length;
+  const ok = a.up && a.ready && b.up && b.ready && docsOk;
+  rec.end(ok, (ok ? "" : "not held: ") + "after the whole user-data folder was discarded the desk started (" + yes(a.up) + "), its id "
+    + (idA === id1 ? "the same" : "a new one") + ", the first-run sample written again " + yes(sampled()) + "; after Local State alone was discarded it started ("
+    + yes(b.up) + "), its id " + (idB === idA ? "kept" : "new") + ", " + unread() + " desk file(s) set aside as unreadable; the person's Documents unchanged "
+    + yes(docsOk) + (docsOk ? "" : " (A: " + few(dA.changed.concat(dA.gone, dA.added)) + "; B: " + few(dB.changed.concat(dB.gone, dB.added)) + ")"));
+}
+
 /* ---- (d) locked-1618 ------------------------------------------------------------------------------------------- */
 
 async function locked1618(rec) {
@@ -1071,7 +1149,7 @@ function record(name) {
   return rec;
 }
 const LEGS = { "all-upgrade": allUpgrade, "running-1618": running1618, "system-bare": systemBare, "locked-1618": locked1618, "all-move": allMove, "all-space-d": allSpaceD,
-  "system-push": systemPush, "ext-claimed": extClaimed, "ts-cycle": tsCycle, "shipped-detect": shippedDetect };
+  "system-push": systemPush, "ext-claimed": extClaimed, "ts-cycle": tsCycle, "shipped-detect": shippedDetect, "nonpersistent": nonPersistent };
 
 /* The newer setup, built once from this tree under the test identity, as the marker builds it. */
 const early = legPreflight();
