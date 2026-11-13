@@ -2093,8 +2093,9 @@ function outsideNames(main) {
 }
 const outside = outsideNames(MAIN);
 /* And to write the seat after a request to join and a folder change (ds10b), and to knock at a relay team's door with the
-   certificate and write the request there (ds11d), none of which gates anything. */
-const expectOutside = ["signinListen", "armSigninRenew", "signinFlush", "signinFlush", "signinDoorInvite", "signinDoorKept"];
+   certificate and write the request there (ds11d), and for Buy to carry the sign-in code to the order page (tests/desk-buy.mjs), none
+   of which gates anything. */
+const expectOutside = ["signinListen", "armSigninRenew", "signinFlush", "signinFlush", "signinDoorInvite", "signinDoorKept", "signinView"];
 check(outside.slice().sort().join() === expectOutside.slice().sort().join(),
   "ds5a nothing local is gated: outside its section the shell names the sign-in only to require its loopback, to arm the renewal and to write the seat after a join: " + outside.join(" "));
 const modules = fs.readdirSync(path.join(ROOT, "src", "modules")).filter(n => n.endsWith(".js"));

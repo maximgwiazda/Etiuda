@@ -291,13 +291,23 @@ function accountCardHtml(v){
   if(choosing && v.signedIn) h+='<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">'+esc(t("Cancel"))+'</button></span>';
   return h+'</div>';
 }
+/* Buy, where the shell names an order page (shell/main.js orderAddress); the shell builds the address, so the page names none. */
+function buyOffered(){
+  const h=eHost();
+  try{ const s=h && typeof h.buyState==="function" ? h.buyState() : null; return !!(s && s.offer===true); }catch(e){ return false; }
+}
+function buyRow(v){
+  return row("buy","forward",t("Licence for one person"),v.signedIn ? t("The order page opens in the browser with your sign-in code filled in.")
+    : t("The order page opens in the browser and asks for the sign-in code of the person the licence is for."),
+    '<button type="button" class="btn" data-e-open="buy">'+esc(t("Buy"))+'</button>'); // placeholder: Claudette
+}
 function accountGroups(){
   /* NO LINE UNDER THE NAME: the placeholder names the field and the cards show what the name does. */
   const name=row("name","user",t("Your name"),"",'<input type="text" id="setAgentName" autocomplete="off" spellcheck="false"'
     +' placeholder="'+esc(t("first name"))+'" value="'+esc(agentName())+'">');
   const v=signinNow(), groups=[];
   if(signinShown(v)) groups.push({rows:[], after:accountCardHtml(v)});
-  const rows=[name];
+  const rows=[name], buy=buyOffered() && !v.busy;
   if(v.signedIn && !signinChoosingNow()){
     const p=signinParts(v), val=x=>'<span class="sgn-val">'+esc(x)+'</span>', join=pair=>pair[0]+" "+pair[1];
     /* A press at a door the shell refused is said on the team's row, where it was pressed. */
@@ -310,9 +320,10 @@ function accountGroups(){
     if(v.refused==="full") rows.push(row("seat","check",t("Seat"),join(signinSay("full", v, p)),""));
     else if(v.seat==="none") rows.push(row("seat","check",t("Seat"),join(signinSay("nolicence", v)),""));
     else rows.push(row("seat","check",t("Seat"),v.seat==="lapsed" ? join(signinSay("lapsed", v)) : t("On up to three computers; this is one of them."),val(t("Held by this account"))));
+    if(buy) rows.push(buyRow(v));
     rows.push(row("checked","clock",t("Last checked"),v.reached ? "" : t("The sign-in service cannot be reached just now. Etiuda keeps working with the catalog it has."),
       (v.at ? val(signinWhen(v.at)) : "")+'<button type="button" class="btn" data-signin-act="check">'+esc(t("Check now"))+'</button>'));
-  }
+  } else if(buy && !v.signedIn) rows.push(buyRow(v));
   groups.push({rows});
   return groups;
 }
@@ -323,6 +334,10 @@ function wireAccountRows(box){
   box.querySelectorAll('[data-e-open="signin"]').forEach(b=>{ b.onclick=()=>signinStart(b.getAttribute("data-e-provider"), "account"); });
   box.querySelectorAll("[data-signin-act]").forEach(b=>{ b.onclick=()=>signinAct(b.getAttribute("data-signin-act"), b); });
   box.querySelectorAll(".sgn-link-f").forEach(f=>{ f.onclick=()=>signinLinkSelect(f); });
+  box.querySelectorAll('[data-e-open="buy"]').forEach(b=>{ b.onclick=()=>{
+    const h=eHost();
+    try{ if(h && typeof h.openBuyPage==="function") Promise.resolve(h.openBuyPage()).catch(()=>{}); }catch(e){ /* the shell has gone */ }
+  }; });
 }
 function generalGroups(){
   const langSel='<select id="setUiLang" aria-label="'+esc(t("Interface language"))+'"'+

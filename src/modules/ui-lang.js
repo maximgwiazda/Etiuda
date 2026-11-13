@@ -1368,6 +1368,11 @@ UI_STRINGS.pl={
   "Your sign-in code":"Kod logowania",
   "Not a secret. It tells a team's lead which account is yours.":"To nie tajemnica. Po nim lider zespołu rozpoznaje, czyje to konto.",
   "Check now":"Sprawdź teraz",
+  // placeholder: Claudette, the four lines below
+  "Licence for one person":"Licencja dla jednej osoby",
+  "The order page opens in the browser with your sign-in code filled in.":"Strona zamówienia otworzy się w przeglądarce z wpisanym już kodem logowania.",
+  "The order page opens in the browser and asks for the sign-in code of the person the licence is for.":"Strona zamówienia otworzy się w przeglądarce i poprosi o kod logowania osoby, dla której jest licencja.",
+  "Buy":"Kup",
   "The sign-in service could not be reached.":"Nie udało się połączyć z usługą logowania.",
   "Nothing changed: this computer is not signed in, and Etiuda works as before.":"Nic się nie zmieniło: ten komputer nie jest zalogowany, a Etiuda działa jak dotąd.",
   "{TEAM} has no free seat.":"W zespole {TEAM} nie ma wolnego miejsca.",
