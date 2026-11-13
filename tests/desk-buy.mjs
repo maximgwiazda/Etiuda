@@ -141,11 +141,11 @@ CASES.present = async () => {
   try { plIn = buyRowOf(await acctOf(signed, OFFER)); plOut = buyRowOf(await acctOf(signedOut, OFFER)); } finally { storage.lsSet("eUiLang", "en"); }
   return S.taken === true && S.page() === ORDER && !!st && st.offer === true && Object.keys(st).join() === "offer" && other === null
     && /<button type="button" class="btn" data-e-open="buy">Buy<\/button>/.test(inRow)
-    && words(inRow).indexOf("Licence for one person") >= 0 && words(inRow).indexOf("with your sign-in code filled in") >= 0
-    && /data-e-open="buy">Buy</.test(outRow) && words(outRow).indexOf("asks for the sign-in code of the person the licence is for") >= 0
+    && words(inRow).indexOf("Licence for one person") >= 0 && words(inRow).indexOf("with this account's sign-in code filled in; typing another person's code buys the licence for them instead.") >= 0
+    && /data-e-open="buy">Buy</.test(outRow) && words(outRow).indexOf("asks for the sign-in code of the person the licence is for, which Etiuda shows them after their first sign-in.") >= 0
     && inRow.indexOf(CODE) < 0 && outRow.indexOf("http") < 0 && !/data-e-open="buy"/.test(busy)
-    && /data-e-open="buy">Kup</.test(plIn) && words(plIn).indexOf("Licencja dla jednej osoby") >= 0 && words(plIn).indexOf("z wpisanym już kodem logowania") >= 0
-    && /data-e-open="buy">Kup</.test(plOut) && words(plOut).indexOf("poprosi o kod logowania osoby") >= 0;
+    && /data-e-open="buy">Kup</.test(plIn) && words(plIn).indexOf("Licencja dla jednej osoby") >= 0 && words(plIn).indexOf("z wpisanym kodem logowania tego konta; po wpisaniu kodu innej osoby licencja zostanie kupiona dla niej.") >= 0
+    && /data-e-open="buy">Kup</.test(plOut) && words(plOut).indexOf("poprosi o kod logowania osoby, dla której jest licencja; Etiuda pokazuje go tej osobie po jej pierwszym zalogowaniu.") >= 0;
 };
 /* b3: a click on Buy hands the browser the order page with the code after its #: the request a browser makes of it (its path and
    query) holds no code. Signed out, or with a code not of its shape, the bare page. */

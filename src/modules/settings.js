@@ -297,9 +297,9 @@ function buyOffered(){
   try{ const s=h && typeof h.buyState==="function" ? h.buyState() : null; return !!(s && s.offer===true); }catch(e){ return false; }
 }
 function buyRow(v){
-  return row("buy","forward",t("Licence for one person"),v.signedIn ? t("The order page opens in the browser with your sign-in code filled in.")
-    : t("The order page opens in the browser and asks for the sign-in code of the person the licence is for."),
-    '<button type="button" class="btn" data-e-open="buy">'+esc(t("Buy"))+'</button>'); // placeholder: Claudette
+  return row("buy","forward",t("Licence for one person"),v.signedIn ? t("The order page opens in the browser with this account's sign-in code filled in; typing another person's code buys the licence for them instead.")
+    : t("The order page opens in the browser and asks for the sign-in code of the person the licence is for, which Etiuda shows them after their first sign-in."),
+    '<button type="button" class="btn" data-e-open="buy">'+esc(t("Buy"))+'</button>');
 }
 function accountGroups(){
   /* NO LINE UNDER THE NAME: the placeholder names the field and the cards show what the name does. */
