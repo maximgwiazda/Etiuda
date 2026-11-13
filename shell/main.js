@@ -5587,6 +5587,9 @@ function askAgain(j) {
 function cancelJoin() {
   if (deskKeys === undefined) deskKeys = readDesk();
   const j = teamJoin;
+  /* A door request the relay named may be up at the lead's, so it is taken back there too; the join ends once the relay has taken
+     the withdrawal (refusedWithdrawEnds). One the relay turned away, or never named, stands nowhere and simply goes. */
+  if (j && j.invite && j.invite.relay && j.invite.relay.door === true && j.invite.relay.end === undefined && /^[0-9a-f]{32}$/.test(String(j.invite.relay.inv))) return withdrawJoin(j); /* plant:door-cancel-withdraw */
   if (!(j && j.invite && j.invite.relay && j.invite.relay.door === true) && inviteAccepted(j)) return withdrawJoin(j); /* plant:h35-keep */
   if (j && deskBranch) { try { unlinkOwn(joinFile()); } catch { /* gone already, or the share is away */ } }
   teamJoin = null;
@@ -5655,7 +5658,9 @@ function endRefusedRelay(j) {
   sendJoin(theWindow);
 }
 function refusedWithdrawEnds(j) {
-  if (!j || j.refused !== true || !j.invite || !j.invite.relay) return false;
+  if (!j || !j.invite || !j.invite.relay) return false;
+  /* A door request has no Ask again (its request is written only when the relay names it), so its withdrawal ends it as well. */
+  if (j.refused !== true && j.invite.relay.door !== true) return false; /* plant:door-withdrawn-ends */
   endRefusedRelay(j); /* plant:refused-cancel-ends */
   return true;
 }
@@ -6653,6 +6658,12 @@ function relayFlagged() {
   const teams = Object.keys(teamChannel).filter(t => relayFollowed(t) && teamRelayGone[t] === true).sort();
   if (!teams.length) return null;
   return { team: teams[0], rt: teamChannel[teams[0]].rt, url: teamChannel[teams[0]].url, joining: false };
+}
+/* A pinned team this desk has not been taken off: leadsView's `removed`, turned round. */
+function teamPinStands(team) {
+  const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", roster = teamRoster[team];
+  const removed = (newestEpoch(team) > 0 && !!me && !!roster && Array.isArray(roster.desks) && roster.desks.indexOf(me) < 0) || teamRelayGone[team] === true;
+  return !!teamPins[team] && !removed;
 }
 function relayMirrorOf(rt) { return path.join(app.getPath("userData"), "relay", rt); }
 
@@ -9661,9 +9672,11 @@ function signinFileRead(text, packed) {
       cert: h.cert && typeof h.cert === "object" && Number.isSafeInteger(h.cert.until) ? h.cert : null,
       at: num(h.at), checked: num(h.checked), reached: h.reached !== false, said: typeof h.said === "string" ? h.said : "", ask: h.ask === true,
       doors: signinDoorsOk(h.doors, packed) };
+  /* The desk key whose sign out the service has not taken yet: asked again at the renewal's next turn (signinOutAgain). */
+  if (/^[0-9a-f]{64}$/.test(String(d.out))) out.out = String(d.out); /* plant:out-kept */
   return out;
 }
-function signinFileText(s) { return JSON.stringify({ format: 2, held: s.held || null }, null, 1) + "\n"; }
+function signinFileText(s) { return JSON.stringify(Object.assign({ format: 2, held: s.held || null }, s.out ? { out: s.out } : {}), null, 1) + "\n"; }
 
 /* The sign-in's wiring: the person's click, the browser, the service, seat.json, the quiet renewal and what the page is told.
    With no provider configured nothing is offered, opened or sent. */
@@ -9674,6 +9687,9 @@ const SIGNIN_FIRST_MS = 2 * 60 * 1000;
 /* Check now asks at most this often, whatever is pressed. */
 const SIGNIN_CHECK_GAP_MS = 10 * 1000;
 let signinStore, signinBusy = null, signinSaid = "", signinClick = null, signinTimer = null, signinWrote = "", signinCheckAt = 0;
+/* The quiet renewal's post while it is out, and the sign out's: a sign out waits for the first, so the service never takes a renewal
+   after it. */
+let signinRenewing = null, signinOutFlight = null;
 /* Google's client secret, where the package step put one beside the asar: read here once, at start, installed only. */
 if (INSTALLED) { try { signinPacked = signinSecretRead(fs.readFileSync(path.join(String(process.resourcesPath || ""), SIGNIN_SECRET_FILE), "utf8")); } catch { /* none packaged: every byte as before */ } }
 /* This desk's flag for the relays a door may name (signinDoorAddressOk): installed or packaged. */
@@ -9740,6 +9756,9 @@ function signinDoorInvite(team, rt) {
   /* A door request the relay or the lead turned away, or refused as removed, knocks no more; Cancel forgets it. */
   if (inv.end !== undefined) return null; /* plant:door-ended-quiet */
   if (!signinDoorAddressOk(inv, SIGNIN_DESK_PACKED)) return null; /* plant:door-address-knock */
+  /* A request being taken back knocks no more and needs no certificate: its id and the lead's box let the channel send the deletion on
+     the session the desk's key resumes. */
+  if (inv.withdrawing === true) return inv.rt === rt && /^[0-9a-f]{64}$/.test(String(inv.box)) && /^[0-9a-f]{32}$/.test(String(inv.inv)) ? { door: null, box: inv.box, inv: inv.inv } : null; /* plant:door-withdraw-invite */
   const held = signinState().held, cert = held && held.cert, me = branchIdentity(false);
   if (inv.rt !== rt || !me || !/^[0-9a-f]{64}$/.test(String(inv.box)) || !signinCertOk(cert, me.key) || !(cert.until > Date.now())) return null; /* plant:door-invite-cert */
   const out = { door: cert, box: inv.box };
@@ -9771,8 +9790,14 @@ function signinDoorKept(team, mirror, id) {
 function signinDoorsShown(held, now) {
   const me = branchIdentity(false);
   if (!held || !held.cert || !me || !signinCertOk(held.cert, me.key) || !(held.cert.until > now) || pinnedLead() || teamJoin) return []; /* plant:door-shown */
+  if (Object.keys(teamPins).some(teamPinStands)) return []; /* plant:door-pin-stands */
   return (held.doors || []).map((d, n) => {
     if (!signinDoorAddressOk(d, SIGNIN_DESK_PACKED)) return null; /* plant:door-address-offer */
+    /* Machine policy binds a door as it binds an invitation (inviteDoor); a team pinned under another lead is no door, as it is no
+       invitation (inviteSettled). */
+    if (inviteDoor({ lead: { public: d.lead } })) return null; /* plant:door-policy */
+    const pin = teamPins[d.team];
+    if (pin && (pin.keyId !== d.keyId || pin.public !== d.lead)) return null; /* plant:door-pinned */
     let host = "";
     try { host = new URL(d.url).host; } catch { host = ""; }
     return { n: n, host: host, print: leadPrint(d.lead) };
@@ -9795,6 +9820,8 @@ function signinDoorJoin(n) {
       relay: { rt: d.rt, url: d.url, door: true, box: d.box } } }; /* plant:door-join-box */
   if (!teamPins[d.team]) { teamPins[d.team] = { keyId: d.keyId, public: d.lead }; teamSeen.delete(d.team); }
   teamPinFrom[d.team] = "invite";
+  /* The press asks again: a leave or an "It does not match" kept for this team is lifted, and Cancel puts it back (`before`). */
+  delete teamLeft[d.team]; teamBarred.delete(d.team); /* plant:door-join-unbar */
   let host = "";
   try { host = new URL(d.url).host; } catch { host = ""; }
   teamShown[d.team] = Object.assign({ folder: relayMirrorOf(d.rt) }, host ? { relay: host } : {});
@@ -9826,6 +9853,7 @@ function signinView() {
     at: signedIn ? held.at : 0, reached: !signedIn || held.reached !== false, ask: !!signedIn && held.ask === true,
     refused: signedIn ? held.said : "", busy: signinBusy ? signinBusy.provider : "", said: signinSaid,
     doors: signedIn ? signinDoorsShown(held, now) : [],
+    outOwed: !signedIn && !!signinState().out && !signinOutFlight, /* plant:out-owed-view */
     link: signinBusy && signinPageOk(signinBusy.url) ? signinBusy.url : "", keeps: sealsForReal(safeStorage, process.platform) }; /* plant:view-link */
 }
 function tellSignin() {
@@ -9862,6 +9890,7 @@ function signinTake(provider, got, ans, now) {
   const base = { provider: provider, refresh: signinKeep(safeStorage, process.platform, got.refreshToken),
     sub: signinKeep(safeStorage, process.platform, got.sub), seed: got.seed, code: "", cert: null, at: 0, checked: now, reached: true, said: "", ask: false, doors: [] };
   s.held = signinSettle(base, ans, now);
+  delete s.out; /* this sign-in holds the desk's place again, so a sign out still owed is no longer wanted */
   signinSave();
   return true;
 }
@@ -9915,19 +9944,21 @@ ipcMain.handle("etiuda:signin-stop", (e) => {
   if (run && run.loop) run.loop.close();
   return !!run;
 });
-/* Sign out: this computer forgets the account, its tokens, its code and its certificate, and takes its seat.json back out of the
-   team's folder. The team, its catalog and everything else on the desk stay. Where the desk was signed in and a provider is offered,
-   its place at the licence service is freed first by one signed signout/desk, which nothing here waits on or says anything of: if
-   the service is away or refuses, the place frees itself after 30 days unseen. The person's seat on the licence is not touched. */
+/* Sign out: this computer forgets the account, its tokens, code and certificate, takes its seat.json out of the team's folder and
+   lets go of a request made at a team's door, which its certificate no longer stands for; the team and its catalog stay. Its place at
+   the licence service is freed by one signed signout/desk, sent after any renewal still out, so the service takes it last; one not
+   taken is owed (`out`), said on the page and asked again at the renewal's next turn. The person's seat on the licence is untouched. */
 function signinOutNow() {
   if (signinBusy) return signinView();
   const s = signinState(), me = branchIdentity(false);
   if (s.held && me && (!harnessLaunch() || signinLabHeld()) && net && typeof net.fetch === "function"
     && signinOffered().length) { /* plant:signout-offered */
-    signoutAsk(signinIo({ loop: null }), me.key, Date.now); /* plant:signout-post */
+    s.out = me.key;
+    signinOutSend(me.key);
   }
+  if (teamJoin && teamJoin.invite && teamJoin.invite.relay && teamJoin.invite.relay.door === true) { cancelJoin(); sendJoin(theWindow); } /* plant:signout-door */
   if (s.held && me && signinTeamHere()) {
-    try { fs.unlinkSync(path.join(sharedFolderForWrite(), "desks", me.id, SEAT_NAME)); } catch { /* not written, or the folder is away */ }
+    try { unlinkOwn(path.join(sharedFolderForWrite(), "desks", me.id, SEAT_NAME)); } catch { /* not written, or the folder is away */ } /* plant:signout-unlink-own */
   }
   s.held = null;
   signinWrote = "";
@@ -9935,6 +9966,27 @@ function signinOutNow() {
   signinSave();
   tellSignin();
   return signinView();
+}
+/* One signout/desk for `key`, at once or after the renewal still out, and the owed mark taken off once the service has it. Resolves
+   whether it did; never rejects. */
+function signinOutSend(key) {
+  const send = () => signoutAsk(signinIo({ loop: null }), key, Date.now); /* plant:signout-post */
+  const flight = (signinRenewing ? signinRenewing.then(send, send) : send()).then(ok => { /* plant:signout-after-renew */
+    if (signinOutFlight === flight) signinOutFlight = null;
+    const st = signinState();
+    if (ok && st.out === key) { delete st.out; signinSave(); }
+    else if (!ok) tellSignin(); /* the owed line is the page's to show now */
+    return ok;
+  });
+  signinOutFlight = flight;
+  return flight;
+}
+/* A sign out the service did not take, asked again while nobody is signed in and nothing else is out, for the desk key it was for. */
+function signinOutAgain() {
+  const s = signinState(), me = branchIdentity(false);
+  if (!s.out || s.held || signinBusy || signinOutFlight || !net || typeof net.fetch !== "function" || !signinOffered().length) return Promise.resolve(false);
+  if (!me || me.key !== s.out) { delete s.out; signinSave(); return Promise.resolve(false); }
+  return signinOutSend(s.out); /* plant:out-again */
 }
 ipcMain.handle("etiuda:signin-out", (e) => {
   if (!fromEngine(e)) return null;
@@ -9955,10 +10007,14 @@ async function signinRenewNow() {
   if (harnessLaunch() && !signinLabHeld()) return ""; /* plant:renew-now-harness */
   signinFlush();
   const s = signinState(), held = s.held;
+  if (!held && s.out) { await signinOutAgain(); return ""; } /* plant:renew-out */
   if (!held || !held.refresh || signinBusy) return "";
   const p = signinOffered().find(x => x.id === held.provider), me = branchIdentity(false);
   if (!p || !me) return ""; /* plant:renew-offered */
-  const r = await signinRenewHeld(signinIo({ loop: null }), p, me.key, held, Date.now);
+  const pending = signinRenewHeld(signinIo({ loop: null }), p, me.key, held, Date.now);
+  signinRenewing = pending; /* plant:renew-marked */
+  let r;
+  try { r = await pending; } finally { if (signinRenewing === pending) signinRenewing = null; }
   if (s.held !== held) return ""; /* a sign-in or a sign out took its place meanwhile */
   s.held = r.held;
   signinSave();

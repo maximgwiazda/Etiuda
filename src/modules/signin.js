@@ -32,6 +32,8 @@ function signinRead(v){
     /* The provider's page of the sign-in that waits, only while one does. */
     link: known(o.busy) && typeof o.link==="string" && (/^https:\/\/\S+$/.test(o.link) || (o.busy==="lab" && /^http:\/\/127\.0\.0\.1:[0-9]+\/\S*$/.test(o.link))) ? o.link : "",
     keeps: o.keeps!==false,
+    /* Signed out, with the service not yet told: the desk's place among the account's three is freed at the next contact. */
+    outOwed: !signedIn && o.outOwed===true,
     /* The doors the sign-in handed, offered while the desk keeps no team (the door-finding): each by its place, the relay's host
        and the lead's print, so two leads' doors of one team are told apart. */
     doors: signedIn && Array.isArray(o.doors) ? o.doors.filter(d=>d && Number.isInteger(d.n) && typeof d.host==="string" && d.host.length<=256
