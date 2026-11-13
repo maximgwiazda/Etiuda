@@ -40,35 +40,8 @@ const sentNow = new Map();         // relPath -> the sha (or "del") this worker 
 const casHeld = new Map();         // ask id -> the lock a compare and swap holds
 const CAS_HOLD_MS = 20000;
 
-function isAllowedPath(rel) {
-  const norm = String(rel || "").replace(/\\/g, "/");
-  const parts = norm.split("/");
-  if (parts.length === 1) {
-    if (norm.endsWith(".ec")) return true;
-    if (/^etiuda-team.*\.json$/i.test(norm)) return true;
-    if (/^etiuda-head.*\.json$/i.test(norm)) return true;
-    if (/^etiuda-ring.*\.json$/i.test(norm)) return true;
-    if (/^etiuda-team-joins.*\.json$/i.test(norm)) return true;
-    if (/^etiuda-team-pause.*\.json$/i.test(norm)) return true;
-    if (/^stats-span.*\.json$/i.test(norm)) return true;
-    return false;
-  }
-  if (parts[0] === "invites" && parts.length === 2) {
-    return parts[1].endsWith(".wrap.json") || parts[1].endsWith(".refused.json");
-  }
-  if (parts[0] === "catalog-asks" && parts.length === 2) {
-    return parts[1].endsWith(".json");
-  }
-  if (parts[0] === "desks" && parts.length === 3) {
-    const deskId = parts[1];
-    const file = parts[2];
-    if (!/^k-[0-9a-f]{16}$/.test(deskId)) return false;
-    if (file.endsWith(".ec")) return true;
-    if (file === "stats.estat" || file === "join.json") return true;
-    return false;
-  }
-  return false;
-}
+/* The same paths the main thread keeps, so a file it keeps (a desk's seat.json among them) is listed and not taken for gone. */
+const isAllowedPath = S.isAllowedPath;
 
 function walkFolder(baseDir, sub = "") {
   const out = new Map();

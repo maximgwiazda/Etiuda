@@ -1033,7 +1033,8 @@ function folderSyncerRun(win) {
     /* The floor heedTeam keeps, so a team file put back from an older rev never reaches the mirror, a restart included. */
     floor: (t, pub) => (teamRevSeen[t] || {})[pub], /* plant:s0b-syncer-floor */
     checks: deskTrustChecks(), /* plant:syncer-checks */
-    own: deskBranch ? branchIdOf(deskBranch.sign.pub) : "",
+    /* Read at each listing, so a desk key made after the syncer started is this desk's own folder at once. */
+    own: () => deskBranch ? branchIdOf(deskBranch.sign.pub) : "",
     onOwed: () => { if (theWindow && !theWindow.isDestroyed()) sendJoin(theWindow); },
     /* A team file in the share that is not the lead's is left aside and the desk works on the last genuine one, so it says
        so through teamSay, once a line (the test architect's C1 to slice 2): the old refusal of a write was the only alarm a
@@ -8626,7 +8627,7 @@ function deskRowOf(file, folder) {
   const x = ecFacts(file, folder);
   if (!x || !x.deskOk) return null;
   const me = branchIdentity(false);
-  let reached = true;
+  let reached = true, fault = "";
   if (me && folder === me.id) {
     const relay = relayHere();
     if (relay) {
@@ -8640,11 +8641,13 @@ function deskRowOf(file, folder) {
     } else {
       reached = !heldBranch.has(path.basename(file, ".ec")); /* plant:w1-folder-reached */
       if (reached && mirrorOwed(file)) reached = false; /* plant:outbox-row-kept */
+      const mirror = folderMirrorHere();
+      try { if (mirror && FolderSyncer().takenBackList(mirror, "desks/" + folder + "/").length) fault = "taken-back"; } catch { /* no outbox */ } /* plant:own-fault-row */
     }
   }
   return { name: path.basename(file), mtime: x.mtime, cards: x.cards, edition: x.edition, macros: x.macros, intents: x.intents, cats: x.cats,
            awaiting: x.awaiting, sample: false, id: x.id, builtIn: false, rev: x.rev, grew: x.grew, sha: x.sha,
-           genuine: true, reached: reached, relay: !!relayHere(), desk: { id: folder, name: x.deskName } };
+           genuine: true, reached: reached, relay: !!relayHere(), fault: fault, desk: { id: folder, name: x.deskName } };
 }
 function deskRows() {
   const root = catalogFolder();
@@ -8792,7 +8795,7 @@ let listingSent = "";
 function sendListing(win, force) {
   if (!win || win.isDestroyed() || !folderAnswers(catalogFolder())) return;
   const rows = listingRows();
-  const key = JSON.stringify(rows.map(r => [r.desk ? r.desk.id : r.builtIn ? "~" : "", r.name, r.id, r.rev, r.sha]).sort());
+  const key = JSON.stringify(rows.map(r => [r.desk ? r.desk.id : r.builtIn ? "~" : "", r.name, r.id, r.rev, r.sha, r.fault || ""]).sort());
   try { syncJumpList(); } catch { /* jump list optional */ }
   if (!force && key === listingSent) return;
   listingSent = key;

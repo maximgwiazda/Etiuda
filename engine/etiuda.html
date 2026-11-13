@@ -16835,6 +16835,8 @@ What you type stays in this browser only.`;
       desk: f && f.desk && typeof f.desk === "object" && f.desk.id ? { id: String(f.desk.id), name: String(f.desk.name || "") } : null,
       reached: !!(f && f.reached),
       relay: !!(f && f.relay),
+      // "taken-back" on this desk's own file where the team's folder has taken its writes back three times.
+      fault: String(f && f.fault || ""),
       // The copy Etiuda ships, rather than a folder's own file.
       builtIn: !!(f && f.builtIn)
     })).filter((f) => f.name) : [];
@@ -33696,8 +33698,8 @@ What you type stays in this browser only.`;
     const tip = t("Signed by {DESK}, key {KEY}. Only that teammate can change this file; anyone with the folder can read it.").split("{DESK}").join(who).split("{KEY}").join(deskKey(f));
     return '<div class="ec-row ec-desk' + (o.nested ? "" : " ec-alone") + (o.loaded ? " is-loaded" : "") + '" data-ec-desk="' + o.at + '"><span class="ec-name"><b>' + esc(who) + (o.twin ? '<span class="ec-fp">' + esc(o.twin) + "</span>" : "") + '</b><small class="ec-meta">' + o.meta + "</small>" + (o.extra || "") + "</span>" + (o.loaded ? loadedTickHtml() + ecExportHtml() : "") + '<span class="ec-who" role="img" tabindex="0" aria-label="' + esc(who) + '" data-tip="' + esc(tip) + '" data-tip-key="' + esc(String(f.desk.id).slice(2)) + '" data-tip-kind="desk">' + ICON_DESK + "</span>" + ecActHtml("See what changed", ICON_LOOK, ' data-ec-look="' + o.at + '"') + (o.loaded ? ecActHtml("Eject", ICON_EJECT, ' data-ec-eject="1"') : ecActHtml("Work from this file", ICON_LOAD, ' data-ec-work="' + o.at + '"')) + "</div>";
   }
-  function ecMineHtml(line, glyph) {
-    return '<small class="ec-mine">' + (glyph ? ICON_DESK : "") + "<span>" + esc(line) + "</span></small>";
+  function ecMineHtml(line, glyph, fault) {
+    return '<small class="ec-mine"' + (fault ? ' data-ec-fault="' + esc(fault) + '"' : "") + ">" + (glyph ? ICON_DESK : "") + "<span>" + esc(line) + "</span></small>";
   }
   var ecTrustOf = /* @__PURE__ */ new Map();
   function ecFileTrust(f) {
@@ -33811,7 +33813,9 @@ What you type stays in this browser only.`;
       const ownEntry = ownOf(heldId);
       const ownReached = !!(ownEntry && ownEntry.reached);
       const holdsEdits = deskBranchHolds();
-      const mineLine = ownEntry || holdsEdits ? ecMineHtml(t(ownReached ? "Your edits are with the team" : "Your edits are kept on this computer and go to the team as soon as it can take them. To hand them over now, Export saves them in a catalog file for the team's lead."), true) : "";
+      const takenBack = own.some((o) => o && o.fault === "taken-back");
+      const keptLine = t("Your edits are kept on this computer and go to the team as soon as it can take them. To hand them over now, Export saves them in a catalog file for the team's lead.");
+      const mineLine = takenBack ? ecMineHtml(keptLine, true, "taken-back") : ownEntry || holdsEdits ? ecMineHtml(ownReached ? t("Your edits are with the team") : keptLine, true) : "";
       const extraFor = (id, on) => on ? mineLine : id && id !== heldId && ownOf(id) ? ecMineHtml(t("Your edits to it come back when it is loaded again"), false) : "";
       const tops = files.map((f, i) => {
         const on = i === onAt;
@@ -33862,6 +33866,7 @@ What you type stays in this browser only.`;
       });
       ecKeyBubClose();
       const rows = tops.reduce((out2, x, k) => out2.concat([x.html], under[k]), []).concat(alone);
+      if (takenBack && !rows.some((r) => r.indexOf("data-ec-fault") >= 0)) rows.unshift(mineLine);
       box.innerHTML = rows.length ? rows.join("") : ecEmptyHtml();
       wireEcKeys(box);
       nested.forEach((i) => deskChangeWords(desks[i], deskBase(desks[i], files, held)).then((words) => {
