@@ -474,8 +474,9 @@ function createCore(deps) {
     else store.del("grantKey");
   }
   /* The seats a taken grant carries, kept apart from the team row as {licence, live, at}, `at` the grant's issue: the newest-issued
-     grant decides, so a grant issued earlier changes nothing and one without seats issued later makes the team ordinary again. A team
-     whose grants never carried seats is never written here. */
+     grant decides, so a grant issued earlier changes nothing and one without seats issued later makes the team ordinary again. Its
+     live never falls while the licence stays: the service reads it from the seats it still holds, so a freed seat's proof can drop
+     out of a later grant. A team whose grants never carried seats is never written here. */
   function takeSeats(grant) {
     const held = store.get("seats"), was = plain(held) && Number.isSafeInteger(held.at) ? held : null, at = grant.issued;
     if (grant.seats === undefined) {
@@ -483,7 +484,9 @@ function createCore(deps) {
       return;
     }
     if (was && at < was.at) return; /* plant:seats-older */
-    store.put("seats", { licence: grant.seats.licence, live: grant.seats.live, at });
+    let live = grant.seats.live;
+    if (was && was.licence === grant.seats.licence && was.live > live) live = was.live; /* plant:seats-live-kept */
+    store.put("seats", { licence: grant.seats.licence, live, at });
   }
   /* A desk's session on a team whose grant carries seats, before it is issued: `cert` judged by certWhy for the seats' licence, its run
      ending decided here. A current one opens the session and its issue is kept as evidence; a run-out one opens it until the evidence

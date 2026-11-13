@@ -2199,26 +2199,34 @@ function createChannel(opts) {
   }
 
   /* THE SEAT ON A TEAM WHOSE LICENCE FOLLOWS ENTRA: a key's session there carries this desk's certificate. Sent once the relay has
-     refused one without it, on the same challenge, which a refusal leaves unspent; a run-out certificate is renewed first. Answers
-     the relay's last answer, and tells the shell when the refusal starts or ends. */
+     refused one without it, on the same challenge, which a refusal leaves unspent; a run-out certificate is renewed first, and so is
+     one the relay refused (a revoked service key, a licence moved), sent again only where the renewal changed it. Answers the relay's
+     last answer, and tells the shell when the refusal starts or ends. */
   async function seatHello(challenge, who) {
     const sig = crypto.sign(null, helloBytes(o.rt, challenge, who.keyId), who.privateKey).toString("hex");
     const send = seat => call("POST", "session", { json: Object.assign({ challenge, key: who.keyId, pub: who.public, sig }, seat ? { seat } : {}) });
-    const sent = seatAsked ? await seatNow() : null;
+    let sent = seatAsked ? await seatNow(false) : null;
     let r = await send(sent);
-    if (refusalOf(r).reason === "seat-lapsed" && !seatAsked) { /* plant:seat-learn */
+    const same = (x, y) => !!x && !!y && table(x.sig) && table(y.sig) && x.sig.value === y.sig.value;
+    let tries = 0;
+    tries = 2; /* plant:seat-learn */
+    for (let i = 0; i < tries && refusalOf(r).reason === "seat-lapsed"; i++) {
       seatAsked = true;
-      const next = await seatNow();
-      if (next) r = await send(next);
+      let force = false;
+      force = !!sent; /* plant:seat-renew-refused */
+      const next = await seatNow(force);
+      if (!next || same(next, sent)) break;
+      sent = next;
+      r = await send(next);
     }
     const state = r.status === 200 ? "open" : refusalOf(r).reason === "seat-lapsed" ? "refused" : seatState;
     if (state !== seatState && (state === "refused" || seatState === "refused") && typeof o.onSeat === "function") o.onSeat(state); /* plant:seat-told */
     seatState = state;
     return r;
   }
-  async function seatNow() {
+  async function seatNow(force) {
     let c = typeof o.seat === "function" ? o.seat() : null;
-    if (c && Number.isSafeInteger(c.until) && c.until <= clock() && typeof o.seatRenew === "function") { /* plant:seat-renew-first */
+    if (c && (force || (Number.isSafeInteger(c.until) && c.until <= clock())) && typeof o.seatRenew === "function") { /* plant:seat-renew-first */
       try { await o.seatRenew(); } catch { /* the certificate in hand goes */ }
       c = o.seat();
     }

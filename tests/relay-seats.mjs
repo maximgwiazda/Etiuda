@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 50;
+const EXPECTED = 55;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -522,7 +522,7 @@ async function main() {
       const g2 = ordinarySequence.g2 || (ordinarySequence.g2 = grantAt(keys.next.pub, t));
       note("handover", await call(R, "POST", "/relay/v1/t/" + w.rt + "/lead", { json: { to, t, sig: signHex(w.lead, C.leadBytes(w.rt, to.keyId, to.pub, t)), grant: g2 } }));
       note("after", await session(w, w.desks.b));
-      const rows = storeOf(w).dump().map(([k, v]) => k.replace(/[0-9a-f]{16,}/g, "#") + "=" + JSON.stringify(v, (kk, vv) => (typeof vv === "string" ? vv.replace(/[0-9a-f]{16,}/g, "#") : vv)));
+      const rows = storeOf(w).dump().map(([k, v]) => k.replace(/[0-9a-f]{16,}/g, "#") + "=" + JSON.stringify(v, (kk, vv) => (typeof vv === "string" ? vv.replace(/[0-9a-f]{16,}/g, "#") : vv))).sort();
       return { steps, rows };
     } finally { if (core) for (const k of Object.keys(kept)) C[k] = kept[k]; }
   }
@@ -562,6 +562,23 @@ async function main() {
   const order = await leg("s12a", orderScene, "O7 the order: a grant carrying seats is refused fields by main's relay before this change and taken by this one, and main's takes the same grant without seats");
   await leg("s14a", shapeScene, "a grant's seats out of shape (live after the issue, negative or fractional, a licence not 32 lowercase hex, an extra or missing field, not an object) is refused shape, and at a create or a renewal bad-grant, before any team keeps it");
   await leg("s15a", keptScene, "the newest-issued grant decides: an ordinary team renewed with seats asks for certificates, an earlier-issued grant without seats changes nothing, a later one makes the team ordinary again, and a handover with seats makes it an Entra team");
+  /* The grant's live never falls while the licence stays: a removed desk cut by one grant's live stays cut when a newer grant names an
+     earlier live (the service reads live from the seats it still holds, and a freed seat's proof drops out). */
+  async function liveKeptScene() {
+    const w = await team({ seats: true });
+    prove(w, "a", DAY);
+    const aEnd = w.desks.a.cert.until;
+    w.R.clock.now = aEnd + 2 * HOUR;
+    await renew(w, grantAt(w.lead.pub, w.R.clock.now, { licence: w.licence, live: aEnd + M }));
+    const cut = await sessionAs(w, "a");
+    w.R.clock.now += HOUR;
+    const lower = await renew(w, grantAt(w.lead.pub, w.R.clock.now, { licence: w.licence, live: T0 }));
+    const still = await sessionAs(w, "a");
+    const kept = storeOf(w).get("seats");
+    const ok = refused(cut, "seat-lapsed") && lower.status === 200 && refused(still, "seat-lapsed") && !!kept && kept.live === aEnd + M;
+    return { ok, detail: brief({ cut: said(cut), newerGrantEarlierLive: said(lower), still: said(still), keptLiveHoursAfterEnd: kept ? (kept.live - aEnd) / HOUR : null }) };
+  }
+  await leg("s15b", liveKeptScene, "a grant's live never falls while the licence stays: a desk cut by one grant stays cut when a newer grant names an earlier live");
   await leg("s16a", doorKnockScene, "an enrolled desk knocking at the door with a current certificate of another of the door's licences than the seats' is refused seat-lapsed, and of the seats' licence opens as a desk");
   /* The door still refuses an ended certificate of a stranger: only a desk session leaves the end to seatGate. */
   async function doorEndedScene() {
@@ -606,6 +623,7 @@ async function main() {
     ["seat-session", "s2a", noCertScene, "a desk's session asks no seat"],
     ["seat-cert", "s3a", wrongCertScene, "a certificate that is not this team's current seat opens"],
     ["seat-ordinary", "s2a", noCertScene, "an ordinary team is judged as an Entra team"],
+    ["seat-ordinary", "s17a", ordinaryScene, "an ordinary team asks a seat, so its sequence differs from main's"],
     ["seat-lapsed", "s6 W=7d", () => removedByColleagueScene(W7), "a run-out certificate always opens"],
     ["seat-lapsed", "s7 W=1d", () => removedByGrantScene(W1), "a run-out certificate always opens"],
     ["seat-seen", "s10 W=7d", () => studioClosedScene(W7), "no certificate taken at a session is kept as evidence"],
@@ -616,6 +634,7 @@ async function main() {
     ["seats-lead", "s15a", keptScene, "a handover's seats are not kept"],
     ["seats-dropped", "s15a", keptScene, "a later grant without seats leaves the team asking for certificates"],
     ["seats-older", "s15a", keptScene, "an earlier-issued grant takes the team's seats"],
+    ["seats-live-kept", "s15b", liveKeptScene, "a newer grant's earlier live lowers the evidence"],
     ["grant-seats", "s14a", shapeScene, "seats out of shape are taken"],
     ["cert-ended", "s18a", doorEndedScene, "the door takes an ended certificate"],
   ];
@@ -710,6 +729,30 @@ async function main() {
     const ok = !refusedOnline && toldBefore.join() === "refused" && back && c.told.join() === "refused,open";
     return { ok, detail: brief({ refusedOnline, toldWhileRefused: toldBefore, signedInAgain: back, told: c.told }) };
   }
+  /* A desk whose current certificate the relay refuses (its service key revoked): it renews once and opens with the new one; a renewal
+     that brings the same certificate is not sent again. */
+  async function deskRefusedRenewsScene(mod) {
+    const w = await team({ seats: true });
+    const svc = serviceKey(), now = w.R.clock.now, a = w.desks.a;
+    const viaSvc = K.delegationFor(now, { fields: { may: ["licence"], key: { id: svc.id, pub: svc.pub } } });
+    w.R.env.REVOKED = revokedText([svc.pub]);
+    const seat = { cert: certFor(a.pub, w.licence, now, DAY, { signer: svc, via: viaSvc }) };
+    seat.renew = () => certFor(a.pub, w.licence, w.R.clock.now, DAY);
+    const c = deskChannel(w, "a", seat, mod);
+    await cycleOf(c);
+    const online = c.ch.online();
+    await c.ch.stop();
+    const same = { cert: certFor(a.pub, w.licence, now, DAY, { signer: svc, via: viaSvc }) };
+    same.renew = () => same.cert;
+    const c2 = deskChannel(w, "a", same, mod);
+    await cycleOf(c2);
+    const sentSame = c2.bodies.filter(b => b && b.seat).length;
+    await c2.ch.stop();
+    const ok = online && seat.renewals === 1 && c.bodies.length === 3 && !!c.bodies[2].seat && c.bodies[2].seat.via.key.pub === K.DELEGATE.pub
+      && !c2.ch.online() && same.renewals === 1 && sentSame === 1;
+    return { ok, detail: brief({ online, renewals: seat.renewals, sessions: c.bodies.length, sameRenewalSentAgain: sentSame > 1 }) };
+  }
+  await leg("d4a", () => deskRefusedRenewsScene(), "a desk whose current certificate the relay refuses (its service key revoked) renews once and opens with the new one; a renewal bringing the same certificate is not sent again");
   await leg("d1a", () => deskLearnsScene(), "the desk on an Entra team sends its certificate once the relay refuses a session without one, on the same challenge, and opens; on an ordinary team no session ever carries one");
   await leg("d2a", () => deskRenewsScene(), "a desk whose certificate has run out renews before its session, once, and the session carries the new certificate and opens");
   await leg("d3a", () => deskToldScene(), "a removed person's desk is refused, the shell is told refused once over two cycles, and open once the desk holds a new certificate");
@@ -734,6 +777,7 @@ async function main() {
     ["seat-learn", "d1a", deskLearnsScene, "the desk never sends its certificate"],
     ["seat-renew-first", "d2a", deskRenewsScene, "a run-out certificate is sent unrenewed"],
     ["seat-told", "d3a", deskToldScene, "the shell is never told"],
+    ["seat-renew-refused", "d4a", deskRefusedRenewsScene, "a refused current certificate is never renewed"],
   ]) {
     const line = "p " + id + " lifting plant:" + tag + " in a copy of shell/relay/channel.cjs turns " + id + " red (" + what + "), and the product file is never written";
     if (PLANTS_OFF) { skip(line); continue; }
