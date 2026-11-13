@@ -573,7 +573,11 @@ async function systemBare(rec) {
       own package and wrote as the person, with nothing of the installing context in the way.
    3. the removal: the uninstaller the HKLM entry names, with P.uninstallArgs("machine"), in a one-shot task as SYSTEM, after
       the person's copy is stopped by pid. Holds where it exits 0, the folder goes within 120 s, and the keys, the shortcuts
-      and the link's class are gone. The person's own Documents and AppData are left, which is recorded, not judged.
+      and the link's class are gone. The extension's own key (.<ext> under Software\Classes) may stay, as electron-builder's
+      APP_UNASSOCIATE leaves it (it deletes the class and the OpenWithProgids value, not the extension key), so it is judged as
+      the per-user leg's U12 judges it: no association to the removed copy, its class gone and no OpenWithProgids value naming
+      it (first run 43392802791, 2026-11-13, red on that key alone). The person's own Documents and AppData are left, which is
+      recorded, not judged.
    The account goes at the end; its profile folder stays on the throwaway runner. */
 const SAMPLE = path.join(ROOT, "shell", "sample-catalog.ec");
 const MACHINE_LINK = "HKLM\\Software\\Classes\\" + T.scheme;
@@ -677,8 +681,15 @@ async function systemPush(rec) {
   const goneIn = await goneWithin(want, 120);
   rec.f("removal-exit", removal.timedOut ? "timeout" : removal.code); rec.f("removal-seconds", Math.round((Date.now() - t3) / 1000));
   rec.f("folder-gone-s", goneIn);
-  const left = { keys: KEYS.filter(present).map((k) => k.replace(/^.*\\/, "")), links: commonLinks().filter((f) => fs.existsSync(f)), link: present(MACHINE_LINK) };
-  rec.f("keys-left", left.keys.length ? few(left.keys) : 0); rec.f("shortcuts-left", left.links.length); rec.f("machine-link-left", yes(left.link));
+  /* A key named by its hive and last segment, so a fact says which hive kept it. */
+  const keyName = (k) => k.split("\\")[0] + ":" + k.replace(/^.*\\/, "");
+  const extKeys = ["HKLM", "HKCU"].map((h) => h + "\\Software\\Classes\\." + T.ext);
+  const extLeft = extKeys.filter(present);
+  const extOpens = extLeft.filter((k) => { const r = G.regQuery(k + "\\OpenWithProgids"); return r.present && T.catalogClass in G.regValues(r.text); });
+  const left = { keys: KEYS.filter((k) => !extKeys.includes(k)).filter(present).map(keyName).concat(extOpens.map((k) => keyName(k) + "(opens it)")),
+    links: commonLinks().filter((f) => fs.existsSync(f)), link: present(MACHINE_LINK) };
+  rec.f("keys-left", left.keys.length ? few(left.keys) : 0); rec.f("ext-key-kept", extLeft.length ? extLeft.map(keyName).join(",") : "none");
+  rec.f("shortcuts-left", left.links.length); rec.f("machine-link-left", yes(left.link));
   rec.f("person-data-kept", yes(fs.existsSync(path.join(profile, "Documents", "Etiuda")) && fs.existsSync(path.join(profile, "AppData", "Roaming", T.packageName))));
   const removedOk = removal.code === 0 && goneIn > 0 && !left.keys.length && !left.links.length && !left.link;
   rec.end(removedOk, removedOk
