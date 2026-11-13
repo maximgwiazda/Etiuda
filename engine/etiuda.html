@@ -8903,9 +8903,9 @@ What you type stays in this browser only.`;
     "Not signed in": "Bez logowania",
     /* words: copywriter and product designer, a managed computer (decision 49) */
     "Your organisation has not given this account access to Etiuda.": "Organizacja nie przyznała temu kontu dostępu do Etiudy.",
-    "Its IT department can: asking them to assign the account is enough. Etiuda keeps working with the catalog it has.": "Może to zrobić jej dział IT: wystarczy poprosić o przypisanie konta. Etiuda działa dalej z katalogiem, który ma.",
-    // placeholder: Claudette
-    "Whom to ask: {CONTACT}. Etiuda keeps working with the catalog it has.": "Kogo poprosić: {CONTACT}. Etiuda działa dalej z katalogiem, który ma.",
+    "Its IT department can: asking them to assign the account is enough.": "Może to zrobić jej dział IT: wystarczy poprosić o przypisanie konta.",
+    "To ask for access: {CONTACT}.": "W sprawie dostępu: {CONTACT}.",
+    "Etiuda keeps working with the catalog it has.": "Etiuda działa dalej na katalogu, który już ma.",
     "This account has no Etiuda role in its organisation, so it holds no seat.": "To konto nie ma w swojej organizacji żadnej roli w Etiudzie, więc nie zajmuje miejsca w licencji.",
     "Its IT department assigns the roles.": "Role przydziela dział IT organizacji.",
     "Managed by your organisation.": "Zarządzane przez organizację.",
@@ -8914,7 +8914,9 @@ What you type stays in this browser only.`;
     "A shared computer: another person may sign in here, with an account of your organisation.": "Wspólny komputer: może się tu zalogować inna osoba, kontem organizacji.",
     "Set by your organisation": "Ustawione przez organizację",
     "Sign-in": "Logowanie",
-    "{PROVIDER} · work accounts of your organisation": "{PROVIDER} · konta służbowe organizacji",
+    "{PROVIDER} · work accounts of the organisation": "{PROVIDER} · konta służbowe organizacji",
+    "{PROVIDER} · work accounts": "{PROVIDER} · konta służbowe",
+    "{PROVIDER} · accounts the organisation allows": "{PROVIDER} · konta dopuszczone przez organizację",
     /* words: copywriter */
     "Withdrawing the request to join": "Wycofywanie prośby o dołączenie",
     "This computer is signed out. Its place among the account's three computers is freed by itself as soon as the sign-in service can be reached.": "Ten komputer jest wylogowany. Jego miejsce wśród trzech komputerów konta zwolni się samo, gdy tylko usługa logowania będzie osiągalna.",
@@ -27343,6 +27345,30 @@ What you type stays in this browser only.`;
     syncOrgMark();
   }
 
+  // src/modules/catalog-boot.js
+  var catalog_boot_exports = {};
+  __export(catalog_boot_exports, {
+    applyBootCatalog: () => applyBootCatalog,
+    catalogLoaded: () => catalogLoaded
+  });
+  function bootCatalog() {
+    const stored = storedCatalog();
+    if (stored) return stored;
+    const c = eCatalog();
+    return c && eCatalogAccepted(c) ? c : null;
+  }
+  var E_APPLIED = null;
+  function catalogLoaded() {
+    return !!E_APPLIED;
+  }
+  function applyBootCatalog() {
+    eResetCatalog();
+    E_APPLIED = bootCatalog();
+    if (E_APPLIED) eApplyCatalog(E_APPLIED);
+    setLayer(layerNsOf(E_APPLIED));
+    orbitOldLayer();
+  }
+
   // src/modules/signin.js
   var SIGNIN_NAMES = { microsoft: "Microsoft", google: "Google", lab: "Lab" };
   function signinRead(v) {
@@ -27399,7 +27425,7 @@ What you type stays in this browser only.`;
     const c = v && v.managed ? v.managed.contact : "";
     return [
       t("Your organisation has not given this account access to Etiuda."),
-      c ? named(t("Whom to ask: {CONTACT}. Etiuda keeps working with the catalog it has."), "{CONTACT}", c) : t("Its IT department can: asking them to assign the account is enough. Etiuda keeps working with the catalog it has.")
+      (c ? named(t("To ask for access: {CONTACT}."), "{CONTACT}", c) : t("Its IT department can: asking them to assign the account is enough.")) + (catalogLoaded() ? " " + t("Etiuda keeps working with the catalog it has.") : "")
     ];
   }
   function signinRefusedHere(reason, v) {
@@ -29331,30 +29357,6 @@ What you type stays in this browser only.`;
     wireCatalogDrop: () => wireCatalogDrop,
     writeDeskBranch: () => writeDeskBranch
   });
-
-  // src/modules/catalog-boot.js
-  var catalog_boot_exports = {};
-  __export(catalog_boot_exports, {
-    applyBootCatalog: () => applyBootCatalog,
-    catalogLoaded: () => catalogLoaded
-  });
-  function bootCatalog() {
-    const stored = storedCatalog();
-    if (stored) return stored;
-    const c = eCatalog();
-    return c && eCatalogAccepted(c) ? c : null;
-  }
-  var E_APPLIED = null;
-  function catalogLoaded() {
-    return !!E_APPLIED;
-  }
-  function applyBootCatalog() {
-    eResetCatalog();
-    E_APPLIED = bootCatalog();
-    if (E_APPLIED) eApplyCatalog(E_APPLIED);
-    setLayer(layerNsOf(E_APPLIED));
-    orbitOldLayer();
-  }
 
   // src/modules/catalog-merge.js
   var catalog_merge_exports = {};
@@ -37086,6 +37088,10 @@ What you type stays in this browser only.`;
     return '<p class="sgn-say" data-signin-managed><b>' + esc(t("Managed by your organisation.")) + "</b>" + (line ? "<span>" + esc(line) + "</span>" : "") + "</p>";
   }
   var ICON_LOCK2 = '<svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M7.26 8.83V6.09A2.74 2.74 0 0 1 12.74 6.09V8.83"/><rect x="4.14" y="8.83" width="11.73" height="7.82" rx="1.17"/></svg>';
+  function signinHeldTo(m) {
+    const line = m.tenant ? t("{PROVIDER} · work accounts of the organisation") : !m.personal ? t("{PROVIDER} · work accounts") : t("{PROVIDER} · accounts the organisation allows");
+    return line.split("{PROVIDER}").join(SIGNIN_NAMES[m.provider]);
+  }
   function lockedHtml(value) {
     return '<span class="sgn-val">' + esc(value) + '</span><span class="sgn-lock">' + ICON_LOCK2 + esc(t("Set by your organisation")) + "</span>";
   }
@@ -37153,7 +37159,7 @@ What you type stays in this browser only.`;
       const p = signinParts(v), val = (x) => '<span class="sgn-val">' + esc(x) + "</span>", join = (pair) => pair[0] + " " + pair[1];
       const doorSaid = signinDoorRefusedNow() ? signinSay("door", v)[0] : "";
       rows.push(p.team ? row("team", "people", t("Team"), doorSaid || (p.team.lead ? t("Led by {LEAD}").split("{LEAD}").join(p.team.lead) : ""), val(p.teamName)) : v.doors.length && v.seat === "held" ? row("team", "people", t("A team on this licence"), doorSaid || t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."), signinDoorsHtml(v.doors)) : v.deskOnly && v.seat === "held" ? row("team", "people", t("Working without a team"), doorSaid || t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."), "") : row("team", "people", t("No team yet"), doorSaid || t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."), ""));
-      if (v.managed && v.managed.provider) rows.push(row("signin", "user", t("Sign-in"), "", lockedHtml(v.managed.tenant ? t("{PROVIDER} · work accounts of your organisation").split("{PROVIDER}").join(SIGNIN_NAMES[v.managed.provider]) : SIGNIN_NAMES[v.managed.provider])));
+      if (v.managed && v.managed.provider) rows.push(row("signin", "user", t("Sign-in"), "", lockedHtml(signinHeldTo(v.managed))));
       if (v.code && !signinManaged(v)) rows.push(row(
         "code",
         "code",

@@ -1410,9 +1410,9 @@ UI_STRINGS.pl={
   "Not signed in":"Bez logowania",
   /* words: copywriter and product designer, a managed computer (decision 49) */
   "Your organisation has not given this account access to Etiuda.":"Organizacja nie przyznała temu kontu dostępu do Etiudy.",
-  "Its IT department can: asking them to assign the account is enough. Etiuda keeps working with the catalog it has.":"Może to zrobić jej dział IT: wystarczy poprosić o przypisanie konta. Etiuda działa dalej z katalogiem, który ma.",
-  // placeholder: Claudette
-  "Whom to ask: {CONTACT}. Etiuda keeps working with the catalog it has.":"Kogo poprosić: {CONTACT}. Etiuda działa dalej z katalogiem, który ma.",
+  "Its IT department can: asking them to assign the account is enough.":"Może to zrobić jej dział IT: wystarczy poprosić o przypisanie konta.",
+  "To ask for access: {CONTACT}.":"W sprawie dostępu: {CONTACT}.",
+  "Etiuda keeps working with the catalog it has.":"Etiuda działa dalej na katalogu, który już ma.",
   "This account has no Etiuda role in its organisation, so it holds no seat.":"To konto nie ma w swojej organizacji żadnej roli w Etiudzie, więc nie zajmuje miejsca w licencji.",
   "Its IT department assigns the roles.":"Role przydziela dział IT organizacji.",
   "Managed by your organisation.":"Zarządzane przez organizację.",
@@ -1421,7 +1421,9 @@ UI_STRINGS.pl={
   "A shared computer: another person may sign in here, with an account of your organisation.":"Wspólny komputer: może się tu zalogować inna osoba, kontem organizacji.",
   "Set by your organisation":"Ustawione przez organizację",
   "Sign-in":"Logowanie",
-  "{PROVIDER} · work accounts of your organisation":"{PROVIDER} · konta służbowe organizacji",
+  "{PROVIDER} · work accounts of the organisation":"{PROVIDER} · konta służbowe organizacji",
+  "{PROVIDER} · work accounts":"{PROVIDER} · konta służbowe",
+  "{PROVIDER} · accounts the organisation allows":"{PROVIDER} · konta dopuszczone przez organizację",
   /* words: copywriter */
   "Withdrawing the request to join":"Wycofywanie prośby o dołączenie",
   "This computer is signed out. Its place among the account's three computers is freed by itself as soon as the sign-in service can be reached.":"Ten komputer jest wylogowany. Jego miejsce wśród trzech komputerów konta zwolni się samo, gdy tylko usługa logowania będzie osiągalna.",

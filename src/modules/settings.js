@@ -271,6 +271,12 @@ function accountManagedHtml(v){
   return '<p class="sgn-say" data-signin-managed><b>'+esc(t("Managed by your organisation."))+'</b>'+(line?'<span>'+esc(line)+'</span>':'')+'</p>';
 }
 const ICON_LOCK='<svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M7.26 8.83V6.09A2.74 2.74 0 0 1 12.74 6.09V8.83"/><rect x="4.14" y="8.83" width="11.73" height="7.82" rx="1.17"/></svg>';
+/* Whose accounts the pinned provider takes, one of three that hold: the tenant's, any work account, or those the organisation allows. */
+function signinHeldTo(m){
+  const line=m.tenant ? t("{PROVIDER} · work accounts of the organisation") : !m.personal ? t("{PROVIDER} · work accounts") /* plant:held-to */
+    : t("{PROVIDER} · accounts the organisation allows");
+  return line.split("{PROVIDER}").join(SIGNIN_NAMES[m.provider]);
+}
 /* A value machine policy holds: the value as text and the lock, with no control, so nothing looks pressable. */
 function lockedHtml(value){
   return '<span class="sgn-val">'+esc(value)+'</span><span class="sgn-lock">'+ICON_LOCK+esc(t("Set by your organisation"))+'</span>';
@@ -337,8 +343,7 @@ function accountGroups(){
       : v.deskOnly && v.seat==="held" ? row("team","people",t("Working without a team"),doorSaid||t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."),"") /* plant:account-desk-only */
       : row("team","people",t("No team yet"),doorSaid||t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."),""));
     /* A managed computer shows the provider it is held to in the code's place, since nobody there is admitted by code. */
-    if(v.managed && v.managed.provider) rows.push(row("signin","user",t("Sign-in"),"",lockedHtml(v.managed.tenant
-      ? t("{PROVIDER} · work accounts of your organisation").split("{PROVIDER}").join(SIGNIN_NAMES[v.managed.provider]) : SIGNIN_NAMES[v.managed.provider])));
+    if(v.managed && v.managed.provider) rows.push(row("signin","user",t("Sign-in"),"",lockedHtml(signinHeldTo(v.managed))));
     if(v.code && !signinManaged(v)) rows.push(row("code","code",t("Your sign-in code"), /* plant:code-row-managed */t("Not a secret. It tells a team's lead which account is yours."),
       '<code class="sgn-mono">'+esc(signinCodeText(v.code))+'</code>'+signinCopyHtml("copy")));
     if(signinNoSeat(v)) rows.push(row("seat","check",t("Seat"),join(signinSay(v.refused, v, p)),""));

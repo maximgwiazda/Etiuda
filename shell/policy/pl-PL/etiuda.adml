@@ -76,7 +76,7 @@ Jeśli to ustawienie zasad nie zostanie skonfigurowane, model wybiera się w Ust
       <string id="Managed">Zarządzaj kontami na tym komputerze w imieniu organizacji</string>
       <string id="Managed_Explain">To ustawienie zasad oznacza ten komputer jako zarządzany przez organizację, która decyduje wtedy, kto i jakim kontem loguje się tu do Etiudy i Etiudy Studio.
 
-Jeśli to ustawienie zasad zostanie włączone, obie aplikacje nie proponują zakupu ani okresu próbnego, nie oferują innego konta ani wylogowania, chyba że włączone jest „Traktuj ten komputer jako wspólny”, i nie pokazują żadnych czynności właściciela licencji. Konta osobiste nie są oferowane, chyba że włączone jest „Zezwalaj na konta osobiste”. W części Konto widać, że komputerem zarządza organizacja. Wszystko inne w obu aplikacjach działa tak jak na każdym komputerze.
+Jeśli to ustawienie zasad zostanie włączone, obie aplikacje nie proponują zakupu ani okresu próbnego; nie oferują innego konta ani wylogowania i zostają przy koncie, które się zalogowało, chyba że włączone jest „Traktuj ten komputer jako wspólny”; nie pokazują też niczego, co może zrobić tylko osoba, do której należy licencja. Konta osobiste nie są oferowane, chyba że włączone jest „Zezwalaj na konta osobiste”. W części Konto obu aplikacji widać, że zarządza nimi organizacja. Wszystko inne w obu aplikacjach działa tak jak na każdym komputerze.
 
 Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, obie aplikacje pokazują ustawienia konta tak jak na każdym komputerze.</string>
       <string id="SharedComputer">Traktuj ten komputer jako wspólny</string>
@@ -98,7 +98,7 @@ Jeśli to ustawienie zasad nie zostanie skonfigurowane, konta osobiste mogą si�
 
 Jeśli to ustawienie zasad zostanie włączone, należy wybrać Microsoft lub Google albo wpisać microsoft lub google; oferowany jest wtedy tylko ten dostawca. Każda inna wartość wyłącza logowanie całkowicie.
 
-Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, oferowany jest każdy dostawca, przez którego Etiuda umożliwia logowanie.</string>
+Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, oferowane są oba logowania, Microsoft i Google.</string>
       <string id="SigninProvider_microsoft">Microsoft (microsoft)</string>
       <string id="SigninProvider_google">Google (google)</string>
       <string id="SigninTenant">Ustaw dzierżawę logowania organizacji</string>
@@ -106,11 +106,13 @@ Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane,
 
 Jeśli to ustawienie zasad zostanie włączone, należy podać identyfikator dzierżawy Microsoft Entra, na przykład 00000000-0000-0000-0000-000000000000, albo domenę Google Workspace, na przykład example.com. Logowanie Microsoft odbywa się wtedy w tej dzierżawie, logowanie Google dotyczy tej domeny, a konto spoza nich zostaje odrzucone, nawet jeśli dostawca pozwoli mu się zalogować. Identyfikator dzierżawy dopuszcza wyłącznie Microsoft, a domena wyłącznie Google. Wartość w innej postaci albo niezgodna z „Ustaw dostawcę logowania” wyłącza logowanie całkowicie.
 
+W przypadku Microsoft należy podać identyfikator dzierżawy, a nie domenę: domena, na przykład contoso.com lub contoso.onmicrosoft.com, jest odczytywana jako domena Google Workspace, więc żadne konto Microsoft nie może się wtedy zalogować.
+
 Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, mogą się logować konta dowolnej organizacji.</string>
       <string id="SupportContact">Ustaw, kogo prosić o dostęp</string>
       <string id="SupportContact_Explain">To ustawienie zasad wskazuje, kogo należy poprosić o dostęp, gdy organizacja nie przyznała kontu dostępu do Etiudy.
 
-Jeśli to ustawienie zasad zostanie włączone, należy podać najwyżej 200 znaków, na przykład nazwę i numer telefonu działu wsparcia. Etiuda i Etiuda Studio pokazują ten tekst bez zmian w miejscu wiersza, który wskazuje dział IT organizacji, i nigdy nie otwierają go jako łącza.
+Jeśli to ustawienie zasad zostanie włączone, należy podać najwyżej 200 znaków, na przykład nazwę i numer telefonu działu wsparcia. Etiuda i Etiuda Studio pokazują ten tekst bez zmian, po słowach „W sprawie dostępu:”, w miejscu wiersza, który wskazuje dział IT organizacji, i nigdy nie otwierają go jako łącza.
 
 Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, ten wiersz wskazuje dział IT organizacji.</string>
     </stringTable>

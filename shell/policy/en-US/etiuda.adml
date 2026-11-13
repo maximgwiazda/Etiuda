@@ -76,7 +76,7 @@ If you do not configure this policy setting, the model is chosen in Etiuda's Set
       <string id="Managed">Manage the accounts on this computer for the organisation</string>
       <string id="Managed_Explain">This policy setting marks this computer as managed by your organisation, which then decides who signs in to Etiuda and Etiuda Studio here, and with which account.
 
-If you enable this policy setting, both programs show nothing to buy and no trial, offer no other account and no way to sign out unless "Treat this computer as shared" is enabled, and show none of the acts of the licence's owner. Personal accounts are not offered unless "Allow personal accounts" is enabled. Account says that the organisation manages it. Everything else in both programs works as on any computer.
+If you enable this policy setting, both programs show nothing to buy and no trial; offer no other account and no way to sign out, and keep the account that signed in, unless "Treat this computer as shared" is enabled; and hide everything that only the licence's owner may do. Personal accounts are not offered unless "Allow personal accounts" is enabled. Account, in each program, says that the organisation manages it. Everything else in both programs works as on any computer.
 
 If you disable or do not configure this policy setting, both programs show their account settings as on any computer.</string>
       <string id="SharedComputer">Treat this computer as shared</string>
@@ -98,19 +98,21 @@ If you do not configure this policy setting, personal accounts may sign in, exce
 
 If you enable this policy setting, choose Microsoft or Google, or enter microsoft or google; only that provider is offered. Any other value offers no sign-in at all.
 
-If you disable or do not configure this policy setting, each provider Etiuda signs in with is offered.</string>
+If you disable or do not configure this policy setting, both Microsoft and Google are offered.</string>
       <string id="SigninProvider_microsoft">Microsoft (microsoft)</string>
       <string id="SigninProvider_google">Google (google)</string>
       <string id="SigninTenant">Set the organisation's sign-in tenant</string>
       <string id="SigninTenant_Explain">This policy setting limits sign-in to Etiuda and Etiuda Studio on this computer to the accounts of one organisation.
 
-If you enable this policy setting, enter your Microsoft Entra tenant ID, such as 00000000-0000-0000-0000-000000000000, or your Google Workspace domain, such as example.com. Microsoft's sign-in is then asked at that tenant, Google's is asked for that domain, and an account from anywhere else is refused even where the provider lets it sign in. A tenant ID allows Microsoft alone, and a domain Google alone. A value in any other form, or one that disagrees with "Set the sign-in provider", offers no sign-in at all.
+If you enable this policy setting, enter your Microsoft Entra tenant ID, such as 00000000-0000-0000-0000-000000000000, or your Google Workspace domain, such as example.com. Microsoft's sign-in then takes place at that tenant and Google's asks for that domain, and an account from anywhere else is refused even where the provider lets it sign in. A tenant ID allows Microsoft alone, and a domain Google alone. A value in any other form, or one that disagrees with "Set the sign-in provider", offers no sign-in at all.
+
+For Microsoft, enter the tenant ID, never a domain: a domain such as contoso.com or contoso.onmicrosoft.com is read as a Google Workspace domain, so no Microsoft account can sign in.
 
 If you disable or do not configure this policy setting, the accounts of any organisation may sign in.</string>
       <string id="SupportContact">Set whom to ask for access</string>
       <string id="SupportContact_Explain">This policy setting names whom a person should ask when the organisation has not given their account access to Etiuda.
 
-If you enable this policy setting, enter up to 200 characters, such as a service desk's name and telephone number. Etiuda and Etiuda Studio show it as written, in place of the line that names the organisation's IT department, and never open it as a link.
+If you enable this policy setting, enter up to 200 characters, such as a service desk's name and telephone number. Etiuda and Etiuda Studio show it as written, after "To ask for access:", in place of the line that names the organisation's IT department, and never open it as a link.
 
 If you disable or do not configure this policy setting, that line names the organisation's IT department.</string>
     </stringTable>

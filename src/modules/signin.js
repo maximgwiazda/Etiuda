@@ -9,6 +9,7 @@ import { t, uiLang } from "./ui-lang.js";
 import { agentName } from "./agent.js";
 import { teamLeads } from "./team-join.js";
 import { hooks } from "./hooks.js";
+import { catalogLoaded } from "./catalog-boot.js";
 
 /* "lab" is offered only by the sign-in lab (shell/main.js signinLabRead), never by a desk installed or packaged. */
 const SIGNIN_NAMES={microsoft:"Microsoft", google:"Google", lab:"Lab"}; // placeholder: Claudette, "Lab"
@@ -54,12 +55,13 @@ function signinManaged(v){ return !!(v && v.managed && v.managed.on); }
 function signinKeepsAccount(v){ return signinManaged(v) && !v.managed.shared; } /* plant:keeps-account */
 /* Where a provider is pinned or personal accounts are off, the line naming personal accounts would not hold. */
 function signinCapHolds(v){ return !(v && v.managed && (v.managed.on || v.managed.provider || !v.managed.personal)); } /* plant:cap-holds */
-/* The refusal of an account the organisation has not given access, and whom to ask: the policy's contact as written, or its IT. */
+/* The refusal of an account the organisation has not given access, and whom to ask: the policy's contact as written, or its IT;
+   that the desk works on is said only where it holds a catalog to work with. */
 function signinRefusedWords(v){
   const c=v && v.managed ? v.managed.contact : "";
   return [t("Your organisation has not given this account access to Etiuda."),
-    c ? named(t("Whom to ask: {CONTACT}. Etiuda keeps working with the catalog it has."),"{CONTACT}",c)
-      : t("Its IT department can: asking them to assign the account is enough. Etiuda keeps working with the catalog it has.")]; /* plant:refused-contact */
+    (c ? named(t("To ask for access: {CONTACT}."),"{CONTACT}",c) : t("Its IT department can: asking them to assign the account is enough.")) /* plant:refused-contact */
+      + (catalogLoaded() ? " "+t("Etiuda keeps working with the catalog it has.") : "")]; /* plant:refused-catalog */
 }
 /* The reasons that sentence answers: a sign-in outside the pinned tenant always, and the organisation's refusals on a managed computer. */
 function signinRefusedHere(reason, v){

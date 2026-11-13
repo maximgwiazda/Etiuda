@@ -28,7 +28,7 @@ const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const SIGNIN = fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8");
 const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const CHECKS = 22, PLANTS = 30;
+const CHECKS = 24, PLANTS = 32;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -315,7 +315,7 @@ CASES.managedSeat = async (s, set, pg) => {
   const panel = d.moment === "managed" && d.acts.length === 0 && w.indexOf("Managed by your organisation.") >= 0
     && w.indexOf("Your organisation gave this account its seat on this desk.") >= 0 && /Seat held · checked today, \d\d:\d\d/.test(w);
   const acct = d.acct.indexOf("data-signin-act=\"another\"") < 0 && d.acct.indexOf("data-signin-act=\"out\"") < 0 && d.acct.indexOf("data-row=\"code\"") < 0
-    && a.indexOf("Microsoft · work accounts of your organisation") >= 0 && a.indexOf("Set by your organisation") >= 0 && d.acct.indexOf("data-row=\"signin\"") >= 0;
+    && a.indexOf("Microsoft · work accounts of the organisation") >= 0 && a.indexOf("Set by your organisation") >= 0 && d.acct.indexOf("data-row=\"signin\"") >= 0;
   const sh = await drawn(withM(PROFILES.signed, Object.assign({}, M_ON, { shared: true })), "en", set, pg);
   const shared = sh.acct.indexOf("data-signin-act=\"another\"") >= 0 && sh.acct.indexOf("data-signin-act=\"out\"") >= 0
     && words(sh.acct).indexOf("A shared computer: another person may sign in here, with an account of your organisation.") >= 0;
@@ -333,6 +333,37 @@ CASES.noRole = async (s, set, pg) => {
 CASES.unmanagedRefused = async (s, set, pg) => {
   const a = await drawn(PROFILES.refused, "en", set, pg), b = await drawn(PROFILES.notallowed, "en", set, pg);
   return a.moment === "refused" && a.door === b.door && words(a.door).indexOf("another account can be used meanwhile") >= 0;
+};
+
+/* mm-p5: that the desk works on is said only where it holds a catalog: with one, the refusal's line ends on it; with none (a first start
+   that never signed in), the line stops at whom to ask. signin.js is read with catalog-boot.js stood in, true and false. */
+async function signinFrom(text, held) {
+  const stub = "data:text/javascript;base64," + Buffer.from("export function catalogLoaded(){ return " + held + "; }").toString("base64");
+  if (text.split('from "./catalog-boot.js"').length !== 2) throw new Error("signin.js imports catalog-boot.js other than once");
+  const src = text.replace('from "./catalog-boot.js"', 'from "' + stub + '"').replace(/from "\.\//g, 'from "' + DIR);
+  return import("data:text/javascript;base64," + Buffer.from(src).toString("base64"));
+}
+const CATALOG_EN = "Etiuda keeps working with the catalog it has.", CATALOG_PL = "Etiuda działa dalej na katalogu, który już ma.";
+CASES.catalogBothWays = async (s, set, pg, text) => {
+  const said = async (held, lang, contact) => {
+    const P = await signinFrom(text || SIGNIN, held);
+    storage.lsSet("eUiLang", lang);
+    try { return P.signinSay("signin-notassigned", P.signinRead(withM(PROFILES.refused, Object.assign({}, M_ON, { contact }))))[1]; }
+    finally { storage.lsSet("eUiLang", "en"); }
+  };
+  const withEn = await said(true, "en", ""), noneEn = await said(false, "en", ""), withPl = await said(true, "pl", ""), nonePl = await said(false, "pl", "");
+  const contact = await said(false, "en", "Service desk"), contactHeld = await said(true, "en", "Service desk");
+  return withEn === EN.it + " " + CATALOG_EN && noneEn === EN.it && withPl === PL.it + " " + CATALOG_PL && nonePl === PL.it
+    && contact === "To ask for access: Service desk." && contactHeld === "To ask for access: Service desk. " + CATALOG_EN;
+};
+/* mm-p6: the Sign-in row says whose accounts in the one of three states that holds: the tenant's, any work account, or those the
+   organisation allows. */
+CASES.heldTo = async (s, set, pg) => {
+  const row = async m => words((await drawn(withM(Object.assign({}, PROFILES.signed, { at: Date.now() }), Object.assign({}, M_ON, m)), "en", set, pg)).acct);
+  const tenant = await row({}), work = await row({ tenant: false }), allowed = await row({ tenant: false, personal: true });
+  const pl = words((await drawn(withM(PROFILES.signed, Object.assign({}, M_ON, { tenant: false, personal: true })), "pl", set, pg)).acct);
+  return tenant.indexOf("Microsoft · work accounts of the organisation") >= 0 && work.indexOf("Microsoft · work accounts Set by") >= 0
+    && allowed.indexOf("Microsoft · accounts the organisation allows") >= 0 && pl.indexOf("Microsoft · konta dopuszczone przez organizację") >= 0;
 };
 
 /* ---- the run ---------------------------------------------------------------------------------------------------------- */
@@ -359,6 +390,8 @@ const LIST = [
   ["mm-p2", "managedSeat", "a managed seat: who decides and when it was checked, the sign-in locked to its provider, no other account or sign out unless shared"],
   ["mm-p3", "noRole", "no seat on a managed computer: the no-role words, nothing to try, buy or switch, no code"],
   ["mm-p4", "unmanagedRefused", "unmanaged, an account not assigned is told as the organisation's refusal, another account offered"],
+  ["mm-p5", "catalogBothWays", "that the desk works on with its catalog is said only where it holds one, English and Polish, with or without SupportContact"],
+  ["mm-p6", "heldTo", "the Sign-in row in the one of three states that holds: the tenant's work accounts, any work account, or those the organisation allows"],
 ];
 const run = async (name, s, set, pg) => { try { return !!(await CASES[name](s, set, pg)); } catch (e) { return false; } };
 for (const [id, name, what] of LIST) check(!!S && await run(name, S), id + " " + what);
@@ -414,8 +447,8 @@ if (!PLANTS_OFF && S) {
   await plantPage("mmp23", ["    rows.push(row(\"checked\",\"clock\",", "    if(!signinManaged(v)) rows.push(row(\"checked\",\"clock\","], "m2", "settings");
   await plantPage("mmp24", ["function signinCapHolds(v){ return !(v && v.managed && (v.managed.on || v.managed.provider || !v.managed.personal)); } /* plant:cap-holds */",
     "function signinCapHolds(v){ return true; }"], "m3", "signin");
-  await plantPage("mmp25", ["      : t(\"Its IT department can: asking them to assign the account is enough. Etiuda keeps working with the catalog it has.\")]; /* plant:refused-contact */",
-    "      : \"\"];"], "m1", "signin");
+  await plantPage("mmp25", ["(c ? named(t(\"To ask for access: {CONTACT}.\"),\"{CONTACT}\",c) : t(\"Its IT department can: asking them to assign the account is enough.\")) /* plant:refused-contact */",
+    "(c ? named(t(\"To ask for access: {CONTACT}.\"),\"{CONTACT}\",c) : \"\")"], "m1", "signin");
   await plantPage("mmp26", ["  return reason===\"signin-tenant\" || (signinManaged(v) && (reason===\"signin-notassigned\" || reason===\"signin-notallowed\")); /* plant:refused-here */",
     "  return reason===\"signin-tenant\";"], "m1", "signin");
   await plantPage("mmp27", ["      +(keeps ? '' : '<span class=\"sgn-acts\"><button type=\"button\" class=\"btn\" data-signin-act=\"another\">'+esc(t(\"Use another account\"))+'</button>' /* plant:card-keeps */",
@@ -423,6 +456,15 @@ if (!PLANTS_OFF && S) {
   await plantPage("mmp28", ["    if(v.code && !signinManaged(v)) rows.push(row(\"code\",\"code\",t(\"Your sign-in code\"), /* plant:code-row-managed */",
     "    if(v.code) rows.push(row(\"code\",\"code\",t(\"Your sign-in code\"),"], "managedSeat", "settings");
   await plantPage("mmp29", ["  if(reason===\"nolicence\" && signinManaged(v)) /* plant:no-role-managed */", "  if(false)"], "noRole", "signin");
+  {
+    const swap = ["      + (catalogLoaded() ? \" \"+t(\"Etiuda keeps working with the catalog it has.\") : \"\")]; /* plant:refused-catalog */",
+      "      + (true ? \" \"+t(\"Etiuda keeps working with the catalog it has.\") : \"\")];"];
+    let red = false;
+    try { red = SIGNIN.split(swap[0]).length === 2 && !(await CASES.catalogBothWays(S, undefined, undefined, SIGNIN.replace(swap[0], swap[1]))); } catch (e) { red = false; }
+    check(red, "mmp31 plant the catalog's sentence said without one turns catalogBothWays red");
+  }
+  await plantPage("mmp32", ["  const line=m.tenant ? t(\"{PROVIDER} · work accounts of the organisation\") : !m.personal ? t(\"{PROVIDER} · work accounts\") /* plant:held-to */",
+    "  const line=m.tenant ? t(\"{PROVIDER} · work accounts of the organisation\") : true ? t(\"{PROVIDER} · work accounts\")"], "heldTo", "settings");
   await plantPage("mmp30", ["    case \"signin-notassigned\":\n", ""], "unmanagedRefused", "signin");
 }
 
