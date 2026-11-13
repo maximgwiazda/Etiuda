@@ -7949,6 +7949,27 @@ const CARD_B = {
           "false|true|true|false|typed here|true|true|false|0 || false|true|true|false|typed here|true|true|false|0 || true|false|true");
       });
 
+    check("dialog.js", "983s7 under the newer-edition line, Reset is on though only typing differs, and pressing it drops the typing and shows the edition's entry, the editor open; a saved change's Reset stays the editor's own",
+      () => {
+        fresh(); reset(); subj = "A"; reopened = 0;
+        const openR = (vals, saved) => openEd("card", vals, { subject: () => subj, resettable: () => saved, again: () => { reopened++; openR(["edition's"], saved); } });
+        openR(["catalog's"], false);
+        modalCard.fields()[0].value = "typed";
+        scrim();
+        DL.edCatalogTaken(true); subj = "B"; desk();
+        const shown = [/A newer edition changed this card/.test(said()), resetB.disabled].join("|");
+        const ev = { target: resetB, prevented: false, stopped: false, preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } };
+        (heard["capture:click"] || []).forEach(fn => fn(ev));
+        const pressed = [ev.prevented && ev.stopped, reopened, modalCard.fields()[0].value, modalEl.hidden, DL.edDirty(), resetB.disabled].join("|");
+        fresh(); reset(); subj = "A"; reopened = 0;
+        openR(["catalog's"], true);
+        modalCard.fields()[0].value = "typed";
+        DL.edCatalogTaken(true); subj = "B"; desk();
+        const ev2 = { target: resetB, prevented: false, preventDefault() { this.prevented = true; }, stopPropagation() {} };
+        (heard["capture:click"] || []).forEach(fn => fn(ev2));
+        return eq([shown, pressed, resetB.disabled, ev2.prevented, reopened].join(" || "), "true|false || true|1|edition's|false|false|true || false || false || 0");
+      });
+
     check("dialog.js", "983s4 every editor names its subject, the desk asks after it draws, the loader says whether the catalog taken is the same layer's (local memory never is), every Save asks first, the intent's heading follows its id, a deleted catalog card counts as gone, and every line has its Polish",
       () => {
         const rd = n => fs.readFileSync(join(MODDIR, n), "utf8");

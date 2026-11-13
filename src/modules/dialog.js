@@ -133,7 +133,7 @@ let modalResetFn=null, modalResetOn="", modalResetOff="";
 function refreshDialogReset(){
   const b=modalCard&&modalCard.querySelector(".mf-reset");
   if(!b||!modalResetFn) return;
-  const live=!!modalResetFn();
+  const live=!!modalResetFn() || edEditionReset;
   b.disabled=!live || edGone;
   b.title=t(live?modalResetOn:modalResetOff);
 }
@@ -142,6 +142,7 @@ function refreshDialogReset(){
 function refreshDialogChrome(){
   refreshDialogName(); refreshDialogReset();
   if(edSubject && !edGone){
+    edEditionReset=false;
     edSubjectSig=edSubjectNow();
     const n=modalCard.querySelector(":scope > .modal-note");
     if(n) n.remove();
@@ -639,12 +640,14 @@ function edToFront(keys){
    Next give; a dialog of another kind is opened over the editor, which is held whole until it closes. */
 function edBeforeOpen(cfg){
   const place=ED_PLACE_KINDS.indexOf(cfg.place)>=0;
+  const edition=edEditionReset;
+  edEditionReset=false;   // a new render asks Reset afresh
   if(place && edHeld){
     const h=edHeld; edHeld=null;
     return (h.dirty && h.again) ? {was:h.typed, again:h.again} : null;
   }
   if(modalEl.hidden || !edPlaceKind) return null;
-  if(!place){ if(!edHeld) edHold(); return null; }
+  if(!place){ if(!edHeld){ edHold(); edHeld.editionReset=edition; } return null; }
   return (!edStepping && edAgain && edDirty()) ? {was:edTyped(), again:edAgain} : null;
 }
 function edAfterOpen(cfg, leaving){
@@ -686,7 +689,8 @@ function edRestore(){
   h.kids.forEach(k=>modalCard.appendChild(k));
   modalNameFn=h.nameFn; modalResetFn=h.resetFn; modalResetOn=h.resetOn; modalResetOff=h.resetOff;
   edBaseline=h.baseline; edReturn=h.ret; modalBack=h.back; edAgain=h.again;
-  edEdFocus=h.focus; edDeskFocus=h.desk; edPlaceKind=h.kind; edPlaced=null;
+  edEdFocus=h.focus; edDeskFocus=h.desk; edPlaceKind=h.kind; edPlaced=null; edEditionReset=!!h.editionReset;
+  refreshDialogReset();
   if(h.rest && modalEl.clientWidth>=ED_REST_MIN){
     edRest=true;
     modalEl.classList.add("ed-rest");
@@ -708,7 +712,13 @@ function wireEditorRest(){
   modalCard.addEventListener("focusin",()=>{ if(edRest) edToFront(false); });
   /* Gone, the entry has no Save, Reset or Delete, whatever an editor does to its buttons later. */
   modalCard.addEventListener("click",e=>{
-    if(edGone && e.target.closest && e.target.closest(ED_LOCKS)){ e.preventDefault(); e.stopPropagation(); }
+    if(edGone && e.target.closest && e.target.closest(ED_LOCKS)){ e.preventDefault(); e.stopPropagation(); return; }
+    /* Only typing to drop: Reset shows the entry as the edition has it, the editor open. A saved change's Reset is the editor's own. */
+    if(edEditionReset && edAgain && !(modalResetFn && modalResetFn()) && e.target.closest && e.target.closest(".mf-reset")){
+      e.preventDefault(); e.stopPropagation();
+      edStepping=true;
+      try{ edAgain(); }finally{ edStepping=false; }
+    }
   },true);
 }
 /* ---- WHAT AN EDITOR EDITS, CHANGED UNDERNEATH IT. Typed fields are never changed for the person:
@@ -727,14 +737,15 @@ const ED_LINES={
     elsewhere:"This category changed elsewhere while it was open. Save keeps what is written here; Cancel leaves the change made there."}
 };
 const ED_LOCKS=".modal-actions .btn.primary, .modal-actions .mf-reset, .modal-actions .mf-del";
-let edSubject=null, edSubjectSig=null, edGone=false, edGoneLayer=false, edCause="", edSubjectTimer=null;
+/* Under the newer-edition line Reset is on even where only typing differs, as the line promises. */
+let edSubject=null, edSubjectSig=null, edGone=false, edGoneLayer=false, edCause="", edSubjectTimer=null, edEditionReset=false;
 function edSubjectNow(){
   try{ return edSubject ? edSubject() : undefined; }catch(e){ return undefined; }
 }
 function edSubjectOpen(cfg){
   edSubject=(edPlaceKind && typeof cfg.subject==="function") ? cfg.subject : null;
   edSubjectSig=edSubjectNow();
-  edGone=false; edGoneLayer=false;
+  edGone=false; edGoneLayer=false; edEditionReset=false;
 }
 /* A catalog taken: in the same layer the next difference is the edition's. Another layer, or local memory
    cleared or put back, leaves the editor with nothing it may write to: its entry is taken as gone. */
@@ -759,7 +770,9 @@ function edSubjectCheck(){
   }
   edUnGone();
   edSubjectSig=now;
+  edEditionReset=cause==="edition";
   edSayLine(ED_LINES[edPlaceKind][cause==="edition" ? "edition" : "elsewhere"]);
+  refreshDialogReset();
 }
 function edMarkGone(){
   edGone=true;

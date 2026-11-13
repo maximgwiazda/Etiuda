@@ -18488,7 +18488,7 @@ What you type stays in this browser only.`;
   function refreshDialogReset() {
     const b = modalCard && modalCard.querySelector(".mf-reset");
     if (!b || !modalResetFn) return;
-    const live = !!modalResetFn();
+    const live = !!modalResetFn() || edEditionReset;
     b.disabled = !live || edGone;
     b.title = t(live ? modalResetOn : modalResetOff);
   }
@@ -18496,6 +18496,7 @@ What you type stays in this browser only.`;
     refreshDialogName();
     refreshDialogReset();
     if (edSubject && !edGone) {
+      edEditionReset = false;
       edSubjectSig = edSubjectNow();
       const n = modalCard.querySelector(":scope > .modal-note");
       if (n) n.remove();
@@ -18978,6 +18979,8 @@ What you type stays in this browser only.`;
   }
   function edBeforeOpen(cfg) {
     const place = ED_PLACE_KINDS.indexOf(cfg.place) >= 0;
+    const edition = edEditionReset;
+    edEditionReset = false;
     if (place && edHeld) {
       const h = edHeld;
       edHeld = null;
@@ -18985,7 +18988,10 @@ What you type stays in this browser only.`;
     }
     if (modalEl.hidden || !edPlaceKind) return null;
     if (!place) {
-      if (!edHeld) edHold();
+      if (!edHeld) {
+        edHold();
+        edHeld.editionReset = edition;
+      }
       return null;
     }
     return !edStepping && edAgain && edDirty() ? { was: edTyped(), again: edAgain } : null;
@@ -19060,6 +19066,8 @@ What you type stays in this browser only.`;
     edDeskFocus = h.desk;
     edPlaceKind = h.kind;
     edPlaced = null;
+    edEditionReset = !!h.editionReset;
+    refreshDialogReset();
     if (h.rest && modalEl.clientWidth >= ED_REST_MIN) {
       edRest = true;
       modalEl.classList.add("ed-rest");
@@ -19085,6 +19093,17 @@ What you type stays in this browser only.`;
       if (edGone && e.target.closest && e.target.closest(ED_LOCKS)) {
         e.preventDefault();
         e.stopPropagation();
+        return;
+      }
+      if (edEditionReset && edAgain && !(modalResetFn && modalResetFn()) && e.target.closest && e.target.closest(".mf-reset")) {
+        e.preventDefault();
+        e.stopPropagation();
+        edStepping = true;
+        try {
+          edAgain();
+        } finally {
+          edStepping = false;
+        }
       }
     }, true);
   }
@@ -19112,6 +19131,7 @@ What you type stays in this browser only.`;
   var edGoneLayer = false;
   var edCause = "";
   var edSubjectTimer = null;
+  var edEditionReset = false;
   function edSubjectNow() {
     try {
       return edSubject ? edSubject() : void 0;
@@ -19124,6 +19144,7 @@ What you type stays in this browser only.`;
     edSubjectSig = edSubjectNow();
     edGone = false;
     edGoneLayer = false;
+    edEditionReset = false;
   }
   function edCatalogTaken(sameLayer) {
     edCause = sameLayer ? "edition" : "layer";
@@ -19161,7 +19182,9 @@ What you type stays in this browser only.`;
     }
     edUnGone();
     edSubjectSig = now;
+    edEditionReset = cause === "edition";
     edSayLine(ED_LINES[edPlaceKind][cause === "edition" ? "edition" : "elsewhere"]);
+    refreshDialogReset();
   }
   function edMarkGone() {
     edGone = true;
