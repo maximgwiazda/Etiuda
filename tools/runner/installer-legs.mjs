@@ -787,7 +787,10 @@ async function tsCycle(rec) {
   if (!process.env.APPDATA || !PLACES.desktop || !PLACES.programs) throw new NoVerdict("this account's AppData, Desktop or Programs folder cannot be named");
   const ts = tsSetup(rec);
   const ud = path.join(process.env.APPDATA, T.packageName);
-  const docs = path.join(os.homedir(), "Documents", "Etiuda"), sample = path.join(docs, path.basename(SAMPLE));
+  /* Documents confined to the lab, as the launch door wants: an installed copy honours ETIUDA_TEST_DOCUMENTS only beside
+     ETIUDA_TEST_DEVTOOLS=1 (shell/main.js TEST_DOOR), so every start carries both. */
+  const docsRoot = path.join(LAB, "documents");
+  const docs = path.join(docsRoot, "Etiuda"), sample = path.join(docs, path.basename(SAMPLE));
   const desk = path.join(ud, "desk.json"), marker = path.join(ud, "ts-cycle-marker.bin");
   for (const p of [ud, docs]) if (fs.existsSync(p)) throw new NoVerdict(p + " is already there, so this account is not a fresh one to measure");
   rec.after("uninstall", uninstallUser);
@@ -819,7 +822,7 @@ async function tsCycle(rec) {
      named, as the one Electron picks for this package by its own rule (%APPDATA%\<package name>), because the launch door refuses
      a start that leaves it to the machine (first ts-cycle run with the config in place, 2026-11-13). */
   const start = async (prog, tag, done) => {
-    const opts = { stdio: "ignore", windowsHide: true, env: E.offscreenEnv({}) };
+    const opts = { stdio: "ignore", windowsHide: true, env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: docsRoot, ETIUDA_TEST_DEVTOOLS: "1" }) };
     const args = ["--user-data-dir=" + ud];
     const no = E.shellLaunchRefusal(WHO, args, opts);
     if (no) throw new NoVerdict("the start is refused: " + no[0]);
