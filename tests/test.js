@@ -4552,12 +4552,12 @@ function shippedFlagTests() {
       new Function("ipcMain", "fromEngine", "BrowserWindow", "process", "hostBackdrop", "catalogFolder",
         "path", "catalogFrom", "folderShown", "isBuiltIn", "catalogMtime", "openedWith",
         "openedRefused", "recovering", "deskFile", "os", "hostAccent", "catalogWaitNewer", "newerKey", "catalogNewerSaid",
-        "sessionHeld", "pendingSavedTabs", "readSavedTabs",
+        "sessionHeld", "pendingSavedTabs", "readSavedTabs", "testServiceOn",
         extractDecl(shell, 'ipcMain.on("etiuda:host",'))(
         { on: (ch, fn) => { handler = fn; } }, () => true, { fromWebContents: () => null }, { platform: "win32" }, () => null,
         () => own, path.win32, from, S.folderShown, S.isBuiltIn, () => 0, "",
         null, new Set(), () => "", { homedir: () => "" }, () => "", null, () => "", "",
-        new Map(), null, () => null);
+        new Map(), null, () => null, false);
       ev = { sender: { id: 1, once() {} } };
       handler(ev);
     } catch (e) { return "the host answer did not run: " + e.message; }

@@ -24,6 +24,7 @@ import { packagedFuseProblems, wantedFuses } from './fuses.mjs';
 import { prepareEmbed } from './model.mjs';
 
 const { signinSecretSummary, given: signinSecretGiven, SIGNIN_SECRET_VAR } = createRequire(import.meta.url)('./signin-secret.cjs');
+const { testServiceSummary, given: testServiceGiven, TEST_SERVICE_VAR } = createRequire(import.meta.url)('./test-service.cjs');
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = resolve(ROOT, process.env.ETIUDA_DIST || 'dist');
 /* The test build differs in its program's name and its config, never in what is checked here. */
@@ -118,5 +119,13 @@ if (r.status === 0) {
     process.exit(1);
   }
   console.log('npm run package: ' + said);
+  /* THE TEST SERVICE BUILD, read back the same way (tools/test-service.cjs): a package carrying it without the variable, or lacking
+     it with the variable, is refused. */
+  const service = testServiceSummary(join(DIST, 'win-unpacked', 'resources'));
+  if (!!testServiceGiven(process.env) !== /present/.test(service)) {
+    console.error('npm run package: ' + TEST_SERVICE_VAR + ' was ' + (testServiceGiven(process.env) ? 'set' : 'unset') + ' and the package says ' + service);
+    process.exit(1);
+  }
+  console.log('npm run package: ' + service);
 }
 process.exit(r.status == null ? 1 : r.status);

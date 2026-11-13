@@ -17,6 +17,8 @@
  *      unsigned one, read by the same function the release calls, and the signature gate's
  *      whole body on those files as installer and as program
  *   6  tools/release.mjs stops a customer build at gate 2 and lets a preview through, driven
+ *   9  a test service build (tools/test-service.cjs) is never released: the variable stops any release at gate 2, a package
+ *      carrying its file is refused, and in the release profile this tree's own package is read for it
  *
  * The expected values below were written from the rule in tools/sellable.mjs before any run. */
 process.removeAllListeners('warning');
@@ -27,15 +29,15 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { customerVersion, versionProblems, placeholders, licencePages, licenceProblems,
          signingConfigured, signatureProblems, readAuthenticode, signatureVerdict, beforeBuild, SIGNING_VARS,
-         customerReleaseProfileVerdict, readReleaseSummaries } from '../tools/sellable.mjs';
+         customerReleaseProfileVerdict, readReleaseSummaries, testServiceProblems, TEST_SERVICE_VAR } from '../tools/sellable.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 39;
+const EXPECTED = 46;
 
 let asserted = 0, failed = 0;
 const notRun = [];
@@ -393,7 +395,7 @@ try {
     const runs = path.join(root, 'runs');
     fs.mkdirSync(runs, { recursive: true });
     for (const d of ['tools', 'tests', 'shell', path.join('src', 'modules')]) fs.mkdirSync(path.join(dir, d), { recursive: true });
-    for (const f of ['tools/release.mjs', 'tools/sellable.mjs', 'tools/sbom.mjs', 'tests/engine.js', 'electron-builder.js', 'tools/signin-secret.cjs', 'package.json'])
+    for (const f of ['tools/release.mjs', 'tools/sellable.mjs', 'tools/sbom.mjs', 'tests/engine.js', 'electron-builder.js', 'tools/signin-secret.cjs', 'tools/test-service.cjs', 'package.json', 'shell/main.js'])
       fs.copyFileSync(path.join(ROOT, f), path.join(dir, f));
     fs.writeFileSync(path.join(dir, 'src', 'modules', 'env.js'), 'const E_VERSION="' + version + '";\n');
     fs.writeFileSync(path.join(dir, 'shell', 'license_en.txt'), licence);
@@ -546,6 +548,73 @@ try {
   const r6 = release(l6, [], 'C:/nowhere/etiuda.pfx');
   check(!stopped2(r6) && past2(r6),
     '7f lifting plant:customer-release-profile turns leg 1 red: customer build with no summary passes gate 2, exit ' + r6.status);
+  /* ---- 9. the test service build is never released ------------------------------------------------------------------ */
+  /* A lab file the desk's reader takes, so with the refusal lifted the config packs it and the release goes on (9b). */
+  fs.writeFileSync(path.join(TMP, 'any-lab.json'), JSON.stringify({ service: 'https://etiuda.dev/licence-staging/v1/', clientIds: { microsoft: '11111111-2222-3333-4444-555555555555' } }));
+  const l9 = lab('test-service', '2.0.0-dev', FILLED);
+  const r9 = release(l9, [], null, { [TEST_SERVICE_VAR]: path.join(TMP, 'any-lab.json') });
+  check(stopped2(r9) && new RegExp(TEST_SERVICE_VAR + ' is set').test(r9.out),
+    '9a a preview released with ' + TEST_SERVICE_VAR + ' set stops at gate 2, naming it, exit ' + r9.status);
+  const l9p = lab('test-service-plant', '2.0.0-dev', FILLED);
+  const rel9 = path.join(l9p.dir, 'tools', 'release.mjs'), rel9Code = fs.readFileSync(rel9, 'utf8');
+  const lift9 = rel9Code.replace(/const testService = testServiceProblems\(\{ env: process\.env \}\); \/\* plant:release-ts-var \*\//,
+    'const testService = []; /* plant:release-ts-var */');
+  if (lift9 === rel9Code) throw new Error('plant:release-ts-var not found in tools/release.mjs');
+  fs.writeFileSync(rel9, lift9);
+  l9p.git('commit', '-am', 'lift plant:release-ts-var');
+  const r9p = release(l9p, [], null, { [TEST_SERVICE_VAR]: path.join(TMP, 'any-lab.json') });
+  check(past2(r9p), '9b lifting plant:release-ts-var lets the same release past gate 2, exit ' + r9p.status);
+  const res9 = path.join(TMP, 'ts-resources'), clean9 = path.join(TMP, 'ts-clean');
+  fs.mkdirSync(res9, { recursive: true }); fs.mkdirSync(clean9, { recursive: true });
+  fs.writeFileSync(path.join(res9, 'test-service.json'), '{}\n');
+  const said9 = testServiceProblems({ resources: res9 });
+  /* A package whose asar carries the fields, packed by @electron/asar itself, and one whose asar does not. */
+  const asar9 = async (name, pkg) => {
+    const src = path.join(TMP, name + '-src'), res = path.join(TMP, name);
+    fs.mkdirSync(src, { recursive: true }); fs.mkdirSync(res, { recursive: true });
+    fs.writeFileSync(path.join(src, 'package.json'), JSON.stringify(pkg));
+    await require('@electron/asar').createPackage(src, path.join(res, 'app.asar'));
+    return res;
+  };
+  const inAsar9 = await asar9('ts-asar', { name: 'etiuda', etiudaTestService: { service: 'https://etiuda.dev/licence-staging/v1/' } });
+  const plainAsar9 = await asar9('ts-asar-plain', { name: 'etiuda' });
+  const saidAsar9 = testServiceProblems({ resources: inAsar9 });
+  check(said9.length === 1 && /test service build/.test(said9[0]) && testServiceProblems({ resources: clean9, env: {} }).length === 0
+    && testServiceProblems({ env: { [TEST_SERVICE_VAR]: '' } }).length === 0,
+    '9c a package whose resources carry test-service.json is refused, one without it and an empty variable are not: ' + JSON.stringify(said9));
+  check(saidAsar9.length === 1 && /carries the test service fields/.test(saidAsar9[0]) && testServiceProblems({ resources: plainAsar9 }).length === 0,
+    '9g a package whose asar carries the test service fields is refused, one whose asar does not is not: ' + JSON.stringify(saidAsar9));
+  /* 9d, the file's refusal planted: tools/sellable.mjs copied with its plant line put in another form and imported. */
+  const sell9 = fs.readFileSync(path.join(ROOT, 'tools', 'sellable.mjs'), 'utf8');
+  const sellLift = sell9.split('\n').map(l => /plant:sell-ts-file/.test(l) ? '    if (false) out.push(""); /* plant:sell-ts-file */' : l).join('\n');
+  const sellAt = path.join(TMP, 'sellable-planted.mjs');
+  fs.writeFileSync(sellAt, sellLift);
+  fs.copyFileSync(path.join(ROOT, 'tools', 'test-service.cjs'), path.join(TMP, 'test-service.cjs'));
+  const planted9 = await import(pathToFileURL(sellAt).href);
+  const varLift = sell9.split('\n').map(l => /plant:sell-ts-var/.test(l) ? '    void 0; /* plant:sell-ts-var */' : l).join('\n');
+  const varAt = path.join(TMP, 'sellable-planted-var.mjs');
+  fs.writeFileSync(varAt, varLift);
+  const plantedVar = await import(pathToFileURL(varAt).href);
+  const asarLift = sell9.split('\n').map(l => /plant:sell-ts-asar/.test(l) ? '    void pkg; /* plant:sell-ts-asar */' : l).join('\n');
+  const asarAt = path.join(TMP, 'sellable-planted-asar.mjs');
+  fs.writeFileSync(asarAt, asarLift);
+  const plantedAsar = await import(pathToFileURL(asarAt).href);
+  check(sellLift !== sell9 && planted9.testServiceProblems({ resources: res9 }).length === 0
+    && varLift !== sell9 && plantedVar.testServiceProblems({ env: { [TEST_SERVICE_VAR]: 'x' } }).length === 0
+    && asarLift !== sell9 && plantedAsar.testServiceProblems({ resources: inAsar9 }).length === 0,
+    '9d with plant:sell-ts-file, plant:sell-ts-var and plant:sell-ts-asar each put in another form, the loose file, the variable and the asar\'s fields each go unrefused, so 9c, 9a and 9g have teeth');
+  /* 9e, structure: the installer's gate in tools/release.mjs asks the same question of the package it built (it cannot be
+     driven here without packaging). */
+  const relReal = fs.readFileSync(path.join(ROOT, 'tools', 'release.mjs'), 'utf8');
+  const gateAt = relReal.indexOf("gate('the installer, built from this tree"), gateEnd = relReal.indexOf('\n  });', gateAt);
+  check(gateAt > 0 && /testServiceProblems\(\{ resources: join\(DIST, 'win-unpacked', 'resources'\) \}\); \/\* plant:release-ts-file \*\/\r?\n\s+if \(testService\.length\) return/.test(relReal.slice(gateAt, gateEnd)),
+    '9e the installer\'s gate refuses a built package carrying the file (read in its body, plant:release-ts-file)');
+  /* 9f, the release profile: this tree's own package, where one is built, carries no test service file. */
+  if (process.env.ETIUDA_PROFILE === 'release' || process.env.ETIUDA_PROFILE === 'nightly') {
+    const own = path.join(path.resolve(ROOT, process.env.ETIUDA_DIST || 'dist'), 'win-unpacked', 'resources');
+    const ownSaid = testServiceProblems({ resources: own });
+    check(ownSaid.length === 0, '9f the release profile finds no test service package in ' + own + (ownSaid.length ? ': ' + ownSaid.join('; ') : ''));
+  } else check(true, '9f outside the release profile, this tree\'s own package is not read (ETIUDA_PROFILE is not release or nightly)');
   /* The real tree as it stands, through the same function gate 2 calls: a preview today, and
      what stands between it and a sale is printed rather than asserted, so this leg does not
      redden on the day the seller or the certificate arrives. */

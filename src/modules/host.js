@@ -449,9 +449,25 @@ function dispatchTabChord(shift){
   }catch(e){}
 }
 
+/* THE TEST SERVICE BAND: where the shell says this is a test service build, one line above the header on every screen, which
+   nothing dismisses. Its English stays its source, so the chrome sweep turns it with the language (translateChrome). */
+const TEST_BAND_EN="Test build: sign-in goes to Etiuda's test service, not the real one.";
+function testServiceBand(doc){
+  if(!doc || !doc.body || doc.getElementById("eTestBand")) return null;
+  const el=doc.createElement("div");
+  el.id="eTestBand";
+  el.setAttribute("role","note");
+  el.setAttribute("data-i18n-text",TEST_BAND_EN);
+  el.textContent=t("Test build: sign-in goes to Etiuda's test service, not the real one."); /* the literal i18n-scan reads; ts5b holds it to TEST_BAND_EN */
+  doc.body.insertBefore(el,doc.body.firstChild);
+  doc.body.classList.add("e-test-service");
+  return el;
+}
+
 function wireHost(){
   const h=eHost(); if(!h) return;
   document.body.classList.add("e-host");
+  if(h.testService===true) testServiceBand(document); /* plant:ts-band */
   if(typeof h.onStatsAsk==="function") h.onStatsAsk(answerStats);
   if(h.backdrop) document.body.classList.add("e-backdrop");
   if(h.platform) document.body.classList.add("e-"+String(h.platform).replace(/[^a-z0-9]/gi,""));
@@ -503,6 +519,8 @@ function eSetMaximized(on){
 }
 
 export {
+  testServiceBand,
+  TEST_BAND_EN,
   eBranchIdentity,
   eHasBranch,
   eWriteBranch,

@@ -63,6 +63,8 @@ function caretHelper() {
 // packaging command, written by beforePack below; unset, both desks' resources are as before. Its value is never in this tree.
 const signinSecret = require("./tools/signin-secret.cjs");
 const SIGNIN_SECRET = signinSecret.signinSecretResources(process.env, output);
+// THE TEST SERVICE BUILD (tools/test-service.cjs): only where ETIUDA_PACK_TEST_SERVICE names a lab file for the packaging command.
+const testService = require("./tools/test-service.cjs");
 
 // THE SIGNING HOOK: one route or none, chosen by which variables are set. With none the block is
 // absent and electron-builder packages unsigned, which SmartScreen warns about (spec 11.5). No route
@@ -85,7 +87,7 @@ const signing = cert ? { signtoolOptions: { certificateFile: cert, ...SIGN_TIMES
   : artifact.length ? { azureSignOptions: Object.fromEntries(Object.entries(ARTIFACT).map(([key, name]) => [key, given(name)])) }
   : {};
 
-module.exports = {
+module.exports = testService.testServiceConfig({
   appId: "app.etiuda.desktop",
   // The display name: the Start menu entry, Add or remove programs, and the install folder.
   // Lowercase everywhere else in 2.x, capital here because it is the product's name on screen.
@@ -193,6 +195,7 @@ module.exports = {
     }
     if (plat === "linux" || plat === "win32") {
       console.log(signinSecret.signinSecretStep(process.env, output));
+      console.log(testService.testServiceStep(process.env, __dirname, plat));
       const { prepareEmbed } = await import("./tools/model.mjs");
       await prepareEmbed({ dest: EMBED, platform: plat === "linux" ? "linux" : "win32" });
     }
@@ -226,4 +229,4 @@ module.exports = {
     // copy's uninstaller runs through UAC_AsUser_Call (shell/installer.nsh). perMachine true would override this.
     packElevateHelper: false,
   },
-};
+}, process.env, __dirname);

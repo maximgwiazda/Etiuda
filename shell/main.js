@@ -8421,6 +8421,7 @@ ipcMain.on("etiuda:host", (e) => {
     backdrop: hostBackdrop(),
     maximized: !!(win && win.isMaximized()),
     session: sessionEntries,
+    ...(testServiceOn ? { testService: true } : {}), /* plant:ts-host */
     // Whether the window is on screen yet, or never will be: a first load is answered before ready-to-show.
     shown: !!(win && (win.etiudaShown || (typeof win.isVisible === "function" && win.isVisible()))),
     /* Which file is loaded and where it was found, because the page cannot look: About prints
@@ -9794,8 +9795,18 @@ let signinStore, signinBusy = null, signinSaid = "", signinClick = null, signinT
 let signinRenewing = null, signinOutFlight = null;
 /* Google's client secret, where the package step put one beside the asar: read here once, at start, installed only. */
 if (INSTALLED) { try { signinPacked = signinSecretRead(fs.readFileSync(path.join(String(process.resourcesPath || ""), SIGNIN_SECRET_FILE), "utf8")); } catch { /* none packaged: every byte as before */ } }
-/* This desk's flag for the relays a door may name (signinDoorAddressOk): installed or packaged. */
-const SIGNIN_DESK_PACKED = INSTALLED || !!app.isPackaged; /* plant:door-packed */
+/* THE TEST SERVICE BUILD (tools/test-service.cjs): its fields travel inside the asar, as etiudaTestService in the package.json packed
+   beside this file, read here once, at start, installed only, as the sign-in lab's file, and said on every screen (testService in
+   etiuda:host). A file beside the asar is never read, so a sold package cannot gain them. Refused, the desk is the ordinary one. */
+let testServiceOn = false;
+if (INSTALLED) { /* plant:ts-installed */
+  let fields;
+  try { fields = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8")).etiudaTestService; } catch { fields = undefined; } /* plant:ts-asar */
+  if (fields !== undefined && !(testServiceOn = signinLabUse(signinLabRead(JSON.stringify(fields))))) console.error("etiuda: this package's test service fields were refused, so it runs as the ordinary build"); /* plant:ts-take */
+}
+/* This desk's flag for the relays a door may name (signinDoorAddressOk): installed or packaged, and not a test service build, which
+   may also name staging's. */
+const SIGNIN_DESK_PACKED = (INSTALLED || !!app.isPackaged) && !testServiceOn; /* plant:door-packed */
 /* The sign-in lab's file, where ETIUDA_SIGNIN_LAB names one: read here once, at start, and never on a desk installed or packaged. */
 if (!INSTALLED && !app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) { /* plant:lab-packaged */
   let text = "";

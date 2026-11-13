@@ -26,6 +26,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { createRequire } from 'node:module';
 
 /** Is this version a customer's? Bare x.y.z, major 1 or more. */
 export function customerVersion(version) {
@@ -75,6 +76,22 @@ export function licenceProblems(dir) {
     const holes = placeholders(readFileSync(p, 'utf8'));
     if (holes.length) out.push(p.replace(/\\/g, '/').split('/').pop() + ' still carries '
       + holes.length + ' placeholder(s): ' + holes.map(h => 'line ' + h.line + ' ' + h.text).join(', '));
+  }
+  return out;
+}
+
+/* THE TEST SERVICE BUILD (tools/test-service.cjs) is never sold and never released, preview or customer: refused where its
+   variable is set for the release, where a package's asar carries its fields, and where a file of its name lies beside the asar. */
+export const TEST_SERVICE_VAR = 'ETIUDA_PACK_TEST_SERVICE';
+export const TEST_SERVICE_FILE = 'test-service.json';
+export function testServiceProblems({ env, resources } = {}) {
+  const out = [];
+  if (env && typeof env[TEST_SERVICE_VAR] === 'string' && env[TEST_SERVICE_VAR] !== '')
+    out.push(TEST_SERVICE_VAR + ' is set, which makes a test service build, and no test service build is released'); /* plant:sell-ts-var */
+  for (const dir of [].concat(resources || [])) {
+    if (existsSync(join(dir, TEST_SERVICE_FILE))) out.push(join(dir, TEST_SERVICE_FILE) + ' is in the package, so it is a test service build, which is never released'); /* plant:sell-ts-file */
+    const pkg = createRequire(import.meta.url)('./test-service.cjs').asarPackage(join(dir, 'app.asar'));
+    if (pkg && pkg.etiudaTestService !== undefined) out.push(join(dir, 'app.asar') + ' carries the test service fields, so it is a test service build, which is never released'); /* plant:sell-ts-asar */
   }
   return out;
 }
