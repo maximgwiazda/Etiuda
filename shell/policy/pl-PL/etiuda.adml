@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <policyDefinitionResources revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
   <displayName>Etiuda</displayName>
-  <description>Folder zespołu, klucz lidera zespołu, sprawdzanie wersji i usługa AI Etiudy Studio</description>
+  <description>Folder zespołu, klucz lidera zespołu, sprawdzanie wersji, usługa AI Etiudy Studio oraz konta na komputerze zarządzanym</description>
   <resources>
     <stringTable>
       <string id="SUPPORTED_Etiuda">Etiuda</string>
@@ -73,6 +73,46 @@ Jeśli to ustawienie zasad zostanie włączone, Etiuda korzysta z usługi, adres
 Jeśli to ustawienie zasad zostanie wyłączone, Etiuda korzysta wyłącznie z modelu wbudowanego, który działa tylko na tym komputerze i niczego z niego nie wysyła, a tego wyboru nie można zmienić w jej Ustawieniach.
 
 Jeśli to ustawienie zasad nie zostanie skonfigurowane, model wybiera się w Ustawieniach Etiudy. Model wbudowany, domyślny, działa wyłącznie na tym komputerze i niczego z niego nie wysyła.</string>
+      <string id="Managed">Zarządzaj kontami na tym komputerze w imieniu organizacji</string>
+      <string id="Managed_Explain">To ustawienie zasad oznacza ten komputer jako zarządzany przez organizację, która decyduje wtedy, kto i jakim kontem loguje się tu do Etiudy i Etiudy Studio.
+
+Jeśli to ustawienie zasad zostanie włączone, obie aplikacje nie proponują zakupu ani okresu próbnego, nie oferują innego konta ani wylogowania, chyba że włączone jest „Traktuj ten komputer jako wspólny”, i nie pokazują żadnych czynności właściciela licencji. Konta osobiste nie są oferowane, chyba że włączone jest „Zezwalaj na konta osobiste”. W części Konto widać, że komputerem zarządza organizacja. Wszystko inne w obu aplikacjach działa tak jak na każdym komputerze.
+
+Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, obie aplikacje pokazują ustawienia konta tak jak na każdym komputerze.</string>
+      <string id="SharedComputer">Traktuj ten komputer jako wspólny</string>
+      <string id="SharedComputer_Explain">To ustawienie zasad pozwala kolejno korzystać z Etiudy i Etiudy Studio na tym komputerze więcej niż jednej osobie.
+
+Jeśli to ustawienie zasad zostanie włączone na komputerze, na którym włączone jest „Zarządzaj kontami na tym komputerze w imieniu organizacji”, znów można się wylogować i zalogować innym kontem, nadal w granicach ustawień „Ustaw dostawcę logowania” i „Ustaw dzierżawę logowania organizacji”.
+
+Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, komputer zarządzany zostaje przy koncie, które się na nim zalogowało.</string>
+      <string id="AllowPersonalAccounts">Zezwalaj na konta osobiste</string>
+      <string id="AllowPersonalAccounts_Explain">To ustawienie zasad określa, czy do Etiudy i Etiudy Studio na tym komputerze może się zalogować osobiste konto Microsoft albo konto Google spoza domeny Google Workspace.
+
+Jeśli to ustawienie zasad zostanie włączone, konta osobiste mogą się logować.
+
+Jeśli to ustawienie zasad zostanie wyłączone, logować się mogą tylko konta służbowe i szkolne: logowanie Microsoft jest wtedy dostępne wyłącznie dla kont organizacji, a konto Google musi należeć do domeny Google Workspace.
+
+Jeśli to ustawienie zasad nie zostanie skonfigurowane, konta osobiste mogą się logować, z wyjątkiem komputerów, na których włączone jest „Zarządzaj kontami na tym komputerze w imieniu organizacji”.</string>
+      <string id="SigninProvider">Ustaw dostawcę logowania</string>
+      <string id="SigninProvider_Explain">To ustawienie zasad ogranicza logowanie do Etiudy i Etiudy Studio na tym komputerze do jednego dostawcy.
+
+Jeśli to ustawienie zasad zostanie włączone, należy wybrać Microsoft lub Google albo wpisać microsoft lub google; oferowany jest wtedy tylko ten dostawca. Każda inna wartość wyłącza logowanie całkowicie.
+
+Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, oferowany jest każdy dostawca, przez którego Etiuda umożliwia logowanie.</string>
+      <string id="SigninProvider_microsoft">Microsoft (microsoft)</string>
+      <string id="SigninProvider_google">Google (google)</string>
+      <string id="SigninTenant">Ustaw dzierżawę logowania organizacji</string>
+      <string id="SigninTenant_Explain">To ustawienie zasad ogranicza logowanie do Etiudy i Etiudy Studio na tym komputerze do kont jednej organizacji.
+
+Jeśli to ustawienie zasad zostanie włączone, należy podać identyfikator dzierżawy Microsoft Entra, na przykład 00000000-0000-0000-0000-000000000000, albo domenę Google Workspace, na przykład example.com. Logowanie Microsoft odbywa się wtedy w tej dzierżawie, logowanie Google dotyczy tej domeny, a konto spoza nich zostaje odrzucone, nawet jeśli dostawca pozwoli mu się zalogować. Identyfikator dzierżawy dopuszcza wyłącznie Microsoft, a domena wyłącznie Google. Wartość w innej postaci albo niezgodna z „Ustaw dostawcę logowania” wyłącza logowanie całkowicie.
+
+Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, mogą się logować konta dowolnej organizacji.</string>
+      <string id="SupportContact">Ustaw, kogo prosić o dostęp</string>
+      <string id="SupportContact_Explain">To ustawienie zasad wskazuje, kogo należy poprosić o dostęp, gdy organizacja nie przyznała kontu dostępu do Etiudy.
+
+Jeśli to ustawienie zasad zostanie włączone, należy podać najwyżej 200 znaków, na przykład nazwę i numer telefonu działu wsparcia. Etiuda i Etiuda Studio pokazują ten tekst bez zmian w miejscu wiersza, który wskazuje dział IT organizacji, i nigdy nie otwierają go jako łącza.
+
+Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, ten wiersz wskazuje dział IT organizacji.</string>
     </stringTable>
     <presentationTable>
       <presentation id="TeamFolder">
@@ -101,6 +141,19 @@ Jeśli to ustawienie zasad nie zostanie skonfigurowane, model wybiera się w Ust
       <presentation id="AiKey">
         <textBox refId="AiKeyBox">
           <label>Klucz:</label>
+        </textBox>
+      </presentation>
+      <presentation id="SigninProvider">
+        <dropdownList refId="SigninProviderList" noSort="true">Dostawca:</dropdownList>
+      </presentation>
+      <presentation id="SigninTenant">
+        <textBox refId="SigninTenantBox">
+          <label>Identyfikator dzierżawy lub domena Google Workspace:</label>
+        </textBox>
+      </presentation>
+      <presentation id="SupportContact">
+        <textBox refId="SupportContactBox">
+          <label>Kogo prosić:</label>
         </textBox>
       </presentation>
     </presentationTable>

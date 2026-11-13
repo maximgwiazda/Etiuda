@@ -111,5 +111,67 @@
         <decimal value="0" />
       </disabledValue>
     </policy>
+    <policy name="Managed" class="Machine" displayName="$(string.Managed)" explainText="$(string.Managed_Explain)" key="Software\Policies\Etiuda" valueName="Managed">
+      <parentCategory ref="Etiuda" />
+      <supportedOn ref="SUPPORTED_Etiuda" />
+      <enabledValue>
+        <decimal value="1" />
+      </enabledValue>
+      <disabledValue>
+        <decimal value="0" />
+      </disabledValue>
+    </policy>
+    <policy name="SharedComputer" class="Machine" displayName="$(string.SharedComputer)" explainText="$(string.SharedComputer_Explain)" key="Software\Policies\Etiuda" valueName="SharedComputer">
+      <parentCategory ref="Etiuda" />
+      <supportedOn ref="SUPPORTED_Etiuda" />
+      <enabledValue>
+        <decimal value="1" />
+      </enabledValue>
+      <disabledValue>
+        <decimal value="0" />
+      </disabledValue>
+    </policy>
+    <policy name="AllowPersonalAccounts" class="Machine" displayName="$(string.AllowPersonalAccounts)" explainText="$(string.AllowPersonalAccounts_Explain)" key="Software\Policies\Etiuda" valueName="AllowPersonalAccounts">
+      <parentCategory ref="Etiuda" />
+      <supportedOn ref="SUPPORTED_Etiuda" />
+      <enabledValue>
+        <decimal value="1" />
+      </enabledValue>
+      <disabledValue>
+        <decimal value="0" />
+      </disabledValue>
+    </policy>
+    <policy name="SigninProvider" class="Machine" displayName="$(string.SigninProvider)" explainText="$(string.SigninProvider_Explain)" key="Software\Policies\Etiuda" presentation="$(presentation.SigninProvider)">
+      <parentCategory ref="Etiuda" />
+      <supportedOn ref="SUPPORTED_Etiuda" />
+      <elements>
+        <enum id="SigninProviderList" valueName="SigninProvider" required="true">
+          <item displayName="$(string.SigninProvider_microsoft)">
+            <value>
+              <string>microsoft</string>
+            </value>
+          </item>
+          <item displayName="$(string.SigninProvider_google)">
+            <value>
+              <string>google</string>
+            </value>
+          </item>
+        </enum>
+      </elements>
+    </policy>
+    <policy name="SigninTenant" class="Machine" displayName="$(string.SigninTenant)" explainText="$(string.SigninTenant_Explain)" key="Software\Policies\Etiuda" presentation="$(presentation.SigninTenant)">
+      <parentCategory ref="Etiuda" />
+      <supportedOn ref="SUPPORTED_Etiuda" />
+      <elements>
+        <text id="SigninTenantBox" valueName="SigninTenant" required="true" maxLength="253" />
+      </elements>
+    </policy>
+    <policy name="SupportContact" class="Machine" displayName="$(string.SupportContact)" explainText="$(string.SupportContact_Explain)" key="Software\Policies\Etiuda" presentation="$(presentation.SupportContact)">
+      <parentCategory ref="Etiuda" />
+      <supportedOn ref="SUPPORTED_Etiuda" />
+      <elements>
+        <text id="SupportContactBox" valueName="SupportContact" required="true" maxLength="200" />
+      </elements>
+    </policy>
   </policies>
 </policyDefinitions>

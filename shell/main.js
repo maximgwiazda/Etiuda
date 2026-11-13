@@ -4155,6 +4155,60 @@ function readJoinPolicy(lang) {
 function updateLookOff() {
   try { return readJoinPolicy("en").noUpdate === true; } catch { return false; }
 }
+/* A MANAGED INSTALLATION (decision 49): Managed, SharedComputer, AllowPersonalAccounts, SigninProvider, SigninTenant and
+   SupportContact, from policyValues' reading, machine policy alone. A pin that cannot be read closes the sign-in rather than
+   widening it; nothing set (`any` false) leaves every surface and request as it was. Studio reads the same six alike. */
+const MANAGED_TENANT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MANAGED_TENANT_DOMAIN = /^(?=.{4,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i;
+const MANAGED_CONTACT_MAX = 200;
+const MANAGED_NAMES = Object.freeze(["managed", "sharedcomputer", "allowpersonalaccounts", "signinprovider", "signintenant", "supportcontact"]);
+/** {any, managed, shared, personal, provider, tenant, closed, contact} from `values`. A switch is on where set to anything but
+ *  empty or 0; AllowPersonalAccounts unset follows Managed (personal off where managed); a string is taken trimmed. Pure. */
+function managedPolicyFrom(values) {
+  const out = { any: false, managed: false, shared: false, personal: true, provider: "", tenant: "", closed: false, contact: "" };
+  if (!values) return out;
+  const own = name => (Object.prototype.hasOwnProperty.call(values, name) ? values[name] : null);
+  const text = v => !!v && (v.type === "REG_SZ" || v.type === "REG_EXPAND_SZ");
+  /* null unset, else whether it is on */
+  const sw = v => {
+    if (!v) return null;
+    const s = String(v.value).trim();
+    if (text(v) && s === "") return null;
+    return !((v.type === "dword" || text(v)) && s === "0"); /* plant:mp-switch */
+  };
+  out.any = MANAGED_NAMES.some(n => own(n) !== null); /* plant:mp-any */
+  out.managed = sw(own("managed")) === true;
+  out.shared = sw(own("sharedcomputer")) === true;
+  const personal = sw(own("allowpersonalaccounts"));
+  out.personal = personal === null ? !out.managed : personal; /* plant:mp-personal */
+  let bad = false, kind = "";
+  const pv = own("signinprovider");
+  if (pv && !(text(pv) && String(pv.value).trim() === "")) {
+    const s = text(pv) ? String(pv.value).trim().toLowerCase() : "";
+    if (s === "microsoft" || s === "google") out.provider = s; else bad = true; /* plant:mp-provider */
+  }
+  const tv = own("signintenant");
+  if (tv && !(text(tv) && String(tv.value).trim() === "")) {
+    const s = text(tv) ? String(tv.value).trim().toLowerCase() : "";
+    if (MANAGED_TENANT_ID.test(s)) { out.tenant = s; kind = "microsoft"; }
+    else if (MANAGED_TENANT_DOMAIN.test(s)) { out.tenant = s; kind = "google"; }
+    else bad = true; /* plant:mp-tenant */
+  }
+  out.closed = bad || (!!out.provider && !!kind && out.provider !== kind); /* plant:mp-closed */
+  if (!out.provider) out.provider = kind;
+  if (out.closed) { out.provider = ""; out.tenant = ""; }
+  const cv = own("supportcontact");
+  if (text(cv)) {
+    const s = String(cv.value).trim();
+    if (s.length <= MANAGED_CONTACT_MAX && !/[\u0000-\u001f\u007f]/.test(s)) out.contact = s; /* plant:mp-contact */
+  }
+  return out;
+}
+/* The machine's answer, once a run, as the team values are read. */
+function managedPolicy() {
+  try { readJoinPolicy("en"); } catch { /* no policy is read as none */ }
+  return managedPolicyFrom(joinPolicyRead && joinPolicyRead.values);
+}
 /* THE DESK'S OPTIONAL CUSTOMER MODEL (board 992). Off by default; on, the organisation's own service ranks the search and the
    suggestions, and deskAiConfig is the one place its address and key are handed on. The person's choice and fields are kept in
    desk-ai.json beside desk.json, the key apart in desk-ai-key.json, sealed by safeStorage with the address it was given for,
@@ -9182,6 +9236,40 @@ const SIGNIN_CLIENT = /^[A-Za-z0-9][A-Za-z0-9._-]{7,199}$/;
 const SIGNIN_FORM_MAX = 16 * 1024, SIGNIN_ANSWER_MAX = 256 * 1024, SIGNIN_TIMEOUT_MS = 30 * 1000, SIGNIN_WAIT_MS = 5 * 60 * 1000;
 const SIGNIN_SKEW_MS = 5 * 60 * 1000;
 function signinKnown(id) { return Object.prototype.hasOwnProperty.call(SIGNIN_PROVIDERS, String(id)) ? SIGNIN_PROVIDERS[String(id)] : null; }
+/* The tenant of personal Microsoft accounts, as Microsoft's ID token reference names it in `tid`. */
+const SIGNIN_PERSONAL_TENANT = "9188040d-6c67-4c5b-b112-36a304b66dad";
+/* THE TABLE UNDER A MANAGED INSTALLATION'S PINS (managedPolicyFrom's answer `pol`): only the provider it names, none where it is
+   closed; Microsoft asked at the tenant, or at "organizations" with personal accounts off; Google hinted its domain. Each such entry
+   carries the `pin` its tokens are held to (signinPinOk). With no pin the table itself comes back, so nothing changes. Pure. */
+function signinPinTable(table, pol) {
+  const p = pol || {};
+  if (!p.closed && !p.provider && !p.tenant && p.personal !== false) return table; /* plant:pin-none */
+  const out = {};
+  if (p.closed) return Object.freeze(out); /* plant:pin-closed */
+  for (const id of Object.keys(table || {})) {
+    if (p.provider && id !== p.provider) continue; /* plant:pin-provider */
+    const e = table[id];
+    if (id === "microsoft") {
+      const at = p.tenant || (p.personal === false ? "organizations" : "");
+      out[id] = !at ? e : Object.freeze(Object.assign({}, e, { authorize: e.authorize.replace("/common/", "/" + at + "/"), /* plant:pin-ms-at */
+        token: e.token.replace("/common/", "/" + at + "/"), pin: Object.freeze(p.tenant ? { tid: p.tenant } : { work: "microsoft" }) }));
+    } else if (id === "google") {
+      out[id] = p.tenant ? Object.freeze(Object.assign({}, e, { extra: Object.freeze(Object.assign({}, e.extra, { hd: p.tenant })), pin: Object.freeze({ hd: p.tenant }) }))
+        : p.personal === false ? Object.freeze(Object.assign({}, e, { pin: Object.freeze({ work: "google" }) })) : e;
+    }
+  }
+  return Object.freeze(out);
+}
+/* Whether the ID token's claims `c` meet the entry's `pin`: the tenant's tid, the domain's hd, or a work account's (a tid other than
+   personal accounts', or any hd). The hint asked for is never trusted alone. */
+function signinPinOk(pin, c) {
+  if (!pin) return true;
+  const tid = typeof c.tid === "string" ? c.tid.toLowerCase() : "", hd = typeof c.hd === "string" ? c.hd.toLowerCase() : "";
+  if (pin.tid) return tid === pin.tid; /* plant:pin-tid */
+  if (pin.hd) return hd === pin.hd; /* plant:pin-hd */
+  if (pin.work === "microsoft") return SIGNIN_TENANT.test(tid) && tid !== SIGNIN_PERSONAL_TENANT; /* plant:pin-work-ms */
+  return pin.work === "google" && hd !== ""; /* plant:pin-work-g */
+}
 /* THE SIGN-IN PREVIEW: ETIUDA_SIGNIN_PREVIEW=1, read once at the start and never from the page, an installed desk included, names
    both providers on the door and in Account, drawn as a preview, while none has a client id; a press is answered "signin-preview"
    and nothing is opened, sent or written. Where any provider has a client id it changes nothing. */
@@ -9353,9 +9441,11 @@ function signinOurs(query, pending) {
 }
 /* A provider's refusal named: its organisation not consenting to Etiuda (Microsoft's consent and admin-consent codes, Google's
    admin policy) is "signin-notallowed", the person's own Cancel "signin-cancelled", anything else "signin-refused". AADSTS65004 is
-   the person declining the consent page, a Cancel of their own, so it is read before the organisation's codes. */
+   the person declining the consent page, a Cancel of their own, so it is read before the organisation's codes. AADSTS50105, an
+   account the organisation has not assigned to Etiuda, is "signin-notassigned", whatever `error` says. */
 function signinRefusedWhy(error, said) {
   if (/\bAADSTS65004\b/.test(String(said || ""))) return "signin-cancelled"; /* plant:declined */
+  if (/\bAADSTS50105\b/.test(String(said || ""))) return "signin-notassigned"; /* plant:not-assigned */
   if (error === "consent_required" || error === "admin_policy_enforced" || /\bAADSTS(65001|90094|90095)\b/.test(String(said || ""))) return "signin-notallowed"; /* plant:not-allowed */
   return error === "access_denied" ? "signin-cancelled" : "signin-refused";
 }
@@ -9406,6 +9496,7 @@ function signinTokens(res, p, nonce, now, sub) {
   const aud = c ? [].concat(c.aud) : [];
   if (!c || aud.indexOf(p.clientId) < 0 || !signinIssuerOk(p, c) || !(Number(c.exp) * 1000 > now - SIGNIN_SKEW_MS)
     || typeof c.sub !== "string" || !c.sub) return { ok: false, reason: "signin-token" };
+  if (!signinPinOk(signinKnown(p.id).pin, c)) return { ok: false, reason: "signin-tenant" }; /* plant:token-pin */
   if (sub !== undefined && !signinSame(c.sub, sub)) return { ok: false, reason: "signin-other" }; /* plant:renew-sub */
   const renewal = sub !== undefined && c.nonce === undefined; /* plant:renew-none */
   if (!renewal && (typeof c.nonce !== "string" || !signinSame(c.nonce, nonce))) return { ok: false, reason: "signin-unbound" }; /* plant:token-nonce */
@@ -9512,10 +9603,13 @@ function signinLandingHtml(kind, lang) {
 }
 /* How the sign-in ended, as the landing says it: `got` signinRun's, `ans` the service's where it was asked. The desk is signed in
    with no seat where the service gave a code without a certificate, or said "full" (signinTake keeps both). */
-function signinLanding(got, ans) {
+function signinLanding(got, ans, managed) {
   if (!got || got.ok !== true) {
     const why = got ? got.reason : "";
     if (why === "signin-cancelled") return "cancelled";
+    /* "org" offers another account, which a managed computer does not (decision 49). */
+    if (managed === true) return "appfail"; /* plant:land-managed */
+    if (why === "signin-notassigned") return "org"; /* plant:land-not-assigned */
     return why === "signin-notallowed" ? "org" : "appfail"; /* plant:land-org */
   }
   if (!ans) return "appfail";
@@ -9885,8 +9979,8 @@ function signinSettleSeat(held, ans, now) {
   return Object.assign({}, held, { checked: now, reached: true, said: ans.reason, ask: freed || held.ask === true,
     refresh: freed ? "" : held.refresh }); /* plant:settle-freed */
 }
-/* The reasons a provider's refresh forgets its token: it no longer takes it, or the token it gives is not this seat's. */
-const SIGNIN_LOST = Object.freeze(["signin-ask", "signin-expired", "signin-other", "signin-unbound"]);
+/* The reasons a provider's refresh forgets its token: it no longer takes it, or the token it gives is not this seat's or not the pinned tenant's. */
+const SIGNIN_LOST = Object.freeze(["signin-ask", "signin-expired", "signin-other", "signin-unbound", "signin-tenant"]);
 /* One quiet renewal of `held`: the provider's refresh, then signin/desk with no seed. `io` {tokenAsk, serviceAsk, sign, keep(text),
    kept(sealed)}. {held, said}; whatever fails, the code, the certificate and the provider stay, so the desk works on. */
 async function signinRenewHeld(io, p, deskKey, held, now) {
@@ -9986,11 +10080,16 @@ if (!INSTALLED && !app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) { /* plant:l
 function signinLabHeld() {
   return signinLabOn && !!signinState().held; /* plant:lab-held */
 }
+/* The state, read once. Its first read also pins the providers to machine policy, before the file is judged by them and before any
+   view, press or renewal, each of which reads the state first; `managed` rides beside it, unwritten, for every caller. */
 function signinState() {
   if (signinStore !== undefined) return signinStore;
+  const managed = managedPolicy();
+  SIGNIN_PROVIDERS = signinPinTable(SIGNIN_PROVIDERS, managed); /* plant:pin-taken */
   let text = "";
   try { text = fs.readFileSync(path.join(app.getPath("userData"), SIGNIN_FILE), "utf8"); } catch { text = ""; }
   signinStore = signinFileRead(text, SIGNIN_DESK_PACKED); /* plant:door-file-packed */
+  signinStore.managed = managed;
   return signinStore;
 }
 function signinSave() {
@@ -10131,10 +10230,10 @@ ipcMain.handle("etiuda:signin-door", (e, n) => {
    the last try reached it; the provider's
    page of the sign-in that waits, and nothing once it ends; and whether this system keeps a sign-in (sealsForReal). */
 function signinView() {
-  const real = signinOffered().map(p => p.id), held = signinState().held, now = Date.now(), preview = signinPreviewing();
+  const st = signinState(), held = st.held, real = signinOffered().map(p => p.id), now = Date.now(), preview = signinPreviewing();
   const offered = preview ? Object.keys(SIGNIN_PROVIDERS) : real;
   const signedIn = held && real.indexOf(held.provider) >= 0 ? held.provider : "";
-  return { offered: offered, preview: preview, signedIn: signedIn, code: signedIn ? held.code : "",
+  const view = { offered: offered, preview: preview, signedIn: signedIn, code: signedIn ? held.code : "",
     seat: !signedIn ? "" : held.cert ? (signinLapsed(held, now) ? "lapsed" : "held") : "none",
     deskOnly: !!signedIn && !!held.cert && held.cert.deskOnly === true, /* plant:view-desk-only */
     at: signedIn ? held.at : 0, reached: !signedIn || held.reached !== false, ask: !!signedIn && held.ask === true,
@@ -10142,6 +10241,10 @@ function signinView() {
     doors: signedIn ? signinDoorsShown(held, now) : [],
     outOwed: !signedIn && !!signinState().out && !signinOutFlight, /* plant:out-owed-view */
     link: signinBusy && signinPageOk(signinBusy.url) ? signinBusy.url : "", keeps: sealsForReal(safeStorage, process.platform) }; /* plant:view-link */
+  /* Only where machine policy sets any of its six values, so an unmanaged desk's view is the same object as before. */
+  const m = st.managed;
+  if (m && m.any) view.managed = { on: m.managed, shared: m.shared, personal: m.personal, provider: m.provider, tenant: !!m.tenant, closed: m.closed, contact: m.contact }; /* plant:view-managed */
+  return view;
 }
 function tellSignin() {
   const win = theWindow;
@@ -10181,6 +10284,14 @@ function signinTake(provider, got, ans, now) {
   signinSave();
   return true;
 }
+/* A MANAGED COMPUTER THAT IS NOT SHARED KEEPS ITS ACCOUNT (decision 49): true where state `st` holds a sign-in whose account can be
+   opened and `sub` is another's. A sub that can no longer be opened lets the sign-in through, so a lost keyring never locks the desk. */
+function signinOtherHeld(st, sub) {
+  const m = st && st.managed;
+  if (!m || !m.managed || m.shared || !st.held || !st.held.sub) return false; /* plant:other-held */
+  const was = signinKept(safeStorage, st.held.sub);
+  return !!was && !signinSame(was, String(sub)); /* plant:other-same */
+}
 /* The person's sign-in, for a trusted click on one of the page's provider buttons (the preload's signin-click), one at a time. */
 ipcMain.on("etiuda:signin-click", (e, provider) => {
   e.returnValue = null;
@@ -10193,6 +10304,7 @@ ipcMain.on("etiuda:signin-state", (e) => {
 });
 ipcMain.handle("etiuda:signin", async (e, provider) => {
   if (!fromEngine(e)) return null;
+  const st = signinState(), managed = !!(st.managed && st.managed.managed);
   const id = String(provider || ""), c = signinClick;
   signinClick = null;
   if (!c || c.provider !== id || Date.now() - c.at > LINK_CLICK_MS || signinBusy) return signinView(); /* plant:signin-click */
@@ -10208,14 +10320,15 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
   tellSignin();
   let landing = "appfail";
   try {
-    const got = await signinRun(io, p, me.key, Date.now);
+    let got = await signinRun(io, p, me.key, Date.now);
+    if (got.ok && signinOtherHeld(st, got.sub)) got = { ok: false, reason: "signin-other" }; /* plant:managed-same */
     if (got.ok) {
       const ans = await signinSeat(io, p.id, me.key, got.idToken, got.seed, Date.now);
       signinTake(p.id, got, ans, Date.now());
       signinFlush();
       signinSaid = ans.ok ? "signin-done" : ans.reason;
-      landing = signinLanding(got, ans);
-    } else { signinSaid = got.reason; landing = signinLanding(got); }
+      landing = signinLanding(got, ans, managed);
+    } else { signinSaid = got.reason; landing = signinLanding(got, undefined, managed); }
   } catch { signinSaid = "unreached"; }
   finally {
     signinBusy = null;
@@ -10247,6 +10360,7 @@ ipcMain.handle("etiuda:signin-stop", (e) => {
 function signinOutNow() {
   if (signinBusy) return signinView();
   const s = signinState(), me = branchIdentity(false);
+  if (s.managed && s.managed.managed && !s.managed.shared) return signinView(); /* plant:out-managed */
   if (s.held && me && (!harnessLaunch() || signinLabHeld()) && net && typeof net.fetch === "function"
     && signinOffered().length) { /* plant:signout-offered */
     s.out = me.key;
@@ -10349,11 +10463,14 @@ function orderAddress(page, code) {
   if (typeof page !== "string" || !ORDER_PAGE_SHAPE.test(page)) return ""; /* plant:order-page */
   return page + (typeof code === "string" && /^[0-9A-Z]{16}$/.test(code) ? "#code=" + code : ""); /* plant:order-fragment */
 }
+/* A managed computer offers no Buy (decision 49): the state says none, and a click or an open names no address. */
+function buyManaged(v) { return !!(v && v.managed && v.managed.on === true); }
 function buyAddress() {
   const v = signinView();
+  if (buyManaged(v)) return ""; /* plant:buy-managed */
   return orderAddress(ORDER_PAGE, v && v.code);
 }
-ipcMain.on("etiuda:buy-state", (e) => { e.returnValue = fromEngine(e) ? { offer: !!orderAddress(ORDER_PAGE, "") } : null; });
+ipcMain.on("etiuda:buy-state", (e) => { e.returnValue = fromEngine(e) ? { offer: !buyManaged(signinView()) && !!orderAddress(ORDER_PAGE, "") } : null; }); /* plant:buy-state-managed */
 /* Buy leaves as the release page does (etiuda:update-click): the preload names a trusted click on it, which stands for the address
    the shell builds now, and the open goes through openExternally. The page never names an address. */
 ipcMain.on("etiuda:buy-click", (e) => {
