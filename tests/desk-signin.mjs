@@ -52,9 +52,7 @@ const PLANTS = 77;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-/* The service's own answers (ds23): four checks. */
-const ANSWER_CHECKS = 4;
-const EXPECTED = 91 + TRACE_CHECKS + ANSWER_CHECKS + (PLANTS_OFF ? 0 : PLANTS + TRACE_PLANTS);
+const EXPECTED = 91 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + TRACE_PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2334,7 +2332,9 @@ if (!PLANTS_OFF) {
     "dsp14 plant a sign-in gate on the desk file's write turns ds5a red");
 }
 
-console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED + " plants=" + (PLANTS_OFF ? 0 : PLANTS));
-if (asserted !== EXPECTED) { console.log("FAIL the run made " + asserted + " checks of " + EXPECTED + ": it did not complete"); failed++; }
+/* The service's own answers (ds23): four checks, counted apart so the legs' own sum stays where its builders keep it. */
+const ANSWER_CHECKS = 4;
+console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + (EXPECTED + ANSWER_CHECKS) + " plants=" + (PLANTS_OFF ? 0 : PLANTS));
+if (asserted !== EXPECTED + ANSWER_CHECKS) { console.log("FAIL the run made " + asserted + " checks of " + (EXPECTED + ANSWER_CHECKS) + ": it did not complete"); failed++; }
 console.log(failed ? "desk-signin: " + failed + " failed" : "desk-signin: all " + asserted + " passed");
 process.exit(Math.min(failed, 63));
