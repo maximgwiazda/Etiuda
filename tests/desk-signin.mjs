@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 81;
+const PLANTS = 84;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 94 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + TRACE_PLANTS);
+const EXPECTED = 95 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + TRACE_PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1890,6 +1890,36 @@ CASES.waitPage = async (s, page) => {
     && !/has no free seat\."|can free a seat or add one/.test(L + PAGE + SETTINGS);
 };
 
+/* ---- no refresh token or an unopened sub asks for sign-in again (ds20): Google asks offline, and Check now / daily renewal
+   set ask: true with the copywriter's words instead of doing nothing or failing as signin-unbound ---- */
+const ASK_EN = ["This computer could not renew its sign-in by itself.", "Signing in again renews it."];
+const ASK_PL = ["Ten komputer nie zdołał sam odnowić logowania.", "Wystarczy zalogować się ponownie."];
+CASES.renewAsk = async (s, swap) => {
+  const sec = typeof swap === "string" ? s : s;
+  const gUrl = new URL(sec.signinAuthorize(G, 50000, DESK_KEY).url);
+  const st = wireStand(sec, () => answer({ id_token: jwt(msClaims(undefined, Date.now())) }));
+  st.store.held = heldOf({ refresh: "" });
+  const said = await loadWire(st, Array.isArray(swap) ? swap : undefined).signinRenewNow();
+  const ioSub = renewIo(answer({ id_token: jwt(msClaims(undefined)) }), answer({}));
+  ioSub.kept = x => (x === "sealed:rt-1" ? "rt-1" : "");
+  const badSub = await sec.signinRenewHeld(ioSub, MS, DESK_KEY, heldOf(), () => NOW);
+  if (!P) return false;
+  const storage = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const words = h => String(h).replace(/<[^>]*>/g, "").replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+  const vAsk = view({ signedIn: "microsoft", code: CODE, seat: "held", ask: true });
+  const doorEn = P.signinDoor(vAsk), acctEn = words(await acctOf(vAsk));
+  let doorPl = null;
+  storage.lsSet("eUiLang", "pl");
+  try { doorPl = P.signinDoor(vAsk); } finally { storage.lsSet("eUiLang", "en"); }
+  return gUrl.searchParams.get("access_type") === "offline"
+    && said === "signin-ask" && st.asked === 0 && st.posted === 0 && st.saves === 1 && st.tells === 1
+    && st.store.held.ask === true && st.store.held.refresh === "" && !!st.store.held.cert && st.store.held.code === CODE
+    && badSub.said === "signin-ask" && badSub.held.ask === true && badSub.held.refresh === "" && ioSub.asked.length === 0 && ioSub.posted.length === 0
+    && doorEn && doorEn.moment === "ask" && doorEn.say[0] === ASK_EN[0] && doorEn.say[1] === ASK_EN[1]
+    && acctEn.indexOf(ASK_EN[0] + ASK_EN[1]) >= 0
+    && doorPl && doorPl.say[0] === ASK_PL[0] && doorPl.say[1] === ASK_PL[1];
+};
+
 /* ---- the cases on the branch ------------------------------------------------------------------------------------------- */
 const LEGS = [
   ["ds1a", "offered", "as shipped no client id is configured and nothing is offered; a configured table offers what it configures, in order"],
@@ -1975,6 +2005,7 @@ const LEGS = [
   ["ds18a", "waitRead", "no free seat is a wait: the service's 200 with no certificate and the reason \"waiting\" is kept as the said reason with the refresh token, asking nobody; none without it stays no licence; the certificate after it ends the wait; a 409 \"full\" reads as before"],
   ["ds18b", "waitRenew", "the quiet renewal while waiting waits again with its token renewed and nobody asked, and seats the desk once a seat frees; an older service's \"full\" keeps its token as before"],
   ["ds18c", "waitPage", "the door and Account tell the wait in the copywriter's words, the licence form and the team form, English and Polish, Check now first; an older service's \"full\" the same; no licence its own moment; today's words gone"],
+  ["ds20a", "renewAsk", "Google authorizes with access_type=offline; a renewal with no refresh token or an unopenable sub asks for sign-in again without reaching the provider, in the copywriter's English and Polish words"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
@@ -2308,6 +2339,12 @@ if (!PLANTS_OFF) {
   await plantPage("dsp81", ["function signinNoSeat(v){ return v.refused===\"waiting\" || v.refused===\"full\"; } /* plant:no-seat */",
     "function signinNoSeat(v){ return v.refused===\"full\"; }"], "waitPage");
   await plantPage("dsp82", ["case \"waiting\": case \"full\": /* plant:wait-say */", "case \"full\":"], "waitPage");
+  await plant("dsp87", ["extra: Object.freeze({ prompt: \"select_account\", access_type: \"offline\" }) }), /* plant:google-offline */",
+    "extra: Object.freeze({ prompt: \"select_account\" }) }),"], "renewAsk");
+  await plantWire("dsp88", ["if (!held || signinBusy) return \"\"; /* plant:renew-no-token */",
+    "if (!held || !held.refresh || signinBusy) return \"\";"], "renewAsk");
+  await plant("dsp89", ["const got = token && sub ? await signinRenew(io, p, deskKey, token, held.seed, sub, now) : { ok: false, reason: \"signin-ask\" }; /* plant:renew-sub-kept */",
+    "const got = token ? await signinRenew(io, p, deskKey, token, held.seed, sub, now) : { ok: false, reason: \"signin-ask\" };"], "renewAsk");
   /* A gate on a local act, put into the desk file's write in memory, is seen. */
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),

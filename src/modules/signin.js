@@ -101,7 +101,7 @@ function signinSay(reason, v, p){
     case "lapsed":
       return [t("This desk's seat is due for renewal."), t("It renews by itself the next time the sign-in service answers. Everything on this desk works as before.")];
     case "ask":
-      return [t("This desk could not renew its sign-in by itself."), t("Signing in again below picks up where it stopped. Meanwhile everything on this desk works as before.")];
+      return [t("This computer could not renew its sign-in by itself."), t("Signing in again renews it.")];
     case "signin-preview":
       return [t("Sign-in is not set up yet, so nothing was sent. This is a preview."), ""];
     case "door":
