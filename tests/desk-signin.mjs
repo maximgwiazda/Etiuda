@@ -1898,7 +1898,7 @@ const WAIT_TEAM_PL = ["W zespole Ada's team nie ma teraz wolnego miejsca.",
 CASES.waitRead = s => {
   const a = (o, st) => s.signinAnswer(answer(o, st), DESK_KEY);
   const wait = a({ ok: true, certificate: null, code: CODE, reason: "waiting" }), none = a({ ok: true, certificate: null, code: CODE });
-  const other = a({ ok: true, certificate: null, code: CODE, reason: "elsewhere" }), full = a({ ok: false, reason: "full" }, 409);
+  const other = s.signinAnswer(strayAnswer({ ok: true, certificate: null, code: CODE, reason: "elsewhere" }), DESK_KEY), full = a({ ok: false, reason: "full" }, 409);
   const base = { provider: "microsoft", refresh: "sealed:rt", sub: "sealed:s", seed: SEED, code: "", cert: null, at: 0, checked: NOW, reached: true, said: "", ask: false, doors: [] };
   const held = s.signinSettle(base, wait, NOW), seated = s.signinSettle(held, { ok: true, code: CODE, cert: cert({ issued: NOW + 1 }), doors: [] }, NOW + 1);
   const noLic = s.signinSettle(base, none, NOW), old = s.signinSettle(base, full, NOW);
@@ -1914,7 +1914,7 @@ CASES.waitRenew = async s => {
   const waiting = heldOf({ cert: null, said: "waiting" });
   const again = await s.signinRenewHeld(renewIo(tok(), answer({ ok: true, certificate: null, code: CODE, reason: "waiting" })), MS, DESK_KEY, waiting, () => NOW);
   const next = cert({ issued: NOW + 5, until: NOW + 5 + 30 * 86400000 });
-  const seated = await s.signinRenewHeld(renewIo(tok(), answer({ ok: true, certificate: next, code: CODE })), MS, DESK_KEY, again.held, () => NOW + 5);
+  const seated = await s.signinRenewHeld(renewIo(tok(), answer({ ok: true, certificate: next, code: CODE, doors: [] })), MS, DESK_KEY, again.held, () => NOW + 5);
   const full = await s.signinRenewHeld(renewIo(tok(), answer({ ok: false, reason: "full" }, 409)), MS, DESK_KEY, heldOf({ cert: null, said: "full" }), () => NOW);
   return again.held.said === "waiting" && again.held.cert === null && again.held.refresh === "sealed:rt-2" && again.held.ask === false && again.held.reached === true
     && seated.said === "renewed" && seated.held.said === "" && !!seated.held.cert && seated.held.cert.issued === NOW + 5
@@ -2029,7 +2029,7 @@ CASES.checkGap = async (s, swap) => {
 /* A renewal that reached its end leaves no stale press's refusal standing: the press's said is cleared with it. */
 CASES.saidCleared = async (s, swap) => {
   const next = cert({ issued: Date.now(), until: Date.now() + 30 * 86400000 });
-  const st = wireStand(s, () => answer({ id_token: jwt(msClaims(undefined, Date.now())), refresh_token: "rt-2" }), () => answer({ ok: true, certificate: next, code: CODE }));
+  const st = wireStand(s, () => answer({ id_token: jwt(msClaims(undefined, Date.now())), refresh_token: "rt-2" }), () => answer({ ok: true, certificate: next, code: CODE, doors: [] }));
   st.store.held = heldOf();
   st.said = "signin-unreached";
   const w = loadWire(st, swap);
@@ -2210,7 +2210,7 @@ CASES.signoutAfterRenew = async (s, swap) => {
     serviceAsk: async url => {
       if (url === s.SIGNOUT_SERVICE) { order.push("out"); return answer({ ok: true }); }
       order.push("renew"); await gate; order.push("answered");
-      return answer({ ok: true, code: CODE, certificate: cert({ issued: Date.now(), until: Date.now() + 86400000 }) });
+      return answer({ ok: true, code: CODE, certificate: cert({ issued: Date.now(), until: Date.now() + 86400000 }), doors: [] });
     } });
   const w = loadWire(st, swap), renewing = w.signinRenewNow();
   await tick(5);
