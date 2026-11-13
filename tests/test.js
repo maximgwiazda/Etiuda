@@ -3835,6 +3835,17 @@ function fifthTests() {
    fileAssociations, and shell/installer.nsh's customInstall writes the Polish over it when the
    installer runs in Polish. Read here against electron-builder's own templates and language table;
    what Explorer shows on a Polish Windows is Maxim's to see. */
+/* makensis started by the kind of file it is, never by process.platform: the NSIS 3.12 bundle's makensis is a .cmd, which Node will not
+   start bare (spawnSync answers EINVAL, board 996), and cross-spawn reads process.platform to decide, which tests/engine-selftest.js's
+   Linux arm sets to "linux" on a Windows desk (30a, 2026-11-13). A .cmd or .bat goes through cmd.exe as cross-spawn would send it on
+   Windows; anything else is started as it is, which is the only kind a real Linux bundle has. */
+function runMakensis(mkPath, args, opts) {
+  const cp = require("child_process");
+  if (!/\.(cmd|bat)$/i.test(String(mkPath))) return cp.spawnSync(mkPath, args, opts);
+  const line = ['"' + mkPath + '"'].concat(args.map(a => (/[\s"]/.test(a) ? '"' + String(a).replace(/"/g, '""') + '"' : a))).join(" ");
+  return cp.spawnSync(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", '"' + line + '"'], Object.assign({}, opts, { windowsVerbatimArguments: true }));
+}
+
 /* WHAT A BUILD'S INSTALLER WRITES AROUND customInstall, as electron-builder's own makensis
    preprocesses it: the include, then registerFileAssociations only if the build declares a type,
    then installSection.nsh's own lines that insert both. Registry writes come back with the
@@ -3870,7 +3881,7 @@ function nsisInstallWrites(root, cfg) {
   try { mk = JSON.parse(String(where.stdout).trim().split(/\r?\n/).pop()); } catch (e) { return "electron-builder named no makensis: " + String(where.stderr).trim(); }
   /* cross-spawn, as electron-builder starts it: the NSIS 3.12 bundle's makensis is a .cmd, which Node will not start bare
      (spawnSync answers EINVAL with no output, which read "refused the script: NaN" here, board 996). */
-  const r = require(path.join(root, "node_modules", "cross-spawn")).sync(mk.path, ["-INPUTCHARSET", "UTF8", "-OUTPUTCHARSET", "UTF8", "-SAFEPPO", "-"],
+  const r = runMakensis(mk.path, ["-INPUTCHARSET", "UTF8", "-OUTPUTCHARSET", "UTF8", "-SAFEPPO", "-"],
     /* Off Windows makensis prints in the locale's charset whatever -OUTPUTCHARSET says, and under C a Polish letter comes back "?". */
     { input: script, encoding: "utf8", env: Object.assign({}, process.env, process.platform === "win32" ? {} : { LC_ALL: "C.UTF-8" }, mk.env || {}) });
   if (r.status !== 0) return "makensis refused the script: " + (String((r.stdout || "") + (r.stderr || "")).trim().split(/\r?\n/).slice(-2).join(" / ") || String(r.error || "no output"));
@@ -3968,7 +3979,7 @@ function installerUpdateTests() {
       "!define PRODUCT_NAME \"Etiuda Studio\"",
       "!include /CHARSET=UTF8 \"" + path.join(root, "shell", "installer.nsh") + "\"",
       "Section", "!insertmacro customCheckAppRunning", "!insertmacro customRemoveFiles", "SectionEnd", ""].join("\n");
-    const r = cp.spawnSync(mk.path, ["-INPUTCHARSET", "UTF8", "-OUTPUTCHARSET", "UTF8", "-SAFEPPO", "-"],
+    const r = runMakensis(mk.path, ["-INPUTCHARSET", "UTF8", "-OUTPUTCHARSET", "UTF8", "-SAFEPPO", "-"],
       { input: script, encoding: "utf8", env: Object.assign({}, process.env, process.platform === "win32" ? {} : { LC_ALL: "C.UTF-8" }, mk.env || {}) });
     const out = String(r.stdout || "");
     const named = s => out.indexOf(s.split("${PRODUCT_NAME}").join("Etiuda Studio")) > -1;
