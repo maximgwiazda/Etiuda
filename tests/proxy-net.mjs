@@ -38,7 +38,7 @@ const nodeRequire = createRequire(import.meta.url);
 const NET_FILE = process.env.PROXY_NET_FILE || path.join(ROOT, "shell", "proxy-net.cjs");
 const MAIN_FILE = process.env.PROXY_MAIN_FILE || path.join(ROOT, "shell", "main.js");
 const ONLY = process.env.PROXY_NET_ONLY || "";
-const EXPECTED = 61;
+const EXPECTED = 63;
 const USER = "proxy-person", PASS = "invented-" + crypto.randomBytes(4).toString("hex");
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -262,6 +262,9 @@ async function p3() {
   stop.abort();
   const why = await pending.then(() => "answered", e => e.name);
   check(why === "AbortError" && N4.made[0].aborted === true, "p3e an abort rejects the call and aborts the request: " + why);
+  const N5 = standNet([], "x");
+  await (await P.fetchThrough(N5, "https://etiuda.dev/relay/v1/x", { credentials: "omit" }, A.forRequest())).text();
+  check(N5.made[0].opts.credentials === "omit", "p3f a call made with credentials omit reaches net.request with omit: " + N5.made[0].opts.credentials);
 }
 
 async function p4() {
@@ -432,11 +435,12 @@ async function p7() {
   const deskFetchText = slice(src, "deskFetch"), relayConnectText = slice(src, "relayConnect"), relayRequestText = slice(src, "relayRequest");
   let listener = null;
   const netStand = { request: () => ({}) };
-  const proxyNet = { fetchThrough: (n, u, i, l) => { listener = l; return Promise.resolve("sent"); }, proxiedConnect: (u, h, on, o) => ({ via: "proxy", o }) };
+  let handed = null;
+  const proxyNet = { fetchThrough: (n, u, i, l) => { listener = l; handed = i; return Promise.resolve("sent"); }, proxiedConnect: (u, h, on, o) => ({ via: "proxy", o }) };
   const deskProxy = { forRequest: () => "the-listener" };
   let out = null;
-  try { out = await new Function("net", "proxyNet", "deskProxy", deskFetchText + "\nreturn deskFetch('https://etiuda.dev/x', {});")(netStand, proxyNet, deskProxy); } catch (e) { out = "threw " + e.message; }
-  check(out === "sent" && listener === "the-listener", "p7c deskFetch hands fetchThrough the asker's listener: " + out);
+  try { out = await new Function("net", "proxyNet", "deskProxy", deskFetchText + "\nreturn deskFetch('https://etiuda.dev/x', { credentials: 'omit' });")(netStand, proxyNet, deskProxy); } catch (e) { out = "threw " + e.message; }
+  check(out === "sent" && listener === "the-listener" && handed && handed.credentials === "omit", "p7c deskFetch hands fetchThrough the asker's listener and the call's own options, credentials among them: " + out);
   let r2 = null;
   try {
     const run = new Function("WebSocket", "session", "proxyNet", "deskProxy", "relaySocket", relayConnectText + "\nreturn relayConnect('wss://etiuda.dev/relay/v1/socket', {}, {});");
@@ -462,6 +466,7 @@ const PLANTS = [
   ["shell/proxy-net.cjs", "plant:ws-unmasked", "p5"],
   ["shell/proxy-net.cjs", "plant:proxy-resolve-bound", "p6"],
   ["shell/proxy-net.cjs", "plant:proxy-basic-scheme", "p4"],
+  ["shell/proxy-net.cjs", "plant:proxy-credentials", "p3"],
   /* Not lifted but rewritten: the platform's check turned off, which must open the socket p6h expects refused. */
   ["shell/proxy-net.cjs", "plant:proxy-tls-verify", "p6", 'ALPNProtocols: ["http/1.1"] })', 'ALPNProtocols: ["http/1.1"], rejectUnauthorized: false })'],
   ["shell/main.js", "plant:desk-fetch-login", "p7"],

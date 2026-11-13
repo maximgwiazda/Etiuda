@@ -109,7 +109,7 @@ function fetchThrough(electronNet, input, init, login) {
     req.signal.addEventListener("abort", () => { aborted = true; reject(reason()); try { r && r.abort(); } catch { /* gone */ } }, { once: true });
     const origin = req.headers.get("origin") || undefined;
     r = electronNet.request({ method: req.method, url: req.url, origin,
-      credentials: req.credentials === "same-origin" && !origin ? "include" : req.credentials,
+      credentials: req.credentials === "same-origin" && !origin ? "include" : req.credentials, /* plant:proxy-credentials */
       cache: req.cache, referrerPolicy: req.referrerPolicy, redirect: req.redirect });
     for (const [k, v] of req.headers) r.setHeader(k, v);
     r.on("login", (authInfo, callback) => { if (typeof login === "function") login(authInfo, callback); else callback(); }); /* plant:proxy-login-listener */

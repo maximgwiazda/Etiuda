@@ -5,7 +5,7 @@
 # RUNNER_TEMP, then placed over the checkout's, so a build never judges itself with a runner it changed. What they measure is the
 # checkout's shell/proxy-net.cjs and shell/win-proxy.cjs.
 #
-# The legs (tools/runner/proxy-legs.cjs says what each proves): basic-fetch, integrated-ntlm, system-proxy, pac, relay-socket.
+# The legs (tools/runner/proxy-legs.cjs says what each proves): basic-fetch, basic-fetch-omit, integrated-ntlm, integrated-ntlm-omit, system-proxy, pac, relay-socket.
 # system-proxy and pac write this runner account's own proxy setting and restore it before the leg ends.
 #
 # Electron runs as it is installed, with no --no-sandbox: the job's account is an ordinary Windows session, where Chromium's sandbox
@@ -26,7 +26,7 @@ on:
         required: true
         type: string
       legs:
-        description: Leg names separated by spaces (basic-fetch integrated-ntlm system-proxy pac relay-socket); empty runs all five
+        description: Leg names separated by spaces (basic-fetch basic-fetch-omit integrated-ntlm integrated-ntlm-omit system-proxy pac relay-socket); empty runs all seven
         required: false
         type: string
         default: ""

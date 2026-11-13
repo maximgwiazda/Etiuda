@@ -2,8 +2,8 @@
 /* A COMPANY PROXY, MEASURED AGAINST ELECTRON'S OWN NETWORK STACK ON A HOSTED WINDOWS RUNNER. An Electron main-process script that
  * opens no window:
  *
- *   npx electron tools/runner/proxy-legs.cjs --out <dir> [basic-fetch] [integrated-ntlm] [system-proxy] [pac] [relay-socket]
- *                                            on a hosted Windows runner only (see THE WALL); no leg named runs all five
+ *   npx electron tools/runner/proxy-legs.cjs --out <dir> [basic-fetch] [basic-fetch-omit] [integrated-ntlm] [integrated-ntlm-omit] [system-proxy] [pac] [relay-socket]
+ *                                            on a hosted Windows runner only (see THE WALL); no leg named runs all seven
  *
  * The stand-ins (tools/runner/proxy-stand-ins.cjs) run in this process on 127.0.0.1, with an answer invented per run and never
  * printed. Each measurement runs in a fresh Electron started from this file, so the switches it takes before ready are its own;
@@ -19,6 +19,9 @@
  *   integrated-ntlm  a proxy asking NTLM only, checking no account: fetchThrough reaches the origin and the asker is never asked,
  *                    so Chromium answered with the runner account's own sign-in. No control: nothing here can turn Chromium's
  *                    default credentials for a proxy off; plain net.fetch in a partition of its own is logged beside it.
+ *   basic-fetch-omit, integrated-ntlm-omit  the same two with the call's credentials "omit", as the relay's calls carry them:
+ *                    Electron documents that omit suppresses the login event for a 401, not whether it suppresses a proxy's 407 or
+ *                    Chromium's own answer to one. Green means a relay call keeping cookies off still passes the proxy.
  *   system-proxy     the account's own Windows setting (ProxyEnable 1, ProxyServer the stand-in), read by windowsProxySwitches
  *                    before ready as shell/main.js reads it: resolveProxy names the stand-in and a call goes through it. The
  *                    control is the setting as found; Chromium without the switches is logged beside it. Restored in finally.
@@ -44,7 +47,7 @@ const { spawn, spawnSync } = require("node:child_process");
 
 const ROOT = path.resolve(__dirname, "..", "..");
 const NO_VERDICT = 78;
-const LEG_NAMES = ["basic-fetch", "integrated-ntlm", "system-proxy", "pac", "relay-socket"];
+const LEG_NAMES = ["basic-fetch", "basic-fetch-omit", "integrated-ntlm", "integrated-ntlm-omit", "system-proxy", "pac", "relay-socket"];
 const CHILD_WAIT_MS = 120 * 1000;
 const CALL_WAIT_MS = 30 * 1000;
 const REG_TOOL = "C:\\Windows\\System32\\reg.exe";
@@ -122,7 +125,7 @@ const STEPS = {
     out.resolved = await ses.resolveProxy(S.ORIGIN + "/");
     out.control = await settle(net.fetch(S.ORIGIN + "/control", { cache: "no-store" }));
     const c = counted(cfg.answer);
-    out.through = await settle(PN.fetchThrough(net, S.ORIGIN + "/through", { cache: "no-store" }, c.asker.forRequest()));
+    out.through = await settle(PN.fetchThrough(net, S.ORIGIN + "/through", Object.assign({ cache: "no-store" }, cfg.credentials ? { credentials: cfg.credentials } : {}), c.asker.forRequest()));
     Object.assign(out, { asks: c.asks, askInfo: c.info, lines: c.lines });
   },
   "fetch-ntlm": async (cfg, out) => {
@@ -131,7 +134,7 @@ const STEPS = {
     await ses.setProxy({ proxyRules: "127.0.0.1:" + cfg.proxyPort });
     out.resolved = await ses.resolveProxy(S.ORIGIN + "/");
     const c = counted(null);
-    out.through = await settle(PN.fetchThrough(net, S.ORIGIN + "/ntlm", { cache: "no-store" }, c.asker.forRequest()));
+    out.through = await settle(PN.fetchThrough(net, S.ORIGIN + "/ntlm", Object.assign({ cache: "no-store" }, cfg.credentials ? { credentials: cfg.credentials } : {}), c.asker.forRequest()));
     Object.assign(out, { asks: c.asks, askInfo: c.info, lines: c.lines });
     /* A persistent partition of its own, so its connections are not the ones the call above signed in. */
     const other = session.fromPartition("persist:plain");
@@ -217,10 +220,11 @@ function record(name) {
   return rec;
 }
 
-async function basicFetch(rec) {
+async function basicFetch(rec, credentials) {
   const proxy = await S.startProxy({ mode: "basic", answer: ANSWER });
   rec.after("proxy", () => proxy.close());
-  const g = needResult(await runChild({ step: "fetch-basic", proxyPort: proxy.port, answer: ANSWER }));
+  const g = needResult(await runChild({ step: "fetch-basic", proxyPort: proxy.port, answer: ANSWER, credentials }));
+  rec.f("credentials", credentials || "default");
   const want = "PROXY 127.0.0.1:" + proxy.port;
   const ctl = at(proxy.log, "/control"), thr = at(proxy.log, "/through");
   rec.f("resolved", g.resolved); rec.f("control", callFact(g.control)); rec.f("control-log", seq(ctl));
@@ -233,10 +237,11 @@ async function basicFetch(rec) {
     : "fetchThrough " + callFact(g.through) + ", the proxy saw " + seq(thr) + ", the asker was asked " + g.asks + " time(s)");
 }
 
-async function integratedNtlm(rec) {
+async function integratedNtlm(rec, credentials) {
   const proxy = await S.startProxy({ mode: "ntlm" });
   rec.after("proxy", () => proxy.close());
-  const g = needResult(await runChild({ step: "fetch-ntlm", proxyPort: proxy.port }));
+  const g = needResult(await runChild({ step: "fetch-ntlm", proxyPort: proxy.port, credentials }));
+  rec.f("credentials", credentials || "default");
   const thr = at(proxy.log, "/ntlm");
   const t1 = thr.find(e => e.ntlm === 1), t3 = thr.find(e => e.ntlm === 3);
   rec.f("resolved", g.resolved); rec.f("through", callFact(g.through)); rec.f("through-log", seq(thr)); rec.f("asks", g.asks);
@@ -344,7 +349,8 @@ async function relaySocket(rec) {
       + (okB ? "" : "through NTLM: opened " + g.b.opened + ", closed " + g.b.closed + ", " + minute.length + " every-minute line(s), CONNECT " + connB));
 }
 
-const LEGS = { "basic-fetch": basicFetch, "integrated-ntlm": integratedNtlm, "system-proxy": r => systemLeg(r, "system-proxy"), "pac": r => systemLeg(r, "pac"), "relay-socket": relaySocket };
+const LEGS = { "basic-fetch": r => basicFetch(r), "basic-fetch-omit": r => basicFetch(r, "omit"), "integrated-ntlm": r => integratedNtlm(r),
+  "integrated-ntlm-omit": r => integratedNtlm(r, "omit"), "system-proxy": r => systemLeg(r, "system-proxy"), "pac": r => systemLeg(r, "pac"), "relay-socket": relaySocket };
 
 async function parent() {
   const self = process.argv.findIndex(a => { try { return path.resolve(a) === __filename; } catch { return false; } });
