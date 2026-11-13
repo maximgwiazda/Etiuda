@@ -52,7 +52,9 @@ const PLANTS = 77;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 91 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + TRACE_PLANTS);
+/* The service's own answers (ds23): four checks. */
+const ANSWER_CHECKS = 4;
+const EXPECTED = 91 + TRACE_CHECKS + ANSWER_CHECKS + (PLANTS_OFF ? 0 : PLANTS + TRACE_PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -105,14 +107,59 @@ function load(swap, where, invSwap) {
     inv = inv.replace(invSwap[0], invSwap[1]);
   }
   /* A name the slice lacks comes back undefined, so a case reaching for it fails alone rather than the whole file. */
-  const body = NEEDS + "\n" + sec + "\n" + inv + "\nreturn {" + NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
+  /* Every answer the section reads from the licence service passes the observer (ds23d), planted or not. */
+  const body = NEEDS + "\n" + sec + "\n" + inv + "\nif (typeof signinAnswer === \"function\") { const signinAnswerRead = signinAnswer;"
+    + " signinAnswer = function (res, deskKey, packed) { const r = signinAnswerRead(res, deskKey, packed); answerSeen(res, r); return r; }; }"
+    + "\nreturn {" + NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
     + ", live: () => ({ providers: SIGNIN_PROVIDERS, signin: SIGNIN_SERVICE, signout: SIGNOUT_SERVICE, on: typeof signinLabOn === \"undefined\" ? undefined : signinLabOn,"
     + " packed: signinPacked }), setPacked: v => { signinPacked = v; } };";
   /* inviteRead's own readers stand in: a folder is taken as written and no place is kept; a relay's address is the desk's own rule. */
   return new Function("crypto", "Buffer", "URLSearchParams", "AbortController", "setTimeout", "clearTimeout",
-    "inviteFolder", "placeKept", body)(crypto, Buffer, URLSearchParams, AbortController, setTimeout, clearTimeout,
-    f => String(f || ""), () => null);
+    "inviteFolder", "placeKept", "answerSeen", body)(crypto, Buffer, URLSearchParams, AbortController, setTimeout, clearTimeout,
+    f => String(f || ""), () => null, answerSeen);
 }
+/* THE SERVICE'S OWN ANSWERS (ds23; Hydrogen's review of the sign-in, findings 1 and 11: these legs once mocked "full" as a 409 the
+   service never gives). tests/signin-answers.json is every answer the licence service's signin/desk and signout/desk give, driven
+   from its core in Studio and written there (tests/licence-service.mjs --write-answers, s110), held here byte for byte; Studio's
+   s110c compares it with the pinned engine's copy, so neither tree moves alone. A certificate here is built from the recorded one,
+   and every answer a leg hands the desk is held to the record's shapes (ds23d). */
+const ANSWERS = (() => { try { return JSON.parse(fs.readFileSync(path.join(ROOT, "tests", "signin-answers.json"), "utf8")); } catch { return null; } })();
+const ANSWER_CASES = ANSWERS && ANSWERS.kind === "etiuda-signin-answers" && Array.isArray(ANSWERS.cases) ? ANSWERS.cases : [];
+/* An answer's shape: each object's names sorted, a fixed word kept, and a value that varies by run named by its class (an integer,
+   an address, hex or a code of its length), so a hand-built answer with this file's values meets the service's own. */
+function answerShape(v) {
+  if (v === null || typeof v === "boolean") return v;
+  if (typeof v === "number") return Number.isInteger(v) ? "<int>" : "<num>";
+  if (typeof v === "string") {
+    if (/^https?:\/\//.test(v)) return "<url>";
+    if (v.length >= 8 && /^[0-9a-f]+$/.test(v)) return "<hex" + v.length + ">";
+    if (v.length >= 8 && /^[0-9A-Z]+$/.test(v)) return "<A" + v.length + ">";
+    return v.replace(/[0-9a-f]{8,}/g, m => "<hex" + m.length + ">");
+  }
+  if (Array.isArray(v)) return Array.from(new Set(v.map(x => JSON.stringify(answerShape(x))))).sort();
+  if (typeof v === "object") return Object.fromEntries(Object.keys(v).sort().map(k => [k, answerShape(v[k])]));
+  return typeof v;
+}
+const answerSig = (status, body) => status + " " + JSON.stringify(answerShape(body));
+/* An answer an older service gave and this desk still reads, each naming when the service stopped giving it. Nothing else a
+   leg hands the desk may be read as meaning anything unless the record holds its shape. */
+const PAST_ANSWERS = [
+  { status: 409, body: { ok: false, reason: "full" }, until: "Studio 63614038, decision 32: no free seat is now the 200 \"waiting\" answer" },
+];
+const SERVED = new Set(ANSWER_CASES.filter(c => c.route === "signin/desk").map(c => answerSig(c.status, c.body))
+  .concat(PAST_ANSWERS.map(p => answerSig(p.status, p.body))));
+/* The observer: while the legs run (and not their plants), each answer the section read, with what it read. */
+const ANSWERS_READ = [];
+let answersWatched = true;
+let answersStray = 0;
+function answerSeen(res, r) {
+  if (!answersWatched) return;
+  if (res && res.stray === true) { answersStray++; return; }
+  let body;
+  try { body = JSON.parse(Buffer.from(res && res.bytes ? res.bytes : []).toString("utf8")); } catch { body = undefined; }
+  ANSWERS_READ.push({ status: res ? res.status : undefined, body, read: r });
+}
+
 let S = {};
 try { S = load(); } catch (e) { console.log("  (the section did not load: " + e.message + ")"); }
 
@@ -136,6 +183,9 @@ const msClaims = (nonce, at) => ({ iss: "https://login.microsoftonline.com/" + T
   iat: (at || NOW) / 1000, exp: (at || NOW) / 1000 + 3600, nonce: nonce });
 const gClaims = nonce => ({ iss: "https://accounts.google.com", aud: G_CLIENT, sub: "1001", email_verified: true, iat: NOW / 1000, exp: NOW / 1000 + 3600, nonce: nonce });
 const answer = (obj, status) => ({ status: status || 200, bytes: Buffer.from(JSON.stringify(obj)) });
+/* An answer the licence service never gives, handed on purpose to show the desk takes nothing from it beyond the service's own
+   shape. ds23d passes it by this mark alone and counts it; any other answer a leg hands the desk is held to tests/signin-answers.json. */
+const strayAnswer = (obj, status) => Object.assign(answer(obj, status), { stray: true });
 /* The service's own making of the nonce and of the desk's signed bytes, written here from the lines the interface names. */
 const serviceNonce = (key, seed) => crypto.createHash("sha256").update("etiuda-licence-signin-nonce\n" + key + "\n" + seed).digest("hex");
 const serviceBytes = (provider, idToken, desk, t) => Buffer.from("etiuda-licence-signin-desk\n" + [provider,
@@ -145,8 +195,9 @@ const signWith = k => bytes => crypto.sign(null, bytes, k.privateKey).toString("
    desk's public half and t, one a line. */
 const serviceOutBytes = (desk, t) => Buffer.from("etiuda-licence-signout-desk\n" + [desk, t].join("\n"), "utf8");
 const CODE = "7K3MQ9TV2XRBHN4W";
-const cert = over => Object.assign({ kind: "etiuda-seat-certificate", format: 1, licence: "a".repeat(32), desk: DESK_KEY, person: "b".repeat(64),
-  code: CODE, issued: NOW, until: NOW + 30 * 86400000, via: { kind: "etiuda-delegation" }, sig: { alg: "Ed25519", keyId: "svc-1", value: "c".repeat(128) } }, over);
+/* A certificate as the service makes one (the record's "seated" case), for this desk, this code and this window. */
+const SERVED_CERT = (() => { const c = ANSWER_CASES.find(x => x.case === "seated"); return c && c.body && c.body.certificate ? c.body.certificate : {}; })();
+const cert = over => Object.assign(JSON.parse(JSON.stringify(SERVED_CERT)), { desk: DESK_KEY, code: CODE, issued: NOW, until: NOW + 30 * 86400000 }, over);
 
 /* ---- cases, each a function of the loaded section so a plant reads the same case again ------------------------------ */
 const CASES = {};
@@ -249,7 +300,7 @@ CASES.serviceDoor = async s => {
 /* The service's answers read as the interface names them; a certificate for another desk or another code is not taken. */
 CASES.answers = s => {
   const a = (o, st) => s.signinAnswer(answer(o, st), DESK_KEY);
-  const held = a({ ok: true, certificate: cert(), code: CODE }), none = a({ ok: true, certificate: null, code: CODE });
+  const held = a({ ok: true, certificate: cert(), code: CODE, doors: [] }), none = a({ ok: true, certificate: null, code: CODE });
   const theirs = a({ ok: true, certificate: cert({ desk: OTHER_DESK_KEY }), code: CODE }), mixed = a({ ok: true, certificate: cert(), code: "ABCDEFGHJKMNPQRS" });
   return held.ok === true && held.cert && held.cert.code === CODE && held.code === CODE && none.ok === true && none.cert === null
     && theirs.reason === "unreached" && mixed.reason === "unreached"
@@ -375,7 +426,7 @@ const heldOf = over => Object.assign({ provider: "microsoft", refresh: "sealed:r
    certificate replaces the last. */
 CASES.renewWrite = async s => {
   const plain = jwt(msClaims(undefined)), next = cert({ issued: NOW + 5, until: NOW + 5 + 30 * 86400000 });
-  const io = renewIo(answer({ id_token: plain, refresh_token: "rt-2" }), answer({ ok: true, certificate: next, code: CODE }));
+  const io = renewIo(answer({ id_token: plain, refresh_token: "rt-2" }), answer({ ok: true, certificate: next, code: CODE, doors: [] }));
   const r = await s.signinRenewHeld(io, MS, DESK_KEY, heldOf(), () => NOW);
   const b = io.posted.length === 1 ? io.posted[0].body : {};
   return r.said === "renewed" && r.held.cert.issued === NOW + 5 && r.held.refresh === "sealed:rt-2" && r.held.sub === "sealed:s-1" && r.held.reached === true
@@ -461,7 +512,7 @@ CASES.renewDaily = async (s, swap) => {
 /* The wiring end to end: a renewal keeps the new certificate, writes it and tells the page; a provider no longer offered is never asked. */
 CASES.renewWire = async (s, swap) => {
   const next = cert({ issued: Date.now(), until: Date.now() + 30 * 86400000 });
-  const ok = wireStand(s, () => answer({ id_token: jwt(msClaims(undefined, Date.now())), refresh_token: "rt-2" }), () => answer({ ok: true, certificate: next, code: CODE }));
+  const ok = wireStand(s, () => answer({ id_token: jwt(msClaims(undefined, Date.now())), refresh_token: "rt-2" }), () => answer({ ok: true, certificate: next, code: CODE, doors: [] }));
   ok.store.held = heldOf();
   const said = await loadWire(ok, swap).signinRenewNow();
   const gone = wireStand(s, () => answer({}));
@@ -646,8 +697,9 @@ const DOORS_TWO = () => [doorOf(), doorOf({ team: "t-fedcba9876543210", rt: "b1"
    them, makes no list at all; no certificate, no doors; an answer with none has none. */
 CASES.doorsRead = s => {
   const c = cert();
-  const read = doors => s.signinAnswer(answer({ ok: true, code: CODE, certificate: c, doors }), DESK_KEY);
-  const two = read(DOORS_TWO()), none = read(undefined), noCert = s.signinAnswer(answer({ ok: true, code: CODE, certificate: null, doors: DOORS_TWO() }), DESK_KEY);
+  /* Doors out of shape, none named at all, and doors beside no certificate are answers the service never gives: stray, on purpose. */
+  const read = doors => s.signinAnswer(strayAnswer({ ok: true, code: CODE, certificate: c, doors }), DESK_KEY);
+  const two = read(DOORS_TWO()), none = read(undefined), noCert = s.signinAnswer(strayAnswer({ ok: true, code: CODE, certificate: null, doors: DOORS_TWO() }), DESK_KEY);
   const bad = [[doorOf({ keyId: "studio-" + "0".repeat(16) })], [doorOf({ keyId: "studio-maxs-laptop-01" })], Array.from({ length: 17 }, () => doorOf()),
     [doorOf({ url: "http://relay.example.test" })], [doorOf({ url: "https://relay.example.test/a b" })], [doorOf({ box: "short" })],
     [Object.assign(doorOf(), { name: "Ops" })], [doorOf({ rt: "zz" })], [doorOf({ team: "team-1" })], [doorOf(), doorOf({ lead: "x" })], "doors"];
@@ -845,7 +897,8 @@ CASES.doorAddress = async (s, swap) => {
   const lead = { keyId: "studio-1", public: "a".repeat(64), name: "Lead" };
   const invited = (t, url) => !!t.inviteRead("etiuda-join:" + b64url(JSON.stringify({ team: TEAM, secret: "0".repeat(32), lead,
     relay: { rt: RT, url, token: "c".repeat(64), inv: "5".repeat(32) } })), false);
-  const served = url => answer({ ok: true, code: CODE, certificate: cert(), doors: [doorOf({ url })] });
+  /* A door at each sample address, most of which the service refuses at door/set and so never hands: stray, on purpose (ds23d). */
+  const served = url => strayAnswer({ ok: true, code: CODE, certificate: cert(), doors: [doorOf({ url })] });
   const kept = async (t, url, packed) => t.signinAnswer(served(url), DESK_KEY, packed).doors.length === 1;
   const seated = async (t, url, packed) => {
     const r = await t.signinSeat({ serviceAsk: async () => served(url), sign: signWith(signKey), packed }, "google", DESK_KEY, jwt(gClaims("n")), "3".repeat(64), () => NOW);
@@ -1213,7 +1266,7 @@ CASES.secretNever = async s => {
       listen: async () => { let yes; const caught = new Promise(a => { yes = a; }); setTimeout(() => yes(io.loopQ), 5); return { port: 49998, caught, close: () => {} }; },
       openPage: async url => { const q = new URL(url).searchParams; io.loopQ = "state=" + encodeURIComponent(q.get("state")) + "&code=abc"; io.nonce = q.get("nonce"); return true; },
       tokenAsk: async (url, form) => { urls.push(url); forms.push(form.toString()); return answer({ id_token: jwt(Object.assign(gClaims(io.nonce), { sub: "s-1" })), refresh_token: "rt-1" }); },
-      serviceAsk: async (url, body) => { posted.push(JSON.stringify(body)); return answer({ ok: true, certificate: cert(), code: CODE }); },
+      serviceAsk: async (url, body) => { posted.push(JSON.stringify(body)); return answer({ ok: true, certificate: cert(), code: CODE, doors: [] }); },
       sign: signWith(signKey), keep: t => t ? "sealed:" + t : "", kept: x => String(x || "").replace(/^sealed:/, ""), page: () => "",
     };
     first = await s.signinRun(io, G_SECRET, DESK_KEY, () => NOW);
@@ -1716,7 +1769,7 @@ async function labDouble() {
       if (req.method === "POST" && /^\/licence\/v1\/sign(in|out)\/desk$/.test(u.pathname)) {
         st.posts.push({ path: u.pathname, body: JSON.parse(body) });
         res.writeHead(200, { "content-type": "application/json" });
-        return res.end(JSON.stringify(/signin/.test(u.pathname) ? { ok: true, code: CODE, certificate: cert({ issued: Date.now(), until: Date.now() + 86400000 }) } : { ok: true }));
+        return res.end(JSON.stringify(/signin/.test(u.pathname) ? { ok: true, code: CODE, certificate: cert({ issued: Date.now(), until: Date.now() + 86400000 }), doors: [] } : { ok: true }));
       }
       res.writeHead(404);
       res.end();
@@ -2116,6 +2169,57 @@ check(acctAt > 0 && genAt > acctAt && SETTINGS.lastIndexOf("{id:", acctAt - 1) <
 check(/^\s*"Your name":/m.test(fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8")) && /id="setAgentName"/.test(account)
   && /const n=box\.querySelector\("#setAgentName"\)|box\.querySelector\("#setAgentName"\)/.test(SETTINGS),
   "ds5e the name field keeps its id and its wiring, so it is stored on the keystroke as before");
+
+/* ---- ds23: the desk read against the service's own answers ---------------------------------------------------------------- */
+answersWatched = false;
+/* What the desk makes of each case the service records, by its name there. A case the record gains with no line here, or a line
+   here naming a case the record no longer holds, is red (ds23b): the desk has no reading for an answer the service gives, or reads
+   one it no longer gives. A held certificate stands in for what the desk kept before the answer. */
+const HELD_BEFORE = () => ({ provider: "microsoft", refresh: "sealed:rt", sub: "sealed:s", seed: "6".repeat(64), code: CODE, cert: cert(), at: 1, checked: 1, reached: true, said: "", ask: false });
+const unreached = r => r.ok === false && r.reason === "unreached";
+const DESK_READS = {
+  "seated": (r, c, s) => r.ok === true && !!r.cert && r.cert.desk === c.body.certificate.desk && r.code === c.body.code && r.doors.length === 0
+    && s.signinSettle(HELD_BEFORE(), r, NOW).cert === r.cert,
+  "seated-doors": (r, c) => r.ok === true && !!r.cert && r.doors.length === c.body.doors.length && r.doors.length > 0,
+  "none": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.code === c.body.code && h.cert === null && h.said === ""; },
+  "waiting": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.code === c.body.code && h.said === "waiting" && h.ask === false && h.refresh === "sealed:rt"; },
+  "signin": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === false && r.reason === "signin" && h.refresh === "" && h.ask === true; },
+  "desks": r => r.ok === false && r.reason === "desks",
+  "token": r => r.ok === false && r.reason === "token",
+  "malformed": unreached, "stale": unreached, "signature": unreached, "replayed": unreached, "slow-down": unreached, "unavailable": unreached,
+  "signed-out": (r, c) => r === true,
+};
+const recordedAnswer = c => ({ status: c.status, bytes: Buffer.from(JSON.stringify(c.body)) });
+const caseNames = ANSWER_CASES.map(c => c.case);
+check(ANSWER_CASES.length >= 14 && new Set(caseNames).size === caseNames.length && ANSWER_CASES.every(c => (c.route === "signin/desk" || c.route === "signout/desk")
+  && Number.isInteger(c.status) && c.body && typeof c.body === "object" && typeof c.means === "string" && c.means),
+  "ds23a tests/signin-answers.json is the licence service's record of its desk answers: " + ANSWER_CASES.length + " cases, each named once, of signin/desk and signout/desk");
+const unread = caseNames.filter(n => !Object.prototype.hasOwnProperty.call(DESK_READS, n)), gone = Object.keys(DESK_READS).filter(n => caseNames.indexOf(n) < 0);
+check(ANSWER_CASES.length > 0 && unread.length === 0 && gone.length === 0,
+  "ds23b every answer the service records has a reading here, and every reading here an answer the service records"
+  + (unread.length ? "; the desk has no reading for: " + unread.join(" ") : "") + (gone.length ? "; read here, given no longer: " + gone.join(" ") : ""));
+const misread = [];
+for (const c of ANSWER_CASES) {
+  const want = DESK_READS[c.case];
+  if (!want) continue;
+  let got = null;
+  try {
+    if (c.route === "signout/desk") got = await S.signoutAsk({ sign: signWith(signKey), serviceAsk: async () => recordedAnswer(c) }, DESK_KEY, () => NOW);
+    else got = S.signinAnswer(recordedAnswer(c), c.body.certificate ? c.body.certificate.desk : DESK_KEY, true);
+    if (!want(got, c, S)) misread.push(c.case + " read as " + JSON.stringify(got).slice(0, 120));
+  } catch (e) { misread.push(c.case + " threw " + (e && e.message)); }
+}
+check(ANSWER_CASES.length > 0 && misread.length === 0,
+  "ds23c the desk reads each answer the service records as its reading here (the wait as a wait, no licence as none, each refusal as itself, the rest as not reached)"
+  + (misread.length ? ": " + misread.join("; ") : ""));
+/* Every answer the legs above handed the desk: of a shape the service gives (or gave, PAST_ANSWERS), or read as not reached, so no
+   leg rests on an answer the service never gives. */
+const invented = ANSWERS_READ.filter(a => !SERVED.has(answerSig(a.status, a.body)) && !unreached(a.read || {}))
+  .map(a => a.status + " " + JSON.stringify(a.body === undefined ? "(not JSON)" : a.body).slice(0, 100) + " read as " + JSON.stringify(a.read).slice(0, 60));
+check(SERVED.size > 0 && ANSWERS_READ.length >= 20 && invented.length === 0,
+  "ds23d every answer the legs hand the desk is one the service gives, by the record's shapes, or is read as not reached: " + ANSWERS_READ.length + " read, "
+  + answersStray + " handed as stray on purpose"
+  + (invented.length ? "; hand-written and read as meaning something: " + Array.from(new Set(invented)).join(" | ") : ""));
 
 /* ---- the plants --------------------------------------------------------------------------------------------------------- */
 if (!PLANTS_OFF) {
