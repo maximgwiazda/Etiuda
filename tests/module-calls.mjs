@@ -7528,6 +7528,307 @@ const CARD_B = {
   if (hadCs === undefined) delete globalThis.getComputedStyle; else globalThis.getComputedStyle = hadCs;
 }
 
+/* ------------------------------------------------------------------ dialog.js: an editor is moved (board 983, stage 1)
+   The card, intent and category editors drag by their title bar and keep their place per kind in eEdPlace; every
+   other dialog stays centred. Driven through the real openDialog, wireDialogDrag and closeModal on a modal modelled
+   here: a flex row of the window's size with 16 px of padding, the card centred in it, or top-aligned under
+   .ed-placed, offset by its relative top and left, its width min(560, W - 32) and its height its content's, capped
+   by min(92vh, 820px) and, placed, by --ed-room. Pixels on a real screen, the glide and the band's drag region
+   are the window's and Max's eye. */
+{
+  const fs = await import("node:fs");
+  const DL = await import(MOD("dialog.js"));
+  const Dom = await import(MOD("dom.js"));
+  const ST = await import(MOD("storage.js"));
+  const hadDoc = globalThis.document, hadAdd = globalThis.addEventListener, hadNow = Date.now;
+  const view = { W: 1280, H: 800, band: 36, ch: 500 };
+  const classes = () => {
+    const s = new Set();
+    return { add: (...c) => c.forEach(x => s.add(x)), remove: (...c) => c.forEach(x => s.delete(x)), contains: c => s.has(c),
+      toggle: (c, on) => { if (on === undefined ? !s.has(c) : on) s.add(c); else s.delete(c); return s.has(c); } };
+  };
+  const style = () => {
+    const p = {};
+    const st = { setProperty: (k, v) => { p[k] = String(v); }, removeProperty: k => { delete p[k]; }, getPropertyValue: k => p[k] || "", props: p };
+    [["top", "top"], ["left", "left"], ["transformOrigin", "transform-origin"], ["height", "height"], ["overflow", "overflow"],
+      ["transition", "transition"]].forEach(([js, css]) => Object.defineProperty(st, js, {
+      get: () => p[css] || "", set: v => { if (v === "" || v == null) delete p[css]; else p[css] = String(v); } }));
+    return st;
+  };
+  const heard = {}, captured = [], animated = [];
+  const modalEl = { id: "modal", hidden: true, classList: classes(),
+    get clientWidth() { return view.W; }, get clientHeight() { return view.H; } };
+  const rel = v => parseFloat(v) || 0;
+  const placed = () => modalEl.classList.contains("ed-placed");
+  const modalCard = { id: "modalCard", className: "", style: style(), children: [], _h: "",
+    get innerHTML() { return this._h; }, set innerHTML(v) { this._h = String(v || ""); },
+    get offsetWidth() { return Math.min(560, view.W - 32); },
+    get offsetHeight() {
+      const room = placed() && this.style.props["--ed-room"] != null ? rel(this.style.props["--ed-room"]) : Infinity;
+      return Math.min(view.ch, Math.floor(0.92 * view.H), 820, room);
+    },
+    get offsetTop() { return Math.round((placed() ? 16 : (view.H - this.offsetHeight) / 2) + rel(this.style.top)); },
+    get offsetLeft() { return Math.round((view.W - this.offsetWidth) / 2 + rel(this.style.left)); },
+    getBoundingClientRect() { return { top: this.offsetTop, left: this.offsetLeft, width: this.offsetWidth, height: this.offsetHeight }; },
+    addEventListener(k, fn) { (heard[k] = heard[k] || []).push(fn); },
+    setPointerCapture(id) { captured.push(id); },
+    animate(k, o) { animated.push([k, o]); return {}; },
+    querySelector: () => null, querySelectorAll: () => [], contains: () => false, focus() {},
+    classList: classes() };
+  const h2 = { tag: "H2", parentNode: modalCard, closest: s => (s === "h2" ? h2 : null) };
+  const name = { tag: "SPAN", closest: s => (s === "h2" ? h2 : null) };
+  const xBtn = { tag: "BUTTON", closest: s => (s === "h2" ? h2 : /^button/.test(s) ? xBtn : null) };
+  const field = { tag: "INPUT", closest: s => (/^button/.test(s) ? field : null) };
+  const row = { getBoundingClientRect: () => ({ top: 0, bottom: view.band, height: view.band }) };
+  const prev = { disabled: false, onclick: null }, next = { disabled: false, onclick: null };
+  globalThis.document = {
+    body: {}, documentElement: {}, activeElement: null,
+    querySelector: s => s === "#modal" ? modalEl : s === "#modalCard" ? modalCard : s === "header > .row" ? row
+      : s === "#edPrev" ? prev : s === "#edNext" ? next : null,
+    querySelectorAll: () => [], getElementById: () => null, contains: () => true,
+    createRange: () => ({}), createElement: () => ({ getContext: () => ({}) })
+  };
+  const winHeard = {};
+  globalThis.addEventListener = (k, fn) => { (winHeard[k] = winHeard[k] || []).push(fn); };
+  Dom.grabDom();
+  let unwired = "";
+  try { DL.wireDialogDrag(); } catch (e) { unwired = "wireDialogDrag: " + e.message; }
+  const fire = (k, e) => (heard[k] || []).forEach(fn => fn(Object.assign({ button: 0, pointerType: "mouse", pointerId: 7, target: name }, e)));
+  const drag = (x0, y0, x1, y1, e) => { fire("pointerdown", Object.assign({ clientX: x0, clientY: y0 }, e)); fire("pointermove", Object.assign({ clientX: x1, clientY: y1 }, e)); fire("pointerup", e || {}); };
+  const resize = (W, H) => { view.W = W; view.H = H; (winHeard.resize || []).forEach(fn => fn({})); };
+  /* The press is captured to the card, so the double click it ends in is aimed at the card, as Chrome aims it. */
+  const dbl = target => { fire("pointerdown", { clientX: 600, clientY: 160, target }); fire("pointerup", { target }); fire("dblclick", { target: modalCard }); };
+  const at = () => [modalCard.offsetLeft, modalCard.offsetTop];
+  const store = () => ST.lsGet("eEdPlace");
+  let T = 1e6;
+  const fresh = () => {
+    if (unwired) throw new Error(unwired);
+    DL.closeModal(); ST.lsDel("eEdPlace"); ST.lsSet("eMotionOff", "1");
+    Object.assign(view, { W: 1280, H: 800, band: 36, ch: 500 }); animated.length = 0; captured.length = 0; T += 10000;
+  };
+  const open = (place, more) => DL.openDialog(Object.assign({ title: "Edit card", place: place }, more || {}));
+  Date.now = () => T;
+  const hadMotion = ST.lsGet("eMotionOff");
+
+  try {
+    check("dialog.js", "983a the title bar drags only once the pointer has gone 4 px, the move following it from where it started",
+      () => {
+        fresh(); open("card");
+        const c0 = at();
+        fire("pointerdown", { clientX: 600, clientY: 160 });
+        fire("pointermove", { clientX: 602, clientY: 161 });
+        const still = [placed(), at().join(",")].join("|");
+        fire("pointermove", { clientX: 603, clientY: 161 });
+        const went = at().join(",");
+        fire("pointermove", { clientX: 500, clientY: 260 });
+        const far = at().join(",");
+        fire("pointerup", {});
+        return eq([still, went, far, captured.join(",")].join(" || "),
+          ["false|" + c0.join(","), [c0[0] + 3, c0[1] + 1].join(","), [c0[0] - 100, c0[1] + 100].join(","), "7"].join(" || "));
+      });
+
+    check("dialog.js", "983b its buttons, a field, touch and the right button never start a drag; the name inside the bar does",
+      () => {
+        fresh(); open("card");
+        const c0 = at().join(",");
+        drag(600, 160, 700, 300, { target: xBtn });
+        drag(600, 160, 700, 300, { target: field });
+        drag(600, 160, 700, 300, { pointerType: "touch" });
+        drag(600, 160, 700, 300, { button: 2 });
+        const none = [at().join(","), placed(), store(), captured.length].join("|");
+        drag(600, 160, 700, 300, { target: name });
+        return eq([none, at().join(",") !== c0].join(" || "), [c0 + "|false||0", true].join(" || "));
+      });
+
+    check("dialog.js", "983c it stays wholly inside the window: 8 px from the left, right and foot, its top 8 px under the band, whatever the band's height",
+      () => {
+        fresh(); open("card");
+        const w = modalCard.offsetWidth, h = modalCard.offsetHeight;
+        drag(600, 160, -4000, -4000);
+        const topLeft = at().join(",");
+        drag(600, 160, 9000, 9000);
+        const r = at(), botRight = [r[0] + w, r[1] + h].join(",");
+        view.band = 100;
+        drag(600, 600, 600, -4000);
+        return eq([topLeft, botRight, at()[1], modalCard.style.props["--ed-room"]].join(" | "),
+          ["8,44", (view.W - 8) + "," + (view.H - 8), 108, (800 - 16 - 100) + "px"].join(" | "));
+      });
+
+    check("dialog.js", "983d a smaller window pushes a moved editor back in, and a larger one gives it back its place",
+      () => {
+        fresh(); open("card");
+        drag(600, 160, 9000, 9000);
+        const corner = at().join(","), kept = store();
+        resize(900, 600);
+        const w = modalCard.offsetWidth, h = modalCard.offsetHeight, r = at();
+        const inside = [r[0] >= 8, r[1] >= 44, r[0] + w <= 892, r[1] + h <= 592, r[0] + w === 892, r[1] + h === 592].join(",");
+        resize(1280, 800);
+        return eq([inside, at().join(",") === corner, store() === kept].join(" | "), "true,true,true,true,true,true | true | true");
+      });
+
+    check("dialog.js", "983e the place is kept per kind across closing and reopening, read back after a restart from what the desk stored",
+      () => {
+        fresh(); open("card");
+        drag(600, 160, 300, 200);
+        const card = at().join(",");
+        DL.closeModal();
+        const closed = [placed(), modalCard.style.top].join("|");
+        open("intent");
+        const intentCentred = !placed();
+        drag(600, 160, 900, 400);
+        const intent = at().join(",");
+        DL.closeModal();
+        open("card");
+        const cardBack = at().join(",") === card;
+        open("intent");
+        const intentBack = at().join(",") === intent;
+        open("category");
+        const catCentred = !placed();
+        DL.closeModal();
+        /* A restart: nothing in memory, the store as a previous run left it. */
+        ST.lsSet("eEdPlace", JSON.stringify({ category: { x: -200, y: -150 } }));
+        open("category");
+        const w = modalCard.offsetWidth;
+        const restored = [modalCard.offsetLeft + w / 2 - view.W / 2, modalCard.offsetTop - view.H / 2].join(",");
+        return eq([closed, intentCentred, cardBack, intentBack, catCentred, restored, store()].join(" | "),
+          ['false| | true | true | true | true | -200,-150 | {"category":{"x":-200,"y":-150}}'].join(""));
+      });
+
+    check("dialog.js", "983f a malformed store is refused kind by kind: that editor opens centred and the refused part leaves the store",
+      () => {
+        const out = [];
+        ["{bad", "[]", "7", '{"card":[1,2]}', '{"card":{"x":"5","y":1}}', '{"card":{"x":1e9,"y":0}}', '{"card":{"x":null,"y":0}}', '{"card":{"y":0}}']
+          .forEach(raw => { fresh(); ST.lsSet("eEdPlace", raw); open("card"); out.push([placed(), store()].join(":")); });
+        fresh();
+        ST.lsSet("eEdPlace", '{"card":{"x":"5","y":1},"intent":{"x":10,"y":-100},"zz":{"x":1,"y":1}}');
+        open("card");
+        const mixed = [placed(), store()].join(":");
+        open("intent");
+        return eq(out.join(" ") + " || " + mixed + " | " + placed(),
+          "false: false: false: false: false: false: false: false: || false:{\"intent\":{\"x\":10,\"y\":-100}} | true");
+      });
+
+    check("dialog.js", "983g a double click on the title bar puts it back in the centre and forgets the place, gliding there on the move tier unless motion is still",
+      () => {
+        fresh(); open("card");
+        const c0 = at().join(",");
+        drag(600, 160, 300, 400);
+        const moved = at();
+        T += 1000;
+        dbl(xBtn);
+        const onButton = placed();
+        ST.lsDel("eMotionOff");
+        dbl(name);
+        const anim = animated.map(([k, o]) => k[0].translate + ">" + k[1].translate + "@" + o.duration).join(";");
+        const back = [placed(), at().join(",") === c0, store(), modalCard.style.top, modalCard.style.left].join("|");
+        ST.lsSet("eMotionOff", "1");
+        drag(600, 160, 300, 400);
+        T += 1000; animated.length = 0;
+        dbl(name);
+        return eq([onButton, back, anim === (moved[0] - Number(c0.split(",")[0])) + "px " + (moved[1] - Number(c0.split(",")[1])) + "px>0 0@180",
+          animated.length, placed()].join(" | "), "true | false|true||| | true | 0 | false");
+      });
+
+    check("dialog.js", "983h a double click straight after a drag is not a reset",
+      () => {
+        fresh(); open("card");
+        drag(600, 160, 300, 400);
+        const moved = at().join(",");
+        T += 300;
+        dbl(name);
+        const kept = [placed(), at().join(",") === moved, store() != null].join("|");
+        T += 300;
+        dbl(name);
+        return eq(kept + " || " + placed(), "true|true|true || false");
+      });
+
+    check("dialog.js", "983i Prev, Next and the reopening after a first Save stand where the editor stood, a taller entry keeping the same top",
+      () => {
+        fresh();
+        const list = [1, 2, 3];
+        const go = i => { view.ch = 400 + 60 * i; open("intent", { title: "Edit intent", nav: DL.edNavHtml(), wire: () => DL.edWireNav(list, i, go) }); };
+        go(2);
+        drag(600, 160, 400, 100);
+        const stood = at().join(",");
+        next.onclick();
+        const afterNext = at().join(",");
+        prev.onclick();
+        const afterPrev = at().join(",");
+        open("intent");                                   // the reopening after a first Save is the same render
+        return eq([afterNext === stood, afterPrev === stood, at().join(",") === stood, placed()].join("|"), "true|true|true|true");
+      });
+
+    check("dialog.js", "983l an entry tall enough to nudge the editor up glides from where the last one was painted",
+      () => {
+        fresh();
+        const list = [1, 2, 3];
+        const go = i => { view.ch = 400 + 60 * i; open("intent", { title: "Edit intent", nav: DL.edNavHtml(), wire: () => DL.edWireNav(list, i, go) }); };
+        go(2);
+        drag(600, 160, 600, 270);
+        const top0 = at()[1], h0 = modalCard.offsetHeight;
+        next.onclick();
+        resize(view.W, view.H);                           // the card's own change of size, which the observer hears
+        const top1 = at()[1], h1 = modalCard.offsetHeight;
+        const o = parseFloat((modalCard.style.transformOrigin || "").split(" ")[1]);
+        return eq([top0, h0, top1, h1, Math.abs(top1 + o * (1 - h0 / h1) - top0) < 0.01].join("|"), "250|520|212|580|true");
+      });
+
+    check("dialog.js", "983j a moved editor keeps its top and grows downward, nudged up only when its foot would leave the window and back when it shrinks; one never moved grows as today",
+      () => {
+        fresh(); open("card");
+        drag(600, 160, 600, 100);
+        const top = at()[1];
+        view.ch = 520; resize(view.W, view.H);
+        const grew = [at()[1] === top, modalCard.style.transformOrigin].join("|");
+        const h0 = modalCard.offsetHeight, top0 = at()[1];
+        view.ch = 760; resize(view.W, view.H);
+        const h1 = modalCard.offsetHeight, top1 = at()[1];
+        const o = parseFloat(modalCard.style.transformOrigin.split(" ")[1]);
+        /* The glide starts at scale h0/h1 about the origin, which must put the top where it was painted. */
+        const holds = Math.abs(top1 + o * (1 - h0 / h1) - top0) < 0.01;
+        const nudged = [top1 + h1 === view.H - 8, top1 < top0, holds].join(",");
+        view.ch = 500; resize(view.W, view.H);
+        const back = at()[1] === top;
+        fresh(); open("card");
+        view.ch = 650; resize(view.W, view.H);
+        const today = [placed(), modalCard.style.top, modalCard.style.left, modalCard.style.transformOrigin].join("|");
+        const tpl = fs.readFileSync(join(HERE, "..", "src", "template.html"), "utf8");
+        const sheet = [tpl.indexOf(".modal.ed-placed{align-items:flex-start}") >= 0,
+          tpl.indexOf(".modal.ed-placed .modal-card{transform-origin:50% 0;max-height:min(92vh,820px,var(--ed-room,100vh))}") >= 0].join(",");
+        return eq([grew, nudged, back, today, sheet].join(" || "), "true| || true,true,true || true || false||| || true,true");
+      });
+
+    check("dialog.js", "983k every other dialog stays centred and fixed: none names a place, a dialog opened after a moved editor stands centred and does not drag",
+      () => {
+        /* A place is named in an openDialog config, so only the modules that open one are read. */
+        const names = [];
+        let sites = 0;
+        fs.readdirSync(MODDIR).filter(f => f.endsWith(".js") && f !== "dialog.js").forEach(f => {
+          const s = fs.readFileSync(join(MODDIR, f), "utf8");
+          sites += (s.match(/\bopenDialog\(\{/g) || []).length;
+          if (s.indexOf("openDialog(") >= 0) for (const m of s.matchAll(/\bplace:\s*"([a-z]+)"/g)) names.push(f + ":" + m[1]);
+        });
+        fresh(); open("card");
+        drag(600, 160, 300, 400);
+        const kept = store();
+        DL.openDialog({ title: "About", cls: "about-modal" });
+        const about = [placed(), modalCard.style.top, modalCard.style.left, modalCard.style.props["--ed-room"] || ""].join("|");
+        const c0 = at().join(",");
+        drag(600, 160, 900, 600);
+        return eq([names.sort().join(",") + " of " + sites, about, at().join(",") === c0, store() === kept].join(" || "),
+          "card-editor.js:card,editors.js:category,editors.js:intent of 9 || false||| || true || true");
+      });
+  } finally {
+    Date.now = hadNow;
+    try { DL.closeModal(); } catch (e) {}
+    ST.lsDel("eEdPlace");
+    if (hadMotion == null) ST.lsDel("eMotionOff"); else ST.lsSet("eMotionOff", hadMotion);
+    globalThis.addEventListener = hadAdd;
+    globalThis.document = hadDoc;
+    if (hadDoc !== undefined) Dom.grabDom();
+  }
+}
+
 /* ------------------------------------------------------------------ AN IMPORT CALLED AS A FUNCTION IS ONE.
    2026-11-10: search-meaning.js called ePackEpoch(), which pack.js exports as a number, and the desk died at start
    with "ePackEpoch is not a function" the moment a packed model made that line run; no leg had run it. So every

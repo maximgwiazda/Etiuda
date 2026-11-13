@@ -364,6 +364,7 @@ function openCardEditor(id, presetCat, fromManage){
        here - which is how Escape came to close outright where Cancel went back. */
     back: backToManage?doneCardEditor:null,
     title: isNew?"New card":"Edit card",
+    place: "card",
     /* Read through savedId so a card saved for the first time names itself at once. */
     name: ()=>{ const c=savedId?findCard(savedId):null; return c?cardTitle(c):""; },
     resettable: ()=>!!(baseCard(savedId) && pack.overrides[savedId]),

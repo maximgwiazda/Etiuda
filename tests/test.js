@@ -4510,6 +4510,25 @@ function leavingCopyTests(H) {
   }
   {
     const { El, doc } = dismissFakeDom();
+    const card = new El("div", { class: "modal-card" });
+    card.style.cssText = "top:120px;left:-80px";
+    card.add(new El("div"));
+    const modal = new El("div", { id: "modal", class: "modal ed-placed" }).add(new El("div", { class: "modal-bg" }), card);
+    doc.add(modal);
+    let leave = null;
+    try {
+      leave = new Function("modalEl", "modalCard", "mgReduceMotion", "document", "dismissNode",
+        extractDecl(src("dialog.js"), "function leaveModal(") + "\nreturn leaveModal;")(
+        modal, card, () => false, { createElement: t => new El(t), body: doc }, H.dismissNode);
+    } catch (e) { leave = null; }
+    if (leave) leave();
+    const g = doc.kids[doc.kids.length - 1], c = g && g.kids[1];
+    eq("a moved editor leaves where it stood: its copy's frame is top-aligned as the editor's was (board 983)",
+      leave ? [g !== modal && g.classList.contains("ed-placed"), c && c.style.cssText] : "no leaveModal in dialog.js",
+      [true, "top:120px;left:-80px"]);
+  }
+  {
+    const { El, doc } = dismissFakeDom();
     const card = new El("div", { id: "tourCard", class: "tour-card bub" }), hole = new El("div", { id: "tourHole" });
     card.style.cssText = "left:40px"; hole.style.cssText = "top:5px"; hole.style.display = "block";
     const root = new El("div", { id: "tourRoot", class: "on" }).add(card, hole);
@@ -4698,12 +4717,12 @@ function dialogFocusTests() {
     return { doc, N, modalEl, modalCard, x, field, save, tourBtn, cover, coverBtn, search, body };
   };
   const sliced = w => new Function("document", "modalEl", "modalCard", "cutLeaves", "setModalBack", "modalHead", "t",
-    "refreshDialogReset", "translateTree", "dressDialogInputs", "markCutText", "openCover", "focusKey",
+    "refreshDialogReset", "translateTree", "dressDialogInputs", "markCutText", "openCover", "focusKey", "placeDialog",
     "let modalOpener=null, modalOpenerKbd=false, modalOpenerKey=null, modalNameFn=null, modalResetFn=null, modalResetOn=\"\", modalResetOff=\"\", lastInputWasKey=false;\n"
     + [extractDecl(dlg, "function openDialog("), extractDecl(dlg, "const MODAL_TABBABLE="), extractDecl(dlg, "function tabTargetIn(")].join("\n")
     + "\nreturn {openDialog, tabTargetIn};")(
     w.doc, w.modalEl, w.modalCard, () => {}, () => {}, () => "", s => s, () => {}, () => {}, () => {}, () => {},
-    () => (w.coverOn ? w.cover : null), () => null);
+    () => (w.coverOn ? w.cover : null), () => null, () => {});
   const open = (from, opts) => {
     const w = world(); Object.assign(w, opts || {});
     w.doc.activeElement = typeof from === "function" ? from(w) : w.body;

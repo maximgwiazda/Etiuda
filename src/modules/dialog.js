@@ -3,7 +3,8 @@
 import { markCutText } from "./cut-text.js";
 import { ICON_CHEVRON_R, ICON_X } from "./icons.js";
 import { mgOpen } from "./app-state.js";
-import { animateModalHeightFrom, animatePinnedHeight, cutLeaves, dismissNode, mgAccordion, mgPinCard, mgReduceMotion } from "./motion.js";
+import { animateModalHeightFrom, animatePinnedHeight, cutLeaves, dismissNode, mgAccordion, mgPinCard, mgReduceMotion, E_EASE, M_MS } from "./motion.js";
+import { lsGet, lsSet, lsDel } from "./storage.js";
 import { formatActionChord } from "./shortcuts.js";
 import { scStopCapture } from "./shortcuts-list.js";
 import { offerUndo, t, tc, translateTree } from "./ui-lang.js";
@@ -178,6 +179,7 @@ function openDialog(cfg){
   translateTree(modalCard);
   dressDialogInputs(modalCard);
   markCutText(modalCard);
+  placeDialog(cfg.place);
   /* THE SCREEN TAKES THE KEYBOARD: where its wiring focused nothing inside it, the card itself
      holds it, so a key reaches the dialog rather than the page it covers. A cover over it and a
      tour bubble keep theirs. */
@@ -407,7 +409,7 @@ var modalOpener=null, modalOpenerKbd=false, modalOpenerKey=null;
 function leaveModal(){
   if(modalEl.hidden || !modalCard.firstChild || mgReduceMotion()) return;
   const g=document.createElement("div"), bg=document.createElement("div"), c=document.createElement("div");
-  g.className="modal"; bg.className="modal-bg";
+  g.className=modalEl.classList.contains("ed-placed") ? "modal ed-placed" : "modal"; bg.className="modal-bg";
   c.className=modalCard.className; c.style.cssText=modalCard.style.cssText;
   const kept=Array.prototype.filter.call(modalCard.querySelectorAll("*"),x=>x.scrollTop>0).map(x=>[x,x.scrollTop]);
   while(modalCard.firstChild) c.appendChild(modalCard.firstChild);
@@ -422,6 +424,7 @@ function closeModal(){
   modalBack=null;
   leaveModal();
   modalEl.hidden=true;
+  edPlaceKind=null; edDrag=null; edUnstand();
   modalCard.classList.remove("about-modal","about-page","mt-modal");
   modalCard.innerHTML="";
   let back=modalOpener;
@@ -436,6 +439,130 @@ function closeModal(){
     const how=kbd?{preventScroll:true}:{preventScroll:true,focusVisible:false};
     try{ back.focus(how); }catch(e){ try{ back.focus(); }catch(e2){} }
   }
+}
+/* ---- AN EDITOR STANDS WHERE IT WAS PUT. The card, intent and category editors drag by the whole
+   title bar but its buttons. Each kind keeps its place in eEdPlace as {x,y}, the middle of its top
+   edge from the window's centre, so the place still means something in a window of another size.
+   Every other dialog stays centred: openDialog clears a place its config does not name. */
+const ED_PLACE_KINDS=["card","intent","category"], ED_EDGE=8;
+let edPlaceKind=null, edDrag=null, edDragEnd=0, edPlaced=null, edHeadDown=false;
+function edPlaceNum(v){ return typeof v==="number" && isFinite(v) && Math.abs(v)<=20000; }
+/* Each kind is refused on its own when malformed, and what is refused leaves the store. */
+function edPlaces(){
+  const raw=lsGet("eEdPlace");
+  if(raw==null) return {};
+  let o=null;
+  try{ o=JSON.parse(raw); }catch(e){}
+  const out={};
+  if(o && typeof o==="object" && !Array.isArray(o)) ED_PLACE_KINDS.forEach(k=>{
+    const p=o[k];
+    if(p && typeof p==="object" && edPlaceNum(p.x) && edPlaceNum(p.y)) out[k]={x:Math.round(p.x), y:Math.round(p.y)};
+  });
+  if(JSON.stringify(out)!==raw) edPlacesWrite(out);
+  return out;
+}
+function edPlacesWrite(all){
+  const out={};
+  ED_PLACE_KINDS.forEach(k=>{ if(all[k]) out[k]=all[k]; });
+  if(Object.keys(out).length) lsSet("eEdPlace", JSON.stringify(out)); else lsDel("eEdPlace");
+}
+/* Wholly inside the window: ED_EDGE from its sides and foot, and its top ED_EDGE under the band,
+   whose drag region swallows every click over it (the band's rule in the sheet). Too narrow for the
+   margins, it is centred; too short, the top wins and --ed-room keeps the foot in. */
+function edPlaceRect(g, x, y){
+  const maxL=g.W-ED_EDGE-g.w;
+  const left=maxL<ED_EDGE ? (g.W-g.w)/2 : Math.min(maxL, Math.max(ED_EDGE, g.W/2+x-g.w/2));
+  const top=Math.max(g.band+ED_EDGE, Math.min(g.H-ED_EDGE-g.h, g.H/2+y));
+  return {left:Math.round(left), top:Math.round(top)};
+}
+function edBand(){
+  const row=document.querySelector("header > .row");
+  const r=row && row.getBoundingClientRect ? row.getBoundingClientRect() : null;
+  return r && r.bottom>0 ? r.bottom : 0;
+}
+/* Stands the card at (x,y), clamped, and returns the offset it took. It stays a flex item,
+   top-aligned and shifted by its relative top and left, so its width is the centred card's own. */
+function edStandAt(x, y){
+  const st=modalCard.style, band=edBand(), W=modalEl.clientWidth, H=modalEl.clientHeight;
+  modalEl.classList.add("ed-placed");
+  st.setProperty("--ed-room", Math.max(0, H-2*ED_EDGE-band)+"px");
+  const relT=parseFloat(st.top)||0, relL=parseFloat(st.left)||0;
+  const g={W:W, H:H, band:band, w:modalCard.offsetWidth, h:modalCard.offsetHeight};
+  const at=edPlaceRect(g, x, y), t0=modalCard.offsetTop-relT, l0=modalCard.offsetLeft-relL;
+  st.top=(at.top-t0)+"px";
+  st.left=(at.left-l0)+"px";
+  /* A height glide scales the card about its origin, so the origin is the point that holds still
+     while the top goes to its nudged place and the foot to its new one; unnudged, the top (the sheet). */
+  const was=edPlaced;
+  if(was && was.h!==g.h && was.top!==at.top) st.transformOrigin="50% "+((was.top-at.top)*g.h/(g.h-was.h))+"px";
+  else st.removeProperty("transform-origin");
+  edPlaced={top:at.top, h:g.h};
+  return {x:Math.round(at.left+g.w/2-W/2), y:Math.round(at.top-H/2)};
+}
+function edUnstand(){
+  if(!modalEl || !modalEl.classList.contains("ed-placed")) return;
+  modalEl.classList.remove("ed-placed");
+  ["top","left","--ed-room","transform-origin"].forEach(k=>modalCard.style.removeProperty(k));
+  edPlaced=null;
+}
+/* Every render asks again, so Prev, Next and the reopening after a first Save stand where the
+   editor stood; so do a resize and the card's own change of size. */
+function placeDialog(kind){
+  const was=edPlaced;
+  edPlaceKind=ED_PLACE_KINDS.indexOf(kind)>=0 ? kind : null;
+  edPlaceSync();
+  if(was && edPlaced) edPlaced=was;   // the glide after a re-render starts from what was painted
+}
+function edPlaceSync(){
+  if(edDrag && edDrag.moved) return;
+  const p=(edPlaceKind && !modalEl.hidden) ? edPlaces()[edPlaceKind] : null;
+  if(p) edStandAt(p.x, p.y); else edUnstand();
+}
+function wireDialogDrag(){
+  const head=e=>{
+    const h=e.target && e.target.closest ? e.target.closest("h2") : null;
+    return h && h.parentNode===modalCard && !e.target.closest("button,a,input,select,textarea") ? h : null;
+  };
+  /* The press is captured, so the double click it ends in is the card's: where it began is read here. */
+  modalCard.addEventListener("pointerdown",e=>{
+    edHeadDown=!!head(e);
+    if(!edPlaceKind || e.button!==0 || e.pointerType==="touch" || !head(e)) return;
+    edDrag={x:e.clientX, y:e.clientY, top:modalCard.offsetTop, left:modalCard.offsetLeft, moved:false, at:null};
+    try{ modalCard.setPointerCapture(e.pointerId); }catch(_){}
+  });
+  modalCard.addEventListener("pointermove",e=>{
+    const d=edDrag;
+    if(!d) return;
+    const dx=e.clientX-d.x, dy=e.clientY-d.y;
+    if(!d.moved){ if(Math.abs(dx)+Math.abs(dy)<4) return; d.moved=true; }
+    d.at=edStandAt(d.left+dx+modalCard.offsetWidth/2-modalEl.clientWidth/2, d.top+dy-modalEl.clientHeight/2);
+  });
+  const end=()=>{
+    const d=edDrag;
+    edDrag=null;
+    if(!d || !d.at || !edPlaceKind) return;
+    edDragEnd=Date.now();
+    const all=edPlaces();
+    all[edPlaceKind]=d.at;
+    edPlacesWrite(all);
+  };
+  ["pointerup","pointercancel","lostpointercapture"].forEach(k=>modalCard.addEventListener(k,end));
+  /* Back to the centre, the desk's double click for how it came (All, the rail's title). A drag
+     just ended is not the first half of one. */
+  modalCard.addEventListener("dblclick",e=>{
+    if(!edPlaceKind || !edHeadDown || Date.now()-edDragEnd<500) return;
+    const all=edPlaces();
+    if(!all[edPlaceKind]) return;
+    delete all[edPlaceKind];
+    edPlacesWrite(all);
+    const t0=modalCard.offsetTop, l0=modalCard.offsetLeft;
+    edUnstand();
+    const dx=l0-modalCard.offsetLeft, dy=t0-modalCard.offsetTop;
+    if((dx||dy) && !mgReduceMotion() && typeof modalCard.animate==="function")
+      modalCard.animate([{translate:dx+"px "+dy+"px"},{translate:"0 0"}],{duration:M_MS.move, easing:E_EASE});
+  });
+  addEventListener("resize", edPlaceSync);
+  if(typeof ResizeObserver==="function") new ResizeObserver(edPlaceSync).observe(modalCard);
 }
 /* THE CARD IS THE WHOLE KEYBOARD while it is up: the markup says aria-modal, and the scrim
    takes the mouse, but Tab walked off the card and into the header behind it - reachable and
@@ -465,7 +592,7 @@ function openCover(){
 
 export {
   modalOpen, modalTabTarget, tabTargetIn, openCover, mountModalBody, modalResize, dismissModal, closeModal,
-  wireModalX, wireModalBody, wireFocusModality,
+  wireModalX, wireModalBody, wireFocusModality, wireDialogDrag,
   accOpen, accHtml, mfSec, catToggle, wireFolds, wireAcc,
   openDialog, refreshDialogName, refreshDialogChrome,
   dressDialogInputs,
