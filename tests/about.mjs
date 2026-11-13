@@ -131,6 +131,8 @@ const DOC = {
   createElement: () => new Stub(""), createRange: () => ({}), addEventListener() {}, removeEventListener() {},
 };
 DOC.documentElement.dataset = {};
+/* placeDialog sizes the room above the editors' bars (Editors stage 3, edBars: --ed-bars-h on the root); a stand-in here. */
+DOC.documentElement.style.setProperty = () => {};
 DOC.createElement = () => { const s = new Stub(""); s.getContext = () => ({}); return s; };
 ctx.document = DOC;
 
