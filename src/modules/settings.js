@@ -267,8 +267,6 @@ function accountCardHtml(v){
     let h='<div class="sgn-top"><div class="sgn-top-row">'+signinIdentHtml({initial:p.initial, name:p.name, sub:p.sub, off:p.off})
       +'<span class="sgn-acts"><button type="button" class="btn" data-signin-act="another">'+esc(t("Use another account"))+'</button>'
       +'<button type="button" class="btn" data-signin-act="out">'+esc(t("Sign out"))+'</button></span></div>';
-    /* Where the system seals nothing for real (shell/main.js signinKeep), no refresh token is kept, and the next renewal asks. */
-    if(!v.keeps) h+='<p class="sgn-cap" data-signin-unkept>'+esc(t("No keyring is open on this computer, so the sign-in is not kept: each renewal asks for it again."))+'</p>';
     /* A press that failed is said first, as the door says it; a renewal's refusal where no fresh sign-in is asked. */
     const told=signinTold(v), say=s=>'<p class="sgn-say"><b>'+esc(s[0])+'</b><span>'+esc(s[1])+'</span></p>';
     if(told && told.kind==="pressed") h+=say(told.say)+signinActsHtml(told.acts);

@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 85;
+const PLANTS = 92;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 98 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + TRACE_PLANTS);
+const EXPECTED = 100 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + TRACE_PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1319,7 +1319,7 @@ CASES.secretTree = () => {
 /* The shell around a real press with Microsoft configured: the view, the two press handlers and Cancel's, and signinIo, all sliced;
    the browser a stand-in that resolves and opens nothing, the loopback one that waits until closed and records the wait it was
    given; the provider, the service, a write and the network throw if reached. `storage` stands for safeStorage. */
-function waitStand(sec, swap, storage) {
+function waitStand(sec, swap, storage, branchId) {
   const st = { on: {}, handle: {}, out: 0, told: [], handed: [], waits: [] };
   const tryDecl = s => { try { return decl(MAIN, s); } catch { return ""; } };
   let text = [tryDecl("function signinView("), tryDecl("function signinIo("), ipcSlice('ipcMain.on("etiuda:signin-click"'),
@@ -1329,7 +1329,7 @@ function waitStand(sec, swap, storage) {
   const vals = {
     ipcMain: { on: (ch, fn) => { st.on[ch] = fn; }, handle: (ch, fn) => { st.handle[ch] = fn; } }, fromEngine: () => true, LINK_CLICK_MS: 2000,
     signinState: () => ({ held: null }), signinLapsed: sec.signinLapsed, signinOffered: () => [MS], signinPreviewing: () => false,
-    signinKnown: sec.signinKnown, SIGNIN_PROVIDERS: sec.SIGNIN_PROVIDERS, branchIdentity: () => ({ id: DESK_ID, key: DESK_KEY }), net: { fetch: out },
+    signinKnown: sec.signinKnown, SIGNIN_PROVIDERS: sec.SIGNIN_PROVIDERS, branchIdentity: branchId || (() => ({ id: DESK_ID, key: DESK_KEY })), net: { fetch: out },
     signinRun: sec.signinRun, signinSeat: out, signinTake: out, signinFlush: out, signinSave: out,
     tellSignin: () => { st.told.push(st.view()); }, signinPageOk: sec.signinPageOk, sealsForReal: sec.sealsForReal,
     safeStorage: storage === undefined ? { isEncryptionAvailable: () => true } : storage, http: {}, SIGNIN_WAIT_MS: sec.SIGNIN_WAIT_MS,
@@ -1469,17 +1469,17 @@ CASES.previewSh = () => {
     && lines.filter(l => /\bexec\b/.test(l)).length === 1 && lines.filter(l => /ETIUDA_SIGNIN_PREVIEW/.test(l)).length === 1
     && !lines.some(l => /\b(export|setx|reg|gsettings|xdg-open)\b/.test(l));
 };
-/* No keyring: the view says whether the system seals for real (sealsForReal over safeStorage), and Account's card, signed in, says
-   in one line that the sign-in is not kept where it does not, and nothing where it does. */
+/* No keyring: the view says whether the system seals for real (sealsForReal over safeStorage), and Account's retired unkept line is gone. */
 CASES.keyringLine = async (s, swap) => {
   const viewWith = storage => waitStand(s, swap, storage).view();
   const real = viewWith({ isEncryptionAvailable: () => true }), none = viewWith({ isEncryptionAvailable: () => false }), absent = viewWith(null);
   const signed = { offered: ["microsoft"], signedIn: "microsoft", code: CODE, seat: "held" };
   const words = h => String(h).replace(/<[^>]*>/g, "");
-  const kept = await acctOf(Object.assign({ keeps: true }, signed)), unkept = await acctOf(Object.assign({ keeps: false }, signed));
-  const before = await acctOf({ offered: ["microsoft"], keeps: false });
+  const unkept = await acctOf(Object.assign({ keeps: false }, signed));
+  const L = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
   return real.keeps === true && none.keeps === false && absent.keeps === false && !!P && P.signinRead({}).keeps === true
-    && words(unkept).indexOf(UNKEPT_LINE) >= 0 && /data-signin-unkept/.test(unkept) && !/data-signin-unkept/.test(kept) && !/data-signin-unkept/.test(before);
+    && words(unkept).indexOf(UNKEPT_LINE) < 0 && !/data-signin-unkept/.test(unkept) && !/data-signin-unkept/.test(SETTINGS)
+    && L.indexOf(UNKEPT_LINE) < 0;
 };
 /* A provider pressed in Settings, Account is answered there alone: the header's panel stays shut; pressed in the panel, the answer
    opens it as before. */
@@ -1975,6 +1975,64 @@ CASES.saidCleared = async (s, swap) => {
   const r = await w.signinRenewNow();
   return before === "signin-unreached" && r === "renewed" && w.said() === "";
 };
+/* ---- no refresh token or an unopened sub asks for sign-in again (ds20): Google asks offline, and Check now / daily renewal
+   set ask: true with the copywriter's words instead of doing nothing or failing as signin-unbound ---- */
+const ASK_EN = ["This computer could not renew its sign-in by itself.", "Signing in again renews it."];
+const ASK_PL = ["Ten komputer nie zdołał sam odnowić logowania.", "Wystarczy zalogować się ponownie."];
+CASES.renewAsk = async (s, swap) => {
+  const sec = typeof swap === "string" ? s : s;
+  const gUrl = new URL(sec.signinAuthorize(G, 50000, DESK_KEY).url);
+  const st = wireStand(sec, () => answer({ id_token: jwt(msClaims(undefined, Date.now())) }));
+  st.store.held = heldOf({ refresh: "" });
+  const said = await loadWire(st, Array.isArray(swap) ? swap : undefined).signinRenewNow();
+  const ioSub = renewIo(answer({ id_token: jwt(msClaims(undefined)) }), answer({}));
+  ioSub.kept = x => (x === "sealed:rt-1" ? "rt-1" : "");
+  const badSub = await sec.signinRenewHeld(ioSub, MS, DESK_KEY, heldOf(), () => NOW);
+  if (!P) return false;
+  const storage = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const words = h => String(h).replace(/<[^>]*>/g, "").replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+  const vAsk = view({ signedIn: "microsoft", code: CODE, seat: "held", ask: true });
+  const doorEn = P.signinDoor(vAsk), acctEn = words(await acctOf(vAsk));
+  let doorPl = null;
+  storage.lsSet("eUiLang", "pl");
+  try { doorPl = P.signinDoor(vAsk); } finally { storage.lsSet("eUiLang", "en"); }
+  return gUrl.searchParams.get("access_type") === "offline" && gUrl.searchParams.get("prompt") === "consent select_account"
+    && said === "signin-ask" && st.asked === 0 && st.posted === 0 && st.saves === 1 && st.tells === 1
+    && st.store.held.ask === true && st.store.held.refresh === "" && !!st.store.held.cert && st.store.held.code === CODE
+    && badSub.said === "signin-ask" && badSub.held.ask === true && badSub.held.refresh === "" && ioSub.asked.length === 0 && ioSub.posted.length === 0
+    && doorEn && doorEn.moment === "ask" && doorEn.say[0] === ASK_EN[0] && doorEn.say[1] === ASK_EN[1]
+    && acctEn.indexOf(ASK_EN[0] + ASK_EN[1]) >= 0
+    && doorPl && doorPl.say[0] === ASK_PL[0] && doorPl.say[1] === ASK_PL[1];
+};
+
+/* ---- a desk with no keyring says so plainly at sign-in (ds21): no identity is made, and the retired Account line is gone ---- */
+const KEYRING_EN = ["Signing in needs a keyring, and none is open on this computer.",
+  "Installing or unlocking GNOME Keyring or KDE Wallet, then reopening Etiuda, lets this computer sign in."];
+const KEYRING_PL = ["Logowanie wymaga magazynu kluczy, a na tym komputerze żaden nie jest otwarty.",
+  "Po zainstalowaniu lub odblokowaniu GNOME Keyring albo Portfela KDE i ponownym otwarciu Etiudy ten komputer będzie mógł się zalogować."];
+CASES.noKeyring = async (s, swapOrPage) => {
+  const swap = Array.isArray(swapOrPage) ? swapOrPage : undefined;
+  const pg = swapOrPage && !Array.isArray(swapOrPage) && typeof swapOrPage.signinDoor === "function" ? swapOrPage : P;
+  if (!pg) return false;
+  let idCalls = 0;
+  const st = waitStand(s, swap, { isEncryptionAvailable: () => false }, () => { idCalls++; return null; });
+  const pressed = await st.press("microsoft");
+  const storage = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const words = h => String(h).replace(/<[^>]*>/g, "").replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+  const vKeyring = pg.signinRead({ offered: ["microsoft", "google"], said: "signin-keyring", keeps: false });
+  const doorEn = pg.signinDoor(vKeyring), acctEn = swapOrPage ? "" : words(await acctOf(vKeyring));
+  let doorPl = null;
+  storage.lsSet("eUiLang", "pl");
+  try { doorPl = pg.signinDoor(vKeyring); } finally { storage.lsSet("eUiLang", "en"); }
+  const L = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
+  return s.sealsForReal({ isEncryptionAvailable: () => true, getSelectedStorageBackend: () => "basic_text" }, "linux") === false
+    && idCalls === 0 && st.out === 0 && !!pressed && pressed.said === "signin-keyring"
+    && st.told.some(v => v.said === "signin-keyring")
+    && !!doorEn && doorEn.moment === "refused" && doorEn.heading === KEYRING_EN[0] && doorEn.line === KEYRING_EN[1]
+    && (swapOrPage ? true : acctEn.indexOf(KEYRING_EN[0] + KEYRING_EN[1]) >= 0 && acctEn.indexOf(UNKEPT_LINE) < 0)
+    && !!doorPl && doorPl.moment === "refused" && doorPl.heading === KEYRING_PL[0] && doorPl.line === KEYRING_PL[1]
+    && L.indexOf("Na tym komputerze nie jest otwarty żaden magazyn kluczy") < 0 && SETTINGS.indexOf(UNKEPT_LINE) < 0;
+};
 
 /* ---- the cases on the branch ------------------------------------------------------------------------------------------- */
 const LEGS = [
@@ -2038,7 +2096,7 @@ const LEGS = [
   ["ds14b", "linkPage", "the link block stands last in every waiting place, the panel after its acts and Account after Cancel, and nowhere outside a wait or in the preview's pressed state; Polish too; its Copy copies the link"],
   ["ds14c", "linkLook", "the link block as the designer placed it: the line in the preview line's form, the field 6 px under it, never wrapping, 12 px and a hairline in the panel, 12 px and 560 px in Account, no box; a click selects all"],
   ["ds14d", "previewSh", "tools/signin-preview.sh is outside the packaged files: the .deb's program unless an AppImage is named, --where starts nothing, one exec with the variable for that start alone"],
-  ["ds14e", "keyringLine", "the view says whether the system seals for real, and Account says in one line that the sign-in is not kept where it does not, and nothing where it does"],
+  ["ds14e", "keyringLine", "the view says whether the system seals for real, and Account's retired unkept line is gone"],
   ["ds14f", "accountPress", "a provider pressed in Settings, Account is answered there alone and the header's panel stays shut; pressed in the panel, the answer opens it as before"],
   ["ds17a", "doorsRead", "the doors beside a certificate are kept whole and in order; a door out of shape, its key id not the lead key's canonical one among them, makes no list; no certificate, no doors"],
   ["ds17b", "doorsKept", "the doors are kept with the certificate and in the file, dropped with it, kept through a refusal, and a door out of shape in the file is no list"],
@@ -2065,6 +2123,8 @@ const LEGS = [
   ["ds19b", "toldPressed", "a sign-in pressed while signed in that fails says the desk stays signed in, then the reason's own heading where it has one, with Try again or Use another account; a cancel or a sign-in done says nothing; the door and Account, Polish too"],
   ["ds19c", "checkGap", "Check now asks once per SIGNIN_CHECK_GAP_MS, and a clock set back since the last press does not hold it up"],
   ["ds19d", "saidCleared", "a renewal that reached its end clears a failed press's said, so no stale refusal stands over the desk"],
+  ["ds20a", "renewAsk", "Google authorizes with access_type=offline and asks for consent every interactive sign-in (decision 36); a renewal with no refresh token or an unopenable sub asks for sign-in again without reaching the provider, in the copywriter's English and Polish words"],
+  ["ds20b", "noKeyring", "pressing a provider with no keyring open makes no identity and tells the person plainly in the copywriter's English and Polish words; Account's unkept line is retired"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
@@ -2399,6 +2459,18 @@ if (!PLANTS_OFF) {
   await plantPage("dsp81", ["function signinNoSeat(v){ return v.refused===\"waiting\" || v.refused===\"full\"; } /* plant:no-seat */",
     "function signinNoSeat(v){ return v.refused===\"full\"; }"], "waitPage");
   await plantPage("dsp82", ["case \"waiting\": case \"full\": /* plant:wait-say */", "case \"full\":"], "waitPage");
+  await plantPage("dsp91", ["\"signin-none\",\"signin-preview\",\"signin-keyring\"];", "\"signin-none\",\"signin-preview\"];"], "noKeyring");
+  await plantPage("dsp92", ["    case \"signin-keyring\":\n      return [t(\"Signing in needs a keyring, and none is open on this computer.\"), t(\"Installing or unlocking GNOME Keyring or KDE Wallet, then reopening Etiuda, lets this computer sign in.\")];\n", ""], "noKeyring");
+  await plant("dsp87", ["extra: Object.freeze({ prompt: \"consent select_account\", access_type: \"offline\" }) }), /* plant:google-offline */",
+    "extra: Object.freeze({ prompt: \"consent select_account\" }) }),"], "renewAsk");
+  await plant("dsp111", ["extra: Object.freeze({ prompt: \"consent select_account\", access_type: \"offline\" }) }), /* plant:google-offline */",
+    "extra: Object.freeze({ prompt: \"select_account\", access_type: \"offline\" }) }),"], "renewAsk");
+  await plantWire("dsp88", ["if (!held || signinBusy) return \"\"; /* plant:renew-no-token */",
+    "if (!held || !held.refresh || signinBusy) return \"\";"], "renewAsk");
+  await plant("dsp89", ["const got = token && sub ? await signinRenew(io, p, deskKey, token, held.seed, sub, now) : { ok: false, reason: \"signin-ask\" }; /* plant:renew-sub-kept */",
+    "const got = token ? await signinRenew(io, p, deskKey, token, held.seed, sub, now) : { ok: false, reason: \"signin-ask\" };"], "renewAsk");
+  await plantWire("dsp90", ["  if (!sealsForReal(safeStorage, process.platform)) { signinSaid = \"signin-keyring\"; tellSignin(); return signinView(); } /* plant:signin-keyring */\n",
+    ""], "noKeyring");
   /* A gate on a local act, put into the desk file's write in memory, is seen. */
   await plantPage("dsp83", ["if(!r || r===\"signin\" || signinNoSeat(v)) return null; /* plant:told-renewal */", "return null;"], "toldRenewal");
   await plantPage("dsp84", ["  if(FAIL_FIRST.indexOf(v.said)>=0) return {kind:\"pressed\",", "  if(false) return {kind:\"pressed\","], "toldPressed");

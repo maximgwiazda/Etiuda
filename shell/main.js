@@ -9099,9 +9099,11 @@ let SIGNIN_PROVIDERS = Object.freeze({
     token: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
     scope: "openid profile offline_access", refreshScope: "openid profile offline_access",
     extra: Object.freeze({ response_mode: "query", prompt: "select_account" }) }),
+  /* Google gives a refresh token only on the consent that grants offline access, so every interactive sign-in asks for it
+     ("consent select_account", Claude alpha's decision 36, 2026-11-13): a consent screen at a rare act beats an ask every hour. */
   google: Object.freeze({ clientId: "", clientSecret: "", issuer: "https://accounts.google.com",
     authorize: "https://accounts.google.com/o/oauth2/v2/auth", token: "https://oauth2.googleapis.com/token",
-    scope: GOOGLE_HD_NEEDS_EMAIL ? "openid email" : "openid", refreshScope: "", extra: Object.freeze({ prompt: "select_account" }) }),
+    scope: GOOGLE_HD_NEEDS_EMAIL ? "openid email" : "openid", refreshScope: "", extra: Object.freeze({ prompt: "consent select_account", access_type: "offline" }) }), /* plant:google-offline */
 });
 const SIGNIN_TENANT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SIGNIN_CLIENT = /^[A-Za-z0-9][A-Za-z0-9._-]{7,199}$/;
@@ -9630,7 +9632,7 @@ const SIGNIN_LOST = Object.freeze(["signin-ask", "signin-expired", "signin-other
 async function signinRenewHeld(io, p, deskKey, held, now) {
   if (!held) return { held: null, said: "signin-ask" };
   const token = held.refresh ? io.kept(held.refresh) : "", sub = held.sub ? io.kept(held.sub) : "";
-  const got = token ? await signinRenew(io, p, deskKey, token, held.seed, sub, now) : { ok: false, reason: "signin-ask" };
+  const got = token && sub ? await signinRenew(io, p, deskKey, token, held.seed, sub, now) : { ok: false, reason: "signin-ask" }; /* plant:renew-sub-kept */
   if (!got.ok) {
     const lost = SIGNIN_LOST.indexOf(got.reason) >= 0;
     return { held: Object.assign({}, held, { refresh: lost ? "" : held.refresh, ask: lost || held.ask === true, checked: now(),
@@ -9887,9 +9889,12 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
   const id = String(provider || ""), c = signinClick;
   signinClick = null;
   if (!c || c.provider !== id || Date.now() - c.at > LINK_CLICK_MS || signinBusy) return signinView(); /* plant:signin-click */
-  const p = signinOffered().find(x => x.id === id), me = p ? branchIdentity(true) : null;
+  const p = signinOffered().find(x => x.id === id);
   if (!p && signinPreviewing() && signinKnown(id)) { signinSaid = "signin-preview"; tellSignin(); return signinView(); } /* plant:preview-press */
-  if (!p || !me || !net || typeof net.fetch !== "function") { signinSaid = "signin-none"; return signinView(); } /* plant:signin-offered */
+  if (!p || !net || typeof net.fetch !== "function") { signinSaid = "signin-none"; return signinView(); } /* plant:signin-offered */
+  if (!sealsForReal(safeStorage, process.platform)) { signinSaid = "signin-keyring"; tellSignin(); return signinView(); } /* plant:signin-keyring */
+  const me = branchIdentity(true);
+  if (!me) { signinSaid = "signin-none"; return signinView(); }
   const run = { loop: null, provider: p.id, url: "" }, io = signinIo(run);
   signinBusy = run;
   signinSaid = "";
@@ -9957,14 +9962,14 @@ ipcMain.handle("etiuda:signin-check", async (e) => {
   await signinRenewNow().catch(() => "");
   return signinView();
 });
-/* The quiet renewal, for a desk holding a refresh token for a provider still offered: a new certificate kept and written, or the
-   last kept and the calm words. Never from the harness's own window or any harness start, so no leg reaches a provider, save
-   while the sign-in lab is taken (signinLabHeld). */
+/* The quiet renewal, for a desk holding a sign-in for a provider still offered: a new certificate kept and written, or the
+   last kept and the calm words, or ask: true where no refresh token or sub can be opened. Never from the harness's own window
+   or any harness start, so no leg reaches a provider, save while the sign-in lab is taken (signinLabHeld). */
 async function signinRenewNow() {
   if (harnessLaunch() && !signinLabHeld()) return ""; /* plant:renew-now-harness */
   signinFlush();
   const s = signinState(), held = s.held;
-  if (!held || !held.refresh || signinBusy) return "";
+  if (!held || signinBusy) return ""; /* plant:renew-no-token */
   const p = signinOffered().find(x => x.id === held.provider), me = branchIdentity(false);
   if (!p || !me) return ""; /* plant:renew-offered */
   const r = await signinRenewHeld(signinIo({ loop: null }), p, me.key, held, Date.now);

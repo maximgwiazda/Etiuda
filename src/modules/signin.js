@@ -101,11 +101,13 @@ function signinSay(reason, v, p){
     case "lapsed":
       return [t("This desk's seat is due for renewal."), t("It renews by itself the next time the sign-in service answers. Everything on this desk works as before.")];
     case "ask":
-      return [t("This desk could not renew its sign-in by itself."), t("Signing in again below picks up where it stopped. Meanwhile everything on this desk works as before.")];
+      return [t("This computer could not renew its sign-in by itself."), t("Signing in again renews it.")];
     case "signin-preview":
       return [t("Sign-in is not set up yet, so nothing was sent. This is a preview."), ""];
     case "door":
       return [t("This team is no longer offered here, or this computer is already in a team, so nothing was sent."), ""];
+    case "signin-keyring":
+      return [t("Signing in needs a keyring, and none is open on this computer."), t("Installing or unlocking GNOME Keyring or KDE Wallet, then reopening Etiuda, lets this computer sign in.")];
     default:
       return [t("The sign-in did not finish."), t("Nothing changed, and signing in can be tried again.")];
   }
@@ -129,7 +131,7 @@ function signinTold(v){
   return {kind:"renewal", say:[t("The sign-in service did not accept this account's sign-in."),
     t("Signing in again settles it; until then, Etiuda keeps working with the catalog it has.")], acts:[], providers:true};
 }
-const FAIL_FIRST=["unreached","signin-unreached","signin-timeout","signin-browser","signin-notallowed","desks","token","signin","signin-refused","signin-token","signin-unbound","signin-state","signin-none","signin-preview"];
+const FAIL_FIRST=["unreached","signin-unreached","signin-timeout","signin-browser","signin-notallowed","desks","token","signin","signin-refused","signin-token","signin-unbound","signin-state","signin-none","signin-preview","signin-keyring"];
 /* THE DOOR'S CONTENT for the view `v`, whatever form draws it: {moment, ident, heading, line, say, calm, code, providers, cap, privacy, foot,
    acts: [{act, label, solid}]}; null where there is no door. The shell is separate from what it does: signinPanelHtml is the one
    form drawn today (a button in the header with a panel under it), and another form takes the same content. */
