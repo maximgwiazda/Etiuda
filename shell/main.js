@@ -9223,7 +9223,7 @@ let SIGNIN_PROVIDERS = Object.freeze({
     authorize: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     token: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
     scope: "openid profile offline_access", refreshScope: "openid profile offline_access",
-    extra: Object.freeze({ response_mode: "query", prompt: "select_account" }) }),
+    extra: Object.freeze({ response_mode: "query", prompt: "select_account" }), service: "" }),
   /* Google: select_account alone. A consent prompt at every sign-in (decision 36) was withdrawn on measurement, 2026-11-13: a
      personal account signed in twice with select_account and kept a refresh token both times (a Workspace account unmeasured);
      access_type offline stays, and a sign-in that ever lacks a refresh token is asked again (signinRenewHeld). */
@@ -9236,6 +9236,19 @@ const SIGNIN_CLIENT = /^[A-Za-z0-9][A-Za-z0-9._-]{7,199}$/;
 const SIGNIN_FORM_MAX = 16 * 1024, SIGNIN_ANSWER_MAX = 256 * 1024, SIGNIN_TIMEOUT_MS = 30 * 1000, SIGNIN_WAIT_MS = 5 * 60 * 1000;
 const SIGNIN_SKEW_MS = 5 * 60 * 1000;
 function signinKnown(id) { return Object.prototype.hasOwnProperty.call(SIGNIN_PROVIDERS, String(id)) ? SIGNIN_PROVIDERS[String(id)] : null; }
+/* THE LICENCE SERVICE AS ITS OWN RESOURCE (decision 49, section 11.11): the scope its registration exposes, api://<its client id>/
+   Licence.Use, asked only on a managed path, never of an ordinary licence or a personal account; "" where the table names no service. */
+const SIGNIN_ACCESS_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SIGNIN_ACCESS_MAX = 4096;
+function signinServiceScope(p) {
+  const known = p ? signinKnown(p.id) : null;
+  return p && p.id === "microsoft" && known && SIGNIN_ACCESS_ID.test(String(known.service || "")) ? "api://" + String(known.service).toLowerCase() + "/Licence.Use" : "";
+}
+/** The scope a sign-in or renewal asks beside today's: the service's, where machine policy sets Managed or the service has answered this
+ *  account "access-token" (`held.access`); else "", and every request is today's. */
+function signinAccessFor(p, managed, held) {
+  return managed === true || (!!held && held.access === true) ? signinServiceScope(p) : ""; /* plant:access-path */
+}
 /* The tenant of personal Microsoft accounts, as Microsoft's ID token reference names it in `tid`. */
 const SIGNIN_PERSONAL_TENANT = "9188040d-6c67-4c5b-b112-36a304b66dad";
 /* THE TABLE UNDER A MANAGED INSTALLATION'S PINS (managedPolicyFrom's answer `pol`): only the provider it names, none where it is
@@ -9418,13 +9431,13 @@ function signinSame(a, b) {
 }
 /* One sign-in's request for the browser, {url, state, nonce, seed, verifier, redirect}: `port` the loopback's, `deskKey` this
    desk's signing public half, `rand(n)` n random bytes. */
-function signinAuthorize(p, port, deskKey, rand) {
+function signinAuthorize(p, port, deskKey, rand, access) {
   const r = typeof rand === "function" ? rand : crypto.randomBytes, known = signinKnown(p.id);
   const verifier = signinB64url(r(32)), state = signinB64url(r(32)), seed = Buffer.from(r(32)).toString("hex");
   const nonce = signinNonce(deskKey, seed); /* plant:nonce-bound */
   const redirect = "http://127.0.0.1:" + Math.floor(Number(port));
   const challenge = signinB64url(crypto.createHash("sha256").update(verifier).digest()); /* plant:pkce */
-  const q = new URLSearchParams(Object.assign({ client_id: p.clientId, response_type: "code", redirect_uri: redirect, scope: known.scope,
+  const q = new URLSearchParams(Object.assign({ client_id: p.clientId, response_type: "code", redirect_uri: redirect, scope: access ? known.scope + " " + access : known.scope,
     state: state, nonce: nonce, code_challenge: challenge, code_challenge_method: "S256" }, known.extra));
   return { url: known.authorize + "?" + q.toString(), state: state, nonce: nonce, seed: seed, verifier: verifier, redirect: redirect };
 }
@@ -9465,10 +9478,10 @@ function signinCodeForm(p, pending, code) {
   return Buffer.from(new URLSearchParams(Object.assign({ client_id: p.clientId }, signinSecretPart(p), { grant_type: "authorization_code", code: String(code),
     redirect_uri: pending.redirect, code_verifier: pending.verifier })).toString(), "utf8");
 }
-function signinRefreshForm(p, refreshToken) {
-  const known = signinKnown(p.id);
+function signinRefreshForm(p, refreshToken, access) {
+  const known = signinKnown(p.id), scope = access ? (known.refreshScope ? known.refreshScope + " " : "openid ") + access : known.refreshScope;
   return Buffer.from(new URLSearchParams(Object.assign({ client_id: p.clientId }, signinSecretPart(p), { grant_type: "refresh_token",
-    refresh_token: String(refreshToken) }, known.refreshScope ? { scope: known.refreshScope } : {})).toString(), "utf8");
+    refresh_token: String(refreshToken) }, scope ? { scope: scope } : {})).toString(), "utf8");
 }
 /* A JWT's claims, unverified: the licence service verifies the signature; the desk reads only what says the answer is its own. */
 function signinClaims(jwt) {
@@ -9487,7 +9500,7 @@ function signinIssuerOk(p, c) {
 /* The token answer `res` ({status, bytes}) read: {ok, idToken, refreshToken, sub} where it holds an ID token for this client from
    this provider, unexpired, with a sub, carrying `nonce`; else {ok: false, reason}. For a renewal `sub` is the seat's: the token
    must carry it ("signin-other"), and one with no nonce at all is taken as the renewal; a nonce present must still be `nonce`. */
-function signinTokens(res, p, nonce, now, sub) {
+function signinTokens(res, p, nonce, now, sub, access) {
   let json = null;
   try { json = JSON.parse(Buffer.from(res && res.bytes ? res.bytes : []).toString("utf8")); } catch { json = null; }
   if (!json || typeof json !== "object") return { ok: false, reason: "signin-unreached" };
@@ -9500,7 +9513,10 @@ function signinTokens(res, p, nonce, now, sub) {
   if (sub !== undefined && !signinSame(c.sub, sub)) return { ok: false, reason: "signin-other" }; /* plant:renew-sub */
   const renewal = sub !== undefined && c.nonce === undefined; /* plant:renew-none */
   if (!renewal && (typeof c.nonce !== "string" || !signinSame(c.nonce, nonce))) return { ok: false, reason: "signin-unbound" }; /* plant:token-nonce */
-  return { ok: true, idToken: json.id_token, refreshToken: typeof json.refresh_token === "string" ? json.refresh_token : "", sub: c.sub };
+  const out = { ok: true, idToken: json.id_token, refreshToken: typeof json.refresh_token === "string" ? json.refresh_token : "", sub: c.sub };
+  /* The service's access token, kept only where its scope was asked: an ordinary answer's access token is another resource's. */
+  if (access) out.accessToken = typeof json.access_token === "string" && json.access_token.length <= SIGNIN_ACCESS_MAX ? json.access_token : ""; /* plant:access-kept */
+  return out;
 }
 /* One POST of `form` through `fetchFn` to `url`, no redirect followed, nothing cached, no cookie, the answer read up to `max`
    bytes, the whole within `ms`: {status, bytes}; throws else. The provider's token door and the service's door both use it. */
@@ -9686,12 +9702,12 @@ function signinListen(httpMod, pageFor, ms, takes, landMs) {
 /* One sign-in at the provider, the person's own act. `io` {listen(pageFor, takes), openPage(url), tokenAsk(url, form), page(kind),
    rand?}: the shell's door, loopback and browser, or a leg's stand-ins. {ok, provider, idToken, refreshToken, sub, seed}, or
    {ok: false, reason}. The caller lands the loopback (signinLanding). */
-async function signinRun(io, p, deskKey, now) {
+async function signinRun(io, p, deskKey, now, access) {
   if (!p || !signinKnown(p.id) || !/^[0-9a-f]{64}$/.test(String(deskKey))) return { ok: false, reason: "signin-none" };
   let pending = null;
   const loop = await io.listen(kind => io.page(kind), query => signinOurs(query, pending)); /* plant:loop-takes */
   try {
-    pending = signinAuthorize(p, loop.port, deskKey, io.rand);
+    pending = signinAuthorize(p, loop.port, deskKey, io.rand, access);
     let opened = false;
     try { opened = signinPageOk(pending.url) && !!(await io.openPage(pending.url)); } catch { opened = false; }
     if (!opened) { signinTrace(io, p.id, "browser", "signin-browser"); return { ok: false, reason: "signin-browser" }; }
@@ -9709,7 +9725,7 @@ async function signinRun(io, p, deskKey, now) {
     let res = null;
     try { res = await io.tokenAsk(signinKnown(p.id).token, signinCodeForm(p, pending, back.code)); }
     catch (e) { signinTrace(io, p.id, "token", "signin-unreached", { detail: e && e.message }, hide); return { ok: false, reason: "signin-unreached" }; }
-    const got = signinTokens(res, p, pending.nonce, now());
+    const got = signinTokens(res, p, pending.nonce, now(), undefined, access);
     const said = signinTraceSaid(res, hide);
     if (!got.ok) {
       if (said.status === 200 && !said.error && !said.detail) said.detail = signinTraceClaims(res, pending.nonce, now());
@@ -9717,7 +9733,8 @@ async function signinRun(io, p, deskKey, now) {
       return got;
     }
     signinTrace(io, p.id, "token", "ok", { status: said.status, detail: "refresh token " + (got.refreshToken ? "given" : "none") }, hide);
-    return { ok: true, provider: p.id, idToken: got.idToken, refreshToken: got.refreshToken, sub: got.sub, seed: pending.seed };
+    return Object.assign({ ok: true, provider: p.id, idToken: got.idToken, refreshToken: got.refreshToken, sub: got.sub, seed: pending.seed },
+      access ? { accessToken: got.accessToken } : {});
   } finally {
     loop.close();
   }
@@ -9725,14 +9742,16 @@ async function signinRun(io, p, deskKey, now) {
 /* The quiet refresh at the provider: the refresh token exchanged for a fresh ID token, nothing shown. {ok, idToken, refreshToken,
    sub} where the new token is the seat's (signinTokens with `sub`, the last token's; "" holds it to this desk's nonce alone); else
    signinTokens' reason, "signin-unreached" where the provider could not be asked, or "signin-ask" where there is nothing to ask with. */
-async function signinRenew(io, p, deskKey, refreshToken, seed, sub, now) {
+async function signinRenew(io, p, deskKey, refreshToken, seed, sub, now, access) {
   if (!p || !signinKnown(p.id) || !refreshToken || !/^[0-9a-f]{64}$/.test(String(seed))) return { ok: false, reason: "signin-ask" };
   const hide = [String(refreshToken), p.clientSecret, sub ? String(sub) : ""];
   let res = null;
-  try { res = await io.tokenAsk(signinKnown(p.id).token, signinRefreshForm(p, refreshToken)); }
+  try { res = await io.tokenAsk(signinKnown(p.id).token, signinRefreshForm(p, refreshToken, access)); }
   catch (e) { signinTrace(io, p.id, "refresh", "signin-unreached", { detail: e && e.message }, hide); return { ok: false, reason: "signin-unreached" }; }
   const nonce = signinNonce(deskKey, seed);
-  const got = signinTokens(res, p, nonce, now(), sub ? String(sub) : undefined);
+  const got = signinTokens(res, p, nonce, now(), sub ? String(sub) : undefined, access);
+  /* The organisation has not assigned this account to the service: its own refusal, said as at sign-in. */
+  if (!got.ok && access && /\bAADSTS50105\b/.test(signinTraceSaid(res, hide).error_description || "")) return { ok: false, reason: "signin-notassigned" }; /* plant:access-50105 */
   const said = signinTraceSaid(res, hide);
   if (!got.ok) {
     if (said.status === 200 && !said.error && !said.detail) said.detail = signinTraceClaims(res, nonce, now());
@@ -9741,7 +9760,7 @@ async function signinRenew(io, p, deskKey, refreshToken, seed, sub, now) {
   }
   signinTrace(io, p.id, "refresh", "ok", { status: said.status, detail: signinTraceClaims(res, nonce, now()).replace(/^.*, nonce /, "nonce ")
     + ", refresh token " + (got.refreshToken ? "replaced" : "kept") }, hide);
-  return { ok: true, idToken: got.idToken, refreshToken: got.refreshToken || refreshToken, sub: got.sub };
+  return Object.assign({ ok: true, idToken: got.idToken, refreshToken: got.refreshToken || refreshToken, sub: got.sub }, access ? { accessToken: got.accessToken } : {});
 }
 /* The refresh token sealed by the system's store, as base64, or "" where the store seals nothing for real (sealsForReal: no
    keyring, or Linux's basic_text): no refresh token is kept there, and the next renewal asks the person to sign in again. */
@@ -9764,10 +9783,29 @@ function signinTokenHash(idToken) { return crypto.createHash("sha256").update(St
 function signinDeskBytes(o) {
   return Buffer.from(SIGNIN_DESK_LINE + "\n" + [o.provider, o.tokenHash, o.desk, o.t].map(String).join("\n"), "utf8");
 }
-/* The request's body, {provider, idToken, desk, seed?, t, sig}, signed by `sign(bytes)` (hex); null where any part is not its shape. */
-function signinDeskBody(provider, idToken, desk, seed, t, sign) {
+/* With the service's access token (section 11.11): the service's managed line over both tokens' hashes, requests.mjs
+   signinDeskManagedBytes. */
+const SIGNIN_DESK_MANAGED_LINE = "etiuda-licence-signin-desk-managed";
+function signinDeskManagedBytes(o) {
+  return Buffer.from(SIGNIN_DESK_MANAGED_LINE + "\n" + [o.provider, o.tokenHash, o.accessHash, o.desk, o.t].map(String).join("\n"), "utf8"); /* plant:access-signed */
+}
+/* The managed body, {provider, idToken, accessToken, desk, seed?, t, sig}; null where the access token is not its shape. */
+function signinDeskManagedBody(provider, idToken, desk, seed, t, sign, accessToken) {
+  if (typeof accessToken !== "string" || !accessToken || accessToken.length > SIGNIN_ACCESS_MAX) return null;
+  const sig = String(sign(signinDeskManagedBytes({ provider: provider, tokenHash: signinTokenHash(idToken), accessHash: signinTokenHash(accessToken), desk: desk, t: t })) || "");
+  if (!/^[0-9a-f]{128}$/.test(sig)) return null;
+  const body = { provider: String(provider), idToken: idToken, accessToken: accessToken, desk: String(desk) };
+  if (seed) body.seed = String(seed);
+  body.t = t;
+  body.sig = sig;
+  return body;
+}
+/* The request's body, {provider, idToken, desk, seed?, t, sig}, signed by `sign(bytes)` (hex); null where any part is not its shape.
+   With `accessToken`, the managed body; without, today's. */
+function signinDeskBody(provider, idToken, desk, seed, t, sign, accessToken) {
   if (!signinKnown(provider) || typeof idToken !== "string" || !idToken || !/^[0-9a-f]{64}$/.test(String(desk)) || !Number.isSafeInteger(t)) return null;
   if (seed && !/^[0-9a-f]{64}$/.test(String(seed))) return null;
+  if (accessToken !== undefined) return signinDeskManagedBody(provider, idToken, desk, seed, t, sign, accessToken); /* plant:access-body */
   const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t })) || ""); /* plant:desk-signed */
   if (!/^[0-9a-f]{128}$/.test(sig)) return null;
   const body = { provider: String(provider), idToken: idToken, desk: String(desk) };
@@ -9942,12 +9980,14 @@ function signinAnswerBody(res, deskKey, packed) {
     }
     return { ok: false, reason: "unreached" };
   }
-  const said = { 403: ["token", "signin"], 409: ["full", "desks"] }[res.status];
+  /* A licence whose seats follow the organisation's roles (a managed installation): "no-role", the token carrying none for a desk;
+     "access-token", the service asking for its own access token beside the ID token, which it left unspent. */
+  const said = { 403: ["token", "signin", "no-role"], 409: ["full", "desks", "access-token"] }[res.status];
   return { ok: false, reason: said && said.indexOf(j.reason) >= 0 ? j.reason : "unreached" };
 }
 /* One post to signin/desk with `idToken`: `seed` for a first sign-in, "" for a renewal. `io` {serviceAsk(url, body), sign(bytes), packed}. */
-async function signinSeat(io, provider, deskKey, idToken, seed, now) {
-  const body = signinDeskBody(provider, idToken, deskKey, seed, now(), io.sign);
+async function signinSeat(io, provider, deskKey, idToken, seed, now, accessToken) {
+  const body = signinDeskBody(provider, idToken, deskKey, seed, now(), io.sign, accessToken || undefined);
   if (!body) { signinTrace(io, provider, "service", "unreached", { detail: "the request did not form" }); return { ok: false, reason: "unreached" }; }
   const hide = [String(idToken)];
   let res = null;
@@ -9957,6 +9997,19 @@ async function signinSeat(io, provider, deskKey, idToken, seed, now) {
   signinTrace(io, provider, "service", ans.ok ? "ok" : ans.reason, ans.ok ? { status: res.status, detail: "certificate " + (ans.cert ? "given" : "none") }
     : signinTraceSaid(res, hide), hide);
   return ans;
+}
+/* "ACCESS-TOKEN", where the path was not managed (section 11.11): the refresh token already held is redeemed for the service's scope,
+   silently, a token request and never a browser, and the seat asked once more with both tokens. {ans, got, access}: `access` true where
+   the service took the managed request, so the path is remembered; the redemption's own refusal, AADSTS50105 included, as the answer. */
+async function signinSeatAccess(io, p, deskKey, got, seed, now) {
+  const scope = signinServiceScope(p);
+  if (!scope || !got.refreshToken) return { ans: { ok: false, reason: "signin-refused" }, got: got, access: false };
+  const r = await signinRenew(io, p, deskKey, got.refreshToken, got.seed || seed || "0".repeat(64), got.sub, now, scope); /* plant:access-silent */
+  if (!r.ok) return { ans: { ok: false, reason: r.reason === "signin-notassigned" ? r.reason : "signin-refused" }, got: got, access: false };
+  if (!r.accessToken) return { ans: { ok: false, reason: "signin-refused" }, got: got, access: false };
+  const ans = await signinSeat(io, p.id, deskKey, r.idToken, seed, now, r.accessToken);
+  const again = !ans.ok && ans.reason === "access-token";
+  return { ans: again ? { ok: false, reason: "signin-refused" } : ans, got: Object.assign({}, got, { idToken: r.idToken, refreshToken: r.refreshToken }), access: !again };
 }
 /* THE CALM LAPSE: the kept certificate's `until` passed with no new one. It decides nothing on the desk but Account's words; the
    desk works on, and the next certificate ends it. */
@@ -9985,6 +10038,8 @@ const SIGNIN_LOST = Object.freeze(["signin-ask", "signin-expired", "signin-other
    kept(sealed)}. {held, said}; whatever fails, the code, the certificate and the provider stay, so the desk works on. */
 async function signinRenewHeld(io, p, deskKey, held, now) {
   if (!held) return { held: null, said: "signin-ask" };
+  const access = signinAccessFor(p, io.managed === true, held);
+  if (access) return signinRenewHeldAccess(io, p, deskKey, held, now, access);
   const token = held.refresh ? io.kept(held.refresh) : "", sub = held.sub ? io.kept(held.sub) : "";
   const got = token && sub ? await signinRenew(io, p, deskKey, token, held.seed, sub, now) : { ok: false, reason: "signin-ask" }; /* plant:renew-sub-kept */
   if (!got.ok) {
@@ -9994,6 +10049,25 @@ async function signinRenewHeld(io, p, deskKey, held, now) {
   }
   const fresh = Object.assign({}, held, { refresh: io.keep(got.refreshToken) || held.refresh, sub: held.sub || io.keep(got.sub) });
   const ans = await signinSeat(io, p.id, deskKey, got.idToken, "", now); /* plant:renew-seedless */
+  /* The service now asks its own access token for this account: redeemed once, silently, and the path remembered. */
+  const m = !ans.ok && ans.reason === "access-token" ? await signinSeatAccess(io, p, deskKey, { refreshToken: got.refreshToken || token, sub: sub, seed: held.seed }, "", now) : null;
+  if (m && m.access) fresh.access = true;
+  const said = m ? m.ans : ans;
+  return { held: signinSettle(fresh, said, now()), said: said.ok ? "renewed" : said.reason };
+}
+/* The renewal on a managed path: the refresh asks the service's scope beside today's, and the seat is asked with both tokens. An
+   account the organisation has not assigned keeps what it held, said; the rest fails as the ordinary renewal does. */
+async function signinRenewHeldAccess(io, p, deskKey, held, now, access) {
+  const token = held.refresh ? io.kept(held.refresh) : "", sub = held.sub ? io.kept(held.sub) : "";
+  const got = token && sub ? await signinRenew(io, p, deskKey, token, held.seed, sub, now, access) : { ok: false, reason: "signin-ask" };
+  if (!got.ok && got.reason === "signin-notassigned") return { held: Object.assign({}, held, { checked: now(), reached: true, said: got.reason }), said: got.reason };
+  if (!got.ok) {
+    const lost = SIGNIN_LOST.indexOf(got.reason) >= 0;
+    return { held: Object.assign({}, held, { refresh: lost ? "" : held.refresh, ask: lost || held.ask === true, checked: now(),
+      reached: lost ? held.reached : false }), said: got.reason };
+  }
+  const fresh = Object.assign({}, held, { refresh: io.keep(got.refreshToken) || held.refresh, sub: held.sub || io.keep(got.sub) });
+  const ans = await signinSeat(io, p.id, deskKey, got.idToken, "", now, got.accessToken); /* plant:access-renew-seat */
   return { held: signinSettle(fresh, ans, now()), said: ans.ok ? "renewed" : ans.reason };
 }
 /* seat.json as the desk writes it for its lead: {format: 2, desk, certificate}, unsealed, since it holds pseudonyms alone. */
@@ -10028,6 +10102,7 @@ function signinFileRead(text, packed) {
   /* The list is beside `held`, and the held seat judges by it. */
   out.revoked = signinRevokedOk(d.revoked) ? d.revoked : null; /* plant:revoked-file */
   if (out.held) out.held.revoked = out.revoked;
+  if (out.held && h.access === true) out.held.access = true; /* the service's answer "access-token", remembered (section 11.11) */
   if (out.held && out.held.cert) {
     const doors = signinDoorsOk(h.doors, packed), sig = typeof h.doorsSig === "string" ? h.doorsSig : "";
     if (signinDoorsSigned(doors, sig, out.held.cert)) Object.assign(out.held, { doors: doors, doorsSig: sig }); /* plant:file-doors-signed */
@@ -10268,16 +10343,19 @@ function signinIo(run) {
     page: kind => signinPageHtml(kind),
     trace: SIGNIN_TRACE_ASKED ? line => console.error(line) : null, /* plant:trace-wired */
     packed: SIGNIN_DESK_PACKED, /* plant:door-io-packed */
+    /* Read when a renewal asks it, so an io made where no state is read never reads one. */
+    get managed() { const m = signinState().managed; return !!(m && m.managed); },
   };
 }
 /* A first sign-in's outcome kept: the refresh token and the sub sealed where the system seals for real, the seed beside, and the
    service's answer. A refusal other than a full licence keeps nothing, so the desk is as it was. */
-function signinTake(provider, got, ans, now) {
+function signinTake(provider, got, ans, now, access) {
   const s = signinState();
   if (!ans.ok && ans.reason !== "full") return false; /* plant:take-refused */
   const base = { provider: provider, refresh: signinKeep(safeStorage, process.platform, got.refreshToken),
     sub: signinKeep(safeStorage, process.platform, got.sub), seed: got.seed, code: "", cert: null, at: 0, checked: now, reached: true, said: "", ask: false, doors: [] };
   base.revoked = s.revoked || null; /* plant:revoked-survives */
+  if (access === true) base.access = true;
   s.held = signinSettle(base, ans, now);
   s.revoked = s.held.revoked;
   delete s.out; /* this sign-in holds the desk's place again, so a sign out still owed is no longer wanted */
@@ -10320,11 +10398,14 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
   tellSignin();
   let landing = "appfail";
   try {
-    let got = await signinRun(io, p, me.key, Date.now);
+    const access = managed || (st.held && st.held.provider === p.id) ? signinAccessFor(p, managed, st.held) : "";
+    let got = await signinRun(io, p, me.key, Date.now, access || undefined);
     if (got.ok && managed && signinOtherHeld(st, got.sub)) got = { ok: false, reason: "signin-other" }; /* plant:managed-same */
     if (got.ok) {
-      const ans = await signinSeat(io, p.id, me.key, got.idToken, got.seed, Date.now);
-      signinTake(p.id, got, ans, Date.now());
+      let ans = await signinSeat(io, p.id, me.key, got.idToken, got.seed, Date.now, got.accessToken);
+      let took = !!access;
+      if (!access && !ans.ok && ans.reason === "access-token") { const m = await signinSeatAccess(io, p, me.key, got, got.seed, Date.now); ans = m.ans; got = m.got; took = m.access; }
+      signinTake(p.id, got, ans, Date.now(), took);
       signinFlush();
       signinSaid = ans.ok ? "signin-done" : ans.reason;
       landing = signinLanding(got, ans, managed);
