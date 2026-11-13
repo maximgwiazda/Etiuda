@@ -5503,7 +5503,8 @@ function liveSyncIo() {
 }
 /* Drive's roots as `readdir` finds them within `ms`: each gdrive root the records name, and each letter D to Z, other
    than a mapped network letter, whose root holds one of Drive's folders; each with its folders and its shortcut targets.
-   A letter that has not answered by then is passed over, so a share that hangs costs the wait and no more. */
+   One read at a time, and none after the bound: a read that hangs holds one of the pool's four threads until the system
+   gives up on it, and every asynchronous file, crypto and zlib call in this process shares that pool. */
 async function driveSeen(records, readdir, ms) {
   const rec = records && typeof records === "object" ? records : {};
   const mapped = {};
@@ -5515,24 +5516,29 @@ async function driveSeen(records, readdir, ms) {
     if (mapped[letter] || asked.some(a => a.root.toUpperCase() === letter + ":")) continue; /* plant:drive-mapped */
     asked.push({ root: letter + ":", named: false });
   }
-  let timer = null;
-  const late = new Promise(r => { timer = setTimeout(() => r(null), ms); if (timer.unref) timer.unref(); });
-  const within = dir => Promise.race([Promise.resolve().then(() => readdir(/:$/.test(dir) ? dir + "\\" : dir)).catch(() => null), late])
-    .then(got => (Array.isArray(got) ? got.map(String) : null));
-  const found = await Promise.all(asked.map(async a => {
+  let timer = null, over = false;
+  const late = new Promise(r => { timer = setTimeout(() => { over = true; r(null); }, ms); if (timer.unref) timer.unref(); });
+  const within = dir => {
+    if (over) return Promise.resolve(null); /* plant:drive-one */
+    return Promise.race([Promise.resolve().then(() => readdir(/:$/.test(dir) ? dir + "\\" : dir)).catch(() => null), late])
+      .then(got => (Array.isArray(got) ? got.map(String) : null));
+  };
+  const found = [];
+  for (const a of asked) {
     const top = await within(a.root);
-    if (!top || (!a.named && !top.some(n => driveTops(n)))) return null;
+    if (!top || (!a.named && !top.some(n => driveTops(n)))) continue;
     const linkDir = top.find(n => driveTops(n) === "link");
     const links = [];
     const ids = linkDir ? (await within(placeJoin(a.root, linkDir))) || [] : [];
-    await Promise.all(ids.map(async id => {
+    for (const id of ids) {
       const inner = (await within(placeJoin(a.root, linkDir + "\\" + id))) || [];
       inner.forEach(n => links.push(placeJoin(a.root, linkDir + "\\" + id + "\\" + n)));
-    }));
-    return { root: a.root, tops: top, links: links };
-  }));
+    }
+    found.push({ root: a.root, tops: top, links: links });
+  }
+  over = true;
   clearTimeout(timer);
-  return found.filter(Boolean);
+  return found;
 }
 /* One look at a time, on Windows alone, kept on liveSyncIo for the readers that cannot wait for one; a later look
    replaces it, so a Drive started after the desk is found at the next invitation. */

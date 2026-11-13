@@ -20,7 +20,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 const STAND = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), STAND);
-const EXPECTED = 11;
+const EXPECTED = 12;
 let asserted = 0, failed = 0;
 function check(ok, line) {
   asserted++;
@@ -287,14 +287,15 @@ check(rec.gdrive.join("|") === "C:\\Users\\ann\\GDrive|k:|J:" && rec.gdriveSeen.
   "955k DefaultMountPoint is read as a letter or a folder with its variables, one naming a variable this computer lacks names no"
   + " root, and a root a look found joins them: " + rec.gdrive.join("|"));
 
-/* The look: within its bound whatever a letter does, and never at a mapped network letter. */
+/* The look: within its bound whatever a letter does, one read in flight at most, and never at a mapped network letter.
+   E is the mapped letter and Q never answers, so every letter after Q is one a serial look does not reach. */
 async function look(src) {
   const api = src ? placeApi(src) : P;
   const read = [];
-  const readdir = dir => {
-    read.push(dir);
+  let live = 0, peak = 0;
+  const answer = dir => {
     if (dir === "Q:\\") return new Promise(noop);
-    if (dir === "Z:\\") return Promise.resolve(["My Drive"]);
+    if (dir === "E:\\") return Promise.resolve(["My Drive"]);
     if (dir === "K:\\") return Promise.resolve([POLISH_MINE, ".shortcut-targets-by-id"]);
     if (dir === "K:\\.shortcut-targets-by-id") return Promise.resolve([SHORT_ID]);
     if (dir === "K:\\.shortcut-targets-by-id\\" + SHORT_ID) return Promise.resolve(["Team"]);
@@ -302,25 +303,44 @@ async function look(src) {
     if (dir === "M:\\") return Promise.resolve(["Lab Mine"]);
     return Promise.reject(Object.assign(new Error("absent"), { code: "ENOENT" }));
   };
+  const readdir = dir => {
+    read.push(dir);
+    live++;
+    if (live > peak) peak = live;
+    const got = answer(dir);
+    got.then(() => { live--; }, () => { live--; });
+    return got;
+  };
   const t0 = Date.now();
-  const found = await api.driveSeen({ gdrive: ["M:\\"], mapped: [{ letter: "Z:", remote: "\\\\files\\dept" }] }, readdir, 300);
-  return { found, read, ms: Date.now() - t0 };
+  const found = await api.driveSeen({ gdrive: ["M:\\"], mapped: [{ letter: "E:", remote: "\\\\files\\dept" }] }, readdir, 300);
+  return { found, read, peak, ms: Date.now() - t0 };
 }
-/* The look's own timer does not hold a process open, so this one keeps the leg alive across its bound. */
-const hold = setTimeout(noop, 5000);
-const seen = await look();
-const k = seen.found.find(f => f.root === "K:");
+/* The look's own timer holds no process open. This one keeps the leg alive across the bound, and names 955l where a look
+   never answers, so a bound grown past it reads as a failure rather than an early exit. */
+const LOOK_GUARD_MS = 10000;
+const guarded = src => {
+  let timer = null;
+  return Promise.race([look(src), new Promise(r => { timer = setTimeout(() => r(null), LOOK_GUARD_MS); })])
+    .then(got => { clearTimeout(timer); return got; });
+};
+const seen = await guarded();
+const k = seen ? seen.found.find(f => f.root === "K:") : null;
 const mappedLifted = lifted("drive-mapped");
-const seenLifted = mappedLifted ? await look(mappedLifted) : null;
-clearTimeout(hold);
-check(seen.ms < 1500 && !!k && k.links.join("|") === "K:\\.shortcut-targets-by-id\\" + SHORT_ID + "\\Team"
-    && seen.found.map(f => f.root).sort().join("|") === "K:|M:" && seen.read.indexOf("Z:\\") < 0 && seen.read.indexOf("Q:\\") >= 0
-    && !!seenLifted && seenLifted.read.indexOf("Z:\\") >= 0,
+const seenLifted = mappedLifted ? await guarded(mappedLifted) : null;
+check(!!seen && seen.ms < 1500 && !!k && k.links.join("|") === "K:\\.shortcut-targets-by-id\\" + SHORT_ID + "\\Team"
+    && seen.found.map(f => f.root).sort().join("|") === "K:|M:" && seen.read.indexOf("E:\\") < 0 && seen.read.indexOf("Q:\\") >= 0
+    && !!seenLifted && seenLifted.read.indexOf("E:\\") >= 0,
   "955l a look answers within its bound past a letter that never answers, keeps a root the records name and a letter holding Drive's"
   + " folders with its shortcut targets, passes over a letter holding none, and never reads a mapped network letter (lifting"
-  + " plant:drive-mapped reads it): " + seen.ms + " ms, roots " + seen.found.map(f => f.root).join("|")
-  + ", mapped read " + (seen.read.indexOf("Z:\\") >= 0) + (seenLifted ? ", lifted " + (seenLifted.read.indexOf("Z:\\") >= 0) : ""));
-
+  + " plant:drive-mapped reads it): " + (seen ? seen.ms + " ms, roots " + seen.found.map(f => f.root).join("|")
+  + ", mapped read " + (seen.read.indexOf("E:\\") >= 0) : "no answer in " + LOOK_GUARD_MS + " ms")
+  + (seenLifted ? ", lifted " + (seenLifted.read.indexOf("E:\\") >= 0) : ""));
+const oneLifted = lifted("drive-one");
+const seenOne = oneLifted ? await guarded(oneLifted) : null;
+check(!!seen && seen.peak === 1 && seen.read.indexOf("R:\\") < 0 && !!seenOne && seenOne.peak > 1,
+  "955r a look holds one read in flight at most and starts none after a read that hangs, so a hang takes one of the pool's"
+  + " threads (lifting plant:drive-one goes on reading past it): peak " + (seen ? seen.peak : "none")
+  + ", past the hang " + (seen ? seen.read.indexOf("R:\\") >= 0 : "none") + ", lifted peak " + (seenOne ? seenOne.peak : "none"));
 /* Every other kind gives the candidates it gave before this change, read off the rules as they stood. */
 const before955 = [
   [{ kind: "onedrive", root: "OneDrive", rel: "Etiuda" }, { onedrive: ["D:\\Users\\ben\\OneDrive", "E:\\Spare\\OneDrive"] }, "D:\\Users\\ben\\OneDrive\\Etiuda|E:\\Spare\\OneDrive\\Etiuda"],
