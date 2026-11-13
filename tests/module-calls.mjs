@@ -7933,8 +7933,10 @@ const CARD_B = {
           fresh(); reset(); subj = "same id"; reopened = 0; openS(place, ["typed"]);
           modalCard.fields()[0].value = "typed here";
           scrim();
-          DL.edCatalogTaken(false); desk();
-          const gone = [said() === ({ intent: "This intent", card: "This card" })[place] + " is no longer in the catalog, so nothing here can be saved. The text can still be copied.",
+          DL.edCatalogTaken(false);
+          const queued = DL.edCanSave();
+          desk();
+          const gone = [queued, said() === ({ intent: "This intent", card: "This card" })[place] + " is no longer in the catalog, so nothing here can be saved. The text can still be copied.",
             saveB.disabled, DL.edCanSave(), modalCard.fields()[0].value, DL.edResting()].join("|");
           subj = "B differs"; desk();
           return gone + "|" + [saveB.disabled, DL.edCanSave(), reopened].join("|");
@@ -7944,7 +7946,7 @@ const CARD_B = {
         DL.edCatalogTaken(true); subj = "A2"; desk();
         const edition = [/A newer edition changed this intent/.test(said()), saveB.disabled, DL.edCanSave()].join("|");
         return eq([intent, card, edition].join(" || "),
-          "true|true|false|typed here|true|true|false|0 || true|true|false|typed here|true|true|false|0 || true|false|true");
+          "false|true|true|false|typed here|true|true|false|0 || false|true|true|false|typed here|true|true|false|0 || true|false|true");
       });
 
     check("dialog.js", "983s4 every editor names its subject, the desk asks after it draws, the loader says whether the catalog taken is the same layer's (local memory never is), every Save asks first, the intent's heading follows its id, a deleted catalog card counts as gone, and every line has its Polish",

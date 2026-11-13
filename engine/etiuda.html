@@ -19129,7 +19129,7 @@ What you type stays in this browser only.`;
     edCause = sameLayer ? "edition" : "layer";
   }
   function edCanSave() {
-    return !edGone;
+    return !edGone && edCause !== "layer";
   }
   function edSubjectSoon() {
     clearTimeout(edSubjectTimer);

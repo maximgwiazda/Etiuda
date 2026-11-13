@@ -739,7 +739,7 @@ function edSubjectOpen(cfg){
 /* A catalog taken: in the same layer the next difference is the edition's. Another layer, or local memory
    cleared or put back, leaves the editor with nothing it may write to: its entry is taken as gone. */
 function edCatalogTaken(sameLayer){ edCause=sameLayer ? "edition" : "layer"; }
-function edCanSave(){ return !edGone; }
+function edCanSave(){ return !edGone && edCause!=="layer"; }   // the check runs a task after the desk draws
 function edSubjectSoon(){
   clearTimeout(edSubjectTimer);
   edSubjectTimer=setTimeout(edSubjectCheck,0);
