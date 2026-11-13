@@ -13,7 +13,8 @@
  * Whether a leg spawns, and its child's environment, is decided by
  * tools/ci-legs-decide.cjs alone: ETIUDA_FIXTURES and the window word never reach a
  * child from this process's environment, and a window leg spawns only on the Windows
- * runner with the dispatch's date. tests/engine-selftest.js 22f drives every arm.
+ * runner with the dispatch's date. A leg marked fixtures is given, on the runner only,
+ * the invented catalog tools/ci-catalog.mjs wrote to the folder CI_FIXTURES names. tests/engine-selftest.js 22f drives every arm.
  *
  * CI_LEGS_ROOT is the tree under test. Unset, this file's parent folder is the tree,
  * which is where a desk run keeps it. The decision module is loaded from this file's
@@ -62,15 +63,15 @@ const LEGS = [
   { id: "desk-ipc", args: ["tests/desk-ipc.mjs"], where: "linux-ok" },
   { id: "test", args: ["tests/test.js"], where: "linux-ok" },
   { id: "gate-run", args: ["tools/gate-run.mjs", "test", "split-guard"], where: "linux-ok" },
-  { id: "shell-smoke", args: ["tests/shell-smoke.js"], where: "windows-only", window: true, who: "tests/shell-smoke.js" },
-  { id: "reinstall", args: ["tests/reinstall.js"], where: "windows-only", window: true, who: "tests/reinstall.js" },
+  { id: "shell-smoke", args: ["tests/shell-smoke.js"], where: "windows-only", window: true, fixtures: true, who: "tests/shell-smoke.js" },
+  { id: "reinstall", args: ["tests/reinstall.js"], where: "windows-only", window: true, fixtures: true, who: "tests/reinstall.js" },
   { id: "update-install", args: ["tests/update-install.js", "--update"], where: "windows-only", window: true, who: "tests/update-install.js" },
   { id: "dot-field-desk", args: ["tests/dot-field-desk.js"], where: "windows-only", window: true, who: "tests/dot-field-desk.js" },
   { id: "pick-desk", args: ["tests/pick-desk.js"], where: "windows-only", window: true, who: "tests/pick-desk.js" },
   { id: "csp", args: ["tests/csp.js"], where: "linux-ok", window: true, who: "tests/csp.js" },
   { id: "desk", args: ["tests/desk.js"], where: "linux-ok", window: true, who: "tests/desk.js" },
   { id: "links", args: ["tests/links.js"], where: "linux-ok", window: true, who: "tests/links.js" },
-  { id: "catalog-watch", args: ["tests/catalog-watch.js"], where: "linux-ok", window: true, who: "tests/catalog-watch.js" },
+  { id: "catalog-watch", args: ["tests/catalog-watch.js"], where: "linux-ok", window: true, fixtures: true, who: "tests/catalog-watch.js" },
 ];
 
 const BY_ID = new Map(LEGS.map(leg => [leg.id, leg]));

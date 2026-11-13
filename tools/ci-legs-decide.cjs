@@ -9,10 +9,14 @@
  * computes. That date is the word for that one run, set by the dispatch the verdict argued
  * (channel 549, the widening of the wall to a runner). Anywhere else the leg is refused with the
  * wall's own lines, and nothing is spawned. The word is never inherited: it is removed from every
- * child, and set only on a window leg's child, from the dispatch's date. */
+ * child, and set only on a window leg's child, from the dispatch's date.
+ *
+ * ETIUDA_FIXTURES is never inherited either. On the runner alone, a leg marked `fixtures` is given
+ * the folder CI_FIXTURES names: the invented catalog tools/ci-catalog.mjs wrote there from the
+ * tree's own sample. A real catalog never reaches a runner, so there is nothing else to hand. */
 "use strict";
 
-const DROPPED = ["ETIUDA_FIXTURES", "GITHUB_TOKEN", "GH_TOKEN", "CI_LEGS", "CI_WINDOWS_DATE", "RELAY_TARGET"];
+const DROPPED = ["ETIUDA_FIXTURES", "GITHUB_TOKEN", "GH_TOKEN", "CI_LEGS", "CI_WINDOWS_DATE", "RELAY_TARGET", "CI_FIXTURES"];
 
 function onWindowsRunner(o) {
   const env = o.env || {};
@@ -43,6 +47,8 @@ function decide(E, leg, o) {
   delete child[E.WINDOWS_VAR];
   if (leg.relay) child.RELAY_TARGET = leg.relay;
   if (leg.window) child[E.WINDOWS_VAR] = date;
+  const made = (o.env || {}).CI_FIXTURES;
+  if (leg.fixtures && runner && made) child.ETIUDA_FIXTURES = made;
   return { status: "spawn", env: child };
 }
 

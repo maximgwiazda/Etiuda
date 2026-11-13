@@ -696,6 +696,7 @@ try {
     const { decide } = require(path.join(E.ROOT, "tools", "ci-legs-decide.cjs"));
     const winLeg = { id: "csp", window: true, where: "linux-ok", who: "tests/csp.js" };
     const nodeLeg = { id: "relay-unit", where: "linux-ok" };
+    const fixLeg = { id: "catalog-watch", window: true, fixtures: true, where: "linux-ok", who: "tests/catalog-watch.js" };
     const runnerEnv = { GITHUB_ACTIONS: "true" };
     const profile = Object.assign({ [E.WINDOWS_VAR]: E.WINDOWS_DAY }, runnerEnv);
     const arm = (leg, o) => decide(E, leg, Object.assign(
@@ -713,6 +714,16 @@ try {
       ["a profile carrying the word, with no date, is refused", walled, arm(winLeg, { env: profile, windowsDate: "" })],
       ["a node leg never inherits the word from a profile", d => d.status === "spawn" && !keyed(d), arm(nodeLeg, { env: profile })],
       ["a node leg is not given the word by the day's date", d => d.status === "spawn" && !keyed(d), arm(nodeLeg, {})],
+      /* The invented catalog: a fixtures leg on the runner takes CI_FIXTURES's folder; nothing else ever takes one. */
+      ["a fixtures leg on the runner is given the folder CI_FIXTURES names",
+        d => d.status === "spawn" && d.env.ETIUDA_FIXTURES === "made-here" && !("CI_FIXTURES" in d.env),
+        arm(fixLeg, { env: Object.assign({ CI_FIXTURES: "made-here", ETIUDA_FIXTURES: "inherited" }, runnerEnv) })],
+      ["a leg not marked fixtures is never given a folder",
+        d => d.status === "spawn" && !("ETIUDA_FIXTURES" in d.env),
+        arm(winLeg, { env: Object.assign({ CI_FIXTURES: "made-here", ETIUDA_FIXTURES: "inherited" }, runnerEnv) })],
+      ["off the runner a fixtures leg inherits no folder",
+        d => d.status === "spawn" && !("ETIUDA_FIXTURES" in d.env),
+        arm(Object.assign({}, fixLeg, { window: false }), { env: { CI_FIXTURES: "made-here", ETIUDA_FIXTURES: "inherited" } })],
     ];
     const missed = arms.filter(([, good, d]) => !good(d)).map(([what]) => what);
     ok(missed.length === 0,
