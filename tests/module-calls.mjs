@@ -8104,14 +8104,16 @@ const CARD_B = {
         return eq([modalEl.shells.length, titleOf(modalCard), modalEl.classList.contains("ed-multi")].join("|"), "0|Edit intent|false");
       });
 
-    check("dialog.js", "983w8 every named thing an editor lists has the desk's own row with F2, F2 and the menu keys on a focused one too, the menu above every editor; the tour closes every editor; the one in hand wears the accent line",
+    check("dialog.js", "983w8 every named thing an editor lists has the menu its own panel gives, by the same builder, its edit row opening the editor beside, F2 at its right, F2 and the menu keys on a focused one too, the menu above every editor; the tour closes every editor; the one in hand wears the accent line",
       () => {
         const rd = n => fs.readFileSync(join(MODDIR, n), "utf8");
         const cm = rd("context-menu.js"), kd = rd("keydown.js"), tu = rd("tour.js"), tpl = fs.readFileSync(join(HERE, "..", "src", "template.html"), "utf8");
         const got = [
           /if\(target\.closest\("#modalCard"\)\) return editorRows\(target\);/.test(cm),
-          (cm.match(/edOpenBeside\(\); hooks\.open(Category|Intent|Card)Editor\(/g) || []).length,
-          ['label:t("Edit this category"), key:"F2"', 'label:t("Edit this intent"), key:"F2"', 'label:t("Edit this card"), key:"F2"'].every(s => cm.indexOf(s) >= 0),
+          ['besideRows(pill ? pillRows(pill) : null, "Edit this category"', 'besideRows(row ? intentRows(row) : null, "Edit this intent"',
+            'besideRows(card ? replyRows(card, card) : null, "Edit this card"'].filter(x => cm.indexOf(x) >= 0).length,
+          cm.indexOf('const out=(rows||[]).map(r=>(r && r.key==="F2") ? Object.assign({}, r, {act:act}) : r);') >= 0
+            && cm.indexOf("const act=()=>{ edOpenBeside(); open(); };") >= 0,
           cm.indexOf('!(target.matches && target.matches("#meIntents input[type=checkbox]"))') >= 0,
           kd.indexOf('else if(eventMatchesAction(e,"rename") && ctxEditorAct(document.activeElement)) e.preventDefault();') >= 0,
           tpl.indexOf(".menu.e-ctx.e-ctx-ed{z-index:230}") >= 0,

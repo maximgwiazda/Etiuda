@@ -31,23 +31,40 @@ function press(el, mods){
 }
 const label=(el, fallback)=>(el && el.getAttribute("aria-label")) || fallback;
 
-/* WHAT AN EDITOR LISTS: a category chip, a linked intent, a next reply, each with the desk's own row for its kind; the
-   editor it opens stands beside the one in hand (dialog.js, edOpenBeside). A field keeps the shell's edit menu. */
+/* WHAT AN EDITOR LISTS: a category chip, a linked intent, a next reply, each with the menu its own panel gives (the same
+   builder, on the desk's own pill, rail row or reply), its edit row opening the editor beside the one in hand (dialog.js,
+   edOpenBeside). Where the desk is not showing that thing, the edit row alone. A field keeps the shell's edit menu. */
+function besideRows(rows, label, open){
+  const act=()=>{ edOpenBeside(); open(); };
+  const out=(rows||[]).map(r=>(r && r.key==="F2") ? Object.assign({}, r, {act:act}) : r);
+  if(!out.some(r=>r && r.key==="F2")) out.push("-", {label:t(label), key:"F2", act:act});
+  return out;
+}
 function editorRows(target){
   const chip=target.closest(".cat-chip[data-k]");
-  if(chip) return [{label:t("Edit this category"), key:"F2", act:()=>{ edOpenBeside(); hooks.openCategoryEditor(chip.getAttribute("data-k"), true); }}];
+  if(chip){
+    const k=chip.getAttribute("data-k"), pill=document.querySelector('#pills .pill[data-k="'+cssEsc(k)+'"]');
+    return besideRows(pill ? pillRows(pill) : null, "Edit this category", ()=>hooks.openCategoryEditor(k, true));
+  }
   const ir=target.closest("#meIntents label"), inp=ir && ir.querySelector("input");
   const at=inp ? intentIdxOfId(inp.value) : -1;
-  if(at>-1) return [{label:t("Edit this intent"), key:"F2", act:()=>{ edOpenBeside(); hooks.openIntentEditor(at); }}];
+  if(at>-1){
+    const row=document.querySelector('#intentRail .rail-item[data-si="'+at+'"]');
+    return besideRows(row ? intentRows(row) : null, "Edit this intent", ()=>hooks.openIntentEditor(at));
+  }
   const nx=target.closest(".nx-row[data-to]");
-  if(nx) return [{label:t("Edit this card"), key:"F2", act:()=>{ edOpenBeside(); hooks.openCardEditor(nx.getAttribute("data-to"), null, false); }}];
+  if(nx){
+    const id=nx.getAttribute("data-to"), card=list && list.querySelector('.card[data-id="'+cssEsc(id)+'"]');
+    return besideRows(card ? replyRows(card, card) : null, "Edit this card", ()=>hooks.openCardEditor(id, null, false));
+  }
   return null;
 }
 /* F2 on a focused thing an editor lists does what its menu's row does. */
 function ctxEditorAct(el){
   const rows=(el && el.closest && el.closest("#modalCard")) ? editorRows(el) : null;
-  if(!rows) return false;
-  rows[0].act();
+  const ed=rows && rows.filter(r=>r && r.key==="F2")[0];
+  if(!ed) return false;
+  ed.act();
   return true;
 }
 /* The rows for what the event landed on, or null where nothing here has a menu. A row is {label, act}, or "-". */

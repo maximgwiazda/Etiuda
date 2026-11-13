@@ -38351,29 +38351,39 @@ What you type stays in this browser only.`;
     el.dispatchEvent(new MouseEvent("click", o));
   }
   var label = (el, fallback2) => el && el.getAttribute("aria-label") || fallback2;
+  function besideRows(rows, label2, open) {
+    const act = () => {
+      edOpenBeside();
+      open();
+    };
+    const out = (rows || []).map((r) => r && r.key === "F2" ? Object.assign({}, r, { act }) : r);
+    if (!out.some((r) => r && r.key === "F2")) out.push("-", { label: t(label2), key: "F2", act });
+    return out;
+  }
   function editorRows(target) {
     const chip = target.closest(".cat-chip[data-k]");
-    if (chip) return [{ label: t("Edit this category"), key: "F2", act: () => {
-      edOpenBeside();
-      hooks.openCategoryEditor(chip.getAttribute("data-k"), true);
-    } }];
+    if (chip) {
+      const k = chip.getAttribute("data-k"), pill = document.querySelector('#pills .pill[data-k="' + cssEsc(k) + '"]');
+      return besideRows(pill ? pillRows(pill) : null, "Edit this category", () => hooks.openCategoryEditor(k, true));
+    }
     const ir = target.closest("#meIntents label"), inp = ir && ir.querySelector("input");
     const at = inp ? intentIdxOfId(inp.value) : -1;
-    if (at > -1) return [{ label: t("Edit this intent"), key: "F2", act: () => {
-      edOpenBeside();
-      hooks.openIntentEditor(at);
-    } }];
+    if (at > -1) {
+      const row2 = document.querySelector('#intentRail .rail-item[data-si="' + at + '"]');
+      return besideRows(row2 ? intentRows2(row2) : null, "Edit this intent", () => hooks.openIntentEditor(at));
+    }
     const nx = target.closest(".nx-row[data-to]");
-    if (nx) return [{ label: t("Edit this card"), key: "F2", act: () => {
-      edOpenBeside();
-      hooks.openCardEditor(nx.getAttribute("data-to"), null, false);
-    } }];
+    if (nx) {
+      const id = nx.getAttribute("data-to"), card = list && list.querySelector('.card[data-id="' + cssEsc(id) + '"]');
+      return besideRows(card ? replyRows(card, card) : null, "Edit this card", () => hooks.openCardEditor(id, null, false));
+    }
     return null;
   }
   function ctxEditorAct(el) {
     const rows = el && el.closest && el.closest("#modalCard") ? editorRows(el) : null;
-    if (!rows) return false;
-    rows[0].act();
+    const ed = rows && rows.filter((r) => r && r.key === "F2")[0];
+    if (!ed) return false;
+    ed.act();
     return true;
   }
   function ctxRowsFor(target) {
