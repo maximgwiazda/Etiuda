@@ -48,7 +48,7 @@ try {
       && cfg.linux.executableName === 'etiuda' && cfg.linux.publish === null,
     '1a the Linux block asks a .deb and an AppImage for x64, the program etiuda and no updater: ' + J(cfg.linux.target));
   check(J(cfg.win.target) === J([{ target: 'nsis', arch: ['x64'] }]) && cfg.win.icon === 'shell/etiuda.ico'
-      && J(cfg.fileAssociations) === J([{ ext: 'ec', name: 'Etiuda catalog', description: 'Etiuda catalog', icon: 'shell/etiuda.ico', role: 'Editor' }]),
+      && J(cfg.fileAssociations) === J([{ ext: 'ec', name: 'Etiuda catalog', description: 'Etiuda catalog file', icon: 'shell/etiuda.ico', role: 'Editor' }]),
     '1b the Windows target, its icon and the association it registers are as they were, with no MIME type in it');
 
   /* ---- 2. the icons, from a fresh read of the config with its output in the lab ---- */

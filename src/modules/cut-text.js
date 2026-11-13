@@ -13,7 +13,10 @@ import { cutInk, cutRange, $ } from "./dom.js";
 const CUT_SEL=".ctitle,.ccat,.modal-name,.mg-card-lab,.mg-int-t,.mg-count,.acc-note,.mf-sum,"
   +"#toast,#intentPh,#roleDrum span,.tab-label>span,.fills input,.cat-now .cn-name,"
   +".mf input:not([type]),.mf input[type=text],.rail-t,footer .nw,.nx-t,.nx-hit>span,.nd-t,.nd-b,.nd-from,"
-  +".lw-name .n,.lw-drum span,.lw-drumfield,.lw-ct .t,.lw-c.op,.lw-c.in,.mg-cat-fixed";
+  +".lw-name .n,.lw-drum span,.lw-drumfield,.lw-ct .t,.lw-c.op,.lw-c.in,.mg-cat-fixed,"
+  +"#eTestBand,.screen-head .screen-name,.ec-name b,.ec-where code.open-folder,.eh-head b,.mg-int.chips-open .lw-chip,.lk-t,.ln-since";
+// Boxes of more than one line, a whole number of lines high: one that runs out is cut at its foot.
+const CUT_FOOT=".ln-clamp2,.ln-clamp";
 const CUT_MARGIN=400;
 const CUT_EPS=.01;
 /* A CARET'S WIDTH OF SLACK, for the scroll geometry alone: a field scrolled hard against its
@@ -82,6 +85,7 @@ function markCut(el){
   if(el) applyCut(el,cutSides(el));
 }
 function markCutText(root){
+  markCutFeet(root);
   const all=(root||document).querySelectorAll(CUT_SEL);
   if(!all.length) return;
   const top=-CUT_MARGIN, bottom=innerHeight+CUT_MARGIN, live=[];
@@ -96,6 +100,16 @@ function markCutText(root){
   const cut=[];
   for(let i=0;i<live.length;i++) cut.push(cutSides(live[i]));
   for(let i=0;i<live.length;i++) applyCut(live[i],cut[i]);
+}
+function markCutFeet(root){
+  const feet=(root||document).querySelectorAll(CUT_FOOT);
+  if(!feet.length) return;
+  const over=[];
+  for(let i=0;i<feet.length;i++) over.push(feet[i].scrollHeight-feet[i].clientHeight>.5);
+  for(let i=0;i<feet.length;i++){
+    feet[i].classList.toggle("cut-b", over[i]);
+    if(feet[i].classList.contains("cut-peek")) feet[i].title=over[i] ? feet[i].textContent.trim() : "";
+  }
 }
 /* One pass per frame however many callers ask, and a frame late on purpose: a card rebuilt in
    this task reports its estimated size until content-visibility resolves it. */
@@ -123,5 +137,5 @@ function wireCutFields(){
 }
 
 export {
-  CUT_SEL, cutSides, applyCut, markCut, markCutText, scheduleCutScan, wireCutFields,
+  CUT_SEL, CUT_FOOT, cutSides, applyCut, markCut, markCutText, scheduleCutScan, wireCutFields,
 };

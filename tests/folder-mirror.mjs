@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 117;
+const EXPECTED = 125;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
@@ -2912,7 +2912,7 @@ async function run() {
         while (Date.now() < untilOffer && !doc.getElementById("eCatalogOffer")) await sleep(25);
         const offerEl = doc.getElementById("eCatalogOffer");
         const offerHtml = offerEl ? offerEl.innerHTML : "";
-        offer = offerHtml.indexOf("lamp-shop") >= 0 && offerHtml.indexOf("Load catalog") >= 0;
+        offer = offerHtml.indexOf("lamp-shop") >= 0 && offerHtml.indexOf("Load catalog file") >= 0;
         const rowAfter = kit.SET.settingsBodyHtml().indexOf(shownLine) < 0;
         const deskAfter = (doc.getElementById("list").innerHTML || "").indexOf(shownLine) < 0;
         gone = rowAfter && deskAfter;
@@ -3678,6 +3678,218 @@ async function run() {
       return !q.landed && q.ownCopies > 1;
     });
     check(p.ok, "dc3b lifting plant:syncer-gone-lands leaves the record out of the mirror and copied again at every listing: " + JSON.stringify(p));
+  }
+
+  /* dr1a to dr1h (board 955, condition 1): a synced folder that takes this desk's write back, by dropping its own file or putting
+     an older copy in its place (Google Drive for desktop restoring its version), loses nothing. Through the syncer the shell
+     starts and that program's own listings: the mirror keeps the file and owes it again after two answered listings, another
+     desk's file still leaves after two absences, the third time the Library names the fault, and listings with nothing taken
+     back change nothing. */
+  const sha256 = b => crypto.createHash("sha256").update(b).digest("hex");
+  const DR1_OTHER = "k-" + "cd".repeat(8);
+  const DR1_FAULT = 'data-ec-fault="taken-back"';
+  async function takenBackScene(name, o = {}) {
+    const share = folder(name + "-share");
+    const { ud, mirror } = teamDesk(name + "-desk", share);
+    const d = loadDesk(ud, o.src ? { src: o.src } : {});
+    const me = d.api.branchIdentity(true);
+    enrol(d, me, [mirror, share]);
+    const tail = "5a5b5c5d", stem = "cat-" + name + "-" + tail, rel = "desks/" + me.id + "/" + stem + ".ec";
+    const onShare = path.join(share, "desks", me.id, stem + ".ec"), inMirror = path.join(mirror, "desks", me.id, stem + ".ec");
+    const lib = o.mod || syncerMod;
+    const out = {};
+    let s = null, prog = null;
+    if (o.mod) prog = o.mod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks, own: me.id, logger: () => {} });
+    else {
+      try { s = d.api.folderSyncerRun(null); } catch { s = null; }
+      if (s) { s.stop(); prog = s.program; }
+    }
+    out.syncer = !!prog;
+    if (!prog) return out;
+    const owed = () => !!lib.owedAt(mirror, rel);
+    const hash = f => { try { return sha256(fs.readFileSync(f)); } catch { return ""; } };
+    const faults = () => (typeof lib.takenBackList === "function" ? lib.takenBackList(mirror, "desks/" + me.id + "/") : []);
+    const scan = () => prog.syncOnce();
+    d.api.writeBranch(stem, JSON.stringify(branchOf(me, tail)));
+    scan();
+    const older = fs.existsSync(onShare) ? fs.readFileSync(onShare) : null;
+    d.api.writeBranch(stem, JSON.stringify(Object.assign(branchOf(me, tail), { name: "Edited" })));
+    scan();
+    const newer = hash(inMirror);
+    out.landed = !!older && !!newer && hash(onShare) === newer && !owed();
+    /* The control: three listings with nothing taken back leave the mirror, the share and the outbox byte for byte. */
+    const outboxAt = path.join(mirror, ".outbox.json");
+    const outboxNow = () => (fs.existsSync(outboxAt) ? fs.readFileSync(outboxAt, "utf8") : "");
+    const outboxBefore = outboxNow();
+    scan(); scan(); scan();
+    out.quiet = hash(inMirror) === newer && hash(onShare) === newer && !owed() && outboxNow() === outboxBefore
+      && outboxBefore.indexOf('"back"') < 0;
+    const otherRel = ["desks", DR1_OTHER, "cat-other-6a6b6c6d.ec"];
+    for (const dir of [share, mirror]) {
+      fs.mkdirSync(path.join(dir, "desks", DR1_OTHER), { recursive: true });
+      fs.writeFileSync(path.join(dir, ...otherRel), "{}\n", "utf8");
+    }
+    scan();
+    /* The share drops this desk's file, and another desk's. */
+    fs.unlinkSync(onShare);
+    fs.unlinkSync(path.join(share, ...otherRel));
+    scan();
+    out.goneOne = hash(inMirror) === newer && !owed() && fs.existsSync(path.join(mirror, ...otherRel));
+    scan();
+    out.goneTwo = hash(inMirror) === newer && owed() && !fs.existsSync(path.join(mirror, ...otherRel));
+    scan();
+    out.goneBack = hash(onShare) === newer && !owed();
+    /* The share puts the older copy back in its place. */
+    if (older) { fs.writeFileSync(onShare, older); touch(onShare); }
+    scan();
+    out.olderOne = hash(inMirror) === newer && !owed();
+    scan();
+    out.olderTwo = hash(inMirror) === newer && owed() && !!older && hash(onShare) === sha256(older);
+    scan();
+    out.olderBack = hash(onShare) === newer && !owed();
+    /* A file no floor guards, the statistics, put back older: the mirror keeps the newer bytes and owes them again. */
+    const statsAt = dir => path.join(dir, "desks", me.id, "stats.estat");
+    const statsDoc = v => JSON.stringify({ format: 1, kind: "etiuda-stats-sealed", team: TEAM, v }) + "\n";
+    d.api.writeReplacing(statsAt(mirror), statsDoc(1));
+    scan();
+    const statsOld = fs.existsSync(statsAt(share)) ? fs.readFileSync(statsAt(share)) : null;
+    d.api.writeReplacing(statsAt(mirror), statsDoc(2));
+    scan();
+    if (statsOld) { fs.writeFileSync(statsAt(share), statsOld); touch(statsAt(share)); }
+    scan();
+    out.statsKept = !!statsOld && fs.readFileSync(statsAt(mirror), "utf8") === statsDoc(2);
+    scan(); scan();
+    out.statsBack = fs.readFileSync(statsAt(share), "utf8") === statsDoc(2) && fs.readFileSync(statsAt(mirror), "utf8") === statsDoc(2);
+    out.noFaultYet = faults().length === 0;
+    /* The third time: dropped again. */
+    fs.unlinkSync(onShare);
+    scan(); scan();
+    out.thirdOwed = owed() && hash(inMirror) === newer;
+    out.fault = faults().join(",");
+    scan();
+    out.faultStays = hash(onShare) === newer && !owed() && faults().length === 1;
+    if (o.mod) return out;
+    const row = (d.api.deskRows() || []).filter(r => r && r.id === me.id + "-" + tail)[0] || null;
+    out.row = row ? String(row.fault || "") : null;
+    try {
+      const listed = await d.ask("etiuda:catalog-files");
+      const hit = (Array.isArray(listed) ? listed : []).filter(r => r && r.id === me.id + "-" + tail)[0];
+      out.listed = hit ? String(hit.fault || "") : null;
+    } catch { out.listed = null; }
+    try {
+      pageDoc();
+      const box = globalThis.document.createElement("div");
+      box.id = "mgCatList";
+      globalThis.document.body.appendChild(box);
+      box.isConnected = true;
+      globalThis.window.E_HOST = {
+        catalogFiles: () => d.invoke["etiuda:catalog-files"](eventFor()),
+        branchIdentity: make => d.api.branchIdentity(make),
+        writeBranch: (st, text) => d.api.writeBranch(st, text),
+        catalogLeads: () => [],
+      };
+      const kit = await pageKitOnce();
+      kit.OFF.paintCatalogList();
+      const until = Date.now() + 3000;
+      let html = "";
+      while (Date.now() < until && (html = String(box.innerHTML || "")).indexOf(DR1_FAULT) < 0) await sleep(25);
+      out.named = html.indexOf(DR1_FAULT) >= 0;
+    } catch (e) { out.named = false; out.page = String(e && e.message || e).split("\n")[0].slice(0, 160); }
+    finally { delete globalThis.window.E_HOST; }
+    return out;
+  }
+  const dr1Kept = r => r.syncer && r.landed && r.goneOne && r.goneTwo && r.goneBack && r.olderOne && r.olderTwo && r.olderBack && r.statsKept && r.statsBack;
+  const dr1Faulted = r => r.noFaultYet && r.thirdOwed && r.fault !== "" && r.faultStays;
+  {
+    let r = {};
+    try { r = await takenBackScene("dr1a"); } catch (e) { r = { threw: String(e && e.message || e).split("\n")[0] }; }
+    check(dr1Kept(r) && dr1Faulted(r) && r.row === "taken-back" && r.listed === "taken-back" && r.named,
+      "dr1a a desk's own file the share drops, or replaces with an older copy, stays in the mirror and is owed again after two"
+      + " listings, another desk's file still leaves, and the third time the row, the listing and the Library name it: " + JSON.stringify(r));
+    check(r.syncer && r.landed && r.quiet,
+      "dr1b the control: listings with nothing taken back leave the mirror, the share and the outbox byte for byte: " + JSON.stringify({ landed: r.landed, quiet: r.quiet }));
+  }
+  /* dr1c: the count is forgotten once the share has kept the file TAKEN_BACK_QUIET_MS since the last time, and not before. */
+  {
+    const share = folder("dr1c-share"), mirror = folder("dr1c-mirror");
+    const id = "k-" + "ab".repeat(8), rel = "desks/" + id + "/own.ec";
+    for (const dir of [share, mirror]) {
+      fs.writeFileSync(path.join(dir, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 1 })), "utf8");
+      fs.mkdirSync(path.join(dir, "desks", id), { recursive: true });
+      fs.writeFileSync(path.join(dir, ...rel.split("/")), "{\"kind\":\"own\"}\n", "utf8");
+    }
+    let now = 1e12;
+    const quietMs = 30 * 60 * 1000;
+    const out = {};
+    try {
+      fs.writeFileSync(path.join(mirror, ".outbox.json"), JSON.stringify({ kind: "etiuda-folder-outbox", v: 1, owe: {}, floors: {}, back: { [rel]: { n: 3, at: now } } }), "utf8");
+      const prog = syncerMod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks, own: id, logger: () => {}, now: () => now });
+      const listed = () => (typeof syncerMod.takenBackList === "function" ? syncerMod.takenBackList(mirror, "desks/" + id + "/") : null);
+      prog.syncOnce();
+      out.first = listed();
+      now += quietMs - 1000;
+      prog.syncOnce();
+      out.before = listed();
+      now += 2000;
+      prog.syncOnce();
+      out.after = listed();
+      out.outbox = fs.readFileSync(path.join(mirror, ".outbox.json"), "utf8").indexOf('"back"') < 0;
+    } catch (e) { out.threw = String(e && e.message || e).split("\n")[0]; }
+    check(!!out.first && out.first.length === 1 && out.before && out.before.length === 1 && out.after && out.after.length === 0 && out.outbox,
+      "dr1c a taken-back fault stands while the share has kept the file less than the quiet span, and is forgotten after it: " + JSON.stringify(out));
+  }
+  /* dr1d: through the worker thread, this desk's seat.json, on the share and in the mirror alike, is listed: it is neither
+     removed from the mirror nor owed again as gone. */
+  {
+    const share = folder("dr1d-share");
+    const { ud, mirror } = teamDesk("dr1d-desk", share);
+    const d = loadDesk(ud);
+    const me = d.api.branchIdentity(true);
+    enrol(d, me, [mirror, share]);
+    const rel = "desks/" + me.id + "/seat.json";
+    for (const dir of [share, mirror]) {
+      fs.mkdirSync(path.join(dir, "desks", me.id), { recursive: true });
+      fs.writeFileSync(path.join(dir, ...rel.split("/")), JSON.stringify({ format: 2, desk: me.id }) + "\n", "utf8");
+    }
+    const out = { scans: 0 };
+    let ctl = null;
+    try {
+      ctl = new syncerMod.FolderSyncerController({ team: TEAM, folder: share, mirror, pin: LEAD, keyFor: e => (e === 1 ? K1 : null), checks, pollMs: 100,
+        own: me.id, onChange: () => {} });
+      const apply = ctl.program.applyScan;
+      ctl.program.applyScan = msg => { const r = apply(msg); out.scans++; return r; };
+      ctl.start();
+      for (let i = 0; i < 200 && out.scans < 12; i++) await sleep(50);
+      out.inMirror = fs.existsSync(path.join(mirror, ...rel.split("/")));
+      const boxAt = path.join(mirror, ".outbox.json");
+      const box = fs.existsSync(boxAt) ? JSON.parse(fs.readFileSync(boxAt, "utf8")) : {};
+      out.owedOrBack = !!((box.owe || {})[rel] || (box.back || {})[rel]);
+    } catch (e) { out.threw = String(e && e.message || e).split("\n")[0]; }
+    finally { if (ctl) ctl.stop(); }
+    check(out.scans >= 12 && out.inMirror === true && out.owedOrBack === false,
+      "dr1d through the worker, this desk's seat.json on the share is listed: kept in the mirror and never owed again as gone: " + JSON.stringify(out));
+  }
+  if (PLANTS_OFF) {
+    for (const [id, tag, what] of [["dr1e", "own-never-unlinked", "removes this desk's own file from the mirror after two absences"],
+      ["dr1f", "own-gone-owed", "never owes this desk's own file again once the share drops it"],
+      ["dr1g", "own-older-kept", "lets the share's older copy of this desk's own file land over the mirror's"],
+      ["dr1h", "own-fault-row", "leaves the fault off this desk's row"]]) skip(id + " lifting plant:" + tag + " " + what);
+  } else {
+    const viaMod = async (tag, name, judge) => testPlant(tag, syncerFile, async scratch => {
+      fs.copyFileSync(path.join(ROOT, "shell", "folder", "syncer-worker.cjs"), path.join(path.dirname(scratch), "syncer-worker.cjs"));
+      return judge(await takenBackScene(name, { mod: nodeRequire(scratch) }));
+    });
+    const e = await viaMod("own-never-unlinked", "dr1e", r => r.syncer && r.landed && !r.goneTwo);
+    check(e.ok, "dr1e lifting plant:own-never-unlinked removes this desk's own file from the mirror after two absences: " + JSON.stringify(e));
+    const f = await viaMod("own-gone-owed", "dr1f", r => r.syncer && r.landed && r.goneOne && !r.goneTwo);
+    check(f.ok, "dr1f lifting plant:own-gone-owed never owes this desk's own file again once the share drops it: " + JSON.stringify(f));
+    const g = await viaMod("own-older-kept", "dr1g", r => r.syncer && r.landed && r.goneBack && !r.olderTwo && !r.statsKept);
+    check(g.ok, "dr1g lifting plant:own-older-kept lets the share's older copy of this desk's own file land over the mirror's: " + JSON.stringify(g));
+    const h = await testPlant("own-fault-row", mainFile, async scratch => {
+      const r = await takenBackScene("dr1h", { src: fs.readFileSync(scratch, "utf8") });
+      return dr1Kept(r) && dr1Faulted(r) && r.row === "" && !r.named;
+    });
+    check(h.ok, "dr1h lifting plant:own-fault-row leaves the fault off this desk's row: " + JSON.stringify(h));
   }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {

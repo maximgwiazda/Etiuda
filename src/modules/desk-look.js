@@ -20,6 +20,7 @@ import { uid } from "./ids.js";
 import { esc } from "./esc.js";
 import { ICON_PLUS } from "./icons.js";
 import { pills } from "./dom.js";
+import { markCutText } from "./cut-text.js";
 
 /* The desk's name as the agent gave it in Settings, else a colleague's. */
 function deskName(f){
@@ -243,6 +244,7 @@ function lkDragStart(d,hers,it){
   addEventListener("keydown", d.key, true);
 }
 function wireDeskPlace(pane,it,hers,done){
+  markCutText(pane);
   const chip=pane.querySelector("[data-lk-chip]"), back=pane.querySelector("[data-lk-back]"), q=pane.querySelector("#lkFind");
   const take=to=>{ lkPick=null; if(deskTakeNew(it,hers,to)) done(); };
   if(back) back.onclick=()=>{ deskGiveNew(it,hers); done(); };

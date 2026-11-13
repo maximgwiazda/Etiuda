@@ -2138,7 +2138,7 @@ const t0 = Date.now();
       if (!el) return null;
       const cs = getComputedStyle(el), card = document.querySelector("#screenHost .lib-list");
       return { over: el.scrollWidth - Math.round(el.getBoundingClientRect().width),
-               dir: cs.direction, ell: cs.textOverflow, txt: el.textContent,
+               dir: cs.direction, ell: cs.textOverflow, fade: el.classList.contains("cut-l"), txt: el.textContent,
                cardOver: card.scrollWidth - card.clientWidth };
     };
     const short = await read("C:\\Users\\x\\Documents\\Etiuda");
@@ -2149,9 +2149,9 @@ const t0 = Date.now();
     delete window.E_HOST;
     return { short, long };
   });
-  check(!!trim.long && trim.long.over > 0 && trim.long.dir === "rtl" && trim.long.ell === "ellipsis"
-        && trim.long.cardOver === 0 && !!trim.short && trim.short.over === 0,
-    "a folder too long for the title line is trimmed at its front and widens nothing: "
+  check(!!trim.long && trim.long.over > 0 && trim.long.dir === "rtl" && trim.long.ell !== "ellipsis" && trim.long.fade
+        && trim.long.cardOver === 0 && !!trim.short && trim.short.over === 0 && !trim.short.fade,
+    "a folder too long for the title line is trimmed at its front, faded there with no ellipsis, and widens nothing: "
     + JSON.stringify(trim));
   await p.keyboard.press("Escape"); await sleep(300);
   await p.keyboard.press("Escape"); await sleep(400);

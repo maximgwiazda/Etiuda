@@ -203,7 +203,10 @@ function matches(el, sel, scope) {
   }
   return true;
 }
+/* The cut pass measures laid-out lines and nothing here is laid out, so its two lists (CUT_SEL, CUT_FOOT) find nothing. */
+let CUT_LISTS = new Set();
 function queryAll(root, sel) {
+  if (CUT_LISTS.has(sel)) return [];
   const out = [];
   const walk = n => n.children.forEach(c => { if (matches(c, sel, root)) out.push(c); walk(c); });
   walk(root);
@@ -359,6 +362,8 @@ async function launch(plan) {
   const contextBridge = { exposeInMainWorld: (k, v) => { globalThis[k] = v; }, executeInMainWorld: o => o.func(...(o.args || [])) };
   new Function("require", shellSrc("preload.js"))(n => (n === "electron" ? { contextBridge, ipcRenderer, webUtils: {} } : nodeRequire(n)));
 
+  const CUT = await import(MOD("cut-text.js"));
+  CUT_LISTS = new Set([CUT.CUT_SEL, CUT.CUT_FOOT]);
   const OFFER = await import(MOD("catalog-offer.js"));
   const CF = await import(MOD("catalog-file.js"));
   const TR = await import(MOD("catalog-trust.js"));
@@ -1687,7 +1692,7 @@ async function parent() {
     const boot76n = run(lab76n, ["boot", "settle", "offer", "yes", "settle"]);
     const load76n = run(lab76n, ["dom", "library", "load:lamp-1.ec", "settle", "said", "settle", "offer"], true);
     const o76n = load76n.offers[load76n.offers.length - 1] || {};
-    check(boot76n.heldRev === 2 && o76n.shown === true && (o76n.warn || []).indexOf(OLDER_WARN) >= 0 && o76n.title === "Older catalog found"
+    check(boot76n.heldRev === 2 && o76n.shown === true && (o76n.warn || []).indexOf(OLDER_WARN) >= 0 && o76n.title === "Older catalog file found"
       && o76n.yes === OPEN_OLDER && o76n.no === KEEP_NEWER && ![boot76n, load76n].some(o => (o.errors || []).length),
       "76n with a catalog held verified under the same key, a lower rev of it opened on purpose is offered as older, with the warning: " + said76(o76n));
 
@@ -1704,7 +1709,7 @@ async function parent() {
        shell does not scan, so the boot holds rev 2 and only a double-click offers rev 3. Unsigned, another key, an
        unverified catalog in use, and a file whose signature then fails are each offered plainly. The offer is still
        made, and the unsigned one still loads. */
-    const UPDATE_FOUND = "Updated catalog found", LOAD_UPDATE = "Load the new edition", KEEP_CURRENT = "Keep current";
+    const UPDATE_FOUND = "Updated catalog file found", LOAD_UPDATE = "Load the new edition", KEEP_CURRENT = "Keep current";
     const asUpdate = o => o.shown === true && !(o.warn || []).length && o.title === UPDATE_FOUND && o.yes === LOAD_UPDATE && o.no === "Not now";
     const plainKept = o => plainly(o) && o.no === KEEP_CURRENT;
     const higherLab = (file, ringText) => {
@@ -1865,7 +1870,7 @@ async function parent() {
     onRoster(lab77, ["k-" + "0".repeat(16)]);
     const off77 = run(lab77, ["deskload:" + bo77File + "," + bo77.id, "said", "settle"]);
     const o77 = off77.offers[0] || {};
-    check(o77.shown === true && same(o77.roster, ["This file comes from outside the team."]) && o77.yes === "Load catalog"
+    check(o77.shown === true && same(o77.roster, ["This file comes from outside the team."]) && o77.yes === "Load catalog file"
       && !off77.reloaded && off77.heldId === "" && !(off77.errors || []).length,
       "77a on an empty desk, a file asked for whose desk is off the team's roster is offered with the note rather than loaded at once: "
       + JSON.stringify({ shown: o77.shown, roster: o77.roster, yes: o77.yes, loaded: off77.reloaded, held: off77.heldId, errors: (off77.errors || []).slice(0, 2) }));

@@ -11,6 +11,7 @@ import { eOfferCatalogDialog, toastIfSameCatalog } from "./catalog-offer.js";
 import { lsSet } from "./storage.js";
 import { ICON_LOAD } from "./icons.js";
 import { screenOn } from "./screen-tabs.js";
+import { markCutText } from "./cut-text.js";
 
 function historyHost(){
   const h=eHost();
@@ -63,7 +64,7 @@ function historyRowHtml(v,key){
 function historyBodyHtml(groups){
   if(!groups.length)
     return '<div class="ec-list"><div class="ec-row ec-empty">'
-      +esc(t("Each catalog this desk opens or saves leaves a copy here, kept for 30 days."))+'</div></div>';
+      +esc(t("Each catalog file this desk opens or saves leaves a copy here, kept for 30 days."))+'</div></div>';
   let n=0;
   return groups.map(g=>historyHeadHtml(g)+'<div class="ec-list">'+g.map(v=>historyRowHtml(v,n++)).join("")+'</div>').join("");
 }
@@ -117,6 +118,7 @@ function openHistory(host){
     }
     const ehView=document.getElementById("ehView");
     if(ehView){
+      markCutText(ehView);
       ehView.querySelectorAll("[data-eh-open]").forEach(b=>{ b.onclick=()=>historyOpen(flat[+b.getAttribute("data-eh-open")]); });
       ehView.querySelectorAll("[data-eh-put]").forEach(b=>{ b.onclick=()=>historyPutBack(flat[+b.getAttribute("data-eh-put")]); });
     }

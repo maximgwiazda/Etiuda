@@ -129,6 +129,8 @@ function mapListing(v){
                                            desk:(f&&f.desk&&typeof f.desk==="object"&&f.desk.id)?{id:String(f.desk.id),name:String(f.desk.name||"")}:null,
                                            reached:!!(f&&f.reached),
                                            relay:!!(f&&f.relay),
+                                           // "taken-back" on this desk's own file where the team's folder has taken its writes back three times.
+                                           fault:String(f&&f.fault||""),
                                            // The copy Etiuda ships, rather than a folder's own file.
                                            builtIn:!!(f&&f.builtIn)}))
                                  .filter(f=>f.name):[];

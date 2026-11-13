@@ -337,8 +337,8 @@ async function run() {
           const textCol = btnStyle ? btnStyle.color : "";
 
           // 4. Catalog-folder line present and byte-for-byte as decided
-          const folderBranchPresent = emptyDesk.textContent.includes("Under any other name, bring it in with Load catalog.")
-            || emptyDesk.textContent.includes("loads with Load catalog.")
+          const folderBranchPresent = emptyDesk.textContent.includes("Under any other name, bring it in with Load catalog file.")
+            || emptyDesk.textContent.includes("loads with Load catalog file.")
             || emptyDesk.textContent.includes("The catalog you load stays in this browser, ready whenever you come back.");
 
           const orLinkPresent = orText && (orText.querySelector("a, button, [role='button']") || orText.classList.contains("link"));
@@ -368,7 +368,7 @@ async function run() {
         && light.figureAbsent && dark.figureAbsent
         && light.inOrder && dark.inOrder
         && light.h2Text === "Etiuda is ready for its first replies." && dark.h2Text === "Etiuda is ready for its first replies."
-        && light.btnText === "Load catalog" && dark.btnText === "Load catalog"
+        && light.btnText === "Load catalog file" && dark.btnText === "Load catalog file"
         && light.orContent.includes("or add a card to a category") && dark.orContent.includes("or add a card to a category")
         && lightContrast >= 4.5 && darkContrast >= 4.5
         && light.folderBranchPresent && dark.folderBranchPresent

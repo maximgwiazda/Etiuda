@@ -736,11 +736,11 @@ await checkAsync("L16b the Library list says 'Categories & cards'", async () => 
   return text === "Categories & cards" || "read " + JSON.stringify(text);
 });
 
-/* THE FOOTER GOES (Maxim, 2026-11-09 20:31, finding 3): no Close and no bar under the list; Load catalog, Join a team,
+/* THE FOOTER GOES (Maxim, 2026-11-09 20:31, finding 3): no Close and no bar under the list; Load catalog file, Join a team,
    Saved copies and Clear local changes are rows of Catalog and data, each doing what its button did. The host offers a
    picker and a join for this leg only. */
 const ST = await import(MOD("storage.js"));
-await checkAsync("L17 the Library has no footer, and Catalog and data holds Load catalog, Join a team, Saved copies and Clear local changes as rows, each acting as its button did", async () => {
+await checkAsync("L17 the Library has no footer, and Catalog and data holds Load catalog file, Join a team, Saved copies and Clear local changes as rows, each acting as its button did", async () => {
   if (wired) return wired;
   const picked = [];
   window.E_HOST.pickCatalogFile = () => { picked.push(1); return Promise.resolve(null); };

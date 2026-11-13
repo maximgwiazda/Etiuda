@@ -148,7 +148,7 @@ function render(){
       : (wholeThingEmpty()
         ? '<div class="empty empty-desk">'
           + '<h2 class="p1">' + esc(t("Etiuda is ready for its first replies.")) + '</h2>'
-          + '<button type="button" class="btn p1" id="emptyLoad">' + esc(t("Load catalog")) + '</button>'
+          + '<button type="button" class="btn p1" id="emptyLoad">' + esc(t("Load catalog file")) + '</button>'
           + '<div class="mid-or p1"><a href="#" id="emptyAddCard" class="quiet-link" role="button">' + esc(t("or add a card to a category")) + '</a></div>'
           + (teamCanJoin()
             ? '<button type="button" class="btn p2" id="emptyJoin">' + esc(t("Join a team")) + '</button>'
@@ -156,15 +156,15 @@ function render(){
           + '<div class="mid-folder p2">'
           + (eCatalogFolder()
             ? (eFolderHoldsCatalog()
-              ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with Load catalog.")
-              : t("There is no catalog in {FOLDER} yet. A catalog kept anywhere else loads with Load catalog."))
+              ? t("Etiuda offers you the newest catalog file from {FOLDER}; one kept anywhere else loads with Load catalog file.")
+              : t("There is no catalog file in {FOLDER} yet. One kept anywhere else loads with Load catalog file."))
                 .split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button"'
                   +' tabindex="0" title="'+esc(eCatalogFolder())+'">'
                   +esc(eCatalogFolderShort())+'</code>')
             : location.protocol==="file:"
             ? esc(t("A catalog file next to Etiuda loads by itself when it is called"))+' '
               +'<code>'+esc(E_CATALOG_SCRIPT)+'</code>. '
-              +esc(t("Under any other name, bring it in with Load catalog."))
+              +esc(t("Under any other name, bring it in with Load catalog file."))
             : esc(t("The catalog you load stays in this browser, ready whenever you come back.")))
           + '</div></div>'
         /* A chosen category with nothing in it: the same quiet drawing as the other empty

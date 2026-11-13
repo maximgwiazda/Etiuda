@@ -2221,17 +2221,17 @@ Module.prototype._compile = function (content, filename) {
 /* 35. A BUILD THE HARNESS MAKES SIGNS NOTHING (board 827, item A). electron-builder signs a --dir build
    too, and a token route asks for a PIN in a window nobody sees behind stdio "ignore", where Artifact
    Signing installs a module and signs in. So the three builds the gates make (shell-smoke, reinstall,
-   update-install) take their environment from E.unsignedEnv, which drops the nine route variables and
+   update-install) take their environment from E.unsignedEnv, which drops the ten route variables and
    the two key passwords listed once in tools/sellable.mjs. Each build's own call is cut out of its file
-   and run against a stub electron-builder CLI that records which of the eleven it was handed, with all
-   eleven set in this process. 35d is the control: the same calls with the whole environment. */
+   and run against a stub electron-builder CLI that records which of the twelve it was handed, with all
+   twelve set in this process. 35d is the control: the same calls with the whole environment. */
 {
   const S = require("../tools/sellable.mjs");
-  /* THE ELEVEN NAMES, WRITTEN OUT HERE ON PURPOSE and not read from the list under test: the legs below
+  /* THE TWELVE NAMES, WRITTEN OUT HERE ON PURPOSE and not read from the list under test: the legs below
      plant these, and the stub CLI records against these, so a name the exported list loses is still
      looked for. 35a compares the two. */
   const VARS = ["ETIUDA_CERT", "ETIUDA_CERT_SHA1", "ETIUDA_CERT_SUBJECT", "ETIUDA_SIGNING_ENDPOINT", "ETIUDA_SIGNING_ACCOUNT",
-    "ETIUDA_SIGNING_PROFILE", "ETIUDA_SIGNING_PUBLISHER", "CSC_LINK", "WIN_CSC_LINK", "CSC_KEY_PASSWORD", "WIN_CSC_KEY_PASSWORD"];
+    "ETIUDA_SIGNING_PROFILE", "ETIUDA_SIGNING_PUBLISHER", "CSC_LINK", "WIN_CSC_LINK", "CSC_KEY_PASSWORD", "WIN_CSC_KEY_PASSWORD", "ETIUDA_SIGN"];
   const exported = S.SIGNING_VARS.concat(S.KEY_PASSWORD_VARS);
   const was = {};
   for (const k of VARS) { was[k] = process.env[k]; process.env[k] = "planted-" + k; }
@@ -2243,7 +2243,7 @@ Module.prototype._compile = function (content, filename) {
     ok(have && VARS.every(k => !(k in env)) && VARS.every(k => process.env[k] === "planted-" + k)
        && (env.PATH || env.Path) === (process.env.PATH || process.env.Path)
        && exported.slice().sort().join() === VARS.slice().sort().join(),
-       "35a the exported list is exactly the eleven names written out above (" + (exported.filter(k => VARS.indexOf(k) < 0).map(k => "extra " + k)
+       "35a the exported list is exactly the twelve names written out above (" + (exported.filter(k => VARS.indexOf(k) < 0).map(k => "extra " + k)
        .concat(VARS.filter(k => exported.indexOf(k) < 0).map(k => "missing " + k)).join(", ") || "no difference") + "), and E.unsignedEnv() drops all "
        + VARS.length + " of them from a caller's environment that holds them, keeps the rest (PATH) and leaves process.env itself alone: "
        + (have ? VARS.filter(k => k in env).length + " left" : "E.unsignedEnv is not there"));

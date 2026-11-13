@@ -96,12 +96,12 @@ export function testServiceProblems({ env, resources } = {}) {
   return out;
 }
 
-/* THE VARIABLES THAT DECIDE WHETHER A BUILD SIGNS, listed here and nowhere else: the nine that pick a
+/* THE VARIABLES THAT DECIDE WHETHER A BUILD SIGNS, listed here and nowhere else: the ten that pick a
    route (electron-builder's own certificate links included) and the two passwords a key is opened with. */
 export const SIGNING_VARS = ['ETIUDA_CERT', 'ETIUDA_CERT_SHA1', 'ETIUDA_CERT_SUBJECT', 'ETIUDA_SIGNING_ENDPOINT',
-  'ETIUDA_SIGNING_ACCOUNT', 'ETIUDA_SIGNING_PROFILE', 'ETIUDA_SIGNING_PUBLISHER', 'CSC_LINK', 'WIN_CSC_LINK'];
+  'ETIUDA_SIGNING_ACCOUNT', 'ETIUDA_SIGNING_PROFILE', 'ETIUDA_SIGNING_PUBLISHER', 'CSC_LINK', 'WIN_CSC_LINK', 'ETIUDA_SIGN'];
 export const KEY_PASSWORD_VARS = ['CSC_KEY_PASSWORD', 'WIN_CSC_KEY_PASSWORD'];
-/** `env` less those eleven, so a build a gate makes never signs, asks for a token's PIN or signs in to Azure.
+/** `env` less those twelve, so a build a gate makes never signs, asks for a token's PIN or signs in to Azure or SSL.com.
  *  Names match case-insensitively on Windows, where the child reads them that way. */
 export function withoutSigning(env = process.env) {
   const drop = new Set(SIGNING_VARS.concat(KEY_PASSWORD_VARS).map(k => k.toUpperCase()));
@@ -128,7 +128,7 @@ export function signingConfigured(win, env = process.env) {
     || first(w.cscLink, first(env.WIN_CSC_LINK, env.CSC_LINK)));
 }
 const NO_ROUTE = 'no certificate is configured (none of ETIUDA_CERT, ETIUDA_CERT_SHA1, ETIUDA_CERT_SUBJECT'
-  + ' or ETIUDA_SIGNING_* is set), so the installer would be unsigned';
+  + ', ETIUDA_SIGNING_* or ETIUDA_SIGN is set), so the installer would be unsigned';
 
 /* WHAT WINDOWS SAYS OF A FILE: the Authenticode status, and whether a timestamp countersigns it.
    Without the timestamp a signature dies with its certificate, and a customer's installer would
@@ -139,12 +139,12 @@ export function readAuthenticode(files) {
   if (process.platform !== 'win32') return null;
   const q = f => "'" + String(f).replace(/'/g, "''") + "'";
   const script = 'foreach ($f in @(' + files.map(q).join(',') + ')) { $s = Get-AuthenticodeSignature -LiteralPath $f; '
-    + '[string]$s.Status + [char]9 + [string]([bool]$s.TimeStamperCertificate) + [char]9 + $f }';
+    + '[string]$s.Status + [char]9 + [string]([bool]$s.TimeStamperCertificate) + [char]9 + $f + [char]9 + [string]$s.SignerCertificate.Subject }';
   const out = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],
     { encoding: 'utf8', windowsHide: true, timeout: 120000 });
   const rows = out.split(/\r?\n/).filter(Boolean).map(l => {
-    const [status, ts, file] = l.split('\t');
-    return { file, status: status.trim(), timestamped: ts.trim() === 'True' };
+    const [status, ts, file, subject] = l.split('\t');
+    return { file, status: status.trim(), timestamped: ts.trim() === 'True', subject: (subject || '').trim() };
   });
   /* A path Windows did not answer for is a reading lost, not a pass. */
   if (rows.length !== files.length) throw new Error('Authenticode answered for ' + rows.length + ' of ' + files.length + ' file(s)');
@@ -161,6 +161,16 @@ export function signatureProblems(readings, required) {
     if (r.status !== 'Valid') out.push(name(r.file) + ' reads Authenticode ' + r.status + ', not Valid');
     else if (!r.timestamped) out.push(name(r.file) + ' is signed with no timestamp, so its signature dies with the certificate');
   }
+  return out;
+}
+
+/* A BUILD SIGNED BY SSL.com'S DEMO CERTIFICATE (tools/esigner.cjs, ETIUDA_SIGN=esigner-demo) is never released, preview or
+   customer: refused where the variable is set for the release, and wherever a file read carries the demo certificate's subject. */
+const ESIGNER = createRequire(import.meta.url)('./esigner.cjs');
+export function demoSigningProblems({ env, readings } = {}) {
+  const out = [];
+  if (env && ESIGNER.given(env) === 'esigner-demo') out.push(ESIGNER.SIGN_VAR + ' is esigner-demo, which signs with SSL.com\'s demo certificate, and no demo-signed build is released'); /* plant:sell-demo-var */
+  for (const r of readings || []) if (ESIGNER.DEMO_SUBJECT.test(r.subject || '')) out.push(String(r.file).replace(/\\/g, '/').split('/').pop() + ' is signed by SSL.com\'s demo certificate, which is never released'); /* plant:sell-demo-subject */
   return out;
 }
 
@@ -188,7 +198,7 @@ export function signatureVerdict({ setup, program, customer, win, read = readAut
   for (const r of readings) log('  Authenticode: ' + r.status + (r.timestamped ? ', timestamped' : '') + '  ' + r.file
     + (r.status === 'NotSigned' ? '  (a log line reading "signing with signtool.exe" is the asar integrity edit, not a signature)' : ''));
   if (!required) log('  not required: a preview with no certificate configured');
-  const problems = signatureProblems(readings, required);
+  const problems = signatureProblems(readings, required).concat(demoSigningProblems({ readings }));
   return problems.length ? problems.join('; ') : true;
 }
 

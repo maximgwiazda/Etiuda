@@ -174,7 +174,8 @@ const normRel = (rel) => String(rel || "").replace(/\\/g, "/");
 /* THE OUTBOX: what this desk wrote into the mirror and the share has not yet taken, one record a path ({owe, sha, del}),
    kept beside the mirror's files under a dot name neither walk lists, with the rev and counter floors. A record goes once
    the share holds exactly those bytes, or no file for a deletion. The floors never go down: an edition deleted and published
-   again under the same name at a lower rev would stay out. That holds while Studio always raises rev. */
+   again under the same name at a lower rev would stay out. That holds while Studio always raises rev. `back` counts, per
+   file of this desk's own folder, the times the share took it back ({n, at}), written only while it holds one. */
 const OUTBOX_NAME = ".outbox.json";
 const OUTBOX_KIND = "etiuda-folder-outbox";
 const PRIMED_NAME = ".primed";
@@ -182,18 +183,21 @@ function readOutbox(mirror, io, rethrowBusy) {
   try {
     const doc = JSON.parse(io.readFile(path.join(mirror, OUTBOX_NAME), "utf8"));
     if (doc && doc.kind === OUTBOX_KIND && doc.owe && typeof doc.owe === "object") {
-      return { owe: doc.owe, floors: doc.floors && typeof doc.floors === "object" ? doc.floors : {} };
+      return { owe: doc.owe, floors: doc.floors && typeof doc.floors === "object" ? doc.floors : {},
+        back: doc.back && typeof doc.back === "object" ? doc.back : {} };
     }
   } catch (e) {
     if (rethrowBusy && e && RENAME_BUSY.indexOf(e.code) >= 0) throw e; /* plant:outbox-read-retry */
   }
-  return { owe: {}, floors: {} };
+  return { owe: {}, floors: {}, back: {} };
 }
 function writeOutbox(mirror, st, io) {
   const file = path.join(mirror, OUTBOX_NAME);
   const tmp = file + "." + crypto.randomBytes(6).toString("hex") + ".tmp";
   try { io.mkdir(mirror); } catch {}
-  io.writeFile(tmp, JSON.stringify({ kind: OUTBOX_KIND, v: 1, owe: st.owe, floors: st.floors }));
+  const doc = { kind: OUTBOX_KIND, v: 1, owe: st.owe, floors: st.floors };
+  if (st.back && Object.keys(st.back).length) doc.back = st.back;
+  io.writeFile(tmp, JSON.stringify(doc));
   try { renameRetrying(tmp, file, io); } catch (e) { try { io.unlink(tmp); } catch {} throw e; }
 }
 /* Runs fn; on the main thread a busy code is tried again, 20 tries RENAME_WAIT_MS apart, off it the code is thrown. */
@@ -256,6 +260,15 @@ function owedAt(mirror, rel, io) {
   const st = readOutbox(mirror, io || defaultIO);
   const rec = st.owe[normRel(rel)];
   return !!(rec && rec.owe);
+}
+/* A file of this desk's own folder the share has taken back this many times is a fault the Library names. The count is
+   forgotten once the share has kept the file this long since the last time. */
+const TAKEN_BACK_FAULT = 3;
+const TAKEN_BACK_QUIET_MS = 30 * 60 * 1000;
+/* The paths under `prefix` (desks/<id>/) the share has taken back TAKEN_BACK_FAULT times or more. */
+function takenBackList(mirror, prefix, io) {
+  const st = readOutbox(mirror, io || defaultIO), p = normRel(prefix);
+  return Object.keys(st.back).filter(k => k.indexOf(p) === 0 && st.back[k] && +st.back[k].n >= TAKEN_BACK_FAULT);
 }
 
 const RENAME_BUSY = ["EPERM", "EACCES", "EBUSY"];
@@ -565,6 +578,10 @@ function createFolderProgram(opts) {
   let mirrorRev = -1;
   let pending = []; // [{ kind, relPath, epoch, tmpPath, text, doc, size, mtimeMs }]
   const missingCount = new Map(); // relPath -> number of consecutive answered listings missing
+  const backSeen = new Map(); // a file of this desk's own folder -> answered listings in a row that showed it taken back
+  const backStamp = new Map(); // that file -> { size, mtimeMs } of the share's copy judged a take-back
+  let takenNow = new Set(); // this desk's own files whose staged copy this listing judged a take-back
+  const clock = typeof opts.now === "function" ? opts.now : Date.now;
   const knownMtimes = new Map(); // relPath -> { size, mtimeMs }
   const refusedMtimes = new Map(); // relPath -> { size, mtimeMs, at, epoch, key }
   const renameWait = new Map(); // relPath -> the staged item whose rename into the mirror was refused
@@ -820,6 +837,76 @@ function createFolderProgram(opts) {
       floorsDirty.floors[k.key] = k.val;
     }
     return true;
+  }
+
+  /* ---- THIS DESK'S OWN FOLDER, desks/<own>/: only this desk writes it, so the mirror's copy stands. A share that drops one of
+     its files, or puts back a copy carrying no higher number, has taken the write back (a synced folder restoring its own
+     version): for two answered listings while nothing is owed, the mirror's bytes are owed again, never removed or overwritten. */
+  function ownNow() {
+    let raw = "";
+    try { raw = String((typeof opts.own === "function" ? opts.own() : opts.own) || ""); } catch { raw = ""; }
+    return /^k-[0-9a-f]{16}$/.test(raw) ? raw : "";
+  }
+  function ownRel(rel) {
+    const id = ownNow();
+    const parts = normRel(rel).split("/");
+    return !!id && parts.length === 3 && parts[0] === "desks" && parts[1] === id;
+  }
+  /* The key number of a sealed file, the in-use counter and the rev, where the bytes carry them. */
+  function marksOf(text) {
+    let outer = null;
+    try { outer = JSON.parse(text); } catch { return {}; }
+    const inner = catalogIn(text) || {};
+    const rev = inner.rev === null || inner.rev === "" ? NaN : +inner.rev;
+    return { epoch: outer && outer.kind === "etiuda-sealed" && Number.isInteger(outer.epoch) ? outer.epoch : null,
+      n: Number.isSafeInteger(inner.n) ? inner.n : null, rev: Number.isSafeInteger(rev) ? rev : null };
+  }
+  function shareNewer(shareText, mirrorText) {
+    const a = marksOf(shareText), b = marksOf(mirrorText);
+    for (const k of ["epoch", "n", "rev"]) if (a[k] != null && b[k] != null && a[k] !== b[k]) return a[k] > b[k];
+    return false;
+  }
+  /* A staged copy of an own file other than the mirror's and no newer: it does not land, and is held while the share keeps it. */
+  function tookBack(item) {
+    const key = normRel(item.relPath);
+    let held = null, staged = null;
+    try { held = io.readFile(path.join(mirror, item.relPath)); staged = io.readFile(item.tmpPath); } catch { return false; }
+    if (sha256hex(held) === sha256hex(staged)) { backStamp.delete(key); return false; }
+    let back = false;
+    back = !shareNewer(staged.toString("utf8"), held.toString("utf8")); /* plant:own-older-kept */
+    if (!back) { backStamp.delete(key); return false; }
+    takenNow.add(key);
+    backStamp.set(key, { size: item.size, mtimeMs: item.mtimeMs });
+    refuse(item);
+    try { io.unlink(item.tmpPath); } catch {}
+    return true;
+  }
+  /* Step 4 for an own file. True where its fault came or went, so the Library is told. */
+  function ownStays(rel, listed, stamp) {
+    const key = normRel(rel);
+    if (isOwed(key)) { backSeen.delete(key); return false; }
+    const had = backStamp.get(key), st = listed ? stamp(rel) : null;
+    let taken = false;
+    taken = !listed || takenNow.has(key) || !!(had && st && had.size === st.size && had.mtimeMs === st.mtimeMs); /* plant:own-gone-owed */
+    if (!taken) { backSeen.delete(key); return forgetBack(key); }
+    const seen = (backSeen.get(key) || 0) + 1;
+    backSeen.set(key, seen);
+    if (seen < 2) return false;
+    backSeen.delete(key);
+    const was = readOutbox(mirror, io).back[key], n = (was && Number.isSafeInteger(was.n) ? was.n : 0) + 1;
+    try {
+      writeOutboxRetrying(mirror, s => { s.owe[key] = owedRecord(mirror, key, io); s.back[key] = { n, at: clock() }; }, io, null, outboxTimers);
+    } catch { return false; }
+    logger("etiuda: " + key + " was taken back by the team's folder " + folder + " (" + n + (n === 1 ? " time" : " times")
+      + "), so the copy on this computer is sent again");
+    return n === TAKEN_BACK_FAULT;
+  }
+  function forgetBack(key) {
+    const was = readOutbox(mirror, io).back[key];
+    if (!was || clock() - (+was.at || 0) < TAKEN_BACK_QUIET_MS) return false;
+    try { writeOutboxRetrying(mirror, s => { delete s.back[key]; }, io, null, outboxTimers); } catch { return false; }
+    backStamp.delete(key);
+    return +was.n >= TAKEN_BACK_FAULT;
   }
 
   function pushPending(item) {
@@ -1123,6 +1210,7 @@ function createFolderProgram(opts) {
 
     const applied = [];
     floorsDirty = null;
+    takenNow = new Set();
     const listing = scanData.listing || [];
     let staged = scanData.staged || [];
     const stagedNow = new Map();
@@ -1285,6 +1373,7 @@ function createFolderProgram(opts) {
         try { io.unlink(tmpPath); } catch {}
         continue;
       }
+      if (ownRel(relPath) && tookBack(item)) continue;
       let text = null;
       try { text = io.readFile(tmpPath, "utf8"); } catch {
         try { io.unlink(tmpPath); } catch {}
@@ -1514,7 +1603,22 @@ function createFolderProgram(opts) {
     // Step 4: Removals (only after 2 answered listings absent)
     const currentMirrorFiles = walkMirror();
     const listingMap = new Set(listing.map(entry => Array.isArray(entry) ? entry[0] : entry.relPath || entry));
+    const stampOf = (rel) => {
+      for (const entry of listing) {
+        if (!Array.isArray(entry) || normRel(entry[0]) !== normRel(rel)) continue;
+        return entry[1] && entry[1].size != null ? { size: entry[1].size, mtimeMs: entry[1].mtimeMs || 0 } : null;
+      }
+      return null;
+    };
+    let faultMoved = false;
     for (const relPath of currentMirrorFiles) {
+      let mine = false;
+      mine = ownRel(relPath); /* plant:own-never-unlinked */
+      if (mine) {
+        missingCount.delete(relPath);
+        if (ownStays(relPath, listingMap.has(relPath), stampOf)) faultMoved = true;
+        continue;
+      }
       let stays = listingMap.has(relPath);
       if (isOwed(relPath)) stays = true; /* plant:outbox-owe-stay */
       if (stays) {
@@ -1541,7 +1645,7 @@ function createFolderProgram(opts) {
     try {
       if (!io.exists(path.join(mirror, PRIMED_NAME))) { io.writeFile(path.join(mirror, PRIMED_NAME), ""); primed = true; }
     } catch {}
-    if (applied.length > 0 || primed) {
+    if (applied.length > 0 || primed || faultMoved) {
       onChange(primed ? { team, applied, primed: true } : { team, applied });
     }
     return { answers: true, applied };
@@ -1550,7 +1654,7 @@ function createFolderProgram(opts) {
   function syncOnce() {
     if (typeof opts.pin === "function") setPin(opts.pin());
     const owing = owed();
-    if (owing.length) landed(flushOwed(folder, mirror, owing, io, opts.own));
+    if (owing.length) landed(flushOwed(folder, mirror, owing, io, ownNow()));
     const stillOwed = new Set(owed().map(x => x.rel));
     let foundFiles = null;
     try {
@@ -1659,7 +1763,7 @@ class FolderSyncerController {
       onRetryApplied: () => { this.sendHeld(); this.flushCheck(); },
       own: opts.own
     });
-    this.own = opts.own || "";
+    this.own = opts.own;
   }
 
   start() {
@@ -1696,10 +1800,15 @@ class FolderSyncerController {
           folder: this.folder,
           mirror: this.mirror,
           pollMs: this.pollMs,
-          own: this.own
+          own: this.ownNow()
         }
       });
     }
+  }
+
+  /* The own folder id as it stands now: the shell may hand a function, read at each use, and the worker takes a string. */
+  ownNow() {
+    try { return String((typeof this.own === "function" ? this.own() : this.own) || ""); } catch { return ""; }
   }
 
   /* The copies the worker leaves on the share until they change, and the refusals let go since it was last told. */
@@ -1897,6 +2006,7 @@ module.exports = {
   isAllowedPath,
   noteOwed,
   owedAt,
+  takenBackList,
   owedList,
   flushOwed,
   clearReadOnly,
