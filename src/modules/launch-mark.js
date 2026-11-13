@@ -2,7 +2,7 @@
  * First-round variant A, the desk's turn phiIcon 56 degrees (a-turning), ink #2881ea over window ground (theme token),
  * landing in the header's corner mark (.brand svg) with no jump, then the window arriving; nothing of UI before landing.
  * Under reduced motion: no opening; window shows as soon as ready, corner mark still. A key, click or wheel skips it. */
-import { setFifthPhase } from "./fifth.js";
+import { fifthMarkFrame, setFifthPhase } from "./fifth.js";
 
 const LAUNCH_R = 7, LAUNCH_MIN_MS = 1100, LAUNCH_OUT_MS = 350, LAUNCH_QUICK_MS = 140, LAUNCH_MAX_MS = 4000;
 const OPENING_INK = "#2881ea";
@@ -56,18 +56,22 @@ function cornerTarget() {
     && (document.querySelector(".brand-tile svg") || document.querySelector(".brand svg"));
   if (svg) {
     const r = svg.getBoundingClientRect();
+    const path = typeof svg.querySelector === "function" ? svg.querySelector("path") : null;
+    const mf = fifthMarkFrame(svg, path && path.parentElement), u = r.width / mf.w;
+    // the figure's centre where the mark's frame puts it, and its scale from this flight's fit to the mark's own size
     return {
-      cx: r.left + r.width / 2,
-      cy: r.top + r.height / 2,
-      k: (r.width / 256) * 1.0581,
+      cx: r.left + (128 * mf.sc + mf.tx - mf.x0) * u,
+      cy: r.top + (128 * mf.sc + mf.ty - mf.y0) * (r.height / mf.h),
+      k: u * mf.sc / KF,
       w: r.width,
       h: r.height
     };
   }
+  // the header's frame as template.html writes it
   return {
     cx: 14 + 12.5,
     cy: 6 + 12.5,
-    k: (25 / 256) * 1.0581,
+    k: (25 / 290.9091) * 1.195755 / KF,
     w: 25,
     h: 25
   };

@@ -3100,16 +3100,14 @@ function launchMarkTests() {
     const L = launchLab(), F10 = L.sb.launchFigure(10), F7 = L.sb.launchFigure(7);
     const lat = { x0: 0.5, y0: 0.5, step: 2, nx: 128, ny: 128 }, to = o => o, lay = (f, phi) => { const out = new Float32Array(lat.nx * lat.ny); f(phi, to, 9, 1, lat, out); return Array.from(out); };
     const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-    const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
     got = [same(F10.band(PHI0), fifth.__f.fifthBand(PHI0)), same(F10.band(PHI0 + 1.3), fifth.__f.fifthBand(PHI0 + 1.3)),
       F10.radius() === fifth.__f.fifthRadius(),
       same(lay(F10.lay, PHI0 + 0.7), lay(fifth.__f.fifthLay, PHI0 + 0.7)),
       // the control: at R 7 the figure is not the header's, so the comparison can tell a width
-      same(F7.band(PHI0), fifth.__f.fifthBand(PHI0)),
-      /<g transform="translate\(-7\.441 -7\.441\) scale\(1\.0581\)">/.test(tpl), L.sb.__R()];
+      same(F7.band(PHI0), fifth.__f.fifthBand(PHI0)), L.sb.__R()];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the launch mark's figure is fifth.js's at R 10, band, radius and lay, it stands in the header's group transform, and it launches at R 7",
-    got, [true, true, true, true, false, true, 7]);
+  eq("the launch mark's figure is fifth.js's at R 10, band, radius and lay, and it launches at R 7",
+    got, [true, true, true, true, false, 7]);
 
   try {
     const L = launchLab(); const h = L.launch(); L.play(200); L.ready(); L.play(3300);
@@ -3638,9 +3636,10 @@ function fifthLab(still) {
   const read = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
   const src = read("fifth.js").replace(/^import[^\n]*\n/gm, "").replace(/export\s*\{[^}]*\};?\s*$/, "");
   const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
-  const std = (/<span class="brand-tile"[^>]*><svg[^>]*><g[^>]*><path fill="currentColor" d="([^"]+)"/.exec(tpl) || [])[1] || "";
-  const group = (/<span class="brand-tile"[^>]*><svg[^>]*><g transform="([^"]+)"/.exec(tpl) || [])[1] || "";
-  const viewBox = (/<span class="brand-tile"[^>]*><svg[^>]*viewBox="([^"]+)"/.exec(tpl) || [])[1] || "0 0 256 256";
+  const tileSvg = (/<span class="brand-tile"[^>]*>(<svg[\s\S]*?<\/svg>)<\/span>/.exec(tpl) || [])[1] || "";
+  const std = (/<path [^>]*?d="([^"]+)"/.exec(tileSvg) || [])[1] || "";
+  const group = (/<g transform="([^"]+)">\s*<path /.exec(tileSvg) || [])[1] || "";
+  const viewBox = (/^<svg[^>]*viewBox="([^"]+)"/.exec(tileSvg) || [])[1] || "0 0 256 256";
   let seq = 0, frames = [], watch = null, draws = [];
   const stroke = { cap: "", join: "", w: 0 };
   const tile = {
@@ -3721,6 +3720,20 @@ function outlinePoints(d) {
   }
   return out;
 }
+/* The rings of a path of absolute M, L, C and Z, one per subpath, as outlinePoints walks them; and the nonzero
+   winding of a point against them, which is the svg's own fill rule, so a point inside the ink winds non-zero. */
+function outlineRings(d) {
+  return d.split(/(?=M)/).map(sub => outlinePoints(sub)).filter(r => r.length > 2);
+}
+function windOf(rings, q) {
+  let w = 0;
+  for (const r of rings) for (let i = 0; i < r.length; i++) {
+    const a = r[i], b = r[(i + 1) % r.length];
+    if (a[1] <= q[1]) { if (b[1] > q[1] && (b[0] - a[0]) * (q[1] - a[1]) - (q[0] - a[0]) * (b[1] - a[1]) > 0) w++; }
+    else if (b[1] <= q[1] && (b[0] - a[0]) * (q[1] - a[1]) - (q[0] - a[0]) * (b[1] - a[1]) < 0) w--;
+  }
+  return w;
+}
 function fifthTests() {
   const W0 = 2 * Math.PI * 0.007, PHI0 = Math.PI / 4;
   let got;
@@ -3730,23 +3743,27 @@ function fifthTests() {
     const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
     const fav = (/<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml,([^"]+)"/.exec(tpl) || [])[1] || "";
     const favD = (/ d='([^']+)'/.exec(decodeURIComponent(fav)) || [])[1] || "";
-    got = [a.std.length > 1000, aboutD === a.std, favD === a.std, a.f.FIFTH_PHI0 === PHI0];
+    got = [a.std.length > 1000, aboutD.length > 1000, favD === aboutD, a.std !== aboutD, a.f.FIFTH_PHI0 === PHI0];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the header, About and the tab icon ship one path, byte for byte",
-    got, [true, true, true, true]);
+  eq("About and the tab icon ship one path, byte for byte, and the header stands a drawing of its own",
+    got, [true, true, true, true, true]);
 
   try {
-    const a = fifthLab(false), t = lineTruth(PHI0), out = outlinePoints(a.std), turn = a.f.fifthLinePath(PHI0);
+    // the header's path is the figure at its own size (ink 212); taken to the turn's fit (150) it is the line standing at 56 degrees
+    const KF = 150 / 212, a = fifthLab(false), t = lineTruth(56 * Math.PI / 180), turn = a.f.fifthLinePath(PHI0);
+    const out = outlinePoints(a.std).map(p => [128 + (p[0] - 128) * KF, 128 + (p[1] - 128) * KF]), t0 = lineTruth(PHI0);
     const atHalf = pts => pts.length > 500 && pts.every(p => Math.abs(lineGap(t.line, p) - t.h) <= 0.03);
-    const reaches = pts => t.line.filter((p, i) => i % 20 === 0).every(q => pts.some(p => Math.hypot(p[0] - q[0], p[1] - q[1]) <= t.h + 1));
+    // where the two passes cross, the ink has no edge near the centreline, so reaching it is read as lying inside the ink
+    const rings = outlineRings(a.std).map(r => r.map(p => [128 + (p[0] - 128) * KF, 128 + (p[1] - 128) * KF]));
+    const reaches = rs => t.line.filter((p, i) => i % 20 === 0).every(q => windOf(rs, q) !== 0);
     const t1 = lineTruth(PHI0 + 1), turn1 = outlinePoints(a.f.fifthLinePath(PHI0 + 1));
-    got = [atHalf(out), reaches(out), outlinePoints(turn).every(p => lineGap(t.line, p) <= 0.06),
+    got = [atHalf(out), reaches(rings), outlinePoints(turn).every(p => lineGap(t0.line, p) <= 0.06),
       Math.abs(2 * a.f.fifthRadius() - 2 * t.h) < 0.01, !/Z$/.test(turn) && /Z$/.test(a.f.fifthLinePath(PHI0 + 1)),
       turn1.length > 500 && turn1.every(p => lineGap(t1.line, p) <= 0.06),
       t1.line.filter((p, i) => i % 20 === 0).every(q => turn1.some(p => Math.hypot(p[0] - q[0], p[1] - q[1]) <= 1)),
-      atHalf(out.map(p => [p[0] + 0.5, p[1]])), reaches(out.filter(p => p[0] >= 128))];
+      atHalf(out.map(p => [p[0] + 0.5, p[1]])), reaches(rings.map(r => r.filter(p => p[0] >= 128)))];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the path shipped is the turning line standing: every point of its outline lies half the line's width from the figure's centreline at pi/4 (within 0.03) and the outline reaches all of it; the turn's centreline at pi/4 lies on the figure's (within 0.06) at the same width, open there and closed at any other phase; at pi/4 + 1 the turn's centreline, both halves of the loop, lies on the figure's (within 0.06) and reaches every point of it (within 1); controls: moved half a unit, or with its left half gone, it is not",
+  eq("the header's path is the turning line standing at 56 degrees: every point of its outline, taken from the figure's own size to the turn's fit, lies half the line's width from the figure's centreline at 56 degrees (within 0.03) and that centreline lies inside its ink; the turn's centreline at pi/4 lies on the figure's (within 0.06) at the same width, open there and closed at any other phase; at pi/4 + 1 the turn's centreline, both halves of the loop, lies on the figure's (within 0.06) and reaches every point of it (within 1); controls: moved half a unit, or with its left half gone, it is not",
     got, [true, true, true, true, true, true, true, false, false]);
 
   try {
