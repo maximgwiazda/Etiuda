@@ -2,7 +2,7 @@
  "kind": "etiuda-signin-answers",
  "format": 1,
  "note": "Every answer the licence service's signin/desk and signout/desk give, driven from service/licence/core.mjs in node over test keys signing nothing real. Written by Studio's node tests/licence-service.mjs --write-answers (tests/fixtures/signin-answers.json there); the engine holds it byte for byte as tests/signin-answers.json and reads its desk against each case (tests/desk-signin.mjs ds23). root is the test root this run's delegation traces to, for a desk that checks a certificate's chain to be given in its root's place.",
- "root": "ffe04c10183b1bd773dbaf99e974e065eba7245da5294bd887981140455ea6ea",
+ "root": "47de7deb16f27f6b62992258b98fa19528725987d8a179a0c5f4f60421086276",
  "cases": [
   {
    "case": "seated",
@@ -14,18 +14,18 @@
     "certificate": {
      "kind": "etiuda-seat-certificate",
      "format": 1,
-     "licence": "89a8a48728ca239f67c88e077051d7aa",
+     "licence": "20b363ba66e4551b5e3af64f91fab92e",
      "desk": "aa2494fd8033e9c45dce1aa5f6572c78523605e001da5b6977be71865598c497",
-     "person": "f1e8ecf75b662de9599f5a3cf84554fbbc5d94688454040a5e30733c81ddf754",
-     "code": "HK9AKTHWFAHZ0EF8",
+     "person": "e71b48437d12b0d27f59c2c0ff6703413ee02f3618bf79547b4817390977601f",
+     "code": "YNA483X1BWWJS8NT",
      "issued": 1793610000000,
      "until": 1796202000000,
      "via": {
       "kind": "etiuda-delegation",
       "format": 1,
       "key": {
-       "id": "studio-cb2bcc153b6b0046",
-       "pub": "ccab0118fd0edda8add6bf371f61333cadd8cee132991b220ae180535a75e863"
+       "id": "studio-0f8f919af7fec33a",
+       "pub": "102db7adde7fba24c2e1b4d85d130b7024c261e92462c41f4f857f204d69535e"
       },
       "may": [
        "licence",
@@ -36,18 +36,18 @@
       "sig": {
        "alg": "ed25519",
        "keyId": "etiuda-root-test",
-       "value": "50f54989a11d30c07920f7dca1947e9c8a3ef1cba41c6a707135413b85128b7651df3f0ccf692c30a8da60d87b41e0039e8de4aa82bca1934b4078849d79ab00"
+       "value": "b50c672bee580aa0c3eef101ca30a51fb413e9121234b161849466f96392fb6cd39b1dd475e957d3c0faab39d183d9ec869daa0cf4d4ab0359f8711e5b640a0e"
       }
      },
      "sig": {
       "alg": "Ed25519",
-      "keyId": "studio-cb2bcc153b6b0046",
-      "value": "4702690d69b4284407145df32820ece54ed369968b0ea27c6a944ee2e5f90f8aa736517c1ede6b6c0337f397e01fd0e39f1ed136ef3ba9dc8218567b29095208"
+      "keyId": "studio-0f8f919af7fec33a",
+      "value": "00d4089ac61c66643688dd50e805c1c22d399a0dd9d9571787d89a9ee5a475591c6e9675eaa936f903e8556a695fb727064f3e7e7764fa0db92b56b1554d3f01"
      }
     },
-    "code": "HK9AKTHWFAHZ0EF8",
+    "code": "YNA483X1BWWJS8NT",
     "doors": [],
-    "doorsSig": "5e8aa3756fc8622822c2618cd45e336d4fc668a8b2f73746252e1e05dfe5ef882c656f686904f1be79b9a86172317c1c279d31064477ac65f702071ad0499706",
+    "doorsSig": "8bb599991fe20af6cc45baf9cde2148f22992c5f1a3c749e020b4fa5f8474ac3546ef2db816532b30b64e8d77d58b8aff94aade5139258132f2731cca8404907",
     "revoked": {
      "kind": "etiuda-revocations",
      "format": 1,
@@ -58,7 +58,7 @@
      "sig": {
       "alg": "ed25519",
       "keyId": "etiuda-root-test",
-      "value": "0f3348fa64ff380f64323185d02c91a25816f8deda6c4b9983954b34ef723f0c6284f856e002c9c16b3af8debda8c88d041d3727af193fcdcc2f8f39ce506b02"
+      "value": "8525a42c4c12b30b2fb972878871a63d298f19247d73f8451dbac77a62c033eacc7468b425afc10695e90985160f5b9f0db15c824bbd45d3de236a01450ceb0d"
      }
     }
    }
@@ -73,18 +73,18 @@
     "certificate": {
      "kind": "etiuda-seat-certificate",
      "format": 1,
-     "licence": "89a8a48728ca239f67c88e077051d7aa",
+     "licence": "20b363ba66e4551b5e3af64f91fab92e",
      "desk": "2999419429787b93a6b1c5155efe8c767afcfe0288ca2d0107b309823a94e616",
-     "person": "365d9cb0b526c8bcab33cddcd03d73ff2b88b1ad0cdfa93fe2229dd94f33e967",
-     "code": "RK2X74G98B412BZ6",
+     "person": "f896f5221671798b177e508decd55b7f865d9fa43600bb450efcb50a26b2a7e2",
+     "code": "8XDC8V3VJRJ5KB82",
      "issued": 1793610000000,
      "until": 1796202000000,
      "via": {
       "kind": "etiuda-delegation",
       "format": 1,
       "key": {
-       "id": "studio-cb2bcc153b6b0046",
-       "pub": "ccab0118fd0edda8add6bf371f61333cadd8cee132991b220ae180535a75e863"
+       "id": "studio-0f8f919af7fec33a",
+       "pub": "102db7adde7fba24c2e1b4d85d130b7024c261e92462c41f4f857f204d69535e"
       },
       "may": [
        "licence",
@@ -95,27 +95,27 @@
       "sig": {
        "alg": "ed25519",
        "keyId": "etiuda-root-test",
-       "value": "50f54989a11d30c07920f7dca1947e9c8a3ef1cba41c6a707135413b85128b7651df3f0ccf692c30a8da60d87b41e0039e8de4aa82bca1934b4078849d79ab00"
+       "value": "b50c672bee580aa0c3eef101ca30a51fb413e9121234b161849466f96392fb6cd39b1dd475e957d3c0faab39d183d9ec869daa0cf4d4ab0359f8711e5b640a0e"
       }
      },
      "sig": {
       "alg": "Ed25519",
-      "keyId": "studio-cb2bcc153b6b0046",
-      "value": "d9f6caa2d6014a9ef2d21a75ed7c58d9ef6a0dcf2d2e523eb4f45420fa5170f28b6e9b4c23aa6c3b187bc8dc17f448c6086ee5ec08d8127cbcd51639c6e0f204"
+      "keyId": "studio-0f8f919af7fec33a",
+      "value": "466cc77606446d67ccec73408ed5dde75f66848f69f28b610834ffc7aaeb88c7ac4bb9940ceef9297674659efdb20157f057eacd36aa15bc9d9d898c0ac2f90d"
      }
     },
-    "code": "RK2X74G98B412BZ6",
+    "code": "8XDC8V3VJRJ5KB82",
     "doors": [
      {
       "team": "t-a1fa857966d9229a",
       "rt": "a05febf5ca23defbadf5496ad231fbe6",
       "url": "https://etiuda.dev/relay/v1",
-      "keyId": "studio-b29254a76706bce2",
-      "lead": "523c26f7fea1acc74d95f7dc5f20f524af24a48af9cbcaf7c36e3f1967ef3f8d",
+      "keyId": "studio-7c187b883c3741d6",
+      "lead": "91ce4a7dced5a24be5ca13cdecf8d2ca1ab39a00aed2d7d366c5953354941152",
       "box": "707e5601fa56b99523ce9e3100122574709f1a8fd6e11fa4b7eca0123b557176"
      }
     ],
-    "doorsSig": "37b094f6f5db76734447f18906fac3503c25554b313bff0332070c6932819f670500c86de6a9e29ead85fbd142af8f077cc5779ba00fbb92a24e12588509d402",
+    "doorsSig": "33669e24da161c37d80187e80f7c7b7c05885dc702a21ff223ded9d6d03b102b0b0d91c455b634b247ed1e7fc4fc142f6aacd77f3a4fafd080800de0dcb56d07",
     "revoked": {
      "kind": "etiuda-revocations",
      "format": 1,
@@ -126,7 +126,7 @@
      "sig": {
       "alg": "ed25519",
       "keyId": "etiuda-root-test",
-      "value": "0f3348fa64ff380f64323185d02c91a25816f8deda6c4b9983954b34ef723f0c6284f856e002c9c16b3af8debda8c88d041d3727af193fcdcc2f8f39ce506b02"
+      "value": "8525a42c4c12b30b2fb972878871a63d298f19247d73f8451dbac77a62c033eacc7468b425afc10695e90985160f5b9f0db15c824bbd45d3de236a01450ceb0d"
      }
     }
    }
@@ -139,7 +139,7 @@
    "body": {
     "ok": true,
     "certificate": null,
-    "code": "XW5KKQ6J3ZZKRTMH",
+    "code": "9C68BR1H9KQDFXWV",
     "reason": "waiting",
     "revoked": {
      "kind": "etiuda-revocations",
@@ -151,7 +151,7 @@
      "sig": {
       "alg": "ed25519",
       "keyId": "etiuda-root-test",
-      "value": "0f3348fa64ff380f64323185d02c91a25816f8deda6c4b9983954b34ef723f0c6284f856e002c9c16b3af8debda8c88d041d3727af193fcdcc2f8f39ce506b02"
+      "value": "8525a42c4c12b30b2fb972878871a63d298f19247d73f8451dbac77a62c033eacc7468b425afc10695e90985160f5b9f0db15c824bbd45d3de236a01450ceb0d"
      }
     }
    }
@@ -174,7 +174,7 @@
      "sig": {
       "alg": "ed25519",
       "keyId": "etiuda-root-test",
-      "value": "0f3348fa64ff380f64323185d02c91a25816f8deda6c4b9983954b34ef723f0c6284f856e002c9c16b3af8debda8c88d041d3727af193fcdcc2f8f39ce506b02"
+      "value": "8525a42c4c12b30b2fb972878871a63d298f19247d73f8451dbac77a62c033eacc7468b425afc10695e90985160f5b9f0db15c824bbd45d3de236a01450ceb0d"
      }
     }
    }
@@ -187,7 +187,7 @@
    "body": {
     "ok": true,
     "certificate": null,
-    "code": "Z2598WJM9WASCW6K",
+    "code": "QC0E7HDTFWT17YW8",
     "revoked": {
      "kind": "etiuda-revocations",
      "format": 1,
@@ -198,7 +198,93 @@
      "sig": {
       "alg": "ed25519",
       "keyId": "etiuda-root-test",
-      "value": "0f3348fa64ff380f64323185d02c91a25816f8deda6c4b9983954b34ef723f0c6284f856e002c9c16b3af8debda8c88d041d3727af193fcdcc2f8f39ce506b02"
+      "value": "8525a42c4c12b30b2fb972878871a63d298f19247d73f8451dbac77a62c033eacc7468b425afc10695e90985160f5b9f0db15c824bbd45d3de236a01450ceb0d"
+     }
+    }
+   }
+  },
+  {
+   "case": "ask-lead-trial",
+   "route": "signin/desk",
+   "means": "their organisation's licence seats only people admitted: their own desk trial's certificate, and the ask to give a lead their code",
+   "status": 200,
+   "body": {
+    "ok": true,
+    "certificate": {
+     "kind": "etiuda-seat-certificate",
+     "format": 1,
+     "licence": "b581756297712345dcda6f5ca415e861",
+     "desk": "0cc2b93e992ae58a3ff294e7d7c15e19a11d81cdaf9859f06c22b0c63fde9e55",
+     "person": "c152bb30c48f7a0e887474612f4b83c73dded928eb87ca5220494c3f2b7420fe",
+     "code": "FQDY7H604RTNTQQ5",
+     "issued": 1793610000000,
+     "until": 1794819600000,
+     "via": {
+      "kind": "etiuda-delegation",
+      "format": 1,
+      "key": {
+       "id": "studio-0f8f919af7fec33a",
+       "pub": "102db7adde7fba24c2e1b4d85d130b7024c261e92462c41f4f857f204d69535e"
+      },
+      "may": [
+       "licence",
+       "relay-grant"
+      ],
+      "from": 1792746000000,
+      "until": 1819530000000,
+      "sig": {
+       "alg": "ed25519",
+       "keyId": "etiuda-root-test",
+       "value": "b50c672bee580aa0c3eef101ca30a51fb413e9121234b161849466f96392fb6cd39b1dd475e957d3c0faab39d183d9ec869daa0cf4d4ab0359f8711e5b640a0e"
+      }
+     },
+     "sig": {
+      "alg": "Ed25519",
+      "keyId": "studio-0f8f919af7fec33a",
+      "value": "38425f9b2bb935483f6d74b23c70623c36ac6ac62d0f87f64b051471c4684d42235b6dab825c55cfeb8481ba629e0c75185ca8274223bdeb5e2947bd6935f40a"
+     },
+     "deskOnly": true
+    },
+    "code": "FQDY7H604RTNTQQ5",
+    "doors": [],
+    "doorsSig": "6a22e9dcf62ae6ad7636cd693fdc5621bacdb3daf544a8069114b6cfb819ee25d4358dc35e5b7490a5bd6b4136e9ffc9bb088f03e36701283ad59b81721cab06",
+    "ask": "lead",
+    "revoked": {
+     "kind": "etiuda-revocations",
+     "format": 1,
+     "serial": 1,
+     "keys": [
+      "abababababababababababababababababababababababababababababababab"
+     ],
+     "sig": {
+      "alg": "ed25519",
+      "keyId": "etiuda-root-test",
+      "value": "8525a42c4c12b30b2fb972878871a63d298f19247d73f8451dbac77a62c033eacc7468b425afc10695e90985160f5b9f0db15c824bbd45d3de236a01450ceb0d"
+     }
+    }
+   }
+  },
+  {
+   "case": "ask-lead",
+   "route": "signin/desk",
+   "means": "the same, their own trial had: no certificate, their code, and the ask",
+   "status": 200,
+   "body": {
+    "ok": true,
+    "certificate": null,
+    "code": "FQDY7H604RTNTQQ5",
+    "ask": "lead",
+    "revoked": {
+     "kind": "etiuda-revocations",
+     "format": 1,
+     "serial": 1,
+     "keys": [
+      "abababababababababababababababababababababababababababababababab"
+     ],
+     "sig": {
+      "alg": "ed25519",
+      "keyId": "etiuda-root-test",
+      "value": "8525a42c4c12b30b2fb972878871a63d298f19247d73f8451dbac77a62c033eacc7468b425afc10695e90985160f5b9f0db15c824bbd45d3de236a01450ceb0d"
      }
     }
    }
@@ -220,6 +306,26 @@
    "status": 200,
    "body": {
     "ok": true
+   }
+  },
+  {
+   "case": "no-role",
+   "route": "signin/desk",
+   "means": "a token of a tenant whose licence's seats follow Entra, carrying neither Etiuda.Agent nor Etiuda.Lead: no seat and no trial, the token spent and nothing else written",
+   "status": 403,
+   "body": {
+    "ok": false,
+    "reason": "no-role"
+   }
+  },
+  {
+   "case": "access-token",
+   "route": "signin/desk",
+   "means": "a token of a tenant whose licence's seats follow Entra with no access token for the licence service beside it: no seat, the token not spent, so the desk asks the access token and comes again",
+   "status": 409,
+   "body": {
+    "ok": false,
+    "reason": "access-token"
    }
   },
   {

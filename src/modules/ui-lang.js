@@ -1397,6 +1397,8 @@ UI_STRINGS.pl={
   "The new sign-in did not finish.":"Nowe logowanie nie dobiegło końca.",
   "This computer stays signed in with the account it had. {REASON}":"Ten komputer pozostaje zalogowany kontem, którego używał. {REASON}",
   "This account is already in use on three computers.":"To konto działa już na trzech komputerach.",
+  "This account has no Etiuda role in its organisation, so it holds no seat.":"To konto nie ma w swojej organizacji żadnej roli w Etiudzie, więc nie zajmuje miejsca w licencji.",
+  "Its IT department assigns the roles.":"Role przydziela dział IT organizacji.",
   "Signing out on one of them makes room here, and so does a computer left unused for 30 days; then Try again.":"Wylogowanie na jednym z nich zwalnia tu miejsce, podobnie jak komputer nieużywany przez 30 dni; potem wystarczy spróbować ponownie.",
   "This account's organisation has not allowed Etiuda at its sign-in provider.":"Organizacja tego konta nie dopuściła Etiudy u swojego dostawcy logowania.",
   "Its IT department can allow it; another account can be used meanwhile.":"Może to zmienić jej dział IT; do tego czasu można użyć innego konta.",

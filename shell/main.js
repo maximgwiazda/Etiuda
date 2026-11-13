@@ -9848,7 +9848,9 @@ function signinAnswerBody(res, deskKey, packed) {
     }
     return { ok: false, reason: "unreached" };
   }
-  const said = { 403: ["token", "signin"], 409: ["full", "desks"] }[res.status];
+  /* A licence whose seats follow the organisation's roles (a managed installation): "no-role", the token carrying none for a desk;
+     "access-token", the service asking for its own access token beside the ID token, which it left unspent. */
+  const said = { 403: ["token", "signin", "no-role"], 409: ["full", "desks", "access-token"] }[res.status];
   return { ok: false, reason: said && said.indexOf(j.reason) >= 0 ? j.reason : "unreached" };
 }
 /* One post to signin/desk with `idToken`: `seed` for a first sign-in, "" for a renewal. `io` {serviceAsk(url, body), sign(bytes), packed}. */

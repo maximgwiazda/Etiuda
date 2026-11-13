@@ -48,7 +48,7 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 150;
+const PLANTS = 152;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
@@ -353,6 +353,7 @@ CASES.answers = s => {
   return held.ok === true && held.cert && held.cert.code === CODE && held.code === CODE && none.ok === true && none.cert === null
     && theirs.reason === "unreached" && mixed.reason === "unreached"
     && a({ ok: false, reason: "token" }, 403).reason === "token" && a({ ok: false, reason: "signin" }, 403).reason === "signin"
+    && a({ ok: false, reason: "no-role" }, 403).reason === "no-role" && a({ ok: false, reason: "access-token" }, 409).reason === "access-token"
     && a({ ok: false, reason: "full" }, 409).reason === "full" && a({ ok: false, reason: "desks" }, 409).reason === "desks"
     && a({ ok: false, reason: "unavailable" }, 503).reason === "unreached" && a({ ok: false, reason: "slow-down" }, 429).reason === "unreached"
     && s.signinAnswer({ status: 200, bytes: Buffer.from("<html>") }, DESK_KEY).reason === "unreached";
@@ -3247,6 +3248,8 @@ const DESK_READS = {
   "signin": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === false && r.reason === "signin" && h.refresh === "" && h.ask === true; },
   "desks": r => r.ok === false && r.reason === "desks",
   "token": r => r.ok === false && r.reason === "token",
+  "access-token": r => r.ok === false && r.reason === "access-token",
+  "no-role": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === false && r.reason === "no-role" && h.said === "no-role" && h.refresh === "sealed:rt"; },
   "malformed": unreached, "stale": unreached, "signature": unreached, "replayed": unreached, "slow-down": unreached, "unavailable": unreached,
   "signed-out": (r, c) => r === true,
 };
@@ -3496,6 +3499,10 @@ if (!PLANTS_OFF) {
   await plantWire("dsp149", ["  if (signinRevokedHas(held.revoked, cert)) return null; /* plant:revoked-knock */\n", ""], "revokedLapse");
   await plantWire("dsp150", ["  if (held && signinRevokedHas(held.revoked, held.cert)) return false; /* plant:revoked-request */\n", ""], "revokedLapse");
   await plantWire("dsp152", ["  base.revoked = s.revoked || null; /* plant:revoked-survives */\n", ""], "revokedSurvives");
+  await plant("dsp153", ["const said = { 403: [\"token\", \"signin\", \"no-role\"], 409: [\"full\", \"desks\", \"access-token\"] }[res.status];",
+    "const said = { 403: [\"token\", \"signin\"], 409: [\"full\", \"desks\", \"access-token\"] }[res.status];"], "answers");
+  await plant("dsp154", ["const said = { 403: [\"token\", \"signin\", \"no-role\"], 409: [\"full\", \"desks\", \"access-token\"] }[res.status];",
+    "const said = { 403: [\"token\", \"signin\", \"no-role\"], 409: [\"full\", \"desks\"] }[res.status];"], "answers");
   await plant("dsp151", ["return !!list && Array.isArray(list.keys) && !!cert && !!cert.via && !!cert.via.key && list.keys.indexOf(String(cert.via.key.pub)) >= 0; /* plant:revoked-has */", "return false;"], "revokedLapse");
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),
