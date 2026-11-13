@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 55;
+const EXPECTED = 61;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -151,8 +151,8 @@ async function main() {
     const read = opened(s) ? await call(w.R, "GET", "/relay/v1/t/" + w.rt + "/since/0", { token: s.json.session }) : { status: 0 };
     const lead = await session(w, w.lead);
     const seen = storeOf(w).get("seatSeen");
-    const ok = opened(s) && read.status === 200 && opened(lead) && !!seen && seen.issued === c.issued && seen.licence === w.licence;
-    return { ok, detail: brief({ desk: said(s), since: read.status, lead: said(lead), seen: !!seen }) };
+    const ok = opened(s) && read.status === 200 && refused(lead, "seat-lapsed") && !!seen && seen.issued === c.issued && seen.licence === w.licence;
+    return { ok, detail: brief({ desk: said(s), since: read.status, leadWithoutCertificate: said(lead), seen: !!seen }) };
   }
   /* O5: on an Entra team a desk sending no certificate is refused; on an ordinary team one sending a certificate is answered and
      stored exactly as one sending none, and nothing of seats is stored. */
@@ -380,7 +380,7 @@ async function main() {
     const toldRemoved = await sessionAs(w, "a");
     const ro = await team({ seats: true, paid: false });
     ro.R.clock.now = T0 + 31 * DAY;
-    const lapse = await session(ro, ro.lead);
+    const lapse = await session(ro, ro.lead, certFor(ro.lead.pub, ro.licence, T0, span));
     const roRemoved = await devicesOf(ro, ["a"]);
     /* A door request up, then taken back after its certificate ran out with evidence past it. */
     const dw = await team({ seats: true, desks: ["b"] });
@@ -545,7 +545,7 @@ async function main() {
     check(r.ok === true, id + " " + line + ": " + r.detail);
     return r;
   };
-  await leg("s1a", () => opensScene(7 * DAY), "a desk with a current certificate of the grant's licence opens a session and reads on an Entra team, its issue kept as evidence, and the lead's session asks for none");
+  await leg("s1a", () => opensScene(7 * DAY), "a desk with a current certificate of the grant's licence opens a session and reads on an Entra team, its issue kept as evidence; the lead's session with none is refused");
   await leg("s2a", noCertScene, "O5 a desk sending no certificate is refused seat-lapsed on an Entra team; on an ordinary team a desk sending one is answered and stored exactly as one sending none, and nothing of seats is stored");
   await leg("s3a", wrongCertScene, "O6 a certificate of another licence, of another desk's key, forged, signed by a revoked service key, under a delegation that may not sign licences, past 30 days, issued ahead of the clock, or no certificate at all, is each refused seat-lapsed, and the desk's own opens");
   for (const [name, span] of WINDOWS) {
@@ -580,6 +580,64 @@ async function main() {
   }
   await leg("s15b", liveKeptScene, "a grant's live never falls while the licence stays: a desk cut by one grant stays cut when a newer grant names an earlier live");
   await leg("s16a", doorKnockScene, "an enrolled desk knocking at the door with a current certificate of another of the door's licences than the seats' is refused seat-lapsed, and of the seats' licence opens as a desk");
+  /* A STUDIO IS JUDGED AS A DESK IS, BY ITS PERSON (Claude alpha's ruling of 20:47 on C1): on an Entra team the lead's own Studio and a
+     Studio following it as a teammate each present the certificate of their person's lead seat, named for that Studio's own key. */
+  async function studioLeadScene(span) {
+    const w = await team({ seats: true });
+    const t = w.R.clock.now, other = keyPair(false);
+    const none = await session(w, w.lead);
+    const own = await session(w, w.lead, certFor(w.lead.pub, w.licence, t, span));
+    const otherKey = await session(w, w.lead, certFor(other.pub, w.licence, t, span));
+    /* The author loses the role at once and never proves again; colleagues do. Past its end and M the lead's session is refused, and what
+       takes access away still goes: a desk taken off, an invitation dropped, the door closed, the team handed over. */
+    const inv = hex(16);
+    const addRow = [{ id: inv, hash: sha(hex(32)) }];
+    const added = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/invites", { json: { add: addRow, drop: [], t, sig: signHex(w.lead, C.invitesBytes(w.rt, t, addRow, [])) } });
+    w.R.clock.now = t + span + M;
+    prove(w, "b", span);
+    await sessionAs(w, "b");
+    const former = await session(w, w.lead, certFor(w.lead.pub, w.licence, t, span));
+    const t2 = w.R.clock.now;
+    const removed = await devicesOf(w, ["b", "c"]);
+    const dropped = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/invites", { json: { add: [], drop: [inv], t: t2, sig: signHex(w.lead, C.invitesBytes(w.rt, t2, [], [inv])) } });
+    const closed = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/door", { json: { refs: [], t: t2, sig: signHex(w.lead, C.doorBytes(w.rt, t2, [])) } });
+    const next = keyPair(false), to = { keyId: next.keyId, pub: next.pub };
+    const handed = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/lead", { json: { to, t: t2, sig: signHex(w.lead, C.leadBytes(w.rt, to.keyId, to.pub, t2)),
+      grant: grantAt(next.pub, t2, { licence: w.licence, live: t2 }) } });
+    const newLead = await session(w, next, certFor(next.pub, w.licence, t2, span));
+    const ok = refused(none, "seat-lapsed") && opened(own) && refused(otherKey, "seat-lapsed") && added.status === 200 && refused(former, "seat-lapsed")
+      && removed.status === 200 && dropped.status === 200 && closed.status === 200 && handed.status === 200 && opened(newLead);
+    return { ok, detail: brief({ none: said(none), ownSeat: said(own), anotherKeysSeat: said(otherKey), formerAuthor: said(former), removes: said(removed),
+      drops: said(dropped), closesDoor: said(closed), handsOver: said(handed), newLead: said(newLead) }) };
+  }
+  /* A lead's second computer following its own team as a teammate (its member key enrolled as a desk) keeps its session for days while
+     its person proves, each renewal a new certificate for that member key; once the person's role is gone it is refused within the
+     window and M, as a leaver's desk is. On an ordinary team neither Studio is asked for anything. */
+  async function studioFollowScene(span) {
+    const w = await team({ seats: true, desks: ["a", "m"] });
+    const kept = [];
+    prove(w, "a", span);
+    prove(w, "m", span);
+    for (let d = 1; d <= 3; d++) {
+      w.R.clock.now = T0 + d * span;
+      prove(w, "a", span);
+      prove(w, "m", span);
+      kept.push(await sessionAs(w, "m"));
+    }
+    const lost = w.desks.m.cert.until;
+    w.R.clock.now = lost + M;
+    prove(w, "a", span);
+    await sessionAs(w, "a");
+    const former = await sessionAs(w, "m");
+    const o = await team({ desks: ["m"] });
+    const plainLead = await session(o, o.lead), plainMember = await session(o, o.desks.m);
+    const ok = kept.length === 3 && kept.every(opened) && refused(former, "seat-lapsed") && opened(plainLead) && opened(plainMember);
+    return { ok, detail: brief({ secondComputer: kept.map(said), formerAuthor: said(former), ordinaryLead: said(plainLead), ordinaryMember: said(plainMember) }) };
+  }
+  for (const [name, span] of WINDOWS) {
+    await leg("s19a " + name, () => studioLeadScene(span), "a lead's own Studio on an Entra team opens with its person's lead-seat certificate for its own key, none or another key's is refused, a former author is refused past its end and M, and a desk taken off, an invitation dropped, the door closed and the team handed over still go");
+    await leg("s19b " + name, () => studioFollowScene(span), "a lead's second computer following as a teammate keeps its session while its person proves, a former author's is refused past its end and M, and on an ordinary team neither Studio is asked for anything");
+  }
   /* The door still refuses an ended certificate of a stranger: only a desk session leaves the end to seatGate. */
   async function doorEndedScene() {
     const w = await team({ seats: true });
@@ -629,6 +687,8 @@ async function main() {
     ["seat-seen", "s10 W=7d", () => studioClosedScene(W7), "no certificate taken at a session is kept as evidence"],
     ["seat-evidence-seen", "s10 W=1d", () => studioClosedScene(W1), "the evidence reads the grant's live alone"],
     ["seat-door", "s16a", doorKnockScene, "an enrolled desk at the door asks no seat"],
+    ["seat-lead", "s19a W=7d", () => studioLeadScene(W7), "the lead's session asks no seat"],
+    ["seat-lead", "s19a W=1d", () => studioLeadScene(W1), "the lead's session asks no seat"],
     ["seats-create", "s1a", () => opensScene(W7), "a create's seats are not kept"],
     ["seats-renew", "s15a", keptScene, "a renewal's seats are not kept"],
     ["seats-lead", "s15a", keptScene, "a handover's seats are not kept"],

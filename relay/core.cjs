@@ -488,7 +488,7 @@ function createCore(deps) {
     if (was && was.licence === grant.seats.licence && was.live > live) live = was.live; /* plant:seats-live-kept */
     store.put("seats", { licence: grant.seats.licence, live, at });
   }
-  /* A desk's session on a team whose grant carries seats, before it is issued: `cert` judged by certWhy for the seats' licence, its run
+  /* A desk's or a Studio's session on a team whose grant carries seats, before it is issued: `cert` judged by certWhy for the seats' licence, its run
      ending decided here. A current one opens the session and its issue is kept as evidence; a run-out one opens it until the evidence
      (the grant's live, or the newest issue of a certificate taken at this team's sessions) passes its until by SEAT_MARGIN_MS, so an
      outage of the service or of Microsoft for everyone refuses nobody. Answers {ok, note} or the refusal; an ordinary team {ok}. */
@@ -1051,7 +1051,12 @@ function createCore(deps) {
     if (!isId(b.key) || !is(HEX128, b.sig) || !matches || !verified(b.pub, msg, b.sig)) return no("bad-signature"); /* plant:hello-shape */
     if (b.key === team.lead.keyId) {
       if (team.lead.pub !== b.pub) return no("bad-signature"); /* plant:lead-sig */
-      return issue(b.challenge, { key: b.key, inv: null });
+      /* A Studio is judged as a desk is, by its person: on a team whose grant carries seats the lead's session carries the certificate
+         of its person's lead seat. What takes access away is a signed call, never a session, so a lapsed seat still lets the lead go. */
+      let seat = { ok: true };
+      seat = seatGate(b.seat, b.pub); /* plant:seat-lead */
+      if (!seat.ok) return seat;
+      return issue(b.challenge, { key: b.key, inv: null }, seat.note);
     }
     const dev = store.get("dev:" + b.key), gone = store.get("gone:" + b.key);
     if (!dev && gone) {
