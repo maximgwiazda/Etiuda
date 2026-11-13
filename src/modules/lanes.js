@@ -17,7 +17,7 @@ import { NEXT_KEYS, nextFoldState, nextHitHtml, nextHits, nextIdsOf, nextListWri
 import { ICON_PLUS, ICON_X } from "./icons.js";
 import { copyCardPart } from "./copy-entry.js";
 import { animatePillsBox, syncPillsCollapse } from "./pills-box.js";
-import { modalOpen, openCover } from "./dialog.js";
+import { modalFront, openCover } from "./dialog.js";
 import { hooks } from "./hooks.js";
 import { cssEsc } from "./css-esc.js";
 import { $, intentEl } from "./dom.js";
@@ -57,7 +57,7 @@ function lanesKey(){
 }
 function toggleLanes(on){
   const want=on===undefined ? !lanesOn : !!on, el=lanesEl();
-  if(want===lanesOn || !el || (want && (modalOpen() || openCover()))) return;
+  if(want===lanesOn || !el || (want && (modalFront() || openCover()))) return;
   lanesOn=want;
   laneFresh=want; laneMark=-1; laneKey=""; laneFind=false; laneDrag=null;
   const shell=document.querySelector("#pageScroll > .shell");

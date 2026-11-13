@@ -6,7 +6,7 @@ import { isAlwaysCat, setCatAlways } from "./cat-roles.js";
 import { importCatalogHere, catalogFileName } from "./catalog-file.js";
 import { CATS, CONTENT_LANGS, tagChangedAt } from "./content-model.js";
 import { v2ChangedAt } from "./catalog-v2.js";
-import { catToggle, closeModal, dressDialogInputs, modalOpen, openCover, wireFolds } from "./dialog.js";
+import { catToggle, closeModal, dressDialogInputs, modalFront, openCover, wireFolds } from "./dialog.js";
 import { markCutText } from "./cut-text.js";
 import { openIntentEditor, openCategoryEditor } from "./editors.js";
 import { ICON_CHEVRON_R, ICON_EYE_SHUT, ICON_EYE_OPEN, ICON_EDIT, ICON_TRASH, ICON_STAR_ON, ICON_STAR_OFF, ICON_PLUS, ICON_ROLE_ALWAYS } from "./icons.js";
@@ -1525,7 +1525,7 @@ function openManage(justHtml){
   /* THE LIBRARY IS A TAB: opening it fronts the one tab, and a pop-up standing over it closes back
      onto it, which is how an editor opened from here returns. */
   libView="list";
-  if(modalOpen()) closeModal(); /* plant:library-editor-closes-back */
+  if(modalFront()) closeModal(); /* plant:library-editor-closes-back */
   if(screenOn===LIB_SCREEN) paintLibrary(null,mgBody);
   else openScreenTab(LIB_SCREEN);
 }
@@ -1592,7 +1592,7 @@ function paintLibrary(host,body){
   if(fk) focusSame(host,fk);
   // The tab takes the keyboard where its wiring left focus nowhere inside it, as a dialog does.
   const at=document.activeElement;
-  if(!page.contains(at) && !modalOpen() && !openCover() && !(at && at.closest && at.closest("#tourCard")))
+  if(!page.contains(at) && !modalFront() && !openCover() && !(at && at.closest && at.closest("#tourCard")))
     try{ page.focus({preventScroll:true}); }catch(e){}
 }
 registerScreen(LIB_SCREEN,{ title:()=>t("Library"), render:host=>paintLibrary(host) });

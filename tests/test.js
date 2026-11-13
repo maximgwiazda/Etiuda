@@ -576,7 +576,7 @@ function lanePageKeyTests() {
   const off = () => false;
   const own = { document: doc, addEventListener: (k, fn) => { if (k === "keydown") world.listener = fn; },
     $: s => (s === "#lanes" ? lanesBox : null), scCaptureId: "", SC_DEFS: [], intentEl: null,
-    tourActive: off, tourHasFocus: off, openCover: () => null, modalOpen: off, factsPanelOpen: off,
+    tourActive: off, tourHasFocus: off, openCover: () => null, modalOpen: off, modalFront: off, edToDesk: off, factsPanelOpen: off,
     eventMatchesAction: off, eHost: off, hooks: { runShortcut: off }, mgReduceMotion: off };
   Object.defineProperty(own, "lanesOn", { get: () => world.open });
   const scope = new Proxy({}, {
@@ -641,7 +641,7 @@ function ejectUndoTests() {
     try {
       w.F = new Function("E_CATALOG_STORE", "E_CATALOG_KEY", "E_NS", "nsKey", "hooks", "flushStats", "clearTimeout", "tabSaveTimer",
         "saveTabSession", "ssGet", "ssSet", "ssDel", "TAB_KEY", "lsGet", "lsSet", "lsDel", "lsKeys", "eLayers",
-        "eWatchGet", "eWatchClear", "eWatchPut", "offerUndo", "toastRefusal", "catalogStoreRefusal", "eDeskFileShown", "location", "eHasBranch", "LAYER_KEYS",
+        "eWatchGet", "eWatchClear", "eWatchPut", "offerUndo", "toastRefusal", "catalogStoreRefusal", "eDeskFileShown", "location", "eHasBranch", "LAYER_KEYS", "edCatalogTaken",
         loose +"\n" + markers.map(m => extractDecl(src, m)).join("\n")
         + "\nreturn {ejectCatalog, clearLocalMemory, bringBackCleared: typeof bringBackCleared==='function' ? bringBackCleared : null};")(
         ns("Catalog"), ns("CatalogOk"), "e", ns, hooks, () => {}, () => {}, null, () => {},
@@ -650,7 +650,7 @@ function ejectUndoTests() {
         () => Object.keys(w.ls), () => ["eab12~"],
         () => Promise.resolve(null), () => Promise.resolve(), () => {},
         (said, fn) => { w.said = said; w.undo = fn; }, () => {}, () => "", () => "",
-        { reload: () => { w.reloads++; } }, () => desk, JSON.parse(LAYER));
+        { reload: () => { w.reloads++; } }, () => desk, JSON.parse(LAYER), same => { w.taken = (w.taken || []).concat(same); });
     } catch (e) { w.F = null; w.err = e.message; }
     w.ls = { eCatalog: "{\"cards\":[1]}", eCatalogOk: "sig", eSample: "1", eCatalogNo: "no", eCatalogFile: "shop.ec",
              eCatalogFileAt: "1700", eCatalogTrust: "valid", eCatalogFrom: "shop.ec", "eab12~Pack": OWN_PACK, ePack: "[\"loose\"]",
@@ -4734,12 +4734,12 @@ function dialogFocusTests() {
     return { doc, N, modalEl, modalCard, x, field, save, tourBtn, cover, coverBtn, search, body };
   };
   const sliced = w => new Function("document", "modalEl", "modalCard", "cutLeaves", "setModalBack", "modalHead", "t",
-    "refreshDialogReset", "translateTree", "dressDialogInputs", "markCutText", "openCover", "focusKey", "placeDialog",
+    "refreshDialogReset", "translateTree", "dressDialogInputs", "markCutText", "openCover", "focusKey", "edBeforeOpen", "edAfterOpen",
     "let modalOpener=null, modalOpenerKbd=false, modalOpenerKey=null, modalNameFn=null, modalResetFn=null, modalResetOn=\"\", modalResetOff=\"\", lastInputWasKey=false;\n"
     + [extractDecl(dlg, "function openDialog("), extractDecl(dlg, "const MODAL_TABBABLE="), extractDecl(dlg, "function tabTargetIn(")].join("\n")
     + "\nreturn {openDialog, tabTargetIn};")(
     w.doc, w.modalEl, w.modalCard, () => {}, () => {}, () => "", s => s, () => {}, () => {}, () => {}, () => {},
-    () => (w.coverOn ? w.cover : null), () => null, () => {});
+    () => (w.coverOn ? w.cover : null), () => null, () => null, () => {});
   const open = (from, opts) => {
     const w = world(); Object.assign(w, opts || {});
     w.doc.activeElement = typeof from === "function" ? from(w) : w.body;

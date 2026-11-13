@@ -771,7 +771,7 @@ body.e-backdrop{background:transparent}
    band pixel the tint leaves uncovered arrives sharp however heavy the scrim. Measured with a
    dialog up, band alpha .93 against 1.00 over the cards and 3.0x their edge energy. The floor
    goes back under the whole window while one is open, the tint above it unchanged. */
-body.e-backdrop:has(.modal:not([hidden])){background:var(--bg)}
+body.e-backdrop:has(.modal:not([hidden]):not(.ed-rest)){background:var(--bg)}
 body.e-backdrop .dotfield{background:var(--bg)}
 body.e-backdrop header{
   background:linear-gradient(var(--header-bg) 0 0) no-repeat left bottom/100% calc(100% - var(--band-h,36px));
@@ -2885,6 +2885,21 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
 /* A MOVED EDITOR (dialog.js, edStandAt) stands top-aligned and grows downward from its top. */
 .modal.ed-placed{align-items:flex-start}
 .modal.ed-placed .modal-card{transform-origin:50% 0;max-height:min(92vh,820px,var(--ed-room,100vh))}
+/* A RESTING EDITOR (dialog.js, edToDesk): the desk in front and live, the editor above the cards, the
+   rail and the pills and under the desk's own overlays; the header rises over it while one of its own
+   popovers is open. The dim lifts on the scrim tier and its keyframe brings it back. */
+.modal.ed-rest{z-index:56;pointer-events:none}
+.modal.ed-rest .modal-card{pointer-events:auto;border-color:var(--line-strong);box-shadow:0 8px 20px rgba(0,0,0,.12)}
+.modal.ed-rest .modal-card h2 .modal-t{color:var(--dim)}
+/* THE LINE UNDER AN EDITOR'S TITLE (dialog.js, edSayLine): the screen's own type, a dot in the warning colour, no box; part of the pinned heading. */
+.modal-card .modal-note{flex:0 0 auto;margin:0;padding:0 18px 10px;font:13px/1.45 var(--sans);color:var(--ink);display:flex;gap:8px;align-items:baseline;user-select:text;-webkit-user-select:text}
+.modal-note-dot{flex:0 0 auto;width:7px;height:7px;border-radius:50%;background:var(--warn);transform:translateY(-1px)}
+.modal-card:has(.modal-body):has(> .modal-note) h2{border-bottom:0}
+.modal-card:has(.modal-body) > .modal-note{border-bottom:1px solid var(--line)}
+.modal.ed-rest:not([hidden]) .modal-bg{animation:none;opacity:0;transition:opacity var(--m-scrim) ease}
+/* An editor's scrim takes the click over the band too, which brings the desk in front (the band's rule above). */
+body.e-host .modal.ed-win:not(.ed-rest) .modal-bg{app-region:no-drag;-webkit-app-region:no-drag}
+body:has(.modal.ed-rest:not([hidden])) header:has(.menu:not([hidden]):not(.e-warm),.facts-panel:not([hidden]),.sgn-panel:not([hidden])){z-index:57}
 /* The intent panel, the dialogs, the menus, Quick facts and the opened pill bar wear the rim inside their
    border; their bevel gives way to it. A surface that scrolls as a whole carries the ring with its content. */
 :root:not([data-theme=light]) #intentRail,

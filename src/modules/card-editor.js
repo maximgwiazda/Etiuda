@@ -3,7 +3,7 @@ import { baseCard, cardCommits, cardText, cardTitle, findCard, overrideAgainstBa
 import { nextReplies, stampToggleHtml, wireStampToggle } from "./card-chain.js";
 import { catSortIdx } from "./card-order.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
-import { closeModal, edMarkClean, edNavHtml, edWireNav, mfSec, openDialog, refreshDialogChrome, wireFolds } from "./dialog.js";
+import { closeModal, edCanSave, edMarkClean, edNavHtml, edWireNav, mfSec, openDialog, refreshDialogChrome, wireFolds } from "./dialog.js";
 import { afterPaint } from "./motion.js";
 import { ICON_PLUS } from "./icons.js";
 import { intentNavName, paxOwnExample } from "./intent-text.js";
@@ -365,6 +365,17 @@ function openCardEditor(id, presetCat, fromManage){
     back: backToManage?doneCardEditor:null,
     title: isNew?"New card":"Edit card",
     place: "card",
+    again: ()=>openCardEditor(savedId, presetCat, fromManage),
+    /* The card as stored, its own fields only: a star, putting it away or moving it is not an edit. */
+    subject: ()=>{
+      if(!savedId) return "";
+      const c=findCard(savedId);
+      /* A deleted catalog card is still in the catalog's own list: pack.removed is what says it is gone. */
+      if(!c || (pack.removed||[]).indexOf(savedId)>=0) return null;
+      const o={};
+      Object.keys(c).sort().forEach(k=>{ if(k.charAt(0)!=="_") o[k]=c[k]; });
+      return JSON.stringify(o);
+    },
     /* Read through savedId so a card saved for the first time names itself at once. */
     name: ()=>{ const c=savedId?findCard(savedId):null; return c?cardTitle(c):""; },
     resettable: ()=>!!(baseCard(savedId) && pack.overrides[savedId]),
@@ -588,6 +599,7 @@ function openCardEditor(id, presetCat, fromManage){
     toast(t("Restored original -")+" "+(base.t||id));
   };
   $("#meSave").onclick=()=>{
+    if(!edCanSave()) return;   // its entry is gone (dialog.js, edMarkGone)
     /* Every language's text straight off the table, so a new language adds no line here. */
     const text={};
     CARD_TEXT_FIELDS.forEach(f=>CONTENT_LANGS.forEach(l=>{

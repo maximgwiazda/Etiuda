@@ -29,6 +29,7 @@ import { rebuildCards } from "./rebuild.js";
 import { cards } from "./app-state.js";
 import { carryCardLayer } from "./card-carry.js";
 import { hooks } from "./hooks.js";
+import { edCatalogTaken } from "./dialog.js";
 import { recordCatalogTrust } from "./catalog-trust.js";
 
 /* ---- one catalog format, one export, one import -----------------------------------------
@@ -682,6 +683,7 @@ function takeCatalog(c,opts){
      What the agent owns is not per-tab and is untouched. */
   clearTimeout(tabSaveTimer);
   if (!same) ssDel(TAB_KEY);
+  edCatalogTaken(same);
   hooks.restartDesk();
   /* A marked file just opened shows the bubble. Boot reads the stored copy and never comes through here. */
   try{

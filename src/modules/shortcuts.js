@@ -51,6 +51,9 @@ const SC_DEFS=[
     def:{code:"ArrowLeft",key:"ArrowLeft",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   {id:"edNextLang",label:"Editor: next language",hint:"In an editor: the language tab after this one",
     def:{code:"ArrowRight",key:"ArrowRight",ctrl:0,alt:1,shift:0,meta:0},inField:1},
+  /* F6 moves between panes on Windows. inField, since both sides hold a caret. */
+  {id:"edSwitch",label:"Switch between the desk and the editor",hint:"Moves the keyboard between the cards and an open editor",
+    def:{code:"F6",key:"F6",ctrl:0,alt:0,shift:0,meta:0},inField:1},
   {id:"newCard",label:"New card",hint:"Open the editor for a new card, in the chosen category",
     def:{code:"KeyN",key:"n",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   {id:"clearIntent",label:"Clear intent",hint:"Deselect every chosen intent",

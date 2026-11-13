@@ -12,7 +12,7 @@ import { fill } from "./intent-text.js";
 import { markCutText } from "./cut-text.js";
 import { NEXT_KEYS, nextLive, stampHtml } from "./card-chain.js";
 import { copyCardPart } from "./copy-entry.js";
-import { modalOpen, openCover } from "./dialog.js";
+import { modalFront, openCover } from "./dialog.js";
 import { $ } from "./dom.js";
 
 /* ---- The dock: what the conversation in front can send next, behind the action button in the corner.
@@ -183,7 +183,7 @@ function placeDock(){
 }
 function nextDockOpen(){ return !!dockEl && !dockEl.hidden; }
 function unfoldDock(by){
-  if(!dockRows.length || lanesShown() || modalOpen() || openCover()) return;
+  if(!dockRows.length || lanesShown() || modalFront() || openCover()) return;
   openBy[by]=true;
   if(!dockEl){
     dockEl=document.createElement("div");

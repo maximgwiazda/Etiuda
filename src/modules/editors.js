@@ -1,6 +1,6 @@
 import { isAlwaysCat, setCatAlways } from "./cat-roles.js";
 import { intentStoreKeys, intentFieldKey, intentCount, CATS, CONTENT_LANGS, INTENT_TEXT_FIELDS, SW_STORE } from "./content-model.js";
-import { closeModal, edMarkClean, edNavHtml, edWireNav, openDialog, refreshDialogChrome } from "./dialog.js";
+import { closeModal, edCanSave, edMarkClean, edNavHtml, edWireNav, openDialog, refreshDialogChrome } from "./dialog.js";
 import { ICON_ROLE_ALWAYS, catIconInner, E_HUE_CYCLE, E_HUE_NAMES, CAT_ICON_KEYS } from "./icons.js";
 import { intentNavName, commentTokensInUse } from "./intent-text.js";
 import { langTabs, langPane, langFieldId, langEndonym, markMissing, edReportMissing, langFocus } from "./lang-tabs.js";
@@ -61,6 +61,9 @@ function openCategoryEditor(k,fromPill){
     back: fromPill?null:()=>hooks.openManage(),
     title: "Edit category",
     place: "category",
+    again: ()=>openCategoryEditor(k, fromPill),
+    subject: ()=>CATS[k]==null ? null : JSON.stringify([CATS[k], catIconKey(k), catSlot(k), isAlwaysCat(k),
+      CONTENT_LANGS.map(l=>(pack[catPackKey(l,primary)]||{})[k]||"")]),
     name: ()=>CATS[k]||"",
     resettable: ()=>!isCustomCat && categoryIsOverridden(k),
     resetOn: "Discard your changes and restore the catalog's category.",
@@ -194,6 +197,7 @@ function openCategoryEditor(k,fromPill){
     openCategoryEditor(k, fromPill);   // redraws the fields, and the button goes with them
   };
   $("#ceSave").onclick=()=>{
+    if(!edCanSave()) return;   // its entry is gone (dialog.js, edMarkGone)
     const nm=nameVal(primary);
     if(nm && nm!==orig){
       pack.catLabels[k]=nm;
@@ -290,7 +294,13 @@ function openIntentEditor(idx, fromManage){
     back: fromManage?()=>doneIntentEditor():null,
     title: isNew?"New intent":"Edit intent",
     place: "intent",
-    name: ()=>(!isNew&&i>-1)?intentNavName(i):"",
+    again: ()=>openIntentEditor(isNew ? null : intentIdxOfId(id), fromManage),
+    subject: ()=>{
+      if(isNew) return "";
+      const at=intentIdxOfId(id);
+      return at<0 ? null : JSON.stringify(intentStoreKeys().map(f=>SW_STORE[f][at]||""));
+    },
+    name: ()=>{ const at=isNew ? -1 : intentIdxOfId(id); return at>-1 ? intentNavName(at) : ""; },
     resettable: ()=>!isNew && !isCustom && i>-1 && intentIsOverridden(i),
     resetOn: "Discard your edits and restore the catalog wording.",
     resetOff: isCustom||isNew ? "This is yours, so the catalog has no version to restore." : "Nothing to discard - this matches the catalog.",
@@ -332,6 +342,7 @@ function openIntentEditor(idx, fromManage){
     if(removeIntent(id)) doneIntentEditor();
   };
   $("#ieSave").onclick=()=>{
+    if(!edCanSave()) return;   // its entry is gone (dialog.js, edMarkGone)
     const ieVal=(f,l)=>{ const el=$("#"+langFieldId("ie",f,l)); return el?el.value.trim():null; };
     /* A FIELD THE DIALOG DID NOT RENDER KEEPS WHAT WAS LOADED rather than being read as
        empty: the comment inputs are conditional, and reading a missing one as "" would quietly

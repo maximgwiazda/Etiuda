@@ -86,7 +86,7 @@ function removeCategory(k){
     lySet("CatOrder",JSON.stringify(catOrder));
     hooks.rebuildCards(); applyCatsToGlobal(); hooks.drawPillsCore(); hooks.render(); hooks.drawIntentRail();
     // The Library shows the category again where it stands in front, never closing a pop-up over it.
-    if(document.getElementById("mgCatList") && document.getElementById("modal").hidden) hooks.openManage();
+    if(document.getElementById("mgCatList") && (document.getElementById("modal").hidden || document.getElementById("modal").classList.contains("ed-rest"))) hooks.openManage();
   });
   return true;
 }
