@@ -25049,6 +25049,19 @@ What you type stays in this browser only.`;
     const u = z * 0.5 + 0.5;
     return FIFTH_FAR + (1 - FIFTH_FAR) * u * u * (3 - 2 * u);
   }
+  var FIFTH_TURN_FAR = 0.4;
+  function fifthTurnLight(z) {
+    const u = z * 0.5 + 0.5;
+    return FIFTH_TURN_FAR + (1 - FIFTH_TURN_FAR) * u * u * (3 - 2 * u);
+  }
+  function fifthPieces(phi) {
+    const b = fifthBand(phi), out = [];
+    for (let i = 2; i < b.length; i++) {
+      const p = b[i - 2], q = b[i];
+      out.push([p[0], p[1], q[0], q[1], (p[2] + q[2]) / 2]);
+    }
+    return out.sort((a, c) => a[4] - c[4]);
+  }
   function fifthLay(phi, to, rad, feather, lat, out) {
     out.fill(0);
     const o = [0, 0];
@@ -25110,8 +25123,9 @@ What you type stays in this browser only.`;
       cv.setAttribute("aria-hidden", "true");
       tile.appendChild(cv);
     }
-    const ctx = cv.getContext && cv.getContext("2d");
-    if (!ctx || typeof Path2D !== "function") return null;
+    const ctx = cv.getContext && cv.getContext("2d", { willReadFrequently: true });
+    const lc = document.createElement("canvas"), lx = lc.getContext && lc.getContext("2d", { willReadFrequently: true });
+    if (!ctx || !lx || typeof Path2D !== "function") return null;
     const mf = fifthMarkFrame(svg, g);
     const box = { w: 25, h: 25, dpr: 1 };
     let ink = "";
@@ -25131,6 +25145,8 @@ What you type stays in this browser only.`;
       const bw = Math.max(1, Math.round(w * dpr)), bh = Math.max(1, Math.round(h * dpr));
       if (cv.width !== bw) cv.width = bw;
       if (cv.height !== bh) cv.height = bh;
+      if (lc.width !== bw) lc.width = bw;
+      if (lc.height !== bh) lc.height = bh;
     };
     fit();
     if (typeof ResizeObserver === "function") {
@@ -25142,17 +25158,38 @@ What you type stays in this browser only.`;
     }
     return {
       readInk,
-      show(d) {
+      show(phi) {
         if (!tile.classList.contains("brand-turning")) tile.classList.add("brand-turning");
-        const f = fifthFit(), sx = box.dpr * box.w / mf.w, sy = box.dpr * box.h / mf.h, a = mf.sc / f.k;
+        const f = fifthFit(), sx = box.dpr * box.w / mf.w, sy = box.dpr * box.h / mf.h, a = mf.sc / f.k, w = 2 * fifthRadius();
+        const m = [sx * a, 0, 0, sy * a, sx * (mf.tx - mf.x0 - a * f.ox), sy * (mf.ty - mf.y0 - a * f.oy)];
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, cv.width, cv.height);
-        ctx.setTransform(sx * a, 0, 0, sy * a, sx * (mf.tx - mf.x0 - a * f.ox), sy * (mf.ty - mf.y0 - a * f.oy));
-        ctx.lineWidth = 2 * fifthRadius();
+        ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
+        ctx.lineWidth = w;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
         ctx.strokeStyle = ink || "#000";
-        ctx.stroke(new Path2D(d));
+        ctx.stroke(new Path2D(fifthLinePath(phi)));
+        lx.setTransform(1, 0, 0, 1, 0, 0);
+        lx.fillStyle = "#000";
+        lx.fillRect(0, 0, lc.width, lc.height);
+        lx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
+        lx.lineCap = "round";
+        const pieces = fifthPieces(phi);
+        [w + 2 / m[0], w].forEach((lw) => {
+          lx.lineWidth = lw;
+          pieces.forEach((p) => {
+            const v = Math.round(255 * fifthTurnLight(p[4]));
+            lx.strokeStyle = "rgb(" + v + "," + v + "," + v + ")";
+            lx.beginPath();
+            lx.moveTo(p[0], p[1]);
+            lx.lineTo(p[2], p[3]);
+            lx.stroke();
+          });
+        });
+        const img = ctx.getImageData(0, 0, cv.width, cv.height), lum = lx.getImageData(0, 0, lc.width, lc.height).data, px = img.data;
+        for (let i = 3; i < px.length; i += 4) px[i] = px[i] * lum[i - 3] / 255;
+        ctx.putImageData(img, 0, 0);
       },
       hide() {
         if (tile.classList.contains("brand-turning")) tile.classList.remove("brand-turning");
@@ -25188,11 +25225,10 @@ What you type stays in this browser only.`;
         sync();
         return;
       }
-      const d = fifthLinePath(fifthPhase());
-      if (paint) paint.show(d);
+      if (paint) paint.show(fifthPhase());
       else {
         stroke(true);
-        node.setAttribute("d", d);
+        node.setAttribute("d", fifthLinePath(fifthPhase()));
       }
     };
     const sync = () => {

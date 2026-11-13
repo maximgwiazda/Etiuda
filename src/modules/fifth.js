@@ -72,6 +72,21 @@ function fifthLight(z){
   const u=z*0.5+0.5;
   return FIFTH_FAR+(1-FIFTH_FAR)*u*u*(3-2*u);
 }
+/* THE TURNING LINE'S LIGHT, as the app icon paints it: the far pass at FIFTH_TURN_FAR of the near one, eased. The line's
+   pieces between the band's centres, each [x1, y1, x2, y2, z], far first, so a piece painted later is nearer. */
+const FIFTH_TURN_FAR=0.4;
+function fifthTurnLight(z){
+  const u=z*0.5+0.5;
+  return FIFTH_TURN_FAR+(1-FIFTH_TURN_FAR)*u*u*(3-2*u);
+}
+function fifthPieces(phi){
+  const b=fifthBand(phi), out=[];
+  for(let i=2;i<b.length;i++){
+    const p=b[i-2], q=b[i];
+    out.push([p[0], p[1], q[0], q[1], (p[2]+q[2])/2]);
+  }
+  return out.sort((a,c)=>a[4]-c[4]);
+}
 
 /* THE BAND LAID ON A LATTICE: lat={x0,y0,step,nx,ny} is a grid of dots, `to` maps the header's box into the
    grid's units in place, rad is the disc radius in those units. Writes into out (nx*ny, row by row) each
@@ -123,7 +138,9 @@ function fifthMarkFrame(svg, g){
 
 /* THE HEADER PAINTS ON A CANVAS. A path's d write marks the shape for layout, and this repaints
    every FIFTH_PAINT_MS for as long as the page is shown. The canvas strokes the turning line in the
-   standing path's frame, so a turn and a stand are one size. A node passed in still turns by d. */
+   standing path's frame, so a turn and a stand are one size, and takes each pixel's opacity from a
+   light canvas where the pieces are painted far to near in their greys, as the icon and the svg's mask
+   are: the nearer pass wins where they cross, with no seam where pieces meet. A node passed in still turns by d. */
 function headerPaint(node){
   const tile=node.closest && node.closest(".brand-tile");
   const svg=node.ownerSVGElement || (node.closest && node.closest("svg"));
@@ -136,8 +153,9 @@ function headerPaint(node){
     cv.setAttribute("aria-hidden","true");
     tile.appendChild(cv);
   }
-  const ctx=cv.getContext && cv.getContext("2d");
-  if(!ctx || typeof Path2D!=="function") return null;
+  const ctx=cv.getContext && cv.getContext("2d",{willReadFrequently:true});
+  const lc=document.createElement("canvas"), lx=lc.getContext && lc.getContext("2d",{willReadFrequently:true});
+  if(!ctx || !lx || typeof Path2D!=="function") return null;
   const mf=fifthMarkFrame(svg, g);
   const box={w:25, h:25, dpr:1};
   let ink="";
@@ -156,6 +174,8 @@ function headerPaint(node){
     const bw=Math.max(1, Math.round(w*dpr)), bh=Math.max(1, Math.round(h*dpr));
     if(cv.width!==bw) cv.width=bw;
     if(cv.height!==bh) cv.height=bh;
+    if(lc.width!==bw) lc.width=bw;
+    if(lc.height!==bh) lc.height=bh;
   };
   fit();
   if(typeof ResizeObserver==="function"){
@@ -165,18 +185,37 @@ function headerPaint(node){
   }
   return {
     readInk,
-    show(d){
+    show(phi){
       if(!tile.classList.contains("brand-turning")) tile.classList.add("brand-turning");
-      const f=fifthFit(), sx=box.dpr*box.w/mf.w, sy=box.dpr*box.h/mf.h, a=mf.sc/f.k;
+      const f=fifthFit(), sx=box.dpr*box.w/mf.w, sy=box.dpr*box.h/mf.h, a=mf.sc/f.k, w=2*fifthRadius();
+      // the line at the box's fit, taken back to the figure's own size, then placed as the path is
+      const m=[sx*a,0,0,sy*a, sx*(mf.tx-mf.x0-a*f.ox), sy*(mf.ty-mf.y0-a*f.oy)];
       ctx.setTransform(1,0,0,1,0,0);
       ctx.clearRect(0,0,cv.width,cv.height);
-      // the line at the box's fit, taken back to the figure's own size, then placed as the path is
-      ctx.setTransform(sx*a,0,0,sy*a, sx*(mf.tx-mf.x0-a*f.ox), sy*(mf.ty-mf.y0-a*f.oy));
-      ctx.lineWidth=2*fifthRadius();
+      ctx.setTransform(m[0],m[1],m[2],m[3],m[4],m[5]);
+      ctx.lineWidth=w;
       ctx.lineCap="round";
       ctx.lineJoin="round";
       ctx.strokeStyle=ink || "#000";
-      ctx.stroke(new Path2D(d));
+      ctx.stroke(new Path2D(fifthLinePath(phi)));
+      // a wider pass under the exact one, so the rim takes its own pass's light and not the black around it
+      lx.setTransform(1,0,0,1,0,0);
+      lx.fillStyle="#000";
+      lx.fillRect(0,0,lc.width,lc.height);
+      lx.setTransform(m[0],m[1],m[2],m[3],m[4],m[5]);
+      lx.lineCap="round";
+      const pieces=fifthPieces(phi);
+      [w+2/m[0], w].forEach(lw=>{
+        lx.lineWidth=lw;
+        pieces.forEach(p=>{
+          const v=Math.round(255*fifthTurnLight(p[4]));
+          lx.strokeStyle="rgb("+v+","+v+","+v+")";
+          lx.beginPath(); lx.moveTo(p[0],p[1]); lx.lineTo(p[2],p[3]); lx.stroke();
+        });
+      });
+      const img=ctx.getImageData(0,0,cv.width,cv.height), lum=lx.getImageData(0,0,lc.width,lc.height).data, px=img.data;
+      for(let i=3;i<px.length;i+=4) px[i]=px[i]*lum[i-3]/255;
+      ctx.putImageData(img,0,0);
     },
     hide(){ if(tile.classList.contains("brand-turning")) tile.classList.remove("brand-turning"); }
   };
@@ -209,9 +248,8 @@ function wireFifth(opts){
     painted=ms;
     // asked at each repaint too: a switch that flips with no class on the root sends no word here
     if(quiet()){ sync(); return; }
-    const d=fifthLinePath(fifthPhase());
-    if(paint) paint.show(d);
-    else { stroke(true); node.setAttribute("d", d); }
+    if(paint) paint.show(fifthPhase());
+    else { stroke(true); node.setAttribute("d", fifthLinePath(fifthPhase())); }
   };
   const sync=()=>{
     const still=quiet(), go=!still && !document.hidden;
