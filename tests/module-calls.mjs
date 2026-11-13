@@ -5541,6 +5541,7 @@ const CARD_B = {
   Dom.grabDom();
 
   const setupCat = (langs, primaryLabel, byLang) => {
+    DIALOG_MOD.closeAllDialogs();   // one editor at a time here, as these checks were written (several are 983w's)
     PK.resetPack();
     Object.keys(PK.BASE_CATS).forEach(k => delete PK.BASE_CATS[k]);
     Object.keys(CM.CATS).forEach(k => delete CM.CATS[k]);
@@ -7630,16 +7631,18 @@ const CARD_B = {
   };
   const heard = {}, captured = [], animated = [];
   /* A shell: an editor standing aside, at the box its style names. */
-  const mkShell = () => { const sh = { kids: [], style: {}, className: "", attrs: {}, heard: {}, gone: false,
+  const mkShell = () => { const sh = { kids: [], style: { props: {}, setProperty(k, v) { this.props[k] = String(v); }, removeProperty(k) { delete this.props[k]; } }, className: "", attrs: {}, heard: {}, gone: false,
     get childNodes() { return this.kids; }, get firstChild() { return this.kids[0] || null; },
     appendChild(k) { if (k.parent) k.parent.kids = k.parent.kids.filter(x => x !== k); k.parent = this; this.kids.push(k); return k; },
     setAttribute(k, v) { this.attrs[k] = v; }, querySelectorAll: () => [],
     addEventListener(k, fn, cap) { const at = cap ? "capture:" + k : k; (this.heard[at] = this.heard[at] || []).push(fn); },
     remove() { this.gone = true; modalEl.shells = modalEl.shells.filter(x => x !== this); },
-    get offsetLeft() { return parseFloat(this.style.left) || 0; }, get offsetTop() { return parseFloat(this.style.top) || 0; },
+    get offsetLeft() { return parseFloat(this.style.left) || 0; },
+    get offsetTop() { return (this.classList && this.classList.contains("ed-bar")) ? parseFloat(this.style.props["--bar-t"]) : (parseFloat(this.style.top) || 0); },
     get offsetWidth() { return parseFloat(this.style.width) || 0; }, get offsetHeight() { return parseFloat(this.style.maxHeight) || 0; },
     fields() { return this.kids.flatMap(k => k.fields || []); } }; return sh; };
   const modalEl = { id: "modal", hidden: true, classList: classes(), shells: [], insertBefore(sh) { this.shells.push(sh); return sh; },
+    querySelectorAll(sel) { return sel === ".ed-bar" ? [modalCard].concat(this.shells).filter(e => e.classList.contains("ed-bar")) : []; },
     contains(el) { return el === modalCard || modalCard.contains(el) || this.shells.some(s => s.fields().indexOf(el) >= 0); },
     get clientWidth() { return view.W; }, get clientHeight() { return view.H; } };
   const rel = v => parseFloat(v) || 0;
@@ -7657,7 +7660,7 @@ const CARD_B = {
       const room = placed() && this.style.props["--ed-room"] != null ? rel(this.style.props["--ed-room"]) : Infinity;
       return Math.min(view.ch, Math.floor(0.92 * view.H), 820, room);
     },
-    get offsetTop() { return Math.round((placed() ? 16 : (view.H - this.offsetHeight) / 2) + rel(this.style.top)); },
+    get offsetTop() { return this.classList.contains("ed-bar") ? parseFloat(this.style.props["--bar-t"]) : Math.round((placed() ? 16 : (view.H - this.offsetHeight) / 2) + rel(this.style.top)); },
     get offsetLeft() { return Math.round((view.W - this.offsetWidth) / 2 + rel(this.style.left)); },
     getBoundingClientRect() { return { top: this.offsetTop, left: this.offsetLeft, width: this.offsetWidth, height: this.offsetHeight }; },
     addEventListener(k, fn, capture) { const at = capture ? "capture:" + k : k; (heard[at] = heard[at] || []).push(fn); },
@@ -7681,9 +7684,10 @@ const CARD_B = {
   const row = { getBoundingClientRect: () => ({ top: 0, bottom: view.band, height: view.band }) };
   const prev = { disabled: false, onclick: null }, next = { disabled: false, onclick: null };
   globalThis.document = {
-    body: {}, documentElement: { classList: classes() }, activeElement: null,
+    body: { classList: classes() }, documentElement: { classList: classes(), style: { props: {}, setProperty(k, v) { this.props[k] = String(v); }, removeProperty(k) { delete this.props[k]; } } }, activeElement: null,
     querySelector: s => s === "#modal" ? modalEl : s === "#modalCard" ? modalCard : s === "header > .row" ? row
       : s === "header > .fills" ? fills : s === "#edPrev" ? prev : s === "#edNext" ? next
+      : s === ".fab-stack" ? { getBoundingClientRect: () => ({ left: view.W - 66, top: view.H - 66, width: 56, height: 44 }) }
       : s === "#eUndo" ? bubbles.filter(b => !b.gone).pop() || null : null,
     querySelectorAll: () => [], getElementById: id => (id === "eUndo" ? bubbles.filter(b => !b.gone).pop() || null : null), contains: () => true,
     createRange: () => ({}),
@@ -7778,7 +7782,7 @@ const CARD_B = {
     /* ---- Stage 2 (board 983): the desk in front while an editor rests. */
     const openEd = (place, vals, more) => open(place, Object.assign({ wire: () => { modalCard.kids[0].fields = vals.map(mkField); } }, more || {}));
 
-    check("dialog.js", "983r1 a click on the dimmed desk puts the desk in front and does nothing else, the keyboard back on the desk; below 800 px the editor stays modal",
+    check("dialog.js", "983r1 a click on the dimmed desk puts the desk in front and does nothing else, the keyboard back on the desk, below 800 px too",
       () => {
         fresh(); openEd("card", ["a"]);
         const f = modalCard.fields()[0]; f.focus();
@@ -7792,7 +7796,7 @@ const CARD_B = {
         const aboutWin = modalEl.classList.contains("ed-win");
         DL.closeModal();
         return eq([before, after, narrow, ev2.prevented, aboutWin].join(" || "),
-          "false,true,false,true,true || true,,true,false|true|true || false,true,false,true || false" + " || " + "false");
+          "false,true,false,true,true || true,,true,false|true|true || true,,true,false || true" + " || " + "false");
       });
 
     check("dialog.js", "983r2 a press on a resting editor brings it in front and is acted on where it landed; the editor goes back to its place once the press is over",
@@ -7875,13 +7879,6 @@ const CARD_B = {
         return eq([offered, back, clean, bubbles.length - n2].join(" || "), "1|true|two || a,b,a|typed || 0 || 1");
       });
 
-    check("dialog.js", "983r7 a window made narrower than 800 px brings a resting editor back in front, modal, with the keyboard",
-      () => {
-        fresh(); openEd("card", ["a"]);
-        scrim();
-        resize(760, 800);
-        return eq([rests(), modalCard.contains(globalThis.document.activeElement)].join("|"), "false,true,false,true|true");
-      });
 
     check("dialog.js", "983r8 the resting layer stands above the cards, the rail, the pills and the floating buttons and under the desk's own overlays; the header rises over it while one of its popovers is open; the dim lifts on the scrim tier",
       () => {
@@ -8150,10 +8147,81 @@ const CARD_B = {
         return eq([aside, titleOf(modalCard), DL.edCanSave()].join("|"), "renamed|Edit card|false");
       });
 
-    check("dialog.js", "983w7 below 800 px one window stays: another kind takes it, as before",
+
+    /* ---- the narrowest window: bars below 800 px (board 983, the product designer's seven rules). */
+    const barOf = el => el.classList.contains("ed-bar") ? [el.style.props["--bar-l"], el.style.props["--bar-t"], el.style.props["--bar-w"], el.attrs.role, el.tabIndex].join(" ") : "no bar";
+    const narrowOpen = () => { fresh(); view.W = 546; view.H = 900; };
+
+    check("dialog.js", "983b1 below 800 px the desk in front steps the editor down to a bar: the scrim gone, the desk whole, nothing typed lost",
       () => {
-        fresh(); view.W = 760; openK("card", "c1"); openK("intent", "i1");
-        return eq([modalEl.shells.length, titleOf(modalCard), modalEl.classList.contains("ed-multi")].join("|"), "0|Edit intent|false");
+        narrowOpen(); openK("card", "c1");
+        modalCard.fields()[0].value = "typed";
+        scrim();
+        return eq([DL.edResting(), modalCard.classList.contains("ed-bar"), globalThis.document.body.classList.contains("ed-bars"), modalCard.fields()[0].value].join("|"),
+          "true|true|true|typed");
+      });
+
+    check("dialog.js", "983b2 a bar is 40 px high, 8 px above the foot, from 16 px to 8 px short of the floating +",
+      () => {
+        narrowOpen(); openK("card", "c1"); scrim();
+        return eq(barOf(modalCard), "16px 852px 456px button 0");
+      });
+
+    check("dialog.js", "983b3 a press on a bar or Enter on it stands its editor up as it was left; its X closes that editor, the desk staying in front, unsaved work left with the Undo",
+      () => {
+        narrowOpen();
+        const card = () => openK("card", "c1", { again: card, wire: () => { modalCard.kids[0].title = "Edit card"; modalCard.kids[0].fields = [mkField("card text")]; DL.edWireNav(["c1"], "c1", card); } });
+        card(); DL.edOpenBeside(); openK("intent", "i1"); scrim();
+        const cardBar = modalEl.shells[0];
+        cardBar.kids[0].fields[0].value = "typed";
+        (cardBar.heard.keydown || []).forEach(fn => fn({ key: "Enter", preventDefault() {} }));
+        const stood = [titleOf(modalCard), modalCard.classList.contains("ed-bar"), DL.edResting(), modalCard.fields()[0].value].join("|");
+        scrim();
+        const n = bubbles.length;
+        const x = { closest: s => (/modalX/.test(s) ? x : null) };
+        (heard["capture:pointerdown"] || []).forEach(fn => fn({ button: 0, target: x, preventDefault() {}, stopPropagation() {} }));
+        return eq([stood, modalEl.shells.length, titleOf(modalCard), DL.edResting(), bubbles.length - n].join(" || "), "Edit card|false|false|typed || 0 || Edit intent || true || 1");
+      });
+
+    check("dialog.js", "983b4 several bars stack 8 px apart, the one opened latest lowest; a second editor asked for comes in front and the one in hand steps down; F6 walks the desk, then each in the order opened",
+      () => {
+        narrowOpen(); openK("card", "c1"); openK("intent", "i1");
+        const second = [titleOf(modalCard), barOf(modalEl.shells[0])].join(" / ");
+        scrim();
+        const both = [barOf(modalEl.shells[0]), barOf(modalCard)].join(" / ");
+        const walk = [];
+        DL.edF6(); walk.push(DL.edResting() ? "desk" : titleOf(modalCard));
+        DL.edF6(); walk.push(DL.edResting() ? "desk" : titleOf(modalCard));
+        DL.edF6(); walk.push(DL.edResting() ? "desk" : titleOf(modalCard));
+        return eq([second, both, walk.join(",")].join(" || "),
+          "Edit intent / 16px 852px 456px button 0 || 16px 804px 456px button 0 / 16px 852px 456px button 0 || Edit card,Edit intent,desk");
+      });
+
+    check("dialog.js", "983b5 an editor in front stops 8 px above the topmost bar, and 8 px above the + where its right side meets it; the list scrolls clear of the bars",
+      () => {
+        narrowOpen(); openK("card", "c1"); openK("intent", "i1");
+        const room = modalCard.style.props["--ed-room"];
+        scrim();
+        return eq([room, globalThis.document.documentElement.style.props["--ed-bars-h"]].join(" | "), "782px | 104px");
+      });
+
+    check("dialog.js", "983b6 crossing 800 px: narrowing turns resting editors into bars, widening stands them up as resting windows at their places",
+      () => {
+        fresh(); view.W = 1280; openK("card", "c1"); DL.edOpenBeside(); openK("category", "k1"); scrim();
+        const wide = [modalCard.classList.contains("ed-bar"), barOf(modalEl.shells[0]), shellAt()].join(" / ");
+        resize(546, 900);
+        const narrow = [modalCard.classList.contains("ed-bar"), modalEl.shells[0].classList.contains("ed-bar")].join(",");
+        resize(1280, 800);
+        return eq([wide, narrow, [modalCard.classList.contains("ed-bar"), modalEl.shells[0].classList.contains("ed-bar"), shellAt(), DL.edResting()].join(" / ")].join(" || "),
+          "false / no bar / Edit card 74 150 || true,true || false / false / Edit card 74 150 / true");
+      });
+
+    check("dialog.js", "983b7 a bar is a button named by its title, and the editor is not modal while it is a bar",
+      () => {
+        narrowOpen(); openK("card", "c1"); scrim();
+        const asBar = [modalCard.attrs.role, modalCard.tabIndex, "aria-label" in modalCard.attrs, modalCard.getAttribute("aria-modal")].join("|");
+        DL.edF6();
+        return eq([asBar, modalCard.attrs.role, modalCard.getAttribute("aria-modal")].join(" || "), "button|0|true| || dialog || true");
       });
 
     check("dialog.js", "983w8 every named thing an editor lists has the menu its own panel gives, by the same builder, its edit row opening the editor beside, F2 at its right, F2 and the menu keys on a focused one too, the menu above every editor; the tour closes every editor; the one in hand wears the accent line",

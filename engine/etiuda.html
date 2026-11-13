@@ -2908,6 +2908,16 @@ body.e-host .modal.ed-win:not(.ed-rest) .modal-bg{app-region:no-drag;-webkit-app
 .modal .modal-card.ed-shell h2 .modal-t{color:var(--dim)}
 .modal.ed-held .modal-card.ed-shell{z-index:-1}
 .modal.ed-multi:not(.ed-rest) #modalCard{border-color:var(--accent)}
+/* A BAR (dialog.js, edBars): below 800 px a waiting editor, its kind, its name and its X, at the foot of the window, in the
+   resting look. Its nodes stay whole inside, so it stands up as it was left. The list scrolls clear of the bars. */
+.modal .modal-card.ed-bar{position:absolute;left:var(--bar-l)!important;top:var(--bar-t)!important;width:var(--bar-w)!important;max-width:none;height:40px!important;max-height:40px!important;
+  margin:0;overflow:hidden;pointer-events:auto;border-color:var(--line-strong);box-shadow:0 8px 20px rgba(0,0,0,.12);border-radius:var(--radius);animation:none;scale:none;translate:none}
+.modal .modal-card.ed-bar > :not(h2){display:none}
+.modal .modal-card.ed-bar h2{height:38px;padding:0 6px 0 14px;border-bottom:0;font-size:14.5px}
+.modal .modal-card.ed-bar h2 .modal-t{color:var(--dim)}
+.modal .modal-card.ed-bar h2 .modal-name{flex:1 1 auto;text-overflow:ellipsis}
+.modal .modal-card.ed-bar h2 .modal-nav{display:none}
+body.ed-bars #list{padding-bottom:var(--ed-bars-h)}
 :root:not([data-theme=light]) .modal.ed-multi:not(.ed-rest) #modalCard::after{display:none}
 body:has(.modal.ed-rest:not([hidden])) header:has(.menu:not([hidden]):not(.e-warm),.facts-panel:not([hidden]),.sgn-panel:not([hidden])){z-index:57}
 /* The intent panel, the dialogs, the menus, Quick facts and the opened pill bar wear the rim inside their
@@ -18825,6 +18835,8 @@ What you type stays in this browser only.`;
     edEntry = null;
     edRefresh = null;
     modalEl.classList.remove("ed-multi");
+    if (document.body) document.body.classList.remove("ed-bars");
+    if (modalCard.classList.contains("ed-bar")) edBarLook(modalCard, false);
     const wasRest = edRest;
     leaveModal();
     modalEl.hidden = true;
@@ -18891,7 +18903,7 @@ What you type stays in this browser only.`;
   function edPlaceRect(g, x, y) {
     const maxL = g.W - ED_EDGE - g.w;
     const left = g.fill || maxL < ED_EDGE ? (g.W - g.w) / 2 : Math.min(maxL, Math.max(ED_EDGE, g.W / 2 + x - g.w / 2));
-    const top = Math.max(g.floor, Math.min(g.H - ED_EDGE - g.h, g.H / 2 + y));
+    const top = Math.max(g.floor, Math.min(g.bottom - g.h, g.H / 2 + y));
     return { left: Math.round(left), top: Math.round(top) };
   }
   function edBand() {
@@ -18903,10 +18915,11 @@ What you type stays in this browser only.`;
     const st = modalCard.style, band = edBand(), W = modalEl.clientWidth, H = modalEl.clientHeight;
     modalEl.classList.add("ed-placed");
     const top0 = Math.max(band + ED_EDGE, floor || 0);
-    st.setProperty("--ed-room", Math.max(0, H - ED_EDGE - top0) + "px");
+    const bottom = edBottom(H);
+    st.setProperty("--ed-room", Math.max(0, bottom - top0) + "px");
     const relT = parseFloat(st.top) || 0, relL = parseFloat(st.left) || 0;
     const w = modalCard.offsetWidth, cap = parseFloat(getComputedStyle(modalCard).maxWidth);
-    const g = { W, H, floor: top0, w, h: modalCard.offsetHeight, fill: cap > 0 && w < cap - 0.5 };
+    const g = { W, H, floor: top0, bottom, w, h: modalCard.offsetHeight, fill: cap > 0 && w < cap - 0.5 };
     const at = edPlaceRect(g, x, y), t0 = modalCard.offsetTop - relT, l0 = modalCard.offsetLeft - relL;
     st.top = at.top - t0 + "px";
     st.left = at.left - l0 + "px";
@@ -18931,14 +18944,11 @@ What you type stays in this browser only.`;
   function edPlaceSync() {
     modalEl.classList.toggle("ed-win", !!(edPlaceKind && !modalEl.hidden));
     if (edDrag && edDrag.moved) return;
-    if (edRest && modalEl.clientWidth < ED_REST_MIN) {
-      edToFront(true);
-      return;
-    }
+    edBars();
     const open = edPlaceKind && !modalEl.hidden, p = open ? edPlaceNow || edPlaces()[edPlaceKind] : null;
     const floor = open && edRest ? edHeaderFloor() : 0;
     if (p) edStandAt(p.x, p.y, floor);
-    else if (floor && modalEl.clientHeight / 2 - modalCard.offsetHeight / 2 < floor) edStandAt(0, -modalCard.offsetHeight / 2, floor);
+    else if (floor && modalEl.clientHeight / 2 - modalCard.offsetHeight / 2 < floor || open && edBarsUp()) edStandAt(0, -modalCard.offsetHeight / 2, floor);
     else edUnstand();
   }
   function wireDialogDrag() {
@@ -19028,9 +19038,10 @@ What you type stays in this browser only.`;
     edRest = false;
     modalEl.classList.remove("ed-rest");
     modalCard.setAttribute("aria-modal", "true");
+    edBars();
   }
   function edToDesk() {
-    if (edRest || !edPlaceKind || modalEl.hidden || modalEl.clientWidth < ED_REST_MIN || openCover()) return false;
+    if (edRest || !edPlaceKind || modalEl.hidden || openCover()) return false;
     const at = document.activeElement;
     edEdFocus = at && modalCard.contains(at) && at !== modalCard ? at : null;
     edRest = true;
@@ -19069,7 +19080,7 @@ What you type stays in this browser only.`;
     if (place && !modalEl.hidden && edPlaceKind) {
       const w = edWinOf(cfg.place);
       if (w && w !== edActiveWin) edActivate(w, true);
-      else if (!w && modalEl.clientWidth >= ED_REST_MIN) {
+      else if (!w) {
         edBesideFrom = beside;
         edShelve();
         edNewWin = true;
@@ -19156,7 +19167,7 @@ What you type stays in this browser only.`;
     edPlaceNow = h.placeNow || null;
     modalEl.classList.remove("ed-held");
     refreshDialogReset();
-    if (h.rest && modalEl.clientWidth >= ED_REST_MIN) {
+    if (h.rest) {
       edRest = true;
       modalEl.classList.add("ed-rest");
       modalCard.removeAttribute("aria-modal");
@@ -19171,11 +19182,21 @@ What you type stays in this browser only.`;
       if (e.button !== 0 || !edToDesk()) return;
       e.preventDefault();
     });
-    modalCard.addEventListener("pointerdown", () => {
-      if (edRest) edToFront(false);
+    modalCard.addEventListener("pointerdown", (e) => {
+      if (!edRest) return;
+      if (edBarX(e, modalCard)) {
+        dismissModal();
+        return;
+      }
+      edToFront(false);
     }, true);
     modalCard.addEventListener("focusin", () => {
-      if (edRest) edToFront(false);
+      if (edRest && !modalCard.classList.contains("ed-bar")) edToFront(false);
+    });
+    modalCard.addEventListener("keydown", (e) => {
+      if (!edRest || !modalCard.classList.contains("ed-bar") || e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      edToFront(true);
     });
     modalCard.addEventListener("click", (e) => {
       if (edGone && e.target.closest && e.target.closest(ED_LOCKS)) {
@@ -19351,9 +19372,16 @@ What you type stays in this browser only.`;
   }
   function edMulti() {
     modalEl.classList.toggle("ed-multi", edWins.length > 1);
+    edBars();
   }
   function edScrolls(root) {
     return Array.prototype.filter.call(root.querySelectorAll("*"), (x) => x.scrollTop > 0).map((x) => [x, x.scrollTop]);
+  }
+  function edBarX(e, el) {
+    if (!el.classList.contains("ed-bar") || !(e.target.closest && e.target.closest("#modalX,[data-ed-id=modalX]"))) return false;
+    e.preventDefault();
+    e.stopPropagation();
+    return true;
   }
   function edWinState() {
     const at = document.activeElement;
@@ -19423,6 +19451,7 @@ What you type stays in this browser only.`;
   function edShelve() {
     const rec = edActiveWin;
     if (!rec || !edPlaceKind) return null;
+    if (modalCard.classList.contains("ed-bar")) edBarLook(modalCard, false);
     const st = edWinState();
     const box = { left: modalCard.offsetLeft, top: modalCard.offsetTop, width: modalCard.offsetWidth, height: modalCard.offsetHeight };
     const kept = edScrolls(modalCard);
@@ -19444,14 +19473,29 @@ What you type stays in this browser only.`;
     kept.forEach((k) => {
       k[0].scrollTop = k[1];
     });
-    sh.addEventListener("pointerdown", () => {
-      if (rec.shell === sh) edActivate(rec, false);
+    sh.addEventListener("pointerdown", (e) => {
+      if (rec.shell !== sh) return;
+      if (edBarX(e, sh)) {
+        edShelve();
+        edUnshelve(rec);
+        edFrontHist(rec);
+        dismissModal();
+        edMulti();
+        return;
+      }
+      edActivate(rec, false);
     }, true);
     sh.addEventListener("focusin", () => {
-      if (rec.shell === sh) edActivate(rec, false);
+      if (rec.shell === sh && !sh.classList.contains("ed-bar")) edActivate(rec, false);
+    });
+    sh.addEventListener("keydown", (e) => {
+      if (rec.shell !== sh || !sh.classList.contains("ed-bar") || e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      edActivate(rec, true);
     });
     rec.shell = sh;
     rec.state = st;
+    rec.winPlace = edPlaceNow;
     edActiveWin = null;
     edWinClear();
     modalCard.className = "modal-card";
@@ -19460,7 +19504,7 @@ What you type stays in this browser only.`;
   }
   function edUnshelve(rec) {
     const sh = rec.shell, st = rec.state;
-    const x = sh.offsetLeft + sh.offsetWidth / 2 - modalEl.clientWidth / 2, y = sh.offsetTop - modalEl.clientHeight / 2;
+    const x = sh.offsetLeft + sh.offsetWidth / 2 - modalEl.clientWidth / 2, y = sh.offsetTop - modalEl.clientHeight / 2, wasBar = sh.classList.contains("ed-bar");
     const kept = edScrolls(sh);
     modalCard.innerHTML = "";
     modalCard.className = st.cls;
@@ -19474,7 +19518,7 @@ What you type stays in this browser only.`;
     rec.state = null;
     edWinApply(st);
     edActiveWin = rec;
-    edPlaceNow = { x: Math.round(x), y: Math.round(y) };
+    edPlaceNow = wasBar ? rec.winPlace || null : { x: Math.round(x), y: Math.round(y) };
     edPlaceSync();
     kept.forEach((k) => {
       k[0].scrollTop = k[1];
@@ -19549,6 +19593,10 @@ What you type stays in this browser only.`;
   }
   var ED_TITLE_H = 52;
   function edPlaceNewWin() {
+    if (modalEl.clientWidth < ED_REST_MIN) {
+      edBesideFrom = null;
+      return;
+    }
     mountModalBody();
     const W = modalEl.clientWidth, H = modalEl.clientHeight, w = modalCard.offsetWidth;
     const from = edBesideFrom;
@@ -19586,6 +19634,71 @@ What you type stays in this browser only.`;
     if (w.state.entry !== entry) return false;
     edActivate(w, true);
     return true;
+  }
+  var ED_BAR_H = 40;
+  function edNarrow() {
+    return !!modalEl && modalEl.clientWidth < ED_REST_MIN;
+  }
+  function edBarsUp() {
+    return edNarrow() && !modalEl.hidden && edWins.some((r) => r.shell);
+  }
+  function edBottom(H) {
+    let b = H - ED_EDGE;
+    if (!edNarrow() || modalEl.hidden) return b;
+    const bars = modalEl.querySelectorAll(".ed-bar");
+    Array.prototype.forEach.call(bars, (el) => {
+      if (el !== modalCard) b = Math.min(b, el.offsetTop - ED_EDGE);
+    });
+    const fab = document.querySelector(".fab-stack"), r = fab && fab.getBoundingClientRect ? fab.getBoundingClientRect() : null;
+    if (r && r.width > 0 && modalCard.offsetLeft + modalCard.offsetWidth > r.left) b = Math.min(b, r.top - ED_EDGE);
+    return b;
+  }
+  function edBarLook(el, on, name) {
+    el.classList.toggle("ed-bar", on);
+    if (on) {
+      el.setAttribute("role", "button");
+      el.setAttribute("aria-label", name);
+      el.tabIndex = 0;
+    } else {
+      el.setAttribute("role", "dialog");
+      el.removeAttribute("aria-label");
+      el.tabIndex = -1;
+      ["--bar-l", "--bar-t", "--bar-w"].forEach((k) => el.style.removeProperty(k));
+    }
+  }
+  function edBarName(el) {
+    const t2 = el.querySelector(".modal-t"), n = el.querySelector(".modal-name");
+    return [t2 && t2.textContent, n && n.textContent].filter(Boolean).join(" ");
+  }
+  function edBars() {
+    if (!modalEl || modalEl.hidden) {
+      if (document.body) document.body.classList.remove("ed-bars");
+      return;
+    }
+    const narrow = edNarrow();
+    modalEl.classList.toggle("ed-narrow", narrow);
+    const list2 = edWins.slice().sort((a, b) => a.seq - b.seq);
+    const bars = [];
+    list2.forEach((r) => {
+      const el = r === edActiveWin ? modalCard : r.shell;
+      if (!el) return;
+      const bar = narrow && (r !== edActiveWin || edRest);
+      if (bar) bars.push(el);
+      else if (el.classList.contains("ed-bar")) edBarLook(el, false);
+    });
+    const W = modalEl.clientWidth, H = modalEl.clientHeight;
+    const fab = document.querySelector(".fab-stack"), fabBox = fab && fab.getBoundingClientRect ? fab.getBoundingClientRect() : null;
+    const right = fabBox && fabBox.width > 0 ? fabBox.left - ED_EDGE : W - 16;
+    bars.forEach((el, i) => {
+      edBarLook(el, true, edBarName(el));
+      el.style.setProperty("--bar-l", "16px");
+      el.style.setProperty("--bar-w", Math.max(120, right - 16) + "px");
+      el.style.setProperty("--bar-t", H - ED_EDGE - ED_BAR_H - (bars.length - 1 - i) * (ED_BAR_H + ED_EDGE) + "px");
+    });
+    if (document.body) {
+      document.body.classList.toggle("ed-bars", bars.length > 0);
+      document.documentElement.style.setProperty("--ed-bars-h", bars.length * (ED_BAR_H + ED_EDGE) + ED_EDGE + "px");
+    }
   }
   function closeAllDialogs() {
     edWins.forEach((r) => {

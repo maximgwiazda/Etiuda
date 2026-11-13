@@ -2908,6 +2908,16 @@ body.e-host .modal.ed-win:not(.ed-rest) .modal-bg{app-region:no-drag;-webkit-app
 .modal .modal-card.ed-shell h2 .modal-t{color:var(--dim)}
 .modal.ed-held .modal-card.ed-shell{z-index:-1}
 .modal.ed-multi:not(.ed-rest) #modalCard{border-color:var(--accent)}
+/* A BAR (dialog.js, edBars): below 800 px a waiting editor, its kind, its name and its X, at the foot of the window, in the
+   resting look. Its nodes stay whole inside, so it stands up as it was left. The list scrolls clear of the bars. */
+.modal .modal-card.ed-bar{position:absolute;left:var(--bar-l)!important;top:var(--bar-t)!important;width:var(--bar-w)!important;max-width:none;height:40px!important;max-height:40px!important;
+  margin:0;overflow:hidden;pointer-events:auto;border-color:var(--line-strong);box-shadow:0 8px 20px rgba(0,0,0,.12);border-radius:var(--radius);animation:none;scale:none;translate:none}
+.modal .modal-card.ed-bar > :not(h2){display:none}
+.modal .modal-card.ed-bar h2{height:38px;padding:0 6px 0 14px;border-bottom:0;font-size:14.5px}
+.modal .modal-card.ed-bar h2 .modal-t{color:var(--dim)}
+.modal .modal-card.ed-bar h2 .modal-name{flex:1 1 auto;text-overflow:ellipsis}
+.modal .modal-card.ed-bar h2 .modal-nav{display:none}
+body.ed-bars #list{padding-bottom:var(--ed-bars-h)}
 :root:not([data-theme=light]) .modal.ed-multi:not(.ed-rest) #modalCard::after{display:none}
 body:has(.modal.ed-rest:not([hidden])) header:has(.menu:not([hidden]):not(.e-warm),.facts-panel:not([hidden]),.sgn-panel:not([hidden])){z-index:57}
 /* The intent panel, the dialogs, the menus, Quick facts and the opened pill bar wear the rim inside their
