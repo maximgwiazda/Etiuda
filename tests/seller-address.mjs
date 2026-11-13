@@ -181,10 +181,10 @@ CASES.release = () => {
   const lines = RELEASE_TEXT.split("\n").filter(l => /plant:release-licence-dir/.test(l));
   return lines.length === 1 && /directories\.buildResources/.test(lines[0]) && /licenceDir/.test(lines[0]);
 };
-/* sa6: the step's line says whether the pages carry the address, never the address; unset, it is the line it was, byte for byte. */
+/* sa6: the step's line says whether the pages carry the address, never the address; unset, it says none is named and the pages are as written. */
 CASES.step = () => {
   const T = tool(), on = T.sellerStep({ ETIUDA_PACK_SELLER_ADDRESS: GOOD }, "x"), off = T.sellerStep({}, RES);
-  return /^Seller address: filled into license_en\.txt, license_pl\.txt/.test(on) && off === "Seller address: absent, the licence pages keep their placeholders"
+  return /^Seller address: filled into license_en\.txt, license_pl\.txt/.test(on) && off === "Seller address: none named, the licence pages carry their seller's line as written"
     && [on, off].every(s => s.indexOf("Invented") < 0 && s.indexOf(GOOD) < 0);
 };
 /* sa7: the builder's config names the tool, and its beforePack says the step's line. */
@@ -216,7 +216,7 @@ const LEGS = [
   ["sa3", "malformed", "on pages carrying the placeholder, a malformed file, a page whose placeholder moved, or no file: refused, naming no value"],
   ["sa4", "inside", "the copy never lands inside the tree's buildResources"],
   ["sa5", "release", "the release judges the config's buildResources"],
-  ["sa6", "step", "the step's line never carries the address, and unset it is the line it was"],
+  ["sa6", "step", "the step's line never carries the address, and unset it says the pages are as written"],
   ["sa7", "wired", "electron-builder.js wraps its config in the tool and says the step"],
   ["sa8", "identity", "the test identity build finds its installer script in the copy's absolute buildResources"],
   ["sa9", "fill", "set on pages carrying the placeholder: a filled copy in the output folder, no placeholder, sellable passes; nothing else moved"],

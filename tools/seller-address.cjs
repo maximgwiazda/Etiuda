@@ -75,7 +75,7 @@ function sellerConfig(base, env, root, output) {
 
 /* Before packing: the one line saying whether the pages carry the address, never the address. */
 function sellerStep(env, buildResources) {
-  return "Seller address: " + (given(env) ? "filled into " + Object.keys(HOLES).join(", ") + " in " + buildResources : "absent, the licence pages keep their placeholders");
+  return "Seller address: " + (given(env) ? "filled into " + Object.keys(HOLES).join(", ") + " in " + buildResources : "none named, the licence pages carry their seller's line as written");
 }
 
 module.exports = { SELLER_ADDRESS_VAR, STAGE, HOLES, addressRead, fill, sellerStage, sellerConfig, sellerStep, given };
