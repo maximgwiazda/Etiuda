@@ -9110,11 +9110,12 @@ let SIGNIN_PROVIDERS = Object.freeze({
     token: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
     scope: "openid profile offline_access", refreshScope: "openid profile offline_access",
     extra: Object.freeze({ response_mode: "query", prompt: "select_account" }) }),
-  /* Google gives a refresh token only on the consent that grants offline access, so every interactive sign-in asks for it
-     ("consent select_account", Claude alpha's decision 36, 2026-11-13): a consent screen at a rare act beats an ask every hour. */
+  /* Google: select_account alone. A consent prompt at every sign-in (decision 36) was withdrawn on measurement, 2026-11-13: a
+     personal account signed in twice with select_account and kept a refresh token both times (a Workspace account unmeasured);
+     access_type offline stays, and a sign-in that ever lacks a refresh token is asked again (signinRenewHeld). */
   google: Object.freeze({ clientId: "", clientSecret: "", issuer: "https://accounts.google.com",
     authorize: "https://accounts.google.com/o/oauth2/v2/auth", token: "https://oauth2.googleapis.com/token",
-    scope: GOOGLE_HD_NEEDS_EMAIL ? "openid email" : "openid", refreshScope: "", extra: Object.freeze({ prompt: "consent select_account", access_type: "offline" }) }), /* plant:google-offline */
+    scope: GOOGLE_HD_NEEDS_EMAIL ? "openid email" : "openid", refreshScope: "", extra: Object.freeze({ prompt: "select_account", access_type: "offline" }) }), /* plant:google-offline */
 });
 const SIGNIN_TENANT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SIGNIN_CLIENT = /^[A-Za-z0-9][A-Za-z0-9._-]{7,199}$/;

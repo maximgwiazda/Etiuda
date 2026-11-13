@@ -48,7 +48,7 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 108;
+const PLANTS = 107;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
@@ -2058,7 +2058,7 @@ CASES.renewAsk = async (s, swap) => {
   let doorPl = null;
   storage.lsSet("eUiLang", "pl");
   try { doorPl = P.signinDoor(vAsk); } finally { storage.lsSet("eUiLang", "en"); }
-  return gUrl.searchParams.get("access_type") === "offline" && gUrl.searchParams.get("prompt") === "consent select_account"
+  return gUrl.searchParams.get("access_type") === "offline" && gUrl.searchParams.get("prompt") === "select_account"
     && said === "signin-ask" && st.asked === 0 && st.posted === 0 && st.saves === 1 && st.tells === 1
     && st.store.held.ask === true && st.store.held.refresh === "" && !!st.store.held.cert && st.store.held.code === CODE
     && badSub.said === "signin-ask" && badSub.held.ask === true && badSub.held.refresh === "" && ioSub.asked.length === 0 && ioSub.posted.length === 0
@@ -2376,7 +2376,7 @@ const LEGS = [
   ["ds19b", "toldPressed", "a sign-in pressed while signed in that fails says the desk stays signed in, then the reason's own heading where it has one, with Try again or Use another account; a cancel or a sign-in done says nothing; the door and Account, Polish too"],
   ["ds19c", "checkGap", "Check now asks once per SIGNIN_CHECK_GAP_MS, and a clock set back since the last press does not hold it up"],
   ["ds19d", "saidCleared", "a renewal that reached its end clears a failed press's said, so no stale refusal stands over the desk"],
-  ["ds20a", "renewAsk", "Google authorizes with access_type=offline and asks for consent every interactive sign-in (decision 36); a renewal with no refresh token or an unopenable sub asks for sign-in again without reaching the provider, in the copywriter's English and Polish words"],
+  ["ds20a", "renewAsk", "Google authorizes with access_type=offline and select_account alone; a renewal with no refresh token or an unopenable sub asks for sign-in again without reaching the provider, in the copywriter's English and Polish words"],
   ["ds20b", "noKeyring", "pressing a provider with no keyring open makes no identity and tells the person plainly in the copywriter's English and Polish words; Account's unkept line is retired"],
 ];
 for (let [id, name, line] of LEGS) {
@@ -2793,10 +2793,8 @@ if (!PLANTS_OFF) {
   await plantPage("dsp82", ["case \"waiting\": case \"full\": /* plant:wait-say */", "case \"full\":"], "waitPage");
   await plantPage("dsp91", ["\"signin-none\",\"signin-preview\",\"signin-keyring\"];", "\"signin-none\",\"signin-preview\"];"], "noKeyring");
   await plantPage("dsp92", ["    case \"signin-keyring\":\n      return [t(\"Signing in needs a keyring, and none is open on this computer.\"), t(\"Installing or unlocking GNOME Keyring or KDE Wallet, then reopening Etiuda, lets this computer sign in.\")];\n", ""], "noKeyring");
-  await plant("dsp87", ["extra: Object.freeze({ prompt: \"consent select_account\", access_type: \"offline\" }) }), /* plant:google-offline */",
-    "extra: Object.freeze({ prompt: \"consent select_account\" }) }),"], "renewAsk");
-  await plant("dsp111", ["extra: Object.freeze({ prompt: \"consent select_account\", access_type: \"offline\" }) }), /* plant:google-offline */",
-    "extra: Object.freeze({ prompt: \"select_account\", access_type: \"offline\" }) }),"], "renewAsk");
+  await plant("dsp87", ["extra: Object.freeze({ prompt: \"select_account\", access_type: \"offline\" }) }), /* plant:google-offline */",
+    "extra: Object.freeze({ prompt: \"select_account\" }) }),"], "renewAsk");
   await plantWire("dsp88", ["if (!held || signinBusy) return \"\"; /* plant:renew-no-token */",
     "if (!held || !held.refresh || signinBusy) return \"\";"], "renewAsk");
   await plant("dsp89", ["const got = token && sub ? await signinRenew(io, p, deskKey, token, held.seed, sub, now) : { ok: false, reason: \"signin-ask\" }; /* plant:renew-sub-kept */",
