@@ -9793,7 +9793,8 @@ function signinDoorsSigned(doors, sig, cert) {
 /* THE REVOKED KEYS' LIST, as Studio's licence and the relay take it (relay/core.cjs revocationsHold and laterList): kind
    "etiuda-revocations", format 1, a serial, at most SIGNIN_REVOKED_MAX sorted 64-hex keys, Ed25519 by NOTE_ROOT (or a lab's
    signinLabRoot) over the kind's line, the serial and the keys joined by commas. The service hands it on signin/desk as REVOKED
-   holds it; the desk keeps the last it took and replaces it only with a later one: higher serial, every kept key still named. */
+   holds it; the desk keeps the last it took and replaces it only with a later one: higher serial, every kept key still named. It
+   is kept beside `held` in signin.json, so a sign-out and a sign-in as another account keep it (signinFileText, signinTake). */
 const SIGNIN_REVOKED_MAX = 256;
 function signinRevokedOk(r) {
   const plainObj = v => !!v && typeof v === "object" && !Array.isArray(v);
@@ -9922,7 +9923,10 @@ function signinFileRead(text, packed) {
       seed: String(h.seed), code: SIGNIN_CODE.test(String(h.code)) ? String(h.code) : "",
       cert: h.cert && typeof h.cert === "object" && signinCertOk(h.cert, h.cert.desk) ? h.cert : null, /* plant:file-cert */
       at: num(h.at), checked: num(h.checked), reached: h.reached !== false, said: typeof h.said === "string" ? h.said : "", ask: h.ask === true,
-      doors: [], doorsSig: "", revoked: signinRevokedOk(h.revoked) ? h.revoked : null }; /* plant:revoked-file */
+      doors: [], doorsSig: "", revoked: null };
+  /* The list is beside `held`, and the held seat judges by it. */
+  out.revoked = signinRevokedOk(d.revoked) ? d.revoked : null; /* plant:revoked-file */
+  if (out.held) out.held.revoked = out.revoked;
   if (out.held && out.held.cert) {
     const doors = signinDoorsOk(h.doors, packed), sig = typeof h.doorsSig === "string" ? h.doorsSig : "";
     if (signinDoorsSigned(doors, sig, out.held.cert)) Object.assign(out.held, { doors: doors, doorsSig: sig }); /* plant:file-doors-signed */
@@ -9931,7 +9935,11 @@ function signinFileRead(text, packed) {
   if (/^[0-9a-f]{64}$/.test(String(d.out))) out.out = String(d.out); /* plant:out-kept */
   return out;
 }
-function signinFileText(s) { return JSON.stringify(Object.assign({ format: 2, held: s.held || null }, s.out ? { out: s.out } : {}), null, 1) + "\n"; }
+function signinFileText(s) {
+  const revoked = signinRevokedNext(s.revoked || null, s.held ? s.held.revoked : null);
+  return JSON.stringify(Object.assign({ format: 2, held: s.held ? Object.assign({}, s.held, { revoked: undefined }) : null }, s.out ? { out: s.out } : {},
+    revoked ? { revoked } : {}), null, 1) + "\n";
+}
 
 /* The sign-in's wiring: the person's click, the browser, the service, seat.json, the quiet renewal and what the page is told.
    With no provider configured nothing is offered, opened or sent. */
@@ -10159,7 +10167,9 @@ function signinTake(provider, got, ans, now) {
   if (!ans.ok && ans.reason !== "full") return false; /* plant:take-refused */
   const base = { provider: provider, refresh: signinKeep(safeStorage, process.platform, got.refreshToken),
     sub: signinKeep(safeStorage, process.platform, got.sub), seed: got.seed, code: "", cert: null, at: 0, checked: now, reached: true, said: "", ask: false, doors: [] };
+  base.revoked = s.revoked || null; /* plant:revoked-survives */
   s.held = signinSettle(base, ans, now);
+  s.revoked = s.held.revoked;
   delete s.out; /* this sign-in holds the desk's place again, so a sign out still owed is no longer wanted */
   signinSave();
   return true;
@@ -10298,6 +10308,7 @@ async function signinRenewNow() {
   try { r = await pending; } finally { if (signinRenewing === pending) signinRenewing = null; }
   if (s.held !== held) return ""; /* a sign-in or a sign out took its place meanwhile */
   s.held = r.held;
+  s.revoked = signinRevokedNext(s.revoked || null, r.held ? r.held.revoked : null);
   signinSaid = ""; /* plant:renew-said */
   signinSave();
   signinFlush();
