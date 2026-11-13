@@ -1,0 +1,229 @@
+{
+ "kind": "etiuda-signin-answers",
+ "format": 1,
+ "note": "Every answer the licence service's signin/desk and signout/desk give, driven from service/licence/core.mjs in node over test keys signing nothing real. Written by Studio's node tests/licence-service.mjs --write-answers (tests/fixtures/signin-answers.json there); the engine holds it byte for byte as tests/signin-answers.json and reads its desk against each case (tests/desk-signin.mjs ds23). root is the test root this run's delegation traces to, for a desk that checks a certificate's chain to be given in its root's place.",
+ "root": "2dc087120aef5232eb9040acf8f8aec2c5684cbb043482b1d31b15d973a12ff5",
+ "cases": [
+  {
+   "case": "seated",
+   "route": "signin/desk",
+   "means": "a certificate for this desk on the licence that admits its person, and the licence's doors, here none",
+   "status": 200,
+   "body": {
+    "ok": true,
+    "certificate": {
+     "kind": "etiuda-seat-certificate",
+     "format": 1,
+     "licence": "101d3a8e0cfe56e7bec6fc577efc2b29",
+     "desk": "aa2494fd8033e9c45dce1aa5f6572c78523605e001da5b6977be71865598c497",
+     "person": "9505b66af6b4e29ae28085ea7f29a1d91747ddaeeaf48d186a7fe2b587fbbadd",
+     "code": "MBFQFQXS0C1X3011",
+     "issued": 1793610000000,
+     "until": 1796202000000,
+     "via": {
+      "kind": "etiuda-delegation",
+      "format": 1,
+      "key": {
+       "id": "studio-f54eb1ad5e8bba9a",
+       "pub": "7f6848ea8b4a7144c6609fff806b8e5bf0509bfd85cf78d62bef1e05d2272916"
+      },
+      "may": [
+       "licence",
+       "relay-grant"
+      ],
+      "from": 1792746000000,
+      "until": 1819530000000,
+      "sig": {
+       "alg": "ed25519",
+       "keyId": "etiuda-root-test",
+       "value": "02c9c0f3d349f2c08567efea3538ba01646c4e4b5aa7889fcba245dfc336fedabaa9ead3e4ee907227c0a6f24fbacd0790eb68b0f74a4e4af93cfd70ac9abe0a"
+      }
+     },
+     "sig": {
+      "alg": "Ed25519",
+      "keyId": "studio-f54eb1ad5e8bba9a",
+      "value": "c7273e8c0621a00be5cafc7fcaa38220e5dacb800959d657c18de6099b8f3c108e8a3c1520de903301604e874654c10ba17889ae08de856e3b23317b4e231e02"
+     }
+    },
+    "code": "MBFQFQXS0C1X3011",
+    "doors": []
+   }
+  },
+  {
+   "case": "seated-doors",
+   "route": "signin/desk",
+   "means": "a certificate, and the doors of the relay teams on its licence whose lead still leads it",
+   "status": 200,
+   "body": {
+    "ok": true,
+    "certificate": {
+     "kind": "etiuda-seat-certificate",
+     "format": 1,
+     "licence": "101d3a8e0cfe56e7bec6fc577efc2b29",
+     "desk": "2999419429787b93a6b1c5155efe8c767afcfe0288ca2d0107b309823a94e616",
+     "person": "01aaff0aef7f742651d193a3716353d3c5d229082ff6740d123aa8cd90b1f097",
+     "code": "6X92QM1WWDSPET22",
+     "issued": 1793610000000,
+     "until": 1796202000000,
+     "via": {
+      "kind": "etiuda-delegation",
+      "format": 1,
+      "key": {
+       "id": "studio-f54eb1ad5e8bba9a",
+       "pub": "7f6848ea8b4a7144c6609fff806b8e5bf0509bfd85cf78d62bef1e05d2272916"
+      },
+      "may": [
+       "licence",
+       "relay-grant"
+      ],
+      "from": 1792746000000,
+      "until": 1819530000000,
+      "sig": {
+       "alg": "ed25519",
+       "keyId": "etiuda-root-test",
+       "value": "02c9c0f3d349f2c08567efea3538ba01646c4e4b5aa7889fcba245dfc336fedabaa9ead3e4ee907227c0a6f24fbacd0790eb68b0f74a4e4af93cfd70ac9abe0a"
+      }
+     },
+     "sig": {
+      "alg": "Ed25519",
+      "keyId": "studio-f54eb1ad5e8bba9a",
+      "value": "769462040e209b82389ade438b99a7b5c0887182334a3cd4bf7ebca3e8fdcf742404a808ce0a026277379c9326e78f55cf8c6442b3f08d24074f618e8850b107"
+     }
+    },
+    "code": "6X92QM1WWDSPET22",
+    "doors": [
+     {
+      "team": "t-a1fa857966d9229a",
+      "rt": "a05febf5ca23defbadf5496ad231fbe6",
+      "url": "https://etiuda.dev/relay/v1",
+      "keyId": "studio-37bf932954b9fa60",
+      "lead": "3c51d552b5275226aad289980737cdf65c6494538bc94e9e2f3573dbad8d362b",
+      "box": "707e5601fa56b99523ce9e3100122574709f1a8fd6e11fa4b7eca0123b557176"
+     }
+    ]
+   }
+  },
+  {
+   "case": "waiting",
+   "route": "signin/desk",
+   "means": "signed in and held, no free seat on the person's licence: a wait, seated by a later renewal once a seat is free (decision 32)",
+   "status": 200,
+   "body": {
+    "ok": true,
+    "certificate": null,
+    "code": "A7K5S5KWGMWSJRHY",
+    "reason": "waiting"
+   }
+  },
+  {
+   "case": "signin",
+   "route": "signin/desk",
+   "means": "a renewal of a seat its lead freed: only an interactive sign-in takes it again",
+   "status": 403,
+   "body": {
+    "ok": false,
+    "reason": "signin"
+   }
+  },
+  {
+   "case": "none",
+   "route": "signin/desk",
+   "means": "signed in, and no licence admits the person: their code, and no certificate",
+   "status": 200,
+   "body": {
+    "ok": true,
+    "certificate": null,
+    "code": "Y57C0Q7TKGK42BG1"
+   }
+  },
+  {
+   "case": "desks",
+   "route": "signin/desk",
+   "means": "a person's fourth desk: a true refusal, the token spent and nothing else written",
+   "status": 409,
+   "body": {
+    "ok": false,
+    "reason": "desks"
+   }
+  },
+  {
+   "case": "signed-out",
+   "route": "signout/desk",
+   "means": "the desk's place among its person's three freed, answered alike whether or not it held one",
+   "status": 200,
+   "body": {
+    "ok": true
+   }
+  },
+  {
+   "case": "malformed",
+   "route": "signin/desk",
+   "means": "a body not of the route's shape",
+   "status": 400,
+   "body": {
+    "ok": false,
+    "reason": "malformed"
+   }
+  },
+  {
+   "case": "stale",
+   "route": "signin/desk",
+   "means": "a t outside the skew",
+   "status": 403,
+   "body": {
+    "ok": false,
+    "reason": "stale"
+   }
+  },
+  {
+   "case": "signature",
+   "route": "signin/desk",
+   "means": "a signature not the desk key's",
+   "status": 403,
+   "body": {
+    "ok": false,
+    "reason": "signature"
+   }
+  },
+  {
+   "case": "replayed",
+   "route": "signin/desk",
+   "means": "the same signed request twice",
+   "status": 403,
+   "body": {
+    "ok": false,
+    "reason": "replayed"
+   }
+  },
+  {
+   "case": "token",
+   "route": "signin/desk",
+   "means": "a token the service does not take, one body whatever the cause",
+   "status": 403,
+   "body": {
+    "ok": false,
+    "reason": "token"
+   }
+  },
+  {
+   "case": "slow-down",
+   "route": "signin/desk",
+   "means": "over the route's limit for this desk key or address",
+   "status": 429,
+   "body": {
+    "ok": false,
+    "reason": "slow-down"
+   }
+  },
+  {
+   "case": "unavailable",
+   "route": "signin/desk",
+   "means": "the service holds no list of providers it can read",
+   "status": 503,
+   "body": {
+    "ok": false,
+    "reason": "unavailable"
+   }
+  }
+ ]
+}
