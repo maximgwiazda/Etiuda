@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 108;
+const PLANTS = 118;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 112 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 122 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -90,6 +90,7 @@ const NAMES = ["SIGNIN_PROVIDERS", "signinOffered", "signinNonce", "signinAuthor
   "signinCodeForm", "signinSecretRead", "SIGNIN_SECRET_FILE", "SIGNIN_SECRET_SHAPE", "sealsForReal", "SIGNIN_WAIT_MS", "signinLabAt", "signinLabRead",
   "signinLabUse", "signinDoorAddressOk", "DOOR_RELAYS", "BUILTIN_RELAY_URL"];
 NAMES.push("SIGNIN_TRACE_ASKED", "signinTraceLine", "signinTraceSaid");
+NAMES.push("signinLanding", "signinLandingHtml", "signinLandingCsp", "SIGNIN_LAND_MS");
 /* The section, evaluated: `swap` is [from, to], put in place of the one line that holds `from`, for a plant; `invSwap` the same in the
    invitation's slice as well. */
 function load(swap, where, invSwap) {
@@ -311,12 +312,14 @@ const stateIs = want => q => new URLSearchParams(q).get("state") === want;
 CASES.loopOnce = async s => {
   const loop = await s.signinListen(http, q => "page " + q.length, 10000, stateIs("a"));
   const stray = await get(loop.port, "/favicon.ico");
-  const first = await get(loop.port, "/?state=a&code=b");
+  const first = await fetchLoop(loop.port, "/?state=a&code=b");
   const query = await loop.caught.catch(() => null);
+  loop.land("seat");
+  const landed = await get(loop.port, String(first.headers.location || ""));
   await tick(50);
   const again = await get(loop.port, "/?state=a&code=b");
   loop.close();
-  return stray === 404 && first === 200 && query === "state=a&code=b" && again !== 200 && again !== 404;
+  return stray === 404 && first.status === 303 && landed === 200 && query === "state=a&code=b" && again !== 200 && again !== 404;
 };
 CASES.loopStray = async s => {
   const loop = await s.signinListen(http, () => "page", 10000, stateIs("good"));
@@ -328,7 +331,7 @@ CASES.loopStray = async s => {
   const right = await get(loop.port, "/?state=good&code=y");
   const query = await loop.caught.catch(() => null);
   loop.close();
-  return bare === 400 && wrong === 400 && waiting && right === 200 && query === "state=good&code=y";
+  return bare === 400 && wrong === 400 && waiting && right === 303 && query === "state=good&code=y";
 };
 CASES.loopFlow = async s => {
   const codes = [];
@@ -350,7 +353,7 @@ CASES.loopFlow = async s => {
   };
   const got = await s.signinRun(io, G, DESK_KEY, () => NOW);
   await tick(50);
-  return got.ok === true && code === "abc" && codes.join() === "400,400,200";
+  return got.ok === true && code === "abc" && codes.join() === "400,400,303";
 };
 CASES.scopes = s => {
   const ms = s.SIGNIN_PROVIDERS.microsoft, g = s.SIGNIN_PROVIDERS.google, want = "openid profile offline_access";
@@ -1341,7 +1344,7 @@ function waitStand(sec, swap, storage, branchId) {
     ipcMain: { on: (ch, fn) => { st.on[ch] = fn; }, handle: (ch, fn) => { st.handle[ch] = fn; } }, fromEngine: () => true, LINK_CLICK_MS: 2000,
     signinState: () => st.state || ({ held: null }), signinLapsed: sec.signinLapsed, signinOffered: () => [MS], signinPreviewing: () => false,
     signinKnown: sec.signinKnown, SIGNIN_PROVIDERS: sec.SIGNIN_PROVIDERS, branchIdentity: branchId || (() => ({ id: DESK_ID, key: DESK_KEY })), net: { fetch: out },
-    signinRun: sec.signinRun, signinSeat: out, signinTake: out, signinFlush: out, signinSave: out,
+    signinRun: sec.signinRun, signinLanding: sec.signinLanding, signinSeat: out, signinTake: out, signinFlush: out, signinSave: out,
     tellSignin: () => { st.told.push(st.view()); }, signinPageOk: sec.signinPageOk, sealsForReal: sec.sealsForReal,
     safeStorage: storage === undefined ? { isEncryptionAvailable: () => true } : storage, http: {}, SIGNIN_WAIT_MS: sec.SIGNIN_WAIT_MS,
     signinListen: (h, pageFor, ms) => {
@@ -1746,12 +1749,14 @@ CASES.labPath = async () => {
     const s = load();
     if (!s.signinLabUse(s.signinLabRead(labText(d.port)))) return false;
     const p = s.signinOffered().find(x => x.id === "lab");
-    let followed = 0;
-    const io = { listen: (pageFor, takes) => s.signinListen(http, pageFor, 10000, takes),
-      openPage: async url => { followed = (await fetch(url, { redirect: "follow" })).status; return true; },
+    let followed = 0, following = null, loop = null;
+    const io = { listen: (pageFor, takes) => s.signinListen(http, pageFor, 10000, takes).then(l => (loop = l)),
+      openPage: async url => { following = fetch(url, { redirect: "follow" }).then(r => r.status); return true; },
       tokenAsk: (u, f) => s.signinRequest(fetch, u, f), serviceAsk: (u, b) => s.signinServiceAsk(fetch, u, b), sign: signWith(signKey), page: ok => ok ? "ok" : "no" };
     const got = await s.signinRun(io, p, DESK_KEY, Date.now);
     const ans = got.ok ? await s.signinSeat(io, "lab", DESK_KEY, got.idToken, got.seed, Date.now) : { ok: false };
+    if (loop) loop.land(s.signinLanding(got, ans));
+    followed = following ? await following : 0;
     const renewed = got.ok ? await s.signinRenew(io, p, DESK_KEY, got.refreshToken, got.seed, got.sub, Date.now) : { ok: false };
     const out = await s.signoutAsk(io, DESK_KEY, Date.now);
     let elsewhere = 0;
@@ -2225,6 +2230,249 @@ CASES.outOwedPage = async (s, page) => {
 };
 
 /* ---- the cases on the branch ------------------------------------------------------------------------------------------- */
+/* ---- the page the browser lands on (ds24): the loopback answers the sign-in's own reply 303 to a path of its own, holds that path's
+   one GET until the desk knows how the sign-in ended (at most SIGNIN_LAND_MS, then the neutral page), serves it once and closes ----- */
+/* One GET on the loopback, read whole: {status, headers, body}, or {status: <error code>} where nothing answered. */
+const fetchLoop = (port, p) => new Promise(res => {
+  const req = http.get({ host: "127.0.0.1", port, path: p, agent: false }, r => {
+    let body = "";
+    r.setEncoding("utf8");
+    r.on("data", c => { body += c; });
+    r.on("end", () => res({ status: r.statusCode, headers: r.headers, body }));
+  });
+  req.on("error", e => res({ status: e.code || "error", headers: {}, body: "" }));
+  req.setTimeout(3000, () => req.destroy(Object.assign(new Error("no answer"), { code: "TIMEOUT" })));
+});
+/* The copywriter's words, written here from her brief (words-signin-landing-page-2026-11-13, the outcome set and the fitted table),
+   not taken from the shell's table, so the two are checked against each other: [headline, line, tab]. */
+const LAND_WORDS = {
+  en: {
+    seat: ["Signed in", "This computer has its seat. Etiuda carries on by itself; this tab can be closed.", "Signed in"],
+    noseat: ["Signed in, no seat yet", "Etiuda shows why, and what comes next. This tab can be closed.", "No seat yet"],
+    appfail: ["The sign-in could not be finished", "Etiuda shows why. This tab can be closed.", "Not finished"],
+    cancelled: ["The sign-in was cancelled", "Nothing was changed. This tab can be closed; signing in can wait until it suits.", "Cancelled"],
+    org: ["Not allowed by this organisation", "Its IT department can allow it; meanwhile another account can be tried. This tab can be closed.", "Not allowed"],
+    earlier: ["This tab is from an earlier sign-in", "It was not used, and nothing was changed. This tab can be closed.", "An earlier sign-in"],
+    back: ["The sign-in is back with Etiuda", "Etiuda finishes it and shows the result. This tab can be closed.", "Sign-in received"],
+    foot: "Shown by Etiuda on this computer; this page itself sends nothing anywhere." },
+  pl: {
+    seat: ["Zalogowano", "Ten komputer ma już miejsce w licencji. Etiuda sama przechodzi dalej; tę kartę można zamknąć.", "Zalogowano"],
+    noseat: ["Zalogowano, jeszcze bez miejsca", "Etiuda pokazuje, dlaczego i co dalej. Tę kartę można zamknąć.", "Jeszcze bez miejsca"],
+    appfail: ["Nie udało się dokończyć logowania", "Etiuda pokazuje, dlaczego. Tę kartę można zamknąć.", "Nie dokończono"],
+    cancelled: ["Logowanie anulowano", "Nic się nie zmieniło. Tę kartę można zamknąć; z logowaniem można poczekać do dogodnej chwili.", "Anulowano"],
+    org: ["Organizacja nie dopuściła Etiudy", "Może to zmienić jej dział IT. Tymczasem w Etiudzie można użyć innego konta; tę kartę można zamknąć.", "Bez zgody organizacji"],
+    earlier: ["To karta wcześniejszego logowania", "Nie została użyta i nic się nie zmieniło. Tę kartę można zamknąć.", "Wcześniejsze logowanie"],
+    back: ["Logowanie wróciło do Etiudy", "Etiuda je dokończy i pokaże wynik. Tę kartę można zamknąć.", "Logowanie odebrane"],
+    foot: "Tę stronę wyświetla Etiuda na tym komputerze; sama strona niczego nie wysyła." },
+};
+const htmlText = h => String(h).replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+/* Whether `page` is the landing for `kind` in `lang`: its headline in the h1, its line, its tab title before the app's name, its foot. */
+const landIs = (page, kind, lang) => {
+  const w = LAND_WORDS[lang][kind], t = htmlText(page);
+  return !!w && t.indexOf("<h1>" + w[0] + "</h1>") > 0 && t.indexOf(">" + w[1] + "<") > 0 && t.indexOf("<title>" + w[2] + " · Etiuda</title>") > 0
+    && t.indexOf(LAND_WORDS[lang].foot) > 0 && t.indexOf("<html lang=\"" + lang + "\">") > 0;
+};
+/* The landing's policy: nothing fetched, framed or run, the served page's own style alone by its hash. */
+const cspHolds = (csp, page) => {
+  const m = /<style>([\s\S]*?)<\/style>/.exec(String(page));
+  const hash = m ? "'sha256-" + crypto.createHash("sha256").update(m[1], "utf8").digest("base64") + "'" : "none";
+  return typeof csp === "string" && /^default-src 'none'; /.test(csp) && csp.indexOf("style-src " + hash + ";") > 0 && !/unsafe|script-src|\*/.test(csp)
+    && /frame-ancestors 'none'/.test(csp) && !/<script|https?:\/\/|\ssrc=|@import|url\((?!#)|\sstyle=/i.test(page);
+};
+const landPage = s => kind => s.signinLandingHtml(kind, "en");
+/* The callback taken: a 303 whose Location is a path of the loopback's own with no query, nothing of the code or the state in it;
+   the outcome landed, that path's one GET is the seat's page under the strict policy, and the loopback then closes. */
+CASES.landSeat = async s => {
+  const loop = await s.signinListen(http, landPage(s), 10000, stateIs("st-1"), 5000);
+  const back = await fetchLoop(loop.port, "/?code=c-secret-1&state=st-1");
+  const query = await loop.caught.catch(() => null), at = String(back.headers.location || "");
+  loop.land("seat");
+  const page = await fetchLoop(loop.port, at);
+  await tick(30);
+  const after = await fetchLoop(loop.port, at);
+  return back.status === 303 && /^\/[0-9a-f]{16}$/.test(at) && at.indexOf("c-secret-1") < 0 && at.indexOf("st-1") < 0 && back.body === ""
+    && back.headers["cache-control"] === "no-store" && back.headers["referrer-policy"] === "no-referrer" && query === "code=c-secret-1&state=st-1"
+    && page.status === 200 && landIs(page.body, "seat", "en") && cspHolds(page.headers["content-security-policy"], page.body)
+    && page.headers["cache-control"] === "no-store" && page.body.indexOf("c-secret-1") < 0 && page.body.indexOf("st-1") < 0
+    && typeof after.status !== "number";
+};
+/* The clean path asked before the desk knows: the GET is held, not answered, until land(), which answers it with that outcome. */
+CASES.landHeld = async s => {
+  const loop = await s.signinListen(http, landPage(s), 10000, stateIs("st-2"), 5000);
+  const back = await fetchLoop(loop.port, "/?state=st-2&code=c2");
+  let page = null;
+  const asked = fetchLoop(loop.port, String(back.headers.location || "")).then(r => { page = r; return r; });
+  await tick(80);
+  const heldOpen = page === null;
+  loop.land("noseat");
+  await asked;
+  return back.status === 303 && heldOpen && page.status === 200 && landIs(page.body, "noseat", "en");
+};
+/* The cap: nothing landed within landMs, the held GET is answered the neutral page, and the loopback closes; a landing after is nothing. */
+CASES.landCap = async s => {
+  const loop = await s.signinListen(http, landPage(s), 10000, stateIs("st-3"), 150);
+  const back = await fetchLoop(loop.port, "/?state=st-3&code=c3");
+  const at = String(back.headers.location || ""), t0 = Date.now();
+  const page = await fetchLoop(loop.port, at), took = Date.now() - t0;
+  loop.land("seat");
+  await tick(30);
+  const after = await fetchLoop(loop.port, at);
+  return back.status === 303 && page.status === 200 && landIs(page.body, "back", "en") && took >= 100 && took < 3000 && typeof after.status !== "number";
+};
+/* A stray before the reply is answered 400 with the earlier tab's page and the wait goes on; after the reply, another GET of "/" and
+   any other path are 404 and the landing still serves its path. */
+CASES.landStray = async s => {
+  const loop = await s.signinListen(http, landPage(s), 10000, stateIs("st-4"), 5000);
+  let settled = false;
+  loop.caught.then(() => { settled = true; }, () => { settled = true; });
+  const stray = await fetchLoop(loop.port, "/?state=other&code=x");
+  await tick(30);
+  const waiting = !settled;
+  const back = await fetchLoop(loop.port, "/?state=st-4&code=c4"), at = String(back.headers.location || "");
+  const again = await fetchLoop(loop.port, "/?state=st-4&code=c4"), guess = await fetchLoop(loop.port, "/" + "0".repeat(16));
+  const withQuery = await fetchLoop(loop.port, at + "?code=c4");
+  loop.land("cancelled");
+  const page = await fetchLoop(loop.port, at);
+  return stray.status === 400 && landIs(stray.body, "earlier", "en") && cspHolds(stray.headers["content-security-policy"], stray.body) && waiting
+    && back.status === 303 && again.status === 404 && guess.status === 404 && withQuery.status === 404 && page.status === 200 && landIs(page.body, "cancelled", "en");
+};
+/* The clean path is served once: a second GET of it while the first is held is refused at once, and the first still gets the page. */
+CASES.landOnce = async s => {
+  const loop = await s.signinListen(http, landPage(s), 10000, stateIs("st-5"), 5000);
+  const back = await fetchLoop(loop.port, "/?state=st-5&code=c5"), at = String(back.headers.location || "");
+  const first = fetchLoop(loop.port, at);
+  await tick(40);
+  const second = await fetchLoop(loop.port, at);
+  loop.land("seat");
+  const one = await first;
+  return back.status === 303 && second.status === 404 && one.status === 200 && landIs(one.body, "seat", "en");
+};
+/* Every way a sign-in ends, as the landing says it: through signinRun for the provider's own replies (its refusal "at" authorize), and
+   from the service's answers. */
+CASES.landKinds = async s => {
+  const run = async (loopQ, reply) => {
+    const io = {
+      listen: async () => { let yes; const caught = new Promise(a => { yes = a; }); io.give = yes; return { port: 49999, caught, close: () => {} }; },
+      openPage: async url => { const q = new URL(url).searchParams; io.nonce = q.get("nonce"); setTimeout(() => io.give(loopQ(q.get("state"))), 2); return true; },
+      tokenAsk: async () => { if (reply instanceof Error) throw reply; return typeof reply === "function" ? reply(io.nonce) : reply; }, page: () => "",
+    };
+    return s.signinRun(io, MS, DESK_KEY, () => NOW);
+  };
+  const q = (e, d) => st => "state=" + encodeURIComponent(st) + "&error=" + e + (d ? "&error_description=" + encodeURIComponent(d) : "");
+  const code = st => "state=" + encodeURIComponent(st) + "&code=abc";
+  const ok = nonce => answer({ id_token: jwt(msClaims(nonce)), refresh_token: "rt" });
+  const cases = [
+    [await run(q("access_denied"), ok), null, "cancelled"],
+    [await run(q("access_denied", "AADSTS65004: User declined to consent"), ok), null, "cancelled"],
+    [await run(q("consent_required"), ok), null, "org"],
+    [await run(q("access_denied", "AADSTS65001: not consented"), ok), null, "org"],
+    [await run(q("invalid_request", "AADSTS90094: admin approval"), ok), null, "org"],
+    [await run(q("server_error"), ok), null, "appfail"],
+    [await run(code, answer({ error: "invalid_grant" }, 400)), null, "appfail"],
+    [await run(code, answer({ error: "invalid_client" }, 401)), null, "appfail"],
+    [await run(code, new Error("offline")), null, "appfail"],
+  ];
+  const got = await run(code, ok);
+  const cert1 = cert();
+  const answers = [[{ ok: true, code: CODE, cert: cert1 }, "seat"], [{ ok: true, code: CODE, cert: null, waiting: true }, "noseat"],
+    [{ ok: true, code: CODE, cert: null }, "noseat"], [{ ok: false, reason: "full" }, "noseat"], [{ ok: false, reason: "desks" }, "appfail"],
+    [{ ok: false, reason: "token" }, "appfail"], [{ ok: false, reason: "signin" }, "appfail"], [{ ok: false, reason: "unreached" }, "appfail"]];
+  const wrong = cases.filter(c => s.signinLanding(c[0], c[1]) !== c[2]).map(c => c[2] + ":" + s.signinLanding(c[0], c[1]))
+    .concat(answers.filter(a => s.signinLanding(got, a[0]) !== a[1]).map(a => a[1] + ":" + s.signinLanding(got, a[0])));
+  if (wrong.length) console.log("  (landings wrong: " + wrong.join(", ") + ")");
+  return got.ok === true && wrong.length === 0 && s.signinLanding(got) === "appfail" && s.signinLanding(null) === "appfail";
+};
+/* Every kind's page in both languages carries the copywriter's words, its tab title and foot, no script, no address and nothing a
+   keyboard cannot type; a kind it does not know is the could-not-finish page. */
+CASES.landWords = s => {
+  const kinds = Object.keys(LAND_WORDS.en).filter(k => k !== "foot"), bad = [];
+  for (const lang of ["en", "pl"]) for (const k of kinds) {
+    const page = s.signinLandingHtml(k, lang);
+    if (!landIs(page, k, lang) || !cspHolds(s.signinLandingCsp(page), page) || /[‐-―‘-‟… ]/.test(page)) bad.push(lang + ":" + k);
+  }
+  if (bad.length) console.log("  (pages wrong: " + bad.join(", ") + ")");
+  return bad.length === 0 && kinds.length === 7 && landIs(s.signinLandingHtml("nothing-known", "en"), "appfail", "en")
+    && landIs(s.signinLandingHtml("seat", "de"), "seat", "en");
+};
+/* Every landing is one response: the mark's symbol and its mask each once, every id on the page once, the mark drawn twice by
+   reference to that symbol, the icon data: and nothing else that could make the browser ask for anything. */
+CASES.landMark = s => {
+  const bad = [];
+  for (const lang of ["en", "pl"]) for (const k of Object.keys(LAND_WORDS.en).filter(x => x !== "foot")) {
+    const page = s.signinLandingHtml(k, lang), ids = [...page.matchAll(/\sid="([^"]*)"/g)].map(m => m[1]);
+    const once = re => (page.match(re) || []).length === 1;
+    const refs = [...page.matchAll(/(?:href|xlink:href)="([^"]*)"|url\(([^)]*)\)/g)].map(m => m[1] || m[2]);
+    if (!(once(/<symbol id="m" /g) && once(/<mask /g) && once(/<mask id="[^"]+"/g) && new Set(ids).size === ids.length && ids.indexOf("m") >= 0
+      && (page.match(/<use href="#m"\/>/g) || []).length === 2 && refs.every(r => r === "data:," || (r.charAt(0) === "#" && ids.indexOf(r.slice(1)) >= 0))
+      && once(/<link /g) && once(/<link rel="icon" href="data:,">/g) && !/<(script|img|iframe|object|embed|image|audio|video|source|font|base|meta http-equiv)\b/i.test(page)
+      && !/\ssrc=|\sstyle=|@import|https?:/i.test(page) && page.length > 60000 && page.length < 100000)) bad.push(lang + ":" + k);
+  }
+  if (bad.length) console.log("  (pages that fetch or repeat: " + bad.join(", ") + ")");
+  return bad.length === 0;
+};
+/* The press lands the loopback with how it ended, once, after the service's answer: a seat; no seat yet; the person's Cancel at the
+   provider; the service away. The shell around the press sliced as waitStand slices it, the loopback a stand-in recording land(). */
+function landStand(sec, swap, serve, loopQ) {
+  const st = { on: {}, handle: {}, landed: [], told: [] };
+  const tryDecl = d => { try { return decl(MAIN, d); } catch { return ""; } };
+  let text = [tryDecl("function signinView("), tryDecl("function signinIo("), ipcSlice('ipcMain.on("etiuda:signin-click"'), ipcSlice('ipcMain.handle("etiuda:signin",')].join("\n");
+  if (swap && text.split(swap[0]).length === 2) text = text.replace(swap[0], swap[1]);
+  let give = null, nonce = "";
+  const vals = {
+    ipcMain: { on: (ch, fn) => { st.on[ch] = fn; }, handle: (ch, fn) => { st.handle[ch] = fn; } }, fromEngine: () => true, LINK_CLICK_MS: 2000,
+    signinState: () => ({ held: null }), signinLapsed: sec.signinLapsed, signinOffered: () => [MS], signinPreviewing: () => false,
+    signinKnown: sec.signinKnown, SIGNIN_PROVIDERS: sec.SIGNIN_PROVIDERS, branchIdentity: () => ({ id: DESK_ID, key: DESK_KEY }), net: { fetch: () => { throw new Error("no"); } },
+    signinRun: sec.signinRun, signinLanding: sec.signinLanding, signinTake: () => true, signinFlush: () => true, signinSave: () => {},
+    signinSeat: async () => { if (serve instanceof Error) throw serve; return serve; },
+    tellSignin: () => { st.told.push(1); }, signinPageOk: sec.signinPageOk, sealsForReal: () => true,
+    safeStorage: { isEncryptionAvailable: () => true }, http: {}, SIGNIN_WAIT_MS: sec.SIGNIN_WAIT_MS,
+    signinListen: () => { const caught = new Promise(a => { give = a; }); return Promise.resolve({ port: 49152, caught, close: () => {}, land: k => { st.landed.push(k); } }); },
+    handOut: url => { const q = new URL(url).searchParams; nonce = q.get("nonce"); setTimeout(() => give(loopQ(q.get("state"))), 2); return Promise.resolve(); },
+    signinRequest: async () => answer({ id_token: jwt(msClaims(nonce, Date.now())), refresh_token: "rt" }), signinServiceAsk: () => { throw new Error("no"); },
+    signinSign: () => "", signinKeep: () => "", signinKept: () => "", signinPageHtml: () => "",
+    SIGNIN_TRACE_ASKED: false, SIGNIN_DESK_PACKED: true,
+  };
+  const names = Object.keys(vals);
+  const body = "let signinClick = null, signinBusy = null, signinSaid = \"\", signinOutFlight = null;\n" + text + "\nreturn { view: signinView };";
+  st.view = new Function(...names, body)(...names.map(n => vals[n])).view;
+  st.press = id => { st.on["etiuda:signin-click"]({ returnValue: undefined }, id); return st.handle["etiuda:signin"]({}, id); };
+  return st;
+}
+CASES.landWired = async (s, swap) => {
+  const code = st => "state=" + encodeURIComponent(st) + "&code=abc";
+  const press = async (serve, loopQ) => { const st = landStand(s, swap, serve, loopQ); const v = await st.press("microsoft"); return [st.landed.join(), v.said]; };
+  const seat = await press({ ok: true, code: CODE, cert: cert() }, code);
+  const none = await press({ ok: true, code: CODE, cert: null, waiting: true }, code);
+  const gone = await press(new Error("offline"), code);
+  const cancelled = await press({ ok: true }, st => "state=" + encodeURIComponent(st) + "&error=access_denied");
+  const all = [seat, none, gone, cancelled].map(x => x.join("/")).join(", ");
+  if (all !== "seat/signin-done, noseat/signin-done, appfail/unreached, cancelled/signin-cancelled") console.log("  (landed: " + all + ")");
+  return seat.join() === "seat,signin-done" && none.join() === "noseat,signin-done" && gone.join() === "appfail,unreached"
+    && cancelled.join() === "cancelled,signin-cancelled";
+};
+/* The address the browser ends at, over real HTTP with node's own fetch following the redirects as a browser does: the lab's authorize
+   page 302 to the loopback with the code and state, the loopback 303 to its own path; the page's address carries neither, and the
+   page says how it ended once the desk lands it. */
+CASES.landAddress = async () => {
+  const d = await labDouble();
+  try {
+    const s = load();
+    if (!s.signinLabUse(s.signinLabRead(labText(d.port)))) return false;
+    const p = s.signinOffered().find(x => x.id === "lab");
+    let loop = null, followed = null;
+    const io = { listen: (pageFor, takes) => s.signinListen(http, pageFor, 10000, takes, 5000).then(l => (loop = l)),
+      openPage: async url => { followed = fetch(url, { redirect: "follow" }).then(async r => ({ status: r.status, url: r.url, redirected: r.redirected, body: await r.text() })); return true; },
+      tokenAsk: (u, f) => s.signinRequest(fetch, u, f), serviceAsk: (u, b) => s.signinServiceAsk(fetch, u, b), sign: signWith(signKey), page: landPage(s) };
+    const got = await s.signinRun(io, p, DESK_KEY, Date.now);
+    const ans = got.ok ? await s.signinSeat(io, "lab", DESK_KEY, got.idToken, got.seed, Date.now) : { ok: false };
+    loop.land(s.signinLanding(got, ans));
+    const f = await followed;
+    const u = new URL(f.url);
+    return got.ok && ans.ok && f.status === 200 && f.redirected && u.hostname === "127.0.0.1" && u.search === "" && /^\/[0-9a-f]{16}$/.test(u.pathname)
+      && f.url.indexOf("lab-code") < 0 && f.url.indexOf("state") < 0 && landIs(f.body, "seat", "en") && f.body.indexOf("lab-code") < 0;
+  } finally { await d.close(); }
+};
+
 const LEGS = [
   ["ds1a", "offered", "as shipped no client id is configured and nothing is offered; a configured table offers what it configures, in order"],
   ["ds1b", "noHintStart", "an invitation naming providers carries no sign-in hint: the team's start is retired"],
@@ -2242,7 +2490,7 @@ const LEGS = [
   ["ds3f", "lapse", "the calm lapse: lapsed once the kept certificate's until has passed, never with no certificate"],
   ["ds4b", "door", "the provider's door asks only its own token address, by POST, no redirect followed, nothing cached, no cookie"],
   ["ds4c", "keep", "the refresh token is sealed by a real keyring and never kept on Linux's basic_text"],
-  ["ds4d", "loopOnce", "the loopback answers 404 to anything but GET /, answers the GET / it takes once, and then closes"],
+  ["ds4d", "loopOnce", "the loopback answers 404 to anything but GET /, answers the GET / it takes once (303 to its landing), and closes once the landing is served"],
   ["ds6a", "loopStray", "a GET / with no state or another state is answered 400 and ignored, and the reply with the state ends it"],
   ["ds6b", "loopFlow", "through signinRun on a real loopback, two strays leave the sign-in waiting and the browser's reply completes it"],
   ["ds6c", "scopes", "Microsoft is asked for openid profile offline_access at sign-in and refresh, Google for openid, email of nobody"],
@@ -2326,6 +2574,16 @@ const LEGS = [
   ["ds19c", "checkGap", "Check now asks once per SIGNIN_CHECK_GAP_MS, and a clock set back since the last press does not hold it up"],
   ["ds19d", "saidCleared", "a renewal that reached its end clears a failed press's said, so no stale refusal stands over the desk"],
   ["ds20a", "renewAsk", "Google authorizes with access_type=offline and asks for consent every interactive sign-in (decision 36); a renewal with no refresh token or an unopenable sub asks for sign-in again without reaching the provider, in the copywriter's English and Polish words"],
+  ["ds24a", "landSeat", "the sign-in's own reply is answered 303 to a path of the loopback's own with no code, no state and no query; landed, that path's one GET is the seat's page in the copywriter's words under a policy that fetches, frames and runs nothing, and the loopback closes"],
+  ["ds24b", "landHeld", "the clean path asked before the desk knows is held unanswered, and land() answers it with that outcome"],
+  ["ds24c", "landCap", "nothing landed within the cap: the held GET is answered the neutral page and the loopback closes"],
+  ["ds24d", "landStray", "a stray state is answered 400 with the earlier tab's page and the wait goes on; after the reply, another GET of / and any other path or query are 404 and the landing still serves"],
+  ["ds24e", "landOnce", "a second GET of the clean path is refused at once, and the first still gets its page"],
+  ["ds24f", "landKinds", "each end tells its landing: cancelled (access_denied, AADSTS65004), the organisation (consent_required, AADSTS65001, 90094), could not be finished for any other end the desk knows (the provider's refusal, a code it no longer takes, the service refusing or away); a seat, no seat yet (no certificate, waiting, full)"],
+  ["ds24j", "landMark", "every landing is one response that fetches nothing: the mark defined once in one symbol, its mask once with an id no other element has, drawn twice by use; the icon data:, no script, style attribute, address or outside reference"],
+  ["ds24g", "landWords", "every landing in English and Polish carries the copywriter's headline, line, tab title and foot, no script, no address and nothing a keyboard cannot type; an unknown kind is the could-not-finish page"],
+  ["ds24h", "landWired", "the press lands the loopback once with how it ended, after the service's answer: a seat, no seat yet, the service away, the person's Cancel at the provider"],
+  ["ds24i", "landAddress", "over real HTTP, following the provider's 302 and the loopback's 303 as a browser does, the page's address is the loopback's own path with no code, no state and no query, and the page is the seat's"],
   ["ds20b", "noKeyring", "pressing a provider with no keyring open makes no identity and tells the person plainly in the copywriter's English and Polish words; Account's unkept line is retired"],
 ];
 for (let [id, name, line] of LEGS) {
@@ -2580,8 +2838,8 @@ if (!PLANTS_OFF) {
   await plant("dsp17", ["body: form, redirect: \"error\", cache: \"no-store\", credentials: \"omit\", signal: ctl ? ctl.signal : undefined }); /* plant:door-redirect */",
     "body: form, redirect: \"follow\", cache: \"no-store\", credentials: \"omit\", signal: ctl ? ctl.signal : undefined });"], "serviceDoor");
   await plant("dsp18", ["if (!token || !sealsForReal(storage, platform)) return \"\"; /* plant:keep-real */", "if (!token) return \"\";"], "keep");
-  await plant("dsp19", ["      shut();\n      caughtYes(query);", "      caughtYes(query);"], "loopOnce");
-  await plant("dsp20", ["if (!ours) { res.writeHead(400, { \"content-type\": \"text/html; charset=utf-8\", \"cache-control\": \"no-store\" }); res.end(page); return; } /* plant:loop-state */", ""], "loopStray");
+  await plant("dsp19", ["if (landed) { serve(res, 200, landed); shut(); } else held = res;", "if (landed) serve(res, 200, landed); else held = res;"], "loopOnce");
+  await plant("dsp20", ["if (!ours) { serve(res, 400, \"earlier\"); return; } /* plant:loop-state */", ""], "loopStray");
   await plant("dsp21", ["const GOOGLE_HD_NEEDS_EMAIL = false; /* plant:scope-email */", "const GOOGLE_HD_NEEDS_EMAIL = true;"], "scopes");
   await plant("dsp22", ["const ans = await signinSeat(io, p.id, deskKey, got.idToken, \"\", now); /* plant:renew-seedless */",
     "const ans = await signinSeat(io, p.id, deskKey, got.idToken, held.seed, now);"], "renewWrite");
@@ -2697,6 +2955,18 @@ if (!PLANTS_OFF) {
     "const got = token ? await signinRenew(io, p, deskKey, token, held.seed, sub, now) : { ok: false, reason: \"signin-ask\" };"], "renewAsk");
   await plantWire("dsp90", ["  if (!sealsForReal(safeStorage, process.platform)) { signinSaid = \"signin-keyring\"; tellSignin(); return signinView(); } /* plant:signin-keyring */\n",
     ""], "noKeyring");
+  /* The page the browser lands on (ds24). */
+  await plant("dsp129", ["mark(\"m\") + \"<div class=\\\"hd\\\">\"", "mark(\"m\").replace(\"<use href=\\\"#m\\\"/>\", SIGNIN_LANDING_MARK) + \"<div class=\\\"hd\\\">\""], "landMark");
+  await plant("dsp120", ["res.writeHead(303, Object.assign({ location: clean, \"content-length\": 0 }, SIGNIN_LOOP_HEADERS)); /* plant:land-redirect */",
+    "res.writeHead(303, Object.assign({ location: clean + \"?\" + query, \"content-length\": 0 }, SIGNIN_LOOP_HEADERS));"], "landSeat");
+  await plant("dsp121", ["if (clean && !served && req.method === \"GET\" && u === clean) { /* plant:land-once */", "if (clean && req.method === \"GET\" && u === clean) {"], "landOnce");
+  await plant("dsp122", ["timer = setTimeout(() => { if (!landed) landed = \"back\"; if (held)", "timer = setTimeout(() => { if (held)"], "landCap");
+  await plant("dsp123", ["return why === \"signin-notallowed\" ? \"org\" : \"appfail\"; /* plant:land-org */", "return \"appfail\";"], "landKinds");
+  await plant("dsp124", ["if (ans.ok === true) return ans.cert ? \"seat\" : \"noseat\"; /* plant:land-seat */", "if (ans.ok === true) return \"seat\";"], "landKinds");
+  await plant("dsp125", ["hashes.push(\"'sha256-\" + crypto.createHash(\"sha256\").update(m[1], \"utf8\").digest(\"base64\") + \"'\");", "hashes.push(\"'unsafe-inline'\");"], "landSeat");
+  await plant("dsp126", ["        if (landed) { serve(res, 200, landed); shut(); } else held = res;", "        if (landed) { serve(res, 200, landed); shut(); } else { serve(res, 200, \"back\"); shut(); }"], "landHeld");
+  await plant("dsp127", ["    noseat: [\"Signed in, no seat yet\",", "    noseat: [\"Signed in\","], "landWords");
+  await plantWire("dsp128", ["    if (run.loop && typeof run.loop.land === \"function\") run.loop.land(landing); /* plant:land-wired */\n", ""], "landWired");
   /* A gate on a local act, put into the desk file's write in memory, is seen. */
   await plantPage("dsp83", ["if(!r || r===\"signin\" || signinNoSeat(v)) return null; /* plant:told-renewal */", "return null;"], "toldRenewal");
   await plantPage("dsp84", ["  if(FAIL_FIRST.indexOf(v.said)>=0) return {kind:\"pressed\",", "  if(false) return {kind:\"pressed\","], "toldPressed");
