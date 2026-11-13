@@ -2666,6 +2666,7 @@ const BRANCH_STEM_MAX = 96, BRANCH_TEXT_MAX = 16 * 1024 * 1024;
 const SPKI_ED25519 = Buffer.from("302a300506032b6570032100", "hex");
 let deskBranch = null;                         // {sign:{pub,priv}, box:{pub,priv}}: hex publics, sealed privates
 let deskBranchOld = [];                        // pairs the envelope could never open again, kept aside and never deleted
+let deskStranded = false;                      // the key would not open and machine policy keeps the desk (section 12): said, not replaced
 let branchRevs = {};                           // desk file id -> the last edition written, kept when the file is removed
 let readRevs = {};                             // desk file id -> the highest rev this desk has handed on
 let catalogRevs = {};                          // catalog id -> {signing public -> the highest rev handed to the page under it}, kept when teamKeys is empty
@@ -2769,6 +2770,12 @@ function branchIdentity(make) {
   if (!branchSealable()) return null;
   const was = deskBranch, wasOld = deskBranchOld;
   if (!deskBranch || !openPrivate(deskBranch.sign.priv)) {
+    /* The company's non-persistent desktop without its consent to churn: nothing is made or set aside, the page says why. */
+    if (deskBranch && managedStrands(managedPolicy())) { /* plant:np-guard */
+      if (!deskStranded) console.error("etiuda: the desk's branch key could not be opened on this profile, and machine policy keeps this desk rather than make a new one");
+      deskStranded = true;
+      return null;
+    }
     try {
       if (deskBranch) { deskBranchOld = wasOld.concat([deskBranch]); deskBranch = null; }
       const s = crypto.generateKeyPairSync("ed25519"), b = crypto.generateKeyPairSync("x25519");
@@ -4161,11 +4168,13 @@ function updateLookOff() {
 const MANAGED_TENANT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MANAGED_TENANT_DOMAIN = /^(?=.{4,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i;
 const MANAGED_CONTACT_MAX = 200;
-const MANAGED_NAMES = Object.freeze(["managed", "sharedcomputer", "allowpersonalaccounts", "signinprovider", "signintenant", "supportcontact"]);
+const MANAGED_NAMES = Object.freeze(["managed", "sharedcomputer", "allowpersonalaccounts", "signinprovider", "signintenant", "supportcontact",
+  "nonpersistent", "nonpersistentnewdesk"]);
 /** {any, managed, shared, personal, provider, tenant, closed, contact} from `values`. A switch is on where set to anything but
  *  empty or 0; AllowPersonalAccounts unset follows Managed (personal off where managed); a string is taken trimmed. Pure. */
 function managedPolicyFrom(values) {
-  const out = { any: false, managed: false, shared: false, personal: true, provider: "", tenant: "", closed: false, contact: "" };
+  const out = { any: false, managed: false, shared: false, personal: true, provider: "", tenant: "", closed: false, contact: "",
+    nonPersistent: false, nonPersistentNewDesk: false };
   if (!values) return out;
   const own = name => (Object.prototype.hasOwnProperty.call(values, name) ? values[name] : null);
   const text = v => !!v && (v.type === "REG_SZ" || v.type === "REG_EXPAND_SZ");
@@ -4179,6 +4188,8 @@ function managedPolicyFrom(values) {
   out.any = MANAGED_NAMES.some(n => own(n) !== null); /* plant:mp-any */
   out.managed = sw(own("managed")) === true;
   out.shared = sw(own("sharedcomputer")) === true;
+  out.nonPersistent = sw(own("nonpersistent")) === true; /* plant:np-read */
+  out.nonPersistentNewDesk = sw(own("nonpersistentnewdesk")) === true;
   const personal = sw(own("allowpersonalaccounts"));
   out.personal = personal === null ? !out.managed : personal; /* plant:mp-personal */
   let bad = false, kind = "";
@@ -4204,6 +4215,9 @@ function managedPolicyFrom(values) {
   }
   return out;
 }
+/* A NON-PERSISTENT DESKTOP (decision 49, section 12): where machine policy sets NonPersistent and not NonPersistentNewDesk, a desk
+   whose own key will not open is reported, never silently replaced by a new desk. Pure. */
+function managedStrands(pol) { return !!pol && pol.nonPersistent === true && pol.nonPersistentNewDesk !== true; } /* plant:np-strands */
 /* The machine's answer, once a run, as the team values are read. */
 function managedPolicy() {
   try { readJoinPolicy("en"); } catch { /* no policy is read as none */ }
@@ -9800,11 +9814,34 @@ function signinDeskManagedBody(provider, idToken, desk, seed, t, sign, accessTok
   body.sig = sig;
   return body;
 }
+/* A POOLED DESK (section 12, point 3): one whose machine policy sets NonPersistent says so, `pooled: true`, on every sign-in and
+   renewal, signed over lines of its own, so the service lets the person's newest pooled desk take their one pooled place over. */
+const SIGNIN_DESK_POOLED_LINE = "etiuda-licence-signin-desk-pooled";
+const SIGNIN_DESK_MANAGED_POOLED_LINE = "etiuda-licence-signin-desk-managed-pooled";
+function signinDeskPooledBytes(o) {
+  return Buffer.from(o.accessHash === undefined ? SIGNIN_DESK_POOLED_LINE + "\n" + [o.provider, o.tokenHash, o.desk, o.t].map(String).join("\n") /* plant:pooled-line */
+    : SIGNIN_DESK_MANAGED_POOLED_LINE + "\n" + [o.provider, o.tokenHash, o.accessHash, o.desk, o.t].map(String).join("\n"), "utf8");
+}
+/* The pooled body, {provider, idToken, accessToken?, desk, pooled: true, seed?, t, sig}; null where the access token is not its shape. */
+function signinDeskPooledBody(provider, idToken, desk, seed, t, sign, accessToken) {
+  if (accessToken !== undefined && (typeof accessToken !== "string" || !accessToken || accessToken.length > SIGNIN_ACCESS_MAX)) return null;
+  const o = { provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t };
+  if (accessToken !== undefined) o.accessHash = signinTokenHash(accessToken);
+  const sig = String(sign(signinDeskPooledBytes(o)) || "");
+  if (!/^[0-9a-f]{128}$/.test(sig)) return null;
+  const body = Object.assign({ provider: String(provider), idToken: idToken }, accessToken === undefined ? {} : { accessToken: accessToken },
+    { desk: String(desk), pooled: true });
+  if (seed) body.seed = String(seed);
+  body.t = t;
+  body.sig = sig;
+  return body;
+}
 /* The request's body, {provider, idToken, desk, seed?, t, sig}, signed by `sign(bytes)` (hex); null where any part is not its shape.
-   With `accessToken`, the managed body; without, today's. */
-function signinDeskBody(provider, idToken, desk, seed, t, sign, accessToken) {
+   With `accessToken`, the managed body; with `pooled`, the pooled one; with neither, today's. */
+function signinDeskBody(provider, idToken, desk, seed, t, sign, accessToken, pooled) {
   if (!signinKnown(provider) || typeof idToken !== "string" || !idToken || !/^[0-9a-f]{64}$/.test(String(desk)) || !Number.isSafeInteger(t)) return null;
   if (seed && !/^[0-9a-f]{64}$/.test(String(seed))) return null;
+  if (pooled === true) return signinDeskPooledBody(provider, idToken, desk, seed, t, sign, accessToken); /* plant:pooled-body */
   if (accessToken !== undefined) return signinDeskManagedBody(provider, idToken, desk, seed, t, sign, accessToken); /* plant:access-body */
   const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t })) || ""); /* plant:desk-signed */
   if (!/^[0-9a-f]{128}$/.test(sig)) return null;
@@ -9987,7 +10024,7 @@ function signinAnswerBody(res, deskKey, packed) {
 }
 /* One post to signin/desk with `idToken`: `seed` for a first sign-in, "" for a renewal. `io` {serviceAsk(url, body), sign(bytes), packed}. */
 async function signinSeat(io, provider, deskKey, idToken, seed, now, accessToken) {
-  const body = signinDeskBody(provider, idToken, deskKey, seed, now(), io.sign, accessToken || undefined);
+  const body = signinDeskBody(provider, idToken, deskKey, seed, now(), io.sign, accessToken || undefined, io.pooled === true);
   if (!body) { signinTrace(io, provider, "service", "unreached", { detail: "the request did not form" }); return { ok: false, reason: "unreached" }; }
   const hide = [String(idToken)];
   let res = null;
@@ -10321,7 +10358,8 @@ function signinView() {
     link: signinBusy && signinPageOk(signinBusy.url) ? signinBusy.url : "", keeps: sealsForReal(safeStorage, process.platform) }; /* plant:view-link */
   /* Only where machine policy sets any of its six values, so an unmanaged desk's view is the same object as before. */
   const m = st.managed;
-  if (m && m.any) view.managed = { on: m.managed, shared: m.shared, personal: m.personal, provider: m.provider, tenant: !!m.tenant, closed: m.closed, contact: m.contact }; /* plant:view-managed */
+  if (m && m.any) view.managed = { on: m.managed, shared: m.shared, personal: m.personal, provider: m.provider, tenant: !!m.tenant, closed: m.closed, contact: m.contact, /* plant:view-managed */
+    stranded: deskStranded };
   return view;
 }
 function tellSignin() {
@@ -10348,6 +10386,7 @@ function signinIo(run) {
     packed: SIGNIN_DESK_PACKED, /* plant:door-io-packed */
     /* Read when a renewal asks it, so an io made where no state is read never reads one. */
     get managed() { const m = signinState().managed; return !!(m && m.managed); },
+    get pooled() { const m = signinState().managed; return !!(m && m.nonPersistent); },
   };
 }
 /* A first sign-in's outcome kept: the refresh token and the sub sealed where the system seals for real, the seed beside, and the

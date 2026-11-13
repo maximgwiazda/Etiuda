@@ -173,5 +173,25 @@
         <text id="SupportContactBox" valueName="SupportContact" required="true" maxLength="200" />
       </elements>
     </policy>
+    <policy name="NonPersistent" class="Machine" displayName="$(string.NonPersistent)" explainText="$(string.NonPersistent_Explain)" key="Software\Policies\Etiuda" valueName="NonPersistent">
+      <parentCategory ref="Etiuda" />
+      <supportedOn ref="SUPPORTED_Etiuda" />
+      <enabledValue>
+        <decimal value="1" />
+      </enabledValue>
+      <disabledValue>
+        <decimal value="0" />
+      </disabledValue>
+    </policy>
+    <policy name="NonPersistentNewDesk" class="Machine" displayName="$(string.NonPersistentNewDesk)" explainText="$(string.NonPersistentNewDesk_Explain)" key="Software\Policies\Etiuda" valueName="NonPersistentNewDesk">
+      <parentCategory ref="Etiuda" />
+      <supportedOn ref="SUPPORTED_Etiuda" />
+      <enabledValue>
+        <decimal value="1" />
+      </enabledValue>
+      <disabledValue>
+        <decimal value="0" />
+      </disabledValue>
+    </policy>
   </policies>
 </policyDefinitions>

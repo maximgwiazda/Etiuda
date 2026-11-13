@@ -8905,6 +8905,12 @@ What you type stays in this browser only.`;
     "Your organisation has not given this account access to Etiuda.": "Organizacja nie przyznała temu kontu dostępu do Etiudy.",
     "Its IT department can: asking them to assign the account is enough.": "Może to zrobić jej dział IT: wystarczy poprosić o przypisanie konta.",
     "To ask for access: {CONTACT}.": "W sprawie dostępu: {CONTACT}.",
+    // placeholder: Claudette
+    "This computer did not keep Etiuda's key for this desk.": "Ten komputer nie zachował klucza Etiudy dla tego stanowiska.",
+    // placeholder: Claudette
+    "Its IT department can have the profile keep it.": "Dział IT organizacji może sprawić, że profil będzie go zachowywał.",
+    // placeholder: Claudette
+    "Everything on this desk works as before; signing in waits until then.": "Wszystko na tym stanowisku działa jak dotąd; logowanie poczeka do tego czasu.",
     "Etiuda keeps working with the catalog it has.": "Etiuda działa dalej na katalogu, który już ma.",
     "This account has no Etiuda role in its organisation, so it holds no seat.": "To konto nie ma w swojej organizacji żadnej roli w Etiudzie, więc nie zajmuje miejsca w licencji.",
     "Its IT department assigns the roles.": "Role przydziela dział IT organizacji.",
@@ -10427,7 +10433,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-13";
+  var E_BUILT = "2026-11-14";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -27409,7 +27415,8 @@ What you type stays in this browser only.`;
       provider: m.provider === "microsoft" || m.provider === "google" ? m.provider : "",
       tenant: m.tenant === true,
       closed: m.closed === true,
-      contact: typeof m.contact === "string" && m.contact.length <= 200 ? m.contact : ""
+      contact: typeof m.contact === "string" && m.contact.length <= 200 ? m.contact : "",
+      stranded: m.stranded === true
     };
   }
   function signinManaged(v) {
@@ -27426,6 +27433,16 @@ What you type stays in this browser only.`;
     return [
       t("Your organisation has not given this account access to Etiuda."),
       (c ? named(t("To ask for access: {CONTACT}."), "{CONTACT}", c) : t("Its IT department can: asking them to assign the account is enough.")) + (catalogLoaded() ? " " + t("Etiuda keeps working with the catalog it has.") : "")
+    ];
+  }
+  function signinStranded(v) {
+    return !!(v && v.managed && v.managed.stranded);
+  }
+  function signinStrandedWords(v) {
+    const c = v && v.managed ? v.managed.contact : "";
+    return [
+      t("This computer did not keep Etiuda's key for this desk."),
+      (c ? named(t("To ask for access: {CONTACT}."), "{CONTACT}", c) : t("Its IT department can have the profile keep it.")) + " " + t("Everything on this desk works as before; signing in waits until then.")
     ];
   }
   function signinRefusedHere(reason, v) {
@@ -27561,6 +27578,7 @@ What you type stays in this browser only.`;
     if (!signinShown(v)) return null;
     const p = signinParts(v), acct = { act: "account", label: t("Account settings") };
     const ident = { initial: p.initial, name: p.name, sub: p.sub, off: p.off };
+    if (signinStranded(v)) return { moment: "stranded", say: signinStrandedWords(v) };
     if (v.busy) return {
       moment: "waiting",
       heading: t("Finish signing in in the browser"),
@@ -37096,6 +37114,10 @@ What you type stays in this browser only.`;
     return '<span class="sgn-val">' + esc(value) + '</span><span class="sgn-lock">' + ICON_LOCK2 + esc(t("Set by your organisation")) + "</span>";
   }
   function accountCardHtml(v) {
+    if (signinStranded(v)) {
+      const s = signinStrandedWords(v);
+      return '<div class="sgn-top col"><p class="sgn-say" data-signin-stranded><b>' + esc(s[0]) + "</b><span>" + esc(s[1]) + "</span></p></div>";
+    }
     const p = signinParts(v), choosing = signinChoosingNow();
     if (v.signedIn && !choosing) {
       const keeps = signinKeepsAccount(v);

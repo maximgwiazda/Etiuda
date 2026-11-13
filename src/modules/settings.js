@@ -32,7 +32,7 @@ import { focusKey, focusSame } from "./dom.js";
 import { orgModel, orgRanks, syncOrgMark } from "./org-model.js";
 import { SIGNIN_NAMES, signinNow, signinShown, signinParts, signinSay, signinNoSeat, signinTold, signinActsHtml, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow, signinDoorsHtml, signinDoorRefusedNow,
   signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect, signinCopyHtml, signinManaged, signinKeepsAccount,
-  signinCapHolds } from "./signin.js";
+  signinCapHolds, signinStranded, signinStrandedWords } from "./signin.js";
 
 /* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name,
    in columns that fill the width. Choosing a section shows that section alone: Appearance and Layout
@@ -282,6 +282,8 @@ function lockedHtml(value){
   return '<span class="sgn-val">'+esc(value)+'</span><span class="sgn-lock">'+ICON_LOCK+esc(t("Set by your organisation"))+'</span>';
 }
 function accountCardHtml(v){
+  /* The desk's key not kept by a non-persistent profile (section 12): the card says so and offers nothing that would make a new desk. */
+  if(signinStranded(v)){ const s=signinStrandedWords(v); return '<div class="sgn-top col"><p class="sgn-say" data-signin-stranded><b>'+esc(s[0])+'</b><span>'+esc(s[1])+'</span></p></div>'; }
   const p=signinParts(v), choosing=signinChoosingNow();
   if(v.signedIn && !choosing){
     const keeps=signinKeepsAccount(v);

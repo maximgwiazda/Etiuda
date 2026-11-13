@@ -48,7 +48,7 @@ function signinManagedRead(m){
   if(!m || typeof m!=="object") return null;
   return {on:m.on===true, shared:m.shared===true, personal:m.personal!==false,
     provider:m.provider==="microsoft" || m.provider==="google" ? m.provider : "", tenant:m.tenant===true, closed:m.closed===true,
-    contact:typeof m.contact==="string" && m.contact.length<=200 ? m.contact : ""};
+    contact:typeof m.contact==="string" && m.contact.length<=200 ? m.contact : "", stranded:m.stranded===true};
 }
 /* A MANAGED COMPUTER (decision 49): nothing to buy, try or switch, and the account it has kept unless the computer is shared. */
 function signinManaged(v){ return !!(v && v.managed && v.managed.on); }
@@ -62,6 +62,15 @@ function signinRefusedWords(v){
   return [t("Your organisation has not given this account access to Etiuda."),
     (c ? named(t("To ask for access: {CONTACT}."),"{CONTACT}",c) : t("Its IT department can: asking them to assign the account is enough.")) /* plant:refused-contact */
       + (catalogLoaded() ? " "+t("Etiuda keeps working with the catalog it has.") : "")]; /* plant:refused-catalog */
+}
+/* A NON-PERSISTENT DESKTOP whose profile did not keep this desk's key (section 12): what happened and whom to ask, never a fault of
+   the person's, and everything on the desk working as before. */
+function signinStranded(v){ return !!(v && v.managed && v.managed.stranded); } /* plant:np-page */
+function signinStrandedWords(v){
+  const c=v && v.managed ? v.managed.contact : "";
+  return [t("This computer did not keep Etiuda's key for this desk."),
+    (c ? named(t("To ask for access: {CONTACT}."),"{CONTACT}",c) : t("Its IT department can have the profile keep it."))
+      + " " + t("Everything on this desk works as before; signing in waits until then.")];
 }
 /* The reasons that sentence answers: a sign-in outside the pinned tenant always, and the organisation's refusals on a managed computer. */
 function signinRefusedHere(reason, v){
@@ -185,6 +194,7 @@ function signinDoorOf(v){
   if(!signinShown(v)) return null;
   const p=signinParts(v), acct={act:"account", label:t("Account settings")};
   const ident={initial:p.initial, name:p.name, sub:p.sub, off:p.off};
+  if(signinStranded(v)) return {moment:"stranded", say:signinStrandedWords(v)};
   if(v.busy) return {moment:"waiting", heading:t("Finish signing in in the browser"),
     line:named(t("The browser has opened {PROVIDER}'s sign-in page. Etiuda waits here and carries on by itself when you come back."),"{PROVIDER}",SIGNIN_NAMES[v.busy]),
     wait:named(t("Waiting for {PROVIDER}…"),"{PROVIDER}",SIGNIN_NAMES[v.busy]),
@@ -461,6 +471,8 @@ export {
   signinLinkHtml,
   signinLinkSelect,
   signinManaged,
+  signinStranded,
+  signinStrandedWords,
   signinKeepsAccount,
   signinCapHolds,
   signinNow,

@@ -50,7 +50,8 @@ const tableOf = () => { const at = once(MAIN, "\nlet SIGNIN_PROVIDERS = Object.f
 let SHELL = "", sliced = "";
 try {
   SHELL = [lineOf("const POLICY_KEY ="), lineOf("const POLICY_HEAD ="), lineOf("const POLICY_EXPORT_LINE ="), fnOf("function policyValues("),
-    lineOf("const MANAGED_TENANT_ID ="), lineOf("const MANAGED_TENANT_DOMAIN ="), lineOf("const MANAGED_CONTACT_MAX ="), lineOf("const MANAGED_NAMES ="),
+    lineOf("const MANAGED_TENANT_ID ="), lineOf("const MANAGED_TENANT_DOMAIN ="), lineOf("const MANAGED_CONTACT_MAX ="),
+    MAIN.slice(once(MAIN, "\nconst MANAGED_NAMES =") + 1, MAIN.indexOf("]);", once(MAIN, "\nconst MANAGED_NAMES =")) + 3),
     fnOf("function managedPolicyFrom("), lineOf("const GOOGLE_HD_NEEDS_EMAIL ="), tableOf(), lineOf("const SIGNIN_TENANT ="), lineOf("const SIGNIN_CLIENT ="),
     lineOf("const SIGNIN_SKEW_MS ="), lineOf("function signinKnown("), lineOf("const SIGNIN_PERSONAL_TENANT ="), fnOf("function signinPinTable("),
     fnOf("function signinPinOk("), lineOf("let signinPacked ="), fnOf("function signinOffered("), lineOf("const SIGNIN_NONCE_LINE ="),
