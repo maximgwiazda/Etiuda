@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 152;
+const PLANTS = 153;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 139 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 140 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -345,6 +345,18 @@ CASES.serviceDoor = async s => {
     && init.method === "POST" && init.redirect === "error" && init.cache === "no-store" && init.credentials === "omit"
     && init.headers["content-type"] === "application/json" && JSON.parse(init.body.toString()).provider === "google";
 };
+/* A managed tenant (a large company's licence that follows the roles its IT assigns): the service's word that it is managed, and why, read
+   from a seated answer and a no-role refusal and kept on the seat, and nothing read from an ordinary answer. */
+CASES.managedRead = s => {
+  const a = (o, st) => s.signinAnswer(answer(o, st), DESK_KEY);
+  const held = { provider: "microsoft", refresh: "sealed:rt", sub: "sealed:s", seed: "6".repeat(64), code: CODE, cert: null, at: 1, checked: 1, reached: true, said: "", ask: false };
+  const seated = a({ ok: true, certificate: cert(), code: CODE, doors: [], managed: true, cause: "assigned" });
+  const plain = a({ ok: true, certificate: cert(), code: CODE, doors: [] });
+  const no = a({ ok: false, reason: "no-role", managed: true }, 403);
+  const h1 = s.signinSettle(held, seated, NOW), h2 = s.signinSettle(held, no, NOW), h3 = s.signinSettle(h1, plain, NOW);
+  return seated.ok === true && seated.managed === true && seated.cause === "assigned" && plain.ok === true && plain.managed === undefined
+    && no.reason === "no-role" && no.managed === true && h1.managed === true && h1.cause === "assigned" && h2.managed === true && h3.managed === false;
+};
 /* The service's answers read as the interface names them; a certificate for another desk or another code is not taken. */
 CASES.answers = s => {
   const a = (o, st) => s.signinAnswer(answer(o, st), DESK_KEY);
@@ -353,7 +365,7 @@ CASES.answers = s => {
   return held.ok === true && held.cert && held.cert.code === CODE && held.code === CODE && none.ok === true && none.cert === null
     && theirs.reason === "unreached" && mixed.reason === "unreached"
     && a({ ok: false, reason: "token" }, 403).reason === "token" && a({ ok: false, reason: "signin" }, 403).reason === "signin"
-    && a({ ok: false, reason: "no-role" }, 403).reason === "no-role" && a({ ok: false, reason: "access-token" }, 409).reason === "access-token"
+    && a({ ok: false, reason: "no-role", managed: true }, 403).reason === "no-role" && a({ ok: false, reason: "access-token", managed: true }, 409).reason === "access-token"
     && a({ ok: false, reason: "full" }, 409).reason === "full" && a({ ok: false, reason: "desks" }, 409).reason === "desks"
     && a({ ok: false, reason: "unavailable" }, 503).reason === "unreached" && a({ ok: false, reason: "slow-down" }, 429).reason === "unreached"
     && s.signinAnswer({ status: 200, bytes: Buffer.from("<html>") }, DESK_KEY).reason === "unreached";
@@ -2900,6 +2912,7 @@ const LEGS = [
   ["ds3a", "deskBody", "signin/desk's body has the interface's names alone, signed by this desk's key over the service's bytes; the seed on a first sign-in only"],
   ["ds3b", "serviceDoor", "the service's door posts JSON to signin/desk alone, no redirect, nothing cached, no cookie, nothing over 8 KiB"],
   ["ds3c", "answers", "the service's answers read as the interface names them; a certificate for another desk or code is not taken"],
+  ["ds3g", "managedRead", "a managed tenant: the service's word that it is managed, and why, read from a seat and a no-role refusal and kept; an ordinary answer clears it"],
   ["ds3d", "seatFile", "seat.json is {format: 2, desk, certificate}, the certificate whole and no token"],
   ["ds3e", "settle", "a refusal keeps the last certificate, a freed seat forgets the refresh token, a service away is only marked, none drops it"],
   ["ds3f", "lapse", "the calm lapse: lapsed once the kept certificate's until has passed, never with no certificate"],
@@ -3248,8 +3261,14 @@ const DESK_READS = {
   "signin": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === false && r.reason === "signin" && h.refresh === "" && h.ask === true; },
   "desks": r => r.ok === false && r.reason === "desks",
   "token": r => r.ok === false && r.reason === "token",
-  "access-token": r => r.ok === false && r.reason === "access-token",
-  "no-role": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === false && r.reason === "no-role" && h.said === "no-role" && h.refresh === "sealed:rt"; },
+  "access-token": r => r.ok === false && r.reason === "access-token" && r.managed === true,
+  "no-role": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === false && r.reason === "no-role" && r.managed === true && h.said === "no-role" && h.refresh === "sealed:rt" && h.managed === true; },
+  "no-role-assigned": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === false && r.reason === "no-role" && r.managed === true && r.cause === "assigned" && h.cause === "assigned"; },
+  "managed-seated": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.managed === true && r.cause === "" && h.managed === true && h.cert === r.cert; },
+  "managed-waiting": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.waiting === true && r.managed === true && h.said === "waiting" && h.managed === true; },
+  "managed-none": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.managed === true && h.cert === null && h.managed === true; },
+  "managed-own": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.managed === true && r.cause === "own-licence" && h.cause === "own-licence"; },
+  "managed-assigned": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.managed === true && r.cause === "assigned" && h.cause === "assigned"; },
   "malformed": unreached, "stale": unreached, "signature": unreached, "replayed": unreached, "slow-down": unreached, "unavailable": unreached,
   "signed-out": (r, c) => r === true,
 };
@@ -3321,7 +3340,8 @@ if (!PLANTS_OFF) {
   await plant("dsp28", ["const SIGNOUT_DESK_LINE = \"etiuda-licence-signout-desk\"; /* plant:signout-line */", "const SIGNOUT_DESK_LINE = \"etiuda-licence-signin-desk\";"], "signoutBody");
   await plant("dsp12", ["&& String(c.desk) === String(deskKey) && /^[0-9a-f]{64}$/.test(String(c.person)) && SIGNIN_CODE.test(String(c.code)) /* plant:cert-desk */",
     "&& /^[0-9a-f]{64}$/.test(String(c.person)) && SIGNIN_CODE.test(String(c.code))"], "answers");
-  await plant("dsp13", ["    refresh: freed ? \"\" : held.refresh }); /* plant:settle-freed */", "    refresh: held.refresh });"], "settle");
+  await plant("dsp13", ["    refresh: freed ? \"\" : held.refresh }, ans.managed === true ? { managed: true, cause: ans.cause || \"\" } : {}); /* plant:settle-freed */",
+    "    refresh: held.refresh }, ans.managed === true ? { managed: true, cause: ans.cause || \"\" } : {});"], "settle");
   await plant("dsp15", ["return !!held && !!held.cert && now >= held.cert.until; /* plant:lapse-until */", "return !!held && !!held.cert && now >= held.cert.until + 86400000;"], "lapse");
   await plant("dsp16", ["if (!Object.keys(SIGNIN_PROVIDERS).some(id => SIGNIN_PROVIDERS[id].token === u)) throw new Error(\"a token is asked only at a provider's own token address\"); /* plant:door-host */", ""], "door");
   await plant("dsp17", ["body: form, redirect: \"error\", cache: \"no-store\", credentials: \"omit\", signal: ctl ? ctl.signal : undefined }); /* plant:door-redirect */",
@@ -3375,7 +3395,8 @@ if (!PLANTS_OFF) {
   await plant("dsp53", ["/^http:\\/\\/127\\.0\\.0\\.1:([0-9]{1,5})", "/^http:\\/\\/[a-z0-9.]+:([0-9]{1,5})"], "labRead");
   await plant("dsp54", ["|| !(d.root === undefined || /^[0-9a-f]{64}$/.test(String(d.root)))) return null; /* plant:lab-shape */", ") return null;"], "labRead");
   await plant("dsp59", ["if (d.keyId !== \"studio-\" + crypto.createHash(\"sha256\").update(Buffer.from(d.lead, \"hex\")).digest(\"hex\").slice(0, 16)) return []; /* plant:door-key-id */", ""], "doorsRead");
-  await plant("dsp60", ["return { ok: true, code: String(j.code), cert: j.certificate, doors: signed ? doors : [], doorsSig: signed ? String(j.doorsSig) : \"\" }; /* plant:door-read */", "return { ok: true, code: String(j.code), cert: j.certificate, doors: [], doorsSig: \"\" };"], "doorsRead");
+  await plant("dsp60", ["return Object.assign({ ok: true, code: String(j.code), cert: j.certificate, doors: signed ? doors : [], doorsSig: signed ? String(j.doorsSig) : \"\" }, signinManagedOf(j)); /* plant:door-read */",
+    "return Object.assign({ ok: true, code: String(j.code), cert: j.certificate, doors: [], doorsSig: \"\" }, signinManagedOf(j));"], "doorsRead");
   await plant("dsp61", ["doors: ans.cert ? (ans.doors || []) : [],", "doors: ans.doors || [],"], "doorsKept");
   await plantWire("dsp62", ["|| !(held.cert.until > now) || pinnedLead() || teamJoin) return []; /* plant:door-shown */", ") return [];"], "doorJoin");
   await plantWire("dsp63", ["if (!d || !me) return Object.assign({}, joinView(), { refused: \"door\" }); /* plant:door-join-offered */", "if (!me) return joinView();"], "doorJoin");
@@ -3405,9 +3426,10 @@ if (!PLANTS_OFF) {
   await plantWire("dtp5", ["trace: SIGNIN_TRACE_ASKED ? line => console.error(line) : null, /* plant:trace-wired */", "trace: line => console.error(line),"], "traceDefault");
   await plantWire("dtp6", ["if (!io || typeof io.trace !== \"function\") return; /* plant:trace-off */",
     "if (!io || typeof io.trace !== \"function\") { console.error(signinTraceLine(provider, step, shown, said, hide)); return; }"], "traceDefault");
-  await plant("dsp79", ["if (j.certificate === null) return { ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === \"waiting\" }; /* plant:wait-read */",
-    "if (j.certificate === null) return { ok: true, code: String(j.code), cert: null, doors: [] };"], "waitRead");
-  await plant("dsp80", ["said: ans.waiting === true ? \"waiting\" : \"\", ask: false }); /* plant:wait-settle */", "said: \"\", ask: false });"], "waitRead");
+  await plant("dsp79", ["if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === \"waiting\" }, signinManagedOf(j)); /* plant:wait-read */",
+    "if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [] }, signinManagedOf(j));"], "waitRead");
+  await plant("dsp80", ["said: ans.waiting === true ? \"waiting\" : \"\", ask: false, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || \"\" : \"\" }); /* plant:wait-settle */",
+    "said: \"\", ask: false, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || \"\" : \"\" });"], "waitRead");
   await plantWire("dsp93", ["  if (Object.keys(teamPins).some(teamPinStands)) return []; /* plant:door-pin-stands */\n", ""], "doorPins");
   await plantWire("dsp94", ["    if (inviteDoor({ lead: { public: d.lead } })) return null; /* plant:door-policy */\n", ""], "doorPolicy");
   await plantWire("dsp95", ["    if (pin && (pin.keyId !== d.keyId || pin.public !== d.lead)) return null; /* plant:door-pinned */\n", ""], "doorPins");
@@ -3499,6 +3521,7 @@ if (!PLANTS_OFF) {
   await plantWire("dsp149", ["  if (signinRevokedHas(held.revoked, cert)) return null; /* plant:revoked-knock */\n", ""], "revokedLapse");
   await plantWire("dsp150", ["  if (held && signinRevokedHas(held.revoked, held.cert)) return false; /* plant:revoked-request */\n", ""], "revokedLapse");
   await plantWire("dsp152", ["  base.revoked = s.revoked || null; /* plant:revoked-survives */\n", ""], "revokedSurvives");
+  await plant("dsp155", ["  return { managed: true, cause: j.cause === \"own-licence\" || j.cause === \"assigned\" ? j.cause : \"\" }; /* plant:managed-read */", "  return {};"], "managedRead");
   await plant("dsp153", ["const said = { 403: [\"token\", \"signin\", \"no-role\"], 409: [\"full\", \"desks\", \"access-token\"] }[res.status];",
     "const said = { 403: [\"token\", \"signin\"], 409: [\"full\", \"desks\", \"access-token\"] }[res.status];"], "answers");
   await plant("dsp154", ["const said = { 403: [\"token\", \"signin\", \"no-role\"], 409: [\"full\", \"desks\", \"access-token\"] }[res.status];",

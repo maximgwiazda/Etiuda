@@ -23,6 +23,9 @@ function signinRead(v){
     code: signedIn && /^[0-9A-Z]{16}$/.test(String(o.code)) ? String(o.code) : "",
     seat: o.seat==="held" || o.seat==="lapsed" || o.seat==="none" ? o.seat : "",
     deskOnly: !!signedIn && o.deskOnly===true,
+    /* The service said this account's organisation holds its licence (a managed tenant), and why where it also owns one. */
+    managed: o.managed===true,
+    cause: o.managed===true && (o.cause==="own-licence" || o.cause==="assigned") ? o.cause : "",
     at: Number.isFinite(o.at) ? o.at : 0,
     reached: o.reached!==false,
     ask: o.ask===true,

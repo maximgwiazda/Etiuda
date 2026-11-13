@@ -28,9 +28,9 @@ const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 7;
+const PLANTS = 8;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 9 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 10 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -75,7 +75,7 @@ function shellOf(o) {
     ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { handle[ch] = fn; } },
     fromEngine: e => !!(e && e.engine),
     shell: { openExternal: async u => { opened.push(u); } },
-    signinView: () => ({ code: typeof opt.code === "function" ? opt.code() : opt.code || "" }),
+    signinView: () => ({ code: typeof opt.code === "function" ? opt.code() : opt.code || "", managed: opt.managed === true }),
   };
   const names = Object.keys(env);
   const body = "let SIGNIN_PROVIDERS = Object.freeze({ microsoft: Object.freeze({ clientId: \"\" }), google: Object.freeze({ clientId: \"\" }) }),"
@@ -229,6 +229,22 @@ CASES.pagePress = () => {
   return !!block && /h\.openBuyPage\(\)/.test(block) && !/https?:|window\.open|location/.test(block) && !/window\.open\(|location\.href\s*=/.test(SETTINGS);
 };
 
+/* b10: where the service said the account's organisation holds its licence (a managed tenant), on any computer, the shell offers no order
+   page and a press opens nothing, and Account draws no Buy, signed in or out, saying instead that the organisation holds the licence;
+   and why, where the person also bought one of their own (placeholder words, the copywriter's to write). */
+CASES.managed = async () => {
+  const S = shellOf({ lab: labWith({ order: ORDER }), code: CODE, managed: true });
+  const st = S.state(); S.click(); const opened = S.open();
+  const v = Object.assign({}, signed, { managed: true }), vo = Object.assign({}, signedOut, { managed: true });
+  const a = await acctOf(v, OFFER), b = await acctOf(vo, OFFER);
+  const own = await acctOf(Object.assign({}, v, { cause: "own-licence" }), OFFER), asg = await acctOf(Object.assign({}, v, { cause: "assigned" }), OFFER);
+  const line = "Your organisation holds the Etiuda licence for this account, so there is nothing to buy here.";
+  return !!st && st.offer === false && opened === false && S.opened.length === 0
+    && [a, b].every(h => !/data-e-open="buy"/.test(h) && words(h).indexOf(line) >= 0)
+    && words(own).indexOf("and this account has none, so it uses the licence it bought before.") >= 0
+    && words(asg).indexOf("the licence it bought before waits unused meanwhile.") >= 0;
+};
+
 /* ---- the run ---------------------------------------------------------------------------------------------------------- */
 const LEGS = [
   ["b1", "absent", "as shipped, no order page: the shell offers nothing, a press hands nothing, and Account draws no Buy, signed in or out"],
@@ -238,6 +254,7 @@ const LEGS = [
   ["b5", "shape", "the order page is etiuda.dev's over https with no port, user, query or fragment; a lab file naming another is refused whole"],
   ["b6", "preload", "the preload tells main of a trusted click on Buy alone; E_HOST asks the state and the open"],
   ["b7", "pagePress", "the page's Buy asks the shell's open and names no address"],
+  ["b10", "managed", "a managed tenant's account: no order page offered, a press opens nothing, Account draws no Buy but who holds the licence, and why"],
 ];
 if (sliced) console.log("  (the slices did not load: " + sliced + ")");
 for (const [id, name, line] of LEGS) {
@@ -271,6 +288,8 @@ if (!PLANTS_OFF && !sliced) {
     "buy-click-frame cut: a click from another frame would let the page out");
   await plant("bp6", ["openExternally(u); /* plant:buy-open */", "handOut(u);"], "nothingElse",
     "buy-open past the link rule: an open with no click would reach the browser");
+  await plant("bp8", ["if (v && v.managed) return \"\"; /* plant:buy-managed */", ""], "managed",
+    "the order page handed to a managed tenant's account turns b10 red");
   await plant("bp7", ["let ORDER_PAGE = \"\";", "let ORDER_PAGE = \"" + ORDER + "\";"], "absent",
     "the control for b1: with an order page named in the tree, the shell offers Buy and a press hands it");
 }
