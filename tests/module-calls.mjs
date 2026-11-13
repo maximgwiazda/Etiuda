@@ -8063,13 +8063,13 @@ const CARD_B = {
         (sh.heard["capture:pointerdown"] || []).forEach(fn => fn({ button: 0 }));
         const pressed = [titleOf(modalCard), at().join(","), shellAt()].join(" ");
         const walk = [];
-        DL.edF6(); walk.push(DL.edResting() ? "desk" : titleOf(modalCard));
+        DL.edF6(); walk.push(DL.edResting() ? "desk" : titleOf(modalCard) + "@" + at().join(","));
         DL.edF6(); walk.push(DL.edResting() ? "desk" : titleOf(modalCard));
         DL.edF6(); walk.push(DL.edResting() ? "desk" : titleOf(modalCard));
         DL.edF6(); walk.push(DL.edResting() ? "desk" : titleOf(modalCard));
         DL.closeModal();
         const closed = [titleOf(modalCard), modalEl.shells.length, modalEl.classList.contains("ed-multi"), modalCard.contains(globalThis.document.activeElement)].join("|");
-        return eq([pressed, walk.join(","), closed].join(" || "), "Edit card 620,150 Edit category 1192 150 || Edit category,desk,Edit card,Edit category || Edit card|0|false|true");
+        return eq([pressed, walk.join(","), closed].join(" || "), "Edit card 620,150 Edit category 1192 150 || Edit category@1192,150,desk,Edit card,Edit category || Edit card|0|false|true");
       });
 
     check("dialog.js", "983w5 asked for an entry already open, its window comes forward untouched, from the desk too; another entry of an open kind takes that kind's window, in its place, with the Undo",
