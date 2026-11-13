@@ -65,6 +65,7 @@ function run(block, reg, opts) {
     /* LogicLib's == and != are StrCmp, which ignores case. */
     if (op === "==") return val(a).toLowerCase() === val(b).toLowerCase();
     if (op === "!=") return val(a).toLowerCase() !== val(b).toLowerCase();
+    if (op === ">") return Number(val(a)) > Number(val(b));
     throw new Error("a condition this interpreter does not read: " + toks.join(" "));
   };
   /* Parse into a tree: [{kind, ...}] */
@@ -113,7 +114,7 @@ function run(block, reg, opts) {
         if (arm) exec(arm.body); else if (n.otherwise) exec(n.otherwise);
       } else if (n.kind === "while") {
         for (let guard = 0; cond(n.toks); guard++) {
-          if (guard > 100) throw new Error("a loop that does not end");
+          if (guard > (opts.guard || 100)) throw new Error("a loop that does not end");
           try { exec(n.body); } catch (e) { if (e === EXIT) break; throw e; }
         }
       } else {
@@ -124,6 +125,8 @@ function run(block, reg, opts) {
         else if (w === "IntOp") vars[a[0]] = String(Number(val(a[1])) + Number(val(a[3])));
         else if (w === "ClearErrors") errors = false;
         else if (w === "ReadRegStr") { const k = reg[keyOf(a[1], a[2])]; const v = k && k.values[val(a[3])]; vars[a[0]] = v === undefined ? "" : v; if (v === undefined) errors = true; }
+        else if (w === "EnumRegValue" && opts.endless && opts.endless.what === val(a[2]).split("\\").pop().toLowerCase()) vars[a[0]] = opts.endless.name;
+        else if (w === "EnumRegKey" && opts.endless && opts.endless.what === "subkeys") vars[a[0]] = opts.endless.name;
         else if (w === "EnumRegValue") {
           const k = reg[keyOf(a[1], a[2])], names = k ? Object.keys(k.values) : [], n2 = Number(val(a[3]));
           if (n2 < names.length) vars[a[0]] = names[n2]; else { vars[a[0]] = ""; errors = true; }
@@ -155,7 +158,11 @@ function cases(block) {
   const gone = (reg, ctx) => !Object.keys(reg).some(p => p === (ctx + "\\software\\classes\\." + ext).toLowerCase());
   const out = {};
   for (const ctx of ["HKCU", "HKLM"]) {
-    const R = (over, opts) => gone(run(block, fresh(ctx, over), Object.assign({ context: ctx }, opts)), ctx);
+    /* A loop the step guard had to stop reads "hang": in the installer it is a silent uninstall that never ends. */
+    const R = (over, opts) => {
+      try { return gone(run(block, fresh(ctx, over), Object.assign({ context: ctx }, opts)), ctx); }
+      catch (e) { if (/does not end/.test(e.message)) return "hang"; throw e; }
+    };
     out[ctx] = {
       unclaimed: R(),
       updated: R(null, { updated: true }),
@@ -165,6 +172,11 @@ function cases(block) {
       otherSubkey: R(put => put("Software\\Classes\\." + ext + "\\ShellNew", { NullFile: "" })),
       userChoiceOther: R(put => { put("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\." + ext + "\\UserChoice", { ProgId: "Another.Program" }); }),
       userChoiceOurs: R(put => { put("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\." + ext + "\\UserChoice", { ProgId: cls }); }),
+      /* An enumeration that never raises the error flag (the two value loops answering "" for ever, the subkey loop our own
+         subkey for ever), with the interpreter's step guard lifted well past the cap, so it is the cap that ends each one. */
+      endlessProgids: R(null, { guard: 10000, endless: { what: "openwithprogids", name: "" } }),
+      endlessValues: R(null, { guard: 10000, endless: { what: "." + ext, name: "" } }),
+      endlessSubkeys: R(null, { guard: 10000, endless: { what: "subkeys", name: "OpenWithProgids" } }),
     };
     if (ctx === "HKLM") {
       /* The UserChoice is the uninstalling account's, in HKCU, whichever hive the install wrote. */
@@ -173,7 +185,8 @@ function cases(block) {
   }
   return out;
 }
-const WANT = { unclaimed: true, updated: false, otherDefault: false, otherProgid: false, otherValue: false, otherSubkey: false, userChoiceOther: false, userChoiceOurs: true };
+const WANT = { unclaimed: true, updated: false, otherDefault: false, otherProgid: false, otherValue: false, otherSubkey: false, userChoiceOther: false, userChoiceOurs: true,
+  endlessProgids: false, endlessValues: false, endlessSubkeys: false };
 const holds = r => ["HKCU", "HKLM"].every(c => Object.keys(WANT).every(k => r[c][k] === WANT[k]));
 
 try {
@@ -186,7 +199,8 @@ try {
     "ue2 its extension and class are electron-builder.js's association (." + assoc.ext + ", " + assoc.name + "), the class read past 17 characters of Software\\Classes\\");
   const r = block ? cases(block) : null;
   check(!!r && holds(r), "ue3 per-user and all-users: an unclaimed key goes, as with this account's UserChoice naming our class; an update, another default,"
-    + " another OpenWithProgids entry, another value, another subkey or another program's UserChoice each keep it: " + JSON.stringify(r));
+    + " another OpenWithProgids entry, another value, another subkey, another program's UserChoice, or an enumeration that never ends (stopped by"
+    + " its 256-entry cap, the step guard lifted) each keep it: " + JSON.stringify(r));
   const I = require(path.join(ROOT, "tools", "test-identity.cjs"));
   const own = I.ownNamesNsh(NSH), tb = blockOf(own.text);
   check(own.left.length === 0 && own.counts.ext === 1 && !!tb && tb.defs.ETIUDA_EC_EXT === I.TEST.desk.ext
@@ -199,6 +213,9 @@ try {
     ["ext-values", "StrCpy $R5 \"\" # plant:ext-values", "IntOp $R3 0 + 0 # plant:ext-values"],
     ["ext-subkeys", "${ElseIf} $R3 != \"OpenWithProgids\" # plant:ext-subkeys", "${ElseIf} 1 == 0 # plant:ext-subkeys"],
     ["ext-userchoice", "${AndIf} $R3 != $R5 # plant:ext-userchoice", "${AndIf} 1 == 0 # plant:ext-userchoice"],
+    ["ext-cap-progids", "${If} $R4 > 255 # plant:ext-cap-progids", "${If} 1 == 0 # plant:ext-cap-progids"],
+    ["ext-cap-values", "${If} $R4 > 255 # plant:ext-cap-values", "${If} 1 == 0 # plant:ext-cap-values"],
+    ["ext-cap-subkeys", "${If} $R4 > 255 # plant:ext-cap-subkeys", "${If} 1 == 0 # plant:ext-cap-subkeys"],
     ["ext-gone", "DeleteRegKey SHELL_CONTEXT \"Software\\Classes\\.${ETIUDA_EC_EXT}\" # plant:ext-gone", "IntOp $R3 0 + 0 # plant:ext-gone"],
   ];
   if (PLANTS_OFF) { skipped += 2; console.log("  skip ue5, ue6 (ETIUDA_PLANTS=off)"); }
