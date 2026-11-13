@@ -6,7 +6,8 @@ import { mgReduceMotion } from "./motion.js";
 import { fifthPhase } from "./fifth.js";
 import { syncLaunchMark } from "./launch-mark.js";
 
-function dialogStanding(){ return !!document.querySelector(".modal:not([hidden]):not(.e-gone)"); }
+// A resting editor (.ed-rest) leaves the desk in front, so it stands no dialog up.
+function dialogStanding(){ return !!document.querySelector(".modal:not([hidden]):not(.e-gone):not(.ed-rest)"); }
 /* THE WINDOW ON SCREEN: a host says whether it was when this load asked, and once when it is; a page
    with no host, or a host that never says, is on screen. The first ask listens, and boot asks.
    NOTHING WAITS ON THE WORD FOR EVER: the page counts as on screen SHOWN_BOUND_MS after its first frame, or

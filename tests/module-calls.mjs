@@ -2749,6 +2749,44 @@ const CARD_B = {
         });
     } finally { AS.setCards(hadCards); }
   }
+  /* The next replies in an open card editor follow another card renamed or removed (board 983, design.md: "The chips and lists
+     refresh; nothing typed is touched"). The list's nodes are stand-ins the fold draws into; invented cards only. */
+  {
+    const Dom = await import(MOD("dom.js"));
+    const hadCards = AS.cards, hadDoc = globalThis.document;
+    const box = () => { let h = "", sets = 0; return { value: "", hidden: false, textContent: "", children: [], querySelectorAll: () => [], addEventListener() {},
+      closest: () => ({ closest: () => null, addEventListener() {} }),
+      get sets() { return sets; }, get innerHTML() { return h; }, set innerHTML(v) { h = String(v); sets++; } }; };
+    const els = { meNextList: box(), meNextIds: box(), meNextSrc: box(), meNextWas: box(), meNextSum: box() };
+    const card = { querySelector: q => els[q.slice(1)] || null, querySelectorAll: () => [] };
+    try {
+      globalThis.document = { querySelector: q => (q === "#modalCard" ? card : null), querySelectorAll: () => [], activeElement: null,
+        getElementById: () => null, addEventListener() {}, body: { classList: { contains: () => false } },
+        createElement: () => ({ getContext: () => ({}) }), createRange: () => ({}) };
+      Dom.grabDom();
+      check("card-chain.js", "983z3 an open card editor's next replies follow: another card renamed shows its new title, one removed leaves the list and its ids, and nothing is drawn where nothing differs",
+        () => {
+          AS.setCards([{ id: "c-self", t: "Self" }, { id: "c-a", t: "Alpha" }, { id: "c-b", t: "Beta" }]);
+          const nx = CH.nextReplies({ id: "c-self", next: to("c-a", "c-b") }, null, null);
+          els.meNextList.innerHTML = ""; els.meNextIds.value = "";
+          nx.wire();
+          const n0 = els.meNextList.sets;
+          nx.refresh();
+          const still = els.meNextList.sets - n0;
+          AS.setCards([{ id: "c-self", t: "Self" }, { id: "c-a", t: "Alpha renamed" }, { id: "c-b", t: "Beta" }]);
+          nx.refresh();
+          const renamed = /Alpha renamed/.test(els.meNextList.innerHTML) && /Beta/.test(els.meNextList.innerHTML);
+          AS.setCards([{ id: "c-self", t: "Self" }, { id: "c-a", t: "Alpha renamed" }]);
+          nx.refresh();
+          return eq([still, renamed, /Beta|c-b/.test(els.meNextList.innerHTML), els.meNextIds.value, els.meNextSum.textContent,
+            JSON.stringify(nx.fields())].join("|"), '0|true|false|["c-a"]|1|{"next":[{"to":"c-a"},{"to":"c-b"}]}');
+        });
+    } finally {
+      AS.setCards(hadCards);
+      if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+      if (hadDoc !== undefined) Dom.grabDom();
+    }
+  }
   check("card-model.js", "814D the catalog's ids ride the override only beside a list it writes",
     () => {
       const b = base(to("c-a"));
@@ -3639,6 +3677,67 @@ const CARD_B = {
     check("card-editor.js", "814st1 every selector by which tests/smoke.js types into the card editor reaches the first language's title, a visible text field, before any other input",
       () => eq([sites.length >= 3, [...new Set(sites.map(reach))].join(",")].join("|"), "true|me_t_" + CM.CONTENT_LANGS[0]));
   } finally {
+    AS.setCards(hadCards);
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+    if (hadDoc !== undefined) Dom.grabDom();
+  }
+}
+
+/* ------------------------------------------------------------------ card-editor.js, the chips follow another entry
+   A category renamed while a card editor is open (board 983, design.md: "The chips and lists refresh; nothing typed is touched").
+   The markup is the real openCardEditor's on a stand-in document, each box parsed from what it was given; the desk's check is
+   asked at once. An invented category only; every global set is put back. */
+{
+  const Dom = await import(MOD("dom.js"));
+  const AS = await import(MOD("app-state.js"));
+  const CE = await import(MOD("card-editor.js"));
+  const CM = await import(MOD("content-model.js"));
+  const DL = await import(MOD("dialog.js"));
+  const hadDoc = globalThis.document, hadCards = AS.cards;
+  const quiet = { toggle() {}, add() {}, remove() {}, contains() { return false; } };
+  const stub = () => ({ hidden: true, style: {}, classList: quiet, dataset: {}, setAttribute() {}, getAttribute() { return null; },
+    removeAttribute() {}, addEventListener() {}, querySelector() { return null; }, querySelectorAll() { return []; }, contains() { return false; },
+    getBoundingClientRect() { return { left: 0, top: 0, width: 0, height: 0 }; }, appendChild() {}, focus() {}, getContext() { return {}; } });
+  /* A box whose markup is kept, counting each write; the queries the editor asks of it are read from that markup. */
+  const box = () => { let h = "", sets = 0; return Object.defineProperties(stub(), { sets: { get: () => sets }, innerHTML: { get: () => h, set: v => { h = String(v); sets++; } },
+    querySelector: { value(q) {
+      if (q === ".cat-chip-new") return /cat-chip-new/.test(h) ? {} : null;
+      const on = q === ".cat-chip.on[data-k]" && h.match(/class="cat-chip on" data-k="([^"]*)"/);
+      return on ? { getAttribute: () => on[1] } : null;
+    } } }); };
+  const els = {};
+  const inner = (h, id) => { const m = String(h).match(new RegExp('id="' + id + '"[^>]*>([\\s\\S]*?)</(div|span)>')); return m ? m[1] : ""; };
+  els["#modalCard"] = Object.defineProperty(stub(), "innerHTML", { get() { return ""; }, set(v) {
+    ["meCatPick", "meCatSum"].forEach(id => { if (String(v).indexOf('id="' + id + '"') < 0) return; els["#" + id] = box(); els["#" + id].innerHTML = inner(v, id); }); } });
+  const hadCat = Object.prototype.hasOwnProperty.call(CM.CATS, "k-harbour") ? CM.CATS["k-harbour"] : undefined;
+  try {
+    globalThis.document = { querySelector: q => els[q] || (els[q] = stub()), getElementById: id => els["#" + id] || null, querySelectorAll: () => [],
+      createElement: () => stub(), createRange: () => stub(), addEventListener() {}, activeElement: null,
+      body: Object.assign(stub(), { classList: quiet }), documentElement: { style: { setProperty() {} }, classList: quiet } };
+    Dom.grabDom();
+    CM.CATS["k-harbour"] = "Harbour lamps";
+    AS.setCards([{ id: "c-hb-a", c: "k-harbour", t: "Invented title", en: "Invented body" }]);
+    let got = "", err = "";
+    try {
+      CE.openCardEditor("c-hb-a");
+      const pick = () => els["#meCatPick"], sum = () => els["#meCatSum"];
+      const w0 = pick().sets;
+      DL.edSubjectCheck();
+      const still = pick().sets - w0;
+      CM.CATS["k-harbour"] = "Harbour lights";
+      DL.edSubjectCheck();
+      const renamed = [/Harbour lights/.test(pick().innerHTML), /class="cat-chip on" data-k="k-harbour"/.test(pick().innerHTML), /Harbour lights/.test(sum().innerHTML)].join(",");
+      pick().innerHTML += '<span class="cat-chip cat-chip-new"><input type="text"></span>';
+      const w1 = pick().sets;
+      CM.CATS["k-harbour"] = "Harbour again";
+      DL.edSubjectCheck();
+      got = [still, renamed, pick().sets - w1, /Harbour again/.test(pick().innerHTML)].join("|");
+    } catch (e) { err = "threw: " + e.message; }
+    check("card-editor.js", "983z4 an open card editor's category chips follow a category renamed, the card's own kept on and its fold's summary renamed; nothing is drawn where nothing differs, and a category being named in it is left as it is",
+      () => eq(err || got, "0|true,true,true|0|false"));
+  } finally {
+    DL.closeAllDialogs && (() => { try { DL.closeAllDialogs(); } catch (e) { /* the stand-in ends here */ } })();
+    if (hadCat === undefined) delete CM.CATS["k-harbour"]; else CM.CATS["k-harbour"] = hadCat;
     AS.setCards(hadCards);
     if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
     if (hadDoc !== undefined) Dom.grabDom();
@@ -7930,6 +8029,31 @@ const CARD_B = {
         return eq(got.join(","), got.map(() => "true").join(","));
       });
 
+    check("dialog.js", "983z2 a resting editor holds no dialog up: the Library's desk mark, the first-entry and Load focus, the empty mark's wait, the tour's bubble and a shortcut capture all see the desk in front, and no read outside dialog.js asks the shared window's hidden alone",
+      () => {
+        const rd = n => fs.readFileSync(join(MODDIR, n), "utf8");
+        /* Bare reads of the shared window or of any .modal's [hidden] that do not also leave out .ed-rest; dialog.js is the one that
+           keeps the editor's state, and favourites.js and cat-set.js already ask ed-rest beside hidden. */
+        const loose = fs.readdirSync(MODDIR).filter(n => n.endsWith(".js") && n !== "dialog.js").flatMap(n => rd(n).split("\n").map((l, i) => [n, i + 1, l]))
+          .filter(([, , l]) => (/getElementById\("modal"\)\.hidden|\.modal:not\(\[hidden\]\)|modalOpen\(\)\s*&&\s*!scListShown/.test(l)) && !/ed-rest/.test(l))
+          .map(([n, i]) => n + ":" + i);
+        const sel = rd("empty-mark.js").match(/function dialogStanding\(\)\{ return !!document\.querySelector\("([^"]*)"\); \}/);
+        /* The empty mark's selector, judged on a stand-in: the shared window resting, then in front. */
+        const matches = (q, el) => (q.match(/:not\([^)]*\)|\.[a-z-]+/g) || []).every(part => part === ".modal" ? el.cls.indexOf("modal") >= 0
+          : part === ":not([hidden])" ? !el.hidden : /^:not\(\.[a-z-]+\)$/.test(part) ? el.cls.indexOf(part.slice(6, -1)) < 0 : false);
+        const restSel = sel ? [matches(sel[1], { cls: ["modal", "ed-rest"], hidden: false }), matches(sel[1], { cls: ["modal"], hidden: false }),
+          matches(sel[1], { cls: ["modal", "e-gone"], hidden: false })].join(",") : "no selector";
+        const got = [
+          restSel,
+          /function deskMarkTarget\(\)\{\n\s*const open=modalFront\(\);/.test(rd("catalog-file.js")),
+          /d\.getClientRects\(\)\.length>0 && !\(d\.closest && d\.closest\("\.ed-rest"\)\)/.test(rd("on-open.js")),
+          /const covered=!!document\.querySelector\("body > \.modal:not\(\[hidden\]\):not\(\.e-gone\):not\(\.ed-rest\)"\);/.test(rd("tour.js")),
+          /mo\.observe\(shared,\{attributes:true, attributeFilter:\["hidden","class"\]\}\)/.test(rd("tour.js")),
+          /if\(scCaptureId && !modalFront\(\) && !scListShown\(\)\) scStopCapture\(\);/.test(rd("keydown.js")),
+          loose.join(" ") || "none loose"];
+        return eq(got.join("|"), "false,true,false|true|true|true|true|true|none loose");
+      });
+
     /* ---- Stage 2: what an editor edits, changed underneath it. The card's heading, its actions and the line are modelled here. */
     const saveB = { disabled: false, closest(s) { return /\.btn\.primary/.test(s) ? saveB : null; } };
     const resetB = { disabled: false, title: "", closest(s) { return /\.mf-reset/.test(s) ? resetB : null; } };
@@ -8147,6 +8271,20 @@ const CARD_B = {
         DL.edCatalogTaken(false); DL.edSubjectCheck();
         (modalEl.shells[0].heard["capture:pointerdown"] || []).forEach(fn => fn({ button: 0 }));
         return eq([aside, titleOf(modalCard), DL.edCanSave()].join("|"), "renamed|Edit card|false");
+      });
+
+    check("dialog.js", "983z1 the editor in hand shows another entry's change too, in front and resting, the typing kept, a clean one staying clean",
+      () => {
+        fresh(); view.W = 1800;
+        let shown = "old name", drawn = "";
+        openK("card", "c1", { refresh: () => { drawn = shown; }, subject: () => "s" });
+        shown = "renamed in front"; DL.edSubjectCheck();
+        const front = [drawn, DL.edDirty()].join(",");
+        modalCard.fields()[0].value = "typed";
+        scrim();
+        shown = "renamed resting"; DL.edSubjectCheck();
+        return eq([front, drawn, DL.edResting(), modalCard.fields()[0].value, DL.edDirty()].join("|"),
+          "renamed in front,false|renamed resting|true|typed|true");
       });
 
 

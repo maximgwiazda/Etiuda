@@ -1,7 +1,7 @@
 /* The document's own keydown, in two listeners: the capture pass that belongs to the
    shortcuts screen while a chord is being rebound, and the pass every other key goes
    through. */
-import { dismissModal, edF6, modalFront, modalOpen, modalTabTarget, openCover, tabTargetIn } from "./dialog.js";
+import { dismissModal, edF6, modalFront, modalTabTarget, openCover, tabTargetIn } from "./dialog.js";
 import { ctxEditorAct } from "./context-menu.js";
 import { closeFactsPanel, factsPanelOpen } from "./facts.js";
 import { openMaintenance } from "./maintenance.js";
@@ -49,7 +49,7 @@ function typingInField(){
 function wireCaptureKeydown(){
   addEventListener("keydown",e=>{
     /* A capture whose list has left the screen ends here, or every key after it would be swallowed. */
-    if(scCaptureId && !modalOpen() && !scListShown()) scStopCapture();
+    if(scCaptureId && !modalFront() && !scListShown()) scStopCapture();
     if(!scCaptureId) return;
     if(e.key==="Escape"){
       e.preventDefault(); e.stopPropagation();

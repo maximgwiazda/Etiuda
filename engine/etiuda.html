@@ -19281,6 +19281,7 @@ What you type stays in this browser only.`;
       edMarkGone();
       return;
     }
+    edRefreshNow();
     const now = edSubjectNow();
     if (now === void 0 || now === edSubjectSig) return;
     if (now === null) {
@@ -20335,8 +20336,8 @@ What you type stays in this browser only.`;
   function nextReplies(card, base, ov) {
     const self = String(card && card.id || "");
     const live = new Map((cards || []).filter((m) => m && m.id).map((m) => [m.id, m]));
-    const st = nextFoldState(card, base, ov, new Set(live.keys()));
-    const catalog = st.catalog, catIds = catalog ? nextIdsOf(catalog) : [];
+    let st = nextFoldState(card, base, ov, new Set(live.keys()));
+    let catalog = st.catalog, catIds = catalog ? nextIdsOf(catalog) : [], drawn = "";
     let rows = st.rows.slice(), touched = false, drag = null, marked = 0, hits = [];
     const own = () => !!catalog && !nextSameIds(nextIdsOf(rows), catIds);
     const changed = () => st.changed && own() && !touched;
@@ -20384,7 +20385,25 @@ What you type stays in this browser only.`;
       const s = el("meNextSum");
       if (s) s.textContent = sum();
       markCutText(list2);
+      drawn = drawSig();
       if (focus) focus();
+    }
+    function drawSig() {
+      return rows.map(rowHtml2).join("") + srcHtml() + wasText() + sum();
+    }
+    function refresh() {
+      if (drag || !el("meNextList")) return;
+      live.clear();
+      (cards || []).forEach((m) => {
+        if (m && m.id) live.set(m.id, m);
+      });
+      st = nextFoldState(card, base, ov, new Set(live.keys()));
+      catalog = st.catalog;
+      catIds = catalog ? nextIdsOf(catalog) : [];
+      rows = touched ? rows.filter((e) => live.has(e.to)) : st.rows.slice();
+      if (drawSig() === drawn) return;
+      const list2 = el("meNextList"), at = document.activeElement, key = at && list2.contains && list2.contains(at) ? focusKey(at, list2) : null;
+      sync(key ? () => focusSame(list2, key) : null);
     }
     function change(mutate, focus) {
       touched = true;
@@ -20465,6 +20484,7 @@ What you type stays in this browser only.`;
       if (!list2 || !root) return;
       const was = el("meNextWas");
       if (was) was.hidden = !own();
+      drawn = drawSig();
       const fold = root.closest("details");
       if (fold) fold.addEventListener("toggle", () => {
         if (fold.open) markCutText(list2);
@@ -20588,6 +20608,7 @@ What you type stays in this browser only.`;
       sum,
       body,
       wire,
+      refresh,
       fields: () => touched ? nextSaveFields(rows, catalog, base, ov, true) : nextStoredFields(card, catalog, base, ov)
     };
   }
@@ -26537,7 +26558,7 @@ What you type stays in this browser only.`;
 
   // src/modules/empty-mark.js
   function dialogStanding() {
-    return !!document.querySelector(".modal:not([hidden]):not(.e-gone)");
+    return !!document.querySelector(".modal:not([hidden]):not(.e-gone):not(.ed-rest)");
   }
   var SHOWN_BOUND_MS = 1500;
   var SHOWN_LATEST_MS = 3e3;
@@ -28177,7 +28198,7 @@ What you type stays in this browser only.`;
   }
   function dialogShown() {
     try {
-      return Array.prototype.some.call(document.querySelectorAll('[role="dialog"]'), (d) => d.getClientRects && d.getClientRects().length > 0);
+      return Array.prototype.some.call(document.querySelectorAll('[role="dialog"]'), (d) => d.getClientRects && d.getClientRects().length > 0 && !(d.closest && d.closest(".ed-rest")));
     } catch (_) {
       return false;
     }
@@ -29062,7 +29083,7 @@ What you type stays in this browser only.`;
     const els = tourEls();
     if (!els.root) return;
     const step = TOUR_STEPS[tourIdx];
-    const covered = !!document.querySelector("body > .modal:not([hidden]):not(.e-gone)");
+    const covered = !!document.querySelector("body > .modal:not([hidden]):not(.e-gone):not(.ed-rest)");
     const asked = !!document.querySelector("body > .bub-ask:not(.e-gone)");
     els.root.classList.toggle("behind", tourRunning && (asked || covered && !(step && step.modal)));
     let away = false;
@@ -29189,7 +29210,7 @@ What you type stays in this browser only.`;
         });
         mo.observe(document.body, { childList: true });
         const shared = $("#modal");
-        if (shared) mo.observe(shared, { attributes: true, attributeFilter: ["hidden"] });
+        if (shared) mo.observe(shared, { attributes: true, attributeFilter: ["hidden", "class"] });
         const screen = $("#screenHost");
         if (screen) mo.observe(screen, { attributes: true, attributeFilter: ["hidden"] });
         const menu = $("#settingsMenu");
@@ -30721,7 +30742,7 @@ What you type stays in this browser only.`;
     return deskMarkVisible(e);
   }
   function deskMarkTarget() {
-    const open = !document.getElementById("modal").hidden;
+    const open = modalFront();
     if (!open && document.querySelector("#screenHost:not([hidden]) details.manage-sec")) {
       const d = document.querySelector('#screenHost details[data-mg="data"]');
       if (!d) return null;
@@ -32805,6 +32826,25 @@ What you type stays in this browser only.`;
     }).join("");
     return chips + '<button type="button" class="cat-chip cat-chip-add" title="' + esc(t("Add a category")) + '" aria-label="' + esc(t("Add a category")) + '">' + ICON_PLUS + "</button>";
   }
+  function redrawPick(box, html) {
+    if (!box || box._drawn === html) return false;
+    const root = box.parentElement || box, at = document.activeElement, key = at && at !== box && box.contains(at) ? focusKey(at, root) : null;
+    box.innerHTML = html;
+    box._drawn = html;
+    if (key) focusSame(root, key);
+    return true;
+  }
+  function cardEditorRefresh(nx) {
+    const box = $("#meCatPick");
+    if (box && !box.querySelector(".cat-chip-new")) redrawPick(box, cardCatPickHtml(readCardCatPick()));
+    const k = readCardCatPick(), sum = $("#meCatSum"), said = k ? catIconSvg(k, "cat-ic") + esc(CATS[k] || k) : "";
+    if (sum && said && sum._drawn !== said) {
+      sum.innerHTML = said;
+      sum._drawn = said;
+    }
+    if ($("#meIntents")) refreshMeIntentList(readMeIntentIds(), true);
+    if (nx && typeof nx.refresh === "function") nx.refresh();
+  }
   function readCardCatPick() {
     const on = $("#meCatPick") && $("#meCatPick").querySelector(".cat-chip.on[data-k]");
     return on ? on.getAttribute("data-k") : "";
@@ -32855,7 +32895,7 @@ What you type stays in this browser only.`;
       addEl.hidden = false;
       if (!ok || !name) return;
       const key = ensureCustomCat(name);
-      box.innerHTML = cardCatPickHtml(key);
+      box.innerHTML = box._drawn = cardCatPickHtml(key);
       if (typeof box._onPick === "function") box._onPick(key);
       rebuildCards();
       toast("Category added");
@@ -32926,12 +32966,17 @@ What you type stays in this browser only.`;
       sum.textContent = txt;
     }
   }
-  function refreshMeIntentList(keepChecked) {
+  function refreshMeIntentList(keepChecked, follow) {
     const box = $("#meIntents");
     if (!box) return;
     const selected = keepChecked || readMeIntentIds();
-    const c = readCardCatPick();
-    box.innerHTML = intentPickHtml(selected, c);
+    const c = readCardCatPick(), html = intentPickHtml(selected, c);
+    if (follow) {
+      if (redrawPick(box, html)) syncMeIntentPick();
+      return;
+    }
+    box.innerHTML = html;
+    box._drawn = html;
     syncMeIntentPick();
   }
   function storeIntentIds(ids) {
@@ -33074,11 +33119,7 @@ What you type stays in this browser only.`;
       place: "card",
       entry: savedId,
       /* What another editor saved shows here: the category chips and the linked intents, the picks kept. */
-      refresh: () => {
-        const box = $("#meCatPick");
-        if (box) box.innerHTML = cardCatPickHtml(readCardCatPick());
-        if ($("#meIntents")) refreshMeIntentList(readMeIntentIds());
-      },
+      refresh: () => cardEditorRefresh(nx),
       again: () => openCardEditor(savedId, presetCat, fromManage),
       /* The card as stored, its own fields only: a star, putting it away or moving it is not an edit. */
       subject: () => {
@@ -33326,6 +33367,8 @@ What you type stays in this browser only.`;
       if (e.target && e.target.matches && e.target.matches("input[type=checkbox]")) syncMeIntentPick();
     };
     const meCatBox = $("#meCatPick");
+    if (meCatBox) meCatBox._drawn = cardCatPickHtml(readCardCatPick());
+    if ($("#meIntents")) $("#meIntents")._drawn = intentPickHtml(linked, m.c);
     if (meCatBox) {
       meCatBox._onPick = (k) => {
         const sum = $("#meCatSum");
@@ -39661,7 +39704,7 @@ What you type stays in this browser only.`;
   }
   function wireCaptureKeydown() {
     addEventListener("keydown", (e) => {
-      if (scCaptureId && !modalOpen() && !scListShown()) scStopCapture();
+      if (scCaptureId && !modalFront() && !scListShown()) scStopCapture();
       if (!scCaptureId) return;
       if (e.key === "Escape") {
         e.preventDefault();
