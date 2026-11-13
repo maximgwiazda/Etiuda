@@ -13,8 +13,10 @@
 # that step's own outcome is a failure, which is the runner itself breaking. The
 # job's colour is not the verdict. The summary's first line is, per OS.
 #
-# ETIUDA_FIXTURES is never set. A catalog, the name list and a secret are not handed
-# to a runner. ETIUDA_WINDOWS is set inside tools/ci-legs-decide.cjs, on the child of a
+# ETIUDA_FIXTURES is never taken from the runner's environment. A real catalog, the name
+# list and a secret are not handed to a runner. A leg marked fixtures in tools/ci-legs.mjs
+# is given, on the Windows runner only, the folder tools/ci-catalog.mjs writes: an invented
+# catalog made from the tree's own sample, and the tree's 09-17 sample from its history. ETIUDA_WINDOWS is set inside tools/ci-legs-decide.cjs, on the child of a
 # window leg only, on the Windows runner only, and only when windows_date equals the
 # date tests/engine.js's window wall computed for that process.
 #
@@ -95,7 +97,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/ci-runner/tools"
           git fetch --depth 1 origin "$GITHUB_SHA"
-          for f in tools/ci-legs.mjs tools/ci-legs-decide.cjs; do
+          for f in tools/ci-legs.mjs tools/ci-legs-decide.cjs tools/ci-catalog.mjs; do
             git show "FETCH_HEAD:$f" > "$RUNNER_TEMP/ci-runner/tools/$(basename "$f")"
           done
 
@@ -128,6 +130,7 @@ jobs:
           if [ "$ELECTRON_SKIP" != "1" ]; then
             node node_modules/electron/install.js
             test -s node_modules/electron/path.txt
+            node "$RUNNER_TEMP/ci-runner/tools/ci-catalog.mjs" --root "$GITHUB_WORKSPACE" --out "$RUNNER_TEMP/ci-fixtures"
           fi
 
       - name: legs
@@ -139,6 +142,7 @@ jobs:
           CI_WINDOWS_DATE: ${{ inputs.windows_date }}
           CI_LEG_OS: ${{ matrix.os }}
           CI_LEGS_ROOT: ${{ github.workspace }}
+          CI_FIXTURES: ${{ runner.temp }}/ci-fixtures
         run: node "$RUNNER_TEMP/ci-runner/tools/ci-legs.mjs" --from-env --out "$RUNNER_TEMP/ci-out"
 
       - name: results for this os
