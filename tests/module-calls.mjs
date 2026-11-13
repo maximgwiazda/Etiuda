@@ -8200,9 +8200,11 @@ const CARD_B = {
     check("dialog.js", "983b5 an editor in front stops 8 px above the topmost bar, and 8 px above the + where its right side meets it; the list scrolls clear of the bars",
       () => {
         narrowOpen(); openK("card", "c1"); openK("intent", "i1");
-        const room = modalCard.style.props["--ed-room"];
+        const overOne = modalCard.style.props["--ed-room"];
+        openK("category", "k1");
+        const overTwo = modalCard.style.props["--ed-room"];
         scrim();
-        return eq([room, globalThis.document.documentElement.style.props["--ed-bars-h"]].join(" | "), "782px | 104px");
+        return eq([overOne, overTwo, globalThis.document.documentElement.style.props["--ed-bars-h"]].join(" | "), "782px | 752px | 152px");
       });
 
     check("dialog.js", "983b6 crossing 800 px: narrowing turns resting editors into bars, widening stands them up as resting windows at their places",
