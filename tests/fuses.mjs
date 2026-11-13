@@ -26,6 +26,7 @@ import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { wantedFuses, fuseProblems, packagedFuseProblems } from '../tools/fuses.mjs';
+import { SIGNING_VARS } from '../tools/sellable.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -88,8 +89,7 @@ try {
     const EBT = fs.readFileSync(path.join(ROOT, 'electron-builder.js'), 'utf8');
     const EBL = EBT.split('\n').map(l => l.includes('plant:fuse-cookie') ? '    /* plant:fuse-cookie */' : l).join('\n');
     const liftedAsk = (() => {
-      const quiet = ['ETIUDA_CERT', 'ETIUDA_CERT_SHA1', 'ETIUDA_CERT_SUBJECT', 'ETIUDA_SIGNING_ENDPOINT', 'ETIUDA_SIGNING_ACCOUNT',
-        'ETIUDA_SIGNING_PROFILE', 'ETIUDA_SIGNING_PUBLISHER', 'ETIUDA_SIGN'], was = {};
+      const quiet = SIGNING_VARS, was = {};
       for (const k of quiet) { was[k] = process.env[k]; delete process.env[k]; }
       try { const m = { exports: {} };
         new Function('require', '__dirname', 'module', 'exports', EBL)(createRequire(path.join(ROOT, 'electron-builder.js')), ROOT, m, m.exports);
