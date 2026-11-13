@@ -6967,7 +6967,7 @@ function relayRun() {
     else if (restart) relayChannel.start(); /* plant:h35-follow */
     return relayChannel;
   }
-  if (relayChannel) { const old = relayChannel; relayChannel = null; old.stop().catch(() => {}); }
+  if (relayChannel) { const old = relayChannel; relayChannel = null; old.stop().catch(() => {}); signinRelaySeatIo(null); }
   relayAt = at;
   relayAtPin = pin ? pin.public : "";
   if (!at) return null;
@@ -7015,6 +7015,8 @@ function relayRun() {
     },
     /* The relay named this desk's request at the standing door: kept, and the request written with its seat and that id. */
     onDoor: id => { signinDoorKept(team, mirror, id); }, /* plant:door-on */
+    /* A team whose licence follows Entra asks each session for this desk's seat certificate. */
+    ...signinRelaySeatIo(team),
     onTeam: () => {
       const j = teamJoin;
       if (j && j.team === team && j.invite && j.invite.relay && (j.invite.relay.withdrawing === true || j.invite.relay.withdrawn === true)) return;
@@ -9848,7 +9850,7 @@ function signinAnswerBody(res, deskKey, packed) {
     }
     return { ok: false, reason: "unreached" };
   }
-  const said = { 403: ["token", "signin"], 409: ["full", "desks"] }[res.status];
+  const said = { 403: ["token", "signin", "no-role"], 409: ["full", "desks"] }[res.status]; /* plant:no-role-read */
   return { ok: false, reason: said && said.indexOf(j.reason) >= 0 ? j.reason : "unreached" };
 }
 /* One post to signin/desk with `idToken`: `seed` for a first sign-in, "" for a renewal. `io` {serviceAsk(url, body), sign(bytes), packed}. */
@@ -9960,6 +9962,40 @@ let signinStore, signinBusy = null, signinSaid = "", signinClick = null, signinT
 /* The quiet renewal's post while it is out, and the sign out's: a sign out waits for the first, so the service never takes a renewal
    after it. */
 let signinRenewing = null, signinOutFlight = null;
+/* THE RELAY'S SEAT on a team whose licence follows Entra (decision 49, option (b)): the team whose relay last refused this desk's
+   certificate, "" where none does, as the channel tells it (signinRelaySeatTold). Account says it by the last renewal: "removed" where
+   the service found no Etiuda role for the account, "renew" otherwise. A run-out certificate is renewed before a session, at most
+   once in SIGNIN_SEAT_RENEW_MS, so a desk the relay keeps refusing does not ask the provider at each poll. */
+const SIGNIN_SEAT_RENEW_MS = 60 * 60 * 1000;
+let signinRelaySeatTeam = "", signinSeatRenewAt = 0;
+function signinRelaySeatTold(team, state) {
+  const was = signinRelaySeatTeam;
+  if (state === "refused") signinRelaySeatTeam = String(team);
+  else if (signinRelaySeatTeam === String(team)) signinRelaySeatTeam = "";
+  if (was !== signinRelaySeatTeam) tellSignin(); /* plant:relay-seat-told */
+}
+function signinRelaySeat(held) {
+  if (!signinRelaySeatTeam || !held) return "";
+  return held.said === "no-role" ? "removed" : "renew"; /* plant:relay-seat-removed */
+}
+/* The certificate a relay session carries: this desk's own, standing by the desk's rules, or none. */
+function signinSeatCert() {
+  const held = signinState().held, me = branchIdentity(false), cert = held && held.cert;
+  if (!cert || !me || !signinCertOk(cert, me.key) || signinRevokedHas(held.revoked, cert)) return null;
+  return cert;
+}
+function signinSeatRenew() {
+  if (signinRenewing) return signinRenewing.then(() => {}, () => {});
+  const now = Date.now();
+  if (signinSeatRenewAt && now >= signinSeatRenewAt && now - signinSeatRenewAt < SIGNIN_SEAT_RENEW_MS) return Promise.resolve(); /* plant:seat-renew-gap */
+  signinSeatRenewAt = now;
+  return signinRenewNow().then(() => {}, () => {});
+}
+/* What a team's relay channel is handed for its seat; null forgets the refusal of a channel let go. */
+function signinRelaySeatIo(team) {
+  if (team === null) { signinRelaySeatTold(signinRelaySeatTeam, "open"); return null; }
+  return { seat: () => signinSeatCert(), seatRenew: () => signinSeatRenew(), onSeat: state => signinRelaySeatTold(team, state) };
+}
 /* Google's client secret, where the package step put one beside the asar: read here once, at start, installed only. */
 if (INSTALLED) { try { signinPacked = signinSecretRead(fs.readFileSync(path.join(String(process.resourcesPath || ""), SIGNIN_SECRET_FILE), "utf8")); } catch { /* none packaged: every byte as before */ } }
 /* THE TEST SERVICE BUILD (tools/test-service.cjs): its fields travel inside the asar, as etiudaTestService in the package.json packed
@@ -10140,6 +10176,7 @@ function signinView() {
     at: signedIn ? held.at : 0, reached: !signedIn || held.reached !== false, ask: !!signedIn && held.ask === true,
     refused: signedIn ? held.said : "", busy: signinBusy ? signinBusy.provider : "", said: signinSaid,
     doors: signedIn ? signinDoorsShown(held, now) : [],
+    relaySeat: signedIn ? signinRelaySeat(held) : "",
     outOwed: !signedIn && !!signinState().out && !signinOutFlight, /* plant:out-owed-view */
     link: signinBusy && signinPageOk(signinBusy.url) ? signinBusy.url : "", keeps: sealsForReal(safeStorage, process.platform) }; /* plant:view-link */
 }

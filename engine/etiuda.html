@@ -8890,6 +8890,12 @@ What you type stays in this browser only.`;
     "This account is already in use on three computers.": "To konto działa już na trzech komputerach.",
     "Signing out on one of them makes room here, and so does a computer left unused for 30 days; then Try again.": "Wylogowanie na jednym z nich zwalnia tu miejsce, podobnie jak komputer nieużywany przez 30 dni; potem wystarczy spróbować ponownie.",
     "This account's organisation has not allowed Etiuda at its sign-in provider.": "Organizacja tego konta nie dopuściła Etiudy u swojego dostawcy logowania.",
+    "This account has no Etiuda role in its organisation, so it holds no seat.": "To konto nie ma w swojej organizacji żadnej roli w Etiudzie, więc nie zajmuje miejsca w licencji.",
+    "Its IT department assigns the roles.": "Role przydziela dział IT organizacji.",
+    "Your organisation no longer gives this account access to Etiuda.": "Organizacja nie przyznaje już temu kontu dostępu do Etiudy.",
+    "This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. The organisation's IT department can give access again.": "To stanowisko zachowuje swój katalog i działa z nim jak dotąd, ale nowe wydania od zespołu już do niego nie trafiają. Dostęp może przywrócić dział IT organizacji.",
+    "This account's sign-in needs renewing.": "Logowanie tego konta wymaga odnowienia.",
+    "This desk keeps its catalog and works with it as before. Signing in again, under Account, brings the team's new editions back.": "To stanowisko zachowuje swój katalog i działa z nim jak dotąd. Po ponownym zalogowaniu się w części Konto nowe wydania od zespołu znów zaczną docierać.",
     "Its IT department can allow it; another account can be used meanwhile.": "Może to zmienić jej dział IT; do tego czasu można użyć innego konta.",
     "No Etiuda licence has a seat for this account.": "Żadna licencja Etiudy nie ma miejsca dla tego konta.",
     "The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.": "Logowanie się powiodło. Miejsce daje okres próbny, zakup albo przyjęcie konta przez lidera zespołu; do tego czasu można użyć innego konta.",
@@ -27349,6 +27355,8 @@ What you type stays in this browser only.`;
       /* The provider's page of the sign-in that waits, only while one does. */
       link: known(o.busy) && typeof o.link === "string" && (/^https:\/\/\S+$/.test(o.link) || o.busy === "lab" && /^http:\/\/127\.0\.0\.1:[0-9]+\/\S*$/.test(o.link)) ? o.link : "",
       keeps: o.keeps !== false,
+      /* The team's relay refused this desk's seat (a licence that follows Entra): "removed" or "renew". */
+      relaySeat: signedIn && (o.relaySeat === "removed" || o.relaySeat === "renew") ? o.relaySeat : "",
       /* Signed out, with the service not yet told: the desk's place among the account's three is freed at the next contact. */
       outOwed: !signedIn && o.outOwed === true,
       /* The doors the sign-in handed, offered while the desk keeps no team (the door-finding): each by its place, the relay's host
@@ -27412,6 +27420,12 @@ What you type stays in this browser only.`;
         return [t("The sign-in service could not be reached."), t("Nothing changed: this computer is not signed in, and Etiuda works as before.")];
       case "signin-notallowed":
         return [t("This account's organisation has not allowed Etiuda at its sign-in provider."), t("Its IT department can allow it; another account can be used meanwhile.")];
+      case "no-role":
+        return [t("This account has no Etiuda role in its organisation, so it holds no seat."), t("Its IT department assigns the roles.")];
+      case "seat-removed":
+        return [t("Your organisation no longer gives this account access to Etiuda."), t("This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. The organisation's IT department can give access again.")];
+      case "seat-renew":
+        return [t("This account's sign-in needs renewing."), t("This desk keeps its catalog and works with it as before. Signing in again, under Account, brings the team's new editions back.")];
       case "desks":
         return [t("This account is already in use on three computers."), t("Signing out on one of them makes room here, and so does a computer left unused for 30 days; then Try again.")];
       case "waiting":
@@ -27452,6 +27466,7 @@ What you type stays in this browser only.`;
     };
     const r = v.refused;
     if (!r || r === "signin" || signinNoSeat(v)) return null;
+    if (r === "no-role") return { kind: "renewal", say: signinSay("no-role", v), acts: [] };
     if (r === "desks") return {
       kind: "desks",
       say: [
@@ -27465,7 +27480,7 @@ What you type stays in this browser only.`;
       t("Signing in again settles it; until then, Etiuda keeps working with the catalog it has.")
     ], acts: [], providers: true };
   }
-  var FAIL_FIRST = ["unreached", "signin-unreached", "signin-timeout", "signin-browser", "signin-notallowed", "desks", "token", "signin", "signin-refused", "signin-token", "signin-unbound", "signin-state", "signin-none", "signin-preview", "signin-keyring"];
+  var FAIL_FIRST = ["no-role", "unreached", "signin-unreached", "signin-timeout", "signin-browser", "signin-notallowed", "desks", "token", "signin", "signin-refused", "signin-token", "signin-unbound", "signin-state", "signin-none", "signin-preview", "signin-keyring"];
   function signinDoor(v) {
     const d = signinDoorOf(v);
     if (d && v.signedIn && signinDoorRefused) {
@@ -27510,6 +27525,14 @@ What you type stays in this browser only.`;
     }
     const told = signinTold(v), toldDoor = () => ({ moment: told.kind, ident, say: told.say, providers: told.providers ? v.offered : void 0, acts: told.acts.concat([acct]) });
     if (told && told.kind === "pressed") return toldDoor();
+    if (v.relaySeat) return {
+      moment: "relayseat",
+      ident,
+      say: signinSay(v.relaySeat === "removed" ? "seat-removed" : "seat-renew", v),
+      /* plant:relay-seat-moment */
+      providers: v.relaySeat === "renew" ? v.offered : void 0,
+      acts: [acct]
+    };
     if (v.ask) return { moment: "ask", ident, say: signinSay("ask", v), providers: v.offered, acts: [acct] };
     if (told) return toldDoor();
     if (signinNoSeat(v)) return { moment: "noseat", ident, say: signinSay(v.refused, v, p), acts: [{ act: "check", label: t("Check now"), solid: true }, acct] };

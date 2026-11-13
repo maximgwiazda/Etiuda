@@ -1,15 +1,7 @@
-/* THE SEATS OF A TEAM WHOSE LICENCE FOLLOWS ENTRA, AT THE RELAY (decision 49, option (b)).
- *
- *     node tests/relay-seats.mjs
- *
- * A grant may carry `seats: {licence, live}`. On such a team a desk's session carries its seat certificate, judged as the door
- * judges one for the grant's licence; a run-out certificate is refused only once the team holds evidence (the grant's `live`, or
- * the newest issue of a certificate taken at this team's sessions) at least SEAT_MARGIN_MS past its end, so an outage of the licence
- * service or of Microsoft never cuts a team off. A grant without `seats` is today's. Every timeline leg runs at the certificate span
- * the service gives an Entra licence (WINDOWS: seven days, and one day beside it, the two values of the ruling still open), over the
- * relay as relay-unit runs it: relay/worker.mjs over relay/test/stand-ins.cjs, the test root of relay/test/grant-kit.cjs. Each guard
- * lifted in a copy of relay/core.cjs turns its named leg red, and no product file is written. Node builtins only, no window.
- */
+/* THE SEATS OF A TEAM WHOSE LICENCE FOLLOWS ENTRA, AT THE RELAY AND THE DESK (decision 49, option (b)). node tests/relay-seats.mjs
+ * Over relay/worker.mjs on relay/test/stand-ins.cjs, as relay-unit runs it, and shell/relay/channel.cjs over that relay: each timeline
+ * leg at the window W of seven days and of one day, the ruling still open; each guard lifted in a copy turns its named leg red, and no
+ * product file is written. Node builtins only, no window. */
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -22,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 44;
+const EXPECTED = 50;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -633,6 +625,120 @@ async function main() {
     const base = results[id] && results[id].ok === true;
     const p = await lifted(tag, scene);
     check(base && p.turned && p.back, line + ": " + p.detail + ", sha " + (p.back ? "unchanged" : "CHANGED"));
+  }
+  /* ---- the desk's half: shell/relay/channel.cjs over the same relay ---- */
+  const CH = require(path.join(ROOT, "shell", "relay", "channel.cjs"));
+  /* A desk's channel over team `w`, its seat what `seat.cert` holds; each session's body kept, so a leg reads what the desk sent. */
+  function deskChannel(w, name, seat, mod) {
+    const d = w.desks[name], bodies = [], told = [];
+    const mirror = path.join(WORK, "m" + (++copies));
+    const ch = (mod || CH).createChannel({
+      rt: w.rt, url: "https://relay.test/relay/v1", mirror, stateFile: mirror + ".json", watch: false, pollMs: 1e9,
+      pin: () => ({ teamId: "t-" + w.rt.slice(0, 8), rt: w.rt, lead: { keyId: w.lead.keyId, public: w.lead.pub } }),
+      me: () => ({ keyId: d.keyId, public: d.pub, privateKey: d.privateKey, place: "desk:" + d.place }),
+      keyFor: () => null, sealEpoch: () => 1, clock: () => w.R.clock.now, say: () => {},
+      request: async (method, url, headers, body) => {
+        if (/\/session$/.test(url)) { try { bodies.push(JSON.parse(Buffer.from(body).toString("utf8"))); } catch { bodies.push(null); } }
+        const res = await W.fetch(new Request(url, { method, headers, body: method === "GET" ? undefined : body, duplex: "half" }), w.R.env);
+        return { status: res.status, header: n => res.headers.get(n), bytes: Buffer.from(await res.arrayBuffer()) };
+      },
+      connect: () => null,
+      seat: () => seat.cert || null,
+      seatRenew: async () => { seat.renewals = (seat.renewals || 0) + 1; if (seat.renew) seat.cert = seat.renew(); },
+      onSeat: s => told.push(s),
+    });
+    return { ch, bodies, told };
+  }
+  const cycleOf = async c => { c.ch.start(); await c.ch.idle(); };
+  /* The desk learns the team asks: its first hello carries nothing, the refusal leaves the challenge unspent, and the same challenge
+     with its certificate opens; on an ordinary team no session ever carries one. */
+  async function deskLearnsScene(mod) {
+    const w = await team({ seats: true });
+    const seat = { cert: prove(w, "a", 7 * DAY) };
+    const c = deskChannel(w, "a", seat, mod);
+    await cycleOf(c);
+    const online = c.ch.online();
+    await c.ch.stop();
+    const o = await team({});
+    const os = { cert: prove(o, "a", 7 * DAY) };
+    const oc = deskChannel(o, "a", os, mod);
+    await cycleOf(oc);
+    const oOnline = oc.ch.online();
+    await oc.ch.stop();
+    const sent = c.bodies.map(b => (b && b.seat ? "seat" : "none"));
+    const ok = online && sent.join() === "none,seat" && c.bodies[0].challenge === c.bodies[1].challenge && oOnline
+      && oc.bodies.length >= 1 && oc.bodies.every(b => b && b.seat === undefined) && c.told.length === 0;
+    return { ok, detail: brief({ entraSent: sent, entraOnline: online, ordinarySent: oc.bodies.map(b => (b && b.seat ? "seat" : "none")), ordinaryOnline: oOnline }) };
+  }
+  /* The desk renews before a session with a run-out certificate: the renewal is asked once, and the session carries the new one. */
+  async function deskRenewsScene(mod) {
+    const w = await team({ seats: true });
+    const seat = { cert: prove(w, "a", DAY) };
+    prove(w, "b", DAY);
+    w.R.clock.now = seat.cert.until + M;
+    prove(w, "b", DAY);
+    await sessionAs(w, "b");
+    seat.renew = () => certFor(w.desks.a.pub, w.licence, w.R.clock.now, DAY);
+    const c = deskChannel(w, "a", seat, mod);
+    await cycleOf(c);
+    const online = c.ch.online();
+    await c.ch.stop();
+    const last = c.bodies[c.bodies.length - 1];
+    const ok = online && seat.renewals === 1 && !!last && !!last.seat && last.seat.issued === w.R.clock.now;
+    return { ok, detail: brief({ online, renewals: seat.renewals, sentIssuedNow: !!last && !!last.seat && last.seat.issued === w.R.clock.now }) };
+  }
+  /* A removed person's desk: the renewal brings nothing, the relay refuses, and the shell is told once, "refused"; a later cycle says
+     nothing more; the desk signed in again opens, and the shell is told "open". */
+  async function deskToldScene(mod) {
+    const w = await team({ seats: true });
+    const seat = { cert: prove(w, "a", DAY) };
+    w.R.clock.now = seat.cert.until + M;
+    prove(w, "b", DAY);
+    await sessionAs(w, "b");
+    const c = deskChannel(w, "a", seat, mod);
+    await cycleOf(c);
+    const refusedOnline = c.ch.online();
+    c.ch.kick();
+    await c.ch.idle();
+    const toldBefore = c.told.slice();
+    await c.ch.stop();
+    w.R.clock.now += 10 * MIN;
+    seat.cert = certFor(w.desks.a.pub, w.licence, w.R.clock.now, DAY);
+    await cycleOf(c);
+    const back = c.ch.online();
+    await c.ch.stop();
+    const ok = !refusedOnline && toldBefore.join() === "refused" && back && c.told.join() === "refused,open";
+    return { ok, detail: brief({ refusedOnline, toldWhileRefused: toldBefore, signedInAgain: back, told: c.told }) };
+  }
+  await leg("d1a", () => deskLearnsScene(), "the desk on an Entra team sends its certificate once the relay refuses a session without one, on the same challenge, and opens; on an ordinary team no session ever carries one");
+  await leg("d2a", () => deskRenewsScene(), "a desk whose certificate has run out renews before its session, once, and the session carries the new certificate and opens");
+  await leg("d3a", () => deskToldScene(), "a removed person's desk is refused, the shell is told refused once over two cycles, and open once the desk holds a new certificate");
+  const PRODUCT_CH = path.join(ROOT, "shell", "relay", "channel.cjs");
+  async function liftedChannel(tag, fn) {
+    const digest = sha(fs.readFileSync(PRODUCT_CH));
+    let turned = false, detail = "plant line absent";
+    try {
+      const lines = fs.readFileSync(PRODUCT_CH, "utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("/* plant:" + tag + " */") >= 0);
+      if (at >= 0) {
+        lines.splice(at, 1);
+        const dir = copyOf({ "shell/relay/channel.cjs": lines.join("\n"), "shell/relay/blob.cjs": forwardTo(PRODUCT.blob) });
+        const r = await safe(() => fn(require(path.join(dir, "shell", "relay", "channel.cjs"))));
+        turned = r.ok !== true;
+        detail = turned ? "the check lifted" : "the check still held";
+      }
+    } catch (e) { detail = e && e.stack ? e.stack.split("\n")[0] : String(e); }
+    return { turned, back: sha(fs.readFileSync(PRODUCT_CH)) === digest, detail };
+  }
+  for (const [tag, id, scene, what] of [
+    ["seat-learn", "d1a", deskLearnsScene, "the desk never sends its certificate"],
+    ["seat-renew-first", "d2a", deskRenewsScene, "a run-out certificate is sent unrenewed"],
+    ["seat-told", "d3a", deskToldScene, "the shell is never told"],
+  ]) {
+    const line = "p " + id + " lifting plant:" + tag + " in a copy of shell/relay/channel.cjs turns " + id + " red (" + what + "), and the product file is never written";
+    if (PLANTS_OFF) { skip(line); continue; }
+    const p = await liftedChannel(tag, scene);
+    check(results[id] && results[id].ok === true && p.turned && p.back, line + ": " + p.detail + ", sha " + (p.back ? "unchanged" : "CHANGED"));
   }
   /* O1 and O7 lean on main's core; their own control is that a seats grant changes their answer on this relay. */
   if (order && order.mainHasSeats) check(false, "s12b main's core already names seats, so O7 cannot show the order: merge order changed");

@@ -2026,7 +2026,8 @@ function createProgram(opts) {
    url, headers, body) answering {status, header(name), bytes} and throwing where the relay does not answer; connect(url,
    headers, {message, close}) a socket or null; write(abs, text) the shell's atomic write; say(line); onTeam() after a team
    file lands; onRemoved() once, when the relay refuses this desk as removed and the shell is listening, after which
-   the channel stops asking; clock. */
+   the channel stops asking; seat() this desk's seat certificate or null, seatRenew() a promise that renews it, and
+   onSeat(state), "refused" or "open", for a team whose licence follows Entra (seatHello); clock. */
 function createChannel(opts) {
   const o = opts || {};
   const mirror = path.resolve(o.mirror);
@@ -2049,6 +2050,9 @@ function createChannel(opts) {
   /* How long a join keeps asking after the relay says the team is not there yet, from the first such answer. */
   const ENROL_WAIT_MS = 5 * 60 * 1000;
   let enrolWaitFrom = 0, removedTold = false;
+  /* Whether the relay has asked this desk's sessions for a seat certificate, and what it last answered: learnt from a refusal, so a
+     team whose licence does not follow Entra is never sent one. */
+  let seatAsked = false, seatState = "";
   /* need: not fetched. held: fetched, waiting for the team file. opened: the team key was handed on. none: this relay
      keeps no wrap (a 404), said as nothing. bad: the wrap did not open, said once. */
   let wrapPhase = "need", wrapHeld = null;
@@ -2194,6 +2198,33 @@ function createChannel(opts) {
     return { status: res.status, json, bytes, meta, lapse };
   }
 
+  /* THE SEAT ON A TEAM WHOSE LICENCE FOLLOWS ENTRA: a key's session there carries this desk's certificate. Sent once the relay has
+     refused one without it, on the same challenge, which a refusal leaves unspent; a run-out certificate is renewed first. Answers
+     the relay's last answer, and tells the shell when the refusal starts or ends. */
+  async function seatHello(challenge, who) {
+    const sig = crypto.sign(null, helloBytes(o.rt, challenge, who.keyId), who.privateKey).toString("hex");
+    const send = seat => call("POST", "session", { json: Object.assign({ challenge, key: who.keyId, pub: who.public, sig }, seat ? { seat } : {}) });
+    const sent = seatAsked ? await seatNow() : null;
+    let r = await send(sent);
+    if (refusalOf(r).reason === "seat-lapsed" && !seatAsked) { /* plant:seat-learn */
+      seatAsked = true;
+      const next = await seatNow();
+      if (next) r = await send(next);
+    }
+    const state = r.status === 200 ? "open" : refusalOf(r).reason === "seat-lapsed" ? "refused" : seatState;
+    if (state !== seatState && (state === "refused" || seatState === "refused") && typeof o.onSeat === "function") o.onSeat(state); /* plant:seat-told */
+    seatState = state;
+    return r;
+  }
+  async function seatNow() {
+    let c = typeof o.seat === "function" ? o.seat() : null;
+    if (c && Number.isSafeInteger(c.until) && c.until <= clock() && typeof o.seatRenew === "function") { /* plant:seat-renew-first */
+      try { await o.seatRenew(); } catch { /* the certificate in hand goes */ }
+      c = o.seat();
+    }
+    return table(c) ? c : null;
+  }
+
   /* A session by this program's own key, or, where the relay does not know that key yet, by the invitation's token, which
      the relay spends at its first use. */
   async function openSession() {
@@ -2205,8 +2236,7 @@ function createChannel(opts) {
     const inv = typeof o.invite === "function" ? o.invite() : null;
     const freshInvite = !!(inv && HEX32.test(String(inv.inv)) && prog.tokenSpent(inv.inv) === false);
     if (who && who.privateKey) {
-      const sig = crypto.sign(null, helloBytes(o.rt, ch.json.challenge, who.keyId), who.privateKey).toString("hex");
-      const r = await call("POST", "session", { json: { challenge: ch.json.challenge, key: who.keyId, pub: who.public, sig } });
+      const r = await seatHello(ch.json.challenge, who);
       /* An invitation's session for this key is an earlier invitation's where a fresh one waits unspent and this program
          has used one before: since slice 3 the relay answers a bound key with its invitation's session after the upload too
          (for the lead's answer alone), so taking it would hold the desk there and never spend the fresh token, and the fresh
@@ -2298,8 +2328,7 @@ function createChannel(opts) {
     if (!who || !who.privateKey) return R("not-enrolled");
     const ch = await hello();
     if (ch.status !== 200 || !ch.json || !HEX32.test(String(ch.json.challenge))) return refusalOf(ch);
-    const sig = crypto.sign(null, helloBytes(o.rt, ch.json.challenge, who.keyId), who.privateKey).toString("hex");
-    const r = await call("POST", "session", { json: { challenge: ch.json.challenge, key: who.keyId, pub: who.public, sig } });
+    const r = await seatHello(ch.json.challenge, who);
     if (r.status !== 200 || !r.json || !HEX64.test(String(r.json.session))) return refusalOf(r);
     let device = false;
     device = r.json.invite !== true; /* plant:S3-device */

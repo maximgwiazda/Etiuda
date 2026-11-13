@@ -33,6 +33,8 @@ function signinRead(v){
     /* The provider's page of the sign-in that waits, only while one does. */
     link: known(o.busy) && typeof o.link==="string" && (/^https:\/\/\S+$/.test(o.link) || (o.busy==="lab" && /^http:\/\/127\.0\.0\.1:[0-9]+\/\S*$/.test(o.link))) ? o.link : "",
     keeps: o.keeps!==false,
+    /* The team's relay refused this desk's seat (a licence that follows Entra): "removed" or "renew". */
+    relaySeat: signedIn && (o.relaySeat==="removed" || o.relaySeat==="renew") ? o.relaySeat : "",
     /* Signed out, with the service not yet told: the desk's place among the account's three is freed at the next contact. */
     outOwed: !signedIn && o.outOwed===true,
     /* The doors the sign-in handed, offered while the desk keeps no team (the door-finding): each by its place, the relay's host
@@ -91,6 +93,12 @@ function signinSay(reason, v, p){
       return [t("The sign-in service could not be reached."), t("Nothing changed: this computer is not signed in, and Etiuda works as before.")];
     case "signin-notallowed":
       return [t("This account's organisation has not allowed Etiuda at its sign-in provider."), t("Its IT department can allow it; another account can be used meanwhile.")];
+    case "no-role":
+      return [t("This account has no Etiuda role in its organisation, so it holds no seat."), t("Its IT department assigns the roles.")];
+    case "seat-removed":
+      return [t("Your organisation no longer gives this account access to Etiuda."), t("This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. The organisation's IT department can give access again.")];
+    case "seat-renew":
+      return [t("This account's sign-in needs renewing."), t("This desk keeps its catalog and works with it as before. Signing in again, under Account, brings the team's new editions back.")];
     case "desks":
       return [t("This account is already in use on three computers."), t("Signing out on one of them makes room here, and so does a computer left unused for 30 days; then Try again.")];
     case "waiting": case "full": /* plant:wait-say */
@@ -128,13 +136,14 @@ function signinTold(v){
     acts:[{act:"choose", label:v.said==="signin-notallowed" ? t("Use another account") : t("Try again"), solid:true}]}; /* plant:told-pressed */
   const r=v.refused;
   if(!r || r==="signin" || signinNoSeat(v)) return null; /* plant:told-renewal */
+  if(r==="no-role") return {kind:"renewal", say:signinSay("no-role", v), acts:[]}; /* plant:told-no-role */
   if(r==="desks") return {kind:"desks", say:[t("This account is signed in on three computers already."),
     t("A seat holds three computers. Signing out on one of the others frees its place, and this computer checks again by itself.")],
     acts:[{act:"check", label:t("Check now"), solid:true}]};
   return {kind:"renewal", say:[t("The sign-in service did not accept this account's sign-in."),
     t("Signing in again settles it; until then, Etiuda keeps working with the catalog it has.")], acts:[], providers:true};
 }
-const FAIL_FIRST=["unreached","signin-unreached","signin-timeout","signin-browser","signin-notallowed","desks","token","signin","signin-refused","signin-token","signin-unbound","signin-state","signin-none","signin-preview","signin-keyring"];
+const FAIL_FIRST=["no-role","unreached","signin-unreached","signin-timeout","signin-browser","signin-notallowed","desks","token","signin","signin-refused","signin-token","signin-unbound","signin-state","signin-none","signin-preview","signin-keyring"];
 /* THE DOOR'S CONTENT for the view `v`, whatever form draws it: {moment, ident, heading, line, say, calm, code, providers, cap, privacy, foot,
    acts: [{act, label, solid}]}; null where there is no door. The shell is separate from what it does: signinPanelHtml is the one
    form drawn today (a button in the header with a panel under it), and another form takes the same content. */
@@ -169,6 +178,9 @@ function signinDoorOf(v){
   }
   const told=signinTold(v), toldDoor=()=>({moment:told.kind, ident, say:told.say, providers:told.providers ? v.offered : undefined, acts:told.acts.concat([acct])});
   if(told && told.kind==="pressed") return toldDoor();
+  /* The relay refused this desk's seat: what that means to the person, never a fault of the team or its lead. */
+  if(v.relaySeat) return {moment:"relayseat", ident, say:signinSay(v.relaySeat==="removed" ? "seat-removed" : "seat-renew", v), /* plant:relay-seat-moment */
+    providers:v.relaySeat==="renew" ? v.offered : undefined, acts:[acct]};
   if(v.ask) return {moment:"ask", ident, say:signinSay("ask", v), providers:v.offered, acts:[acct]};
   if(told) return toldDoor();
   if(signinNoSeat(v)) return {moment:"noseat", ident, say:signinSay(v.refused, v, p), acts:[{act:"check", label:t("Check now"), solid:true}, acct]};

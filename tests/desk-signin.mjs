@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 150;
+const PLANTS = 156;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 139 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 143 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2455,12 +2455,12 @@ const DESK_ONLY_EN = ["Working without a team", "This computer has its seat, and
 const DESK_ONLY_PL = ["Praca bez zespołu", "Ten komputer ma swoje miejsce w licencji, a Etiuda działa na własnym katalogu. Nic więcej nie trzeba."];
 const NO_TEAM_LINE = "No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.";
 /* The shell's signinView over `held`, the rest stood in. */
-function viewOver(held) {
+function viewOver(held, relaySeat) {
   const text = decl(MAIN, "function signinView(");
   return new Function("signinOffered", "signinState", "signinPreviewing", "SIGNIN_PROVIDERS", "signinLapsed", "signinDoorsShown", "signinPageOk",
-    "sealsForReal", "safeStorage", "process", "let signinBusy = null, signinSaid = \"\";\n" + text + "\nreturn signinView();")(
+    "sealsForReal", "safeStorage", "process", "signinRelaySeat", "let signinBusy = null, signinSaid = \"\";\n" + text + "\nreturn signinView();")(
     () => [{ id: "microsoft" }], () => ({ held }), () => false, {}, (h, now) => !!h && !!h.cert && now >= h.cert.until, () => [], () => false,
-    () => true, {}, { platform: "win32" });
+    () => true, {}, { platform: "win32" }, relaySeat || (() => ""));
 }
 CASES.deskOnlyCert = s => {
   const ok = c => s.signinCertOk(c, DESK_KEY) === true;
@@ -2548,9 +2548,9 @@ const STRANGER_PUB = "ef".repeat(32);
 const OTHER_SERVICE_PUB = OTHER_SERVICE.publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
 /* The shell's view over `held` with the section's own signinLapsed, the rest stood in. */
 const viewWith = (s, held) => new Function("signinOffered", "signinState", "signinPreviewing", "SIGNIN_PROVIDERS", "signinLapsed", "signinDoorsShown",
-  "signinPageOk", "sealsForReal", "safeStorage", "process", "let signinBusy = null, signinSaid = \"\", signinOutFlight = null;\n"
+  "signinPageOk", "sealsForReal", "safeStorage", "process", "signinRelaySeat", "let signinBusy = null, signinSaid = \"\", signinOutFlight = null;\n"
   + decl(MAIN, "function signinView(") + "\nreturn signinView();")(() => [{ id: "microsoft" }], () => ({ held }), () => false, {}, s.signinLapsed,
-  () => [], () => false, () => true, {}, { platform: "win32" });
+  () => [], () => false, () => true, {}, { platform: "win32" }, () => "");
 /* Taken at a first sign-in and at the renewal, from a refusal as well, and kept in signin.json. */
 CASES.revokedTaken = async s => {
   const list = revokedList(1, [STRANGER_PUB]), later = revokedList(2, [STRANGER_PUB, "aa".repeat(32)]);
@@ -2887,6 +2887,98 @@ CASES.landAddress = async () => {
   } finally { await d.close(); }
 };
 
+/* ---- THE RELAY'S SEAT (ds49; decision 49, option (b)): on a team whose licence follows Entra the relay refuses a desk whose seat
+   certificate ran out once colleagues prove past it (tests/relay-seats.mjs). The shell keeps the team whose relay refused, renews a
+   run-out certificate before a session at most hourly, and Account says what it means to the person in the copywriter's words. ---- */
+const SEAT_REMOVED_EN = ["Your organisation no longer gives this account access to Etiuda.", "This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. The organisation's IT department can give access again."];
+const SEAT_RENEW_EN = ["This account's sign-in needs renewing.", "This desk keeps its catalog and works with it as before. Signing in again, under Account, brings the team's new editions back."];
+const SEAT_REMOVED_PL = ["Organizacja nie przyznaje już temu kontu dostępu do Etiudy.", "To stanowisko zachowuje swój katalog i działa z nim jak dotąd, ale nowe wydania od zespołu już do niego nie trafiają. Dostęp może przywrócić dział IT organizacji."];
+const SEAT_RENEW_PL = ["Logowanie tego konta wymaga odnowienia.", "To stanowisko zachowuje swój katalog i działa z nim jak dotąd. Po ponownym zalogowaniu się w części Konto nowe wydania od zespołu znów zaczną docierać."];
+const NO_ROLE_EN = ["This account has no Etiuda role in its organisation, so it holds no seat.", "Its IT department assigns the roles."];
+/* The service's "no-role" (a token of a licence that follows Entra without an Etiuda role) is read as itself, at a renewal and at a first
+   sign-in; the certificate in hand is kept to its own end and no sign-in is asked. Handed as stray until the service's record holds it. */
+CASES.relaySeatAnswer = s => {
+  const ans = s.signinAnswer(strayAnswer({ ok: false, reason: "no-role" }, 403), DESK_KEY);
+  const held = heldOf({});
+  const settled = s.signinSettle(held, ans, NOW);
+  return ans.ok === false && ans.reason === "no-role" && settled.said === "no-role" && settled.ask === false && !!settled.cert
+    && settled.cert.sig.value === held.cert.sig.value && settled.refresh === held.refresh;
+};
+/* The shell's own declarations of the relay's seat, evaluated with stand-ins; swap is a plant's. */
+function relaySeatWire(swap, stand) {
+  const names = ["function signinRelaySeatTold(", "function signinRelaySeat(", "function signinSeatCert(", "function signinSeatRenew(", "function signinRelaySeatIo("];
+  let text = decl(MAIN, "const SIGNIN_SEAT_RENEW_MS") + "\n" + names.map(n => decl(MAIN, n)).join("\n");
+  if (swap) { if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in the slice once: " + swap[0]); text = text.replace(swap[0], swap[1]); }
+  const st = stand || {};
+  return new Function("st", "let signinRelaySeatTeam = \"\", signinSeatRenewAt = 0, signinRenewing = null;\n"
+    + "const tellSignin = () => { st.told = (st.told || 0) + 1; }, signinRenewNow = () => { st.renewed = (st.renewed || 0) + 1; return Promise.resolve(\"\"); };\n"
+    + "const signinState = () => ({ held: st.held }), branchIdentity = () => st.me, signinCertOk = (c, k) => !!c && c.desk === k, signinRevokedHas = (l, c) => !!l && l.indexOf(c.sig.value) >= 0;\n"
+    + "const Date = { now: () => st.now };\n"
+    + text + "\nreturn { signinRelaySeatTold, signinRelaySeat, signinSeatCert, signinSeatRenew, signinRelaySeatIo, team: () => signinRelaySeatTeam, pending: p => { signinRenewing = p; } };")(st);
+}
+/* The team whose relay refused is kept and told once; the words follow the last renewal: "removed" where the service found no role,
+   "renew" otherwise; another team's open leaves it, its own open or a channel let go clears it; no sign-in held is no words. */
+CASES.relaySeatWire = (s, swap) => {
+  const st = {}, w = relaySeatWire(swap, st);
+  const io = w.signinRelaySeatIo("t-1");
+  io.onSeat("refused");
+  const told1 = st.told, renew = w.signinRelaySeat(heldOf({})), removed = w.signinRelaySeat(heldOf({ said: "no-role" })), none = w.signinRelaySeat(null);
+  io.onSeat("refused");
+  const told2 = st.told;
+  w.signinRelaySeatIo("t-2").onSeat("open");
+  const kept = w.team();
+  io.onSeat("open");
+  const cleared = w.team() === "" && w.signinRelaySeat(heldOf({})) === "";
+  io.onSeat("refused");
+  w.signinRelaySeatIo(null);
+  return told1 === 1 && renew === "renew" && removed === "removed" && none === "" && told2 === 1 && kept === "t-1" && cleared && w.team() === "" && st.told === 4;
+};
+/* The certificate a session carries is the desk's own and standing, or none; a run-out one is renewed before a session at most once an
+   hour, and a renewal already out is waited on rather than doubled. */
+CASES.seatRenewGap = async (s, swap) => {
+  const c = cert();
+  const st = { now: NOW, me: { key: DESK_KEY }, held: heldOf({ cert: c }) }, w = relaySeatWire(swap, st);
+  const own = w.signinSeatCert() === c;
+  st.me = { key: OTHER_DESK_KEY };
+  const other = w.signinSeatCert() === null;
+  st.me = { key: DESK_KEY };
+  st.held = heldOf({ cert: c, revoked: [c.sig.value] });
+  const revoked = w.signinSeatCert() === null;
+  await w.signinSeatRenew();
+  st.now += 10 * 60 * 1000;
+  await w.signinSeatRenew();
+  const withinHour = st.renewed;
+  st.now += 60 * 60 * 1000;
+  let out = null;
+  w.pending(new Promise(r => { out = r; }));
+  const waiting = w.signinSeatRenew();
+  out();
+  await waiting;
+  const whilePending = st.renewed;
+  w.pending(null);
+  await w.signinSeatRenew();
+  return own && other && revoked && withinHour === 1 && whilePending === 1 && st.renewed === 2;
+};
+/* Account and the door say the relay's refusal as what it is to the person, never a fault of the team or its lead: no longer given
+   access, or the sign-in to renew (with the providers under it); nothing while signed out; the service's no-role at a first sign-in and at
+   a renewal in the copywriter's words; Polish too. */
+CASES.relaySeatPage = async (s, page) => {
+  const pg = page || P;
+  if (!pg) return false;
+  const storage = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const base = { offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, seat: "held" };
+  const door = o => pg.signinDoor(pg.signinRead(Object.assign({}, base, o)));
+  const removed = door({ relaySeat: "removed", refused: "no-role" }), renew = door({ relaySeat: "renew", ask: true }), out = door({ signedIn: "", relaySeat: "renew" });
+  const noRoleFirst = door({ signedIn: "", said: "no-role" }), noRoleRenewal = door({ refused: "no-role" });
+  let pl = null;
+  storage.lsSet("eUiLang", "pl");
+  try { pl = [door({ relaySeat: "removed" }).say, door({ relaySeat: "renew" }).say]; } finally { storage.lsSet("eUiLang", "en"); }
+  const blames = JSON.stringify([removed.say, renew.say]).match(/lead|relay|team's fault|lider/gi);
+  return removed.moment === "relayseat" && sayIs(removed.say, SEAT_REMOVED_EN) && !removed.providers
+    && renew.moment === "relayseat" && sayIs(renew.say, SEAT_RENEW_EN) && renew.providers.join() === "microsoft,google"
+    && out.moment === "before" && noRoleFirst.moment === "refused" && noRoleFirst.heading === NO_ROLE_EN[0] && noRoleFirst.line === NO_ROLE_EN[1]
+    && noRoleRenewal.moment === "renewal" && sayIs(noRoleRenewal.say, NO_ROLE_EN) && !!pl && sayIs(pl[0], SEAT_REMOVED_PL) && sayIs(pl[1], SEAT_RENEW_PL) && !blames;
+};
 const LEGS = [
   ["ds1a", "offered", "as shipped no client id is configured and nothing is offered; a configured table offers what it configures, in order"],
   ["ds1b", "noHintStart", "an invitation naming providers carries no sign-in hint: the team's start is retired"],
@@ -3015,6 +3107,10 @@ const LEGS = [
   ["ds22h", "labRoot", "unpackaged, a lab file's root is honoured beside the shipped one; installed, packaged or both a certificate under it is refused, the file never read; no lab, or one naming no root, honours the shipped root alone; a stranger's root never"],
   ["ds22e", "doorsSigned", "a door is taken only under the service's signature by the certificate's key, over those doors in that order under that certificate; an older service's answer without one holds the seat, offers no door and says nothing; a stranger's door added, a door changed, another key's or another certificate's signature is no door"],
   ["ds22f", "doorsFile", "signin.json keeps doors only with their signature under the certificate it holds: doors edited, the signature gone (an older build's file) or no certificate is no door, and the certificate stays"],
+  ["ds49a", "relaySeatAnswer", "the service's no-role is read as itself at a renewal: the certificate kept to its own end, no sign-in asked"],
+  ["ds49b", "relaySeatWire", "the team whose relay refused this desk's seat is kept and told once, said removed where the service found no role and renew otherwise, cleared by its own open or the channel let go"],
+  ["ds49c", "seatRenewGap", "a relay session carries the desk's own standing certificate or none, and a run-out one is renewed first at most once an hour, a renewal already out waited on"],
+  ["ds49d", "relaySeatPage", "Account says the relay's refusal as what it is to the person, in the copywriter's English and Polish: no longer given access, or the sign-in to renew with the providers under it; nothing signed out; no-role at a first sign-in and a renewal"],
   ["ds22g", "doorsShownSigned", "doors held without the signature are offered nowhere and a press on one joins nothing; signed ones are offered"],
 ];
 for (let [id, name, line] of LEGS) {
@@ -3207,8 +3303,10 @@ function outsideNames(main) {
 const outside = outsideNames(MAIN);
 /* And to write the seat after a request to join and a folder change (ds10b), and to knock at a relay team's door with the
    certificate and write the request there (ds11d), and for Buy to carry the sign-in code to the order page (tests/desk-buy.mjs), none
-   of which gates anything. */
-const expectOutside = ["signinListen", "armSigninRenew", "signinFlush", "signinFlush", "signinDoorInvite", "signinDoorKept", "signinView"];
+   of which gates anything; and to hand a team's relay its seat on a licence that follows Entra, which the relay judges and nothing
+   on the desk waits on (tests/relay-seats.mjs d1a to d3a). */
+const expectOutside = ["signinListen", "armSigninRenew", "signinFlush", "signinFlush", "signinDoorInvite", "signinDoorKept", "signinView",
+  "signinRelaySeatIo", "signinRelaySeatIo"];
 check(outside.slice().sort().join() === expectOutside.slice().sort().join(),
   "ds5a nothing local is gated: outside its section the shell names the sign-in only to require its loopback, to arm the renewal and to write the seat after a join: " + outside.join(" "));
 const modules = fs.readdirSync(path.join(ROOT, "src", "modules")).filter(n => n.endsWith(".js"));
@@ -3497,6 +3595,13 @@ if (!PLANTS_OFF) {
   await plantWire("dsp150", ["  if (held && signinRevokedHas(held.revoked, held.cert)) return false; /* plant:revoked-request */\n", ""], "revokedLapse");
   await plantWire("dsp152", ["  base.revoked = s.revoked || null; /* plant:revoked-survives */\n", ""], "revokedSurvives");
   await plant("dsp151", ["return !!list && Array.isArray(list.keys) && !!cert && !!cert.via && !!cert.via.key && list.keys.indexOf(String(cert.via.key.pub)) >= 0; /* plant:revoked-has */", "return false;"], "revokedLapse");
+  await plant("dsp153", ["const said = { 403: [\"token\", \"signin\", \"no-role\"], 409: [\"full\", \"desks\"] }[res.status]; /* plant:no-role-read */",
+    "const said = { 403: [\"token\", \"signin\"], 409: [\"full\", \"desks\"] }[res.status];"], "relaySeatAnswer");
+  await plantWire("dsp154", ["  if (was !== signinRelaySeatTeam) tellSignin(); /* plant:relay-seat-told */\n", ""], "relaySeatWire");
+  await plantWire("dsp155", ["return held.said === \"no-role\" ? \"removed\" : \"renew\"; /* plant:relay-seat-removed */", "return \"renew\";"], "relaySeatWire");
+  await plantWire("dsp156", ["if (signinSeatRenewAt && now >= signinSeatRenewAt && now - signinSeatRenewAt < SIGNIN_SEAT_RENEW_MS) return Promise.resolve(); /* plant:seat-renew-gap */", ""], "seatRenewGap");
+  await plantPage("dsp157", ["  if(v.relaySeat) return {moment:\"relayseat\",", "  if(false) return {moment:\"relayseat\","], "relaySeatPage");
+  await plantPage("dsp158", ["  if(r===\"no-role\") return {kind:\"renewal\", say:signinSay(\"no-role\", v), acts:[]}; /* plant:told-no-role */", ""], "relaySeatPage");
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),
     "dsp14 plant a sign-in gate on the desk file's write turns ds5a red");
