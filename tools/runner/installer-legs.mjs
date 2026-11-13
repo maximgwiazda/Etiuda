@@ -868,6 +868,8 @@ async function tsCycle(rec) {
   };
 
   /* 2. The Test Service build over it. */
+  /* CONTROL, this probe branch only: the desk is taken away before the Test Service build goes over it, so "read" must go red. */
+  try { fs.unlinkSync(desk); rec.f("control", "desk.json removed"); } catch (e) { rec.f("control", "removal failed " + e.code); }
   const b = await install(ts, "ts", PRODUCT + TS_SUFFIX, TS_LNK, ORD_LNK);
   const bSame = samePath(b.dir, a.dir);
   rec.f("ts-same-folder", yes(bSame));
