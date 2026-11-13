@@ -1,6 +1,6 @@
 import { isAlwaysCat, setCatAlways } from "./cat-roles.js";
 import { intentStoreKeys, intentFieldKey, intentCount, CATS, CONTENT_LANGS, INTENT_TEXT_FIELDS, SW_STORE } from "./content-model.js";
-import { closeModal, edCanSave, edMarkClean, edNavHtml, edWireNav, openDialog, refreshDialogChrome } from "./dialog.js";
+import { closeModal, edAlreadyOpen, edCanSave, edMarkClean, edNavHtml, edWireNav, openDialog, refreshDialogChrome } from "./dialog.js";
 import { ICON_ROLE_ALWAYS, catIconInner, E_HUE_CYCLE, E_HUE_NAMES, CAT_ICON_KEYS } from "./icons.js";
 import { intentNavName, commentTokensInUse } from "./intent-text.js";
 import { langTabs, langPane, langFieldId, langEndonym, markMissing, edReportMissing, langFocus } from "./lang-tabs.js";
@@ -27,6 +27,7 @@ import { hooks } from "./hooks.js";
    top is the point: icon and colour are judged together or not at all. */
 function openCategoryEditor(k,fromPill){
   if(!k || k==="__orphan") return;
+  if(edAlreadyOpen("category", k)) return;
   applyCatsToGlobal();
   /* Opened from the category bar rather than from the Library, the way back is OUT, not into a
      screen the user never asked for. Cancel, Save and Delete all use it. */
@@ -61,6 +62,7 @@ function openCategoryEditor(k,fromPill){
     back: fromPill?null:()=>hooks.openManage(),
     title: "Edit category",
     place: "category",
+    entry: k,
     again: ()=>openCategoryEditor(k, fromPill),
     subject: ()=>CATS[k]==null ? null : JSON.stringify([CATS[k], catIconKey(k), catSlot(k), isAlwaysCat(k),
       CONTENT_LANGS.map(l=>(pack[catPackKey(l,primary)]||{})[k]||"")]),
@@ -267,6 +269,7 @@ function openIntentEditor(idx, fromManage){
   const i=isNew?-1:+idx;
   const isCustom=!isNew&&intentIsCustom(i);
   const id=isNew?null:intentIdAt(i);
+  if(edAlreadyOpen("intent", id)) return;
   const backToManage=!!fromManage;
   function doneIntentEditor(){
     if(backToManage) hooks.openManage();
@@ -294,6 +297,7 @@ function openIntentEditor(idx, fromManage){
     back: fromManage?()=>doneIntentEditor():null,
     title: isNew?"New intent":"Edit intent",
     place: "intent",
+    entry: id,
     again: ()=>openIntentEditor(isNew ? null : intentIdxOfId(id), fromManage),
     subject: ()=>{
       if(isNew) return "";

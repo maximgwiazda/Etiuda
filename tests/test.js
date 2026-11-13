@@ -754,7 +754,7 @@ function tourActTests() {
     /* The card editor is the pop-up. The Library and Settings are screen tabs: libraryOpen and
        settingsOpen are the module's own, over this page, so a tab that is not the window they
        name leaves their inside step off. */
-    modalOpen: () => page.win === "editor", closeModal: () => { page.win = null; },
+    modalOpen: () => page.win === "editor", closeModal: () => { page.win = null; }, closeAllDialogs: () => { page.win = null; },
     get screenOn() { return page.win === "library" || page.win === "settings" ? page.win : ""; },
     closeScreenTab: id => { if (page.win === id) page.win = null; },
     document: {
@@ -4751,12 +4751,12 @@ function dialogFocusTests() {
     return { doc, N, modalEl, modalCard, x, field, save, tourBtn, cover, coverBtn, search, body };
   };
   const sliced = w => new Function("document", "modalEl", "modalCard", "cutLeaves", "setModalBack", "modalHead", "t",
-    "refreshDialogReset", "translateTree", "dressDialogInputs", "markCutText", "openCover", "focusKey", "edBeforeOpen", "edAfterOpen",
+    "refreshDialogReset", "translateTree", "dressDialogInputs", "markCutText", "openCover", "focusKey", "edBeforeOpen", "edAfterOpen", "edResting",
     "let modalOpener=null, modalOpenerKbd=false, modalOpenerKey=null, modalNameFn=null, modalResetFn=null, modalResetOn=\"\", modalResetOff=\"\", lastInputWasKey=false;\n"
     + [extractDecl(dlg, "function openDialog("), extractDecl(dlg, "const MODAL_TABBABLE="), extractDecl(dlg, "function tabTargetIn(")].join("\n")
     + "\nreturn {openDialog, tabTargetIn};")(
     w.doc, w.modalEl, w.modalCard, () => {}, () => {}, () => "", s => s, () => {}, () => {}, () => {}, () => {},
-    () => (w.coverOn ? w.cover : null), () => null, () => null, () => {});
+    () => (w.coverOn ? w.cover : null), () => null, () => null, () => {}, () => false);
   const open = (from, opts) => {
     const w = world(); Object.assign(w, opts || {});
     w.doc.activeElement = typeof from === "function" ? from(w) : w.body;

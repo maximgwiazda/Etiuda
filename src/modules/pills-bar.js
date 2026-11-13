@@ -21,6 +21,28 @@ import { hooks } from "./hooks.js";
 // The category bar itself: the row of pills, the inline add, and the capture half of its FLIP.
 
 /* drawPills() wraps this to repaint the tab accents; the wrapper sits beside syncTabAccent. */
+/* WHAT A PILL'S PRESS DOES: only this category, again to clear it, or with `add` (Ctrl) in or out of the filter. Its menu's
+   rows call it where the pill is not drawn. */
+function pickCategory(id, add){
+  // Captured before cats changes, so the rail's echo animates from where it really was
+  const railBefore=hooks.captureRail(), relBefore=hooks.railRelKeys();
+  if(!id){ setCats([]); }                                  // "All" clears the filter
+  else if(add){
+    const at=cats.indexOf(id);
+    if(at>-1) cats.splice(at,1); else cats.push(id);
+    setEditionView(false);
+  }
+  else setCats((cats.length===1 && cats[0]===id) ? [] : [id]);
+  // Opening a category while an intent is selected → jump to its linked entries
+  setPendingScrollHit(!!intentIdxs.length);
+  // The cards glide as a settle's do, unless that pending scroll may carry the view away.
+  const cardsBefore=intentIdxs.length ? null : captureSettle();
+  drawPills(); hooks.render();
+  glideSettle(cardsBefore,"move");
+  hooks.railEchoRedraw(railBefore, relBefore);
+  scrollRailTop();
+  scheduleTabSave();
+}
 function drawPillsCore(){
   /* The + button is the bar's one focusable control, and a redraw replaces its node
      UNDER a keyboard user's focus when the language key or the tab key redraws the bar's
@@ -87,24 +109,7 @@ function drawPillsCore(){
          "add this category to the selection", and the pencil sits inside the pill. */
       const ed=ev&&ev.target&&ev.target.closest?ev.target.closest("[data-editcat]"):null;
       if(ed){ ev.preventDefault(); ev.stopPropagation(); hooks.openCategoryEditor(ed.getAttribute("data-editcat"),true); return; }
-      // Captured before cats changes, so the rail's echo animates from where it really was
-      const railBefore=hooks.captureRail(), relBefore=hooks.railRelKeys();
-      if(!id){ setCats([]); }                                  // "All" clears the filter
-      else if(ev && (ev.ctrlKey||ev.metaKey)){             // ctrl+click adds/removes
-        const at=cats.indexOf(id);
-        if(at>-1) cats.splice(at,1); else cats.push(id);
-        setEditionView(false);
-      }
-      else setCats((cats.length===1 && cats[0]===id) ? [] : [id]);
-      // Opening a category while an intent is selected → jump to its linked entries
-      setPendingScrollHit(!!intentIdxs.length);
-      // The cards glide as a settle's do, unless that pending scroll may carry the view away.
-      const cardsBefore=intentIdxs.length ? null : captureSettle();
-      drawPills(); hooks.render();
-      glideSettle(cardsBefore,"move");
-      hooks.railEchoRedraw(railBefore, relBefore);
-      scrollRailTop();
-      scheduleTabSave();
+      pickCategory(id, !!(ev && (ev.ctrlKey||ev.metaKey)));
     };
     // Pointer-based dragging. HTML5 drag-and-drop gave a no-drop cursor and never
     // fired drop; pointer events also let the list reorder live, under the cursor.
@@ -240,6 +245,7 @@ function capturePills(){
 }
 export {
   drawPillsCore,
+  pickCategory,
   startPillCatAdd,
   capturePills,
 };

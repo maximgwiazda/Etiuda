@@ -1,4 +1,4 @@
-import { closeModal, modalOpen } from "./dialog.js";
+import { closeAllDialogs, modalOpen } from "./dialog.js";
 import { closeFactsPanel, factsPanelOpen } from "./facts.js";
 import { fillProseIcons } from "./icons.js";
 import { focusFirstEntryOnOpen } from "./on-open.js";
@@ -157,7 +157,7 @@ function tourPress(el, sel){ if(el && el.matches && el.matches(sel) && el.getCli
 function tourPressRow(act){ if(!menuOpen()) openSettingsMenu(); tourPress(menuTarget(act), '[data-act="'+act+'"]'); }
 // The window an inside step stands in, closed as the person would close it.
 // A screen tab the tour went into closes with the step. A pop-up over it closes first.
-function shutTourWindow(){ if(modalOpen()) closeModal(); else if(screenOn==="library") closeScreenTab("library"); else if(screenOn==="settings") closeScreenTab("settings"); if(factsPanelOpen()) closeFactsPanel(); }
+function shutTourWindow(){ if(modalOpen()) closeAllDialogs(); else if(screenOn==="library") closeScreenTab("library"); else if(screenOn==="settings") closeScreenTab("settings"); if(factsPanelOpen()) closeFactsPanel(); }
 /* THE PICKER'S STEP, where the shell holds a combination: done once the picker opens after the step began (pick.js
    says when it does), and Next opens it by the pointer. */
 let tourPicks=0, tourStepPicks=0;
@@ -704,7 +704,7 @@ function startTour(from,auto){
   if(!auto){
     closeSettingsMenu();
     closeFactsPanel();
-    if(modalOpen()) closeModal();
+    if(modalOpen()) closeAllDialogs();
   }
   const els=tourEls();
   if(!els.root) return;

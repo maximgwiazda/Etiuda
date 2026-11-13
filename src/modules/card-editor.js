@@ -3,7 +3,7 @@ import { baseCard, cardCommits, cardText, cardTitle, findCard, overrideAgainstBa
 import { nextReplies, stampToggleHtml, wireStampToggle } from "./card-chain.js";
 import { catSortIdx } from "./card-order.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
-import { closeModal, edCanSave, edMarkClean, edNavHtml, edWireNav, mfSec, openDialog, refreshDialogChrome, wireFolds } from "./dialog.js";
+import { closeModal, edAlreadyOpen, edCanSave, edMarkClean, edNavHtml, edWireNav, mfSec, openDialog, refreshDialogChrome, wireFolds } from "./dialog.js";
 import { afterPaint } from "./motion.js";
 import { ICON_PLUS } from "./icons.js";
 import { intentNavName, paxOwnExample } from "./intent-text.js";
@@ -341,6 +341,7 @@ function syncAddFab(){
  *  select, because that is the only way to move a card between categories.
  *  fromManage returns to Manage when the editor closes, the same contract as the intent editor. */
 function openCardEditor(id, presetCat, fromManage){
+  if(edAlreadyOpen("card", id||null)) return;
   const isNew=!id;
   let savedId=id;
   const existing=id?findCard(id):null;
@@ -365,6 +366,13 @@ function openCardEditor(id, presetCat, fromManage){
     back: backToManage?doneCardEditor:null,
     title: isNew?"New card":"Edit card",
     place: "card",
+    entry: savedId,
+    /* What another editor saved shows here: the category chips and the linked intents, the picks kept. */
+    refresh: ()=>{
+      const box=$("#meCatPick");
+      if(box) box.innerHTML=cardCatPickHtml(readCardCatPick());
+      if($("#meIntents")) refreshMeIntentList(readMeIntentIds());
+    },
     again: ()=>openCardEditor(savedId, presetCat, fromManage),
     /* The card as stored, its own fields only: a star, putting it away or moving it is not an edit. */
     subject: ()=>{
