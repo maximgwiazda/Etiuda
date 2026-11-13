@@ -948,7 +948,24 @@ function closePlan(root, wholeChain, changed, gf, reason, extra, mapped) {
     added.add(g);
   }
   appendTextScans(steps, added, walled, root, changed, gf);
+  appendNodeArms(steps, added, walled, root, gf);
   return Object.assign({ failClosed: true, reason, steps, walled }, extra || {});
+}
+
+/* A WALLED GATE'S NODE ARM RUNS (the test architect, 2026-11-13: Studio's cursor 1c stood red on main for four days because the
+   file's second half opens a window, so its node half never ran at a merge). A window gate left out whose header names a
+   "gate-node-arm:" (tools/gates-for.mjs nodeArmOf) has that arm run, with no window; the gate stays walled for the rest. */
+function appendNodeArms(steps, addedFiles, windowGates, root, gf) {
+  if (!gf || typeof gf.nodeArmOf !== "function") return;
+  for (const leg of windowGates) {
+    let arm = null;
+    try { arm = gf.nodeArmOf(path.join(root, leg)); } catch (e) { arm = null; }
+    if (!arm || addedFiles.has(leg)) continue;
+    const cmd = "node " + leg + " " + arm.join(" ");
+    steps.push({ script: "area", cmd, file: leg, args: arm.slice(), note: "the walled gate's node arm" }); /* plant:node-arm */
+    addedFiles.add(leg);
+    console.log("gate-run area: window gate " + leg + " runs its node arm alone: " + cmd);
+  }
 }
 
 /* A bare tests/relay-channel.mjs step runs every part. Replace it with the parts that read the diff,
@@ -1231,6 +1248,7 @@ export async function planAreaRun(root, changed, pkg, base = "main", ready) {
   if (fs.existsSync(path.join(root, "tests", "plant-compare.mjs"))) steps.push(plantCompare);
 
   appendTextScans(steps, addedFiles, windowGates, root, changed, gf);
+  appendNodeArms(steps, addedFiles, windowGates, root, gf);
   narrowRelayChannel(steps, root, changed, gf, isRelayCode);
   return { failClosed: false, reason: "", plan: toolsOnly ? "gate tools" : "mapped", steps, gaps, walled: windowGates };
 }

@@ -2,6 +2,8 @@
  *
  *   node tests/pick-desk.js
  *
+ * gate-node-arm: --guards
+ *
  * WHAT IT PROVES. That Windows itself holds the combination (a second program asking for it is
  * refused, which a keyboard hook would not cause), that the hotkey pressed over another program's
  * window opens the picker focused, that Enter puts on the clipboard what the desk's own page puts

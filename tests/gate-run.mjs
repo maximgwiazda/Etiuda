@@ -33,7 +33,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 /* The floor: every leg below runs or is skipped by name, or the tally says so rather than reading as a short green. */
-const EXPECTED = 22;  /* 14, +2 each step's own scratch (15a, 15b), +2 a customer's roots (15c, 15d), +4 the gate wall and the area lane (16a to 16d) */
+const EXPECTED = 23;  /* 14, +2 each step's own scratch (15a, 15b), +2 a customer's roots (15c, 15d), +4 the gate wall and the area lane (16a to 16d), +1 a walled gate's node arm (16e) */
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
   asserted++;
@@ -579,6 +579,21 @@ function main() {
       check(rp.exit === 0 && rp.out.indexOf("taking machine lock for heavy run (area)") >= 0 && rp.out.indexOf("fail-closed") < 0,
         "16d control: with the lane free the same narrow area run takes it and runs green: exit " + rp.exit);
     }
+
+    /* A walled gate's node arm (gates-for nodeArmOf): the area plan for the tree's own tools/desk-input.js runs pick-desk's
+       --guards, which opens no window, and leaves the rest of pick-desk walled; no window gate is run whole (the test architect,
+       2026-11-13, after Studio's cursor 1c stood red on main unseen because its node half sat inside a window leg). */
+    {
+      const { gfa, plan } = ARM_PLAN;
+      const cmds = (plan.steps || []).map(s => s.cmd);
+      const wholeWindow = (plan.steps || []).filter(s => gfa.windowKind(path.join(ROOT, s.file)) === "window"
+        && JSON.stringify(s.args) !== JSON.stringify(gfa.nodeArmOf(path.join(ROOT, s.file))) && !/ (U0d|open-external)$/.test(s.cmd)).map(s => s.cmd);
+      check(!plan.failClosed && cmds.indexOf("node tests/pick-desk.js --guards") >= 0 && (plan.walled || []).indexOf("tests/pick-desk.js") >= 0
+        && wholeWindow.length === 0,
+        "16e a walled gate's declared node arm runs at a merge: tools/desk-input.js plans `node tests/pick-desk.js --guards`, pick-desk "
+        + "itself stays walled, and no window gate runs whole: " + JSON.stringify(cmds.filter(c => /desk/.test(c))) + " whole window "
+        + JSON.stringify(wholeWindow));
+    }
   } finally {
     cleanLab(lab);
   }
@@ -591,5 +606,13 @@ function main() {
   process.stdout.write("gate-run " + (failed ? "FAILED " + failed + " of " : "passed ") + asserted + " check(s)\n");
   process.exit(failed ? 1 : 0);
 }
+
+/* 16e's plan, made before main (which is synchronous): the area plan for the tree's own tools/desk-input.js. */
+const ARM_PLAN = await (async () => {
+  const gr = await import(new URL("../tools/gate-run.mjs", import.meta.url).href);
+  const gfa = await import(new URL("../tools/gates-for.mjs", import.meta.url).href);
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+  return { gfa, plan: await gr.planAreaRun(ROOT, ["tools/desk-input.js"], pkg) };
+})();
 
 main();
