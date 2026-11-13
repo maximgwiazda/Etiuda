@@ -1125,11 +1125,13 @@ try {
     let restarts = 0;
     const H = await import(MOD("host.js"));
     const tell = typeof H.eCatalogEject === "function" ? H.eCatalogEject : function () {};
+    /* ejectCatalog tells a resting editor the catalog is another one (Editors stage 2, edCatalogTaken(false)); a stand-in here. */
     const runEject = new Function("eCatalogEject", "ejectKeys", "keepKeys", "lsDel", "ssDel", "TAB_KEY", "hooks", "offerUndo", "undoEject",
+      "edCatalogTaken",
       declOf(pageSrc, "function ejectCatalog(") + "\nreturn ejectCatalog;")(
       tell, () => ["eCatalog"], () => ({ keys: {}, tabs: null }),
       (k) => { delete ls[k]; }, () => {}, "tabs",
-      { flushPillState() {}, restartDesk() { restarts++; } }, () => {}, () => {});
+      { flushPillState() {}, restartDesk() { restarts++; } }, () => {}, () => {}, () => {});
     /* Undo of that eject, through the same preload. The shell is told only if undoEject names the catalog. */
     let undoBack = false;
     let undoThrew = "";
