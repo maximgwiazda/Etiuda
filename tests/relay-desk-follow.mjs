@@ -812,7 +812,7 @@ async function main() {
   check(r11.testService === false && !r11.channelCreated && r11.openedDir === s11.sharedFolder,
     "945s20 the same desk in the ordinary build does not follow its team to staging's relay: "
     + JSON.stringify({ testService: r11.testService, created: r11.channelCreated, opened: r11.openedDir === s11.sharedFolder }));
-  const s12 = movedPlan("ts-other", { testService: true, url: "https://other.test/relay/v1" });
+  const s12 = movedPlan("ts-other", { testService: true, url: "https://other.test/relay-staging/v1" });
   const r12 = runScenario(s12);
   check(r12.testService === true && !r12.channelCreated && r12.openedDir === s12.sharedFolder,
     "945s21 a test service desk follows no address but the two relays: "
