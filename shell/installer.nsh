@@ -657,6 +657,86 @@
   ${If} $0 == `"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"`
     DeleteRegKey HKCU "Software\Classes\etiuda"
   ${EndIf}
+
+  # THE CATALOG'S EXTENSION KEY goes with the desk only while it is still ours alone: electron-builder's unassociation, which runs
+  # after this, takes the class and its OpenWithProgids value and never the key. Its default must name this desk's class, and no
+  # OpenWithProgids entry, other value, subkey or this account's UserChoice may name anything else; any of those leaves it, and so
+  # does an enumeration that has not ended by its 256th entry.
+  # The test build renames both defines (tools/test-identity.cjs ownNamesNsh); tests/uninstall-ext.mjs holds the block.
+  !ifndef ETIUDA_EC_EXT
+    !define ETIUDA_EC_EXT "ec"
+    !define ETIUDA_EC_CLASS_KEY "Software\Classes\Etiuda catalog"
+  !endif
+  ${IfNot} ${isUpdated} # plant:ext-updated
+    Push $R3
+    Push $R4
+    Push $R5
+    StrCpy $R5 "${ETIUDA_EC_CLASS_KEY}" "" 17
+    ReadRegStr $R3 SHELL_CONTEXT "Software\Classes\.${ETIUDA_EC_EXT}" ""
+    ${If} $R3 != $R5 # plant:ext-default
+      StrCpy $R5 ""
+    ${EndIf}
+    StrCpy $R4 0
+    ${DoWhile} $R5 != ""
+      ${If} $R4 > 255 # plant:ext-cap-progids
+        StrCpy $R5 ""
+        ${ExitDo}
+      ${EndIf}
+      ClearErrors
+      EnumRegValue $R3 SHELL_CONTEXT "Software\Classes\.${ETIUDA_EC_EXT}\OpenWithProgids" $R4
+      ${If} ${Errors}
+        ${ExitDo}
+      ${ElseIf} $R3 != ""
+      ${AndIf} $R3 != $R5 # plant:ext-progids
+        StrCpy $R5 ""
+      ${EndIf}
+      IntOp $R4 $R4 + 1
+    ${Loop}
+    StrCpy $R4 0
+    ${DoWhile} $R5 != ""
+      ${If} $R4 > 255 # plant:ext-cap-values
+        StrCpy $R5 ""
+        ${ExitDo}
+      ${EndIf}
+      ClearErrors
+      EnumRegValue $R3 SHELL_CONTEXT "Software\Classes\.${ETIUDA_EC_EXT}" $R4
+      ${If} ${Errors}
+        ${ExitDo}
+      ${ElseIf} $R3 != ""
+        StrCpy $R5 "" # plant:ext-values
+      ${EndIf}
+      IntOp $R4 $R4 + 1
+    ${Loop}
+    StrCpy $R4 0
+    ${DoWhile} $R5 != ""
+      ${If} $R4 > 255 # plant:ext-cap-subkeys
+        StrCpy $R5 ""
+        ${ExitDo}
+      ${EndIf}
+      ClearErrors
+      EnumRegKey $R3 SHELL_CONTEXT "Software\Classes\.${ETIUDA_EC_EXT}" $R4
+      ${If} ${Errors}
+      ${OrIf} $R3 == ""
+        ${ExitDo}
+      ${ElseIf} $R3 != "OpenWithProgids" # plant:ext-subkeys
+        StrCpy $R5 ""
+      ${EndIf}
+      IntOp $R4 $R4 + 1
+    ${Loop}
+    ${If} $R5 != ""
+      ReadRegStr $R3 HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.${ETIUDA_EC_EXT}\UserChoice" "ProgId"
+      ${If} $R3 != ""
+      ${AndIf} $R3 != $R5 # plant:ext-userchoice
+        StrCpy $R5 ""
+      ${EndIf}
+    ${EndIf}
+    ${If} $R5 != ""
+      DeleteRegKey SHELL_CONTEXT "Software\Classes\.${ETIUDA_EC_EXT}" # plant:ext-gone
+    ${EndIf}
+    Pop $R5
+    Pop $R4
+    Pop $R3
+  ${EndIf}
   !endif
 
   # THE DESK'S OWN DATA STEP. A build with its own Remove my data step (Studio, packaging/installer-pages.nsh

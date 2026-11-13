@@ -49,22 +49,24 @@ function shippedLeft(cfg) {
   return left;
 }
 
-/* An installer script with the shipped names it spells out renamed to the test build's: the desk's class and scheme,
-   and either app's profile folder. The same script, so the test install still writes and removes them, under names no
+/* An installer script with the shipped names it spells out renamed to the test build's: the desk's class, extension and
+   scheme, and either app's profile folder. The same script, so the test install still writes and removes them, under names no
    shipped install uses; `left` is every line still naming a shipped one. */
 const CLASS_RE = /(Software\\Classes\\)Etiuda catalog(?=["\\])/gi;
 const LINK_RE = /(Software\\Classes\\)etiuda(?=["\\])/gi;
 const URL_RE = /"URL:etiuda"/gi;
+/* The catalog's extension, which the desk's script names once, in this define (shell/installer.nsh, the extension key). */
+const EXT_RE = /(!define ETIUDA_EC_EXT ")ec(?=")/g;
 const PROFILE_RE = new RegExp("(\\$(?:LOCAL)?APPDATA\\\\)(" + Object.values(SHIPPED).map(s => s.packageName).join("|") + ")(?=[\"\\\\])", "gi");
-const LEFT_RE = new RegExp("Classes\\\\(etiuda[\"\\\\]|etiuda catalog[\"\\\\]|\\.ec[\"\\\\])|\"URL:etiuda\"|\\$(LOCAL)?APPDATA\\\\("
+const LEFT_RE = new RegExp("Classes\\\\(etiuda[\"\\\\]|etiuda catalog[\"\\\\]|\\.ec[\"\\\\])|\"URL:etiuda\"|!define ETIUDA_EC_EXT \"ec\"|\\$(LOCAL)?APPDATA\\\\("
   + Object.values(SHIPPED).map(s => s.packageName).join("|") + ")[\"\\\\]", "i");
 function ownNamesNsh(text) {
   const t = TEST.desk;
   const count = re => (String(text).match(re) || []).length;
-  const counts = { klass: count(CLASS_RE), link: count(LINK_RE), url: count(URL_RE), profile: count(PROFILE_RE) };
+  const counts = { klass: count(CLASS_RE), link: count(LINK_RE), url: count(URL_RE), profile: count(PROFILE_RE), ext: count(EXT_RE) };
   const testOf = name => Object.keys(SHIPPED).map(k => [SHIPPED[k].packageName, TEST[k].packageName]).find(p => p[0] === name.toLowerCase())[1];
   const out = String(text).replace(CLASS_RE, "$1" + t.catalogClass).replace(LINK_RE, "$1" + t.scheme)
-    .replace(URL_RE, "\"URL:" + t.scheme + "\"").replace(PROFILE_RE, (m, at, name) => at + testOf(name));
+    .replace(URL_RE, "\"URL:" + t.scheme + "\"").replace(PROFILE_RE, (m, at, name) => at + testOf(name)).replace(EXT_RE, "$1" + t.ext);
   const left = out.split(/\r?\n/).filter(l => LEFT_RE.test(l));
   return { text: out, counts, left };
 }
