@@ -112,6 +112,23 @@ function signinSay(reason, v, p){
 }
 /* No free seat: the service's wait, "waiting", or its refusal, "full"; either way the shell renews quietly until a seat frees. */
 function signinNoSeat(v){ return v.refused==="waiting" || v.refused==="full"; } /* plant:no-seat */
+/* Refusals whose own heading names the reason a sign-in pressed while signed in failed for. */
+const SIGNIN_REASON_SAID=["desks","signin-notallowed","unreached","signin-unreached","signin-timeout","signin-browser"];
+/* What a signed-in desk is told over its moment, or null: {kind, say, acts, providers}. "pressed", a sign-in the person pressed while
+   signed in that failed, which leaves the desk signed in as it was; else a refusal the shell kept from a renewal or Check now. */
+function signinTold(v){
+  if(!v || !v.signedIn) return null;
+  if(FAIL_FIRST.indexOf(v.said)>=0) return {kind:"pressed", say:[t("The new sign-in did not finish."), named(t("This computer stays signed in with the account it had. {REASON}"),"{REASON}",
+    SIGNIN_REASON_SAID.indexOf(v.said)>=0 ? signinSay(v.said, v)[0] : "").trim()],
+    acts:[{act:"choose", label:v.said==="signin-notallowed" ? t("Use another account") : t("Try again"), solid:true}]}; /* plant:told-pressed */
+  const r=v.refused;
+  if(!r || r==="signin" || signinNoSeat(v)) return null; /* plant:told-renewal */
+  if(r==="desks") return {kind:"desks", say:[t("This account is signed in on three computers already."),
+    t("A seat holds three computers. Signing out on one of the others frees its place, and this computer checks again by itself.")],
+    acts:[{act:"check", label:t("Check now"), solid:true}]};
+  return {kind:"renewal", say:[t("The sign-in service did not accept this account's sign-in."),
+    t("Signing in again settles it; until then, Etiuda keeps working with the catalog it has.")], acts:[], providers:true};
+}
 const FAIL_FIRST=["unreached","signin-unreached","signin-timeout","signin-browser","signin-notallowed","desks","token","signin","signin-refused","signin-token","signin-unbound","signin-state","signin-none","signin-preview"];
 /* THE DOOR'S CONTENT for the view `v`, whatever form draws it: {moment, ident, heading, line, say, calm, code, providers, cap, privacy, foot,
    acts: [{act, label, solid}]}; null where there is no door. The shell is separate from what it does: signinPanelHtml is the one
@@ -145,7 +162,10 @@ function signinDoorOf(v){
       providers:v.offered, cap:t("Microsoft: a work, school or personal account. Google: a Workspace or personal account."), privacy:t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account."),
       foot:t("Etiuda for personal use, outside work, needs no sign-in.")};
   }
+  const told=signinTold(v), toldDoor=()=>({moment:told.kind, ident, say:told.say, providers:told.providers ? v.offered : undefined, acts:told.acts.concat([acct])});
+  if(told && told.kind==="pressed") return toldDoor();
   if(v.ask) return {moment:"ask", ident, say:signinSay("ask", v), providers:v.offered, acts:[acct]};
+  if(told) return toldDoor();
   if(signinNoSeat(v)) return {moment:"noseat", ident, say:signinSay(v.refused, v, p), acts:[{act:"check", label:t("Check now"), solid:true}, acct]};
   /* No certificate: the service found no licence with a seat for this account. The code still shows, since a lead admits by it. */
   if(v.seat==="none" || !v.seat) return {moment:"nolicence", ident, say:signinSay("nolicence", v), code:v.code,
@@ -400,6 +420,7 @@ export {
   signinRead,
   signinSay,
   signinNoSeat,
+  signinTold,
   signinStart,
   signinShown,
   signinWhen,

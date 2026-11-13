@@ -8799,6 +8799,12 @@ What you type stays in this browser only.`;
     "Nothing changed: this computer is not signed in, and Etiuda works as before.": "Nic się nie zmieniło: ten komputer nie jest zalogowany, a Etiuda działa jak dotąd.",
     "{TEAM} has no free seat just now.": "W zespole {TEAM} nie ma teraz wolnego miejsca.",
     "The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and {LEAD}, the team's lead, sees this account among those who have signed in.": "Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; nikt nie musi nic robić, a lider zespołu, {LEAD}, widzi to konto wśród osób, które się zalogowały.",
+    "This account is signed in on three computers already.": "To konto jest już zalogowane na trzech komputerach.",
+    "A seat holds three computers. Signing out on one of the others frees its place, and this computer checks again by itself.": "Miejsce w licencji obejmuje trzy komputery. Wylogowanie się na jednym z pozostałych zwolni jego miejsce, a ten komputer sam sprawdzi ponownie.",
+    "The sign-in service did not accept this account's sign-in.": "Usługa logowania nie przyjęła logowania tego konta.",
+    "Signing in again settles it; until then, Etiuda keeps working with the catalog it has.": "Wystarczy zalogować się ponownie; do tego czasu Etiuda działa dalej na katalogu, który już ma.",
+    "The new sign-in did not finish.": "Nowe logowanie nie dobiegło końca.",
+    "This computer stays signed in with the account it had. {REASON}": "Ten komputer pozostaje zalogowany kontem, którego używał. {REASON}",
     "This account is already in use on three computers.": "To konto działa już na trzech komputerach.",
     "Signing out on one of them makes room here, and so does a computer left unused for 30 days; then Try again.": "Wylogowanie na jednym z nich zwalnia tu miejsce, podobnie jak komputer nieużywany przez 30 dni; potem wystarczy spróbować ponownie.",
     "This account's organisation has not allowed Etiuda at its sign-in provider.": "Organizacja tego konta nie dopuściła Etiudy u swojego dostawcy logowania.",
@@ -26326,6 +26332,33 @@ What you type stays in this browser only.`;
   function signinNoSeat(v) {
     return v.refused === "waiting" || v.refused === "full";
   }
+  var SIGNIN_REASON_SAID = ["desks", "signin-notallowed", "unreached", "signin-unreached", "signin-timeout", "signin-browser"];
+  function signinTold(v) {
+    if (!v || !v.signedIn) return null;
+    if (FAIL_FIRST.indexOf(v.said) >= 0) return {
+      kind: "pressed",
+      say: [t("The new sign-in did not finish."), named(
+        t("This computer stays signed in with the account it had. {REASON}"),
+        "{REASON}",
+        SIGNIN_REASON_SAID.indexOf(v.said) >= 0 ? signinSay(v.said, v)[0] : ""
+      ).trim()],
+      acts: [{ act: "choose", label: v.said === "signin-notallowed" ? t("Use another account") : t("Try again"), solid: true }]
+    };
+    const r = v.refused;
+    if (!r || r === "signin" || signinNoSeat(v)) return null;
+    if (r === "desks") return {
+      kind: "desks",
+      say: [
+        t("This account is signed in on three computers already."),
+        t("A seat holds three computers. Signing out on one of the others frees its place, and this computer checks again by itself.")
+      ],
+      acts: [{ act: "check", label: t("Check now"), solid: true }]
+    };
+    return { kind: "renewal", say: [
+      t("The sign-in service did not accept this account's sign-in."),
+      t("Signing in again settles it; until then, Etiuda keeps working with the catalog it has.")
+    ], acts: [], providers: true };
+  }
   var FAIL_FIRST = ["unreached", "signin-unreached", "signin-timeout", "signin-browser", "signin-notallowed", "desks", "token", "signin", "signin-refused", "signin-token", "signin-unbound", "signin-state", "signin-none", "signin-preview"];
   function signinDoor(v) {
     const d = signinDoorOf(v);
@@ -26369,7 +26402,10 @@ What you type stays in this browser only.`;
         foot: t("Etiuda for personal use, outside work, needs no sign-in.")
       };
     }
+    const told = signinTold(v), toldDoor = () => ({ moment: told.kind, ident, say: told.say, providers: told.providers ? v.offered : void 0, acts: told.acts.concat([acct]) });
+    if (told && told.kind === "pressed") return toldDoor();
     if (v.ask) return { moment: "ask", ident, say: signinSay("ask", v), providers: v.offered, acts: [acct] };
+    if (told) return toldDoor();
     if (signinNoSeat(v)) return { moment: "noseat", ident, say: signinSay(v.refused, v, p), acts: [{ act: "check", label: t("Check now"), solid: true }, acct] };
     if (v.seat === "none" || !v.seat) return {
       moment: "nolicence",
@@ -35811,10 +35847,10 @@ What you type stays in this browser only.`;
     if (v.signedIn && !choosing) {
       let h2 = '<div class="sgn-top"><div class="sgn-top-row">' + signinIdentHtml({ initial: p.initial, name: p.name, sub: p.sub, off: p.off }) + '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="another">' + esc(t("Use another account")) + '</button><button type="button" class="btn" data-signin-act="out">' + esc(t("Sign out")) + "</button></span></div>";
       if (!v.keeps) h2 += '<p class="sgn-cap" data-signin-unkept>' + esc(t("No keyring is open on this computer, so the sign-in is not kept: each renewal asks for it again.")) + "</p>";
-      if (v.ask) {
-        const s = signinSay("ask", v);
-        h2 += '<p class="sgn-say"><b>' + esc(s[0]) + "</b><span>" + esc(s[1]) + "</span></p>" + signinProvidersHtml(v.offered, true);
-      }
+      const told = signinTold(v), say = (s) => '<p class="sgn-say"><b>' + esc(s[0]) + "</b><span>" + esc(s[1]) + "</span></p>";
+      if (told && told.kind === "pressed") h2 += say(told.say) + signinActsHtml(told.acts);
+      if (v.ask) h2 += say(signinSay("ask", v)) + signinProvidersHtml(v.offered, true);
+      else if (told && told.kind !== "pressed") h2 += say(told.say) + (told.providers ? signinProvidersHtml(v.offered, true) : "");
       h2 += '<p class="sgn-ft">' + esc(t("Signing out ends this computer's sign-in and frees its place among the account's three; the seat stays the account's. The team's catalog and personal cards stay on the computer.")) + "</p>";
       return h2 + "</div>";
     }
