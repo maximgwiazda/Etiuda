@@ -57,7 +57,7 @@ const MEMBER_DECLS = ["const HPKE_KEM =", "const HPKE_SUITE =", "const SPKI_X255
   "function handoverSignedBytes(", "function handoverGenuine(", "function handedTo(", "const SPKI_ED25519 =",
   "function canonJson(", "function signedBytesOf(", "function teamWhole(", "function memberRingVouches(",
   "function memberStateCopy(", "function memberProof(", "function inviteCode(", "function inviteIdOf(", "const INVITE_HIDDEN_RE =", "function inviteFolder(",
-  "function placeKindOk(", "function placeSlash(", "function placeLeaf(", "function placeJoin(",
+  "function placeKindOk(", "function driveTops(", "function placeSlash(", "function placeLeaf(", "function placeJoin(",
   "function placeUnder(", "function placeRest(", "function syncRootsFrom(", "function placeOf(",
   "function placeCandidates(", "function placeResolve(", "function placeKept(", "function readSyncRecords(",
   "function inviteRead(", "function folderHost(",
@@ -375,7 +375,7 @@ if (M && J) {
   /* A place beside the absolute path (board 945, item 4). The functions are sliced on their own, with crypto and Buffer
      alone, as the member core is: a free name fails here. liveSyncIo is not on this list; the record reader is given a
      stand-in and never starts PowerShell. */
-  const PLACE_DECLS = ["function placeKindOk(", "function placeSlash(", "function placeLeaf(", "function placeJoin(",
+  const PLACE_DECLS = ["function placeKindOk(", "function driveTops(", "function placeSlash(", "function placeLeaf(", "function placeJoin(",
     "function placeUnder(", "function placeRest(", "function syncRootsFrom(", "function placeOf(",
     "function placeCandidates(", "function placeResolve(", "function placeKept(", "function readSyncRecords("];
   let P = null, placeErr = "";
@@ -448,7 +448,7 @@ if (M && J) {
     check(!!mappedPlace && mappedPlace.kind === "mapped" && mappedPlace.root === "\\\\files\\dept" && mappedPlace.rel === "Etiuda"
         && !!mappedBack && mappedBack.path === "Y:\\Etiuda" && mappedBack.how === "root" && mappedBack.why === ""
         && !!mappedUnc && mappedUnc.path === "\\\\files\\dept\\Etiuda" && mappedUnc.how === "root"
-        && !!gPlace && gPlace.kind === "gdrive" && gPlace.rel === "My Drive\\Team" && gPlace.root === undefined
+        && !!gPlace && gPlace.kind === "gdrive" && gPlace.rel === "Team" && gPlace.root === "My Drive"
         && !!gBack && gBack.path === "H:\\My Drive\\Team" && gBack.how === "root"
         && namedOnly === null && P.placeJoin("G:", "My Drive\\Team") === "G:\\My Drive\\Team"
         && P.placeJoin("C:\\Users\\anna\\OneDrive", "Etiuda") === annaFolder,
@@ -588,6 +588,8 @@ if (M && J) {
     ["query", "HKCU\\Software\\Microsoft\\OneDrive\\Accounts", "/s", "/v", "UserFolder"],
     ["query", "HKCU\\Software\\Google\\DriveFS", "/s", "/v", "DefaultMountPoint"],
     ["query", "HKLM\\SOFTWARE\\Policies\\Google\\DriveFS", "/s", "/v", "DefaultMountPoint"],
+    ["query", "HKLM\\SOFTWARE\\Google\\DriveFS", "/s", "/v", "DefaultMountPoint"],
+    ["query", "HKLM\\SOFTWARE\\WOW6432Node\\Google\\DriveFS", "/s", "/v", "DefaultMountPoint"],
     ["query", "HKCU\\Network", "/s", "/v", "RemotePath"]
   ];
   const reopenSpy = function (file, args, opts) {
@@ -610,7 +612,7 @@ if (M && J) {
   let firstPlan = null, secondPlan = null, reopenErr = "", stayed = false;
   try {
     const OPEN_DECLS = ["const { execFile, execFileSync } =", "const fs = require(\"node:fs\");", "const REG_TOOL =",
-      "function placeKindOk(", "function placeSlash(", "function placeLeaf(", "function placeJoin(",
+      "function placeKindOk(", "function driveTops(", "function placeSlash(", "function placeLeaf(", "function placeJoin(",
       "function placeUnder(", "function placeRest(", "function syncRootsFrom(", "function placeOf(",
       "function placeCandidates(", "function placeResolve(", "function placeKept(", "function readSyncRecords(",
       "function liveSyncIo(", "function invitePlacePlan("];

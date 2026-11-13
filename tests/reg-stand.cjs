@@ -15,6 +15,9 @@
  *   each bare line feed made CRLF. `reg query` of the key with a policy scripted throws, as not stood in.
  * - The proxy and Connections keys (machine policy, the user, machine settings, and Connections) fail as missing and are
  *   counted as `proxy`. With `proxy` given as a map or function, `reg query <key>` answers the scripted text.
+ * - A query of Google DriveFS under HKLM (the client's key, its WOW6432Node twin and its policy key) is a read the shell
+ *   is allowed, counted as `drive`: missing, or the DefaultMountPoint `drive` names for that key (a map of key to value).
+ *   Any other verb on those keys is counted as `machine`.
  * - Any other key under HKLM fails as missing and is counted as `machine`: a second reader of the machine's hive.
  * - Anything else (the theme reads) fails as missing and is counted as `user`.
  * spawn of reg throws, as not stood in, and counts nothing. `regStand.held()` is the line a leg checks.
@@ -28,6 +31,7 @@ const { syncBuiltinESMExports } = require("node:module");
 const norm = (x) => String(x).replace(/\//g, "\\");
 const HIVE = /^(?:HKLM|HKEY_LOCAL_MACHINE)(?:\\|$)/i;
 const POLICY = /^(?:HKLM|HKEY_LOCAL_MACHINE)\\SOFTWARE\\Policies\\Etiuda(?:\\|$)/i;
+const DRIVE_KEY = /^(?:HKLM|HKEY_LOCAL_MACHINE)\\SOFTWARE\\(?:WOW6432Node\\)?(?:Policies\\)?Google\\DriveFS$/i;
 const PROXY = /^(?:HKCU|HKLM|HKEY_CURRENT_USER|HKEY_LOCAL_MACHINE)\\Software\\(?:Policies\\)?Microsoft\\Windows\\CurrentVersion\\Internet Settings(?:\\|$)/i;
 const isReg = (file) => /^reg(\.exe)?$/i.test(path.win32.basename(String(file || "")));
 /* A command line's words, a quoted word whole: enough for `reg export "HKLM\..." "C:\...\policy.reg" /y`. */
@@ -45,7 +49,7 @@ function connDump(flags, key) {
 
 function regStand(real, opts) {
   const o = opts || {};
-  const calls = { export: 0, query: 0, other: 0, machine: 0, proxy: 0, user: 0, reached: 0 };
+  const calls = { export: 0, query: 0, other: 0, machine: 0, proxy: 0, user: 0, drive: 0, reached: 0 };
   const orig = {};
   for (const k of ["execFile", "execFileSync", "exec", "execSync", "spawn", "spawnSync"]) orig[k] = real[k];
   const missing = () => {
@@ -78,6 +82,15 @@ function regStand(real, opts) {
         if (v !== undefined) return { stdout: String(v) };
       }
       return missing();
+    }
+    const driveKey = keys.find((x) => DRIVE_KEY.test(x));
+    if (driveKey) {
+      if (verb !== "query") { if (count) calls.machine++; return missing(); }
+      if (count) calls.drive++;
+      const named = o.drive && typeof o.drive === "object" ? Object.keys(o.drive).find((k) => norm(k).toLowerCase() === driveKey.toLowerCase()) : undefined;
+      if (named === undefined) return missing();
+      const full = driveKey.replace(/^HKLM\\/i, "HKEY_LOCAL_MACHINE\\");
+      return { stdout: ["", full, "    DefaultMountPoint    REG_SZ    " + String(o.drive[named]), "", ""].join("\r\n") };
     }
     if (count) calls[keys.some((x) => HIVE.test(x)) ? "machine" : "user"]++;
     return missing();
@@ -135,7 +148,7 @@ function regStand(real, opts) {
     ? policyReads() >= 1 && calls.machine === 0 && calls.reached === 0
     : policyReads() + calls.machine + calls.proxy + calls.user + calls.reached === 0);
   const said = () => calls.export + " export, " + calls.query + " query, " + calls.other + " other of the policy key, "
-    + calls.machine + " elsewhere in HKLM, " + calls.proxy + " proxy, " + calls.user + " outside it, "
+    + calls.drive + " DriveFS query, " + calls.machine + " elsewhere in HKLM, " + calls.proxy + " proxy, " + calls.user + " outside it, "
     + calls.reached + " past the stand-in";
   return { calls, held, said, total: policyReads };
 }

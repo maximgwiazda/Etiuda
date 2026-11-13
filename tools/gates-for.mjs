@@ -211,6 +211,7 @@ export const SCANS = {
   "tests/embed-suggest.mjs": ["shell/embed/*.cjs", "shell/main.js", "src/modules/clip-suggest.js"],
   "tests/module-calls.mjs": ["src/template.html", "src/modules/deck.js"],
   "tests/team-join.mjs": ["src/template.html", "src/modules/ui-lang.js", "shell/main.js", "src/modules/catalog-trust.js"],
+  "tests/drive-join.mjs": ["shell/main.js"],
   "tests/relay-blob.mjs": ["relay/test/target-contract.md", "shell/main.js"],
   "tests/relay-workerd.mjs": ["relay/wrangler.toml", "relay/worker.mjs", "relay/team.cjs"],
   "tests/relay-unit.mjs": ["relay/wrangler.toml", "relay/core.cjs", "relay/team.cjs", "relay/worker.mjs", "relay/test/grant-vector.json"],

@@ -1313,6 +1313,13 @@ function askFolder(dir) {
   settled.then(() => { if (folderAsking === asking) folderAsking = null; });
   return answer;
 }
+/* True only where `dir` itself is a folder, within the same bound: a Drive candidate's parent is one of Drive's own folders,
+   which answers for every spelling beside the right one. */
+function askDirItself(dir) {
+  let timer = null;
+  return Promise.race([fs.promises.stat(dir).then(st => st.isDirectory(), () => false),
+    new Promise(r => { timer = setTimeout(() => r(false), FOLDER_ASK_MS); })]).then(ok => { clearTimeout(timer); return ok; });
+}
 /* Records what an ask found, said in the log once per change, and whether it answered. */
 function settleFolder(dir, ok) {
   const current = catalogFolder();
@@ -5074,6 +5081,22 @@ function inviteFolder(folder, posix) {
 function placeKindOk(kind) {
   return kind === "onedrive" || kind === "onedrive-business" || kind === "dropbox" || kind === "gdrive" || kind === "mapped" || kind === "unc";
 }
+/* Drive for desktop's folders under its root, each named in the Windows language unless DisableLocalizedVirtualFolders
+   keeps English: My Drive, Shared drives, and the folder a shortcut to a folder shared with this person lands in (Google's
+   help and the disk spell it differently). With a name, its group, or "". A language not listed is still resolved through a
+   root's own listing; only the scan for a root with no record cannot recognise it. */
+function driveTops(name) {
+  const tops = {
+    my: ["My Drive", "Mój dysk", "Meine Ablage", "Mon Drive", "Mi unidad", "Il mio Drive", "Meu Drive", "Mijn Drive"],
+    shared: ["Shared drives", "Dyski współdzielone", "Geteilte Ablagen", "Drives partagés", "Unidades compartidas",
+      "Drive condivisi", "Drives compartilhados", "Gedeelde drives"],
+    link: [".shortcut-targets-by-id", "shortcuts-target-by-id"]
+  };
+  if (name === undefined) return tops;
+  const n = String(name).toLowerCase();
+  for (const group of ["my", "shared", "link"]) if (tops[group].some(t => t.toLowerCase() === n)) return group;
+  return "";
+}
 function placeSlash(p) {
   return String(p == null ? "" : p).replace(/\//g, "\\").replace(/\\+$/, "");
 }
@@ -5114,6 +5137,14 @@ function syncRootsFrom(records) {
   pushCloud("onedrive-business", rec.onedriveBusiness);
   pushCloud("dropbox", rec.dropbox);
   pushCloud("gdrive", rec.gdrive);
+  /* A Drive root carries what a look found in it: its folders and its shortcut targets, each a full path. */
+  const seen = Array.isArray(rec.gdriveSeen) ? rec.gdriveSeen : [];
+  const names = list => (Array.isArray(list) ? list.filter(s => typeof s === "string" && s) : []);
+  for (let i = 0; i < out.length; i++) {
+    if (out[i].kind !== "gdrive") continue;
+    const s = seen.find(x => x && typeof x.root === "string" && placeSlash(x.root).toLowerCase() === out[i].root.toLowerCase());
+    if (s) { out[i].tops = names(s.tops); out[i].links = names(s.links); }
+  }
   const mapped = Array.isArray(rec.mapped) ? rec.mapped : [];
   for (let i = 0; i < mapped.length; i++) {
     const m = mapped[i];
@@ -5150,6 +5181,10 @@ function placeOf(folder, roots) {
       raw = { kind: rec.kind, rel: placeRest(f, root) };
       const leaf = placeLeaf(root);
       if (leaf && leaf.indexOf(":") < 0) raw.root = leaf;
+      /* Under a Drive root every first folder is one of Drive's, spelt in this computer's language: it is kept as the
+         root, and only the part after it as the path, which another computer finds under its own spelling. */
+      const segs = rec.kind === "gdrive" && raw.rel ? raw.rel.split("\\") : [];
+      if (segs.length) { raw.root = segs[0]; raw.rel = segs.slice(1).join("\\"); } /* plant:drive-tail */
     }
     const place = placeKept(raw);
     if (place && covered.length > bestLen) { best = place; bestLen = covered.length; }
@@ -5171,6 +5206,46 @@ function placeCandidates(folder, place, roots) {
       if (/^[A-Za-z]:$/.test(letter)) out.push(placeJoin(letter, kept.rel));
     }
     out.push(placeJoin(kept.root, kept.rel));
+    return out;
+  }
+  if (kept.kind === "gdrive") {
+    /* The writer's own spelling first, then that group's in every language listed, then any folder of this root the
+       list does not place in another group; where a look listed the root, only the folders it has. A place an older
+       writer made keeps Drive's folder in its path. A shortcut target is tried at the writer's own id, and any folder
+       this root's shortcuts land in is matched by name against the path. */
+    const tops = driveTops();
+    let top = kept.root || "", rel = kept.rel;
+    if (!top && rel) { const cut = rel.indexOf("\\"); top = cut < 0 ? rel : rel.slice(0, cut); rel = cut < 0 ? "" : rel.slice(cut + 1); }
+    const group = driveTops(top);
+    const tail = group === "link" ? rel.split("\\").slice(1).join("\\") : rel;
+    const tailSegs = tail ? tail.split("\\") : [];
+    const out = [], had = {};
+    const add = p => { const k = p.toLowerCase(); if (!had[k]) { had[k] = true; out.push(p); } };
+    for (let i = 0; i < same.length; i++) {
+      const r = same[i];
+      if (!top) { add(placeJoin(r.root, rel)); continue; }
+      let spellings = [top];
+      if (group) spellings.push.apply(spellings, tops[group]); /* plant:drive-tops */
+      const here = Array.isArray(r.tops) ? r.tops : [];
+      for (let j = 0; j < here.length; j++) {
+        const g = driveTops(here[j]);
+        if (here[j].charAt(0) !== "." && (g === group || !g || !group || group === "link")) spellings.push(here[j]);
+      }
+      if (here.length) spellings = spellings.filter(n => here.some(h => h.toLowerCase() === String(n).toLowerCase()));
+      for (let j = 0; j < spellings.length; j++) {
+        if (!spellings[j]) continue;
+        const g = driveTops(spellings[j]);
+        if (group === "link" && g !== "link") { if (tail) add(placeJoin(r.root, spellings[j] + "\\" + tail)); }
+        else add(placeJoin(r.root, spellings[j] + (rel ? "\\" + rel : "")));
+      }
+      const links = Array.isArray(r.links) ? r.links : [];
+      for (let j = 0; j < links.length; j++) {
+        const name = placeLeaf(links[j]).toLowerCase();
+        for (let k = 0; k < tailSegs.length; k++) {
+          if (tailSegs[k].toLowerCase() === name) add(placeJoin(links[j], tailSegs.slice(k + 1).join("\\"))); /* plant:drive-links */
+        }
+      }
+    }
     return out;
   }
   const leaf = kept.root ? kept.root.toLowerCase() : "";
@@ -5281,8 +5356,23 @@ function readSyncRecords(io) {
     for (let i = 0; i < out.onedriveBusiness.length; i++) if (out.onedriveBusiness[i].toLowerCase() === p.toLowerCase()) return false;
     return true;
   });
-  pushUnique(out.gdrive, reg("HKCU:\\Software\\Google\\DriveFS", "DefaultMountPoint"));
-  pushUnique(out.gdrive, reg("HKLM:\\SOFTWARE\\Policies\\Google\\DriveFS", "DefaultMountPoint"));
+  /* DefaultMountPoint is a drive letter or a folder, and a folder may name environment variables; one naming a variable
+     this computer does not have names no root. Drive's other roots are those a look found (driveLook). */
+  const mount = function (value) {
+    const s = String(value || "").trim().replace(/%([^%]+)%/g, function (all, name) {
+      for (const k in env) if (k.toLowerCase() === name.toLowerCase() && typeof env[k] === "string" && env[k]) return env[k];
+      return all;
+    });
+    if (s.indexOf("%") >= 0) return "";
+    return /^[A-Za-z]:?$/.test(s) ? s.charAt(0) + ":" : s;
+  };
+  const driveKeys = ["HKCU:\\Software\\Google\\DriveFS", "HKLM:\\SOFTWARE\\Policies\\Google\\DriveFS"];
+  driveKeys.push("HKLM:\\SOFTWARE\\Google\\DriveFS", "HKLM:\\SOFTWARE\\WOW6432Node\\Google\\DriveFS"); /* plant:drive-hklm */
+  for (let i = 0; i < driveKeys.length; i++) pushUnique(out.gdrive, mount(reg(driveKeys[i], "DefaultMountPoint")));
+  let seen = [];
+  try { seen = ask && typeof ask.drives === "function" ? ask.drives() : []; } catch (e) { seen = []; }
+  out.gdriveSeen = (Array.isArray(seen) ? seen : []).filter(s => s && typeof s.root === "string" && placeSlash(s.root));
+  out.gdriveSeen.forEach(s => pushUnique(out.gdrive, s.root)); /* plant:drive-scan */
   const absorb = function (text) {
     const raw = String(text || "").replace(/^\ufeff/, "");
     if (!raw) return;
@@ -5321,7 +5411,7 @@ function readSyncRecords(io) {
   return out;
 }
 /* One read of the records, kept on the function itself. The one program is reg.exe at REG_TOOL, through the shell's
-   one child_process handle, and the four queries share the five seconds the policy read is allowed. A root already
+   one child_process handle, and the six queries share the five seconds the policy read is allowed. A root already
    named in the environment is still asked of the registry, because a second account may live only there. Off Windows
    the environment is the whole record. Brackets in this function stay balanced so a slice ends on it. */
 function liveSyncIo() {
@@ -5367,7 +5457,7 @@ function liveSyncIo() {
       if (raw.indexOf("End of search") === 0) continue;
       const found = valueLine.exec(raw);
       if (found && key) {
-        values[key + "|" + found[1]] = found[2];
+        values[(key + "|" + found[1]).toLowerCase()] = found[2];
         continue;
       }
       const mapped = hive(raw);
@@ -5384,6 +5474,8 @@ function liveSyncIo() {
       ["query", "HKCU\\Software\\Microsoft\\OneDrive\\Accounts", "/s", "/v", "UserFolder"],
       ["query", "HKCU\\Software\\Google\\DriveFS", "/s", "/v", "DefaultMountPoint"],
       ["query", "HKLM\\SOFTWARE\\Policies\\Google\\DriveFS", "/s", "/v", "DefaultMountPoint"],
+      ["query", "HKLM\\SOFTWARE\\Google\\DriveFS", "/s", "/v", "DefaultMountPoint"],
+      ["query", "HKLM\\SOFTWARE\\WOW6432Node\\Google\\DriveFS", "/s", "/v", "DefaultMountPoint"],
       ["query", "HKCU\\Network", "/s", "/v", "RemotePath"]
     ];
     for (let i = 0; i < queries.length; i++) {
@@ -5397,14 +5489,62 @@ function liveSyncIo() {
   const io = {
     env: {
       APPDATA: env.APPDATA, LOCALAPPDATA: env.LOCALAPPDATA,
-      OneDrive: env.OneDrive, OneDriveConsumer: env.OneDriveConsumer, OneDriveCommercial: env.OneDriveCommercial
+      OneDrive: env.OneDrive, OneDriveConsumer: env.OneDriveConsumer, OneDriveCommercial: env.OneDriveCommercial,
+      USERPROFILE: env.USERPROFILE, USERNAME: env.USERNAME, HOMEDRIVE: env.HOMEDRIVE, HOMEPATH: env.HOMEPATH,
+      SystemDrive: env.SystemDrive, PUBLIC: env.PUBLIC
     },
-    reg: function (key, name) { return values[String(key) + "|" + String(name)] || ""; },
+    reg: function (key, name) { return values[(String(key) + "|" + String(name)).toLowerCase()] || ""; },
+    drives: function () { return liveSyncIo.drives || []; },
     subkeys: function (key) { return sub[String(key)] ? sub[String(key)].slice() : []; },
     readFile: function (p) { try { return fs.readFileSync(p, "utf8"); } catch (e) { return ""; } }
   };
   liveSyncIo.cached = io;
   return io;
+}
+/* Drive's roots as `readdir` finds them within `ms`: each gdrive root the records name, and each letter D to Z, other
+   than a mapped network letter, whose root holds one of Drive's folders; each with its folders and its shortcut targets.
+   A letter that has not answered by then is passed over, so a share that hangs costs the wait and no more. */
+async function driveSeen(records, readdir, ms) {
+  const rec = records && typeof records === "object" ? records : {};
+  const mapped = {};
+  (Array.isArray(rec.mapped) ? rec.mapped : []).forEach(m => { if (m && m.letter) mapped[String(m.letter).charAt(0).toUpperCase()] = true; });
+  const asked = [];
+  (Array.isArray(rec.gdrive) ? rec.gdrive : []).forEach(r => { const s = placeSlash(r); if (s) asked.push({ root: s, named: true }); });
+  for (let c = 68; c <= 90; c++) {
+    const letter = String.fromCharCode(c);
+    if (mapped[letter] || asked.some(a => a.root.toUpperCase() === letter + ":")) continue; /* plant:drive-mapped */
+    asked.push({ root: letter + ":", named: false });
+  }
+  let timer = null;
+  const late = new Promise(r => { timer = setTimeout(() => r(null), ms); if (timer.unref) timer.unref(); });
+  const within = dir => Promise.race([Promise.resolve().then(() => readdir(/:$/.test(dir) ? dir + "\\" : dir)).catch(() => null), late])
+    .then(got => (Array.isArray(got) ? got.map(String) : null));
+  const found = await Promise.all(asked.map(async a => {
+    const top = await within(a.root);
+    if (!top || (!a.named && !top.some(n => driveTops(n)))) return null;
+    const linkDir = top.find(n => driveTops(n) === "link");
+    const links = [];
+    const ids = linkDir ? (await within(placeJoin(a.root, linkDir))) || [] : [];
+    await Promise.all(ids.map(async id => {
+      const inner = (await within(placeJoin(a.root, linkDir + "\\" + id))) || [];
+      inner.forEach(n => links.push(placeJoin(a.root, linkDir + "\\" + id + "\\" + n)));
+    }));
+    return { root: a.root, tops: top, links: links };
+  }));
+  clearTimeout(timer);
+  return found.filter(Boolean);
+}
+/* One look at a time, on Windows alone, kept on liveSyncIo for the readers that cannot wait for one; a later look
+   replaces it, so a Drive started after the desk is found at the next invitation. */
+function driveLook() {
+  if (driveLook.running) return driveLook.running;
+  let rec = null;
+  try { rec = readSyncRecords(Object.assign({}, liveSyncIo(), { drives: null })); } catch (e) { rec = null; }
+  const run = process.platform === "win32" && rec ? driveSeen(rec, d => fs.promises.readdir(d), FOLDER_ASK_MS) : Promise.resolve([]);
+  const looking = run.then(found => { liveSyncIo.drives = found; return found; }, () => liveSyncIo.drives || [])
+    .then(found => { driveLook.running = null; return found; });
+  driveLook.running = looking;
+  return looking;
 }
 /* The invitation a lead hands over: "etiuda-join:" and base64url of the team, the folder, the lead and a
    128-bit secret, or the same base64url after Studio's relay invitation link, exactly https://etiuda.dev/join#, read as
@@ -6010,6 +6150,14 @@ function readInvite(text) {
   if (teamBarred.has(parsed.team) && teamLeft[parsed.team]) offer.left = teamLeft[parsed.team];
   return Object.assign({}, view, { offer: offer });
 }
+/* A pasted invitation's confirm waits on a look at Drive's roots where its place is on Drive, so its plan names this
+   computer's own spelling of the folder. */
+async function readInviteLooked(text) {
+  let kept = null;
+  try { const parsed = inviteParse(text); kept = parsed && !parsed.relay ? placeKept(parsed.place) : null; } catch (e) { kept = null; }
+  if (kept && kept.kind === "gdrive") await driveLook();
+  return readInvite(text);
+}
 /* Where the invitation's place would land on this computer, with every candidate treated as there: the confirm shows
    the plan and does not stat, because a path on another computer answers a stat by connecting. A record that cannot
    be read leaves the absolute path. */
@@ -6031,6 +6179,7 @@ async function chooseInviteFolder(parsed) {
     if (await askFolder(parsed.folder)) return { path: parsed.folder, ask: false };
     return { ask: true };
   }
+  if (kept.kind === "gdrive") await driveLook();
   let roots = [];
   try { roots = syncRootsFrom(readSyncRecords(null)); }
   catch (e) { roots = []; }
@@ -6042,8 +6191,10 @@ async function chooseInviteFolder(parsed) {
   let candidates = [];
   try { candidates = placeCandidates(parsed.folder, kept, roots); }
   catch (e) { candidates = []; }
+  let asks = askFolder;
+  if (kept.kind === "gdrive") asks = askDirItself; /* plant:drive-itself */
   for (let i = 0; i < candidates.length; i++) {
-    if (candidates[i] && await askFolder(candidates[i])) return { path: candidates[i], ask: false };
+    if (candidates[i] && await asks(candidates[i])) return { path: candidates[i], ask: false };
   }
   if (await askFolder(parsed.folder)) return { path: parsed.folder, ask: false };
   return { ask: true };
@@ -8949,7 +9100,7 @@ ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e)
   : op === "content" ? contentView() : op === "content-said" ? contentSaid(file, name) : op === "private" ? markPrivate(file, name === "on")
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
   : op === "lapse-seen" ? lapseSeen(file, name) : op === "fork-seen" ? forkDismissed(file) : op === "stranded-seen" ? strandedDismissed(file)
-  : op === "forget" ? forgetLead(file) : op === "leave" ? forgetLead(file, true) : op === "read" ? readInvite(file) : op === "invite" ? takeInvite(file, name, check)
+  : op === "forget" ? forgetLead(file) : op === "leave" ? forgetLead(file, true) : op === "read" ? readInviteLooked(file) : op === "invite" ? takeInvite(file, name, check)
   : op === "pick-moved-folder" ? pickMovedFolder(file, name)
   : op === "held" ? heldLinkAnswer() : op === "link" ? takeHeldLink(name) : op === "link-no" ? declineHeldLink() : joinView())); /* plant:link-no */
 
