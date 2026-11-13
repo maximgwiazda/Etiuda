@@ -1479,11 +1479,13 @@ function inheritedEnv(step) {
 export const STEP_WALL_MS_DEFAULT = 25 * 60 * 1000;
 export const STEP_WALL_EXIT = 124;
 const stepWallMs = () => { const v = Number(process.env.ETIUDA_STEP_WALL_MS); return v > 0 ? v : STEP_WALL_MS_DEFAULT; };
-/** Stops `pid` and every process it started, by that PID: taskkill /T on Windows, the process itself elsewhere. */
+/** Stops `pid` and every process it started, by that PID: taskkill /T on Windows; elsewhere the gate runs as a process group of its
+ *  own (runStep's detached spawn), so the whole group goes by its negative PID, the gate alone where no group was made. Off Windows
+ *  the gate's own PID alone left its children running (Claude gamma's Linux floor sweep, 2026-11-13, engine gate-run 16a). */
 export function stopTree(pid) {
   if (!pid) return;
   if (process.platform === "win32") spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
-  else { try { process.kill(pid, "SIGKILL"); } catch { /* gone */ } }
+  else { try { process.kill(-pid, "SIGKILL"); } catch { try { process.kill(pid, "SIGKILL"); } catch { /* gone */ } } }
 }
 
 function runStep(step, customEnv = {}) {
@@ -1493,7 +1495,8 @@ function runStep(step, customEnv = {}) {
     const own = scratch ? { TEMP: scratch, TMP: scratch, TMPDIR: scratch } : {};
     const env = Object.assign(inheritedEnv(step), own, customEnv, step.env || {});
     const child = spawn(process.execPath, [step.file].concat(step.args),
-      { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
+      /* Off Windows its own process group, so the wall stops it with its children (stopTree). */
+      { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
     let out = "", overWall = false;
     const limit = stepWallMs();
     const wall = setTimeout(() => { overWall = true; stopTree(child.pid); }, limit); /* plant:step-wall */
