@@ -8791,6 +8791,10 @@ What you type stays in this browser only.`;
     "Your sign-in code": "Kod logowania",
     "Not a secret. It tells a team's lead which account is yours.": "To nie tajemnica. Po nim lider zespołu rozpoznaje, czyje to konto.",
     "Check now": "Sprawdź teraz",
+    "Licence for one person": "Licencja dla jednej osoby",
+    "The order page opens in the browser with this account's sign-in code filled in; typing another person's code buys the licence for them instead.": "Strona zamówienia otworzy się w przeglądarce z wpisanym kodem logowania tego konta; po wpisaniu kodu innej osoby licencja zostanie kupiona dla niej.",
+    "The order page opens in the browser and asks for the sign-in code of the person the licence is for, which Etiuda shows them after their first sign-in.": "Strona zamówienia otworzy się w przeglądarce i poprosi o kod logowania osoby, dla której jest licencja; Etiuda pokazuje go tej osobie po jej pierwszym zalogowaniu.",
+    "Buy": "Kup",
     "The sign-in service could not be reached.": "Nie udało się połączyć z usługą logowania.",
     "Nothing changed: this computer is not signed in, and Etiuda works as before.": "Nic się nie zmieniło: ten komputer nie jest zalogowany, a Etiuda działa jak dotąd.",
     "{TEAM} has no free seat just now.": "W zespole {TEAM} nie ma teraz wolnego miejsca.",
@@ -35837,11 +35841,29 @@ What you type stays in this browser only.`;
     if (choosing && v.signedIn) h += '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">' + esc(t("Cancel")) + "</button></span>";
     return h + "</div>";
   }
+  function buyOffered() {
+    const h = eHost();
+    try {
+      const s = h && typeof h.buyState === "function" ? h.buyState() : null;
+      return !!(s && s.offer === true);
+    } catch (e) {
+      return false;
+    }
+  }
+  function buyRow(v) {
+    return row(
+      "buy",
+      "forward",
+      t("Licence for one person"),
+      v.signedIn ? t("The order page opens in the browser with this account's sign-in code filled in; typing another person's code buys the licence for them instead.") : t("The order page opens in the browser and asks for the sign-in code of the person the licence is for, which Etiuda shows them after their first sign-in."),
+      '<button type="button" class="btn" data-e-open="buy">' + esc(t("Buy")) + "</button>"
+    );
+  }
   function accountGroups() {
     const name = row("name", "user", t("Your name"), "", '<input type="text" id="setAgentName" autocomplete="off" spellcheck="false" placeholder="' + esc(t("first name")) + '" value="' + esc(agentName()) + '">');
     const v = signinNow(), groups = [];
     if (signinShown(v)) groups.push({ rows: [], after: accountCardHtml(v) });
-    const rows = [name];
+    const rows = [name], buy = buyOffered() && !v.busy;
     if (v.signedIn && !signinChoosingNow()) {
       const p = signinParts(v), val = (x) => '<span class="sgn-val">' + esc(x) + "</span>", join = (pair) => pair[0] + " " + pair[1];
       const doorSaid = signinDoorRefusedNow() ? signinSay("door", v)[0] : "";
@@ -35856,6 +35878,7 @@ What you type stays in this browser only.`;
       if (signinNoSeat(v)) rows.push(row("seat", "check", t("Seat"), join(signinSay(v.refused, v, p)), ""));
       else if (v.seat === "none") rows.push(row("seat", "check", t("Seat"), join(signinSay("nolicence", v)), ""));
       else rows.push(row("seat", "check", t("Seat"), v.seat === "lapsed" ? join(signinSay("lapsed", v)) : t("On up to three computers; this is one of them."), val(t("Held by this account"))));
+      if (buy) rows.push(buyRow(v));
       rows.push(row(
         "checked",
         "clock",
@@ -35863,7 +35886,7 @@ What you type stays in this browser only.`;
         v.reached ? "" : t("The sign-in service cannot be reached just now. Etiuda keeps working with the catalog it has."),
         (v.at ? val(signinWhen(v.at)) : "") + '<button type="button" class="btn" data-signin-act="check">' + esc(t("Check now")) + "</button>"
       ));
-    }
+    } else if (buy && !v.signedIn) rows.push(buyRow(v));
     groups.push({ rows });
     return groups;
   }
@@ -35883,6 +35906,16 @@ What you type stays in this browser only.`;
     });
     box.querySelectorAll(".sgn-link-f").forEach((f) => {
       f.onclick = () => signinLinkSelect(f);
+    });
+    box.querySelectorAll('[data-e-open="buy"]').forEach((b) => {
+      b.onclick = () => {
+        const h = eHost();
+        try {
+          if (h && typeof h.openBuyPage === "function") Promise.resolve(h.openBuyPage()).catch(() => {
+          });
+        } catch (e) {
+        }
+      };
     });
   }
   function generalGroups() {

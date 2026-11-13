@@ -30,6 +30,8 @@ if (!PICKER && typeof window !== "undefined" && typeof window.addEventListener =
     if (/^https?:/i.test(href)) ipcRenderer.sendSync("etiuda:link-click", href);
     /* The release page's button names no address: main takes the one its signed version note holds. */
     else if (e.type === "click" && e.composedPath().some(n => n && n.dataset && n.dataset.eOpen === "update")) ipcRenderer.sendSync("etiuda:update-click");
+    /* Buy names no address either: main builds the order page's (shell/main.js orderAddress). */
+    else if (e.type === "click" && e.composedPath().some(n => n && n.dataset && n.dataset.eOpen === "buy")) ipcRenderer.sendSync("etiuda:buy-click");
     /* A sign-in button names its provider; main opens the provider's page only after a click on one. */
     else if (e.type === "click") {
       const b = e.composedPath().find(n => n && n.dataset && n.dataset.eOpen === "signin");
@@ -280,6 +282,9 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   signinDoor: (n) => ipcRenderer.invoke("etiuda:signin-door", n),
   signinCheck: () => ipcRenderer.invoke("etiuda:signin-check"),
   signinAgain: () => ipcRenderer.invoke("etiuda:signin-again"),
+  /* Buy, where the shell names an order page: {offer} now, and the page opened by the shell for a click on it. */
+  buyState: () => ipcRenderer.sendSync("etiuda:buy-state"),
+  openBuyPage: () => ipcRenderer.invoke("etiuda:buy-open"),
   onSignin: (fn) => ipcRenderer.on("etiuda:signin", (_e, v) => { try { fn(v && typeof v === "object" ? v : {}); } catch { /* the page has gone */ } }),
   /* Returns this desk to a fresh install. The shell does the work on the next start. */
   resetDesk: () => ipcRenderer.invoke("etiuda:desk-reset"),

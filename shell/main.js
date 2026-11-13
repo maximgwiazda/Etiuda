@@ -9178,11 +9178,15 @@ function signinSecretRead(text) {
   const v = d && typeof d === "object" && !Array.isArray(d) && d.format === 1 ? d.google : undefined;
   return Object.freeze(typeof v === "string" && SIGNIN_SECRET_SHAPE.test(v) ? { google: v } : {}); /* plant:secret-shape */
 }
+/* THE ORDER PAGE IS CONFIGURATION, as a provider's client id is: etiuda.dev's address where a licence is ordered, https, with no
+   query and no fragment of its own. While it is "" Account offers no Buy (the order page's section, below). */
+let ORDER_PAGE = "";
+const ORDER_PAGE_SHAPE = /^https:\/\/(?:[a-z0-9-]+\.)*etiuda\.dev(?:\/[A-Za-z0-9._~-]+)*\/?$/; /* plant:order-shape */
 /* THE SIGN-IN LAB, this whole path run from a development tree against a service other than production: the file ETIUDA_SIGNIN_LAB
    names, read once at start by the wiring and only on a desk neither installed nor packaged. It names the service, http on 127.0.0.1
-   or https on etiuda.dev; it may fill the shipped providers' client ids, their addresses unchanged, and add a third provider, "lab",
-   whose addresses the desk fetches or hands out are http on 127.0.0.1 (its issuer, only compared, and key set, never read, may also
-   be https on a .localhost name). `root` is Studio's: the desk judges no certificate's signature (signinCertOk). */
+   or https on etiuda.dev; it may name the order page, fill the shipped providers' client ids, their addresses unchanged, and add a
+   third provider, "lab", whose addresses the desk fetches or hands out are http on 127.0.0.1 (its issuer, only compared, and key set,
+   never read, may also be https on a .localhost name). `root` is Studio's: the desk judges no certificate's signature (signinCertOk). */
 function signinLabAt(u, named) {
   const m = typeof u !== "string" ? null : /^http:\/\/127\.0\.0\.1:([0-9]{1,5})(\/[A-Za-z0-9._~\/-]*)?$/.exec(u) /* plant:lab-loopback */
     || (named ? /^https:\/\/(?:[a-z0-9-]+\.)*localhost(?::([0-9]{1,5}))?(\/[A-Za-z0-9._~\/-]*)?$/.exec(u) : null);
@@ -9191,12 +9195,14 @@ function signinLabAt(u, named) {
 function signinLabService(u) {
   return typeof u === "string" && /\/$/.test(u) && (signinLabAt(u) || /^https:\/\/(?:[a-z0-9-]+\.)*etiuda\.dev(?:\/[A-Za-z0-9._~-]+)*\/$/.test(u)); /* plant:lab-service */
 }
-/* The lab file whole, {provider (null where it names none), clientIds, signin, signout}, or null where any part is not its shape. */
+/* The lab file whole, {provider (null where it names none), clientIds, signin, signout, order ("" where it names none)}, or null where
+   any part is not its shape. */
 function signinLabRead(text) {
   let d = null;
   try { d = JSON.parse(String(text)); } catch { d = null; }
   if (!d || typeof d !== "object" || Array.isArray(d) || !signinLabService(d.service)
     || !(d.root === undefined || /^[0-9a-f]{64}$/.test(String(d.root)))) return null; /* plant:lab-shape */
+  if (!(d.order === undefined || (typeof d.order === "string" && ORDER_PAGE_SHAPE.test(d.order)))) return null; /* plant:lab-order */
   const ids = d.clientIds === undefined ? {} : d.clientIds, p = d.provider;
   if (!ids || typeof ids !== "object" || Array.isArray(ids)
     || Object.keys(ids).some(id => (id !== "microsoft" && id !== "google") || typeof ids[id] !== "string" || !SIGNIN_CLIENT.test(ids[id]))) return null; /* plant:lab-ids */
@@ -9206,7 +9212,7 @@ function signinLabRead(text) {
     || !signinLabAt(p.authorize) || !signinLabAt(p.token) || !signinLabAt(p.issuer, true) || !(p.jwks === undefined || signinLabAt(p.jwks, true)))) return null;
   return Object.freeze({ provider: p === undefined ? null : Object.freeze({ clientId: p.clientId, clientSecret: p.clientSecret || "", issuer: p.issuer,
     authorize: p.authorize, token: p.token, scope: p.scope, refreshScope: "", extra: Object.freeze({}) }), clientIds: Object.freeze(Object.assign({}, ids)),
-    signin: d.service + "signin/desk", signout: d.service + "signout/desk" });
+    signin: d.service + "signin/desk", signout: d.service + "signout/desk", order: d.order === undefined ? "" : d.order });
 }
 /* The lab taken, once: the shipped providers with the lab's client ids, the provider "lab" where it names one, and the service's door. */
 let signinLabOn = false;
@@ -9219,6 +9225,7 @@ function signinLabUse(lab) {
   SIGNIN_PROVIDERS = Object.freeze(t);
   SIGNIN_SERVICE = lab.signin;
   SIGNOUT_SERVICE = lab.signout;
+  if (lab.order) ORDER_PAGE = lab.order;
   signinLabOn = true;
   return true;
 }
@@ -9984,6 +9991,36 @@ function fromEngine(e) {
   const f = e.senderFrame;
   return !!f && f.parent === null && /\/engine\/etiuda\.html($|[?#])/.test(f.url || "");
 }
+
+/* ---- the order page (the desk-only licence) ------------------------------------------------------------------------------
+   Buy in Account hands the system's browser ORDER_PAGE with the signed-in person's sign-in code after its #, as "#code=", so the
+   page fills its own field. A fragment stays in the browser: it is not part of the request, so no server's log holds the code.
+   Signed out, Buy hands the bare page, whose typed field is the way to buy for someone else. */
+function orderAddress(page, code) {
+  if (typeof page !== "string" || !ORDER_PAGE_SHAPE.test(page)) return ""; /* plant:order-page */
+  return page + (typeof code === "string" && /^[0-9A-Z]{16}$/.test(code) ? "#code=" + code : ""); /* plant:order-fragment */
+}
+function buyAddress() {
+  const v = signinView();
+  return orderAddress(ORDER_PAGE, v && v.code);
+}
+ipcMain.on("etiuda:buy-state", (e) => { e.returnValue = fromEngine(e) ? { offer: !!orderAddress(ORDER_PAGE, "") } : null; });
+/* Buy leaves as the release page does (etiuda:update-click): the preload names a trusted click on it, which stands for the address
+   the shell builds now, and the open goes through openExternally. The page never names an address. */
+ipcMain.on("etiuda:buy-click", (e) => {
+  e.returnValue = null;
+  if (!fromEngine(e)) return; /* plant:buy-click-frame */
+  const u = buyAddress();
+  if (u) linkClicked = { href: new URL(u).href, at: Date.now() };
+});
+ipcMain.handle("etiuda:buy-open", (e) => {
+  if (!fromEngine(e)) return false;
+  const u = buyAddress(), c = linkClicked;
+  if (!u) return false;
+  const ok = !!c && c.href === new URL(u).href && Date.now() - c.at <= LINK_CLICK_MS;
+  openExternally(u); /* plant:buy-open */
+  return ok;
+});
 
 /* A WEB ADDRESS LEAVES ONLY FOR A CLICK ON IT. The preload names the link a trusted click landed on,
    synchronously, before that click's navigation can begin; the address is handed to the browser
