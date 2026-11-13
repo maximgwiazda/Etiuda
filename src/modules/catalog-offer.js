@@ -225,8 +225,8 @@ function ecDeskRowHtml(f,o){
     +(o.loaded?ecActHtml("Eject",ICON_EJECT,' data-ec-eject="1"'):ecActHtml("Work from this file",ICON_LOAD,' data-ec-work="'+o.at+'"'))
     +'</div>';
 }
-function ecMineHtml(line,glyph){
-  return '<small class="ec-mine">'+(glyph?ICON_DESK:'')+'<span>'+esc(line)+'</span></small>';
+function ecMineHtml(line,glyph,fault){
+  return '<small class="ec-mine"'+(fault?' data-ec-fault="'+esc(fault)+'"':'')+'>'+(glyph?ICON_DESK:'')+'<span>'+esc(line)+'</span></small>';
 }
 /* A FOLDER FILE'S SIGNATURE, checked as a load would check it and kept per name and date: the
    rows are files nobody has loaded, so each is read once to be told apart. */
@@ -378,12 +378,17 @@ function paintCatalogList(){
     const ownEntry=ownOf(heldId);
     const ownReached=!!(ownEntry && ownEntry.reached);
     const holdsEdits=deskBranchHolds();
-    const mineLine=(ownEntry || holdsEdits)
-      ? ecMineHtml(t(ownReached
-          ? "Your edits are with the team"
-          /* One line for the relay and the folder alike: a folder team's outbox retries every few seconds too (board 945 stage 3 (b)
-             slice 2; the copywriter, 2026-11-01 02:08). */
-          : "Your edits are kept on this computer and go to the team as soon as it can take them. To hand them over now, Export saves them in a catalog file for the team's lead."), true)
+    /* The team's folder has taken this desk's own writes back three times: they are kept here and sent again, never "with the team". */
+    const takenBack=own.some(o=>o && o.fault==="taken-back");
+    /* One line for the relay and the folder alike: a folder team's outbox retries every few seconds too (board 945 stage 3 (b)
+       slice 2; the copywriter, 2026-11-01 02:08). */
+    const keptLine=t("Your edits are kept on this computer and go to the team as soon as it can take them. To hand them over now, Export saves them in a catalog file for the team's lead.");
+    const mineLine=takenBack
+      ? ecMineHtml(keptLine,true,"taken-back")
+      : (ownEntry || holdsEdits)
+      ? ecMineHtml(ownReached
+          ? t("Your edits are with the team")
+          : keptLine, true)
       : "";
     const extraFor=(id,on)=>on ? mineLine : (id && id!==heldId && ownOf(id)) ? ecMineHtml(t("Your edits to it come back when it is loaded again"),false) : "";
     const tops=files.map((f,i)=>{
@@ -415,6 +420,8 @@ function paintCatalogList(){
     });
     ecKeyBubClose();
     const rows=tops.reduce((out,x,k)=>out.concat([x.html],under[k]),[]).concat(alone);
+    /* With no catalog in use the line has no row to stand under, and the fault is still said. */
+    if(takenBack && !rows.some(r=>r.indexOf("data-ec-fault")>=0)) rows.unshift(mineLine);
     box.innerHTML=rows.length?rows.join(""):ecEmptyHtml();
     markCutText(box);
     wireEcKeys(box);
