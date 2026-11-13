@@ -43,7 +43,7 @@ on:
         type: string
         default: ubuntu
       windows_date:
-        description: Local date for a window leg. Empty refuses the leg, as on the desk.
+        description: The runner's local date for a window leg, which is UTC (date -u +%F). Empty refuses the leg, as on the desk.
         required: false
         type: string
         default: ""
@@ -121,6 +121,14 @@ jobs:
             export ELECTRON_SKIP_BINARY_DOWNLOAD=1
           fi
           npm ci
+          # 44.3.0 has no postinstall, so npm ci leaves no binary and no path.txt. The window
+          # legs read path.txt directly and never require the package, so the binary is fetched
+          # here, once, by the package's own install.js (first window run, 2026-11-13: both legs
+          # red on ENOENT path.txt).
+          if [ "$ELECTRON_SKIP" != "1" ]; then
+            node node_modules/electron/install.js
+            test -s node_modules/electron/path.txt
+          fi
 
       - name: legs
         id: legs
