@@ -703,7 +703,7 @@ async function systemPush(rec) {
 
 /* Claude α's criterion of 2026-11-13, through the lead engineer: after the ordinary build, then the Test Service build, then the
    ordinary build again, each for one account, red where anything in the user-data folder is lost, moved or unread, or a second
-   Apps entry or shortcut is left behind. Both builds are the test identity's (tools/runner/test-service-qa.cjs puts the Test
+   Apps entry or shortcut is left behind. Both builds are the test identity's (the config tsSetup writes puts the Test
    Service config on the ordinary test build), and the lab file is invented: the same staging service address and placeholder
    client ids tests/test-service.mjs holds, so nothing of Max's reaches the runner. "Read" is measured by the first run's own
    mark: the sample a first run writes into Documents\Etiuda is taken away before each later start, and a copy that read its
@@ -724,12 +724,27 @@ function appsRows() {
 let TS_SETUP = "";
 function tsSetup(rec) {
   if (TS_SETUP) return TS_SETUP;
-  const out = path.join(LAB, "dist-ts"), lab = path.join(LAB, "ts-lab.json");
+  const out = path.join(LAB, "dist-ts"), lab = path.join(LAB, "ts-lab.json"), cfg = path.join(LAB, "test-service-qa.cjs");
   fs.writeFileSync(lab, JSON.stringify(TS_LAB));
+  /* THE TEST SERVICE BUILD UNDER THE TEST IDENTITY, written here because the workflow carries only this folder's named .mjs files
+     into the checkout. tools/test-identity.cjs refuses a base whose product name is not the shipped one, and the Test Service
+     config renames it, so electron-builder.js's order (the Test Service inside, the identity outside) cannot be used: the test
+     identity's config is loaded with the variable unset, and the Test Service config goes on top. It then differs from the
+     ordinary test build exactly as the shipped Test Service build differs from the shipped one: the product name with the
+     suffix, the same program file and package name (so the same user-data folder), the fields in the asar, the installer's
+     name and shortcut. */
+  fs.writeFileSync(cfg, ['"use strict";',
+    "const VAR = \"ETIUDA_PACK_TEST_SERVICE\", lab = process.env[VAR];",
+    "if (!lab) throw new Error(\"ts-cycle's config: \" + VAR + \" names no lab file\");",
+    "delete process.env[VAR];",
+    "let base;",
+    "try { base = require(" + JSON.stringify(path.join(ROOT, "tools", "electron-builder-test.cjs")) + "); } finally { process.env[VAR] = lab; }",
+    "module.exports = require(" + JSON.stringify(path.join(ROOT, "tools", "test-service.cjs")) + ").testServiceConfig(base, process.env, " + JSON.stringify(ROOT) + ");",
+    ""].join("\n"));
   const cli = path.join(ROOT, "node_modules", "electron-builder", "out", "cli", "cli.js");
   const t0 = Date.now();
   try {
-    execFileSync(process.execPath, [cli, "--win", "--config", path.join("tools", "runner", "test-service-qa.cjs")],
+    execFileSync(process.execPath, [cli, "--win", "--config", cfg],
       { cwd: ROOT, stdio: "inherit", env: E.unsignedEnv({ ETIUDA_DIST: out, ETIUDA_PACK_TEST_SERVICE: lab }) });
   } catch (e) { throw new NoVerdict("the Test Service test build could not be built: " + oneLine(e.message)); }
   const found = fs.readdirSync(out).filter((n) => /-setup\.exe$/i.test(n));
