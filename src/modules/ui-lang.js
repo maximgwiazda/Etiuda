@@ -1432,6 +1432,10 @@ UI_STRINGS.pl={
   // placeholder: Claudette, the eight lines below
   "today, {TIME}":"dziś, {TIME}",
   "No seat is free on the organisation's licence just now.":"W licencji organizacji nie ma teraz wolnego miejsca.",
+  // placeholder: Claudette, the three lines below
+  "Your organisation's Etiuda licence seats the people its leads add.":"Licencja Etiudy tej organizacji daje miejsce osobom, które dodają jej liderzy.",
+  "Give your lead this code. Once you are added, this desk takes its seat by itself; nothing more to do here.":"Wystarczy podać liderowi ten kod. Po dodaniu to stanowisko samo zajmie miejsce w licencji; tutaj nie trzeba robić nic więcej.",
+  "Your own trial is running: fourteen days, to {DATE}.":"Trwa własny okres próbny: czternaście dni, do {DATE}.",
   "The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account's sign-in code among those who have signed in.":"Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; nikt nie musi nic robić, a lider zespołu widzi kod logowania tego konta wśród osób, które się zalogowały.",
   "This desk's seat is due for renewal.":"Miejsce w licencji dla tego stanowiska czeka na odnowienie.",
   "It renews by itself the next time the sign-in service answers. Everything on this desk works as before.":"Odnowi się samo, gdy usługa logowania znów odpowie. Wszystko na tym stanowisku działa jak dotąd.",

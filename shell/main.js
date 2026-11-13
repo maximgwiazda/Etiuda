@@ -9822,9 +9822,10 @@ function signinRevokedNext(kept, offered) {
 function signinRevokedHas(list, cert) {
   return !!list && Array.isArray(list.keys) && !!cert && !!cert.via && !!cert.via.key && list.keys.indexOf(String(cert.via.key.pub)) >= 0; /* plant:revoked-has */
 }
-/* The service's answer read: {ok, code, cert, doors, doorsSig} (the doors only under signinDoorsSigned; cert null where no licence
-   admits the person yet, and then no doors; `waiting` where a licence admits them and has no free seat, so a quiet renewal seats the
-   desk once one frees), or {ok: false, reason}, the reason "token", "signin", "full" or "desks" as the service says it, else
+/* The service's answer read: {ok, code, cert, doors, doorsSig, askLead} (the doors only under signinDoorsSigned; cert null where no
+   licence admits the person yet, and then no doors; `waiting` where a licence admits them and has no free seat, so a quiet renewal seats
+   the desk once one frees; `askLead` where their organisation's licence seats only the people its leads add, beside their own trial's
+   certificate or none), or {ok: false, reason}, the reason "token", "signin", "full" or "desks" as the service says it, else
    "unreached", which every other answer is; each with `revoked`, the list it carried where signinRevokedOk holds it, else null.
    `packed` is signinDoorAddressOk's. */
 function signinAnswer(res, deskKey, packed) {
@@ -9838,10 +9839,11 @@ function signinAnswerBody(res, deskKey, packed) {
   try { j = JSON.parse(Buffer.from(res && res.bytes ? res.bytes : []).toString("utf8")); } catch { j = null; }
   if (!j || typeof j !== "object" || Array.isArray(j)) return { ok: false, reason: "unreached" };
   if (res.status === 200 && j.ok === true && SIGNIN_CODE.test(String(j.code))) {
-    if (j.certificate === null) return { ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === "waiting" }; /* plant:wait-read */
+    const askLead = j.ask === "lead"; /* plant:ask-lead-read */
+    if (j.certificate === null) return { ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === "waiting", askLead }; /* plant:wait-read */
     if (signinCertOk(j.certificate, deskKey) && j.certificate.code === j.code) {
       const doors = signinDoorsOk(j.doors, packed), signed = signinDoorsSigned(doors, j.doorsSig, j.certificate); /* plant:door-signed-read */
-      return { ok: true, code: String(j.code), cert: j.certificate, doors: signed ? doors : [], doorsSig: signed ? String(j.doorsSig) : "" }; /* plant:door-read */
+      return { ok: true, code: String(j.code), cert: j.certificate, doors: signed ? doors : [], doorsSig: signed ? String(j.doorsSig) : "", askLead }; /* plant:door-read */
     }
     return { ok: false, reason: "unreached" };
   }
@@ -9876,7 +9878,7 @@ function signinSettle(held, ans, now) {
 }
 function signinSettleSeat(held, ans, now) {
   if (ans.ok) return Object.assign({}, held, { code: ans.code, cert: ans.cert, doors: ans.cert ? (ans.doors || []) : [], doorsSig: ans.cert ? String(ans.doorsSig || "") : "", at: now, checked: now, reached: true,
-    said: ans.waiting === true ? "waiting" : "", ask: false }); /* plant:wait-settle */
+    said: ans.waiting === true ? "waiting" : "", ask: false, askLead: ans.askLead === true }); /* plant:wait-settle */
   if (ans.reason === "unreached") return Object.assign({}, held, { checked: now, reached: false });
   const freed = ans.reason === "signin";
   return Object.assign({}, held, { checked: now, reached: true, said: ans.reason, ask: freed || held.ask === true,
@@ -10134,6 +10136,9 @@ function signinView() {
   return { offered: offered, preview: preview, signedIn: signedIn, code: signedIn ? held.code : "",
     seat: !signedIn ? "" : held.cert ? (signinLapsed(held, now) ? "lapsed" : "held") : "none",
     deskOnly: !!signedIn && !!held.cert && held.cert.deskOnly === true, /* plant:view-desk-only */
+    /* Ask your lead, and the person's own trial's end where its certificate is the one held (a team is its lead's own). */
+    askLead: !!signedIn && held.askLead === true, /* plant:view-ask-lead */
+    trialUntil: !!signedIn && held.askLead === true && !!held.cert && held.cert.deskOnly === true ? Number(held.cert.until) || 0 : 0,
     at: signedIn ? held.at : 0, reached: !signedIn || held.reached !== false, ask: !!signedIn && held.ask === true,
     refused: signedIn ? held.said : "", busy: signinBusy ? signinBusy.provider : "", said: signinSaid,
     doors: signedIn ? signinDoorsShown(held, now) : [],
