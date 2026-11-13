@@ -8783,6 +8783,8 @@ What you type stays in this browser only.`;
     "Signed in with {PROVIDER}": "Zalogowano przez {PROVIDER}",
     "Account settings": "Ustawienia konta",
     "Signed in. No team yet": "Zalogowano. Jeszcze bez zespołu",
+    "Working without a team": "Praca bez zespołu",
+    "This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed.": "Ten komputer ma swoje miejsce w licencji, a Etiuda działa na własnym katalogu. Nic więcej nie trzeba.",
     "A team on this licence": "Zespół w tej licencji",
     "This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation.": "Ta licencja ma zespół na przekaźniku. Jeśli lider zespołu przyjął już to konto, po prośbie o dołączenie ten komputer wejdzie, gdy Studio lidera zobaczy prośbę; w przeciwnym razie lider może wysłać zaproszenie.",
     "This team is no longer offered here, or this computer is already in a team, so nothing was sent.": "Ten zespół nie jest już tu proponowany albo ten komputer należy już do zespołu, więc nic nie wysłano.",
@@ -26242,6 +26244,7 @@ What you type stays in this browser only.`;
       signedIn,
       code: signedIn && /^[0-9A-Z]{16}$/.test(String(o.code)) ? String(o.code) : "",
       seat: o.seat === "held" || o.seat === "lapsed" || o.seat === "none" ? o.seat : "",
+      deskOnly: !!signedIn && o.deskOnly === true,
       at: Number.isFinite(o.at) ? o.at : 0,
       reached: o.reached !== false,
       ask: o.ask === true,
@@ -26434,8 +26437,8 @@ What you type stays in this browser only.`;
     if (!p.team && v.reached && v.seat === "held") return {
       moment: "noteam",
       ident,
-      heading: t("Signed in. No team yet"),
-      line: t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."),
+      heading: v.deskOnly ? t("Working without a team") : t("Signed in. No team yet"),
+      line: v.deskOnly ? t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed.") : t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."),
       code: v.code,
       acts: [{ act: "check", label: t("Check now") }, acct]
     };
@@ -35912,7 +35915,7 @@ What you type stays in this browser only.`;
     if (v.signedIn && !signinChoosingNow()) {
       const p = signinParts(v), val = (x) => '<span class="sgn-val">' + esc(x) + "</span>", join = (pair) => pair[0] + " " + pair[1];
       const doorSaid = signinDoorRefusedNow() ? signinSay("door", v)[0] : "";
-      rows.push(p.team ? row("team", "people", t("Team"), doorSaid || (p.team.lead ? t("Led by {LEAD}").split("{LEAD}").join(p.team.lead) : ""), val(p.teamName)) : v.doors.length && v.seat === "held" ? row("team", "people", t("A team on this licence"), doorSaid || t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."), signinDoorsHtml(v.doors)) : row("team", "people", t("No team yet"), doorSaid || t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."), ""));
+      rows.push(p.team ? row("team", "people", t("Team"), doorSaid || (p.team.lead ? t("Led by {LEAD}").split("{LEAD}").join(p.team.lead) : ""), val(p.teamName)) : v.doors.length && v.seat === "held" ? row("team", "people", t("A team on this licence"), doorSaid || t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."), signinDoorsHtml(v.doors)) : v.deskOnly && v.seat === "held" ? row("team", "people", t("Working without a team"), doorSaid || t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."), "") : row("team", "people", t("No team yet"), doorSaid || t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."), ""));
       if (v.code) rows.push(row(
         "code",
         "code",

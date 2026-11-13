@@ -22,6 +22,7 @@ function signinRead(v){
     signedIn: signedIn,
     code: signedIn && /^[0-9A-Z]{16}$/.test(String(o.code)) ? String(o.code) : "",
     seat: o.seat==="held" || o.seat==="lapsed" || o.seat==="none" ? o.seat : "",
+    deskOnly: !!signedIn && o.deskOnly===true,
     at: Number.isFinite(o.at) ? o.at : 0,
     reached: o.reached!==false,
     ask: o.ask===true,
@@ -178,8 +179,10 @@ function signinDoorOf(v){
   if(!p.team && v.seat==="held" && v.doors.length) return {moment:"doors", ident, heading:t("A team on this licence"),
     line:t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."),
     doors:v.doors, acts:[acct]};
-  if(!p.team && v.reached && v.seat==="held") return {moment:"noteam", ident, heading:t("Signed in. No team yet"),
-    line:t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."), code:v.code,
+  /* A desk-only licence has no lead to wait for, so it is not told to wait for one. */
+  if(!p.team && v.reached && v.seat==="held") return {moment:"noteam", ident, heading:v.deskOnly ? t("Working without a team") : t("Signed in. No team yet"),
+    line:v.deskOnly ? t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed.") /* plant:panel-desk-only */
+      : t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."), code:v.code,
     acts:[{act:"check", label:t("Check now")}, acct]};
   const out={moment:"signed", ident, team:p.team ? p.teamName+(p.team.lead ? " · "+named(t("Led by {LEAD}"),"{LEAD}",p.team.lead) : "") : t("No team yet"), acts:[acct]};
   if(!v.reached){ out.moment="offline"; out.say=signinSay("offline", v); out.calm=true; out.acts=[{act:"check", label:t("Check now")}, acct]; }

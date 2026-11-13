@@ -1360,6 +1360,8 @@ UI_STRINGS.pl={
   "Signed in with {PROVIDER}":"Zalogowano przez {PROVIDER}",
   "Account settings":"Ustawienia konta",
   "Signed in. No team yet":"Zalogowano. Jeszcze bez zespołu",
+  "Working without a team":"Praca bez zespołu",
+  "This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed.":"Ten komputer ma swoje miejsce w licencji, a Etiuda działa na własnym katalogu. Nic więcej nie trzeba.",
   "A team on this licence":"Zespół w tej licencji",
   "This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation.":"Ta licencja ma zespół na przekaźniku. Jeśli lider zespołu przyjął już to konto, po prośbie o dołączenie ten komputer wejdzie, gdy Studio lidera zobaczy prośbę; w przeciwnym razie lider może wysłać zaproszenie.",
   "This team is no longer offered here, or this computer is already in a team, so nothing was sent.":"Ten zespół nie jest już tu proponowany albo ten komputer należy już do zespołu, więc nic nie wysłano.",

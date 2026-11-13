@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 107;
+const PLANTS = 122;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 112 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 119 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -80,7 +80,12 @@ function decl(src, start) {
   const end = src.indexOf("\n}", at + 1);
   return src.slice(at + 1, end + 2);
 }
-const NEEDS = ["const BUILTIN_RELAY_URL =", "const SEALED_TEAM_RE =", "const LINUX_KEYRINGS =", "function sealsForReal(", "function branchIdOf("].map(s => decl(MAIN, s)).join("\n");
+/* THE ROOT A CERTIFICATE TRACES TO (ds22): the slice is given a root of this run's own in NOTE_ROOT's place, so a certificate signed
+   here under its delegation is a genuine one; ds22d holds the shipped NOTE_ROOT to the relay's ROOT_PUB. */
+const ROOT_KEY = crypto.generateKeyPairSync("ed25519"), SERVICE_KEY = crypto.generateKeyPairSync("ed25519");
+const TEST_ROOT = ROOT_KEY.publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
+const NEEDS = ["const BUILTIN_RELAY_URL =", "const SEALED_TEAM_RE =", "const LINUX_KEYRINGS =", "function sealsForReal(", "function branchIdOf(",
+  "const SPKI_ED25519 =", "function canonJson("].map(s => decl(MAIN, s)).join("\n") + "\nconst NOTE_ROOT = \"" + TEST_ROOT + "\";";
 const INVITE = ["const INVITE_HIDDEN_RE =", "function inviteRead(", "function inviteRelay(", "function teamChannelOf("].map(s => decl(MAIN, s)).join("\n");
 const NAMES = ["SIGNIN_PROVIDERS", "signinOffered", "signinNonce", "signinAuthorize", "signinPageOk", "signinBack", "signinRefusedWhy", "signinTokens",
   "signinRequest", "signinListen", "signinRun", "signinRenew", "signinKeep", "signinKept", "GOOGLE_HD_NEEDS_EMAIL", "signinRefreshForm",
@@ -193,9 +198,33 @@ const signWith = k => bytes => crypto.sign(null, bytes, k.privateKey).toString("
    desk's public half and t, one a line. */
 const serviceOutBytes = (desk, t) => Buffer.from("etiuda-licence-signout-desk\n" + [desk, t].join("\n"), "utf8");
 const CODE = "7K3MQ9TV2XRBHN4W";
-/* A certificate as the service makes one (the record's "seated" case), for this desk, this code and this window. */
-const SERVED_CERT = (() => { const c = ANSWER_CASES.find(x => x.case === "seated"); return c && c.body && c.body.certificate ? c.body.certificate : {}; })();
-const cert = over => Object.assign(JSON.parse(JSON.stringify(SERVED_CERT)), { desk: DESK_KEY, code: CODE, issued: NOW, until: NOW + 30 * 86400000 }, over);
+/* The service's signing, written here from the interface (relay/core.cjs's delegationBytes and certBytes, Studio's seatCertBytes):
+   a delegation is the line "etiuda-delegation" and the canonical JSON of the document without its signature's value, signed by the
+   root; a certificate is the line "etiuda-seat-certificate", then format, licence, desk, person, code, issued, until and the signing
+   key's id, one a line, signed by the delegated key. */
+const canonOf = v => v === null || typeof v !== "object" ? JSON.stringify(v) : Array.isArray(v) ? "[" + v.map(canonOf).join(",") + "]"
+  : "{" + Object.keys(v).filter(k => v[k] !== undefined).sort().map(k => JSON.stringify(k) + ":" + canonOf(v[k])).join(",") + "}";
+const SERVICE_PUB = SERVICE_KEY.publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
+const VIA_FROM = Math.min(NOW, Date.now()) - 30 * 86400000;
+function delegation(over, signer) {
+  const d = Object.assign({ kind: "etiuda-delegation", format: 1, key: { id: "svc-1", pub: SERVICE_PUB }, may: ["licence", "relay-grant"],
+    from: VIA_FROM, until: VIA_FROM + 360 * 86400000 }, over, { sig: { alg: "ed25519", keyId: "root-1" } });
+  d.sig.value = crypto.sign(null, Buffer.from("etiuda-delegation\n" + canonOf(d), "utf8"), (signer || ROOT_KEY).privateKey).toString("hex");
+  return d;
+}
+const VIA = delegation();
+/* A desk-only licence's certificate carries deskOnly: true, signed as the line "desk-only" after the key id; any other has neither. */
+const certBytesOf = c => Buffer.from("etiuda-seat-certificate\n" + [c.format, c.licence, c.desk, c.person, c.code, c.issued, c.until, c.sig.keyId]
+  .concat(c.deskOnly === true ? ["desk-only"] : []).join("\n"), "utf8");
+/* A certificate as the service signs one: `over` replaces fields before the signing, and a `sig` given is kept as given. */
+function cert(over, signer) {
+  const c = Object.assign({ kind: "etiuda-seat-certificate", format: 1, licence: "a".repeat(32), desk: DESK_KEY, person: "b".repeat(64),
+    code: CODE, issued: NOW, until: NOW + 30 * 86400000, via: VIA }, over);
+  if (over && over.sig) return c;
+  c.sig = { alg: "Ed25519", keyId: c.via && c.via.key ? c.via.key.id : "svc-1", value: "" };
+  c.sig.value = crypto.sign(null, certBytesOf(c), (signer || SERVICE_KEY).privateKey).toString("hex");
+  return c;
+}
 
 /* ---- cases, each a function of the loaded section so a plant reads the same case again ------------------------------ */
 const CASES = {};
@@ -2274,6 +2303,125 @@ CASES.outOwedPage = async (s, page) => {
   try { pl = words(await acctOf({ offered: ["microsoft"], outOwed: true })); } finally { storage.lsSet("eUiLang", "en"); }
   return read && words(owed).indexOf(OUT_OWED_EN) >= 0 && /data-signin-out-owed/.test(owed) && !/data-signin-out-owed/.test(quiet) && pl.indexOf(OUT_OWED_PL) >= 0;
 };
+/* ---- the seat's signature (ds22, Hydrogen's finding 8; Claude alpha's decision 35): a certificate is taken only where a
+   delegation from the root signed its key and that key signed it, as the relay's door takes one ---------------------------- */
+const DAY_MS = 86400000, OTHER_ROOT = crypto.generateKeyPairSync("ed25519"), OTHER_SERVICE = crypto.generateKeyPairSync("ed25519");
+/* Each forgery a hostile answer or an edited signin.json could carry, beside the genuine one. */
+function certForgeries() {
+  const keyIdOff = cert({ via: delegation({ key: { id: "svc-2", pub: SERVICE_PUB } }) });
+  keyIdOff.sig = { alg: "Ed25519", keyId: "svc-1", value: "" };
+  keyIdOff.sig.value = crypto.sign(null, certBytesOf(keyIdOff), SERVICE_KEY.privateKey).toString("hex");
+  return {
+    "a shape-valid made-up signature": cert({ sig: { alg: "Ed25519", keyId: "svc-1", value: "c".repeat(128) } }),
+    "signed by a key the delegation does not name": cert({}, OTHER_SERVICE),
+    "a delegation from a root this desk does not ship": cert({ via: delegation({}, OTHER_ROOT) }),
+    "a delegation that may not sign licences": cert({ via: delegation({ may: ["relay-grant"] }) }),
+    "issued before the delegation's first day": cert({ issued: VIA_FROM - 3 * DAY_MS, until: VIA_FROM - 2 * DAY_MS }),
+    "a field changed after the signing": Object.assign(cert(), { person: "d".repeat(64) }),
+    "a delegation changed after the root signed it": cert({ via: Object.assign({}, VIA, { until: VIA.until + DAY_MS }) }),
+    "signed under a key id not the delegation's": keyIdOff,
+    "longer than the service's thirty days": cert({ until: NOW + 31 * DAY_MS }),
+    "a field beyond the certificate's": Object.assign(cert(), { name: "Ops" }),
+  };
+}
+CASES.certSigned = s => {
+  const ok = c => s.signinCertOk(c, DESK_KEY) === true;
+  const forged = certForgeries();
+  return ok(cert()) && ok(cert({ issued: NOW - DAY_MS, until: NOW - 1 })) && Object.keys(forged).every(k => !ok(forged[k]));
+};
+/* The desk and the relay's door judge every sample alike, the genuine one taken by both, with ONE NAMED EXCEPTION: a genuine
+   desk-only certificate, which the desk takes and the door refuses as "shape" (certWhy holds exactly ten fields). A desk-only
+   licence hands no doors, so none reaches a door. */
+CASES.certAsDoor = s => {
+  const R = createRequire(import.meta.url)(path.join(ROOT, "relay", "core.cjs"));
+  const samples = Object.assign({ genuine: cert() }, certForgeries());
+  const why = c => R.certWhy(c, DESK_KEY, [String(c.licence)], NOW, [TEST_ROOT]), door = c => why(c) === null;
+  const deskOnly = cert({ deskOnly: true });
+  return door(samples.genuine) && Object.keys(samples).every(k => door(samples[k]) === (s.signinCertOk(samples[k], DESK_KEY) === true))
+    && why(deskOnly) === "shape" && s.signinCertOk(deskOnly, DESK_KEY) === true;
+};
+/* The review's own sequence: a forged answer with a made-up signature and a stranger's door on the trusted relay is no seat and
+   offers no door; signin.json edited to hold a forged certificate holds no seat, and a genuine one, lapsed too, stays. */
+CASES.certForgedAnswer = s => {
+  const forged = certForgeries()["a shape-valid made-up signature"];
+  const ans = s.signinAnswer(answer({ ok: true, code: CODE, certificate: forged, doors: [doorOf()] }), DESK_KEY);
+  const rooted = s.signinAnswer(answer({ ok: true, code: CODE, certificate: certForgeries()["a delegation from a root this desk does not ship"], doors: [doorOf()] }), DESK_KEY);
+  const file = c => s.signinFileRead(s.signinFileText({ held: heldOf({ cert: c, doors: [] }) })).held;
+  const lapsed = cert({ issued: NOW - 25 * DAY_MS, until: NOW - 2 * DAY_MS });
+  return ans.ok === false && ans.reason === "unreached" && !ans.doors && rooted.ok === false
+    && file(forged).cert === null && file(certForgeries()["a field changed after the signing"]).cert === null
+    && JSON.stringify(file(cert()).cert) === JSON.stringify(cert()) && JSON.stringify(file(lapsed).cert) === JSON.stringify(lapsed);
+};
+/* THE LAB'S ROOT (the test architect's overrule of 2026-11-13): unpackaged, a lab file's root is honoured beside the shipped one,
+   so a development desk takes a certificate from the local licence lab; installed, packaged or both the file is never read and a
+   certificate under its root is no seat; no lab, or a lab naming no root, honours the shipped root alone. */
+const LAB_ROOT_KEY = crypto.generateKeyPairSync("ed25519");
+CASES.labRoot = async (s0, swap) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-signin-labroot-"));
+  try {
+    const rooted = path.join(dir, "rooted.json"), rootless = path.join(dir, "rootless.json");
+    fs.writeFileSync(rooted, labText(4567, { root: rawPub(LAB_ROOT_KEY.publicKey) }));
+    fs.writeFileSync(rootless, labText(4567, { root: undefined }));
+    const labCert = cert({ via: delegation({}, LAB_ROOT_KEY) }), strayCert = cert({ via: delegation({}, OTHER_ROOT) });
+    const takes = (facts, file) => {
+      const s = loadIn(swap);
+      labStart(s, Object.assign({ file }, facts), swap);
+      return [s.signinCertOk(labCert, DESK_KEY) === true, s.signinCertOk(cert(), DESK_KEY) === true, s.signinCertOk(strayCert, DESK_KEY) === true].join();
+    };
+    const dev = { installed: false, packaged: false };
+    return takes(dev, rooted) === "true,true,false" && takes(dev, rootless) === "false,true,false" && takes(dev, undefined) === "false,true,false"
+      && [{ installed: true, packaged: false }, { installed: false, packaged: true }, { installed: true, packaged: true }].every(x => takes(x, rooted) === "false,true,false");
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+};
+/* A DESK-ONLY LICENCE (Max's test of 2026-11-13; Claude alpha, 03:31): its certificate says so in a signed field, and a desk holding
+   one with no team is told it works without a team, in the copywriter's pair, instead of being told to wait for a lead. An older
+   certificate, without the field, reads as not desk-only. */
+const DESK_ONLY_EN = ["Working without a team", "This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."];
+const DESK_ONLY_PL = ["Praca bez zespołu", "Ten komputer ma swoje miejsce w licencji, a Etiuda działa na własnym katalogu. Nic więcej nie trzeba."];
+const NO_TEAM_LINE = "No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.";
+/* The shell's signinView over `held`, the rest stood in. */
+function viewOver(held) {
+  const text = decl(MAIN, "function signinView(");
+  return new Function("signinOffered", "signinState", "signinPreviewing", "SIGNIN_PROVIDERS", "signinLapsed", "signinDoorsShown", "signinPageOk",
+    "sealsForReal", "safeStorage", "process", "let signinBusy = null, signinSaid = \"\";\n" + text + "\nreturn signinView();")(
+    () => [{ id: "microsoft" }], () => ({ held }), () => false, {}, (h, now) => !!h && !!h.cert && now >= h.cert.until, () => [], () => false,
+    () => true, {}, { platform: "win32" });
+}
+CASES.deskOnlyCert = s => {
+  const ok = c => s.signinCertOk(c, DESK_KEY) === true;
+  const only = cert({ deskOnly: true }), plain = cert();
+  const stripped = Object.assign({}, only); delete stripped.deskOnly;
+  const back = c => s.signinFileRead(s.signinFileText({ held: heldOf({ cert: c, doors: [] }) })).held.cert;
+  const fresh = { issued: Date.now() - DAY_MS, until: Date.now() + 20 * DAY_MS };
+  const onlyNow = cert(Object.assign({ deskOnly: true }, fresh)), plainNow = cert(fresh);
+  return ok(only) && ok(plain) && !ok(stripped) && !ok(Object.assign(cert(), { deskOnly: true })) && !ok(cert({ deskOnly: false })) && !ok(cert({ deskOnly: "yes" }))
+    && !!back(only) && back(only).deskOnly === true && !!back(plain) && back(plain).deskOnly === undefined && back(stripped) === null
+    && viewOver(heldOf({ cert: onlyNow })).deskOnly === true && viewOver(heldOf({ cert: plainNow })).deskOnly === false
+    && viewOver(heldOf({ cert: null })).deskOnly === false && viewOver(null).deskOnly === false;
+};
+CASES.deskOnlyPage = async (s, page) => {
+  const pg = page || P;
+  if (!pg) return false;
+  const storage = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const words = h => String(h).replace(/<[^>]*>/g, "").replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+  const base = { offered: ["microsoft"], signedIn: "microsoft", code: CODE, seat: "held", reached: true, doors: [] };
+  const v = o => pg.signinRead(Object.assign({}, base, o));
+  const only = pg.signinDoor(v({ deskOnly: true })), plain = pg.signinDoor(v({})), forged = pg.signinRead(Object.assign({}, base, { signedIn: "", deskOnly: true }));
+  let pl = null;
+  storage.lsSet("eUiLang", "pl");
+  try { pl = pg.signinDoor(v({ deskOnly: true })); } finally { storage.lsSet("eUiLang", "en"); }
+  const acct = page ? "" : words(await acctOf(Object.assign({}, base, { deskOnly: true }))), acctPlain = page ? "" : words(await acctOf(base));
+  return only.moment === "noteam" && only.heading === DESK_ONLY_EN[0] && only.line === DESK_ONLY_EN[1] && only.code === CODE
+    && plain.moment === "noteam" && plain.heading === "Signed in. No team yet" && plain.line === NO_TEAM_LINE && forged.deskOnly === false
+    && !!pl && pl.heading === DESK_ONLY_PL[0] && pl.line === DESK_ONLY_PL[1]
+    && (page ? true : acct.indexOf(DESK_ONLY_EN[0]) >= 0 && acct.indexOf(DESK_ONLY_EN[1]) >= 0 && acct.indexOf(NO_TEAM_LINE) < 0 && acctPlain.indexOf(NO_TEAM_LINE) >= 0);
+};
+/* The root the shipped desk checks against is the vendor's, the relay's ROOT_PUB, and the check names it. */
+CASES.certRoot = () => {
+  const R = createRequire(import.meta.url)(path.join(ROOT, "relay", "core.cjs"));
+  const m = /\nconst NOTE_ROOT = "([0-9a-f]{64})";/.exec(MAIN);
+  return !!m && m[1] === R.ROOT_PUB && SECTION.split("signinVerified(NOTE_ROOT, ").length === 2;
+};
 
 /* ---- the cases on the branch ------------------------------------------------------------------------------------------- */
 const LEGS = [
@@ -2378,6 +2526,13 @@ const LEGS = [
   ["ds19d", "saidCleared", "a renewal that reached its end clears a failed press's said, so no stale refusal stands over the desk"],
   ["ds20a", "renewAsk", "Google authorizes with access_type=offline and select_account alone; a renewal with no refresh token or an unopenable sub asks for sign-in again without reaching the provider, in the copywriter's English and Polish words"],
   ["ds20b", "noKeyring", "pressing a provider with no keyring open makes no identity and tells the person plainly in the copywriter's English and Polish words; Account's unkept line is retired"],
+  ["ds22a", "certSigned", "a seat certificate is taken only where a delegation from the shipped root, one that may sign licences on the day it was issued, names the key that signed it, for this desk, thirty days at most; each forgery of signature, signer, root, licence right, window, field or key id is not"],
+  ["ds22b", "certAsDoor", "the desk takes a certificate exactly where the relay's door takes it (relay/core.cjs certWhy), sample by sample, the genuine one by both, with one named exception: a genuine desk-only certificate, which the door refuses as \"shape\" and the desk takes (no desk-only licence hands a door)"],
+  ["ds22c", "certForgedAnswer", "a forged answer, a made-up signature or a stranger's root with a door on the trusted relay, is no seat and offers no door; signin.json edited to a forged certificate holds no seat, while a genuine one, lapsed too, stays"],
+  ["ds22d", "certRoot", "the root the desk checks a certificate against is the vendor's, the relay's ROOT_PUB, and the check names it"],
+  ["ds22i", "deskOnlyCert", "a desk-only licence's certificate carries deskOnly: true under the signature, as the line \"desk-only\" after the key id; the field taken off, put on, false or of another value is no certificate; signin.json keeps it; an older certificate without it reads as not desk-only, in the view as well"],
+  ["ds22j", "deskOnlyPage", "a desk-only seat with no team is told \"Working without a team\" and that nothing else is needed, in the panel and Account, Polish too, the code still shown; any other seat with no team keeps the waiting-for-a-lead line"],
+  ["ds22h", "labRoot", "unpackaged, a lab file's root is honoured beside the shipped one; installed, packaged or both a certificate under it is refused, the file never read; no lab, or one naming no root, honours the shipped root alone; a stranger's root never"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
@@ -2782,6 +2937,23 @@ if (!PLANTS_OFF) {
   await plantWire("dsp99f", ["  return signinOutSend(s.out); /* plant:out-again */", "  return Promise.resolve(false);"], "signoutOwed");
   await plantWire("dsp99g", ["{ cancelJoin(); sendJoin(theWindow); } /* plant:signout-door */", "{ }"], "signoutDoorJoin");
   await plantWire("dsp99h", ["    outOwed: !signedIn && !!signinState().out && !signinOutFlight, /* plant:out-owed-view */", "    outOwed: false,"], "outOwedView");
+  /* The seat's signature (ds22): each check of the chain, and the file's reading of it. */
+  await plant("dsp100", ["if (!signinVerified(NOTE_ROOT, viaBytes, d.sig.value) /* plant:cert-root */", "if (false /* plant:cert-root */"], "certSigned");
+  await plant("dsp101", ["return signinVerified(d.key.pub, bytes, c.sig.value); /* plant:cert-sig */", "return true;"], "certSigned");
+  await plant("dsp102", ["if (c.sig.keyId !== d.key.id) return false; /* plant:cert-via-key */", ""], "certSigned");
+  await plant("dsp103", ["if (d.may.indexOf(\"licence\") < 0) return false; /* plant:cert-may */", ""], "certSigned");
+  await plant("dsp104", ["if (!at || !first || !last || !(first <= at && at <= last)) return false; /* plant:cert-window */", ""], "certSigned");
+  await plant("dsp105", ["cert: h.cert && typeof h.cert === \"object\" && signinCertOk(h.cert, h.cert.desk) ? h.cert : null, /* plant:file-cert */", "cert: h.cert && typeof h.cert === \"object\" && Number.isSafeInteger(h.cert.until) ? h.cert : null,"], "certForgedAnswer");
+  await plant("dsp106", ["&& c.until - c.issued <= SIGNIN_CERT_SPAN_MS /* plant:cert-span */", ""], "certSigned");
+  /* The desk-only field (ds22i, ds22j): signed, of one shape, and told on the page. */
+  await plant("dsp117", ["    .concat(c.deskOnly === true ? [\"desk-only\"] : []).map(String).join(\"\\n\"), \"utf8\"); /* plant:cert-desk-only-bytes */", "    .map(String).join(\"\\n\"), \"utf8\");"], "deskOnlyCert");
+  await plant("dsp118", ["      .concat(c.deskOnly === true ? [\"deskOnly\"] : [])) /* plant:cert-desk-only-field */", "      .concat(c.deskOnly !== undefined ? [\"deskOnly\"] : []))"], "deskOnlyCert");
+  /* The lab's root (ds22h): honoured where the lab is taken, and the lab never taken installed or packaged. */
+  await plantWire("dsp112", ["    && !(signinLabRoot !== \"\" && signinVerified(signinLabRoot, viaBytes, d.sig.value))) return false; /* plant:cert-lab-root */", "    ) return false;"], "labRoot");
+  await plantWire("dsp113", ["  signinLabRoot = lab.root || \"\"; /* plant:lab-root-use */", ""], "labRoot");
+  await plantWire("dsp114", ["root: d.root === undefined ? \"\" : String(d.root) });", "root: \"\" });"], "labRoot");
+  await plantWire("dsp115", ["if (!INSTALLED && !app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) {", "if (!INSTALLED && process.env.ETIUDA_SIGNIN_LAB) {"], "labRoot");
+  await plantWire("dsp116", ["if (!INSTALLED && !app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) {", "if (!app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) {"], "labRoot");
   /* The page's half, imported again with the line planted. */
   const plantPage = async (id, swap, name) => {
     const r = await plantRed(async () => CASES[name](S, await pageWith(swap)));
@@ -2801,6 +2973,8 @@ if (!PLANTS_OFF) {
     "const got = token ? await signinRenew(io, p, deskKey, token, held.seed, sub, now) : { ok: false, reason: \"signin-ask\" };"], "renewAsk");
   await plantWire("dsp90", ["  if (!sealsForReal(safeStorage, process.platform)) { signinSaid = \"signin-keyring\"; tellSignin(); return signinView(); } /* plant:signin-keyring */\n",
     ""], "noKeyring");
+  await plantPage("dsp119", ["    line:v.deskOnly ? t(\"This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed.\") /* plant:panel-desk-only */",
+    "    line:false ? \"\""], "deskOnlyPage");
   /* A gate on a local act, put into the desk file's write in memory, is seen. */
   await plantPage("dsp83", ["if(!r || r===\"signin\" || signinNoSeat(v)) return null; /* plant:told-renewal */", "return null;"], "toldRenewal");
   await plantPage("dsp84", ["  if(FAIL_FIRST.indexOf(v.said)>=0) return {kind:\"pressed\",", "  if(false) return {kind:\"pressed\","], "toldPressed");

@@ -9252,7 +9252,9 @@ const ORDER_PAGE_SHAPE = /^https:\/\/(?:[a-z0-9-]+\.)*etiuda\.dev(?:\/[A-Za-z0-9
    names, read once at start by the wiring and only on a desk neither installed nor packaged. It names the service, http on 127.0.0.1
    or https on etiuda.dev; it may name the order page, fill the shipped providers' client ids, their addresses unchanged, and add a
    third provider, "lab", whose addresses the desk fetches or hands out are http on 127.0.0.1 (its issuer, only compared, and key set,
-   never read, may also be https on a .localhost name). `root` is Studio's: the desk judges no certificate's signature (signinCertOk). */
+   never read, may also be https on a .localhost name). `root`, where given, is a root Studio and the desk judge a certificate under
+   beside the shipped one (signinLabRoot, signinCertOk); a desk installed or packaged never reads the file, so it trusts the shipped
+   root alone. */
 function signinLabAt(u, named) {
   const m = typeof u !== "string" ? null : /^http:\/\/127\.0\.0\.1:([0-9]{1,5})(\/[A-Za-z0-9._~\/-]*)?$/.exec(u) /* plant:lab-loopback */
     || (named ? /^https:\/\/(?:[a-z0-9-]+\.)*localhost(?::([0-9]{1,5}))?(\/[A-Za-z0-9._~\/-]*)?$/.exec(u) : null);
@@ -9261,8 +9263,8 @@ function signinLabAt(u, named) {
 function signinLabService(u) {
   return typeof u === "string" && /\/$/.test(u) && (signinLabAt(u) || /^https:\/\/(?:[a-z0-9-]+\.)*etiuda\.dev(?:\/[A-Za-z0-9._~-]+)*\/$/.test(u)); /* plant:lab-service */
 }
-/* The lab file whole, {provider (null where it names none), clientIds, signin, signout, order ("" where it names none)}, or null where
-   any part is not its shape. */
+/* The lab file whole, {provider (null where it names none), clientIds, signin, signout, order and root (each "" where it names
+   none)}, or null where any part is not its shape. */
 function signinLabRead(text) {
   let d = null;
   try { d = JSON.parse(String(text)); } catch { d = null; }
@@ -9278,10 +9280,13 @@ function signinLabRead(text) {
     || !signinLabAt(p.authorize) || !signinLabAt(p.token) || !signinLabAt(p.issuer, true) || !(p.jwks === undefined || signinLabAt(p.jwks, true)))) return null;
   return Object.freeze({ provider: p === undefined ? null : Object.freeze({ clientId: p.clientId, clientSecret: p.clientSecret || "", issuer: p.issuer,
     authorize: p.authorize, token: p.token, scope: p.scope, refreshScope: "", extra: Object.freeze({}) }), clientIds: Object.freeze(Object.assign({}, ids)),
-    signin: d.service + "signin/desk", signout: d.service + "signout/desk", order: d.order === undefined ? "" : d.order });
+    signin: d.service + "signin/desk", signout: d.service + "signout/desk", order: d.order === undefined ? "" : d.order,
+    root: d.root === undefined ? "" : String(d.root) });
 }
 /* The lab taken, once: the shipped providers with the lab's client ids, the provider "lab" where it names one, and the service's door. */
 let signinLabOn = false;
+/* The lab's own root, "" where no lab is taken or it names none: signinCertOk honours it beside NOTE_ROOT. */
+let signinLabRoot = "";
 function signinLabUse(lab) {
   if (!lab || signinLabOn) return false;
   const t = {};
@@ -9292,6 +9297,7 @@ function signinLabUse(lab) {
   SIGNIN_SERVICE = lab.signin;
   SIGNOUT_SERVICE = lab.signout;
   if (lab.order) ORDER_PAGE = lab.order;
+  signinLabRoot = lab.root || ""; /* plant:lab-root-use */
   signinLabOn = true;
   return true;
 }
@@ -9601,15 +9607,49 @@ async function signoutAsk(io, deskKey, now) {
     return !!res && res.status === 200;
   } catch { return false; }
 }
-/* THE SEAT CERTIFICATE as the desk takes it: the service's shape, for this desk's key, a window that ends after it begins. Its
-   signature under the delegation is Studio's to check, as Studio checks a grant; the desk keeps it and writes it. */
+/* THE SEAT CERTIFICATE as the desk takes it, as relay/core.cjs certWhy takes it at a door: the service's shape, for this desk's key,
+   a window of at most SIGNIN_CERT_SPAN_MS, signed by the key of a delegation from NOTE_ROOT, or a lab's signinLabRoot, that may sign
+   "licence" on the UTC day the certificate was issued. A certificate failing any of it is no seat, wherever it came from. `deskOnly`,
+   present only as true, says its licence is desk-only (no lead), and is signed: the line "desk-only" after the key id, as
+   Studio's seatCertBytes makes it; without it the bytes are as before. */
 const SIGNIN_CODE = /^[0-9A-HJKMNP-TV-Z]{16}$/;
+const SIGNIN_CERT_SPAN_MS = 30 * 24 * 60 * 60 * 1000, SIGNIN_VIA_SPAN_MS = 366 * 24 * 60 * 60 * 1000;
+const SIGNIN_KEY_ID = /^[a-z0-9][a-z0-9-]{2,63}$/;
+function signinVerified(pub, bytes, value) {
+  try {
+    return /^[0-9a-f]{64}$/.test(String(pub)) && crypto.verify(null, bytes,
+      crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(pub, "hex")]), format: "der", type: "spki" }), Buffer.from(String(value), "hex")) === true;
+  } catch { return false; }
+}
 function signinCertOk(c, deskKey) {
   const plainObj = v => !!v && typeof v === "object" && !Array.isArray(v);
-  return plainObj(c) && c.kind === "etiuda-seat-certificate" && c.format === 1 && /^[0-9a-f]{32}$/.test(String(c.licence))
+  const exactly = (o, names) => Object.keys(o).length === names.length && names.every(k => Object.prototype.hasOwnProperty.call(o, k));
+  const day = ms => Math.abs(ms) <= 8.64e15 ? new Date(ms).toISOString().slice(0, 10) : "";
+  if (!(plainObj(c) && exactly(c, ["kind", "format", "licence", "desk", "person", "code", "issued", "until", "via", "sig"]
+      .concat(c.deskOnly === true ? ["deskOnly"] : [])) /* plant:cert-desk-only-field */
+    && c.kind === "etiuda-seat-certificate" && c.format === 1 && /^[0-9a-f]{32}$/.test(String(c.licence))
     && String(c.desk) === String(deskKey) && /^[0-9a-f]{64}$/.test(String(c.person)) && SIGNIN_CODE.test(String(c.code)) /* plant:cert-desk */
-    && Number.isSafeInteger(c.issued) && Number.isSafeInteger(c.until) && c.until > c.issued && plainObj(c.via)
-    && plainObj(c.sig) && c.sig.alg === "Ed25519" && typeof c.sig.keyId === "string" && /^[0-9a-f]{128}$/.test(String(c.sig.value));
+    && Number.isSafeInteger(c.issued) && Number.isSafeInteger(c.until) && c.issued > 0 && c.until > c.issued
+    && c.until - c.issued <= SIGNIN_CERT_SPAN_MS /* plant:cert-span */
+    && plainObj(c.sig) && exactly(c.sig, ["alg", "keyId", "value"]) && c.sig.alg === "Ed25519" && SIGNIN_KEY_ID.test(String(c.sig.keyId))
+    && /^[0-9a-f]{128}$/.test(String(c.sig.value)))) return false;
+  const d = c.via;
+  if (!(plainObj(d) && exactly(d, ["kind", "format", "key", "may", "from", "until", "sig"]) && d.kind === "etiuda-delegation" && d.format === 1
+    && plainObj(d.key) && exactly(d.key, ["id", "pub"]) && SIGNIN_KEY_ID.test(String(d.key.id)) && /^[0-9a-f]{64}$/.test(String(d.key.pub))
+    && Array.isArray(d.may) && d.may.length >= 1 && d.may.length <= 16 && d.may.every(m => typeof m === "string")
+    && Number.isSafeInteger(d.from) && Number.isSafeInteger(d.until) && d.until > d.from && d.until - d.from <= SIGNIN_VIA_SPAN_MS
+    && plainObj(d.sig) && exactly(d.sig, ["alg", "keyId", "value"]) && d.sig.alg === "ed25519" && SIGNIN_KEY_ID.test(String(d.sig.keyId))
+    && /^[0-9a-f]{128}$/.test(String(d.sig.value)))) return false;
+  if (d.may.indexOf("licence") < 0) return false; /* plant:cert-may */
+  const at = day(c.issued), first = day(d.from), last = day(d.until);
+  if (!at || !first || !last || !(first <= at && at <= last)) return false; /* plant:cert-window */
+  const viaBytes = Buffer.from("etiuda-delegation\n" + canonJson(Object.assign({}, d, { sig: { alg: d.sig.alg, keyId: d.sig.keyId } })), "utf8");
+  if (!signinVerified(NOTE_ROOT, viaBytes, d.sig.value) /* plant:cert-root */
+    && !(signinLabRoot !== "" && signinVerified(signinLabRoot, viaBytes, d.sig.value))) return false; /* plant:cert-lab-root */
+  if (c.sig.keyId !== d.key.id) return false; /* plant:cert-via-key */
+  const bytes = Buffer.from("etiuda-seat-certificate\n" + [c.format, c.licence, c.desk, c.person, c.code, c.issued, c.until, c.sig.keyId]
+    .concat(c.deskOnly === true ? ["desk-only"] : []).map(String).join("\n"), "utf8"); /* plant:cert-desk-only-bytes */
+  return signinVerified(d.key.pub, bytes, c.sig.value); /* plant:cert-sig */
 }
 /* THE DOORS THE SERVICE HANDS (board 980, the door-finding; Max, 2026-11-12 18:46 and 18:57): beside a certificate, the doors of
    the relay teams on its licence, each {team, rt, url, keyId, lead, box}. A door is kept only whole: the team id and relay id in
@@ -9731,7 +9771,7 @@ function signinFileRead(text, packed) {
   if (h && typeof h === "object" && signinKnown(h.provider) && /^[0-9a-f]{64}$/.test(String(h.seed)))
     out.held = { provider: String(h.provider), refresh: typeof h.refresh === "string" ? h.refresh : "", sub: typeof h.sub === "string" ? h.sub : "",
       seed: String(h.seed), code: SIGNIN_CODE.test(String(h.code)) ? String(h.code) : "",
-      cert: h.cert && typeof h.cert === "object" && Number.isSafeInteger(h.cert.until) ? h.cert : null,
+      cert: h.cert && typeof h.cert === "object" && signinCertOk(h.cert, h.cert.desk) ? h.cert : null, /* plant:file-cert */
       at: num(h.at), checked: num(h.checked), reached: h.reached !== false, said: typeof h.said === "string" ? h.said : "", ask: h.ask === true,
       doors: signinDoorsOk(h.doors, packed) };
   /* The desk key whose sign out the service has not taken yet: asked again at the renewal's next turn (signinOutAgain). */
@@ -9904,7 +9944,8 @@ ipcMain.handle("etiuda:signin-door", (e, n) => {
   return r;
 });
 /* What the page is told, no token and nothing from the provider: the providers offered by id, who is signed in by provider, the
-   code, the seat ("held", "lapsed" or "none"), when the service last answered and whether the last try reached it; the provider's
+   code, the seat ("held", "lapsed" or "none") and whether its licence is desk-only, when the service last answered and whether
+   the last try reached it; the provider's
    page of the sign-in that waits, and nothing once it ends; and whether this system keeps a sign-in (sealsForReal). */
 function signinView() {
   const real = signinOffered().map(p => p.id), held = signinState().held, now = Date.now(), preview = signinPreviewing();
@@ -9912,6 +9953,7 @@ function signinView() {
   const signedIn = held && real.indexOf(held.provider) >= 0 ? held.provider : "";
   return { offered: offered, preview: preview, signedIn: signedIn, code: signedIn ? held.code : "",
     seat: !signedIn ? "" : held.cert ? (signinLapsed(held, now) ? "lapsed" : "held") : "none",
+    deskOnly: !!signedIn && !!held.cert && held.cert.deskOnly === true, /* plant:view-desk-only */
     at: signedIn ? held.at : 0, reached: !signedIn || held.reached !== false, ask: !!signedIn && held.ask === true,
     refused: signedIn ? held.said : "", busy: signinBusy ? signinBusy.provider : "", said: signinSaid,
     doors: signedIn ? signinDoorsShown(held, now) : [],
