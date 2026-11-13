@@ -40,7 +40,7 @@ import { customerVersion, versionProblems, placeholders, licencePages, licencePr
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 55;
+const EXPECTED = 56;
 
 let asserted = 0, failed = 0;
 const notRun = [];
@@ -629,6 +629,8 @@ try {
   const THUMB10 = 'AB'.repeat(20), WHO10 = 'CN=Example Publisher';
   const calls10 = [], logs10 = [];
   let readBack = null;
+  const TEMP10 = path.join(TMP, 'es-temp');
+  fs.mkdirSync(TEMP10, { recursive: true });
   const fakeIo = {
     /* python-keyring's layout after storing the four in order: the last under the service, the rest under name@service. */
     readCredentials: targets => targets.map(t => t === ES.KEYRING_SERVICE ? ['totp-secret', U16(VAL['totp-secret'])]
@@ -642,6 +644,8 @@ try {
     },
     leaf: () => ({ thumbprint: THUMB10, subject: WHO10 }),
     readSignature: () => readBack || { status: 'Valid', timestamped: true, thumbprint: THUMB10, subject: WHO10 },
+    /* A temporary folder of the legs' own, so the session's sweep (10j) never reaches the desk's real one. */
+    tmp: () => TEMP10,
     now: (() => { let n = 0; return () => (n += 1000); })(),
     log: line => logs10.push(line),
   };
@@ -789,6 +793,30 @@ try {
     l10p.git('commit', '-am', 'lift plant:release-demo-var');
     const r10p = release(l10p, [], null, { ETIUDA_SIGN: 'esigner-demo' });
     check(lift10r !== rel10Code && past2(r10p), '10i lifting plant:release-demo-var lets the same release past gate 2, exit ' + r10p.status);
+    /* 10j: a packaging command killed mid-call leaves its argument folder behind; the next session removes this tool's own
+       stale folders by their exact prefix, and nothing else in the temporary folder, which here is a planted one. */
+    const TMP_ROOT = path.join(TMP, 'es-tmp'), hourAgo = new Date(Date.now() - 3600000);
+    fs.mkdirSync(TMP_ROOT, { recursive: true });
+    const plant = (name, dir, old) => {
+      const at = path.join(TMP_ROOT, name);
+      if (dir) { fs.mkdirSync(at, { recursive: true }); fs.writeFileSync(path.join(at, 'args'), '-password\n"planted"\n'); }
+      else fs.writeFileSync(at, 'x');
+      if (old) fs.utimesSync(at, hourAgo, hourAgo);
+      return at;
+    };
+    const stale = plant('etiuda-esigner-stale1', true, true);
+    const keep = [plant('etiuda-esigner-fresh1', true, false), plant('etiuda-esigner-file', false, true),
+      plant('etiuda-esignerx-stale', true, true), plant('etiuda-sellable-stale', true, true), plant('xetiuda-esigner-stale', true, true)];
+    for (const rel of Object.keys(ES.TOOL.sha256))   /* 10f put the real pins back */
+      ES.TOOL.sha256[rel] = require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(TOOL_AT, rel))).digest('hex');
+    const tmpWas = ES.io.tmp;
+    ES.io.tmp = () => TMP_ROOT;
+    try { await hookFor('esigner')({ path: target('probe-j.exe') }); } finally { ES.io.tmp = tmpWas; }
+    const left = fs.readdirSync(TMP_ROOT).sort();
+    check(!fs.existsSync(stale) && keep.every(k => fs.existsSync(k)) && left.length === keep.length,
+      '10j a stale etiuda-esigner- folder holding an argument file is gone once the next session starts, while a fresh folder of'
+      + ' that prefix, a stale file of it, stale folders of other names and the session\'s own spent folders are as they should be: '
+      + JSON.stringify(left));
   } finally {
     Object.assign(ES.io, IO);
     Object.assign(ES.TOOL.sha256, realPins);

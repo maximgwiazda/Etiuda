@@ -74,6 +74,8 @@ const io = {
     const [status, ts, thumbprint, subject] = out.split("\t");
     return { status: (status || "").trim(), timestamped: (ts || "").trim() === "True", thumbprint: (thumbprint || "").trim().toUpperCase(), subject: (subject || "").trim() };
   },
+  /* The user's temporary folder, where each call's argument folder lives. */
+  tmp() { return os.tmpdir(); },
   now() { return Date.now(); },
   log(line) { console.log(line); },
 };
@@ -131,9 +133,26 @@ function scrub(text, values) {
   return t;
 }
 
+/* A packaging command killed mid-call skips the call's clean-up and leaves its argument folder, values in it. Each session
+   first removes this tool's own folders, by their exact prefix, older than any call can run (its timeout is 5 minutes);
+   a younger one may be another build's call in flight. Links are left alone. */
+const ARGS_PREFIX = "etiuda-esigner-";
+const STALE_MS = 10 * 60 * 1000;
+function sweepStale() {
+  const root = io.tmp(), now = Date.now();
+  for (const name of fs.readdirSync(root)) {
+    if (!name.startsWith(ARGS_PREFIX)) continue;
+    const at = path.join(root, name);
+    let st;
+    try { st = fs.lstatSync(at); } catch { continue; }
+    if (st.isDirectory() && !st.isSymbolicLink() && now - st.mtimeMs > STALE_MS) fs.rmSync(at, { recursive: true, force: true });
+  }
+}
+
 /* One session per packaging command: the values, the tool, a working folder for its configuration and log, and the
    account's own certificate, which every signed file must carry. */
 function session(kind, root, output) {
+  sweepStale();
   const tool = findTool(root);
   const demo = kind === "esigner-demo" ? demoValues() : null;
   const values = demo ? demo.values : fromKeyring();
@@ -159,7 +178,7 @@ function session(kind, root, output) {
 function call(s, command, extra, plain) {
   const v = s.values;
   const pairs = [["-username", v.username], ["-password", v.password]].concat(command === "sign" ? [["-totp_secret", v["totp-secret"]]] : [], extra);
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-esigner-"));
+  const dir = fs.mkdtempSync(path.join(io.tmp(), ARGS_PREFIX));
   const argFile = path.join(dir, "args");
   let r;
   try {
