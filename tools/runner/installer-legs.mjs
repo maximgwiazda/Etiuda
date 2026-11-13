@@ -837,14 +837,14 @@ async function tsCycle(rec) {
     for (const p of procsOf(prog)) E.killTree(p.pid);
     for (let i = 0; i < 15 && procsOf(prog).length; i++) await sleep(1000);
     rec.f(tag + "-start-s", s); rec.f(tag + "-ran", yes(!gone || held));
-    return held;
+    return { held, ran: !gone || held };
   };
   const sampled = () => { try { return /"e~sampled"/.test(fs.readFileSync(desk, "utf8")); } catch (e) { return false; } };
 
   /* 1. The ordinary build, and its first run. */
   const a = await install(NEWER, "ordinary", PRODUCT, ORD_LNK, TS_LNK);
   if (!a.ok) { rec.end(false, "the ordinary build: " + a.why); return; }
-  const firstOk = await start(a.prog, "first", () => sampled() && fs.existsSync(sample) && shaOr(sample) === E.sha256(SAMPLE));
+  const firstOk = (await start(a.prog, "first", () => sampled() && fs.existsSync(sample) && shaOr(sample) === E.sha256(SAMPLE))).held;
   if (!firstOk) throw new NoVerdict("the ordinary build's first run did not write desk.json with its mark and the sample, so there is no data to carry");
   fs.writeFileSync(marker, crypto.randomBytes(4096));
   const markSha = E.sha256(marker);
@@ -854,7 +854,9 @@ async function tsCycle(rec) {
   /* The data after an install and a start: nothing of `before` gone, the marker byte for byte, the mark read (no sample again). */
   const carried = async (tag, prog) => {
     fs.unlinkSync(sample);
-    const ran = await start(prog, tag, () => false); /* the full 90 s: a re-written sample is the fault, so its absence takes the wait */
+    /* The full 90 s, the copy staying up through them: a re-written sample is the fault, so its absence takes the whole wait
+       (the fifth dispatch, 2026-11-13, read this wait's never-met condition as "did not run"). */
+    const ran = (await start(prog, tag, () => false)).ran;
     const now = steady(manifest(ud));
     const gone = Object.keys(before).filter((k) => !(k in now));
     const markerSame = shaOr(marker) === markSha;
