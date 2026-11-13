@@ -1354,7 +1354,6 @@ body.pills-off.pills-peek .pills-slot{display:block}
 .sgn-say b{display:block;font-size:14.5px;color:var(--ink)}
 .sgn-say span{color:var(--dim)}
 .sgn-say.calm b{font-weight:400;font-size:13.5px}
-.sgn-own{margin:14px 0 0;padding-top:12px;border-top:1px solid var(--line);font-size:13.5px;line-height:1.45;color:var(--dim)}
 .sgn-wait{font-size:13.5px;color:var(--dim);margin-top:4px}
 .sgn-run{position:relative;height:2px;width:100%;background:var(--line);border-radius:2px;overflow:hidden;margin-top:8px}
 /* The bar runs while a sign-in waits for the browser, and that wait ends by itself at SIGNIN_WAIT_MS (five minutes, shell/main.js):
@@ -8924,10 +8923,11 @@ What you type stays in this browser only.`;
     // placeholder: Claudette, the eight lines below
     "today, {TIME}": "dziś, {TIME}",
     "No seat is free on the organisation's licence just now.": "W licencji organizacji nie ma teraz wolnego miejsca.",
-    // placeholder: Claudette, the three lines below
-    "Your organisation's Etiuda licence seats the people its leads add.": "Licencja Etiudy tej organizacji daje miejsce osobom, które dodają jej liderzy.",
-    "Give your lead this code. Once you are added, this desk takes its seat by itself; nothing more to do here.": "Wystarczy podać liderowi ten kod. Po dodaniu to stanowisko samo zajmie miejsce w licencji; tutaj nie trzeba robić nic więcej.",
-    "Your own trial is running: fourteen days, to {DATE}.": "Trwa własny okres próbny: czternaście dni, do {DATE}.",
+    // the copywriter's, the four lines below
+    "The organisation's Etiuda licence seats the people its leads add.": "Licencja Etiudy tej organizacji daje miejsce osobom, które dodają jej liderzy.",
+    "Give the team's lead this code. Once added, this desk takes its seat by itself; nothing more is needed here.": "Wystarczy podać liderowi zespołu ten kod. Po dodaniu to stanowisko samo zajmie miejsce w licencji; tutaj nie trzeba robić nic więcej.",
+    "This account's own trial is running.": "Trwa własny okres próbny tego konta.",
+    "Fourteen days, until {DATE}, on up to three computers. A lead can add this account at any time, without waiting for the trial to end.": "Czternaście dni, do {DATE}, najwyżej na trzech komputerach. Lider może dodać to konto w każdej chwili, bez czekania na koniec okresu próbnego.",
     "The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account's sign-in code among those who have signed in.": "Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; nikt nie musi nic robić, a lider zespołu widzi kod logowania tego konta wśród osób, które się zalogowały.",
     "This desk's seat is due for renewal.": "Miejsce w licencji dla tego stanowiska czeka na odnowienie.",
     "It renews by itself the next time the sign-in service answers. Everything on this desk works as before.": "Odnowi się samo, gdy usługa logowania znów odpowie. Wszystko na tym stanowisku działa jak dotąd.",
@@ -27425,9 +27425,8 @@ What you type stays in this browser only.`;
       case "waiting":
       case "full":
         return p && p.team && p.team.lead ? [named(t("{TEAM} has no free seat just now."), "{TEAM}", p.teamName), named(t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and {LEAD}, the team's lead, sees this account's sign-in code among those who have signed in."), "{LEAD}", p.team.lead)] : [t("No seat is free on the organisation's licence just now."), t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account's sign-in code among those who have signed in.")];
-      /* Words for the copywriter. */
       case "asklead":
-        return [t("Your organisation's Etiuda licence seats the people its leads add."), t("Give your lead this code. Once you are added, this desk takes its seat by itself; nothing more to do here.")];
+        return [t("The organisation's Etiuda licence seats the people its leads add."), t("Give the team's lead this code. Once added, this desk takes its seat by itself; nothing more is needed here.")];
       case "nolicence":
         return [t("No Etiuda licence has a seat for this account."), t("The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.")];
       case "offline":
@@ -27530,7 +27529,10 @@ What you type stays in this browser only.`;
       say: signinSay("asklead", v),
       code: v.code,
       acts: [{ act: "check", label: t("Check now") }, acct],
-      own: v.seat === "held" && v.trialUntil ? named(t("Your own trial is running: fourteen days, to {DATE}."), "{DATE}", signinDay(v.trialUntil)) : ""
+      own: v.seat === "held" && v.trialUntil ? [
+        t("This account's own trial is running."),
+        named(t("Fourteen days, until {DATE}, on up to three computers. A lead can add this account at any time, without waiting for the trial to end."), "{DATE}", signinDay(v.trialUntil))
+      ] : null
     };
     if (v.seat === "none" || !v.seat) return {
       moment: "nolicence",
@@ -27618,7 +27620,7 @@ What you type stays in this browser only.`;
     if (d.cap) h += '<p class="sgn-cap">' + esc(d.cap) + "</p>";
     if (d.privacy) h += '<p class="sgn-cap">' + esc(d.privacy) + "</p>";
     if (d.acts && d.acts.length) h += signinActsHtml(d.acts);
-    if (d.own) h += '<p class="sgn-own">' + esc(d.own) + "</p>";
+    if (d.own) h += '<p class="sgn-say sgn-own"><b>' + esc(d.own[0]) + "</b><span>" + esc(d.own[1]) + "</span></p>";
     if (d.link) h += signinLinkHtml(d.link);
     if (d.foot) h += '<p class="sgn-ft">' + esc(d.foot) + "</p>";
     return h;

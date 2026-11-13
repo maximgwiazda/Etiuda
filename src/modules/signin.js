@@ -103,9 +103,8 @@ function signinSay(reason, v, p){
       return p && p.team && p.team.lead
         ? [named(t("{TEAM} has no free seat just now."),"{TEAM}",p.teamName), named(t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and {LEAD}, the team's lead, sees this account's sign-in code among those who have signed in."),"{LEAD}",p.team.lead)]
         : [t("No seat is free on the organisation's licence just now."), t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account's sign-in code among those who have signed in.")];
-    /* Words for the copywriter. */
     case "asklead":
-      return [t("Your organisation's Etiuda licence seats the people its leads add."), t("Give your lead this code. Once you are added, this desk takes its seat by itself; nothing more to do here.")];
+      return [t("The organisation's Etiuda licence seats the people its leads add."), t("Give the team's lead this code. Once added, this desk takes its seat by itself; nothing more is needed here.")];
     case "nolicence":
       return [t("No Etiuda licence has a seat for this account."), t("The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.")];
     case "offline":
@@ -183,10 +182,11 @@ function signinDoorOf(v){
   if(signinNoSeat(v)) return {moment:"noseat", ident, say:signinSay(v.refused, v, p), acts:[{act:"check", label:t("Check now"), solid:true}, acct]};
   /* ASK YOUR LEAD: the organisation's licence seats the people its
      leads add, so the code is given to a lead; beside it, never in its place, the person's own trial where it runs, which the service
-     started at the sign-in. Its words are for the copywriter. */
+     started at the sign-in. */
   if(v.askLead) return {moment:"asklead", ident, say:signinSay("asklead", v), code:v.code,
     acts:[{act:"check", label:t("Check now")}, acct],
-    own:v.seat==="held" && v.trialUntil ? named(t("Your own trial is running: fourteen days, to {DATE}."),"{DATE}",signinDay(v.trialUntil)) : ""};
+    own:v.seat==="held" && v.trialUntil ? [t("This account's own trial is running."),
+      named(t("Fourteen days, until {DATE}, on up to three computers. A lead can add this account at any time, without waiting for the trial to end."),"{DATE}",signinDay(v.trialUntil))] : null};
   /* No certificate: the service found no licence with a seat for this account. The code still shows, since a lead admits by it. */
   if(v.seat==="none" || !v.seat) return {moment:"nolicence", ident, say:signinSay("nolicence", v), code:v.code,
     acts:[{act:"check", label:t("Check now"), solid:true}, acct]};
@@ -274,7 +274,7 @@ function signinPanelHtml(d){
   if(d.cap) h+='<p class="sgn-cap">'+esc(d.cap)+'</p>';
   if(d.privacy) h+='<p class="sgn-cap">'+esc(d.privacy)+'</p>';
   if(d.acts && d.acts.length) h+=signinActsHtml(d.acts);
-  if(d.own) h+='<p class="sgn-own">'+esc(d.own)+'</p>';
+  if(d.own) h+='<p class="sgn-say sgn-own"><b>'+esc(d.own[0])+'</b><span>'+esc(d.own[1])+'</span></p>';
   if(d.link) h+=signinLinkHtml(d.link);
   if(d.foot) h+='<p class="sgn-ft">'+esc(d.foot)+'</p>';
   return h;

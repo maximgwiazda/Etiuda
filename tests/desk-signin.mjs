@@ -1109,9 +1109,10 @@ CASES.pageAskLead = async () => {
   try { pl = P.signinPanelHtml(P.signinDoor(view({ signedIn: "microsoft", code: CODE, seat: "held", deskOnly: true, askLead: true, trialUntil: until }))); }
   finally { storage.lsSet("eUiLang", "en"); }
   return !!running && running.moment === "asklead" && running.code === CODE && running.acts.map(a => a.act).join() === "check,account"
-    && html.indexOf("Etiuda licence seats the people its leads add.") > 0 && html.indexOf("Your own trial is running: fourteen days, to 27 Nov.") > 0
-    && html.indexOf('class="sgn-own"') > html.indexOf("data-signin-act") && !!had && had.moment === "asklead" && hadHtml.indexOf("sgn-own") < 0
-    && pl.indexOf("Licencja Etiudy tej organizacji daje miejsce osobom, które dodają jej liderzy.") > 0 && pl.indexOf("Trwa własny okres próbny") > 0
+    && html.indexOf("Etiuda licence seats the people its leads add.") > 0 && html.indexOf("Give the team") > 0
+    && /<p class="sgn-say sgn-own"><b>This account&#39;s own trial is running\.<\/b><span>Fourteen days, until 27 Nov, on up to three computers\./.test(html)
+    && html.indexOf('sgn-own"') > html.indexOf("data-signin-act") && !!had && had.moment === "asklead" && hadHtml.indexOf("sgn-own") < 0
+    && pl.indexOf("Licencja Etiudy tej organizacji daje miejsce osobom, które dodają jej liderzy.") > 0 && pl.indexOf("Trwa własny okres próbny tego konta.") > 0 && pl.indexOf("do 27 lis") > 0
     && P.signinDoor(view({ signedIn: "microsoft", code: CODE, seat: "held", deskOnly: true })).moment === "noteam";
 };
 /* Two refusals told apart in their own words: the organisation at its provider, and no licence with a seat at our service. */
