@@ -727,17 +727,19 @@ const ED_LINES={
     elsewhere:"This category changed elsewhere while it was open. Save keeps what is written here; Cancel leaves the change made there."}
 };
 const ED_LOCKS=".modal-actions .btn.primary, .modal-actions .mf-reset, .modal-actions .mf-del";
-let edSubject=null, edSubjectSig=null, edGone=false, edCause="", edSubjectTimer=null;
+let edSubject=null, edSubjectSig=null, edGone=false, edGoneLayer=false, edCause="", edSubjectTimer=null;
 function edSubjectNow(){
   try{ return edSubject ? edSubject() : undefined; }catch(e){ return undefined; }
 }
 function edSubjectOpen(cfg){
   edSubject=(edPlaceKind && typeof cfg.subject==="function") ? cfg.subject : null;
   edSubjectSig=edSubjectNow();
-  edGone=false;
+  edGone=false; edGoneLayer=false;
 }
-/* A catalog taken (restartDesk): the next difference is the edition's. */
-function edCatalogTaken(){ edCause="edition"; }
+/* A catalog taken: in the same layer the next difference is the edition's. Another layer, or local memory
+   cleared or put back, leaves the editor with nothing it may write to: its entry is taken as gone. */
+function edCatalogTaken(sameLayer){ edCause=sameLayer ? "edition" : "layer"; }
+function edCanSave(){ return !edGone; }
 function edSubjectSoon(){
   clearTimeout(edSubjectTimer);
   edSubjectTimer=setTimeout(edSubjectCheck,0);
@@ -745,7 +747,8 @@ function edSubjectSoon(){
 function edSubjectCheck(){
   const cause=edCause;
   edCause="";
-  if(!edPlaceKind || modalEl.hidden || !edSubject || edStepping) return;
+  if(!edPlaceKind || modalEl.hidden || !edSubject || edStepping || edGoneLayer) return;
+  if(cause==="layer"){ edGoneLayer=true; edMarkGone(); return; }
   const now=edSubjectNow();
   if(now===undefined || now===edSubjectSig) return;
   if(now===null){ edMarkGone(); return; }
@@ -811,7 +814,7 @@ function openCover(){
 
 export {
   modalOpen, modalTabTarget, tabTargetIn, openCover, mountModalBody, modalResize, dismissModal, closeModal,
-  wireModalX, wireModalBody, wireFocusModality, wireDialogDrag, wireEditorRest, modalFront, edResting, edToDesk, edToFront, edSubjectSoon, edCatalogTaken,
+  wireModalX, wireModalBody, wireFocusModality, wireDialogDrag, wireEditorRest, modalFront, edResting, edToDesk, edToFront, edSubjectSoon, edCatalogTaken, edCanSave,
   accOpen, accHtml, mfSec, catToggle, wireFolds, wireAcc,
   openDialog, refreshDialogName, refreshDialogChrome,
   dressDialogInputs,

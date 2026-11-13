@@ -55,6 +55,7 @@ Object.defineProperty(globalThis, "navigator", { configurable: true,
 /* storage.js is imported here as well as tested below, because two other modules read a
    preference out of it and the only honest way to test that is to set the preference. */
 const UILANG_STORE = await import(MOD("storage.js"));
+const DIALOG_MOD = await import(MOD("dialog.js"));
 
 let pass = 0, fail = 0;
 const touched = new Set();
@@ -5618,6 +5619,25 @@ const CARD_B = {
         return eq([gone, holds].join("|"), "true|false");
       });
 
+    check("editors.js", "983s6 the real category editor, typed while another catalog's layer is taken under it, saves nothing; the same layer's next edition still lets Save keep the typing",
+      () => {
+        const DLG = DIALOG_MOD;
+        setupCat(["en"], "General", {});
+        ED.openCategoryEditor("gen", true);
+        byId["#ce_name_en"].value = "Typed in A";
+        byId["#ce_name_en"].oninput();
+        DLG.edCatalogTaken(false); DLG.edSubjectSoon();
+        byId["#ceSave"].onclick();
+        const other = [PK.pack.catLabels.gen || "", DLG.edCanSave()].join("|");
+        setupCat(["en"], "General", {});
+        ED.openCategoryEditor("gen", true);
+        byId["#ce_name_en"].value = "Typed, same layer";
+        byId["#ce_name_en"].oninput();
+        DLG.edCatalogTaken(true); DLG.edSubjectSoon();
+        byId["#ceSave"].onclick();
+        return eq([other, PK.pack.catLabels.gen || "", DLG.edCanSave()].join(" || "), "|false || Typed, same layer || true");
+      });
+
     check("editors.js", "908ce7 on a de-uk catalog, a category whose only change is a uk name is overridden and its editor offers Reset",
       () => {
         setupCat(["de", "uk"], "General de", { uk: { gen: "General uk" } });
@@ -7889,9 +7909,9 @@ const CARD_B = {
         modalCard.fields()[0].value = "typed";
         subj = "C"; desk();
         const typed = [reopened, said(), modalCard.fields()[0].value].join("|");
-        DL.edCatalogTaken(); subj = "D"; desk();
+        DL.edCatalogTaken(true); subj = "D"; desk();
         const edition = said();
-        DL.edCatalogTaken(); DL.closeModal(); desk();
+        DL.edCatalogTaken(true); DL.closeModal(); desk();
         reset(); subj = "E"; openS("category", ["c"]); modalCard.fields()[0].value = "typed"; subj = "F"; desk();
         return eq([clean, typed, edition, said()].join(" || "),
           "1| || 1|This intent changed elsewhere while it was open. Save keeps what is written here; Cancel leaves the change made there.|typed || A newer edition changed this intent while it was open. Save keeps what is written here; Reset takes the new edition's. || This category changed elsewhere while it was open. Save keeps what is written here; Cancel leaves the change made there.");
@@ -7907,7 +7927,27 @@ const CARD_B = {
         return eq([before, said(), reopened].join("|"), "true||0");
       });
 
-    check("dialog.js", "983s4 every editor names its subject, the desk asks after it draws and says when a catalog was taken, the intent's heading follows its id, and every line has its Polish",
+    check("dialog.js", "983s5 another catalog's layer taken under a resting, typed intent or card editor leaves it readable with Save off and refused, the gone line said, and it stays so whatever differs after; the same layer's next edition still only says so",
+      () => {
+        const one = place => {
+          fresh(); reset(); subj = "same id"; reopened = 0; openS(place, ["typed"]);
+          modalCard.fields()[0].value = "typed here";
+          scrim();
+          DL.edCatalogTaken(false); desk();
+          const gone = [said() === ({ intent: "This intent", card: "This card" })[place] + " is no longer in the catalog, so nothing here can be saved. The text can still be copied.",
+            saveB.disabled, DL.edCanSave(), modalCard.fields()[0].value, DL.edResting()].join("|");
+          subj = "B differs"; desk();
+          return gone + "|" + [saveB.disabled, DL.edCanSave(), reopened].join("|");
+        };
+        const intent = one("intent"), card = one("card");
+        fresh(); reset(); subj = "A"; openS("intent", ["x"]); modalCard.fields()[0].value = "typed";
+        DL.edCatalogTaken(true); subj = "A2"; desk();
+        const edition = [/A newer edition changed this intent/.test(said()), saveB.disabled, DL.edCanSave()].join("|");
+        return eq([intent, card, edition].join(" || "),
+          "true|true|false|typed here|true|true|false|0 || true|true|false|typed here|true|true|false|0 || true|false|true");
+      });
+
+    check("dialog.js", "983s4 every editor names its subject, the desk asks after it draws, the loader says whether the catalog taken is the same layer's (local memory never is), every Save asks first, the intent's heading follows its id, and every line has its Polish",
       () => {
         const rd = n => fs.readFileSync(join(MODDIR, n), "utf8");
         const ce = rd("card-editor.js"), ed = rd("editors.js"), dl = rd("dialog.js"), ul = rd("ui-lang.js");
@@ -7915,10 +7955,13 @@ const CARD_B = {
         const pl = lines.filter(l => ul.indexOf(JSON.stringify(l) + ":") < 0);
         const got = [(ce.match(/\n\s*subject: \(\)=>/g) || []).length, (ed.match(/\n\s*subject: \(\)=>/g) || []).length,
           /function render\(\)\{\n[^\n]*\n\s*closeNotePane\(\);\n\s*edSubjectSoon\(\);/.test(rd("render.js")),
-          /closeNotePane\(\);\n\s*edCatalogTaken\(\);\n\s*resetPack\(\);/.test(rd("restart.js")),
+          rd("restart.js").indexOf("edCatalogTaken") < 0,
+          /edCatalogTaken\(same\);\n\s*hooks\.restartDesk\(\);/.test(rd("catalog-file.js")),
+          (rd("local-memory.js").match(/edCatalogTaken\(false\);\n\s*hooks\.restartDesk\(\);/g) || []).length === (rd("local-memory.js").match(/hooks\.restartDesk\(\);/g) || []).length,
+          [["card-editor.js", "meSave"], ["editors.js", "ceSave"], ["editors.js", "ieSave"]].every(([n, b]) => rd(n).indexOf('$("#' + b + '").onclick=()=>{\n    if(!edCanSave()) return;') >= 0),
           ed.indexOf("name: ()=>{ const at=isNew ? -1 : intentIdxOfId(id); return at>-1 ? intentNavName(at) : \"\"; },") >= 0,
           lines.length, "missing Polish " + pl.length];
-        return eq(got.join("|"), "1|2|true|true|true|9|missing Polish 0");
+        return eq(got.join("|"), "1|2|true|true|true|true|true|true|9|missing Polish 0");
       });
     modalCard.querySelector = qs0; modalCard.querySelectorAll = qsa0; globalThis.document.createElement = ce0;
 

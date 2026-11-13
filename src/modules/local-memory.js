@@ -8,6 +8,7 @@ import { E_NS, LAYER_KEYS, eDeskFileShown, eLayers, lsDel, lsGet, lsSet, nsKey, 
 import { TAB_KEY, saveTabSession, tabSaveTimer } from "./tabs.js";
 import { offerUndo, t, toastRefusal } from "./ui-lang.js";
 import { hooks } from "./hooks.js";
+import { edCatalogTaken } from "./dialog.js";
 
 /* Clearing opens from the Library, the eject from Maintenance. FORGETTING WHAT YOU MADE AND
    PUTTING THE CATALOG DOWN ARE TWO ACTS: one button doing both charged the common one the
@@ -45,6 +46,7 @@ function keepKeys(keys){
 function putBack(was){
   Object.keys(was.keys).forEach(k=>{ const v=was.keys[k]; if(v==null) lsDel(k); else lsSet(k,v); });
   if(was.tabs!=null) ssSet(TAB_KEY,was.tabs); else ssDel(TAB_KEY);
+  edCatalogTaken(false);
   hooks.restartDesk();
 }
 /* THE CLEARED LAYER STAYS ON THIS PAGE until it is brought back or the page closes. The toast's
@@ -62,6 +64,7 @@ function clearLocalMemory(){
   const was=keepKeys(keys);
   keys.forEach(k=>{ const half=/Pack$/.test(k) ? packKept(was.keys[k],keep.pack) : null; if(half!=null) lsSet(k,half); else lsDel(k); });
   if(!clearedHold) clearedHold=was;
+  edCatalogTaken(false);
   hooks.restartDesk();
   offerUndo("Local changes cleared", ()=>{ if(clearedHold===was) clearedHold=null; putBack(was); });
 }
@@ -108,6 +111,7 @@ function ejectCatalog(){
   /* Told before the restart, so the shell drops its copy first. A browser, and a run of this
      function outside the module, has no binding and ejects as before. */
   if(typeof eCatalogEject==="function") eCatalogEject();
+  edCatalogTaken(false);
   hooks.restartDesk();
   offerUndo("Catalog ejected", ()=>undoEject(was));
 }

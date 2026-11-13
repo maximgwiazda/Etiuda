@@ -641,7 +641,7 @@ function ejectUndoTests() {
     try {
       w.F = new Function("E_CATALOG_STORE", "E_CATALOG_KEY", "E_NS", "nsKey", "hooks", "flushStats", "clearTimeout", "tabSaveTimer",
         "saveTabSession", "ssGet", "ssSet", "ssDel", "TAB_KEY", "lsGet", "lsSet", "lsDel", "lsKeys", "eLayers",
-        "eWatchGet", "eWatchClear", "eWatchPut", "offerUndo", "toastRefusal", "catalogStoreRefusal", "eDeskFileShown", "location", "eHasBranch", "LAYER_KEYS",
+        "eWatchGet", "eWatchClear", "eWatchPut", "offerUndo", "toastRefusal", "catalogStoreRefusal", "eDeskFileShown", "location", "eHasBranch", "LAYER_KEYS", "edCatalogTaken",
         loose +"\n" + markers.map(m => extractDecl(src, m)).join("\n")
         + "\nreturn {ejectCatalog, clearLocalMemory, bringBackCleared: typeof bringBackCleared==='function' ? bringBackCleared : null};")(
         ns("Catalog"), ns("CatalogOk"), "e", ns, hooks, () => {}, () => {}, null, () => {},
@@ -650,7 +650,7 @@ function ejectUndoTests() {
         () => Object.keys(w.ls), () => ["eab12~"],
         () => Promise.resolve(null), () => Promise.resolve(), () => {},
         (said, fn) => { w.said = said; w.undo = fn; }, () => {}, () => "", () => "",
-        { reload: () => { w.reloads++; } }, () => desk, JSON.parse(LAYER));
+        { reload: () => { w.reloads++; } }, () => desk, JSON.parse(LAYER), same => { w.taken = (w.taken || []).concat(same); });
     } catch (e) { w.F = null; w.err = e.message; }
     w.ls = { eCatalog: "{\"cards\":[1]}", eCatalogOk: "sig", eSample: "1", eCatalogNo: "no", eCatalogFile: "shop.ec",
              eCatalogFileAt: "1700", eCatalogTrust: "valid", eCatalogFrom: "shop.ec", "eab12~Pack": OWN_PACK, ePack: "[\"loose\"]",

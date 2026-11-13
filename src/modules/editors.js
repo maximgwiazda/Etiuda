@@ -1,6 +1,6 @@
 import { isAlwaysCat, setCatAlways } from "./cat-roles.js";
 import { intentStoreKeys, intentFieldKey, intentCount, CATS, CONTENT_LANGS, INTENT_TEXT_FIELDS, SW_STORE } from "./content-model.js";
-import { closeModal, edMarkClean, edNavHtml, edWireNav, openDialog, refreshDialogChrome } from "./dialog.js";
+import { closeModal, edCanSave, edMarkClean, edNavHtml, edWireNav, openDialog, refreshDialogChrome } from "./dialog.js";
 import { ICON_ROLE_ALWAYS, catIconInner, E_HUE_CYCLE, E_HUE_NAMES, CAT_ICON_KEYS } from "./icons.js";
 import { intentNavName, commentTokensInUse } from "./intent-text.js";
 import { langTabs, langPane, langFieldId, langEndonym, markMissing, edReportMissing, langFocus } from "./lang-tabs.js";
@@ -197,6 +197,7 @@ function openCategoryEditor(k,fromPill){
     openCategoryEditor(k, fromPill);   // redraws the fields, and the button goes with them
   };
   $("#ceSave").onclick=()=>{
+    if(!edCanSave()) return;   // its entry is gone (dialog.js, edMarkGone)
     const nm=nameVal(primary);
     if(nm && nm!==orig){
       pack.catLabels[k]=nm;
@@ -341,6 +342,7 @@ function openIntentEditor(idx, fromManage){
     if(removeIntent(id)) doneIntentEditor();
   };
   $("#ieSave").onclick=()=>{
+    if(!edCanSave()) return;   // its entry is gone (dialog.js, edMarkGone)
     const ieVal=(f,l)=>{ const el=$("#"+langFieldId("ie",f,l)); return el?el.value.trim():null; };
     /* A FIELD THE DIALOG DID NOT RENDER KEEPS WHAT WAS LOADED rather than being read as
        empty: the comment inputs are conditional, and reading a missing one as "" would quietly

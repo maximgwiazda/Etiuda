@@ -18314,6 +18314,7 @@ What you type stays in this browser only.`;
     closeModal: () => closeModal,
     dismissModal: () => dismissModal,
     dressDialogInputs: () => dressDialogInputs,
+    edCanSave: () => edCanSave,
     edCatalogTaken: () => edCatalogTaken,
     edDirty: () => edDirty,
     edMarkClean: () => edMarkClean,
@@ -19108,6 +19109,7 @@ What you type stays in this browser only.`;
   var edSubject = null;
   var edSubjectSig = null;
   var edGone = false;
+  var edGoneLayer = false;
   var edCause = "";
   var edSubjectTimer = null;
   function edSubjectNow() {
@@ -19121,9 +19123,13 @@ What you type stays in this browser only.`;
     edSubject = edPlaceKind && typeof cfg.subject === "function" ? cfg.subject : null;
     edSubjectSig = edSubjectNow();
     edGone = false;
+    edGoneLayer = false;
   }
-  function edCatalogTaken() {
-    edCause = "edition";
+  function edCatalogTaken(sameLayer) {
+    edCause = sameLayer ? "edition" : "layer";
+  }
+  function edCanSave() {
+    return !edGone;
   }
   function edSubjectSoon() {
     clearTimeout(edSubjectTimer);
@@ -19132,7 +19138,12 @@ What you type stays in this browser only.`;
   function edSubjectCheck() {
     const cause = edCause;
     edCause = "";
-    if (!edPlaceKind || modalEl.hidden || !edSubject || edStepping) return;
+    if (!edPlaceKind || modalEl.hidden || !edSubject || edStepping || edGoneLayer) return;
+    if (cause === "layer") {
+      edGoneLayer = true;
+      edMarkGone();
+      return;
+    }
     const now = edSubjectNow();
     if (now === void 0 || now === edSubjectSig) return;
     if (now === null) {
@@ -30024,6 +30035,7 @@ What you type stays in this browser only.`;
     }
     clearTimeout(tabSaveTimer);
     if (!same) ssDel(TAB_KEY);
+    edCatalogTaken(same);
     hooks.restartDesk();
     try {
       const sentence = deskMarkSentence(deskMarkOf(c));
@@ -30339,6 +30351,7 @@ What you type stays in this browser only.`;
     });
     if (was.tabs != null) ssSet(TAB_KEY, was.tabs);
     else ssDel(TAB_KEY);
+    edCatalogTaken(false);
     hooks.restartDesk();
   }
   var clearedHold = null;
@@ -30360,6 +30373,7 @@ What you type stays in this browser only.`;
       else lsDel(k);
     });
     if (!clearedHold) clearedHold = was;
+    edCatalogTaken(false);
     hooks.restartDesk();
     offerUndo("Local changes cleared", () => {
       if (clearedHold === was) clearedHold = null;
@@ -30409,6 +30423,7 @@ What you type stays in this browser only.`;
     keys.forEach((k) => lsDel(k));
     ssDel(TAB_KEY);
     if (typeof eCatalogEject === "function") eCatalogEject();
+    edCatalogTaken(false);
     hooks.restartDesk();
     offerUndo("Catalog ejected", () => undoEject(was));
   }
@@ -31464,6 +31479,7 @@ What you type stays in this browser only.`;
       openCategoryEditor(k, fromPill);
     };
     $("#ceSave").onclick = () => {
+      if (!edCanSave()) return;
       const nm = nameVal(primary);
       if (nm && nm !== orig) {
         pack.catLabels[k] = nm;
@@ -31594,6 +31610,7 @@ What you type stays in this browser only.`;
       if (removeIntent(id)) doneIntentEditor();
     };
     $("#ieSave").onclick = () => {
+      if (!edCanSave()) return;
       const ieVal = (f, l) => {
         const el = $("#" + langFieldId("ie", f, l));
         return el ? el.value.trim() : null;
@@ -32713,6 +32730,7 @@ What you type stays in this browser only.`;
       toast(t("Restored original -") + " " + (base.t || id));
     };
     $("#meSave").onclick = () => {
+      if (!edCanSave()) return;
       const text = {};
       CARD_TEXT_FIELDS.forEach((f) => CONTENT_LANGS.forEach((l) => {
         const el = $("#" + meFieldId(f, l)), key = cardFieldKey(f, l);
@@ -39881,7 +39899,6 @@ What you type stays in this browser only.`;
     const u = document.getElementById("eUndo");
     if (u) u.remove();
     closeNotePane();
-    edCatalogTaken();
     resetPack();
     resetAppState();
     resetIntentIds();

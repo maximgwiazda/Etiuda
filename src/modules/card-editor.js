@@ -3,7 +3,7 @@ import { baseCard, cardCommits, cardText, cardTitle, findCard, overrideAgainstBa
 import { nextReplies, stampToggleHtml, wireStampToggle } from "./card-chain.js";
 import { catSortIdx } from "./card-order.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
-import { closeModal, edMarkClean, edNavHtml, edWireNav, mfSec, openDialog, refreshDialogChrome, wireFolds } from "./dialog.js";
+import { closeModal, edCanSave, edMarkClean, edNavHtml, edWireNav, mfSec, openDialog, refreshDialogChrome, wireFolds } from "./dialog.js";
 import { afterPaint } from "./motion.js";
 import { ICON_PLUS } from "./icons.js";
 import { intentNavName, paxOwnExample } from "./intent-text.js";
@@ -598,6 +598,7 @@ function openCardEditor(id, presetCat, fromManage){
     toast(t("Restored original -")+" "+(base.t||id));
   };
   $("#meSave").onclick=()=>{
+    if(!edCanSave()) return;   // its entry is gone (dialog.js, edMarkGone)
     /* Every language's text straight off the table, so a new language adds no line here. */
     const text={};
     CARD_TEXT_FIELDS.forEach(f=>CONTENT_LANGS.forEach(l=>{

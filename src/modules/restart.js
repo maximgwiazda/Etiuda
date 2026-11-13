@@ -4,7 +4,6 @@
    stay. Reached through hooks; tests/swap.mjs holds the result to a fresh start from the same
    storage, so a step added to boot() that reads any of the three belongs here too. */
 import { closeNotePane } from "./note-pane.js";
-import { edCatalogTaken } from "./dialog.js";
 import { resetPack, loadPack } from "./pack.js";
 import { resetAppState, putLang, lang } from "./app-state.js";
 import { resetIntentIds, snapshotBaseIntents } from "./intent-id.js";
@@ -44,7 +43,6 @@ function restartDesk(){
   const u=document.getElementById("eUndo");
   if(u) u.remove();
   closeNotePane();
-  edCatalogTaken();
   resetPack();
   resetAppState();
   resetIntentIds();
