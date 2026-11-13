@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 123;
+const EXPECTED = 125;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -142,7 +142,7 @@ const QUIET_CONN = connDump(1, CONN_KEY);
    opts.session: the electron session in place of the stand-in; opts.order: an array a window's construction is pushed to;
    opts.bus: the session bus dbus-send meets, a function of its arguments (leg 14); opts.env: variables set while the file loads (null removes one), over XDG_CURRENT_DESKTOP=GNOME, so the keyring switch of
    leg 14 is asked for only where a leg names a desktop that wants it. opts.window: a function of the options that builds the desk's
-   window in place of the stand-in; opts.screen: electron's screen; opts.place: window.json's contents (leg 15). */
+   window in place of the stand-in; opts.screen: electron's screen; opts.place: window.json's contents (leg 15); opts.packaged: app.isPackaged (leg 16). */
 function loadShell(opts) {
   const o = opts || {};
   const dir = path.join(LAB, "load" + (++loads));
@@ -161,7 +161,7 @@ function loadShell(opts) {
   const wc = anything({ send: (...a) => { sent.push(a); }, id: 7 });
   const win = anything({ isDestroyed: () => false, webContents: wc });
   const electron = {
-    app: { getPath: n => (n === "documents" ? DOCS : UD), setPath: (k, v) => { if (o.paths) o.paths.push([k, v]); }, requestSingleInstanceLock: () => !!o.ready,
+    app: { getPath: n => (n === "documents" ? DOCS : UD), setPath: (k, v) => { if (o.paths) o.paths.push([k, v]); }, requestSingleInstanceLock: () => !!o.ready, isPackaged: !!o.packaged,
            quit: noop, on: (ev, fn) => { (appOn[ev] = appOn[ev] || []).push(fn); }, getVersion: () => "0.0.0",
            commandLine: { appendSwitch: (...a) => { switches.push(a); }, hasSwitch: k => onLine.has(k),
                           removeSwitch: k => { if (onLine.delete(k)) removed.push(k); } },
@@ -1727,6 +1727,36 @@ try {
       if (at >= 0) { lines.splice(at, 1); lifted = await told(false, lines.join("\n")); }
       check(!!lifted && lifted[1] === "show",
         "15e lifting plant:shown-told leaves a window shown restored unsaid: " + JSON.stringify(lifted));
+    }
+  }
+  /* ---- 16. a development start that finds another copy holding the lock says so on its standard error before it quits: that the
+     start was handed to the running copy, which of its start switches therefore did not take effect, by name and never by value, and
+     to quit the running copy from the tray first. A packaged or installed desk says nothing, as before. Lifting plant:handed-said
+     from a copy of the source leaves the handover unsaid. ---- */
+  {
+    const SWITCHES = ["ETIUDA_SIGNIN_LAB", "ETIUDA_SIGNIN_PREVIEW", "ETIUDA_SIGNIN_TRACE", "ETIUDA_GOOGLE_CLIENT_SECRET", "ETIUDA_TEST_DOCUMENTS",
+      "ETIUDA_TEST_SAVE_AS", "ETIUDA_TEST_DEVTOOLS", "ETIUDA_TEST_OFFSCREEN", "ETIUDA_TEST_CONTEXT_MENU", "ETIUDA_EMBED_MODEL", "ETIUDA_EMBED_RUNTIME"];
+    const clear = Object.fromEntries(SWITCHES.map(k => [k, null]));
+    const labFile = path.join(LAB, "lab-start-file.json");
+    const set = Object.assign({}, clear, { ETIUDA_SIGNIN_LAB: labFile, ETIUDA_SIGNIN_PREVIEW: "1", ETIUDA_SIGNIN_TRACE: "1" });
+    const handed = (o, src) => loadShell(Object.assign({}, o, { src })).said.filter(l => /^ERR etiuda: .*handed/.test(l));
+    const INST = path.join(LAB, "inst", "resources", "app.asar");
+    if (!realFs.existsSync(INST)) realFs.cpSync(APP, INST, { recursive: true });
+    const dev = handed({ env: set }), bare = handed({ env: clear });
+    const packed = handed({ env: set, packaged: true }), inst = handed({ env: set, app: INST });
+    const line = dev[0] || "";
+    check(dev.length === 1 && line.indexOf("ETIUDA_SIGNIN_LAB, ETIUDA_SIGNIN_PREVIEW, ETIUDA_SIGNIN_TRACE") > 0 && /tray/.test(line)
+      && line.indexOf(labFile) < 0 && SWITCHES.slice(3).every(k => line.indexOf(k) < 0)
+      && bare.length === 1 && bare[0].indexOf("ETIUDA_") < 0 && /tray/.test(bare[0]) && packed.length === 0 && inst.length === 0,
+      "16 a development start handed to a running copy says so before it quits, names the start switches set in it that did not take effect"
+      + " (never their values) and says to quit the running copy from the tray first; packaged or installed, nothing is said: "
+      + JSON.stringify({ dev, bare: bare.length, packed: packed.length, inst: inst.length }));
+    if (PLANTS_OFF) skip("16 lifting plant:handed-said leaves the handover unsaid");
+    else {
+      const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:handed-said") >= 0);
+      let lifted = null;
+      if (at >= 0) { lines.splice(at, 1); lifted = handed({ env: set }, lines.join("\n")); }
+      check(!!lifted && lifted.length === 0, "16 lifting plant:handed-said leaves the handover unsaid: " + JSON.stringify(lifted));
     }
   }
 } catch (e) {

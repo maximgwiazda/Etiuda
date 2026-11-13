@@ -12333,10 +12333,23 @@ function dispatchColdStartArgs(win, argv) {
    the lock every double-clicked catalog would open a second window with its own desk file, two
    copies writing the same desk. The second copy hands its path over and exits. The lock is keyed
    on the user-data folder, so a harness launch aimed at a lab of its own is unaffected. */
+/* The variables the shell reads once at start. A development start handed to the running copy says which of them it carried, by
+   name only: none of them reaches the copy that runs, and a copy closed to the tray is still running. */
+const START_SWITCHES = Object.freeze(["ETIUDA_SIGNIN_LAB", "ETIUDA_SIGNIN_PREVIEW", "ETIUDA_SIGNIN_TRACE", "ETIUDA_GOOGLE_CLIENT_SECRET",
+  "ETIUDA_TEST_DOCUMENTS", "ETIUDA_TEST_SAVE_AS", "ETIUDA_TEST_DEVTOOLS", "ETIUDA_TEST_OFFSCREEN", "ETIUDA_TEST_CONTEXT_MENU",
+  "ETIUDA_EMBED_MODEL", "ETIUDA_EMBED_RUNTIME"]);
+function handedOverLine(env) {
+  const set = START_SWITCHES.filter(k => typeof env[k] === "string" && env[k] !== "");
+  return "etiuda: another Etiuda is running with this user-data folder, so this start was handed to it and ends here"
+    + (set.length ? "; this start's " + set.join(", ") + " did not take effect" : "")
+    + ". To start afresh, quit the running Etiuda from its tray icon first, then start again.";
+}
 /* The lock is taken first. Only the process that holds it finishes a pending reset, and it
    does that before anything else in this folder is read. The lock's own files stay. */
 const theOnlyOne = app.requestSingleInstanceLock();
 if (!theOnlyOne || (Array.isArray(process.argv) && process.argv.includes("--update-close"))) {
+  /* Electron unpackaged answers isPackaged false, never undefined; a stand-in electron without it says nothing. */
+  if (!theOnlyOne && !INSTALLED && app.isPackaged === false) console.error(handedOverLine(process.env)); /* plant:handed-said */
   app.quit();
 } else {
   try {
