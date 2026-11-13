@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 562;
+const EXPECTED = 564;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -6822,6 +6822,26 @@ async function main() {
       const ok = got.every(r => r.status === 200) && refused(inside, "team-size") && past.status === 200;
       return { ok, detail: JSON.stringify({ got: got.map(said), inside: said(inside), past: said(past) }) };
     }
+    /* The team's cap of held requests takes no withdrawn one: sixty-four requests up and taken back, over four hours, leave the door
+       open to the next, while the hourly rate still refuses the seventeenth knock in an hour. */
+    async function withdrawnCapScene() {
+      const w = await doorWorld();
+      let up = 0, back = 0;
+      for (let i = 0; i < C.DOOR_LIVE_MAX; i++) {
+        if (i > 0 && i % C.DOOR_RATE_MAX === 0) w.R.clock.now += C.DOOR_RATE_MS;
+        const a = await upAtDoor(w);
+        if (a.ok) up++;
+        if (a.ok && (await withdrawAtDoor(w, a)).status === 200) back++;
+      }
+      w.R.clock.now += C.DOOR_RATE_MS;
+      const got = [];
+      for (let i = 0; i < C.DOOR_RATE_MAX + 1; i++) { const k = keyPair(true); got.push(await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now))); }
+      const ok = up === C.DOOR_LIVE_MAX && back === C.DOOR_LIVE_MAX && got.slice(0, C.DOOR_RATE_MAX).every(r => r.status === 200) && refused(got[C.DOOR_RATE_MAX], "rate");
+      return { ok, detail: JSON.stringify({ up, back, first: said(got[0]), takenInTheHour: got.filter(r => r.status === 200).length, then: said(got[C.DOOR_RATE_MAX]) }) };
+    }
+    const capBack = await safe(withdrawnCapScene);
+    check(capBack.ok, "a4u a team whose " + C.DOOR_LIVE_MAX + " door requests were all taken back still takes the next, and the door's hourly"
+      + " rate still refuses the " + (C.DOOR_RATE_MAX + 1) + "th knock in an hour: " + capBack.detail);
     const seenBack = await safe(withdrawSeenScene), costBack = await safe(withdrawCostScene), unsent = await safe(unsentCostScene);
     check(seenBack.ok, "a4r a door request its desk takes back: the lead that fetched it is served the desk's box beside the deletion and"
       + " makes the key the request was sealed under, a lead catching up is listed no live request, its blob is gone, and the lead's yes as"
@@ -6866,12 +6886,13 @@ async function main() {
       ["door-drop-prune", async () => !(await dropScene()).ok, "a4q (a dropped request is held past its window)"],
       ["door-drop-window", async () => !(await dropScene()).ok, "a4o (a dropped request is held for no time at all)"],
       ["door-withdraw-box", async () => !(await withdrawSeenScene()).ok, "a4r (a lead holding a door request cannot open its deletion)"],
-      ["door-withdrawn-own", async () => !(await withdrawCostScene()).ok, "a4s (a request taken back still holds its person)"],
       ["door-unsent-own", async () => !(await unsentCostScene()).ok, "a4t (a request never sent up holds its person for the keep)"],
       ["door-own", async () => !(await personScene()).ok, "a4e (no request counts against its person)"],
+      ["door-withdrawn-live", async () => !(await withdrawnCapScene()).ok, "a4u (withdrawn requests jam the team's door)"],
+      ["door-withdrawn-live", async () => !(await withdrawCostScene()).ok, "a4s (a request taken back still holds its person)"],
     ];
     const base = taken.ok && refusesAll.ok && closed.ok && register.ok && person.ok && rated.ok && live.ok && tries.ok && request.ok && removed.ok
-      && invs.ok && lapsed.ok && handed.ok && rawId.ok && drops.ok && seenBack.ok && costBack.ok && unsent.ok;
+      && invs.ok && lapsed.ok && handed.ok && rawId.ok && drops.ok && seenBack.ok && costBack.ok && unsent.ok && capBack.ok;
     for (const [tag, turns, what] of DOOR_PLANTS) {
       const line = "a4p lifting plant:" + tag + " turns " + what + " red, and the product file is never written";
       if (PLANTS_OFF) { skip(line); continue; }

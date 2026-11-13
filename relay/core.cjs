@@ -1096,16 +1096,16 @@ function createCore(deps) {
   function doorDropLive(v, now) {
     return !!v && Number.isSafeInteger(v.at) && now - v.at <= DOOR_RATE_MS; /* plant:door-drop-window */
   }
-  /* A door request still held against the door's caps: inside its keep, its key neither enrolled nor removed. */
+  /* A door request still held against the door's caps: inside its keep, its key neither enrolled nor removed, and not withdrawn by its
+     desk, whose knock counted against the hourly rate alone; its row and the deletion's record stay for their keep, outside the caps. */
   function doorLive(v, now) {
+    if (!!v && v.withdrawn === true) return false; /* plant:door-withdrawn-live */
     return !!v && v.door === true && Number.isSafeInteger(v.spentAt) && now - v.spentAt <= KEEP_MS
       && !store.get("dev:" + v.key) && !store.get("gone:" + v.key);
   }
-  /* What a held door request costs its person: asking, up at the lead's, for its keep; withdrawn by its desk, nothing, its knock having
-     counted against the door's hourly rate alone; never sent up, the door's rate window from its knock, as one the lead dropped. The
-     team's own count of held requests (doorLive) still takes them all. */
+  /* What a held door request (doorLive) costs its person: asking, up at the lead's, for its keep; never sent up, the door's rate window
+     from its knock, as one the lead dropped. */
   function doorOwn(v, now) {
-    if (v.withdrawn === true) return false; /* plant:door-withdrawn-own */
     if (v.uploaded !== true) return now - v.spentAt <= DOOR_RATE_MS; /* plant:door-unsent-own */
     return true;
   }
