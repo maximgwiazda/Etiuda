@@ -55,7 +55,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const NO_VERDICT = 78;
-const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618", "all-move", "all-space-d", "system-push"];
+const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618", "all-move", "all-space-d", "system-push", "ts-cycle"];
 let OUT = "";
 const say = (l) => { process.stdout.write(l + "\n"); if (OUT) fs.appendFileSync(path.join(OUT, "legs.txt"), l + "\n"); };
 const refuse = (why) => { say("#legs refused: " + why); process.exit(NO_VERDICT); };
@@ -699,6 +699,169 @@ async function systemPush(rec) {
       + ", keys left " + left.keys.length + ", shortcuts left " + left.links.length + ", the link left " + yes(left.link));
 }
 
+/* ---- ts-cycle: the Test Service build over the ordinary one, and back ---------------------------------------------- */
+
+/* Claude α's criterion of 2026-11-13, through the lead engineer: after the ordinary build, then the Test Service build, then the
+   ordinary build again, each for one account, red where anything in the user-data folder is lost, moved or unread, or a second
+   Apps entry or shortcut is left behind. Both builds are the test identity's (tools/runner/test-service-qa.cjs puts the Test
+   Service config on the ordinary test build), and the lab file is invented: the same staging service address and placeholder
+   client ids tests/test-service.mjs holds, so nothing of Max's reaches the runner. "Read" is measured by the first run's own
+   mark: the sample a first run writes into Documents\Etiuda is taken away before each later start, and a copy that read its
+   desk.json (which carries "e~sampled") does not write it again. */
+const TS_SUFFIX = " Test Service";
+const TS_LAB = { service: "https://etiuda.dev/licence-staging/v1/",
+  clientIds: { microsoft: "11111111-2222-3333-4444-555555555555", google: "1234567890-abcdefghij.apps.googleusercontent.com" },
+  order: "https://etiuda.dev/buy-staging/" };
+const userDir = () => valueOf(regKey(KU.install), "InstallLocation");
+const userLinks = (name) => [path.join(PLACES.desktop, name), path.join(PLACES.programs, name)];
+/* Every per-user uninstall entry whose display name names the test build, by key: the Apps list's rows for it. */
+function appsRows() {
+  const r = spawnSync("reg", ["query", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall", "/s", "/f", PRODUCT, "/d"],
+    { encoding: "utf8", windowsHide: true, timeout: 30000 });
+  return String(r.stdout || "").split(/\r?\n/).filter((l) => /^HKEY_/.test(l)).map((l) => l.trim());
+}
+/** The Test Service test build, made once: the ordinary test build's tree, packed again with the composed config. */
+let TS_SETUP = "";
+function tsSetup(rec) {
+  if (TS_SETUP) return TS_SETUP;
+  const out = path.join(LAB, "dist-ts"), lab = path.join(LAB, "ts-lab.json");
+  fs.writeFileSync(lab, JSON.stringify(TS_LAB));
+  const cli = path.join(ROOT, "node_modules", "electron-builder", "out", "cli", "cli.js");
+  const t0 = Date.now();
+  try {
+    execFileSync(process.execPath, [cli, "--win", "--config", path.join("tools", "runner", "test-service-qa.cjs")],
+      { cwd: ROOT, stdio: "inherit", env: E.unsignedEnv({ ETIUDA_DIST: out, ETIUDA_PACK_TEST_SERVICE: lab }) });
+  } catch (e) { throw new NoVerdict("the Test Service test build could not be built: " + oneLine(e.message)); }
+  const found = fs.readdirSync(out).filter((n) => /-setup\.exe$/i.test(n));
+  if (found.length !== 1) throw new NoVerdict(out + " holds " + found.length + " installers; expected 1");
+  const exe = path.join(out, found[0]);
+  /* The guard's own test, with the one rename this build makes: the test app id, the test product name with the suffix, and
+     nothing of a shipped app's. */
+  const id = G.setupIdentity(exe);
+  const shipped = Object.values(require(path.join(ROOT, "tools", "test-identity.cjs")).SHIPPED)
+    .find((s) => s.productName === id.productName || s.appId === id.appId);
+  if (shipped || id.appId !== T.appId || id.productName !== PRODUCT + TS_SUFFIX)
+    throw new NoVerdict("the Test Service test setup names " + JSON.stringify(id.productName) + " and app id " + JSON.stringify(id.appId || null)
+      + ", not " + PRODUCT + TS_SUFFIX + " / " + T.appId);
+  const ts = require(path.join(ROOT, "tools", "test-service.cjs"));
+  const fields = ts.asarPackage(path.join(out, "win-unpacked", "resources", "app.asar"));
+  if (!fields || !fields[ts.TEST_SERVICE_KEY]) throw new NoVerdict("the Test Service test build's asar carries no " + ts.TEST_SERVICE_KEY);
+  rec.f("ts-built-s", Math.round((Date.now() - t0) / 1000)); rec.f("ts-setup", found[0]);
+  TS_SETUP = exe;
+  return exe;
+}
+/* The per-user copy uninstalled from its own entry, then the sweep; the user-data folder is left, as a person's uninstall leaves it. */
+async function uninstallUser() {
+  const said = [];
+  const dir = userDir();
+  const un = exeOf(valueOf(regKey(KU.uninstall), "UninstallString")) || (dir ? path.join(dir, UNINSTALLER) : "");
+  if (un && fs.existsSync(un)) {
+    const r = await runExe(un, P.uninstallArgs("user"), 300000);
+    const g = dir ? await goneWithin(dir, 120) : 0;
+    said.push("uninstaller exit " + r.code + ", " + (g > 0 ? "folder gone in " + g + " s" : "folder still there"));
+  } else said.push("nothing registered for this account");
+  const took = sweep();
+  for (const n of [SHORTCUT, PRODUCT + TS_SUFFIX + ".lnk"]) for (const f of userLinks(n)) if (fs.existsSync(f)) { try { fs.unlinkSync(f); took.push(f); } catch (e) { took.push(f + "(refused)"); } }
+  if (took.length) said.push("swept " + took.join(","));
+  return said.join("; ");
+}
+
+async function tsCycle(rec) {
+  const wall = E.windowWallRefusal(WHO);
+  if (wall) throw new NoVerdict("the leg starts each installed build and the window wall refuses: " + wall[0]);
+  if (!process.env.APPDATA || !PLACES.desktop || !PLACES.programs) throw new NoVerdict("this account's AppData, Desktop or Programs folder cannot be named");
+  const ts = tsSetup(rec);
+  const ud = path.join(process.env.APPDATA, T.packageName);
+  const docs = path.join(os.homedir(), "Documents", "Etiuda"), sample = path.join(docs, path.basename(SAMPLE));
+  const desk = path.join(ud, "desk.json"), marker = path.join(ud, "ts-cycle-marker.bin");
+  for (const p of [ud, docs]) if (fs.existsSync(p)) throw new NoVerdict(p + " is already there, so this account is not a fresh one to measure");
+  rec.after("uninstall", uninstallUser);
+  const VOLATILE = /^(cache|code cache|gpucache|dawn[^\\]*|shared dictionary|crashpad|blob_storage|network|service worker)(\\|$)/;
+  const steady = (m) => Object.fromEntries(Object.entries(m).filter(([k]) => !VOLATILE.test(k)));
+  const ORD_LNK = SHORTCUT, TS_LNK = PRODUCT + TS_SUFFIX + ".lnk";
+
+  const install = async (exe, tag, wantName, wantLnk, notLnk) => {
+    const args = P.installArgs({ mode: "user" });
+    const bad = P.argsFault(args, "user");
+    if (bad) throw new Error("refusing " + args.join(" ") + ": " + bad);
+    const r = await runExe(exe, args, 600000);
+    const dir = userDir(), prog = dir ? path.join(dir, PRODUCT + ".exe") : "";
+    const rows = appsRows();
+    const shown = valueOf(regKey(KU.uninstall), "DisplayName");
+    const wantLinks = userLinks(wantLnk).filter((f) => fs.existsSync(f));
+    const strayLinks = userLinks(notLnk).filter((f) => fs.existsSync(f));
+    const linksOk = wantLinks.length > 0 && wantLinks.every((f) => samePath(lnkTarget(f), prog));
+    const pkg = require(path.join(ROOT, "tools", "test-service.cjs")).asarPackage(path.join(dir || "", "resources", "app.asar"));
+    const carries = !!(pkg && pkg.etiudaTestService);
+    rec.f(tag + "-exit", r.timedOut ? "timeout" : r.code); rec.f(tag + "-dir", dir); rec.f(tag + "-apps-rows", rows.length);
+    rec.f(tag + "-shown", shown); rec.f(tag + "-links", wantLinks.length); rec.f(tag + "-stray-links", strayLinks.length); rec.f(tag + "-fields", yes(carries));
+    return { ok: r.code === 0 && !!prog && fs.existsSync(prog) && rows.length === 1 && shown === wantName && linksOk && !strayLinks.length,
+      dir, prog, carries, why: "exit " + r.code + ", the program there " + yes(!!prog && fs.existsSync(prog)) + ", Apps rows " + rows.length
+        + ", the row says " + JSON.stringify(shown) + " (want " + JSON.stringify(wantName) + "), its shortcuts to it " + yes(linksOk)
+        + ", the other build's shortcuts left " + strayLinks.length };
+  };
+  /* One start of the installed program as this account, with no argument, stopped by pid once `done` holds or 90 s pass. */
+  const start = async (prog, tag, done) => {
+    const opts = { stdio: "ignore", windowsHide: true, env: E.offscreenEnv({}) };
+    const no = E.shellLaunchRefusal(WHO, [], opts);
+    if (no) throw new NoVerdict("the start is refused: " + no[0]);
+    const child = E.shellLaunch(WHO, prog, [], opts);
+    let gone = false;
+    child.on("exit", () => { gone = true; });
+    let held = false, s = -1;
+    const t0 = Date.now();
+    for (let i = 0; i < 45 && !gone; i++) { await sleep(2000); if (done()) { held = true; s = Math.round((Date.now() - t0) / 1000); break; } }
+    if (!gone) E.killTree(child.pid);
+    for (const p of procsOf(prog)) E.killTree(p.pid);
+    for (let i = 0; i < 15 && procsOf(prog).length; i++) await sleep(1000);
+    rec.f(tag + "-start-s", s); rec.f(tag + "-ran", yes(!gone || held));
+    return held;
+  };
+  const sampled = () => { try { return /"e~sampled"/.test(fs.readFileSync(desk, "utf8")); } catch (e) { return false; } };
+
+  /* 1. The ordinary build, and its first run. */
+  const a = await install(NEWER, "ordinary", PRODUCT, ORD_LNK, TS_LNK);
+  if (!a.ok) { rec.end(false, "the ordinary build: " + a.why); return; }
+  const firstOk = await start(a.prog, "first", () => sampled() && fs.existsSync(sample) && shaOr(sample) === E.sha256(SAMPLE));
+  if (!firstOk) throw new NoVerdict("the ordinary build's first run did not write desk.json with its mark and the sample, so there is no data to carry");
+  fs.writeFileSync(marker, crypto.randomBytes(4096));
+  const markSha = E.sha256(marker);
+  const before = steady(manifest(ud));
+  rec.f("userdata-files", Object.keys(before).length);
+
+  /* The data after an install and a start: nothing of `before` gone, the marker byte for byte, the mark read (no sample again). */
+  const carried = async (tag, prog) => {
+    fs.unlinkSync(sample);
+    const ran = await start(prog, tag, () => false); /* the full 90 s: a re-written sample is the fault, so its absence takes the wait */
+    const now = steady(manifest(ud));
+    const gone = Object.keys(before).filter((k) => !(k in now));
+    const markerSame = shaOr(marker) === markSha;
+    const reSampled = fs.existsSync(sample);
+    rec.f(tag + "-gone", gone.length ? few(gone) : 0); rec.f(tag + "-marker", markerSame ? "same" : "differs"); rec.f(tag + "-resampled", yes(reSampled));
+    return { ok: ran && !gone.length && markerSame && !reSampled && sampled(),
+      why: "it ran " + yes(ran) + ", files of the first run gone " + gone.length + (gone.length ? " (" + few(gone) + ")" : "") + ", the marker " + (markerSame ? "same" : "differs")
+        + ", the sample written again " + yes(reSampled) + ", desk.json still marked " + yes(sampled()) };
+  };
+
+  /* 2. The Test Service build over it. */
+  const b = await install(ts, "ts", PRODUCT + TS_SUFFIX, TS_LNK, ORD_LNK);
+  const bSame = samePath(b.dir, a.dir);
+  rec.f("ts-same-folder", yes(bSame));
+  if (!b.ok || !bSame || !b.carries) { rec.end(false, "the Test Service build over the ordinary one: " + b.why + ", the same folder " + yes(bSame) + ", the fields in its asar " + yes(b.carries)); return; }
+  const bData = await carried("ts", b.prog);
+  if (!bData.ok) { rec.end(false, "the Test Service build over the ordinary one installed, but its start and the data: " + bData.why); return; }
+
+  /* 3. The ordinary build again. */
+  const c = await install(NEWER, "back", PRODUCT, ORD_LNK, TS_LNK);
+  const cSame = samePath(c.dir, a.dir);
+  rec.f("back-same-folder", yes(cSame));
+  if (!c.ok || !cSame || c.carries) { rec.end(false, "the ordinary build over the Test Service one: " + c.why + ", the same folder " + yes(cSame) + ", the fields gone from its asar " + yes(!c.carries)); return; }
+  const cData = await carried("back", c.prog);
+  rec.end(cData.ok, cData.ok
+    ? "ordinary, then Test Service, then ordinary, each into " + a.dir + " with one Apps row naming it and its own shortcuts alone; the user-data folder carried whole (marker byte for byte, nothing of the first run gone) and read by each start (no second sample)"
+    : "back on the ordinary build, its start and the data: " + cData.why);
+}
+
 /* ---- (d) locked-1618 ------------------------------------------------------------------------------------------- */
 
 async function locked1618(rec) {
@@ -764,7 +927,7 @@ function record(name) {
   return rec;
 }
 const LEGS = { "all-upgrade": allUpgrade, "running-1618": running1618, "system-bare": systemBare, "locked-1618": locked1618, "all-move": allMove, "all-space-d": allSpaceD,
-  "system-push": systemPush };
+  "system-push": systemPush, "ts-cycle": tsCycle };
 
 /* The newer setup, built once from this tree under the test identity, as the marker builds it. */
 const early = legPreflight();
