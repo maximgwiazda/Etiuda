@@ -23,7 +23,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 13;
+const EXPECTED = 14;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -49,6 +49,7 @@ const ROWS = {
             "At work, each person has a subscription of their own."],
     licButton: "Read the licence",
     credit: "\u00a9 2026 Max Gwiazda. Etiuda is a trademark of Max Gwiazda.",
+    licensor: "Licensor: Stardust Maxim Gwiazda, NIP\u00a05242711262, Poland.",
     maker: "Made by Stardust.",
     earlier: "Earlier versions of Etiuda", close: "Close",
     e2: "{VERSION}, built on {DATE}",
@@ -72,6 +73,7 @@ const ROWS = {
             "W pracy każda osoba ma własną subskrypcję."],
     licButton: "Przeczytaj umowę",
     credit: "\u00a9 2026 Max Gwiazda. Etiuda jest znakiem towarowym Maxa Gwiazdy.",
+    licensor: "Licencjodawca: Stardust Maxim Gwiazda, NIP\u00a05242711262, Polska.",
     maker: "Etiuda. Tworzy ją Stardust.",
     earlier: "Poprzednie wersje Etiudy", close: "Zamknij",
     e2: "{VERSION}, z {DATE}",
@@ -163,7 +165,7 @@ if (ready) {
       const r = ROWS[lang], day = dayOf(builtIso, lang);
       const want = terms => [r.name, String(ctx.E_VERSION), r.cap].concat(day ? [r.built.split("{DATE}").join(day)] : [])
         .concat([r.head]).concat(...r.items.map(it => [keyed(it[0]), it[1]]))
-        .concat([r.licTitle, terms, r.licButton, r.credit, r.maker, r.earlier, r.close]).join(" ");
+        .concat([r.licTitle, terms, r.licButton, r.credit, r.licensor, r.maker, r.earlier, r.close]).join(" ");
       const got = words(markup);
       const which = r.terms.findIndex(tm => want(tm) === got);
       return { got, which, want: want(r.terms[0]), x: (ids.modalX && ids.modalX.getAttribute("aria-label"))
@@ -178,6 +180,17 @@ if (ready) {
       const back = ids.aboutBack ? (click("aboutBack"), words(markup)) : "";
       return { went, ok: got === want, got, want, back: back === aboutIn(lang).got && back.indexOf(r.head) > -1 };
     };
+    /* ---- 1. the credit: three lines a <br> apart, the licensor second, its NIP held to its number --------------- */
+    const creditIn = lang => {
+      inLang(lang); ctx.openAbout();
+      const m = /<p class="about-credit"[^>]*>([\s\S]*?)<\/p>/.exec(markup);
+      return m ? m[1].split("<br>").map(s => s.replace(/<[^>]+>/g, "").trim()) : null;
+    };
+    const cen = creditIn("en"), cpl = creditIn("pl");
+    check([[cen, "en"], [cpl, "pl"]].every(([c, l]) => c && c.length === 3 && c[0] === ROWS[l].credit && c[1] === ROWS[l].licensor
+          && c[2] === ROWS[l].maker),
+      "1c the credit is three lines in each language, the licensor second, NIP and its number joined by a no-break space: "
+      + JSON.stringify([cen, cpl]));
     const een = earlierIn("en"), epl = earlierIn("pl");
     for (const [e, lang, id] of [[een, "en", "2a"], [epl, "pl", "2b"]])
       check(e.went && e.ok, id + " its footer's left button opens Earlier versions of Etiuda in " + lang + ": rows E1, E4 and E5"
