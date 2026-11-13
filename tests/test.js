@@ -3663,7 +3663,13 @@ function fifthLab(still) {
   ctx.translate = () => {};
   ctx.scale = () => {};
   ctx.clearRect = () => {};
-  ctx.stroke = p => { draws.push({ d: p.d, phase: sb.__f.fifthPhase() }); stroke.cap = ctx.lineCap; stroke.join = ctx.lineJoin; stroke.w = ctx.lineWidth; };
+  // the tile and its light canvas share this context: a stroke of a Path2D is the line, a bare stroke a piece of the light
+  const lights = [];
+  ctx.fillRect = () => {}; ctx.beginPath = () => {}; ctx.moveTo = () => {}; ctx.lineTo = () => {};
+  ctx.getImageData = (x, y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }); ctx.putImageData = () => {};
+  ctx.stroke = p => {
+    if (!p) { lights.push({ grey: +((/rgb\((\d+)/.exec(ctx.strokeStyle) || [])[1]), w: ctx.lineWidth, phase: sb.__f.fifthPhase() }); return; }
+    draws.push({ d: p.d, phase: sb.__f.fifthPhase() }); stroke.cap = ctx.lineCap; stroke.join = ctx.lineJoin; stroke.w = ctx.lineWidth; };
   const doc = { hidden: false, documentElement: { classList: { contains: () => false } },
     createElement: () => ({ className: "", width: 0, height: 0, setAttribute() {}, getContext: () => ctx }),
     querySelector: s => s === ".brand-tile svg path" ? node : null, addEventListener() {} };
@@ -3679,7 +3685,7 @@ function fifthLab(still) {
   const f = sb.__f, wire = f.wireFifth;
   // with no options, as main.js wires the header on the desk's switch (the leg on the program's own band holds that call)
   f.wireFifth = o => wire(o || { still: sb.mgReduceMotion });
-  return { f, node, std, sb, stroke, queued: () => frames.length, draws: () => draws.slice(),
+  return { f, node, std, sb, stroke, lights: () => lights.slice(), queued: () => frames.length, draws: () => draws.slice(),
     turning: () => tile.classes.has("brand-turning"), flip: v => { sb.still = v; watch(); },
     frame: ms => { const run = frames; frames = []; run.forEach(x => x.fn(ms)); } };
 }
@@ -3773,10 +3779,16 @@ function fifthTests() {
     const last = drawn[drawn.length - 1];
     got = [Math.abs(adv - W0) < 1e-9, a.node.d === a.std && a.node.sets === 0 && a.turning(), drawn.length >= 15 && drawn.length <= 21, a.queued(),
       !!last && last.d === a.f.fifthLinePath(last.phase) && segs(last.d) > 1.8 * segs(a.f.fifthLinePath(PHI0)) && /Z$/.test(last.d),
-      [a.stroke.cap, a.stroke.join, Math.abs(a.stroke.w - 2 * a.f.fifthRadius()) < 0.02]];
+      [a.stroke.cap, a.stroke.join, Math.abs(a.stroke.w - 2 * a.f.fifthRadius()) < 0.02],
+      // and it carries the depth: the frame's light is its pieces twice, a wider pass then the exact one, each far to near,
+      // from the far pass's 0.4 (grey 102) to the near pass's full light
+      (() => { const l = last ? a.lights().filter(x => x.phase === last.phase) : [], h = l.length / 2, w = 2 * a.f.fifthRadius();
+        const up = ps => ps.every((x, i) => i === 0 || x.grey >= ps[i - 1].grey), g = l.map(x => x.grey);
+        return l.length > 200 && up(l.slice(0, h)) && up(l.slice(h)) && l.slice(0, h).every(x => x.w > w) && l.slice(h).every(x => Math.abs(x.w - w) < 1e-9)
+          && Math.min(...g) >= 101 && Math.min(...g) <= 103 && Math.max(...g) >= 254; })()];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("under motion the phase advances at 2 pi times 0.007 per second, the header's mark turns on its canvas and the path is not rewritten, repaints stay at or under 20 a second, frames keep coming, and the turned line is both halves of the loop, at its width with round ends and joins",
-    got, [true, true, true, 1, true, ["round", "round", true]]);
+  eq("under motion the phase advances at 2 pi times 0.007 per second, the header's mark turns on its canvas and the path is not rewritten, repaints stay at or under 20 a second, frames keep coming, and the turned line is both halves of the loop, at its width with round ends and joins, carrying its depth: its light painted far to near from the far pass at 0.4 (grey 102) to the near at full light, a wider pass under the exact one",
+    got, [true, true, true, 1, true, ["round", "round", true], true]);
 
   try {
     const a = fifthLab(true); a.f.wireFifth();

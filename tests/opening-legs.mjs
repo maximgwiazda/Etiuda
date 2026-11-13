@@ -386,8 +386,10 @@ async function run() {
       await page.evaluateOnNewDocument(() => {
         let count = 0;
         const origStroke = CanvasRenderingContext2D.prototype.stroke;
+        // only the opening's own strokes count: the header's turn strokes its light in pieces, hundreds a repaint
         CanvasRenderingContext2D.prototype.stroke = function(...args) {
-          if (++count === 5) {
+          const own = this.canvas && this.canvas.isConnected && this.canvas.closest && this.canvas.closest(".e-launch-veil");
+          if (own && ++count === 5) {
             throw new Error("simulated render frame error");
           }
           return origStroke.apply(this, args);

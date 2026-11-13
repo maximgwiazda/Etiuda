@@ -44,13 +44,14 @@
  * that match and fires the change listener the query recorded. The read is the
  * listener's, so the stroke that follows lays nothing out and reads no style.
  */
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXPECTED = 10;
+const EXPECTED = 13;
 const DT = 1000 / 60;
 const SETTLE = 400;
 const WINDOW = 1700;
@@ -89,7 +90,7 @@ function loadFifth() {
 function makeLab() {
   let seq = 0, frames = [];
   const lab = {
-    layouts: 0, styleReads: 0, dWrites: 0, clientReads: 0, draws: [], dirty: false, arm: false, t: 0
+    layouts: 0, styleReads: 0, dWrites: 0, clientReads: 0, draws: [], pieces: [], puts: [], dirty: false, arm: false, t: 0
   };
   const mark = () => { if (lab.arm) lab.dirty = true; };
   const tile = {
@@ -119,17 +120,28 @@ function makeLab() {
     parentElement: g
   };
   function canvas() {
-    const ctx = { lineWidth: 0, lineCap: "", lineJoin: "", strokeStyle: "", tx: 0, ty: 0, sc: 1, a: 1, d: 1, e: 0, f: 0 };
+    const ctx = { lineWidth: 0, lineCap: "", lineJoin: "", strokeStyle: "", tx: 0, ty: 0, sc: 1, a: 1, d: 1, e: 0, f: 0, at: [], fill: "" };
+    const first = !lab.canvas;
+    ctx.fillRect = () => {};
+    ctx.beginPath = () => { ctx.at = []; };
+    ctx.moveTo = (x, y) => { ctx.at.push(x, y); };
+    ctx.lineTo = (x, y) => { ctx.at.push(x, y); };
+    /* The tile's bitmap reads as full ink and the light canvas as grey 102 everywhere, so what comes back is the product. */
+    ctx.getImageData = (x, y, w, h) => { const data = new Uint8ClampedArray(w * h * 4);
+      for (let i = 0; i < data.length; i += 4) { if (first) data[i + 3] = 255; else { data[i] = data[i + 1] = data[i + 2] = 102; data[i + 3] = 255; } }
+      return { data, width: w, height: h }; };
+    ctx.putImageData = img => { lab.puts.push({ first, alpha: img.data[3], n: img.data.length / 4, phase: sb.__f.fifthPhase() }); };
     ctx.setTransform = (a, b, c, d, e, f) => { ctx.a = a; ctx.d = d; ctx.e = e; ctx.f = f; };
     ctx.translate = (x, y) => { ctx.tx = x; ctx.ty = y; };
     ctx.scale = x => { ctx.sc = x; };
     ctx.clearRect = () => {};
     ctx.stroke = p => {
+      if (!p) { lab.pieces.push({ at: ctx.at.slice(), grey: ctx.strokeStyle, w: ctx.lineWidth, cap: ctx.lineCap, a: ctx.a, e: ctx.e, f: ctx.f, phase: sb.__f.fifthPhase(), first }); return; }
       lab.draws.push({ d: p.d, phase: sb.__f.fifthPhase(), w: ctx.lineWidth, cap: ctx.lineCap, join: ctx.lineJoin,
         tx: ctx.tx, ty: ctx.ty, sc: ctx.sc, a: ctx.a, md: ctx.d, e: ctx.e, f: ctx.f, ink: ctx.strokeStyle });
     };
     const cv = { className: "", _w: 0, _h: 0, setAttribute() {}, getContext: () => ctx };
-    lab.canvas = cv;
+    if (first) lab.canvas = cv;
     // The bitmap size is a layout. A repaint that sets it again would put the layouts back.
     Object.defineProperty(cv, "width", { get() { return cv._w; }, set(v) { if (lab.arm && v !== cv._w) mark(); cv._w = v; } });
     Object.defineProperty(cv, "height", { get() { return cv._h; }, set(v) { if (lab.arm && v !== cv._h) mark(); cv._h = v; } });
@@ -220,7 +232,7 @@ function makeLab() {
       if (lab.dirty) lab.layouts++;
     }
   };
-  lab.zero = () => { lab.layouts = 0; lab.styleReads = 0; lab.dWrites = 0; lab.clientReads = 0; lab.draws = []; };
+  lab.zero = () => { lab.layouts = 0; lab.styleReads = 0; lab.dWrites = 0; lab.clientReads = 0; lab.draws = []; lab.pieces = []; lab.puts = []; };
   return lab;
 }
 
@@ -241,8 +253,12 @@ check(draws.length >= 30 && draws.length <= 36
     && p.cap === "round" && p.join === "round"
     && p.tx === 0 && p.ty === 0 && p.sc === 1
     && Math.abs(p.a - wantA) < 1e-6 && Math.abs(p.md - wantA) < 1e-6 && Math.abs(p.e - wantE) < 1e-3 && Math.abs(p.f - wantE) < 1e-3)
-  && header.tile.classList.contains("brand-turning"),
-  "898b the mark strokes " + draws.length + " frames of its own line, through the tile's transform, at the line's width");
+  && header.tile.classList.contains("brand-turning")
+  && header.puts.length === draws.length && header.puts.every(p => p.first)
+  && draws.every(p => { const own = header.pieces.filter(q => q.phase === p.phase && !q.first); return own.length > 100
+    && own.every(q => Math.abs(q.a - wantA) < 1e-6 && Math.abs(q.e - wantE) < 1e-3 && q.cap === "round"); }),
+  "898b the mark strokes " + draws.length + " frames of its own line, through the tile's transform, at the line's width, each with its"
+  + " light painted through the same transform and the frame's opacity put back once (" + header.puts.length + " put(s))");
 
 const passed = makeLab();
 const own = { d: "M0 0", sets: 0, attrs: {}, getAttribute(n) { return n === "d" ? own.d : own.attrs[n]; },
@@ -391,6 +407,52 @@ const worstOff = onLine({ a: tilePx * wantSc, e: (wantTx - wantVx) * tilePx, f: 
 check(worstOn <= 0.01 && worstOff > 0.5,
   "441d the canvas at 56 degrees strokes the standing figure: its " + standPx.length + " outline points lie within "
   + worstOn.toFixed(4) + " px of half the line's width; control, through the tile's transform alone, off by " + (isFinite(worstOff) ? worstOff.toFixed(2) + " px" : "more than 3 px"));
+
+/* THE TURN CARRIES THE DEPTH (board 441). At each repaint the light canvas holds the line's pieces in greys, a wider pass
+   then the exact one, each pass far to near; the tile's opacity is its ink's times that light. Each piece's grey is held to
+   0.4 + 0.6 x smoothstep(u), u = (z + 1) / 2, with z worked out here from the figure's definition at the piece's middle:
+   the nearest point of the pass, x = 128 + 96 sin(3t + phi), y = 128 + 96 sin(2t), z = cos(3t + phi), or of its mirror,
+   z the opposite; where two arms cross within half a unit either may be the piece's. */
+const ease = z => { const u = z * 0.5 + 0.5; return 0.4 + 0.6 * u * u * (3 - 2 * u); };
+function zCandidates(phi, mx, my) {
+  const rx = 128 + (mx - 128) / FIT, ry = 128 + (my - 128) / FIT, near = [];
+  let best = Infinity;
+  const all = [];
+  for (let i = 0; i <= 6000; i++) {
+    const t = 3 * Math.PI / 4 + Math.PI * i / 6000, x = 128 + 96 * Math.sin(3 * t + phi), y = 128 + 96 * Math.sin(2 * t), z = Math.cos(3 * t + phi);
+    for (const c of [[x, y, z], [256 - x, y, -z]]) { const d = Math.hypot(c[0] - rx, c[1] - ry); all.push([d, c[2]]); if (d < best) best = d; }
+  }
+  for (const c of all) if (c[0] <= best + 0.5) near.push(c[1]);
+  return { best, near };
+}
+const lastPhase = draws.length ? draws[draws.length - 1].phase : 0;
+const lit = header.pieces.filter(q => q.phase === lastPhase && !q.first);
+const half = lit.length / 2, wide = lit.slice(0, half), exact = lit.slice(half);
+const greyOf = q => +((/rgb\((\d+)/.exec(q.grey) || [])[1]);
+const ordered = ps => ps.every((q, i) => i === 0 || greyOf(q) >= greyOf(ps[i - 1]));
+let worstGrey = 0, worstDist = 0;
+for (const q of exact) {
+  const c = zCandidates(lastPhase, (q.at[0] + q.at[2]) / 2, (q.at[1] + q.at[3]) / 2);
+  worstDist = Math.max(worstDist, c.best);
+  worstGrey = Math.max(worstGrey, Math.min(...c.near.map(z => Math.abs(255 * ease(z) - greyOf(q)))));
+}
+const greys = exact.map(greyOf);
+check(lit.length > 200 && lit.length % 2 === 0 && wide.every(q => Math.abs(q.w - (radius + 2 / wantA)) < 1e-9) && exact.every(q => Math.abs(q.w - radius) < 1e-9)
+  && ordered(wide) && ordered(exact) && worstDist < 0.6 && worstGrey <= 8 && Math.min(...greys) <= 103 && Math.max(...greys) >= 254,
+  "441e at phase " + lastPhase.toFixed(3) + " the light holds " + half + " pieces twice (a wider pass, then the exact one), each far to near, greys "
+  + Math.min(...greys) + " to " + Math.max(...greys) + ", each within " + worstGrey.toFixed(2) + " of 0.4 + 0.6 x smoothstep of its depth, its middle "
+  + worstDist.toFixed(2) + " from the figure");
+const lastPut = header.puts[header.puts.length - 1] || {};
+check(lastPut.first === true && lastPut.alpha === 102 && lastPut.n === 625,
+  "441f the tile's opacity is its ink's times the light: full ink under grey 102 comes back at " + lastPut.alpha + ", over " + lastPut.n + " pixel(s)");
+
+/* THE STANDING MARK IS THE AGREED CUT, BYTE FOR BYTE: the svg's content after the viewBox is the cut taken whole,
+   its sha256 written here when it landed. */
+const STAND_SHA = "db48b668f4ad6e23d9e6eaa6a24977ed2c1d358d1353cb3617458ae58b222a51";
+const standInner = (/^<svg[^>]*>([\s\S]*)<\/svg>$/.exec(tileSvg) || [])[1] || "";
+const standSha = crypto.createHash("sha256").update(standInner, "utf8").digest("hex");
+check(standSha === STAND_SHA && viewBox === "-17.4545 -17.4545 290.9091 290.9091",
+  "441g the standing svg is the agreed cut byte for byte: sha256 " + standSha.slice(0, 16) + ", viewBox " + viewBox);
 
 if (asserted !== EXPECTED) {
   failed++;
