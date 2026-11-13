@@ -158,7 +158,14 @@ module.exports = sellerAddress.sellerConfig(testService.testServiceConfig({
     // THE GROUP POLICY TEMPLATE goes beside the program as it stands, resources/policy holding etiuda.admx and its
     // en-US and pl-PL etiuda.adml, so an administrator who installs a desk has the template that pins its team folder
     // and its lead's key (sense pass finding 17; tests/join-policy.mjs 19i). Windows only: no other system reads it.
-    extraResources: [{ from: CARET, to: "caret.exe" }, { from: "shell/policy", to: "policy" }, { from: EMBED, to: "embed" }, ...SIGNIN_SECRET],
+    // The caret helper as a folder of one, not as the file: electron-builder signs what it copies out of a folder and
+    // copies a lone file unsigned (tests/sign-all.mjs 1c).
+    extraResources: [
+      { from: path.dirname(CARET), to: ".", filter: [path.basename(CARET)] }, /* plant:sign-caret */
+      { from: "shell/policy", to: "policy" }, { from: EMBED, to: "embed" }, ...SIGNIN_SECRET],
+    // EVERY LIBRARY SIGNED AS THE PROGRAMS ARE: Electron's DLLs beside the exe and the model's runtime, a DLL and a Node
+    // addon, each of which a publisher rule judges on its own (tests/sign-all.mjs). One its maker signed is signed again.
+    signExts: [".dll", ".node"], /* plant:sign-exts */
     ...signing,
   },
   // THE LICENCE PAGE IS FOUND BY NAME rather than named here: electron-builder shows one when

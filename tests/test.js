@@ -7585,7 +7585,7 @@ if (require.main === module) {
     const facts = {
       relay: /const BUILTIN_RELAY_URL = "https:\/\/etiuda\.dev\/relay\/v1"/.test(main),
       licence: /"https:\/\/etiuda\.dev\/licence\/v1\//.test(main),
-      caret: /to:\s*"caret\.exe"/.test(cfg),
+      caret: /const CARET = path\.resolve\(output, "\.caret", "caret\.exe"\)/.test(cfg) && /\{ from: path\.dirname\(CARET\), to: "\.", filter: \[path\.basename\(CARET\)\] \}/.test(cfg),
       clipboard: /clipboard\.readText\(/.test(main),
     };
     const DENY = [

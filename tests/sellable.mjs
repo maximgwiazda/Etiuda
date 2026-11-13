@@ -766,7 +766,7 @@ try {
     const fineRead = [{ file: 'C:/x/etiuda-setup.exe', status: 'Valid', timestamped: true, subject: WHO10 }];
     const asks = typeof SELL10.demoSigningProblems === 'function';
     const v10 = signatureVerdict({ setup: EN_FILE, program: EN_FILE, customer: false, win: {}, read: () => demoRead, log: () => {} });
-    const v10ok = signatureVerdict({ setup: EN_FILE, program: EN_FILE, customer: true, win: {}, read: () => fineRead, log: () => {} });
+    const v10ok = signatureVerdict({ setup: EN_FILE, program: EN_FILE, customer: true, win: {}, read: files => files.map(f => ({ ...fineRead[0], file: f })), log: () => {} });
     const sellText = fs.readFileSync(path.join(ROOT, 'tools', 'sellable.mjs'), 'utf8');
     const lift10 = (marker, line) => {
       const t = sellText.split('\n').map(l => l.includes('plant:' + marker) ? line + ' /* plant:' + marker + ' */' : l).join('\n');

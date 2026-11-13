@@ -24,8 +24,8 @@
  * The signature is also required of a PREVIEW whenever a certificate is configured, because a
  * signing that was asked for and did not come out Valid is a fault whoever the build is for. */
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { closeSync, existsSync, lstatSync, openSync, readdirSync, readFileSync, readSync } from 'node:fs';
+import { join, relative, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 
 /** Is this version a customer's? Bare x.y.z, major 1 or more. */
@@ -151,15 +151,45 @@ export function readAuthenticode(files) {
   return rows;
 }
 
+/* THE FILES WINDOWS RUNS AS CODE, which a publisher rule allows or refuses one by one: every file under `dir` named as a
+   program or a library Windows or Node loads (.exe, .dll, .node), and any other that opens with a PE header (MZ, then
+   PE at the offset it names). A file whose header cannot be read is taken as one, so it is asked about rather than
+   passed over. Links are not followed. Sorted, full paths. */
+const PE_NAME = /\.(exe|dll|node)$/i;
+export function isPeFile(file) {
+  if (PE_NAME.test(file)) return true;
+  let fd = null;
+  try {
+    fd = openSync(file, 'r');
+    const head = Buffer.alloc(64);
+    if (readSync(fd, head, 0, 64, 0) < 64 || head.readUInt16LE(0) !== 0x5a4d) return false;
+    const sig = Buffer.alloc(4);
+    return readSync(fd, sig, 0, 4, head.readUInt32LE(60)) === 4 && sig.readUInt32LE(0) === 0x4550; /* plant:sign-header */
+  } catch { return true; } finally { if (fd !== null) closeSync(fd); }
+}
+export function peFiles(dir) {
+  const out = [];
+  const walk = at => {
+    for (const name of readdirSync(at)) {
+      const full = join(at, name), st = lstatSync(full);
+      if (st.isDirectory()) walk(full);
+      else if (st.isFile() && isPeFile(full)) out.push(full);
+    }
+  };
+  walk(dir);
+  return out.sort();
+}
+
 /** Why these readings fail when a signature is required, or nothing. When it is not required a
- *  reading is only printed, which is what a preview with no certificate has always done. */
+ *  reading is only printed, which is what a preview with no certificate has always done. A reading
+ *  carrying a `label`, its path inside the app, is named by it, and any other by its file's name. */
+const nameOf = r => r.label || String(r.file).replace(/\\/g, '/').split('/').pop();
 export function signatureProblems(readings, required) {
   if (!required) return [];
-  const name = f => String(f).replace(/\\/g, '/').split('/').pop();
   const out = [];
   for (const r of readings) {
-    if (r.status !== 'Valid') out.push(name(r.file) + ' reads Authenticode ' + r.status + ', not Valid');
-    else if (!r.timestamped) out.push(name(r.file) + ' is signed with no timestamp, so its signature dies with the certificate');
+    if (r.status !== 'Valid') out.push(nameOf(r) + ' reads Authenticode ' + r.status + ', not Valid');
+    else if (!r.timestamped) out.push(nameOf(r) + ' is signed with no timestamp, so its signature dies with the certificate');
   }
   return out;
 }
@@ -170,7 +200,7 @@ const ESIGNER = createRequire(import.meta.url)('./esigner.cjs');
 export function demoSigningProblems({ env, readings } = {}) {
   const out = [];
   if (env && ESIGNER.given(env) === 'esigner-demo') out.push(ESIGNER.SIGN_VAR + ' is esigner-demo, which signs with SSL.com\'s demo certificate, and no demo-signed build is released'); /* plant:sell-demo-var */
-  for (const r of readings || []) if (ESIGNER.DEMO_SUBJECT.test(r.subject || '')) out.push(String(r.file).replace(/\\/g, '/').split('/').pop() + ' is signed by SSL.com\'s demo certificate, which is never released'); /* plant:sell-demo-subject */
+  for (const r of readings || []) if (ESIGNER.DEMO_SUBJECT.test(r.subject || '')) out.push(nameOf(r) + ' is signed by SSL.com\'s demo certificate, which is never released'); /* plant:sell-demo-subject */
   return out;
 }
 
@@ -183,22 +213,30 @@ export function demoSigningProblems({ env, readings } = {}) {
    release so that it can be driven on planted files without packaging anything; `read` is the
    reader, replaceable only so a leg can say what an off-Windows run does. The uninstaller is not
    read: electron-builder signs it with the same options and then seals it inside the installer,
-   where nothing reaches it without installing. Returns true or the reason, as a gate does. */
-export function signatureVerdict({ setup, program, customer, win, read = readAuthenticode, log = console.log }) {
+   where nothing reaches it without installing. Given `app`, the unpacked folder the installer
+   carries, every file in it Windows runs as code (peFiles) is read too and held to the same rule,
+   each named by its path inside the app. Returns true or the reason, as a gate does. */
+export function signatureVerdict({ setup, program, app, customer, win, read = readAuthenticode, log = console.log }) {
   const files = [setup, program];
-  const missing = files.filter(f => !f || !existsSync(f));
+  const missing = files.concat(app === undefined ? [] : [app]).filter(f => !f || !existsSync(f));
   if (missing.length) return 'nothing to read the signature of: ' + missing.join(', ') + ' is not there';
+  if (app) files.push(...peFiles(app).filter(f => resolve(f) !== resolve(program))); /* plant:sign-walk */
+  const label = f => app && !relative(app, f).startsWith('..') ? relative(app, f).replace(/\\/g, '/') : '';
   const required = !!customer || signingConfigured(win);
-  const readings = read(files);
-  if (!readings) {
+  const read0 = read(files);
+  if (!read0) {
     if (required) return 'NOT RUN: not Windows, so no signature can be read, and this build requires one';
     log('  not Windows, so there is nothing to ask');
     return true;
   }
+  const readings = read0.map(r => ({ ...r, label: label(r.file) || undefined }));
   for (const r of readings) log('  Authenticode: ' + r.status + (r.timestamped ? ', timestamped' : '') + '  ' + r.file
     + (r.status === 'NotSigned' ? '  (a log line reading "signing with signtool.exe" is the asar integrity edit, not a signature)' : ''));
   if (!required) log('  not required: a preview with no certificate configured');
-  const problems = signatureProblems(readings, required).concat(demoSigningProblems({ readings }));
+  /* A file the reader gave no answer for is a reading lost, not a pass. */
+  const answered = new Set(readings.map(r => resolve(String(r.file))));
+  const unread = required ? files.filter(f => !answered.has(resolve(f))).map(f => (label(f) || nameOf({ file: f })) + ' was not read, so its signature is not known') : []; /* plant:sign-unread */
+  const problems = unread.concat(signatureProblems(readings, required), demoSigningProblems({ readings }));
   return problems.length ? problems.join('; ') : true;
 }
 
