@@ -10734,8 +10734,8 @@ async function sceneA4Withdraw(mod, restart) {
   await round(desk);
   await round(lead);
   /* What stays waiting for a lead: the relay's record of the request, whether it still serves the request to a lead that catches up
-     afresh, and whether it takes the lead's yes to it. The lead that fetched it before keeps its own copy (leadKept), since the relay
-     serves no box beside a door request's deletion (relay/core.cjs admitWithdraw); that is reported, not judged here. */
+     afresh, whether it takes the lead's yes to it, and whether the lead that fetched it before still holds it: the relay serves the
+     desk's box beside the deletion (relay/core.cjs admitWithdraw), so that lead opens the deletion and its mirror lets the request go. */
   const rec = (() => { try { return JSON.parse(relayStore(rt).dump().find(([k]) => k === "inv:" + asked)[1]); } catch { return null; } })();
   const freshMirror = path.join(LAB, "a4w-fresh-" + rt), tF = transport("a4w-fresh");
   const fresh = mod.createChannel({ rt, url: URLV1, mirror: freshMirror, stateFile: freshMirror + ".json", pin: pinOf,
@@ -10749,7 +10749,7 @@ async function sceneA4Withdraw(mod, restart) {
   const leadKept = read(leadMirror, rel) !== null;
   for (const ch of [desk, lead, fresh]) { try { await ch.stop(); } catch { /* already stopped */ } }
   const ok = made.status === 200 && opened.status === 200 && /^[0-9a-f]{32}$/.test(asked) && reached && knocked === 1 && withdrawn >= 1
-    && !!rec && rec.withdrawn === true && unseen && !(yes && yes.ok) && knocks === 1;
+    && !!rec && rec.withdrawn === true && unseen && !(yes && yes.ok) && !leadKept && knocks === 1;
   return { made: made.status, opened: opened.status, asked: !!asked, reached, knocked, withdrawn, recWithdrawn: !!rec && rec.withdrawn === true, unseen,
     yesRefused: !(yes && yes.ok), why: yes && yes.reason, knocks, leadKept, ok };
 }
@@ -10759,7 +10759,7 @@ if (partOn("pA4")) {
     for (const restart of [false, true]) {
       const w = await sceneA4Withdraw(C, restart);
       check(w.ok, (restart ? "a4k" : "a4j") + " a door request up at the lead's is taken back " + (restart ? "by a new channel on the same mirror, as after a sign out or a restart, " : "")
-        + "with no certificate and no change to the relay: the key's hello resumes the request's session, the deletion goes under the door's seal, the relay holds the request withdrawn, serves it to no lead catching up and refuses the lead's yes to it, and no door hello is sent again: " + JSON.stringify(w));
+        + "with no certificate: the key's hello resumes the request's session, the deletion goes under the door's seal, the relay holds the request withdrawn, serves it to no lead catching up, refuses the lead's yes to it, and the lead that fetched it lets it go, and no door hello is sent again: " + JSON.stringify(w));
     }
     if (PLANTS_OFF) skip("a4l lifting plant:e4-withdraw-send, the door request stays for the lead to take, and a4j goes red");
     else {

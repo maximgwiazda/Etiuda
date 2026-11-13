@@ -8818,6 +8818,7 @@ What you type stays in this browser only.`;
     "Use another account": "Użyj innego konta",
     "Not signed in": "Bez logowania",
     /* words: copywriter */
+    "Withdrawing the request to join": "Wycofywanie prośby o dołączenie",
     "This computer is signed out. Its place among the account's three computers is freed by itself as soon as the sign-in service can be reached.": "Ten komputer jest wylogowany. Jego miejsce wśród trzech komputerów konta zwolni się samo, gdy tylko usługa logowania będzie osiągalna.",
     "Preview only.": "Tylko podgląd.",
     "Sign-in is not set up yet, so nothing here is sent.": "Logowanie nie jest jeszcze uruchomione, więc nic stąd nie zostanie wysłane.",
@@ -17819,6 +17820,8 @@ What you type stays in this browser only.`;
           acts: [["join", t("Join a team")], ["load", t("Load another catalog")]]
         };
       }
+      let backTitle = t("Joining {LEAD}'s team").split("{LEAD}").join(lead);
+      if (j.invite.door === true) backTitle = t("Withdrawing the request to join");
       if (j.withdrawn === true) return {
         title: t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
         /* plant:e4-card */
@@ -17833,13 +17836,13 @@ What you type stays in this browser only.`;
         acts: [["join", t("Join a team")], ["load", t("Load another catalog")]]
       };
       if (j.withdrawing === true && j.readonly === true) return {
-        title: t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
+        title: backTitle,
         line: t("The request is being withdrawn. The team's relay is read-only until it is renewed, so it takes the withdrawal then, and until that the team's lead may still see the request. If the relay clears the team's copy first, the request goes with it."),
         body: meta,
         acts: []
       };
       if (j.withdrawing === true) return {
-        title: t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
+        title: backTitle,
         line: t("The request is being withdrawn. The relay takes the withdrawal shortly, and until then the team's lead may still see the request."),
         body: meta,
         acts: []

@@ -576,6 +576,9 @@ function joinParts(){
         line:cause+" "+status+" "+forward,
         body:meta, acts:[["join",t("Join a team")],["load",t("Load another catalog")]]};
     }
+    /* A request at a team's door, while it is taken back, is titled by that act: the copywriter's words. */
+    let backTitle=t("Joining {LEAD}'s team").split("{LEAD}").join(lead);
+    if(j.invite.door===true) backTitle=t("Withdrawing the request to join"); /* plant:door-withdraw-title */
     /* Claudette's words, 2026-10-27. */
     if(j.withdrawn===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead), /* plant:e4-card */
       line:t("The request is withdrawn: the team's lead no longer sees it. This desk keeps what the invitation gave it, so Ask again sends the request anew without a new link."),
@@ -585,11 +588,11 @@ function joinParts(){
       line:t("The relay no longer holds this request, so it could not be withdrawn there. The team's lead may still see it until it expires. To join after all, a new invitation from the team's lead is needed."),
       body:meta, acts:[["join",t("Join a team")],["load",t("Load another catalog")]]}; /* plant:c5-card-unkept */
     /* Claudette's words, 2026-10-27. */
-    if(j.withdrawing===true && j.readonly===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
+    if(j.withdrawing===true && j.readonly===true) return {title:backTitle,
       line:t("The request is being withdrawn. The team's relay is read-only until it is renewed, so it takes the withdrawal then, and until that the team's lead may still see the request. If the relay clears the team's copy first, the request goes with it."),
       body:meta, acts:[]}; /* plant:c5-card-held */
     /* Until the relay has taken the withdrawal the lead may still see the request, so the card says so, with nothing to press. Claudette's words, 2026-10-27. */
-    if(j.withdrawing===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
+    if(j.withdrawing===true) return {title:backTitle,
       line:t("The request is being withdrawn. The relay takes the withdrawal shortly, and until then the team's lead may still see the request."),
       body:meta, acts:[]}; /* plant:g2-card */
     /* The catalogs are said to be open only once the shell has opened the team's here; until then the line says what it
