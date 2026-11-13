@@ -65,9 +65,9 @@ function readKey(key) {
   }
 }
 
-/** What Windows is set to now, as switches. Any system but Windows is no proxy. A failed read leaves Chromium's resolver. */
+/** What Windows is set to now, as switches. Any system but Windows or a failed read leaves Chromium's resolver. */
 function windowsProxySwitches() {
-  if (process.platform !== "win32") return [["no-proxy-server"]];
+  if (process.platform !== "win32") return [];
   const pol = readKey(POLICY_KEY);
   if (pol.failed) return [];
   const perMachine = isPerMachine(pol.text);

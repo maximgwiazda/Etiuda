@@ -976,10 +976,16 @@ try {
     try {
       Object.defineProperty(process, "platform", { value: "linux" });
       const asLinux = loadShell();
+      Object.defineProperty(process, "platform", { value: "darwin" });
+      const asMac = loadShell();
       Object.defineProperty(process, "platform", { value: "win32" });
-      check(JSON.stringify(asked(asLinux)) === '["no-proxy-server"]' && asLinux.regCalls.length === 0,
-        "6l off Windows the shell starts no program and asks for no proxy and no lookup: " + JSON.stringify(asked(asLinux))
-        + ", " + asLinux.regCalls.length + " program(s)");
+      const asWin = loadShell();
+      check(JSON.stringify(asked(asLinux)) === "[]" && asLinux.regCalls.length === 0
+        && JSON.stringify(asked(asMac)) === "[]" && asMac.regCalls.length === 0
+        && JSON.stringify(asked(asWin)) === '["no-proxy-server"]',
+        "6l off Windows the shell starts no program and follows system proxy (linux=" + JSON.stringify(asked(asLinux))
+        + ", darwin=" + JSON.stringify(asked(asMac)) + ", win32=" + JSON.stringify(asked(asWin))
+        + ", " + (asLinux.regCalls.length + asMac.regCalls.length) + " program(s))");
       const S = loadShell();
       const PROXY_ASKS = [["query", POLICY_KEY], ["query", REG_KEY], ["query", CONN_KEY]];
       check(JSON.stringify(asked(S)) === '["no-proxy-server"]',
