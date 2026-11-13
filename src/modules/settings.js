@@ -30,7 +30,7 @@ import { E_VERSION } from "./env.js";
 import { sxIcon } from "./sx-icons.js";
 import { focusKey, focusSame } from "./dom.js";
 import { orgModel, orgRanks, syncOrgMark } from "./org-model.js";
-import { SIGNIN_NAMES, signinNow, signinShown, signinParts, signinSay, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow, signinDoorsHtml, signinDoorRefusedNow,
+import { SIGNIN_NAMES, signinNow, signinShown, signinParts, signinSay, signinNoSeat, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow, signinDoorsHtml, signinDoorRefusedNow,
   signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect, signinCopyHtml } from "./signin.js";
 
 /* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name,
@@ -307,7 +307,7 @@ function accountGroups(){
       : row("team","people",t("No team yet"),doorSaid||t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."),""));
     if(v.code) rows.push(row("code","code",t("Your sign-in code"),t("Not a secret. It tells a team's lead which account is yours."),
       '<code class="sgn-mono">'+esc(signinCodeText(v.code))+'</code>'+signinCopyHtml("copy")));
-    if(v.refused==="full") rows.push(row("seat","check",t("Seat"),join(signinSay("full", v, p)),""));
+    if(signinNoSeat(v)) rows.push(row("seat","check",t("Seat"),join(signinSay(v.refused, v, p)),""));
     else if(v.seat==="none") rows.push(row("seat","check",t("Seat"),join(signinSay("nolicence", v)),""));
     else rows.push(row("seat","check",t("Seat"),v.seat==="lapsed" ? join(signinSay("lapsed", v)) : t("On up to three computers; this is one of them."),val(t("Held by this account"))));
     rows.push(row("checked","clock",t("Last checked"),v.reached ? "" : t("The sign-in service cannot be reached just now. Etiuda keeps working with the catalog it has."),

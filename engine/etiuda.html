@@ -8793,8 +8793,8 @@ What you type stays in this browser only.`;
     "Check now": "Sprawdź teraz",
     "The sign-in service could not be reached.": "Nie udało się połączyć z usługą logowania.",
     "Nothing changed: this computer is not signed in, and Etiuda works as before.": "Nic się nie zmieniło: ten komputer nie jest zalogowany, a Etiuda działa jak dotąd.",
-    "{TEAM} has no free seat.": "W zespole {TEAM} nie ma wolnego miejsca.",
-    "You are signed in and in the team. {LEAD}, the team's lead, can free a seat or add one, and Etiuda checks again by itself.": "Logowanie się powiodło i to konto należy do zespołu. Lider zespołu, {LEAD}, może zwolnić miejsce albo dodać nowe, a Etiuda sama sprawdzi ponownie.",
+    "{TEAM} has no free seat just now.": "W zespole {TEAM} nie ma teraz wolnego miejsca.",
+    "The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and {LEAD}, the team's lead, sees this account among those who have signed in.": "Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; nikt nie musi nic robić, a lider zespołu, {LEAD}, widzi to konto wśród osób, które się zalogowały.",
     "This account is already in use on three computers.": "To konto działa już na trzech komputerach.",
     "Signing out on one of them makes room here, and so does a computer left unused for 30 days; then Try again.": "Wylogowanie na jednym z nich zwalnia tu miejsce, podobnie jak komputer nieużywany przez 30 dni; potem wystarczy spróbować ponownie.",
     "This account's organisation has not allowed Etiuda at its sign-in provider.": "Organizacja tego konta nie dopuściła Etiudy u swojego dostawcy logowania.",
@@ -8827,8 +8827,8 @@ What you type stays in this browser only.`;
     "Signing out ends this computer's sign-in and frees its place among the account's three; the seat stays the account's. The team's catalog and personal cards stay on the computer.": "Wylogowanie kończy logowanie na tym komputerze i zwalnia jego miejsce wśród trzech komputerów konta; miejsce w licencji zostaje przy koncie. Katalog zespołu i własne karty zostają na komputerze.",
     // placeholder: Claudette, the eight lines below
     "today, {TIME}": "dziś, {TIME}",
-    "This licence has no free seat.": "Ta licencja nie ma wolnego miejsca.",
-    "The sign-in worked. The licence's owner can free a seat or add one, and Etiuda checks again by itself.": "Logowanie się powiodło. Osoba, do której należy licencja, może zwolnić miejsce albo dodać nowe, a Etiuda sama sprawdzi ponownie.",
+    "No seat is free on the organisation's licence just now.": "W licencji organizacji nie ma teraz wolnego miejsca.",
+    "The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account among those who have signed in.": "Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; nikt nie musi nic robić, a lider zespołu widzi to konto wśród osób, które się zalogowały.",
     "This desk's seat is due for renewal.": "Miejsce w licencji dla tego stanowiska czeka na odnowienie.",
     "It renews by itself the next time the sign-in service answers. Everything on this desk works as before.": "Odnowi się samo, gdy usługa logowania znów odpowie. Wszystko na tym stanowisku działa jak dotąd.",
     "This desk could not renew its sign-in by itself.": "To stanowisko nie mogło samo odnowić logowania.",
@@ -10313,7 +10313,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-12";
+  var E_BUILT = "2026-11-13";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -26300,8 +26300,9 @@ What you type stays in this browser only.`;
         return [t("This account's organisation has not allowed Etiuda at its sign-in provider."), t("Its IT department can allow it; another account can be used meanwhile.")];
       case "desks":
         return [t("This account is already in use on three computers."), t("Signing out on one of them makes room here, and so does a computer left unused for 30 days; then Try again.")];
+      case "waiting":
       case "full":
-        return p && p.team && p.team.lead ? [named(t("{TEAM} has no free seat."), "{TEAM}", p.teamName), named(named(t("You are signed in and in the team. {LEAD}, the team's lead, can free a seat or add one, and Etiuda checks again by itself."), "{LEAD}", p.team.lead), "{TEAM}", p.teamName)] : [t("This licence has no free seat."), t("The sign-in worked. The licence's owner can free a seat or add one, and Etiuda checks again by itself.")];
+        return p && p.team && p.team.lead ? [named(t("{TEAM} has no free seat just now."), "{TEAM}", p.teamName), named(t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and {LEAD}, the team's lead, sees this account among those who have signed in."), "{LEAD}", p.team.lead)] : [t("No seat is free on the organisation's licence just now."), t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account among those who have signed in.")];
       case "nolicence":
         return [t("No Etiuda licence has a seat for this account."), t("The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.")];
       case "offline":
@@ -26317,6 +26318,9 @@ What you type stays in this browser only.`;
       default:
         return [t("The sign-in did not finish."), t("Nothing changed, and signing in can be tried again.")];
     }
+  }
+  function signinNoSeat(v) {
+    return v.refused === "waiting" || v.refused === "full";
   }
   var FAIL_FIRST = ["unreached", "signin-unreached", "signin-timeout", "signin-browser", "signin-notallowed", "desks", "token", "signin", "signin-refused", "signin-token", "signin-unbound", "signin-state", "signin-none", "signin-preview"];
   function signinDoor(v) {
@@ -26362,7 +26366,7 @@ What you type stays in this browser only.`;
       };
     }
     if (v.ask) return { moment: "ask", ident, say: signinSay("ask", v), providers: v.offered, acts: [acct] };
-    if (v.refused === "full") return { moment: "noseat", ident, say: signinSay("full", v, p), acts: [{ act: "check", label: t("Check now"), solid: true }, acct] };
+    if (signinNoSeat(v)) return { moment: "noseat", ident, say: signinSay(v.refused, v, p), acts: [{ act: "check", label: t("Check now"), solid: true }, acct] };
     if (v.seat === "none" || !v.seat) return {
       moment: "nolicence",
       ident,
@@ -35849,7 +35853,7 @@ What you type stays in this browser only.`;
         t("Not a secret. It tells a team's lead which account is yours."),
         '<code class="sgn-mono">' + esc(signinCodeText(v.code)) + "</code>" + signinCopyHtml("copy")
       ));
-      if (v.refused === "full") rows.push(row("seat", "check", t("Seat"), join(signinSay("full", v, p)), ""));
+      if (signinNoSeat(v)) rows.push(row("seat", "check", t("Seat"), join(signinSay(v.refused, v, p)), ""));
       else if (v.seat === "none") rows.push(row("seat", "check", t("Seat"), join(signinSay("nolicence", v)), ""));
       else rows.push(row("seat", "check", t("Seat"), v.seat === "lapsed" ? join(signinSay("lapsed", v)) : t("On up to three computers; this is one of them."), val(t("Held by this account"))));
       rows.push(row(

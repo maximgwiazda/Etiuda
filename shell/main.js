@@ -9570,15 +9570,16 @@ function signinDoorsOk(list, packed) {
   }
   return out;
 }
-/* The service's answer read: {ok, code, cert, doors} (cert null where no licence admits the person yet, and then no doors), or
-   {ok: false, reason}, the reason "token", "signin", "full" or "desks" as the service says it, else "unreached", which every other
-   answer is. `packed` is signinDoorAddressOk's. */
+/* The service's answer read: {ok, code, cert, doors} (cert null where no licence admits the person yet, and then no doors; `waiting`
+   where a licence admits them and has no free seat, so a quiet renewal seats the desk once one frees), or {ok: false, reason}, the
+   reason "token", "signin", "full" or "desks" as the service says it, else "unreached", which every other answer is. `packed` is
+   signinDoorAddressOk's. */
 function signinAnswer(res, deskKey, packed) {
   let j = null;
   try { j = JSON.parse(Buffer.from(res && res.bytes ? res.bytes : []).toString("utf8")); } catch { j = null; }
   if (!j || typeof j !== "object" || Array.isArray(j)) return { ok: false, reason: "unreached" };
   if (res.status === 200 && j.ok === true && SIGNIN_CODE.test(String(j.code))) {
-    if (j.certificate === null) return { ok: true, code: String(j.code), cert: null, doors: [] };
+    if (j.certificate === null) return { ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === "waiting" }; /* plant:wait-read */
     if (signinCertOk(j.certificate, deskKey) && j.certificate.code === j.code)
       return { ok: true, code: String(j.code), cert: j.certificate, doors: signinDoorsOk(j.doors, packed) }; /* plant:door-read */
     return { ok: false, reason: "unreached" };
@@ -9604,10 +9605,12 @@ async function signinSeat(io, provider, deskKey, idToken, seed, now) {
 function signinLapsed(held, now) {
   return !!held && !!held.cert && now >= held.cert.until; /* plant:lapse-until */
 }
-/* `held` after the service's answer `ans` at `now`: a certificate replaces the last, an answer of none drops it, a refusal keeps it
-   (until its own `until`) and is said; "signin", a seat freed, forgets the refresh token, since only a sign-in takes it again. */
+/* `held` after the service's answer `ans` at `now`: a certificate replaces the last, an answer of none drops it (a wait is said as
+   "waiting"), a refusal keeps it (until its own `until`) and is said; "signin", a seat freed, forgets the refresh token, since only a
+   sign-in takes it again. */
 function signinSettle(held, ans, now) {
-  if (ans.ok) return Object.assign({}, held, { code: ans.code, cert: ans.cert, doors: ans.cert ? (ans.doors || []) : [], at: now, checked: now, reached: true, said: "", ask: false });
+  if (ans.ok) return Object.assign({}, held, { code: ans.code, cert: ans.cert, doors: ans.cert ? (ans.doors || []) : [], at: now, checked: now, reached: true,
+    said: ans.waiting === true ? "waiting" : "", ask: false }); /* plant:wait-settle */
   if (ans.reason === "unreached") return Object.assign({}, held, { checked: now, reached: false });
   const freed = ans.reason === "signin";
   return Object.assign({}, held, { checked: now, reached: true, said: ans.reason, ask: freed || held.ask === true,

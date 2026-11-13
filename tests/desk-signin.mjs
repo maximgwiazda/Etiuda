@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 77;
+const PLANTS = 81;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 91 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + TRACE_PLANTS);
+const EXPECTED = 94 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + TRACE_PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1821,6 +1821,75 @@ CASES.stagingCmd = () => {
     && !/Etiuda\.exe|Programs\\Etiuda|ProgramFiles/i.test(text) && !lines.some(l => /\b(setx|reg)\b/i.test(l));
 };
 
+/* ---- no free seat is a wait (ds18): the service answers 200 with no certificate and the reason "waiting", the desk keeps the person
+   signed in and renews quietly, and the door and Account say so in the copywriter's words; an older service's 409 "full" as before ---- */
+const WAIT_EN = ["No seat is free on the organisation's licence just now.",
+  "The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account among those who have signed in."];
+const WAIT_TEAM_EN = ["Ada's team has no free seat just now.",
+  "The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and Ada, the team's lead, sees this account among those who have signed in."];
+const WAIT_PL = ["W licencji organizacji nie ma teraz wolnego miejsca.",
+  "Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; nikt nie musi nic robić, a lider zespołu widzi to konto wśród osób, które się zalogowały."];
+const WAIT_TEAM_PL = ["W zespole Ada's team nie ma teraz wolnego miejsca.",
+  "Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; nikt nie musi nic robić, a lider zespołu, Ada, widzi to konto wśród osób, które się zalogowały."];
+/* The answer read and settled: "waiting" is a wait, kept as the said reason with the refresh token, asking nobody; an answer of none
+   without it stays no licence; the certificate that follows ends the wait; a 409 "full" reads and settles as before. */
+CASES.waitRead = s => {
+  const a = (o, st) => s.signinAnswer(answer(o, st), DESK_KEY);
+  const wait = a({ ok: true, certificate: null, code: CODE, reason: "waiting" }), none = a({ ok: true, certificate: null, code: CODE });
+  const other = a({ ok: true, certificate: null, code: CODE, reason: "elsewhere" }), full = a({ ok: false, reason: "full" }, 409);
+  const base = { provider: "microsoft", refresh: "sealed:rt", sub: "sealed:s", seed: SEED, code: "", cert: null, at: 0, checked: NOW, reached: true, said: "", ask: false, doors: [] };
+  const held = s.signinSettle(base, wait, NOW), seated = s.signinSettle(held, { ok: true, code: CODE, cert: cert({ issued: NOW + 1 }), doors: [] }, NOW + 1);
+  const noLic = s.signinSettle(base, none, NOW), old = s.signinSettle(base, full, NOW);
+  return wait.ok === true && wait.cert === null && wait.code === CODE && wait.waiting === true && none.ok === true && none.cert === null && none.waiting !== true
+    && other.ok === true && other.waiting !== true && full.ok === false && full.reason === "full"
+    && held.said === "waiting" && held.cert === null && held.code === CODE && held.refresh === "sealed:rt" && held.ask === false && held.reached === true
+    && seated.said === "" && seated.cert.issued === NOW + 1 && noLic.said === "" && old.said === "full" && old.refresh === "sealed:rt" && old.ask === false;
+};
+/* The quiet renewal while waiting: waited again, the refresh token renewed and nobody asked, so the next renewal runs; once a seat frees,
+   the renewal seats the desk. A renewal an older service refuses as full keeps its token and says so, as before. */
+CASES.waitRenew = async s => {
+  const tok = () => answer({ id_token: jwt(msClaims(undefined)), refresh_token: "rt-2" });
+  const waiting = heldOf({ cert: null, said: "waiting" });
+  const again = await s.signinRenewHeld(renewIo(tok(), answer({ ok: true, certificate: null, code: CODE, reason: "waiting" })), MS, DESK_KEY, waiting, () => NOW);
+  const next = cert({ issued: NOW + 5, until: NOW + 5 + 30 * 86400000 });
+  const seated = await s.signinRenewHeld(renewIo(tok(), answer({ ok: true, certificate: next, code: CODE })), MS, DESK_KEY, again.held, () => NOW + 5);
+  const full = await s.signinRenewHeld(renewIo(tok(), answer({ ok: false, reason: "full" }, 409)), MS, DESK_KEY, heldOf({ cert: null, said: "full" }), () => NOW);
+  return again.held.said === "waiting" && again.held.cert === null && again.held.refresh === "sealed:rt-2" && again.held.ask === false && again.held.reached === true
+    && seated.said === "renewed" && seated.held.said === "" && !!seated.held.cert && seated.held.cert.issued === NOW + 5
+    && full.said === "full" && full.held.said === "full" && full.held.refresh === "sealed:rt-2" && full.held.ask === false;
+};
+/* The page imported again with one line put in another form in memory, for a plant on the page's half. */
+async function pageWith(swap) {
+  const dir = pathToFileURL(path.join(ROOT, "src", "modules")).href + "/";
+  if (PAGE.split(swap[0]).length !== 2) throw new Error("plant anchor not in signin.js once: " + swap[0]);
+  const text = PAGE.replace(swap[0], swap[1]).replace(/from "\.\//g, 'from "' + dir);
+  return import("data:text/javascript;base64," + Buffer.from(text).toString("base64"));
+}
+/* The door and Account in the copywriter's words for the wait, the licence form and the team form, English and Polish; an older
+   service's "full" told the same; no licence still its own moment; today's words gone from the table. */
+CASES.waitPage = async (s, page) => {
+  const pg = page || P;
+  if (!pg) return false;
+  const storage = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const words = h => String(h).replace(/<[^>]*>/g, "").replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+  const v = o => pg.signinRead(Object.assign({ offered: ["microsoft"], signedIn: "microsoft", code: CODE }, o));
+  const team = { team: { lead: "Ada" }, teamName: "Ada's team" };
+  const same = (a, b) => Array.isArray(a) && a.length === 2 && a[0] === b[0] && a[1] === b[1];
+  const wait = pg.signinDoor(v({ seat: "none", refused: "waiting" })), full = pg.signinDoor(v({ seat: "held", refused: "full" }));
+  const none = pg.signinDoor(v({ seat: "none" }));
+  const teamSay = [pg.signinSay("waiting", v({ seat: "none", refused: "waiting" }), team), pg.signinSay("full", v({ seat: "held", refused: "full" }), team)];
+  const acct = page ? "" : words(await acctOf({ offered: ["microsoft"], signedIn: "microsoft", code: CODE, seat: "none", refused: "waiting" }));
+  let pl = null, plTeam = null;
+  storage.lsSet("eUiLang", "pl");
+  try { pl = pg.signinDoor(v({ seat: "none", refused: "waiting" })).say; plTeam = pg.signinSay("waiting", v({ seat: "none", refused: "waiting" }), team); }
+  finally { storage.lsSet("eUiLang", "en"); }
+  const L = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
+  return wait.moment === "noseat" && same(wait.say, WAIT_EN) && wait.acts[0].act === "check" && full.moment === "noseat" && same(full.say, WAIT_EN)
+    && none.moment === "nolicence" && teamSay.every(x => same(x, WAIT_TEAM_EN)) && same(pl, WAIT_PL) && same(plTeam, WAIT_TEAM_PL)
+    && (page ? true : acct.indexOf(WAIT_EN[0] + " " + WAIT_EN[1]) >= 0 && acct.indexOf("No Etiuda licence has a seat") < 0)
+    && !/has no free seat\."|can free a seat or add one/.test(L + PAGE + SETTINGS);
+};
+
 /* ---- the cases on the branch ------------------------------------------------------------------------------------------- */
 const LEGS = [
   ["ds1a", "offered", "as shipped no client id is configured and nothing is offered; a configured table offers what it configures, in order"],
@@ -1903,6 +1972,9 @@ const LEGS = [
   ["ds16e", "labPage", "the page draws the lab's provider as it draws the shipped two and keeps its 127.0.0.1 link while it waits, no other provider's http link"],
   ["ds16f", "labOnly", "nothing else points the sign-in: the variable read in the lab's read alone, the table and both doors assigned in signinLabUse alone, called once; no IPC, preload or page module names the file"],
   ["ds16g", "stagingCmd", "tools/signin-staging.cmd is outside the packaged files and starts this tree's own Electron with a profile of its own, never the installed desk, with ETIUDA_SIGNIN_LAB for that start alone"],
+  ["ds18a", "waitRead", "no free seat is a wait: the service's 200 with no certificate and the reason \"waiting\" is kept as the said reason with the refresh token, asking nobody; none without it stays no licence; the certificate after it ends the wait; a 409 \"full\" reads as before"],
+  ["ds18b", "waitRenew", "the quiet renewal while waiting waits again with its token renewed and nobody asked, and seats the desk once a seat frees; an older service's \"full\" keeps its token as before"],
+  ["ds18c", "waitPage", "the door and Account tell the wait in the copywriter's words, the licence form and the team form, English and Polish, Check now first; an older service's \"full\" the same; no licence its own moment; today's words gone"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
@@ -2224,6 +2296,18 @@ if (!PLANTS_OFF) {
   await plantWire("dtp5", ["trace: SIGNIN_TRACE_ASKED ? line => console.error(line) : null, /* plant:trace-wired */", "trace: line => console.error(line),"], "traceDefault");
   await plantWire("dtp6", ["if (!io || typeof io.trace !== \"function\") return; /* plant:trace-off */",
     "if (!io || typeof io.trace !== \"function\") { console.error(signinTraceLine(provider, step, shown, said, hide)); return; }"], "traceDefault");
+  await plant("dsp79", ["if (j.certificate === null) return { ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === \"waiting\" }; /* plant:wait-read */",
+    "if (j.certificate === null) return { ok: true, code: String(j.code), cert: null, doors: [] };"], "waitRead");
+  await plant("dsp80", ["said: ans.waiting === true ? \"waiting\" : \"\", ask: false }); /* plant:wait-settle */", "said: \"\", ask: false });"], "waitRead");
+  /* The page's half, imported again with the line planted. */
+  const plantPage = async (id, swap, name) => {
+    let red = false;
+    try { red = !(await CASES[name](S, await pageWith(swap))); } catch { red = true; }
+    check(red, id + " plant " + swap[0].replace(/\s+/g, " ").trim().slice(0, 50) + " turns " + name + " red");
+  };
+  await plantPage("dsp81", ["function signinNoSeat(v){ return v.refused===\"waiting\" || v.refused===\"full\"; } /* plant:no-seat */",
+    "function signinNoSeat(v){ return v.refused===\"full\"; }"], "waitPage");
+  await plantPage("dsp82", ["case \"waiting\": case \"full\": /* plant:wait-say */", "case \"full\":"], "waitPage");
   /* A gate on a local act, put into the desk file's write in memory, is seen. */
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),

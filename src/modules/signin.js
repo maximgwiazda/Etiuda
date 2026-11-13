@@ -90,10 +90,10 @@ function signinSay(reason, v, p){
       return [t("This account's organisation has not allowed Etiuda at its sign-in provider."), t("Its IT department can allow it; another account can be used meanwhile.")];
     case "desks":
       return [t("This account is already in use on three computers."), t("Signing out on one of them makes room here, and so does a computer left unused for 30 days; then Try again.")];
-    case "full":
+    case "waiting": case "full": /* plant:wait-say */
       return p && p.team && p.team.lead
-        ? [named(t("{TEAM} has no free seat."),"{TEAM}",p.teamName), named(named(t("You are signed in and in the team. {LEAD}, the team's lead, can free a seat or add one, and Etiuda checks again by itself."),"{LEAD}",p.team.lead),"{TEAM}",p.teamName)]
-        : [t("This licence has no free seat."), t("The sign-in worked. The licence's owner can free a seat or add one, and Etiuda checks again by itself.")];
+        ? [named(t("{TEAM} has no free seat just now."),"{TEAM}",p.teamName), named(t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and {LEAD}, the team's lead, sees this account among those who have signed in."),"{LEAD}",p.team.lead)]
+        : [t("No seat is free on the organisation's licence just now."), t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account among those who have signed in.")];
     case "nolicence":
       return [t("No Etiuda licence has a seat for this account."), t("The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.")];
     case "offline":
@@ -110,6 +110,8 @@ function signinSay(reason, v, p){
       return [t("The sign-in did not finish."), t("Nothing changed, and signing in can be tried again.")];
   }
 }
+/* No free seat: the service's wait, "waiting", or its refusal, "full"; either way the shell renews quietly until a seat frees. */
+function signinNoSeat(v){ return v.refused==="waiting" || v.refused==="full"; } /* plant:no-seat */
 const FAIL_FIRST=["unreached","signin-unreached","signin-timeout","signin-browser","signin-notallowed","desks","token","signin","signin-refused","signin-token","signin-unbound","signin-state","signin-none","signin-preview"];
 /* THE DOOR'S CONTENT for the view `v`, whatever form draws it: {moment, ident, heading, line, say, calm, code, providers, cap, privacy, foot,
    acts: [{act, label, solid}]}; null where there is no door. The shell is separate from what it does: signinPanelHtml is the one
@@ -144,7 +146,7 @@ function signinDoorOf(v){
       foot:t("Etiuda for personal use, outside work, needs no sign-in.")};
   }
   if(v.ask) return {moment:"ask", ident, say:signinSay("ask", v), providers:v.offered, acts:[acct]};
-  if(v.refused==="full") return {moment:"noseat", ident, say:signinSay("full", v, p), acts:[{act:"check", label:t("Check now"), solid:true}, acct]};
+  if(signinNoSeat(v)) return {moment:"noseat", ident, say:signinSay(v.refused, v, p), acts:[{act:"check", label:t("Check now"), solid:true}, acct]};
   /* No certificate: the service found no licence with a seat for this account. The code still shows, since a lead admits by it. */
   if(v.seat==="none" || !v.seat) return {moment:"nolicence", ident, say:signinSay("nolicence", v), code:v.code,
     acts:[{act:"check", label:t("Check now"), solid:true}, acct]};
@@ -397,6 +399,7 @@ export {
   signinProvidersHtml,
   signinRead,
   signinSay,
+  signinNoSeat,
   signinStart,
   signinShown,
   signinWhen,
