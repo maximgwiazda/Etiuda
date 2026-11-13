@@ -4032,7 +4032,7 @@ function ecTypeNameTests() {
       .filter(a => [].concat(a.ext).indexOf("ec") > -1);
     got = assoc.map(a => [a.name, a.description]);
   } catch (e) { got = "electron-builder.js threw: " + e.message; }
-  eq("one .ec association, whose class and name are the English \"Etiuda catalog\"", got, [["Etiuda catalog", "Etiuda catalog"]]);
+  eq("one .ec association, whose class is the English \"Etiuda catalog\" and its type name \"Etiuda catalog file\"", got, [["Etiuda catalog", "Etiuda catalog file"]]);
   try {
     const nsh = fs.readFileSync(path.join(root, "shell", "installer.nsh"), "utf8");
     const body = (/!macro customInstall\r?\n([\s\S]*?)!macroend/.exec(nsh) || [])[1] || "";
