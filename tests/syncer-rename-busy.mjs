@@ -1,6 +1,7 @@
 /* A rename out of the mirror's .staging folder that the system refuses for a moment is asked again.
  * One that keeps refusing leaves that file staged, is said, and is tried at the next scan. The worker stays up.
  * A share file marked read-only lands writable, and a mirror copy already marked takes the next landing (998).
+ * An outbox read refused for a moment still clears what landed; one refused every time keeps the record for the next pass.
  *
  *     node tests/syncer-rename-busy.mjs
  */
@@ -19,7 +20,7 @@ import { createLab } from "./lab-owner.mjs";
 const SELF = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(SELF), "..");
 const nodeRequire = createRequire(import.meta.url);
-const EXPECTED = 12;
+const EXPECTED = 15;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -273,6 +274,65 @@ async function readOnlyScene(kind, syncerDir) {
       out.histMaxMs = Math.round(hist.max / 1e6);
       out.tickMaxGapMs = tickMaxGapMs;
       out.maxStallMs = Math.max(out.histMaxMs, out.tickMaxGapMs);
+    } else if (kind === "outbox-read-once") {
+      const cjsFs = nodeRequire("node:fs");
+      const deskId = "k-" + crypto.randomBytes(8).toString("hex");
+      const rel = "desks/" + deskId + "/outbox-busy.ec";
+      const mirrorFile = path.join(mirror, rel);
+      const shareFile = path.join(share, rel);
+      fs.mkdirSync(path.dirname(mirrorFile), { recursive: true });
+      fs.writeFileSync(mirrorFile, "outbox-read-payload", "utf8");
+      syncer.noteOwed(mirror, rel);
+      const realReadFile = cjsFs.readFileSync;
+      let outboxReads = 0, firstAt = 0, owedEvents = 0;
+      const outboxCleared = () => {
+        try {
+          const doc = JSON.parse(realReadFile.call(cjsFs, path.join(mirror, ".outbox.json"), "utf8"));
+          return !(doc && doc.owe && doc.owe[rel]);
+        } catch { return false; }
+      };
+      cjsFs.readFileSync = function (p, enc) {
+        if (path.basename(String(p)) === ".outbox.json" && fs.existsSync(shareFile)) {
+          outboxReads++;
+          if (!firstAt) firstAt = Date.now();
+          if (outboxReads === 1) throw busy("EBUSY");
+        }
+        return realReadFile.call(cjsFs, p, enc);
+      };
+      const hist = monitorEventLoopDelay({ resolution: 10 });
+      let lastTick = Date.now(), tickMaxGapMs = 0;
+      const ticker = setInterval(() => {
+        const now = Date.now();
+        const gap = now - lastTick;
+        if (gap > tickMaxGapMs) tickMaxGapMs = gap;
+        lastTick = now;
+      }, 10);
+      hist.enable();
+      const ctl = new syncer.FolderSyncerController({
+        team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: crypto.randomBytes(32) }, checks, pollMs: 150,
+        logger: s => said.push(String(s)), onOwed: () => { owedEvents++; }
+      });
+      try {
+        ctl.program.landed([{ rel, del: false, ok: false, code: "EACCES" }]);
+        owedEvents = 0;
+        ctl.start();
+        out.cleared = await until(outboxCleared, 1500);
+        out.clearAfterFirstMs = firstAt ? Date.now() - firstAt : null;
+        out.outboxReads = outboxReads;
+        out.owedEvents = owedEvents;
+        out.shareMatches = fs.existsSync(shareFile) && realReadFile.call(cjsFs, shareFile, "utf8") === "outbox-read-payload";
+        out.saidKept = said.filter(l => l.indexOf("is kept on this computer") >= 0 && l.indexOf(rel) >= 0).length;
+        out.saidReached = said.filter(l => l.indexOf("has reached the team's folder") >= 0 && l.indexOf(rel) >= 0).length;
+      } finally {
+        clearInterval(ticker);
+        hist.disable();
+        cjsFs.readFileSync = realReadFile;
+        try { ctl.stop(); } catch {}
+      }
+      out.owedAfter = syncer.owedAt(mirror, rel);
+      out.histMaxMs = Math.round(hist.max / 1e6);
+      out.tickMaxGapMs = tickMaxGapMs;
+      out.maxStallMs = Math.max(out.histMaxMs, out.tickMaxGapMs);
     }
     out.refusedSaid = said.filter(l => l.indexOf("stayed staged") >= 0).length;
   } finally {
@@ -308,6 +368,8 @@ function plantScene(tag, file, kind, swap) {
 const landGreen = r => r.landed === true && r.mirrorWritable === true && r.shareStillMarked === true && r.next === true && r.refusedSaid === 0;
 const thawGreen = r => r.thawed === true && r.mirrorWritable === true && r.refusedSaid === 0;
 const copyGreen = r => !r.threw && r.bytes === true && r.copyWritable === true && r.timeKept === true && r.sourceStillMarked === true && r.noTemp === true;
+const outboxReadGreen = r => !r.killed && !r.noResult && r.cleared === true && r.owedAfter === false
+  && r.shareMatches === true && r.outboxReads >= 2 && r.owedEvents === 1 && r.saidKept === 1 && r.saidReached === 1 && r.maxStallMs < 50;
 
 async function main() {
   const land = runScene("land");
@@ -330,10 +392,15 @@ async function main() {
   const copyStall = runScene("copy-stall");
   check(!copyStall.killed && !copyStall.noResult && copyStall.threw === "EPERM" && copyStall.maxStallMs < 50,
     "998t copyClear refused on the main thread returns under 50 ms without blocking the event loop: " + JSON.stringify(copyStall));
+  const outboxReadOnce = runScene("outbox-read-once");
+  check(outboxReadGreen(outboxReadOnce),
+    "998u landed clears the outbox record and its waiting line when the outbox read is refused once with EBUSY and then allowed, under 50 ms stall: "
+    + JSON.stringify(outboxReadOnce));
   const plants = [
     ["stage-clear-mark", "syncer-worker.cjs", "land", landGreen, "998d lifting plant:stage-clear-mark lands a read-only share file read-only"],
     ["land-clear-mark", "syncer.cjs", "thaw", thawGreen, "998e lifting plant:land-clear-mark leaves a read-only mirror copy refusing every landing"],
     ["copy-clear-mark", "syncer.cjs", "copy", copyGreen, "998f lifting plant:copy-clear-mark leaves a marked copy refusing the next"],
+    ["outbox-read-retry", "syncer.cjs", "outbox-read-once", outboxReadGreen, "998v lifting plant:outbox-read-retry leaves a single refused outbox read un-cleared"],
   ];
   plants.push(["stage-clear-mark", "syncer-worker.cjs", "land", landGreen,
     "998m control: a worker that clears the share's file in place of its own staged copy turns 998a red",
@@ -424,6 +491,59 @@ async function main() {
     + (after ? JSON.stringify(after) : "no result") + (threwB ? ", threw " + threwB : ""));
 
   if (typeof progB.stop === "function") progB.stop();
+
+  const shareC = path.join(LAB, "share-c");
+  const mirrorC = path.join(LAB, "mirror-c");
+  const deskC = "k-" + crypto.randomBytes(8).toString("hex");
+  const relC = "desks/" + deskC + "/always.ec";
+  const relOther = "desks/" + deskC + "/other.ec";
+  fs.mkdirSync(shareC, { recursive: true });
+  fs.mkdirSync(path.join(mirrorC, "desks", deskC), { recursive: true });
+  fs.writeFileSync(path.join(mirrorC, relC), "always-bytes", "utf8");
+  fs.writeFileSync(path.join(mirrorC, relOther), "other-bytes", "utf8");
+  const shaC = crypto.createHash("sha256").update(Buffer.from("always-bytes", "utf8")).digest("hex");
+  let refuseOutboxRead = false, readTriesC = 0, owedEventsC = 0;
+  const ioC = {
+    readdir: d => fs.readdirSync(d),
+    stat: p => fs.statSync(p),
+    readFile: (p, enc) => {
+      if (refuseOutboxRead && path.basename(String(p)) === ".outbox.json") {
+        readTriesC++;
+        throw busy("EBUSY");
+      }
+      return fs.readFileSync(p, enc);
+    },
+    writeFile: (p, data) => fs.writeFileSync(p, data),
+    unlink: p => fs.unlinkSync(p),
+    mkdir: d => fs.mkdirSync(d, { recursive: true }),
+    exists: p => fs.existsSync(p),
+    rename: (a, b) => fs.renameSync(a, b)
+  };
+  const progC = syncer.createFolderProgram({
+    team: TEAM, folder: shareC, mirror: mirrorC, pin: LEAD, keys: { 1: crypto.randomBytes(32) }, checks,
+    io: ioC, logger: noop, onOwed: () => { owedEventsC++; }
+  });
+  let threwC = "";
+  progC.owe(relC);
+  progC.owe(relOther);
+  const owedBeforeC = progC.isOwed(relC) && progC.isOwed(relOther);
+  refuseOutboxRead = true;
+  try { progC.landed([{ rel: relC, sha: shaC, del: false, ok: true, size: 12, mtimeMs: 100 }]); }
+  catch (e) { threwC = (e && e.code) || String(e); }
+  await sleep(1250);
+  const triesAt1250 = readTriesC;
+  await sleep(150);
+  const triesStable = readTriesC === triesAt1250;
+  const owedWhileRefused = owedEventsC === 0;
+  refuseOutboxRead = false;
+  const keptBoth = progC.isOwed(relC) && progC.isOwed(relOther);
+  progC.landed([{ rel: relC, sha: shaC, del: false, ok: true, size: 12, mtimeMs: 100 }]);
+  const clearedNext = !progC.isOwed(relC) && progC.isOwed(relOther) && owedEventsC === 1;
+  if (typeof progC.stop === "function") progC.stop();
+  check(!threwC && owedBeforeC && triesAt1250 === 20 && triesStable && owedWhileRefused && keptBoth && clearedNext,
+    "998w control: an outbox read refused every time stops at 20 tries, leaves the record and sibling in place, and clears on the next pass: "
+    + JSON.stringify({ threwC, owedBeforeC, triesAt1250, triesStable, owedWhileRefused, keptBoth, clearedNext }));
+
   if (asserted !== EXPECTED) check(false, "completed " + asserted + " of " + EXPECTED + " checks");
   console.log("syncer-rename-busy: " + (asserted - failed) + " passed, " + failed + " failed, " + asserted + " of " + EXPECTED);
   process.exit(Math.min(failed, 63));

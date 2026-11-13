@@ -178,13 +178,15 @@ const normRel = (rel) => String(rel || "").replace(/\\/g, "/");
 const OUTBOX_NAME = ".outbox.json";
 const OUTBOX_KIND = "etiuda-folder-outbox";
 const PRIMED_NAME = ".primed";
-function readOutbox(mirror, io) {
+function readOutbox(mirror, io, rethrowBusy) {
   try {
     const doc = JSON.parse(io.readFile(path.join(mirror, OUTBOX_NAME), "utf8"));
     if (doc && doc.kind === OUTBOX_KIND && doc.owe && typeof doc.owe === "object") {
       return { owe: doc.owe, floors: doc.floors && typeof doc.floors === "object" ? doc.floors : {} };
     }
-  } catch {}
+  } catch (e) {
+    if (rethrowBusy && e && RENAME_BUSY.indexOf(e.code) >= 0) throw e; /* plant:outbox-read-retry */
+  }
   return { owe: {}, floors: {} };
 }
 function writeOutbox(mirror, st, io) {
@@ -194,15 +196,10 @@ function writeOutbox(mirror, st, io) {
   io.writeFile(tmp, JSON.stringify({ kind: OUTBOX_KIND, v: 1, owe: st.owe, floors: st.floors }));
   try { renameRetrying(tmp, file, io); } catch (e) { try { io.unlink(tmp); } catch {} throw e; }
 }
-function writeOutboxRetrying(mirror, mutate, io, onDone, timerSet) {
-  io = io || defaultIO;
-  const applyOnce = () => {
-    const st = readOutbox(mirror, io);
-    mutate(st);
-    writeOutbox(mirror, st, io);
-  };
+/* Runs fn; on the main thread a busy code is tried again, 20 tries RENAME_WAIT_MS apart, off it the code is thrown. */
+function outboxBusyRetrying(fn, onDone, timerSet) {
   try {
-    applyOnce();
+    fn();
     if (onDone) onDone();
     return true;
   } catch (e) {
@@ -214,7 +211,7 @@ function writeOutboxRetrying(mirror, mutate, io, onDone, timerSet) {
     if (timerSet) timerSet.delete(timer);
     tries++;
     try {
-      applyOnce();
+      fn();
       if (onDone) onDone();
     } catch (e) {
       if (tries < 20 && e && RENAME_BUSY.indexOf(e.code) >= 0) {
@@ -228,6 +225,14 @@ function writeOutboxRetrying(mirror, mutate, io, onDone, timerSet) {
   if (timer.unref) timer.unref();
   if (timerSet) timerSet.add(timer);
   return false;
+}
+function writeOutboxRetrying(mirror, mutate, io, onDone, timerSet) {
+  io = io || defaultIO;
+  return outboxBusyRetrying(() => {
+    const st = readOutbox(mirror, io);
+    mutate(st);
+    writeOutbox(mirror, st, io);
+  }, onDone, timerSet);
 }
 function owedRecord(mirror, rel, io) {
   let bytes = null;
@@ -700,28 +705,32 @@ function createFolderProgram(opts) {
   function isOwed(rel) { return owedAt(mirror, rel, io); }
   function landed(results) {
     if (!Array.isArray(results) || !results.length) return;
-    const st0 = readOutbox(mirror, io);
+    let decided = false;
     const clearRels = [];
     const updateRels = [];
-    for (const r of results) {
-      const rec = r && st0.owe[r.rel];
-      if (!rec) continue;
-      if (r.ok) {
-        if (!!rec.del !== !!r.del || (!rec.del && rec.sha !== r.sha)) continue;
-        clearRels.push(r);
-        if (saidWait.has(r.rel)) { saidWait.delete(r.rel); logger("etiuda: " + r.rel + " has reached the team's folder " + folder); }
-        if (!r.del && r.size != null) knownMtimes.set(r.rel, { size: r.size, mtimeMs: r.mtimeMs });
-      } else if (rec.code !== r.code || (rec.readOnly || "") !== (r.readOnly || "")) {
-        updateRels.push(r);
-        if (saidWait.get(r.rel) !== r.code) {
-          saidWait.set(r.rel, r.code);
-          logger("etiuda: " + r.rel + " is kept on this computer until the team's folder " + folder + " takes it (" + r.code + "), and is tried again");
-        }
-      }
-    }
-    if (!clearRels.length && !updateRels.length) return;
     try {
-      writeOutboxRetrying(mirror, st => {
+      outboxBusyRetrying(() => {
+        const st = readOutbox(mirror, io, true);
+        if (!decided) {
+          for (const r of results) {
+            const rec = r && st.owe[r.rel];
+            if (!rec) continue;
+            if (r.ok) {
+              if (!!rec.del !== !!r.del || (!rec.del && rec.sha !== r.sha)) continue;
+              clearRels.push(r);
+              if (saidWait.has(r.rel)) { saidWait.delete(r.rel); logger("etiuda: " + r.rel + " has reached the team's folder " + folder); }
+              if (!r.del && r.size != null) knownMtimes.set(r.rel, { size: r.size, mtimeMs: r.mtimeMs });
+            } else if (rec.code !== r.code || (rec.readOnly || "") !== (r.readOnly || "")) {
+              updateRels.push(r);
+              if (saidWait.get(r.rel) !== r.code) {
+                saidWait.set(r.rel, r.code);
+                logger("etiuda: " + r.rel + " is kept on this computer until the team's folder " + folder + " takes it (" + r.code + "), and is tried again");
+              }
+            }
+          }
+          decided = true;
+        }
+        if (!clearRels.length && !updateRels.length) return;
         for (const r of clearRels) {
           const rec = st.owe[r.rel];
           if (rec && !!rec.del === !!r.del && (rec.del || rec.sha === r.sha)) delete st.owe[r.rel];
@@ -733,7 +742,8 @@ function createFolderProgram(opts) {
             if (r.readOnly) rec.readOnly = r.readOnly; else delete rec.readOnly; /* plant:owed-read-only */
           }
         }
-      }, io, () => { if (!stopped) onOwed(); }, outboxTimers);
+        writeOutbox(mirror, st, io);
+      }, () => { if (!stopped && (clearRels.length || updateRels.length)) onOwed(); }, outboxTimers);
     } catch {}
   }
   /* A desk's catalog answer sealed to the lead's box for this team: judged by its place and its envelope alone, never opened. */
