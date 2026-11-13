@@ -853,7 +853,7 @@ async function tsCycle(rec) {
 
   /* The data after an install and a start: nothing of `before` gone, the marker byte for byte, the mark read (no sample again). */
   const carried = async (tag, prog) => {
-    fs.unlinkSync(sample);
+    if (fs.existsSync(sample)) fs.unlinkSync(sample); /* gone already where the step before read the mark and wrote none */
     /* The full 90 s, the copy staying up through them: a re-written sample is the fault, so its absence takes the whole wait
        (the fifth dispatch, 2026-11-13, read this wait's never-met condition as "did not run"). */
     const ran = (await start(prog, tag, () => false)).ran;
