@@ -30,7 +30,7 @@ import { createRequire } from 'node:module';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { beforeBuild, signatureVerdict, customerReleaseProfileVerdict, testServiceProblems, demoSigningProblems } from './sellable.mjs';
+import { beforeBuild, signatureVerdict, customerReleaseProfileVerdict, testServiceProblems, demoSigningProblems, ourPublisher } from './sellable.mjs';
 import { writeSbom } from './sbom.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -345,7 +345,7 @@ if (flag('--package')) {
   gate('the signature of the installer and of every program and library in win-unpacked, required of a customer build or a configured certificate', () =>
     signatureVerdict({ setup: join(DIST, readdirSync(DIST).filter(f => /-setup\.exe$/i.test(f))[0]),
                        program: join(DIST, 'win-unpacked', 'Etiuda.exe'), app: join(DIST, 'win-unpacked'),
-                       customer: SELL.customer, win: SELL.win }));
+                       customer: SELL.customer, win: SELL.win, ours: ourPublisher(SELL.win, DIST) }));
 }
 
 /* The home goes on a green run only; a red one leaves it standing, named at the top, as evidence. */

@@ -375,7 +375,9 @@ try {
     check(typeof v4 === 'string' && /NotSigned, not Valid/.test(v4),
       '5f a preview WITH a certificate configured that came out unsigned is stopped: ' + v4);
     const v5 = verdict(SIGNED, SIGNED, true);
-    check(v5 === true, '5g a customer build with both files Valid and timestamped passes: ' + v5);
+    check(v5 === 'the program is signed by Microsoft Corporation, a maker, not by us',
+      '5g a customer build whose installer and program read Valid and timestamped, as Windows reads this Microsoft-signed tool, is'
+      + ' refused as a maker\'s program, not ours (a pass on our own signature is tests/sign-all.mjs 2c): ' + v5);
     const v6 = verdict(SIGNED, path.join(TMP, 'no-such', 'Etiuda.exe'), false);
     check(typeof v6 === 'string' && /is not there/.test(v6),
       '5h a program that is not where the gate looks is a stop, not a pass: ' + v6);

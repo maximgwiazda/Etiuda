@@ -139,12 +139,13 @@ export function readAuthenticode(files) {
   if (process.platform !== 'win32') return null;
   const q = f => "'" + String(f).replace(/'/g, "''") + "'";
   const script = 'foreach ($f in @(' + files.map(q).join(',') + ')) { $s = Get-AuthenticodeSignature -LiteralPath $f; '
-    + '[string]$s.Status + [char]9 + [string]([bool]$s.TimeStamperCertificate) + [char]9 + $f + [char]9 + [string]$s.SignerCertificate.Subject }';
+    + '[string]$s.Status + [char]9 + [string]([bool]$s.TimeStamperCertificate) + [char]9 + $f + [char]9 + [string]$s.SignerCertificate.Subject'
+    + ' + [char]9 + [string]$s.SignerCertificate.Thumbprint }';
   const out = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],
     { encoding: 'utf8', windowsHide: true, timeout: 120000 });
   const rows = out.split(/\r?\n/).filter(Boolean).map(l => {
-    const [status, ts, file, subject] = l.split('\t');
-    return { file, status: status.trim(), timestamped: ts.trim() === 'True', subject: (subject || '').trim() };
+    const [status, ts, file, subject, thumbprint] = l.split('\t');
+    return { file, status: status.trim(), timestamped: ts.trim() === 'True', subject: (subject || '').trim(), thumbprint: (thumbprint || '').trim().toUpperCase() };
   });
   /* A path Windows did not answer for is a reading lost, not a pass. */
   if (rows.length !== files.length) throw new Error('Authenticode answered for ' + rows.length + ' of ' + files.length + ' file(s)');
@@ -230,6 +231,25 @@ export function keepMakersSignatures(packager) {
   return true;
 }
 
+/* OUR PUBLISHER WHERE THE CONFIGURATION NAMES IT: Artifact Signing's publisherName or a store certificate's subject (a part
+   of the signer's subject, as signtool's /n takes it), a store certificate's thumbprint, or the eSigner account's certificate,
+   which its hook records beside each file it signs in <dist>/.esigner/signings.jsonl. Null where nothing names it (a .pfx). */
+export function ourPublisher(win, dist) {
+  const w = win || {}, az = w.azureSignOptions || {}, st = w.signtoolOptions || {};
+  if (az.publisherName) return { subject: String(az.publisherName), what: az.publisherName + ' (Artifact Signing\'s publisherName)' };
+  if (st.certificateSubjectName) return { subject: String(st.certificateSubjectName), what: st.certificateSubjectName + ' (the certificate subject configured)' };
+  if (st.certificateSha1) return { thumbprints: [String(st.certificateSha1).toUpperCase()], what: 'the certificate ' + String(st.certificateSha1).toUpperCase() + ' configured' };
+  const at = dist ? join(dist, '.esigner', 'signings.jsonl') : '';
+  if (!at || !existsSync(at)) return null;
+  const prints = [...new Set(readFileSync(at, 'utf8').split(/\r?\n/).filter(Boolean)
+    .map(l => { try { return String(JSON.parse(l).thumbprint || '').toUpperCase(); } catch { return ''; } }).filter(Boolean))];
+  return prints.length ? { thumbprints: prints, what: 'the eSigner account\'s certificate ' + prints.join(' or ') } : null;
+}
+function signedByNamed(r, named) {
+  return named.subject ? String(r.subject || '').toLowerCase().includes(named.subject.toLowerCase())
+    : named.thumbprints.includes(String(r.thumbprint || '').toUpperCase());
+}
+
 /* A BUILD SIGNED BY SSL.com'S DEMO CERTIFICATE (tools/esigner.cjs, ETIUDA_SIGN=esigner-demo) is never released, preview or
    customer: refused where the variable is set for the release, and wherever a file read carries the demo certificate's subject. */
 const ESIGNER = createRequire(import.meta.url)('./esigner.cjs');
@@ -252,7 +272,7 @@ export function demoSigningProblems({ env, readings } = {}) {
    where nothing reaches it without installing. Given `app`, the unpacked folder the installer
    carries, every file in it Windows runs as code (peFiles) is read too and held to the same rule,
    each named by its path inside the app. Returns true or the reason, as a gate does. */
-export function signatureVerdict({ setup, program, app, customer, win, read = readAuthenticode, log = console.log }) {
+export function signatureVerdict({ setup, program, app, customer, win, ours, read = readAuthenticode, log = console.log }) {
   const files = [setup, program];
   const missing = files.concat(app === undefined ? [] : [app]).filter(f => !f || !existsSync(f));
   if (missing.length) return 'nothing to read the signature of: ' + missing.join(', ') + ' is not there';
@@ -274,10 +294,15 @@ export function signatureVerdict({ setup, program, app, customer, win, read = re
   const unread = required ? files.filter(f => !answered.has(resolve(f))).map(f => (label(f) || nameOf({ file: f })) + ' was not read, so its signature is not known') : []; /* plant:sign-unread */
   /* OURS is the publisher that signed the program (else the installer); every other Valid file is ours or a maker's. */
   const own = readings.find(r => r.file === program && r.status === 'Valid') || readings.find(r => r.file === setup && r.status === 'Valid');
+  /* OURS is never a maker, and where the configuration names our publisher it is that one. */
+  const whose = r => (r.file === program ? 'the program' : 'the installer') + ' is signed by ' + (organisationOf(r.subject) || r.subject || 'an unnamed publisher');
+  const ownMaker = required && own && makerOf(own) ? [whose(own) + ', a maker, not by us'] : []; /* plant:sign-own-maker */
+  const named = ours === undefined ? ourPublisher(win) : ours;
+  const ownNamed = required && own && named && !makerOf(own) && !signedByNamed(own, named) ? [whose(own) + ', not by ' + named.what] : []; /* plant:sign-own-named */
   const foreign = required && own ? readings.filter(r => r.status === 'Valid' && r.subject !== own.subject && !makerOf(r)) : []; /* plant:sign-publisher */
   const strangers = foreign.map(r => nameOf(r) + ' is signed by ' + (organisationOf(r.subject) || r.subject || 'an unnamed publisher')
     + ', neither our publisher nor a maker on the list (' + MAKERS.map(m => m.name).join(', ') + ')');
-  const problems = unread.concat(signatureProblems(readings, required), strangers, demoSigningProblems({ readings }));
+  const problems = unread.concat(ownMaker, ownNamed, signatureProblems(readings, required), strangers, demoSigningProblems({ readings }));
   return problems.length ? problems.join('; ') : true;
 }
 

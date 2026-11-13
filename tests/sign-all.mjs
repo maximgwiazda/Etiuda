@@ -14,7 +14,8 @@
  *   2  the signature gate (tools/sellable.mjs signatureVerdict) given that app reads every one of those
  *      files back through its replaceable reader: one unsigned DLL, top-level or nested, is named; all
  *      ours passes, and a DLL Microsoft signed passes beside them; one signed by a publisher not on the
- *      makers' list is named; a preview with no certificate passes and is told; a PE file under another
+ *      makers' list is named; a program Valid under a maker is refused, and where the configuration names our
+ *      publisher (publisherName, a subject, a thumbprint, the eSigner record) the program is held to it; a preview with no certificate passes and is told; a PE file under another
  *      name is read and a text file opening MZ is not; a file the reader leaves unanswered is refused;
  *      with plant:sign-walk, plant:sign-unread, plant:sign-header, plant:sign-unsigned or
  *      plant:sign-publisher lifted, the fault each catches passes
@@ -26,14 +27,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { signatureVerdict, peFiles, SIGNING_VARS, signIo, MAKERS } from '../tools/sellable.mjs';
+import { signatureVerdict, peFiles, SIGNING_VARS, signIo, MAKERS, ourPublisher } from '../tools/sellable.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /* Off in a merge's area run, which runs no planted fault. */
 const PLANTS = process.env.ETIUDA_PLANTS !== 'off';
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 16;
+const EXPECTED = 18;
 
 let asserted = 0, failed = 0;
 const notRun = [];
@@ -254,6 +255,30 @@ try {
     '2f a file the reader gave no answer for is refused, not passed: ' + lostOne);
   const gone = signatureVerdict({ setup, program, app: path.join(TMP, 'no-such'), customer: false, win: {}, read: () => [], log: () => {} });
   check(typeof gone === 'string' && /no-such is not there/.test(gone), '2g an app folder that is not there is a stop, not a pass: ' + gone);
+  /* 2j, OURS IS NEVER A MAKER: a program read Valid under Microsoft, every file beside it Microsoft's too, made the
+     makers' list everybody's publisher; it is refused, naming the maker. */
+  const allMs = run(SELL, { say: () => ({ status: 'Valid', timestamped: true, subject: MS_SUBJECT }) });
+  check(allMs.v === 'the program is signed by Microsoft Corporation, a maker, not by us',
+    '2j a program read Valid under a maker\'s signature is refused, every file beside it a maker\'s too: ' + allMs.v);
+  /* 2k, OURS IS THE ONE THE CONFIGURATION NAMES, where it names one: Artifact Signing's publisherName, a store certificate's
+     subject or thumbprint, the eSigner account's certificate from the hook's own record; a .pfx names none. */
+  const DIST2 = path.join(TMP, 'named-dist');
+  put(path.join(DIST2, '.esigner', 'signings.jsonl'), JSON.stringify({ file: 'Etiuda.exe', ms: 1, status: 'Valid', thumbprint: 'ab'.repeat(20) }) + '\n');
+  const names = [ourPublisher({ azureSignOptions: { publisherName: 'Example Publisher' } }), ourPublisher({ signtoolOptions: { certificateSubjectName: 'Example Publisher' } }),
+    ourPublisher({ signtoolOptions: { certificateSha1: 'ab'.repeat(20) } }), ourPublisher({ signtoolOptions: { sign: () => {} } }, DIST2),
+    ourPublisher({ signtoolOptions: { certificateFile: 'C:/nowhere/etiuda.pfx' } }, path.join(TMP, 'no-dist'))];
+  const AB = { thumbprint: 'AB'.repeat(20) }, CD = { thumbprint: 'CD'.repeat(20) };
+  const byName = run(SELL, { ours: names[0] }), notName = run(SELL, { ours: { subject: 'Another Publisher', what: 'Another Publisher (the configuration)' } });
+  const byPrint = run(SELL, { ours: names[3], say: () => ({ status: 'Valid', timestamped: true, ...AB }) });
+  const notPrint = run(SELL, { ours: names[3], say: () => ({ status: 'Valid', timestamped: true, ...CD }) });
+  const fromWin = run(SELL, { win: { azureSignOptions: { endpoint: 'e', codeSigningAccountName: 'a', certificateProfileName: 'p', publisherName: 'Another Publisher' } } });
+  check(names[0].subject === 'Example Publisher' && names[1].subject === 'Example Publisher' && J(names[2].thumbprints) === J(['AB'.repeat(20)])
+    && J(names[3].thumbprints) === J(['AB'.repeat(20)]) && names[4] === null
+    && byName.v === true && notName.v === 'the program is signed by CN=Example Publisher, not by Another Publisher (the configuration)'
+    && byPrint.v === true && typeof notPrint.v === 'string' && /^the program is signed by CN=Example Publisher, not by the eSigner account's certificate ABAB/.test(notPrint.v)
+    && typeof fromWin.v === 'string' && /not by Another Publisher \(Artifact Signing's publisherName\)/.test(fromWin.v),
+    '2k where the configuration names our publisher (publisherName, a subject, a thumbprint, the eSigner record) the program is held to it, and a'
+    + ' .pfx names none: ' + J([notName.v, notPrint.v, fromWin.v]));
   const VENDOR = 'CN=Example Vendor, O=Example Vendor Ltd, C=GB';
   const ms = run(SELL, { say: f => f === dll ? { status: 'Valid', timestamped: true, subject: MS_SUBJECT } : null });
   const stranger = run(SELL, { say: f => f === dll ? { status: 'Valid', timestamped: true, subject: VENDOR } : null });
@@ -285,17 +310,23 @@ try {
     const pPublisher = await planted('sign-publisher', '  const foreign = []; void own;');
     const sRed = pUnsigned && run(pUnsigned, { say: f => f === dll ? { status: 'NotSigned', timestamped: false } : null });
     const vRed = pPublisher && run(pPublisher, { say: f => f === dll ? { status: 'Valid', timestamped: true, subject: 'CN=Example Vendor, O=Example Vendor Ltd' } : null });
+    const pOwnMaker = await planted('sign-own-maker', '  const ownMaker = [];');
+    const pOwnNamed = await planted('sign-own-named', '  const ownNamed = [];');
+    const mRed = pOwnMaker && run(pOwnMaker, { say: () => ({ status: 'Valid', timestamped: true, subject: MS_SUBJECT }) });
+    const nRed = pOwnNamed && run(pOwnNamed, { ours: { subject: 'Another Publisher', what: 'Another Publisher' } });
     check(!!wRed && wRed.v === true && !!pUnread && uRed === true && !!hAsked && !hAsked.includes('resources/helper.bin') && hAsked.includes(nested)
-      && !!sRed && sRed.v === true && !!vRed && vRed.v === true,
+      && !!sRed && sRed.v === true && !!vRed && vRed.v === true && !!mRed && mRed.v === true && !!nRed && nRed.v === true,
       '2h with plant:sign-walk lifted the unsigned DLL passes (' + (wRed && wRed.v) + '), with plant:sign-unread lifted the unanswered file passes ('
       + uRed + '), with plant:sign-header lifted a PE under another name is not read, with plant:sign-unsigned lifted an unsigned DLL passes ('
-      + (sRed && sRed.v) + '), and with plant:sign-publisher lifted a stranger\'s DLL passes (' + (vRed && vRed.v) + ')');
+      + (sRed && sRed.v) + '), with plant:sign-publisher lifted a stranger\'s DLL passes (' + (vRed && vRed.v) + '), with plant:sign-own-maker'
+      + ' lifted a program Microsoft signed passes (' + (mRed && mRed.v) + '), and with plant:sign-own-named lifted a program not by the named publisher'
+      + ' passes (' + (nRed && nRed.v) + ')');
   }
 
   /* ---- 3. the release asks the gate of the unpacked app --------------------------------------------------------- */
   const relText = fs.readFileSync(path.join(ROOT, 'tools', 'release.mjs'), 'utf8');
-  check(/signatureVerdict\(\{ setup: join\(DIST, [^\n]+\r?\n\s+program: join\(DIST, 'win-unpacked', 'Etiuda\.exe'\), app: join\(DIST, 'win-unpacked'\),/.test(relText),
-    '3a tools/release.mjs gives the signature gate the unpacked app, win-unpacked, beside the installer and the program');
+  check(/signatureVerdict\(\{ setup: join\(DIST, [^\n]+\r?\n\s+program: join\(DIST, 'win-unpacked', 'Etiuda\.exe'\), app: join\(DIST, 'win-unpacked'\),\r?\n\s+customer: SELL\.customer, win: SELL\.win, ours: ourPublisher\(SELL\.win, DIST\) \}/.test(relText),
+    '3a tools/release.mjs gives the signature gate the unpacked app, win-unpacked, beside the installer and the program, and the publisher the configuration names');
 } catch (e) {
   failed++;
   console.log('  FAIL ' + String(e && e.stack || e).split('\n').slice(0, 3).join(' | '));
