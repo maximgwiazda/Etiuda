@@ -438,8 +438,12 @@ async function updateLeg(newer) {
     keyGlass: keysAfter.eGlassOff, keysBefore, keysAfter,
     controlBooted: bare.booted, controlCards: bare.cards, controlGlassOff: bare.glassOff }));
   const gone = await uninstall(PROG, "user");
-  check(gone > 0 && !regExists(KU.uninstall) && !regExists(KU.install) && assocCmd(KU.classes).toLowerCase().indexOf(PROG.toLowerCase()) < 0,
-    "U12 the uninstall takes the updated copy whole: folder gone in " + gone + " s, both HKCU keys gone, no .ec association to it");
+  /* The extension's own key goes too where nothing else claimed it, which on this lab account nothing did (Claude α's yes of
+     2026-11-13 09:33: the uninstaller deletes .<ext> while its default still names our class). */
+  const extLeft = regExists(KU.classes + "\\." + T.ext);
+  check(gone > 0 && !regExists(KU.uninstall) && !regExists(KU.install) && assocCmd(KU.classes).toLowerCase().indexOf(PROG.toLowerCase()) < 0 && !extLeft,
+    "U12 the uninstall takes the updated copy whole: folder gone in " + gone + " s, both HKCU keys gone, no .ec association to it, the ."
+    + T.ext + " key " + (extLeft ? "STILL THERE" : "gone"));
 }
 
 /* ---- the all-users leg ------------------------------------------------------------------------- */

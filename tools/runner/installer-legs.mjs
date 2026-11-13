@@ -23,6 +23,8 @@
  *                 standard account that never installed anything starts the copy from the all-users Start-menu shortcut and
  *                 its first run writes into that account's own Documents and AppData; then the uninstall, as SYSTEM, takes
  *                 the program, its keys, its shortcuts and its link whole. Green only where all three hold.
+ *   ext-claimed   the other half of the extension key's rule (Claude α's yes, 2026-11-13 09:33): the all-users uninstall deletes
+ *                 .<ext> where its default still names our class, and leaves it where another program's claim stands.
  *
  * WHAT IT REUSES. The test build and its installer as tools/runner/hkcu-uninstaller-marker.mjs makes them (the test identity
  * of tools/test-identity.cjs, built from tools/electron-builder-test.cjs with E.unsignedEnv, refused unless G.setupRefusal
@@ -55,7 +57,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const NO_VERDICT = 78;
-const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618", "all-move", "all-space-d", "system-push", "ts-cycle"];
+const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618", "all-move", "all-space-d", "system-push", "ext-claimed", "ts-cycle"];
 let OUT = "";
 const say = (l) => { process.stdout.write(l + "\n"); if (OUT) fs.appendFileSync(path.join(OUT, "legs.txt"), l + "\n"); };
 const refuse = (why) => { say("#legs refused: " + why); process.exit(NO_VERDICT); };
@@ -573,13 +575,17 @@ async function systemBare(rec) {
       own package and wrote as the person, with nothing of the installing context in the way.
    3. the removal: the uninstaller the HKLM entry names, with P.uninstallArgs("machine"), in a one-shot task as SYSTEM, after
       the person's copy is stopped by pid. Holds where it exits 0, the folder goes within 120 s, and the keys, the shortcuts
-      and the link's class are gone. The extension's own key (.<ext> under Software\Classes) may stay, as electron-builder's
-      APP_UNASSOCIATE leaves it (it deletes the class and the OpenWithProgids value, not the extension key), so it is judged as
-      the per-user leg's U12 judges it: no association to the removed copy, its class gone and no OpenWithProgids value naming
-      it (first run 43392802791, 2026-11-13, red on that key alone). The person's own Documents and AppData are left, which is
+      and the link's class are gone, the extension's own key (.<ext> under Software\Classes) with them: nothing else claimed
+      it here, and the uninstaller deletes it when its default still names our class (Claude α's yes of 2026-11-13 09:33 to the
+      test architect's note on the first run, 43392802791, red on that key alone while electron-builder's APP_UNASSOCIATE left
+      it). A key another program claims is ext-claimed's question. The person's own Documents and AppData are left, which is
       recorded, not judged.
    The account goes at the end; its profile folder stays on the throwaway runner. */
 const SAMPLE = path.join(ROOT, "shell", "sample-catalog.ec");
+/* A key named by its hive and last segment, so a fact says which hive kept it. */
+const keyName = (k) => k.split("\\")[0] + ":" + k.replace(/^.*\\/, "");
+/* The extension's own key in either hive. */
+const EXT_KEYS = ["HKLM", "HKCU"].map((h) => h + "\\Software\\Classes\\." + T.ext);
 const MACHINE_LINK = "HKLM\\Software\\Classes\\" + T.scheme;
 const lnkTarget = (f) => ps("lnk", ["-File", f]);
 const samePath = (a, b) => !!a && !!b && P.samePath(a, b);
@@ -681,14 +687,9 @@ async function systemPush(rec) {
   const goneIn = await goneWithin(want, 120);
   rec.f("removal-exit", removal.timedOut ? "timeout" : removal.code); rec.f("removal-seconds", Math.round((Date.now() - t3) / 1000));
   rec.f("folder-gone-s", goneIn);
-  /* A key named by its hive and last segment, so a fact says which hive kept it. */
-  const keyName = (k) => k.split("\\")[0] + ":" + k.replace(/^.*\\/, "");
-  const extKeys = ["HKLM", "HKCU"].map((h) => h + "\\Software\\Classes\\." + T.ext);
-  const extLeft = extKeys.filter(present);
-  const extOpens = extLeft.filter((k) => { const r = G.regQuery(k + "\\OpenWithProgids"); return r.present && T.catalogClass in G.regValues(r.text); });
-  const left = { keys: KEYS.filter((k) => !extKeys.includes(k)).filter(present).map(keyName).concat(extOpens.map((k) => keyName(k) + "(opens it)")),
-    links: commonLinks().filter((f) => fs.existsSync(f)), link: present(MACHINE_LINK) };
-  rec.f("keys-left", left.keys.length ? few(left.keys) : 0); rec.f("ext-key-kept", extLeft.length ? extLeft.map(keyName).join(",") : "none");
+  const extLeft = EXT_KEYS.filter(present);
+  const left = { keys: KEYS.filter(present).map(keyName), links: commonLinks().filter((f) => fs.existsSync(f)), link: present(MACHINE_LINK) };
+  rec.f("keys-left", left.keys.length ? few(left.keys) : 0); rec.f("ext-key-left", extLeft.length ? extLeft.map(keyName).join(",") : "none");
   rec.f("shortcuts-left", left.links.length); rec.f("machine-link-left", yes(left.link));
   rec.f("person-data-kept", yes(fs.existsSync(path.join(profile, "Documents", "Etiuda")) && fs.existsSync(path.join(profile, "AppData", "Roaming", T.packageName))));
   const removedOk = removal.code === 0 && goneIn > 0 && !left.keys.length && !left.links.length && !left.link;
@@ -697,6 +698,32 @@ async function systemPush(rec) {
       + " s, then removed as SYSTEM whole (folder gone in " + goneIn + " s)"
     : "pushed and started, but the removal as SYSTEM: exit " + (removal.timedOut ? "none within 10 min" : removal.code) + ", folder gone " + yes(goneIn > 0)
       + ", keys left " + left.keys.length + ", shortcuts left " + left.links.length + ", the link left " + yes(left.link));
+}
+
+/* ---- (h) ext-claimed: the extension key another program claimed after us stays theirs -------------------------------
+   The all-users install, then another program's claim written as such a program writes it: the default of HKLM's
+   Software\Classes\.<ext> set to its own class. The uninstall, from the entry, then must take our class and our OpenWithProgids
+   value and leave that key with the other program's default as it stands. Green where it does; the sweep then takes the key. */
+const OTHER_CLASS = "Other.Program." + T.ext;
+const defaultOf = (k) => { const r = G.regQuery(k); return r.present ? G.regValues(r.text)["(Default)"] || "" : null; };
+async function extClaimed(rec) {
+  const dir = await installMachine(rec, NEWER, "install");
+  const ext = EXT_KEYS[0], ours = "HKLM\\Software\\Classes\\" + T.catalogClass;
+  rec.f("default-after-install", defaultOf(ext));
+  const w = spawnSync("reg", ["add", ext, "/ve", "/d", OTHER_CLASS, "/f", "/reg:64"], { encoding: "utf8", windowsHide: true, timeout: 30000 });
+  if (w.status !== 0 || defaultOf(ext) !== OTHER_CLASS) throw new NoVerdict("the other program's claim could not be written: " + oneLine(w.stderr || w.stdout));
+  const un = exeOf(valueOf(regKey(KM.uninstall), "UninstallString"));
+  if (!un || !fs.existsSync(un)) throw new NoVerdict("the HKLM entry names no uninstaller that exists (" + JSON.stringify(un) + ")");
+  const r = await runExe(un, P.uninstallArgs("machine"), 300000);
+  const goneIn = await goneWithin(dir, 120);
+  const progids = G.regQuery(ext + "\\OpenWithProgids");
+  const after = { kept: present(ext), def: defaultOf(ext), ours: present(ours), progid: progids.present && T.catalogClass in G.regValues(progids.text) };
+  rec.f("uninstall-exit", r.code); rec.f("folder-gone-s", goneIn); rec.f("ext-kept", yes(after.kept)); rec.f("ext-default", after.def);
+  rec.f("our-class-left", yes(after.ours)); rec.f("our-progid-left", yes(after.progid));
+  const ok = r.code === 0 && goneIn > 0 && after.kept && after.def === OTHER_CLASS && !after.ours && !after.progid;
+  rec.end(ok, ok ? "another program's claim on ." + T.ext + " survived the uninstall as it stood, and our class and our OpenWithProgids value went"
+    : "after the uninstall: exit " + r.code + ", folder gone " + yes(goneIn > 0) + ", ." + T.ext + " kept " + yes(after.kept) + " with default "
+      + JSON.stringify(after.def) + " (" + OTHER_CLASS + " wanted), our class left " + yes(after.ours) + ", our OpenWithProgids value left " + yes(after.progid));
 }
 
 /* ---- ts-cycle: the Test Service build over the ordinary one, and back ---------------------------------------------- */
@@ -951,7 +978,7 @@ function record(name) {
   return rec;
 }
 const LEGS = { "all-upgrade": allUpgrade, "running-1618": running1618, "system-bare": systemBare, "locked-1618": locked1618, "all-move": allMove, "all-space-d": allSpaceD,
-  "system-push": systemPush, "ts-cycle": tsCycle };
+  "system-push": systemPush, "ext-claimed": extClaimed, "ts-cycle": tsCycle };
 
 /* The newer setup, built once from this tree under the test identity, as the marker builds it. */
 const early = legPreflight();
