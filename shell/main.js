@@ -7045,6 +7045,7 @@ function teamKeyAt(team, epoch) {
 async function relayRequest(method, url, headers, body) {
   if (!/^https:\/\//.test(String(url))) throw new Error("the relay is reached over https only");
   const init = { method: method, headers: headers, body: body || undefined, redirect: "error", cache: "no-store" };
+  init.credentials = "omit"; /* plant:relay-credentials */
   const res = await (net && typeof net.fetch === "function" ? net.fetch(url, init) : fetch(url, init));
   const bytes = Buffer.from(await res.arrayBuffer());
   return { status: res.status, header: n => res.headers.get(n), bytes: bytes };
