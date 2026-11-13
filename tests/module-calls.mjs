@@ -7947,7 +7947,7 @@ const CARD_B = {
           "true|true|false|typed here|true|true|false|0 || true|true|false|typed here|true|true|false|0 || true|false|true");
       });
 
-    check("dialog.js", "983s4 every editor names its subject, the desk asks after it draws, the loader says whether the catalog taken is the same layer's (local memory never is), every Save asks first, the intent's heading follows its id, and every line has its Polish",
+    check("dialog.js", "983s4 every editor names its subject, the desk asks after it draws, the loader says whether the catalog taken is the same layer's (local memory never is), every Save asks first, the intent's heading follows its id, a deleted catalog card counts as gone, and every line has its Polish",
       () => {
         const rd = n => fs.readFileSync(join(MODDIR, n), "utf8");
         const ce = rd("card-editor.js"), ed = rd("editors.js"), dl = rd("dialog.js"), ul = rd("ui-lang.js");
@@ -7959,7 +7959,7 @@ const CARD_B = {
           /edCatalogTaken\(same\);\n\s*hooks\.restartDesk\(\);/.test(rd("catalog-file.js")),
           (rd("local-memory.js").match(/edCatalogTaken\(false\);\n\s*hooks\.restartDesk\(\);/g) || []).length === (rd("local-memory.js").match(/hooks\.restartDesk\(\);/g) || []).length,
           [["card-editor.js", "meSave"], ["editors.js", "ceSave"], ["editors.js", "ieSave"]].every(([n, b]) => rd(n).indexOf('$("#' + b + '").onclick=()=>{\n    if(!edCanSave()) return;') >= 0),
-          ed.indexOf("name: ()=>{ const at=isNew ? -1 : intentIdxOfId(id); return at>-1 ? intentNavName(at) : \"\"; },") >= 0,
+          ed.indexOf("name: ()=>{ const at=isNew ? -1 : intentIdxOfId(id); return at>-1 ? intentNavName(at) : \"\"; },") >= 0 && ce.indexOf("if(!c || (pack.removed||[]).indexOf(savedId)>=0) return null;") >= 0,
           lines.length, "missing Polish " + pl.length];
         return eq(got.join("|"), "1|2|true|true|true|true|true|true|9|missing Polish 0");
       });

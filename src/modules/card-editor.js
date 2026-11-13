@@ -370,7 +370,8 @@ function openCardEditor(id, presetCat, fromManage){
     subject: ()=>{
       if(!savedId) return "";
       const c=findCard(savedId);
-      if(!c) return null;
+      /* A deleted catalog card is still in the catalog's own list: pack.removed is what says it is gone. */
+      if(!c || (pack.removed||[]).indexOf(savedId)>=0) return null;
       const o={};
       Object.keys(c).sort().forEach(k=>{ if(k.charAt(0)!=="_") o[k]=c[k]; });
       return JSON.stringify(o);
