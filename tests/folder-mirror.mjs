@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 115;
+const EXPECTED = 117;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
@@ -3639,6 +3639,45 @@ async function run() {
       return r.saysFolder && !r.landed;
     });
     check(l.ok, "998l lifting plant:outbox-own-clear leaves this desk's own copy on the share refusing every write: " + JSON.stringify(l));
+  }
+
+  /* dc3a and dc3b (board 955, condition 3): a lead Studio's record of its own deletions, etiuda-team-gone-<id>.json sealed to the
+     team, lands in a desk's mirror unread and is copied once, where the worker copied and dropped it at every listing; another
+     team's record, or one that is not a sealed envelope, never lands. Through the controller and its worker, as a desk runs it. */
+  const goneScene = async (tag, mod) => {
+    const share = folder(tag + "-share"), mirror = folder(tag + "-mirror");
+    const own = "etiuda-team-gone-0123456789abcdef.json", other = "etiuda-team-gone-fedcba9876543210.json", junk = "etiuda-team-gone-00112233445566aa.json";
+    fs.writeFileSync(path.join(share, own), seal(K1, 1, JSON.stringify({ format: 1, kind: "etiuda-team-gone", team: TEAM, files: {} })), "utf8");
+    fs.writeFileSync(path.join(share, other), seal(K1, 1, "{}", "t-" + "ab".repeat(8)), "utf8");
+    fs.writeFileSync(path.join(share, junk), JSON.stringify({ kind: "etiuda-team-gone" }), "utf8");
+    let scans = 0;
+    const copies = {};
+    const s = new mod.FolderSyncerController({ team: TEAM, folder: share, mirror, pin: LEAD, keyFor: (ep) => (ep === 1 ? K1 : null), checks,
+      pollMs: 150, logger() {}, onStatus() {}, onChange() {} });
+    const apply = s.program.applyScan;
+    s.program.applyScan = (msg) => {
+      if (msg && msg.answers) { scans++; for (const it of msg.staged || []) copies[it.relPath] = (copies[it.relPath] || 0) + 1; }
+      return apply(msg);
+    };
+    s.start();
+    const end = Date.now() + 8000;
+    while (scans < 8 && Date.now() < end) await new Promise(r => setTimeout(r, 50));
+    s.stop();
+    const landed = fs.existsSync(path.join(mirror, own)) && fs.readFileSync(path.join(mirror, own)).equals(fs.readFileSync(path.join(share, own)));
+    return { scans, ownCopies: copies[own] || 0, landed, otherLanded: fs.existsSync(path.join(mirror, other)), junkLanded: fs.existsSync(path.join(mirror, junk)) };
+  };
+  {
+    let r = null, err = "";
+    try { r = await goneScene("dc3a", syncerMod); } catch (e) { err = String(e && e.message || e); }
+    check(!!r && r.scans >= 8 && r.landed && r.ownCopies === 1 && !r.otherLanded && !r.junkLanded,
+      "dc3a a lead's sealed record of deletions lands in the desk's mirror byte for byte and is copied once over eight listings; another team's and a"
+      + " record that is no sealed envelope never land: " + (r ? JSON.stringify(r) : err));
+    const p = await testPlant("syncer-gone-lands", syncerFile, async scratch => {
+      fs.copyFileSync(path.join(ROOT, "shell", "folder", "syncer-worker.cjs"), path.join(path.dirname(scratch), "syncer-worker.cjs"));
+      const q = await goneScene("plant-dc3b", nodeRequire(scratch));
+      return !q.landed && q.ownCopies > 1;
+    });
+    check(p.ok, "dc3b lifting plant:syncer-gone-lands leaves the record out of the mirror and copied again at every listing: " + JSON.stringify(p));
   }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {
