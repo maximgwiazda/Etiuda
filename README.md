@@ -45,10 +45,11 @@ Which command to use depends on the account the deployment tool runs as:
 - **From the system account, or elevated with nobody signed in:** `etiuda-<version>-setup.exe /S /allusers` installs
   once for every account on the machine, into `C:\Program Files\Etiuda`. Bare `/S` does the same here: a silent run
   with neither switch, by the system account or by an administrator's elevated process in session 0, where no person's
-  desktop is, installs for all users. No all-users install has been run on any machine yet; this path is built and
-  compiled, not tested.
+  desktop is, installs for all users. Tested on GitHub's Windows runner, under a test identity (this installer under
+  another app id): pushed silently as the system account into Program Files, a standard account's first start, and the
+  removal as the system account (run 43434942330, 2026-11-13).
 - **In the person's own account:** `etiuda-<version>-setup.exe /S /currentuser` installs for that account alone and
-  opens no window. This is the path tested so far.
+  opens no window. Tested the same way, over an older version (run 43435159941, 2026-11-13).
 - **Bare `/S` anywhere else follows the account that runs it**, as it always has: for that account alone, unless an
   all-users copy is already registered. Pass `/currentuser` or `/allusers` rather than leaving the choice to the account.
 
