@@ -9557,7 +9557,9 @@ async function signoutAsk(io, deskKey, now) {
 }
 /* THE SEAT CERTIFICATE as the desk takes it, as relay/core.cjs certWhy takes it at a door: the service's shape, for this desk's key,
    a window of at most SIGNIN_CERT_SPAN_MS, signed by the key of a delegation from NOTE_ROOT, or a lab's signinLabRoot, that may sign
-   "licence" on the UTC day the certificate was issued. A certificate failing any of it is no seat, wherever it came from. */
+   "licence" on the UTC day the certificate was issued. A certificate failing any of it is no seat, wherever it came from. `deskOnly`,
+   present only as true, says its licence is desk-only (no lead), and is signed: the line "desk-only" after the key id, as
+   Studio's seatCertBytes makes it; without it the bytes are as before. */
 const SIGNIN_CODE = /^[0-9A-HJKMNP-TV-Z]{16}$/;
 const SIGNIN_CERT_SPAN_MS = 30 * 24 * 60 * 60 * 1000, SIGNIN_VIA_SPAN_MS = 366 * 24 * 60 * 60 * 1000;
 const SIGNIN_KEY_ID = /^[a-z0-9][a-z0-9-]{2,63}$/;
@@ -9571,7 +9573,8 @@ function signinCertOk(c, deskKey) {
   const plainObj = v => !!v && typeof v === "object" && !Array.isArray(v);
   const exactly = (o, names) => Object.keys(o).length === names.length && names.every(k => Object.prototype.hasOwnProperty.call(o, k));
   const day = ms => Math.abs(ms) <= 8.64e15 ? new Date(ms).toISOString().slice(0, 10) : "";
-  if (!(plainObj(c) && exactly(c, ["kind", "format", "licence", "desk", "person", "code", "issued", "until", "via", "sig"])
+  if (!(plainObj(c) && exactly(c, ["kind", "format", "licence", "desk", "person", "code", "issued", "until", "via", "sig"]
+      .concat(c.deskOnly === true ? ["deskOnly"] : [])) /* plant:cert-desk-only-field */
     && c.kind === "etiuda-seat-certificate" && c.format === 1 && /^[0-9a-f]{32}$/.test(String(c.licence))
     && String(c.desk) === String(deskKey) && /^[0-9a-f]{64}$/.test(String(c.person)) && SIGNIN_CODE.test(String(c.code)) /* plant:cert-desk */
     && Number.isSafeInteger(c.issued) && Number.isSafeInteger(c.until) && c.issued > 0 && c.until > c.issued
@@ -9592,7 +9595,8 @@ function signinCertOk(c, deskKey) {
   if (!signinVerified(NOTE_ROOT, viaBytes, d.sig.value) /* plant:cert-root */
     && !(signinLabRoot !== "" && signinVerified(signinLabRoot, viaBytes, d.sig.value))) return false; /* plant:cert-lab-root */
   if (c.sig.keyId !== d.key.id) return false; /* plant:cert-via-key */
-  const bytes = Buffer.from("etiuda-seat-certificate\n" + [c.format, c.licence, c.desk, c.person, c.code, c.issued, c.until, c.sig.keyId].map(String).join("\n"), "utf8");
+  const bytes = Buffer.from("etiuda-seat-certificate\n" + [c.format, c.licence, c.desk, c.person, c.code, c.issued, c.until, c.sig.keyId]
+    .concat(c.deskOnly === true ? ["desk-only"] : []).map(String).join("\n"), "utf8"); /* plant:cert-desk-only-bytes */
   return signinVerified(d.key.pub, bytes, c.sig.value); /* plant:cert-sig */
 }
 /* THE DOORS THE SERVICE HANDS (board 980, the door-finding; Max, 2026-11-12 18:46 and 18:57): beside a certificate, the doors of
@@ -9888,7 +9892,8 @@ ipcMain.handle("etiuda:signin-door", (e, n) => {
   return r;
 });
 /* What the page is told, no token and nothing from the provider: the providers offered by id, who is signed in by provider, the
-   code, the seat ("held", "lapsed" or "none"), when the service last answered and whether the last try reached it; the provider's
+   code, the seat ("held", "lapsed" or "none") and whether its licence is desk-only, when the service last answered and whether
+   the last try reached it; the provider's
    page of the sign-in that waits, and nothing once it ends; and whether this system keeps a sign-in (sealsForReal). */
 function signinView() {
   const real = signinOffered().map(p => p.id), held = signinState().held, now = Date.now(), preview = signinPreviewing();
@@ -9896,6 +9901,7 @@ function signinView() {
   const signedIn = held && real.indexOf(held.provider) >= 0 ? held.provider : "";
   return { offered: offered, preview: preview, signedIn: signedIn, code: signedIn ? held.code : "",
     seat: !signedIn ? "" : held.cert ? (signinLapsed(held, now) ? "lapsed" : "held") : "none",
+    deskOnly: !!signedIn && !!held.cert && held.cert.deskOnly === true, /* plant:view-desk-only */
     at: signedIn ? held.at : 0, reached: !signedIn || held.reached !== false, ask: !!signedIn && held.ask === true,
     refused: signedIn ? held.said : "", busy: signinBusy ? signinBusy.provider : "", said: signinSaid,
     doors: signedIn ? signinDoorsShown(held, now) : [],
