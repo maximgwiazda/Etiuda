@@ -3745,14 +3745,19 @@ function fifthTests() {
   let got;
   try {
     const a = fifthLab(false), about = fs.readFileSync(path.join(E.ROOT, "src", "modules", "about.js"), "utf8");
-    const aboutD = (/TILE_MARK='[^']*? d="([^"]+)"/.exec(about) || [])[1] || "";
     const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
     const fav = (/<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml,([^"]+)"/.exec(tpl) || [])[1] || "";
-    const favD = (/ d='([^']+)'/.exec(decodeURIComponent(fav)) || [])[1] || "";
-    got = [a.std.length > 1000, aboutD.length > 1000, favD === aboutD, a.std !== aboutD, a.f.FIFTH_PHI0 === PHI0];
+    // the logo repository's engine/etiuda-app-favicon.svg with its leading comment removed (a shipped build carries no
+    // comment), everything else byte for byte; the stripped file's sha256 written here when it landed
+    const FAV_SHA = "dd30529d9e2333ad36701c610c9887cd51dffe07af23c8181942db903becfe06";
+    const favSvg = decodeURIComponent(fav), favSha = require("crypto").createHash("sha256").update(favSvg, "utf8").digest("hex");
+    const tile = (/TILE_MARK='<svg viewBox="([^"]+)"[^>]*>([\s\S]*?)<\/svg>';/.exec(about) || []);
+    const head = (/<span class="brand-tile"[^>]*><svg viewBox="([^"]+)"[^>]*>([\s\S]*?)<\/svg><\/span>/.exec(tpl) || []);
+    got = [a.std.length > 1000, favSha === FAV_SHA, !/<!--|-->/.test(favSvg) && !/<!--|-->|%3C!--/i.test(fav), !!tile[2] && tile[2] !== head[2] && tile[2].split('"depth-about"').join('"depth"').split("#depth-about)").join("#depth)") === head[2],
+      tile[1] === head[1] && (tile[2] || "").split('id="depth-about"').length === 2, a.f.FIFTH_PHI0 === PHI0];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("About and the tab icon ship one path, byte for byte, and the header stands a drawing of its own",
-    got, [true, true, true, true, true]);
+  eq("the tab icon is the logo's favicon byte for byte with its leading comment removed, and no comment of any kind in the shipped data URI; About's mark is the header's cut and viewBox under a mask id of its own, depth-about",
+    got, [true, true, true, true, true, true]);
 
   try {
     // the header's path is the figure at its own size (ink 212); taken to the turn's fit (150) it is the line standing at 56 degrees

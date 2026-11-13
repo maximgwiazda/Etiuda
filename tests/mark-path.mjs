@@ -1,8 +1,9 @@
 /* Inline copies of the mark's path are held to tests/mark-path.json.
  * node tests/mark-path.mjs
  *
- * The tab icon and the About tile must equal its path; the header stands the app
- * icon's figure instead, held by mark-layout.mjs. Any other
+ * The path is the archived flat mark: the header, the tab icon and the About tile
+ * each stand the agreed figure with its depth (mark-layout.mjs, test.js), and
+ * neither the tab icon nor About may carry the flat path again. Any other
  * copy is found by content, not by the way it is written. Eight windows of 24
  * characters, spread from the path's first character to its last, are matched in
  * every tracked or untracked file outside v1/, the built page (section 2b holds
@@ -113,16 +114,15 @@ function heldAside(rel) {
 const tpl = fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8");
 const about = fs.readFileSync(path.join(ROOT, "src", "modules", "about.js"), "utf8");
 const fav = (/<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml,([^"]+)"/.exec(tpl) || [])[1] || "";
-const favD = (/ d='([^']+)'/.exec(decodeURIComponent(fav)) || [])[1] || "";
-const aboutD = (/TILE_MARK='[^']*? d="([^"]+)"/.exec(about) || [])[1] || "";
+const aboutMark = (/TILE_MARK='([^']*)'/.exec(about) || [])[1] || "";
 const sites = [
-  ["tab icon", favD],
-  ["About tile", aboutD],
+  ["tab icon", decodeURIComponent(fav)],
+  ["About tile", aboutMark],
 ];
-const bad = sites.filter(s => s[1] !== fix.d).map(s => s[0] + (s[1] ? " differs" : " is missing"));
+const bad = sites.filter(s => s[1].indexOf(fix.d) >= 0 || !/<mask\b/.test(s[1])).map(s => s[0] + (s[1] ? " carries the flat path or no mask" : " is missing"));
 check(bad.length === 0 && sites.every(s => s[1].length > LONG),
-  "1a the tab icon and the About tile carry the fixture path"
-  + (bad.length ? ": " + bad.join(", ") : " (" + fix.d.length + " chars)"));
+  "1a the tab icon and the About tile stand the figure with its depth, not the archived flat path"
+  + (bad.length ? ": " + bad.join(", ") : " (" + fix.d.length + " chars held aside)"));
 
 const windows = windowsOf(fix.d);
 let listed = [];
