@@ -432,9 +432,14 @@ process.exit(r.ok ? 0 : 1);
   for (let i = 0; i < 6; i++) hs.push(await live());
   for (let i = 0; i < 5; i++) take(slots, hs[i]);
   const r6 = take(slots, hs[5], { waitMs: 0 });
+  /* The test's idle reading is honoured only in the lab (ETIUDA_LOCK_PATH), as ml20 sets it; without it the real idle is read
+     and the fallback reads 4 while the laptop is idle, so the leg passed by day and failed by night. */
+  const oldLockPath = process.env.ETIUDA_LOCK_PATH;
+  process.env.ETIUDA_LOCK_PATH = slots[0];
   const six = L.lanePolicy ? L.lanePolicy(slots, { testIdleMinutes: 1 }) : { count: 0 };
   fs.writeFileSync(lanesFile, "7" + String.fromCharCode(10));
   const seven = L.lanePolicy ? L.lanePolicy(slots, { testIdleMinutes: 1 }) : { count: 0 };
+  if (oldLockPath === undefined) delete process.env.ETIUDA_LOCK_PATH; else process.env.ETIUDA_LOCK_PATH = oldLockPath;
   check(r6.ok && pidAt(slots[5]) === hs[5].pid && six.count === 6 && seven.count === 2 && L.LANES_MAX === 6,
     "ml31 the lane file may say up to six: a sixth taker takes machine-6.lock (" + r6.ok + "), \"6\" reads " + six.count + ", \"7\" is not read and falls back to " + seven.count);
   free(slots, hs[5]);
