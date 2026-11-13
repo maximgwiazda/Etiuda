@@ -18873,6 +18873,7 @@ What you type stays in this browser only.`;
   var edDragEnd = 0;
   var edPlaced = null;
   var edHeadDown = false;
+  var edDragStart = null;
   function edPlaceNum(v) {
     return typeof v === "number" && isFinite(v) && Math.abs(v) <= 2e4;
   }
@@ -18956,7 +18957,7 @@ What you type stays in this browser only.`;
       const h = e.target && e.target.closest ? e.target.closest("h2") : null;
       return h && h.parentNode === modalCard && !e.target.closest("button,a,input,select,textarea") ? h : null;
     };
-    modalCard.addEventListener("pointerdown", (e) => {
+    edDragStart = (e) => {
       edHeadDown = !!head(e);
       if (!edPlaceKind || e.button !== 0 || e.pointerType === "touch" || !head(e)) return;
       edDrag = { x: e.clientX, y: e.clientY, top: modalCard.offsetTop, left: modalCard.offsetLeft, moved: false, at: null };
@@ -18964,7 +18965,8 @@ What you type stays in this browser only.`;
         modalCard.setPointerCapture(e.pointerId);
       } catch (_) {
       }
-    });
+    };
+    modalCard.addEventListener("pointerdown", (e) => edDragStart(e));
     modalCard.addEventListener("pointermove", (e) => {
       const d = edDrag;
       if (!d) return;
@@ -19184,10 +19186,7 @@ What you type stays in this browser only.`;
     });
     modalCard.addEventListener("pointerdown", (e) => {
       if (!edRest) return;
-      if (edBarX(e, modalCard)) {
-        dismissModal();
-        return;
-      }
+      if (edBarX(e, modalCard)) return;
       edToFront(false);
     }, true);
     modalCard.addEventListener("focusin", () => {
@@ -19475,16 +19474,19 @@ What you type stays in this browser only.`;
     });
     sh.addEventListener("pointerdown", (e) => {
       if (rec.shell !== sh) return;
-      if (edBarX(e, sh)) {
-        edShelve();
-        edUnshelve(rec);
-        edFrontHist(rec);
-        dismissModal();
-        edMulti();
-        return;
-      }
+      if (edBarX(e, sh)) return;
+      const bar = sh.classList.contains("ed-bar");
       edActivate(rec, false);
+      if (!bar && edDragStart) edDragStart(e);
     }, true);
+    sh.addEventListener("click", (e) => {
+      if (rec.shell !== sh || !edBarX(e, sh)) return;
+      edShelve();
+      edUnshelve(rec);
+      edFrontHist(rec);
+      dismissModal();
+      edMulti();
+    });
     sh.addEventListener("focusin", () => {
       if (rec.shell === sh && !sh.classList.contains("ed-bar")) edActivate(rec, false);
     });

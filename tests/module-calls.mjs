@@ -7709,6 +7709,7 @@ const CARD_B = {
   Dom.grabDom();
   let unwired = "";
   try { DL.wireDialogDrag(); } catch (e) { unwired = "wireDialogDrag: " + e.message; }
+  try { DL.wireModalX(); } catch (e) { unwired = unwired || "wireModalX: " + e.message; }
   try { DL.wireEditorRest(); } catch (e) { unwired = unwired || "wireEditorRest: " + e.message; }
   const fire = (k, e) => (heard["capture:" + k] || []).concat(heard[k] || []).forEach(fn => fn(Object.assign({ button: 0, pointerType: "mouse", pointerId: 7, target: name }, e)));
   const scrim = () => { const ev = { button: 0, prevented: false, preventDefault() { this.prevented = true; } }; (bgHeard.pointerdown || []).forEach(fn => fn(ev)); return ev; };
@@ -8180,6 +8181,7 @@ const CARD_B = {
         const n = bubbles.length;
         const x = { closest: s => (/modalX/.test(s) ? x : null) };
         (heard["capture:pointerdown"] || []).forEach(fn => fn({ button: 0, target: x, preventDefault() {}, stopPropagation() {} }));
+        (heard.click || []).forEach(fn => fn({ target: x, preventDefault() {}, stopPropagation() {} }));
         return eq([stood, modalEl.shells.length, titleOf(modalCard), DL.edResting(), bubbles.length - n].join(" || "), "Edit card|false|false|typed || 0 || Edit intent || true || 1");
       });
 
@@ -8224,6 +8226,35 @@ const CARD_B = {
         const asBar = [modalCard.attrs.role, modalCard.tabIndex, "aria-label" in modalCard.attrs, modalCard.getAttribute("aria-modal")].join("|");
         DL.edF6();
         return eq([asBar, modalCard.attrs.role, modalCard.getAttribute("aria-modal")].join(" || "), "button|0|true| || dialog || true");
+      });
+
+    check("dialog.js", "983b8 a bar's X acts on the click, as every X does: the press on it neither closes nor stands its editor up, and a press that slides off closes nothing",
+      () => {
+        narrowOpen(); openK("card", "c1"); openK("intent", "i1"); scrim();
+        const x = { closest: s => (/modalX/.test(s) ? x : null) }, ev = () => ({ button: 0, target: x, preventDefault() {}, stopPropagation() {} });
+        const cardBar = modalEl.shells[0];
+        (cardBar.heard["capture:pointerdown"] || []).forEach(fn => fn(ev()));
+        const pressed = [modalEl.shells.length, cardBar.classList.contains("ed-bar"), DL.edResting(), titleOf(modalCard)].join("|");
+        (cardBar.heard.click || []).forEach(fn => fn(ev()));
+        const clicked = [modalEl.shells.length, DL.edResting(), titleOf(modalCard)].join("|");
+        (heard["capture:pointerdown"] || []).forEach(fn => fn(ev()));
+        const ownPress = [DL.edResting(), modalCard.classList.contains("ed-bar"), modalEl.hidden].join("|");
+        return eq([pressed, clicked, ownPress].join(" || "), "1|true|true|Edit intent || 0|true|Edit intent || true|true|false");
+      });
+
+    check("dialog.js", "983w9 a press on the title bar of a window standing aside brings it forward and starts its drag in the same press; a press elsewhere on it only brings it forward",
+      () => {
+        fresh(); view.W = 1800; openK("card", "c1"); DL.edOpenBeside(); openK("category", "k1");
+        const sh = modalEl.shells[0];
+        (sh.heard["capture:pointerdown"] || []).forEach(fn => fn({ button: 0, pointerType: "mouse", pointerId: 3, clientX: 700, clientY: 170, target: name }));
+        fire("pointermove", { clientX: 700, clientY: 270 }); fire("pointerup", {});
+        const dragged = [titleOf(modalCard), at().join(","), captured.indexOf(3) >= 0].join("|");
+        const sh2 = modalEl.shells[0];
+        const body = { closest: () => null };
+        (sh2.heard["capture:pointerdown"] || []).forEach(fn => fn({ button: 0, pointerType: "mouse", pointerId: 4, clientX: 1300, clientY: 400, target: body }));
+        const before = at().join(",");
+        fire("pointermove", { clientX: 1300, clientY: 500 }); fire("pointerup", {});
+        return eq([dragged, titleOf(modalCard), at().join(",") === before].join(" || "), "Edit card|620,250|true || Edit category || true");
       });
 
     check("dialog.js", "983w8 every named thing an editor lists has the menu its own panel gives, by the same builder, its edit row opening the editor beside, F2 at its right, F2 and the menu keys on a focused one too, the menu above every editor; the tour closes every editor; the one in hand wears the accent line",

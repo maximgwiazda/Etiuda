@@ -480,7 +480,7 @@ function closeModal(){
    edge from the window's centre, so the place still means something in a window of another size.
    Every other dialog stays centred: openDialog clears a place its config does not name. */
 const ED_PLACE_KINDS=["card","intent","category"], ED_EDGE=8;
-let edPlaceKind=null, edDrag=null, edDragEnd=0, edPlaced=null, edHeadDown=false;
+let edPlaceKind=null, edDrag=null, edDragEnd=0, edPlaced=null, edHeadDown=false, edDragStart=null;
 function edPlaceNum(v){ return typeof v==="number" && isFinite(v) && Math.abs(v)<=20000; }
 /* Each kind is refused on its own when malformed, and what is refused leaves the store. */
 function edPlaces(){
@@ -568,12 +568,13 @@ function wireDialogDrag(){
     return h && h.parentNode===modalCard && !e.target.closest("button,a,input,select,textarea") ? h : null;
   };
   /* The press is captured, so the double click it ends in is the card's: where it began is read here. */
-  modalCard.addEventListener("pointerdown",e=>{
+  edDragStart=e=>{
     edHeadDown=!!head(e);
     if(!edPlaceKind || e.button!==0 || e.pointerType==="touch" || !head(e)) return;
     edDrag={x:e.clientX, y:e.clientY, top:modalCard.offsetTop, left:modalCard.offsetLeft, moved:false, at:null};
     try{ modalCard.setPointerCapture(e.pointerId); }catch(_){}
-  });
+  };
+  modalCard.addEventListener("pointerdown",e=>edDragStart(e));
   modalCard.addEventListener("pointermove",e=>{
     const d=edDrag;
     if(!d) return;
@@ -759,7 +760,7 @@ function wireEditorRest(){
   });
   modalCard.addEventListener("pointerdown",e=>{
     if(!edRest) return;
-    if(edBarX(e, modalCard)){ dismissModal(); return; }
+    if(edBarX(e, modalCard)) return;
     edToFront(false);
   },true);
   modalCard.addEventListener("focusin",()=>{ if(edRest && !modalCard.classList.contains("ed-bar")) edToFront(false); });
@@ -894,8 +895,8 @@ function edMulti(){ modalEl.classList.toggle("ed-multi", edWins.length>1); edBar
 function edScrolls(root){
   return Array.prototype.filter.call(root.querySelectorAll("*"),x=>x.scrollTop>0).map(x=>[x,x.scrollTop]);
 }
-/* A bar's X closes its editor where it stands, the desk staying in front: taken on the press, since the editor would not be
-   under the release. Unsaved work is left with the Undo, as the editor's own X leaves it. */
+/* A bar's X closes its editor where it stands, the desk staying in front, on the click as every X does; the press on it stands
+   nothing up. Unsaved work is left with the Undo, as the editor's own X leaves it. */
 function edBarX(e, el){
   if(!el.classList.contains("ed-bar") || !(e.target.closest && e.target.closest("#modalX,[data-ed-id=modalX]"))) return false;
   e.preventDefault(); e.stopPropagation();
@@ -943,9 +944,17 @@ function edShelve(){
   /* A press or the keyboard reaching a shell brings its editor forward, and the press is then acted on there. */
   sh.addEventListener("pointerdown",e=>{
     if(rec.shell!==sh) return;
-    if(edBarX(e, sh)){ edShelve(); edUnshelve(rec); edFrontHist(rec); dismissModal(); edMulti(); return; }
+    if(edBarX(e, sh)) return;
+    const bar=sh.classList.contains("ed-bar");
     edActivate(rec,false);
+    /* A press on a window's title bar brings it forward and starts the drag in the same press, as a window does; a bar
+       stands up at its own place, away from the pointer. */
+    if(!bar && edDragStart) edDragStart(e);
   },true);
+  sh.addEventListener("click",e=>{
+    if(rec.shell!==sh || !edBarX(e, sh)) return;
+    edShelve(); edUnshelve(rec); edFrontHist(rec); dismissModal(); edMulti();
+  });
   sh.addEventListener("focusin",()=>{ if(rec.shell===sh && !sh.classList.contains("ed-bar")) edActivate(rec,false); });
   sh.addEventListener("keydown",e=>{
     if(rec.shell!==sh || !sh.classList.contains("ed-bar") || (e.key!=="Enter" && e.key!==" ")) return;
