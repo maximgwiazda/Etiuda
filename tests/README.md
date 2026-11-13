@@ -663,7 +663,8 @@ is a customer's; a prerelease part (`2.0.0-dev`) or a major of 0 is a preview. A
 refused while the version is a preview's, while any licence page in `shell/` carries a bracketed
 placeholder, while no certificate is configured, and after the build unless the installer and
 every PE file in `win-unpacked` (by name .exe, .dll or .node, or by its header) read Authenticode
-Valid with a timestamp, each named by its path inside the app. A preview packages as it
+Valid with a timestamp, each named by its path inside the app, and signed by our publisher (the
+program's) or by a maker on `MAKERS` (Microsoft today), whose own signature the build keeps. A preview packages as it
 always did, is told what would stop it, and is refused only when a certificate WAS configured and
 the result is not Valid. `--customer` asks the questions of any version; nothing skips them.
 
@@ -678,13 +679,16 @@ those files, and the release itself driven in a throwaway repository to its seco
 exit 2 is a stop and exit 3 (gate 3 finding no name list in the lab) is a pass. The uninstaller
 is not read, since it is sealed inside the installer. 29 checks, about 6 s.
 
-`tests/sign-all.mjs` holds that the build signs every such file and the gate reads every one: electron-builder's
-own copier and `signApp`, given the real `electron-builder.js` and sealed against any process or network, hand
-their signer each PE file of an app laid out as Electron's dist and the config's extra resources (the DLLs by
-`signExts`, the caret helper copied as a folder, the model's runtime), and the gate, through its replaceable
-reader, names one unsigned DLL, top-level or nested, passes all Valid, tells a preview, reads a PE under another
-name and refuses a file left unanswered. Five plants, each lifted in a copy: `sign-exts`, `sign-caret`,
-`sign-walk`, `sign-unread`, `sign-header`. 13 checks.
+`tests/sign-all.mjs` holds that the build signs every such file its maker has not and the gate reads every one:
+electron-builder's own copier and `signApp`, given the real `electron-builder.js` and a certificate and sealed
+against any process or network, hand their signer each PE file of an app laid out as Electron's dist and the
+config's extra resources (the DLLs by `signExts`, the caret helper copied as a folder, the model's runtime) except
+those that already read Valid, which the config's `afterExtract` door keeps from it (a Microsoft-signed DLL is
+never handed; with no certificate the door reads nothing); and the gate, through its replaceable reader, names one
+unsigned DLL, top-level or nested, passes ours and Microsoft's, names one signed by a publisher not on the list,
+tells a preview, reads a PE under another name and refuses a file left unanswered. Eight plants, each lifted in a
+copy: `sign-exts`, `sign-caret`, `sign-keep`, `sign-walk`, `sign-unread`, `sign-header`, `sign-unsigned`,
+`sign-publisher`. 16 checks.
 
 ## The shell's proxy switch, and how it is proved in two places
 

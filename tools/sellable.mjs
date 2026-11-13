@@ -188,10 +188,46 @@ export function signatureProblems(readings, required) {
   if (!required) return [];
   const out = [];
   for (const r of readings) {
-    if (r.status !== 'Valid') out.push(nameOf(r) + ' reads Authenticode ' + r.status + ', not Valid');
+    if (r.status !== 'Valid') out.push(nameOf(r) + ' reads Authenticode ' + r.status + ', not Valid'); /* plant:sign-unsigned */
     else if (!r.timestamped) out.push(nameOf(r) + ' is signed with no timestamp, so its signature dies with the certificate');
   }
   return out;
+}
+
+/* THE MAKERS WHOSE OWN SIGNATURE A SHIPPED FILE KEEPS, by the organisation (O=) of the certificate that signed it. The
+   gate takes a file Valid under one of them as theirs; any other file must carry our publisher's signature. */
+export const MAKERS = [{ name: 'Microsoft', organisation: 'Microsoft Corporation' }];
+export function organisationOf(subject) {
+  const m = /(?:^|,\s*)O=(?:"([^"]*)"|([^,]*))/.exec(String(subject || ''));
+  return m ? (m[1] !== undefined ? m[1] : m[2]).trim() : '';
+}
+export function makerOf(reading) {
+  const o = organisationOf(reading && reading.subject);
+  return MAKERS.find(m => m.organisation === o) || null;
+}
+
+/* WHAT THE BUILD SIGNS: each file electron-builder hands its signer, except one that already reads Valid, which keeps its
+   maker's signature (the gate then holds that maker to MAKERS). Put on the packager's signIf, the one door every route and
+   every file passes through: the program, the extra resources, the installer and the uninstaller. Nothing is read while
+   no certificate is configured. `signIo` is replaceable so a leg can say what Windows would. */
+export const signIo = { read: files => readAuthenticode(files), log: line => console.log(line) };
+export function keepMakersSignatures(packager) {
+  if (!packager || typeof packager.signIf !== 'function' || packager.signIf.keepsMakers) return false;
+  const signIf = packager.signIf.bind(packager);
+  const door = async file => {
+    if (signingConfigured(packager.platformSpecificBuildOptions)) {
+      let r = null;
+      try { r = (signIo.read([file]) || [])[0] || null; } catch { r = null; }
+      if (r && r.status === 'Valid') { /* plant:sign-keep */
+        signIo.log('  kept its maker\'s signature (' + (organisationOf(r.subject) || r.subject || 'unnamed') + '): ' + file);
+        return false;
+      }
+    }
+    return signIf(file);
+  };
+  door.keepsMakers = true;
+  packager.signIf = door;
+  return true;
 }
 
 /* A BUILD SIGNED BY SSL.com'S DEMO CERTIFICATE (tools/esigner.cjs, ETIUDA_SIGN=esigner-demo) is never released, preview or
@@ -236,7 +272,12 @@ export function signatureVerdict({ setup, program, app, customer, win, read = re
   /* A file the reader gave no answer for is a reading lost, not a pass. */
   const answered = new Set(readings.map(r => resolve(String(r.file))));
   const unread = required ? files.filter(f => !answered.has(resolve(f))).map(f => (label(f) || nameOf({ file: f })) + ' was not read, so its signature is not known') : []; /* plant:sign-unread */
-  const problems = unread.concat(signatureProblems(readings, required), demoSigningProblems({ readings }));
+  /* OURS is the publisher that signed the program (else the installer); every other Valid file is ours or a maker's. */
+  const own = readings.find(r => r.file === program && r.status === 'Valid') || readings.find(r => r.file === setup && r.status === 'Valid');
+  const foreign = required && own ? readings.filter(r => r.status === 'Valid' && r.subject !== own.subject && !makerOf(r)) : []; /* plant:sign-publisher */
+  const strangers = foreign.map(r => nameOf(r) + ' is signed by ' + (organisationOf(r.subject) || r.subject || 'an unnamed publisher')
+    + ', neither our publisher nor a maker on the list (' + MAKERS.map(m => m.name).join(', ') + ')');
+  const problems = unread.concat(signatureProblems(readings, required), strangers, demoSigningProblems({ readings }));
   return problems.length ? problems.join('; ') : true;
 }
 
