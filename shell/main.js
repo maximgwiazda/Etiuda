@@ -10038,7 +10038,9 @@ const SIGNIN_LOST = Object.freeze(["signin-ask", "signin-expired", "signin-other
    kept(sealed)}. {held, said}; whatever fails, the code, the certificate and the provider stay, so the desk works on. */
 async function signinRenewHeld(io, p, deskKey, held, now) {
   if (!held) return { held: null, said: "signin-ask" };
-  const access = signinAccessFor(p, io.managed === true, held);
+  /* Machine policy alone puts a renewal on the managed path; a remembered one is tried ordinary first, so it ends when the
+     service stops asking (a company's licence that no longer follows Entra). */
+  const access = signinAccessFor(p, io.managed === true, null);
   if (access) return signinRenewHeldAccess(io, p, deskKey, held, now, access);
   const token = held.refresh ? io.kept(held.refresh) : "", sub = held.sub ? io.kept(held.sub) : "";
   const got = token && sub ? await signinRenew(io, p, deskKey, token, held.seed, sub, now) : { ok: false, reason: "signin-ask" }; /* plant:renew-sub-kept */
@@ -10051,7 +10053,8 @@ async function signinRenewHeld(io, p, deskKey, held, now) {
   const ans = await signinSeat(io, p.id, deskKey, got.idToken, "", now); /* plant:renew-seedless */
   /* The service now asks its own access token for this account: redeemed once, silently, and the path remembered. */
   const m = !ans.ok && ans.reason === "access-token" ? await signinSeatAccess(io, p, deskKey, { refreshToken: got.refreshToken || token, sub: sub, seed: held.seed }, "", now) : null;
-  if (m && m.access) fresh.access = true;
+  if (m && m.access) { fresh.access = true; fresh.refresh = io.keep(m.got.refreshToken) || fresh.refresh; } /* plant:access-rotated */
+  else if (!m && ans.reason !== "unreached" && fresh.access) delete fresh.access; /* plant:access-clear */
   const said = m ? m.ans : ans;
   return { held: signinSettle(fresh, said, now()), said: said.ok ? "renewed" : said.reason };
 }

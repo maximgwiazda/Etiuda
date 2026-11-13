@@ -12,6 +12,8 @@
  *       both tokens' hashes (the service's line, rebuilt here)
  *   da5 the access token is kept only where its scope was asked and only within 4096 characters, and never into the sign-in's state
  *   da6 AADSTS50105 at the redemption is the organisation's not-assigned refusal; the path is remembered only where the service took it
+ *   da8 a renewal: a remembered path is tried ordinary first and forgotten where the service answers ordinarily; met with
+ *       "access-token", it redeems once, remembers the path and keeps the refresh token the redemption rotated in
  *
  * EVERY GUARD IS SHOWN RED (dap): the line carrying its plant tag is put in another form in memory and the same case is read again;
  * nothing on disk is touched. Skipped under ETIUDA_PLANTS=off.
@@ -27,7 +29,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const CHECKS = 7, PLANTS = 8;
+const CHECKS = 8, PLANTS = 10;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -57,10 +59,11 @@ try {
     lineOf("const SIGNIN_DESK_LINE ="), lineOf("function signinTokenHash("), fnOf("function signinDeskBytes("),
     lineOf("const SIGNIN_DESK_MANAGED_LINE ="), fnOf("function signinDeskManagedBytes("), fnOf("function signinDeskManagedBody("),
     fnOf("function signinDeskBody("), lineOf("let SIGNIN_SERVICE ="), fnOf("async function signinSeat("), fnOf("async function signinSeatAccess("),
+    lineOf("const SIGNIN_LOST ="), fnOf("async function signinRenewHeld("), fnOf("async function signinRenewHeldAccess("),
   ].join("\n");
 } catch (e) { sliced = e.message; }
 const NAMES = ["signinServiceScope", "signinAccessFor", "signinAuthorize", "signinRefreshForm", "signinTokens", "signinRenew", "signinDeskBody",
-  "signinSeat", "signinSeatAccess", "signinKnown"];
+  "signinSeat", "signinSeatAccess", "signinKnown", "signinRenewHeld"];
 /* The service's answer read as the shell's signinAnswer reads it, for what these cases need: a seat, or a refusal by its reason. */
 const answerOf = res => { const j = JSON.parse(String(res.body)); return j.ok ? { ok: true, code: "ABCD2345EFGH6789", cert: null } : { ok: false, reason: j.reason }; };
 function shellOf(swap) {
@@ -70,8 +73,10 @@ function shellOf(swap) {
     text = text.replace(swap[0], swap[1]);
   }
   const body = text + "\nconst BASE = SIGNIN_PROVIDERS;\nreturn { " + NAMES.join(", ") + ", base: () => BASE, setTable: t => { SIGNIN_PROVIDERS = t; } };";
-  return new Function("crypto", "Buffer", "URLSearchParams", "signinAnswer", "signinTraceLine", "signinTraceClaims", body)(crypto, Buffer, URLSearchParams,
-    answerOf, () => "", () => "");
+  /* signinSettle stood in: the held state with the answer said, as the real one keeps what these cases read. */
+  const settle = (held, ans) => Object.assign({}, held, { said: ans.ok ? "" : ans.reason });
+  return new Function("crypto", "Buffer", "URLSearchParams", "signinAnswer", "signinTraceLine", "signinTraceClaims", "signinSettle", body)(crypto, Buffer, URLSearchParams,
+    answerOf, () => "", () => "", settle);
 }
 
 /* ---- stand-ins: illustrations only; no provider issues these ids ---------------------------------------------------------- */
@@ -174,6 +179,30 @@ CASES.refused = async s => {
   return m.ans.reason === "signin-notassigned" && m.access === false && other.ans.reason === "signin-refused" && st.opened === 0 && st.asked.length === 0;
 };
 
+/* da8: the renewal's remembered path, cleared by an ordinary answer, kept with the rotated refresh token by "access-token". */
+CASES.renewal = async s => {
+  tableOn(s, SERVICE_ID);
+  const keep = t => "sealed:" + t, kept = t => String(t).replace(/^sealed:/, "");
+  const ioOf = (serviceFor, refreshes) => {
+    const st = { forms: [], asked: [] };
+    const io = { sign, packed: true, trace: null, managed: false, keep, kept,
+      tokenAsk: async (url, form) => { const q = formOf(form); st.forms.push(q); const n = st.forms.length;
+        return { status: 200, bytes: Buffer.from(JSON.stringify({ id_token: jwt(idClaims()), refresh_token: refreshes[n - 1], access_token: String(q.get("scope")).indexOf(SCOPE) >= 0 ? ACCESS : "graph" })) }; },
+      serviceAsk: async (url, body) => { st.asked.push(body); return serviceFor(body, st.asked.length); },
+    };
+    return { io, st };
+  };
+  const held = over => Object.assign({ provider: "microsoft", refresh: keep("r1"), sub: keep(SUB), seed: SEED, code: "", cert: null }, over);
+  const seated = { status: 200, body: JSON.stringify({ ok: true }) }, asks = { status: 409, body: JSON.stringify({ ok: false, reason: "access-token" }) };
+  const a = ioOf(() => seated, ["r2"]);
+  const cleared = await s.signinRenewHeld(a.io, MS, DESK, held({ access: true }), () => NOW);
+  const b = ioOf(body => (body.accessToken ? seated : asks), ["r2", "r3"]);
+  const met = await s.signinRenewHeld(b.io, MS, DESK, held({}), () => NOW);
+  return cleared.said === "renewed" && !("access" in cleared.held) && String(a.st.forms[0].get("scope")).indexOf(SCOPE) < 0 && !("accessToken" in a.st.asked[0])
+    && met.said === "renewed" && met.held.access === true && met.held.refresh === keep("r3") && b.st.forms.length === 2
+    && String(b.st.forms[1].get("scope")).indexOf(SCOPE) >= 0 && b.st.asked[1].accessToken === ACCESS;
+};
+
 /* ---- the run ------------------------------------------------------------------------------------------------------------- */
 let S = null;
 try { if (!sliced) S = shellOf(null); } catch (e) { sliced = e.message; }
@@ -186,6 +215,7 @@ for (const [id, name, what] of [
   ["da4", "managed", "a managed path asks the service's scope at the authorize and the refresh, and signs both tokens' hashes; with no service id, nothing"],
   ["da5", "kept", "the access token is kept only where asked and within 4096 characters, and never into the sign-in's state"],
   ["da6", "refused", "AADSTS50105 at the redemption is the not-assigned refusal; any other, the sign-in not finished; nothing sent, nothing opened"],
+  ["da8", "renewal", "a remembered path renews ordinary first and is forgotten on an ordinary answer; \"access-token\" redeems once and keeps the rotated refresh token"],
 ]) check(!!S && await run(name, S), id + " " + what);
 check(fnOf("async function signinRenewHeld(").indexOf("if (access) return signinRenewHeldAccess(io, p, deskKey, held, now, access);") >= 0
   && MAIN.indexOf("    let got = await signinRun(io, p, me.key, Date.now, access || undefined);") >= 0
@@ -211,6 +241,9 @@ if (!PLANTS_OFF && S) {
   await plant("dap7", ["  if (accessToken !== undefined) return signinDeskManagedBody(provider, idToken, desk, seed, t, sign, accessToken); /* plant:access-body */", ""], "managed");
   await plant("dap8", ["  if (access) out.accessToken = typeof json.access_token === \"string\" && json.access_token.length <= SIGNIN_ACCESS_MAX ? json.access_token : \"\"; /* plant:access-kept */",
     "  out.accessToken = typeof json.access_token === \"string\" && json.access_token.length <= SIGNIN_ACCESS_MAX ? json.access_token : \"\";"], "ordinary");
+  await plant("dap9", ["  if (m && m.access) { fresh.access = true; fresh.refresh = io.keep(m.got.refreshToken) || fresh.refresh; } /* plant:access-rotated */",
+    "  if (m && m.access) { fresh.access = true; }"], "renewal");
+  await plant("dap10", ["  else if (!m && ans.reason !== \"unreached\" && fresh.access) delete fresh.access; /* plant:access-clear */", ""], "renewal");
 }
 
 const done = asserted === EXPECTED;
