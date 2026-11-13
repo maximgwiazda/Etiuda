@@ -9,8 +9,9 @@
  * so in its own no-verdict line rather than passing:
  *   all-upgrade   "an all-users upgrade: version N with /allusers, then N+1 with /S. The uninstall entry, the shortcuts and the
  *                 etiuda: link must be intact afterwards, and a marker file planted in the install folder gone".
- *   running-1618  "1618 at a running copy: the installing account's own copy is asked to close, another session's copy ends
- *                 the run with 1618, and nothing else changes". The other session is a standard account made for the leg,
+ *   running-1618  "1618 at a running copy: the installing account's own copy is left as it is when another session's copy
+ *                 ends the run with 1618, and nothing else changes" (the installer owner's ruling, 2026-11-13: closing the
+ *                 person's own copy only to refuse would cost their open work for no install). The other session is a standard account made for the leg,
  *                 its password generated here and never printed, starting the installed copy through a one-shot scheduled
  *                 task; the account and the task are removed at the end.
  *   system-bare   "a bare /S as SYSTEM, driven by schtasks /ru SYSTEM with a one-shot task, which the harness can start
@@ -129,7 +130,11 @@ const PS = {
   hold: ["param([string]$Target, [string]$Signal)",
     "try { $f = [System.IO.File]::Open($Target, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::None) }",
     "catch { Set-Content -LiteralPath $Signal -Value ('refused: ' + $_.Exception.Message); exit 3 }",
-    "Set-Content -LiteralPath $Signal -Value 'held'", "Start-Sleep -Seconds 3600", "$f.Close()"],
+    "Set-Content -LiteralPath $Signal -Value ('held ' + $f.Name)", "Start-Sleep -Seconds 3600", "$f.Close()"],
+  /* A second process's open of the same file, read with every sharing, as the probe beside node's own. */
+  tryopen: ["param([string]$Target)",
+    "try { $g = [System.IO.File]::Open($Target, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite); $g.Close(); 'opened' }",
+    "catch { 'refused: ' + $_.Exception.GetType().Name + ' ' + $_.Exception.Message }"],
   /* A password task runs only for an account holding the batch-logon right, which a standard account has not by default
      (running-1618 on both trees, 2026-11-12: last result 0x41303, the task never ran). Granted here on the runner, by the
      account's SID, through secedit's own export and configure of USER_RIGHTS. */
@@ -500,9 +505,9 @@ async function running1618(rec) {
   rec.f("exit", r.timedOut ? "timeout" : r.code); rec.f("seconds", r.seconds); rec.f("own-closed", yes(ownGone));
   rec.f("other-alive", othersAlive); rec.f("files-changed", d.files.length ? few(d.files) : 0);
   rec.f("keys-changed", d.keys.length ? few(d.keys) : 0); rec.f("links-changed", d.links.length);
-  const ok = r.code === 1618 && ownGone && othersAlive > 0 && !d.files.length && !d.keys.length && !d.links.length;
-  rec.end(ok, ok ? "the own copy closed, the other account's copy ended the run with 1618, and the installed files, keys and shortcuts are as they were"
-    : "exit " + r.code + " (1618 wanted), own copy closed " + yes(ownGone) + ", other account's copy alive " + yes(othersAlive > 0)
+  const ok = r.code === 1618 && !ownGone && othersAlive > 0 && !d.files.length && !d.keys.length && !d.links.length;
+  rec.end(ok, ok ? "the other account's copy ended the run with 1618, the own copy was left running, and the installed files, keys and shortcuts are as they were"
+    : "exit " + r.code + " (1618 wanted), own copy left running " + yes(!ownGone) + ", other account's copy alive " + yes(othersAlive > 0)
       + ", " + d.files.length + " file(s), " + d.keys.length + " key(s) and " + d.links.length + " shortcut(s) changed");
 }
 
@@ -564,6 +569,7 @@ async function locked1618(rec) {
   try { holderSaid = oneLine(fs.readFileSync(signal, "utf8")) || "an empty word"; } catch { /* none came */ }
   rec.f("held", heldRel); rec.f("held-confirmed", yes(heldNow)); rec.f("holder-said", holderSaid);
   rec.f("holder-running", yes(!holderGone)); rec.f("open-here", openSaid);
+  rec.f("open-other-process", oneLine(ps("tryopen", ["-Target", held])));
   if (!heldNow) throw new NoVerdict("the file did not stay held (this run could still open it: " + openSaid + "); the holder said "
     + JSON.stringify(holderSaid) + " and was " + (holderGone ? "gone" : "still running"));
 
