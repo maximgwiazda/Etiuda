@@ -1586,6 +1586,15 @@ const placeEc = (dir, from, as, minutesOld) => {
     await sleep(500);
     return out;
   };
+  /* DARK FIRST BY THE LEG'S OWN HAND, not by the machine's: the desk opens in the system's theme, which is dark on the laptop and
+     light on GitHub's runner, where the first runner run (2026-11-13) measured the light ground (247,248,250) as "dark" and
+     held each theme to the other's target. The theme read back here must be dark before anything is measured. */
+  const themeFirst = await s.p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    if (document.documentElement.dataset.theme !== "dark") { const t = document.getElementById("theme"); if (t) t.click(); await wait(800); }
+    return document.documentElement.dataset.theme || null;
+  });
+  if (themeFirst !== "dark") throw new Error("2k5 could not put the desk in dark before measuring: the theme reads " + themeFirst);
   const darkField = await patchOf("dark");
   const darkScales = await atScales("dark");
   const flat = await s.p.evaluate(() => {
