@@ -94,8 +94,8 @@ function signinSay(reason, v, p){
       return [t("This account is already in use on three computers."), t("Signing out on one of them makes room here, and so does a computer left unused for 30 days; then Try again.")];
     case "waiting": case "full": /* plant:wait-say */
       return p && p.team && p.team.lead
-        ? [named(t("{TEAM} has no free seat just now."),"{TEAM}",p.teamName), named(t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and {LEAD}, the team's lead, sees this account among those who have signed in."),"{LEAD}",p.team.lead)]
-        : [t("No seat is free on the organisation's licence just now."), t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account among those who have signed in.")];
+        ? [named(t("{TEAM} has no free seat just now."),"{TEAM}",p.teamName), named(t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and {LEAD}, the team's lead, sees this account's sign-in code among those who have signed in."),"{LEAD}",p.team.lead)]
+        : [t("No seat is free on the organisation's licence just now."), t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account's sign-in code among those who have signed in.")];
     case "nolicence":
       return [t("No Etiuda licence has a seat for this account."), t("The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.")];
     case "offline":

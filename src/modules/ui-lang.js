@@ -1375,7 +1375,7 @@ UI_STRINGS.pl={
   "The sign-in service could not be reached.":"Nie udało się połączyć z usługą logowania.",
   "Nothing changed: this computer is not signed in, and Etiuda works as before.":"Nic się nie zmieniło: ten komputer nie jest zalogowany, a Etiuda działa jak dotąd.",
   "{TEAM} has no free seat just now.":"W zespole {TEAM} nie ma teraz wolnego miejsca.",
-  "The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and {LEAD}, the team's lead, sees this account among those who have signed in.":"Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; nikt nie musi nic robić, a lider zespołu, {LEAD}, widzi to konto wśród osób, które się zalogowały.",
+  "The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and {LEAD}, the team's lead, sees this account's sign-in code among those who have signed in.":"Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; nikt nie musi nic robić, a lider zespołu, {LEAD}, widzi kod logowania tego konta wśród osób, które się zalogowały.",
   "This account is signed in on three computers already.":"To konto jest już zalogowane na trzech komputerach.",
   "A seat holds three computers. Signing out on one of the others frees its place, and this computer checks again by itself.":"Miejsce w licencji obejmuje trzy komputery. Wylogowanie się na jednym z pozostałych zwolni jego miejsce, a ten komputer sam sprawdzi ponownie.",
   "The sign-in service did not accept this account's sign-in.":"Usługa logowania nie przyjęła logowania tego konta.",
@@ -1417,7 +1417,7 @@ UI_STRINGS.pl={
   // placeholder: Claudette, the eight lines below
   "today, {TIME}":"dziś, {TIME}",
   "No seat is free on the organisation's licence just now.":"W licencji organizacji nie ma teraz wolnego miejsca.",
-  "The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account among those who have signed in.":"Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; nikt nie musi nic robić, a lider zespołu widzi to konto wśród osób, które się zalogowały.",
+  "The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account's sign-in code among those who have signed in.":"Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; nikt nie musi nic robić, a lider zespołu widzi kod logowania tego konta wśród osób, które się zalogowały.",
   "This desk's seat is due for renewal.":"Miejsce w licencji dla tego stanowiska czeka na odnowienie.",
   "It renews by itself the next time the sign-in service answers. Everything on this desk works as before.":"Odnowi się samo, gdy usługa logowania znów odpowie. Wszystko na tym stanowisku działa jak dotąd.",
   "This computer could not renew its sign-in by itself.":"Ten komputer nie zdołał sam odnowić logowania.",

@@ -1835,13 +1835,13 @@ CASES.stagingCmd = () => {
 /* ---- no free seat is a wait (ds18): the service answers 200 with no certificate and the reason "waiting", the desk keeps the person
    signed in and renews quietly, and the door and Account say so in the copywriter's words; an older service's 409 "full" as before ---- */
 const WAIT_EN = ["No seat is free on the organisation's licence just now.",
-  "The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account among those who have signed in."];
+  "The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account's sign-in code among those who have signed in."];
 const WAIT_TEAM_EN = ["Ada's team has no free seat just now.",
-  "The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and Ada, the team's lead, sees this account among those who have signed in."];
+  "The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and Ada, the team's lead, sees this account's sign-in code among those who have signed in."];
 const WAIT_PL = ["W licencji organizacji nie ma teraz wolnego miejsca.",
-  "Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; nikt nie musi nic robić, a lider zespołu widzi to konto wśród osób, które się zalogowały."];
+  "Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; nikt nie musi nic robić, a lider zespołu widzi kod logowania tego konta wśród osób, które się zalogowały."];
 const WAIT_TEAM_PL = ["W zespole Ada's team nie ma teraz wolnego miejsca.",
-  "Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; nikt nie musi nic robić, a lider zespołu, Ada, widzi to konto wśród osób, które się zalogowały."];
+  "Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; nikt nie musi nic robić, a lider zespołu, Ada, widzi kod logowania tego konta wśród osób, które się zalogowały."];
 /* The answer read and settled: "waiting" is a wait, kept as the said reason with the refresh token, asking nobody; an answer of none
    without it stays no licence; the certificate that follows ends the wait; a 409 "full" reads and settles as before. */
 CASES.waitRead = s => {
