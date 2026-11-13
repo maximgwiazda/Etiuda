@@ -508,6 +508,7 @@ function createCore(deps) {
       store.put("team", row);
       if (team) resumeHeld(team, clock());
       store.del("swept");
+      store.del("sweptAt");
       if (made1st) { store.del("moved"); store.del("teamFile"); }
       if (takes) remember(b.grant);
     });
@@ -1738,16 +1739,18 @@ function createCore(deps) {
     for (const [k] of store.list("orphan:")) objs.add(k.slice(7));
     return [...objs];
   }
-  /* Emptied, but for one mark: the lead's public key, so a later create of this id is taken only under that key. A sweep that
-     finds no team keeps a mark already written, so a missed delete's retry does not drop it. Nothing else of the team is kept.
+  /* Emptied, but for one mark: the lead's public key, so a later create of this id is taken only under that key, and the instant of
+     the sweep it dates from (sweptAt), which its end counts from. A sweep that finds no team keeps a mark already written and its
+     instant, so a missed delete's retry neither drops it nor moves its end. Nothing else of the team is kept.
      With nothing left to delete, the drop and the mark are one atomic step, so a throw between them leaves the team. */
   function wipe(left) {
     const team = store.get("team");
-    const prior = store.get("swept");
+    const prior = store.get("swept"), priorAt = store.get("sweptAt");
     const leadPub = team && plain(team.lead) ? team.lead.pub : null;
     const mark = is(HEX64, leadPub) ? leadPub : (is(HEX64, prior) ? prior : null);
     const finish = () => {
       if (mark) store.put("swept", mark); /* plant:swept-mark */
+      if (mark) store.put("sweptAt", !team && Number.isSafeInteger(priorAt) ? priorAt : clock());
     };
     if (!left.length && typeof store.clear === "function") {
       store.atomic(() => { store.clear(); finish(); }); /* plant:swept-atomic */

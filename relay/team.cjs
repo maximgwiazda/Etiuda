@@ -437,10 +437,16 @@ function teamObject(deps) {
     closeWhere(() => true, "team-lapsed");
     c.wipe(left); /* plant:sweep-wipe */
     if (leadKey && heldRt) { try { await dropLead(leadKey, heldRt); } catch { /* a missed drop is reclaimed at the next reserve */ } } /* plant:lead-drop */
-    /* A missed delete rings again for its objects; otherwise the alarm rings once more, SWEPT_KEEP_MS on, for the mark alone. */
-    const marked = deps.store.get("swept") !== undefined;
-    if (alarm) await (left.length ? alarm.set(deps.clock() + SWEEP_RETRY_MS) : marked ? alarm.set(deps.clock() + core.SWEPT_KEEP_MS) : alarm.clear()); /* plant:swept-alarm */
+    /* A missed delete rings again for its objects; otherwise the alarm rings once more, SWEPT_KEEP_MS after the sweep, for the mark alone. */
+    const markEnd = sweptEnd();
+    if (alarm) await (left.length ? alarm.set(deps.clock() + SWEEP_RETRY_MS) : markEnd !== null ? alarm.set(markEnd) : alarm.clear()); /* plant:swept-alarm */
     return true;
+  }
+
+  /* The instant a swept id's mark ends, or null where it holds none or no instant. */
+  function sweptEnd() {
+    const at = deps.store.get("sweptAt");
+    return deps.store.get("swept") !== undefined && Number.isSafeInteger(at) ? at + core.SWEPT_KEEP_MS : null;
   }
 
   /* The alarm: the sweep where it is due; otherwise a trial's sockets closed at its until, and the alarm set to the next instant. */
@@ -455,8 +461,11 @@ function teamObject(deps) {
     const leadRow = deps.store.get("lead");
     if (leadRow !== undefined && deps.store.get("team") === undefined) return leadAlarm(leadRow);
     if (await sweepIfDue()) return;
-    /* A swept id's alarm rings only for its mark's end (sweep, above), so the mark goes. */
-    if (deps.store.get("team") === undefined && deps.store.get("swept") !== undefined) { deps.store.del("swept"); return; } /* plant:swept-forget */
+    /* A swept id's mark goes at its end; an alarm ringing before it (a retry, a stale one) sets the alarm to the end again. A mark kept from
+       before its instant was, with none, stays. */
+    const markEnd = deps.store.get("team") === undefined ? sweptEnd() : null;
+    if (markEnd !== null && deps.clock() >= markEnd) { deps.store.atomic(() => { deps.store.del("swept"); deps.store.del("sweptAt"); }); return; } /* plant:swept-forget */
+    if (markEnd !== null) { if (alarm) await alarm.set(markEnd); return; }
     c.forgetGone(); /* plant:gone-forget */
     closeEnded();
     if (c.lapseState() === "lapsed") closeWhere(() => true, "team-lapsed"); /* plant:lapse-close */

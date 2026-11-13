@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 579;
+const EXPECTED = 580;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -1804,7 +1804,7 @@ async function main() {
       w.R.clock.now = 120 * DAY;
       const rang = await w.R.ring(w.rt);
       const st = w.R.stores.get(w.rt);
-      const marked = !!st && st.dump().length === 1 && st.get("swept") === w.lead.pub && st.get("team") === undefined;
+      const marked = !!st && st.dump().length === 2 && st.get("swept") === w.lead.pub && Number.isSafeInteger(st.get("sweptAt")) && st.get("team") === undefined;
       const whileSwept = await put(w, a.s, deletionOf(w, a.who, a.place, a.ask.id, 2));
       const again = await create(w, w.lead, w.R.clock.now);
       const after = await put(w, a.s, deletionOf(w, a.who, a.place, a.ask.id, 3));
@@ -3759,7 +3759,7 @@ async function main() {
         a: sameJ(working, wantRoutes(told(w.until, true, "working"), true)),
         b: sameJ(reading, wantRoutes(ro, false)),
         c: w.armedAtCreate === w.until + READ && sameJ(late, ["challenge,until", ro, true])
-          && sameJ(gone, { rang: true, bucket: 0, store: 1, mark: true, alarm: true, hello: "not-enrolled", socket: [4400, true] }),
+          && sameJ(gone, { rang: true, bucket: 0, store: 2, mark: true, alarm: true, hello: "not-enrolled", socket: [4400, true] }),
         detail: JSON.stringify({ working, reading, late, gone, armed: w.armedAtCreate === w.until + READ }),
       };
     }
@@ -3823,7 +3823,7 @@ async function main() {
       const early = [await v.R.ring(v.rt), await helloKeys(v), inBucket(v).length > 0];
       at(v, TRIAL);
       const late = [await v.R.ring(v.rt), inBucket(v).length, v.R.stores.get(v.rt).dump().length, v.R.alarms.get(v.rt) === v.R.clock.now + C.SWEPT_KEEP_MS, await helloKeys(v)];
-      const g2 = r0 && sameJ(early, [false, "challenge,until", true]) && sameJ(late, [true, 0, 1, true, "not-enrolled"]);
+      const g2 = r0 && sameJ(early, [false, "challenge,until", true]) && sameJ(late, [true, 0, 2, true, "not-enrolled"]);
       return { e, f, g: g2, detail: JSON.stringify({ out, renewal: [rn.r.status, ds.status, up], early, late }) };
     }
 
@@ -3887,8 +3887,9 @@ async function main() {
       const r2 = await v.R.ring(v.rt);
       const marked = v.R.stores.get(v.rt).get("swept") === v.lead.pub;
       const afterSweep = v.R.stores.get(v.rt);
-      const missed = r1 && left.length === 1 && sameJ(keys, ["orphan:" + left[0], "swept"]) && marked && retry && r2 && inBucket(v).length === 0
-        && afterSweep.dump().length === 1 && afterSweep.get("swept") === v.lead.pub && v.R.alarms.get(v.rt) === v.R.clock.now + C.SWEPT_KEEP_MS;
+      const missed = r1 && left.length === 1 && sameJ(keys, ["orphan:" + left[0], "swept", "sweptAt"]) && marked && retry && r2 && inBucket(v).length === 0
+        && afterSweep.dump().length === 2 && afterSweep.get("swept") === v.lead.pub && v.R.alarms.get(v.rt) === afterSweep.get("sweptAt") + C.SWEPT_KEEP_MS
+        && afterSweep.get("sweptAt") === v.R.clock.now - HOUR;
       return { a, b: missed, detail: JSON.stringify({ lost: !!lostObj, rowed, every, rang, left: inBucket(w).length, r1, kept: keys.length, retry, r2 }) };
     }
 
@@ -3901,7 +3902,7 @@ async function main() {
       const body = K.createBody(w.rt, w.lead, w.R.clock.now, bytes => signHex(w.lead, bytes));
       const made = await call(w.R, "POST", "/relay/v1/teams", { json: body });
       const team = st.get("team");
-      return { ok: hello === "not-enrolled" && sameJ(emptied, [1, 0]) && made.status === 200 && !!team && team.epoch === 0 && team.until === body.grant.until
+      return { ok: hello === "not-enrolled" && sameJ(emptied, [2, 0]) && made.status === 200 && !!team && team.epoch === 0 && team.until === body.grant.until
         && st.list("dev:").length === 0 && st.list("blob:").length === 0, detail: JSON.stringify({ hello, emptied, made: made.status }) };
     }
 
@@ -3930,10 +3931,10 @@ async function main() {
       const out = { armed: (await ctx.storage.getAlarm()) === w.until + READ, before: tables(), objects: [...env.BLOBS.objects.keys()].length > 0 };
       clk.now = w.until + 91 * DAY;
       await team.alarm();
-      Object.assign(out, { after: tables(), keys: keys(), left: [...env.BLOBS.objects.keys()].length, alarm: (x => x !== null && Math.abs(x - Date.now() - C.SWEPT_KEEP_MS) < 60000)(await ctx.storage.getAlarm()) });
+      Object.assign(out, { after: tables(), keys: keys(), left: [...env.BLOBS.objects.keys()].length, alarm: (await ctx.storage.getAlarm()) === clk.now + C.SWEPT_KEEP_MS });
       return out;
     }
-    const WANT_SQL = { armed: true, before: ["kv"], objects: true, after: ["kv"], keys: ["swept"], left: 0, alarm: true };
+    const WANT_SQL = { armed: true, before: ["kv"], objects: true, after: ["kv"], keys: ["swept", "sweptAt"], left: 0, alarm: true };
 
     /* Each state's edges, in milliseconds. A core that has no lapseOf does not hold them. */
     const edgesHold = () => {
@@ -3969,7 +3970,7 @@ async function main() {
       out.rang = await w.R.ring(w.rt);
       out.gone = [inBucket(w).length, w.R.stores.get(w.rt).dump().length];
       const ok = sameJ(out, { renewal: [200, want("working")], row: [w.until + 5 * DAY, false, w.until], alarm: w.until + READ, at29: [200, "working", 200],
-        at31: [200, "read-only", "team-lapsed"], at89: [200, "read-only"], rang: true, gone: [0, 1] });
+        at31: [200, "read-only", "team-lapsed"], at89: [200, "read-only"], rang: true, gone: [0, 2] });
       return { ok, detail: JSON.stringify(out) };
     }
 
@@ -4410,7 +4411,7 @@ async function main() {
     const markOnly = (st, pub) => {
       if (!st) return false;
       const dump = st.dump();
-      return dump.length === 1 && dump[0][0] === "swept" && dump[0][1] === JSON.stringify(pub) && st.get("swept") === pub && st.get("team") === undefined;
+      return dump.length === 2 && dump[0][0] === "swept" && dump[0][1] === JSON.stringify(pub) && dump[1][0] === "sweptAt" && st.get("swept") === pub && st.get("team") === undefined;
     };
     async function sweptOf() {
       const R = relayEnv();
@@ -4477,7 +4478,7 @@ async function main() {
       const row = await sweptOf();
       const dDump = row.st ? row.st.dump() : [];
       const ok = row.made.status === 200 && row.rang === true && markOnly(row.st, row.lead.pub) && row.R.bucket.objects.size === 0
-        && dDump.length === 1 && typeof row.st.get("swept") === "string";
+        && dDump.length === 2 && typeof row.st.get("swept") === "string" && row.st.get("sweptAt") === row.R.clock.now;
       const line = "980d after a sweep the mark is the lead's public key and nothing else: rang " + row.rang + ", dump "
         + JSON.stringify(dDump.map(([k, v]) => [k, v])) + ", bucket " + row.R.bucket.objects.size;
       return { ok, line };
@@ -6977,6 +6978,9 @@ async function main() {
       R.clock.now = until + 30 * DAY;
       const swept = R.clock.now, rang = await R.ring(rt), st = R.stores.get(rt);
       const out = { made: made.status, rang, mark: st.get("swept") === lead.pub, armed: R.alarms.get(rt) === swept + YEAR };
+      /* An alarm ringing early, a retry or a stale one, leaves the mark and sets the alarm to its end again. */
+      R.alarms.set(rt, R.clock.now);
+      out.stale = [await R.ring(rt), st.get("swept") === lead.pub, R.alarms.get(rt) === swept + YEAR];
       R.clock.now = swept + YEAR - H;
       const other = keyPair(false);
       out.early = [await R.ring(rt), st.get("swept") === lead.pub, tail13(await call(R, "POST", "/relay/v1/teams", { json: createBody(rt, other, R.clock.now) }))];
@@ -6985,11 +6989,12 @@ async function main() {
       out.taken = tail13(await call(R, "POST", "/relay/v1/teams", { json: createBody(rt, other, R.clock.now) }));
       return out;
     }
-    const sweptOk = s => !!s && s.made === 200 && s.rang === true && s.mark && s.armed && sameJ(s.early, [false, true, "swept-other-lead"])
+    const sweptOk = s => !!s && s.made === 200 && s.rang === true && s.mark && s.armed && sameJ(s.stale, [true, true, true]) && sameJ(s.early, [false, true, "swept-other-lead"])
       && sameJ(s.late, [true, 0, false]) && s.taken === 200;
     const r2 = await sweptScene();
     check(sweptOk(r2) && C.SWEPT_KEEP_MS === YEAR,
-      "1013c a swept team's mark, its lead's public key, keeps the id from another key for a year less an hour, its alarm set to that year,"
+      "1013c a swept team's mark, its lead's public key, keeps the id from another key for a year less an hour, its alarm set to that year and an"
+      + " alarm ringing early leaving it,"
       + " and is gone an hour after it, nothing left and no alarm, the id then free: " + JSON.stringify(r2));
 
     async function leadScene(T) {
@@ -7054,10 +7059,12 @@ async function main() {
       ["1013h", lineLifted("plant:gone-forget"), async T => !goneOk(await safe(() => goneScene(T))), "lifting plant:gone-forget leaves a desk taken off at its alarm", "1013a"],
       ["1013i", lineLifted("plant:arm-gone"), async T => !goneOk(await safe(() => goneScene(T))), "lifting plant:arm-gone sets no alarm for a desk taken off", "1013a"],
       ["1013j", lineLifted("plant:swept-forget"), async T => !sweptOk(await safe(() => sweptScene(T))), "lifting plant:swept-forget keeps a swept mark for ever", "1013c"],
-      ["1013k", swapped("marked ? alarm.set(deps.clock() + core.SWEPT_KEEP_MS)", "marked ? alarm.clear()"), async T => !sweptOk(await safe(() => sweptScene(T))),
+      ["1013k", swapped("markEnd !== null ? alarm.set(markEnd)", "markEnd !== null ? alarm.clear()"), async T => !sweptOk(await safe(() => sweptScene(T))),
         "a sweep that clears its alarm leaves the mark with no end", "1013c"],
-      ["1013l", swapped("marked ? alarm.set(deps.clock() + core.SWEPT_KEEP_MS)", "marked ? alarm.set(deps.clock() + core.SWEPT_KEEP_MS - 2 * 24 * 60 * 60 * 1000)"),
+      ["1013l", swapped("Number.isSafeInteger(at) ? at + core.SWEPT_KEEP_MS : null", "Number.isSafeInteger(at) ? at + core.SWEPT_KEEP_MS - 2 * 24 * 60 * 60 * 1000 : null"),
         async T => !sweptOk(await safe(() => sweptScene(T))), "a mark forgotten two days early lets another key take the id within the year", "1013c"],
+      ["1013o", swapped("if (markEnd !== null && deps.clock() >= markEnd)", "if (markEnd !== null)"), async T => !sweptOk(await safe(() => sweptScene(T))),
+        "an alarm ringing before the mark's end takes the mark", "1013c"],
       ["1013m", lineLifted("plant:lead-empty"), async T => !leadOk(await safe(() => leadScene(T))), "lifting plant:lead-empty keeps an emptied list", "1013d"],
       ["1013n", lineLifted("plant:lead-alarm-reap"), async T => !leadOk(await safe(() => leadScene(T))), "lifting plant:lead-alarm-reap keeps a list its alarm found dead", "1013d"],
     ];
