@@ -3282,7 +3282,6 @@ const DESK_READS = {
   "token": r => r.ok === false && r.reason === "token",
   "access-token": r => r.ok === false && r.reason === "access-token" && r.managed === true,
   "no-role": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === false && r.reason === "no-role" && r.managed === true && h.said === "no-role" && h.refresh === "sealed:rt" && h.managed === true; },
-  "no-role-assigned": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === false && r.reason === "no-role" && r.managed === true && r.cause === "assigned" && h.cause === "assigned"; },
   "managed-seated": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.managed === true && r.cause === "" && h.managed === true && h.cert === r.cert; },
   "managed-waiting": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.waiting === true && r.managed === true && h.said === "waiting" && h.managed === true; },
   "managed-none": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.managed === true && h.cert === null && h.managed === true; },
