@@ -92,7 +92,7 @@ const NAMES = ["SIGNIN_PROVIDERS", "signinOffered", "signinNonce", "signinAuthor
 NAMES.push("SIGNIN_TRACE_ASKED", "signinTraceLine", "signinTraceSaid");
 /* The section, evaluated: `swap` is [from, to], put in place of the one line that holds `from`, for a plant; `invSwap` the same in the
    invitation's slice as well. */
-function load(swap, where, invSwap) {
+function load(swap, where, invSwap, needs) {
   let sec = SECTION, inv = INVITE;
   if (swap) {
     const inSec = where !== "invite";
@@ -106,7 +106,7 @@ function load(swap, where, invSwap) {
   }
   /* A name the slice lacks comes back undefined, so a case reaching for it fails alone rather than the whole file. */
   /* Every answer the section reads from the licence service passes the observer (ds23d), planted or not. */
-  const body = NEEDS + "\n" + sec + "\n" + inv + "\nif (typeof signinAnswer === \"function\") { const signinAnswerRead = signinAnswer;"
+  const body = (needs || NEEDS) + "\n" + sec + "\n" + inv + "\nif (typeof signinAnswer === \"function\") { const signinAnswerRead = signinAnswer;"
     + " signinAnswer = function (res, deskKey, packed) { const r = signinAnswerRead(res, deskKey, packed); answerSeen(res, r); return r; }; }"
     + "\nreturn {" + NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
     + ", live: () => ({ providers: SIGNIN_PROVIDERS, signin: SIGNIN_SERVICE, signout: SIGNOUT_SERVICE, on: typeof signinLabOn === \"undefined\" ? undefined : signinLabOn,"
@@ -124,7 +124,7 @@ function load(swap, where, invSwap) {
 const ANSWERS = (() => { try { return JSON.parse(fs.readFileSync(path.join(ROOT, "tests", "signin-answers.json"), "utf8")); } catch { return null; } })();
 const ANSWER_CASES = ANSWERS && ANSWERS.kind === "etiuda-signin-answers" && Array.isArray(ANSWERS.cases) ? ANSWERS.cases : [];
 /* An answer's shape: each object's names sorted, a fixed word kept, and a value that varies by run named by its class (an integer,
-   an address, hex or a code of its length), so a hand-built answer with this file's values meets the service's own. */
+   an address, hex or a code of its length, a key's id), so a hand-built answer with this file's values meets the service's own. */
 function answerShape(v) {
   if (v === null || typeof v === "boolean") return v;
   if (typeof v === "number") return Number.isInteger(v) ? "<int>" : "<num>";
@@ -135,7 +135,7 @@ function answerShape(v) {
     return v.replace(/[0-9a-f]{8,}/g, m => "<hex" + m.length + ">");
   }
   if (Array.isArray(v)) return Array.from(new Set(v.map(x => JSON.stringify(answerShape(x))))).sort();
-  if (typeof v === "object") return Object.fromEntries(Object.keys(v).sort().map(k => [k, answerShape(v[k])]));
+  if (typeof v === "object") return Object.fromEntries(Object.keys(v).sort().map(k => [k, (k === "id" || k === "keyId") && typeof v[k] === "string" ? "<id>" : answerShape(v[k])]));
   return typeof v;
 }
 const answerSig = (status, body) => status + " " + JSON.stringify(answerShape(body));
@@ -2196,15 +2196,19 @@ const unread = caseNames.filter(n => !Object.prototype.hasOwnProperty.call(DESK_
 check(ANSWER_CASES.length > 0 && unread.length === 0 && gone.length === 0,
   "ds23b every answer the service records has a reading here, and every reading here an answer the service records"
   + (unread.length ? "; the desk has no reading for: " + unread.join(" ") : "") + (gone.length ? "; read here, given no longer: " + gone.join(" ") : ""));
+/* Where the section checks a certificate's chain to a root it is given (NOTE_ROOT among the declarations it needs), the record's own
+   test root stands in, so the service's certificates are read as the service signed them. */
+const ROOTED = ANSWERS && /^[0-9a-f]{64}$/.test(String(ANSWERS.root)) ? NEEDS.replace(/\nconst NOTE_ROOT = "[0-9a-f]{64}";/, "\nconst NOTE_ROOT = \"" + ANSWERS.root + "\";") : NEEDS;
+const S23 = ROOTED === NEEDS ? S : load(null, undefined, undefined, ROOTED);
 const misread = [];
 for (const c of ANSWER_CASES) {
   const want = DESK_READS[c.case];
   if (!want) continue;
   let got = null;
   try {
-    if (c.route === "signout/desk") got = await S.signoutAsk({ sign: signWith(signKey), serviceAsk: async () => recordedAnswer(c) }, DESK_KEY, () => NOW);
-    else got = S.signinAnswer(recordedAnswer(c), c.body.certificate ? c.body.certificate.desk : DESK_KEY, true);
-    if (!want(got, c, S)) misread.push(c.case + " read as " + JSON.stringify(got).slice(0, 120));
+    if (c.route === "signout/desk") got = await S23.signoutAsk({ sign: signWith(signKey), serviceAsk: async () => recordedAnswer(c) }, DESK_KEY, () => NOW);
+    else got = S23.signinAnswer(recordedAnswer(c), c.body.certificate ? c.body.certificate.desk : DESK_KEY, true);
+    if (!want(got, c, S23)) misread.push(c.case + " read as " + JSON.stringify(got).slice(0, 120));
   } catch (e) { misread.push(c.case + " threw " + (e && e.message)); }
 }
 check(ANSWER_CASES.length > 0 && misread.length === 0,
