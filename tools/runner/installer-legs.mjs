@@ -1029,7 +1029,10 @@ async function nonPersistent(rec) {
   const ud = path.join(process.env.APPDATA, T.packageName), docsRoot = path.join(LAB, "np-documents"), docs = path.join(docsRoot, "Etiuda");
   if (fs.existsSync(ud)) throw new NoVerdict(ud + " is already there, so this account is not a fresh one to measure");
   fs.mkdirSync(docsRoot, { recursive: true });
-  rec.after("profile", () => { try { if (fs.existsSync(ud)) fs.renameSync(ud, path.join(LAB, "np-ud-left")); return "moved aside"; } catch (e) { return "left: " + e.code; } });
+  /* Every aside sits beside the profile on its own drive, never in the lab: the lab is on D: on a hosted runner and APPDATA on C:,
+     and a rename does not cross drives (EXDEV, first dispatch 43495740245). */
+  const aside = (tag) => path.join(process.env.APPDATA, "etiuda-np-" + tag + "-" + process.pid);
+  rec.after("profile", () => { try { if (fs.existsSync(ud)) fs.renameSync(ud, aside("left")); return "moved aside"; } catch (e) { return "left: " + e.code; } });
   const deskFile = path.join(ud, "desk.json"), sample = path.join(docs, path.basename(SAMPLE));
   const deskId = () => { try { const d = JSON.parse(fs.readFileSync(deskFile, "utf8")); return typeof d.desk === "string" ? d.desk : ""; } catch (e) { return ""; } };
   const sampled = () => { try { return /"e~sampled"/.test(fs.readFileSync(deskFile, "utf8")); } catch (e) { return false; } };
@@ -1064,7 +1067,7 @@ async function nonPersistent(rec) {
   rec.f("s1-desk", id1.slice(0, 9));
 
   /* (A) the whole user-data folder discarded, as at a non-persistent logoff. */
-  fs.renameSync(ud, path.join(LAB, "np-ud-after-s1"));
+  fs.renameSync(ud, aside("after-s1"));
   const a = await session("a", () => !!deskId());
   const idA = deskId(), docsA = manifest(docsRoot), dA = manifestDiff(docsBefore, docsA);
   rec.f("a-desk", idA ? (idA === id1 ? "same" : "new") : "none"); rec.f("a-docs-changed", dA.changed.length ? few(dA.changed) : 0);
@@ -1073,7 +1076,7 @@ async function nonPersistent(rec) {
   /* (B) Local State alone discarded, desk.json kept: the sealing key's wrap lost, the desk file roaming. */
   const ls = path.join(ud, "Local State");
   const hadLs = fs.existsSync(ls);
-  if (hadLs) fs.renameSync(ls, path.join(LAB, "np-local-state-after-a"));
+  if (hadLs) fs.renameSync(ls, aside("local-state-after-a"));
   rec.f("b-local-state-removed", yes(hadLs));
   const b = await session("b", () => !!deskId());
   const idB = deskId(), docsB = manifest(docsRoot), dB = manifestDiff(docsA, docsB);
@@ -1106,7 +1109,7 @@ async function netHosts(rec) {
   const ud = path.join(process.env.APPDATA, T.packageName), docsRoot = path.join(LAB, "nh-documents"), netFile = path.join(LAB, "net-log.json");
   if (fs.existsSync(ud)) throw new NoVerdict(ud + " is already there, so this account is not a fresh one to measure");
   fs.mkdirSync(docsRoot, { recursive: true });
-  rec.after("profile", () => { try { if (fs.existsSync(ud)) fs.renameSync(ud, path.join(LAB, "nh-ud-left")); return "moved aside"; } catch (e) { return "left: " + e.code; } });
+  rec.after("profile", () => { try { if (fs.existsSync(ud)) fs.renameSync(ud, path.join(process.env.APPDATA, "etiuda-nh-left-" + process.pid)); return "moved aside"; } catch (e) { return "left: " + e.code; } });
   const IDLE = 120000;
   const names = (said) => /^refused|^no answer/.test(said) ? null : said.split(/\s+/).filter(Boolean);
   /* The runner's own names in a window as long as the session's, with no desk running. */
