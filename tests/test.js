@@ -4641,14 +4641,15 @@ function shippedFlagTests() {
     got, [[true, true, true], [false, false, true]]);
 
   const about = fs.readFileSync(path.join(E.ROOT, "src", "modules", "about.js"), "utf8");
-  /* The credit under one interface language, with TRADEMARK, MAKER and STARDUST_URL read from their own lines in
-     about.js, split at its line break. Two parts: the copyright with the notice, then the maker line. */
+  /* The credit under one interface language, with TRADEMARK, LICENSOR, MAKER and STARDUST_URL read from their own lines
+     in about.js, split at its line breaks. Three parts: the copyright with the notice, the licensor, then the maker line. */
   const aboutParts = lang => {
     try {
       const konst = name => new Function("return " + extractDecl(about, "const " + name + "=").replace(/^[^=]*=|;$/g, ""))();
-      const credit = new Function("esc", "TRADEMARK", "MAKER", "STARDUST_URL",
+      const credit = new Function("esc", "TRADEMARK", "LICENSOR", "MAKER", "STARDUST_URL",
         extractDecl(about, "function aboutCredit(") + "\nreturn aboutCredit;")(
-        s => s, konst("TRADEMARK"), konst("MAKER"), about.indexOf("const STARDUST_URL=") > -1 ? konst("STARDUST_URL") : "");
+        s => s, konst("TRADEMARK"), about.indexOf("const LICENSOR=") > -1 ? konst("LICENSOR") : {}, konst("MAKER"),
+        about.indexOf("const STARDUST_URL=") > -1 ? konst("STARDUST_URL") : "");
       return String(credit(lang)).split("<br>");
     } catch (e) { return "aboutCredit did not run: " + e.message; }
   };
@@ -4657,9 +4658,16 @@ function shippedFlagTests() {
   const STARDUST = '<a href="https://stardustcore.com" target="_blank" rel="noopener">Stardust</a>';
   eq("About puts the maker line under the trademark line, once, its Stardust a link to the company's address that opens outside the window: Made by Stardust. in English, Etiuda. Tworzy ją Stardust. in Polish, and English in a language with no key",
     [aboutTail("en"), aboutTail("pl"), aboutTail("de")],
-    [[2, "Made by " + STARDUST + "."], [2, "Etiuda. Tworzy ją " + STARDUST + "."], [2, "Made by " + STARDUST + "."]]);
-  eq("control: the trademark line above the maker line is unchanged in each language, after the copyright",
-    ["en", "pl", "de"].map(l => { const p = aboutParts(l); return typeof p === "string" ? p : p[p.length - 2]; }),
+    [[3, "Made by " + STARDUST + "."], [3, "Etiuda. Tworzy ją " + STARDUST + "."], [3, "Made by " + STARDUST + "."]]);
+  /* The copywriter's words of 2026-11-13, the business as licensor, a no-break space between NIP and its number so the
+     line never wraps inside it; written here with the space spelt as its code, so the source's own character is asked. */
+  const NBSP_NIP = "NIP" + String.fromCharCode(160) + "5242711262";
+  eq("About's credit carries the licensor line second, between the trademark line and the maker line: the business, its NIP held to its number by a no-break space, in English, in Polish, and English in a language with no key",
+    ["en", "pl", "de"].map(l => { const p = aboutParts(l); return typeof p === "string" ? p : p[1]; }),
+    ["Licensor: Stardust Maxim Gwiazda, " + NBSP_NIP + ", Poland.", "Licencjodawca: Stardust Maxim Gwiazda, " + NBSP_NIP + ", Polska.",
+     "Licensor: Stardust Maxim Gwiazda, " + NBSP_NIP + ", Poland."]);
+  eq("control: the trademark line above the licensor line is unchanged in each language, after the copyright",
+    ["en", "pl", "de"].map(l => { const p = aboutParts(l); return typeof p === "string" ? p : p[0]; }),
     ["© 2026 Max Gwiazda. Etiuda is a trademark of Max Gwiazda.", "© 2026 Max Gwiazda. Etiuda jest znakiem towarowym Maxa Gwiazdy.",
      "© 2026 Max Gwiazda. Etiuda is a trademark of Max Gwiazda."]);
 
