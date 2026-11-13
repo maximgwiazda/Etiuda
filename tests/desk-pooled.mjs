@@ -163,11 +163,11 @@ CASES.page = async (s, pg) => {
   const en = drawn(Object.assign({ managed: M({ stranded: true }) }, base), "en", pg), pl = drawn(Object.assign({ managed: M({ stranded: true }) }, base), "pl", pg);
   const contact = drawn(Object.assign({ managed: M({ stranded: true, contact: "Service desk, ext. 4400" }) }, base), "en", pg);
   const opens = drawn(Object.assign({ managed: M({}) }, base), "en", pg);
-  const H = "This computer did not keep Etiuda's key for this desk.", IT = "Its IT department can have the profile keep it.", ON = "Everything on this desk works as before; signing in waits until then.";
+  const H = "This computer's profile did not keep this desk's key.", IT = "The organisation's IT department can have the profile keep it.", ON = "Everything else on this desk works as before; only signing in waits.";
   const both = x => words(x.door) + " | " + words(x.acct);
   return en.moment === "stranded" && both(en).split(H).length === 3 && both(en).indexOf(IT + " " + ON) >= 0 && (en.d.acts || []).length === 0
     && en.door.indexOf("data-e-open=\"signin\"") < 0 && en.acct.indexOf("data-e-open=\"signin\"") < 0
-    && words(pl.door).indexOf("Ten komputer nie zachował klucza Etiudy dla tego stanowiska.") >= 0
+    && words(pl.door).indexOf("Profil na tym komputerze nie zachował klucza tego stanowiska.") >= 0
     && words(contact.door).indexOf("To ask for access: Service desk, ext. 4400. " + ON) >= 0
     && opens.moment !== "stranded" && both(opens).indexOf(H) < 0 && opens.acct.indexOf("data-e-open=\"signin\"") >= 0;
 };
@@ -209,7 +209,7 @@ if (!PLANTS_OFF && S) {
   }
   /* The page: the stranded words dropped. */
   for (const [id, swap] of [["dpp8", ["function signinStranded(v){ return !!(v && v.managed && v.managed.stranded); } /* plant:np-page */", "function signinStranded(v){ return false; }"]],
-    ["dpp9", ["      + \" \" + t(\"Everything on this desk works as before; signing in waits until then.\")];", "      ];"]]]) {
+    ["dpp9", ["      + \" \" + t(\"Everything else on this desk works as before; only signing in waits.\")];", "      ];"]]]) {
     let red = false;
     try {
       if (SIGNIN.split(swap[0]).length !== 2) throw new Error("anchor");

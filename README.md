@@ -105,8 +105,6 @@ retry and 740 and 2 to a failure.
 
 ## A managed installation
 
-<!-- Words for the copywriter to finish: this section is the engineer's draft (decision 49, section 12). -->
-
 Etiuda's Group Policy template is in `shell/policy` (`etiuda.admx`, with English and Polish `.adml`), and an all-users
 install carries it in `resources\policy` beside the program. Every setting is machine policy under
 `HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Etiuda`, read and never written; each one's own text says what it does.
@@ -128,7 +126,7 @@ The person's Documents were unchanged either way.
 Where profiles are not kept, two settings say what the desk does when its key cannot be opened on a new host:
 
 - **Keep each desk on a non-persistent desktop** (`NonPersistent`): the desk says what happened and whom to ask (the
-  setting `SupportContact`, or the organisation's IT department), keeps working, and makes no new desk. Its sign-ins say
+  setting `SupportContact`, or the organisation's IT department), keeps working in everything but signing in, and makes no new desk. Its sign-ins say
   that it is pooled, so a person's pooled desks hold one place among their three computers, the newest taking it over.
 - **Let a non-persistent desktop make a new desk** (`NonPersistentNewDesk`), with the first: such a desk makes a new
   desk, as on any computer, and its team may need to let it in again; it still holds one pooled place.

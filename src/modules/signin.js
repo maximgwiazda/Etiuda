@@ -68,9 +68,9 @@ function signinRefusedWords(v){
 function signinStranded(v){ return !!(v && v.managed && v.managed.stranded); } /* plant:np-page */
 function signinStrandedWords(v){
   const c=v && v.managed ? v.managed.contact : "";
-  return [t("This computer did not keep Etiuda's key for this desk."),
-    (c ? named(t("To ask for access: {CONTACT}."),"{CONTACT}",c) : t("Its IT department can have the profile keep it."))
-      + " " + t("Everything on this desk works as before; signing in waits until then.")];
+  return [t("This computer's profile did not keep this desk's key."),
+    (c ? named(t("To ask for access: {CONTACT}."),"{CONTACT}",c) : t("The organisation's IT department can have the profile keep it."))
+      + " " + t("Everything else on this desk works as before; only signing in waits.")];
 }
 /* The reasons that sentence answers: a sign-in outside the pinned tenant always, and the organisation's refusals on a managed computer. */
 function signinRefusedHere(reason, v){

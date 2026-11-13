@@ -120,15 +120,15 @@ Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane,
 
 Etiuda przechowuje tożsamość stanowiska w profilu użytkownika, w folderze %APPDATA%\etiuda, pod kluczami, które Windows chroni dla tej osoby. Jeśli profil zachowuje ten folder i klucze ochrony danych Windows tej osoby, dzięki kontenerowi profilu FSLogix lub profilowi mobilnemu, stanowisko jest tym samym stanowiskiem na każdym hoście, a to ustawienie niczego nie zmienia.
 
-Jeśli to ustawienie zasad zostanie włączone, stanowisko, którego klucza nie można otworzyć w tym profilu, zostaje zachowane i Etiuda o tym mówi, zamiast je zastąpić: wyjaśnia, co się stało i kogo poprosić, wszystko na stanowisku działa jak dotąd, a nowe stanowisko nie powstaje, chyba że włączone jest „Pozwól pulpitowi nietrwałemu tworzyć nowe stanowisko”. Każde logowanie zaznacza też, że stanowisko jest współdzielone, więc współdzielone stanowiska danej osoby zajmują jedno miejsce spośród jej trzech komputerów, które przejmuje najnowsze z nich, a jej zwykłe komputery zachowują swoje.
+Jeśli to ustawienie zasad zostanie włączone, stanowisko, którego klucza nie można otworzyć w tym profilu, zostaje zachowane, a nie zastąpione: Etiuda wyjaśnia, co się stało i do kogo się zwrócić, wszystko na stanowisku poza logowaniem działa jak dotąd, a nowe stanowisko nie powstaje, chyba że włączone jest ustawienie „Pozwól pulpitowi nietrwałemu tworzyć nowe stanowisko”. Każde logowanie oznacza też stanowisko jako współdzielone, więc współdzielone stanowiska danej osoby zajmują jedno miejsce spośród jej trzech komputerów, które przejmuje najnowsze z nich, a jej zwykłe komputery zachowują swoje.
 
 Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, stanowisko, którego klucza nie można otworzyć, tworzy nowe stanowisko, tak jak na każdym komputerze.</string>
       <string id="NonPersistentNewDesk">Pozwól pulpitowi nietrwałemu tworzyć nowe stanowisko</string>
       <string id="NonPersistentNewDesk_Explain">To ustawienie zasad działa tylko razem z „Zachowuj stanowisko na pulpicie nietrwałym”.
 
-Jeśli to ustawienie zasad zostanie włączone, stanowisko, którego klucza nie można otworzyć w tym profilu, tworzy nowe stanowisko, tak jak na każdym komputerze, a jego zespół może musieć ponownie je przyjąć. Jego logowania nadal zaznaczają, że jest współdzielone, więc zajmuje jedno miejsce spośród trzech komputerów danej osoby.
+Jeśli to ustawienie zasad zostanie włączone, stanowisko, którego klucza nie można otworzyć w tym profilu, tworzy nowe stanowisko, tak jak na każdym komputerze, i może być konieczne ponowne przyjęcie go do zespołu. Jego logowania nadal oznaczają je jako współdzielone, więc zajmuje jedno miejsce spośród trzech komputerów danej osoby.
 
-Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, takie stanowisko zostaje zachowane, Etiuda o tym mówi i nie tworzy nowego stanowiska.</string>
+Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, takie stanowisko zostaje zachowane, Etiuda wyjaśnia, co się stało, a nowe stanowisko nie powstaje.</string>
     </stringTable>
     <presentationTable>
       <presentation id="TeamFolder">

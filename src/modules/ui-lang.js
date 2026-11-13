@@ -1412,12 +1412,9 @@ UI_STRINGS.pl={
   "Your organisation has not given this account access to Etiuda.":"Organizacja nie przyznała temu kontu dostępu do Etiudy.",
   "Its IT department can: asking them to assign the account is enough.":"Może to zrobić jej dział IT: wystarczy poprosić o przypisanie konta.",
   "To ask for access: {CONTACT}.":"W sprawie dostępu: {CONTACT}.",
-  // placeholder: Claudette
-  "This computer did not keep Etiuda's key for this desk.":"Ten komputer nie zachował klucza Etiudy dla tego stanowiska.",
-  // placeholder: Claudette
-  "Its IT department can have the profile keep it.":"Dział IT organizacji może sprawić, że profil będzie go zachowywał.",
-  // placeholder: Claudette
-  "Everything on this desk works as before; signing in waits until then.":"Wszystko na tym stanowisku działa jak dotąd; logowanie poczeka do tego czasu.",
+  "This computer's profile did not keep this desk's key.":"Profil na tym komputerze nie zachował klucza tego stanowiska.",
+  "The organisation's IT department can have the profile keep it.":"Dział IT organizacji może sprawić, że profil będzie go zachowywał.",
+  "Everything else on this desk works as before; only signing in waits.":"Wszystko inne na tym stanowisku działa jak dotąd; czeka tylko logowanie.",
   "Etiuda keeps working with the catalog it has.":"Etiuda działa dalej na katalogu, który już ma.",
   "This account has no Etiuda role in its organisation, so it holds no seat.":"To konto nie ma w swojej organizacji żadnej roli w Etiudzie, więc nie zajmuje miejsca w licencji.",
   "Its IT department assigns the roles.":"Role przydziela dział IT organizacji.",
