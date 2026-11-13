@@ -8817,6 +8817,8 @@ What you type stays in this browser only.`;
     "The sign-in service cannot be reached just now. Etiuda keeps working with the catalog it has.": "Usługa logowania jest teraz nieosiągalna. Etiuda działa dalej na katalogu, który już ma.",
     "Use another account": "Użyj innego konta",
     "Not signed in": "Bez logowania",
+    /* words: copywriter */
+    "This computer is signed out. Its place among the account's three computers is freed by itself as soon as the sign-in service can be reached.": "Ten komputer jest wylogowany. Jego miejsce wśród trzech komputerów konta zwolni się samo, gdy tylko usługa logowania będzie osiągalna.",
     "Preview only.": "Tylko podgląd.",
     "Sign-in is not set up yet, so nothing here is sent.": "Logowanie nie jest jeszcze uruchomione, więc nic stąd nie zostanie wysłane.",
     "Sign-in is not set up yet, so nothing was sent. This is a preview.": "Logowanie nie jest jeszcze uruchomione, więc nic nie wysłano. To tylko podgląd.",
@@ -26247,6 +26249,8 @@ What you type stays in this browser only.`;
       /* The provider's page of the sign-in that waits, only while one does. */
       link: known(o.busy) && typeof o.link === "string" && (/^https:\/\/\S+$/.test(o.link) || o.busy === "lab" && /^http:\/\/127\.0\.0\.1:[0-9]+\/\S*$/.test(o.link)) ? o.link : "",
       keeps: o.keeps !== false,
+      /* Signed out, with the service not yet told: the desk's place among the account's three is freed at the next contact. */
+      outOwed: !signedIn && o.outOwed === true,
       /* The doors the sign-in handed, offered while the desk keeps no team (the door-finding): each by its place, the relay's host
          and the lead's print, so two leads' doors of one team are told apart. */
       doors: signedIn && Array.isArray(o.doors) ? o.doors.filter((d) => d && Number.isInteger(d.n) && typeof d.host === "string" && d.host.length <= 256 && /^[0-9a-f]{16}$/.test(String(d.print))).slice(0, 16).map((d) => ({ n: d.n, host: d.host, print: String(d.print) })) : []
@@ -35874,6 +35878,7 @@ What you type stays in this browser only.`;
       name: t("Not signed in"),
       sub: t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.")
     });
+    if (v.outOwed) h += '<p class="sgn-cap" data-signin-out-owed>' + esc(t("This computer is signed out. Its place among the account's three computers is freed by itself as soon as the sign-in service can be reached.")) + "</p>";
     h += "<div>" + (v.said === "signin-preview" ? "" : signinPreviewHtml(v)) + signinProvidersHtml(v.offered, true) + '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + '</p><p class="sgn-cap">' + esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account.")) + "</p></div>";
     if (choosing && v.signedIn) h += '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">' + esc(t("Cancel")) + "</button></span>";
     return h + "</div>";

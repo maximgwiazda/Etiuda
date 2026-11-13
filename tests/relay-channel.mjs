@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 447;
+const EXPECTED = 450;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -10687,9 +10687,86 @@ async function sceneA4Turned(mod) {
     && openNamed && openQuiet && dropped.status === 200 && open.ends.length >= 1 && open.ends.every(k => k === "turned");
   return { made: made.status, opened: opened.status, shutEnds, openNamed, openQuiet, dropped: dropped.status, openEnds: open.ends, ok };
 }
+/* A door request taken back (board 980, decision 33): the desk's request is up and in the lead's mirror; the desk then drops it from
+   its own mirror and its invite() names the request's id and the lead's box with no certificate (door: null), as the desk shell does
+   while a door join is withdrawing (shell/main.js signinDoorInvite). The key's own hello resumes the request's session, the deletion
+   goes under the door's seal, the lead's mirror loses the request, and no door hello is sent again. `restart`: the withdrawal is
+   made by a new channel on the same mirror and state, as after the shell rebuilds it (a sign out, a restart). */
+async function sceneA4Withdraw(mod, restart) {
+  const rt = hex(16), pinTeam = "t-" + hex(8), ref = hex(16), who = keyPair(true), leadBox = xPair(), deskBox = xPair();
+  R.clock.now += 1;
+  const made = await admin("POST", "/relay/v1/teams", createBody(rt, R.clock.now));
+  R.clock.now += 1;
+  const t = R.clock.now;
+  const opened = await admin("POST", "/relay/v1/t/" + rt + "/door", { refs: [ref], t, sig: signHex(LEAD, core.doorBytes(rt, t, [ref])) });
+  const pinOf = () => ({ teamId: pinTeam, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } });
+  let door = { door: certA4(who.pub, ref, R.clock.now), box: leadBox.pub, inv: "" };
+  const tD = transport("a4w-desk"), tL = transport("a4w-lead");
+  let knocks = 0, withdrawn = 0;
+  const plain = tD.request;
+  tD.request = (method, url, headers, body) => {
+    if (method === "POST" && /\/session$/.test(String(url)) && body && /"door":\{/.test(Buffer.from(body).toString("utf8"))) knocks++;
+    return plain(method, url, headers, body);
+  };
+  const deskMirror = path.join(LAB, "a4w-desk-" + rt), leadMirror = path.join(LAB, "a4w-lead-" + rt), rel = "desks/" + who.keyId + "/join.json";
+  const JOIN = "{\"kind\":\"etiuda-join\",\"note\":\"" + "DoorBack" + hex(6) + "\"}\n";
+  const deskOf = () => mod.createChannel({ rt, url: URLV1, mirror: deskMirror, stateFile: deskMirror + ".json", pin: pinOf,
+    me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place: "desk:" + who.keyId, box: deskBox.pub }),
+    agree: peer => xAgree(deskBox, peer), keyFor: () => null, sealEpoch: () => null, invite: () => door,
+    onDoor: id => { if (!door.inv) { door.inv = id; put(deskMirror, rel, JSON.stringify(Object.assign({ door: id }, JSON.parse(JOIN))) + "\n"); } },
+    onWithdrawn: () => { withdrawn++; },
+    request: tD.request, connect: tD.connect, pollMs: 1e9, watch: false, say: () => {} });
+  const lead = mod.createChannel({ rt, url: URLV1, mirror: leadMirror, stateFile: leadMirror + ".json", pin: pinOf,
+    me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root", box: leadBox.pub }),
+    agree: peer => xAgree(leadBox, peer), keyFor: e => (e === 1 ? K1 : null), sealEpoch: () => 1, inviteKeys: () => [],
+    request: tL.request, connect: tL.connect, pollMs: 1e9, watch: false });
+  const round = async ch => { for (let i = 0; i < 3; i++) { ch.kick(); await ch.idle(); } };
+  let desk = deskOf();
+  desk.start();
+  await round(desk);
+  lead.start();
+  await round(lead);
+  const reached = read(leadMirror, rel) !== null, asked = door.inv, knocked = knocks;
+  if (restart) { try { await desk.stop(); } catch { /* already stopped */ } desk = deskOf(); }
+  door = { door: null, box: leadBox.pub, inv: asked };
+  try { fs.unlinkSync(path.join(deskMirror, ...rel.split("/"))); } catch { /* never written */ }
+  if (restart) desk.start();
+  await round(desk);
+  await round(lead);
+  /* What stays waiting for a lead: the relay's record of the request, whether it still serves the request to a lead that catches up
+     afresh, and whether it takes the lead's yes to it. The lead that fetched it before keeps its own copy (leadKept), since the relay
+     serves no box beside a door request's deletion (relay/core.cjs admitWithdraw); that is reported, not judged here. */
+  const rec = (() => { try { return JSON.parse(relayStore(rt).dump().find(([k]) => k === "inv:" + asked)[1]); } catch { return null; } })();
+  const freshMirror = path.join(LAB, "a4w-fresh-" + rt), tF = transport("a4w-fresh");
+  const fresh = mod.createChannel({ rt, url: URLV1, mirror: freshMirror, stateFile: freshMirror + ".json", pin: pinOf,
+    me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root", box: leadBox.pub }),
+    agree: peer => xAgree(leadBox, peer), keyFor: e => (e === 1 ? K1 : null), sealEpoch: () => 1, inviteKeys: () => [],
+    request: tF.request, connect: tF.connect, pollMs: 1e9, watch: false });
+  fresh.start();
+  await round(fresh);
+  const unseen = read(freshMirror, rel) === null;
+  const yes = await lead.writeAnswer({ answer: "joined", inv: asked, deskId: who.keyId, deskBox: deskBox.pub, leadBox: leadBox.pub });
+  const leadKept = read(leadMirror, rel) !== null;
+  for (const ch of [desk, lead, fresh]) { try { await ch.stop(); } catch { /* already stopped */ } }
+  const ok = made.status === 200 && opened.status === 200 && /^[0-9a-f]{32}$/.test(asked) && reached && knocked === 1 && withdrawn >= 1
+    && !!rec && rec.withdrawn === true && unseen && !(yes && yes.ok) && knocks === 1;
+  return { made: made.status, opened: opened.status, asked: !!asked, reached, knocked, withdrawn, recWithdrawn: !!rec && rec.withdrawn === true, unseen,
+    yesRefused: !(yes && yes.ok), why: yes && yes.reason, knocks, leadKept, ok };
+}
 if (partOn("pA4")) {
   try {
     markPart("pA4");
+    for (const restart of [false, true]) {
+      const w = await sceneA4Withdraw(C, restart);
+      check(w.ok, (restart ? "a4k" : "a4j") + " a door request up at the lead's is taken back " + (restart ? "by a new channel on the same mirror, as after a sign out or a restart, " : "")
+        + "with no certificate and no change to the relay: the key's hello resumes the request's session, the deletion goes under the door's seal, the relay holds the request withdrawn, serves it to no lead catching up and refuses the lead's yes to it, and no door hello is sent again: " + JSON.stringify(w));
+    }
+    if (PLANTS_OFF) skip("a4l lifting plant:e4-withdraw-send, the door request stays for the lead to take, and a4j goes red");
+    else {
+      const p = await liftChannel("plant:e4-withdraw-send", async mod => !(await sceneA4Withdraw(mod, false)).ok);
+      check(p.turned && p.back, "a4l lifting plant:e4-withdraw-send, the door request stays for the lead to take, and a4j goes red: "
+        + p.detail.split("\n")[0] + ", sha " + (p.back ? "restored" : "differs"));
+    }
     const a = await sceneA4(C);
     check(a.ok, "a4c a desk whose person signed in knocks at the team's standing door with its seat certificate and no invitation: the relay"
       + " names its request, the request sealed to the lead's box reaches the lead's mirror, the relay's rows and bucket never hold its"

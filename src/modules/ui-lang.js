@@ -1394,6 +1394,8 @@ UI_STRINGS.pl={
   "The sign-in service cannot be reached just now. Etiuda keeps working with the catalog it has.":"Usługa logowania jest teraz nieosiągalna. Etiuda działa dalej na katalogu, który już ma.",
   "Use another account":"Użyj innego konta",
   "Not signed in":"Bez logowania",
+  /* words: copywriter */
+  "This computer is signed out. Its place among the account's three computers is freed by itself as soon as the sign-in service can be reached.":"Ten komputer jest wylogowany. Jego miejsce wśród trzech komputerów konta zwolni się samo, gdy tylko usługa logowania będzie osiągalna.",
   "Preview only.":"Tylko podgląd.",
   "Sign-in is not set up yet, so nothing here is sent.":"Logowanie nie jest jeszcze uruchomione, więc nic stąd nie zostanie wysłane.",
   "Sign-in is not set up yet, so nothing was sent. This is a preview.":"Logowanie nie jest jeszcze uruchomione, więc nic nie wysłano. To tylko podgląd.",

@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 92;
+const PLANTS = 108;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 100 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + TRACE_PLANTS);
+const EXPECTED = 112 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + TRACE_PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -405,23 +405,25 @@ CASES.renewFail = async s => {
 };
 
 /* ---- the renewal's wiring, evaluated with stand-ins for the shell around it --------------------------------------------- */
-const WIRE_DECLS = ["const SIGNIN_RENEW_MS =", "const SIGNIN_FIRST_MS =", "async function signinRenewNow(", "function armSigninRenew(", "function signinOutNow("];
+const WIRE_DECLS = ["const SIGNIN_RENEW_MS =", "const SIGNIN_FIRST_MS =", "async function signinRenewNow(", "function armSigninRenew(", "function signinOutNow(",
+  "function signinOutSend(", "function signinOutAgain("];
 const WIRE_STANDS = ["harnessLaunch", "PLACED_ASIDE", "signinState", "signinOffered", "branchIdentity", "signinIo", "net", "signinRenewHeld",
-  "signinSave", "tellSignin", "setTimeout", "pinnedLead", "signinTeamHere", "fs", "path", "sharedFolderForWrite", "SEAT_NAME", "signinView", "signoutAsk", "signinLabHeld", "stand"];
+  "signinSave", "tellSignin", "setTimeout", "pinnedLead", "signinTeamHere", "fs", "path", "sharedFolderForWrite", "SEAT_NAME", "signinView", "signoutAsk", "signinLabHeld", "teamJoin", "cancelJoin", "sendJoin", "theWindow", "unlinkOwn", "stand"];
 function loadWire(st, swap) {
   let text = WIRE_DECLS.map(d => { try { return decl(MAIN, d); } catch { return ""; } }).filter(Boolean).join("\n");
   if (swap) {
     if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in the wiring once: " + swap[0]);
     text = text.replace(swap[0], swap[1]);
   }
-  const body = "let signinBusy = stand.busy || null, signinTimer = null, signinWrote = \"kept\", signinSaid = stand.said || \"\";\nfunction signinFlush() { stand.flushes++; return true; }\n" + text
+  const body = "let signinBusy = stand.busy || null, signinTimer = null, signinWrote = \"kept\", signinSaid = stand.said || \"\", signinRenewing = null, signinOutFlight = null;\n"
+    + "function signinFlush() { stand.flushes++; return true; }\n" + text
     + "\nreturn { signinRenewNow, armSigninRenew, SIGNIN_RENEW_MS, SIGNIN_FIRST_MS, signinOutNow: typeof signinOutNow === \"undefined\" ? undefined : signinOutNow,"
     + " wrote: () => signinWrote, said: () => signinSaid };";
   return new Function(...WIRE_STANDS, body)(...WIRE_STANDS.map(n => n === "stand" ? st : st[n]));
 }
 /* The shell around the renewal: Microsoft configured, this desk's identity, the doors answering `reply()` and `serve()`. Real time. */
 function wireStand(s, reply, serve) {
-  const st = { flushes: 0, saves: 0, tells: 0, asked: 0, posted: 0, offeredAsked: 0, timers: [], store: { held: null } };
+  const st = { flushes: 0, saves: 0, tells: 0, asked: 0, posted: 0, offeredAsked: 0, timers: [], store: { held: null }, cancels: 0, sends: 0, unlinked: [] };
   Object.assign(st, {
     harnessLaunch: () => false, PLACED_ASIDE: false, signinLabHeld: () => false,
     signinState: () => st.store, signinOffered: () => { st.offeredAsked++; return [MS]; }, branchIdentity: () => ({ id: DESK_ID, key: DESK_KEY }),
@@ -431,6 +433,7 @@ function wireStand(s, reply, serve) {
     signinRenewHeld: s.signinRenewHeld, signinSave: () => { st.saves++; }, tellSignin: () => { st.tells++; },
     pinnedLead: () => false, signinTeamHere: () => false, fs, path, sharedFolderForWrite: () => "", SEAT_NAME: "seat.json", signoutAsk: s.signoutAsk,
     signinView: () => ({ offered: [], signedIn: st.store.held ? "microsoft" : "" }),
+    teamJoin: null, cancelJoin: () => { st.cancels++; }, sendJoin: () => { st.sends++; }, theWindow: null, unlinkOwn: f => { st.unlinked.push(String(f)); },
     setTimeout: (fn, ms) => { st.timers.push({ fn, ms }); return { unref() {} }; },
   });
   return st;
@@ -667,10 +670,11 @@ CASES.doorsKept = s => {
   return JSON.stringify(got.doors) === JSON.stringify(DOORS_TWO()) && JSON.stringify(dropped.doors) === "[]" && JSON.stringify(refused.doors) === JSON.stringify(DOORS_TWO())
     && !!back && JSON.stringify(back.doors) === JSON.stringify(DOORS_TWO()) && !!forged && JSON.stringify(forged.doors) === "[]";
 };
-const DOORJOIN_DECLS = ["function signinDoorsShown(", "function signinDoorJoin("];
+const DOORJOIN_DECLS = ["function signinDoorsShown(", "function signinDoorJoin(", "function teamPinStands(", "function inviteDoor(", "function policySameFolder("];
 const DOORJOIN_STANDS = ["init", "readDesk", "signinState", "branchIdentity", "signinCertOk", "pinnedLead", "joinView", "inviteBeforeFor", "joinCommit",
   "newestEpoch", "teamPins", "teamSeen", "teamPinFrom", "relayMirrorOf", "teamShown", "teamRelayGone", "relayCatalogNamed", "persistDeskEnvelope",
-  "relayRun", "catalogFolderChanged", "leadPrint", "crypto", "URL", "Date", "signinDoorAddressOk", "SIGNIN_DESK_PACKED"];
+  "relayRun", "catalogFolderChanged", "leadPrint", "crypto", "URL", "Date", "signinDoorAddressOk", "SIGNIN_DESK_PACKED",
+  "deskBranch", "branchIdOf", "teamRoster", "teamLeft", "teamBarred", "sayJoinPolicy", "path", "process"];
 /* The door's offer and its join with stand-ins: `st` {held, pinned, join, pins, counts}. */
 function loadDoorJoin(s, st, swap) {
   let text = DOORJOIN_DECLS.map(d => tryDeclText(d)).filter(Boolean).join("\n");
@@ -679,9 +683,12 @@ function loadDoorJoin(s, st, swap) {
     text = text.replace(swap[0], swap[1]);
   }
   const vals = { init: st, readDesk: () => ({}), signinState: () => ({ held: st.held }), branchIdentity: () => ({ id: DESK_ID, key: DESK_KEY, box: DESK_BOX }),
-    signinCertOk: s.signinCertOk, pinnedLead: () => st.pinned, joinView: () => ({ view: true }), inviteBeforeFor: () => ({ barred: false, epoch: 0 }),
-    joinCommit: JOIN_LIB.joinCommit, newestEpoch: () => 0, teamPins: st.pins, teamSeen: new Set(), teamPinFrom: st.from, relayMirrorOf: rt => "/relay/" + rt,
-    teamShown: st.shown, teamRelayGone: {}, relayCatalogNamed: new Set(), persistDeskEnvelope: () => { st.persists++; }, relayRun: () => { st.runs++; },
+    signinCertOk: s.signinCertOk, pinnedLead: () => st.pinned, joinView: () => ({ view: true }),
+    inviteBeforeFor: team => { st.beforeSeen = { left: st.left[team], barred: st.barred.has(team) }; return { barred: false, epoch: 0 }; },
+    joinCommit: JOIN_LIB.joinCommit, newestEpoch: t => (st.epochs && st.epochs[t]) || 0, teamPins: st.pins, teamSeen: new Set(), teamPinFrom: st.from, relayMirrorOf: rt => "/relay/" + rt,
+    teamShown: st.shown, teamRelayGone: st.gone || {}, relayCatalogNamed: new Set(),
+    deskBranch: { sign: { pub: DESK_KEY } }, branchIdOf: () => DESK_ID, teamRoster: st.roster || {}, teamLeft: st.left, teamBarred: st.barred,
+    sayJoinPolicy: () => st.policy || {}, path, process, persistDeskEnvelope: () => { st.persists++; }, relayRun: () => { st.runs++; },
     catalogFolderChanged: () => {}, leadPrint: pub => crypto.createHash("sha256").update(Buffer.from(String(pub), "hex")).digest("hex").slice(0, 16),
     crypto, URL, Date: { now: () => NOW }, signinDoorAddressOk: st.addressOk || s.signinDoorAddressOk,
     SIGNIN_DESK_PACKED: st.packed === undefined ? true : st.packed };
@@ -689,7 +696,8 @@ function loadDoorJoin(s, st, swap) {
     + "\nreturn { signinDoorsShown, signinDoorJoin, join: () => teamJoin };";
   return new Function(...DOORJOIN_STANDS, body)(...DOORJOIN_STANDS.map(n => vals[n]));
 }
-const doorJoinStand = over => Object.assign({ held: heldOf({ doors: DOORS_TWO() }), pinned: null, join: null, pins: {}, from: {}, shown: {}, persists: 0, runs: 0 }, over);
+const doorJoinStand = over => Object.assign({ held: heldOf({ doors: DOORS_TWO() }), pinned: null, join: null, pins: {}, from: {}, shown: {}, persists: 0, runs: 0,
+  left: {}, barred: new Set(), policy: null }, over);
 /* Offered while signed in with a certificate that stands and no team: each door by host and print; nothing with a lead pinned, a join
    asked, or a certificate ran out. A press makes the door's join: door true, the lead and box from the door, no invitation, the lead
    pinned as an invitation pins it; a door not offered changes nothing. */
@@ -913,7 +921,7 @@ CASES.signoutPost = async (s, swap) => {
   const x = st.sent[0] || {}, b = x.body || {};
   return st.sent.length === 1 && x.url === s.SIGNOUT_SERVICE && /\/signout\/desk$/.test(String(x.url)) && Object.keys(b).join() === "desk,t,sig" && b.desk === DESK_KEY
     && b.t >= before && b.t <= after && crypto.verify(null, serviceOutBytes(DESK_KEY, b.t), signKey.publicKey, Buffer.from(b.sig, "hex"))
-    && x.heldThen === true && st.store.held === null && st.saves === 1 && st.tells === 1 && !!view && view.signedIn === "" && w.wrote() === "";
+    && x.heldThen === true && st.store.held === null && st.saves === 2 && st.tells === 1 && st.store.out === undefined && !!view && view.signedIn === "" && w.wrote() === "";
 };
 /* The service away or refusing changes nothing here: the sign-in is cleared, nothing new is said, nothing is left unhandled. */
 CASES.signoutAway = async (s, swap) => {
@@ -924,7 +932,10 @@ CASES.signoutAway = async (s, swap) => {
     const st = outStand(s, serve), w = loadWire(st, swap);
     const view = w.signinOutNow();
     await tick(5);
-    every = every && st.sent.length === 1 && st.store.held === null && st.saves === 1 && st.tells === 1 && !!view && view.signedIn === "" && w.said() === "" && w.wrote() === "";
+    /* A 200 is the service's taking, whatever its body (signoutAsk). */
+    const taken = serve === serves[serves.length - 1];
+    const owed = taken ? st.saves === 2 && st.tells === 1 && st.store.out === undefined : st.saves === 1 && st.tells === 2 && st.store.out === DESK_KEY;
+    every = every && st.sent.length === 1 && st.store.held === null && owed && !!view && view.signedIn === "" && w.said() === "" && w.wrote() === "";
   }
   return every;
 };
@@ -1016,7 +1027,7 @@ function pressStand(sec, swap) {
   let text = [viewDecl, ipcSlice('ipcMain.on("etiuda:signin-click"'), ipcSlice('ipcMain.handle("etiuda:signin",')].join("\n");
   if (swap && text.split(swap[0]).length === 2) text = text.replace(swap[0], swap[1]);
   const out = () => { st.out++; throw new Error("a door out was reached"); };
-  const body = "let signinClick = null, signinBusy = null, signinSaid = \"\";\n" + text + "\nreturn { view: signinView };";
+  const body = "let signinClick = null, signinBusy = null, signinSaid = \"\", signinOutFlight = null;\n" + text + "\nreturn { view: signinView };";
   const r = new Function(...PRESS_STANDS, body)({ on: (ch, fn) => { st.on[ch] = fn; }, handle: (ch, fn) => { st.handle[ch] = fn; } }, () => true, 2000,
     () => ({ held: null }), sec.signinLapsed, sec.signinOffered, sec.signinPreviewing, sec.signinKnown, sec.SIGNIN_PROVIDERS,
     () => { st.out++; return { id: DESK_ID, key: DESK_KEY }; }, { fetch: out }, out, out, out, out, out, out, () => { st.tells++; },
@@ -1328,7 +1339,7 @@ function waitStand(sec, swap, storage, branchId) {
   const out = () => { st.out++; throw new Error("a door out was reached"); };
   const vals = {
     ipcMain: { on: (ch, fn) => { st.on[ch] = fn; }, handle: (ch, fn) => { st.handle[ch] = fn; } }, fromEngine: () => true, LINK_CLICK_MS: 2000,
-    signinState: () => ({ held: null }), signinLapsed: sec.signinLapsed, signinOffered: () => [MS], signinPreviewing: () => false,
+    signinState: () => st.state || ({ held: null }), signinLapsed: sec.signinLapsed, signinOffered: () => [MS], signinPreviewing: () => false,
     signinKnown: sec.signinKnown, SIGNIN_PROVIDERS: sec.SIGNIN_PROVIDERS, branchIdentity: branchId || (() => ({ id: DESK_ID, key: DESK_KEY })), net: { fetch: out },
     signinRun: sec.signinRun, signinSeat: out, signinTake: out, signinFlush: out, signinSave: out,
     tellSignin: () => { st.told.push(st.view()); }, signinPageOk: sec.signinPageOk, sealsForReal: sec.sealsForReal,
@@ -1345,7 +1356,7 @@ function waitStand(sec, swap, storage, branchId) {
     SIGNIN_TRACE_ASKED: sec.SIGNIN_TRACE_ASKED, SIGNIN_DESK_PACKED: true,
   };
   const names = Object.keys(vals);
-  const body = "let signinClick = null, signinBusy = null, signinSaid = \"\";\n" + text + "\nreturn { view: signinView };";
+  const body = "let signinClick = null, signinBusy = null, signinSaid = \"\", signinOutFlight = null;\n" + text + "\nreturn { view: signinView };";
   st.view = new Function(...names, body)(...names.map(n => vals[n])).view;
   st.press = id => { st.on["etiuda:signin-click"]({ returnValue: undefined }, id); return st.handle["etiuda:signin"]({}, id); };
   return st;
@@ -2033,6 +2044,185 @@ CASES.noKeyring = async (s, swapOrPage) => {
     && !!doorPl && doorPl.moment === "refused" && doorPl.heading === KEYRING_PL[0] && doorPl.line === KEYRING_PL[1]
     && L.indexOf("Na tym komputerze nie jest otwarty żaden magazyn kluczy") < 0 && SETTINGS.indexOf(UNKEPT_LINE) < 0;
 };
+/* ---- the door and the sign out agree with the relay (ds21, decision 33; Hydrogen's review of the desk's sign-in, 3, 4 and 6) ----- */
+const OTHER_LEAD = rawPub(crypto.generateKeyPairSync("ed25519").publicKey);
+const OTHER_KEY_ID = "studio-" + crypto.createHash("sha256").update(Buffer.from(OTHER_LEAD, "hex")).digest("hex").slice(0, 16);
+const shownOf = (s, over, swap) => { const q = doorJoinStand(over); return loadDoorJoin(s, q, swap).signinDoorsShown(q.held, NOW).map(d => d.n).join(); };
+/* Machine policy binds a door as it binds an invitation: none where it names a folder, only the named lead's where it names a lead,
+   none where it names both (a door has no folder); a press at a door it does not offer changes nothing. */
+CASES.doorPolicy = (s, swap) => {
+  const mixed = heldOf({ doors: [doorOf(), doorOf({ team: "t-fedcba9876543210", lead: OTHER_LEAD, keyId: OTHER_KEY_ID })] });
+  const share = "\\\\server\\team";
+  const free = shownOf(s, { held: mixed }, swap), folder = shownOf(s, { held: mixed, policy: { folder: share } }, swap);
+  const lead = shownOf(s, { held: mixed, policy: { lead: DOOR_LEAD } }, swap), other = shownOf(s, { held: mixed, policy: { lead: OTHER_LEAD } }, swap);
+  const both = shownOf(s, { held: mixed, policy: { lead: DOOR_LEAD, folder: share } }, swap);
+  const q = doorJoinStand({ held: mixed, policy: { lead: OTHER_LEAD } }), x = loadDoorJoin(s, q, swap), r = x.signinDoorJoin(0);
+  return free === "0,1" && folder === "" && lead === "0" && other === "1" && both === ""
+    && !!r && r.refused === "door" && x.join() === null && Object.keys(q.pins).length === 0 && q.persists === 0;
+};
+/* No door while a pinned team stands (its roster still names this desk, or it holds no key yet, and the relay has not refused it);
+   a team taken off leaves the doors; a door of a team pinned under another lead is no door, under the same lead it is. */
+CASES.doorPins = (s, swap) => {
+  const T1 = "t-1111111111111111", pin = { [T1]: { keyId: OTHER_KEY_ID, public: OTHER_LEAD } };
+  const standing = shownOf(s, { pins: Object.assign({}, pin) }, swap);
+  const relayGone = shownOf(s, { pins: Object.assign({}, pin), gone: { [T1]: true } }, swap);
+  const rosterOff = shownOf(s, { pins: Object.assign({}, pin), epochs: { [T1]: 2 }, roster: { [T1]: { epoch: 2, desks: ["k-0000000000000000"] } } }, swap);
+  const rosterOn = shownOf(s, { pins: Object.assign({}, pin), epochs: { [T1]: 2 }, roster: { [T1]: { epoch: 2, desks: [DESK_ID] } } }, swap);
+  const otherLead = shownOf(s, { pins: { [TEAM]: { keyId: OTHER_KEY_ID, public: OTHER_LEAD } }, gone: { [TEAM]: true } }, swap);
+  const sameLead = shownOf(s, { pins: { [TEAM]: { keyId: DOOR_KEY_ID, public: DOOR_LEAD } }, gone: { [TEAM]: true } }, swap);
+  return standing === "" && relayGone === "0,1" && rosterOff === "0,1" && rosterOn === "" && otherLead === "1" && sameLead === "0,1";
+};
+/* A team this desk left, or whose key it said did not match, is offered at its door, and the press asks again: the leave and the
+   doubt are lifted, after the snapshot Cancel puts back has taken them. */
+CASES.doorUnbar = (s, swap) => {
+  const LEFT = "2026-09-01T08:30:00.000Z";
+  const run = (left, barred) => {
+    const q = doorJoinStand({ left: left ? { [TEAM]: LEFT } : {}, barred: new Set(barred ? [TEAM] : []) }), x = loadDoorJoin(s, q, swap);
+    const offered = x.signinDoorsShown(q.held, NOW).some(d => d.n === 0), r = x.signinDoorJoin(0);
+    return { offered, r, q, j: x.join() };
+  };
+  const lifted = o => o.offered && !!o.j && o.r.refused === undefined && o.q.left[TEAM] === undefined && !o.q.barred.has(TEAM) && !!o.q.beforeSeen && o.q.beforeSeen.barred === true;
+  const l = run(true, true), d = run(false, true);
+  return lifted(l) && l.q.beforeSeen.left === LEFT && lifted(d) && d.q.beforeSeen.left === undefined;
+};
+/* Cancel and the end of a withdrawal, with stand-ins: `st` {join, accepted, withdrawn, unlinked, undone, ended}. */
+const CANCEL_DECLS = ["function cancelJoin(", "function refusedWithdrawEnds("];
+const CANCEL_STANDS = ["init", "readDesk", "inviteAccepted", "withdrawJoin", "deskBranch", "unlinkOwn", "joinFile", "newestEpoch", "undoInvite",
+  "persistDeskEnvelope", "joinView", "endRefusedRelay"];
+function loadCancel(st, swap) {
+  let text = CANCEL_DECLS.map(d => tryDeclText(d)).filter(Boolean).join("\n");
+  if (swap) {
+    if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in Cancel once: " + swap[0]);
+    text = text.replace(swap[0], swap[1]);
+  }
+  const vals = { init: st, readDesk: () => ({}), inviteAccepted: () => st.accepted === true, withdrawJoin: j => { st.withdrawn.push(j); return { view: "withdrawing" }; },
+    deskBranch: {}, unlinkOwn: f => { st.unlinked.push(f); }, joinFile: () => "/relay/" + RT + "/desks/" + DESK_ID + "/join.json", newestEpoch: () => 0,
+    undoInvite: () => { st.undone++; }, persistDeskEnvelope: () => {}, joinView: () => ({ view: true }), endRefusedRelay: j => { st.ended.push(j); } };
+  const body = "let deskKeys = {}, teamJoin = init.join, joinTold = true;\n" + text + "\nreturn { cancelJoin, refusedWithdrawEnds, join: () => teamJoin };";
+  return new Function(...CANCEL_STANDS, body)(...CANCEL_STANDS.map(n => vals[n]));
+}
+const cancelStand = (join, accepted) => ({ join, accepted, withdrawn: [], unlinked: [], undone: 0, ended: [] });
+const doorAsked = over => { const j = doorJoin(over); j.invite.before = { barred: false, epoch: 0 }; j.invite.lead = { keyId: DOOR_KEY_ID, public: DOOR_LEAD, name: "" }; return j; };
+const relayAsked = over => ({ team: TEAM, nonce: "4".repeat(64), commit: "1".repeat(64), asked: NOW, held: 0, name: "Desk",
+  invite: { id: "2".repeat(16), proof: "3".repeat(64), lead: { keyId: DOOR_KEY_ID, public: DOOR_LEAD, name: "Ada" }, before: { barred: false, epoch: 0 },
+    relay: Object.assign({ rt: RT, url: "https://etiuda.dev/relay/v1", inv: "5".repeat(32), token: "x", seal: "y" }, over) } });
+/* Cancel at a door the relay named takes the request back there as an invitation's is, the join kept until the relay has taken it;
+   a door request never named, or one the relay turned away, goes at once as before; an accepted invitation is withdrawn as before. */
+CASES.doorCancel = (s, swap) => {
+  const run = (join, accepted) => { const st = cancelStand(join, accepted), x = loadCancel(st, swap), r = x.cancelJoin(); return { st, r, j: x.join(), join }; };
+  const named = run(doorAsked({ inv: DOOR_ID }), true), unnamed = run(doorAsked(), false), turned = run(doorAsked({ inv: DOOR_ID, end: "turned" }), true);
+  const invited = run(relayAsked(), true);
+  return named.st.withdrawn.length === 1 && named.st.withdrawn[0] === named.join && named.j === named.join && named.r.view === "withdrawing" && named.st.unlinked.length === 0
+    && unnamed.st.withdrawn.length === 0 && unnamed.j === null && unnamed.st.unlinked.length === 1 && unnamed.st.undone === 1
+    && turned.st.withdrawn.length === 0 && turned.j === null && turned.st.undone === 1
+    && invited.st.withdrawn.length === 1 && invited.j === invited.join;
+};
+/* The relay having taken a door request's withdrawal, or holding none to take, the join ends and what it changed is put back: a door
+   request has no Ask again. An invitation's waits withdrawn as before; a refused one ends as before. */
+CASES.doorWithdrawnEnds = (s, swap) => {
+  const st = cancelStand(null, false), x = loadCancel(st, swap);
+  const door = doorAsked({ inv: DOOR_ID, withdrawing: true }), refused = Object.assign(relayAsked({ withdrawing: true }), { refused: true });
+  const a = x.refusedWithdrawEnds(door), b = x.refusedWithdrawEnds(relayAsked({ withdrawing: true })), c = x.refusedWithdrawEnds(refused);
+  return a === true && b === false && c === true && st.ended.length === 2 && st.ended[0] === door && st.ended[1] === refused;
+};
+/* A door request being withdrawn: the channel is given its id and the lead's box and no certificate, signed in or out, the
+   certificate lapsed or standing, so it resumes the request's session and never knocks again; unnamed or turned away, nothing. */
+CASES.doorWithdrawInvite = (s, swap) => {
+  const ask = (join, held) => loadDoor(s, doorStand(join, held), swap).signinDoorInvite(TEAM, RT);
+  const shape = o => !!o && o.door === null && o.box === LEAD_BOX && o.inv === DOOR_ID && Object.keys(o).join() === "door,box,inv";
+  const out = ask(doorJoin({ inv: DOOR_ID, withdrawing: true }), null), lapsed = ask(doorJoin({ inv: DOOR_ID, withdrawing: true }), heldOf({ cert: cert({ until: NOW }) }));
+  const held = ask(doorJoin({ inv: DOOR_ID, withdrawing: true }));
+  const unnamed = ask(doorJoin({ withdrawing: true })), turned = ask(doorJoin({ inv: DOOR_ID, withdrawing: true, end: "turned" }));
+  const away = loadDoor(s, doorStand(doorJoin({ inv: DOOR_ID, withdrawing: true })), swap).signinDoorInvite(TEAM, "9".repeat(32));
+  return shape(out) && shape(lapsed) && shape(held) && unnamed === null && turned === null && away === null;
+};
+/* Sign out on a folder team takes seat.json out through the desk's own removal, so the share is owed it, never by a bare unlink. */
+CASES.signoutUnlinkOwn = async (s, swap) => {
+  const st = outStand(s);
+  let raw = 0;
+  st.signinTeamHere = () => true;
+  st.sharedFolderForWrite = () => path.join(path.sep, "share", "team");
+  st.fs = Object.assign({}, fs, { unlinkSync: () => { raw++; } });
+  loadWire(st, swap).signinOutNow();
+  await tick(5);
+  return st.unlinked.length === 1 && st.unlinked[0] === path.join(path.sep, "share", "team", "desks", DESK_ID, "seat.json") && raw === 0 && st.store.held === null;
+};
+/* Sign out while the quiet renewal's signin/desk is out: signout/desk goes only once that renewal has its answer, so the service
+   takes the sign out last; the renewal's answer is not kept. */
+CASES.signoutAfterRenew = async (s, swap) => {
+  let release = null;
+  const gate = new Promise(r => { release = r; }), order = [];
+  const st = wireStand(s);
+  st.store.held = heldOf();
+  st.signinIo = () => ({ keep: t => t ? "sealed:" + t : "", kept: x => String(x || "").replace(/^sealed:/, ""), sign: signWith(signKey),
+    tokenAsk: async () => answer({ id_token: jwt(msClaims(undefined, Date.now())), refresh_token: "rt-2" }),
+    serviceAsk: async url => {
+      if (url === s.SIGNOUT_SERVICE) { order.push("out"); return answer({ ok: true }); }
+      order.push("renew"); await gate; order.push("answered");
+      return answer({ ok: true, code: CODE, certificate: cert({ issued: Date.now(), until: Date.now() + 86400000 }) });
+    } });
+  const w = loadWire(st, swap), renewing = w.signinRenewNow();
+  await tick(5);
+  w.signinOutNow();
+  await tick(5);
+  const meanwhile = order.join();
+  release();
+  await renewing;
+  await tick(10);
+  return meanwhile === "renew" && order.join() === "renew,answered,out" && st.store.held === null && st.store.out === undefined;
+};
+/* A sign out the service did not take is owed: kept in the file with the desk key, asked again at the renewal's next turn while
+   nobody is signed in, and the mark goes once the service takes it; nothing owed, nothing sent. */
+CASES.signoutOwed = async (s, swap) => {
+  let up = false;
+  const st = outStand(s, () => { if (!up) throw new Error("offline"); return answer({ ok: true }); });
+  const w = loadWire(st, swap);
+  w.signinOutNow();
+  await tick(5);
+  const owed = st.sent.length === 1 && st.store.held === null && st.store.out === DESK_KEY;
+  const text = s.signinFileText(st.store), back = s.signinFileRead(text);
+  const kept = JSON.parse(text).out === DESK_KEY && back.out === DESK_KEY && s.signinFileRead(s.signinFileText({ held: null })).out === undefined
+    && s.signinFileRead(JSON.stringify({ format: 2, held: null, out: "zz" })).out === undefined;
+  up = true;
+  await w.signinRenewNow();
+  await tick(5);
+  const again = st.sent.length === 2 && st.sent[1].body.desk === DESK_KEY && st.store.out === undefined;
+  await w.signinRenewNow();
+  await tick(5);
+  return owed && kept && again && st.sent.length === 2;
+};
+/* Sign out lets go of a request made at a team's door, which the certificate no longer stands for, through Cancel; an invitation's
+   request, and no request, are left as they were. */
+CASES.signoutDoorJoin = async (s, swap) => {
+  const run = async join => { const st = outStand(s); st.teamJoin = join; loadWire(st, swap).signinOutNow(); await tick(5); return st; };
+  const door = await run(doorJoin({ inv: DOOR_ID })), invited = await run(relayAsked()), none = await run(null);
+  return door.cancels === 1 && door.sends === 1 && door.store.held === null && invited.cancels === 0 && none.cancels === 0;
+};
+/* The page is told a sign out is owed only while nobody is signed in and none is out; Account says so under Not signed in, in the
+   copywriter's words, Polish too, and says nothing where none is owed. */
+const OUT_OWED_EN = "This computer is signed out. Its place among the account's three computers is freed by itself as soon as the sign-in service can be reached.";
+const OUT_OWED_PL = "Ten komputer jest wylogowany. Jego miejsce wśród trzech komputerów konta zwolni się samo, gdy tylko usługa logowania będzie osiągalna.";
+CASES.outOwedView = (s, swap) => {
+  const ws = waitStand(s, swap);
+  ws.state = { held: null, out: DESK_KEY };
+  const owed = ws.view().outOwed === true;
+  ws.state = { held: null };
+  return owed && ws.view().outOwed === false;
+};
+CASES.outOwedPage = async (s, page) => {
+  const pg = page || P;
+  if (!pg) return false;
+  const storage = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const words = h => String(h).replace(/<[^>]*>/g, "").replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+  const read = pg.signinRead({ offered: ["microsoft"], outOwed: true }).outOwed === true && pg.signinRead({ offered: ["microsoft"], signedIn: "microsoft", outOwed: true }).outOwed === false
+    && pg.signinRead({ offered: ["microsoft"] }).outOwed === false;
+  if (page) return read;
+  const owed = await acctOf({ offered: ["microsoft"], outOwed: true }), quiet = await acctOf({ offered: ["microsoft"] });
+  let pl = "";
+  storage.lsSet("eUiLang", "pl");
+  try { pl = words(await acctOf({ offered: ["microsoft"], outOwed: true })); } finally { storage.lsSet("eUiLang", "en"); }
+  return read && words(owed).indexOf(OUT_OWED_EN) >= 0 && /data-signin-out-owed/.test(owed) && !/data-signin-out-owed/.test(quiet) && pl.indexOf(OUT_OWED_PL) >= 0;
+};
 
 /* ---- the cases on the branch ------------------------------------------------------------------------------------------- */
 const LEGS = [
@@ -2067,8 +2257,8 @@ const LEGS = [
   ["ds8c", "pageTwoRefusals", "the organisation's refusal at its provider and no licence at our service are two moments, each in its own words"],
   ["ds8d", "pageNothingFromProvider", "the identity is the person's own name, the provider's name and the code in fours, nothing from the provider"],
   ["ds9a", "signoutBody", "signout/desk's body has the interface's three names alone, signed by this desk's key over the service's bytes"],
-  ["ds9b", "signoutPost", "Sign out posts exactly one signout/desk, the three names, a fresh t and a signature that verifies, before the sign-in is cleared"],
-  ["ds9c", "signoutAway", "with the service unreached, throwing or answering 503 or a refusal, Sign out still clears the sign-in and says nothing new"],
+  ["ds9b", "signoutPost", "Sign out posts exactly one signout/desk, the three names, a fresh t and a signature that verifies, before the sign-in is cleared, and nothing stays owed once it is taken"],
+  ["ds9c", "signoutAway", "with the service unreached, throwing or answering 503 or a refusal, Sign out still clears the sign-in, says no refusal, and keeps the place owed, the page told once more"],
   ["ds9d", "signoutNone", "no signout/desk is sent where no client id is configured or the desk was never signed in; a sign-in in the browser is left alone"],
   ["ds9e", "signoutDoor", "the service's door carries signout/desk at its own address alone, no redirect, nothing cached, no cookie"],
   ["ds10a", "flushJoin", "a desk signed in first writes its seat beside its request to join a folder team, and again where the file went or the folder changed"],
@@ -2118,6 +2308,18 @@ const LEGS = [
   ["ds16g", "stagingCmd", "tools/signin-staging.cmd is outside the packaged files and starts this tree's own Electron with a profile of its own, never the installed desk, with ETIUDA_SIGNIN_LAB for that start alone"],
   ["ds18a", "waitRead", "no free seat is a wait: the service's 200 with no certificate and the reason \"waiting\" is kept as the said reason with the refresh token, asking nobody; none without it stays no licence; the certificate after it ends the wait; a 409 \"full\" reads as before"],
   ["ds18b", "waitRenew", "the quiet renewal while waiting waits again with its token renewed and nobody asked, and seats the desk once a seat frees; an older service's \"full\" keeps its token as before"],
+  ["ds21a", "doorPolicy", "machine policy binds a door as an invitation: no door where it names a folder, only the named lead's where it names a lead, none where it names both; a press at a door not offered changes nothing"],
+  ["ds21b", "doorPins", "no door while a pinned team stands; a team the roster or the relay took off leaves the doors; a door of a team pinned under another lead is not offered, under the same lead it is"],
+  ["ds21c", "doorUnbar", "a team left, or whose key did not match, is offered at its door, and the press lifts the leave and the doubt after Cancel's snapshot has taken them"],
+  ["ds21d", "doorCancel", "Cancel at a door the relay named withdraws the request there and keeps the join until the relay takes it; a door request never named or turned away goes at once; an accepted invitation as before"],
+  ["ds21e", "doorWithdrawnEnds", "a door request's withdrawal taken, or nothing left to take, ends the join and puts back what it changed; an invitation's waits withdrawn as before"],
+  ["ds21f", "doorWithdrawInvite", "a door request being withdrawn gives the channel its id and the lead's box and never the certificate, signed in or out, so it resumes and never knocks again; unnamed or turned away, nothing"],
+  ["ds21g", "signoutUnlinkOwn", "Sign out on a folder team takes seat.json out through the desk's own removal, owed to the share, never a bare unlink"],
+  ["ds21h", "signoutAfterRenew", "Sign out during a renewal sends signout/desk only once the renewal has its answer, so the service takes the sign out last, and the renewal's answer is not kept"],
+  ["ds21i", "signoutOwed", "a sign out the service did not take is owed in the file with the desk key, asked again at the renewal's next turn while signed out, and cleared once taken"],
+  ["ds21j", "signoutDoorJoin", "Sign out lets go of a request made at a team's door through Cancel; an invitation's request, or none, is left alone"],
+  ["ds21k", "outOwedView", "the page is told a sign out is owed only while nobody is signed in and none is out"],
+  ["ds21l", "outOwedPage", "the page keeps an owed sign out only while signed out, and Account says so under Not signed in in the copywriter's words, Polish too, and nothing otherwise"],
   ["ds18c", "waitPage", "the door and Account tell the wait in the copywriter's words, the licence form and the team form, English and Polish, Check now first; an older service's \"full\" the same; no licence its own moment; today's words gone"],
   ["ds19a", "toldRenewal", "a renewal or Check now the service refuses is said in the door and Account in the copywriter's words: \"desks\" with Check now, \"token\" or any other kept reason settled by signing in again, the providers under it; Polish too"],
   ["ds19b", "toldPressed", "a sign-in pressed while signed in that fails says the desk stays signed in, then the reason's own heading where it has one, with Try again or Use another account; a cancel or a sign-in done says nothing; the door and Account, Polish too"],
@@ -2288,7 +2490,7 @@ const armRenew = tryDecl("function armSigninRenew(");
 const outNow = tryDecl("function signinOutNow(");
 const outHandler = (() => { const a = at(WIRING, 'ipcMain.handle("etiuda:signin-out",'); return a < 0 ? "" : WIRING.slice(a, WIRING.indexOf("\n});", a)); })();
 check(!!outHandler && /^ipcMain\.handle\("etiuda:signin-out", \(e\) => \{\n  if \(!fromEngine\(e\)\) return null;\n  return signinOutNow\(\);/.test(outHandler)
-  && at(outNow, "signoutAsk(") > 0 && at(outNow, "signoutAsk(") < at(outNow, "s.held = null;"),
+  && at(outNow, "signinOutSend(") > 0 && at(outNow, "signinOutSend(") < at(outNow, "s.held = null;"),
   "ds9f Sign out is answered for the engine's own frame alone, and the desk's place is freed at the service before the sign-in is cleared");
 check(!!handler && at(handler, "/* plant:signin-click */") > 0 && at(handler, "/* plant:signin-offered */") > at(handler, "/* plant:signin-click */")
   && at(handler, "signinRun(") > at(handler, "/* plant:signin-offered */") && /signinOffered\(\)\.find\(x => x\.id === id\)/.test(handler)
@@ -2382,7 +2584,7 @@ if (!PLANTS_OFF) {
   await plantWire("dsp24", ["  if (harnessLaunch() && !signinLabHeld()) return \"\"; /* plant:renew-now-harness */\n", ""], "renewHarness");
   await plantWire("dsp25", ["const SIGNIN_RENEW_MS = 24 * 60 * 60 * 1000; /* plant:renew-daily */", "const SIGNIN_RENEW_MS = 55 * 60 * 1000;"], "renewDaily");
   await plantWire("dsp26", ["if (!p || !me) return \"\"; /* plant:renew-offered */", "if (!me) return \"\";"], "renewWire");
-  await plantWire("dsp29", ["signoutAsk(signinIo({ loop: null }), me.key, Date.now); /* plant:signout-post */", ""], "signoutPost");
+  await plantWire("dsp29", ["const send = () => signoutAsk(signinIo({ loop: null }), key, Date.now); /* plant:signout-post */", "const send = () => Promise.resolve(false);"], "signoutPost");
   await plantWire("dsp30", ["&& signinOffered().length) { /* plant:signout-offered */", ") {"], "signoutNone");
   await plantWire("dsp31", ["return !!teamJoin && !(teamJoin.invite && teamJoin.invite.relay); /* plant:flush-asking */", "return false;"], "flushJoin");
   await plantWire("dsp32", ["if (signinWrote === mark && fs.existsSync(file)) return false; /* plant:flush-mark */", "if (signinWrote === cert.sig.value) return false;"], "flushJoin");
@@ -2450,6 +2652,21 @@ if (!PLANTS_OFF) {
   await plant("dsp79", ["if (j.certificate === null) return { ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === \"waiting\" }; /* plant:wait-read */",
     "if (j.certificate === null) return { ok: true, code: String(j.code), cert: null, doors: [] };"], "waitRead");
   await plant("dsp80", ["said: ans.waiting === true ? \"waiting\" : \"\", ask: false }); /* plant:wait-settle */", "said: \"\", ask: false });"], "waitRead");
+  await plantWire("dsp93", ["  if (Object.keys(teamPins).some(teamPinStands)) return []; /* plant:door-pin-stands */\n", ""], "doorPins");
+  await plantWire("dsp94", ["    if (inviteDoor({ lead: { public: d.lead } })) return null; /* plant:door-policy */\n", ""], "doorPolicy");
+  await plantWire("dsp95", ["    if (pin && (pin.keyId !== d.keyId || pin.public !== d.lead)) return null; /* plant:door-pinned */\n", ""], "doorPins");
+  await plantWire("dsp96", ["  delete teamLeft[d.team]; teamBarred.delete(d.team); /* plant:door-join-unbar */\n", ""], "doorUnbar");
+  await plantWire("dsp97", ["return withdrawJoin(j); /* plant:door-cancel-withdraw */", "return null;"], "doorCancel");
+  await plantWire("dsp98", ["  if (j.refused !== true && j.invite.relay.door !== true) return false; /* plant:door-withdrawn-ends */", "  if (j.refused !== true) return false;"], "doorWithdrawnEnds");
+  await plantWire("dsp99", ["  if (inv.withdrawing === true) return inv.rt === rt &&", "  if (false) return inv.rt === rt &&"], "doorWithdrawInvite");
+  await plantWire("dsp99a", ["try { unlinkOwn(path.join(sharedFolderForWrite(), \"desks\", me.id, SEAT_NAME)); }", "try { fs.unlinkSync(path.join(sharedFolderForWrite(), \"desks\", me.id, SEAT_NAME)); }"], "signoutUnlinkOwn");
+  await plantWire("dsp99b", ["  signinRenewing = pending; /* plant:renew-marked */\n", ""], "signoutAfterRenew");
+  await plantWire("dsp99c", ["const flight = (signinRenewing ? signinRenewing.then(send, send) : send()).then(ok => { /* plant:signout-after-renew */", "const flight = send().then(ok => {"], "signoutAfterRenew");
+  await plant("dsp99d", ["  if (/^[0-9a-f]{64}$/.test(String(d.out))) out.out = String(d.out); /* plant:out-kept */\n", ""], "signoutOwed");
+  await plantWire("dsp99e", ["  if (!held && s.out) { await signinOutAgain(); return \"\"; } /* plant:renew-out */\n", ""], "signoutOwed");
+  await plantWire("dsp99f", ["  return signinOutSend(s.out); /* plant:out-again */", "  return Promise.resolve(false);"], "signoutOwed");
+  await plantWire("dsp99g", ["{ cancelJoin(); sendJoin(theWindow); } /* plant:signout-door */", "{ }"], "signoutDoorJoin");
+  await plantWire("dsp99h", ["    outOwed: !signedIn && !!signinState().out && !signinOutFlight, /* plant:out-owed-view */", "    outOwed: false,"], "outOwedView");
   /* The page's half, imported again with the line planted. */
   const plantPage = async (id, swap, name) => {
     let red = false;
@@ -2458,6 +2675,7 @@ if (!PLANTS_OFF) {
   };
   await plantPage("dsp81", ["function signinNoSeat(v){ return v.refused===\"waiting\" || v.refused===\"full\"; } /* plant:no-seat */",
     "function signinNoSeat(v){ return v.refused===\"full\"; }"], "waitPage");
+  await plantPage("dsp99i", ["outOwed: !signedIn && o.outOwed===true,", "outOwed: o.outOwed===true,"], "outOwedPage");
   await plantPage("dsp82", ["case \"waiting\": case \"full\": /* plant:wait-say */", "case \"full\":"], "waitPage");
   await plantPage("dsp91", ["\"signin-none\",\"signin-preview\",\"signin-keyring\"];", "\"signin-none\",\"signin-preview\"];"], "noKeyring");
   await plantPage("dsp92", ["    case \"signin-keyring\":\n      return [t(\"Signing in needs a keyring, and none is open on this computer.\"), t(\"Installing or unlocking GNOME Keyring or KDE Wallet, then reopening Etiuda, lets this computer sign in.\")];\n", ""], "noKeyring");
