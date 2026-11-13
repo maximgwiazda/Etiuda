@@ -57,7 +57,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const NO_VERDICT = 78;
-const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618", "all-move", "all-space-d", "system-push", "ext-claimed", "ts-cycle"];
+const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618", "all-move", "all-space-d", "system-push", "ext-claimed", "ts-cycle", "shipped-detect"];
 let OUT = "";
 const say = (l) => { process.stdout.write(l + "\n"); if (OUT) fs.appendFileSync(path.join(OUT, "legs.txt"), l + "\n"); };
 const refuse = (why) => { say("#legs refused: " + why); process.exit(NO_VERDICT); };
@@ -913,6 +913,94 @@ async function tsCycle(rec) {
     : "back on the ordinary build, its start and the data: " + cData.why);
 }
 
+/* ---- shipped-detect: the README's detection rule, on the shipped identity ---------------------------------------- */
+
+/* Claude α's corporate-readiness list, row 2b (2026-11-13): "the detection rule proven on the shipped identity". Every other leg
+   installs the test identity, which the install guard alone admits, since on a desk the shipped identity's install would write
+   and its uninstall remove what the real install owns. On a hosted runner nothing real is installed: the wall above has already
+   held (the sentinel absent, GITHUB_ACTIONS and the hosted runner's variables, the guard finding neither shipped app), so this
+   leg alone builds and installs the shipped identity, all users, and reads the rule the README gives in its own words:
+   DisplayVersion under HKLM's Uninstall key named by the app id's GUID, in the 64-bit view; InstallLocation beside it the
+   folder; the QuietUninstallString the README writes out; and, after the uninstall that string names, the rule finding nothing.
+   The README's GUID is read from the README itself and must be the one the shipped app id gives. The guard's end comparison
+   (the whole run's last line) is the net: every shipped place reads as before. */
+const SHIPPED = require(path.join(ROOT, "tools", "test-identity.cjs")).SHIPPED.desk;
+const S_GUID = P.appGuid(SHIPPED.appId), SKM = P.registryKeys("machine", S_GUID);
+const S_KEYS = [SKM.uninstall, SKM.install].map(regKey)
+  .concat([SHIPPED.scheme, "." + SHIPPED.ext, SHIPPED.catalogClass].map((n) => "HKLM\\Software\\Classes\\" + n));
+function shippedSweep() {
+  const took = [];
+  for (const k of S_KEYS) {
+    if (!present(k)) continue;
+    const r = spawnSync("reg", ["delete", k, "/f", "/reg:64"], { encoding: "utf8", windowsHide: true, timeout: 30000 });
+    took.push(k.replace(/^.*\\/, "") + (r.status === 0 ? "" : "(refused)"));
+  }
+  for (const f of [path.join(PLACES.commonDesktop, SHIPPED.productName + ".lnk"), path.join(PLACES.commonPrograms, SHIPPED.productName + ".lnk")])
+    if (fs.existsSync(f)) { try { fs.unlinkSync(f); took.push(f); } catch (e) { took.push(f + "(refused)"); } }
+  return took;
+}
+async function shippedDetect(rec) {
+  /* The README's own rule, its GUID and its quiet uninstall string, read from the file as it stands. */
+  const readme = fs.readFileSync(path.join(ROOT, "README.md"), "utf8");
+  const said = /Uninstall\\([0-9a-f-]{36})`/.exec(readme), saidGuid = said ? said[1] : "";
+  const quietSaid = (/`("C:\\Program Files\\[^`]+)`/.exec(readme) || [])[1] || "";
+  rec.f("readme-guid", saidGuid || "none"); rec.f("guid-of-app-id", S_GUID);
+  if (saidGuid !== S_GUID) { rec.end(false, "the README's detection key names " + JSON.stringify(saidGuid) + ", not the shipped app id's GUID " + S_GUID); return; }
+  for (const k of S_KEYS) if (present(k)) throw new NoVerdict("the shipped identity is already registered here (" + k + "), so this is no clean runner");
+
+  /* The shipped build: the same tree, packed without the test identity, unsigned. */
+  const out = path.join(LAB, "dist-shipped");
+  try {
+    execFileSync(process.execPath, [path.join(ROOT, "tools", "package.mjs")], { cwd: ROOT, stdio: "inherit", env: E.unsignedEnv({ ETIUDA_DIST: out }) });
+  } catch (e) { throw new NoVerdict("the shipped build could not be made: " + oneLine(e.message)); }
+  const found = fs.readdirSync(out).filter((n) => /-setup\.exe$/i.test(n));
+  if (found.length !== 1) throw new NoVerdict(out + " holds " + found.length + " installers; expected 1");
+  const setup = path.join(out, found[0]), id = G.setupIdentity(setup);
+  rec.f("setup", found[0]);
+  if (id.productName !== SHIPPED.productName || id.appId) throw new NoVerdict("the built setup is not the shipped identity: " + JSON.stringify(id));
+
+  rec.after("shipped-uninstall", async () => {
+    const said2 = [];
+    const loc = valueOf(regKey(SKM.install), "InstallLocation") || valueOf(regKey(SKM.uninstall), "InstallLocation");
+    const un = exeOf(valueOf(regKey(SKM.uninstall), "UninstallString"));
+    if (un && fs.existsSync(un)) {
+      const r = await runExe(un, P.uninstallArgs("machine"), 300000);
+      said2.push("uninstaller exit " + r.code + (loc ? ", folder gone " + yes((await goneWithin(loc, 120)) > 0) : ""));
+    }
+    const took = shippedSweep();
+    if (took.length) said2.push("swept " + took.join(","));
+    return said2.join("; ") || "nothing of the shipped identity was left";
+  });
+  const args = P.installArgs({ mode: "machine" });
+  const r = await runExe(setup, args, 600000);
+  rec.f("install-exit", r.timedOut ? "timeout" : r.code);
+  const version = valueOf(regKey(SKM.uninstall), "DisplayVersion");
+  const loc = valueOf(regKey(SKM.uninstall), "InstallLocation");
+  const quiet = valueOf(regKey(SKM.uninstall), "QuietUninstallString");
+  const prog = loc ? path.join(loc, SHIPPED.productName + ".exe") : "";
+  rec.f("display-version", version); rec.f("install-location", loc); rec.f("quiet-uninstall", quiet);
+  const found1 = r.code === 0 && !!version && !!prog && fs.existsSync(prog);
+  const quietOk = !!quietSaid && quiet === quietSaid;
+  if (!found1 || !quietOk) {
+    rec.end(false, "after the all-users install (exit " + r.code + "): DisplayVersion " + JSON.stringify(version) + ", InstallLocation "
+      + JSON.stringify(loc) + " holding the program " + yes(!!prog && fs.existsSync(prog)) + ", QuietUninstallString " + JSON.stringify(quiet)
+      + (quietOk ? "" : " where the README says " + JSON.stringify(quietSaid)));
+    return;
+  }
+  /* The uninstall a deployment tool runs: the QuietUninstallString as written, its program and its arguments. */
+  const qExe = exeOf(quiet), qArgs = quiet.slice(quiet.indexOf('"', 1) + 1).trim().split(/\s+/).filter(Boolean);
+  const u = await runExe(qExe, qArgs, 300000);
+  const goneIn = await goneWithin(loc, 120);
+  const after = present(regKey(SKM.uninstall)) ? valueOf(regKey(SKM.uninstall), "DisplayVersion") : "";
+  rec.f("uninstall-exit", u.code); rec.f("folder-gone-s", goneIn); rec.f("rule-after", after ? "still finds " + after : "finds nothing");
+  const ok = u.code === 0 && goneIn > 0 && !after;
+  rec.end(ok, ok
+    ? "the shipped identity, all users: the README's rule finds DisplayVersion " + version + " under Uninstall\\" + S_GUID + " (its GUID the app id's),"
+      + " InstallLocation " + loc + " holding the program, the QuietUninstallString exactly the README's; that string uninstalls (exit 0, folder gone in "
+      + goneIn + " s) and the rule then finds nothing"
+    : "the uninstall the QuietUninstallString names: exit " + u.code + ", folder gone " + yes(goneIn > 0) + ", the rule afterwards " + (after ? "still finds " + after : "finds nothing"));
+}
+
 /* ---- (d) locked-1618 ------------------------------------------------------------------------------------------- */
 
 async function locked1618(rec) {
@@ -978,7 +1066,7 @@ function record(name) {
   return rec;
 }
 const LEGS = { "all-upgrade": allUpgrade, "running-1618": running1618, "system-bare": systemBare, "locked-1618": locked1618, "all-move": allMove, "all-space-d": allSpaceD,
-  "system-push": systemPush, "ext-claimed": extClaimed, "ts-cycle": tsCycle };
+  "system-push": systemPush, "ext-claimed": extClaimed, "ts-cycle": tsCycle, "shipped-detect": shippedDetect };
 
 /* The newer setup, built once from this tree under the test identity, as the marker builds it. */
 const early = legPreflight();
