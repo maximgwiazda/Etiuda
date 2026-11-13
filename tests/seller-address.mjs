@@ -29,9 +29,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TOOL = path.join(ROOT, "tools", "seller-address.cjs");
 const RELEASE = path.join(ROOT, "tools", "release.mjs");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 5;
+const PLANTS = 6;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 7 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 8 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -62,16 +62,17 @@ function configOf(file, out) {
   try { c = r.status === 0 ? JSON.parse(r.stdout) : null; } catch { c = null; }
   return { status: r.status, config: c, said: String(r.stderr || "") };
 }
-/* The tool, evaluated from its text with the standing plant's swap in place of the one line holding its anchor. */
+/* The tool (or `file`), evaluated from its text with the standing plant's swap in place of the one line holding its anchor. */
 let PLANT_SWAP = null;
-function tool() {
-  let text = fs.readFileSync(TOOL, "utf8");
+const IDENTITY = path.join(ROOT, "tools", "test-identity.cjs");
+function tool(file = TOOL) {
+  let text = fs.readFileSync(file, "utf8");
   if (PLANT_SWAP) {
     if (text.split(PLANT_SWAP[0]).length !== 2) throw new Error("plant anchor not in the tool once: " + PLANT_SWAP[0]);
     text = text.replace(PLANT_SWAP[0], PLANT_SWAP[1]);
   }
   const mod = { exports: {} };
-  new Function("require", "module", "exports", text)(createRequire(TOOL), mod, mod.exports);
+  new Function("require", "module", "exports", text)(createRequire(file), mod, mod.exports);
   return mod.exports;
 }
 const SELL = await import(pathToFileURL(path.join(ROOT, "tools", "sellable.mjs")).href);
@@ -164,6 +165,21 @@ CASES.wired = () => {
     && /console\.log\(sellerAddress\.sellerStep\(process\.env, module\.exports\.directories\.buildResources\)\)/.test(text);
 };
 
+/* sa8: the test identity build (tools/test-identity.cjs, package.mjs --test-identity) reads its installer script from buildResources
+   when that is the copy's absolute folder: its beforePack finds the script and writes the renamed one (the test architect's read). */
+CASES.identity = async () => {
+  const I = tool(IDENTITY), app = PLAIN.config.appId === I.SHIPPED.desk.appId ? "desk" : "studio", s = I.SHIPPED[app];
+  const root = path.join(LAB, "identity-root"), res = path.join(LAB, "identity-res"), out = path.join(LAB, "identity-out");
+  fs.mkdirSync(root, { recursive: true }); fs.mkdirSync(res, { recursive: true });
+  fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ description: "a stand-in" }), "utf8");
+  fs.writeFileSync(path.join(res, "installer.nsh"), "; a stand-in script\n", "utf8");
+  const base = { appId: s.appId, productName: s.productName, extraMetadata: {}, fileAssociations: [], nsis: { include: "installer.nsh" },
+    directories: { buildResources: res, output: out } };
+  const cfg = I.testConfig(base, app, root);
+  await cfg.beforePack({});
+  return path.isAbsolute(res) && fs.readFileSync(cfg.nsis.include, "utf8") === "; a stand-in script\n";
+};
+
 /* ---- the run ---------------------------------------------------------------------------------------------------------- */
 const LEGS = [
   ["sa1", "unset", "unset: the config is the same object, no copy is made, and sellable still finds the placeholder"],
@@ -173,15 +189,24 @@ const LEGS = [
   ["sa5", "release", "the release judges the config's buildResources"],
   ["sa6", "step", "the step's line never carries the address"],
   ["sa7", "wired", "electron-builder.js wraps its config in the tool and says the step"],
+  ["sa8", "identity", "the test identity build finds its installer script in the copy's absolute buildResources"],
 ];
 for (const [id, name, line] of LEGS) {
   let ok = false;
-  try { ok = !!RES && CASES[name]() === true; } catch (e) { console.log("    (" + id + " threw: " + e.message + ")"); }
+  try { ok = !!RES && (await CASES[name]()) === true; } catch (e) { console.log("    (" + id + " threw: " + e.message + ")"); }
   check(ok, id + " " + line);
 }
 
 async function plant(id, swap, name, line, where) {
   let red = false;
+  if (where === "identity") {
+    PLANT_SWAP = swap;
+    const anchored = fs.readFileSync(IDENTITY, "utf8").split(swap[0]).length === 2;
+    try { red = anchored && (await CASES[name]()) !== true; } catch { red = anchored; }
+    PLANT_SWAP = null;
+    check(red, id + " " + line);
+    return;
+  }
   if (where === "release") {
     const was = RELEASE_TEXT, hit = was.split("\n").find(l => /plant:release-licence-dir/.test(l));
     RELEASE_TEXT = hit ? was.replace(hit, swap[1]) : was;
@@ -207,6 +232,9 @@ if (!PLANTS_OFF && RES) {
     "seller-inside cut: the filled pages could be written into the tree");
   await plant("sap5", [null, "  const licenceDir = join(ROOT, 'shell'); /* plant:release-licence-dir */"], "release",
     "release-licence-dir: a release judging the tree's pages would refuse a filled build, or pass an unfilled one", "release");
+  await plant("sap6", ["const from = path.resolve(root, (base.directories && base.directories.buildResources) || \"build\", base.nsis.include); /* plant:identity-resolve */",
+    "const from = path.join(root, (base.directories && base.directories.buildResources) || \"build\", base.nsis.include);"], "identity",
+    "identity-resolve back to path.join: a --test-identity pack under the variable misses its installer script", "identity");
 }
 
 try { fs.rmSync(LAB, { recursive: true, force: true }); } catch { /* the scratch folder is this run's own */ }

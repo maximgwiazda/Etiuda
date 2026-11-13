@@ -98,7 +98,7 @@ function testConfig(base, app, root) {
   /* The installer script is renamed into the output folder before packing, and the build refuses one still naming a
      shipped class, scheme or profile folder. */
   if (!base.nsis || !base.nsis.include) throw new Error("test identity: electron-builder.js names no nsis.include to rename");
-  const from = path.join(root, (base.directories && base.directories.buildResources) || "build", base.nsis.include);
+  const from = path.resolve(root, (base.directories && base.directories.buildResources) || "build", base.nsis.include); /* plant:identity-resolve */
   const to = path.join(path.resolve(root, (base.directories && base.directories.output) || "dist"), ".test-identity", path.basename(base.nsis.include));
   cfg.nsis.include = to;
   cfg.beforePack = async context => {
