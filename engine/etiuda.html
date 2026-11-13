@@ -18354,6 +18354,7 @@ What you type stays in this browser only.`;
     edNavHtml: () => edNavHtml,
     edResting: () => edResting,
     edStepLang: () => edStepLang,
+    edSubjectCheck: () => edSubjectCheck,
     edSubjectSoon: () => edSubjectSoon,
     edToDesk: () => edToDesk,
     edToFront: () => edToFront,
@@ -18564,7 +18565,7 @@ What you type stays in this browser only.`;
     markCutText(modalCard);
     edAfterOpen(cfg, leaving);
     const at = document.activeElement;
-    if (!modalCard.contains(at) && !openCover() && !(at && at.closest && at.closest("#tourCard")))
+    if (!modalCard.contains(at) && !openCover() && !edResting() && !(at && at.closest && at.closest("#tourCard")))
       try {
         modalCard.focus({ preventScroll: true });
       } catch (e) {
@@ -18594,6 +18595,7 @@ What you type stays in this browser only.`;
     return '<span class="modal-nav"><button type="button" class="modal-x nav-up" id="edPrev" title="' + esc(lp) + '" aria-label="' + esc(t("Previous")) + '">' + ICON_CHEVRON_R + '</button><button type="button" class="modal-x nav-dn" id="edNext" title="' + esc(ln) + '" aria-label="' + esc(tc("editor", "Next")) + '">' + ICON_CHEVRON_R + "</button></span>";
   }
   var edBaseline = null;
+  var edBaseTyped = null;
   var edReturn = null;
   function edFormState() {
     if (!modalCard) return "";
@@ -18606,6 +18608,7 @@ What you type stays in this browser only.`;
   }
   function edMarkClean() {
     edBaseline = edFormState();
+    edBaseTyped = edTyped();
   }
   function edTyped() {
     if (!modalCard) return null;
@@ -19033,7 +19036,7 @@ What you type stays in this browser only.`;
     const place = ED_PLACE_KINDS.indexOf(cfg.place) >= 0;
     if (place && modalEl.hidden === false && !edPlaceKind) edDeskFocus = modalOpener;
     edAgain = place && typeof cfg.again === "function" ? cfg.again : null;
-    edRestEnd();
+    if (!edStepping) edRestEnd();
     placeDialog(cfg.place);
     if (edPlaceKind && edBaseline === null) edMarkClean();
     edSubjectOpen(cfg);
@@ -19186,8 +19189,10 @@ What you type stays in this browser only.`;
     return !edGone && edCause !== "layer";
   }
   function edSubjectSoon() {
-    clearTimeout(edSubjectTimer);
-    edSubjectTimer = setTimeout(edSubjectCheck, 0);
+    Promise.resolve().then(() => {
+      clearTimeout(edSubjectTimer);
+      edSubjectTimer = setTimeout(edSubjectCheck, 0);
+    });
   }
   function edSubjectCheck() {
     const cause = edCause;
@@ -19214,10 +19219,32 @@ What you type stays in this browser only.`;
       return;
     }
     edUnGone();
-    edSubjectSig = now;
+    const under = edAgain ? edMergeUnder() : null;
+    edSubjectSig = edSubjectNow();
+    if (cause !== "edition" && under === false) return;
     edEditionReset = cause === "edition";
     edSayLine(ED_LINES[edPlaceKind][cause === "edition" ? "edition" : "elsewhere"]);
     refreshDialogReset();
+  }
+  function edMergeUnder() {
+    const base = edBaseTyped, was = edTyped();
+    const same = (a, b) => !!(a && b && a.fields.length === b.fields.length && a.segs.length === b.segs.length);
+    if (!same(base, was)) return null;
+    const tf = was.fields.map((v, i) => v !== base.fields[i]), ts = was.segs.map((v, i) => v !== base.segs[i]);
+    edStepping = true;
+    try {
+      edAgain();
+    } finally {
+      edStepping = false;
+    }
+    const now = edTyped();
+    if (!same(now, was)) {
+      edRetype(was);
+      return null;
+    }
+    const under = now.fields.some((v, i) => tf[i] && v !== base.fields[i] && v !== was.fields[i]) || now.segs.some((v, i) => ts[i] && v !== base.segs[i] && v !== was.segs[i]);
+    edRetype({ fields: now.fields.map((v, i) => tf[i] ? was.fields[i] : v), segs: now.segs.map((v, i) => ts[i] ? was.segs[i] : v) });
+    return under;
   }
   function edMarkGone() {
     edGone = true;

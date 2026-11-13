@@ -5626,14 +5626,14 @@ const CARD_B = {
         ED.openCategoryEditor("gen", true);
         byId["#ce_name_en"].value = "Typed in A";
         byId["#ce_name_en"].oninput();
-        DLG.edCatalogTaken(false); DLG.edSubjectSoon();
+        DLG.edCatalogTaken(false); DLG.edSubjectCheck();
         byId["#ceSave"].onclick();
         const other = [PK.pack.catLabels.gen || "", DLG.edCanSave()].join("|");
         setupCat(["en"], "General", {});
         ED.openCategoryEditor("gen", true);
         byId["#ce_name_en"].value = "Typed, same layer";
         byId["#ce_name_en"].oninput();
-        DLG.edCatalogTaken(true); DLG.edSubjectSoon();
+        DLG.edCatalogTaken(true); DLG.edSubjectCheck();
         byId["#ceSave"].onclick();
         return eq([other, PK.pack.catLabels.gen || "", DLG.edCanSave()].join(" || "), "|false || Typed, same layer || true");
       });
@@ -7881,50 +7881,66 @@ const CARD_B = {
     const mkNote = () => { const t = { textContent: "" }; return { className: "", setAttribute() {}, querySelector: q => (q === ".modal-note-t" ? t : null), querySelectorAll: () => [], get text() { return t.textContent; } }; };
     const ce0 = globalThis.document.createElement;
     globalThis.document.createElement = tag => (tag === "p" ? mkNote() : ce0(tag));
-    /* The check runs a task after the desk draws; here it runs at once. */
-    const desk = () => { const st = globalThis.setTimeout; globalThis.setTimeout = fn => { fn(); return 0; }; try { DL.edSubjectSoon(); } finally { globalThis.setTimeout = st; } };
+    /* The check runs a task after the desk draws (edSubjectSoon); here it is asked at once. */
+    const desk = () => DL.edSubjectCheck();
     const said = () => (note ? note.text : "");
     const reset = () => { note = null; saveB.disabled = resetB.disabled = delB.disabled = false; };
-    let subj = "A", reopened = 0;
-    const openS = (place, vals) => openEd(place, vals, { subject: () => subj, again: () => { reopened++; openS(place, vals); } });
+    /* `stored` is the entry as the desk now holds it: a redraw of the editor shows it, the way a real editor reads its entry again. */
+    let subj = "A", reopened = 0, stored = null;
+    const openS = (place, vals) => openEd(place, stored || vals, { subject: () => subj, again: () => { reopened++; note = null; openS(place, vals); } });
 
     check("dialog.js", "983s1 an entry removed while its editor is open: it stays open and readable, Save, Reset and Delete off and refused, the line in the copywriter's words; if the entry comes back, so do they",
       () => {
-        fresh(); reset(); subj = "A"; openS("card", ["a"]);
+        fresh(); reset(); subj = "A"; stored = null; openS("card", ["a"]);
         subj = null; desk();
         const gone = [said(), saveB.disabled, resetB.disabled, delB.disabled, modalEl.hidden].join("|");
         const ev = { target: saveB, prevented: false, stopped: false, preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } };
         (heard["capture:click"] || []).forEach(fn => fn(ev));
         modalCard.fields()[0].value = "typed";
         subj = "B"; desk();
-        return eq([gone, ev.prevented && ev.stopped, said(), saveB.disabled, delB.disabled].join(" || "),
-          "This card is no longer in the catalog, so nothing here can be saved. The text can still be copied.|true|true|true|false || true || This card changed elsewhere while it was open. Save keeps what is written here; Cancel leaves the change made there. || false || false");
+        return eq([gone, ev.prevented && ev.stopped, said(), saveB.disabled, delB.disabled, modalCard.fields()[0].value].join(" || "),
+          "This card is no longer in the catalog, so nothing here can be saved. The text can still be copied.|true|true|true|false || true ||  || false || false || typed");
       });
 
-    check("dialog.js", "983s2 a clean editor shows its entry as it now is; one holding typing keeps it and says whether a newer edition or this computer changed it",
+    check("dialog.js", "983s2 a clean editor shows its entry as it now is; one holding typing keeps it, says nothing unless a field typed in changed underneath, and says when a newer edition changed it",
       () => {
-        fresh(); reset(); subj = "A"; reopened = 0; openS("intent", ["x"]);
+        fresh(); reset(); subj = "A"; reopened = 0; stored = null; openS("intent", ["x"]);
         subj = "B"; desk();
         const clean = [reopened, said()].join("|");
         modalCard.fields()[0].value = "typed";
         subj = "C"; desk();
-        const typed = [reopened, said(), modalCard.fields()[0].value].join("|");
+        const untouched = [reopened, said(), modalCard.fields()[0].value].join("|");
+        stored = ["theirs"]; subj = "C2"; desk();
+        const typedChanged = [said(), modalCard.fields()[0].value].join("|");
         DL.edCatalogTaken(true); subj = "D"; desk();
         const edition = said();
         DL.edCatalogTaken(true); DL.closeModal(); desk();
-        reset(); subj = "E"; openS("category", ["c"]); modalCard.fields()[0].value = "typed"; subj = "F"; desk();
-        return eq([clean, typed, edition, said()].join(" || "),
-          "1| || 1|This intent changed elsewhere while it was open. Save keeps what is written here; Cancel leaves the change made there.|typed || A newer edition changed this intent while it was open. Save keeps what is written here; Reset takes the new edition's. || This category changed elsewhere while it was open. Save keeps what is written here; Cancel leaves the change made there.");
+        reset(); stored = null; subj = "E"; openS("category", ["c"]); modalCard.fields()[0].value = "typed"; stored = ["renamed"]; subj = "F"; desk();
+        stored = null;
+        return eq([clean, untouched, typedChanged, edition, said()].join(" || "),
+          "1| || 2||typed || This intent changed elsewhere while it was open. Save keeps what is written here; Cancel leaves the change made there.|typed || A newer edition changed this intent while it was open. Save keeps what is written here; Reset takes the new edition's. || This category changed elsewhere while it was open. Save keeps what is written here; Cancel leaves the change made there.");
+      });
+
+    check("dialog.js", "983s8 a field the person has not typed in takes the entry's new value, the one typed in keeps the typing, and nothing is said",
+      () => {
+        fresh(); reset(); subj = "A"; reopened = 0; stored = null; openS("card", ["one", "two", "three"]);
+        modalCard.fields()[0].value = "typed";
+        scrim();
+        stored = ["one", "theirs", "three"]; subj = "B"; desk();
+        const got = [modalCard.fields().map(f => f.value).join(","), said(), DL.edDirty(), DL.edResting(), reopened].join("|");
+        stored = null;
+        return eq(got, "typed,theirs,three||true|true|1");
       });
 
     check("dialog.js", "983s3 Save's own write is the editor's: once it refreshes its heading, the change it made says nothing and a line said before it goes",
       () => {
-        fresh(); reset(); subj = "A"; reopened = 0; openS("card", ["a"]);
+        fresh(); reset(); subj = "A"; reopened = 0; stored = null; openS("card", ["a"]);
         modalCard.fields()[0].value = "typed";
-        subj = "elsewhere"; desk();
+        stored = ["theirs"]; subj = "elsewhere"; desk();
         const before = said() !== "";
         subj = "saved"; DL.refreshDialogChrome(); desk();
-        return eq([before, said(), reopened].join("|"), "true||0");
+        stored = null;
+        return eq([before, said(), reopened].join("|"), "true||1");
       });
 
     check("dialog.js", "983s5 another catalog's layer taken under a resting, typed intent or card editor leaves it readable with Save off and refused, the gone line said, and it stays so whatever differs after; the same layer's next edition still only says so",
@@ -7967,7 +7983,7 @@ const CARD_B = {
         DL.edCatalogTaken(true); subj = "B"; desk();
         const ev2 = { target: resetB, prevented: false, preventDefault() { this.prevented = true; }, stopPropagation() {} };
         (heard["capture:click"] || []).forEach(fn => fn(ev2));
-        return eq([shown, pressed, resetB.disabled, ev2.prevented, reopened].join(" || "), "true|false || true|1|edition's|false|false|true || false || false || 0");
+        return eq([shown, pressed, resetB.disabled, ev2.prevented, reopened].join(" || "), "true|false || true|2|edition's|false|false|true || false || false || 1");
       });
 
     check("dialog.js", "983s4 every editor names its subject, the desk asks after it draws, the loader says whether the catalog taken is the same layer's (local memory never is), every Save asks first, the intent's heading follows its id, a deleted catalog card counts as gone, and every line has its Polish",

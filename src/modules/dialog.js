@@ -194,7 +194,7 @@ function openDialog(cfg){
      holds it, so a key reaches the dialog rather than the page it covers. A cover over it and a
      tour bubble keep theirs. */
   const at=document.activeElement;
-  if(!modalCard.contains(at) && !openCover() && !(at && at.closest && at.closest("#tourCard")))
+  if(!modalCard.contains(at) && !openCover() && !edResting() && !(at && at.closest && at.closest("#tourCard")))
     try{ modalCard.focus({preventScroll:true}); }catch(e){}
 }
 /* Wraps each of a dialog's text inputs once - see .mf .field-wrap. Before anything focuses a
@@ -232,7 +232,7 @@ function edNavHtml(){
    later is covered without being registered anywhere. */
 /* Null outside an editor. An editor sets it when it wires; any other dialog is not an
    edit, and must not be compared with the editor that stood here before. */
-let edBaseline=null;
+let edBaseline=null, edBaseTyped=null;
 /* The editor's own way back, the go edWireNav already undoes through. */
 let edReturn=null;
 function edFormState(){
@@ -245,7 +245,7 @@ function edFormState(){
   modalCard.querySelectorAll(".on[data-v]").forEach(el=>out.push(String(el.dataset.v||"")));
   return out.join("\u0001");
 }
-function edMarkClean(){ edBaseline=edFormState(); }
+function edMarkClean(){ edBaseline=edFormState(); edBaseTyped=edTyped(); }
 /* The typing itself, to be put back: every field's value in document order, and which of the
    segmented buttons carried .on. The same entry reopens in the same shape, so order is identity. */
 function edTyped(){
@@ -654,7 +654,7 @@ function edAfterOpen(cfg, leaving){
   const place=ED_PLACE_KINDS.indexOf(cfg.place)>=0;
   if(place && modalEl.hidden===false && !edPlaceKind) edDeskFocus=modalOpener;
   edAgain=(place && typeof cfg.again==="function") ? cfg.again : null;
-  edRestEnd();
+  if(!edStepping) edRestEnd();   // the editor redrawing itself keeps the desk in front
   placeDialog(cfg.place);
   if(edPlaceKind && edBaseline===null) edMarkClean();
   edSubjectOpen(cfg);
@@ -751,9 +751,12 @@ function edSubjectOpen(cfg){
    cleared or put back, leaves the editor with nothing it may write to: its entry is taken as gone. */
 function edCatalogTaken(sameLayer){ edCause=sameLayer ? "edition" : "layer"; }
 function edCanSave(){ return !edGone && edCause!=="layer"; }   // the check runs a task after the desk draws
+/* After the task that drew: an editor's own Save finishes, acknowledging its write, before the check asks. */
 function edSubjectSoon(){
-  clearTimeout(edSubjectTimer);
-  edSubjectTimer=setTimeout(edSubjectCheck,0);
+  Promise.resolve().then(()=>{
+    clearTimeout(edSubjectTimer);
+    edSubjectTimer=setTimeout(edSubjectCheck,0);
+  });
 }
 function edSubjectCheck(){
   const cause=edCause;
@@ -769,10 +772,28 @@ function edSubjectCheck(){
     return;
   }
   edUnGone();
-  edSubjectSig=now;
+  const under=edAgain ? edMergeUnder() : null;
+  edSubjectSig=edSubjectNow();
+  if(cause!=="edition" && under===false) return;
   edEditionReset=cause==="edition";
   edSayLine(ED_LINES[edPlaceKind][cause==="edition" ? "edition" : "elsewhere"]);
   refreshDialogReset();
+}
+/* A field the person has not typed in takes the entry's new value, one they typed in keeps their typing: the editor is
+   redrawn from the entry and the typed fields put back. Whether a typed field changed underneath, or null where the
+   form's shape is not the same before and after, every field then kept as typed. */
+function edMergeUnder(){
+  const base=edBaseTyped, was=edTyped();
+  const same=(a,b)=>!!(a && b && a.fields.length===b.fields.length && a.segs.length===b.segs.length);
+  if(!same(base,was)) return null;
+  const tf=was.fields.map((v,i)=>v!==base.fields[i]), ts=was.segs.map((v,i)=>v!==base.segs[i]);
+  edStepping=true;
+  try{ edAgain(); }finally{ edStepping=false; }
+  const now=edTyped();
+  if(!same(now,was)){ edRetype(was); return null; }
+  const under=now.fields.some((v,i)=>tf[i] && v!==base.fields[i] && v!==was.fields[i]) || now.segs.some((v,i)=>ts[i] && v!==base.segs[i] && v!==was.segs[i]);
+  edRetype({fields:now.fields.map((v,i)=>tf[i] ? was.fields[i] : v), segs:now.segs.map((v,i)=>ts[i] ? was.segs[i] : v)});
+  return under;
 }
 function edMarkGone(){
   edGone=true;
@@ -827,7 +848,7 @@ function openCover(){
 
 export {
   modalOpen, modalTabTarget, tabTargetIn, openCover, mountModalBody, modalResize, dismissModal, closeModal,
-  wireModalX, wireModalBody, wireFocusModality, wireDialogDrag, wireEditorRest, modalFront, edResting, edToDesk, edToFront, edSubjectSoon, edCatalogTaken, edCanSave,
+  wireModalX, wireModalBody, wireFocusModality, wireDialogDrag, wireEditorRest, modalFront, edResting, edToDesk, edToFront, edSubjectSoon, edSubjectCheck, edCatalogTaken, edCanSave,
   accOpen, accHtml, mfSec, catToggle, wireFolds, wireAcc,
   openDialog, refreshDialogName, refreshDialogChrome,
   dressDialogInputs,
