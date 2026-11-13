@@ -9,20 +9,23 @@
  *   p3  fetchThrough is net.fetch with a login listener: a stand-in of Electron's request, which cancels a challenge when
  *       nothing listens, is answered from the asker, and the answer's body and status arrive as a Response.
  *   p4  the CONNECT tunnel through a stand-in proxy asking Basic: no answer and a wrong one are refused with the schemes,
- *       the right one opens; a proxy asking only Windows sign-in names its schemes; a 403 is a refusal.
+ *       the right one opens; a proxy asking only Windows sign-in names its schemes; a 403 is a refusal; an answer given
+ *       for Digest never goes to a Digest proxy, and goes to a Basic one only after its 407.
  *   p5  the WebSocket client inside: the handshake's accept is checked, fragments join, a ping is answered, a masked
  *       frame from the server ends it, and its own frames are masked.
  *   p6  proxiedConnect end to end: through the proxy with the held answer the relay's socket opens and carries text; DIRECT
- *       takes the runtime's own socket; a proxy asking Windows sign-in or a SOCKS proxy closes it unopened, said once.
+ *       takes the runtime's own socket; a proxy asking Windows sign-in or a SOCKS proxy closes it unopened, said once; with
+ *       the platform's own TLS, a relay certificate no root signs closes it unopened, said once.
  *   p7  shell/main.js: every call goes through deskFetch, deskFetch hands the asker's listener, and relayConnect asks the
  *       session's resolveProxy and takes proxiedConnect.
- *   p8  each plant lifted turns its own case red.
+ *   p8  each plant lifted (or, for the TLS check, rewritten) turns its own case red.
  *
  *     node tests/proxy-net.mjs        exit code is the number of failed checks, capped at 63
  */
 import fs from "node:fs";
 import os from "node:os";
 import net from "node:net";
+import tls from "node:tls";
 import path from "node:path";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -35,7 +38,7 @@ const nodeRequire = createRequire(import.meta.url);
 const NET_FILE = process.env.PROXY_NET_FILE || path.join(ROOT, "shell", "proxy-net.cjs");
 const MAIN_FILE = process.env.PROXY_MAIN_FILE || path.join(ROOT, "shell", "main.js");
 const ONLY = process.env.PROXY_NET_ONLY || "";
-const EXPECTED = 56;
+const EXPECTED = 61;
 const USER = "proxy-person", PASS = "invented-" + crypto.randomBytes(4).toString("hex");
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -73,6 +76,7 @@ function standProxy(mode) {
       seen.push({ target: m ? m[1] + ":" + m[2] : head[0], auth: auth ? (right ? "right" : "wrong") : "none" });
       if (!m) { sock.end("HTTP/1.1 400 Bad Request\r\n\r\n"); return; }
       if (mode === "deny") { sock.end("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n"); return; }
+      if (mode === "digest") { sock.end("HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Digest realm=\"lab\", nonce=\"n1\", qop=\"auth\"\r\nContent-Length: 0\r\n\r\n"); return; }
       if (mode === "windows") { sock.end("HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Negotiate\r\nProxy-Authenticate: NTLM\r\nContent-Length: 0\r\n\r\n"); return; }
       if (mode === "basic" && !right) { sock.end("HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"lab\"\r\nContent-Length: 0\r\n\r\n"); return; }
       const up = net.connect({ host: "127.0.0.1", port: Number(m[2]) }, () => {
@@ -92,8 +96,9 @@ function standProxy(mode) {
 
 /* A WebSocket server, plain TCP (the tunnel's TLS is the platform's, and a lab has no certificate the system trusts).
    `bad` "accept" answers a wrong Sec-WebSocket-Accept; "masked" sends its first frame masked. It sends "hel" + "lo" as two
-   fragments, then a ping, and records what the client sends, unmasked, and whether every client frame was masked. */
-function standSocket(bad) {
+   fragments, then a ping, and records what the client sends, unmasked, and whether every client frame was masked. With
+   `secure` ({ key, cert }) it speaks TLS first, for the one case that keeps the platform's own certificate check. */
+function standSocket(bad, secure) {
   const got = { texts: [], pongs: 0, allMasked: true, headers: null, closes: 0 };
   const frame = (op, payload, fin, mask) => {
     const p = Buffer.from(payload);
@@ -102,7 +107,8 @@ function standSocket(bad) {
     const k = Buffer.from([1, 2, 3, 4]);
     return Buffer.concat([head, k, Buffer.from(p.map((b, i) => b ^ k[i & 3]))]);
   };
-  const server = net.createServer(sock => {
+  const make = h => (secure ? tls.createServer(secure, h) : net.createServer(h));
+  const server = make(sock => {
     let buf = Buffer.alloc(0), open = false;
     sock.on("error", () => {});
     sock.on("data", chunk => {
@@ -264,10 +270,10 @@ async function p4() {
   const ep = echo.address().port;
   const at = { host: "127.0.0.1", port: basic.port };
   const err = async a => P.tunnel(at, { host: "127.0.0.1", port: ep }, a).then(s => { s.destroy(); return { code: "open" }; }, e => e);
-  const none = await err(null), wrong = await err({ username: USER, password: "not-it" });
+  const none = await err(null), wrong = await err({ username: USER, password: "not-it", scheme: "basic" });
   check(none.code === "proxy-auth" && JSON.stringify(none.schemes) === '["basic"]', "p4a no answer: refused for a sign-in, the scheme named: " + none.code + " " + JSON.stringify(none.schemes));
   check(wrong.code === "proxy-auth" && basic.seen[1].auth === "wrong", "p4b a wrong answer: refused the same way");
-  const sock = await P.tunnel(at, { host: "127.0.0.1", port: ep }, { username: USER, password: PASS });
+  const sock = await P.tunnel(at, { host: "127.0.0.1", port: ep }, { username: USER, password: PASS, scheme: "basic" });
   const back = await new Promise(r => { sock.once("data", d => r(d.toString())); sock.write("through"); });
   sock.destroy();
   check(back === "through" && basic.seen[2].auth === "right" && basic.seen[2].target === "127.0.0.1:" + ep, "p4c the right answer opens the tunnel to the target");
@@ -278,7 +284,16 @@ async function p4() {
   check(d.code === "proxy-refused" && d.status === 403, "p4e a 403 is a refusal: " + d.code);
   const gone = await P.tunnel({ host: "127.0.0.1", port: 1 }, { host: "127.0.0.1", port: ep }, null).catch(e => e);
   check(gone.code === "proxy-refused", "p4f a proxy that is not there is a refusal: " + gone.code);
-  for (const s of [basic, win, deny]) s.server.close();
+  const digest = await standProxy("digest");
+  const dg = await P.tunnel({ host: "127.0.0.1", port: digest.port }, { host: "127.0.0.1", port: ep }, { username: USER, password: PASS, scheme: "digest" }).catch(e => e);
+  check(dg.code === "proxy-auth" && dg.sent === false && digest.seen.length === 1 && digest.seen.every(x => x.auth === "none"),
+    "p4g an answer given for a Digest challenge is not sent on CONNECT to a proxy offering Digest: " + JSON.stringify(digest.seen));
+  const before = basic.seen.length;
+  const late = await P.tunnel(at, { host: "127.0.0.1", port: ep }, { username: USER, password: PASS, scheme: "digest" });
+  late.destroy();
+  const two = basic.seen.slice(before).map(x => x.auth).join(",");
+  check(two === "none,right", "p4h that answer goes as Basic only after a 407 offering Basic: " + two);
+  for (const s of [basic, win, deny, digest]) s.server.close();
   echo.close();
 }
 
@@ -357,7 +372,7 @@ async function p6() {
   const ev5 = { close: 0 };
   P.proxiedConnect("wss://etiuda.dev:" + S.port + "/relay/v1/socket", {}, { message: () => {}, close: () => ev5.close++ },
     { resolve: async () => "PROXY 127.0.0.1:" + basic.port, direct: () => null, tlsConnect: s => s,
-      asker: { heldFor: () => ({ username: USER, password: "stale" }), refused: () => refusedCalled++, tell: () => {} } });
+      asker: { heldFor: () => ({ username: USER, password: "stale", scheme: "basic" }), refused: () => refusedCalled++, tell: () => {} } });
   await sleep(150);
   check(ev5.close === 1 && refusedCalled === 1, "p6f an answer the proxy refuses is handed back as refused, so it is asked again");
   const thenable = new Proxy(function () {}, { get: () => thenable, apply: () => thenable });
@@ -369,6 +384,31 @@ async function p6() {
   await sleep(150);
   check(viaDirect === 2, "p6g a resolver answering with no Promise, or not in time, leaves the runtime's own socket: " + viaDirect + " of 2");
   for (const s of [S, basic, win]) s.server.close();
+  await tlsCase();
+}
+
+/* The platform's own TLS inside the tunnel, unreplaced: a relay stand-in whose certificate no root signs (made by openssl in a
+   lab folder in the temp directory and never installed anywhere) is refused, the socket closed unopened and said once. */
+async function tlsCase() {
+  const OPENSSL = ["openssl", "C:/Program Files/Git/usr/bin/openssl.exe", "C:/Program Files/Git/mingw64/bin/openssl.exe"]
+    .find(c => { try { return spawnSync(c, ["version"], { encoding: "utf8" }).status === 0; } catch { return false; } });
+  if (!OPENSSL) { check(false, "p6h needs openssl to make the lab certificate, and none was found"); return; }
+  const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-proxy-tls-"));
+  try {
+    const key = path.join(lab, "key.pem"), cert = path.join(lab, "cert.pem");
+    const made = spawnSync(OPENSSL, ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", key, "-out", cert, "-days", "1",
+      "-subj", "/CN=etiuda.dev", "-addext", "subjectAltName=DNS:etiuda.dev"], { encoding: "utf8" });
+    if (made.status !== 0) { check(false, "p6h openssl could not make the lab certificate: " + String(made.stderr).split("\n")[0]); return; }
+    const S = await standSocket("", { key: fs.readFileSync(key), cert: fs.readFileSync(cert) }), open = await standProxy("open");
+    const ev = { open: 0, close: 0 }, said = [];
+    P.proxiedConnect("wss://etiuda.dev:" + S.port + "/relay/v1/socket", {}, { open: () => ev.open++, message: () => {}, close: () => ev.close++ },
+      { resolve: async () => "PROXY 127.0.0.1:" + open.port, direct: () => null, asker: { heldFor: () => null, refused: () => {}, tell: l => said.push(l) } });
+    for (let i = 0; i < 100 && !ev.close && !ev.open; i++) await sleep(20);
+    await sleep(50);
+    check(ev.open === 0 && ev.close === 1 && open.seen.length === 1 && said.length === 1 && /certificate check/.test(said[0]),
+      "p6h with the platform's own TLS, a relay certificate no root signs closes the socket unopened, said once: " + (said[0] || "nothing said"));
+    S.server.close(); open.server.close();
+  } finally { fs.rmSync(lab, { recursive: true, force: true }); }
 }
 
 /* The text of one top-level function of shell/main.js, by brace depth from its declaration. */
@@ -421,6 +461,9 @@ const PLANTS = [
   ["shell/proxy-net.cjs", "plant:ws-accept", "p5"],
   ["shell/proxy-net.cjs", "plant:ws-unmasked", "p5"],
   ["shell/proxy-net.cjs", "plant:proxy-resolve-bound", "p6"],
+  ["shell/proxy-net.cjs", "plant:proxy-basic-scheme", "p4"],
+  /* Not lifted but rewritten: the platform's check turned off, which must open the socket p6h expects refused. */
+  ["shell/proxy-net.cjs", "plant:proxy-tls-verify", "p6", 'ALPNProtocols: ["http/1.1"] })', 'ALPNProtocols: ["http/1.1"], rejectUnauthorized: false })'],
   ["shell/main.js", "plant:desk-fetch-login", "p7"],
   ["shell/main.js", "plant:relay-socket-proxy", "p7"],
   ["shell/main.js", "plant:relay-fetch-proxy", "p7"],
@@ -428,16 +471,17 @@ const PLANTS = [
 async function p8() {
   const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-proxy-net-"));
   try {
-    for (const [file, mark, part] of PLANTS) {
+    for (const [file, mark, part, from, to] of PLANTS) {
       const text = fs.readFileSync(path.join(ROOT, file), "utf8");
-      const lines = text.split("\n"), hit = lines.filter(l => l.indexOf(mark) >= 0).length;
+      const lines = text.split("\n"), marked = lines.filter(l => l.indexOf(mark) >= 0);
+      const hit = from ? marked.filter(l => l.split(from).length === 2).length : marked.length;
       const copy = path.join(lab, path.basename(file).replace(/(\.\w+)$/, "-" + mark.slice(6) + "$1"));
-      fs.writeFileSync(copy, lines.filter(l => l.indexOf(mark) < 0).join("\n"));
+      fs.writeFileSync(copy, (from ? lines.map(l => (l.indexOf(mark) >= 0 ? l.replace(from, () => to) : l)) : lines.filter(l => l.indexOf(mark) < 0)).join("\n"));
       const env = Object.assign({}, process.env, { PROXY_NET_ONLY: part },
         file === "shell/main.js" ? { PROXY_MAIN_FILE: copy } : { PROXY_NET_FILE: copy });
       const r = spawnSync(process.execPath, [SELF], { env, encoding: "utf8", timeout: 60000 });
       const reds = (r.stdout.match(/^ {2}FAIL /mg) || []).length;
-      check(hit === 1 && r.status !== 0 && reds > 0, "p8 lifting " + mark + " (" + hit + " line) turns " + part + " red: " + reds + " red");
+      check(hit === 1 && marked.length === 1 && r.status !== 0 && reds > 0, "p8 " + (from ? "rewriting " : "lifting ") + mark + " (" + hit + " line) turns " + part + " red: " + reds + " red");
     }
   } finally { fs.rmSync(lab, { recursive: true, force: true }); }
 }

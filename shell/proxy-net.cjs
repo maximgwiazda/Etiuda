@@ -43,8 +43,9 @@ function parseProxyList(text) {
 }
 
 const proxyKey = (host, port) => String(host || "").toLowerCase() + ":" + (Number(port) || 0);
+/* An answer keeps the scheme it was given for, so the socket's tunnel sends a password in the clear only where Basic was asked. */
 const answerOf = a => (a && typeof a === "object" && typeof a.username === "string" && a.username !== "" && typeof a.password === "string")
-  ? { username: a.username, password: a.password } : null;
+  ? { username: a.username, password: a.password, scheme: typeof a.scheme === "string" ? a.scheme.toLowerCase() : "" } : null;
 
 /** One asker per app. `o.ask({ host, port, scheme, realm, again })` resolves to { username, password } or null, and is
  *  called at most once at a time per proxy; `o.say(line)` is told what happened, once per line, never a credential. */
@@ -56,7 +57,7 @@ function proxyAsker(o) {
   const tell = line => { if (told.has(line)) return; told.add(line); try { if (typeof opts.say === "function") opts.say(line); } catch { /* the log is gone */ } };
   function askFor(key, info) {
     if (asking.has(key)) return asking.get(key);
-    const p = Promise.resolve().then(() => opts.ask(info)).then(answerOf, () => null).then(a => {
+    const p = Promise.resolve().then(() => opts.ask(info)).then(a => answerOf(a && Object.assign({}, a, { scheme: info.scheme })), () => null).then(a => {
       asking.delete(key);
       if (a) { held.set(key, a); declined.delete(key); tell("the proxy at " + key + " was given a sign-in"); }
       else { declined.set(key, now()); tell("the proxy at " + key + " was not given a sign-in, so calls through it are refused for now"); }
@@ -132,9 +133,20 @@ function fetchThrough(electronNet, input, init, login) {
   });
 }
 
-/** An HTTP CONNECT tunnel to target through proxy, with a Basic answer where one is given. Resolves to the open socket;
- *  rejects with code "proxy-auth" (and `schemes`, the challenge's schemes in lower case), "proxy-refused" or "proxy-timeout". */
+/** An HTTP CONNECT tunnel to target through proxy. A held answer goes as Basic on the first CONNECT only where it was given
+ *  for Basic, else only after a 407 offering Basic. Resolves to the open socket; rejects with code "proxy-auth" (`schemes`, the
+ *  challenge's in lower case; `sent`, whether an answer went), "proxy-refused" or "proxy-timeout". */
 function tunnel(proxy, target, answer, o) {
+  const a = answerOf(answer);
+  let first = a;
+  if (!a || a.scheme !== "basic") first = null; /* plant:proxy-basic-scheme */
+  return connectOnce(proxy, target, first, o).catch(e => {
+    if (e && e.code === "proxy-auth" && a && !first && (e.schemes || []).includes("basic")) return connectOnce(proxy, target, a, o);
+    throw e;
+  });
+}
+/* One CONNECT, carrying `auth` as Basic where it is given. */
+function connectOnce(proxy, target, auth, o) {
   const opts = o || {};
   return new Promise((resolve, reject) => {
     const sock = (opts.connect || net.connect)({ host: proxy.host, port: proxy.port });
@@ -144,7 +156,7 @@ function tunnel(proxy, target, answer, o) {
       done = true;
       clearTimeout(timer);
       try { sock.destroy(); } catch { /* gone */ }
-      reject(Object.assign(new Error("the proxy at " + proxyKey(proxy.host, proxy.port) + " did not open a tunnel: " + code), { code }, extra || {}));
+      reject(Object.assign(new Error("the proxy at " + proxyKey(proxy.host, proxy.port) + " did not open a tunnel: " + code), { code, sent: !!auth }, extra || {}));
     };
     const timer = setTimeout(() => fail("proxy-timeout"), opts.waitMs || TUNNEL_WAIT_MS);
     if (timer.unref) timer.unref();
@@ -152,9 +164,8 @@ function tunnel(proxy, target, answer, o) {
     sock.once("close", () => fail("proxy-refused"));
     sock.once("connect", () => {
       const at = target.host + ":" + target.port;
-      const a = answerOf(answer);
       sock.write("CONNECT " + at + " HTTP/1.1\r\nHost: " + at + "\r\n"
-        + (a ? "Proxy-Authorization: Basic " + Buffer.from(a.username + ":" + a.password, "utf8").toString("base64") + "\r\n" : "") /* plant:proxy-basic */
+        + (auth ? "Proxy-Authorization: Basic " + Buffer.from(auth.username + ":" + auth.password, "utf8").toString("base64") + "\r\n" : "") /* plant:proxy-basic */
         + "\r\n");
     });
     const onData = chunk => {
@@ -299,7 +310,7 @@ function proxiedConnect(url, headers, on, o) {
     try { sock = await tunnel(first, { host: u.hostname, port }, opts.asker ? opts.asker.heldFor(first.host, first.port) : null, opts); }
     catch (e) {
       if (e && e.code === "proxy-auth") {
-        if (opts.asker && opts.asker.heldFor(first.host, first.port)) opts.asker.refused(first.host, first.port);
+        if (opts.asker && e.sent) opts.asker.refused(first.host, first.port);
         const basic = (e.schemes || []).includes("basic");
         say(basic ? "the relay's live connection waits for a sign-in to the proxy at " + proxyKey(first.host, first.port) + ", so the relay is asked every minute until then"
           : "the proxy at " + proxyKey(first.host, first.port) + " asks the relay's live connection for a sign-in it cannot give (" + (e.schemes || []).join(", ") + "), so the relay is asked every minute instead");
@@ -307,7 +318,10 @@ function proxiedConnect(url, headers, on, o) {
       return closeOnce();
     }
     if (gone) { sock.destroy(); return closeOnce(); }
-    const secure = (opts.tlsConnect || (s => tls.connect({ socket: s, servername: u.hostname, ALPNProtocols: ["http/1.1"] })))(sock);
+    const secure = (opts.tlsConnect || (s => tls.connect({ socket: s, servername: u.hostname, ALPNProtocols: ["http/1.1"] })))(sock); /* plant:proxy-tls-verify */
+    let shaken = false;
+    secure.once("secureConnect", () => { shaken = true; });
+    secure.once("error", e => { if (!shaken) say("the relay's live connection through the proxy at " + proxyKey(first.host, first.port) + " was refused at its certificate check (" + String(e && e.code || "tls") + "), so the relay is asked every minute instead"); });
     inner = webSocketOver(secure, url, headers, handlers);
   })().catch(() => closeOnce());
   return {
