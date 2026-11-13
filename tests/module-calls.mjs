@@ -7540,7 +7540,7 @@ const CARD_B = {
   const DL = await import(MOD("dialog.js"));
   const Dom = await import(MOD("dom.js"));
   const ST = await import(MOD("storage.js"));
-  const hadDoc = globalThis.document, hadAdd = globalThis.addEventListener, hadNow = Date.now;
+  const hadDoc = globalThis.document, hadAdd = globalThis.addEventListener, hadNow = Date.now, hadGcs = globalThis.getComputedStyle;
   const view = { W: 1280, H: 800, band: 36, ch: 500 };
   const classes = () => {
     const s = new Set();
@@ -7582,7 +7582,7 @@ const CARD_B = {
   const row = { getBoundingClientRect: () => ({ top: 0, bottom: view.band, height: view.band }) };
   const prev = { disabled: false, onclick: null }, next = { disabled: false, onclick: null };
   globalThis.document = {
-    body: {}, documentElement: {}, activeElement: null,
+    body: {}, documentElement: { classList: classes() }, activeElement: null,
     querySelector: s => s === "#modal" ? modalEl : s === "#modalCard" ? modalCard : s === "header > .row" ? row
       : s === "#edPrev" ? prev : s === "#edNext" ? next : null,
     querySelectorAll: () => [], getElementById: () => null, contains: () => true,
@@ -7590,6 +7590,7 @@ const CARD_B = {
   };
   const winHeard = {};
   globalThis.addEventListener = (k, fn) => { (winHeard[k] = winHeard[k] || []).push(fn); };
+  globalThis.getComputedStyle = el => (el === modalCard ? { maxWidth: "560px" } : {});
   Dom.grabDom();
   let unwired = "";
   try { DL.wireDialogDrag(); } catch (e) { unwired = "wireDialogDrag: " + e.message; }
@@ -7625,6 +7626,36 @@ const CARD_B = {
         fire("pointerup", {});
         return eq([still, went, far, captured.join(",")].join(" || "),
           ["false|" + c0.join(","), [c0[0] + 3, c0[1] + 1].join(","), [c0[0] - 100, c0[1] + 100].join(","), "7"].join(" || "));
+      });
+
+    check("dialog.js", "983m selection is off for the drag as for every drag on the desk: html.eddrag from the 4th px to the release, and never for a press that does not move",
+      () => {
+        fresh(); open("card");
+        const html = globalThis.document.documentElement.classList;
+        fire("pointerdown", { clientX: 600, clientY: 160 });
+        fire("pointermove", { clientX: 602, clientY: 161 });
+        const before = html.contains("eddrag");
+        fire("pointermove", { clientX: 650, clientY: 200 });
+        const during = html.contains("eddrag");
+        fire("pointerup", {});
+        const after = html.contains("eddrag");
+        fire("pointerdown", { clientX: 600, clientY: 160 }); fire("pointerup", {});
+        const tpl = fs.readFileSync(join(HERE, "..", "src", "template.html"), "utf8");
+        const sheet = tpl.indexOf("html.eddrag, html.eddrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}") >= 0;
+        return eq([before, during, after, html.contains("eddrag"), sheet].join("|"), "false|true|false|false|true");
+      });
+
+    check("dialog.js", "983n an editor that fills the window's width is kept centred sideways and still drags up and down; a wider window lets it move sideways again",
+      () => {
+        fresh(); view.W = 546; open("card");
+        drag(600, 160, 300, 100);
+        const narrow = at().join(",");
+        drag(300, 100, 500, 100);
+        const side = at()[0];
+        resize(1280, 800);
+        const wide = at()[0];
+        drag(600, 160, 300, 160);
+        return eq([narrow, side, wide, at()[0]].join("|"), "16,90|16|360|60");
       });
 
     check("dialog.js", "983b its buttons, a field, touch and the right button never start a drag; the name inside the bar does",
@@ -7820,6 +7851,7 @@ const CARD_B = {
       });
   } finally {
     Date.now = hadNow;
+    globalThis.getComputedStyle = hadGcs;
     try { DL.closeModal(); } catch (e) {}
     ST.lsDel("eEdPlace");
     if (hadMotion == null) ST.lsDel("eMotionOff"); else ST.lsSet("eMotionOff", hadMotion);

@@ -467,11 +467,11 @@ function edPlacesWrite(all){
   if(Object.keys(out).length) lsSet("eEdPlace", JSON.stringify(out)); else lsDel("eEdPlace");
 }
 /* Wholly inside the window: ED_EDGE from its sides and foot, and its top ED_EDGE under the band,
-   whose drag region swallows every click over it (the band's rule in the sheet). Too narrow for the
-   margins, it is centred; too short, the top wins and --ed-room keeps the foot in. */
+   whose drag region swallows every click over it (the band's rule in the sheet). Where it fills the
+   window's width it is kept centred sideways; too short, the top wins and --ed-room keeps the foot in. */
 function edPlaceRect(g, x, y){
   const maxL=g.W-ED_EDGE-g.w;
-  const left=maxL<ED_EDGE ? (g.W-g.w)/2 : Math.min(maxL, Math.max(ED_EDGE, g.W/2+x-g.w/2));
+  const left=(g.fill || maxL<ED_EDGE) ? (g.W-g.w)/2 : Math.min(maxL, Math.max(ED_EDGE, g.W/2+x-g.w/2));
   const top=Math.max(g.band+ED_EDGE, Math.min(g.H-ED_EDGE-g.h, g.H/2+y));
   return {left:Math.round(left), top:Math.round(top)};
 }
@@ -487,7 +487,8 @@ function edStandAt(x, y){
   modalEl.classList.add("ed-placed");
   st.setProperty("--ed-room", Math.max(0, H-2*ED_EDGE-band)+"px");
   const relT=parseFloat(st.top)||0, relL=parseFloat(st.left)||0;
-  const g={W:W, H:H, band:band, w:modalCard.offsetWidth, h:modalCard.offsetHeight};
+  const w=modalCard.offsetWidth, cap=parseFloat(getComputedStyle(modalCard).maxWidth);
+  const g={W:W, H:H, band:band, w:w, h:modalCard.offsetHeight, fill:cap>0 && w<cap-0.5};
   const at=edPlaceRect(g, x, y), t0=modalCard.offsetTop-relT, l0=modalCard.offsetLeft-relL;
   st.top=(at.top-t0)+"px";
   st.left=(at.left-l0)+"px";
@@ -534,12 +535,13 @@ function wireDialogDrag(){
     const d=edDrag;
     if(!d) return;
     const dx=e.clientX-d.x, dy=e.clientY-d.y;
-    if(!d.moved){ if(Math.abs(dx)+Math.abs(dy)<4) return; d.moved=true; }
+    if(!d.moved){ if(Math.abs(dx)+Math.abs(dy)<4) return; d.moved=true; document.documentElement.classList.add("eddrag"); }
     d.at=edStandAt(d.left+dx+modalCard.offsetWidth/2-modalEl.clientWidth/2, d.top+dy-modalEl.clientHeight/2);
   });
   const end=()=>{
     const d=edDrag;
     edDrag=null;
+    if(d && d.moved) document.documentElement.classList.remove("eddrag");
     if(!d || !d.at || !edPlaceKind) return;
     edDragEnd=Date.now();
     const all=edPlaces();

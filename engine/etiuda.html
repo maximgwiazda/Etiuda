@@ -1939,6 +1939,7 @@ main{max-width:none;margin:16px 0 0;padding:0}
 #list .card{display:flow-root}
 .card.dragging{opacity:.55;z-index:2}
 html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
+html.eddrag, html.eddrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
 .cbadge.hit{background:var(--go-soft);color:var(--go)}
 .cbadge.cat{background:var(--accent-soft);color:var(--accent)}
 .cbadge.fav{background:var(--fav-soft);color:var(--fav)}
@@ -18756,7 +18757,7 @@ What you type stays in this browser only.`;
   }
   function edPlaceRect(g, x, y) {
     const maxL = g.W - ED_EDGE - g.w;
-    const left = maxL < ED_EDGE ? (g.W - g.w) / 2 : Math.min(maxL, Math.max(ED_EDGE, g.W / 2 + x - g.w / 2));
+    const left = g.fill || maxL < ED_EDGE ? (g.W - g.w) / 2 : Math.min(maxL, Math.max(ED_EDGE, g.W / 2 + x - g.w / 2));
     const top = Math.max(g.band + ED_EDGE, Math.min(g.H - ED_EDGE - g.h, g.H / 2 + y));
     return { left: Math.round(left), top: Math.round(top) };
   }
@@ -18770,7 +18771,8 @@ What you type stays in this browser only.`;
     modalEl.classList.add("ed-placed");
     st.setProperty("--ed-room", Math.max(0, H - 2 * ED_EDGE - band) + "px");
     const relT = parseFloat(st.top) || 0, relL = parseFloat(st.left) || 0;
-    const g = { W, H, band, w: modalCard.offsetWidth, h: modalCard.offsetHeight };
+    const w = modalCard.offsetWidth, cap = parseFloat(getComputedStyle(modalCard).maxWidth);
+    const g = { W, H, band, w, h: modalCard.offsetHeight, fill: cap > 0 && w < cap - 0.5 };
     const at = edPlaceRect(g, x, y), t0 = modalCard.offsetTop - relT, l0 = modalCard.offsetLeft - relL;
     st.top = at.top - t0 + "px";
     st.left = at.left - l0 + "px";
@@ -18819,12 +18821,14 @@ What you type stays in this browser only.`;
       if (!d.moved) {
         if (Math.abs(dx) + Math.abs(dy) < 4) return;
         d.moved = true;
+        document.documentElement.classList.add("eddrag");
       }
       d.at = edStandAt(d.left + dx + modalCard.offsetWidth / 2 - modalEl.clientWidth / 2, d.top + dy - modalEl.clientHeight / 2);
     });
     const end = () => {
       const d = edDrag;
       edDrag = null;
+      if (d && d.moved) document.documentElement.classList.remove("eddrag");
       if (!d || !d.at || !edPlaceKind) return;
       edDragEnd = Date.now();
       const all = edPlaces();
