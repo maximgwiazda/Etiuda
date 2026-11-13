@@ -9414,7 +9414,7 @@ const SIGNIN_LANDING_STYLE = ":root{--bg:#f7f8fa;--panel:#fff;--ink:#0f172a;--di
   + "@media (prefers-color-scheme:dark){:root{--bg:#0f1013;--panel:#131418;--ink:#e3e6ea;--dim:#8f98a6;--line:#262a31;--mark:#409afc;--logo:#409afc;--band:#0a0d13;--deep:#0b1a33;--ok:#4ec98a;--warn:#ff9f43;--dot:rgba(227,230,234,.10)}}"
   + "*{box-sizing:border-box}html,body{height:100%;margin:0}"
   + "body{font:16px/1.5 \"Segoe UI Variable Text\",\"Segoe UI\",system-ui,-apple-system,\"Liberation Sans\",sans-serif;color:var(--ink);background:var(--bg);display:flex;flex-direction:column;-webkit-text-size-adjust:100%}"
-  + "h1{font-family:\"Segoe UI Variable Display\",\"Segoe UI\",system-ui,sans-serif;font-weight:300;letter-spacing:-.01em;margin:0;text-wrap:balance}p{margin:0}svg{display:block;fill:currentColor}"
+  + "h1{font-family:\"Segoe UI Variable Display\",\"Segoe UI\",system-ui,sans-serif;font-weight:300;letter-spacing:-.01em;margin:0;text-wrap:balance}p{margin:0}svg{display:block;fill:currentColor}.defs{position:absolute}"
   + ".st{display:inline-block;flex:none;border-radius:50%}.st.ok{background:var(--ok)}.st.no{border:2px solid var(--warn);background:radial-gradient(circle,var(--warn) 0 30%,transparent 34%)}.st.wt{border:2px solid var(--mark)}"
   + ".band{background:var(--band);color:#fff;height:40px;display:flex;align-items:center;gap:9px;padding:0 16px;font-size:15px;flex:none}.band svg{width:24px;height:24px}"
   + "main{flex:1;display:flex;flex-direction:column;justify-content:center;padding:32px clamp(20px,7vw,120px) 9vh;background-image:radial-gradient(var(--dot) 1px,transparent 1.4px);background-size:22px 22px}"
@@ -9422,8 +9422,7 @@ const SIGNIN_LANDING_STYLE = ":root{--bg:#f7f8fa;--panel:#fff;--ink:#0f172a;--di
   + "h1{font-size:clamp(30px,4.4vw,52px);line-height:1.12}.st{width:30px;height:30px}.st svg{width:30px;height:30px}"
   + "main p{font-size:clamp(16px,1.5vw,19px);color:var(--dim);max-width:36em;margin-top:16px}"
   + "footer{flex:none;padding:14px clamp(20px,7vw,120px);font-size:13px;color:var(--dim);border-top:1px solid var(--line);background:var(--panel)}"
-  + "@media (max-width:520px){.hd{align-items:flex-start;gap:12px}.st{margin-top:4px;width:24px;height:24px}.st svg{width:24px;height:24px}}"
-  + ".defs{position:absolute}";
+  + "@media (max-width:520px){.hd{align-items:flex-start;gap:12px}.st{margin-top:4px;width:24px;height:24px}.st svg{width:24px;height:24px}}";
 /* Each kind's sign: a tick for a seat, a ring in the app's colour while the app has not finished, an amber ring for the rest. */
 const SIGNIN_LANDING_SIGN = Object.freeze({ seat: "ok", back: "wait", noseat: "warn" });
 function signinLandingLook(w, sign, foot, app, lang) {
@@ -9434,7 +9433,7 @@ function signinLandingLook(w, sign, foot, app, lang) {
   return "<!DOCTYPE html><html lang=\"" + lang + "\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"color-scheme\" content=\"light dark\">"
     + "<link rel=\"icon\" href=\"data:,\"><title>" + esc(w[2] + " · " + app) + "</title><style>" + SIGNIN_LANDING_STYLE + "</style>"
     + "<body" + (sign === "ok" || sign === "wait" || sign === "warn" ? "" : " class=\"bad\"") + ">"
-    + "<svg width=\"0\" height=\"0\" class=\"defs\" aria-hidden=\"true\"><symbol id=\"m\" viewBox=\"0 0 256 256\">" + SIGNIN_LANDING_MARK + "</symbol></svg>" /* plant:land-mark */
+    + "<svg class=\"defs\" width=\"0\" height=\"0\" aria-hidden=\"true\"><symbol id=\"m\" viewBox=\"0 0 256 256\">" + SIGNIN_LANDING_MARK + "</symbol></svg>" /* plant:land-mark */
     + "<div class=\"band\">" + mark("") + "<span>" + app + "</span></div><main>" + mark("m") + "<div class=\"hd\">" + dot + "<h1>" + esc(w[0]) + "</h1></div><p>" + esc(w[1]) + "</p></main>"
     + "<footer>" + esc(foot) + "</footer></body></html>";
 }
