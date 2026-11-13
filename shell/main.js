@@ -9200,7 +9200,9 @@ const ORDER_PAGE_SHAPE = /^https:\/\/(?:[a-z0-9-]+\.)*etiuda\.dev(?:\/[A-Za-z0-9
    names, read once at start by the wiring and only on a desk neither installed nor packaged. It names the service, http on 127.0.0.1
    or https on etiuda.dev; it may name the order page, fill the shipped providers' client ids, their addresses unchanged, and add a
    third provider, "lab", whose addresses the desk fetches or hands out are http on 127.0.0.1 (its issuer, only compared, and key set,
-   never read, may also be https on a .localhost name). `root` is Studio's: the desk judges a certificate under NOTE_ROOT alone (signinCertOk). */
+   never read, may also be https on a .localhost name). `root`, where given, is a root Studio and the desk judge a certificate under
+   beside the shipped one (signinLabRoot, signinCertOk); a desk installed or packaged never reads the file, so it trusts the shipped
+   root alone. */
 function signinLabAt(u, named) {
   const m = typeof u !== "string" ? null : /^http:\/\/127\.0\.0\.1:([0-9]{1,5})(\/[A-Za-z0-9._~\/-]*)?$/.exec(u) /* plant:lab-loopback */
     || (named ? /^https:\/\/(?:[a-z0-9-]+\.)*localhost(?::([0-9]{1,5}))?(\/[A-Za-z0-9._~\/-]*)?$/.exec(u) : null);
@@ -9209,8 +9211,8 @@ function signinLabAt(u, named) {
 function signinLabService(u) {
   return typeof u === "string" && /\/$/.test(u) && (signinLabAt(u) || /^https:\/\/(?:[a-z0-9-]+\.)*etiuda\.dev(?:\/[A-Za-z0-9._~-]+)*\/$/.test(u)); /* plant:lab-service */
 }
-/* The lab file whole, {provider (null where it names none), clientIds, signin, signout, order ("" where it names none)}, or null where
-   any part is not its shape. */
+/* The lab file whole, {provider (null where it names none), clientIds, signin, signout, order and root (each "" where it names
+   none)}, or null where any part is not its shape. */
 function signinLabRead(text) {
   let d = null;
   try { d = JSON.parse(String(text)); } catch { d = null; }
@@ -9226,10 +9228,13 @@ function signinLabRead(text) {
     || !signinLabAt(p.authorize) || !signinLabAt(p.token) || !signinLabAt(p.issuer, true) || !(p.jwks === undefined || signinLabAt(p.jwks, true)))) return null;
   return Object.freeze({ provider: p === undefined ? null : Object.freeze({ clientId: p.clientId, clientSecret: p.clientSecret || "", issuer: p.issuer,
     authorize: p.authorize, token: p.token, scope: p.scope, refreshScope: "", extra: Object.freeze({}) }), clientIds: Object.freeze(Object.assign({}, ids)),
-    signin: d.service + "signin/desk", signout: d.service + "signout/desk", order: d.order === undefined ? "" : d.order });
+    signin: d.service + "signin/desk", signout: d.service + "signout/desk", order: d.order === undefined ? "" : d.order,
+    root: d.root === undefined ? "" : String(d.root) });
 }
 /* The lab taken, once: the shipped providers with the lab's client ids, the provider "lab" where it names one, and the service's door. */
 let signinLabOn = false;
+/* The lab's own root, "" where no lab is taken or it names none: signinCertOk honours it beside NOTE_ROOT. */
+let signinLabRoot = "";
 function signinLabUse(lab) {
   if (!lab || signinLabOn) return false;
   const t = {};
@@ -9240,6 +9245,7 @@ function signinLabUse(lab) {
   SIGNIN_SERVICE = lab.signin;
   SIGNOUT_SERVICE = lab.signout;
   if (lab.order) ORDER_PAGE = lab.order;
+  signinLabRoot = lab.root || ""; /* plant:lab-root-use */
   signinLabOn = true;
   return true;
 }
@@ -9550,8 +9556,8 @@ async function signoutAsk(io, deskKey, now) {
   } catch { return false; }
 }
 /* THE SEAT CERTIFICATE as the desk takes it, as relay/core.cjs certWhy takes it at a door: the service's shape, for this desk's key,
-   a window of at most SIGNIN_CERT_SPAN_MS, signed by the key of a delegation from NOTE_ROOT that may sign "licence" on the UTC day
-   the certificate was issued. A certificate failing any of it is no seat, wherever it came from. */
+   a window of at most SIGNIN_CERT_SPAN_MS, signed by the key of a delegation from NOTE_ROOT, or a lab's signinLabRoot, that may sign
+   "licence" on the UTC day the certificate was issued. A certificate failing any of it is no seat, wherever it came from. */
 const SIGNIN_CODE = /^[0-9A-HJKMNP-TV-Z]{16}$/;
 const SIGNIN_CERT_SPAN_MS = 30 * 24 * 60 * 60 * 1000, SIGNIN_VIA_SPAN_MS = 366 * 24 * 60 * 60 * 1000;
 const SIGNIN_KEY_ID = /^[a-z0-9][a-z0-9-]{2,63}$/;
@@ -9583,7 +9589,8 @@ function signinCertOk(c, deskKey) {
   const at = day(c.issued), first = day(d.from), last = day(d.until);
   if (!at || !first || !last || !(first <= at && at <= last)) return false; /* plant:cert-window */
   const viaBytes = Buffer.from("etiuda-delegation\n" + canonJson(Object.assign({}, d, { sig: { alg: d.sig.alg, keyId: d.sig.keyId } })), "utf8");
-  if (!signinVerified(NOTE_ROOT, viaBytes, d.sig.value)) return false; /* plant:cert-root */
+  if (!signinVerified(NOTE_ROOT, viaBytes, d.sig.value) /* plant:cert-root */
+    && !(signinLabRoot !== "" && signinVerified(signinLabRoot, viaBytes, d.sig.value))) return false; /* plant:cert-lab-root */
   if (c.sig.keyId !== d.key.id) return false; /* plant:cert-via-key */
   const bytes = Buffer.from("etiuda-seat-certificate\n" + [c.format, c.licence, c.desk, c.person, c.code, c.issued, c.until, c.sig.keyId].map(String).join("\n"), "utf8");
   return signinVerified(d.key.pub, bytes, c.sig.value); /* plant:cert-sig */

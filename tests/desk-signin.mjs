@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 114;
+const PLANTS = 119;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 116 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 117 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2346,6 +2346,27 @@ CASES.certForgedAnswer = s => {
     && file(forged).cert === null && file(certForgeries()["a field changed after the signing"]).cert === null
     && JSON.stringify(file(cert()).cert) === JSON.stringify(cert()) && JSON.stringify(file(lapsed).cert) === JSON.stringify(lapsed);
 };
+/* THE LAB'S ROOT (the test architect's overrule of 2026-11-13): unpackaged, a lab file's root is honoured beside the shipped one,
+   so a development desk takes a certificate from the local licence lab; installed, packaged or both the file is never read and a
+   certificate under its root is no seat; no lab, or a lab naming no root, honours the shipped root alone. */
+const LAB_ROOT_KEY = crypto.generateKeyPairSync("ed25519");
+CASES.labRoot = async (s0, swap) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-signin-labroot-"));
+  try {
+    const rooted = path.join(dir, "rooted.json"), rootless = path.join(dir, "rootless.json");
+    fs.writeFileSync(rooted, labText(4567, { root: rawPub(LAB_ROOT_KEY.publicKey) }));
+    fs.writeFileSync(rootless, labText(4567, { root: undefined }));
+    const labCert = cert({ via: delegation({}, LAB_ROOT_KEY) }), strayCert = cert({ via: delegation({}, OTHER_ROOT) });
+    const takes = (facts, file) => {
+      const s = loadIn(swap);
+      labStart(s, Object.assign({ file }, facts), swap);
+      return [s.signinCertOk(labCert, DESK_KEY) === true, s.signinCertOk(cert(), DESK_KEY) === true, s.signinCertOk(strayCert, DESK_KEY) === true].join();
+    };
+    const dev = { installed: false, packaged: false };
+    return takes(dev, rooted) === "true,true,false" && takes(dev, rootless) === "false,true,false" && takes(dev, undefined) === "false,true,false"
+      && [{ installed: true, packaged: false }, { installed: false, packaged: true }, { installed: true, packaged: true }].every(x => takes(x, rooted) === "false,true,false");
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+};
 /* The root the shipped desk checks against is the vendor's, the relay's ROOT_PUB, and the check names it. */
 CASES.certRoot = () => {
   const R = createRequire(import.meta.url)(path.join(ROOT, "relay", "core.cjs"));
@@ -2460,6 +2481,7 @@ const LEGS = [
   ["ds22b", "certAsDoor", "the desk takes a certificate exactly where the relay's door takes it (relay/core.cjs certWhy), sample by sample, the genuine one by both"],
   ["ds22c", "certForgedAnswer", "a forged answer, a made-up signature or a stranger's root with a door on the trusted relay, is no seat and offers no door; signin.json edited to a forged certificate holds no seat, while a genuine one, lapsed too, stays"],
   ["ds22d", "certRoot", "the root the desk checks a certificate against is the vendor's, the relay's ROOT_PUB, and the check names it"],
+  ["ds22h", "labRoot", "unpackaged, a lab file's root is honoured beside the shipped one; installed, packaged or both a certificate under it is refused, the file never read; no lab, or one naming no root, honours the shipped root alone; a stranger's root never"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
@@ -2865,13 +2887,19 @@ if (!PLANTS_OFF) {
   await plantWire("dsp99g", ["{ cancelJoin(); sendJoin(theWindow); } /* plant:signout-door */", "{ }"], "signoutDoorJoin");
   await plantWire("dsp99h", ["    outOwed: !signedIn && !!signinState().out && !signinOutFlight, /* plant:out-owed-view */", "    outOwed: false,"], "outOwedView");
   /* The seat's signature (ds22): each check of the chain, and the file's reading of it. */
-  await plant("dsp100", ["if (!signinVerified(NOTE_ROOT, viaBytes, d.sig.value)) return false; /* plant:cert-root */", ""], "certSigned");
+  await plant("dsp100", ["if (!signinVerified(NOTE_ROOT, viaBytes, d.sig.value) /* plant:cert-root */", "if (false /* plant:cert-root */"], "certSigned");
   await plant("dsp101", ["return signinVerified(d.key.pub, bytes, c.sig.value); /* plant:cert-sig */", "return true;"], "certSigned");
   await plant("dsp102", ["if (c.sig.keyId !== d.key.id) return false; /* plant:cert-via-key */", ""], "certSigned");
   await plant("dsp103", ["if (d.may.indexOf(\"licence\") < 0) return false; /* plant:cert-may */", ""], "certSigned");
   await plant("dsp104", ["if (!at || !first || !last || !(first <= at && at <= last)) return false; /* plant:cert-window */", ""], "certSigned");
   await plant("dsp105", ["cert: h.cert && typeof h.cert === \"object\" && signinCertOk(h.cert, h.cert.desk) ? h.cert : null, /* plant:file-cert */", "cert: h.cert && typeof h.cert === \"object\" && Number.isSafeInteger(h.cert.until) ? h.cert : null,"], "certForgedAnswer");
   await plant("dsp106", ["&& c.until - c.issued <= SIGNIN_CERT_SPAN_MS /* plant:cert-span */", ""], "certSigned");
+  /* The lab's root (ds22h): honoured where the lab is taken, and the lab never taken installed or packaged. */
+  await plantWire("dsp112", ["    && !(signinLabRoot !== \"\" && signinVerified(signinLabRoot, viaBytes, d.sig.value))) return false; /* plant:cert-lab-root */", "    ) return false;"], "labRoot");
+  await plantWire("dsp113", ["  signinLabRoot = lab.root || \"\"; /* plant:lab-root-use */", ""], "labRoot");
+  await plantWire("dsp114", ["root: d.root === undefined ? \"\" : String(d.root) });", "root: \"\" });"], "labRoot");
+  await plantWire("dsp115", ["if (!INSTALLED && !app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) {", "if (!INSTALLED && process.env.ETIUDA_SIGNIN_LAB) {"], "labRoot");
+  await plantWire("dsp116", ["if (!INSTALLED && !app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) {", "if (!app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) {"], "labRoot");
   /* The page's half, imported again with the line planted. */
   const plantPage = async (id, swap, name) => {
     const r = await plantRed(async () => CASES[name](S, await pageWith(swap)));
