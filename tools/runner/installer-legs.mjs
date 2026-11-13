@@ -950,8 +950,13 @@ async function shippedDetect(rec) {
 
   /* The shipped build: the same tree, packed without the test identity, unsigned. */
   const out = path.join(LAB, "dist-shipped");
+  /* electron-builder directly, with publishing off: on a hosted runner it publishes by itself where nothing says otherwise
+     ("Implicit publishing triggered by CI detection"), and the shipped config, unlike the test identity's, names no publish: null
+     (the first dispatch, 2026-11-13: the installer was made, then the build stopped for want of a GitHub token). The pack step
+     package.mjs adds (turning.7z, the NSIS template patches) has already run in this job for the test build, on this tree. */
   try {
-    execFileSync(process.execPath, [path.join(ROOT, "tools", "package.mjs")], { cwd: ROOT, stdio: "inherit", env: E.unsignedEnv({ ETIUDA_DIST: out }) });
+    execFileSync(process.execPath, [path.join(ROOT, "node_modules", "electron-builder", "out", "cli", "cli.js"), "--win", "--publish", "never"],
+      { cwd: ROOT, stdio: "inherit", env: E.unsignedEnv({ ETIUDA_DIST: out }) });
   } catch (e) { throw new NoVerdict("the shipped build could not be made: " + oneLine(e.message)); }
   const found = fs.readdirSync(out).filter((n) => /-setup\.exe$/i.test(n));
   if (found.length !== 1) throw new NoVerdict(out + " holds " + found.length + " installers; expected 1");
