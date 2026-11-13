@@ -6670,9 +6670,13 @@ function forgetLead(team, left) {
    widens 907 knowingly: whoever planted that first team file can move such a desk to a built-in relay team they lead). A folder
    named by machine policy wins over any relay, and the desk says so. */
 const BUILTIN_RELAY_URL = "https://etiuda.dev/relay/v1";
+/* A test service build's second built-in relay, fixed here as the first is and never read from a file or the environment. */
+const STAGING_RELAY_URL = "https://etiuda.dev/relay-staging/v1";
 function isBuiltinRelayUrl(u) {
   if (typeof u !== "string") return false;
-  return u.trim().replace(/\/+$/, "") === BUILTIN_RELAY_URL; /* plant:follow-builtin-url */
+  const at = u.trim().replace(/\/+$/, "");
+  if (testServiceOn && at === STAGING_RELAY_URL) return true; /* plant:follow-staging */
+  return at === BUILTIN_RELAY_URL; /* plant:follow-builtin-url */
 }
 
 const PIN_FROM = ["invite", "policy", "answer"];
