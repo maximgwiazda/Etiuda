@@ -1498,6 +1498,19 @@ function createFolderProgram(opts) {
             applied.push(relPath);
           }
         }
+      } else if (/^etiuda-team-gone-[0-9a-f]{16}[^/]*\.json$/.test(relPath)) {
+        /* A lead Studio's record of its own deletions, sealed to this team, for its other Studio: no desk reads it, so it lands
+           unread, as a lead's answer does, and is not copied again at every listing. */
+        let doc = null;
+        try { doc = JSON.parse(text); } catch {}
+        let lands = false;
+        lands = !!doc && +doc.format === 2 && doc.kind === "etiuda-sealed" && doc.team === team && Number.isInteger(doc.epoch) && doc.epoch >= 1; /* plant:syncer-gone-lands */
+        if (lands) {
+          const target = path.join(mirror, relPath);
+          if (landStaged(item, target)) applied.push(relPath);
+        } else {
+          try { io.unlink(tmpPath); } catch {}
+        }
       } else if (/^etiuda-ring.*\.json$/i.test(relPath)) {
         let doc = null;
         try { doc = JSON.parse(text); } catch {}
