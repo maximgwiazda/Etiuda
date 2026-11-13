@@ -793,6 +793,7 @@ async function tsCycle(rec) {
   const docs = path.join(docsRoot, "Etiuda"), sample = path.join(docs, path.basename(SAMPLE));
   const desk = path.join(ud, "desk.json"), marker = path.join(ud, "ts-cycle-marker.bin");
   for (const p of [ud, docs]) if (fs.existsSync(p)) throw new NoVerdict(p + " is already there, so this account is not a fresh one to measure");
+  fs.mkdirSync(docsRoot, { recursive: true }); /* the launch door wants the confined Documents to be a folder before the start */
   rec.after("uninstall", uninstallUser);
   const VOLATILE = /^(cache|code cache|gpucache|dawn[^\\]*|shared dictionary|crashpad|blob_storage|network|service worker)(\\|$)/;
   const steady = (m) => Object.fromEntries(Object.entries(m).filter(([k]) => !VOLATILE.test(k)));
