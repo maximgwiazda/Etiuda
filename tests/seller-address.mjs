@@ -85,10 +85,10 @@ const throws = fn => { try { fn(); return ""; } catch (e) { return String(e && e
 
 /* ---- the cases -------------------------------------------------------------------------------------------------------- */
 const CASES = {};
-/* The seller's line as decided: the name, the NIP and the country, no address; each page's first paragraph after its title, unwrapped. */
+/* The seller's line as decided: the business's name, the NIP and the country, no address; each page's first paragraph after its title, unwrapped. */
 const SELLER = {
-  "license_en.txt": "Maxim Gwiazda, NIP 5242711262, Poland. This licence covers Etiuda and Etiuda Studio.",
-  "license_pl.txt": "Maxim Gwiazda, NIP 5242711262, Polska. Licencja obejmuje Etiudę i Etiudę Studio.",
+  "license_en.txt": "Stardust Maxim Gwiazda, NIP 5242711262, Poland. This licence covers Etiuda and Etiuda Studio.",
+  "license_pl.txt": "Stardust Maxim Gwiazda, NIP 5242711262, Polska. Licencja obejmuje Etiudę i Etiudę Studio.",
 };
 const BOM = String.fromCharCode(0xfeff);
 const sellerLine = text => (String(text).replace(BOM, "").split(/\r?\n\s*\n/)[1] || "").replace(/\s+/g, " ").trim();
