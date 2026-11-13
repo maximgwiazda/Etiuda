@@ -87,7 +87,7 @@ function showPackMigrationWarning(){
   if(!packMigrationFailed || document.getElementById("eMigrateWarn")) return;
   const d=document.createElement("div");
   d.id="eMigrateWarn";
-  d.style.cssText="position:fixed;left:0;right:0;top:0;z-index:2147483646;background:#78350f;"
+  d.style.cssText="position:fixed;left:0;right:0;top:var(--e-tb-h,0px);z-index:2147483646;background:#78350f;"
     +"color:#fff;font:14px/1.5 system-ui,Segoe UI,sans-serif;padding:14px 18px;"
     +"box-shadow:0 2px 14px rgba(0,0,0,.4)";
   const lead=document.createElement("b");

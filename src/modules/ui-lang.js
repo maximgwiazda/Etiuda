@@ -1194,6 +1194,7 @@ UI_STRINGS.pl={
   "Sign with this":"Podpisz",
   "Beside the customer's name there is now a wheel: it chooses who in the team this reply names.":"Obok imienia klienta jest teraz kółko: wybiera się nim osobę z zespołu, którą wymienia ta odpowiedź.",
   "No catalog loaded":"Nie wczytano katalogu",
+  "Test build: sign-in goes to Etiuda's test service, not the real one.":"Wersja testowa: logowanie trafia do testowej usługi Etiudy, nie do prawdziwej.",
   "This catalog has changed since it was loaded.":"Ten katalog zmienił się od czasu wczytania.",
   "This file is an earlier edition than the one loaded now.":"Ten plik to wcześniejsze wydanie niż wczytane teraz.",
   "The tour of Etiuda's controls, one at a time":"Przewodnik po Etiudzie, krok po kroku",
@@ -1825,7 +1826,7 @@ function translateChrome(){
   /* #intentRail carries the engine's own labels AND the catalog's intent clauses; the
      clauses are marked data-i18n-skip where they are written, so the sweep is safe here. */
   ["header","#settingsMenu","#modalCard","#screenHost","footer","#tourRoot",
-   "#intentRail","#sampleMark","#railHit"].forEach(sel=>{
+   "#intentRail","#sampleMark","#railHit","#eTestBand"].forEach(sel=>{
     const el=document.querySelector(sel);
     if(el) translateTree(el);
   });

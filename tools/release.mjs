@@ -30,7 +30,7 @@ import { createRequire } from 'node:module';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { beforeBuild, signatureVerdict, customerReleaseProfileVerdict } from './sellable.mjs';
+import { beforeBuild, signatureVerdict, customerReleaseProfileVerdict, testServiceProblems } from './sellable.mjs';
 import { writeSbom } from './sbom.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -139,6 +139,8 @@ gate('the version, read where the rulebook keeps it, and whether the build is a 
   const m = readFileSync(join(ROOT, 'src', 'modules', 'env.js'), 'utf8').match(/E_VERSION\s*=\s*["']([^"']+)["']/);
   if (!m) return 'E_VERSION is not in src/modules/env.js';
   console.log('  E_VERSION ' + m[1] + ', and package.json stays at ' + JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version);
+  const testService = testServiceProblems({ env: process.env }); /* plant:release-ts-var */
+  if (testService.length) return testService.join('; ');
   const win = createRequire(import.meta.url)(join(ROOT, 'electron-builder.js')).win;
   const judged = beforeBuild({ version: m[1], customer: flag('--customer'), licenceDir: join(ROOT, 'shell'), win });
   SELL = { customer: judged.customer, win };
@@ -282,6 +284,8 @@ if (flag('--package')) {
       return 'npm run package failed: electron-builder, no fresh installer, or the fuses read back from Etiuda.exe (its lines above)';
     const exe = readdirSync(DIST).filter(f => /-setup\.exe$/i.test(f));
     if (exe.length !== 1) return DIST + ' holds ' + exe.length + ' installers; expected 1';
+    const testService = testServiceProblems({ resources: join(DIST, 'win-unpacked', 'resources') }); /* plant:release-ts-file */
+    if (testService.length) return testService.join('; ');
     const file = join(DIST, exe[0]);
     const bytes = statSync(file).size;
     console.log('  ' + exe[0] + '  ' + bytes + ' bytes, sha256 '

@@ -657,6 +657,15 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);
 *::-webkit-scrollbar-thumb:hover{background-color:var(--scroll-thumb-hover)}
 *::-webkit-scrollbar-corner{background:transparent}
 
+/* THE TEST SERVICE BAND (host.js testServiceBand): in flow above the header, so everything below makes room, and the layers fixed
+   to the window's top start under it. It paints above every layer and drags the window as the header's row does. */
+#eTestBand{position:relative;z-index:2147483645;flex:0 0 auto;height:var(--e-tb-h);padding:0 12px;box-sizing:border-box;
+  background:#78350f;color:#fff;font-family:var(--sans);font-size:12px;line-height:var(--e-tb-h);text-align:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;user-select:none;-webkit-user-select:none;
+  app-region:drag;-webkit-app-region:drag}
+body.e-test-service{--e-tb-h:24px}
+body.e-test-service .modal,body.e-test-service #railHit{top:var(--e-tb-h)}
+
 /* relative, not static, and NOT sticky: nothing scrolls under it any more, but the z-index
    ladder is written against this element being a stacking context - see the note at
    #sampleMark. Static would drop the context and let the menu order against the document. */

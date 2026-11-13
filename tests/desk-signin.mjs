@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 132;
+const PLANTS = 133;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 129 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 130 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -969,8 +969,10 @@ CASES.doorAddress = async (s, swap) => {
   const both = base.signinAnswer(answer({ ok: true, code: CODE, certificate: cert(), doors: [doorOf({ url: trusted.url }), doorOf({ url: foreign.url })] }), DESK_KEY, false);
   /* The desk's flag at start, and the wiring handing it to the file's read and to the service's io. */
   const at = wiring.indexOf("/* plant:door-packed */"), line = at < 0 ? "" : wiring.slice(wiring.lastIndexOf("\n", at) + 1, at);
-  const flag = (installed, packaged) => { try { return new Function("INSTALLED", "app", line + "\nreturn SIGNIN_DESK_PACKED;")(installed, { isPackaged: packaged }); } catch { return null; } };
-  const flagged = flag(true, false) === true && flag(false, true) === true && flag(true, true) === true && flag(false, false) === false;
+  /* A test service build (tools/test-service.cjs) is packaged and takes staging's relay too (tests/test-service.mjs). */
+  const flag = (installed, packaged, ts) => { try { return new Function("INSTALLED", "app", "testServiceOn", line + "\nreturn SIGNIN_DESK_PACKED;")(installed, { isPackaged: packaged }, !!ts); } catch { return null; } };
+  const flagged = flag(true, false) === true && flag(false, true) === true && flag(true, true) === true && flag(false, false) === false
+    && flag(true, true, true) === false;
   const handed = /\n  signinStore = signinFileRead\(text, SIGNIN_DESK_PACKED\);/.test(wiring) && /\n    packed: SIGNIN_DESK_PACKED,/.test(wiring);
   return rowsHold && spread && shipped && narrowed && both.ok === true && both.doors.length === 0 && flagged && handed;
 };
@@ -1887,7 +1889,8 @@ CASES.labPage = () => {
     && /data-e-provider="lab"/.test(html) && /<span>Lab<\/span>/.test(html) && !/undefined/.test(html) && !!door && door.providers.join() === "lab";
 };
 /* Nothing else points the sign-in anywhere: the variable is read in the lab's read alone, and the table and both doors are assigned in
-   signinLabUse alone, which is called once; no IPC, preload or page module names the lab's file. */
+   signinLabUse alone, which is called by the lab's read and the test service build's (tests/test-service.mjs); no IPC, preload or page
+   module names the lab's file. */
 CASES.labOnly = () => {
   const n = re => (MAIN.match(re) || []).length;
   const i = MAIN.indexOf("/* plant:lab-packaged */"), block = i < 0 ? "" : MAIN.slice(MAIN.lastIndexOf("\n", i), MAIN.indexOf("\n}\n", i));
@@ -1895,7 +1898,7 @@ CASES.labOnly = () => {
   const env = /process\.env\.ETIUDA_SIGNIN_LAB\b|process\.env\[/g;
   return !!block && n(/process\.env\.ETIUDA_SIGNIN_LAB\b/g) === 2 && (block.match(env) || []).length === 2
     && n(/(?<!let )\bSIGNIN_PROVIDERS = /g) === 1 && n(/(?<!let )\bSIGNIN_SERVICE = /g) === 1 && n(/(?<!let )\bSIGNOUT_SERVICE = /g) === 1
-    && n(/\bsigninLabUse\(/g) === 2 && n(/\bsigninLabOn = true/g) === 1 && /SIGNIN_PROVIDERS = [^\n]*\n  SIGNIN_SERVICE = lab\.signin;\n  SIGNOUT_SERVICE = lab\.signout;/.test(MAIN)
+    && n(/\bsigninLabUse\(/g) === 3 && /\(testServiceOn = signinLabUse\(signinLabRead\(JSON\.stringify\(fields\)\)\)\)/.test(MAIN) && n(/\bsigninLabOn = true/g) === 1 && /SIGNIN_PROVIDERS = [^\n]*\n  SIGNIN_SERVICE = lab\.signin;\n  SIGNOUT_SERVICE = lab\.signout;/.test(MAIN)
     && !/ipcMain\.(on|handle)\([^\n]*(signinLab|SIGNIN_LAB)/.test(MAIN) &&!/ETIUDA_SIGNIN_LAB/.test(PRELOAD) && pageNames.length === 0;
 };
 
@@ -2378,6 +2381,48 @@ CASES.labRoot = async (s0, swap) => {
       && [{ installed: true, packaged: false }, { installed: false, packaged: true }, { installed: true, packaged: true }].every(x => takes(x, rooted) === "false,true,false");
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 };
+/* THE TEST SERVICE BUILD'S FIELDS TRAVEL INSIDE THE ASAR (the test architect's hold and Claude alpha's ruling, 2026-11-13): the
+   wiring takes them from the package.json packed beside this shell file and never reads a file beside the asar. A test-service.json,
+   root included, planted beside the asar changes nothing in an ordinary package, and in a test service package the asar's fields win. */
+const TS_ROOT_KEY = crypto.generateKeyPairSync("ed25519");
+function tsStart(s, facts, swap) {
+  const i = WIRING.indexOf("/* THE TEST SERVICE BUILD (tools/test-service.cjs)"), to = WIRING.indexOf("/* plant:door-packed */", i);
+  let text = i < 0 || to < 0 ? "" : WIRING.slice(i, WIRING.indexOf("\n", to));
+  if (swap && text.split(swap[0]).length === 2) text = text.replace(swap[0], swap[1]);
+  const reads = [];
+  const r = new Function("INSTALLED", "app", "process", "fs", "path", "console", "__dirname", "signinLabUse", "signinLabRead",
+    text + "\nreturn { on: testServiceOn, packed: SIGNIN_DESK_PACKED };")(true, { isPackaged: true }, { resourcesPath: facts.resources, env: {} },
+    { readFileSync: (p, enc) => { reads.push(String(p)); return fs.readFileSync(p, enc); } }, path, { error: () => {} }, facts.shell,
+    s.signinLabUse, s.signinLabRead);
+  return Object.assign(r, { reads });
+}
+CASES.testServiceAsar = async (s0, swap) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-signin-ts-"));
+  try {
+    const loose = { service: "https://etiuda.dev/licence-planted/v1/", clientIds: { microsoft: MS_CLIENT, google: G_CLIENT }, root: rawPub(LAB_ROOT_KEY.publicKey) };
+    const layout = (name, fields) => {
+      const res = path.join(dir, name, "resources"), shell = path.join(res, "app.asar", "shell");
+      fs.mkdirSync(shell, { recursive: true });
+      fs.writeFileSync(path.join(res, "app.asar", "package.json"), JSON.stringify(Object.assign({ name: "etiuda", version: "0.0.0" },
+        fields ? { etiudaTestService: fields } : {})));
+      fs.writeFileSync(path.join(res, "test-service.json"), JSON.stringify(loose));
+      return { resources: res, shell: shell };
+    };
+    const planted = cert({ via: delegation({}, LAB_ROOT_KEY) }), asarCert = cert({ via: delegation({}, TS_ROOT_KEY) });
+    const staging = doorOf({ url: "https://etiuda.dev/relay-staging/v1" });
+    const noLoose = r => !r.reads.some(f => /test-service\.json$/.test(f));
+    const s1 = loadIn(swap), a = tsStart(s1, layout("plain"), swap);
+    const ordinary = a.on === false && a.packed === true && s1.live().on !== true && s1.live().signin === "https://etiuda.dev/licence/v1/signin/desk"
+      && s1.signinCertOk(planted, DESK_KEY) !== true && s1.signinCertOk(cert(), DESK_KEY) === true
+      && s1.signinDoorAddressOk(staging, a.packed) === false && noLoose(a);
+    const fields = { service: STAGING, clientIds: { microsoft: MS_CLIENT, google: G_CLIENT }, root: rawPub(TS_ROOT_KEY.publicKey) };
+    const s2 = loadIn(swap), b = tsStart(s2, layout("tested", fields), swap);
+    const asarWins = b.on === true && b.packed === false && s2.live().signin === STAGING + "signin/desk"
+      && s2.signinCertOk(asarCert, DESK_KEY) === true && s2.signinCertOk(planted, DESK_KEY) !== true
+      && s2.signinDoorAddressOk(staging, b.packed) === true && noLoose(b);
+    return ordinary && asarWins;
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+};
 /* A DESK-ONLY LICENCE (Max's test of 2026-11-13; Claude alpha, 03:31): its certificate says so in a signed field, and a desk holding
    one with no team is told it works without a team, in the copywriter's pair, instead of being told to wait for a lead. An older
    certificate, without the field, reads as not desk-only. */
@@ -2751,7 +2796,7 @@ const LEGS = [
   ["ds16c", "labPath", "pointed at a lab over real HTTP, the real path runs unchanged: the browser's redirect to the loopback, the code exchange with PKCE, the token checks, signin/desk's certificate, a refresh, a sign out; the shipped door and other ports refused"],
   ["ds16d", "labHarness", "a harness start renews and signs out only while the lab is taken, and reads nothing for it while no lab is taken"],
   ["ds16e", "labPage", "the page draws the lab's provider as it draws the shipped two and keeps its 127.0.0.1 link while it waits, no other provider's http link"],
-  ["ds16f", "labOnly", "nothing else points the sign-in: the variable read in the lab's read alone, the table and both doors assigned in signinLabUse alone, called once; no IPC, preload or page module names the file"],
+  ["ds16f", "labOnly", "nothing else points the sign-in: the variable read in the lab's read alone, the table and both doors assigned in signinLabUse alone, called by the lab's read and the test service build's; no IPC, preload or page module names the file"],
   ["ds16g", "stagingCmd", "tools/signin-staging.cmd is outside the packaged files and starts this tree's own Electron with a profile of its own, never the installed desk, with ETIUDA_SIGNIN_LAB for that start alone"],
   ["ds18a", "waitRead", "no free seat is a wait: the service's 200 with no certificate and the reason \"waiting\" is kept as the said reason with the refresh token, asking nobody; none without it stays no licence; the certificate after it ends the wait; a 409 \"full\" reads as before"],
   ["ds18b", "waitRenew", "the quiet renewal while waiting waits again with its token renewed and nobody asked, and seats the desk once a seat frees; an older service's \"full\" keeps its token as before"],
@@ -2790,6 +2835,7 @@ const LEGS = [
   ["ds22d", "certRoot", "the root the desk checks a certificate against is the vendor's, the relay's ROOT_PUB, and the check names it"],
   ["ds22i", "deskOnlyCert", "a desk-only licence's certificate carries deskOnly: true under the signature, as the line \"desk-only\" after the key id; the field taken off, put on, false or of another value is no certificate; signin.json keeps it; an older certificate without it reads as not desk-only, in the view as well"],
   ["ds22j", "deskOnlyPage", "a desk-only seat with no team is told \"Working without a team\" and that nothing else is needed, in the panel and Account, Polish too, the code still shown; any other seat with no team keeps the waiting-for-a-lead line"],
+  ["ds22k", "testServiceAsar", "THE TEST SERVICE BUILD READS ITS FIELDS FROM INSIDE THE ASAR: a test-service.json, root included, planted beside the asar of an ordinary package changes nothing (no test service, the shipped service and root alone, a certificate under the planted root refused, staging's relay refused); in a test service package the asar's fields win over it; no file beside the asar is read"],
   ["ds22h", "labRoot", "unpackaged, a lab file's root is honoured beside the shipped one; installed, packaged or both a certificate under it is refused, the file never read; no lab, or one naming no root, honours the shipped root alone; a stranger's root never"],
 ];
 for (let [id, name, line] of LEGS) {
@@ -3162,7 +3208,7 @@ if (!PLANTS_OFF) {
   await plantWire("dsp72", ["  if (!signinDoorAddressOk(inv, SIGNIN_DESK_PACKED)) return null; /* plant:door-address-knock */\n", ""], "doorAddress");
   await plantWire("dsp73", ["return DOOR_RELAYS.installed.indexOf(at) >= 0 || (packed === false && DOOR_RELAYS.unpackaged.indexOf(at) >= 0); /* plant:door-address-trusted */", "return true;"], "doorAddress");
   await plantWire("dsp74", ["(packed === false && DOOR_RELAYS.unpackaged", "(packed !== true && DOOR_RELAYS.unpackaged"], "doorAddress");
-  await plantWire("dsp75", ["const SIGNIN_DESK_PACKED = INSTALLED || !!app.isPackaged; /* plant:door-packed */", "const SIGNIN_DESK_PACKED = !!app.isPackaged; /* plant:door-packed */"], "doorAddress");
+  await plantWire("dsp75", ["const SIGNIN_DESK_PACKED = (INSTALLED || !!app.isPackaged) && !testServiceOn; /* plant:door-packed */", "const SIGNIN_DESK_PACKED = !!app.isPackaged && !testServiceOn; /* plant:door-packed */"], "doorAddress");
   await plantWire("dsp76", ["  signinStore = signinFileRead(text, SIGNIN_DESK_PACKED); /* plant:door-file-packed */", "  signinStore = signinFileRead(text); /* plant:door-file-packed */"], "doorAddress");
   await plantWire("dsp77", ["    packed: SIGNIN_DESK_PACKED, /* plant:door-io-packed */\n", ""], "doorAddress");
   await plantWire("dsp78", ["const ans = signinAnswer(res, deskKey, io.packed); /* plant:door-seat-packed */", "const ans = signinAnswer(res, deskKey); /* plant:door-seat-packed */"], "doorAddress");
@@ -3207,6 +3253,7 @@ if (!PLANTS_OFF) {
   await plant("dsp117", ["    .concat(c.deskOnly === true ? [\"desk-only\"] : []).map(String).join(\"\\n\"), \"utf8\"); /* plant:cert-desk-only-bytes */", "    .map(String).join(\"\\n\"), \"utf8\");"], "deskOnlyCert");
   await plant("dsp118", ["      .concat(c.deskOnly === true ? [\"deskOnly\"] : [])) /* plant:cert-desk-only-field */", "      .concat(c.deskOnly !== undefined ? [\"deskOnly\"] : []))"], "deskOnlyCert");
   /* The lab's root (ds22h): honoured where the lab is taken, and the lab never taken installed or packaged. */
+  await plantWire("dsp130", ["  try { fields = JSON.parse(fs.readFileSync(path.join(__dirname, \"..\", \"package.json\"), \"utf8\")).etiudaTestService; } catch { fields = undefined; } /* plant:ts-asar */", "  try { fields = JSON.parse(fs.readFileSync(path.join(String(process.resourcesPath || \"\"), \"test-service.json\"), \"utf8\")); } catch { fields = undefined; }"], "testServiceAsar");
   await plantWire("dsp112", ["    && !(signinLabRoot !== \"\" && signinVerified(signinLabRoot, viaBytes, d.sig.value))) return false; /* plant:cert-lab-root */", "    ) return false;"], "labRoot");
   await plantWire("dsp113", ["  signinLabRoot = lab.root || \"\"; /* plant:lab-root-use */", ""], "labRoot");
   await plantWire("dsp114", ["root: d.root === undefined ? \"\" : String(d.root) });", "root: \"\" });"], "labRoot");

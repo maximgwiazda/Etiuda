@@ -55,6 +55,8 @@ const sessionCache = new Map(host && host.session ? Object.entries(host.session)
 if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   platform: host.platform,
   backdrop: host.backdrop,
+  /* True only in a test service build (the shell's etiuda:host); the page then draws its band. */
+  testService: host.testService === true,
   maximized: host.maximized,
   minimize: () => ipcRenderer.send("etiuda:window", "minimize"),
   maximize: () => ipcRenderer.send("etiuda:window", "maximize"),
