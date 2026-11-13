@@ -9790,11 +9790,45 @@ function signinDoorsSigned(doors, sig, cert) {
   const fields = [cert.sig.value, doors.length].concat(...doors.map(d => [d.team, d.rt, d.url, d.keyId, d.lead, d.box]));
   return signinVerified(cert.via.key.pub, Buffer.from("etiuda-seat-doors\n" + fields.map(String).join("\n"), "utf8"), sig); /* plant:doors-sig */
 }
+/* THE REVOKED KEYS' LIST, as Studio's licence and the relay take it (relay/core.cjs revocationsHold and laterList): kind
+   "etiuda-revocations", format 1, a serial, at most SIGNIN_REVOKED_MAX sorted 64-hex keys, Ed25519 by NOTE_ROOT (or a lab's
+   signinLabRoot) over the kind's line, the serial and the keys joined by commas. The service hands it on signin/desk as REVOKED
+   holds it; the desk keeps the last it took and replaces it only with a later one: higher serial, every kept key still named. */
+const SIGNIN_REVOKED_MAX = 256;
+function signinRevokedOk(r) {
+  const plainObj = v => !!v && typeof v === "object" && !Array.isArray(v);
+  const exactly = (o, names) => Object.keys(o).length === names.length && names.every(k => Object.prototype.hasOwnProperty.call(o, k));
+  if (!plainObj(r) || !exactly(r, ["kind", "format", "serial", "keys", "sig"]) || r.kind !== "etiuda-revocations" || r.format !== 1
+    || !Number.isSafeInteger(r.serial) || r.serial < 1 || !Array.isArray(r.keys) || r.keys.length > SIGNIN_REVOKED_MAX
+    || !r.keys.every((k, i) => /^[0-9a-f]{64}$/.test(String(k)) && (i === 0 || r.keys[i - 1] < k))
+    || !plainObj(r.sig) || !exactly(r.sig, ["alg", "keyId", "value"]) || r.sig.alg !== "ed25519" || typeof r.sig.keyId !== "string"
+    || !/^[0-9a-f]{128}$/.test(String(r.sig.value))) return false;
+  const bytes = Buffer.from("etiuda-revocations\n" + r.serial + "\n" + r.keys.join(","), "utf8");
+  return signinVerified(NOTE_ROOT, bytes, r.sig.value) || (signinLabRoot !== "" && signinVerified(signinLabRoot, bytes, r.sig.value)); /* plant:revoked-sig */
+}
+/* The list to keep after `offered`: it, where it holds and is later than `kept`; else `kept` (null for none). */
+function signinRevokedNext(kept, offered) {
+  if (!signinRevokedOk(offered)) return kept || null;
+  if (!kept) return offered;
+  if (offered.serial <= kept.serial) return kept; /* plant:revoked-later */
+  return kept.keys.every(k => offered.keys.indexOf(k) >= 0) ? offered : kept; /* plant:revoked-keeps */
+}
+/* Whether `cert` was signed by a service key the kept list names. */
+function signinRevokedHas(list, cert) {
+  return !!list && Array.isArray(list.keys) && !!cert && !!cert.via && !!cert.via.key && list.keys.indexOf(String(cert.via.key.pub)) >= 0; /* plant:revoked-has */
+}
 /* The service's answer read: {ok, code, cert, doors, doorsSig} (the doors only under signinDoorsSigned; cert null where no licence
    admits the person yet, and then no doors; `waiting` where a licence admits them and has no free seat, so a quiet renewal seats the
    desk once one frees), or {ok: false, reason}, the reason "token", "signin", "full" or "desks" as the service says it, else
-   "unreached", which every other answer is. `packed` is signinDoorAddressOk's. */
+   "unreached", which every other answer is; each with `revoked`, the list it carried where signinRevokedOk holds it, else null.
+   `packed` is signinDoorAddressOk's. */
 function signinAnswer(res, deskKey, packed) {
+  const ans = signinAnswerBody(res, deskKey, packed);
+  let j = null;
+  try { j = JSON.parse(Buffer.from(res && res.bytes ? res.bytes : []).toString("utf8")); } catch { j = null; }
+  return Object.assign(ans, { revoked: j && typeof j === "object" && signinRevokedOk(j.revoked) ? j.revoked : null }); /* plant:revoked-read */
+}
+function signinAnswerBody(res, deskKey, packed) {
   let j = null;
   try { j = JSON.parse(Buffer.from(res && res.bytes ? res.bytes : []).toString("utf8")); } catch { j = null; }
   if (!j || typeof j !== "object" || Array.isArray(j)) return { ok: false, reason: "unreached" };
@@ -9825,12 +9859,17 @@ async function signinSeat(io, provider, deskKey, idToken, seed, now) {
 /* THE CALM LAPSE: the kept certificate's `until` passed with no new one. It decides nothing on the desk but Account's words; the
    desk works on, and the next certificate ends it. */
 function signinLapsed(held, now) {
+  if (!!held && !!held.cert && signinRevokedHas(held.revoked, held.cert)) return true; /* plant:lapse-revoked */
   return !!held && !!held.cert && now >= held.cert.until; /* plant:lapse-until */
 }
 /* `held` after the service's answer `ans` at `now`: a certificate replaces the last, an answer of none drops it (a wait is said as
    "waiting"), a refusal keeps it (until its own `until`) and is said; "signin", a seat freed, forgets the refresh token, since only a
-   sign-in takes it again. */
+   sign-in takes it again. Whatever the answer, the list it carried replaces the kept one only where it is later (signinRevokedNext). */
 function signinSettle(held, ans, now) {
+  const settled = signinSettleSeat(held, ans, now);
+  return Object.assign(settled, { revoked: signinRevokedNext(held && held.revoked, ans.revoked) }); /* plant:revoked-settle */
+}
+function signinSettleSeat(held, ans, now) {
   if (ans.ok) return Object.assign({}, held, { code: ans.code, cert: ans.cert, doors: ans.cert ? (ans.doors || []) : [], doorsSig: ans.cert ? String(ans.doorsSig || "") : "", at: now, checked: now, reached: true,
     said: ans.waiting === true ? "waiting" : "", ask: false }); /* plant:wait-settle */
   if (ans.reason === "unreached") return Object.assign({}, held, { checked: now, reached: false });
@@ -9883,7 +9922,7 @@ function signinFileRead(text, packed) {
       seed: String(h.seed), code: SIGNIN_CODE.test(String(h.code)) ? String(h.code) : "",
       cert: h.cert && typeof h.cert === "object" && signinCertOk(h.cert, h.cert.desk) ? h.cert : null, /* plant:file-cert */
       at: num(h.at), checked: num(h.checked), reached: h.reached !== false, said: typeof h.said === "string" ? h.said : "", ask: h.ask === true,
-      doors: [], doorsSig: "" };
+      doors: [], doorsSig: "", revoked: signinRevokedOk(h.revoked) ? h.revoked : null }; /* plant:revoked-file */
   if (out.held && out.held.cert) {
     const doors = signinDoorsOk(h.doors, packed), sig = typeof h.doorsSig === "string" ? h.doorsSig : "";
     if (signinDoorsSigned(doors, sig, out.held.cert)) Object.assign(out.held, { doors: doors, doorsSig: sig }); /* plant:file-doors-signed */
@@ -9958,6 +9997,7 @@ function signinTeamHere() {
 function signinFlush() {
   const held = signinState().held, cert = held && held.cert, me = branchIdentity(false);
   if (!cert || !me || !signinTeamHere()) return false;
+  if (signinRevokedHas(held.revoked, cert)) return false; /* plant:revoked-flush */
   try {
     const root = sharedFolderForWrite();
     if (!folderAnswers(root)) return false;
@@ -9987,6 +10027,7 @@ function signinDoorInvite(team, rt) {
   if (inv.withdrawing === true) return inv.rt === rt && /^[0-9a-f]{64}$/.test(String(inv.box)) && /^[0-9a-f]{32}$/.test(String(inv.inv)) ? { door: null, box: inv.box, inv: inv.inv } : null; /* plant:door-withdraw-invite */
   const held = signinState().held, cert = held && held.cert, me = branchIdentity(false);
   if (inv.rt !== rt || !me || !/^[0-9a-f]{64}$/.test(String(inv.box)) || !signinCertOk(cert, me.key) || !(cert.until > Date.now())) return null; /* plant:door-invite-cert */
+  if (signinRevokedHas(held.revoked, cert)) return null; /* plant:revoked-knock */
   const out = { door: cert, box: inv.box };
   if (/^[0-9a-f]{32}$/.test(String(inv.inv))) out.inv = inv.inv;
   return out;
@@ -10005,6 +10046,7 @@ function signinDoorKept(team, mirror, id) {
   let had = null;
   try { had = JSON.parse(fs.readFileSync(file, "utf8")); } catch { had = null; }
   if (had && had.door === id) return false; /* plant:door-once */
+  if (held && signinRevokedHas(held.revoked, held.cert)) return false; /* plant:revoked-request */
   const doc = signinDoorRequest(memberRequestDoc(j, null, me, null), me.id, me.key, held && held.cert, id, Date.now());
   if (!doc) return false;
   try { writeJoin(doc, file); return true; }
@@ -10017,6 +10059,7 @@ function signinDoorsShown(held, now) {
   const me = branchIdentity(false);
   if (!held || !held.cert || !me || !signinCertOk(held.cert, me.key) || !(held.cert.until > now) || pinnedLead() || teamJoin) return []; /* plant:door-shown */
   if (Object.keys(teamPins).some(teamPinStands)) return []; /* plant:door-pin-stands */
+  if (signinRevokedHas(held.revoked, held.cert)) return []; /* plant:revoked-offer */
   if (!signinDoorsSigned(held.doors, held.doorsSig, held.cert)) return []; /* plant:door-shown-signed */
   return (held.doors || []).map((d, n) => {
     if (!signinDoorAddressOk(d, SIGNIN_DESK_PACKED)) return null; /* plant:door-address-offer */
