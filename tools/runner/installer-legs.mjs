@@ -563,14 +563,19 @@ async function locked1618(rec) {
   holder.on("exit", () => { holderGone = true; });
   rec.after("holder", () => (holderGone ? "had ended" : E.killTree(holder.pid).how));
   for (let i = 0; i < 60 && !fs.existsSync(signal); i++) await sleep(500);
-  let heldNow = false, openSaid = "opened";
-  try { fs.closeSync(fs.openSync(held, "r")); } catch (e) { heldNow = ["EBUSY", "EPERM", "EACCES"].indexOf(e.code) > -1; openSaid = e.code || e.message; }
+  /* Held means another process cannot open it: a second PowerShell's read open, every sharing allowed, refused by the holder's
+     no-sharing open. Node's own open is recorded beside it and decides nothing: on the runner it went through a held file while
+     the second process was refused for a sharing violation (run 43357213052, cause not named). */
+  let openSaid = "opened";
+  try { fs.closeSync(fs.openSync(held, "r")); } catch (e) { openSaid = e.code || e.message; }
+  const otherSaid = oneLine(ps("tryopen", ["-Target", held]));
+  const heldNow = /^refused: /.test(otherSaid) && /being used by another process/i.test(otherSaid);
   let holderSaid = "no word in 30 s";
   try { holderSaid = oneLine(fs.readFileSync(signal, "utf8")) || "an empty word"; } catch { /* none came */ }
   rec.f("held", heldRel); rec.f("held-confirmed", yes(heldNow)); rec.f("holder-said", holderSaid);
   rec.f("holder-running", yes(!holderGone)); rec.f("open-here", openSaid);
-  rec.f("open-other-process", oneLine(ps("tryopen", ["-Target", held])));
-  if (!heldNow) throw new NoVerdict("the file did not stay held (this run could still open it: " + openSaid + "); the holder said "
+  rec.f("open-other-process", otherSaid);
+  if (!heldNow) throw new NoVerdict("the file did not stay held (a second process's open: " + otherSaid + "); the holder said "
     + JSON.stringify(holderSaid) + " and was " + (holderGone ? "gone" : "still running"));
 
   const r = await runExe(NEWER, P.installArgs({ mode: "machine" }), 900000);
