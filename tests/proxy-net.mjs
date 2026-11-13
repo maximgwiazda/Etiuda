@@ -429,7 +429,7 @@ async function p7() {
   const fetches = (src.split(slice(src, "deskFetch")).join("").match(/\bnet\.fetch\(/g) || []).length;
   const kept = (src.match(/net\.fetch\(request\.url, \{ bypassCustomProtocolHandlers: true \}\)/g) || []).length;
   check(fetches === 1 && kept === 1, "p7a no call goes out by net.fetch outside deskFetch but the page's own protocol handler: " + fetches + " net.fetch call(s)");
-  const uses = ["signinRequest(deskFetch,", "signinServiceAsk(deskFetch,", "lookForNote(deskFetch)", "deskFetch(url, init)", "return deskFetch(u, init);"];
+  const uses = ["signinRequest((u, init) => deskFetch(u, init),", "signinServiceAsk((u, init) => deskFetch(u, init),", "lookForNote((u, init) => deskFetch(u, init))", "deskFetch(url, init)", "return deskFetch(u, init);"];
   const missing = uses.filter(u => src.indexOf(u) < 0);
   check(missing.length === 0, "p7b the sign-in, the licence service, the version note, the relay and the organisation's model go through deskFetch: " + (missing.join(", ") || "all"));
   const deskFetchText = slice(src, "deskFetch"), relayConnectText = slice(src, "relayConnect"), relayRequestText = slice(src, "relayRequest");

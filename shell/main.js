@@ -10351,8 +10351,8 @@ function signinIo(run) {
     /* The page is told the provider's page before the browser is asked, so a browser that does not open (Linux resolves
        the system browser call all the same) leaves the person its link to paste. */
     openPage: url => { if (!signinPageOk(url)) return false; run.url = url; tellSignin(); return Promise.resolve(handOut(url)).then(() => true); }, /* plant:signin-open */
-    tokenAsk: (url, form) => signinRequest(deskFetch, url, form),
-    serviceAsk: (url, body) => signinServiceAsk(deskFetch, url, body),
+    tokenAsk: (url, form) => signinRequest((u, init) => deskFetch(u, init), url, form),
+    serviceAsk: (url, body) => signinServiceAsk((u, init) => deskFetch(u, init), url, body),
     sign: signinSign,
     keep: text => signinKeep(safeStorage, process.platform, text), kept: sealed => signinKept(safeStorage, sealed),
     page: kind => signinPageHtml(kind),
@@ -10749,7 +10749,7 @@ function armNoteLook() {
   /* Not from any harness start (harnessLaunch: --user-data-dir or a test variable), so no leg ever asks production etiuda.dev. */
   if (PLACED_ASIDE || harnessLaunch() || updateLookOff() || noteTimer || !net || typeof net.fetch !== "function") return;
   const next = () => {
-    lookForNote(deskFetch).catch(() => {});
+    lookForNote((u, init) => deskFetch(u, init)).catch(() => {});
     noteTimer = setTimeout(next, NOTE_EVERY_MS);
     if (noteTimer.unref) noteTimer.unref();
   };
