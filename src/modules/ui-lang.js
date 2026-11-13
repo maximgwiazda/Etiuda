@@ -1385,6 +1385,8 @@ UI_STRINGS.pl={
   "Use another account":"Użyj innego konta",
   "Not signed in":"Bez logowania",
   /* words: copywriter */
+  "Withdrawing the request to join":"Wycofywanie prośby o dołączenie",
+  /* words: copywriter */
   "This computer is signed out. Its place among the account's three is freed by itself the next time the sign-in service can be reached.":"Ten komputer jest wylogowany. Jego miejsce wśród trzech komputerów konta zwolni się samo przy najbliższym połączeniu z usługą logowania.",
   "Preview only.":"Tylko podgląd.",
   "Sign-in is not set up yet, so nothing here is sent.":"Logowanie nie jest jeszcze uruchomione, więc nic stąd nie zostanie wysłane.",

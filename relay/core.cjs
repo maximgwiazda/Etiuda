@@ -1069,7 +1069,11 @@ function createCore(deps) {
     if (lapsedDoor) return lapsedDoor; /* plant:door-lapse */
     const now = clock(), mark = personMark(team, b.door.person);
     let live = 0, own = 0;
-    for (const [, v] of store.list("inv:")) if (doorLive(v, now)) { live++; if (v.person === mark) own++; }
+    for (const [, v] of store.list("inv:")) {
+      if (!doorLive(v, now)) continue;
+      live++;
+      if (v.person === mark && doorOwn(v, now)) own++; /* plant:door-own */
+    }
     /* And the person's requests the lead dropped, inside their keep: a drop does not make room for that person. */
     for (const [, v] of dropped) if (v.person === mark) own++; /* plant:door-drop-person */
     if (live >= DOOR_LIVE_MAX) return no("team-size"); /* plant:door-live */
@@ -1096,6 +1100,14 @@ function createCore(deps) {
   function doorLive(v, now) {
     return !!v && v.door === true && Number.isSafeInteger(v.spentAt) && now - v.spentAt <= KEEP_MS
       && !store.get("dev:" + v.key) && !store.get("gone:" + v.key);
+  }
+  /* What a held door request costs its person: asking, up at the lead's, for its keep; withdrawn by its desk, nothing, its knock having
+     counted against the door's hourly rate alone; never sent up, the door's rate window from its knock, as one the lead dropped. The
+     team's own count of held requests (doorLive) still takes them all. */
+  function doorOwn(v, now) {
+    if (v.withdrawn === true) return false; /* plant:door-withdrawn-own */
+    if (v.uploaded !== true) return now - v.spentAt <= DOOR_RATE_MS; /* plant:door-unsent-own */
+    return true;
   }
   /* The person a certificate names, kept only as a keyed hash under the team's secret, so the store holds no pseudonym. */
   function personMark(team, person) {
@@ -1413,7 +1425,10 @@ function createCore(deps) {
     if (!is(HEX32, inv.asked) || m.supersedes !== inv.asked) return no("outside-place"); /* plant:e4-withdraw-chain */
     if (store.get("dev:" + m.writer) !== undefined || inv.spentAt === undefined || clock() - inv.spentAt > KEEP_MS) return no("token-spent");
     if (typeof m.place !== "string" || m.place.indexOf("desk:") !== 0) return no("outside-place");
-    return { ok: true, team, s, max: INVITE_UPLOAD_MAX, pub: inv.pub, lead: false, invite: s.inv, inv, withdraw: true };
+    const out = { ok: true, team, s, max: INVITE_UPLOAD_MAX, pub: inv.pub, lead: false, invite: s.inv, inv, withdraw: true };
+    /* A door request's deletion is served with the box its door hello bound, as the request was, so a lead holding it can open it. */
+    out.door = inv.door === true; /* plant:door-withdraw-box */
+    return out;
   }
 
   function deskHeld(desk) {

@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 555;
+const EXPECTED = 562;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -6734,6 +6734,104 @@ async function main() {
     check(handed.ok, "a4m a lead handover closes the door the old key opened, so a good certificate is not-enrolled until the new lead names"
       + " its licences: " + handed.detail);
 
+    /* A DOOR REQUEST TAKEN BACK (decision 33; the second branch of the review of the desk's sign-in). The desk's request is up, and
+       its desk withdraws it with a deletion of that request on the session its key's hello resumes, sealed under the door's key. */
+    async function upAtDoor(w, person) {
+      const leadBox = boxPair(), deskBox = boxPair(), k = keyPair(true), place = deskOf(w);
+      const hello = await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now, person ? { person } : undefined), { box: deskBox.pub });
+      const s = hello.json && hello.json.session, id = hello.json && hello.json.door;
+      const f = { rt: w.rt, leadKeyId: w.lead.keyId, leadBox: leadBox.pub, deskKeyId: k.keyId, deskBox: deskBox.pub };
+      const sealKey = CH.doorSealKey(agree(deskBox, leadBox.pub), f);
+      const ask = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: sealKey, writer: { keyId: k.keyId, privateKey: k.privateKey },
+        path: "desks/" + place + "/join.json", body: JSON.stringify({ marker: "DoorAsk" + hex(6) }), counter: 1, place: "desk:" + place, kind: "file" });
+      const up = await put(w, s, ask, { extra: { pub: k.pub } });
+      return { k, place, id, ask, sealKey, leadBox, deskBox, f, ok: hello.status === 200 && up.status === 200 };
+    }
+    async function withdrawAtDoor(w, a) {
+      const again = await helloAs(w, a.k);
+      const del = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: a.sealKey, writer: { keyId: a.k.keyId, privateKey: a.k.privateKey },
+        path: "desks/" + a.place + "/join.json", body: "", counter: 2, place: "desk:" + a.place, kind: "delete", supersedes: a.ask.id });
+      const r = await put(w, again.json && again.json.session, del);
+      return { status: r.status, why: said(r), del };
+    }
+    /* The lead that fetched the request is served the box beside its deletion and makes the very key it was sealed under, so it can
+       apply it; a lead catching up from scratch is listed no live request; the request's blob is gone; the lead's yes, as an answer
+       or a device, is refused withdrawn. */
+    async function withdrawSeenScene() {
+      const w = await doorWorld();
+      const lead = await sessionOf(w, w.lead);
+      const a = await upAtDoor(w);
+      const fetched = await getBlob(w, lead, a.ask.id);
+      const wd = await withdrawAtDoor(w, a);
+      const listed = await since(w, lead);
+      const entries = Array.isArray(listed.json) ? listed.json : [];
+      const dm = (entries.find(e => e.meta && e.meta.id === wd.del.id) || {}).meta || {};
+      const leadKey = /^[0-9a-f]{64}$/.test(String(dm.box)) ? CH.doorSealKey(agree(a.leadBox, String(dm.box)), Object.assign({}, a.f, { deskBox: String(dm.box) })) : null;
+      const live = entries.filter(e => e.meta && e.meta.id === a.ask.id && e.meta.del !== true).length;
+      const old = await getBlob(w, lead, a.ask.id);
+      const answer = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32), writer: { keyId: w.lead.keyId, privateKey: w.lead.privateKey },
+        path: "join-answer.json", body: "joined", counter: 9, place: null, kind: "file", id: a.id });
+      answer.place = "answer:" + a.id;
+      const yes = await put(w, lead, answer);
+      const dev = await devices(w, w.devs.concat([{ id: a.k.keyId, pub: a.k.pub, desk: a.place }]));
+      const ok = a.ok && fetched.status === 200 && wd.status === 200 && dm.del === true && dm.box === a.deskBox.pub && !!leadKey && leadKey.equals(a.sealKey)
+        && live === 0 && old.status === 410 && refused(yes, "withdrawn") && refused(dev, "withdrawn");
+      return { ok, detail: JSON.stringify({ up: a.ok, fetched: said(fetched), withdrawn: wd.why, box: dm.box === a.deskBox.pub, key: !!leadKey && leadKey.equals(a.sealKey),
+        live, old: said(old), yes: said(yes), device: said(dev) }) };
+    }
+    /* What withdrawing costs a person: nothing at the person's three; three requests up and taken back from three of the person's
+       desks leave the next desk taken at once, and the same desk asks again on its own request. The knock still counts against the
+       door's hourly rate, so one who keeps knocking and taking back is refused rate past it. Three left asking hold the person past
+       the window, for the keep. */
+    async function withdrawCostScene() {
+      const w = await doorWorld();
+      const person = hex(32), asks = [];
+      for (let i = 0; i < C.DOOR_PER_PERSON; i++) asks.push(await upAtDoor(w, person));
+      w.R.clock.now += MIN;
+      const taken = [];
+      for (const a of asks) taken.push((await withdrawAtDoor(w, a)).status);
+      const k4 = keyPair(true), next = await doorHello(w, k4, certFor(k4.pub, w.ref, w.R.clock.now, { person }));
+      const same = await doorHello(w, asks[0].k, certFor(asks[0].k.pub, w.ref, w.R.clock.now, { person }));
+      /* Knock, send up and take back, over and over, inside the hour: the door's hourly rate refuses the knock past it. */
+      let knocks = C.DOOR_PER_PERSON + 1, last = next;
+      while (last.status === 200 && knocks < C.DOOR_RATE_MAX + 4) {
+        const a = await upAtDoor(w, person);
+        knocks++;
+        if (!a.ok) { last = { status: 0, json: { error: "knock " + knocks + " refused" } }; break; }
+        await withdrawAtDoor(w, a);
+      }
+      const k9 = keyPair(true), rated = await doorHello(w, k9, certFor(k9.pub, w.ref, w.R.clock.now, { person }));
+      const w2 = await doorWorld(), held = hex(32);
+      const stay = [];
+      for (let i = 0; i < C.DOOR_PER_PERSON; i++) stay.push((await upAtDoor(w2, held)).ok);
+      w2.R.clock.now += C.DOOR_RATE_MS + MIN;
+      const k6 = keyPair(true), still = await doorHello(w2, k6, certFor(k6.pub, w2.ref, w2.R.clock.now, { person: held }));
+      const ok = asks.every(a => a.ok) && taken.every(x => x === 200) && next.status === 200 && same.status === 200 && same.json.door === asks[0].id
+        && knocks === C.DOOR_RATE_MAX + 1 && refused(rated, "rate") && stay.every(Boolean) && refused(still, "team-size");
+      return { ok, detail: JSON.stringify({ taken, next: said(next), same: said(same), takenInTheHour: knocks - 1, then: said(rated), stillAsking: said(still) }) };
+    }
+    /* A request a desk never sent up costs its person the door's rate window from its knock, as a dropped one; a person who knocks
+       from three desks and sends nothing is held for that window and taken past it. The team's own bound on held requests is a4g's. */
+    async function unsentCostScene() {
+      const w = await doorWorld();
+      const person = hex(32), got = [];
+      for (let i = 0; i < C.DOOR_PER_PERSON; i++) { const k = keyPair(true); got.push(await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now, { person }))); }
+      const k4 = keyPair(true), inside = await doorHello(w, k4, certFor(k4.pub, w.ref, w.R.clock.now, { person }));
+      w.R.clock.now += C.DOOR_RATE_MS + 1;
+      const k5 = keyPair(true), past = await doorHello(w, k5, certFor(k5.pub, w.ref, w.R.clock.now, { person }));
+      const ok = got.every(r => r.status === 200) && refused(inside, "team-size") && past.status === 200;
+      return { ok, detail: JSON.stringify({ got: got.map(said), inside: said(inside), past: said(past) }) };
+    }
+    const seenBack = await safe(withdrawSeenScene), costBack = await safe(withdrawCostScene), unsent = await safe(unsentCostScene);
+    check(seenBack.ok, "a4r a door request its desk takes back: the lead that fetched it is served the desk's box beside the deletion and"
+      + " makes the key the request was sealed under, a lead catching up is listed no live request, its blob is gone, and the lead's yes as"
+      + " an answer or a device is refused withdrawn: " + seenBack.detail);
+    check(costBack.ok, "a4s a request taken back costs its person nothing at the three: after three, the next desk is taken at once and the"
+      + " same desk asks again on its own request; each knock still counts against the door's hourly rate, so knocking and taking back"
+      + " is refused rate past " + C.DOOR_RATE_MAX + " in the hour; three left asking still hold the person past the window: " + costBack.detail);
+    check(unsent.ok, "a4t a request never sent up holds its person for the door's rate window from the knock: inside it the fourth desk is"
+      + " refused team-size, past it taken: " + unsent.detail);
+
     /* Each guard lifted in a copy of relay/core.cjs turns its leg red, and the product file is never written. */
     const DOOR_PLANTS = [
       ["door-bind", async () => { const w = await doorWorld(); const k = keyPair(true);
@@ -6767,9 +6865,13 @@ async function main() {
       ["door-drop-person", async () => !(await dropScene()).ok, "a4o (a person's dropped request makes room at the door)"],
       ["door-drop-prune", async () => !(await dropScene()).ok, "a4q (a dropped request is held past its window)"],
       ["door-drop-window", async () => !(await dropScene()).ok, "a4o (a dropped request is held for no time at all)"],
+      ["door-withdraw-box", async () => !(await withdrawSeenScene()).ok, "a4r (a lead holding a door request cannot open its deletion)"],
+      ["door-withdrawn-own", async () => !(await withdrawCostScene()).ok, "a4s (a request taken back still holds its person)"],
+      ["door-unsent-own", async () => !(await unsentCostScene()).ok, "a4t (a request never sent up holds its person for the keep)"],
+      ["door-own", async () => !(await personScene()).ok, "a4e (no request counts against its person)"],
     ];
     const base = taken.ok && refusesAll.ok && closed.ok && register.ok && person.ok && rated.ok && live.ok && tries.ok && request.ok && removed.ok
-      && invs.ok && lapsed.ok && handed.ok && rawId.ok && drops.ok;
+      && invs.ok && lapsed.ok && handed.ok && rawId.ok && drops.ok && seenBack.ok && costBack.ok && unsent.ok;
     for (const [tag, turns, what] of DOOR_PLANTS) {
       const line = "a4p lifting plant:" + tag + " turns " + what + " red, and the product file is never written";
       if (PLANTS_OFF) { skip(line); continue; }
