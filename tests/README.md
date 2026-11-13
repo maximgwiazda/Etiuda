@@ -15,6 +15,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/pl-diacritics.js                     no fixtures, a dropped Polish diacritic
     node tests/deadcode.js                           no fixtures
     node tests/css-layers.js                         no fixtures, the cascade layers
+    node tests/fade-off.mjs                          no fixtures, cut text fades and nothing ends in an ellipsis: the sheet has no ellipsis or clamp and every one-line clip is measured or named, no code cuts with dots, and the cut pass marks a side and a foot on laid-out numbers, each with its control
     node tests/motion-tokens.js                      no fixtures, the motion tiers and the quiet switch
     node tests/theme-switch.mjs                      no fixtures, the theme lands at once as Studio's does: no crossfade or transition cut left in the sheet, a press puts data-theme on the root in its own task with no view transition and no waited write, and a second press straight after is taken (952a, 952b)
     node tests/kin-contrast.mjs                      no fixtures, the desk's blue in the four token blocks as drawn (kc1), the ratios it keeps (kc2), the bubbles' fill (kc3) and no retired blue in shell/*.js (kc4)

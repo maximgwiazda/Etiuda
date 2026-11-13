@@ -15,7 +15,7 @@ import { ejectCatalog } from "./local-memory.js";
 import { lsGet, lsSet, nsGet, nsSet } from "./storage.js";
 import { tourDueAtBoot, afterTour } from "./tour.js";
 import { placeBubble } from "./bubble.js";
-import { markCut } from "./cut-text.js";
+import { markCut, markCutText } from "./cut-text.js";
 import { cutLeaves, dismissNode, mgReduceMotion, M_MS, E_EASE, E_SPRING } from "./motion.js";
 import { catalogAwaitingLine, catalogCountsLine, t, toast, toastRefusal } from "./ui-lang.js";
 import { esc } from "./esc.js";
@@ -416,6 +416,7 @@ function paintCatalogList(){
     ecKeyBubClose();
     const rows=tops.reduce((out,x,k)=>out.concat([x.html],under[k]),[]).concat(alone);
     box.innerHTML=rows.length?rows.join(""):ecEmptyHtml();
+    markCutText(box);
     wireEcKeys(box);
     // A hanging row's line says what that desk changed, once both files have been read.
     nested.forEach(i=>deskChangeWords(desks[i],deskBase(desks[i],files,held)).then(words=>{

@@ -11,6 +11,7 @@ import { eOfferCatalogDialog, toastIfSameCatalog } from "./catalog-offer.js";
 import { lsSet } from "./storage.js";
 import { ICON_LOAD } from "./icons.js";
 import { screenOn } from "./screen-tabs.js";
+import { markCutText } from "./cut-text.js";
 
 function historyHost(){
   const h=eHost();
@@ -117,6 +118,7 @@ function openHistory(host){
     }
     const ehView=document.getElementById("ehView");
     if(ehView){
+      markCutText(ehView);
       ehView.querySelectorAll("[data-eh-open]").forEach(b=>{ b.onclick=()=>historyOpen(flat[+b.getAttribute("data-eh-open")]); });
       ehView.querySelectorAll("[data-eh-put]").forEach(b=>{ b.onclick=()=>historyPutBack(flat[+b.getAttribute("data-eh-put")]); });
     }

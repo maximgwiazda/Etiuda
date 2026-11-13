@@ -661,7 +661,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);
    to the window's top start under it. It paints above every layer and drags the window as the header's row does. */
 #eTestBand{position:relative;z-index:2147483645;flex:0 0 auto;height:var(--e-tb-h);padding:0 12px;box-sizing:border-box;
   background:#78350f;color:#fff;font-family:var(--sans);font-size:12px;line-height:var(--e-tb-h);text-align:center;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;user-select:none;-webkit-user-select:none;
+  white-space:nowrap;overflow:hidden;user-select:none;-webkit-user-select:none;
   app-region:drag;-webkit-app-region:drag}
 body.e-test-service{--e-tb-h:24px}
 body.e-test-service .modal,body.e-test-service #railHit{top:var(--e-tb-h)}
@@ -2791,6 +2791,11 @@ html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!importan
 /* An input paints its words in the CONTENT box and nothing outside it, so the fade is measured
    there too - against the border box it lands in the padding that clears the button and fades
    nothing at all. Safe only because these inputs go naked: see .fill input. */
+/* A box of lines that runs out fades the end of its last line: its height is whole lines, and markCutText marks it. */
+.cut-b{-webkit-mask-image:linear-gradient(#000,#000),linear-gradient(to right,#000 calc(100% - 3em),transparent);
+  -webkit-mask-size:100% calc(100% - 1lh),100% 1lh;-webkit-mask-position:0 0,0 100%;-webkit-mask-repeat:no-repeat;
+  mask-image:linear-gradient(#000,#000),linear-gradient(to right,#000 calc(100% - 3em),transparent);
+  mask-size:100% calc(100% - 1lh),100% 1lh;mask-position:0 0,0 100%;mask-repeat:no-repeat}
 input.is-cut{-webkit-mask-origin:content-box;mask-origin:content-box;
   -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
 /* Centred. It is a single line of credit under a column of cards, and left-aligned it read as
@@ -3088,7 +3093,7 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 /* A SCREEN TAB'S HEADING AND BAR keep the dialog's: the file's name beside the title, and the bar's left group with
    its hairline, as the Library's bar had them. */
 .screen-head{display:flex;align-items:baseline;gap:.7ch;min-width:0}
-.screen-head .screen-name{font-weight:400;color:var(--dim);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.screen-head .screen-name{font-weight:400;color:var(--dim);min-width:0;overflow:hidden;white-space:nowrap}
 .screen-actions .mf-left{display:flex;gap:8px;margin-right:auto;flex-wrap:wrap}
 .screen-actions .mf-left .mf-sep{align-self:stretch;width:1px;margin:3px;background:var(--line-strong);border-radius:1px}
 .screen-page:focus{outline:none}
@@ -3197,7 +3202,7 @@ details.mf-fold>summary:focus-visible .mf-lab{text-decoration:underline 2px var(
   border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--panel)}
 .ec-row.is-loaded{border-color:var(--go-edge,var(--go))}
 .ec-name{flex:1 1 auto;min-width:0}
-.ec-name b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ec-name b{display:block;overflow:hidden;white-space:nowrap}
 .ec-meta{display:block;color:var(--dim);font-size:11.5px}
 .ec-tag{flex:0 0 auto;font:600 10.5px var(--mono);color:var(--dim);
   border:1px solid var(--line);border-radius:999px;padding:1px 7px}
@@ -3212,10 +3217,10 @@ details.mf-fold>summary:focus-visible .mf-lab{text-decoration:underline 2px var(
    already puts a section's value - .mg-count and .acc-note own that slot at 11px mono, dim, and
    this is the one section whose value is a place rather than a number. The heading does not
    yield, so the path takes the trim, and it takes it at the FRONT: direction:rtl puts the
-   ellipsis there, which keeps the last folder - the part that identifies it - always readable. */
+   cut there, faded, which keeps the last folder - the part that identifies it - always readable. */
 details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
   display:flex;align-items:center;gap:4px}
-.ec-where code.open-folder{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+.ec-where code.open-folder{min-width:0;overflow:hidden;white-space:nowrap;
   direction:rtl;text-align:left;font:11px var(--mono);color:var(--dim);opacity:.8}
 .ec-where code.open-folder:hover,.ec-where code.open-folder:focus-visible{opacity:1}
 /* The pencil may not make this title line taller than any other section's, so the box is the
@@ -3274,7 +3279,7 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
 /* Earlier versions: each file's name heads its own list, and the version its file holds now wears the loaded row's edge. */
 .eh-head{display:flex;align-items:baseline;gap:8px;margin:18px 0 0;font-size:13px;min-width:0}
 .eh-head:first-child{margin-top:2px}
-.eh-head b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.eh-head b{min-width:0;overflow:hidden;white-space:nowrap}
 .eh-head small{flex:0 0 auto;color:var(--dim);font-size:11.5px}
 .eh-head+.ec-list{margin-top:6px}
 .ec-row.is-current{border-color:var(--go-edge,var(--go))}
@@ -3917,7 +3922,7 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx.lm-lib.is-find details.manage-sec>summary{display:flex}
 .mg-data-bar{display:flex;align-items:center;justify-content:flex-end;padding:10px 16px;border-bottom:1px solid var(--line)}
 /* The summary is hidden here, so this bar is the path the desk shows. The same trim as the title
-   line: the path shrinks, and direction on the path keeps the ellipsis at the front. */
+   line: the path shrinks, and direction on the path keeps the cut at the front. */
 .mg-data-bar .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;display:flex;align-items:center;gap:4px}
 .sx.lm-lib.is-find .mg-data-bar{display:none}
 .sx.lm-lib .mg-data-acts>.set-row:first-child{border-top:1px solid var(--line)}
@@ -4078,7 +4083,7 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx.lm-lib .mg-intents .manage-row.mg-int.chips-open .cat-slot{align-self:flex-start;height:24px}
 .sx.lm-lib .mg-intents .manage-row.mg-int.chips-open .mg-int-t,.sx.lm-lib .mg-intents .manage-row.mg-int.chips-open .mg-int-n{line-height:24px}
 .sx.lm-lib .mg-intents .manage-row.mg-int.chips-open .lw-mid{flex-wrap:wrap;row-gap:6px;-webkit-mask-image:none;mask-image:none}
-.sx.lm-lib .mg-intents .manage-row.mg-int.chips-open .lw-chip{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.sx.lm-lib .mg-intents .manage-row.mg-int.chips-open .lw-chip{max-width:100%;overflow:hidden;white-space:nowrap}
 /* Under about 320px of chip column, an open row's chips start on the next line and run from the
    name's left edge to the row's right. 22px is the mark and the row's gap. A closed row stays. */
 .sx.lm-lib .mg-intents.chips-narrow .manage-row.mg-int.chips-open{flex-wrap:wrap}
@@ -4355,7 +4360,7 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .lk-chip{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:7px 12px 7px 8px;border:1.5px dashed var(--accent);
   border-radius:var(--radius-sm);background:transparent;color:var(--ink);font:13.5px var(--sans);cursor:default;touch-action:none}
 .lk-chip:hover,.lk-chip:focus-visible,.lk-chip[aria-expanded="true"]{background:var(--accent-soft)}
-.lk-t{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.lk-t{min-width:0;overflow:hidden;white-space:nowrap}
 .lk-pick{width:min(440px,100%);display:grid}
 .lk-pick input{font:14px var(--sans);padding:8px 10px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
   background:var(--field);color:var(--ink);outline:none}
@@ -4590,7 +4595,7 @@ body.e-lanes #pillsSlot{display:none}
 @keyframes eLanesIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .ln-head{display:flex;align-items:center;gap:12px;min-width:0;padding:0 2px 14px}
 .ln-title{flex:none;font:600 15px var(--sans);color:var(--ink)}
-.ln-since{flex:0 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:13px;color:var(--dim)}
+.ln-since{flex:0 1 auto;min-width:0;overflow:hidden;white-space:nowrap;font-size:13px;color:var(--dim)}
 .ln-hint{margin-left:auto;flex:none;font-size:13px;color:var(--dim);white-space:nowrap}
 .ln-hint kbd{margin-right:6px;font:12px var(--mono);border:1px solid var(--line-strong);border-radius:4px;padding:1px 5px;
   color:var(--dim);background:var(--panel)}
@@ -4612,7 +4617,7 @@ body.e-lanes #pillsSlot{display:none}
 .ln-at{flex:none;font:12.5px var(--mono);color:var(--dim)}
 .ln-lang{flex:none;margin-left:auto}
 .ln-first{margin-top:3px;font-size:13px;line-height:1.45;color:var(--dim)}
-.ln-clamp2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.ln-clamp2{display:block;max-height:2lh;overflow:hidden}
 .ln-when{flex:none;margin-left:auto;font:12px var(--mono);color:var(--dim)}
 .ln-cols .cat-ic{flex:none;width:14px;height:14px;margin:0}
 .ln-sent .cstamp{flex:none;display:inline-flex;color:var(--warn)}
@@ -4624,7 +4629,7 @@ body.e-lanes #pillsSlot{display:none}
 .ln-txt,.ln-blk{padding-right:16px}
 /* The clamp is on the text and not the slab, whose padding would show the start of a fourth line. */
 .ln-txt{white-space:normal;margin-bottom:4px}
-.ln-clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.ln-clamp{display:block;max-height:3lh;overflow:hidden}
 .ln-txt:hover,.ln-blk:hover{border-color:var(--accent)}
 .ln-then{display:flex;align-items:center;flex-wrap:wrap;gap:6px;white-space:normal;overflow:visible;padding:2px 3px 0;font-size:12.5px;color:var(--dim)}
 .ln-then-l{font-size:12px;color:var(--dim);margin-right:2px}

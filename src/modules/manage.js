@@ -1796,6 +1796,7 @@ function wireLibrary(page){
       btn.title=word;
       btn.setAttribute("aria-label",word+" "+btn.getAttribute("data-chips-more"));
       markChipOverflow();
+      markCutText(r);
     };
   });
   if(intentsList){

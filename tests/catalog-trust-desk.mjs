@@ -203,7 +203,10 @@ function matches(el, sel, scope) {
   }
   return true;
 }
+/* The cut pass measures laid-out lines and nothing here is laid out, so its two lists (CUT_SEL, CUT_FOOT) find nothing. */
+let CUT_LISTS = new Set();
 function queryAll(root, sel) {
+  if (CUT_LISTS.has(sel)) return [];
   const out = [];
   const walk = n => n.children.forEach(c => { if (matches(c, sel, root)) out.push(c); walk(c); });
   walk(root);
@@ -359,6 +362,8 @@ async function launch(plan) {
   const contextBridge = { exposeInMainWorld: (k, v) => { globalThis[k] = v; }, executeInMainWorld: o => o.func(...(o.args || [])) };
   new Function("require", shellSrc("preload.js"))(n => (n === "electron" ? { contextBridge, ipcRenderer, webUtils: {} } : nodeRequire(n)));
 
+  const CUT = await import(MOD("cut-text.js"));
+  CUT_LISTS = new Set([CUT.CUT_SEL, CUT.CUT_FOOT]);
   const OFFER = await import(MOD("catalog-offer.js"));
   const CF = await import(MOD("catalog-file.js"));
   const TR = await import(MOD("catalog-trust.js"));
