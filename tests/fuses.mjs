@@ -139,7 +139,7 @@ try {
     for (const d of ['tools', 'src/modules', 'node_modules/.bin', 'shell/embed']) fs.mkdirSync(path.join(LAB, d), { recursive: true });
     /* tools/package.mjs prepares the built-in model first (tools/model.mjs, Prima Vista step 2), so the lab carries what that
        step reads; with no model in the lab it packages the desk without one, as a build without the model does. */
-    for (const f of ['tools/package.mjs', 'tools/fuses.mjs', 'electron-builder.js', 'tools/signin-secret.cjs', 'tools/test-service.cjs', 'src/modules/env.js', 'tools/model.mjs',
+    for (const f of ['tools/package.mjs', 'tools/fuses.mjs', 'electron-builder.js', 'tools/signin-secret.cjs', 'tools/test-service.cjs', 'tools/seller-address.cjs', 'src/modules/env.js', 'tools/model.mjs',
                      'tools/model-runtime.json', 'shell/embed/core.cjs', 'shell/embed/third-party.txt', 'tools/patch-nsis.mjs', 'tools/patch-nsis.cjs'].filter(f => fs.existsSync(path.join(ROOT, f))))
       fs.copyFileSync(path.join(ROOT, f), path.join(LAB, f));
     fs.writeFileSync(path.join(LAB, 'package.json'),

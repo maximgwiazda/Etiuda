@@ -141,8 +141,10 @@ gate('the version, read where the rulebook keeps it, and whether the build is a 
   console.log('  E_VERSION ' + m[1] + ', and package.json stays at ' + JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version);
   const testService = testServiceProblems({ env: process.env }); /* plant:release-ts-var */
   if (testService.length) return testService.join('; ');
-  const win = createRequire(import.meta.url)(join(ROOT, 'electron-builder.js')).win;
-  const judged = beforeBuild({ version: m[1], customer: flag('--customer'), licenceDir: join(ROOT, 'shell'), win });
+  const builder = createRequire(import.meta.url)(join(ROOT, 'electron-builder.js')), win = builder.win;
+  /* The pages the build will show: the filled copy where ETIUDA_PACK_SELLER_ADDRESS names its file (tools/seller-address.cjs). */
+  const licenceDir = resolve(ROOT, builder.directories.buildResources); /* plant:release-licence-dir */
+  const judged = beforeBuild({ version: m[1], customer: flag('--customer'), licenceDir, win });
   SELL = { customer: judged.customer, win };
   if (!judged.customer) {
     console.log('  PREVIEW, not for a customer' + (judged.problems.length
