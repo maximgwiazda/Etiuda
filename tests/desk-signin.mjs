@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 81;
+const PLANTS = 85;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 94 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + TRACE_PLANTS);
+const EXPECTED = 98 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + TRACE_PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -414,7 +414,7 @@ function loadWire(st, swap) {
     if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in the wiring once: " + swap[0]);
     text = text.replace(swap[0], swap[1]);
   }
-  const body = "let signinBusy = stand.busy || null, signinTimer = null, signinWrote = \"kept\", signinSaid = \"\";\nfunction signinFlush() { stand.flushes++; return true; }\n" + text
+  const body = "let signinBusy = stand.busy || null, signinTimer = null, signinWrote = \"kept\", signinSaid = stand.said || \"\";\nfunction signinFlush() { stand.flushes++; return true; }\n" + text
     + "\nreturn { signinRenewNow, armSigninRenew, SIGNIN_RENEW_MS, SIGNIN_FIRST_MS, signinOutNow: typeof signinOutNow === \"undefined\" ? undefined : signinOutNow,"
     + " wrote: () => signinWrote, said: () => signinSaid };";
   return new Function(...WIRE_STANDS, body)(...WIRE_STANDS.map(n => n === "stand" ? st : st[n]));
@@ -1890,6 +1890,92 @@ CASES.waitPage = async (s, page) => {
     && !/has no free seat\."|can free a seat or add one/.test(L + PAGE + SETTINGS);
 };
 
+/* ---- a refusal is said where the person looks (ds19): what the service refuses at a renewal or Check now, and a sign-in pressed
+   while signed in that fails, in the door and in Account, in words that say what to do; Check now not held by a clock set back ---- */
+const SAY_DESKS = ["This account is signed in on three computers already.", "A seat holds three computers. Signing out on one of the others frees its place, and this computer checks again by itself."];
+const SAY_TOKEN = ["The sign-in service did not accept this account's sign-in.", "Signing in again settles it; until then, Etiuda keeps working with the catalog it has."];
+const NEW_FAILED = "The new sign-in did not finish.", KEPT = "This computer stays signed in with the account it had.";
+const SAY_PRESSED = why => [NEW_FAILED, why ? KEPT + " " + why : KEPT];
+const sayIs = (a, b) => Array.isArray(a) && a.length === 2 && a[0] === b[0] && a[1] === b[1];
+const textOf = h => String(h).replace(/<[^>]*>/g, "\n").replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+const saidIn = (h, pair) => { const x = textOf(h); return x.indexOf(pair[0]) >= 0 && x.indexOf(pair[1]) >= 0; };
+/* A renewal's refusal kept as the said reason, in the copywriter's words: "desks" with Check now; "token", or any other reason the shell
+   keeps, settled by signing in again, the providers under it; the door and Account alike, Polish too. */
+CASES.toldRenewal = async (s, page) => {
+  const pg = page || P;
+  if (!pg) return false;
+  const storage = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const base = { offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, seat: "held" };
+  const door = o => pg.signinDoor(pg.signinRead(Object.assign({}, base, o)));
+  const desks = door({ refused: "desks" }), token = door({ refused: "token" }), other = door({ refused: "elsewhere" }), none = door({});
+  let pl = null;
+  storage.lsSet("eUiLang", "pl");
+  try { pl = door({ refused: "desks" }).say; } finally { storage.lsSet("eUiLang", "en"); }
+  const acct = page ? null : [await acctOf(Object.assign({}, base, { refused: "desks" })), await acctOf(Object.assign({}, base, { refused: "token" }))];
+  return sayIs(desks.say, SAY_DESKS) && desks.acts[0].act === "check" && desks.acts[0].label === "Check now" && desks.acts[0].solid === true
+    && sayIs(token.say, SAY_TOKEN) && token.providers.join() === "microsoft,google" && sayIs(other.say, SAY_TOKEN) && none.moment === "noteam" && !none.say
+    && !!pl && pl[0] === "To konto jest już zalogowane na trzech komputerach." && pl[1] === "Miejsce w licencji obejmuje trzy komputery. Wylogowanie się na jednym z pozostałych zwolni jego miejsce, a ten komputer sam sprawdzi ponownie."
+    && (page ? true : saidIn(acct[0], SAY_DESKS) && saidIn(acct[1], SAY_TOKEN)
+      && (acct[1].match(/data-e-open="signin"/g) || []).length === 2);
+};
+/* A sign-in pressed while signed in that fails: the desk stays signed in and says so, then the reason's own heading where it has one;
+   Try again choosing again; a cancel or a sign-in done says nothing; the door and Account alike, Polish too. */
+CASES.toldPressed = async (s, page) => {
+  const pg = page || P;
+  if (!pg) return false;
+  const storage = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const base = { offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, seat: "held" };
+  const door = o => pg.signinDoor(pg.signinRead(Object.assign({}, base, o)));
+  const desks = door({ said: "desks" }), away = door({ said: "signin-unreached" }), org = door({ said: "signin-notallowed" }), token = door({ said: "token" });
+  const quiet = [door({ said: "signin-cancelled" }), door({ said: "signin-done" })];
+  let pl = null;
+  storage.lsSet("eUiLang", "pl");
+  try { pl = door({ said: "signin-unreached" }).say; } finally { storage.lsSet("eUiLang", "en"); }
+  const acct = page ? "" : await acctOf(Object.assign({}, base, { said: "signin-timeout" }));
+  return sayIs(desks.say, SAY_PRESSED("This account is already in use on three computers.")) && desks.acts[0].act === "choose" && desks.acts[0].label === "Try again" && !!desks.ident
+    && sayIs(away.say, SAY_PRESSED("The sign-in service could not be reached.")) && sayIs(org.say, SAY_PRESSED("This account's organisation has not allowed Etiuda at its sign-in provider."))
+    && org.acts[0].label === "Use another account" && sayIs(token.say, SAY_PRESSED(""))
+    && quiet.every(d => d.moment === "noteam" && !d.say) && !!pl && pl[0] === "Nowe logowanie nie dobiegło końca."
+    && pl[1] === "Ten komputer pozostaje zalogowany kontem, którego używał. Nie udało się połączyć z usługą logowania."
+    && (page ? true : saidIn(acct, SAY_PRESSED("The sign-in service could not be reached.")) && /data-signin-act="choose"[^>]*>Try again</.test(acct));
+};
+/* Check now, the handler evaluated with stand-ins: once per gap, and a clock set back does not hold it up. */
+function loadCheck(swap) {
+  const a = WIRING.indexOf('ipcMain.handle("etiuda:signin-check",');
+  let text = a < 0 ? "" : WIRING.slice(a, WIRING.indexOf("\n});", a) + 4);
+  if (swap) {
+    if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in the check once: " + swap[0]);
+    text = text.replace(swap[0], swap[1]);
+  }
+  const st = { at: 1e12, renews: 0, handler: null };
+  const ipc = { handle: (ch, fn) => { st.handler = fn; } };
+  const clock = { now: () => st.at };
+  new Function("ipcMain", "fromEngine", "signinRenewNow", "signinView", "SIGNIN_CHECK_GAP_MS", "Date", "let signinCheckAt = 0;\n" + text)(
+    ipc, () => true, async () => { st.renews++; return "renewed"; }, () => ({}), 10 * 1000, clock);
+  return st;
+}
+CASES.checkGap = async (s, swap) => {
+  const st = loadCheck(swap);
+  if (typeof st.handler !== "function") return false;
+  const press = () => st.handler({});
+  await press(); const first = st.renews;
+  st.at += 3000; await press(); const held = st.renews;
+  st.at -= 3600 * 1000; await press(); const back = st.renews;
+  st.at += 11 * 1000; await press(); const after = st.renews;
+  return first === 1 && held === 1 && back === 2 && after === 3;
+};
+/* A renewal that reached its end leaves no stale press's refusal standing: the press's said is cleared with it. */
+CASES.saidCleared = async (s, swap) => {
+  const next = cert({ issued: Date.now(), until: Date.now() + 30 * 86400000 });
+  const st = wireStand(s, () => answer({ id_token: jwt(msClaims(undefined, Date.now())), refresh_token: "rt-2" }), () => answer({ ok: true, certificate: next, code: CODE }));
+  st.store.held = heldOf();
+  st.said = "signin-unreached";
+  const w = loadWire(st, swap);
+  const before = w.said();
+  const r = await w.signinRenewNow();
+  return before === "signin-unreached" && r === "renewed" && w.said() === "";
+};
+
 /* ---- the cases on the branch ------------------------------------------------------------------------------------------- */
 const LEGS = [
   ["ds1a", "offered", "as shipped no client id is configured and nothing is offered; a configured table offers what it configures, in order"],
@@ -1975,6 +2061,10 @@ const LEGS = [
   ["ds18a", "waitRead", "no free seat is a wait: the service's 200 with no certificate and the reason \"waiting\" is kept as the said reason with the refresh token, asking nobody; none without it stays no licence; the certificate after it ends the wait; a 409 \"full\" reads as before"],
   ["ds18b", "waitRenew", "the quiet renewal while waiting waits again with its token renewed and nobody asked, and seats the desk once a seat frees; an older service's \"full\" keeps its token as before"],
   ["ds18c", "waitPage", "the door and Account tell the wait in the copywriter's words, the licence form and the team form, English and Polish, Check now first; an older service's \"full\" the same; no licence its own moment; today's words gone"],
+  ["ds19a", "toldRenewal", "a renewal or Check now the service refuses is said in the door and Account in the copywriter's words: \"desks\" with Check now, \"token\" or any other kept reason settled by signing in again, the providers under it; Polish too"],
+  ["ds19b", "toldPressed", "a sign-in pressed while signed in that fails says the desk stays signed in, then the reason's own heading where it has one, with Try again or Use another account; a cancel or a sign-in done says nothing; the door and Account, Polish too"],
+  ["ds19c", "checkGap", "Check now asks once per SIGNIN_CHECK_GAP_MS, and a clock set back since the last press does not hold it up"],
+  ["ds19d", "saidCleared", "a renewal that reached its end clears a failed press's said, so no stale refusal stands over the desk"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
@@ -2309,6 +2399,10 @@ if (!PLANTS_OFF) {
     "function signinNoSeat(v){ return v.refused===\"full\"; }"], "waitPage");
   await plantPage("dsp82", ["case \"waiting\": case \"full\": /* plant:wait-say */", "case \"full\":"], "waitPage");
   /* A gate on a local act, put into the desk file's write in memory, is seen. */
+  await plantPage("dsp83", ["if(!r || r===\"signin\" || signinNoSeat(v)) return null; /* plant:told-renewal */", "return null;"], "toldRenewal");
+  await plantPage("dsp84", ["  if(FAIL_FIRST.indexOf(v.said)>=0) return {kind:\"pressed\",", "  if(false) return {kind:\"pressed\","], "toldPressed");
+  await plantWire("dsp85", ["if (since >= 0 && since < SIGNIN_CHECK_GAP_MS)", "if (since < SIGNIN_CHECK_GAP_MS)"], "checkGap");
+  await plantWire("dsp86", ["  signinSaid = \"\"; /* plant:renew-said */\n", ""], "saidCleared");
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),
     "dsp14 plant a sign-in gate on the desk file's write turns ds5a red");

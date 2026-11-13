@@ -9943,7 +9943,9 @@ ipcMain.handle("etiuda:signin-out", (e) => {
 /* Check now: one renewal at once, at most once per SIGNIN_CHECK_GAP_MS. */
 ipcMain.handle("etiuda:signin-check", async (e) => {
   if (!fromEngine(e)) return null;
-  if (Date.now() - signinCheckAt < SIGNIN_CHECK_GAP_MS) return signinView(); /* plant:check-gap */
+  /* A clock set back since the last press does not hold Check now up. */
+  const since = Date.now() - signinCheckAt;
+  if (since >= 0 && since < SIGNIN_CHECK_GAP_MS) return signinView(); /* plant:check-gap */
   signinCheckAt = Date.now();
   await signinRenewNow().catch(() => "");
   return signinView();
@@ -9961,6 +9963,7 @@ async function signinRenewNow() {
   const r = await signinRenewHeld(signinIo({ loop: null }), p, me.key, held, Date.now);
   if (s.held !== held) return ""; /* a sign-in or a sign out took its place meanwhile */
   s.held = r.held;
+  signinSaid = ""; /* plant:renew-said */
   signinSave();
   signinFlush();
   tellSignin();
