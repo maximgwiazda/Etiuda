@@ -72,6 +72,10 @@ const LEGS = [
   { id: "desk", args: ["tests/desk.js"], where: "linux-ok", window: true, who: "tests/desk.js" },
   { id: "links", args: ["tests/links.js"], where: "linux-ok", window: true, who: "tests/links.js" },
   { id: "catalog-watch", args: ["tests/catalog-watch.js"], where: "linux-ok", window: true, fixtures: true, who: "tests/catalog-watch.js" },
+  { id: "opening-frame", args: ["tests/opening-frame.js"], where: "windows-only", window: true, who: "tests/opening-frame.js" },
+  { id: "eject-desk", args: ["tests/eject-desk.js"], where: "linux-ok", window: true, who: "tests/eject-desk.js" },
+  { id: "no-crash-dialog-desk", args: ["tests/no-crash-dialog-desk.js"], where: "linux-ok", window: true, who: "tests/no-crash-dialog-desk.js" },
+  { id: "silent-update-desk", args: ["tests/silent-update-desk.js"], where: "linux-ok", window: true, who: "tests/silent-update-desk.js" },
 ];
 
 const BY_ID = new Map(LEGS.map(leg => [leg.id, leg]));
