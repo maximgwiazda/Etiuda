@@ -2283,7 +2283,7 @@ try {
     const releaseOk = inUse2 && inUse2.n === 2 && env2.inUseN === 2 && inUse2.cleared === true
       && box.D.api.deskFileGenuine(inUse2, box.me.id);
 
-    // Load another catalog: counter increments strictly to n = 3
+    // Load another catalog file: counter increments strictly to n = 3
     const priv2 = textOf(catalog(2, { id: "counter-lamps", name: "Counter lamps revised" }));
     const outside2 = path.join(folder("counter-out-2"), "counter2.ec");
     put(path.dirname(outside2), "counter2.ec", priv2);

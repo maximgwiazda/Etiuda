@@ -441,20 +441,26 @@ function loadTabSession(){
     return true;
   }catch(e){ return false; }
 }
+/* The mark moves in place only while the strip holds exactly what drawTabsCore would draw, screen tabs
+   included, in its order; anything else is a redraw. */
 function syncTabActive(id){
   const bar=$("#tabsBar");
   if(!bar) return false;
   const tabEls=bar.querySelectorAll(".tab");
-  if(tabEls.length!==tabs.length) return false;
-  let matched=true;
-  tabEls.forEach((el,i)=>{
-    if(!tabs[i] || el.dataset.tid!==tabs[i].id){ matched=false; return; }
-    const on=tabs[i].id===id;
+  const screenList=typeof screens !== "undefined" && Array.isArray(screens) ? screens : [];
+  const order=(typeof getTabOrder === "function" ? getTabOrder() : tabs.map(tb=>tb.id).concat(screenList))
+    .filter(k=>screenList.includes(k) || tabs.some(tb=>tb.id===k));
+  if(tabEls.length!==order.length) return false;
+  for(let i=0;i<tabEls.length;i++){
+    if((tabEls[i].classList.contains("screen") ? tabEls[i].dataset.sid : tabEls[i].dataset.tid)!==order[i]) return false;
+  }
+  const curScreen=typeof screenOn !== "undefined" ? screenOn : null;
+  tabEls.forEach(el=>{
+    const on=el.classList.contains("screen") ? el.dataset.sid===curScreen : !curScreen && el.dataset.tid===id;
     el.classList.toggle("on",on);
     const lab=el.querySelector(".tab-label");
     if(lab) lab.setAttribute("aria-selected",on?"true":"false");
   });
-  if(!matched) return false;
   syncTabAccent();
   syncTabBeads();
   return true;

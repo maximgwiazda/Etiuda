@@ -137,7 +137,7 @@ module.exports = sellerAddress.sellerConfig(testService.testServiceConfig({
   fileAssociations: [{
     ext: "ec",
     name: "Etiuda catalog",
-    description: "Etiuda catalog",
+    description: "Etiuda catalog file",
     icon: "shell/etiuda.ico",
     role: "Editor",
   }],
@@ -176,7 +176,7 @@ module.exports = sellerAddress.sellerConfig(testService.testServiceConfig({
     synopsis: require("./package.json").description,
     // No updater, as on Windows: without this the build writes app-update.yml and latest-linux.yml.
     publish: null,
-    fileAssociations: [{ ext: "ec", name: "Etiuda catalog", description: "Etiuda catalog",
+    fileAssociations: [{ ext: "ec", name: "Etiuda catalog", description: "Etiuda catalog file",
       mimeType: "application/x-etiuda-catalog" }],
     // The class the window is measured to carry (tests/linux-desk.js 5a), so a dock groups it under this entry.
     // The scheme joins this entry from protocols above: MimeType=x-scheme-handler/etiuda;

@@ -23,7 +23,7 @@ function markEReady(){
   applyUiLang();
 }
 
-/* THE EMPTY DESK'S FOCUS is its one button: Load catalog takes it where the screen draws it, once nothing else holds the
+/* THE EMPTY DESK'S FOCUS is its one button: Load catalog file takes it where the screen draws it, once nothing else holds the
    focus and no dialog stands. The search box takes none at open (it is hidden under the launch, and the first typed key
    reaches it by the page's own routing); a work hidden by the launch cannot take it, so the landing asks again. */
 function focusEmptyLoadOnOpen(){
@@ -47,7 +47,7 @@ function dialogShown(){
 // On open: focus the first copyable entry so ↑↓ work immediately (no INTENT capture).
 // INTENT still receives typing when the user starts typing (global keydown → intent field).
 function focusFirstEntryOnOpen(){
-  // An empty desk takes nothing from what holds the focus: Load catalog waits for the page itself to have it.
+  // An empty desk takes nothing from what holds the focus: Load catalog file waits for the page itself to have it.
   const els=listEntryEls();
   if(!els.length){ focusEmptyLoadOnOpen(); return; }
   try{

@@ -12,7 +12,7 @@ import { offerUndo, t, uiLang } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { catIconSvg, catSlot } from "./cat-identity.js";
 import { escFilled, fill } from "./intent-text.js";
-import { markCutText } from "./cut-text.js";
+import { markCut, markCutText } from "./cut-text.js";
 import { NEXT_KEYS, nextFoldState, nextHitHtml, nextHits, nextIdsOf, nextListWrite, stampHtml } from "./card-chain.js";
 import { ICON_PLUS, ICON_X } from "./icons.js";
 import { copyCardPart } from "./copy-entry.js";
@@ -65,7 +65,7 @@ function toggleLanes(on){
   animatePillsBox(()=>{ document.body.classList.toggle("e-lanes", want); syncPillsCollapse(); });
   if(!want){ finishWalk(); el.hidden=true; el.innerHTML=""; laneRows=[]; laneFrom=null; }
   clearInterval(laneTick); laneTick=0;
-  if(want) laneTick=setInterval(()=>{ const s=lanesEl() && lanesEl().querySelector(".ln-since"); if(s) s.textContent=laneSince(laneState().log); }, LANE_TICK_MS);
+  if(want) laneTick=setInterval(()=>{ const s=lanesEl() && lanesEl().querySelector(".ln-since"); if(s){ s.textContent=laneSince(laneState().log); markCut(s); } }, LANE_TICK_MS);
   // Let go where a timer can be, so a test in bare node that leaves the lanes up still ends.
   if(laneTick && laneTick.unref) laneTick.unref();
   // One frame on while the bar is still retreating, so this frame is only the bar and the

@@ -15,7 +15,7 @@ import { ejectCatalog } from "./local-memory.js";
 import { lsGet, lsSet, nsGet, nsSet } from "./storage.js";
 import { tourDueAtBoot, afterTour } from "./tour.js";
 import { placeBubble } from "./bubble.js";
-import { markCut } from "./cut-text.js";
+import { markCut, markCutText } from "./cut-text.js";
 import { cutLeaves, dismissNode, mgReduceMotion, M_MS, E_EASE, E_SPRING } from "./motion.js";
 import { catalogAwaitingLine, catalogCountsLine, t, toast, toastRefusal } from "./ui-lang.js";
 import { esc } from "./esc.js";
@@ -277,7 +277,7 @@ function ecEmptyHtml(){
   const dir=eCatalogFolder();
   if(!dir) return "";
   return '<div class="ec-row ec-empty">'
-    +t("Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.")
+    +t("Catalog files in {FOLDER} appear here: load one from anywhere else, or put it in the folder.")
       .split("{FOLDER}").join('<code class="open-folder" data-ec-open="1" role="button"'
         +' tabindex="0" title="'+esc(dir)+'">'+esc(eCatalogFolderShort())+'</code>')
     +'</div>';
@@ -416,6 +416,7 @@ function paintCatalogList(){
     ecKeyBubClose();
     const rows=tops.reduce((out,x,k)=>out.concat([x.html],under[k]),[]).concat(alone);
     box.innerHTML=rows.length?rows.join(""):ecEmptyHtml();
+    markCutText(box);
     wireEcKeys(box);
     // A hanging row's line says what that desk changed, once both files have been read.
     nested.forEach(i=>deskChangeWords(desks[i],deskBase(desks[i],files,held)).then(words=>{
@@ -602,8 +603,8 @@ function eOfferCatalogDialog(c,src){
        another taken up, which the question asks and no sentence beneath it can improve on. The
        two editions of ONE catalog keep their sentence: what is at stake there is what happens to
        this desk's own work, which the screen cannot show. */
-    '<h3 id="ecTitle">'+esc(t(olderSure||older?"Older catalog found":updating && !plain?"Updated catalog found"
-        :replacing?"Replace catalog?":"Load catalog?"))+'</h3>'
+    '<h3 id="ecTitle">'+esc(t(olderSure||older?"Older catalog file found":updating && !plain?"Updated catalog file found"
+        :replacing?"Replace catalog?":"Load catalog file?"))+'</h3>'
     +(olderSure
         ? '<p class="ec-warn">'+esc(t("This edition is older than the one in use on this desk, so some of its replies may be out of date."))+'</p>'
         : '')
@@ -635,7 +636,7 @@ function eOfferCatalogDialog(c,src){
     +(fresh && !src.asked ? '<p class="ec-holds">'+esc(t("This desk carries on as it is until the update is loaded."))+'</p>' : '')
     +'<div class="tour-actions">'
     +'<button type="button" class="btn" id="ecNo">'+esc(t(olderSure?"Keep the newer one":replacing && !fresh?"Keep current":"Not now"))+'</button>'
-    +'<button type="button" class="btn primary" id="ecYes">'+esc(t(olderSure?"Open the older edition":older?"Load it anyway":updating && !plain?"Load the new edition":replacing?"Load it":"Load catalog"))+'</button>'
+    +'<button type="button" class="btn primary" id="ecYes">'+esc(t(olderSure?"Open the older edition":older?"Load it anyway":updating && !plain?"Load the new edition":replacing?"Load it":"Load catalog file"))+'</button>'
     +'</div>';
   cutLeaves();
   if(fresh){ edWaiting={c:c, src:src}; paintCatWaiting(); }
@@ -894,7 +895,7 @@ function eCheckWatchedFile(interactive){
         return f.text().then(text=>{
           let c=null;
           try{ c=parseCatalogFile(text); }
-          catch(e){ if(interactive) toastRefusal(e&&e.needsEngine ? eNeedsNewerLine(e.needsEngine) : t("That file is not a catalog Etiuda can read.")); return null; }
+          catch(e){ if(interactive) toastRefusal(e&&e.needsEngine ? eNeedsNewerLine(e.needsEngine) : t("That is not a catalog file Etiuda can read.")); return null; }
           const shown=eOfferCatalogDialog(c,{
             /* No folder: this file was PICKED, so it may sit anywhere, and naming the catalog
                folder beside it would say it came from there. */
@@ -1035,7 +1036,7 @@ function refuseAskedFile(name,why,code){
   if(why==="read"||why==="not-answering"||why==="not-desk-file"||why==="sealed"||why==="sealed-wait"||why==="unreadable"||why==="off-roster"){
     toastRefusal(fileReadLine(name, fileReadCode({text:"", why:why, code:code||""}))); return;
   }
-  toastRefusal(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(String(name||"")));
+  toastRefusal(t("{FILE} is not a catalog file Etiuda can read.").split("{FILE}").join(String(name||"")));
 }
 function wireHostCatalogWatch(){
   const h=(typeof window!=="undefined" && window.E_HOST)||null;

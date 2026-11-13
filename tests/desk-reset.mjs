@@ -37,7 +37,7 @@ function skip(line) {
   console.log("  SKIP " + line);
 }
 
-const GOES = "Reset removes every catalog in Etiuda's own folder, the team, the agent's name, settings, open conversations and every local change. Catalog files in any other folder stay, and so does the licence.";
+const GOES = "Reset removes every catalog file in Etiuda's own folder, the team, the agent's name, settings, open conversations and every local change. Catalog files in any other folder stay, and so does the licence.";
 const WARN = "There is no Undo. Joining the team again takes a new invitation from its lead.";
 const ASK = "Type RESET to confirm.";
 const ROW = "Returns this desk to a fresh install, keeping only the licence.";
@@ -59,7 +59,7 @@ const UNFINISHED_PL = {
 const PL = {
   "Returns this desk to a fresh install, keeping only the licence.": "Przywraca stanowisko do stanu po świeżej instalacji; zostaje tylko licencja.",
   "Reset Etiuda?": "Zresetować Etiudę?",
-  [GOES]: "Reset usuwa każdy katalog z własnego folderu Etiudy, zespół, imię agenta, ustawienia, otwarte rozmowy i wszystkie zmiany lokalne. Pliki katalogów w każdym innym folderze zostają, podobnie jak licencja.",
+  [GOES]: "Reset usuwa każdy plik katalogu z własnego folderu Etiudy, zespół, imię agenta, ustawienia, otwarte rozmowy i wszystkie zmiany lokalne. Pliki katalogów w każdym innym folderze zostają, podobnie jak licencja.",
   [WARN]: "Tego nie da się cofnąć. Ponowne dołączenie do zespołu wymaga nowego zaproszenia od lidera.",
   [ASK]: "Do potwierdzenia trzeba wpisać RESET.",
   [AGAIN]: "Etiuda uruchamia się ponownie jak po świeżej instalacji."
