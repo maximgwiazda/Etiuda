@@ -1948,6 +1948,7 @@ main{max-width:none;margin:16px 0 0;padding:0}
 #list .card{display:flow-root}
 .card.dragging{opacity:.55;z-index:2}
 html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
+html.eddrag, html.eddrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
 .cbadge.hit{background:var(--go-soft);color:var(--go)}
 .cbadge.cat{background:var(--accent-soft);color:var(--accent)}
 .cbadge.fav{background:var(--fav-soft);color:var(--fav)}
@@ -2881,6 +2882,9 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
   display:flex;flex-direction:column;overflow:hidden;
   background:var(--panel-raised);color:var(--ink);border:1px solid var(--line);
   border-radius:16px;box-shadow:0 8px 20px rgba(0,0,0,.12),0 28px 68px rgba(0,0,0,.22);padding:0}
+/* A MOVED EDITOR (dialog.js, edStandAt) stands top-aligned and grows downward from its top. */
+.modal.ed-placed{align-items:flex-start}
+.modal.ed-placed .modal-card{transform-origin:50% 0;max-height:min(92vh,820px,var(--ed-room,100vh))}
 /* The intent panel, the dialogs, the menus, Quick facts and the opened pill bar wear the rim inside their
    border; their bevel gives way to it. A surface that scrolls as a whole carries the ring with its content. */
 :root:not([data-theme=light]) #intentRail,
@@ -18325,6 +18329,7 @@ What you type stays in this browser only.`;
     refreshDialogName: () => refreshDialogName,
     tabTargetIn: () => tabTargetIn,
     wireAcc: () => wireAcc,
+    wireDialogDrag: () => wireDialogDrag,
     wireFocusModality: () => wireFocusModality,
     wireFolds: () => wireFolds,
     wireModalBody: () => wireModalBody,
@@ -18508,6 +18513,7 @@ What you type stays in this browser only.`;
     translateTree(modalCard);
     dressDialogInputs(modalCard);
     markCutText(modalCard);
+    placeDialog(cfg.place);
     const at = document.activeElement;
     if (!modalCard.contains(at) && !openCover() && !(at && at.closest && at.closest("#tourCard")))
       try {
@@ -18704,7 +18710,7 @@ What you type stays in this browser only.`;
   function leaveModal() {
     if (modalEl.hidden || !modalCard.firstChild || mgReduceMotion()) return;
     const g = document.createElement("div"), bg = document.createElement("div"), c = document.createElement("div");
-    g.className = "modal";
+    g.className = modalEl.classList.contains("ed-placed") ? "modal ed-placed" : "modal";
     bg.className = "modal-bg";
     c.className = modalCard.className;
     c.style.cssText = modalCard.style.cssText;
@@ -18725,6 +18731,9 @@ What you type stays in this browser only.`;
     modalBack = null;
     leaveModal();
     modalEl.hidden = true;
+    edPlaceKind = null;
+    edDrag = null;
+    edUnstand();
     modalCard.classList.remove("about-modal", "about-page", "mt-modal");
     modalCard.innerHTML = "";
     let back = modalOpener;
@@ -18744,6 +18753,136 @@ What you type stays in this browser only.`;
         }
       }
     }
+  }
+  var ED_PLACE_KINDS = ["card", "intent", "category"];
+  var ED_EDGE = 8;
+  var edPlaceKind = null;
+  var edDrag = null;
+  var edDragEnd = 0;
+  var edPlaced = null;
+  var edHeadDown = false;
+  function edPlaceNum(v) {
+    return typeof v === "number" && isFinite(v) && Math.abs(v) <= 2e4;
+  }
+  function edPlaces() {
+    const raw = lsGet("eEdPlace");
+    if (raw == null) return {};
+    let o = null;
+    try {
+      o = JSON.parse(raw);
+    } catch (e) {
+    }
+    const out = {};
+    if (o && typeof o === "object" && !Array.isArray(o)) ED_PLACE_KINDS.forEach((k) => {
+      const p = o[k];
+      if (p && typeof p === "object" && edPlaceNum(p.x) && edPlaceNum(p.y)) out[k] = { x: Math.round(p.x), y: Math.round(p.y) };
+    });
+    if (JSON.stringify(out) !== raw) edPlacesWrite(out);
+    return out;
+  }
+  function edPlacesWrite(all) {
+    const out = {};
+    ED_PLACE_KINDS.forEach((k) => {
+      if (all[k]) out[k] = all[k];
+    });
+    if (Object.keys(out).length) lsSet("eEdPlace", JSON.stringify(out));
+    else lsDel("eEdPlace");
+  }
+  function edPlaceRect(g, x, y) {
+    const maxL = g.W - ED_EDGE - g.w;
+    const left = g.fill || maxL < ED_EDGE ? (g.W - g.w) / 2 : Math.min(maxL, Math.max(ED_EDGE, g.W / 2 + x - g.w / 2));
+    const top = Math.max(g.band + ED_EDGE, Math.min(g.H - ED_EDGE - g.h, g.H / 2 + y));
+    return { left: Math.round(left), top: Math.round(top) };
+  }
+  function edBand() {
+    const row2 = document.querySelector("header > .row");
+    const r = row2 && row2.getBoundingClientRect ? row2.getBoundingClientRect() : null;
+    return r && r.bottom > 0 ? r.bottom : 0;
+  }
+  function edStandAt(x, y) {
+    const st = modalCard.style, band = edBand(), W = modalEl.clientWidth, H = modalEl.clientHeight;
+    modalEl.classList.add("ed-placed");
+    st.setProperty("--ed-room", Math.max(0, H - 2 * ED_EDGE - band) + "px");
+    const relT = parseFloat(st.top) || 0, relL = parseFloat(st.left) || 0;
+    const w = modalCard.offsetWidth, cap = parseFloat(getComputedStyle(modalCard).maxWidth);
+    const g = { W, H, band, w, h: modalCard.offsetHeight, fill: cap > 0 && w < cap - 0.5 };
+    const at = edPlaceRect(g, x, y), t0 = modalCard.offsetTop - relT, l0 = modalCard.offsetLeft - relL;
+    st.top = at.top - t0 + "px";
+    st.left = at.left - l0 + "px";
+    const was = edPlaced;
+    if (was && was.h !== g.h && was.top !== at.top) st.transformOrigin = "50% " + (was.top - at.top) * g.h / (g.h - was.h) + "px";
+    else st.removeProperty("transform-origin");
+    edPlaced = { top: at.top, h: g.h };
+    return { x: Math.round(at.left + g.w / 2 - W / 2), y: Math.round(at.top - H / 2) };
+  }
+  function edUnstand() {
+    if (!modalEl || !modalEl.classList.contains("ed-placed")) return;
+    modalEl.classList.remove("ed-placed");
+    ["top", "left", "--ed-room", "transform-origin"].forEach((k) => modalCard.style.removeProperty(k));
+    edPlaced = null;
+  }
+  function placeDialog(kind) {
+    const was = edPlaced;
+    edPlaceKind = ED_PLACE_KINDS.indexOf(kind) >= 0 ? kind : null;
+    edPlaceSync();
+    if (was && edPlaced) edPlaced = was;
+  }
+  function edPlaceSync() {
+    if (edDrag && edDrag.moved) return;
+    const p = edPlaceKind && !modalEl.hidden ? edPlaces()[edPlaceKind] : null;
+    if (p) edStandAt(p.x, p.y);
+    else edUnstand();
+  }
+  function wireDialogDrag() {
+    const head = (e) => {
+      const h = e.target && e.target.closest ? e.target.closest("h2") : null;
+      return h && h.parentNode === modalCard && !e.target.closest("button,a,input,select,textarea") ? h : null;
+    };
+    modalCard.addEventListener("pointerdown", (e) => {
+      edHeadDown = !!head(e);
+      if (!edPlaceKind || e.button !== 0 || e.pointerType === "touch" || !head(e)) return;
+      edDrag = { x: e.clientX, y: e.clientY, top: modalCard.offsetTop, left: modalCard.offsetLeft, moved: false, at: null };
+      try {
+        modalCard.setPointerCapture(e.pointerId);
+      } catch (_) {
+      }
+    });
+    modalCard.addEventListener("pointermove", (e) => {
+      const d = edDrag;
+      if (!d) return;
+      const dx = e.clientX - d.x, dy = e.clientY - d.y;
+      if (!d.moved) {
+        if (Math.abs(dx) + Math.abs(dy) < 4) return;
+        d.moved = true;
+        document.documentElement.classList.add("eddrag");
+      }
+      d.at = edStandAt(d.left + dx + modalCard.offsetWidth / 2 - modalEl.clientWidth / 2, d.top + dy - modalEl.clientHeight / 2);
+    });
+    const end = () => {
+      const d = edDrag;
+      edDrag = null;
+      if (d && d.moved) document.documentElement.classList.remove("eddrag");
+      if (!d || !d.at || !edPlaceKind) return;
+      edDragEnd = Date.now();
+      const all = edPlaces();
+      all[edPlaceKind] = d.at;
+      edPlacesWrite(all);
+    };
+    ["pointerup", "pointercancel", "lostpointercapture"].forEach((k) => modalCard.addEventListener(k, end));
+    modalCard.addEventListener("dblclick", (e) => {
+      if (!edPlaceKind || !edHeadDown || Date.now() - edDragEnd < 500) return;
+      const all = edPlaces();
+      if (!all[edPlaceKind]) return;
+      delete all[edPlaceKind];
+      edPlacesWrite(all);
+      const t0 = modalCard.offsetTop, l0 = modalCard.offsetLeft;
+      edUnstand();
+      const dx = l0 - modalCard.offsetLeft, dy = t0 - modalCard.offsetTop;
+      if ((dx || dy) && !mgReduceMotion() && typeof modalCard.animate === "function")
+        modalCard.animate([{ translate: dx + "px " + dy + "px" }, { translate: "0 0" }], { duration: M_MS.move, easing: E_EASE });
+    });
+    addEventListener("resize", edPlaceSync);
+    if (typeof ResizeObserver === "function") new ResizeObserver(edPlaceSync).observe(modalCard);
   }
   var MODAL_TABBABLE = "a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex='-1'])";
   function modalTabTarget(back) {
@@ -30920,6 +31059,7 @@ What you type stays in this browser only.`;
     openDialog({
       back: fromPill ? null : () => hooks.openManage(),
       title: "Edit category",
+      place: "category",
       name: () => CATS[k] || "",
       resettable: () => !isCustomCat && categoryIsOverridden(k),
       resetOn: "Discard your changes and restore the catalog's category.",
@@ -31113,6 +31253,7 @@ What you type stays in this browser only.`;
     openDialog({
       back: fromManage ? () => doneIntentEditor() : null,
       title: isNew ? "New intent" : "Edit intent",
+      place: "intent",
       name: () => !isNew && i > -1 ? intentNavName(i) : "",
       resettable: () => !isNew && !isCustom && i > -1 && intentIsOverridden(i),
       resetOn: "Discard your edits and restore the catalog wording.",
@@ -31997,6 +32138,7 @@ What you type stays in this browser only.`;
          here - which is how Escape came to close outright where Cancel went back. */
       back: backToManage ? doneCardEditor : null,
       title: isNew ? "New card" : "Edit card",
+      place: "card",
       /* Read through savedId so a card saved for the first time names itself at once. */
       name: () => {
         const c = savedId ? findCard(savedId) : null;
@@ -36849,6 +36991,7 @@ What you type stays in this browser only.`;
       "eRailW",
       "eFactsW",
       "eFactsH",
+      "eEdPlace",
       "eCollapsed",
       "eSharedEdit",
       E_HOTKEY_KEY,
@@ -40321,6 +40464,7 @@ What you type stays in this browser only.`;
     wireModalX();
     wireModalBody();
     wireFocusModality();
+    wireDialogDrag();
     wireCaptureKeydown();
     loadShortcuts();
     wireGlobalKeydown();

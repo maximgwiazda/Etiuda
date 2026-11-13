@@ -1948,6 +1948,7 @@ main{max-width:none;margin:16px 0 0;padding:0}
 #list .card{display:flow-root}
 .card.dragging{opacity:.55;z-index:2}
 html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
+html.eddrag, html.eddrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
 .cbadge.hit{background:var(--go-soft);color:var(--go)}
 .cbadge.cat{background:var(--accent-soft);color:var(--accent)}
 .cbadge.fav{background:var(--fav-soft);color:var(--fav)}
@@ -2881,6 +2882,9 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
   display:flex;flex-direction:column;overflow:hidden;
   background:var(--panel-raised);color:var(--ink);border:1px solid var(--line);
   border-radius:16px;box-shadow:0 8px 20px rgba(0,0,0,.12),0 28px 68px rgba(0,0,0,.22);padding:0}
+/* A MOVED EDITOR (dialog.js, edStandAt) stands top-aligned and grows downward from its top. */
+.modal.ed-placed{align-items:flex-start}
+.modal.ed-placed .modal-card{transform-origin:50% 0;max-height:min(92vh,820px,var(--ed-room,100vh))}
 /* The intent panel, the dialogs, the menus, Quick facts and the opened pill bar wear the rim inside their
    border; their bevel gives way to it. A surface that scrolls as a whole carries the ring with its content. */
 :root:not([data-theme=light]) #intentRail,

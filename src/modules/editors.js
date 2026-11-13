@@ -60,6 +60,7 @@ function openCategoryEditor(k,fromPill){
   openDialog({
     back: fromPill?null:()=>hooks.openManage(),
     title: "Edit category",
+    place: "category",
     name: ()=>CATS[k]||"",
     resettable: ()=>!isCustomCat && categoryIsOverridden(k),
     resetOn: "Discard your changes and restore the catalog's category.",
@@ -288,6 +289,7 @@ function openIntentEditor(idx, fromManage){
   openDialog({
     back: fromManage?()=>doneIntentEditor():null,
     title: isNew?"New intent":"Edit intent",
+    place: "intent",
     name: ()=>(!isNew&&i>-1)?intentNavName(i):"",
     resettable: ()=>!isNew && !isCustom && i>-1 && intentIsOverridden(i),
     resetOn: "Discard your edits and restore the catalog wording.",
