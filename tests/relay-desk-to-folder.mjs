@@ -657,14 +657,14 @@ async function main() {
     const r = runScenario(Object.assign({}, sc, { deliverTeamDoc: signTeamDoc(sc.movedTeamDoc, sc.lead) }, extra.plan || {}));
     const marked = p => { try { return (fs.statSync(p).mode & 0o200) === 0; } catch { return null; } };
     const outboxAt = path.join(sc.lab, "userdata", "folder-mirror", sc.teamId, ".outbox.json");
-    let owed = [];
-    try { owed = Object.keys(JSON.parse(fs.readFileSync(outboxAt, "utf8")).owe || {}); } catch { owed = []; }
+    let owed = [], backed = [];
+    try { const box = JSON.parse(fs.readFileSync(outboxAt, "utf8")); owed = Object.keys(box.owe || {}); backed = Object.keys(box.back || {}); } catch { owed = []; }
     const got = {
       opened: path.resolve(r.openedDir) === path.resolve(kf),
       held: r.currentFolderDeskHeld, want,
       otherKept: marked(otherFile) === true && fs.readFileSync(otherFile, "utf8") === "another desk's",
       teamKept: marked(teamAt) === true,
-      owed, ownRel: "desks/" + sc.ownDeskId + "/branch-lamp.ec", inUse: r.inUseReachable,
+      owed, backed, ownRel: "desks/" + sc.ownDeskId + "/branch-lamp.ec", inUse: r.inUseReachable,
     };
     for (const p of [mirrorBranch, otherFile, teamAt, path.join(own, "branch-lamp.ec")]) { try { fs.chmodSync(p, 0o666); } catch {} }
     try { fs.rmSync(sc.lab, { recursive: true, force: true }); } catch {}
@@ -678,7 +678,8 @@ async function main() {
     + " and the folder's copy is writable: " + JSON.stringify(r2r));
   check(r2r.opened && r2r.otherKept && r2r.teamKept,
     "998n on that move another desk's file and the team file on the share, both marked read-only, keep their marks and bytes: " + JSON.stringify(r2r));
-  const blockedOwed = g => g.owed.indexOf(g.ownRel) >= 0;
+  /* Owed by the move itself: the syncer also owes a desk's own file the share lacks, two listings on, and marks that under back. */
+  const blockedOwed = g => g.owed.indexOf(g.ownRel) >= 0 && g.backed.indexOf(g.ownRel) < 0;
   const r2b = roMove({ blocked: true });
   check(r2b.opened && blockedOwed(r2b) && r2b.otherKept && r2b.teamKept,
     "998o where the folder refuses the desk's own copies, they are kept in the team's mirror and owed, so the outbox tries them at each"
