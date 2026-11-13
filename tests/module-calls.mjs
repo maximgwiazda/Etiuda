@@ -5313,6 +5313,58 @@ const CARD_B = {
       () => eq([p0, p1, p2, (pill.pressed || []).join(), (pencil.pressed || []).join(), CX.ctxRowsFor(allPill) === null].join("|"),
         "Show only this category|-|Edit this category|Show every category|-|Edit this category|Show only this category|Add it to the filter|-|Edit this category|click,ctrl+click|click|true"));
 
+    /* ---- board 983 stage 3: a thing named inside an editor offers its own desk menu, by the same builder, with the desk's
+       control not drawn (the stand-in document draws none), so each row calls what that control calls. */
+    {
+      const calls = [];
+      const hookNames = ["openCategoryEditor", "openIntentEditor", "openCardEditor", "hideCard", "captureRail", "railRelKeys", "railEchoRedraw", "render", "drawPillsCore"];
+      const hadH = hookNames.map(k => [k, H.hooks[k]]);
+      hookNames.forEach(k => { H.hooks[k] = (...a) => { calls.push(k + "(" + a.filter(x => typeof x !== "object").join(",") + ")"); return null; }; });
+      const mcStub = node({});
+      const inEd = (sel, extra) => { const n = node({ "#modalCard": mcStub }, extra); n.up[sel] = n; return n; };
+      const chip = inEd(".cat-chip[data-k]", { attrs: { "data-k": "cx-orders" } });
+      const wasCats3 = AS.cats.slice(), keptCopies = copied.slice();
+      try {
+        AS.setCats([]);
+        const deskRowsNow = names(CX.ctxRowsFor(chip));
+        calls.length = 0;
+        let crash = "";
+        try { run(CX.ctxRowsFor(chip), "Show only this category"); } catch (e) { crash = e.message; }
+        const picked = AS.cats.join(",");
+        AS.setCats([]); calls.length = 0;
+        run(CX.ctxRowsFor(chip), "Edit this category");
+        const edited = calls.join(",");
+        check("context-menu.js", "983y1 a category chip in an editor gives the pill's own menu, in its order and words, its rows working with no pill drawn: Show only calls what the pill's press calls, Edit opens the category editor",
+          () => eq([deskRowsNow, crash || picked, edited].join(" | "), "Show only this category|-|Edit this category | cx-orders | openCategoryEditor(cx-orders,true)"));
+
+        const ST2 = await import(MOD("screen-tabs.js"));
+        ST2.frontScreenTab("library");
+        const behindLibrary = names(CX.ctxRowsFor(chip));
+        ST2.dropScreenTab("library");
+        check("context-menu.js", "983y2 with the Library behind an editor, the rows that only change what the desk shows are left out, and the rest stay",
+          () => eq(behindLibrary, "-|Edit this category"));
+
+        const nx = inEd(".nx-row[data-to]", { attrs: { "data-to": "c-cx" } });
+        copied.length = 0; calls.length = 0;
+        const nxRows = CX.ctxRowsFor(nx), nxNames = names(nxRows);
+        run(nxRows, "Copy");
+        run(nxRows, "Put this card away");
+        check("context-menu.js", "983y3 a next reply in an editor gives the reply's own menu less Show the note; Copy copies its first variant and Put away calls what the reply's control calls, with no reply drawn",
+          () => eq([nxNames, copied.join(";"), calls.filter(c => /hideCard/.test(c)).join()].join(" | "),
+            "Copy|Copy the PL version|-|Edit this card|Add to Favourites|Put this card away | copy:Your parcel is on its way back. | hideCard(c-cx)"));
+
+        calls.length = 0;
+        const viaF2 = CX.ctxEditorAct(chip);
+        const notNamed = CX.ctxEditorAct(inEd(".modal-body", {}));
+        check("context-menu.js", "983y4 F2 on a focused chip opens its editor, as its menu's Edit row does; F2 on anything else in an editor is not taken",
+          () => eq([viaF2, calls.join(","), notNamed].join(" | "), "true | openCategoryEditor(cx-orders,true) | false"));
+      } finally {
+        AS.setCats(wasCats3);
+        copied.length = 0; keptCopies.forEach(c => copied.push(c));
+        hadH.forEach(([k, v]) => { if (v === undefined) delete H.hooks[k]; else H.hooks[k] = v; });
+      }
+    }
+
     start([["dp-a", "Anna"], ["dp-b", "Bartek"], ["dp-c", "Celina"]], "dp-a");
     const tabEl = node({}, { dataset: { tid: "dp-b" } }); tabEl.up["#tabsBar .tab[data-tid]"] = tabEl;
     const back0 = T.closedTabCount();
@@ -8110,8 +8162,8 @@ const CARD_B = {
         const cm = rd("context-menu.js"), kd = rd("keydown.js"), tu = rd("tour.js"), tpl = fs.readFileSync(join(HERE, "..", "src", "template.html"), "utf8");
         const got = [
           /if\(target\.closest\("#modalCard"\)\) return editorRows\(target\);/.test(cm),
-          ['besideRows(pill ? pillRows(pill) : null, "Edit this category"', 'besideRows(row ? intentRows(row) : null, "Edit this intent"',
-            'besideRows(card ? replyRows(card, card) : null, "Edit this card"'].filter(x => cm.indexOf(x) >= 0).length,
+          ['besideRows(pillRows(k, {desk:desk}), "Edit this category"', 'besideRows(intentRows(at, {desk:desk}), "Edit this intent"',
+            'besideRows(replyRows(id, null, {anchor:nx, note:false}), "Edit this card"'].filter(x => cm.indexOf(x) >= 0).length,
           cm.indexOf('const out=(rows||[]).map(r=>(r && r.key==="F2") ? Object.assign({}, r, {act:act}) : r);') >= 0
             && cm.indexOf("const act=()=>{ edOpenBeside(); open(); };") >= 0,
           cm.indexOf('!(target.matches && target.matches("#meIntents input[type=checkbox]"))') >= 0,

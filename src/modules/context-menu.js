@@ -7,7 +7,7 @@
 import { list } from "./dom.js";
 import { cssEsc } from "./css-esc.js";
 import { esc } from "./esc.js";
-import { t } from "./ui-lang.js";
+import { t, toast } from "./ui-lang.js";
 import { CONTENT_LANGS, nextContentLang } from "./content-model.js";
 import { cardLang, findCard } from "./card-model.js";
 import { copyCardPart } from "./copy-entry.js";
@@ -17,8 +17,13 @@ import { isCollapsed } from "./collapse.js";
 import { animateFoldAll } from "./list-pointer.js";
 import { tabs, addTab, closeTabById, closeOtherTabs, reopenClosedTab, closedTabCount, beginTabRename, clearTabRename } from "./tabs.js";
 import { edOpenBeside } from "./dialog.js";
-import { intentIdxOfId } from "./intent-id.js";
+import { intentIdAt, intentIdxOfId } from "./intent-id.js";
 import { hooks } from "./hooks.js";
+import { pickCategory } from "./pills-bar.js";
+import { isFavourite, pack } from "./pack.js";
+import { intentPickedLine } from "./intent-text.js";
+import { screenOn } from "./screen-tabs.js";
+import { toggleFavourite } from "./favourites.js";
 
 let ctxEl=null, ctxBack=null;
 
@@ -30,6 +35,14 @@ function press(el, mods){
   el.dispatchEvent(new MouseEvent("click", o));
 }
 const label=(el, fallback)=>(el && el.getAttribute("aria-label")) || fallback;
+/* A ROW DOES WHAT ITS CONTROL DOES: it presses the desk's own control where the desk draws it, and otherwise calls what that
+   control calls, so it works with the list filtered, the rail folded away or a pill out of sight. */
+function pressOr(el, mods, call){
+  return ()=>{ if(el) press(el, mods); else call(); };
+}
+const deskPill=k=>document.querySelector('#pills .pill[data-k="'+cssEsc(String(k))+'"]');
+const deskRail=si=>document.querySelector('#intentRail .rail-item[data-si="'+si+'"]');
+const deskCard=id=>list ? list.querySelector('.card[data-id="'+cssEsc(String(id))+'"]') : null;
 
 /* WHAT AN EDITOR LISTS: a category chip, a linked intent, a next reply, each with the menu its own panel gives (the same
    builder, on the desk's own pill, rail row or reply), its edit row opening the editor beside the one in hand (dialog.js,
@@ -41,21 +54,19 @@ function besideRows(rows, label, open){
   return out;
 }
 function editorRows(target){
+  const desk=!screenOn;
   const chip=target.closest(".cat-chip[data-k]");
   if(chip){
-    const k=chip.getAttribute("data-k"), pill=document.querySelector('#pills .pill[data-k="'+cssEsc(k)+'"]');
-    return besideRows(pill ? pillRows(pill) : null, "Edit this category", ()=>hooks.openCategoryEditor(k, true));
+    const k=chip.getAttribute("data-k");
+    return besideRows(pillRows(k, {desk:desk}), "Edit this category", ()=>hooks.openCategoryEditor(k, true));
   }
   const ir=target.closest("#meIntents label"), inp=ir && ir.querySelector("input");
   const at=inp ? intentIdxOfId(inp.value) : -1;
-  if(at>-1){
-    const row=document.querySelector('#intentRail .rail-item[data-si="'+at+'"]');
-    return besideRows(row ? intentRows(row) : null, "Edit this intent", ()=>hooks.openIntentEditor(at));
-  }
+  if(at>-1) return besideRows(intentRows(at, {desk:desk}), "Edit this intent", ()=>hooks.openIntentEditor(at));
   const nx=target.closest(".nx-row[data-to]");
   if(nx){
-    const id=nx.getAttribute("data-to"), card=list && list.querySelector('.card[data-id="'+cssEsc(id)+'"]');
-    return besideRows(card ? replyRows(card, card) : null, "Edit this card", ()=>hooks.openCardEditor(id, null, false));
+    const id=nx.getAttribute("data-to");
+    return besideRows(replyRows(id, null, {anchor:nx, note:false}), "Edit this card", ()=>hooks.openCardEditor(id, null, false));
   }
   return null;
 }
@@ -72,37 +83,41 @@ function ctxRowsFor(target){
   if(!target || !target.closest) return null;
   if(target.closest("#modalCard")) return editorRows(target);
   const card=target.closest("#list .card[data-id]");
-  if(card) return replyRows(card, target);
+  if(card) return replyRows(card.dataset.id, target, {card:card});
   const sep=target.closest("#list .list-sep");
   if(sep) return headingRows(sep);
   const row=target.closest("#intentRail .rail-item[data-si]");
-  if(row) return intentRows(row);
+  if(row) return intentRows(+row.dataset.si, {row:row});
   const pill=target.closest("#pills .pill[data-k]");
-  if(pill) return pill.dataset.k ? pillRows(pill) : null;
+  if(pill) return pill.dataset.k ? pillRows(pill.dataset.k, {pill:pill}) : null;
   const tab=target.closest("#tabsBar .tab[data-tid]");
   if(tab) return tabRows(tab);
   return null;
 }
 
-function replyRows(card, target){
-  const id=card.dataset.id, m=findCard(id);
+/* `o.card` is the desk's own reply when the menu was asked on it; inside an editor: `anchor` where the copy shows itself when
+   the reply is not drawn, `note:false` to leave out the note, which hangs from the reply in the desk's list. */
+function replyRows(id, target, o){
+  o=o||{};
+  const m=findCard(id);
   if(!m) return null;
-  const block=target.closest(".txt[data-v]");
+  const card=o.card||deskCard(id);
+  const block=(card && target && card.contains(target)) ? target.closest(".txt[data-v]") : null;
   const vi=block ? +block.dataset.v : (entrySel && entrySel.id===id ? (entrySel.vi|0) : 0);
-  const anchor=block || card.querySelector('.txt[data-v="'+vi+'"]') || card;
+  const anchor=block || (card && card.querySelector('.txt[data-v="'+vi+'"]')) || card || o.anchor || null;
   const rows=[{ label:t("Copy"), act:()=>{ setEntrySel(id, vi); copyCardPart(id, vi, anchor, false); } }];
   if(CONTENT_LANGS.length>1){
     const other=nextContentLang(cardLang(m));
     rows.push({ label:t("Copy the {LANG} version").replace("{LANG}",String(other).toUpperCase()),
       act:()=>{ setEntrySel(id, vi); copyCardPart(id, vi, anchor, true); } });
   }
-  const btn=a=>card.querySelector('.cacts [data-act="'+a+'"]');
+  const btn=a=>card ? card.querySelector('.cacts [data-act="'+a+'"]') : null;
   const note=btn("note"), edit=btn("edit"), fav=btn("fav"), hide=btn("hide");
   rows.push("-");
-  if(edit) rows.push({ label:label(edit, t("Edit this card")), act:()=>press(edit), key:"F2" });
-  if(fav) rows.push({ label:label(fav, t("Add to Favourites")), act:()=>press(fav) });
-  if(note) rows.push({ label:t("Show the note"), act:()=>press(note) });
-  if(hide) rows.push({ label:t(card.classList.contains("is-hidden") ? "Show this card again" : "Put this card away"), act:()=>press(hide) });
+  rows.push({ label:label(edit, t("Edit this card")), act:pressOr(edit, null, ()=>hooks.openCardEditor(id)), key:"F2" });
+  rows.push({ label:label(fav, t(isFavourite(id) ? "Remove from Favourites" : "Add to Favourites")), act:pressOr(fav, null, ()=>toggleFavourite(id)) });
+  if(note && o.note!==false) rows.push({ label:t("Show the note"), act:()=>press(note) });
+  rows.push({ label:t(m._hidden ? "Show this card again" : "Put this card away"), act:pressOr(hide, null, ()=>hooks.hideCard(id)) });
   return rows;
 }
 
@@ -119,26 +134,44 @@ function headingRows(sep){
   return rows;
 }
 
-function intentRows(row){
-  const si=+row.dataset.si, picked=intentIdxs.indexOf(si)>-1;
-  const rows=[{ label:t(picked ? "Drop this intent" : "Pick this intent"), act:()=>press(row) }];
-  if(!picked && intentIdxs.length) rows.push({ label:t("Pick it with the others"), act:()=>press(row, { ctrlKey:true }) });
-  const show=row.querySelector("[data-show-intent]");
+/* `o.row` is the desk's own row when the menu was asked on it; `o.desk:false`: the screen behind is not the desk, so the pick
+   rows, which only change what it shows, are left out. */
+function intentRows(si, o){
+  o=o||{};
+  const row=o.row||deskRail(si), id=intentIdAt(si), picked=intentIdxs.indexOf(si)>-1;
+  const pick=multi=>()=>{ hooks.pickIntent(si, multi); toast(intentIdxs.length ? intentPickedLine() : t("{INTENT} cleared")); };
+  const rows=[];
+  if(o.desk!==false){
+    rows.push({ label:t(picked ? "Drop this intent" : "Pick this intent"), act:pressOr(row, null, pick(picked)) });
+    if(!picked && intentIdxs.length) rows.push({ label:t("Pick it with the others"), act:pressOr(row, { ctrlKey:true }, pick(true)) });
+  }
+  const slot=s=>row ? row.querySelector(s) : null;
   rows.push("-");
-  if(show){ rows.push({ label:label(show, t("Show this intent again")), act:()=>press(show) }); return rows; }
-  const fav=row.querySelector("[data-fav-intent]"), edit=row.querySelector("[data-edit-intent]"), hide=row.querySelector("[data-hide-intent]");
-  if(fav) rows.push({ label:label(fav, t("Add to Favourites")), act:()=>press(fav) });
-  if(edit) rows.push({ label:label(edit, t("Edit this intent")), act:()=>press(edit, { ctrlKey:true }), key:"F2" });
-  if(hide) rows.push({ label:label(hide, t("Hide this intent")), act:()=>press(hide, { shiftKey:true }) });
+  if(row ? !!slot("[data-show-intent]") : (pack.intentHidden||[]).indexOf(id)>-1){
+    rows.push({ label:t("Show this intent again"), act:pressOr(slot("[data-show-intent]"), null, ()=>hooks.setIntentHidden(id, false)) });
+    rows.push({ label:t("Edit this intent"), act:()=>hooks.openIntentEditor(si), key:"F2", hidden:true });
+    return rows.filter(r=>!(r && r.hidden));
+  }
+  const fav=slot("[data-fav-intent]"), edit=slot("[data-edit-intent]"), hide=slot("[data-hide-intent]");
+  rows.push({ label:label(fav, t((pack.intentFavourites||[]).indexOf(id)>-1 ? "Remove from Favourites" : "Add to Favourites")), act:pressOr(fav, null, ()=>hooks.toggleIntentFavourite(id)) });
+  rows.push({ label:label(edit, t("Edit this intent")), act:pressOr(edit, { ctrlKey:true }, ()=>hooks.openIntentEditor(si)), key:"F2" });
+  rows.push({ label:label(hide, t("Hide this intent")), act:pressOr(hide, { shiftKey:true }, ()=>hooks.setIntentHidden(id, true)) });
   return rows;
 }
 
-function pillRows(pill){
-  const k=pill.dataset.k, only=cats.length===1 && cats[0]===k, inFilter=cats.indexOf(k)>-1;
-  const rows=[{ label:t(only ? "Show every category" : "Show only this category"), act:()=>press(pill) }];
-  if(cats.length && !only) rows.push({ label:t(inFilter ? "Take it out of the filter" : "Add it to the filter"), act:()=>press(pill, { ctrlKey:true }) });
-  const ed=pill.querySelector("[data-editcat]");
-  if(ed){ rows.push("-"); rows.push({ label:t("Edit this category"), act:()=>press(ed), key:"F2" }); }
+/* `o.pill` is the desk's own pill when the menu was asked on it; `o.desk:false`: the screen behind is not the desk, so the
+   filter rows are left out. */
+function pillRows(k, o){
+  o=o||{};
+  const pill=o.pill||deskPill(k), only=cats.length===1 && cats[0]===k, inFilter=cats.indexOf(k)>-1;
+  const rows=[];
+  if(o.desk!==false){
+    rows.push({ label:t(only ? "Show every category" : "Show only this category"), act:pressOr(pill, null, ()=>pickCategory(k, false)) });
+    if(cats.length && !only) rows.push({ label:t(inFilter ? "Take it out of the filter" : "Add it to the filter"), act:pressOr(pill, { ctrlKey:true }, ()=>pickCategory(k, true)) });
+  }
+  const ed=pill ? pill.querySelector("[data-editcat]") : null;
+  rows.push("-");
+  rows.push({ label:t("Edit this category"), act:pressOr(ed, null, ()=>hooks.openCategoryEditor(k, true)), key:"F2" });
   return rows;
 }
 
