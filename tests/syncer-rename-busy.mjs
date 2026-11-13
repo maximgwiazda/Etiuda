@@ -20,7 +20,7 @@ import { createLab } from "./lab-owner.mjs";
 const SELF = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(SELF), "..");
 const nodeRequire = createRequire(import.meta.url);
-const EXPECTED = 15;
+const EXPECTED = 17;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -175,6 +175,8 @@ async function readOnlyScene(kind, syncerDir) {
       const from = path.join(share, "desk-file.ec"), to = path.join(mirror, "desk-file.ec");
       marked.push(from, to);
       fs.writeFileSync(from, "from the share", "utf8");
+      const past = Math.floor(Date.now() / 1000) - 60;
+      fs.utimesSync(from, past, past);
       fs.writeFileSync(to, "older", "utf8");
       for (const p of [from, to]) {
         if (process.platform === "win32") spawnSync("attrib", ["+h", p]);
@@ -360,7 +362,7 @@ function plantScene(tag, file, kind, swap) {
   const lines = before.toString("utf8").split("\n");
   const at = lines.findIndex(l => l.includes("plant:" + tag));
   if (at < 0) return { found: false };
-  if (swap) lines[at] = swap(lines[at]); else lines.splice(at, 1);
+  if (swap) lines[at] = swap(lines[at], lines); else lines.splice(at, 1);
   fs.writeFileSync(path.join(dir, file), lines.join("\n"), "utf8");
   const res = runScene(kind, dir);
   return { found: true, res, same: fs.readFileSync(path.join(src, file)).equals(before) };
@@ -405,10 +407,34 @@ async function main() {
   plants.push(["stage-clear-mark", "syncer-worker.cjs", "land", landGreen,
     "998m control: a worker that clears the share's file in place of its own staged copy turns 998a red",
     l => l.replace("S.clearReadOnly(tmpFile)", "S.clearReadOnly(srcFile)")]);
+  if (process.platform === "win32") {
+    plants.push(["copy-clear-time", "syncer.cjs", "copy", copyGreen,
+      "998g control: a copy without CopyFile or utimesSync loses the source's last-write time",
+      (l, lines) => {
+        const c = lines.findIndex(x => x.includes("fs.copyFileSync(from, tmp);"));
+        if (c >= 0) lines[c] = "    fs.writeFileSync(tmp, fs.readFileSync(from));";
+        return "    /* plant:copy-clear-time lifted */";
+      }]);
+  } else {
+    plants.push(["copy-clear-time", "syncer.cjs", "copy", copyGreen,
+      "998g lifting plant:copy-clear-time loses the source's last-write time off Windows"]);
+  }
   for (const [tag, file, kind, green, line, swap] of plants) {
     if (PLANTS_OFF) { asserted++; console.log("  skip " + line); continue; }
     const p = plantScene(tag, file, kind, swap);
     check(p.found && !green(p.res) && p.same, line + ": " + JSON.stringify(p));
+  }
+  {
+    const line = "998h control: utimesSync keeps the source's last-write time even when the copy writes now";
+    if (PLANTS_OFF) { asserted++; console.log("  skip " + line); }
+    else {
+      const p = plantScene("copy-clear-time", "syncer.cjs", "copy", (l, lines) => {
+        const c = lines.findIndex(x => x.includes("fs.copyFileSync(from, tmp);"));
+        if (c >= 0) lines[c] = "    fs.writeFileSync(tmp, fs.readFileSync(from));";
+        return l.replace("if (process.platform !== \"win32\") ", "");
+      });
+      check(p.found && copyGreen(p.res) && p.same, line + ": " + JSON.stringify(p));
+    }
   }
 
   const checks = loadChecks();

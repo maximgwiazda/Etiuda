@@ -1120,7 +1120,9 @@ const SHARE_STAT_MS = 30000;
 let shareStatTimer = null, shareStatBusy = false, shareStatOut = null, shareStatPrimed = false, shareStatGen = 0;
 let shareStatSeen = new Map();
 let shareStatPrime = null;
-function shareDropsWatch(dir) { return !folderHost(dir).local; }
+/* The folder armed as a share: where it sits is decided when the stat is armed, never at a look. */
+let shareStatFor = "";
+function shareDropsWatch(dir, env, opts) { return !folderHost(dir, env, opts).local; }
 function shareStatStop() {
   if (shareStatTimer) clearInterval(shareStatTimer);
   shareStatTimer = null;
@@ -1128,6 +1130,7 @@ function shareStatStop() {
   shareStatPrimed = false;
   shareStatSeen = new Map();
   shareStatPrime = null;
+  shareStatFor = "";
   shareStatGen++;
 }
 function catalogStatRows(dir) {
@@ -1200,7 +1203,7 @@ function shareStatApply(dir, next, win) {
 function shareStatTick(win) {
   if (shareStatBusy || shareStatOut) return Promise.resolve(false); /* plant:f2-share-hung */
   const dir = watchedFolder;
-  if (!dir || !shareDropsWatch(dir) || !folderAnswers(dir)) return Promise.resolve(false);
+  if (!dir || dir !== shareStatFor && !shareDropsWatch(dir) || !folderAnswers(dir)) return Promise.resolve(false); /* plant:f2-share-decided */
   const gen = ++shareStatGen;
   shareStatBusy = true;
   return shareStatFlight(dir, gen, next => shareStatApply(dir, next, win));
@@ -1209,6 +1212,7 @@ function armShareStat(win) {
   shareStatStop();
   const dir = watchedFolder;
   if (!dir || !shareDropsWatch(dir) || !folderAnswers(dir)) return;
+  shareStatFor = dir;
   shareStatTimer = setInterval(() => { shareStatTick(win); }, SHARE_STAT_MS);
   if (shareStatTimer && shareStatTimer.unref) shareStatTimer.unref();
   if (shareStatOut) return;
@@ -5454,9 +5458,55 @@ function inviteRelay(r) {
   if (!c || c.kind !== "relay" || !/^[0-9a-f]{64}$/.test(String(r.token)) || !/^[0-9a-f]{32}$/.test(String(r.inv))) return null;
   return { rt: c.rt, url: c.url, token: String(r.token), inv: String(r.inv) };
 }
-/* Where a folder sits, from its text alone: a UNC host, a cloud client named by the path, or this
-   computer's system drive. Another drive letter may be a mapped share, so it is none of those. */
-function folderHost(folder, env) {
+/* Filesystems on this computer's own disks. A network type, any FUSE mount (fuse.*, fuseblk), autofs and a folder shared in
+   from a host (9p, virtiofs) are not, so a folder on one is watched as a share is. */
+const LINUX_DISK_FS = new Set(["ext2", "ext3", "ext4", "xfs", "btrfs", "f2fs", "zfs", "jfs", "reiserfs", "bcachefs", "nilfs2",
+  "tmpfs", "ramfs", "overlay", "ecryptfs", "vfat", "exfat", "ntfs3", "hfsplus"]);
+/* The type of the longest mount point holding p, the last of equal ones winning, as the kernel stacks them. */
+function linuxMountType(table, p) {
+  let best = null;
+  for (const m of table) {
+    if ((m.at === "/" || p === m.at || p.startsWith(m.at + "/")) && (!best || m.at.length >= best.at.length)) best = m; /* plant:f2-linux-mount */
+  }
+  return best ? best.type : "";
+}
+/* On Linux, whether the filesystem holding a folder's real path is on this computer's own disk. Links are followed only
+   while still on such a disk, so a network or FUSE mount is never asked a stat. A read that fails is not local. io holds
+   mounts() and link(p) (a link's target, or null) where a leg stands in for /proc/self/mounts and the disk. */
+function linuxDiskLocal(folder, io) {
+  const o = io || {};
+  let table;
+  try {
+    const text = typeof o.mounts === "function" ? o.mounts() : fs.readFileSync("/proc/self/mounts", "utf8");
+    if (typeof text !== "string") return false;
+    table = text.split("\n").map(l => l.split(" ")).filter(c => c.length >= 3 && c[1].charAt(0) === "/")
+      .map(c => ({ at: c[1].replace(/\\([0-7]{3})/g, (_, n) => String.fromCharCode(parseInt(n, 8))), type: c[2] }));
+  } catch { return false; } /* plant:f2-linux-unread */
+  const link = typeof o.link === "function" ? o.link
+    : p => { const st = fs.lstatSync(p); return st.isSymbolicLink() ? fs.readlinkSync(p) : null; };
+  const disk = p => LINUX_DISK_FS.has(linuxMountType(table, p || "/")); /* plant:f2-linux-local */
+  let todo = folder.split("/"), cur = "", hops = 0, gone = false;
+  while (todo.length) {
+    const part = todo.shift();
+    if (!part || part === ".") continue;
+    if (part === "..") { cur = cur.slice(0, cur.lastIndexOf("/")); continue; }
+    const next = cur + "/" + part;
+    if (!disk(next)) return false; /* plant:f2-linux-walk */
+    let to = null;
+    if (!gone) {
+      try { to = link(next); }
+      catch (e) { if (e && (e.code === "ENOENT" || e.code === "ENOTDIR")) gone = true; else return false; }
+    }
+    if (typeof to !== "string") { cur = next; continue; }
+    if (++hops > 40) return false;
+    if (to.charAt(0) === "/") cur = "";
+    todo = to.split("/").concat(todo);
+  }
+  return disk(cur);
+}
+/* Where a folder sits, from its text alone: a UNC host, a cloud client named by the path, or this computer's system drive,
+   and on Linux, from the mounts, a folder on this computer's own disk. Another drive letter may be a mapped share. */
+function folderHost(folder, env, opts) {
   const raw = String(folder || "");
   const e = env && typeof env === "object" ? env : {};
   let host = "";
@@ -5483,7 +5533,9 @@ function folderHost(folder, env) {
   }
   const sys = String(e.SystemDrive || "C:").slice(0, 2).toLowerCase();
   const drive = /^[a-zA-Z]:/.test(raw) ? raw.slice(0, 2).toLowerCase() : "";
-  const local = !host && !cloud && drive !== "" && drive === sys;
+  let local = !host && !cloud && drive !== "" && drive === sys;
+  const plat = opts && typeof opts.platform === "string" ? opts.platform : process.platform;
+  if (!host && !cloud && raw.charAt(0) === "/" && plat === "linux") local = linuxDiskLocal(raw, opts);
   return { host: host, local: local, cloud: cloud };
 }
 /* The request a member writes. `me` is {id, key, box}, `j` the join this desk keeps, `reveal` the lead's
