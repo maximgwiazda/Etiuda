@@ -124,10 +124,25 @@ const PS = {
     "try { Stop-ScheduledTask -TaskName $Task -ErrorAction SilentlyContinue",
     "  Unregister-ScheduledTask -TaskName $Task -Confirm:$false -ErrorAction Stop; 'unregistered' } catch { 'not unregistered: ' + $_.Exception.Message }"],
   taskinfo: ["param([string]$Task)",
-    "try { $i = Get-ScheduledTaskInfo -TaskName $Task -ErrorAction Stop; 'state ' + (Get-ScheduledTask -TaskName $Task).State + ', last result ' + $i.LastTaskResult } catch { 'unreadable' }"],
+    "try { $i = Get-ScheduledTaskInfo -TaskName $Task -ErrorAction Stop; $t = Get-ScheduledTask -TaskName $Task; 'state ' + $t.State + ', last result ' + $i.LastTaskResult + ', last run ' + $i.LastRunTime + ', missed ' + $i.NumberOfMissedRuns + ', logon ' + $t.Principal.LogonType } catch { 'unreadable' }"],
+  /* The holder writes "held" once the file is open with no sharing, or its own refusal, so a lock never seen names itself. */
   hold: ["param([string]$Target, [string]$Signal)",
-    "$f = [System.IO.File]::Open($Target, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::None)",
+    "try { $f = [System.IO.File]::Open($Target, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::None) }",
+    "catch { Set-Content -LiteralPath $Signal -Value ('refused: ' + $_.Exception.Message); exit 3 }",
     "Set-Content -LiteralPath $Signal -Value 'held'", "Start-Sleep -Seconds 3600", "$f.Close()"],
+  /* A password task runs only for an account holding the batch-logon right, which a standard account has not by default
+     (running-1618 on both trees, 2026-11-12: last result 0x41303, the task never ran). Granted here on the runner, by the
+     account's SID, through secedit's own export and configure of USER_RIGHTS. */
+  batchright: ["param([string]$Name)",
+    "try { $sid = (New-Object System.Security.Principal.NTAccount($Name)).Translate([System.Security.Principal.SecurityIdentifier]).Value",
+    "  $cfg = Join-Path $env:TEMP ('br-' + [guid]::NewGuid().ToString() + '.inf'); $db = $cfg + '.sdb'",
+    "  secedit /export /cfg $cfg /areas USER_RIGHTS | Out-Null",
+    "  $found = $false",
+    "  $lines = @(Get-Content -LiteralPath $cfg | ForEach-Object { if ($_ -match '^SeBatchLogonRight\\s*=') { $found = $true; $_ + ',*' + $sid } else { $_ } })",
+    "  if (-not $found) { $lines = @($lines | ForEach-Object { if ($_ -eq '[Privilege Rights]') { $_; 'SeBatchLogonRight = *' + $sid } else { $_ } }) }",
+    "  Set-Content -LiteralPath $cfg -Value $lines -Encoding Unicode",
+    "  secedit /configure /db $db /cfg $cfg /areas USER_RIGHTS | Out-Null",
+    "  if ($LASTEXITCODE -ne 0) { 'refused: secedit exit ' + $LASTEXITCODE } else { 'granted' } } catch { 'refused: ' + $_.Exception.Message }"],
 };
 const psFile = (k) => path.join(LAB, "q-" + k + ".ps1");
 for (const k of Object.keys(PS)) fs.writeFileSync(psFile(k), PS[k].join("\r\n"), "utf8");
@@ -439,6 +454,9 @@ async function running1618(rec) {
   rec.after("account", () => ps("rmuser", ["-Name", name]));
   const made = ps("mkuser", ["-Name", name], { LEG_PW: secret });
   if (made !== "made") { secret = null; throw new NoVerdict("a standard account could not be made: " + made); }
+  const right = ps("batchright", ["-Name", name]);
+  rec.f("batch-right", right);
+  if (right !== "granted") { secret = null; throw new NoVerdict("the second account could not be given the batch-logon right its task needs: " + right); }
   const drop = path.join(LAB, "as-" + name);
   fs.mkdirSync(drop);
   spawnSync("icacls", [drop, "/grant", name + ":(OI)(CI)M"], { windowsHide: true, timeout: 30000 });
@@ -540,10 +558,14 @@ async function locked1618(rec) {
   holder.on("exit", () => { holderGone = true; });
   rec.after("holder", () => (holderGone ? "had ended" : E.killTree(holder.pid).how));
   for (let i = 0; i < 60 && !fs.existsSync(signal); i++) await sleep(500);
-  let heldNow = false;
-  try { fs.closeSync(fs.openSync(held, "r")); } catch (e) { heldNow = ["EBUSY", "EPERM", "EACCES"].indexOf(e.code) > -1; }
-  rec.f("held", heldRel); rec.f("held-confirmed", yes(heldNow));
-  if (!heldNow) throw new NoVerdict("the file did not stay held (this run could still open it), so the lock was never there");
+  let heldNow = false, openSaid = "opened";
+  try { fs.closeSync(fs.openSync(held, "r")); } catch (e) { heldNow = ["EBUSY", "EPERM", "EACCES"].indexOf(e.code) > -1; openSaid = e.code || e.message; }
+  let holderSaid = "no word in 30 s";
+  try { holderSaid = oneLine(fs.readFileSync(signal, "utf8")) || "an empty word"; } catch { /* none came */ }
+  rec.f("held", heldRel); rec.f("held-confirmed", yes(heldNow)); rec.f("holder-said", holderSaid);
+  rec.f("holder-running", yes(!holderGone)); rec.f("open-here", openSaid);
+  if (!heldNow) throw new NoVerdict("the file did not stay held (this run could still open it: " + openSaid + "); the holder said "
+    + JSON.stringify(holderSaid) + " and was " + (holderGone ? "gone" : "still running"));
 
   const r = await runExe(NEWER, P.installArgs({ mode: "machine" }), 900000);
   if (!holderGone) E.killTree(holder.pid);
