@@ -139,7 +139,7 @@ function fetchThrough(electronNet, input, init, login) {
 function tunnel(proxy, target, answer, o) {
   const a = answerOf(answer);
   let first = a;
-  if (!a || a.scheme !== "basic") first = null; /* plant:proxy-basic-scheme */
+  if (!a || a.scheme !== "basic") first = null; /* plant:proxy-scheme-first */
   return connectOnce(proxy, target, first, o).catch(e => {
     if (e && e.code === "proxy-auth" && a && !first && (e.schemes || []).includes("basic")) return connectOnce(proxy, target, a, o);
     throw e;

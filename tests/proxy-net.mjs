@@ -207,7 +207,7 @@ async function p2() {
   resolveAsk({ username: USER, password: PASS });
   const [a1, a2] = await Promise.all([one, two]);
   check(a1.u === USER && a1.p === PASS && a2.u === USER && a2.p === PASS, "p2c the one answer goes to both calls");
-  check(JSON.stringify(A.heldFor("PROXY.lab.invalid", 3128)) === JSON.stringify({ username: USER, password: PASS }), "p2d the answer is held for this proxy, the host's case aside");
+  check(JSON.stringify(A.heldFor("PROXY.lab.invalid", 3128)) === JSON.stringify({ username: USER, password: PASS, scheme: "basic" }), "p2d the answer is held for this proxy with the scheme it was given for, the host's case aside");
 
   const later = await call(proxyInfo());
   check(later.u === USER && asked.length === 1, "p2e a later call is answered from what is held, unasked");
@@ -465,7 +465,7 @@ const PLANTS = [
   ["shell/proxy-net.cjs", "plant:ws-accept", "p5"],
   ["shell/proxy-net.cjs", "plant:ws-unmasked", "p5"],
   ["shell/proxy-net.cjs", "plant:proxy-resolve-bound", "p6"],
-  ["shell/proxy-net.cjs", "plant:proxy-basic-scheme", "p4"],
+  ["shell/proxy-net.cjs", "plant:proxy-scheme-first", "p4"],
   ["shell/proxy-net.cjs", "plant:proxy-credentials", "p3"],
   /* Not lifted but rewritten: the platform's check turned off, which must open the socket p6h expects refused. */
   ["shell/proxy-net.cjs", "plant:proxy-tls-verify", "p6", 'ALPNProtocols: ["http/1.1"] })', 'ALPNProtocols: ["http/1.1"], rejectUnauthorized: false })'],
