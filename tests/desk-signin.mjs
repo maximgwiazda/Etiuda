@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 133;
+const PLANTS = 137;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 130 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 133 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -93,7 +93,7 @@ const NAMES = ["SIGNIN_PROVIDERS", "signinOffered", "signinNonce", "signinAuthor
   "signinSettle", "signinRenewHeld", "seatFileText", "SEAT_NAME", "signinFileRead", "signinFileText", "branchIdOf", "inviteRead",
   "SIGNOUT_SERVICE", "signoutDeskBytes", "signoutDeskBody", "signoutAsk", "signinDoorRequest", "signinKnown", "signinPreviewing",
   "signinCodeForm", "signinSecretRead", "SIGNIN_SECRET_FILE", "SIGNIN_SECRET_SHAPE", "sealsForReal", "SIGNIN_WAIT_MS", "signinLabAt", "signinLabRead",
-  "signinLabUse", "signinDoorAddressOk", "DOOR_RELAYS", "BUILTIN_RELAY_URL"];
+  "signinLabUse", "signinDoorAddressOk", "DOOR_RELAYS", "BUILTIN_RELAY_URL", "signinDoorsSigned"];
 NAMES.push("SIGNIN_TRACE_ASKED", "signinTraceLine", "signinTraceSaid");
 NAMES.push("signinLanding", "signinLandingHtml", "signinLandingCsp", "SIGNIN_LAND_MS");
 /* The section, evaluated: `swap` is [from, to], put in place of the one line that holds `from`, for a plant; `invSwap` the same in the
@@ -149,7 +149,12 @@ const answerSig = (status, body) => status + " " + JSON.stringify(answerShape(bo
    leg hands the desk may be read as meaning anything unless the record holds its shape. */
 const PAST_ANSWERS = [
   { status: 409, body: { ok: false, reason: "full" }, until: "Studio 63614038, decision 32: no free seat is now the 200 \"waiting\" answer" },
-];
+].concat(["seated", "seated-doors"].map(name => {
+  /* The seated answers before their doors came signed: the record's own, doorsSig taken off. The desk keeps the seat, offers no door. */
+  const c = ANSWER_CASES.find(x => x.case === name), body = Object.assign({}, c ? c.body : {});
+  delete body.doorsSig;
+  return { status: 200, body, until: "Studio f62490a1, decision 35: a certificate's doors now come with doorsSig" };
+}));
 const SERVED = new Set(ANSWER_CASES.filter(c => c.route === "signin/desk").map(c => answerSig(c.status, c.body))
   .concat(PAST_ANSWERS.map(p => answerSig(p.status, p.body))));
 /* The observer: while the legs run (and not their plants), each answer the section read, with what it read. */
@@ -186,7 +191,10 @@ const NOW = Date.UTC(2026, 10, 12, 2, 0, 0);
 const msClaims = (nonce, at) => ({ iss: "https://login.microsoftonline.com/" + TENANT + "/v2.0", aud: MS_CLIENT, tid: TENANT, oid: "o-1", sub: "s-1",
   iat: (at || NOW) / 1000, exp: (at || NOW) / 1000 + 3600, nonce: nonce });
 const gClaims = nonce => ({ iss: "https://accounts.google.com", aud: G_CLIENT, sub: "1001", email_verified: true, iat: NOW / 1000, exp: NOW / 1000 + 3600, nonce: nonce });
-const answer = (obj, status) => ({ status: status || 200, bytes: Buffer.from(JSON.stringify(obj)) });
+/* The service's answer: a certificate's doors are signed beside it as the service signs them (doorsSigOf) unless the answer names
+   its own doorsSig, which an older service's answer does as undefined. */
+const answer = (obj, status) => ({ status: status || 200, bytes: Buffer.from(JSON.stringify(obj && typeof obj === "object" && obj.certificate
+  && obj.certificate.sig && Array.isArray(obj.doors) && !("doorsSig" in obj) ? Object.assign({}, obj, { doorsSig: doorsSigOf(obj.certificate, obj.doors) }) : obj)) });
 /* An answer the licence service never gives, handed on purpose to show the desk takes nothing from it beyond the service's own
    shape. ds23d passes it by this mark alone and counts it; any other answer a leg hands the desk is held to tests/signin-answers.json. */
 const strayAnswer = (obj, status) => Object.assign(answer(obj, status), { stray: true });
@@ -217,6 +225,13 @@ const VIA = delegation();
 /* A desk-only licence's certificate carries deskOnly: true, signed as the line "desk-only" after the key id; any other has neither. */
 const certBytesOf = c => Buffer.from("etiuda-seat-certificate\n" + [c.format, c.licence, c.desk, c.person, c.code, c.issued, c.until, c.sig.keyId]
   .concat(c.deskOnly === true ? ["desk-only"] : []).join("\n"), "utf8");
+/* The doors beside a certificate as the service signs them, written here from the interface (Studio's seatDoorsBytes): the line
+   "etiuda-seat-doors", the certificate's signature value, the number of doors, then each door's team, rt, url, keyId, lead and box,
+   one a line, in the order handed, by the key that signed the certificate. */
+function doorsSigOf(c, doors, signer) {
+  const fields = [c.sig.value, doors.length].concat(...doors.map(d => [d.team, d.rt, d.url, d.keyId, d.lead, d.box]));
+  return crypto.sign(null, Buffer.from("etiuda-seat-doors\n" + fields.join("\n"), "utf8"), (signer || SERVICE_KEY).privateKey).toString("hex");
+}
 /* A certificate as the service signs one: `over` replaces fields before the signing, and a `sig` given is kept as given. */
 function cert(over, signer) {
   const c = Object.assign({ kind: "etiuda-seat-certificate", format: 1, licence: "a".repeat(32), desk: DESK_KEY, person: "b".repeat(64),
@@ -450,8 +465,13 @@ const renewIo = (reply, serve) => {
     serviceAsk: async (url, body) => { io.posted.push({ url, body }); if (serve instanceof Error) throw serve; return serve; } };
   return io;
 };
-const heldOf = over => Object.assign({ provider: "microsoft", refresh: "sealed:rt-1", sub: "sealed:s-1", seed: SEED, code: CODE, cert: cert(), at: 1, checked: 1,
-  reached: true, said: "", ask: false }, over);
+/* What the desk holds; doors given are signed under its certificate as the service signs them, unless a doorsSig is given. */
+const heldOf = over => {
+  const h = Object.assign({ provider: "microsoft", refresh: "sealed:rt-1", sub: "sealed:s-1", seed: SEED, code: CODE, cert: cert(), at: 1, checked: 1,
+    reached: true, said: "", ask: false }, over);
+  if (Array.isArray(h.doors) && h.cert && h.cert.sig && !(over && "doorsSig" in over)) h.doorsSig = doorsSigOf(h.cert, h.doors);
+  return h;
+};
 /* A refreshed token with no nonce and the seat's sub goes to signin/desk with no seed, signed by this desk's key, and the new
    certificate replaces the last. */
 CASES.renewWrite = async s => {
@@ -744,7 +764,7 @@ CASES.doorsRead = s => {
    the file holds them and reads them back, and a door out of shape in the file is no list. */
 CASES.doorsKept = s => {
   const c = cert();
-  const got = s.signinSettle(heldOf({ doors: [] }), { ok: true, code: CODE, cert: c, doors: DOORS_TWO() }, NOW);
+  const got = s.signinSettle(heldOf({ doors: [] }), { ok: true, code: CODE, cert: c, doors: DOORS_TWO(), doorsSig: doorsSigOf(c, DOORS_TWO()) }, NOW);
   const dropped = s.signinSettle(got, { ok: true, code: CODE, cert: null, doors: DOORS_TWO() }, NOW);
   const refused = s.signinSettle(got, { ok: false, reason: "unreached" }, NOW);
   const back = s.signinFileRead(s.signinFileText({ held: got })).held;
@@ -756,7 +776,7 @@ const DOORJOIN_DECLS = ["function signinDoorsShown(", "function signinDoorJoin("
 const DOORJOIN_STANDS = ["init", "readDesk", "signinState", "branchIdentity", "signinCertOk", "pinnedLead", "joinView", "inviteBeforeFor", "joinCommit",
   "newestEpoch", "teamPins", "teamSeen", "teamPinFrom", "relayMirrorOf", "teamShown", "teamRelayGone", "relayCatalogNamed", "persistDeskEnvelope",
   "relayRun", "catalogFolderChanged", "leadPrint", "crypto", "URL", "Date", "signinDoorAddressOk", "SIGNIN_DESK_PACKED",
-  "deskBranch", "branchIdOf", "teamRoster", "teamLeft", "teamBarred", "sayJoinPolicy", "path", "process"];
+  "deskBranch", "branchIdOf", "teamRoster", "teamLeft", "teamBarred", "sayJoinPolicy", "path", "process", "signinDoorsSigned"];
 /* The door's offer and its join with stand-ins: `st` {held, pinned, join, pins, counts}. */
 function loadDoorJoin(s, st, swap) {
   let text = DOORJOIN_DECLS.map(d => tryDeclText(d)).filter(Boolean).join("\n");
@@ -773,7 +793,7 @@ function loadDoorJoin(s, st, swap) {
     sayJoinPolicy: () => st.policy || {}, path, process, persistDeskEnvelope: () => { st.persists++; }, relayRun: () => { st.runs++; },
     catalogFolderChanged: () => {}, leadPrint: pub => crypto.createHash("sha256").update(Buffer.from(String(pub), "hex")).digest("hex").slice(0, 16),
     crypto, URL, Date: { now: () => NOW }, signinDoorAddressOk: st.addressOk || s.signinDoorAddressOk,
-    SIGNIN_DESK_PACKED: st.packed === undefined ? true : st.packed };
+    SIGNIN_DESK_PACKED: st.packed === undefined ? true : st.packed, signinDoorsSigned: s.signinDoorsSigned };
   const body = "let deskKeys = {}, teamJoin = init.join, teamStamp = \"x\", joinTold = true;\n" + text
     + "\nreturn { signinDoorsShown, signinDoorJoin, join: () => teamJoin };";
   return new Function(...DOORJOIN_STANDS, body)(...DOORJOIN_STANDS.map(n => vals[n]));
@@ -2473,6 +2493,43 @@ CASES.certRoot = () => {
   return !!m && m[1] === R.ROOT_PUB && SECTION.split("signinVerified(NOTE_ROOT, ").length === 2;
 };
 
+/* The doors are the service's only under its signature (decision 35): signed by the key that signed the certificate beside them,
+   over those doors in that order under that certificate. An older service's answer, with none, holds the seat and offers no door,
+   saying nothing; a stranger's door added, a door changed, another key's signature or another certificate's is no door. */
+CASES.doorsSigned = s => {
+  const c = cert(), other = cert({ person: "e".repeat(64) }), two = DOORS_TWO();
+  const read = (doors, sig) => s.signinAnswer(answer({ ok: true, code: CODE, certificate: c, doors, doorsSig: sig }), DESK_KEY);
+  const good = read(two, doorsSigOf(c, two)), older = read(two, undefined);
+  const stranger = doorOf({ lead: OTHER_DESK_KEY, keyId: "studio-" + crypto.createHash("sha256").update(Buffer.from(OTHER_DESK_KEY, "hex")).digest("hex").slice(0, 16) });
+  const forged = [read(two.concat([stranger]), doorsSigOf(c, two)), read([two[0], Object.assign({}, two[1], { box: "0".repeat(64) })], doorsSigOf(c, two)),
+    read(two, doorsSigOf(c, two, OTHER_SERVICE)), read(two, doorsSigOf(other, two)), read(two.slice().reverse(), doorsSigOf(c, two)), read(two, "c".repeat(128))];
+  const settled = s.signinSettle(heldOf({ doors: [] }), older, NOW);
+  return good.ok === true && JSON.stringify(good.doors) === JSON.stringify(two) && good.doorsSig === doorsSigOf(c, two)
+    && older.ok === true && !!older.cert && JSON.stringify(older.doors) === "[]" && older.doorsSig === ""
+    && JSON.stringify(settled.cert) === JSON.stringify(c) && settled.said === "" && settled.reached === true && JSON.stringify(settled.doors) === "[]"
+    && forged.every(r => r.ok === true && !!r.cert && JSON.stringify(r.doors) === "[]");
+};
+/* signin.json keeps doors only with their signature under the certificate it holds: doors edited, the signature taken out (a file an
+   older build wrote among them) or no certificate is no door, and the certificate stays. */
+CASES.doorsFile = s => {
+  const c = cert(), two = DOORS_TWO();
+  const back = h => s.signinFileRead(s.signinFileText({ held: h })).held;
+  const kept = back(heldOf({ cert: c, doors: two })), edited = back(heldOf({ cert: c, doors: [doorOf({ box: "0".repeat(64) })], doorsSig: doorsSigOf(c, [doorOf()]) }));
+  const unsigned = back(heldOf({ cert: c, doors: two, doorsSig: undefined })), certless = back(heldOf({ cert: null, doors: two, doorsSig: doorsSigOf(c, two) }));
+  return JSON.stringify(kept.doors) === JSON.stringify(two) && kept.doorsSig === doorsSigOf(c, two)
+    && JSON.stringify(edited.doors) === "[]" && JSON.stringify(edited.cert) === JSON.stringify(c)
+    && JSON.stringify(unsigned.doors) === "[]" && JSON.stringify(unsigned.cert) === JSON.stringify(c) && JSON.stringify(certless.doors) === "[]";
+};
+/* What the desk holds in memory is offered only under the signature too, and a press on such a door joins nothing. */
+CASES.doorsShownSigned = (s, swap) => {
+  const signed = doorJoinStand(), bare = doorJoinStand({ held: heldOf({ doors: DOORS_TWO(), doorsSig: "" }) });
+  const other = doorJoinStand({ held: heldOf({ doors: DOORS_TWO(), doorsSig: doorsSigOf(cert(), [doorOf()]) }) });
+  const w = loadDoorJoin(s, bare, swap), pressed = w.signinDoorJoin(0);
+  return loadDoorJoin(s, signed, swap).signinDoorsShown(signed.held, NOW).length === 2 && w.signinDoorsShown(bare.held, NOW).length === 0
+    && loadDoorJoin(s, other, swap).signinDoorsShown(other.held, NOW).length === 0
+    && !!pressed && pressed.refused === "door" && w.join() === null && Object.keys(bare.pins).length === 0;
+};
+
 /* ---- the cases on the branch ------------------------------------------------------------------------------------------- */
 /* ---- the page the browser lands on (ds24): the loopback answers the sign-in's own reply 303 to a path of its own, holds that path's
    one GET until the desk knows how the sign-in ended (at most SIGNIN_LAND_MS, then the neutral page), serves it once and closes ----- */
@@ -2837,6 +2894,9 @@ const LEGS = [
   ["ds22j", "deskOnlyPage", "a desk-only seat with no team is told \"Working without a team\" and that nothing else is needed, in the panel and Account, Polish too, the code still shown; any other seat with no team keeps the waiting-for-a-lead line"],
   ["ds22k", "testServiceAsar", "THE TEST SERVICE BUILD READS ITS FIELDS FROM INSIDE THE ASAR: a test-service.json, root included, planted beside the asar of an ordinary package changes nothing (no test service, the shipped service and root alone, a certificate under the planted root refused, staging's relay refused); in a test service package the asar's fields win over it; no file beside the asar is read"],
   ["ds22h", "labRoot", "unpackaged, a lab file's root is honoured beside the shipped one; installed, packaged or both a certificate under it is refused, the file never read; no lab, or one naming no root, honours the shipped root alone; a stranger's root never"],
+  ["ds22e", "doorsSigned", "a door is taken only under the service's signature by the certificate's key, over those doors in that order under that certificate; an older service's answer without one holds the seat, offers no door and says nothing; a stranger's door added, a door changed, another key's or another certificate's signature is no door"],
+  ["ds22f", "doorsFile", "signin.json keeps doors only with their signature under the certificate it holds: doors edited, the signature gone (an older build's file) or no certificate is no door, and the certificate stays"],
+  ["ds22g", "doorsShownSigned", "doors held without the signature are offered nowhere and a press on one joins nothing; signed ones are offered"],
 ];
 for (let [id, name, line] of LEGS) {
   let ok = false;
@@ -3193,7 +3253,7 @@ if (!PLANTS_OFF) {
   await plant("dsp53", ["/^http:\\/\\/127\\.0\\.0\\.1:([0-9]{1,5})", "/^http:\\/\\/[a-z0-9.]+:([0-9]{1,5})"], "labRead");
   await plant("dsp54", ["|| !(d.root === undefined || /^[0-9a-f]{64}$/.test(String(d.root)))) return null; /* plant:lab-shape */", ") return null;"], "labRead");
   await plant("dsp59", ["if (d.keyId !== \"studio-\" + crypto.createHash(\"sha256\").update(Buffer.from(d.lead, \"hex\")).digest(\"hex\").slice(0, 16)) return []; /* plant:door-key-id */", ""], "doorsRead");
-  await plant("dsp60", ["return { ok: true, code: String(j.code), cert: j.certificate, doors: signinDoorsOk(j.doors, packed) }; /* plant:door-read */", "return { ok: true, code: String(j.code), cert: j.certificate, doors: [] };"], "doorsRead");
+  await plant("dsp60", ["return { ok: true, code: String(j.code), cert: j.certificate, doors: signed ? doors : [], doorsSig: signed ? String(j.doorsSig) : \"\" }; /* plant:door-read */", "return { ok: true, code: String(j.code), cert: j.certificate, doors: [], doorsSig: \"\" };"], "doorsRead");
   await plant("dsp61", ["doors: ans.cert ? (ans.doors || []) : [],", "doors: ans.doors || [],"], "doorsKept");
   await plantWire("dsp62", ["|| !(held.cert.until > now) || pinnedLead() || teamJoin) return []; /* plant:door-shown */", ") return [];"], "doorJoin");
   await plantWire("dsp63", ["if (!d || !me) return Object.assign({}, joinView(), { refused: \"door\" }); /* plant:door-join-offered */", "if (!me) return joinView();"], "doorJoin");
@@ -3259,6 +3319,13 @@ if (!PLANTS_OFF) {
   await plantWire("dsp114", ["root: d.root === undefined ? \"\" : String(d.root) });", "root: \"\" });"], "labRoot");
   await plantWire("dsp115", ["if (!INSTALLED && !app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) {", "if (!INSTALLED && process.env.ETIUDA_SIGNIN_LAB) {"], "labRoot");
   await plantWire("dsp116", ["if (!INSTALLED && !app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) {", "if (!app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) {"], "labRoot");
+  /* The doors' signature (ds22e to ds22g): its check, and each place a door is taken or offered. */
+  await plant("dsp107", ["return signinVerified(cert.via.key.pub, Buffer.from(\"etiuda-seat-doors\\n\" + fields.map(String).join(\"\\n\"), \"utf8\"), sig); /* plant:doors-sig */", "return true;"], "doorsSigned");
+  await plant("dsp108", ["const doors = signinDoorsOk(j.doors, packed), signed = signinDoorsSigned(doors, j.doorsSig, j.certificate); /* plant:door-signed-read */",
+    "const doors = signinDoorsOk(j.doors, packed), signed = doors.length > 0;"], "doorsSigned");
+  await plant("dsp109", ["if (signinDoorsSigned(doors, sig, out.held.cert)) Object.assign(out.held, { doors: doors, doorsSig: sig }); /* plant:file-doors-signed */",
+    "Object.assign(out.held, { doors: doors, doorsSig: sig });"], "doorsFile");
+  await plantWire("dsp110", ["  if (!signinDoorsSigned(held.doors, held.doorsSig, held.cert)) return []; /* plant:door-shown-signed */\n", ""], "doorsShownSigned");
   /* The page's half, imported again with the line planted. */
   const plantPage = async (id, swap, name) => {
     const r = await plantRed(async () => CASES[name](S, await pageWith(swap)));
