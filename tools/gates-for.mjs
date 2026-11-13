@@ -190,6 +190,7 @@ export const SCANS = {
   "tests/catalog-sig.js": ["src/template.html", "src/modules/*.js", "src/main.js", "shell/main.js"],
   "tests/variables.mjs": ["src/modules/variables.js", "src/modules/catalog-v2.js"],
   "tests/install-plan-selftest.js": ["tests/update-install.js", "tests/reinstall.js"],
+  "tests/uninstall-ext.mjs": ["shell/installer.nsh", "tools/test-identity.cjs", "electron-builder.js"],
   "tests/sellable.mjs": ["shell/license_en.txt", "shell/license_pl.txt", "src/modules/env.js", "electron-builder.js", "tools/test-service.cjs"],
   "tests/test-service.mjs": ["tools/test-service.cjs", "electron-builder.js", "tools/package.mjs", "shell/main.js", "shell/preload.js", "src/template.html",
     "src/modules/host.js", "src/modules/ui-lang.js"],
