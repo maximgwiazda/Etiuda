@@ -5083,13 +5083,16 @@ function placeKindOk(kind) {
 }
 /* Drive for desktop's folders under its root, each named in the Windows language unless DisableLocalizedVirtualFolders
    keeps English: My Drive, Shared drives, and the folder a shortcut to a folder shared with this person lands in (Google's
-   help and the disk spell it differently). With a name, its group, or "". A language not listed is still resolved through a
-   root's own listing; only the scan for a root with no record cannot recognise it. */
+   help and the disk spell it differently). With a name, its group, or "". The names are Drive's own, from its string table,
+   a pair per Windows language; every pair is tried, as which Windows setting picks Drive's language is not known, and
+   without case, as Windows compares paths. A language not listed is still resolved through a root's own listing; only the
+   scan for a root with no record cannot recognise it. */
 function driveTops(name) {
   const tops = {
-    my: ["My Drive", "Mój dysk", "Meine Ablage", "Mon Drive", "Mi unidad", "Il mio Drive", "Meu Drive", "Mijn Drive"],
-    shared: ["Shared drives", "Dyski współdzielone", "Geteilte Ablagen", "Drives partagés", "Unidades compartidas",
-      "Drive condivisi", "Drives compartilhados", "Gedeelde drives"],
+    my: ["My Drive", "Mój dysk", "Meine Ablage", "Mon Drive", "Mon disque", "Mi unidad", "Il mio Drive", "Meu Drive",
+      "O meu disco", "Mijn Drive"],
+    shared: ["Shared drives", "Dyski współdzielone", "Geteilte Ablagen", "Drive partagés", "Disques partagés",
+      "Unidades compartidas", "Drive condivisi", "Drives compartilhados", "Discos partilhados", "Gedeelde drives"],
     link: [".shortcut-targets-by-id", "shortcuts-target-by-id"]
   };
   if (name === undefined) return tops;

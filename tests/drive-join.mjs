@@ -20,7 +20,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 const STAND = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), STAND);
-const EXPECTED = 12;
+const EXPECTED = 13;
 let asserted = 0, failed = 0;
 function check(ok, line) {
   asserted++;
@@ -61,7 +61,7 @@ const PLACE_DECLS = ["function placeKindOk(", "function driveTops(", "function p
   "function placeCandidates(", "function placeResolve(", "function placeKept(", "function readSyncRecords(", "async function driveSeen("];
 function placeApi(src) {
   const body = PLACE_DECLS.map(m => sliceDecl(src, m)).join("\n");
-  return new Function("crypto", "Buffer", body + "\nreturn { placeOf, placeCandidates, placeResolve, syncRootsFrom, readSyncRecords, driveSeen, placeKept };")(crypto, Buffer);
+  return new Function("crypto", "Buffer", body + "\nreturn { placeOf, placeCandidates, placeResolve, syncRootsFrom, readSyncRecords, driveSeen, placeKept, driveTops };")(crypto, Buffer);
 }
 const lifted = tag => {
   const lines = SRC.split("\n");
@@ -341,6 +341,20 @@ check(!!seen && seen.peak === 1 && seen.read.indexOf("R:\\") < 0 && !!seenOne &&
   "955r a look holds one read in flight at most and starts none after a read that hangs, so a hang takes one of the pool's"
   + " threads (lifting plant:drive-one goes on reading past it): peak " + (seen ? seen.peak : "none")
   + ", past the hang " + (seen ? seen.read.indexOf("R:\\") >= 0 : "none") + ", lifted peak " + (seenOne ? seenOne.peak : "none"));
+/* Drive's own names, a pair per Windows language, each in its group, compared without case; the French "Shared drives"
+   with an s, which the list held before the names were sourced, is not one. Built from code points, so this file stays ASCII. */
+const e9 = String.fromCharCode(0xe9);
+const named = {
+  my: ["My Drive", POLISH_MINE, "Meine Ablage", "Mon Drive", "Mon disque", "Mi unidad", "Il mio Drive", "Meu Drive", "O meu disco", "Mijn Drive"],
+  shared: ["Shared drives", POLISH_SHARED, "Geteilte Ablagen", "Drive partag" + e9 + "s", "Disques partag" + e9 + "s", "Unidades compartidas",
+    "Drive condivisi", "Drives compartilhados", "Discos partilhados", "Gedeelde drives"]
+};
+const misgrouped = [].concat(named.my.filter(n => P.driveTops(n) !== "my"), named.shared.filter(n => P.driveTops(n) !== "shared"));
+check(misgrouped.length === 0 && P.driveTops("GEDEELDE DRIVES") === "shared" && P.driveTops("o MEU disco") === "my"
+    && P.driveTops("Drives partag" + e9 + "s") === "" && P.driveTops(".SHORTCUT-TARGETS-BY-ID") === "link",
+  "955s every pair Drive's string table holds is recognised in its group, whatever the case, and the unsourced French plural is"
+  + " not: misgrouped " + JSON.stringify(misgrouped) + ", Dutch capital " + P.driveTops("GEDEELDE DRIVES"));
+
 /* Every other kind gives the candidates it gave before this change, read off the rules as they stood. */
 const before955 = [
   [{ kind: "onedrive", root: "OneDrive", rel: "Etiuda" }, { onedrive: ["D:\\Users\\ben\\OneDrive", "E:\\Spare\\OneDrive"] }, "D:\\Users\\ben\\OneDrive\\Etiuda|E:\\Spare\\OneDrive\\Etiuda"],
