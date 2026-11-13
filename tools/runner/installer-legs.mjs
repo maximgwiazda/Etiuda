@@ -57,7 +57,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const NO_VERDICT = 78;
-const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618", "all-move", "all-space-d", "system-push", "ext-claimed", "ts-cycle", "shipped-detect", "nonpersistent"];
+const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618", "all-move", "all-space-d", "system-push", "ext-claimed", "ts-cycle", "shipped-detect", "nonpersistent", "net-hosts"];
 let OUT = "";
 const say = (l) => { process.stdout.write(l + "\n"); if (OUT) fs.appendFileSync(path.join(OUT, "legs.txt"), l + "\n"); };
 const refuse = (why) => { say("#legs refused: " + why); process.exit(NO_VERDICT); };
@@ -107,6 +107,10 @@ if (P.badInstallDir(LAB)) refuse("the lab cannot be named by /D: " + P.badInstal
 /* PowerShell, one script file per question, written into the lab. None prints a password: the one that needs it reads it
    from the environment of that one child. */
 const PS = {
+  /* The runner's own DNS client cache: emptied before a window and read after it, so every name either network stack (Chromium's
+     and Node's) asked the system for in that window is listed. The net-hosts leg's second witness, beside the net-log. */
+  dnsclear: ["try { Clear-DnsClientCache; 'cleared' } catch { 'refused: ' + $_.Exception.Message }"],
+  dnsread: ["try { @(Get-DnsClientCache | ForEach-Object { $_.Entry.ToLower() } | Sort-Object -Unique) -join ' ' } catch { 'refused: ' + $_.Exception.Message }"],
   elevated: ["$p = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())",
     "if ($p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { 'yes' } else { 'no' }"],
   lnk: ["param([string]$File)",
@@ -1084,6 +1088,65 @@ async function nonPersistent(rec) {
     + yes(docsOk) + (docsOk ? "" : " (A: " + few(dA.changed.concat(dA.gone, dA.added)) + "; B: " + few(dB.changed.concat(dB.gone, dB.added)) + ")"));
 }
 
+/* ---- net-hosts: every host a desk session reaches, measured -------------------------------------------------------- */
+
+/* The data-flow facts' table 1 (state/briefs/lead-engineer-gamma-4prime-2026-11-13-data-flow-facts.md, row 10b) lists the hosts
+   the desk contacts as read from the code; this measures them. One installed session, idle 120 s, witnessed twice: Chromium's own
+   net-log (--log-net-log) for what goes through Chromium's stack, the relay's Node socket excepted, and the system's DNS cache,
+   emptied before and read after, for both stacks; a window of the same length with no desk running is read first, so the runner's
+   own traffic is named and set apart. What a harness start cannot show is said, never inferred: the update look and the sign-in
+   renewal are off for every harness start (shell/main.js harnessLaunch), so neither can appear here. Windows' own spell-checker
+   asks nothing of Chromium's network; a dictionary download, if one happened, shows as its host in both witnesses. */
+async function netHosts(rec) {
+  const wall = E.windowWallRefusal(WHO);
+  if (wall) throw new NoVerdict("the leg starts the installed desk and the window wall refuses: " + wall[0]);
+  if (!process.env.APPDATA) throw new NoVerdict("APPDATA is not set, so the profile's data folder cannot be named");
+  const dir = await installMachine(rec, NEWER, "install");
+  const prog = path.join(dir, PRODUCT + ".exe");
+  const ud = path.join(process.env.APPDATA, T.packageName), docsRoot = path.join(LAB, "nh-documents"), netFile = path.join(LAB, "net-log.json");
+  if (fs.existsSync(ud)) throw new NoVerdict(ud + " is already there, so this account is not a fresh one to measure");
+  fs.mkdirSync(docsRoot, { recursive: true });
+  rec.after("profile", () => { try { if (fs.existsSync(ud)) fs.renameSync(ud, path.join(LAB, "nh-ud-left")); return "moved aside"; } catch (e) { return "left: " + e.code; } });
+  const IDLE = 120000;
+  const names = (said) => /^refused|^no answer/.test(said) ? null : said.split(/\s+/).filter(Boolean);
+  /* The runner's own names in a window as long as the session's, with no desk running. */
+  if (ps("dnsclear") !== "cleared") throw new NoVerdict("the DNS cache could not be emptied, so neither window can be read clean");
+  await sleep(IDLE);
+  const quiet = names(ps("dnsread"));
+  if (!quiet) throw new NoVerdict("the DNS cache could not be read");
+  const opts = { stdio: "ignore", windowsHide: true, env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: docsRoot, ETIUDA_TEST_DEVTOOLS: "1" }) };
+  const args = ["--user-data-dir=" + ud, "--log-net-log=" + netFile];
+  const no = E.shellLaunchRefusal(WHO, args, opts);
+  if (no) throw new NoVerdict("the start is refused: " + no[0]);
+  ps("dnsclear");
+  const child = E.shellLaunch(WHO, prog, args, opts);
+  let gone = false, code = null;
+  child.on("exit", (c) => { gone = true; code = c; });
+  for (let t = 0; t < IDLE && !gone; t += 2000) await sleep(2000);
+  const up = !gone;
+  const busy = names(ps("dnsread")) || [];
+  if (!gone) E.killTree(child.pid);
+  for (const p of procsOf(prog)) E.killTree(p.pid);
+  for (let i = 0; i < 15 && procsOf(prog).length; i++) await sleep(1000);
+  rec.f("up-120s", yes(up)); if (!up) rec.f("exit", code);
+  /* The net-log, read whole even where the stop left it unclosed: every scheme://host in an event, and every resolver host. */
+  let raw = "";
+  try { raw = fs.readFileSync(netFile, "utf8"); } catch (e) { rec.f("net-log", "none: " + e.code); }
+  const ev = raw.indexOf('"events"') > -1 ? raw.slice(raw.indexOf('"events"')) : "";
+  const fromLog = new Set();
+  for (const m of ev.matchAll(/"(?:url|original_url|host|origin|host_and_port|server_address)":"(?:[a-z][a-z0-9+.-]*:\/\/)?(\[[^\]"]+\]|[^\/":"]+)/gi)) fromLog.add(m[1].toLowerCase());
+  const local = (h) => /^(127\.|\[?::1\]?$|localhost$|0\.0\.0\.0$)/.test(h);
+  const logHosts = [...fromLog].filter((h) => h && !local(h)).sort();
+  const quietSet = new Set(quiet), dnsHosts = busy.filter((h) => !quietSet.has(h)).sort();
+  rec.f("net-log-bytes", raw.length); rec.f("net-log-hosts", logHosts.length ? logHosts.join(",") : 0);
+  rec.f("dns-runner-own", quiet.length); rec.f("dns-new-in-session", dnsHosts.length ? dnsHosts.join(",") : 0);
+  rec.f("loopback-in-log", yes([...fromLog].some(local)));
+  const ok = up && raw.length > 0;
+  rec.end(ok, (ok ? "" : "not measured: ") + "an installed desk idle 120 s (harness start: the update look and the renewal off by design) reached, by its net-log, "
+    + (logHosts.length ? logHosts.join(", ") : "no host but loopback") + "; the DNS cache saw " + (dnsHosts.length ? dnsHosts.join(", ") : "no name")
+    + " beyond the " + quiet.length + " the runner asked for in a quiet window of the same length");
+}
+
 /* ---- (d) locked-1618 ------------------------------------------------------------------------------------------- */
 
 async function locked1618(rec) {
@@ -1149,7 +1212,7 @@ function record(name) {
   return rec;
 }
 const LEGS = { "all-upgrade": allUpgrade, "running-1618": running1618, "system-bare": systemBare, "locked-1618": locked1618, "all-move": allMove, "all-space-d": allSpaceD,
-  "system-push": systemPush, "ext-claimed": extClaimed, "ts-cycle": tsCycle, "shipped-detect": shippedDetect, "nonpersistent": nonPersistent };
+  "system-push": systemPush, "ext-claimed": extClaimed, "ts-cycle": tsCycle, "shipped-detect": shippedDetect, "nonpersistent": nonPersistent, "net-hosts": netHosts };
 
 /* The newer setup, built once from this tree under the test identity, as the marker builds it. */
 const early = legPreflight();
