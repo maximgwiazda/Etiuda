@@ -1,0 +1,103 @@
+# A company proxy on a hosted Windows runner: Electron's own network stack against stand-in proxies made on the runner.
+#
+# Dispatch only. A push, a pull request or a fork cannot start it. The job checks out the commit asked for; the runner's own
+# scripts (tools/runner/proxy-legs.cjs and proxy-stand-ins.cjs) always come from the workflow's commit and are written under
+# RUNNER_TEMP, then placed over the checkout's, so a build never judges itself with a runner it changed. What they measure is the
+# checkout's shell/proxy-net.cjs and shell/win-proxy.cjs.
+#
+# The legs (tools/runner/proxy-legs.cjs says what each proves): basic-fetch, integrated-ntlm, system-proxy, pac, relay-socket.
+# system-proxy and pac write this runner account's own proxy setting and restore it before the leg ends.
+#
+# Electron runs as it is installed, with no --no-sandbox: the job's account is an ordinary Windows session, where Chromium's sandbox
+# needs nothing, and the script opens no window, so no window wall is asked.
+#
+# Nothing secret is handed to the runner: no catalog, no name list, no token beyond contents: read, and the checkout keeps no
+# credential. The stand-ins' answer is invented per run and never printed. The repository is public, so this log and the
+# artifact are public: the scripts print facts about the runner and the tree only.
+name: proxy-runner
+
+run-name: proxy-runner ${{ inputs.legs || 'all' }} at ${{ inputs.sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit to check out and test
+        required: true
+        type: string
+      legs:
+        description: Leg names separated by spaces (basic-fetch integrated-ntlm system-proxy pac relay-socket); empty runs all five
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  proxy:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: the runner's files, always the workflow's own
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/runner/tools/runner"
+          git fetch --depth 1 origin "$GITHUB_SHA"
+          for f in proxy-legs.cjs proxy-stand-ins.cjs; do
+            git show "FETCH_HEAD:tools/runner/$f" > "$RUNNER_TEMP/runner/tools/runner/$f" || { echo "no tools/runner/$f at the workflow's commit" >&2; exit 1; }
+          done
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      # Electron 44.3.0 has no postinstall, so npm ci leaves no binary; its own install.js fetches it once, as verify.yml does.
+      - name: npm ci
+        shell: bash
+        run: |
+          npm ci
+          node node_modules/electron/install.js
+          test -s node_modules/electron/path.txt
+
+      # The scripts require the tree under test from the checkout's tools/runner, so the workflow's copies are placed there first.
+      - name: the workflow's instrument over the checkout
+        shell: bash
+        run: |
+          mkdir -p tools/runner "$RUNNER_TEMP/out"
+          cp "$RUNNER_TEMP/runner/tools/runner/proxy-legs.cjs" "$RUNNER_TEMP/runner/tools/runner/proxy-stand-ins.cjs" tools/runner/
+
+      # Node only: the stand-ins driven by node's own net, http and tls. A red here is the instrument, and the legs do not run.
+      - name: the stand-ins' own check
+        shell: bash
+        run: |
+          set -o pipefail
+          node tools/runner/proxy-stand-ins.cjs --selftest "$RUNNER_TEMP/stand-ins" 2>&1 | tee "$RUNNER_TEMP/out/stand-ins.txt"
+
+      - name: legs
+        shell: bash
+        env:
+          LEGS: ${{ inputs.legs }}
+        run: npx electron tools/runner/proxy-legs.cjs --out "$RUNNER_TEMP/out" $LEGS
+
+      # A red leg is a red job: no step carries continue-on-error. The legs file is printed and uploaded whatever happened.
+      - name: the legs file
+        if: always()
+        shell: bash
+        run: cat "$RUNNER_TEMP/out/legs.txt" 2>/dev/null || echo "no legs.txt was written"
+
+      - name: results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: proxy-runner
+          path: ${{ runner.temp }}/out
+          if-no-files-found: warn
+          retention-days: 7
