@@ -951,6 +951,9 @@ async function run() {
 
     fs.writeFileSync(path.join(shareW, "etiuda-team.json"), JSON.stringify(teamFile({ team: TEAM_W, epoch: 1, rev: 1 })), "utf8");
     fs.writeFileSync(path.join(shareW, "lamp-shop.ec"), CAT_A1, "utf8");
+    /* Stamped a minute back: a file stamped within 3 s of its reading is read again (syncer-rename-busy 955o). */
+    const pastW = Math.floor(Date.now() / 1000) - 60;
+    fs.utimesSync(path.join(shareW, "lamp-shop.ec"), pastW, pastW);
 
     const unknownFile = path.join(shareW, "large-video.mp4");
     fs.writeFileSync(unknownFile, Buffer.alloc(1024 * 1024));

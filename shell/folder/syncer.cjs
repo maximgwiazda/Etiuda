@@ -22,6 +22,14 @@ const SPKI_ED25519 = Buffer.from("302a300506032b6570032100", "hex");
 const SEALED_TEAM_RE = /^t-[0-9a-f]{16}$/;
 const PENDING_MAX = 50;
 const SHARE_ASK_MS = 10000;
+/* A share file's size and stamp stand for the bytes read only where it was stamped more than this before that reading: a
+   rewrite of the same size inside the share's clock tick, two seconds on a FAT volume such as Drive's, keeps its stamp. */
+const STAMP_SETTLED_MS = 3000;
+function stampStands(st, readAt) {
+  let stands = true;
+  stands = !!st && st.mtimeMs < (Number(readAt) || 0) - STAMP_SETTLED_MS; /* plant:stamp-settled */
+  return stands;
+}
 
 function canonJson(v) {
   if (v === null || typeof v !== "object") return JSON.stringify(v);
@@ -1559,7 +1567,7 @@ function createFolderProgram(opts) {
       const prev = knownMtimes.get(relPath);
       const hold = holds.get(relPath);
       if (hold && hold.size === st.size && hold.mtimeMs === st.mtimeMs) alreadyInMirror = true;
-      else if (prev && prev.size === st.size && prev.mtimeMs === st.mtimeMs && io.exists(mirrorFile)) alreadyInMirror = true;
+      else if (prev && prev.size === st.size && prev.mtimeMs === st.mtimeMs && io.exists(mirrorFile) && stampStands(st, prev.at)) alreadyInMirror = true;
       const waiting = renameWait.get(relPath);
       if (waiting && (alreadyInMirror || waiting.size !== st.size || waiting.mtimeMs !== st.mtimeMs)) {
         try { if (waiting.tmpPath) io.unlink(waiting.tmpPath); } catch {}
@@ -1573,10 +1581,17 @@ function createFolderProgram(opts) {
         const rand = crypto.randomBytes(8).toString("hex");
         const tmpFile = path.join(stagingDir, rand + ".tmp");
         try {
+          const readAt = Date.now();
           const data = io.readFile(srcFile);
+          let mine = null;
+          if (prev && prev.size === st.size && prev.mtimeMs === st.mtimeMs) { try { mine = io.readFile(mirrorFile); } catch { mine = null; } }
+          if (mine && Buffer.isBuffer(data) && Buffer.isBuffer(mine) && data.equals(mine)) {
+            knownMtimes.set(relPath, { size: st.size, mtimeMs: st.mtimeMs, at: readAt });
+            continue;
+          }
           io.writeFile(tmpFile, data);
           staged.push({ relPath, tmpPath: tmpFile, size: st.size, mtimeMs: st.mtimeMs });
-          knownMtimes.set(relPath, { size: st.size, mtimeMs: st.mtimeMs });
+          knownMtimes.set(relPath, { size: st.size, mtimeMs: st.mtimeMs, at: readAt });
         } catch {
           try { io.unlink(tmpFile); } catch {}
         }
@@ -1888,6 +1903,7 @@ module.exports = {
   flushOwed,
   clearReadOnly,
   copyClear,
+  stampStands,
   shareReadFile,
   shareCasBegin,
   shareCasCommit,
