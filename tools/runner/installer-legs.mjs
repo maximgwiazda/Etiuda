@@ -18,6 +18,11 @@
  *                 without a person. It must choose all users".
  *   locked-1618   "1618 at a locked file during extract (a file held open). The leg records what is left": green where the
  *                 exit is 1618 and the installed copy is whole or fully the new version, red where it is a mix.
+ *   system-push   "an all-users silent push from a system context (what a Software Center does)", measured end to end (the
+ *                 lead engineer's to-sellable list, item 14, 2026-11-13): /S /allusers as SYSTEM into the default folder; a
+ *                 standard account that never installed anything starts the copy from the all-users Start-menu shortcut and
+ *                 its first run writes into that account's own Documents and AppData; then the uninstall, as SYSTEM, takes
+ *                 the program, its keys, its shortcuts and its link whole. Green only where all three hold.
  *
  * WHAT IT REUSES. The test build and its installer as tools/runner/hkcu-uninstaller-marker.mjs makes them (the test identity
  * of tools/test-identity.cjs, built from tools/electron-builder-test.cjs with E.unsignedEnv, refused unless G.setupRefusal
@@ -50,7 +55,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const NO_VERDICT = 78;
-const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618", "all-move", "all-space-d"];
+const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618", "all-move", "all-space-d", "system-push"];
 let OUT = "";
 const say = (l) => { process.stdout.write(l + "\n"); if (OUT) fs.appendFileSync(path.join(OUT, "legs.txt"), l + "\n"); };
 const refuse = (why) => { say("#legs refused: " + why); process.exit(NO_VERDICT); };
@@ -121,6 +126,18 @@ const PS = {
     "  $s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries",
     "  Register-ScheduledTask -TaskName $Task -Action $a -Settings $s -User ($env:COMPUTERNAME + '\\' + $Name) -Password $env:LEG_PW -RunLevel Limited -ErrorAction Stop | Out-Null",
     "  Start-ScheduledTask -TaskName $Task -ErrorAction Stop; 'started' } catch { 'refused: ' + $_.Exception.Message }"],
+  /* system-push's start: the program as the shortcut names it, with no argument of ours, so the copy picks its own user-data
+     and Documents folders as it would for a person; the account's profile is loaded by the password logon. */
+  runplain: ["param([string]$Task, [string]$Name, [string]$Exe)",
+    "try { $a = New-ScheduledTaskAction -Execute $Exe",
+    "  $s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries",
+    "  Register-ScheduledTask -TaskName $Task -Action $a -Settings $s -User ($env:COMPUTERNAME + '\\' + $Name) -Password $env:LEG_PW -RunLevel Limited -ErrorAction Stop | Out-Null",
+    "  Start-ScheduledTask -TaskName $Task -ErrorAction Stop; 'started' } catch { 'refused: ' + $_.Exception.Message }"],
+  /* An account's profile folder, by its SID's ProfileList entry; empty until its first logon made one. */
+  profileof: ["param([string]$Name)",
+    "try { $sid = (New-Object System.Security.Principal.NTAccount($Name)).Translate([System.Security.Principal.SecurityIdentifier]).Value",
+    "  $k = 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProfileList\\' + $sid",
+    "  if (Test-Path -LiteralPath $k) { [string](Get-ItemProperty -LiteralPath $k).ProfileImagePath } else { '' } } catch { '' }"],
   unreg: ["param([string]$Task)",
     "try { Stop-ScheduledTask -TaskName $Task -ErrorAction SilentlyContinue",
     "  Unregister-ScheduledTask -TaskName $Task -Confirm:$false -ErrorAction Stop; 'unregistered' } catch { 'not unregistered: ' + $_.Exception.Message }"],
@@ -543,6 +560,134 @@ async function systemBare(rec) {
       + ", SYSTEM's HKCU keys " + yes(f.sysU) + "/" + yes(f.sysI));
 }
 
+/* ---- (g) system-push: what a Software Center does, end to end ------------------------------------------------------
+   Three acts, each timed, the leg green only where all three hold:
+   1. the push: P.installArgs({ mode: "machine" }) (/S /allusers, no /D, so the default folder) in a one-shot task as SYSTEM.
+      Holds where it exits 0, the HKLM uninstall and install keys stand and name the default all-users folder holding the
+      program, both all-users shortcuts point at that program, the link's class stands in HKLM, and SYSTEM's own HKCU has
+      neither key.
+   2. the first start by a person: a standard account made here (as running-1618 makes one), never used to install, starts
+      the program the all-users Start-menu shortcut names, with no argument. Holds where its copy runs as that account and,
+      within 90 s, that first run has written the shipped sample catalog, byte for byte, into <its profile>\Documents\Etiuda
+      and desk.json (carrying the sampled mark) into <its profile>\AppData\Roaming\<package name>: the installed code read its
+      own package and wrote as the person, with nothing of the installing context in the way.
+   3. the removal: the uninstaller the HKLM entry names, with P.uninstallArgs("machine"), in a one-shot task as SYSTEM, after
+      the person's copy is stopped by pid. Holds where it exits 0, the folder goes within 120 s, and the keys, the shortcuts
+      and the link's class are gone. The person's own Documents and AppData are left, which is recorded, not judged.
+   The account goes at the end; its profile folder stays on the throwaway runner. */
+const SAMPLE = path.join(ROOT, "shell", "sample-catalog.ec");
+const MACHINE_LINK = "HKLM\\Software\\Classes\\" + T.scheme;
+const lnkTarget = (f) => ps("lnk", ["-File", f]);
+const samePath = (a, b) => !!a && !!b && P.samePath(a, b);
+/* The link's class in HKLM, a URL protocol whose open command names the program in `dir`, as all-upgrade reads it. */
+function machineLinkTo(dir) {
+  const v = G.regQuery(MACHINE_LINK);
+  const cmd = present(MACHINE_LINK + "\\shell\\open\\command") ? G.regValues(G.regQuery(MACHINE_LINK + "\\shell\\open\\command").text)["(Default)"] || "" : "";
+  return v.present && "URL Protocol" in G.regValues(v.text) && !!dir && cmd.toLowerCase().indexOf(dir.toLowerCase()) > -1;
+}
+
+async function systemPush(rec) {
+  const wall = E.windowWallRefusal(WHO);
+  if (wall) throw new NoVerdict("the leg starts the installed app as a second account and the window wall refuses: " + wall[0]);
+  if (!fs.existsSync(SAMPLE)) throw new NoVerdict("the tree holds no " + SAMPLE + " to compare the first run's copy with");
+  const want = path.join(PLACES.programFiles, PRODUCT);
+  const exe = path.join(want, PRODUCT + ".exe");
+
+  /* 1. The push. The uninstall is registered first, so a half-done push still goes. */
+  rec.after("uninstall", async () => {
+    const said = [];
+    if (present(regKey(KM.uninstall)) || machineDir()) said.push(await uninstallMachine());
+    for (const k of [SYS.uninstall, SYS.install]) if (hku(k)) { spawnSync("reg", ["delete", k, "/f"], { windowsHide: true, timeout: 30000 }); said.push("deleted " + k); }
+    for (const p of procsOf(NEWER)) said.push("stopped setup pid " + p.pid + " " + E.killTree(p.pid).killed);
+    return said.join("; ") || "nothing was left installed";
+  });
+  const args = P.installArgs({ mode: "machine" });
+  const bad = P.argsFault(args, "machine");
+  if (bad) throw new Error("refusing " + args.join(" ") + ": " + bad);
+  const t1 = Date.now();
+  const push = await systemTask(rec, "push", ['"' + NEWER + '" ' + args.join(" ")], 900000);
+  rec.f("push-exit", push.timedOut ? "timeout" : push.code); rec.f("push-seconds", Math.round((Date.now() - t1) / 1000)); rec.f("push-args", args.join(" "));
+  const dir = machineDir();
+  const links = commonLinks().map((f) => ({ f, to: lnkTarget(f) }));
+  const pushed = {
+    keys: present(regKey(KM.uninstall)) && present(regKey(KM.install)),
+    folder: samePath(dir, want) && fs.existsSync(exe),
+    links: links.every((l) => samePath(l.to, exe)),
+    link: machineLinkTo(dir),
+    sysClean: !hku(SYS.uninstall) && !hku(SYS.install),
+  };
+  rec.f("location", dir); rec.f("hklm-keys", yes(pushed.keys)); rec.f("shortcuts-to-program", yes(pushed.links));
+  rec.f("machine-link", yes(pushed.link)); rec.f("system-hkcu-clean", yes(pushed.sysClean));
+  const pushOk = push.code === 0 && pushed.keys && pushed.folder && pushed.links && pushed.link && pushed.sysClean;
+  if (!pushOk) {
+    rec.end(false, "the push as SYSTEM: exit " + (push.timedOut ? "none within 15 min" : push.code) + ", HKLM keys " + yes(pushed.keys)
+      + ", in the default folder " + yes(pushed.folder) + ", shortcuts to the program " + yes(pushed.links) + ", the link " + yes(pushed.link)
+      + ", SYSTEM's HKCU clean " + yes(pushed.sysClean));
+    return;
+  }
+
+  /* 2. The first start by a person who never installed it. */
+  const name = "etst" + crypto.randomInt(10000, 99999);
+  let secret = "Aa1!" + crypto.randomBytes(24).toString("base64");
+  rec.after("account", () => ps("rmuser", ["-Name", name]));
+  const made = ps("mkuser", ["-Name", name], { LEG_PW: secret });
+  if (made !== "made") { secret = null; throw new NoVerdict("a standard account could not be made: " + made); }
+  const right = ps("batchright", ["-Name", name]);
+  rec.f("batch-right", right);
+  if (right !== "granted") { secret = null; throw new NoVerdict("the second account could not be given the batch-logon right its task needs: " + right); }
+  const fromMenu = lnkTarget(path.join(PLACES.commonPrograms, SHORTCUT));
+  const task = "etst-push-" + name;
+  rec.after("task", () => ps("unreg", ["-Task", task]));
+  rec.after("person-copy", () => { const left = procsOf(exe).filter((p) => String(p.user).toLowerCase() === name.toLowerCase());
+    return left.length ? left.map((p) => p.pid + " " + E.killTree(p.pid).killed).join(",") : "had ended"; });
+  const t2 = Date.now();
+  const started = ps("runplain", ["-Task", task, "-Name", name, "-Exe", fromMenu], { LEG_PW: secret });
+  secret = null;
+  if (started !== "started") throw new NoVerdict("the program the Start-menu shortcut names could not be started as the second account: " + started);
+  const wantSample = E.sha256(SAMPLE);
+  let profile = "", copies = [], sampleSaid = "absent", deskSaid = "absent", firstSeconds = -1;
+  for (let i = 0; i < 45; i++) {
+    await sleep(2000);
+    copies = procsOf(exe).filter((p) => String(p.user).toLowerCase() === name.toLowerCase());
+    if (!profile) { const p = ps("profileof", ["-Name", name]); if (/^[A-Za-z]:\\/.test(p)) profile = p; }
+    if (!profile) continue;
+    const sample = path.join(profile, "Documents", "Etiuda", path.basename(SAMPLE));
+    const desk = path.join(profile, "AppData", "Roaming", T.packageName, "desk.json");
+    sampleSaid = !fs.existsSync(sample) ? "absent" : shaOr(sample) === wantSample ? "same" : "differs";
+    deskSaid = !fs.existsSync(desk) ? "absent" : (() => { try { return /"e~sampled"/.test(fs.readFileSync(desk, "utf8")) ? "sampled" : "unmarked"; } catch (e) { return "unreadable"; } })();
+    if (sampleSaid === "same" && deskSaid === "sampled" && copies.length) { firstSeconds = Math.round((Date.now() - t2) / 1000); break; }
+  }
+  rec.f("menu-target", fromMenu); rec.f("person-copies", copies.length); rec.f("profile", profile ? "made" : "none");
+  rec.f("first-run-sample", sampleSaid); rec.f("first-run-desk", deskSaid); rec.f("first-run-seconds", firstSeconds);
+  const firstOk = samePath(fromMenu, exe) && firstSeconds >= 0;
+  if (!firstOk) {
+    rec.end(false, "pushed as SYSTEM, but the person's first start: the menu names the program " + yes(samePath(fromMenu, exe)) + ", copies running as the person "
+      + copies.length + ", the sample in their Documents " + sampleSaid + ", their desk.json " + deskSaid + " (task " + ps("taskinfo", ["-Task", task]) + ")");
+    return;
+  }
+
+  /* 3. The removal, as SYSTEM, from the entry's own uninstaller, once the person's copy is stopped by pid. */
+  const stopped = copies.map((p) => p.pid + " " + E.killTree(p.pid).killed).join(",");
+  rec.f("person-copy-stopped", stopped);
+  for (let i = 0; i < 15 && procsOf(exe).length; i++) await sleep(1000);
+  const un = exeOf(valueOf(regKey(KM.uninstall), "UninstallString"));
+  if (!un || !fs.existsSync(un)) throw new NoVerdict("the HKLM entry names no uninstaller that exists (" + JSON.stringify(un) + ")");
+  const t3 = Date.now();
+  const removal = await systemTask(rec, "unpush", ['"' + un + '" ' + P.uninstallArgs("machine").join(" ")], 600000);
+  const goneIn = await goneWithin(want, 120);
+  rec.f("removal-exit", removal.timedOut ? "timeout" : removal.code); rec.f("removal-seconds", Math.round((Date.now() - t3) / 1000));
+  rec.f("folder-gone-s", goneIn);
+  const left = { keys: KEYS.filter(present).map((k) => k.replace(/^.*\\/, "")), links: commonLinks().filter((f) => fs.existsSync(f)), link: present(MACHINE_LINK) };
+  rec.f("keys-left", left.keys.length ? few(left.keys) : 0); rec.f("shortcuts-left", left.links.length); rec.f("machine-link-left", yes(left.link));
+  rec.f("person-data-kept", yes(fs.existsSync(path.join(profile, "Documents", "Etiuda")) && fs.existsSync(path.join(profile, "AppData", "Roaming", T.packageName))));
+  const removedOk = removal.code === 0 && goneIn > 0 && !left.keys.length && !left.links.length && !left.link;
+  rec.end(removedOk, removedOk
+    ? "pushed as SYSTEM into " + want + ", started by a standard account from the Start menu whose first run wrote its own Documents and AppData in " + firstSeconds
+      + " s, then removed as SYSTEM whole (folder gone in " + goneIn + " s)"
+    : "pushed and started, but the removal as SYSTEM: exit " + (removal.timedOut ? "none within 10 min" : removal.code) + ", folder gone " + yes(goneIn > 0)
+      + ", keys left " + left.keys.length + ", shortcuts left " + left.links.length + ", the link left " + yes(left.link));
+}
+
 /* ---- (d) locked-1618 ------------------------------------------------------------------------------------------- */
 
 async function locked1618(rec) {
@@ -607,7 +752,8 @@ function record(name) {
   rec.end = (ok, why) => { rec.verdict = ok ? "ok" : "fail"; rec.why = why; };
   return rec;
 }
-const LEGS = { "all-upgrade": allUpgrade, "running-1618": running1618, "system-bare": systemBare, "locked-1618": locked1618, "all-move": allMove, "all-space-d": allSpaceD };
+const LEGS = { "all-upgrade": allUpgrade, "running-1618": running1618, "system-bare": systemBare, "locked-1618": locked1618, "all-move": allMove, "all-space-d": allSpaceD,
+  "system-push": systemPush };
 
 /* The newer setup, built once from this tree under the test identity, as the marker builds it. */
 const early = legPreflight();
