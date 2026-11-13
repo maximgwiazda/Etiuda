@@ -65,6 +65,8 @@ const signinSecret = require("./tools/signin-secret.cjs");
 const SIGNIN_SECRET = signinSecret.signinSecretResources(process.env, output);
 // THE TEST SERVICE BUILD (tools/test-service.cjs): only where ETIUDA_PACK_TEST_SERVICE names a lab file for the packaging command.
 const testService = require("./tools/test-service.cjs");
+// THE SELLER'S ADDRESS (tools/seller-address.cjs): only where ETIUDA_PACK_SELLER_ADDRESS names its private file for the packaging command.
+const sellerAddress = require("./tools/seller-address.cjs");
 
 // THE SIGNING HOOK: one route or none, chosen by which variables are set. With none the block is
 // absent and electron-builder packages unsigned, which SmartScreen warns about (spec 11.5). No route
@@ -87,7 +89,7 @@ const signing = cert ? { signtoolOptions: { certificateFile: cert, ...SIGN_TIMES
   : artifact.length ? { azureSignOptions: Object.fromEntries(Object.entries(ARTIFACT).map(([key, name]) => [key, given(name)])) }
   : {};
 
-module.exports = testService.testServiceConfig({
+module.exports = sellerAddress.sellerConfig(testService.testServiceConfig({
   appId: "app.etiuda.desktop",
   // The display name: the Start menu entry, Add or remove programs, and the install folder.
   // Lowercase everywhere else in 2.x, capital here because it is the product's name on screen.
@@ -196,6 +198,7 @@ module.exports = testService.testServiceConfig({
     if (plat === "linux" || plat === "win32") {
       console.log(signinSecret.signinSecretStep(process.env, output));
       console.log(testService.testServiceStep(process.env, __dirname, plat));
+      console.log(sellerAddress.sellerStep(process.env, module.exports.directories.buildResources));
       const { prepareEmbed } = await import("./tools/model.mjs");
       await prepareEmbed({ dest: EMBED, platform: plat === "linux" ? "linux" : "win32" });
     }
@@ -229,4 +232,4 @@ module.exports = testService.testServiceConfig({
     // copy's uninstaller runs through UAC_AsUser_Call (shell/installer.nsh). perMachine true would override this.
     packElevateHelper: false,
   },
-}, process.env, __dirname);
+}, process.env, __dirname), process.env, __dirname, output);
