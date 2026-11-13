@@ -1095,7 +1095,7 @@ async function nonPersistent(rec) {
 
 /* The data-flow facts' table 1 (state/briefs/lead-engineer-gamma-4prime-2026-11-13-data-flow-facts.md, row 10b) lists the hosts
    the desk contacts as read from the code; this measures them. One installed session, idle 120 s, witnessed twice: Chromium's own
-   net-log (--log-net-log) for what goes through Chromium's stack, the relay's Node socket excepted, and the system's DNS cache,
+   net-log (--log-net-log, written out only at a clean close) for what goes through Chromium's stack, the relay's Node socket excepted, and the system's DNS cache,
    emptied before and read after, for both stacks; a window of the same length with no desk running is read first, so the runner's
    own traffic is named and set apart. What a harness start cannot show is said, never inferred: the update look and the sign-in
    renewal are off for every harness start (shell/main.js harnessLaunch), so neither can appear here. Windows' own spell-checker
@@ -1110,44 +1110,77 @@ async function netHosts(rec) {
   if (fs.existsSync(ud)) throw new NoVerdict(ud + " is already there, so this account is not a fresh one to measure");
   fs.mkdirSync(docsRoot, { recursive: true });
   rec.after("profile", () => { try { if (fs.existsSync(ud)) fs.renameSync(ud, path.join(process.env.APPDATA, "etiuda-nh-left-" + process.pid)); return "moved aside"; } catch (e) { return "left: " + e.code; } });
-  const IDLE = 120000;
+  const IDLE = 120000, TYPED = 30000, PORT = 9339;
   const names = (said) => /^refused|^no answer/.test(said) ? null : said.split(/\s+/).filter(Boolean);
   /* The runner's own names in a window as long as the session's, with no desk running. */
   if (ps("dnsclear") !== "cleared") throw new NoVerdict("the DNS cache could not be emptied, so neither window can be read clean");
-  await sleep(IDLE);
+  await sleep(IDLE + TYPED);
   const quiet = names(ps("dnsread"));
   if (!quiet) throw new NoVerdict("the DNS cache could not be read");
+  /* The debugging port is the test door's (ETIUDA_TEST_DEVTOOLS=1, shell/main.js TEST_DOOR): the leg closes the window by
+     Browser.close, because Chromium writes the net-log out only at a clean exit and a killed window leaves its list empty
+     (tests/desk.js readNetLog), and it types through the same port. */
   const opts = { stdio: "ignore", windowsHide: true, env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: docsRoot, ETIUDA_TEST_DEVTOOLS: "1" }) };
-  const args = ["--user-data-dir=" + ud, "--log-net-log=" + netFile];
+  const args = ["--user-data-dir=" + ud, "--log-net-log=" + netFile, "--remote-debugging-port=" + PORT];
   const no = E.shellLaunchRefusal(WHO, args, opts);
   if (no) throw new NoVerdict("the start is refused: " + no[0]);
   ps("dnsclear");
   const child = E.shellLaunch(WHO, prog, args, opts);
   let gone = false, code = null;
-  child.on("exit", (c) => { gone = true; code = c; });
+  const exited = new Promise((r) => child.on("exit", (c) => { gone = true; code = c; r(true); }));
+  const b = await E.connectShell({ port: PORT, child, waitMs: 60000 });
   for (let t = 0; t < IDLE && !gone; t += 2000) await sleep(2000);
-  const up = !gone;
+  const upIdle = !gone;
+  /* Spell-check: Chromium starts a dictionary's fetch when a field it checks gets focus and text, so an idle desk may not show
+     it. A text field with spell-check on, in the desk's own window and renderer, takes an invented line in Polish and one in
+     English with misspellings, typed key by key; the reply editor is such a field (spellcheck="true"), reached here without
+     driving the editor open. The profile's Dictionaries folder is the third witness: a downloaded dictionary lands there. */
+  let typed = "no";
+  try {
+    const pages = await b.pages();
+    const page = pages.find((x) => /etiuda\.html/i.test(x.url())) || pages[0];
+    await page.evaluate(() => { const t = document.createElement("textarea"); t.id = "nhSpell"; t.spellcheck = true; document.body.appendChild(t); t.focus(); });
+    await page.keyboard.type("Wczoraj przyjechalem do domu, ale ksiązka zostala w samochodzie. ", { delay: 15 });
+    await page.keyboard.type("I recieved the parcle yesterday and the adress was rigth. ", { delay: 15 });
+    typed = await page.evaluate(() => String((document.getElementById("nhSpell") || {}).value || "").length > 60 ? "yes" : "short");
+  } catch (e) { typed = "failed: " + oneLine(String(e && e.message || e)); }
+  for (let t = 0; t < TYPED && !gone; t += 2000) await sleep(2000);
   const busy = names(ps("dnsread")) || [];
+  let dicts = [];
+  try { dicts = fs.readdirSync(path.join(ud, "Dictionaries")); } catch (e) { dicts = []; }
+  try { await b.close(); } catch (e) { /* judged by the exit below */ }
+  const alone = await Promise.race([exited, sleep(15000).then(() => false)]);
+  try { b.disconnect(); } catch (e) { /* closed */ }
   if (!gone) E.killTree(child.pid);
   for (const p of procsOf(prog)) E.killTree(p.pid);
   for (let i = 0; i < 15 && procsOf(prog).length; i++) await sleep(1000);
-  rec.f("up-120s", yes(up)); if (!up) rec.f("exit", code);
-  /* The net-log, read whole even where the stop left it unclosed: every scheme://host in an event, and every resolver host. */
-  let raw = "";
+  rec.f("up-120s", yes(upIdle)); rec.f("typed", typed); rec.f("closed-alone", yes(alone === true)); if (gone) rec.f("exit", code);
+  /* The net-log, parsed whole as tests/desk.js reads it: every event's params.host, and every scheme://host in a url. */
+  let doc = null, raw = "";
   try { raw = fs.readFileSync(netFile, "utf8"); } catch (e) { rec.f("net-log", "none: " + e.code); }
-  const ev = raw.indexOf('"events"') > -1 ? raw.slice(raw.indexOf('"events"')) : "";
+  try { doc = JSON.parse(raw); } catch (e) { try { doc = JSON.parse(raw.replace(/,\s*$/, "") + "]}"); } catch (x) { doc = null; } }
+  const events = doc && Array.isArray(doc.events) ? doc.events : [];
   const fromLog = new Set();
-  for (const m of ev.matchAll(/"(?:url|original_url|host|origin|host_and_port|server_address)":"(?:[a-z][a-z0-9+.-]*:\/\/)?(\[[^\]"]+\]|[^\/":"]+)/gi)) fromLog.add(m[1].toLowerCase());
+  for (const ev of events) {
+    const pr = ev && ev.params;
+    if (!pr) continue;
+    if (typeof pr.host === "string") fromLog.add(pr.host.toLowerCase());
+    for (const k of ["url", "original_url", "origin"]) {
+      const m = typeof pr[k] === "string" && /^(https?|wss?):\/\/(\[[^\]]+\]|[^\/:?#]+)/i.exec(pr[k]);
+      if (m) fromLog.add(m[2].toLowerCase());
+    }
+  }
   const local = (h) => /^(127\.|\[?::1\]?$|localhost$|0\.0\.0\.0$)/.test(h);
   const logHosts = [...fromLog].filter((h) => h && !local(h)).sort();
   const quietSet = new Set(quiet), dnsHosts = busy.filter((h) => !quietSet.has(h)).sort();
-  rec.f("net-log-bytes", raw.length); rec.f("net-log-hosts", logHosts.length ? logHosts.join(",") : 0);
+  rec.f("net-log-events", events.length); rec.f("net-log-hosts", logHosts.length ? logHosts.join(",") : 0);
   rec.f("dns-runner-own", quiet.length); rec.f("dns-new-in-session", dnsHosts.length ? dnsHosts.join(",") : 0);
-  rec.f("loopback-in-log", yes([...fromLog].some(local)));
-  const ok = up && raw.length > 0;
-  rec.end(ok, (ok ? "" : "not measured: ") + "an installed desk idle 120 s (harness start: the update look and the renewal off by design) reached, by its net-log, "
-    + (logHosts.length ? logHosts.join(", ") : "no host but loopback") + "; the DNS cache saw " + (dnsHosts.length ? dnsHosts.join(", ") : "no name")
-    + " beyond the " + quiet.length + " the runner asked for in a quiet window of the same length");
+  rec.f("dictionaries", dicts.length ? dicts.join(",") : 0); rec.f("loopback-in-log", yes([...fromLog].some(local)));
+  const ok = upIdle && alone === true && events.length > 0 && typed === "yes";
+  rec.end(ok, (ok ? "" : "not measured whole: ") + "an installed desk idle 120 s and then typed into (Polish and English, misspelt; harness start, so the update look and the renewal off by design) reached, by its net-log of "
+    + events.length + " events, " + (logHosts.length ? logHosts.join(", ") : "no host but loopback") + "; the DNS cache saw " + (dnsHosts.length ? dnsHosts.join(", ") : "no name")
+    + " beyond the " + quiet.length + " the runner asked for in a quiet window of the same length; dictionaries in the profile: " + (dicts.length ? dicts.join(", ") : "none")
+    + "; typed " + typed + ", closed alone " + yes(alone === true));
 }
 
 /* ---- (d) locked-1618 ------------------------------------------------------------------------------------------- */
