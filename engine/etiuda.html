@@ -762,7 +762,7 @@ body.e-backdrop{background:transparent}
    band pixel the tint leaves uncovered arrives sharp however heavy the scrim. Measured with a
    dialog up, band alpha .93 against 1.00 over the cards and 3.0x their edge energy. The floor
    goes back under the whole window while one is open, the tint above it unchanged. */
-body.e-backdrop:has(.modal:not([hidden])){background:var(--bg)}
+body.e-backdrop:has(.modal:not([hidden]):not(.ed-rest)){background:var(--bg)}
 body.e-backdrop .dotfield{background:var(--bg)}
 body.e-backdrop header{
   background:linear-gradient(var(--header-bg) 0 0) no-repeat left bottom/100% calc(100% - var(--band-h,36px));
@@ -2876,6 +2876,21 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
 /* A MOVED EDITOR (dialog.js, edStandAt) stands top-aligned and grows downward from its top. */
 .modal.ed-placed{align-items:flex-start}
 .modal.ed-placed .modal-card{transform-origin:50% 0;max-height:min(92vh,820px,var(--ed-room,100vh))}
+/* A RESTING EDITOR (dialog.js, edToDesk): the desk in front and live, the editor above the cards, the
+   rail and the pills and under the desk's own overlays; the header rises over it while one of its own
+   popovers is open. The dim lifts on the scrim tier and its keyframe brings it back. */
+.modal.ed-rest{z-index:56;pointer-events:none}
+.modal.ed-rest .modal-card{pointer-events:auto;border-color:var(--line-strong);box-shadow:0 8px 20px rgba(0,0,0,.12)}
+.modal.ed-rest .modal-card h2 .modal-t{color:var(--dim)}
+/* THE LINE UNDER AN EDITOR'S TITLE (dialog.js, edSayLine): the screen's own type, a dot in the warning colour, no box; part of the pinned heading. */
+.modal-card .modal-note{flex:0 0 auto;margin:0;padding:0 18px 10px;font:13px/1.45 var(--sans);color:var(--ink);display:flex;gap:8px;align-items:baseline;user-select:text;-webkit-user-select:text}
+.modal-note-dot{flex:0 0 auto;width:7px;height:7px;border-radius:50%;background:var(--warn);transform:translateY(-1px)}
+.modal-card:has(.modal-body):has(> .modal-note) h2{border-bottom:0}
+.modal-card:has(.modal-body) > .modal-note{border-bottom:1px solid var(--line)}
+.modal.ed-rest:not([hidden]) .modal-bg{animation:none;opacity:0;transition:opacity var(--m-scrim) ease}
+/* An editor's scrim takes the click over the band too, which brings the desk in front (the band's rule above). */
+body.e-host .modal.ed-win:not(.ed-rest) .modal-bg{app-region:no-drag;-webkit-app-region:no-drag}
+body:has(.modal.ed-rest:not([hidden])) header:has(.menu:not([hidden]):not(.e-warm),.facts-panel:not([hidden]),.sgn-panel:not([hidden])){z-index:57}
 /* The intent panel, the dialogs, the menus, Quick facts and the opened pill bar wear the rim inside their
    border; their bevel gives way to it. A surface that scrolls as a whole carries the ring with its content. */
 :root:not([data-theme=light]) #intentRail,
@@ -8097,6 +8112,17 @@ What you type stays in this browser only.`;
     "In an editor: open the one before it": "W edytorze: otwiera poprzednią pozycję",
     "In an editor: open the one after it": "W edytorze: otwiera następną pozycję",
     "Editor: previous language": "Edytor: poprzedni język",
+    "Switch between the desk and the editor": "Przełącz między kartami a edytorem",
+    "A newer edition changed this card while it was open. Save keeps what is written here; Reset takes the new edition's.": "Nowe wydanie zmieniło tę kartę, gdy była otwarta. Zapisz zachowa to, co jest tutaj; Przywróć weźmie wersję z nowego wydania.",
+    "This card is no longer in the catalog, so nothing here can be saved. The text can still be copied.": "Tej karty nie ma już w katalogu, więc niczego tu nie da się zapisać. Tekst można nadal skopiować.",
+    "This card changed elsewhere while it was open. Save keeps what is written here; Cancel leaves the change made there.": "Ta karta zmieniła się gdzie indziej, gdy była otwarta. Zapisz zachowa to, co jest tutaj; Anuluj zostawi tamtą zmianę.",
+    "A newer edition changed this intent while it was open. Save keeps what is written here; Reset takes the new edition's.": "Nowe wydanie zmieniło tę intencję, gdy była otwarta. Zapisz zachowa to, co jest tutaj; Przywróć weźmie wersję z nowego wydania.",
+    "This intent is no longer in the catalog, so nothing here can be saved. The text can still be copied.": "Tej intencji nie ma już w katalogu, więc niczego tu nie da się zapisać. Tekst można nadal skopiować.",
+    "This intent changed elsewhere while it was open. Save keeps what is written here; Cancel leaves the change made there.": "Ta intencja zmieniła się gdzie indziej, gdy była otwarta. Zapisz zachowa to, co jest tutaj; Anuluj zostawi tamtą zmianę.",
+    "A newer edition changed this category while it was open. Save keeps what is written here; Reset takes the new edition's.": "Nowe wydanie zmieniło tę kategorię, gdy była otwarta. Zapisz zachowa to, co jest tutaj; Przywróć weźmie wersję z nowego wydania.",
+    "This category is no longer in the catalog, so nothing here can be saved. The text can still be copied.": "Tej kategorii nie ma już w katalogu, więc niczego tu nie da się zapisać. Tekst można nadal skopiować.",
+    "This category changed elsewhere while it was open. Save keeps what is written here; Cancel leaves the change made there.": "Ta kategoria zmieniła się gdzie indziej, gdy była otwarta. Zapisz zachowa to, co jest tutaj; Anuluj zostawi tamtą zmianę.",
+    "Moves the keyboard between the cards and an open editor": "Przenosi klawiaturę między kartami a otwartym edytorem",
     "Editor: next language": "Edytor: następny język",
     "In an editor: the language tab before this one": "W edytorze: poprzedni język",
     "In an editor: the language tab after this one": "W edytorze: następny język",
@@ -12818,6 +12844,14 @@ What you type stays in this browser only.`;
       def: { code: "ArrowRight", key: "ArrowRight", ctrl: 0, alt: 1, shift: 0, meta: 0 },
       inField: 1
     },
+    /* F6 moves between panes on Windows. inField, since both sides hold a caret. */
+    {
+      id: "edSwitch",
+      label: "Switch between the desk and the editor",
+      hint: "Moves the keyboard between the cards and an open editor",
+      def: { code: "F6", key: "F6", ctrl: 0, alt: 0, shift: 0, meta: 0 },
+      inField: 1
+    },
     {
       id: "newCard",
       label: "New card",
@@ -13322,7 +13356,7 @@ What you type stays in this browser only.`;
       hooks.drawPillsCore();
       hooks.render();
       hooks.drawIntentRail();
-      if (document.getElementById("mgCatList") && document.getElementById("modal").hidden) hooks.openManage();
+      if (document.getElementById("mgCatList") && (document.getElementById("modal").hidden || document.getElementById("modal").classList.contains("ed-rest"))) hooks.openManage();
     });
     return true;
   }
@@ -18280,12 +18314,18 @@ What you type stays in this browser only.`;
     closeModal: () => closeModal,
     dismissModal: () => dismissModal,
     dressDialogInputs: () => dressDialogInputs,
+    edCatalogTaken: () => edCatalogTaken,
     edDirty: () => edDirty,
     edMarkClean: () => edMarkClean,
     edNavHtml: () => edNavHtml,
+    edResting: () => edResting,
     edStepLang: () => edStepLang,
+    edSubjectSoon: () => edSubjectSoon,
+    edToDesk: () => edToDesk,
+    edToFront: () => edToFront,
     edWireNav: () => edWireNav,
     mfSec: () => mfSec,
+    modalFront: () => modalFront,
     modalOpen: () => modalOpen,
     modalResize: () => modalResize,
     modalTabTarget: () => modalTabTarget,
@@ -18297,6 +18337,7 @@ What you type stays in this browser only.`;
     tabTargetIn: () => tabTargetIn,
     wireAcc: () => wireAcc,
     wireDialogDrag: () => wireDialogDrag,
+    wireEditorRest: () => wireEditorRest,
     wireFocusModality: () => wireFocusModality,
     wireFolds: () => wireFolds,
     wireModalBody: () => wireModalBody,
@@ -18447,15 +18488,21 @@ What you type stays in this browser only.`;
     const b = modalCard && modalCard.querySelector(".mf-reset");
     if (!b || !modalResetFn) return;
     const live = !!modalResetFn();
-    b.disabled = !live;
+    b.disabled = !live || edGone;
     b.title = t(live ? modalResetOn : modalResetOff);
   }
   function refreshDialogChrome() {
     refreshDialogName();
     refreshDialogReset();
+    if (edSubject && !edGone) {
+      edSubjectSig = edSubjectNow();
+      const n = modalCard.querySelector(":scope > .modal-note");
+      if (n) n.remove();
+    }
   }
   function openDialog(cfg) {
     if (!modalEl || !modalCard) return;
+    const leaving = edBeforeOpen(cfg);
     edBaseline = null;
     edReturn = null;
     cutLeaves();
@@ -18480,7 +18527,7 @@ What you type stays in this browser only.`;
     translateTree(modalCard);
     dressDialogInputs(modalCard);
     markCutText(modalCard);
-    placeDialog(cfg.place);
+    edAfterOpen(cfg, leaving);
     const at = document.activeElement;
     if (!modalCard.contains(at) && !openCover() && !(at && at.closest && at.closest("#tourCard")))
       try {
@@ -18579,8 +18626,8 @@ What you type stays in this browser only.`;
       const j = i + d;
       if (i < 0 || j < 0 || j >= list2.length) return;
       const was = edDirty() ? edTyped() : null;
-      edNavTo(() => go(list2[j]));
-      if (was) offerUndo("Moved on without saving the changes", () => edNavTo(() => {
+      edGo(() => go(list2[j]));
+      if (was) offerUndo("Moved on without saving the changes", () => edGo(() => {
         go(cur);
         edRetype(was);
       }));
@@ -18596,6 +18643,7 @@ What you type stays in this browser only.`;
     }
   }
   function edStepLang(dir) {
+    if (edRest) return false;
     const strip = modalCard && modalCard.querySelector(".lang-tabs");
     if (!strip) return false;
     const tabs2 = Array.prototype.slice.call(strip.querySelectorAll("button[data-l]"));
@@ -18696,11 +18744,20 @@ What you type stays in this browser only.`;
     edReturn = null;
     scStopCapture();
     modalBack = null;
+    if (edHeld) {
+      leaveModal();
+      edRestore();
+      return;
+    }
+    const wasRest = edRest;
     leaveModal();
     modalEl.hidden = true;
     edPlaceKind = null;
     edDrag = null;
+    edAgain = null;
+    edRestEnd();
     edUnstand();
+    modalEl.classList.remove("ed-win");
     modalCard.classList.remove("about-modal", "about-page", "mt-modal");
     modalCard.innerHTML = "";
     let back = modalOpener;
@@ -18709,7 +18766,7 @@ What you type stays in this browser only.`;
     modalOpenerKbd = false;
     modalOpenerKey = null;
     if (back && !document.contains(back) && key) back = sameControl(document.body, key);
-    if (back && document.contains(back) && typeof back.focus === "function") {
+    if (back && !wasRest && document.contains(back) && typeof back.focus === "function") {
       const how = kbd ? { preventScroll: true } : { preventScroll: true, focusVisible: false };
       try {
         back.focus(how);
@@ -18758,7 +18815,7 @@ What you type stays in this browser only.`;
   function edPlaceRect(g, x, y) {
     const maxL = g.W - ED_EDGE - g.w;
     const left = g.fill || maxL < ED_EDGE ? (g.W - g.w) / 2 : Math.min(maxL, Math.max(ED_EDGE, g.W / 2 + x - g.w / 2));
-    const top = Math.max(g.band + ED_EDGE, Math.min(g.H - ED_EDGE - g.h, g.H / 2 + y));
+    const top = Math.max(g.floor, Math.min(g.H - ED_EDGE - g.h, g.H / 2 + y));
     return { left: Math.round(left), top: Math.round(top) };
   }
   function edBand() {
@@ -18766,13 +18823,14 @@ What you type stays in this browser only.`;
     const r = row2 && row2.getBoundingClientRect ? row2.getBoundingClientRect() : null;
     return r && r.bottom > 0 ? r.bottom : 0;
   }
-  function edStandAt(x, y) {
+  function edStandAt(x, y, floor) {
     const st = modalCard.style, band = edBand(), W = modalEl.clientWidth, H = modalEl.clientHeight;
     modalEl.classList.add("ed-placed");
-    st.setProperty("--ed-room", Math.max(0, H - 2 * ED_EDGE - band) + "px");
+    const top0 = Math.max(band + ED_EDGE, floor || 0);
+    st.setProperty("--ed-room", Math.max(0, H - ED_EDGE - top0) + "px");
     const relT = parseFloat(st.top) || 0, relL = parseFloat(st.left) || 0;
     const w = modalCard.offsetWidth, cap = parseFloat(getComputedStyle(modalCard).maxWidth);
-    const g = { W, H, band, w, h: modalCard.offsetHeight, fill: cap > 0 && w < cap - 0.5 };
+    const g = { W, H, floor: top0, w, h: modalCard.offsetHeight, fill: cap > 0 && w < cap - 0.5 };
     const at = edPlaceRect(g, x, y), t0 = modalCard.offsetTop - relT, l0 = modalCard.offsetLeft - relL;
     st.top = at.top - t0 + "px";
     st.left = at.left - l0 + "px";
@@ -18795,9 +18853,16 @@ What you type stays in this browser only.`;
     if (was && edPlaced) edPlaced = was;
   }
   function edPlaceSync() {
+    modalEl.classList.toggle("ed-win", !!(edPlaceKind && !modalEl.hidden));
     if (edDrag && edDrag.moved) return;
-    const p = edPlaceKind && !modalEl.hidden ? edPlaces()[edPlaceKind] : null;
-    if (p) edStandAt(p.x, p.y);
+    if (edRest && modalEl.clientWidth < ED_REST_MIN) {
+      edToFront(true);
+      return;
+    }
+    const open = edPlaceKind && !modalEl.hidden, p = open ? edPlaces()[edPlaceKind] : null;
+    const floor = open && edRest ? edHeaderFloor() : 0;
+    if (p) edStandAt(p.x, p.y, floor);
+    else if (floor && modalEl.clientHeight / 2 - modalCard.offsetHeight / 2 < floor) edStandAt(0, -modalCard.offsetHeight / 2, floor);
     else edUnstand();
   }
   function wireDialogDrag() {
@@ -18850,6 +18915,271 @@ What you type stays in this browser only.`;
     });
     addEventListener("resize", edPlaceSync);
     if (typeof ResizeObserver === "function") new ResizeObserver(edPlaceSync).observe(modalCard);
+  }
+  var ED_REST_MIN = 800;
+  var edRest = false;
+  var edEdFocus = null;
+  var edDeskFocus = null;
+  var edHeld = null;
+  var edAgain = null;
+  var edStepping = false;
+  function edResting() {
+    return edRest;
+  }
+  function modalFront() {
+    return !!modalEl && !modalEl.hidden && !edRest;
+  }
+  function edHeaderFloor() {
+    const r = document.querySelector("header > .fills"), b = r && r.getBoundingClientRect ? r.getBoundingClientRect() : null;
+    return b && b.bottom > 0 ? b.bottom + ED_EDGE : 0;
+  }
+  function edFocusOn(el) {
+    if (!el || typeof el.focus !== "function") return;
+    const how = lastInputWasKey ? { preventScroll: true } : { preventScroll: true, focusVisible: false };
+    try {
+      el.focus(how);
+    } catch (e) {
+      try {
+        el.focus();
+      } catch (e2) {
+      }
+    }
+  }
+  function edRestEnd() {
+    if (!edRest) return;
+    edRest = false;
+    modalEl.classList.remove("ed-rest");
+    modalCard.setAttribute("aria-modal", "true");
+  }
+  function edToDesk() {
+    if (edRest || !edPlaceKind || modalEl.hidden || modalEl.clientWidth < ED_REST_MIN || openCover()) return false;
+    const at = document.activeElement;
+    edEdFocus = at && modalCard.contains(at) && at !== modalCard ? at : null;
+    edRest = true;
+    modalEl.classList.add("ed-rest");
+    modalCard.removeAttribute("aria-modal");
+    edPlaceSync();
+    const back = edDeskFocus && document.contains(edDeskFocus) && edDeskFocus.getClientRects && edDeskFocus.getClientRects().length ? edDeskFocus : null;
+    if (back) edFocusOn(back);
+    else if (at && modalCard.contains(at) && typeof at.blur === "function") at.blur();
+    return true;
+  }
+  function edToFront(keys) {
+    if (!edRest) return false;
+    const at = document.activeElement;
+    if (at && at !== document.body && !modalCard.contains(at)) edDeskFocus = at;
+    edRestEnd();
+    if (keys) {
+      edPlaceSync();
+      edFocusOn(edEdFocus && modalCard.contains(edEdFocus) ? edEdFocus : modalCard);
+    } else addEventListener("pointerup", () => setTimeout(edPlaceSync, 0), { once: true });
+    return true;
+  }
+  function edBeforeOpen(cfg) {
+    const place = ED_PLACE_KINDS.indexOf(cfg.place) >= 0;
+    if (place && edHeld) {
+      const h = edHeld;
+      edHeld = null;
+      return h.dirty && h.again ? { was: h.typed, again: h.again } : null;
+    }
+    if (modalEl.hidden || !edPlaceKind) return null;
+    if (!place) {
+      if (!edHeld) edHold();
+      return null;
+    }
+    return !edStepping && edAgain && edDirty() ? { was: edTyped(), again: edAgain } : null;
+  }
+  function edAfterOpen(cfg, leaving) {
+    const place = ED_PLACE_KINDS.indexOf(cfg.place) >= 0;
+    if (place && modalEl.hidden === false && !edPlaceKind) edDeskFocus = modalOpener;
+    edAgain = place && typeof cfg.again === "function" ? cfg.again : null;
+    edRestEnd();
+    placeDialog(cfg.place);
+    if (edPlaceKind && edBaseline === null) edMarkClean();
+    edSubjectOpen(cfg);
+    if (leaving) offerUndo("Moved on without saving the changes", () => edGo(() => {
+      leaving.again();
+      edRetype(leaving.was);
+    }));
+  }
+  function edGo(run) {
+    edStepping = true;
+    try {
+      edNavTo(run);
+    } finally {
+      edStepping = false;
+    }
+  }
+  function edHold() {
+    let at = document.activeElement;
+    const wrap = at && at.closest ? at.closest(".menu-wrap") : null;
+    if (wrap) at = wrap.querySelector(":scope > button") || at;
+    edHeld = {
+      kids: Array.prototype.slice.call(modalCard.childNodes),
+      cls: modalCard.className,
+      css: modalCard.style.cssText,
+      kind: edPlaceKind,
+      rest: edRest,
+      again: edAgain,
+      dirty: edDirty(),
+      typed: edTyped(),
+      nameFn: modalNameFn,
+      resetFn: modalResetFn,
+      resetOn: modalResetOn,
+      resetOff: modalResetOff,
+      baseline: edBaseline,
+      ret: edReturn,
+      back: modalBack,
+      focus: at && modalCard.contains(at) && at !== modalCard ? at : edEdFocus,
+      desk: edRest ? at : edDeskFocus
+    };
+    edHeld.kids.forEach((k) => modalCard.removeChild(k));
+    edPlaceKind = null;
+    modalEl.classList.remove("ed-win");
+    edRestEnd();
+    edUnstand();
+  }
+  function edRestore() {
+    const h = edHeld;
+    edHeld = null;
+    modalCard.innerHTML = "";
+    modalCard.className = h.cls;
+    modalCard.style.cssText = h.css;
+    ["top", "left", "--ed-room", "transform-origin"].forEach((k) => modalCard.style.removeProperty(k));
+    h.kids.forEach((k) => modalCard.appendChild(k));
+    modalNameFn = h.nameFn;
+    modalResetFn = h.resetFn;
+    modalResetOn = h.resetOn;
+    modalResetOff = h.resetOff;
+    edBaseline = h.baseline;
+    edReturn = h.ret;
+    modalBack = h.back;
+    edAgain = h.again;
+    edEdFocus = h.focus;
+    edDeskFocus = h.desk;
+    edPlaceKind = h.kind;
+    edPlaced = null;
+    if (h.rest && modalEl.clientWidth >= ED_REST_MIN) {
+      edRest = true;
+      modalEl.classList.add("ed-rest");
+      modalCard.removeAttribute("aria-modal");
+    }
+    edPlaceSync();
+    if (edRest) edFocusOn(h.desk && document.contains(h.desk) ? h.desk : null);
+    else edFocusOn(h.focus && modalCard.contains(h.focus) ? h.focus : modalCard);
+  }
+  function wireEditorRest() {
+    const bg = modalEl.querySelector(".modal-bg");
+    if (bg) bg.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || !edToDesk()) return;
+      e.preventDefault();
+    });
+    modalCard.addEventListener("pointerdown", () => {
+      if (edRest) edToFront(false);
+    }, true);
+    modalCard.addEventListener("focusin", () => {
+      if (edRest) edToFront(false);
+    });
+    modalCard.addEventListener("click", (e) => {
+      if (edGone && e.target.closest && e.target.closest(ED_LOCKS)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true);
+  }
+  var ED_LINES = {
+    card: {
+      edition: "A newer edition changed this card while it was open. Save keeps what is written here; Reset takes the new edition's.",
+      gone: "This card is no longer in the catalog, so nothing here can be saved. The text can still be copied.",
+      elsewhere: "This card changed elsewhere while it was open. Save keeps what is written here; Cancel leaves the change made there."
+    },
+    intent: {
+      edition: "A newer edition changed this intent while it was open. Save keeps what is written here; Reset takes the new edition's.",
+      gone: "This intent is no longer in the catalog, so nothing here can be saved. The text can still be copied.",
+      elsewhere: "This intent changed elsewhere while it was open. Save keeps what is written here; Cancel leaves the change made there."
+    },
+    category: {
+      edition: "A newer edition changed this category while it was open. Save keeps what is written here; Reset takes the new edition's.",
+      gone: "This category is no longer in the catalog, so nothing here can be saved. The text can still be copied.",
+      elsewhere: "This category changed elsewhere while it was open. Save keeps what is written here; Cancel leaves the change made there."
+    }
+  };
+  var ED_LOCKS = ".modal-actions .btn.primary, .modal-actions .mf-reset, .modal-actions .mf-del";
+  var edSubject = null;
+  var edSubjectSig = null;
+  var edGone = false;
+  var edCause = "";
+  var edSubjectTimer = null;
+  function edSubjectNow() {
+    try {
+      return edSubject ? edSubject() : void 0;
+    } catch (e) {
+      return void 0;
+    }
+  }
+  function edSubjectOpen(cfg) {
+    edSubject = edPlaceKind && typeof cfg.subject === "function" ? cfg.subject : null;
+    edSubjectSig = edSubjectNow();
+    edGone = false;
+  }
+  function edCatalogTaken() {
+    edCause = "edition";
+  }
+  function edSubjectSoon() {
+    clearTimeout(edSubjectTimer);
+    edSubjectTimer = setTimeout(edSubjectCheck, 0);
+  }
+  function edSubjectCheck() {
+    const cause = edCause;
+    edCause = "";
+    if (!edPlaceKind || modalEl.hidden || !edSubject || edStepping) return;
+    const now = edSubjectNow();
+    if (now === void 0 || now === edSubjectSig) return;
+    if (now === null) {
+      edMarkGone();
+      return;
+    }
+    if (!edDirty() && edAgain) {
+      edStepping = true;
+      try {
+        edAgain();
+      } finally {
+        edStepping = false;
+      }
+      return;
+    }
+    edUnGone();
+    edSubjectSig = now;
+    edSayLine(ED_LINES[edPlaceKind][cause === "edition" ? "edition" : "elsewhere"]);
+  }
+  function edMarkGone() {
+    edGone = true;
+    edSubjectSig = null;
+    modalCard.querySelectorAll(ED_LOCKS).forEach((b) => {
+      b.disabled = true;
+    });
+    edSayLine(ED_LINES[edPlaceKind].gone);
+  }
+  function edUnGone() {
+    if (!edGone) return;
+    edGone = false;
+    modalCard.querySelectorAll(".modal-actions .btn.primary, .modal-actions .mf-del").forEach((b) => {
+      b.disabled = false;
+    });
+    refreshDialogReset();
+  }
+  function edSayLine(text) {
+    const old = modalCard.querySelector(":scope > .modal-note");
+    if (old) old.remove();
+    const h = modalCard.querySelector(":scope > h2");
+    if (!h) return;
+    const p = document.createElement("p");
+    p.className = "modal-note";
+    p.setAttribute("role", "status");
+    p.innerHTML = '<span class="modal-note-dot" aria-hidden="true"></span><span class="modal-note-t"></span>';
+    p.querySelector(".modal-note-t").textContent = text;
+    h.after(p);
+    translateTree(p);
   }
   var MODAL_TABBABLE = "a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex='-1'])";
   function modalTabTarget(back) {
@@ -23015,7 +23345,7 @@ What you type stays in this browser only.`;
       rebuildCards();
       hooks.render();
       drawPills();
-      if (document.getElementById("mgCatList") && document.getElementById("modal").hidden) hooks.openManage();
+      if (document.getElementById("mgCatList") && (document.getElementById("modal").hidden || document.getElementById("modal").classList.contains("ed-rest"))) hooks.openManage();
     });
     return true;
   }
@@ -23066,7 +23396,7 @@ What you type stays in this browser only.`;
         saveIntentOrder();
       }
       refreshAfterIntents();
-      if (document.getElementById("mgCatList") && document.getElementById("modal").hidden) hooks.openManage();
+      if (document.getElementById("mgCatList") && (document.getElementById("modal").hidden || document.getElementById("modal").classList.contains("ed-rest"))) hooks.openManage();
     });
     return true;
   }
@@ -25708,6 +26038,7 @@ What you type stays in this browser only.`;
   function render() {
     remPx();
     closeNotePane();
+    edSubjectSoon();
     cancelLangChunks();
     const terms = cardSearchTerms();
     scheduleSearchRank();
@@ -30893,14 +31224,14 @@ What you type stays in this browser only.`;
     });
   }
   function openMaintenance(backFn) {
-    if (typeof modalOpen === "function" && modalOpen() && typeof edDirty === "function" && edDirty()) {
+    if (typeof modalFront === "function" && modalFront() && typeof edDirty === "function" && edDirty()) {
       try {
         toast(t("Maintenance can open once the edit in progress is saved or cancelled."));
       } catch (_) {
       }
       return;
     }
-    if (typeof closeModal === "function") {
+    if (typeof closeModal === "function" && modalFront()) {
       try {
         closeModal();
       } catch (_) {
@@ -31018,6 +31349,14 @@ What you type stays in this browser only.`;
       back: fromPill ? null : () => hooks.openManage(),
       title: "Edit category",
       place: "category",
+      again: () => openCategoryEditor(k, fromPill),
+      subject: () => CATS[k] == null ? null : JSON.stringify([
+        CATS[k],
+        catIconKey(k),
+        catSlot(k),
+        isAlwaysCat(k),
+        CONTENT_LANGS.map((l) => (pack[catPackKey(l, primary)] || {})[k] || "")
+      ]),
       name: () => CATS[k] || "",
       resettable: () => !isCustomCat && categoryIsOverridden(k),
       resetOn: "Discard your changes and restore the catalog's category.",
@@ -31212,7 +31551,16 @@ What you type stays in this browser only.`;
       back: fromManage ? () => doneIntentEditor() : null,
       title: isNew ? "New intent" : "Edit intent",
       place: "intent",
-      name: () => !isNew && i > -1 ? intentNavName(i) : "",
+      again: () => openIntentEditor(isNew ? null : intentIdxOfId(id), fromManage),
+      subject: () => {
+        if (isNew) return "";
+        const at = intentIdxOfId(id);
+        return at < 0 ? null : JSON.stringify(intentStoreKeys().map((f) => SW_STORE[f][at] || ""));
+      },
+      name: () => {
+        const at = isNew ? -1 : intentIdxOfId(id);
+        return at > -1 ? intentNavName(at) : "";
+      },
       resettable: () => !isNew && !isCustom && i > -1 && intentIsOverridden(i),
       resetOn: "Discard your edits and restore the catalog wording.",
       resetOff: isCustom || isNew ? "This is yours, so the catalog has no version to restore." : "Nothing to discard - this matches the catalog.",
@@ -32097,6 +32445,18 @@ What you type stays in this browser only.`;
       back: backToManage ? doneCardEditor : null,
       title: isNew ? "New card" : "Edit card",
       place: "card",
+      again: () => openCardEditor(savedId, presetCat, fromManage),
+      /* The card as stored, its own fields only: a star, putting it away or moving it is not an edit. */
+      subject: () => {
+        if (!savedId) return "";
+        const c = findCard(savedId);
+        if (!c) return null;
+        const o = {};
+        Object.keys(c).sort().forEach((k) => {
+          if (k.charAt(0) !== "_") o[k] = c[k];
+        });
+        return JSON.stringify(o);
+      },
       /* Read through savedId so a card saved for the first time names itself at once. */
       name: () => {
         const c = savedId ? findCard(savedId) : null;
@@ -35386,7 +35746,7 @@ What you type stays in this browser only.`;
     );
     if (justHtml) return mgBody;
     libView = "list";
-    if (modalOpen()) closeModal();
+    if (modalFront()) closeModal();
     if (screenOn === LIB_SCREEN) paintLibrary(null, mgBody);
     else openScreenTab(LIB_SCREEN);
   }
@@ -35435,7 +35795,7 @@ What you type stays in this browser only.`;
     }
     if (fk) focusSame(host, fk);
     const at = document.activeElement;
-    if (!page.contains(at) && !modalOpen() && !openCover() && !(at && at.closest && at.closest("#tourCard")))
+    if (!page.contains(at) && !modalFront() && !openCover() && !(at && at.closest && at.closest("#tourCard")))
       try {
         page.focus({ preventScroll: true });
       } catch (e) {
@@ -37690,7 +38050,7 @@ What you type stays in this browser only.`;
     return !!dockEl && !dockEl.hidden;
   }
   function unfoldDock(by) {
-    if (!dockRows.length || lanesShown() || modalOpen() || openCover()) return;
+    if (!dockRows.length || lanesShown() || modalFront() || openCover()) return;
     openBy[by] = true;
     if (!dockEl) {
       dockEl = document.createElement("div");
@@ -37844,7 +38204,7 @@ What you type stays in this browser only.`;
   }
   function toggleLanes(on) {
     const want = on === void 0 ? !lanesOn : !!on, el = lanesEl();
-    if (want === lanesOn || !el || want && (modalOpen() || openCover())) return;
+    if (want === lanesOn || !el || want && (modalFront() || openCover())) return;
     lanesOn = want;
     laneFresh = want;
     laneMark = -1;
@@ -38479,7 +38839,7 @@ What you type stays in this browser only.`;
         }
         return;
       }
-      if (modalOpen()) {
+      if (modalFront()) {
         if (e.key === "Escape") {
           e.preventDefault();
           dismissModal();
@@ -38501,6 +38861,9 @@ What you type stays in this browser only.`;
         } else if (eventMatchesAction(e, "edNextLang")) {
           e.preventDefault();
           hooks.runShortcut("edNextLang");
+        } else if (eventMatchesAction(e, "edSwitch")) {
+          e.preventDefault();
+          edToDesk();
         } else if (e.key === "Tab" && !e.ctrlKey && !e.altKey && !e.metaKey) {
           const to = modalTabTarget(e.shiftKey);
           if (to) {
@@ -39157,6 +39520,7 @@ What you type stays in this browser only.`;
     runShortcut: () => runShortcut
   });
   function runShortcut(id) {
+    if (id === "edSwitch") return edToFront(true);
     if (typeof document !== "undefined" && document.body && document.body.classList && document.body.classList.contains("screen-on")) {
       if (id === "tabNext") {
         stepTab(1);
@@ -39403,6 +39767,7 @@ What you type stays in this browser only.`;
       return true;
     }
     if (id === "edPrevEntry" || id === "edNextEntry") {
+      if (edResting()) return false;
       const b = $(id === "edPrevEntry" ? "#edPrev" : "#edNext");
       if (!b || b.disabled) return false;
       b.click();
@@ -39516,6 +39881,7 @@ What you type stays in this browser only.`;
     const u = document.getElementById("eUndo");
     if (u) u.remove();
     closeNotePane();
+    edCatalogTaken();
     resetPack();
     resetAppState();
     resetIntentIds();
@@ -40423,6 +40789,7 @@ What you type stays in this browser only.`;
     wireModalBody();
     wireFocusModality();
     wireDialogDrag();
+    wireEditorRest();
     wireCaptureKeydown();
     loadShortcuts();
     wireGlobalKeydown();

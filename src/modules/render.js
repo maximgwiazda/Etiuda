@@ -28,6 +28,7 @@ import { deckSettle } from "./deck.js";
 import { cssEsc } from "./css-esc.js";
 import { markEntrySel } from "./entry-walk.js";
 import { scrollPageTop } from "./page-scroll.js";
+import { edSubjectSoon } from "./dialog.js";
 import { scheduleCutScan } from "./cut-text.js";
 import { markSearchHits } from "./search-marks.js";
 import { syncEmptyMark } from "./empty-mark.js";
@@ -120,6 +121,7 @@ function meaningBoundaryHtml(wordCount, tailCount, noMatchHtml, label){
 function render(){
   remPx();   // while the style is still clean: see remPx
   closeNotePane();
+  edSubjectSoon();
   cancelLangChunks();
   const terms=cardSearchTerms();
   scheduleSearchRank();

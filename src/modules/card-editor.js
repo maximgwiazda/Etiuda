@@ -365,6 +365,16 @@ function openCardEditor(id, presetCat, fromManage){
     back: backToManage?doneCardEditor:null,
     title: isNew?"New card":"Edit card",
     place: "card",
+    again: ()=>openCardEditor(savedId, presetCat, fromManage),
+    /* The card as stored, its own fields only: a star, putting it away or moving it is not an edit. */
+    subject: ()=>{
+      if(!savedId) return "";
+      const c=findCard(savedId);
+      if(!c) return null;
+      const o={};
+      Object.keys(c).sort().forEach(k=>{ if(k.charAt(0)!=="_") o[k]=c[k]; });
+      return JSON.stringify(o);
+    },
     /* Read through savedId so a card saved for the first time names itself at once. */
     name: ()=>{ const c=savedId?findCard(savedId):null; return c?cardTitle(c):""; },
     resettable: ()=>!!(baseCard(savedId) && pack.overrides[savedId]),

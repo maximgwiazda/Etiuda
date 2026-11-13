@@ -6,7 +6,7 @@ import { toggleFactsPanel, factsPanelOpen, closeFactsPanel } from "./facts.js";
 import { $, intentEl, pax } from "./dom.js";
 import { toggleRail } from "./rail-panel.js";
 import { togglePills } from "./pills-box.js";
-import { edStepLang } from "./dialog.js";
+import { edResting, edStepLang, edToFront } from "./dialog.js";
 import { clearIntents, pickIntent } from "./intent-pick.js";
 import { captureRail, railRelKeys, railEchoRedraw, railDecorate } from "./rail-list.js";
 import { render } from "./render.js";
@@ -27,6 +27,8 @@ import { hooks } from "./hooks.js";
 
 // ---- running a shortcut: the dispatcher reaches the whole app, so it stays here -------
 function runShortcut(id){
+  /* Whichever screen is in front: a resting editor stands above them all. */
+  if(id==="edSwitch") return edToFront(true);
   if(typeof document!=="undefined" && document.body && document.body.classList && document.body.classList.contains("screen-on")){
     if(id==="tabNext"){ stepTab(1); return true; }
     if(id==="tabPrev"){ stepTab(-1); return true; }
@@ -172,6 +174,7 @@ function runShortcut(id){
   /* Unhandled when no editor is open, or when the arrow is at its end, so the key falls
      through instead of being silently swallowed. */
   if(id==="edPrevEntry"||id==="edNextEntry"){
+    if(edResting()) return false;
     const b=$(id==="edPrevEntry"?"#edPrev":"#edNext");
     if(!b||b.disabled) return false;
     b.click();

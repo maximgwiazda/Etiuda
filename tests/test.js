@@ -576,7 +576,7 @@ function lanePageKeyTests() {
   const off = () => false;
   const own = { document: doc, addEventListener: (k, fn) => { if (k === "keydown") world.listener = fn; },
     $: s => (s === "#lanes" ? lanesBox : null), scCaptureId: "", SC_DEFS: [], intentEl: null,
-    tourActive: off, tourHasFocus: off, openCover: () => null, modalOpen: off, factsPanelOpen: off,
+    tourActive: off, tourHasFocus: off, openCover: () => null, modalOpen: off, modalFront: off, edToDesk: off, factsPanelOpen: off,
     eventMatchesAction: off, eHost: off, hooks: { runShortcut: off }, mgReduceMotion: off };
   Object.defineProperty(own, "lanesOn", { get: () => world.open });
   const scope = new Proxy({}, {
@@ -4717,12 +4717,12 @@ function dialogFocusTests() {
     return { doc, N, modalEl, modalCard, x, field, save, tourBtn, cover, coverBtn, search, body };
   };
   const sliced = w => new Function("document", "modalEl", "modalCard", "cutLeaves", "setModalBack", "modalHead", "t",
-    "refreshDialogReset", "translateTree", "dressDialogInputs", "markCutText", "openCover", "focusKey", "placeDialog",
+    "refreshDialogReset", "translateTree", "dressDialogInputs", "markCutText", "openCover", "focusKey", "edBeforeOpen", "edAfterOpen",
     "let modalOpener=null, modalOpenerKbd=false, modalOpenerKey=null, modalNameFn=null, modalResetFn=null, modalResetOn=\"\", modalResetOff=\"\", lastInputWasKey=false;\n"
     + [extractDecl(dlg, "function openDialog("), extractDecl(dlg, "const MODAL_TABBABLE="), extractDecl(dlg, "function tabTargetIn(")].join("\n")
     + "\nreturn {openDialog, tabTargetIn};")(
     w.doc, w.modalEl, w.modalCard, () => {}, () => {}, () => "", s => s, () => {}, () => {}, () => {}, () => {},
-    () => (w.coverOn ? w.cover : null), () => null, () => {});
+    () => (w.coverOn ? w.cover : null), () => null, () => null, () => {});
   const open = (from, opts) => {
     const w = world(); Object.assign(w, opts || {});
     w.doc.activeElement = typeof from === "function" ? from(w) : w.body;

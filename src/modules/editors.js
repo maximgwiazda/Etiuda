@@ -61,6 +61,9 @@ function openCategoryEditor(k,fromPill){
     back: fromPill?null:()=>hooks.openManage(),
     title: "Edit category",
     place: "category",
+    again: ()=>openCategoryEditor(k, fromPill),
+    subject: ()=>CATS[k]==null ? null : JSON.stringify([CATS[k], catIconKey(k), catSlot(k), isAlwaysCat(k),
+      CONTENT_LANGS.map(l=>(pack[catPackKey(l,primary)]||{})[k]||"")]),
     name: ()=>CATS[k]||"",
     resettable: ()=>!isCustomCat && categoryIsOverridden(k),
     resetOn: "Discard your changes and restore the catalog's category.",
@@ -290,7 +293,13 @@ function openIntentEditor(idx, fromManage){
     back: fromManage?()=>doneIntentEditor():null,
     title: isNew?"New intent":"Edit intent",
     place: "intent",
-    name: ()=>(!isNew&&i>-1)?intentNavName(i):"",
+    again: ()=>openIntentEditor(isNew ? null : intentIdxOfId(id), fromManage),
+    subject: ()=>{
+      if(isNew) return "";
+      const at=intentIdxOfId(id);
+      return at<0 ? null : JSON.stringify(intentStoreKeys().map(f=>SW_STORE[f][at]||""));
+    },
+    name: ()=>{ const at=isNew ? -1 : intentIdxOfId(id); return at>-1 ? intentNavName(at) : ""; },
     resettable: ()=>!isNew && !isCustom && i>-1 && intentIsOverridden(i),
     resetOn: "Discard your edits and restore the catalog wording.",
     resetOff: isCustom||isNew ? "This is yours, so the catalog has no version to restore." : "Nothing to discard - this matches the catalog.",

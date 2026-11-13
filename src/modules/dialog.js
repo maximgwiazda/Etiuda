@@ -134,13 +134,22 @@ function refreshDialogReset(){
   const b=modalCard&&modalCard.querySelector(".mf-reset");
   if(!b||!modalResetFn) return;
   const live=!!modalResetFn();
-  b.disabled=!live;
+  b.disabled=!live || edGone;
   b.title=t(live?modalResetOn:modalResetOff);
 }
 /** Both halves of a heading that has to keep up with its own screen. */
-function refreshDialogChrome(){ refreshDialogName(); refreshDialogReset(); }
+/* After the editor's own Save the entry is what it wrote, so a line about a change underneath has said its piece. */
+function refreshDialogChrome(){
+  refreshDialogName(); refreshDialogReset();
+  if(edSubject && !edGone){
+    edSubjectSig=edSubjectNow();
+    const n=modalCard.querySelector(":scope > .modal-note");
+    if(n) n.remove();
+  }
+}
 function openDialog(cfg){
   if(!modalEl||!modalCard) return;
+  const leaving=edBeforeOpen(cfg);
   /* Null outside an editor. Written in place: this function is sliced out and run on its own. */
   edBaseline=null; edReturn=null;
   cutLeaves();
@@ -179,7 +188,7 @@ function openDialog(cfg){
   translateTree(modalCard);
   dressDialogInputs(modalCard);
   markCutText(modalCard);
-  placeDialog(cfg.place);
+  edAfterOpen(cfg, leaving);
   /* THE SCREEN TAKES THE KEYBOARD: where its wiring focused nothing inside it, the card itself
      holds it, so a key reaches the dialog rather than the page it covers. A cover over it and a
      tour bubble keep theirs. */
@@ -284,8 +293,8 @@ function edWireNav(list,cur,go){
     if(i<0||j<0||j>=list.length) return;
     /* Leaving with changes unsaved leaves at once, and Undo goes back to them. */
     const was=edDirty() ? edTyped() : null;
-    edNavTo(()=>go(list[j]));
-    if(was) offerUndo("Moved on without saving the changes", ()=>edNavTo(()=>{ go(cur); edRetype(was); }));
+    edGo(()=>go(list[j]));
+    if(was) offerUndo("Moved on without saving the changes", ()=>edGo(()=>{ go(cur); edRetype(was); }));
   };
   const p=$("#edPrev"), n=$("#edNext");
   if(p){ p.disabled=(i<=0); p.onclick=()=>step(-1); }
@@ -296,6 +305,7 @@ function edWireNav(list,cur,go){
    Clicks the tab rather than moving the class itself, so the sweep and its direction come
    from the one handler that owns them. */
 function edStepLang(dir){
+  if(edRest) return false;
   const strip=modalCard&&modalCard.querySelector(".lang-tabs");
   if(!strip) return false;
   const tabs=Array.prototype.slice.call(strip.querySelectorAll("button[data-l]"));
@@ -422,9 +432,12 @@ function closeModal(){
   edBaseline=null; edReturn=null;
   scStopCapture();
   modalBack=null;
+  if(edHeld){ leaveModal(); edRestore(); return; }
+  const wasRest=edRest;
   leaveModal();
   modalEl.hidden=true;
-  edPlaceKind=null; edDrag=null; edUnstand();
+  edPlaceKind=null; edDrag=null; edAgain=null; edRestEnd(); edUnstand();
+  modalEl.classList.remove("ed-win");
   modalCard.classList.remove("about-modal","about-page","mt-modal");
   modalCard.innerHTML="";
   let back=modalOpener;
@@ -432,7 +445,7 @@ function closeModal(){
   modalOpener=null; modalOpenerKbd=false; modalOpenerKey=null;
   /* Its own screen rebuilt while the dialog stood over it: the control with the same identity stands in its place. */
   if(back && !document.contains(back) && key) back=sameControl(document.body,key);
-  if(back && document.contains(back) && typeof back.focus==="function"){
+  if(back && !wasRest && document.contains(back) && typeof back.focus==="function"){
     /* The ring belongs to the hand that would use it: kept where the dialog was opened from the
        keyboard, suppressed where it was opened by pointer. focusVisible is honoured here and
        ignored harmlessly where it is not - see wireFocusModality for what it is answering. */
@@ -472,7 +485,7 @@ function edPlacesWrite(all){
 function edPlaceRect(g, x, y){
   const maxL=g.W-ED_EDGE-g.w;
   const left=(g.fill || maxL<ED_EDGE) ? (g.W-g.w)/2 : Math.min(maxL, Math.max(ED_EDGE, g.W/2+x-g.w/2));
-  const top=Math.max(g.band+ED_EDGE, Math.min(g.H-ED_EDGE-g.h, g.H/2+y));
+  const top=Math.max(g.floor, Math.min(g.H-ED_EDGE-g.h, g.H/2+y));
   return {left:Math.round(left), top:Math.round(top)};
 }
 function edBand(){
@@ -482,13 +495,14 @@ function edBand(){
 }
 /* Stands the card at (x,y), clamped, and returns the offset it took. It stays a flex item,
    top-aligned and shifted by its relative top and left, so its width is the centred card's own. */
-function edStandAt(x, y){
+function edStandAt(x, y, floor){
   const st=modalCard.style, band=edBand(), W=modalEl.clientWidth, H=modalEl.clientHeight;
   modalEl.classList.add("ed-placed");
-  st.setProperty("--ed-room", Math.max(0, H-2*ED_EDGE-band)+"px");
+  const top0=Math.max(band+ED_EDGE, floor||0);
+  st.setProperty("--ed-room", Math.max(0, H-ED_EDGE-top0)+"px");
   const relT=parseFloat(st.top)||0, relL=parseFloat(st.left)||0;
   const w=modalCard.offsetWidth, cap=parseFloat(getComputedStyle(modalCard).maxWidth);
-  const g={W:W, H:H, band:band, w:w, h:modalCard.offsetHeight, fill:cap>0 && w<cap-0.5};
+  const g={W:W, H:H, floor:top0, w:w, h:modalCard.offsetHeight, fill:cap>0 && w<cap-0.5};
   const at=edPlaceRect(g, x, y), t0=modalCard.offsetTop-relT, l0=modalCard.offsetLeft-relL;
   st.top=(at.top-t0)+"px";
   st.left=(at.left-l0)+"px";
@@ -515,9 +529,15 @@ function placeDialog(kind){
   if(was && edPlaced) edPlaced=was;   // the glide after a re-render starts from what was painted
 }
 function edPlaceSync(){
+  modalEl.classList.toggle("ed-win", !!(edPlaceKind && !modalEl.hidden));
   if(edDrag && edDrag.moved) return;
-  const p=(edPlaceKind && !modalEl.hidden) ? edPlaces()[edPlaceKind] : null;
-  if(p) edStandAt(p.x, p.y); else edUnstand();
+  if(edRest && modalEl.clientWidth<ED_REST_MIN){ edToFront(true); return; }
+  const open=edPlaceKind && !modalEl.hidden, p=open ? edPlaces()[edPlaceKind] : null;
+  /* Resting, it stands clear of the header: the band and the tools' row under it. */
+  const floor=(open && edRest) ? edHeaderFloor() : 0;
+  if(p) edStandAt(p.x, p.y, floor);
+  else if(floor && modalEl.clientHeight/2-modalCard.offsetHeight/2<floor) edStandAt(0, -modalCard.offsetHeight/2, floor);
+  else edUnstand();
 }
 function wireDialogDrag(){
   const head=e=>{
@@ -566,6 +586,203 @@ function wireDialogDrag(){
   addEventListener("resize", edPlaceSync);
   if(typeof ResizeObserver==="function") new ResizeObserver(edPlaceSync).observe(modalCard);
 }
+/* ---- THE DESK IN FRONT WHILE AN EDITOR WAITS. A click on the dimmed desk, or F6, puts the desk in
+   front: the scrim lifts, the editor rests where it stands, inert to the keys and live to the
+   pointer, and a click on it or F6 brings it back. Below ED_REST_MIN wide the editors stay modal. */
+const ED_REST_MIN=800;
+let edRest=false, edEdFocus=null, edDeskFocus=null, edHeld=null, edAgain=null, edStepping=false;
+function edResting(){ return edRest; }
+/* A dialog the keyboard belongs to: any dialog, an editor only while it is in front. */
+function modalFront(){ return !!modalEl && !modalEl.hidden && !edRest; }
+function edHeaderFloor(){
+  const r=document.querySelector("header > .fills"), b=r && r.getBoundingClientRect ? r.getBoundingClientRect() : null;
+  return b && b.bottom>0 ? b.bottom+ED_EDGE : 0;
+}
+function edFocusOn(el){
+  if(!el || typeof el.focus!=="function") return;
+  const how=lastInputWasKey?{preventScroll:true}:{preventScroll:true,focusVisible:false};
+  try{ el.focus(how); }catch(e){ try{ el.focus(); }catch(e2){} }
+}
+function edRestEnd(){
+  if(!edRest) return;
+  edRest=false;
+  modalEl.classList.remove("ed-rest");
+  modalCard.setAttribute("aria-modal","true");
+}
+function edToDesk(){
+  if(edRest || !edPlaceKind || modalEl.hidden || modalEl.clientWidth<ED_REST_MIN || openCover()) return false;
+  const at=document.activeElement;
+  edEdFocus=(at && modalCard.contains(at) && at!==modalCard) ? at : null;
+  edRest=true;
+  modalEl.classList.add("ed-rest");
+  modalCard.removeAttribute("aria-modal");
+  edPlaceSync();
+  const back=(edDeskFocus && document.contains(edDeskFocus) && edDeskFocus.getClientRects && edDeskFocus.getClientRects().length) ? edDeskFocus : null;
+  if(back) edFocusOn(back);
+  else if(at && modalCard.contains(at) && typeof at.blur==="function") at.blur();
+  return true;
+}
+/* `keys` says the keyboard brought it: the caret goes back to the field it had. A press is acted
+   on where it landed, so the editor goes back to its place only once the press is over. */
+function edToFront(keys){
+  if(!edRest) return false;
+  const at=document.activeElement;
+  if(at && at!==document.body && !modalCard.contains(at)) edDeskFocus=at;
+  edRestEnd();
+  if(keys){
+    edPlaceSync();
+    edFocusOn((edEdFocus && modalCard.contains(edEdFocus)) ? edEdFocus : modalCard);
+  } else addEventListener("pointerup",()=>setTimeout(edPlaceSync,0),{once:true});
+  return true;
+}
+/* Another entry takes the window, and unsaved typing in the one it replaces gets the Undo Prev and
+   Next give; a dialog of another kind is opened over the editor, which is held whole until it closes. */
+function edBeforeOpen(cfg){
+  const place=ED_PLACE_KINDS.indexOf(cfg.place)>=0;
+  if(place && edHeld){
+    const h=edHeld; edHeld=null;
+    return (h.dirty && h.again) ? {was:h.typed, again:h.again} : null;
+  }
+  if(modalEl.hidden || !edPlaceKind) return null;
+  if(!place){ if(!edHeld) edHold(); return null; }
+  return (!edStepping && edAgain && edDirty()) ? {was:edTyped(), again:edAgain} : null;
+}
+function edAfterOpen(cfg, leaving){
+  const place=ED_PLACE_KINDS.indexOf(cfg.place)>=0;
+  if(place && modalEl.hidden===false && !edPlaceKind) edDeskFocus=modalOpener;
+  edAgain=(place && typeof cfg.again==="function") ? cfg.again : null;
+  edRestEnd();
+  placeDialog(cfg.place);
+  if(edPlaceKind && edBaseline===null) edMarkClean();
+  edSubjectOpen(cfg);
+  if(leaving) offerUndo("Moved on without saving the changes", ()=>edGo(()=>{ leaving.again(); edRetype(leaving.was); }));
+}
+function edGo(run){
+  edStepping=true;
+  try{ edNavTo(run); }finally{ edStepping=false; }
+}
+function edHold(){
+  let at=document.activeElement;
+  const wrap=(at && at.closest) ? at.closest(".menu-wrap") : null;
+  if(wrap) at=wrap.querySelector(":scope > button")||at;
+  edHeld={kids:Array.prototype.slice.call(modalCard.childNodes), cls:modalCard.className, css:modalCard.style.cssText,
+    kind:edPlaceKind, rest:edRest, again:edAgain, dirty:edDirty(), typed:edTyped(),
+    nameFn:modalNameFn, resetFn:modalResetFn, resetOn:modalResetOn, resetOff:modalResetOff,
+    baseline:edBaseline, ret:edReturn, back:modalBack,
+    focus:(at && modalCard.contains(at) && at!==modalCard) ? at : edEdFocus, desk:edRest ? at : edDeskFocus};
+  edHeld.kids.forEach(k=>modalCard.removeChild(k));
+  edPlaceKind=null;
+  modalEl.classList.remove("ed-win");
+  edRestEnd();
+  edUnstand();
+}
+function edRestore(){
+  const h=edHeld;
+  edHeld=null;
+  modalCard.innerHTML="";
+  modalCard.className=h.cls;
+  modalCard.style.cssText=h.css;
+  ["top","left","--ed-room","transform-origin"].forEach(k=>modalCard.style.removeProperty(k));
+  h.kids.forEach(k=>modalCard.appendChild(k));
+  modalNameFn=h.nameFn; modalResetFn=h.resetFn; modalResetOn=h.resetOn; modalResetOff=h.resetOff;
+  edBaseline=h.baseline; edReturn=h.ret; modalBack=h.back; edAgain=h.again;
+  edEdFocus=h.focus; edDeskFocus=h.desk; edPlaceKind=h.kind; edPlaced=null;
+  if(h.rest && modalEl.clientWidth>=ED_REST_MIN){
+    edRest=true;
+    modalEl.classList.add("ed-rest");
+    modalCard.removeAttribute("aria-modal");
+  }
+  edPlaceSync();
+  if(edRest) edFocusOn((h.desk && document.contains(h.desk)) ? h.desk : null);
+  else edFocusOn((h.focus && modalCard.contains(h.focus)) ? h.focus : modalCard);
+}
+function wireEditorRest(){
+  const bg=modalEl.querySelector(".modal-bg");
+  /* The desk was dimmed when it was clicked, so the click was not aimed: it brings the desk in
+     front and does nothing else. */
+  if(bg) bg.addEventListener("pointerdown",e=>{
+    if(e.button!==0 || !edToDesk()) return;
+    e.preventDefault();
+  });
+  modalCard.addEventListener("pointerdown",()=>{ if(edRest) edToFront(false); },true);
+  modalCard.addEventListener("focusin",()=>{ if(edRest) edToFront(false); });
+  /* Gone, the entry has no Save, Reset or Delete, whatever an editor does to its buttons later. */
+  modalCard.addEventListener("click",e=>{
+    if(edGone && e.target.closest && e.target.closest(ED_LOCKS)){ e.preventDefault(); e.stopPropagation(); }
+  },true);
+}
+/* ---- WHAT AN EDITOR EDITS, CHANGED UNDERNEATH IT. Typed fields are never changed for the person:
+   a clean editor shows the entry as it now is, one holding typing keeps it and says so in one line
+   under the title, and one whose entry is gone stays readable with Save, Reset and Delete off.
+   Asked after the desk draws; Save's own write is the editor's (refreshDialogChrome). */
+const ED_LINES={
+  card:{edition:"A newer edition changed this card while it was open. Save keeps what is written here; Reset takes the new edition's.",
+    gone:"This card is no longer in the catalog, so nothing here can be saved. The text can still be copied.",
+    elsewhere:"This card changed elsewhere while it was open. Save keeps what is written here; Cancel leaves the change made there."},
+  intent:{edition:"A newer edition changed this intent while it was open. Save keeps what is written here; Reset takes the new edition's.",
+    gone:"This intent is no longer in the catalog, so nothing here can be saved. The text can still be copied.",
+    elsewhere:"This intent changed elsewhere while it was open. Save keeps what is written here; Cancel leaves the change made there."},
+  category:{edition:"A newer edition changed this category while it was open. Save keeps what is written here; Reset takes the new edition's.",
+    gone:"This category is no longer in the catalog, so nothing here can be saved. The text can still be copied.",
+    elsewhere:"This category changed elsewhere while it was open. Save keeps what is written here; Cancel leaves the change made there."}
+};
+const ED_LOCKS=".modal-actions .btn.primary, .modal-actions .mf-reset, .modal-actions .mf-del";
+let edSubject=null, edSubjectSig=null, edGone=false, edCause="", edSubjectTimer=null;
+function edSubjectNow(){
+  try{ return edSubject ? edSubject() : undefined; }catch(e){ return undefined; }
+}
+function edSubjectOpen(cfg){
+  edSubject=(edPlaceKind && typeof cfg.subject==="function") ? cfg.subject : null;
+  edSubjectSig=edSubjectNow();
+  edGone=false;
+}
+/* A catalog taken (restartDesk): the next difference is the edition's. */
+function edCatalogTaken(){ edCause="edition"; }
+function edSubjectSoon(){
+  clearTimeout(edSubjectTimer);
+  edSubjectTimer=setTimeout(edSubjectCheck,0);
+}
+function edSubjectCheck(){
+  const cause=edCause;
+  edCause="";
+  if(!edPlaceKind || modalEl.hidden || !edSubject || edStepping) return;
+  const now=edSubjectNow();
+  if(now===undefined || now===edSubjectSig) return;
+  if(now===null){ edMarkGone(); return; }
+  if(!edDirty() && edAgain){
+    edStepping=true;
+    try{ edAgain(); }finally{ edStepping=false; }
+    return;
+  }
+  edUnGone();
+  edSubjectSig=now;
+  edSayLine(ED_LINES[edPlaceKind][cause==="edition" ? "edition" : "elsewhere"]);
+}
+function edMarkGone(){
+  edGone=true;
+  edSubjectSig=null;
+  modalCard.querySelectorAll(ED_LOCKS).forEach(b=>{ b.disabled=true; });
+  edSayLine(ED_LINES[edPlaceKind].gone);
+}
+function edUnGone(){
+  if(!edGone) return;
+  edGone=false;
+  modalCard.querySelectorAll(".modal-actions .btn.primary, .modal-actions .mf-del").forEach(b=>{ b.disabled=false; });
+  refreshDialogReset();
+}
+function edSayLine(text){
+  const old=modalCard.querySelector(":scope > .modal-note");
+  if(old) old.remove();
+  const h=modalCard.querySelector(":scope > h2");
+  if(!h) return;
+  const p=document.createElement("p");
+  p.className="modal-note";
+  p.setAttribute("role","status");
+  p.innerHTML='<span class="modal-note-dot" aria-hidden="true"></span><span class="modal-note-t"></span>';
+  p.querySelector(".modal-note-t").textContent=text;
+  h.after(p);
+  translateTree(p);
+}
 /* THE CARD IS THE WHOLE KEYBOARD while it is up: the markup says aria-modal, and the scrim
    takes the mouse, but Tab walked off the card and into the header behind it - reachable and
    pressable, with nothing on screen to say where the caret had gone. Returns the far end when
@@ -594,7 +811,7 @@ function openCover(){
 
 export {
   modalOpen, modalTabTarget, tabTargetIn, openCover, mountModalBody, modalResize, dismissModal, closeModal,
-  wireModalX, wireModalBody, wireFocusModality, wireDialogDrag,
+  wireModalX, wireModalBody, wireFocusModality, wireDialogDrag, wireEditorRest, modalFront, edResting, edToDesk, edToFront, edSubjectSoon, edCatalogTaken,
   accOpen, accHtml, mfSec, catToggle, wireFolds, wireAcc,
   openDialog, refreshDialogName, refreshDialogChrome,
   dressDialogInputs,
