@@ -202,7 +202,10 @@ function buildApp() {
       setUiLang(l); await new Promise(r => setTimeout(r, 400));
       openAbout(); await new Promise(r => setTimeout(r, 400));
       const a = document.querySelector(".about-modal .about-credit a");
-      if (a) a.id = "lkAbout";
+      /* Scrolled into view first, as a person scrolls to it: the maker line sits at the foot of About's body, which scrolls
+         under the actions row at a 720 px window (first runner run, 2026-11-13: the click landed on aboutEarlier). The hit
+         check below stays as it is, so a link the row still covers once in view stays red. */
+      if (a) { a.scrollIntoView({ block: "center" }); a.id = "lkAbout"; }
     }, lang);
     const made = await p.evaluate(() => { const a = document.getElementById("lkAbout");
       return a ? { href: a.href, target: a.target, rel: a.rel } : null; });

@@ -65,7 +65,8 @@ const LEGS = [
   { id: "gate-run", args: ["tools/gate-run.mjs", "test", "split-guard"], where: "linux-ok" },
   { id: "shell-smoke", args: ["tests/shell-smoke.js"], where: "windows-only", window: true, fixtures: true, who: "tests/shell-smoke.js" },
   { id: "reinstall", args: ["tests/reinstall.js"], where: "windows-only", window: true, fixtures: true, who: "tests/reinstall.js" },
-  { id: "update-install", args: ["tests/update-install.js", "--update"], where: "windows-only", window: true, who: "tests/update-install.js" },
+  /* update-install is not here: it needs an older installer, which .github/workflows/installer-runner.yml builds from old_sha
+     and runs it with, in its per-user stage (first runner run of it here, 2026-11-13: ETIUDA_OLD_SETUP_EXE names no file). */
   { id: "dot-field-desk", args: ["tests/dot-field-desk.js"], where: "windows-only", window: true, who: "tests/dot-field-desk.js" },
   { id: "pick-desk", args: ["tests/pick-desk.js"], where: "windows-only", window: true, who: "tests/pick-desk.js" },
   { id: "csp", args: ["tests/csp.js"], where: "linux-ok", window: true, who: "tests/csp.js" },

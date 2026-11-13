@@ -551,7 +551,11 @@ function buildSetup() {
   const cli = path.join(E.ROOT, "node_modules", "electron-builder", "out", "cli", "cli.js");
   if (!fs.existsSync(cli)) throw new Error("electron-builder is not installed; npm install first");
   const t = Date.now();
-  execFileSync(process.execPath, [cli, "--win", "--config", path.join("tools", "electron-builder-test.cjs")],
+  /* Through tools/package.mjs --test-identity, the same config (tools/electron-builder-test.cjs), never electron-builder
+     directly: the pack step makes turning.7z (generated, git-ignored) and applies the NSIS template patches, which a direct
+     call skips. A desk hides that with leftovers and a clean runner does not (first runner run, 2026-11-13: makensis failed;
+     tests/update-install.js took the same fix after run 43222136075). */
+  execFileSync(process.execPath, [path.join(E.ROOT, "tools", "package.mjs"), "--test-identity"],
     { cwd: E.ROOT, env: E.unsignedEnv({ ETIUDA_DIST: out }), stdio: "ignore" });
   const found = listing(out).filter(n => /-setup\.exe$/i.test(n));
   if (found.length !== 1) throw new Error(out + " holds " + found.length + " installers; expected 1");
