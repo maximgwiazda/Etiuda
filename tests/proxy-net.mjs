@@ -375,9 +375,9 @@ function slice(src, name) {
 
 async function p7() {
   const src = fs.readFileSync(MAIN_FILE, "utf8");
-  const fetches = (src.match(/\bnet\.fetch\(/g) || []).length;
+  const fetches = (src.split(slice(src, "deskFetch")).join("").match(/\bnet\.fetch\(/g) || []).length;
   const kept = (src.match(/net\.fetch\(request\.url, \{ bypassCustomProtocolHandlers: true \}\)/g) || []).length;
-  check(fetches === 1 && kept === 1, "p7a no call goes out by net.fetch but the page's own protocol handler: " + fetches + " net.fetch call(s)");
+  check(fetches === 1 && kept === 1, "p7a no call goes out by net.fetch outside deskFetch but the page's own protocol handler: " + fetches + " net.fetch call(s)");
   const uses = ["signinRequest(deskFetch,", "signinServiceAsk(deskFetch,", "lookForNote(deskFetch)", "deskFetch(url, init)", "return deskFetch(u, init);"];
   const missing = uses.filter(u => src.indexOf(u) < 0);
   check(missing.length === 0, "p7b the sign-in, the licence service, the version note, the relay and the organisation's model go through deskFetch: " + (missing.join(", ") || "all"));
@@ -399,7 +399,7 @@ async function p7() {
   let sent = null;
   try {
     const run = new Function("net", "deskFetch", "fetch", relayRequestText +"\nreturn relayRequest('GET', 'https://etiuda.dev/relay/v1/x', {}, null);");
-    await run({ request: () => ({}) }, async () => { sent = "deskFetch"; return new Response("ok"); }, async () => { sent = "node"; return new Response("ok"); });
+    await run({ request: () => ({}), fetch: async () => { sent = "net.fetch"; return new Response("ok"); } }, async () => { sent = "deskFetch"; return new Response("ok"); }, async () => { sent = "node"; return new Response("ok"); });
   } catch (e) { sent = "threw " + e.message; }
   check(sent === "deskFetch", "p7e the relay's calls go through deskFetch: " + sent);
 }

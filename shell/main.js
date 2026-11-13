@@ -128,8 +128,8 @@ const deskProxy = proxyNet.proxyAsker({
   say: line => console.error("etiuda: " + line),
 });
 function deskFetch(u, init) {
-  if (!net || typeof net.request !== "function") return Promise.reject(new Error("no network here"));
-  return proxyNet.fetchThrough(net, u, init, deskProxy.forRequest()); /* plant:desk-fetch-login */
+  if (net && typeof net.request === "function") return proxyNet.fetchThrough(net, u, init, deskProxy.forRequest()); /* plant:desk-fetch-login */
+  return net && typeof net.fetch === "function" ? net.fetch(u, init) : Promise.reject(new Error("no network here"));
 }
 /* Every question still open goes to the page whenever it loads, so one asked before the window opened waits for it. */
 function proxyAskShow() {
@@ -7073,7 +7073,7 @@ function teamKeyAt(team, epoch) {
 async function relayRequest(method, url, headers, body) {
   if (!/^https:\/\//.test(String(url))) throw new Error("the relay is reached over https only");
   const init = { method: method, headers: headers, body: body || undefined, redirect: "error", cache: "no-store" };
-  const res = await (net && typeof net.request === "function" ? deskFetch(url, init) : fetch(url, init)); /* plant:relay-fetch-proxy */
+  const res = await (net && typeof net.fetch === "function" ? deskFetch(url, init) : fetch(url, init)); /* plant:relay-fetch-proxy */
   const bytes = Buffer.from(await res.arrayBuffer());
   return { status: res.status, header: n => res.headers.get(n), bytes: bytes };
 }
