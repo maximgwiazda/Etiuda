@@ -356,7 +356,7 @@ async function main() {
   function releaseLab(name, deps) {
     const root = lab('release-' + name), dir = path.join(root, 'repo');
     for (const d of ['tools', 'tests', 'shell', 'engine', path.join('src', 'modules')]) fs.mkdirSync(path.join(dir, d), { recursive: true });
-    for (const f of ['tools/release.mjs', 'tools/sellable.mjs', 'tools/sbom.mjs', 'tests/engine.js', 'electron-builder.js', 'tools/signin-secret.cjs', 'tools/test-service.cjs', 'tools/seller-address.cjs'])
+    for (const f of ['tools/release.mjs', 'tools/sellable.mjs', 'tools/sbom.mjs', 'tests/engine.js', 'electron-builder.js', 'tools/signin-secret.cjs', 'tools/test-service.cjs', 'tools/seller-address.cjs', 'tools/esigner.cjs'])
       if (fs.existsSync(path.join(ROOT, f))) fs.copyFileSync(path.join(ROOT, f), path.join(dir, f));
     const ok = "node -e 0";
     const scripts = {};

@@ -30,7 +30,7 @@ import { createRequire } from 'node:module';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { beforeBuild, signatureVerdict, customerReleaseProfileVerdict, testServiceProblems } from './sellable.mjs';
+import { beforeBuild, signatureVerdict, customerReleaseProfileVerdict, testServiceProblems, demoSigningProblems } from './sellable.mjs';
 import { writeSbom } from './sbom.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -141,6 +141,8 @@ gate('the version, read where the rulebook keeps it, and whether the build is a 
   console.log('  E_VERSION ' + m[1] + ', and package.json stays at ' + JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version);
   const testService = testServiceProblems({ env: process.env }); /* plant:release-ts-var */
   if (testService.length) return testService.join('; ');
+  const demoSigned = demoSigningProblems({ env: process.env }); /* plant:release-demo-var */
+  if (demoSigned.length) return demoSigned.join('; ');
   const builder = createRequire(import.meta.url)(join(ROOT, 'electron-builder.js')), win = builder.win;
   /* The pages the build will show: the filled copy where ETIUDA_PACK_SELLER_ADDRESS names its file (tools/seller-address.cjs). */
   const licenceDir = resolve(ROOT, builder.directories.buildResources); /* plant:release-licence-dir */
