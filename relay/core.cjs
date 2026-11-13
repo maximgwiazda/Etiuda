@@ -53,6 +53,10 @@ const DOOR_RATE_MAX = 16;
 const DOOR_RATE_MS = 60 * 60 * 1000;
 const DOOR_TRY_SHARE = 32;
 const CERT_SPAN_MS = 30 * 24 * 60 * 60 * 1000;
+/* THE SEATS OF A TEAM WHOSE LICENCE FOLLOWS ENTRA (decision 49, option (b); the window is the certificate's span, which the licence
+   service sets): a desk's run-out certificate is refused only once the team holds evidence, newer than its end by at least this
+   margin, that the licence service and Microsoft were proving people after it ran out. */
+const SEAT_MARGIN_MS = 60 * 60 * 1000;
 
 const HEX24 = /^[0-9a-f]{24}$/, HEX32 = /^[0-9a-f]{32}$/, HEX64 = /^[0-9a-f]{64}$/, HEX128 = /^[0-9a-f]{128}$/;
 /* A key id takes blob.cjs's id shape, so no newline or separator rides in it. A desk id is isDeskId: that shape, and not a
@@ -141,7 +145,10 @@ function leadKeyMatches(id, pub) {
 const ROOT_PUB = "f78558260ad75c094052f936326a63bffb1a581ac8b91d898ae1fd01b61127ee";
 const GRANT_KIND = "etiuda-relay-grant", DELEGATION_KIND = "etiuda-delegation";
 const GRANT_MAX_MS = 45 * 24 * 60 * 60 * 1000;
-const GRANT_FIELDS = ["kind", "format", "lead", "issued", "until", "paid", "sig", "via"];
+const GRANT_FIELDS = ["kind", "format", "lead", "issued", "until", "paid", "sig", "via", "seats"];
+/* A grant's seats: the licence its desks' certificates must name, and the latest instant the service saw a proof succeed for any person
+   of it, no later than the grant's issue. */
+const SEATS_FIELDS = ["licence", "live"];
 const DELEGATION_FIELDS = ["kind", "format", "key", "may", "from", "until", "sig"];
 const SIG_FIELDS = ["alg", "keyId", "value"];
 const MAY_MAX = 16;
@@ -188,6 +195,7 @@ function grantWhy(grant, leadPub, now, roots, revoked) {
   if (!only(grant, GRANT_FIELDS)) return "fields"; /* plant:grant-fields */
   if (!is(HEX64, grant.lead) || !Number.isSafeInteger(grant.issued) || !Number.isSafeInteger(grant.until) || !sigShaped(grant.sig)) return "shape";
   if (typeof grant.paid !== "boolean") return "shape"; /* plant:grant-paid */
+  if (grant.seats !== undefined && !seatsShaped(grant.seats, grant.issued)) return "shape"; /* plant:grant-seats */
   if (grant.lead !== leadPub) return "lead"; /* plant:grant-lead */
   if (grant.until <= grant.issued || grant.until - grant.issued > GRANT_MAX_MS) return "span"; /* plant:grant-span */
   if (grant.issued > now + CALL_SKEW_MS) return "future"; /* plant:grant-future */
@@ -207,6 +215,9 @@ function grantWhy(grant, leadPub, now, roots, revoked) {
   return null;
 }
 const grantOk = (grant, leadPub, now, roots, revoked) => grantWhy(grant, leadPub, now, roots, revoked) === null;
+function seatsShaped(s, issued) {
+  return plain(s) && exactly(s, SEATS_FIELDS) && is(HEX32, s.licence) && Number.isSafeInteger(s.live) && s.live >= 0 && s.live <= issued;
+}
 
 /* THE SEAT CERTIFICATE the licence service gives a signed-in desk, as the door reads it: what Etiuda Studio's
    src/desk-seat.mjs checkSeat takes, judged here too so that the door is no open mailbox. It names pseudonyms only. */
@@ -238,8 +249,9 @@ function certViaWhy(d, issued, roots) {
 
 /* Why a certificate does not open a door naming licence references `refs` for the desk key `deskPub` at `now`, or null where it
    does. Its size is measured before anything walks it, every check of shape, key, licence and time comes before a signature, and
-   a revoked service key is refused once its signature holds. The door answers every reason alike. */
-function certWhy(cert, deskPub, refs, now, roots, revoked) {
+   a revoked service key is refused once its signature holds. The door answers every reason alike. `runOut` true leaves a certificate
+   whose until has passed to its caller, for a team's seats (seatGate). */
+function certWhy(cert, deskPub, refs, now, roots, revoked, runOut) {
   const rs = roots === undefined ? [ROOT_PUB] : roots;
   if (!Array.isArray(rs) || rs.length < 1 || !rs.every(r => is(HEX64, r)) || !Number.isSafeInteger(now) || !is(HEX64, deskPub)) return "setup";
   if (!Array.isArray(refs) || refs.length < 1) return "door";
@@ -253,7 +265,7 @@ function certWhy(cert, deskPub, refs, now, roots, revoked) {
   if (cert.desk !== deskPub) return "desk"; /* plant:cert-desk */
   if (refs.indexOf(cert.licence) < 0) return "licence"; /* plant:cert-licence */
   if (cert.issued > now + CALL_SKEW_MS) return "future"; /* plant:cert-future */
-  if (now >= cert.until) return "ended"; /* plant:cert-ended */
+  if (now >= cert.until && runOut !== true) return "ended"; /* plant:cert-ended */
   const via = certViaWhy(cert.via, cert.issued, rs);
   if (via !== null) return via;
   if (cert.sig.keyId !== cert.via.key.id) return "via-key"; /* plant:cert-via-key */
@@ -461,6 +473,39 @@ function createCore(deps) {
     if (is(HEX64, via)) store.put("grantKey", via);
     else store.del("grantKey");
   }
+  /* The seats a taken grant carries, kept apart from the team row as {licence, live, at}, `at` the grant's issue: the newest-issued
+     grant decides, so a grant issued earlier changes nothing and one without seats issued later makes the team ordinary again. A team
+     whose grants never carried seats is never written here. */
+  function takeSeats(grant) {
+    const held = store.get("seats"), was = plain(held) && Number.isSafeInteger(held.at) ? held : null, at = grant.issued;
+    if (grant.seats === undefined) {
+      if (was && at > was.at) store.del("seats"); /* plant:seats-dropped */
+      return;
+    }
+    if (was && at < was.at) return; /* plant:seats-older */
+    store.put("seats", { licence: grant.seats.licence, live: grant.seats.live, at });
+  }
+  /* A desk's session on a team whose grant carries seats, before it is issued: `cert` judged by certWhy for the seats' licence, its run
+     ending decided here. A current one opens the session and its issue is kept as evidence; a run-out one opens it until the evidence
+     (the grant's live, or the newest issue of a certificate taken at this team's sessions) passes its until by SEAT_MARGIN_MS, so an
+     outage of the service or of Microsoft for everyone refuses nobody. Answers {ok, note} or the refusal; an ordinary team {ok}. */
+  function seatGate(cert, deskPub) {
+    const seats = store.get("seats");
+    if (!plain(seats)) return { ok: true }; /* plant:seat-ordinary */
+    const now = clock();
+    if (cert === undefined || certWhy(cert, deskPub, [seats.licence], now, roots, revokedNow(), true) !== null) return no("seat-lapsed"); /* plant:seat-cert */
+    if (now < cert.until) {
+      const seen = store.get("seatSeen");
+      const newer = !(plain(seen) && seen.licence === seats.licence && seen.issued >= cert.issued);
+      return { ok: true, note: newer ? () => store.put("seatSeen", { licence: seats.licence, issued: cert.issued }) : null }; /* plant:seat-seen */
+    }
+    const seen = store.get("seatSeen");
+    let evidence = seats.live;
+    if (plain(seen) && seen.licence === seats.licence && seen.issued > evidence) evidence = seen.issued; /* plant:seat-evidence-seen */
+    if (evidence >= cert.until + SEAT_MARGIN_MS) return no("seat-lapsed"); /* plant:seat-lapsed */
+    return { ok: true, note: null };
+  }
+
   /* A hello, a session or a later call under one, where the grant in force was signed by a key now on the list. */
   function grantRefused() {
     const key = store.get("grantKey");
@@ -504,6 +549,7 @@ function createCore(deps) {
       store.del("swept");
       if (made1st) { store.del("moved"); store.del("teamFile"); }
       if (takes) remember(b.grant);
+      if (takes) takeSeats(b.grant); /* plant:seats-create */
     });
     return { ok: true, rt };
   }
@@ -550,6 +596,7 @@ function createCore(deps) {
       }
       if (clears) store.del("moved");
       remember(b.grant);
+      takeSeats(b.grant); /* plant:seats-renew */
     });
     return { ok: true, lapse: told() };
   }
@@ -594,6 +641,7 @@ function createCore(deps) {
       /* The old key named the door's licences; the new lead names them anew. */
       store.del("door"); /* plant:door-handover */
       remember(b.grant);
+      takeSeats(b.grant); /* plant:seats-lead */
     });
     return { ok: true, lead: to.keyId, oldLead: oldLead.keyId, lapse: told() };
   }
@@ -1023,7 +1071,10 @@ function createCore(deps) {
       return no("not-enrolled"); /* plant:key-enrolled */
     }
     if (dev.pub !== b.pub) return no("bad-signature"); /* plant:key-sig */
-    return issue(b.challenge, { key: b.key, inv: null });
+    let seat = { ok: true };
+    seat = seatGate(b.seat, b.pub); /* plant:seat-session */
+    if (!seat.ok) return seat;
+    return issue(b.challenge, { key: b.key, inv: null }, seat.note);
   }
 
   /* THE STANDING DOOR (board 980, A4): a desk whose person signed in to the licence service asks to join with no invitation, its
@@ -1049,7 +1100,13 @@ function createCore(deps) {
     }
     if (b.key === team.lead.keyId || b.pub === team.lead.pub) return no("bad-signature");
     const dev = store.get("dev:" + b.key);
-    if (dev) return dev.pub === b.pub ? issue(b.challenge, { key: b.key, inv: null }) : no("bad-signature");
+    if (dev && dev.pub !== b.pub) return no("bad-signature");
+    if (dev) {
+      /* An enrolled desk knocking is a desk session, so the team's seats judge the certificate it knocks with. */
+      let seat = { ok: true };
+      seat = seatGate(b.door, b.pub); /* plant:seat-door */
+      return seat.ok ? issue(b.challenge, { key: b.key, inv: null }, seat.note) : seat;
+    }
     if (store.get("gone:" + b.key)) return no("removed"); /* plant:door-removed */
     /* A key whose door request the lead dropped is answered as a stranger is for the rate window after the drop. */
     const dropped = store.list("dd:").filter(([, v]) => doorDropLive(v, clock()));
@@ -1785,7 +1842,7 @@ module.exports = {
   CHALLENGE_MS, CHALLENGE_SHARE, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, REMOVED_KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, BLOB_MIN, BLOBS_MAX,
   SESSIONS_MAX, SESSION_SHARE, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, lapseOf, keptGrant, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
   LEAD_PREFIX, leadBytes, judgeLead,
-  DOOR_REFS_MAX, DOOR_CERT_MAX, DOOR_LIVE_MAX, DOOR_PER_PERSON, DOOR_RATE_MAX, DOOR_RATE_MS, DOOR_TRY_SHARE, CERT_SPAN_MS,
+  DOOR_REFS_MAX, DOOR_CERT_MAX, DOOR_LIVE_MAX, DOOR_PER_PERSON, DOOR_RATE_MAX, DOOR_RATE_MS, DOOR_TRY_SHARE, CERT_SPAN_MS, SEAT_MARGIN_MS,
   doorBytes, doorHelloBytes, certBytes, certWhy,
   grantBytes, delegationBytes, revocationBytes, revokedKeysOf, acceptRevocations, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, leadKeyMatches, parseMeta,
   createCore,
