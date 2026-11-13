@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 61;
+const EXPECTED = 63;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -94,6 +94,7 @@ async function team(o) {
   const w = { R, rt: hex(16), lead: keyPair(false), rev: 0, desks: {}, licence: opts.licence || hex(16) };
   const seats = opts.seats === undefined ? undefined : opts.seats === true ? { licence: w.licence, live: R.clock.now } : opts.seats;
   const grant = grantAt(w.lead.pub, R.clock.now, seats, opts.paid === false ? { fields: { paid: false } } : undefined);
+  w.firstGrant = grant;
   w.made = await call(R, "POST", "/relay/v1/teams", { json: K.createBody(w.rt, w.lead, R.clock.now, b => signHex(w.lead, b), { grant }) });
   const names = opts.desks || ["a", "b", "c"];
   for (const n of names) w.desks[n] = Object.assign(keyPair(true), { place: "k-" + hex(8) });
@@ -447,6 +448,8 @@ async function main() {
   }
   /* Which grant makes a team an Entra team: the newest issued. An ordinary team renewed with seats asks for certificates; a later grant
      without seats makes it ordinary; an earlier-issued grant without seats changes nothing; a handover with seats makes it Entra. */
+  /* The first grant an ordinary team was made with, as its lead's Studio still holds it. */
+  const ordinaryFirst = w => w.firstGrant;
   async function keptScene() {
     const w = await team({});
     const before = await session(w, w.desks.a);
@@ -463,15 +466,18 @@ async function main() {
     w.R.clock.now += HOUR;
     const toPlain = await renew(w, grantAt(w.lead.pub, w.R.clock.now, undefined, { fields: { until: w.R.clock.now + 32 * DAY } }));
     const plainAgain = await session(w, w.desks.a);
+    /* The grant the team was made with, replayed after it was gated. */
+    const replay = await renew(w, ordinaryFirst(w));
+    const stillGated = await session(w, w.desks.a);
     const h = await team({});
     const next = keyPair(false), to = { keyId: next.keyId, pub: next.pub }, t = h.R.clock.now;
     const moved = await call(h.R, "POST", "/relay/v1/t/" + h.rt + "/lead", { json: { to, t, sig: signHex(h.lead, C.leadBytes(h.rt, to.keyId, to.pub, t)),
       grant: grantAt(next.pub, t, { licence: h.licence, live: t }) } });
     const handed = await session(h, h.desks.a);
     const ok = opened(before) && toEntra.status === 200 && refused(asks, "seat-lapsed") && stale.status === 200 && refused(stillAsks, "seat-lapsed")
-      && staleSeats.status === 200 && opened(ownLic) && refused(staleLic, "seat-lapsed") && toPlain.status === 200 && opened(plainAgain) && !storeOf(w).get("seats") && moved.status === 200 && refused(handed, "seat-lapsed");
+      && staleSeats.status === 200 && opened(ownLic) && refused(staleLic, "seat-lapsed") && toPlain.status === 200 && refused(plainAgain, "seat-lapsed") && !!storeOf(w).get("seats") && replay.status === 200 && refused(stillGated, "seat-lapsed") && moved.status === 200 && refused(handed, "seat-lapsed");
     return { ok, detail: brief({ ordinary: said(before), renewedWithSeats: said(asks), earlierWithout: said(stale) + "/" + said(stillAsks),
-      earlierOtherLicence: said(ownLic) + "/" + said(staleLic), laterWithout: said(toPlain) + "/" + said(plainAgain), handoverWithSeats: said(moved) + "/" + said(handed) }) };
+      earlierOtherLicence: said(ownLic) + "/" + said(staleLic), laterWithout: said(toPlain) + "/" + said(plainAgain), replayedFirst: said(replay) + "/" + said(stillGated), handoverWithSeats: said(moved) + "/" + said(handed) }) };
   }
   /* An enrolled desk knocking at the door is a desk session: a current certificate of another of the door's licences than the seats'
      is refused seat-lapsed, one of the seats' licence opens. */
@@ -561,7 +567,7 @@ async function main() {
   }
   const order = await leg("s12a", orderScene, "O7 the order: a grant carrying seats is refused fields by main's relay before this change and taken by this one, and main's takes the same grant without seats");
   await leg("s14a", shapeScene, "a grant's seats out of shape (live after the issue, negative or fractional, a licence not 32 lowercase hex, an extra or missing field, not an object) is refused shape, and at a create or a renewal bad-grant, before any team keeps it");
-  await leg("s15a", keptScene, "the newest-issued grant decides: an ordinary team renewed with seats asks for certificates, an earlier-issued grant without seats changes nothing, a later one makes the team ordinary again, and a handover with seats makes it an Entra team");
+  await leg("s15a", keptScene, "a team once gated stays gated: an ordinary team renewed with seats asks for certificates, and a grant without seats, issued earlier, issued later (the removed lead's trial) or the team's first replayed, leaves it gated; an earlier-issued grant of another licence changes nothing; a handover with seats gates a team");
   /* The grant's live never falls while the licence stays: a removed desk cut by one grant's live stays cut when a newer grant names an
      earlier live (the service reads live from the seats it still holds, and a freed seat's proof drops out). */
   async function liveKeptScene() {
@@ -579,6 +585,28 @@ async function main() {
     return { ok, detail: brief({ cut: said(cut), newerGrantEarlierLive: said(lower), still: said(still), keptLiveHoursAfterEnd: kept ? (kept.live - aEnd) / HOUR : null }) };
   }
   await leg("s15b", liveKeptScene, "a grant's live never falls while the licence stays: a desk cut by one grant stays cut when a newer grant names an earlier live");
+  /* The service's signed release lifts the gate: for the gated licence and issued after it, the team is ordinary again and asks nothing;
+     a release of another licence, one issued before the gate, and one on a team never gated change nothing and store nothing. */
+  async function releaseScene() {
+    const w = await team({ seats: true });
+    const t1 = w.R.clock.now + HOUR;
+    w.R.clock.now = t1;
+    const other = await renew(w, grantAt(w.lead.pub, t1, { licence: hex(16), release: true }));
+    const otherAsks = await session(w, w.desks.a);
+    const older = await renew(w, grantAt(w.lead.pub, T0 - HOUR, { licence: w.licence, release: true }, { fields: { until: t1 + 31 * DAY } }));
+    const olderAsks = await session(w, w.desks.a);
+    const release = await renew(w, grantAt(w.lead.pub, t1, { licence: w.licence, release: true }, { fields: { until: t1 + 32 * DAY } }));
+    const free = await session(w, w.desks.a);
+    const freeLead = await session(w, w.lead);
+    const o = await team({});
+    const oRelease = await renew(o, grantAt(o.lead.pub, o.R.clock.now + MIN, { licence: o.licence, release: true }));
+    const shapes = ["release false", "release with live"].map((_, i) => C.grantWhy(grantAt(w.lead.pub, T0, i ? { licence: w.licence, release: true, live: T0 } : { licence: w.licence, release: false }), w.lead.pub, T0, K.ROOTS));
+    const ok = other.status === 200 && refused(otherAsks, "seat-lapsed") && older.status === 200 && refused(olderAsks, "seat-lapsed")
+      && release.status === 200 && opened(free) && opened(freeLead) && !storeOf(w).get("seats") && !storeOf(w).get("seatSeen")
+      && oRelease.status === 200 && !storeOf(o).dump().some(([k]) => /^seat/.test(k)) && shapes.every(s => s === "shape");
+    return { ok, detail: brief({ otherLicence: said(otherAsks), issuedBefore: said(olderAsks), released: said(free) + "/" + said(freeLead), ordinaryTeam: said(oRelease), shapes }) };
+  }
+  await leg("s15c", releaseScene, "only the service's signed release lifts the gate, for the gated licence and issued after it; a release of another licence or issued before the gate changes nothing, nor one on a team never gated, and a release of any other shape is refused");
   await leg("s16a", doorKnockScene, "an enrolled desk knocking at the door with a current certificate of another of the door's licences than the seats' is refused seat-lapsed, and of the seats' licence opens as a desk");
   /* A STUDIO IS JUDGED AS A DESK IS, BY ITS PERSON (Claude alpha's ruling of 20:47 on C1): on an Entra team the lead's own Studio and a
      Studio following it as a teammate each present the certificate of their person's lead seat, named for that Studio's own key. */
@@ -692,7 +720,8 @@ async function main() {
     ["seats-create", "s1a", () => opensScene(W7), "a create's seats are not kept"],
     ["seats-renew", "s15a", keptScene, "a renewal's seats are not kept"],
     ["seats-lead", "s15a", keptScene, "a handover's seats are not kept"],
-    ["seats-dropped", "s15a", keptScene, "a later grant without seats leaves the team asking for certificates"],
+    ["seats-held", "s15a", keptScene, "a later grant without seats lifts the gate"],
+    ["seats-release", "s15c", releaseScene, "the service's release lifts nothing"],
     ["seats-older", "s15a", keptScene, "an earlier-issued grant takes the team's seats"],
     ["seats-live-kept", "s15b", liveKeptScene, "a newer grant's earlier live lowers the evidence"],
     ["grant-seats", "s14a", shapeScene, "seats out of shape are taken"],

@@ -147,8 +147,9 @@ const GRANT_KIND = "etiuda-relay-grant", DELEGATION_KIND = "etiuda-delegation";
 const GRANT_MAX_MS = 45 * 24 * 60 * 60 * 1000;
 const GRANT_FIELDS = ["kind", "format", "lead", "issued", "until", "paid", "sig", "via", "seats"];
 /* A grant's seats: the licence its desks' certificates must name, and the latest instant the service saw a proof succeed for any person
-   of it, no later than the grant's issue. */
-const SEATS_FIELDS = ["licence", "live"];
+   of it, no later than the grant's issue; or, as {licence, release: true}, the service's word that a team gated for that licence is
+   released. */
+const SEATS_FIELDS = ["licence", "live"], RELEASE_FIELDS = ["licence", "release"];
 const DELEGATION_FIELDS = ["kind", "format", "key", "may", "from", "until", "sig"];
 const SIG_FIELDS = ["alg", "keyId", "value"];
 const MAY_MAX = 16;
@@ -216,6 +217,7 @@ function grantWhy(grant, leadPub, now, roots, revoked) {
 }
 const grantOk = (grant, leadPub, now, roots, revoked) => grantWhy(grant, leadPub, now, roots, revoked) === null;
 function seatsShaped(s, issued) {
+  if (plain(s) && exactly(s, RELEASE_FIELDS)) return is(HEX32, s.licence) && s.release === true;
   return plain(s) && exactly(s, SEATS_FIELDS) && is(HEX32, s.licence) && Number.isSafeInteger(s.live) && s.live >= 0 && s.live <= issued;
 }
 
@@ -473,14 +475,20 @@ function createCore(deps) {
     if (is(HEX64, via)) store.put("grantKey", via);
     else store.del("grantKey");
   }
-  /* The seats a taken grant carries, kept apart from the team row as {licence, live, at}, `at` the grant's issue: the newest-issued
-     grant decides, so a grant issued earlier changes nothing and one without seats issued later makes the team ordinary again. Its
-     live never falls while the licence stays: the service reads it from the seats it still holds, so a freed seat's proof can drop
-     out of a later grant. A team whose grants never carried seats is never written here. */
+  /* The seats a taken grant carries, kept apart from the team row as {licence, live, at}, `at` the grant's issue. A team once gated
+     stays gated until the service signs its release: a grant without seats, of any issue, changes nothing, and a release lifts the gate
+     only for the gated licence and issued after it. Of seats, the newest-issued grant decides, and live never falls while the licence
+     stays (the service reads it from the seats it still holds). A team whose grants never carried seats is never written here. */
   function takeSeats(grant) {
     const held = store.get("seats"), was = plain(held) && Number.isSafeInteger(held.at) ? held : null, at = grant.issued;
     if (grant.seats === undefined) {
-      if (was && at > was.at) store.del("seats"); /* plant:seats-dropped */
+      let lifts = true;
+      lifts = false; /* plant:seats-held */
+      if (lifts && was && at > was.at) store.del("seats");
+      return;
+    }
+    if (grant.seats.release === true) {
+      if (was && was.licence === grant.seats.licence && at > was.at) { store.del("seats"); store.del("seatSeen"); } /* plant:seats-release */
       return;
     }
     if (was && at < was.at) return; /* plant:seats-older */
