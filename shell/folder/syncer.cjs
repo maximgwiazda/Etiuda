@@ -196,8 +196,7 @@ function writeOutbox(mirror, st, io) {
   io.writeFile(tmp, JSON.stringify({ kind: OUTBOX_KIND, v: 1, owe: st.owe, floors: st.floors }));
   try { renameRetrying(tmp, file, io); } catch (e) { try { io.unlink(tmp); } catch {} throw e; }
 }
-/* Runs `fn` and retries asynchronously on the main thread when a transient busy error (RENAME_BUSY) hits,
-   up to 20 tries spaced by RENAME_WAIT_MS; shared by outbox writes and landed() outbox reads. */
+/* Runs fn; on the main thread a busy code is tried again, 20 tries RENAME_WAIT_MS apart, off it the code is thrown. */
 function outboxBusyRetrying(fn, onDone, timerSet) {
   try {
     fn();
@@ -711,7 +710,6 @@ function createFolderProgram(opts) {
     const updateRels = [];
     try {
       outboxBusyRetrying(() => {
-        if (stopped) return;
         const st = readOutbox(mirror, io, true);
         if (!decided) {
           for (const r of results) {

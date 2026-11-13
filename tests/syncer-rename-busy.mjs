@@ -1,6 +1,7 @@
 /* A rename out of the mirror's .staging folder that the system refuses for a moment is asked again.
  * One that keeps refusing leaves that file staged, is said, and is tried at the next scan. The worker stays up.
  * A share file marked read-only lands writable, and a mirror copy already marked takes the next landing (998).
+ * An outbox read refused for a moment still clears what landed; one refused every time keeps the record for the next pass.
  *
  *     node tests/syncer-rename-busy.mjs
  */
@@ -393,13 +394,13 @@ async function main() {
     "998t copyClear refused on the main thread returns under 50 ms without blocking the event loop: " + JSON.stringify(copyStall));
   const outboxReadOnce = runScene("outbox-read-once");
   check(outboxReadGreen(outboxReadOnce),
-    "outbox-read-once: landed clears the outbox record and its waiting line when the outbox read is refused once with EBUSY and then allowed, under 50 ms stall: "
+    "998u landed clears the outbox record and its waiting line when the outbox read is refused once with EBUSY and then allowed, under 50 ms stall: "
     + JSON.stringify(outboxReadOnce));
   const plants = [
     ["stage-clear-mark", "syncer-worker.cjs", "land", landGreen, "998d lifting plant:stage-clear-mark lands a read-only share file read-only"],
     ["land-clear-mark", "syncer.cjs", "thaw", thawGreen, "998e lifting plant:land-clear-mark leaves a read-only mirror copy refusing every landing"],
     ["copy-clear-mark", "syncer.cjs", "copy", copyGreen, "998f lifting plant:copy-clear-mark leaves a marked copy refusing the next"],
-    ["outbox-read-retry", "syncer.cjs", "outbox-read-once", outboxReadGreen, "lifting plant:outbox-read-retry leaves a single refused outbox read un-cleared"],
+    ["outbox-read-retry", "syncer.cjs", "outbox-read-once", outboxReadGreen, "998v lifting plant:outbox-read-retry leaves a single refused outbox read un-cleared"],
   ];
   plants.push(["stage-clear-mark", "syncer-worker.cjs", "land", landGreen,
     "998m control: a worker that clears the share's file in place of its own staged copy turns 998a red",
@@ -540,7 +541,7 @@ async function main() {
   const clearedNext = !progC.isOwed(relC) && progC.isOwed(relOther) && owedEventsC === 1;
   if (typeof progC.stop === "function") progC.stop();
   check(!threwC && owedBeforeC && triesAt1250 === 20 && triesStable && owedWhileRefused && keptBoth && clearedNext,
-    "outbox-read-always control: outbox read refused every time stops at 20 tries, leaves the record and sibling in place, and clears on the next pass: "
+    "998w control: an outbox read refused every time stops at 20 tries, leaves the record and sibling in place, and clears on the next pass: "
     + JSON.stringify({ threwC, owedBeforeC, triesAt1250, triesStable, owedWhileRefused, keptBoth, clearedNext }));
 
   if (asserted !== EXPECTED) check(false, "completed " + asserted + " of " + EXPECTED + " checks");
