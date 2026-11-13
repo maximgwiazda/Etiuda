@@ -915,7 +915,7 @@ function tourActTests() {
   const loadSays = [x => x, x => PL[x] == null ? x : PL[x]].map(tr => { own.t = tr; return typeof loadStep.body === "function" ? loadStep.body() : ""; });
   own.t = s => s;
   eq("the tour's load step names Load and no sample button, on the desk, in English and in Polish",
-    loadSays.map(b => /<b>Load catalog<\/b>|<b>Wczytaj katalog<\/b>/.test(b) && !/sample|przyk/i.test(b)), [true, true]);
+    loadSays.map(b => /<b>Load catalog file<\/b>|<b>Wczytaj plik katalogu<\/b>/.test(b) && !/sample|przyk/i.test(b)), [true, true]);
 }
 
 /* THE EMPTY DESK OFFERS LOAD AND NO SAMPLE BUTTON: the sample is a file, and Load reaches it (Maxim,
@@ -3600,12 +3600,12 @@ function launchFollowsTests() {
     [["desk", "C:/X"], ["browser", ""]].forEach(([form, dir]) => ["en", "pl"].forEach(lang => {
       const sb = { eCatalogFolderShort: () => dir, esc: s => String(s), t: lang === "pl" ? s => (PL[s] == null ? s : PL[s]) : s => s };
       vm.runInNewContext(fn + "\nglobalThis.__b = loadStepBody();", sb);
-      const b = sb.__b, want = lang === "pl" ? /Proszę kliknąć <b>Wczytaj katalog<\/b> i wybrać / : /Click <b>Load catalog<\/b> and choose /;
+      const b = sb.__b, want = lang === "pl" ? /Proszę kliknąć <b>Wczytaj plik katalogu<\/b> i wybrać / : /Click <b>Load catalog file<\/b> and choose /;
       says.push([form, lang, want.test(b), !/logo/i.test(b)]);
     }));
     got = says;
   } catch (x) { got = "the lab threw: " + x.message; }
-  eq("957c the tour's load step names Load catalog and no logo, in both forms and both languages",
+  eq("957c the tour's load step names Load catalog file and no logo, in both forms and both languages",
     got, [["desk", "en", true, true], ["desk", "pl", true, true], ["browser", "en", true, true], ["browser", "pl", true, true]]);
 
   try {
@@ -4043,7 +4043,7 @@ function ecTypeNameTests() {
     const inInstaller = asked == null ? langs.bundledLanguages.indexOf("pl_PL") > -1
       : [].concat(asked).some(l => /^pl([_-]PL)?$/.test(l));
     const ui = fs.readFileSync(path.join(root, "src", "modules", "ui-lang.js"), "utf8");
-    const pl = (/\n\s*"Etiuda catalog":"([^"]+)",/.exec(ui) || [])[1];
+    const pl = (/\n\s*"Etiuda catalog file":"([^"]+)",/.exec(ui) || [])[1];
     got = w ? [+w[1] === langs.lcid.pl_PL, inInstaller, w[2] === (assoc[0] || {}).name, !!pl && w[3] === pl,
       /System::Call 'shell32::SHChangeNotify\(i 0x08000000, i 0, i 0, i 0\)'/.test(body.slice(w.index))]
       : "customInstall writes no name under $LANGUAGE";
@@ -4087,7 +4087,7 @@ function ecTypeNameTests() {
   got = typeof desk === "string" ? desk : [classes(desk).filter(w => w.when).map(w => [w.key, w.value, w.when]),
     classes(desk).every(w => own.has(w.key.split("\\")[2]))];
   eq("makensis reads the desk's installer writing only its own type's and its own link's keys, and in Polish the name and the open verb",
-    got, [[["Software\\Classes\\Etiuda catalog", "Katalog Etiudy", "$LANGUAGE==1045"],
+    got, [[["Software\\Classes\\Etiuda catalog", "Plik katalogu Etiudy", "$LANGUAGE==1045"],
       ["Software\\Classes\\Etiuda catalog\\shell\\open", "Otwórz w Etiudzie", "$LANGUAGE==1045"]], true]);
   const bare = nsisInstallWrites(root, Object.assign({}, cfgNow, { fileAssociations: [] }));
   got = typeof bare === "string" ? bare : [bare.assoc, classes(bare).map(w => [w.key, w.value, w.when]),

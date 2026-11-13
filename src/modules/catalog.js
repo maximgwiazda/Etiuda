@@ -81,7 +81,7 @@ function storedCatalog(){
 }
 /* The cause, as far as it is known: a desk writes one file, and names it; a browser keeps its own store. */
 function catalogStoreRefusal(file){
-  return file ? t("Could not save the catalog, because Etiuda cannot write {FILE}.").split("{FILE}").join(file)
+  return file ? t("Could not save the catalog file, because Etiuda cannot write {FILE}.").split("{FILE}").join(file)
     : t("Could not save the catalog, perhaps because the browser's storage is full.");
 }
 /* CHECKED, NOT ATTEMPTED. lsSet swallows the quota throw by design, so a try/catch here can
@@ -188,7 +188,7 @@ function eNeedsNewerLine(v){
 }
 function eUnreadableLine(e,name){
   return e&&e.needsEngine ? eNeedsNewerLine(e.needsEngine)
-    : t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(String(name||""));
+    : t("{FILE} is not a catalog file Etiuda can read.").split("{FILE}").join(String(name||""));
 }
 /* The code a failed read may carry: "empty" where the read came back with no text, an operating
    system's short code where it named one, and "" where it named none. Anything else is dropped,

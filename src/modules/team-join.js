@@ -574,7 +574,7 @@ function joinParts(){
       const forward=t("To join, a new invitation from the team's lead is needed.");
       return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
         line:cause+" "+status+" "+forward,
-        body:meta, acts:[["join",t("Join a team")],["load",t("Load another catalog")]]};
+        body:meta, acts:[["join",t("Join a team")],["load",t("Load another catalog file")]]};
     }
     /* A request at a team's door, while it is taken back, is titled by that act: the copywriter's words. */
     let backTitle=t("Joining {LEAD}'s team").split("{LEAD}").join(lead);
@@ -586,7 +586,7 @@ function joinParts(){
     /* Claudette's words, 2026-10-27 20:37. */
     if(j.unkept===true) return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
       line:t("The relay no longer holds this request, so it could not be withdrawn there. The team's lead may still see it until it expires. To join after all, a new invitation from the team's lead is needed."),
-      body:meta, acts:[["join",t("Join a team")],["load",t("Load another catalog")]]}; /* plant:c5-card-unkept */
+      body:meta, acts:[["join",t("Join a team")],["load",t("Load another catalog file")]]}; /* plant:c5-card-unkept */
     /* Claudette's words, 2026-10-27. */
     if(j.withdrawing===true && j.readonly===true) return {title:backTitle,
       line:t("The request is being withdrawn. The team's relay is read-only until it is renewed, so it takes the withdrawal then, and until that the team's lead may still see the request. If the relay clears the team's copy first, the request goes with it."),
@@ -610,7 +610,7 @@ function joinParts(){
   if(j && j.invite && j.invite.relay && j.invite.door===true && (j.state==="turned" || j.state==="removed")) return {title:t("Join a team"),
     line:t("The team did not let this computer in. Its lead can send an invitation instead."),
     body:'<div class="e-join-meta">'+esc(t("Relay: {HOST}").split("{HOST}").join(j.invite.relay))+'</div>',
-    acts:[["cancel",t("Cancel the request")],["load",t("Load another catalog")]]};
+    acts:[["cancel",t("Cancel the request")],["load",t("Load another catalog file")]]};
   /* A relay invitation the relay refused: its token was spent by another desk, it ended unused, or it was made before
      the team's lead removed this desk. Cancel the request clears it. */
   if(j && j.invite && j.invite.relay && j.state==="removed") return {title:t("Join a team"),
@@ -619,27 +619,27 @@ function joinParts(){
     body:'<div class="e-join-meta">'+esc(t("Lead: {NAME}").split("{NAME}").join(String(j.invite.lead||"").trim()||t("the lead")))+'</div>'
       +'<div class="e-join-meta">'+esc(t("Team: {TEAM}").split("{TEAM}").join(j.team))+'</div>'
       +'<div class="e-join-meta">'+esc(t("Relay: {HOST}").split("{HOST}").join(j.invite.relay))+'</div>',
-    acts:[["cancel",t("Cancel the request")],["load",t("Load another catalog")]]};
+    acts:[["cancel",t("Cancel the request")],["load",t("Load another catalog file")]]};
   if(j && j.invite && j.invite.relay && (j.state==="used" || j.state==="ended")) return {title:t("Join a team"),
     line:j.state==="used"?t("This invitation has already been used. Ask your lead for a new one."):t("This invitation has expired. Ask your lead for a new one."),
     body:'<div class="e-join-meta">'+esc(t("Lead: {NAME}").split("{NAME}").join(String(j.invite.lead||"").trim()||t("the lead")))+'</div>'
       +'<div class="e-join-meta">'+esc(t("Team: {TEAM}").split("{TEAM}").join(j.team))+'</div>'
       +'<div class="e-join-meta">'+esc(t("Relay: {HOST}").split("{HOST}").join(j.invite.relay))+'</div>',
-    acts:[["cancel",t("Cancel the request")],["load",t("Load another catalog")]]};
+    acts:[["cancel",t("Cancel the request")],["load",t("Load another catalog file")]]};
   if(j && j.state==="code") return {title:t("Read this code to the team's lead"),
     line:t("They type it in Studio, and the catalog opens here once they let this desk in."),
     body:joinCodeHtml(j.code)+meta, acts:[["cancel",t("Cancel the request")]]};
   if(j && j.state==="refused"){
-    if(j.invite) return {title:t("The lead turned the request down"), line:t("To join, a new invitation from the team's lead is needed."), body:meta, acts:[["cancel",t("Cancel the request")],["load",t("Load another catalog")]]}; /* plant:relay-refused-card */
+    if(j.invite) return {title:t("The lead turned the request down"), line:t("To join, a new invitation from the team's lead is needed."), body:meta, acts:[["cancel",t("Cancel the request")],["load",t("Load another catalog file")]]}; /* plant:relay-refused-card */
     return {title:t("The lead turned the request down"),
-      line:t("Asking again sends a new request."), body:meta, acts:[["ask",t("Ask again")],["load",t("Load another catalog")]]};
+      line:t("Asking again sends a new request."), body:meta, acts:[["ask",t("Ask again")],["load",t("Load another catalog file")]]};
   }
   if(j) return {title:t("Waiting for the lead to open the request"),
     line:j.paused?t("The team's lead cannot let anyone in for now, as the lead's licence is paused. Nothing needs doing here: once the licence is active again, this desk is let in by itself.") /* copywriter, 2026-10-30 00:20 */
       :t("The code to read to them appears here as soon as they do."), body:joinCodeHtml("")+meta,
     acts:[["cancel",t("Cancel the request")]]};
   const ask='<div class="e-join-meta">'+esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who))+'</div>'+joinDisclosure();
-  const acts=[["ask",t("Ask to join")],["join",t("Join a team")],["load",t("Load another catalog")]];
+  const acts=[["ask",t("Ask to join")],["join",t("Join a team")],["load",t("Load another catalog file")]];
   /* A team whose roster no longer lists this desk says so in place of the ask a desk never on it gets. */
   const gone=s?((joinNow&&joinNow.leads)||[]).filter(x=>x.team===s.team && x.removed)[0]:null;
   if(gone){

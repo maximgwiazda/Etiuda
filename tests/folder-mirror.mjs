@@ -2912,7 +2912,7 @@ async function run() {
         while (Date.now() < untilOffer && !doc.getElementById("eCatalogOffer")) await sleep(25);
         const offerEl = doc.getElementById("eCatalogOffer");
         const offerHtml = offerEl ? offerEl.innerHTML : "";
-        offer = offerHtml.indexOf("lamp-shop") >= 0 && offerHtml.indexOf("Load catalog") >= 0;
+        offer = offerHtml.indexOf("lamp-shop") >= 0 && offerHtml.indexOf("Load catalog file") >= 0;
         const rowAfter = kit.SET.settingsBodyHtml().indexOf(shownLine) < 0;
         const deskAfter = (doc.getElementById("list").innerHTML || "").indexOf(shownLine) < 0;
         gone = rowAfter && deskAfter;

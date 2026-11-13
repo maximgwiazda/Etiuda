@@ -1682,7 +1682,7 @@ function wireLibrary(page){
   if(page && page.querySelectorAll) page.querySelectorAll("button.ec-where-edit").forEach(btn=>{
     btn.onclick=e=>{
       e.preventDefault(); e.stopPropagation();
-      eChooseCatalogFolder(t("Choose the folder Etiuda reads catalogs from")).then(dir=>{
+      eChooseCatalogFolder(t("Choose the folder Etiuda reads catalog files from")).then(dir=>{
         if(dir) paintLibrary();
       });
     };
@@ -1891,10 +1891,10 @@ function libraryActRow(key,icon,title,hint,ctl){
 function libraryActionsHtml(){
   const join=joinDoorButton("mgJoinTeam");
   return '<div class="mg-data-acts">'
-    +libraryActRow("load","data",t("Load catalog"),t("Loads a catalog file from this computer."),
-      '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog…</button>')
+    +libraryActRow("load","data",t("Load catalog file"),t("Loads a catalog file from this computer."),
+      '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog file…</button>')
     +(join?libraryActRow("join","teams",t("Join a team"),t("Joins a team with an invitation from its lead."),join):'')
-    +(eHasHistory()?libraryActRow("history","refresh",t("Saved copies"),t("Each catalog this desk opens or saves leaves a copy here, kept for 30 days."),
+    +(eHasHistory()?libraryActRow("history","refresh",t("Saved copies"),t("Each catalog file this desk opens or saves leaves a copy here, kept for 30 days."),
       '<button type="button" class="btn" id="mgHistory">'+esc(t("Saved copies…"))+'</button>'):'')
     +(clearedHeld()
       ? libraryActRow("clear","delete",t("Bring back local changes"),

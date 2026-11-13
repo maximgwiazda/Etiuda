@@ -63,7 +63,7 @@ function historyRowHtml(v,key){
 function historyBodyHtml(groups){
   if(!groups.length)
     return '<div class="ec-list"><div class="ec-row ec-empty">'
-      +esc(t("Each catalog this desk opens or saves leaves a copy here, kept for 30 days."))+'</div></div>';
+      +esc(t("Each catalog file this desk opens or saves leaves a copy here, kept for 30 days."))+'</div></div>';
   let n=0;
   return groups.map(g=>historyHeadHtml(g)+'<div class="ec-list">'+g.map(v=>historyRowHtml(v,n++)).join("")+'</div>').join("");
 }

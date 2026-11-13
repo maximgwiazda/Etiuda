@@ -447,10 +447,10 @@ function teamsGroups(){
   const rows=teamLeads().map((l,i,all)=>({key:"team", html:teamRowHtml(l, i===all.findIndex(x=>!x.removed)?t("The team's lead can see which catalog this desk uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk, since copies of unlisted catalogs are off. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own."):"", i===all.findIndex(x=>!x.policy))}));
   if(joinDoor) rows.push({key:"join", html:'<div class="set-row" data-row="join">'+sxIcon("desks")+'<div class="set-label">'+esc(t("Team"))+'</div><div class="set-ctl">'+joinDoor+'</div></div>'});
   /* Under a host only: a browser has no catalog folder to share. */
-  if(eHasShared() && !relayDesk()) rows.push(row("sharededit","teams",t("Edit the shared catalog directly"),
-    t("For a team that keeps its catalog without Studio: each change is written into the catalog in the shared folder. A catalog the team's lead signed is never touched."),
+  if(eHasShared() && !relayDesk()) rows.push(row("sharededit","teams",t("Edit the shared catalog file directly"),
+    t("For a team that keeps its catalog without Studio: each change is written into the catalog file in the shared folder. A catalog file the team's lead signed is never touched."),
     onoff("sharededit", lsGet("eSharedEdit")==="1",
-      t("Each change goes into the shared catalog; where a teammate changed the same text first, theirs stays and yours waits in this desk's own file"),
+      t("Each change goes into the shared catalog file; where a teammate changed the same text first, theirs stays and yours waits in this desk's own file"),
       t("Each change stays in this desk's own file"))));
   return rows.length ? [{rows}] : [];
 }
@@ -957,7 +957,7 @@ function wirePage(box){
           if(on) lsSet("eSharedEdit","1"); else lsDel("eSharedEdit");
           // The desk writes at once, as after an edit, so what it holds already goes where the setting now says.
           hooks.syncSampleMark();
-          toast(on?t("From now on, changes go into the shared catalog"):t("From now on, changes stay in this desk's own file"));
+          toast(on?t("From now on, changes go into the shared catalog file"):t("From now on, changes stay in this desk's own file"));
         }
         else if(seg==="aisuggest"){
           if(on) lsDel(E_AI_OFF_KEY); else lsSet(E_AI_OFF_KEY,"1");

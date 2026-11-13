@@ -1781,7 +1781,7 @@ try {
   if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
   check(!!tookFn && sayingUsed && sayingEnded && offered && cleared,
     "15ck a relay invitation answered already used, or expired, is said on the join's card in English and in Polish, naming the team and the relay,"
-    + " with Cancel the request and Load another catalog, and Cancel the request clears it: used " + (sayingUsed ? "said" : "not said")
+    + " with Cancel the request and Load another catalog file, and Cancel the request clears it: used " + (sayingUsed ? "said" : "not said")
     + ", expired " + (sayingEnded ? "said" : "not said") + ", acts " + (offered ? "offered" : "missing") + ", card " + (cleared ? "cleared" : "still there"));
 
   /* The shell's own state, painted by the page. A constructed view is not this card. */
@@ -2132,7 +2132,7 @@ try {
     && unkeptHtml.en.indexOf(escPage(STAYS_EN)) < 0;
   if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
   check(unkeptSaid,
-    "15cy a withdrawal the relay refuses for good ends the waiting and the card says the invitation is past its keep, in English and in Polish, with Join a team and Load another catalog and no Ask again: "
+    "15cy a withdrawal the relay refuses for good ends the waiting and the card says the invitation is past its keep, in English and in Polish, with Join a team and Load another catalog file and no Ask again: "
     + (unkeptSaid ? "said" : "not said"));
   const heldDesk = await relayDesk("c5-held-card", { withdrawing: true, readonly: true });
   const heldHtml = await bothLang(heldDesk);
@@ -2533,7 +2533,7 @@ try {
     && cardSaid(htmlS2, s2En, s2Pl) && buttonsWork(htmlS2.en) && canJoinS2
     && cardSaid(htmlS3, s3En, s3Pl) && buttonsWork(htmlS3.en) && canJoinS3;
   check(leaveCardsOk,
-    "15dk after Leave this team, the card says what is true across withdrawing, read-only and landed states, with buttons Join a team and Load another catalog: "
+    "15dk after Leave this team, the card says what is true across withdrawing, read-only and landed states, with buttons Join a team and Load another catalog file: "
     + (leaveCardsOk ? "all 3 states said" : "mismatched"));
 
   // 15dl: after It does not match, cards say what is true across withdrawing, read-only and landed, buttons work
@@ -2566,7 +2566,7 @@ try {
     && cardSaid(htmlS5, s5En, s5Pl) && buttonsWork(htmlS5.en) && canJoinS5
     && cardSaid(htmlS6, s6En, s6Pl) && buttonsWork(htmlS6.en) && canJoinS6;
   check(matchCardsOk,
-    "15dl after It does not match, the card says what is true across withdrawing, read-only and landed states, with buttons Join a team and Load another catalog: "
+    "15dl after It does not match, the card says what is true across withdrawing, read-only and landed states, with buttons Join a team and Load another catalog file: "
     + (matchCardsOk ? "all 3 states said" : "mismatched"));
 
   // 15do: after Leave or It does not match, a withdrawal the relay refused because it no longer holds the request (a sweep, or

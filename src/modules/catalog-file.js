@@ -230,7 +230,7 @@ function catalogFileName(){
  *  text, and runs only once the choice is made; `from` is the catalog it was made from, which the host seals it for
  *  where that came sealed. Resolves to {name, sealed}, or null where nothing was saved. */
 function saveCatalogFile(name, build, from){
-  if(eHasCatalogSaver()) return eSaveCatalogFile(t("Export"),name,t("Catalogs"),build,from).then(r=>{
+  if(eHasCatalogSaver()) return eSaveCatalogFile(t("Export"),name,t("Catalog files"),build,from).then(r=>{
     if(r && !r.ok) toastRefusal((r.sealed ? t("{FILE} was not saved: the team's catalog leaves this desk only sealed, and this desk cannot seal for the team now.")
       : t("{FILE} could not be saved.")).split("{FILE}").join(r.name));
     return (r && r.ok) ? {name:r.name, sealed:r.sealed} : null;
@@ -238,7 +238,7 @@ function saveCatalogFile(name, build, from){
   if(typeof window.showSaveFilePicker==="function"){
     return window.showSaveFilePicker({
         suggestedName:name,
-        types:[{description:t("Etiuda catalog"), accept:{"application/json":[".ec"]}}]
+        types:[{description:t("Etiuda catalog file"), accept:{"application/json":[".ec"]}}]
       })
       .then(h=>{
         const as=h.name||name, text=build();
@@ -468,14 +468,14 @@ function writeShared(loose,origin,holds,layer){
         if(loose){ lySet("SharedFile",name); lySet("Exported",looseMark()); }
         sharedSaid=false;
       }
-      if(r.fresh && r.fresh.length) toast(t("A teammate changed the same text first, so the shared catalog keeps theirs and yours stays in this desk's own file."));
+      if(r.fresh && r.fresh.length) toast(t("A teammate changed the same text first, so the shared catalog file keeps theirs and yours stays in this desk's own file."));
       else if(r.why==="sealed" && !sharedSaid){
         sharedSaid=true;
         toast(t("This team's catalogs stay sealed, so this change stays in this desk's own file."));
       }
       else if(r.why && r.why!=="signed" && !sharedSaid){
         sharedSaid=true;
-        toast(t("The shared catalog could not be written this time; this change is safe in this desk's own file."));
+        toast(t("The shared catalog file could not be written this time; this change is safe in this desk's own file."));
         if(r.why==="busy") setTimeout(scheduleDeskBranch,SHARED_RETRY_MS);
       }
       return r;
@@ -572,7 +572,7 @@ function askLoose(go){
   el.id="eLoose";
   el.setAttribute("role","alertdialog");
   el.setAttribute("data-side","none");
-  el.innerHTML='<p>'+esc(t("Loading a catalog erases the cards you made without one. Export them as a catalog of their own first?"))+'</p>'
+  el.innerHTML='<p>'+esc(t("Loading a catalog file erases the cards you made with no catalog loaded. Export them as a catalog file of their own first?"))+'</p>'
     +'<div class="tour-actions">'
     +'<button type="button" class="btn" id="eLooseLoad">'+esc(t("Load anyway"))+'</button>'
     +'<button type="button" class="btn primary" id="eLooseExport">'+esc(t("Export…"))+'</button></div>';
@@ -876,7 +876,7 @@ function importCatalogText(text,fileName,offTeam){
    is put down, unlike the picker - this build's shell watches the catalog folder, and a second
    channel saying the same thing is one more thing to keep in step. */
 function importCatalogHosted(){
-  ePickCatalogFile(t("Load catalog"),t("Catalogs")).then(got=>{
+  ePickCatalogFile(t("Load catalog file"),t("Catalog files")).then(got=>{
     if(!got) return;
     if(!got.text){ toastRefusal(fileReadLine(got.name, fileReadCode(got))); return; }
     importCatalogText(got.text,got.name,!!got.notOnTeam);
@@ -925,7 +925,7 @@ function wireCatalogDrop(){
     const f=e.dataTransfer.files && e.dataTransfer.files[0];
     if(!f) return;
     if(!/[.](ec|json|js)$/i.test(f.name)){
-      toastRefusal(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(f.name));
+      toastRefusal(t("{FILE} is not a catalog file Etiuda can read.").split("{FILE}").join(f.name));
       return;
     }
     const h=eHost();
@@ -941,7 +941,7 @@ function importCatalogPicked(){
   let handle=null, picked="";
   window.showOpenFilePicker({
     multiple:false,
-    types:[{description:t("Etiuda catalog"),accept:{"application/json":[".ec",".json"],"text/javascript":[".js"]}}]
+    types:[{description:t("Etiuda catalog file"),accept:{"application/json":[".ec",".json"],"text/javascript":[".js"]}}]
   }).then(picked=>{
     handle=picked&&picked[0];
     return handle?handle.getFile():null;
@@ -963,7 +963,7 @@ function importCatalogPicked(){
     if(e && e.name==="AbortError") return;
     /* The browser's own sentence is English whatever the interface speaks, so the line names the
        file instead, or where none was picked the error's own name. */
-    toastRefusal(t("The catalog could not be loaded:")+" "+(picked || (e&&e.name) || ""));
+    toastRefusal(t("The catalog file could not be loaded:")+" "+(picked || (e&&e.name) || ""));
   });
 }
 
