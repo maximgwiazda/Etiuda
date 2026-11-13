@@ -313,8 +313,8 @@ function accountGroups(){
   const rows=[name], buy=buyOffered() && !v.busy && !v.managed; /* plant:account-buy-managed */
   /* A managed tenant's account: nothing to buy, and who holds the licence instead (the copywriter's placeholder words). */
   const held=v.managed ? row("buy","forward",t("Licence for one person"),t("Your organisation holds the Etiuda licence for this account, so there is nothing to buy here."),"") : null;
-  const cause=v.cause==="own-licence" ? t("Your organisation's licence follows the roles its IT department assigns, and this account has none, so it uses the licence it bought before.")
-    : v.cause==="assigned" ? t("Your organisation has given this account a role, so it uses the organisation's licence; the licence it bought before waits unused meanwhile.") : "";
+  const cause=v.cause==="own-licence" ? t("Your organisation's licence follows the roles its IT department assigns, and this account has none, so it keeps its seat on the licence bought before.")
+    : v.cause==="assigned" ? t("Your organisation has given this account a role, so it uses the organisation's licence; its seat on the licence bought before is not used meanwhile.") : "";
   if(v.signedIn && !signinChoosingNow()){
     const p=signinParts(v), val=x=>'<span class="sgn-val">'+esc(x)+'</span>', join=pair=>pair[0]+" "+pair[1];
     /* A press at a door the shell refused is said on the team's row, where it was pressed. */

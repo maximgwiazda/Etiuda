@@ -10271,6 +10271,8 @@ function signinOutNow() {
     try { unlinkOwn(path.join(sharedFolderForWrite(), "desks", me.id, SEAT_NAME)); } catch { /* not written, or the folder is away */ } /* plant:signout-unlink-own */
   }
   s.held = null;
+  /* Signed out, the account's organisation no longer stands in for this desk: Buy, which needs no sign-in, is offered again. */
+  delete s.managed; /* plant:signout-managed */
   signinWrote = "";
   signinSaid = "";
   signinSave();

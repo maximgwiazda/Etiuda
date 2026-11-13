@@ -241,8 +241,8 @@ CASES.managed = async () => {
   const line = "Your organisation holds the Etiuda licence for this account, so there is nothing to buy here.";
   return !!st && st.offer === false && opened === false && S.opened.length === 0
     && [a, b].every(h => !/data-e-open="buy"/.test(h) && words(h).indexOf(line) >= 0)
-    && words(own).indexOf("and this account has none, so it uses the licence it bought before.") >= 0
-    && words(asg).indexOf("the licence it bought before waits unused meanwhile.") >= 0;
+    && words(own).indexOf("and this account has none, so it keeps its seat on the licence bought before.") >= 0
+    && words(asg).indexOf("its seat on the licence bought before is not used meanwhile.") >= 0;
 };
 
 /* ---- the run ---------------------------------------------------------------------------------------------------------- */

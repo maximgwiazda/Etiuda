@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 153;
+const PLANTS = 154;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 140 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 141 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1061,6 +1061,24 @@ CASES.signoutAway = async (s, swap) => {
     every = every && st.sent.length === 1 && st.store.held === null && owed && !!view && view.signedIn === "" && w.said() === "" && w.wrote() === "";
   }
   return every;
+};
+/* A managed tenant's account remembered (signinTake keeps "managed" beside no seat where a sign-in was refused with it): Sign out
+   forgets it, signed in or not, so Buy, which needs no sign-in, is offered again (the test architect's read of decision 49's pass). */
+CASES.signoutManaged = async (s, swap) => {
+  const st = outStand(s);
+  st.store.held = Object.assign(heldOf(), { managed: true });
+  st.store.managed = true;
+  const w = loadWire(st, swap);
+  w.signinOutNow();
+  await tick(5);
+  const st2 = outStand(s);
+  st2.store.held = null;
+  st2.store.managed = true;
+  const w2 = loadWire(st2, swap);
+  w2.signinOutNow();
+  await tick(5);
+  return st.store.held === null && !("managed" in st.store) && st2.store.held === null && !("managed" in st2.store)
+    && s.signinFileText(st2.store).indexOf("managed") < 0;
 };
 /* Nothing is sent where no client id is configured, the desk was never signed in, or it has no identity, or on a harness start; the
    sign-in is cleared all the same, except while a sign-in is in the browser, which Sign out leaves alone as before. */
@@ -2935,6 +2953,7 @@ const LEGS = [
   ["ds9a", "signoutBody", "signout/desk's body has the interface's three names alone, signed by this desk's key over the service's bytes"],
   ["ds9b", "signoutPost", "Sign out posts exactly one signout/desk, the three names, a fresh t and a signature that verifies, before the sign-in is cleared, and nothing stays owed once it is taken"],
   ["ds9c", "signoutAway", "with the service unreached, throwing or answering 503 or a refusal, Sign out still clears the sign-in, says no refusal, and keeps the place owed, the page told once more"],
+  ["ds9m", "signoutManaged", "Sign out forgets that the account's organisation holds its licence, signed in or not, so Buy is offered again"],
   ["ds9d", "signoutNone", "no signout/desk is sent where no client id is configured or the desk was never signed in; a sign-in in the browser is left alone"],
   ["ds9e", "signoutDoor", "the service's door carries signout/desk at its own address alone, no redirect, nothing cached, no cookie"],
   ["ds10a", "flushJoin", "a desk signed in first writes its seat beside its request to join a folder team, and again where the file went or the folder changed"],
@@ -3267,6 +3286,7 @@ const DESK_READS = {
   "managed-seated": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.managed === true && r.cause === "" && h.managed === true && h.cert === r.cert; },
   "managed-waiting": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.waiting === true && r.managed === true && h.said === "waiting" && h.managed === true; },
   "managed-none": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.managed === true && h.cert === null && h.managed === true; },
+  "managed-own-waiting": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.waiting === true && r.managed === true && r.cause === "own-licence" && h.said === "waiting" && h.cause === "own-licence"; },
   "managed-own": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.managed === true && r.cause === "own-licence" && h.cause === "own-licence"; },
   "managed-assigned": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.managed === true && r.cause === "assigned" && h.cause === "assigned"; },
   "malformed": unreached, "stale": unreached, "signature": unreached, "replayed": unreached, "slow-down": unreached, "unavailable": unreached,
@@ -3361,6 +3381,7 @@ if (!PLANTS_OFF) {
   await plantWire("dsp25", ["const SIGNIN_RENEW_MS = 24 * 60 * 60 * 1000; /* plant:renew-daily */", "const SIGNIN_RENEW_MS = 55 * 60 * 1000;"], "renewDaily");
   await plantWire("dsp26", ["if (!p || !me) return \"\"; /* plant:renew-offered */", "if (!me) return \"\";"], "renewWire");
   await plantWire("dsp29", ["const send = () => signoutAsk(signinIo({ loop: null }), key, Date.now); /* plant:signout-post */", "const send = () => Promise.resolve(false);"], "signoutPost");
+  await plantWire("dsp156", ["  delete s.managed; /* plant:signout-managed */\n", ""], "signoutManaged");
   await plantWire("dsp30", ["&& signinOffered().length) { /* plant:signout-offered */", ") {"], "signoutNone");
   await plantWire("dsp31", ["return !!teamJoin && !(teamJoin.invite && teamJoin.invite.relay); /* plant:flush-asking */", "return false;"], "flushJoin");
   await plantWire("dsp32", ["if (signinWrote === mark && fs.existsSync(file)) return false; /* plant:flush-mark */", "if (signinWrote === cert.sig.value) return false;"], "flushJoin");
