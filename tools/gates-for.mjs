@@ -1466,6 +1466,28 @@ function coverApp(root, tracked, gateRel, files, dirs, refer, get) {
   }
 }
 
+/* THE NODE ARM OF A WINDOW GATE: a line "gate-node-arm: <args>" in the file's leading comments names the arguments that run
+ * its half with no window (tests/pick-desk.js's --guards, tests/desk.js's --node). A merge runs that arm where it would
+ * otherwise leave the whole file out as walled (tools/gate-run.mjs). The arguments, or null where the header names none or
+ * names one not of that shape. Studio's tools/gates-for.mjs holds the same reader. */
+export function nodeArmOf(abs) {
+  let text;
+  try { text = fs.readFileSync(abs, "utf8"); }
+  catch (e) { return null; }
+  let i = text.startsWith("#!") ? Math.max(0, text.indexOf("\n") + 1) : 0, header = "";
+  for (;;) {
+    while (i < text.length && /\s/.test(text[i])) i++;
+    if (text.startsWith("//", i)) { const e = text.indexOf("\n", i); const end = e < 0 ? text.length : e + 1; header += text.slice(i, end); i = end; continue; }
+    if (text.startsWith("/*", i)) { const e = text.indexOf("*/", i + 2); const end = e < 0 ? text.length : e + 2; header += text.slice(i, end) + "\n"; i = end; continue; }
+    if (/^["']use strict["'];?/.test(text.slice(i, i + 14))) { i = text.indexOf("\n", i) < 0 ? text.length : text.indexOf("\n", i) + 1; continue; }
+    break;
+  }
+  const m = /\bgate-node-arm:[ \t]*([^\r\n]*)/i.exec(header);
+  if (!m) return null;
+  const args = m[1].replace(/\*\/.*$/, "").trim().split(/\s+/).filter(Boolean);
+  return args.length && args.length <= 4 && args.every(a => /^(?:--?)?[A-Za-z0-9][A-Za-z0-9_-]*$/.test(a)) ? args : null;
+}
+
 export function windowKind(abs) {
   let text;
   try { text = fs.readFileSync(abs, "utf8"); }

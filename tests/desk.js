@@ -1,6 +1,9 @@
 /* The desk in a file: spec 11.4, driven in the shell and read off the disk.
  *
  *   node tests/desk.js
+ *   node tests/desk.js --node     the node half alone (the migration engine and the merge rule on sliced functions), no window
+ *
+ * gate-node-arm: --node
  *
  * WHAT IT PROVES, and how, because the how is where a storage test lies most easily.
  *
@@ -66,11 +69,14 @@ console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " +
    four sibling refusals of two. The base comes from the table in tests/engine.js, which is
    checked for overlaps at every call, and the block is leased by its base where the run was
    given a lease command, at load, before anything is built. */
-const PORT = E.portBlock("desk");
-E.windowWall("tests/desk.js");
+/* THE NODE ARM, `node tests/desk.js --node` (gate-node-arm above): the node half alone, no port, no lease, no window, so a merge
+   runs it where the window half is walled (the test architect, 2026-11-13: until then the migration engine ran at no merge). */
+const NODE_ARM = process.argv.slice(2).includes("--node");
+const PORT = NODE_ARM ? 0 : E.portBlock("desk");
+if (!NODE_ARM) E.windowWall("tests/desk.js");
 /* After the port block, so a refused shift is refused whatever else is live (engine-selftest 27f, 27g). */
-E.refuseWhileElectronLive("tests/desk.js");
-const LEASED = E.takeLeases(["ports:" + PORT], 20, "tests/desk.js");
+if (!NODE_ARM) E.refuseWhileElectronLive("tests/desk.js");
+const LEASED = NODE_ARM ? { said: "none (the node arm)" } : E.takeLeases(["ports:" + PORT], 20, "tests/desk.js");
 console.log("       debugging port(s) count up from " + PORT
   + (process.env.ETIUDA_PORT_SHIFT ? " (ETIUDA_PORT_SHIFT " + process.env.ETIUDA_PORT_SHIFT + ")"
                                    : " (the port table's own number)")
@@ -370,6 +376,10 @@ async function startOn(appDir, ud) {
 (async () => {
   migrationTests();
   mergeTests();
+  if (NODE_ARM) {
+    console.log("#counts checks=" + checks + " failed=" + fails + " notRun=0");
+    process.exit(fails ? 1 : 0);
+  }
 
   /* ---- run A: a planted 1.16.7 desk ---- */
   writePlantedDesk(PLANTED);
