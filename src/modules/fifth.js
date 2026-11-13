@@ -111,9 +111,19 @@ function setFifthPhase(phi){ fifthClock.phi=phi; fifthClock.last=null; }
 function fifthRest(){ fifthClock.phi=FIFTH_PHI0; fifthClock.last=null; }
 if(typeof globalThis!=="undefined") globalThis.fifthPhase = fifthPhase;
 
+/* THE HEADER'S MARK STANDS AT THE FIGURE'S OWN SIZE: its path is the line at FIFTH_A and FIFTH_R about the
+   box's centre, placed by the svg's viewBox and its group's transform. An unreadable part reads as identity. */
+function fifthMarkFrame(svg, g){
+  const attr=(n,a)=>(n && typeof n.getAttribute==="function" && n.getAttribute(a))||"";
+  const vb=(attr(svg,"viewBox")||"0 0 256 256").trim().split(/[\s,]+/).map(Number);
+  const tr=attr(g,"transform");
+  const tm=/translate\(\s*([-\d.]+)[\s,]+([-\d.]+)\s*\)/.exec(tr), sm=/scale\(\s*([-\d.]+)\s*\)/.exec(tr);
+  return {x0:vb[0]||0, y0:vb[1]||0, w:vb[2]||256, h:vb[3]||256, tx:tm?+tm[1]:0, ty:tm?+tm[2]:0, sc:sm?+sm[1]:1};
+}
+
 /* THE HEADER PAINTS ON A CANVAS. A path's d write marks the shape for layout, and this repaints
-   every FIFTH_PAINT_MS for as long as the page is shown. The canvas uses the same line and the
-   tile's transform. A node passed in still turns by d. */
+   every FIFTH_PAINT_MS for as long as the page is shown. The canvas strokes the turning line in the
+   standing path's frame, so a turn and a stand are one size. A node passed in still turns by d. */
 function headerPaint(node){
   const tile=node.closest && node.closest(".brand-tile");
   const svg=node.ownerSVGElement || (node.closest && node.closest("svg"));
@@ -128,11 +138,7 @@ function headerPaint(node){
   }
   const ctx=cv.getContext && cv.getContext("2d");
   if(!ctx || typeof Path2D!=="function") return null;
-  const vb=(svg.getAttribute("viewBox")||"0 0 256 256").trim().split(/[\s,]+/).map(Number);
-  const tr=(g && g.getAttribute && g.getAttribute("transform"))||"";
-  const tm=/translate\(\s*([-\d.]+)[\s,]+([-\d.]+)\s*\)/.exec(tr);
-  const sm=/scale\(\s*([-\d.]+)\s*\)/.exec(tr);
-  const user={vx:vb[2]||256, vy:vb[3]||256, tx:tm?+tm[1]:0, ty:tm?+tm[2]:0, sc:sm?+sm[1]:1};
+  const mf=fifthMarkFrame(svg, g);
   const box={w:25, h:25, dpr:1};
   let ink="";
   const readInk=()=>{
@@ -161,12 +167,11 @@ function headerPaint(node){
     readInk,
     show(d){
       if(!tile.classList.contains("brand-turning")) tile.classList.add("brand-turning");
-      const k=box.dpr, sx=box.w/user.vx, sy=box.h/user.vy;
+      const f=fifthFit(), sx=box.dpr*box.w/mf.w, sy=box.dpr*box.h/mf.h, a=mf.sc/f.k;
       ctx.setTransform(1,0,0,1,0,0);
       ctx.clearRect(0,0,cv.width,cv.height);
-      ctx.setTransform(k*sx,0,0,k*sy,0,0);
-      ctx.translate(user.tx, user.ty);
-      ctx.scale(user.sc, user.sc);
+      // the line at the box's fit, taken back to the figure's own size, then placed as the path is
+      ctx.setTransform(sx*a,0,0,sy*a, sx*(mf.tx-mf.x0-a*f.ox), sy*(mf.ty-mf.y0-a*f.oy));
       ctx.lineWidth=2*fifthRadius();
       ctx.lineCap="round";
       ctx.lineJoin="round";
@@ -237,6 +242,7 @@ export {
   fifthBand,
   fifthLinePath,
   fifthLay,
+  fifthMarkFrame,
   fifthPhase,
   setFifthPhase,
   fifthRadius,

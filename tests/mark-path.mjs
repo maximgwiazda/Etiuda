@@ -1,7 +1,8 @@
 /* Inline copies of the mark's path are held to tests/mark-path.json.
  * node tests/mark-path.mjs
  *
- * The header tile, the tab icon and the About tile must equal its path. Any other
+ * The tab icon and the About tile must equal its path; the header stands the app
+ * icon's figure instead, held by mark-layout.mjs. Any other
  * copy is found by content, not by the way it is written. Eight windows of 24
  * characters, spread from the path's first character to its last, are matched in
  * every tracked or untracked file outside v1/, the built page (section 2b holds
@@ -111,18 +112,16 @@ function heldAside(rel) {
 
 const tpl = fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8");
 const about = fs.readFileSync(path.join(ROOT, "src", "modules", "about.js"), "utf8");
-const brand = (/<span class="brand-tile"[^>]*><svg[^>]*><g[^>]*><path fill="currentColor" d="([^"]+)"/.exec(tpl) || [])[1] || "";
 const fav = (/<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml,([^"]+)"/.exec(tpl) || [])[1] || "";
 const favD = (/ d='([^']+)'/.exec(decodeURIComponent(fav)) || [])[1] || "";
 const aboutD = (/TILE_MARK='[^']*? d="([^"]+)"/.exec(about) || [])[1] || "";
 const sites = [
-  ["header", brand],
   ["tab icon", favD],
   ["About tile", aboutD],
 ];
 const bad = sites.filter(s => s[1] !== fix.d).map(s => s[0] + (s[1] ? " differs" : " is missing"));
 check(bad.length === 0 && sites.every(s => s[1].length > LONG),
-  "1a the header, the tab icon and the About tile carry the fixture path"
+  "1a the tab icon and the About tile carry the fixture path"
   + (bad.length ? ": " + bad.join(", ") : " (" + fix.d.length + " chars)"));
 
 const windows = windowsOf(fix.d);

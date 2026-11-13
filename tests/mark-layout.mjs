@@ -18,7 +18,9 @@
  * 1/60s apart, the same length m10 sleeps, and the frames carry their own timestamps.
  *
  * The geometry is the markup's. The group transform and the viewBox are read from the template
- * here, and every stroke has to have been drawn through them at the line's own width. A caller
+ * here, and every stroke has to have been drawn through them at the line's own width, the line
+ * taken from the turn's fit (150 of the figure's 212) back to the figure's own size, which is
+ * the size the standing path is drawn at. A caller
  * that passes its own path still turns by writing d: that is the other program's mark, and the
  * same window on it has to count a layout a repaint, or this stand-in would be blind to the
  * write it exists to catch.
@@ -48,7 +50,7 @@ import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXPECTED = 6;
+const EXPECTED = 10;
 const DT = 1000 / 60;
 const SETTLE = 400;
 const WINDOW = 1700;
@@ -61,12 +63,19 @@ function check(cond, line) {
 }
 
 const tpl = fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8");
-const std = (/<span class="brand-tile"[^>]*><svg[^>]*><g[^>]*><path fill="currentColor" d="([^"]+)"/.exec(tpl) || [])[1] || "";
-const group = (/<span class="brand-tile"[^>]*><svg[^>]*><g transform="([^"]+)"/.exec(tpl) || [])[1] || "";
-const viewBox = (/<span class="brand-tile"[^>]*><svg[^>]*viewBox="([^"]+)"/.exec(tpl) || [])[1] || "";
+const tileSvg = (/<span class="brand-tile"[^>]*>(<svg[\s\S]*?<\/svg>)<\/span>/.exec(tpl) || [])[1] || "";
+const std = (/<path [^>]*?d="([^"]+)"/.exec(tileSvg) || [])[1] || "";
+const group = (/<g transform="([^"]+)">\s*<path /.exec(tileSvg) || [])[1] || "";
+const viewBox = (/^<svg[^>]*viewBox="([^"]+)"/.exec(tileSvg) || [])[1] || "";
 const wantTx = +(/translate\(\s*([-\d.]+)/.exec(group) || [])[1];
 const wantSc = +(/scale\(\s*([-\d.]+)/.exec(group) || [])[1];
-const wantVb = +(viewBox.trim().split(/[\s,]+/)[2]);
+const vbParts = viewBox.trim().split(/[\s,]+/).map(Number);
+const wantVb = vbParts[2], wantVx = vbParts[0];
+/* The turn's line is fitted so the figure's ink, 2 x (96 + 10) = 212 at its own size, spans 150 of the box, about
+   its centre; the canvas takes it back by 212/150 and places it as the path is. Worked out here, not read. */
+const FIT = 150 / 212;
+const wantA = (25 / wantVb) * wantSc / FIT;
+const wantE = (25 / wantVb) * (wantTx - wantVx - (wantSc / FIT) * 128 * (1 - FIT));
 
 function loadFifth() {
   const src = fs.readFileSync(path.join(ROOT, "src", "modules", "fifth.js"), "utf8")
@@ -110,14 +119,14 @@ function makeLab() {
     parentElement: g
   };
   function canvas() {
-    const ctx = { lineWidth: 0, lineCap: "", lineJoin: "", strokeStyle: "", tx: 0, ty: 0, sc: 1, a: 1, d: 1 };
-    ctx.setTransform = (a, b, c, d) => { ctx.a = a; ctx.d = d; };
+    const ctx = { lineWidth: 0, lineCap: "", lineJoin: "", strokeStyle: "", tx: 0, ty: 0, sc: 1, a: 1, d: 1, e: 0, f: 0 };
+    ctx.setTransform = (a, b, c, d, e, f) => { ctx.a = a; ctx.d = d; ctx.e = e; ctx.f = f; };
     ctx.translate = (x, y) => { ctx.tx = x; ctx.ty = y; };
     ctx.scale = x => { ctx.sc = x; };
     ctx.clearRect = () => {};
     ctx.stroke = p => {
       lab.draws.push({ d: p.d, phase: sb.__f.fifthPhase(), w: ctx.lineWidth, cap: ctx.lineCap, join: ctx.lineJoin,
-        tx: ctx.tx, ty: ctx.ty, sc: ctx.sc, a: ctx.a, ink: ctx.strokeStyle });
+        tx: ctx.tx, ty: ctx.ty, sc: ctx.sc, a: ctx.a, md: ctx.d, e: ctx.e, f: ctx.f, ink: ctx.strokeStyle });
     };
     const cv = { className: "", _w: 0, _h: 0, setAttribute() {}, getContext: () => ctx };
     lab.canvas = cv;
@@ -223,15 +232,15 @@ header.arm = true;
 header.play(WINDOW);
 const draws = header.draws;
 const radius = 2 * header.f.fifthRadius();
-const scale = header.tile ? (25 / wantVb) : 0;
+
 check(header.layouts === 0 && header.styleReads === 0 && header.dWrites === 0 && header.clientReads === 0 && header.node.d === header.std,
   "898a the header mark over 1700ms lays out " + header.layouts + " time(s), reads style " + header.styleReads
   + " time(s), reads a size " + header.clientReads + " time(s) and writes the path " + header.dWrites + " time(s)");
 check(draws.length >= 30 && draws.length <= 36
   && draws.every(p => p.d === header.f.fifthLinePath(p.phase) && Math.abs(p.w - radius) < 0.02
     && p.cap === "round" && p.join === "round"
-    && Math.abs(p.tx - wantTx) < 1e-6 && Math.abs(p.ty - wantTx) < 1e-6 && Math.abs(p.sc - wantSc) < 1e-6
-    && Math.abs(p.a - scale) < 1e-6)
+    && p.tx === 0 && p.ty === 0 && p.sc === 1
+    && Math.abs(p.a - wantA) < 1e-6 && Math.abs(p.md - wantA) < 1e-6 && Math.abs(p.e - wantE) < 1e-3 && Math.abs(p.f - wantE) < 1e-3)
   && header.tile.classList.contains("brand-turning"),
   "898b the mark strokes " + draws.length + " frames of its own line, through the tile's transform, at the line's width");
 
@@ -271,7 +280,7 @@ ratio.zero();
 ratio.arm = true;
 ratio.play(WINDOW);
 const ratioLast = ratio.draws.length ? ratio.draws[ratio.draws.length - 1] : null;
-const wantRatio = 2 * (25 / wantVb);
+const wantRatio = 2 * wantA;
 check(beforeBmp === 25 && afterBmp === 50 && ratio.draws.length >= 30 && ratio.draws.length <= 36
   && ratio.draws.every(p => Math.abs(p.a - wantRatio) < 1e-6)
   && ratio.clientReads === 0 && ratio.layouts === 0 && ratio.styleReads === 0 && ratio.dWrites === 0,
@@ -294,6 +303,94 @@ check(beforeInk === "rgb(15, 23, 42)" && force.draws.length === 1 && forceInk ==
   "898f a live forced-colours switch turns the stroke from " + (beforeInk || "nothing") + " to " + (forceInk || "nothing")
   + ", and that repaint lays out " + force.layouts + " time(s), reads style " + force.styleReads
   + " time(s) and reads a size " + force.clientReads + " time(s)");
+
+/* THE STANDING MARK IS THE APP ICON'S FIGURE WITH ITS DEPTH (board 441): one mask, id depth, once in the page; the
+   figure's one path filled with currentColor through it; the tile 25 px, the svg spanning it, the viewBox framing the
+   icon's 256 box at 88 per cent, centred. */
+const built = fs.readFileSync(path.join(ROOT, "engine", "etiuda.html"), "utf8");
+const depthIds = s => (s.match(/\bid="depth"/g) || []).length;
+const tilePaths = tileSvg.match(/<path\b[^>]*>/g) || [];
+const tileMasks = tileSvg.match(/<mask\b[^>]*>/g) || [];
+check(tileMasks.length === 1 && /\bid="depth"/.test(tileMasks[0]) && depthIds(tpl) === 1 && depthIds(built) === 1
+  && tilePaths.length === 1 && /\bfill="currentColor"/.test(tilePaths[0]) && /\bmask="url\(#depth\)"/.test(tilePaths[0]),
+  "441a the header's mark holds " + tileMasks.length + " mask(s), id depth " + depthIds(tpl) + " time(s) in the template and "
+  + depthIds(built) + " in the built page, and " + tilePaths.length + " path(s), filled currentColor through url(#depth)");
+
+/** Points along a path of absolute M, L, C and Z: eight on each cubic. */
+function outline(d) {
+  const tok = d.match(/[MLCZ]|-?[\d.]+/g) || [], out = [];
+  let i = 0, cmd = "", cur = [0, 0];
+  const n = () => +tok[i++];
+  while (i < tok.length) {
+    if (/[MLCZ]/.test(tok[i])) { cmd = tok[i++]; if (cmd === "Z") continue; }
+    if (cmd === "M" || cmd === "L") { cur = [n(), n()]; out.push(cur); }
+    else if (cmd === "C") {
+      const c = [n(), n(), n(), n(), n(), n()];
+      for (let k = 1; k <= 8; k++) { const u = k / 8, g = 1 - u;
+        out.push([g * g * g * cur[0] + 3 * g * g * u * c[0] + 3 * g * u * u * c[2] + u * u * u * c[4],
+          g * g * g * cur[1] + 3 * g * g * u * c[1] + 3 * g * u * u * c[3] + u * u * u * c[5]]); }
+      cur = [c[4], c[5]];
+    } else return [];
+  }
+  return out;
+}
+const wantTy = +(/translate\(\s*[-\d.]+[\s,]+([-\d.]+)/.exec(group) || [])[1];
+const tilePx = 25 / wantVb;
+const standPx = outline(std).map(p => [(p[0] * wantSc + wantTx - wantVx) * tilePx, (p[1] * wantSc + wantTy - vbParts[1]) * tilePx]);
+const inkPx = standPx.length ? Math.max(...standPx.map(p => p[0])) - Math.min(...standPx.map(p => p[0])) : 0;
+const tileCss = (/\.brand-tile\{([^}]*)\}/.exec(tpl) || [])[1] || "";
+const svgCss = (/\.brand-tile svg\{([^}]*)\}/.exec(tpl) || [])[1] || "";
+const share = 256 / wantVb;
+const centred = Math.abs(wantVx + (wantVb - 256) / 2) < 1e-3 && vbParts[1] === wantVx && vbParts[3] === wantVb;
+check(/\bwidth:25px/.test(tileCss) && /\bheight:25px/.test(tileCss) && /\bwidth:100%/.test(svgCss) && /\bheight:100%/.test(svgCss)
+  && Math.abs(share - 0.88) < 1e-4 && centred,
+  "441b the tile is 25 px and the svg spans it; the viewBox frames the icon's box at " + (share * 100).toFixed(2) + " per cent, "
+  + (centred ? "centred" : "off centre") + ", the figure's ink " + inkPx.toFixed(2) + " px wide");
+
+const rest = makeLab();
+let restQuiet = false;
+rest.wire({ still: () => restQuiet });
+rest.play(SETTLE);
+const restTurned = rest.tile.classList.contains("brand-turning") && rest.draws.length > 0;
+restQuiet = true;
+rest.zero();
+rest.play(200);
+check(restTurned && !rest.tile.classList.contains("brand-turning") && rest.draws.length === 0 && rest.node.d === rest.std,
+  "441c at rest the header hands back to its svg: turning " + restTurned + ", then the canvas "
+  + (rest.tile.classList.contains("brand-turning") ? "stays" : "comes off") + " after " + rest.draws.length + " stroke(s), the path unwritten");
+
+/* The canvas at the standing figure's phase, 56 degrees, lies on the standing path: every point of the path's outline,
+   placed as the svg places it, sits half the line's width from the turn's centreline placed by the canvas's own matrix.
+   The centreline is worked out from the figure's definition. The control: the same test through the tile's transform
+   alone, without the turn's fit taken back, misses. */
+function onLine(m, pts) {
+  const line = [];
+  const phi = 56 * Math.PI / 180;
+  for (let i = 0; i <= 6000; i++) {
+    const t = i / 6000 * 2 * Math.PI;
+    line.push([(128 + FIT * 96 * Math.sin(3 * t + phi)) * m.a + m.e, (128 + FIT * 96 * Math.sin(2 * t)) * m.a + m.f]);
+  }
+  const half = 10 * FIT * m.a;
+  let worst = 0;
+  for (const p of pts) {
+    let best = Infinity;
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1], b = line[i];
+      if (Math.abs(p[0] - a[0]) > 3 || Math.abs(p[1] - a[1]) > 3) continue;
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const u = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1)));
+      best = Math.min(best, Math.hypot(p[0] - a[0] - u * dx, p[1] - a[1] - u * dy));
+    }
+    worst = Math.max(worst, Math.abs(best - half));
+  }
+  return worst;
+}
+const canvasM = draws.length ? { a: draws[0].a, e: draws[0].e, f: draws[0].f } : { a: 0, e: 0, f: 0 };
+const worstOn = standPx.length > 500 ? onLine(canvasM, standPx) : Infinity;
+const worstOff = onLine({ a: tilePx * wantSc, e: (wantTx - wantVx) * tilePx, f: (wantTy - vbParts[1]) * tilePx }, standPx);
+check(worstOn <= 0.01 && worstOff > 0.5,
+  "441d the canvas at 56 degrees strokes the standing figure: its " + standPx.length + " outline points lie within "
+  + worstOn.toFixed(4) + " px of half the line's width; control, through the tile's transform alone, off by " + (isFinite(worstOff) ? worstOff.toFixed(2) + " px" : "more than 3 px"));
 
 if (asserted !== EXPECTED) {
   failed++;

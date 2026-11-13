@@ -182,7 +182,13 @@ async function run() {
         if (!state) return { found: false, oldLaunch: true };
 
         const dist = Math.hypot(state.cx - brandCenter.x, state.cy - brandCenter.y);
-        const expectedSize = bRect.width * 1.0581;
+        // the flight is drawn at the turn's fit (150 of the figure's 212); the mark stands at the figure's own size,
+        // placed by its viewBox and group transform
+        const vb = (brandSvg.getAttribute("viewBox") || "0 0 256 256").trim().split(/[\s,]+/).map(Number);
+        const markPath = brandSvg.querySelector("path");
+        const tr = (markPath && markPath.parentElement && markPath.parentElement.getAttribute("transform")) || "";
+        const sc = +((/scale\(\s*([-\d.]+)/.exec(tr) || [])[1] || 1);
+        const expectedSize = bRect.width / vb[2] * sc / (150 / 212) * 256;
         const sizeDiffRatio = Math.abs(state.size - expectedSize) / expectedSize;
 
         // Header corner mark phase
