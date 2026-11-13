@@ -22,6 +22,11 @@ const nodeRequire = createRequire(import.meta.url);
 const REAL_CHANNEL = nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
 
 const BUILTIN_RELAY = "https://etiuda.dev/relay/v1";
+const STAGING_RELAY = "https://etiuda.dev/relay-staging/v1";
+/* A test service build's fields, as tools/test-service.cjs packs them into the asar's package.json (tests/test-service.mjs). */
+const TEST_SERVICE_FIELDS = { service: "https://etiuda.dev/licence-staging/v1/",
+  clientIds: { microsoft: "11111111-2222-3333-4444-555555555555", google: "1234567890-abcdefghij.apps.googleusercontent.com" },
+  order: "https://etiuda.dev/buy-staging/" };
 
 const safeStorage = {
   isEncryptionAvailable: () => true,
@@ -88,7 +93,7 @@ const inert = new Proxy(function () {}, { get: () => inert, set: () => true, app
 async function launch(plan) {
   const LAB = plan.lab;
   const UD = path.join(LAB, "userdata");
-  const SHELL = path.join(LAB, "shell");
+  const SHELL = plan.shellDir || path.join(LAB, "shell");
   const DOCS = path.join(LAB, "documents");
   const SHARED = plan.sharedFolder;
   const MIRROR = plan.mirrorFolder;
@@ -283,6 +288,12 @@ async function launch(plan) {
   if (invokeHandlers["etiuda:open-catalog-folder"]) {
     await invokeHandlers["etiuda:open-catalog-folder"](ev);
   }
+  /* What the page is told about the build: testService only where the asar's fields were taken. */
+  let testService = null;
+  if (onHandlers["etiuda:host"]) {
+    const hostEv = { sender: pageWin.webContents, senderFrame: FRAME, returnValue: undefined };
+    try { onHandlers["etiuda:host"](hostEv); testService = !!(hostEv.returnValue && hostEv.returnValue.testService === true); } catch { testService = null; }
+  }
   /* Board 962, stage 0b: the lead's switch on a relay team, in the relay's mirror where the desk reads its team file. */
   let contentViews = null;
   if (plan.contentSwitch && invokeHandlers["etiuda:team-join"]) {
@@ -323,6 +334,7 @@ async function launch(plan) {
     preHeld: !!preWrite && preWrite.held === true,
     said,
     contentViews,
+    testService,
   };
 
   return res;
@@ -336,11 +348,13 @@ function makeScenario(kind, extra = {}) {
   const ud = path.join(lab, "userdata");
   const catalogs = path.join(lab, "catalogs");
   const docs = path.join(lab, "documents");
-  const shell = path.join(lab, "shell");
+  /* A test service desk is installed, so its shell sits inside app.asar with the fields in the package.json beside it. */
+  const shell = extra.testService ? path.join(lab, "resources", "app.asar", "shell") : path.join(lab, "shell");
   fs.mkdirSync(ud, { recursive: true });
   fs.mkdirSync(catalogs, { recursive: true });
   fs.mkdirSync(docs, { recursive: true });
   fs.mkdirSync(shell, { recursive: true });
+  if (extra.testService) fs.writeFileSync(path.join(shell, "..", "package.json"), JSON.stringify({ name: "etiuda", etiudaTestService: TEST_SERVICE_FIELDS }));
 
   const lead = keyPair();
   const ownDesk = keyPair();
@@ -485,6 +499,7 @@ function makeScenario(kind, extra = {}) {
     mirrorTeamAfterHold: extra.memberMirror ? JSON.stringify(signTeamDoc(movedTeamDoc, lead), null, 2) : undefined,
     policyFolder: extra.policyFolder,
     policyLead: lead.public,
+    shellDir: shell,
   };
 }
 
@@ -780,8 +795,50 @@ async function main() {
     + " the mirror held marked, and the folder's files keep their marks: " + JSON.stringify({ marks: r9.mirrorMarks, writable: r9.mirrorWritable, shareKept }));
   for (const n of ["fresh.ec", "branch-lamp.ec"]) { try { fs.chmodSync(path.join(s9Desk, n), 0o666); } catch {} }
 
+  /* Scenario 10: a test service desk follows its folder team to staging's relay as an ordinary desk follows one to the live relay;
+     an ordinary desk does not, and the test service desk follows no other address (945s19 to 945s24). */
+  const movedPlan = (kind, extra) => {
+    const p = makeScenario(kind, extra);
+    fs.writeFileSync(path.join(p.sharedFolder, "etiuda-team.json"), JSON.stringify(signTeamDoc(p.movedTeamDoc, p.lead), null, 2));
+    return p;
+  };
+  const s10 = movedPlan("ts-staging", { testService: true, url: STAGING_RELAY });
+  const r10 = runScenario(s10);
+  check(r10.testService === true && r10.channelCreated && r10.channelStarted && r10.openedDir === s10.mirrorFolder && r10.mirrorWatched && !r10.sharedWatched,
+    "945s19 a test service desk, rostered, that pinned the lead from the folder follows its team to staging's relay: "
+    + JSON.stringify({ testService: r10.testService, created: r10.channelCreated, started: r10.channelStarted, opened: r10.openedDir === s10.mirrorFolder }));
+  const s11 = movedPlan("plain-staging", { url: STAGING_RELAY });
+  const r11 = runScenario(s11);
+  check(r11.testService === false && !r11.channelCreated && r11.openedDir === s11.sharedFolder,
+    "945s20 the same desk in the ordinary build does not follow its team to staging's relay: "
+    + JSON.stringify({ testService: r11.testService, created: r11.channelCreated, opened: r11.openedDir === s11.sharedFolder }));
+  const s12 = movedPlan("ts-other", { testService: true, url: "https://other.test/relay-staging/v1" });
+  const r12 = runScenario(s12);
+  check(r12.testService === true && !r12.channelCreated && r12.openedDir === s12.sharedFolder,
+    "945s21 a test service desk follows no address but the two relays: "
+    + JSON.stringify({ testService: r12.testService, created: r12.channelCreated, opened: r12.openedDir === s12.sharedFolder }));
+  const s13 = movedPlan("ts-live", { testService: true });
+  const r13 = runScenario(s13);
+  check(r13.testService === true && r13.channelCreated && r13.openedDir === s13.mirrorFolder,
+    "945s22 a test service desk still follows its team to the live relay: "
+    + JSON.stringify({ testService: r13.testService, created: r13.channelCreated, opened: r13.openedDir === s13.mirrorFolder }));
+  {
+    const p = testPlant("plant:follow-staging", (lines, at) => {
+      lines[at] = "  /* plant:follow-staging */";
+    }, movedPlan("ts-staging-plant", { testService: true, url: STAGING_RELAY }));
+    const turned = p.found && p.res.testService === true && !p.res.channelCreated && p.res.openedDir === p.plan.sharedFolder;
+    check(turned && p.shaSame, "945s23 lifting plant:follow-staging turns 945s19 red: turned=" + turned + ", shaSame=" + p.shaSame);
+  }
+  {
+    const p = testPlant("plant:follow-staging", (lines, at) => {
+      lines[at] = lines[at].replace("testServiceOn && ", "");
+    }, movedPlan("plain-staging-plant", { url: STAGING_RELAY }));
+    const turned = p.found && p.res.testService === false && p.res.channelCreated && p.res.openedDir === p.plan.mirrorFolder;
+    check(turned && p.shaSame, "945s24 staging's relay followed without the switch turns 945s20 red: turned=" + turned + ", shaSame=" + p.shaSame);
+  }
+
   // Clean up scenario temp dirs
-  [s1, s2, s3, s4, s6, s7, s8, s9].forEach(s => {
+  [s1, s2, s3, s4, s6, s7, s8, s9, s10, s11, s12, s13].forEach(s => {
     try { fs.rmSync(s.lab, { recursive: true, force: true }); } catch {}
   });
 
