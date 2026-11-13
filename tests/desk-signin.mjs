@@ -52,7 +52,7 @@ const PLANTS = 108;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 112 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + TRACE_PLANTS);
+const EXPECTED = 112 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2544,11 +2544,21 @@ check(/^\s*"Your name":/m.test(fs.readFileSync(path.join(ROOT, "src", "modules",
 
 /* ---- the plants --------------------------------------------------------------------------------------------------------- */
 if (!PLANTS_OFF) {
-  const plant = async (id, swap, name, where) => {
-    let red = false;
-    try { const s = load(swap, where); red = !(await CASES[name](s)); } catch { red = true; }
-    check(red, id + " plant " + swap[0].replace(/\s+/g, " ").trim().slice(0, 50) + " turns " + name + " red");
+  /* A PLANT WHOSE ANCHOR IS GONE IS NO PLANT: the swap never happened, so a red would be the throw's and not the line's. Such a plant
+     reads NOT red and names the lost anchor (the lead engineer's ν″, 2026-11-13: dsp60 passed silently after its line moved). Every
+     other throw is still the planted line breaking its case, and reads red. dspA is the control: a made-up anchor is not red. */
+  const ANCHOR_LOST = /plant anchor not in|not in shell\/main\.js once/;
+  const plantRed = async (run) => {
+    try { return { red: !(await run()), lost: "" }; }
+    catch (e) { const m = String(e && e.message || e); return ANCHOR_LOST.test(m) ? { red: false, lost: m } : { red: true, lost: "" }; }
   };
+  const said = (r) => (r.lost ? " (anchor gone: " + r.lost.slice(0, 90) + ")" : "");
+  const plant = async (id, swap, name, where) => {
+    const r = await plantRed(async () => CASES[name](load(swap, where)));
+    check(r.red, id + " plant " + swap[0].replace(/\s+/g, " ").trim().slice(0, 50) + " turns " + name + " red" + said(r));
+  };
+  const ghost = await plantRed(async () => CASES.offered(load(["/* no such anchor anywhere */", ""])));
+  check(ghost.red === false && !!ghost.lost, "dspA control: a plant whose anchor is not in the text reads not red and says so" + said(ghost));
   await plant("dsp1", ["SIGNIN_CLIENT.test(t[id].clientId)) /* plant:offered-client */", "true)"], "offered");
   await plant("dsp2", ["  if (box) out.lead.box = box; /* plant:f6-box-read */", "  if (box) out.lead.box = box;\n  if (doc.signin) out.signin = doc.signin.providers;"], "noHintStart", "invite");
   await plant("dsp4", ["const challenge = signinB64url(crypto.createHash(\"sha256\").update(verifier).digest()); /* plant:pkce */", "const challenge = verifier;"], "pkce");
@@ -2577,9 +2587,8 @@ if (!PLANTS_OFF) {
     "const ans = await signinSeat(io, p.id, deskKey, got.idToken, held.seed, now);"], "renewWrite");
   await plant("dsp23", ["reached: lost ? held.reached : false }), said: got.reason }; /* plant:renew-ask */", "reached: held.reached }), said: got.reason };"], "renewFail");
   const plantWire = async (id, swap, name) => {
-    let red = false;
-    try { red = !(await CASES[name](S, swap)); } catch { red = true; }
-    check(red, id + " plant " + swap[0].replace(/\s+/g, " ").trim().slice(0, 50) + " turns " + name + " red");
+    const r = await plantRed(async () => CASES[name](S, swap));
+    check(r.red, id + " plant " + swap[0].replace(/\s+/g, " ").trim().slice(0, 50) + " turns " + name + " red" + said(r));
   };
   await plantWire("dsp24", ["  if (harnessLaunch() && !signinLabHeld()) return \"\"; /* plant:renew-now-harness */\n", ""], "renewHarness");
   await plantWire("dsp25", ["const SIGNIN_RENEW_MS = 24 * 60 * 60 * 1000; /* plant:renew-daily */", "const SIGNIN_RENEW_MS = 55 * 60 * 1000;"], "renewDaily");
@@ -2611,7 +2620,7 @@ if (!PLANTS_OFF) {
   await plantWire("dsp50", ["if (!INSTALLED && !app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) {", "if (!INSTALLED && process.env.ETIUDA_SIGNIN_LAB) {"], "labPackaged");
   await plantWire("dsp51", ["if (!INSTALLED && !app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) {", "if (!app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) {"], "labPackaged");
   await plantWire("dsp52", ["return signinLabOn && !!signinState().held; /* plant:lab-held */", "return !!signinState().held;"], "labHarness");
-  await plant("dsp55", ["(?:[a-z0-9-]+\\.)*etiuda\\.dev(?:", "[a-z0-9.-]+(?:"], "labRead");
+  await plant("dsp55", ["(?:[a-z0-9-]+\\.)*etiuda\\.dev(?:\\/[A-Za-z0-9._~-]+)*\\/$/.test(u)); /* plant:lab-service */", "[a-z0-9.-]+(?:\\/[A-Za-z0-9._~-]+)*\\/$/.test(u)); /* plant:lab-service */"], "labRead"); /* anchored on its own line: Buy's ORDER_PAGE_SHAPE holds the same host pattern */
   await plant("dsp56", ["|| Object.keys(ids).some(id => (id !== \"microsoft\" && id !== \"google\") || typeof ids[id] !== \"string\" || !SIGNIN_CLIENT.test(ids[id]))) return null; /* plant:lab-ids */",
     ") return null;"], "labRead");
   await plantWire("dsp57", ["t[id] = lab.clientIds[id] ? Object.freeze(", "t[id] = false ? Object.freeze("], "labPackaged");
@@ -2669,9 +2678,8 @@ if (!PLANTS_OFF) {
   await plantWire("dsp99h", ["    outOwed: !signedIn && !!signinState().out && !signinOutFlight, /* plant:out-owed-view */", "    outOwed: false,"], "outOwedView");
   /* The page's half, imported again with the line planted. */
   const plantPage = async (id, swap, name) => {
-    let red = false;
-    try { red = !(await CASES[name](S, await pageWith(swap))); } catch { red = true; }
-    check(red, id + " plant " + swap[0].replace(/\s+/g, " ").trim().slice(0, 50) + " turns " + name + " red");
+    const r = await plantRed(async () => CASES[name](S, await pageWith(swap)));
+    check(r.red, id + " plant " + swap[0].replace(/\s+/g, " ").trim().slice(0, 50) + " turns " + name + " red" + said(r));
   };
   await plantPage("dsp81", ["function signinNoSeat(v){ return v.refused===\"waiting\" || v.refused===\"full\"; } /* plant:no-seat */",
     "function signinNoSeat(v){ return v.refused===\"full\"; }"], "waitPage");
