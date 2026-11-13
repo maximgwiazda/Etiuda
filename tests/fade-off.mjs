@@ -55,6 +55,7 @@ const SAME = {
   ".manage-row .mg-card-lab": ".mg-card-lab",
   ".mg-cat-body .mg-card-lab": ".mg-card-lab",
   ".sx.lm-lib .mg-intents .manage-row.mg-int.chips-open .lw-chip": ".mg-int.chips-open .lw-chip",
+  ".sx.lm-lib .mg-intents .manage-row.mg-int .lw-date": ".lw-date",
 };
 /* Boxes that clip a line and are not a line a reader is meant to finish. */
 const NOT_TEXT = {
@@ -73,8 +74,6 @@ const NOT_TEXT = {
 /* Clipped without a fade, and not measured: each named, so a new one is found. */
 const UNFADED = {
   ".sgn-link input.sgn-link-f": "the sign-in link, a read-only field selected whole by a click; a field fades through wireCutFields, which does not listen to it",
-  ".lw-c": "the Library list's cells; two of them, .lw-c.op and .lw-c.in, are measured, and measuring every cell of every row is a cost not yet weighed",
-  ".sx.lm-lib .mg-intents .manage-row.mg-int .lw-date": "the same list's date column, as .lw-c",
 };
 function sheetFaults(html, cut) {
   const sel = listOf(cut, "CUT_SEL") || [], foot = listOf(cut, "CUT_FOOT") || [];
