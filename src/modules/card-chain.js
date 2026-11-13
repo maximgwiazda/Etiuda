@@ -6,7 +6,7 @@ import { t } from "./ui-lang.js";
 import { foldDiacritics } from "./words.js";
 import { ICON_PLUS, ICON_STAMP, ICON_X } from "./icons.js";
 import { modalResize } from "./dialog.js";
-import { modalCard } from "./dom.js";
+import { modalCard, focusKey, focusSame } from "./dom.js";
 import { markCutText } from "./cut-text.js";
 import { mgReduceMotion } from "./motion.js";
 import { formatActionChord } from "./shortcuts.js";
@@ -112,8 +112,8 @@ function stampHtml(cls){
 function nextReplies(card,base,ov){
   const self=String(card&&card.id||"");
   const live=new Map((cards||[]).filter(m=>m&&m.id).map(m=>[m.id,m]));
-  const st=nextFoldState(card,base,ov,new Set(live.keys()));
-  const catalog=st.catalog, catIds=catalog ? nextIdsOf(catalog) : [];
+  let st=nextFoldState(card,base,ov,new Set(live.keys()));
+  let catalog=st.catalog, catIds=catalog ? nextIdsOf(catalog) : [], drawn="";
   let rows=st.rows.slice(), touched=false, drag=null, marked=0, hits=[];
   const own=()=>!!catalog && !nextSameIds(nextIdsOf(rows),catIds);
   const changed=()=>st.changed && own() && !touched;
@@ -177,7 +177,22 @@ function nextReplies(card,base,ov){
     const was=el("meNextWas"); if(was){ was.textContent=wasText(); was.hidden=!own(); }
     const s=el("meNextSum"); if(s) s.textContent=sum();
     markCutText(list);
+    drawn=drawSig();
     if(focus) focus();
+  }
+  function drawSig(){ return rows.map(rowHtml).join("")+srcHtml()+wasText()+sum(); }
+  /* Another card renamed or removed: the rows read the live cards again, as the fold would open now. A list the person
+     changed keeps their order and loses only a card that is gone; nothing is drawn where nothing differs. */
+  function refresh(){
+    if(drag || !el("meNextList")) return;
+    live.clear();
+    (cards||[]).forEach(m=>{ if(m&&m.id) live.set(m.id,m); });
+    st=nextFoldState(card,base,ov,new Set(live.keys()));
+    catalog=st.catalog; catIds=catalog ? nextIdsOf(catalog) : [];
+    rows=touched ? rows.filter(e=>live.has(e.to)) : st.rows.slice(); /* plant:nx-refresh-rows */
+    if(drawSig()===drawn) return;
+    const list=el("meNextList"), at=document.activeElement, key=(at && list.contains && list.contains(at)) ? focusKey(at, list) : null;
+    sync(key ? ()=>focusSame(list, key) : null);
   }
   function change(mutate,focus){
     touched=true;
@@ -236,6 +251,7 @@ function nextReplies(card,base,ov){
     const list=el("meNextList"), q=el("meNextFind"), root=list && list.closest(".nx");
     if(!list||!root) return;
     const was=el("meNextWas"); if(was) was.hidden=!own();
+    drawn=drawSig();
     // A shut fold lays nothing out, so the cut is read again as it opens.
     const fold=root.closest("details");
     if(fold) fold.addEventListener("toggle",()=>{ if(fold.open) markCutText(list); });
@@ -319,7 +335,7 @@ function nextReplies(card,base,ov){
     ["pointerup","pointercancel","lostpointercapture"].forEach(k=>list.addEventListener(k,onUp));
   }
   return {
-    sum:sum, body:body, wire:wire,
+    sum:sum, body:body, wire:wire, refresh:refresh,
     fields:()=>touched ? nextSaveFields(rows,catalog,base,ov,true) : nextStoredFields(card,catalog,base,ov)
   };
 }

@@ -827,6 +827,7 @@ function edSubjectCheck(){
   edCause="";
   if(!edPlaceKind || modalEl.hidden || !edSubject || edStepping || edGoneLayer) return;
   if(cause==="layer"){ edGoneLayer=true; edMarkGone(); return; }
+  edRefreshNow(); /* plant:ed-refresh-in-hand */
   const now=edSubjectNow();
   if(now===undefined || now===edSubjectSig) return;
   if(now===null){ edMarkGone(); return; }

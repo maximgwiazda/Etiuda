@@ -1758,7 +1758,9 @@ function deskMarkTests() {
       const i = listeners.findIndex(l => l.type === type && l.fn === fn);
       if (i >= 0) listeners.splice(i, 1);
     },
-    t: (en) => (lang === "pl" ? (PL[en] == null ? en : PL[en]) : en)
+    t: (en) => (lang === "pl" ? (PL[en] == null ? en : PL[en]) : en),
+    // dialog.js modalFront: a dialog up, an editor only while it is in front (`rest` stands for .ed-rest).
+    modalFront: () => !modal.hidden && !modal.rest
   };
   own.MutationObserver = function (cb) { this.cb = cb; this.dead = false; observers.push(this); };
   own.MutationObserver.prototype.observe = function () {};
@@ -1917,6 +1919,14 @@ function deskMarkTests() {
     modal.hidden = true; world.library = false;
     eq("desk mark a step that cannot be done points at the file name in the band",
       fell.join(", "), "filename below, filename below, filename below, filename below, filename below, filename below, filename below");
+    // An editor resting over the desk is no pop-up in the way: the bubble still shows the way (board 983).
+    const rested = [];
+    modal.hidden = false; modal.rest = true; fireMutations(); rested.push(whereOf(placed[placed.length - 1]));
+    world.library = true; dataDetails.open = true; fireMutations(); rested.push(whereOf(placed[placed.length - 1]));
+    modal.rest = false; fireMutations(); rested.push(whereOf(placed[placed.length - 1]));
+    modal.hidden = true; world.library = false; dataDetails.open = false;
+    eq("desk mark an editor resting over the desk leaves the way shown, Menu and then the loaded row; in front, it stands in the way",
+      rested.join(", "), "menu left, row right, filename below");
   }
 
   open({ evaluation: "evaluation", cards: [{ id: "c-hello" }] });
@@ -2786,7 +2796,7 @@ function markClockTests() {
     const h = unseen(), w = markLab({ host: h });
     let opts = null, dialog = false;
     w.sb.launchMark = x => { opts = x; return null; };
-    w.sb.document.querySelector = sel => sel === "#dotField>div" ? {} : sel === ".modal:not([hidden]):not(.e-gone)" && dialog ? {} : null;
+    w.sb.document.querySelector = sel => sel === "#dotField>div" ? {} : sel === ".modal:not([hidden]):not(.e-gone):not(.ed-rest)" && dialog ? {} : null;
     w.sb.deskLaunch();
     const a = !!opts && opts.covered();
     h.tell();
