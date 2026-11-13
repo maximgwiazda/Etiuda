@@ -53,9 +53,9 @@ export function licencePages(dir) {
   return readdirSync(dir).filter(f => PAGE.test(f)).sort().map(f => join(dir, f));
 }
 
-/* A PLACEHOLDER IS A BRACKETED SPAN ON ONE LINE, the shape the licence's drafter used for every
-   term left open ([Seller's legal name], [registered address], and in the Polish the same). The
-   licence prose has no other square bracket, so no clause is caught by this. */
+/* A PLACEHOLDER IS A BRACKETED SPAN ON ONE LINE, the shape the licence's drafter uses for a term
+   left open, such as [registered address]. The licence prose has no other square bracket, so no
+   clause is caught by this. */
 const HOLE = /\[[^\]\r\n]*\]/g;
 export function placeholders(text) {
   const out = [];

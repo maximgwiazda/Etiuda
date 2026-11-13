@@ -3,10 +3,11 @@
  *
  *     node tests/seller-address.mjs        exit code is the number of failed checks, capped at 63
  *
- * THE CLAIM. With ETIUDA_PACK_SELLER_ADDRESS unset, electron-builder.js's config is the same object, its licence pages are the
- * tree's, and tools/sellable.mjs still finds the address placeholder, as before. With it naming a file, the config reads its pages
- * from a copy of buildResources in the output folder whose pages carry the address and no placeholder, the tree's pages are byte for
- * byte as they were, and the release judges the copy. A malformed file, or a page whose placeholder moved, stops the packaging.
+ * THE CLAIM. The tree's licence pages give the seller's line with no address, so they carry no placeholder and tools/sellable.mjs
+ * passes them. With ETIUDA_PACK_SELLER_ADDRESS unset, electron-builder.js's config is the same object and the step's line is as it
+ * was, byte for byte. With it naming a file, the packaging stops, saying there is no address to fill, and the tree is untouched. The
+ * filling itself stays, driven on scratch pages that carry the placeholder: a copy of buildResources in the output folder whose
+ * pages carry the address and no placeholder, and the release judges the copy. A malformed file, or a page whose placeholder moved, stops it.
  *
  * Every address here is invented, written into this run's own scratch folder. The config is loaded in a child process, as
  * tests/test-service.mjs loads it, with the output folder pointed at that scratch folder.
@@ -29,9 +30,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TOOL = path.join(ROOT, "tools", "seller-address.cjs");
 const RELEASE = path.join(ROOT, "tools", "release.mjs");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 6;
+const PLANTS = 7;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 8 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 9 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -84,33 +85,61 @@ const throws = fn => { try { fn(); return ""; } catch (e) { return String(e && e
 
 /* ---- the cases -------------------------------------------------------------------------------------------------------- */
 const CASES = {};
-/* sa1: unset, the config is the same object and makes no copy; the tree's pages still carry the address placeholder, so sellable
-   refuses them for a customer build as before. */
+/* The seller's line as decided: the name, the NIP and the country, no address; each page's first paragraph after its title, unwrapped. */
+const SELLER = {
+  "license_en.txt": "Maxim Gwiazda, NIP 5242711262, Poland. This licence covers Etiuda and Etiuda Studio.",
+  "license_pl.txt": "Maxim Gwiazda, NIP 5242711262, Polska. Licencja obejmuje Etiudę i Etiudę Studio.",
+};
+const BOM = String.fromCharCode(0xfeff);
+const sellerLine = text => (String(text).replace(BOM, "").split(/\r?\n\s*\n/)[1] || "").replace(/\s+/g, " ").trim();
+/* A scratch page with `hole` planted in its seller's line, the shape the filling reads; "" where that line is not there once. */
+const holed = (text, hole) => String(text).split("Maxim Gwiazda, ").length === 2 ? String(text).replace("Maxim Gwiazda, ", "Maxim Gwiazda, " + hole + ", ") : "";
+const treeHoled = n => holed(fs.readFileSync(treePage(n), "utf8"), n === PAGES[0] ? "[registered address]" : "[adres siedziby]");
+/* sa1: the tree's pages give the seller's line as decided, with no address placeholder, so sellable passes them; unset, the config is
+   the same object and makes no copy. */
 CASES.unset = () => {
   const T = tool(), base = { directories: { output: "out", buildResources: RES } };
-  const holes = SELL.licenceProblems(path.join(ROOT, RES)).join(" ");
+  const pages = PAGES.map(n => fs.readFileSync(treePage(n), "utf8"));
   return PLAIN.status === 0 && !!RES && !path.isAbsolute(RES) && T.sellerConfig(base, {}, ROOT, LAB) === base
     && T.sellerConfig(base, { ETIUDA_PACK_SELLER_ADDRESS: "" }, ROOT, LAB) === base && !fs.existsSync(path.join(LAB, "out-unset", T.STAGE))
-    && holes.indexOf("[registered address]") >= 0 && holes.indexOf("[adres siedziby]") >= 0;
+    && SELL.licenceProblems(path.join(ROOT, RES)).length === 0
+    && PAGES.every((n, i) => sellerLine(pages[i]) === SELLER[n] && pages[i].indexOf(T.HOLES[n].hole) < 0);
 };
-/* sa2: set, the config reads a copy in the output folder, every file of buildResources in it; its two pages carry the address once,
-   their BOM kept and no placeholder left, so sellable passes them; nothing else in the config moved; the tree's pages are untouched. */
+/* sa2: set against the tree's pages, the packaging stops before anything is written, saying there is no address to fill rather than
+   that a page's wording moved; the config does not load, no copy is made, and the tree's pages are untouched. */
 CASES.set = () => {
   const before = PAGES.map(n => sha(treePage(n)));
-  const out = path.join(LAB, "out-set"), got = configOf(GOOD, out), plain = configOf("", out);
-  const T = tool(), dir = got.config ? got.config.directories.buildResources : "", want = path.resolve(ROOT, out, T.STAGE, path.basename(RES));
-  if (got.status !== 0 || dir !== want || !fs.existsSync(dir)) return false;
+  const out = path.join(LAB, "out-set"), got = configOf(GOOD, out), T = tool();
+  const said = throws(() => T.sellerStage({ ETIUDA_PACK_SELLER_ADDRESS: GOOD }, ROOT, RES, out));
+  const plain = s => /has an address to fill, since the seller's line gives none/.test(s) && !/carries/.test(s) && s.indexOf("Invented") < 0;
+  return got.status !== 0 && got.config === null && plain(got.said) && plain(said) && !fs.existsSync(path.join(out, T.STAGE))
+    && PAGES.every((n, i) => sha(treePage(n)) === before[i]);
+};
+/* sa9: the filling, on scratch pages carrying the placeholder: the config reads a copy in the output folder, every file of
+   buildResources in it; its two pages carry the address once, their BOM kept and no placeholder left, so sellable passes them; nothing
+   else in the config moved; the scratch pages are untouched. */
+CASES.fill = () => {
+  const T = tool(), root = path.join(LAB, "fill-root"), name = path.basename(RES), d = path.join(root, name);
+  fs.mkdirSync(path.join(d, "sub"), { recursive: true });
+  for (const n of PAGES) fs.writeFileSync(path.join(d, n), treeHoled(n), "utf8");
+  fs.writeFileSync(path.join(d, "installer.nsh"), "; a stand-in script\n", "utf8");
+  fs.writeFileSync(path.join(d, "sub", "icon.bin"), crypto.randomBytes(64));
+  const before = walk(d).map(f => sha(path.join(d, f)));
+  if (PAGES.some(n => SELL.placeholders(fs.readFileSync(path.join(d, n), "utf8")).length !== 1)) return false;
+  const base = Object.assign({}, PLAIN.config, { directories: Object.assign({}, PLAIN.config.directories, { buildResources: name }) });
+  const out = path.join(LAB, "out-fill"), got = T.sellerConfig(base, { ETIUDA_PACK_SELLER_ADDRESS: GOOD }, root, out);
+  const dir = got.directories.buildResources;
+  if (dir !== path.resolve(root, out, T.STAGE, name) || !fs.existsSync(dir)) return false;
   const en = fs.readFileSync(path.join(dir, PAGES[0]), "utf8"), pl = fs.readFileSync(path.join(dir, PAGES[1]), "utf8");
-  const same = walk(path.join(ROOT, RES)).join() === walk(dir).join()
-    && walk(dir).filter(f => PAGES.indexOf(f) < 0).every(f => sha(path.join(dir, f)) === sha(path.join(ROOT, RES, f)));
+  const same = walk(d).join() === walk(dir).join() && walk(dir).filter(f => PAGES.indexOf(f) < 0).every(f => sha(path.join(dir, f)) === sha(path.join(d, f)));
   const rest = c => JSON.stringify(Object.assign({}, c, { directories: Object.assign({}, c.directories, { buildResources: "" }) }));
   return same && en.split(EN).length === 2 && pl.split(PL).length === 2 && en.charCodeAt(0) === 0xfeff && pl.charCodeAt(0) === 0xfeff
     && SELL.placeholders(en).length === 0 && SELL.placeholders(pl).length === 0 && SELL.licenceProblems(dir).length === 0
-    && !!plain.config && rest(got.config) === rest(plain.config) && PAGES.every((n, i) => sha(treePage(n)) === before[i])
-    && PAGES.every(n => fs.readFileSync(treePage(n), "utf8").indexOf(EN) < 0 && fs.readFileSync(treePage(n), "utf8").indexOf(PL) < 0);
+    && rest(got) === rest(base) && walk(d).every((f, i) => sha(path.join(d, f)) === before[i]);
 };
-/* sa3: a malformed file stops the packaging, its refusal naming no value, and the config does not load; so does a page carrying its
-   placeholder twice or not at all, and a variable naming no file. */
+/* sa3: on scratch pages carrying the placeholder, a malformed file stops the packaging, its refusal naming no value; so does a page
+   carrying its placeholder twice or not at all beside one that does, and a variable naming no file. Against the tree, a malformed
+   file still leaves the config unloaded. */
 const BAD = [
   "not json", "[]", { format: 2, en: EN, pl: PL }, { format: 1, en: EN }, { format: 1, en: EN, pl: PL, name: "Somebody" }, { format: 1, en: EN, pl: 7 },
   { format: 1, en: "[" + EN + "]", pl: PL }, { format: 1, en: EN + "\nSecond line", pl: PL }, { format: 1, en: "12 St", pl: PL.slice(0, 3) },
@@ -121,19 +150,19 @@ function resWith(name, enText) {
   const d = path.join(LAB, name, path.basename(RES));
   fs.mkdirSync(d, { recursive: true });
   fs.writeFileSync(path.join(d, PAGES[0]), enText, "utf8");
-  fs.copyFileSync(treePage(PAGES[1]), path.join(d, PAGES[1]));
+  fs.writeFileSync(path.join(d, PAGES[1]), treeHoled(PAGES[1]), "utf8");
   return d;
 }
 CASES.malformed = () => {
-  const T = tool(), stage = path.join(LAB, "stage-bad");
-  const said = BAD.map((b, i) => throws(() => T.sellerStage({ ETIUDA_PACK_SELLER_ADDRESS: fileOf("bad-" + i + ".json", b) }, ROOT, RES, stage)));
+  const T = tool(), stage = path.join(LAB, "stage-bad"), hr = resWith("bad-root", treeHoled(PAGES[0])), hRoot = path.dirname(hr), hRes = path.basename(hr);
+  const said = BAD.map((b, i) => throws(() => T.sellerStage({ ETIUDA_PACK_SELLER_ADDRESS: fileOf("bad-" + i + ".json", b) }, hRoot, hRes, stage)));
   const twice = resWith("twice", "﻿Maxim Gwiazda, [registered address], [registered address], Poland.\n");
   const none = resWith("none", "﻿Maxim Gwiazda, Poland.\n");
   const holes = [twice, none].map(d => throws(() => T.sellerStage({ ETIUDA_PACK_SELLER_ADDRESS: GOOD }, path.dirname(d), path.basename(d), path.join(LAB, "stage-holes"))));
-  const missing = throws(() => T.sellerStage({ ETIUDA_PACK_SELLER_ADDRESS: path.join(LAB, "no-such-file.json") }, ROOT, RES, stage));
+  const missing = throws(() => T.sellerStage({ ETIUDA_PACK_SELLER_ADDRESS: path.join(LAB, "no-such-file.json") }, hRoot, hRes, stage));
   const child = configOf(fileOf("bad-child.json", { format: 1, en: "[" + EN + "]", pl: PL }), path.join(LAB, "out-bad"));
-  return said.every(s => !!s && s.indexOf(EN) < 0 && s.indexOf(PL) < 0 && s.indexOf("Invented") < 0) && holes.every(s => /carries/.test(s))
-    && !!missing && !fs.existsSync(stage) && child.status !== 0 && child.config === null && child.said.indexOf("Invented") < 0;
+  return said.every(s => !!s && s.indexOf(EN) < 0 && s.indexOf(PL) < 0 && s.indexOf("Invented") < 0 && !/has an address to fill/.test(s))
+    && holes.every(s => /carries/.test(s)) && /names no file/.test(missing) && !fs.existsSync(stage) && child.status !== 0 && child.config === null && child.said.indexOf("Invented") < 0;
 };
 /* sa4: the copy never lands inside buildResources, nor buildResources inside the copy: an output folder there is refused before
    anything is written. Driven on a scratch copy of the two pages, never on the tree, since the guard cut would write into the root. */
@@ -152,10 +181,10 @@ CASES.release = () => {
   const lines = RELEASE_TEXT.split("\n").filter(l => /plant:release-licence-dir/.test(l));
   return lines.length === 1 && /directories\.buildResources/.test(lines[0]) && /licenceDir/.test(lines[0]);
 };
-/* sa6: the step's line says whether the pages carry the address, never the address. */
+/* sa6: the step's line says whether the pages carry the address, never the address; unset, it is the line it was, byte for byte. */
 CASES.step = () => {
   const T = tool(), on = T.sellerStep({ ETIUDA_PACK_SELLER_ADDRESS: GOOD }, "x"), off = T.sellerStep({}, RES);
-  return /^Seller address: filled into license_en\.txt, license_pl\.txt/.test(on) && /^Seller address: absent/.test(off)
+  return /^Seller address: filled into license_en\.txt, license_pl\.txt/.test(on) && off === "Seller address: absent, the licence pages keep their placeholders"
     && [on, off].every(s => s.indexOf("Invented") < 0 && s.indexOf(GOOD) < 0);
 };
 /* sa7: the builder's config names the tool, and its beforePack says the step's line. */
@@ -182,14 +211,15 @@ CASES.identity = async () => {
 
 /* ---- the run ---------------------------------------------------------------------------------------------------------- */
 const LEGS = [
-  ["sa1", "unset", "unset: the config is the same object, no copy is made, and sellable still finds the placeholder"],
-  ["sa2", "set", "set: the pages come from a filled copy in the output folder, no placeholder, sellable passes; nothing else moved; the tree untouched"],
-  ["sa3", "malformed", "a malformed file, a page whose placeholder moved, or no file: refused, naming no value"],
+  ["sa1", "unset", "the tree's pages give the decided seller's line, no placeholder, and sellable passes them; unset, the config is the same object and no copy is made"],
+  ["sa2", "set", "set against the tree's pages: refused, saying there is no address to fill; no copy, the tree untouched"],
+  ["sa3", "malformed", "on pages carrying the placeholder, a malformed file, a page whose placeholder moved, or no file: refused, naming no value"],
   ["sa4", "inside", "the copy never lands inside the tree's buildResources"],
   ["sa5", "release", "the release judges the config's buildResources"],
-  ["sa6", "step", "the step's line never carries the address"],
+  ["sa6", "step", "the step's line never carries the address, and unset it is the line it was"],
   ["sa7", "wired", "electron-builder.js wraps its config in the tool and says the step"],
   ["sa8", "identity", "the test identity build finds its installer script in the copy's absolute buildResources"],
+  ["sa9", "fill", "set on pages carrying the placeholder: a filled copy in the output folder, no placeholder, sellable passes; nothing else moved"],
 ];
 for (const [id, name, line] of LEGS) {
   let ok = false;
@@ -235,6 +265,8 @@ if (!PLANTS_OFF && RES) {
   await plant("sap6", ["const from = path.resolve(root, (base.directories && base.directories.buildResources) || \"build\", base.nsis.include); /* plant:identity-resolve */",
     "const from = path.join(root, (base.directories && base.directories.buildResources) || \"build\", base.nsis.include);"], "identity",
     "identity-resolve back to path.join: a --test-identity pack under the variable misses its installer script", "identity");
+  await plant("sap7", ["if (!Object.keys(HOLES).some(n => pages[n].indexOf(HOLES[n].hole) >= 0)) throw new Error(noHole(resDir)); /* plant:seller-no-hole */", ""], "set",
+    "seller-no-hole cut: the variable set against pages with no address would be refused as a page whose wording moved");
 }
 
 try { fs.rmSync(LAB, { recursive: true, force: true }); } catch { /* the scratch folder is this run's own */ }
