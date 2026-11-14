@@ -28127,7 +28127,7 @@ What you type stays in this browser only.`;
       if (b.dataset.signinAct) signinAct(b.dataset.signinAct, b);
     });
   }
-  var SYNC_LINES = ["on", "off", "consent", "org-off", "unavailable", "paused", "conflict"];
+  var SYNC_LINES = ["on", "off", "ungiven", "org-off", "unavailable", "paused", "conflict"];
   function syncRead(v) {
     const o = v && typeof v === "object" ? v : {};
     if (o.shown !== true || SYNC_LINES.indexOf(o.line) < 0) return { shown: false, line: "", on: false, held: false, why: "", since: 0, say: "" };
@@ -28164,7 +28164,7 @@ What you type stays in this browser only.`;
   function syncLine(s, provider) {
     if (s.line === "org-off") return t("Your organisation has not turned this on.");
     if (s.line === "off") return t("Only on this computer.");
-    if (s.line === "consent") return named(t("Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account."), "{PROVIDER}", SIGNIN_NAMES[provider] || "Microsoft");
+    if (s.line === "ungiven") return named(t("Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account."), "{PROVIDER}", SIGNIN_NAMES[provider] || "Microsoft");
     if (s.line === "unavailable") return syncUnavailable(s.why, provider);
     if (s.line === "paused") return named(t("Paused since {DATE}. It resumes when this computer reaches our service."), "{DATE}", syncDate(s.since));
     if (s.line === "conflict") return t("Changed on two computers: choose which to keep.");
@@ -28236,6 +28236,15 @@ What you type stays in this browser only.`;
       return Promise.resolve(h.storeSet(what)).catch(() => null).then(() => syncNow());
     } catch (e) {
       return Promise.resolve(syncNow());
+    }
+  }
+  function syncConsent() {
+    const h = eHost();
+    if (!h || typeof h.storeConsent !== "function") return Promise.resolve("none");
+    try {
+      return Promise.resolve(h.storeConsent()).catch(() => "none");
+    } catch (e) {
+      return Promise.resolve("none");
     }
   }
   function wireSignin() {
@@ -37583,7 +37592,8 @@ What you type stays in this browser only.`;
     return groups;
   }
   function syncRow(s, provider) {
-    const sw = s.line === "unavailable" || s.line === "org-off" ? "" : seg2("sync", [{ v: "off", t: t("Off") }, { v: "on", t: t("On") }], s.on ? "on" : "off", s.held) + (s.held ? '<span class="sgn-lock">' + ICON_LOCK2 + esc(t("Set by your organisation")) + "</span>" : "");
+    let sw = s.line === "unavailable" || s.line === "org-off" ? "" : seg2("sync", [{ v: "off", t: t("Off") }, { v: "on", t: t("On") }], s.on ? "on" : "off", s.held) + (s.held ? '<span class="sgn-lock">' + ICON_LOCK2 + esc(t("Set by your organisation")) + "</span>" : "");
+    if (s.line === "ungiven") sw = sw.replace('<button type="button" data-val="on"', '<button type="button" data-e-open="store-on" data-val="on"');
     return row("sync", "teams", t("Sync across computers"), syncLine(s, provider), sw);
   }
   function askSyncOff() {
@@ -38335,7 +38345,10 @@ What you type stays in this browser only.`;
           const seg3 = sbox.getAttribute("data-seg"), v = b.getAttribute("data-val"), on = v === "on";
           if (seg3 === "sync") {
             if (b.classList.contains("on")) return;
-            if (on) syncSet(syncNow().line === "consent" ? "consent" : "on").then(() => {
+            if (on && syncNow().line === "ungiven") syncConsent().then(() => {
+              if (document.getElementById("setBody")) paintSettings();
+            });
+            else if (on) syncSet("on").then(() => {
               if (document.getElementById("setBody")) paintSettings();
             });
             else askSyncOff();

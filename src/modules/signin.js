@@ -481,7 +481,7 @@ function signinClicks(root){
 /* ---- sync across computers: what the shell's storeRow answers (shell/sync/store.cjs), the row's words and the one bubble ---------
    The page is told a line ("on", "off", "org-off", "unavailable", "paused", "conflict"), the switch, whether policy holds it, the
    reason, the pause's start and what to say once; never a key, a store or a token. */
-const SYNC_LINES=["on","off","consent","org-off","unavailable","paused","conflict"];
+const SYNC_LINES=["on","off","ungiven","org-off","unavailable","paused","conflict"];
 function syncRead(v){
   const o=v && typeof v==="object" ? v : {};
   if(o.shown!==true || SYNC_LINES.indexOf(o.line)<0) return {shown:false, line:"", on:false, held:false, why:"", since:0, say:""};
@@ -494,7 +494,7 @@ function syncNow(){
   try{ return syncRead(h.storeState()); }catch(e){ return syncRead(null); }
 }
 /* The reason a folder could not be reached that the person cannot mend, in the copywriter's words; "" where she has given none.
-   "no-drive" is OneDrive missing on Microsoft and Drive switched off on Google. A folder never allowed is the row's "consent". */
+   "no-drive" is OneDrive missing on Microsoft and Drive switched off on Google. A folder consent never given is the row's "ungiven". */
 function syncWhyWords(why, provider){
   if(why==="no-drive") return provider==="google" ? t("your organisation has switched off Google Drive for it") : t("the account has no OneDrive");
   return "";
@@ -511,7 +511,7 @@ function syncDate(at){
 function syncLine(s, provider){
   if(s.line==="org-off") return t("Your organisation has not turned this on.");
   if(s.line==="off") return t("Only on this computer.");
-  if(s.line==="consent") return named(t("Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account."),"{PROVIDER}",SIGNIN_NAMES[provider]||"Microsoft");
+  if(s.line==="ungiven") return named(t("Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account."),"{PROVIDER}",SIGNIN_NAMES[provider]||"Microsoft");
   if(s.line==="unavailable") return syncUnavailable(s.why, provider);
   if(s.line==="paused") return named(t("Paused since {DATE}. It resumes when this computer reaches our service."),"{DATE}",syncDate(s.since));
   if(s.line==="conflict") return t("Changed on two computers: choose which to keep.");
@@ -562,12 +562,18 @@ function syncChanged(){
   syncSay(s);
   syncTellers.forEach(fn=>{ try{ fn(s); }catch(e){ /* a closed screen */ } });
 }
-/* The switch: "on", "consent" (On where the folder was never allowed: the shell asks the provider for it), or off "here" or
-   "everywhere"; resolves the new view once the shell has acted. */
+/* The switch: "on", or off "here" or "everywhere"; resolves the new view once the shell has acted. */
 function syncSet(what){
   const h=eHost();
   if(!h || typeof h.storeSet!=="function") return Promise.resolve(syncNow());
   try{ return Promise.resolve(h.storeSet(what)).catch(()=>null).then(()=>syncNow()); }catch(e){ return Promise.resolve(syncNow()); }
+}
+/* On where the folder's consent was never given: the shell opens the provider's page for it at once, for the trusted click the
+   preload saw on the switch's On (data-e-open="store-on"). Resolves the shell's answer, or "none". */
+function syncConsent(){
+  const h=eHost();
+  if(!h || typeof h.storeConsent!=="function") return Promise.resolve("none");
+  try{ return Promise.resolve(h.storeConsent()).catch(()=>"none"); }catch(e){ return Promise.resolve("none"); }
 }
 function wireSignin(){
   const h=signinHost();
@@ -622,6 +628,7 @@ export {
   signinShown,
   signinWhen,
   syncChanged,
+  syncConsent,
   syncLine,
   syncNow,
   syncOnChange,

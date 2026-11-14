@@ -32,7 +32,7 @@ import { focusKey, focusSame, originOf } from "./dom.js";
 import { orgModel, orgRanks, syncOrgMark } from "./org-model.js";
 import { SIGNIN_NAMES, signinNow, signinShown, signinParts, signinSay, signinNoSeat, signinTold, signinActsHtml, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow, signinDoorsHtml, signinDoorRefusedNow,
   signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect, signinCopyHtml, signinManaged, signinKeepsAccount,
-  signinCapHolds, signinStranded, signinStrandedWords, syncNow, syncLine, syncSet, syncOnChange } from "./signin.js";
+  signinCapHolds, signinStranded, signinStrandedWords, syncNow, syncLine, syncSet, syncOnChange, syncConsent } from "./signin.js";
 import { hangBubble } from "./bubble.js";
 
 /* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name,
@@ -372,9 +372,11 @@ function accountGroups(){
 /* SYNC ACROSS COMPUTERS, a card of its own: the line says how it stands, and the switch is drawn only where it can act; one policy
    holds is drawn fixed, with the lock. */
 function syncRow(s, provider){
-  const sw=s.line==="unavailable" || s.line==="org-off" ? ""
+  let sw=s.line==="unavailable" || s.line==="org-off" ? ""
     : seg("sync",[{v:"off",t:t("Off")},{v:"on",t:t("On")}], s.on?"on":"off", s.held)
       +(s.held ? '<span class="sgn-lock">'+ICON_LOCK+esc(t("Set by your organisation"))+'</span>' : "");
+  /* Where the folder's consent was never given, On is the person's trusted click that opens the provider's page (syncConsent). */
+  if(s.line==="ungiven") sw=sw.replace('<button type="button" data-val="on"','<button type="button" data-e-open="store-on" data-val="on"');
   return row("sync","teams",t("Sync across computers"),syncLine(s, provider),sw);
 }
 /* TURNING SYNC OFF ASKS, from the switch: Everywhere first and quiet, This computer, Cancel filled and last, as the desk's other
@@ -994,7 +996,8 @@ function wirePage(box){
         /* Sync's Off asks first, and the class moves only once the shell has acted (askSyncOff). */
         if(seg==="sync"){
           if(b.classList.contains("on")) return;
-          if(on) syncSet(syncNow().line==="consent" ? "consent" : "on").then(()=>{ if(document.getElementById("setBody")) paintSettings(); });
+          if(on && syncNow().line==="ungiven") syncConsent().then(()=>{ if(document.getElementById("setBody")) paintSettings(); });
+          else if(on) syncSet("on").then(()=>{ if(document.getElementById("setBody")) paintSettings(); });
           else askSyncOff();
           return;
         }
