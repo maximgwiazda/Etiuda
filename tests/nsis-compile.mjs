@@ -99,9 +99,11 @@ async function main() {
   }
   if (!located || !located.path || !fs.existsSync(located.path)) noVerdict();
   const compilerVersion = makensisVersion(located);
-  /* The comparison's own control: 3.11 lacks the third fix and 3.04 all three, and both must read too old. */
+  /* The comparison's own control: 3.11 lacks the third fix and 3.04 all three, and both must read too old; a build string
+     such as a CVS snapshot's names no release, so it reads as unknown and never as fixed. */
   const floorHolds = !versionAtLeast("v3.11", NSIS_FLOOR) && !versionAtLeast("v3.04", NSIS_FLOOR)
-    && versionAtLeast("v3.12", NSIS_FLOOR) && versionAtLeast("v4.0", NSIS_FLOOR);
+    && versionAtLeast("v3.12", NSIS_FLOOR) && versionAtLeast("v4.0", NSIS_FLOOR) && !versionAtLeast("v23-May-2026.cvs", NSIS_FLOOR);
+  const versionKnown = /^v?\d+\.\d+/.test(String(compilerVersion).trim());
   const compilerFixed = floorHolds && versionAtLeast(compilerVersion, NSIS_FLOOR);
 
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "nsis-compile-"));
@@ -206,7 +208,8 @@ async function main() {
     const versionTitle = "the makensis that compiles is NSIS " + NSIS_FLOOR.join(".") + " or later, which carries the fixes for"
       + " CVE-2023-37378, CVE-2025-43715 and CVE-2026-42171: it prints " + compilerVersion;
     if (compilerFixed) console.log("  ok   " + versionTitle);
-    else { failures += 1; sayFail(versionTitle, floorHolds ? "" : "the version comparison itself reads 3.11 or 3.04 as fixed"); }
+    else { failures += 1; sayFail(versionTitle, !floorHolds ? "the version comparison itself reads 3.11, 3.04 or a build string as fixed"
+      : versionKnown ? "" : "that is a build string, not a release number, so which release it is, and whether it carries the fixes, is unknown"); }
     for (const [title, isInstaller, defines] of passes) {
       delete defines.BUILD_UNINSTALLER;
       if (!isInstaller) defines.BUILD_UNINSTALLER = null;

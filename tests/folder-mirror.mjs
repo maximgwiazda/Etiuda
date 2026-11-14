@@ -38,6 +38,12 @@ const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MAC
 const EXPECTED = 125;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+const { offWindows } = nodeRequire("./off-windows.cjs");
+const ASIDE = {
+  "998j": offWindows("998j", "a rename over another desk's read-only file on the share succeeds off Windows, so there is no refusal to tell"),
+  "998l": offWindows("998l", "a rename over this desk's read-only copy succeeds off Windows, so lifting plant:outbox-own-clear leaves nothing refusing"),
+  "974e": offWindows("974e", "the desk reads no Group Policy off Windows, so the policy's folder this leg stubs is never asked for"),
+};
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -3160,7 +3166,8 @@ async function run() {
     else skip("974k lifting plant:changed-held leaves the copy held while joining unwritten after the admission");
   }
   /* E1: a managed folder with no team file there is the desk's own, and a copy is written there; once a team file is there, held. */
-  {
+  if (ASIDE["974e"]) skip(ASIDE["974e"]);
+  else {
     const share = folder("c5-policy-share");
     const ud = folder("c5-policy-desk");
     fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eUiLang: "en" } }), "utf8");
@@ -3605,7 +3612,8 @@ async function run() {
     check(!!r && refusedGreen(r), "998i a write this desk owes that the shared folder refuses as read-only is said on the team's row in English and Polish, and once it"
       + " lands the row says nothing of it; its own folder's copy marked read-only is replaced, writable: " + JSON.stringify(r) + (err ? " " + err : ""));
   }
-  {
+  if (ASIDE["998j"]) skip(ASIDE["998j"]);
+  else {
     /* The other kind, and the boundary: another desk's file on the share, marked read-only, is refused as such and keeps its mark. */
     const share = folder("share-998j"), mirror = folder("mirror-998j");
     const other = "k-" + crypto.randomBytes(8).toString("hex"), mine = "k-" + crypto.randomBytes(8).toString("hex");
@@ -3636,12 +3644,15 @@ async function run() {
       return !r.saysFolder && r.landed;
     });
     check(k.ok, "998k lifting plant:share-refused-row leaves the refusal off the team's row: " + JSON.stringify(k));
-    const l = await testPlant("outbox-own-clear", syncerFile, async scratch => {
-      fs.copyFileSync(path.join(ROOT, "shell", "folder", "syncer-worker.cjs"), path.join(path.dirname(scratch), "syncer-worker.cjs"));
-      const r = await refusedScene("plant-998l", "", scratch);
-      return r.saysFolder && !r.landed;
-    });
-    check(l.ok, "998l lifting plant:outbox-own-clear leaves this desk's own copy on the share refusing every write: " + JSON.stringify(l));
+    if (ASIDE["998l"]) skip(ASIDE["998l"]);
+    else {
+      const l = await testPlant("outbox-own-clear", syncerFile, async scratch => {
+        fs.copyFileSync(path.join(ROOT, "shell", "folder", "syncer-worker.cjs"), path.join(path.dirname(scratch), "syncer-worker.cjs"));
+        const r = await refusedScene("plant-998l", "", scratch);
+        return r.saysFolder && !r.landed;
+      });
+      check(l.ok, "998l lifting plant:outbox-own-clear leaves this desk's own copy on the share refusing every write: " + JSON.stringify(l));
+    }
   }
 
   /* dc3a and dc3b (board 955, condition 3): a lead Studio's record of its own deletions, etiuda-team-gone-<id>.json sealed to the

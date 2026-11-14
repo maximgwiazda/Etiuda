@@ -123,6 +123,8 @@ function stagedTmps(mirror) {
    files from a folder of its own, where a plant is lifted. */
 const SCENE_KILL_MS = 45000;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+const ASIDE_998E = nodeRequire("./off-windows.cjs").offWindows("998e",
+  "a rename over a read-only file succeeds off Windows, so lifting plant:land-clear-mark leaves nothing refusing and the plant has no teeth");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ringText = note => JSON.stringify({ format: 1, kind: "etiuda-ring", keys: [], note }) + "\n";
 async function readOnlyScene(kind, syncerDir) {
@@ -463,6 +465,7 @@ async function main() {
   }
   for (const [tag, file, kind, green, line, swap] of plants) {
     if (PLANTS_OFF) { asserted++; console.log("  skip " + line); continue; }
+    if (ASIDE_998E && tag === "land-clear-mark") { asserted++; console.log("  skip " + ASIDE_998E); continue; }
     const p = plantScene(tag, file, kind, swap);
     check(p.found && !green(p.res) && p.same, line + ": " + JSON.stringify(p));
   }

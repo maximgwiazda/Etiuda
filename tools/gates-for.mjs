@@ -225,6 +225,7 @@ export const SCANS = {
   ],
   "tests/tray.mjs": ["shell/tray.cjs"],
   "tests/no-crash-dialog.mjs": ["tests/**/*.{js,mjs,cjs}"],
+  "tests/off-windows-selftest.cjs": ["tests/*.{js,mjs,cjs}"],
   "tests/swap.mjs": ["engine/etiuda.html", "shell/sample-catalog.ec"],
   "tests/shell-shipped.mjs": ["shell/**", "tools/release.mjs"],
   "tests/nsis-compile.mjs": ["shell/installer.nsh", "shell/installer/turning.nsh", "shell/installer/allusers-folder.nsh", "electron-builder.js", "tools/patch-nsis.cjs", "tools/patch-nsis.mjs", "package-lock.json"],
