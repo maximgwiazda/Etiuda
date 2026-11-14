@@ -8898,7 +8898,7 @@ What you type stays in this browser only.`;
     "This computer stays signed in with the account it had. {REASON}": "Ten komputer pozostaje zalogowany kontem, którego używał. {REASON}",
     "This account is already in use on three computers.": "To konto działa już na trzech komputerach.",
     "This account has no Etiuda role in its organisation, so it holds no seat.": "To konto nie ma w swojej organizacji żadnej roli w Etiudzie, więc nie zajmuje miejsca w licencji.",
-    "Its IT department assigns the roles.": "Role przydziela dział IT organizacji.",
+    "Its IT department can assign one.": "Może ją przydzielić dział IT organizacji.",
     "Your organisation holds the Etiuda licence for this account, so there is nothing to buy here.": "Licencję Etiudy dla tego konta ma organizacja, więc nie ma tu czego kupować.",
     "Your organisation's licence follows the roles its IT department assigns, and this account has none, so it keeps its seat on the licence bought before.": "Licencja organizacji wynika z ról przydzielanych przez jej dział IT, a to konto nie ma żadnej, więc zachowuje miejsce w licencji kupionej wcześniej.",
     "Your organisation has given this account a role, so it uses the organisation's licence; its seat on the licence bought before is not used meanwhile.": "Organizacja przydzieliła temu kontu rolę, więc korzysta ono z licencji organizacji; jego miejsce w licencji kupionej wcześniej nie jest do tego czasu używane.",
@@ -27480,6 +27480,13 @@ What you type stays in this browser only.`;
       (c ? named(t("To ask for access: {CONTACT}."), "{CONTACT}", c) : t("Its IT department can: asking them to assign the account is enough.")) + (catalogLoaded() ? " " + t("Etiuda keeps working with the catalog it has.") : "")
     ];
   }
+  function signinNoRoleWords(v) {
+    const c = v && v.managed ? v.managed.contact : "";
+    return [
+      t("This account has no Etiuda role in its organisation, so it holds no seat."),
+      c ? named(t("To ask for access: {CONTACT}."), "{CONTACT}", c) : t("Its IT department can assign one.")
+    ];
+  }
   function signinStranded(v) {
     return !!(v && v.managed && v.managed.stranded);
   }
@@ -27546,7 +27553,7 @@ What you type stays in this browser only.`;
     const prov = SIGNIN_NAMES[v.busy || v.signedIn] || "";
     if (signinRefusedHere(reason, v)) return signinRefusedWords(v);
     if (reason === "nolicence" && signinManaged(v))
-      return [t("This account has no Etiuda role in its organisation, so it holds no seat."), t("Its IT department assigns the roles.")];
+      return signinNoRoleWords(v);
     switch (reason) {
       case "unreached":
       case "signin-unreached":
@@ -27558,7 +27565,7 @@ What you type stays in this browser only.`;
       case "signin-notallowed":
         return [t("This account's organisation has not allowed Etiuda at its sign-in provider."), t("Its IT department can allow it; another account can be used meanwhile.")];
       case "no-role":
-        return [t("This account has no Etiuda role in its organisation, so it holds no seat."), t("Its IT department assigns the roles.")];
+        return signinNoRoleWords(v);
       case "seat-removed":
         return [t("Your organisation no longer gives this account access to Etiuda."), t("This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. The organisation's IT department can give access again.")];
       case "seat-renew":

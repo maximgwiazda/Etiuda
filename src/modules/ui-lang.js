@@ -1403,7 +1403,7 @@ UI_STRINGS.pl={
   "This computer stays signed in with the account it had. {REASON}":"Ten komputer pozostaje zalogowany kontem, którego używał. {REASON}",
   "This account is already in use on three computers.":"To konto działa już na trzech komputerach.",
   "This account has no Etiuda role in its organisation, so it holds no seat.":"To konto nie ma w swojej organizacji żadnej roli w Etiudzie, więc nie zajmuje miejsca w licencji.",
-  "Its IT department assigns the roles.":"Role przydziela dział IT organizacji.",
+  "Its IT department can assign one.":"Może ją przydzielić dział IT organizacji.",
   "Your organisation holds the Etiuda licence for this account, so there is nothing to buy here.":"Licencję Etiudy dla tego konta ma organizacja, więc nie ma tu czego kupować.",
   "Your organisation's licence follows the roles its IT department assigns, and this account has none, so it keeps its seat on the licence bought before.":"Licencja organizacji wynika z ról przydzielanych przez jej dział IT, a to konto nie ma żadnej, więc zachowuje miejsce w licencji kupionej wcześniej.",
   "Your organisation has given this account a role, so it uses the organisation's licence; its seat on the licence bought before is not used meanwhile.":"Organizacja przydzieliła temu kontu rolę, więc korzysta ono z licencji organizacji; jego miejsce w licencji kupionej wcześniej nie jest do tego czasu używane.",
