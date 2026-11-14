@@ -2027,12 +2027,14 @@ function createProgram(opts) {
    headers, {message, close}) a socket or null; write(abs, text) the shell's atomic write; say(line); onTeam() after a team
    file lands; onRemoved() once, when the relay refuses this desk as removed and the shell is listening, after which
    the channel stops asking; seat() this desk's seat certificate or null, seatRenew() a promise that renews it, and
-   onSeat(state), "refused" or "open", for a team whose licence follows Entra (seatHello); clock. */
+   onSeat(state), "refused" or "open", for a team whose licence follows Entra (seatHello); room(reason) after each upload, "" where it
+   was taken and the refusal's reason where it was not; clock. */
 function createChannel(opts) {
   const o = opts || {};
   const mirror = path.resolve(o.mirror);
   const clock = typeof o.clock === "function" ? o.clock : Date.now;
   const say = typeof o.say === "function" ? o.say : () => {};
+  const room = typeof o.room === "function" ? o.room : () => {};
   const io = o.io || diskIO(mirror, o.write);
   const stateFile = o.stateFile;
   const saveState = s => {
@@ -2604,8 +2606,8 @@ function createChannel(opts) {
       let u = await upload(op, who, sealing);
       if (u.why && u.why.reason === "superseded" && await lapsed(op)) u = await upload(op, who, sealing); /* plant:unchain */
       if (u.ok && op.byInvite) forgetWrap(); /* plant:S3-wrap-gone */
-      if (u.ok) { floorlessFile = null; floorlessTries = 0; continue; }
-      if (u.lim) { if (u.lim.reason === "rate") { if (sawReplay) scheduleCounterRetry(); return u.lim; } prog.refusedOut(op, u.lim); continue; }
+      if (u.ok) { floorlessFile = null; floorlessTries = 0; room(""); continue; }
+      if (u.lim) { if (u.lim.reason === "rate") { if (sawReplay) scheduleCounterRetry(); return u.lim; } room(u.lim.reason); prog.refusedOut(op, u.lim); continue; }
       if (u.r.status === 0 || u.r.status >= 500 || ["rate", "no-hello", "nonce-stale", "hello-replay"].indexOf(u.why.reason) >= 0) {
         /* The invitation's one upload, and no reply: the relay may already hold it, and a later token-spent is that upload. */
         if (op.byInvite && u.r.status === 0) prog.markReplyLost(op.inviteId, u.blob && u.blob.id);
@@ -2618,6 +2620,7 @@ function createChannel(opts) {
       spentSent = !!(op.byInvite && u.why && u.why.reason === "token-spent" && u.blob && prog.replyLost(op.inviteId)); /* plant:spent-sent */
       if (spentSent) { prog.sentOut(op, u.blob); forgetWrap(); continue; }
       /* true: the relay answered. That refusal waits; it is not kept by content hash. */
+      room(u.why.reason);
       const waits = prog.refusedOut(op, u.why, true);
       if (u.why && u.why.reason === "replay-counter") {
         sawReplay = true; /* plant:counter-retry */

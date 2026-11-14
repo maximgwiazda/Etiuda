@@ -11177,7 +11177,7 @@ function storeSettle(look) {
    storeRow's answer for the desk as it stands: the line, the switch, whether policy holds it, the reason, the pause's start, and what
    waits to be said once. Cards kept in two versions are counted by storeConflicts. */
 let storeSay = "", storeFresh = false;
-function storeConflicts() { return 0; }
+function storeConflicts() { return storeSyncView().kept; } /* plant:store-conflicts */
 /* store/end at the licence service, signed by this desk over the service's own lines (Studio's storeEndBytes). Resolves "done" where
    the service answered 200, "never" where it refused the request as one that can never succeed (400), with a line in the sign-in's
    trace, and "owed" for anything else, a refusal for want of a sign-in (401, 403) included; never rejects. */
@@ -11317,6 +11317,7 @@ async function storeSetNow(what) {
   storeSay = "";
   storeFresh = false;
   storeNow = null;
+  storeSyncStop(); /* plant:store-set-stop */
   storeSave();
   if (keys) await storeEndEverywhere(keys).catch(() => false);
   if (leaving) await storeLeaveNow(cert); /* plant:store-leave */
@@ -11458,6 +11459,7 @@ function storeSyncOf() {
   storeSyncing = SyncLib().createStoreSync({
     me: { id: me.id, pub: me.key, privateKey: priv }, mirrorRoot: storeSyncDir("mirror"),
     channel: opts => C.createChannel(Object.assign(opts, { write: writeReplacing, request: relayRequest, connect: relayConnect,
+      room: storeRoom, /* plant:store-room */
       seatRenew: () => storeTurn(), say: line => console.log("etiuda: the store's sync: " + line) })),
     io: mirror => C.diskIO(mirror, writeReplacing),
     load: () => { try { return JSON.parse(fs.readFileSync(storeSyncDir(STORE_SYNC_FILE), "utf8")); } catch { return null; } },

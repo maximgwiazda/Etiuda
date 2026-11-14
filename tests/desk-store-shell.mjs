@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 60;
+const EXPECTED = 66;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -83,14 +83,14 @@ function storeCertOf(desk, now) {
 /* ---- the world the shell's network meets: every request kept, by where it went ---- */
 function worldOf(o) {
   const opt = o || {};
-  const R = S.relayEnv({ roots: K.ROOTS });
+  const R = S.relayEnv({ roots: K.ROOTS, limits: opt.limits });
   R.clock.now = Date.now();
   const w = { R, access: "stand-in-folder-token-" + crypto.randomBytes(12).toString("hex"), forms: [], service: [], relay: [], graph: [], other: [], file: null, codes: {} };
   const json = (status, o) => new Response(Buffer.from(JSON.stringify(o)), { status, headers: { "content-type": "application/json" } });
   const GRAPH = "https://graph.microsoft.com/v1.0/me/drive/special/approot", FILE = GRAPH + ":/etiuda-store.json:/content";
   w.fetch = async (url, init) => {
     const u = String(url), method = String(init && init.method || "GET"), headers = (init && init.headers) || {};
-    const body = init && init.body !== undefined && init.body !== null ? Buffer.from(init.body).toString("utf8") : "";
+    const raw = init && init.body !== undefined && init.body !== null ? Buffer.from(init.body) : null, body = raw ? raw.toString("utf8") : "";
     if (u === "https://login.microsoftonline.com/common/oauth2/v2.0/token") {
       w.forms.push(body);
       /* A code the browser stand-in was given: its ID token carries that request's nonce, and the folder's token only for a code of the folder's own request. */
@@ -142,7 +142,7 @@ function worldOf(o) {
       w.relay.push(body);
       if (w.relayDown) return json(503, { error: "unavailable" });
       R.clock.now = Date.now();
-      const res = await W.fetch(new Request("https://relay.test/relay/v1/" + u.slice("https://etiuda.dev/relay/v1/".length), { method, headers, body: body || undefined, duplex: "half" }), R.env);
+      const res = await W.fetch(new Request("https://relay.test/relay/v1/" + u.slice("https://etiuda.dev/relay/v1/".length), { method, headers, body: raw && raw.length ? raw : undefined, duplex: "half" }), R.env);
       return new Response(Buffer.from(await res.arrayBuffer()), { status: res.status });
     }
     if (u.startsWith(GRAPH)) {
@@ -453,7 +453,8 @@ async function endNeverScene(src) {
   return { ok, detail: brief({ line: off.line, owed: !!kept.owed, posted, postedAfterRenewal: endsPosted(w), traced }) };
 }
 /* (d4l) A store/end refused for want of a sign-in (403) stays owed, the row saying so: posted again at each renewal while signed in, never
-   while signed out, and ended by the 200 that follows. */
+   while signed out, and ended by the 200 that follows. A desk that still holds a sign-in the service has since freed is answered the same
+   alike 200 and stops retrying; nothing is lost, since the service posts its own store/end when it frees a seat. */
 async function endSigninScene(src) {
   const r = await renewScene(src), T = r.shell.T, w = r.world;
   w.endStatus = 403;
@@ -700,6 +701,47 @@ async function googleSwitchScene(src) {
     seat: !!(held && held.cert), token: !!access && access.token === r.world.access, why: now && now.why }) };
 }
 
+/* (gc, gs, gr) Where the sync meets the row and the switch. gc: the versions the sync keeps for the person's choice are the row's
+   conflict count. gs: This computer and Everywhere stop the sync's channel at once, not at the next look. gr: a write the store's relay
+   refuses for its room turns the row full, and the next write it takes turns it on (the relay in memory, its room made small). */
+async function conflictsScene(src) {
+  const r = await renewScene(src), T = r.shell.T, sync = T.get().storeSyncing;
+  const on = T.storeView().line, kept = sync ? sync.state().kept : null;
+  if (kept) kept.push({ item: "k:eTheme", by: "k-" + "0".repeat(16), t: Date.now(), h: "0".repeat(64), value: "dark" });
+  const two = T.storeView();
+  if (kept) kept.length = 0;
+  const none = T.storeView().line;
+  const ok = on === "on" && !!kept && two.line === "conflict" && none === "on";
+  return { ok, detail: brief({ on, kept: kept ? "the sync's list" : "no sync", withOne: two.line, emptied: none }) };
+}
+async function switchStopScene(src) {
+  const got = {};
+  for (const what of ["here", "everywhere"]) {
+    const r = await renewScene(src), T = r.shell.T, sync = T.get().storeSyncing;
+    const before = !!sync && sync.running();
+    r.world.relayDown = true;
+    const at = T.storeSetNow(what), mid = !!sync && sync.running();
+    await at;
+    got[what] = { before, atOnce: mid, after: !!sync && sync.running() };
+  }
+  const ok = Object.values(got).every(g => g.before && !g.atOnce && !g.after);
+  return { ok, detail: brief(got) };
+}
+async function roomWireScene(src) {
+  const r = await renewScene(src, { limits: { teamMax: 64 * 1024 } }), T = r.shell.T, sync = T.get().storeSyncing;
+  const settle = async () => { if (!sync) return; sync.merge(); const c = sync.channel(); if (c) { c.kick(); await c.idle(); } };
+  await settle();
+  const on = T.storeView().line, before = r.world.relay.length;
+  T.patchDesk(JSON.stringify({ eAgent: "a".repeat(160 * 1024) }));
+  await settle();
+  const full = T.storeView().line, tried = r.world.relay.length - before;
+  T.patchDesk(JSON.stringify({ eAgent: "Ada" }));
+  await settle();
+  const after = T.storeView().line;
+  const ok = on === "on" && tried >= 1 && full === "full" && after === "on";
+  return { ok, detail: brief({ on, tried, full, after }) };
+}
+
 const LEGS = [
   ["d4h", leaveScene, "This computer leaves the store's list: the relay withdraws its key and the folder's file names it no more, under the last look's store certificate, nothing left owed"],
   ["d4i", leaveOwedScene, "the relay not reached at This computer: the folder's file leaves it out at once, the keys kept sealed as owed, and the next seated renewal has the relay withdraw it"],
@@ -726,6 +768,9 @@ const LEGS = [
   ["h", folderPagesScene, "the folder's three landing pages carry the copywriter's words whole in English and Polish, closing as the sign-in's pages close, and the seat page is unchanged"],
   ["d", doorScene, "the licence service's door takes signin/desk, signout/desk, store/grant and store/end of its own host, and refuses every other route"],
   ["g", syncScene, "the look that is on starts the store's sync: a desk key that follows reaches the relay sealed, one that does not stays out, and a sign out stops it"],
+  ["gc", conflictsScene, "the versions the sync keeps for the person's choice are the row's conflict count: one kept reads conflict, none reads on"],
+  ["gs", switchStopScene, "This computer and Everywhere stop the store's sync at once, the relay unreached, not at the next look"],
+  ["gr", roomWireScene, "a write the store's relay refuses for its room turns the row full, and the next write it takes turns it on"],
 ];
 const results = {};
 const scenes = Object.fromEntries(LEGS.map(([id, scene]) => [id, scene]));
@@ -773,6 +818,9 @@ const PLANTS = [
   ["g2", swap("const token = !lacks && ", "const token = "), "Google's answer without the folder's scope taken as the folder's token"],
   ["f3", swap("    loop.land(folder || kind || \"back\"); /* plant:folder-land */", "    loop.land(kind || \"back\"); /* plant:folder-land */"), "the second step lands the sign-in's page, not the folder's"],
   ["h", swap("Nothing changed. It can be turned on in Account at any time. This tab can be closed.", "Nothing changed. It can be turned on in Account at any time. You can close this tab."), "a folder page closing in other words than the sign-in's"],
+  ["gc", swap("function storeConflicts() { return storeSyncView().kept; } /* plant:store-conflicts */", "function storeConflicts() { return 0; } /* plant:store-conflicts */"), "the row counts no conflict"],
+  ["gs", swap("  storeSyncStop(); /* plant:store-set-stop */\n", ""), "the switch leaves the sync running"],
+  ["gr", swap("      room: storeRoom, /* plant:store-room */\n", ""), "the store's channel tells the row nothing"],
   ["d", swap(".indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes", ".indexOf(String(url)) < -1) throw new Error(\"the licence service's door takes"), "the door takes any route"],
 ];
 for (const [id, change, what] of PLANTS) {
