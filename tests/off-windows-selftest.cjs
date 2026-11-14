@@ -41,10 +41,10 @@ const DECISION = /^[^\n]*\/\*\s*plant:off-windows\s*\*\/[^\n]*$/m;
 
 /* o1 */
 const users = fs.readdirSync(TESTS).filter(f => /\.(c|m)?js$/.test(f) && f !== "off-windows.cjs" && f !== "off-windows-selftest.cjs")
-  .filter(f => fs.readFileSync(path.join(TESTS, f), "utf8").indexOf("off-windows.cjs") >= 0).sort();
+  .filter(f => /(?:[Rr]equire|createRequire\([^)]*\))\(\s*["']\.\/off-windows\.cjs["']\s*\)/.test(fs.readFileSync(path.join(TESTS, f), "utf8"))).sort(); /* a require of it, not a mention (chain-split names it in a list) */
 const silent = users.filter(f => !/\boffWindows\(/.test(fs.readFileSync(path.join(TESTS, f), "utf8")));
 check(users.length > 0 && silent.length === 0 && users.indexOf("drive-join.mjs") >= 0,
-  "o1 " + users.length + " leg file(s) require the helper, by a scan of tests/ for its file name, and each calls offWindows(): "
+  "o1 " + users.length + " leg file(s) require the helper, by a scan of tests/ for a require of it, and each calls offWindows(): "
   + users.join(", ") + (silent.length ? "; never calling it: " + silent.join(", ") : ""));
 
 /* o2 */
