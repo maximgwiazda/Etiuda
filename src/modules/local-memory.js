@@ -3,6 +3,8 @@ import { tellTaken } from "./catalog-file.js";
 import { eCatalogEject, eHasBranch } from "./host.js";
 import { esc } from "./esc.js";
 import { dismissNode } from "./motion.js";
+import { hangBubble } from "./bubble.js";
+import { originOf } from "./dom.js";
 import { flushStats } from "./pack.js";
 import { E_NS, LAYER_KEYS, eDeskFileShown, eLayers, lsDel, lsGet, lsSet, nsKey, ssDel, ssGet, ssSet } from "./storage.js";
 import { TAB_KEY, saveTabSession, tabSaveTimer } from "./tabs.js";
@@ -56,6 +58,7 @@ let clearedHold=null;
 function clearedHeld(){ return !!clearedHold; }
 /* THE CLEAR ITSELF, at once once asked, and its Undo puts every key back. */
 function clearLocalMemory(){
+  const from=originOf(document.getElementById("mgWipe"), ()=>document.getElementById("mgBring"));
   let keep={layer:[], pack:[]};
   keep={layer:CLEAR_KEEP_LAYER, pack:CLEAR_KEEP_PACK}; /* plant:clear-keep-list */
   const spaces=[E_NS].concat(eLayers());
@@ -66,7 +69,7 @@ function clearLocalMemory(){
   if(!clearedHold) clearedHold=was;
   edCatalogTaken(false);
   hooks.restartDesk();
-  offerUndo("Local changes cleared", ()=>{ if(clearedHold===was) clearedHold=null; putBack(was); });
+  offerUndo("Local changes cleared", ()=>{ if(clearedHold===was) clearedHold=null; putBack(was); }, null, from);
 }
 function bringBackCleared(){
   const was=clearedHold;
@@ -92,6 +95,7 @@ function askClearLocal(){
     +'<div class="tour-actions"><button type="button" class="btn" id="eClearGo">'+esc(t("Clear local changes"))+'</button>'
     +'<button type="button" class="btn primary" id="eClearStay">'+esc(t("Cancel"))+'</button></div>';
   document.body.appendChild(el);
+  hangBubble(el, ()=>document.getElementById("mgWipe"));
   el.querySelector("#eClearGo").onclick=()=>{ dismissNode(el); clearLocalMemory(); };
   el.querySelector("#eClearStay").onclick=()=>dismissNode(el);
   el.addEventListener("keydown",e=>{
@@ -103,7 +107,10 @@ function askClearLocal(){
 /* EJECT HAPPENS AT ONCE, and its Undo loads the same catalog straight back. The personal layer
    stays where it is, with the catalog it orbits, and the empty desk shows its own. */
 function ejectKeys(){ return catalogKeep().concat([nsKey("CatalogNo"),nsKey("CatalogFile"),nsKey("CatalogFileAt")]); }
-function ejectCatalog(){
+/* Wired as a click handler: the event names the Eject pressed. */
+function ejectCatalog(e){
+  const at=e && e.currentTarget && e.currentTarget.nodeType===1 ? e.currentTarget : null;
+  const from=originOf(at, ()=>document.getElementById("catNow"));
   const keys=ejectKeys();
   const was=keepKeys(keys);
   keys.forEach(k=>lsDel(k));
@@ -113,7 +120,7 @@ function ejectCatalog(){
   if(typeof eCatalogEject==="function") eCatalogEject();
   edCatalogTaken(false);
   hooks.restartDesk();
-  offerUndo("Catalog ejected", ()=>undoEject(was));
+  offerUndo("Catalog ejected", ()=>undoEject(was), null, from);
 }
 function undoEject(was){
   const put=was.keys[E_CATALOG_STORE];

@@ -20,7 +20,7 @@ import { animatePillsBox, syncPillsCollapse } from "./pills-box.js";
 import { modalFront, openCover } from "./dialog.js";
 import { hooks } from "./hooks.js";
 import { cssEsc } from "./css-esc.js";
-import { $, intentEl } from "./dom.js";
+import { $, intentEl, originOf } from "./dom.js";
 
 /* ---- The lanes: the conversation in front given the whole window. What it sent, the reply it sent last
    whole, and what can follow it, each with the batch after it. The list keeps its place and its scroll
@@ -352,7 +352,7 @@ function lanesShortcut(id){
 /* ---- Editing the list in the lanes: the agent's own layer, written as the editor's Next fold writes it and
    applied at once; taking a reply off offers it back. */
 const laneListIds=()=>laneRows.filter(r=>!r.learnt&&!r.used).map(r=>r.id);
-function writeLaneList(ids, said){
+function writeLaneList(ids, said, from){
   const id=lanesOn ? laneFrom : null, card=id!=null ? (cards||[]).find(m=>m&&String(m.id)===id) : null;
   if(!card) return false;
   const base=baseCard(card.id), entry=base ? null : (pack.custom||[]).find(x=>x&&String(x.id)===id);
@@ -374,7 +374,7 @@ function writeLaneList(ids, said){
     else { const e=(pack.custom||[]).find(x=>x&&String(x.id)===id); if(e){ if(was) e.next=JSON.parse(was); else delete e.next;
       if(wasAt) e.changedAt=wasAt; else delete e.changedAt; } }
     savePack(); hooks.rebuildCards();
-  });
+  }, null, from);
   return true;
 }
 function laneMove(k, to){
@@ -411,10 +411,10 @@ function wireLaneEdits(el){
     const at=e.target;
     if(!at || !at.closest || !el.contains(at)) return true;
     const row=at.closest(".ln-row"), k=row ? +row.dataset.k : -1;
-    if(at.closest(".nx-x")){ writeLaneList(laneListIds().filter(x=>x!==row.dataset.to), "Taken off the list"); return true; }
+    if(at.closest(".nx-x")){ writeLaneList(laneListIds().filter(x=>x!==row.dataset.to), "Taken off the list", originOf(at.closest(".nx-x"), null, ".ln-row .nx-x")); return true; }
     if(at.closest(".ln-keep")){ writeLaneList(laneListIds().concat(row.dataset.to)); return true; }
     if(at.closest(".nx-grip")) return true;
-    if(at.closest(".ln-back")){ const st=laneState(); writeLaneList(st.fold && st.fold.catalog ? nextIdsOf(st.fold.catalog) : [], "Back to the catalog's"); return true; }
+    if(at.closest(".ln-back")){ const st=laneState(); writeLaneList(st.fold && st.fold.catalog ? nextIdsOf(st.fold.catalog) : [], "Back to the catalog's", originOf(at.closest(".ln-back"), null, ".ln-back")); return true; }
     if(at.closest(".ln-add-btn")){ laneFindOpen(true); return true; }
     const hit=at.closest(".nx-hit");
     if(hit){ laneTake(hit.getAttribute("data-to")); return true; }

@@ -3,7 +3,7 @@ import { lsGet, lsSet } from "./storage.js";
 import { offerUndo, t, toast } from "./ui-lang.js";
 import { pack, savePack } from "./pack.js";
 import { esc } from "./esc.js";
-import { $ } from "./dom.js";
+import { $, originOf } from "./dom.js";
 import { cutLeaves, dismissCopy } from "./motion.js";
 import { copy } from "./mark.js";
 import { hooks } from "./hooks.js";
@@ -118,6 +118,7 @@ function wireFactsEditor(){
   if(cancelBtn) cancelBtn.onclick=e=>{ e.stopPropagation(); exitFactsEdit(false,true); };
   if(resetBtn) resetBtn.onclick=e=>{
     e.stopPropagation();
+    const from=originOf(resetBtn, ()=>$("#factsEditBtn"));
     const was=pack.facts;
     pack.facts=null;
     savePack();
@@ -129,7 +130,7 @@ function wireFactsEditor(){
       pack.facts=was; savePack();
       if(ta) ta.value=(was!=null)?was:FACTS;
       renderFacts();
-    });
+    }, null, from);
   };
   if(ta){
     ta.addEventListener("keydown",e=>{

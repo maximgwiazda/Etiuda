@@ -1609,8 +1609,7 @@ try {
     Object.keys(byIdEls).forEach(k => delete byIdEls[k]);
     host7(st);
     PICK.hotkeyNotice();
-    const box = byIdEls.eNotices, d = box && box.children.find(c => c.id === "eHotkeyNote");
-    return d || null;
+    return byIdEls.eHotkeyNote || null;
   };
   let taken7, held7, none7, acted = "";
   try {
@@ -1629,7 +1628,7 @@ try {
     globalThis.window.E_HOST = undefined;
     Object.keys(byIdEls).forEach(k => delete byIdEls[k]);
     PICK.hotkeyNotice();
-    none7 = byIdEls.eNotices || null;
+    none7 = byIdEls.eHotkeyNote || null;
   } finally {
     globalThis.document = docWas; globalThis.addEventListener = addWas; delete globalThis.removeEventListener; HKS.hooks.openSettings = openWas;
     if (hostWas === undefined) delete globalThis.window.E_HOST; else globalThis.window.E_HOST = hostWas;

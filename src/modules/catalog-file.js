@@ -19,7 +19,8 @@ import { esc } from "./esc.js";
 import { newCatalogId } from "./ids.js";
 import { TAB_KEY, tabSaveTimer, saveTabSession, tabs } from "./tabs.js";
 import { t, catalogCountsLine, toast, toastRefusal } from "./ui-lang.js";
-import { placeBubble } from "./bubble.js";
+import { placeBubble, hangBubble } from "./bubble.js";
+import { originOf } from "./dom.js";
 import { BASE_CATS, BASE_M, pack, whoOptions, savePack, flushStats, retiredCards } from "./pack.js";
 import { catIconKey, catSlot } from "./cat-identity.js";
 import { catPackKey, catCatalogLabel } from "./cat-set.js";
@@ -565,6 +566,10 @@ function looseUnexported(){
    own catalog first: Export saves it and then loads, Load anyway loads without it, Escape does
    neither. */
 function askLoose(go){
+  /* FROM THE LOAD THAT WAS PRESSED, which a click leaves holding the focus; a dropped file, or an offer whose bubble went
+     with its press, leaves none, and the catalog's name in the bar answers. */
+  const a=document.activeElement;
+  const from=originOf(a && a.tagName==="BUTTON" ? a : null, ()=>document.getElementById("catNow"));
   const was=document.getElementById("eLoose");
   if(was) was.remove();
   const el=document.createElement("div");
@@ -578,6 +583,7 @@ function askLoose(go){
     +'<button type="button" class="btn primary" id="eLooseExport">'+esc(t("Export…"))+'</button></div>';
   cutLeaves();
   document.body.appendChild(el);
+  hangBubble(el, from);
   const close=()=>dismissNode(el);
   el.querySelector("#eLooseLoad").onclick=()=>{ close(); go(); };
   el.querySelector("#eLooseExport").onclick=()=>{ close(); exportCatalog().then(saved=>{ if(saved) go(); }); };
@@ -978,6 +984,7 @@ export {
   catalogEditionOlder,
   todayEdition,
   activateCatalog,
+  askLoose,
   catalogEdited,
   sampleUntouched,
   syncSampleMark,

@@ -13,7 +13,7 @@ import { catIconKey, catSlot, categoryIsOverridden, resetCategory } from "./cat-
 import { intentIdAt, intentIdxOfId, intentIsCustom, intentIsOverridden } from "./intent-id.js";
 import { applyCatsToGlobal, removeCategory, catPackKey, catCatalogLabel } from "./cat-set.js";
 import { esc } from "./esc.js";
-import { $, modalCard } from "./dom.js";
+import { $, modalCard, originOf } from "./dom.js";
 import { rebuildCards, refreshAfterIntents } from "./rebuild.js";
 import { render } from "./render.js";
 import { uid } from "./ids.js";
@@ -186,6 +186,7 @@ function openCategoryEditor(k,fromPill){
     if(removeCategory(k)) leave();
   };
   if($("#ceReset")) $("#ceReset").onclick=()=>{
+    const from=originOf($("#ceReset"));
     const was=packSnapshot();
     resetCategory(k);
     drawPills(); render();
@@ -195,7 +196,7 @@ function openCategoryEditor(k,fromPill){
       back(); applyCatsToGlobal();
       drawPills(); render(); drawIntentRail();
       if(document.getElementById("ceReset")) openCategoryEditor(k, fromPill);
-    });
+    }, null, from);
     openCategoryEditor(k, fromPill);   // redraws the fields, and the button goes with them
   };
   $("#ceSave").onclick=()=>{

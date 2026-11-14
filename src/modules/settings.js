@@ -28,7 +28,7 @@ import { openUpdatePage, updateAbout } from "./update-offer.js";
 import { openMaintenance } from "./maintenance.js";
 import { E_VERSION } from "./env.js";
 import { sxIcon } from "./sx-icons.js";
-import { focusKey, focusSame } from "./dom.js";
+import { focusKey, focusSame, originOf } from "./dom.js";
 import { orgModel, orgRanks, syncOrgMark } from "./org-model.js";
 import { SIGNIN_NAMES, signinNow, signinShown, signinParts, signinSay, signinNoSeat, signinTold, signinActsHtml, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow, signinDoorsHtml, signinDoorRefusedNow,
   signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect, signinCopyHtml, signinManaged, signinKeepsAccount,
@@ -206,7 +206,7 @@ function teamRowHtml(l,status,bar){
    the offer ends without Undo, and the screen is drawn again where it is open. A second click while the
    offer stands does not start another: the offer already on screen is the way back. */
 let leaveHold="";
-function leaveThisTeam(team){
+function leaveThisTeam(team, from){
   team=String(team||"");
   if(!team || leaveHold) return;
   leaveHold=team;
@@ -216,11 +216,11 @@ function leaveThisTeam(team){
     if(leaveHold!==team) return;
     leaveHold="";
     forgetTeamLead(team, repaint);
-  });
+  }, from);
 }
 function wireTeamRows(box){
   box.querySelectorAll("[data-leave-team]").forEach(b=>{
-    b.onclick=()=>leaveThisTeam(b.getAttribute("data-leave-team"));
+    b.onclick=()=>leaveThisTeam(b.getAttribute("data-leave-team"), originOf(b));
   });
   box.querySelectorAll("[data-team-pick-folder]").forEach(b=>{
     b.onclick=()=>pickMovedFolder(b.getAttribute("data-team-pick-folder"),()=>{ if(document.getElementById("setBody")) paintSettings(); }); /* plant:needs-folder-press */
@@ -1073,16 +1073,18 @@ function syncColFloorRow(){
 }
 
 function resetShortcuts(){
+  const from=originOf(document.getElementById("setResetKeys"));
   const was=lsGet("eShortcuts");
   scStopCapture();
   lsDel("eShortcuts"); loadShortcuts(); paintKeysInline();
-  offerUndo("Shortcuts reset", ()=>{ if(was!=null){ lsSet("eShortcuts",was); loadShortcuts(); paintKeysInline(); } });
+  offerUndo("Shortcuts reset", ()=>{ if(was!=null){ lsSet("eShortcuts",was); loadShortcuts(); paintKeysInline(); } }, null, from);
 }
 /* EVERY SETTING, and nothing that is not one: a card edit, a favourite, a hidden entry or a hand-sorted order is
    WORK and none of it is touched here, which is what lets this be one button that acts at once with an Undo. A
    name typed into a field and the language a tab is worked in are not settings. Every key this clears is named
    HERE, where both a reader and tests/storage-keys.js look for the list. */
 function resetAllSettings(){
+  const from=originOf(document.getElementById("setReset"));
   const was={};
   ["eTheme","eGlassOff","eMotionOff","eUiLang","ePillsLock","eRailLock","ePills","eRail",
    "eShortcuts","eHdrPills","eNoteHover","eDeckOff","eRailW","eFactsW","eFactsH","eEdPlace","eCollapsed","eSharedEdit",E_HOTKEY_KEY,"eQuitOnClose",
@@ -1109,12 +1111,17 @@ function resetAllSettings(){
     if(host && typeof host.setTrayNotes==="function"){ try{ host.setTrayNotes(notesWere); }catch(e){} }
     applyPrefs();
     repaintScreen();
-  });
+  }, null, from);
 }
 // The language may have changed with the keys, so the whole screen and the tab's name are drawn again.
+/* The page keeps its place through the repaint, so a control pressed low on it, Reset defaults among them, is still
+   where its Undo hangs. */
 function repaintScreen(){
   const host=settingsHost();
+  const was=host && host.querySelector("#setBody"), top=was ? was.scrollTop : 0;
   if(host) renderSettings(host);
+  const now=host && host.querySelector("#setBody");
+  if(now && top) now.scrollTop=top; /* plant:settings-keep-scroll */
   try{ drawTabs(); }catch(e){}
 }
 /* EVERY PREFERENCE PUT ON SCREEN FROM WHAT IS STORED, whatever changed the keys: Reset, its Undo,
