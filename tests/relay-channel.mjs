@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 450;
+const EXPECTED = 452;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -1705,6 +1705,9 @@ if (deskOn()) try {
   const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
   const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
   let deskTransport = transport("main");
+  /* What each desk fetch to a relay asked of Chromium beside its bytes: 942i holds that none sends the session's credentials. */
+  const deskInits = [];
+  const noteInit = (url, init) => { if (String(url).indexOf("/relay/v1/") >= 0) deskInits.push({ url: String(url), credentials: init ? init.credentials : undefined }); };
   globalThis.WebSocket = class {
     constructor(url, opts) {
       this.readyState = 1;
@@ -1732,6 +1735,7 @@ if (deskOn()) try {
     };
     const net = { fetch: (url, init) => {
       deskTransport.log.push((init && init.method) + " " + url);
+      noteInit(url, init);
       if (deskTransport.down) return Promise.reject(new Error("down"));
       if (hooks && typeof hooks.fetch === "function") { const alt = hooks.fetch(url, init); if (alt) return alt; }
       return relayFetch(url, init);
@@ -1814,6 +1818,23 @@ if (deskOn()) try {
     "942a a desk takes a relay invitation: its team folder is the mirror, it reads the team file sealed for that invitation, and its"
     + " request reaches the lead's mirror as its one invitation upload: folder " + (folderNow === mirror ? "the mirror" : folderNow)
     + ", request " + (sent ? "at the lead" : "missing") + (taken.refused ? ", refused " + taken.refused : ""));
+  const omitted = deskInits.filter(x => x.credentials === "omit").length;
+  check(deskInits.length > 0 && omitted === deskInits.length,
+    "942i every fetch the desk made to the relay omits the session's credentials: " + omitted + " of " + deskInits.length);
+  if (PLANTS_OFF) skip("942j lifting plant:relay-credentials sends a relay fetch that does not omit credentials");
+  else {
+    const lift = await liftDesk("plant:relay-credentials", async (next) => {
+      const from = deskInits.length;
+      const inv = await relayInviteOn(RT2, TEAM2);
+      fs.mkdirSync(path.join(LAB, "cred-plant-share"), { recursive: true });
+      const P = newDesk("cred-plant", path.join(LAB, "cred-plant-share"), { source: next });
+      await P.ask("etiuda:team-join", "invite", inv.text, "Desk Ten", codeOf(inv.secret));
+      const got = deskInits.slice(from);
+      return got.length > 0 && got.some(x => x.credentials !== "omit");
+    });
+    check(lift.turned && lift.back, "942j lifting plant:relay-credentials sends a relay fetch that does not omit credentials: " + lift.detail
+      + (lift.back ? "" : ", shell/main.js changed on disk"));
+  }
 
   /* Slice 3, item 4: a read sends nothing, a no leaves the token, and yes asks for no check code. */
   async function relayInviteOn(rt, teamId) {
@@ -1834,7 +1855,7 @@ if (deskOn()) try {
       encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
       decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
     };
-    const net = { fetch: (url, init) => { deskTransport.log.push(init.method + " " + url); if (deskTransport.down) return Promise.reject(new Error("down")); return relayFetch(url, init); } };
+    const net = { fetch: (url, init) => { deskTransport.log.push(init.method + " " + url); noteInit(url, init); if (deskTransport.down) return Promise.reject(new Error("down")); return relayFetch(url, init); } };
     const electron = {
       app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
         getVersion: () => "0.0.0", whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
