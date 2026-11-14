@@ -4,8 +4,9 @@
  *
  * Headless Chrome on the built engine page and the shipped sample catalog. The measure is the eye's: the
  * pointer's point, read from the laid-out box of the bubble's .bub-tip, lies within the control's span along
- * the edge it faces and no further than the bubble's gap (10 px) and a pixel from that edge. A bubble with no
- * pointer, or a pointer elsewhere, is red; so is a control that is not on screen. Each check names the bubble.
+ * the edge it faces and no further than the bubble's gap (10 px) and a pixel from that edge, with the whole bubble
+ * inside the window. A bubble with no pointer, off screen, or pointing elsewhere is red; so is a control not on
+ * screen. Each check names the bubble.
  *   b1  the questions: Close Etiuda?, loading a catalog over one's own cards (from the Load pressed, and from the
  *       catalog's name when nothing was pressed), Clear local changes?, Reset Etiuda?, the reset left unfinished,
  *       the proxy's sign-in, the agent's name with no reply to hang from
@@ -77,8 +78,9 @@ window.__bubAt = function(bub, ctl){
   else if(side==="right"){ perp=t.left-c.right; along=t.top+t.height/2; lo=c.top; hi=c.bottom; }
   else if(side==="left"){ perp=c.left-t.right; along=t.top+t.height/2; lo=c.top; hi=c.bottom; }
   else return {why:"side "+side};
-  const ok=perp>=-2 && perp<=11 && along>=lo-0.5 && along<=hi+0.5;
-  return {ok:ok, side:side, perp:Math.round(perp*10)/10, along:Math.round(along), span:[Math.round(lo),Math.round(hi)]};
+  const b=bub.getBoundingClientRect(), shown=b.top>=-1 && b.left>=-1 && b.bottom<=innerHeight+1 && b.right<=innerWidth+1;
+  const ok=shown && perp>=-2 && perp<=11 && along>=lo-0.5 && along<=hi+0.5;
+  return {ok:ok, shown:shown, side:side, perp:Math.round(perp*10)/10, along:Math.round(along), span:[Math.round(lo),Math.round(hi)]};
 };`;
 
 /* One case: `act` runs in the page and answers {bub, ctl} as selectors or a note; the measure runs a few frames later. */
@@ -273,13 +275,13 @@ const UNDOS = [
     return { name: "moved-all", bub: "#eUndo", ctl: "#catNow" };
   }],
   ["Settings reset", () => {
-    openSettings();
+    openSettings("data");
     const b = document.getElementById("setReset"); b.scrollIntoView({ block: "center" });
     b.click();
     return { name: "settings-reset", bub: "#eUndo", ctl: "#setReset" };
   }],
   ["Shortcuts reset", () => {
-    openSettings();
+    openSettings("keys");
     const b = document.getElementById("setResetKeys"); b.scrollIntoView({ block: "center" });
     b.click();
     return { name: "shortcuts-reset", bub: "#eUndo", ctl: "#setResetKeys" };

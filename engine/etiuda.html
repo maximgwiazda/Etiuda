@@ -5166,8 +5166,12 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
         return;
       }
       const r = box();
-      if (!r) {
-        if (!placed) el.setAttribute("data-side", "none");
+      const away = !!r && (r.bottom <= 0 || r.right <= 0 || r.top >= innerHeight || r.left >= innerWidth);
+      if (!r && placed) return;
+      if (!r || away) {
+        el.setAttribute("data-side", "none");
+        el.style.top = el.style.left = el.style.right = el.style.bottom = "";
+        placed = false;
         return;
       }
       placeBubble(el, { top: r.top, left: r.left, width: r.width, height: r.height }, opts);

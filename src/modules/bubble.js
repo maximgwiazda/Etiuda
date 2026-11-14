@@ -72,7 +72,9 @@ function placeBubble(el, target, opts){
 }
 /* HUNG FROM ITS ORIGIN FOR AS LONG AS IT STANDS: `origin` (an element, or a function answering one) is asked again
    at every placing, since a repaint replaces the control. Where it answers nothing the bubble stays where it last
-   stood, or at its own resting place if it never stood anywhere. Call it once `el` is in the document. */
+   stood, or at its own resting place if it never stood anywhere; while the control is scrolled out of the window it
+   rests there too, so it is never hung off screen, and hangs again when the control comes back. Call it once `el` is
+   in the document. */
 function hangBubble(el, origin, opts){
   if(!el || !el.isConnected) return ()=>{};
   let raf=0, placed=false;
@@ -93,7 +95,14 @@ function hangBubble(el, origin, opts){
     raf=0;
     if(!el.isConnected){ drop(); return; }
     const r=box();
-    if(!r){ if(!placed) el.setAttribute("data-side","none"); return; }
+    const away=!!r && (r.bottom<=0 || r.right<=0 || r.top>=innerHeight || r.left>=innerWidth);
+    if(!r && placed) return;
+    if(!r || away){
+      el.setAttribute("data-side","none");
+      el.style.top=el.style.left=el.style.right=el.style.bottom="";
+      placed=false;
+      return;
+    }
     placeBubble(el, {top:r.top, left:r.left, width:r.width, height:r.height}, opts);
     placed=true;
   };
