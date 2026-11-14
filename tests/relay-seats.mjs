@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 79;
+const EXPECTED = 81;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -770,7 +770,7 @@ async function main() {
     a.cert = certFor(a.pub, w.licence, T0, DAY, { fields: { pooled: true } });
     const before = await sessionAs(w, "a");
     w.R.clock.now = T0 + HOUR;
-    const named = await renew(w, grantAt(w.lead.pub, w.R.clock.now, { licence: w.licence, live: w.R.clock.now, freed: [a.pub] }));
+    const named = await renew(w, grantAt(w.lead.pub, w.R.clock.now, { licence: w.licence, live: w.R.clock.now, freed: [{ key: a.pub, at: w.R.clock.now }] }));
     const current = await sessionAs(w, "a");
     w.R.clock.now = T0 + 2 * HOUR;
     const unnamed = await renew(w, grantAt(w.lead.pub, w.R.clock.now, { licence: w.licence, live: w.R.clock.now }));
@@ -788,7 +788,7 @@ async function main() {
       w.R.clock.now = last;
       prove(w, "c", DAY);
       await sessionAs(w, "c");
-      await renew(w, grantAt(w.lead.pub, last, Object.assign({ licence: w.licence, live: last }, freed ? { freed: [a.pub] } : {})));
+      await renew(w, grantAt(w.lead.pub, last, Object.assign({ licence: w.licence, live: last }, freed ? { freed: [{ key: a.pub, at: T0 + HOUR }] } : {})));
       w.R.clock.now = last + C.SEAT_QUIET_MS + MIN;
       const night = await sessionAs(w, "a");
       w.R.clock.now = end + C.POOLED_GRACE_MS - MIN;
@@ -804,16 +804,33 @@ async function main() {
   }
   /* A grant's freed list out of shape is refused at the grant. */
   async function freedShapeScene() {
-    const lead = keyPair(false), at = T0, k = keyPair(false).pub;
-    const bad = { empty: [], notList: k, notHex: ["zz"], twice: [k, k], tooMany: Array.from({ length: C.FREED_MAX + 1 }, () => hex(32)) };
+    const lead = keyPair(false), at = T0, k = keyPair(false).pub, e = key => ({ key, at: T0 - HOUR });
+    const bad = { empty: [], notList: e(k), bareKey: [k], notHex: [e("zz")], noAt: [{ key: k }], atAfterIssue: [{ key: k, at: T0 + 1 }],
+      extra: [Object.assign(e(k), { x: 1 })], twice: [e(k), { key: k, at: T0 - 2 * HOUR }], tooMany: Array.from({ length: C.FREED_MAX + 1 }, () => e(hex(32))) };
     const got = Object.fromEntries(Object.entries(bad).map(([n, freed]) => [n, C.grantWhy(grantAt(lead.pub, at, { licence: hex(16), live: at, freed }), lead.pub, at, K.ROOTS)]));
-    const good = C.grantWhy(grantAt(lead.pub, at, { licence: hex(16), live: at, freed: [k] }), lead.pub, at, K.ROOTS);
-    const full = C.grantWhy(grantAt(lead.pub, at, { licence: hex(16), live: at, freed: Array.from({ length: C.FREED_MAX }, () => hex(32)) }), lead.pub, at, K.ROOTS);
+    const good = C.grantWhy(grantAt(lead.pub, at, { licence: hex(16), live: at, freed: [e(k)] }), lead.pub, at, K.ROOTS);
+    const full = C.grantWhy(grantAt(lead.pub, at, { licence: hex(16), live: at, freed: Array.from({ length: C.FREED_MAX }, () => e(hex(32))) }), lead.pub, at, K.ROOTS);
     return { ok: Object.values(got).every(x => x === "shape") && good === null && full === null && C.FREED_MAX === 1000, detail: brief(Object.assign({}, got, { good, full, max: C.FREED_MAX })) };
   }
+  /* The test architect's read of (d): the name holds against a certificate issued before the freeing, never after it, so a desk its
+     person comes back to opens under a grant still naming it. */
+  async function freedSinceScene() {
+    const w = await team({ seats: true });
+    const a = w.desks.a, T = T0 + 2 * HOUR;
+    w.R.clock.now = T;
+    await renew(w, grantAt(w.lead.pub, T, { licence: w.licence, live: T, freed: [{ key: a.pub, at: T }] }));
+    w.R.clock.now = T + 2 * HOUR;
+    a.cert = certFor(a.pub, w.licence, T - HOUR, DAY, { fields: { pooled: true } });
+    const before = await sessionAs(w, "a");
+    a.cert = certFor(a.pub, w.licence, T + HOUR, DAY, { fields: { pooled: true } });
+    const after = await sessionAs(w, "a");
+    const ok = refused(before, "seat-lapsed") && opened(after) && JSON.stringify(storeOf(w).get("seats").freed.map(f => f.at)) === JSON.stringify([T]);
+    return { ok, detail: brief({ issuedHourBefore: said(before), issuedHourAfter: said(after) }) };
+  }
+  await leg("s22d", freedSinceScene, "a desk named as freed at T: a certificate on its key issued at T - 1 h is refused, and one issued at T + 1 h opens under the grant still naming it");
   await leg("s22a", freedScene, "(d) a pooled desk the grant names as freed is refused outright, its certificate current, and opens again once a later grant no longer names it");
   await leg("s22b", nightOnlyScene, "(a)'s measured limit: a removed pooled desk first tried only at night, never refused while the evidence was fresh, is honoured to its end plus 72 hours under (a) alone, as expected; with (d), the grant naming it, it is refused outright, at night, late in the grace and after");
-  await leg("s22c", freedShapeScene, "a grant's freed list out of shape (empty, not a list, not keys, a key twice, past FREED_MAX, a thousand) is refused shape, and a good one and a full one taken");
+  await leg("s22c", freedShapeScene, "a grant's freed list out of shape (empty, not a list, not keys, a key twice, a bare key, an entry without its instant, one freed after the grant's issue, one with another field, past FREED_MAX, a thousand) is refused shape, and a good one and a full one taken");
   await leg("s21d", pooledNightScene, "a removed pooled desk refused by day stays refused through a quiet night of seven hours and more, its certificate never honoured by the grace again (one refusal kept, by key and end), its next certificate from a later logon opens, and the kept refusal goes at the first prune past the grace's end");
   await leg("s21c", pooledSignedScene, "the pooled mark is signed: one its signature does not cover, or not true, is refused, and a signed pooled certificate opens and knocks at the door");
   /* The door still refuses an ended certificate of a stranger: only a desk session leaves the end to seatGate. */
@@ -868,6 +885,7 @@ async function main() {
     ["pooled-refused-read", "s21d", pooledNightScene, "a kept refusal is never read"],
     ["pooled-refused-prune", "s21d", pooledNightScene, "a kept refusal outlives the grace"],
     ["seat-freed", "s22a", freedScene, "a freed pooled desk is not refused"],
+    ["freed-issued", "s22d", freedSinceScene, "the issue-time comparison dropped, so a certificate issued after the freeing is refused"],
     ["seats-freed-kept", "s22b", nightOnlyScene, "a grant's freed list is not kept"],
     ["grant-freed-shape", "s22c", freedShapeScene, "a freed list out of shape is taken"],
     ["cert-pooled-bytes", "s21c", pooledSignedScene, "the pooled mark rides outside the signature"],

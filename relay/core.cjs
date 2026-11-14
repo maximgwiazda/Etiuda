@@ -155,9 +155,11 @@ const GRANT_FIELDS = ["kind", "format", "lead", "issued", "until", "paid", "sig"
    of it, no later than the grant's issue; or, as {licence, release: true}, the service's word that a team gated for that licence is
    released. */
 const SEATS_FIELDS = ["licence", "live"], RELEASE_FIELDS = ["licence", "release"];
-/* `freed`, beside licence and live where present: the pooled desks' keys the service freed within the grace's span, refused outright
-   whatever the grace while a grant names them; at most FREED_MAX, distinct, as many as a team holds desks (KEYS_MAX), so a large
-   company's pooled desks, each freed every morning, all fit: a thousand keys are about 67 KB, inside JSON_MAX and a stored value. */
+/* `freed`, beside licence and live where present: the pooled desks the service freed within the grace's span, each {key, at}, its key
+   and the instant it was freed (at most the grant's issue). A certificate on a named key issued before that instant is refused outright,
+   whatever the grace, while a grant names it; one issued at or after it beats the name, so a desk its person comes back to opens (the
+   test architect's read). At most FREED_MAX, keys distinct, as many as a team holds desks (KEYS_MAX), so a large company's pooled desks,
+   each freed every morning, all fit: a thousand entries are about 95 KB, inside JSON_MAX and a stored value's 128 KiB. */
 const FREED_MAX = KEYS_MAX;
 const DELEGATION_FIELDS = ["kind", "format", "key", "may", "from", "until", "sig"];
 const SIG_FIELDS = ["alg", "keyId", "value"];
@@ -229,7 +231,8 @@ function seatsShaped(s, issued) {
   if (plain(s) && exactly(s, RELEASE_FIELDS)) return is(HEX32, s.licence) && s.release === true;
   const listed = !!s && Array.isArray(s.freed);
   let freedOk = !!s && s.freed === undefined || listed;
-  freedOk = !!s && (s.freed === undefined || (listed && s.freed.length >= 1 && s.freed.length <= FREED_MAX && s.freed.every(k => is(HEX64, k)) && new Set(s.freed).size === s.freed.length)); /* plant:grant-freed-shape */
+  const entryOk = f => plain(f) && exactly(f, ["key", "at"]) && is(HEX64, f.key) && Number.isSafeInteger(f.at) && f.at >= 0 && f.at <= issued;
+  freedOk = !!s && (s.freed === undefined || (listed && s.freed.length >= 1 && s.freed.length <= FREED_MAX && s.freed.every(entryOk) && new Set(s.freed.map(f => f.key)).size === s.freed.length)); /* plant:grant-freed-shape */
   return plain(s) && exactly(s, s.freed === undefined ? SEATS_FIELDS : SEATS_FIELDS.concat(["freed"])) && !!freedOk && is(HEX32, s.licence)
     && Number.isSafeInteger(s.live) && s.live >= 0 && s.live <= issued;
 }
@@ -511,7 +514,7 @@ function createCore(deps) {
     let live = grant.seats.live;
     if (was && was.licence === grant.seats.licence && was.live > live) live = was.live; /* plant:seats-live-kept */
     const kept = { licence: grant.seats.licence, live, at };
-    if (Array.isArray(grant.seats.freed)) kept.freed = grant.seats.freed.slice(); /* plant:seats-freed-kept */
+    if (Array.isArray(grant.seats.freed)) kept.freed = grant.seats.freed.map(f => ({ key: f.key, at: f.at })); /* plant:seats-freed-kept */
     store.put("seats", kept);
   }
   /* A desk's or a Studio's session on a team whose grant carries seats, before it is issued: `cert` judged by certWhy for the seats' licence, its run
@@ -522,8 +525,12 @@ function createCore(deps) {
     const seats = store.get("seats");
     if (!plain(seats)) return { ok: true }; /* plant:seat-ordinary */
     const now = clock();
-    /* A pooled desk the service freed (its person's place taken by another pooled desk) is refused outright while the grant names it. */
-    if (Array.isArray(seats.freed) && seats.freed.indexOf(deskPub) > -1) return no("seat-lapsed"); /* plant:seat-freed */
+    /* A pooled desk the service freed (its person's place taken by another pooled desk) is refused outright while the grant names it,
+       on a certificate issued before it was freed; one issued since (its person came back to it) is judged as any other. */
+    const named = Array.isArray(seats.freed) ? seats.freed.find(f => plain(f) && f.key === deskPub) : undefined;
+    let since = false;
+    since = !!named && plain(cert) && Number.isSafeInteger(cert.issued) && cert.issued >= named.at; /* plant:freed-issued */
+    if (named && !since) return no("seat-lapsed"); /* plant:seat-freed */
     if (cert === undefined || certWhy(cert, deskPub, [seats.licence], now, roots, revokedNow(), true) !== null) return no("seat-lapsed"); /* plant:seat-cert */
     if (now < cert.until) {
       const seen = store.get("seatSeen");
