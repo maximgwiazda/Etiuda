@@ -10003,15 +10003,24 @@ function signinAnswerBody(res, deskKey, packed) {
   if (!j || typeof j !== "object" || Array.isArray(j)) return { ok: false, reason: "unreached" };
   if (res.status === 200 && j.ok === true && SIGNIN_CODE.test(String(j.code))) {
     const askLead = j.ask === "lead"; /* plant:ask-lead-read */
-    if (j.certificate === null) return { ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === "waiting", askLead }; /* plant:wait-read */
+    if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === "waiting", askLead }, signinManagedOf(j)); /* plant:wait-read */
     if (signinCertOk(j.certificate, deskKey) && j.certificate.code === j.code) {
       const doors = signinDoorsOk(j.doors, packed), signed = signinDoorsSigned(doors, j.doorsSig, j.certificate); /* plant:door-signed-read */
-      return { ok: true, code: String(j.code), cert: j.certificate, doors: signed ? doors : [], doorsSig: signed ? String(j.doorsSig) : "", askLead }; /* plant:door-read */
+      return Object.assign({ ok: true, code: String(j.code), cert: j.certificate, doors: signed ? doors : [], doorsSig: signed ? String(j.doorsSig) : "", askLead }, signinManagedOf(j)); /* plant:door-read */
     }
     return { ok: false, reason: "unreached" };
   }
-  const said = { 403: ["token", "signin"], 409: ["full", "desks"] }[res.status];
-  return { ok: false, reason: said && said.indexOf(j.reason) >= 0 ? j.reason : "unreached" };
+  /* A licence whose seats follow the organisation's roles (a managed installation): "no-role", the token carrying none for a desk;
+     "access-token", the service asking for its own access token beside the ID token, which it left unspent. */
+  const said = { 403: ["token", "signin", "no-role"], 409: ["full", "desks", "access-token"] }[res.status];
+  const reason = said && said.indexOf(j.reason) >= 0 ? j.reason : "unreached";
+  return Object.assign({ ok: false, reason }, reason === "no-role" || reason === "access-token" ? signinManagedOf(j) : {});
+}
+/* THE TENANT MANAGED (a large company's licence that follows the roles its IT assigns): the service says so beside any answer to such an
+   account, and why where the person also holds a licence of their own, so the desk offers nothing to buy (settings.js) on any computer. */
+function signinManagedOf(j) {
+  if (j.managed !== true) return {};
+  return { managed: true, cause: j.cause === "own-licence" || j.cause === "assigned" ? j.cause : "" }; /* plant:managed-read */
 }
 /* One post to signin/desk with `idToken`: `seed` for a first sign-in, "" for a renewal. `io` {serviceAsk(url, body), sign(bytes), packed}. */
 async function signinSeat(io, provider, deskKey, idToken, seed, now) {
@@ -10041,11 +10050,11 @@ function signinSettle(held, ans, now) {
 }
 function signinSettleSeat(held, ans, now) {
   if (ans.ok) return Object.assign({}, held, { code: ans.code, cert: ans.cert, doors: ans.cert ? (ans.doors || []) : [], doorsSig: ans.cert ? String(ans.doorsSig || "") : "", at: now, checked: now, reached: true,
-    said: ans.waiting === true ? "waiting" : "", ask: false, askLead: ans.askLead === true }); /* plant:wait-settle */
+    said: ans.waiting === true ? "waiting" : "", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || "" : "" }); /* plant:wait-settle */
   if (ans.reason === "unreached") return Object.assign({}, held, { checked: now, reached: false });
   const freed = ans.reason === "signin";
   return Object.assign({}, held, { checked: now, reached: true, said: ans.reason, ask: freed || held.ask === true,
-    refresh: freed ? "" : held.refresh }); /* plant:settle-freed */
+    refresh: freed ? "" : held.refresh }, ans.managed === true ? { managed: true, cause: ans.cause || "" } : {}); /* plant:settle-freed */
 }
 /* The reasons a provider's refresh forgets its token: it no longer takes it, or the token it gives is not this seat's. */
 const SIGNIN_LOST = Object.freeze(["signin-ask", "signin-expired", "signin-other", "signin-unbound"]);
@@ -10092,7 +10101,7 @@ function signinFileRead(text, packed) {
       seed: String(h.seed), code: SIGNIN_CODE.test(String(h.code)) ? String(h.code) : "",
       cert: h.cert && typeof h.cert === "object" && signinCertOk(h.cert, h.cert.desk) ? h.cert : null, /* plant:file-cert */
       at: num(h.at), checked: num(h.checked), reached: h.reached !== false, said: typeof h.said === "string" ? h.said : "", ask: h.ask === true,
-      doors: [], doorsSig: "", revoked: null };
+      doors: [], doorsSig: "", revoked: null, managed: h.managed === true, cause: h.cause === "own-licence" || h.cause === "assigned" ? h.cause : "" };
   /* The list is beside `held`, and the held seat judges by it. */
   out.revoked = signinRevokedOk(d.revoked) ? d.revoked : null; /* plant:revoked-file */
   if (out.held) out.held.revoked = out.revoked;
@@ -10102,12 +10111,14 @@ function signinFileRead(text, packed) {
   }
   /* The desk key whose sign out the service has not taken yet: asked again at the renewal's next turn (signinOutAgain). */
   if (/^[0-9a-f]{64}$/.test(String(d.out))) out.out = String(d.out); /* plant:out-kept */
+  /* A sign-in the service refused for a managed tenant keeps no seat, but the desk remembers it offers nothing to buy (signinTake). */
+  if (d.managed === true) out.managed = true;
   return out;
 }
 function signinFileText(s) {
   const revoked = signinRevokedNext(s.revoked || null, s.held ? s.held.revoked : null);
   return JSON.stringify(Object.assign({ format: 2, held: s.held ? Object.assign({}, s.held, { revoked: undefined }) : null }, s.out ? { out: s.out } : {},
-    revoked ? { revoked } : {}), null, 1) + "\n";
+    revoked ? { revoked } : {}, s.managed ? { managed: true } : {}), null, 1) + "\n";
 }
 
 /* The sign-in's wiring: the person's click, the browser, the service, seat.json, the quiet renewal and what the page is told.
@@ -10302,6 +10313,7 @@ function signinView() {
     /* Ask your lead, and the person's own trial's end where its certificate is the one held (a team is its lead's own). */
     askLead: !!signedIn && held.askLead === true, /* plant:view-ask-lead */
     trialUntil: !!signedIn && held.askLead === true && !!held.cert && held.cert.deskOnly === true ? Number(held.cert.until) || 0 : 0,
+    managed: signedIn ? held.managed === true : signinState().managed === true, cause: signedIn && held.managed === true ? held.cause || "" : "", /* plant:view-managed */
     at: signedIn ? held.at : 0, reached: !signedIn || held.reached !== false, ask: !!signedIn && held.ask === true,
     refused: signedIn ? held.said : "", busy: signinBusy ? signinBusy.provider : "", said: signinSaid,
     doors: signedIn ? signinDoorsShown(held, now) : [],
@@ -10336,6 +10348,8 @@ function signinIo(run) {
    service's answer. A refusal other than a full licence keeps nothing, so the desk is as it was. */
 function signinTake(provider, got, ans, now) {
   const s = signinState();
+  /* The service said this account's tenant is managed, or that it is not (an ordinary seat): kept whatever the answer, for Buy. */
+  if (ans.managed === true || ans.ok) { const was = !!s.managed; if (ans.managed === true) s.managed = true; else delete s.managed; if (was !== !!s.managed && !ans.ok) signinSave(); }
   if (!ans.ok && ans.reason !== "full") return false; /* plant:take-refused */
   const base = { provider: provider, refresh: signinKeep(safeStorage, process.platform, got.refreshToken),
     sub: signinKeep(safeStorage, process.platform, got.sub), seed: got.seed, code: "", cert: null, at: 0, checked: now, reached: true, said: "", ask: false, doors: [] };
@@ -10422,6 +10436,8 @@ function signinOutNow() {
     try { unlinkOwn(path.join(sharedFolderForWrite(), "desks", me.id, SEAT_NAME)); } catch { /* not written, or the folder is away */ } /* plant:signout-unlink-own */
   }
   s.held = null;
+  /* Signed out, the account's organisation no longer stands in for this desk: Buy, which needs no sign-in, is offered again. */
+  delete s.managed; /* plant:signout-managed */
   signinWrote = "";
   signinSaid = "";
   signinSave();
@@ -10516,9 +10532,10 @@ function orderAddress(page, code) {
 }
 function buyAddress() {
   const v = signinView();
+  if (v && v.managed) return ""; /* plant:buy-managed */
   return orderAddress(ORDER_PAGE, v && v.code);
 }
-ipcMain.on("etiuda:buy-state", (e) => { e.returnValue = fromEngine(e) ? { offer: !!orderAddress(ORDER_PAGE, "") } : null; });
+ipcMain.on("etiuda:buy-state", (e) => { e.returnValue = fromEngine(e) ? { offer: !!buyAddress() } : null; });
 /* Buy leaves as the release page does (etiuda:update-click): the preload names a trusted click on it, which stands for the address
    the shell builds now, and the open goes through openExternally. The page never names an address. */
 ipcMain.on("etiuda:buy-click", (e) => {

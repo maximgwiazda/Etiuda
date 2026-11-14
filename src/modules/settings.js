@@ -310,7 +310,11 @@ function accountGroups(){
     +' placeholder="'+esc(t("first name"))+'" value="'+esc(agentName())+'">');
   const v=signinNow(), groups=[];
   if(signinShown(v)) groups.push({rows:[], after:accountCardHtml(v)});
-  const rows=[name], buy=buyOffered() && !v.busy;
+  const rows=[name], buy=buyOffered() && !v.busy && !v.managed; /* plant:account-buy-managed */
+  /* A managed tenant's account: nothing to buy, and who holds the licence instead (the copywriter's placeholder words). */
+  const held=v.managed ? row("buy","forward",t("Licence for one person"),t("Your organisation holds the Etiuda licence for this account, so there is nothing to buy here."),"") : null;
+  const cause=v.cause==="own-licence" ? t("Your organisation's licence follows the roles its IT department assigns, and this account has none, so it keeps its seat on the licence bought before.")
+    : v.cause==="assigned" ? t("Your organisation has given this account a role, so it uses the organisation's licence; its seat on the licence bought before is not used meanwhile.") : "";
   if(v.signedIn && !signinChoosingNow()){
     const p=signinParts(v), val=x=>'<span class="sgn-val">'+esc(x)+'</span>', join=pair=>pair[0]+" "+pair[1];
     /* A press at a door the shell refused is said on the team's row, where it was pressed. */
@@ -324,10 +328,13 @@ function accountGroups(){
     if(signinNoSeat(v)) rows.push(row("seat","check",t("Seat"),join(signinSay(v.refused, v, p)),""));
     else if(v.seat==="none") rows.push(row("seat","check",t("Seat"),join(signinSay("nolicence", v)),""));
     else rows.push(row("seat","check",t("Seat"),v.seat==="lapsed" ? join(signinSay("lapsed", v)) : t("On up to three computers; this is one of them."),val(t("Held by this account"))));
+    if(cause) rows.push(row("cause","check",t("Licence"),cause,""));
     if(buy) rows.push(buyRow(v));
+    else if(held) rows.push(held);
     rows.push(row("checked","clock",t("Last checked"),v.reached ? "" : t("The sign-in service cannot be reached just now. Etiuda keeps working with the catalog it has."),
       (v.at ? val(signinWhen(v.at)) : "")+'<button type="button" class="btn" data-signin-act="check">'+esc(t("Check now"))+'</button>'));
   } else if(buy && !v.signedIn) rows.push(buyRow(v));
+  else if(held && !v.signedIn) rows.push(held);
   groups.push({rows});
   return groups;
 }
