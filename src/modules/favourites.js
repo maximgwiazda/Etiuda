@@ -10,6 +10,8 @@ import { statsForgetCards } from "./desk-stats.js";
 import { rebuildCards, refreshAfterIntents, rebuildIntents } from "./rebuild.js";
 import { cards, setIntentIdxs, intentIdxs } from "./app-state.js";
 import { hooks } from "./hooks.js";
+import { originAmong } from "./dom.js";
+import { cssEsc } from "./css-esc.js";
 
 // The acts a star, a hide or a removal performs on the desk's own lists, and the order
 // invariant they all have to keep. Whether something IS starred is asked in pack.js.
@@ -72,9 +74,13 @@ function syncIntentOrder(){
    recoverable by Reset because it lives in the pack and the catalog keeps the entry. A
    custom has nothing to recover from and is spliced for real - Reset wipes customs anyway,
    so "Reset brings it back" stays true either way. */
-function removeCard(id){
+/* A deletion's Undo hangs from the thing's own control, in the Library or else on the desk, read before it goes so the
+   Undo hangs from the one now in its place; `from` names another. */
+function removeCard(id, from){
   if(!id) return false;
   const m=findCard(id);
+  from=from||originAmong([['[data-remove-card="'+cssEsc(id)+'"]'], ['#list .card[data-id="'+cssEsc(id)+'"]', "#list .card[data-id]"]],
+    ()=>document.querySelector('#pills [data-k="'+cssEsc(m&&m.c||"")+'"]'));
   const isCustom=!!(m&&m._custom);
   const was=packSnapshot();
   if(isCustom) pack.custom=(pack.custom||[]).filter(x=>x&&x.id!==id);
@@ -92,7 +98,7 @@ function removeCard(id){
   offerUndo("Card deleted", ()=>{
     back(); hooks.cardOrderTouched(); rebuildCards(); hooks.render(); drawPills();
     if(document.getElementById("mgCatList") && (document.getElementById("modal").hidden || document.getElementById("modal").classList.contains("ed-rest"))) hooks.openManage();
-  });
+  }, null, from);
   return true;
 }
 /* No in-place title rename here - a card has a full editor, so there is one rename
@@ -111,9 +117,11 @@ function shiftIntentIdxAfterRemoval(at){
   }
   saveIntentOrder();
 }
-function removeIntent(id){
+function removeIntent(id, from){
   if(!id) return false;
   const idx=intentIdxFromId(id);
+  from=from||originAmong([['[data-remove-intent="'+cssEsc(id)+'"]'], ['#intentRail [data-si="'+idx+'"]', "#intentRail [data-si]"]],
+    ()=>document.getElementById("intentRail"));
   const isCustom=idx>=0 && intentIsCustom(idx);
   /* Undo puts back what a custom's removal shifts as well: the order, the selection, every tab's,
      by undoing the shift, so a choice made in between stands. */
@@ -149,7 +157,7 @@ function removeIntent(id){
     }
     refreshAfterIntents();
     if(document.getElementById("mgCatList") && (document.getElementById("modal").hidden || document.getElementById("modal").classList.contains("ed-rest"))) hooks.openManage();
-  });
+  }, null, from);
   return true;
 }
 /** Hidden intents stay in the panel, greyed and at the bottom, and drop out of every search

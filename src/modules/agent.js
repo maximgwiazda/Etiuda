@@ -157,8 +157,10 @@ function askAgentName(raw,then,anchor){
   const inp=wireNameField(wrap,raw);
   const place=()=>{
     const r=(anchor && anchor.isConnected) ? anchor.getBoundingClientRect() : null;
-    placeBubble(wrap, (r && r.width) ? {top:r.top, left:r.left, width:r.width, height:r.height}
-      : {top:innerHeight/2, left:innerWidth/2, width:0, height:0}, {width:340});
+    const m=(r && r.width) ? null : document.getElementById("settingsBtn"), b=m && m.getBoundingClientRect();
+    if(r && r.width) placeBubble(wrap, {top:r.top, left:r.left, width:r.width, height:r.height}, {width:340});
+    else if(b && b.width) placeBubble(wrap, {top:b.top, left:b.left, width:b.width, height:b.height}, {width:340});
+    else wrap.setAttribute("data-side","none");
   };
   place();
   addEventListener("resize",place);

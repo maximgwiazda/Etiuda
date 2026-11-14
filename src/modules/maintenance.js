@@ -16,6 +16,8 @@ import { ejectCatalog } from "./local-memory.js";
 import { tabs } from "./tabs.js";
 import { mgSystemStill, M_STILL_Q } from "./motion.js";
 import { tc, fileStamp, t, toast } from "./ui-lang.js";
+import { cutLeaves, dismissNode } from "./motion.js";
+import { hangBubble } from "./bubble.js";
 import { openScreenTab, registerScreen } from "./screen-tabs.js";
 import { pack } from "./pack.js";
 import { RAIL_DOCK_MIN, railLocked, railMaxWidth } from "./rail-panel.js";
@@ -552,38 +554,54 @@ function mtResetRow(){
     +'<small>'+esc(t("Returns this desk to a fresh install, keeping only the licence."))+'</small></div>'
     +'<div class="set-ctl"><button type="button" class="btn danger" id="mtReset">'+esc(t("Reset Etiuda"))+'</button></div></div>';
 }
+/* THE RESET'S QUESTIONS HANG FROM ITS RED BUTTON, one at a time; Escape answers as the first button does. */
+function resetAsk(cls, html, first){
+  const was=document.getElementById("eResetAsk");
+  if(was) was.remove();
+  const el=document.createElement("div");
+  el.className="bub bub-ask e-undo e-clear-ask e-reset-ask "+cls;
+  el.id="eResetAsk";
+  el.setAttribute("role","alertdialog");
+  el.setAttribute("aria-labelledby","eResetAskT");
+  el.innerHTML=html;
+  cutLeaves();
+  document.body.appendChild(el);
+  hangBubble(el, ()=>document.getElementById("mtReset"));
+  el.addEventListener("keydown",e=>{
+    if(e.key!=="Escape") return;
+    e.preventDefault(); e.stopPropagation();
+    const b=el.querySelector("#"+first);
+    if(b) b.click();
+  });
+  return el;
+}
 /* The press stays disabled until the field is exactly the word, and the page never touches the disk. */
 function openResetConfirm(){
-  openDialog({
-    cls:"mt-reset-confirm",
-    title:"Reset Etiuda?",
-    body:'<p>'+esc(t("Reset removes every catalog file in Etiuda's own folder, the team, the agent's name, settings, open conversations and every local change. Catalog files in any other folder stay, and so does the licence."))+'</p>'
-      +'<p class="mt-reset-warn">'+esc(t("There is no Undo. Joining the team again takes a new invitation from its lead."))+'</p>'
-      +'<label class="mf">'+esc(t("Type RESET to confirm."))
-      +'<input type="text" id="mtResetWord" autocomplete="off" spellcheck="false"></label>',
-    actions:'<button type="button" class="btn" id="mtResetCancel">'+esc(t("Cancel"))+'</button>'
-      +'<button type="button" class="btn danger" id="mtResetGo" disabled>'+esc(t("Reset Etiuda"))+'</button>',
-    wire:()=>{
-      const word=$("#mtResetWord"), go=$("#mtResetGo");
-      const ready=()=>!!word && /^reset$/i.test(String(word.value||"").trim());
-      const sync=()=>{ if(go) go.disabled=!ready(); };
-      if(word) word.addEventListener("input", sync);
-      sync();
-      const cancel=$("#mtResetCancel");
-      if(cancel) cancel.onclick=()=>dismissModal();
-      if(go) go.onclick=()=>{
-        if(!ready()) return;
-        dismissModal();
-        const h=eHost();
-        if(!h || typeof h.resetDesk!=="function") return;
-        let answer=null;
-        try{ answer=h.resetDesk(); }catch(e){ return; }
-        const say=()=>{ try{ toast(t("Etiuda is starting again as freshly installed.")); }catch(e){} };
-        if(answer && typeof answer.then==="function") answer.then(r=>{ if(r && r.ok) say(); },()=>{});
-        else if(answer && answer.ok) say();
-      };
-    }
-  });
+  const el=resetAsk("mt-reset-confirm",
+    '<h3 id="eResetAskT">'+esc(t("Reset Etiuda?"))+'</h3>'
+    +'<p>'+esc(t("Reset removes every catalog file in Etiuda's own folder, the team, the agent's name, settings, open conversations and every local change. Catalog files in any other folder stay, and so does the licence."))+'</p>'
+    +'<p class="mt-reset-warn">'+esc(t("There is no Undo. Joining the team again takes a new invitation from its lead."))+'</p>'
+    +'<label>'+esc(t("Type RESET to confirm."))
+    +'<input type="text" class="e-reset-inp" id="mtResetWord" autocomplete="off" spellcheck="false"></label>'
+    +'<div class="tour-actions"><button type="button" class="btn" id="mtResetCancel">'+esc(t("Cancel"))+'</button>'
+    +'<button type="button" class="btn danger" id="mtResetGo" disabled>'+esc(t("Reset Etiuda"))+'</button></div>',
+    "mtResetCancel");
+  const word=el.querySelector("#mtResetWord"), go=el.querySelector("#mtResetGo");
+  const ready=()=>/^reset$/i.test(String(word.value||"").trim());
+  word.addEventListener("input", ()=>{ go.disabled=!ready(); });
+  el.querySelector("#mtResetCancel").onclick=()=>dismissNode(el);
+  go.onclick=()=>{
+    if(!ready()) return;
+    dismissNode(el);
+    const h=eHost();
+    if(!h || typeof h.resetDesk!=="function") return;
+    let answer=null;
+    try{ answer=h.resetDesk(); }catch(e){ return; }
+    const say=()=>{ try{ toast(t("Etiuda is starting again as freshly installed.")); }catch(e){} };
+    if(answer && typeof answer.then==="function") answer.then(r=>{ if(r && r.ok) say(); },()=>{});
+    else if(answer && answer.ok) say();
+  };
+  try{ word.focus({preventScroll:true}); }catch(_){}
 }
 const RESET_LEFT="The reset of Etiuda did not finish. Could not be removed, perhaps in use by another program or an open folder: {PATH}.";
 const RESET_NEXT="Trying again finishes it once they are closed; stopping it keeps this desk as it is now.";
@@ -591,46 +609,42 @@ function unfinishedLine(info){
   const names=info && Array.isArray(info.paths) ? info.paths.filter(p=>typeof p==="string" && p) : [];
   return t(RESET_LEFT).replace("{PATH}", names.join(", "));
 }
-/* Said at the start that found the reset unfinished. The path is filled after translation,
-   so the sentence stays the copywriter's in both languages. */
+/* Said at the start that found the reset unfinished, from the reset's own button: Maintenance opens on the page that
+   holds it. The path is filled after translation, so the sentence stays the copywriter's in both languages. */
 function openUnfinishedReset(info){
   const line=unfinishedLine(info);
-  openDialog({
-    cls:"mt-reset-unfinished",
-    title:RESET_LEFT,
-    body:'<p>'+esc(RESET_NEXT)+'</p>',
-    actions:'<button type="button" class="btn" id="mtResetStop">'+esc(t("Stop the reset"))+'</button>'
-      +'<button type="button" class="btn danger" id="mtResetAgain">'+esc(t("Try again"))+'</button>',
-    wire:()=>{
-      const title=document.querySelector("#modalTitle .modal-t");
-      if(title){
-        title.textContent=line;
-        title.setAttribute("data-i18n-skip","");
-      }
-      const stop=$("#mtResetStop"), again=$("#mtResetAgain");
-      if(stop) stop.onclick=()=>{
-        const h=eHost();
-        const done=()=>dismissModal();
-        if(!h || typeof h.stopReset!=="function"){ done(); return; }
-        let answer=null;
-        try{ answer=h.stopReset(); }catch(e){ done(); return; }
-        if(answer && typeof answer.then==="function") answer.then(done, done);
-        else done();
-      };
-      if(again) again.onclick=()=>{
-        const h=eHost();
-        if(!h || typeof h.retryReset!=="function") return;
-        let answer=null;
-        try{ answer=h.retryReset(); }catch(e){ return; }
-        const take=r=>{
-          if(r && r.ok){ dismissModal(); return; }
-          if(r && r.notice && Array.isArray(r.paths)) openUnfinishedReset({paths:r.paths});
-        };
-        if(answer && typeof answer.then==="function") answer.then(take, ()=>{});
-        else take(answer);
-      };
-    }
-  });
+  mtOn="storage";
+  openMaintenance();
+  const page=document.querySelector('.sx-sec[data-mt="storage"]');
+  if(page && !page.classList.contains("on")) page.click();
+  const el=resetAsk("mt-reset-unfinished",
+    '<h3 id="eResetAskT" data-i18n-skip></h3>'
+    +'<p>'+esc(t(RESET_NEXT))+'</p>'
+    +'<div class="tour-actions"><button type="button" class="btn" id="mtResetStop">'+esc(t("Stop the reset"))+'</button>'
+    +'<button type="button" class="btn danger" id="mtResetAgain">'+esc(t("Try again"))+'</button></div>',
+    "mtResetStop");
+  el.querySelector("#eResetAskT").textContent=line;
+  const done=()=>dismissNode(el);
+  el.querySelector("#mtResetStop").onclick=()=>{
+    const h=eHost();
+    if(!h || typeof h.stopReset!=="function"){ done(); return; }
+    let answer=null;
+    try{ answer=h.stopReset(); }catch(e){ done(); return; }
+    if(answer && typeof answer.then==="function") answer.then(done, done);
+    else done();
+  };
+  el.querySelector("#mtResetAgain").onclick=()=>{
+    const h=eHost();
+    if(!h || typeof h.retryReset!=="function") return;
+    let answer=null;
+    try{ answer=h.retryReset(); }catch(e){ return; }
+    const take=r=>{
+      if(r && r.ok){ done(); return; }
+      if(r && r.notice && Array.isArray(r.paths)) openUnfinishedReset({paths:r.paths});
+    };
+    if(answer && typeof answer.then==="function") answer.then(take, ()=>{});
+    else take(answer);
+  };
 }
 function armResetNotice(){
   const h=eHost();
@@ -730,6 +744,7 @@ function openMaintenance(backFn){
 
 export {
   armResetNotice,
+  openUnfinishedReset,
   wireMaintenanceWatch,
   mtRefreshLive,
   openMaintenance,

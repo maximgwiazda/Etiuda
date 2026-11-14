@@ -8659,7 +8659,7 @@ const CARD_B = {
         const c0 = at().join(",");
         drag(600, 160, 900, 600);
         return eq([names.sort().join(",") + " of " + sites, about, at().join(",") === c0, store() === kept].join(" || "),
-          "card-editor.js:card,editors.js:category,editors.js:intent of 9 || false||| || true || true");
+          "card-editor.js:card,editors.js:category,editors.js:intent of 7 || false||| || true || true");
       });
   } finally {
     Date.now = hadNow;

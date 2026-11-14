@@ -70,6 +70,53 @@ function placeBubble(el, target, opts){
   tip.style.top  = ty==null ? "" : (ty-BUB.tip/2)+"px";
   return {side:side, top:top, left:left, tip:tx==null?ty:tx, width:w, height:h};
 }
+/* HUNG FROM ITS ORIGIN FOR AS LONG AS IT STANDS: `origin` (an element, or a function answering one) is asked again
+   at every placing, since a repaint replaces the control. Where it answers nothing the bubble stays where it last
+   stood, or at its own resting place if it never stood anywhere; while the control is scrolled out of the window it
+   rests there too, so it is never hung off screen, and hangs again when the control comes back. Call it once `el` is
+   in the document. */
+function hangBubble(el, origin, opts){
+  if(!el || !el.isConnected) return ()=>{};
+  let raf=0, placed=false;
+  const box=()=>{
+    let o=null;
+    try{ o=typeof origin==="function" ? origin() : origin; }catch(e){ o=null; }
+    if(!o || !o.isConnected) return null;
+    const r=o.getBoundingClientRect();
+    return (r.width || r.height) ? r : null;
+  };
+  const on=typeof addEventListener==="function" && typeof removeEventListener==="function";
+  const drop=()=>{
+    mo.disconnect();
+    if(on){ removeEventListener("resize", again); removeEventListener("scroll", again, {capture:true}); }
+    if(raf) cancelAnimationFrame(raf); raf=0;
+  };
+  const place=()=>{
+    raf=0;
+    if(!el.isConnected){ drop(); return; }
+    const r=box();
+    const away=!!r && (r.bottom<=0 || r.right<=0 || r.top>=innerHeight || r.left>=innerWidth);
+    if(!r && placed) return;
+    if(!r || away){
+      el.setAttribute("data-side","none");
+      el.style.top=el.style.left=el.style.right=el.style.bottom="";
+      placed=false;
+      return;
+    }
+    placeBubble(el, {top:r.top, left:r.left, width:r.width, height:r.height}, opts);
+    placed=true;
+  };
+  const again=()=>{ if(!raf && typeof requestAnimationFrame==="function") raf=requestAnimationFrame(place); };
+  const mo=typeof MutationObserver!=="function" ? {observe(){}, disconnect(){}} : new MutationObserver(rs=>{
+    if(!el.isConnected){ drop(); return; }
+    if(!rs.every(m=>el.contains(m.target))) again();
+  });
+  if(document.body) mo.observe(document.body, {subtree:true, childList:true, attributes:true, attributeFilter:["hidden","open","class","style"]});
+  if(on){ addEventListener("resize", again, {passive:true}); addEventListener("scroll", again, {passive:true, capture:true}); }
+  place();
+  return drop;
+}
 export {
-  placeBubble
+  placeBubble,
+  hangBubble
 };
