@@ -117,6 +117,34 @@ function folderSyncerFailed(e) {
    is passed; automatic detection or a failed read leaves Chromium's resolver. */
 const { windowsProxySwitches } = require(path.join(__dirname, "win-proxy.cjs"));
 for (const s of windowsProxySwitches()) app.commandLine.appendSwitch(...s);
+/* A PROXY THAT ASKS FOR A SIGN-IN (shell/proxy-net.cjs): every call the shell makes goes through deskFetch, and a challenge
+   Chromium cannot answer with the Windows account is asked of the person on the page, once per proxy, the answer held in
+   memory for this run and never written or logged. The relay's socket follows the proxy Chromium names (relayConnect). */
+const proxyNet = require(path.join(__dirname, "proxy-net.cjs"));
+const proxyAsks = new Map();
+let proxyAskSeq = 0;
+const deskProxy = proxyNet.proxyAsker({
+  ask: info => new Promise(resolve => { proxyAsks.set(++proxyAskSeq, { info, resolve }); proxyAskShow(); }),
+  say: line => console.error("etiuda: " + line),
+});
+function deskFetch(u, init) {
+  if (net && typeof net.request === "function") return proxyNet.fetchThrough(net, u, init, deskProxy.forRequest()); /* plant:desk-fetch-login */
+  return net && typeof net.fetch === "function" ? net.fetch(u, init) : Promise.reject(new Error("no network here"));
+}
+/* Every question still open goes to the page whenever it loads, so one asked before the window opened waits for it. */
+function proxyAskShow() {
+  const win = theWindow;
+  if (!win || win.isDestroyed()) return;
+  for (const [id, a] of proxyAsks) win.webContents.send("etiuda:proxy-ask", { id, host: a.info.host, port: a.info.port, again: a.info.again });
+}
+ipcMain.handle("etiuda:proxy-answer", (e, id, username, password) => {
+  if (!fromEngine(e)) return false;
+  const a = proxyAsks.get(Number(id));
+  if (!a) return false;
+  proxyAsks.delete(Number(id));
+  a.resolve(typeof username === "string" && username !== "" ? { username, password: typeof password === "string" ? password : "" } : null);
+  return true;
+});
 
 /* ON LINUX THE KEYRING IS ASKED FOR BY NAME WHERE CHROMIUM WOULD NOT ASK FOR ONE. Before ready Chromium names the desktop
    (base/nix/xdg_util.cc, which chromiumDesktop follows line for line) and picks a store (SelectBackend, in Electron's
@@ -7046,7 +7074,7 @@ async function relayRequest(method, url, headers, body) {
   if (!/^https:\/\//.test(String(url))) throw new Error("the relay is reached over https only");
   const init = { method: method, headers: headers, body: body || undefined, redirect: "error", cache: "no-store" };
   init.credentials = "omit"; /* plant:relay-credentials */
-  const res = await (net && typeof net.fetch === "function" ? net.fetch(url, init) : fetch(url, init));
+  const res = await (net && typeof net.fetch === "function" ? deskFetch(url, init) : fetch(url, init)); /* plant:relay-fetch-proxy */
   const bytes = Buffer.from(await res.arrayBuffer());
   return { status: res.status, header: n => res.headers.get(n), bytes: bytes };
 }
@@ -7054,6 +7082,11 @@ async function relayRequest(method, url, headers, body) {
    layer then asks on a timer. `opens` says the layer is told when it opens, so a close before that reads as refused. */
 function relayConnect(url, headers, on) {
   if (typeof WebSocket !== "function" || !/^wss:\/\//.test(String(url))) return null;
+  if (session && session.defaultSession) return proxyNet.proxiedConnect(url, headers, on, { resolve: u => session.defaultSession.resolveProxy(u), direct: relaySocket, asker: deskProxy }); /* plant:relay-socket-proxy */
+  return relaySocket(url, headers, on);
+}
+/* The runtime's own socket, where Chromium names no proxy for the relay. */
+function relaySocket(url, headers, on) {
   const ws = new WebSocket(url, { headers: headers });
   ws.onopen = () => { if (typeof on.open === "function") on.open(); };
   ws.onmessage = e => on.message(typeof e.data === "string" ? e.data : Buffer.from(e.data).toString("utf8"));
@@ -10319,8 +10352,8 @@ function signinIo(run) {
     /* The page is told the provider's page before the browser is asked, so a browser that does not open (Linux resolves
        the system browser call all the same) leaves the person its link to paste. */
     openPage: url => { if (!signinPageOk(url)) return false; run.url = url; tellSignin(); return Promise.resolve(handOut(url)).then(() => true); }, /* plant:signin-open */
-    tokenAsk: (url, form) => signinRequest((u, init) => net.fetch(u, init), url, form),
-    serviceAsk: (url, body) => signinServiceAsk((u, init) => net.fetch(u, init), url, body),
+    tokenAsk: (url, form) => signinRequest((u, init) => deskFetch(u, init), url, form),
+    serviceAsk: (url, body) => signinServiceAsk((u, init) => deskFetch(u, init), url, body),
     sign: signinSign,
     keep: text => signinKeep(safeStorage, process.platform, text), kept: sealed => signinKept(safeStorage, sealed),
     page: kind => signinPageHtml(kind),
@@ -10717,7 +10750,7 @@ function armNoteLook() {
   /* Not from any harness start (harnessLaunch: --user-data-dir or a test variable), so no leg ever asks production etiuda.dev. */
   if (PLACED_ASIDE || harnessLaunch() || updateLookOff() || noteTimer || !net || typeof net.fetch !== "function") return;
   const next = () => {
-    lookForNote((u, init) => net.fetch(u, init)).catch(() => {});
+    lookForNote((u, init) => deskFetch(u, init)).catch(() => {});
     noteTimer = setTimeout(next, NOTE_EVERY_MS);
     if (noteTimer.unref) noteTimer.unref();
   };
@@ -11930,7 +11963,7 @@ function deskAiState(state) {
   if (win && !win.isDestroyed()) win.webContents.send("etiuda:ai-ranking", state);
 }
 function deskAiFetch(u, init) {
-  return net && typeof net.fetch === "function" ? net.fetch(u, init) : Promise.reject(new Error("no network here"));
+  return deskFetch(u, init);
 }
 const deskReorder = deskAi.createReorder({ config: () => deskAiConfig(), fetch: deskAiFetch, onState: deskAiState });
 /* An agent's key, click, wheel or scroll in each window, counted, so an order that comes after one is dropped. */
@@ -12412,6 +12445,7 @@ function createWindow() {
   win.webContents.on("did-finish-load", () => { const lost = win.webContents.etiudaLost; if (lost) lost.back = true; });
   win.webContents.on("did-finish-load", () => { setTimeout(() => { tryLiveStats(win); tryHeldBranches(); sendListing(win, true); handOpenedOffRoster(win); }, 0); });
   win.webContents.on("did-finish-load", () => { handHeldLink(win); }); /* plant:link-load */
+  win.webContents.on("did-finish-load", () => { proxyAskShow(); });
   win.webContents.on("did-finish-load", () => { setTimeout(warmSuggestSoon, EMBED_WARM_DELAY_MS); });
   win.webContents.once("did-finish-load", () => { dispatchColdStartArgs(win); });
   win.webContents.on("did-finish-load", () => { if (resetNotice) deliverResetNotice(win, resetNotice); });

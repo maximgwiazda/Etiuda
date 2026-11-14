@@ -4433,9 +4433,11 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
   pointer-events:none}
 #eNotices .bub{position:relative;pointer-events:auto}
 /* A field on the fill: paper, so what is typed reads as the reader's own. */
-.bub .e-name-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
+.bub .e-name-inp,.bub .e-proxy-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
   border:1px solid transparent;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans)}
-.bub .e-name-inp:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.bub .e-name-inp:focus-visible,.bub .e-proxy-inp:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.bub .e-proxy-inp+.e-proxy-inp{margin-top:8px}
+.bub .e-proxy-inp:last-of-type{margin-bottom:10px}
 .bub .e-greet{color:var(--bub-ink);margin:8px 0 10px}
 .tour-field{margin:0 0 4px}
 .bub .e-greet .e-name-ph{color:var(--bub-dim);opacity:.8}
@@ -8693,6 +8695,10 @@ What you type stays in this browser only.`;
     "for instance, Kate": "na przykład Kasia",
     "Kate": "Kasia",
     "Sign with this": "Podpisz",
+    "The network proxy asks for a sign-in": "Serwer proxy w sieci prosi o zalogowanie",
+    "The proxy asked again, so the user name or password may need another look.": "Serwer proxy zapytał ponownie, więc nazwę użytkownika lub hasło warto sprawdzić jeszcze raz.",
+    "User name": "Nazwa użytkownika",
+    "Password": "Hasło",
     "Beside the customer's name there is now a wheel: it chooses who in the team this reply names.": "Obok imienia klienta jest teraz kółko: wybiera się nim osobę z zespołu, którą wymienia ta odpowiedź.",
     "No catalog loaded": "Nie wczytano katalogu",
     "Test build: sign-in goes to Etiuda's test service, not the real one.": "Wersja testowa: logowanie trafia do testowej usługi Etiudy, nie do prawdziwej.",
@@ -41335,8 +41341,100 @@ What you type stays in this browser only.`;
     }
   }
 
+  // src/modules/proxy-ask.js
+  var proxy_ask_exports = {};
+  __export(proxy_ask_exports, {
+    wireProxyAsk: () => wireProxyAsk
+  });
+  var proxyAskQueue = /* @__PURE__ */ new Map();
+  var proxyAskShown = 0;
+  function proxyAskHost() {
+    const h = eHost();
+    return h && typeof h.onProxyAsk === "function" && typeof h.proxyAnswer === "function" ? h : null;
+  }
+  function proxyAskTake(q) {
+    const id = q && Number.isInteger(q.id) && q.id > 0 ? q.id : 0;
+    if (!id || proxyAskQueue.has(id)) return;
+    proxyAskQueue.set(id, { id, host: String(q.host || ""), port: Number.isInteger(q.port) ? q.port : 0, again: q.again === true });
+    if (!proxyAskShown) proxyAskNext();
+  }
+  function proxyAskNext() {
+    const q = proxyAskQueue.values().next().value;
+    proxyAskShown = q ? q.id : 0;
+    if (q) proxyAskOpen(q);
+  }
+  function proxyAskSend(id, username, password) {
+    proxyAskQueue.delete(id);
+    const h = proxyAskHost();
+    try {
+      if (h) Promise.resolve(h.proxyAnswer(id, username, password)).catch(() => {
+      });
+    } catch (e) {
+    }
+    proxyAskNext();
+  }
+  function proxyAskTyping() {
+    const a = document.activeElement;
+    return !!(a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.tagName === "SELECT" || a.isContentEditable));
+  }
+  function proxyAskOpen(q) {
+    const wrap = document.createElement("div");
+    wrap.className = "bub bub-ask";
+    wrap.id = "eProxyAsk";
+    wrap.setAttribute("role", "dialog");
+    wrap.setAttribute("aria-labelledby", "eProxyTitle");
+    wrap.innerHTML = '<h3 id="eProxyTitle">The network proxy asks for a sign-in</h3><p><code class="e-proxy-at" data-i18n-skip></code></p>' + (q.again ? "<p>" + t("The proxy asked again, so the user name or password may need another look.") + "</p>" : "") + '<input class="e-proxy-inp" id="eProxyUser" type="text" autocomplete="off" spellcheck="false" placeholder="User name" aria-label="User name"><input class="e-proxy-inp" id="eProxyPass" type="password" autocomplete="off" spellcheck="false" placeholder="Password" aria-label="Password"><div class="tour-actions"><button type="button" class="btn" id="eProxyNo">Not now</button><button type="button" class="btn primary" id="eProxyYes">Sign in</button></div>';
+    wrap.querySelector(".e-proxy-at").textContent = q.host + (q.port ? ":" + q.port : "");
+    cutLeaves();
+    document.body.appendChild(wrap);
+    translateTree(wrap);
+    const user = wrap.querySelector("#eProxyUser"), pass = wrap.querySelector("#eProxyPass");
+    const place = () => placeBubble(wrap, { top: innerHeight / 2, left: innerWidth / 2, width: 0, height: 0 }, { width: 340 });
+    place();
+    addEventListener("resize", place);
+    let done = false;
+    const answer = (name, word) => {
+      if (done) return;
+      done = true;
+      user.value = "";
+      pass.value = "";
+      removeEventListener("resize", place);
+      dismissNode(wrap);
+      proxyAskSend(q.id, name, word);
+    };
+    const proxySignIn = () => {
+      const name = String(user.value || "").trim();
+      answer(name, name ? String(pass.value || "") : "");
+    };
+    const notNow = () => answer("", "");
+    wrap.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        notNow();
+        return;
+      }
+      if (e.key === "Enter" && (e.target === user || e.target === pass)) {
+        e.preventDefault();
+        e.stopPropagation();
+        proxySignIn();
+      }
+    });
+    wrap.querySelector("#eProxyYes").onclick = proxySignIn;
+    wrap.querySelector("#eProxyNo").onclick = notNow;
+    if (!proxyAskTyping()) try {
+      user.focus();
+    } catch (e) {
+    }
+  }
+  function wireProxyAsk() {
+    const h = proxyAskHost();
+    if (!h) return;
+    h.onProxyAsk(proxyAskTake);
+  }
+
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_margin_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, launch_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, deck_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports, edition_marks_exports, screen_tabs_exports, search_meaning_exports, org_model_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_margin_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, launch_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, deck_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports, edition_marks_exports, screen_tabs_exports, search_meaning_exports, org_model_exports, proxy_ask_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
@@ -41580,6 +41678,7 @@ What you type stays in this browser only.`;
     maybeStartTour();
     wireHostCatalogWatch();
     wirePick();
+    wireProxyAsk();
     wireCatalogDrop();
     setTimeout(() => {
       try {

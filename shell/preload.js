@@ -288,6 +288,14 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   buyState: () => ipcRenderer.sendSync("etiuda:buy-state"),
   openBuyPage: () => ipcRenderer.invoke("etiuda:buy-open"),
   onSignin: (fn) => ipcRenderer.on("etiuda:signin", (_e, v) => { try { fn(v && typeof v === "object" ? v : {}); } catch { /* the page has gone */ } }),
+  /* A proxy's question for a user name and password, as {id, host, port, again}, and the page's answer to it by id;
+     an empty user name is "Not now". The answer is handed to the shell and kept nowhere on this side. */
+  onProxyAsk: (fn) => ipcRenderer.on("etiuda:proxy-ask", (_e, v) => {
+    const q = v && typeof v === "object" ? v : {};
+    const ask = { id: Number.isInteger(q.id) && q.id > 0 ? q.id : 0, host: typeof q.host === "string" ? q.host : "", port: Number.isInteger(q.port) && q.port > 0 && q.port < 65536 ? q.port : 0, again: q.again === true }; /* plant:proxy-ask-clean */
+    try { fn(ask); } catch { /* the page has gone */ }
+  }),
+  proxyAnswer: (id, username, password) => ipcRenderer.invoke("etiuda:proxy-answer", Number(id) || 0, String(username == null ? "" : username), String(password == null ? "" : password)), /* plant:proxy-answer-strings */
   /* Returns this desk to a fresh install. The shell does the work on the next start. */
   resetDesk: () => ipcRenderer.invoke("etiuda:desk-reset"),
   /* A reset that could not finish. The page asks to try again, or to stop and keep the desk. */

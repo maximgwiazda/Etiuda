@@ -109,7 +109,7 @@ module.exports = sellerAddress.sellerConfig(testService.testServiceConfig({
   // for a team on the relay (board 900). The two under shell/folder/ are the folder mirror's syncer and
   // its worker, which the shell requires only for a team in a shared folder (board 945 stage 3 (b)).
   // The three under shell/embed/ run the embedded model, whose files sit beside the asar, not in it.
-  files: ["package.json", "shell/main.js", "shell/preload.js", "shell/win-proxy.cjs", "shell/page-watch.cjs", "shell/clip-suggest.cjs", "shell/desk-ai.cjs", "shell/desk-reset.cjs", "shell/tray.cjs",
+  files: ["package.json", "shell/main.js", "shell/preload.js", "shell/win-proxy.cjs", "shell/page-watch.cjs", "shell/proxy-net.cjs", "shell/clip-suggest.cjs", "shell/desk-ai.cjs", "shell/desk-reset.cjs", "shell/tray.cjs",
           "shell/relay/channel.cjs", "shell/relay/blob.cjs", "shell/folder/syncer.cjs", "shell/folder/syncer-worker.cjs",
           "shell/embed/suggest.cjs", "shell/embed/core.cjs", "shell/embed/worker.cjs",
           "engine/etiuda.html", "engine/etiuda.csp.json", "shell/sample-catalog.ec",
