@@ -12,6 +12,7 @@
  *   957o7 no frames and a ready that never comes gives way by the failsafe
  *   957o8 reduced motion: a ready that never comes gives way by the failsafe
  *   1110o9 a folder that holds nothing does not say a catalog is offered; a listing that holds one does, in English and in Polish
+ *   1001o10 the corner mark, the opening gone, is drawn at its size: its canvas's ink spans most of the tile, at ratio 1 and 1.5
  *
  * Exit code is the number of failed checks.
  */
@@ -468,6 +469,39 @@ async function run() {
       const ok8 = beforeFailsafe.launchActive && !beforeFailsafe.ended && afterFailsafe.launchGone && afterFailsafe.reasonFailsafe;
       check(ok8, "957o8 reduced motion: a ready that never comes gives way by the failsafe");
       await page.close();
+    }
+
+    /* -------------------------------------------------------------------------
+     * 1001o10: the corner mark, the opening gone, is drawn at its size: the ink on its canvas, taken to CSS pixels,
+     * spans most of the 25 px tile both ways, at a device pixel ratio of 1 and of 1.5
+     * ------------------------------------------------------------------------- */
+    {
+      const seen = [];
+      for (const dpr of [1, 1.5]) {
+        const page = await browser.newPage();
+        await page.setViewport({ width: 1024, height: 768, deviceScaleFactor: dpr });
+        await page.goto("file://" + ENGINE_HTML);
+        const gone = await waitLaunchGone(page);
+        await sleep(400);
+        const m = await page.evaluate(() => {
+          const tile = document.querySelector(".brand-tile"), cv = tile && tile.querySelector("canvas.brand-fifth");
+          if (!cv || getComputedStyle(cv).display === "none") return { why: "no turning canvas" };
+          const r = cv.getBoundingClientRect(), d = cv.getContext("2d").getImageData(0, 0, cv.width, cv.height).data;
+          let x1 = Infinity, y1 = Infinity, x2 = -1, y2 = -1;
+          for (let y = 0; y < cv.height; y++) for (let x = 0; x < cv.width; x++) {
+            if (d[(y * cv.width + x) * 4 + 3] > 0) { x1 = Math.min(x1, x); y1 = Math.min(y1, y); x2 = Math.max(x2, x); y2 = Math.max(y2, y); }
+          }
+          if (x2 < 0) return { why: "no ink" };
+          const round = v => Math.round(v * 10) / 10;
+          return { tile: round(r.width), bitmap: cv.width + "x" + cv.height,
+            w: round((x2 - x1 + 1) * r.width / cv.width), h: round((y2 - y1 + 1) * r.height / cv.height) };
+        });
+        seen.push(Object.assign({ dpr, gone }, m));
+        await page.close();
+      }
+      const ok10 = seen.every(s => s.gone && !s.why && s.w >= 0.8 * s.tile && s.h >= 0.8 * s.tile && s.w <= s.tile && s.h <= s.tile);
+      check(ok10, "1001o10 the corner mark, the opening gone, is drawn at its size: its ink spans most of the tile both ways "
+        + seen.map(s => "(ratio " + s.dpr + ": " + (s.why || s.w + " by " + s.h + " px of " + s.tile + ", bitmap " + s.bitmap) + ")").join(" "));
     }
 
     /* -------------------------------------------------------------------------

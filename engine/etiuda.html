@@ -25799,7 +25799,6 @@ What you type stays in this browser only.`;
       const dpr = globalThis.devicePixelRatio || 1;
       const w0 = tile.clientWidth, h0 = tile.clientHeight;
       const w = w0 > 0 ? w0 : box.w, h = h0 > 0 ? h0 : box.h;
-      if (w === box.w && h === box.h && dpr === box.dpr && cv.width) return;
       box.w = w;
       box.h = h;
       box.dpr = dpr;
