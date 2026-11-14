@@ -213,7 +213,7 @@ function mergeOnce(o) {
     const all = (mine ? [mine] : []).concat(others);
     let top = all.filter(a => !all.some(b => b !== a && !same(a, b) && over(b, a)));
     /* A setting by the later write, read from each computer's own clock (t is max(now, previous + 1) above), so within the clocks'
-       skew the faster clock's write wins: accepted for a setting, never for an edit or a file, where both are kept. */
+       skew the faster clock's write wins. */
     if (isSetting(item)) top = [top.reduce((a, b) => (b.t > a.t || (b.t === a.t && b.by > a.by) ? b : a))];
     const values = new Set(top.map(e => e.h));
     if (values.size === 1) {
