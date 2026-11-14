@@ -5,6 +5,7 @@ import { eHost, eCatalogFolderShort } from "./host.js";
 import { t, toastRefusal, offerUndo, fileStamp, catalogCountsLine } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { hooks } from "./hooks.js";
+import { originOf } from "./dom.js";
 import { parseCatalogFile, eUnreadableLine, fileReadCode, fileReadLine, editionNameOf, editionLabel, E_CATALOG_KEY } from "./catalog.js";
 import { activateCatalog } from "./catalog-file.js";
 import { eOfferCatalogDialog, toastIfSameCatalog } from "./catalog-offer.js";
@@ -86,7 +87,7 @@ function historyOpen(v){
     if(!shown) toastIfSameCatalog(c);
   }).catch(()=>{});
 }
-function historyPutBack(v){
+function historyPutBack(v, from){
   const h=historyHost(); if(!h) return;
   const refuse=()=>toastRefusal(t("{FILE} could not be put back in the catalog folder. The version stays here, ready to try again.").split("{FILE}").join(String(v.name||"")));
   Promise.resolve(h.historyPut(v.sha,v.path)).then(r=>{
@@ -95,7 +96,7 @@ function historyPutBack(v){
     if(r.replaced) offerUndo("Version put back",()=>Promise.resolve(h.historyPut(r.replaced,v.path)).then(u=>{
       if(!u || !u.ok) refuse();
       else if(document.getElementById("ehView")) openHistory();
-    }));
+    }), null, from);
   }).catch(refuse);
 }
 /* EARLIER VERSIONS IS A PAGE OF THE LIBRARY'S TAB, painted into the tab's host, and Back returns to the Library's list.
@@ -120,7 +121,7 @@ function openHistory(host){
     if(ehView){
       markCutText(ehView);
       ehView.querySelectorAll("[data-eh-open]").forEach(b=>{ b.onclick=()=>historyOpen(flat[+b.getAttribute("data-eh-open")]); });
-      ehView.querySelectorAll("[data-eh-put]").forEach(b=>{ b.onclick=()=>historyPutBack(flat[+b.getAttribute("data-eh-put")]); });
+      ehView.querySelectorAll("[data-eh-put]").forEach(b=>{ b.onclick=()=>historyPutBack(flat[+b.getAttribute("data-eh-put")], originOf(b)); });
     }
     const back=document.getElementById("ehClose");
     if(back) back.onclick=()=>hooks.openManage();

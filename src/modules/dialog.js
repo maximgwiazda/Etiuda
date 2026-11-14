@@ -10,7 +10,7 @@ import { scStopCapture } from "./shortcuts-list.js";
 import { offerUndo, t, tc, translateTree } from "./ui-lang.js";
 import { hooks } from "./hooks.js";
 import { esc } from "./esc.js";
-import { modalEl, modalCard, $, focusKey, sameControl } from "./dom.js";
+import { modalEl, modalCard, $, focusKey, sameControl, originOf } from "./dom.js";
 
 function modalOpen(){ return !modalEl.hidden; }
 /* ---- SHARED MODAL BEHAVIOUR ---------------------------------------------------------------
@@ -297,8 +297,9 @@ function edWireNav(list,cur,go){
     if(i<0||j<0||j>=list.length) return;
     /* Leaving with changes unsaved leaves at once, and Undo goes back to them. */
     const was=edDirty() ? edTyped() : null;
+    const from=originOf($(d<0 ? "#edPrev" : "#edNext"));
     edGo(()=>go(list[j]));
-    if(was) offerUndo("Moved on without saving the changes", ()=>edGo(()=>{ go(cur); edRetype(was); }));
+    if(was) offerUndo("Moved on without saving the changes", ()=>edGo(()=>{ go(cur); edRetype(was); }), null, from);
   };
   const p=$("#edPrev"), n=$("#edNext");
   if(p){ p.disabled=(i<=0); p.onclick=()=>step(-1); }
@@ -389,11 +390,13 @@ function dismissModal(){
   /* Leaving keeps the edit the way the next entry does: go back, and retype. */
   const was=edDirty()?edTyped():null;
   const ret=was?edReturn:null;
+  /* Its Undo hangs from the control that opened the editor, the catalog's name in the bar where none stands. */
+  const from=was ? originOf(modalOpener, ()=>document.getElementById("catNow")) : null;
   edBaseline=null; edReturn=null;
   const back=modalBack;
   modalBack=null;
   if(back) back(); else closeModal();
-  if(was && ret) offerUndo("Moved on without saving the changes", ()=>edNavTo(()=>{ ret.go(ret.cur); edRetype(was); }));
+  if(was && ret) offerUndo("Moved on without saving the changes", ()=>edNavTo(()=>{ ret.go(ret.cur); edRetype(was); }), null, from);
   return true;
 }
 /* A flex column with a scrolling middle, so the scrollbar sits beside the content it
@@ -712,7 +715,8 @@ function edAfterOpen(cfg, leaving){
   if(place && edNewWin){ edNewWin=false; edPlaceNewWin(); }
   if(edPlaceKind && edBaseline===null) edMarkClean();
   edSubjectOpen(cfg);
-  if(leaving) offerUndo("Moved on without saving the changes", ()=>edGo(()=>{ leaving.again(); edRetype(leaving.was); }));
+  if(leaving) offerUndo("Moved on without saving the changes", ()=>edGo(()=>{ leaving.again(); edRetype(leaving.was); }), null,
+    ()=>document.querySelector("#modalTitle .modal-t")||document.getElementById("modalTitle"));
 }
 function edGo(run){
   edStepping=true;
@@ -1168,7 +1172,7 @@ function closeAllDialogs(){
   edMulti();
   if(!modalEl.hidden) closeModal();
   if(!kept.length) return;
-  offerUndo("Moved on without saving the changes", ()=>edBringBack(kept));
+  offerUndo("Moved on without saving the changes", ()=>edBringBack(kept), null, ()=>document.getElementById("catNow"));
   const u=document.getElementById("eUndo");
   if(u) u.classList.add("e-undo-top");
 }

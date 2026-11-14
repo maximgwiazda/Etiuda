@@ -46,7 +46,7 @@ async function boot({ lang = "en", theme = "light", viewport = { width: 1280, he
   await page.evaluateOnNewDocument((lang, theme) => {
     try {
       for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eAgent", "Bench Agent"], ["eNameAsked", "1"],
-        ["eTheme", theme], ["eUiLang", lang], ["eStill", "1"]]) localStorage.setItem(k, v);
+        ["eTheme", theme], ["eUiLang", lang], ["eStill", "1"], ["eRail", "1"]]) localStorage.setItem(k, v);
     } catch (e) {}
   }, lang, theme);
   await page.goto(url, { waitUntil: "load", timeout: 60000 });
@@ -59,7 +59,11 @@ async function boot({ lang = "en", theme = "light", viewport = { width: 1280, he
 }
 
 /* The measure, in the page: where the pointer's point is against the control's box. */
-const MEASURE = String.raw`window.__bubAt = function(bub, ctl){
+const MEASURE = String.raw`window.__typeIn = function(){
+  const f=[...document.querySelectorAll("#modalCard input[type=text], #modalCard textarea")].find(x=>x.getClientRects().length && !x.disabled);
+  f.value=f.value+" more"; f.dispatchEvent(new Event("input", {bubbles:true}));
+};
+window.__bubAt = function(bub, ctl){
   if(!bub) return {why:"no bubble"};
   const side=bub.getAttribute("data-side");
   const tip=bub.querySelector(":scope > .bub-tip");
@@ -85,7 +89,8 @@ async function measure(page, act, arg) {
   return page.evaluate(sel => {
     if (!sel || sel.why) return sel || { why: "act answered nothing" };
     const bub = document.querySelector(sel.bub);
-    const ctl = sel.ctlAt ? document.querySelectorAll(sel.ctl)[sel.ctlAt] : document.querySelector(sel.ctl);
+    const all = [...document.querySelectorAll(sel.ctl)].filter(e => e.getClientRects().length && !e.closest(".e-gone,[hidden]"));
+    const ctl = all[Math.min(sel.ctlAt || 0, all.length - 1)];
     return Object.assign({ name: sel.name }, window.__bubAt(bub, ctl));
   }, sel);
 }
@@ -144,9 +149,174 @@ const QUESTIONS = [
   }],
 ];
 
+/* EVERY UNDO. Where the act takes its control away, the control expected is the one of its kind now at the same place,
+   counted among those on screen before the act (ctlAt), else the last of them. */
+const UNDOS = [
+  ["Tab closed, by its X", () => {
+    addTab(); addTab();
+    const tabsNow = document.querySelectorAll("#tabsBar .tab[data-tid]");
+    tabsNow[1].querySelector(".tab-x").click();
+    return { name: "tab-closed", bub: "#eUndo", ctl: "#tabsBar .tab[data-tid]", ctlAt: 1 };
+  }],
+  ["Tab closed, the last in the strip", () => {
+    const tabsNow = document.querySelectorAll("#tabsBar .tab[data-tid]");
+    const n = tabsNow.length;
+    tabsNow[n - 1].querySelector(".tab-x").click();
+    return { name: "tab-closed-last", bub: "#eUndo", ctl: "#tabsBar .tab[data-tid]", ctlAt: n - 1 };
+  }],
+  ["Other tabs closed", () => {
+    addTab(); addTab();
+    const keep = document.querySelectorAll("#tabsBar .tab[data-tid]")[1].dataset.tid;
+    closeOtherTabs(keep);
+    return { name: "tabs-other", bub: "#eUndo", ctl: '#tabsBar .tab[data-tid="' + keep + '"]' };
+  }],
+  ["All tabs closed", () => {
+    addTab();
+    const p = document.getElementById("pax"); p.value = "A traveller"; p.dispatchEvent(new Event("input", { bubbles: true }));
+    closeAllTabs();
+    return { name: "tabs-all", bub: "#eUndo", ctl: "#tabsBar .tab[data-tid]", ctlAt: 0 };
+  }],
+  ["Tab cleared, the one tab", () => {
+    const p = document.getElementById("pax"); p.value = "A traveller"; p.dispatchEvent(new Event("input", { bubbles: true }));
+    document.querySelector("#tabsBar .tab[data-tid] .tab-x").click();
+    return { name: "tab-cleared", bub: "#eUndo", ctl: "#tabsBar .tab[data-tid]", ctlAt: 0 };
+  }],
+  ["Card deleted in its editor, on the desk", () => {
+    const cardsNow = [...document.querySelectorAll("#list .card[data-id]")].filter(e => e.getClientRects().length);
+    const at = 1, id = cardsNow[at].dataset.id;
+    openCardEditor(id);
+    document.getElementById("meDelete").click();
+    return { name: "card-deleted-desk", bub: "#eUndo", ctl: "#list .card[data-id]", ctlAt: at };
+  }],
+  ["Card deleted, from its row in the Library", async () => {
+    openManage();
+    const seen = () => [...document.querySelectorAll("[data-remove-card]")].filter(e => e.getClientRects().length);
+    const sec = document.querySelector('.sx-sec[data-lm="catmac"], button[data-lm="catmac"]'); if (sec) sec.click();
+    await new Promise(r => setTimeout(r, 200));
+    const h = [...document.querySelectorAll("[data-toggle]")].find(b => b.getClientRects().length && b.getAttribute("aria-expanded") === "false");
+    if (h) h.click();
+    await new Promise(r => setTimeout(r, 500));
+    const rows = seen();
+    if (rows.length < 3) return { why: "the Library shows " + rows.length + " card rows" };
+    const at = 1;
+    rows[at].scrollIntoView({ block: "center" });
+    rows[at].click();
+    return { name: "card-deleted-library", bub: "#eUndo", ctl: "[data-remove-card]", ctlAt: at };
+  }],
+  ["Intent deleted, from its row in the Library", async () => {
+    openManage();
+    const sec = document.querySelector('button[data-lm="intents"]'); if (sec) sec.click();
+    await new Promise(r => setTimeout(r, 300));
+    const rows = [...document.querySelectorAll("[data-remove-intent]")].filter(e => e.getClientRects().length);
+    if (rows.length < 3) return { why: "the Library shows " + rows.length + " intent rows" };
+    const at = 1;
+    rows[at].scrollIntoView({ block: "center" });
+    rows[at].click();
+    return { name: "intent-deleted-library", bub: "#eUndo", ctl: "[data-remove-intent]", ctlAt: at };
+  }],
+  ["A name taken off the wheel, in the Library", async () => {
+    openManage();
+    const sec = document.querySelector('button[data-lm="who"]'); if (sec) sec.click();
+    await new Promise(r => setTimeout(r, 300));
+    const rows = [...document.querySelectorAll(".lw-del")].filter(e => e.getClientRects().length);
+    if (rows.length < 3) return { why: "the wheel shows " + rows.length + " names" };
+    const at = 1;
+    rows[at].scrollIntoView({ block: "center" });
+    rows[at].click();
+    return { name: "wheel-name", bub: "#eUndo", ctl: ".lw-del", ctlAt: at };
+  }],
+  ["Intent deleted, from the panel's row", () => {
+    const rows = [...document.querySelectorAll("#intentRail [data-si]")].filter(e => e.getClientRects().length);
+    if (rows.length < 3) return { why: "the panel shows " + rows.length + " rows" };
+    const at = 1;
+    removeIntent(intentIdAt(+rows[at].dataset.si));
+    return { name: "intent-deleted", bub: "#eUndo", ctl: "#intentRail [data-si]", ctlAt: at };
+  }],
+  ["Category reset, in its editor", () => {
+    const k = document.querySelector("#pills [data-k]:not([data-k=''])").dataset.k;
+    openCategoryEditor(k, true);
+    const col=[...document.querySelectorAll("#ceCols .col-opt")].find(b=>b.getAttribute("aria-pressed")!=="true");
+    col.click(); document.getElementById("ceSave").click();
+    openCategoryEditor(k, true);
+    document.getElementById("ceReset").click();
+    return { name: "category-reset", bub: "#eUndo", ctl: "#ceReset" };
+  }],
+  ["Moved on without saving, by the editor's arrow", () => {
+    const id = document.querySelector("#list .card[data-id]").dataset.id;
+    openCardEditor(id);
+    window.__typeIn();
+    const n = document.getElementById("edNext");
+    if (!n || n.disabled) return { why: "no next arrow" };
+    n.click();
+    return { name: "moved-arrow", bub: "#eUndo", ctl: "#edNext" };
+  }],
+  ["Moved on without saving, the editor closed by Escape", () => {
+    const opener = document.querySelector("#settingsBtn");
+    opener.focus();
+    openCardEditor(document.querySelector("#list .card[data-id]").dataset.id);
+    window.__typeIn();
+    dismissModal();
+    return { name: "moved-closed", bub: "#eUndo", ctl: "#settingsBtn" };
+  }],
+  ["Moved on without saving, another card opened over the typing", () => {
+    const ids = [...document.querySelectorAll("#list .card[data-id]")].map(e => e.dataset.id);
+    openCardEditor(ids[0]);
+    window.__typeIn();
+    openCardEditor(ids[1]);
+    return { name: "moved-over", bub: "#eUndo", ctl: "#modalTitle .modal-t" };
+  }],
+  ["Moved on without saving, every editor closed at once", () => {
+    openCardEditor(document.querySelector("#list .card[data-id]").dataset.id);
+    window.__typeIn();
+    closeAllDialogs();
+    return { name: "moved-all", bub: "#eUndo", ctl: "#catNow" };
+  }],
+  ["Settings reset", () => {
+    openSettings();
+    const b = document.getElementById("setReset"); b.scrollIntoView({ block: "center" });
+    b.click();
+    return { name: "settings-reset", bub: "#eUndo", ctl: "#setReset" };
+  }],
+  ["Shortcuts reset", () => {
+    openSettings();
+    const b = document.getElementById("setResetKeys"); b.scrollIntoView({ block: "center" });
+    b.click();
+    return { name: "shortcuts-reset", bub: "#eUndo", ctl: "#setResetKeys" };
+  }],
+  ["Local changes cleared", async () => {
+    openManage();
+    const sec = document.querySelector('button[data-lm="data"]'); if (sec) sec.click();
+    await new Promise(r => setTimeout(r, 300));
+    document.getElementById("mgWipe").click();
+    document.getElementById("eClearGo").click();
+    return { name: "cleared", bub: "#eUndo", ctl: "#mgBring" };
+  }],
+  ["Catalog ejected", () => {
+    openMaintenance();
+    document.getElementById("mtEject").click();
+    return { name: "ejected", bub: "#eUndo", ctl: "#mtEject" };
+  }],
+];
+async function runUndos(page, label, only) {
+  const bad = [];
+  let n = 0;
+  for (const [what, act] of UNDOS) {
+    if (only && only.indexOf(what) < 0) continue;
+    if (process.env.BUB_ONLY && what.indexOf(process.env.BUB_ONLY) < 0) continue;
+    n++;
+    const r = await measure(page, act);
+    if (!r.ok) bad.push({ what, ...r });
+    if (process.env.BUB_LOG) console.log("       " + what + " " + JSON.stringify(r));
+    await tidy(page);
+    await sleep(60);
+  }
+  check(!bad.length && n > 0, label.replace("{N}", n), bad);
+}
+
 async function runQuestions(page, label) {
   const bad = [];
   for (const [what, act] of QUESTIONS) {
+    if (process.env.BUB_ONLY && what.indexOf(process.env.BUB_ONLY) < 0) continue;
     const r = await measure(page, act);
     if (!r.ok) bad.push({ what, ...r });
     if (process.env.BUB_LOG) console.log("       " + what + " " + JSON.stringify(r));
@@ -161,6 +331,9 @@ try {
   const page = await boot();
   await runQuestions(page, "b1 the questions hang from their controls (" + QUESTIONS.length + ")");
   await page.close();
+  const p2 = await boot();
+  await runUndos(p2, "b2 every Undo hangs from the control whose act it undoes, or the one now in its place ({N})");
+  await p2.close();
 } catch (e) {
   check(false, "run crashed: " + (e && e.stack ? e.stack.split("\n").slice(0, 3).join(" | ") : e));
 } finally {

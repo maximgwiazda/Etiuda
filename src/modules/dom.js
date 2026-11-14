@@ -90,6 +90,15 @@ function originOf(el, fallback, kind){
     return seen(f) ? f : null;
   };
 }
+/* The first of [selector, kind] that is on screen, as originOf reads it; with none, the origin is `last`. */
+function originAmong(sels, last){
+  for(const [sel,kind] of sels){
+    let el=null;
+    try{ el=document.querySelector(sel); }catch(e){ el=null; }
+    if(el && el.getClientRects().length) return originOf(el, last, kind);
+  }
+  return originOf(null, last);
+}
 function grabDom(){
   list=$("#list"); pax=$("#pax"); intentEl=$("#intent");
   roleSel=$("#roleSel");
@@ -117,5 +126,6 @@ export {
   focusSame,
   sameControl,
   originOf,
+  originAmong,
   grabDom
 };

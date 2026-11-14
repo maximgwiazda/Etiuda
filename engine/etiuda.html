@@ -7135,6 +7135,7 @@ What you type stays in this browser only.`;
     list: () => list,
     modalCard: () => modalCard,
     modalEl: () => modalEl,
+    originAmong: () => originAmong,
     originOf: () => originOf,
     pax: () => pax,
     pills: () => pills,
@@ -7236,6 +7237,18 @@ What you type stays in this browser only.`;
       const f = typeof fallback2 === "function" ? fallback2() : fallback2;
       return seen(f) ? f : null;
     };
+  }
+  function originAmong(sels, last) {
+    for (const [sel, kind] of sels) {
+      let el = null;
+      try {
+        el = document.querySelector(sel);
+      } catch (e) {
+        el = null;
+      }
+      if (el && el.getClientRects().length) return originOf(el, last, kind);
+    }
+    return originOf(null, last);
   }
   function grabDom() {
     list = $("#list");
@@ -12812,6 +12825,7 @@ What you type stays in this browser only.`;
     cancelTabRename: () => cancelTabRename,
     clearTabRename: () => clearTabRename,
     closeActiveTab: () => closeActiveTab,
+    closeAllTabs: () => closeAllTabs,
     closeOtherTabs: () => closeOtherTabs,
     closeTabById: () => closeTabById,
     closedTabCount: () => closedTabCount,
@@ -13461,8 +13475,12 @@ What you type stays in this browser only.`;
     });
     refreshCatRoles();
   }
-  function removeCategory(k) {
+  function removeCategory(k, from) {
     if (!k) return false;
+    from = from || originAmong(
+      [['[data-delcat="' + cssEsc(k) + '"]'], ['#pills [data-k="' + cssEsc(k) + '"]', "#pills [data-k]"]],
+      () => document.getElementById("pills")
+    );
     if (cardCounts[k]) {
       toast("Move or delete the cards in this category first");
       return false;
@@ -13501,7 +13519,7 @@ What you type stays in this browser only.`;
       hooks.render();
       hooks.drawIntentRail();
       if (document.getElementById("mgCatList") && (document.getElementById("modal").hidden || document.getElementById("modal").classList.contains("ed-rest"))) hooks.openManage();
-    });
+    }, null, from);
     return true;
   }
 
@@ -14493,7 +14511,7 @@ What you type stays in this browser only.`;
       tabs[0] = Object.assign(blankTab(), { id: keepId });
       applyTab(tabs[0]);
       saveTabSession();
-      if (kept2) offerUndo("Tab cleared", () => reopenClosedTab(kept2));
+      if (kept2) offerUndo("Tab cleared", () => reopenClosedTab(kept2), null, tabAt(0));
       else toast("Tab cleared");
       activeHeard();
       return;
@@ -14507,8 +14525,13 @@ What you type stays in this browser only.`;
       drawTabs();
     }
     saveTabSession();
-    offerUndo("Tab closed", () => reopenClosedTab(kept));
+    offerUndo("Tab closed", () => reopenClosedTab(kept), null, tabAt(idx));
   }
+  var tabAt = (i) => () => {
+    const all = [...document.querySelectorAll("#tabsBar .tab[data-tid]")].filter((b) => b.getClientRects().length && !b.closest(".e-gone"));
+    return all[Math.min(i, all.length - 1)] || null;
+  };
+  var tabOf = (id) => () => [...document.querySelectorAll("#tabsBar .tab[data-tid]")].find((b) => b.dataset.tid === String(id)) || null;
   function closeTabById(id) {
     closeTab(id);
   }
@@ -14520,7 +14543,7 @@ What you type stays in this browser only.`;
     tabs = [keep];
     applyTab(keep);
     saveTabSession();
-    offerUndo("Other tabs closed", () => reopenClosedTab(kept));
+    offerUndo("Other tabs closed", () => reopenClosedTab(kept), null, tabOf(id));
     activeHeard();
   }
   function closedTabCount() {
@@ -14546,7 +14569,7 @@ What you type stays in this browser only.`;
     tabs = [keepId ? Object.assign(blankTab(), { id: keepId }) : blankTab()];
     applyTab(tabs[0]);
     saveTabSession();
-    if (kept) offerUndo("All tabs closed", () => reopenClosedTab(kept));
+    if (kept) offerUndo("All tabs closed", () => reopenClosedTab(kept), null, tabAt(0));
     else toast("All tabs closed");
     activeHeard();
   }
@@ -18805,11 +18828,12 @@ What you type stays in this browser only.`;
       const j = i + d;
       if (i < 0 || j < 0 || j >= list2.length) return;
       const was = edDirty() ? edTyped() : null;
+      const from = originOf($(d < 0 ? "#edPrev" : "#edNext"));
       edGo(() => go(list2[j]));
       if (was) offerUndo("Moved on without saving the changes", () => edGo(() => {
         go(cur);
         edRetype(was);
-      }));
+      }), null, from);
     };
     const p = $("#edPrev"), n = $("#edNext");
     if (p) {
@@ -18870,6 +18894,7 @@ What you type stays in this browser only.`;
   function dismissModal() {
     const was = edDirty() ? edTyped() : null;
     const ret = was ? edReturn : null;
+    const from = was ? originOf(modalOpener, () => document.getElementById("catNow")) : null;
     edBaseline = null;
     edReturn = null;
     const back = modalBack;
@@ -18879,7 +18904,7 @@ What you type stays in this browser only.`;
     if (was && ret) offerUndo("Moved on without saving the changes", () => edNavTo(() => {
       ret.go(ret.cur);
       edRetype(was);
-    }));
+    }), null, from);
     return true;
   }
   function mountModalBody() {
@@ -19239,10 +19264,15 @@ What you type stays in this browser only.`;
     }
     if (edPlaceKind && edBaseline === null) edMarkClean();
     edSubjectOpen(cfg);
-    if (leaving) offerUndo("Moved on without saving the changes", () => edGo(() => {
-      leaving.again();
-      edRetype(leaving.was);
-    }));
+    if (leaving) offerUndo(
+      "Moved on without saving the changes",
+      () => edGo(() => {
+        leaving.again();
+        edRetype(leaving.was);
+      }),
+      null,
+      () => document.querySelector("#modalTitle .modal-t") || document.getElementById("modalTitle")
+    );
   }
   function edGo(run) {
     edStepping = true;
@@ -19829,7 +19859,7 @@ What you type stays in this browser only.`;
     edMulti();
     if (!modalEl.hidden) closeModal();
     if (!kept.length) return;
-    offerUndo("Moved on without saving the changes", () => edBringBack(kept));
+    offerUndo("Moved on without saving the changes", () => edBringBack(kept), null, () => document.getElementById("catNow"));
     const u = document.getElementById("eUndo");
     if (u) u.classList.add("e-undo-top");
   }
@@ -20156,6 +20186,7 @@ What you type stays in this browser only.`;
     };
     if (resetBtn) resetBtn.onclick = (e) => {
       e.stopPropagation();
+      const from = originOf(resetBtn, () => $("#factsEditBtn"));
       const was = pack.facts;
       pack.facts = null;
       savePack();
@@ -20168,7 +20199,7 @@ What you type stays in this browser only.`;
         savePack();
         if (ta) ta.value = was != null ? was : FACTS;
         renderFacts();
-      });
+      }, null, from);
     };
     if (ta) {
       ta.addEventListener("keydown", (e) => {
@@ -24022,9 +24053,13 @@ What you type stays in this browser only.`;
     setIntentOrder(out);
     saveIntentOrder();
   }
-  function removeCard(id) {
+  function removeCard(id, from) {
     if (!id) return false;
     const m = findCard(id);
+    from = from || originAmong(
+      [['[data-remove-card="' + cssEsc(id) + '"]'], ['#list .card[data-id="' + cssEsc(id) + '"]', "#list .card[data-id]"]],
+      () => document.querySelector('#pills [data-k="' + cssEsc(m && m.c || "") + '"]')
+    );
     const isCustom = !!(m && m._custom);
     const was = packSnapshot();
     if (isCustom) pack.custom = (pack.custom || []).filter((x) => x && x.id !== id);
@@ -24047,7 +24082,7 @@ What you type stays in this browser only.`;
       hooks.render();
       drawPills();
       if (document.getElementById("mgCatList") && (document.getElementById("modal").hidden || document.getElementById("modal").classList.contains("ed-rest"))) hooks.openManage();
-    });
+    }, null, from);
     return true;
   }
   function shiftIntentIdxAfterRemoval(at) {
@@ -24062,9 +24097,13 @@ What you type stays in this browser only.`;
     }
     saveIntentOrder();
   }
-  function removeIntent(id) {
+  function removeIntent(id, from) {
     if (!id) return false;
     const idx = intentIdxFromId(id);
+    from = from || originAmong(
+      [['[data-remove-intent="' + cssEsc(id) + '"]'], ['#intentRail [data-si="' + idx + '"]', "#intentRail [data-si]"]],
+      () => document.getElementById("intentRail")
+    );
     const isCustom = idx >= 0 && intentIsCustom(idx);
     const was = packSnapshot(), wasOrder = intentOrder.slice(), wasIdxs = intentIdxs.slice(), wasTabs = (Array.isArray(tabs) ? tabs : []).map((tb) => tb && Array.isArray(tb.intentIdxs) ? tb.intentIdxs.slice() : null);
     if (isCustom) {
@@ -24098,7 +24137,7 @@ What you type stays in this browser only.`;
       }
       refreshAfterIntents();
       if (document.getElementById("mgCatList") && (document.getElementById("modal").hidden || document.getElementById("modal").classList.contains("ed-rest"))) hooks.openManage();
-    });
+    }, null, from);
     return true;
   }
   function setIntentHidden(id, hidden) {
@@ -31103,6 +31142,7 @@ What you type stays in this browser only.`;
     return !!clearedHold;
   }
   function clearLocalMemory() {
+    const from = originOf(document.getElementById("mgWipe"), () => document.getElementById("mgBring"));
     let keep = { layer: [], pack: [] };
     keep = { layer: CLEAR_KEEP_LAYER, pack: CLEAR_KEEP_PACK };
     const spaces = [E_NS].concat(eLayers());
@@ -31122,7 +31162,7 @@ What you type stays in this browser only.`;
     offerUndo("Local changes cleared", () => {
       if (clearedHold === was) clearedHold = null;
       putBack(was);
-    });
+    }, null, from);
   }
   function bringBackCleared() {
     const was = clearedHold;
@@ -31162,7 +31202,9 @@ What you type stays in this browser only.`;
   function ejectKeys() {
     return catalogKeep().concat([nsKey("CatalogNo"), nsKey("CatalogFile"), nsKey("CatalogFileAt")]);
   }
-  function ejectCatalog() {
+  function ejectCatalog(e) {
+    const at = e && e.currentTarget && e.currentTarget.nodeType === 1 ? e.currentTarget : null;
+    const from = originOf(at, () => document.getElementById("catNow"));
     const keys = ejectKeys();
     const was = keepKeys(keys);
     keys.forEach((k) => lsDel(k));
@@ -31170,7 +31212,7 @@ What you type stays in this browser only.`;
     if (typeof eCatalogEject === "function") eCatalogEject();
     edCatalogTaken(false);
     hooks.restartDesk();
-    offerUndo("Catalog ejected", () => undoEject(was));
+    offerUndo("Catalog ejected", () => undoEject(was), null, from);
   }
   function undoEject(was) {
     const put = was.keys[E_CATALOG_STORE];
@@ -32224,6 +32266,7 @@ What you type stays in this browser only.`;
       if (removeCategory(k)) leave();
     };
     if ($("#ceReset")) $("#ceReset").onclick = () => {
+      const from = originOf($("#ceReset"));
       const was = packSnapshot();
       resetCategory(k);
       drawPills();
@@ -32237,7 +32280,7 @@ What you type stays in this browser only.`;
         render();
         drawIntentRail();
         if (document.getElementById("ceReset")) openCategoryEditor(k, fromPill);
-      });
+      }, null, from);
       openCategoryEditor(k, fromPill);
     };
     $("#ceSave").onclick = () => {
@@ -35320,7 +35363,7 @@ What you type stays in this browser only.`;
     }).catch(() => {
     });
   }
-  function historyPutBack(v) {
+  function historyPutBack(v, from) {
     const h = historyHost();
     if (!h) return;
     const refuse = () => toastRefusal(t("{FILE} could not be put back in the catalog folder. The version stays here, ready to try again.").split("{FILE}").join(String(v.name || "")));
@@ -35333,7 +35376,7 @@ What you type stays in this browser only.`;
       if (r.replaced) offerUndo("Version put back", () => Promise.resolve(h.historyPut(r.replaced, v.path)).then((u) => {
         if (!u || !u.ok) refuse();
         else if (document.getElementById("ehView")) openHistory();
-      }));
+      }), null, from);
     }).catch(refuse);
   }
   function openHistory(host) {
@@ -35357,7 +35400,7 @@ What you type stays in this browser only.`;
           b.onclick = () => historyOpen(flat[+b.getAttribute("data-eh-open")]);
         });
         ehView.querySelectorAll("[data-eh-put]").forEach((b) => {
-          b.onclick = () => historyPutBack(flat[+b.getAttribute("data-eh-put")]);
+          b.onclick = () => historyPutBack(flat[+b.getAttribute("data-eh-put")], originOf(b));
         });
       }
       const back = document.getElementById("ehClose");
@@ -36459,6 +36502,7 @@ What you type stays in this browser only.`;
           const was = Array.isArray(pack.who) ? pack.who.slice() : null;
           const next = current.filter((n) => n !== name);
           const at = current.indexOf(name);
+          const from = originOf(delBtn, () => page.querySelector("#mgAddWho"), ".lw-del");
           setWhoList(next);
           if (mgRoleMarked === name) {
             mgRoleMarked = next[0] || "";
@@ -36482,7 +36526,7 @@ What you type stays in this browser only.`;
               back.focus({ preventScroll: true });
             } catch (_) {
             }
-          });
+          }, null, from);
         };
       }
     });
@@ -37110,7 +37154,7 @@ What you type stays in this browser only.`;
     return '<div class="set-row"><div class="set-label">' + esc(l.lead ? t("{LEAD}'s team").split("{LEAD}").join(l.lead) : t("Team")) + notes.filter(Boolean).map((n) => typeof n === "object" ? '<small title="' + esc(n.tip) + '">' + esc(n.text) + "</small>" : "<small>" + esc(n) + "</small>").join("") + '</div><div class="set-ctl"><span class="e-lead-key">' + keySignHtml("studio", l.print) + "</span>" + (l.needsFolder ? '<button type="button" class="btn" data-team-pick-folder="' + esc(l.team) + '">' + esc(t("Open a folder")) + "</button>" : "") + (l.policy ? "" : '<button type="button" class="btn danger" data-leave-team="' + esc(l.team) + '">' + esc(t("Leave this team")) + "</button>") + "</div></div>";
   }
   var leaveHold = "";
-  function leaveThisTeam(team) {
+  function leaveThisTeam(team, from) {
     team = String(team || "");
     if (!team || leaveHold) return;
     leaveHold = team;
@@ -37127,11 +37171,11 @@ What you type stays in this browser only.`;
       if (leaveHold !== team) return;
       leaveHold = "";
       forgetTeamLead(team, repaint);
-    });
+    }, from);
   }
   function wireTeamRows(box) {
     box.querySelectorAll("[data-leave-team]").forEach((b) => {
-      b.onclick = () => leaveThisTeam(b.getAttribute("data-leave-team"));
+      b.onclick = () => leaveThisTeam(b.getAttribute("data-leave-team"), originOf(b));
     });
     box.querySelectorAll("[data-team-pick-folder]").forEach((b) => {
       b.onclick = () => pickMovedFolder(b.getAttribute("data-team-pick-folder"), () => {
@@ -38097,6 +38141,7 @@ What you type stays in this browser only.`;
     if (r) r.classList.toggle("set-row-off", !auto);
   }
   function resetShortcuts() {
+    const from = originOf(document.getElementById("setResetKeys"));
     const was = lsGet("eShortcuts");
     scStopCapture();
     lsDel("eShortcuts");
@@ -38108,9 +38153,10 @@ What you type stays in this browser only.`;
         loadShortcuts();
         paintKeysInline();
       }
-    });
+    }, null, from);
   }
   function resetAllSettings() {
+    const from = originOf(document.getElementById("setReset"));
     const was = {};
     [
       "eTheme",
@@ -38198,7 +38244,7 @@ What you type stays in this browser only.`;
       }
       applyPrefs();
       repaintScreen();
-    });
+    }, null, from);
   }
   function repaintScreen() {
     const host = settingsHost();
@@ -39621,7 +39667,7 @@ What you type stays in this browser only.`;
     return void 0;
   }
   var laneListIds = () => laneRows.filter((r) => !r.learnt && !r.used).map((r) => r.id);
-  function writeLaneList(ids, said) {
+  function writeLaneList(ids, said, from) {
     const id = lanesOn ? laneFrom : null, card = id != null ? (cards || []).find((m) => m && String(m.id) === id) : null;
     if (!card) return false;
     const base = baseCard(card.id), entry = base ? null : (pack.custom || []).find((x) => x && String(x.id) === id);
@@ -39655,7 +39701,7 @@ What you type stays in this browser only.`;
       }
       savePack();
       hooks.rebuildCards();
-    });
+    }, null, from);
     return true;
   }
   function laneMove(k, to) {
@@ -39695,7 +39741,7 @@ What you type stays in this browser only.`;
       if (!at || !at.closest || !el.contains(at)) return true;
       const row2 = at.closest(".ln-row"), k = row2 ? +row2.dataset.k : -1;
       if (at.closest(".nx-x")) {
-        writeLaneList(laneListIds().filter((x) => x !== row2.dataset.to), "Taken off the list");
+        writeLaneList(laneListIds().filter((x) => x !== row2.dataset.to), "Taken off the list", originOf(at.closest(".nx-x"), null, ".ln-row .nx-x"));
         return true;
       }
       if (at.closest(".ln-keep")) {
@@ -39705,7 +39751,7 @@ What you type stays in this browser only.`;
       if (at.closest(".nx-grip")) return true;
       if (at.closest(".ln-back")) {
         const st = laneState();
-        writeLaneList(st.fold && st.fold.catalog ? nextIdsOf(st.fold.catalog) : [], "Back to the catalog's");
+        writeLaneList(st.fold && st.fold.catalog ? nextIdsOf(st.fold.catalog) : [], "Back to the catalog's", originOf(at.closest(".ln-back"), null, ".ln-back"));
         return true;
       }
       if (at.closest(".ln-add-btn")) {

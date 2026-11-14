@@ -7,6 +7,8 @@ import { lyGet, lySet } from "./storage.js";
 import { uiLang, toast, offerUndo } from "./ui-lang.js";
 import { cardCounts, setCatOrder, catOrder, setCats, cats } from "./app-state.js";
 import { hooks } from "./hooks.js";
+import { originAmong } from "./dom.js";
+import { cssEsc } from "./css-esc.js";
 
 /* The personal layer's bag for one language's category names: the catalog's own key with
    "categories" read as "catLabels", so en-then-pl keeps catLabels and catLabelsPl. */
@@ -51,8 +53,10 @@ function applyCatsToGlobal(){
 /** Delete an empty category. Empty-only everywhere, so no path silently destroys contents.
  *  No special-category guard: a category carries no roles, and the empty-only rule is what
  *  actually guards content. */
-function removeCategory(k){
+function removeCategory(k, from){
   if(!k) return false;
+  from=from||originAmong([['[data-delcat="'+cssEsc(k)+'"]'], ['#pills [data-k="'+cssEsc(k)+'"]', "#pills [data-k]"]],
+    ()=>document.getElementById("pills"));   /* as removeCard reads it (favourites.js) */
   if(cardCounts[k]){ toast("Move or delete the cards in this category first"); return false; }
   const was=packSnapshot(), wasOrder=catOrder.slice();
   if(pack.customCats && pack.customCats[k]) delete pack.customCats[k];
@@ -87,7 +91,7 @@ function removeCategory(k){
     hooks.rebuildCards(); applyCatsToGlobal(); hooks.drawPillsCore(); hooks.render(); hooks.drawIntentRail();
     // The Library shows the category again where it stands in front, never closing a pop-up over it.
     if(document.getElementById("mgCatList") && (document.getElementById("modal").hidden || document.getElementById("modal").classList.contains("ed-rest"))) hooks.openManage();
-  });
+  }, null, from);
   return true;
 }
 
