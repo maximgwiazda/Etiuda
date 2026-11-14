@@ -297,7 +297,7 @@ async function relayScene(src) {
   return { ok, detail: brief(got) };
 }
 
-/* (f) The look that is on starts the store's sync (shell/sync/sync.cjs): a desk key that follows, patched, reaches the relay sealed and
+/* (g) The look that is on starts the store's sync (shell/sync/sync.cjs): a desk key that follows, patched, reaches the relay sealed and
    the sync state beside desk.json, a key that does not follow stays out, and a sign out stops it. */
 async function syncScene(src) {
   const r = await renewScene(src);
@@ -326,7 +326,7 @@ const LEGS = [
   ["c", tokenScene,"the folder's access token reaches the folder alone: no file, no trace line and no body to the licence service or the relay holds it"],
   ["e", relayScene, "a store is made at production's relay, or at the one of the trusted relays a sign-in lab names; a lab naming another is refused whole"],
   ["d", doorScene, "the licence service's door takes signin/desk, signout/desk, store/grant and store/end of its own host, and refuses every other route"],
-  ["f", syncScene, "the look that is on starts the store's sync: a desk key that follows reaches the relay sealed, one that does not stays out, and a sign out stops it"],
+  ["g", syncScene, "the look that is on starts the store's sync: a desk key that follows reaches the relay sealed, one that does not stays out, and a sign out stops it"],
 ];
 const results = {};
 const scenes = Object.fromEntries(LEGS.map(([id, scene]) => [id, scene]));
@@ -349,7 +349,7 @@ const PLANTS = [
   ["c", swap("  if (folder) signinFolderTake(io, folderRes || { status: 0 }, p.id, now()); /* plant:folder-take-renew */\n",
     "  if (folder) signinFolderTake(io, folderRes || { status: 0 }, p.id, now()); /* plant:folder-take-renew */\n  signinTrace(io, p.id, \"refresh\", \"ok\", { detail: String(JSON.parse(Buffer.from(folderRes.bytes).toString()).access_token) });\n"), "the token traced past the trace's own hiding"],
   ["e", swap("  if (!(d.relay === undefined || DOOR_RELAYS.installed.concat(DOOR_RELAYS.unpackaged).indexOf(d.relay) >= 0)) return null; /* plant:lab-relay */\n", ""), "a lab may name any relay"],
-  ["f", swap("  if (sync) sync.turn(look); /* plant:store-sync-turn */\n", ""), "the look's answer does not turn the sync"],
+  ["g", swap("  if (sync) sync.turn(look); /* plant:store-sync-turn */\n", ""), "the look's answer does not turn the sync"],
   ["d", swap(".indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes", ".indexOf(String(url)) < -1) throw new Error(\"the licence service's door takes"), "the door takes any route"],
 ];
 for (const [id, change, what] of PLANTS) {
