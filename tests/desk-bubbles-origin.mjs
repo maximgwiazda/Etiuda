@@ -320,7 +320,7 @@ async function runUndos(page, label, only) {
    else Etiuda's name at the band's left; a second from one control hangs from the first. */
 const NOTICES = [
   ["eTeamLapse", "#catNow"], ["eTeamFork", "#catNow"], ["eTeamStranded", "#catNow"], ["eTeamRemoved", "#catNow"],
-  ["eHotkeyNote", "#settingsBtn"], ["eSaveWarn", ".row .brand"], ["eDeskWarn", ".row .brand"], ["eDeskNewer", ".row .brand"],
+  ["eMigrateWarn", "#catNow"], ["eHotkeyNote", "#settingsBtn"], ["eSaveWarn", ".row .brand"], ["eDeskWarn", ".row .brand"], ["eDeskNewer", ".row .brand"],
 ];
 async function runNotices(page, label) {
   const bad = [];

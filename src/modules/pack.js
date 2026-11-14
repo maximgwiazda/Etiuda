@@ -86,43 +86,20 @@ function resetPack(){ pack=emptyPack(); BASE_M=[]; packMigrationFailed=false; }
    is lost, not the content. */
 function showPackMigrationWarning(){
   if(!packMigrationFailed || document.getElementById("eMigrateWarn")) return;
-  const d=document.createElement("div");
-  d.id="eMigrateWarn";
-  d.style.cssText="position:fixed;left:0;right:0;top:var(--e-tb-h,0px);z-index:2147483646;background:#78350f;"
-    +"color:#fff;font:14px/1.5 system-ui,Segoe UI,sans-serif;padding:14px 18px;"
-    +"box-shadow:0 2px 14px rgba(0,0,0,.4)";
-  const lead=document.createElement("b");
-  lead.textContent=t("The saved card arrangement could not be read."); /* plant:pack-migrate-why */
-  const body=document.createElement("span");
-  body.textContent=" "+t("This version stores the arrangement in a new way, and the copy kept here could not be converted. The catalog is untouched and Etiuda runs as usual; only the card order, hidden cards and favourites kept here are affected. Reset personal data clears them and starts afresh.");
-  const row=document.createElement("div");
-  row.style.marginTop="10px";
-  const reset=document.createElement("button");
-  reset.id="eMigrateReset";
-  reset.textContent=t("Reset personal data");
-  reset.style.cssText="font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;background:#fff;color:#78350f";
-  const hide=document.createElement("button");
-  hide.id="eMigrateHide";
-  hide.textContent=t("Dismiss");
-  hide.style.cssText="font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;background:rgba(255,255,255,.18);color:#fff;margin-left:10px";
-  row.appendChild(reset);
-  row.appendChild(hide);
-  d.appendChild(lead);
-  d.appendChild(body);
-  d.appendChild(row);
-  (document.body||document.documentElement).appendChild(d);
-  reset.onclick=()=>{
-    try{ lsKeys().filter(k=>E_KEY_RE.test(k)).forEach(k=>lsDel(k)); }catch(e){}
-    try{ ssDel("eSessionTabs"); }catch(e){}
-    location.replace(location.href.split("#")[0]);
-  };
-  hide.onclick=()=>d.remove();
+  const lead=t("The saved card arrangement could not be read."); /* plant:pack-migrate-why */
+  eNotice("eMigrateWarn", lead,
+    t("This version stores the arrangement in a new way, and the copy kept here could not be converted. The catalog is untouched and Etiuda runs as usual; only the card order, hidden cards and favourites kept here are affected. Reset personal data clears them and starts afresh."),
+    null, {label:t("Reset personal data"), run:()=>{
+      try{ lsKeys().filter(k=>E_KEY_RE.test(k)).forEach(k=>lsDel(k)); }catch(e){}
+      try{ ssDel("eSessionTabs"); }catch(e){}
+      location.replace(location.href.split("#")[0]);
+    }});
 }
 /* THE LASTING NOTICES, in the rescue's dress (the family's bubble), each hung from the control of what it concerns:
    the catalog's name for a catalog's matter, the Menu where Settings hold its equal, else Etiuda's name at the band's
    left. Two from one control hang one from the other. Built from text nodes, so a path is never read as markup. */
 const NOTICE_FROM={
-  eTeamLapse:"#catNow", eTeamFork:"#catNow", eTeamStranded:"#catNow", eTeamRemoved:"#catNow",
+  eTeamLapse:"#catNow", eTeamFork:"#catNow", eTeamStranded:"#catNow", eTeamRemoved:"#catNow", eMigrateWarn:"#catNow",
   eHotkeyNote:"#settingsBtn"
 };
 const NOTICE_ETIUDA=".row .brand";

@@ -312,6 +312,8 @@ try {
         set(v) { node._text = String(v); }
       });
       node.appendChild = (ch) => { node.childNodes.push(ch); return ch; };
+      node.setAttribute = (k, v) => { node["@" + k] = String(v); };
+      node.getAttribute = (k) => node["@" + k] == null ? null : node["@" + k];
       node.remove = () => { if (node._id && byId[node._id] === node) delete byId[node._id]; };
       return node;
     };
