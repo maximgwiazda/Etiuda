@@ -195,7 +195,7 @@ try {
   bea.mine.cards = bea.mine.cards.filter(x => x.id !== "c-d" && x.id !== "c-f");
   const rB4 = await save(bea, cards("c-b", "c-a", "c-d", "c-f"));
   const now6 = onDisk(SHOP);
-  check(titleOf(now6, "c-d") === "Ann's d" && rB4.fresh.some(l => /cardsc-d$/.test(l)),
+  check(titleOf(now6, "c-d") === "Ann's d" && rB4.fresh.some(l => /cards\u0001c-d$/.test(l)),
     "2g a card the desk removes stays in the file where a colleague edited it since, and the removal is held (" + titleOf(now6, "c-d") + ")");
   check(rB4.wrote === true && titleOf(now6, "c-f") === "(gone)" && now6.cards.length === 5,
     "2h a card the desk removes that nobody else touched leaves the file (" + now6.cards.length + " cards)");
