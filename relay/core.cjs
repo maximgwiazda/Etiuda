@@ -155,6 +155,10 @@ const GRANT_FIELDS = ["kind", "format", "lead", "issued", "until", "paid", "sig"
    of it, no later than the grant's issue; or, as {licence, release: true}, the service's word that a team gated for that licence is
    released. */
 const SEATS_FIELDS = ["licence", "live"], RELEASE_FIELDS = ["licence", "release"];
+/* `freed`, beside licence and live where present: the pooled desks' keys the service freed within the grace's span, refused outright
+   whatever the grace while a grant names them; at most FREED_MAX, distinct, as many as a team holds desks (KEYS_MAX), so a large
+   company's pooled desks, each freed every morning, all fit: a thousand keys are about 67 KB, inside JSON_MAX and a stored value. */
+const FREED_MAX = KEYS_MAX;
 const DELEGATION_FIELDS = ["kind", "format", "key", "may", "from", "until", "sig"];
 const SIG_FIELDS = ["alg", "keyId", "value"];
 const MAY_MAX = 16;
@@ -223,7 +227,11 @@ function grantWhy(grant, leadPub, now, roots, revoked) {
 const grantOk = (grant, leadPub, now, roots, revoked) => grantWhy(grant, leadPub, now, roots, revoked) === null;
 function seatsShaped(s, issued) {
   if (plain(s) && exactly(s, RELEASE_FIELDS)) return is(HEX32, s.licence) && s.release === true;
-  return plain(s) && exactly(s, SEATS_FIELDS) && is(HEX32, s.licence) && Number.isSafeInteger(s.live) && s.live >= 0 && s.live <= issued;
+  const listed = !!s && Array.isArray(s.freed);
+  let freedOk = !!s && s.freed === undefined || listed;
+  freedOk = !!s && (s.freed === undefined || (listed && s.freed.length >= 1 && s.freed.length <= FREED_MAX && s.freed.every(k => is(HEX64, k)) && new Set(s.freed).size === s.freed.length)); /* plant:grant-freed-shape */
+  return plain(s) && exactly(s, s.freed === undefined ? SEATS_FIELDS : SEATS_FIELDS.concat(["freed"])) && !!freedOk && is(HEX32, s.licence)
+    && Number.isSafeInteger(s.live) && s.live >= 0 && s.live <= issued;
 }
 
 /* THE SEAT CERTIFICATE the licence service gives a signed-in desk, as the door reads it: what Etiuda Studio's
@@ -502,7 +510,9 @@ function createCore(deps) {
     if (was && at < was.at) return; /* plant:seats-older */
     let live = grant.seats.live;
     if (was && was.licence === grant.seats.licence && was.live > live) live = was.live; /* plant:seats-live-kept */
-    store.put("seats", { licence: grant.seats.licence, live, at });
+    const kept = { licence: grant.seats.licence, live, at };
+    if (Array.isArray(grant.seats.freed)) kept.freed = grant.seats.freed.slice(); /* plant:seats-freed-kept */
+    store.put("seats", kept);
   }
   /* A desk's or a Studio's session on a team whose grant carries seats, before it is issued: `cert` judged by certWhy for the seats' licence, its run
      ending decided here. A current one opens the session and its issue is kept as evidence; a run-out one opens it until the evidence
@@ -512,6 +522,8 @@ function createCore(deps) {
     const seats = store.get("seats");
     if (!plain(seats)) return { ok: true }; /* plant:seat-ordinary */
     const now = clock();
+    /* A pooled desk the service freed (its person's place taken by another pooled desk) is refused outright while the grant names it. */
+    if (Array.isArray(seats.freed) && seats.freed.indexOf(deskPub) > -1) return no("seat-lapsed"); /* plant:seat-freed */
     if (cert === undefined || certWhy(cert, deskPub, [seats.licence], now, roots, revokedNow(), true) !== null) return no("seat-lapsed"); /* plant:seat-cert */
     if (now < cert.until) {
       const seen = store.get("seatSeen");
@@ -522,10 +534,16 @@ function createCore(deps) {
     let evidence = seats.live;
     if (plain(seen) && seen.licence === seats.licence && seen.issued > evidence) evidence = seen.issued; /* plant:seat-evidence-seen */
     if (evidence < cert.until + SEAT_MARGIN_MS) return { ok: true, note: null };
-    /* A pooled desk's grace: within POOLED_GRACE_MS of its end, while the newest evidence is SEAT_QUIET_MS old (the service gone quiet). */
+    /* A pooled desk's grace: within POOLED_GRACE_MS of its end, while the newest evidence is SEAT_QUIET_MS old (the service gone quiet),
+       and never for a certificate once refused while the evidence was fresh: that refusal is kept by key and end ("pr:") to the grace's
+       end, so a quiet night does not reopen it; the desk's next certificate is another. */
     let quiet = true;
     quiet = now - evidence >= SEAT_QUIET_MS; /* plant:pooled-quiet */
-    if (cert.pooled === true && quiet && now < cert.until + POOLED_GRACE_MS) return { ok: true, note: null }; /* plant:pooled-grace */
+    const within = cert.pooled === true && now < cert.until + POOLED_GRACE_MS, refusedKey = "pr:" + deskPub + ":" + cert.until;
+    let refusedOnce = false;
+    refusedOnce = within && store.get(refusedKey) !== undefined; /* plant:pooled-refused-read */
+    if (within && quiet && !refusedOnce) return { ok: true, note: null }; /* plant:pooled-grace */
+    if (within && !refusedOnce) store.atomic(() => store.put(refusedKey, { until: cert.until + POOLED_GRACE_MS })); /* plant:pooled-refused-mark */
     return no("seat-lapsed"); /* plant:seat-lapsed */
     return { ok: true, note: null };
   }
@@ -1774,6 +1792,8 @@ function createCore(deps) {
         if (v.door === true) continue;
         store.put("sp:" + id, SPENT); /* plant:spent-kept */
       }
+      /* A pooled certificate's kept refusal, past the grace's end: nothing of it stays. */
+      for (const [k, v] of store.list("pr:")) if (!v || !(v.until > now)) store.del(k); /* plant:pooled-refused-prune */
       /* A dropped door request's key and person, past its window: nothing of it stays. */
       for (const [k, v] of store.list("dd:")) if (!doorDropLive(v, now)) store.del(k); /* plant:door-drop-prune */
       /* A put row no upload of this object holds was left by a request that died before its commit: its object is to be deleted. */
@@ -1871,7 +1891,7 @@ module.exports = {
   CHALLENGE_MS, CHALLENGE_SHARE, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, REMOVED_KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, BLOB_MIN, BLOBS_MAX,
   SESSIONS_MAX, SESSION_SHARE, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, lapseOf, keptGrant, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
   LEAD_PREFIX, leadBytes, judgeLead,
-  DOOR_REFS_MAX, DOOR_CERT_MAX, DOOR_LIVE_MAX, DOOR_PER_PERSON, DOOR_RATE_MAX, DOOR_RATE_MS, DOOR_TRY_SHARE, CERT_SPAN_MS, SEAT_MARGIN_MS, POOLED_GRACE_MS, SEAT_QUIET_MS,
+  DOOR_REFS_MAX, DOOR_CERT_MAX, DOOR_LIVE_MAX, DOOR_PER_PERSON, DOOR_RATE_MAX, DOOR_RATE_MS, DOOR_TRY_SHARE, CERT_SPAN_MS, SEAT_MARGIN_MS, POOLED_GRACE_MS, SEAT_QUIET_MS, FREED_MAX,
   doorBytes, doorHelloBytes, certBytes, certWhy,
   grantBytes, delegationBytes, revocationBytes, revokedKeysOf, acceptRevocations, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, leadKeyMatches, parseMeta,
   createCore,
