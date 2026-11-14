@@ -13,7 +13,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-store-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 45;
+const EXPECTED = 48;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -102,9 +102,17 @@ function revokedText(keys) {
 
 const envOf = () => S.relayEnv(Object.assign({ roots: K.ROOTS }, TEAM_COPY ? { team: TEAM_COPY } : {}));
 const createAs = (R, rt, lead, grant) => call(R, "POST", "/relay/v1/teams", { json: K.createBody(rt, lead, R.clock.now, b => signHex(lead, b), { grant }) });
-function devicesOf(w, keys) {
-  const rev = w.rev + 1, t = w.R.clock.now;
-  return call(w.R, "POST", "/relay/v1/t/" + w.rt + "/devices", { json: { keys, rev, t, sig: signHex(w.lead, C.devicesBytes(w.rt, rev, t, keys)) } })
+/* The list signed by the lead; on a store also by one of the person's computers (desk a unless `o.by`) with its store certificate
+   (a current one for the person unless `o.seat`; `o.bare` sends neither, `o.signer` signs in `o.by`'s place). */
+function devicesOf(w, keys, o) {
+  const opts = o || {}, rev = w.rev + 1, t = w.R.clock.now;
+  const json = { keys, rev, t, sig: signHex(w.lead, C.devicesBytes(w.rt, rev, t, keys)) };
+  if (w.code && !opts.bare) {
+    const by = opts.by || w.desks.a;
+    json.seat = opts.seat !== undefined ? opts.seat : storeCert(by.pub, w.code, t, DAY);
+    json.by = { pub: by.pub, sig: signHex(opts.signer || by, C.storeDevicesBytes(w.rt, rev, t, keys)) };
+  }
+  return call(w.R, "POST", "/relay/v1/t/" + w.rt + "/devices", { json })
     .then(r => { if (r.status === 200) w.rev = rev; return r; });
 }
 const listOf = (w, names) => names.map(n => ({ id: w.desks[n].keyId, pub: w.desks[n].pub, desk: w.desks[n].place }));
@@ -234,6 +242,25 @@ async function main() {
     const door = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/door", { json: { refs, t, sig: signHex(w.lead, C.doorBytes(w.rt, t, refs)) } });
     return { ok: refused(inv, "not-enrolled") && refused(door, "not-enrolled"), detail: brief({ invites: said(inv), door: said(door) }) };
   }
+  /* A store's computer list signed by S alone (as anyone holding the folder's file could) is refused; so is one whose computer holds
+     no current store certificate for the person, holds another person's, a lapsed one, or did not sign it; the person's own takes. */
+  async function listScene() {
+    const w = await storeTeam(), now = w.R.clock.now, x = keyPair(true);
+    x.place = "k-" + hex(8);
+    w.desks.x = x;
+    const keys = listOf(w, ["a", "b", "x"]), tries = {};
+    tries.bare = await devicesOf(w, keys, { bare: true });
+    tries.noCert = await devicesOf(w, keys, { seat: null });
+    tries.otherPerson = await devicesOf(w, keys, { seat: storeCert(w.desks.a.pub, OTHER, now, DAY) });
+    tries.notSigned = await devicesOf(w, keys, { signer: x });
+    tries.lapsed = await devicesOf(w, keys, { seat: storeCert(w.desks.a.pub, w.code, now - DAY, DAY) });
+    const good = await devicesOf(w, keys);
+    const ok = Object.values(tries).every(r => refused(r, "seat-lapsed")) && good.status === 200;
+    const out = {};
+    for (const [k, r] of Object.entries(tries)) out[k] = said(r);
+    out.good = good.status;
+    return { ok, detail: brief(out) };
+  }
   /* A store stays a store and a team a team: a relay grant renews no store and moves no store's lead; a store grant renews no team; a
      repeat create of the store under a store grant for another person is refused, and for its own person taken. */
   async function stickyScene() {
@@ -342,6 +369,7 @@ async function main() {
     ["st2b", leadScene, "the store's lead key S opens no session, with or without a certificate"],
     ["st2c", certScene, "a store certificate lapsed, of another kind, over a day, forged, under a delegation that may not sign licences, or from a revoked service key, is refused seat-lapsed; a fresh one opens"],
     ["st2d", noDoorScene, "a store takes no invitation and opens no door"],
+    ["st2e", listScene, "a store's computer list signed by S alone, or by a computer without a current store certificate for the person, or not signed by that computer, is refused; the person's own takes"],
     ["st3a", stickyScene, "a store stays a store and a team a team, and a store's person never changes"],
     ["st3b", grantShapeScene, "a store grant without its code, with a code out of shape, with seats, or signed over the relay grant's label is refused at the create"],
     ["st4a", endScene, "the service's store-end deletes every object before it answers, leaves only the ended mark, and the id is never made again"],
@@ -401,6 +429,8 @@ async function main() {
     ["core", "store-cert-revoked", "st2c", "a revoked key's certificate opens"],
     ["core", "store-no-invites", "st2d", "a store takes invitations"],
     ["core", "store-no-door", "st2d", "a store opens a door"],
+    ["core", "store-devices", "st2e", "S alone writes a store's computer list"],
+    ["core", "store-devices-sig", "st2e", "the certificate's computer need not sign the list"],
     ["core", "store-kind-fits", "st3a", "a grant of the other kind fits"],
     ["core", "store-code-fits", "st3a", "a store grant for another person fits"],
     ["core", "store-create-fits", "st3a", "a repeat create asks no fit"],
