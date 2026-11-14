@@ -28,11 +28,11 @@ const HELD_PATH = "/etiuda/held";
 const HELD_MARK = "etiuda-held";
 /* One leading slash, one segment, then /v1/ and a trailing slash. A ".." cannot occur in that shape. */
 const PREFIX_RE = /^\/[a-z][a-z0-9-]{0,40}\/v1\/$/;
-const ROUTE_TAIL = "(?:teams|t/([0-9a-f]{32})/(devices|invites|door|hello|session|grant|lead|socket|wrap|states|since/(\\d{1,16})|b/([0-9a-f]{32})))$";
+const ROUTE_TAIL = "(?:teams|t/([0-9a-f]{32})/(devices|invites|door|hello|session|grant|lead|notice|socket|wrap|states|since/(\\d{1,16})|b/([0-9a-f]{32})))$";
 const HEADERS = { "content-type": "application/json", "cache-control": "no-store" };
 /* The methods each route answers, in one table the Worker and the object both ask, so that a path or a method no route answers
    is missing before any object is woken to say so. `since` and `b` are the two routes whose names carry an argument. */
-const METHODS = { teams: ["POST"], devices: ["POST"], invites: ["POST"], door: ["POST"], hello: ["POST"], session: ["POST"], grant: ["POST"], lead: ["POST"], socket: ["GET"],
+const METHODS = { teams: ["POST"], devices: ["POST"], invites: ["POST"], door: ["POST"], hello: ["POST"], session: ["POST"], grant: ["POST"], lead: ["POST"], notice: ["POST"], socket: ["GET"],
   wrap: ["GET"], states: ["GET"], since: ["GET"], b: ["GET", "PUT"] };
 /* The one path this Worker answers under. API_PREFIX names it where set; with none, the path is /relay/v1/. A value of any
    other shape is not a prefix, and the Worker answers unavailable rather than /relay/v1/. */
@@ -305,6 +305,12 @@ function teamObject(deps) {
       if (s.ok && alarm && (await alarm.get()) == null) await arm(); /* plant:arm-session */
       return answer(s, r => Object.assign(r.invite ? { session: r.session, until: r.until, invite: true, lapse: r.lapse } : { session: r.session, until: r.until, lapse: r.lapse },
         r.made ? { made: r.made } : {}, r.door ? { door: r.door } : {}));
+    }
+    /* The service's notice: a store-end taken is swept here, before the answer, so the store is gone when the service hears ok. */
+    if (what === "notice") {
+      const n = c.notice(rt, body);
+      if (n.ok) await sweepIfDue(); /* plant:notice-sweep-now */
+      return answer(n, r => ({ ok: true, what: r.what }));
     }
     if (what === "door") return answer(c.door(rt, body), r => ({ ok: true, refs: r.refs }));
     if (what === "devices") {
