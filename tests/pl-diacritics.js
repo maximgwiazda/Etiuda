@@ -151,6 +151,9 @@ const ALLOWED_IN = [
     within: "Wszystko działa jak zwykle; lider zespołu może ją zastąpić wydaniem opublikowanym na licencji." },
   { fold: "zwykle", since: "2026-10-26",
     within: "Wszystko działa jak zwykle; lider zespołu może je zastąpić wydaniem objętym licencją." },
+  /* 2026-11-14. Sync's reason for a provider's refusal says "kolejna próba", the nominative, not "kolejną". */
+  { fold: "kolejna", since: "2026-11-14",
+    within: "dostawca konta odrzucił prośbę Etiudy; kolejna próba nastąpi następnego dnia" },
   /* 2026-11-13. A managed computer's shared line (decision 49) says "inna osoba", the nominative, not "inną". */
   { fold: "inna", since: "2026-11-13",
     within: "Wspólny komputer: może się tu zalogować inna osoba, kontem organizacji." },

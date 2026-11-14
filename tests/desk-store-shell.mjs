@@ -21,7 +21,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 20;
+const EXPECTED = 22;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -111,6 +111,7 @@ function worldOf(o) {
     }
     if (u === STAGING + "store/end") {
       w.service.push(body);
+      if (w.endDown) return json(503, { ok: false, reason: "unavailable" });
       const b = JSON.parse(body);
       w.ended = verifyWith(b.desk, Buffer.from(["etiuda-licence-store-end", b.desk, b.rt, b.t].join("\n"), "utf8"), b.sig) ? b.rt : "unsigned";
       return json(200, { ok: true });
@@ -325,7 +326,26 @@ async function switchScene(src) {
     againLine: again.line, newStore: !!file && file.rt !== rt, here: here.line, hereSent: w.service.length - before }) };
 }
 
+/* (d4g) A store/end the service did not answer is owed: kept sealed in store.json, the row's line "ending" meanwhile, posted again at
+   the next renewal and gone once answered. */
+async function owedScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  const rt = r.now && r.now.state === "on" && w.file ? JSON.parse(w.file).rt : "";
+  w.endDown = true;
+  const off = await T.storeSetNow("everywhere");
+  const text = fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8"), kept = JSON.parse(text);
+  w.endDown = false;
+  w.ended = "";
+  await T.signinRenewNow();
+  for (let i = 0; i < 50 && !w.ended; i++) await new Promise(a => setTimeout(a, 20));
+  await new Promise(a => setTimeout(a, 20));
+  const after = T.storeView(), left = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8"));
+  const ok = !!rt && off.line === "ending" && !!kept.owed && text.indexOf(rt) < 0 && w.ended === rt && after.line === "off" && !left.owed;
+  return { ok, detail: brief({ whileOwed: off.line, keptSealed: !!kept.owed && text.indexOf(rt) < 0, retried: w.ended === rt ? "signed, this store" : w.ended, after: after.line, left: !!left.owed }) };
+}
+
 const LEGS = [
+  ["d4g", owedScene, "a store/end the service did not answer is kept sealed, the row says so, and the next renewal posts it again; answered, the line and the mark are gone"],
   ["d4f", switchScene, "the first look that made the store says on once; Everywhere posts store/end signed by this desk and leaves the ended mark; On makes a new store over it; This computer forgets the keys and ends nothing"],
   ["a1", scopesOnScene, "where sync may be on, Microsoft's authorize address and refresh form carry Files.ReadWrite.AppFolder and Google's authorize address drive.appdata, its refresh as today; a managed computer with PersonalStore unset is off, set on is on"],
   ["a2", scopesOffScene, "where sync is off (a managed computer, PersonalStore unset), each provider's authorize address and refresh form are today's, byte for byte"],
@@ -356,6 +376,7 @@ const PLANTS = [
   ["c", swap("  if (folder) signinFolderTake(io, folderRes || { status: 0 }, p.id, now()); /* plant:folder-take-renew */\n",
     "  if (folder) signinFolderTake(io, folderRes || { status: 0 }, p.id, now()); /* plant:folder-take-renew */\n  signinTrace(io, p.id, \"refresh\", \"ok\", { detail: String(JSON.parse(Buffer.from(folderRes.bytes).toString()).access_token) });\n"), "the token traced past the trace's own hiding"],
   ["e", swap("  if (!(d.relay === undefined || DOOR_RELAYS.installed.concat(DOOR_RELAYS.unpackaged).indexOf(d.relay) >= 0)) return null; /* plant:lab-relay */\n", ""), "a lab may name any relay"],
+  ["d4g", swap("  storeEndAgain().catch(() => false); /* plant:store-end-again */\n", ""), "the owed store/end is never posted again"],
   ["d4f", swap("  if (keys) await storeEndEverywhere(keys).catch(() => false);\n", ""), "Everywhere ends nothing"],
   ["d4f", swap("    if (folder && !tok.why) await folder.write(L.endedText(keys.rt)).catch(() => null); /* plant:store-end-mark */\n", ""), "Everywhere leaves the key in the folder"],
   ["d", swap(".indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes", ".indexOf(String(url)) < -1) throw new Error(\"the licence service's door takes"), "the door takes any route"],

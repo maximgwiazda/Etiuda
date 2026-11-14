@@ -481,7 +481,7 @@ function signinClicks(root){
 /* ---- sync across computers: what the shell's storeRow answers (shell/sync/store.cjs), the row's words and the one bubble ---------
    The page is told a line ("on", "off", "org-off", "unavailable", "paused", "conflict"), the switch, whether policy holds it, the
    reason, the pause's start and what to say once; never a key, a store or a token. */
-const SYNC_LINES=["on","off","ungiven","org-off","unavailable","paused","conflict"];
+const SYNC_LINES=["on","off","ending","ungiven","org-off","unavailable","paused","conflict"];
 function syncRead(v){
   const o=v && typeof v==="object" ? v : {};
   if(o.shown!==true || SYNC_LINES.indexOf(o.line)<0) return {shown:false, line:"", on:false, held:false, why:"", since:0, say:""};
@@ -493,16 +493,20 @@ function syncNow(){
   if(!h || typeof h.storeState!=="function") return syncRead(null);
   try{ return syncRead(h.storeState()); }catch(e){ return syncRead(null); }
 }
-/* The reason a folder could not be reached that the person cannot mend, in the copywriter's words; "" where she has given none.
-   "no-drive" is OneDrive missing on Microsoft and Drive switched off on Google. A folder consent never given is the row's "ungiven". */
+/* The reason a folder could not be reached that the person cannot mend, in the copywriter's words. "no-drive" is OneDrive missing on
+   Microsoft and Drive switched off on Google; "consent" the organisation's refusal; "" a system that seals nothing for real. A folder
+   consent never given is the row's "ungiven"; a reason not named here is read as the provider's refusal, retried at each renewal. */
 function syncWhyWords(why, provider){
   if(why==="no-drive") return provider==="google" ? t("your organisation has switched off Google Drive for it") : t("the account has no OneDrive");
-  return "";
+  if(why==="full") return t("the account's storage is full");
+  if(why==="consent") return t("your organisation has not allowed it; its IT department decides");
+  if(why==="") return t("this computer cannot keep it locked for this Windows account");
+  return t("the account's provider turned down Etiuda's request; it tries again each day");
 }
-function syncUnavailable(why, provider){
-  const r=syncWhyWords(why, provider);
-  return r ? named(t("Not available on this account: {REASON}. Everything works on this computer as before."),"{REASON}",r)
-    : t("Not available on this account. Everything works on this computer as before."); // placeholder: Claudette, a reason she has not worded
+/* The row's line, beside the feature's name; "alone", the bubble's, which names it. */
+function syncUnavailable(why, provider, alone){
+  return named(alone ? t("Sync across computers is not available on this account: {REASON}. Everything works on this computer as before.")
+    : t("Not available on this account: {REASON}. Everything works on this computer as before."),"{REASON}",syncWhyWords(why, provider));
 }
 function syncDate(at){
   return new Date(at).toLocaleDateString(uiLang()==="pl" ? "pl-PL" : "en-GB",{day:"numeric", month:"long"});
@@ -511,6 +515,7 @@ function syncDate(at){
 function syncLine(s, provider){
   if(s.line==="org-off") return t("Your organisation has not turned this on.");
   if(s.line==="off") return t("Only on this computer.");
+  if(s.line==="ending") return t("Off everywhere. The synced copy is deleted as soon as this computer reaches our service.");
   if(s.line==="ungiven") return named(t("Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account."),"{PROVIDER}",SIGNIN_NAMES[provider]||"Microsoft");
   if(s.line==="unavailable") return syncUnavailable(s.why, provider);
   if(s.line==="paused") return named(t("Paused since {DATE}. It resumes when this computer reaches our service."),"{DATE}",syncDate(s.since));
@@ -532,7 +537,7 @@ function syncSay(s){
     return;
   }
   const words=s.say==="on" ? t("Your catalogs, edits and settings now follow you to every computer you sign in on. You can turn this off in Account.")
-    : syncUnavailable(s.say, signinV.signedIn);
+    : syncUnavailable(s.say, signinV.signedIn, true);
   const i=words.indexOf(". ");
   const d=document.createElement("div");
   d.id="eSyncSaid";

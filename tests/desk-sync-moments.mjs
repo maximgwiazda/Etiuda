@@ -181,8 +181,11 @@ async function main() {
   const LINES = [
     ["on", ON, "Your catalogs, edits and settings on every computer you sign in on.", "switch"],
     ["off", { ...ON, line: "off", on: false }, "Only on this computer.", "switch"],
+    ["off everywhere, the end still owed", { ...ON, line: "ending", on: false }, "Off everywhere. The synced copy is deleted as soon as this computer reaches our service.", "switch"],
     ["org-off", { ...ON, line: "org-off", on: false, held: true, say: "" }, "Your organisation has not turned this on.", "none"],
     ["unavailable, no OneDrive", { ...ON, line: "unavailable", why: "no-drive" }, "Not available on this account: the account has no OneDrive. Everything works on this computer as before.", "none"],
+    ["unavailable, the folder full", { ...ON, line: "unavailable", why: "full" }, "Not available on this account: the account's storage is full. Everything works on this computer as before.", "none"],
+    ["unavailable, the organisation's refusal", { ...ON, line: "unavailable", why: "consent" }, "Not available on this account: your organisation has not allowed it; its IT department decides. Everything works on this computer as before.", "none"],
     ["the folder's consent never given", { ...ON, line: "ungiven", on: false }, "Off. Turning it on asks Microsoft to let Etiuda use its folder in this account.", "switch"],
     ["conflict", { ...ON, line: "conflict" }, "Changed on two computers: choose which to keep.", "switch"],
     ["paused", { ...ON, line: "paused", since: Date.UTC(2026, 10, 11, 12) }, "Paused since 11 November. It resumes when this computer reaches our service.", "switch"],
@@ -276,12 +279,15 @@ async function main() {
     await sleep(400);
     const q = await page.evaluate(() => { const b = document.getElementById("eSyncAsk"); return b ? [b.querySelector("h3").textContent, b.querySelector("p").textContent, ...[...b.querySelectorAll("button")].map(x => x.textContent)] : []; });
     const said = await tell(page, { shown: true, line: "on", on: true, held: false, why: "", since: 0, say: "on" });
+    await page.evaluate(() => { const b = document.getElementById("eSyncSaid"); if (b) b.remove(); });
+    const alone = await tell(page, { shown: true, line: "unavailable", on: true, held: false, why: "no-drive", since: 0, say: "no-drive" });
     await page.close();
     const want = ["Wyłączyć synchronizację?", "Opcja Wszędzie usuwa też zsynchronizowaną kopię; każdy komputer zachowuje własną.", "Wszędzie", "Ten komputer", "Anuluj"];
     const ok = r1 && r1.title === "Synchronizacja między komputerami" && r1.line === "Niedostępna na tym koncie: konto nie ma usługi OneDrive. Na tym komputerze wszystko działa jak dotąd."
       && JSON.stringify(q) === JSON.stringify(want)
-      && said.text.replace(/Zamknij$/, "").trim() === "Własne katalogi, zmiany i ustawienia będą teraz dostępne na każdym komputerze, na którym nastąpi zalogowanie. Można to wyłączyć w Koncie.";
-    check(ok, "m3 the row, the question and the bubble in the copywriter's Polish", ok ? undefined : { r1, q, said: said.text });
+      && said.text.replace(/Zamknij$/, "").trim() === "Własne katalogi, zmiany i ustawienia będą teraz dostępne na każdym komputerze, na którym nastąpi zalogowanie. Można to wyłączyć w Koncie."
+      && alone.text.replace(/Zamknij$/, "").trim() === "Synchronizacja między komputerami jest niedostępna na tym koncie: konto nie ma usługi OneDrive. Na tym komputerze wszystko działa jak dotąd.";
+    check(ok, "m3 the row, the question and both bubbles (said once, and not available standing alone) in the copywriter's Polish", ok ? undefined : { r1, q, said: said.text, alone: alone.text });
   }
 
   /* r1: storeRow. */
@@ -294,6 +300,7 @@ async function main() {
       [row({}).line === "on", "on"],
       [row({ pol: { on: false, held: false } }).line === "off", "turned off"],
       [row({ pol: { on: false, held: true } }).line === "org-off", "policy off"],
+      [row({ pol: { on: false, held: false }, owed: true }).line === "ending" && row({ pol: { on: false, held: true }, owed: true }).line === "org-off", "off everywhere, the end owed"],
       [row({ look: { state: "unavailable", why: "offline" } }).line === "on", "offline says nothing"],
       [row({ look: { state: "unavailable", why: "no-drive" } }).why === "no-drive", "no drive"],
       [row({ look: { state: "unavailable", why: "consent" } }).line === "unavailable", "the organisation's refusal: not available"],

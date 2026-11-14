@@ -10836,6 +10836,7 @@ ipcMain.handle("etiuda:signin-check", async (e) => {
 async function signinRenewNow() {
   if (harnessLaunch() && !signinLabHeld()) return ""; /* plant:renew-now-harness */
   signinFlush();
+  storeEndAgain().catch(() => false); /* plant:store-end-again */
   const s = signinState(), held = s.held;
   if (!held && s.out) { await signinOutAgain(); return ""; } /* plant:renew-out */
   if (!held || signinBusy) return ""; /* plant:renew-no-token */
@@ -10873,20 +10874,21 @@ function armSigninRenew() {
    folder itself. */
 let storeLayer = null;
 function StoreLib() { return storeLayer || (storeLayer = require(path.join(__dirname, "sync", "store.cjs"))); }
-/* store.json beside desk.json, read whole or not at all: {format: 1, keys, said, off?, told?, until?}. `keys` the store's keys sealed by
+/* store.json beside desk.json, read whole or not at all: {format: 1, keys, said, off?, told?, until?, owed?}. `keys` the store's keys sealed by
    safeStorage as base64, "" where none are kept; `said` the reason the desk last said (sayOnce); `off` the person's own switch, absent where on;
-   `told` once this computer has had its first look with sync on (firstSay); `until` the last store certificate's end, for the pause. */
+   `told` once this computer has had its first look with sync on (firstSay); `until` the last store certificate's end, for the pause;
+   `owed` the relay team id of a store Turn off everywhere ended that the licence service has not yet answered, sealed as `keys`. */
 const STORE_FILE = "store.json";
 function storeFileRead(text) {
   let d = null;
   try { d = JSON.parse(String(text)); } catch { d = null; }
   const ok = !!d && typeof d === "object" && !Array.isArray(d) && d.format === 1;
   return { keys: ok && typeof d.keys === "string" ? d.keys : "", said: ok && typeof d.said === "string" ? d.said.slice(0, 40) : "", off: ok && d.off === true,
-    told: ok && d.told === true, until: ok && Number.isSafeInteger(d.until) && d.until > 0 ? d.until : 0 };
+    told: ok && d.told === true, until: ok && Number.isSafeInteger(d.until) && d.until > 0 ? d.until : 0, owed: ok && typeof d.owed === "string" ? d.owed.slice(0, 400) : "" };
 }
 function storeFileText(s) {
   return JSON.stringify(Object.assign({ format: 1, keys: s.keys || "", said: s.said || "" }, s.off === true ? { off: true } : {}, s.told === true ? { told: true } : {},
-    s.until > 0 ? { until: s.until } : {}), null, 1) + "\n";
+    s.until > 0 ? { until: s.until } : {}, s.owed ? { owed: s.owed } : {}), null, 1) + "\n";
 }
 let storeKept;
 function storeState() {
@@ -11068,19 +11070,43 @@ function storeConflicts() { return 0; }
 /* store/end at the licence service, signed by this desk over the service's own lines (Studio's storeEndBytes), and the ended mark
    written in the person's folder. Resolves whether the service took it; never rejects. */
 const STORE_END_LINE = "etiuda-licence-store-end";
+async function storeEndPost(rt) {
+  const me = branchIdentity(false);
+  if (!me || (harnessLaunch() && !signinLabHeld()) || !/^[0-9a-f]{32}$/.test(String(rt))) return false;
+  const t = Date.now(), sig = String(signinSign(Buffer.from([STORE_END_LINE, me.key, rt, t].join("\n"), "utf8")) || "");
+  if (!/^[0-9a-f]{128}$/.test(sig)) return false;
+  try {
+    const res = await signinServiceAsk((u, init) => deskFetch(u, init), storeServiceAt("store/end"), { desk: me.key, rt: String(rt), t: t, sig: sig });
+    return !!res && res.status === 200; /* plant:store-end-sent */
+  } catch { return false; }
+}
+/* A STORE/END NOT ANSWERED IS OWED: kept sealed in store.json and posted again at each start and renewal (signinRenewNow) until the
+   service answers, the row saying so meanwhile; where nothing seals for real it is owed in memory alone, until the desk closes. */
+let storeOwedHere = "";
+function storeOwedRt() {
+  const o = storeState().owed;
+  if (!o) return storeOwedHere;
+  try { return String(safeStorage.decryptString(Buffer.from(o, "base64"))); } catch { return ""; }
+}
+function storeOwe(rt) {
+  const s = storeState();
+  storeOwedHere = rt || "";
+  s.owed = "";
+  if (rt && sealsForReal(safeStorage, process.platform)) { try { s.owed = safeStorage.encryptString(String(rt)).toString("base64"); } catch { s.owed = ""; } }
+  storeSave();
+}
+async function storeEndAgain() {
+  const rt = storeOwedRt();
+  if (!rt) return false;
+  if (!(await storeEndPost(rt))) return false;
+  if (storeOwedRt() === rt) { storeOwe(""); tellStore(); }
+  return true;
+}
 async function storeEndEverywhere(keys) {
-  const me = branchIdentity(false), held = signinState().held;
+  const held = signinState().held;
   const p = held ? signinOffered().find(x => x.id === held.provider) : null;
-  let ended = false;
-  if (me && (!harnessLaunch() || signinLabHeld())) {
-    const t = Date.now(), sig = String(signinSign(Buffer.from([STORE_END_LINE, me.key, keys.rt, t].join("\n"), "utf8")) || "");
-    if (/^[0-9a-f]{128}$/.test(sig)) {
-      try {
-        const res = await signinServiceAsk((u, init) => deskFetch(u, init), storeServiceAt("store/end"), { desk: me.key, rt: keys.rt, t: t, sig: sig });
-        ended = !!res && res.status === 200; /* plant:store-end-sent */
-      } catch { ended = false; }
-    }
-  }
+  const ended = await storeEndPost(keys.rt);
+  if (!ended) storeOwe(keys.rt); /* plant:store-end-owed */
   if (p) {
     const L = StoreLib(), folder = L.folderFor(p.id, { ask: storeAsk, token: () => (storeAccess ? storeAccess.token : "") });
     const tok = folder ? await storeTokenFor(p, held).catch(() => ({ why: "offline" })) : { why: "no-drive" };
@@ -11092,7 +11118,7 @@ function storeView() {
   const held = signinState().held;
   const provider = held && signinOffered().some(p => p.id === held.provider) && held.cert ? held.provider : "";
   return StoreLib().storeRow({ provider, pol: storePolicyNow(), look: storeNow, until: storeState().until, now: Date.now(),
-    signinRefused: !!(held && held.said), conflicts: storeConflicts(), say: storeSay });
+    signinRefused: !!(held && held.said), conflicts: storeConflicts(), say: storeSay, owed: !!storeOwedRt() });
 }
 function tellStore() {
   const win = theWindow;

@@ -257,7 +257,8 @@ function pausedLine(cert, now, signinRefused) {
 
 /* ---- what the page is told: the Account row's line and the one thing said once -------------------------------------------
    `o`: provider (the signed-in one, "" for none), pol (storePolicy's answer), look (the last look's {state, why} or null), until (the
-   last store certificate's end), now, signinRefused, conflicts (cards kept in two versions), say (what waits to be said once). Answers
+   last store certificate's end), now, signinRefused, conflicts (cards kept in two versions), say (what waits to be said once), owed
+   (a Turn off everywhere the licence service has not answered yet). Answers
    {shown, line, on, held, why, since, say}: line "org-off" where policy keeps sync off, "off" where the person turned it off,
    "ungiven" where the folder's consent was never given (off, the switch the person's own way to ask for it), "unavailable" where
    the folder could not be reached for a reason the person cannot mend (never offline), "conflict", "paused" after
@@ -265,6 +266,7 @@ function pausedLine(cert, now, signinRefused) {
 function storeRow(o) {
   if (o.provider !== "microsoft" && o.provider !== "google") return { shown: false };
   const pol = o.pol || {}, say = typeof o.say === "string" ? o.say : "";
+  if (!pol.on && !pol.held && o.owed === true) return { shown: true, line: "ending", on: false, held: false, why: "", since: 0, say: "" };
   if (!pol.on) return { shown: true, line: pol.held ? "org-off" : "off", on: false, held: pol.held === true, why: "", since: 0, say: "" };
   const base = { shown: true, on: true, held: pol.held === true, why: "", since: 0, say };
   const look = o.look;

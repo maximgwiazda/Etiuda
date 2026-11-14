@@ -540,9 +540,11 @@ const WIRE_DECLS = ["const SIGNIN_RENEW_MS =", "const SIGNIN_FIRST_MS =", "async
   "function signinOutSend(", "function signinOutAgain("];
 const WIRE_STANDS = ["harnessLaunch", "PLACED_ASIDE", "signinState", "signinOffered", "branchIdentity", "signinIo", "net", "signinRenewHeld",
   "signinSave", "tellSignin", "setTimeout", "pinnedLead", "signinTeamHere", "fs", "path", "sharedFolderForWrite", "SEAT_NAME", "signinView", "signoutAsk", "signinLabHeld", "teamJoin", "cancelJoin", "sendJoin", "theWindow", "unlinkOwn", "stand", "signinRevokedNext",
-  "storeTurn", "storeForget"];
-/* The store's look after a renewal and its forgetting at a sign out (tests/desk-store-shell.mjs holds them): counted, never run here. */
-const WIRE_DEFAULTS = { storeTurn: st => () => { st.storeTurns = (st.storeTurns || 0) + 1; }, storeForget: () => () => {} };
+  "storeTurn", "storeForget", "storeEndAgain"];
+/* The store's look after a renewal, its forgetting at a sign out and an owed store/end posted again (tests/desk-store-shell.mjs holds
+   them): counted, never run here. */
+const WIRE_DEFAULTS = { storeTurn: st => () => { st.storeTurns = (st.storeTurns || 0) + 1; }, storeForget: () => () => {},
+  storeEndAgain: st => () => { st.storeEnds = (st.storeEnds || 0) + 1; return Promise.resolve(false); } };
 function loadWire(st, swap) {
   let text = WIRE_DECLS.map(d => { try { return decl(MAIN, d); } catch { return ""; } }).filter(Boolean).join("\n");
   if (swap) {
