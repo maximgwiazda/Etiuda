@@ -642,6 +642,7 @@ function ejectUndoTests() {
       w.F = new Function("E_CATALOG_STORE", "E_CATALOG_KEY", "E_NS", "nsKey", "hooks", "flushStats", "clearTimeout", "tabSaveTimer",
         "saveTabSession", "ssGet", "ssSet", "ssDel", "TAB_KEY", "lsGet", "lsSet", "lsDel", "lsKeys", "eLayers",
         "eWatchGet", "eWatchClear", "eWatchPut", "offerUndo", "toastRefusal", "catalogStoreRefusal", "eDeskFileShown", "location", "eHasBranch", "LAYER_KEYS", "edCatalogTaken",
+        "originOf", "document",
         loose +"\n" + markers.map(m => extractDecl(src, m)).join("\n")
         + "\nreturn {ejectCatalog, clearLocalMemory, bringBackCleared: typeof bringBackCleared==='function' ? bringBackCleared : null};")(
         ns("Catalog"), ns("CatalogOk"), "e", ns, hooks, () => {}, () => {}, null, () => {},
@@ -650,7 +651,9 @@ function ejectUndoTests() {
         () => Object.keys(w.ls), () => ["eab12~"],
         () => Promise.resolve(null), () => Promise.resolve(), () => {},
         (said, fn) => { w.said = said; w.undo = fn; }, () => {}, () => "", () => "",
-        { reload: () => { w.reloads++; } }, () => desk, JSON.parse(LAYER), same => { w.taken = (w.taken || []).concat(same); });
+        { reload: () => { w.reloads++; } }, () => desk, JSON.parse(LAYER), same => { w.taken = (w.taken || []).concat(same); },
+        /* where the Undo hangs is the page's (tests/desk-bubbles-origin.mjs); here, a page with no controls */
+        () => () => null, { getElementById: () => null });
     } catch (e) { w.F = null; w.err = e.message; }
     w.ls = { eCatalog: "{\"cards\":[1]}", eCatalogOk: "sig", eSample: "1", eCatalogNo: "no", eCatalogFile: "shop.ec",
              eCatalogFileAt: "1700", eCatalogTrust: "valid", eCatalogFrom: "shop.ec", "eab12~Pack": OWN_PACK, ePack: "[\"loose\"]",
@@ -1617,7 +1620,7 @@ function deskMarkTests() {
   eq("desk mark the published mark is not a band over the cards and not a line in the header",
     [tpl.indexOf("mark-sentence") < 0, tpl.indexOf('id="deskMark"') < 0,
      tpl.indexOf("Manage's status line") < 0, tpl.indexOf("#eDeskMark") < 0,
-     /import \{ placeBubble \} from "\.\/bubble\.js"/.test(fileSrc)],
+     /import \{[^}]*\bplaceBubble\b[^}]*\} from "\.\/bubble\.js"/.test(fileSrc)],
     [true, true, true, true, true]);
 
   const V = v2Fns();
