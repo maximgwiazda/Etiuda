@@ -11143,7 +11143,7 @@ function storeSyncFile(name, text) {
   try {
     if (text === null) {
       fs.mkdirSync(storeSyncDir("kept"), { recursive: true });
-      fs.renameSync(at, storeSyncDir("kept", Date.now() + "-" + name));
+      renamePatiently(at, storeSyncDir("kept", Date.now() + "-" + name));
     } else {
       fs.mkdirSync(dir, { recursive: true });
       writeReplacing(at, text);
