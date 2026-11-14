@@ -128,7 +128,8 @@ import * as editionMarksMod from "./modules/edition-marks.js";
 import * as screenTabs from "./modules/screen-tabs.js";
 import * as searchMeaning from "./modules/search-meaning.js";
 import * as orgModelMod from "./modules/org-model.js";
-Object.assign(globalThis, bubble, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, catalogV2, collapse, tour, editors, catalogFile, cardCarry, langTabs, cardEditor, cardMargin, cardChain, macrosJson, tabs, motion, fifth, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, searchMarks, emptyMark, launchMarkMod, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, catalogHistory, catalogMerge, teamJoin, editionChangesMod, editionPanel, deskLook, catalogTrustMod, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, variables, genderDrum, genderTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, deck, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState, host, hookSlots, restart, pick, nextDock, lanes, editionMarksMod, screenTabs, searchMeaning, orgModelMod);
+import * as proxyAsk from "./modules/proxy-ask.js";
+Object.assign(globalThis, bubble, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, catalogV2, collapse, tour, editors, catalogFile, cardCarry, langTabs, cardEditor, cardMargin, cardChain, macrosJson, tabs, motion, fifth, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, searchMarks, emptyMark, launchMarkMod, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, catalogHistory, catalogMerge, teamJoin, editionChangesMod, editionPanel, deskLook, catalogTrustMod, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, variables, genderDrum, genderTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, deck, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState, host, hookSlots, restart, pick, nextDock, lanes, editionMarksMod, screenTabs, searchMeaning, orgModelMod, proxyAsk);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place
@@ -465,6 +466,8 @@ function boot(){
   catalogOffer.wireHostCatalogWatch();
   // The picker the shell draws over the chat, answered from this page
   pick.wirePick();
+  // A network proxy's question for a user name and password, asked by the shell
+  proxyAsk.wireProxyAsk();
   catalogFile.wireCatalogDrop();
   /* The sibling channel is synchronous and free, so it goes first and this only speaks if it
      left the screen clear. */

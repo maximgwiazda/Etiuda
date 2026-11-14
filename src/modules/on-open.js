@@ -37,10 +37,11 @@ function focusEmptyLoadOnOpen(){
   }catch(_){}
 }
 
-/* A dialog on screen that is not a .modal (Quick facts, the tour's card, a question's bubble) holds the desk too. */
+/* A dialog on screen that is not a .modal (Quick facts, the tour's card, a question's bubble) holds the desk too; a resting
+   editor and the editors standing beside it do not. */
 function dialogShown(){
   try{
-    return Array.prototype.some.call(document.querySelectorAll('[role="dialog"]'), d=>d.getClientRects && d.getClientRects().length>0);
+    return Array.prototype.some.call(document.querySelectorAll('[role="dialog"]'), d=>d.getClientRects && d.getClientRects().length>0 && !(d.closest && d.closest(".ed-rest")));
   }catch(_){ return false; }
 }
 

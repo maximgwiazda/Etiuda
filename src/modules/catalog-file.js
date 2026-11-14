@@ -29,7 +29,7 @@ import { rebuildCards } from "./rebuild.js";
 import { cards } from "./app-state.js";
 import { carryCardLayer } from "./card-carry.js";
 import { hooks } from "./hooks.js";
-import { edCatalogTaken } from "./dialog.js";
+import { edCatalogTaken, modalFront } from "./dialog.js";
 import { recordCatalogTrust } from "./catalog-trust.js";
 
 /* ---- one catalog format, one export, one import -----------------------------------------
@@ -782,7 +782,7 @@ function deskMarkInView(e){
   return deskMarkVisible(e);
 }
 function deskMarkTarget(){
-  const open=!document.getElementById("modal").hidden;
+  const open=modalFront();
   if(!open && document.querySelector("#screenHost:not([hidden]) details.manage-sec")){
     const d=document.querySelector('#screenHost details[data-mg="data"]');
     if(!d) return null;

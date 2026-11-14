@@ -23,6 +23,8 @@
  *                 standard account that never installed anything starts the copy from the all-users Start-menu shortcut and
  *                 its first run writes into that account's own Documents and AppData; then the uninstall, as SYSTEM, takes
  *                 the program, its keys, its shortcuts and its link whole. Green only where all three hold.
+ *   ext-claimed   the other half of the extension key's rule (Claude α's yes, 2026-11-13 09:33): the all-users uninstall deletes
+ *                 .<ext> where its default still names our class, and leaves it where another program's claim stands.
  *
  * WHAT IT REUSES. The test build and its installer as tools/runner/hkcu-uninstaller-marker.mjs makes them (the test identity
  * of tools/test-identity.cjs, built from tools/electron-builder-test.cjs with E.unsignedEnv, refused unless G.setupRefusal
@@ -55,7 +57,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const NO_VERDICT = 78;
-const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618", "all-move", "all-space-d", "system-push", "ts-cycle"];
+const LEG_NAMES = ["all-upgrade", "running-1618", "system-bare", "locked-1618", "all-move", "all-space-d", "system-push", "ext-claimed", "ts-cycle", "shipped-detect", "nonpersistent", "net-hosts"];
 let OUT = "";
 const say = (l) => { process.stdout.write(l + "\n"); if (OUT) fs.appendFileSync(path.join(OUT, "legs.txt"), l + "\n"); };
 const refuse = (why) => { say("#legs refused: " + why); process.exit(NO_VERDICT); };
@@ -105,6 +107,10 @@ if (P.badInstallDir(LAB)) refuse("the lab cannot be named by /D: " + P.badInstal
 /* PowerShell, one script file per question, written into the lab. None prints a password: the one that needs it reads it
    from the environment of that one child. */
 const PS = {
+  /* The runner's own DNS client cache: emptied before a window and read after it, so every name either network stack (Chromium's
+     and Node's) asked the system for in that window is listed. The net-hosts leg's second witness, beside the net-log. */
+  dnsclear: ["try { Clear-DnsClientCache; 'cleared' } catch { 'refused: ' + $_.Exception.Message }"],
+  dnsread: ["try { @(Get-DnsClientCache | ForEach-Object { $_.Entry.ToLower() } | Sort-Object -Unique) -join ' ' } catch { 'refused: ' + $_.Exception.Message }"],
   elevated: ["$p = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())",
     "if ($p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { 'yes' } else { 'no' }"],
   lnk: ["param([string]$File)",
@@ -573,13 +579,17 @@ async function systemBare(rec) {
       own package and wrote as the person, with nothing of the installing context in the way.
    3. the removal: the uninstaller the HKLM entry names, with P.uninstallArgs("machine"), in a one-shot task as SYSTEM, after
       the person's copy is stopped by pid. Holds where it exits 0, the folder goes within 120 s, and the keys, the shortcuts
-      and the link's class are gone. The extension's own key (.<ext> under Software\Classes) may stay, as electron-builder's
-      APP_UNASSOCIATE leaves it (it deletes the class and the OpenWithProgids value, not the extension key), so it is judged as
-      the per-user leg's U12 judges it: no association to the removed copy, its class gone and no OpenWithProgids value naming
-      it (first run 43392802791, 2026-11-13, red on that key alone). The person's own Documents and AppData are left, which is
+      and the link's class are gone, the extension's own key (.<ext> under Software\Classes) with them: nothing else claimed
+      it here, and the uninstaller deletes it when its default still names our class (Claude α's yes of 2026-11-13 09:33 to the
+      test architect's note on the first run, 43392802791, red on that key alone while electron-builder's APP_UNASSOCIATE left
+      it). A key another program claims is ext-claimed's question. The person's own Documents and AppData are left, which is
       recorded, not judged.
    The account goes at the end; its profile folder stays on the throwaway runner. */
 const SAMPLE = path.join(ROOT, "shell", "sample-catalog.ec");
+/* A key named by its hive and last segment, so a fact says which hive kept it. */
+const keyName = (k) => k.split("\\")[0] + ":" + k.replace(/^.*\\/, "");
+/* The extension's own key in either hive. */
+const EXT_KEYS = ["HKLM", "HKCU"].map((h) => h + "\\Software\\Classes\\." + T.ext);
 const MACHINE_LINK = "HKLM\\Software\\Classes\\" + T.scheme;
 const lnkTarget = (f) => ps("lnk", ["-File", f]);
 const samePath = (a, b) => !!a && !!b && P.samePath(a, b);
@@ -681,14 +691,9 @@ async function systemPush(rec) {
   const goneIn = await goneWithin(want, 120);
   rec.f("removal-exit", removal.timedOut ? "timeout" : removal.code); rec.f("removal-seconds", Math.round((Date.now() - t3) / 1000));
   rec.f("folder-gone-s", goneIn);
-  /* A key named by its hive and last segment, so a fact says which hive kept it. */
-  const keyName = (k) => k.split("\\")[0] + ":" + k.replace(/^.*\\/, "");
-  const extKeys = ["HKLM", "HKCU"].map((h) => h + "\\Software\\Classes\\." + T.ext);
-  const extLeft = extKeys.filter(present);
-  const extOpens = extLeft.filter((k) => { const r = G.regQuery(k + "\\OpenWithProgids"); return r.present && T.catalogClass in G.regValues(r.text); });
-  const left = { keys: KEYS.filter((k) => !extKeys.includes(k)).filter(present).map(keyName).concat(extOpens.map((k) => keyName(k) + "(opens it)")),
-    links: commonLinks().filter((f) => fs.existsSync(f)), link: present(MACHINE_LINK) };
-  rec.f("keys-left", left.keys.length ? few(left.keys) : 0); rec.f("ext-key-kept", extLeft.length ? extLeft.map(keyName).join(",") : "none");
+  const extLeft = EXT_KEYS.filter(present);
+  const left = { keys: KEYS.filter(present).map(keyName), links: commonLinks().filter((f) => fs.existsSync(f)), link: present(MACHINE_LINK) };
+  rec.f("keys-left", left.keys.length ? few(left.keys) : 0); rec.f("ext-key-left", extLeft.length ? extLeft.map(keyName).join(",") : "none");
   rec.f("shortcuts-left", left.links.length); rec.f("machine-link-left", yes(left.link));
   rec.f("person-data-kept", yes(fs.existsSync(path.join(profile, "Documents", "Etiuda")) && fs.existsSync(path.join(profile, "AppData", "Roaming", T.packageName))));
   const removedOk = removal.code === 0 && goneIn > 0 && !left.keys.length && !left.links.length && !left.link;
@@ -697,6 +702,32 @@ async function systemPush(rec) {
       + " s, then removed as SYSTEM whole (folder gone in " + goneIn + " s)"
     : "pushed and started, but the removal as SYSTEM: exit " + (removal.timedOut ? "none within 10 min" : removal.code) + ", folder gone " + yes(goneIn > 0)
       + ", keys left " + left.keys.length + ", shortcuts left " + left.links.length + ", the link left " + yes(left.link));
+}
+
+/* ---- (h) ext-claimed: the extension key another program claimed after us stays theirs -------------------------------
+   The all-users install, then another program's claim written as such a program writes it: the default of HKLM's
+   Software\Classes\.<ext> set to its own class. The uninstall, from the entry, then must take our class and our OpenWithProgids
+   value and leave that key with the other program's default as it stands. Green where it does; the sweep then takes the key. */
+const OTHER_CLASS = "Other.Program." + T.ext;
+const defaultOf = (k) => { const r = G.regQuery(k); return r.present ? G.regValues(r.text)["(Default)"] || "" : null; };
+async function extClaimed(rec) {
+  const dir = await installMachine(rec, NEWER, "install");
+  const ext = EXT_KEYS[0], ours = "HKLM\\Software\\Classes\\" + T.catalogClass;
+  rec.f("default-after-install", defaultOf(ext));
+  const w = spawnSync("reg", ["add", ext, "/ve", "/d", OTHER_CLASS, "/f", "/reg:64"], { encoding: "utf8", windowsHide: true, timeout: 30000 });
+  if (w.status !== 0 || defaultOf(ext) !== OTHER_CLASS) throw new NoVerdict("the other program's claim could not be written: " + oneLine(w.stderr || w.stdout));
+  const un = exeOf(valueOf(regKey(KM.uninstall), "UninstallString"));
+  if (!un || !fs.existsSync(un)) throw new NoVerdict("the HKLM entry names no uninstaller that exists (" + JSON.stringify(un) + ")");
+  const r = await runExe(un, P.uninstallArgs("machine"), 300000);
+  const goneIn = await goneWithin(dir, 120);
+  const progids = G.regQuery(ext + "\\OpenWithProgids");
+  const after = { kept: present(ext), def: defaultOf(ext), ours: present(ours), progid: progids.present && T.catalogClass in G.regValues(progids.text) };
+  rec.f("uninstall-exit", r.code); rec.f("folder-gone-s", goneIn); rec.f("ext-kept", yes(after.kept)); rec.f("ext-default", after.def);
+  rec.f("our-class-left", yes(after.ours)); rec.f("our-progid-left", yes(after.progid));
+  const ok = r.code === 0 && goneIn > 0 && after.kept && after.def === OTHER_CLASS && !after.ours && !after.progid;
+  rec.end(ok, ok ? "another program's claim on ." + T.ext + " survived the uninstall as it stood, and our class and our OpenWithProgids value went"
+    : "after the uninstall: exit " + r.code + ", folder gone " + yes(goneIn > 0) + ", ." + T.ext + " kept " + yes(after.kept) + " with default "
+      + JSON.stringify(after.def) + " (" + OTHER_CLASS + " wanted), our class left " + yes(after.ours) + ", our OpenWithProgids value left " + yes(after.progid));
 }
 
 /* ---- ts-cycle: the Test Service build over the ordinary one, and back ---------------------------------------------- */
@@ -886,6 +917,272 @@ async function tsCycle(rec) {
     : "back on the ordinary build, its start and the data: " + cData.why);
 }
 
+/* ---- shipped-detect: the README's detection rule, on the shipped identity ---------------------------------------- */
+
+/* Claude α's corporate-readiness list, row 2b (2026-11-13): "the detection rule proven on the shipped identity". Every other leg
+   installs the test identity, which the install guard alone admits, since on a desk the shipped identity's install would write
+   and its uninstall remove what the real install owns. On a hosted runner nothing real is installed: the wall above has already
+   held (the sentinel absent, GITHUB_ACTIONS and the hosted runner's variables, the guard finding neither shipped app), so this
+   leg alone builds and installs the shipped identity, all users, and reads the rule the README gives in its own words:
+   DisplayVersion under HKLM's Uninstall key named by the app id's GUID, in the 64-bit view; InstallLocation beside it the
+   folder; the QuietUninstallString the README writes out; and, after the uninstall that string names, the rule finding nothing.
+   The README's GUID is read from the README itself and must be the one the shipped app id gives. The guard's end comparison
+   (the whole run's last line) is the net: every shipped place reads as before. */
+const SHIPPED = require(path.join(ROOT, "tools", "test-identity.cjs")).SHIPPED.desk;
+const S_GUID = P.appGuid(SHIPPED.appId), SKM = P.registryKeys("machine", S_GUID);
+const S_KEYS = [SKM.uninstall, SKM.install].map(regKey)
+  .concat([SHIPPED.scheme, "." + SHIPPED.ext, SHIPPED.catalogClass].map((n) => "HKLM\\Software\\Classes\\" + n));
+function shippedSweep() {
+  const took = [];
+  for (const k of S_KEYS) {
+    if (!present(k)) continue;
+    const r = spawnSync("reg", ["delete", k, "/f", "/reg:64"], { encoding: "utf8", windowsHide: true, timeout: 30000 });
+    took.push(k.replace(/^.*\\/, "") + (r.status === 0 ? "" : "(refused)"));
+  }
+  for (const f of [path.join(PLACES.commonDesktop, SHIPPED.productName + ".lnk"), path.join(PLACES.commonPrograms, SHIPPED.productName + ".lnk")])
+    if (fs.existsSync(f)) { try { fs.unlinkSync(f); took.push(f); } catch (e) { took.push(f + "(refused)"); } }
+  return took;
+}
+async function shippedDetect(rec) {
+  /* The README's own rule, its GUID and its quiet uninstall string, read from the file as it stands. */
+  const readme = fs.readFileSync(path.join(ROOT, "README.md"), "utf8");
+  const said = /Uninstall\\([0-9a-f-]{36})`/.exec(readme), saidGuid = said ? said[1] : "";
+  const quietSaid = (/`("C:\\Program Files\\[^`]+)`/.exec(readme) || [])[1] || "";
+  rec.f("readme-guid", saidGuid || "none"); rec.f("guid-of-app-id", S_GUID);
+  if (saidGuid !== S_GUID) { rec.end(false, "the README's detection key names " + JSON.stringify(saidGuid) + ", not the shipped app id's GUID " + S_GUID); return; }
+  for (const k of S_KEYS) if (present(k)) throw new NoVerdict("the shipped identity is already registered here (" + k + "), so this is no clean runner");
+
+  /* The shipped build: the same tree, packed without the test identity, unsigned. */
+  const out = path.join(LAB, "dist-shipped");
+  /* electron-builder directly, with publishing off: on a hosted runner it publishes by itself where nothing says otherwise
+     ("Implicit publishing triggered by CI detection"), and the shipped config, unlike the test identity's, names no publish: null
+     (the first dispatch, 2026-11-13: the installer was made, then the build stopped for want of a GitHub token). The pack step
+     package.mjs adds (turning.7z, the NSIS template patches) has already run in this job for the test build, on this tree. */
+  try {
+    execFileSync(process.execPath, [path.join(ROOT, "node_modules", "electron-builder", "out", "cli", "cli.js"), "--win", "--publish", "never"],
+      { cwd: ROOT, stdio: "inherit", env: E.unsignedEnv({ ETIUDA_DIST: out }) });
+  } catch (e) { throw new NoVerdict("the shipped build could not be made: " + oneLine(e.message)); }
+  const found = fs.readdirSync(out).filter((n) => /-setup\.exe$/i.test(n));
+  if (found.length !== 1) throw new NoVerdict(out + " holds " + found.length + " installers; expected 1");
+  const setup = path.join(out, found[0]), id = G.setupIdentity(setup);
+  rec.f("setup", found[0]);
+  if (id.productName !== SHIPPED.productName || id.appId) throw new NoVerdict("the built setup is not the shipped identity: " + JSON.stringify(id));
+
+  rec.after("shipped-uninstall", async () => {
+    const said2 = [];
+    const loc = valueOf(regKey(SKM.install), "InstallLocation") || valueOf(regKey(SKM.uninstall), "InstallLocation");
+    const un = exeOf(valueOf(regKey(SKM.uninstall), "UninstallString"));
+    if (un && fs.existsSync(un)) {
+      const r = await runExe(un, P.uninstallArgs("machine"), 300000);
+      said2.push("uninstaller exit " + r.code + (loc ? ", folder gone " + yes((await goneWithin(loc, 120)) > 0) : ""));
+    }
+    const took = shippedSweep();
+    if (took.length) said2.push("swept " + took.join(","));
+    return said2.join("; ") || "nothing of the shipped identity was left";
+  });
+  const args = P.installArgs({ mode: "machine" });
+  const r = await runExe(setup, args, 600000);
+  rec.f("install-exit", r.timedOut ? "timeout" : r.code);
+  const version = valueOf(regKey(SKM.uninstall), "DisplayVersion");
+  const loc = valueOf(regKey(SKM.uninstall), "InstallLocation");
+  const quiet = valueOf(regKey(SKM.uninstall), "QuietUninstallString");
+  const prog = loc ? path.join(loc, SHIPPED.productName + ".exe") : "";
+  rec.f("display-version", version); rec.f("install-location", loc); rec.f("quiet-uninstall", quiet);
+  const found1 = r.code === 0 && !!version && !!prog && fs.existsSync(prog);
+  const quietOk = !!quietSaid && quiet === quietSaid;
+  if (!found1 || !quietOk) {
+    rec.end(false, "after the all-users install (exit " + r.code + "): DisplayVersion " + JSON.stringify(version) + ", InstallLocation "
+      + JSON.stringify(loc) + " holding the program " + yes(!!prog && fs.existsSync(prog)) + ", QuietUninstallString " + JSON.stringify(quiet)
+      + (quietOk ? "" : " where the README says " + JSON.stringify(quietSaid)));
+    return;
+  }
+  /* The uninstall a deployment tool runs: the QuietUninstallString as written, its program and its arguments. */
+  const qExe = exeOf(quiet), qArgs = quiet.slice(quiet.indexOf('"', 1) + 1).trim().split(/\s+/).filter(Boolean);
+  const u = await runExe(qExe, qArgs, 300000);
+  const goneIn = await goneWithin(loc, 120);
+  const after = present(regKey(SKM.uninstall)) ? valueOf(regKey(SKM.uninstall), "DisplayVersion") : "";
+  rec.f("uninstall-exit", u.code); rec.f("folder-gone-s", goneIn); rec.f("rule-after", after ? "still finds " + after : "finds nothing");
+  const ok = u.code === 0 && goneIn > 0 && !after;
+  rec.end(ok, ok
+    ? "the shipped identity, all users: the README's rule finds DisplayVersion " + version + " under Uninstall\\" + S_GUID + " (its GUID the app id's),"
+      + " InstallLocation " + loc + " holding the program, the QuietUninstallString exactly the README's; that string uninstalls (exit 0, folder gone in "
+      + goneIn + " s) and the rule then finds nothing"
+    : "the uninstall the QuietUninstallString names: exit " + u.code + ", folder gone " + yes(goneIn > 0) + ", the rule afterwards " + (after ? "still finds " + after : "finds nothing"));
+}
+
+/* ---- nonpersistent: a profile reset between sessions, measured ----------------------------------------------------- */
+
+/* Claude α's corporate-readiness list, row 6d (2026-11-13): "a non-persistent profile measured", against the folder list of
+   state/briefs/lead-engineer-gamma-4prime-2026-11-13-data-flow-facts.md table 3 (6b). The program installed for all users, as
+   that table advises; Documents kept as a redirected folder keeps it; the profile's data folder lost between sessions:
+     (A) the whole user-data folder gone, as a non-persistent desktop discards it at logoff;
+     (B) Local State alone gone, desk.json kept, as where the profile roams but the sealing key's wrap does not.
+   Green only where the desk starts in every session and the person's Documents come through byte for byte (their own catalog
+   and the first run's sample, neither changed nor duplicated). What is lost is recorded, never judged: the desk's id after each
+   reset, a desk file set aside as unreadable, and whether the first run's sample was written again. */
+async function nonPersistent(rec) {
+  const wall = E.windowWallRefusal(WHO);
+  if (wall) throw new NoVerdict("the leg starts the installed desk and the window wall refuses: " + wall[0]);
+  if (!process.env.APPDATA) throw new NoVerdict("APPDATA is not set, so the profile's data folder cannot be named");
+  const dir = await installMachine(rec, NEWER, "install");
+  const prog = path.join(dir, PRODUCT + ".exe");
+  const ud = path.join(process.env.APPDATA, T.packageName), docsRoot = path.join(LAB, "np-documents"), docs = path.join(docsRoot, "Etiuda");
+  if (fs.existsSync(ud)) throw new NoVerdict(ud + " is already there, so this account is not a fresh one to measure");
+  fs.mkdirSync(docsRoot, { recursive: true });
+  /* Every aside sits beside the profile on its own drive, never in the lab: the lab is on D: on a hosted runner and APPDATA on C:,
+     and a rename does not cross drives (EXDEV, first dispatch 43495740245). */
+  const aside = (tag) => path.join(process.env.APPDATA, "etiuda-np-" + tag + "-" + process.pid);
+  rec.after("profile", () => { try { if (fs.existsSync(ud)) fs.renameSync(ud, aside("left")); return "moved aside"; } catch (e) { return "left: " + e.code; } });
+  const deskFile = path.join(ud, "desk.json"), sample = path.join(docs, path.basename(SAMPLE));
+  const deskId = () => { try { const d = JSON.parse(fs.readFileSync(deskFile, "utf8")); return typeof d.desk === "string" ? d.desk : ""; } catch (e) { return ""; } };
+  const sampled = () => { try { return /"e~sampled"/.test(fs.readFileSync(deskFile, "utf8")); } catch (e) { return false; } };
+  const unread = () => { try { return fs.readdirSync(ud).filter((n) => /^desk\.unread-[0-9a-f]+\.json$/.test(n)).length; } catch (e) { return 0; } };
+  /* One session: the installed program, its user-data folder the one Electron's own rule picks, stopped by pid once `done` holds
+     and the copy has stayed up a further 10 s, or 90 s pass. */
+  const session = async (tag, done) => {
+    const opts = { stdio: "ignore", windowsHide: true, env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: docsRoot, ETIUDA_TEST_DEVTOOLS: "1" }) };
+    const args = ["--user-data-dir=" + ud];
+    const no = E.shellLaunchRefusal(WHO, args, opts);
+    if (no) throw new NoVerdict("the start is refused: " + no[0]);
+    const t0 = Date.now(), child = E.shellLaunch(WHO, prog, args, opts);
+    let gone = false, code = null;
+    child.on("exit", (c) => { gone = true; code = c; });
+    let held = -1;
+    for (let i = 0; i < 45 && !gone; i++) { await sleep(2000); if (done()) { held = Math.round((Date.now() - t0) / 1000); break; } }
+    if (held >= 0) for (let i = 0; i < 5 && !gone; i++) await sleep(2000);
+    const up = !gone;
+    if (!gone) E.killTree(child.pid);
+    for (const p of procsOf(prog)) E.killTree(p.pid);
+    for (let i = 0; i < 15 && procsOf(prog).length; i++) await sleep(1000);
+    rec.f(tag + "-started", yes(up)); rec.f(tag + "-ready-s", held); if (!up) rec.f(tag + "-exit", code);
+    return { up, ready: held >= 0 };
+  };
+
+  /* Session 1: a fresh profile; the first run writes the sample and desk.json. Then the person's own catalog beside it. */
+  const s1 = await session("s1", () => sampled() && fs.existsSync(sample) && !!deskId());
+  if (!s1.ready) throw new NoVerdict("the first session did not write desk.json with its mark and the sample, so there is nothing to carry");
+  const id1 = deskId(), mine = path.join(docs, "my-own-catalog.ec");
+  fs.copyFileSync(SAMPLE, mine);
+  const docsBefore = manifest(docsRoot);
+  rec.f("s1-desk", id1.slice(0, 9));
+
+  /* (A) the whole user-data folder discarded, as at a non-persistent logoff. */
+  fs.renameSync(ud, aside("after-s1"));
+  const a = await session("a", () => !!deskId());
+  const idA = deskId(), docsA = manifest(docsRoot), dA = manifestDiff(docsBefore, docsA);
+  rec.f("a-desk", idA ? (idA === id1 ? "same" : "new") : "none"); rec.f("a-docs-changed", dA.changed.length ? few(dA.changed) : 0);
+  rec.f("a-docs-gone", dA.gone.length ? few(dA.gone) : 0); rec.f("a-docs-added", dA.added.length ? few(dA.added) : 0); rec.f("a-resampled", yes(sampled()));
+
+  /* (B) Local State alone discarded, desk.json kept: the sealing key's wrap lost, the desk file roaming. */
+  const ls = path.join(ud, "Local State");
+  const hadLs = fs.existsSync(ls);
+  if (hadLs) fs.renameSync(ls, aside("local-state-after-a"));
+  rec.f("b-local-state-removed", yes(hadLs));
+  const b = await session("b", () => !!deskId());
+  const idB = deskId(), docsB = manifest(docsRoot), dB = manifestDiff(docsA, docsB);
+  rec.f("b-desk", idB ? (idB === idA ? "same" : "new") : "none"); rec.f("b-unread-set-aside", unread());
+  rec.f("b-docs-changed", dB.changed.length ? few(dB.changed) : 0); rec.f("b-docs-gone", dB.gone.length ? few(dB.gone) : 0); rec.f("b-docs-added", dB.added.length ? few(dB.added) : 0);
+
+  const docsOk = !dA.changed.length && !dA.gone.length && !dA.added.length && !dB.changed.length && !dB.gone.length && !dB.added.length;
+  const ok = a.up && a.ready && b.up && b.ready && docsOk;
+  rec.end(ok, (ok ? "" : "not held: ") + "after the whole user-data folder was discarded the desk started (" + yes(a.up) + "), its id "
+    + (idA === id1 ? "the same" : "a new one") + ", the first-run sample written again " + yes(sampled()) + "; after Local State alone was discarded it started ("
+    + yes(b.up) + "), its id " + (idB === idA ? "kept" : "new") + ", " + unread() + " desk file(s) set aside as unreadable; the person's Documents unchanged "
+    + yes(docsOk) + (docsOk ? "" : " (A: " + few(dA.changed.concat(dA.gone, dA.added)) + "; B: " + few(dB.changed.concat(dB.gone, dB.added)) + ")"));
+}
+
+/* ---- net-hosts: every host a desk session reaches, measured -------------------------------------------------------- */
+
+/* The data-flow facts' table 1 (state/briefs/lead-engineer-gamma-4prime-2026-11-13-data-flow-facts.md, row 10b) lists the hosts
+   the desk contacts as read from the code; this measures them. One installed session, idle 120 s, witnessed twice: Chromium's own
+   net-log (--log-net-log, written out only at a clean close) for what goes through Chromium's stack, the relay's Node socket excepted, and the system's DNS cache,
+   emptied before and read after, for both stacks; a window of the same length with no desk running is read first, so the runner's
+   own traffic is named and set apart. What a harness start cannot show is said, never inferred: the update look and the sign-in
+   renewal are off for every harness start (shell/main.js harnessLaunch), so neither can appear here. Windows' own spell-checker
+   asks nothing of Chromium's network; a dictionary download, if one happened, shows as its host in both witnesses. */
+async function netHosts(rec) {
+  const wall = E.windowWallRefusal(WHO);
+  if (wall) throw new NoVerdict("the leg starts the installed desk and the window wall refuses: " + wall[0]);
+  if (!process.env.APPDATA) throw new NoVerdict("APPDATA is not set, so the profile's data folder cannot be named");
+  const dir = await installMachine(rec, NEWER, "install");
+  const prog = path.join(dir, PRODUCT + ".exe");
+  const ud = path.join(process.env.APPDATA, T.packageName), docsRoot = path.join(LAB, "nh-documents"), netFile = path.join(LAB, "net-log.json");
+  if (fs.existsSync(ud)) throw new NoVerdict(ud + " is already there, so this account is not a fresh one to measure");
+  fs.mkdirSync(docsRoot, { recursive: true });
+  rec.after("profile", () => { try { if (fs.existsSync(ud)) fs.renameSync(ud, path.join(process.env.APPDATA, "etiuda-nh-left-" + process.pid)); return "moved aside"; } catch (e) { return "left: " + e.code; } });
+  const IDLE = 120000, TYPED = 30000, PORT = 9339;
+  const names = (said) => /^refused|^no answer/.test(said) ? null : said.split(/\s+/).filter(Boolean);
+  /* The runner's own names in a window as long as the session's, with no desk running. */
+  if (ps("dnsclear") !== "cleared") throw new NoVerdict("the DNS cache could not be emptied, so neither window can be read clean");
+  await sleep(IDLE + TYPED);
+  const quiet = names(ps("dnsread"));
+  if (!quiet) throw new NoVerdict("the DNS cache could not be read");
+  /* The debugging port is the test door's (ETIUDA_TEST_DEVTOOLS=1, shell/main.js TEST_DOOR): the leg closes the window by
+     Browser.close, because Chromium writes the net-log out only at a clean exit and a killed window leaves its list empty
+     (tests/desk.js readNetLog), and it types through the same port. */
+  const opts = { stdio: "ignore", windowsHide: true, env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: docsRoot, ETIUDA_TEST_DEVTOOLS: "1" }) };
+  const args = ["--user-data-dir=" + ud, "--log-net-log=" + netFile, "--remote-debugging-port=" + PORT];
+  const no = E.shellLaunchRefusal(WHO, args, opts);
+  if (no) throw new NoVerdict("the start is refused: " + no[0]);
+  ps("dnsclear");
+  const child = E.shellLaunch(WHO, prog, args, opts);
+  let gone = false, code = null;
+  const exited = new Promise((r) => child.on("exit", (c) => { gone = true; code = c; r(true); }));
+  const b = await E.connectShell({ port: PORT, child, waitMs: 60000 });
+  for (let t = 0; t < IDLE && !gone; t += 2000) await sleep(2000);
+  const upIdle = !gone;
+  /* Spell-check: Chromium starts a dictionary's fetch when a field it checks gets focus and text, so an idle desk may not show
+     it. A text field with spell-check on, in the desk's own window and renderer, takes an invented line in Polish and one in
+     English with misspellings, typed key by key; the reply editor is such a field (spellcheck="true"), reached here without
+     driving the editor open. The profile's Dictionaries folder is the third witness: a downloaded dictionary lands there. */
+  let typed = "no";
+  try {
+    const pages = await b.pages();
+    const page = pages.find((x) => /etiuda\.html/i.test(x.url())) || pages[0];
+    await page.evaluate(() => { const t = document.createElement("textarea"); t.id = "nhSpell"; t.spellcheck = true; document.body.appendChild(t); t.focus(); });
+    await page.keyboard.type("Wczoraj przyjechalem do domu, ale ksiązka zostala w samochodzie. ", { delay: 15 });
+    await page.keyboard.type("I recieved the parcle yesterday and the adress was rigth. ", { delay: 15 });
+    typed = await page.evaluate(() => String((document.getElementById("nhSpell") || {}).value || "").length > 60 ? "yes" : "short");
+  } catch (e) { typed = "failed: " + oneLine(String(e && e.message || e)); }
+  for (let t = 0; t < TYPED && !gone; t += 2000) await sleep(2000);
+  const busy = names(ps("dnsread")) || [];
+  let dicts = [];
+  try { dicts = fs.readdirSync(path.join(ud, "Dictionaries")); } catch (e) { dicts = []; }
+  try { await b.close(); } catch (e) { /* judged by the exit below */ }
+  const alone = await Promise.race([exited, sleep(15000).then(() => false)]);
+  try { b.disconnect(); } catch (e) { /* closed */ }
+  if (!gone) E.killTree(child.pid);
+  for (const p of procsOf(prog)) E.killTree(p.pid);
+  for (let i = 0; i < 15 && procsOf(prog).length; i++) await sleep(1000);
+  rec.f("up-120s", yes(upIdle)); rec.f("typed", typed); rec.f("closed-alone", yes(alone === true)); if (gone) rec.f("exit", code);
+  /* The net-log, parsed whole as tests/desk.js reads it: every event's params.host, and every scheme://host in a url. */
+  let doc = null, raw = "";
+  try { raw = fs.readFileSync(netFile, "utf8"); } catch (e) { rec.f("net-log", "none: " + e.code); }
+  try { doc = JSON.parse(raw); } catch (e) { try { doc = JSON.parse(raw.replace(/,\s*$/, "") + "]}"); } catch (x) { doc = null; } }
+  const events = doc && Array.isArray(doc.events) ? doc.events : [];
+  const fromLog = new Set();
+  for (const ev of events) {
+    const pr = ev && ev.params;
+    if (!pr) continue;
+    if (typeof pr.host === "string") fromLog.add(pr.host.toLowerCase());
+    for (const k of ["url", "original_url", "origin"]) {
+      const m = typeof pr[k] === "string" && /^(https?|wss?):\/\/(\[[^\]]+\]|[^\/:?#]+)/i.exec(pr[k]);
+      if (m) fromLog.add(m[2].toLowerCase());
+    }
+  }
+  const local = (h) => /^(127\.|\[?::1\]?$|localhost$|0\.0\.0\.0$)/.test(h);
+  const logHosts = [...fromLog].filter((h) => h && !local(h)).sort();
+  const quietSet = new Set(quiet), dnsHosts = busy.filter((h) => !quietSet.has(h)).sort();
+  rec.f("net-log-events", events.length); rec.f("net-log-hosts", logHosts.length ? logHosts.join(",") : 0);
+  rec.f("dns-runner-own", quiet.length); rec.f("dns-new-in-session", dnsHosts.length ? dnsHosts.join(",") : 0);
+  rec.f("dictionaries", dicts.length ? dicts.join(",") : 0); rec.f("loopback-in-log", yes([...fromLog].some(local)));
+  const ok = upIdle && alone === true && events.length > 0 && typed === "yes";
+  rec.end(ok, (ok ? "" : "not measured whole: ") + "an installed desk idle 120 s and then typed into (Polish and English, misspelt; harness start, so the update look and the renewal off by design) reached, by its net-log of "
+    + events.length + " events, " + (logHosts.length ? logHosts.join(", ") : "no host but loopback") + "; the DNS cache saw " + (dnsHosts.length ? dnsHosts.join(", ") : "no name")
+    + " beyond the " + quiet.length + " the runner asked for in a quiet window of the same length; dictionaries in the profile: " + (dicts.length ? dicts.join(", ") : "none")
+    + "; typed " + typed + ", closed alone " + yes(alone === true));
+}
+
 /* ---- (d) locked-1618 ------------------------------------------------------------------------------------------- */
 
 async function locked1618(rec) {
@@ -951,7 +1248,7 @@ function record(name) {
   return rec;
 }
 const LEGS = { "all-upgrade": allUpgrade, "running-1618": running1618, "system-bare": systemBare, "locked-1618": locked1618, "all-move": allMove, "all-space-d": allSpaceD,
-  "system-push": systemPush, "ts-cycle": tsCycle };
+  "system-push": systemPush, "ext-claimed": extClaimed, "ts-cycle": tsCycle, "shipped-detect": shippedDetect, "nonpersistent": nonPersistent, "net-hosts": netHosts };
 
 /* The newer setup, built once from this tree under the test identity, as the marker builds it. */
 const early = legPreflight();

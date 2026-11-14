@@ -1,7 +1,7 @@
 /* THE SELLER'S ADDRESS: ETIUDA_PACK_SELLER_ADDRESS names a private file outside every tree for one packaging command. The build then
  * reads its licence pages from a copy of buildResources in the output folder, each page's address placeholder filled from that file.
- * The tree's own pages keep their placeholders, so the address is never in a tree. Unset or empty, electron-builder.js's config is
- * returned as it is, the same object, and tools/sellable.mjs refuses the placeholder for a customer build as before.
+ * The tree's own pages carry no placeholder: the seller's line gives no address, so the variable set against them stops the packaging
+ * with that reason. Unset or empty, electron-builder.js's config is returned as it is, the same object.
  * tests/seller-address.mjs drives every path here. */
 "use strict";
 const fs = require("node:fs");
@@ -41,21 +41,25 @@ function fill(text, hole, value, name) {
   return String(text).split(hole).join(value);
 }
 
+/* No page carrying its placeholder leaves nothing to fill: refused with that reason, not as a page whose wording moved. */
+const noHole = dir => SELLER_ADDRESS_VAR + " is set, but no licence page in " + dir + " has an address to fill, since the seller's line gives none: leave it unset";
+
 /* The copy made: buildResources `resDir` of `root` copied whole to <output>/.seller-pages/<its name>, the one folder this replaces, each
    page HOLES names filled from the file the variable names. Returns {dir, pages}. A copy inside the tree's buildResources is refused. */
 const within = (outer, inner) => { const rel = path.relative(outer, inner); return !rel || (!rel.startsWith("..") && !path.isAbsolute(rel)); };
 function sellerStage(env, root, resDir, output) {
   const from = path.resolve(root, resDir), to = path.resolve(root, output, STAGE, path.basename(from));
   if (within(from, to) || within(to, from)) throw new Error(SELLER_ADDRESS_VAR + ": the copy would land inside " + resDir); /* plant:seller-inside */
+  const pages = {};
+  for (const name of Object.keys(HOLES)) {
+    try { pages[name] = fs.readFileSync(path.join(from, name), "utf8"); } catch { throw new Error(SELLER_ADDRESS_VAR + ": " + resDir + " holds no " + name); }
+  }
+  if (!Object.keys(HOLES).some(n => pages[n].indexOf(HOLES[n].hole) >= 0)) throw new Error(noHole(resDir)); /* plant:seller-no-hole */
   let text = "";
   try { text = fs.readFileSync(given(env), "utf8"); } catch { throw new Error(SELLER_ADDRESS_VAR + " names no file that can be read"); }
   const address = addressRead(text);
   const filled = {};
-  for (const name of Object.keys(HOLES)) {
-    let page = "";
-    try { page = fs.readFileSync(path.join(from, name), "utf8"); } catch { throw new Error(SELLER_ADDRESS_VAR + ": " + resDir + " holds no " + name); }
-    filled[name] = fill(page, HOLES[name].hole, address[HOLES[name].field], name);
-  }
+  for (const name of Object.keys(HOLES)) filled[name] = fill(pages[name], HOLES[name].hole, address[HOLES[name].field], name);
   fs.rmSync(to, { recursive: true, force: true });
   fs.cpSync(from, to, { recursive: true });
   for (const name of Object.keys(filled)) fs.writeFileSync(path.join(to, name), filled[name], "utf8");
@@ -71,7 +75,7 @@ function sellerConfig(base, env, root, output) {
 
 /* Before packing: the one line saying whether the pages carry the address, never the address. */
 function sellerStep(env, buildResources) {
-  return "Seller address: " + (given(env) ? "filled into " + Object.keys(HOLES).join(", ") + " in " + buildResources : "absent, the licence pages keep their placeholders");
+  return "Seller address: " + (given(env) ? "filled into " + Object.keys(HOLES).join(", ") + " in " + buildResources : "none named, the licence pages carry their seller's line as written");
 }
 
 module.exports = { SELLER_ADDRESS_VAR, STAGE, HOLES, addressRead, fill, sellerStage, sellerConfig, sellerStep, given };

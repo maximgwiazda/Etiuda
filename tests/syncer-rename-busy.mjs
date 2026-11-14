@@ -2,6 +2,8 @@
  * One that keeps refusing leaves that file staged, is said, and is tried at the next scan. The worker stays up.
  * A share file marked read-only lands writable, and a mirror copy already marked takes the next landing (998).
  * An outbox read refused for a moment still clears what landed; one refused every time keeps the record for the next pass.
+ * A same-size rewrite that keeps its stamp, as a FAT volume's two-second tick does, lands where the stamp was within 3 s of
+ * the reading before it, by the worker and by the program alike; one stamped a minute before is still passed over (955).
  *
  *     node tests/syncer-rename-busy.mjs
  */
@@ -20,7 +22,7 @@ import { createLab } from "./lab-owner.mjs";
 const SELF = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(SELF), "..");
 const nodeRequire = createRequire(import.meta.url);
-const EXPECTED = 17;
+const EXPECTED = 21;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -161,6 +163,37 @@ async function readOnlyScene(kind, syncerDir) {
       } finally {
         try { ctl.stop(); } catch {}
       }
+    } else if (kind === "tick" || kind === "tick-settled") {
+      /* The ring rewritten at its own size and given back its stamp. A stamp ahead of the clock is one no reading has passed by
+         3 s, however slowly the worker starts; the settled one is a minute behind it. */
+      const stamp = Math.floor(Date.now() / 1000) + (kind === "tick" ? 20 : -60);
+      fs.writeFileSync(shareRing, ringText("tick-aaaa"), "utf8");
+      fs.utimesSync(shareRing, stamp, stamp);
+      const ctl = new syncer.FolderSyncerController({ team: TEAM, folder: share, mirror, pin: LEAD, checks, pollMs: 200, logger: s => said.push(String(s)) });
+      try {
+        ctl.start();
+        out.landed = await until(() => holds(mirrorRing, "tick-aaaa"), 10000);
+        fs.writeFileSync(shareRing, ringText("tick-bbbb"), "utf8");
+        fs.utimesSync(shareRing, stamp, stamp);
+        out.sameStamp = fs.statSync(shareRing).mtimeMs === stamp * 1000;
+        out.next = await until(() => holds(mirrorRing, "tick-bbbb"), kind === "tick" ? 6000 : 1500);
+      } finally {
+        try { ctl.stop(); } catch {}
+      }
+    } else if (kind === "tick-program") {
+      /* The program a desk runs where no worker starts: one scan lands the ring, a rewrite inside its stamp lands at the next. */
+      const stamp = Math.floor(Date.now() / 1000) + 20;
+      fs.writeFileSync(shareRing, ringText("tick-aaaa"), "utf8");
+      fs.utimesSync(shareRing, stamp, stamp);
+      const prog = syncer.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: crypto.randomBytes(32) }, checks, logger: s => said.push(String(s)) });
+      prog.syncOnce();
+      out.landed = holds(mirrorRing, "tick-aaaa");
+      fs.writeFileSync(shareRing, ringText("tick-bbbb"), "utf8");
+      fs.utimesSync(shareRing, stamp, stamp);
+      out.sameStamp = fs.statSync(shareRing).mtimeMs === stamp * 1000;
+      prog.syncOnce();
+      out.next = holds(mirrorRing, "tick-bbbb");
+      if (typeof prog.stop === "function") prog.stop();
     } else if (kind === "thaw") {
       /* One scan of the landing both paths share, so a refusal answers in its own bounded tries rather than a hang. */
       fs.writeFileSync(mirrorRing, ringText("older"), "utf8");
@@ -370,6 +403,8 @@ function plantScene(tag, file, kind, swap) {
 const landGreen = r => r.landed === true && r.mirrorWritable === true && r.shareStillMarked === true && r.next === true && r.refusedSaid === 0;
 const thawGreen = r => r.thawed === true && r.mirrorWritable === true && r.refusedSaid === 0;
 const copyGreen = r => !r.threw && r.bytes === true && r.copyWritable === true && r.timeKept === true && r.sourceStillMarked === true && r.noTemp === true;
+const tickGreen = r => !r.killed && !r.noResult && r.landed === true && r.sameStamp === true && r.next === true;
+const settledGreen = r => !r.killed && !r.noResult && r.landed === true && r.sameStamp === true && r.next === false;
 const outboxReadGreen = r => !r.killed && !r.noResult && r.cleared === true && r.owedAfter === false
   && r.shareMatches === true && r.outboxReads >= 2 && r.owedEvents === 1 && r.saidKept === 1 && r.saidReached === 1 && r.maxStallMs < 50;
 
@@ -394,6 +429,12 @@ async function main() {
   const copyStall = runScene("copy-stall");
   check(!copyStall.killed && !copyStall.noResult && copyStall.threw === "EPERM" && copyStall.maxStallMs < 50,
     "998t copyClear refused on the main thread returns under 50 ms without blocking the event loop: " + JSON.stringify(copyStall));
+  const tick = runScene("tick");
+  check(tickGreen(tick), "955n the worker reads again a share file stamped within 3 s of its reading, so a rewrite of the same size and stamp lands: " + JSON.stringify(tick));
+  const tickProgram = runScene("tick-program");
+  check(tickGreen(tickProgram), "955o the program a desk runs without a worker lands the same rewrite at its next scan: " + JSON.stringify(tickProgram));
+  const settled = runScene("tick-settled");
+  check(settledGreen(settled), "955p control: a file stamped a minute before its reading is still passed over at the same size and stamp: " + JSON.stringify(settled));
   const outboxReadOnce = runScene("outbox-read-once");
   check(outboxReadGreen(outboxReadOnce),
     "998u landed clears the outbox record and its waiting line when the outbox read is refused once with EBUSY and then allowed, under 50 ms stall: "
@@ -403,6 +444,7 @@ async function main() {
     ["land-clear-mark", "syncer.cjs", "thaw", thawGreen, "998e lifting plant:land-clear-mark leaves a read-only mirror copy refusing every landing"],
     ["copy-clear-mark", "syncer.cjs", "copy", copyGreen, "998f lifting plant:copy-clear-mark leaves a marked copy refusing the next"],
     ["outbox-read-retry", "syncer.cjs", "outbox-read-once", outboxReadGreen, "998v lifting plant:outbox-read-retry leaves a single refused outbox read un-cleared"],
+    ["stamp-settled", "syncer.cjs", "tick", tickGreen, "955q lifting plant:stamp-settled leaves the worker passing over the rewrite inside the stamp"],
   ];
   plants.push(["stage-clear-mark", "syncer-worker.cjs", "land", landGreen,
     "998m control: a worker that clears the share's file in place of its own staged copy turns 998a red",

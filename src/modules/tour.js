@@ -821,7 +821,7 @@ function syncTourBehind(){
   const els=tourEls();
   if(!els.root) return;
   const step=TOUR_STEPS[tourIdx];
-  const covered=!!document.querySelector("body > .modal:not([hidden]):not(.e-gone)");
+  const covered=!!document.querySelector("body > .modal:not([hidden]):not(.e-gone):not(.ed-rest)");
   const asked=!!document.querySelector("body > .bub-ask:not(.e-gone)");
   els.root.classList.toggle("behind", tourRunning && (asked || (covered && !(step && step.modal))));
   let away=false;
@@ -948,7 +948,7 @@ function wireTourUi(){
       const mo=new MutationObserver(()=>{ if(tourRunning){ if(!tourFollowWindow()) syncTourBehind(); scheduleTourPlace(); } });
       mo.observe(document.body,{childList:true});
       const shared=$("#modal");
-      if(shared) mo.observe(shared,{attributes:true, attributeFilter:["hidden"]});
+      if(shared) mo.observe(shared,{attributes:true, attributeFilter:["hidden","class"]});   // class: an editor resting or back in front
       const screen=$("#screenHost");
       if(screen) mo.observe(screen,{attributes:true, attributeFilter:["hidden"]});
       // The menu opening or shutting moves a Menu step's ring between the button and its rows.

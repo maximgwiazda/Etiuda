@@ -12,6 +12,9 @@ const TILE_MARK='<svg viewBox="-17.4545 -17.4545 290.9091 290.9091" aria-hidden=
    2026-11-11); the installer's licence texts name the registered owner.
    A language without a key reads English. */
 const TRADEMARK={en:"Etiuda is a trademark of Max Gwiazda.", pl:"Etiuda jest znakiem towarowym Maxa Gwiazdy."};
+/* The licensor line, between the notice and the maker line. A no-break space holds NIP to its number, so the
+   line never wraps between them. A language without a key reads English. */
+const LICENSOR={en:"Licensor: Stardust Maxim Gwiazda, NIP\u00a05242711262, Poland.", pl:"Licencjodawca: Stardust Maxim Gwiazda, NIP\u00a05242711262, Polska."};
 /* The maker line, under the notice: {STARDUST} becomes the link, whose address is this constant and
    never text from a catalog or the agent. A language without a key reads English. */
 const STARDUST_URL="https://stardustcore.com";
@@ -55,11 +58,11 @@ function aboutEarlierHtml(list){
       .split("{DATE}").join(aboutDay(r.built)))+'</h3>' : "")
     +'<ul class="about-new" data-i18n-skip>'+r.items.map(aboutItemHtml).join("")+'</ul>').join("");
 }
-/* The credit: copyright and the trademark notice, then the maker line, whose {STARDUST} becomes the link. */
+/* The credit: copyright and the trademark notice, the licensor, then the maker line, whose {STARDUST} becomes the link. */
 function aboutCredit(lang){
   const maker=esc(MAKER[lang]||MAKER.en).split("{STARDUST}")
     .join('<a href="'+STARDUST_URL+'" target="_blank" rel="noopener">Stardust</a>');
-  return "© 2026 Max Gwiazda. "+esc(TRADEMARK[lang]||TRADEMARK.en)+"<br>"+maker;
+  return "© 2026 Max Gwiazda. "+esc(TRADEMARK[lang]||TRADEMARK.en)+"<br>"+esc(LICENSOR[lang]||LICENSOR.en)+"<br>"+maker;
 }
 /* A page within the About: its X, Escape and Back all return there. */
 function aboutPage(title, body){

@@ -98,6 +98,10 @@ function flushOutbox() {
   return rels;
 }
 
+function sameBytes(a, b) {
+  try { return fs.readFileSync(a).equals(fs.readFileSync(b)); } catch { return false; }
+}
+
 function syncOnce() {
   if (inFlight || stopped) return;
   inFlight = true;
@@ -125,16 +129,20 @@ function syncOnce() {
       const mirrorFile = path.join(mirror, relPath);
       let alreadyInMirror = false;
       const known = knownMtimes.get(relPath);
+      /* fresh: the stamp matches what was read, but was written too close to that reading to stand for the bytes. */
+      let fresh = false;
       if (known && known.size === st.size && known.mtimeMs === st.mtimeMs && fs.existsSync(mirrorFile)) {
-        alreadyInMirror = true;
+        if (S.stampStands(st, known.at)) alreadyInMirror = true;
+        else fresh = true;
       } else {
         try {
           if (fs.existsSync(mirrorFile)) {
             const dstSt = fs.statSync(mirrorFile);
-            if (dstSt.size === st.size && dstSt.mtimeMs === st.mtimeMs) {
+            const at = Date.now();
+            if (dstSt.size === st.size && dstSt.mtimeMs === st.mtimeMs && S.stampStands(st, at)) {
               alreadyInMirror = true;
-              knownMtimes.set(relPath, { size: st.size, mtimeMs: st.mtimeMs });
-            }
+              knownMtimes.set(relPath, { size: st.size, mtimeMs: st.mtimeMs, at });
+            } else if (dstSt.size === st.size && dstSt.mtimeMs === st.mtimeMs) fresh = true;
           }
         } catch {}
       }
@@ -143,14 +151,18 @@ function syncOnce() {
         const srcFile = path.join(folder, relPath);
         const rand = crypto.randomBytes(8).toString("hex");
         const tmpFile = path.join(stagingDir, rand + ".tmp");
+        const readAt = Date.now();
         try {
           fs.copyFileSync(srcFile, tmpFile);
           S.clearReadOnly(tmpFile); /* plant:stage-clear-mark */
           const postSt = fs.statSync(srcFile);
           if (postSt.size !== st.size || postSt.mtimeMs !== st.mtimeMs) {
             try { fs.unlinkSync(tmpFile); } catch {}
+          } else if (fresh && sameBytes(tmpFile, mirrorFile)) {
+            try { fs.unlinkSync(tmpFile); } catch {}
+            knownMtimes.set(relPath, { size: postSt.size, mtimeMs: postSt.mtimeMs, at: readAt });
           } else {
-            knownMtimes.set(relPath, { size: postSt.size, mtimeMs: postSt.mtimeMs });
+            knownMtimes.set(relPath, { size: postSt.size, mtimeMs: postSt.mtimeMs, at: readAt });
             staged.push({ relPath, tmpPath: tmpFile, size: postSt.size, mtimeMs: postSt.mtimeMs });
           }
         } catch {

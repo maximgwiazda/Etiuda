@@ -1758,7 +1758,9 @@ function deskMarkTests() {
       const i = listeners.findIndex(l => l.type === type && l.fn === fn);
       if (i >= 0) listeners.splice(i, 1);
     },
-    t: (en) => (lang === "pl" ? (PL[en] == null ? en : PL[en]) : en)
+    t: (en) => (lang === "pl" ? (PL[en] == null ? en : PL[en]) : en),
+    // dialog.js modalFront: a dialog up, an editor only while it is in front (`rest` stands for .ed-rest).
+    modalFront: () => !modal.hidden && !modal.rest
   };
   own.MutationObserver = function (cb) { this.cb = cb; this.dead = false; observers.push(this); };
   own.MutationObserver.prototype.observe = function () {};
@@ -1917,6 +1919,14 @@ function deskMarkTests() {
     modal.hidden = true; world.library = false;
     eq("desk mark a step that cannot be done points at the file name in the band",
       fell.join(", "), "filename below, filename below, filename below, filename below, filename below, filename below, filename below");
+    // An editor resting over the desk is no pop-up in the way: the bubble still shows the way (board 983).
+    const rested = [];
+    modal.hidden = false; modal.rest = true; fireMutations(); rested.push(whereOf(placed[placed.length - 1]));
+    world.library = true; dataDetails.open = true; fireMutations(); rested.push(whereOf(placed[placed.length - 1]));
+    modal.rest = false; fireMutations(); rested.push(whereOf(placed[placed.length - 1]));
+    modal.hidden = true; world.library = false; dataDetails.open = false;
+    eq("desk mark an editor resting over the desk leaves the way shown, Menu and then the loaded row; in front, it stands in the way",
+      rested.join(", "), "menu left, row right, filename below");
   }
 
   open({ evaluation: "evaluation", cards: [{ id: "c-hello" }] });
@@ -2786,7 +2796,7 @@ function markClockTests() {
     const h = unseen(), w = markLab({ host: h });
     let opts = null, dialog = false;
     w.sb.launchMark = x => { opts = x; return null; };
-    w.sb.document.querySelector = sel => sel === "#dotField>div" ? {} : sel === ".modal:not([hidden]):not(.e-gone)" && dialog ? {} : null;
+    w.sb.document.querySelector = sel => sel === "#dotField>div" ? {} : sel === ".modal:not([hidden]):not(.e-gone):not(.ed-rest)" && dialog ? {} : null;
     w.sb.deskLaunch();
     const a = !!opts && opts.covered();
     h.tell();
@@ -4641,14 +4651,15 @@ function shippedFlagTests() {
     got, [[true, true, true], [false, false, true]]);
 
   const about = fs.readFileSync(path.join(E.ROOT, "src", "modules", "about.js"), "utf8");
-  /* The credit under one interface language, with TRADEMARK, MAKER and STARDUST_URL read from their own lines in
-     about.js, split at its line break. Two parts: the copyright with the notice, then the maker line. */
+  /* The credit under one interface language, with TRADEMARK, LICENSOR, MAKER and STARDUST_URL read from their own lines
+     in about.js, split at its line breaks. Three parts: the copyright with the notice, the licensor, then the maker line. */
   const aboutParts = lang => {
     try {
       const konst = name => new Function("return " + extractDecl(about, "const " + name + "=").replace(/^[^=]*=|;$/g, ""))();
-      const credit = new Function("esc", "TRADEMARK", "MAKER", "STARDUST_URL",
+      const credit = new Function("esc", "TRADEMARK", "LICENSOR", "MAKER", "STARDUST_URL",
         extractDecl(about, "function aboutCredit(") + "\nreturn aboutCredit;")(
-        s => s, konst("TRADEMARK"), konst("MAKER"), about.indexOf("const STARDUST_URL=") > -1 ? konst("STARDUST_URL") : "");
+        s => s, konst("TRADEMARK"), about.indexOf("const LICENSOR=") > -1 ? konst("LICENSOR") : {}, konst("MAKER"),
+        about.indexOf("const STARDUST_URL=") > -1 ? konst("STARDUST_URL") : "");
       return String(credit(lang)).split("<br>");
     } catch (e) { return "aboutCredit did not run: " + e.message; }
   };
@@ -4657,9 +4668,16 @@ function shippedFlagTests() {
   const STARDUST = '<a href="https://stardustcore.com" target="_blank" rel="noopener">Stardust</a>';
   eq("About puts the maker line under the trademark line, once, its Stardust a link to the company's address that opens outside the window: Made by Stardust. in English, Etiuda. Tworzy ją Stardust. in Polish, and English in a language with no key",
     [aboutTail("en"), aboutTail("pl"), aboutTail("de")],
-    [[2, "Made by " + STARDUST + "."], [2, "Etiuda. Tworzy ją " + STARDUST + "."], [2, "Made by " + STARDUST + "."]]);
-  eq("control: the trademark line above the maker line is unchanged in each language, after the copyright",
-    ["en", "pl", "de"].map(l => { const p = aboutParts(l); return typeof p === "string" ? p : p[p.length - 2]; }),
+    [[3, "Made by " + STARDUST + "."], [3, "Etiuda. Tworzy ją " + STARDUST + "."], [3, "Made by " + STARDUST + "."]]);
+  /* The copywriter's words of 2026-11-13, the business as licensor, a no-break space between NIP and its number so the
+     line never wraps inside it; written here with the space spelt as its code, so the source's own character is asked. */
+  const NBSP_NIP = "NIP" + String.fromCharCode(160) + "5242711262";
+  eq("About's credit carries the licensor line second, between the trademark line and the maker line: the business, its NIP held to its number by a no-break space, in English, in Polish, and English in a language with no key",
+    ["en", "pl", "de"].map(l => { const p = aboutParts(l); return typeof p === "string" ? p : p[1]; }),
+    ["Licensor: Stardust Maxim Gwiazda, " + NBSP_NIP + ", Poland.", "Licencjodawca: Stardust Maxim Gwiazda, " + NBSP_NIP + ", Polska.",
+     "Licensor: Stardust Maxim Gwiazda, " + NBSP_NIP + ", Poland."]);
+  eq("control: the trademark line above the licensor line is unchanged in each language, after the copyright",
+    ["en", "pl", "de"].map(l => { const p = aboutParts(l); return typeof p === "string" ? p : p[0]; }),
     ["© 2026 Max Gwiazda. Etiuda is a trademark of Max Gwiazda.", "© 2026 Max Gwiazda. Etiuda jest znakiem towarowym Maxa Gwiazdy.",
      "© 2026 Max Gwiazda. Etiuda is a trademark of Max Gwiazda."]);
 
@@ -7540,7 +7558,7 @@ if (require.main === module) {
        reads it, in its own generateFuseConfig, and the value the config gives it is checked.
        This is the ask only; the built program is read by tools/package.mjs, held by tests/fuses.mjs. */
     const root = path.join(__dirname, "..");
-    const want = { runAsNode: false, enableNodeOptionsEnvironmentVariable: false,
+    const want = { runAsNode: false, enableCookieEncryption: true, enableNodeOptionsEnvironmentVariable: false,
                    enableNodeCliInspectArguments: false, enableEmbeddedAsarIntegrityValidation: false,
                    onlyLoadAppFromAsar: true, grantFileProtocolExtraPrivileges: true };
     const cfg = require(path.join(root, "electron-builder.js")).electronFuses || {};
@@ -7567,7 +7585,7 @@ if (require.main === module) {
     const facts = {
       relay: /const BUILTIN_RELAY_URL = "https:\/\/etiuda\.dev\/relay\/v1"/.test(main),
       licence: /"https:\/\/etiuda\.dev\/licence\/v1\//.test(main),
-      caret: /to:\s*"caret\.exe"/.test(cfg),
+      caret: /const CARET = path\.resolve\(output, "\.caret", "caret\.exe"\)/.test(cfg) && /\{ from: path\.dirname\(CARET\), to: "\.", filter: \[path\.basename\(CARET\)\] \}/.test(cfg),
       clipboard: /clipboard\.readText\(/.test(main),
     };
     const DENY = [

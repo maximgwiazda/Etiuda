@@ -4433,9 +4433,11 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
   pointer-events:none}
 #eNotices .bub{position:relative;pointer-events:auto}
 /* A field on the fill: paper, so what is typed reads as the reader's own. */
-.bub .e-name-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
+.bub .e-name-inp,.bub .e-proxy-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
   border:1px solid transparent;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans)}
-.bub .e-name-inp:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.bub .e-name-inp:focus-visible,.bub .e-proxy-inp:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.bub .e-proxy-inp+.e-proxy-inp{margin-top:8px}
+.bub .e-proxy-inp:last-of-type{margin-bottom:10px}
 .bub .e-greet{color:var(--bub-ink);margin:8px 0 10px}
 .tour-field{margin:0 0 4px}
 .bub .e-greet .e-name-ph{color:var(--bub-dim);opacity:.8}

@@ -20,7 +20,7 @@ import { normalizeCardIntents } from "./card-intent.js";
 import { BASE_N, intentIdAt, intentIdxOfId, intentOrder, isIntentHiddenIdx } from "./intent-id.js";
 import { applyCatsToGlobal } from "./cat-set.js";
 import { esc } from "./esc.js";
-import { $, modalCard } from "./dom.js";
+import { $, modalCard, focusKey, focusSame } from "./dom.js";
 import { recountMacros } from "./card-counts.js";
 import { rebuildCards } from "./rebuild.js";
 import { render } from "./render.js";
@@ -48,6 +48,24 @@ function cardCatPickHtml(selected){
   return chips+
     '<button type="button" class="cat-chip cat-chip-add" title="'+esc(t("Add a category"))+
     '" aria-label="'+esc(t("Add a category"))+'">'+ICON_PLUS+'</button>';
+}
+// Draws `box` again only where its markup differs from what this last drew, the focus kept on the same control.
+function redrawPick(box, html){
+  if(!box || box._drawn===html) return false;
+  const root=box.parentElement||box, at=document.activeElement, key=(at && at!==box && box.contains(at)) ? focusKey(at, root) : null;
+  box.innerHTML=html;
+  box._drawn=html;
+  if(key) focusSame(root, key);
+  return true;
+}
+/* What the card editor shows of other entries follows them; the picks are kept, a category being named is left as it is. */
+function cardEditorRefresh(nx){
+  const box=$("#meCatPick");
+  if(box && !box.querySelector(".cat-chip-new")) redrawPick(box, cardCatPickHtml(readCardCatPick())); /* plant:ce-chips-follow */
+  const k=readCardCatPick(), sum=$("#meCatSum"), said=k ? catIconSvg(k,"cat-ic")+esc(CATS[k]||k) : "";
+  if(sum && said && sum._drawn!==said){ sum.innerHTML=said; sum._drawn=said; }
+  if($("#meIntents")) refreshMeIntentList(readMeIntentIds(), true);
+  if(nx && typeof nx.refresh==="function") nx.refresh();
 }
 function readCardCatPick(){
   const on=$("#meCatPick") && $("#meCatPick").querySelector(".cat-chip.on[data-k]");
@@ -106,7 +124,7 @@ function startChipCatAdd(box,addEl){
     addEl.hidden=false;
     if(!ok||!name) return;
     const key=ensureCustomCat(name);
-    box.innerHTML=cardCatPickHtml(key);
+    box.innerHTML=box._drawn=cardCatPickHtml(key);
     if(typeof box._onPick==="function") box._onPick(key);
     rebuildCards();          // the strip behind the dialog has to gain the pill too
     toast("Category added");
@@ -174,12 +192,15 @@ function syncMeIntentPick(){
     sum.textContent=txt;
   }
 }
-function refreshMeIntentList(keepChecked){
+// `follow`: drawn only where the list differs, as another entry's change asks.
+function refreshMeIntentList(keepChecked, follow){
   const box=$("#meIntents");
   if(!box) return;
   const selected=keepChecked||readMeIntentIds();
-  const c=readCardCatPick();
-  box.innerHTML=intentPickHtml(selected, c);
+  const c=readCardCatPick(), html=intentPickHtml(selected, c);
+  if(follow){ if(redrawPick(box, html)) syncMeIntentPick(); return; }
+  box.innerHTML=html;
+  box._drawn=html;
   syncMeIntentPick();
 }
 /* A catalog request arrives as its tag id and is stored as it is. Only a request whose catalog
@@ -368,11 +389,7 @@ function openCardEditor(id, presetCat, fromManage){
     place: "card",
     entry: savedId,
     /* What another editor saved shows here: the category chips and the linked intents, the picks kept. */
-    refresh: ()=>{
-      const box=$("#meCatPick");
-      if(box) box.innerHTML=cardCatPickHtml(readCardCatPick());
-      if($("#meIntents")) refreshMeIntentList(readMeIntentIds());
-    },
+    refresh: ()=>cardEditorRefresh(nx),
     again: ()=>openCardEditor(savedId, presetCat, fromManage),
     /* The card as stored, its own fields only: a star, putting it away or moving it is not an edit. */
     subject: ()=>{
@@ -585,6 +602,8 @@ function openCardEditor(id, presetCat, fromManage){
      is a statement about THIS card, and leaving to make one meant losing the edit - so the
      "+" chip is here, the same control as the strip's, wired to the same ensureCustomCat. */
   const meCatBox=$("#meCatPick");
+  if(meCatBox) meCatBox._drawn=cardCatPickHtml(readCardCatPick());
+  if($("#meIntents")) $("#meIntents")._drawn=intentPickHtml(linked, m.c);
   if(meCatBox){
     // Moving the card re-scopes the intent list, so rebuild it on a real change only
     meCatBox._onPick=k=>{

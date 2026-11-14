@@ -30,7 +30,7 @@ import { createRequire } from 'node:module';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { beforeBuild, signatureVerdict, customerReleaseProfileVerdict, testServiceProblems, demoSigningProblems } from './sellable.mjs';
+import { beforeBuild, signatureVerdict, customerReleaseProfileVerdict, testServiceProblems, demoSigningProblems, ourPublisher } from './sellable.mjs';
 import { writeSbom } from './sbom.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -296,10 +296,10 @@ if (flag('--package')) {
       + createHash('sha256').update(readFileSync(file)).digest('hex'));
     const inside = asarEntries(join(DIST, 'win-unpacked', 'resources', 'app.asar'));
     /* Written out rather than read from electron-builder.js, so that widening that list is
-       refused here instead of followed. The same twenty-one are stated in the builder's `files` and
+       refused here instead of followed. The same twenty-two are stated in the builder's `files` and
        in tests/reinstall.js 1c: all three move together or this gate stops the release. */
     const expected = ['engine/etiuda.csp.json', 'engine/etiuda.html', 'package.json', 'shell/clip-suggest.cjs', 'shell/desk-ai.cjs', 'shell/desk-reset.cjs', 'shell/embed/core.cjs', 'shell/embed/suggest.cjs', 'shell/embed/worker.cjs', 'shell/etiuda-tray.png', 'shell/etiuda.ico', 'shell/folder/syncer-worker.cjs', 'shell/folder/syncer.cjs', 'shell/main.js',
-                      'shell/page-watch.cjs', 'shell/preload.js', 'shell/relay/blob.cjs', 'shell/relay/channel.cjs',
+                      'shell/page-watch.cjs', 'shell/preload.js', 'shell/proxy-net.cjs', 'shell/relay/blob.cjs', 'shell/relay/channel.cjs',
                       'shell/sample-catalog.ec', 'shell/tray.cjs', 'shell/win-proxy.cjs'];
     console.log('  the asar holds ' + inside.length + ': ' + inside.join(', '));
     if (JSON.stringify(inside) !== JSON.stringify(expected)) return 'the asar is not the allowlist';
@@ -337,14 +337,15 @@ if (flag('--package')) {
       ? true : 'npm run reinstall failed: the test build of what a customer installs is what this gate drives';
   });
 
-  /* THE SIGNATURE of the installer and of the program inside it, required of a customer build
-     and of any build with a certificate configured, Valid and timestamped; a preview with no
+  /* THE SIGNATURE of the installer and of every program and library it installs, required of a customer
+     build and of any build with a certificate configured, Valid and timestamped; a preview with no
      certificate is only told. Until 2026-09-27 this gate printed the installer's status and
      passed whatever it was. The body is tools/sellable.mjs signatureVerdict, which
-     tests/sellable.mjs drives on planted files. */
-  gate('the signature of the installer and of Etiuda.exe, required of a customer build or a configured certificate', () =>
+     tests/sellable.mjs and tests/sign-all.mjs drive on planted files. */
+  gate('the signature of the installer and of every program and library in win-unpacked, required of a customer build or a configured certificate', () =>
     signatureVerdict({ setup: join(DIST, readdirSync(DIST).filter(f => /-setup\.exe$/i.test(f))[0]),
-                       program: join(DIST, 'win-unpacked', 'Etiuda.exe'), customer: SELL.customer, win: SELL.win }));
+                       program: join(DIST, 'win-unpacked', 'Etiuda.exe'), app: join(DIST, 'win-unpacked'),
+                       customer: SELL.customer, win: SELL.win, ours: ourPublisher(SELL.win, DIST) }));
 }
 
 /* The home goes on a green run only; a red one leaves it standing, named at the top, as evidence. */

@@ -158,6 +158,10 @@ function session(kind, root, output) {
   const values = demo ? demo.values : fromKeyring();
   const work = path.resolve(output, ".esigner");
   fs.mkdirSync(path.join(work, "conf"), { recursive: true });
+  /* EACH BUILD'S RECORD BEGINS EMPTY: one an earlier build left in this output folder is set aside beside it under the time,
+     never deleted, so a release reads only this build's certificate (tools/sellable.mjs ourPublisher). */
+  const record = path.join(work, "signings.jsonl"), stamp = new Date(io.now()).toISOString().replace(/[:.]/g, "-");
+  for (let i = 0, to; fs.existsSync(record); i++) if (!fs.existsSync(to = path.join(work, "signings-" + stamp + (i ? "-" + i : "") + ".jsonl"))) fs.renameSync(record, to); /* plant:esigner-fresh-record */
   const props = demo ? Object.entries(demo.properties).map(([k, v]) => k + "=" + v).join("\n") + "\n"
     : fs.readFileSync(path.join(tool, "conf", "code_sign_tool.properties"), "utf8");
   fs.writeFileSync(path.join(work, "conf", "code_sign_tool.properties"), props);
