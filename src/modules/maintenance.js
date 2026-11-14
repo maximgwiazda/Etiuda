@@ -554,7 +554,8 @@ function mtResetRow(){
     +'<small>'+esc(t("Returns this desk to a fresh install, keeping only the licence."))+'</small></div>'
     +'<div class="set-ctl"><button type="button" class="btn danger" id="mtReset">'+esc(t("Reset Etiuda"))+'</button></div></div>';
 }
-/* THE RESET'S QUESTIONS HANG FROM ITS RED BUTTON, one at a time; Escape answers as the first button does. */
+/* THE RESET'S QUESTIONS HANG FROM ITS RED BUTTON, one at a time; Escape answers as the first button does. Above it where
+   they fit, over the page's figures: below, they cover Maintenance's own buttons at the foot. */
 function resetAsk(cls, html, first){
   const was=document.getElementById("eResetAsk");
   if(was) was.remove();
@@ -566,7 +567,7 @@ function resetAsk(cls, html, first){
   el.innerHTML=html;
   cutLeaves();
   document.body.appendChild(el);
-  hangBubble(el, ()=>document.getElementById("mtReset"));
+  hangBubble(el, ()=>document.getElementById("mtReset"), {prefer:"above"});
   el.addEventListener("keydown",e=>{
     if(e.key!=="Escape") return;
     e.preventDefault(); e.stopPropagation();

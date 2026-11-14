@@ -1079,9 +1079,14 @@ function resetAllSettings(){
   }, null, from);
 }
 // The language may have changed with the keys, so the whole screen and the tab's name are drawn again.
+/* The page keeps its place through the repaint, so a control pressed low on it, Reset defaults among them, is still
+   where its Undo hangs. */
 function repaintScreen(){
   const host=settingsHost();
+  const was=host && host.querySelector("#setBody"), top=was ? was.scrollTop : 0;
   if(host) renderSettings(host);
+  const now=host && host.querySelector("#setBody");
+  if(now && top) now.scrollTop=top; /* plant:settings-keep-scroll */
   try{ drawTabs(); }catch(e){}
 }
 /* EVERY PREFERENCE PUT ON SCREEN FROM WHAT IS STORED, whatever changed the keys: Reset, its Undo,

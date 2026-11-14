@@ -88,7 +88,7 @@ async function measure(page, act, arg) {
   await page.evaluate(MEASURE);
   let sel;
   try { sel = await page.evaluate(act, arg); } catch (e) { return { why: "act threw: " + String(e && e.message || e).split(String.fromCharCode(10))[0] }; }
-  await sleep(250);
+  await sleep(450);
   return page.evaluate(sel => {
     if (!sel || sel.why) return sel || { why: "act answered nothing" };
     const bub = document.querySelector(sel.bub);
@@ -280,6 +280,12 @@ const UNDOS = [
     b.click();
     return { name: "settings-reset", bub: "#eUndo", ctl: "#setReset" };
   }],
+  ["Settings reset, from All settings with the page scrolled to it", () => {
+    openSettings();
+    const b = document.getElementById("setReset"); b.scrollIntoView({ block: "center" });
+    b.click();
+    return { name: "settings-reset-all", bub: "#eUndo", ctl: "#setReset" };
+  }],
   ["Shortcuts reset", () => {
     openSettings("keys");
     const b = document.getElementById("setResetKeys"); b.scrollIntoView({ block: "center" });
@@ -320,7 +326,7 @@ async function runUndos(page, label, only) {
    else Etiuda's name at the band's left; a second from one control hangs from the first. */
 const NOTICES = [
   ["eTeamLapse", "#catNow"], ["eTeamFork", "#catNow"], ["eTeamStranded", "#catNow"], ["eTeamRemoved", "#catNow"],
-  ["eHotkeyNote", "#settingsBtn"], ["eSaveWarn", ".row .brand"], ["eDeskWarn", ".row .brand"], ["eDeskNewer", ".row .brand"],
+  ["eMigrateWarn", "#catNow"], ["eHotkeyNote", "#settingsBtn"], ["eSaveWarn", ".row .brand"], ["eDeskWarn", ".row .brand"], ["eDeskNewer", ".row .brand"],
 ];
 async function runNotices(page, label) {
   const bad = [];
