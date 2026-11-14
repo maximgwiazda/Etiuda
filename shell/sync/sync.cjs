@@ -271,7 +271,7 @@ function storeChannelOptions(keys, me, cert, mirrorRoot, pubOf) {
    computer had (another computer's replace ended it) is adopted at that look, and this computer's whole place written into it, so
    every edit it holds reaches the new store. */
 function createStoreSync(o) {
-  let ch = null, at = "", keysNow = null, certNow = null, busy = false;
+  let ch = null, at = "", revNow = -1, keysNow = null, certNow = null, busy = false;
   let state = (() => { const s = o.load(); return plain(s) && plain(s.ledger) && Array.isArray(s.kept) ? s : { rt: "", ledger: {}, kept: [] }; })();
   const mirrorOf = rt => path.join(o.mirrorRoot, rt);
   function theirs(io, rt) {
@@ -321,13 +321,17 @@ function createStoreSync(o) {
     keysNow = look.keys; certNow = look.store;
     const fresh = state.rt !== look.keys.rt;
     if (fresh) { state = Object.assign({}, state, { rt: look.keys.rt }); o.save(state); } /* plant:adopt */
-    const key = [look.keys.rt, look.keys.rev].join("|");
-    if (ch && at === key) { ch.kick(); return; }
+    /* A computer enrolled since is taken into the channel it has, by the list's new roster, not a new channel over the same mirror. */
+    if (ch && at === look.keys.rt) {
+      if (look.keys.rev !== revNow) { ch.program.loadTeamFile(storeTeamDoc(look.keys, o.pubOf, o.canonBytes)); revNow = look.keys.rev; }
+      ch.kick();
+      return;
+    }
     stop();
     fs.mkdirSync(mirrorOf(look.keys.rt), { recursive: true });
     /* After each cycle that reached the relay, what came is merged in. */
     ch = o.channel(Object.assign(storeChannelOptions(look.keys, o.me, () => certNow, o.mirrorRoot, o.pubOf), { onHere: () => { merge(); } }));
-    at = key;
+    at = look.keys.rt; revNow = look.keys.rev;
     ch.program.loadTeamFile(storeTeamDoc(look.keys, o.pubOf, o.canonBytes));
     merge();
     ch.start(); /* plant:resume */
