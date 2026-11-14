@@ -135,16 +135,17 @@ async function relayCall(R, sent, method, p, json, token) {
     token ? { authorization: "Bearer " + token } : {}), body, duplex: "half" }), R.env);
   return { status: res.status, json: await res.json().catch(() => null) };
 }
-function relayIo(R, sent) {
+function relayIo(R, sent, me) {
   return {
     async create(keys, grant) {
       const sPub = ST.pubOf(keys.s), t = R.clock.now;
       const r = await relayCall(R, sent, "POST", "/teams", { rt: keys.rt, lead: { keyId: sPub, pub: sPub }, t, grant, sig: signWith(sKey(keys.s), C.create2Bytes(keys.rt, sPub, t, grant)) });
       return r.status === 200 ? { ok: true } : { ok: false, why: r.json && r.json.error };
     },
-    async devices(keys) {
+    async devices(keys, cert) {
       const t = R.clock.now, list = keys.devices.map(d => ({ id: d.id, pub: d.pub, desk: d.desk }));
-      const r = await relayCall(R, sent, "POST", "/t/" + keys.rt + "/devices", { keys: list, rev: keys.rev, t, sig: signWith(sKey(keys.s), C.devicesBytes(keys.rt, keys.rev, t, list)) });
+      const r = await relayCall(R, sent, "POST", "/t/" + keys.rt + "/devices", { keys: list, rev: keys.rev, t, sig: signWith(sKey(keys.s), C.devicesBytes(keys.rt, keys.rev, t, list)),
+        seat: cert, by: { pub: me.pub, sig: signWith(me.privateKey, C.storeDevicesBytes(keys.rt, keys.rev, t, list)) } });
       return r.status === 200 ? { ok: true } : { ok: false, why: r.json && r.json.error };
     },
   };
@@ -162,7 +163,7 @@ function computer(world, label) {
   const io = () => ({ folder: world.folder(), local: () => sealed.keys, keep: k => { sealed.keys = JSON.parse(JSON.stringify(k)); }, grant: async (rt, sPub, ...rest) => {
     const g = await world.service(rt, sPub, ...rest);
     return g.why ? g : { grant: g.grant, store: g.cert(me.pub) };
-  }, relay: relayIo(world.R, world.relaySent), me, url: "https://relay.test/relay/v1", rand: n => crypto.randomBytes(n), ask: () => said.push("asked"), say: () => said.push("said") });
+  }, relay: relayIo(world.R, world.relaySent, me), me, url: "https://relay.test/relay/v1", rand: n => crypto.randomBytes(n), ask: () => said.push("asked"), say: () => said.push("said") });
   return { label, me, sealed, said, look: () => ST.storeLook(io()) };
 }
 function worldOf(kind) {
