@@ -8923,6 +8923,11 @@ What you type stays in this browser only.`;
     // placeholder: Claudette, the eight lines below
     "today, {TIME}": "dziś, {TIME}",
     "No seat is free on the organisation's licence just now.": "W licencji organizacji nie ma teraz wolnego miejsca.",
+    // the copywriter's, the four lines below
+    "The organisation's Etiuda licence seats the people its leads add.": "Licencja Etiudy tej organizacji daje miejsce osobom, które dodają jej liderzy.",
+    "Give the team's lead this code. Once added, this desk takes its seat by itself; nothing more is needed here.": "Wystarczy podać liderowi zespołu ten kod. Po dodaniu to stanowisko samo zajmie miejsce w licencji; tutaj nie trzeba robić nic więcej.",
+    "This account's own trial is running.": "Trwa własny okres próbny tego konta.",
+    "Fourteen days, until {DATE}, on up to three computers. A lead can add this account at any time, without waiting for the trial to end.": "Czternaście dni, do {DATE}, najwyżej na trzech komputerach. Lider może dodać to konto w każdej chwili, bez czekania na koniec okresu próbnego.",
     "The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account's sign-in code among those who have signed in.": "Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; nikt nie musi nic robić, a lider zespołu widzi kod logowania tego konta wśród osób, które się zalogowały.",
     "This desk's seat is due for renewal.": "Miejsce w licencji dla tego stanowiska czeka na odnowienie.",
     "It renews by itself the next time the sign-in service answers. Everything on this desk works as before.": "Odnowi się samo, gdy usługa logowania znów odpowie. Wszystko na tym stanowisku działa jak dotąd.",
@@ -27361,6 +27366,8 @@ What you type stays in this browser only.`;
       code: signedIn && /^[0-9A-Z]{16}$/.test(String(o.code)) ? String(o.code) : "",
       seat: o.seat === "held" || o.seat === "lapsed" || o.seat === "none" ? o.seat : "",
       deskOnly: !!signedIn && o.deskOnly === true,
+      askLead: !!signedIn && o.askLead === true,
+      trialUntil: !!signedIn && Number.isFinite(o.trialUntil) && o.trialUntil > 0 ? o.trialUntil : 0,
       at: Number.isFinite(o.at) ? o.at : 0,
       reached: o.reached !== false,
       ask: o.ask === true,
@@ -27398,6 +27405,9 @@ What you type stays in this browser only.`;
   }
   function signinCodeText(code) {
     return String(code || "").replace(/(.{4})(?=.)/g, "$1 ");
+  }
+  function signinDay(at) {
+    return new Date(at).toLocaleDateString(uiLang() === "pl" ? "pl-PL" : "en-GB", { day: "numeric", month: "short" });
   }
   function signinWhen(at) {
     if (!at) return "";
@@ -27439,6 +27449,8 @@ What you type stays in this browser only.`;
       case "waiting":
       case "full":
         return p && p.team && p.team.lead ? [named(t("{TEAM} has no free seat just now."), "{TEAM}", p.teamName), named(t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and {LEAD}, the team's lead, sees this account's sign-in code among those who have signed in."), "{LEAD}", p.team.lead)] : [t("No seat is free on the organisation's licence just now."), t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account's sign-in code among those who have signed in.")];
+      case "asklead":
+        return [t("The organisation's Etiuda licence seats the people its leads add."), t("Give the team's lead this code. Once added, this desk takes its seat by itself; nothing more is needed here.")];
       case "nolicence":
         return [t("No Etiuda licence has a seat for this account."), t("The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.")];
       case "offline":
@@ -27535,6 +27547,17 @@ What you type stays in this browser only.`;
     if (v.ask) return { moment: "ask", ident, say: signinSay("ask", v), providers: v.offered, acts: [acct] };
     if (told) return toldDoor();
     if (signinNoSeat(v)) return { moment: "noseat", ident, say: signinSay(v.refused, v, p), acts: [{ act: "check", label: t("Check now"), solid: true }, acct] };
+    if (v.askLead) return {
+      moment: "asklead",
+      ident,
+      say: signinSay("asklead", v),
+      code: v.code,
+      acts: [{ act: "check", label: t("Check now") }, acct],
+      own: v.seat === "held" && v.trialUntil ? [
+        t("This account's own trial is running."),
+        named(t("Fourteen days, until {DATE}, on up to three computers. A lead can add this account at any time, without waiting for the trial to end."), "{DATE}", signinDay(v.trialUntil))
+      ] : null
+    };
     if (v.seat === "none" || !v.seat) return {
       moment: "nolicence",
       ident,
@@ -27621,6 +27644,7 @@ What you type stays in this browser only.`;
     if (d.cap) h += '<p class="sgn-cap">' + esc(d.cap) + "</p>";
     if (d.privacy) h += '<p class="sgn-cap">' + esc(d.privacy) + "</p>";
     if (d.acts && d.acts.length) h += signinActsHtml(d.acts);
+    if (d.own) h += '<p class="sgn-say sgn-own"><b>' + esc(d.own[0]) + "</b><span>" + esc(d.own[1]) + "</span></p>";
     if (d.link) h += signinLinkHtml(d.link);
     if (d.foot) h += '<p class="sgn-ft">' + esc(d.foot) + "</p>";
     return h;

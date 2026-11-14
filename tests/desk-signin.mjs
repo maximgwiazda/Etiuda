@@ -52,7 +52,7 @@ const PLANTS = 150;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 139 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 140 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1094,6 +1094,26 @@ CASES.pageMoments = () => {
     && m({ said: "signin-notallowed" }) === "refused" && m({ said: "desks" }) === "refused" && m({ said: "signin-cancelled" }) === "before"
     && m({ signedIn: "microsoft", code: CODE, seat: "none" }) === "nolicence" && m({ signedIn: "microsoft", code: CODE, seat: "held" }) === "noteam"
     && m({ signedIn: "microsoft", code: CODE, seat: "held", refused: "full" }) === "noseat" && m({ signedIn: "microsoft", code: CODE, seat: "held", ask: true }) === "ask";
+};
+/* ASK YOUR LEAD (a team is its lead's own; decision 47, held for Max's ruling): the ask, the code, Check now and Account; under the
+   hairline the person's own trial and its end where its certificate is held, and nothing there once it is had; Polish too. */
+CASES.pageAskLead = async () => {
+  if (!P) return false;
+  const storage = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const until = Date.UTC(2026, 10, 27, 12, 0, 0);
+  const running = P.signinDoor(view({ signedIn: "microsoft", code: CODE, seat: "held", deskOnly: true, askLead: true, trialUntil: until }));
+  const had = P.signinDoor(view({ signedIn: "microsoft", code: CODE, seat: "none", askLead: true }));
+  const html = running ? P.signinPanelHtml(running) : "", hadHtml = had ? P.signinPanelHtml(had) : "";
+  storage.lsSet("eUiLang", "pl");
+  let pl = "";
+  try { pl = P.signinPanelHtml(P.signinDoor(view({ signedIn: "microsoft", code: CODE, seat: "held", deskOnly: true, askLead: true, trialUntil: until }))); }
+  finally { storage.lsSet("eUiLang", "en"); }
+  return !!running && running.moment === "asklead" && running.code === CODE && running.acts.map(a => a.act).join() === "check,account"
+    && html.indexOf("Etiuda licence seats the people its leads add.") > 0 && html.indexOf("Give the team") > 0
+    && /<p class="sgn-say sgn-own"><b>This account&#39;s own trial is running\.<\/b><span>Fourteen days, until 27 Nov, on up to three computers\./.test(html)
+    && html.indexOf('sgn-own"') > html.indexOf("data-signin-act") && !!had && had.moment === "asklead" && hadHtml.indexOf("sgn-own") < 0
+    && pl.indexOf("Licencja Etiudy tej organizacji daje miejsce osobom, które dodają jej liderzy.") > 0 && pl.indexOf("Trwa własny okres próbny tego konta.") > 0 && pl.indexOf("do 27 lis") > 0
+    && P.signinDoor(view({ signedIn: "microsoft", code: CODE, seat: "held", deskOnly: true })).moment === "noteam";
 };
 /* Two refusals told apart in their own words: the organisation at its provider, and no licence with a seat at our service. */
 CASES.pageTwoRefusals = () => {
@@ -3015,6 +3035,7 @@ const LEGS = [
   ["ds22h", "labRoot", "unpackaged, a lab file's root is honoured beside the shipped one; installed, packaged or both a certificate under it is refused, the file never read; no lab, or one naming no root, honours the shipped root alone; a stranger's root never"],
   ["ds22e", "doorsSigned", "a door is taken only under the service's signature by the certificate's key, over those doors in that order under that certificate; an older service's answer without one holds the seat, offers no door and says nothing; a stranger's door added, a door changed, another key's or another certificate's signature is no door"],
   ["ds22f", "doorsFile", "signin.json keeps doors only with their signature under the certificate it holds: doors edited, the signature gone (an older build's file) or no certificate is no door, and the certificate stays"],
+  ["ds26a", "pageAskLead", "a desk its organisation's licence does not seat, the switch seating only people added, is told to give its lead the code, with Check now and Account, and under a hairline its own trial and its end, nothing there once the trial is had; Polish too (decision 47, held for Max's ruling)"],
   ["ds22g", "doorsShownSigned", "doors held without the signature are offered nowhere and a press on one joins nothing; signed ones are offered"],
 ];
 for (let [id, name, line] of LEGS) {
@@ -3249,6 +3270,10 @@ const DESK_READS = {
   "token": r => r.ok === false && r.reason === "token",
   "malformed": unreached, "stale": unreached, "signature": unreached, "replayed": unreached, "slow-down": unreached, "unavailable": unreached,
   "signed-out": (r, c) => r === true,
+  /* A team is its lead's own (decision 47): the ask beside the person's own trial's certificate, and beside none once it is had. */
+  "ask-lead-trial": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.cert.deskOnly === true && r.askLead === true
+    && r.code === c.body.code && h.askLead === true && h.said === ""; },
+  "ask-lead": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.askLead === true && h.askLead === true && h.said === ""; },
 };
 const recordedAnswer = c => ({ status: c.status, bytes: Buffer.from(JSON.stringify(c.body)) });
 const caseNames = ANSWER_CASES.map(c => c.case);
