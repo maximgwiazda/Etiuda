@@ -198,7 +198,9 @@ async function storeLook(io) {
     const fresh = freshKeys(io.rand, io.url);
     const put = await io.folder.create(keyText(fresh));
     if (!put.ok && put.why !== "taken") return { state: "unavailable", why: put.why };
-    /* Read again, so two computers making a store at once both adopt the file that stands; the one that lost asks nothing for its own. */
+    /* Read again, so two computers making a store at once both adopt the file that stands where each sees the other's write. Where each
+       reads back its own (a replica not yet reconciled) both replace, and the earlier store ends: its computer adopts the folder's store
+       at the look after its replica shows it, and its sync carries every edit there (shell/sync/sync.cjs). */
     const again = await io.folder.read();
     keys = again.ok && again.text !== null ? keyRead(again.text) : null;
     if (!keys) return { state: "unavailable", why: again.ok ? "refused" : again.why };
@@ -206,7 +208,7 @@ async function storeLook(io) {
   }
   if (!local || local.rt !== keys.rt || local.k !== keys.k || local.s !== keys.s || local.rev !== keys.rev) io.keep(keys);
   const sPub = pubOf(keys.s);
-  /* Only the computer that made the store the folder holds says it replaces the person's others (the service ends them). */
+  /* Only a computer that made the store its folder shows says it replaces the person's others (the service ends them); two may, above. */
   const got = await io.grant(keys.rt, sPub, { replace: made });
   if (!got || got.why || !got.grant) return { state: "paused", why: got && got.why ? got.why : "unreached", keys };
   if (made) {

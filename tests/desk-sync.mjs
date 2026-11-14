@@ -1,0 +1,391 @@
+/* A PERSON'S STORE, THE SYNC: what follows between the person's computers and how it merges (shell/sync/sync.cjs), through the
+ * relay channel (shell/relay/channel.cjs) over the relay itself in memory (relay/worker.mjs on relay/test/stand-ins.cjs), with
+ * stand-ins for OneDrive's App Folder and the licence service; no leg calls a real provider. node tests/desk-sync.mjs
+ * C7, C8, C10's outbox half and the replace race's adoption, each guard named by a plant in a copy that turns its leg red, and no
+ * product file written. Node builtins only, no window. */
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import crypto from "node:crypto";
+import { createRequire } from "node:module";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const require = createRequire(import.meta.url);
+const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-sync-"));
+const EXPECTED = 11;
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+
+let asserted = 0, failed = 0, skipped = 0;
+function check(ok, line) {
+  asserted++;
+  if (ok) console.log("  ok   " + line);
+  else { failed++; console.log("  FAIL " + line); }
+}
+function skip(line) { skipped++; console.log("  SKIP  " + line); }
+
+const MIN = 60 * 1000, HOUR = 60 * MIN, DAY = 24 * HOUR;
+const T0 = Date.UTC(2026, 10, 16, 9);
+const CODE = "ABCDEFGHJKMNPQRS";
+const SPKI = Buffer.from("302a300506032b6570032100", "hex"), PKCS8 = Buffer.from("302e020100300506032b657004220420", "hex");
+const sha = s => crypto.createHash("sha256").update(s).digest("hex");
+const brief = o => JSON.stringify(o);
+const safe = async fn => { try { return await fn(); } catch (e) { return { ok: false, detail: "threw " + (e && e.stack ? e.stack.split("\n").slice(0, 3).join(" | ") : e) }; } };
+
+let ST = null, SY = null, CH = null, C = null, S = null, K = null, W = null;
+function keyPair() {
+  const p = crypto.generateKeyPairSync("ed25519");
+  const pub = p.publicKey.export({ type: "spki", format: "der" }).subarray(SPKI.length).toString("hex");
+  const id = "k-" + sha(Buffer.from(pub, "hex")).slice(0, 16);
+  return { id, pub, privateKey: p.privateKey, desk: id };
+}
+const sKey = seed => crypto.createPrivateKey({ key: Buffer.concat([PKCS8, Buffer.from(seed, "hex")]), format: "der", type: "pkcs8" });
+const signWith = (privateKey, bytes) => crypto.sign(null, bytes, privateKey).toString("hex");
+
+/* ---- OneDrive's App Folder, as Microsoft documents it; `replica` gives a computer a copy that shows its own write until reconciled ---- */
+function graphStandIn() {
+  const st = { text: null, down: false };
+  st.askFor = view => async (method, url, headers, body) => {
+    const json = (status, o) => ({ status, bytes: Buffer.from(JSON.stringify(o)) });
+    if (st.down) throw new TypeError("fetch failed");
+    if (method === "GET" && url === ST.GRAPH) return json(200, { id: "approot" });
+    const file = ST.GRAPH + ":/" + ST.KEY_FILE + ":/content";
+    if (method === "GET" && url === file) return view.text === null ? json(404, { error: { code: "itemNotFound" } }) : { status: 200, bytes: Buffer.from(view.text) };
+    if (method === "PUT" && url.startsWith(file)) {
+      if (/conflictBehavior=fail$/.test(url) && view.text !== null) return json(409, { error: { code: "nameAlreadyExists" } });
+      const was = view.text;
+      view.text = Buffer.from(body).toString("utf8");
+      return json(was === null ? 201 : 200, { id: "f" });
+    }
+    return json(400, { error: { code: "invalidRequest" } });
+  };
+  return st;
+}
+/* ---- the licence service, standing in: grants and one-day store certificates as it signs them; a replace ends the person's other stores ---- */
+const via = at => K.delegationFor(at, { fields: { may: ["licence", "relay-grant"] } });
+function serviceStandIn(R, sent) {
+  const kept = new Set();
+  sent.notices = [];
+  return async (rt, sPub, extra) => {
+    sent.push(JSON.stringify({ rt, sPub, extra }));
+    if (sent.down) return { why: "unreached" };
+    const now = R.clock.now;
+    if (extra && extra.replace === true) for (const old of [...kept].filter(x => x !== rt)) {
+      const n = { kind: "etiuda-service-notice", format: 1, what: "store-end", rt: old, code: CODE, issued: now, via: via(now), sig: { alg: "ed25519", keyId: K.DELEGATE.id, value: "" } };
+      n.sig.value = signWith(K.DELEGATE.privateKey, C.noticeBytes(n));
+      const r = await relayCall(R, [], "POST", "/t/" + old + "/notice", { notice: n });
+      sent.notices.push(old + " " + r.status);
+      kept.delete(old);
+    }
+    kept.add(rt);
+    const g = { kind: "etiuda-store-grant", format: 1, lead: sPub, code: CODE, issued: now, until: now + 30 * DAY, paid: true, via: via(now),
+      sig: { alg: "ed25519", keyId: K.DELEGATE.id, value: "" } };
+    g.sig.value = signWith(K.DELEGATE.privateKey, C.grantBytes(g));
+    return { grant: g, cert: deskPub => {
+      const c = { kind: "etiuda-store-certificate", format: 1, desk: deskPub, code: CODE, issued: now, until: now + DAY, via: K.delegationFor(now, { fields: { may: ["licence"] } }),
+        sig: { alg: "Ed25519", keyId: K.DELEGATE.id, value: "" } };
+      c.sig.value = signWith(K.DELEGATE.privateKey, C.storeCertBytes(c));
+      return c;
+    } };
+  };
+}
+/* ---- the relay: the real one in memory; every body and blob it is sent is kept, to be read ---- */
+async function relayCall(R, sent, method, p, json, token) {
+  const body = json === undefined ? undefined : JSON.stringify(json);
+  if (body) sent.push(body);
+  const res = await W.fetch(new Request("https://relay.test/relay/v1" + p, { method, headers: Object.assign({ "content-type": "application/json" },
+    token ? { authorization: "Bearer " + token } : {}), body, duplex: "half" }), R.env);
+  return { status: res.status, json: await res.json().catch(() => null) };
+}
+function relayIo(R, sent, me) {
+  return {
+    async create(keys, grant) {
+      const sPub = ST.pubOf(keys.s), t = R.clock.now;
+      const r = await relayCall(R, sent, "POST", "/teams", { rt: keys.rt, lead: { keyId: sPub, pub: sPub }, t, grant, sig: signWith(sKey(keys.s), C.create2Bytes(keys.rt, sPub, t, grant)) });
+      return r.status === 200 ? { ok: true } : { ok: false, why: r.json && r.json.error };
+    },
+    async devices(keys, cert) {
+      const t = R.clock.now, list = keys.devices.map(d => ({ id: d.id, pub: d.pub, desk: d.desk }));
+      const r = await relayCall(R, sent, "POST", "/t/" + keys.rt + "/devices", { keys: list, rev: keys.rev, t, sig: signWith(sKey(keys.s), C.devicesBytes(keys.rt, keys.rev, t, list)),
+        seat: cert, by: { pub: me.pub, sig: signWith(me.privateKey, C.storeDevicesBytes(keys.rt, keys.rev, t, list)) } });
+      return r.status === 200 ? { ok: true } : { ok: false, why: r.json && r.json.error };
+    },
+  };
+}
+/* The channel's transport over the relay in memory; every upload's bytes are kept, to be read. */
+function transport(R, sent, down) {
+  return async (method, url, headers, body) => {
+    if (down.on) throw new Error("the relay does not answer");
+    if (body) sent.push(Buffer.from(body).toString("latin1"));
+    const res = await W.fetch(new Request(url, { method, headers, body: body || undefined, duplex: "half" }), R.env);
+    const bytes = Buffer.from(await res.arrayBuffer());
+    return { status: res.status, header: n => res.headers.get(n), bytes };
+  };
+}
+
+/* A computer of the person: its key, its sealed copy, its desk (keys and catalog files), its sync state and its mirror. */
+function computer(world, label, view) {
+  const me = keyPair(), sealed = { keys: null }, desk = { keys: {}, files: {} }, kept = [], down = { on: false };
+  const dir = path.join(WORK, world.name + "-" + label);
+  let syncState = null, sync = null;
+  const folderView = view || world.f;
+  const lookIo = () => ({ folder: ST.folderFor("microsoft", { ask: world.f.askFor(folderView), token: () => "access-token" }), local: () => sealed.keys,
+    keep: k => { sealed.keys = JSON.parse(JSON.stringify(k)); }, grant: async (rt, sPub, ...rest) => {
+      const g = await world.service(rt, sPub, ...rest);
+      return g.why ? g : { grant: g.grant, store: g.cert(me.pub) };
+    }, relay: relayIo(world.R, world.relaySent, me), me: { id: me.id, pub: me.pub, desk: me.desk, privateKey: me.privateKey }, url: "https://relay.test/relay/v1", rand: n => crypto.randomBytes(n) });
+  function make() {
+    sync = SY.createStoreSync({
+      me: { id: me.id, pub: me.pub, privateKey: me.privateKey }, mirrorRoot: dir,
+      channel: opts => CH.createChannel(Object.assign(opts, { request: transport(world.R, world.uploads, down), clock: () => world.R.clock.now, watch: false, pollMs: 1e9, say: l => { if (process.env.SYNC_SAY) console.log("   say " + label + ": " + l); } })),
+      io: m => CH.diskIO(m), load: () => syncState, save: s => { syncState = JSON.parse(JSON.stringify(s)); },
+      local: () => SY.localItems(desk.keys, desk.files),
+      apply: (patch, copies) => {
+        for (const item of Object.keys(patch)) {
+          const at = item.slice(2), box = item.startsWith("k:") ? desk.keys : desk.files;
+          if (patch[item] === null) delete box[at]; else box[at] = patch[item];
+        }
+        for (const c of copies) kept.push(c);
+      },
+      pubOf: ST.pubOf, canonBytes: CH.signedBytes, now: () => world.R.clock.now,
+    });
+  }
+  make();
+  const self = {
+    label, me, desk, kept, down, dir, sealed, world,
+    look: async () => { const l = await ST.storeLook(lookIo()); sync.turn(l); return l; },
+    edit: () => sync.merge(),
+    cycle: async () => { const c = sync.channel(); if (!c) return; c.kick(); await c.idle(); },
+    sync: () => sync,
+    stopAll: () => sync.stop(),
+  };
+  return self;
+}
+function worldOf(name) {
+  const R = S.relayEnv({ roots: K.ROOTS });
+  R.clock.now = T0;
+  const w = { name, R, f: graphStandIn(), relaySent: [], serviceSent: [], uploads: [] };
+  w.service = serviceStandIn(R, w.serviceSent);
+  return w;
+}
+/* Rounds of cycles and merges until nothing moves, the way the shell runs them: each merge writes the computer's place, each cycle sends and takes. */
+async function settle(...cs) {
+  for (let i = 0; i < 4; i++) for (const c of cs) { cs[0].world.R.clock.now += 1000; c.edit(); await c.cycle(); c.edit(); }
+}
+async function twoOn(name) {
+  const w = worldOf(name), a = computer(w, "a"), b = computer(w, "b");
+  const la = await a.look(), lb = await b.look();
+  if (la.state !== "on" || lb.state !== "on") throw new Error("the store did not come on: " + la.state + "/" + lb.state);
+  await a.look(); /* a takes the list b's enrolment wrote, so it judges b's blobs */
+  return { w, a, b };
+}
+
+async function main() {
+  try {
+    ST = require(path.join(ROOT, "shell", "sync", "store.cjs"));
+    SY = require(path.join(ROOT, "shell", "sync", "sync.cjs"));
+    CH = require(path.join(ROOT, "shell", "relay", "channel.cjs"));
+    C = require(path.join(ROOT, "relay", "core.cjs"));
+    S = require(path.join(ROOT, "relay", "test", "stand-ins.cjs"));
+    K = require(path.join(ROOT, "relay", "test", "grant-kit.cjs"));
+    const WORKER = await import(pathToFileURL(path.join(ROOT, "relay", "worker.mjs")).href);
+    W = WORKER.routeWith(K.ROOTS, env => env.NOW());
+  } catch (e) { check(false, "0a the modules load - " + e.message); return; }
+
+  /* S1: what one computer changes reaches the other through the relay, sealed: a setting, an edit over a catalog and a catalog file. */
+  async function followsScene() {
+    const { w, a, b } = await twoOn("s1");
+    a.desk.keys.eUiLang = "pl";
+    a.desk.keys["e3f9a1~Pack"] = JSON.stringify({ stars: { c1: 1 } });
+    a.desk.files["Harbour notes.ec"] = JSON.stringify({ kind: "etiuda-catalog", format: 2, id: "harbour", cards: [] });
+    await settle(a, b);
+    const plainSent = w.uploads.filter(t => t.indexOf("Harbour notes") >= 0 || t.indexOf("stars") >= 0).length;
+    const ok = b.desk.keys.eUiLang === "pl" && b.desk.keys["e3f9a1~Pack"] === a.desk.keys["e3f9a1~Pack"] && b.desk.files["Harbour notes.ec"] === a.desk.files["Harbour notes.ec"]
+      && plainSent === 0 && w.uploads.length > 0;
+    return { ok, detail: brief({ lang: b.desk.keys.eUiLang || null, pack: !!b.desk.keys["e3f9a1~Pack"], file: !!b.desk.files["Harbour notes.ec"], uploads: w.uploads.length, plainSent }) };
+  }
+  /* C7: a desk holding a team key, a team mirror's file, a sign-in token and its identity key beside what follows: none of them reaches
+     the computer's place in the store, what the relay is sent, or the folder's key file. */
+  async function staysScene() {
+    const { w, a, b } = await twoOn("c7");
+    const secrets = { team: crypto.randomBytes(32).toString("hex"), token: "rt." + crypto.randomBytes(24).toString("base64url"), ident: crypto.randomBytes(32).toString("hex"),
+      mirror: "mirrored-" + crypto.randomBytes(12).toString("hex") };
+    Object.assign(a.desk.keys, { eUiLang: "en", eTheme: "dark", eTeamKeys: JSON.stringify({ t1: secrets.team }), eSigninRefresh: secrets.token, eBranch: JSON.stringify({ sign: { priv: secrets.ident } }),
+      eCatalogFolder: "C:/Users/someone/Documents/Etiuda", e3f9a1Stats: "{}", "e3f9a1~SharedFile": secrets.mirror });
+    a.desk.files["relay-mirror.json"] = JSON.stringify({ team: secrets.team });
+    a.desk.files["Own.ec"] = JSON.stringify({ kind: "etiuda-catalog", format: 2, id: "own" });
+    await settle(a, b);
+    const place = [];
+    const walk = d => { for (const n of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, n.name); if (n.isDirectory()) walk(p); else place.push(fs.readFileSync(p, "utf8")); } };
+    walk(path.join(a.dir));
+    const hay = place.concat(w.uploads, w.relaySent, w.serviceSent, [w.f.text || ""]).join("\n");
+    const leaks = Object.keys(secrets).filter(k => hay.indexOf(secrets[k]) >= 0);
+    const followed = b.desk.keys.eTheme === "dark" && b.desk.files["Own.ec"] === a.desk.files["Own.ec"];
+    const strays = Object.keys(b.desk.keys).filter(k => ["eTeamKeys", "eSigninRefresh", "eBranch", "eCatalogFolder", "e3f9a1Stats", "e3f9a1~SharedFile"].indexOf(k) >= 0)
+      .concat(Object.keys(b.desk.files).filter(n => n === "relay-mirror.json"));
+    return { ok: leaks.length === 0 && followed && strays.length === 0, detail: brief({ leaks, followed, strays, placeFiles: place.length }) };
+  }
+  /* C8: two computers offline edit the same item: both versions stand on both computers, each keeping its own in place and the other's for
+     the person; an item only one changed takes that change; a setting takes the later write; the person's choice then stands on both. */
+  async function bothScene() {
+    const { w, a, b } = await twoOn("c8");
+    const L = "e3f9a1~Pack", F = "Quay.ec";
+    a.desk.keys[L] = JSON.stringify({ edits: { c1: "first" } });
+    a.desk.files[F] = "{\"v\":1}";
+    a.desk.keys.eTheme = "light";
+    await settle(a, b);
+    const shared = b.desk.keys[L] === a.desk.keys[L] && b.desk.files[F] === a.desk.files[F];
+    a.down.on = true; b.down.on = true;
+    w.R.clock.now += MIN;
+    a.desk.keys[L] = JSON.stringify({ edits: { c1: "from a" } });
+    a.desk.files[F] = "{\"v\":\"a\"}";
+    a.desk.keys["e77~CatOrder"] = "[\"x\"]";
+    a.desk.keys.eTheme = "dark";
+    a.edit();
+    w.R.clock.now += MIN;
+    b.desk.keys[L] = JSON.stringify({ edits: { c1: "from b" } });
+    b.desk.files[F] = "{\"v\":\"b\"}";
+    b.desk.keys.eTheme = "system";
+    b.edit();
+    a.down.on = false; b.down.on = false;
+    await settle(a, b);
+    const versions = (c, item) => [c.desk.keys[item.slice(2)] !== undefined && item.startsWith("k:") ? c.desk.keys[item.slice(2)] : c.desk.files[item.slice(2)]]
+      .concat(c.kept.filter(k => k.item === item).map(k => k.value)).sort();
+    const want = { ["k:" + L]: [JSON.stringify({ edits: { c1: "from a" } }), JSON.stringify({ edits: { c1: "from b" } })].sort(), ["f:" + F]: ["{\"v\":\"a\"}", "{\"v\":\"b\"}"] };
+    const kept = Object.keys(want).every(item => JSON.stringify(versions(a, item)) === JSON.stringify(want[item]) && JSON.stringify(versions(b, item)) === JSON.stringify(want[item]));
+    const ownInPlace = a.desk.keys[L].indexOf("from a") > 0 && b.desk.keys[L].indexOf("from b") > 0;
+    const oneSide = b.desk.keys["e77~CatOrder"] === "[\"x\"]" && !a.kept.concat(b.kept).some(k => k.item === "k:e77~CatOrder");
+    const later = a.desk.keys.eTheme === "system" && b.desk.keys.eTheme === "system" && !a.kept.concat(b.kept).some(k => k.item === "k:eTheme");
+    /* The person chooses on a: the choice reaches b and the version kept there is let go. */
+    w.R.clock.now += MIN;
+    const pick = JSON.stringify({ edits: { c1: "from b" } });
+    a.desk.keys[L] = pick;
+    a.sync().resolve("k:" + L, pick);
+    await settle(a, b);
+    const chosen = a.desk.keys[L] === pick && b.desk.keys[L] === pick && !a.sync().state().kept.some(k => k.item === "k:" + L) && !b.sync().state().kept.some(k => k.item === "k:" + L);
+    const ok = shared && kept && ownInPlace && oneSide && later && chosen;
+    return { ok, detail: brief({ shared, kept, ownInPlace, oneSide, later, chosen, keptA: a.kept.length, keptB: b.kept.length }) };
+  }
+  /* C10, the outbox: a's store certificate lapses (two days offline, then the service unreached while online): its edits wait in its own
+     place, nothing is sent; at the next look that is on, sync resumes by itself, sends what waited and takes what came. */
+  async function outboxScene() {
+    const { w, a, b } = await twoOn("c10");
+    a.desk.keys.eUiLang = "en";
+    a.desk.keys["e3f9a1~Pack"] = JSON.stringify({ edits: { c9: "before" } });
+    await settle(a, b);
+    /* Changed just before the lapse is met, not yet merged: it waits as anything made while paused does. */
+    a.desk.keys["e3f9a1~Pack"] = JSON.stringify({ edits: { c9: "at the lapse" } });
+    w.R.clock.now += 2 * DAY;
+    w.serviceSent.down = true;
+    const paused = await a.look();
+    const stopped = !a.sync().running();
+    a.desk.files["Paused.ec"] = "{\"made\":\"offline\"}";
+    a.edit();
+    const sentWhilePaused = w.uploads.length;
+    await a.cycle();
+    const quiet = w.uploads.length === sentWhilePaused;
+    w.serviceSent.down = false;
+    const bl = await b.look();
+    b.desk.keys.eTheme = "dark";
+    b.edit(); await b.cycle();
+    const back = await a.look();
+    await settle(a, b);
+    const ok = paused.state === "paused" && stopped && quiet && bl.state === "on" && back.state === "on" && a.sync().running()
+      && b.desk.keys["e3f9a1~Pack"] === JSON.stringify({ edits: { c9: "at the lapse" } }) && b.desk.files["Paused.ec"] === "{\"made\":\"offline\"}" && a.desk.keys.eTheme === "dark";
+    return { ok, detail: brief({ paused: paused.state, stopped, quiet, back: back.state, atLapse: b.desk.keys["e3f9a1~Pack"] === JSON.stringify({ edits: { c9: "at the lapse" } }), sent: b.desk.files["Paused.ec"] === "{\"made\":\"offline\"}", took: a.desk.keys.eTheme || null }) };
+  }
+  /* The replace race on real replicas: two computers set up within the folder's sync lag, each reading back its own write, so both say they
+     replace and the later ends the earlier's store. Once a's replica shows the folder's store, a adopts it at its next look, and every edit a
+     made, before and after its own store ended, reaches the new store and b. */
+  async function raceScene() {
+    const w = worldOf("race");
+    const ra = { text: null }, rb = { text: null };
+    const a = computer(w, "a", ra), b = computer(w, "b", rb);
+    const la = await a.look();
+    a.desk.keys["e3f9a1~Pack"] = JSON.stringify({ edits: { c1: "a, on its own store" } });
+    a.edit(); await a.cycle();
+    w.R.clock.now += MIN;
+    const lb = await b.look();
+    const replaces = w.serviceSent.filter(t => { const j = JSON.parse(t); return j.extra && j.extra.replace === true; }).length;
+    const ended = w.serviceSent.notices.length;
+    a.desk.files["Late.ec"] = "{\"after\":\"the end\"}";
+    a.edit(); await a.cycle();
+    /* The replicas reconcile on the later write, b's. */
+    ra.text = rb.text;
+    w.R.clock.now += MIN;
+    const la2 = await a.look();
+    rb.text = ra.text; /* and again on a's enrolment */
+    await b.look();
+    await settle(a, b);
+    const ok = la.state === "on" && lb.state === "on" && la.keys.rt !== lb.keys.rt && replaces === 2 && ended === 1 && la2.state === "on" && la2.keys.rt === lb.keys.rt
+      && b.desk.keys["e3f9a1~Pack"] === a.desk.keys["e3f9a1~Pack"] && b.desk.files["Late.ec"] === "{\"after\":\"the end\"}";
+    return { ok, detail: brief({ a: la.state, b: lb.state, twoStores: !!la.keys && !!lb.keys && la.keys.rt !== lb.keys.rt, replaces, ended, adopted: !!la2.keys && la2.keys.rt === (lb.keys && lb.keys.rt),
+      edit: b.desk.keys["e3f9a1~Pack"] === a.desk.keys["e3f9a1~Pack"], late: b.desk.files["Late.ec"] === "{\"after\":\"the end\"}" }) };
+  }
+
+  const results = {};
+  const LEGS = [
+    ["S1", followsScene, "a setting, an edit over a catalog and a catalog file changed on one computer reach the other through the relay, nothing of them in the clear"],
+    ["C7", staysScene, "a team key, a team mirror's file, a sign-in token and the desk's identity key on the desk reach neither the computer's place, nor the relay, nor the folder's file"],
+    ["C8", bothScene, "the same edit and catalog changed on two computers offline: both versions stand on both, each its own in place; one side's change and a setting's later write merge without a copy; the person's choice stands on both"],
+    ["C10o", outboxScene, "a lapsed store certificate pauses sync and sends nothing; edits wait in the outbox and at the next look that is on are sent, and what came is taken"],
+    ["C1a", raceScene, "two computers that each read back their own store both replace and the earlier store ends; the earlier computer adopts the folder's store at its next look and every edit it made reaches the new store"],
+  ];
+  for (const [id, scene, line] of LEGS) {
+    const r = await safe(scene);
+    results[id] = r;
+    check(r.ok === true, id + " " + line + ": " + r.detail);
+  }
+
+  /* ---- the plants: each guard lifted, or a fault put in, in a copy of shell/sync/sync.cjs turns its leg red ---- */
+  const PRODUCT = path.join(ROOT, "shell", "sync", "sync.cjs");
+  let copies = 0;
+  async function planted(change, fn) {
+    const digest = sha(fs.readFileSync(PRODUCT)), kept = SY;
+    let turned = false, detail = "plant line absent";
+    try {
+      const text = fs.readFileSync(PRODUCT, "utf8");
+      const next = change(text);
+      if (next !== null && next !== text) {
+        const dir = path.join(WORK, "p" + (++copies));
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, "sync.cjs"), next);
+        SY = require(path.join(dir, "sync.cjs"));
+        const r = await safe(fn);
+        turned = r.ok !== true;
+        detail = turned ? "the leg turned red" : "the leg still held";
+      }
+    } catch (e) { detail = e && e.message ? e.message : String(e); }
+    finally { SY = kept; }
+    return { turned, back: sha(fs.readFileSync(PRODUCT)) === digest, detail };
+  }
+  const lift = tag => text => { const lines = text.split(/\n/), at = lines.findIndex(l => l.indexOf("/* plant:" + tag + " */") >= 0); if (at < 0) return null; lines.splice(at, 1); return lines.join("\n"); };
+  const swap = (from, to) => text => (text.split(from).length === 2 ? text.split(from).join(to) : null);
+  const scenes = Object.fromEntries(LEGS.map(([id, scene]) => [id, scene]));
+  const PLANTS = [
+    ["one item added", "C7", swap("return SETTINGS.indexOf(s.slice(2)) >= 0 || LAYER_RE.test(s.slice(2)); /* plant:follows */", "return SETTINGS.indexOf(s.slice(2)) >= 0 || LAYER_RE.test(s.slice(2)) || s === \"k:eTeamKeys\"; /* plant:follows */"), "a team's keys follow"],
+    ["last-write-wins", "C8", swap("if (isSetting(item)) top = [", "if (true) top = ["), "a conflict is settled by the later write, the earlier version lost"],
+    ["keep-both", "C8", lift("keep-both"), "the other side of a conflict is not kept"],
+    ["outbox emptied", "C10o", swap("if (old) old.stop().catch(() => {}); /* plant:outbox-kept */", "if (old) { old.stop().catch(() => {}); const l = o.local() || {}; for (const i of Object.keys(state.ledger)) if (has(l, i)) state.ledger[i] = Object.assign({}, state.ledger[i], { h: sha(l[i]) }); } /* plant:outbox-kept */"), "the outbox emptied at the lapse: what waited is taken as sent"],
+    ["resume", "C10o", lift("resume"), "sync does not start again at the next look that is on"],
+    ["adopt", "C1a", lift("adopt"), "the store adopted is not where this computer's place is written, so its edits stay in the ended store"],
+  ];
+  for (const [name, id, change, what] of PLANTS) {
+    const line = "p " + id + " " + name + " in a copy of shell/sync/sync.cjs turns " + id + " red (" + what + "), and the product file is never written";
+    if (PLANTS_OFF) { skip(line); continue; }
+    const base = results[id] && results[id].ok === true;
+    const p = await planted(change, scenes[id]);
+    check(base && p.turned && p.back, line + ": " + p.detail + ", sha " + (p.back ? "unchanged" : "CHANGED"));
+  }
+}
+
+try { await main(); }
+catch (e) { check(false, "harness: " + (e && e.stack ? e.stack : e)); }
+try { fs.rmSync(WORK, { recursive: true, force: true }); } catch { /* a temp folder */ }
+console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);
+if (asserted + skipped < EXPECTED) {
+  console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " checks ran");
+  process.exit(78);
+}
+console.log(failed ? "  RESULT: FAIL " + failed + " of " + asserted : "  RESULT: ok " + asserted + " check(s)");
+process.exit(Math.min(failed, 63));

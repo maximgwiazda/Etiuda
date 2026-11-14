@@ -202,7 +202,8 @@ async function main() {
   }
   /* C1r: two of the person's computers, neither holding keys, look at the same instant: both end on one store (the file the folder
      kept, the one made first on Drive, which keeps both), the relay holds one store, one grant says it replaces, and nothing is ended;
-     the one that lost joins at its first look or, where the store was not yet made at the relay, its next. */
+     the one that lost joins at its first look or, where the store was not yet made at the relay, its next. One folder both computers
+     see: replicas that each show their own write send two replaces, which is tests/desk-sync.mjs C1a. */
   async function raceScene(kind) {
     const w = worldOf(kind), a = computer(w, "a"), b = computer(w, "b");
     const [la, lb0] = await Promise.all([a.look(), b.look()]);
