@@ -2972,7 +2972,7 @@ const SEAT_REMOVED_EN = ["Your organisation no longer gives this account access 
 const SEAT_RENEW_EN = ["This account's sign-in needs renewing.", "This desk keeps its catalog and works with it as before. Signing in again, under Account, brings the team's new editions back."];
 const SEAT_REMOVED_PL = ["Organizacja nie przyznaje już temu kontu dostępu do Etiudy.", "To stanowisko zachowuje swój katalog i działa z nim jak dotąd, ale nowe wydania od zespołu już do niego nie trafiają. Dostęp może przywrócić dział IT organizacji."];
 const SEAT_RENEW_PL = ["Logowanie tego konta wymaga odnowienia.", "To stanowisko zachowuje swój katalog i działa z nim jak dotąd. Po ponownym zalogowaniu się w części Konto nowe wydania od zespołu znów zaczną docierać."];
-const NO_ROLE_EN = ["This account has no Etiuda role in its organisation, so it holds no seat.", "Its IT department assigns the roles."];
+const NO_ROLE_EN = ["This account has no Etiuda role in its organisation, so it holds no seat.", "Its IT department can assign one."];
 /* The service's "no-role" (a token of a licence that follows Entra without an Etiuda role) is read as itself, at a renewal and at a first
    sign-in; the certificate in hand is kept to its own end and no sign-in is asked. Handed as stray until this tree's copy of the service's
    record holds it (Studio records it since a9ad7cd3; ds23b then wants its reading). */

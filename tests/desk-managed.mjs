@@ -28,7 +28,7 @@ const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const SIGNIN = fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8");
 const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const CHECKS = 24, PLANTS = 32;
+const CHECKS = 25, PLANTS = 33;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -357,6 +357,20 @@ CASES.catalogBothWays = async (s, set, pg, text) => {
   return withEn === EN.it + " " + CATALOG_EN && noneEn === EN.it && withPl === PL.it + " " + CATALOG_PL && nonePl === PL.it
     && contact === "To ask for access: Service desk." && contactHeld === "To ask for access: Service desk. " + CATALOG_EN;
 };
+/* mm-p7: no role: the copywriter's line (2026-11-14), English and Polish, giving way to SupportContact where it is set. */
+const NO_ROLE_WORDS = { en: ["This account has no Etiuda role in its organisation, so it holds no seat.", "Its IT department can assign one."],
+  pl: ["To konto nie ma w swojej organizacji żadnej roli w Etiudzie, więc nie zajmuje miejsca w licencji.", "Może ją przydzielić dział IT organizacji."] };
+CASES.noRoleWords = async (s, set, pg, text) => {
+  const said = async (lang, contact) => {
+    const P = await signinFrom(text || SIGNIN, false);
+    storage.lsSet("eUiLang", lang);
+    try { return P.signinSay("no-role", P.signinRead(withM(PROFILES.noseat, Object.assign({}, M_ON, { contact })))); }
+    finally { storage.lsSet("eUiLang", "en"); }
+  };
+  const en = await said("en", ""), pl = await said("pl", ""), withContact = await said("en", "Service desk");
+  return JSON.stringify(en) === JSON.stringify(NO_ROLE_WORDS.en) && JSON.stringify(pl) === JSON.stringify(NO_ROLE_WORDS.pl)
+    && JSON.stringify(withContact) === JSON.stringify([NO_ROLE_WORDS.en[0], "To ask for access: Service desk."]);
+};
 /* mm-p6: the Sign-in row says whose accounts in the one of three states that holds: the tenant's, any work account, or those the
    organisation allows. */
 CASES.heldTo = async (s, set, pg) => {
@@ -392,6 +406,7 @@ const LIST = [
   ["mm-p3", "noRole", "no seat on a managed computer: the no-role words, nothing to try, buy or switch, no code"],
   ["mm-p4", "unmanagedRefused", "unmanaged, an account not assigned is told as the organisation's refusal, another account offered"],
   ["mm-p5", "catalogBothWays", "that the desk works on with its catalog is said only where it holds one, English and Polish, with or without SupportContact"],
+  ["mm-p7", "noRoleWords", "no role: the copywriter's line, English and Polish, giving way to SupportContact where it is set"],
   ["mm-p6", "heldTo", "the Sign-in row in the one of three states that holds: the tenant's work accounts, any work account, or those the organisation allows"],
 ];
 const run = async (name, s, set, pg) => { try { return !!(await CASES[name](s, set, pg)); } catch (e) { return false; } };
@@ -467,6 +482,13 @@ if (!PLANTS_OFF && S) {
   await plantPage("mmp32", ["  const line=m.tenant ? t(\"{PROVIDER} · work accounts of the organisation\") : !m.personal ? t(\"{PROVIDER} · work accounts\") /* plant:held-to */",
     "  const line=m.tenant ? t(\"{PROVIDER} · work accounts of the organisation\") : true ? t(\"{PROVIDER} · work accounts\")"], "heldTo", "settings");
   await plantPage("mmp30", ["    case \"signin-notassigned\":\n", ""], "unmanagedRefused", "signin");
+  {
+    const swap = ["    c ? named(t(\"To ask for access: {CONTACT}.\"),\"{CONTACT}\",c) : t(\"Its IT department can assign one.\")]; /* plant:no-role-contact */",
+      "    t(\"Its IT department can assign one.\")];"];
+    let red = false;
+    try { red = SIGNIN.split(swap[0]).length === 2 && !(await CASES.noRoleWords(S, undefined, undefined, SIGNIN.replace(swap[0], swap[1]))); } catch (e) { red = false; }
+    check(red, "mmp33 plant SupportContact dropped from the no-role line turns noRoleWords red");
+  }
 }
 
 const done = asserted === EXPECTED;

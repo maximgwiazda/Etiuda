@@ -70,6 +70,13 @@ function signinRefusedWords(v){
     (c ? named(t("To ask for access: {CONTACT}."),"{CONTACT}",c) : t("Its IT department can: asking them to assign the account is enough.")) /* plant:refused-contact */
       + (catalogLoaded() ? " "+t("Etiuda keeps working with the catalog it has.") : "")]; /* plant:refused-catalog */
 }
+/* An account its organisation gives no Etiuda role (a managed installation, or the service's "no-role"): what to do, and whom to ask
+   where SupportContact names someone, as the refusal above does (the copywriter, 2026-11-14). */
+function signinNoRoleWords(v){
+  const c=v && v.managed ? v.managed.contact : "";
+  return [t("This account has no Etiuda role in its organisation, so it holds no seat."),
+    c ? named(t("To ask for access: {CONTACT}."),"{CONTACT}",c) : t("Its IT department can assign one.")]; /* plant:no-role-contact */
+}
 /* A NON-PERSISTENT DESKTOP whose profile did not keep this desk's key (section 12): what happened and whom to ask, never a fault of
    the person's, and everything on the desk working as before. */
 function signinStranded(v){ return !!(v && v.managed && v.managed.stranded); } /* plant:np-page */
@@ -134,7 +141,7 @@ function signinSay(reason, v, p){
   const prov=SIGNIN_NAMES[v.busy||v.signedIn]||"";
   if(signinRefusedHere(reason, v)) return signinRefusedWords(v);
   if(reason==="nolicence" && signinManaged(v)) /* plant:no-role-managed */
-    return [t("This account has no Etiuda role in its organisation, so it holds no seat."), t("Its IT department assigns the roles.")];
+    return signinNoRoleWords(v);
   switch(reason){
     case "unreached": case "signin-unreached": case "signin-timeout": case "signin-browser":
       return [t("The sign-in service could not be reached."), t("Nothing changed: this computer is not signed in, and Etiuda works as before.")];
@@ -143,7 +150,7 @@ function signinSay(reason, v, p){
     case "signin-notallowed":
       return [t("This account's organisation has not allowed Etiuda at its sign-in provider."), t("Its IT department can allow it; another account can be used meanwhile.")];
     case "no-role":
-      return [t("This account has no Etiuda role in its organisation, so it holds no seat."), t("Its IT department assigns the roles.")];
+      return signinNoRoleWords(v);
     case "seat-removed":
       return [t("Your organisation no longer gives this account access to Etiuda."), t("This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. The organisation's IT department can give access again.")];
     case "seat-renew":
