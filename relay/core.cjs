@@ -1963,7 +1963,8 @@ function createCore(deps) {
   }
   /* Emptied, but for one mark: the lead's public key, so a later create of this id is taken only under that key. A sweep that
      finds no team keeps a mark already written, so a missed delete's retry does not drop it. Nothing else of the team is kept.
-     With nothing left to delete, the drop and the mark are one atomic step, so a throw between them leaves the team. */
+     With nothing left to delete, the drop and the mark are one atomic step, so a throw between them leaves the team. A store the
+     service ended is marked "ended" in its place, a swept mark like the others, kept as long as they are and gone when they go. */
   function wipe(left) {
     const team = store.get("team");
     const prior = store.get("swept");
