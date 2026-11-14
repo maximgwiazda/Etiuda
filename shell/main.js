@@ -9467,6 +9467,9 @@ function signinFolderScope(id, access) {
   if (id === "microsoft" && access) return ""; /* plant:folder-one-resource */
   return Object.prototype.hasOwnProperty.call(SIGNIN_FOLDER_SCOPES, String(id)) ? SIGNIN_FOLDER_SCOPES[String(id)] : "";
 }
+/* Microsoft's folder is never asked beside the sign-in: an organisation that allowed today's scopes alone refuses the whole sign-in for
+   one more. It is asked after it, apart (signinFolderAsk). */
+function signinFolderApart(id) { return id === "microsoft"; } /* plant:folder-apart */
 /* The tenant of personal Microsoft accounts, as Microsoft's ID token reference names it in `tid`. */
 const SIGNIN_PERSONAL_TENANT = "9188040d-6c67-4c5b-b112-36a304b66dad";
 /* THE TABLE UNDER A MANAGED INSTALLATION'S PINS (managedPolicyFrom's answer `pol`): only the provider it names, none where it is
@@ -9661,6 +9664,18 @@ function signinAuthorize(p, port, deskKey, rand, access, folder) {
   const challenge = signinB64url(crypto.createHash("sha256").update(verifier).digest()); /* plant:pkce */
   const q = new URLSearchParams(Object.assign({ client_id: p.clientId, response_type: "code", redirect_uri: redirect, scope: known.scope + (access ? " " + access : "") + (folder ? " " + folder : ""),
     state: state, nonce: nonce, code_challenge: challenge, code_challenge_method: "S256" }, known.extra));
+  return { url: known.authorize + "?" + q.toString(), state: state, nonce: nonce, seed: seed, verifier: verifier, redirect: redirect };
+}
+/* The folder's own request (signinFolderAsk), shaped as signinAuthorize's: openid and the folder's scope alone, so the ID token ties the
+   answer to the account that signed in; no account choice asked, that account's name as the hint where its ID token gave one. */
+function signinFolderAuthorize(p, port, deskKey, rand, scope, hint) {
+  const r = typeof rand === "function" ? rand : crypto.randomBytes, known = signinKnown(p.id);
+  const verifier = signinB64url(r(32)), state = signinB64url(r(32)), seed = Buffer.from(r(32)).toString("hex");
+  const nonce = signinNonce(deskKey, seed), redirect = "http://127.0.0.1:" + Math.floor(Number(port));
+  const extra = Object.assign({}, known.extra);
+  delete extra.prompt; /* plant:folder-no-prompt */
+  const q = new URLSearchParams(Object.assign({ client_id: p.clientId, response_type: "code", redirect_uri: redirect, scope: "openid " + scope, state: state, nonce: nonce,
+    code_challenge: signinB64url(crypto.createHash("sha256").update(verifier).digest()), code_challenge_method: "S256" }, extra, hint ? { login_hint: hint } : {}));
   return { url: known.authorize + "?" + q.toString(), state: state, nonce: nonce, seed: seed, verifier: verifier, redirect: redirect };
 }
 /* Whether `url` is a provider's own authorize page as signinAuthorize makes it: the only address the sign-in hands the browser. */
@@ -9879,12 +9894,13 @@ const SIGNIN_LOOP_HEADERS = Object.freeze({ "cache-control": "no-store", "referr
    query `takes(query)` owns is answered 303 to a path made for this sign-in, so no code or state stays in the address bar; any other
    GET of "/" 400 with `pageFor("earlier")` and ignored; any other path or verb 404. Before that GET it closes after `ms` or on close(),
    and `caught` rejects, with {closed: true} for a close. After it, land(kind) answers that path's one GET with `pageFor(kind)`, the
-   GET held until then; at `landMs` it is answered `pageFor("back")` and the loopback closes. Resolves {port, caught, close, land}. */
+   GET held until then; at `landMs` it is answered `pageFor("back")` and the loopback closes. Resolves {port, caught, close, land, onward}. */
 function signinListen(httpMod, pageFor, ms, takes, landMs) {
   return new Promise((resolve, reject) => {
-    let done = false, timer = null, up = false, caughtYes = null, caughtNo = null, clean = "", landed = "", held = null, served = false;
+    let done = false, timer = null, up = false, caughtYes = null, caughtNo = null, clean = "", landed = "", held = null, served = false, next = "", sent = false;
     const caught = new Promise((yes, no) => { caughtYes = yes; caughtNo = no; });
     caught.catch(() => {});
+    const send = (res, url) => { res.writeHead(303, Object.assign({ location: url, "content-length": 0 }, SIGNIN_LOOP_HEADERS)); res.end(); };
     const serve = (res, status, kind) => {
       let page = "";
       try { page = String(pageFor(kind)); } catch { page = ""; }
@@ -9896,6 +9912,7 @@ function signinListen(httpMod, pageFor, ms, takes, landMs) {
       const u = String(req.url || ""), at = u.indexOf("?"), where = at < 0 ? u : u.slice(0, at);
       if (clean && !served && req.method === "GET" && u === clean) { /* plant:land-once */
         served = true;
+        if (next) { send(res, next); next = ""; return; }
         if (landed) { serve(res, 200, landed); shut(); } else held = res;
         return;
       }
@@ -9907,6 +9924,7 @@ function signinListen(httpMod, pageFor, ms, takes, landMs) {
       done = true;
       clearTimeout(timer);
       clean = "/" + crypto.randomBytes(8).toString("hex");
+      served = false;
       res.writeHead(303, Object.assign({ location: clean, "content-length": 0 }, SIGNIN_LOOP_HEADERS)); /* plant:land-redirect */
       res.end();
       timer = setTimeout(() => { if (!landed) landed = "back"; if (held) serve(held, 200, landed); held = null; shut(); }, landMs === undefined ? SIGNIN_LAND_MS : landMs); /* plant:land-cap */
@@ -9924,12 +9942,27 @@ function signinListen(httpMod, pageFor, ms, takes, landMs) {
       landed = String(kind || "appfail");
       if (held) { serve(held, 200, landed); held = null; shut(); }
     };
+    /* Once per loopback, before the outcome lands (signinFolderAsk): the clean path's GET, held or still to come, answered 303 to `url`,
+       and "/" open again for one GET `again` owns within `wait`. A promise of its query, as `caught` is, or null. */
+    const onward = (url, again, wait) => {
+      if (!clean || landed || sent) return null; /* plant:onward-once */
+      sent = true;
+      const c = new Promise((yes, no) => { caughtYes = yes; caughtNo = no; });
+      c.catch(() => {});
+      takes = again;
+      done = false;
+      clearTimeout(timer);
+      timer = setTimeout(() => { if (!done) { done = true; shut(); caughtNo({ closed: false }); } }, wait === undefined ? SIGNIN_WAIT_MS : wait);
+      if (timer.unref) timer.unref();
+      if (held) { send(held, String(url)); held = null; } else next = String(url);
+      return c;
+    };
     server.on("error", e => { if (!up) reject(e); });
     server.listen(0, "127.0.0.1", () => {
       up = true;
       timer = setTimeout(() => { if (!done) { done = true; shut(); caughtNo({ closed: false }); } }, ms === undefined ? SIGNIN_WAIT_MS : ms);
       if (timer.unref) timer.unref();
-      resolve({ port: server.address().port, caught: caught, land: land,
+      resolve({ port: server.address().port, caught: caught, land: land, onward: onward,
         close: () => { if (!done) { done = true; shut(); caughtNo({ closed: true }); } } });
     });
   });
@@ -9942,7 +9975,7 @@ async function signinRun(io, p, deskKey, now, access) {
   let pending = null;
   const loop = await io.listen(kind => io.page(kind), query => signinOurs(query, pending)); /* plant:loop-takes */
   try {
-    const folder = io.store === true ? signinFolderScope(p.id, access) : "";
+    const folder = io.store === true && !signinFolderApart(p.id) ? signinFolderScope(p.id, access) : "";
     pending = signinAuthorize(p, loop.port, deskKey, io.rand, access, folder);
     let opened = false;
     try { opened = signinPageOk(pending.url) && !!(await io.openPage(pending.url)); } catch { opened = false; }
@@ -10005,6 +10038,37 @@ async function signinRenew(io, p, deskKey, refreshToken, seed, sub, now, access)
     + ", refresh token " + (got.refreshToken ? "replaced" : "kept") }, hide);
   if (folder) signinFolderTake(io, folderRes || { status: 0 }, p.id, now()); /* plant:folder-take-renew */
   return Object.assign({ ok: true, idToken: got.idToken, refreshToken: got.refreshToken || refreshToken, sub: got.sub }, access ? { accessToken: got.accessToken } : {});
+}
+/* THE FOLDER ASKED APART (signinFolderApart), after a seated sign-in `got` where sync may be on: quietly first, by its refresh token,
+   which answers where the account already allows it; else once, the browser that signed in sent on from `loop`'s landing to ask the folder
+   alone, the answer held to the same account. A refusal, an administrator's approval needed or another account hands io.folderToken ""
+   and the sign-in stands; only the renewal's quiet refresh asks again. Resolves when the landing is the caller's to serve; never rejects. */
+async function signinFolderAsk(io, p, loop, deskKey, got, now) {
+  const scope = signinFolderScope(p.id, ""), at = signinKnown(p.id).token, hide = [String(got.refreshToken || ""), p.clientSecret];
+  if (!scope) return;
+  if (got.refreshToken) {
+    let res = null;
+    try { res = await io.tokenAsk(at, signinRefreshForm(p, got.refreshToken, "", scope)); } catch { res = null; }
+    if (res && res.status === 200) { signinFolderTake(io, res, p.id, now()); return; } /* plant:folder-quiet */
+  }
+  const c = signinClaims(got.idToken) || {}, hint = typeof c.preferred_username === "string" && c.preferred_username.length <= 256 ? c.preferred_username : "";
+  const pending = signinFolderAuthorize(p, loop.port, deskKey, io.rand, scope, hint);
+  const again = signinPageOk(pending.url) && typeof loop.onward === "function" ? loop.onward(pending.url, query => signinOurs(query, pending), SIGNIN_WAIT_MS) : null; /* plant:folder-onward */
+  if (!again) return;
+  let query = "";
+  try { query = await again; } catch (e) { signinTrace(io, p.id, "folder", e && e.closed ? "signin-cancelled" : "signin-timeout"); return; }
+  const back = signinBack(query, pending);
+  if (!back.ok) {
+    const q = new URLSearchParams(String(query || ""));
+    signinTrace(io, p.id, "folder", back.reason, { error: q.get("error") || "", error_description: q.get("error_description") || "" }, [q.get("code") || "", pending.verifier]);
+    io.folderToken({ provider: p.id, token: "", until: 0 }); /* plant:folder-refused */
+    return;
+  }
+  let res = null;
+  try { res = await io.tokenAsk(at, signinCodeForm(p, pending, back.code)); }
+  catch (e) { signinTrace(io, p.id, "folder", "signin-unreached", { detail: e && e.message }, hide.concat([back.code, pending.verifier])); return; }
+  const same = signinTokens(res, p, pending.nonce, now(), String(got.sub));
+  signinFolderTake(io, same.ok ? res : { status: 0 }, p.id, now()); /* plant:folder-same */
 }
 /* The refresh token sealed by the system's store, as base64, or "" where the store seals nothing for real (sealsForReal: no
    keyring, or Linux's basic_text): no refresh token is kept there, and the next renewal asks the person to sign in again. */
@@ -10740,7 +10804,7 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
       if (!access && !ans.ok && ans.reason === "access-token") { const m = await signinSeatAccess(io, p, me.key, got, got.seed, Date.now); ans = m.ans; got = m.got; took = m.access; }
       signinTake(p.id, got, ans, Date.now(), took);
       signinFlush();
-      if (ans.ok && ans.cert) storeTurn(); /* plant:store-signin */
+      if (ans.ok && ans.cert) { if (io.store === true && signinFolderApart(p.id)) signinFolderAfter(run, io, p, me.key, got); else storeTurn(); } /* plant:store-signin */
       signinSaid = ans.ok ? "signin-done" : ans.reason;
       landing = signinLanding(got, ans, managed);
     } else { signinSaid = got.reason; landing = signinLanding(got, undefined, managed); }
@@ -11051,6 +11115,19 @@ function storeTurn() {
   const flight = storeLookNow().catch(() => null).then(r => { if (storeFlight === flight) storeFlight = null; return r; });
   storeFlight = flight;
   return flight;
+}
+/* Microsoft's folder asked after a seated sign-in (signinFolderAsk), the desk already signed in: the press's landing waits for it, then the
+   look. A token answered after another sign-in or a sign out took this one's place is dropped. */
+function signinFolderAfter(run, io, p, deskKey, got) {
+  const loop = run.loop, heldAt = signinState().held;
+  if (!loop || typeof loop.onward !== "function") { storeTurn(); return; }
+  let kind = "";
+  run.loop = Object.assign({}, loop, { land: k => { kind = String(k || ""); } });
+  const stepIo = { rand: io.rand, trace: io.trace, tokenAsk: io.tokenAsk, folderToken: t => { if (signinState().held === heldAt) storeTokenTake(t); } };
+  signinFolderAsk(stepIo, p, loop, deskKey, got, Date.now).catch(() => {}).then(() => {
+    loop.land(kind || "back");
+    if (signinState().held === heldAt) storeTurn();
+  });
 }
 async function storeLookNow() {
   if (harnessLaunch() && !signinLabHeld()) return null;
