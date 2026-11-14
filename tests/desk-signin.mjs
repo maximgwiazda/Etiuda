@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 156;
+const PLANTS = 158;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 143 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 144 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -229,7 +229,7 @@ function delegation(over, signer) {
 const VIA = delegation();
 /* A desk-only licence's certificate carries deskOnly: true, signed as the line "desk-only" after the key id; any other has neither. */
 const certBytesOf = c => Buffer.from("etiuda-seat-certificate\n" + [c.format, c.licence, c.desk, c.person, c.code, c.issued, c.until, c.sig.keyId]
-  .concat(c.deskOnly === true ? ["desk-only"] : []).join("\n"), "utf8");
+  .concat(c.pooled === true ? ["pooled"] : []).concat(c.deskOnly === true ? ["desk-only"] : []).join("\n"), "utf8");
 /* The doors beside a certificate as the service signs them, written here from the interface (Studio's seatDoorsBytes): the line
    "etiuda-seat-doors", the certificate's signature value, the number of doors, then each door's team, rt, url, keyId, lead and box,
    one a line, in the order handed, by the key that signed the certificate. */
@@ -2980,6 +2980,16 @@ CASES.relaySeatPage = async (s, page) => {
     && out.moment === "before" && noRoleFirst.moment === "refused" && noRoleFirst.heading === NO_ROLE_EN[0] && noRoleFirst.line === NO_ROLE_EN[1]
     && noRoleRenewal.moment === "renewal" && sayIs(noRoleRenewal.say, NO_ROLE_EN) && !!pl && sayIs(pl[0], SEAT_REMOVED_PL) && sayIs(pl[1], SEAT_RENEW_PL) && !blames;
 };
+/* A POOLED DESK'S CERTIFICATE (Claude alpha's ruling of 2026-11-14 01:07; the relay's grace reads the mark): the desk takes it exactly where
+   the relay does, signed or not. */
+CASES.pooledCert = s => {
+  const req = createRequire(import.meta.url), core = req(path.join(ROOT, "relay", "core.cjs"));
+  const pooled = cert({ pooled: true }), forged = Object.assign(cert(), { pooled: true }), odd = cert({ pooled: "yes" });
+  const kept = s.signinFileRead(s.signinFileText({ held: heldOf({ cert: pooled, doors: [] }) })).held.cert;
+  const relay = c => core.certWhy(c, DESK_KEY, [c.licence], NOW, [TEST_ROOT]) === null;
+  return s.signinCertOk(pooled, DESK_KEY) === true && !s.signinCertOk(forged, DESK_KEY) && !s.signinCertOk(odd, DESK_KEY)
+    && !!kept && kept.pooled === true && relay(pooled) && !relay(forged) && !relay(odd);
+};
 const LEGS = [
   ["ds1a", "offered", "as shipped no client id is configured and nothing is offered; a configured table offers what it configures, in order"],
   ["ds1b", "noHintStart", "an invitation naming providers carries no sign-in hint: the team's start is retired"],
@@ -3112,6 +3122,7 @@ const LEGS = [
   ["ds49b", "relaySeatWire", "the team whose relay refused this desk's seat is kept and told once, said removed where the service found no role and renew otherwise, cleared by its own open or the channel let go"],
   ["ds49c", "seatRenewGap", "a relay session carries the desk's own standing certificate or none, and a run-out one is renewed first at most once an hour, a renewal already out waited on"],
   ["ds49d", "relaySeatPage", "Account says the relay's refusal as what it is to the person, in the copywriter's English and Polish: no longer given access, or the sign-in to renew with the providers under it; nothing signed out; no-role at a first sign-in and a renewal"],
+  ["ds50a", "pooledCert", "a pooled desk's certificate (pooled: true, signed as the line \"pooled\") is a seat on the desk, kept by signin.json, and the relay's certWhy takes it alike; the mark outside the signature, or of another value, is no certificate"],
   ["ds22g", "doorsShownSigned", "doors held without the signature are offered nowhere and a press on one joins nothing; signed ones are offered"],
 ];
 for (let [id, name, line] of LEGS) {
@@ -3596,6 +3607,8 @@ if (!PLANTS_OFF) {
   await plantWire("dsp150", ["  if (held && signinRevokedHas(held.revoked, held.cert)) return false; /* plant:revoked-request */\n", ""], "revokedLapse");
   await plantWire("dsp152", ["  base.revoked = s.revoked || null; /* plant:revoked-survives */\n", ""], "revokedSurvives");
   await plant("dsp151", ["return !!list && Array.isArray(list.keys) && !!cert && !!cert.via && !!cert.via.key && list.keys.indexOf(String(cert.via.key.pub)) >= 0; /* plant:revoked-has */", "return false;"], "revokedLapse");
+  await plant("dsp159", ["    .concat(c.pooled === true ? [\"pooled\"] : []) /* plant:cert-pooled-line */\n", ""], "pooledCert");
+  await plant("dsp160", ["      .concat(c.pooled === true ? [\"pooled\"] : []) /* plant:cert-pooled-field */\n", ""], "pooledCert");
   await plant("dsp153", ["const said = { 403: [\"token\", \"signin\", \"no-role\"], 409: [\"full\", \"desks\"] }[res.status]; /* plant:no-role-read */",
     "const said = { 403: [\"token\", \"signin\"], 409: [\"full\", \"desks\"] }[res.status];"], "relaySeatAnswer");
   await plantWire("dsp154", ["  if (was !== signinRelaySeatTeam) tellSignin(); /* plant:relay-seat-told */\n", ""], "relaySeatWire");

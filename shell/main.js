@@ -9717,9 +9717,9 @@ async function signoutAsk(io, deskKey, now) {
 }
 /* THE SEAT CERTIFICATE as the desk takes it, as relay/core.cjs certWhy takes it at a door: the service's shape, for this desk's key,
    a window of at most SIGNIN_CERT_SPAN_MS, signed by the key of a delegation from NOTE_ROOT, or a lab's signinLabRoot, that may sign
-   "licence" on the UTC day the certificate was issued. A certificate failing any of it is no seat, wherever it came from. `deskOnly`,
-   present only as true, says its licence is desk-only (no lead), and is signed: the line "desk-only" after the key id, as
-   Studio's seatCertBytes makes it; without it the bytes are as before. */
+   "licence" on the UTC day the certificate was issued. A certificate failing any of it is no seat, wherever it came from. `pooled`
+   (a pooled desk, for the relay's grace) and `deskOnly` (a desk-only licence), each present only as true, are signed as the lines
+   "pooled" then "desk-only" after the key id, as Studio's seatCertBytes makes them; without them the bytes are as before. */
 const SIGNIN_CODE = /^[0-9A-HJKMNP-TV-Z]{16}$/;
 const SIGNIN_CERT_SPAN_MS = 30 * 24 * 60 * 60 * 1000, SIGNIN_VIA_SPAN_MS = 366 * 24 * 60 * 60 * 1000;
 const SIGNIN_KEY_ID = /^[a-z0-9][a-z0-9-]{2,63}$/;
@@ -9734,6 +9734,7 @@ function signinCertOk(c, deskKey) {
   const exactly = (o, names) => Object.keys(o).length === names.length && names.every(k => Object.prototype.hasOwnProperty.call(o, k));
   const day = ms => Math.abs(ms) <= 8.64e15 ? new Date(ms).toISOString().slice(0, 10) : "";
   if (!(plainObj(c) && exactly(c, ["kind", "format", "licence", "desk", "person", "code", "issued", "until", "via", "sig"]
+      .concat(c.pooled === true ? ["pooled"] : []) /* plant:cert-pooled-field */
       .concat(c.deskOnly === true ? ["deskOnly"] : [])) /* plant:cert-desk-only-field */
     && c.kind === "etiuda-seat-certificate" && c.format === 1 && /^[0-9a-f]{32}$/.test(String(c.licence))
     && String(c.desk) === String(deskKey) && /^[0-9a-f]{64}$/.test(String(c.person)) && SIGNIN_CODE.test(String(c.code)) /* plant:cert-desk */
@@ -9756,6 +9757,7 @@ function signinCertOk(c, deskKey) {
     && !(signinLabRoot !== "" && signinVerified(signinLabRoot, viaBytes, d.sig.value))) return false; /* plant:cert-lab-root */
   if (c.sig.keyId !== d.key.id) return false; /* plant:cert-via-key */
   const bytes = Buffer.from("etiuda-seat-certificate\n" + [c.format, c.licence, c.desk, c.person, c.code, c.issued, c.until, c.sig.keyId]
+    .concat(c.pooled === true ? ["pooled"] : []) /* plant:cert-pooled-line */
     .concat(c.deskOnly === true ? ["desk-only"] : []).map(String).join("\n"), "utf8"); /* plant:cert-desk-only-bytes */
   return signinVerified(d.key.pub, bytes, c.sig.value); /* plant:cert-sig */
 }
