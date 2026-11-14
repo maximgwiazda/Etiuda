@@ -239,6 +239,31 @@ async function storeLook(io) {
   return { state: "on", keys, store: got.store, made };
 }
 
+/* ---- this computer leaves the store (This computer): the list without it written to the folder first, so a computer enrolling
+   later signs it without this one even where the relay is not reached now; then signed at the relay by S and by this computer under its
+   store certificate. `io`: folder, keys (this computer's last copy), cert() (a current store certificate, asked only once the folder
+   holds this store), relay.devices(next, cert), me {pub}. {ok: true} where the store names it no more, or the store is gone or
+   replaced; else {ok: false, why}. */
+async function storeLeave(io) {
+  if (!io.folder) return { ok: false, why: "no-drive" };
+  const read = await io.folder.read();
+  if (!read.ok) return { ok: false, why: read.why };
+  const held = read.text === null ? null : keyRead(read.text);
+  if ((read.text !== null && endedRead(read.text)) || (held && held.rt !== io.keys.rt)) return { ok: true };
+  const base = held || io.keys, listed = base.devices.some(d => d.pub === io.me.pub);
+  const next = listed ? Object.assign({}, base, { devices: base.devices.filter(d => d.pub !== io.me.pub), rev: base.rev + 1 }) : base;
+  if (listed) {
+    const w = read.text === null ? await io.folder.create(keyText(next)) : await io.folder.write(keyText(next)); /* plant:leave-folder */
+    if (!w.ok) return { ok: false, why: w.why };
+  }
+  const cert = await io.cert();
+  if (!cert) return { ok: false, why: "unreached" };
+  /* Posted even where the folder already left this computer out, since the relay may not have taken that list yet; a list it holds
+     already (replay-rev) or a store it no longer has is done. */
+  const d = await io.relay.devices(next, cert); /* plant:leave-relay */
+  return d.ok || d.why === "replay-rev" || d.why === "not-enrolled" ? { ok: true } : { ok: false, why: d.why || "relay" };
+}
+
 /* ---- what the desk says, once: a reason it says the first time it meets it and not again until another, or sync, comes ---- */
 function sayOnce(kept, look) {
   const why = look && look.state === "unavailable" ? look.why : "";
@@ -284,4 +309,4 @@ function firstSay(told, look) {
 }
 
 module.exports = { KEY_FILE, KEY_KIND, FILE_MAX, DEVICES_MAX, GRAPH, DRIVE, DRIVE_UPLOAD, PAUSE_SAY_MS, graphFolder, driveFolder, folderFor, keyText, keyRead,
-  freshKeys, pubOf, storePolicy, storeLook, sayOnce, pausedLine, storeRow, firstSay, endedText, endedRead };
+  freshKeys, pubOf, storePolicy, storeLook, storeLeave, sayOnce, pausedLine, storeRow, firstSay, endedText, endedRead };

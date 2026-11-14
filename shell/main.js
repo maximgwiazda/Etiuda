@@ -10740,7 +10740,7 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
       if (!access && !ans.ok && ans.reason === "access-token") { const m = await signinSeatAccess(io, p, me.key, got, got.seed, Date.now); ans = m.ans; got = m.got; took = m.access; }
       signinTake(p.id, got, ans, Date.now(), took);
       signinFlush();
-      if (ans.ok && ans.cert) storeTurn(); /* plant:store-signin */
+      if (ans.ok && ans.cert) { storeLeaveNow(null); storeTurn(); } /* plant:store-signin */
       signinSaid = ans.ok ? "signin-done" : ans.reason;
       landing = signinLanding(got, ans, managed);
     } else { signinSaid = got.reason; landing = signinLanding(got, undefined, managed); }
@@ -10853,7 +10853,7 @@ async function signinRenewNow() {
   signinSave();
   signinFlush();
   tellSignin();
-  if (r.said === "renewed") storeTurn(); /* plant:store-renew */
+  if (r.said === "renewed") { storeLeaveNow(null); storeTurn(); } /* plant:store-renew */
   return r.said;
 }
 function armSigninRenew() {
@@ -10874,21 +10874,23 @@ function armSigninRenew() {
    folder itself. */
 let storeLayer = null;
 function StoreLib() { return storeLayer || (storeLayer = require(path.join(__dirname, "sync", "store.cjs"))); }
-/* store.json beside desk.json, read whole or not at all: {format: 1, keys, said, off?, told?, until?, owed?}. `keys` the store's keys sealed by
+/* store.json beside desk.json, read whole or not at all: {format: 1, keys, said, off?, told?, until?, owed?, leave?}. `keys` the store's keys sealed by
    safeStorage as base64, "" where none are kept; `said` the reason the desk last said (sayOnce); `off` the person's own switch, absent where on;
    `told` once this computer has had its first look with sync on (firstSay); `until` the last store certificate's end, for the pause;
-   `owed` the relay team id of a store Turn off everywhere ended that the licence service has not yet answered, sealed as `keys`. */
+   `owed` the relay team id of a store Turn off everywhere ended that the licence service has not yet answered, sealed as `keys`; `leave`
+   the keys of the store This computer has not yet left (storeLeaveNow), sealed as `keys`. */
 const STORE_FILE = "store.json";
 function storeFileRead(text) {
   let d = null;
   try { d = JSON.parse(String(text)); } catch { d = null; }
   const ok = !!d && typeof d === "object" && !Array.isArray(d) && d.format === 1;
   return { keys: ok && typeof d.keys === "string" ? d.keys : "", said: ok && typeof d.said === "string" ? d.said.slice(0, 40) : "", off: ok && d.off === true,
-    told: ok && d.told === true, until: ok && Number.isSafeInteger(d.until) && d.until > 0 ? d.until : 0, owed: ok && typeof d.owed === "string" ? d.owed.slice(0, 400) : "" };
+    told: ok && d.told === true, until: ok && Number.isSafeInteger(d.until) && d.until > 0 ? d.until : 0, owed: ok && typeof d.owed === "string" ? d.owed.slice(0, 400) : "",
+    leave: ok && typeof d.leave === "string" ? d.leave.slice(0, 200000) : "" };
 }
 function storeFileText(s) {
   return JSON.stringify(Object.assign({ format: 1, keys: s.keys || "", said: s.said || "" }, s.off === true ? { off: true } : {}, s.told === true ? { told: true } : {},
-    s.until > 0 ? { until: s.until } : {}, s.owed ? { owed: s.owed } : {}), null, 1) + "\n";
+    s.until > 0 ? { until: s.until } : {}, s.owed ? { owed: s.owed } : {}, s.leave ? { leave: s.leave } : {}), null, 1) + "\n";
 }
 let storeKept;
 function storeState() {
@@ -11114,6 +11116,46 @@ async function storeEndEverywhere(keys) {
   }
   return ended;
 }
+/* THIS COMPUTER LEAVES THE STORE when turned off here (store.cjs storeLeave), its keys kept sealed as `leave` until the relay and the
+   folder have the list without it: tried at once with the last look's store certificate, and again after each seated sign-in or
+   renewal with a fresh one; On here drops it, this computer being on the list again. Where nothing seals for real, in memory alone. */
+let storeLeaveHere = null, storeLeaveFlight = null;
+function storeLeaveKeys() {
+  const v = storeState().leave;
+  if (!v) return storeLeaveHere;
+  try { return StoreLib().keyRead(String(safeStorage.decryptString(Buffer.from(v, "base64")))); } catch { return null; }
+}
+function storeLeaveOwe(keys) {
+  const s = storeState();
+  storeLeaveHere = keys || null;
+  s.leave = "";
+  if (keys && sealsForReal(safeStorage, process.platform)) { try { s.leave = safeStorage.encryptString(StoreLib().keyText(keys)).toString("base64"); } catch { s.leave = ""; } }
+  storeSave();
+}
+function storeLeaveNow(cert) {
+  if (storeLeaveFlight) return storeLeaveFlight;
+  const flight = storeLeaveTry(cert).catch(() => false).then(r => { if (storeLeaveFlight === flight) storeLeaveFlight = null; return r; });
+  storeLeaveFlight = flight;
+  return flight;
+}
+async function storeLeaveTry(cert) {
+  const keys = storeLeaveKeys();
+  if (!keys) return true;
+  if (harnessLaunch() && !signinLabHeld()) return false;
+  const held = signinState().held, me = branchIdentity(false);
+  const p = held ? signinOffered().find(x => x.id === held.provider) : null;
+  if (!p || !me) return false;
+  const L = StoreLib(), folder = L.folderFor(p.id, { ask: storeAsk, token: () => (storeAccess ? storeAccess.token : "") });
+  const tok = folder ? await storeTokenFor(p, held) : { why: "no-drive" };
+  if (tok.why) return false;
+  const current = cert && Number.isSafeInteger(cert.until) && cert.until > Date.now() ? cert : null;
+  const r = await L.storeLeave({ folder, keys, me: { pub: me.key }, relay: { devices: (k, c) => storeRelayDevices(k, c, me) },
+    cert: async () => current || (await storeGrant(me.key, keys.rt, L.pubOf(keys.s), {})).store || null });
+  if (!r.ok) return false;
+  const now = storeLeaveKeys();
+  if (now && now.rt === keys.rt) storeLeaveOwe(null);
+  return true;
+}
 function storeView() {
   const held = signinState().held;
   const provider = held && signinOffered().some(p => p.id === held.provider) && held.cert ? held.provider : "";
@@ -11131,6 +11173,7 @@ async function storeSetNow(what) {
   if (storePolicyNow().held) return storeView(); /* plant:store-set-held */
   const s = storeState();
   if (what === "on") {
+    if (storeLeaveKeys()) storeLeaveOwe(null);
     delete s.off;
     storeFresh = true;
     storeSave();
@@ -11138,7 +11181,9 @@ async function storeSetNow(what) {
     return storeView();
   }
   if (what !== "here" && what !== "everywhere") return storeView();
-  const keys = what === "everywhere" ? storeLocal() : null;
+  const keys = what === "everywhere" ? storeLocal() : null, leaving = what === "here" ? storeLocal() : null;
+  const cert = storeNow && storeNow.store ? storeNow.store : null;
+  if (leaving) storeLeaveOwe(leaving);
   s.off = true;
   s.keys = "";
   s.until = 0;
@@ -11147,6 +11192,7 @@ async function storeSetNow(what) {
   storeNow = null;
   storeSave();
   if (keys) await storeEndEverywhere(keys).catch(() => false);
+  if (leaving) await storeLeaveNow(cert); /* plant:store-leave */
   tellStore();
   return storeView();
 }

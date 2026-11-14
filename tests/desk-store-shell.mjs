@@ -21,7 +21,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 22;
+const EXPECTED = 27;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -118,6 +118,7 @@ function worldOf(o) {
     }
     if (u.startsWith("https://etiuda.dev/relay/v1/")) {
       w.relay.push(body);
+      if (w.relayDown) return json(503, { error: "unavailable" });
       R.clock.now = Date.now();
       const res = await W.fetch(new Request("https://relay.test/relay/v1/" + u.slice("https://etiuda.dev/relay/v1/".length), { method, headers, body: body || undefined, duplex: "half" }), R.env);
       return new Response(Buffer.from(await res.arrayBuffer()), { status: res.status });
@@ -144,7 +145,7 @@ function worldOf(o) {
 /* ---- the shell, evaluated whole: `src` is shell/main.js's text or a planted copy of it ---- */
 /* What the leg reads from main.js, appended to its text; a name main.js lacks comes back undefined, so its leg fails alone. */
 const TAIL_NAMES = ["storeView", "storeSetNow", "storeState", "signinRun", "signinRenew", "signinIo", "signinRenewNow", "signinServiceAsk", "storeServiceAt", "storeOnFor", "storeTurn", "branchIdentity", "signinState"];
-const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS"];
+const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS"];
 const TAIL = "\n__test.T = {" + TAIL_NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
   + ", get: () => ({" + TAIL_STATE.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "}) };";
 function boot(src, o) {
@@ -321,9 +322,48 @@ async function switchScene(src) {
   const here = await T.storeSetNow("here");
   const ok = first.line === "on" && first.say === "on" && !!rt && all.line === "off" && st.off === true && st.keys === "" && w.ended === rt
     && /"kind":"etiuda-store-ended"/.test(String(mark)) && String(mark).indexOf(rt) >= 0 && again.line === "on" && !!file && file.kind === "etiuda-store-key" && file.rt !== rt
-    && here.line === "off" && T.storeState().off === true && T.storeState().keys === "" && w.service.length === before && w.file === fileBefore;
+    && here.line === "off" && T.storeState().off === true && T.storeState().keys === "" && w.service.length === before && sameStore(w.file, fileBefore);
   return { ok, detail: brief({ first: first.line + "/" + first.say, everywhere: all.line, ended: w.ended === rt ? "signed, this store" : w.ended, mark: /etiuda-store-ended/.test(String(mark)),
     againLine: again.line, newStore: !!file && file.rt !== rt, here: here.line, hereSent: w.service.length - before }) };
+}
+
+/* The folder's file still the same store's key: This computer leaves the store's list (d4h) and leaves the key where it is. */
+const sameStore = (a, b) => { try { const x = JSON.parse(a), y = JSON.parse(b); return x.kind === "etiuda-store-key" && x.rt === y.rt && x.k === y.k && x.s === y.s; } catch { return false; } };
+/* The keys the relay's store holds enrolled, by the store's own object in memory. */
+const enrolled = (w, rt) => { const st = w.R.stores.get(rt); return st ? st.list("dev:").length : -1; };
+
+/* (d4h) This computer, turned off here, leaves the store's list: the relay withdraws its key, the folder's file no longer names it, under
+   the last look's store certificate (no new grant asked), and nothing is left owed. */
+async function leaveScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  const was = w.file ? JSON.parse(w.file) : null, rt = was ? was.rt : "";
+  const before = enrolled(w, rt), asked = w.service.length;
+  const off = await T.storeSetNow("here");
+  const file = w.file ? JSON.parse(w.file) : null, left = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8"));
+  const ok = !!rt && before === 1 && off.line === "off" && enrolled(w, rt) === 0 && !!file && file.rt === rt && file.devices.length === 0 && file.rev === was.rev + 1
+    && w.service.length === asked && !left.leave && !left.keys;
+  return { ok, detail: brief({ before, after: enrolled(w, rt), line: off.line, fileDevices: file && file.devices.length, rev: file && was ? file.rev - was.rev : null,
+    serviceAsked: w.service.length - asked, leaveKept: !!left.leave }) };
+}
+/* (d4i) The relay not reached at This computer: the folder's file already leaves it out, the keys are kept sealed as owed (no relay team id
+   in the file's text), and the next seated renewal, under a fresh store certificate, has the relay withdraw it; then nothing is owed. */
+async function leaveOwedScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  const rt = w.file ? JSON.parse(w.file).rt : "";
+  w.relayDown = true;
+  const off = await T.storeSetNow("here");
+  const text = fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8"), kept = JSON.parse(text);
+  const still = enrolled(w, rt), fileDown = w.file ? JSON.parse(w.file) : null;
+  w.relayDown = false;
+  const grants = w.service.filter(b => /"lead"/.test(b)).length;
+  await T.signinRenewNow();
+  const flight = T.get().storeLeaveFlight;
+  if (flight) await flight;
+  const left = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8"));
+  const ok = !!rt && off.line === "off" && !!kept.leave && text.indexOf(rt) < 0 && still === 1 && !!fileDown && fileDown.devices.length === 0
+    && enrolled(w, rt) === 0 && !left.leave && w.service.filter(b => /"lead"/.test(b)).length === grants + 1 && T.storeView().line === "off";
+  return { ok, detail: brief({ line: off.line, keptSealed: !!kept.leave && text.indexOf(rt) < 0, whileDown: still, folderLeft: fileDown && fileDown.devices.length === 0,
+    after: enrolled(w, rt), owedAfter: !!left.leave }) };
 }
 
 /* (d4g) A store/end the service did not answer is owed: kept sealed in store.json, the row's line "ending" meanwhile, posted again at
@@ -345,6 +385,8 @@ async function owedScene(src) {
 }
 
 const LEGS = [
+  ["d4h", leaveScene, "This computer leaves the store's list: the relay withdraws its key and the folder's file names it no more, under the last look's store certificate, nothing left owed"],
+  ["d4i", leaveOwedScene, "the relay not reached at This computer: the folder's file leaves it out at once, the keys kept sealed as owed, and the next seated renewal has the relay withdraw it"],
   ["d4g", owedScene, "a store/end the service did not answer is kept sealed, the row says so, and the next renewal posts it again; answered, the line and the mark are gone"],
   ["d4f", switchScene, "the first look that made the store says on once; Everywhere posts store/end signed by this desk and leaves the ended mark; On makes a new store over it; This computer forgets the keys and ends nothing"],
   ["a1", scopesOnScene, "where sync may be on, Microsoft's authorize address and refresh form carry Files.ReadWrite.AppFolder and Google's authorize address drive.appdata, its refresh as today; a managed computer with PersonalStore unset is off, set on is on"],
@@ -370,13 +412,16 @@ const PLANTS = [
   ["a1", swap("    : known.refreshScope && folder ? known.refreshScope + \" \" + folder : known.refreshScope;", "    : known.refreshScope;"), "the refresh asks no folder scope"],
   ["a2", swap("    const folder = io.store === true ? signinFolderScope(p.id, access) : \"\";\n    pending =", "    const folder = signinFolderScope(p.id, access);\n    pending ="), "the sign-in asks the folder's scope where sync is off"],
   ["a2", swap("  const folder = io.store === true ? signinFolderScope(p.id, access) : \"\";\n  let res = null, folderRes = null;", "  const folder = signinFolderScope(p.id, access);\n  let res = null, folderRes = null;"), "the renewal asks it where sync is off"],
-  ["b", swap("  if (r.said === \"renewed\") storeTurn(); /* plant:store-renew */\n", ""), "the look taken out of the renewal"],
+  ["b", swap(" storeTurn(); } /* plant:store-renew */\n", " } /* plant:store-renew */\n"), "the look taken out of the renewal"],
   ["b2", swap("  if (folder && res.status !== 200) {\n    try {", "  if (false) {\n    try {"), "the refused scope is not asked again without it"],
   ["c", swap("{ format: 1, keys: s.keys || \"\", said: s.said || \"\" }", "{ format: 1, keys: s.keys || \"\", said: s.said || \"\", t: storeAccess && storeAccess.token }"), "the token written to the state file"],
   ["c", swap("  if (folder) signinFolderTake(io, folderRes || { status: 0 }, p.id, now()); /* plant:folder-take-renew */\n",
     "  if (folder) signinFolderTake(io, folderRes || { status: 0 }, p.id, now()); /* plant:folder-take-renew */\n  signinTrace(io, p.id, \"refresh\", \"ok\", { detail: String(JSON.parse(Buffer.from(folderRes.bytes).toString()).access_token) });\n"), "the token traced past the trace's own hiding"],
   ["e", swap("  if (!(d.relay === undefined || DOOR_RELAYS.installed.concat(DOOR_RELAYS.unpackaged).indexOf(d.relay) >= 0)) return null; /* plant:lab-relay */\n", ""), "a lab may name any relay"],
   ["d4g", swap("  storeEndAgain().catch(() => false); /* plant:store-end-again */\n", ""), "the owed store/end is never posted again"],
+  ["d4h", swap("  if (leaving) await storeLeaveNow(cert); /* plant:store-leave */\n", ""), "This computer leaves nothing"],
+  ["d4h", swap("  const current = cert && Number.isSafeInteger(cert.until) && cert.until > Date.now() ? cert : null;", "  const current = null;"), "the leave asks the service for a new grant rather than using the look's certificate"],
+  ["d4i", swap("  if (r.said === \"renewed\") { storeLeaveNow(null); storeTurn(); } /* plant:store-renew */", "  if (r.said === \"renewed\") { storeTurn(); } /* plant:store-renew */"), "the owed leave is never tried again"],
   ["d4f", swap("  if (keys) await storeEndEverywhere(keys).catch(() => false);\n", ""), "Everywhere ends nothing"],
   ["d4f", swap("    if (folder && !tok.why) await folder.write(L.endedText(keys.rt)).catch(() => null); /* plant:store-end-mark */\n", ""), "Everywhere leaves the key in the folder"],
   ["d", swap(".indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes", ".indexOf(String(url)) < -1) throw new Error(\"the licence service's door takes"), "the door takes any route"],
