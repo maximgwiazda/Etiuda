@@ -1,6 +1,6 @@
 /* A PERSON'S STORE ON THE DESK: the key's life in the person's own folder (shell/sync/store.cjs). node tests/desk-store.mjs
  * Over stand-ins for OneDrive's App Folder, Google Drive's appDataFolder and the licence service, and the relay itself in memory
- * (relay/worker.mjs on relay/test/stand-ins.cjs); no leg calls a real provider. C1, C2, C3, C4, C6 and C10's line, each guard
+ * (relay/worker.mjs on relay/test/stand-ins.cjs); no leg calls a real provider. C1, C2, C3, C4, C6, C10's line and E1 (off everywhere), each guard
  * named by a plant in a copy that turns its leg red, and no product file written. Node builtins only, no window. */
 import fs from "node:fs";
 import os from "node:os";
@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-plants-"));
-const EXPECTED = 18;
+const EXPECTED = 21;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -164,7 +164,7 @@ function computer(world, label) {
     const g = await world.service(rt, sPub, ...rest);
     return g.why ? g : { grant: g.grant, store: g.cert(me.pub) };
   }, relay: relayIo(world.R, world.relaySent, me), me, url: "https://relay.test/relay/v1", rand: n => crypto.randomBytes(n), ask: () => said.push("asked"), say: () => said.push("said") });
-  return { label, me, sealed, said, look: () => ST.storeLook(io()) };
+  return { label, me, sealed, said, look: more => ST.storeLook(Object.assign(io(), more)) };
 }
 function worldOf(kind) {
   const R = S.relayEnv({ roots: K.ROOTS });
@@ -291,6 +291,22 @@ async function main() {
     return { ok, detail: brief({ early, late, refused, resumed }) };
   }
 
+  /* E1: turned off everywhere, the ended mark in the folder in the key's place: a computer still holding K and S reads it, answers ended
+     and writes nothing back; one the person turned on there since (fresh) makes a new store over the mark. On both folders. */
+  async function endedScene(kind) {
+    const w = worldOf(kind), a = computer(w, "a"), b = computer(w, "b");
+    const la = await a.look(), lb = await b.look();
+    const mark = la.keys ? ST.endedText(la.keys.rt) : "";
+    w.f.text = mark;
+    const lb2 = await b.look();
+    const kept = w.f.text;
+    const la2 = await a.look({ fresh: true });
+    const fresh = ST.keyRead(w.f.text);
+    const ok = la.state === "on" && lb.state === "on" && lb2.state === "ended" && kept === mark && ST.endedRead(kept)
+      && la2.state === "on" && la2.made === true && !!fresh && fresh.rt !== la.keys.rt && fresh.rt === la2.keys.rt;
+    return { ok, detail: brief({ b: lb2.state, markKept: kept === mark, fresh: la2.state, made: la2.made, newStore: !!fresh && !!la.keys && fresh.rt !== la.keys.rt }) };
+  }
+
   const results = {};
   const LEGS = [
     ["C1", () => firstAndSecondScene("microsoft"), "on OneDrive's App Folder the first computer finds no key and makes the store, and a second computer of the person reads it and opens a session at its first look; neither shows nor asks anything"],
@@ -301,6 +317,8 @@ async function main() {
     ["C3", unreachedScene, "the folder unreached (offline, no drive, Drive off by the organisation, consent refused, full), on each provider, answers unavailable with its reason and throws nothing; each reason is said once, offline never"],
     ["C4", deletedScene, "the file deleted while a computer holds K and S is written back, the same store; with none holding them the next sign-in makes a new store and asks the service for it"],
     ["C6", policyScene, "a managed computer with PersonalStore unset does not sync; on or company it does, held; elsewhere sync is on unless the person turned it off"],
+    ["E1", () => endedScene("microsoft"), "turned off everywhere on OneDrive: a computer holding K and S reads the ended mark, answers ended and writes nothing back; turned on there since, a new store is made over the mark"],
+    ["E1g", () => endedScene("google"), "the same on Drive"],
     ["C10", pausedScene, "a lapsed store certificate says nothing before three days, then Paused since its lapse; nothing beside a sign-in refusal or once renewed"],
   ];
   for (const [id, scene, line] of LEGS) {
@@ -344,6 +362,7 @@ async function main() {
     ["write-back", "C4", lift("write-back"), "the deleted file is not written back, so a new store is made"],
     ["policy-managed", "C6", lift("policy-managed"), "a managed computer with the policy unset syncs"],
     ["pause-days", "C10", lift("pause-days"), "the paused line shows at the first lapse"],
+    ["ended-off", "E1", lift("ended-off"), "the ended mark is read as no key, so the computer does not turn off"],
   ];
   for (const [name, id, change, what] of PLANTS) {
     const line = "p " + id + " " + name + " in a copy of shell/sync/store.cjs turns " + id + " red (" + what + "), and the product file is never written";
