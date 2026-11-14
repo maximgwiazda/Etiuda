@@ -40,7 +40,7 @@ import { customerVersion, versionProblems, placeholders, licencePages, licencePr
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 56;
+const EXPECTED = 58;
 
 let asserted = 0, failed = 0;
 const notRun = [];
@@ -375,7 +375,9 @@ try {
     check(typeof v4 === 'string' && /NotSigned, not Valid/.test(v4),
       '5f a preview WITH a certificate configured that came out unsigned is stopped: ' + v4);
     const v5 = verdict(SIGNED, SIGNED, true);
-    check(v5 === true, '5g a customer build with both files Valid and timestamped passes: ' + v5);
+    check(v5 === 'the program is signed by Microsoft Corporation, a maker, not by us',
+      '5g a customer build whose installer and program read Valid and timestamped, as Windows reads this Microsoft-signed tool, is'
+      + ' refused as a maker\'s program, not ours (a pass on our own signature is tests/sign-all.mjs 2c): ' + v5);
     const v6 = verdict(SIGNED, path.join(TMP, 'no-such', 'Etiuda.exe'), false);
     check(typeof v6 === 'string' && /is not there/.test(v6),
       '5h a program that is not where the gate looks is a stop, not a pass: ' + v6);
@@ -766,7 +768,7 @@ try {
     const fineRead = [{ file: 'C:/x/etiuda-setup.exe', status: 'Valid', timestamped: true, subject: WHO10 }];
     const asks = typeof SELL10.demoSigningProblems === 'function';
     const v10 = signatureVerdict({ setup: EN_FILE, program: EN_FILE, customer: false, win: {}, read: () => demoRead, log: () => {} });
-    const v10ok = signatureVerdict({ setup: EN_FILE, program: EN_FILE, customer: true, win: {}, read: () => fineRead, log: () => {} });
+    const v10ok = signatureVerdict({ setup: EN_FILE, program: EN_FILE, customer: true, win: {}, read: files => files.map(f => ({ ...fineRead[0], file: f })), log: () => {} });
     const sellText = fs.readFileSync(path.join(ROOT, 'tools', 'sellable.mjs'), 'utf8');
     const lift10 = (marker, line) => {
       const t = sellText.split('\n').map(l => l.includes('plant:' + marker) ? line + ' /* plant:' + marker + ' */' : l).join('\n');
@@ -817,6 +819,31 @@ try {
       '10j a stale etiuda-esigner- folder holding an argument file is gone once the next session starts, while a fresh folder of'
       + ' that prefix, a stale file of it, stale folders of other names and the session\'s own spent folders are as they should be: '
       + JSON.stringify(left));
+
+    /* 10k: each build's eSigner record begins empty. One an earlier build left in the same output folder, under another
+       certificate, is set aside beside it when the next session opens, so the release's ourPublisher reads this build's alone. */
+    const oldRecord = JSON.stringify({ file: 'Etiuda.exe', ms: 1, status: 'Valid', thumbprint: 'CD'.repeat(20) }) + '\n';
+    const recordIn = out => { fs.mkdirSync(path.join(out, '.esigner'), { recursive: true }); fs.writeFileSync(path.join(out, '.esigner', 'signings.jsonl'), oldRecord); return out; };
+    const OUTK = recordIn(path.join(TMP, 'es-dist-k'));
+    await ES.esignerSigning({ ETIUDA_SIGN: 'esigner' }, TOOL_ROOT, OUTK).signtoolOptions.sign({ path: target('probe-k.exe') });
+    const setAside = fs.readdirSync(path.join(OUTK, '.esigner')).filter(f => /^signings-.+\.jsonl$/.test(f));
+    const namedK = SELL10.ourPublisher({ signtoolOptions: { sign: () => {} } }, OUTK);
+    check(!!namedK && JSON.stringify(namedK.thumbprints) === JSON.stringify([THUMB10]) && setAside.length === 1
+      && fs.readFileSync(path.join(OUTK, '.esigner', setAside[0]), 'utf8') === oldRecord,
+      '10k a new build\'s eSigner record begins empty: the earlier build\'s, under another certificate, is set aside beside it as '
+      + setAside.join(', ') + ', and the release accepts only ' + (namedK ? namedK.thumbprints.join(', ') : 'nothing'));
+    /* 10l, the plant: the hook's copy with plant:esigner-fresh-record lifted keeps the earlier record, and its certificate passes. */
+    const esTextK = fs.readFileSync(path.join(ROOT, 'tools', 'esigner.cjs'), 'utf8');
+    const esLiftK = esTextK.split('\n').map(l => l.includes('plant:esigner-fresh-record') ? '  void record; /* plant:esigner-fresh-record */' : l).join('\n');
+    const ESK = new Function('require', '__dirname', 'module', esLiftK + '\nreturn module.exports;')(require, path.join(ROOT, 'tools'), { exports: {} });
+    Object.assign(ESK.io, fakeIo);
+    Object.assign(ESK.TOOL.sha256, ES.TOOL.sha256);
+    const OUTL = recordIn(path.join(TMP, 'es-dist-l'));
+    await ESK.esignerSigning({ ETIUDA_SIGN: 'esigner' }, TOOL_ROOT, OUTL).signtoolOptions.sign({ path: target('probe-l.exe') });
+    const namedL = SELL10.ourPublisher({ signtoolOptions: { sign: () => {} } }, OUTL);
+    check(esLiftK !== esTextK && !!namedL && namedL.thumbprints.includes('CD'.repeat(20)),
+      '10l with plant:esigner-fresh-record lifted on a copy of the hook, the earlier build\'s certificate is accepted beside this one: '
+      + (namedL ? namedL.thumbprints.join(', ') : 'nothing'));
   } finally {
     Object.assign(ES.io, IO);
     Object.assign(ES.TOOL.sha256, realPins);

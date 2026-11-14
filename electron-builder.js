@@ -120,13 +120,14 @@ module.exports = sellerAddress.sellerConfig(testService.testServiceConfig({
           // (`icon:` below) is a build input and never reaches the asar by itself (Max's finding, 2026-11-09).
           "shell/etiuda.ico"],
   asar: true,
-  // THE FUSES, flipped in the binary before signing. Off: running the executable as plain Node,
-  // NODE_OPTIONS, and --inspect, none of which the shell or the harness uses. On: the app is read
-  // from app.asar alone. Asar integrity stays off while tests/shell-smoke.js rewrites the asar in
-  // place for its variants; the file protocol keeps its extra privileges, since the engine is
-  // served from file:// and nothing has been measured without them.
+  // THE FUSES, flipped in the binary before signing. Off: running the executable as plain Node, NODE_OPTIONS, and --inspect,
+  // none of which the shell or the harness uses. On: the app is read from app.asar alone, and cookies on disk are encrypted
+  // under Local State's key (DPAPI on Windows), so a cookie store dies with Local State, and with the fuse turned off.
+  // Asar integrity stays off while tests/shell-smoke.js rewrites the asar in place for its variants; the file protocol
+  // keeps its extra privileges, since the engine is served from file:// and nothing has been measured without them.
   electronFuses: {
     runAsNode: false,
+    enableCookieEncryption: true, /* plant:fuse-cookie */
     enableNodeOptionsEnvironmentVariable: false,
     enableNodeCliInspectArguments: false,
     enableEmbeddedAsarIntegrityValidation: false,
@@ -158,7 +159,14 @@ module.exports = sellerAddress.sellerConfig(testService.testServiceConfig({
     // THE GROUP POLICY TEMPLATE goes beside the program as it stands, resources/policy holding etiuda.admx and its
     // en-US and pl-PL etiuda.adml, so an administrator who installs a desk has the template that pins its team folder
     // and its lead's key (sense pass finding 17; tests/join-policy.mjs 19i). Windows only: no other system reads it.
-    extraResources: [{ from: CARET, to: "caret.exe" }, { from: "shell/policy", to: "policy" }, { from: EMBED, to: "embed" }, ...SIGNIN_SECRET],
+    // The caret helper as a folder of one, not as the file: electron-builder signs what it copies out of a folder and
+    // copies a lone file unsigned (tests/sign-all.mjs 1c).
+    extraResources: [
+      { from: path.dirname(CARET), to: ".", filter: [path.basename(CARET)] }, /* plant:sign-caret */
+      { from: "shell/policy", to: "policy" }, { from: EMBED, to: "embed" }, ...SIGNIN_SECRET],
+    // EVERY LIBRARY SIGNED AS THE PROGRAMS ARE: Electron's DLLs beside the exe and the model's runtime, a DLL and a Node
+    // addon, each of which a publisher rule judges on its own (tests/sign-all.mjs); afterExtract below spares one its maker signed.
+    signExts: [".dll", ".node"], /* plant:sign-exts */
     ...signing,
   },
   // THE LICENCE PAGE IS FOUND BY NAME rather than named here: electron-builder shows one when
@@ -187,6 +195,12 @@ module.exports = sellerAddress.sellerConfig(testService.testServiceConfig({
     // Dictionaries are Linux only: Windows checks spelling with its own checker and fetches nothing (shell/main.js).
     // The model folder is the one the Windows block copies. The shell reads resources/embed once installed.
     extraResources: [{ from: LINUX_DICTIONARIES, to: "dictionaries" }, { from: EMBED, to: "embed" }, ...SIGNIN_SECRET],
+  },
+  // A FILE ITS MAKER SIGNED KEEPS THAT SIGNATURE: the packager's one signing door is narrowed before anything is copied or
+  // signed (tools/sellable.mjs keepMakersSignatures), whichever route signs.
+  afterExtract: async context => {
+    if (context.electronPlatformName !== "win32") return;
+    (await import(require("node:url").pathToFileURL(path.join(__dirname, "tools", "sellable.mjs")).href)).keepMakersSignatures(context.packager);
   },
   beforePack: async context => {
     const plat = context.electronPlatformName;

@@ -141,7 +141,7 @@ try {
   check(J(fresh.linux.extraResources) === J([{ from: path.join(DIST, '.dictionaries'), to: 'dictionaries' },
         { from: path.join(DIST, '.embed'), to: 'embed' }])
       && cfg.extraResources === undefined && cfg.nsis.extraResources === undefined
-      && J(fresh.win.extraResources) === J([{ from: path.join(DIST, '.caret', 'caret.exe'), to: 'caret.exe' }, { from: 'shell/policy', to: 'policy' },
+      && J(fresh.win.extraResources) === J([{ from: path.join(DIST, '.caret'), to: '.', filter: ['caret.exe'] }, { from: 'shell/policy', to: 'policy' },
         { from: path.join(DIST, '.embed'), to: 'embed' }]),
     '5a the Linux block copies the output folder\'s .dictionaries into resources/dictionaries and its .embed into resources/embed,'
     + ' the Windows block the caret helper, the Group Policy template and the same embed folder (tests/join-policy.mjs 19i),'
