@@ -9042,6 +9042,22 @@ What you type stays in this browser only.`;
     "Seat held · checked {WHEN}": "Miejsce zajęte · sprawdzono {WHEN}",
     "A shared computer: another person may sign in here, with an account of your organisation.": "Wspólny komputer: może się tu zalogować inna osoba, kontem organizacji.",
     "Set by your organisation": "Ustawione przez organizację",
+    "Sync across computers": "Synchronizacja między komputerami",
+    "Your catalogs, edits and settings on every computer you sign in on.": "Własne katalogi, zmiany i ustawienia na każdym komputerze, na którym nastąpi zalogowanie.",
+    "Only on this computer.": "Tylko na tym komputerze.",
+    "Changed on two computers: choose which to keep.": "Zmieniono na dwóch komputerach: należy wybrać, którą wersję zostawić.",
+    "Your catalogs, edits and settings now follow you to every computer you sign in on. You can turn this off in Account.": "Własne katalogi, zmiany i ustawienia będą teraz dostępne na każdym komputerze, na którym nastąpi zalogowanie. Można to wyłączyć w Koncie.",
+    "Not available on this account: {REASON}. Everything works on this computer as before.": "Niedostępna na tym koncie: {REASON}. Na tym komputerze wszystko działa jak dotąd.",
+    "Not available on this account. Everything works on this computer as before.": "Niedostępna na tym koncie. Na tym komputerze wszystko działa jak dotąd.",
+    "the account has no OneDrive": "konto nie ma usługi OneDrive",
+    "your organisation has switched off Google Drive for it": "organizacja wyłączyła dla niego Dysk Google",
+    "Etiuda was not allowed its folder in the account. To turn sync on, sign in again and allow it": "Etiuda nie dostała zgody na swój folder na koncie. Aby włączyć synchronizację, należy zalogować się ponownie i wyrazić zgodę",
+    "Turn off sync?": "Wyłączyć synchronizację?",
+    "Everywhere also deletes the synced copy; each computer keeps its own.": "Opcja Wszędzie usuwa też zsynchronizowaną kopię; każdy komputer zachowuje własną.",
+    "Everywhere": "Wszędzie",
+    "This computer": "Ten komputer",
+    "Your organisation has not turned this on.": "Organizacja nie włączyła tej funkcji.",
+    "Paused since {DATE}. It resumes when this computer reaches our service.": "Wstrzymana od {DATE}. Zostanie wznowiona, gdy komputer połączy się z naszą usługą.",
     "Sign-in": "Logowanie",
     "{PROVIDER} · work accounts of the organisation": "{PROVIDER} · konta służbowe organizacji",
     "{PROVIDER} · work accounts": "{PROVIDER} · konta służbowe",
@@ -28111,11 +28127,123 @@ What you type stays in this browser only.`;
       if (b.dataset.signinAct) signinAct(b.dataset.signinAct, b);
     });
   }
+  var SYNC_LINES = ["on", "off", "org-off", "unavailable", "paused", "conflict"];
+  function syncRead(v) {
+    const o = v && typeof v === "object" ? v : {};
+    if (o.shown !== true || SYNC_LINES.indexOf(o.line) < 0) return { shown: false, line: "", on: false, held: false, why: "", since: 0, say: "" };
+    return {
+      shown: true,
+      line: o.line,
+      on: o.on === true,
+      held: o.held === true,
+      why: typeof o.why === "string" ? o.why.slice(0, 40) : "",
+      since: Number.isFinite(o.since) && o.since > 0 ? o.since : 0,
+      say: typeof o.say === "string" ? o.say.slice(0, 40) : ""
+    };
+  }
+  function syncNow() {
+    const h = eHost();
+    if (!h || typeof h.storeState !== "function") return syncRead(null);
+    try {
+      return syncRead(h.storeState());
+    } catch (e) {
+      return syncRead(null);
+    }
+  }
+  function syncWhyWords(why, provider) {
+    if (why === "no-drive") return provider === "google" ? t("your organisation has switched off Google Drive for it") : t("the account has no OneDrive");
+    if (why === "consent") return t("Etiuda was not allowed its folder in the account. To turn sync on, sign in again and allow it");
+    return "";
+  }
+  function syncUnavailable(why, provider) {
+    const r = syncWhyWords(why, provider);
+    return r ? named(t("Not available on this account: {REASON}. Everything works on this computer as before."), "{REASON}", r) : t("Not available on this account. Everything works on this computer as before.");
+  }
+  function syncDate(at) {
+    return new Date(at).toLocaleDateString(uiLang() === "pl" ? "pl-PL" : "en-GB", { day: "numeric", month: "long" });
+  }
+  function syncLine(s, provider) {
+    if (s.line === "org-off") return t("Your organisation has not turned this on.");
+    if (s.line === "off") return t("Only on this computer.");
+    if (s.line === "unavailable") return syncUnavailable(s.why, provider);
+    if (s.line === "paused") return named(t("Paused since {DATE}. It resumes when this computer reaches our service."), "{DATE}", syncDate(s.since));
+    if (s.line === "conflict") return t("Changed on two computers: choose which to keep.");
+    return t("Your catalogs, edits and settings on every computer you sign in on.");
+  }
+  var syncWaiting = null;
+  function syncSay(s) {
+    if (!s.say || document.getElementById("eSyncSaid")) return;
+    const btn = $("#signinBtn"), panel = $("#signinPanel");
+    if (!btn || !btn.getClientRects().length) return;
+    if (panel && !panel.hidden) {
+      if (syncWaiting) return;
+      syncWaiting = new MutationObserver(() => {
+        if (panel.hidden) {
+          syncWaiting.disconnect();
+          syncWaiting = null;
+          syncSay(syncNow());
+        }
+      });
+      syncWaiting.observe(panel, { attributes: true, attributeFilter: ["hidden"] });
+      return;
+    }
+    const words = s.say === "on" ? t("Your catalogs, edits and settings now follow you to every computer you sign in on. You can turn this off in Account.") : syncUnavailable(s.say, signinV.signedIn);
+    const i = words.indexOf(". ");
+    const d = document.createElement("div");
+    d.id = "eSyncSaid";
+    d.className = "bub bub-ask e-sync-said";
+    d.setAttribute("role", "status");
+    const p = document.createElement("p"), b = document.createElement("b");
+    b.textContent = i < 0 ? words : words.slice(0, i + 1);
+    p.appendChild(b);
+    if (i >= 0) p.appendChild(document.createTextNode(" " + words.slice(i + 2)));
+    d.appendChild(p);
+    const row2 = document.createElement("div");
+    row2.className = "tour-actions";
+    const x = document.createElement("button");
+    x.type = "button";
+    x.className = "btn";
+    x.textContent = t("Dismiss");
+    x.onclick = () => d.remove();
+    row2.appendChild(x);
+    d.appendChild(row2);
+    document.body.appendChild(d);
+    hangBubble(d, () => $("#signinBtn"));
+    const h = eHost();
+    try {
+      if (h && typeof h.storeSaid === "function") h.storeSaid();
+    } catch (e) {
+    }
+  }
+  var syncTellers = [];
+  function syncOnChange(fn) {
+    if (typeof fn === "function") syncTellers.push(fn);
+  }
+  function syncChanged() {
+    const s = syncNow();
+    syncSay(s);
+    syncTellers.forEach((fn) => {
+      try {
+        fn(s);
+      } catch (e) {
+      }
+    });
+  }
+  function syncSet(what) {
+    const h = eHost();
+    if (!h || typeof h.storeSet !== "function") return Promise.resolve(syncNow());
+    try {
+      return Promise.resolve(h.storeSet(what)).catch(() => null).then(() => syncNow());
+    } catch (e) {
+      return Promise.resolve(syncNow());
+    }
+  }
   function wireSignin() {
     const h = signinHost();
     if (!h) return;
     signinNow();
     if (typeof h.onSignin === "function") h.onSignin((v) => signinChanged(v, false));
+    if (typeof h.onStore === "function") h.onStore(() => syncChanged());
     const btn = $("#signinBtn"), panel = $("#signinPanel"), wrap = $("#signinWrap");
     if (btn) btn.onclick = (e) => {
       e.stopPropagation();
@@ -28133,6 +28261,7 @@ What you type stays in this browser only.`;
       }
     }, true);
     paintSigninButton();
+    syncSay(syncNow());
   }
 
   // src/modules/header-menus.js
@@ -37449,15 +37578,59 @@ What you type stays in this browser only.`;
     } else if (buy && !v.signedIn) rows.push(buyRow(v));
     else if (held && !v.signedIn) rows.push(held);
     groups.push({ rows });
+    const s = v.signedIn && !signinChoosingNow() ? syncNow() : null;
+    if (s && s.shown) groups.push({ rows: [syncRow(s, v.signedIn)] });
     return groups;
+  }
+  function syncRow(s, provider) {
+    const sw = s.line === "unavailable" || s.line === "org-off" ? "" : seg2("sync", [{ v: "off", t: t("Off") }, { v: "on", t: t("On") }], s.on ? "on" : "off", s.held) + (s.held ? '<span class="sgn-lock">' + ICON_LOCK2 + esc(t("Set by your organisation")) + "</span>" : "");
+    return row("sync", "teams", t("Sync across computers"), syncLine(s, provider), sw);
+  }
+  function askSyncOff() {
+    const was = document.getElementById("eSyncAsk");
+    if (was) was.remove();
+    const el = document.createElement("div");
+    el.className = "bub bub-ask e-sync-ask";
+    el.id = "eSyncAsk";
+    el.setAttribute("role", "alertdialog");
+    el.setAttribute("aria-labelledby", "eSyncAskT");
+    el.innerHTML = '<h3 id="eSyncAskT">' + esc(t("Turn off sync?")) + "</h3><p>" + esc(t("Everywhere also deletes the synced copy; each computer keeps its own.")) + '</p><div class="tour-actions"><button type="button" class="btn" id="eSyncAll">' + esc(t("Everywhere")) + '</button><button type="button" class="btn" id="eSyncHere">' + esc(t("This computer")) + '</button><button type="button" class="btn primary" id="eSyncStay">' + esc(t("Cancel")) + "</button></div>";
+    document.body.appendChild(el);
+    hangBubble(el, () => document.querySelector('#setBody .set-seg[data-seg="sync"]'));
+    const shut = () => {
+      el.remove();
+      removeEventListener("keydown", onEsc, true);
+    };
+    const onEsc = (e) => {
+      if (e.key !== "Escape" || !el.isConnected) return;
+      e.preventDefault();
+      e.stopPropagation();
+      shut();
+    };
+    addEventListener("keydown", onEsc, true);
+    const off = (what) => {
+      shut();
+      syncSet(what).then(() => {
+        if (document.getElementById("setBody")) paintSettings();
+      });
+    };
+    el.querySelector("#eSyncAll").onclick = () => off("everywhere");
+    el.querySelector("#eSyncHere").onclick = () => off("here");
+    el.querySelector("#eSyncStay").onclick = shut;
+    try {
+      el.querySelector("#eSyncStay").focus({ preventScroll: true });
+    } catch (_) {
+    }
   }
   var accountHeard = false;
   function wireAccountRows(box) {
     if (!accountHeard) {
       accountHeard = true;
-      signinOnChange(() => {
-        if (document.getElementById("setBody")) paintSettings();
-      });
+      const again = () => {
+        if (document.getElementById("setBody") && !document.getElementById("eSyncAsk")) paintSettings();
+      };
+      signinOnChange(again);
+      syncOnChange(again);
     }
     box.querySelectorAll('[data-e-open="signin"]').forEach((b) => {
       b.onclick = () => signinStart(b.getAttribute("data-e-provider"), "account");
@@ -38160,6 +38333,14 @@ What you type stays in this browser only.`;
       sbox.querySelectorAll("button").forEach((b) => {
         b.onclick = () => {
           const seg3 = sbox.getAttribute("data-seg"), v = b.getAttribute("data-val"), on = v === "on";
+          if (seg3 === "sync") {
+            if (b.classList.contains("on")) return;
+            if (on) syncSet("on").then(() => {
+              if (document.getElementById("setBody")) paintSettings();
+            });
+            else askSyncOff();
+            return;
+          }
           if (b.classList.contains("on")) return;
           sbox.querySelectorAll("button").forEach((x) => x.classList.remove("on"));
           b.classList.add("on");

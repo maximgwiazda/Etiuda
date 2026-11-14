@@ -10,6 +10,7 @@ import { agentName } from "./agent.js";
 import { teamLeads } from "./team-join.js";
 import { hooks } from "./hooks.js";
 import { catalogLoaded } from "./catalog-boot.js";
+import { hangBubble } from "./bubble.js";
 
 /* "lab" is offered only by the sign-in lab (shell/main.js signinLabRead), never by a desk installed or packaged. */
 const SIGNIN_NAMES={microsoft:"Microsoft", google:"Google", lab:"Lab"}; // placeholder: Claudette, "Lab"
@@ -477,11 +478,102 @@ function signinClicks(root){
     if(b.dataset.signinAct) signinAct(b.dataset.signinAct, b);
   });
 }
+/* ---- sync across computers: what the shell's storeRow answers (shell/sync/store.cjs), the row's words and the one bubble ---------
+   The page is told a line ("on", "off", "org-off", "unavailable", "paused", "conflict"), the switch, whether policy holds it, the
+   reason, the pause's start and what to say once; never a key, a store or a token. */
+const SYNC_LINES=["on","off","org-off","unavailable","paused","conflict"];
+function syncRead(v){
+  const o=v && typeof v==="object" ? v : {};
+  if(o.shown!==true || SYNC_LINES.indexOf(o.line)<0) return {shown:false, line:"", on:false, held:false, why:"", since:0, say:""};
+  return {shown:true, line:o.line, on:o.on===true, held:o.held===true, why:typeof o.why==="string" ? o.why.slice(0,40) : "",
+    since:Number.isFinite(o.since) && o.since>0 ? o.since : 0, say:typeof o.say==="string" ? o.say.slice(0,40) : ""};
+}
+function syncNow(){
+  const h=eHost();
+  if(!h || typeof h.storeState!=="function") return syncRead(null);
+  try{ return syncRead(h.storeState()); }catch(e){ return syncRead(null); }
+}
+/* The reason a folder could not be reached, in the copywriter's words; "" where she has given none. "no-drive" is OneDrive missing
+   on Microsoft and Drive switched off on Google. */
+function syncWhyWords(why, provider){
+  if(why==="no-drive") return provider==="google" ? t("your organisation has switched off Google Drive for it") : t("the account has no OneDrive");
+  if(why==="consent") return t("Etiuda was not allowed its folder in the account. To turn sync on, sign in again and allow it");
+  return "";
+}
+function syncUnavailable(why, provider){
+  const r=syncWhyWords(why, provider);
+  return r ? named(t("Not available on this account: {REASON}. Everything works on this computer as before."),"{REASON}",r)
+    : t("Not available on this account. Everything works on this computer as before."); // placeholder: Claudette, a reason she has not worded
+}
+function syncDate(at){
+  return new Date(at).toLocaleDateString(uiLang()==="pl" ? "pl-PL" : "en-GB",{day:"numeric", month:"long"});
+}
+/* The row's small line for view `s`, the person signed in with `provider`. */
+function syncLine(s, provider){
+  if(s.line==="org-off") return t("Your organisation has not turned this on.");
+  if(s.line==="off") return t("Only on this computer.");
+  if(s.line==="unavailable") return syncUnavailable(s.why, provider);
+  if(s.line==="paused") return named(t("Paused since {DATE}. It resumes when this computer reaches our service."),"{DATE}",syncDate(s.since));
+  if(s.line==="conflict") return t("Changed on two computers: choose which to keep.");
+  return t("Your catalogs, edits and settings on every computer you sign in on.");
+}
+/* SAID ONCE, FROM THE ACCOUNT CONTROL: that sync is on, at the sign-in that made the person's store, or why it is not available. The
+   shell hands it until the page says it was shown (storeSaid), so a second view never says it again; while the account panel is open,
+   it waits for the panel to close, since both hang from the one button. */
+let syncWaiting=null;
+function syncSay(s){
+  if(!s.say || document.getElementById("eSyncSaid")) return;
+  const btn=$("#signinBtn"), panel=$("#signinPanel");
+  if(!btn || !btn.getClientRects().length) return;
+  if(panel && !panel.hidden){
+    if(syncWaiting) return;
+    syncWaiting=new MutationObserver(()=>{ if(panel.hidden){ syncWaiting.disconnect(); syncWaiting=null; syncSay(syncNow()); } });
+    syncWaiting.observe(panel, {attributes:true, attributeFilter:["hidden"]});
+    return;
+  }
+  const words=s.say==="on" ? t("Your catalogs, edits and settings now follow you to every computer you sign in on. You can turn this off in Account.")
+    : syncUnavailable(s.say, signinV.signedIn);
+  const i=words.indexOf(". ");
+  const d=document.createElement("div");
+  d.id="eSyncSaid";
+  d.className="bub bub-ask e-sync-said";
+  d.setAttribute("role","status");
+  const p=document.createElement("p"), b=document.createElement("b");
+  b.textContent=i<0 ? words : words.slice(0,i+1);
+  p.appendChild(b);
+  if(i>=0) p.appendChild(document.createTextNode(" "+words.slice(i+2)));
+  d.appendChild(p);
+  const row=document.createElement("div");
+  row.className="tour-actions";
+  const x=document.createElement("button");
+  x.type="button"; x.className="btn"; x.textContent=t("Dismiss");
+  x.onclick=()=>d.remove();
+  row.appendChild(x);
+  d.appendChild(row);
+  document.body.appendChild(d);
+  hangBubble(d, ()=>$("#signinBtn"));
+  const h=eHost();
+  try{ if(h && typeof h.storeSaid==="function") h.storeSaid(); }catch(e){ /* the shell has gone */ } /* plant:sync-said-told */
+}
+const syncTellers=[];
+function syncOnChange(fn){ if(typeof fn==="function") syncTellers.push(fn); }
+function syncChanged(){
+  const s=syncNow();
+  syncSay(s);
+  syncTellers.forEach(fn=>{ try{ fn(s); }catch(e){ /* a closed screen */ } });
+}
+/* The switch: "on", or off "here" or "everywhere"; resolves the new view once the shell has acted. */
+function syncSet(what){
+  const h=eHost();
+  if(!h || typeof h.storeSet!=="function") return Promise.resolve(syncNow());
+  try{ return Promise.resolve(h.storeSet(what)).catch(()=>null).then(()=>syncNow()); }catch(e){ return Promise.resolve(syncNow()); }
+}
 function wireSignin(){
   const h=signinHost();
   if(!h) return;
   signinNow();
   if(typeof h.onSignin==="function") h.onSignin(v=>signinChanged(v, false));
+  if(typeof h.onStore==="function") h.onStore(()=>syncChanged());
   const btn=$("#signinBtn"), panel=$("#signinPanel"), wrap=$("#signinWrap");
   if(btn) btn.onclick=e=>{ e.stopPropagation(); if(signinOpen) closeSigninPanel(true); else openSigninPanel(); };
   signinClicks(panel);
@@ -490,6 +582,7 @@ function wireSignin(){
     if(e.key==="Escape" && signinOpen && wrap && wrap.contains(document.activeElement)){ e.stopPropagation(); closeSigninPanel(true); }
   }, true);
   paintSigninButton();
+  syncSay(syncNow());
 }
 
 export {
@@ -527,5 +620,12 @@ export {
   signinStart,
   signinShown,
   signinWhen,
+  syncChanged,
+  syncLine,
+  syncNow,
+  syncOnChange,
+  syncRead,
+  syncSay,
+  syncSet,
   wireSignin
 };
