@@ -28,11 +28,12 @@ import { openUpdatePage, updateAbout } from "./update-offer.js";
 import { openMaintenance } from "./maintenance.js";
 import { E_VERSION } from "./env.js";
 import { sxIcon } from "./sx-icons.js";
-import { focusKey, focusSame } from "./dom.js";
+import { focusKey, focusSame, originOf } from "./dom.js";
 import { orgModel, orgRanks, syncOrgMark } from "./org-model.js";
 import { SIGNIN_NAMES, signinNow, signinShown, signinParts, signinSay, signinNoSeat, signinTold, signinActsHtml, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow, signinDoorsHtml, signinDoorRefusedNow,
   signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect, signinCopyHtml, signinManaged, signinKeepsAccount,
-  signinCapHolds, signinStranded, signinStrandedWords } from "./signin.js";
+  signinCapHolds, signinStranded, signinStrandedWords, syncNow, syncLine, syncSet, syncOnChange, syncConsent } from "./signin.js";
+import { hangBubble } from "./bubble.js";
 
 /* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name,
    in columns that fill the width. Choosing a section shows that section alone: Appearance and Layout
@@ -206,7 +207,7 @@ function teamRowHtml(l,status,bar){
    the offer ends without Undo, and the screen is drawn again where it is open. A second click while the
    offer stands does not start another: the offer already on screen is the way back. */
 let leaveHold="";
-function leaveThisTeam(team){
+function leaveThisTeam(team, from){
   team=String(team||"");
   if(!team || leaveHold) return;
   leaveHold=team;
@@ -216,11 +217,11 @@ function leaveThisTeam(team){
     if(leaveHold!==team) return;
     leaveHold="";
     forgetTeamLead(team, repaint);
-  });
+  }, from);
 }
 function wireTeamRows(box){
   box.querySelectorAll("[data-leave-team]").forEach(b=>{
-    b.onclick=()=>leaveThisTeam(b.getAttribute("data-leave-team"));
+    b.onclick=()=>leaveThisTeam(b.getAttribute("data-leave-team"), originOf(b));
   });
   box.querySelectorAll("[data-team-pick-folder]").forEach(b=>{
     b.onclick=()=>pickMovedFolder(b.getAttribute("data-team-pick-folder"),()=>{ if(document.getElementById("setBody")) paintSettings(); }); /* plant:needs-folder-press */
@@ -364,12 +365,58 @@ function accountGroups(){
   } else if(buy && !v.signedIn) rows.push(buyRow(v));
   else if(held && !v.signedIn) rows.push(held);
   groups.push({rows});
+  const s=v.signedIn && !signinChoosingNow() ? syncNow() : null;
+  if(s && s.shown) groups.push({rows:[syncRow(s, v.signedIn)]});
   return groups;
+}
+/* SYNC ACROSS COMPUTERS, a card of its own: the line says how it stands, and the switch is drawn only where it can act; one policy
+   holds is drawn fixed, with the lock. */
+function syncRow(s, provider){
+  let sw=s.line==="unavailable" || s.line==="org-off" ? ""
+    : seg("sync",[{v:"off",t:t("Off")},{v:"on",t:t("On")}], s.on?"on":"off", s.held)
+      +(s.held ? '<span class="sgn-lock">'+ICON_LOCK+esc(t("Set by your organisation"))+'</span>' : "");
+  /* Where the folder's consent was never given, On is the person's trusted click that opens the provider's page (syncConsent). */
+  if(s.line==="ungiven") sw=sw.replace('<button type="button" data-val="on"','<button type="button" data-e-open="store-on" data-val="on"');
+  return row("sync","teams",t("Sync across computers"),syncLine(s, provider),sw);
+}
+/* TURNING SYNC OFF ASKS, from the switch: Everywhere first and quiet, This computer, Cancel filled and last, as the desk's other
+   questions stand. The switch stays On until a choice is pressed; Cancel and Escape leave it so. */
+function askSyncOff(){
+  const was=document.getElementById("eSyncAsk");
+  if(was) was.remove();
+  const el=document.createElement("div");
+  el.className="bub bub-ask e-sync-ask";
+  el.id="eSyncAsk";
+  el.setAttribute("role","alertdialog");
+  el.setAttribute("aria-labelledby","eSyncAskT");
+  el.innerHTML='<h3 id="eSyncAskT">'+esc(t("Turn off sync?"))+'</h3>'
+    +'<p>'+esc(t("Everywhere also deletes the synced copy; each computer keeps its own."))+'</p>'
+    +'<div class="tour-actions"><button type="button" class="btn" id="eSyncAll">'+esc(t("Everywhere"))+'</button>'
+    +'<button type="button" class="btn" id="eSyncHere">'+esc(t("This computer"))+'</button>'
+    +'<button type="button" class="btn primary" id="eSyncStay">'+esc(t("Cancel"))+'</button></div>';
+  document.body.appendChild(el);
+  hangBubble(el, ()=>document.querySelector('#setBody .set-seg[data-seg="sync"]'));
+  /* Escape is taken on the window, ahead of the section's own Escape on the document, while the question stands. */
+  const shut=()=>{ el.remove(); removeEventListener("keydown", onEsc, true); };
+  const onEsc=e=>{
+    if(e.key!=="Escape" || !el.isConnected) return;
+    e.preventDefault(); e.stopPropagation(); shut();
+  };
+  addEventListener("keydown", onEsc, true);
+  const off=what=>{ shut(); syncSet(what).then(()=>{ if(document.getElementById("setBody")) paintSettings(); }); };
+  el.querySelector("#eSyncAll").onclick=()=>off("everywhere");
+  el.querySelector("#eSyncHere").onclick=()=>off("here");
+  el.querySelector("#eSyncStay").onclick=shut;
+  try{ el.querySelector("#eSyncStay").focus({preventScroll:true}); }catch(_){}
 }
 /* The card's and the rows' buttons: a provider's goes to the shell as the person's trusted click; the rest are the door's own acts. */
 let accountHeard=false;
 function wireAccountRows(box){
-  if(!accountHeard){ accountHeard=true; signinOnChange(()=>{ if(document.getElementById("setBody")) paintSettings(); }); }
+  if(!accountHeard){
+    accountHeard=true;
+    const again=()=>{ if(document.getElementById("setBody") && !document.getElementById("eSyncAsk")) paintSettings(); };
+    signinOnChange(again); syncOnChange(again);
+  }
   box.querySelectorAll('[data-e-open="signin"]').forEach(b=>{ b.onclick=()=>signinStart(b.getAttribute("data-e-provider"), "account"); });
   box.querySelectorAll("[data-signin-act]").forEach(b=>{ b.onclick=()=>signinAct(b.getAttribute("data-signin-act"), b); });
   box.querySelectorAll(".sgn-link-f").forEach(f=>{ f.onclick=()=>signinLinkSelect(f); });
@@ -946,6 +993,14 @@ function wirePage(box){
     sbox.querySelectorAll("button").forEach(b=>{
       b.onclick=()=>{
         const seg=sbox.getAttribute("data-seg"), v=b.getAttribute("data-val"), on=(v==="on");
+        /* Sync's Off asks first, and the class moves only once the shell has acted (askSyncOff). */
+        if(seg==="sync"){
+          if(b.classList.contains("on")) return;
+          if(on && syncNow().line==="ungiven") syncConsent().then(()=>{ if(document.getElementById("setBody")) paintSettings(); });
+          else if(on) syncSet("on").then(()=>{ if(document.getElementById("setBody")) paintSettings(); });
+          else askSyncOff();
+          return;
+        }
         /* THE CLASS MOVES, THE ELEMENT STAYS: a rebuilt seg arrives with .on already on the right button, so
            the thumb would be born at its destination with nothing to travel from. */
         if(b.classList.contains("on")) return;
@@ -1073,16 +1128,18 @@ function syncColFloorRow(){
 }
 
 function resetShortcuts(){
+  const from=originOf(document.getElementById("setResetKeys"));
   const was=lsGet("eShortcuts");
   scStopCapture();
   lsDel("eShortcuts"); loadShortcuts(); paintKeysInline();
-  offerUndo("Shortcuts reset", ()=>{ if(was!=null){ lsSet("eShortcuts",was); loadShortcuts(); paintKeysInline(); } });
+  offerUndo("Shortcuts reset", ()=>{ if(was!=null){ lsSet("eShortcuts",was); loadShortcuts(); paintKeysInline(); } }, null, from);
 }
 /* EVERY SETTING, and nothing that is not one: a card edit, a favourite, a hidden entry or a hand-sorted order is
    WORK and none of it is touched here, which is what lets this be one button that acts at once with an Undo. A
    name typed into a field and the language a tab is worked in are not settings. Every key this clears is named
    HERE, where both a reader and tests/storage-keys.js look for the list. */
 function resetAllSettings(){
+  const from=originOf(document.getElementById("setReset"));
   const was={};
   ["eTheme","eGlassOff","eMotionOff","eUiLang","ePillsLock","eRailLock","ePills","eRail",
    "eShortcuts","eHdrPills","eNoteHover","eDeckOff","eRailW","eFactsW","eFactsH","eEdPlace","eCollapsed","eSharedEdit",E_HOTKEY_KEY,"eQuitOnClose",
@@ -1109,12 +1166,17 @@ function resetAllSettings(){
     if(host && typeof host.setTrayNotes==="function"){ try{ host.setTrayNotes(notesWere); }catch(e){} }
     applyPrefs();
     repaintScreen();
-  });
+  }, null, from);
 }
 // The language may have changed with the keys, so the whole screen and the tab's name are drawn again.
+/* The page keeps its place through the repaint, so a control pressed low on it, Reset defaults among them, is still
+   where its Undo hangs. */
 function repaintScreen(){
   const host=settingsHost();
+  const was=host && host.querySelector("#setBody"), top=was ? was.scrollTop : 0;
   if(host) renderSettings(host);
+  const now=host && host.querySelector("#setBody");
+  if(now && top) now.scrollTop=top; /* plant:settings-keep-scroll */
   try{ drawTabs(); }catch(e){}
 }
 /* EVERY PREFERENCE PUT ON SCREEN FROM WHAT IS STORED, whatever changed the keys: Reset, its Undo,

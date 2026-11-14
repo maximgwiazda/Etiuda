@@ -32,6 +32,12 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+const { offWindows } = nodeRequire("./off-windows.cjs");
+const ASIDE = {
+  "15em": offWindows("15em", "a folder where the join file goes refuses with EISDIR off Windows, where Windows says EPERM, so the desk reads it as a folder"
+    + " that does not answer; a Linux leg injecting EACCES by the folder's mode is owed"),
+  "15ep": offWindows("15ep", "15em stands aside off Windows, so lifting plant:w2-folder-not-writable has no green leg there to turn"),
+};
 /* The floor: every leg below runs, or the file says it did not complete. */
 const EXPECTED = 179;
 
@@ -4425,7 +4431,8 @@ try {
   }
 
   // 15em: Ask to join when the folder is not writable returns folder-not-writable
-  {
+  if (ASIDE["15em"]) skip(ASIDE["15em"]);
+  else {
     const udNoWrite = path.join(LAB, "nowrite");
     fs.mkdirSync(udNoWrite, { recursive: true });
     fs.writeFileSync(path.join(udNoWrite, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: SHARE, eUiLang: "en" } }), "utf8");
@@ -4509,6 +4516,8 @@ try {
   {
     if (PLANTS_OFF) {
       skip("15ep lifting plant:w2-folder-not-writable turns 15em red");
+    } else if (ASIDE["15ep"]) {
+      skip(ASIDE["15ep"]);
     } else {
       const mainPath = path.join(ROOT, "shell", "main.js");
       const before = fs.readFileSync(mainPath);

@@ -27,7 +27,7 @@ import { intentIdAt, intentIdxFromId, intentIsCustom, intentIsOverridden, intent
 import { applyCatsToGlobal, removeCategory } from "./cat-set.js";
 import { esc } from "./esc.js";
 import { syncRoleDrum } from "./role-drum.js";
-import { $, focusKey, focusSame } from "./dom.js";
+import { $, focusKey, focusSame, originOf } from "./dom.js";
 import { macroBlockCount, recountMacros, totalMacroCount } from "./card-counts.js";
 import { rebuildCards } from "./rebuild.js";
 import { render } from "./render.js";
@@ -1389,6 +1389,7 @@ function wireRolePage(page){
         const was = Array.isArray(pack.who) ? pack.who.slice() : null;
         const next = current.filter(n => n !== name);
         const at = current.indexOf(name);
+        const from = originOf(delBtn, () => page.querySelector("#mgAddWho"), ".lw-del");
         setWhoList(next);
         if(mgRoleMarked === name){
           mgRoleMarked = next[0] || "";
@@ -1406,7 +1407,7 @@ function wireRolePage(page){
           refreshRolePage(page);
           const back = page.querySelector('.lw-name[data-wrow="'+esc(name)+'"]');
           if(back) try{ back.focus({preventScroll:true}); }catch(_){}
-        });
+        }, null, from);
       };
     }
   });

@@ -15,6 +15,7 @@ import { intentEscapeStep } from "./escape-ladder.js";
 import { syncRoleDrum } from "./role-drum.js";
 import { getHandGender, putHandGender, syncGenderGlyph } from "./gender-drum.js";
 import { pax, intentEl, roleSel, $ } from "./dom.js";
+import { hangBubble } from "./bubble.js";
 import { lang, intentIdxs, intentText, cats, entrySel, setIntentIdxs, setIntentText, setCats, putEntrySel, setPickRun } from "./app-state.js";
 import { hooks } from "./hooks.js";
 import { screens, screenOn, frontScreenTab, closeScreenTab, clearScreenOn, dropScreenTab, setPrevTabId, wireScreenTabsChange, wireScreenTabsReturn, getScreenDef } from "./screen-tabs.js";
@@ -726,7 +727,7 @@ function closeTab(id, ev){
     tabs[0]=Object.assign(blankTab(),{id:keepId});
     applyTab(tabs[0]);
     saveTabSession();
-    if(kept) offerUndo("Tab cleared", ()=>reopenClosedTab(kept)); else toast("Tab cleared");
+    if(kept) offerUndo("Tab cleared", ()=>reopenClosedTab(kept), null, tabAt(0)); else toast("Tab cleared");
     activeHeard();
     return;
   }
@@ -739,8 +740,11 @@ function closeTab(id, ev){
     drawTabs();
   }
   saveTabSession();
-  offerUndo("Tab closed", ()=>reopenClosedTab(kept));
+  offerUndo("Tab closed", ()=>reopenClosedTab(kept), null, tabAt(idx));
 }
+/* WHERE A TAB'S UNDO HANGS: the conversation tab now in that slot, else the last one, or the tab an act kept. */
+const tabAt=i=>()=>{ const all=[...document.querySelectorAll("#tabsBar .tab[data-tid]")].filter(b=>b.getClientRects().length && !b.closest(".e-gone")); return all[Math.min(i,all.length-1)]||null; };
+const tabOf=id=>()=>[...document.querySelectorAll("#tabsBar .tab[data-tid]")].find(b=>b.dataset.tid===String(id))||null;
 /* A tab's menu (context-menu.js): close one by its id, close every other, and how many can come back. */
 function closeTabById(id){ closeTab(id); }
 function closeOtherTabs(id){
@@ -751,7 +755,7 @@ function closeOtherTabs(id){
   tabs=[keep];
   applyTab(keep);
   saveTabSession();
-  offerUndo("Other tabs closed", ()=>reopenClosedTab(kept));
+  offerUndo("Other tabs closed", ()=>reopenClosedTab(kept), null, tabOf(id));
   activeHeard();
 }
 function closedTabCount(){ return closedTabs.length; }
@@ -785,13 +789,14 @@ function closeAllTabs(){
   tabs=[keepId?Object.assign(blankTab(),{id:keepId}):blankTab()];
   applyTab(tabs[0]);
   saveTabSession();
-  if(kept) offerUndo("All tabs closed", ()=>reopenClosedTab(kept)); else toast("All tabs closed");
+  if(kept) offerUndo("All tabs closed", ()=>reopenClosedTab(kept), null, tabAt(0)); else toast("All tabs closed");
   activeHeard();
 }
 /* CLOSING THE WINDOW ASKS ONCE WHILE A CONVERSATION IS IN PROGRESS (desk-chrome-close-quits-forgets): the X, Alt+F4 and
    the taskbar closed at once and forgot every conversation. The shell holds the close and asks here, and the answer
    goes back at once: "none" where nothing would be lost, else "asked", then the person's "close" or "stay". Cancel is
-   the focused button, so Enter and Escape both keep the window; an Undo bubble in the same place waits under it. */
+   the focused button, so Enter and Escape both keep the window. It hangs from the band's close button however the close
+   was asked, and a standing Undo waits hidden until it is answered. */
 function askClose(answer){
   snapshotActiveTab();
   const n=tabs.filter(tabHasWork).length;
@@ -810,6 +815,7 @@ function askClose(answer){
     +'<div class="tour-actions"><button type="button" class="btn" id="eCloseGo">'+esc(t("Close Etiuda"))+'</button>'
     +'<button type="button" class="btn primary" id="eCloseStay">'+esc(t("Cancel"))+'</button></div>';
   document.body.appendChild(el);
+  hangBubble(el, ()=>document.getElementById("winClose"));
   const done=a=>{ dismissNode(el); if(undo && a==="stay") undo.hidden=false; answer(a); };
   el.querySelector("#eCloseGo").onclick=()=>done("close");
   el.querySelector("#eCloseStay").onclick=()=>done("stay");
@@ -1692,6 +1698,6 @@ export {
   tabSaveTimer,
   tabInsertAnimating,
   turnScreenTabToCards,
-  TAB_FLOOR_W, reopenClosedTab, escapeHeld, askClose, closeTabById, closeOtherTabs, closedTabCount, activeTabName,
+  TAB_FLOOR_W, reopenClosedTab, closeAllTabs, escapeHeld, askClose, closeTabById, closeOtherTabs, closedTabCount, activeTabName,
   beginTabRename, finishTabRename, cancelTabRename, clearTabRename, moveTab, getTabOrder, tabOrder
 };

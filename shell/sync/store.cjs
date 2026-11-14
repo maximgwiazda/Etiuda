@@ -156,6 +156,15 @@ function keyRead(text) {
   if (devices.length !== j.devices.length) return null;
   return { k: j.k, s: j.s, rt: j.rt, url: j.url, devices, rev: j.rev };
 }
+/* THE ENDED MARK: what "Turn off everywhere" leaves in the folder in the key's place, so a computer still holding the keys reads that
+   the person ended the store rather than writing the key back. It names the store it ended and holds no key. */
+const ENDED_KIND = "etiuda-store-ended";
+function endedText(rt) { return JSON.stringify({ kind: ENDED_KIND, format: 1, rt: String(rt) }); }
+function endedRead(text) {
+  let j = null;
+  try { j = typeof text === "string" && text.length <= FILE_MAX ? JSON.parse(text) : null; } catch { j = null; }
+  return !!j && typeof j === "object" && j.kind === ENDED_KIND && j.format === 1 && HEX32.test(String(j.rt));
+}
 function freshKeys(rand, url) {
   return { k: rand(32).toString("hex"), s: rand(32).toString("hex"), rt: rand(16).toString("hex"), url, devices: [], rev: 0 };
 }
@@ -182,8 +191,12 @@ async function storeLook(io) {
   if (!io.folder) return { state: "unavailable", why: "no-drive" };
   const read = await io.folder.read();
   if (!read.ok) return { state: "unavailable", why: read.why };
-  let keys = read.text === null ? null : keyRead(read.text);
-  const local = io.local();
+  /* The person turned sync off everywhere: this computer turns off too, unless the person has turned it on here since (io.fresh),
+     where a new store is made over the mark. */
+  const ended = read.text !== null && endedRead(read.text);
+  if (ended && io.fresh !== true) return { state: "ended" }; /* plant:ended-off */
+  let keys = read.text === null || ended ? null : keyRead(read.text);
+  const local = ended ? null : io.local();
   if (!keys && local) {
     /* The file deleted or unreadable, this computer holding the keys: written back, so no other computer starts afresh. A deleted one
        is made again only where no file has come since; one another computer wrote meanwhile is adopted. */
@@ -196,7 +209,7 @@ async function storeLook(io) {
   let made = false;
   if (!keys) {
     const fresh = freshKeys(io.rand, io.url);
-    const put = await io.folder.create(keyText(fresh));
+    const put = ended ? await io.folder.write(keyText(fresh)) : await io.folder.create(keyText(fresh));
     if (!put.ok && put.why !== "taken") return { state: "unavailable", why: put.why };
     /* Read again, so two computers making a store at once both adopt the file that stands where each sees the other's write. Where each
        reads back its own (a replica not yet reconciled) both replace, and the earlier store ends: its computer adopts the folder's store
@@ -228,6 +241,31 @@ async function storeLook(io) {
   return { state: "on", keys, store: got.store, made };
 }
 
+/* ---- this computer leaves the store (This computer): the list without it written to the folder first, so a computer enrolling
+   later signs it without this one even where the relay is not reached now; then signed at the relay by S and by this computer under its
+   store certificate. `io`: folder, keys (this computer's last copy), cert() (a current store certificate, asked only once the folder
+   holds this store), relay.devices(next, cert), me {pub}. {ok: true} where the store names it no more, or the store is gone or
+   replaced; else {ok: false, why}. */
+async function storeLeave(io) {
+  if (!io.folder) return { ok: false, why: "no-drive" };
+  const read = await io.folder.read();
+  if (!read.ok) return { ok: false, why: read.why };
+  const held = read.text === null ? null : keyRead(read.text);
+  if ((read.text !== null && endedRead(read.text)) || (held && held.rt !== io.keys.rt)) return { ok: true };
+  const base = held || io.keys, listed = base.devices.some(d => d.pub === io.me.pub);
+  const next = listed ? Object.assign({}, base, { devices: base.devices.filter(d => d.pub !== io.me.pub), rev: base.rev + 1 }) : base;
+  if (listed) {
+    const w = read.text === null ? await io.folder.create(keyText(next)) : await io.folder.write(keyText(next)); /* plant:leave-folder */
+    if (!w.ok) return { ok: false, why: w.why };
+  }
+  const cert = await io.cert();
+  if (!cert) return { ok: false, why: "unreached" };
+  /* Posted even where the folder already left this computer out, since the relay may not have taken that list yet; a list it holds
+     already (replay-rev) or a store it no longer has is done. */
+  const d = await io.relay.devices(next, cert); /* plant:leave-relay */
+  return d.ok || d.why === "replay-rev" || d.why === "not-enrolled" ? { ok: true } : { ok: false, why: d.why || "relay" };
+}
+
 /* ---- what the desk says, once: a reason it says the first time it meets it and not again until another, or sync, comes ---- */
 function sayOnce(kept, look) {
   const why = look && look.state === "unavailable" ? look.why : "";
@@ -244,5 +282,42 @@ function pausedLine(cert, now, signinRefused) {
   return now - cert.until >= PAUSE_SAY_MS ? { since: cert.until } : null; /* plant:pause-days */
 }
 
+/* ---- what the page is told: the Account row's line and the one thing said once -------------------------------------------
+   `o`: provider (the signed-in one, "" for none), pol (storePolicy's answer), look (the last look's {state, why} or null), until (the
+   last store certificate's end), now, signinRefused, conflicts (cards kept in two versions), say (what waits to be said once), owed
+   (a Turn off everywhere the licence service has not answered yet), seatless (the account's seat refused at its last renewal), full
+   (the store's room at the relay refused a write, roomNext). Answers
+   {shown, line, on, held, why, since, say}: line "org-off" where policy keeps sync off, "off" where the person turned it off,
+   "ungiven" where the folder's consent was never given (off, the switch the person's own way to ask for it), "unavailable" where
+   the folder could not be reached for a reason the person cannot mend (never offline), "noseat", "conflict", "paused" after
+   PAUSE_SAY_MS, "full", else "on". Nothing of a key, a store or a token. Pure. */
+function storeRow(o) {
+  if (o.provider !== "microsoft" && o.provider !== "google") return { shown: false };
+  const pol = o.pol || {}, say = typeof o.say === "string" ? o.say : "";
+  if (!pol.on && !pol.held && o.owed === true) return { shown: true, line: "ending", on: false, held: false, why: "", since: 0, say: "" };
+  if (!pol.on) return { shown: true, line: pol.held ? "org-off" : "off", on: false, held: pol.held === true, why: "", since: 0, say: "" };
+  const base = { shown: true, on: true, held: pol.held === true, why: "", since: 0, say };
+  const look = o.look;
+  if (look && look.state === "unavailable" && look.why === "ungiven") return Object.assign(base, { line: "ungiven", on: false, say: "" }); /* plant:row-ungiven */
+  if (look && look.state === "unavailable" && look.why !== "offline") return Object.assign(base, { line: "unavailable", why: String(look.why || "") });
+  if (o.seatless === true) return Object.assign(base, { line: "noseat" }); /* plant:row-noseat */
+  if (Number(o.conflicts) > 0) return Object.assign(base, { line: "conflict" });
+  const p = pausedLine({ until: o.until }, o.now, o.signinRefused);
+  if (p) return Object.assign(base, { line: "paused", since: p.since });
+  return Object.assign(base, { line: o.full === true ? "full" : "on" }); /* plant:row-full */
+}
+/* The store's room: full once the relay (or the channel's own count) refuses a write as "team-size", the changes staying owed on this
+   computer, and no longer once a write is taken (reason ""); any other refusal leaves it as it was. */
+function roomNext(full, reason) {
+  if (reason === "team-size") return true;
+  return reason === "" ? false : full === true;
+}
+/* Said once, from the account control: "on" at the first look that finds sync on on this computer, where that look made the person's
+   store (a second computer, or a store made afresh later, says nothing); `told` whether this computer has had its first such look. */
+function firstSay(told, look) {
+  if (told === true || !look || look.state !== "on") return { say: "", told: told === true };
+  return { say: look.made === true ? "on" : "", told: true }; /* plant:first-say */
+}
+
 module.exports = { KEY_FILE, KEY_KIND, FILE_MAX, DEVICES_MAX, GRAPH, DRIVE, DRIVE_UPLOAD, PAUSE_SAY_MS, graphFolder, driveFolder, folderFor, keyText, keyRead,
-  freshKeys, pubOf, storePolicy, storeLook, sayOnce, pausedLine };
+  freshKeys, pubOf, storePolicy, storeLook, storeLeave, sayOnce, pausedLine, storeRow, roomNext, firstSay, endedText, endedRead };

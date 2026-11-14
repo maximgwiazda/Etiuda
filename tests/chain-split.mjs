@@ -25,6 +25,7 @@ export const HELPERS = {
   "tests/install-guard.cjs": "the read-only guard the installer legs require, not a gate (its leg is tests/install-guard-selftest.js)",
   "tests/launch-wait.js": "a helper the window legs require, not a gate",
   "tests/quiet-lane.mjs": "the timing legs' busy-machine refusal, not a gate (its leg is tests/quiet-lane-selftest.mjs)",
+  "tests/off-windows.cjs": "the stand-aside helper a Windows-only assertion asks, not a gate (its leg is tests/off-windows-selftest.cjs)",
   "tests/linux-desk.js": "a machine-window gate on Linux, not in either chain",
   "tests/linux-keyring.js": "a machine-window gate on Linux, not in either chain",
   "tests/motion.js": "legs tests/smoke.js requires and runs",

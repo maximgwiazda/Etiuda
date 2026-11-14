@@ -28,12 +28,14 @@ import tls from "node:tls";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+const E = createRequire(import.meta.url)("./engine.js");
 
 /* The floor: every leg below runs or is skipped by name, or the tally says so rather than reading as a short green. */
-const EXPECTED = 23;  /* 14, +2 each step's own scratch (15a, 15b), +2 a customer's roots (15c, 15d), +4 the gate wall and the area lane (16a to 16d), +1 a walled gate's node arm (16e) */
+const EXPECTED = 24;  /* 14, +2 each step's own scratch (15a, 15b), +2 a customer's roots (15c, 15d), +4 the gate wall and the area lane (16a to 16d), +1 a walled gate's node arm (16e), +1 a zombie read as gone (16f) */
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
   asserted++;
@@ -534,7 +536,24 @@ function main() {
       const pkg = JSON.parse(pkgWas);
       pkg.scripts.hang = "node tests/hang.mjs";
       fs.writeFileSync(pkgFile, JSON.stringify(pkg, null, 2) + "\n");
-      const alive = (pid) => { try { process.kill(Number(pid), 0); return true; } catch { return false; } };
+      /* Signal 0 answers for a zombie too, and off Windows a stopped child is one until something reaps it: its /proc state Z is
+         gone (tests/engine.js, statIsZombie). The platform, the reader and the signal are arguments so 16f can stand in for Linux. */
+      const alive = (pid, platform = process.platform, readStat = p => fs.readFileSync("/proc/" + p + "/stat", "utf8"),
+        signal = p => process.kill(p, 0)) => {
+        try { signal(Number(pid)); } catch { return false; }
+        if (platform === "win32") return true;
+        try { return !E.statIsZombie(readStat(Number(pid))); }
+        catch (e) { return !(e.code === "ENOENT" && fs.existsSync("/proc/self")); }
+      };
+      {
+        const answers = () => {}, Z = () => "8113 (node) Z 8095 8095 0", S = () => "8113 (node) S 8095 8095 0";
+        const signalAlone = (() => { try { answers(8113); return true; } catch { return false; } })();
+        const zLinux = alive(8113, "linux", Z, answers), sLinux = alive(8113, "linux", S, answers);
+        let readOnWin = false; const zWin = alive(8113, "win32", () => { readOnWin = true; return Z(); }, answers);
+        check(signalAlone === true && zLinux === false && sLinux === true && zWin === true && !readOnWin,
+          "16f its child gone reads a zombie as gone off Windows (a stand-in /proc): signal alone says alive " + signalAlone
+          + ", Linux state Z alive " + zLinux + ", state S alive " + sLinux + ", Windows arm alive " + zWin + " and /proc read " + readOnWin);
+      }
       const runHang = () => { try { fs.rmSync(pidFile, { force: true }); } catch {} const t0 = Date.now();
         const r = runTool(lab, ["hang"], { ETIUDA_STEP_WALL_MS: "2000", HANG_PID_FILE: pidFile });
         const g = fs.existsSync(pidFile) ? fs.readFileSync(pidFile, "utf8").trim() : "";

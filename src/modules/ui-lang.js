@@ -1,6 +1,7 @@
 import { lsGet, lsSet, lsDel } from "./storage.js";
 import { markCut } from "./cut-text.js";
-import { $ } from "./dom.js";
+import { $, originOf } from "./dom.js";
+import { hangBubble } from "./bubble.js";
 import { esc } from "./esc.js";
 import { cutLeaves, dismissNode, mgReduceMotion, M_MS } from "./motion.js";
 import { ICON_LINT_WARNING, ICON_STAMP } from "./icons.js";
@@ -1435,6 +1436,30 @@ UI_STRINGS.pl={
   "Seat held · checked {WHEN}":"Miejsce zajęte · sprawdzono {WHEN}",
   "A shared computer: another person may sign in here, with an account of your organisation.":"Wspólny komputer: może się tu zalogować inna osoba, kontem organizacji.",
   "Set by your organisation":"Ustawione przez organizację",
+  "Sync across computers":"Synchronizacja między komputerami",
+  "Your catalogs, edits and settings on every computer you sign in on.":"Własne katalogi, zmiany i ustawienia na każdym komputerze, na którym nastąpi zalogowanie.",
+  "Only on this computer.":"Tylko na tym komputerze.",
+  "Off everywhere. The synced copy is deleted as soon as this computer reaches our service.":"Wyłączona wszędzie. Zsynchronizowana kopia zostanie usunięta, gdy tylko ten komputer połączy się z naszą usługą.",
+  "Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account.":"Wyłączona. Po włączeniu {PROVIDER} poprosi o zgodę na użycie przez Etiudę jej folderu na tym koncie.",
+  "Changed on two computers: choose which to keep.":"Zmieniono na dwóch komputerach: należy wybrać, którą wersję zostawić.",
+  "Your catalogs, edits and settings now follow you to every computer you sign in on. You can turn this off in Account.":"Własne katalogi, zmiany i ustawienia będą teraz dostępne na każdym komputerze, na którym nastąpi zalogowanie. Można to wyłączyć w Koncie.",
+  "Not available on this account: {REASON}. Everything works on this computer as before.":"Niedostępna na tym koncie: {REASON}. Na tym komputerze wszystko działa jak dotąd.",
+  "Sync across computers is not available on this account: {REASON}. Everything works on this computer as before.":"Synchronizacja między komputerami jest niedostępna na tym koncie: {REASON}. Na tym komputerze wszystko działa jak dotąd.",
+  "the account's storage is full":"miejsce na koncie jest zapełnione",
+  "the account's provider turned down Etiuda's request; it tries again each day":"dostawca konta odrzucił prośbę Etiudy; kolejna próba nastąpi następnego dnia",
+  "this computer cannot keep it locked for this Windows account":"ten komputer nie może przechowywać jej zamkniętej dla tego konta Windows",
+  "your organisation has not allowed it; its IT department decides":"organizacja jej nie dopuściła; decyduje o tym dział IT organizacji",
+  "the account has no OneDrive":"konto nie ma usługi OneDrive",
+  "your organisation has switched off Google Drive for it":"organizacja wyłączyła dla niego Dysk Google",
+  "Turn off sync?":"Wyłączyć synchronizację?",
+  "Everywhere also deletes the synced copy; each computer keeps its own.":"Opcja Wszędzie usuwa też zsynchronizowaną kopię; każdy komputer zachowuje własną.",
+  "Everywhere":"Wszędzie",
+  "This computer":"Ten komputer",
+  "Your organisation has not turned this on.":"Organizacja nie włączyła tej funkcji.",
+  "Paused since {DATE}. It resumes when this computer reaches our service.":"Wstrzymana od {DATE}. Zostanie wznowiona, gdy komputer połączy się z naszą usługą.",
+  "Sync is full, so new changes stay on this computer until something is removed.":"Miejsce na synchronizację jest pełne, więc nowe zmiany zostają na tym komputerze, dopóki czegoś się nie usunie.",
+  // placeholder: Claudette
+  "Without a seat, sync waits until this account has one again. This computer keeps its own copy.":"Bez miejsca w licencji synchronizacja czeka, aż to konto znów je otrzyma. Ten komputer zachowuje własną kopię.",
   "Sign-in":"Logowanie",
   "{PROVIDER} · work accounts of the organisation":"{PROVIDER} · konta służbowe organizacji",
   "{PROVIDER} · work accounts":"{PROVIDER} · konta służbowe",
@@ -1670,18 +1695,19 @@ function t(en){
   const tab=UI_STRINGS[uiLang()];
   return (tab && tab[en]!=null) ? tab[en] : en;
 }
-/* AN ACT THAT CAN BE UNDONE HAPPENS AT ONCE, and this bubble at the foot of the window offers the
-   way back: over any dialog, until another act replaces it or UNDO_MS passes. A caller that has
-   not done the act yet passes `lapse`. It runs when this offer ends without Undo: the wait,
-   Escape, or a later act taking the bubble. `undo` is the way back, and it does not run `lapse`.
-   Every caller that already did the act passes no `lapse`, and nothing here changes for that caller. */
+/* AN ACT THAT CAN BE UNDONE HAPPENS AT ONCE, and this bubble offers the way back: over any dialog, until another act
+   replaces it or UNDO_MS passes. A caller that has not done the act yet passes `lapse`. It runs when this offer ends
+   without Undo: the wait, Escape, or a later act taking the bubble. `undo` is the way back, and it does not run `lapse`.
+   Every caller that already did the act passes no `lapse`, and nothing here changes for that caller. `from` is the
+   control whose act it undoes, and the bubble hangs from it: an element, or originOf(control) read before an act
+   that may take the control away. */
 const UNDO_MS=10000;
 /* The key the button names, the fixed "undo" row of SC_DEFS as formatActionChord spells it. */
 const UNDO_KEY="Ctrl+Z";
 let undoTimer=0, undoTake=null, undoLapse=null, undoTyped=false;
 /* A field typed in since the bubble came (keydown.js reports it): its Ctrl+Z is then its own typing's. */
 function noteUndoTyping(){ undoTyped=true; }
-function offerUndo(said, undo, lapse){
+function offerUndo(said, undo, lapse, from){
   const was=$("#eUndo"); if(was) was.remove();
   clearTimeout(undoTimer);
   const prev=undoLapse;
@@ -1697,6 +1723,7 @@ function offerUndo(said, undo, lapse){
     +'" aria-keyshortcuts="Control+Z">'+esc(t("Undo"))+'<kbd>'+esc(UNDO_KEY)+'</kbd></button></div>';
   cutLeaves();
   document.body.appendChild(el);
+  if(from) hangBubble(el, typeof from==="function" ? from : originOf(from));
   const onLapse=typeof lapse==="function"?lapse:null;
   const close=kept=>{
     clearTimeout(undoTimer);

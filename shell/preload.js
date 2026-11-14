@@ -287,6 +287,11 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   /* Buy, where the shell names an order page: {offer} now, and the page opened by the shell for a click on it. */
   buyState: () => ipcRenderer.sendSync("etiuda:buy-state"),
   openBuyPage: () => ipcRenderer.invoke("etiuda:buy-open"),
+  /* Sync across computers: the Account row's view (shell/sync/store.cjs storeRow), its switch, and the one thing said, told shown. */
+  storeState: () => ipcRenderer.sendSync("etiuda:store-state"),
+  storeSet: (what) => ipcRenderer.invoke("etiuda:store-set", String(what || "")),
+  storeSaid: () => ipcRenderer.sendSync("etiuda:store-said"),
+  onStore: (fn) => ipcRenderer.on("etiuda:store", () => { try { fn(); } catch { /* the page has gone */ } }),
   onSignin: (fn) => ipcRenderer.on("etiuda:signin", (_e, v) => { try { fn(v && typeof v === "object" ? v : {}); } catch { /* the page has gone */ } }),
   /* A proxy's question for a user name and password, as {id, host, port, again}, and the page's answer to it by id;
      an empty user name is "Not now". The answer is handed to the shell and kept nowhere on this side. */

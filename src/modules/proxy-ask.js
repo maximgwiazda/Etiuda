@@ -1,6 +1,6 @@
 import { eHost } from "./host.js";
 import { t, translateTree } from "./ui-lang.js";
-import { placeBubble } from "./bubble.js";
+import { hangBubble } from "./bubble.js";
 import { cutLeaves, dismissNode } from "./motion.js";
 // A network proxy's question for a user name and password, asked by the shell where Windows sign-in
 // could not answer it: one bubble at a time, the rest waiting by id.
@@ -58,15 +58,16 @@ function proxyAskOpen(q){
   document.body.appendChild(wrap);
   translateTree(wrap);
   const user=wrap.querySelector("#eProxyUser"), pass=wrap.querySelector("#eProxyPass");
-  const place=()=>placeBubble(wrap,{top:innerHeight/2, left:innerWidth/2, width:0, height:0},{width:340});
-  place();
-  addEventListener("resize",place);
+  /* From the sign-in in the bar where it stands, else from the Menu, whose Settings hold the account. */
+  hangBubble(wrap, ()=>{
+    const b=document.getElementById("signinBtn");
+    return b && b.getClientRects().length ? b : document.getElementById("settingsBtn");
+  }, {width:340});
   let done=false;
   const answer=(name,word)=>{
     if(done) return;
     done=true;
     user.value=""; pass.value=""; /* plant:proxy-ask-empty */
-    removeEventListener("resize",place);
     dismissNode(wrap);
     proxyAskSend(q.id,name,word);
   };
@@ -89,4 +90,5 @@ function wireProxyAsk(){
 
 export {
   wireProxyAsk,
+  proxyAskTake,
 };

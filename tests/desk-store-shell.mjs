@@ -21,7 +21,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 19;
+const EXPECTED = 37;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -99,6 +99,8 @@ function worldOf(o) {
     }
     if (u === STAGING + "signin/desk") {
       w.service.push(body);
+      if (w.seatRefused === "none") return json(200, { ok: true, code: CODE, certificate: null, doors: [] });
+      if (w.seatRefused) return json(w.seatRefused === "full" ? 409 : 403, { ok: false, reason: w.seatRefused });
       const b = JSON.parse(body);
       return json(200, { ok: true, code: CODE, certificate: seatCert(b.desk, Date.now()), doors: [] });
     }
@@ -109,8 +111,17 @@ function worldOf(o) {
       R.clock.now = Date.now();
       return json(200, { ok: true, grant: storeGrantOf(b.lead, R.clock.now), store: storeCertOf(b.desk, R.clock.now) });
     }
+    if (u === STAGING + "store/end") {
+      w.service.push(body);
+      if (w.endDown) return json(503, { ok: false, reason: "unavailable" });
+      if (w.endStatus) return json(w.endStatus, { ok: false, reason: w.endStatus === 400 ? "malformed" : "signin" });
+      const b = JSON.parse(body);
+      w.ended = verifyWith(b.desk, Buffer.from(["etiuda-licence-store-end", b.desk, b.rt, b.t].join("\n"), "utf8"), b.sig) ? b.rt : "unsigned";
+      return json(200, { ok: true });
+    }
     if (u.startsWith("https://etiuda.dev/relay/v1/")) {
       w.relay.push(body);
+      if (w.relayDown) return json(503, { error: "unavailable" });
       R.clock.now = Date.now();
       const res = await W.fetch(new Request("https://relay.test/relay/v1/" + u.slice("https://etiuda.dev/relay/v1/".length), { method, headers, body: body || undefined, duplex: "half" }), R.env);
       return new Response(Buffer.from(await res.arrayBuffer()), { status: res.status });
@@ -136,8 +147,8 @@ function worldOf(o) {
 
 /* ---- the shell, evaluated whole: `src` is shell/main.js's text or a planted copy of it ---- */
 /* What the leg reads from main.js, appended to its text; a name main.js lacks comes back undefined, so its leg fails alone. */
-const TAIL_NAMES = ["signinRun", "signinRenew", "signinIo", "signinRenewNow", "signinServiceAsk", "storeServiceAt", "storeOnFor", "storeTurn", "branchIdentity", "signinState", "patchDesk", "storeForget"];
-const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing"];
+const TAIL_NAMES = ["storeView", "storeRoom", "storeSetNow", "storeState", "signinRun", "signinRenew", "signinIo", "signinRenewNow", "signinServiceAsk", "storeServiceAt", "storeOnFor", "storeTurn", "branchIdentity", "signinState", "patchDesk", "storeForget"];
+const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing"];
 const TAIL = "\n__test.T = {" + TAIL_NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
   + ", get: () => ({" + TAIL_STATE.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "}) };";
 function boot(src, o) {
@@ -318,7 +329,157 @@ async function syncScene(src) {
   return { ok, detail: brief({ state: r.now && r.now.state, running, sent, ledger, clear, stopped }) };
 }
 
+/* (d4f) The page's view and the switch: the first look that made the store says "on" once; This computer forgets the keys and ends
+   nothing; Everywhere also posts store/end, signed by this desk over the service's lines, and leaves the ended mark in the folder; On
+   again makes a new store over the mark. */
+async function switchScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  const first = T.storeView();
+  const rt = r.now && r.now.state === "on" && w.file ? JSON.parse(w.file).rt : "";
+  const all = await T.storeSetNow("everywhere");
+  const st = T.storeState(), mark = w.file;
+  await T.storeSetNow("on");
+  const flight = T.get().storeFlight;
+  if (flight) await flight;
+  const again = T.storeView(), file = w.file ? JSON.parse(w.file) : null;
+  const before = w.service.length, fileBefore = w.file;
+  const here = await T.storeSetNow("here");
+  const ok = first.line === "on" && first.say === "on" && !!rt && all.line === "off" && st.off === true && st.keys === "" && w.ended === rt
+    && /"kind":"etiuda-store-ended"/.test(String(mark)) && String(mark).indexOf(rt) >= 0 && again.line === "on" && !!file && file.kind === "etiuda-store-key" && file.rt !== rt
+    && here.line === "off" && T.storeState().off === true && T.storeState().keys === "" && w.service.length === before && sameStore(w.file, fileBefore);
+  return { ok, detail: brief({ first: first.line + "/" + first.say, everywhere: all.line, ended: w.ended === rt ? "signed, this store" : w.ended, mark: /etiuda-store-ended/.test(String(mark)),
+    againLine: again.line, newStore: !!file && file.rt !== rt, here: here.line, hereSent: w.service.length - before }) };
+}
+
+/* The folder's file still the same store's key: This computer leaves the store's list (d4h) and leaves the key where it is. */
+const sameStore = (a, b) => { try { const x = JSON.parse(a), y = JSON.parse(b); return x.kind === "etiuda-store-key" && x.rt === y.rt && x.k === y.k && x.s === y.s; } catch { return false; } };
+/* The keys the relay's store holds enrolled, by the store's own object in memory. */
+const enrolled = (w, rt) => { const st = w.R.stores.get(rt); return st ? st.list("dev:").length : -1; };
+
+/* (d4h) This computer, turned off here, leaves the store's list: the relay withdraws its key, the folder's file no longer names it, under
+   the last look's store certificate (no new grant asked), and nothing is left owed. */
+async function leaveScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  const was = w.file ? JSON.parse(w.file) : null, rt = was ? was.rt : "";
+  const before = enrolled(w, rt), asked = w.service.length;
+  const off = await T.storeSetNow("here");
+  const file = w.file ? JSON.parse(w.file) : null, left = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8"));
+  const ok = !!rt && before === 1 && off.line === "off" && enrolled(w, rt) === 0 && !!file && file.rt === rt && file.devices.length === 0 && file.rev === was.rev + 1
+    && w.service.length === asked && !left.leave && !left.keys;
+  return { ok, detail: brief({ before, after: enrolled(w, rt), line: off.line, fileDevices: file && file.devices.length, rev: file && was ? file.rev - was.rev : null,
+    serviceAsked: w.service.length - asked, leaveKept: !!left.leave }) };
+}
+/* (d4i) The relay not reached at This computer: the folder's file already leaves it out, the keys are kept sealed as owed (no relay team id
+   in the file's text), and the next seated renewal, under a fresh store certificate, has the relay withdraw it; then nothing is owed. */
+async function leaveOwedScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  const rt = w.file ? JSON.parse(w.file).rt : "";
+  w.relayDown = true;
+  const off = await T.storeSetNow("here");
+  const text = fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8"), kept = JSON.parse(text);
+  const still = enrolled(w, rt), fileDown = w.file ? JSON.parse(w.file) : null;
+  w.relayDown = false;
+  const grants = w.service.filter(b => /"lead"/.test(b)).length;
+  await T.signinRenewNow();
+  const flight = T.get().storeLeaveFlight;
+  if (flight) await flight;
+  const left = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8"));
+  const ok = !!rt && off.line === "off" && !!kept.leave && text.indexOf(rt) < 0 && still === 1 && !!fileDown && fileDown.devices.length === 0
+    && enrolled(w, rt) === 0 && !left.leave && w.service.filter(b => /"lead"/.test(b)).length === grants + 1 && T.storeView().line === "off";
+  return { ok, detail: brief({ line: off.line, keptSealed: !!kept.leave && text.indexOf(rt) < 0, whileDown: still, folderLeft: fileDown && fileDown.devices.length === 0,
+    after: enrolled(w, rt), owedAfter: !!left.leave }) };
+}
+
+/* (d4j) The store's room and the account's seat, as the row reads them: a write refused as team-size says full, any other refusal leaves
+   it, a write taken empties it; a renewal refused for want of a free seat, or answered with no certificate after this computer synced, says no seat, the switch on; a freed seat
+   ("signin") is the sign-in's moment and not this line. */
+async function roomSeatScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  const on = T.storeView().line;
+  T.storeRoom("team-size");
+  const full = T.storeView();
+  T.storeRoom("rate");
+  const still = T.storeView().line;
+  T.storeRoom("");
+  const emptied = T.storeView().line;
+  const seats = {};
+  for (const why of ["full", "signin"]) {
+    w.seatRefused = why;
+    await T.signinRenewNow();
+    seats[why] = T.storeView();
+  }
+  /* A second computer whose renewal is answered with no certificate at all, after it has synced. */
+  const b = await renewScene(src);
+  b.world.seatRefused = "none";
+  await b.shell.T.signinRenewNow();
+  seats.none = b.shell.T.storeView();
+  const ok = on === "on" && full.line === "full" && full.on === true && still === "full" && emptied === "on"
+    && seats.full.line === "noseat" && seats.full.on === true && seats.signin.shown === true && seats.signin.line !== "noseat" && seats.none.line === "noseat" && seats.none.on === true;
+  return { ok, detail: brief({ on, full: full.line, afterRate: still, afterTaken: emptied, noneFree: seats.full.line, freed: seats.signin.line, noCertificate: seats.none.shown ? seats.none.line : "not shown" }) };
+}
+
+/* (d4k) A store/end refused as one that can never succeed (400) ends the retry: the row returns to "Only on this computer.", nothing
+   is kept owed, a line is in the sign-in's trace, and no renewal posts it again. */
+const endsPosted = w => w.service.filter(b => { try { const j = JSON.parse(b); return Object.keys(j).sort().join() === "desk,rt,sig,t"; } catch { return false; } }).length;
+async function endNeverScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  w.endStatus = 400;
+  const off = await T.storeSetNow("everywhere");
+  const kept = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8")), posted = endsPosted(w);
+  await T.signinRenewNow();
+  const traced = r.shell.said.filter(l => /^etiuda: sign-in microsoft store\/end: refused \| status=400/.test(l)).length;
+  const ok = off.line === "off" && !kept.owed && posted === 1 && endsPosted(w) === 1 && traced === 1;
+  return { ok, detail: brief({ line: off.line, owed: !!kept.owed, posted, postedAfterRenewal: endsPosted(w), traced }) };
+}
+/* (d4l) A store/end refused for want of a sign-in (403) stays owed, the row saying so: posted again at each renewal while signed in, never
+   while signed out, and ended by the 200 that follows. */
+async function endSigninScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  w.endStatus = 403;
+  const off = await T.storeSetNow("everywhere");
+  await T.signinRenewNow();
+  await new Promise(a => setTimeout(a, 40));
+  const again = endsPosted(w), still = T.storeView().line;
+  const held = T.signinState().held;
+  T.signinState().held = null;
+  await T.signinRenewNow();
+  await new Promise(a => setTimeout(a, 40));
+  const signedOut = endsPosted(w);
+  T.signinState().held = held;
+  w.endStatus = 0;
+  await T.signinRenewNow();
+  for (let i = 0; i < 50 && T.storeView().line !== "off"; i++) await new Promise(a => setTimeout(a, 20));
+  const after = T.storeView().line, left = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8"));
+  const ok = off.line === "ending" && again === 2 && still === "ending" && signedOut === 2 && endsPosted(w) === 3 && after === "off" && !left.owed;
+  return { ok, detail: brief({ line: off.line, postedByRenewal: again, still, postedSignedOut: signedOut - again, final: endsPosted(w), after, owedAfter: !!left.owed }) };
+}
+
+/* (d4g) A store/end the service did not answer is owed: kept sealed in store.json, the row's line "ending" meanwhile, posted again at
+   the next renewal and gone once answered. */
+async function owedScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  const rt = r.now && r.now.state === "on" && w.file ? JSON.parse(w.file).rt : "";
+  w.endDown = true;
+  const off = await T.storeSetNow("everywhere");
+  const text = fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8"), kept = JSON.parse(text);
+  w.endDown = false;
+  w.ended = "";
+  await T.signinRenewNow();
+  for (let i = 0; i < 50 && !w.ended; i++) await new Promise(a => setTimeout(a, 20));
+  await new Promise(a => setTimeout(a, 20));
+  const after = T.storeView(), left = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8"));
+  const ok = !!rt && off.line === "ending" && !!kept.owed && text.indexOf(rt) < 0 && w.ended === rt && after.line === "off" && !left.owed;
+  return { ok, detail: brief({ whileOwed: off.line, keptSealed: !!kept.owed && text.indexOf(rt) < 0, retried: w.ended === rt ? "signed, this store" : w.ended, after: after.line, left: !!left.owed }) };
+}
+
 const LEGS = [
+  ["d4h", leaveScene, "This computer leaves the store's list: the relay withdraws its key and the folder's file names it no more, under the last look's store certificate, nothing left owed"],
+  ["d4i", leaveOwedScene, "the relay not reached at This computer: the folder's file leaves it out at once, the keys kept sealed as owed, and the next seated renewal has the relay withdraw it"],
+  ["d4j", roomSeatScene, "the row says full once a write is refused as team-size and on once one is taken, and no seat where the renewal is refused for want of one; a freed seat is the sign-in's"],
+  ["d4k", endNeverScene, "a store/end refused as malformed (400) ends the retry: Only on this computer., nothing owed, one line in the trace, no renewal posts it again"],
+  ["d4l", endSigninScene, "a store/end refused for want of a sign-in (403) stays owed and Off everywhere: posted at each renewal while signed in, never signed out, ended by the 200 that follows"],
+  ["d4g", owedScene, "a store/end the service did not answer is kept sealed, the row says so, and the next renewal posts it again; answered, the line and the mark are gone"],
+  ["d4f", switchScene, "the first look that made the store says on once; Everywhere posts store/end signed by this desk and leaves the ended mark; On makes a new store over it; This computer forgets the keys and ends nothing"],
   ["a1", scopesOnScene, "where sync may be on, Microsoft's authorize address and refresh form carry Files.ReadWrite.AppFolder and Google's authorize address drive.appdata, its refresh as today; a managed computer with PersonalStore unset is off, set on is on"],
   ["a2", scopesOffScene, "where sync is off (a managed computer, PersonalStore unset), each provider's authorize address and refresh form are today's, byte for byte"],
   ["b", lookScene, "a seated quiet renewal is followed by the look: the key file made in the person's App Folder, this desk enrolled at the relay, the store certificate kept"],
@@ -343,13 +504,24 @@ const PLANTS = [
   ["a1", swap("    : known.refreshScope && folder ? known.refreshScope + \" \" + folder : known.refreshScope;", "    : known.refreshScope;"), "the refresh asks no folder scope"],
   ["a2", swap("    const folder = io.store === true ? signinFolderScope(p.id, access) : \"\";\n    pending =", "    const folder = signinFolderScope(p.id, access);\n    pending ="), "the sign-in asks the folder's scope where sync is off"],
   ["a2", swap("  const folder = io.store === true ? signinFolderScope(p.id, access) : \"\";\n  let res = null, folderRes = null;", "  const folder = signinFolderScope(p.id, access);\n  let res = null, folderRes = null;"), "the renewal asks it where sync is off"],
-  ["b", swap("  if (r.said === \"renewed\") storeTurn(); /* plant:store-renew */\n", ""), "the look taken out of the renewal"],
+  ["b", swap(" storeTurn(); } /* plant:store-renew */\n", " } /* plant:store-renew */\n"), "the look taken out of the renewal"],
   ["b2", swap("  if (folder && res.status !== 200) {\n    try {", "  if (false) {\n    try {"), "the refused scope is not asked again without it"],
   ["c", swap("{ format: 1, keys: s.keys || \"\", said: s.said || \"\" }", "{ format: 1, keys: s.keys || \"\", said: s.said || \"\", t: storeAccess && storeAccess.token }"), "the token written to the state file"],
   ["c", swap("  if (folder) signinFolderTake(io, folderRes || { status: 0 }, p.id, now()); /* plant:folder-take-renew */\n",
     "  if (folder) signinFolderTake(io, folderRes || { status: 0 }, p.id, now()); /* plant:folder-take-renew */\n  signinTrace(io, p.id, \"refresh\", \"ok\", { detail: String(JSON.parse(Buffer.from(folderRes.bytes).toString()).access_token) });\n"), "the token traced past the trace's own hiding"],
   ["e", swap("  if (!(d.relay === undefined || DOOR_RELAYS.installed.concat(DOOR_RELAYS.unpackaged).indexOf(d.relay) >= 0)) return null; /* plant:lab-relay */\n", ""), "a lab may name any relay"],
   ["g", swap("  if (sync) sync.turn(look); /* plant:store-sync-turn */\n", ""), "the look's answer does not turn the sync"],
+  ["d4j", swap("seatless: !!held && (!held.cert || held.said === \"full\"), full: storeFullNow }); /* plant:store-view-room */", "seatless: false, full: false }); /* plant:store-view-room */"), "the row is told neither the room nor the seat"],
+  ["d4k", swap("  if (!res || res.status !== 400) return \"owed\"; /* plant:store-end-never */", "  if (true) return \"owed\"; /* plant:store-end-never */"), "a 400 kept owed for ever"],
+  ["d4k", swap("  signinTrace({ trace: SIGNIN_TRACE_ASKED ? line => console.error(line) : null }, held ? held.provider : \"\", \"store/end\", \"refused\", signinTraceSaid(res, []));\n", ""), "a 400 ends the retry with no line in the trace"],
+  ["d4l", swap("  if (!res || res.status !== 400) return \"owed\"; /* plant:store-end-never */", "  if (!res || res.status >= 500) return \"owed\"; /* plant:store-end-never */"), "a 403 ends the retry as a 400 does"],
+  ["d4l", swap("  signinFlush();\n  const s = signinState(), held = s.held;\n", "  signinFlush();\n  storeEndAgain().catch(() => false);\n  const s = signinState(), held = s.held;\n"), "posted while signed out, where the service ends nothing"],
+  ["d4g", swap("  storeEndAgain().catch(() => false); /* plant:store-end-again */\n", ""), "the owed store/end is never posted again"],
+  ["d4h", swap("  if (leaving) await storeLeaveNow(cert); /* plant:store-leave */\n", ""), "This computer leaves nothing"],
+  ["d4h", swap("  const current = cert && Number.isSafeInteger(cert.until) && cert.until > Date.now() ? cert : null;", "  const current = null;"), "the leave asks the service for a new grant rather than using the look's certificate"],
+  ["d4i", swap("  if (r.said === \"renewed\") { storeLeaveNow(null); storeTurn(); } /* plant:store-renew */", "  if (r.said === \"renewed\") { storeTurn(); } /* plant:store-renew */"), "the owed leave is never tried again"],
+  ["d4f", swap("  if (keys) await storeEndEverywhere(keys).catch(() => false);\n", ""), "Everywhere ends nothing"],
+  ["d4f", swap("    if (folder && !tok.why) await folder.write(L.endedText(keys.rt)).catch(() => null); /* plant:store-end-mark */\n", ""), "Everywhere leaves the key in the folder"],
   ["d", swap(".indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes", ".indexOf(String(url)) < -1) throw new Error(\"the licence service's door takes"), "the door takes any route"],
 ];
 for (const [id, change, what] of PLANTS) {

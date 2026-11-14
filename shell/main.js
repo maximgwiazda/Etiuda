@@ -10742,7 +10742,7 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
       if (!access && !ans.ok && ans.reason === "access-token") { const m = await signinSeatAccess(io, p, me.key, got, got.seed, Date.now); ans = m.ans; got = m.got; took = m.access; }
       signinTake(p.id, got, ans, Date.now(), took);
       signinFlush();
-      if (ans.ok && ans.cert) storeTurn(); /* plant:store-signin */
+      if (ans.ok && ans.cert) { storeEndAgain().catch(() => false); storeLeaveNow(null); storeTurn(); } /* plant:store-signin */
       signinSaid = ans.ok ? "signin-done" : ans.reason;
       landing = signinLanding(got, ans, managed);
     } else { signinSaid = got.reason; landing = signinLanding(got, undefined, managed); }
@@ -10841,6 +10841,8 @@ async function signinRenewNow() {
   const s = signinState(), held = s.held;
   if (!held && s.out) { await signinOutAgain(); return ""; } /* plant:renew-out */
   if (!held || signinBusy) return ""; /* plant:renew-no-token */
+  /* Only while signed in: the service answers a desk signed out alike and ends nothing. */
+  storeEndAgain().catch(() => false); /* plant:store-end-again */
   const p = signinOffered().find(x => x.id === held.provider), me = branchIdentity(false);
   if (!p || !me) return ""; /* plant:renew-offered */
   const pending = signinRenewHeld(signinIo({ loop: null }), p, me.key, held, Date.now);
@@ -10854,7 +10856,7 @@ async function signinRenewNow() {
   signinSave();
   signinFlush();
   tellSignin();
-  if (r.said === "renewed") storeTurn(); /* plant:store-renew */
+  if (r.said === "renewed") { storeLeaveNow(null); storeTurn(); } /* plant:store-renew */
   return r.said;
 }
 function armSigninRenew() {
@@ -10875,17 +10877,23 @@ function armSigninRenew() {
    folder itself. */
 let storeLayer = null;
 function StoreLib() { return storeLayer || (storeLayer = require(path.join(__dirname, "sync", "store.cjs"))); }
-/* store.json beside desk.json, read whole or not at all: {format: 1, keys, said, off?}. `keys` the store's keys sealed by safeStorage
-   as base64, "" where none are kept; `said` the reason the desk last said (sayOnce); `off` the person's own switch, absent where on. */
+/* store.json beside desk.json, read whole or not at all: {format: 1, keys, said, off?, told?, until?, owed?, leave?}. `keys` the store's keys sealed by
+   safeStorage as base64, "" where none are kept; `said` the reason the desk last said (sayOnce); `off` the person's own switch, absent where on;
+   `told` once this computer has had its first look with sync on (firstSay); `until` the last store certificate's end, for the pause;
+   `owed` the relay team id of a store Turn off everywhere ended that the licence service has not yet answered, sealed as `keys`; `leave`
+   the keys of the store This computer has not yet left (storeLeaveNow), sealed as `keys`. */
 const STORE_FILE = "store.json";
 function storeFileRead(text) {
   let d = null;
   try { d = JSON.parse(String(text)); } catch { d = null; }
   const ok = !!d && typeof d === "object" && !Array.isArray(d) && d.format === 1;
-  return { keys: ok && typeof d.keys === "string" ? d.keys : "", said: ok && typeof d.said === "string" ? d.said.slice(0, 40) : "", off: ok && d.off === true };
+  return { keys: ok && typeof d.keys === "string" ? d.keys : "", said: ok && typeof d.said === "string" ? d.said.slice(0, 40) : "", off: ok && d.off === true,
+    told: ok && d.told === true, until: ok && Number.isSafeInteger(d.until) && d.until > 0 ? d.until : 0, owed: ok && typeof d.owed === "string" ? d.owed.slice(0, 400) : "",
+    leave: ok && typeof d.leave === "string" ? d.leave.slice(0, 200000) : "" };
 }
 function storeFileText(s) {
-  return JSON.stringify(Object.assign({ format: 1, keys: s.keys || "", said: s.said || "" }, s.off === true ? { off: true } : {}), null, 1) + "\n";
+  return JSON.stringify(Object.assign({ format: 1, keys: s.keys || "", said: s.said || "" }, s.off === true ? { off: true } : {}, s.told === true ? { told: true } : {},
+    s.until > 0 ? { until: s.until } : {}, s.owed ? { owed: s.owed } : {}, s.leave ? { leave: s.leave } : {}), null, 1) + "\n";
 }
 let storeKept;
 function storeState() {
@@ -10921,7 +10929,7 @@ function storeTokenTake(t) {
   if (!t || typeof t.provider !== "string" || typeof t.token !== "string") return;
   storeAccess = { provider: t.provider, token: t.token, until: Number(t.until) || 0 };
 }
-function storeForget() { storeAccess = null; storeNow = null; storeSyncStop(); }
+function storeForget() { storeAccess = null; storeNow = null; storeSay = ""; storeFresh = false; storeSyncStop(); }
 /* The folder's requests, at OneDrive's App Folder and Drive's appDataFolder alone, through the shell's own network as the sign-in's:
    no redirect, nothing cached, no cookie, the answer read up to STORE_ANSWER_MAX. {status, bytes}; throws where unreached. */
 const STORE_ANSWER_MAX = 256 * 1024;
@@ -11039,14 +11047,181 @@ async function storeRelayDevices(keys, cert, me) {
 }
 /* A look's answer kept: the state, the store certificate where it is on, the reason; the reason sayOnce would say kept in store.json. */
 function storeSettle(look) {
+  if (look.state === "ended") {
+    const e = storeState();
+    e.off = true; e.keys = ""; e.until = 0;
+    storeSave();
+  }
+  if (look.state === "on") storeFresh = false;
   storeNow = { state: look.state, why: look.why || "", store: look.state === "on" && look.store ? look.store : null, made: look.made === true, say: null };
-  const s = storeState(), r = StoreLib().sayOnce(s.said, look);
+  const s = storeState(), r = StoreLib().sayOnce(s.said, look), first = StoreLib().firstSay(s.told, look);
   storeNow.say = r.say;
-  if (r.kept !== s.said) { s.said = r.kept; storeSave(); }
+  let save = false;
+  if (r.kept !== s.said) { s.said = r.kept; save = true; }
+  if (first.told !== s.told) { s.told = first.told; save = true; }
+  const until = storeNow.store && Number.isSafeInteger(storeNow.store.until) ? storeNow.store.until : 0;
+  if (until && until !== s.until) { s.until = until; save = true; }
+  if (save) storeSave();
   const sync = storeSyncOf();
   if (sync) sync.turn(look); /* plant:store-sync-turn */
+  /* What waits to be said once from the account control, until the page says it showed it (etiuda:store-said). */
+  if (first.say || r.say) storeSay = first.say || r.say;
+  tellStore();
   return storeNow;
 }
+/* ---- what the page is told of sync, and its switch -------------------------------------------------------------------------
+   storeRow's answer for the desk as it stands: the line, the switch, whether policy holds it, the reason, the pause's start, and what
+   waits to be said once. Cards kept in two versions are counted by storeConflicts. */
+let storeSay = "", storeFresh = false;
+function storeConflicts() { return 0; }
+/* store/end at the licence service, signed by this desk over the service's own lines (Studio's storeEndBytes). Resolves "done" where
+   the service answered 200, "never" where it refused the request as one that can never succeed (400), with a line in the sign-in's
+   trace, and "owed" for anything else, a refusal for want of a sign-in (401, 403) included; never rejects. */
+const STORE_END_LINE = "etiuda-licence-store-end";
+async function storeEndPost(rt) {
+  const me = branchIdentity(false);
+  if (!/^[0-9a-f]{32}$/.test(String(rt))) return "never";
+  if (!me || (harnessLaunch() && !signinLabHeld())) return "owed";
+  const t = Date.now(), sig = String(signinSign(Buffer.from([STORE_END_LINE, me.key, rt, t].join("\n"), "utf8")) || "");
+  if (!/^[0-9a-f]{128}$/.test(sig)) return "owed";
+  let res = null;
+  try { res = await signinServiceAsk((u, init) => deskFetch(u, init), storeServiceAt("store/end"), { desk: me.key, rt: String(rt), t: t, sig: sig }); }
+  catch { return "owed"; }
+  if (res && res.status === 200) return "done"; /* plant:store-end-sent */
+  if (!res || res.status !== 400) return "owed"; /* plant:store-end-never */
+  const held = signinState().held;
+  signinTrace({ trace: SIGNIN_TRACE_ASKED ? line => console.error(line) : null }, held ? held.provider : "", "store/end", "refused", signinTraceSaid(res, []));
+  return "never";
+}
+/* A STORE/END NOT ANSWERED IS OWED: kept sealed in store.json and posted again at each start and renewal (signinRenewNow) until the
+   service answers, the row saying so meanwhile; where nothing seals for real it is owed in memory alone, until the desk closes. */
+let storeOwedHere = "";
+function storeOwedRt() {
+  const o = storeState().owed;
+  if (!o) return storeOwedHere;
+  try { return String(safeStorage.decryptString(Buffer.from(o, "base64"))); } catch { return ""; }
+}
+function storeOwe(rt) {
+  const s = storeState();
+  storeOwedHere = rt || "";
+  s.owed = "";
+  if (rt && sealsForReal(safeStorage, process.platform)) { try { s.owed = safeStorage.encryptString(String(rt)).toString("base64"); } catch { s.owed = ""; } }
+  storeSave();
+}
+async function storeEndAgain() {
+  const rt = storeOwedRt();
+  if (!rt) return false;
+  if ((await storeEndPost(rt)) === "owed") return false;
+  if (storeOwedRt() === rt) { storeOwe(""); tellStore(); }
+  return true;
+}
+async function storeEndEverywhere(keys) {
+  const held = signinState().held;
+  const p = held ? signinOffered().find(x => x.id === held.provider) : null;
+  const end = await storeEndPost(keys.rt), ended = end === "done";
+  if (end === "owed") storeOwe(keys.rt); /* plant:store-end-owed */
+  if (p) {
+    const L = StoreLib(), folder = L.folderFor(p.id, { ask: storeAsk, token: () => (storeAccess ? storeAccess.token : "") });
+    const tok = folder ? await storeTokenFor(p, held).catch(() => ({ why: "offline" })) : { why: "no-drive" };
+    if (folder && !tok.why) await folder.write(L.endedText(keys.rt)).catch(() => null); /* plant:store-end-mark */
+  }
+  return ended;
+}
+/* THIS COMPUTER LEAVES THE STORE when turned off here (store.cjs storeLeave), its keys kept sealed as `leave` until the relay and the
+   folder have the list without it: tried at once with the last look's store certificate, and again after each seated sign-in or
+   renewal with a fresh one; On here drops it, this computer being on the list again. Where nothing seals for real, in memory alone. */
+let storeLeaveHere = null, storeLeaveFlight = null;
+function storeLeaveKeys() {
+  const v = storeState().leave;
+  if (!v) return storeLeaveHere;
+  try { return StoreLib().keyRead(String(safeStorage.decryptString(Buffer.from(v, "base64")))); } catch { return null; }
+}
+function storeLeaveOwe(keys) {
+  const s = storeState();
+  storeLeaveHere = keys || null;
+  s.leave = "";
+  if (keys && sealsForReal(safeStorage, process.platform)) { try { s.leave = safeStorage.encryptString(StoreLib().keyText(keys)).toString("base64"); } catch { s.leave = ""; } }
+  storeSave();
+}
+function storeLeaveNow(cert) {
+  if (storeLeaveFlight) return storeLeaveFlight;
+  const flight = storeLeaveTry(cert).catch(() => false).then(r => { if (storeLeaveFlight === flight) storeLeaveFlight = null; return r; });
+  storeLeaveFlight = flight;
+  return flight;
+}
+async function storeLeaveTry(cert) {
+  const keys = storeLeaveKeys();
+  if (!keys) return true;
+  if (harnessLaunch() && !signinLabHeld()) return false;
+  const held = signinState().held, me = branchIdentity(false);
+  const p = held ? signinOffered().find(x => x.id === held.provider) : null;
+  if (!p || !me) return false;
+  const L = StoreLib(), folder = L.folderFor(p.id, { ask: storeAsk, token: () => (storeAccess ? storeAccess.token : "") });
+  const tok = folder ? await storeTokenFor(p, held) : { why: "no-drive" };
+  if (tok.why) return false;
+  const current = cert && Number.isSafeInteger(cert.until) && cert.until > Date.now() ? cert : null;
+  const r = await L.storeLeave({ folder, keys, me: { pub: me.key }, relay: { devices: (k, c) => storeRelayDevices(k, c, me) },
+    cert: async () => current || (await storeGrant(me.key, keys.rt, L.pubOf(keys.s), {})).store || null });
+  if (!r.ok) return false;
+  const now = storeLeaveKeys();
+  if (now && now.rt === keys.rt) storeLeaveOwe(null);
+  return true;
+}
+/* THE STORE'S ROOM, told by the store's sync channel: each write refused as "team-size" or taken (""), store.cjs roomNext. In memory
+   alone: after a start the first refused write says it again. */
+let storeFullNow = false;
+function storeRoom(reason) {
+  const next = StoreLib().roomNext(storeFullNow, String(reason));
+  if (next === storeFullNow) return;
+  storeFullNow = next;
+  tellStore();
+}
+/* NO SEAT: the renewal refused for want of a free seat ("full"), or answered with no certificate on a computer that has synced (it
+   holds the store's keys). A freed seat ("signin") is the sign-in's own moment, as the paused line's rule says. */
+function storeView() {
+  const held = signinState().held, synced = !!storeState().keys;
+  const provider = held && signinOffered().some(p => p.id === held.provider) && (held.cert || synced) ? held.provider : "";
+  return StoreLib().storeRow({ provider, pol: storePolicyNow(), look: storeNow, until: storeState().until, now: Date.now(),
+    signinRefused: !!(held && held.said), conflicts: storeConflicts(), say: storeSay, owed: !!storeOwedRt(),
+    seatless: !!held && (!held.cert || held.said === "full"), full: storeFullNow }); /* plant:store-view-room */
+}
+function tellStore() {
+  const win = theWindow;
+  if (win && !win.isDestroyed()) win.webContents.send("etiuda:store", true);
+}
+/* THE SWITCH: "on" turns sync on here and looks at once; "here" turns it off on this computer, which forgets the store's keys and
+   its last look; "everywhere" also ends the store at the licence service, which deletes the relay's copy, and leaves the ended mark
+   in the person's folder, so no other computer writes the key back. Policy that holds the switch refuses all three. */
+async function storeSetNow(what) {
+  if (storePolicyNow().held) return storeView(); /* plant:store-set-held */
+  const s = storeState();
+  if (what === "on") {
+    if (storeLeaveKeys()) storeLeaveOwe(null);
+    delete s.off;
+    storeFresh = true;
+    storeSave();
+    storeTurn();
+    return storeView();
+  }
+  if (what !== "here" && what !== "everywhere") return storeView();
+  const keys = what === "everywhere" ? storeLocal() : null, leaving = what === "here" ? storeLocal() : null;
+  const cert = storeNow && storeNow.store ? storeNow.store : null;
+  if (leaving) storeLeaveOwe(leaving);
+  s.off = true;
+  s.keys = "";
+  s.until = 0;
+  storeSay = "";
+  storeFresh = false;
+  storeNow = null;
+  storeSave();
+  if (keys) await storeEndEverywhere(keys).catch(() => false);
+  if (leaving) await storeLeaveNow(cert); /* plant:store-leave */
+  tellStore();
+  return storeView();
+}
+ipcMain.on("etiuda:store-state", (e) => { e.returnValue = fromEngine(e) ? storeView() : null; });
+ipcMain.handle("etiuda:store-set", (e, what) => (fromEngine(e) ? storeSetNow(String(what || "")) : null));
+ipcMain.on("etiuda:store-said", (e) => { e.returnValue = null; if (fromEngine(e)) storeSay = ""; });
 /* THE LOOK, after each seated sign-in or renewal: one at a time, never on a harness start save the sign-in lab's, and only where sync
    may be on and a certificate of this desk stands. Where nothing seals for real, nothing is kept and the look is "unavailable" with no
    reason to say. Resolves the result kept (storeNow), or null where no look was made; never rejects. */
@@ -11072,7 +11247,7 @@ async function storeLookNow() {
   return storeSettle(await L.storeLook({ folder: folder, local: storeLocal, keep: storeKeep,
     grant: (rt, sPub, extra) => storeGrant(me.key, rt, sPub, Object.assign({}, extra, { company: pol.company === true })),
     relay: { create: storeRelayCreate, devices: (keys, cert) => storeRelayDevices(keys, cert, me) },
-    me: { id: me.id, pub: me.key, desk: me.id }, url: STORE_RELAY, rand: n => crypto.randomBytes(n) }));
+    me: { id: me.id, pub: me.key, desk: me.id }, url: STORE_RELAY, rand: n => crypto.randomBytes(n), fresh: storeFresh }));
 }
 
 /* ---- the store's sync (shell/sync/sync.cjs) --------------------------------------------------------------------------------
