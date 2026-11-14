@@ -117,6 +117,8 @@ const devicesBytes = (rt, rev, t, keys, from) => Buffer.from("etiuda-relay-devic
 /* `wraps` left out when the caller does not pass it, so a slice 1 signature over add and drop still matches. */
 const invitesBytes = (rt, t, add, drop, wraps) => Buffer.from("etiuda-relay-invites\n" + rt + "\n" + t + "\n"
   + canon(wraps === undefined ? { add, drop } : { add, drop, wraps }), "utf8");
+/* A store's list is also signed by one of the person's computers holding a current store certificate, over the same list under a line of its own. */
+const storeDevicesBytes = (rt, rev, t, keys) => Buffer.from("etiuda-relay-store-devices\n" + rt + "\n" + rev + "\n" + t + "\n" + canon(keys), "utf8");
 const helloBytes = (rt, nonce, keyId) => Buffer.from("etiuda-relay-hello\n" + rt + "\n" + nonce + "\n" + keyId + "\n", "utf8");
 const LEAD_PREFIX = "etiuda-relay-lead\n";
 const leadBytes = (rt, toKeyId, toPub, t) => Buffer.from(LEAD_PREFIX + rt + "\n" + toKeyId + "\n" + toPub + "\n" + t, "utf8");
@@ -636,6 +638,12 @@ function createCore(deps) {
     return { ok: true, note: null };
   }
 
+  function storeListed(team, b) {
+    const by = plain(b.by) ? b.by : {};
+    if (!is(HEX64, by.pub) || !is(HEX128, by.sig) || !storeGate(team, b.seat, by.pub).ok) return false;
+    return verified(by.pub, storeDevicesBytes(team.rt, b.rev, b.t, b.keys), by.sig); /* plant:store-devices-sig */
+  }
+
   /* A hello, a session or a later call under one, where the grant in force was signed by a key now on the list. */
   function grantRefused() {
     const key = store.get("grantKey");
@@ -835,6 +843,9 @@ function createCore(deps) {
     if (!fresh(b.t)) return no("nonce-stale"); /* plant:devices-fresh */
     if (b.keys.length > KEYS_MAX) return no("team-size"); /* plant:devices-cap */
     if (!verified(team.lead.pub, devicesBytes(rt, b.rev, b.t, b.keys, from), b.sig)) return no("bad-signature"); /* plant:devices-sig */ /* plant:devices-unsigned */
+    /* On a store S alone is not enough, since the person's folder holds it: the list also carries a store certificate for the store's
+       person and the signature of the computer it names. */
+    if (team.store && !storeListed(team, b)) return no("seat-lapsed"); /* plant:store-devices */
     if (b.rev <= (store.get("devrev") || 0)) return no("replay-rev"); /* plant:devices-rev */
     /* A list read from an older team file than the last list taken, or naming none once one was named, changes nothing, whatever
        its rev. */
@@ -2005,7 +2016,7 @@ module.exports = {
   SESSIONS_MAX, SESSION_SHARE, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, lapseOf, keptGrant, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
   LEAD_PREFIX, leadBytes, judgeLead,
   DOOR_REFS_MAX, DOOR_CERT_MAX, DOOR_LIVE_MAX, DOOR_PER_PERSON, DOOR_RATE_MAX, DOOR_RATE_MS, DOOR_TRY_SHARE, CERT_SPAN_MS, SEAT_MARGIN_MS, POOLED_GRACE_MS, SEAT_QUIET_MS, FREED_MAX,
-  doorBytes, doorHelloBytes, certBytes, certWhy,
+  doorBytes, doorHelloBytes, certBytes, certWhy, storeDevicesBytes,
   STORE_GRANT_KIND, STORE_CERT_KIND, STORE_CERT_SPAN_MS, NOTICE_KIND, storeCertBytes, storeCertWhy, noticeBytes, noticeWhy,
   grantBytes, delegationBytes, revocationBytes, revokedKeysOf, acceptRevocations, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, leadKeyMatches, parseMeta,
   createCore,
