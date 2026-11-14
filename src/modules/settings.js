@@ -994,7 +994,7 @@ function wirePage(box){
         /* Sync's Off asks first, and the class moves only once the shell has acted (askSyncOff). */
         if(seg==="sync"){
           if(b.classList.contains("on")) return;
-          if(on) syncSet("on").then(()=>{ if(document.getElementById("setBody")) paintSettings(); });
+          if(on) syncSet(syncNow().line==="consent" ? "consent" : "on").then(()=>{ if(document.getElementById("setBody")) paintSettings(); });
           else askSyncOff();
           return;
         }

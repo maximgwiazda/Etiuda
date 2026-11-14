@@ -259,7 +259,8 @@ function pausedLine(cert, now, signinRefused) {
    `o`: provider (the signed-in one, "" for none), pol (storePolicy's answer), look (the last look's {state, why} or null), until (the
    last store certificate's end), now, signinRefused, conflicts (cards kept in two versions), say (what waits to be said once). Answers
    {shown, line, on, held, why, since, say}: line "org-off" where policy keeps sync off, "off" where the person turned it off,
-   "unavailable" where the folder could not be reached for a reason the desk says (never offline), "conflict", "paused" after
+   "consent" where the folder was never allowed (off, the switch the person's own way to ask for it), "unavailable" where the folder
+   could not be reached for a reason the person cannot mend (never offline), "conflict", "paused" after
    PAUSE_SAY_MS, else "on". Nothing of a key, a store or a token. Pure. */
 function storeRow(o) {
   if (o.provider !== "microsoft" && o.provider !== "google") return { shown: false };
@@ -267,6 +268,7 @@ function storeRow(o) {
   if (!pol.on) return { shown: true, line: pol.held ? "org-off" : "off", on: false, held: pol.held === true, why: "", since: 0, say: "" };
   const base = { shown: true, on: true, held: pol.held === true, why: "", since: 0, say };
   const look = o.look;
+  if (look && look.state === "unavailable" && look.why === "consent") return Object.assign(base, { line: "consent", on: false, say: "" }); /* plant:row-consent */
   if (look && look.state === "unavailable" && look.why !== "offline") return Object.assign(base, { line: "unavailable", why: String(look.why || "") });
   if (Number(o.conflicts) > 0) return Object.assign(base, { line: "conflict" });
   const p = pausedLine({ until: o.until }, o.now, o.signinRefused);

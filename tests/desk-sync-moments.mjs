@@ -11,7 +11,8 @@
  *   c9d firstSay: "on" only at the first look with sync on that made the store
  *   m1  the Account row's line for each state, the switch only where it acts, held by policy fixed with its lock
  *   m2  Off asks from the switch: Everywhere, This computer, Cancel filled and last; the switch stays On; Escape and Cancel change
- *       nothing; This computer and Everywhere go to the shell as such; On goes at once, unasked
+ *       nothing; This computer and Everywhere go to the shell as such; On goes at once, unasked, and where the folder was never
+ *       allowed it goes as "consent", with no bubble before the provider's page
  *   m3  the row and the question in Polish
  *   r1  storeRow's line for each state
  * Plants: the page's word to the shell that it showed the bubble taken out (c9a red: said again after Dismiss); firstSay saying at a
@@ -181,7 +182,7 @@ async function main() {
     ["off", { ...ON, line: "off", on: false }, "Only on this computer.", "switch"],
     ["org-off", { ...ON, line: "org-off", on: false, held: true, say: "" }, "Your organisation has not turned this on.", "none"],
     ["unavailable, no OneDrive", { ...ON, line: "unavailable", why: "no-drive" }, "Not available on this account: the account has no OneDrive. Everything works on this computer as before.", "none"],
-    ["unavailable, the folder refused", { ...ON, line: "unavailable", why: "consent" }, "Not available on this account: Etiuda was not allowed its folder in the account. To turn sync on, sign in again and allow it. Everything works on this computer as before.", "none"],
+    ["the folder never allowed", { ...ON, line: "consent", on: false }, "Off. Turning it on asks Microsoft to let Etiuda use its folder in this account.", "switch"],
     ["conflict", { ...ON, line: "conflict" }, "Changed on two computers: choose which to keep.", "switch"],
     ["paused", { ...ON, line: "paused", since: Date.UTC(2026, 10, 11, 12) }, "Paused since 11 November. It resumes when this computer reaches our service.", "switch"],
     ["held on", { ...ON, held: true }, "Your catalogs, edits and settings on every computer you sign in on.", "fixed"],
@@ -247,7 +248,12 @@ async function main() {
     await page.evaluate(() => document.querySelector('#setBody .set-seg[data-seg="sync"] button[data-val="on"]').click());
     await sleep(300);
     const sets = await page.evaluate(() => ({ sets: window.__st.sets.slice(), b: !!document.getElementById("eSyncAsk") }));
-    if (JSON.stringify(sets.sets) !== JSON.stringify(["here", "everywhere", "on"]) || sets.b) m2bad.push({ presses: sets });
+    await page.evaluate(() => { window.__st.view = Object.assign({}, window.__st.view, { line: "consent", on: false }); openSettings("account"); });
+    await sleep(150);
+    await page.evaluate(() => document.querySelector('#setBody .set-seg[data-seg="sync"] button[data-val="on"]').click());
+    await sleep(300);
+    const sets2 = await page.evaluate(() => ({ sets: window.__st.sets.slice(), b: !!document.getElementById("eSyncAsk") || !!document.getElementById("eSyncSaid") }));
+    if (JSON.stringify(sets2.sets) !== JSON.stringify(["here", "everywhere", "on", "consent"]) || sets2.b || sets.b) m2bad.push({ presses: sets2 });
     await page.close();
     check(!m2bad.length, "m2 Off asks from the switch (Everywhere, This computer, Cancel filled and last), the switch stays On; Escape and Cancel change nothing; the choices and On reach the shell", m2bad.length ? m2bad : undefined);
   }
@@ -284,6 +290,7 @@ async function main() {
       [row({ pol: { on: false, held: true } }).line === "org-off", "policy off"],
       [row({ look: { state: "unavailable", why: "offline" } }).line === "on", "offline says nothing"],
       [row({ look: { state: "unavailable", why: "no-drive" } }).why === "no-drive", "no drive"],
+      [(r => r.line === "consent" && r.on === false && r.say === "")(row({ look: { state: "unavailable", why: "consent" }, say: "consent" })), "the folder never allowed: off with its switch, nothing said"],
       [row({ conflicts: 2 }).line === "conflict", "a conflict"],
       [row({ until: now - 2 * D }).line === "on", "paused two days: not yet"],
       [row({ until: now - 3 * D }).line === "paused" && row({ until: now - 3 * D }).since === now - 3 * D, "paused three days"],

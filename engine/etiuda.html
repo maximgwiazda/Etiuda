@@ -9045,13 +9045,13 @@ What you type stays in this browser only.`;
     "Sync across computers": "Synchronizacja między komputerami",
     "Your catalogs, edits and settings on every computer you sign in on.": "Własne katalogi, zmiany i ustawienia na każdym komputerze, na którym nastąpi zalogowanie.",
     "Only on this computer.": "Tylko na tym komputerze.",
+    "Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account.": "Wyłączona. Po włączeniu {PROVIDER} poprosi o zgodę na użycie przez Etiudę jej folderu na tym koncie.",
     "Changed on two computers: choose which to keep.": "Zmieniono na dwóch komputerach: należy wybrać, którą wersję zostawić.",
     "Your catalogs, edits and settings now follow you to every computer you sign in on. You can turn this off in Account.": "Własne katalogi, zmiany i ustawienia będą teraz dostępne na każdym komputerze, na którym nastąpi zalogowanie. Można to wyłączyć w Koncie.",
     "Not available on this account: {REASON}. Everything works on this computer as before.": "Niedostępna na tym koncie: {REASON}. Na tym komputerze wszystko działa jak dotąd.",
     "Not available on this account. Everything works on this computer as before.": "Niedostępna na tym koncie. Na tym komputerze wszystko działa jak dotąd.",
     "the account has no OneDrive": "konto nie ma usługi OneDrive",
     "your organisation has switched off Google Drive for it": "organizacja wyłączyła dla niego Dysk Google",
-    "Etiuda was not allowed its folder in the account. To turn sync on, sign in again and allow it": "Etiuda nie dostała zgody na swój folder na koncie. Aby włączyć synchronizację, należy zalogować się ponownie i wyrazić zgodę",
     "Turn off sync?": "Wyłączyć synchronizację?",
     "Everywhere also deletes the synced copy; each computer keeps its own.": "Opcja Wszędzie usuwa też zsynchronizowaną kopię; każdy komputer zachowuje własną.",
     "Everywhere": "Wszędzie",
@@ -28127,7 +28127,7 @@ What you type stays in this browser only.`;
       if (b.dataset.signinAct) signinAct(b.dataset.signinAct, b);
     });
   }
-  var SYNC_LINES = ["on", "off", "org-off", "unavailable", "paused", "conflict"];
+  var SYNC_LINES = ["on", "off", "consent", "org-off", "unavailable", "paused", "conflict"];
   function syncRead(v) {
     const o = v && typeof v === "object" ? v : {};
     if (o.shown !== true || SYNC_LINES.indexOf(o.line) < 0) return { shown: false, line: "", on: false, held: false, why: "", since: 0, say: "" };
@@ -28152,7 +28152,6 @@ What you type stays in this browser only.`;
   }
   function syncWhyWords(why, provider) {
     if (why === "no-drive") return provider === "google" ? t("your organisation has switched off Google Drive for it") : t("the account has no OneDrive");
-    if (why === "consent") return t("Etiuda was not allowed its folder in the account. To turn sync on, sign in again and allow it");
     return "";
   }
   function syncUnavailable(why, provider) {
@@ -28165,6 +28164,7 @@ What you type stays in this browser only.`;
   function syncLine(s, provider) {
     if (s.line === "org-off") return t("Your organisation has not turned this on.");
     if (s.line === "off") return t("Only on this computer.");
+    if (s.line === "consent") return named(t("Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account."), "{PROVIDER}", SIGNIN_NAMES[provider] || "Microsoft");
     if (s.line === "unavailable") return syncUnavailable(s.why, provider);
     if (s.line === "paused") return named(t("Paused since {DATE}. It resumes when this computer reaches our service."), "{DATE}", syncDate(s.since));
     if (s.line === "conflict") return t("Changed on two computers: choose which to keep.");
@@ -38335,7 +38335,7 @@ What you type stays in this browser only.`;
           const seg3 = sbox.getAttribute("data-seg"), v = b.getAttribute("data-val"), on = v === "on";
           if (seg3 === "sync") {
             if (b.classList.contains("on")) return;
-            if (on) syncSet("on").then(() => {
+            if (on) syncSet(syncNow().line === "consent" ? "consent" : "on").then(() => {
               if (document.getElementById("setBody")) paintSettings();
             });
             else askSyncOff();
