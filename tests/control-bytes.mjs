@@ -75,14 +75,16 @@ try {
   check(c.length === 0, "cb2 text, a tab, both line ends and a written escape are clean: " + (c.map(f => said("plain.mjs", f)).join(", ") || "none"));
   /* cb3 */
   const files = sources();
-  const hits = [];
+  const hits = [], unread = [];
   for (const rel of files) {
     let buf = null;
-    try { buf = fs.readFileSync(path.join(ROOT, rel)); } catch { continue; }
+    /* A listed file that will not read (one deleted in a worktree not yet committed) is passed over, and the line says how many. */
+    try { buf = fs.readFileSync(path.join(ROOT, rel)); } catch { unread.push(rel); continue; }
     for (const f of controlBytes(buf)) hits.push(said(rel, f));
   }
   check(files.length > 0 && hits.length === 0, "cb3 " + files.length + " tracked .js, .mjs and .cjs files hold no control byte"
-    + (hits.length ? ": " + hits.slice(0, 12).join(", ") + (hits.length > 12 ? " and " + (hits.length - 12) + " more" : "") : ""));
+    + (hits.length ? ": " + hits.slice(0, 12).join(", ") + (hits.length > 12 ? " and " + (hits.length - 12) + " more" : "") : "")
+    + (unread.length ? "; " + unread.length + " listed file(s) not readable, passed over: " + unread.slice(0, 4).join(", ") : ""));
 } finally {
   try { fs.rmSync(lab, { recursive: true, force: true }); } catch { /* the leg's own lab, in the temporary folder */ }
 }
