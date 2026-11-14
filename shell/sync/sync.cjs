@@ -64,22 +64,48 @@ function localItems(keys, files) {
   return out;
 }
 
-/* A layer's value as its fields, each field's value as JSON text and a map field by its keys; null where it is no JSON object. */
+/* A layer's sets, by member, "<field>[]<member's id>": hiding, starring, deleting or adding one card or request is that member's change
+   alone, and showing it again or removing it is recorded for that member, so only the same member changed both ways is a conflict.
+   SET_IDS are lists of ids, SET_OWN lists of the person's own entries by each one's id; card order and every other list stay whole. */
+const SET_IDS = ["hidden", "favourites", "removed", "removedCats", "intentHidden", "intentFavourites", "intentRemoved"]; /* plant:set-ids */
+const SET_OWN = ["custom", "intentCustom"]; /* plant:set-own */
+const MEMBER = "[]";
+/* A set field's members {id: JSON text}, or null where the field is merged whole: not a set, or a list a member of which has no id of
+   its own or shares one. */
+function membersOf(f, v) {
+  if (!Array.isArray(v)) return null;
+  const out = {};
+  if (SET_IDS.indexOf(f) >= 0) {
+    for (const id of v) { if (typeof id !== "string" || !id) return null; out[id] = JSON.stringify(id); }
+    return out;
+  }
+  if (SET_OWN.indexOf(f) < 0) return null;
+  for (const m of v) {
+    if (!plain(m) || typeof m.id !== "string" || !m.id || has(out, m.id)) return null;
+    out[m.id] = JSON.stringify(m);
+  }
+  return out;
+}
+/* A layer's value as its fields, each field's value as JSON text, a map field by its keys and a set by its members; null where it is
+   no JSON object. */
 function fieldsOf(text) {
   let j = null;
   try { j = JSON.parse(text); } catch { return null; }
   if (!plain(j)) return null;
   const out = {};
   for (const f of Object.keys(j)) {
-    if (f.indexOf("/") >= 0 || f.indexOf("#") >= 0) return null;
-    if (plain(j[f]) && Object.keys(j[f]).length) { for (const k of Object.keys(j[f])) out[f + "/" + k] = JSON.stringify(j[f][k]); }
+    if (f.indexOf("/") >= 0 || f.indexOf("#") >= 0 || f.indexOf("[") >= 0) return null;
+    const set = membersOf(f, j[f]);
+    if (set) { for (const id of Object.keys(set)) out[f + MEMBER + id] = set[id]; }
+    else if (plain(j[f]) && Object.keys(j[f]).length) { for (const k of Object.keys(j[f])) out[f + "/" + k] = JSON.stringify(j[f][k]); }
     else out[f] = JSON.stringify(j[f]);
   }
   return out;
 }
 /* The layer key an item is a field of, or "". */
 const layerOf = item => { const s = String(item), at = s.indexOf("#"); return s.startsWith("k:") && at > 0 ? s.slice(2, at) : ""; };
-/* A layer key's value put back together from its field items, null where none stands. */
+/* A layer key's value put back together from its field items, null where none stands. A set's members keep the order they stand in
+   `items`, this computer's own first and those taken after; a member already in the field whole is not added twice. */
 function layerText(items, key) {
   const pre = "k:" + key + "#", out = {};
   let any = false;
@@ -87,10 +113,20 @@ function layerText(items, key) {
     if (!item.startsWith(pre)) continue;
     let v;
     try { v = JSON.parse(items[item]); } catch { continue; }
-    const rest = item.slice(pre.length), at = rest.indexOf("/");
+    const rest = item.slice(pre.length), at = rest.search(/[/[]/), f = at < 0 ? rest : rest.slice(0, at);
     any = true;
     if (at < 0) out[rest] = v;
-    else { const f = rest.slice(0, at); if (!plain(out[f])) out[f] = {}; out[f][rest.slice(at + 1)] = v; }
+    else if (rest.startsWith(MEMBER, at)) { if (!Array.isArray(out[f])) out[f] = []; }
+    else { if (!plain(out[f])) out[f] = {}; out[f][rest.slice(at + 1)] = v; }
+  }
+  for (const item of Object.keys(items)) {
+    if (!item.startsWith(pre)) continue;
+    const rest = item.slice(pre.length), at = rest.search(/[/[]/);
+    if (at < 0 || !rest.startsWith(MEMBER, at)) continue;
+    let v;
+    try { v = JSON.parse(items[item]); } catch { continue; }
+    const list = out[rest.slice(0, at)], id = rest.slice(at + MEMBER.length);
+    if (Array.isArray(list) && !list.some(x => x === id || (plain(x) && x.id === id))) list.push(v);
   }
   return any ? JSON.stringify(out) : null;
 }
@@ -152,7 +188,7 @@ function mergeOnce(o) {
   /* This computer's own changes first: an item whose value is not the one its entry names was changed here. */
   for (const item of new Set(Object.keys(ledger).concat(Object.keys(local)))) {
     const was = ledger[item], h = has(local, item) ? sha(local[item]) : null;
-    if (was ? was.h === h : h === null) continue;
+    if (was ? was.h === h : h === null) continue; /* plant:recorded */
     const t = Math.max(now, was ? was.t + 1 : 0);
     ledger[item] = { h, by: me, t, seen: was ? (was.by === me ? Object.assign({}, was.seen) : unionSeen(was)) : {} };
   }

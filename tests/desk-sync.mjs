@@ -1,7 +1,7 @@
 /* A PERSON'S STORE, THE SYNC: what follows between the person's computers and how it merges (shell/sync/sync.cjs), through the
  * relay channel (shell/relay/channel.cjs) over the relay itself in memory (relay/worker.mjs on relay/test/stand-ins.cjs), with
  * stand-ins for OneDrive's App Folder and the licence service; no leg calls a real provider. node tests/desk-sync.mjs
- * C7, C8, C10's outbox half and the replace race's adoption, each guard named by a plant in a copy that turns its leg red, and no
+ * C7, C8 with its sets by member, C10's outbox half and the replace race's adoption, each guard named by a plant in a copy that turns its leg red, and no
  * product file written. Node builtins only, no window. */
 import fs from "node:fs";
 import os from "node:os";
@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-sync-"));
-const EXPECTED = 13;
+const EXPECTED = 20;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -291,6 +291,88 @@ async function main() {
     const none = a.kept.length === 0 && b.kept.length === 0;
     return { ok: same && none, detail: brief({ same, none, a: a.desk.keys[L], keptA: a.kept.length, keptB: b.kept.length }) };
   }
+  /* Hidden cards and own cards are sets, merged by member: a different card hidden or added on each computer is two changes that both
+     stand, and only the same card changed both ways is a conflict. */
+  const L8 = "e3f9a1~Pack";
+  const packOf = c => { try { return JSON.parse(c.desk.keys[L8]); } catch { return {}; } };
+  const setOf = list => JSON.stringify((Array.isArray(list) ? list : []).map(x => (typeof x === "string" ? x : JSON.stringify(x))).sort());
+  const repack = (c, fn) => { const p = packOf(c); fn(p); c.desk.keys[L8] = JSON.stringify(p); c.edit(); };
+  async function hiddenScene() {
+    const { w, a, b } = await twoOn("c8h");
+    a.desk.keys[L8] = JSON.stringify({ overrides: { c1: { t: "one" } }, cardOrder: ["c1", "c2", "c3"], hidden: ["c0"] });
+    await settle(a, b);
+    a.down.on = true; b.down.on = true;
+    w.R.clock.now += MIN;
+    repack(a, p => p.hidden.push("c1"));
+    w.R.clock.now += MIN;
+    repack(b, p => p.hidden.push("c2"));
+    a.down.on = false; b.down.on = false;
+    await settle(a, b);
+    const both = setOf(packOf(a).hidden) === setOf(["c0", "c1", "c2"]) && setOf(packOf(b).hidden) === setOf(["c0", "c1", "c2"]);
+    const none = a.kept.length === 0 && b.kept.length === 0;
+    /* Shown again on one computer: the removal is recorded for that card, so it is shown again on the other too. */
+    w.R.clock.now += MIN;
+    repack(a, p => { p.hidden = p.hidden.filter(id => id !== "c1"); });
+    await settle(a, b);
+    const shown = setOf(packOf(a).hidden) === setOf(["c0", "c2"]) && setOf(packOf(b).hidden) === setOf(["c0", "c2"]) && a.kept.length + b.kept.length === 0;
+    const kept = packOf(b).overrides && packOf(b).overrides.c1 && packOf(b).overrides.c1.t === "one" && JSON.stringify(packOf(b).cardOrder) === JSON.stringify(["c1", "c2", "c3"]);
+    return { ok: both && none && shown && kept, detail: brief({ both, none, shown, kept, a: packOf(a).hidden, b: packOf(b).hidden, keptA: a.kept.length, keptB: b.kept.length }) };
+  }
+  async function ownScene() {
+    const { w, a, b } = await twoOn("c8o");
+    const card = (id, t) => ({ id, c: "k1", t: { en: t } });
+    a.desk.keys[L8] = JSON.stringify({ custom: [card("u:base", "base")], cardOrder: ["c1"], hidden: [] });
+    await settle(a, b);
+    a.down.on = true; b.down.on = true;
+    w.R.clock.now += MIN;
+    repack(a, p => p.custom.push(card("u:aa", "made on a")));
+    w.R.clock.now += MIN;
+    repack(b, p => p.custom.push(card("u:bb", "made on b")));
+    a.down.on = false; b.down.on = false;
+    await settle(a, b);
+    const want = setOf([card("u:base", "base"), card("u:aa", "made on a"), card("u:bb", "made on b")]);
+    const both = setOf(packOf(a).custom) === want && setOf(packOf(b).custom) === want;
+    const none = a.kept.length === 0 && b.kept.length === 0;
+    /* Deleted on one computer: gone on the other, the rest untouched. */
+    w.R.clock.now += MIN;
+    repack(b, p => { p.custom = p.custom.filter(m => m.id !== "u:aa"); });
+    await settle(a, b);
+    const gone = setOf(packOf(a).custom) === setOf([card("u:base", "base"), card("u:bb", "made on b")]) && setOf(packOf(b).custom) === setOf(packOf(a).custom) && a.kept.length + b.kept.length === 0;
+    return { ok: both && none && gone, detail: brief({ both, none, gone, a: (packOf(a).custom || []).map(m => m.id), b: (packOf(b).custom || []).map(m => m.id), keptA: a.kept.length, keptB: b.kept.length }) };
+  }
+  /* The same card hidden on one computer and shown again on the other, beside a different card hidden on each: that card alone is a
+     conflict. Each computer keeps its own in place, the hide waits for the person where it was shown, and the person's choice stands on both. */
+  async function sameScene() {
+    const { w, a, b } = await twoOn("c8x");
+    a.desk.keys[L8] = JSON.stringify({ cardOrder: ["c5", "c6", "c7"], hidden: ["c0"] });
+    await settle(a, b);
+    a.down.on = true; b.down.on = true;
+    w.R.clock.now += MIN;
+    repack(a, p => p.hidden.push("c5"));
+    repack(a, p => p.hidden.push("c6"));
+    w.R.clock.now += MIN;
+    repack(b, p => p.hidden.push("c5"));
+    w.R.clock.now += MIN;
+    repack(b, p => { p.hidden = p.hidden.filter(id => id !== "c5"); });
+    repack(b, p => p.hidden.push("c7"));
+    a.down.on = false; b.down.on = false;
+    await settle(a, b);
+    const own = setOf(packOf(a).hidden) === setOf(["c0", "c5", "c6", "c7"]) && setOf(packOf(b).hidden) === setOf(["c0", "c6", "c7"]);
+    const all = a.kept.concat(b.kept);
+    const one = all.length === 1 && b.kept.length === 1 && b.kept[0].item.indexOf("c5") >= 0 && b.kept[0].value === JSON.stringify("c5")
+      && b.sync().state().kept.length === 1 && a.sync().state().kept.length === 0;
+    /* The person chooses the hide where it waits: it stands on both and nothing waits any more. */
+    let chosen = false;
+    if (one) {
+      w.R.clock.now += MIN;
+      const p = packOf(b); p.hidden.push("c5"); b.desk.keys[L8] = JSON.stringify(p);
+      b.sync().resolve(b.kept[0].item, b.kept[0].value);
+      await settle(a, b);
+      chosen = setOf(packOf(a).hidden) === setOf(["c0", "c5", "c6", "c7"]) && setOf(packOf(b).hidden) === setOf(["c0", "c5", "c6", "c7"])
+        && a.sync().state().kept.length === 0 && b.sync().state().kept.length === 0 && a.kept.length + b.kept.length === 1;
+    }
+    return { ok: own && one && chosen, detail: brief({ own, one, chosen, a: packOf(a).hidden, b: packOf(b).hidden, kept: all.map(k => k.item.slice(-12)) }) };
+  }
   /* C10, the outbox: a's store certificate lapses (two days offline, then the service unreached while online): its edits wait in its own
      place, nothing is sent; at the next look that is on, sync resumes by itself, sends what waited and takes what came. */
   async function outboxScene() {
@@ -354,6 +436,9 @@ async function main() {
     ["C7", staysScene, "a team key, a team mirror's file, a sign-in token and the desk's identity key on the desk reach neither the computer's place, nor the relay, nor the folder's file"],
     ["C8", bothScene, "the same edit and catalog changed on two computers offline: both versions stand on both, each its own in place; one side's change and a setting's later write merge without a copy; the person's choice stands on both"],
     ["C8f", fieldsScene, "different cards of one catalog changed on two computers offline, and a card added on one: every change stands on both and no version is kept"],
+    ["C8h", hiddenScene, "a different card hidden on each computer offline: both end hidden on both with no version kept, and a card shown again on one is shown again on both"],
+    ["C8o", ownScene, "an own card added on each computer offline: both kept on both with no version kept, and one deleted on one is gone from both"],
+    ["C8x", sameScene, "the same card hidden on one computer and shown again on the other, beside a different card hidden on each: that card is the one conflict, each keeps its own, and the person's choice stands on both"],
     ["C10o", outboxScene, "a lapsed store certificate pauses sync and sends nothing; edits wait in the outbox and at the next look that is on are sent, and what came is taken"],
     ["C1a", raceScene, "two computers that each read back their own store both replace and the earlier store ends; the earlier computer adopts the folder's store at its next look and every edit it made reaches the new store"],
   ];
@@ -393,6 +478,10 @@ async function main() {
     ["last-write-wins", "C8", swap("if (isSetting(item)) top = [", "if (true) top = ["), "a conflict is settled by the later write, the earlier version lost"],
     ["keep-both", "C8", lift("keep-both"), "the other side of a conflict is not kept"],
     ["whole keys", "C8f", swap("const parts = LAYER_RE.test(k) ? fieldsOf(v) : null; /* plant:fields */", "const parts = null; /* plant:fields */"), "a layer merged as one item, so two cards changed on two computers are a conflict"],
+    ["hidden whole", "C8h", swap("const SET_IDS = [\"hidden\", ", "const SET_IDS = ["), "hidden cards merged as one list, so a different card hidden on each computer is a conflict"],
+    ["removal unrecorded", "C8h", swap("if (was ? was.h === h : h === null) continue; /* plant:recorded */", "if (was ? was.h === h || (h === null && item.indexOf(\"[]\") > 0) : h === null) continue; /* plant:recorded */"), "a card shown again is not recorded for that card, so the other computer keeps it hidden"],
+    ["own whole", "C8o", swap("const SET_OWN = [\"custom\", \"intentCustom\"];", "const SET_OWN = [\"intentCustom\"];"), "own cards merged as one list, so a card added on each computer is a conflict"],
+    ["member by later write", "C8x", swap("if (isSetting(item)) top = [", "if (isSetting(item) || item.indexOf(\"[]\") > 0) top = ["), "the same card hidden and shown again settled by the later write, the other computer's choice lost"],
     ["outbox emptied", "C10o", swap("if (old) old.stop().catch(() => {}); /* plant:outbox-kept */", "if (old) { old.stop().catch(() => {}); const l = o.local() || {}; for (const i of Object.keys(state.ledger)) if (has(l, i)) state.ledger[i] = Object.assign({}, state.ledger[i], { h: sha(l[i]) }); } /* plant:outbox-kept */"), "the outbox emptied at the lapse: what waited is taken as sent"],
     ["resume", "C10o", lift("resume"), "sync does not start again at the next look that is on"],
     ["adopt", "C1a", lift("adopt"), "the store adopted is not where this computer's place is written, so its edits stay in the ended store"],
