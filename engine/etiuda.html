@@ -9065,7 +9065,7 @@ What you type stays in this browser only.`;
     "Paused since {DATE}. It resumes when this computer reaches our service.": "Wstrzymana od {DATE}. Zostanie wznowiona, gdy komputer połączy się z naszą usługą.",
     "Sync is full, so new changes stay on this computer until something is removed.": "Miejsce na synchronizację jest pełne, więc nowe zmiany zostają na tym komputerze, dopóki czegoś się nie usunie.",
     // placeholder: Claudette
-    "Without a seat, sync waits until this account has one again. This computer keeps its own copy.": "Bez miejsca w licencji synchronizacja czeka, aż to konto znów je otrzyma. Ten komputer zachowuje własną kopię.",
+    "Waiting for a seat. Sync resumes when this account holds one again, and nothing on this computer is lost.": "Oczekiwanie na miejsce w licencji. Synchronizacja zostanie wznowiona, gdy to konto znów je otrzyma; na tym komputerze nic nie ginie.",
     "Sign-in": "Logowanie",
     "{PROVIDER} · work accounts of the organisation": "{PROVIDER} · konta służbowe organizacji",
     "{PROVIDER} · work accounts": "{PROVIDER} · konta służbowe",
@@ -28180,7 +28180,7 @@ What you type stays in this browser only.`;
     if (s.line === "paused") return named(t("Paused since {DATE}. It resumes when this computer reaches our service."), "{DATE}", syncDate(s.since));
     if (s.line === "conflict") return t("Changed on two computers: choose which to keep.");
     if (s.line === "full") return t("Sync is full, so new changes stay on this computer until something is removed.");
-    if (s.line === "noseat") return t("Without a seat, sync waits until this account has one again. This computer keeps its own copy.");
+    if (s.line === "noseat") return t("Waiting for a seat. Sync resumes when this account holds one again, and nothing on this computer is lost.");
     return t("Your catalogs, edits and settings on every computer you sign in on.");
   }
   var syncWaiting = null;

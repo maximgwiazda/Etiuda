@@ -190,7 +190,7 @@ async function main() {
     ["conflict", { ...ON, line: "conflict" }, "Changed on two computers: choose which to keep.", "switch"],
     ["paused", { ...ON, line: "paused", since: Date.UTC(2026, 10, 11, 12) }, "Paused since 11 November. It resumes when this computer reaches our service.", "switch"],
     ["the store's room full", { ...ON, line: "full" }, "Sync is full, so new changes stay on this computer until something is removed.", "switch"],
-    ["no seat", { ...ON, line: "noseat" }, "Without a seat, sync waits until this account has one again. This computer keeps its own copy.", "switch"],
+    ["no seat", { ...ON, line: "noseat" }, "Waiting for a seat. Sync resumes when this account holds one again, and nothing on this computer is lost.", "switch"],
     ["held on", { ...ON, held: true }, "Your catalogs, edits and settings on every computer you sign in on.", "fixed"],
   ];
   const rowOf = page => page.evaluate(() => {
