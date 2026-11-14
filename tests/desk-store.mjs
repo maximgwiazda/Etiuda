@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-plants-"));
-const EXPECTED = 14;
+const EXPECTED = 18;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -65,7 +65,10 @@ function graphStandIn() {
   return st;
 }
 function driveStandIn() {
-  const st = { text: null, id: null, policy: "ok", full: false, offline: false, calls: [] };
+  /* Drive keeps every file a create makes, two of one name included; a list sorted by createdTime when asked, newest first otherwise. */
+  const st = { files: [], n: 0, policy: "ok", full: false, offline: false, calls: [] };
+  Object.defineProperty(st, "text", { get: () => (st.files.length ? st.files.slice().sort((a, b) => a.at - b.at)[0].text : null),
+    set: v => { if (v === null) st.files = []; else if (st.files.length) st.files[0].text = v; } });
   st.ask = async (method, url, headers, body) => {
     st.calls.push(method + " " + url.replace(/^https:\/\/www\.googleapis\.com/, ""));
     if (st.offline) throw new TypeError("fetch failed");
@@ -73,18 +76,23 @@ function driveStandIn() {
     const err = (status, reason) => json(status, { error: { code: status, errors: [{ reason }] } });
     if (st.policy === "consent") return err(403, "insufficientPermissions");
     if (st.policy === "domain") return err(403, "domainPolicy");
-    if (method === "GET" && url.startsWith(ST.DRIVE + "?spaces=appDataFolder")) return json(200, { files: st.id ? [{ id: st.id }] : [] });
-    if (method === "GET" && st.id && url === ST.DRIVE + "/" + st.id + "?alt=media") return { status: 200, bytes: Buffer.from(st.text) };
+    const byId = id => st.files.find(f => f.id === id);
+    if (method === "GET" && url.startsWith(ST.DRIVE + "?spaces=appDataFolder")) {
+      const oldest = /orderBy=createdTime(&|$)/.test(url), list = st.files.slice().sort((a, b) => (oldest ? a.at - b.at : b.at - a.at));
+      return json(200, { files: list.map(f => ({ id: f.id, createdTime: new Date(T0 + f.at).toISOString() })) });
+    }
+    const m = /\/files\/([A-Za-z0-9]+)\?(alt=media|uploadType=media)$/.exec(url);
+    if (method === "GET" && m && byId(m[1])) return { status: 200, bytes: Buffer.from(byId(m[1]).text) };
     if (st.full && (method === "POST" || method === "PATCH")) return err(403, "storageQuotaExceeded");
     if (method === "POST" && url === ST.DRIVE_UPLOAD + "?uploadType=multipart") {
       const text = Buffer.from(body).toString("utf8"), parts = text.split(/\r\n--etiuda-[0-9a-f]+/);
       const meta = JSON.parse(parts[0].split("\r\n\r\n")[1]);
       if (meta.name !== ST.KEY_FILE || meta.parents.join() !== "appDataFolder") return err(400, "badRequest");
-      st.id = "id" + crypto.randomBytes(4).toString("hex");
-      st.text = parts[1].split("\r\n\r\n").slice(1).join("\r\n\r\n");
-      return json(200, { id: st.id });
+      const f = { id: "id" + crypto.randomBytes(4).toString("hex"), at: ++st.n, text: parts[1].split("\r\n\r\n").slice(1).join("\r\n\r\n") };
+      st.files.push(f);
+      return json(200, { id: f.id });
     }
-    if (method === "PATCH" && st.id && url === ST.DRIVE_UPLOAD + "/" + st.id + "?uploadType=media") { st.text = Buffer.from(body).toString("utf8"); return json(200, { id: st.id }); }
+    if (method === "PATCH" && m && byId(m[1]) && url.startsWith(ST.DRIVE_UPLOAD)) { byId(m[1]).text = Buffer.from(body).toString("utf8"); return json(200, { id: m[1] }); }
     return err(400, "badRequest");
   };
   return st;
@@ -92,11 +100,22 @@ function driveStandIn() {
 
 /* ---- the licence service, standing in: store grants and certificates signed by the test delegate, as the service signs them ---- */
 const via = at => K.delegationFor(at, { fields: { may: ["licence", "relay-grant"] } });
+/* As the service does: a grant that says it replaces ends the person's other stores, by the notice posted to the relay. */
 function serviceStandIn(R, sent) {
+  const kept = new Set();
+  sent.notices = [];
   return async (rt, sPub, extra) => {
     sent.push(JSON.stringify({ rt, sPub, extra }));
     if (sent.down) return { why: "unreached" };
     const now = R.clock.now;
+    if (extra && extra.replace === true) for (const old of [...kept].filter(x => x !== rt)) {
+      const n = { kind: "etiuda-service-notice", format: 1, what: "store-end", rt: old, code: CODE, issued: now, via: via(now), sig: { alg: "ed25519", keyId: K.DELEGATE.id, value: "" } };
+      n.sig.value = signWith(K.DELEGATE.privateKey, C.noticeBytes(n));
+      const r = await relayCall(R, [], "POST", "/t/" + old + "/notice", { notice: n });
+      sent.notices.push(old + " " + r.status);
+      kept.delete(old);
+    }
+    kept.add(rt);
     const g = { kind: "etiuda-store-grant", format: 1, lead: sPub, code: CODE, issued: now, until: now + 30 * DAY, paid: true, via: via(now),
       sig: { alg: "ed25519", keyId: K.DELEGATE.id, value: "" } };
     g.sig.value = signWith(K.DELEGATE.privateKey, C.grantBytes(g));
@@ -180,6 +199,21 @@ async function main() {
       && openB === "open" && !!file && file.devices.length === 2 && a.said.length === 0 && b.said.length === 0;
     return { ok, detail: brief({ a: la.state, made: la.made, openA, b: lb.state, sameStore: lb.keys && la.keys && lb.keys.rt === la.keys.rt, openB, enrolled: file && file.devices.length, said: a.said.concat(b.said) }) };
   }
+  /* C1r: two of the person's computers, neither holding keys, look at the same instant: both end on one store (the file the folder
+     kept, the one made first on Drive, which keeps both), the relay holds one store, one grant says it replaces, and nothing is ended;
+     the one that lost joins at its first look or, where the store was not yet made at the relay, its next. */
+  async function raceScene(kind) {
+    const w = worldOf(kind), a = computer(w, "a"), b = computer(w, "b");
+    const [la, lb0] = await Promise.all([a.look(), b.look()]);
+    /* The one that lost may meet the store before its maker has made it at the relay: it waits (paused) and joins at its next look. */
+    const lb = lb0.state === "on" ? lb0 : await b.look();
+    const teams = [...w.R.stores.values()].filter(st => st.get("team")).length;
+    const replaces = w.serviceSent.filter(t => { const j = JSON.parse(t); return j.extra && j.extra.replace === true; }).length;
+    const openA = la.state === "on" ? await opens(w.R, la.keys.rt, a.me, la.store) : "off", openB = lb.state === "on" ? await opens(w.R, lb.keys.rt, b.me, lb.store) : "off";
+    const ok = la.state === "on" && lb.state === "on" && la.keys.rt === lb.keys.rt && teams === 1 && replaces === 1 && w.serviceSent.notices.length === 0
+      && openA === "open" && openB === "open" && (lb0.state === "on" || lb0.state === "paused");
+    return { ok, detail: brief({ a: la.state, bFirst: lb0.state, b: lb.state, oneStore: !!la.keys && !!lb.keys && la.keys.rt === lb.keys.rt, teams, replaces, ended: w.serviceSent.notices, openA, openB }) };
+  }
   /* C2: K and S go to the person's folder and this computer's sealing alone: nothing the service or the relay was sent holds either. */
   async function keysStayScene() {
     const w = worldOf("microsoft"), a = computer(w, "a"), b = computer(w, "b");
@@ -260,6 +294,8 @@ async function main() {
   const LEGS = [
     ["C1", () => firstAndSecondScene("microsoft"), "on OneDrive's App Folder the first computer finds no key and makes the store, and a second computer of the person reads it and opens a session at its first look; neither shows nor asks anything"],
     ["C1g", () => firstAndSecondScene("google"), "the same on Google Drive's appDataFolder"],
+    ["C1r", () => raceScene("microsoft"), "two computers with no keys setting up at once on OneDrive end on one store, one replace asked, nothing ended"],
+    ["C1rg", () => raceScene("google"), "the same on Drive, where both files are made and the one made first is read by both"],
     ["C2", keysStayScene, "K and S reach the person's folder and each computer's own sealing alone: no body sent to the service or the relay holds either"],
     ["C3", unreachedScene, "the folder unreached (offline, no drive, Drive off by the organisation, consent refused, full), on each provider, answers unavailable with its reason and throws nothing; each reason is said once, offline never"],
     ["C4", deletedScene, "the file deleted while a computer holds K and S is written back, the same store; with none holding them the next sign-in makes a new store and asks the service for it"],
@@ -300,7 +336,9 @@ async function main() {
   const PLANTS = [
     ["made", "C1", lift("made"), "the first computer makes the file but not the store at the relay"],
     ["made", "C1g", lift("made"), "the same on Drive"],
-    ["a copy to the service", "C2", swap("const got = await io.grant(keys.rt, sPub);", "const got = await io.grant(keys.rt, sPub, keys.s);"), "S rides beside the grant's request"],
+    ["a copy to the service", "C2", swap("const got = await io.grant(keys.rt, sPub, { replace: made });", "const got = await io.grant(keys.rt, sPub, { replace: made, s: keys.s });"), "S rides beside the grant's request"],
+    ["the re-read", "C1r", swap("    keys = again.ok && again.text !== null ? keyRead(again.text) : null;", "    keys = again.ok ? fresh : null;"), "each computer keeps the store it made, so two are made and one ends the other"],
+    ["the re-read", "C1rg", swap("    keys = again.ok && again.text !== null ? keyRead(again.text) : null;", "    keys = again.ok ? fresh : null;"), "the same on Drive"],
     ["say-once", "C3", lift("say-once"), "a reason is said at every look"],
     ["write-back", "C4", lift("write-back"), "the deleted file is not written back, so a new store is made"],
     ["policy-managed", "C6", lift("policy-managed"), "a managed computer with the policy unset syncs"],

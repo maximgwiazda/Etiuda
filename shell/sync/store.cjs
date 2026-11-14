@@ -80,7 +80,8 @@ function driveWhy(res) {
 }
 function driveFolder(o) {
   const auth = () => ({ authorization: "Bearer " + o.token() });
-  const listUrl = DRIVE + "?spaces=appDataFolder&fields=files(id)&q=" + encodeURIComponent("name = '" + KEY_FILE + "'");
+  /* Oldest first, so two computers that each made a file in the same instant both read the one made first. */
+  const listUrl = DRIVE + "?spaces=appDataFolder&orderBy=createdTime&fields=files(id,createdTime)&q=" + encodeURIComponent("name = '" + KEY_FILE + "'");
   async function idOf() {
     const a = await asked(o.ask, "GET", listUrl, auth());
     if (a.why) return { why: a.why };
@@ -184,17 +185,20 @@ async function storeLook(io) {
   let keys = read.text === null ? null : keyRead(read.text);
   const local = io.local();
   if (!keys && local) {
-    /* The file deleted or unreadable, this computer holding the keys: written back, so no other computer starts afresh. */
-    const back = await io.folder.write(keyText(local)); /* plant:write-back */
-    if (!back.ok) return { state: "unavailable", why: back.why };
-    keys = local;
+    /* The file deleted or unreadable, this computer holding the keys: written back, so no other computer starts afresh. A deleted one
+       is made again only where no file has come since; one another computer wrote meanwhile is adopted. */
+    const back = read.text === null ? await io.folder.create(keyText(local)) : await io.folder.write(keyText(local)); /* plant:write-back */
+    if (!back.ok && back.why !== "taken") return { state: "unavailable", why: back.why };
+    const now = back.ok ? { ok: true, text: keyText(local) } : await io.folder.read();
+    keys = now.ok && now.text !== null ? keyRead(now.text) : null;
+    if (!keys) return { state: "unavailable", why: now.ok ? "refused" : now.why };
   }
   let made = false;
   if (!keys) {
     const fresh = freshKeys(io.rand, io.url);
     const put = await io.folder.create(keyText(fresh));
     if (!put.ok && put.why !== "taken") return { state: "unavailable", why: put.why };
-    /* Read again, so two computers making a store at once both adopt the file that stands. */
+    /* Read again, so two computers making a store at once both adopt the file that stands; the one that lost asks nothing for its own. */
     const again = await io.folder.read();
     keys = again.ok && again.text !== null ? keyRead(again.text) : null;
     if (!keys) return { state: "unavailable", why: again.ok ? "refused" : again.why };
@@ -202,7 +206,8 @@ async function storeLook(io) {
   }
   if (!local || local.rt !== keys.rt || local.k !== keys.k || local.s !== keys.s || local.rev !== keys.rev) io.keep(keys);
   const sPub = pubOf(keys.s);
-  const got = await io.grant(keys.rt, sPub);
+  /* Only the computer that made the store the folder holds says it replaces the person's others (the service ends them). */
+  const got = await io.grant(keys.rt, sPub, { replace: made });
   if (!got || got.why || !got.grant) return { state: "paused", why: got && got.why ? got.why : "unreached", keys };
   if (made) {
     const c = await io.relay.create(keys, got.grant);
