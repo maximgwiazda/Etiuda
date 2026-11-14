@@ -21,7 +21,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 29;
+const EXPECTED = 35;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -114,6 +114,7 @@ function worldOf(o) {
     if (u === STAGING + "store/end") {
       w.service.push(body);
       if (w.endDown) return json(503, { ok: false, reason: "unavailable" });
+      if (w.endStatus) return json(w.endStatus, { ok: false, reason: w.endStatus === 400 ? "malformed" : "signin" });
       const b = JSON.parse(body);
       w.ended = verifyWith(b.desk, Buffer.from(["etiuda-licence-store-end", b.desk, b.rt, b.t].join("\n"), "utf8"), b.sig) ? b.rt : "unsigned";
       return json(200, { ok: true });
@@ -396,6 +397,42 @@ async function roomSeatScene(src) {
   return { ok, detail: brief({ on, full: full.line, afterRate: still, afterTaken: emptied, noneFree: seats.full.line, freed: seats.signin.line, noCertificate: seats.none.shown ? seats.none.line : "not shown" }) };
 }
 
+/* (d4k) A store/end refused as one that can never succeed (400) ends the retry: the row returns to "Only on this computer.", nothing
+   is kept owed, a line is in the sign-in's trace, and no renewal posts it again. */
+const endsPosted = w => w.service.filter(b => { try { const j = JSON.parse(b); return Object.keys(j).sort().join() === "desk,rt,sig,t"; } catch { return false; } }).length;
+async function endNeverScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  w.endStatus = 400;
+  const off = await T.storeSetNow("everywhere");
+  const kept = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8")), posted = endsPosted(w);
+  await T.signinRenewNow();
+  const traced = r.shell.said.filter(l => /^etiuda: sign-in microsoft store\/end: refused \| status=400/.test(l)).length;
+  const ok = off.line === "off" && !kept.owed && posted === 1 && endsPosted(w) === 1 && traced === 1;
+  return { ok, detail: brief({ line: off.line, owed: !!kept.owed, posted, postedAfterRenewal: endsPosted(w), traced }) };
+}
+/* (d4l) A store/end refused for want of a sign-in (403) stays owed, the row saying so: posted again at each renewal while signed in, never
+   while signed out, and ended by the 200 that follows. */
+async function endSigninScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  w.endStatus = 403;
+  const off = await T.storeSetNow("everywhere");
+  await T.signinRenewNow();
+  await new Promise(a => setTimeout(a, 40));
+  const again = endsPosted(w), still = T.storeView().line;
+  const held = T.signinState().held;
+  T.signinState().held = null;
+  await T.signinRenewNow();
+  await new Promise(a => setTimeout(a, 40));
+  const signedOut = endsPosted(w);
+  T.signinState().held = held;
+  w.endStatus = 0;
+  await T.signinRenewNow();
+  for (let i = 0; i < 50 && T.storeView().line !== "off"; i++) await new Promise(a => setTimeout(a, 20));
+  const after = T.storeView().line, left = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8"));
+  const ok = off.line === "ending" && again === 2 && still === "ending" && signedOut === 2 && endsPosted(w) === 3 && after === "off" && !left.owed;
+  return { ok, detail: brief({ line: off.line, postedByRenewal: again, still, postedSignedOut: signedOut - again, final: endsPosted(w), after, owedAfter: !!left.owed }) };
+}
+
 /* (d4g) A store/end the service did not answer is owed: kept sealed in store.json, the row's line "ending" meanwhile, posted again at
    the next renewal and gone once answered. */
 async function owedScene(src) {
@@ -418,6 +455,8 @@ const LEGS = [
   ["d4h", leaveScene, "This computer leaves the store's list: the relay withdraws its key and the folder's file names it no more, under the last look's store certificate, nothing left owed"],
   ["d4i", leaveOwedScene, "the relay not reached at This computer: the folder's file leaves it out at once, the keys kept sealed as owed, and the next seated renewal has the relay withdraw it"],
   ["d4j", roomSeatScene, "the row says full once a write is refused as team-size and on once one is taken, and no seat where the renewal is refused for want of one; a freed seat is the sign-in's"],
+  ["d4k", endNeverScene, "a store/end refused as malformed (400) ends the retry: Only on this computer., nothing owed, one line in the trace, no renewal posts it again"],
+  ["d4l", endSigninScene, "a store/end refused for want of a sign-in (403) stays owed and Off everywhere: posted at each renewal while signed in, never signed out, ended by the 200 that follows"],
   ["d4g", owedScene, "a store/end the service did not answer is kept sealed, the row says so, and the next renewal posts it again; answered, the line and the mark are gone"],
   ["d4f", switchScene, "the first look that made the store says on once; Everywhere posts store/end signed by this desk and leaves the ended mark; On makes a new store over it; This computer forgets the keys and ends nothing"],
   ["a1", scopesOnScene, "where sync may be on, Microsoft's authorize address and refresh form carry Files.ReadWrite.AppFolder and Google's authorize address drive.appdata, its refresh as today; a managed computer with PersonalStore unset is off, set on is on"],
@@ -450,6 +489,10 @@ const PLANTS = [
     "  if (folder) signinFolderTake(io, folderRes || { status: 0 }, p.id, now()); /* plant:folder-take-renew */\n  signinTrace(io, p.id, \"refresh\", \"ok\", { detail: String(JSON.parse(Buffer.from(folderRes.bytes).toString()).access_token) });\n"), "the token traced past the trace's own hiding"],
   ["e", swap("  if (!(d.relay === undefined || DOOR_RELAYS.installed.concat(DOOR_RELAYS.unpackaged).indexOf(d.relay) >= 0)) return null; /* plant:lab-relay */\n", ""), "a lab may name any relay"],
   ["d4j", swap("seatless: !!held && (!held.cert || held.said === \"full\"), full: storeFullNow }); /* plant:store-view-room */", "seatless: false, full: false }); /* plant:store-view-room */"), "the row is told neither the room nor the seat"],
+  ["d4k", swap("  if (!res || res.status !== 400) return \"owed\"; /* plant:store-end-never */", "  if (true) return \"owed\"; /* plant:store-end-never */"), "a 400 kept owed for ever"],
+  ["d4k", swap("  signinTrace({ trace: SIGNIN_TRACE_ASKED ? line => console.error(line) : null }, held ? held.provider : \"\", \"store/end\", \"refused\", signinTraceSaid(res, []));\n", ""), "a 400 ends the retry with no line in the trace"],
+  ["d4l", swap("  if (!res || res.status !== 400) return \"owed\"; /* plant:store-end-never */", "  if (!res || res.status >= 500) return \"owed\"; /* plant:store-end-never */"), "a 403 ends the retry as a 400 does"],
+  ["d4l", swap("  signinFlush();\n  const s = signinState(), held = s.held;\n", "  signinFlush();\n  storeEndAgain().catch(() => false);\n  const s = signinState(), held = s.held;\n"), "posted while signed out, where the service ends nothing"],
   ["d4g", swap("  storeEndAgain().catch(() => false); /* plant:store-end-again */\n", ""), "the owed store/end is never posted again"],
   ["d4h", swap("  if (leaving) await storeLeaveNow(cert); /* plant:store-leave */\n", ""), "This computer leaves nothing"],
   ["d4h", swap("  const current = cert && Number.isSafeInteger(cert.until) && cert.until > Date.now() ? cert : null;", "  const current = null;"), "the leave asks the service for a new grant rather than using the look's certificate"],

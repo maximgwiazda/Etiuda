@@ -10740,7 +10740,7 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
       if (!access && !ans.ok && ans.reason === "access-token") { const m = await signinSeatAccess(io, p, me.key, got, got.seed, Date.now); ans = m.ans; got = m.got; took = m.access; }
       signinTake(p.id, got, ans, Date.now(), took);
       signinFlush();
-      if (ans.ok && ans.cert) { storeLeaveNow(null); storeTurn(); } /* plant:store-signin */
+      if (ans.ok && ans.cert) { storeEndAgain().catch(() => false); storeLeaveNow(null); storeTurn(); } /* plant:store-signin */
       signinSaid = ans.ok ? "signin-done" : ans.reason;
       landing = signinLanding(got, ans, managed);
     } else { signinSaid = got.reason; landing = signinLanding(got, undefined, managed); }
@@ -10836,10 +10836,11 @@ ipcMain.handle("etiuda:signin-check", async (e) => {
 async function signinRenewNow() {
   if (harnessLaunch() && !signinLabHeld()) return ""; /* plant:renew-now-harness */
   signinFlush();
-  storeEndAgain().catch(() => false); /* plant:store-end-again */
   const s = signinState(), held = s.held;
   if (!held && s.out) { await signinOutAgain(); return ""; } /* plant:renew-out */
   if (!held || signinBusy) return ""; /* plant:renew-no-token */
+  /* Only while signed in: the service answers a desk signed out alike and ends nothing. */
+  storeEndAgain().catch(() => false); /* plant:store-end-again */
   const p = signinOffered().find(x => x.id === held.provider), me = branchIdentity(false);
   if (!p || !me) return ""; /* plant:renew-offered */
   const pending = signinRenewHeld(signinIo({ loop: null }), p, me.key, held, Date.now);
@@ -11069,18 +11070,24 @@ function storeSettle(look) {
    waits to be said once. Cards kept in two versions are counted by storeConflicts. */
 let storeSay = "", storeFresh = false;
 function storeConflicts() { return 0; }
-/* store/end at the licence service, signed by this desk over the service's own lines (Studio's storeEndBytes), and the ended mark
-   written in the person's folder. Resolves whether the service took it; never rejects. */
+/* store/end at the licence service, signed by this desk over the service's own lines (Studio's storeEndBytes). Resolves "done" where
+   the service answered 200, "never" where it refused the request as one that can never succeed (400), with a line in the sign-in's
+   trace, and "owed" for anything else, a refusal for want of a sign-in (401, 403) included; never rejects. */
 const STORE_END_LINE = "etiuda-licence-store-end";
 async function storeEndPost(rt) {
   const me = branchIdentity(false);
-  if (!me || (harnessLaunch() && !signinLabHeld()) || !/^[0-9a-f]{32}$/.test(String(rt))) return false;
+  if (!/^[0-9a-f]{32}$/.test(String(rt))) return "never";
+  if (!me || (harnessLaunch() && !signinLabHeld())) return "owed";
   const t = Date.now(), sig = String(signinSign(Buffer.from([STORE_END_LINE, me.key, rt, t].join("\n"), "utf8")) || "");
-  if (!/^[0-9a-f]{128}$/.test(sig)) return false;
-  try {
-    const res = await signinServiceAsk((u, init) => deskFetch(u, init), storeServiceAt("store/end"), { desk: me.key, rt: String(rt), t: t, sig: sig });
-    return !!res && res.status === 200; /* plant:store-end-sent */
-  } catch { return false; }
+  if (!/^[0-9a-f]{128}$/.test(sig)) return "owed";
+  let res = null;
+  try { res = await signinServiceAsk((u, init) => deskFetch(u, init), storeServiceAt("store/end"), { desk: me.key, rt: String(rt), t: t, sig: sig }); }
+  catch { return "owed"; }
+  if (res && res.status === 200) return "done"; /* plant:store-end-sent */
+  if (!res || res.status !== 400) return "owed"; /* plant:store-end-never */
+  const held = signinState().held;
+  signinTrace({ trace: SIGNIN_TRACE_ASKED ? line => console.error(line) : null }, held ? held.provider : "", "store/end", "refused", signinTraceSaid(res, []));
+  return "never";
 }
 /* A STORE/END NOT ANSWERED IS OWED: kept sealed in store.json and posted again at each start and renewal (signinRenewNow) until the
    service answers, the row saying so meanwhile; where nothing seals for real it is owed in memory alone, until the desk closes. */
@@ -11100,15 +11107,15 @@ function storeOwe(rt) {
 async function storeEndAgain() {
   const rt = storeOwedRt();
   if (!rt) return false;
-  if (!(await storeEndPost(rt))) return false;
+  if ((await storeEndPost(rt)) === "owed") return false;
   if (storeOwedRt() === rt) { storeOwe(""); tellStore(); }
   return true;
 }
 async function storeEndEverywhere(keys) {
   const held = signinState().held;
   const p = held ? signinOffered().find(x => x.id === held.provider) : null;
-  const ended = await storeEndPost(keys.rt);
-  if (!ended) storeOwe(keys.rt); /* plant:store-end-owed */
+  const end = await storeEndPost(keys.rt), ended = end === "done";
+  if (end === "owed") storeOwe(keys.rt); /* plant:store-end-owed */
   if (p) {
     const L = StoreLib(), folder = L.folderFor(p.id, { ask: storeAsk, token: () => (storeAccess ? storeAccess.token : "") });
     const tok = folder ? await storeTokenFor(p, held).catch(() => ({ why: "offline" })) : { why: "no-drive" };

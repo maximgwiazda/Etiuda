@@ -2934,6 +2934,7 @@ function landStand(sec, swap, serve, loopQ) {
     SIGNIN_TRACE_ASKED: false, SIGNIN_DESK_PACKED: true,
     /* The store off and its look after a seat counted, never run: tests/desk-store-shell.mjs holds them. */
     storeOn: () => false, storeTokenTake: () => {}, storeTurn: () => { st.storeTurns = (st.storeTurns || 0) + 1; }, storeLeaveNow: () => Promise.resolve(true),
+    storeEndAgain: () => Promise.resolve(false),
   };
   const names = Object.keys(vals);
   const body = "let signinClick = null, signinBusy = null, signinSaid = \"\", signinOutFlight = null;\n" + text + "\nreturn { view: signinView };";
