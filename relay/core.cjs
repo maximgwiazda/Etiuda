@@ -57,6 +57,11 @@ const CERT_SPAN_MS = 30 * 24 * 60 * 60 * 1000;
    service sets): a desk's run-out certificate is refused only once the team holds evidence, newer than its end by at least this
    margin, that the licence service and Microsoft were proving people after it ran out. */
 const SEAT_MARGIN_MS = 60 * 60 * 1000;
+/* A POOLED DESK's certificate runs a day (a shared or non-persistent machine; Claude alpha's ruling of 2026-11-14 01:07), so past the
+   margin it is still honoured for POOLED_GRACE_MS after its end, but only while the team's newest evidence is SEAT_QUIET_MS old: a
+   service that proved anyone recently would have renewed it, so a pooled desk taken over while the service works is cut as any desk. */
+const POOLED_GRACE_MS = 72 * 60 * 60 * 1000;
+const SEAT_QUIET_MS = 6 * 60 * 60 * 1000;
 
 const HEX24 = /^[0-9a-f]{24}$/, HEX32 = /^[0-9a-f]{32}$/, HEX64 = /^[0-9a-f]{64}$/, HEX128 = /^[0-9a-f]{128}$/;
 /* A key id takes blob.cjs's id shape, so no newline or separator rides in it. A desk id is isDeskId: that shape, and not a
@@ -228,8 +233,11 @@ const CERT_FIELDS = ["kind", "format", "licence", "desk", "person", "code", "iss
 const CODE_RE = /^[0-9A-HJKMNP-TV-Z]{16}$/;
 /* The bytes the service signs, restated from its seatCertBytes: the kind's line, then format, licence, desk, person, code,
    issued, until and the signing key's id, one a line. A change there is a change here, or no certificate opens the door. */
+/* `pooled`, present only as true, says the desk is pooled, and is signed: the line "pooled" after the key id; without it the bytes are as before. */
 function certBytes(c) {
-  return Buffer.from(CERT_KIND + "\n" + [c.format, c.licence, c.desk, c.person, c.code, c.issued, c.until, c.sig.keyId].map(String).join("\n"), "utf8");
+  const lines = [c.format, c.licence, c.desk, c.person, c.code, c.issued, c.until, c.sig.keyId];
+  if (c.pooled === true) lines.push("pooled"); /* plant:cert-pooled-bytes */
+  return Buffer.from(CERT_KIND + "\n" + lines.map(String).join("\n"), "utf8");
 }
 const utcDay = ms => (Number.isSafeInteger(ms) && Math.abs(ms) <= 8.64e15 ? new Date(ms).toISOString().slice(0, 10) : null);
 
@@ -259,7 +267,7 @@ function certWhy(cert, deskPub, refs, now, roots, revoked, runOut) {
   if (!Array.isArray(refs) || refs.length < 1) return "door";
   if (!plain(cert) || canonBytesWithin(cert, DOOR_CERT_MAX) > DOOR_CERT_MAX) return "size"; /* plant:cert-size */
   if (cert.kind !== CERT_KIND) return "kind";
-  if (!exactly(cert, CERT_FIELDS) || cert.format !== 1 || !is(HEX32, cert.licence) || !is(HEX64, cert.desk) || !is(HEX64, cert.person)
+  if (!exactly(cert, cert.pooled === true ? CERT_FIELDS.concat(["pooled"]) : CERT_FIELDS) || cert.format !== 1 || !is(HEX32, cert.licence) || !is(HEX64, cert.desk) || !is(HEX64, cert.person)
     || !is(CODE_RE, cert.code) || !Number.isSafeInteger(cert.issued) || !Number.isSafeInteger(cert.until) || cert.issued <= 0
     || cert.until <= cert.issued || !plain(cert.sig) || !exactly(cert.sig, SIG_FIELDS) || cert.sig.alg !== "Ed25519" || !isId(cert.sig.keyId)
     || !is(HEX128, cert.sig.value)) return "shape";
@@ -513,7 +521,12 @@ function createCore(deps) {
     const seen = store.get("seatSeen");
     let evidence = seats.live;
     if (plain(seen) && seen.licence === seats.licence && seen.issued > evidence) evidence = seen.issued; /* plant:seat-evidence-seen */
-    if (evidence >= cert.until + SEAT_MARGIN_MS) return no("seat-lapsed"); /* plant:seat-lapsed */
+    if (evidence < cert.until + SEAT_MARGIN_MS) return { ok: true, note: null };
+    /* A pooled desk's grace: within POOLED_GRACE_MS of its end, while the newest evidence is SEAT_QUIET_MS old (the service gone quiet). */
+    let quiet = true;
+    quiet = now - evidence >= SEAT_QUIET_MS; /* plant:pooled-quiet */
+    if (cert.pooled === true && quiet && now < cert.until + POOLED_GRACE_MS) return { ok: true, note: null }; /* plant:pooled-grace */
+    return no("seat-lapsed"); /* plant:seat-lapsed */
     return { ok: true, note: null };
   }
 
@@ -1858,7 +1871,7 @@ module.exports = {
   CHALLENGE_MS, CHALLENGE_SHARE, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, REMOVED_KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, BLOB_MIN, BLOBS_MAX,
   SESSIONS_MAX, SESSION_SHARE, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, lapseOf, keptGrant, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
   LEAD_PREFIX, leadBytes, judgeLead,
-  DOOR_REFS_MAX, DOOR_CERT_MAX, DOOR_LIVE_MAX, DOOR_PER_PERSON, DOOR_RATE_MAX, DOOR_RATE_MS, DOOR_TRY_SHARE, CERT_SPAN_MS, SEAT_MARGIN_MS,
+  DOOR_REFS_MAX, DOOR_CERT_MAX, DOOR_LIVE_MAX, DOOR_PER_PERSON, DOOR_RATE_MAX, DOOR_RATE_MS, DOOR_TRY_SHARE, CERT_SPAN_MS, SEAT_MARGIN_MS, POOLED_GRACE_MS, SEAT_QUIET_MS,
   doorBytes, doorHelloBytes, certBytes, certWhy,
   grantBytes, delegationBytes, revocationBytes, revokedKeysOf, acceptRevocations, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, leadKeyMatches, parseMeta,
   createCore,

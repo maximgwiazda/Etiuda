@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 63;
+const EXPECTED = 69;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -666,6 +666,70 @@ async function main() {
     await leg("s19a " + name, () => studioLeadScene(span), "a lead's own Studio on an Entra team opens with its person's lead-seat certificate for its own key, none or another key's is refused, a former author is refused past its end and M, and a desk taken off, an invitation dropped, the door closed and the team handed over still go");
     await leg("s19b " + name, () => studioFollowScene(span), "a lead's second computer following as a teammate keeps its session while its person proves, a former author's is refused past its end and M, and on an ordinary team neither Studio is asked for anything");
   }
+  /* A POOLED DESK'S GRACE (Claude alpha's ruling of 2026-11-14 01:07): its certificate runs a day, signed "pooled". A colleague proved past
+     its end and the margin, and then the service went quiet for everyone: the pooled desk is refused while that evidence is fresh, opens
+     once it is SEAT_QUIET_MS old, and keeps opening to POOLED_GRACE_MS past its end, then is refused; an ordinary desk in the same state
+     has no grace. */
+  async function pooledOutageScene() {
+    const w = await team({ seats: true });
+    const a = w.desks.a, b = w.desks.b;
+    a.cert = certFor(a.pub, w.licence, T0, DAY, { fields: { pooled: true } });
+    b.cert = certFor(b.pub, w.licence, T0, DAY);
+    const end = T0 + DAY, last = end + 2 * HOUR;
+    w.R.clock.now = last;
+    prove(w, "c", DAY);
+    const colleague = await sessionAs(w, "c");
+    w.R.clock.now = last + HOUR;
+    const fresh = [await sessionAs(w, "a"), await sessionAs(w, "b")];
+    w.R.clock.now = last + C.SEAT_QUIET_MS + MIN;
+    const quiet = [await sessionAs(w, "a"), await sessionAs(w, "b")];
+    w.R.clock.now = end + C.POOLED_GRACE_MS - MIN;
+    const late = await sessionAs(w, "a");
+    w.R.clock.now = end + C.POOLED_GRACE_MS;
+    const past = await sessionAs(w, "a");
+    const ok = C.POOLED_GRACE_MS === 72 * HOUR && opened(colleague) && refused(fresh[0], "seat-lapsed") && refused(fresh[1], "seat-lapsed")
+      && opened(quiet[0]) && refused(quiet[1], "seat-lapsed") && opened(late) && refused(past, "seat-lapsed");
+    return { ok, detail: brief({ evidenceFresh: fresh.map(said), serviceQuiet: quiet.map(said), graceLastMinute: said(late), graceOver: said(past) }) };
+  }
+  /* A pooled desk taken over while the service works (its person signed in on another pooled machine, which took the place): colleagues
+     prove every two hours, so the evidence is never quiet, and the desk is refused from its end and the margin, all through the grace. */
+  async function pooledTakenScene() {
+    const w = await team({ seats: true });
+    const a = w.desks.a;
+    a.cert = certFor(a.pub, w.licence, T0, DAY, { fields: { pooled: true } });
+    const end = T0 + DAY, rows = [];
+    for (let t2 = T0 + 2 * HOUR; t2 <= end + C.POOLED_GRACE_MS; t2 += 2 * HOUR) {
+      w.R.clock.now = t2;
+      prove(w, "c", DAY);
+      await sessionAs(w, "c");
+      if (t2 >= end + SEAT_M() ) rows.push(await sessionAs(w, "a"));
+    }
+    const ok = rows.length > 30 && rows.every(r => refused(r, "seat-lapsed"));
+    return { ok, detail: brief({ sessionsAfterEnd: rows.length, refused: rows.filter(r => refused(r, "seat-lapsed")).length }) };
+  }
+  const SEAT_M = () => C.SEAT_MARGIN_MS;
+  /* The pooled mark is signed: a certificate carrying it that its signature does not cover is refused, current or run out, and a signed
+     pooled certificate is taken at the door as any is. */
+  async function pooledSignedScene() {
+    const w = await team({ seats: true });
+    const a = w.desks.a, now = w.R.clock.now;
+    const forged = certFor(a.pub, w.licence, now, DAY);
+    forged.pooled = true;
+    const forgedNow = await session(w, a, forged);
+    const k = keyPair(true), box = hex(32);
+    const door = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/door", { json: { refs: [w.licence], t: now, sig: signHex(w.lead, C.doorBytes(w.rt, now, [w.licence])) } });
+    const ch = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/hello", { json: {} });
+    const knock = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: ch.json.challenge, door: certFor(k.pub, w.licence, now, DAY, { fields: { pooled: true } }),
+      key: k.keyId, pub: k.pub, box, sig: signHex(k, C.doorHelloBytes(w.rt, ch.json.challenge, k.keyId, box)) } });
+    const signed = await session(w, a, certFor(a.pub, w.licence, now, DAY, { fields: { pooled: true } }));
+    const other = certFor(a.pub, w.licence, now, DAY, { fields: { pooled: "yes" } });
+    const odd = await session(w, a, other);
+    const ok = refused(forgedNow, "seat-lapsed") && door.status === 200 && knock.status === 200 && opened(signed) && refused(odd, "seat-lapsed");
+    return { ok, detail: brief({ forgedMark: said(forgedNow), doorKnock: said(knock), signed: said(signed), markNotTrue: said(odd) }) };
+  }
+  await leg("s21a", pooledOutageScene, "a pooled desk whose service went quiet after a colleague proved past its end is refused while that evidence is fresh, opens once it is SEAT_QUIET_MS old and to POOLED_GRACE_MS (72 hours) past its end, then is refused; an ordinary desk in the same state has no grace");
+  await leg("s21b", pooledTakenScene, "a pooled desk taken over while the service works, colleagues proving every two hours, is refused from its end and the margin all through the grace");
+  await leg("s21c", pooledSignedScene, "the pooled mark is signed: one its signature does not cover, or not true, is refused, and a signed pooled certificate opens and knocks at the door");
   /* The door still refuses an ended certificate of a stranger: only a desk session leaves the end to seatGate. */
   async function doorEndedScene() {
     const w = await team({ seats: true });
@@ -712,6 +776,9 @@ async function main() {
     ["seat-ordinary", "s17a", ordinaryScene, "an ordinary team asks a seat, so its sequence differs from main's"],
     ["seat-lapsed", "s6 W=7d", () => removedByColleagueScene(W7), "a run-out certificate always opens"],
     ["seat-lapsed", "s7 W=1d", () => removedByGrantScene(W1), "a run-out certificate always opens"],
+    ["pooled-grace", "s21a", pooledOutageScene, "a pooled desk has no grace"],
+    ["pooled-quiet", "s21b", pooledTakenScene, "the grace runs while the service works"],
+    ["cert-pooled-bytes", "s21c", pooledSignedScene, "the pooled mark rides outside the signature"],
     ["seat-seen", "s10 W=7d", () => studioClosedScene(W7), "no certificate taken at a session is kept as evidence"],
     ["seat-evidence-seen", "s10 W=1d", () => studioClosedScene(W1), "the evidence reads the grant's live alone"],
     ["seat-door", "s16a", doorKnockScene, "an enrolled desk at the door asks no seat"],
