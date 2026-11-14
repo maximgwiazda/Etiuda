@@ -19,6 +19,8 @@ import { fileURLToPath } from "node:url";
 const SELF = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(SELF), "..");
 const nodeRequire = createRequire(import.meta.url);
+const ASIDE_945S3 = nodeRequire("./off-windows.cjs").offWindows("945s3",
+  "the desk reads no Group Policy off Windows, so the policy's folder this leg stubs is never asked for");
 const REAL_CHANNEL = nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
 
 const BUILTIN_RELAY = "https://etiuda.dev/relay/v1";
@@ -518,11 +520,15 @@ function runScenario(plan) {
   return JSON.parse(line.slice(8));
 }
 
-let asserted = 0, failed = 0;
+let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
   asserted++;
   if (cond) process.stdout.write("  ok   " + line + "\n");
   else { failed++; process.stdout.write("  FAIL " + line + "\n"); }
+}
+function skip(line) {
+  skipped++;
+  process.stdout.write("  SKIP " + line + "\n");
 }
 
 async function main() {
@@ -586,20 +592,24 @@ async function main() {
   );
 
   /* Scenario 3: A policy naming a folder does not follow (945s3) */
-  const policyFolder = path.join(os.tmpdir(), "follow-policy-" + crypto.randomBytes(4).toString("hex"));
-  const s3 = makeScenario("policy-folder", { policyFolder });
-  fs.writeFileSync(
-    path.join(s3.sharedFolder, "etiuda-team.json"),
-    JSON.stringify(signTeamDoc(s3.movedTeamDoc, s3.lead), null, 2)
-  );
-  const r3 = runScenario(s3);
-  try { fs.rmSync(policyFolder, { recursive: true, force: true }); } catch {}
+  let s3 = null;
+  if (ASIDE_945S3) skip(ASIDE_945S3);
+  else {
+    const policyFolder = path.join(os.tmpdir(), "follow-policy-" + crypto.randomBytes(4).toString("hex"));
+    s3 = makeScenario("policy-folder", { policyFolder });
+    fs.writeFileSync(
+      path.join(s3.sharedFolder, "etiuda-team.json"),
+      JSON.stringify(signTeamDoc(s3.movedTeamDoc, s3.lead), null, 2)
+    );
+    const r3 = runScenario(s3);
+    try { fs.rmSync(policyFolder, { recursive: true, force: true }); } catch {}
 
-  check(
-    !r3.channelCreated && r3.openedDir === policyFolder,
-    "945s3 a policy naming a folder does not follow: "
-    + JSON.stringify({ created: r3.channelCreated, opened: r3.openedDir })
-  );
+    check(
+      !r3.channelCreated && r3.openedDir === policyFolder,
+      "945s3 a policy naming a folder does not follow: "
+      + JSON.stringify({ created: r3.channelCreated, opened: r3.openedDir })
+    );
+  }
 
   /* Scenario 4: A url other than the built-in relay is not followed (945s7) */
   const s4 = makeScenario("other-url", { url: "https://other.test/relay/v1" });
@@ -838,11 +848,11 @@ async function main() {
   }
 
   // Clean up scenario temp dirs
-  [s1, s2, s3, s4, s6, s7, s8, s9, s10, s11, s12, s13].forEach(s => {
+  [s1, s2, s3, s4, s6, s7, s8, s9, s10, s11, s12, s13].filter(Boolean).forEach(s => {
     try { fs.rmSync(s.lab, { recursive: true, force: true }); } catch {}
   });
 
-  process.stdout.write("#counts checks=" + asserted + " failed=" + failed + "\n");
+  process.stdout.write("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + "\n");
   if (failed > 0) process.exit(Math.min(failed, 63));
 }
 

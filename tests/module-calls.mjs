@@ -33,10 +33,13 @@ process.on("warning", () => {});
 import { pathToFileURL } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MODDIR = resolve(join(HERE, "..", "src", "modules"));
 const MOD = n => pathToFileURL(join(MODDIR, n)).href;
+const ASIDE_D6 = createRequire(import.meta.url)("./off-windows.cjs").offWindows("D6",
+  "Settings draws the Start with Windows row on Windows alone, so there is no row to read and reset off Windows");
 
 /* The globals a browser would have. Deliberately the SMALLEST set that lets a module body
    run: this file tests behaviour, not a DOM emulation, and a check needing a real element
@@ -57,7 +60,7 @@ Object.defineProperty(globalThis, "navigator", { configurable: true,
 const UILANG_STORE = await import(MOD("storage.js"));
 const DIALOG_MOD = await import(MOD("dialog.js"));
 
-let pass = 0, fail = 0;
+let pass = 0, fail = 0, skipped = 0;
 const touched = new Set();
 const check = (mod, name, fn) => {
   touched.add(mod);
@@ -6156,7 +6159,8 @@ const CARD_B = {
       }
     });
 
-    check("settings.js", "D6 reset defaults turns start-with-Windows off and clears quit-on-close", () => {
+    if (ASIDE_D6) { skipped++; console.log("  SKIP settings.js: " + ASIDE_D6); }
+    else check("settings.js", "D6 reset defaults turns start-with-Windows off and clears quit-on-close", () => {
       const calls = [];
       const prev = globalThis.window.E_HOST;
       /* Reset clears the motion key the later screen-tab checks still need reduced, so put every key back. */
@@ -8725,7 +8729,7 @@ const FLOOR = 50;   /* raised from 20 on 2026-09-21 (e) with the second tranche:
    clashes with the value tools/gate-run.mjs reads out of its own tally - so the tally here is
    spelled passed/failed. */
 console.log("#counts modules=" + touched.size + " checks=" + (pass + fail)
-  + " passed=" + pass + " failed=" + fail + " floor=" + FLOOR);
+  + " passed=" + pass + " failed=" + fail + " skipped=" + skipped + " floor=" + FLOOR);
 if (touched.size < FLOOR) {
   console.log("  FAIL liveness: " + touched.size + " modules called, floor is " + FLOOR);
   fail++;

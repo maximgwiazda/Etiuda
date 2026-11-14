@@ -33,6 +33,8 @@ const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
 const EXPECTED = 128;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+const ASIDE_D6_LOGIN = nodeRequire("./off-windows.cjs").offWindows("D6-login",
+  "the shell sets no login item off Windows, so Reset's turn-off has nothing to reach");
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -1826,7 +1828,8 @@ try {
       if (!d6Login) d6LoginWhy = JSON.stringify(loginApplied);
     }
   } catch (e) { d6LoginWhy = String(e && e.message || e).split("\n")[0]; }
-  check(d6Login, "D6-login Reset's turn-off reaches Windows as a login item with no hidden argument (" + d6LoginWhy + ")");
+  if (ASIDE_D6_LOGIN) skip(ASIDE_D6_LOGIN);
+  else check(d6Login, "D6-login Reset's turn-off reaches Windows as a login item with no hidden argument (" + d6LoginWhy + ")");
 
   let d6ResetLogin = false, d6ResetLoginWhy = "";
   try {
