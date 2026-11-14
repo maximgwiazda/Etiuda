@@ -1,6 +1,7 @@
 import { lsGet, lsSet, lsDel } from "./storage.js";
 import { markCut } from "./cut-text.js";
-import { $ } from "./dom.js";
+import { $, originOf } from "./dom.js";
+import { hangBubble } from "./bubble.js";
 import { esc } from "./esc.js";
 import { cutLeaves, dismissNode, mgReduceMotion, M_MS } from "./motion.js";
 import { ICON_LINT_WARNING, ICON_STAMP } from "./icons.js";
@@ -1642,14 +1643,16 @@ function t(en){
    way back: over any dialog, until another act replaces it or UNDO_MS passes. A caller that has
    not done the act yet passes `lapse`. It runs when this offer ends without Undo: the wait,
    Escape, or a later act taking the bubble. `undo` is the way back, and it does not run `lapse`.
-   Every caller that already did the act passes no `lapse`, and nothing here changes for that caller. */
+   Every caller that already did the act passes no `lapse`, and nothing here changes for that caller. `from` is the
+   control whose act it undoes, and the bubble hangs from it: an element, or originOf(control) read before an act
+   that may take the control away. */
 const UNDO_MS=10000;
 /* The key the button names, the fixed "undo" row of SC_DEFS as formatActionChord spells it. */
 const UNDO_KEY="Ctrl+Z";
 let undoTimer=0, undoTake=null, undoLapse=null, undoTyped=false;
 /* A field typed in since the bubble came (keydown.js reports it): its Ctrl+Z is then its own typing's. */
 function noteUndoTyping(){ undoTyped=true; }
-function offerUndo(said, undo, lapse){
+function offerUndo(said, undo, lapse, from){
   const was=$("#eUndo"); if(was) was.remove();
   clearTimeout(undoTimer);
   const prev=undoLapse;
@@ -1665,6 +1668,7 @@ function offerUndo(said, undo, lapse){
     +'" aria-keyshortcuts="Control+Z">'+esc(t("Undo"))+'<kbd>'+esc(UNDO_KEY)+'</kbd></button></div>';
   cutLeaves();
   document.body.appendChild(el);
+  if(from) hangBubble(el, typeof from==="function" ? from : originOf(from));
   const onLapse=typeof lapse==="function"?lapse:null;
   const close=kept=>{
     clearTimeout(undoTimer);

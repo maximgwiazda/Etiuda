@@ -15,6 +15,7 @@ import { intentEscapeStep } from "./escape-ladder.js";
 import { syncRoleDrum } from "./role-drum.js";
 import { getHandGender, putHandGender, syncGenderGlyph } from "./gender-drum.js";
 import { pax, intentEl, roleSel, $ } from "./dom.js";
+import { hangBubble } from "./bubble.js";
 import { lang, intentIdxs, intentText, cats, entrySel, setIntentIdxs, setIntentText, setCats, putEntrySel, setPickRun } from "./app-state.js";
 import { hooks } from "./hooks.js";
 import { screens, screenOn, frontScreenTab, closeScreenTab, clearScreenOn, dropScreenTab, setPrevTabId, wireScreenTabsChange, wireScreenTabsReturn, getScreenDef } from "./screen-tabs.js";
@@ -791,7 +792,8 @@ function closeAllTabs(){
 /* CLOSING THE WINDOW ASKS ONCE WHILE A CONVERSATION IS IN PROGRESS (desk-chrome-close-quits-forgets): the X, Alt+F4 and
    the taskbar closed at once and forgot every conversation. The shell holds the close and asks here, and the answer
    goes back at once: "none" where nothing would be lost, else "asked", then the person's "close" or "stay". Cancel is
-   the focused button, so Enter and Escape both keep the window; an Undo bubble in the same place waits under it. */
+   the focused button, so Enter and Escape both keep the window. It hangs from the band's close button however the close
+   was asked, and a standing Undo waits hidden until it is answered. */
 function askClose(answer){
   snapshotActiveTab();
   const n=tabs.filter(tabHasWork).length;
@@ -810,6 +812,7 @@ function askClose(answer){
     +'<div class="tour-actions"><button type="button" class="btn" id="eCloseGo">'+esc(t("Close Etiuda"))+'</button>'
     +'<button type="button" class="btn primary" id="eCloseStay">'+esc(t("Cancel"))+'</button></div>';
   document.body.appendChild(el);
+  hangBubble(el, ()=>document.getElementById("winClose"));
   const done=a=>{ dismissNode(el); if(undo && a==="stay") undo.hidden=false; answer(a); };
   el.querySelector("#eCloseGo").onclick=()=>done("close");
   el.querySelector("#eCloseStay").onclick=()=>done("stay");

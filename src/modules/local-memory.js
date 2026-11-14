@@ -3,6 +3,7 @@ import { tellTaken } from "./catalog-file.js";
 import { eCatalogEject, eHasBranch } from "./host.js";
 import { esc } from "./esc.js";
 import { dismissNode } from "./motion.js";
+import { hangBubble } from "./bubble.js";
 import { flushStats } from "./pack.js";
 import { E_NS, LAYER_KEYS, eDeskFileShown, eLayers, lsDel, lsGet, lsSet, nsKey, ssDel, ssGet, ssSet } from "./storage.js";
 import { TAB_KEY, saveTabSession, tabSaveTimer } from "./tabs.js";
@@ -92,6 +93,7 @@ function askClearLocal(){
     +'<div class="tour-actions"><button type="button" class="btn" id="eClearGo">'+esc(t("Clear local changes"))+'</button>'
     +'<button type="button" class="btn primary" id="eClearStay">'+esc(t("Cancel"))+'</button></div>';
   document.body.appendChild(el);
+  hangBubble(el, ()=>document.getElementById("mgWipe"));
   el.querySelector("#eClearGo").onclick=()=>{ dismissNode(el); clearLocalMemory(); };
   el.querySelector("#eClearStay").onclick=()=>dismissNode(el);
   el.addEventListener("keydown",e=>{

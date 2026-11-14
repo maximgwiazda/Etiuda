@@ -67,6 +67,29 @@ function focusSame(root,key){
   if(el && key.sel) try{ el.setSelectionRange(key.sel[0], key.sel[1]); }catch(e){}
   return el;
 }
+/* WHERE A BUBBLE ABOUT AN ACT HANGS, as a function asked at each placing: the control pressed while it stands; after a
+   repaint, the control with its identity; where the act took it away, the control of its kind now in its place, else
+   the last of its kind; else `fallback` (an element or a function). Its kind is `kind`, a selector, or else its tag and
+   first data attribute: a class alone names too many. Read before the act, so the place is the one it had. */
+function originOf(el, fallback, kind){
+  const seen=e=>!!(e && e.isConnected && e.getClientRects().length && !e.closest(".e-gone,[hidden]"));
+  const key=el ? focusKey(el,document.body) : null;
+  const own=key && key.k;
+  if(!kind && el && el.tagName){
+    const d=el.attributes && Array.prototype.find.call(el.attributes,x=>x.name.indexOf("data-")===0);
+    if(d) kind=el.tagName.toLowerCase()+"["+d.name+"]";
+  }
+  const all=()=>{ try{ return [...document.querySelectorAll(kind)].filter(seen); }catch(e){ return []; } };
+  const at=kind && el ? all().indexOf(el) : -1;
+  return ()=>{
+    if(seen(el)) return el;
+    const same=own ? focusFind(document.body,own) : null;
+    if(seen(same)) return same;
+    if(at>=0){ const now=all(); if(now.length) return now[Math.min(at,now.length-1)]; }
+    const f=typeof fallback==="function" ? fallback() : fallback;
+    return seen(f) ? f : null;
+  };
+}
 function grabDom(){
   list=$("#list"); pax=$("#pax"); intentEl=$("#intent");
   roleSel=$("#roleSel");
@@ -93,5 +116,6 @@ export {
   focusKey,
   focusSame,
   sameControl,
+  originOf,
   grabDom
 };

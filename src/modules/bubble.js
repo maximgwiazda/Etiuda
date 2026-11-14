@@ -70,6 +70,44 @@ function placeBubble(el, target, opts){
   tip.style.top  = ty==null ? "" : (ty-BUB.tip/2)+"px";
   return {side:side, top:top, left:left, tip:tx==null?ty:tx, width:w, height:h};
 }
+/* HUNG FROM ITS ORIGIN FOR AS LONG AS IT STANDS: `origin` (an element, or a function answering one) is asked again
+   at every placing, since a repaint replaces the control. Where it answers nothing the bubble stays where it last
+   stood, or at its own resting place if it never stood anywhere. Call it once `el` is in the document. */
+function hangBubble(el, origin, opts){
+  let raf=0, placed=false;
+  const box=()=>{
+    let o=null;
+    try{ o=typeof origin==="function" ? origin() : origin; }catch(e){ o=null; }
+    if(!o || !o.isConnected) return null;
+    const r=o.getBoundingClientRect();
+    return (r.width || r.height) ? r : null;
+  };
+  const drop=()=>{
+    mo.disconnect();
+    removeEventListener("resize", again);
+    removeEventListener("scroll", again, {capture:true});
+    cancelAnimationFrame(raf); raf=0;
+  };
+  const place=()=>{
+    raf=0;
+    if(!el.isConnected){ drop(); return; }
+    const r=box();
+    if(!r){ if(!placed) el.setAttribute("data-side","none"); return; }
+    placeBubble(el, {top:r.top, left:r.left, width:r.width, height:r.height}, opts);
+    placed=true;
+  };
+  const again=()=>{ if(!raf) raf=requestAnimationFrame(place); };
+  const mo=new MutationObserver(rs=>{
+    if(!el.isConnected){ drop(); return; }
+    if(!rs.every(m=>el.contains(m.target))) again();
+  });
+  mo.observe(document.body, {subtree:true, childList:true, attributes:true, attributeFilter:["hidden","open","class","style"]});
+  addEventListener("resize", again, {passive:true});
+  addEventListener("scroll", again, {passive:true, capture:true});
+  place();
+  return drop;
+}
 export {
-  placeBubble
+  placeBubble,
+  hangBubble
 };

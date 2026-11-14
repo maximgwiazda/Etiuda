@@ -4416,6 +4416,7 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
 .e-undo.e-clear-ask{display:block;width:min(560px,calc(100vw - 24px))}
 .e-undo.e-clear-ask p{margin:0 0 8px}
 .e-undo.e-clear-ask .tour-actions{justify-content:flex-end;margin-top:12px}
+.e-reset-ask label{display:block;font-size:13.5px;line-height:1.5;color:var(--bub-ink)}
 /* The key that takes it, on the button in the button's own ink. */
 .e-undo .btn kbd{margin-left:8px;padding:0 5px;border:1px solid color-mix(in srgb,currentColor 40%,transparent);
   border-radius:4px;font:11px var(--mono);font-weight:400}
@@ -4433,9 +4434,9 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
   pointer-events:none}
 #eNotices .bub{position:relative;pointer-events:auto}
 /* A field on the fill: paper, so what is typed reads as the reader's own. */
-.bub .e-name-inp,.bub .e-proxy-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
+.bub .e-name-inp,.bub .e-proxy-inp,.bub .e-reset-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
   border:1px solid transparent;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans)}
-.bub .e-name-inp:focus-visible,.bub .e-proxy-inp:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.bub .e-name-inp:focus-visible,.bub .e-proxy-inp:focus-visible,.bub .e-reset-inp:focus-visible{outline:2px solid #fff;outline-offset:2px}
 .bub .e-proxy-inp+.e-proxy-inp{margin-top:8px}
 .bub .e-proxy-inp:last-of-type{margin-bottom:10px}
 .bub .e-greet{color:var(--bub-ink);margin:8px 0 10px}
@@ -5059,6 +5060,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   // src/modules/bubble.js
   var bubble_exports = {};
   __export(bubble_exports, {
+    hangBubble: () => hangBubble,
     placeBubble: () => placeBubble
   });
   var BUB = {
@@ -5121,6 +5123,56 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
     tip.style.left = tx == null ? "" : tx - BUB.tip / 2 + "px";
     tip.style.top = ty == null ? "" : ty - BUB.tip / 2 + "px";
     return { side, top, left, tip: tx == null ? ty : tx, width: w, height: h };
+  }
+  function hangBubble(el, origin, opts) {
+    let raf = 0, placed = false;
+    const box = () => {
+      let o = null;
+      try {
+        o = typeof origin === "function" ? origin() : origin;
+      } catch (e) {
+        o = null;
+      }
+      if (!o || !o.isConnected) return null;
+      const r = o.getBoundingClientRect();
+      return r.width || r.height ? r : null;
+    };
+    const drop = () => {
+      mo.disconnect();
+      removeEventListener("resize", again);
+      removeEventListener("scroll", again, { capture: true });
+      cancelAnimationFrame(raf);
+      raf = 0;
+    };
+    const place = () => {
+      raf = 0;
+      if (!el.isConnected) {
+        drop();
+        return;
+      }
+      const r = box();
+      if (!r) {
+        if (!placed) el.setAttribute("data-side", "none");
+        return;
+      }
+      placeBubble(el, { top: r.top, left: r.left, width: r.width, height: r.height }, opts);
+      placed = true;
+    };
+    const again = () => {
+      if (!raf) raf = requestAnimationFrame(place);
+    };
+    const mo = new MutationObserver((rs) => {
+      if (!el.isConnected) {
+        drop();
+        return;
+      }
+      if (!rs.every((m) => el.contains(m.target))) again();
+    });
+    mo.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["hidden", "open", "class", "style"] });
+    addEventListener("resize", again, { passive: true });
+    addEventListener("scroll", again, { passive: true, capture: true });
+    place();
+    return drop;
   }
 
   // src/modules/icons.js
@@ -7083,6 +7135,7 @@ What you type stays in this browser only.`;
     list: () => list,
     modalCard: () => modalCard,
     modalEl: () => modalEl,
+    originOf: () => originOf,
     pax: () => pax,
     pills: () => pills,
     roleSel: () => roleSel,
@@ -7155,6 +7208,34 @@ What you type stays in this browser only.`;
     } catch (e) {
     }
     return el;
+  }
+  function originOf(el, fallback2, kind) {
+    const seen = (e) => !!(e && e.isConnected && e.getClientRects().length && !e.closest(".e-gone,[hidden]"));
+    const key = el ? focusKey(el, document.body) : null;
+    const own = key && key.k;
+    if (!kind && el && el.tagName) {
+      const d = el.attributes && Array.prototype.find.call(el.attributes, (x) => x.name.indexOf("data-") === 0);
+      if (d) kind = el.tagName.toLowerCase() + "[" + d.name + "]";
+    }
+    const all = () => {
+      try {
+        return [...document.querySelectorAll(kind)].filter(seen);
+      } catch (e) {
+        return [];
+      }
+    };
+    const at = kind && el ? all().indexOf(el) : -1;
+    return () => {
+      if (seen(el)) return el;
+      const same = own ? focusFind(document.body, own) : null;
+      if (seen(same)) return same;
+      if (at >= 0) {
+        const now = all();
+        if (now.length) return now[Math.min(at, now.length - 1)];
+      }
+      const f = typeof fallback2 === "function" ? fallback2() : fallback2;
+      return seen(f) ? f : null;
+    };
   }
   function grabDom() {
     list = $("#list");
@@ -9134,7 +9215,7 @@ What you type stays in this browser only.`;
   function noteUndoTyping() {
     undoTyped = true;
   }
-  function offerUndo(said, undo, lapse) {
+  function offerUndo(said, undo, lapse, from) {
     const was = $("#eUndo");
     if (was) was.remove();
     clearTimeout(undoTimer);
@@ -9150,6 +9231,7 @@ What you type stays in this browser only.`;
     el.innerHTML = "<p>" + esc(t(said)) + '</p><div class="tour-actions"><button type="button" class="btn primary" id="eUndoBtn" aria-label="' + esc(t("Undo")) + '" aria-keyshortcuts="Control+Z">' + esc(t("Undo")) + "<kbd>" + esc(UNDO_KEY) + "</kbd></button></div>";
     cutLeaves();
     document.body.appendChild(el);
+    if (from) hangBubble(el, typeof from === "function" ? from : originOf(from));
     const onLapse = typeof lapse === "function" ? lapse : null;
     const close = (kept) => {
       clearTimeout(undoTimer);
@@ -10415,7 +10497,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-13";
+  var E_BUILT = "2026-11-14";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -14486,6 +14568,7 @@ What you type stays in this browser only.`;
     el.setAttribute("data-side", "none");
     el.innerHTML = "<p>" + esc(n === 1 ? t("Close Etiuda? A conversation is still in progress, and closing forgets it.") : t("Close Etiuda? {N} conversations are still in progress, and closing forgets them.").replace("{N}", String(n))) + '</p><div class="tour-actions"><button type="button" class="btn" id="eCloseGo">' + esc(t("Close Etiuda")) + '</button><button type="button" class="btn primary" id="eCloseStay">' + esc(t("Cancel")) + "</button></div>";
     document.body.appendChild(el);
+    hangBubble(el, () => document.getElementById("winClose"));
     const done = (a) => {
       dismissNode(el);
       if (undo && a === "stay") undo.hidden = false;
@@ -15290,7 +15373,10 @@ What you type stays in this browser only.`;
     const inp = wireNameField(wrap, raw);
     const place = () => {
       const r = anchor && anchor.isConnected ? anchor.getBoundingClientRect() : null;
-      placeBubble(wrap, r && r.width ? { top: r.top, left: r.left, width: r.width, height: r.height } : { top: innerHeight / 2, left: innerWidth / 2, width: 0, height: 0 }, { width: 340 });
+      const m = r && r.width ? null : document.getElementById("settingsBtn"), b = m && m.getBoundingClientRect();
+      if (r && r.width) placeBubble(wrap, { top: r.top, left: r.left, width: r.width, height: r.height }, { width: 340 });
+      else if (b && b.width) placeBubble(wrap, { top: b.top, left: b.left, width: b.width, height: b.height }, { width: 340 });
+      else wrap.setAttribute("data-side", "none");
     };
     place();
     addEventListener("resize", place);
@@ -16056,6 +16142,7 @@ What you type stays in this browser only.`;
     mtTeamLine: () => mtTeamLine,
     openMaintenance: () => openMaintenance,
     openMaintenanceModal: () => openMaintenanceModal,
+    openUnfinishedReset: () => openUnfinishedReset,
     wireMaintenanceActions: () => wireMaintenanceActions,
     wireMaintenanceWatch: () => wireMaintenanceWatch
   });
@@ -29263,6 +29350,7 @@ What you type stays in this browser only.`;
   __export(catalog_file_exports, {
     LOOSE_FIELDS: () => LOOSE_FIELDS,
     activateCatalog: () => activateCatalog,
+    askLoose: () => askLoose,
     branchFileId: () => branchFileId,
     catalogEdited: () => catalogEdited,
     catalogEditionOlder: () => catalogEditionOlder,
@@ -30575,6 +30663,8 @@ What you type stays in this browser only.`;
     return !catalogLoaded() && catalogEdited() && lyGet("Exported") !== looseMark();
   }
   function askLoose(go) {
+    const a = document.activeElement;
+    const from = originOf(a && a.tagName === "BUTTON" ? a : null, () => document.getElementById("catNow"));
     const was = document.getElementById("eLoose");
     if (was) was.remove();
     const el = document.createElement("div");
@@ -30585,6 +30675,7 @@ What you type stays in this browser only.`;
     el.innerHTML = "<p>" + esc(t("Loading a catalog file erases the cards you made with no catalog loaded. Export them as a catalog file of their own first?")) + '</p><div class="tour-actions"><button type="button" class="btn" id="eLooseLoad">' + esc(t("Load anyway")) + '</button><button type="button" class="btn primary" id="eLooseExport">' + esc(t("Export…")) + "</button></div>";
     cutLeaves();
     document.body.appendChild(el);
+    hangBubble(el, from);
     const close = () => dismissNode(el);
     el.querySelector("#eLooseLoad").onclick = () => {
       close();
@@ -31051,6 +31142,7 @@ What you type stays in this browser only.`;
     el.setAttribute("aria-labelledby", "eClearAskT");
     el.innerHTML = '<h3 id="eClearAskT">' + esc(t("Clear local changes?")) + "</h3><p>" + esc(t("Every change made to the content on this computer goes: your edits to cards, your own cards and intents, changes to categories, roles and variables, and stars, hidden cards and the order of cards. The catalog is left as delivered.")) + "</p>" + (eHasBranch() ? "<p>" + esc(t("On a team, the changes this desk shared with the team's lead go too, any the lead has not yet reviewed included.")) + "</p>" : "") + "<p>" + esc(t("The catalog file, the team, the licence, the folder setting and the agent's name stay. Undo brings the changes back on this desk until Etiuda closes; after a restart, nothing comes back.")) + '</p><div class="tour-actions"><button type="button" class="btn" id="eClearGo">' + esc(t("Clear local changes")) + '</button><button type="button" class="btn primary" id="eClearStay">' + esc(t("Cancel")) + "</button></div>";
     document.body.appendChild(el);
+    hangBubble(el, () => document.getElementById("mgWipe"));
     el.querySelector("#eClearGo").onclick = () => {
       dismissNode(el);
       clearLocalMemory();
@@ -31728,47 +31820,66 @@ What you type stays in this browser only.`;
   function mtResetRow() {
     return '<div class="set-row mt-reset" id="mtResetRow"><div class="set-label">' + esc(t("Reset Etiuda")) + "<small>" + esc(t("Returns this desk to a fresh install, keeping only the licence.")) + '</small></div><div class="set-ctl"><button type="button" class="btn danger" id="mtReset">' + esc(t("Reset Etiuda")) + "</button></div></div>";
   }
-  function openResetConfirm() {
-    openDialog({
-      cls: "mt-reset-confirm",
-      title: "Reset Etiuda?",
-      body: "<p>" + esc(t("Reset removes every catalog file in Etiuda's own folder, the team, the agent's name, settings, open conversations and every local change. Catalog files in any other folder stay, and so does the licence.")) + '</p><p class="mt-reset-warn">' + esc(t("There is no Undo. Joining the team again takes a new invitation from its lead.")) + '</p><label class="mf">' + esc(t("Type RESET to confirm.")) + '<input type="text" id="mtResetWord" autocomplete="off" spellcheck="false"></label>',
-      actions: '<button type="button" class="btn" id="mtResetCancel">' + esc(t("Cancel")) + '</button><button type="button" class="btn danger" id="mtResetGo" disabled>' + esc(t("Reset Etiuda")) + "</button>",
-      wire: () => {
-        const word = $("#mtResetWord"), go = $("#mtResetGo");
-        const ready = () => !!word && /^reset$/i.test(String(word.value || "").trim());
-        const sync = () => {
-          if (go) go.disabled = !ready();
-        };
-        if (word) word.addEventListener("input", sync);
-        sync();
-        const cancel = $("#mtResetCancel");
-        if (cancel) cancel.onclick = () => dismissModal();
-        if (go) go.onclick = () => {
-          if (!ready()) return;
-          dismissModal();
-          const h = eHost();
-          if (!h || typeof h.resetDesk !== "function") return;
-          let answer = null;
-          try {
-            answer = h.resetDesk();
-          } catch (e) {
-            return;
-          }
-          const say = () => {
-            try {
-              toast(t("Etiuda is starting again as freshly installed."));
-            } catch (e) {
-            }
-          };
-          if (answer && typeof answer.then === "function") answer.then((r) => {
-            if (r && r.ok) say();
-          }, () => {
-          });
-          else if (answer && answer.ok) say();
-        };
-      }
+  function resetAsk(cls, html, first) {
+    const was = document.getElementById("eResetAsk");
+    if (was) was.remove();
+    const el = document.createElement("div");
+    el.className = "bub bub-ask e-undo e-clear-ask e-reset-ask " + cls;
+    el.id = "eResetAsk";
+    el.setAttribute("role", "alertdialog");
+    el.setAttribute("aria-labelledby", "eResetAskT");
+    el.innerHTML = html;
+    cutLeaves();
+    document.body.appendChild(el);
+    hangBubble(el, () => document.getElementById("mtReset"));
+    el.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      const b = el.querySelector("#" + first);
+      if (b) b.click();
     });
+    return el;
+  }
+  function openResetConfirm() {
+    const el = resetAsk(
+      "mt-reset-confirm",
+      '<h3 id="eResetAskT">' + esc(t("Reset Etiuda?")) + "</h3><p>" + esc(t("Reset removes every catalog file in Etiuda's own folder, the team, the agent's name, settings, open conversations and every local change. Catalog files in any other folder stay, and so does the licence.")) + '</p><p class="mt-reset-warn">' + esc(t("There is no Undo. Joining the team again takes a new invitation from its lead.")) + "</p><label>" + esc(t("Type RESET to confirm.")) + '<input type="text" class="e-reset-inp" id="mtResetWord" autocomplete="off" spellcheck="false"></label><div class="tour-actions"><button type="button" class="btn" id="mtResetCancel">' + esc(t("Cancel")) + '</button><button type="button" class="btn danger" id="mtResetGo" disabled>' + esc(t("Reset Etiuda")) + "</button></div>",
+      "mtResetCancel"
+    );
+    const word = el.querySelector("#mtResetWord"), go = el.querySelector("#mtResetGo");
+    const ready = () => /^reset$/i.test(String(word.value || "").trim());
+    word.addEventListener("input", () => {
+      go.disabled = !ready();
+    });
+    el.querySelector("#mtResetCancel").onclick = () => dismissNode(el);
+    go.onclick = () => {
+      if (!ready()) return;
+      dismissNode(el);
+      const h = eHost();
+      if (!h || typeof h.resetDesk !== "function") return;
+      let answer = null;
+      try {
+        answer = h.resetDesk();
+      } catch (e) {
+        return;
+      }
+      const say = () => {
+        try {
+          toast(t("Etiuda is starting again as freshly installed."));
+        } catch (e) {
+        }
+      };
+      if (answer && typeof answer.then === "function") answer.then((r) => {
+        if (r && r.ok) say();
+      }, () => {
+      });
+      else if (answer && answer.ok) say();
+    };
+    try {
+      word.focus({ preventScroll: true });
+    } catch (_) {
+    }
   }
   var RESET_LEFT = "The reset of Etiuda did not finish. Could not be removed, perhaps in use by another program or an open folder: {PATH}.";
   var RESET_NEXT = "Trying again finishes it once they are closed; stopping it keeps this desk as it is now.";
@@ -31778,57 +31889,53 @@ What you type stays in this browser only.`;
   }
   function openUnfinishedReset(info) {
     const line = unfinishedLine(info);
-    openDialog({
-      cls: "mt-reset-unfinished",
-      title: RESET_LEFT,
-      body: "<p>" + esc(RESET_NEXT) + "</p>",
-      actions: '<button type="button" class="btn" id="mtResetStop">' + esc(t("Stop the reset")) + '</button><button type="button" class="btn danger" id="mtResetAgain">' + esc(t("Try again")) + "</button>",
-      wire: () => {
-        const title = document.querySelector("#modalTitle .modal-t");
-        if (title) {
-          title.textContent = line;
-          title.setAttribute("data-i18n-skip", "");
-        }
-        const stop = $("#mtResetStop"), again = $("#mtResetAgain");
-        if (stop) stop.onclick = () => {
-          const h = eHost();
-          const done = () => dismissModal();
-          if (!h || typeof h.stopReset !== "function") {
-            done();
-            return;
-          }
-          let answer = null;
-          try {
-            answer = h.stopReset();
-          } catch (e) {
-            done();
-            return;
-          }
-          if (answer && typeof answer.then === "function") answer.then(done, done);
-          else done();
-        };
-        if (again) again.onclick = () => {
-          const h = eHost();
-          if (!h || typeof h.retryReset !== "function") return;
-          let answer = null;
-          try {
-            answer = h.retryReset();
-          } catch (e) {
-            return;
-          }
-          const take = (r) => {
-            if (r && r.ok) {
-              dismissModal();
-              return;
-            }
-            if (r && r.notice && Array.isArray(r.paths)) openUnfinishedReset({ paths: r.paths });
-          };
-          if (answer && typeof answer.then === "function") answer.then(take, () => {
-          });
-          else take(answer);
-        };
+    mtOn = "storage";
+    openMaintenance();
+    const page = document.querySelector('.sx-sec[data-mt="storage"]');
+    if (page && !page.classList.contains("on")) page.click();
+    const el = resetAsk(
+      "mt-reset-unfinished",
+      '<h3 id="eResetAskT" data-i18n-skip></h3><p>' + esc(t(RESET_NEXT)) + '</p><div class="tour-actions"><button type="button" class="btn" id="mtResetStop">' + esc(t("Stop the reset")) + '</button><button type="button" class="btn danger" id="mtResetAgain">' + esc(t("Try again")) + "</button></div>",
+      "mtResetStop"
+    );
+    el.querySelector("#eResetAskT").textContent = line;
+    const done = () => dismissNode(el);
+    el.querySelector("#mtResetStop").onclick = () => {
+      const h = eHost();
+      if (!h || typeof h.stopReset !== "function") {
+        done();
+        return;
       }
-    });
+      let answer = null;
+      try {
+        answer = h.stopReset();
+      } catch (e) {
+        done();
+        return;
+      }
+      if (answer && typeof answer.then === "function") answer.then(done, done);
+      else done();
+    };
+    el.querySelector("#mtResetAgain").onclick = () => {
+      const h = eHost();
+      if (!h || typeof h.retryReset !== "function") return;
+      let answer = null;
+      try {
+        answer = h.retryReset();
+      } catch (e) {
+        return;
+      }
+      const take = (r) => {
+        if (r && r.ok) {
+          done();
+          return;
+        }
+        if (r && r.notice && Array.isArray(r.paths)) openUnfinishedReset({ paths: r.paths });
+      };
+      if (answer && typeof answer.then === "function") answer.then(take, () => {
+      });
+      else take(answer);
+    };
   }
   function armResetNotice() {
     const h = eHost();
@@ -41344,6 +41451,7 @@ What you type stays in this browser only.`;
   // src/modules/proxy-ask.js
   var proxy_ask_exports = {};
   __export(proxy_ask_exports, {
+    proxyAskTake: () => proxyAskTake,
     wireProxyAsk: () => wireProxyAsk
   });
   var proxyAskQueue = /* @__PURE__ */ new Map();
@@ -41389,16 +41497,16 @@ What you type stays in this browser only.`;
     document.body.appendChild(wrap);
     translateTree(wrap);
     const user = wrap.querySelector("#eProxyUser"), pass = wrap.querySelector("#eProxyPass");
-    const place = () => placeBubble(wrap, { top: innerHeight / 2, left: innerWidth / 2, width: 0, height: 0 }, { width: 340 });
-    place();
-    addEventListener("resize", place);
+    hangBubble(wrap, () => {
+      const b = document.getElementById("signinBtn");
+      return b && b.getClientRects().length ? b : document.getElementById("settingsBtn");
+    }, { width: 340 });
     let done = false;
     const answer = (name, word) => {
       if (done) return;
       done = true;
       user.value = "";
       pass.value = "";
-      removeEventListener("resize", place);
       dismissNode(wrap);
       proxyAskSend(q.id, name, word);
     };
