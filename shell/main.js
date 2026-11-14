@@ -9459,6 +9459,14 @@ function signinServiceScope(p) {
 function signinAccessFor(p, managed, held) {
   return managed === true || (!!held && held.access === true) ? signinServiceScope(p) : ""; /* plant:access-path */
 }
+/* THE PERSON'S STORE'S FOLDER (shell/sync/store.cjs), its scope asked only where sync may be on (io.store): OneDrive's App Folder,
+   but never in a request that asks the service's resource, since one token answers one resource; Google's appDataFolder with the
+   sign-in itself, since an installed app cannot add a scope later. "" for a provider with no such folder. */
+const SIGNIN_FOLDER_SCOPES = Object.freeze({ microsoft: "Files.ReadWrite.AppFolder", google: "https://www.googleapis.com/auth/drive.appdata" });
+function signinFolderScope(id, access) {
+  if (id === "microsoft" && access) return ""; /* plant:folder-one-resource */
+  return Object.prototype.hasOwnProperty.call(SIGNIN_FOLDER_SCOPES, String(id)) ? SIGNIN_FOLDER_SCOPES[String(id)] : "";
+}
 /* The tenant of personal Microsoft accounts, as Microsoft's ID token reference names it in `tid`. */
 const SIGNIN_PERSONAL_TENANT = "9188040d-6c67-4c5b-b112-36a304b66dad";
 /* THE TABLE UNDER A MANAGED INSTALLATION'S PINS (managedPolicyFrom's answer `pol`): only the provider it names, none where it is
@@ -9569,11 +9577,11 @@ let ORDER_PAGE = "";
 const ORDER_PAGE_SHAPE = /^https:\/\/(?:[a-z0-9-]+\.)*etiuda\.dev(?:\/[A-Za-z0-9._~-]+)*\/?$/; /* plant:order-shape */
 /* THE SIGN-IN LAB, this whole path run from a development tree against a service other than production: the file ETIUDA_SIGNIN_LAB
    names, read once at start by the wiring and only on a desk neither installed nor packaged. It names the service, http on 127.0.0.1
-   or https on etiuda.dev; it may name the order page, fill the shipped providers' client ids, their addresses unchanged, and add a
-   third provider, "lab", whose addresses the desk fetches or hands out are http on 127.0.0.1 (its issuer, only compared, and key set,
-   never read, may also be https on a .localhost name). `root`, where given, is a root Studio and the desk judge a certificate under
-   beside the shipped one (signinLabRoot, signinCertOk); a desk installed or packaged never reads the file, so it trusts the shipped
-   root alone. */
+   or https on etiuda.dev; it may name the order page and the relay a person's store is made at (one of DOOR_RELAYS), fill the
+   shipped providers' client ids, their addresses unchanged, and add a third provider, "lab", whose addresses the desk fetches or
+   hands out are http on 127.0.0.1 (its issuer, only compared, and key set, never read, may also be https on a .localhost name).
+   `root`, where given, is a root Studio and the desk judge a certificate under beside the shipped one (signinLabRoot, signinCertOk);
+   a desk installed or packaged never reads the file, so it trusts the shipped root alone. */
 function signinLabAt(u, named) {
   const m = typeof u !== "string" ? null : /^http:\/\/127\.0\.0\.1:([0-9]{1,5})(\/[A-Za-z0-9._~\/-]*)?$/.exec(u) /* plant:lab-loopback */
     || (named ? /^https:\/\/(?:[a-z0-9-]+\.)*localhost(?::([0-9]{1,5}))?(\/[A-Za-z0-9._~\/-]*)?$/.exec(u) : null);
@@ -9582,14 +9590,15 @@ function signinLabAt(u, named) {
 function signinLabService(u) {
   return typeof u === "string" && /\/$/.test(u) && (signinLabAt(u) || /^https:\/\/(?:[a-z0-9-]+\.)*etiuda\.dev(?:\/[A-Za-z0-9._~-]+)*\/$/.test(u)); /* plant:lab-service */
 }
-/* The lab file whole, {provider (null where it names none), clientIds, signin, signout, order and root (each "" where it names
-   none)}, or null where any part is not its shape. */
+/* The lab file whole, {provider (null where it names none), clientIds, signin, signout, order, root and relay (each "" where it
+   names none)}, or null where any part is not its shape. */
 function signinLabRead(text) {
   let d = null;
   try { d = JSON.parse(String(text)); } catch { d = null; }
   if (!d || typeof d !== "object" || Array.isArray(d) || !signinLabService(d.service)
     || !(d.root === undefined || /^[0-9a-f]{64}$/.test(String(d.root)))) return null; /* plant:lab-shape */
   if (!(d.order === undefined || (typeof d.order === "string" && ORDER_PAGE_SHAPE.test(d.order)))) return null; /* plant:lab-order */
+  if (!(d.relay === undefined || DOOR_RELAYS.installed.concat(DOOR_RELAYS.unpackaged).indexOf(d.relay) >= 0)) return null; /* plant:lab-relay */
   const ids = d.clientIds === undefined ? {} : d.clientIds, p = d.provider;
   if (!ids || typeof ids !== "object" || Array.isArray(ids)
     || Object.keys(ids).some(id => (id !== "microsoft" && id !== "google") || typeof ids[id] !== "string" || !SIGNIN_CLIENT.test(ids[id]))) return null; /* plant:lab-ids */
@@ -9600,6 +9609,7 @@ function signinLabRead(text) {
   return Object.freeze({ provider: p === undefined ? null : Object.freeze({ clientId: p.clientId, clientSecret: p.clientSecret || "", issuer: p.issuer,
     authorize: p.authorize, token: p.token, scope: p.scope, refreshScope: "", extra: Object.freeze({}) }), clientIds: Object.freeze(Object.assign({}, ids)),
     signin: d.service + "signin/desk", signout: d.service + "signout/desk", order: d.order === undefined ? "" : d.order,
+    relay: d.relay === undefined ? "" : String(d.relay),
     root: d.root === undefined ? "" : String(d.root) });
 }
 /* The lab taken, once: the shipped providers with the lab's client ids, none where it names none, the provider "lab" where it names one,
@@ -9617,6 +9627,7 @@ function signinLabUse(lab) {
   SIGNIN_SERVICE = lab.signin;
   SIGNOUT_SERVICE = lab.signout;
   if (lab.order) ORDER_PAGE = lab.order;
+  if (lab.relay) STORE_RELAY = lab.relay;
   signinLabRoot = lab.root || ""; /* plant:lab-root-use */
   signinLabOn = true;
   return true;
@@ -9641,14 +9652,14 @@ function signinSame(a, b) {
   return x.length === y.length && crypto.timingSafeEqual(x, y);
 }
 /* One sign-in's request for the browser, {url, state, nonce, seed, verifier, redirect}: `port` the loopback's, `deskKey` this
-   desk's signing public half, `rand(n)` n random bytes. */
-function signinAuthorize(p, port, deskKey, rand, access) {
+   desk's signing public half, `rand(n)` n random bytes, `access` and `folder` the scopes asked beside today's, each "" for none. */
+function signinAuthorize(p, port, deskKey, rand, access, folder) {
   const r = typeof rand === "function" ? rand : crypto.randomBytes, known = signinKnown(p.id);
   const verifier = signinB64url(r(32)), state = signinB64url(r(32)), seed = Buffer.from(r(32)).toString("hex");
   const nonce = signinNonce(deskKey, seed); /* plant:nonce-bound */
   const redirect = "http://127.0.0.1:" + Math.floor(Number(port));
   const challenge = signinB64url(crypto.createHash("sha256").update(verifier).digest()); /* plant:pkce */
-  const q = new URLSearchParams(Object.assign({ client_id: p.clientId, response_type: "code", redirect_uri: redirect, scope: access ? known.scope + " " + access : known.scope,
+  const q = new URLSearchParams(Object.assign({ client_id: p.clientId, response_type: "code", redirect_uri: redirect, scope: known.scope + (access ? " " + access : "") + (folder ? " " + folder : ""),
     state: state, nonce: nonce, code_challenge: challenge, code_challenge_method: "S256" }, known.extra));
   return { url: known.authorize + "?" + q.toString(), state: state, nonce: nonce, seed: seed, verifier: verifier, redirect: redirect };
 }
@@ -9689,10 +9700,23 @@ function signinCodeForm(p, pending, code) {
   return Buffer.from(new URLSearchParams(Object.assign({ client_id: p.clientId }, signinSecretPart(p), { grant_type: "authorization_code", code: String(code),
     redirect_uri: pending.redirect, code_verifier: pending.verifier })).toString(), "utf8");
 }
-function signinRefreshForm(p, refreshToken, access) {
-  const known = signinKnown(p.id), scope = access ? (known.refreshScope ? known.refreshScope + " " : "openid ") + access : known.refreshScope;
+/* A provider that names no refresh scope (Google) answers every scope granted, the folder's included, so only one that names them asks it. */
+function signinRefreshForm(p, refreshToken, access, folder) {
+  const known = signinKnown(p.id), scope = access ? (known.refreshScope ? known.refreshScope + " " : "openid ") + access
+    : known.refreshScope && folder ? known.refreshScope + " " + folder : known.refreshScope;
   return Buffer.from(new URLSearchParams(Object.assign({ client_id: p.clientId }, signinSecretPart(p), { grant_type: "refresh_token",
     refresh_token: String(refreshToken) }, scope ? { scope: scope } : {})).toString(), "utf8");
+}
+/* The folder's access token in a provider's answer `res`, handed to io.folderToken and nowhere else: {provider, token, until}, its life
+   expires_in seconds or an hour where it names none, token "" where the answer holds none. */
+const SIGNIN_FOLDER_TOKEN_MAX = 16 * 1024;
+function signinFolderTake(io, res, provider, now) {
+  if (!io || typeof io.folderToken !== "function") return;
+  let j = null;
+  try { j = JSON.parse(Buffer.from(res && res.bytes ? res.bytes : []).toString("utf8")); } catch { j = null; }
+  const token = !!res && res.status === 200 && !!j && typeof j.access_token === "string" && j.access_token.length <= SIGNIN_FOLDER_TOKEN_MAX ? j.access_token : "";
+  const secs = j && Number(j.expires_in) > 0 ? Number(j.expires_in) : 3600;
+  io.folderToken({ provider: String(provider), token: token, until: now + secs * 1000 });
 }
 /* A JWT's claims, unverified: the licence service verifies the signature; the desk reads only what says the answer is its own. */
 function signinClaims(jwt) {
@@ -9918,7 +9942,8 @@ async function signinRun(io, p, deskKey, now, access) {
   let pending = null;
   const loop = await io.listen(kind => io.page(kind), query => signinOurs(query, pending)); /* plant:loop-takes */
   try {
-    pending = signinAuthorize(p, loop.port, deskKey, io.rand, access);
+    const folder = io.store === true ? signinFolderScope(p.id, access) : "";
+    pending = signinAuthorize(p, loop.port, deskKey, io.rand, access, folder);
     let opened = false;
     try { opened = signinPageOk(pending.url) && !!(await io.openPage(pending.url)); } catch { opened = false; }
     if (!opened) { signinTrace(io, p.id, "browser", "signin-browser"); return { ok: false, reason: "signin-browser" }; }
@@ -9944,6 +9969,7 @@ async function signinRun(io, p, deskKey, now, access) {
       return got;
     }
     signinTrace(io, p.id, "token", "ok", { status: said.status, detail: "refresh token " + (got.refreshToken ? "given" : "none") }, hide);
+    if (folder) signinFolderTake(io, res, p.id, now()); /* plant:folder-take-signin */
     return Object.assign({ ok: true, provider: p.id, idToken: got.idToken, refreshToken: got.refreshToken, sub: got.sub, seed: pending.seed },
       access ? { accessToken: got.accessToken } : {});
   } finally {
@@ -9956,9 +9982,15 @@ async function signinRun(io, p, deskKey, now, access) {
 async function signinRenew(io, p, deskKey, refreshToken, seed, sub, now, access) {
   if (!p || !signinKnown(p.id) || !refreshToken || !/^[0-9a-f]{64}$/.test(String(seed))) return { ok: false, reason: "signin-ask" };
   const hide = [String(refreshToken), p.clientSecret, sub ? String(sub) : ""];
-  let res = null;
-  try { res = await io.tokenAsk(signinKnown(p.id).token, signinRefreshForm(p, refreshToken, access)); }
+  const folder = io.store === true ? signinFolderScope(p.id, access) : "";
+  let res = null, folderRes = null;
+  try { res = await io.tokenAsk(signinKnown(p.id).token, signinRefreshForm(p, refreshToken, access, folder)); }
   catch (e) { signinTrace(io, p.id, "refresh", "signin-unreached", { detail: e && e.message }, hide); return { ok: false, reason: "signin-unreached" }; }
+  /* The folder's scope refused, as where it was never consented: asked once more as before the folder existed, so the seat renews alike. */
+  if (folder && res.status !== 200) {
+    try { res = await io.tokenAsk(signinKnown(p.id).token, signinRefreshForm(p, refreshToken, access)); }
+    catch (e) { signinTrace(io, p.id, "refresh", "signin-unreached", { detail: e && e.message }, hide); return { ok: false, reason: "signin-unreached" }; }
+  } else folderRes = res;
   const nonce = signinNonce(deskKey, seed);
   const got = signinTokens(res, p, nonce, now(), sub ? String(sub) : undefined, access);
   /* The organisation has not assigned this account to the service: its own refusal, said as at sign-in. */
@@ -9971,6 +10003,7 @@ async function signinRenew(io, p, deskKey, refreshToken, seed, sub, now, access)
   }
   signinTrace(io, p.id, "refresh", "ok", { status: said.status, detail: signinTraceClaims(res, nonce, now()).replace(/^.*, nonce /, "nonce ")
     + ", refresh token " + (got.refreshToken ? "replaced" : "kept") }, hide);
+  if (folder) signinFolderTake(io, folderRes || { status: 0 }, p.id, now()); /* plant:folder-take-renew */
   return Object.assign({ ok: true, idToken: got.idToken, refreshToken: got.refreshToken || refreshToken, sub: got.sub }, access ? { accessToken: got.accessToken } : {});
 }
 /* The refresh token sealed by the system's store, as base64, or "" where the store seals nothing for real (sealsForReal: no
@@ -10048,8 +10081,10 @@ function signinDeskBody(provider, idToken, desk, seed, t, sign, accessToken, poo
   body.sig = sig;
   return body;
 }
+/* The store's routes at the licence service, beside signin/desk wherever the service is, the sign-in lab's included. */
+function storeServiceAt(route) { return SIGNIN_SERVICE.replace(/signin\/desk$/, route); }
 async function signinServiceAsk(fetchFn, url, body, ms) {
-  if (String(url) !== SIGNIN_SERVICE && String(url) !== SIGNOUT_SERVICE) throw new Error("the licence service's door takes signin/desk and signout/desk only"); /* plant:service-host */
+  if ([SIGNIN_SERVICE, SIGNOUT_SERVICE, storeServiceAt("store/grant"), storeServiceAt("store/end")].indexOf(String(url)) < 0) throw new Error("the licence service's door takes signin/desk, signout/desk, store/grant and store/end only"); /* plant:service-host */
   const bytes = Buffer.from(JSON.stringify(body), "utf8");
   if (bytes.length > SIGNIN_BODY_MAX) throw new Error("the body is longer than it may be");
   return signinPost(fetchFn, String(url), bytes, "application/json", SIGNIN_SERVICE_MAX, ms);
@@ -10137,6 +10172,8 @@ const SIGNIN_DOORS_MAX = 16;
    `installed` holds on every desk, `unpackaged` also on a desk neither installed nor packaged. tests/door-relays.json holds the
    samples, each address with its answer installed and unpackaged, which the licence service's door/set is held to as well. */
 const DOOR_RELAYS = Object.freeze({ installed: Object.freeze(["https://etiuda.dev/relay/v1"]), unpackaged: Object.freeze(["https://etiuda.dev/relay-staging/v1"]) });
+/* The relay a person's store is made at (shell/sync/store.cjs): production's, or the one of these the sign-in lab names. */
+let STORE_RELAY = DOOR_RELAYS.installed[0];
 /* A door's relay address: a channel by teamChannelOf and one of DOOR_RELAYS. `packed` is the desk's flag, installed or packaged,
    which takes the installed list alone; anything but false counts as packed. Asked where a door is kept, offered and knocked at. */
 function signinDoorAddressOk(d, packed) {
@@ -10636,6 +10673,9 @@ function signinIo(run) {
     /* Read when a renewal asks it, so an io made where no state is read never reads one. */
     get managed() { const m = signinState().managed; return !!(m && m.managed); },
     get pooled() { const m = signinState().managed; return !!(m && m.nonPersistent); },
+    /* Whether sync may be on, read when a sign-in asks it; the folder's access token handed back, kept in memory alone. */
+    get store() { return storeOn(); },
+    folderToken: t => storeTokenTake(t),
   };
 }
 /* A first sign-in's outcome kept: the refresh token and the sub sealed where the system seals for real, the seed beside, and the
@@ -10700,6 +10740,7 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
       if (!access && !ans.ok && ans.reason === "access-token") { const m = await signinSeatAccess(io, p, me.key, got, got.seed, Date.now); ans = m.ans; got = m.got; took = m.access; }
       signinTake(p.id, got, ans, Date.now(), took);
       signinFlush();
+      if (ans.ok && ans.cert) storeTurn(); /* plant:store-signin */
       signinSaid = ans.ok ? "signin-done" : ans.reason;
       landing = signinLanding(got, ans, managed);
     } else { signinSaid = got.reason; landing = signinLanding(got, undefined, managed); }
@@ -10745,6 +10786,7 @@ function signinOutNow() {
     try { unlinkOwn(path.join(sharedFolderForWrite(), "desks", me.id, SEAT_NAME)); } catch { /* not written, or the folder is away */ } /* plant:signout-unlink-own */
   }
   s.held = null;
+  storeForget();
   /* Signed out, the account's organisation no longer stands in for this desk: Buy, which needs no sign-in, is offered again. */
   delete s.licenceManaged; /* plant:signout-managed */
   signinWrote = "";
@@ -10810,6 +10852,7 @@ async function signinRenewNow() {
   signinSave();
   signinFlush();
   tellSignin();
+  if (r.said === "renewed") storeTurn(); /* plant:store-renew */
   return r.said;
 }
 function armSigninRenew() {
@@ -10821,6 +10864,210 @@ function armSigninRenew() {
   };
   signinTimer = setTimeout(next, SIGNIN_FIRST_MS); /* plant:renew-start */
   if (signinTimer.unref) signinTimer.unref();
+}
+
+/* ---- the person's store on the desk (shell/sync/store.cjs) ---------------------------------------------------------------
+   After each seated sign-in or renewal, where sync may be on, one look: the key file in the person's own folder read or made, this
+   desk enrolled at the store's relay, and the store certificate the licence service hands kept in memory for the sync that follows.
+   Nothing is shown and nothing is asked. The folder's access token lives in memory alone, never written, logged or sent but to the
+   folder itself. */
+let storeLayer = null;
+function StoreLib() { return storeLayer || (storeLayer = require(path.join(__dirname, "sync", "store.cjs"))); }
+/* store.json beside desk.json, read whole or not at all: {format: 1, keys, said, off?}. `keys` the store's keys sealed by safeStorage
+   as base64, "" where none are kept; `said` the reason the desk last said (sayOnce); `off` the person's own switch, absent where on. */
+const STORE_FILE = "store.json";
+function storeFileRead(text) {
+  let d = null;
+  try { d = JSON.parse(String(text)); } catch { d = null; }
+  const ok = !!d && typeof d === "object" && !Array.isArray(d) && d.format === 1;
+  return { keys: ok && typeof d.keys === "string" ? d.keys : "", said: ok && typeof d.said === "string" ? d.said.slice(0, 40) : "", off: ok && d.off === true };
+}
+function storeFileText(s) {
+  return JSON.stringify(Object.assign({ format: 1, keys: s.keys || "", said: s.said || "" }, s.off === true ? { off: true } : {}), null, 1) + "\n";
+}
+let storeKept;
+function storeState() {
+  if (storeKept !== undefined) return storeKept;
+  let text = "";
+  try { text = fs.readFileSync(path.join(app.getPath("userData"), STORE_FILE), "utf8"); } catch { text = ""; }
+  storeKept = storeFileRead(text);
+  return storeKept;
+}
+function storeSave() {
+  try { writeReplacing(path.join(app.getPath("userData"), STORE_FILE), storeFileText(storeState())); }
+  catch (e) { console.error("etiuda: the store's state could not be kept - " + e.message); }
+}
+/* PersonalStore, REG_SZ, read beside the managed six and apart from them, so nothing managedPolicyFrom answers changes; undefined
+   where unset. */
+function personalStoreFrom(values) {
+  const v = values && Object.prototype.hasOwnProperty.call(values, "personalstore") ? values.personalstore : null;
+  return v && v.type === "REG_SZ" && String(v.value).trim() ? String(v.value).trim() : undefined;
+}
+/* storePolicy's answer {on, company, held} for machine policy `values` and the person's own switch. Pure. */
+function storeOnFor(values, personOff) {
+  return StoreLib().storePolicy(managedPolicyFrom(values).managed === true, personalStoreFrom(values), personOff === true); /* plant:store-policy */
+}
+function storePolicyNow() {
+  try { readJoinPolicy("en"); } catch { /* no policy is read as none */ }
+  return storeOnFor(joinPolicyRead && joinPolicyRead.values, storeState().off);
+}
+function storeOn() { return storePolicyNow().on === true; }
+/* The folder's access token from the provider's last answer, {provider, token, until}, token "" where the folder's scope was refused;
+   and the last look's result, {state, why, store, made, say}. Both in memory alone. */
+let storeAccess = null, storeNow = null, storeFlight = null;
+function storeTokenTake(t) {
+  if (!t || typeof t.provider !== "string" || typeof t.token !== "string") return;
+  storeAccess = { provider: t.provider, token: t.token, until: Number(t.until) || 0 };
+}
+function storeForget() { storeAccess = null; storeNow = null; }
+/* The folder's requests, at OneDrive's App Folder and Drive's appDataFolder alone, through the shell's own network as the sign-in's:
+   no redirect, nothing cached, no cookie, the answer read up to STORE_ANSWER_MAX. {status, bytes}; throws where unreached. */
+const STORE_ANSWER_MAX = 256 * 1024;
+function storeAddressOk(url) {
+  const L = StoreLib(), u = String(url);
+  if (/[\s#]/.test(u) || u.indexOf("/..") >= 0) return false;
+  return [L.GRAPH, L.DRIVE, L.DRIVE_UPLOAD].some(at => u === at || [":/", "/", "?"].some(next => u.indexOf(at + next) === 0)); /* plant:store-host */
+}
+async function storeAsk(method, url, headers, body) {
+  if (!storeAddressOk(url)) throw new Error("the store's folder is asked at its provider's own address alone");
+  const init = { method: String(method), headers: headers, body: body || undefined, redirect: "error", cache: "no-store", credentials: "omit" };
+  if (typeof AbortSignal === "function" && typeof AbortSignal.timeout === "function") init.signal = AbortSignal.timeout(SIGNIN_TIMEOUT_MS);
+  const res = await deskFetch(String(url), init);
+  const bytes = Buffer.from(await res.arrayBuffer());
+  if (bytes.length > STORE_ANSWER_MAX) throw new Error("the answer is longer than it may be");
+  return { status: res.status, bytes: bytes };
+}
+/* The token the folder is asked with: the one the sign-in or renewal handed, unexpired; else, where none was handed (a renewal on the
+   managed path asks the service's resource alone), one quiet refresh for the folder's scope. {} where one stands, else {why}. */
+const STORE_TOKEN_SLACK_MS = 60 * 1000;
+async function storeTokenFor(p, held) {
+  const a = storeAccess && storeAccess.provider === p.id ? storeAccess : null;
+  if (a && a.token && a.until > Date.now() + STORE_TOKEN_SLACK_MS) return {};
+  if (a && !a.token) return { why: "consent" };
+  const folder = signinFolderScope(p.id, ""), refresh = held.refresh ? signinKept(safeStorage, held.refresh) : "";
+  if (!folder || !refresh) return { why: "consent" };
+  let res = null;
+  try { res = await signinRequest((u, init) => deskFetch(u, init), signinKnown(p.id).token, signinRefreshForm(p, refresh, "", folder)); }
+  catch { return { why: "offline" }; }
+  signinFolderTake({ folderToken: storeTokenTake }, res, p.id, Date.now());
+  return storeAccess && storeAccess.provider === p.id && storeAccess.token ? {} : { why: "consent" };
+}
+/* This desk's sealed copy of the store's keys, and its keeping: nothing where the system seals nothing for real. */
+function storeLocal() {
+  const s = storeState();
+  if (!s.keys) return null;
+  try { return StoreLib().keyRead(String(safeStorage.decryptString(Buffer.from(s.keys, "base64")))); } catch { return null; }
+}
+function storeKeep(keys) {
+  if (!sealsForReal(safeStorage, process.platform)) return;
+  try { storeState().keys = safeStorage.encryptString(StoreLib().keyText(keys)).toString("base64"); }
+  catch { return; /* not kept here: the person's folder holds them */ }
+  storeSave();
+}
+/* THE STORE GRANT at the licence service (Studio's store/grant): {desk, rt, lead, t, sig}, then company and replace each only as true,
+   `sig` the desk key's over the service's own lines: its line, desk, rt, lead and t, then "company" and "replace" where they are true. */
+const STORE_GRANT_LINE = "etiuda-licence-store-grant";
+function storeGrantBytes(o) {
+  return Buffer.from([STORE_GRANT_LINE, o.desk, o.rt, o.lead, o.t].map(String).concat(o.company === true ? ["company"] : [], o.replace === true ? ["replace"] : [])
+    .join("\n"), "utf8");
+}
+function storeGrantBody(desk, rt, lead, t, sign, company, replace) {
+  if (!/^[0-9a-f]{64}$/.test(String(desk)) || !/^[0-9a-f]{32}$/.test(String(rt)) || !/^[0-9a-f]{64}$/.test(String(lead)) || !Number.isSafeInteger(t)) return null;
+  const sig = String(sign(storeGrantBytes({ desk, rt, lead, t, company: company === true, replace: replace === true })) || "");
+  if (!/^[0-9a-f]{128}$/.test(sig)) return null;
+  return Object.assign({ desk: String(desk), rt: String(rt), lead: String(lead), t: t, sig: sig }, company === true ? { company: true } : {}, replace === true ? { replace: true } : {});
+}
+/* The service's answer read as storeLook takes it: {grant, store} where it hands a store grant and a store certificate for this desk;
+   {why} else, "signin" (no sign-in of this desk's own within the hour) or "store" (another person's store) as the service says it, or
+   "unreached". */
+function storeGrantAnswer(res, deskKey) {
+  let j = null;
+  try { j = JSON.parse(Buffer.from(res && res.bytes ? res.bytes : []).toString("utf8")); } catch { j = null; }
+  const plainObj = v => !!v && typeof v === "object" && !Array.isArray(v);
+  if (res && res.status === 200 && plainObj(j) && j.ok === true && plainObj(j.grant) && j.grant.kind === "etiuda-store-grant"
+    && plainObj(j.store) && j.store.kind === "etiuda-store-certificate" && j.store.desk === String(deskKey)) return { grant: j.grant, store: j.store };
+  if (res && res.status === 403 && plainObj(j) && (j.reason === "signin" || j.reason === "store")) return { why: j.reason };
+  return { why: "unreached" };
+}
+async function storeGrant(deskKey, rt, lead, extra) {
+  const body = storeGrantBody(deskKey, rt, lead, Date.now(), signinSign, !!extra && extra.company === true, !!extra && extra.replace === true);
+  if (!body) return { why: "unreached" };
+  let res = null;
+  try { res = await signinServiceAsk((u, init) => deskFetch(u, init), storeServiceAt("store/grant"), body); } catch { return { why: "unreached" }; }
+  return storeGrantAnswer(res, deskKey);
+}
+/* THE STORE AT ITS RELAY, by the relay's own routes and bytes (relay/core.cjs create2Bytes, devicesBytes and storeDevicesBytes): a
+   store made by S over its grant's hash, and the computers' list signed by S and by this desk under its store certificate. A relay
+   this build does not trust (signinDoorAddressOk) is never asked. */
+const STORE_PKCS8 = Buffer.from("302e020100300506032b657004220420", "hex");
+function storeLeadSign(seed, bytes) {
+  const key = crypto.createPrivateKey({ key: Buffer.concat([STORE_PKCS8, Buffer.from(String(seed), "hex")]), format: "der", type: "pkcs8" });
+  return crypto.sign(null, bytes, key).toString("hex");
+}
+function storeCreateBytes(rt, keyId, t, grant) {
+  const unsigned = Object.assign({}, grant, grant && grant.sig && typeof grant.sig === "object" ? { sig: Object.assign({}, grant.sig, { value: undefined }) } : {});
+  const hash = crypto.createHash("sha256").update(Buffer.from("etiuda-store-grant\n" + canonJson(unsigned), "utf8")).digest("hex");
+  return Buffer.from("etiuda-relay-create-2\n" + rt + "\n" + keyId + "\n" + t + "\n" + hash, "utf8");
+}
+function storeListBytes(line, rt, rev, t, keys) { return Buffer.from(line + "\n" + rt + "\n" + rev + "\n" + t + "\n" + canonJson(keys), "utf8"); }
+function storeRelayAt(keys) { return signinDoorAddressOk({ rt: keys.rt, url: keys.url }, SIGNIN_DESK_PACKED) ? String(keys.url).replace(/\/$/, "") : ""; }
+async function storeRelayPost(url, body) {
+  try {
+    const res = await relayRequest("POST", url, { "content-type": "application/json" }, Buffer.from(JSON.stringify(body), "utf8"));
+    if (res.status === 200) return { ok: true };
+    let j = null;
+    try { j = JSON.parse(res.bytes.toString("utf8")); } catch { j = null; }
+    return { ok: false, why: j && typeof j.error === "string" ? j.error.slice(0, 40) : "relay" };
+  } catch { return { ok: false, why: "relay" }; }
+}
+async function storeRelayCreate(keys, grant) {
+  const at = storeRelayAt(keys);
+  if (!at) return { ok: false, why: "relay" };
+  const sPub = StoreLib().pubOf(keys.s), t = Date.now();
+  return storeRelayPost(at + "/teams", { rt: keys.rt, lead: { keyId: sPub, pub: sPub }, t: t, grant: grant, sig: storeLeadSign(keys.s, storeCreateBytes(keys.rt, sPub, t, grant)) });
+}
+async function storeRelayDevices(keys, cert, me) {
+  const at = storeRelayAt(keys);
+  if (!at) return { ok: false, why: "relay" };
+  const t = Date.now(), list = keys.devices.map(d => ({ id: d.id, pub: d.pub, desk: d.desk }));
+  const by = String(signinSign(storeListBytes("etiuda-relay-store-devices", keys.rt, keys.rev, t, list)) || "");
+  if (!/^[0-9a-f]{128}$/.test(by)) return { ok: false, why: "relay" };
+  return storeRelayPost(at + "/t/" + keys.rt + "/devices", { keys: list, rev: keys.rev, t: t, sig: storeLeadSign(keys.s, storeListBytes("etiuda-relay-devices", keys.rt, keys.rev, t, list)),
+    seat: cert, by: { pub: me.key, sig: by } });
+}
+/* A look's answer kept: the state, the store certificate where it is on, the reason; the reason sayOnce would say kept in store.json. */
+function storeSettle(look) {
+  storeNow = { state: look.state, why: look.why || "", store: look.state === "on" && look.store ? look.store : null, made: look.made === true, say: null };
+  const s = storeState(), r = StoreLib().sayOnce(s.said, look);
+  storeNow.say = r.say;
+  if (r.kept !== s.said) { s.said = r.kept; storeSave(); }
+  return storeNow;
+}
+/* THE LOOK, after each seated sign-in or renewal: one at a time, never on a harness start save the sign-in lab's, and only where sync
+   may be on and a certificate of this desk stands. Where nothing seals for real, nothing is kept and the look is "unavailable" with no
+   reason to say. Resolves the result kept (storeNow), or null where no look was made; never rejects. */
+function storeTurn() {
+  if (storeFlight) return storeFlight;
+  const flight = storeLookNow().catch(() => null).then(r => { if (storeFlight === flight) storeFlight = null; return r; });
+  storeFlight = flight;
+  return flight;
+}
+async function storeLookNow() {
+  if (harnessLaunch() && !signinLabHeld()) return null;
+  const held = signinState().held, me = branchIdentity(false);
+  const p = held ? signinOffered().find(x => x.id === held.provider) : null;
+  if (!p || !me || !held.cert || !signinCertOk(held.cert, me.key) || signinRevokedHas(held.revoked, held.cert)) return null;
+  const pol = storePolicyNow();
+  if (!pol.on) return null; /* plant:store-off */
+  if (!sealsForReal(safeStorage, process.platform)) return storeSettle({ state: "unavailable", why: "" });
+  const L = StoreLib();
+  const folder = L.folderFor(p.id, { ask: storeAsk, token: () => (storeAccess ? storeAccess.token : "") });
+  const token = folder ? await storeTokenFor(p, held) : {};
+  if (token.why) return storeSettle({ state: "unavailable", why: token.why });
+  return storeSettle(await L.storeLook({ folder: folder, local: storeLocal, keep: storeKeep,
+    grant: (rt, sPub, extra) => storeGrant(me.key, rt, sPub, Object.assign({}, extra, { company: pol.company === true })),
+    relay: { create: storeRelayCreate, devices: (keys, cert) => storeRelayDevices(keys, cert, me) },
+    me: { id: me.id, pub: me.key, desk: me.id }, url: STORE_RELAY, rand: n => crypto.randomBytes(n) }));
 }
 
 /* An IPC message is answered only for the engine's own top frame. Nothing else can reach these

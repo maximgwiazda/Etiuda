@@ -539,7 +539,10 @@ CASES.renewFail = async s => {
 const WIRE_DECLS = ["const SIGNIN_RENEW_MS =", "const SIGNIN_FIRST_MS =", "async function signinRenewNow(", "function armSigninRenew(", "function signinOutNow(",
   "function signinOutSend(", "function signinOutAgain("];
 const WIRE_STANDS = ["harnessLaunch", "PLACED_ASIDE", "signinState", "signinOffered", "branchIdentity", "signinIo", "net", "signinRenewHeld",
-  "signinSave", "tellSignin", "setTimeout", "pinnedLead", "signinTeamHere", "fs", "path", "sharedFolderForWrite", "SEAT_NAME", "signinView", "signoutAsk", "signinLabHeld", "teamJoin", "cancelJoin", "sendJoin", "theWindow", "unlinkOwn", "stand", "signinRevokedNext"];
+  "signinSave", "tellSignin", "setTimeout", "pinnedLead", "signinTeamHere", "fs", "path", "sharedFolderForWrite", "SEAT_NAME", "signinView", "signoutAsk", "signinLabHeld", "teamJoin", "cancelJoin", "sendJoin", "theWindow", "unlinkOwn", "stand", "signinRevokedNext",
+  "storeTurn", "storeForget"];
+/* The store's look after a renewal and its forgetting at a sign out (tests/desk-store-shell.mjs holds them): counted, never run here. */
+const WIRE_DEFAULTS = { storeTurn: st => () => { st.storeTurns = (st.storeTurns || 0) + 1; }, storeForget: () => () => {} };
 function loadWire(st, swap) {
   let text = WIRE_DECLS.map(d => { try { return decl(MAIN, d); } catch { return ""; } }).filter(Boolean).join("\n");
   if (swap) {
@@ -550,7 +553,8 @@ function loadWire(st, swap) {
     + "function signinFlush() { stand.flushes++; return true; }\n" + text
     + "\nreturn { signinRenewNow, armSigninRenew, SIGNIN_RENEW_MS, SIGNIN_FIRST_MS, signinOutNow: typeof signinOutNow === \"undefined\" ? undefined : signinOutNow,"
     + " wrote: () => signinWrote, said: () => signinSaid };";
-  return new Function(...WIRE_STANDS, body)(...WIRE_STANDS.map(n => n === "stand" ? st : n === "signinRevokedNext" && !st[n] ? S.signinRevokedNext : st[n]));
+  return new Function(...WIRE_STANDS, body)(...WIRE_STANDS.map(n => n === "stand" ? st : n === "signinRevokedNext" && !st[n] ? S.signinRevokedNext
+    : !st[n] && WIRE_DEFAULTS[n] ? WIRE_DEFAULTS[n](st) : st[n]));
 }
 /* The shell around the renewal: Microsoft configured, this desk's identity, the doors answering `reply()` and `serve()`. Real time. */
 function wireStand(s, reply, serve) {
@@ -1533,6 +1537,8 @@ function waitStand(sec, swap, storage, branchId) {
     handOut: url => { st.handed.push(url); return Promise.resolve(); },
     signinRequest: out, signinServiceAsk: out, signinSign: out, signinKeep: () => "", signinKept: () => "", signinPageHtml: () => "",
     SIGNIN_TRACE_ASKED: sec.SIGNIN_TRACE_ASKED, SIGNIN_DESK_PACKED: true,
+    /* signinIo's store answer, off, so the press asks today's scopes; its token hand-off never reached. */
+    storeOn: () => false, storeTokenTake: out,
   };
   const names = Object.keys(vals);
   const body = "let signinClick = null, signinBusy = null, signinSaid = \"\", signinOutFlight = null;\n" + text + "\nreturn { view: signinView };";
@@ -2923,6 +2929,8 @@ function landStand(sec, swap, serve, loopQ) {
     signinRequest: async () => answer({ id_token: jwt(msClaims(nonce, Date.now())), refresh_token: "rt" }), signinServiceAsk: () => { throw new Error("no"); },
     signinSign: () => "", signinKeep: () => "", signinKept: () => "", signinPageHtml: () => "",
     SIGNIN_TRACE_ASKED: false, SIGNIN_DESK_PACKED: true,
+    /* The store off and its look after a seat counted, never run: tests/desk-store-shell.mjs holds them. */
+    storeOn: () => false, storeTokenTake: () => {}, storeTurn: () => { st.storeTurns = (st.storeTurns || 0) + 1; },
   };
   const names = Object.keys(vals);
   const body = "let signinClick = null, signinBusy = null, signinSaid = \"\", signinOutFlight = null;\n" + text + "\nreturn { view: signinView };";
@@ -3516,8 +3524,8 @@ if (!PLANTS_OFF) {
   await plant("dsp9", ["const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t })) || \"\"); /* plant:desk-signed */",
     "const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t + 1 })) || \"\");"], "deskBody");
   await plant("dsp10", ["if (seed) body.seed = String(seed); /* plant:seed-first */", "body.seed = String(seed);"], "deskBody");
-  await plant("dsp11", ["if (String(url) !== SIGNIN_SERVICE && String(url) !== SIGNOUT_SERVICE) throw new Error(\"the licence service's door takes signin/desk and signout/desk only\"); /* plant:service-host */", ""], "serviceDoor");
-  await plant("dsp27", ["if (String(url) !== SIGNIN_SERVICE && String(url) !== SIGNOUT_SERVICE) throw new Error(\"the licence service's door takes signin/desk and signout/desk only\"); /* plant:service-host */", ""], "signoutDoor");
+  await plant("dsp11", ["if ([SIGNIN_SERVICE, SIGNOUT_SERVICE, storeServiceAt(\"store/grant\"), storeServiceAt(\"store/end\")].indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes signin/desk, signout/desk, store/grant and store/end only\"); /* plant:service-host */", ""], "serviceDoor");
+  await plant("dsp27", ["if ([SIGNIN_SERVICE, SIGNOUT_SERVICE, storeServiceAt(\"store/grant\"), storeServiceAt(\"store/end\")].indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes signin/desk, signout/desk, store/grant and store/end only\"); /* plant:service-host */", ""], "signoutDoor");
   await plant("dsp28", ["const SIGNOUT_DESK_LINE = \"etiuda-licence-signout-desk\"; /* plant:signout-line */", "const SIGNOUT_DESK_LINE = \"etiuda-licence-signin-desk\";"], "signoutBody");
   await plant("dsp12", ["&& String(c.desk) === String(deskKey) && /^[0-9a-f]{64}$/.test(String(c.person)) && SIGNIN_CODE.test(String(c.code)) /* plant:cert-desk */",
     "&& /^[0-9a-f]{64}$/.test(String(c.person)) && SIGNIN_CODE.test(String(c.code))"], "answers");
