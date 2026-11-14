@@ -9829,6 +9829,10 @@ const SIGNIN_LANDING_WORDS = Object.freeze({
     org: ["Not allowed by this organisation", "Its IT department can allow it; meanwhile another account can be tried. This tab can be closed.", "Not allowed"],
     cancelled: ["The sign-in was cancelled", "Nothing was changed. This tab can be closed; signing in can wait until it suits.", "Cancelled"],
     earlier: ["This tab is from an earlier sign-in", "It was not used, and nothing was changed. This tab can be closed.", "An earlier sign-in"],
+    /* The page answering the folder's own request (signinFolderBack): allowed, declined or not back, the organisation's to decide. */
+    "folder-on": ["Sync is on", "Etiuda can now use its folder in this account. This tab can be closed.", "Sync on"],
+    "folder-off": ["Sync stays off", "Nothing changed. It can be turned on in Account at any time. This tab can be closed.", "Sync off"],
+    "folder-org": ["Your organisation decides on sync", "Its IT department can allow Etiuda's folder. Etiuda works on this computer as before. This tab can be closed.", "Organisation's decision"],
     foot: "Shown by Etiuda on this computer; this page itself sends nothing anywhere." }),
   pl: Object.freeze({
     seat: ["Zalogowano", "Ten komputer ma już miejsce w licencji. Etiuda sama przechodzi dalej; tę kartę można zamknąć.", "Zalogowano"],
@@ -9838,6 +9842,9 @@ const SIGNIN_LANDING_WORDS = Object.freeze({
     org: ["Organizacja nie dopuściła Etiudy", "Może to zmienić jej dział IT. Tymczasem w Etiudzie można użyć innego konta; tę kartę można zamknąć.", "Bez zgody organizacji"],
     cancelled: ["Logowanie anulowano", "Nic się nie zmieniło. Tę kartę można zamknąć; z logowaniem można poczekać do dogodnej chwili.", "Anulowano"],
     earlier: ["To karta wcześniejszego logowania", "Nie została użyta i nic się nie zmieniło. Tę kartę można zamknąć.", "Wcześniejsze logowanie"],
+    "folder-on": ["Synchronizacja włączona", "Etiuda może już korzystać ze swojego folderu na tym koncie. Tę kartę można zamknąć.", "Synchronizacja włączona"],
+    "folder-off": ["Synchronizacja pozostaje wyłączona", "Nic się nie zmieniło. Można ją włączyć w Koncie w dowolnej chwili. Tę kartę można zamknąć.", "Synchronizacja wyłączona"],
+    "folder-org": ["O synchronizacji decyduje organizacja", "Folder Etiudy może dopuścić jej dział IT. Na tym komputerze Etiuda działa jak dotąd. Tę kartę można zamknąć.", "Decyzja organizacji"],
     foot: "Tę stronę wyświetla Etiuda na tym komputerze; sama strona niczego nie wysyła." }),
 });
 /* THE LANDING'S LOOK, its one place: the product designer's variant A (quiet), the page whole from one kind's words. The mark with
@@ -9857,7 +9864,7 @@ const SIGNIN_LANDING_STYLE = ":root{--bg:#f7f8fa;--panel:#fff;--ink:#0f172a;--di
   + "footer{flex:none;padding:14px clamp(20px,7vw,120px);font-size:13px;color:var(--dim);border-top:1px solid var(--line);background:var(--panel)}"
   + "@media (max-width:520px){.hd{align-items:flex-start;gap:12px}.st{margin-top:4px;width:24px;height:24px}.st svg{width:24px;height:24px}}";
 /* Each kind's sign: a tick for a seat, a ring in the app's colour while the app has not finished, an amber ring for the rest. */
-const SIGNIN_LANDING_SIGN = Object.freeze({ seat: "ok", back: "wait", noseat: "warn" });
+const SIGNIN_LANDING_SIGN = Object.freeze({ seat: "ok", back: "wait", noseat: "warn", "folder-on": "ok", "folder-off": "warn", "folder-org": "warn" });
 function signinLandingLook(w, sign, foot, app, lang) {
   const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
   const mark = cls => "<svg class=\"" + cls + "\" viewBox=\"0 0 256 256\" aria-hidden=\"true\"><use href=\"#m\"/></svg>";
@@ -10052,26 +10059,27 @@ async function signinRenew(io, p, deskKey, refreshToken, seed, sub, now, access)
 /* THE FOLDER ASKED APART (signinFolderApart), after a seated sign-in `got` where sync may be on: quietly first, by its refresh token,
    which answers where the account already allows it; else once, the browser that signed in sent on from `loop`'s landing to ask the folder
    alone, the answer held to the same account. A refusal, an administrator's approval needed or another account hands io.folderToken ""
-   and the sign-in stands; only the renewal's quiet refresh asks again. Resolves when the landing is the caller's to serve; never rejects. */
+   and the sign-in stands; only the renewal's quiet refresh asks again. Resolves the folder's landing where the window was sent on and
+   answered, else "", once the landing is the caller's to serve; never rejects. */
 async function signinFolderAsk(io, p, loop, deskKey, got, now) {
   const scope = signinFolderScope(p.id, ""), at = signinKnown(p.id).token;
-  if (!scope) return;
+  if (!scope) return "";
   if (got.refreshToken) {
     let res = null;
     try { res = await io.tokenAsk(at, signinRefreshForm(p, got.refreshToken, "", scope)); } catch { res = null; }
-    if (res && res.status === 200) { signinFolderTake(io, res, p.id, now()); return; } /* plant:folder-quiet */
+    if (res && res.status === 200) { signinFolderTake(io, res, p.id, now()); return ""; } /* plant:folder-quiet */
   }
   const c = signinClaims(got.idToken) || {}, hint = typeof c.preferred_username === "string" && c.preferred_username.length <= 256 ? c.preferred_username : "";
   const pending = signinFolderAuthorize(p, loop.port, deskKey, io.rand, scope, hint);
   const again = signinPageOk(pending.url) && typeof loop.onward === "function" ? loop.onward(pending.url, query => signinOurs(query, pending), SIGNIN_WAIT_MS) : null; /* plant:folder-onward */
-  if (!again) return;
+  if (!again) return "";
   let query = "";
-  try { query = await again; } catch (e) { signinTrace(io, p.id, "folder", e && e.closed ? "signin-cancelled" : "signin-timeout"); return; }
-  await signinFolderBack(io, p, pending, query, got, now);
+  try { query = await again; } catch (e) { signinTrace(io, p.id, "folder", e && e.closed ? "signin-cancelled" : "signin-timeout"); return ""; }
+  return signinFolderBack(io, p, pending, query, got, now);
 }
 /* The folder's own request answered (`query` at the loopback): its code exchanged and held to `got.sub`, the token handed to
    io.folderToken; a refusal hands "" with why "org" where the organisation's (an administrator's approval needed included), else
-   "ungiven", which the person may mend from the switch. The landing's kind: "seat", "cancelled", "org", or "" where nothing came back. */
+   "ungiven", which the person may mend from the switch. The landing's kind: "folder-on", "folder-off" or "folder-org". */
 async function signinFolderBack(io, p, pending, query, got, now) {
   const at = signinKnown(p.id).token, back = signinBack(query, pending);
   if (!back.ok) {
@@ -10079,14 +10087,14 @@ async function signinFolderBack(io, p, pending, query, got, now) {
     signinTrace(io, p.id, "folder", back.reason, { error: q.get("error") || "", error_description: q.get("error_description") || "" }, [q.get("code") || "", pending.verifier]);
     const org = back.reason === "signin-notallowed"; /* plant:folder-org */
     io.folderToken({ provider: p.id, token: "", until: 0, why: org ? "org" : "ungiven" }); /* plant:folder-refused */
-    return org ? "org" : "cancelled";
+    return org ? "folder-org" : "folder-off";
   }
   let res = null;
   try { res = await io.tokenAsk(at, signinCodeForm(p, pending, back.code)); }
-  catch (e) { signinTrace(io, p.id, "folder", "signin-unreached", { detail: e && e.message }, [back.code, pending.verifier, p.clientSecret]); return ""; }
+  catch (e) { signinTrace(io, p.id, "folder", "signin-unreached", { detail: e && e.message }, [back.code, pending.verifier, p.clientSecret]); return "folder-off"; }
   const same = signinTokens(res, p, pending.nonce, now(), String(got.sub));
   signinFolderTake(io, same.ok ? res : { status: 0 }, p.id, now()); /* plant:folder-same */
-  return same.ok ? "seat" : "appfail";
+  return same.ok ? "folder-on" : "folder-off";
 }
 /* The refresh token sealed by the system's store, as base64, or "" where the store seals nothing for real (sealsForReal: no
    keyring, or Linux's basic_text): no refresh token is kept there, and the next renewal asks the person to sign in again. */
@@ -11151,8 +11159,8 @@ function signinFolderAfter(run, io, p, deskKey, got) {
   let kind = "";
   run.loop = Object.assign({}, loop, { land: k => { kind = String(k || ""); } });
   const stepIo = { rand: io.rand, trace: io.trace, tokenAsk: io.tokenAsk, folderToken: t => { if (signinState().held === heldAt) storeTokenTake(t); } };
-  signinFolderAsk(stepIo, p, loop, deskKey, got, Date.now).catch(() => {}).then(() => {
-    loop.land(kind || "back");
+  signinFolderAsk(stepIo, p, loop, deskKey, got, Date.now).catch(() => "").then(folder => {
+    loop.land(folder || kind || "back"); /* plant:folder-land */
     if (signinState().held === heldAt) storeTurn();
   });
 }
@@ -11195,7 +11203,7 @@ async function storeConsentFolder(p, me, held, sub) {
     try { query = await loop.caught; } catch { return; }
     kind = await signinFolderBack(io, p, pending, query, { sub: sub }, Date.now);
   } finally {
-    loop.land(kind || "appfail");
+    loop.land(kind || "folder-off");
     loop.close();
   }
 }
@@ -11212,8 +11220,8 @@ async function storeConsentSignin(p, me, sub) {
     if (got.ok) {
       const ans = await signinSeat(io, p.id, me.key, got.idToken, got.seed, Date.now);
       if (ans.ok && ans.cert) { signinTake(p.id, got, ans, Date.now(), false); signinFlush(); if (token) storeTokenTake(token); }
-      landing = signinLanding(got, ans, managed);
-    } else landing = signinLanding(got, undefined, managed);
+      landing = ans.ok && ans.cert ? (token && token.token ? "folder-on" : "folder-off") : signinLanding(got, ans, managed);
+    } else landing = got.reason === "signin-notallowed" ? "folder-org" : got.reason === "signin-cancelled" || got.reason === "signin-other" ? "folder-off" : signinLanding(got, undefined, managed);
   } finally {
     signinBusy = null;
     if (run.loop && typeof run.loop.land === "function") run.loop.land(landing);
