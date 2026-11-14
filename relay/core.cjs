@@ -16,6 +16,12 @@ const KEEP_MS = 30 * 24 * 60 * 60 * 1000;
 /* How long a desk taken off leaves its blobs readable by the lead alone, counted toward nothing, before they are deleted. Only time the
    team can read counts toward it. */
 const REMOVED_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
+/* What the relay keeps of a desk taken off, its key, its desk id and the instant, goes GONE_KEEP_MS after the removal; while an
+   invitation registered before the removal is still open it stays, being what keeps that invitation from letting the desk back in.
+   A swept team's mark goes SWEPT_KEEP_MS after the sweep (relay/team.cjs). Section 13 of the licence design; decision 50. */
+const GONE_KEEP_MS = KEEP_MS;
+const SWEPT_KEEP_MS = 365 * 24 * 60 * 60 * 1000;
+const GONE_RECHECK_MS = 24 * 60 * 60 * 1000;
 const TOKEN_TRIES = 20;
 /* Wrong tokens are counted per key, and a team keeps at most this many keys' counts for one invitation. */
 const TRY_KEYS_MAX = 64;
@@ -589,6 +595,7 @@ function createCore(deps) {
       store.put("team", row);
       if (team) resumeHeld(team, clock());
       store.del("swept");
+      store.del("sweptAt");
       if (made1st) { store.del("moved"); store.del("teamFile"); }
       if (takes) remember(b.grant);
       if (takes) takeSeats(b.grant); /* plant:seats-create */
@@ -1838,16 +1845,18 @@ function createCore(deps) {
     for (const [k] of store.list("orphan:")) objs.add(k.slice(7));
     return [...objs];
   }
-  /* Emptied, but for one mark: the lead's public key, so a later create of this id is taken only under that key. A sweep that
-     finds no team keeps a mark already written, so a missed delete's retry does not drop it. Nothing else of the team is kept.
+  /* Emptied, but for one mark: the lead's public key, so a later create of this id is taken only under that key, and the instant of
+     the sweep it dates from (sweptAt), which its end counts from. A sweep that finds no team keeps a mark already written and its
+     instant, so a missed delete's retry neither drops it nor moves its end. Nothing else of the team is kept.
      With nothing left to delete, the drop and the mark are one atomic step, so a throw between them leaves the team. */
   function wipe(left) {
     const team = store.get("team");
-    const prior = store.get("swept");
+    const prior = store.get("swept"), priorAt = store.get("sweptAt");
     const leadPub = team && plain(team.lead) ? team.lead.pub : null;
     const mark = is(HEX64, leadPub) ? leadPub : (is(HEX64, prior) ? prior : null);
     const finish = () => {
       if (mark) store.put("swept", mark); /* plant:swept-mark */
+      if (mark) store.put("sweptAt", !team && Number.isSafeInteger(priorAt) ? priorAt : clock());
     };
     if (!left.length && typeof store.clear === "function") {
       store.atomic(() => { store.clear(); finish(); }); /* plant:swept-atomic */
@@ -1859,14 +1868,40 @@ function createCore(deps) {
       finish();
     });
   }
-  /* When the team's alarm should next ring: the instant it turns lapsed while that lies ahead, and then the sweep; or null with no
-     team to count from. */
+  /* When the team's alarm should next ring: the instant it turns lapsed while that lies ahead, and then the sweep, or sooner the
+     instant a removed desk is next due to be forgotten; or null with no team to count from. */
   function alarmAt() {
     const team = store.get("team");
     if (!team) return null;
     const l = lapseOf(team, clock()), from = lapsedFrom(team);
-    if (l.swept === null) return null;
-    return from !== null && from > clock() ? from : l.swept;
+    const lapse = l.swept === null ? null : from !== null && from > clock() ? from : l.swept;
+    const gone = goneDue();
+    return gone !== null && (lapse === null || gone < lapse) ? gone : lapse;
+  }
+  /* A desk taken off a team is forgotten GONE_KEEP_MS after its removal (its gone: row deleted), unless an invitation registered
+     before that removal is still open, unspent and not ended, which the row keeps from letting that desk back in. */
+  function openBefore(g, now) {
+    return store.list("inv:").some(([, v]) => !!v && !v.spent && !(v.until != null && now > v.until) && !registeredAfter(v, g)); /* plant:gone-open-invite */
+  }
+  function forgetGone() {
+    const now = clock(), due = [];
+    for (const [k, g] of store.list("gone:")) {
+      const at = g && Number.isSafeInteger(g.at) ? g.at : 0;
+      if (now - at >= GONE_KEEP_MS && !openBefore(g, now)) due.push(k); /* plant:gone-keep */
+    }
+    if (due.length) store.atomic(() => { for (const k of due) store.del(k); });
+    return due.length;
+  }
+  /* The instant the next removed desk is due to be forgotten: a row held by an open invitation is asked again a day on. */
+  function goneDue() {
+    const now = clock();
+    let next = null;
+    for (const [, g] of store.list("gone:")) {
+      const at = g && Number.isSafeInteger(g.at) ? g.at : 0;
+      const t = Math.max(at + GONE_KEEP_MS, now + (at + GONE_KEEP_MS <= now ? GONE_RECHECK_MS : 0));
+      if (next === null || t < next) next = t;
+    }
+    return next;
   }
   const lapseState = () => lapseOf(store.get("team"), clock()).state;
   /* The next instant the lapse changes while sockets are open: working to read-only, read-only to gone, or a trial's end. */
@@ -1884,11 +1919,11 @@ function createCore(deps) {
   const hasTeam = rt => teamOf(rt) !== null;
 
   return { create, renew, lead, devices, invites, door, challenge, session, sessionOf, sessionByHash, since, blobFor, admit, judge, reserve, unreserve, commit,
-    prune, orphan, record, forget, sweepDue, heldObjects, wipe, alarmAt, nextLapse, lapseState, lapseGate, parseMeta, wrapFor, statesFor, readGate, hasTeam };
+    prune, orphan, record, forget, sweepDue, heldObjects, wipe, alarmAt, forgetGone, nextLapse, lapseState, lapseGate, parseMeta, wrapFor, statesFor, readGate, hasTeam };
 }
 
 module.exports = {
-  CHALLENGE_MS, CHALLENGE_SHARE, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, REMOVED_KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, BLOB_MIN, BLOBS_MAX,
+  CHALLENGE_MS, CHALLENGE_SHARE, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, REMOVED_KEEP_MS, GONE_KEEP_MS, SWEPT_KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, BLOB_MIN, BLOBS_MAX,
   SESSIONS_MAX, SESSION_SHARE, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, lapseOf, keptGrant, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
   LEAD_PREFIX, leadBytes, judgeLead,
   DOOR_REFS_MAX, DOOR_CERT_MAX, DOOR_LIVE_MAX, DOOR_PER_PERSON, DOOR_RATE_MAX, DOOR_RATE_MS, DOOR_TRY_SHARE, CERT_SPAN_MS, SEAT_MARGIN_MS, POOLED_GRACE_MS, SEAT_QUIET_MS, FREED_MAX,

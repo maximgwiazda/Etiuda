@@ -22,6 +22,9 @@ const REVOKED_MARK = "etiuda-revoked";
 /* One lead key holds at most this many live teams. The number is Claudius's, 2026-10-28. The lead's object is named
    lead:<key id>, outside the public table, and a team object answers whether it still holds its team on the held path. */
 const TEAMS_PER_LEAD = 25;
+/* A lead's list goes at the release that empties it; one a missed release left is asked again LEAD_KEEP_MS after its last change, and
+   goes once no team it names still holds (section 13 of the licence design; decision 50). */
+const LEAD_KEEP_MS = 30 * 24 * 60 * 60 * 1000;
 const LEAD_PATH = "/etiuda/lead";
 const LEAD_MARK = "etiuda-lead";
 const HELD_PATH = "/etiuda/held";
@@ -208,7 +211,7 @@ function teamObject(deps) {
     if (op === "release") {
       const row = deps.store.get("lead");
       const rts = row && Array.isArray(row.rts) ? row.rts.filter(x => x !== rt) : [];
-      deps.store.put("lead", Object.assign({}, row, { rts }));
+      await keepLead(row, rts, row && row.leadKey);
       return reply(200, { ok: true });
     }
     const row = deps.store.get("lead");
@@ -226,14 +229,33 @@ function teamObject(deps) {
           if (holds) live.push(id);
         }
         rts = live; /* plant:lead-reap */
-        deps.store.put("lead", Object.assign({}, row, { rts, leadKey }));
+        await keepLead(row, rts, leadKey);
         full = rts.length >= TEAMS_PER_LEAD;
       }
     }
     if (full) return refusedFor("team-count"); /* plant:team-count */
     rts.push(rt);
-    deps.store.put("lead", Object.assign({}, row, { rts, leadKey }));
+    await keepLead(row, rts, leadKey);
     return reply(200, { ok: true });
+  }
+  /* The lead's list written, or deleted where it names no team, and its alarm set LEAD_KEEP_MS on or cleared with it. */
+  async function keepLead(row, rts, leadKey) {
+    if (!rts.length) { deps.store.del("lead"); if (alarm) await alarm.clear(); return; } /* plant:lead-empty */
+    deps.store.put("lead", Object.assign({}, row, { rts }, leadKey ? { leadKey } : {}));
+    if (alarm) await alarm.set(deps.clock() + LEAD_KEEP_MS);
+  }
+  /* A lead's list asked again: each team it names asked whether it still holds, a throw keeping the id; the list kept as what holds. */
+  async function leadAlarm(row) {
+    const ns = namespaceOf(deps.teams);
+    const rts = Array.isArray(row.rts) ? row.rts.filter(x => typeof x === "string") : [];
+    if (!ns) return keepLead(row, rts, row.leadKey);
+    const live = [];
+    for (const id of rts) {
+      let holds = true;
+      try { holds = await asksHeld(ns, id, row.leadKey || null); } catch { holds = true; }
+      if (holds) live.push(id);
+    }
+    return keepLead(row, live, row.leadKey); /* plant:lead-alarm-reap */
   }
 
   async function route(request) {
@@ -311,6 +333,7 @@ function teamObject(deps) {
       const r = c.devices(rt, body);
       if (r.ok) closeWhere(a => r.withdrawn.indexOf(a.key) > -1, "removed"); /* plant:withdraw-sockets */
       if (r.ok) closeWhere(a => !!a.inv && !c.sessionByHash(a.ses).ok, "no-hello");
+      if (r.ok && r.withdrawn.length) await arm(); /* plant:arm-gone */
       return answer(r, x => ({ rev: x.rev }));
     }
     const r = c.invites(rt, body);
@@ -414,8 +437,16 @@ function teamObject(deps) {
     closeWhere(() => true, "team-lapsed");
     c.wipe(left); /* plant:sweep-wipe */
     if (leadKey && heldRt) { try { await dropLead(leadKey, heldRt); } catch { /* a missed drop is reclaimed at the next reserve */ } } /* plant:lead-drop */
-    if (alarm) await (left.length ? alarm.set(deps.clock() + SWEEP_RETRY_MS) : alarm.clear());
+    /* A missed delete rings again for its objects; otherwise the alarm rings once more, SWEPT_KEEP_MS after the sweep, for the mark alone. */
+    const markEnd = sweptEnd();
+    if (alarm) await (left.length ? alarm.set(deps.clock() + SWEEP_RETRY_MS) : markEnd !== null ? alarm.set(markEnd) : alarm.clear()); /* plant:swept-alarm */
     return true;
+  }
+
+  /* The instant a swept id's mark ends, or null where it holds none or no instant. */
+  function sweptEnd() {
+    const at = deps.store.get("sweptAt");
+    return deps.store.get("swept") !== undefined && Number.isSafeInteger(at) ? at + core.SWEPT_KEEP_MS : null;
   }
 
   /* The alarm: the sweep where it is due; otherwise a trial's sockets closed at its until, and the alarm set to the next instant. */
@@ -427,7 +458,15 @@ function teamObject(deps) {
   }
 
   async function onAlarm() {
+    const leadRow = deps.store.get("lead");
+    if (leadRow !== undefined && deps.store.get("team") === undefined) return leadAlarm(leadRow);
     if (await sweepIfDue()) return;
+    /* A swept id's mark goes at its end; an alarm ringing before it (a retry, a stale one) sets the alarm to the end again. A mark kept from
+       before its instant was, with none, stays. */
+    const markEnd = deps.store.get("team") === undefined ? sweptEnd() : null;
+    if (markEnd !== null && deps.clock() >= markEnd) { deps.store.atomic(() => { deps.store.del("swept"); deps.store.del("sweptAt"); }); return; } /* plant:swept-forget */
+    if (markEnd !== null) { if (alarm) await alarm.set(markEnd); return; }
+    c.forgetGone(); /* plant:gone-forget */
     closeEnded();
     if (c.lapseState() === "lapsed") closeWhere(() => true, "team-lapsed"); /* plant:lapse-close */
     await arm();
@@ -567,6 +606,6 @@ class RelayTeam {
   webSocketClose(ws) { return this.object.webSocketClose(ws); }
 }
 
-module.exports = { JSON_MAX, TEAMS_PER_LEAD, teamObject, RelayTeam, routeOf, apiPrefixOf, readCapped, refusedFor, missing, fault, unavailable,
+module.exports = { JSON_MAX, TEAMS_PER_LEAD, LEAD_KEEP_MS, teamObject, RelayTeam, routeOf, apiPrefixOf, readCapped, refusedFor, missing, fault, unavailable,
   REVOKED_PATH, REVOKED_MARK, revokedPathname, revokedMarked, revokedTextOf, revokedReply,
   LEAD_PATH, LEAD_MARK, HELD_PATH, HELD_MARK, leadRequest, heldRequest };
