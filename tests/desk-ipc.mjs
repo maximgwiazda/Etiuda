@@ -30,6 +30,9 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
+/* Every reg call answers from a stand-in, never from this machine's registry (tests/reg-stand.cjs): a desk key that will not
+   open now asks machine policy whether to keep the desk (section 12), and 77z drives exactly that. Before the shell loads. */
+nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 /* The floor: every leg below runs, or the file says it did not complete. */
 const EXPECTED = 128;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";

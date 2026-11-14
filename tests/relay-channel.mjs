@@ -5507,7 +5507,8 @@ if (deskOn()) try {
         const goneNotice = notice();
         const sweptDump = RL.stores.get(paid.rt).dump();
         const sweptStore = sweptDump.length;
-        const sweptOnly = sweptStore === 1 && sweptDump[0][0] === "swept";
+        /* The mark and the instant it dates from (relay/core.cjs wipe), and nothing else of the team. */
+        const sweptOnly = sweptStore === 2 && sweptDump[0][0] === "swept" && sweptDump[1][0] === "sweptAt";
         at(BASE + 121 * DAYMS);
         await pumpL(paid);
         await feed(paid);
@@ -10378,8 +10379,8 @@ async function scene990(mod) {
       if (!s) return { ok: false, rows: "none" };
       const d = s.dump();
       let pub = null;
-      try { pub = d.length === 1 ? JSON.parse(d[0][1]) : null; } catch { pub = null; }
-      return { ok: d.length === 1 && d[0][0] === "swept" && pub === LEAD.pub, rows: d.map(e => e[0]).join(",") || "empty" };
+      try { pub = d.length === 2 && d[1][0] === "sweptAt" ? JSON.parse(d[0][1]) : null; } catch { pub = null; }
+      return { ok: d.length === 2 && d[0][0] === "swept" && pub === LEAD.pub, rows: d.map(e => e[0]).join(",") || "empty" };
     };
     const sweptNow = markOnly();
     const swept = sweptNow.ok;
@@ -10517,11 +10518,11 @@ async function scene992(mod, o) {
     const working = read(desk.mirror, "lane.ec") === ED9[0];
     X.at(BASE + 121 * DAYMS);
     await settle(lead, desk);
-    /* A swept store keeps the lead's public key alone. An empty store is a team never made. */
+    /* A swept store keeps the lead's public key and the instant it dates from alone. An empty store is a team never made. */
     const sweptRows = X.store9() ? X.store9().dump() : [];
     let sweptPub = null;
-    try { sweptPub = sweptRows.length === 1 ? JSON.parse(sweptRows[0][1]) : null; } catch { sweptPub = null; }
-    const swept = sweptRows.length === 1 && sweptRows[0][0] === "swept" && sweptPub === LEAD.pub;
+    try { sweptPub = sweptRows.length === 2 && sweptRows[1][0] === "sweptAt" ? JSON.parse(sweptRows[0][1]) : null; } catch { sweptPub = null; }
+    const swept = sweptRows.length === 2 && sweptRows[0][0] === "swept" && sweptPub === LEAD.pub;
     await desk.ch.stop();
     const kept = JSON.parse(fs.readFileSync(stateAt, "utf8"));
     if (x.noLapse) delete kept.lapse;

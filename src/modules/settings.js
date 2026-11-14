@@ -31,7 +31,8 @@ import { sxIcon } from "./sx-icons.js";
 import { focusKey, focusSame } from "./dom.js";
 import { orgModel, orgRanks, syncOrgMark } from "./org-model.js";
 import { SIGNIN_NAMES, signinNow, signinShown, signinParts, signinSay, signinNoSeat, signinTold, signinActsHtml, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow, signinDoorsHtml, signinDoorRefusedNow,
-  signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect, signinCopyHtml } from "./signin.js";
+  signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect, signinCopyHtml, signinManaged, signinKeepsAccount,
+  signinCapHolds, signinStranded, signinStrandedWords } from "./signin.js";
 
 /* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name,
    in columns that fill the width. Choosing a section shows that section alone: Appearance and Layout
@@ -261,18 +262,40 @@ function closeHost(){
 }
 /* ACCOUNT (board 980): the person's own name, and the sign-in where a provider is offered. The identity card is not a row; the rows
    after it are Settings' own, so search finds them by their labels. With no provider offered and nobody signed in, the name alone. */
+/* A MANAGED COMPUTER'S LINE (decision 49): who decides, the seat it gave where one is held, and on a shared computer that another may sign in. */
+function accountManagedHtml(v){
+  if(!signinManaged(v)) return "";
+  const held=v.signedIn && v.seat==="held", shared=v.managed.shared;
+  const line=[held ? t("Your organisation gave this account its seat on this desk. Its IT department decides who uses Etiuda here, and with which account.") : "",
+    shared ? t("A shared computer: another person may sign in here, with an account of your organisation.") : ""].filter(Boolean).join(" ");
+  return '<p class="sgn-say" data-signin-managed><b>'+esc(t("Managed by your organisation."))+'</b>'+(line?'<span>'+esc(line)+'</span>':'')+'</p>';
+}
+const ICON_LOCK='<svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M7.26 8.83V6.09A2.74 2.74 0 0 1 12.74 6.09V8.83"/><rect x="4.14" y="8.83" width="11.73" height="7.82" rx="1.17"/></svg>';
+/* Whose accounts the pinned provider takes, one of three that hold: the tenant's, any work account, or those the organisation allows. */
+function signinHeldTo(m){
+  const line=m.tenant ? t("{PROVIDER} · work accounts of the organisation") : !m.personal ? t("{PROVIDER} · work accounts") /* plant:held-to */
+    : t("{PROVIDER} · accounts the organisation allows");
+  return line.split("{PROVIDER}").join(SIGNIN_NAMES[m.provider]);
+}
+/* A value machine policy holds: the value as text and the lock, with no control, so nothing looks pressable. */
+function lockedHtml(value){
+  return '<span class="sgn-val">'+esc(value)+'</span><span class="sgn-lock">'+ICON_LOCK+esc(t("Set by your organisation"))+'</span>';
+}
 function accountCardHtml(v){
+  /* The desk's key not kept by a non-persistent profile (section 12): the card says so and offers nothing that would make a new desk. */
+  if(signinStranded(v)){ const s=signinStrandedWords(v); return '<div class="sgn-top col"><p class="sgn-say" data-signin-stranded><b>'+esc(s[0])+'</b><span>'+esc(s[1])+'</span></p></div>'; }
   const p=signinParts(v), choosing=signinChoosingNow();
   if(v.signedIn && !choosing){
+    const keeps=signinKeepsAccount(v);
     let h='<div class="sgn-top"><div class="sgn-top-row">'+signinIdentHtml({initial:p.initial, name:p.name, sub:p.sub, off:p.off})
-      +'<span class="sgn-acts"><button type="button" class="btn" data-signin-act="another">'+esc(t("Use another account"))+'</button>'
-      +'<button type="button" class="btn" data-signin-act="out">'+esc(t("Sign out"))+'</button></span></div>';
+      +(keeps ? '' : '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="another">'+esc(t("Use another account"))+'</button>' /* plant:card-keeps */
+      +'<button type="button" class="btn" data-signin-act="out">'+esc(t("Sign out"))+'</button></span>')+'</div>'+accountManagedHtml(v);
     /* A press that failed is said first, as the door says it; a renewal's refusal where no fresh sign-in is asked. */
     const told=signinTold(v), say=s=>'<p class="sgn-say"><b>'+esc(s[0])+'</b><span>'+esc(s[1])+'</span></p>';
     if(told && told.kind==="pressed") h+=say(told.say)+signinActsHtml(told.acts);
     if(v.ask) h+=say(signinSay("ask", v))+signinProvidersHtml(v.offered, true);
     else if(told && told.kind!=="pressed") h+=say(told.say)+(told.providers ? signinProvidersHtml(v.offered, true) : "");
-    h+='<p class="sgn-ft">'+esc(t("Signing out ends this computer's sign-in and frees its place among the account's three; the seat stays the account's. The team's catalog and personal cards stay on the computer."))+'</p>';
+    if(!keeps) h+='<p class="sgn-ft">'+esc(t("Signing out ends this computer's sign-in and frees its place among the account's three; the seat stays the account's. The team's catalog and personal cards stay on the computer."))+'</p>';
     return h+'</div>';
   }
   let h='<div class="sgn-top col">';
@@ -288,8 +311,10 @@ function accountCardHtml(v){
   if(failed){ const s=signinSay(v.said, v); h+=signinIdentHtml({initial:"", name:s[0], sub:s[1]}); }
   else h+=signinIdentHtml({initial:"", name:t("Not signed in"),
     sub:t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.")});
+  h+=accountManagedHtml(v);
   if(v.outOwed) h+='<p class="sgn-cap" data-signin-out-owed>'+esc(t("This computer is signed out. Its place among the account's three computers is freed by itself as soon as the sign-in service can be reached."))+'</p>';
-  h+='<div>'+(v.said==="signin-preview" ? "" : signinPreviewHtml(v))+signinProvidersHtml(v.offered, true)+'<p class="sgn-cap">'+esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account."))+'</p>'
+  h+='<div>'+(v.said==="signin-preview" ? "" : signinPreviewHtml(v))+signinProvidersHtml(v.offered, true)
+    +(signinCapHolds(v) ? '<p class="sgn-cap">'+esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account."))+'</p>' : '') /* plant:card-cap */
     +'<p class="sgn-cap">'+esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account."))+'</p></div>';
   if(choosing && v.signedIn) h+='<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">'+esc(t("Cancel"))+'</button></span>';
   return h+'</div>';
@@ -310,7 +335,12 @@ function accountGroups(){
     +' placeholder="'+esc(t("first name"))+'" value="'+esc(agentName())+'">');
   const v=signinNow(), groups=[];
   if(signinShown(v)) groups.push({rows:[], after:accountCardHtml(v)});
-  const rows=[name], buy=buyOffered() && !v.busy;
+  const rows=[name], buy=buyOffered() && !v.busy && !signinManaged(v) /* plant:buy-page-managed */
+    && !v.licenceManaged; /* plant:account-buy-managed */
+  /* A managed tenant's account: nothing to buy, and who holds the licence instead (the copywriter's placeholder words). */
+  const held=v.licenceManaged ? row("buy","forward",t("Licence for one person"),t("Your organisation holds the Etiuda licence for this account, so there is nothing to buy here."),"") : null;
+  const cause=v.cause==="own-licence" ? t("Your organisation's licence follows the roles its IT department assigns, and this account has none, so it keeps its seat on the licence bought before.")
+    : v.cause==="assigned" ? t("Your organisation has given this account a role, so it uses the organisation's licence; its seat on the licence bought before is not used meanwhile.") : "";
   if(v.signedIn && !signinChoosingNow()){
     const p=signinParts(v), val=x=>'<span class="sgn-val">'+esc(x)+'</span>', join=pair=>pair[0]+" "+pair[1];
     /* A press at a door the shell refused is said on the team's row, where it was pressed. */
@@ -319,15 +349,20 @@ function accountGroups(){
       : v.doors.length && v.seat==="held" ? row("team","people",t("A team on this licence"),doorSaid||t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."),signinDoorsHtml(v.doors))
       : v.deskOnly && v.seat==="held" ? row("team","people",t("Working without a team"),doorSaid||t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."),"") /* plant:account-desk-only */
       : row("team","people",t("No team yet"),doorSaid||t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."),""));
-    if(v.code) rows.push(row("code","code",t("Your sign-in code"),t("Not a secret. It tells a team's lead which account is yours."),
+    /* A managed computer shows the provider it is held to in the code's place, since nobody there is admitted by code. */
+    if(v.managed && v.managed.provider) rows.push(row("signin","user",t("Sign-in"),"",lockedHtml(signinHeldTo(v.managed))));
+    if(v.code && !signinManaged(v)) rows.push(row("code","code",t("Your sign-in code"), /* plant:code-row-managed */t("Not a secret. It tells a team's lead which account is yours."),
       '<code class="sgn-mono">'+esc(signinCodeText(v.code))+'</code>'+signinCopyHtml("copy")));
     if(signinNoSeat(v)) rows.push(row("seat","check",t("Seat"),join(signinSay(v.refused, v, p)),""));
     else if(v.seat==="none") rows.push(row("seat","check",t("Seat"),join(signinSay("nolicence", v)),""));
     else rows.push(row("seat","check",t("Seat"),v.seat==="lapsed" ? join(signinSay("lapsed", v)) : t("On up to three computers; this is one of them."),val(t("Held by this account"))));
+    if(cause) rows.push(row("cause","check",t("Licence"),cause,""));
     if(buy) rows.push(buyRow(v));
+    else if(held) rows.push(held);
     rows.push(row("checked","clock",t("Last checked"),v.reached ? "" : t("The sign-in service cannot be reached just now. Etiuda keeps working with the catalog it has."),
       (v.at ? val(signinWhen(v.at)) : "")+'<button type="button" class="btn" data-signin-act="check">'+esc(t("Check now"))+'</button>'));
   } else if(buy && !v.signedIn) rows.push(buyRow(v));
+  else if(held && !v.signedIn) rows.push(held);
   groups.push({rows});
   return groups;
 }
