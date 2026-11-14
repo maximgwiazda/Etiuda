@@ -277,7 +277,7 @@ async function main() {
     return { ok, detail: brief(out) };
   }
   /* The service's store-end: answered ok, every object of the store deleted before the answer, the storage left holding only the
-     "ended" mark, the hello and a held session refused, and a create of the same id under S and a good store grant refused. */
+     "ended" mark (and the instant of its sweep, where the relay keeps one), the hello and a held session refused, and a create of the same id under S and a good store grant refused. */
   async function endScene() {
     const w = await storeTeam();
     const s = await hello(w, w.desks.a, w.desks.a.cert);
@@ -290,7 +290,7 @@ async function main() {
     const again = await createAs(w.R, w.rt, w.lead, storeGrant(w.lead.pub, w.code, w.R.clock.now));
     const twice = await postNotice(w, noticeOf(w.rt, w.code, w.R.clock.now));
     const ok = up.r.status === 200 && before >= 1 && end.status === 200 && end.json.ok === true && end.json.what === "store-end" && after === 0
-      && rows.join() === "swept=ended" && held.status !== 200 && refused(ch, "not-enrolled") && refused(again, "swept-other-lead") && refused(twice, "not-enrolled");
+      && rows.filter(r => !r.startsWith("sweptAt=")).join() === "swept=ended" && held.status !== 200 && refused(ch, "not-enrolled") && refused(again, "swept-other-lead") && refused(twice, "not-enrolled");
     return { ok, detail: brief({ upload: up.r.status, objectsBefore: before, end: said(end), objectsAfter: after, rows, heldSession: held.status,
       hello: said(ch), createAgain: said(again), secondNotice: said(twice) }) };
   }
