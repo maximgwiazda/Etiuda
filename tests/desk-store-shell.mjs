@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 32;
+const EXPECTED = 37;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -44,7 +44,8 @@ const W = WORKER.routeWith(K.ROOTS, env => env.NOW());
 
 const DAY = 24 * 60 * 60 * 1000;
 const CODE = "ABCDEFGHJKMNPQRS", SEED = "5".repeat(64), TID = "aaaabbbb-0000-1111-2222-ccccddddeeee", SUB = "sub-of-the-person";
-const MS_CLIENT = "00001111-aaaa-2222-bbbb-333344445555";
+const MS_CLIENT = "00001111-aaaa-2222-bbbb-333344445555", G_CLIENT = "000011112222-stand.apps.googleusercontent.com";
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.appdata";
 const STAGING = "https://etiuda.dev/licence-staging/v1/";
 const SPKI = Buffer.from("302a300506032b6570032100", "hex");
 const rawPub = k => k.export({ type: "spki", format: "der" }).subarray(SPKI.length).toString("hex");
@@ -104,8 +105,16 @@ function worldOf(o) {
       if (opt.refuseFolder && /Files\.ReadWrite\.AppFolder/.test(new URLSearchParams(body).get("scope") || ""))
         return json(400, { error: "invalid_grant", error_description: "AADSTS65001: The user or administrator has not consented to use the application." });
       const now = Date.now();
-      return json(200, { token_type: "Bearer", id_token: jwt({ iss: "https://login.microsoftonline.com/" + TID + "/v2.0", tid: TID, aud: MS_CLIENT, sub: SUB, exp: Math.floor(now / 1000) + 3600 }),
+      return json(200, { token_type: "Bearer", id_token: jwt({ iss: "https://login.microsoftonline.com/" + TID + "/v2.0", tid: TID, aud: MS_CLIENT, sub: SUB, preferred_username: "person@example.test", exp: Math.floor(now / 1000) + 3600 }),
         refresh_token: "rt-next", access_token: w.access, expires_in: 3600 });
+    }
+    if (u === "https://oauth2.googleapis.com/token") {
+      w.forms.push(body);
+      /* Google's answer names the scopes granted: the folder's only where the person left its line ticked. */
+      const c = w.codes[new URLSearchParams(body).get("code")], now = Date.now();
+      if (!c) return json(400, { error: "invalid_grant" });
+      return json(200, { token_type: "Bearer", id_token: jwt({ iss: "https://accounts.google.com", aud: G_CLIENT, sub: SUB, nonce: c.nonce, exp: Math.floor(now / 1000) + 3600 }),
+        scope: c.folder ? "openid " + DRIVE_SCOPE : "openid", access_token: c.folder ? w.access : "stand-in-google-token-not-the-folder", refresh_token: "rt-google", expires_in: 3600 });
     }
     if (u === STAGING + "signin/desk") {
       w.service.push(body);
@@ -147,7 +156,7 @@ function worldOf(o) {
 /* ---- the shell, evaluated whole: `src` is shell/main.js's text or a planted copy of it ---- */
 /* What the leg reads from main.js, appended to its text; a name main.js lacks comes back undefined, so its leg fails alone. */
 const TAIL_NAMES = ["signinListen", "signinRun", "signinRenew", "signinIo", "signinRenewNow", "signinServiceAsk", "storeServiceAt", "storeOnFor", "storeTurn", "branchIdentity", "signinState"];
-const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS"];
+const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeConsentFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS"];
 const TAIL = "\n__test.T = {" + TAIL_NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
   + ", get: () => ({" + TAIL_STATE.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "}) };";
 function boot(src, o) {
@@ -269,7 +278,7 @@ async function lookScene(src) {
 async function refusedScene(src) {
   const r = await renewScene(src, { refuseFolder: true });
   const scopes = r.world.forms.map(f => new URLSearchParams(f).get("scope"));
-  const ok = r.said === "renewed" && !!r.held && !!r.held.cert && !!r.now && r.now.state === "unavailable" && r.now.why === "consent" && r.now.say === "consent"
+  const ok = r.said === "renewed" && !!r.held && !!r.held.cert && !!r.now && r.now.state === "unavailable" && r.now.why === "ungiven" && r.now.say === "ungiven"
     && scopes.join() === "openid profile offline_access Files.ReadWrite.AppFolder,openid profile offline_access" && r.world.graph.length === 0 && r.world.service.length === 1;
   return { ok, detail: brief({ said: r.said, seat: !!(r.held && r.held.cert), state: r.now && r.now.state, why: r.now && r.now.why, scopes, folderAsks: r.world.graph.length }) };
 }
@@ -314,7 +323,7 @@ async function relayScene(src) {
    "consent" once; a renewal asks the folder quietly and never opens a browser. The browser is a stand-in over real HTTP to the loopback. */
 const MS_AUTH = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
 const TODAY_MS = "openid profile offline_access", FOLDER_ALONE = "openid Files.ReadWrite.AppFolder";
-const labOf = () => ({ service: STAGING, clientIds: { microsoft: MS_CLIENT }, root: rawPub(LAB_ROOT.publicKey) });
+const labOf = () => ({ service: STAGING, clientIds: { microsoft: MS_CLIENT, google: G_CLIENT }, root: rawPub(LAB_ROOT.publicKey) });
 function loopGet(port, at) {
   return new Promise(resolve => {
     const req = http.get({ host: "127.0.0.1", port, path: at }, res => {
@@ -335,9 +344,10 @@ function browserOf(world, mode) {
   let finish = null;
   b.done = new Promise(a => { finish = a; });
   const answer = (q, folder) => {
-    if (/Files\.ReadWrite\.AppFolder/.test(q.get("scope") || "") && mode.refuse) return mode.refuse;
+    const asks = /Files\.ReadWrite\.AppFolder|drive\.appdata/.test(q.get("scope") || "");
+    if (asks && mode.refuse) return mode.refuse;
     const code = "code-" + (++codeN) + "-" + crypto.randomBytes(6).toString("hex");
-    world.codes[code] = { nonce: q.get("nonce"), folder };
+    world.codes[code] = { nonce: q.get("nonce"), folder: (folder || asks) && !mode.untick };
     return "code=" + code;
   };
   b.go = async url => {
@@ -361,11 +371,12 @@ function browserOf(world, mode) {
 async function signinFlow(src, mode) {
   const world = worldOf({ refuseFolder: mode.quiet !== true });
   const b = browserOf(world, mode);
-  const shell = boot(src, { world, lab: labOf(), store: mode.store, browser: u => { setTimeout(() => { b.go(u).catch(() => {}); }, 5); } });
+  const shell = boot(src, { world, lab: labOf(), store: mode.store, browser: u => { setTimeout(() => { b.last = b.go(u).catch(() => {}); }, 5); } });
   const { T } = shell;
   const e = { senderFrame: { parent: null, url: "file:///desk/engine/etiuda.html" }, returnValue: undefined };
-  shell.ipc.on["etiuda:signin-click"](e, "microsoft");
-  const view = await shell.ipc.handle["etiuda:signin"](e, "microsoft");
+  const provider = mode.provider || "microsoft";
+  shell.ipc.on["etiuda:signin-click"](e, provider);
+  const view = await shell.ipc.handle["etiuda:signin"](e, provider);
   const held = T.signinState().held;
   await Promise.race([b.done, new Promise(a => setTimeout(a, 20000))]);
   await new Promise(a => setTimeout(a, 60));
@@ -373,19 +384,19 @@ async function signinFlow(src, mode) {
   if (flight) await flight;
   const forms = world.forms.map(f => { const x = new URLSearchParams(f); return x.get("grant_type") + (x.get("scope") ? " " + x.get("scope") : ""); });
   const qs = b.urls.map(u => new URL(u).searchParams);
-  return { world, shell, view, held, now: T.get().storeNow, page: b.pages[0] || { status: 0, body: "" }, qs, b, forms };
+  return { world, shell, view, held, now: T.get().storeNow, page: b.pages[0] || { status: 0, body: "" }, qs, b, forms, e, mode };
 }
 const seatPage = page => page.status === 200 && page.body.indexOf("<h1>Signed in</h1>") >= 0;
 const flowBrief = r => brief({ said: r.view && r.view.said, seat: !!(r.held && r.held.cert), scopes: r.qs.map(q => q.get("scope")), opened: r.shell.opened.length,
   page: r.page.status, seatPage: seatPage(r.page), state: r.now && r.now.state, why: r.now && r.now.why, say: r.now && r.now.say, forms: r.forms, folderAsks: r.world.graph.length });
 const DECLINED = "error=access_denied&error_description=" + encodeURIComponent("AADSTS65004: User declined to consent to access the app.");
 const ADMIN = "error=consent_required&error_description=" + encodeURIComponent("AADSTS90094: The grant requires admin permission.");
-async function refusedFlowScene(src, refuse) {
+async function refusedFlowScene(src, refuse, why) {
   const r = await signinFlow(src, { refuse });
   const second = r.qs[1];
   const ok = !!r.qs[0] && r.qs[0].get("scope") === TODAY_MS && !!r.held && !!r.held.cert && r.view.said === "signin-done" && seatPage(r.page)
     && r.qs.length === 2 && r.shell.opened.length === 1 && second.get("scope") === FOLDER_ALONE && second.get("redirect_uri") === r.qs[0].get("redirect_uri")
-    && !!r.now && r.now.state === "unavailable" && r.now.why === "consent" && r.now.say === "consent" && r.world.graph.length === 0
+    && !!r.now && r.now.state === "unavailable" && r.now.why === why && r.now.say === why && r.world.graph.length === 0
     && r.forms.join() === "authorization_code,refresh_token " + TODAY_MS + " Files.ReadWrite.AppFolder" && r.b.again.every(x => x.status !== 303);
   return { ok, detail: flowBrief(r) };
 }
@@ -415,13 +426,13 @@ async function offFlowScene(src) {
 /* A renewal whose folder scope is refused, the desk having said "consent" already: no browser, no loopback, nothing more said. */
 async function renewQuietScene(src) {
   const world = worldOf({ refuseFolder: true });
-  const shell = boot(src, { world, held: true, lab: labOf(), store: { said: "consent" }, browser: () => {} });
+  const shell = boot(src, { world, held: true, lab: labOf(), store: { said: "ungiven" }, browser: () => {} });
   shell.T.branchIdentity(true);
   const said = await shell.T.signinRenewNow();
   const flight = shell.T.get().storeFlight;
   if (flight) await flight;
   const now = shell.T.get().storeNow, held = shell.T.signinState().held;
-  const ok = said === "renewed" && !!held && !!held.cert && shell.opened.length === 0 && !!now && now.state === "unavailable" && now.why === "consent" && now.say === null
+  const ok = said === "renewed" && !!held && !!held.cert && shell.opened.length === 0 && !!now && now.state === "unavailable" && now.why === "ungiven" && now.say === null
     && world.graph.length === 0;
   return { ok, detail: brief({ said, seat: !!(held && held.cert), opened: shell.opened.length, state: now && now.state, why: now && now.why, say: now && now.say }) };
 }
@@ -446,20 +457,69 @@ async function onwardOnceScene(src) {
   return { ok, detail: brief({ back: back.status, one: !!one, two: two === null ? null : "a second", sent: sent.status, old: old.status, reply: reply.status, query, repeat: repeat.status, page: page.status }) };
 }
 
+/* (g) THE SWITCH WHERE CONSENT WAS NEVER GIVEN: after a declined folder (Microsoft) or an unticked one (Google), the look says "ungiven",
+   the state the Account row shows as Off with its switch; a trusted click on On and the switch's call open exactly one request at the
+   provider naming the account, and its answer lands as the second step's or a sign-in's does. The organisation's refusal keeps "consent",
+   and the call opens nothing. */
+const until = async (cond, ms) => { const t0 = Date.now(); while (!cond() && Date.now() - t0 < ms) await new Promise(a => setTimeout(a, 20)); return cond(); };
+async function pressOn(r, clicked) {
+  const before = r.shell.opened.length, last = r.b.last;
+  if (clicked) r.shell.ipc.on["etiuda:store-on-click"](r.e);
+  const answer = await r.shell.ipc.handle["etiuda:store-consent"](r.e);
+  if (answer === "asked") { await until(() => r.b.last !== last, 5000); await r.b.last; }
+  const flight = r.shell.T.get().storeConsentFlight;
+  if (flight) await flight;
+  const look = r.shell.T.get().storeFlight;
+  if (look) await look;
+  return { answer, opened: r.shell.opened.slice(before) };
+}
+async function switchScene(src) {
+  const r = await signinFlow(src, { refuse: DECLINED });
+  const ungiven = !!r.now && r.now.why === "ungiven";
+  const unclicked = await pressOn(r, false);
+  r.mode.refuse = undefined;
+  const on = await pressOn(r, true);
+  const q = on.opened.length === 1 ? new URL(on.opened[0]).searchParams : new URLSearchParams();
+  const now = r.shell.T.get().storeNow, held = r.shell.T.signinState().held;
+  const admin = await signinFlow(src, { refuse: ADMIN });
+  const adminPress = await pressOn(admin, true);
+  const ok = ungiven && unclicked.answer === "click" && unclicked.opened.length === 0 && on.answer === "asked" && on.opened.length === 1
+    && on.opened[0].indexOf(MS_AUTH + "?") === 0 && q.get("scope") === FOLDER_ALONE && q.get("login_hint") === "person@example.test" && q.get("prompt") === null
+    && !!now && now.state === "on" && !!held && !!held.cert && admin.now && admin.now.why === "consent" && adminPress.answer === "none" && adminPress.opened.length === 0;
+  return { ok, detail: brief({ ungiven, unclicked: unclicked.answer, answer: on.answer, opened: on.opened.length, scope: q.get("scope"), hint: q.get("login_hint"), prompt: q.get("prompt"),
+    state: now && now.state, why: now && now.why, adminWhy: admin.now && admin.now.why, adminPress: adminPress.answer, adminOpened: adminPress.opened.length }) };
+}
+async function googleSwitchScene(src) {
+  const r = await signinFlow(src, { provider: "google", untick: true });
+  const first = r.qs[0] || new URLSearchParams();
+  const ungiven = !!r.now && r.now.why === "ungiven" && !!r.held && !!r.held.cert;
+  r.mode.untick = false;
+  const on = await pressOn(r, true);
+  const q = on.opened.length === 1 ? new URL(on.opened[0]).searchParams : new URLSearchParams();
+  const held = r.shell.T.signinState().held, access = r.shell.T.get().storeAccess, now = r.shell.T.get().storeNow;
+  const ok = ungiven && first.get("scope") === "openid " + DRIVE_SCOPE && on.answer === "asked" && on.opened.length === 1
+    && on.opened[0].indexOf("https://accounts.google.com/o/oauth2/v2/auth?") === 0 && q.get("scope") === "openid " + DRIVE_SCOPE && q.get("login_hint") === SUB
+    && q.get("prompt") === null && !!held && !!held.cert && !!access && access.token === r.world.access && !!now && now.why !== "ungiven";
+  return { ok, detail: brief({ ungiven, answer: on.answer, opened: on.opened.length, scope: q.get("scope"), hint: q.get("login_hint") === SUB, prompt: q.get("prompt"),
+    seat: !!(held && held.cert), token: !!access && access.token === r.world.access, why: now && now.why }) };
+}
+
 const LEGS = [
   ["a1", scopesOnScene, "where sync may be on, Microsoft's refresh form carries Files.ReadWrite.AppFolder, its authorize address today's (the folder asked apart, f), and Google's authorize address drive.appdata, its refresh as today; a managed computer with PersonalStore unset is off, set on is on"],
   ["a2", scopesOffScene, "where sync is off (a managed computer, PersonalStore unset), each provider's authorize address and refresh form are today's, byte for byte"],
   ["b", lookScene, "a seated quiet renewal is followed by the look: the key file made in the person's App Folder, this desk enrolled at the relay, the store certificate kept"],
-  ["b2", refusedScene, "a renewal whose folder scope is refused renews the seat as today, and the look says consent once, the provider not asked again"],
+  ["b2", refusedScene, "a renewal whose folder scope is refused renews the seat as today, and the look says \"ungiven\" once (consent never given), the provider not asked again"],
   ["c", tokenScene,"the folder's access token reaches the folder alone: no file, no trace line and no body to the licence service or the relay holds it"],
   ["e", relayScene, "a store is made at production's relay, or at the one of the trusted relays a sign-in lab names; a lab naming another is refused whole"],
   ["f0", offFlowScene, "where sync is off, Microsoft's sign-in asks today's scopes and nothing after: no folder asked, quietly or in the browser, no look"],
-  ["f1", s => refusedFlowScene(s, DECLINED), "Microsoft's sign-in asks today's scopes alone; the folder, declined in the same browser window, leaves the desk signed in with its seat, the landing as today's, and consent said once"],
-  ["f2", s => refusedFlowScene(s, ADMIN), "the same where the folder needs an administrator's approval: signed in with its seat, consent said once, the provider not asked again"],
+  ["f1", s => refusedFlowScene(s, DECLINED, "ungiven"), "Microsoft's sign-in asks today's scopes alone; the folder, declined in the same browser window, leaves the desk signed in with its seat, the landing as today's, and \"ungiven\" said once, which the switch mends"],
+  ["f2", s => refusedFlowScene(s, ADMIN, "consent"), "the same where the folder needs an administrator's approval: signed in with its seat, \"consent\" (the organisation's, no switch) said once, the provider not asked again"],
   ["f3", grantFlowScene, "the folder granted in the second step: the loopback's landing sends the same window on to ask it alone, no account choice, the person's name as hint; the folder's token opens the store"],
   ["f4", quietFlowScene, "an account that already allows the folder is asked nothing more: the quiet refresh answers it, one browser screen"],
   ["f5", renewQuietScene, "a renewal whose folder scope is refused asks it quietly, opens no browser and says nothing more"],
   ["f6", onwardOnceScene, "the loopback sends the window on at most once per sign-in, and takes the folder's reply once"],
+  ["g1", switchScene, "after a declined folder the look says \"ungiven\", Off with its switch: On without a trusted click opens nothing; with one, exactly one request for the folder alone naming the account, which lands the store on; an administrator's need keeps \"consent\" and the call opens nothing"],
+  ["g2", googleSwitchScene, "on Google the folder line unticked at sign-in says \"ungiven\"; On opens exactly one Google sign-in asking the folder with it, naming the account, and the same account's seat and the folder's token are kept"],
   ["d", doorScene, "the licence service's door takes signin/desk, signout/desk, store/grant and store/end of its own host, and refuses every other route"],
 ];
 const results = {};
@@ -485,12 +545,15 @@ const PLANTS = [
   ["e", swap("  if (!(d.relay === undefined || DOOR_RELAYS.installed.concat(DOOR_RELAYS.unpackaged).indexOf(d.relay) >= 0)) return null; /* plant:lab-relay */\n", ""), "a lab may name any relay"],
   ["f0", swap("if (io.store === true && signinFolderApart(p.id)) signinFolderAfter(", "if (signinFolderApart(p.id)) signinFolderAfter("), "the folder asked after the sign-in where sync is off"],
   ["f1", swap("function signinFolderApart(id) { return id === \"microsoft\"; }", "function signinFolderApart(id) { return false; }"), "Microsoft's folder asked with the sign-in"],
-  ["f2", swap("    io.folderToken({ provider: p.id, token: \"\", until: 0 }); /* plant:folder-refused */\n", ""), "a refusal not kept, so the provider is asked again"],
+  ["f2", swap("    io.folderToken({ provider: p.id, token: \"\", until: 0, why: org ? \"org\" : \"ungiven\" }); /* plant:folder-refused */\n", ""), "a refusal not kept, so the provider is asked again"],
   ["f3", swap("SIGNIN_WAIT_MS) : null; /* plant:folder-onward */", "SIGNIN_WAIT_MS) && null : null; /* plant:folder-onward */"), "the window never sent on"],
   ["f3", swap("  delete extra.prompt; /* plant:folder-no-prompt */\n", ""), "the second step asks the account choice again"],
   ["f4", swap("if (res && res.status === 200) { signinFolderTake(io, res, p.id, now()); return; } /* plant:folder-quiet */", "if (false) { return; } /* plant:folder-quiet */"), "the quiet answer ignored, the window sent on regardless"],
   ["f5", swap("  if (folder && res.status !== 200) {\n    try {", "  if (folder && res.status !== 200) {\n    handOut(signinAuthorize(p, 1, deskKey, null, \"\", folder).url);\n    try {"), "a renewal opens the browser on a refusal"],
   ["f6", swap("if (!clean || landed || sent) return null; /* plant:onward-once */", "if (!clean || landed) return null; /* plant:onward-once */"), "the loopback sends the window on more than once"],
+  ["g1", swap("function storeUngiven() { return storeState().org === true ? \"consent\" : \"ungiven\"; }", "function storeUngiven() { return \"consent\"; }"), "a consent never given read as the organisation's, so no switch"],
+  ["g1", swap("    await handOut(pending.url); /* plant:consent-open */", "    await handOut(pending.url); handOut(pending.url); /* plant:consent-open */"), "the switch opens the request twice"],
+  ["g2", swap("const token = !lacks && ", "const token = "), "Google's answer without the folder's scope taken as the folder's token"],
   ["d", swap(".indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes", ".indexOf(String(url)) < -1) throw new Error(\"the licence service's door takes"), "the door takes any route"],
 ];
 for (const [id, change, what] of PLANTS) {

@@ -9678,6 +9678,13 @@ function signinFolderAuthorize(p, port, deskKey, rand, scope, hint) {
     code_challenge: signinB64url(crypto.createHash("sha256").update(verifier).digest()), code_challenge_method: "S256" }, extra, hint ? { login_hint: hint } : {}));
   return { url: known.authorize + "?" + q.toString(), state: state, nonce: nonce, seed: seed, verifier: verifier, redirect: redirect };
 }
+/* A sign-in asked again for the account already held (storeConsentAsk): no account choice, that account named as the hint. */
+function signinHinted(url, hint) {
+  const u = new URL(String(url));
+  u.searchParams.delete("prompt");
+  u.searchParams.set("login_hint", String(hint));
+  return u.toString();
+}
 /* Whether `url` is a provider's own authorize page as signinAuthorize makes it: the only address the sign-in hands the browser. */
 function signinPageOk(url) {
   const u = String(url);
@@ -9729,7 +9736,9 @@ function signinFolderTake(io, res, provider, now) {
   if (!io || typeof io.folderToken !== "function") return;
   let j = null;
   try { j = JSON.parse(Buffer.from(res && res.bytes ? res.bytes : []).toString("utf8")); } catch { j = null; }
-  const token = !!res && res.status === 200 && !!j && typeof j.access_token === "string" && j.access_token.length <= SIGNIN_FOLDER_TOKEN_MAX ? j.access_token : "";
+  /* An answer naming its scopes without the folder's (Google's folder line unticked) holds no token for the folder. */
+  const want = signinFolderScope(provider, ""), lacks = !!j && typeof j.scope === "string" && !!want && !j.scope.split(" ").some(s => s === want || s.endsWith("/" + want)); /* plant:folder-lacks */
+  const token = !lacks && !!res && res.status === 200 && !!j && typeof j.access_token === "string" && j.access_token.length <= SIGNIN_FOLDER_TOKEN_MAX ? j.access_token : "";
   const secs = j && Number(j.expires_in) > 0 ? Number(j.expires_in) : 3600;
   io.folderToken({ provider: String(provider), token: token, until: now + secs * 1000 });
 }
@@ -9977,6 +9986,7 @@ async function signinRun(io, p, deskKey, now, access) {
   try {
     const folder = io.store === true && !signinFolderApart(p.id) ? signinFolderScope(p.id, access) : "";
     pending = signinAuthorize(p, loop.port, deskKey, io.rand, access, folder);
+    if (io.hint) pending.url = signinHinted(pending.url, io.hint);
     let opened = false;
     try { opened = signinPageOk(pending.url) && !!(await io.openPage(pending.url)); } catch { opened = false; }
     if (!opened) { signinTrace(io, p.id, "browser", "signin-browser"); return { ok: false, reason: "signin-browser" }; }
@@ -10044,7 +10054,7 @@ async function signinRenew(io, p, deskKey, refreshToken, seed, sub, now, access)
    alone, the answer held to the same account. A refusal, an administrator's approval needed or another account hands io.folderToken ""
    and the sign-in stands; only the renewal's quiet refresh asks again. Resolves when the landing is the caller's to serve; never rejects. */
 async function signinFolderAsk(io, p, loop, deskKey, got, now) {
-  const scope = signinFolderScope(p.id, ""), at = signinKnown(p.id).token, hide = [String(got.refreshToken || ""), p.clientSecret];
+  const scope = signinFolderScope(p.id, ""), at = signinKnown(p.id).token;
   if (!scope) return;
   if (got.refreshToken) {
     let res = null;
@@ -10057,18 +10067,26 @@ async function signinFolderAsk(io, p, loop, deskKey, got, now) {
   if (!again) return;
   let query = "";
   try { query = await again; } catch (e) { signinTrace(io, p.id, "folder", e && e.closed ? "signin-cancelled" : "signin-timeout"); return; }
-  const back = signinBack(query, pending);
+  await signinFolderBack(io, p, pending, query, got, now);
+}
+/* The folder's own request answered (`query` at the loopback): its code exchanged and held to `got.sub`, the token handed to
+   io.folderToken; a refusal hands "" with why "org" where the organisation's (an administrator's approval needed included), else
+   "ungiven", which the person may mend from the switch. The landing's kind: "seat", "cancelled", "org", or "" where nothing came back. */
+async function signinFolderBack(io, p, pending, query, got, now) {
+  const at = signinKnown(p.id).token, back = signinBack(query, pending);
   if (!back.ok) {
     const q = new URLSearchParams(String(query || ""));
     signinTrace(io, p.id, "folder", back.reason, { error: q.get("error") || "", error_description: q.get("error_description") || "" }, [q.get("code") || "", pending.verifier]);
-    io.folderToken({ provider: p.id, token: "", until: 0 }); /* plant:folder-refused */
-    return;
+    const org = back.reason === "signin-notallowed"; /* plant:folder-org */
+    io.folderToken({ provider: p.id, token: "", until: 0, why: org ? "org" : "ungiven" }); /* plant:folder-refused */
+    return org ? "org" : "cancelled";
   }
   let res = null;
   try { res = await io.tokenAsk(at, signinCodeForm(p, pending, back.code)); }
-  catch (e) { signinTrace(io, p.id, "folder", "signin-unreached", { detail: e && e.message }, hide.concat([back.code, pending.verifier])); return; }
+  catch (e) { signinTrace(io, p.id, "folder", "signin-unreached", { detail: e && e.message }, [back.code, pending.verifier, p.clientSecret]); return ""; }
   const same = signinTokens(res, p, pending.nonce, now(), String(got.sub));
   signinFolderTake(io, same.ok ? res : { status: 0 }, p.id, now()); /* plant:folder-same */
+  return same.ok ? "seat" : "appfail";
 }
 /* The refresh token sealed by the system's store, as base64, or "" where the store seals nothing for real (sealsForReal: no
    keyring, or Linux's basic_text): no refresh token is kept there, and the next renewal asks the person to sign in again. */
@@ -10937,17 +10955,17 @@ function armSigninRenew() {
    folder itself. */
 let storeLayer = null;
 function StoreLib() { return storeLayer || (storeLayer = require(path.join(__dirname, "sync", "store.cjs"))); }
-/* store.json beside desk.json, read whole or not at all: {format: 1, keys, said, off?}. `keys` the store's keys sealed by safeStorage
-   as base64, "" where none are kept; `said` the reason the desk last said (sayOnce); `off` the person's own switch, absent where on. */
+/* store.json beside desk.json, read whole or not at all: {format: 1, keys, said, off?, org?}. `keys` the store's keys sealed by safeStorage
+   as base64, "" where none are kept; `said` the reason the desk last said (sayOnce); `off` the person's own switch, absent where on; `org` where the organisation refused the folder (storeUngiven). */
 const STORE_FILE = "store.json";
 function storeFileRead(text) {
   let d = null;
   try { d = JSON.parse(String(text)); } catch { d = null; }
   const ok = !!d && typeof d === "object" && !Array.isArray(d) && d.format === 1;
-  return { keys: ok && typeof d.keys === "string" ? d.keys : "", said: ok && typeof d.said === "string" ? d.said.slice(0, 40) : "", off: ok && d.off === true };
+  return { keys: ok && typeof d.keys === "string" ? d.keys : "", said: ok && typeof d.said === "string" ? d.said.slice(0, 40) : "", off: ok && d.off === true, org: ok && d.org === true };
 }
 function storeFileText(s) {
-  return JSON.stringify(Object.assign({ format: 1, keys: s.keys || "", said: s.said || "" }, s.off === true ? { off: true } : {}), null, 1) + "\n";
+  return JSON.stringify(Object.assign({ format: 1, keys: s.keys || "", said: s.said || "" }, s.off === true ? { off: true } : {}, s.org === true ? { org: true } : {}), null, 1) + "\n";
 }
 let storeKept;
 function storeState() {
@@ -10982,8 +11000,17 @@ let storeAccess = null, storeNow = null, storeFlight = null;
 function storeTokenTake(t) {
   if (!t || typeof t.provider !== "string" || typeof t.token !== "string") return;
   storeAccess = { provider: t.provider, token: t.token, until: Number(t.until) || 0 };
+  /* The last answer to an asked consent decides whose refusal stands: a token or a person's no clears the organisation's. */
+  const s = storeState(), org = t.token ? false : t.why === "org" ? true : t.why === "ungiven" ? false : s.org === true;
+  if (org !== (s.org === true)) { s.org = org; storeSave(); }
 }
-function storeForget() { storeAccess = null; storeNow = null; }
+/* Why the folder holds no token: "consent" where its organisation refused it, which the person cannot mend; else "ungiven", consent
+   never given (declined, unticked, never asked, or the window not sent on), which the switch mends (storeConsentAsk). */
+function storeUngiven() { return storeState().org === true ? "consent" : "ungiven"; } /* plant:store-ungiven */
+function storeForget() {
+  storeAccess = null; storeNow = null;
+  if (storeState().org === true) { storeState().org = false; storeSave(); }
+}
 /* The folder's requests, at OneDrive's App Folder and Drive's appDataFolder alone, through the shell's own network as the sign-in's:
    no redirect, nothing cached, no cookie, the answer read up to STORE_ANSWER_MAX. {status, bytes}; throws where unreached. */
 const STORE_ANSWER_MAX = 256 * 1024;
@@ -11007,14 +11034,14 @@ const STORE_TOKEN_SLACK_MS = 60 * 1000;
 async function storeTokenFor(p, held) {
   const a = storeAccess && storeAccess.provider === p.id ? storeAccess : null;
   if (a && a.token && a.until > Date.now() + STORE_TOKEN_SLACK_MS) return {};
-  if (a && !a.token) return { why: "consent" };
+  if (a && !a.token) return { why: storeUngiven() };
   const folder = signinFolderScope(p.id, ""), refresh = held.refresh ? signinKept(safeStorage, held.refresh) : "";
   if (!folder || !refresh) return { why: "consent" };
   let res = null;
   try { res = await signinRequest((u, init) => deskFetch(u, init), signinKnown(p.id).token, signinRefreshForm(p, refresh, "", folder)); }
   catch { return { why: "offline" }; }
   signinFolderTake({ folderToken: storeTokenTake }, res, p.id, Date.now());
-  return storeAccess && storeAccess.provider === p.id && storeAccess.token ? {} : { why: "consent" };
+  return storeAccess && storeAccess.provider === p.id && storeAccess.token ? {} : { why: storeUngiven() };
 }
 /* This desk's sealed copy of the store's keys, and its keeping: nothing where the system seals nothing for real. */
 function storeLocal() {
@@ -11129,6 +11156,79 @@ function signinFolderAfter(run, io, p, deskKey, got) {
     if (signinState().held === heldAt) storeTurn();
   });
 }
+/* THE SWITCH TURNED ON WHERE THE FOLDER'S CONSENT WAS NEVER GIVEN (the look's "ungiven"), the person's own act and the only way the
+   desk opens a browser for the folder: exactly one request at the provider naming the account held, then the look. Microsoft: the
+   folder alone, its answer held to the same account. Google, which adds no scope later: its sign-in asking the folder with it, kept
+   only where the same account is seated again. The seat and the desk stand whatever the answer. Answers at once: "asked", or why not. */
+let storeConsentFlight = null, storeOnClick = 0;
+function storeConsentAsk() {
+  if (storeConsentFlight || signinBusy) return "busy";
+  const held = signinState().held, me = branchIdentity(false);
+  const p = held ? signinOffered().find(x => x.id === held.provider) : null;
+  if (!p || !me || !held.cert || !storeNow || storeNow.why !== "ungiven" || !storePolicyNow().on) return "none"; /* plant:consent-ungiven */
+  const sub = held.sub ? signinKept(safeStorage, held.sub) : "";
+  if (!sub) return "none";
+  const ask = p.id === "google" ? storeConsentSignin(p, me, sub) : storeConsentFolder(p, me, held, sub);
+  const flight = ask.catch(() => {}).then(() => { if (storeConsentFlight === flight) storeConsentFlight = null; return signinState().held ? storeTurn() : null; });
+  storeConsentFlight = flight;
+  return "asked";
+}
+async function storeConsentFolder(p, me, held, sub) {
+  const io = signinIo({ loop: null }), refresh = held.refresh ? signinKept(safeStorage, held.refresh) : "";
+  /* The account's name, from a quiet refresh's ID token held to the same account; asked without it where none answers. */
+  let hint = "";
+  if (refresh) {
+    let res = null;
+    try { res = await io.tokenAsk(signinKnown(p.id).token, signinRefreshForm(p, refresh, "")); } catch { res = null; }
+    const got = res ? signinTokens(res, p, signinNonce(me.key, held.seed), Date.now(), sub) : { ok: false };
+    const c = got.ok ? signinClaims(got.idToken) || {} : {};
+    hint = typeof c.preferred_username === "string" && c.preferred_username.length <= 256 ? c.preferred_username : "";
+  }
+  let pending = null;
+  const loop = await signinListen(http, kind => signinPageHtml(kind), SIGNIN_WAIT_MS, query => signinOurs(query, pending));
+  let kind = "";
+  try {
+    pending = signinFolderAuthorize(p, loop.port, me.key, null, signinFolderScope(p.id, ""), hint);
+    if (!signinPageOk(pending.url)) return;
+    await handOut(pending.url); /* plant:consent-open */
+    let query = "";
+    try { query = await loop.caught; } catch { return; }
+    kind = await signinFolderBack(io, p, pending, query, { sub: sub }, Date.now);
+  } finally {
+    loop.land(kind || "appfail");
+    loop.close();
+  }
+}
+async function storeConsentSignin(p, me, sub) {
+  const st = signinState(), managed = !!(st.managed && st.managed.managed);
+  let token = null;
+  const run = { loop: null, provider: p.id, url: "" }, io = Object.assign(signinIo(run), { hint: sub, folderToken: t => { token = t; } });
+  signinBusy = run;
+  tellSignin();
+  let landing = "appfail";
+  try {
+    let got = await signinRun(io, p, me.key, Date.now);
+    if (got.ok && !signinSame(got.sub, sub)) got = { ok: false, reason: "signin-other" }; /* plant:consent-same */
+    if (got.ok) {
+      const ans = await signinSeat(io, p.id, me.key, got.idToken, got.seed, Date.now);
+      if (ans.ok && ans.cert) { signinTake(p.id, got, ans, Date.now(), false); signinFlush(); if (token) storeTokenTake(token); }
+      landing = signinLanding(got, ans, managed);
+    } else landing = signinLanding(got, undefined, managed);
+  } finally {
+    signinBusy = null;
+    if (run.loop && typeof run.loop.land === "function") run.loop.land(landing);
+  }
+  tellSignin();
+}
+ipcMain.on("etiuda:store-on-click", (e) => { e.returnValue = null; if (fromEngine(e)) storeOnClick = Date.now(); });
+/* The switch's On where the look says "ungiven", only for a trusted click on it (the preload's store-on-click). */
+ipcMain.handle("etiuda:store-consent", (e) => {
+  if (!fromEngine(e)) return null;
+  const c = storeOnClick;
+  storeOnClick = 0;
+  if (!c || Date.now() - c > LINK_CLICK_MS) return "click"; /* plant:consent-click */
+  return storeConsentAsk();
+});
 async function storeLookNow() {
   if (harnessLaunch() && !signinLabHeld()) return null;
   const held = signinState().held, me = branchIdentity(false);
