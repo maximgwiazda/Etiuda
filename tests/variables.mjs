@@ -66,7 +66,8 @@ if (process.argv[2] === "--grid") {
       const m = Object.assign({ en: text, pl: text }, f);
       out.push(I.fill(text, m, mark, L));
     }
-  process.stdout.write(JSON.stringify(out));
+  /* A pipe is written asynchronously off Windows, so an exit straight after the write cuts the JSON short: exit on its callback. */
+  await new Promise(done => process.stdout.write(JSON.stringify(out), done));
   process.exit(0);
 }
 
