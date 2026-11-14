@@ -86,9 +86,11 @@ function hangBubble(el, origin, opts){
     return (r.width || r.height) ? r : null;
   };
   const on=typeof addEventListener==="function" && typeof removeEventListener==="function";
+  /* A control that slides into place moves with no change to the page an observer sees: its transition's end asks again. */
+  const ENDS=["resize","scroll","transitionend","animationend"];
   const drop=()=>{
     mo.disconnect();
-    if(on){ removeEventListener("resize", again); removeEventListener("scroll", again, {capture:true}); }
+    if(on) ENDS.forEach(n=>removeEventListener(n, again, {capture:true}));
     if(raf) cancelAnimationFrame(raf); raf=0;
   };
   const place=()=>{
@@ -112,7 +114,7 @@ function hangBubble(el, origin, opts){
     if(!rs.every(m=>el.contains(m.target))) again();
   });
   if(document.body) mo.observe(document.body, {subtree:true, childList:true, attributes:true, attributeFilter:["hidden","open","class","style"]});
-  if(on){ addEventListener("resize", again, {passive:true}); addEventListener("scroll", again, {passive:true, capture:true}); }
+  if(on) ENDS.forEach(n=>addEventListener(n, again, {passive:true, capture:true}));
   place();
   return drop;
 }
