@@ -522,10 +522,16 @@ function createCore(deps) {
     let evidence = seats.live;
     if (plain(seen) && seen.licence === seats.licence && seen.issued > evidence) evidence = seen.issued; /* plant:seat-evidence-seen */
     if (evidence < cert.until + SEAT_MARGIN_MS) return { ok: true, note: null };
-    /* A pooled desk's grace: within POOLED_GRACE_MS of its end, while the newest evidence is SEAT_QUIET_MS old (the service gone quiet). */
+    /* A pooled desk's grace: within POOLED_GRACE_MS of its end, while the newest evidence is SEAT_QUIET_MS old (the service gone quiet),
+       and never for a certificate once refused while the evidence was fresh: that refusal is kept by key and end ("pr:") to the grace's
+       end, so a quiet night does not reopen it; the desk's next certificate is another. */
     let quiet = true;
     quiet = now - evidence >= SEAT_QUIET_MS; /* plant:pooled-quiet */
-    if (cert.pooled === true && quiet && now < cert.until + POOLED_GRACE_MS) return { ok: true, note: null }; /* plant:pooled-grace */
+    const within = cert.pooled === true && now < cert.until + POOLED_GRACE_MS, refusedKey = "pr:" + deskPub + ":" + cert.until;
+    let refusedOnce = false;
+    refusedOnce = within && store.get(refusedKey) !== undefined; /* plant:pooled-refused-read */
+    if (within && quiet && !refusedOnce) return { ok: true, note: null }; /* plant:pooled-grace */
+    if (within && !refusedOnce) store.atomic(() => store.put(refusedKey, { until: cert.until + POOLED_GRACE_MS })); /* plant:pooled-refused-mark */
     return no("seat-lapsed"); /* plant:seat-lapsed */
     return { ok: true, note: null };
   }
@@ -1774,6 +1780,8 @@ function createCore(deps) {
         if (v.door === true) continue;
         store.put("sp:" + id, SPENT); /* plant:spent-kept */
       }
+      /* A pooled certificate's kept refusal, past the grace's end: nothing of it stays. */
+      for (const [k, v] of store.list("pr:")) if (!v || !(v.until > now)) store.del(k); /* plant:pooled-refused-prune */
       /* A dropped door request's key and person, past its window: nothing of it stays. */
       for (const [k, v] of store.list("dd:")) if (!doorDropLive(v, now)) store.del(k); /* plant:door-drop-prune */
       /* A put row no upload of this object holds was left by a request that died before its commit: its object is to be deleted. */

@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 69;
+const EXPECTED = 73;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -680,14 +680,15 @@ async function main() {
     prove(w, "c", DAY);
     const colleague = await sessionAs(w, "c");
     w.R.clock.now = last + HOUR;
-    const fresh = [await sessionAs(w, "a"), await sessionAs(w, "b")];
+    /* Only the ordinary desk is tried while the evidence is fresh: a pooled desk refused then keeps that refusal (s21d). */
+    const fresh = [await sessionAs(w, "b")];
     w.R.clock.now = last + C.SEAT_QUIET_MS + MIN;
     const quiet = [await sessionAs(w, "a"), await sessionAs(w, "b")];
     w.R.clock.now = end + C.POOLED_GRACE_MS - MIN;
     const late = await sessionAs(w, "a");
     w.R.clock.now = end + C.POOLED_GRACE_MS;
     const past = await sessionAs(w, "a");
-    const ok = C.POOLED_GRACE_MS === 72 * HOUR && opened(colleague) && refused(fresh[0], "seat-lapsed") && refused(fresh[1], "seat-lapsed")
+    const ok = C.POOLED_GRACE_MS === 72 * HOUR && opened(colleague) && refused(fresh[0], "seat-lapsed")
       && opened(quiet[0]) && refused(quiet[1], "seat-lapsed") && opened(late) && refused(past, "seat-lapsed");
     return { ok, detail: brief({ evidenceFresh: fresh.map(said), serviceQuiet: quiet.map(said), graceLastMinute: said(late), graceOver: said(past) }) };
   }
@@ -708,6 +709,36 @@ async function main() {
     return { ok, detail: brief({ sessionsAfterEnd: rows.length, refused: rows.filter(r => refused(r, "seat-lapsed")).length }) };
   }
   const SEAT_M = () => C.SEAT_MARGIN_MS;
+  /* The test architect's case: a removed pooled desk refused by day, then a quiet night of seven hours, nobody on the team proving. A
+     refusal sticks: that certificate is never honoured by the grace again; the desk's next certificate, from a later logon, opens. */
+  async function pooledNightScene() {
+    const w = await team({ seats: true });
+    const a = w.desks.a;
+    a.cert = certFor(a.pub, w.licence, T0, DAY, { fields: { pooled: true } });
+    const end = T0 + DAY;
+    let day = null, last = 0;
+    for (let t2 = T0 + 2 * HOUR; t2 <= end + 10 * HOUR; t2 += 2 * HOUR) {
+      w.R.clock.now = last = t2;
+      prove(w, "c", DAY);
+      await sessionAs(w, "c");
+      if (t2 >= end + SEAT_M()) day = await sessionAs(w, "a");
+    }
+    w.R.clock.now = last + 7 * HOUR;
+    const night = await sessionAs(w, "a");
+    w.R.clock.now += HOUR;
+    const nightLater = await sessionAs(w, "a");
+    const kept = storeOf(w).list("pr:").length;
+    a.cert = certFor(a.pub, w.licence, w.R.clock.now, DAY, { fields: { pooled: true } });
+    const nextLogon = await sessionAs(w, "a");
+    /* Past the grace's end the kept refusal goes at the next prune (a colleague's list). */
+    w.R.clock.now = end + C.POOLED_GRACE_MS + MIN;
+    prove(w, "c", DAY);
+    const cs = await sessionAs(w, "c");
+    await call(w.R, "GET", "/relay/v1/t/" + w.rt + "/since/0", { token: cs.json && cs.json.session });
+    const left = storeOf(w).list("pr:").length;
+    const ok = refused(day, "seat-lapsed") && refused(night, "seat-lapsed") && refused(nightLater, "seat-lapsed") && kept === 1 && opened(nextLogon) && left === 0;
+    return { ok, detail: brief({ byDay: said(day), quietNight7h: said(night), quietNight8h: said(nightLater), kept, nextLogon: said(nextLogon), keptAfterGrace: left }) };
+  }
   /* The pooled mark is signed: a certificate carrying it that its signature does not cover is refused, current or run out, and a signed
      pooled certificate is taken at the door as any is. */
   async function pooledSignedScene() {
@@ -727,8 +758,9 @@ async function main() {
     const ok = refused(forgedNow, "seat-lapsed") && door.status === 200 && knock.status === 200 && opened(signed) && refused(odd, "seat-lapsed");
     return { ok, detail: brief({ forgedMark: said(forgedNow), doorKnock: said(knock), signed: said(signed), markNotTrue: said(odd) }) };
   }
-  await leg("s21a", pooledOutageScene, "a pooled desk whose service went quiet after a colleague proved past its end is refused while that evidence is fresh, opens once it is SEAT_QUIET_MS old and to POOLED_GRACE_MS (72 hours) past its end, then is refused; an ordinary desk in the same state has no grace");
+  await leg("s21a", pooledOutageScene, "a pooled desk first tried after its service went quiet, a colleague having proved past its end, opens once that evidence is SEAT_QUIET_MS old and to POOLED_GRACE_MS (72 hours) past its end, then is refused; an ordinary desk in the same state has no grace, fresh or quiet");
   await leg("s21b", pooledTakenScene, "a pooled desk taken over while the service works, colleagues proving every two hours, is refused from its end and the margin all through the grace");
+  await leg("s21d", pooledNightScene, "a removed pooled desk refused by day stays refused through a quiet night of seven hours and more, its certificate never honoured by the grace again (one refusal kept, by key and end), its next certificate from a later logon opens, and the kept refusal goes at the first prune past the grace's end");
   await leg("s21c", pooledSignedScene, "the pooled mark is signed: one its signature does not cover, or not true, is refused, and a signed pooled certificate opens and knocks at the door");
   /* The door still refuses an ended certificate of a stranger: only a desk session leaves the end to seatGate. */
   async function doorEndedScene() {
@@ -778,6 +810,9 @@ async function main() {
     ["seat-lapsed", "s7 W=1d", () => removedByGrantScene(W1), "a run-out certificate always opens"],
     ["pooled-grace", "s21a", pooledOutageScene, "a pooled desk has no grace"],
     ["pooled-quiet", "s21b", pooledTakenScene, "the grace runs while the service works"],
+    ["pooled-refused-mark", "s21d", pooledNightScene, "a daylight refusal is not kept, so a quiet night reopens the desk"],
+    ["pooled-refused-read", "s21d", pooledNightScene, "a kept refusal is never read"],
+    ["pooled-refused-prune", "s21d", pooledNightScene, "a kept refusal outlives the grace"],
     ["cert-pooled-bytes", "s21c", pooledSignedScene, "the pooled mark rides outside the signature"],
     ["seat-seen", "s10 W=7d", () => studioClosedScene(W7), "no certificate taken at a session is kept as evidence"],
     ["seat-evidence-seen", "s10 W=1d", () => studioClosedScene(W1), "the evidence reads the grant's live alone"],
