@@ -6,8 +6,9 @@
  * tests/test.js [2f/5] holds what electron-builder.js asks for, and cannot see the program: a
  * build that lost a fuse on the way to Etiuda.exe stayed green there. Nothing here packages
  * anything. What each leg holds:
- *   1  the reader asks for the same six fuses [2f/5] holds
- *   2  CONTROL: the stock Electron binary, which ships four of them the other way, reads wrong on each of
+ *   1  the reader asks for the same seven fuses [2f/5] holds, and with plant:fuse-cookie lifted from a copy of
+ *      electron-builder.js the cookie fuse goes unasked, so a program built without it passes
+ *   2  CONTROL: the stock Electron binary, which ships five of them the other way, reads wrong on each of
  *      those and as asked on the two the config leaves to Electron's defaults
  *   3  a wire lifted from that binary and flipped as electron-builder flips it reads as asked, and
  *      each fuse turned back alone is named, and only that one; a program holding a second wire is
@@ -25,11 +26,12 @@ import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { wantedFuses, fuseProblems, packagedFuseProblems } from '../tools/fuses.mjs';
+import { SIGNING_VARS } from '../tools/sellable.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 15;
+const EXPECTED = 16;
 
 let asserted = 0, failed = 0;
 const notRun = [];
@@ -40,24 +42,24 @@ function check(ok, line) {
 }
 function skip(why, legs) { for (let i = 0; i < legs; i++) notRun.push(why); console.log('  NOT RUN ' + why); }
 
-const WANT = { runAsNode: false, enableNodeOptionsEnvironmentVariable: false,
+const WANT = { runAsNode: false, enableCookieEncryption: true, enableNodeOptionsEnvironmentVariable: false,
                enableNodeCliInspectArguments: false, enableEmbeddedAsarIntegrityValidation: false,
                onlyLoadAppFromAsar: true, grantFileProtocolExtraPrivileges: true };
 /* The two the stock binary already carries as asked. */
 const KEPT = ['enableEmbeddedAsarIntegrityValidation', 'grantFileProtocolExtraPrivileges'];
-const FOUR = Object.keys(WANT).filter(k => !KEPT.includes(k));
+const FIVE = Object.keys(WANT).filter(k => !KEPT.includes(k));
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'etiuda-fuses-'));
 try {
   const want = wantedFuses();
   check(JSON.stringify(want) === JSON.stringify(WANT),
-    '1a the reader asks for what electron-builder.js asks for, the six [2f/5] holds: ' + JSON.stringify(want));
+    '1a the reader asks for what electron-builder.js asks for, the seven [2f/5] holds: ' + JSON.stringify(want));
 
   const { flipFuses, FuseVersion, FuseV1Options } = require('@electron/fuses');
   const stock = require('electron');
   let onStock;
   try { onStock = await fuseProblems(stock, want); } catch (e) { onStock = [String(e && e.message)]; }
-  check(onStock.length === 4 && FOUR.every(k => onStock.some(l => l.indexOf(k + ' is ') === 0)),
-    '2a CONTROL: the stock Electron binary, which ships four the other way, reads wrong on each and as asked on the two kept: '
+  check(onStock.length === 5 && FIVE.every(k => onStock.some(l => l.indexOf(k + ' is ') === 0)),
+    '2a CONTROL: the stock Electron binary, which ships five the other way, reads wrong on each and as asked on the two kept: '
     + JSON.stringify(onStock));
 
   /* A PROGRAM IN MINIATURE: the stock binary's wire behind a few bytes, which is all the reader and
@@ -79,6 +81,27 @@ try {
   check(at > 0 && wireLen >= 6 && onGood.length === 0,
     '3a the stock wire flipped as electron-builder flips it reads as asked: ' + JSON.stringify(onGood)
     + ', a wire of ' + wireLen);
+  if (process.env.ETIUDA_PLANTS === 'off') skip('1b, plant:fuse-cookie lifted (ETIUDA_PLANTS=off)', 1);
+  else {
+    /* 1b, THE PLANT: electron-builder.js's text with plant:fuse-cookie's line put in another form, evaluated as the build
+       reads it, every signing variable cleared; its ask then lacks the cookie fuse, and a program flipped without it,
+       refused under the real ask, passes under the lifted one. */
+    const EBT = fs.readFileSync(path.join(ROOT, 'electron-builder.js'), 'utf8');
+    const EBL = EBT.split('\n').map(l => l.includes('plant:fuse-cookie') ? '    /* plant:fuse-cookie */' : l).join('\n');
+    const liftedAsk = (() => {
+      const quiet = SIGNING_VARS, was = {};
+      for (const k of quiet) { was[k] = process.env[k]; delete process.env[k]; }
+      try { const m = { exports: {} };
+        new Function('require', '__dirname', 'module', 'exports', EBL)(createRequire(path.join(ROOT, 'electron-builder.js')), ROOT, m, m.exports);
+        return m.exports.electronFuses || {}; }
+      finally { for (const k of quiet) if (was[k] != null) process.env[k] = was[k]; }
+    })();
+    const noCookie = await program('no-cookie.exe', [WANT, { enableCookieEncryption: false }]);
+    const realOn = await fuseProblems(noCookie, want), liftedOn = await fuseProblems(noCookie, liftedAsk);
+    check(EBL !== EBT && !('enableCookieEncryption' in liftedAsk) && liftedOn.length === 0
+      && realOn.length === 1 && /^enableCookieEncryption is off where electron-builder\.js asks for it on/.test(realOn[0]),
+      '1b with plant:fuse-cookie lifted the ask has no cookie fuse and a program without it passes, which the real ask refuses: ' + JSON.stringify(realOn));
+  }
   const oneEach = [];
   for (const k of Object.keys(WANT)) {
     const f = await program('one-' + k + '.exe', [WANT, { [k]: !WANT[k] }]);
@@ -119,7 +142,7 @@ try {
   const pFlipped = await packagedFuseProblems(await dist('d-flipped', flipped));
   const pMissing = await packagedFuseProblems(await dist('d-missing', null));
   const pPlain = await packagedFuseProblems(await dist('d-plain', plain));
-  check(pGood.length === 0, '4a a dist whose program carries the six as asked passes: ' + JSON.stringify(pGood));
+  check(pGood.length === 0, '4a a dist whose program carries the seven as asked passes: ' + JSON.stringify(pGood));
   check(pFlipped.length === 1 && /^runAsNode is on /.test(pFlipped[0]),
     '4b one whose program has node turned back on is refused, naming it: ' + JSON.stringify(pFlipped));
   check(pMissing.length === 1 && /is not there/.test(pMissing[0]),
@@ -178,8 +201,8 @@ try {
       return { status: r.status, out: (r.stdout || '') + (r.stderr || '') };
     };
     const a = pack('good', good), b = pack('flipped', flipped), c = pack('missing', null), e = pack('no-caret', good, true);
-    check(a.status === 0 && /6 fuse\(s\) read back from .*Etiuda\.exe as asked/.test(a.out),
-      '5a the step passes a program carrying the six as asked, and says so, exit ' + a.status);
+    check(a.status === 0 && /7 fuse\(s\) read back from .*Etiuda\.exe as asked/.test(a.out),
+      '5a the step passes a program carrying the seven as asked, and says so, exit ' + a.status);
     check(b.status === 1 && /runAsNode is on where electron-builder\.js asks for it off/.test(b.out),
       '5b the step refuses a program with node turned back on, naming the fuse, exit ' + b.status);
     check(c.status === 1 && /is not there, so no fuse was read/.test(c.out),

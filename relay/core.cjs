@@ -167,6 +167,21 @@ const SEATS_FIELDS = ["licence", "live"], RELEASE_FIELDS = ["licence", "release"
    test architect's read). At most FREED_MAX, keys distinct, as many as a team holds desks (KEYS_MAX), so a large company's pooled desks,
    each freed every morning, all fit: a thousand entries are about 95 KB, inside JSON_MAX and a stored value's 128 KiB. */
 const FREED_MAX = KEYS_MAX;
+/* A PERSON'S STORE: a team whose members are one person's computers, made and renewed by a store grant, which names the
+   person's code where a relay grant names seats. Its sessions ask a store certificate naming the same code, and the service may end it
+   by its notice. A store grant is signed under the delegation's "relay-grant", in its own kind, so neither grant is read as the other. */
+const STORE_GRANT_KIND = "etiuda-store-grant";
+const STORE_GRANT_FIELDS = ["kind", "format", "lead", "code", "issued", "until", "paid", "sig", "via"];
+/* THE STORE CERTIFICATE the service gives the person's signed-in computer at each renewal, under the delegation's "licence": the desk
+   key and the person's code, running a day, so a computer whose sign-in ended stops syncing within the day. */
+const STORE_CERT_KIND = "etiuda-store-certificate";
+const STORE_CERT_FIELDS = ["kind", "format", "desk", "code", "issued", "until", "via", "sig"];
+const STORE_CERT_SPAN_MS = 24 * 60 * 60 * 1000;
+/* THE SERVICE'S NOTICE: one signed route by which the licence service tells the relay something about a
+   team, under the delegation's "relay-grant". Each kind names its fields; a kind the relay does not know is refused, never ignored. */
+const NOTICE_KIND = "etiuda-service-notice";
+const NOTICE_FIELDS = { "store-end": ["kind", "format", "what", "rt", "code", "issued", "via", "sig"] };
+const NOTICE_MAX = 4096;
 const DELEGATION_FIELDS = ["kind", "format", "key", "may", "from", "until", "sig"];
 const SIG_FIELDS = ["alg", "keyId", "value"];
 const MAY_MAX = 16;
@@ -183,7 +198,11 @@ function unsigned(doc) {
   if (plain(doc.sig)) { out.sig = Object.assign({}, doc.sig); delete out.sig.value; }
   return out;
 }
-function grantBytes(grant) { return Buffer.from(GRANT_KIND + "\n" + canon(unsigned(grant)), "utf8"); }
+const isStoreGrant = g => plain(g) && g.kind === STORE_GRANT_KIND;
+function grantBytes(grant) {
+  if (isStoreGrant(grant)) return Buffer.from(STORE_GRANT_KIND + "\n" + canon(unsigned(grant)), "utf8");
+  return Buffer.from(GRANT_KIND + "\n" + canon(unsigned(grant)), "utf8");
+}
 function delegationBytes(d) { return Buffer.from(DELEGATION_KIND + "\n" + canon(unsigned(d)), "utf8"); }
 
 /* The delegation a grant names, judged against that grant: its kind and shape, then what it lets its key do and when, and the
@@ -208,9 +227,10 @@ function grantWhy(grant, leadPub, now, roots, revoked) {
   const rs = roots === undefined ? [ROOT_PUB] : roots;
   if (!Array.isArray(rs) || rs.length < 1 || !rs.every(r => is(HEX64, r)) || !Number.isSafeInteger(now) || !is(HEX64, leadPub)) return "setup";
   if (!plain(grant)) return "shape";
-  if (grant.kind !== GRANT_KIND) return "kind"; /* plant:grant-kind */
+  if (grant.kind !== GRANT_KIND && grant.kind !== STORE_GRANT_KIND) return "kind"; /* plant:grant-kind */
   if (grant.format !== 1) return "shape"; /* plant:grant-format */
-  if (!only(grant, GRANT_FIELDS)) return "fields"; /* plant:grant-fields */
+  if (!only(grant, isStoreGrant(grant) ? STORE_GRANT_FIELDS : GRANT_FIELDS)) return "fields"; /* plant:grant-fields */
+  if (isStoreGrant(grant) && !is(CODE_RE, grant.code)) return "shape"; /* plant:store-grant-code */
   if (!is(HEX64, grant.lead) || !Number.isSafeInteger(grant.issued) || !Number.isSafeInteger(grant.until) || !sigShaped(grant.sig)) return "shape";
   if (typeof grant.paid !== "boolean") return "shape"; /* plant:grant-paid */
   if (grant.seats !== undefined && !seatsShaped(grant.seats, grant.issued)) return "shape"; /* plant:grant-seats */
@@ -298,6 +318,51 @@ function certWhy(cert, deskPub, refs, now, roots, revoked, runOut) {
   if (cert.sig.keyId !== cert.via.key.id) return "via-key"; /* plant:cert-via-key */
   if (!verified(cert.via.key.pub, certBytes(cert), cert.sig.value)) return "signature"; /* plant:cert-sig */
   if (Array.isArray(revoked) && revoked.indexOf(cert.via.key.pub) > -1) return "revoked"; /* plant:cert-revoked */
+  return null;
+}
+
+/* The bytes the service signs for a store certificate: the kind's line, then format, desk, code, issued, until and the key's id. */
+function storeCertBytes(c) {
+  return Buffer.from(STORE_CERT_KIND + "\n" + [c.format, c.desk, c.code, c.issued, c.until, c.sig.keyId].map(String).join("\n"), "utf8");
+}
+/* Why a store certificate does not open a session for desk key `deskPub` at `now`, or null: certWhy's order, with no run-out grace. */
+function storeCertWhy(cert, deskPub, now, roots, revoked) {
+  const rs = roots === undefined ? [ROOT_PUB] : roots;
+  if (!Array.isArray(rs) || rs.length < 1 || !rs.every(r => is(HEX64, r)) || !Number.isSafeInteger(now) || !is(HEX64, deskPub)) return "setup";
+  if (!plain(cert) || canonBytesWithin(cert, DOOR_CERT_MAX) > DOOR_CERT_MAX) return "size";
+  if (cert.kind !== STORE_CERT_KIND) return "kind"; /* plant:store-cert-kind */
+  if (!exactly(cert, STORE_CERT_FIELDS) || cert.format !== 1 || !is(HEX64, cert.desk) || !is(CODE_RE, cert.code) || !Number.isSafeInteger(cert.issued)
+    || !Number.isSafeInteger(cert.until) || cert.issued <= 0 || cert.until <= cert.issued || !plain(cert.sig) || !exactly(cert.sig, SIG_FIELDS)
+    || cert.sig.alg !== "Ed25519" || !isId(cert.sig.keyId) || !is(HEX128, cert.sig.value)) return "shape";
+  if (cert.until - cert.issued > STORE_CERT_SPAN_MS) return "span"; /* plant:store-cert-span */
+  if (cert.desk !== deskPub) return "desk"; /* plant:store-cert-desk */
+  if (cert.issued > now + CALL_SKEW_MS) return "future";
+  if (now >= cert.until) return "ended"; /* plant:store-cert-ended */
+  const via = certViaWhy(cert.via, cert.issued, rs);
+  if (via !== null) return via;
+  if (cert.sig.keyId !== cert.via.key.id) return "via-key";
+  if (!verified(cert.via.key.pub, storeCertBytes(cert), cert.sig.value)) return "signature"; /* plant:store-cert-sig */
+  if (Array.isArray(revoked) && revoked.indexOf(cert.via.key.pub) > -1) return "revoked"; /* plant:store-cert-revoked */
+  return null;
+}
+function noticeBytes(n) { return Buffer.from(NOTICE_KIND + "\n" + canon(unsigned(n)), "utf8"); }
+/* Why a notice for team `rt` does not hold at `now`, or null: its size and shape, its kind, a kind of notice the relay knows, the path's
+   team, its freshness, then its delegation, signer, signature and the revoked list, as a grant's. */
+function noticeWhy(n, rt, now, roots, revoked) {
+  const rs = roots === undefined ? [ROOT_PUB] : roots;
+  if (!Array.isArray(rs) || rs.length < 1 || !rs.every(r => is(HEX64, r)) || !Number.isSafeInteger(now)) return "setup";
+  if (!plain(n) || canonBytesWithin(n, NOTICE_MAX) > NOTICE_MAX) return "size";
+  if (n.kind !== NOTICE_KIND) return "kind"; /* plant:notice-kind */
+  const fields = typeof n.what === "string" && Object.prototype.hasOwnProperty.call(NOTICE_FIELDS, n.what) ? NOTICE_FIELDS[n.what] : null;
+  if (!fields) return "what"; /* plant:notice-what */
+  if (!exactly(n, fields) || n.format !== 1 || !is(HEX32, n.rt) || !is(CODE_RE, n.code) || !Number.isSafeInteger(n.issued) || !sigShaped(n.sig)) return "shape";
+  if (n.rt !== rt) return "rt"; /* plant:notice-rt */
+  if (!isFresh(n.issued, now)) return "stale"; /* plant:notice-fresh */
+  const via = delegationWhy(n.via, { issued: n.issued, until: n.issued + 1 }, rs);
+  if (via !== null) return via; /* plant:notice-via */
+  if (n.sig.keyId !== n.via.key.id) return "via-key";
+  if (!verified(n.via.key.pub, noticeBytes(n), n.sig.value)) return "signature"; /* plant:notice-sig */
+  if (Array.isArray(revoked) && revoked.indexOf(n.via.key.pub) > -1) return "revoked"; /* plant:notice-revoked */
   return null;
 }
 
@@ -561,6 +626,22 @@ function createCore(deps) {
     return { ok: true, note: null };
   }
 
+  /* The person's code a store was made for, kept only as a keyed hash under the team's secret, as the door keeps a person. */
+  function storeMark(secret, code) {
+    return crypto.createHmac("sha256", Buffer.from(secret, "hex")).update("etiuda-relay-store-person\n" + code, "utf8").digest("hex").slice(0, 32);
+  }
+  /* Whether a grant fits a team that exists: a store's grant on a store, for its own person, and a relay grant on any other team. */
+  function grantFits(team, grant) {
+    if (!!team.store !== isStoreGrant(grant)) return false; /* plant:store-kind-fits */
+    return !team.store || storeMark(team.secret, grant.code) === team.store; /* plant:store-code-fits */
+  }
+  /* A store's session asks a current store certificate for this desk key and for the person the store was made for. */
+  function storeGate(team, cert, deskPub) {
+    if (storeCertWhy(cert, deskPub, clock(), roots, revokedNow()) !== null) return no("seat-lapsed"); /* plant:store-cert */
+    if (storeMark(team.secret, cert.code) !== team.store) return no("seat-lapsed"); /* plant:store-code */
+    return { ok: true, note: null };
+  }
+
   /* A hello, a session or a later call under one, where the grant in force was signed by a key now on the list. */
   function grantRefused() {
     const key = store.get("grantKey");
@@ -579,7 +660,9 @@ function createCore(deps) {
     if (!fresh(b.t)) return no("nonce-stale"); /* plant:create-fresh */
     const team = store.get("team");
     if (team && (team.lead.keyId !== lead.keyId || team.lead.pub !== lead.pub)) return no("not-enrolled"); /* plant:create-taken */
+    if (team && !grantFits(team, b.grant)) return no("bad-grant"); /* plant:store-create-fits */
     const swept = team ? undefined : store.get("swept");
+    if (swept === "ended") return no("swept-other-lead"); /* plant:store-ended-create */
     const marked = is(HEX64, swept); /* plant:swept-new */
     if (marked && swept !== lead.pub) return no("swept-other-lead"); /* plant:swept-other */
     const kept = keptGrant(team, b.grant), { until, paid } = kept;
@@ -599,6 +682,7 @@ function createCore(deps) {
       delete row.paidUntil;
       Object.assign(row, paidApart);
       if (typeof row.secret !== "string") row.secret = random(32);
+      if (!team && isStoreGrant(b.grant)) Object.assign(row, { store: storeMark(row.secret, b.grant.code), storeAt: clock() });
       store.put("team", row);
       if (team) resumeHeld(team, clock());
       store.del("swept");
@@ -633,6 +717,7 @@ function createCore(deps) {
     const why = grantWhy(b.grant, team.lead.pub, clock(), roots, revokedNow());
     if (why === "revoked") return no("revoked"); /* plant:renew-revoked */
     if (why !== null) return no("bad-grant"); /* plant:renew-grant */
+    if (!grantFits(team, b.grant)) return no("bad-grant"); /* plant:store-renew-fits */
     const next = keptGrant(team, b.grant);
     /* A grant that does not move the team on is taken only where it would change nothing, or where the grant in force was
        signed by a key now revoked; otherwise it is refused, and nothing is cleared for it. */
@@ -676,6 +761,7 @@ function createCore(deps) {
     const why = grantWhy(b.grant, to.pub, clock(), roots, revokedNow());
     if (why === "revoked") return no("revoked"); /* plant:lead-grant-revoked */
     if (why !== null) return no("bad-grant"); /* plant:lead-grant-why */
+    if (!grantFits(team, b.grant)) return no("bad-grant"); /* plant:store-lead-fits */
     const oldLead = team.lead;
     const next = keptGrant(team, b.grant);
     const needsMade = typeof team.made !== "string" || !team.made;
@@ -700,6 +786,19 @@ function createCore(deps) {
       takeSeats(b.grant); /* plant:seats-lead */
     });
     return { ok: true, lead: to.keyId, oldLead: oldLead.keyId, lapse: told() };
+  }
+
+  /* The service's notice. A store-end ends only a store, for the person it was made for, by a notice not older than the store: the team
+     is marked ended here and swept by its object at once, and its id is then never made again. */
+  function notice(rt, body) {
+    const team = teamOf(rt);
+    if (!team) return no("not-enrolled");
+    const n = bodyOf(body).notice;
+    if (noticeWhy(n, rt, clock(), roots, revokedNow()) !== null) return no("bad-grant"); /* plant:notice-judged */
+    if (!team.store || storeMark(team.secret, n.code) !== team.store) return no("bad-grant"); /* plant:notice-code */
+    if (!(Number.isSafeInteger(team.storeAt) && n.issued >= team.storeAt - CALL_SKEW_MS)) return no("bad-grant"); /* plant:notice-after-store */
+    store.atomic(() => store.put("team", Object.assign({}, team, { ended: clock() })));
+    return { ok: true, what: n.what };
   }
 
   /* Where the team stands, as a session's reply and since's header carry it. */
@@ -840,6 +939,7 @@ function createCore(deps) {
     if (!team) return no("not-enrolled");
     const blocked = grantRefused();
     if (blocked) return blocked; /* plant:revoked-invites */
+    if (team.store) return no("not-enrolled"); /* plant:store-no-invites */
     const b = bodyOf(body);
     if (!Array.isArray(b.add) || !Array.isArray(b.drop) || !Number.isSafeInteger(b.t)) return no("bad-signature");
     if (b.wraps !== undefined && !Array.isArray(b.wraps)) return no("bad-signature");
@@ -1104,6 +1204,8 @@ function createCore(deps) {
     if (!isId(b.key) || !is(HEX128, b.sig) || !matches || !verified(b.pub, msg, b.sig)) return no("bad-signature"); /* plant:hello-shape */
     if (b.key === team.lead.keyId) {
       if (team.lead.pub !== b.pub) return no("bad-signature"); /* plant:lead-sig */
+      /* Every computer of a store holds its lead key S, and the folder holds it too, so S signs lists and opens no session. */
+      if (team.store) return no("not-enrolled"); /* plant:store-lead-hello */
       /* A Studio is judged as a desk is, by its person: on a team whose grant carries seats the lead's session carries the certificate
          of its person's lead seat. What takes access away is a signed call, never a session, so a lapsed seat still lets the lead go. */
       let seat = { ok: true };
@@ -1134,6 +1236,7 @@ function createCore(deps) {
     if (dev.pub !== b.pub) return no("bad-signature"); /* plant:key-sig */
     let seat = { ok: true };
     seat = seatGate(b.seat, b.pub); /* plant:seat-session */
+    if (team.store) seat = storeGate(team, b.seat, b.pub); /* plant:store-session */
     if (!seat.ok) return seat;
     return issue(b.challenge, { key: b.key, inv: null }, seat.note);
   }
@@ -1247,6 +1350,7 @@ function createCore(deps) {
   function door(rt, body) {
     const team = teamOf(rt);
     if (!team) return no("not-enrolled");
+    if (team.store) return no("not-enrolled"); /* plant:store-no-door */
     const blocked = grantRefused();
     if (blocked) return blocked;
     const b = bodyOf(body);
@@ -1841,6 +1945,7 @@ function createCore(deps) {
   /* The sweep is due once the team is gone by the clock, or, with no team left, while a missed object waits. */
   function sweepDue() {
     const team = store.get("team");
+    if (team && Number.isSafeInteger(team.ended)) return true; /* plant:notice-sweeps */
     return team ? lapseOf(team, clock()).state === "gone" : store.list("orphan:").length > 0;
   }
   /* Every object the rows name: the blobs', those put and not yet committed, and those a delete missed. */
@@ -1860,7 +1965,8 @@ function createCore(deps) {
     const team = store.get("team");
     const prior = store.get("swept"), priorAt = store.get("sweptAt");
     const leadPub = team && plain(team.lead) ? team.lead.pub : null;
-    const mark = is(HEX64, leadPub) ? leadPub : (is(HEX64, prior) ? prior : null);
+    let mark = is(HEX64, leadPub) ? leadPub : (is(HEX64, prior) || prior === "ended" ? prior : null);
+    if ((team && Number.isSafeInteger(team.ended)) || prior === "ended") mark = "ended"; /* plant:notice-ended-mark */
     const finish = () => {
       if (mark) store.put("swept", mark); /* plant:swept-mark */
       if (mark) store.put("sweptAt", !team && Number.isSafeInteger(priorAt) ? priorAt : clock());
@@ -1925,7 +2031,7 @@ function createCore(deps) {
   /* Whether this object holds the team of that id: the question the object asks before it awaits a body. */
   const hasTeam = rt => teamOf(rt) !== null;
 
-  return { create, renew, lead, devices, invites, door, challenge, session, sessionOf, sessionByHash, since, blobFor, admit, judge, reserve, unreserve, commit,
+  return { create, renew, lead, notice, devices, invites, door, challenge, session, sessionOf, sessionByHash, since, blobFor, admit, judge, reserve, unreserve, commit,
     prune, orphan, record, forget, sweepDue, heldObjects, wipe, alarmAt, forgetGone, nextLapse, lapseState, lapseGate, parseMeta, wrapFor, statesFor, readGate, hasTeam };
 }
 
@@ -1935,6 +2041,7 @@ module.exports = {
   LEAD_PREFIX, leadBytes, judgeLead,
   DOOR_REFS_MAX, DOOR_CERT_MAX, DOOR_LIVE_MAX, DOOR_PER_PERSON, DOOR_RATE_MAX, DOOR_RATE_MS, DOOR_TRY_SHARE, CERT_SPAN_MS, SEAT_MARGIN_MS, POOLED_GRACE_MS, SEAT_QUIET_MS, FREED_MAX,
   doorBytes, doorHelloBytes, certBytes, certWhy,
+  STORE_GRANT_KIND, STORE_CERT_KIND, STORE_CERT_SPAN_MS, NOTICE_KIND, storeCertBytes, storeCertWhy, noticeBytes, noticeWhy,
   grantBytes, delegationBytes, revocationBytes, revokedKeysOf, acceptRevocations, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, leadKeyMatches, parseMeta,
   createCore,
 };
