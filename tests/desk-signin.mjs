@@ -17,7 +17,8 @@
  * EVERY GUARD IS SHOWN RED (ds-plants): the line carrying its plant tag is put in another form in memory and the same case
  * is read again; nothing on disk is touched. Skipped under ETIUDA_PLANTS=off.
  *
- * THE SIGN-IN PREVIEW (ds12): ETIUDA_SIGNIN_PREVIEW=1 draws the door and Account with both providers while none has a client id.
+ * THE SIGN-IN PREVIEW (ds12): ETIUDA_SIGNIN_PREVIEW=1 draws the door and Account with both providers while none has a client id,
+ * read over the section with the shipped client ids taken out (loadBare); as shipped, with them, it changes nothing.
  * Its press is driven through the shell's own click and sign-in handlers, sliced, with every door out stood in and counted.
  *
  * THE DOOR-FINDING (ds17, board 980; Max, 2026-11-12 18:46 and 18:57): the doors the service hands beside a certificate are kept
@@ -48,7 +49,7 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 162;
+const PLANTS = 163;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
@@ -185,6 +186,13 @@ const TENANT = "aaaabbbb-0000-1111-2222-ccccddddeeee";
 const configured = s => ({ microsoft: Object.assign({}, s.SIGNIN_PROVIDERS.microsoft, { clientId: MS_CLIENT }),
   google: Object.assign({}, s.SIGNIN_PROVIDERS.google, { clientId: G_CLIENT }) });
 const MS = { id: "microsoft", clientId: MS_CLIENT }, G = { id: "google", clientId: G_CLIENT };
+/* The providers with no client id, as the section stood before Etiuda's registrations were in it. */
+const bare = s => ({ microsoft: Object.assign({}, s.SIGNIN_PROVIDERS.microsoft, { clientId: "" }),
+  google: Object.assign({}, s.SIGNIN_PROVIDERS.google, { clientId: "" }) });
+/* Etiuda's own registrations as shipped: Microsoft's Application (client) ID, a GUID; Google's Desktop client ID; neither a stand-in. */
+const shippedIds = s => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(s.SIGNIN_PROVIDERS.microsoft.clientId)
+  && /^[0-9]{6,20}-[a-z0-9]{8,64}\.apps\.googleusercontent\.com$/.test(s.SIGNIN_PROVIDERS.google.clientId)
+  && s.SIGNIN_PROVIDERS.microsoft.clientId !== MS_CLIENT && s.SIGNIN_PROVIDERS.google.clientId !== G_CLIENT;
 const signKey = crypto.generateKeyPairSync("ed25519"), otherKey = crypto.generateKeyPairSync("ed25519");
 const rawPub = k => k.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
 const DESK_KEY = rawPub(signKey.publicKey), OTHER_DESK_KEY = rawPub(otherKey.publicKey);
@@ -249,12 +257,15 @@ function cert(over, signer) {
 
 /* ---- cases, each a function of the loaded section so a plant reads the same case again ------------------------------ */
 const CASES = {};
-/* As shipped no client id is configured, so nothing is offered; a configured table offers what it configures, in its order. */
+/* As shipped both are configured with Etiuda's own registrations and offered in order, no secret in the tree; a table with no client
+   id offers nothing; a configured table offers what it configures, in its order. */
 CASES.offered = s => {
-  const shipped = s.signinOffered(), conf = s.signinOffered(configured(s));
-  const half = s.signinOffered({ microsoft: Object.assign({}, s.SIGNIN_PROVIDERS.microsoft, { clientId: MS_CLIENT }), google: s.SIGNIN_PROVIDERS.google });
+  const shipped = s.signinOffered(), none = s.signinOffered(bare(s)), conf = s.signinOffered(configured(s));
+  const half = s.signinOffered({ microsoft: Object.assign({}, s.SIGNIN_PROVIDERS.microsoft, { clientId: MS_CLIENT }), google: bare(s).google });
   const odd = s.signinOffered({ elsewhere: { clientId: G_CLIENT }, google: Object.assign({}, s.SIGNIN_PROVIDERS.google, { clientId: "short" }) });
-  return Array.isArray(shipped) && shipped.length === 0 && conf.map(p => p.id + ":" + p.clientId).join() === "microsoft:" + MS_CLIENT + ",google:" + G_CLIENT
+  return shippedIds(s) && shipped.map(p => p.id + ":" + p.clientId + ":" + p.clientSecret).join()
+      === "microsoft:" + s.SIGNIN_PROVIDERS.microsoft.clientId + ":,google:" + s.SIGNIN_PROVIDERS.google.clientId + ":"
+    && Array.isArray(none) && none.length === 0 && conf.map(p => p.id + ":" + p.clientId).join() === "microsoft:" + MS_CLIENT + ",google:" + G_CLIENT
     && half.map(p => p.id).join() === "microsoft" && odd.length === 0;
 };
 /* An invitation naming providers no longer carries a sign-in hint: the team's start is retired. */
@@ -262,7 +273,8 @@ CASES.noHintStart = s => {
   const doc = { team: TEAM, folder: "\\\\server\\share\\team", secret: "0".repeat(32), lead: { keyId: "studio-1", public: "a".repeat(64), name: "Lead" },
     signin: { providers: [{ id: "microsoft", clientId: MS_CLIENT }] } };
   const read = s.inviteRead("etiuda-join:" + b64url(JSON.stringify(doc)), false);
-  return !!read && read.signin === undefined && s.signinOffered().length === 0;
+  return !!read && read.signin === undefined && s.signinOffered().map(p => p.clientId).join() === [s.SIGNIN_PROVIDERS.microsoft.clientId, s.SIGNIN_PROVIDERS.google.clientId].join()
+    && s.signinOffered().every(p => p.clientId !== MS_CLIENT);
 };
 CASES.pkce = s => {
   const r = s.signinAuthorize(G, 51234, DESK_KEY);
@@ -1172,6 +1184,12 @@ function loadEnv(v, swap) {
   try { return load(swap && SECTION.split(swap[0]).length === 2 ? swap : null); }
   finally { if (was === undefined) delete process.env.ETIUDA_SIGNIN_PREVIEW; else process.env.ETIUDA_SIGNIN_PREVIEW = was; }
 }
+/* loadEnv over the section with the shipped two's client ids taken out, or null where the section does not hold both once. */
+function loadBare(v, swap) {
+  const keep = SECTION, at = /(\n  (?:microsoft|google): Object\.freeze\(\{ clientId: )"[^"]*"/g;
+  if ((keep.match(at) || []).length !== 2) return null;
+  try { SECTION = keep.replace(at, "$1\"\""); return loadEnv(v, swap); } finally { SECTION = keep; }
+}
 /* An IPC statement of the wiring, from its first line to its closing "});". */
 function ipcSlice(start) {
   const a = WIRING.indexOf("\n" + start);
@@ -1203,30 +1221,30 @@ function pressStand(sec, swap) {
 }
 /* Off by default: absent, "0", "yes" or " 1", nothing is offered and nothing is a preview; "1" alone offers both as a preview. */
 CASES.previewOff = (s, swap) => {
-  const seen = [null, "0", "yes", " 1", "1"].map(v => { const sec = loadEnv(v, swap), w = pressStand(sec, swap).view(); return JSON.stringify([w.offered, w.preview]); });
+  const seen = [null, "0", "yes", " 1", "1"].map(v => { const sec = loadBare(v, swap); if (!sec) return ""; const w = pressStand(sec, swap).view(); return JSON.stringify([w.offered, w.preview]); });
   return seen.slice(0, 4).every(x => x === "[[],false]") && seen[4] === '[["microsoft","google"],true]';
 };
-/* Inert with real ids: the section with Microsoft's client id filled in, the variable set, offers Microsoft alone and no preview, and a
-   press of Google is the ordinary "not offered", nothing reached; the decision alone: asked, and nothing configured. */
+/* Inert with real ids: as shipped, the variable set, both are offered and nothing is a preview; the section with no ids but
+   Microsoft's, the variable set, offers Microsoft alone and no preview, and a press of Google is the ordinary "not offered", nothing
+   reached; the decision alone: asked, and nothing configured. */
 CASES.previewInert = (s, swap) => {
-  const anchor = 'microsoft: Object.freeze({ clientId: "",';
-  if (SECTION.split(anchor).length !== 2) return false;
-  const keep = SECTION;
-  let real = null, withId = null;
-  try {
-    real = loadEnv("1", swap);
-    SECTION = keep.replace(anchor, 'microsoft: Object.freeze({ clientId: "' + MS_CLIENT + '",');
-    withId = loadEnv("1", swap);
-  } finally { SECTION = keep; }
-  const st = pressStand(withId, swap), w = st.view();
+  const real = loadBare("1", swap), shipped = loadEnv("1", swap);
+  if (!real) return false;
+  const keep = SECTION, at = /(\n  microsoft: Object\.freeze\(\{ clientId: )"[^"]*"/, gat = /(\n  google: Object\.freeze\(\{ clientId: )"[^"]*"/;
+  let withId = null;
+  try { SECTION = keep.replace(at, "$1\"" + MS_CLIENT + "\"").replace(gat, "$1\"\""); withId = loadEnv("1", swap); } finally { SECTION = keep; }
+  const st = pressStand(withId, swap), w = st.view(), sw = pressStand(shipped, swap).view();
   return real.signinPreviewing(true, configured(real)) === false && real.signinPreviewing(true) === true && real.signinPreviewing(false) === false
+    && shipped.signinPreviewing() === false && JSON.stringify([sw.offered, sw.preview]) === '[["microsoft","google"],false]'
     && withId.signinPreviewing() === false && JSON.stringify([w.offered, w.preview]) === '[["microsoft"],false]'
     && st.press("google").then(v => !!v && v.said === "signin-none" && st.out === 0);
 };
 /* Nothing reaches out: a trusted press of either provider is answered "signin-preview" before the identity, the browser, the
    loopback, the provider, the service, a write or the network; an untrusted press and an unknown provider are not the preview's. */
 CASES.previewPress = async (s, swap) => {
-  const st = pressStand(loadEnv("1", swap), swap);
+  const sec = loadBare("1", swap);
+  if (!sec) return false;
+  const st = pressStand(sec, swap);
   const untrusted = await st.handle["etiuda:signin"]({}, "microsoft");
   const ms = await st.press("microsoft"), g = await st.press("google"), odd = await st.press("elsewhere");
   return !!untrusted && untrusted.said === "" && !!ms && ms.said === "signin-preview" && ms.busy === "" && ms.preview === true
@@ -1370,7 +1388,7 @@ CASES.secretPacked = s => {
     && Object.keys(r(JSON.stringify({ format: 1, google: spaced }))).length === 0 && Object.keys(r(JSON.stringify({ format: 1, google: short }))).length === 0
     && Object.keys(r(JSON.stringify({ format: 2, google: STAND_IN }))).length === 0 && Object.keys(r(JSON.stringify({ format: 1, microsoft: STAND_IN }))).length === 0
     && Object.keys(r("")).length === 0 && Object.keys(r("not json")).length === 0 && Object.keys(r("[]")).length === 0
-    && s.signinOffered().length === 0 && s.signinOffered(configured(s)).find(p => p.id === "google").clientSecret === "";
+    && s.signinOffered().length === 2 && s.signinOffered().every(p => p.clientSecret === "") && s.signinOffered(configured(s)).find(p => p.id === "google").clientSecret === "";
 };
 /* Never logged, kept or sent elsewhere: a first sign-in and a quiet renewal with the stand-in, every console method captured, find it
    in the token forms (so the search can find it) and nowhere else: not a line printed, not the service's bodies, which keep exactly
@@ -1824,8 +1842,9 @@ function labStart(s, facts, swap) {
 }
 /* THE FLOOR: installed, packaged or both, the variable naming a good lab file or a staging one and Google's secret in the
    environment, nothing is read and the providers, what is offered, Google's secret and both doors are byte for byte the shipped
-   ones. Neither, the lab is taken; a staging file fills the shipped two's client ids alone, the environment's secret goes to Google
-   alone, and a file naming another host is refused as a whole, the secret with it. */
+   ones. Neither, the lab is taken and the shipped two hold its client ids alone, none where it names none; a staging file fills the
+   shipped two's client ids alone, the environment's secret goes to Google alone, and a file naming another host is refused as a
+   whole, the secret with it. */
 CASES.labPackaged = async (s0, swap) => {
   /* A plant in the section is put in every section loaded here, one in the wiring in its read. */
   const load = () => loadIn(swap);
@@ -1834,11 +1853,14 @@ CASES.labPackaged = async (s0, swap) => {
     const file = path.join(dir, "lab.json"), far = path.join(dir, "far.json"), staging = path.join(dir, "staging.json");
     fs.writeFileSync(file, labText(4567));
     fs.writeFileSync(far, labText(4567, {}, { token: "http://192.168.1.20:4567/token" }));
+    const half = path.join(dir, "half.json");
     fs.writeFileSync(staging, stagingText());
-    const shipped = load().live(), json = o => JSON.stringify(o);
+    fs.writeFileSync(half, stagingText({ clientIds: { microsoft: MS_CLIENT } }));
+    const first = load(), shipped = first.live(), json = o => JSON.stringify(o), shippedOffered = json(first.signinOffered());
     const asShipped = s => { const l = s.live(); return json(l.providers) === json(shipped.providers) && Object.keys(l.providers).join() === "microsoft,google"
       && Object.isFrozen(l.providers) && l.signin === "https://etiuda.dev/licence/v1/signin/desk" && l.signout === "https://etiuda.dev/licence/v1/signout/desk"
-      && l.on === false && Object.keys(l.packed).length === 0 && s.signinOffered().length === 0 && s.signinKnown("lab") === null
+      && l.on === false && Object.keys(l.packed).length === 0 && shippedIds(s) && json(s.signinOffered()) === shippedOffered
+      && s.signinOffered().length === 2 && s.signinKnown("lab") === null
       && !s.signinPageOk("http://127.0.0.1:4567/authorize?client_id=x"); };
     let inert = true;
     for (const facts of [{ installed: true, packaged: false }, { installed: false, packaged: true }, { installed: true, packaged: true }]) {
@@ -1851,17 +1873,20 @@ CASES.labPackaged = async (s0, swap) => {
     const lab = load(), t = labStart(lab, { installed: false, packaged: false, file: file }, swap), l = lab.live();
     const refused = load(), f = labStart(refused, { installed: false, packaged: false, file: far, secret: STAND_IN }, swap);
     const st = load(), g = labStart(st, { installed: false, packaged: false, file: staging, secret: STAND_IN }, swap), sl = st.live();
+    const hf = load(), h = labStart(hf, { installed: false, packaged: false, file: half }, swap);
     const sans = p => { const o = Object.assign({}, p); delete o.clientId; return json(o); };
     return inert && u.reads.length === 0 && asShipped(unset)
       && t.reads.length === 1 && t.said.length === 0 && l.on === true && Object.keys(l.providers).join() === "microsoft,google,lab"
-      && json(l.providers.microsoft) === json(shipped.providers.microsoft) && json(l.providers.google) === json(shipped.providers.google)
+      && sans(l.providers.microsoft) === sans(shipped.providers.microsoft) && sans(l.providers.google) === sans(shipped.providers.google)
+      && l.providers.microsoft.clientId === "" && l.providers.google.clientId === ""
       && l.signin === "http://127.0.0.1:4567/licence/v1/signin/desk" && l.signout === "http://127.0.0.1:4567/licence/v1/signout/desk"
       && json(lab.signinOffered()) === json([{ id: "lab", clientId: LAB_CLIENT, clientSecret: "" }]) && Object.keys(l.packed).length === 0
       && f.reads.length === 1 && f.said.length === 1 && asShipped(refused)
       && g.reads.length === 1 && g.said.length === 0 && Object.keys(sl.providers).join() === "microsoft,google"
       && sans(sl.providers.microsoft) === sans(shipped.providers.microsoft) && sans(sl.providers.google) === sans(shipped.providers.google)
       && sl.signin === STAGING + "signin/desk" && sl.signout === STAGING + "signout/desk"
-      && json(st.signinOffered()) === json([{ id: "microsoft", clientId: MS_CLIENT, clientSecret: "" }, { id: "google", clientId: G_CLIENT, clientSecret: STAND_IN }]);
+      && json(st.signinOffered()) === json([{ id: "microsoft", clientId: MS_CLIENT, clientSecret: "" }, { id: "google", clientId: G_CLIENT, clientSecret: STAND_IN }])
+      && h.reads.length === 1 && h.said.length === 0 && json(hf.signinOffered()) === json([{ id: "microsoft", clientId: MS_CLIENT, clientSecret: "" }]);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 };
 /* A provider double and a licence service on 127.0.0.1, test values made here: /authorize answers 302 to the desk's loopback, /token
@@ -3044,8 +3069,8 @@ CASES.pooledCert = s => {
     && !!kept && kept.pooled === true && relay(pooled) && !relay(forged) && !relay(odd);
 };
 const LEGS = [
-  ["ds1a", "offered", "as shipped no client id is configured and nothing is offered; a configured table offers what it configures, in order"],
-  ["ds1b", "noHintStart", "an invitation naming providers carries no sign-in hint: the team's start is retired"],
+  ["ds1a", "offered", "as shipped both are configured with Etiuda's own client ids and offered in order, no secret in the tree; with no client id nothing is offered; a configured table offers what it configures, in order"],
+  ["ds1b", "noHintStart", "an invitation naming providers carries no sign-in hint and fills no client id: the team's start is retired"],
   ["ds2a", "pkce", "the authorize URL carries PKCE (S256 over the verifier), the state, the nonce and a 127.0.0.1 loopback, at the provider's own page"],
   ["ds2b", "nonceBound", "the nonce is the service's SHA-256 of its line, this desk's key and the seed, and is not another desk key's"],
   ["ds2c", "tokenNonce", "a token is taken only for this client and issuer, unexpired, carrying this desk's nonce; another key's nonce or none is unbound"],
@@ -3088,16 +3113,16 @@ const LEGS = [
   ["ds11b", "doorInvite", "the channel knocks at the door with this desk's standing certificate and the lead's box, and with nothing else"],
   ["ds11c", "doorKept", "the id the relay names is kept and the request written once, with the seat and that id, signed as the desk's own"],
   ["ds11d", "doorChannel", "the desk's relay channel is given the door's invite() ahead of the invitation's, and onDoor"],
-  ["ds12a", "previewOff", "the sign-in preview is off by default: ETIUDA_SIGNIN_PREVIEW absent, \"0\", \"yes\" or \" 1\" offers nothing; \"1\" alone offers both as a preview"],
-  ["ds12b", "previewInert", "the preview changes nothing where a provider has a client id: that one offered, no preview, another provider's press the ordinary not offered"],
-  ["ds12c", "previewPress", "in the preview a trusted press of either provider is answered signin-preview with no identity, browser, loopback, provider, service, write or request"],
+  ["ds12a", "previewOff", "with no client id the sign-in preview is off by default: ETIUDA_SIGNIN_PREVIEW absent, \"0\", \"yes\" or \" 1\" offers nothing; \"1\" alone offers both as a preview"],
+  ["ds12b", "previewInert", "the preview changes nothing where a provider has a client id: as shipped both offered and no preview; Microsoft's alone, that one offered, no preview, Google's press the ordinary not offered"],
+  ["ds12c", "previewPress", "in the preview, with no client id, a trusted press of either provider is answered signin-preview with no identity, browser, loopback, provider, service, write or request"],
   ["ds12d", "previewPage", "the preview's line stands in the door's content and Account's card, the press's line as the heading, none without the preview; Polish too"],
   ["ds12e", "previewCmd", "tools/signin-preview.cmd is outside the packaged files and starts the installed desk, per-user first, with the variable for that start alone"],
   ["ds12f", "previewLook", "the preview's line as the designer placed it: \"Preview only.\" at 600, the rest the caption's; in the panel before the providers, in Account at the card's measure"],
   ["ds12g", "previewBack", "after a press the preview's heading stands alone with one ordinary Back to the door; the providers' row in Account is no header row"],
   ["ds13a", "secretTable", "the tree holds no client secret: every provider's clientSecret is \"\" and a configured table offers none"],
   ["ds13b", "secretSent", "client_secret goes with Google's code exchange and refresh only where a secret is present, and without one every byte is as before"],
-  ["ds13c", "secretPacked", "the package's signin-secret.json gives Google's secret where it is {format: 1, google} of a secret's shape, and nothing else"],
+  ["ds13c", "secretPacked", "the package's signin-secret.json gives Google's secret where it is {format: 1, google} of a secret's shape, and nothing else; without it both shipped providers carry none"],
   ["ds13d", "secretNever", "the stand-in secret is in the token forms and in no printed line, no licence service body (whose names are unchanged), no kept file, no outcome"],
   ["ds13e", "secretWire", "the shell reads the package's file once at start, installed, beside the asar, from no IPC or page, and the variable only inside the sign-in lab's read"],
   ["ds13f", "secretPackage", "the package step writes nothing and says absent without the variable, writes the file and says present with it, never the value; the file is git-ignored and copied only when set"],
@@ -3119,7 +3144,7 @@ const LEGS = [
   ["ds14g", "copiedLabel", "the code's Copy and the link's read Copied for SIGNIN_COPIED_MS after a copy the clipboard took, then Copy, holding the wider width; a refused copy leaves it; Polish too"],
   ["ds15a", "identNoName", "with no name written the identity's bold line is \"Signed in with\" its provider and there is no second line, in the panel's every signed-in moment and in Account; a name written stands over it; Polish too"],
   ["ds15b", "panelOrder", "the panel tells no licence as it tells no team: the fact, its line, then the code's box, under the identity and above the acts"],
-  ["ds16a", "labPackaged", "THE LAB IS INERT PACKAGED: installed, packaged or both, ETIUDA_SIGNIN_LAB naming a lab or a staging file and Google's secret in the environment, nothing is read and the providers, what is offered, the secret and both doors are byte for byte the shipped ones; unpackaged, the lab is taken, a staging file fills the shipped two's client ids alone, the secret goes to Google alone, and a file naming another host is refused whole"],
+  ["ds16a", "labPackaged", "THE LAB IS INERT PACKAGED: installed, packaged or both, ETIUDA_SIGNIN_LAB naming a lab or a staging file and Google's secret in the environment, nothing is read and the providers, what is offered, the secret and both doors are byte for byte the shipped ones; unpackaged, the lab is taken and the shipped two hold its client ids alone, none where it names none, a staging file fills the shipped two's client ids alone, the secret goes to Google alone, and a file naming another host is refused whole"],
   ["ds16b", "labRead", "the lab file is taken whole or not at all: the service http on 127.0.0.1 or https on etiuda.dev; client ids for the shipped two alone; the provider \"lab\" optional, its authorize and token http on 127.0.0.1 alone, its issuer and key set also https on a .localhost name, openid; a root optional, of 64 hex"],
   ["ds16c", "labPath", "pointed at a lab over real HTTP, the real path runs unchanged: the browser's redirect to the loopback, the code exchange with PKCE, the token checks, signin/desk's certificate, a refresh, a sign out; the shipped door and other ports refused"],
   ["ds16d", "labHarness", "a harness start renews and signs out only while the lab is taken, and reads nothing for it while no lab is taken"],
@@ -3547,7 +3572,9 @@ if (!PLANTS_OFF) {
   await plant("dsp55", ["(?:[a-z0-9-]+\\.)*etiuda\\.dev(?:\\/[A-Za-z0-9._~-]+)*\\/$/.test(u)); /* plant:lab-service */", "[a-z0-9.-]+(?:\\/[A-Za-z0-9._~-]+)*\\/$/.test(u)); /* plant:lab-service */"], "labRead"); /* anchored on its own line: Buy's ORDER_PAGE_SHAPE holds the same host pattern */
   await plant("dsp56", ["|| Object.keys(ids).some(id => (id !== \"microsoft\" && id !== \"google\") || typeof ids[id] !== \"string\" || !SIGNIN_CLIENT.test(ids[id]))) return null; /* plant:lab-ids */",
     ") return null;"], "labRead");
-  await plantWire("dsp57", ["t[id] = lab.clientIds[id] ? Object.freeze(", "t[id] = false ? Object.freeze("], "labPackaged");
+  await plantWire("dsp57", ["{ clientId: lab.clientIds[id] || \"\" })); /* plant:lab-fill */", "{ clientId: \"\" })); /* plant:lab-fill */"], "labPackaged");
+  await plantWire("dsp165", ["Object.freeze(Object.assign({}, SIGNIN_PROVIDERS[id], { clientId: lab.clientIds[id] || \"\" })); /* plant:lab-fill */",
+    "lab.clientIds[id] ? Object.freeze(Object.assign({}, SIGNIN_PROVIDERS[id], { clientId: lab.clientIds[id] })) : SIGNIN_PROVIDERS[id]; /* plant:lab-fill */"], "labPackaged");
   await plantWire("dsp58", ["  else if (process.env.ETIUDA_GOOGLE_CLIENT_SECRET) signinPacked", "  else if (false) signinPacked"], "labPackaged");
   await plant("dsp53", ["/^http:\\/\\/127\\.0\\.0\\.1:([0-9]{1,5})", "/^http:\\/\\/[a-z0-9.]+:([0-9]{1,5})"], "labRead");
   await plant("dsp54", ["|| !(d.root === undefined || /^[0-9a-f]{64}$/.test(String(d.root)))) return null; /* plant:lab-shape */", ") return null;"], "labRead");

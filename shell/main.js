@@ -9389,13 +9389,13 @@ function policyFor(hashes) {
 /* Email is asked of nobody. Google is asked for it only if its hosted domain claim proves to need it, and then by this alone. */
 const GOOGLE_HD_NEEDS_EMAIL = false; /* plant:scope-email */
 /* THE PROVIDERS ARE CONFIGURATION: Etiuda's own registration with each, its client id, and the addresses and scopes Studio uses.
-   A provider with no client id is not offered, so until the registrations exist nothing is drawn and nothing is sent. A desktop
+   A provider with no client id is not offered, and then nothing of it is drawn or sent. A desktop
    app is a public client, and clientSecret stays "" in this tree, which is public: Google's forum reports its token address
    refusing a Desktop client's code without client_secret, PKCE or not, so a package may carry Google's (signinPacked, below).
    Microsoft's profile scope gives the directory's object id, which the service keeps keyed. The sign-in lab alone adds a third
-   (signinLabUse, below). */
+   and, where taken, the shipped two take the lab's client ids alone (signinLabUse, below). */
 let SIGNIN_PROVIDERS = Object.freeze({
-  microsoft: Object.freeze({ clientId: "", clientSecret: "", issuer: "https://login.microsoftonline.com/{tenantid}/v2.0",
+  microsoft: Object.freeze({ clientId: "dd9477fb-3b77-450a-87c9-9cee82850460", clientSecret: "", issuer: "https://login.microsoftonline.com/{tenantid}/v2.0",
     authorize: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     token: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
     scope: "openid profile offline_access", refreshScope: "openid profile offline_access",
@@ -9403,7 +9403,7 @@ let SIGNIN_PROVIDERS = Object.freeze({
   /* Google: select_account alone. A consent prompt at every sign-in (decision 36) was withdrawn on measurement, 2026-11-13: a
      personal account signed in twice with select_account and kept a refresh token both times (a Workspace account unmeasured);
      access_type offline stays, and a sign-in that ever lacks a refresh token is asked again (signinRenewHeld). */
-  google: Object.freeze({ clientId: "", clientSecret: "", issuer: "https://accounts.google.com",
+  google: Object.freeze({ clientId: "969043062821-q35uocrdb3k9ho05uh32dogf0h4uliha.apps.googleusercontent.com", clientSecret: "", issuer: "https://accounts.google.com",
     authorize: "https://accounts.google.com/o/oauth2/v2/auth", token: "https://oauth2.googleapis.com/token",
     scope: GOOGLE_HD_NEEDS_EMAIL ? "openid email" : "openid", refreshScope: "", extra: Object.freeze({ prompt: "select_account", access_type: "offline" }) }), /* plant:google-offline */
 });
@@ -9568,7 +9568,8 @@ function signinLabRead(text) {
     signin: d.service + "signin/desk", signout: d.service + "signout/desk", order: d.order === undefined ? "" : d.order,
     root: d.root === undefined ? "" : String(d.root) });
 }
-/* The lab taken, once: the shipped providers with the lab's client ids, the provider "lab" where it names one, and the service's door. */
+/* The lab taken, once: the shipped providers with the lab's client ids, none where it names none, the provider "lab" where it names one,
+   and the service's door. */
 let signinLabOn = false;
 /* The lab's own root, "" where no lab is taken or it names none: signinCertOk honours it beside NOTE_ROOT. */
 let signinLabRoot = "";
@@ -9576,7 +9577,7 @@ function signinLabUse(lab) {
   if (!lab || signinLabOn) return false;
   const t = {};
   for (const id of Object.keys(SIGNIN_PROVIDERS))
-    t[id] = lab.clientIds[id] ? Object.freeze(Object.assign({}, SIGNIN_PROVIDERS[id], { clientId: lab.clientIds[id] })) : SIGNIN_PROVIDERS[id]; /* plant:lab-fill */
+    t[id] = Object.freeze(Object.assign({}, SIGNIN_PROVIDERS[id], { clientId: lab.clientIds[id] || "" })); /* plant:lab-fill */
   if (lab.provider) t.lab = lab.provider;
   SIGNIN_PROVIDERS = Object.freeze(t);
   SIGNIN_SERVICE = lab.signin;
