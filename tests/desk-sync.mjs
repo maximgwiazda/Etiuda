@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-sync-"));
-const EXPECTED = 11;
+const EXPECTED = 13;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -249,9 +249,11 @@ async function main() {
     b.edit();
     a.down.on = false; b.down.on = false;
     await settle(a, b);
-    const versions = (c, item) => [c.desk.keys[item.slice(2)] !== undefined && item.startsWith("k:") ? c.desk.keys[item.slice(2)] : c.desk.files[item.slice(2)]]
-      .concat(c.kept.filter(k => k.item === item).map(k => k.value)).sort();
-    const want = { ["k:" + L]: [JSON.stringify({ edits: { c1: "from a" } }), JSON.stringify({ edits: { c1: "from b" } })].sort(), ["f:" + F]: ["{\"v\":\"a\"}", "{\"v\":\"b\"}"] };
+    /* The card both changed is the one field of the layer both changed: its two versions, the one in place and the one kept. */
+    const C1 = "k:" + L + "#edits/c1";
+    const here = (c, item) => (item === C1 ? JSON.stringify(JSON.parse(c.desk.keys[L]).edits.c1) : c.desk.files[item.slice(2)]);
+    const versions = (c, item) => [here(c, item)].concat(c.kept.filter(k => k.item === item).map(k => k.value)).sort();
+    const want = { [C1]: [JSON.stringify("from a"), JSON.stringify("from b")].sort(), ["f:" + F]: ["{\"v\":\"a\"}", "{\"v\":\"b\"}"] };
     const kept = Object.keys(want).every(item => JSON.stringify(versions(a, item)) === JSON.stringify(want[item]) && JSON.stringify(versions(b, item)) === JSON.stringify(want[item]));
     const ownInPlace = a.desk.keys[L].indexOf("from a") > 0 && b.desk.keys[L].indexOf("from b") > 0;
     const oneSide = b.desk.keys["e77~CatOrder"] === "[\"x\"]" && !a.kept.concat(b.kept).some(k => k.item === "k:e77~CatOrder");
@@ -260,11 +262,34 @@ async function main() {
     w.R.clock.now += MIN;
     const pick = JSON.stringify({ edits: { c1: "from b" } });
     a.desk.keys[L] = pick;
-    a.sync().resolve("k:" + L, pick);
+    a.sync().resolve(C1, JSON.stringify("from b"));
     await settle(a, b);
-    const chosen = a.desk.keys[L] === pick && b.desk.keys[L] === pick && !a.sync().state().kept.some(k => k.item === "k:" + L) && !b.sync().state().kept.some(k => k.item === "k:" + L);
+    const chosen = JSON.parse(a.desk.keys[L]).edits.c1 === "from b" && JSON.parse(b.desk.keys[L]).edits.c1 === "from b"
+      && !a.sync().state().kept.some(k => k.item === C1) && !b.sync().state().kept.some(k => k.item === C1);
     const ok = shared && kept && ownInPlace && oneSide && later && chosen;
     return { ok, detail: brief({ shared, kept, ownInPlace, oneSide, later, chosen, keptA: a.kept.length, keptB: b.kept.length }) };
+  }
+  /* C8f: two computers offline change different cards of one catalog's layer, and one adds a card of its own: every change stands on both,
+     the layer whole, and no version is kept, since no card was changed on both. */
+  async function fieldsScene() {
+    const { w, a, b } = await twoOn("c8f");
+    const L = "e3f9a1~Pack";
+    a.desk.keys[L] = JSON.stringify({ overrides: { c1: { t: "one" }, c2: { t: "two" } }, cardOrder: ["c1", "c2"], hidden: [] });
+    await settle(a, b);
+    a.down.on = true; b.down.on = true;
+    w.R.clock.now += MIN;
+    a.desk.keys[L] = JSON.stringify({ overrides: { c1: { t: "one, from a" }, c2: { t: "two" } }, cardOrder: ["c1", "c2"], hidden: [] });
+    a.edit();
+    w.R.clock.now += MIN;
+    b.desk.keys[L] = JSON.stringify({ overrides: { c1: { t: "one" }, c2: { t: "two, from b" }, c3: { t: "b's own" } }, cardOrder: ["c1", "c2"], hidden: ["c9"] });
+    b.edit();
+    a.down.on = false; b.down.on = false;
+    await settle(a, b);
+    const want = { overrides: { c1: { t: "one, from a" }, c2: { t: "two, from b" }, c3: { t: "b's own" } }, cardOrder: ["c1", "c2"], hidden: ["c9"] };
+    const norm = t => { try { const j = JSON.parse(t); return JSON.stringify(Object.keys(j).sort().reduce((o, k) => (o[k] = j[k], o), {})); } catch { return null; } };
+    const same = norm(a.desk.keys[L]) === norm(JSON.stringify(want)) && norm(b.desk.keys[L]) === norm(JSON.stringify(want));
+    const none = a.kept.length === 0 && b.kept.length === 0;
+    return { ok: same && none, detail: brief({ same, none, a: a.desk.keys[L], keptA: a.kept.length, keptB: b.kept.length }) };
   }
   /* C10, the outbox: a's store certificate lapses (two days offline, then the service unreached while online): its edits wait in its own
      place, nothing is sent; at the next look that is on, sync resumes by itself, sends what waited and takes what came. */
@@ -328,6 +353,7 @@ async function main() {
     ["S1", followsScene, "a setting, an edit over a catalog and a catalog file changed on one computer reach the other through the relay, nothing of them in the clear"],
     ["C7", staysScene, "a team key, a team mirror's file, a sign-in token and the desk's identity key on the desk reach neither the computer's place, nor the relay, nor the folder's file"],
     ["C8", bothScene, "the same edit and catalog changed on two computers offline: both versions stand on both, each its own in place; one side's change and a setting's later write merge without a copy; the person's choice stands on both"],
+    ["C8f", fieldsScene, "different cards of one catalog changed on two computers offline, and a card added on one: every change stands on both and no version is kept"],
     ["C10o", outboxScene, "a lapsed store certificate pauses sync and sends nothing; edits wait in the outbox and at the next look that is on are sent, and what came is taken"],
     ["C1a", raceScene, "two computers that each read back their own store both replace and the earlier store ends; the earlier computer adopts the folder's store at its next look and every edit it made reaches the new store"],
   ];
@@ -366,6 +392,7 @@ async function main() {
     ["one item added", "C7", swap("return SETTINGS.indexOf(s.slice(2)) >= 0 || LAYER_RE.test(s.slice(2)); /* plant:follows */", "return SETTINGS.indexOf(s.slice(2)) >= 0 || LAYER_RE.test(s.slice(2)) || s === \"k:eTeamKeys\"; /* plant:follows */"), "a team's keys follow"],
     ["last-write-wins", "C8", swap("if (isSetting(item)) top = [", "if (true) top = ["), "a conflict is settled by the later write, the earlier version lost"],
     ["keep-both", "C8", lift("keep-both"), "the other side of a conflict is not kept"],
+    ["whole keys", "C8f", swap("const parts = LAYER_RE.test(k) ? fieldsOf(v) : null; /* plant:fields */", "const parts = null; /* plant:fields */"), "a layer merged as one item, so two cards changed on two computers are a conflict"],
     ["outbox emptied", "C10o", swap("if (old) old.stop().catch(() => {}); /* plant:outbox-kept */", "if (old) { old.stop().catch(() => {}); const l = o.local() || {}; for (const i of Object.keys(state.ledger)) if (has(l, i)) state.ledger[i] = Object.assign({}, state.ledger[i], { h: sha(l[i]) }); } /* plant:outbox-kept */"), "the outbox emptied at the lapse: what waited is taken as sent"],
     ["resume", "C10o", lift("resume"), "sync does not start again at the next look that is on"],
     ["adopt", "C1a", lift("adopt"), "the store adopted is not where this computer's place is written, so its edits stay in the ended store"],
