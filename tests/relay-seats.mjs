@@ -805,14 +805,15 @@ async function main() {
   /* A grant's freed list out of shape is refused at the grant. */
   async function freedShapeScene() {
     const lead = keyPair(false), at = T0, k = keyPair(false).pub;
-    const bad = { empty: [], notList: k, notHex: ["zz"], twice: [k, k], tooMany: Array.from({ length: C.FREED_MAX + 1 }, () => keyPair(false).pub) };
+    const bad = { empty: [], notList: k, notHex: ["zz"], twice: [k, k], tooMany: Array.from({ length: C.FREED_MAX + 1 }, () => hex(32)) };
     const got = Object.fromEntries(Object.entries(bad).map(([n, freed]) => [n, C.grantWhy(grantAt(lead.pub, at, { licence: hex(16), live: at, freed }), lead.pub, at, K.ROOTS)]));
     const good = C.grantWhy(grantAt(lead.pub, at, { licence: hex(16), live: at, freed: [k] }), lead.pub, at, K.ROOTS);
-    return { ok: Object.values(got).every(x => x === "shape") && good === null, detail: brief(Object.assign({}, got, { good })) };
+    const full = C.grantWhy(grantAt(lead.pub, at, { licence: hex(16), live: at, freed: Array.from({ length: C.FREED_MAX }, () => hex(32)) }), lead.pub, at, K.ROOTS);
+    return { ok: Object.values(got).every(x => x === "shape") && good === null && full === null && C.FREED_MAX === 1000, detail: brief(Object.assign({}, got, { good, full, max: C.FREED_MAX })) };
   }
   await leg("s22a", freedScene, "(d) a pooled desk the grant names as freed is refused outright, its certificate current, and opens again once a later grant no longer names it");
   await leg("s22b", nightOnlyScene, "(a)'s measured limit: a removed pooled desk first tried only at night, never refused while the evidence was fresh, is honoured to its end plus 72 hours under (a) alone, as expected; with (d), the grant naming it, it is refused outright, at night, late in the grace and after");
-  await leg("s22c", freedShapeScene, "a grant's freed list out of shape (empty, not a list, not keys, a key twice, past FREED_MAX) is refused shape, and a good one taken");
+  await leg("s22c", freedShapeScene, "a grant's freed list out of shape (empty, not a list, not keys, a key twice, past FREED_MAX, a thousand) is refused shape, and a good one and a full one taken");
   await leg("s21d", pooledNightScene, "a removed pooled desk refused by day stays refused through a quiet night of seven hours and more, its certificate never honoured by the grace again (one refusal kept, by key and end), its next certificate from a later logon opens, and the kept refusal goes at the first prune past the grace's end");
   await leg("s21c", pooledSignedScene, "the pooled mark is signed: one its signature does not cover, or not true, is refused, and a signed pooled certificate opens and knocks at the door");
   /* The door still refuses an ended certificate of a stranger: only a desk session leaves the end to seatGate. */

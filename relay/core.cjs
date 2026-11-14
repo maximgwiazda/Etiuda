@@ -156,8 +156,9 @@ const GRANT_FIELDS = ["kind", "format", "lead", "issued", "until", "paid", "sig"
    released. */
 const SEATS_FIELDS = ["licence", "live"], RELEASE_FIELDS = ["licence", "release"];
 /* `freed`, beside licence and live where present: the pooled desks' keys the service freed within the grace's span, refused outright
-   whatever the grace while a grant names them; at most FREED_MAX, distinct. */
-const FREED_MAX = 64;
+   whatever the grace while a grant names them; at most FREED_MAX, distinct, as many as a team holds desks (KEYS_MAX), so a large
+   company's pooled desks, each freed every morning, all fit: a thousand keys are about 67 KB, inside JSON_MAX and a stored value. */
+const FREED_MAX = KEYS_MAX;
 const DELEGATION_FIELDS = ["kind", "format", "key", "may", "from", "until", "sig"];
 const SIG_FIELDS = ["alg", "keyId", "value"];
 const MAY_MAX = 16;
