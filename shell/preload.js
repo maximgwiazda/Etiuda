@@ -32,6 +32,8 @@ if (!PICKER && typeof window !== "undefined" && typeof window.addEventListener =
     else if (e.type === "click" && e.composedPath().some(n => n && n.dataset && n.dataset.eOpen === "update")) ipcRenderer.sendSync("etiuda:update-click");
     /* Buy names no address either: main builds the order page's (shell/main.js orderAddress). */
     else if (e.type === "click" && e.composedPath().some(n => n && n.dataset && n.dataset.eOpen === "buy")) ipcRenderer.sendSync("etiuda:buy-click");
+    /* Sync's switch turned on where the folder's consent was never given: main asks the provider only after a click on it. */
+    else if (e.type === "click" && e.composedPath().some(n => n && n.dataset && n.dataset.eOpen === "store-on")) ipcRenderer.sendSync("etiuda:store-on-click");
     /* A sign-in button names its provider; main opens the provider's page only after a click on one. */
     else if (e.type === "click") {
       const b = e.composedPath().find(n => n && n.dataset && n.dataset.eOpen === "signin");
@@ -284,6 +286,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   signinDoor: (n) => ipcRenderer.invoke("etiuda:signin-door", n),
   signinCheck: () => ipcRenderer.invoke("etiuda:signin-check"),
   signinAgain: () => ipcRenderer.invoke("etiuda:signin-again"),
+  /* Sync's folder consent asked again, for a click on the switch's On (data-e-open="store-on"): "asked", or why not. */
+  storeConsent: () => ipcRenderer.invoke("etiuda:store-consent"),
   /* Buy, where the shell names an order page: {offer} now, and the page opened by the shell for a click on it. */
   buyState: () => ipcRenderer.sendSync("etiuda:buy-state"),
   openBuyPage: () => ipcRenderer.invoke("etiuda:buy-open"),

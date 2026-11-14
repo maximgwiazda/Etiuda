@@ -9469,6 +9469,9 @@ function signinFolderScope(id, access) {
   if (id === "microsoft" && access) return ""; /* plant:folder-one-resource */
   return Object.prototype.hasOwnProperty.call(SIGNIN_FOLDER_SCOPES, String(id)) ? SIGNIN_FOLDER_SCOPES[String(id)] : "";
 }
+/* Microsoft's folder is never asked beside the sign-in: an organisation that allowed today's scopes alone refuses the whole sign-in for
+   one more. It is asked after it, apart (signinFolderAsk). */
+function signinFolderApart(id) { return id === "microsoft"; } /* plant:folder-apart */
 /* The tenant of personal Microsoft accounts, as Microsoft's ID token reference names it in `tid`. */
 const SIGNIN_PERSONAL_TENANT = "9188040d-6c67-4c5b-b112-36a304b66dad";
 /* THE TABLE UNDER A MANAGED INSTALLATION'S PINS (managedPolicyFrom's answer `pol`): only the provider it names, none where it is
@@ -9665,6 +9668,25 @@ function signinAuthorize(p, port, deskKey, rand, access, folder) {
     state: state, nonce: nonce, code_challenge: challenge, code_challenge_method: "S256" }, known.extra));
   return { url: known.authorize + "?" + q.toString(), state: state, nonce: nonce, seed: seed, verifier: verifier, redirect: redirect };
 }
+/* The folder's own request (signinFolderAsk), shaped as signinAuthorize's: openid and the folder's scope alone, so the ID token ties the
+   answer to the account that signed in; no account choice asked, that account's name as the hint where its ID token gave one. */
+function signinFolderAuthorize(p, port, deskKey, rand, scope, hint) {
+  const r = typeof rand === "function" ? rand : crypto.randomBytes, known = signinKnown(p.id);
+  const verifier = signinB64url(r(32)), state = signinB64url(r(32)), seed = Buffer.from(r(32)).toString("hex");
+  const nonce = signinNonce(deskKey, seed), redirect = "http://127.0.0.1:" + Math.floor(Number(port));
+  const extra = Object.assign({}, known.extra);
+  delete extra.prompt; /* plant:folder-no-prompt */
+  const q = new URLSearchParams(Object.assign({ client_id: p.clientId, response_type: "code", redirect_uri: redirect, scope: "openid " + scope, state: state, nonce: nonce,
+    code_challenge: signinB64url(crypto.createHash("sha256").update(verifier).digest()), code_challenge_method: "S256" }, extra, hint ? { login_hint: hint } : {}));
+  return { url: known.authorize + "?" + q.toString(), state: state, nonce: nonce, seed: seed, verifier: verifier, redirect: redirect };
+}
+/* A sign-in asked again for the account already held (storeConsentAsk): no account choice, that account named as the hint. */
+function signinHinted(url, hint) {
+  const u = new URL(String(url));
+  u.searchParams.delete("prompt");
+  u.searchParams.set("login_hint", String(hint));
+  return u.toString();
+}
 /* Whether `url` is a provider's own authorize page as signinAuthorize makes it: the only address the sign-in hands the browser. */
 function signinPageOk(url) {
   const u = String(url);
@@ -9716,7 +9738,9 @@ function signinFolderTake(io, res, provider, now) {
   if (!io || typeof io.folderToken !== "function") return;
   let j = null;
   try { j = JSON.parse(Buffer.from(res && res.bytes ? res.bytes : []).toString("utf8")); } catch { j = null; }
-  const token = !!res && res.status === 200 && !!j && typeof j.access_token === "string" && j.access_token.length <= SIGNIN_FOLDER_TOKEN_MAX ? j.access_token : "";
+  /* An answer naming its scopes without the folder's (Google's folder line unticked) holds no token for the folder. */
+  const want = signinFolderScope(provider, ""), lacks = !!j && typeof j.scope === "string" && !!want && !j.scope.split(" ").some(s => s === want || s.endsWith("/" + want)); /* plant:folder-lacks */
+  const token = !lacks && !!res && res.status === 200 && !!j && typeof j.access_token === "string" && j.access_token.length <= SIGNIN_FOLDER_TOKEN_MAX ? j.access_token : "";
   const secs = j && Number(j.expires_in) > 0 ? Number(j.expires_in) : 3600;
   io.folderToken({ provider: String(provider), token: token, until: now + secs * 1000 });
 }
@@ -9807,6 +9831,10 @@ const SIGNIN_LANDING_WORDS = Object.freeze({
     org: ["Not allowed by this organisation", "Its IT department can allow it; meanwhile another account can be tried. This tab can be closed.", "Not allowed"],
     cancelled: ["The sign-in was cancelled", "Nothing was changed. This tab can be closed; signing in can wait until it suits.", "Cancelled"],
     earlier: ["This tab is from an earlier sign-in", "It was not used, and nothing was changed. This tab can be closed.", "An earlier sign-in"],
+    /* The page answering the folder's own request (signinFolderBack): allowed, declined or not back, the organisation's to decide. */
+    "folder-on": ["Sync is on", "Etiuda can now use its folder in this account. This tab can be closed.", "Sync on"],
+    "folder-off": ["Sync stays off", "Nothing changed. It can be turned on in Account at any time. This tab can be closed.", "Sync off"],
+    "folder-org": ["Your organisation decides on sync", "Its IT department can allow Etiuda's folder. Etiuda works on this computer as before. This tab can be closed.", "Organisation's decision"],
     foot: "Shown by Etiuda on this computer; this page itself sends nothing anywhere." }),
   pl: Object.freeze({
     seat: ["Zalogowano", "Ten komputer ma już miejsce w licencji. Etiuda sama przechodzi dalej; tę kartę można zamknąć.", "Zalogowano"],
@@ -9816,6 +9844,9 @@ const SIGNIN_LANDING_WORDS = Object.freeze({
     org: ["Organizacja nie dopuściła Etiudy", "Może to zmienić jej dział IT. Tymczasem w Etiudzie można użyć innego konta; tę kartę można zamknąć.", "Bez zgody organizacji"],
     cancelled: ["Logowanie anulowano", "Nic się nie zmieniło. Tę kartę można zamknąć; z logowaniem można poczekać do dogodnej chwili.", "Anulowano"],
     earlier: ["To karta wcześniejszego logowania", "Nie została użyta i nic się nie zmieniło. Tę kartę można zamknąć.", "Wcześniejsze logowanie"],
+    "folder-on": ["Synchronizacja włączona", "Etiuda może już korzystać ze swojego folderu na tym koncie. Tę kartę można zamknąć.", "Synchronizacja włączona"],
+    "folder-off": ["Synchronizacja pozostaje wyłączona", "Nic się nie zmieniło. Można ją włączyć w Koncie w dowolnej chwili. Tę kartę można zamknąć.", "Synchronizacja wyłączona"],
+    "folder-org": ["O synchronizacji decyduje organizacja", "Folder Etiudy może dopuścić jej dział IT. Na tym komputerze Etiuda działa jak dotąd. Tę kartę można zamknąć.", "Decyzja organizacji"],
     foot: "Tę stronę wyświetla Etiuda na tym komputerze; sama strona niczego nie wysyła." }),
 });
 /* THE LANDING'S LOOK, its one place: the product designer's variant A (quiet), the page whole from one kind's words. The mark with
@@ -9835,7 +9866,7 @@ const SIGNIN_LANDING_STYLE = ":root{--bg:#f7f8fa;--panel:#fff;--ink:#0f172a;--di
   + "footer{flex:none;padding:14px clamp(20px,7vw,120px);font-size:13px;color:var(--dim);border-top:1px solid var(--line);background:var(--panel)}"
   + "@media (max-width:520px){.hd{align-items:flex-start;gap:12px}.st{margin-top:4px;width:24px;height:24px}.st svg{width:24px;height:24px}}";
 /* Each kind's sign: a tick for a seat, a ring in the app's colour while the app has not finished, an amber ring for the rest. */
-const SIGNIN_LANDING_SIGN = Object.freeze({ seat: "ok", back: "wait", noseat: "warn" });
+const SIGNIN_LANDING_SIGN = Object.freeze({ seat: "ok", back: "wait", noseat: "warn", "folder-on": "ok", "folder-off": "warn", "folder-org": "warn" });
 function signinLandingLook(w, sign, foot, app, lang) {
   const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
   const mark = cls => "<svg class=\"" + cls + "\" viewBox=\"0 0 256 256\" aria-hidden=\"true\"><use href=\"#m\"/></svg>";
@@ -9881,12 +9912,13 @@ const SIGNIN_LOOP_HEADERS = Object.freeze({ "cache-control": "no-store", "referr
    query `takes(query)` owns is answered 303 to a path made for this sign-in, so no code or state stays in the address bar; any other
    GET of "/" 400 with `pageFor("earlier")` and ignored; any other path or verb 404. Before that GET it closes after `ms` or on close(),
    and `caught` rejects, with {closed: true} for a close. After it, land(kind) answers that path's one GET with `pageFor(kind)`, the
-   GET held until then; at `landMs` it is answered `pageFor("back")` and the loopback closes. Resolves {port, caught, close, land}. */
+   GET held until then; at `landMs` it is answered `pageFor("back")` and the loopback closes. Resolves {port, caught, close, land, onward}. */
 function signinListen(httpMod, pageFor, ms, takes, landMs) {
   return new Promise((resolve, reject) => {
-    let done = false, timer = null, up = false, caughtYes = null, caughtNo = null, clean = "", landed = "", held = null, served = false;
+    let done = false, timer = null, up = false, caughtYes = null, caughtNo = null, clean = "", landed = "", held = null, served = false, next = "", sent = false;
     const caught = new Promise((yes, no) => { caughtYes = yes; caughtNo = no; });
     caught.catch(() => {});
+    const send = (res, url) => { res.writeHead(303, Object.assign({ location: url, "content-length": 0 }, SIGNIN_LOOP_HEADERS)); res.end(); };
     const serve = (res, status, kind) => {
       let page = "";
       try { page = String(pageFor(kind)); } catch { page = ""; }
@@ -9898,6 +9930,7 @@ function signinListen(httpMod, pageFor, ms, takes, landMs) {
       const u = String(req.url || ""), at = u.indexOf("?"), where = at < 0 ? u : u.slice(0, at);
       if (clean && !served && req.method === "GET" && u === clean) { /* plant:land-once */
         served = true;
+        if (next) { send(res, next); next = ""; return; }
         if (landed) { serve(res, 200, landed); shut(); } else held = res;
         return;
       }
@@ -9909,6 +9942,7 @@ function signinListen(httpMod, pageFor, ms, takes, landMs) {
       done = true;
       clearTimeout(timer);
       clean = "/" + crypto.randomBytes(8).toString("hex");
+      served = false;
       res.writeHead(303, Object.assign({ location: clean, "content-length": 0 }, SIGNIN_LOOP_HEADERS)); /* plant:land-redirect */
       res.end();
       timer = setTimeout(() => { if (!landed) landed = "back"; if (held) serve(held, 200, landed); held = null; shut(); }, landMs === undefined ? SIGNIN_LAND_MS : landMs); /* plant:land-cap */
@@ -9926,12 +9960,27 @@ function signinListen(httpMod, pageFor, ms, takes, landMs) {
       landed = String(kind || "appfail");
       if (held) { serve(held, 200, landed); held = null; shut(); }
     };
+    /* Once per loopback, before the outcome lands (signinFolderAsk): the clean path's GET, held or still to come, answered 303 to `url`,
+       and "/" open again for one GET `again` owns within `wait`. A promise of its query, as `caught` is, or null. */
+    const onward = (url, again, wait) => {
+      if (!clean || landed || sent) return null; /* plant:onward-once */
+      sent = true;
+      const c = new Promise((yes, no) => { caughtYes = yes; caughtNo = no; });
+      c.catch(() => {});
+      takes = again;
+      done = false;
+      clearTimeout(timer);
+      timer = setTimeout(() => { if (!done) { done = true; shut(); caughtNo({ closed: false }); } }, wait === undefined ? SIGNIN_WAIT_MS : wait);
+      if (timer.unref) timer.unref();
+      if (held) { send(held, String(url)); held = null; } else next = String(url);
+      return c;
+    };
     server.on("error", e => { if (!up) reject(e); });
     server.listen(0, "127.0.0.1", () => {
       up = true;
       timer = setTimeout(() => { if (!done) { done = true; shut(); caughtNo({ closed: false }); } }, ms === undefined ? SIGNIN_WAIT_MS : ms);
       if (timer.unref) timer.unref();
-      resolve({ port: server.address().port, caught: caught, land: land,
+      resolve({ port: server.address().port, caught: caught, land: land, onward: onward,
         close: () => { if (!done) { done = true; shut(); caughtNo({ closed: true }); } } });
     });
   });
@@ -9944,8 +9993,9 @@ async function signinRun(io, p, deskKey, now, access) {
   let pending = null;
   const loop = await io.listen(kind => io.page(kind), query => signinOurs(query, pending)); /* plant:loop-takes */
   try {
-    const folder = io.store === true ? signinFolderScope(p.id, access) : "";
+    const folder = io.store === true && !signinFolderApart(p.id) ? signinFolderScope(p.id, access) : "";
     pending = signinAuthorize(p, loop.port, deskKey, io.rand, access, folder);
+    if (io.hint) pending.url = signinHinted(pending.url, io.hint);
     let opened = false;
     try { opened = signinPageOk(pending.url) && !!(await io.openPage(pending.url)); } catch { opened = false; }
     if (!opened) { signinTrace(io, p.id, "browser", "signin-browser"); return { ok: false, reason: "signin-browser" }; }
@@ -10007,6 +10057,46 @@ async function signinRenew(io, p, deskKey, refreshToken, seed, sub, now, access)
     + ", refresh token " + (got.refreshToken ? "replaced" : "kept") }, hide);
   if (folder) signinFolderTake(io, folderRes || { status: 0 }, p.id, now()); /* plant:folder-take-renew */
   return Object.assign({ ok: true, idToken: got.idToken, refreshToken: got.refreshToken || refreshToken, sub: got.sub }, access ? { accessToken: got.accessToken } : {});
+}
+/* THE FOLDER ASKED APART (signinFolderApart), after a seated sign-in `got` where sync may be on: quietly first, by its refresh token,
+   which answers where the account already allows it; else once, the browser that signed in sent on from `loop`'s landing to ask the folder
+   alone, the answer held to the same account. A refusal, an administrator's approval needed or another account hands io.folderToken ""
+   and the sign-in stands; only the renewal's quiet refresh asks again. Resolves the folder's landing where the window was sent on and
+   answered, else "", once the landing is the caller's to serve; never rejects. */
+async function signinFolderAsk(io, p, loop, deskKey, got, now) {
+  const scope = signinFolderScope(p.id, ""), at = signinKnown(p.id).token;
+  if (!scope) return "";
+  if (got.refreshToken) {
+    let res = null;
+    try { res = await io.tokenAsk(at, signinRefreshForm(p, got.refreshToken, "", scope)); } catch { res = null; }
+    if (res && res.status === 200) { signinFolderTake(io, res, p.id, now()); return ""; } /* plant:folder-quiet */
+  }
+  const c = signinClaims(got.idToken) || {}, hint = typeof c.preferred_username === "string" && c.preferred_username.length <= 256 ? c.preferred_username : "";
+  const pending = signinFolderAuthorize(p, loop.port, deskKey, io.rand, scope, hint);
+  const again = signinPageOk(pending.url) && typeof loop.onward === "function" ? loop.onward(pending.url, query => signinOurs(query, pending), SIGNIN_WAIT_MS) : null; /* plant:folder-onward */
+  if (!again) return "";
+  let query = "";
+  try { query = await again; } catch (e) { signinTrace(io, p.id, "folder", e && e.closed ? "signin-cancelled" : "signin-timeout"); return ""; }
+  return signinFolderBack(io, p, pending, query, got, now);
+}
+/* The folder's own request answered (`query` at the loopback): its code exchanged and held to `got.sub`, the token handed to
+   io.folderToken; a refusal hands "" with why "org" where the organisation's (an administrator's approval needed included), else
+   "ungiven", which the person may mend from the switch. The landing's kind: "folder-on", "folder-off" or "folder-org". */
+async function signinFolderBack(io, p, pending, query, got, now) {
+  const at = signinKnown(p.id).token, back = signinBack(query, pending);
+  if (!back.ok) {
+    const q = new URLSearchParams(String(query || ""));
+    signinTrace(io, p.id, "folder", back.reason, { error: q.get("error") || "", error_description: q.get("error_description") || "" }, [q.get("code") || "", pending.verifier]);
+    const org = back.reason === "signin-notallowed"; /* plant:folder-org */
+    io.folderToken({ provider: p.id, token: "", until: 0, why: org ? "org" : "ungiven" }); /* plant:folder-refused */
+    return org ? "folder-org" : "folder-off";
+  }
+  let res = null;
+  try { res = await io.tokenAsk(at, signinCodeForm(p, pending, back.code)); }
+  catch (e) { signinTrace(io, p.id, "folder", "signin-unreached", { detail: e && e.message }, [back.code, pending.verifier, p.clientSecret]); return "folder-off"; }
+  const same = signinTokens(res, p, pending.nonce, now(), String(got.sub));
+  signinFolderTake(io, same.ok ? res : { status: 0 }, p.id, now()); /* plant:folder-same */
+  return same.ok ? "folder-on" : "folder-off";
 }
 /* The refresh token sealed by the system's store, as base64, or "" where the store seals nothing for real (sealsForReal: no
    keyring, or Linux's basic_text): no refresh token is kept there, and the next renewal asks the person to sign in again. */
@@ -10742,7 +10832,10 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
       if (!access && !ans.ok && ans.reason === "access-token") { const m = await signinSeatAccess(io, p, me.key, got, got.seed, Date.now); ans = m.ans; got = m.got; took = m.access; }
       signinTake(p.id, got, ans, Date.now(), took);
       signinFlush();
-      if (ans.ok && ans.cert) { storeEndAgain().catch(() => false); storeLeaveNow(null); storeTurn(); } /* plant:store-signin */
+      if (ans.ok && ans.cert) {
+        storeEndAgain().catch(() => false); storeLeaveNow(null);
+        if (io.store === true && signinFolderApart(p.id)) signinFolderAfter(run, io, p, me.key, got); else storeTurn();
+      } /* plant:store-signin */
       signinSaid = ans.ok ? "signin-done" : ans.reason;
       landing = signinLanding(got, ans, managed);
     } else { signinSaid = got.reason; landing = signinLanding(got, undefined, managed); }
@@ -10877,23 +10970,24 @@ function armSigninRenew() {
    folder itself. */
 let storeLayer = null;
 function StoreLib() { return storeLayer || (storeLayer = require(path.join(__dirname, "sync", "store.cjs"))); }
-/* store.json beside desk.json, read whole or not at all: {format: 1, keys, said, off?, told?, until?, owed?, leave?}. `keys` the store's keys sealed by
+/* store.json beside desk.json, read whole or not at all: {format: 1, keys, said, off?, told?, until?, owed?, leave?, org?}. `keys` the store's keys sealed by
    safeStorage as base64, "" where none are kept; `said` the reason the desk last said (sayOnce); `off` the person's own switch, absent where on;
    `told` once this computer has had its first look with sync on (firstSay); `until` the last store certificate's end, for the pause;
    `owed` the relay team id of a store Turn off everywhere ended that the licence service has not yet answered, sealed as `keys`; `leave`
-   the keys of the store This computer has not yet left (storeLeaveNow), sealed as `keys`. */
+   the keys of the store This computer has not yet left (storeLeaveNow), sealed as `keys`; `org` where the organisation refused the folder
+   (storeUngiven). */
 const STORE_FILE = "store.json";
 function storeFileRead(text) {
   let d = null;
   try { d = JSON.parse(String(text)); } catch { d = null; }
   const ok = !!d && typeof d === "object" && !Array.isArray(d) && d.format === 1;
   return { keys: ok && typeof d.keys === "string" ? d.keys : "", said: ok && typeof d.said === "string" ? d.said.slice(0, 40) : "", off: ok && d.off === true,
-    told: ok && d.told === true, until: ok && Number.isSafeInteger(d.until) && d.until > 0 ? d.until : 0, owed: ok && typeof d.owed === "string" ? d.owed.slice(0, 400) : "",
+    org: ok && d.org === true, told: ok && d.told === true, until: ok && Number.isSafeInteger(d.until) && d.until > 0 ? d.until : 0, owed: ok && typeof d.owed === "string" ? d.owed.slice(0, 400) : "",
     leave: ok && typeof d.leave === "string" ? d.leave.slice(0, 200000) : "" };
 }
 function storeFileText(s) {
   return JSON.stringify(Object.assign({ format: 1, keys: s.keys || "", said: s.said || "" }, s.off === true ? { off: true } : {}, s.told === true ? { told: true } : {},
-    s.until > 0 ? { until: s.until } : {}, s.owed ? { owed: s.owed } : {}, s.leave ? { leave: s.leave } : {}), null, 1) + "\n";
+    s.until > 0 ? { until: s.until } : {}, s.owed ? { owed: s.owed } : {}, s.leave ? { leave: s.leave } : {}, s.org === true ? { org: true } : {}), null, 1) + "\n";
 }
 let storeKept;
 function storeState() {
@@ -10928,8 +11022,18 @@ let storeAccess = null, storeNow = null, storeFlight = null;
 function storeTokenTake(t) {
   if (!t || typeof t.provider !== "string" || typeof t.token !== "string") return;
   storeAccess = { provider: t.provider, token: t.token, until: Number(t.until) || 0 };
+  /* The last answer to an asked consent decides whose refusal stands: a token or a person's no clears the organisation's. */
+  const s = storeState(), org = t.token ? false : t.why === "org" ? true : t.why === "ungiven" ? false : s.org === true;
+  if (org !== (s.org === true)) { s.org = org; storeSave(); }
 }
-function storeForget() { storeAccess = null; storeNow = null; storeSay = ""; storeFresh = false; storeSyncStop(); }
+/* Why the folder holds no token: "consent" where its organisation refused it, which the person cannot mend; else "ungiven", consent
+   never given (declined, unticked, never asked, or the window not sent on), which the switch mends (storeConsentAsk). */
+function storeUngiven() { return storeState().org === true ? "consent" : "ungiven"; } /* plant:store-ungiven */
+function storeForget() {
+  storeAccess = null; storeNow = null; storeSay = ""; storeFresh = false;
+  storeSyncStop();
+  if (storeState().org === true) { storeState().org = false; storeSave(); }
+}
 /* The folder's requests, at OneDrive's App Folder and Drive's appDataFolder alone, through the shell's own network as the sign-in's:
    no redirect, nothing cached, no cookie, the answer read up to STORE_ANSWER_MAX. {status, bytes}; throws where unreached. */
 const STORE_ANSWER_MAX = 256 * 1024;
@@ -10953,14 +11057,14 @@ const STORE_TOKEN_SLACK_MS = 60 * 1000;
 async function storeTokenFor(p, held) {
   const a = storeAccess && storeAccess.provider === p.id ? storeAccess : null;
   if (a && a.token && a.until > Date.now() + STORE_TOKEN_SLACK_MS) return {};
-  if (a && !a.token) return { why: "consent" };
+  if (a && !a.token) return { why: storeUngiven() };
   const folder = signinFolderScope(p.id, ""), refresh = held.refresh ? signinKept(safeStorage, held.refresh) : "";
   if (!folder || !refresh) return { why: "consent" };
   let res = null;
   try { res = await signinRequest((u, init) => deskFetch(u, init), signinKnown(p.id).token, signinRefreshForm(p, refresh, "", folder)); }
   catch { return { why: "offline" }; }
   signinFolderTake({ folderToken: storeTokenTake }, res, p.id, Date.now());
-  return storeAccess && storeAccess.provider === p.id && storeAccess.token ? {} : { why: "consent" };
+  return storeAccess && storeAccess.provider === p.id && storeAccess.token ? {} : { why: storeUngiven() };
 }
 /* This desk's sealed copy of the store's keys, and its keeping: nothing where the system seals nothing for real. */
 function storeLocal() {
@@ -11231,6 +11335,92 @@ function storeTurn() {
   storeFlight = flight;
   return flight;
 }
+/* Microsoft's folder asked after a seated sign-in (signinFolderAsk), the desk already signed in: the press's landing waits for it, then the
+   look. A token answered after another sign-in or a sign out took this one's place is dropped. */
+function signinFolderAfter(run, io, p, deskKey, got) {
+  const loop = run.loop, heldAt = signinState().held;
+  if (!loop || typeof loop.onward !== "function") { storeTurn(); return; }
+  let kind = "";
+  run.loop = Object.assign({}, loop, { land: k => { kind = String(k || ""); } });
+  const stepIo = { rand: io.rand, trace: io.trace, tokenAsk: io.tokenAsk, folderToken: t => { if (signinState().held === heldAt) storeTokenTake(t); } };
+  signinFolderAsk(stepIo, p, loop, deskKey, got, Date.now).catch(() => "").then(folder => {
+    loop.land(folder || kind || "back"); /* plant:folder-land */
+    if (signinState().held === heldAt) storeTurn();
+  });
+}
+/* THE SWITCH TURNED ON WHERE THE FOLDER'S CONSENT WAS NEVER GIVEN (the look's "ungiven"), the person's own act and the only way the
+   desk opens a browser for the folder: exactly one request at the provider naming the account held, then the look. Microsoft: the
+   folder alone, its answer held to the same account. Google, which adds no scope later: its sign-in asking the folder with it, kept
+   only where the same account is seated again. The seat and the desk stand whatever the answer. Answers at once: "asked", or why not. */
+let storeConsentFlight = null, storeOnClick = 0;
+function storeConsentAsk() {
+  if (storeConsentFlight || signinBusy) return "busy";
+  const held = signinState().held, me = branchIdentity(false);
+  const p = held ? signinOffered().find(x => x.id === held.provider) : null;
+  if (!p || !me || !held.cert || !storeNow || storeNow.why !== "ungiven" || !storePolicyNow().on) return "none"; /* plant:consent-ungiven */
+  const sub = held.sub ? signinKept(safeStorage, held.sub) : "";
+  if (!sub) return "none";
+  const ask = p.id === "google" ? storeConsentSignin(p, me, sub) : storeConsentFolder(p, me, held, sub);
+  const flight = ask.catch(() => {}).then(() => { if (storeConsentFlight === flight) storeConsentFlight = null; return signinState().held ? storeTurn() : null; });
+  storeConsentFlight = flight;
+  return "asked";
+}
+async function storeConsentFolder(p, me, held, sub) {
+  const io = signinIo({ loop: null }), refresh = held.refresh ? signinKept(safeStorage, held.refresh) : "";
+  /* The account's name, from a quiet refresh's ID token held to the same account; asked without it where none answers. */
+  let hint = "";
+  if (refresh) {
+    let res = null;
+    try { res = await io.tokenAsk(signinKnown(p.id).token, signinRefreshForm(p, refresh, "")); } catch { res = null; }
+    const got = res ? signinTokens(res, p, signinNonce(me.key, held.seed), Date.now(), sub) : { ok: false };
+    const c = got.ok ? signinClaims(got.idToken) || {} : {};
+    hint = typeof c.preferred_username === "string" && c.preferred_username.length <= 256 ? c.preferred_username : "";
+  }
+  let pending = null;
+  const loop = await signinListen(http, kind => signinPageHtml(kind), SIGNIN_WAIT_MS, query => signinOurs(query, pending));
+  let kind = "";
+  try {
+    pending = signinFolderAuthorize(p, loop.port, me.key, null, signinFolderScope(p.id, ""), hint);
+    if (!signinPageOk(pending.url)) return;
+    await handOut(pending.url); /* plant:consent-open */
+    let query = "";
+    try { query = await loop.caught; } catch { return; }
+    kind = await signinFolderBack(io, p, pending, query, { sub: sub }, Date.now);
+  } finally {
+    loop.land(kind || "folder-off");
+    loop.close();
+  }
+}
+async function storeConsentSignin(p, me, sub) {
+  const st = signinState(), managed = !!(st.managed && st.managed.managed);
+  let token = null;
+  const run = { loop: null, provider: p.id, url: "" }, io = Object.assign(signinIo(run), { hint: sub, folderToken: t => { token = t; } });
+  signinBusy = run;
+  tellSignin();
+  let landing = "appfail";
+  try {
+    let got = await signinRun(io, p, me.key, Date.now);
+    if (got.ok && !signinSame(got.sub, sub)) got = { ok: false, reason: "signin-other" }; /* plant:consent-same */
+    if (got.ok) {
+      const ans = await signinSeat(io, p.id, me.key, got.idToken, got.seed, Date.now);
+      if (ans.ok && ans.cert) { signinTake(p.id, got, ans, Date.now(), false); signinFlush(); if (token) storeTokenTake(token); }
+      landing = ans.ok && ans.cert ? (token && token.token ? "folder-on" : "folder-off") : signinLanding(got, ans, managed);
+    } else landing = got.reason === "signin-notallowed" ? "folder-org" : got.reason === "signin-cancelled" || got.reason === "signin-other" ? "folder-off" : signinLanding(got, undefined, managed);
+  } finally {
+    signinBusy = null;
+    if (run.loop && typeof run.loop.land === "function") run.loop.land(landing);
+  }
+  tellSignin();
+}
+ipcMain.on("etiuda:store-on-click", (e) => { e.returnValue = null; if (fromEngine(e)) storeOnClick = Date.now(); });
+/* The switch's On where the look says "ungiven", only for a trusted click on it (the preload's store-on-click). */
+ipcMain.handle("etiuda:store-consent", (e) => {
+  if (!fromEngine(e)) return null;
+  const c = storeOnClick;
+  storeOnClick = 0;
+  if (!c || Date.now() - c > LINK_CLICK_MS) return "click"; /* plant:consent-click */
+  return storeConsentAsk();
+});
 async function storeLookNow() {
   if (harnessLaunch() && !signinLabHeld()) return null;
   const held = signinState().held, me = branchIdentity(false);
