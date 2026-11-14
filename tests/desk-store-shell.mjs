@@ -21,7 +21,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 27;
+const EXPECTED = 29;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -99,6 +99,8 @@ function worldOf(o) {
     }
     if (u === STAGING + "signin/desk") {
       w.service.push(body);
+      if (w.seatRefused === "none") return json(200, { ok: true, code: CODE, certificate: null, doors: [] });
+      if (w.seatRefused) return json(w.seatRefused === "full" ? 409 : 403, { ok: false, reason: w.seatRefused });
       const b = JSON.parse(body);
       return json(200, { ok: true, code: CODE, certificate: seatCert(b.desk, Date.now()), doors: [] });
     }
@@ -144,7 +146,7 @@ function worldOf(o) {
 
 /* ---- the shell, evaluated whole: `src` is shell/main.js's text or a planted copy of it ---- */
 /* What the leg reads from main.js, appended to its text; a name main.js lacks comes back undefined, so its leg fails alone. */
-const TAIL_NAMES = ["storeView", "storeSetNow", "storeState", "signinRun", "signinRenew", "signinIo", "signinRenewNow", "signinServiceAsk", "storeServiceAt", "storeOnFor", "storeTurn", "branchIdentity", "signinState"];
+const TAIL_NAMES = ["storeView", "storeRoom", "storeSetNow", "storeState", "signinRun", "signinRenew", "signinIo", "signinRenewNow", "signinServiceAsk", "storeServiceAt", "storeOnFor", "storeTurn", "branchIdentity", "signinState"];
 const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS"];
 const TAIL = "\n__test.T = {" + TAIL_NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
   + ", get: () => ({" + TAIL_STATE.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "}) };";
@@ -366,6 +368,34 @@ async function leaveOwedScene(src) {
     after: enrolled(w, rt), owedAfter: !!left.leave }) };
 }
 
+/* (d4j) The store's room and the account's seat, as the row reads them: a write refused as team-size says full, any other refusal leaves
+   it, a write taken empties it; a renewal refused for want of a free seat, or answered with no certificate after this computer synced, says no seat, the switch on; a freed seat
+   ("signin") is the sign-in's moment and not this line. */
+async function roomSeatScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  const on = T.storeView().line;
+  T.storeRoom("team-size");
+  const full = T.storeView();
+  T.storeRoom("rate");
+  const still = T.storeView().line;
+  T.storeRoom("");
+  const emptied = T.storeView().line;
+  const seats = {};
+  for (const why of ["full", "signin"]) {
+    w.seatRefused = why;
+    await T.signinRenewNow();
+    seats[why] = T.storeView();
+  }
+  /* A second computer whose renewal is answered with no certificate at all, after it has synced. */
+  const b = await renewScene(src);
+  b.world.seatRefused = "none";
+  await b.shell.T.signinRenewNow();
+  seats.none = b.shell.T.storeView();
+  const ok = on === "on" && full.line === "full" && full.on === true && still === "full" && emptied === "on"
+    && seats.full.line === "noseat" && seats.full.on === true && seats.signin.shown === true && seats.signin.line !== "noseat" && seats.none.line === "noseat" && seats.none.on === true;
+  return { ok, detail: brief({ on, full: full.line, afterRate: still, afterTaken: emptied, noneFree: seats.full.line, freed: seats.signin.line, noCertificate: seats.none.shown ? seats.none.line : "not shown" }) };
+}
+
 /* (d4g) A store/end the service did not answer is owed: kept sealed in store.json, the row's line "ending" meanwhile, posted again at
    the next renewal and gone once answered. */
 async function owedScene(src) {
@@ -387,6 +417,7 @@ async function owedScene(src) {
 const LEGS = [
   ["d4h", leaveScene, "This computer leaves the store's list: the relay withdraws its key and the folder's file names it no more, under the last look's store certificate, nothing left owed"],
   ["d4i", leaveOwedScene, "the relay not reached at This computer: the folder's file leaves it out at once, the keys kept sealed as owed, and the next seated renewal has the relay withdraw it"],
+  ["d4j", roomSeatScene, "the row says full once a write is refused as team-size and on once one is taken, and no seat where the renewal is refused for want of one; a freed seat is the sign-in's"],
   ["d4g", owedScene, "a store/end the service did not answer is kept sealed, the row says so, and the next renewal posts it again; answered, the line and the mark are gone"],
   ["d4f", switchScene, "the first look that made the store says on once; Everywhere posts store/end signed by this desk and leaves the ended mark; On makes a new store over it; This computer forgets the keys and ends nothing"],
   ["a1", scopesOnScene, "where sync may be on, Microsoft's authorize address and refresh form carry Files.ReadWrite.AppFolder and Google's authorize address drive.appdata, its refresh as today; a managed computer with PersonalStore unset is off, set on is on"],
@@ -418,6 +449,7 @@ const PLANTS = [
   ["c", swap("  if (folder) signinFolderTake(io, folderRes || { status: 0 }, p.id, now()); /* plant:folder-take-renew */\n",
     "  if (folder) signinFolderTake(io, folderRes || { status: 0 }, p.id, now()); /* plant:folder-take-renew */\n  signinTrace(io, p.id, \"refresh\", \"ok\", { detail: String(JSON.parse(Buffer.from(folderRes.bytes).toString()).access_token) });\n"), "the token traced past the trace's own hiding"],
   ["e", swap("  if (!(d.relay === undefined || DOOR_RELAYS.installed.concat(DOOR_RELAYS.unpackaged).indexOf(d.relay) >= 0)) return null; /* plant:lab-relay */\n", ""), "a lab may name any relay"],
+  ["d4j", swap("seatless: !!held && (!held.cert || held.said === \"full\"), full: storeFullNow }); /* plant:store-view-room */", "seatless: false, full: false }); /* plant:store-view-room */"), "the row is told neither the room nor the seat"],
   ["d4g", swap("  storeEndAgain().catch(() => false); /* plant:store-end-again */\n", ""), "the owed store/end is never posted again"],
   ["d4h", swap("  if (leaving) await storeLeaveNow(cert); /* plant:store-leave */\n", ""), "This computer leaves nothing"],
   ["d4h", swap("  const current = cert && Number.isSafeInteger(cert.until) && cert.until > Date.now() ? cert : null;", "  const current = null;"), "the leave asks the service for a new grant rather than using the look's certificate"],

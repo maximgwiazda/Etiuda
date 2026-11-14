@@ -11156,11 +11156,23 @@ async function storeLeaveTry(cert) {
   if (now && now.rt === keys.rt) storeLeaveOwe(null);
   return true;
 }
+/* THE STORE'S ROOM, told by the store's sync channel: each write refused as "team-size" or taken (""), store.cjs roomNext. In memory
+   alone: after a start the first refused write says it again. */
+let storeFullNow = false;
+function storeRoom(reason) {
+  const next = StoreLib().roomNext(storeFullNow, String(reason));
+  if (next === storeFullNow) return;
+  storeFullNow = next;
+  tellStore();
+}
+/* NO SEAT: the renewal refused for want of a free seat ("full"), or answered with no certificate on a computer that has synced (it
+   holds the store's keys). A freed seat ("signin") is the sign-in's own moment, as the paused line's rule says. */
 function storeView() {
-  const held = signinState().held;
-  const provider = held && signinOffered().some(p => p.id === held.provider) && held.cert ? held.provider : "";
+  const held = signinState().held, synced = !!storeState().keys;
+  const provider = held && signinOffered().some(p => p.id === held.provider) && (held.cert || synced) ? held.provider : "";
   return StoreLib().storeRow({ provider, pol: storePolicyNow(), look: storeNow, until: storeState().until, now: Date.now(),
-    signinRefused: !!(held && held.said), conflicts: storeConflicts(), say: storeSay, owed: !!storeOwedRt() });
+    signinRefused: !!(held && held.said), conflicts: storeConflicts(), say: storeSay, owed: !!storeOwedRt(),
+    seatless: !!held && (!held.cert || held.said === "full"), full: storeFullNow }); /* plant:store-view-room */
 }
 function tellStore() {
   const win = theWindow;

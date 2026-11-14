@@ -1457,6 +1457,9 @@ UI_STRINGS.pl={
   "This computer":"Ten komputer",
   "Your organisation has not turned this on.":"Organizacja nie włączyła tej funkcji.",
   "Paused since {DATE}. It resumes when this computer reaches our service.":"Wstrzymana od {DATE}. Zostanie wznowiona, gdy komputer połączy się z naszą usługą.",
+  "Sync is full, so new changes stay on this computer until something is removed.":"Miejsce na synchronizację jest pełne, więc nowe zmiany zostają na tym komputerze, dopóki czegoś się nie usunie.",
+  // placeholder: Claudette
+  "Without a seat, sync waits until this account has one again. This computer keeps its own copy.":"Bez miejsca w licencji synchronizacja czeka, aż to konto znów je otrzyma. Ten komputer zachowuje własną kopię.",
   "Sign-in":"Logowanie",
   "{PROVIDER} · work accounts of the organisation":"{PROVIDER} · konta służbowe organizacji",
   "{PROVIDER} · work accounts":"{PROVIDER} · konta służbowe",

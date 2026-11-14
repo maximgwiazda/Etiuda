@@ -38,7 +38,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 10;
+const EXPECTED = 12;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const STORE = path.join(E.ROOT, "shell", "sync", "store.cjs");
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -189,6 +189,8 @@ async function main() {
     ["the folder's consent never given", { ...ON, line: "ungiven", on: false }, "Off. Turning it on asks Microsoft to let Etiuda use its folder in this account.", "switch"],
     ["conflict", { ...ON, line: "conflict" }, "Changed on two computers: choose which to keep.", "switch"],
     ["paused", { ...ON, line: "paused", since: Date.UTC(2026, 10, 11, 12) }, "Paused since 11 November. It resumes when this computer reaches our service.", "switch"],
+    ["the store's room full", { ...ON, line: "full" }, "Sync is full, so new changes stay on this computer until something is removed.", "switch"],
+    ["no seat", { ...ON, line: "noseat" }, "Without a seat, sync waits until this account has one again. This computer keeps its own copy.", "switch"],
     ["held on", { ...ON, held: true }, "Your catalogs, edits and settings on every computer you sign in on.", "fixed"],
   ];
   const rowOf = page => page.evaluate(() => {
@@ -290,8 +292,8 @@ async function main() {
     check(ok, "m3 the row, the question and both bubbles (said once, and not available standing alone) in the copywriter's Polish", ok ? undefined : { r1, q, said: said.text, alone: alone.text });
   }
 
-  /* r1: storeRow. */
-  {
+  /* r1: storeRow, and roomNext. */
+  const rowBad = ST => {
     const now = Date.UTC(2026, 10, 20), D = 24 * 3600 * 1000;
     const row = o => ST.storeRow(Object.assign({ provider: "microsoft", pol: { on: true, held: false }, look: null, until: now + D, now, signinRefused: false, conflicts: 0, say: "" }, o));
     const cases = [
@@ -310,9 +312,33 @@ async function main() {
       [row({ until: now - 3 * D }).line === "paused" && row({ until: now - 3 * D }).since === now - 3 * D, "paused three days"],
       [row({ until: now - 4 * D, signinRefused: true }).line === "on", "a sign-in refusal: the sign-in says it"],
       [row({ say: "on" }).say === "on" && row({ pol: { on: false, held: false }, say: "on" }).say === "", "the say rides on, never off"],
+      [(r => r.line === "noseat" && r.on === true)(row({ seatless: true, signinRefused: true, until: now - 4 * D, conflicts: 1 })), "no seat: said over a conflict and a lapse, the switch on"],
+      [row({ seatless: true, look: { state: "unavailable", why: "no-drive" } }).line === "unavailable" && row({ seatless: true, pol: { on: false, held: false } }).line === "off", "no seat: under a folder not reached and the person's own off"],
+      [(r => r.line === "full" && r.on === true)(row({ full: true })), "the store's room full, the switch on"],
+      [row({ full: true, conflicts: 1 }).line === "conflict" && row({ full: true, until: now - 3 * D }).line === "paused" && row({ full: true, pol: { on: false, held: false } }).line === "off", "full: under a conflict, a pause and off"],
+      [ST.roomNext(false, "team-size") === true && ST.roomNext(true, "rate") === true && ST.roomNext(false, "rate") === false && ST.roomNext(true, "") === false, "roomNext: full at team-size, empty at a taken write, else as it was"],
     ];
-    const bad = cases.filter(c => !c[0]).map(c => c[1]);
-    check(!bad.length, "r1 storeRow's line for each state", bad.length ? bad : undefined);
+    return cases.filter(c => !c[0]).map(c => c[1]);
+  };
+  {
+    const bad = rowBad(ST);
+    check(!bad.length, "r1 storeRow's line for each state, and the store's room", bad.length ? bad : undefined);
+  }
+  /* The row's two new lines, each lifted in a copy of store.cjs, turn r1 red; the product file is never written. */
+  for (const [tag, what] of [["row-noseat", "no seat read as on"], ["row-full", "the room full read as on"]]) {
+    const line = "p r1 " + tag + " lifted in a copy of store.cjs turns r1 red (" + what + "), and the product file is never written";
+    if (PLANTS_OFF) { skip(line); continue; }
+    const before = sha(STORE), text = fs.readFileSync(STORE, "utf8"), lines = text.split("\n"), at = lines.findIndex(l => l.indexOf("/* plant:" + tag + " */") >= 0);
+    let red = false, detail = "the plant's anchor is absent";
+    if (at >= 0) {
+      if (tag === "row-full") lines[at] = lines[at].replace('o.full === true ? "full" : "on"', '"on"'); else lines.splice(at, 1);
+      const dir = path.join(lab, "store-plant-" + tag);
+      fs.mkdirSync(dir);
+      fs.writeFileSync(path.join(dir, "store.cjs"), lines.join("\n"));
+      try { red = rowBad(require(path.join(dir, "store.cjs"))).length > 0; } catch (e) { red = true; }
+      detail = red ? "red" : "still held";
+    }
+    check(red && sha(STORE) === before, line, detail);
   }
 
   /* The plants. */

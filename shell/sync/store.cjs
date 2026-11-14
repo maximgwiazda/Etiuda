@@ -283,11 +283,12 @@ function pausedLine(cert, now, signinRefused) {
 /* ---- what the page is told: the Account row's line and the one thing said once -------------------------------------------
    `o`: provider (the signed-in one, "" for none), pol (storePolicy's answer), look (the last look's {state, why} or null), until (the
    last store certificate's end), now, signinRefused, conflicts (cards kept in two versions), say (what waits to be said once), owed
-   (a Turn off everywhere the licence service has not answered yet). Answers
+   (a Turn off everywhere the licence service has not answered yet), seatless (the account's seat refused at its last renewal), full
+   (the store's room at the relay refused a write, roomNext). Answers
    {shown, line, on, held, why, since, say}: line "org-off" where policy keeps sync off, "off" where the person turned it off,
    "ungiven" where the folder's consent was never given (off, the switch the person's own way to ask for it), "unavailable" where
-   the folder could not be reached for a reason the person cannot mend (never offline), "conflict", "paused" after
-   PAUSE_SAY_MS, else "on". Nothing of a key, a store or a token. Pure. */
+   the folder could not be reached for a reason the person cannot mend (never offline), "noseat", "conflict", "paused" after
+   PAUSE_SAY_MS, "full", else "on". Nothing of a key, a store or a token. Pure. */
 function storeRow(o) {
   if (o.provider !== "microsoft" && o.provider !== "google") return { shown: false };
   const pol = o.pol || {}, say = typeof o.say === "string" ? o.say : "";
@@ -297,9 +298,17 @@ function storeRow(o) {
   const look = o.look;
   if (look && look.state === "unavailable" && look.why === "ungiven") return Object.assign(base, { line: "ungiven", on: false, say: "" }); /* plant:row-ungiven */
   if (look && look.state === "unavailable" && look.why !== "offline") return Object.assign(base, { line: "unavailable", why: String(look.why || "") });
+  if (o.seatless === true) return Object.assign(base, { line: "noseat" }); /* plant:row-noseat */
   if (Number(o.conflicts) > 0) return Object.assign(base, { line: "conflict" });
   const p = pausedLine({ until: o.until }, o.now, o.signinRefused);
-  return p ? Object.assign(base, { line: "paused", since: p.since }) : Object.assign(base, { line: "on" });
+  if (p) return Object.assign(base, { line: "paused", since: p.since });
+  return Object.assign(base, { line: o.full === true ? "full" : "on" }); /* plant:row-full */
+}
+/* The store's room: full once the relay (or the channel's own count) refuses a write as "team-size", the changes staying owed on this
+   computer, and no longer once a write is taken (reason ""); any other refusal leaves it as it was. */
+function roomNext(full, reason) {
+  if (reason === "team-size") return true;
+  return reason === "" ? false : full === true;
 }
 /* Said once, from the account control: "on" at the first look that finds sync on on this computer, where that look made the person's
    store (a second computer, or a store made afresh later, says nothing); `told` whether this computer has had its first such look. */
@@ -309,4 +318,4 @@ function firstSay(told, look) {
 }
 
 module.exports = { KEY_FILE, KEY_KIND, FILE_MAX, DEVICES_MAX, GRAPH, DRIVE, DRIVE_UPLOAD, PAUSE_SAY_MS, graphFolder, driveFolder, folderFor, keyText, keyRead,
-  freshKeys, pubOf, storePolicy, storeLook, storeLeave, sayOnce, pausedLine, storeRow, firstSay, endedText, endedRead };
+  freshKeys, pubOf, storePolicy, storeLook, storeLeave, sayOnce, pausedLine, storeRow, roomNext, firstSay, endedText, endedRead };

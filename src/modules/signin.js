@@ -479,9 +479,9 @@ function signinClicks(root){
   });
 }
 /* ---- sync across computers: what the shell's storeRow answers (shell/sync/store.cjs), the row's words and the one bubble ---------
-   The page is told a line ("on", "off", "org-off", "unavailable", "paused", "conflict"), the switch, whether policy holds it, the
+   The page is told a line (SYNC_LINES), the switch, whether policy holds it, the
    reason, the pause's start and what to say once; never a key, a store or a token. */
-const SYNC_LINES=["on","off","ending","ungiven","org-off","unavailable","paused","conflict"];
+const SYNC_LINES=["on","off","ending","ungiven","org-off","unavailable","paused","conflict","full","noseat"];
 function syncRead(v){
   const o=v && typeof v==="object" ? v : {};
   if(o.shown!==true || SYNC_LINES.indexOf(o.line)<0) return {shown:false, line:"", on:false, held:false, why:"", since:0, say:""};
@@ -520,6 +520,8 @@ function syncLine(s, provider){
   if(s.line==="unavailable") return syncUnavailable(s.why, provider);
   if(s.line==="paused") return named(t("Paused since {DATE}. It resumes when this computer reaches our service."),"{DATE}",syncDate(s.since));
   if(s.line==="conflict") return t("Changed on two computers: choose which to keep.");
+  if(s.line==="full") return t("Sync is full, so new changes stay on this computer until something is removed.");
+  if(s.line==="noseat") return t("Without a seat, sync waits until this account has one again. This computer keeps its own copy."); // placeholder: Claudette
   return t("Your catalogs, edits and settings on every computer you sign in on.");
 }
 /* SAID ONCE, FROM THE ACCOUNT CONTROL: that sync is on, at the sign-in that made the person's store, or why it is not available. The
