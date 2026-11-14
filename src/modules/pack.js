@@ -4,6 +4,7 @@ import { E_KEY_RE, E_NS, lsDel, lsGet, lsKeys, lsSet, ssDel, LAYER_KEYS, eLayer,
   eSaveTrouble, eDeskNewer, eDeskRefused, eDeskRefusedSeen, eHomeless, eDeskHome } from "./storage.js";
 import { t, toast, fileStamp } from "./ui-lang.js";
 import { hooks } from "./hooks.js";
+import { hangBubble } from "./bubble.js";
 import { statsOlderTouched } from "./desk-stats.js";
 
 // Personal cards: stock built-ins in M; optional pack.baseCards (imported catalog)
@@ -117,36 +118,20 @@ function showPackMigrationWarning(){
   };
   hide.onclick=()=>d.remove();
 }
-/* THE LASTING NOTICES, in the rescue's dress (the family's bubble) and stacked under one another
-   UNDER THE BAND: the band holds the window's own controls and is its drag handle, and a person
-   with a full disk still has to close and move the window. Re-placed whenever the band changes
-   height. Built from text nodes, so a path is never read as markup. */
-let noticeRO=null;
-function placeNotices(){
-  const box=document.getElementById("eNotices"), band=document.querySelector(".row");
-  if(box) box.style.top=((band ? Math.max(0,Math.round(band.getBoundingClientRect().bottom)) : 0)+8)+"px";
-}
+/* THE LASTING NOTICES, in the rescue's dress (the family's bubble), each hung from the control of what it concerns:
+   the catalog's name for a catalog's matter, the Menu where Settings hold its equal, else Etiuda's name at the band's
+   left. Two from one control hang one from the other. Built from text nodes, so a path is never read as markup. */
+const NOTICE_FROM={
+  eTeamLapse:"#catNow", eTeamFork:"#catNow", eTeamStranded:"#catNow", eTeamRemoved:"#catNow",
+  eHotkeyNote:"#settingsBtn"
+};
+const NOTICE_ETIUDA=".row .brand";
 function dropNotice(d){
-  const box=document.getElementById("eNotices");
   if(d) d.remove();
-  if(box && !box.firstChild){
-    box.remove();
-    if(noticeRO){ try{ noticeRO.disconnect(); }catch(e){} noticeRO=null; }
-    removeEventListener("resize",placeNotices);
-  }
 }
 /* `act`, where given, is {label, run}: a button before Dismiss that takes the notice down and does its act. */
 function eNotice(id,lead,body,onDismiss,act){
-  let box=document.getElementById("eNotices");
-  if(!box){
-    box=document.createElement("div");
-    box.id="eNotices";
-    (document.body||document.documentElement).appendChild(box);
-    const band=document.querySelector(".row");
-    try{ if(band){ noticeRO=new ResizeObserver(placeNotices); noticeRO.observe(band); } }catch(e){}
-    addEventListener("resize",placeNotices,{passive:true});
-    placeNotices();
-  }
+  const from=NOTICE_FROM[id]||NOTICE_ETIUDA;
   const d=document.createElement("div");
   d.id=id;
   d.className="bub bub-ask e-notice";
@@ -175,7 +160,13 @@ function eNotice(id,lead,body,onDismiss,act){
   x.onclick=()=>{ dropNotice(d); if(onDismiss) onDismiss(); };
   row.appendChild(x);
   d.appendChild(row);
-  box.appendChild(d);
+  d.setAttribute("data-from",from);
+  (document.body||document.documentElement).appendChild(d);
+  hangBubble(d, ()=>{
+    const all=[...document.querySelectorAll(".e-notice[data-from]")].filter(n=>n.getAttribute("data-from")===from && !n.closest(".e-gone"));
+    const i=all.indexOf(d);
+    return i>0 ? all[i-1] : document.querySelector(from);
+  });
   return d;
 }
 /* Shown the moment a write fails and taken down by the write that settles it. A dismissal holds

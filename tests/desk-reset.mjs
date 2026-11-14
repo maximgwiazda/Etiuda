@@ -289,7 +289,7 @@ async function uiLeg() {
     check(!/\b(unlink|rmSync|writeFileSync|rmdir)\b/.test(pageSrc),
       "4d1 the page does not delete; the shell does");
     if (row) row.click();
-    const card = doc.getElementById("modalCard");
+    const card = doc.getElementById("eResetAsk");
     const said = card ? card.textContent : "";
     const go = doc.getElementById("mtResetGo");
     const word = doc.getElementById("mtResetWord");
@@ -803,7 +803,7 @@ async function noticePage(mod) {
   maint.armResetNotice();
   const win = { webContents: { send: (ch, payload) => { if (typeof heard[ch] === "function") heard[ch]({}, payload); } } };
   const sent = mod.deliverResetNotice(win, { paths: ["stuck.txt"] });
-  const card = globalThis.document.getElementById("modalCard");
+  const card = globalThis.document.getElementById("eResetAsk");
   const said = card ? card.textContent : "";
   check(sent === true && said.indexOf("The reset of Etiuda did not finish") >= 0 && said.indexOf("stuck.txt") >= 0
     && said.indexOf(UNFINISHED_NEXT) >= 0 && said.indexOf(TRY_AGAIN) >= 0 && said.indexOf(STOP_RESET) >= 0,
@@ -820,7 +820,7 @@ async function noticePage(mod) {
   check(releases, "4d10 a relaunch lets go of the single-instance lock before it asks again");
   if (globalThis.localStorage) globalThis.localStorage.setItem("eUiLang", "pl");
   mod.deliverResetNotice(win, { paths: ["stuck.txt"] });
-  const plCard = globalThis.document.getElementById("modalCard");
+  const plCard = globalThis.document.getElementById("eResetAsk");
   const plSaid = plCard ? plCard.textContent : "";
   check(plSaid.indexOf("Reset Etiudy nie został dokończony") >= 0 && plSaid.indexOf("stuck.txt") >= 0
     && plSaid.indexOf(UNFINISHED_PL[TRY_AGAIN]) >= 0 && plSaid.indexOf(UNFINISHED_PL[STOP_RESET]) >= 0,

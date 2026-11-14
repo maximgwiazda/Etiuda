@@ -10,8 +10,9 @@
  *       catalog's name when nothing was pressed), Clear local changes?, Reset Etiuda?, the reset left unfinished,
  *       the proxy's sign-in, the agent's name with no reply to hang from
  *   b2  every Undo, from the control whose act it undoes, or the control now in its place
- *   b3  the notices, from the control of the thing they concern
- *   b4  the same in Polish and in the dark: the questions and three Undos
+ *   b3  the notices, from the control of the thing they concern, and a second from one control from the first
+ *   b4  the rescue the boot guard draws at a start whose storage refuses, from Etiuda's name
+ *   b5  the questions and three Undos in Polish light, English dark and Polish dark
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -31,7 +32,7 @@ const check = (ok, what, detail) => {
   if (!ok) fails++;
 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 4;
+const EXPECTED = 10;
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-bubbles-"));
 fs.copyFileSync(E.ENGINE_PATH, path.join(lab, "etiuda.html"));
@@ -313,6 +314,45 @@ async function runUndos(page, label, only) {
   check(!bad.length && n > 0, label.replace("{N}", n), bad);
 }
 
+/* THE NOTICES, each from the control of what it concerns: the catalog's name, the Menu where Settings hold its equal,
+   else Etiuda's name at the band's left; a second from one control hangs from the first. */
+const NOTICES = [
+  ["eTeamLapse", "#catNow"], ["eTeamFork", "#catNow"], ["eTeamStranded", "#catNow"], ["eTeamRemoved", "#catNow"],
+  ["eHotkeyNote", "#settingsBtn"], ["eSaveWarn", ".row .brand"], ["eDeskWarn", ".row .brand"], ["eDeskNewer", ".row .brand"],
+];
+async function runNotices(page, label) {
+  const bad = [];
+  for (const [id, ctl] of NOTICES) {
+    const r = await measure(page, (a) => { eNotice(a.id, "A notice.", "Its body."); return { name: a.id, bub: "#" + a.id, ctl: a.ctl }; }, { id, ctl });
+    if (!r.ok) bad.push({ id, ...r });
+    if (process.env.BUB_LOG) console.log("       " + id + " " + JSON.stringify(r));
+    await page.evaluate(id => dropNotice(document.getElementById(id)), id);
+  }
+  const two = await measure(page, () => { eNotice("eTeamLapse", "A notice.", "Its body."); eNotice("eTeamFork", "A second.", "Its body.");
+    return { name: "two", bub: "#eTeamFork", ctl: "#eTeamLapse" }; });
+  if (!two.ok) bad.push({ id: "the second from one control", ...two });
+  await page.evaluate(() => ["eTeamLapse", "eTeamFork"].forEach(id => dropNotice(document.getElementById(id))));
+  check(!bad.length, label, bad);
+}
+/* The rescue at a start whose storage refuses: drawn by the boot guard before any module, from Etiuda's name. */
+async function runRescue(label) {
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 860, deviceScaleFactor: 1 });
+  await page.evaluateOnNewDocument(() => {
+    Object.defineProperty(window, "localStorage", { get() { throw new DOMException("refused", "SecurityError"); } });
+  });
+  await page.goto(url, { waitUntil: "load", timeout: 60000 });
+  let r;
+  try {
+    await page.waitForFunction(() => !!document.getElementById("eRescue"), { timeout: 15000 });
+    await sleep(200);
+    await page.evaluate(MEASURE);
+    r = await page.evaluate(() => window.__bubAt(document.getElementById("eRescue"), document.querySelector(".row .brand")));
+  } catch (e) { r = { why: "no rescue: " + String(e && e.message || e).slice(0, 80) }; }
+  await page.close();
+  check(!!r.ok, label, r);
+}
+
 async function runQuestions(page, label) {
   const bad = [];
   for (const [what, act] of QUESTIONS) {
@@ -334,6 +374,18 @@ try {
   const p2 = await boot();
   await runUndos(p2, "b2 every Undo hangs from the control whose act it undoes, or the one now in its place ({N})");
   await p2.close();
+  const p3 = await boot();
+  await runNotices(p3, "b3 the notices hang from the control of what they concern (" + NOTICES.length + ", and a second from one control)");
+  await p3.close();
+  await runRescue("b4 the rescue at a start whose storage refuses hangs from Etiuda's name");
+  for (const [lang, theme] of [["pl", "light"], ["en", "dark"], ["pl", "dark"]]) {
+    const p = await boot({ lang, theme });
+    await runQuestions(p, "b5 " + lang + " " + theme + ": the questions hang from their controls (" + QUESTIONS.length + ")");
+    await p.close();
+    const q = await boot({ lang, theme });
+    await runUndos(q, "b5 " + lang + " " + theme + ": three Undos ({N})", ["Tab closed, by its X", "Card deleted in its editor, on the desk", "Settings reset"]);
+    await q.close();
+  }
 } catch (e) {
   check(false, "run crashed: " + (e && e.stack ? e.stack.split("\n").slice(0, 3).join(" | ") : e));
 } finally {

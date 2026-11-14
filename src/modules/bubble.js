@@ -74,6 +74,7 @@ function placeBubble(el, target, opts){
    at every placing, since a repaint replaces the control. Where it answers nothing the bubble stays where it last
    stood, or at its own resting place if it never stood anywhere. Call it once `el` is in the document. */
 function hangBubble(el, origin, opts){
+  if(!el || !el.isConnected) return ()=>{};
   let raf=0, placed=false;
   const box=()=>{
     let o=null;
@@ -82,11 +83,11 @@ function hangBubble(el, origin, opts){
     const r=o.getBoundingClientRect();
     return (r.width || r.height) ? r : null;
   };
+  const on=typeof addEventListener==="function" && typeof removeEventListener==="function";
   const drop=()=>{
     mo.disconnect();
-    removeEventListener("resize", again);
-    removeEventListener("scroll", again, {capture:true});
-    cancelAnimationFrame(raf); raf=0;
+    if(on){ removeEventListener("resize", again); removeEventListener("scroll", again, {capture:true}); }
+    if(raf) cancelAnimationFrame(raf); raf=0;
   };
   const place=()=>{
     raf=0;
@@ -96,14 +97,13 @@ function hangBubble(el, origin, opts){
     placeBubble(el, {top:r.top, left:r.left, width:r.width, height:r.height}, opts);
     placed=true;
   };
-  const again=()=>{ if(!raf) raf=requestAnimationFrame(place); };
-  const mo=new MutationObserver(rs=>{
+  const again=()=>{ if(!raf && typeof requestAnimationFrame==="function") raf=requestAnimationFrame(place); };
+  const mo=typeof MutationObserver!=="function" ? {observe(){}, disconnect(){}} : new MutationObserver(rs=>{
     if(!el.isConnected){ drop(); return; }
     if(!rs.every(m=>el.contains(m.target))) again();
   });
-  mo.observe(document.body, {subtree:true, childList:true, attributes:true, attributeFilter:["hidden","open","class","style"]});
-  addEventListener("resize", again, {passive:true});
-  addEventListener("scroll", again, {passive:true, capture:true});
+  if(document.body) mo.observe(document.body, {subtree:true, childList:true, attributes:true, attributeFilter:["hidden","open","class","style"]});
+  if(on){ addEventListener("resize", again, {passive:true}); addEventListener("scroll", again, {passive:true, capture:true}); }
   place();
   return drop;
 }

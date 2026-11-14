@@ -349,7 +349,7 @@ async function launch(plan) {
   /* THE DESK STARTED AGAIN, or a reload: the launch ends at the next act, its unload events fired,
      which is where a pending desk write is sent whole, as the page leaving at the end of a session. */
   /* A QUESTION STANDING OVER THE DESK: a bubble that asks, not on its way out, and not the Undo. */
-  const standing = () => doc.body.children.filter(n => n.classList.contains("bub-ask") && !n.classList.contains("e-gone") && n.id !== "eUndo").length;
+  const standing = () => doc.body.children.filter(n => n.classList.contains("bub-ask") && !n.classList.contains("e-gone") && !n.classList.contains("e-notice") && n.id !== "eUndo").length;
   const restarted = () => {
     if (obs.reloaded) return;
     obs.reloaded = true;
@@ -677,8 +677,7 @@ async function launch(plan) {
     // The desk's notices as the boot shows them, each by its id and its words.
     notices: () => {
       PACK.showDeskNotices();
-      const box = doc.getElementById("eNotices");
-      obs.notices = box ? box.children.map(n => ({ id: n.id, text: n.textContent.replace(/\s+/g, " ").trim() })) : [];
+      obs.notices = doc.querySelectorAll(".e-notice").map(n => ({ id: n.id, text: n.textContent.replace(/\s+/g, " ").trim() }));
     },
   });
   for (const a of plan.acts) {

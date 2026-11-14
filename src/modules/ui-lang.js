@@ -1639,10 +1639,9 @@ function t(en){
   const tab=UI_STRINGS[uiLang()];
   return (tab && tab[en]!=null) ? tab[en] : en;
 }
-/* AN ACT THAT CAN BE UNDONE HAPPENS AT ONCE, and this bubble at the foot of the window offers the
-   way back: over any dialog, until another act replaces it or UNDO_MS passes. A caller that has
-   not done the act yet passes `lapse`. It runs when this offer ends without Undo: the wait,
-   Escape, or a later act taking the bubble. `undo` is the way back, and it does not run `lapse`.
+/* AN ACT THAT CAN BE UNDONE HAPPENS AT ONCE, and this bubble offers the way back: over any dialog, until another act
+   replaces it or UNDO_MS passes. A caller that has not done the act yet passes `lapse`. It runs when this offer ends
+   without Undo: the wait, Escape, or a later act taking the bubble. `undo` is the way back, and it does not run `lapse`.
    Every caller that already did the act passes no `lapse`, and nothing here changes for that caller. `from` is the
    control whose act it undoes, and the bubble hangs from it: an element, or originOf(control) read before an act
    that may take the control away. */
