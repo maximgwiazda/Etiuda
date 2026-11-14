@@ -1067,18 +1067,18 @@ CASES.signoutAway = async (s, swap) => {
 CASES.signoutManaged = async (s, swap) => {
   const st = outStand(s);
   st.store.held = Object.assign(heldOf(), { managed: true });
-  st.store.managed = true;
+  st.store.licenceManaged = true;
   const w = loadWire(st, swap);
   w.signinOutNow();
   await tick(5);
   const st2 = outStand(s);
   st2.store.held = null;
-  st2.store.managed = true;
+  st2.store.licenceManaged = true;
   const w2 = loadWire(st2, swap);
   w2.signinOutNow();
   await tick(5);
-  return st.store.held === null && !("managed" in st.store) && st2.store.held === null && !("managed" in st2.store)
-    && s.signinFileText(st2.store).indexOf("managed") < 0;
+  return st.store.held === null && !("licenceManaged" in st.store) && st2.store.held === null && !("licenceManaged" in st2.store)
+    && s.signinFileText(st2.store).indexOf("licenceManaged") < 0;
 };
 /* Nothing is sent where no client id is configured, the desk was never signed in, or it has no identity, or on a harness start; the
    sign-in is cleared all the same, except while a sign-in is in the browser, which Sign out leaves alone as before. */
@@ -1973,7 +1973,9 @@ CASES.labOnly = () => {
   const pageNames = fs.readdirSync(path.join(ROOT, "src", "modules")).filter(f => /ETIUDA_SIGNIN_LAB/.test(fs.readFileSync(path.join(ROOT, "src", "modules", f), "utf8")));
   const env = /process\.env\.ETIUDA_SIGNIN_LAB\b|process\.env\[/g;
   return !!block && n(/process\.env\.ETIUDA_SIGNIN_LAB\b/g) === 2 && (block.match(env) || []).length === 2
-    && n(/(?<!let )\bSIGNIN_PROVIDERS = /g) === 1 && n(/(?<!let )\bSIGNIN_SERVICE = /g) === 1 && n(/(?<!let )\bSIGNOUT_SERVICE = /g) === 1
+    /* The one other assignment is machine policy's pin (decision 49, tests/desk-managed.mjs), which narrows the table and never names one. */
+    && n(/(?<!let )\bSIGNIN_PROVIDERS = /g) === 2 && n(/\n  SIGNIN_PROVIDERS = signinPinTable\(SIGNIN_PROVIDERS, managed\); \/\* plant:pin-taken \*\/\n/g) === 1
+    && n(/(?<!let )\bSIGNIN_SERVICE = /g) === 1 && n(/(?<!let )\bSIGNOUT_SERVICE = /g) === 1
     && n(/\bsigninLabUse\(/g) === 3 && /\(testServiceOn = signinLabUse\(signinLabRead\(JSON\.stringify\(fields\)\)\)\)/.test(MAIN) && n(/\bsigninLabOn = true/g) === 1 && /SIGNIN_PROVIDERS = [^\n]*\n  SIGNIN_SERVICE = lab\.signin;\n  SIGNOUT_SERVICE = lab\.signout;/.test(MAIN)
     && !/ipcMain\.(on|handle)\([^\n]*(signinLab|SIGNIN_LAB)/.test(MAIN) &&!/ETIUDA_SIGNIN_LAB/.test(PRELOAD) && pageNames.length === 0;
 };
@@ -3405,7 +3407,7 @@ if (!PLANTS_OFF) {
   await plantWire("dsp25", ["const SIGNIN_RENEW_MS = 24 * 60 * 60 * 1000; /* plant:renew-daily */", "const SIGNIN_RENEW_MS = 55 * 60 * 1000;"], "renewDaily");
   await plantWire("dsp26", ["if (!p || !me) return \"\"; /* plant:renew-offered */", "if (!me) return \"\";"], "renewWire");
   await plantWire("dsp29", ["const send = () => signoutAsk(signinIo({ loop: null }), key, Date.now); /* plant:signout-post */", "const send = () => Promise.resolve(false);"], "signoutPost");
-  await plantWire("dsp156", ["  delete s.managed; /* plant:signout-managed */\n", ""], "signoutManaged");
+  await plantWire("dsp156", ["  delete s.licenceManaged; /* plant:signout-managed */\n", ""], "signoutManaged");
   await plantWire("dsp30", ["&& signinOffered().length) { /* plant:signout-offered */", ") {"], "signoutNone");
   await plantWire("dsp31", ["return !!teamJoin && !(teamJoin.invite && teamJoin.invite.relay); /* plant:flush-asking */", "return false;"], "flushJoin");
   await plantWire("dsp32", ["if (signinWrote === mark && fs.existsSync(file)) return false; /* plant:flush-mark */", "if (signinWrote === cert.sig.value) return false;"], "flushJoin");

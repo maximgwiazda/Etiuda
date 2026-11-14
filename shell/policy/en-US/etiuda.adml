@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <policyDefinitionResources revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
   <displayName>Etiuda</displayName>
-  <description>Team folder, team lead's key, version checks and Etiuda Studio's AI service</description>
+  <description>Team folder, team lead's key, version checks, Etiuda Studio's AI service, and the accounts on a managed computer</description>
   <resources>
     <stringTable>
       <string id="SUPPORTED_Etiuda">Etiuda</string>
@@ -73,6 +73,62 @@ If you enable this policy setting, Etiuda uses the service, address, model and k
 If you disable this policy setting, Etiuda uses the built-in model only, which works on this computer alone and sends nothing from it, and the choice cannot be changed in its Settings.
 
 If you do not configure this policy setting, the model is chosen in Etiuda's Settings. The built-in model, the default, works on this computer alone and sends nothing from it.</string>
+      <string id="Managed">Manage the accounts on this computer for the organisation</string>
+      <string id="Managed_Explain">This policy setting marks this computer as managed by your organisation, which then decides who signs in to Etiuda and Etiuda Studio here, and with which account.
+
+If you enable this policy setting, both programs show nothing to buy and no trial; offer no other account and no way to sign out, and keep the account that signed in, unless "Treat this computer as shared" is enabled; and hide everything that only the licence's owner may do. Personal accounts are not offered unless "Allow personal accounts" is enabled. Account, in each program, says that the organisation manages it. Everything else in both programs works as on any computer.
+
+If you disable or do not configure this policy setting, both programs show their account settings as on any computer.</string>
+      <string id="SharedComputer">Treat this computer as shared</string>
+      <string id="SharedComputer_Explain">This policy setting lets more than one person use Etiuda and Etiuda Studio on this computer, one after another.
+
+If you enable this policy setting on a computer where "Manage the accounts on this computer for the organisation" is enabled, signing out and signing in with another account are offered again, still within "Set the sign-in provider" and "Set the organisation's sign-in tenant".
+
+If you disable or do not configure this policy setting, a managed computer keeps the account that signed in on it.</string>
+      <string id="AllowPersonalAccounts">Allow personal accounts</string>
+      <string id="AllowPersonalAccounts_Explain">This policy setting decides whether a personal Microsoft account, or a Google account outside a Google Workspace domain, may sign in to Etiuda and Etiuda Studio on this computer.
+
+If you enable this policy setting, personal accounts may sign in.
+
+If you disable this policy setting, only work and school accounts may sign in: Microsoft's sign-in is asked for organisations' accounts alone, and a Google account must belong to a Google Workspace domain.
+
+If you do not configure this policy setting, personal accounts may sign in, except where "Manage the accounts on this computer for the organisation" is enabled.</string>
+      <string id="SigninProvider">Set the sign-in provider</string>
+      <string id="SigninProvider_Explain">This policy setting limits sign-in to Etiuda and Etiuda Studio on this computer to one provider.
+
+If you enable this policy setting, choose Microsoft or Google, or enter microsoft or google; only that provider is offered. Any other value offers no sign-in at all.
+
+If you disable or do not configure this policy setting, both Microsoft and Google are offered.</string>
+      <string id="SigninProvider_microsoft">Microsoft (microsoft)</string>
+      <string id="SigninProvider_google">Google (google)</string>
+      <string id="SigninTenant">Set the organisation's sign-in tenant</string>
+      <string id="SigninTenant_Explain">This policy setting limits sign-in to Etiuda and Etiuda Studio on this computer to the accounts of one organisation.
+
+If you enable this policy setting, enter your Microsoft Entra tenant ID, such as 00000000-0000-0000-0000-000000000000, or your Google Workspace domain, such as example.com. Microsoft's sign-in then takes place at that tenant and Google's asks for that domain, and an account from anywhere else is refused even where the provider lets it sign in. A tenant ID allows Microsoft alone, and a domain Google alone. A value in any other form, or one that disagrees with "Set the sign-in provider", offers no sign-in at all.
+
+For Microsoft, enter the tenant ID, never a domain: a domain such as contoso.com or contoso.onmicrosoft.com is read as a Google Workspace domain, so no Microsoft account can sign in.
+
+If you disable or do not configure this policy setting, the accounts of any organisation may sign in.</string>
+      <string id="SupportContact">Set whom to ask for access</string>
+      <string id="SupportContact_Explain">This policy setting names whom a person should ask when the organisation has not given their account access to Etiuda.
+
+If you enable this policy setting, enter up to 200 characters, such as a service desk's name and telephone number. Etiuda and Etiuda Studio show it as written, after "To ask for access:", in place of the line that names the organisation's IT department, and never open it as a link.
+
+If you disable or do not configure this policy setting, that line names the organisation's IT department.</string>
+      <string id="NonPersistent">Keep each desk on a non-persistent desktop</string>
+      <string id="NonPersistent_Explain">This policy setting tells Etiuda that this computer is a pooled or non-persistent desktop, such as a contact centre's virtual desktop, where a person may sign in on a different host each day.
+
+Etiuda keeps a desk's identity in the person's profile, in %APPDATA%\etiuda, under keys Windows protects for that person. Where the profile keeps that folder and the person's Windows data protection keys, with an FSLogix Profile Container or a roaming profile, the desk is the same desk on every host and this setting changes nothing.
+
+If you enable this policy setting, a desk whose own key cannot be opened on this profile is kept rather than replaced: Etiuda says what happened and whom to ask, everything on the desk but signing in works as before, and no new desk is made unless "Let a non-persistent desktop make a new desk" is enabled. Each sign-in also marks the desk as pooled, so a person's pooled desks hold one place among their three computers, the newest taking it over, and their ordinary computers keep theirs.
+
+If you disable or do not configure this policy setting, a desk whose key cannot be opened makes a new desk, as on any computer.</string>
+      <string id="NonPersistentNewDesk">Let a non-persistent desktop make a new desk</string>
+      <string id="NonPersistentNewDesk_Explain">This policy setting applies only with "Keep each desk on a non-persistent desktop".
+
+If you enable this policy setting, a desk whose own key cannot be opened on this profile makes a new desk, as on any computer, and its team may need to let it in again. Its sign-ins still mark it as pooled, so it holds one place among the person's three computers.
+
+If you disable or do not configure this policy setting, such a desk is kept, Etiuda says what happened, and no new desk is made.</string>
     </stringTable>
     <presentationTable>
       <presentation id="TeamFolder">
@@ -101,6 +157,19 @@ If you do not configure this policy setting, the model is chosen in Etiuda's Set
       <presentation id="AiKey">
         <textBox refId="AiKeyBox">
           <label>Key:</label>
+        </textBox>
+      </presentation>
+      <presentation id="SigninProvider">
+        <dropdownList refId="SigninProviderList" noSort="true">Provider:</dropdownList>
+      </presentation>
+      <presentation id="SigninTenant">
+        <textBox refId="SigninTenantBox">
+          <label>Tenant ID or Google Workspace domain:</label>
+        </textBox>
+      </presentation>
+      <presentation id="SupportContact">
+        <textBox refId="SupportContactBox">
+          <label>Whom to ask:</label>
         </textBox>
       </presentation>
     </presentationTable>

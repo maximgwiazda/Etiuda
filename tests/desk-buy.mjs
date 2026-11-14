@@ -75,7 +75,7 @@ function shellOf(o) {
     ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { handle[ch] = fn; } },
     fromEngine: e => !!(e && e.engine),
     shell: { openExternal: async u => { opened.push(u); } },
-    signinView: () => ({ code: typeof opt.code === "function" ? opt.code() : opt.code || "", managed: opt.managed === true }),
+    signinView: () => ({ code: typeof opt.code === "function" ? opt.code() : opt.code || "", licenceManaged: opt.managed === true }),
   };
   const names = Object.keys(env);
   const body = "let SIGNIN_PROVIDERS = Object.freeze({ microsoft: Object.freeze({ clientId: \"\" }), google: Object.freeze({ clientId: \"\" }) }),"
@@ -235,7 +235,7 @@ CASES.pagePress = () => {
 CASES.managed = async () => {
   const S = shellOf({ lab: labWith({ order: ORDER }), code: CODE, managed: true });
   const st = S.state(); S.click(); const opened = S.open();
-  const v = Object.assign({}, signed, { managed: true }), vo = Object.assign({}, signedOut, { managed: true });
+  const v = Object.assign({}, signed, { licenceManaged: true }), vo = Object.assign({}, signedOut, { licenceManaged: true });
   const a = await acctOf(v, OFFER), b = await acctOf(vo, OFFER);
   const own = await acctOf(Object.assign({}, v, { cause: "own-licence" }), OFFER), asg = await acctOf(Object.assign({}, v, { cause: "assigned" }), OFFER);
   const line = "Your organisation holds the Etiuda licence for this account, so there is nothing to buy here.";
@@ -288,7 +288,7 @@ if (!PLANTS_OFF && !sliced) {
     "buy-click-frame cut: a click from another frame would let the page out");
   await plant("bp6", ["openExternally(u); /* plant:buy-open */", "handOut(u);"], "nothingElse",
     "buy-open past the link rule: an open with no click would reach the browser");
-  await plant("bp8", ["if (v && v.managed) return \"\"; /* plant:buy-managed */", ""], "managed",
+  await plant("bp8", ["if (buyManaged(v) || (v && v.licenceManaged)) return \"\"; /* plant:buy-managed */", "if (buyManaged(v)) return \"\";"], "managed",
     "the order page handed to a managed tenant's account turns b10 red");
   await plant("bp7", ["let ORDER_PAGE = \"\";", "let ORDER_PAGE = \"" + ORDER + "\";"], "absent",
     "the control for b1: with an order page named in the tree, the shell offers Buy and a press hands it");

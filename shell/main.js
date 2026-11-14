@@ -2673,6 +2673,7 @@ const BRANCH_STEM_MAX = 96, BRANCH_TEXT_MAX = 16 * 1024 * 1024;
 const SPKI_ED25519 = Buffer.from("302a300506032b6570032100", "hex");
 let deskBranch = null;                         // {sign:{pub,priv}, box:{pub,priv}}: hex publics, sealed privates
 let deskBranchOld = [];                        // pairs the envelope could never open again, kept aside and never deleted
+let deskStranded = false;                      // the key would not open and machine policy keeps the desk (section 12): said, not replaced
 let branchRevs = {};                           // desk file id -> the last edition written, kept when the file is removed
 let readRevs = {};                             // desk file id -> the highest rev this desk has handed on
 let catalogRevs = {};                          // catalog id -> {signing public -> the highest rev handed to the page under it}, kept when teamKeys is empty
@@ -2776,6 +2777,12 @@ function branchIdentity(make) {
   if (!branchSealable()) return null;
   const was = deskBranch, wasOld = deskBranchOld;
   if (!deskBranch || !openPrivate(deskBranch.sign.priv)) {
+    /* The company's non-persistent desktop without its consent to churn: nothing is made or set aside, the page says why. */
+    if (deskBranch && managedStrands(managedPolicy())) { /* plant:np-guard */
+      if (!deskStranded) console.error("etiuda: the desk's branch key could not be opened on this profile, and machine policy keeps this desk rather than make a new one");
+      deskStranded = true;
+      return null;
+    }
     try {
       if (deskBranch) { deskBranchOld = wasOld.concat([deskBranch]); deskBranch = null; }
       const s = crypto.generateKeyPairSync("ed25519"), b = crypto.generateKeyPairSync("x25519");
@@ -4161,6 +4168,67 @@ function readJoinPolicy(lang) {
 /* True where machine policy turns the version look off; read with the team values, once a run. */
 function updateLookOff() {
   try { return readJoinPolicy("en").noUpdate === true; } catch { return false; }
+}
+/* A MANAGED INSTALLATION (decision 49): Managed, SharedComputer, AllowPersonalAccounts, SigninProvider, SigninTenant and
+   SupportContact, from policyValues' reading, machine policy alone. A pin that cannot be read closes the sign-in rather than
+   widening it; nothing set (`any` false) leaves every surface and request as it was. Studio reads the same six alike. */
+const MANAGED_TENANT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MANAGED_TENANT_DOMAIN = /^(?=.{4,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i;
+const MANAGED_CONTACT_MAX = 200;
+const MANAGED_NAMES = Object.freeze(["managed", "sharedcomputer", "allowpersonalaccounts", "signinprovider", "signintenant", "supportcontact",
+  "nonpersistent", "nonpersistentnewdesk"]);
+/** {any, managed, shared, personal, provider, tenant, closed, contact} from `values`. A switch is on where set to anything but
+ *  empty or 0; AllowPersonalAccounts unset follows Managed (personal off where managed); a string is taken trimmed. Pure. */
+function managedPolicyFrom(values) {
+  const out = { any: false, managed: false, shared: false, personal: true, provider: "", tenant: "", closed: false, contact: "",
+    nonPersistent: false, nonPersistentNewDesk: false };
+  if (!values) return out;
+  const own = name => (Object.prototype.hasOwnProperty.call(values, name) ? values[name] : null);
+  const text = v => !!v && (v.type === "REG_SZ" || v.type === "REG_EXPAND_SZ");
+  /* null unset, else whether it is on */
+  const sw = v => {
+    if (!v) return null;
+    const s = String(v.value).trim();
+    if (text(v) && s === "") return null;
+    return !((v.type === "dword" || text(v)) && s === "0"); /* plant:mp-switch */
+  };
+  out.any = MANAGED_NAMES.some(n => own(n) !== null); /* plant:mp-any */
+  out.managed = sw(own("managed")) === true;
+  out.shared = sw(own("sharedcomputer")) === true;
+  out.nonPersistent = sw(own("nonpersistent")) === true; /* plant:np-read */
+  out.nonPersistentNewDesk = sw(own("nonpersistentnewdesk")) === true;
+  const personal = sw(own("allowpersonalaccounts"));
+  out.personal = personal === null ? !out.managed : personal; /* plant:mp-personal */
+  let bad = false, kind = "";
+  const pv = own("signinprovider");
+  if (pv && !(text(pv) && String(pv.value).trim() === "")) {
+    const s = text(pv) ? String(pv.value).trim().toLowerCase() : "";
+    if (s === "microsoft" || s === "google") out.provider = s; else bad = true; /* plant:mp-provider */
+  }
+  const tv = own("signintenant");
+  if (tv && !(text(tv) && String(tv.value).trim() === "")) {
+    const s = text(tv) ? String(tv.value).trim().toLowerCase() : "";
+    if (MANAGED_TENANT_ID.test(s)) { out.tenant = s; kind = "microsoft"; }
+    else if (MANAGED_TENANT_DOMAIN.test(s)) { out.tenant = s; kind = "google"; }
+    else bad = true; /* plant:mp-tenant */
+  }
+  out.closed = bad || (!!out.provider && !!kind && out.provider !== kind); /* plant:mp-closed */
+  if (!out.provider) out.provider = kind;
+  if (out.closed) { out.provider = ""; out.tenant = ""; }
+  const cv = own("supportcontact");
+  if (text(cv)) {
+    const s = String(cv.value).trim();
+    if (s.length <= MANAGED_CONTACT_MAX && !/[\u0000-\u001f\u007f]/.test(s)) out.contact = s; /* plant:mp-contact */
+  }
+  return out;
+}
+/* A NON-PERSISTENT DESKTOP (decision 49, section 12): where machine policy sets NonPersistent and not NonPersistentNewDesk, a desk
+   whose own key will not open is reported, never silently replaced by a new desk. Pure. */
+function managedStrands(pol) { return !!pol && pol.nonPersistent === true && pol.nonPersistentNewDesk !== true; } /* plant:np-strands */
+/* The machine's answer, once a run, as the team values are read. */
+function managedPolicy() {
+  try { readJoinPolicy("en"); } catch { /* no policy is read as none */ }
+  return managedPolicyFrom(joinPolicyRead && joinPolicyRead.values);
 }
 /* THE DESK'S OPTIONAL CUSTOMER MODEL (board 992). Off by default; on, the organisation's own service ranks the search and the
    suggestions, and deskAiConfig is the one place its address and key are handed on. The person's choice and fields are kept in
@@ -9329,7 +9397,7 @@ let SIGNIN_PROVIDERS = Object.freeze({
     authorize: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     token: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
     scope: "openid profile offline_access", refreshScope: "openid profile offline_access",
-    extra: Object.freeze({ response_mode: "query", prompt: "select_account" }) }),
+    extra: Object.freeze({ response_mode: "query", prompt: "select_account" }), service: "" }),
   /* Google: select_account alone. A consent prompt at every sign-in (decision 36) was withdrawn on measurement, 2026-11-13: a
      personal account signed in twice with select_account and kept a refresh token both times (a Workspace account unmeasured);
      access_type offline stays, and a sign-in that ever lacks a refresh token is asked again (signinRenewHeld). */
@@ -9342,6 +9410,53 @@ const SIGNIN_CLIENT = /^[A-Za-z0-9][A-Za-z0-9._-]{7,199}$/;
 const SIGNIN_FORM_MAX = 16 * 1024, SIGNIN_ANSWER_MAX = 256 * 1024, SIGNIN_TIMEOUT_MS = 30 * 1000, SIGNIN_WAIT_MS = 5 * 60 * 1000;
 const SIGNIN_SKEW_MS = 5 * 60 * 1000;
 function signinKnown(id) { return Object.prototype.hasOwnProperty.call(SIGNIN_PROVIDERS, String(id)) ? SIGNIN_PROVIDERS[String(id)] : null; }
+/* THE LICENCE SERVICE AS ITS OWN RESOURCE (decision 49, section 11.11): the scope its registration exposes, api://<its client id>/
+   Licence.Use, asked only on a managed path, never of an ordinary licence or a personal account; "" where the table names no service. */
+const SIGNIN_ACCESS_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SIGNIN_ACCESS_MAX = 4096;
+function signinServiceScope(p) {
+  const known = p ? signinKnown(p.id) : null;
+  return p && p.id === "microsoft" && known && SIGNIN_ACCESS_ID.test(String(known.service || "")) ? "api://" + String(known.service).toLowerCase() + "/Licence.Use" : "";
+}
+/** The scope a sign-in or renewal asks beside today's: the service's, where machine policy sets Managed or the service has answered this
+ *  account "access-token" (`held.access`); else "", and every request is today's. */
+function signinAccessFor(p, managed, held) {
+  return managed === true || (!!held && held.access === true) ? signinServiceScope(p) : ""; /* plant:access-path */
+}
+/* The tenant of personal Microsoft accounts, as Microsoft's ID token reference names it in `tid`. */
+const SIGNIN_PERSONAL_TENANT = "9188040d-6c67-4c5b-b112-36a304b66dad";
+/* THE TABLE UNDER A MANAGED INSTALLATION'S PINS (managedPolicyFrom's answer `pol`): only the provider it names, none where it is
+   closed; Microsoft asked at the tenant, or at "organizations" with personal accounts off; Google hinted its domain. Each such entry
+   carries the `pin` its tokens are held to (signinPinOk). With no pin the table itself comes back, so nothing changes. Pure. */
+function signinPinTable(table, pol) {
+  const p = pol || {};
+  if (!p.closed && !p.provider && !p.tenant && p.personal !== false) return table; /* plant:pin-none */
+  const out = {};
+  if (p.closed) return Object.freeze(out); /* plant:pin-closed */
+  for (const id of Object.keys(table || {})) {
+    if (p.provider && id !== p.provider) continue; /* plant:pin-provider */
+    const e = table[id];
+    if (id === "microsoft") {
+      const at = p.tenant || (p.personal === false ? "organizations" : "");
+      out[id] = !at ? e : Object.freeze(Object.assign({}, e, { authorize: e.authorize.replace("/common/", "/" + at + "/"), /* plant:pin-ms-at */
+        token: e.token.replace("/common/", "/" + at + "/"), pin: Object.freeze(p.tenant ? { tid: p.tenant } : { work: "microsoft" }) }));
+    } else if (id === "google") {
+      out[id] = p.tenant ? Object.freeze(Object.assign({}, e, { extra: Object.freeze(Object.assign({}, e.extra, { hd: p.tenant })), pin: Object.freeze({ hd: p.tenant }) }))
+        : p.personal === false ? Object.freeze(Object.assign({}, e, { pin: Object.freeze({ work: "google" }) })) : e;
+    }
+  }
+  return Object.freeze(out);
+}
+/* Whether the ID token's claims `c` meet the entry's `pin`: the tenant's tid, the domain's hd, or a work account's (a tid other than
+   personal accounts', or any hd). The hint asked for is never trusted alone. */
+function signinPinOk(pin, c) {
+  if (!pin) return true;
+  const tid = typeof c.tid === "string" ? c.tid.toLowerCase() : "", hd = typeof c.hd === "string" ? c.hd.toLowerCase() : "";
+  if (pin.tid) return tid === pin.tid; /* plant:pin-tid */
+  if (pin.hd) return hd === pin.hd; /* plant:pin-hd */
+  if (pin.work === "microsoft") return SIGNIN_TENANT.test(tid) && tid !== SIGNIN_PERSONAL_TENANT; /* plant:pin-work-ms */
+  return pin.work === "google" && hd !== ""; /* plant:pin-work-g */
+}
 /* THE SIGN-IN PREVIEW: ETIUDA_SIGNIN_PREVIEW=1, read once at the start and never from the page, an installed desk included, names
    both providers on the door and in Account, drawn as a preview, while none has a client id; a press is answered "signin-preview"
    and nothing is opened, sent or written. Where any provider has a client id it changes nothing. */
@@ -9490,13 +9605,13 @@ function signinSame(a, b) {
 }
 /* One sign-in's request for the browser, {url, state, nonce, seed, verifier, redirect}: `port` the loopback's, `deskKey` this
    desk's signing public half, `rand(n)` n random bytes. */
-function signinAuthorize(p, port, deskKey, rand) {
+function signinAuthorize(p, port, deskKey, rand, access) {
   const r = typeof rand === "function" ? rand : crypto.randomBytes, known = signinKnown(p.id);
   const verifier = signinB64url(r(32)), state = signinB64url(r(32)), seed = Buffer.from(r(32)).toString("hex");
   const nonce = signinNonce(deskKey, seed); /* plant:nonce-bound */
   const redirect = "http://127.0.0.1:" + Math.floor(Number(port));
   const challenge = signinB64url(crypto.createHash("sha256").update(verifier).digest()); /* plant:pkce */
-  const q = new URLSearchParams(Object.assign({ client_id: p.clientId, response_type: "code", redirect_uri: redirect, scope: known.scope,
+  const q = new URLSearchParams(Object.assign({ client_id: p.clientId, response_type: "code", redirect_uri: redirect, scope: access ? known.scope + " " + access : known.scope,
     state: state, nonce: nonce, code_challenge: challenge, code_challenge_method: "S256" }, known.extra));
   return { url: known.authorize + "?" + q.toString(), state: state, nonce: nonce, seed: seed, verifier: verifier, redirect: redirect };
 }
@@ -9513,9 +9628,11 @@ function signinOurs(query, pending) {
 }
 /* A provider's refusal named: its organisation not consenting to Etiuda (Microsoft's consent and admin-consent codes, Google's
    admin policy) is "signin-notallowed", the person's own Cancel "signin-cancelled", anything else "signin-refused". AADSTS65004 is
-   the person declining the consent page, a Cancel of their own, so it is read before the organisation's codes. */
+   the person declining the consent page, a Cancel of their own, so it is read before the organisation's codes. AADSTS50105, an
+   account the organisation has not assigned to Etiuda, is "signin-notassigned", whatever `error` says. */
 function signinRefusedWhy(error, said) {
   if (/\bAADSTS65004\b/.test(String(said || ""))) return "signin-cancelled"; /* plant:declined */
+  if (/\bAADSTS50105\b/.test(String(said || ""))) return "signin-notassigned"; /* plant:not-assigned */
   if (error === "consent_required" || error === "admin_policy_enforced" || /\bAADSTS(65001|90094|90095)\b/.test(String(said || ""))) return "signin-notallowed"; /* plant:not-allowed */
   return error === "access_denied" ? "signin-cancelled" : "signin-refused";
 }
@@ -9535,10 +9652,10 @@ function signinCodeForm(p, pending, code) {
   return Buffer.from(new URLSearchParams(Object.assign({ client_id: p.clientId }, signinSecretPart(p), { grant_type: "authorization_code", code: String(code),
     redirect_uri: pending.redirect, code_verifier: pending.verifier })).toString(), "utf8");
 }
-function signinRefreshForm(p, refreshToken) {
-  const known = signinKnown(p.id);
+function signinRefreshForm(p, refreshToken, access) {
+  const known = signinKnown(p.id), scope = access ? (known.refreshScope ? known.refreshScope + " " : "openid ") + access : known.refreshScope;
   return Buffer.from(new URLSearchParams(Object.assign({ client_id: p.clientId }, signinSecretPart(p), { grant_type: "refresh_token",
-    refresh_token: String(refreshToken) }, known.refreshScope ? { scope: known.refreshScope } : {})).toString(), "utf8");
+    refresh_token: String(refreshToken) }, scope ? { scope: scope } : {})).toString(), "utf8");
 }
 /* A JWT's claims, unverified: the licence service verifies the signature; the desk reads only what says the answer is its own. */
 function signinClaims(jwt) {
@@ -9557,7 +9674,7 @@ function signinIssuerOk(p, c) {
 /* The token answer `res` ({status, bytes}) read: {ok, idToken, refreshToken, sub} where it holds an ID token for this client from
    this provider, unexpired, with a sub, carrying `nonce`; else {ok: false, reason}. For a renewal `sub` is the seat's: the token
    must carry it ("signin-other"), and one with no nonce at all is taken as the renewal; a nonce present must still be `nonce`. */
-function signinTokens(res, p, nonce, now, sub) {
+function signinTokens(res, p, nonce, now, sub, access) {
   let json = null;
   try { json = JSON.parse(Buffer.from(res && res.bytes ? res.bytes : []).toString("utf8")); } catch { json = null; }
   if (!json || typeof json !== "object") return { ok: false, reason: "signin-unreached" };
@@ -9566,10 +9683,14 @@ function signinTokens(res, p, nonce, now, sub) {
   const aud = c ? [].concat(c.aud) : [];
   if (!c || aud.indexOf(p.clientId) < 0 || !signinIssuerOk(p, c) || !(Number(c.exp) * 1000 > now - SIGNIN_SKEW_MS)
     || typeof c.sub !== "string" || !c.sub) return { ok: false, reason: "signin-token" };
+  if (!signinPinOk(signinKnown(p.id).pin, c)) return { ok: false, reason: "signin-tenant" }; /* plant:token-pin */
   if (sub !== undefined && !signinSame(c.sub, sub)) return { ok: false, reason: "signin-other" }; /* plant:renew-sub */
   const renewal = sub !== undefined && c.nonce === undefined; /* plant:renew-none */
   if (!renewal && (typeof c.nonce !== "string" || !signinSame(c.nonce, nonce))) return { ok: false, reason: "signin-unbound" }; /* plant:token-nonce */
-  return { ok: true, idToken: json.id_token, refreshToken: typeof json.refresh_token === "string" ? json.refresh_token : "", sub: c.sub };
+  const out = { ok: true, idToken: json.id_token, refreshToken: typeof json.refresh_token === "string" ? json.refresh_token : "", sub: c.sub };
+  /* The service's access token, kept only where its scope was asked: an ordinary answer's access token is another resource's. */
+  if (access) out.accessToken = typeof json.access_token === "string" && json.access_token.length <= SIGNIN_ACCESS_MAX ? json.access_token : ""; /* plant:access-kept */
+  return out;
 }
 /* One POST of `form` through `fetchFn` to `url`, no redirect followed, nothing cached, no cookie, the answer read up to `max`
    bytes, the whole within `ms`: {status, bytes}; throws else. The provider's token door and the service's door both use it. */
@@ -9672,10 +9793,13 @@ function signinLandingHtml(kind, lang) {
 }
 /* How the sign-in ended, as the landing says it: `got` signinRun's, `ans` the service's where it was asked. The desk is signed in
    with no seat where the service gave a code without a certificate, or said "full" (signinTake keeps both). */
-function signinLanding(got, ans) {
+function signinLanding(got, ans, managed) {
   if (!got || got.ok !== true) {
     const why = got ? got.reason : "";
     if (why === "signin-cancelled") return "cancelled";
+    /* "org" offers another account, which a managed computer does not (decision 49). */
+    if (managed === true) return "appfail"; /* plant:land-managed */
+    if (why === "signin-notassigned") return "org"; /* plant:land-not-assigned */
     return why === "signin-notallowed" ? "org" : "appfail"; /* plant:land-org */
   }
   if (!ans) return "appfail";
@@ -9752,12 +9876,12 @@ function signinListen(httpMod, pageFor, ms, takes, landMs) {
 /* One sign-in at the provider, the person's own act. `io` {listen(pageFor, takes), openPage(url), tokenAsk(url, form), page(kind),
    rand?}: the shell's door, loopback and browser, or a leg's stand-ins. {ok, provider, idToken, refreshToken, sub, seed}, or
    {ok: false, reason}. The caller lands the loopback (signinLanding). */
-async function signinRun(io, p, deskKey, now) {
+async function signinRun(io, p, deskKey, now, access) {
   if (!p || !signinKnown(p.id) || !/^[0-9a-f]{64}$/.test(String(deskKey))) return { ok: false, reason: "signin-none" };
   let pending = null;
   const loop = await io.listen(kind => io.page(kind), query => signinOurs(query, pending)); /* plant:loop-takes */
   try {
-    pending = signinAuthorize(p, loop.port, deskKey, io.rand);
+    pending = signinAuthorize(p, loop.port, deskKey, io.rand, access);
     let opened = false;
     try { opened = signinPageOk(pending.url) && !!(await io.openPage(pending.url)); } catch { opened = false; }
     if (!opened) { signinTrace(io, p.id, "browser", "signin-browser"); return { ok: false, reason: "signin-browser" }; }
@@ -9775,7 +9899,7 @@ async function signinRun(io, p, deskKey, now) {
     let res = null;
     try { res = await io.tokenAsk(signinKnown(p.id).token, signinCodeForm(p, pending, back.code)); }
     catch (e) { signinTrace(io, p.id, "token", "signin-unreached", { detail: e && e.message }, hide); return { ok: false, reason: "signin-unreached" }; }
-    const got = signinTokens(res, p, pending.nonce, now());
+    const got = signinTokens(res, p, pending.nonce, now(), undefined, access);
     const said = signinTraceSaid(res, hide);
     if (!got.ok) {
       if (said.status === 200 && !said.error && !said.detail) said.detail = signinTraceClaims(res, pending.nonce, now());
@@ -9783,7 +9907,8 @@ async function signinRun(io, p, deskKey, now) {
       return got;
     }
     signinTrace(io, p.id, "token", "ok", { status: said.status, detail: "refresh token " + (got.refreshToken ? "given" : "none") }, hide);
-    return { ok: true, provider: p.id, idToken: got.idToken, refreshToken: got.refreshToken, sub: got.sub, seed: pending.seed };
+    return Object.assign({ ok: true, provider: p.id, idToken: got.idToken, refreshToken: got.refreshToken, sub: got.sub, seed: pending.seed },
+      access ? { accessToken: got.accessToken } : {});
   } finally {
     loop.close();
   }
@@ -9791,14 +9916,16 @@ async function signinRun(io, p, deskKey, now) {
 /* The quiet refresh at the provider: the refresh token exchanged for a fresh ID token, nothing shown. {ok, idToken, refreshToken,
    sub} where the new token is the seat's (signinTokens with `sub`, the last token's; "" holds it to this desk's nonce alone); else
    signinTokens' reason, "signin-unreached" where the provider could not be asked, or "signin-ask" where there is nothing to ask with. */
-async function signinRenew(io, p, deskKey, refreshToken, seed, sub, now) {
+async function signinRenew(io, p, deskKey, refreshToken, seed, sub, now, access) {
   if (!p || !signinKnown(p.id) || !refreshToken || !/^[0-9a-f]{64}$/.test(String(seed))) return { ok: false, reason: "signin-ask" };
   const hide = [String(refreshToken), p.clientSecret, sub ? String(sub) : ""];
   let res = null;
-  try { res = await io.tokenAsk(signinKnown(p.id).token, signinRefreshForm(p, refreshToken)); }
+  try { res = await io.tokenAsk(signinKnown(p.id).token, signinRefreshForm(p, refreshToken, access)); }
   catch (e) { signinTrace(io, p.id, "refresh", "signin-unreached", { detail: e && e.message }, hide); return { ok: false, reason: "signin-unreached" }; }
   const nonce = signinNonce(deskKey, seed);
-  const got = signinTokens(res, p, nonce, now(), sub ? String(sub) : undefined);
+  const got = signinTokens(res, p, nonce, now(), sub ? String(sub) : undefined, access);
+  /* The organisation has not assigned this account to the service: its own refusal, said as at sign-in. */
+  if (!got.ok && access && /\bAADSTS50105\b/.test(signinTraceSaid(res, hide).error_description || "")) return { ok: false, reason: "signin-notassigned" }; /* plant:access-50105 */
   const said = signinTraceSaid(res, hide);
   if (!got.ok) {
     if (said.status === 200 && !said.error && !said.detail) said.detail = signinTraceClaims(res, nonce, now());
@@ -9807,7 +9934,7 @@ async function signinRenew(io, p, deskKey, refreshToken, seed, sub, now) {
   }
   signinTrace(io, p.id, "refresh", "ok", { status: said.status, detail: signinTraceClaims(res, nonce, now()).replace(/^.*, nonce /, "nonce ")
     + ", refresh token " + (got.refreshToken ? "replaced" : "kept") }, hide);
-  return { ok: true, idToken: got.idToken, refreshToken: got.refreshToken || refreshToken, sub: got.sub };
+  return Object.assign({ ok: true, idToken: got.idToken, refreshToken: got.refreshToken || refreshToken, sub: got.sub }, access ? { accessToken: got.accessToken } : {});
 }
 /* The refresh token sealed by the system's store, as base64, or "" where the store seals nothing for real (sealsForReal: no
    keyring, or Linux's basic_text): no refresh token is kept there, and the next renewal asks the person to sign in again. */
@@ -9830,10 +9957,52 @@ function signinTokenHash(idToken) { return crypto.createHash("sha256").update(St
 function signinDeskBytes(o) {
   return Buffer.from(SIGNIN_DESK_LINE + "\n" + [o.provider, o.tokenHash, o.desk, o.t].map(String).join("\n"), "utf8");
 }
-/* The request's body, {provider, idToken, desk, seed?, t, sig}, signed by `sign(bytes)` (hex); null where any part is not its shape. */
-function signinDeskBody(provider, idToken, desk, seed, t, sign) {
+/* With the service's access token (section 11.11): the service's managed line over both tokens' hashes, requests.mjs
+   signinDeskManagedBytes. */
+const SIGNIN_DESK_MANAGED_LINE = "etiuda-licence-signin-desk-managed";
+function signinDeskManagedBytes(o) {
+  return Buffer.from(SIGNIN_DESK_MANAGED_LINE + "\n" + [o.provider, o.tokenHash, o.accessHash, o.desk, o.t].map(String).join("\n"), "utf8"); /* plant:access-signed */
+}
+/* The managed body, {provider, idToken, accessToken, desk, seed?, t, sig}; null where the access token is not its shape. */
+function signinDeskManagedBody(provider, idToken, desk, seed, t, sign, accessToken) {
+  if (typeof accessToken !== "string" || !accessToken || accessToken.length > SIGNIN_ACCESS_MAX) return null;
+  const sig = String(sign(signinDeskManagedBytes({ provider: provider, tokenHash: signinTokenHash(idToken), accessHash: signinTokenHash(accessToken), desk: desk, t: t })) || "");
+  if (!/^[0-9a-f]{128}$/.test(sig)) return null;
+  const body = { provider: String(provider), idToken: idToken, accessToken: accessToken, desk: String(desk) };
+  if (seed) body.seed = String(seed);
+  body.t = t;
+  body.sig = sig;
+  return body;
+}
+/* A POOLED DESK (section 12, point 3): one whose machine policy sets NonPersistent says so, `pooled: true`, on every sign-in and
+   renewal, signed over lines of its own, so the service lets the person's newest pooled desk take their one pooled place over. */
+const SIGNIN_DESK_POOLED_LINE = "etiuda-licence-signin-desk-pooled";
+const SIGNIN_DESK_MANAGED_POOLED_LINE = "etiuda-licence-signin-desk-managed-pooled";
+function signinDeskPooledBytes(o) {
+  return Buffer.from(o.accessHash === undefined ? SIGNIN_DESK_POOLED_LINE + "\n" + [o.provider, o.tokenHash, o.desk, o.t].map(String).join("\n") /* plant:pooled-line */
+    : SIGNIN_DESK_MANAGED_POOLED_LINE + "\n" + [o.provider, o.tokenHash, o.accessHash, o.desk, o.t].map(String).join("\n"), "utf8");
+}
+/* The pooled body, {provider, idToken, accessToken?, desk, pooled: true, seed?, t, sig}; null where the access token is not its shape. */
+function signinDeskPooledBody(provider, idToken, desk, seed, t, sign, accessToken) {
+  if (accessToken !== undefined && (typeof accessToken !== "string" || !accessToken || accessToken.length > SIGNIN_ACCESS_MAX)) return null;
+  const o = { provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t };
+  if (accessToken !== undefined) o.accessHash = signinTokenHash(accessToken);
+  const sig = String(sign(signinDeskPooledBytes(o)) || "");
+  if (!/^[0-9a-f]{128}$/.test(sig)) return null;
+  const body = Object.assign({ provider: String(provider), idToken: idToken }, accessToken === undefined ? {} : { accessToken: accessToken },
+    { desk: String(desk), pooled: true });
+  if (seed) body.seed = String(seed);
+  body.t = t;
+  body.sig = sig;
+  return body;
+}
+/* The request's body, {provider, idToken, desk, seed?, t, sig}, signed by `sign(bytes)` (hex); null where any part is not its shape.
+   With `accessToken`, the managed body; with `pooled`, the pooled one; with neither, today's. */
+function signinDeskBody(provider, idToken, desk, seed, t, sign, accessToken, pooled) {
   if (!signinKnown(provider) || typeof idToken !== "string" || !idToken || !/^[0-9a-f]{64}$/.test(String(desk)) || !Number.isSafeInteger(t)) return null;
   if (seed && !/^[0-9a-f]{64}$/.test(String(seed))) return null;
+  if (pooled === true) return signinDeskPooledBody(provider, idToken, desk, seed, t, sign, accessToken); /* plant:pooled-body */
+  if (accessToken !== undefined) return signinDeskManagedBody(provider, idToken, desk, seed, t, sign, accessToken); /* plant:access-body */
   const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t })) || ""); /* plant:desk-signed */
   if (!/^[0-9a-f]{128}$/.test(sig)) return null;
   const body = { provider: String(provider), idToken: idToken, desk: String(desk) };
@@ -10023,8 +10192,8 @@ function signinManagedOf(j) {
   return { managed: true, cause: j.cause === "own-licence" || j.cause === "assigned" ? j.cause : "" }; /* plant:managed-read */
 }
 /* One post to signin/desk with `idToken`: `seed` for a first sign-in, "" for a renewal. `io` {serviceAsk(url, body), sign(bytes), packed}. */
-async function signinSeat(io, provider, deskKey, idToken, seed, now) {
-  const body = signinDeskBody(provider, idToken, deskKey, seed, now(), io.sign);
+async function signinSeat(io, provider, deskKey, idToken, seed, now, accessToken) {
+  const body = signinDeskBody(provider, idToken, deskKey, seed, now(), io.sign, accessToken || undefined, io.pooled === true);
   if (!body) { signinTrace(io, provider, "service", "unreached", { detail: "the request did not form" }); return { ok: false, reason: "unreached" }; }
   const hide = [String(idToken)];
   let res = null;
@@ -10034,6 +10203,19 @@ async function signinSeat(io, provider, deskKey, idToken, seed, now) {
   signinTrace(io, provider, "service", ans.ok ? "ok" : ans.reason, ans.ok ? { status: res.status, detail: "certificate " + (ans.cert ? "given" : "none") }
     : signinTraceSaid(res, hide), hide);
   return ans;
+}
+/* "ACCESS-TOKEN", where the path was not managed (section 11.11): the refresh token already held is redeemed for the service's scope,
+   silently, a token request and never a browser, and the seat asked once more with both tokens. {ans, got, access}: `access` true where
+   the service took the managed request, so the path is remembered; the redemption's own refusal, AADSTS50105 included, as the answer. */
+async function signinSeatAccess(io, p, deskKey, got, seed, now) {
+  const scope = signinServiceScope(p);
+  if (!scope || !got.refreshToken) return { ans: { ok: false, reason: "signin-refused" }, got: got, access: false };
+  const r = await signinRenew(io, p, deskKey, got.refreshToken, got.seed || seed || "0".repeat(64), got.sub, now, scope); /* plant:access-silent */
+  if (!r.ok) return { ans: { ok: false, reason: r.reason === "signin-notassigned" ? r.reason : "signin-refused" }, got: got, access: false };
+  if (!r.accessToken) return { ans: { ok: false, reason: "signin-refused" }, got: got, access: false };
+  const ans = await signinSeat(io, p.id, deskKey, r.idToken, seed, now, r.accessToken);
+  const again = !ans.ok && ans.reason === "access-token";
+  return { ans: again ? { ok: false, reason: "signin-refused" } : ans, got: Object.assign({}, got, { idToken: r.idToken, refreshToken: r.refreshToken }), access: !again };
 }
 /* THE CALM LAPSE: the kept certificate's `until` passed with no new one. It decides nothing on the desk but Account's words; the
    desk works on, and the next certificate ends it. */
@@ -10056,12 +10238,16 @@ function signinSettleSeat(held, ans, now) {
   return Object.assign({}, held, { checked: now, reached: true, said: ans.reason, ask: freed || held.ask === true,
     refresh: freed ? "" : held.refresh }, ans.managed === true ? { managed: true, cause: ans.cause || "" } : {}); /* plant:settle-freed */
 }
-/* The reasons a provider's refresh forgets its token: it no longer takes it, or the token it gives is not this seat's. */
-const SIGNIN_LOST = Object.freeze(["signin-ask", "signin-expired", "signin-other", "signin-unbound"]);
+/* The reasons a provider's refresh forgets its token: it no longer takes it, or the token it gives is not this seat's or not the pinned tenant's. */
+const SIGNIN_LOST = Object.freeze(["signin-ask", "signin-expired", "signin-other", "signin-unbound", "signin-tenant"]);
 /* One quiet renewal of `held`: the provider's refresh, then signin/desk with no seed. `io` {tokenAsk, serviceAsk, sign, keep(text),
    kept(sealed)}. {held, said}; whatever fails, the code, the certificate and the provider stay, so the desk works on. */
 async function signinRenewHeld(io, p, deskKey, held, now) {
   if (!held) return { held: null, said: "signin-ask" };
+  /* Machine policy alone puts a renewal on the managed path; a remembered one is tried ordinary first, so it ends when the
+     service stops asking (a company's licence that no longer follows Entra). */
+  const access = signinAccessFor(p, io.managed === true, null);
+  if (access) return signinRenewHeldAccess(io, p, deskKey, held, now, access);
   const token = held.refresh ? io.kept(held.refresh) : "", sub = held.sub ? io.kept(held.sub) : "";
   const got = token && sub ? await signinRenew(io, p, deskKey, token, held.seed, sub, now) : { ok: false, reason: "signin-ask" }; /* plant:renew-sub-kept */
   if (!got.ok) {
@@ -10071,6 +10257,26 @@ async function signinRenewHeld(io, p, deskKey, held, now) {
   }
   const fresh = Object.assign({}, held, { refresh: io.keep(got.refreshToken) || held.refresh, sub: held.sub || io.keep(got.sub) });
   const ans = await signinSeat(io, p.id, deskKey, got.idToken, "", now); /* plant:renew-seedless */
+  /* The service now asks its own access token for this account: redeemed once, silently, and the path remembered. */
+  const m = !ans.ok && ans.reason === "access-token" ? await signinSeatAccess(io, p, deskKey, { refreshToken: got.refreshToken || token, sub: sub, seed: held.seed }, "", now) : null;
+  if (m && m.access) { fresh.access = true; fresh.refresh = io.keep(m.got.refreshToken) || fresh.refresh; } /* plant:access-rotated */
+  else if (!m && ans.reason !== "unreached" && fresh.access) delete fresh.access; /* plant:access-clear */
+  const said = m ? m.ans : ans;
+  return { held: signinSettle(fresh, said, now()), said: said.ok ? "renewed" : said.reason };
+}
+/* The renewal on a managed path: the refresh asks the service's scope beside today's, and the seat is asked with both tokens. An
+   account the organisation has not assigned keeps what it held, said; the rest fails as the ordinary renewal does. */
+async function signinRenewHeldAccess(io, p, deskKey, held, now, access) {
+  const token = held.refresh ? io.kept(held.refresh) : "", sub = held.sub ? io.kept(held.sub) : "";
+  const got = token && sub ? await signinRenew(io, p, deskKey, token, held.seed, sub, now, access) : { ok: false, reason: "signin-ask" };
+  if (!got.ok && got.reason === "signin-notassigned") return { held: Object.assign({}, held, { checked: now(), reached: true, said: got.reason }), said: got.reason };
+  if (!got.ok) {
+    const lost = SIGNIN_LOST.indexOf(got.reason) >= 0;
+    return { held: Object.assign({}, held, { refresh: lost ? "" : held.refresh, ask: lost || held.ask === true, checked: now(),
+      reached: lost ? held.reached : false }), said: got.reason };
+  }
+  const fresh = Object.assign({}, held, { refresh: io.keep(got.refreshToken) || held.refresh, sub: held.sub || io.keep(got.sub) });
+  const ans = await signinSeat(io, p.id, deskKey, got.idToken, "", now, got.accessToken); /* plant:access-renew-seat */
   return { held: signinSettle(fresh, ans, now()), said: ans.ok ? "renewed" : ans.reason };
 }
 /* seat.json as the desk writes it for its lead: {format: 2, desk, certificate}, unsealed, since it holds pseudonyms alone. */
@@ -10105,6 +10311,7 @@ function signinFileRead(text, packed) {
   /* The list is beside `held`, and the held seat judges by it. */
   out.revoked = signinRevokedOk(d.revoked) ? d.revoked : null; /* plant:revoked-file */
   if (out.held) out.held.revoked = out.revoked;
+  if (out.held && h.access === true) out.held.access = true; /* the service's answer "access-token", remembered (section 11.11) */
   if (out.held && out.held.cert) {
     const doors = signinDoorsOk(h.doors, packed), sig = typeof h.doorsSig === "string" ? h.doorsSig : "";
     if (signinDoorsSigned(doors, sig, out.held.cert)) Object.assign(out.held, { doors: doors, doorsSig: sig }); /* plant:file-doors-signed */
@@ -10112,13 +10319,13 @@ function signinFileRead(text, packed) {
   /* The desk key whose sign out the service has not taken yet: asked again at the renewal's next turn (signinOutAgain). */
   if (/^[0-9a-f]{64}$/.test(String(d.out))) out.out = String(d.out); /* plant:out-kept */
   /* A sign-in the service refused for a managed tenant keeps no seat, but the desk remembers it offers nothing to buy (signinTake). */
-  if (d.managed === true) out.managed = true;
+  if (d.licenceManaged === true) out.licenceManaged = true;
   return out;
 }
 function signinFileText(s) {
   const revoked = signinRevokedNext(s.revoked || null, s.held ? s.held.revoked : null);
   return JSON.stringify(Object.assign({ format: 2, held: s.held ? Object.assign({}, s.held, { revoked: undefined }) : null }, s.out ? { out: s.out } : {},
-    revoked ? { revoked } : {}, s.managed ? { managed: true } : {}), null, 1) + "\n";
+    revoked ? { revoked } : {}, s.licenceManaged ? { licenceManaged: true } : {}), null, 1) + "\n";
 }
 
 /* The sign-in's wiring: the person's click, the browser, the service, seat.json, the quiet renewal and what the page is told.
@@ -10159,11 +10366,16 @@ if (!INSTALLED && !app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) { /* plant:l
 function signinLabHeld() {
   return signinLabOn && !!signinState().held; /* plant:lab-held */
 }
+/* The state, read once. Its first read also pins the providers to machine policy, before the file is judged by them and before any
+   view, press or renewal, each of which reads the state first; `managed` rides beside it, unwritten, for every caller. */
 function signinState() {
   if (signinStore !== undefined) return signinStore;
+  const managed = managedPolicy();
+  SIGNIN_PROVIDERS = signinPinTable(SIGNIN_PROVIDERS, managed); /* plant:pin-taken */
   let text = "";
   try { text = fs.readFileSync(path.join(app.getPath("userData"), SIGNIN_FILE), "utf8"); } catch { text = ""; }
   signinStore = signinFileRead(text, SIGNIN_DESK_PACKED); /* plant:door-file-packed */
+  signinStore.managed = managed;
   return signinStore;
 }
 function signinSave() {
@@ -10304,21 +10516,26 @@ ipcMain.handle("etiuda:signin-door", (e, n) => {
    the last try reached it; the provider's
    page of the sign-in that waits, and nothing once it ends; and whether this system keeps a sign-in (sealsForReal). */
 function signinView() {
-  const real = signinOffered().map(p => p.id), held = signinState().held, now = Date.now(), preview = signinPreviewing();
+  const st = signinState(), held = st.held, real = signinOffered().map(p => p.id), now = Date.now(), preview = signinPreviewing();
   const offered = preview ? Object.keys(SIGNIN_PROVIDERS) : real;
   const signedIn = held && real.indexOf(held.provider) >= 0 ? held.provider : "";
-  return { offered: offered, preview: preview, signedIn: signedIn, code: signedIn ? held.code : "",
+  const view = { offered: offered, preview: preview, signedIn: signedIn, code: signedIn ? held.code : "",
     seat: !signedIn ? "" : held.cert ? (signinLapsed(held, now) ? "lapsed" : "held") : "none",
     deskOnly: !!signedIn && !!held.cert && held.cert.deskOnly === true, /* plant:view-desk-only */
     /* Ask your lead, and the person's own trial's end where its certificate is the one held (a team is its lead's own). */
     askLead: !!signedIn && held.askLead === true, /* plant:view-ask-lead */
     trialUntil: !!signedIn && held.askLead === true && !!held.cert && held.cert.deskOnly === true ? Number(held.cert.until) || 0 : 0,
-    managed: signedIn ? held.managed === true : signinState().managed === true, cause: signedIn && held.managed === true ? held.cause || "" : "", /* plant:view-managed */
+    licenceManaged: signedIn ? held.managed === true : signinState().licenceManaged === true, cause: signedIn && held.managed === true ? held.cause || "" : "", /* plant:view-licence-managed */
     at: signedIn ? held.at : 0, reached: !signedIn || held.reached !== false, ask: !!signedIn && held.ask === true,
     refused: signedIn ? held.said : "", busy: signinBusy ? signinBusy.provider : "", said: signinSaid,
     doors: signedIn ? signinDoorsShown(held, now) : [],
     outOwed: !signedIn && !!signinState().out && !signinOutFlight, /* plant:out-owed-view */
     link: signinBusy && signinPageOk(signinBusy.url) ? signinBusy.url : "", keeps: sealsForReal(safeStorage, process.platform) }; /* plant:view-link */
+  /* Only where machine policy sets any of its six values, so an unmanaged desk's view is the same object as before. */
+  const m = st.managed;
+  if (m && m.any) view.managed = { on: m.managed, shared: m.shared, personal: m.personal, provider: m.provider, tenant: !!m.tenant, closed: m.closed, contact: m.contact, /* plant:view-managed */
+    stranded: deskStranded };
+  return view;
 }
 function tellSignin() {
   const win = theWindow;
@@ -10342,23 +10559,35 @@ function signinIo(run) {
     page: kind => signinPageHtml(kind),
     trace: SIGNIN_TRACE_ASKED ? line => console.error(line) : null, /* plant:trace-wired */
     packed: SIGNIN_DESK_PACKED, /* plant:door-io-packed */
+    /* Read when a renewal asks it, so an io made where no state is read never reads one. */
+    get managed() { const m = signinState().managed; return !!(m && m.managed); },
+    get pooled() { const m = signinState().managed; return !!(m && m.nonPersistent); },
   };
 }
 /* A first sign-in's outcome kept: the refresh token and the sub sealed where the system seals for real, the seed beside, and the
    service's answer. A refusal other than a full licence keeps nothing, so the desk is as it was. */
-function signinTake(provider, got, ans, now) {
+function signinTake(provider, got, ans, now, access) {
   const s = signinState();
   /* The service said this account's tenant is managed, or that it is not (an ordinary seat): kept whatever the answer, for Buy. */
-  if (ans.managed === true || ans.ok) { const was = !!s.managed; if (ans.managed === true) s.managed = true; else delete s.managed; if (was !== !!s.managed && !ans.ok) signinSave(); }
+  if (ans.managed === true || ans.ok) { const was = !!s.licenceManaged; if (ans.managed === true) s.licenceManaged = true; else delete s.licenceManaged; if (was !== !!s.licenceManaged && !ans.ok) signinSave(); }
   if (!ans.ok && ans.reason !== "full") return false; /* plant:take-refused */
   const base = { provider: provider, refresh: signinKeep(safeStorage, process.platform, got.refreshToken),
     sub: signinKeep(safeStorage, process.platform, got.sub), seed: got.seed, code: "", cert: null, at: 0, checked: now, reached: true, said: "", ask: false, doors: [] };
   base.revoked = s.revoked || null; /* plant:revoked-survives */
+  if (access === true) base.access = true;
   s.held = signinSettle(base, ans, now);
   s.revoked = s.held.revoked;
   delete s.out; /* this sign-in holds the desk's place again, so a sign out still owed is no longer wanted */
   signinSave();
   return true;
+}
+/* A MANAGED COMPUTER THAT IS NOT SHARED KEEPS ITS ACCOUNT (decision 49): true where state `st` holds a sign-in whose account can be
+   opened and `sub` is another's. A sub that can no longer be opened lets the sign-in through, so a lost keyring never locks the desk. */
+function signinOtherHeld(st, sub) {
+  const m = st && st.managed;
+  if (!m || !m.managed || m.shared || !st.held || !st.held.sub) return false; /* plant:other-held */
+  const was = signinKept(safeStorage, st.held.sub);
+  return !!was && !signinSame(was, String(sub)); /* plant:other-same */
 }
 /* The person's sign-in, for a trusted click on one of the page's provider buttons (the preload's signin-click), one at a time. */
 ipcMain.on("etiuda:signin-click", (e, provider) => {
@@ -10372,6 +10601,7 @@ ipcMain.on("etiuda:signin-state", (e) => {
 });
 ipcMain.handle("etiuda:signin", async (e, provider) => {
   if (!fromEngine(e)) return null;
+  const st = signinState(), managed = !!(st.managed && st.managed.managed);
   const id = String(provider || ""), c = signinClick;
   signinClick = null;
   if (!c || c.provider !== id || Date.now() - c.at > LINK_CLICK_MS || signinBusy) return signinView(); /* plant:signin-click */
@@ -10387,14 +10617,18 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
   tellSignin();
   let landing = "appfail";
   try {
-    const got = await signinRun(io, p, me.key, Date.now);
+    const access = managed || (st.held && st.held.provider === p.id) ? signinAccessFor(p, managed, st.held) : "";
+    let got = await signinRun(io, p, me.key, Date.now, access || undefined);
+    if (got.ok && managed && signinOtherHeld(st, got.sub)) got = { ok: false, reason: "signin-other" }; /* plant:managed-same */
     if (got.ok) {
-      const ans = await signinSeat(io, p.id, me.key, got.idToken, got.seed, Date.now);
-      signinTake(p.id, got, ans, Date.now());
+      let ans = await signinSeat(io, p.id, me.key, got.idToken, got.seed, Date.now, got.accessToken);
+      let took = !!access;
+      if (!access && !ans.ok && ans.reason === "access-token") { const m = await signinSeatAccess(io, p, me.key, got, got.seed, Date.now); ans = m.ans; got = m.got; took = m.access; }
+      signinTake(p.id, got, ans, Date.now(), took);
       signinFlush();
       signinSaid = ans.ok ? "signin-done" : ans.reason;
-      landing = signinLanding(got, ans);
-    } else { signinSaid = got.reason; landing = signinLanding(got); }
+      landing = signinLanding(got, ans, managed);
+    } else { signinSaid = got.reason; landing = signinLanding(got, undefined, managed); }
   } catch { signinSaid = "unreached"; }
   finally {
     signinBusy = null;
@@ -10426,6 +10660,7 @@ ipcMain.handle("etiuda:signin-stop", (e) => {
 function signinOutNow() {
   if (signinBusy) return signinView();
   const s = signinState(), me = branchIdentity(false);
+  if (s.managed && s.managed.managed && !s.managed.shared) return signinView(); /* plant:out-managed */
   if (s.held && me && (!harnessLaunch() || signinLabHeld()) && net && typeof net.fetch === "function"
     && signinOffered().length) { /* plant:signout-offered */
     s.out = me.key;
@@ -10437,7 +10672,7 @@ function signinOutNow() {
   }
   s.held = null;
   /* Signed out, the account's organisation no longer stands in for this desk: Buy, which needs no sign-in, is offered again. */
-  delete s.managed; /* plant:signout-managed */
+  delete s.licenceManaged; /* plant:signout-managed */
   signinWrote = "";
   signinSaid = "";
   signinSave();
@@ -10530,12 +10765,14 @@ function orderAddress(page, code) {
   if (typeof page !== "string" || !ORDER_PAGE_SHAPE.test(page)) return ""; /* plant:order-page */
   return page + (typeof code === "string" && /^[0-9A-Z]{16}$/.test(code) ? "#code=" + code : ""); /* plant:order-fragment */
 }
+/* A managed computer offers no Buy (decision 49): the state says none, and a click or an open names no address. */
+function buyManaged(v) { return !!(v && v.managed && v.managed.on === true); }
 function buyAddress() {
   const v = signinView();
-  if (v && v.managed) return ""; /* plant:buy-managed */
+  if (buyManaged(v) || (v && v.licenceManaged)) return ""; /* plant:buy-managed */
   return orderAddress(ORDER_PAGE, v && v.code);
 }
-ipcMain.on("etiuda:buy-state", (e) => { e.returnValue = fromEngine(e) ? { offer: !!buyAddress() } : null; });
+ipcMain.on("etiuda:buy-state", (e) => { e.returnValue = fromEngine(e) ? { offer: !!buyAddress() } : null; }); /* plant:buy-state-managed */
 /* Buy leaves as the release page does (etiuda:update-click): the preload names a trusted click on it, which stands for the address
    the shell builds now, and the open goes through openExternally. The page never names an address. */
 ipcMain.on("etiuda:buy-click", (e) => {
