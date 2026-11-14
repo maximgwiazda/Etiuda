@@ -8115,6 +8115,7 @@ function saveDeskFile(keysText) {
   keepUnkept();
   rotateDesk();
   writeReplacing(file, deskEnvelopeBody(keysText));
+  storeSyncSoon();
 }
 /* A key the MAIN PROCESS owns, written before any window exists. Not writeDesk: that one applies
    a delta against the map a particular load was handed, and re-arms the watch and the theme
@@ -9067,6 +9068,7 @@ function sendListing(win, force) {
   try { syncJumpList(); } catch { /* jump list optional */ }
   if (!force && key === listingSent) return;
   listingSent = key;
+  storeSyncSoon();
   win.webContents.send("etiuda:catalog-listing", rows);
 }
 /* A rev already handed on for one desk file is not replaced by a lower one. Equal is not a raise. */
@@ -10919,7 +10921,7 @@ function storeTokenTake(t) {
   if (!t || typeof t.provider !== "string" || typeof t.token !== "string") return;
   storeAccess = { provider: t.provider, token: t.token, until: Number(t.until) || 0 };
 }
-function storeForget() { storeAccess = null; storeNow = null; }
+function storeForget() { storeAccess = null; storeNow = null; storeSyncStop(); }
 /* The folder's requests, at OneDrive's App Folder and Drive's appDataFolder alone, through the shell's own network as the sign-in's:
    no redirect, nothing cached, no cookie, the answer read up to STORE_ANSWER_MAX. {status, bytes}; throws where unreached. */
 const STORE_ANSWER_MAX = 256 * 1024;
@@ -11041,6 +11043,8 @@ function storeSettle(look) {
   const s = storeState(), r = StoreLib().sayOnce(s.said, look);
   storeNow.say = r.say;
   if (r.kept !== s.said) { s.said = r.kept; storeSave(); }
+  const sync = storeSyncOf();
+  if (sync) sync.turn(look); /* plant:store-sync-turn */
   return storeNow;
 }
 /* THE LOOK, after each seated sign-in or renewal: one at a time, never on a harness start save the sign-in lab's, and only where sync
@@ -11058,6 +11062,7 @@ async function storeLookNow() {
   const p = held ? signinOffered().find(x => x.id === held.provider) : null;
   if (!p || !me || !held.cert || !signinCertOk(held.cert, me.key) || signinRevokedHas(held.revoked, held.cert)) return null;
   const pol = storePolicyNow();
+  if (!pol.on) storeSyncStop();
   if (!pol.on) return null; /* plant:store-off */
   if (!sealsForReal(safeStorage, process.platform)) return storeSettle({ state: "unavailable", why: "" });
   const L = StoreLib();
@@ -11069,6 +11074,92 @@ async function storeLookNow() {
     relay: { create: storeRelayCreate, devices: (keys, cert) => storeRelayDevices(keys, cert, me) },
     me: { id: me.id, pub: me.key, desk: me.id }, url: STORE_RELAY, rand: n => crypto.randomBytes(n) }));
 }
+
+/* ---- the store's sync (shell/sync/sync.cjs) --------------------------------------------------------------------------------
+   One relay channel for the store while a look says it is on, stopped at any other answer, at sync turned off and at a sign out;
+   its mirror and this desk's sync state under userData\store, which carry what waits while it is paused. What arrives is put in
+   place: a desk key through the desk's own patch, a catalog file into the catalog folder, and the other side of an item both
+   computers changed kept under userData\store\kept for the person to choose from. */
+let syncLayer = null;
+function SyncLib() { return syncLayer || (syncLayer = require(path.join(__dirname, "sync", "sync.cjs"))); }
+const STORE_SYNC_FILE = "sync.json", STORE_SYNC_MS = 2000;
+function storeSyncDir(...rest) { return path.join(app.getPath("userData"), "store", ...rest); }
+let storeSyncing = null, storeSyncTimer = null;
+function storeSyncOf() {
+  if (storeSyncing) return storeSyncing;
+  const me = branchIdentity(false), priv = deskBranch ? openPrivate(deskBranch.sign.priv) : null;
+  if (!me || !priv) return null;
+  const C = RelayChannel();
+  storeSyncing = SyncLib().createStoreSync({
+    me: { id: me.id, pub: me.key, privateKey: priv }, mirrorRoot: storeSyncDir("mirror"),
+    channel: opts => C.createChannel(Object.assign(opts, { write: writeReplacing, request: relayRequest, connect: relayConnect,
+      seatRenew: () => storeTurn(), say: line => console.log("etiuda: the store's sync: " + line) })),
+    io: mirror => C.diskIO(mirror, writeReplacing),
+    load: () => { try { return JSON.parse(fs.readFileSync(storeSyncDir(STORE_SYNC_FILE), "utf8")); } catch { return null; } },
+    save: s => {
+      try { fs.mkdirSync(storeSyncDir(), { recursive: true }); writeReplacing(storeSyncDir(STORE_SYNC_FILE), JSON.stringify(s)); }
+      catch (e) { console.error("etiuda: the store's sync state could not be kept - " + e.message); }
+    },
+    local: storeSyncLocal, apply: storeSyncApply, pubOf: StoreLib().pubOf, canonBytes: C.signedBytes, now: Date.now,
+  });
+  return storeSyncing;
+}
+/* This desk's items that follow: its desk keys, and the catalog files at the top of its catalog folder. Null while that folder
+   does not answer, so a folder out of reach is never read as every catalog removed. */
+function storeSyncLocal() {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  const dir = catalogFolder(), files = {}, L = SyncLib();
+  if (!dir || !folderAnswers(dir)) return null;
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch (e) { if (e.code !== "ENOENT") return null; }
+  for (const n of names) {
+    if (!L.CATALOG_RE.test(n)) continue;
+    try {
+      const f = path.join(dir, n), st = fs.statSync(f);
+      if (st.isFile() && st.size <= L.CATALOG_MAX) files[n] = fs.readFileSync(f, "utf8");
+    } catch { return null; }
+  }
+  return L.localItems(deskKeys, files);
+}
+function storeSyncApply(patch, copies) {
+  const keys = {};
+  for (const item of Object.keys(patch)) {
+    if (item.startsWith("k:")) keys[item.slice(2)] = patch[item];
+    else storeSyncFile(item.slice(2), patch[item]);
+  }
+  if (Object.keys(keys).length) patchDesk(JSON.stringify(keys));
+  for (const c of copies) {
+    try {
+      fs.mkdirSync(storeSyncDir("kept"), { recursive: true });
+      writeReplacing(storeSyncDir("kept", c.by + "-" + c.t + "-" + c.h.slice(0, 16) + ".txt"), JSON.stringify({ item: c.item, by: c.by, t: c.t, value: c.value }));
+    } catch (e) { console.error("etiuda: a version another computer made could not be kept - " + e.message); }
+  }
+}
+/* A catalog file from another computer, into the catalog folder; one removed there is moved aside under userData\store\kept,
+   never deleted. */
+function storeSyncFile(name, text) {
+  if (!SyncLib().CATALOG_RE.test(name)) return;
+  const dir = catalogFolder(), at = path.join(dir, name);
+  try {
+    if (text === null) {
+      fs.mkdirSync(storeSyncDir("kept"), { recursive: true });
+      fs.renameSync(at, storeSyncDir("kept", Date.now() + "-" + name));
+    } else {
+      fs.mkdirSync(dir, { recursive: true });
+      writeReplacing(at, text);
+    }
+  } catch (e) { if (e.code !== "ENOENT") console.error("etiuda: a catalog from another computer could not be put in place - " + e.message); }
+}
+/* A change on this desk, merged into its place a moment later, so a burst of writes is one merge. */
+function storeSyncSoon() {
+  if (!storeSyncing) return;
+  clearTimeout(storeSyncTimer);
+  storeSyncTimer = setTimeout(() => { storeSyncTimer = null; try { storeSyncing.merge(); } catch (e) { console.error("etiuda: the store's sync - " + e.message); } }, STORE_SYNC_MS);
+  if (storeSyncTimer.unref) storeSyncTimer.unref();
+}
+function storeSyncStop() { if (storeSyncing) storeSyncing.stop(); }
+/* What the Account row reads: how many versions another computer made wait here for the person's choice. */
+function storeSyncView() { return { kept: storeSyncing ? storeSyncing.state().kept.length : 0 }; }
 
 /* An IPC message is answered only for the engine's own top frame. Nothing else can reach these
    channels today, since navigation is refused and no other frame is created; this is the line

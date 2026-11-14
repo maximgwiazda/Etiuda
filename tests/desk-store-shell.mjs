@@ -21,7 +21,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 17;
+const EXPECTED = 19;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -136,8 +136,8 @@ function worldOf(o) {
 
 /* ---- the shell, evaluated whole: `src` is shell/main.js's text or a planted copy of it ---- */
 /* What the leg reads from main.js, appended to its text; a name main.js lacks comes back undefined, so its leg fails alone. */
-const TAIL_NAMES = ["signinRun", "signinRenew", "signinIo", "signinRenewNow", "signinServiceAsk", "storeServiceAt", "storeOnFor", "storeTurn", "branchIdentity", "signinState"];
-const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS"];
+const TAIL_NAMES = ["signinRun", "signinRenew", "signinIo", "signinRenewNow", "signinServiceAsk", "storeServiceAt", "storeOnFor", "storeTurn", "branchIdentity", "signinState", "patchDesk", "storeForget"];
+const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing"];
 const TAIL = "\n__test.T = {" + TAIL_NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
   + ", get: () => ({" + TAIL_STATE.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "}) };";
 function boot(src, o) {
@@ -297,6 +297,27 @@ async function relayScene(src) {
   return { ok, detail: brief(got) };
 }
 
+/* (f) The look that is on starts the store's sync (shell/sync/sync.cjs): a desk key that follows, patched, reaches the relay sealed and
+   the sync state beside desk.json, a key that does not follow stays out, and a sign out stops it. */
+async function syncScene(src) {
+  const r = await renewScene(src);
+  const T = r.shell.T, sync = T.get().storeSyncing;
+  const ch = sync && sync.channel();
+  if (ch) await ch.idle();
+  const running = !!sync && sync.running(), before = r.world.relay.length, secret = "kept-out-" + crypto.randomBytes(8).toString("hex");
+  T.patchDesk(JSON.stringify({ eTheme: "dark", eTeamKeys: secret }));
+  if (sync) { sync.merge(); const c = sync.channel(); if (c) { c.kick(); await c.idle(); } }
+  const sent = r.world.relay.length - before;
+  let state = null;
+  try { state = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "store", "sync.json"), "utf8")); } catch { state = null; }
+  const ledger = state && state.ledger ? Object.keys(state.ledger) : [];
+  const clear = r.world.relay.filter(b => b.indexOf(secret) >= 0 || b.indexOf("\"dark\"") >= 0).length;
+  if (T.storeForget) T.storeForget();
+  const stopped = !!sync && !sync.running();
+  const ok = !!r.now && r.now.state === "on" && running && sent >= 1 && ledger.indexOf("k:eTheme") >= 0 && ledger.indexOf("k:eTeamKeys") < 0 && clear === 0 && stopped;
+  return { ok, detail: brief({ state: r.now && r.now.state, running, sent, ledger, clear, stopped }) };
+}
+
 const LEGS = [
   ["a1", scopesOnScene, "where sync may be on, Microsoft's authorize address and refresh form carry Files.ReadWrite.AppFolder and Google's authorize address drive.appdata, its refresh as today; a managed computer with PersonalStore unset is off, set on is on"],
   ["a2", scopesOffScene, "where sync is off (a managed computer, PersonalStore unset), each provider's authorize address and refresh form are today's, byte for byte"],
@@ -305,6 +326,7 @@ const LEGS = [
   ["c", tokenScene,"the folder's access token reaches the folder alone: no file, no trace line and no body to the licence service or the relay holds it"],
   ["e", relayScene, "a store is made at production's relay, or at the one of the trusted relays a sign-in lab names; a lab naming another is refused whole"],
   ["d", doorScene, "the licence service's door takes signin/desk, signout/desk, store/grant and store/end of its own host, and refuses every other route"],
+  ["f", syncScene, "the look that is on starts the store's sync: a desk key that follows reaches the relay sealed, one that does not stays out, and a sign out stops it"],
 ];
 const results = {};
 const scenes = Object.fromEntries(LEGS.map(([id, scene]) => [id, scene]));
@@ -327,6 +349,7 @@ const PLANTS = [
   ["c", swap("  if (folder) signinFolderTake(io, folderRes || { status: 0 }, p.id, now()); /* plant:folder-take-renew */\n",
     "  if (folder) signinFolderTake(io, folderRes || { status: 0 }, p.id, now()); /* plant:folder-take-renew */\n  signinTrace(io, p.id, \"refresh\", \"ok\", { detail: String(JSON.parse(Buffer.from(folderRes.bytes).toString()).access_token) });\n"), "the token traced past the trace's own hiding"],
   ["e", swap("  if (!(d.relay === undefined || DOOR_RELAYS.installed.concat(DOOR_RELAYS.unpackaged).indexOf(d.relay) >= 0)) return null; /* plant:lab-relay */\n", ""), "a lab may name any relay"],
+  ["f", swap("  if (sync) sync.turn(look); /* plant:store-sync-turn */\n", ""), "the look's answer does not turn the sync"],
   ["d", swap(".indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes", ".indexOf(String(url)) < -1) throw new Error(\"the licence service's door takes"), "the door takes any route"],
 ];
 for (const [id, change, what] of PLANTS) {
