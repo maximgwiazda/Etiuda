@@ -17,6 +17,7 @@ const TESTS = path.join(ROOT, "tests");
 /* Not gates of any chain. A name that a chain reaches, or a name with no file, is stale. */
 export const HELPERS = {
   "tests/badge-room.js": "the badge's room, a sweep tests/smoke.js requires and runs",
+  "tests/caret-selection-desk.js": "a machine-window gate (the helper on a real control), not in either chain",
   "tests/css-dead.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
   "tests/deadcode.js": "a report: a hit is a candidate to read, not a verdict",
   "tests/engine.js": "the library every gate requires, not a gate",
