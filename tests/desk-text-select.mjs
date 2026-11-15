@@ -34,14 +34,14 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /* DESK'S ALLOWED LIST (kin of Studio's ui/index.html lines 59-66), each with its reason.
  * Checked in page context so every walk and test agrees on one list.
- * Note: `.swap code` (clickable in-card intent swap chips inside `.card`) is explicitly
- * excluded from `code` because those chips are card controls, not copyable text. */
+ * Note: a code inside `.swap`, `.card` or `.txt` is not the copyable kind. Swap chips are
+ * controls, and a token inside a reply stays with the reply. */
 const ALLOWED_LIST = [
   { sel: "input", why: "single-line user entry field (Studio: input)" },
   { sel: "textarea", why: "multi-line user entry field / card editor body (Studio: textarea)" },
   { sel: '[contenteditable="true"], [contenteditable=""]', why: "rich editable surface (Studio: contenteditable)" },
   { sel: ".mono", why: "explicitly marked monospace text for copying (Studio: .mono)" },
-  { sel: "code", exclude: ".swap code", why: "file names, folder paths (code.open-folder), sign-in codes and relay/proxy prints (Studio: code; excludes .swap code card chips)" },
+  { sel: "code", exclude: ".swap code, .card code, .txt code", why: "file names, folder paths (code.open-folder), sign-in codes and relay/proxy prints (Studio: code). A code inside a card or a reply stays with the card: those chips and tokens are not copied by dragging." },
   { sel: "pre", why: "preformatted technical text such as Quick facts #facts (Studio: pre)" },
   { sel: ".ec-fp", why: "catalog twin/edition fingerprint for verification (Studio kin: .fp)" },
   { sel: ".e-join-code", why: "team pairing check code (Studio kin: check/join code)" },
@@ -463,6 +463,7 @@ try {
   const libBadUi = [], libBadAllowed = [];
   const libSeenKeys = new Set();
   let libPoChecked = false;
+  let libFolderChecked = false;
   for (let i = 0; i < libBtns.length; i++) {
     const btnsNow = await page.$$("#libSecs button.sx-sec");
     if (btnsNow[i]) {
@@ -495,12 +496,23 @@ try {
           check(poLib.value && poLib.value.us === "none", "PO example: Library row count/value user-select: none", poLib.value);
         }
         if (poLib.catLabUs) check(poLib.catLabUs === "text", "Library category rename input/textarea (.mg-cat-lab2) user-select: text", poLib.catLabUs);
-        if (poLib.folderUs) {
+        if (poLib.folderUs && !libFolderChecked) {
+          libFolderChecked = true;
           check(poLib.folderUs === "text", "Allowed kind: Library code.open-folder user-select: text", poLib.folderUs);
           const foldDrag = await dragSelectElement(page, "#screenHost code.open-folder");
           check(foldDrag.domSel.trim().length > 0, "Allowed kind: code.open-folder selects on drag", foldDrag.domSel);
         }
       }
+    }
+    if (!libFolderChecked && await page.$("#screenHost code.open-folder")) {
+      libFolderChecked = true;
+      const foldUs = await page.evaluate(() => {
+        const c = document.querySelector("#screenHost code.open-folder");
+        return c ? (getComputedStyle(c).userSelect || "") : "";
+      });
+      check(foldUs === "text", "Allowed kind: Library code.open-folder user-select: text", foldUs);
+      const foldDrag = await dragSelectElement(page, "#screenHost code.open-folder");
+      check(foldDrag.domSel.trim().length > 0, "Allowed kind: code.open-folder selects on drag", foldDrag.domSel);
     }
     const r = await auditScreen(page, "Library", ["#screenHost"]);
     libChecked += r.checked;
@@ -571,7 +583,8 @@ try {
       + '<div class="mono" id="tsMonoProbe">mono-id-9876</div>'
       + '<span class="ec-fp" id="tsFpProbe">fp-abcd-1234</span>'
       + '<div class="e-join-code" id="tsJoinCode"><span>123</span><span>456</span></div>'
-      + '<div class="e-join-key" id="tsJoinKey"><span class="e-ksig"><span>ABCD EFGH 1234 5678</span></span></div>';
+      + '<div class="e-join-key" id="tsJoinKey"><span class="e-ksig"><span>ABCD EFGH 1234 5678</span></span></div>'
+      + '<code id="tsCodeProbe">sample-file.ec</code>';
     document.body.appendChild(d);
   });
   await sleep(40);
@@ -583,6 +596,7 @@ try {
     ["#tsFpProbe", ".ec-fp"],
     ["#tsJoinCode", ".e-join-code"],
     ["#tsJoinKey .e-ksig", ".e-ksig"],
+    ["#tsCodeProbe", "code"],
   ]) {
     const r = await dragSelectElement(page, id);
     check(r.domSel.trim().length > 0 && r.userSelect === "text",
@@ -768,6 +782,7 @@ try {
     await page.waitForFunction(() => !!document.getElementById("ce_name_en"), { timeout: 5000 }).catch(() => {});
   }
   if (await page.$("#ce_name_en")) {
+    recordWalk(await auditScreen(page, "Dialog (category editor)", ["#modalCard"]));
     await checkFieldEmptyAndTyped(page, "#ce_name_en", "Dialog field (Category editor #ce_name_en)");
     await page.click("#modalX").catch(() => {});
     await closeScreenHost(page);
