@@ -20,7 +20,8 @@
  *   b7  the tour's step for the Quick replies window, carried by that window's own page (the shell's pickerDoc, its
  *       host stood in for and answered by the desk page's own "open"): above the search box, the pointer on the box,
  *       the rows below it uncovered, the room it reports what it takes; the desk's bubble stands aside meanwhile, and
- *       the window's Next moves the desk's tour on; English light and Polish dark
+ *       the window's Next moves the desk's tour on; and at 600 px the foot's three key hints stand whole, the opening's
+ *       count giving way; English light and Polish dark
  *   b8  the tour's steps that hang from a tab: the Library's tab, its section rail and the first row of its list,
  *       Settings' tab and its rail, each walked by the tour's own Next from the Menu's Library step, and the step back
  *       to a conversation from the conversation's tab with Settings in front; the pointer within the control's span and
@@ -412,7 +413,7 @@ function pickerDocFile() {
   return "file:///" + at.replace(/\\/g, "/");
 }
 async function runQuickReplies(lang, theme) {
-  const label = "b7 " + lang + " " + theme + ": the Quick replies window carries the tour's step, from its search box, over no row, and its Next moves the tour on";
+  const label = "b7 " + lang + " " + theme + ": the Quick replies window carries the tour's step, from its search box, over no row, and its Next moves the tour on; its foot's key hints stand whole";
   /* The desk under a host reads its catalog from the host, which this stand-in has none of: a plain boot first leaves the
      sample catalog in this browser's storage, so the desk below opens holding it whatever ran before. */
   await (await boot({ lang, theme })).close();
@@ -461,19 +462,29 @@ async function runQuickReplies(lang, theme) {
       const b = bub ? bub.getBoundingClientRect() : null, first = document.querySelector("#rows li");
       const rowsTop = first ? first.getBoundingClientRect().top : document.getElementById("rows").getBoundingClientRect().top;
       const words = bub ? [...bub.querySelectorAll("button[data-go]")].map(x => x.getAttribute("data-go")).join(",") : "";
+      window.__keysWhole = () => {
+        const f = document.querySelector("footer"), foot = f.getBoundingClientRect(), padR = parseFloat(getComputedStyle(f).paddingRight) || 0;
+        const hints = [...document.querySelectorAll("#keys > span")], cnt = document.getElementById("count").getBoundingClientRect();
+        return hints.length === 3 && hints.every(h => { const r = h.getBoundingClientRect(); return r.width > 0 && r.right <= foot.right - padR + 0.5; })
+          && cnt.right <= hints[0].getBoundingClientRect().left + 0.5 && document.getElementById("count").textContent.length > 0;
+      };
+      const keysWhole = window.__keysWhole();
       return Object.assign(at, { clearOfRows: !!b && b.bottom <= q.getBoundingClientRect().top && b.bottom <= rowsTop,
         roomTrue: !!b && Math.abs(window.__room - (q.getBoundingClientRect().top - 8)) <= 1 && b.top >= 11, buttons: words,
-        kbd: bub ? bub.querySelectorAll("p kbd").length : 0 });
+        kbd: bub ? bub.querySelectorAll("p kbd").length : 0, keysWhole });
     });
     await win.click('#tour button[data-go="next"]');
     const went = await win.evaluate(() => window.__went.join(","));
+    /* The count is what gives way: opened again with a count twice as long, standing for a bigger catalog's, the hints stand. */
+    const longCount = Object.assign({}, o, { tour: null, count: String(o.count || "") + " " + String(o.count || "") });
+    m.keysWhole2 = await win.evaluate(text => { window.__open(text); return window.__keysWhole(); }, JSON.stringify(longCount));
     if (process.env.BUB_SHOTS) await win.screenshot({ path: path.join(process.env.BUB_SHOTS, "quick-replies-" + lang + "-" + theme + ".png") });
     await win.close();
     await desk.evaluate(() => window.__pick("tour", JSON.stringify({ go: "next" })));
     await desk.waitForFunction(() => sessionStorage.getItem("eTourAt") === "library", { timeout: 5000 }).catch(() => {});
     const deskOn = await desk.evaluate(() => sessionStorage.getItem("eTourAt"));
     r = Object.assign(m, { tourOpen: !!o.tour, deskAside, went, deskOn });
-    r.ok = !!(m.ok && m.side === "above" && m.clearOfRows && m.roomTrue && m.buttons === "skip,back,next" && m.kbd >= 2 && r.tourOpen
+    r.ok = !!(m.ok && m.keysWhole && m.keysWhole2 && m.side === "above" && m.clearOfRows && m.roomTrue && m.buttons === "skip,back,next" && m.kbd >= 2 && r.tourOpen
       && deskAside && went === "next" && deskOn === "library");
   } catch (e) { r = { why: "crashed: " + String(e && e.message || e).split(String.fromCharCode(10))[0] }; }
   await desk.close();

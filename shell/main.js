@@ -11448,7 +11448,8 @@ function pickPage() {
     q.setAttribute("aria-activedescendant", sgAt >= 0 ? "s" + sgAt : (all.length ? "r" + at : ""));
     paintStrip();
     box.querySelectorAll(".t,.x").forEach(el => el.classList.toggle("cut", el.scrollWidth > el.clientWidth + 1));
-    if (count) count.textContent = all.length ? said : "";
+    /* The count gives way where the foot is short, fading at its right; the key hints always stand whole. */
+    if (count) { count.textContent = all.length ? said : ""; if (count.classList) count.classList.toggle("cut", count.scrollWidth > count.clientWidth + 1); }
     /* A key that moved the mark brings it into view, and its group's title with it at the top; the pointer's mark
        scrolls nothing. */
     const on = keyed && box.querySelector ? box.querySelector("li.on") : null;
@@ -11763,7 +11764,7 @@ function pickerDoc() {
     + '#rows li.none{height:auto;padding:14px 12px;color:var(--dim);white-space:normal}\n'
     + 'footer{flex:0 0 auto;display:flex;align-items:center;gap:14px;padding:6px 10px 0;border-top:1px solid var(--line);'
     + 'color:var(--dim);font-size:12px;white-space:nowrap;overflow:hidden}\n'
-    + '#count{margin-right:auto}\n#keys{display:flex;gap:14px}\n#keys kbd{margin-right:5px}\n'
+    + '#count{margin-right:auto;flex:0 1 auto;min-width:0;overflow:hidden}\n#keys{display:flex;flex:0 0 auto;gap:14px}\n#keys kbd{margin-right:5px}\n'
     + ':root{--bub:#2563eb;--bub-ink:#fff;--bub-dim:rgba(255,255,255,.92);--bub-shadow:rgba(37,99,235,.32);--sans-display:var(--sans)}\n'
     + '.bub{position:fixed;box-sizing:border-box;overflow:visible;padding:12px 14px;background:var(--bub);color:var(--bub-ink);'
     + 'border-radius:14px;filter:drop-shadow(0 10px 22px var(--bub-shadow))}\n'
