@@ -285,15 +285,21 @@ function proxiedConnect(url, headers, on, o) {
   const handlers = { open: () => { if (!gone && typeof on.open === "function") on.open(); }, message: t => { if (!gone) on.message(t); }, close: closeOnce };
   (async () => {
     const u = new URL(String(url));
-    /* Electron's resolveProxy answers with a Promise; anything else, or no answer in time, is DIRECT, the socket it was. */
-    const asked = opts.resolve("https://" + u.host + u.pathname);
+    /* Only Chromium's answer chooses the route, and DIRECT only where it names DIRECT: no answer in time, a refused lookup or
+       one naming nothing closes the socket unopened, and the minute's asking, which goes through Chromium, stands in. */
+    const NO_ROUTE = ""; /* plant:proxy-resolve-closed */
     let bound = null;
-    const late = new Promise(r => { bound = setTimeout(() => r("DIRECT"), opts.resolveWaitMs || RESOLVE_WAIT_MS); if (bound.unref) bound.unref(); });
-    const answer = asked instanceof Promise ? await Promise.race([asked.catch(() => "DIRECT"), late]) : "DIRECT"; /* plant:proxy-resolve-bound */
+    const waits = [Promise.resolve().then(() => opts.resolve("https://" + u.host + u.pathname)).then(a => (typeof a === "string" ? a : NO_ROUTE), () => NO_ROUTE)];
+    waits.push(new Promise(r => { bound = setTimeout(() => r(NO_ROUTE), opts.resolveWaitMs || RESOLVE_WAIT_MS); if (bound.unref) bound.unref(); })); /* plant:proxy-resolve-bound */
+    const answer = await Promise.race(waits);
     clearTimeout(bound);
-    const list = parseProxyList(typeof answer === "string" ? answer : "DIRECT");
-    const first = list[0] || { type: "DIRECT" };
+    const list = parseProxyList(answer);
     if (gone) return closeOnce();
+    if (!list.length) {
+      say("the relay's live connection was given no proxy answer in time, so the relay is asked every minute instead");
+      return closeOnce();
+    }
+    const first = list[0];
     if (first.type === "DIRECT") {
       inner = opts.direct(url, headers, handlers);
       if (!inner) closeOnce();

@@ -15,8 +15,9 @@
  *   p5  the WebSocket client inside: the handshake's accept is checked, fragments join, a ping is answered, a masked
  *       frame from the server ends it, and its own frames are masked.
  *   p6  proxiedConnect end to end: through the proxy with the held answer the relay's socket opens and carries text; DIRECT
- *       takes the runtime's own socket; a proxy asking Windows sign-in or a SOCKS proxy closes it unopened, said once; with
- *       the platform's own TLS, a relay certificate no root signs closes it unopened, said once.
+ *       takes the runtime's own socket; a proxy asking Windows sign-in or a SOCKS proxy closes it unopened, said once; a
+ *       lookup with no answer in time, refused or naming nothing closes it unopened and never goes direct; with the
+ *       platform's own TLS, a relay certificate no root signs closes it unopened, said once.
  *   p7  shell/main.js: every call goes through deskFetch, deskFetch hands the asker's listener, and relayConnect asks the
  *       session's resolveProxy and takes proxiedConnect.
  *   p8  each plant lifted (or, for the TLS check, rewritten) turns its own case red; skipped under ETIUDA_PLANTS=off.
@@ -395,13 +396,20 @@ async function p6() {
   await sleep(150);
   check(ev5.close === 1 && refusedCalled === 1, "p6f an answer the proxy refuses is handed back as refused, so it is asked again");
   const thenable = new Proxy(function () {}, { get: () => thenable, apply: () => thenable });
-  let viaDirect = 0;
-  P.proxiedConnect("wss://etiuda.dev/relay/v1/socket", {}, { message: () => {}, close: () => {} },
-    { resolve: () => thenable, direct: () => { viaDirect++; return { send() {}, close() {} }; } });
-  P.proxiedConnect("wss://etiuda.dev/relay/v1/socket", {}, { message: () => {}, close: () => {} },
-    { resolve: () => new Promise(() => {}), resolveWaitMs: 50, direct: () => { viaDirect++; return { send() {}, close() {} }; } });
-  await sleep(150);
-  check(viaDirect === 2, "p6g a resolver answering with no Promise, or not in time, leaves the runtime's own socket: " + viaDirect + " of 2");
+  let viaDirect = 0, closedG = 0;
+  const saidG = [];
+  const gOpts = resolve => ({ resolve, resolveWaitMs: 50, direct: () => { viaDirect++; return { send() {}, close() {} }; },
+    asker: { heldFor: () => null, refused: () => {}, tell: l => saidG.push(l) } });
+  for (const resolve of [() => thenable, () => new Promise(() => {}), async () => { throw new Error("no lookup"); }, async () => "", async () => "junk here"]) {
+    P.proxiedConnect("wss://etiuda.dev/relay/v1/socket", {}, { message: () => {}, close: () => closedG++ }, gOpts(resolve));
+  }
+  await sleep(200);
+  check(viaDirect === 0 && closedG === 5 && saidG.length === 5 && saidG.every(l => /every minute/.test(l)),
+    "p6g a lookup that never answers, answers late, is refused or names nothing closes the socket unopened, said, and never"
+    + " goes direct: " + viaDirect + " direct, " + closedG + " of 5 closed");
+  P.proxiedConnect("wss://etiuda.dev/relay/v1/socket", {}, { message: () => {}, close: () => closedG++ }, gOpts(() => "DIRECT"));
+  await sleep(50);
+  check(viaDirect === 1 && closedG === 5, "p6i a resolver answering DIRECT without a Promise is still Chromium's answer, and takes the runtime's own socket: " + viaDirect);
   for (const s of [S, basic, win]) s.server.close();
   await tlsCase();
 }
@@ -481,6 +489,8 @@ const PLANTS = [
   ["shell/proxy-net.cjs", "plant:ws-accept", "p5"],
   ["shell/proxy-net.cjs", "plant:ws-unmasked", "p5"],
   ["shell/proxy-net.cjs", "plant:proxy-resolve-bound", "p6"],
+  /* Rewritten: no answer read as DIRECT again, which must take the runtime's own socket p6g expects closed. */
+  ["shell/proxy-net.cjs", "plant:proxy-resolve-closed", "p6", '""', '"DIRECT"'],
   ["shell/proxy-net.cjs", "plant:proxy-scheme-first", "p4"],
   ["shell/proxy-net.cjs", "plant:proxy-credentials", "p3"],
   /* Rewritten: the held answer's slot without its scheme, so any challenge from that proxy is handed it. */
@@ -519,6 +529,6 @@ for (const [id, fn] of Object.entries(PARTS)) {
   try { await fn(); } catch (e) { check(false, id + " threw: " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | ")); }
 }
 clearInterval(alive);
-const EXPECTED = 52 + (PLANTS_OFF ? 0 : PLANTS.length);
+const EXPECTED = 53 +(PLANTS_OFF ? 0 : PLANTS.length);
 if (!ONLY) console.log((failed === 0 && ran === EXPECTED ? "proxy-net: ok" : "proxy-net: FAIL") + ", ran " + ran + " of " + EXPECTED + ", red " + failed);
 process.exit(Math.min(63, failed + (ONLY || ran === EXPECTED ? 0 : 1)));
