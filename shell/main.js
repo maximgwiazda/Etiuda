@@ -6756,9 +6756,17 @@ function awaitsFirstEdition(team) {
   }
   return doc.catalogs.some(id => !have.has(String(id)));
 }
+/* Whether machine policy holds this desk to team `t`, so a leave could not be undone: its lead named and pinned for `t`, or a
+   folder named alone, under which every invitation is refused. `named` is readJoinPolicy's answer. */
+function policyHoldsTeam(t, named) {
+  const pin = teamPins[t];
+  if (!pin || !named) return false;
+  if (named.lead) return named.lead === pin.public;
+  return !!named.folder; /* plant:folder-holds-team */
+}
 function leadsView() {
   const teams = Object.keys(teamPins).filter(t => SEALED_TEAM_RE.test(t) && !!teamPins[t] && typeof teamPins[t].public === "string");
-  const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", named = teams.length ? readJoinPolicy("en").lead : "";
+  const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", named = teams.length ? readJoinPolicy("en") : null;
   const ftHere = folderTeamHere();
   const reading = ftHere && folderStillReading() ? shellWords().stillReading : "";
   return teams.map(t => {
@@ -6771,7 +6779,7 @@ function leadsView() {
     const row = { team: t, print: leadPrint(teamPins[t].public), admitted: admitted, seen: teamSeen.has(t),
       lead: shown.lead || "", folder: shown.folder || "",
       removed: (admitted && !!me && !!roster && roster.desks.indexOf(me) < 0) || relayRemoved,
-      policy: !!named && named === teamPins[t].public };
+      policy: policyHoldsTeam(t, named) };
     if (relayHost) row.relay = relayHost; /* plant:settings-relay-row */
     if (relayRemoved) row.relayRemoved = true;
     const head = headShown(t);
@@ -6828,6 +6836,8 @@ function forgetLead(team, left) {
   team = String(team || "");
   if (deskKeys === undefined) deskKeys = readDesk();
   if (!SEALED_TEAM_RE.test(team) || !teamPins[team]) return joinView();
+  /* Settings offers no Leave where policy holds the team; one sent anyway changes nothing. "It does not match" still forgets. */
+  if (left === true && policyHoldsTeam(team, readJoinPolicy("en"))) return joinView();
   const ch = teamChannel[team];
   if (ch && ch.kind === "relay") setRelayTeamAside(ch.rt); /* plant:leave-aside */
   /* The note this desk left in a folder team's mirror goes too, owed to that share, so a later return does not send it. */
