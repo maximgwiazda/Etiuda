@@ -310,6 +310,7 @@ function pausedLine(cert, now, signinRefused) {
 function storeRow(o) {
   if (o.provider !== "microsoft" && o.provider !== "google") return { shown: false };
   const pol = o.pol || {}, say = typeof o.say === "string" ? o.say : "";
+  if (o.ask === true && !(pol.held && !pol.on)) return { shown: true, line: "ask", on: false, held: false, why: "", since: 0, say: "", askNow: o.askNow === true }; /* plant:row-ask */
   if (!pol.on && !pol.held && o.owed === true) return { shown: true, line: "ending", on: false, held: false, why: "", since: 0, say: "" };
   if (!pol.on) return { shown: true, line: pol.held ? "org-off" : "off", on: false, held: pol.held === true, why: "", since: 0, say: "" };
   const base = { shown: true, on: true, held: pol.held === true, why: "", since: 0, say };

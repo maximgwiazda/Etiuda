@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 114;
+const EXPECTED = 126;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -195,14 +195,14 @@ function worldOf(o) {
 
 /* ---- the shell, evaluated whole: `src` is shell/main.js's text or a planted copy of it ---- */
 /* What the leg reads from main.js, appended to its text; a name main.js lacks comes back undefined, so its leg fails alone. */
-const TAIL_NAMES = ["storeView", "storeRoom", "storeSetNow", "storeState", "signinRun", "signinRenew", "signinIo", "signinRenewNow", "signinServiceAsk", "storeServiceAt", "storeOnFor", "storeTurn", "branchIdentity", "signinState", "patchDesk", "storeForget", "signinLandingHtml", "signinListen",
+const TAIL_NAMES = ["storeView", "storeRoom", "storeSetNow", "storeAnswerNow", "storeSetAsideDir", "storeSyncFolder", "storeState", "signinRun", "signinRenew", "signinIo", "signinRenewNow", "signinServiceAsk", "storeServiceAt", "storeOnFor", "storeTurn", "branchIdentity", "signinState", "patchDesk", "storeForget", "signinLandingHtml", "signinListen",
   "signinOutNow", "storeLeaveNow", "storeSyncApply", "storeSyncSoon"];
 const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing", "storeConsentFlight", "storeSyncTimer"];
 const TAIL = "\n__test.T = {" + TAIL_NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
   + ", setJoin: v => { teamJoin = v; }, get: () => ({" + TAIL_STATE.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "}) };";
 function boot(src, o) {
   const opt = o || {};
-  const UD = fs.mkdtempSync(path.join(WORK, "ud-"));
+  const UD = opt.ud || fs.mkdtempSync(path.join(WORK, "ud-"));
   const said = [], opened = [], ipc = { on: {}, handle: {} };
   const quiet = { log: s => said.push(String(s)), error: s => said.push(String(s)), warn: () => {}, info: () => {}, debug: () => {} };
   const noop = () => {};
@@ -233,9 +233,11 @@ function boot(src, o) {
   const was = {};
   for (const k of Object.keys(env)) { was[k] = process.env[k]; if (env[k] === undefined) delete process.env[k]; else process.env[k] = env[k]; }
   const holder = {};
+  const fsMod = opt.fsWrap ? opt.fsWrap(nodeRequire("node:fs")) : null;
   try {
     new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test", src + TAIL)(
-      n => (n === "electron" ? electron : nodeRequire(n)), path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, holder);
+      n => (n === "electron" ? electron : (fsMod && (n === "fs" || n === "node:fs")) ? fsMod : nodeRequire(n)),
+      path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, holder);
   } finally {
     for (const k of Object.keys(env)) { if (was[k] === undefined) delete process.env[k]; else process.env[k] = was[k]; }
   }
@@ -297,7 +299,7 @@ async function scopesOffScene(src) {
 /* (b) and (c): a desk holding a sign-in renews quietly, seated; the look follows, its store certificate kept in memory. */
 async function renewScene(src, o) {
   const world = worldOf(o);
-  const shell = boot(src, { world, held: true, trace: true, lab: { service: STAGING, clientIds: { microsoft: MS_CLIENT }, root: rawPub(LAB_ROOT.publicKey) } });
+  const shell = boot(src, Object.assign({ world, held: true, trace: true, lab: { service: STAGING, clientIds: { microsoft: MS_CLIENT }, root: rawPub(LAB_ROOT.publicKey) } }, o && o.boot));
   const { T } = shell;
   const me = T.branchIdentity(true);
   const said = await T.signinRenewNow();
@@ -690,6 +692,279 @@ async function backScene(src) {
   const off = await backOf(src, true), on = await backOf(src, false);
   const ok = off.off && !off.look && off.between && off.after && !on.off && !on.look && on.between && on.after && !on.syncing;
   return { ok, detail: brief({ off, on }) };
+}
+
+/* (x6m) "It is mine": lifts the hold, sets who = last = this account and ask = "", runs the look and merge into this account's store,
+   carries the desk's content and ledger there; asked once for this account, symmetric for A coming back. */
+async function answerMineScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world, UD = r.shell.UD;
+  const catDir = T.storeSyncFolder();
+  fs.mkdirSync(catDir, { recursive: true });
+  fs.writeFileSync(path.join(catDir, "alpha.ec"), "ALPHA_CAT\n");
+  T.patchDesk(JSON.stringify({ eAgent: "Alice", eTheme: "dark" }));
+  const syncA = T.get().storeSyncing;
+  if (syncA) { syncA.merge(); const c = syncA.channel(); if (c) { c.kick(); await c.idle(); } }
+  const heldA = T.signinState().held, aFile = w.file;
+  const whoA = whoOf(heldA.provider, SUB), whoB = whoOf(heldA.provider, "sub-of-another-person");
+  T.signinOutNow();
+  seatAnother(T, w, heldA);
+  const heldB = T.signinState().held;
+  await T.storeTurn();
+  const viewHeld = T.storeView();
+  if (typeof T.storeAnswerNow !== "function") return { ok: false, detail: "no storeAnswerNow" };
+  const ans = await T.storeAnswerNow("mine");
+  if (T.get().storeFlight) await T.get().storeFlight;
+  const syncB = T.get().storeSyncing;
+  if (syncB) { syncB.merge(); const c = syncB.channel(); if (c) { c.kick(); await c.idle(); } }
+  const st = storeJson(UD) || {}, viewAfter = T.storeView(), ledger = syncB ? syncB.state().ledger : {};
+  /* Asked once for B: B out and back is not held. */
+  T.signinOutNow();
+  T.signinState().held = heldB;
+  await T.storeTurn();
+  const bBack = T.storeView(), bBackNow = T.get().storeNow;
+  /* Symmetric: A back is held again. */
+  T.signinOutNow();
+  T.signinState().held = heldA;
+  w.file = aFile;
+  await T.storeTurn();
+  const aBack = T.storeView(), aBackNow = T.get().storeNow;
+  const ok = viewHeld.line === "ask" && viewHeld.askNow === true && !!ans && ans.ok === true
+    && st.who === whoB && st.last === whoB && !st.ask && viewAfter.line === "on" && !viewAfter.askNow
+    && !!ledger["k:eAgent"] && !!ledger["f:alpha.ec"] && bBack.line === "on" && !!bBackNow && bBackNow.state === "on"
+    && aBack.line === "ask" && aBack.askNow === true && !aBackNow;
+  return { ok, detail: brief({ viewHeld: viewHeld.line, ans, who: st.who === whoB, ask: st.ask || "", viewAfter: viewAfter.line, hasAgent: !!ledger["k:eAgent"], hasCat: !!ledger["f:alpha.ec"], bBack: bBack.line, aBack: aBack.line }) };
+}
+
+/* (x6s) "Start from my account": sets aside desk.json, store.json, userData\store, and own .ec files byte for byte (team folders untouched),
+   removes synced desk keys, drops the old sync instance, and loads this account's own store with none of the set-aside content in any relay call;
+   a second set-aside lands beside the first, with (2), (3) on the same minute. */
+async function answerStartScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world, UD = r.shell.UD;
+  if (typeof T.storeAnswerNow !== "function") return { ok: false, detail: "no storeAnswerNow" };
+  /* Seed B's own pre-existing store from a second computer of B's over the same relay. */
+  const aFile0 = w.file;
+  w.file = null;
+  const bBoot = boot(src, { world: w, held: true, store: { off: true }, lab: labOf() });
+  const Tb = bBoot.T;
+  Tb.branchIdentity(true);
+  await Tb.signinRenewNow();
+  if (Tb.get().storeFlight) await Tb.get().storeFlight;
+  seatAnother(Tb, w, Tb.signinState().held);
+  await Tb.storeAnswerNow("mine");
+  if (Tb.get().storeFlight) await Tb.get().storeFlight;
+  const bCatDir = Tb.storeSyncFolder();
+  fs.mkdirSync(bCatDir, { recursive: true });
+  fs.writeFileSync(path.join(bCatDir, "bob.ec"), "BOB_CATALOG_BYTES\n");
+  Tb.patchDesk(JSON.stringify({ eAgent: "Bob", eTheme: "light" }));
+  const bSync = Tb.get().storeSyncing;
+  if (bSync) { bSync.merge(); const c = bSync.channel(); if (c) { c.kick(); await c.idle(); } }
+  const bFile = w.file;
+  w.file = aFile0;
+
+  /* Now set up A on the desk. */
+  const catDir = T.storeSyncFolder();
+  fs.mkdirSync(catDir, { recursive: true });
+  const aBytes = Buffer.from("ALPHA_CATALOG_BYTES\n"), bBytes = Buffer.from("BETA_CATALOG_BYTES\n");
+  fs.writeFileSync(path.join(catDir, "alpha.ec"), aBytes);
+  fs.writeFileSync(path.join(catDir, "beta.ec"), bBytes);
+  T.patchDesk(JSON.stringify({ eAgent: "Alice", eTheme: "dark", ePack: JSON.stringify({ custom: [{ id: "c1", t: "Card A" }] }), "e~sampled": "1" }));
+  const syncA = T.get().storeSyncing;
+  if (syncA) { syncA.merge(); const c = syncA.channel(); if (c) { c.kick(); await c.idle(); } }
+  const heldA = T.signinState().held, aFile = w.file;
+  const whoB = whoOf(heldA.provider, "sub-of-another-person");
+  T.signinOutNow();
+  seatAnother(T, w, heldA);
+  w.file = bFile;
+  await T.storeTurn();
+  const deskBefore = fs.readFileSync(path.join(UD, "desk.json"));
+  const storeBefore = fs.readFileSync(path.join(UD, "store.json"));
+  const treeBefore = storeTree(UD);
+  const relayFrom = w.relay.length;
+
+  const ans = await T.storeAnswerNow("start");
+  if (T.get().storeFlight) await T.get().storeFlight;
+  const syncB = T.get().storeSyncing;
+  if (syncB) { const c = syncB.channel(); if (c) { c.kick(); await c.idle(); } }
+
+  const f1 = ans && ans.folder ? ans.folder : "";
+  const asideMatch = path.dirname(f1) === path.join(UD, "Set aside") && /^\d{4}-\d{2}-\d{2} \d{2}\.\d{2}$/.test(path.basename(f1));
+  const deskAside = f1 && fs.existsSync(path.join(f1, "desk.json")) ? fs.readFileSync(path.join(f1, "desk.json")) : null;
+  const storeAside = f1 && fs.existsSync(path.join(f1, "store.json")) ? fs.readFileSync(path.join(f1, "store.json")) : null;
+  const storeDirAside = f1 && fs.existsSync(path.join(f1, "store"))
+    ? filesUnder(path.join(f1, "store")).sort().map(p => path.relative(path.join(f1, "store"), p) + "=" + crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex")).join("|") : "";
+  const alphaAside = f1 && fs.existsSync(path.join(f1, "alpha.ec")) ? fs.readFileSync(path.join(f1, "alpha.ec")) : null;
+  const betaAside = f1 && fs.existsSync(path.join(f1, "beta.ec")) ? fs.readFileSync(path.join(f1, "beta.ec")) : null;
+  const byteMatch = !!deskAside && deskAside.equals(deskBefore) && !!storeAside && storeAside.equals(storeBefore)
+    && storeDirAside === treeBefore && !!alphaAside && alphaAside.equals(aBytes) && !!betaAside && betaAside.equals(bBytes);
+
+  const leftInCat = fs.readdirSync(catDir).sort().join(",");
+  const bobText = fs.existsSync(path.join(catDir, "bob.ec")) ? fs.readFileSync(path.join(catDir, "bob.ec"), "utf8") : "";
+  const deskAfter = JSON.parse(fs.readFileSync(path.join(UD, "desk.json"), "utf8")).keys || {};
+  const bLedger = syncB ? syncB.state().ledger : {};
+  const relayLeak = w.relay.slice(relayFrom).some(buf => /Alice|ALPHA_CATALOG_BYTES|BETA_CATALOG_BYTES|Card A/.test(Buffer.from(buf).toString("utf8")));
+  const ledgerLeak = !!(bLedger["f:alpha.ec"] || bLedger["f:beta.ec"] || bLedger["k:ePack"]) || (deskAfter.eAgent !== "Bob") || ("ePack" in deskAfter);
+
+  /* Team folder safety: when storeSyncFolder() is "" (team active), its .ec files are not moved. */
+  const teamDir = path.join(UD, "team-dir");
+  fs.mkdirSync(teamDir, { recursive: true });
+  fs.writeFileSync(path.join(teamDir, "team.ec"), "TEAM_CAT\n");
+  T.setJoin({ team: "t1", invite: { folder: teamDir } });
+  const teamIgnored = T.storeSyncFolder() === "";
+  T.setJoin(null);
+
+  /* Second set-aside beside the first (A returns and answers start), plus deterministic same-minute (2) and (3). */
+  T.signinOutNow();
+  T.signinState().held = heldA;
+  w.file = aFile;
+  await T.storeTurn();
+  const ans2 = await T.storeAnswerNow("start");
+  if (T.get().storeFlight) await T.get().storeFlight;
+  const syncA2 = T.get().storeSyncing;
+  if (syncA2) { const c = syncA2.channel(); if (c) { c.kick(); await c.idle(); } }
+  const fixedAt = new Date(2026, 10, 15, 18, 10).getTime();
+  const d1 = T.storeSetAsideDir(fixedAt), d2 = T.storeSetAsideDir(fixedAt), d3 = T.storeSetAsideDir(fixedAt);
+  const numbering = path.basename(d1) === "2026-11-15 18.10" && path.basename(d2) === "2026-11-15 18.10 (2)" && path.basename(d3) === "2026-11-15 18.10 (3)";
+
+  const st = storeJson(UD) || {};
+  const ok = !!ans && ans.ok === true && asideMatch && byteMatch && leftInCat === "bob.ec" && bobText === "BOB_CATALOG_BYTES\n"
+    && deskAfter["e~sampled"] === "1" && !relayLeak && !ledgerLeak && teamIgnored && fs.existsSync(path.join(teamDir, "team.ec"))
+    && !!ans2 && ans2.ok === true && ans2.folder !== f1 && fs.existsSync(f1) && fs.existsSync(ans2.folder) && numbering && st.who !== whoB;
+  return { ok, detail: brief({ okAns: ans && ans.ok, asideMatch, byteMatch, leftInCat, agent: deskAfter.eAgent, sampled: deskAfter["e~sampled"], relayLeak, ledgerLeak, teamIgnored, second: ans2 && ans2.folder !== f1, numbering }) };
+}
+
+/* (x6sn) Open case: an account with NO store yet answers "Start from my account": A's content is set aside, B's new store is made
+   with nothing of A's uploaded. */
+async function answerStartNewAccountScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world, UD = r.shell.UD;
+  if (typeof T.storeAnswerNow !== "function") return { ok: false, detail: "no storeAnswerNow" };
+  const catDir = T.storeSyncFolder();
+  fs.mkdirSync(catDir, { recursive: true });
+  fs.writeFileSync(path.join(catDir, "alpha.ec"), "ALPHA_ONLY\n");
+  T.patchDesk(JSON.stringify({ eAgent: "Alice", eTheme: "dark" }));
+  const syncA = T.get().storeSyncing;
+  if (syncA) { syncA.merge(); const c = syncA.channel(); if (c) { c.kick(); await c.idle(); } }
+  const heldA = T.signinState().held;
+  T.signinOutNow();
+  seatAnother(T, w, heldA);
+  w.file = null;
+  await T.storeTurn();
+  const ans = await T.storeAnswerNow("start");
+  if (T.get().storeFlight) await T.get().storeFlight;
+  const syncB = T.get().storeSyncing;
+  if (syncB) { const c = syncB.channel(); if (c) { c.kick(); await c.idle(); } }
+  const ledger = syncB ? syncB.state().ledger : { leaked: true };
+  const deskAfter = JSON.parse(fs.readFileSync(path.join(UD, "desk.json"), "utf8")).keys || {};
+  const bStore = w.file ? JSON.parse(w.file) : null;
+  const ok = !!ans && ans.ok === true && fs.existsSync(path.join(ans.folder, "alpha.ec")) && !fs.existsSync(path.join(catDir, "alpha.ec"))
+    && !!bStore && Object.keys(ledger).length === 0 && !("eAgent" in deskAfter) && !("eTheme" in deskAfter);
+  return { ok, detail: brief({ okAns: ans && ans.ok, newStore: !!bStore, ledgerKeys: Object.keys(ledger), deskKeys: Object.keys(deskAfter) }) };
+}
+
+/* (x6n) "Not now": nothing changes, the hold stays, askNow becomes false in this run, and a fresh run asks again. */
+async function answerNotNowScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world, UD = r.shell.UD;
+  if (typeof T.storeAnswerNow !== "function") return { ok: false, detail: "no storeAnswerNow" };
+  const syncA = T.get().storeSyncing;
+  if (syncA) { const c = syncA.channel(); if (c) await c.idle(); }
+  const heldA = T.signinState().held;
+  T.signinOutNow();
+  seatAnother(T, w, heldA);
+  await T.storeTurn();
+  const storeBefore = fs.readFileSync(path.join(UD, "store.json"), "utf8");
+  const treeBefore = storeTree(UD), relayBefore = w.relay.length;
+  const before = T.storeView();
+  const ans = await T.storeAnswerNow("later");
+  const after = T.storeView();
+  const nextRun = boot(src, { ud: UD, world: w, lab: { service: STAGING, clientIds: { microsoft: MS_CLIENT }, root: rawPub(LAB_ROOT.publicKey) } });
+  seatAnother(nextRun.T, w, heldA);
+  const fresh = nextRun.T.storeView();
+  const ok = before.line === "ask" && before.askNow === true && !!ans && ans.ok === true && after.line === "ask" && after.askNow === false
+    && fs.readFileSync(path.join(UD, "store.json"), "utf8") === storeBefore && storeTree(UD) === treeBefore
+    && w.relay.length === relayBefore && !T.get().storeNow && fresh.line === "ask" && fresh.askNow === true;
+  return { ok, detail: brief({ before, ans, after, fresh }) };
+}
+
+/* (x6f) Failure halfway during set-aside puts back everything moved, removes the half-made folder, leaves the hold and says so. */
+async function answerStartRollbackScene(src) {
+  let failOnBeta = false;
+  const fsWrap = real => new Proxy(real, {
+    get(target, prop) {
+      if (prop === "renameSync") {
+        return (from, to) => {
+          if (failOnBeta && /beta\.ec$/i.test(String(from))) throw new Error("disk full");
+          return target.renameSync(from, to);
+        };
+      }
+      const v = target[prop];
+      return typeof v === "function" ? v.bind(target) : v;
+    }
+  });
+  const r = await renewScene(src, { boot: { fsWrap } }), T = r.shell.T, w = r.world, UD = r.shell.UD;
+  if (typeof T.storeAnswerNow !== "function") return { ok: false, detail: "no storeAnswerNow" };
+  const catDir = T.storeSyncFolder();
+  fs.mkdirSync(catDir, { recursive: true });
+  const aBytes = Buffer.from("ALPHA_KEEP\n"), bBytes = Buffer.from("BETA_KEEP\n");
+  fs.writeFileSync(path.join(catDir, "alpha.ec"), aBytes);
+  fs.writeFileSync(path.join(catDir, "beta.ec"), bBytes);
+  T.patchDesk(JSON.stringify({ eAgent: "Alice" }));
+  const syncA = T.get().storeSyncing;
+  if (syncA) { syncA.merge(); const c = syncA.channel(); if (c) { c.kick(); await c.idle(); } }
+  const heldA = T.signinState().held;
+  T.signinOutNow();
+  seatAnother(T, w, heldA);
+  await T.storeTurn();
+  const deskBefore = fs.readFileSync(path.join(UD, "desk.json"));
+  const storeBefore = fs.readFileSync(path.join(UD, "store.json"));
+  const treeBefore = storeTree(UD);
+  failOnBeta = true;
+  const ans = await T.storeAnswerNow("start");
+  failOnBeta = false;
+  const asideDir = path.join(UD, "Set aside");
+  const leftovers = fs.existsSync(asideDir) ? fs.readdirSync(asideDir) : [];
+  const view = T.storeView();
+  const ok = !!ans && ans.ok === false && storeTree(UD) === treeBefore
+    && fs.readFileSync(path.join(catDir, "alpha.ec")).equals(aBytes) && fs.readFileSync(path.join(catDir, "beta.ec")).equals(bBytes)
+    && fs.readFileSync(path.join(UD, "desk.json")).equals(deskBefore) && fs.readFileSync(path.join(UD, "store.json")).equals(storeBefore)
+    && leftovers.length === 0 && view.line === "ask" && r.shell.said.some(l => /set aside|aside/i.test(l));
+  return { ok, detail: brief({ ans, treeOk: storeTree(UD) === treeBefore, leftovers, line: view.line, said: r.shell.said.slice(-2) }) };
+}
+
+/* (x6w) After an answer lifts the hold, A's keys, leave, owed end and folder token still never reach B. */
+async function answerNeighboursScene(src) {
+  if (typeof boot(src).T.storeAnswerNow !== "function") return { ok: false, detail: "no storeAnswerNow" };
+  /* Leave owed by A, then B seated and answers mine -> B's folder never gets A's keys. */
+  const rLeave = await renewScene(src), Tl = rLeave.shell.T, wl = rLeave.world;
+  const aLeave = wl.file ? JSON.parse(wl.file) : null;
+  wl.relayDown = true; await Tl.storeSetNow("here"); wl.relayDown = false;
+  seatAnother(Tl, wl, Tl.signinState().held);
+  await Tl.storeAnswerNow("mine");
+  if (Tl.get().storeFlight) await Tl.get().storeFlight;
+  await Tl.storeLeaveNow(null);
+  const leaveLeaked = hasKeysOf(wl.file, aLeave);
+
+  /* store/end owed by A, then B seated and answers mine -> B's renewal never posts A's store/end. */
+  const rOwed = await renewScene(src), To = rOwed.shell.T, wo = rOwed.world;
+  wo.endDown = true; await To.storeSetNow("everywhere"); wo.endDown = false;
+  const endsBefore = endsPosted(wo);
+  seatAnother(To, wo, To.signinState().held);
+  await To.storeAnswerNow("mine");
+  if (To.get().storeFlight) await To.get().storeFlight;
+  await To.signinRenewNow();
+  await new Promise(x => setTimeout(x, 40));
+  const endLeaked = endsPosted(wo) > endsBefore;
+
+  /* A's folder access token in memory -> B seated and answers start -> B's look asks its own token, never A's. */
+  const rTok = await renewScene(src), Tt = rTok.shell.T, wt = rTok.world;
+  const oldTok = wt.access, heldA = Tt.signinState().held;
+  wt.access = "b-own-folder-token";
+  const graphFrom = wt.graph.length;
+  seatAnother(Tt, wt, heldA);
+  await Tt.storeAnswerNow("start");
+  if (Tt.get().storeFlight) await Tt.get().storeFlight;
+  const usedOldTok = wt.graph.slice(graphFrom).some(g => g.indexOf("Bearer " + oldTok) >= 0);
+
+  const ok = !leaveLeaked && !endLeaked && !usedOldTok;
+  return { ok, detail: brief({ leaveLeaked, endLeaked, usedOldTok }) };
 }
 
 /* (w4) A look of A's still out when B is seated keeps nothing for B: its keys are not sealed here under B's name, and its folder
@@ -1205,6 +1480,12 @@ const LEGS = [
   ["x5", returnScene, "A synced; B seated edits the desk and signs out; A back is not the account last seated, so it is held too: no look, no relay call, no merge, B's edit still on the desk and in no store, the sync state as B left it"],
   ["x2", sameBackScene, "the ordinary case: the same account signed out and back finds its store on, the same store, its sync running, nothing asked"],
   ["x3", backScene, "A turned sync off here, signed out; B came and went; A back finds its own switch as it left it, and, not the account last seated, is held as B was: no look, the sync stopped, the desk's sync state as A left it"],
+  ["x6m", answerMineScene, "It is mine lifts the hold, sets who = last = this account, clears ask, merges the desk into this account's store, asks once, and holds the earlier account coming back"],
+  ["x6s", answerStartScene, "Start from my account sets aside desk.json, store.json, userData/store and own .ec files byte for byte (team folders untouched), clears synced desk keys, uploads none of it, loads this account's own store, and puts a second set-aside beside the first"],
+  ["x6sn", answerStartNewAccountScene, "Start from my account for an account with no store yet sets A's content aside and makes B's store empty with nothing of A's uploaded"],
+  ["x6n", answerNotNowScene, "Not now leaves store.json and the hold unchanged, suppresses auto-ask in this run, and asks again on a new run"],
+  ["x6f", answerStartRollbackScene, "a failure halfway during set-aside puts back everything moved, leaves no half-made folder, keeps the hold and says so"],
+  ["x6w", answerNeighboursScene, "after an answer lifts the hold, A's keys, owed leave, owed store/end and folder token still never reach B"],
 ];
 const results = {};
 const scenes = Object.fromEntries(LEGS.map(([id, scene]) => [id, scene]));
@@ -1288,6 +1569,12 @@ const PLANTS = [
   ["x3", swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = false; /* plant:store-held */"), "B's seat takes the state, so B's turn leaves its store in the desk's sync state before A is back"],
   ["w4", swap("  const ours = () => storeState().who === who && storeWho(signinState().held) === who; /* plant:store-look-ours */", "  const ours = () => true; /* plant:store-look-ours */"), "a look ends under whoever is seated"],
   ["d", swap(".indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes", ".indexOf(String(url)) < -1) throw new Error(\"the licence service's door takes"), "the door takes any route"],
+  ["x6m", swap("  s.who = who; s.last = who; s.ask = \"\"; /* plant:answer-mine-who */", "  s.last = who; /* plant:answer-mine-who */"), "It is mine leaves ask and who unchanged, so the hold stays"],
+  ["x6s", swap("  if (Object.keys(clear).length && !patchDesk(JSON.stringify(clear))) throw new Error(\"desk.json could not be updated\"); /* plant:answer-aside-clear */", "  /* plant:answer-aside-clear */"), "Start from my account does not clear synced desk keys before the new store syncs"],
+  ["x6sn", swap("  storeSyncStop(); storeSyncing = null; /* plant:answer-aside-syncing */", "  storeSyncStop(); /* plant:answer-aside-syncing */"), "Start from my account keeps the old sync instance in memory"],
+  ["x6n", swap("  storeNotNow.add(who); /* plant:answer-notnow */", "  /* plant:answer-notnow */"), "Not now does not remember the dismissal for this run"],
+  ["x6f", swap("  if (movedStore) storeMoveFile(movedStore.to, movedStore.from); /* plant:answer-aside-rollback */", "  /* plant:answer-aside-rollback */"), "a failure during set-aside does not put userData/store back"],
+  ["x6w", swap("  s.keys = \"\"; s.leave = \"\"; s.owed = \"\"; s.made = \"\"; /* plant:answer-mine-keys */", "  /* plant:answer-mine-keys */"), "answering the hold leaves the earlier account's keys, leave and owed end"],
 ];
 for (const [id, change, what] of PLANTS) {
   const line = "p " + id + " in a copy of shell/main.js turns " + id + " red (" + what + ")";

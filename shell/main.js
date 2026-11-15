@@ -11359,12 +11359,15 @@ function storeRoom(reason) {
 }
 /* NO SEAT: the renewal refused for want of a free seat ("full"), or answered with no certificate on a computer that has synced (it
    holds the store's keys). A freed seat ("signin") is the sign-in's own moment, as the paused line's rule says. */
+const storeNotNow = new Set();
 function storeView() {
   storeMine();
-  const held = signinState().held, synced = !!storeState().keys;
+  const held = signinState().held, s = storeState(), synced = !!s.keys, who = storeWho(held);
   const provider = held && signinOffered().some(p => p.id === held.provider) && (held.cert || synced) ? held.provider : "";
-  return StoreLib().storeRow({ provider, pol: storePolicyNow(), look: storeNow, until: storeState().until, now: Date.now(),
+  const ask = !!who && s.ask === who && storeHeld();
+  return StoreLib().storeRow({ provider, pol: storePolicyNow(), look: storeNow, until: s.until, now: Date.now(),
     signinRefused: !!(held && held.said), conflicts: storeConflicts(), say: storeSay, owed: !!storeOwedRt(),
+    ask, askNow: ask && !storeNotNow.has(who),
     seatless: !!held && (!held.cert || held.said === "full"), full: storeFullNow }); /* plant:store-view-room */
 }
 function tellStore() {
@@ -11405,7 +11408,97 @@ async function storeSetNow(what) {
 }
 ipcMain.on("etiuda:store-state", (e) => { e.returnValue = fromEngine(e) ? storeView() : null; });
 ipcMain.handle("etiuda:store-set", (e, what) => (fromEngine(e) ? storeSetNow(String(what || "")) : null));
+ipcMain.handle("etiuda:store-answer", (e, choice) => (fromEngine(e) ? storeAnswerNow(String(choice || "")) : null));
 ipcMain.on("etiuda:store-said", (e) => { e.returnValue = null; if (fromEngine(e)) storeSay = ""; });
+
+function storeSetAsideDir(now = Date.now()) {
+  const d = new Date(now), p = n => String(n).padStart(2, "0");
+  const base = d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + "." + p(d.getMinutes());
+  const root = path.join(app.getPath("userData"), "Set aside");
+  fs.mkdirSync(root, { recursive: true });
+  for (let i = 1; ; i++) {
+    const dir = path.join(root, i === 1 ? base : base + " (" + i + ")");
+    try { fs.mkdirSync(dir); return dir; } catch (e) { if (e.code !== "EEXIST") throw e; }
+  }
+}
+function storeMoveFile(from, to) {
+  try { fs.renameSync(from, to); }
+  catch (e) {
+    if (e.code !== "EXDEV") throw e;
+    fs.copyFileSync(from, to);
+    try { fs.unlinkSync(from); } catch (e2) { try { fs.unlinkSync(to); } catch {} throw e2; }
+  }
+}
+function storeSetAside() {
+  const ud = app.getPath("userData"), aside = storeSetAsideDir();
+  let movedStore = null;
+  const movedFiles = [];
+  try {
+    for (const name of ["desk.json", STORE_FILE]) {
+      const src = path.join(ud, name);
+      if (fs.existsSync(src)) fs.copyFileSync(src, path.join(aside, name));
+    }
+    const sDir = storeSyncDir(), sDest = path.join(aside, "store");
+    if (fs.existsSync(sDir)) { fs.renameSync(sDir, sDest); movedStore = { from: sDir, to: sDest }; }
+    const catDir = storeSyncFolder(), L = SyncLib();
+    if (catDir && fs.existsSync(catDir)) {
+      for (const name of fs.readdirSync(catDir)) {
+        if (!L.CATALOG_RE.test(name)) continue;
+        const src = path.join(catDir, name);
+        if (!fs.statSync(src).isFile()) continue;
+        const dest = path.join(aside, name);
+        storeMoveFile(src, dest);
+        movedFiles.push({ from: src, to: dest });
+      }
+    }
+    const clear = {};
+    if (deskKeys === undefined) deskKeys = readDesk();
+    for (const k of Object.keys(deskKeys || {})) if (L.follows("k:" + k)) clear[k] = null;
+    if (Object.keys(clear).length && !patchDesk(JSON.stringify(clear))) throw new Error("desk.json could not be updated"); /* plant:answer-aside-clear */
+    if (Object.keys(clear).length) deskSyncedTell(clear);
+    return aside;
+  } catch (e) {
+    for (let i = movedFiles.length - 1; i >= 0; i--) {
+      try { storeMoveFile(movedFiles[i].to, movedFiles[i].from); } catch {}
+    }
+    try {
+      if (movedStore) storeMoveFile(movedStore.to, movedStore.from); /* plant:answer-aside-rollback */
+    } catch {}
+    try { fs.rmSync(aside, { recursive: true, force: true }); } catch {}
+    console.error("etiuda: could not set aside the desk - " + e.message);
+    return "";
+  }
+}
+async function storeAnswerNow(choice) {
+  storeMine();
+  const s = storeState(), held = signinState().held, who = storeWho(held);
+  if (!who || !storeHeld()) return { ok: false, choice: "", folder: "", view: storeView() };
+  if (choice === "later") {
+    storeNotNow.add(who); /* plant:answer-notnow */
+    tellStore();
+    return { ok: true, choice: "later", folder: "", view: storeView() };
+  }
+  if (choice !== "mine" && choice !== "start") return { ok: false, choice: "", folder: "", view: storeView() };
+  let folder = "";
+  if (choice === "start") {
+    folder = storeSetAside();
+    if (!folder) return { ok: false, choice: "start", folder: "", view: storeView() };
+    clearTimeout(storeSyncTimer); storeSyncTimer = null;
+    storeSyncStop(); storeSyncing = null; /* plant:answer-aside-syncing */
+  }
+  s.who = who; s.last = who; s.ask = ""; /* plant:answer-mine-who */
+  s.keys = ""; s.leave = ""; s.owed = ""; s.made = ""; /* plant:answer-mine-keys */
+  s.until = 0; delete s.off; s.org = false; s.said = ""; delete s.told;
+  storeLeaveHere = null; storeOwedHere = ""; storeNow = null; storeSay = ""; storeFresh = false; storeFullNow = false;
+  storeNotNow.delete(who);
+  if (storeAccess && storeAccess.who !== who) { storeAccess = null; }
+  storeSyncStop();
+  storeSave();
+  storeFlight = null;
+  storeTurn();
+  tellStore();
+  return { ok: true, choice, folder, view: storeView() };
+}
 /* THE LOOK, after each seated sign-in or renewal: one at a time, never on a harness start save the sign-in lab's, and only where sync
    may be on and a certificate of this desk stands. Where nothing seals for real, nothing is kept and the look is "unavailable" with no
    reason to say. Resolves the result kept (storeNow), or null where no look was made; never rejects. */
@@ -11520,7 +11613,7 @@ async function storeLookNow() {
   const held = signinState().held, me = branchIdentity(false);
   const p = held ? signinOffered().find(x => x.id === held.provider) : null;
   if (!p || !me || !held.cert || !signinCertOk(held.cert, me.key) || signinRevokedHas(held.revoked, held.cert)) return null;
-  if (sealsForReal(safeStorage, process.platform) && !storeMine()) return null;
+  if (sealsForReal(safeStorage, process.platform) && !storeMine()) { tellStore(); return null; }
   const pol = storePolicyNow();
   if (!pol.on) storeSyncStop();
   if (!pol.on) return null; /* plant:store-off */

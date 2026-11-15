@@ -296,6 +296,7 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   /* Sync across computers: the Account row's view (shell/sync/store.cjs storeRow), its switch, and the one thing said, told shown. */
   storeState: () => ipcRenderer.sendSync("etiuda:store-state"),
   storeSet: (what) => ipcRenderer.invoke("etiuda:store-set", String(what || "")),
+  storeAnswer: (choice) => ipcRenderer.invoke("etiuda:store-answer", String(choice || "")),
   storeSaid: () => ipcRenderer.sendSync("etiuda:store-said"),
   onStore: (fn) => ipcRenderer.on("etiuda:store", () => { try { fn(); } catch { /* the page has gone */ } }),
   onSignin: (fn) => ipcRenderer.on("etiuda:signin", (_e, v) => { try { fn(v && typeof v === "object" ? v : {}); } catch { /* the page has gone */ } }),
