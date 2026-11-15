@@ -84,7 +84,7 @@ const MEMBER_DECLS = ["const HPKE_KEM =", "const HPKE_SUITE =", "const SPKI_X255
   "function hpkeOpen(", "const SEALED_TEAM_RE =", "const TEAM_WRAP_LABEL =", "function teamWrapInfo(",
   "function unwrapTeamKey(", "const JOIN_KIND =", "const HANDOVER_PREFIX =", "const HANDOVER_KIND =",
   "function handoverSignedBytes(", "function handoverGenuine(", "function handedTo(", "const SPKI_ED25519 =",
-  "function canonJson(", "function signedBytesOf(", "function teamWhole(",
+  "function canonJson(", "function signedBytesOf(", "function teamWhole(", "function memberRingVouches(",
   "function memberStateCopy(", "function memberRequestDoc(", "function memberHeed(", "function hpkeSeal(",
   "function wrapTeamKey(", "function branchIdOf(", "function memberHeedUnderPolicy("];
 
@@ -308,8 +308,8 @@ function shape(r) {
     let heed = "";
     try { heed = sliceDecl(SRC, "function heedTeam("); }
     catch (e) { problems.push("heedTeam " + e.message); }
-    if (heed && ((heed.split("memberHeedUnderPolicy(").length - 1) !== 2 || heed.includes("memberHeed(")))
-      problems.push("heedTeam does not call the policy heed twice (the file, then with the box opened) and nothing else");
+    if (heed && ((heed.split("memberHeedUnderPolicy(").length - 1) !== 3 || heed.includes("memberHeed(")))
+      problems.push("heedTeam does not call the policy heed three times and nothing else");
     const sign = crypto.generateKeyPairSync("ed25519");
     const box = crypto.generateKeyPairSync("x25519");
     const leadKey = crypto.generateKeyPairSync("ed25519");
@@ -360,9 +360,9 @@ function shape(r) {
     const missState = empty();
     const bareMiss = M.memberHeed(own, missState, noRing);
     const underMiss = untouched("ring not read", missState, () => M.memberHeedUnderPolicy(own, missState, noRing, lead.public));
-    if (!(bareMiss.stop === true && bareMiss.pinned === false && underMiss.stop === false
+    if (!(bareMiss.needRing === true && bareMiss.pinned === false && underMiss.needRing === false && underMiss.stop === false
         && underMiss.pinned === true && underMiss.state.pins[TEAM].public === lead.public && underMiss.key === null))
-      problems.push("no wrap, no pin: bare stop " + bareMiss.stop + " under pinned " + underMiss.pinned);
+      problems.push("ring not read: bare needRing " + bareMiss.needRing + " under pinned " + underMiss.pinned);
 
     const wrongRing = { file: FILE, member: { id: me.id, sk: box.privateKey }, ring: ringFor(other) };
     const wrongState = empty();
@@ -427,7 +427,7 @@ function shape(r) {
       problems.push("waiting join: bare stop " + bareJoin.stop + " under pinned " + underJoin.pinned);
   }
   check(problems.length === 0,
-    "19c the policy pin is ahead of the first wrap, a ring beside the file, a handover and the pin already held, and is the whole key: "
+    "19c the policy pin is ahead of the ring, the first wrap, a handover and the pin already held, and is the whole key: "
     + (problems.join("; ") || "that order"));
 }
 
