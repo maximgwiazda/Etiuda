@@ -11403,12 +11403,16 @@ function storeConsentAsk() {
   const sub = held.sub ? signinKept(safeStorage, held.sub) : "";
   if (!sub) return "none";
   const ask = p.id === "google" ? storeConsentSignin(p, me, sub) : storeConsentFolder(p, me, held, sub);
-  const flight = ask.catch(() => {}).then(() => { if (storeConsentFlight === flight) storeConsentFlight = null; return signinState().held ? storeTurn() : null; });
+  const flight = ask.catch(() => {}).then(() => { if (storeConsentFlight === flight) storeConsentFlight = null; return signinState().held && storeWho(signinState().held) === storeWho(held) ? storeTurn() : null; }); /* plant:consent-same-look */
   storeConsentFlight = flight;
   return "asked";
 }
+/* A sign-in in progress while it waits on the browser (signinBusy), so Cancel closes it and no sign-in or sign out runs beside it; its
+   answer is the account's it asked for alone. */
 async function storeConsentFolder(p, me, held, sub) {
-  const io = signinIo({ loop: null }), refresh = held.refresh ? signinKept(safeStorage, held.refresh) : "";
+  const same = () => !!signinState().held && storeWho(signinState().held) === storeWho(held);
+  const io = Object.assign(signinIo({ loop: null }), { folderToken: t => { if (same()) storeTokenTake(t); } }); /* plant:consent-held */
+  const refresh = held.refresh ? signinKept(safeStorage, held.refresh) : "";
   /* The account's name, from a quiet refresh's ID token held to the same account; asked without it where none answers. */
   let hint = "";
   if (refresh) {
@@ -11419,18 +11423,25 @@ async function storeConsentFolder(p, me, held, sub) {
     hint = typeof c.preferred_username === "string" && c.preferred_username.length <= 256 ? c.preferred_username : "";
   }
   let pending = null;
-  const loop = await signinListen(http, kind => signinPageHtml(kind), SIGNIN_WAIT_MS, query => signinOurs(query, pending));
-  let kind = "";
+  if (signinBusy || !same()) return;
+  const run = { loop: null, provider: p.id, url: "" };
+  signinBusy = run; /* plant:consent-busy */
+  let loop = null, kind = "";
   try {
+    loop = await signinListen(http, kind => signinPageHtml(kind), SIGNIN_WAIT_MS, query => signinOurs(query, pending));
+    run.loop = loop;
     pending = signinFolderAuthorize(p, loop.port, me.key, null, signinFolderScope(p.id, ""), hint);
     if (!signinPageOk(pending.url)) return;
+    run.url = pending.url;
+    tellSignin();
     await handOut(pending.url); /* plant:consent-open */
     let query = "";
     try { query = await loop.caught; } catch { return; }
     kind = await signinFolderBack(io, p, pending, query, { sub: sub }, Date.now);
   } finally {
-    loop.land(kind || "folder-off");
-    loop.close();
+    if (signinBusy === run) signinBusy = null;
+    if (loop) { loop.land(kind || "folder-off"); loop.close(); }
+    tellSignin();
   }
 }
 async function storeConsentSignin(p, me, sub) {

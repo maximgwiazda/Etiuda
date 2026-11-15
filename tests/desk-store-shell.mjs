@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 85;
+const EXPECTED = 89;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -628,6 +628,7 @@ function browserOf(world, mode) {
     return "code=" + code;
   };
   b.go = async url => {
+    if (mode.hold) await mode.hold;
     b.urls.push(url);
     const q = new URL(url).searchParams, port = new URL(q.get("redirect_uri")).port;
     let r = await loopGet(port, "/?" + answer(q, false) + "&state=" + encodeURIComponent(q.get("state")));
@@ -807,6 +808,36 @@ async function overAnotherScene(src) {
   const ok = !!tokA && !!onA && onA.state === "on" && !!n && n.state === "on" && usedA === 0;
   return { ok, detail: brief({ firstOn: onA && onA.state, look: n && n.state + "/" + n.why, folderAskedWithA: usedA }) };
 }
+/* (g1b) THE CONSENT WINDOW IS A SIGN-IN IN PROGRESS: while the switch's own request waits on the browser, the page is told the desk is
+   busy (and Cancel reaches it), and an answer that comes back after another account took the seat is not taken for that account, nor
+   looked with. */
+async function consentBusyScene(src) {
+  const r = await signinFlow(src, { refuse: DECLINED }), T = r.shell.T, w = r.world;
+  r.mode.refuse = undefined;
+  let release = null;
+  r.mode.hold = new Promise(a => { release = a; });
+  const before = r.shell.opened.length, last = r.b.last;
+  r.shell.ipc.on["etiuda:store-on-click"](r.e);
+  const answer = await r.shell.ipc.handle["etiuda:store-consent"](r.e);
+  await until(() => r.shell.opened.length > before, 5000);
+  await new Promise(a => setTimeout(a, 40));
+  const e2 = Object.assign({}, r.e);
+  r.shell.ipc.on["etiuda:signin-state"](e2);
+  const busy = e2.returnValue ? e2.returnValue.busy : "";
+  seatAnother(T, w, T.signinState().held);
+  const graphFrom = w.graph.length, formsFrom = w.forms.length;
+  r.mode.hold = null;
+  release();
+  await until(() => r.b.last !== last, 5000);
+  await r.b.last;
+  const flight = T.get().storeConsentFlight;
+  if (flight) await flight;
+  const look = T.get().storeFlight;
+  if (look) await look;
+  const a = T.get().storeAccess, asked = w.graph.slice(graphFrom).length, refreshed = w.forms.slice(formsFrom).filter(x => new URLSearchParams(x).get("grant_type") === "refresh_token").length;
+  const ok = answer === "asked" && busy === "microsoft" && !(a && a.token === w.access) && asked === 0 && refreshed === 0;
+  return { ok, detail: brief({ answer, busy, tokenTakenForB: !!a && a.token === w.access, folderAskedAfter: asked, lookRefreshedAfter: refreshed }) };
+}
 async function consentSwitchScene(src) {
   const r = await signinFlow(src, { refuse: DECLINED });
   const ungiven = !!r.now && r.now.why === "ungiven";
@@ -935,6 +966,7 @@ const LEGS = [
   ["gs", switchStopScene, "This computer and Everywhere stop the store's sync at once, the relay unreached, not at the next look"],
   ["gr", roomWireScene, "a write the store's relay refuses for its room turns the row full, and the next write it takes turns it on"],
   ["gt", teamFolderScene, "joined to a folder team, the store's sync takes no team catalog into the person's store, reads the person's own catalog as removed nowhere, and writes nothing from the store into the team's mirror"],
+  ["g1b", consentBusyScene, "while the switch's request for the folder waits on the browser the desk is busy to the page, and an answer after another account took the seat is neither taken for it nor looked with"],
   ["fa1", refusedAccountScene, "a second Google sign-in whose seat is refused leaves the folder's token the seated account's"],
   ["fa2", overAnotherScene, "an account seated straight over another, with no folder step of its own, is never handed the other's folder token: its look asks its own"],
   ["w1", s => anotherScene(s, "look", true), "person A synced and signed out, which leaves no store keys here; person B seated on the same profile with an empty folder: B's look writes nothing of A's K or S into B's folder and makes B's own store"],
@@ -994,6 +1026,9 @@ const PLANTS = [
   ["gc", swap("function storeConflicts() { return storeSyncView().kept; } /* plant:store-conflicts */", "function storeConflicts() { return 0; } /* plant:store-conflicts */"), "the row counts no conflict"],
   ["gs", swap("  storeSyncStop(); /* plant:store-set-stop */\n", ""), "the switch leaves the sync running"],
   ["gr", swap("      room: storeRoom, /* plant:store-room */\n", ""), "the store's channel tells the row nothing"],
+  ["g1b", swap("  signinBusy = run; /* plant:consent-busy */", "  /* plant:consent-busy */"), "the consent's wait is no sign-in in progress to the page"],
+  ["g1b", swap("{ folderToken: t => { if (same()) storeTokenTake(t); } }); /* plant:consent-held */", "{ folderToken: t => { storeTokenTake(t); } }); /* plant:consent-held */"), "the consent's answer taken for whoever is seated"],
+  ["g1b", swap("return signinState().held && storeWho(signinState().held) === storeWho(held) ? storeTurn() : null; }); /* plant:consent-same-look */", "return signinState().held ? storeTurn() : null; }); /* plant:consent-same-look */"), "the look after the consent run for whoever is seated"],
   ["fa1", swap("io = Object.assign(signinIo(run), { folderToken: t => { folderGot = t; } });", "io = signinIo(run);"), "the run's folder token kept before the sign-in is taken"],
   ["fa2", text => { const x = swap("storeAccess.who === storeWho(held) ? storeAccess : null; /* plant:access-who */", "true ? storeAccess : null; /* plant:access-who */")(text);
     return x && swap("  if (storeAccess && storeAccess.who !== who) storeAccess = null;", "")(x); }, "a folder token reused for whoever is seated"],
