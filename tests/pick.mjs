@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 137;
+const EXPECTED = 138 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 1);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1252,15 +1252,66 @@ try {
   const pressed = keyCalls.filter(k => k !== "int vk");
   const pressedValues = [...new Set(pressed.map(k => /^VK_\w+$/.test(k) ? vk[k] : NaN))].sort((a, b) => a - b);
   const builder = fs.readFileSync(path.join(ROOT, "electron-builder.js"), "utf8");
-  const builds = /path\.resolve\(__dirname, "shell", "caret\.cs"\)/.test(builder) && /"-noconfig"/.test(builder) && /"-r:System\.dll"/.test(builder);
+  const builds = /path\.resolve\(__dirname, "shell", "caret\.cs"\)/.test(builder) && /"-noconfig"/.test(builder) && /"-r:System\.dll"/.test(builder)
+    && /"-r:UIAutomationClient\.dll", "-r:UIAutomationTypes\.dll"/.test(builder) && (builder.match(/"-r:[^"]+"/g) || []).length === 3;
+  /* WIDENED 2026-11-15 by the lead engineer (Claudius delta5) for Quick replies on the selection (Max's ruling, decisions
+     2026-11-15 16:28): the helper reads the focused control's selected text through UI Automation. Exactly that is added:
+     three usings (System.Text, System.Windows.Automation and its .Text), the two UI Automation client libraries at the
+     compile, and a read that names only the focused element, its password flag, the text pattern, the selection and its
+     text, and nothing that sets, selects, scrolls, moves or invokes; a password field is refused before any text is read. */
+  const uiaRead = cs => {
+    const uiaNames = [...new Set(cs.match(/\b(?:AutomationElement|TextPattern|TextPatternRange)\b(?:\.\w+)?|\.(?:FocusedElement|TryGetCurrentPattern|GetSelection|GetText|IsPassword)\b/g) || [])].sort();
+    const uiaWrites = cs.match(/\b(?:SetValue|ValuePattern|InvokePattern|SelectionItemPattern|SelectionPattern|AddToSelection|RemoveFromSelection|SetFocus|ScrollIntoView|ExpandCollapsePattern|TogglePattern|Invoke|Move\w*|ExpandToEnclosingUnit|RangeFromPoint|FromPoint|FromHandle|TreeWalker|FindAll|FindFirst|GetVisibleRanges|DocumentRange|Select)\b\s*\(?/g) || [];
+    const passwordFirst = /if \(e\.Current\.IsPassword\) return 6;\s*object found;\s*if \(!e\.TryGetCurrentPattern\(TextPattern\.Pattern, out found\)\) return 3;/.test(cs);
+    return { uiaNames, uiaWrites, passwordFirst, ok: J(uiaNames) === J(UIA_NAMES) && uiaWrites.length === 0 && passwordFirst };
+  };
+  const UIA_NAMES = [".GetSelection", ".GetText", ".IsPassword", ".TryGetCurrentPattern", "AutomationElement",
+    "AutomationElement.FocusedElement", "TextPattern", "TextPattern.Pattern", "TextPatternRange"].sort();
+  const { uiaNames, uiaWrites, passwordFirst } = uiaRead(CS);
   check(J(imports) === J(["GetAsyncKeyState", "GetForegroundWindow", "GetWindowThreadProcessId", "IsWindow", "MapVirtualKey", "SendInput",
       "SetForegroundWindow"]) && dllCount === imports.length && attrs.length === imports.length && attrsOk
-    && J(usings) === J(["using System.Diagnostics;", "using System.Runtime.InteropServices;", "using System.Threading;", "using System;"].sort())
+    && J(usings) === J(["using System.Diagnostics;", "using System.Runtime.InteropServices;", "using System.Threading;", "using System;",
+      "using System.Text;", "using System.Windows.Automation;", "using System.Windows.Automation.Text;"].sort())
+    && uiaRead(CS).ok
     && csForbid.length === 0 && keyCalls.length === 5 && (CS.match(/\bKey\(/g) || []).length === 5 && pressed.length === 4 && pressed.every(k => /^VK_\w+$/.test(k))
     && J(pressedValues) === J([0x11, 0x56]) && builds,
     "5f the caret helper electron-builder.js compiles, with -noconfig, calls " + imports.length + " user32 functions by their own names,"
-    + " uses no library beyond its four usings, and presses the keys 0x" + pressedValues.map(v => (v || 0).toString(16)).join(" and 0x")
+    + " uses no library beyond its seven usings, reads the selection through UI Automation naming " + uiaNames.length + " members and"
+    + (uiaWrites.length ? " ALSO " + uiaWrites.join(", ") : " nothing that changes a control") + (passwordFirst ? ", a password field refused first," : ", NO password refusal first,")
+    + " and presses the keys 0x" + pressedValues.map(v => (v || 0).toString(16)).join(" and 0x")
     + " (Control, V) in " + pressed.length + " presses" + (csForbid.length ? "; also names " + csForbid.join(", ") : ""));
+  /* Two plants on copies of the helper's text: the password refusal lifted, and the focus set before the read. */
+  if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  5fp the helper's two plants (ETIUDA_PLANTS=off)");
+  else {
+    const lifted = CS.replace("if (e.Current.IsPassword) return 6;", ""), focused = CS.replace("object found;", "e.SetFocus(); object found;");
+    check(lifted !== CS && focused !== CS && !uiaRead(lifted).ok && !uiaRead(focused).ok,
+      "5fp the helper's read with its password refusal lifted, and with the focus set before it, each fails 5f's reading");
+  }
+  /* THE HELPER'S OWN CHECK, run where the C# compiler is: caret.cs compiled into a scratch folder as electron-builder.js compiles
+     it, and its check verb, which touches no window, prints the selection's cap over a fixed text as UTF-8: Polish whole, at
+     most 1500 characters, and a pair that makes one character never cut in half. No window of this computer is read. */
+  {
+    const csc = path.join(process.env.WINDIR || "C:/Windows", "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe");
+    let said5h = "no C# compiler here, so not compiled";
+    let ok5h = process.platform !== "win32" || !fs.existsSync(csc);
+    if (!ok5h) {
+      const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-caret-check-")), exe = path.join(lab, "caret.exe");
+      try {
+        const { spawnSync } = nodeRequire("node:child_process");
+        const made = spawnSync(csc, ["-noconfig", "-nologo", "-optimize", "-target:winexe", "-platform:anycpu", "-r:System.dll",
+          "-lib:" + path.join(path.dirname(csc), "WPF"), "-r:UIAutomationClient.dll", "-r:UIAutomationTypes.dll", "-out:" + exe,
+          path.join(ROOT, "shell", "caret.cs")], { encoding: "utf8", windowsHide: true, timeout: 60000 });
+        const ran = made.status === 0 ? spawnSync(exe, ["check"], { windowsHide: true, timeout: 10000 }) : null;
+        const out = ran && ran.stdout ? ran.stdout.toString("utf8") : "";
+        const want = "Za\u017C\u00F3\u0142\u0107 g\u0119\u015Bl\u0105 ja\u017A\u0144 " + "x".repeat(1481);
+        ok5h = !!ran && ran.status === 0 && out === want;
+        said5h = made.status !== 0 ? "did not compile: " + String(made.stdout || made.stderr).split("\n")[0]
+          : "check exit " + (ran && ran.status) + ", " + out.length + " characters, " + (out === want ? "as wanted" : "NOT as wanted");
+      } finally { fs.rmSync(lab, { recursive: true, force: true }); }
+    }
+    check(ok5h, "5fs the caret helper compiles as electron-builder.js compiles it, and its window-free check caps a text at 1500 characters in"
+      + " UTF-8, Polish whole and no character cut in half: " + said5h);
+  }
   /* THE PASTE IS STARTED FROM ONE PLACE: the copy, right after its clipboard write, so no other handler presses a key. */
   const pasteNames = (shellBare.match(/\bcaretPaste\b/g) || []).length;
   const pasteAfterWrite = /clipboard\.writeText\(pickClipText\(v\.text,process\.platform\)\);caretPaste\(pickTarget,showPickNote\);hidePicker\(true\);/.test(shellCode);
