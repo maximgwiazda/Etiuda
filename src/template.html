@@ -395,7 +395,9 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      White wherever the band is deep, which is everywhere but a light session under the host's
      material; the rule that flips it sits beside the scrim. */
   --band-ink:#fff; --band-ink-rgb:255,255,255;
-  --field:#fdfdfd; --field-line:#e0e4ea; --field-edge:#aab3c0;
+  /* Field edge at least 3:1 against every ground it meets (--bg, --panel, --header-bg, and --field),
+     matching Studio's --edge rule (WCAG 1.4.11). */
+  --field:#fdfdfd; --field-line:#e0e4ea; --field-edge:#aab3c0; --edge:#838c9a;
   /* The star is a mark you scan for, not text you read - its ~2.6:1 on white is spent
      deliberately, and the badge, the filled star and the intent panel's gold edge always say
      it too. DARK IS NOT SYNCED to this hue and must not be. */
@@ -512,7 +514,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* The dark half of the WinUI dress - see the light block for the law. */
   /* The band is the light theme's cobalt in the dark too, as Studio's violet is one colour in both themes. */
   --band:#0f4c9d; --header-bg:#191b20;
-  --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30);
+  /* #68707c lifts Studio's #646c78 four steps so the edge clears 3:1 against Desk's --field (#23262c) too. */
+  --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30); --edge:#68707c;
   --accent:#409afc; --accent-fill:#136adc; --accent-soft:#16233a; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
   --ed:#409afc; --ed-soft:rgba(64,154,252,.16);
@@ -553,7 +556,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* The dark half of the WinUI dress - see the light block for the law. */
   /* The band is the light theme's cobalt in the dark too, as Studio's violet is one colour in both themes. */
   --band:#0f4c9d; --header-bg:#191b20;
-  --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30);
+  /* #68707c lifts Studio's #646c78 four steps so the edge clears 3:1 against Desk's --field (#23262c) too. */
+  --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30); --edge:#68707c;
   --accent:#409afc; --accent-fill:#136adc; --accent-soft:#16233a; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
   --ed:#409afc; --ed-soft:rgba(64,154,252,.16);
@@ -591,7 +595,9 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --dots-ink:color-mix(in srgb,var(--dim) 60%,transparent);
   /* The light half of the WinUI dress - the law lives at the base :root block. */
   --band:#0f4c9d; --header-bg:#f0f2f5;
-  --field:#fdfdfd; --field-line:#e0e4ea; --field-edge:#aab3c0;
+  /* Field edge at least 3:1 against every ground it meets (--bg, --panel, --header-bg, and --field),
+     matching Studio's --edge rule (WCAG 1.4.11). */
+  --field:#fdfdfd; --field-line:#e0e4ea; --field-edge:#aab3c0; --edge:#838c9a;
   --accent:#0e67d8; --accent-fill:#0e67d8; --accent-soft:#dde9fc; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8; --mark-ink:#0e67d8;
   /* The star is a mark you scan for, not text you read - its ~2.6:1 on white is spent
      deliberately, and the badge, the filled star and the intent panel's gold edge always say
@@ -1090,9 +1096,9 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    inside. */
 .fill input{width:112px;padding:7px 10px;border:0;background:transparent;
   color:var(--ink);font:13px var(--sans);outline:none}
-.fill .field-wrap,.fill .combo{border:1px solid var(--field-line);border-radius:var(--radius-sm);
-  background:var(--field);box-shadow:inset 0 -1px 0 0 var(--field-edge)}
-.fill .field-wrap:focus-within,.fill .combo:focus-within{box-shadow:inset 0 -2px 0 0 var(--accent)}
+.fill .field-wrap,.fill .combo{border:1px solid var(--edge);border-radius:var(--radius-sm);
+  background:var(--field);box-shadow:inset 0 -1px 0 0 var(--field-edge);outline:none}
+.fill .field-wrap:focus-within,.fill .combo:focus-within{outline:none;box-shadow:inset 0 -2px 0 0 var(--accent)}
 /* The primary control of the screen, and the TYPE says so, not the box: --intent-type reads a
    size above every sibling while 8.5px of padding holds the exact height the field always
    had. padding-right clears the clear button, whose lane is all that remains of the
@@ -1379,9 +1385,10 @@ html.e-still .sgn-run::after{animation:none;transform:translateX(80%)}
 .sgn-link .sgn-cap b{color:var(--ink);font-weight:600}
 .sgn-link-row{display:flex;gap:8px;align-items:center;margin-top:6px;min-width:0}
 /* A reference, so in the ordinary weight and the dim ink; the input type in the selector outranks the header's .fill input. */
-.sgn-link input.sgn-link-f{flex:1 1 auto;width:auto;min-width:0;padding:5px 8px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
+.sgn-link input.sgn-link-f{flex:1 1 auto;width:auto;min-width:0;padding:5px 8px;border:1px solid var(--edge);border-radius:var(--radius-sm);
   background:var(--field);color:var(--dim);font:400 12.5px var(--mono);white-space:nowrap;overflow:hidden;cursor:text;outline:none;
   box-shadow:inset 0 -1px 0 0 var(--field-edge)}
+.sgn-link input.sgn-link-f:focus,.sgn-link input.sgn-link-f:focus-visible{outline:none;box-shadow:inset 0 -2px 0 0 var(--accent)}
 .sgn-link-row .btn{flex:none}
 /* The sign-in's Copy (signinCopyHtml): "Copy" and "Copied" share one cell, so the button holds the wider label's width. */
 .sgn-copy{display:inline-grid;justify-items:center}
@@ -1444,8 +1451,9 @@ html.e-still .sgn-run::after{animation:none;transform:translateX(80%)}
      the window, so it never exceeds the panel's own clamp. */
   flex:1 1 auto;min-height:min(52vh,500px);
   margin:0;padding:8px;font:12px/1.6 var(--mono);white-space:pre;overflow:auto;resize:none;
-  color:var(--ink);background:var(--bg);border:1px solid var(--line-strong);border-radius:var(--radius-sm);outline:none}
-.facts-panel #factsEdit:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+  color:var(--ink);background:var(--bg);border:1px solid var(--edge);border-radius:var(--radius-sm);outline:none;
+  box-shadow:inset 0 -1px 0 0 var(--field-edge)}
+.facts-panel #factsEdit:focus,.facts-panel #factsEdit:focus-visible{outline:none;box-shadow:inset 0 -2px 0 0 var(--accent)}
 /* Editing takes the full width back: a textarea's intrinsic width is a couple dozen
    characters, and the moment width matters most is while aligning the columns. */
 .facts-panel.editing{width:min(720px, var(--facts-maxw, calc(100vw - 28px)))}
@@ -1552,10 +1560,12 @@ body.role-waits #roleDrum{display:none}
    selector was `.fill select` alone until Settings needed a language list; widened rather than
    copied, for the reason the rest of this release keeps repeating. A text field on that screen
    joins them: one dressing for anything in a settings row that takes a value. */
-.fill select,.set-row select,.set-row input[type=text],.om-fields select,.om-fields input{padding:7px 9px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
+.fill select,.set-row select,.set-row input[type=text],.om-fields select,.om-fields input{padding:7px 9px;border:1px solid var(--edge);border-radius:var(--radius-sm);
   background:var(--field);color:var(--ink);font:13px var(--sans);cursor:default;outline:none;
   box-shadow:inset 0 -1px 0 0 var(--field-edge)}
-.fill select:focus,.set-row select:focus,.set-row input[type=text]:focus,.om-fields select:focus,.om-fields input:focus{border-color:var(--field-line);box-shadow:inset 0 -2px 0 0 var(--accent)}
+.fill select:focus,.set-row select:focus,.set-row input[type=text]:focus,.om-fields select:focus,.om-fields input:focus,
+.fill select:focus-visible,.set-row select:focus-visible,.set-row input[type=text]:focus-visible,.om-fields select:focus-visible,.om-fields input:focus-visible{
+  outline:none;border-color:var(--edge);box-shadow:inset 0 -2px 0 0 var(--accent)}
 .set-row input[type=text]{width:var(--name-field);max-width:100%;cursor:text}
 /* {INTENT} combobox - a real dropdown that still accepts free text */
 .combo{position:relative;flex:1 1 auto;display:flex;min-width:0}
@@ -3025,11 +3035,14 @@ body:has(.modal.ed-rest:not([hidden])) header:has(.menu:not([hidden]):not(.e-war
 .modal .mf>label{font:600 12.5px var(--sans);letter-spacing:0;color:var(--ink);text-transform:none}
 /* text fields only - checkboxes inside .intent-pick must not inherit width:100% */
 .mf input:not([type=checkbox]):not([type=radio]):not([type=hidden]),
-.mf select,.mf textarea{width:100%;padding:8px 10px;border:1px solid var(--line-strong);
-  border-radius:var(--radius-sm);background:var(--bg);color:var(--ink);font:14px var(--sans);outline:none}
+.mf select,.mf textarea{width:100%;padding:8px 10px;border:1px solid var(--edge);
+  border-radius:var(--radius-sm);background:var(--bg);color:var(--ink);font:14px var(--sans);outline:none;
+  box-shadow:inset 0 -1px 0 0 var(--field-edge)}
 .mf textarea{min-height:110px;resize:vertical;font:13px/1.45 var(--sans);white-space:pre-wrap}
 .mf input:not([type=checkbox]):not([type=radio]):focus,
-.mf select:focus,.mf textarea:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.mf select:focus,.mf textarea:focus,
+.mf input:not([type=checkbox]):not([type=radio]):focus-visible,
+.mf select:focus-visible,.mf textarea:focus-visible{outline:none;border-color:var(--edge);box-shadow:inset 0 -2px 0 0 var(--accent)}
 /* Left empty and asked for by Save. Declared after focus and matching it on weight, so the
    field the dialog has just jumped to still reads as the wrong one rather than the live one. */
 .cat-pick.is-missing{border-color:#c44;box-shadow:0 0 0 2px rgba(196,68,68,.16)}
@@ -3056,10 +3069,11 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    fades under a mask, and a mask over an input takes its fill and border along with the words,
    so the fade showed the panel behind the field. dressDialogInputs() wraps them as a dialog
    opens; the input goes naked and the wrap carries the border, the fill and both rings. */
-.mf .field-wrap{display:block;border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:var(--bg)}
-.mf .field-wrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.mf .field-wrap{display:block;border:1px solid var(--edge);border-radius:var(--radius-sm);background:var(--bg);
+  box-shadow:inset 0 -1px 0 0 var(--field-edge);outline:none}
+.mf .field-wrap:focus-within{outline:none;border-color:var(--edge);box-shadow:inset 0 -2px 0 0 var(--accent)}
 .mf .field-wrap:has(>input.is-missing){border-color:#c44;box-shadow:0 0 0 2px rgba(196,68,68,.16)}
-.mf .field-wrap>input:not([type=checkbox]):not([type=radio]):not([type=hidden]){border:0;background:transparent;box-shadow:none;border-radius:0}
+.mf .field-wrap>input:not([type=checkbox]):not([type=radio]):not([type=hidden]){border:0;background:transparent;box-shadow:none;border-radius:0;outline:none}
 /* The card editor's flags: one grid, filled column-first (grid-auto-flow:column with an explicit
    row count), so reading down a column keeps related toggles together. Collapses to a single
    column on a narrow dialog, which is the width the modal actually reaches on a small laptop. */
@@ -3199,8 +3213,10 @@ details.mf-fold>summary:focus-visible .mf-lab{text-decoration:underline 2px var(
 .manage-row.is-hidden>span:first-child{color:var(--dim);opacity:.72}
 .manage-row.is-hidden .star-btn{opacity:.4;pointer-events:none}
 .manage-row span{flex:1 1 120px;min-width:0}
-.manage-row input{flex:1 1 140px;min-width:100px;padding:5px 8px;border:1px solid var(--line-strong);
-  border-radius:var(--radius-xs);background:var(--bg);color:var(--ink);font:13px var(--sans)}
+.manage-row input{flex:1 1 140px;min-width:100px;padding:5px 8px;border:1px solid var(--edge);
+  border-radius:var(--radius-xs);background:var(--bg);color:var(--ink);font:13px var(--sans);outline:none;
+  box-shadow:inset 0 -1px 0 0 var(--field-edge)}
+.manage-row input:focus,.manage-row input:focus-visible{outline:none;box-shadow:inset 0 -2px 0 0 var(--accent)}
 .manage-empty{font-size:13px;color:var(--dim);padding:4px 0}
 /* THE CATALOG LIST, in the Library and on the empty state's offer. One row per file: what it is,
    when it was written and how big, then the one act it offers. The name is the only part allowed
@@ -3294,8 +3310,9 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
 /* The same row on an empty screen, with the folder's count over it. Left-aligned inside a centred
    empty state, because a filename and a date are data rather than a sentence, and hidden while it
    holds nothing so a browser's empty state is exactly what it was. */
-.cat-new input{flex:1;padding:7px 10px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);
-  background:var(--bg);color:var(--ink);font:13px var(--sans)}
+.cat-new input{flex:1;padding:7px 10px;border:1px solid var(--edge);border-radius:var(--radius-sm);
+  background:var(--bg);color:var(--ink);font:13px var(--sans);outline:none;box-shadow:inset 0 -1px 0 0 var(--field-edge)}
+.cat-new input:focus,.cat-new input:focus-visible{outline:none;box-shadow:inset 0 -2px 0 0 var(--accent)}
 /* Intent editor: category multi-pick (chips, not native multi-select blue) */
 .cat-pick{display:flex;flex-wrap:wrap;gap:6px;padding:8px;border:1px solid var(--line);
   border-radius:10px;background:var(--bg);max-height:200px;overflow:auto}
@@ -3778,9 +3795,9 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 /* THE HEAD OF A RAIL is Studio's small capitals label: the tab and the page already name the screen in large type. */
 .sx-nav h1,.sx.lm .sx-nav .screen-head h2,.sx-nav .sx-nav-title h2{font:600 11px var(--sans);letter-spacing:.7px;
   text-transform:uppercase;color:var(--dim);margin:0;padding:6px 10px 5px}
-.sx-search{display:flex;align-items:center;gap:8px;margin:0 4px 12px;padding:0 10px;border:1px solid var(--field-line);
-  border-bottom-color:var(--field-edge);border-radius:var(--radius-xs);background:var(--field);color:var(--dim)}
-.sx-search:focus-within{box-shadow:inset 0 -2px 0 0 var(--accent)}
+.sx-search{display:flex;align-items:center;gap:8px;margin:0 4px 12px;padding:0 10px;border:1px solid var(--edge);
+  border-radius:var(--radius-xs);background:var(--field);color:var(--dim);box-shadow:inset 0 -1px 0 0 var(--field-edge);outline:none}
+.sx-search:focus-within{outline:none;box-shadow:inset 0 -2px 0 0 var(--accent)}
 .sx-search .sx-ic{width:15px;height:15px}
 .sx-search input{flex:1 1 auto;min-width:0;padding:7px 0;border:0;outline:0;background:transparent;color:var(--ink);
   font:13.5px var(--sans);cursor:text}
@@ -4394,9 +4411,9 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .lk-chip:hover,.lk-chip:focus-visible,.lk-chip[aria-expanded="true"]{background:var(--accent-soft)}
 .lk-t{min-width:0;overflow:hidden;white-space:nowrap}
 .lk-pick{width:min(440px,100%);display:grid}
-.lk-pick input{font:14px var(--sans);padding:8px 10px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
-  background:var(--field);color:var(--ink);outline:none}
-.lk-pick input:focus{border-color:var(--accent)}
+.lk-pick input{font:14px var(--sans);padding:8px 10px;border:1px solid var(--edge);border-radius:var(--radius-sm);
+  background:var(--field);color:var(--ink);outline:none;box-shadow:inset 0 -1px 0 0 var(--field-edge)}
+.lk-pick input:focus,.lk-pick input:focus-visible{outline:none;box-shadow:inset 0 -2px 0 0 var(--accent)}
 .lk-hits{max-height:240px;overflow-y:auto}
 .lk-hits .cat-ic,.lk-hits .ic{flex:none;width:14px;height:14px;margin:0}
 /* WHILE IT IS DRAGGED the panel steps down and the category bar comes up sharp above the scrim, ringed, with the
@@ -4685,9 +4702,9 @@ body.e-lanes #pillsSlot{display:none}
 .ln-src{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .ln-add{justify-self:start}
 .ln-find{display:grid;max-width:440px}
-.ln-find input{font:14px var(--sans);padding:8px 10px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
-  background:var(--field);color:var(--ink);outline:none}
-.ln-find input:focus{border-color:var(--accent)}
+.ln-find input{font:14px var(--sans);padding:8px 10px;border:1px solid var(--edge);border-radius:var(--radius-sm);
+  background:var(--field);color:var(--ink);outline:none;box-shadow:inset 0 -1px 0 0 var(--field-edge)}
+.ln-find input:focus,.ln-find input:focus-visible{outline:none;box-shadow:inset 0 -2px 0 0 var(--accent)}
 .ln-ghost{position:absolute;margin:0;pointer-events:none;z-index:1}
 .ln-trail{display:none}
 /* Where three lanes would not fit, Sent folds into a trail above, and Now and Next share the width.
