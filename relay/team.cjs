@@ -307,13 +307,24 @@ function teamObject(deps) {
     const ns = namespaceOf(deps.teams);
     const rts = Array.isArray(row.rts) ? row.rts.filter(x => typeof x === "string") : [];
     if (!ns) return keepLead(row, rts, row.leadKey);
-    const live = [];
+    const dead = new Set();
     for (const id of rts) {
       let holds = true;
       try { holds = await asksHeld(ns, id, row.leadKey || null); } catch { holds = true; }
-      if (holds) live.push(id);
+      if (!holds) dead.add(id);
     }
-    return keepLead(row, live, row.leadKey); /* plant:lead-alarm-reap */
+    /* A reserve or a release may have written the list while the alarm asked: what stands now is kept, less the ids found dead, in one
+       atomic step, and a list a release took away meanwhile stays gone. */
+    const kept = deps.store.atomic(() => {
+      let now = row;
+      now = deps.store.get("lead"); /* plant:lead-alarm-reread */
+      if (now === undefined) return null;
+      const list = Array.isArray(now.rts) ? now.rts.filter(x => typeof x === "string") : [];
+      let live = list;
+      live = list.filter(id => !dead.has(id)); /* plant:lead-alarm-reap */
+      return writeLead(now, live, now.leadKey);
+    });
+    if (kept !== null) await alarmLead(kept);
   }
 
   async function route(request) {

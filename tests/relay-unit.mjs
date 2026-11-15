@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 601;
+const EXPECTED = 603;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -7381,6 +7381,30 @@ async function main() {
       + " after its last change and is gone an hour after, no team it names holding; one naming a team that holds stays, asked again thirty"
       + " days on: " + JSON.stringify(r3));
 
+    /* A lead's alarm asking its teams while a reserve writes the list (finding 5's race, in the alarm that reaps): the list the alarm
+       keeps is what stands after its asks, less the ids it found dead, so a reserve taken while it asked stays counted. */
+    async function alarmRaceScene(T) {
+      const M = T || TEAM13;
+      const store = S.memoryStore(), lead = keyPair(false), listed = [hex(16), hex(16), hex(16)], dead = listed[0], fresh = hex(16);
+      store.put("lead", { rts: listed.slice(), leadKey: lead.keyId });
+      const set = { at: null };
+      const alarm = { async set(t) { set.at = t; }, async get() { return set.at; }, async clear() { set.at = null; } };
+      const ns = { idFromName: n => n, get: id => ({ fetch: async () => {
+        await new Promise(r => setTimeout(r, 2));
+        return new Response(JSON.stringify({ held: id !== dead }), { status: 200 });
+      } }) };
+      const obj = M.teamObject({ store, clock: () => 1800000000000, teams: () => ns, sockets: S.socketHub(), r2: S.memoryBucket(), revoked: () => [], alarm });
+      const ring = obj.alarm();
+      const took = await obj.fetch(M.leadRequest({ op: "reserve", rt: fresh, lead: lead.keyId }));
+      await ring;
+      const after = (store.get("lead") || {}).rts || [];
+      return { took: took.status, kept: after.indexOf(fresh) >= 0, reaped: after.indexOf(dead) < 0, length: after.length };
+    }
+    const alarmRaceOk = a => !!a && a.took === 200 && a.kept && a.reaped && a.length === 3;
+    const race = await alarmRaceScene();
+    check(alarmRaceOk(race), "1013p a reserve taken while the lead's alarm asks its teams stays on the list the alarm keeps, and the dead id the"
+      + " alarm found still goes: " + JSON.stringify(race));
+
     /* Each guard planted out in a copy turns its leg red; the product files are never written. */
     const teamCopy = async (edit, fn) => {
       const digest = sha(fs.readFileSync(PRODUCT.team));
@@ -7420,6 +7444,8 @@ async function main() {
         "an alarm ringing before the mark's end takes the mark", "1013c"],
       ["1013m", lineLifted("plant:lead-empty"), async T => !leadOk(await safe(() => leadScene(T))), "lifting plant:lead-empty keeps an emptied list", "1013d"],
       ["1013n", lineLifted("plant:lead-alarm-reap"), async T => !leadOk(await safe(() => leadScene(T))), "lifting plant:lead-alarm-reap keeps a list its alarm found dead", "1013d"],
+      ["1013q", lineLifted("plant:lead-alarm-reread"), async T => !alarmRaceOk(await safe(() => alarmRaceScene(T))),
+        "lifting plant:lead-alarm-reread loses a reserve taken while the alarm asked", "1013p"],
     ];
     for (const [id, edit, turns, say, leg] of TEAM_13) {
       const p = await teamCopy(edit, turns);
