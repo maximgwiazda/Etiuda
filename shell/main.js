@@ -4029,7 +4029,10 @@ function memberHeed(doc, state, seen) {
 }
 /* AN ADMINISTRATOR NAMES THE TEAM IN MACHINE POLICY. The desk reads the Etiuda pair; Studio's pair
    is in the same template and is not read here. A value that is not the form below is said and
-   ignored, and one bad value of a pair leaves the other unused. Nothing set leaves heeding as it was. */
+   ignored, and one bad value of a pair leaves the other unused. Nothing set leaves heeding as it was.
+   An expandable TeamFolder is filled from the person's environment on purpose, since a synced share is pinned only
+   through a variable: a person can move their own desk's pinned folder, and a lead named beside it still refuses any
+   team file it did not sign. */
 const REG_TOOL = "C:\\Windows\\System32\\reg.exe";
 const POLICY_KEY = "HKLM\\SOFTWARE\\Policies\\Etiuda";
 const POLICY_LEAD_RE = /^[0-9a-f]{64}$/;
@@ -4038,11 +4041,13 @@ const POLICY_WORDS = {
     folder: "The team folder set in Group Policy is not a full path, so this desk keeps the folder it already uses.",
     lead: "The team lead's key set in Group Policy is not written as 64 lowercase hexadecimal characters, so this desk does not trust it.",
     beside: "The other value set beside it is not used either: the two are taken together or not at all.",
+    unread: "The organisation's settings could not be read just now. Etiuda will try again.",
   },
   pl: {
     folder: "Folder zespołu ustawiony w zasadach grupy nie jest pełną ścieżką, więc stanowisko zostaje przy folderze, którego już używa.",
     lead: "Klucz lidera zespołu ustawiony w zasadach grupy nie ma postaci 64 małych znaków szesnastkowych, więc stanowisko go nie przyjmuje.",
     beside: "Druga wartość ustawiona obok też nie zostanie użyta: obie są przyjmowane razem albo wcale.",
+    unread: "Nie udało się teraz odczytać ustawień organizacji. Etiuda spróbuje ponownie.",
   },
 };
 /* The key as reg export heads its section, the hive written out and the rest as asked. */
@@ -4170,15 +4175,46 @@ function joinPolicyFacts(text, unread) {
   }
   return { folder: folderValue, lead: leadValue, bad: bad, noUpdate: noUpdate, values: values, unread: doubt };
 }
-/* The facts with their sentences in `lang`, "pl" or anything else for English: {folder, lead, said, noUpdate, unread}. */
+/* The facts with their sentences in `lang`, "pl" or anything else for English: {folder, lead, said, noUpdate, unread, held},
+   held true where an unread key's last good read stands in for it. */
 function policyWords(facts, lang) {
   const words = POLICY_WORDS[lang === "pl" ? "pl" : "en"];
-  return { folder: facts.folder, lead: facts.lead, said: facts.bad.map(k => words[k]), noUpdate: facts.noUpdate === true, unread: facts.unread === true };
+  return { folder: facts.folder, lead: facts.lead, said: facts.bad.map(k => words[k]).concat(facts.unread === true ? [words.unread] : []),
+    noUpdate: facts.noUpdate === true, unread: facts.unread === true, held: facts.held === true };
 }
 function joinPolicyFrom(text, lang) { return policyWords(joinPolicyFacts(text), lang); }
+/* THE LAST GOOD READ, beside desk.json, so a read that fails holds it rather than none, across a restart too. Plain, as the
+   key itself is readable by every account of this computer, and without AiKey, the one secret among the values, which then
+   waits for a good read. Null where there is none or it is not this shape. */
+const POLICY_GOOD_FILE = "policy-last-good.json";
+function policyGoodLoad() {
+  try {
+    const doc = JSON.parse(fs.readFileSync(path.join(app.getPath("userData"), POLICY_GOOD_FILE), "utf8"));
+    if (!doc || doc.kind !== "etiuda-policy-last-good" || doc.format !== 1 || typeof doc.folder !== "string" || typeof doc.lead !== "string") return null;
+    if ((doc.folder && !policyFolderOk(doc.folder)) || (doc.lead && !policyLeadOk(doc.lead))) return null;
+    const values = Object.create(null);
+    const given = doc.values && typeof doc.values === "object" && !Array.isArray(doc.values) ? doc.values : {};
+    Object.keys(given).forEach(k => { const v = given[k]; if (k !== "aikey" && v && typeof v.type === "string" && typeof v.value === "string") values[k] = { type: v.type, value: v.value }; });
+    const bad = Array.isArray(doc.bad) ? doc.bad.filter(b => b === "folder" || b === "lead" || b === "beside") : [];
+    return { folder: doc.folder, lead: doc.lead, bad: bad, noUpdate: doc.noUpdate === true, values: values, unread: false };
+  } catch { return null; }
+}
+function policyGoodSave(facts) {
+  try {
+    const values = {};
+    Object.keys(facts.values || {}).forEach(k => { if (k !== "aikey") values[k] = facts.values[k]; });
+    const text = JSON.stringify({ format: 1, kind: "etiuda-policy-last-good", folder: facts.folder, lead: facts.lead, bad: facts.bad,
+      noUpdate: facts.noUpdate === true, values: values });
+    const file = path.join(app.getPath("userData"), POLICY_GOOD_FILE);
+    let was = "";
+    try { was = fs.readFileSync(file, "utf8"); } catch { /* none kept yet */ }
+    if (was === text) return;
+    writeReplacing(file, text);
+  } catch { /* the next good read keeps it */ }
+}
 /* A read that failed is asked again at the first ask once this has passed, so one failure does not stand for the run. */
 const POLICY_REREAD_MS = 60 * 60 * 1000;
-let joinPolicyRead = null, joinPolicyReadAt = 0;
+let joinPolicyRead = null, joinPolicyReadAt = 0, joinPolicyGood = null;
 /* Read once a run, whatever the language, unless the read failed (POLICY_REREAD_MS). The one program started is reg.exe at its fixed path, exporting
    this one key to a scratch file, which holds the registry's own UTF-16 where reg's printing would be in the
    console's code page. A failure, and any system but Windows, is no policy; reg's own exit 1 is a key that is not there,
@@ -4202,18 +4238,25 @@ function readJoinPolicy(lang) {
         if (dir) { try { fs.rmdirSync(dir); } catch { /* never made */ } }
       }
     }
-    joinPolicyRead = joinPolicyFacts(text, unread);
+    const read = joinPolicyFacts(text, unread);
+    if (!read.unread) { joinPolicyGood = read; policyGoodSave(read); }
+    else {
+      /* A read that failed holds the last good read, every pin and switch it set, said as unread; with none, it is none. */
+      const good = joinPolicyGood || (joinPolicyGood = policyGoodLoad());
+      if (good) { read.folder = good.folder; read.lead = good.lead; read.bad = good.bad; read.noUpdate = good.noUpdate; read.values = good.values; read.held = true; } /* plant:policy-hold-good */
+    }
+    joinPolicyRead = read;
     joinPolicyReadAt = Date.now();
   }
   return policyWords(joinPolicyRead, lang);
 }
-/* True where machine policy turns the version look off, or where the key was there and its read failed, so a switch the read
-   missed is not taken as unset; read with the team values. updateLookUnsure says which. */
+/* True where machine policy turns the version look off, its last good read standing in where a read failed, or where a read
+   failed with no good read ever, so a switch the read missed is not taken as unset. updateLookUnsure says which. */
 function updateLookOff() {
-  try { const p = readJoinPolicy("en"); return p.noUpdate === true || p.unread === true; } catch { return true; } /* plant:look-off-unread */
+  try { const p = readJoinPolicy("en"); return p.noUpdate === true || (p.unread === true && p.held !== true); } catch { return true; } /* plant:look-off-unread */
 }
 function updateLookUnsure() {
-  try { return readJoinPolicy("en").unread === true; } catch { return true; }
+  try { const p = readJoinPolicy("en"); return p.unread === true && p.held !== true; } catch { return true; }
 }
 /* THE DESK'S OPTIONAL CUSTOMER MODEL (board 992). Off by default; on, the organisation's own service ranks the search and the
    suggestions, and deskAiConfig is the one place its address and key are handed on. The person's choice and fields are kept in
@@ -4460,7 +4503,6 @@ function sayJoinPolicy() {
   if (joinPolicySaid !== joinPolicyRead) {
     joinPolicySaid = joinPolicyRead;
     got.said.forEach(teamSay);
-    if (got.unread) teamSay("machine policy for Etiuda was there to read and could not be read, so this desk runs as though none were set");
     policyLetsInviteGo(got);
   }
   return got;
