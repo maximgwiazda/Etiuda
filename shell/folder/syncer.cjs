@@ -246,8 +246,9 @@ function writeOutbox(mirror, st, io) {
   io.writeFile(tmp, JSON.stringify(doc));
   try { renameRetrying(tmp, file, io); } catch (e) { try { io.unlink(tmp); } catch {} throw e; }
 }
-/* Runs fn; on the main thread a busy code is tried again, 20 tries RENAME_WAIT_MS apart, off it the code is thrown. */
-function outboxBusyRetrying(fn, onDone, timerSet) {
+/* Runs fn; on the main thread a busy code is tried again, 20 tries RENAME_WAIT_MS apart, off it the code is thrown.
+   keepGoing is a new owe: past 20 it is said once and still tried, so the record is not dropped while the rename refuses. */
+function outboxBusyRetrying(fn, onDone, timerSet, keepGoing) {
   try {
     fn();
     if (onDone) onDone();
@@ -264,10 +265,15 @@ function outboxBusyRetrying(fn, onDone, timerSet) {
       fn();
       if (onDone) onDone();
     } catch (e) {
-      if (tries < 20 && e && RENAME_BUSY.indexOf(e.code) >= 0) {
-        timer = setTimeout(step, RENAME_WAIT_MS);
-        if (timer.unref) timer.unref();
-        if (timerSet) timerSet.add(timer);
+      if (e && RENAME_BUSY.indexOf(e.code) >= 0) {
+        let keep = tries < 20;
+        if (keepGoing) keep = true; /* plant:outbox-busy-keep */
+        if (keepGoing && tries === 20) console.log("etiuda: an owed write could not be recorded yet (" + e.code + "), and it is tried again");
+        if (keep) {
+          timer = setTimeout(step, RENAME_WAIT_MS);
+          if (timer.unref) timer.unref();
+          if (timerSet) timerSet.add(timer);
+        }
       }
     }
   };
@@ -276,13 +282,13 @@ function outboxBusyRetrying(fn, onDone, timerSet) {
   if (timerSet) timerSet.add(timer);
   return false;
 }
-function writeOutboxRetrying(mirror, mutate, io, onDone, timerSet) {
+function writeOutboxRetrying(mirror, mutate, io, onDone, timerSet, keepGoing) {
   io = io || defaultIO;
   return outboxBusyRetrying(() => {
     const st = readOutbox(mirror, io);
     mutate(st);
     writeOutbox(mirror, st, io);
-  }, onDone, timerSet);
+  }, onDone, timerSet, keepGoing);
 }
 function owedRecord(mirror, rel, io) {
   let bytes = null;
@@ -294,7 +300,7 @@ function noteOwed(mirror, rel, io) {
   io = io || defaultIO;
   const norm = normRel(rel);
   if (!isAllowedPath(norm)) return false;
-  writeOutboxRetrying(mirror, st => { st.owe[norm] = owedRecord(mirror, norm, io); }, io);
+  writeOutboxRetrying(mirror, st => { st.owe[norm] = owedRecord(mirror, norm, io); }, io, null, null, true);
   return true;
 }
 function owedList(mirror, io) {
