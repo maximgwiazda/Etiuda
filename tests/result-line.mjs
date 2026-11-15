@@ -43,7 +43,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 121;  /* 113, +5 an area run carrying on after a test-only fix (ar1 to ar5), +3 what a test reads or starts by name (ar6 to ar8) */
+const EXPECTED = 122;  /* 113, +5 an area run carrying on after a test-only fix (ar1 to ar5), +3 what a test reads or starts by name (ar6 to ar8), +1 the same tree carries its own greens (ar9) */
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -122,6 +122,15 @@ function areaResumeLegs() {
   fs.writeFileSync(chains, line({ head: first.head, tree: third.tree }) + "\n");
   const e = ask();
   check(e.carried === null && /no area run/.test(e.reason), "ar5 a base whose recorded git tree is not its head's is not carried on from: " + said(e));
+
+  /* ar9: THE SAME TREE, stopped by a red with nothing changed since (a load flake): every green plain gate carries, a gate that lists
+     a folder included, since nothing it could list has changed; the gate that ended the run, the floor and a gate with an argument
+     still run (Claude alpha's question of 2026-11-15: a stop cost a rerun of about 130 gates because little carried). */
+  const now = { head: g("rev-parse", "--short", "HEAD").stdout.trim(), tree: g("rev-parse", "HEAD^{tree}").stdout.trim() };
+  fs.writeFileSync(chains, line(now) + "\n");
+  const f = ask();
+  check(JSON.stringify(f.carried) === '["tests-a","tests-b","tests-w"]',
+    "ar9 on the same tree a stopped run's greens carry, the folder-lister w included; c (ended the run), d (an argument) and the floor run: " + said(f));
 }
 
 

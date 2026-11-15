@@ -676,6 +676,7 @@ export function planAreaResume(root, steps, tree, chainsPath = CHAINS_PATH) {
   if (!changed) return { reason: "git could not diff " + base.head + " against HEAD" };
   const outside = changed.filter(f => !f.startsWith("tests/"));
   if (outside.length) return { reason: outside.length + " changed file(s) outside tests/ since " + base.head + ", the first " + outside[0] };
+  const same = changed.length === 0;
   const done = !!base.counts && base.counts.exitCode === 0;
   const earned = (done ? base.gates : base.gates.slice(0, -1)).filter(g => g && g.exit === 0).map(g => g.gate);
   const green = new Set(earned.concat(Array.isArray(base.carried) ? base.carried : []));
@@ -688,7 +689,12 @@ export function planAreaResume(root, steps, tree, chainsPath = CHAINS_PATH) {
   for (const st of steps) {
     const file = stepFile(st), name = gateName(st.file);
     const plain = !(st.args || []).length && !(st.env && Object.keys(st.env).length);
-    if (plain && green.has(name) && !reaching.has(file) && !walking.has(file) && !isFloorStep(st) && !isHygiene(file)) carried.push(name);
+    /* THE SAME TREE (nothing changed since the stopped run, a load flake): a gate that lists a folder has nothing new to list, so it
+       carries like any other (result-line ar9; Claude alpha's question of 2026-11-15). The floor, the hygiene legs, a gate with an
+       argument and the gate that ended the run still run. */
+    let moved = reaching.has(file) || walking.has(file);
+    if (same) moved = false; /* plant:same-tree-carries */
+    if (plain && green.has(name) && !moved && !isFloorStep(st) && !isHygiene(file)) carried.push(name);
     else run.push(st);
   }
   return { base, changed, steps: run, carried };
