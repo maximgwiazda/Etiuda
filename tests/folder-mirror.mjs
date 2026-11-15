@@ -35,8 +35,8 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 149;
-/* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
+const EXPECTED = 154;
+/* The plants of 44 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const { offWindows } = nodeRequire("./off-windows.cjs");
 const ASIDE = {
@@ -2157,6 +2157,121 @@ async function run() {
       return revAt(path.join(mirror, "shared-44.ec")) === 6;
     });
     check(r.ok, "44j lifting plant:outbox-owe-keep lets a share copy overwrite a write the outbox still owes: " + JSON.stringify(r));
+  }
+
+  /* 44w to 44z: a team file the outbox still owes. The desk never writes it; the legs stand in the outbox and call the syncer directly. */
+  const teamText = rev => JSON.stringify(teamFile({ epoch: 1, rev }));
+  function stageCopy(mirror, rel, text) {
+    const dir = path.join(mirror, ".staging");
+    fs.mkdirSync(dir, { recursive: true });
+    const tmp = path.join(dir, "staged-" + crypto.randomBytes(4).toString("hex") + ".tmp");
+    fs.writeFileSync(tmp, text, "utf8");
+    const st = fs.statSync(tmp);
+    return { relPath: rel, tmpPath: tmp, size: st.size, mtimeMs: st.mtimeMs };
+  }
+  function owedTeamScan(mod, name) {
+    const share = folder(name + "-share"), mirror = folder(name + "-mirror");
+    const held = teamText(1), newer = teamText(2);
+    fs.writeFileSync(path.join(mirror, "etiuda-team.json"), held, "utf8");
+    fs.writeFileSync(path.join(share, "etiuda-team.json"), newer, "utf8");
+    mod.noteOwed(mirror, "etiuda-team.json");
+    const said = [];
+    const prog = mod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks, logger: (m) => said.push(String(m)) });
+    const revBefore = prog.state().mirrorRev;
+    const item = stageCopy(mirror, "etiuda-team.json", newer);
+    const res = prog.applyScan({ answers: true, listing: [["etiuda-team.json", { size: item.size, mtimeMs: item.mtimeMs }]], staged: [item] });
+    const bytes = fs.readFileSync(path.join(mirror, "etiuda-team.json"), "utf8");
+    return { prog, share, mirror, held, newer, revBefore, res, bytes, said };
+  }
+  {
+    const g = owedTeamScan(syncerMod, "44w");
+    try {
+      const revNow = g.prog.state().mirrorRev;
+      const quiet = g.said.length === 0;
+      check(g.bytes === g.held && g.res.applied.indexOf("etiuda-team.json") < 0 && revNow === g.revBefore && g.revBefore === 1 && quiet,
+        "44w an owed team file keeps its bytes through a scan that stages a newer copy, the scan applies nothing of it, its rev stays, and the scan says nothing: "
+        + JSON.stringify({ same: g.bytes === g.held, applied: g.res.applied, rev: revNow, before: g.revBefore, said: g.said }));
+    } finally { g.prog.stop(); }
+  }
+  {
+    const share = folder("44x-share"), mirror = folder("44x-mirror");
+    const held = teamText(1), newer = teamText(2);
+    const shareFile = path.join(share, "etiuda-team.json"), mirrorFile = path.join(mirror, "etiuda-team.json");
+    fs.writeFileSync(mirrorFile, newer, "utf8");
+    fs.writeFileSync(shareFile, newer, "utf8");
+    const past = new Date(Date.now() - 60000);
+    fs.utimesSync(shareFile, past, past);
+    const said = [];
+    const prog = syncerMod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks, logger: (m) => said.push(String(m)) });
+    try {
+      prog.syncOnce();
+      fs.writeFileSync(mirrorFile, held, "utf8");
+      syncerMod.noteOwed(mirror, "etiuda-team.json");
+      const item = stageCopy(mirror, "etiuda-team.json", newer);
+      const st = fs.statSync(shareFile);
+      prog.applyScan({ answers: true, listing: [["etiuda-team.json", { size: st.size, mtimeMs: st.mtimeMs }]], staged: [item] });
+      const afterDrop = fs.readFileSync(mirrorFile, "utf8");
+      const told = prog.held().forget.indexOf("etiuda-team.json") >= 0;
+      fs.unlinkSync(path.join(mirror, ".outbox.json"));
+      prog.syncOnce();
+      const afterScan = fs.readFileSync(mirrorFile, "utf8");
+      check(afterDrop === held && told && afterScan === newer && syncerMod.owedList(mirror).length === 0,
+        "44x once the team file is no longer owed, the next listing lands the newer copy the owed scan held back: "
+        + JSON.stringify({ heldBack: afterDrop === held, told, landed: afterScan === newer, owed: syncerMod.owedList(mirror).map(x => x.rel) }));
+    } finally { prog.stop(); }
+  }
+  {
+    const share = folder("44y-share"), mirror = folder("44y-mirror");
+    const held = teamText(1), newer = teamText(2);
+    fs.writeFileSync(path.join(mirror, "etiuda-team.json"), held, "utf8");
+    const prog = syncerMod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks, logger: () => {} });
+    try {
+      const before = prog.state().mirrorRev;
+      const item = stageCopy(mirror, "etiuda-team.json", newer);
+      const res = prog.applyScan({ answers: true, listing: [["etiuda-team.json", { size: item.size, mtimeMs: item.mtimeMs }]], staged: [item] });
+      const rev = revAt(path.join(mirror, "etiuda-team.json"));
+      check(before === 1 && rev === 2 && res.applied.indexOf("etiuda-team.json") >= 0 && prog.state().mirrorRev === 2,
+        "44y a team file the outbox does not owe still lands, and its rev moves: "
+        + JSON.stringify({ before, rev, applied: res.applied, mirrorRev: prog.state().mirrorRev }));
+    } finally { prog.stop(); }
+  }
+  {
+    const sib = "etiuda-team (conflicted copy).json";
+    const share = folder("44z-share"), mirror = folder("44z-mirror");
+    const held = teamText(1), newer = teamText(2);
+    fs.writeFileSync(path.join(mirror, "etiuda-team.json"), held, "utf8");
+    fs.writeFileSync(path.join(share, "etiuda-team.json"), held, "utf8");
+    fs.writeFileSync(path.join(share, sib), newer, "utf8");
+    syncerMod.noteOwed(mirror, "etiuda-team.json");
+    const said = [];
+    const prog = syncerMod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks, logger: (m) => said.push(String(m)) });
+    try {
+      const before = prog.state().mirrorRev;
+      const item = stageCopy(mirror, sib, newer);
+      const res = prog.applyScan({ answers: true, listing: [["etiuda-team.json", { size: 1, mtimeMs: 1 }], [sib, { size: item.size, mtimeMs: item.mtimeMs }]], staged: [item] });
+      const sibLanded = fs.existsSync(path.join(mirror, sib));
+      const canon = fs.readFileSync(path.join(mirror, "etiuda-team.json"), "utf8");
+      const revHeld = prog.state().mirrorRev;
+      const quiet = said.length === 0;
+      fs.unlinkSync(path.join(mirror, ".outbox.json"));
+      const again = prog.syncOnce();
+      const sibAfter = fs.existsSync(path.join(mirror, sib));
+      const canonAfter = fs.readFileSync(path.join(mirror, "etiuda-team.json"), "utf8");
+      const revAfter = prog.state().mirrorRev;
+      check(!sibLanded && canon === held && revHeld === before && before === 1 && res.applied.indexOf(sib) < 0 && quiet
+        && sibAfter && canonAfter === held && revAfter === 2 && again.applied.indexOf(sib) >= 0,
+        "44z a conflict sibling leaves an owed team file and its rev alone, and once the debt is settled that sibling lands by the existing rule: "
+        + JSON.stringify({ sibLanded, revHeld, before, quiet, sibAfter, canonHeld: canonAfter === held, revAfter, applied: again.applied }));
+    } finally { prog.stop(); }
+  }
+  if (PLANTS_OFF) skip("44w2 lifting plant:team-owe-keep lets a newer share team file overwrite a write the outbox still owes: NOT RUN");
+  else {
+    const r = await testPlant("team-owe-keep", syncerFile, (scratchSyncer) => {
+      const g = owedTeamScan(nodeRequire(scratchSyncer), "44w2");
+      try { return g.bytes !== g.held && revAt(path.join(g.mirror, "etiuda-team.json")) === 2; }
+      finally { g.prog.stop(); }
+    });
+    check(r.ok, "44w2 lifting plant:team-owe-keep lets a newer share team file overwrite a write the outbox still owes: " + JSON.stringify(r));
   }
 
   // 44k: plant:outbox-owe-stay
