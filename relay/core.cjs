@@ -1494,11 +1494,15 @@ function createCore(deps) {
     if (inv.spentAt === undefined) return no("token-spent"); /* plant:invite-pruned */
     if (clock() - inv.spentAt > KEEP_MS) return no("token-spent"); /* plant:invite-keep */
     if (s.bound && m.writer !== s.bound) return no("no-hello"); /* plant:invite-bound */
+    /* The writer's one spelling before any row is read under it (finding 4 of the fourth Grok review of 3cc09cb5). */
+    const pub = m.pub !== null ? m.pub : m.writer;
+    let keyFirst = false;
+    keyFirst = true; /* plant:rows-after-key */
+    if (keyFirst && !deskKeyMatches(m.writer, pub)) return no("bad-signature"); /* plant:invite-key */
     if (m.writer === team.lead.keyId || store.get("dev:" + m.writer) !== undefined) return no("no-hello"); /* plant:invite-stranger */
     const goneRec = store.get("gone:" + m.writer);
     if (goneRec && !registeredAfter(inv, goneRec)) return no("removed"); /* plant:invite-removed */
-    const pub = m.pub !== null ? m.pub : m.writer;
-    if (!deskKeyMatches(m.writer, pub)) return no("bad-signature"); /* plant:invite-key */
+    if (!keyFirst && !deskKeyMatches(m.writer, pub)) return no("bad-signature");
     if (pub === team.lead.pub) return no("no-hello"); /* plant:invite-lead-pub */
     const ownDesk = !!(goneRec && registeredAfter(inv, goneRec) && m.place === "desk:" + goneRec.desk);
     let atDesk = true;

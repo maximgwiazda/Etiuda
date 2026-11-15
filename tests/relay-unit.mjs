@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 579;
+const EXPECTED = 581;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -5720,6 +5720,35 @@ async function main() {
       const migLift = await editTeam(lineLifted("plant:desk-id-migrate"), async T => !(await oldRowsScene({ team: T })).ok && !(await migrationLogScene(T)).ok);
       check(oldRows.ok && migLog.ok && migLift.turned && migLift.back, "r1r lifting plant:desk-id-migrate leaves the raw rows (r1p red) and logs"
         + " nothing (r1q red), and the product file is never written: " + how(migLift));
+    }
+
+    /* An invitation's upload is judged on its writer's spelling before any row is read under that writer (finding 4): a writer whose
+       id does not come from the public half the upload brings is refused bad-signature with no dev: or gone: row looked up. */
+    async function inviteOrderScene() {
+      const w = await world();
+      const token = hex(32), id = hex(16), joiner = keyPair(true), liar = keyPair(true), place = "desk:k-" + hex(8);
+      await invites(w, [{ id, hash: sha(token) }], []);
+      const s = (await tokenHello(w, id, token, null, joiner)).json.session;
+      const blob = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32), writer: { keyId: joiner.keyId, privateKey: joiner.privateKey },
+        path: "desks/" + place.slice(5) + "/join.json", body: "ask", counter: 1, place, kind: "file" });
+      const st = w.R.stores.get(w.rt), real = st.get, read = [];
+      st.get = k => { read.push(k); return real.call(st, k); };
+      let r = null;
+      try { r = await put(w, s, blob, { extra: { pub: liar.pub } }); } finally { st.get = real; }
+      /* From admitInvite's own read of the invitation on: quietSession reads the session's bound key's gone: row before, keyed by
+         the session's hello, not by the upload. */
+      const from = read.lastIndexOf("inv:" + id);
+      const rowsRead = read.slice(from + 1).filter(k => k === "dev:" + joiner.keyId || k === "gone:" + joiner.keyId).map(k => k.split(":")[0]);
+      return { ok: refused(r, "bad-signature") && rowsRead.length === 0, detail: JSON.stringify({ answer: answer(r), rowsRead }) };
+    }
+    const inviteOrder = await inviteOrderScene();
+    check(inviteOrder.ok, "r1s an invitation's upload whose writer does not come from its public half is refused bad-signature before its judgement reads"
+      + " any dev: or gone: row under that writer: " + inviteOrder.detail);
+    if (PLANTS_OFF) skip("r1t lifting plant:rows-after-key reads those rows first (r1s red)");
+    else {
+      const orderLift = await liftCore("plant:rows-after-key", async () => !(await inviteOrderScene()).ok);
+      check(inviteOrder.ok && orderLift.turned && orderLift.back, "r1t lifting plant:rows-after-key reads those rows first (r1s red), and the product"
+        + " file is never written: " + how(orderLift));
     }
 
     // 933a: move signed by old lead is taken, new key hello opens lead session
