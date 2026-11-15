@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 150 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 6);
+const EXPECTED = 155 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 7);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1207,16 +1207,18 @@ try {
      the strip of what the shell suggested for them stands as for a copied message (a step up from the first row reaches it,
      and Enter takes it, the agent's act), and nothing is searched or taken by itself. Typing over them hides the note and
      searches what is typed. 4s4 changes each of the two plants in a copy of the script and expects its leg red. */
+  let runSelPage = null;
   {
     const SEL = "my parcel has not arrived and the tracking says nothing";
-    const runSel = async (scriptText, o) => {
+    const runSel = async (scriptText, o, h) => {
       const L = {}, q2 = { value: "", placeholder: "", focus() {}, setAttribute() {}, addEventListener: (t, fn) => { L[t] = fn; } };
       let html = "";
       const box2 = { set innerHTML(v) { html = v; }, get innerHTML() { return html; }, setAttribute() {}, querySelectorAll: () => [], addEventListener() {} };
       const note = { hidden: true, textContent: "" };
-      const calls = [];
+      const calls = [], looked = [];
       let onOpen = null;
       const W = { E_PICK: {
+        rowsOf: id => { looked.push(id); return Promise.resolve(JSON.stringify(h && h.rowsOf ? h.rowsOf(id) : { rows: [R("rows-" + id)], count: "1 reply" })); },
         find: qy => { calls.push("find " + qy); return Promise.resolve(JSON.stringify({ rows: [R("found")] })); },
         takeSuggest: id => { calls.push("take " + id); return Promise.resolve(JSON.stringify({ rows: [R("s1")] })); },
         copy: w => { calls.push("copy " + w); }, close() {}, ready() {}, onOpen: fn => { onOpen = fn; } } };
@@ -1226,7 +1228,8 @@ try {
       const key = k => L.keydown({ key: k, code: k, ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, preventDefault() {} });
       onOpen(JSON.stringify(Object.assign({ rows: pRows, words: { selected: "The words you selected. Type to change them.", none: "none" } }, o)));
       await tick(5);
-      const opened = { box: q2.value, note: note.hidden ? "" : note.textContent, calls: calls.slice() };
+      const opened = { box: q2.value, note: note.hidden ? "" : note.textContent, calls: calls.slice(), looked: looked.slice(), html: html };
+      if (h && h.stop) { await tick(5); return { opened, key, calls, looked, html: () => html, tick5: () => tick(5) }; }
       key("ArrowUp"); key("Enter");
       await tick(5);
       const stepped = calls.slice(opened.calls.length);
@@ -1240,6 +1243,7 @@ try {
       await tick(5);
       return { opened, stepped, edited: { note: note.hidden ? "" : note.textContent, calls: calls.slice(c0) } };
     };
+    runSelPage = runSel;
     const SUGGEST = [{ id: "t:post", name: "Post" }, { id: "t:lamp", name: "Lamps" }];
     const withSel = await runSel(script, { selected: SEL, suggest: SUGGEST });
     const plain = await runSel(script, {});
@@ -1275,6 +1279,47 @@ try {
       && sameFace(onEdit, offEdit) && sameFace(offEdit, unkEdit) && holds,
       "4e1 the page stores whether the selection can be edited, and the box, the note and the strip stay as they were for true, false and unknown: "
       + J3({ box: onEdit.opened.box, note: onEdit.opened.note, holds }));
+  }
+
+  /* 4r1 to 4r5: THE REPLIES FOUND FOR THE SELECTED MESSAGE ARE THE ROWS (Quick replies on the selection). The product owner,
+     2026-11-15: "1-quick-replies-on-the-selection.png and 2-reword-on-a-card.png are perfect, by the way!"; the head of the
+     office's criterion: "opening on a message shows those rows at once; nothing is taken and nothing is counted until the agent
+     picks a row, and the pick then counts as a pick does today." The page asks the desk for the first suggestion's replies
+     (rowsOf) and draws them; it takes nothing, searches nothing and copies nothing by itself, and a pick of a row is the
+     one copy a pick is. The desk's side of it, that the lookup changes nothing, is 6o2 below. 4r5 changes each of two plants in a
+     copy of the script and expects 4r1 red. */
+  {
+    const SEL = "my parcel has not arrived and the tracking says nothing";
+    const SG = [{ id: "t:post", name: "Post" }, { id: "t:lamp", name: "Lamps" }];
+    const J4 = JSON.stringify;
+    const two = id => ({ rows: [R(id + "-1"), R(id + "-2")], count: "2 replies" });
+    const rowsRun = (scriptText, o, h) => runSelPage(scriptText, o, Object.assign({ stop: true, rowsOf: two }, h || {}));
+    const on = await rowsRun(script, { selected: SEL, suggest: SG });
+    const shown = d => (d.html().match(/T [\w:-]+/g) || []).join("|");
+    check(J4(on.looked) === '["t:post"]' && shown(on) === "T t:post-1|T t:post-2" && on.calls.length === 0,
+      "4r1 opening on selected words with suggestions shows the first suggestion's replies as the rows at once, and nothing is taken, searched or copied: "
+      + J4({ looked: on.looked, rows: shown(on), calls: on.calls }));
+    on.key("ArrowDown"); on.key("Enter");
+    await on.tick5();
+    check(J4(on.calls) === '["copy {\\"id\\":\\"t:post-2\\",\\"vi\\":0}"]',
+      "4r2 the arrow keys walk the rows as they walk the resting list, and Enter on one is the one copy a pick is, nothing else sent: " + J4(on.calls));
+    const none = await rowsRun(script, { selected: SEL, suggest: [] });
+    const noSel = await rowsRun(script, { suggest: SG });
+    check(none.looked.length === 0 && shown(none) === "T a|T b|T c" && noSel.looked.length === 0 && shown(noSel) === "T a|T b|T c",
+      "4r3 with no suggestions, or with no selected words, the rows are the resting list and the desk is not asked: "
+      + J4({ none: [none.looked, shown(none)], noSel: [noSel.looked, shown(noSel)] }));
+    const typed = await rowsRun(script, { selected: SEL, suggest: SG });
+    check(typed.opened.box === SEL, "4r4 control: the words still stand in the box beside the rows: " + J4(typed.opened.box));
+    if (process.env.ETIUDA_PLANTS === "off") console.log("  NOT RUN  4r5 the page's two plants (ETIUDA_PLANTS=off)");
+    else {
+      const lines = script.split("\n");
+      const marks = ["pick-rows-look", "pick-rows-take"].map(tag => lines.filter(l => l.indexOf("plant:" + tag) >= 0).length);
+      const noLook = lines.filter(l => l.indexOf("plant:pick-rows-look") < 0).join("\n");
+      const autoTake = lines.map(l => (l.indexOf("plant:pick-rows-take") >= 0 ? l.replace("/* plant:pick-rows-take */", "P.takeSuggest(first, false);") : l)).join("\n");
+      const p1 = await rowsRun(noLook, { selected: SEL, suggest: SG }), p2 = await rowsRun(autoTake, { selected: SEL, suggest: SG });
+      check(J4(marks) === "[1,1]" && noLook !== script && autoTake !== script && shown(p1) === "T a|T b|T c" && p2.calls.indexOf("take t:post") > -1,
+        "4r5 lifting the lookup leaves the resting list, and a lookup that takes the suggestion sends the take 4r1 holds absent: " + J4({ marks, lifted: shown(p1), taken: p2.calls }));
+    }
   }
 
   /* THE LEG (board 952, waste 3b): typing in the global picker filters in the picker;
@@ -1813,6 +1858,10 @@ try {
     PK.pack.suggestTaken = JSON.parse(before6).taken;
     PK.pack.intentCounts = JSON.parse(before6).intents;
   }
+  const desk6run = await runSelPage(script, { selected: "where is my lamp", suggest: [{ id: "t:wick", name: "Wick" }] },
+    { stop: true, rowsOf: id => pickAnswer("suggest-rows", { id: id }) });
+  check(desk6run.opened.looked.join() === "t:wick" && /Linked reply/.test(desk6run.html()) && desk6run.calls.length === 0 && desk6() === before6,
+    "6o3 the page over this desk draws the linked card's reply as its row, sends nothing, and the desk is as it was: " + desk6run.html().replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 120));
   const tookRow1 = pickAnswer("suggest-take", { id: "t:wick" });
   check(tookRow1 && tookRow1.rows && tookRow1.rows[0] && tookRow1.rows[0].id === "c-linked",
     "6o on a desk where an unlinked card has 5 copies and the linked one has 0, taking the suggestion puts the linked card at row 0: "
