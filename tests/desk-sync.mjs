@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-sync-"));
-const EXPECTED = 43;
+const EXPECTED = 47;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -30,6 +30,8 @@ const CODE = "ABCDEFGHJKMNPQRS";
 const SPKI = Buffer.from("302a300506032b6570032100", "hex"), PKCS8 = Buffer.from("302e020100300506032b657004220420", "hex");
 const sha = s => crypto.createHash("sha256").update(s).digest("hex");
 const brief = o => JSON.stringify(o);
+const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+const SAMPLE = JSON.stringify({ kind: "etiuda-catalog", format: 2, id: "sample", sample: true, cards: [] });
 const safe = async fn => { try { return await fn(); } catch (e) { return { ok: false, detail: "threw " + (e && e.stack ? e.stack.split("\n").slice(0, 3).join(" | ") : e) }; } };
 
 let ST = null, SY = null, CH = null, C = null, S = null, K = null, W = null;
@@ -149,6 +151,8 @@ function computer(world, label, view) {
       channel: opts => CH.createChannel(Object.assign(opts, { request: transport(world.R, world.uploads, down), clock: () => world.R.clock.now, watch: false, pollMs: 1e9, say: l => { if (process.env.SYNC_SAY) console.log("   say " + label + ": " + l); } })),
       io: m => CH.diskIO(m), load: () => syncState, save: s => { syncState = JSON.parse(JSON.stringify(s)); },
       local: () => { heldNow = []; return SY.localItems(desk.keys, desk.files, heldNow); }, held: () => heldNow,
+      /* The catalog files that are the shipped sample byte for byte, as the shell judges them (shell/main.js isTheSample). */
+      pristine: () => Object.keys(desk.files).filter(n => desk.files[n] === SAMPLE).map(n => "f:" + n),
       /* What the desk refuses to take (desk.refuse) is answered as not put in place, as the shell answers a failed write or patch. */
       apply: (patch, copies) => {
         const failed = [];
@@ -609,8 +613,41 @@ async function main() {
     return { ok, detail: brief({ overRead: over === null ? "refused" : Object.keys(over.items).length, atCap: at ? Object.keys(at.items).length : null }) };
   }
 
+  /* J1: a second computer joins a store that holds content, an hour after the first set its settings and deleted its sample, holding
+     what it had before its first sign-in: its settings give way to the store's, its untouched sample is removed as the store says
+     rather than bringing the deleted one back, its own card and catalog stand on both, a setting only it holds reaches the store, and
+     no version is kept, since nothing was changed on two computers. */
+  async function joinScene() {
+    const w = worldOf("j1"), a = computer(w, "a");
+    a.desk.files["sample-catalog.ec"] = SAMPLE;
+    if ((await a.look()).state !== "on") throw new Error("the store did not come on");
+    await settle(a);
+    a.desk.keys.eTheme = "dark";
+    a.desk.keys.eUiLang = "pl";
+    delete a.desk.files["sample-catalog.ec"];
+    await settle(a);
+    w.R.clock.now += HOUR;
+    const b = computer(w, "b");
+    Object.assign(b.desk.keys, { eTheme: "light", eUiLang: "en", eMotionOff: "1", [L8]: JSON.stringify({ custom: [{ id: "u:mine", c: "k1", t: { en: "made before sign-in" } }] }) });
+    b.desk.files["sample-catalog.ec"] = SAMPLE;
+    b.desk.files["Mine.ec"] = "{\"made\":\"before sign-in\"}";
+    const lb = await b.look();
+    await a.look();
+    await settle(a, b);
+    const store = a.desk.keys.eTheme === "dark" && b.desk.keys.eTheme === "dark" && a.desk.keys.eUiLang === "pl" && b.desk.keys.eUiLang === "pl";
+    const sample = !has(a.desk.files, "sample-catalog.ec") && !has(b.desk.files, "sample-catalog.ec");
+    const own = a.desk.files["Mine.ec"] === "{\"made\":\"before sign-in\"}" && b.desk.files["Mine.ec"] === a.desk.files["Mine.ec"]
+      && (packOf(a).custom || []).some(m => m.id === "u:mine") && (packOf(b).custom || []).some(m => m.id === "u:mine");
+    const onlyHere = a.desk.keys.eMotionOff === "1" && b.desk.keys.eMotionOff === "1";
+    const none = a.kept.length + b.kept.length === 0 && a.sync().state().kept.length + b.sync().state().kept.length === 0;
+    return { ok: lb.state === "on" && store && sample && own && onlyHere && none,
+      detail: brief({ b: lb.state, theme: [a.desk.keys.eTheme, b.desk.keys.eTheme], lang: [a.desk.keys.eUiLang, b.desk.keys.eUiLang], sample: [has(a.desk.files, "sample-catalog.ec"), has(b.desk.files, "sample-catalog.ec")],
+        own, onlyHere, kept: [a.sync().state().kept.length, b.sync().state().kept.length] }) };
+  }
+
   const results = {};
   const LEGS = [
+    ["J1", joinScene, "a second computer joining a store that holds content takes the store's settings, removes its untouched sample where the store removed it, keeps its own card and catalog on both, and offers a setting only it holds, with no version kept"],
     ["G5k", keptGrowthScene, "the same card changed on both computers offline three rounds running: each keeps one version per other writer, the overtaken ones let go"],
     ["G5i", itemsCapScene, "another computer's sync file past ITEMS_MAX items is refused whole, not read with its tail dropped; one at the cap is read whole"],
     ["G5p", protoScene, "a layer field or map key named __proto__ or constructor from another computer is no item that follows, and put back into a layer never writes Object.prototype"],
@@ -665,6 +702,9 @@ async function main() {
   const swap = (from, to) => text => (text.split(from).length === 2 ? text.split(from).join(to) : null);
   const scenes = Object.fromEntries(LEGS.map(([id, scene]) => [id, scene]));
   const PLANTS = [
+    ["join older", "J1", swap("const t = joining ? 0 : Math.max(", "const t = Math.max("), "what a joining computer held before is stamped now, so its settings outrank the store's"],
+    ["join sample", "J1", lift("join-pristine"), "an untouched sample on a joining computer taken as its own, so the one deleted elsewhere comes back as a conflict"],
+    ["join reached", "J1", lift("join-reached"), "a computer that has never synced merges before a cycle reached the store, so its first merge cannot know it joins"],
     ["one item added", "C7", swap("return SETTINGS.indexOf(s.slice(2)) >= 0 || LAYER_RE.test(s.slice(2)); /* plant:follows */", "return SETTINGS.indexOf(s.slice(2)) >= 0 || LAYER_RE.test(s.slice(2)) || s === \"k:eTeamKeys\"; /* plant:follows */"), "a team's keys follow"],
     ["last-write-wins", "C8", swap("if (isSetting(item)) top = [", "if (true) top = ["), "a conflict is settled by the later write, the earlier version lost"],
     ["keep-both", "C8", lift("keep-both"), "the other side of a conflict is not kept"],

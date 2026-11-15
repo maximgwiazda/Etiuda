@@ -11684,7 +11684,7 @@ function storeSyncOf() {
       try { fs.mkdirSync(storeSyncDir(), { recursive: true }); writeReplacing(storeSyncDir(STORE_SYNC_FILE), JSON.stringify(s)); }
       catch (e) { console.error("etiuda: the store's sync state could not be kept - " + e.message); }
     },
-    local: storeSyncLocal, held: () => storeSyncHeld, apply: storeSyncApply, pubOf: StoreLib().pubOf, canonBytes: C.signedBytes, now: Date.now,
+    local: storeSyncLocal, held: () => storeSyncHeld, pristine: () => storeSyncPristine, apply: storeSyncApply, pubOf: StoreLib().pubOf, canonBytes: C.signedBytes, now: Date.now,
   });
   return storeSyncing;
 }
@@ -11697,12 +11697,14 @@ function storeSyncFolder() {
 }
 /* This desk's items that follow: its desk keys, and the catalog files at the top of the person's own catalog folder. Null while that
    folder does not answer, so a folder out of reach is never read as every catalog removed; what is left out (for its size, or every
-   catalog file while the folder is a team's) is named in storeSyncHeld, so the merge leaves it as it stood. */
-let storeSyncHeld = [];
+   catalog file while the folder is a team's) is named in storeSyncHeld, so the merge leaves it as it stood; a file that is the shipped
+   sample untouched (isTheSample) is named in storeSyncPristine, so a computer joining a store takes the store's word on it. */
+let storeSyncHeld = [], storeSyncPristine = [];
 function storeSyncLocal() {
   if (deskKeys === undefined) deskKeys = readDesk();
-  const dir = storeSyncFolder(), files = {}, L = SyncLib(), held = [];
+  const dir = storeSyncFolder(), files = {}, L = SyncLib(), held = [], pristine = [];
   storeSyncHeld = held;
+  storeSyncPristine = pristine;
   if (!dir) { held.push("f:"); return L.localItems(deskKeys, {}, held); }
   if (!folderAnswers(dir)) return null;
   let names = [];
@@ -11711,7 +11713,7 @@ function storeSyncLocal() {
     if (!L.CATALOG_RE.test(n)) continue;
     try {
       const f = path.join(dir, n), st = fs.statSync(f);
-      if (st.isFile() && st.size <= L.CATALOG_MAX) files[n] = fs.readFileSync(f, "utf8");
+      if (st.isFile() && st.size <= L.CATALOG_MAX) { files[n] = fs.readFileSync(f, "utf8"); if (isTheSample(f)) pristine.push("f:" + n); } /* plant:sync-pristine */
       else if (st.isFile()) held.push("f:" + n);
     } catch { return null; }
   }

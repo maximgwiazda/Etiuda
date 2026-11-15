@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 132;
+const EXPECTED = 134;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -196,8 +196,8 @@ function worldOf(o) {
 /* ---- the shell, evaluated whole: `src` is shell/main.js's text or a planted copy of it ---- */
 /* What the leg reads from main.js, appended to its text; a name main.js lacks comes back undefined, so its leg fails alone. */
 const TAIL_NAMES = ["storeView", "storeRoom", "storeSetNow", "storeAnswerNow", "storeSetAsideDir", "storeSyncFolder", "storeState", "storeTokenTake", "signinRun", "signinRenew", "signinIo", "signinRenewNow", "signinServiceAsk", "storeServiceAt", "storeOnFor", "storeTurn", "branchIdentity", "signinState", "patchDesk", "storeForget", "signinLandingHtml", "signinListen",
-  "signinOutNow", "storeLeaveNow", "storeSyncApply", "storeSyncSoon"];
-const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing", "storeConsentFlight", "storeSyncTimer"];
+  "signinOutNow", "storeLeaveNow", "storeSyncApply", "storeSyncSoon", "storeSyncLocal"];
+const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing", "storeConsentFlight", "storeSyncTimer", "storeSyncPristine"];
 const TAIL = "\n__test.T = {" + TAIL_NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
   + ", setJoin: v => { teamJoin = v; }, get: () => ({" + TAIL_STATE.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "}) };";
 function boot(src, o) {
@@ -387,6 +387,9 @@ async function syncScene(src) {
    store into the team's mirror. */
 async function teamFolderScene(src) {
   const r = await renewScene(src), T = r.shell.T, sync = T.get().storeSyncing;
+  /* A computer's first merge waits for a cycle that reached the store (sync.cjs merge). */
+  const ch = sync && sync.channel();
+  if (ch) await ch.idle();
   const own = path.join(r.shell.UD, "Etiuda");
   fs.mkdirSync(own, { recursive: true });
   fs.writeFileSync(path.join(own, "Own.ec"), JSON.stringify({ kind: "etiuda-catalog", format: 2, id: "own" }));
@@ -403,6 +406,23 @@ async function teamFolderScene(src) {
   const ok = !!sync && !!before.h && !ledger["f:Team.ec"] && !!ledger["f:Own.ec"] && ledger["f:Own.ec"].h === before.h && inMirror.join() === "Team.ec"
     && Array.isArray(failed) && failed.join() === "f:From the store.ec";
   return { ok, detail: brief({ ownTaken: !!before.h, teamTaken: !!ledger["f:Team.ec"], ownRemoved: !!ledger["f:Own.ec"] && ledger["f:Own.ec"].h === null, inMirror, failed }) };
+}
+
+/* (jp) THE SAMPLE UNTOUCHED: the store's sync names the shipped sample in the person's folder as untouched, judged by its bytes as
+   isTheSample judges it, so a computer joining a store takes the store's word on it (shell/sync/sync.cjs); a copy with one byte changed,
+   whatever its name, is the person's own. */
+async function pristineScene(src) {
+  const { T } = boot(src);
+  const dir = T.storeSyncFolder(), shipped = fs.readFileSync(path.join(ROOT, "shell", "sample-catalog.ec"));
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "sample-catalog.ec"), shipped);
+  const edited = Buffer.from(shipped);
+  edited[edited.length - 2] = edited[edited.length - 2] === 0x20 ? 0x0a : 0x20;
+  fs.writeFileSync(path.join(dir, "sample-catalog-copy.ec"), edited);
+  const local = T.storeSyncLocal(), pristine = T.get().storeSyncPristine;
+  const ok = !!local && typeof local["f:sample-catalog.ec"] === "string" && typeof local["f:sample-catalog-copy.ec"] === "string"
+    && Array.isArray(pristine) && pristine.join() === "f:sample-catalog.ec";
+  return { ok, detail: brief({ read: local ? Object.keys(local).filter(k => k.startsWith("f:")) : null, pristine }) };
 }
 
 /* (d4f) The page's view and the switch: the first look that made the store says "on" once; This computer forgets the keys and ends
@@ -1558,6 +1578,7 @@ const LEGS = [
   ["gc", conflictsScene, "the versions the sync keeps for the person's choice are the row's conflict count: one kept reads conflict, none reads on"],
   ["gs", switchStopScene, "This computer and Everywhere stop the store's sync at once, the relay unreached, not at the next look"],
   ["gr", roomWireScene, "a write the store's relay refuses for its room turns the row full, and the next write it takes turns it on"],
+  ["jp", pristineScene, "the store's sync names the shipped sample untouched in the person's folder by its bytes, and a copy with one byte changed as the person's own"],
   ["gt", teamFolderScene, "joined to a folder team, the store's sync takes no team catalog into the person's store, reads the person's own catalog as removed nowhere, and writes nothing from the store into the team's mirror"],
   ["g1b", consentBusyScene, "while the switch's request for the folder waits on the browser the desk is busy to the page, and an answer after another account took the seat is neither taken for it nor looked with"],
   ["g2r", keepRefreshScene, "the switch's Google consent sign-in answered with no refresh token keeps the refresh token already sealed for the same account"],
@@ -1654,6 +1675,7 @@ const PLANTS = [
   ["fa2", text => { const x = swap("storeAccess.who === storeWho(held) ? storeAccess : null; /* plant:access-who */", "true ? storeAccess : null; /* plant:access-who */")(text);
     const y = x && swap("  if (storeAccess && storeAccess.who !== who) storeAccess = null;", "")(x);
     return y && swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = false; /* plant:store-held */")(y); }, "a folder token reused for whoever is seated, the hold lifted"],
+  ["jp", swap(" if (isTheSample(f)) pristine.push(\"f:\" + n); } /* plant:sync-pristine */", " } /* plant:sync-pristine */"), "the untouched sample not named, so a joining computer brings back a sample deleted elsewhere"],
   ["gt", swap("if (sayJoinPolicy().folder || relayHere() || folderTeamHere() || Object.keys(teamNeedsFolder).length) return \"\"; /* plant:sync-team-folder */", "if (false) return \"\"; /* plant:sync-team-folder */"), "the store's sync lists and writes the team's mirror as the person's folder"],
   ["w1", swap("  if (s.keys || s.leave || storeLeaveHere) {", "  if (false) {"), "a sign-out leaves the store's keys in store.json"],
   ["w1d", text => { const x = swap("  if (s.who === who) return true; /* plant:store-mine */", "  if (true) { s.who = who; return true; } /* plant:store-mine */")(text);

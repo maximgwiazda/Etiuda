@@ -196,12 +196,18 @@ function mergeOnce(o) {
   /* A version kept for the person is let go once a later one stands over it, chosen on another computer. */
   const settled = (item, win, tops) => { kept = kept.filter(k => k.item !== item || !(tops || [win]).some(e => over(e, Object.assign({ seen: {} }, k)))); };
   const patch = {}, copies = [];
+  /* A computer that has never synced joining a store the others already hold: what it held before counts as older than anything they
+     wrote, so a setting gives way to the store's; and the shipped sample untouched here (o.pristine) is none of its own, so the store's
+     word on it stands. */
+  const joining = !Object.keys(ledger).length && (o.theirs || []).some(t => t.by !== me && Object.keys(t.items).length);
+  const pristine = Array.isArray(o.pristine) ? o.pristine : [];
   /* This computer's own changes first: an item whose value is not the one its entry names was changed here. */
   for (const item of new Set(Object.keys(ledger).concat(Object.keys(local)))) {
     const was = ledger[item], h = has(local, item) ? sha(local[item]) : null;
     if (was ? was.h === h : h === null) continue; /* plant:recorded */
     if (h === null && heldBy(held, item)) continue; /* plant:held-kept */
-    const t = Math.max(now, was ? was.t + 1 : 0);
+    if (joining && pristine.indexOf(item) >= 0) continue; /* plant:join-pristine */
+    const t = joining ? 0 : Math.max(now, was ? was.t + 1 : 0); /* plant:join-older */
     ledger[item] = { h, by: me, t, seen: was ? (was.by === me ? Object.assign({}, was.seen) : unionSeen(was)) : {} };
   }
   const valueOf = (e, item) => {
@@ -337,14 +343,15 @@ function storeChannelOptions(keys, me, cert, mirrorRoot, pubOf) {
    `o`: me {id, pub, privateKey}; mirrorRoot, where each store's mirror sits by its relay team id; channel(options) the relay channel
    made from storeChannelOptions with the caller's own request, write, say and clock; io(mirror) the channel's diskIO over a mirror;
    load() and save(state) this computer's sync state {rt, ledger, kept}; local() its items now (localItems), or null where they could
-   not be read, and held() those it left out (localItems' `held`); apply(patch, copies) puts the merge's patch in place and keeps each
+   not be read, held() those it left out (localItems' `held`), and pristine() its catalog files that are the shipped sample untouched;
+   apply(patch, copies) puts the merge's patch in place and keeps each
    copy for the person, answering the items it could not (unapplied); pubOf and canonBytes; now().
    WHILE PAUSED nothing is lost: edits go on into the last store's mirror, which is this computer's outbox, and the channel, started
    again at the next look that is on, sends what waited and takes what came. A store the folder now names in place of the one this
    computer had (another computer's replace ended it) is adopted at that look, and this computer's whole place written into it, so
    every edit it holds reaches the new store. */
 function createStoreSync(o) {
-  let ch = null, at = "", revNow = -1, keysNow = null, certNow = null, busy = false;
+  let ch = null, at = "", revNow = -1, keysNow = null, certNow = null, busy = false, reached = "";
   let state = (() => { const s = o.load(); return plain(s) && plain(s.ledger) && Array.isArray(s.kept) ? s : { rt: "", ledger: {}, kept: [] }; })();
   const mirrorOf = rt => path.join(o.mirrorRoot, rt);
   function theirs(io, rt) {
@@ -362,13 +369,15 @@ function createStoreSync(o) {
   /* One merge into the mirror of the store this computer last synced to; nothing where it has synced to none yet. */
   function merge() {
     if (!state.rt || busy) return null;
+    /* A computer that has never synced merges first once a cycle has reached the store, so that merge sees what the store holds. */
+    if (!Object.keys(state.ledger).length && reached !== state.rt) return null; /* plant:join-reached */
     const local = o.local();
     if (!local) return null;
     busy = true;
     try {
       const io = o.io(mirrorOf(state.rt)), t = theirs(io, state.rt);
-      const held = typeof o.held === "function" ? o.held() : [];
-      let r = mergeOnce({ me: o.me.id, now: o.now(), state, local, held, theirs: t.list, fileOf: t.fileOf });
+      const held = typeof o.held === "function" ? o.held() : [], pristine = typeof o.pristine === "function" ? o.pristine() : [];
+      let r = mergeOnce({ me: o.me.id, now: o.now(), state, local, held, pristine, theirs: t.list, fileOf: t.fileOf });
       if (Object.keys(r.patch).length || r.copies.length) r = unapplied(state, r, o.apply(r.patch, r.copies), local, o.me.id); /* plant:unapplied */
       state = Object.assign({ rt: state.rt }, r.state);
       o.save(state);
@@ -404,7 +413,8 @@ function createStoreSync(o) {
     stop();
     fs.mkdirSync(mirrorOf(look.keys.rt), { recursive: true });
     /* After each cycle that reached the relay, what came is merged in. */
-    ch = o.channel(Object.assign(storeChannelOptions(look.keys, o.me, () => certNow, o.mirrorRoot, o.pubOf), { onHere: () => { merge(); } }));
+    const rt = look.keys.rt;
+    ch = o.channel(Object.assign(storeChannelOptions(look.keys, o.me, () => certNow, o.mirrorRoot, o.pubOf), { onHere: () => { reached = rt; merge(); } }));
     at = look.keys.rt; revNow = look.keys.rev;
     ch.program.loadTeamFile(storeTeamDoc(look.keys, o.pubOf, o.canonBytes));
     merge();
