@@ -1441,7 +1441,7 @@ UI_STRINGS.pl={
   "Only on this computer.":"Tylko na tym komputerze.",
   "Off everywhere. The synced copy is deleted as soon as this computer reaches our service.":"Wyłączona wszędzie. Zsynchronizowana kopia zostanie usunięta, gdy tylko ten komputer połączy się z naszą usługą.",
   "Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account.":"Wyłączona. Po włączeniu {PROVIDER} poprosi o zgodę na użycie przez Etiudę jej folderu na tym koncie.",
-  "Changed on two computers: choose which to keep.":"Zmieniono na dwóch komputerach: należy wybrać, którą wersję zostawić.",
+  "Changed on two computers: the newer change is in use, and the older one is kept, so nothing is lost.":"Zmieniono na dwóch komputerach: obowiązuje nowsza zmiana, a starsza jest zachowana, więc nic nie zginęło.",
   "Your catalogs, edits and settings now follow you to every computer you sign in on. You can turn this off in Account.":"Własne katalogi, zmiany i ustawienia będą teraz dostępne na każdym komputerze, na którym nastąpi zalogowanie. Można to wyłączyć w Koncie.",
   "Not available on this account: {REASON}. Everything works on this computer as before.":"Niedostępna na tym koncie: {REASON}. Na tym komputerze wszystko działa jak dotąd.",
   "Sync across computers is not available on this account: {REASON}. Everything works on this computer as before.":"Synchronizacja między komputerami jest niedostępna na tym koncie: {REASON}. Na tym komputerze wszystko działa jak dotąd.",

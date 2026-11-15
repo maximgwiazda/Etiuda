@@ -8507,6 +8507,7 @@ const FOLDER_QUIT_MS = 2000;
    the desk's next start (Argon's folder-as-built review, finding 7, the desk's half). Whatever is not sent stays owed on disk. */
 app.on("before-quit", (e) => {
   quitting = true;
+  storeAgainStop(); /* plant:store-again-quit */
   try { flushHeldStats(); } catch { /* the last sealed answer stays */ }
   if (quitDrained) { try { FolderSyncer().stopAllFolderSyncers(); } catch {} return; }
   let owes = false;
@@ -11046,6 +11047,7 @@ function storeMine() {
     if (s.keys || s.leave || s.ask !== who || s.last !== who) { s.keys = ""; s.leave = ""; s.ask = who; s.last = who; storeSave(); } /* plant:store-ask */
     storeLeaveHere = null; storeNow = null; storeSay = ""; storeFresh = false;
     storeSyncStop();
+    storeAgainStop();
     return false;
   }
   if (s.last !== who) { s.last = who; storeSave(); }
@@ -11055,6 +11057,7 @@ function storeMine() {
   storeLeaveHere = null; storeOwedHere = ""; storeNow = null; storeSay = ""; storeFresh = false;
   if (storeAccess && storeAccess.who !== who) storeAccess = null;
   storeSyncStop();
+  storeAgainStop();
   storeSave();
   return true;
 }
@@ -11105,6 +11108,7 @@ function storeUngiven() { return storeState().org === true ? "consent" : "ungive
 function storeForget() {
   storeAccess = null; storeNow = null; storeSay = ""; storeFresh = false;
   storeSyncStop();
+  storeAgainStop(); /* plant:store-again-out */
   const s = storeState();
   if (s.keys || s.leave || storeLeaveHere) { s.keys = ""; s.leave = ""; storeLeaveHere = null; storeSave(); } /* plant:signout-store-keys */
   if (storeState().org === true) { storeState().org = false; storeSave(); }
@@ -11250,6 +11254,7 @@ function storeSettle(look) {
   if (sync) sync.turn(look); /* plant:store-sync-turn */
   /* What waits to be said once from the account control, until the page says it showed it (etiuda:store-said). */
   if (first.say || r.say) storeSay = first.say || r.say;
+  storeAgainAfter(look); /* plant:store-again */
   tellStore();
   return storeNow;
 }
@@ -11405,6 +11410,7 @@ async function storeSetNow(what) {
   storeFresh = false;
   storeNow = null;
   storeSyncStop(); /* plant:store-set-stop */
+  storeAgainStop();
   storeSave();
   if (keys) await storeEndEverywhere(keys).catch(() => false);
   if (leaving) await storeLeaveNow(cert); /* plant:store-leave */
@@ -11543,6 +11549,18 @@ function storeTurn() {
   const flight = storeLookNow().catch(() => null).then(r => { if (storeFlight === flight) storeFlight = null; return r; });
   storeFlight = flight;
   return flight;
+}
+/* THE LOOK TRIED AGAIN by itself after one that failed for a passing reason, at store.cjs lookAgainIn's gaps: one timer, replaced at each
+   look's answer, and stopped at a sign out, the switch turned off, another account seated or answered, and a quit. */
+let storeAgainTimer = null, storeAgainTries = 0;
+function storeAgainStop() { clearTimeout(storeAgainTimer); storeAgainTimer = null; storeAgainTries = 0; }
+function storeAgainAfter(look) {
+  clearTimeout(storeAgainTimer); storeAgainTimer = null;
+  const ms = StoreLib().lookAgainIn(look, storeAgainTries);
+  if (!ms) { storeAgainTries = 0; return; } /* plant:store-again-after */
+  storeAgainTries++;
+  storeAgainTimer = setTimeout(() => { storeAgainTimer = null; if (!quitting) storeTurn(); }, ms);
+  if (storeAgainTimer.unref) storeAgainTimer.unref();
 }
 /* Microsoft's folder asked after a seated sign-in (signinFolderAsk), the desk already signed in: the press's landing waits for it, then the
    look. A token answered after another sign-in or a sign out took this one's place is dropped. */
@@ -11699,7 +11717,7 @@ function storeSyncOf() {
       try { fs.mkdirSync(storeSyncDir(), { recursive: true }); writeReplacing(storeSyncDir(STORE_SYNC_FILE), JSON.stringify(s)); }
       catch (e) { console.error("etiuda: the store's sync state could not be kept - " + e.message); }
     },
-    local: storeSyncLocal, held: () => storeSyncHeld, apply: storeSyncApply, pubOf: StoreLib().pubOf, canonBytes: C.signedBytes, now: Date.now,
+    local: storeSyncLocal, held: () => storeSyncHeld, pristine: () => storeSyncPristine, apply: storeSyncApply, pubOf: StoreLib().pubOf, canonBytes: C.signedBytes, now: Date.now,
   });
   return storeSyncing;
 }
@@ -11712,12 +11730,14 @@ function storeSyncFolder() {
 }
 /* This desk's items that follow: its desk keys, and the catalog files at the top of the person's own catalog folder. Null while that
    folder does not answer, so a folder out of reach is never read as every catalog removed; what is left out (for its size, or every
-   catalog file while the folder is a team's) is named in storeSyncHeld, so the merge leaves it as it stood. */
-let storeSyncHeld = [];
+   catalog file while the folder is a team's) is named in storeSyncHeld, so the merge leaves it as it stood; a file that is the shipped
+   sample untouched (isTheSample) is named in storeSyncPristine, so a computer joining a store takes the store's word on it. */
+let storeSyncHeld = [], storeSyncPristine = [];
 function storeSyncLocal() {
   if (deskKeys === undefined) deskKeys = readDesk();
-  const dir = storeSyncFolder(), files = {}, L = SyncLib(), held = [];
+  const dir = storeSyncFolder(), files = {}, L = SyncLib(), held = [], pristine = [];
   storeSyncHeld = held;
+  storeSyncPristine = pristine;
   if (!dir) { held.push("f:"); return L.localItems(deskKeys, {}, held); }
   if (!folderAnswers(dir)) return null;
   let names = [];
@@ -11726,7 +11746,7 @@ function storeSyncLocal() {
     if (!L.CATALOG_RE.test(n)) continue;
     try {
       const f = path.join(dir, n), st = fs.statSync(f);
-      if (st.isFile() && st.size <= L.CATALOG_MAX) files[n] = fs.readFileSync(f, "utf8");
+      if (st.isFile() && st.size <= L.CATALOG_MAX) { files[n] = fs.readFileSync(f, "utf8"); if (isTheSample(f)) pristine.push("f:" + n); } /* plant:sync-pristine */
       else if (st.isFile()) held.push("f:" + n);
     } catch { return null; }
   }
@@ -11755,7 +11775,8 @@ function deskSyncedTell(keys) {
   if (win && !win.isDestroyed()) try { win.webContents.send("etiuda:desk-synced", JSON.stringify(keys)); } catch { /* the page has gone */ } /* plant:desk-synced-tell */
 }
 /* A catalog file from another computer, into the catalog folder; one removed there is moved aside under userData\store\kept,
-   never deleted. False where it could not be put in place; a removal of a file already gone is done. */
+   never deleted, by storeMoveFile, which copies and unlinks where the catalog folder is on another volume. False where it could not
+   be put in place; a removal of a file already gone is done. */
 function storeSyncFile(name, text) {
   const dir = storeSyncFolder();
   if (!dir || !SyncLib().CATALOG_RE.test(name)) return false;
@@ -11763,7 +11784,7 @@ function storeSyncFile(name, text) {
   try {
     if (text === null) {
       fs.mkdirSync(storeSyncDir("kept"), { recursive: true });
-      renamePatiently(at, storeSyncDir("kept", Date.now() + "-" + name));
+      storeMoveFile(at, storeSyncDir("kept", Date.now() + "-" + name)); /* plant:sync-remove-volume */
     } else {
       fs.mkdirSync(dir, { recursive: true });
       writeReplacing(at, text);

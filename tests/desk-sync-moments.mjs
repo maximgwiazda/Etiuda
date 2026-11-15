@@ -39,7 +39,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 25;
+const EXPECTED = 26;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const STORE = path.join(E.ROOT, "shell", "sync", "store.cjs");
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -197,7 +197,7 @@ async function main() {
     ["unavailable, the folder full", { ...ON, line: "unavailable", why: "full" }, "Not available on this account: the account's storage is full. Everything works on this computer as before.", "none"],
     ["unavailable, the organisation's refusal", { ...ON, line: "unavailable", why: "consent" }, "Not available on this account: your organisation has not allowed it; its IT department decides. Everything works on this computer as before.", "none"],
     ["the folder's consent never given", { ...ON, line: "ungiven", on: false }, "Off. Turning it on asks Microsoft to let Etiuda use its folder in this account.", "switch"],
-    ["conflict", { ...ON, line: "conflict" }, "Changed on two computers: choose which to keep.", "switch"],
+    ["conflict", { ...ON, line: "conflict" }, "Changed on two computers: the newer change is in use, and the older one is kept, so nothing is lost.", "switch"],
     ["paused", { ...ON, line: "paused", since: Date.UTC(2026, 10, 11, 12) }, "Paused since 11 November. It resumes when this computer reaches our service.", "switch"],
     ["the store's room full", { ...ON, line: "full" }, "Sync is full, so new changes stay on this computer until something is removed.", "switch"],
     ["no seat", { ...ON, line: "noseat" }, "Waiting for a seat. Sync resumes when this account holds one again, and nothing on this computer is lost.", "switch"],
@@ -676,7 +676,8 @@ async function main() {
       [(r => r.line === "noseat" && r.on === true)(row({ seatless: true, signinRefused: true, until: now - 4 * D, conflicts: 1 })), "no seat: said over a conflict and a lapse, the switch on"],
       [row({ seatless: true, look: { state: "unavailable", why: "no-drive" } }).line === "unavailable" && row({ seatless: true, pol: { on: false, held: false } }).line === "off", "no seat: under a folder not reached and the person's own off"],
       [(r => r.line === "full" && r.on === true)(row({ full: true })), "the store's room full, the switch on"],
-      [row({ full: true, conflicts: 1 }).line === "conflict" && row({ full: true, until: now - 3 * D }).line === "paused" && row({ full: true, pol: { on: false, held: false } }).line === "off", "full: under a conflict, a pause and off"],
+      [row({ full: true, conflicts: 1 }).line === "full" && row({ full: true, until: now - 3 * D }).line === "paused" && row({ full: true, pol: { on: false, held: false } }).line === "off", "full: over a conflict, under a pause and off"],
+      [row({ conflicts: 1, until: now - 3 * D }).line === "paused" && row({ conflicts: 1, until: now - 2 * D }).line === "conflict", "a conflict: under a pause, said once the pause is not yet said"],
       [((r) => r.line === "ask" && r.on === false && r.held === false && r.askNow === true)(row({ ask: true, askNow: true, pol: { on: false, held: false } })), "ask: waiting for account-change answer even with person off"],
       [row({ ask: true, askNow: true, pol: { on: false, held: true } }).line === "org-off", "ask: under policy off"],
       [ST.roomNext(false, "team-size") === true && ST.roomNext(true, "rate") === true && ST.roomNext(false, "rate") === false && ST.roomNext(true, "") === false, "roomNext: full at team-size, empty at a taken write, else as it was"],
@@ -687,14 +688,17 @@ async function main() {
     const bad = rowBad(ST);
     check(!bad.length, "r1 storeRow's line for each state, and the store's room", bad.length ? bad : undefined);
   }
-  /* The row's two new lines, each lifted in a copy of store.cjs, turn r1 red; the product file is never written. */
-  for (const [tag, what] of [["row-ask", "the hold's question read as off"], ["row-noseat", "no seat read as on"], ["row-full", "the room full read as on"]]) {
+  /* The row's lines, each lifted or moved in a copy of store.cjs, turn r1 red; the product file is never written. */
+  for (const [tag, what] of [["row-ask", "the hold's question read as off"], ["row-noseat", "no seat read as on"], ["row-full", "the room full read as on"],
+    ["row-conflict", "the conflict said first, over a pause and the room full"]]) {
     const line = "p r1 " + tag + " lifted in a copy of store.cjs turns r1 red (" + what + "), and the product file is never written";
     if (PLANTS_OFF) { skip(line); continue; }
     const before = sha(STORE), text = fs.readFileSync(STORE, "utf8"), lines = text.split("\n"), at = lines.findIndex(l => l.indexOf("/* plant:" + tag + " */") >= 0);
     let red = false, detail = "the plant's anchor is absent";
     if (at >= 0) {
-      if (tag === "row-full") lines[at] = lines[at].replace('o.full === true ? "full" : "on"', '"on"'); else lines.splice(at, 1);
+      if (tag === "row-full") lines[at] = lines[at].replace('o.full === true ? "full" : "on"', '"on"');
+      else if (tag === "row-conflict") { const moved = lines.splice(at, 1)[0].replace(" && o.full !== true", ""); lines.splice(lines.findIndex(l => l.indexOf("const p = pausedLine(") >= 0), 0, moved); }
+      else lines.splice(at, 1);
       const dir = path.join(lab, "store-plant-" + tag);
       fs.mkdirSync(dir);
       fs.writeFileSync(path.join(dir, "store.cjs"), lines.join("\n"));

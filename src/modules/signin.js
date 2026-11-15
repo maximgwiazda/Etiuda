@@ -519,7 +519,7 @@ function syncLine(s, provider){
   if(s.line==="ungiven") return named(t("Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account."),"{PROVIDER}",SIGNIN_NAMES[provider]||"Microsoft");
   if(s.line==="unavailable") return syncUnavailable(s.why, provider);
   if(s.line==="paused") return named(t("Paused since {DATE}. It resumes when this computer reaches our service."),"{DATE}",syncDate(s.since));
-  if(s.line==="conflict") return t("Changed on two computers: choose which to keep.");
+  if(s.line==="conflict") return t("Changed on two computers: the newer change is in use, and the older one is kept, so nothing is lost.");
   if(s.line==="full") return t("Sync is full, so new changes stay on this computer until something is removed.");
   if(s.line==="noseat") return t("Waiting for a seat. Sync resumes when this account holds one again, and nothing on this computer is lost.");
   if(s.line==="ask") return t("Waiting for your answer about what is on this desk. Nothing syncs until then.");

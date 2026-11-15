@@ -8,8 +8,8 @@
    live elsewhere (desk.json's envelope, signin.json, the relay's mirrors) and are never read here.
 
    THE MERGE, per item: a setting by the later write; an edit or a catalog file by the later write where only one computer changed it
-   since it last took the other's, and where both changed it, both kept: this computer keeps its own in place and the other's as a
-   copy the person chooses from (resolve). Each entry names who wrote it, when, and the other computers' entries it was made over
+   since it last took the other's, and where both changed it, the later write in place on every computer and each earlier version
+   kept aside on each, so nothing is lost. Each entry names who wrote it, when, and the other computers' entries it was made over
    (`seen`), so "changed since it last took the other's" is read from the entries alone. */
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -196,12 +196,18 @@ function mergeOnce(o) {
   /* A version kept for the person is let go once a later one stands over it, chosen on another computer. */
   const settled = (item, win, tops) => { kept = kept.filter(k => k.item !== item || !(tops || [win]).some(e => over(e, Object.assign({ seen: {} }, k)))); };
   const patch = {}, copies = [];
+  /* A computer that has never synced joining a store the others already hold: what it held before counts as older than anything they
+     wrote, so a setting gives way to the store's; and the shipped sample untouched here (o.pristine) is none of its own, so the store's
+     word on it stands. */
+  const joining = !Object.keys(ledger).length && (o.theirs || []).some(t => t.by !== me && Object.keys(t.items).length);
+  const pristine = Array.isArray(o.pristine) ? o.pristine : [];
   /* This computer's own changes first: an item whose value is not the one its entry names was changed here. */
   for (const item of new Set(Object.keys(ledger).concat(Object.keys(local)))) {
     const was = ledger[item], h = has(local, item) ? sha(local[item]) : null;
     if (was ? was.h === h : h === null) continue; /* plant:recorded */
     if (h === null && heldBy(held, item)) continue; /* plant:held-kept */
-    const t = Math.max(now, was ? was.t + 1 : 0);
+    if (joining && pristine.indexOf(item) >= 0) continue; /* plant:join-pristine */
+    const t = joining ? 0 : Math.max(now, was ? was.t + 1 : 0); /* plant:join-older */
     ledger[item] = { h, by: me, t, seen: was ? (was.by === me ? Object.assign({}, was.seen) : unionSeen(was)) : {} };
   }
   const valueOf = (e, item) => {
@@ -210,6 +216,8 @@ function mergeOnce(o) {
     const text = typeof o.fileOf === "function" ? o.fileOf(e.by, item) : null;
     return typeof text === "string" && sha(text) === e.h ? text : undefined;
   };
+  /* This computer's own entry's value, from what it holds now (its ledger keeps no value). */
+  const ownOf = (e, item) => (e.h === null ? null : has(local, item) && sha(local[item]) === e.h ? local[item] : undefined);
   const items = new Set(Object.keys(ledger));
   for (const t of o.theirs || []) for (const item of Object.keys(t.items)) items.add(item);
   for (const item of items) {
@@ -242,9 +250,9 @@ function mergeOnce(o) {
       patch[item] = v;
       continue;
     }
-    /* Both changed it: this computer keeps its own in place, or the latest where its own was overtaken, and each other version is
-       kept for the person. Nothing is lost and the entry here claims none of them, so the other computer keeps both too. */
-    const stay = mine && top.some(e => same(e, mine)) ? mine : top.reduce((a, b) => (b.t > a.t || (b.t === a.t && b.by > a.by) ? b : a));
+    /* Both changed it: the later write stands on every computer, and each earlier version is kept aside, this computer's own among them.
+       Nothing is lost, and the entry here claims none of them, so the other computer keeps the earlier too. */
+    const stay = top.reduce((a, b) => (b.t > a.t || (b.t === a.t && b.by > a.by) ? b : a)); /* plant:later-stands */
     if (!mine || !same(stay, mine)) {
       const v = valueOf(stay, item);
       if (v === undefined) continue;
@@ -257,7 +265,7 @@ function mergeOnce(o) {
     /* A removal is a version too, kept with the value null, so the conflict waits on both computers and not only where it was undone. */
     for (const e of top) {
       if (same(e, stay) || kept.some(k => k.item === item && k.by === e.by && k.t === e.t)) continue; /* plant:keep-both */
-      const v = valueOf(e, item);
+      const v = mine && same(e, mine) ? ownOf(e, item) : valueOf(e, item); /* plant:keep-own */
       if (v === undefined) continue;
       copies.push({ item, by: e.by, t: e.t, h: e.h, value: v });
     }
@@ -294,7 +302,7 @@ function unapplied(prev, r, failed, local, me) {
 }
 
 /* The person chose one version of an item both changed (`value`, null to remove): taken here over every version it was chosen from,
-   so the choice stands on every computer. */
+   so the choice stands on every computer. It records only; the value is put in place first (createStoreSync's choose). */
 function resolve(state, me, item, value, now) {
   const ledger = Object.assign({}, state.ledger), kept = state.kept.filter(k => k.item !== item);
   const from = state.kept.filter(k => k.item === item).concat(ledger[item] ? [ledger[item]] : []);
@@ -337,14 +345,15 @@ function storeChannelOptions(keys, me, cert, mirrorRoot, pubOf) {
    `o`: me {id, pub, privateKey}; mirrorRoot, where each store's mirror sits by its relay team id; channel(options) the relay channel
    made from storeChannelOptions with the caller's own request, write, say and clock; io(mirror) the channel's diskIO over a mirror;
    load() and save(state) this computer's sync state {rt, ledger, kept}; local() its items now (localItems), or null where they could
-   not be read, and held() those it left out (localItems' `held`); apply(patch, copies) puts the merge's patch in place and keeps each
+   not be read, held() those it left out (localItems' `held`), and pristine() its catalog files that are the shipped sample untouched;
+   apply(patch, copies) puts the merge's patch in place and keeps each
    copy for the person, answering the items it could not (unapplied); pubOf and canonBytes; now().
    WHILE PAUSED nothing is lost: edits go on into the last store's mirror, which is this computer's outbox, and the channel, started
    again at the next look that is on, sends what waited and takes what came. A store the folder now names in place of the one this
    computer had (another computer's replace ended it) is adopted at that look, and this computer's whole place written into it, so
    every edit it holds reaches the new store. */
 function createStoreSync(o) {
-  let ch = null, at = "", revNow = -1, keysNow = null, certNow = null, busy = false;
+  let ch = null, at = "", revNow = -1, keysNow = null, certNow = null, busy = false, reached = "";
   let state = (() => { const s = o.load(); return plain(s) && plain(s.ledger) && Array.isArray(s.kept) ? s : { rt: "", ledger: {}, kept: [] }; })();
   const mirrorOf = rt => path.join(o.mirrorRoot, rt);
   function theirs(io, rt) {
@@ -362,13 +371,15 @@ function createStoreSync(o) {
   /* One merge into the mirror of the store this computer last synced to; nothing where it has synced to none yet. */
   function merge() {
     if (!state.rt || busy) return null;
+    /* A computer that has never synced merges first once a cycle has reached the store, so that merge sees what the store holds. */
+    if (!Object.keys(state.ledger).length && reached !== state.rt) return null; /* plant:join-reached */
     const local = o.local();
     if (!local) return null;
     busy = true;
     try {
       const io = o.io(mirrorOf(state.rt)), t = theirs(io, state.rt);
-      const held = typeof o.held === "function" ? o.held() : [];
-      let r = mergeOnce({ me: o.me.id, now: o.now(), state, local, held, theirs: t.list, fileOf: t.fileOf });
+      const held = typeof o.held === "function" ? o.held() : [], pristine = typeof o.pristine === "function" ? o.pristine() : [];
+      let r = mergeOnce({ me: o.me.id, now: o.now(), state, local, held, pristine, theirs: t.list, fileOf: t.fileOf });
       if (Object.keys(r.patch).length || r.copies.length) r = unapplied(state, r, o.apply(r.patch, r.copies), local, o.me.id); /* plant:unapplied */
       state = Object.assign({ rt: state.rt }, r.state);
       o.save(state);
@@ -404,14 +415,28 @@ function createStoreSync(o) {
     stop();
     fs.mkdirSync(mirrorOf(look.keys.rt), { recursive: true });
     /* After each cycle that reached the relay, what came is merged in. */
-    ch = o.channel(Object.assign(storeChannelOptions(look.keys, o.me, () => certNow, o.mirrorRoot, o.pubOf), { onHere: () => { merge(); } }));
+    const rt = look.keys.rt;
+    ch = o.channel(Object.assign(storeChannelOptions(look.keys, o.me, () => certNow, o.mirrorRoot, o.pubOf), { onHere: () => { reached = rt; merge(); } }));
     at = look.keys.rt; revNow = look.keys.rev;
     ch.program.loadTeamFile(storeTeamDoc(look.keys, o.pubOf, o.canonBytes));
     merge();
     ch.start(); /* plant:resume */
   }
-  return { turn, merge, stop, state: () => state, channel: () => ch, running: () => !!ch,
-    resolve: (item, value) => { state = Object.assign({ rt: state.rt }, resolve(state, o.me.id, item, value, o.now())); o.save(state); merge(); } };
+  /* A version chosen (resolve, above) is put in place before it is recorded, so the next merge does not read the one that stood as a newer
+     change; where the desk could not put it in place nothing is recorded. A layer field goes in as its whole key, as a merge's patch does. */
+  function choose(item, value) {
+    const local = o.local();
+    if (!local || !follows(item)) return false;
+    const key = layerOf(item), after = Object.assign({}, local);
+    if (value === null) delete after[item]; else after[item] = value;
+    const failed = o.apply(key ? { ["k:" + key]: layerText(after, key) } : { [item]: value }, []); /* plant:choose-applied */
+    if (Array.isArray(failed) && failed.length) return false;
+    state = Object.assign({ rt: state.rt }, resolve(state, o.me.id, item, value, o.now()));
+    o.save(state);
+    merge();
+    return true;
+  }
+  return { turn, merge, stop, state: () => state, channel: () => ch, running: () => !!ch, resolve: choose };
 }
 
 module.exports = { SYNC_NAME, SYNC_KIND, SETTINGS, LAYER_RE, CATALOG_RE, CATALOG_MAX, follows, isSetting, fileRel, syncRel, localItems, syncRead, syncText,

@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 137;
+const EXPECTED = 145;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -132,6 +132,7 @@ function worldOf(o) {
       w.service.push(body);
       if (w.grantGate) { const g = w.grantGate; w.grantGate = null; if (w.onGrant) w.onGrant(); await g; }
       if (w.grantDown) return json(503, { ok: false, reason: "unavailable" });
+      if (w.grantRefuse) return json(403, { ok: false, reason: w.grantRefuse });
       const b = JSON.parse(body), lines = ["etiuda-licence-store-grant", b.desk, b.rt, b.lead, b.t].concat(b.company ? ["company"] : [], b.replace ? ["replace"] : []);
       if (!verifyWith(b.desk, Buffer.from(lines.join("\n"), "utf8"), b.sig)) return json(400, { ok: false, reason: "signature" });
       R.clock.now = Date.now();
@@ -196,14 +197,14 @@ function worldOf(o) {
 /* ---- the shell, evaluated whole: `src` is shell/main.js's text or a planted copy of it ---- */
 /* What the leg reads from main.js, appended to its text; a name main.js lacks comes back undefined, so its leg fails alone. */
 const TAIL_NAMES = ["storeView", "storeRoom", "storeSetNow", "storeAnswerNow", "storeSetAsideDir", "storeSyncFolder", "storeState", "storeTokenTake", "signinRun", "signinRenew", "signinIo", "signinRenewNow", "signinServiceAsk", "storeServiceAt", "storeOnFor", "storeTurn", "branchIdentity", "signinState", "patchDesk", "storeForget", "signinLandingHtml", "signinListen",
-  "signinOutNow", "storeLeaveNow", "storeSyncApply", "storeSyncSoon"];
-const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing", "storeConsentFlight", "storeSyncTimer"];
+  "signinOutNow", "storeLeaveNow", "storeSyncApply", "storeSyncSoon", "storeSyncLocal"];
+const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing", "storeConsentFlight", "storeSyncTimer", "storeSyncPristine", "storeAgainTimer"];
 const TAIL = "\n__test.T = {" + TAIL_NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
   + ", setJoin: v => { teamJoin = v; }, get: () => ({" + TAIL_STATE.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "}) };";
 function boot(src, o) {
   const opt = o || {};
   const UD = opt.ud || fs.mkdtempSync(path.join(WORK, "ud-"));
-  const said = [], opened = [], openedPaths = [], ipc = { on: {}, handle: {} };
+  const said = [], opened = [], openedPaths = [], ipc = { on: {}, handle: {} }, appOn = {};
   const quiet = { log: s => said.push(String(s)), error: s => said.push(String(s)), warn: () => {}, info: () => {}, debug: () => {} };
   const noop = () => {};
   const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined, construct: () => inert });
@@ -214,7 +215,7 @@ function boot(src, o) {
   };
   const sealed = s => safeStorage.encryptString(s).toString("base64");
   const electron = {
-    app: { getPath: () => UD, setPath: noop, requestSingleInstanceLock: () => true, quit: noop, on: noop, getVersion: () => "0.0.0", getLocale: () => "en",
+    app: { getPath: () => UD, setPath: noop, requestSingleInstanceLock: () => true, quit: noop, on: (ev, fn) => { (appOn[ev] = appOn[ev] || []).push(fn); }, getVersion: () => "0.0.0", getLocale: () => "en",
       getPreferredSystemLanguages: () => ["en"], whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop, hasSwitch: () => false },
       getLoginItemSettings: () => ({ openAtLogin: false, args: [], launchItems: [] }), setLoginItemSettings: noop, setAppUserModelId: noop,
       setJumpList: () => ({ result: "ok" }), getJumpListSettings: () => ({ minItems: 0 }) },
@@ -235,13 +236,14 @@ function boot(src, o) {
   const holder = {};
   const fsMod = opt.fsWrap ? opt.fsWrap(nodeRequire("node:fs")) : null;
   try {
-    new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test", src + TAIL)(
+    new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test", "setTimeout", "clearTimeout", src + TAIL)(
       n => (n === "electron" ? electron : (fsMod && (n === "fs" || n === "node:fs")) ? fsMod : nodeRequire(n)),
-      path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, holder);
+      path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, holder,
+      opt.timers ? opt.timers.set : setTimeout, opt.timers ? opt.timers.clear : clearTimeout);
   } finally {
     for (const k of Object.keys(env)) { if (was[k] === undefined) delete process.env[k]; else process.env[k] = was[k]; }
   }
-  return { T: holder.T, UD, said, opened, openedPaths, ipc, lab: env.ETIUDA_SIGNIN_LAB };
+  return { T: holder.T, UD, said, opened, openedPaths, ipc, appOn, lab: env.ETIUDA_SIGNIN_LAB };
 }
 function filesUnder(dir) {
   const out = [];
@@ -387,6 +389,9 @@ async function syncScene(src) {
    store into the team's mirror. */
 async function teamFolderScene(src) {
   const r = await renewScene(src), T = r.shell.T, sync = T.get().storeSyncing;
+  /* A computer's first merge waits for a cycle that reached the store (sync.cjs merge). */
+  const ch = sync && sync.channel();
+  if (ch) await ch.idle();
   const own = path.join(r.shell.UD, "Etiuda");
   fs.mkdirSync(own, { recursive: true });
   fs.writeFileSync(path.join(own, "Own.ec"), JSON.stringify({ kind: "etiuda-catalog", format: 2, id: "own" }));
@@ -403,6 +408,95 @@ async function teamFolderScene(src) {
   const ok = !!sync && !!before.h && !ledger["f:Team.ec"] && !!ledger["f:Own.ec"] && ledger["f:Own.ec"].h === before.h && inMirror.join() === "Team.ec"
     && Array.isArray(failed) && failed.join() === "f:From the store.ec";
   return { ok, detail: brief({ ownTaken: !!before.h, teamTaken: !!ledger["f:Team.ec"], ownRemoved: !!ledger["f:Own.ec"] && ledger["f:Own.ec"].h === null, inMirror, failed }) };
+}
+
+/* (jp) THE SAMPLE UNTOUCHED: the store's sync names the shipped sample in the person's folder as untouched, judged by its bytes as
+   isTheSample judges it, so a computer joining a store takes the store's word on it (shell/sync/sync.cjs); a copy with one byte changed,
+   whatever its name, is the person's own. */
+async function pristineScene(src) {
+  const { T } = boot(src);
+  const dir = T.storeSyncFolder(), shipped = fs.readFileSync(path.join(ROOT, "shell", "sample-catalog.ec"));
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "sample-catalog.ec"), shipped);
+  const edited = Buffer.from(shipped);
+  edited[edited.length - 2] = edited[edited.length - 2] === 0x20 ? 0x0a : 0x20;
+  fs.writeFileSync(path.join(dir, "sample-catalog-copy.ec"), edited);
+  const local = T.storeSyncLocal(), pristine = T.get().storeSyncPristine;
+  const ok = !!local && typeof local["f:sample-catalog.ec"] === "string" && typeof local["f:sample-catalog-copy.ec"] === "string"
+    && Array.isArray(pristine) && pristine.join() === "f:sample-catalog.ec";
+  return { ok, detail: brief({ read: local ? Object.keys(local).filter(k => k.startsWith("f:")) : null, pristine }) };
+}
+
+/* (rv) A REMOVAL ACROSS VOLUMES: a catalog another computer removed, where the catalog folder sits on another volume than the
+   profile (every rename of it refused as EXDEV), is copied under store/kept and unlinked; where the unlink fails, the copy goes, the
+   file stays where it was byte for byte, and the removal is answered as not put in place, so the next merge tries again. */
+async function removalVolumeScene(src) {
+  let unlinkFails = false;
+  const fsWrap = real => new Proxy(real, {
+    get(target, prop) {
+      if (prop === "renameSync") return (from, to) => { if (/Harbour\.ec$/.test(String(from))) throw Object.assign(new Error("cross-device link not permitted"), { code: "EXDEV" }); return target.renameSync(from, to); };
+      if (prop === "unlinkSync") return f => { if (unlinkFails && /[\\/]Etiuda[\\/]Harbour\.ec$/.test(String(f))) throw Object.assign(new Error("busy"), { code: "EPERM" }); return target.unlinkSync(f); };
+      const v = target[prop];
+      return typeof v === "function" ? v.bind(target) : v;
+    }
+  });
+  const { T, UD } = boot(src, { fsWrap });
+  const dir = T.storeSyncFolder(), at = path.join(dir, "Harbour.ec"), keptDir = path.join(UD, "store", "kept");
+  const bytes = Buffer.from(JSON.stringify({ kind: "etiuda-catalog", format: 2, id: "harbour" }));
+  const keptNow = () => (fs.existsSync(keptDir) ? fs.readdirSync(keptDir) : []);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(at, bytes);
+  unlinkFails = true;
+  const half = T.storeSyncApply({ "f:Harbour.ec": null }, []);
+  const stayed = fs.existsSync(at) && fs.readFileSync(at).equals(bytes), keptHalf = keptNow();
+  unlinkFails = false;
+  const done = T.storeSyncApply({ "f:Harbour.ec": null }, []);
+  const kept = keptNow(), moved = kept.length === 1 && /Harbour\.ec$/.test(kept[0]) && fs.readFileSync(path.join(keptDir, kept[0])).equals(bytes);
+  const ok = Array.isArray(half) && half.join() === "f:Harbour.ec" && stayed && keptHalf.length === 0 && Array.isArray(done) && done.length === 0 && !fs.existsSync(at) && moved;
+  return { ok, detail: brief({ half, stayed, keptHalf, done, gone: !fs.existsSync(at), kept }) };
+}
+
+/* (t7) THE LOOK TRIED AGAIN: a look the licence service did not answer is tried again by itself, through main.js's own timers (each
+   real, kept here by handle and run at once rather than waited for): at 1, 2, 4, 8, 16, 32 and 64 minutes, then no more; a look from
+   outside starts again, and the service back, the look is on and nothing waits. A refusal (another person's store) is not tried again,
+   and the switch turned off, a sign out and a quit each leave no timer. */
+async function againScene(src) {
+  const live = new Map();
+  const timers = { set: (fn, ms, ...a) => { const h = setTimeout(fn, ms, ...a); live.set(h, { fn, ms }); return h; }, clear: h => { live.delete(h); clearTimeout(h); } };
+  const r = await renewScene(src, { grantDown: true, boot: { timers } }), T = r.shell.T, w = r.world;
+  const pending = () => { const h = T.get().storeAgainTimer; return h && live.has(h) ? live.get(h).ms : 0; };
+  const fire = async () => { const h = T.get().storeAgainTimer, e = h && live.get(h); if (!e) return false; timers.clear(h); e.fn(); const f = T.get().storeFlight; if (f) await f; return true; };
+  const first = r.now ? r.now.state + "/" + r.now.why : "none", gaps = [];
+  for (let i = 0; i < 9 && pending(); i++) { gaps.push(pending() / 60000); await fire(); }
+  const spent = !pending();
+  await T.storeTurn();
+  const again = pending() / 60000;
+  w.grantDown = false;
+  await fire();
+  const back = T.get().storeNow ? T.get().storeNow.state : "none", backLeft = pending();
+  w.grantRefuse = "store";
+  await T.storeTurn();
+  const refused = T.get().storeNow ? T.get().storeNow.state + "/" + T.get().storeNow.why : "none", refusedLeft = pending();
+  w.grantRefuse = "";
+  w.grantDown = true;
+  await T.storeTurn();
+  const beforeOff = pending();
+  await T.storeSetNow("here");
+  const offLeft = pending();
+  await T.storeSetNow("on");
+  const f1 = T.get().storeFlight;
+  if (f1) await f1;
+  const beforeOut = pending();
+  T.signinOutNow();
+  const outLeft = pending();
+  const quit = await renewScene(src, { grantDown: true, boot: { timers } });
+  const beforeQuit = quit.shell.T.get().storeAgainTimer && live.has(quit.shell.T.get().storeAgainTimer);
+  for (const fn of quit.shell.appOn["before-quit"] || []) fn({ preventDefault() {} });
+  const quitLeft = !!quit.shell.T.get().storeAgainTimer;
+  for (const h of [...live.keys()]) timers.clear(h);
+  const ok = first === "paused/unreached" && gaps.join() === "1,2,4,8,16,32,64" && spent && again === 1 && back === "on" && !backLeft && refused === "paused/store" && !refusedLeft
+    && beforeOff === 60000 && !offLeft && beforeOut === 60000 && !outLeft && beforeQuit && !quitLeft;
+  return { ok, detail: brief({ first, gaps, spent, again, back, backLeft, refused, refusedLeft, beforeOff, offLeft, beforeOut, outLeft, beforeQuit, quitLeft }) };
 }
 
 /* (d4f) The page's view and the switch: the first look that made the store says "on" once; This computer forgets the keys and ends
@@ -1651,6 +1745,9 @@ const LEGS = [
   ["gc", conflictsScene, "the versions the sync keeps for the person's choice are the row's conflict count: one kept reads conflict, none reads on"],
   ["gs", switchStopScene, "This computer and Everywhere stop the store's sync at once, the relay unreached, not at the next look"],
   ["gr", roomWireScene, "a write the store's relay refuses for its room turns the row full, and the next write it takes turns it on"],
+  ["jp", pristineScene, "the store's sync names the shipped sample untouched in the person's folder by its bytes, and a copy with one byte changed as the person's own"],
+  ["rv", removalVolumeScene, "a catalog another computer removed, the catalog folder on another volume than the profile: copied aside and unlinked; an unlink that fails leaves it where it was, the copy gone, the removal not taken as applied"],
+  ["t7", againScene, "a look the licence service did not answer is tried again by itself at 1, 2, 4, 8, 16, 32 and 64 minutes, then no more, until a look from outside; back, it is on and nothing waits; a refusal is not tried again, and the switch turned off, a sign out and a quit leave no timer"],
   ["gt", teamFolderScene, "joined to a folder team, the store's sync takes no team catalog into the person's store, reads the person's own catalog as removed nowhere, and writes nothing from the store into the team's mirror"],
   ["g1b", consentBusyScene, "while the switch's request for the folder waits on the browser the desk is busy to the page, and an answer after another account took the seat is neither taken for it nor looked with"],
   ["g2r", keepRefreshScene, "the switch's Google consent sign-in answered with no refresh token keeps the refresh token already sealed for the same account"],
@@ -1749,6 +1846,11 @@ const PLANTS = [
   ["fa2", text => { const x = swap("storeAccess.who === storeWho(held) ? storeAccess : null; /* plant:access-who */", "true ? storeAccess : null; /* plant:access-who */")(text);
     const y = x && swap("  if (storeAccess && storeAccess.who !== who) storeAccess = null;", "")(x);
     return y && swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = false; /* plant:store-held */")(y); }, "a folder token reused for whoever is seated, the hold lifted"],
+  ["jp", swap(" if (isTheSample(f)) pristine.push(\"f:\" + n); } /* plant:sync-pristine */", " } /* plant:sync-pristine */"), "the untouched sample not named, so a joining computer brings back a sample deleted elsewhere"],
+  ["rv", swap("      storeMoveFile(at, storeSyncDir(\"kept\", Date.now() + \"-\" + name)); /* plant:sync-remove-volume */", "      renamePatiently(at, storeSyncDir(\"kept\", Date.now() + \"-\" + name)); /* plant:sync-remove-volume */"), "a removal moved by rename alone, so a catalog folder on another volume never takes one"],
+  ["t7", swap("  storeAgainAfter(look); /* plant:store-again */\n", ""), "no look is tried again by itself"],
+  ["t7", swap("  storeAgainStop(); /* plant:store-again-out */\n", ""), "a sign out leaves the timer running"],
+  ["t7", swap("  storeAgainStop(); /* plant:store-again-quit */\n", ""), "a quit leaves the timer running"],
   ["gt", swap("if (sayJoinPolicy().folder || relayHere() || folderTeamHere() || Object.keys(teamNeedsFolder).length) return \"\"; /* plant:sync-team-folder */", "if (false) return \"\"; /* plant:sync-team-folder */"), "the store's sync lists and writes the team's mirror as the person's folder"],
   ["w1", swap("  if (s.keys || s.leave || storeLeaveHere) {", "  if (false) {"), "a sign-out leaves the store's keys in store.json"],
   ["w1d", text => { const x = swap("  if (s.who === who) return true; /* plant:store-mine */", "  if (true) { s.who = who; return true; } /* plant:store-mine */")(text);

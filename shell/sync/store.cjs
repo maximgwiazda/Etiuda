@@ -230,8 +230,11 @@ async function storeLook(io) {
   /* Only a computer that made the store its folder shows says it replaces the person's others (the service ends them); two may, above. */
   const got = await io.grant(keys.rt, sPub, { replace: made });
   if (!got || got.why || !got.grant) return { state: "paused", why: got && got.why ? got.why : "unreached", keys, made };
-  /* Sealed here only once the service grants the store to the person signed in, so a key file it refuses never replaces this computer's own. */
-  if (!local || local.rt !== keys.rt || local.k !== keys.k || local.s !== keys.s || local.rev !== keys.rev) io.keep(keys); /* plant:keep-granted */
+  /* Sealed here only once the service grants the store to the person signed in, so a key file it refuses never replaces this computer's own;
+     and a list naming this computer only once the relay holds it (below), so a list the relay may lack is posted again at the next look. */
+  const mine = k => k.devices.some(d => d.pub === io.me.pub);
+  const taken = k => !!local && local.rt === k.rt && local.rev === k.rev && mine(local); /* plant:enrol-taken */
+  if (!mine(keys) && (!local || local.rt !== keys.rt || local.k !== keys.k || local.s !== keys.s || local.rev !== keys.rev)) io.keep(keys); /* plant:keep-granted */
   if (made) {
     const c = await io.relay.create(keys, got.grant);
     if (!c.ok) return { state: "paused", why: c.why || "relay", keys, made };
@@ -244,15 +247,20 @@ async function storeLook(io) {
     /* Swept while every computer was away, or a seat regained after the sweep: a fresh store, once, which this computer's sync fills. */
     if (r && r.ok === false && r.why === "not-enrolled" && !io.gone) return storeLook(Object.assign({}, io, { gone: keys.rt })); /* plant:store-remake */
   }
-  if (!keys.devices.some(d => d.pub === io.me.pub)) {
-    /* This computer enrols itself with S, the list kept in the folder's file so the next computer signs the whole of it. */
+  if (!mine(keys)) {
+    /* This computer enrols itself with S, the list kept in the folder's file so the next computer signs the whole of it. Written to the
+       folder before the relay, as storeLeave does: the relay refuses any revision at or below its own, so it must never hold one the
+       folder lacks. */
     const next = Object.assign({}, keys, { devices: keys.devices.concat([{ id: io.me.id, pub: io.me.pub, desk: io.me.desk }]).slice(-DEVICES_MAX), rev: keys.rev + 1 });
-    const d = await io.relay.devices(next, got.store);
-    if (!d.ok) return { state: "paused", why: d.why || "relay", keys };
-    const w = await io.folder.write(keyText(next));
-    if (!w.ok) return { state: "unavailable", why: w.why, keys: next };
-    io.keep(next);
+    const w = await io.folder.write(keyText(next)); /* plant:enrol-folder-first */
+    if (!w.ok) return { state: "unavailable", why: w.why, keys };
     keys = next;
+  }
+  if (!taken(keys)) {
+    /* A list it holds already (replay-rev) is done, as for storeLeave. */
+    const d = await io.relay.devices(keys, got.store);
+    if (!d.ok && d.why !== "replay-rev") return { state: "paused", why: d.why || "relay", keys };
+    io.keep(keys);
   }
   return { state: "on", keys, store: got.store, made };
 }
@@ -291,6 +299,16 @@ function sayOnce(kept, look) {
   return { say: why, kept: why };
 }
 
+/* ---- the look tried again by itself, after one that failed for a passing reason: the folder, the licence service or the relay not
+   answering, or the relay's rate. The gap before try `tries` (from 0), growing, and 0 once LOOK_AGAIN_MS is spent or for any other
+   answer; a sign-in, a renewal or the switch looks again in any case. Pure. ---- */
+const LOOK_AGAIN_MS = [60e3, 120e3, 240e3, 480e3, 960e3, 1920e3, 3840e3];
+const PASSING = ["offline", "unreached", "relay", "rate"];
+function lookAgainIn(look, tries) {
+  if (!look || (look.state !== "unavailable" && look.state !== "paused") || PASSING.indexOf(String(look.why)) < 0) return 0; /* plant:again-passing */
+  return Number.isSafeInteger(tries) && tries >= 0 && tries < LOOK_AGAIN_MS.length ? LOOK_AGAIN_MS[tries] : 0; /* plant:again-bound */
+}
+
 /* ---- the honest pause: a store certificate lapsed pauses sync; the row speaks only after PAUSE_SAY_MS ---- */
 const PAUSE_SAY_MS = 3 * 24 * 60 * 60 * 1000;
 function pausedLine(cert, now, signinRefused) {
@@ -305,8 +323,8 @@ function pausedLine(cert, now, signinRefused) {
    (the store's room at the relay refused a write, roomNext). Answers
    {shown, line, on, held, why, since, say}: line "org-off" where policy keeps sync off, "off" where the person turned it off,
    "ungiven" where the folder's consent was never given (off, the switch the person's own way to ask for it), "unavailable" where
-   the folder could not be reached for a reason the person cannot mend (never offline), "noseat", "conflict", "paused" after
-   PAUSE_SAY_MS, "full", else "on". Nothing of a key, a store or a token. Pure. */
+   the folder could not be reached for a reason the person cannot mend (never offline), "noseat", "paused" after PAUSE_SAY_MS,
+   "full", "conflict" (a version kept aside), else "on", the first that holds in that order. Nothing of a key, a store or a token. Pure. */
 function storeRow(o) {
   if (o.provider !== "microsoft" && o.provider !== "google") return { shown: false };
   const pol = o.pol || {}, say = typeof o.say === "string" ? o.say : "";
@@ -318,9 +336,10 @@ function storeRow(o) {
   if (look && look.state === "unavailable" && look.why === "ungiven") return Object.assign(base, { line: "ungiven", on: false, say: "" }); /* plant:row-ungiven */
   if (look && look.state === "unavailable" && look.why !== "offline") return Object.assign(base, { line: "unavailable", why: String(look.why || "") });
   if (o.seatless === true) return Object.assign(base, { line: "noseat" }); /* plant:row-noseat */
-  if (Number(o.conflicts) > 0) return Object.assign(base, { line: "conflict" });
+  /* A pause and the room full say changes are not reaching the store, so each is said over a conflict, which says nothing is lost. */
   const p = pausedLine({ until: o.until }, o.now, o.signinRefused);
   if (p) return Object.assign(base, { line: "paused", since: p.since });
+  if (Number(o.conflicts) > 0 && o.full !== true) return Object.assign(base, { line: "conflict" }); /* plant:row-conflict */
   return Object.assign(base, { line: o.full === true ? "full" : "on" }); /* plant:row-full */
 }
 /* The store's room: full once the relay (or the channel's own count) refuses a write as "team-size", the changes staying owed on this
@@ -336,5 +355,5 @@ function firstSay(told, look) {
   return { say: look.made === true ? "on" : "", told: true }; /* plant:first-say */
 }
 
-module.exports = { KEY_FILE, KEY_KIND, FILE_MAX, DEVICES_MAX, GRAPH, DRIVE, DRIVE_UPLOAD, PAUSE_SAY_MS, graphFolder, driveFolder, folderFor, keyText, keyRead,
+module.exports = { KEY_FILE, KEY_KIND, FILE_MAX, DEVICES_MAX, GRAPH, DRIVE, DRIVE_UPLOAD, PAUSE_SAY_MS, LOOK_AGAIN_MS, lookAgainIn, graphFolder, driveFolder, folderFor, keyText, keyRead,
   freshKeys, pubOf, storePolicy, storeLook, storeLeave, sayOnce, pausedLine, storeRow, roomNext, firstSay, endedText, endedRead };

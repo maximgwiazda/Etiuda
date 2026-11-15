@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-plants-"));
-const EXPECTED = 31;
+const EXPECTED = 38;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -390,8 +390,67 @@ async function main() {
     return { ok, detail: brief({ first: la.state, refused: refused.state + "/" + refused.why, keptOwn: !!kept && !!mine && kept.rt === mine.rt && kept.k === mine.k, granted: granted.state, keptFolders: !!after && !!folder && after.rt === folder.rt }) };
   }
 
+  /* W6: a second computer's enrolment failing at one step, the folder's write or the relay's list, by a refusal, by the process ending
+     at that step, or (the relay) by an answer lost after it took the list: the next look enrols it and it opens a session, and a third
+     computer enrols after it; the failed look never says on. */
+  async function enrolFaultScene() {
+    const out = {};
+    let all = true;
+    for (const [name, at, how] of [["folder refused", "folder", "refuse"], ["folder ended", "folder", "die"], ["relay refused", "relay", "refuse"],
+      ["relay ended", "relay", "die"], ["relay answer lost", "relay", "lost"]]) {
+      const w = worldOf("microsoft"), a = computer(w, "a"), b = computer(w, "b"), c = computer(w, "c");
+      const la = await a.look();
+      let armed = true;
+      const folder = w.folder(), relay = relayIo(w.R, w.relaySent, b.me);
+      const fault = async (here, real) => {
+        if (!armed || at !== here) return real();
+        armed = false;
+        if (how === "die") throw new Error("the process ended here");
+        if (how === "lost") await real();
+        return { ok: false, why: here === "folder" ? "offline" : "relay" };
+      };
+      const faulty = { folder: Object.assign({}, folder, { write: t => fault("folder", () => folder.write(t)) }),
+        relay: Object.assign({}, relay, { devices: (k, cert) => fault("relay", () => relay.devices(k, cert)) }) };
+      let first = "";
+      w.R.clock.now += 1000;
+      try { const l = await b.look(faulty); first = l.state + "/" + (l.why || ""); } catch { first = "ended"; }
+      w.R.clock.now += 1000;
+      const lb = await b.look();
+      w.R.clock.now += 1000;
+      const lc = await c.look();
+      const file = ST.keyRead(w.f.text);
+      const openB = lb.state === "on" ? await opens(w.R, lb.keys.rt, b.me, lb.store) : "off", openC = lc.state === "on" ? await opens(w.R, lc.keys.rt, c.me, lc.store) : "off";
+      all = all && la.state === "on" && !armed && first !== "on/" && lb.state === "on" && openB === "open" && lc.state === "on" && openC === "open" && !!file && file.devices.length === 3;
+      out[name] = first + " > b " + lb.state + "/" + (lb.why || "") + " " + openB + ", c " + lc.state + "/" + (lc.why || "") + " " + openC + ", listed " + (file ? file.devices.length : 0);
+    }
+    return { ok: all, detail: brief(out) };
+  }
+
+  /* R7: a look that failed for a passing reason (the folder offline, the licence service unreached, the relay not answering or its rate)
+     is tried again by itself at growing gaps, seven times in a little over two hours, then not; any other answer, on, ended or a refusal,
+     never. Read from storeLook's own answers where the stand-ins give them. */
+  async function againScene() {
+    const gaps = [];
+    for (let i = 0; i <= 8; i++) gaps.push(ST.lookAgainIn({ state: "paused", why: "unreached" }, i));
+    const grows = gaps.slice(0, 7).every((g, i) => g > 0 && (i === 0 || g > gaps[i - 1])) && gaps[7] === 0 && gaps[8] === 0;
+    const total = gaps.reduce((s, g) => s + g, 0);
+    const passing = [["unavailable", "offline"], ["paused", "unreached"], ["paused", "relay"], ["paused", "rate"]].filter(([state, why]) => !(ST.lookAgainIn({ state, why }, 0) > 0));
+    const never = [["on", ""], ["ended", ""], ["paused", "signin"], ["paused", "store"], ["paused", "seat-lapsed"], ["paused", "bad-signature"], ["unavailable", "consent"],
+      ["unavailable", "ungiven"], ["unavailable", "no-drive"], ["unavailable", "full"], ["unavailable", "refused"], ["unavailable", ""]].filter(([state, why]) => ST.lookAgainIn({ state, why }, 0) !== 0);
+    const looks = {};
+    { const w = worldOf("microsoft"), a = computer(w, "a"); w.f.offline = true; looks.offline = await a.look(); }
+    { const w = worldOf("microsoft"), a = computer(w, "a"); w.serviceSent.down = true; looks.unreached = await a.look(); }
+    { const w = worldOf("microsoft"), a = computer(w, "a"); w.serviceSent.refuse = "store"; looks.refused = await a.look(); }
+    { const w = worldOf("microsoft"), a = computer(w, "a"); looks.on = await a.look(); }
+    const fromLooks = ST.lookAgainIn(looks.offline, 0) > 0 && ST.lookAgainIn(looks.unreached, 0) > 0 && ST.lookAgainIn(looks.refused, 0) === 0 && ST.lookAgainIn(looks.on, 0) === 0;
+    const ok = grows && total > 2 * HOUR && total < 3 * HOUR && !passing.length && !never.length && fromLooks;
+    return { ok, detail: brief({ gaps, total, passingNotTried: passing, triedAnyway: never, looks: Object.keys(looks).map(k => k + " " + looks[k].state + "/" + (looks[k].why || "")) }) };
+  }
+
   const results = {};
   const LEGS = [
+    ["R7", againScene, "a look that failed for a passing reason is tried again at growing gaps, seven times in a little over two hours, then not; on, ended or a refusal never"],
+    ["W6", enrolFaultScene, "a second computer's enrolment failing at the folder's write or the relay's list (refused, the process ended there, or the relay's answer lost): the next look enrols it and it opens a session, and a third computer enrols after it"],
     ["G1", grantRefusedScene, "a key file of another store in the folder, refused by the service as another person's, leaves this computer's sealed copy its own; granted, the folder's store is kept"],
     ["L1", leaveScene, "This computer leaves: the folder's list without it written before the relay is asked, posted again when tried again though the folder already leaves it out; a list the relay holds, another store or the ended mark is done, the folder unreached is not"],
     ["C1", () => firstAndSecondScene("microsoft"), "on OneDrive's App Folder the first computer finds no key and makes the store, and a second computer of the person reads it and opens a session at its first look; neither shows nor asks anything"],
@@ -440,6 +499,14 @@ async function main() {
   const swap = (from, to) => text => (text.split(from).length === 2 ? text.split(from).join(to) : null);
   const scenes = Object.fromEntries(LEGS.map(([id, scene]) => [id, scene]));
   const PLANTS = [
+    ["every answer again", "R7", swap("  if (!look || (look.state !== \"unavailable\" && look.state !== \"paused\") || PASSING.indexOf(String(look.why)) < 0) return 0; /* plant:again-passing */", "  if (!look) return 0; /* plant:again-passing */"), "a look that is on, or refused, tried again"],
+    ["no bound", "R7", swap("tries < LOOK_AGAIN_MS.length ? LOOK_AGAIN_MS[tries] : 0; /* plant:again-bound */", "true ? LOOK_AGAIN_MS[Math.min(tries, LOOK_AGAIN_MS.length - 1)] : 0; /* plant:again-bound */"), "tried again for ever, every hour"],
+    ["relay first", "W6", swap("    const w = await io.folder.write(keyText(next)); /* plant:enrol-folder-first */",
+      "    const p = await io.relay.devices(next, got.store);\n    if (!p.ok) return { state: \"paused\", why: p.why || \"relay\", keys };\n    const w = await io.folder.write(keyText(next)); /* plant:enrol-folder-first */"),
+      "the relay asked before the folder, so a folder write that fails leaves the relay a revision ahead"],
+    ["owed list taken", "W6", swap("const taken = k => !!local && local.rt === k.rt && local.rev === k.rev && mine(local); /* plant:enrol-taken */", "const taken = k => mine(k); /* plant:enrol-taken */"),
+      "a list the folder holds is taken as the relay's, so one the relay never took is not posted again"],
+    ["held list refused", "W6", swap("if (!d.ok && d.why !== \"replay-rev\") return", "if (!d.ok) return"), "a list the relay holds already read as a refusal"],
     ["seal after grant", "G1", swap("  const sPub = pubOf(keys.s);\n", "  io.keep(keys);\n  const sPub = pubOf(keys.s);\n"), "the folder's keys sealed before the service has granted their store"],
     ["made", "C1", lift("made"), "the first computer makes the file but not the store at the relay"],
     ["made", "C1g", lift("made"), "the same on Drive"],
