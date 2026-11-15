@@ -42,9 +42,9 @@ function orgMarkWords(st, outcome, now){
   /* Too slow keeps the quiet colour and no dot: nothing has failed. */
   if(o.slow===true) return eAiModel()
     ? {paused:false, label:t("organisation's model too slow to reorder"),
-      title:at(t("{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the built-in model's order stands."))}
+      title:at(t("{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the built-in model's order stands, and the desk still sends one query a minute to {HOST}."))}
     : {paused:false, label:t("organisation's model too slow to reorder"),
-      title:at(t("{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the word matches' order stands."))};
+      title:at(t("{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the word matches' order stands, and the desk still sends one query a minute to {HOST}."))};
   const search=eSearchOn(), suggest=eAiOn();
   const title=search && !suggest ? t("The organisation's model at {HOST} ranks the search. The search text is sent there.")
     : suggest && !search ? t("The organisation's model at {HOST} ranks the suggestions. The copied message they are made from is sent there.")
