@@ -343,10 +343,15 @@ function mgCardDragTip(){
     : t("Drag to reorder, or onto a category to move it there");
 }
 /* An intent's date, in its row's hover while its column has stepped aside. */
-function updateIntentDateTitles(root){
-  const head=(root || document).querySelector(".lw-ih-date");
+function updateIntentDateTitles(root, force){
+  const scope=root || document;
+  const list=scope.classList && scope.classList.contains("mg-intents") ? scope : scope.querySelector(".mg-intents");
+  if(!list || (typeof list.getClientRects==="function" && !list.getClientRects().length)) return;
+  const head=list.querySelector(".lw-ih-date");
   const hidden=!head || !head.offsetParent || getComputedStyle(head).display === "none";
-  (root || document).querySelectorAll(".mg-intents .manage-row.mg-int[data-changed]").forEach(row=>{
+  if(!force && list.__dateHidden===hidden) return;
+  list.__dateHidden=hidden;
+  list.querySelectorAll(".manage-row.mg-int[data-changed]").forEach(row=>{
     if(hidden) row.setAttribute("title", t("Date modified") + ": " + row.getAttribute("data-changed"));
     else row.removeAttribute("title");
   });
@@ -1192,7 +1197,7 @@ function filterLibPage(page){
   if(at) at.scrollTop=0;
   markLibCut(page);
   const intSec=page.querySelector('details.manage-sec[data-mg="intents"]');
-  if(intSec && !intSec.hasAttribute("hidden")) markChipOverflow();
+  if(intSec && !intSec.hasAttribute("hidden")) markChipOverflow({ force: true });
   const catSec=page.querySelector('details.manage-sec[data-mg="catmac"]');
   if(catSec && !catSec.hasAttribute("hidden")) updateTreeHoverTitles(page);
   return true;
@@ -1249,6 +1254,12 @@ function wireLibShell(page){
   }
   const mt=page.querySelector("#libMaint");
   if(mt) mt.onclick=()=>openMaintenance();
+  const at=page.querySelector("#libPage");
+  if(at && typeof at.addEventListener==="function"){
+    at.addEventListener("scroll", ()=>{
+      if(libView==="list" && (libOn==="intents" || libFold(libQuery))) markChipOverflow({ scroll: true });
+    }, { passive: true });
+  }
 }
 const ICON_GRIP = '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><circle cx="6" cy="4" r="1.2"/><circle cx="10" cy="4" r="1.2"/><circle cx="6" cy="8" r="1.2"/><circle cx="10" cy="8" r="1.2"/><circle cx="6" cy="12" r="1.2"/><circle cx="10" cy="12" r="1.2"/></svg>';
 const ICON_REMOVE = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
@@ -1649,7 +1660,7 @@ function paintLibrary(host,body){
     paintCatalogList();
     markLibCut(page);
     updateTreeHoverTitles(page);
-    updateIntentDateTitles(page);
+    markChipOverflow();
   } else if(isHist){
     wireLibShell(page);
     openHistory(host.querySelector("#ehView")||host);
@@ -1663,7 +1674,6 @@ function paintLibrary(host,body){
     dressDialogInputs(page);
     markLibCut(page);
     updateTreeHoverTitles(page);
-    updateIntentDateTitles(page);
   }
   if(fk) focusSame(host,fk);
   // The tab takes the keyboard where its wiring left focus nowhere inside it, as a dialog does.
@@ -1687,10 +1697,12 @@ let chipOverflowRO=null, treeHoverRO=null;
    520px). */
 function chipRoom(list){
   let room=null, gone=false, gap=0, more=null;
-  list.querySelectorAll(".manage-row.mg-int").forEach(r=>{
+  const rows=list.querySelectorAll(".manage-row.mg-int:not([hidden])");
+  for(const r of rows){
+    if(!r.getClientRects().length) continue;
     const mid=r.querySelector(".lw-mid");
-    if(!mid || !r.getClientRects().length) return;
-    if(!mid.getClientRects().length){ gone=true; return; }
+    if(!mid) continue;
+    if(!mid.getClientRects().length){ gone=true; break; }
     const cs=getComputedStyle(r);
     gap=parseFloat(cs.columnGap)||0;
     let w=r.clientWidth-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight);
@@ -1699,41 +1711,123 @@ function chipRoom(list){
       const k=getComputedStyle(c);
       w-=c.getBoundingClientRect().width+parseFloat(k.marginLeft)+parseFloat(k.marginRight)+gap;
     }
-    if(room===null || w<room) room=w;
-    if(!more) more=r.querySelector("[data-chips-more]");
-  });
+    room=w;
+    more=list.querySelector(".manage-row.mg-int:not([hidden]) [data-chips-more]:not([hidden])") || r.querySelector("[data-chips-more]");
+    break;
+  }
   if(room===null) return { room, gone, date:0 };
   // Every chevron is one size; a hidden one is shown for the reading alone, before anything paints.
-  if(more){
-    const was=more.hidden;
+  if(more && more.hidden){
     more.hidden=false;
     room-=more.getBoundingClientRect().width+gap;
-    more.hidden=was;
+    more.hidden=true;
+  } else if(more){
+    room-=more.getBoundingClientRect().width+gap;
   }
-  const cell=list.querySelector(".lw-date");
+  const cell=list.querySelector(".manage-row.mg-int:not([hidden]) .lw-date") || list.querySelector(".lw-date");
   return { room, gone, date: cell ? (parseFloat(getComputedStyle(cell).flexBasis)||0)+gap : 0 };
 }
-function markChipOverflow(){
+function applyChipOverflowRow(r, more, open, over, gen){
+  more.hidden=!open && !over;
+  r.classList.toggle("chips-fade", !open && over);
+  r.__chipGen=gen;
+}
+function markChipOverflow(opts){
+  if(opts && opts.nodeType===1){
+    const r=opts;
+    const intentsList=r.closest ? r.closest(".mg-intents") : document.querySelector(".mg-intents");
+    if(!intentsList || (typeof intentsList.getClientRects==="function" && !intentsList.getClientRects().length)) return;
+    if(r.hasAttribute("hidden") || !r.getClientRects().length) return;
+    const more=r.querySelector("[data-chips-more]"), mid=r.querySelector(".lw-mid");
+    if(!more||!mid) return;
+    const gen=intentsList.__chipGen || 1;
+    applyChipOverflowRow(r, more, r.classList.contains("chips-open"), mid.scrollWidth>mid.clientWidth+1, gen);
+    return;
+  }
   const intentsList=document.querySelector(".mg-intents");
-  if(!intentsList) return;
+  if(!intentsList || (typeof intentsList.getClientRects==="function" && !intentsList.getClientRects().length)) return;
+  const fromRO=!!(opts && opts.fromRO), scroll=!!(opts && opts.scroll), force=!!(opts && opts.force);
+  const listW=intentsList.clientWidth;
+  if(scroll){
+    if(intentsList.__chipDone) return;
+    const gen=intentsList.__chipGen;
+    if(gen){
+      const sc=intentsList.closest ? intentsList.closest("#libPage") : null;
+      const vp=sc ? sc.getBoundingClientRect() : null;
+      const vpTop=vp ? vp.top : 0;
+      const vpBot=vp ? vp.bottom : (window.innerHeight || 900);
+      const rows=[];
+      let seenInView=false;
+      for(const r of intentsList.querySelectorAll(".manage-row.mg-int:not([hidden])")){
+        const box=r.getBoundingClientRect();
+        if(!box.width && !box.height) continue;
+        if(box.bottom < vpTop - 40) continue;
+        if(box.top > vpBot + 80){ if(seenInView) break; continue; }
+        seenInView=true;
+        if(r.__chipGen===gen) continue;
+        const more=r.querySelector("[data-chips-more]"), mid=r.querySelector(".lw-mid");
+        if(!more||!mid) continue;
+        rows.push({ r, more, open:r.classList.contains("chips-open"), over:mid.scrollWidth>mid.clientWidth+1 });
+      }
+      rows.forEach(({ r, more, open, over })=>applyChipOverflowRow(r, more, open, over, gen));
+      return;
+    }
+  }
+  if(!force && intentsList.__chipW===listW && intentsList.__chipGen) return;
+  if(intentsList.__chipTimer){ clearTimeout(intentsList.__chipTimer); intentsList.__chipTimer=0; }
+  if(intentsList.__chipRaf){ cancelAnimationFrame(intentsList.__chipRaf); intentsList.__chipRaf=0; }
+  const gen=(intentsList.__chipGen || 0) + 1;
+  intentsList.__chipGen=gen;
+  intentsList.__chipW=listW;
+  intentsList.__chipDone=false;
   const c=chipRoom(intentsList);
   if(c.room!==null){
     const aside=c.room-c.date<CHIP_COL_DATE;
     intentsList.classList.toggle("date-aside", aside);
     intentsList.classList.toggle("chips-narrow", c.room-(aside?0:c.date)<CHIP_COL_NARROW);
   } else if(c.gone) intentsList.classList.add("date-aside");
-  updateIntentDateTitles();
+  updateIntentDateTitles(intentsList, force);
+  const sc=intentsList.closest ? intentsList.closest("#libPage") : null;
+  const vp=sc ? sc.getBoundingClientRect() : null;
+  const vpTop=vp ? vp.top : 0;
+  const vpBot=vp ? vp.bottom : (window.innerHeight || 900);
   // Every row read before any is written: a write between two reads lays the page out again for each row.
   const rows=[];
-  intentsList.querySelectorAll(".manage-row.mg-int").forEach(r=>{
+  let seenInView=false, hasMore=false;
+  for(const r of intentsList.querySelectorAll(".manage-row.mg-int:not([hidden])")){
+    const box=r.getBoundingClientRect();
+    if(!box.width && !box.height) continue;
+    if(box.bottom < vpTop - 40){ hasMore=true; continue; }
+    if(box.top > vpBot + 80){ hasMore=true; if(seenInView) break; continue; }
+    seenInView=true;
     const more=r.querySelector("[data-chips-more]"), mid=r.querySelector(".lw-mid");
-    if(!more||!mid) return;
+    if(!more||!mid) continue;
     rows.push({ r, more, open:r.classList.contains("chips-open"), over:mid.scrollWidth>mid.clientWidth+1 });
-  });
-  rows.forEach(({ r, more, open, over })=>{
-    more.hidden=!open && !over;
-    r.classList.toggle("chips-fade", !open && over);
-  });
+  }
+  rows.forEach(({ r, more, open, over })=>applyChipOverflowRow(r, more, open, over, gen));
+  if(!hasMore){ intentsList.__chipDone=true; return; }
+  const finish=()=>{
+    intentsList.__chipRaf=0;
+    intentsList.__chipTimer=0;
+    if(!intentsList.isConnected || intentsList.__chipGen!==gen) return;
+    if(typeof intentsList.getClientRects==="function" && !intentsList.getClientRects().length) return;
+    const todo=[];
+    intentsList.querySelectorAll(".manage-row.mg-int:not([hidden])").forEach(r=>{
+      if(r.__chipGen===gen || !r.getClientRects().length) return;
+      const more=r.querySelector("[data-chips-more]"), mid=r.querySelector(".lw-mid");
+      if(!more||!mid) return;
+      todo.push({ r, more, open:r.classList.contains("chips-open"), over:mid.scrollWidth>mid.clientWidth+1 });
+    });
+    todo.forEach(({ r, more, open, over })=>applyChipOverflowRow(r, more, open, over, gen));
+    intentsList.__chipDone=true;
+  };
+  if(fromRO) intentsList.__chipTimer=setTimeout(finish, 0);
+  else if(typeof requestAnimationFrame==="function"){
+    intentsList.__chipRaf=requestAnimationFrame(()=>{
+      intentsList.__chipRaf=0;
+      intentsList.__chipTimer=setTimeout(finish, 0);
+    });
+  } else intentsList.__chipTimer=setTimeout(finish, 0);
 }
 function wireLibrary(page){
   wireLibShell(page);
@@ -1877,13 +1971,13 @@ function wireLibrary(page){
       btn.setAttribute("aria-expanded",open?"true":"false");
       btn.title=word;
       btn.setAttribute("aria-label",word+" "+btn.getAttribute("data-chips-more"));
-      markChipOverflow();
+      markChipOverflow(r);
       markCutText(r);
     };
   });
   if(intentsList){
     if(!chipOverflowRO && typeof ResizeObserver!=="undefined")
-      chipOverflowRO=new ResizeObserver(()=>{ markChipOverflow(); });
+      chipOverflowRO=new ResizeObserver(()=>{ markChipOverflow({ fromRO: true }); });
     if(chipOverflowRO){ chipOverflowRO.disconnect(); chipOverflowRO.observe(intentsList); }
     markChipOverflow();
   }
