@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 149 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 5);
+const EXPECTED = 150 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 6);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1789,6 +1789,30 @@ try {
   deskOf([]); AS.setCards(bandedRow1.map(c => Object.assign({}, c)));
   copies("c-unlinked", 5);
   AS.setIntentIdxs([]);
+  /* 6o2: THE REPLIES OF A SUGGESTION, LOOKED AT AND NOT TAKEN. On the same desk, the lookup answers the rows a take would, the
+     linked card first, and leaves everything a take changes as it found it: the desk's chosen intents, the statistics' take
+     count and intent counts, the copies counted, the desk's page. The measure is one function, and the plant runs the real
+     take through it to show it sees a take. The page is then run over this desk (6o3): it draws these rows and sends
+     no take. */
+  const desk6 = () => JSON.stringify({ sel: AS.intentIdxs.slice(), taken: PK.pack.suggestTaken | 0, intents: PK.pack.intentCounts || null, use: PK.pack.useCounts || null });
+  const before6 = desk6();
+  const looked6 = pickAnswer("suggest-rows", { id: "t:wick" });
+  const after6 = desk6();
+  const stranger6 = pickAnswer("suggest-rows", { id: "t:nothing" });
+  check(looked6 && looked6.rows && looked6.rows[0] && looked6.rows[0].id === "c-linked" && typeof looked6.count === "string"
+    && after6 === before6 && stranger6 === null && desk6() === before6,
+    "6o2 the lookup returns the linked card at row 0 as a take would, and changes nothing: the desk's chosen intents, the take count, the intent counts and the copies counted are as they were, and an unknown id answers null: "
+    + JSON.stringify({ rows: looked6 && looked6.rows ? looked6.rows.map(r => r.id) : null, same: after6 === before6 }));
+  if (process.env.ETIUDA_PLANTS === "off") console.log("  NOT RUN  6o2p the lookup's measure against a real take (ETIUDA_PLANTS=off)");
+  else {
+    pickAnswer("suggest-take", { id: "t:wick" });
+    const afterTake6 = desk6();
+    AS.setIntentIdxs([]);
+    check(afterTake6 !== before6 && JSON.parse(afterTake6).taken === (JSON.parse(before6).taken | 0) + 1,
+      "6o2p plant: the same measure sees a real take (one more taken, the intent chosen), so 6o2's equal reading is not a blind one: " + afterTake6);
+    PK.pack.suggestTaken = JSON.parse(before6).taken;
+    PK.pack.intentCounts = JSON.parse(before6).intents;
+  }
   const tookRow1 = pickAnswer("suggest-take", { id: "t:wick" });
   check(tookRow1 && tookRow1.rows && tookRow1.rows[0] && tookRow1.rows[0].id === "c-linked",
     "6o on a desk where an unlinked card has 5 copies and the linked one has 0, taking the suggestion puts the linked card at row 0: "

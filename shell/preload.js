@@ -13,6 +13,7 @@ if (PICKER) {
     lang: () => ipcRenderer.invoke("etiuda:pick-lang").then(v => String(v || "null")),
     copy: (what) => ipcRenderer.invoke("etiuda:pick-copy", String(what || "")),
     takeSuggest: (id, multi) => ipcRenderer.invoke("etiuda:pick-intent", String(id || ""), multi ? 1 : 0).then(v => String(v || "null")),
+    rowsOf: (id) => ipcRenderer.invoke("etiuda:pick-rows", String(id || "")).then(v => String(v || "null")),
     close: () => ipcRenderer.send("etiuda:pick-close"),
     ready: (add) => ipcRenderer.send("etiuda:pick-ready", Number(add) || 0),
     tour: (go) => ipcRenderer.send("etiuda:pick-tour", String(go || "")),

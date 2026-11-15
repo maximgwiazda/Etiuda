@@ -12362,6 +12362,11 @@ ipcMain.handle("etiuda:pick-intent", (e, id, multi) => {
   if (!fromPicker(e)) return "null";
   return askDesk("suggest-take", { id: String(id || "").slice(0, 80), multi: multi ? 1 : 0 }).then(v => JSON.stringify(v));
 });
+/* THE REPLIES OF A SUGGESTION, asked for and not taken: the desk answers the rows alone and changes nothing. */
+ipcMain.handle("etiuda:pick-rows", (e, id) => {
+  if (!fromPicker(e)) return "null";
+  return askDesk("suggest-rows", { id: String(id || "").slice(0, 80) }).then(v => JSON.stringify(v));
+});
 /* THE COPY. The desk's page makes the text by its own route and counts it, in the other language for `other`; this
    writes it to the clipboard, has the caret helper press Ctrl+V in the window the agent came from, steps aside, and
    says which it was.
