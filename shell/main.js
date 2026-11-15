@@ -2235,7 +2235,8 @@ function writeStatsAnswer(text, askId, forced) {
   return { ok: true, sync: out.sync, syncMs: now.getTime(), why: why };
 }
 /* The span file, if it verifies. Anything else is left unadopted: a bad replacement does not write and does not
-   delete the answer already sealed. A missing file is not a new span either. */
+   delete the answer already sealed. A missing file is not a new span either. A span once adopted that is gone or no
+   longer genuine stops the sealing until a genuine one is read again; a folder not answering stops nothing. */
 function readSpanText() {
   const file = path.join(catalogFolder(), SPAN_NAME);
   try {
@@ -2249,17 +2250,23 @@ function readSpanText() {
     return { away: true };
   }
 }
+function statsWithdrawn() {
+  if (!statsSpan) return;
+  statsSpan = ""; statsPeriod = null; statsHeld = null; statsWroteKey = ""; /* plant:stats-withdrawn */
+  armMidnight();
+}
 function tryLiveStats(win) {
   if (!folderAnswers(catalogFolder())) return;
   const got = readSpanText();
-  if (!got.text) return;
+  if (got.away) return;
+  if (!got.text) return statsWithdrawn();
   const doc = spanDocument(got.text);
-  if (!doc) return;
+  if (!doc) return statsWithdrawn();
   const lead = pinnedLead();
-  if (!lead || !spanGenuine(doc, lead)) return;
+  if (!lead || !spanGenuine(doc, lead)) return statsWithdrawn();
   const next = String(doc.span);
   const period = spanPeriod(next, statsNow());
-  if (!period) return;
+  if (!period) return statsWithdrawn();
   if (next !== statsSpan) {
     statsSpan = next;
     statsPeriod = period;

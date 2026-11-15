@@ -21,7 +21,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
-const EXPECTED = 23;
+const EXPECTED = 24;
 const WORK = path.join(ROOT, "shell", "main.js");
 const GOOD = fs.readFileSync(WORK);
 const GOOD_HASH = crypto.createHash("sha256").update(GOOD).digest("hex");
@@ -235,8 +235,8 @@ try {
   /* ---- 891a: another key, unsigned, or a broken file writes nothing ------------------------------------------ */
   {
     const g = await prove("891a",
-      "if (!lead || !spanGenuine(doc, lead)) return;",
-      "if (false && (!lead || !spanGenuine(doc, lead))) return;",
+      "if (!lead || !spanGenuine(doc, lead)) return statsWithdrawn();",
+      "if (false && (!lead || !spanGenuine(doc, lead))) return statsWithdrawn();",
       async () => {
         const box = await joined(false);
         if (!box.D.api.isCatalogName("stats-span.json") || box.D.api.isCatalogName("etiuda-request.ereq")) return false;
@@ -297,6 +297,39 @@ try {
       const g = await proveOr(name, needle, repl, run);
       check(g.ok, name + " " + says + (g.why ? ": " + g.why.split("\n")[0] : ""));
     }
+  }
+
+  /* ---- 930d: a span removed, or no longer genuine, after it was adopted stops the sealing ------------------------ */
+  {
+    const g = await proveOr("930d",
+      "  statsSpan = \"\"; statsPeriod = null; statsHeld = null; statsWroteKey = \"\"; /* plant:stats-withdrawn */",
+      "  /* plant:stats-withdrawn */",
+      async () => {
+        const outcomes = [];
+        for (const how of ["deleted", "unsigned", "another key"]) {
+          const box = await joined(false);
+          adopt(box, "rolling-30", lead.privateKey, LEAD, 2);
+          if (!openStats(box) || openStats(box).cards[0].n !== 2) return false;
+          const span = path.join(box.share, "stats-span.json");
+          if (how === "deleted") { fs.unlinkSync(span); syncMirror(box); }
+          else if (how === "unsigned") put(box.share, "stats-span.json", "{\"format\":1,\"kind\":\"etiuda-stats-span\",\"span\":\"rolling-30\"}");
+          else put(box.share, "stats-span.json", spanDoc(box.D, "rolling-30", other.privateKey, OTHER));
+          box.D.api.catalogChanged(box.D.win);
+          box.D.api.setStatsClock(CLOCK + 120000);
+          const res = await box.D.ask("etiuda:stats-write", pageBody(9));
+          box.D.api.flushHeldStats();
+          box.D.api.setStatsClock(CLOCK + 2 * 864e5);
+          box.D.api.statsPulse();
+          const stopped = !(res && res.syncMs) && openStats(box).cards[0].n === 2;
+          adopt(box, "rolling-30", lead.privateKey, LEAD, 11);
+          const back = openStats(box);
+          outcomes.push(how + ":" + (stopped ? "stopped" : "SEALED") + ":" + (back && back.cards[0].n === 11 ? "back" : "not back"));
+        }
+        console.log("  --- 930d " + outcomes.join(", "));
+        return outcomes.every(o => /:stopped:back$/.test(o));
+      });
+    check(g.ok, "930d a span deleted, made unsigned or signed by another key after it was adopted stops the sealing: later counts, the close and"
+      + " midnight seal nothing; a genuine span read again starts it" + (g.why ? ": " + g.why.split("\n")[0] : ""));
   }
 
   /* ---- 891b: one watch event ----------------------------------------------------------------------------------- */
