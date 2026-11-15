@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 129;
+const EXPECTED = 132;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -1481,6 +1481,53 @@ async function openSetAsideScene(src) {
   return { ok, detail: brief({ before, openedBefore, f1: path.basename(f1), f2: path.basename(f2), r1, p1: p1.map(x => path.basename(x)), withArg, openedAfterArg, r2, p2: p2.map(x => path.basename(x)), rGone, created, openedAfterGone }) };
 }
 
+/* (x6p) Set-aside moves whose first rename fails busy (EBUSY/EPERM) retry via renamePatiently and succeed on the second attempt. */
+async function answerStartBusyRenameScene(src) {
+  let busyOn = false;
+  const seen = { store: 0, alpha: 0 }, attempts = { store: 0, alpha: 0 };
+  const busy = code => Object.assign(new Error("busy " + code), { code });
+  const fsWrap = real => new Proxy(real, {
+    get(target, prop) {
+      if (prop === "renameSync") {
+        return (from, to) => {
+          const s = String(from);
+          if (busyOn && path.basename(s) === "store") {
+            attempts.store++;
+            if (seen.store === 0) { seen.store++; throw busy("EBUSY"); }
+          }
+          if (busyOn && /alpha\.ec$/i.test(s)) {
+            attempts.alpha++;
+            if (seen.alpha === 0) { seen.alpha++; throw busy("EPERM"); }
+          }
+          return target.renameSync(from, to);
+        };
+      }
+      const v = target[prop];
+      return typeof v === "function" ? v.bind(target) : v;
+    }
+  });
+  const r = await renewScene(src, { boot: { fsWrap } }), T = r.shell.T, w = r.world, UD = r.shell.UD;
+  if (typeof T.storeAnswerNow !== "function") return { ok: false, detail: "no storeAnswerNow" };
+  const catDir = T.storeSyncFolder();
+  fs.mkdirSync(catDir, { recursive: true });
+  const aBytes = Buffer.from("ALPHA_BUSY_KEEP\n");
+  fs.writeFileSync(path.join(catDir, "alpha.ec"), aBytes);
+  const syncA = T.get().storeSyncing;
+  if (syncA) { syncA.merge(); const c = syncA.channel(); if (c) { c.kick(); await c.idle(); } }
+  const heldA = T.signinState().held;
+  T.signinOutNow();
+  seatAnother(T, w, heldA);
+  await T.storeTurn();
+  busyOn = true;
+  const ans = await T.storeAnswerNow("start");
+  busyOn = false;
+  const f1 = ans && ans.folder ? ans.folder : "";
+  const alphaMoved = f1 && fs.existsSync(path.join(f1, "alpha.ec")) && fs.readFileSync(path.join(f1, "alpha.ec")).equals(aBytes);
+  const storeMoved = f1 && fs.existsSync(path.join(f1, "store")) && !fs.existsSync(path.join(UD, "store"));
+  const ok = !!ans && ans.ok === true && attempts.store === 2 && attempts.alpha === 2 && !!alphaMoved && !!storeMoved;
+  return { ok, detail: brief({ okAns: ans && ans.ok, attempts, alphaMoved: !!alphaMoved, storeMoved: !!storeMoved }) };
+}
+
 const LEGS = [
   ["d4h", leaveScene, "This computer leaves the store's list: the relay withdraws its key and the folder's file names it no more, under the last look's store certificate, nothing left owed"],
   ["d4i", leaveOwedScene, "the relay not reached at This computer: the folder's file leaves it out at once, the keys kept sealed as owed, and the next seated renewal has the relay withdraw it"],
@@ -1539,6 +1586,7 @@ const LEGS = [
   ["x6f", answerStartRollbackScene, "a failure halfway during set-aside puts back everything moved, leaves no half-made folder, keeps the hold and says so"],
   ["x6w", answerNeighboursScene, "after an answer lifts the hold, A's keys, owed leave, owed store/end and folder token still never reach B"],
   ["x6o", openSetAsideScene, "opening the set-aside folder uses its no-arg IPC channel, opens only the newest Start from my account folder, refuses page args, and opens/creates nothing when gone"],
+  ["x6p", answerStartBusyRenameScene, "set-aside moves whose first rename fails busy retry via renamePatiently and succeed"],
 ];
 const results = {};
 const scenes = Object.fromEntries(LEGS.map(([id, scene]) => [id, scene]));
@@ -1630,6 +1678,8 @@ const PLANTS = [
   ["x6w", swap("  s.keys = \"\"; s.leave = \"\"; s.owed = \"\"; s.made = \"\"; /* plant:answer-mine-keys */", "  /* plant:answer-mine-keys */"), "answering the hold leaves the earlier account's keys, leave and owed end"],
   ["x6o", swap("  if (args.length) return false; /* plant:open-aside-no-args */", "  if (false) return false; /* plant:open-aside-no-args */"), "the channel accepts a path argument handed by the page"],
   ["x6o", swap("  if (!folder || !isDir) return { ok: false, why: \"gone\" }; /* plant:open-aside-gone */", "  if (!folder) return { ok: false, why: \"gone\" }; /* plant:open-aside-gone */"), "a gone set-aside folder still calls shell.openPath"],
+  ["x6p", swap("  try { renamePatiently(from, to); } /* plant:aside-move-patient */", "  try { fs.renameSync(from, to); } /* plant:aside-move-patient */"), "storeMoveFile uses a bare fs.renameSync instead of renamePatiently"],
+  ["x6p", swap("    if (fs.existsSync(sDir)) { renamePatiently(sDir, sDest); movedStore = { from: sDir, to: sDest }; } /* plant:aside-store-patient */", "    if (fs.existsSync(sDir)) { fs.renameSync(sDir, sDest); movedStore = { from: sDir, to: sDest }; } /* plant:aside-store-patient */"), "storeSetAside moves userData/store with a bare fs.renameSync"],
 ];
 for (const [id, change, what] of PLANTS) {
   const line = "p " + id + " in a copy of shell/main.js turns " + id + " red (" + what + ")";

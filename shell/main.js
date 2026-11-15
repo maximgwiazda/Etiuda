@@ -11438,7 +11438,7 @@ function storeSetAsideDir(now = Date.now()) {
   }
 }
 function storeMoveFile(from, to) {
-  try { fs.renameSync(from, to); }
+  try { renamePatiently(from, to); } /* plant:aside-move-patient */
   catch (e) {
     if (e.code !== "EXDEV") throw e;
     fs.copyFileSync(from, to);
@@ -11456,7 +11456,7 @@ function storeSetAside() {
       if (fs.existsSync(src)) fs.copyFileSync(src, path.join(aside, name));
     }
     const sDir = storeSyncDir(), sDest = path.join(aside, "store");
-    if (fs.existsSync(sDir)) { fs.renameSync(sDir, sDest); movedStore = { from: sDir, to: sDest }; }
+    if (fs.existsSync(sDir)) { renamePatiently(sDir, sDest); movedStore = { from: sDir, to: sDest }; } /* plant:aside-store-patient */
     const catDir = storeSyncFolder(), L = SyncLib();
     if (catDir && fs.existsSync(catDir)) {
       for (const name of fs.readdirSync(catDir)) {
