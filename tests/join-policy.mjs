@@ -27,13 +27,26 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
-const EXPECTED = 11;
+const EXPECTED = 13;
 
-let asserted = 0, failed = 0;
+let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
   asserted++;
   if (ok) console.log("  ok   " + line);
   else { failed++; console.log("  FAIL " + line); }
+}
+/* A planted fault is proof, not a gate: each lift is skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+function skip(line) {
+  skipped++;
+  console.log("  SKIP  " + line);
+}
+/* `src` with the one line holding plant:<name> replaced by `line`, or null where the mark is not on exactly one line. */
+function liftPlant(src, name, line) {
+  const lines = src.split("\n"), at = lines.map((l, i) => (l.indexOf("plant:" + name + " ") >= 0 ? i : -1)).filter(i => i >= 0);
+  if (at.length !== 1) return null;
+  lines[at[0]] = line;
+  return lines.join("\n");
 }
 
 /* The same cut the member core uses: a function by its braces, a const by the semicolon outside them. */
@@ -961,11 +974,10 @@ function scratchGone(reg, problems, name) {
   if (!P) problems.push(loadError);
   else {
     process.env.TEST_POLICY_SHARE = "D:\\Quay";
-    process.env.TEST_POLICY_LEAD = HEX;
     try {
       const got = P.joinPolicyFrom(exportText([
         ["TeamFolder", "REG_EXPAND_SZ", "%TEST_POLICY_SHARE%\\team"],
-        ["LeadKey", "REG_EXPAND_SZ", "%TEST_POLICY_LEAD%"]
+        ["LeadKey", "REG_SZ", HEX]
       ]), "en");
       if (got.folder !== "D:\\Quay\\team" || got.lead !== HEX || got.said.length !== 0)
         problems.push("expanded values not taken: " + JSON.stringify(got));
@@ -989,11 +1001,10 @@ function scratchGone(reg, problems, name) {
         problems.push("prototype toString reached: " + JSON.stringify(gotToString));
     } finally {
       delete process.env.TEST_POLICY_SHARE;
-      delete process.env.TEST_POLICY_LEAD;
     }
   }
   check(problems.length === 0,
-    "19j REG_EXPAND_SZ values are expanded for TeamFolder and LeadKey: environment variables are expanded case-insensitively and values taken, while unresolved variables and inherited names are bad: "
+    "19j an expandable TeamFolder is filled from the environment, its variables matched without regard to case, while unresolved variables and inherited names are bad (the lead is 19l's): "
     + (problems.join("; ") || "expanded"));
 }
 
@@ -1030,11 +1041,46 @@ function scratchGone(reg, problems, name) {
     + (problems.join("; ") || "nine values and two beside the team pair as they should be"));
 }
 
+/* 19l: AN EXPANDABLE LEAD IS TAKEN AS WRITTEN (Grok's review 8, finding 1). A variable in the person's environment never
+   becomes the lead this desk trusts: one that would expand to a good key is the bad lead said, and 64 lower-case hex written
+   into an expandable value is taken. The folder is still filled from the environment (19j). Lifting plant:lead-as-written
+   expands the lead again, and the leg goes red. */
+function leadFromEnvironment(Pd) {
+  const problems = [];
+  process.env.TEST_POLICY_LEAD_19L = HEX;
+  try {
+    const named = Pd.joinPolicyFrom(exportText([["TeamFolder", "REG_SZ", "D:\\Quay\\team"], ["LeadKey", "REG_EXPAND_SZ", "%TEST_POLICY_LEAD_19L%"]]), "en");
+    if (named.lead !== "" || named.folder !== "" || saidOf(named) !== EN.lead + "|" + EN.beside)
+      problems.push("a variable became the lead " + JSON.stringify(named));
+    const alone = Pd.joinPolicyFrom(exportText([["LeadKey", "REG_EXPAND_SZ", "%TEST_POLICY_LEAD_19L%"]]), "en");
+    if (alone.lead !== "" || saidOf(alone) !== EN.lead) problems.push("a variable alone became the lead " + JSON.stringify(alone));
+    const written = Pd.joinPolicyFrom(exportText([["TeamFolder", "REG_SZ", "D:\\Quay\\team"], ["LeadKey", "REG_EXPAND_SZ", HEX]]), "en");
+    if (written.lead !== HEX || written.folder !== "D:\\Quay\\team" || written.said.length !== 0)
+      problems.push("a key written into an expandable value was not taken " + JSON.stringify(written));
+  } finally { delete process.env.TEST_POLICY_LEAD_19L; }
+  return problems;
+}
+{
+  const problems = P ? leadFromEnvironment(P) : [loadError];
+  check(problems.length === 0, "19l an expandable LeadKey is taken as written, never filled from the person's environment: "
+    + (problems.join("; ") || "the variable said as a bad lead, the written key taken"));
+  if (PLANTS_OFF) skip("19l lifting plant:lead-as-written fills the lead from the environment again (ETIUDA_PLANTS=off)");
+  else {
+    const src = liftPlant(SRC, "lead-as-written",
+      "    if (lead.type === \"REG_SZ\" ? policyLeadOk(lead.value) : lead.type === \"REG_EXPAND_SZ\" && policyLeadOk(policyExpand(lead.value))) { leadOk = true; leadValue = lead.type === \"REG_SZ\" ? lead.value : policyExpand(lead.value); }");
+    let turned = [];
+    try { turned = src ? leadFromEnvironment(load(src, POLICY_DECLS, ["joinPolicyFrom"], POLICY_NAMES, [() => "", { platform: "linux", env: process.env }, fs, os, path])) : []; }
+    catch (e) { turned = []; problems.push("the lifted copy: " + e.message); }
+    check(!!src && turned.length > 0, "19l lifting plant:lead-as-written fills the lead from the environment again: "
+      + (src ? turned.length + " problem(s)" : "the plant is not on exactly one line"));
+  }
+}
+
 try { fs.rmSync(LAB, { recursive: true, force: true }); } catch { /* the temp folder's own to clear */ }
 
-console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
-if (asserted < EXPECTED) {
-  console.log("SUITE DID NOT COMPLETE: " + asserted + " of " + EXPECTED + " checks ran");
+console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);
+if (asserted + skipped < EXPECTED) {
+  console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " checks ran");
   process.exit(78);
 }
 console.log(failed ? "  RESULT: FAIL " + failed + " of " + asserted : "  RESULT: ok " + asserted + " check(s)");

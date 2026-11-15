@@ -4138,13 +4138,10 @@ function joinPolicyFacts(text) {
     }
     else bad.push("folder");
   }
+  /* An expandable folder is filled from the desk's environment; the lead is taken as written whatever its type, so no
+     variable a person sets becomes the key this desk trusts. */
   if (lead.set) {
-    if (lead.type === "REG_SZ" && policyLeadOk(lead.value)) { leadOk = true; leadValue = lead.value; }
-    else if (lead.type === "REG_EXPAND_SZ") {
-      const exp = policyExpand(lead.value);
-      if (exp !== null && policyLeadOk(exp)) { leadOk = true; leadValue = exp; }
-      else bad.push("lead");
-    }
+    if ((lead.type === "REG_SZ" || lead.type === "REG_EXPAND_SZ") && policyLeadOk(lead.value)) { leadOk = true; leadValue = lead.value; } /* plant:lead-as-written */
     else bad.push("lead");
   }
   if ((folder.set || lead.set) && (!folderOk || !leadOk)) {
