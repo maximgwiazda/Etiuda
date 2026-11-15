@@ -752,6 +752,220 @@ try {
       );
     }
   }
+
+  /* === 6: The words (EN and PL copywriter updates in the first minutes) === */
+  {
+    const sampleRows = [{ name: "sample-catalog.ec", sample: true, builtIn: false, mtime: 1000, cards: 8 }];
+    const folderShort = "Documents\\Etiuda";
+
+    const readStep = async (lang, stepId, { roleSeen = false } = {}) => {
+      const preStep = stepId === "editor" ? "buttons"
+        : stepId === "libraryRail" ? "library"
+        : stepId === "settingsRail" ? "settings"
+        : stepId;
+      const p = await bootCatalogTour(browser, cleanSampleUrl, { lang, stepId: preStep });
+      if (roleSeen) {
+        await p.evaluate((id) => {
+          localStorage.setItem("eRoleSeen", "1");
+          sessionStorage.setItem("eTourAt", id);
+        }, preStep);
+        await p.reload({ waitUntil: "load", timeout: 60000 });
+        await p.waitForFunction(() => !!document.querySelector("#tourRoot.on"), { timeout: 15000 });
+        await sleep(160);
+      }
+      if (stepId === "editor") {
+        await p.click("#tourNext");
+        await p.waitForFunction(() => sessionStorage.getItem("eTourAt") === "editor", { timeout: 10000 });
+        await sleep(160);
+      } else if (stepId === "libraryRail" || stepId === "settingsRail") {
+        await p.click("#tourNext");
+        const mid = stepId === "libraryRail" ? "libraryIn" : "settingsIn";
+        await p.waitForFunction((m) => sessionStorage.getItem("eTourAt") === m, { timeout: 10000 }, mid);
+        await sleep(120);
+        await p.click("#tourNext");
+        await p.waitForFunction((target) => sessionStorage.getItem("eTourAt") === target, { timeout: 10000 }, stepId);
+        await sleep(160);
+      }
+      const res = await p.evaluate(() => ({
+        title: (document.getElementById("tourTitle") || {}).textContent || "",
+        bodyHtml: (document.getElementById("tourBody") || {}).innerHTML || "",
+        bodyText: (document.getElementById("tourBody") || {}).textContent || ""
+      }));
+      await closePage(p);
+      return res;
+    };
+
+    const probeFirstCopyToast = async (lang) => {
+      const ctx = await browser.createBrowserContext();
+      const p = await ctx.newPage();
+      p.on("dialog", (d) => { d.dismiss().catch(() => {}); });
+      await p.setViewport({ width: 1280, height: 860 });
+      await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
+      await p.evaluateOnNewDocument((l) => {
+        try {
+          localStorage.setItem("eUiLang", l);
+          localStorage.setItem("eTourDone_v3", "1");
+          localStorage.setItem("eAgent", "Anna");
+          localStorage.setItem("eNameAsked", "1");
+        } catch (e) {}
+        try {
+          Object.defineProperty(navigator, "clipboard", {
+            configurable: true,
+            value: { writeText: () => Promise.resolve() }
+          });
+        } catch (e) {}
+        const desk = { eUiLang: l, eTourDone_v3: "1", eAgent: "Anna", eNameAsked: "1" };
+        window.E_HOST = {
+          platform: "win32",
+          openPicker: () => {},
+          hotkeyState: () => ({ accel: "Control+Shift+Space", held: true, taken: false }),
+          deskRead: () => JSON.stringify(desk),
+          deskSave: (raw) => { try { Object.assign(desk, JSON.parse(raw)); } catch (e) {} return true; },
+          session: () => null
+        };
+      }, lang);
+      await p.goto(cleanSampleUrl, { waitUntil: "load", timeout: 60000 });
+      await p.waitForFunction(
+        () => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0,
+        { timeout: 30000 }
+      );
+      if (await p.$("#ecYes")) await p.click("#ecYes");
+      await p.waitForFunction(
+        () => !!document.querySelector("#list .card .txt[data-v]") && !document.getElementById("ecYes") && !document.querySelector(".e-launch-veil"),
+        { timeout: 20000 }
+      );
+      await p.click("#list .card .txt[data-v]");
+      await p.waitForFunction(() => {
+        const el = document.getElementById("toast");
+        return !!(el && el.classList.contains("show") && el.textContent.trim().length > 0);
+      }, { timeout: 8000 });
+      const msg = await p.evaluate(() => (document.getElementById("toast") || {}).textContent || "");
+      await closePage(p);
+      return msg;
+    };
+
+    const norm = (s) => String(s || "").replace(/\s+/g, " ").trim();
+    EXPECTED += 16;
+
+    // Item 1 (load step with practice catalog) checked in EN & PL
+    for (const [lang, expected] of [
+      ["en", "Click <b>Load catalog file</b> to open the practice catalog in " + folderShort + ", to try Etiuda before your team's own arrives."],
+      ["pl", "Prosz\u0119 klikn\u0105\u0107 <b>Wczytaj plik katalogu</b>, aby otworzy\u0107 przyk\u0142adowy katalog z folderu " + folderShort + " i wypr\u00f3bowa\u0107 Etiud\u0119, zanim dotrze katalog zespo\u0142u."]
+    ]) {
+      const p = await bootEmptyWithHost(browser, cleanEmptyUrl, { lang, files: sampleRows });
+      const st = await readTourLoadState(p);
+      await closePage(p);
+      check(
+        st.bodyHtml.includes(expected),
+        `6.1 (${lang}) load step carries the copywriter practice-catalog sentence`,
+        st
+      );
+    }
+
+    // Item 3 (PL name example, with and without wheel) + Item 4 (wheel, EN & PL)
+    const paxNoWheelPl = await readStep("pl", "pax", { roleSeen: false });
+    const paxWheelPl = await readStep("pl", "pax", { roleSeen: true });
+    const paxWheelEn = await readStep("en", "pax", { roleSeen: true });
+    check(
+      [paxNoWheelPl, paxWheelPl].every((x) =>
+        x.bodyHtml.includes("(ANNA KOWALSKA zamienia si\u0119 w <b>Anno</b>)") &&
+        x.bodyHtml.includes("a ka\u017cda odpowied\u017a zwraca si\u0119 do tej osoby po imieniu")
+      ),
+      "6.3 (pl) pax step (with and without wheel) uses exact ANNA KOWALSKA and tej osoby wording",
+      { paxNoWheelPl, paxWheelPl }
+    );
+    check(
+      paxWheelEn.bodyHtml.includes("The wheel beside it chooses who in the team this reply names.") &&
+      paxWheelPl.bodyHtml.includes("K\u00f3\u0142ko obok wybiera osob\u0119 z zespo\u0142u, kt\u00f3r\u0105 wymienia ta odpowied\u017a."),
+      "6.4 (en/pl) pax step with wheel uses exact team-member wheel wording",
+      { paxWheelEn, paxWheelPl }
+    );
+
+    // Item 6 (name step + libraryRail + settingsRail, EN & PL)
+    const nameEn = await readStep("en", "name");
+    const namePl = await readStep("pl", "name");
+    check(
+      norm(nameEn.bodyHtml) === "To begin, the name your replies are signed with. Customers see it at the foot of each one, and it can be changed at any time in Settings, under Account." &&
+      norm(namePl.bodyHtml) === "Na pocz\u0105tek podpis: imi\u0119, kt\u00f3re klienci zobacz\u0105 pod ka\u017cd\u0105 odpowiedzi\u0105. Mo\u017cna je zmieni\u0107 w ka\u017cdej chwili w Ustawieniach, w cz\u0119\u015bci Konto.",
+      "6.6a (en/pl) name step points to Settings, under Account",
+      { nameEn, namePl }
+    );
+
+    const libEn = await readStep("en", "libraryRail");
+    const libPl = await readStep("pl", "libraryRail");
+    check(
+      norm(libEn.bodyHtml) === "Its parts are on the left: <b>Categories &amp; cards</b>, <b>Intents</b>, <b>ROLE suggestions</b> and <b>Catalog &amp; data</b>, where a catalog is loaded and your own improvements go out as a file for whoever keeps the wording." &&
+      norm(libPl.bodyHtml) === "Jej cz\u0119\u015bci s\u0105 po lewej: <b>Kategorie i karty</b>, <b>Intencje</b>, <b>Podpowiedzi ROLE</b> oraz <b>Katalog i dane</b>, gdzie wczytuje si\u0119 katalog i sk\u0105d wysy\u0142a si\u0119 w\u0142asne poprawki, jako plik dla osoby, kt\u00f3ra dba o tre\u015b\u0107.",
+      "6.6b (en/pl) libraryRail names exact four parts in bold",
+      { libEn, libPl }
+    );
+
+    const setEn = await readStep("en", "settingsRail");
+    const setPl = await readStep("pl", "settingsRail");
+    check(
+      norm(setEn.bodyHtml) === "The parts are on the left: your name is under <b>Account</b>, the language under <b>General</b>, the look under <b>Appearance</b>, and every shortcut, Quick replies' included, under <b>Keyboard shortcuts</b>." &&
+      norm(setPl.bodyHtml) === "Cz\u0119\u015bci s\u0105 po lewej: imi\u0119 jest w <b>Koncie</b>, j\u0119zyk w <b>Og\u00f3lnych</b>, wygl\u0105d aplikacji w <b>Wygl\u0105dzie</b>, a wszystkie skr\u00f3ty, tak\u017ce do Szybkich odpowiedzi, w <b>Skr\u00f3tach klawiszowych</b>.",
+      "6.6c (en/pl) settingsRail puts Account first and matches exact section names",
+      { setEn, setPl }
+    );
+
+    // Item 7 (PL intent token in rail step + 898 tooltip)
+    const railPl = await readStep("pl", "rail");
+    check(
+      railPl.bodyHtml.includes('<span class="fillmiss">INTENCJA</span>') && !railPl.bodyHtml.includes('<span class="fillmiss">INTENT</span>'),
+      "6.7a (pl) rail step dashed token reads INTENCJA",
+      railPl
+    );
+    const tipKey = "Hide the intent panel; its chips then appear on the first card that uses {INTENT}";
+    const tipPlMatch = rawHtml.includes('"Ukryj panel intencji; przyciski intencji pojawi\\u0105 si\\u0119 wtedy na pierwszej karcie, kt\\u00f3ra u\\u017cywa INTENCJA"') ||
+      rawHtml.includes('"Ukryj panel intencji; przyciski intencji pojawi\u0105 si\u0119 wtedy na pierwszej karcie, kt\u00f3ra u\u017cywa INTENCJA"');
+    const tipOldMatch = rawHtml.includes("na pierwszej karcie, kt\\u00f3ra u\\u017cywa {INTENT}") ||
+      rawHtml.includes("na pierwszej karcie, kt\u00f3ra u\u017cywa {INTENT}");
+    check(
+      rawHtml.includes(tipKey) && tipPlMatch && !tipOldMatch,
+      "6.7b (pl) menuRail static tooltip reads INTENCJA instead of {INTENT}",
+      { tipPlMatch, tipOldMatch }
+    );
+
+    // Item 9 (pills title EN & PL)
+    const pillsEn = await readStep("en", "pills");
+    const pillsPl = await readStep("pl", "pills");
+    check(pillsEn.title === "The category bar", "6.9 (en) pills step title is The category bar", pillsEn);
+    check(pillsPl.title === "Pasek kategorii", "6.9 (pl) pills step title is Pasek kategorii", pillsPl);
+
+    // Item 10 (editor fold list EN & PL, leaving "Commits the firm" untouched)
+    const edEn = await readStep("en", "editor");
+    const edPl = await readStep("pl", "editor");
+    check(
+      norm(edEn.bodyHtml).startsWith('<span class="t-sec">Content</span> holds the text in both languages and the internal note; the folds below hold the keywords, the category, the linked intents, the next replies and the advanced settings. <b>Cancel</b> leaves everything as it was.'),
+      "6.10a (en) editor step names exact folds including the next replies and the advanced settings",
+      edEn
+    );
+    check(
+      norm(edPl.bodyHtml).startsWith('<span class="t-sec">Tre\u015b\u0107</span> to tekst w obu j\u0119zykach i notatka wewn\u0119trzna; w zwini\u0119tych sekcjach poni\u017cej s\u0105 s\u0142owa kluczowe, kategoria, powi\u0105zane intencje, kolejne odpowiedzi i ustawienia zaawansowane. <b>Anuluj</b> zostawia wszystko bez zmian.'),
+      "6.10b (pl) editor step names exact folds including kolejne odpowiedzi",
+      edPl
+    );
+    check(
+      !rawHtml.includes("Binding on the firm") && !rawHtml.includes("Wi\u0105\u017ce firm\u0119"),
+      "6.10c Commits the firm label stays unchanged (not Binding on the firm)",
+      {}
+    );
+
+    // Item 11 (first copy's toast EN & PL)
+    const toastEn = await probeFirstCopyToast("en");
+    const toastPl = await probeFirstCopyToast("pl");
+    check(
+      toastEn === "Copied: paste it into the chat with Ctrl+V. Next time, Ctrl+Shift+Space opens Quick replies over any window and pastes the one chosen.",
+      "6.11 (en) first copy toast explains Ctrl+V and Ctrl+Shift+Space picker",
+      { toastEn }
+    );
+    check(
+      toastPl === "Skopiowano: wystarczy wklei\u0107 odpowied\u017a w czacie skr\u00f3tem Ctrl+V. Nast\u0119pnym razem Ctrl+Shift+Space otworzy Szybkie odpowiedzi nad dowolnym oknem i wklei wybran\u0105.",
+      "6.11 (pl) first copy toast explains Ctrl+V and Ctrl+Shift+Space picker",
+      { toastPl }
+    );
+  }
 } catch (err) {
   console.error("HARNESS ERROR:", err);
   fails++;

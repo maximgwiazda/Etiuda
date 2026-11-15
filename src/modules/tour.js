@@ -266,7 +266,7 @@ const TOUR_STEPS=[
     id:"name",
     sel:".brand",
     title:"Welcome to Etiuda",
-    body:"To begin, the name your replies are signed with. Customers see it at the foot of each one, and it can be changed at any time in Settings.",
+    body:"To begin, the name your replies are signed with. Customers see it at the foot of each one, and it can be changed at any time in Settings, under Account.",
     name:true,
     pad:10
   },
@@ -298,7 +298,7 @@ const TOUR_STEPS=[
     tab:"chat",
     title:()=>wheelShown() ? "Customer name and role" : "The customer's name",
     body:()=>wheelShown()
-      ? "The customer's name goes here as the chat gives it, surname and capitals included, and every reply greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>). The wheel beside it says who is on the chat, for internal comments."
+      ? "The customer's name goes here as the chat gives it, surname and capitals included, and every reply greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>). The wheel beside it chooses who in the team this reply names."
       : "The customer's name goes here as the chat gives it, surname and capitals included, and every reply greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>).",
     pad:6
   },
@@ -337,7 +337,7 @@ const TOUR_STEPS=[
     id:"pills",
     sel:"#pills",
     tab:"chat",
-    title:"Category pills",
+    title:"The category bar",
     body:"A click on a category shows only its cards, and <kbd>Ctrl</kbd>+click keeps several. A <b class=\"t-go\">green</b> ring marks one holding a card for the chosen intent, and a <b class=\"t-acc\">blue</b> one a supporting category, useful for any question.",
     pad:8,
     prep:tourEnsurePills
@@ -382,7 +382,7 @@ const TOUR_STEPS=[
     when:cardEditorOpen,
     pad:4,
     title:"The card editor",
-    body:()=>t("<span class=\"t-sec\">Content</span> holds the text in both languages and the internal note; the folds below hold the keywords, the category, the linked intents and the finer settings. <b>Cancel</b> leaves everything as it was.")
+    body:()=>t("<span class=\"t-sec\">Content</span> holds the text in both languages and the internal note; the folds below hold the keywords, the category, the linked intents, the next replies and the advanced settings. <b>Cancel</b> leaves everything as it was.")
       +" "+t("The tour carries on once this window is closed.")
   },
   /* AFTER the editor, not before it: the step above acts on a card that already exists, and this
@@ -502,7 +502,7 @@ const TOUR_STEPS=[
     side:"right",
     pad:6,
     title:"Library",
-    body:"Its parts are on the left: the categories and cards, the intents, and the catalog's files, where a catalog is loaded and your own improvements go out as a file for whoever keeps the wording."
+    body:"Its parts are on the left: <b>Categories & cards</b>, <b>Intents</b>, <b>ROLE suggestions</b> and <b>Catalog & data</b>, where a catalog is loaded and your own improvements go out as a file for whoever keeps the wording."
   },
   {
     id:"libraryList",
@@ -541,7 +541,7 @@ const TOUR_STEPS=[
     side:"right",
     pad:6,
     title:"Settings",
-    body:"The parts are on the left: <b>General</b> for the language, <b>Appearance</b> for the look, and <b>Keyboard shortcuts</b> for every shortcut, Quick replies' included."
+    body:"The parts are on the left: your name is under <b>Account</b>, the language under <b>General</b>, the look under <b>Appearance</b>, and every shortcut, Quick replies' included, under <b>Keyboard shortcuts</b>."
   },
   {
     id:"done",
