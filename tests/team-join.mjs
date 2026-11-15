@@ -39,7 +39,7 @@ const ASIDE = {
   "15ep": offWindows("15ep", "15em stands aside off Windows, so lifting plant:w2-folder-not-writable has no green leg there to turn"),
 };
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 179;
+const EXPECTED = 181;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -461,6 +461,47 @@ try {
   check(!!(openState.join && openState.join.state === "waiting") && request(meOpen).reveal === undefined && !request(meOpen).opened && openSaid == null,
     "15nb an opening signed by anyone but that lead is not taken: the desk waits and reveals nothing ("
     + (openState.join ? openState.join.state : "no join") + ", said " + JSON.stringify(openSaid) + ")");
+
+  /* ---- review 14, finding 1: a writer of the share swaps in a team file and an unsigned ring under its own key, and opens the
+     request with that key. The answer pins it before any admission; Cancel takes that pin back, with the bar and the leave. ---- */
+  const answeredForger = async (name, src) => {
+    const share = folder(name + "-share");
+    put(share, "etiuda-team.json", teamFile([], { lead: FORGED, signer: forger.privateKey }));
+    put(share, "etiuda-ring.json", { format: 1, kind: "etiuda-ring", keys: [{ catalog: "lamp-shop", keyId: FORGED.keyId, alg: "Ed25519", public: FORGED.public }] });
+    put(share, "lamps.ec", P.sealCatalog(K1, TEAM, 1, A1));
+    const ud = path.join(LAB, name);
+    fs.mkdirSync(ud, { recursive: true });
+    const left = new Date(Date.now() - 60000).toISOString();
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" },
+      teamBarred: [TEAM], teamLeft: { [TEAM]: left } }), "utf8");
+    const D = loadDesk(ud, src);
+    syncFolder(share);
+    const me = await D.ask("etiuda:branch-identity", true);
+    const barredBefore = JSON.stringify(D.envelope().teamBarred || null) + JSON.stringify(D.envelope().teamLeft || null);
+    await D.join("ask", "lamps.ec", "Rut");
+    const req = JSON.parse(fs.readFileSync(path.join(share, "desks", me.id, "join.json"), "utf8"));
+    put(share, P.JOINS_NAME, signJoinsDoc([{ desk: me.id, commit: req.commit, nonce: nonce() }], forger.privateKey, FORGED));
+    const coded = await D.join("state");
+    await D.join("state");
+    const e1 = D.envelope(), pinned = !!(e1.teamPins && e1.teamPins[TEAM] && e1.teamPins[TEAM].public === FORGED.public);
+    await D.join("cancel");
+    const e2 = D.envelope();
+    return { code: !!(coded.join && coded.join.state === "code"), pinned, from: e1.teamPinFrom ? e1.teamPinFrom[TEAM] : null,
+      barredBefore: barredBefore === JSON.stringify([TEAM]) + JSON.stringify({ [TEAM]: left }),
+      pinAfter: !!(e2.teamPins && e2.teamPins[TEAM]), barredAfter: JSON.stringify(e2.teamBarred || null) === JSON.stringify([TEAM]),
+      leftAfter: !!(e2.teamLeft && e2.teamLeft[TEAM] === left), joinAfter: !!e2.teamJoin };
+  };
+  const af = await answeredForger("j14a");
+  check(af.code && af.pinned && af.from === "answer" && af.barredBefore && !af.pinAfter && af.barredAfter && af.leftAfter && !af.joinAfter,
+    "j14a review 14.1: a forger's team file, its unsigned ring and its signed opening pin its key as the answer before any admission, and"
+    + " Cancel takes that pin back and puts the bar and the leave it lifted back as they were: " + JSON.stringify(af));
+  if (PLANTS_OFF) skip("j14a2 lifting plant:j14-cancel-answer leaves the answered pin after Cancel (ETIUDA_PLANTS=off)");
+  else {
+    const planted = SRC.split("\n").map(l => (l.indexOf("plant:j14-cancel-answer") >= 0 ? "  answered = false;" : l)).join("\n");
+    const pf = SRC.indexOf("plant:j14-cancel-answer") >= 0 ? await answeredForger("j14a-plant", planted) : null;
+    check(!!pf && pf.pinned && pf.pinAfter, "j14a2 lifting plant:j14-cancel-answer leaves the answered pin after Cancel (FAIL j14a): "
+      + JSON.stringify(pf));
+  }
 
   /* ---- the envelope keeps the request across a restart ------------------------------------------------------------ */
   const D1r = loadDesk(D1.ud);

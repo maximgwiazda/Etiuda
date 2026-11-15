@@ -5750,7 +5750,7 @@ function askJoin(file, name) {
     return joinView();
   const nonce = crypto.randomBytes(32).toString("hex"), team = String(d.team);
   const j = { team: team, file: path.basename(at), nonce: nonce, commit: joinCommit(team, me.key, me.box, nonce), asked: Date.now(),
-              held: newestEpoch(team), name: String(name || "").trim().slice(0, 120) };
+              held: newestEpoch(team), name: String(name || "").trim().slice(0, 120), before: inviteBefore(team) };
   try { writeJoin(joinRequestDoc(j, null)); }
   catch (e) {
     console.error("etiuda: the request to join could not be written - " + e.message);
@@ -5833,6 +5833,12 @@ function cancelJoin() {
      newer key from elsewhere, one the roster's wrap gave, means the desk is admitted, and Cancel leaves what it set (921n). */
   const b = j && j.invite && j.invite.before, wrapped = (j && j.invite && ((j.invite.relay && j.invite.relay.wrapped) || j.invite.wrapped)) || [];
   if (b && newestEpoch(j.team, wrapped) === (b.epoch || 0)) undoInvite(j.team, b, j.invite); /* plant:c7-cancel */
+  /* A request with no invitation whose answer pinned a lead the desk did not trust before, and no admission since: Cancel takes
+     back that pin and the bar or leave it lifted, since the opening was signed only by the lead of the folder's own file. */
+  const a = j && !j.invite ? j.before : null;
+  let answered = false;
+  answered = !!a && !a.pin && teamPinFrom[j.team] === "answer" && newestEpoch(j.team) === (a.epoch || 0); /* plant:j14-cancel-answer */
+  if (answered) undoInvite(j.team, a, {});
   persistDeskEnvelope();
   return joinView();
 }
@@ -6051,7 +6057,7 @@ function joinKept(j) {
     && Number.isInteger(j.held) && j.held >= 0 && typeof j.name === "string"
     && (o === undefined || (!!o && !!o.lead && typeof o.lead.keyId === "string" && JOIN_HEX_RE.test(String(o.lead.public))
       && JOIN_HEX_RE.test(String(o.nonce))))
-    && (j.refused === undefined || j.refused === true);
+    && (j.refused === undefined || j.refused === true) && (j.before === undefined || beforeKept(j.before));
   if (!ok) return null;
   if (j.invite === undefined) return j;
   const inv = j.invite, who = inv && inv.lead;
