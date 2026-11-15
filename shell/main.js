@@ -882,6 +882,11 @@ function catalogLeadOk(data) {
   }
   return "";
 }
+/* The public a catalog verifies under as this desk trusts it: while a lead is pinned, that lead's (catalogLeadOk), so the
+   share's unsigned ring file never stands in for it; else the ring's. */
+function catalogTrustedPub(data) {
+  return pinnedLeadPubs().length ? catalogLeadOk(data) : catalogSigValid(data); /* plant:trusted-pub-lead */
+}
 /* The leads the page verifies against, the same publics catalogLeadOk uses. A whole team file narrows them to that
    team's pin. Where that lead is not pinned, one key that verifies nothing, so another team's pin is not read and
    the ring is not read in its place. */
@@ -2727,12 +2732,12 @@ function catalogRevSlot(id, pub) {
   return Number.isInteger(n) ? n : 0;
 }
 /* A rev already held for this signing public is not replaced by a lower one. Equal is not a raise.
-   Only the public catalogSigValid just verified is written, so one key's mark never moves another's.
+   Only the public catalogTrustedPub just verified is written, so one key's mark never moves another's.
    An unsigned file, whoever wrote it into the share, does not. */
 function keepCatalogRev(json) {
   const x = catalogMarkOf(json);
   if (!x) return;
-  const pub = catalogSigValid(catalogDocIn(json));
+  const pub = catalogTrustedPub(catalogDocIn(json));
   if (!pub || !(x.rev > catalogRevSlot(x.id, pub))) return;
   if (!catalogRevs[x.id] || typeof catalogRevs[x.id] !== "object" || Array.isArray(catalogRevs[x.id])) catalogRevs[x.id] = {};
   catalogRevs[x.id][pub] = x.rev;
@@ -2743,7 +2748,7 @@ function keepCatalogRev(json) {
 function belowCatalogRev(json) {
   const x = catalogMarkOf(json);
   if (!x) return false;
-  const pub = catalogSigValid(catalogDocIn(json));
+  const pub = catalogTrustedPub(catalogDocIn(json));
   if (!pub) return false;
   return x.rev < catalogRevSlot(x.id, pub);
 }
@@ -3141,7 +3146,7 @@ function catalogTitleClean(name) {
   return name.replace(INVITE_HIDDEN_RE, "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 120);
 }
 function catalogSignerOf(doc) {
-  return catalogSigValid(doc) && doc.sig && typeof doc.sig.keyId === "string" ? String(doc.sig.keyId) : "";
+  return catalogTrustedPub(doc) && doc.sig && typeof doc.sig.keyId === "string" ? String(doc.sig.keyId) : "";
 }
 function deskTitle() {
   const n = deskKeys && typeof deskKeys.eAgent === "string" ? deskKeys.eAgent.trim().slice(0, 120) : "";

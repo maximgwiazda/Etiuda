@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 131;
+const EXPECTED = 133;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku: jego treść trafi do lidera tylko wtedy, gdy lider włączy w Studiu kopie katalogów spoza listy, a to stanowisko zostanie o tym powiadomione, zanim cokolwiek zostanie wysłane. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -240,6 +240,39 @@ try {
     }
     throw new Error("unterminated " + marker);
   };
+
+  /* ---- 890r: a folder team with no ring in its team file, and a ring file in the share written by someone else ----------
+     The share's ring maps the catalog and the lead's key id to another public, and a catalog signed by that key under the
+     lead's key id is opened: in-use.ec does not name the lead's key as its signer, and the rev floor does not move under that
+     public (Grok's review 16, finding 5). */
+  const forgedRing = async (name, src) => {
+    const box = await arm(name, src);
+    put(box.share, "etiuda-ring.json", { format: 1, kind: "etiuda-ring", keys: [{ catalog: "north-lamps", keyId: LEAD.keyId, alg: "Ed25519", public: OTHER.public }] });
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)]);
+    box.D.sync("etiuda:catalog");
+    const forged = textOf(sign(catalog(3, { unsigned: true }), other.privateKey, LEAD));
+    const pin = pinOf(box.D, forged);
+    take(box.D, pin, forged);
+    const inner = openSealedDoc(box.D, inUsePath(box.share, box.me.id), box.key);
+    const cat = inner && inner.catalog || {};
+    const floor = JSON.stringify(box.D.envelope().catalogRevs || {});
+    return { took: !!inner && cat.sha256 === pin, signer: cat.signer, floored: floor.indexOf(OTHER.public) >= 0 };
+  };
+  {
+    const r = await forgedRing("ring-forge");
+    check(r.took && r.signer === "" && !r.floored,
+      "890r a catalog signed under the lead's key id by a key only the share's ring file names is recorded with no signer, and moves no rev floor: "
+      + JSON.stringify(r));
+    if (PLANTS_OFF) skip("890s rewriting plant:trusted-pub-lead to the ring's check names the lead as that catalog's signer");
+    else {
+      const from = "pinnedLeadPubs().length ? catalogLeadOk(data) : catalogSigValid(data)";
+      const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:trusted-pub-lead") >= 0);
+      let p = null;
+      if (at >= 0 && lines[at].split(from).length === 2) { lines[at] = lines[at].replace(from, () => "catalogSigValid(data)"); p = await forgedRing("ring-forge-plant", lines.join("\n")); }
+      check(!!p && p.took && p.signer === LEAD.keyId, "890s rewriting plant:trusted-pub-lead to the ring's check names the lead as that catalog's signer (FAIL 890r): "
+        + JSON.stringify(p));
+    }
+  }
 
   /* ---- boot of the folder's own file ---------------------------------------------------------- */
   {

@@ -1138,12 +1138,12 @@ try {
     const askedRead = facts(((await D.ask("etiuda:catalog-read", "planted.ec", null, true)) || {}).text || "").rev;
     const quietRead = ((await D.ask("etiuda:catalog-read", "planted.ec", null, false, true)) || {}).text || "";
     check(booted.rev === 2 && markBoot === 2 && watchSent.length === 0 && markWatch === 2
-      && slots[INTR.public] === 1e15 && slots[LEAD.public] === 2 && lowWatch.length === 0
+      && slots[INTR.public] === undefined && slots[LEAD.public] === 2 && lowWatch.length === 0
       && highWatch.length === 1 && highWatch[0] === 3 && putBack.length === 0 && markBack === 3
       && asked.length === 1 && asked[0] === 1e15 && afterAsk[LEAD.public] === 3
-      && lowAsked.length === 1 && lowAsked[0] === 1 && slotsEnd[LEAD.public] === 3 && slotsEnd[INTR.public] === 1e15
+      && lowAsked.length === 1 && lowAsked[0] === 1 && slotsEnd[LEAD.public] === 3 && slotsEnd[INTR.public] === undefined
       && askedRead === 1e15 && quietRead === "",
-      "888ao a lead is pinned, so another key's catalog is not chosen and does not move the lead's mark, and opening it still offers it: "
+      "888ao a lead is pinned, so another key's catalog is not chosen, moves no mark of its own or the lead's, and opening it still offers it: "
       + "boot " + booted.rev + " mark " + markBoot
       + ", watch " + (watchSent.join(",") || "-") + " mark " + markWatch
       + ", intruder slot " + slots[INTR.public] + ", lead slot " + slots[LEAD.public]
