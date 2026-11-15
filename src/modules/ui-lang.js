@@ -1152,7 +1152,7 @@ UI_STRINGS.pl={
   "{SHOWN} of {COUNT}":"{SHOWN} z {COUNT}",
   "Etiuda fills the reply in for this conversation":"Etiuda dopasuje odpowiedź do tej rozmowy",
   "Click to switch replies to the next language":"Kliknięcie przełącza odpowiedzi na następny język",
-  "{KEY} copies, and pastes where it can":"{KEY} kopiuje i wkleja, gdzie się da",
+  "{KEY} copies, and pastes where it can":"{KEY} wkleja lub kopiuje",
   "{KEY} in {LANG}":"{KEY} w języku {LANG}",
   "{KEY} closes":"{KEY} zamyka",
   "Pasted":"Wklejono",
