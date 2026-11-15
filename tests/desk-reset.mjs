@@ -907,6 +907,35 @@ function review23Leg(mod) {
       const lifted = L ? markerRoots(L, "f1-lifted") : null;
       check(!!lifted && !lifted.other, "4r23b lifting plant:reset-own-default takes the marker's default again: " + JSON.stringify(lifted));
     }
+    /* 4r23c (finding 3): this desk's own folder under desks/ in the default folder, its catalog, its request and its
+       invitations, goes with the rest the confirm names, for its key now and one kept aside; another desk's folder there,
+       and anything that is not under desks/<own id>, stays. */
+    const ownFolders = (M, name) => {
+      const crypto = require("node:crypto");
+      const idOf = pub => "k-" + crypto.createHash("sha256").update(Buffer.from(pub, "hex")).digest("hex").slice(0, 16);
+      const now = "ab".repeat(32), old = "cd".repeat(32);
+      const pair = pub => ({ sign: { pub: pub, priv: "x" }, box: { pub: "ef".repeat(32), priv: "y" } });
+      const p = deskPair(lab, name, { branch: pair(now), branchOld: [pair(old)] });
+      const mine = path.join(p.docs, "desks", idOf(now)), aside = path.join(p.docs, "desks", idOf(old));
+      const theirs = path.join(p.docs, "desks", "k-0123456789abcdef");
+      write(path.join(mine, "shop-0a0b0c0d.ec"), "mine");
+      write(path.join(mine, "join.json"), "my request");
+      write(path.join(mine, "invites", "i.json"), "my invitation");
+      write(path.join(aside, "shop-0a0b0c0d.ec"), "mine, an older key");
+      write(path.join(theirs, "shop-0a0b0c0d.ec"), "theirs");
+      M.stageReset({ userData: p.user, catalogSetting: "", defaultCatalog: p.docs });
+      const done = M.honourPendingReset({ userData: p.user, holdsLock: true, defaultCatalog: p.docs });
+      return { done: !!done && done.ok === true, mine: gone(mine), aside: gone(aside), theirs: fs.existsSync(path.join(theirs, "shop-0a0b0c0d.ec")) };
+    };
+    const f3 = ownFolders(mod, "f3");
+    check(f3.done && f3.mine && f3.aside && f3.theirs, "4r23c this desk's own folder under desks/ in the default folder goes, for its key"
+      + " now and one kept aside, catalog, request and invitations alike, and another desk's folder there stays: " + JSON.stringify(f3));
+    if (!PLANTS) skip("4r23c lifting plant:reset-own-desks leaves the desk's own folder under desks/ (ETIUDA_PLANTS=off)");
+    else {
+      const L = liftedReset(lab, "plant:reset-own-desks", "        const keepIt = true;");
+      const lifted = L ? ownFolders(L, "f3-lifted") : null;
+      check(!!lifted && !lifted.mine, "4r23c lifting plant:reset-own-desks leaves the desk's own folder under desks/: " + JSON.stringify(lifted));
+    }
   } finally {
     fs.rmSync(lab, { recursive: true, force: true });
   }

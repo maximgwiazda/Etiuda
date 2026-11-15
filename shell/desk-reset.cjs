@@ -6,6 +6,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
 
 /* Reset keeps these two. A ticked uninstall removes them; the lists differ on purpose. */
 const LICENCE_FILES = ["etiuda-license.js", "etiuda-revoked.json"];
@@ -103,9 +104,9 @@ function refused(detail, userData, roots, keep) {
   };
 }
 
-/* What the desk file says about the folders a reset may touch: the catalog folder setting, and the team folders it names
-   (each folder team's, and an invitation's still asked), read from desk.json or the newest backup that parses; empty
-   where none does. */
+/* What the desk file says about the folders a reset may touch: the catalog folder setting, the team folders it names
+   (each folder team's, and an invitation's still asked), and this desk's own ids under desks/ (its key now and every
+   key kept aside), read from desk.json or the newest backup that parses; empty where none does. */
 function deskFacts(user) {
   const names = ["desk.json"];
   for (let n = 1; n <= 9; n++) names.push("desk.bak" + n + ".json");
@@ -121,9 +122,14 @@ function deskFacts(user) {
     Object.keys(shown).forEach(t => { const s = shown[t]; if (s && typeof s.folder === "string" && s.folder) shares.push(s.folder); });
     const inv = doc.teamJoin && typeof doc.teamJoin === "object" ? doc.teamJoin.invite : null;
     if (inv && typeof inv.folder === "string" && inv.folder) shares.push(inv.folder);
-    return { setting: setting, shares: shares };
+    const ids = [];
+    [doc.branch].concat(Array.isArray(doc.branchOld) ? doc.branchOld : []).forEach(b => {
+      const pub = b && b.sign ? String(b.sign.pub) : "";
+      if (/^[0-9a-f]{64}$/.test(pub)) ids.push("k-" + crypto.createHash("sha256").update(Buffer.from(pub, "hex")).digest("hex").slice(0, 16));
+    });
+    return { setting: setting, shares: shares, ids: ids };
   }
-  return { setting: "", shares: [] };
+  return { setting: "", shares: [], ids: [] };
 }
 
 /* The default catalog is a root only when the setting names it, or names nothing. A folder
@@ -140,6 +146,7 @@ function planReset(opts) {
   const setting = String(o.catalogSetting || "").trim();
   const rawDefault = String(o.defaultCatalog || "");
   const shares = (Array.isArray(o.shares) ? o.shares : []).map(String).filter(s => path.isAbsolute(s));
+  const ids = (Array.isArray(o.deskIds) ? o.deskIds : []).map(String).filter(id => /^k-[0-9a-f]{16}$/.test(id));
   const roots = [user];
   let catalog = "";
   if (path.isAbsolute(rawDefault)) {
@@ -179,6 +186,17 @@ function planReset(opts) {
       const abs = remember(seen, at);
       if (abs) remove.push(abs);
     });
+    /* This desk's own folders under desks/, whole, where desks/ is a real folder: a link there is never passed through. */
+    const desks = path.join(catalog, "desks"), desksSt = lstatOf(desks);
+    if (desksSt && desksSt.isDirectory() && !desksSt.isSymbolicLink()) {
+      ids.forEach(id => {
+        const at = path.join(desks, id);
+        const keepIt = !lstatOf(at); /* plant:reset-own-desks */
+        if (keepIt) return;
+        const abs = remember(seen, at);
+        if (abs) remove.push(abs);
+      });
+    }
   }
   for (let i = 0; i < remove.length; i++) {
     if (pathOutside(roots, remove[i]) || realOutside(roots, remove[i]))
@@ -374,7 +392,8 @@ function honourPendingReset(opts) {
   const planOpts = {
     userData: user,
     defaultCatalog: own, catalogSetting: facts.setting || String(doc.catalogSetting || ""), /* plant:reset-own-default */
-    shares: facts.shares.concat(Array.isArray(given) ? given : [])
+    shares: facts.shares.concat(Array.isArray(given) ? given : []),
+    deskIds: facts.ids
   };
   let done;
   if (Array.isArray(doc.owed) && doc.owed.length) {
