@@ -1366,9 +1366,12 @@ function createFolderProgram(opts) {
     staged = staged.concat(takeWaiting(stagedNow));
 
     /* The team file and its conflict siblings staged together are one look: the desk says a lead key shown in two hands
-       there (checks.forkSeen), and where the pin is handed to two keys none of them is taken, each read again at the next scan. */
+       there (checks.forkSeen), and where the pin is handed to two keys none of them is taken, each read again at the next scan.
+       The look runs while that file is owed. Steps 1 and 1b still land nothing of it until the debt is gone. */
+    let teamOwed = false;
+    teamOwed = isOwed("etiuda-team.json"); /* plant:team-owe-keep */
     const teamItems = staged.filter(s => s.relPath === "etiuda-team.json" || isTeamConflict(s.relPath));
-    if (pin && teamItems.length) {
+    if (pin && teamItems.length) { /* plant:owed-fork-look */
       const docs = [];
       for (const s of teamItems) {
         try { const d = JSON.parse(io.readFile(s.tmpPath, "utf8")); if (d && teamWhole(d) && d.id === team) docs.push(d); } catch {}
@@ -1387,7 +1390,12 @@ function createFolderProgram(opts) {
 
     // Step 1: Team file check
     const teamStaged = staged.filter(s => s.relPath === "etiuda-team.json")[0];
-    if (teamStaged) {
+    /* Dropped, not refused, and the stamp forgotten, so the next listing stages the share's copy once the path is no longer owed. */
+    if (teamStaged && teamOwed) {
+      knownMtimes.delete(teamStaged.relPath);
+      dropped.add(teamStaged.relPath);
+      try { io.unlink(teamStaged.tmpPath); } catch {}
+    } else if (teamStaged) {
       let text = null;
       try { text = io.readFile(teamStaged.tmpPath, "utf8"); } catch {}
       if (text) {
@@ -1470,6 +1478,13 @@ function createFolderProgram(opts) {
     // Step 1b: Conflict siblings of team file
     const teamSiblingsStaged = staged.filter(s => isTeamConflict(s.relPath));
     for (const sibItem of teamSiblingsStaged) {
+      /* A sibling lands at its own path and, where it is newer, moves the rev the canonical file is judged by. Neither happens while that file is owed. */
+      if (teamOwed || isOwed(sibItem.relPath)) {
+        knownMtimes.delete(sibItem.relPath);
+        dropped.add(sibItem.relPath);
+        try { io.unlink(sibItem.tmpPath); } catch {}
+        continue;
+      }
       let text = null;
       try { text = io.readFile(sibItem.tmpPath, "utf8"); } catch {}
       if (text) {
