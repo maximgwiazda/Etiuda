@@ -4212,7 +4212,10 @@ function policyWords(facts, lang) {
 function joinPolicyFrom(text, lang) { return policyWords(joinPolicyFacts(text), lang); }
 /* THE LAST GOOD READ, beside desk.json, so a read that fails holds it rather than none, across a restart too. Plain, as the
    key itself is readable by every account of this computer, and without AiKey, the one secret among the values, which then
-   waits for a good read. Null where there is none or it is not this shape. */
+   waits for a good read. Null where there is none or it is not this shape. It sits in userData, which the person can write:
+   a person who can also make the read fail could put pins of their own in it, but such a person could already make the read
+   fail and drop every pin, so holding the last good read widens nothing (Claude α, 2026-11-15: no seal, which would not stop
+   that person and would add a way for an honest desk to fail). */
 const POLICY_GOOD_FILE = "policy-last-good.json";
 function policyGoodLoad() {
   try {
