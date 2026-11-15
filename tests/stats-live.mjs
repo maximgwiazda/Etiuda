@@ -419,14 +419,7 @@ try {
 
   /* ---- 930i to 930k: the statistics box (lead.stats), which follows the lead's signing key --------------------------- */
   {
-    /* A statistics box as Studio derives it (src/sign.mjs statsBoxOf): the X25519 key of the signing key's own seed, whose public half
-       is the X25519 form of the lead's public key. */
-    const statsKeyOf = ed => {
-      const seed = ed.export({ type: "pkcs8", format: "der" }).subarray(-32), raw = crypto.createHash("sha512").update(seed).digest().subarray(0, 32);
-      const privateKey = crypto.createPrivateKey({ key: Buffer.concat([Buffer.from("302e020100300506032b656e04220420", "hex"), raw]), format: "der", type: "pkcs8" });
-      return { privateKey, publicKey: crypto.createPublicKey(privateKey) };
-    };
-    const heir = crypto.generateKeyPairSync("ed25519"), S1 = statsKeyOf(lead.privateKey), S2 = statsKeyOf(heir.privateKey);
+    const S1 = crypto.generateKeyPairSync("x25519"), S2 = crypto.generateKeyPairSync("x25519"), heir = crypto.generateKeyPairSync("ed25519");
     const HEIR = { keyId: "quay-lead-heir", public: pubHex(heir.publicKey) };
     const signed = (box, leadRec, key, handover) => {
       const o = { format: 1, kind: "etiuda-team", id: box.team, catalogs: ["north-lamps"], lead: leadRec, sealed: true, exportsSealed: false, epoch: 1,
@@ -467,8 +460,8 @@ try {
     });
     check(j.ok, "930j after that handover the old key opens nothing sealed: neither the lead's box it kept nor its own statistics box opens the answer"
       + (j.why ? ": " + j.why.split("\n")[0] : ""));
-    /* A team file whose statistics box is not the lead's own: taken as it is, the desk still on the team, and nothing sealed, not even to
-       the lead's box, until a team file names the lead's own; then the answer is sealed to it. */
+    /* A team file whose statistics box is malformed: taken as it is, the desk still on the team, and nothing sealed, not even to the
+       lead's box, until a team file names a well-formed one; then the answer is sealed to it. */
     const notOwn = async (stats, leadRec, key) => {
       const box = await joined(false);
       const doc = signed(box, Object.assign({ keyId: LEAD.keyId, public: LEAD.public, box: LEAD.box, stats }, leadRec || {}), key || lead.privateKey);
@@ -488,15 +481,31 @@ try {
       return x.whole && x.member && x.none && x.after === 8;
     });
     check(k.ok, "930k a team file whose statistics box is malformed is taken, the desk still on the team, and seals nothing, not even to the lead's box,"
-      + " until a team file names the lead's own" + (k.why ? ": " + k.why.split("\n")[0] : ""));
-    const l = await proveOr("930l", "  stats = doc.lead.stats === leadStatsBox(doc.lead.public) ? doc.lead.stats : \"\"; /* plant:stats-box-lead */",
-      "  stats = /^[0-9a-f]{64}$/.test(String(doc.lead.stats)) ? doc.lead.stats : \"\"; /* plant:stats-box-lead */", async () => {
-      const x = await notOwn(pubHex(S2.publicKey));
+      + " until a team file names a well-formed one" + (k.why ? ": " + k.why.split("\n")[0] : ""));
+    /* A handover whose team file still names the former lead's statistics box, as one the old key's Studio wrote would: the box the
+       last answer was sealed to, under another key, so statsBoxKept seals nothing more and the desk stays on the team. */
+    const l = await proveOr("930l", "  kept = last.team === seal.team && last.box === seal.box && typeof last.keyId === \"string\" && last.keyId !== seal.keyId; /* plant:stats-box-kept */",
+      "  /* plant:stats-box-kept */", async () => {
+      const box = await joined(false);
+      put(box.share, "etiuda-team.json", signed(box, { keyId: LEAD.keyId, public: LEAD.public, box: LEAD.box, stats: pubHex(S1.publicKey) }, lead.privateKey));
+      adopt(box, "rolling-30", lead.privateKey, LEAD, 2);
+      const before = openWith(box, S1.privateKey);
+      const st = { format: 1, kind: "etiuda-team-handover", team: box.team, from: { keyId: LEAD.keyId, public: LEAD.public },
+        to: { keyId: HEIR.keyId, public: HEIR.public }, sig: { alg: "Ed25519", keyId: LEAD.keyId } };
+      st.sig.value = crypto.sign(null, box.D.api.handoverSignedBytes(st), lead.privateKey).toString("hex");
+      put(box.share, "etiuda-team.json", signed(box, { keyId: HEIR.keyId, public: HEIR.public, box: LEAD.box, stats: pubHex(S1.publicKey) }, heir.privateKey, [st]));
+      box.D.api.catalogChanged(box.D.win);
+      put(box.share, "stats-span.json", spanDoc(box.D, "rolling-30", heir.privateKey, HEIR));
+      box.D.api.catalogChanged(box.D.win);
+      box.D.api.setStatsClock(CLOCK + 120000);
+      await box.D.ask("etiuda:stats-write", pageBody(9));
+      const after = openWith(box, S1.privateKey), use = box.D.api.teamUse();
+      const x = { before: before ? before.cards[0].n : null, after: after ? after.cards[0].n : null, member: !!use && use.member === true };
       console.log("  --- 930l " + JSON.stringify(x));
-      return x.whole && x.member && x.none && x.after === 8;
+      return x.before === 2 && x.after === 2 && x.member;
     });
-    check(l.ok, "930l a well-formed statistics box that is not the lead's own (another key's, as one carried forward across a handover would be)"
-      + " seals nothing, the desk still on the team" + (l.why ? ": " + l.why.split("\n")[0] : ""));
+    check(l.ok, "930l a team file after a handover that still names the former lead's statistics box, the box the last answer was sealed to,"
+      + " seals nothing more, the desk still on the team" + (l.why ? ": " + l.why.split("\n")[0] : ""));
   }
 
   /* ---- 891b: one watch event ----------------------------------------------------------------------------------- */
