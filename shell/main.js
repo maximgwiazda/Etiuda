@@ -10214,6 +10214,8 @@ function signinFlush() {
   const held = signinState().held, cert = held && held.cert, me = branchIdentity(false);
   if (!cert || !me || !signinTeamHere()) return false;
   if (signinCertEarly(cert, Date.now())) return false; /* plant:flush-early */
+  /* An ended certificate stays for the lapse's words and is no seat to publish: a door takes that instant as its end. */
+  if (Date.now() >= cert.until) return false; /* plant:flush-ended */
   if (signinRevokedHas(held.revoked, cert)) return false; /* plant:revoked-flush */
   try {
     const root = sharedFolderForWrite();
