@@ -21,6 +21,7 @@
  *   ils1, ils2  the selected tab wears no colour spine, dark and light (Max: "please get rid of it")
  *   ilb1, ilb2  the band is the cobalt at 62 per cent over the material and over the page's colour without it, white on it,
  *               and a Windows accent still takes its place (the product designer's values of 2026-11-15)
+ *   ild7        every section of the three screens: no word stands on the dots without a ground of its own
  *   ild1..ild6  Settings, the Library and Maintenance, light and dark: the page is dotted as Studio's is, measured as the
  *               pixels of an empty 48 px patch that stand off the ground, and its first words stand on the ground (Max's
  *               note 9: "Desk has no dotted background behind Settings/Library/Maintenance, unlike similar tabs in Studio.")
@@ -267,7 +268,7 @@ try {
   // band>>
 
   // <<dots
-  EXPECTED += 6;
+  EXPECTED += 7;
   {
     /* What the eye sees: in an empty patch of the page, the pixels that stand off the page's ground. */
     const decoder = await browser.newPage();
@@ -311,6 +312,33 @@ try {
       await closePage(p);
     }
     await closePage(decoder);
+    /* No word stands on the dots: every visible word of every section of the three screens has a ground of its own
+       (an ancestor inside the page with an opaque background) before the page itself. */
+    const p = await boot(browser, "light");
+    const loose = [];
+    for (const [which, attr] of [["settings", "data-sx"], ["library", "data-lm"], ["maintenance", "data-mt"]]) {
+      await openScreen(p, which);
+      const keys = await p.evaluate((attr) => Array.from(document.querySelectorAll("#screenHost .sx-nav .sx-sec")).map((x) => x.getAttribute(attr)), attr);
+      for (const k of keys) {
+        await p.evaluate((attr, k) => { const x = document.querySelector("#screenHost .sx-nav .sx-sec[" + attr + '="' + k + '"]'); if (x) x.click(); }, attr, k);
+        await sleep(500);
+        const found = await p.evaluate(() => {
+          const page = document.querySelector("#screenHost .sx-page"); if (!page) return ["no page"];
+          const out = [], w = document.createTreeWalker(page, NodeFilter.SHOW_TEXT);
+          const clear = (bg) => bg === "transparent" || /,\s*0\)$|\/ 0\)$/.test(bg);
+          for (let n = w.nextNode(); n; n = w.nextNode()) {
+            const e = n.parentElement;
+            if (!n.nodeValue.trim() || !e || e.offsetParent === null) continue;
+            let a = e; while (a && a !== page && clear(getComputedStyle(a).backgroundColor)) a = a.parentElement;
+            if (!a || a === page) out.push((e.className || e.tagName) + ": " + n.nodeValue.trim().slice(0, 24));
+          }
+          return out.slice(0, 3);
+        });
+        if (found.length) loose.push(which + "/" + k + " " + found.join(" | "));
+      }
+    }
+    check(loose.length === 0, "ild7 no word of any section of the three screens stands on the dots without a ground of its own", loose);
+    await closePage(p);
   }
   // dots>>
 

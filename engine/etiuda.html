@@ -3806,6 +3806,10 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx-page{background-image:radial-gradient(circle at center,var(--sx-dots) 0 .7px,transparent 1.2px);background-size:16px 16px}
 .sx-page :is(h2,.lede,.sx-crumb,.sx-group>h3,.sx-block>h3,.sx-lookside>h3){display:table;background:var(--bg);
   box-shadow:0 0 0 5px var(--bg);border-radius:4px}
+/* What else stands on the page outside a card keeps the page's ground under it: a note, a reading's or a list's heading,
+   the Library's open lists and its rows of actions. */
+.sx-page :is(.sx-note,.sx-lookside>p,.mt-readings,.mt-sub,.lw-h,.sc-sep,.mg-data-acts,.mt-reset,.lw-name.add){background:var(--bg);
+  box-shadow:0 0 0 5px var(--bg);border-radius:4px}
 .sx-group{margin:0 0 20px}
 .sx-group h3{font:600 12px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin:0 0 8px}
 .sx-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-sm);overflow:hidden}
@@ -4170,6 +4174,7 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 }
 .sx.lm-lib .mg-tree,.sx.lm-lib .mg-intents{max-height:none;overflow:visible;border:0;padding:0;background:none;
   box-shadow:none;margin:0}
+.sx.lm-lib .sx-page :is(.mg-tree,.mg-intents){background:var(--bg)}
 .sx.lm-mt .mt-sub{margin:0 0 20px;font-size:14px}
 .sx.lm-mt[data-page="health"] #mtLede{display:none}
 .sx.lm-mt:not([data-page="health"]) .mt-sub,
