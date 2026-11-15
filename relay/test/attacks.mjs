@@ -45,17 +45,17 @@ function relayBlob(blob) {
 
 function world(target) {
   const lead = wire.generateKey();
-  const desk = wire.generateKey();
-  const other = wire.generateKey();
+  const desk = wire.generateDeskKey();
+  const other = wire.generateDeskKey();
   const teamKeyBytes = wire.teamKey();
   const teamId = "t-" + wire.randomId().slice(0, 16);
   const created = target.createTeam({ teamId: teamId, epoch: 1, lead: lead });
   if (!created || !created.relayTeamId) return null;
   const relayTeamId = created.relayTeamId;
-  const deskId = "k-" + wire.randomId().slice(0, 16);
-  const otherId = "k-" + wire.randomId().slice(0, 16);
-  const enrolledDesk = target.enrol({ relayTeamId: relayTeamId, deskId: deskId, keyId: desk.keyId });
-  const enrolledOther = target.enrol({ relayTeamId: relayTeamId, deskId: otherId, keyId: other.keyId });
+  const deskId = desk.keyId;
+  const otherId = other.keyId;
+  const enrolledDesk = target.enrol({ relayTeamId: relayTeamId, deskId: deskId, keyId: desk.keyId, publicKey: desk.publicKey });
+  const enrolledOther = target.enrol({ relayTeamId: relayTeamId, deskId: otherId, keyId: other.keyId, publicKey: other.publicKey });
   if (!enrolledDesk || enrolledDesk.ok === false || !enrolledOther || enrolledOther.ok === false) return null;
   const pinned = target.pin({ leadKeyId: lead.keyId, relayTeamId: relayTeamId, teamId: teamId });
   if (!pinned || pinned.ok === false) return null;
@@ -68,8 +68,8 @@ function world(target) {
     channel: { kind: "relay", relay: relayTeamId },
     lead: { keyId: lead.keyId, public: lead.publicKey },
     roster: [
-      { deskId: deskId, keyId: desk.keyId },
-      { deskId: otherId, keyId: other.keyId },
+      wire.rosterEntry(desk),
+      wire.rosterEntry(other),
     ],
   }, lead.privateKey);
   return {
@@ -320,7 +320,7 @@ function e2eDesk(id, fileName) {
     const stale = acceptDesk(w, seal(w, w.desk, path, 6, { body: "stale" }), { teamDoc: w.teamDoc });
     if (!refused(stale, "replay-rev") || t.readMirror(path) !== "stay") return false;
     const rev3 = teamRev(w, 3, {
-      roster: [{ deskId: w.otherId, keyId: w.other.keyId }],
+      roster: [wire.rosterEntry(w.other)],
     });
     if (!t.loadTeamFile(rev3).ok) return false;
     const gone = acceptDesk(w, seal(w, w.desk, path, 6, { body: "after" }), { teamDoc: rev3 });
@@ -375,8 +375,66 @@ function opensUnder(blob, key) {
   }
 }
 
+/* ONE SPELLING FOR A DESK: the world names its desks by branch id (wire.generateDeskKey), and each entry the relay takes a
+   desk's key at, handed a key named by its raw public half (wire.generateKey) instead, refuses it there. */
+function rawHello(t, relayTeamId, key, inv) {
+  const ch = t.challenge({ relayTeamId: relayTeamId });
+  if (!ch || !ch.nonce) return { ok: false, reason: "no-hello", said: "That hello was not issued.", served: false };
+  const sig = wire.sign(key.privateKey, t.helloMessage(relayTeamId, ch.nonce, key.keyId));
+  if (inv) return t.hello({ relayTeamId: relayTeamId, nonce: ch.nonce, invitationId: inv.invitationId, token: inv.token,
+    key: key.keyId, pub: key.publicKey, sig: sig });
+  return t.hello({ relayTeamId: relayTeamId, nonce: ch.nonce, keyId: key.keyId, publicKey: key.publicKey, signature: sig });
+}
+
 function attacks() {
   return [
+    ["R1-devices", "a devices list naming a desk by its raw public half is refused whole", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const fresh = wire.generateKey();
+      const r = t.enrol({ relayTeamId: w.relayTeamId, deskId: "k-" + wire.randomId().slice(0, 16), keyId: fresh.keyId, publicKey: fresh.publicKey });
+      return refused(r, "bad-signature");
+    }],
+    ["R1-token", "a token hello by a desk's raw public half is refused before it binds", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const inv = t.invite({ relayTeamId: w.relayTeamId });
+      if (!inv || !inv.token) return false;
+      const joiner = wire.generateKey();
+      return refused(rawHello(t, w.relayTeamId, joiner, inv), "bad-signature");
+    }],
+    ["R1-hello", "a key hello by an enrolled desk's raw public half is answered as a key on no list", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const rawDesk = Object.assign({}, w.desk, { keyId: w.desk.publicKey });
+      return refused(rawHello(t, w.relayTeamId, rawDesk), "not-enrolled");
+    }],
+    ["R1-door", "a knock at the door by a desk's raw public half is refused on its spelling, before its certificate is read", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w || typeof t.doorHello !== "function") return false;
+      const joiner = wire.generateKey();
+      const raw = t.doorHello({ relayTeamId: w.relayTeamId, key: joiner });
+      const named = t.doorHello({ relayTeamId: w.relayTeamId, key: Object.assign({}, joiner, { keyId: wire.branchIdOfKey(joiner.publicKey) }) });
+      return refused(raw, "bad-signature") && refused(named, "not-enrolled");
+    }],
+    ["R1-invite-upload", "an invitation's one upload whose writer is the raw public half is refused", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const inv = t.invite({ relayTeamId: w.relayTeamId });
+      if (!inv || !inv.token) return false;
+      const joiner = wire.generateDeskKey();
+      const bound = bindHello(t, w.relayTeamId, inv, joiner);
+      if (!bound || !bound.session) return false;
+      const rawWriter = Object.assign({}, joiner, { keyId: joiner.publicKey });
+      const blob = t.seal({ relayTeamId: w.relayTeamId, epoch: 1, teamKey: w.teamKey, writer: rawWriter, path: "desks/k-" + "a".repeat(16) + "/join.json",
+        body: "ask", counter: 1, place: "desk:k-" + "a".repeat(16), kind: "file" });
+      return refused(t.upload({ relayTeamId: w.relayTeamId, blob: blob, session: bound.session }), "no-hello");
+    }],
     ["F1-list", "a list without a hello is refused, and a live session is served", function (create) {
       const t = create();
       const w = world(t);
@@ -414,7 +472,7 @@ function attacks() {
       const t = create();
       const w = world(t);
       if (!w) return false;
-      const stranger = wire.generateKey();
+      const stranger = wire.generateDeskKey();
       const ch = t.challenge({ relayTeamId: w.relayTeamId });
       const bad = signHello(t, w.relayTeamId, stranger, ch.nonce);
       const good = helloAs(t, w.relayTeamId, w.desk);
@@ -439,7 +497,7 @@ function attacks() {
         teamId: "t-" + wire.randomId().slice(0, 16), epoch: 1, lead: leadB,
       });
       if (!created || !created.relayTeamId) return false;
-      const enrolled = t.enrol({ relayTeamId: created.relayTeamId, deskId: w.deskId, keyId: w.desk.keyId });
+      const enrolled = t.enrol({ relayTeamId: created.relayTeamId, deskId: w.deskId, keyId: w.desk.keyId, publicKey: w.desk.publicKey });
       if (!enrolled || enrolled.ok === false) return false;
       const chB = t.challenge({ relayTeamId: created.relayTeamId });
       if (!chB || !chB.nonce) return false;
@@ -460,7 +518,7 @@ function attacks() {
       if (!w) return false;
       const inv = t.invite({ relayTeamId: w.relayTeamId });
       if (!inv || !inv.token) return false;
-      const joiner = wire.generateKey();
+      const joiner = wire.generateDeskKey();
       const first = bindHello(t, w.relayTeamId, inv, joiner);
       const second = bindHello(t, w.relayTeamId, inv, joiner);
       return first.ok === true && refused(second, "token-spent");
@@ -471,7 +529,7 @@ function attacks() {
       if (!w) return false;
       const inv = t.invite({ relayTeamId: w.relayTeamId });
       if (!inv || !inv.token) return false;
-      const joiner = wire.generateKey();
+      const joiner = wire.generateDeskKey();
       const first = bindHello(t, w.relayTeamId, inv, joiner);
       t.advance(31 * 24 * 60 * 60 * 1000);
       const lead = helloAs(t, w.relayTeamId, w.lead);
@@ -486,16 +544,16 @@ function attacks() {
       if (!w) return false;
       const inv = t.invite({ relayTeamId: w.relayTeamId });
       if (!inv || !inv.token) return false;
-      const attacker = wire.generateKey();
+      const attacker = wire.generateDeskKey();
       let twentieth = null;
       for (let i = 1; i <= wire.TOKEN_TRIES; i++) {
         twentieth = presentToken(t, w.relayTeamId, inv, attacker, "wrong-" + i);
       }
       if (!twentieth || twentieth.reason === "token-tries") return false;
       const locked = bindHello(t, w.relayTeamId, inv, attacker);
-      const otherKey = bindHello(t, w.relayTeamId, inv, wire.generateKey());
+      const otherKey = bindHello(t, w.relayTeamId, inv, wire.generateDeskKey());
       const inv2 = t.invite({ relayTeamId: w.relayTeamId });
-      const otherInv = bindHello(t, w.relayTeamId, inv2, wire.generateKey());
+      const otherInv = bindHello(t, w.relayTeamId, inv2, wire.generateDeskKey());
       return refused(locked, "token-tries") && otherKey.ok === true && otherInv.ok === true;
     }, true],
     ["F1-removed", "a removed desk is refused, and the lead is still served", function (create) {
@@ -623,9 +681,9 @@ function attacks() {
       const t = create();
       const w = world(t);
       if (!w) return false;
-      const stranger = wire.generateKey();
+      const stranger = wire.generateDeskKey();
       const stray = "k-" + wire.randomId().slice(0, 8);
-      t.enrol({ relayTeamId: w.relayTeamId, deskId: stray, keyId: stranger.keyId });
+      t.enrol({ relayTeamId: w.relayTeamId, deskId: stray, keyId: stranger.keyId, publicKey: stranger.publicKey });
       const bad = accept(w, seal(w, stranger, "desks/" + stray + "/join.json", 1, { place: "desk:" + stray }));
       const good = accept(w, seal(w, w.desk, deskFile(w, "join.json"), 1, { body: "own" }));
       return refused(bad, "not-roster") && good.ok === true && t.readMirror(deskFile(w, "join.json")) === "own";
@@ -661,7 +719,7 @@ function attacks() {
       const t = create();
       const w = world(t);
       if (!w) return false;
-      const stranger = wire.generateKey();
+      const stranger = wire.generateDeskKey();
       const bad = upload(w, seal(w, stranger, "notes.ec", 1, { place: "root" }));
       const good = upload(w, seal(w, w.lead, "guide.ec", 1));
       return refused(bad, "not-enrolled") && good.ok === true;
@@ -852,7 +910,7 @@ function attacks() {
     ["P18", "each verifier accepts a genuine signature of its own kind and rejects another key", function (create) {
       const t = create();
       const key = wire.generateKey();
-      const other = wire.generateKey();
+      const other = wire.generateDeskKey();
       const body = Buffer.from("catalog-bytes");
       const deskSig = wire.sign(key.privateKey, wire.deskMessage(body));
       const upSig = wire.sign(key.privateKey, wire.uploadMessage(Buffer.alloc(0), body));
@@ -1143,7 +1201,7 @@ function attacks() {
       const t = create();
       const w = world(t);
       if (!w) return false;
-      const attacker = wire.generateKey();
+      const attacker = wire.generateDeskKey();
       const ch = t.challenge({ relayTeamId: w.relayTeamId });
       if (!ch || !ch.nonce) return false;
       const msg = t.helloMessage(w.relayTeamId, ch.nonce, w.desk.keyId);
@@ -1213,10 +1271,10 @@ function attacks() {
       const t = create();
       const w = world(t);
       if (!w) return false;
-      const stranger = wire.generateKey();
-      const stray = "sx-" + wire.randomId().slice(0, 8);
+      const stranger = wire.generateDeskKey();
+      const stray = stranger.keyId;
       const doc = Object.assign({}, w.teamDoc);
-      doc.roster = w.teamDoc.roster.concat([{ deskId: stray, keyId: stranger.keyId }]);
+      doc.roster = w.teamDoc.roster.concat([wire.rosterEntry(stranger)]);
       const bad = accept(w, seal(w, stranger, "desks/" + stray + "/join.json", 1, {
         place: "desk:" + stray,
       }), { teamDoc: doc });
@@ -1238,7 +1296,7 @@ function attacks() {
       const t = create();
       const w = world(t);
       if (!w) return false;
-      const stranger = wire.generateKey();
+      const stranger = wire.generateDeskKey();
       const doc = wire.signTeam({
         format: 1,
         kind: "etiuda-team",
@@ -1259,7 +1317,7 @@ function attacks() {
       const t = create();
       const w = world(t);
       if (!w) return false;
-      const stranger = wire.generateKey();
+      const stranger = wire.generateDeskKey();
       const badKey = wire.signHead({
         relay: w.relayTeamId, epoch: 1, rev: 1, time: 5000, keyId: stranger.keyId,
       }, stranger.privateKey);
@@ -1282,8 +1340,8 @@ function attacks() {
       const inv = t.invite({ relayTeamId: w.relayTeamId });
       if (!inv || !inv.token) return false;
       const hash = wire.tokenHash(inv.token);
-      const bad = presentToken(t, w.relayTeamId, inv, wire.generateKey(), hash);
-      const good = bindHello(t, w.relayTeamId, inv, wire.generateKey());
+      const bad = presentToken(t, w.relayTeamId, inv, wire.generateDeskKey(), hash);
+      const good = bindHello(t, w.relayTeamId, inv, wire.generateDeskKey());
       return refused(bad, "not-enrolled") && good.ok === true;
     }, true],
     ["P16", "a hello on a nonce past its life is refused, and a hello inside the life works", function (create) {
@@ -1345,7 +1403,7 @@ function attacks() {
       const w = world(t);
       if (!w) return false;
       const rev2 = teamRev(w, 2, {
-        roster: [{ deskId: w.otherId, keyId: w.other.keyId }],
+        roster: [wire.rosterEntry(w.other)],
       });
       if (!t.loadTeamFile(w.teamDoc).ok || !t.loadTeamFile(rev2).ok) return false;
       const deskPath = deskFile(w, "stats.estat");
@@ -1471,17 +1529,17 @@ function attacks() {
       const t = create();
       if (typeof t.sealTeam !== "function") return false;
       const lead = wire.generateKey();
-      const gone = wire.generateKey();
-      const stays = wire.generateKey();
+      const gone = wire.generateDeskKey();
+      const stays = wire.generateDeskKey();
       const teamId = "t-" + wire.randomId().slice(0, 16);
       const created = t.createTeam({ teamId: teamId, epoch: 1, lead: lead });
       if (!created || !created.relayTeamId) return false;
       const rt = created.relayTeamId;
       const w = { target: t, relayTeamId: rt };
-      const goneId = branchId(gone.keyId);
-      const staysId = branchId(stays.keyId);
-      t.enrol({ relayTeamId: rt, deskId: goneId, keyId: gone.keyId });
-      t.enrol({ relayTeamId: rt, deskId: staysId, keyId: stays.keyId });
+      const goneId = gone.keyId;
+      const staysId = stays.keyId;
+      t.enrol({ relayTeamId: rt, deskId: goneId, keyId: gone.keyId, publicKey: gone.publicKey });
+      t.enrol({ relayTeamId: rt, deskId: staysId, keyId: stays.keyId, publicKey: stays.publicKey });
       t.pin({ leadKeyId: lead.keyId, relayTeamId: rt, teamId: teamId });
       const lb = box();
       const gb = box();
@@ -1489,7 +1547,7 @@ function attacks() {
       const k1 = wire.teamKey();
       const k2 = wire.teamKey();
       const entry = function (k, id, b, key, epoch) {
-        return { desk: { id: id, key: k.keyId, box: b.public }, wrap: wrapKey(key, b.public, teamId, epoch, id) };
+        return { desk: { id: id, key: k.publicKey, box: b.public }, wrap: wrapKey(key, b.public, teamId, epoch, id) };
       };
       const doc = function (epoch, roster) {
         return wire.signTeam({ format: 1, kind: "etiuda-team", id: teamId, epoch: epoch, rev: 1, channel: { kind: "relay", relay: rt },
@@ -1670,13 +1728,13 @@ function attacks() {
       t.removeDesk({ relayTeamId: w.relayTeamId, deskId: w.deskId });
       const despite = accept(w, seal(w, w.desk, deskFile(w, "join.json"), 1, { body: "despite" }));
       if (!despite.ok || t.readMirror(deskFile(w, "join.json")) !== "despite") return false;
-      const back = t.enrol({ relayTeamId: w.relayTeamId, deskId: w.deskId, keyId: w.desk.keyId });
+      const back = t.enrol({ relayTeamId: w.relayTeamId, deskId: w.deskId, keyId: w.desk.keyId, publicKey: w.desk.publicKey });
       if (!back || back.ok === false) return false;
       const stats = deskFile(w, "stats.estat");
       const before = accept(w, seal(w, w.desk, stats, 2, { body: "before" }));
       if (!before.ok || t.readMirror(stats) !== "before") return false;
       const rev2 = teamRev(w, 2, {
-        roster: [{ deskId: w.otherId, keyId: w.other.keyId }],
+        roster: [wire.rosterEntry(w.other)],
       });
       if (!t.loadTeamFile(w.teamDoc).ok || !t.loadTeamFile(rev2).ok) return false;
       const afterBlob = seal(w, w.desk, stats, 3, { body: "after" });
@@ -1687,7 +1745,7 @@ function attacks() {
       const epoch2Key = wire.teamKey();
       const epoch2Doc = teamRev(w, 1, {
         epoch: 2,
-        roster: [{ deskId: w.otherId, keyId: w.other.keyId }],
+        roster: [wire.rosterEntry(w.other)],
       });
       if (!t.loadTeamFile(epoch2Doc).ok) return false;
       const epoch2Blob = t.seal({
@@ -1711,7 +1769,7 @@ function attacks() {
       const epoch2Key = wire.teamKey();
       const epoch2Doc = teamRev(w, 1, {
         epoch: 2,
-        roster: [{ deskId: w.otherId, keyId: w.other.keyId }],
+        roster: [wire.rosterEntry(w.other)],
       });
       if (!t.loadTeamFile(w.teamDoc).ok || !t.loadTeamFile(epoch2Doc).ok) return false;
       const oldPath = deskFile(w, "notes.ec");
@@ -1796,12 +1854,12 @@ function attacks() {
       const w = world(t);
       if (!w) return false;
       const names = ["in-use.ec", "catalog-answer.ec", "stats.estat", "edit.ec"];
-      const stranger = wire.generateKey();
+      const stranger = wire.generateDeskKey();
       const forged = wire.signTeam({
         format: 1, kind: "etiuda-team", id: w.teamId, epoch: 1, rev: 1,
         channel: { kind: "relay", relay: w.relayTeamId },
         lead: { keyId: stranger.keyId, public: stranger.publicKey },
-        roster: [{ deskId: w.deskId, keyId: w.desk.keyId }],
+        roster: [wire.rosterEntry(w.desk)],
       }, stranger.privateKey);
       const otherId = teamRev(w, 1, { id: "t-other-team" });
       const otherRelay = teamRev(w, 1, { channel: { kind: "relay", relay: "other-relay" } });
@@ -1854,7 +1912,7 @@ function attacks() {
       const wrap = sealInviteWrap(secret, w.relayTeamId, w.teamId, invitationId, 1, w.teamKey);
       const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: invitationId, wrap: wrap });
       if (!inv || !inv.token) return false;
-      const joiner = wire.generateKey();
+      const joiner = wire.generateDeskKey();
       const first = bindHello(t, w.relayTeamId, inv, joiner);
       if (!first.ok) return false;
       const served = [];
@@ -1867,7 +1925,7 @@ function attacks() {
       for (let i = 0; i < served.length; i++) {
         if (!served[i] || served[i].ok !== true || !served[i].wrap || served[i].wrap.ct !== wrap.ct) return false;
       }
-      const otherKey = wire.generateKey();
+      const otherKey = wire.generateDeskKey();
       const forgedCh = t.challenge({ relayTeamId: w.relayTeamId });
       const forgedMsg = t.helloMessage(w.relayTeamId, forgedCh.nonce, joiner.keyId);
       const forged = t.hello({
@@ -1879,7 +1937,7 @@ function attacks() {
       });
       if (!refused(forged, "bad-signature") || forged.session != null) return false;
       const second = bindHello(t, w.relayTeamId, inv, joiner);
-      const stranger = bindHello(t, w.relayTeamId, inv, wire.generateKey());
+      const stranger = bindHello(t, w.relayTeamId, inv, wire.generateDeskKey());
       if (!refused(second, "token-spent") || second.ciphertext != null) return false;
       if (!refused(stranger, "token-spent") || stranger.ciphertext != null) return false;
       const deskId = "k-" + wire.randomId().slice(0, 16);
@@ -1903,8 +1961,8 @@ function attacks() {
         relayTeamId: w.relayTeamId, nonce: ch.nonce, invitationId: inv.invitationId, token: inv.token,
       });
       if (!refused(loose, "bad-signature") || loose.wrap != null) return false;
-      const joiner = wire.generateKey();
-      const other = wire.generateKey();
+      const joiner = wire.generateDeskKey();
+      const other = wire.generateDeskKey();
       const chBad = t.challenge({ relayTeamId: w.relayTeamId });
       const msgBad = t.helloMessage(w.relayTeamId, chBad.nonce, joiner.keyId);
       const badSig = t.hello({
@@ -1943,7 +2001,7 @@ function attacks() {
       const wrap = sealInviteWrap(secret, w.relayTeamId, w.teamId, invitationId, 1, w.teamKey);
       const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: invitationId, wrap: wrap });
       if (!inv || !inv.token) return false;
-      const joiner = wire.generateKey();
+      const joiner = wire.generateDeskKey();
       const hello = bindHello(t, w.relayTeamId, inv, joiner);
       const lead = helloAs(t, w.relayTeamId, w.lead);
       const desk = helloAs(t, w.relayTeamId, w.desk);
@@ -1976,7 +2034,7 @@ function attacks() {
       const over = sizedWrap(1025);
       const kept = t.invite({ relayTeamId: w.relayTeamId, invitationId: wire.randomId(), wrap: fit });
       if (!kept || !kept.token) return false;
-      const joiner = wire.generateKey();
+      const joiner = wire.generateDeskKey();
       const hello = bindHello(t, w.relayTeamId, kept, joiner);
       if (!hello.ok) return false;
       const served = t.fetchWrap({ relayTeamId: w.relayTeamId, session: hello.session });
@@ -1994,7 +2052,7 @@ function attacks() {
       const wrap = sealInviteWrap(secret, w.relayTeamId, w.teamId, invitationId, 1, w.teamKey);
       const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: invitationId, wrap: wrap });
       if (!inv || !inv.token) return false;
-      const joiner = wire.generateKey();
+      const joiner = wire.generateDeskKey();
       const hello = bindHello(t, w.relayTeamId, inv, joiner);
       if (!hello.ok) return false;
       const before = t.fetchWrap({ relayTeamId: w.relayTeamId, session: hello.session });
@@ -2003,7 +2061,7 @@ function attacks() {
       const unsigned = t.reseal({
         relayTeamId: w.relayTeamId, signed: false, drop: [], wraps: [{ id: invitationId, wrap: other }],
       });
-      const stranger = wire.generateKey();
+      const stranger = wire.generateDeskKey();
       const wrongKey = t.reseal({
         relayTeamId: w.relayTeamId, signer: stranger, drop: [], wraps: [{ id: invitationId, wrap: other }],
       });
@@ -2029,7 +2087,7 @@ function attacks() {
       const wrap = sealInviteWrap(secret, w.relayTeamId, w.teamId, invitationId, 1, w.teamKey);
       const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: invitationId, wrap: wrap });
       if (!inv || !inv.token) return false;
-      const joiner = wire.generateKey();
+      const joiner = wire.generateDeskKey();
       const hello = bindHello(t, w.relayTeamId, inv, joiner);
       if (!hello.ok) return false;
       const served = t.fetchWrap({ relayTeamId: w.relayTeamId, session: hello.session });
@@ -2062,7 +2120,7 @@ function attacks() {
       wrap.key = w.teamKey.toString("hex");
       const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: invitationId, wrap: wrap });
       if (!inv || !inv.token) return false;
-      const joiner = wire.generateKey();
+      const joiner = wire.generateDeskKey();
       const hello = bindHello(t, w.relayTeamId, inv, joiner);
       if (!hello.ok) return false;
       const served = t.fetchWrap({ relayTeamId: w.relayTeamId, session: hello.session });
@@ -2087,7 +2145,7 @@ function attacks() {
       const wrap = sealInviteWrap(secret, w.relayTeamId, w.teamId, invitationId, 1, w.teamKey);
       const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: invitationId, wrap: wrap });
       if (!inv || !inv.token) return false;
-      const joiner = wire.generateKey();
+      const joiner = wire.generateDeskKey();
       const hello = bindHello(t, w.relayTeamId, inv, joiner);
       if (!hello.ok) return false;
       const served = t.fetchWrap({ relayTeamId: w.relayTeamId, session: hello.session });
@@ -2119,7 +2177,7 @@ function attacks() {
       const quiet = t.invite({ relayTeamId: w.relayTeamId, invitationId: quietId, wrap: oldQuiet });
       const dropped = t.invite({ relayTeamId: w.relayTeamId, invitationId: dropId, wrap: oldDrop });
       if (!opened || !opened.token || !quiet || !quiet.token || !dropped || !dropped.token) return false;
-      const joiner = wire.generateKey();
+      const joiner = wire.generateDeskKey();
       const hello = bindHello(t, w.relayTeamId, opened, joiner);
       if (!hello.ok) return false;
       const before = t.fetchWrap({ relayTeamId: w.relayTeamId, session: hello.session });
@@ -2148,7 +2206,7 @@ function attacks() {
         wrap: after.wrap, teamDoc: epochDoc,
       });
       if (!openedKey || openedKey.ok !== true || openCatalog(t, w, hello.session, published.id, openedKey.key) !== "field-guide") return false;
-      const helloQuiet = bindHello(t, w.relayTeamId, quiet, wire.generateKey());
+      const helloQuiet = bindHello(t, w.relayTeamId, quiet, wire.generateDeskKey());
       if (!helloQuiet.ok) return false;
       const quietServed = t.fetchWrap({ relayTeamId: w.relayTeamId, session: helloQuiet.session });
       if (!quietServed || quietServed.ok !== true || quietServed.wrap.ct !== newQuiet.ct) return false;
@@ -2157,7 +2215,7 @@ function attacks() {
         wrap: quietServed.wrap, teamDoc: epochDoc,
       });
       if (!quietKey || quietKey.ok !== true || openCatalog(t, w, helloQuiet.session, published.id, quietKey.key) !== "field-guide") return false;
-      const helloDrop = bindHello(t, w.relayTeamId, dropped, wire.generateKey());
+      const helloDrop = bindHello(t, w.relayTeamId, dropped, wire.generateDeskKey());
       if (helloDrop.ok === true) return false;
       const seen = t.inspect({ relayTeamId: w.relayTeamId, id: published.id });
       if (!seen || hasText(seen, oldOpened.ct) || hasText(seen, oldQuiet.ct) || hasText(seen, oldDrop.ct) || hasText(seen, stray.ct)) return false;
@@ -2177,7 +2235,7 @@ function attacks() {
       const used = t.invite({ relayTeamId: w.relayTeamId, invitationId: usedId, wrap: usedWrap });
       const unused = t.invite({ relayTeamId: w.relayTeamId, invitationId: unusedId, wrap: unusedWrap });
       if (!used || !used.token || !unused || !unused.token) return false;
-      const joiner = wire.generateKey();
+      const joiner = wire.generateDeskKey();
       const hello = bindHello(t, w.relayTeamId, used, joiner);
       if (!hello.ok) return false;
       const before = t.fetchWrap({ relayTeamId: w.relayTeamId, session: hello.session });
@@ -2203,15 +2261,15 @@ function attacks() {
       const late = t.invite({ relayTeamId: w.relayTeamId, invitationId: lateId, wrap: lateWrap, until: until });
       if (!early || !early.token || !late || !late.token) return false;
       t.advance(6 * DAY);
-      const joiner = wire.generateKey();
+      const joiner = wire.generateDeskKey();
       const hello = bindHello(t, w.relayTeamId, early, joiner);
       if (!hello.ok) return false;
       const firstServe = t.fetchWrap({ relayTeamId: w.relayTeamId, session: hello.session });
       if (!firstServe || firstServe.ok !== true || firstServe.wrap.ct !== earlyWrap.ct) return false;
       t.advance(2 * DAY);
-      const lapsed = bindHello(t, w.relayTeamId, late, wire.generateKey());
+      const lapsed = bindHello(t, w.relayTeamId, late, wire.generateDeskKey());
       if (!refused(lapsed, "invite-ended")) return false;
-      const again = bindHello(t, w.relayTeamId, late, wire.generateKey());
+      const again = bindHello(t, w.relayTeamId, late, wire.generateDeskKey());
       if (!refused(again, "invite-ended")) return false;
       const resumed = helloAs(t, w.relayTeamId, joiner);
       if (!resumed.ok) return false;
@@ -2225,7 +2283,7 @@ function attacks() {
       const invitationId = wire.randomId();
       const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: invitationId });
       if (!inv || !inv.token) return false;
-      const joiner = wire.generateKey();
+      const joiner = wire.generateDeskKey();
       const hello = bindHello(t, w.relayTeamId, inv, joiner);
       if (!hello.ok) return false;
       const deskId = "k-" + wire.randomId().slice(0, 16);
@@ -2267,7 +2325,7 @@ function attacks() {
       if (!dropped || dropped.ok !== true) return false;
       if (!refused(t.list({ relayTeamId: w.relayTeamId, session: resumed.session }), "no-hello")) return false;
       if (!refused(t.fetch({ relayTeamId: w.relayTeamId, session: resumed.session, id: invitationId }), "no-hello")) return false;
-      const enrolled = t.enrol({ relayTeamId: w.relayTeamId, deskId: deskId, keyId: joiner.keyId });
+      const enrolled = t.enrol({ relayTeamId: w.relayTeamId, deskId: deskId, keyId: joiner.keyId, publicKey: joiner.publicKey });
       if (!enrolled || enrolled.ok === false) return false;
       const device = helloAs(t, w.relayTeamId, joiner);
       if (!device.ok || device.invite === true) return false;
@@ -2290,7 +2348,7 @@ function attacks() {
       if (!unused || unused.ok !== true) return false;
       const row0 = unused.states.filter(function (s) { return s.id === invitationId; })[0];
       if (!row0 || row0.state !== "unused" || row0.usedAt !== null) return false;
-      const joiner = wire.generateKey();
+      const joiner = wire.generateDeskKey();
       const hello = bindHello(t, w.relayTeamId, inv, joiner);
       if (!hello.ok) return false;
       const used = t.inviteStates({ relayTeamId: w.relayTeamId, session: lead.session });
@@ -2313,7 +2371,7 @@ function attacks() {
       if (!w) return false;
       const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: wire.randomId() });
       if (!inv || !inv.token) return false;
-      const joiner = wire.generateKey();
+      const joiner = wire.generateDeskKey();
       const hello = bindHello(t, w.relayTeamId, inv, joiner);
       if (!hello.ok) return false;
       const blob = sealAt(w, joiner, "join.json", 1, "invite:" + wire.randomId(), { body: "join" });
@@ -2337,13 +2395,13 @@ function attacks() {
       if (!w) return false;
       const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: wire.randomId() });
       if (!inv || !inv.token) return false;
-      const joiner = wire.generateKey();
+      const joiner = wire.generateDeskKey();
       const hello = bindHello(t, w.relayTeamId, inv, joiner);
       if (!hello.ok) return false;
       const deskId = "k-" + wire.randomId().slice(0, 16);
       const joined = upload(w, sealAt(w, joiner, "desks/" + deskId + "/join.json", 1, "desk:" + deskId, { body: "join" }));
       if (!joined.ok) return false;
-      const enrolled = t.enrol({ relayTeamId: w.relayTeamId, deskId: deskId, keyId: joiner.keyId });
+      const enrolled = t.enrol({ relayTeamId: w.relayTeamId, deskId: deskId, keyId: joiner.keyId, publicKey: joiner.publicKey });
       if (!enrolled || enrolled.ok === false) return false;
       /* The product records a desk key when its seal runs, and says hello as that desk to make this upload. */
       const ownBlob = seal(w, joiner, "desks/" + deskId + "/notes.ec", 2, { body: "kept", place: "desk:" + deskId });
@@ -2357,7 +2415,7 @@ function attacks() {
       const invitationId = wire.randomId();
       const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: invitationId });
       if (!inv || !inv.token) return false;
-      const joiner = wire.generateKey();
+      const joiner = wire.generateDeskKey();
       const hello = bindHello(t, w.relayTeamId, inv, joiner);
       if (!hello.ok) return false;
       const deskId = "k-" + wire.randomId().slice(0, 16);
@@ -2384,7 +2442,7 @@ function attacks() {
       const invitationId = wire.randomId();
       const inv = t.invite({ relayTeamId: w.relayTeamId, invitationId: invitationId });
       if (!inv || !inv.token) return false;
-      const joiner = wire.generateKey();
+      const joiner = wire.generateDeskKey();
       const hello = bindHello(t, w.relayTeamId, inv, joiner);
       if (!hello.ok) return false;
       const deskId = "k-" + wire.randomId().slice(0, 16);
@@ -2393,7 +2451,7 @@ function attacks() {
       const catalogBlob = seal(w, w.lead, "guide-a.ec", 1, { body: "edition" });
       const catalog = upload(w, catalogBlob);
       if (!catalog.ok) return false;
-      const enrolled = t.enrol({ relayTeamId: w.relayTeamId, deskId: deskId, keyId: joiner.keyId });
+      const enrolled = t.enrol({ relayTeamId: w.relayTeamId, deskId: deskId, keyId: joiner.keyId, publicKey: joiner.publicKey });
       if (!enrolled || enrolled.ok === false) return false;
       const ended = t.list({ relayTeamId: w.relayTeamId, session: hello.session });
       const endedFetch = t.fetch({ relayTeamId: w.relayTeamId, session: hello.session, id: catalog.id });
@@ -2412,8 +2470,8 @@ function attacks() {
       const w = world(t);
       if (!w) return false;
       const deskId = "k-" + wire.randomId().slice(0, 16);
-      const joiner = wire.generateKey();
-      const firstEnrol = t.enrol({ relayTeamId: w.relayTeamId, deskId: deskId, keyId: joiner.keyId });
+      const joiner = wire.generateDeskKey();
+      const firstEnrol = t.enrol({ relayTeamId: w.relayTeamId, deskId: deskId, keyId: joiner.keyId, publicKey: joiner.publicKey });
       if (!firstEnrol || firstEnrol.ok === false) return false;
       const firstBlob = seal(w, joiner, "desks/" + deskId + "/in-use.ec", 5, { place: "desk:" + deskId });
       const firstUp = upload(w, firstBlob);
