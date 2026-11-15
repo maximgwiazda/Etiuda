@@ -152,9 +152,14 @@ const SWEEP_RETRY_MS = 60 * 60 * 1000;
 
 function teamObject(deps) {
   /* Keys the Worker decided for this request. Empty is a list, so a flag, not the array, says whether it was sent.
-     Those keys stay for a later call with no header, while this wake lasts. With none, the call reads deps.revoked,
+     Those keys stay for a later call with no header, while this wake lasts, and in the team's own row ("kept") across a hibernation,
+     since a headerless wake (a socket's message, the alarm) cannot ask the list object. With neither, the call reads deps.revoked,
      and a result that is not a list is no list. */
   let headerSet = false, headerKeys = null, carried = null;
+  function keptStored() {
+    const row = deps.store.get("kept");
+    return row && Array.isArray(row.keys) && row.keys.every(k => typeof k === "string") ? row.keys.slice() : null;
+  }
   function useKept(request) {
     const raw = request && request.headers ? request.headers.get("etiuda-kept") : null;
     if (typeof raw !== "string") { headerSet = false; headerKeys = null; return; }
@@ -164,11 +169,20 @@ function teamObject(deps) {
     headerSet = true;
     headerKeys = parsed.slice();
     carried = headerKeys.slice();
+    /* Written only for a team that exists and only when the list moved, so a stranger's request stores nothing. */
+    const was = keptStored() || [];
+    const moved = was.length !== carried.length || carried.some(k => was.indexOf(k) < 0);
+    if (moved && deps.store.get("team") !== undefined) deps.store.put("kept", { keys: carried.slice() });
   }
   function revokedNow() {
     if (headerSet) return headerKeys.slice();
     const read = typeof deps.revoked === "function" ? deps.revoked() : [];
     const envKeys = Array.isArray(read) ? read : [];
+    if (!carried) {
+      let kept = null;
+      kept = keptStored(); /* plant:kept-stored */
+      if (kept) carried = kept;
+    }
     if (!carried) return envKeys.slice();
     const out = carried.slice();
     for (const k of envKeys) if (out.indexOf(k) < 0) out.push(k);
