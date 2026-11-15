@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 66;
+const EXPECTED = 67;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -46,6 +46,7 @@ const DAY = 24 * 60 * 60 * 1000;
 const CODE = "ABCDEFGHJKMNPQRS", SEED = "5".repeat(64), TID = "aaaabbbb-0000-1111-2222-ccccddddeeee", SUB = "sub-of-the-person";
 const MS_CLIENT = "00001111-aaaa-2222-bbbb-333344445555", G_CLIENT = "000011112222-stand.apps.googleusercontent.com";
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.appdata";
+const DRIVE_FILES = "https://www.googleapis.com/drive/v3/files", DRIVE_UPLOAD = "https://www.googleapis.com/upload/drive/v3/files";
 const STAGING = "https://etiuda.dev/licence-staging/v1/";
 const SPKI = Buffer.from("302a300506032b6570032100", "hex");
 const rawPub = k => k.export({ type: "spki", format: "der" }).subarray(SPKI.length).toString("hex");
@@ -85,7 +86,7 @@ function worldOf(o) {
   const opt = o || {};
   const R = S.relayEnv({ roots: K.ROOTS, limits: opt.limits });
   R.clock.now = Date.now();
-  const w = { R, access: "stand-in-folder-token-" + crypto.randomBytes(12).toString("hex"), forms: [], service: [], relay: [], graph: [], other: [], file: null, codes: {} };
+  const w = { R, access: "stand-in-folder-token-" + crypto.randomBytes(12).toString("hex"), forms: [], service: [], relay: [], graph: [], other: [], file: null, codes: {}, drive: { files: [], calls: [] } };
   const json = (status, o) => new Response(Buffer.from(JSON.stringify(o)), { status, headers: { "content-type": "application/json" } });
   const GRAPH = "https://graph.microsoft.com/v1.0/me/drive/special/approot", FILE = GRAPH + ":/etiuda-store.json:/content";
   w.fetch = async (url, init) => {
@@ -157,6 +158,28 @@ function worldOf(o) {
         return json(was === null ? 201 : 200, { id: "f" });
       }
       return json(400, { error: { code: "invalidRequest" } });
+    }
+    /* Google Drive's app data folder, as Drive answers: the key file listed by name, made by a multipart create, read by id, its
+       bytes replaced by a media upload; every request named by its path and whether it carried the folder's token. */
+    if (u.startsWith(DRIVE_FILES) || u.startsWith(DRIVE_UPLOAD)) {
+      w.drive.calls.push(method + " " + u.replace("https://www.googleapis.com", "").replace(/\?.*$/, "") + " " + (headers.authorization === "Bearer " + w.access ? "folder" : "other"));
+      if (headers.authorization !== "Bearer " + w.access) return json(401, { error: { code: 401, errors: [{ reason: "authError" }] } });
+      const byId = id => w.drive.files.find(f => f.id === id);
+      if (method === "GET" && u.startsWith(DRIVE_FILES + "?spaces=appDataFolder")) {
+        const name = /name = '([^']+)'/.exec(decodeURIComponent(u.split("&q=")[1] || ""));
+        return json(200, { files: w.drive.files.filter(f => !name || f.name === name[1]).map(f => ({ id: f.id, createdTime: new Date(f.at).toISOString() })) });
+      }
+      const m = /\/files\/([A-Za-z0-9_-]+)\?(alt=media|uploadType=media)$/.exec(u);
+      if (method === "GET" && m && byId(m[1]) && u.startsWith(DRIVE_FILES)) return new Response(Buffer.from(byId(m[1]).text), { status: 200 });
+      if (method === "POST" && u === DRIVE_UPLOAD + "?uploadType=multipart") {
+        const parts = body.split(/\r\n--etiuda-[0-9a-f]+/), meta = JSON.parse(parts[0].split("\r\n\r\n")[1]);
+        if (!Array.isArray(meta.parents) || meta.parents.join() !== "appDataFolder") return json(400, { error: { code: 400, errors: [{ reason: "badRequest" }] } });
+        const f = { id: "d" + crypto.randomBytes(6).toString("hex"), name: meta.name, at: Date.now() + w.drive.files.length, text: parts[1].split("\r\n\r\n").slice(1).join("\r\n\r\n") };
+        w.drive.files.push(f);
+        return json(200, { id: f.id });
+      }
+      if (method === "PATCH" && m && byId(m[1]) && u.startsWith(DRIVE_UPLOAD)) { byId(m[1]).text = body; return json(200, { id: m[1] }); }
+      return json(400, { error: { code: 400, errors: [{ reason: "badRequest" }] } });
     }
     w.other.push(method + " " + u);
     throw new TypeError("fetch failed");
@@ -697,8 +720,16 @@ async function googleSwitchScene(src) {
   const ok = ungiven && first.get("scope") === "openid " + DRIVE_SCOPE && on.answer === "asked" && on.opened.length === 1
     && on.opened[0].indexOf("https://accounts.google.com/o/oauth2/v2/auth?") === 0 && q.get("scope") === "openid " + DRIVE_SCOPE && q.get("login_hint") === SUB
     && q.get("prompt") === null && folderPage(on.page, "on") && !!held && !!held.cert && !!access && access.token === r.world.access && !!now && now.why !== "ungiven";
-  return { ok, detail: brief({ ungiven, answer: on.answer, opened: on.opened.length, scope: q.get("scope"), hint: q.get("login_hint") === SUB, prompt: q.get("prompt"),
-    seat: !!(held && held.cert), token: !!access && access.token === r.world.access, why: now && now.why }) };
+  /* The store opened on Google: the look on, its key file made in Drive's app data folder by the folder's token and naming the store the look
+     holds and the licence service granted, every Drive request made with that token, nothing asked of Graph. */
+  const d = r.world.drive, file = d.files.length === 1 ? d.files[0] : null;
+  let rt = "";
+  try { rt = file ? JSON.parse(file.text).rt : ""; } catch { rt = ""; }
+  const granted = r.world.service.map(b => { try { return JSON.parse(b).rt; } catch { return ""; } }).filter(Boolean);
+  const opened = !!now && now.state === "on" && !!file && file.name === "etiuda-store.json" && /^[0-9a-f]{32}$/.test(rt) && granted.indexOf(rt) >= 0
+    && d.calls.length >= 2 && d.calls.every(c => / folder$/.test(c)) && d.calls.some(c => c.indexOf("POST /upload/drive/v3/files ") === 0) && r.world.graph.length === 0;
+  return { ok: ok && opened, detail: brief({ ungiven, answer: on.answer, opened: on.opened.length, scope: q.get("scope"), hint: q.get("login_hint") === SUB, prompt: q.get("prompt"),
+    seat: !!(held && held.cert), token: !!access && access.token === r.world.access, state: now && now.state, why: now && now.why, store: opened, files: d.files.length, rtGranted: granted.indexOf(rt) >= 0, drive: d.calls.slice(0, 6), graph: r.world.graph.length }) };
 }
 
 /* (gc, gs, gr) Where the sync meets the row and the switch. gc: the versions the sync keeps for the person's choice are the row's
@@ -764,7 +795,7 @@ const LEGS = [
   ["f5", renewQuietScene, "a renewal whose folder scope is refused asks it quietly, opens no browser and says nothing more"],
   ["f6", onwardOnceScene, "the loopback sends the window on at most once per sign-in, and takes the folder's reply once"],
   ["g1", consentSwitchScene, "after a declined folder the look says \"ungiven\", Off with its switch: On without a trusted click opens nothing; with one, exactly one request for the folder alone naming the account, which lands the store on; an administrator's need keeps \"consent\" and the call opens nothing"],
-  ["g2", googleSwitchScene, "on Google the folder line unticked at sign-in says \"ungiven\"; On opens exactly one Google sign-in asking the folder with it, naming the account, and the same account's seat and the folder's token are kept"],
+  ["g2", googleSwitchScene, "on Google the folder line unticked at sign-in says \"ungiven\"; On opens exactly one Google sign-in asking the folder with it, naming the account, and the same account's seat and the folder's token are kept; the store opens in Drive's app data folder by that token"],
   ["h", folderPagesScene, "the folder's three landing pages carry the copywriter's words whole in English and Polish, closing as the sign-in's pages close, and the seat page is unchanged"],
   ["d", doorScene, "the licence service's door takes signin/desk, signout/desk, store/grant and store/end of its own host, and refuses every other route"],
   ["g", syncScene, "the look that is on starts the store's sync: a desk key that follows reaches the relay sealed, one that does not stays out, and a sign out stops it"],
@@ -816,6 +847,7 @@ const PLANTS = [
   ["g1", swap("function storeUngiven() { return storeState().org === true ? \"consent\" : \"ungiven\"; }", "function storeUngiven() { return \"consent\"; }"), "a consent never given read as the organisation's, so no switch"],
   ["g1", swap("    await handOut(pending.url); /* plant:consent-open */", "    await handOut(pending.url); handOut(pending.url); /* plant:consent-open */"), "the switch opens the request twice"],
   ["g2", swap("const token = !lacks && ", "const token = "), "Google's answer without the folder's scope taken as the folder's token"],
+  ["g2", swap("  const folder = L.folderFor(p.id, {", "  const folder = L.folderFor(\"microsoft\", {"), "the store's folder asked of Microsoft whatever the sign-in, so the store never opens in Google Drive"],
   ["f3", swap("    loop.land(folder || kind || \"back\"); /* plant:folder-land */", "    loop.land(kind || \"back\"); /* plant:folder-land */"), "the second step lands the sign-in's page, not the folder's"],
   ["h", swap("Nothing changed. It can be turned on in Account at any time. This tab can be closed.", "Nothing changed. It can be turned on in Account at any time. You can close this tab."), "a folder page closing in other words than the sign-in's"],
   ["gc", swap("function storeConflicts() { return storeSyncView().kept; } /* plant:store-conflicts */", "function storeConflicts() { return 0; } /* plant:store-conflicts */"), "the row counts no conflict"],
