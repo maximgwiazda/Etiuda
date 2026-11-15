@@ -8955,12 +8955,14 @@ function resetShares() {
   Object.keys(teamShown).forEach(t => { const s = teamShown[t]; if (s && typeof s.folder === "string" && s.folder) out.push(s.folder); });
   return out;
 }
-/* The new process asks for the single-instance lock. Releasing it first is what lets that
-   process get it; the marker waits if the new process never arrives. */
+/* The new process asks for the single-instance lock. Releasing it is what lets that process get it, and it is released
+   at will-quit, once before-quit has drained every write, so no new start honours the marker while this one still writes
+   in the desk folder; the marker waits if the new process never arrives. */
+let resetRelaunching = false;
 function relaunchAfterReset() {
   setImmediate(() => {
     try {
-      if (typeof app.releaseSingleInstanceLock === "function") app.releaseSingleInstanceLock();
+      resetRelaunching = true; /* plant:reset-lock-late */
       if (typeof app.relaunch === "function") app.relaunch();
       if (typeof app.quit === "function") app.quit();
       else if (typeof app.exit === "function") app.exit(0);
@@ -12902,4 +12904,6 @@ app.on("window-all-closed", () => {
 app.on("will-quit", () => {
   try { if (deskTray && typeof deskTray.destroy === "function") deskTray.destroy(); } catch { /* already gone */ }
   try { globalShortcut.unregisterAll(); } catch { /* none held */ }
+  /* See relaunchAfterReset: the lock goes only now, after before-quit's drain, and only for a reset's relaunch. */
+  if (resetRelaunching) { try { if (typeof app.releaseSingleInstanceLock === "function") app.releaseSingleInstanceLock(); } catch { /* the exit lets it go */ } }
 });

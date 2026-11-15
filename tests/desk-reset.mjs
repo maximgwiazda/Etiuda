@@ -775,7 +775,8 @@ async function noticePage(mod) {
   const lang = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
   const plOk = Object.keys(UNFINISHED_PL).every(en => lang.indexOf(JSON.stringify(en) + ":" + JSON.stringify(UNFINISHED_PL[en])) >= 0);
   const wired = mainTxt.indexOf("deliverResetNotice(") >= 0 && preTxt.indexOf("etiuda:reset-unfinished") >= 0;
-  const releases = /releaseSingleInstanceLock[\s\S]{0,240}relaunch/.test(mainTxt);
+  /* Since review 23's finding 5 the lock goes at will-quit, after before-quit's drain; 4r23d drives it. */
+  const releases = /app\.on\("will-quit"[\s\S]{0,600}releaseSingleInstanceLock/.test(mainTxt) && /function relaunchAfterReset\(\) \{[\s\S]{0,400}app\.relaunch\(\)/.test(mainTxt);
   if (!mod || typeof mod.deliverResetNotice !== "function" || !maint || typeof maint.armResetNotice !== "function") {
     check(false, "4d10 the page does not carry the notice");
     check(plOk, "4d10 the notice is the copywriter's, both languages");
@@ -941,6 +942,66 @@ function review23Leg(mod) {
   }
 }
 
+/* 4r23d (Grok's review 23, finding 5): the shell's reset press, run in the real shell/main.js under a stand-in electron over a
+   lab folder. The single-instance lock is let go only at will-quit, after before-quit has ended, so a new start cannot take
+   it and honour the marker while this process still flushes; the relaunch and the quit are asked at once. */
+async function lockHeldLeg(src, lab, name) {
+  const ud = path.join(lab, name, "user"), docs = path.join(lab, name, "Documents");
+  write(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eUiLang: "en" } }));
+  fs.mkdirSync(docs, { recursive: true });
+  const events = [], appOn = {}, handle = {};
+  const noop = () => {};
+  const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
+  const electron = {
+    app: { getPath: n => (n === "documents" ? docs : ud), setPath: noop, requestSingleInstanceLock: () => false, getVersion: () => "0.0.0",
+      on: (k, fn) => { (appOn[k] = appOn[k] || []).push(fn); }, whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop, hasSwitch: () => false },
+      quit: () => events.push("quit"), relaunch: () => events.push("relaunch"), releaseSingleInstanceLock: () => events.push("release"),
+      setLoginItemSettings: noop, getLoginItemSettings: () => ({ openAtLogin: false }) },
+    ipcMain: { on: noop, handle: (ch, fn) => { handle[ch] = fn; } },
+    BrowserWindow: inert, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert, shell: inert, screen: inert,
+    systemPreferences: inert, nativeTheme: { themeSource: "system" }, globalShortcut: { unregisterAll: noop },
+    safeStorage: { isEncryptionAvailable: () => false, encryptString: () => { throw new Error("no"); }, decryptString: () => { throw new Error("no"); } },
+  };
+  process.env.XDG_CURRENT_DESKTOP = "GNOME";
+  new Function("require", "__dirname", "__filename", "module", "exports", "console", src)(
+    n => (n === "electron" ? electron : require(n)), path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {},
+    { log: noop, error: noop, warn: noop });
+  events.length = 0;
+  const ev = { sender: { id: 1, once: noop }, senderFrame: { parent: null, url: "file:///C:/lab/engine/etiuda.html" } };
+  const staged = await Promise.resolve(handle["etiuda:desk-reset"](ev));
+  await new Promise(r => setImmediate(r));
+  const beforeQuit = events.slice();
+  (appOn["before-quit"] || []).forEach(fn => fn({ preventDefault: noop }));
+  const afterBeforeQuit = events.slice();
+  (appOn["will-quit"] || []).forEach(fn => fn({ preventDefault: noop }));
+  return { staged: !!staged && staged.ok === true, asked: beforeQuit, atBeforeQuit: afterBeforeQuit, atWillQuit: events.slice() };
+}
+async function lockLegs() {
+  const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-reset-lock-held-"));
+  try {
+    const src = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
+    let r = null;
+    try { r = await lockHeldLeg(src, lab, "now"); } catch (e) { r = { error: String(e && e.message || e) }; }
+    const ok = !!r && r.staged && r.asked.indexOf("relaunch") >= 0 && r.asked.indexOf("quit") >= 0 && r.atBeforeQuit.indexOf("release") < 0
+      && r.atWillQuit.indexOf("release") >= 0;
+    check(ok, "4r23d the reset press asks the relaunch and the quit, and lets the single-instance lock go only at will-quit, after"
+      + " before-quit: " + JSON.stringify(r));
+    if (!PLANTS) skip("4r23d lifting plant:reset-lock-late lets the lock go with the press again (ETIUDA_PLANTS=off)");
+    else {
+      const lines = src.split("\n"), at = lines.map((l, i) => (l.indexOf("plant:reset-lock-late") >= 0 ? i : -1)).filter(i => i >= 0);
+      let lifted = null;
+      if (at.length === 1) {
+        lines[at[0]] = "      if (typeof app.releaseSingleInstanceLock === \"function\") app.releaseSingleInstanceLock();";
+        try { lifted = await lockHeldLeg(lines.join("\n"), lab, "lifted"); } catch (e) { lifted = { error: String(e && e.message || e) }; }
+      }
+      check(!!lifted && Array.isArray(lifted.asked) && lifted.asked.indexOf("release") >= 0,
+        "4r23d lifting plant:reset-lock-late lets the lock go with the press again: " + JSON.stringify(lifted));
+    }
+  } finally {
+    fs.rmSync(lab, { recursive: true, force: true });
+  }
+}
+
 let mod = null, decision = null;
 try { mod = require(path.join(ROOT, "shell", "desk-reset.cjs")); } catch (e) { mod = null; }
 try { decision = require(path.join(ROOT, "tests", "install-plan.js")).uninstallDataDecision; } catch (e) { decision = null; }
@@ -949,6 +1010,7 @@ await uiLeg();
 shellLeg(mod);
 await unfinishedLeg(mod);
 review23Leg(mod);
+await lockLegs();
 installLeg(decision);
 plantLeg(mod, decision);
 console.log("desk-reset " + (failed ? "FAILED " + failed + " of " : "passed ") + asserted
