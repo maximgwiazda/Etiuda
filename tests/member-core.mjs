@@ -56,7 +56,7 @@ const MEMBER_DECLS = ["const HPKE_KEM =", "const HPKE_SUITE =", "const SPKI_X255
   "function hpkeOpen(", "const SEALED_TEAM_RE =", "const TEAM_WRAP_LABEL =", "function teamWrapInfo(",
   "function unwrapTeamKey(", "const JOIN_KIND =", "const HANDOVER_PREFIX =", "const HANDOVER_KIND =",
   "function handoverSignedBytes(", "function handoverGenuine(", "function handedTo(", "const SPKI_ED25519 =",
-  "function canonJson(", "function signedBytesOf(", "function teamWhole(", "function memberRingVouches(",
+  "function canonJson(", "function signedBytesOf(", "function teamWhole(",
   "function memberStateCopy(", "function memberProof(", "function inviteCode(", "function inviteIdOf(", "const INVITE_HIDDEN_RE =", "function inviteFolder(",
   "function placeKindOk(", "function driveTops(", "function placeSlash(", "function placeLeaf(", "function placeJoin(",
   "function placeUnder(", "function placeRest(", "function syncRootsFrom(", "function placeOf(",
@@ -183,13 +183,11 @@ if (M && J) {
   const step2 = M.memberHeed(noWrap, empty(), { file: FILE, member: { id: me.id, sk: box.privateKey }, ring: ring });
   const elsewhere = { format: 1, kind: "etiuda-ring", keys: [{ catalog: "other-board", keyId: lead.keyId, alg: "Ed25519", public: lead.public }] };
   const step3 = M.memberHeed(noWrap, empty(), { file: FILE, member: { id: me.id, sk: box.privateKey }, ring: elsewhere });
-  check(step1.needRing === true && step1.stop === false && step1.keep === false && step1.key === null && step1.pinned === false
-      && step2.stop === false && step2.pinned === true && step2.keep === false && step2.key === null && step2.said.length === 0
-      && step2.state.pins[TEAM].public === lead.public
-      && step3.stop === true && step3.pinned === false && step3.keep === false && Object.keys(step3.state.pins).length === 0,
-    "16g a file naming no wrap for this member asks for the ring; a ring that vouches pins the lead and returns no key,"
-    + " and a ring for another catalog pins nothing: needRing " + step1.needRing + ", vouched pin " + step2.pinned
-    + ", other catalog stopped " + step3.stop);
+  const noPin = r => r.stop === true && r.pinned === false && r.keep === false && r.key === null && Object.keys(r.state.pins).length === 0;
+  check(noPin(step1) && noPin(step2) && noPin(step3) && step2.said.length === 0,
+    "16g a file naming no wrap for this member, with no pin and no invitation, pins nothing, whatever ring beside it lists its lead"
+    + " (decisions, the ruled ways in): no ring stopped " + step1.stop + ", a vouching ring stopped " + step2.stop + ", pinned " + step2.pinned
+    + ", another catalog's stopped " + step3.stop);
 
   const K2 = crypto.randomBytes(32);
   const wrap2 = M.wrapTeamKey(K2, me.box, TEAM, 2, me.id);
@@ -283,9 +281,9 @@ if (M && J) {
   check(byInvite.stop === false && byInvite.pinned === true && byInvite.keep === false && byInvite.state.pins[TEAM].public === lead.public
       && otherFile.stop === true && otherFile.pinned === false && Object.keys(otherFile.state.pins).length === 0
       && otherFile.said.length === 1 && otherFile.said[0].indexOf("asked to join") >= 0
-      && stillAsks.needRing === true && stillAsks.pinned === false,
-    "16m a team file under the invitation's lead is pinned with no ring, a file under another lead is refused, and a request with no invitation still asks for the ring: "
-    + "pinned " + byInvite.pinned + ", other stopped " + otherFile.stop + ", no invitation needRing " + stillAsks.needRing);
+      && stillAsks.stop === true && stillAsks.pinned === false,
+    "16m a team file under the invitation's lead is pinned, a file under another lead is refused, and with no invitation nothing is pinned: "
+    + "pinned " + byInvite.pinned + ", other stopped " + otherFile.stop + ", no invitation stopped " + stillAsks.stop);
 
   /* ---- what an invitation may name, and what the confirm is then given ----------------------------------------- */
   const BS = "\\";
@@ -348,10 +346,10 @@ if (M && J) {
   const forTeamA = M.memberHeed(fileB, { pins: {}, keys: {}, barred: [], join: inviteJoin }, noRing);
   const forBNamed = M.memberHeed(fileB, { pins: {}, keys: {}, barred: [],
     join: { team: TEAM2, invite: { id: id, proof: proof, lead: { keyId: otherLead.keyId, public: otherLead.public, name: "Other" } } } }, noRing);
-  check(forTeamA.needRing === true && forTeamA.pinned === false && Object.keys(forTeamA.state.pins).length === 0
+  check(forTeamA.stop === true && forTeamA.pinned === false && Object.keys(forTeamA.state.pins).length === 0
       && forBNamed.pinned === true && forBNamed.state.pins[TEAM2].public === otherLead.public,
-    "16q an invitation for one team lifts the ring for that team's lead alone: another team's file still asks for the ring, and the"
-    + " same file pins with no ring once the invitation names its team: needRing " + forTeamA.needRing + ", named " + forBNamed.pinned);
+    "16q an invitation for one team pins that team's lead alone: another team's file pins nothing, and the same file is pinned once"
+    + " the invitation names its team: other stopped " + forTeamA.stop + ", named " + forBNamed.pinned);
 
   const barredInvite = M.memberHeed(bareFile, { pins: {}, keys: {}, barred: [TEAM], join: inviteJoin }, noRing);
   check(barredInvite.stop === true && barredInvite.pinned === false && barredInvite.unbar === false
