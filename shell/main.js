@@ -13012,6 +13012,9 @@ function createWindow() {
      controls on it, and a frameless window then leaves Alt+F4 as the only way to close what is
      already a bad moment. The same readPin() the serve path calls, so there is one rule rather
      than two: a window that is going to show the refusal is given the system's frame. */
+  /* The page and the pin are the build's. Absent, the window says how to make them, and it takes
+     the system's frame so the refusal can be closed. */
+  const needsBuild = pageNeedsBuild();
   const framed = !!readPin().why;
   const place = PLACED_ASIDE ? null : readWindowPlace();
   /* A WINDOW REOPENED MAXIMISED IS BUILT AT ITS MAXIMISED SIZE: maximize() shows a hidden window at once with the frame
@@ -13032,7 +13035,7 @@ function createWindow() {
     /* So the band's maximise button raises no Snap Layouts flyout: Windows raises it for a point
        answering WM_NCHITTEST with HTMAXBUTTON, no point of a frameless window does, and
        hookWindowMessage can watch that message but not answer it. */
-    frame: framed,
+    frame: framed || needsBuild,
     backgroundColor: "#00000000",
     ...(PLACED_ASIDE ? Object.assign({ focusable: false }, offscreenAt()) : {}),
     /* Spec section 10: the shell picks the material and the engine leaves the band's pixels
@@ -13166,7 +13169,8 @@ function createWindow() {
     if (pickWin && !pickWin.isDestroyed()) pickWin.destroy();
     if (pickNoteWin && !pickNoteWin.isDestroyed()) pickNoteWin.destroy();
   });
-  win.loadFile(ENGINE);
+  if (needsBuild) win.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(missingBuildDoc()));
+  else win.loadFile(ENGINE);
   watchCatalog(win);
   /* A page loaded again after it was lost asks before closing again (Clément's read, note a): the loss is kept for the
      host answer that reports it, and marked as over, so closeHeld holds again from here. */
@@ -13239,6 +13243,38 @@ function refusalDoc(why) {
     + '</div></div>\n';
 }
 
+/* The page or the pin is not on disk, so nothing is being served yet. */
+function pageNeedsBuild() {
+  return !fs.existsSync(ENGINE) || !fs.existsSync(PIN);
+}
+function missingBuildDoc() {
+  const card = (lead, body) => '<p style="margin:0 0 14px"><b>' + lead + '</b> ' + body + '</p>';
+  return '<!DOCTYPE html>\n<meta charset="utf-8">\n'
+    + '<meta http-equiv="Content-Security-Policy" content="' + policyFor(["'none'"]) + '">\n'
+    + '<title>Etiuda</title>\n'
+    + '<body style="margin:0;background:#1c1917;color:#fff;'
+    + 'font:15px/1.6 system-ui,Segoe UI,sans-serif">\n'
+    + '<div style="max-width:44em;margin:14vh auto;padding:0 28px">'
+    + '<div style="background:#7f1d1d;border-radius:12px;padding:20px 22px;'
+    + 'box-shadow:0 2px 14px rgba(0,0,0,.4)">'
+    + card("Etiuda's page has not been built in this folder yet.",
+        "Run <code>npm run build</code> here, then open Etiuda again.")
+    + card("W tym folderze nie zbudowano jeszcze strony Etiudy.",
+        "Należy uruchomić tu <code>npm run build</code>, a potem ponownie otworzyć Etiudę.")
+    + '<p style="margin:0 0 16px"><a href="' + CLOSE_MARK + '" style="display:inline-block;'
+    + 'padding:7px 16px;border-radius:8px;border:1px solid rgba(255,255,255,.45);'
+    + 'color:#fff;text-decoration:none;font-weight:600">Close Etiuda &middot; Zamknij Etiud&#281;</a></p>'
+    + '<div style="opacity:.75;font:12px/1.5 ui-monospace,Consolas,monospace;margin:0">'
+    + plainText(ENGINE) + '<br>' + plainText(PIN) + '</div>'
+    + '</div></div>\n';
+}
+function startDocument() {
+  if (pageNeedsBuild()) return missingBuildDoc();
+  const pin = readPin();
+  if (pin.why) return refusalDoc(pin.why);
+  return "";
+}
+
 /* THE SIBLING TAG IS NOT SERVED HERE. In a browser it is how a catalog beside the engine arrives;
    under this shell the policy refuses it by design, since a catalog comes through the host, and the
    refusal was a console error on every boot, so a healthy desk never had a clean console (bug hunt
@@ -13249,6 +13285,7 @@ function refusalDoc(why) {
 const SIBLING_TAGS = ['<script src="etiuda-catalog.js"></script>'];
 
 function withPolicy(html) {
+  if (pageNeedsBuild()) return missingBuildDoc();
   const pin = readPin();
   if (pin.why) return refusalDoc(pin.why);
   for (const tag of SIBLING_TAGS) {

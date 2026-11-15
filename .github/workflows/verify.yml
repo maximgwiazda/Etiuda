@@ -133,6 +133,9 @@ jobs:
             node "$RUNNER_TEMP/ci-runner/tools/ci-catalog.mjs" --root "$GITHUB_WORKSPACE" --out "$RUNNER_TEMP/ci-fixtures"
           fi
 
+      # The legs read the built page, so the build runs once npm ci has finished, as gates.yml does.
+      - run: npm run build
+
       - name: legs
         id: legs
         continue-on-error: true
