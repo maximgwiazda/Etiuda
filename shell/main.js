@@ -7550,19 +7550,30 @@ function historyOpen(sha, file) {
   }
 }
 /* Writes a kept version back over its file in the catalog folder, by the rule at historyFree and only after the bytes it
-   replaces are kept themselves: `replaced` names them, so the page can offer them back. */
+   replaces are kept themselves: `replaced` names them, so the page can offer them back. The kept bytes are judged as they
+   are written, whatever the index says of them, and the write is sharedWrite's: under the lock beside the file, {busy}
+   while another desk holds it, except in a folder team's mirror, which is this desk's own and which the syncer swaps. */
 function historyPutBack(sha, file) {
   if (relayHere()) return { ok: false }; /* See sharedWrite. */
   const v = historyFind(sha, file), root = path.resolve(catalogFolder());
   if (!v || !historyFree(v) || !v.path || path.dirname(v.path) !== root || !/\.ec$/i.test(v.path) || !folderAnswers(catalogFolder())) return { ok: false };
+  const mirror = folderMirrorHere();
+  let held = null;
+  if (!mirror || path.resolve(mirror) !== root) { /* plant:put-back-lock */
+    try { held = sharedLock(v.path); }
+    catch (e) { console.error("etiuda: the lock beside " + v.path + " could not be taken - " + e.message); return { ok: false, busy: true }; }
+    if (!held) return { ok: false, busy: true };
+  }
   try {
     const text = historyText(v.sha);
+    if (!historyFree(historyFacts(text))) return { ok: false }; /* plant:put-back-bytes */
     let was = "";
     try { was = fs.readFileSync(v.path, "utf8"); } catch (e) { if (e.code !== "ENOENT") throw e; }
     if (was && sha256Hex(Buffer.from(was, "utf8")) === v.sha) return { ok: true, unchanged: true };
     if (was && !historyFree(historyFacts(was))) return { ok: false };
     const before = historyKeepFile(v.path);
     if (!before) return { ok: false };
+    if (held && !sharedHolds(held)) return { ok: false, busy: true };
     writeReplacing(v.path, text);
     historyKeep(v.path, text, true);
     console.log("etiuda: " + v.path + " was put back as this desk kept it");
@@ -7570,6 +7581,8 @@ function historyPutBack(sha, file) {
   } catch (e) {
     console.error("etiuda: " + v.path + " could not be put back - " + e.message);
     return { ok: false };
+  } finally {
+    if (held && sharedHolds(held)) { try { fs.unlinkSync(held.lock); } catch { /* stale in SHARED_LOCK_MS */ } }
   }
 }
 
