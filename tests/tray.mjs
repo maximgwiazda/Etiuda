@@ -10,6 +10,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CJS_PATH = path.join(ROOT, "shell", "tray.cjs");
 const nodeRequire = createRequire(import.meta.url);
@@ -492,16 +493,20 @@ async function run() {
     const same = diffs(mainText);
     check(same.length === 0, "ft8 no change of behaviour: isSupported asked, the app id set, the toast made, shown, its click wired, told "
       + "and any throw are the same with the trace and without it, in all six cases" + (same.length ? ": " + same.join("; ") : ""));
-    for (const [tag, id, pick, was] of [["trace-shown", "ft9", "shows", /outcome=shown$/], ["trace-unsupported", "ft10", "unsupported", /outcome=not supported$/],
-      ["trace-thrown", "ft11", "ctorThrows", /outcome=thrown: the toast could not be made$/], ["trace-caught", "ft12", "wordsThrow", /outcome=thrown: words unread$/]]) {
-      const cut = mainText.split("\n").filter((l) => l.indexOf("plant:" + tag) < 0).join("\n");
-      const lifted = reads(cut)[pick];
-      check(mainText.indexOf("plant:" + tag) > -1 && !(lifted.lines[0] && was.test(lifted.lines[0])),
-        id + " control: cutting plant:" + tag + " takes that outcome from the line: " + say(lifted));
+    /* The inline plant proofs ft9 to ft13 honour ETIUDA_PLANTS=off (plant-hold's pk-off), named as not run. */
+    if (PLANTS_OFF) console.log("  NOT RUN ft9 to ft13, the trace's plant proofs (ETIUDA_PLANTS=off)");
+    else {
+      for (const [tag, id, pick, was] of [["trace-shown", "ft9", "shows", /outcome=shown$/], ["trace-unsupported", "ft10", "unsupported", /outcome=not supported$/],
+        ["trace-thrown", "ft11", "ctorThrows", /outcome=thrown: the toast could not be made$/], ["trace-caught", "ft12", "wordsThrow", /outcome=thrown: words unread$/]]) {
+        const cut = mainText.split("\n").filter((l) => l.indexOf("plant:" + tag) < 0).join("\n");
+        const lifted = reads(cut)[pick];
+        check(mainText.indexOf("plant:" + tag) > -1 && !(lifted.lines[0] && was.test(lifted.lines[0])),
+          id + " control: cutting plant:" + tag + " takes that outcome from the line: " + say(lifted));
+      }
+      const swallowed = mainText.replace("return show.apply(n, arguments);", "return undefined;");
+      const seenBroken = swallowed !== mainText ? diffs(swallowed) : [];
+      check(seenBroken.length > 0, "ft13 control: a stand-in whose show() no longer reaches Electron's is caught by ft8: " + seenBroken.length + " case(s) differ");
     }
-    const swallowed = mainText.replace("return show.apply(n, arguments);", "return undefined;");
-    const seenBroken = swallowed !== mainText ? diffs(swallowed) : [];
-    check(seenBroken.length > 0, "ft13 control: a stand-in whose show() no longer reaches Electron's is caught by ft8: " + seenBroken.length + " case(s) differ");
   }
 
   console.log("\n#counts checks=" + checks + " failures=" + failed);
