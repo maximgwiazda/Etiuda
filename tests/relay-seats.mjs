@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 81;
+const EXPECTED = 82;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -607,6 +607,23 @@ async function main() {
     return { ok, detail: brief({ otherLicence: said(otherAsks), issuedBefore: said(olderAsks), released: said(free) + "/" + said(freeLead), ordinaryTeam: said(oRelease), shapes }) };
   }
   await leg("s15c", releaseScene, "only the service's signed release lifts the gate, for the gated licence and issued after it; a release of another licence or issued before the gate changes nothing, nor one on a team never gated, and a release of any other shape is refused");
+  /* Argon's review of the relay, finding 3: the release is kept as a mark, so the seats grant it released, posted again, gates nothing;
+     a seats grant issued after the release gates the team again. */
+  async function releaseReplayScene() {
+    const w = await team({ seats: true }), t1 = T0 + HOUR, t3 = T0 + 3 * HOUR;
+    w.R.clock.now = t1;
+    const release = await renew(w, grantAt(w.lead.pub, t1, { licence: w.licence, release: true }, { fields: { until: t1 + 31 * DAY } }));
+    w.R.clock.now = t1 + HOUR;
+    const replay = await renew(w, w.firstGrant);
+    const free = await session(w, w.desks.a);
+    const kept = storeOf(w).get("seats");
+    w.R.clock.now = t3;
+    const later = await renew(w, grantAt(w.lead.pub, t3, { licence: w.licence, live: t3 }, { fields: { until: t3 + 32 * DAY } }));
+    const gated = await session(w, w.desks.b);
+    const ok = release.status === 200 && opened(free) && !kept && later.status === 200 && refused(gated, "seat-lapsed");
+    return { ok, detail: brief({ release: said(release), replayed: said(replay), afterReplay: said(free), seatsKept: !!kept, later: said(later), afterLater: said(gated) }) };
+  }
+  await leg("s15d", releaseReplayScene, "a seats grant issued before the team's release, posted again after it, gates nothing, and one issued after the release gates the team again");
   await leg("s16a", doorKnockScene, "an enrolled desk knocking at the door with a current certificate of another of the door's licences than the seats' is refused seat-lapsed, and of the seats' licence opens as a desk");
   /* A STUDIO IS JUDGED AS A DESK IS, BY ITS PERSON (Claude alpha's ruling of 20:47 on C1): on an Entra team the lead's own Studio and a
      Studio following it as a teammate each present the certificate of their person's lead seat, named for that Studio's own key. */
@@ -885,6 +902,7 @@ async function main() {
     ["pooled-refused-read", "s21d", pooledNightScene, "a kept refusal is never read"],
     ["pooled-refused-prune", "s21d", pooledNightScene, "a kept refusal outlives the grace"],
     ["seat-freed", "s22a", freedScene, "a freed pooled desk is not refused"],
+    ["seats-release-mark", "s15d", releaseReplayScene, "the released grant, posted again, gates the team"],
     ["freed-issued", "s22d", freedSinceScene, "the issue-time comparison dropped, so a certificate issued after the freeing is refused"],
     ["seats-freed-kept", "s22b", nightOnlyScene, "a grant's freed list is not kept"],
     ["grant-freed-shape", "s22c", freedShapeScene, "a freed list out of shape is taken"],

@@ -599,11 +599,14 @@ function createCore(deps) {
       if (lifts && was && at > was.at) store.del("seats");
       return;
     }
+    /* The release's issue is kept as a mark, so a seats grant issued before it, posted again, gates nothing. */
     if (grant.seats.release === true) {
-      if (was && was.licence === grant.seats.licence && at > was.at) { store.del("seats"); store.del("seatSeen"); } /* plant:seats-release */
+      if (was && was.licence === grant.seats.licence && at > was.at) { store.del("seats"); store.del("seatSeen"); store.put("seatsOff", { at }); } /* plant:seats-release */
       return;
     }
+    const off = store.get("seatsOff");
     if (was && at < was.at) return; /* plant:seats-older */
+    if (plain(off) && at <= off.at) return; /* plant:seats-release-mark */
     let live = grant.seats.live;
     if (was && was.licence === grant.seats.licence && was.live > live) live = was.live; /* plant:seats-live-kept */
     const kept = { licence: grant.seats.licence, live, at };
