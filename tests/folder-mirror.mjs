@@ -35,8 +35,8 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 154;
-/* The plants of 44 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
+const EXPECTED = 156;
+/* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const { offWindows } = nodeRequire("./off-windows.cjs");
 const ASIDE = {
@@ -2263,6 +2263,123 @@ async function run() {
         "44z a conflict sibling leaves an owed team file and its rev alone, and once the debt is settled that sibling lands by the existing rule: "
         + JSON.stringify({ sibLanded, revHeld, before, quiet, sibAfter, canonHeld: canonAfter === held, revAfter, applied: again.applied }));
     } finally { prog.stop(); }
+  }
+  /* 44aa: the two-hands scene of a team file and a conflict sibling that hand the pinned key to two keys, staged while
+     the team file is owed. The fork is the one the look reports when nothing is owed. */
+  function forkStep(toLead) {
+    const s = {
+      format: 1, kind: "etiuda-team-handover", team: TEAM,
+      from: { keyId: LEAD.keyId, public: LEAD.public },
+      to: { keyId: toLead.keyId, public: toLead.public },
+      sig: { alg: "Ed25519", keyId: LEAD.keyId }
+    };
+    s.sig.value = crypto.sign(null, Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), signedBytesOf(s)]), lead.privateKey).toString("hex");
+    return s;
+  }
+  function forkTeam(pair, ho) {
+    return JSON.stringify(sign({
+      format: 1, kind: "etiuda-team", id: TEAM, catalogs: ["lamp-shop"],
+      lead: { keyId: pair.keyId, public: pair.public },
+      sealed: true, epoch: 2, rev: 2, roster: [], handover: ho
+    }, pair.signer, pair.keyId));
+  }
+  function forkTexts() {
+    const pair = id => {
+      const k = crypto.generateKeyPairSync("ed25519");
+      return { keyId: id, public: pubHex(k.publicKey), signer: k.privateKey };
+    };
+    const a = pair("lead-fork-a"), b = pair("lead-fork-b");
+    return {
+      sib: "etiuda-team (1).json",
+      held: JSON.stringify(teamFile({ epoch: 1, rev: 1 })),
+      handA: forkTeam(a, [forkStep(a)]),
+      handB: forkTeam(b, [forkStep(b)])
+    };
+  }
+  function forkDesk(name) {
+    const d = newDesk(name, folder(name + "-folder"));
+    const base = d.api.deskTrustChecks();
+    const seen = [];
+    const real = base.forkSeen;
+    return {
+      desk: d, seen,
+      checks: Object.assign({}, base, { forkSeen: (docs, teamId, leads) => { const answer = real(docs, teamId, leads); seen.push(answer); return answer; } })
+    };
+  }
+  function runForkScan(mod, name, texts, owe, bundle) {
+    const share = folder(name + "-share"), mirror = folder(name + "-mirror");
+    fs.writeFileSync(path.join(mirror, "etiuda-team.json"), texts.held, "utf8");
+    fs.writeFileSync(path.join(share, "etiuda-team.json"), texts.handA, "utf8");
+    fs.writeFileSync(path.join(share, texts.sib), texts.handB, "utf8");
+    if (owe) mod.noteOwed(mirror, "etiuda-team.json");
+    const said = [];
+    const prog = mod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks: bundle.checks, logger: (m) => said.push(String(m)) });
+    const before = prog.state().mirrorRev;
+    const a = stageCopy(mirror, "etiuda-team.json", texts.handA);
+    const b = stageCopy(mirror, texts.sib, texts.handB);
+    const res = prog.applyScan({
+      answers: true,
+      listing: [["etiuda-team.json", { size: a.size, mtimeMs: a.mtimeMs }], [texts.sib, { size: b.size, mtimeMs: b.mtimeMs }]],
+      staged: [a, b]
+    });
+    return {
+      prog, said, before, res, seen: bundle.seen, desk: bundle.desk,
+      rev: prog.state().mirrorRev,
+      bytes: fs.readFileSync(path.join(mirror, "etiuda-team.json"), "utf8"),
+      sibLanded: fs.existsSync(path.join(mirror, texts.sib)),
+      forget: prog.held().forget
+    };
+  }
+  function forkPair(mod, name) {
+    const texts = forkTexts();
+    const owed = runForkScan(mod, name + "-owed", texts, true, forkDesk(name + "-owed-desk"));
+    let clear;
+    try { clear = runForkScan(mod, name + "-clear", texts, false, forkDesk(name + "-clear-desk")); }
+    catch (e) { owed.prog.stop(); throw e; }
+    return { texts, owed, clear };
+  }
+  const forkLines = said => (said || []).filter(l => l.indexOf("two different new keys") >= 0);
+  {
+    const g = forkPair(syncerMod, "44aa");
+    try {
+      const owed = g.owed, clear = g.clear;
+      const owedLine = forkLines(owed.desk.said), clearLine = forkLines(clear.desk.said);
+      const sameAnswer = JSON.stringify(owed.seen) === JSON.stringify(clear.seen)
+        && owed.seen.length === 1 && !!owed.seen[0] && owed.seen[0].kind === "two";
+      const sameLine = owedLine.length === 1 && owedLine[0] === clearLine[0];
+      const heldBytes = owed.bytes === g.texts.held && !owed.sibLanded;
+      const notApplied = owed.res.applied.indexOf("etiuda-team.json") < 0 && owed.res.applied.indexOf(g.texts.sib) < 0;
+      const quiet = owed.said.length === 0;
+      check(sameAnswer && sameLine && heldBytes && notApplied && owed.rev === owed.before && owed.before === 1 && quiet,
+        "44aa a fork staged while the team file is owed is reported as it is when nothing is owed, the mirror keeps the held bytes, and the rev stays: "
+        + JSON.stringify({ sameAnswer, sameLine, kind: owed.seen[0] && owed.seen[0].kind, line: owedLine[0] || "", held: heldBytes, applied: owed.res.applied, rev: owed.rev, before: owed.before, quiet, forget: owed.forget }));
+    } finally { g.owed.prog.stop(); g.clear.prog.stop(); }
+  }
+  if (PLANTS_OFF) skip("44aa2 putting && !teamOwed back on the two-hands look leaves a fork unreported while the team file is owed: NOT RUN");
+  else {
+    const before = fs.readFileSync(syncerFile);
+    const lines = before.toString("utf8").split("\n");
+    let at = lines.findIndex(l => l.indexOf("plant:owed-fork-look") >= 0);
+    if (at < 0) at = lines.findIndex(l => l.indexOf("teamItems.length && !teamOwed") >= 0);
+    let turned = false, detail = "look line absent";
+    if (at >= 0) {
+      if (lines[at].indexOf("!teamOwed") < 0) lines[at] = lines[at].replace("teamItems.length)", "teamItems.length && !teamOwed)");
+      const scratchDir = fs.mkdtempSync(path.join(LAB, "plant-owed-fork-look-"));
+      const scratchFile = path.join(scratchDir, "syncer.cjs");
+      fs.writeFileSync(scratchFile, lines.join("\n"), "utf8");
+      let g = null;
+      try {
+        g = forkPair(nodeRequire(scratchFile), "44aa2");
+        const owedQuiet = g.owed.seen.length === 0 && forkLines(g.owed.desk.said).length === 0;
+        const clearSeen = g.clear.seen.length === 1 && !!g.clear.seen[0] && g.clear.seen[0].kind === "two" && forkLines(g.clear.desk.said).length === 1;
+        turned = owedQuiet && clearSeen;
+        detail = turned ? "the owed scan said nothing and the clear scan still reported the fork" : JSON.stringify({ owed: g.owed.seen, clear: g.clear.seen.map(s => s && s.kind) });
+      } catch (e) { detail = e && e.message ? e.message : String(e); }
+      finally { if (g) { g.owed.prog.stop(); g.clear.prog.stop(); } }
+    }
+    const same = fs.readFileSync(syncerFile).equals(before);
+    check(turned && same, "44aa2 putting && !teamOwed back on the two-hands look leaves a fork unreported while the team file is owed: "
+      + detail + ", sha " + (same ? "restored" : "differs"));
   }
   if (PLANTS_OFF) skip("44w2 lifting plant:team-owe-keep lets a newer share team file overwrite a write the outbox still owes: NOT RUN");
   else {
