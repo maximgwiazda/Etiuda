@@ -87,6 +87,9 @@ async function newDeskPage(pageUrl, opts = {}) {
         ["eStill", "1"],
         ["eRail", "1"],
       ]) localStorage.setItem(k, v);
+      /* A desk past its first opening, unless the walk is of the first-opening sign-in screen itself: the stand-in below
+         offers a provider with nobody signed in, which is when that screen stands in front of everything else. */
+      if (!opts.firstOpening) localStorage.setItem("eFirstSigninSeen", "1");
     } catch (e) {}
     const st = opts.signinState || {
       offered: ["microsoft", "google"],
@@ -105,6 +108,10 @@ async function newDeskPage(pageUrl, opts = {}) {
     };
   }, opts);
   await page.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
+  if (opts.firstOpening) {
+    await page.waitForFunction(() => { const f = document.getElementById("firstSignin"); return !!f && !f.hidden && f.textContent.trim().length > 0; }, { timeout: 30000 });
+    return page;
+  }
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   const yes = await page.$("#ecYes");
   if (yes) await page.click("#ecYes");
@@ -844,6 +851,15 @@ try {
     check(plantRep.badUi.length > 0 && plantCtrlA.length > 0,
       "plant: removing body{user-select:none} turns screen walk red and lets Ctrl+A select text",
       { badUi: plantRep.badUi.length, ctrlALen: plantCtrlA.length });
+  }
+
+  // The first-opening sign-in screen, standing: its words are interface text like any other.
+  {
+    const fsPage = await newDeskPage(url, { firstOpening: true });
+    const fsRep = await auditScreen(fsPage, "First-opening sign-in screen", ["#firstSignin"], { excludeStage: false });
+    recordWalk(fsRep);
+    check(fsRep.checked >= 3, "First-opening sign-in screen was standing when walked (" + fsRep.checked + " elements with words)");
+    await fsPage.close();
   }
 
   await page.close();
