@@ -958,6 +958,12 @@ function dropOffersLeft(all){
     paintCatWaiting();
   }
 }
+/* The team's new catalogs a listing may announce as the lead's: a file the shell found signed by the pinned lead (leadSigned),
+   never merely one that parsed, and not the catalog held. */
+function listingNoticeFiles(all,held){
+  return (all||[]).filter(f=>!f.desk && !f.builtIn && !f.sample && f.id && !(held && held.id===f.id))
+    .filter(f=>f.leadSigned===true); /* plant:listing-lead-signed */
+}
 function onCatalogListing(all){
   /* The empty desk's folder line follows whether this listing holds a catalog. Only a change, and
      only while that desk is what is on screen, draws it again. */
@@ -972,10 +978,7 @@ function onCatalogListing(all){
     const tLeads=teamLeads().filter(l=>l&&!l.removed);
     if(tLeads.length>0){
       const leadName=(tLeads[0]&&tLeads[0].lead)||"";
-      const teamFiles=(all||[]).filter(f=>!f.desk && !f.builtIn && !f.sample && f.id);
-      const held=storedCatalog();
-      for(const f of teamFiles){
-        if(held && held.id===f.id) continue;
+      for(const f of listingNoticeFiles(all,storedCatalog())){
         const key=f.id||f.name;
         if(key && !listingNotified.has(key)){
           listingNotified.add(key);
@@ -1091,5 +1094,6 @@ export {
   paintCatWaiting,
   loadCatalogFromFolder,
   onCatalogListing,
+  listingNoticeFiles,
   wireHostCatalogWatch
 };

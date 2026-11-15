@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 133;
+const EXPECTED = 135;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku: jego treść trafi do lidera tylko wtedy, gdy lider włączy w Studiu kopie katalogów spoza listy, a to stanowisko zostanie o tym powiadomione, zanim cokolwiek zostanie wysłane. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -241,7 +241,7 @@ try {
     throw new Error("unterminated " + marker);
   };
 
-  /* ---- 890r: a folder team with no ring in its team file, and a ring file in the share written by someone else ----------
+  /* ---- r16a: a folder team with no ring in its team file, and a ring file in the share written by someone else ----------
      The share's ring maps the catalog and the lead's key id to another public, and a catalog signed by that key under the
      lead's key id is opened: in-use.ec does not name the lead's key as its signer, and the rev floor does not move under that
      public (Grok's review 16, finding 5). */
@@ -261,16 +261,43 @@ try {
   {
     const r = await forgedRing("ring-forge");
     check(r.took && r.signer === "" && !r.floored,
-      "890r a catalog signed under the lead's key id by a key only the share's ring file names is recorded with no signer, and moves no rev floor: "
+      "r16a a catalog signed under the lead's key id by a key only the share's ring file names is recorded with no signer, and moves no rev floor: "
       + JSON.stringify(r));
-    if (PLANTS_OFF) skip("890s rewriting plant:trusted-pub-lead to the ring's check names the lead as that catalog's signer");
+    if (PLANTS_OFF) skip("r16b rewriting plant:trusted-pub-lead to the ring's check names the lead as that catalog's signer");
     else {
       const from = "pinnedLeadPubs().length ? catalogLeadOk(data) : catalogSigValid(data)";
       const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:trusted-pub-lead") >= 0);
       let p = null;
       if (at >= 0 && lines[at].split(from).length === 2) { lines[at] = lines[at].replace(from, () => "catalogSigValid(data)"); p = await forgedRing("ring-forge-plant", lines.join("\n")); }
-      check(!!p && p.took && p.signer === LEAD.keyId, "890s rewriting plant:trusted-pub-lead to the ring's check names the lead as that catalog's signer (FAIL 890r): "
+      check(!!p && p.took && p.signer === LEAD.keyId, "r16b rewriting plant:trusted-pub-lead to the ring's check names the lead as that catalog's signer (FAIL r16a): "
         + JSON.stringify(p));
+    }
+  }
+
+  /* ---- r16c: the listing tells the page which files the pinned lead signed, and only those (Grok's review 16, finding 1) ---- */
+  const leadRows = async (name, src) => {
+    const box = await arm(name, src);
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)]);
+    box.D.sync("etiuda:catalog");
+    put(box.share, "lead-annex.ec", textOf(catalog(1, { id: "north-annex", name: "North annex" })));
+    put(box.share, "forged-annex.ec", textOf(sign(catalog(1, { id: "south-annex", name: "South annex", unsigned: true }), other.privateKey, LEAD)));
+    put(box.share, "bare-annex.ec", textOf(catalog(1, { id: "west-annex", name: "West annex", unsigned: true })));
+    const rows = (await box.D.ask("etiuda:catalog-files")) || [];
+    const of = n => rows.filter(r => r.name === n)[0] || {};
+    return { lead: of("lead-annex.ec").leadSigned === true, forged: of("forged-annex.ec").leadSigned === true,
+      bare: of("bare-annex.ec").leadSigned === true, genuine: rows.some(r => "genuine" in r), listed: rows.length };
+  };
+  {
+    const r = await leadRows("listing-lead");
+    check(r.lead && !r.forged && !r.bare && !r.genuine,
+      "r16c the listing marks a file the pinned lead signed as leadSigned, and neither one another key signed under the lead's key id nor an unsigned one: "
+      + JSON.stringify(r));
+    if (PLANTS_OFF) skip("r16d lifting plant:listing-lead-row tells the page no file is the lead's");
+    else {
+      const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:listing-lead-row") >= 0);
+      let p = null;
+      if (at >= 0) { lines.splice(at, 1); p = await leadRows("listing-lead-plant", lines.join("\n")); }
+      check(!!p && !p.lead, "r16d lifting plant:listing-lead-row tells the page no file is the lead's (FAIL r16c): " + JSON.stringify(p));
     }
   }
 

@@ -31,7 +31,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 128;
+const EXPECTED = 130;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const ASIDE_D6_LOGIN = nodeRequire("./off-windows.cjs").offWindows("D6-login",
   "the shell sets no login item off Windows, so Reset's turn-off has nothing to reach");
@@ -2324,6 +2324,7 @@ try {
   let d7Unsigned = false, d7UnsignedWhy = "";
   let d7Listing = false, d7ListingWhy = "";
   let d7Nameless = false, d7NamelessWhy = "";
+  let d7NotLead = false, d7NotLeadWhy = "";
   let d7Switches = false, d7SwitchesWhy = "";
   let d7Click = false, d7ClickWhy = "";
   let d7Asked = false, d7AskedWhy = "";
@@ -2438,7 +2439,7 @@ try {
 
     // 4. New team catalog in listing toasts once
     const notesBeforeListing = madeNotes.length;
-    const newListing = [{ name: "catalog-gamma.ec", id: "k-team-gamma", sha: "sha-gamma-1", rev: 1, mtime: Date.now() }];
+    const newListing = [{ name: "catalog-gamma.ec", id: "k-team-gamma", sha: "sha-gamma-1", rev: 1, mtime: Date.now(), leadSigned: true }];
     if (typeof CO.onCatalogListing === "function") {
       CO.onCatalogListing(newListing);
     }
@@ -2460,6 +2461,16 @@ try {
       && bodyList.indexOf("is in the Library, ready to open.") >= 0;
     if (!d7Listing) d7ListingWhy = JSON.stringify({ nListOk, nListOnce, notes: madeNotes.length - notesBeforeListing, title: titleList, body: bodyList });
 
+    // 4a. A new file the shell did not find signed by the pinned lead is not announced as the lead's (Grok's review 16, finding 1)
+    const notesBeforeNotLead = madeNotes.length;
+    if (typeof CO.onCatalogListing === "function") {
+      CO.onCatalogListing([{ name: "catalog-forged.ec", id: "k-team-forged", sha: "sha-forged-1", rev: 1, mtime: Date.now() },
+        { name: "catalog-false.ec", id: "k-team-false", sha: "sha-false-1", rev: 1, mtime: Date.now(), leadSigned: false }]);
+    }
+    await tick(150);
+    d7NotLead = madeNotes.length === notesBeforeNotLead;
+    if (!d7NotLead) d7NotLeadWhy = JSON.stringify(madeNotes.slice(notesBeforeNotLead).map(n => n.opts && n.opts.title));
+
     // 4b. A lead the team file gives no name: the copywriter's nameless titles in both languages, never a stand-in name
     if (d7JoinCb) d7JoinCb({ leads: [{ team: "team-alpha", lead: "", print: "1234" }] });
     const nlTitles = [];
@@ -2470,7 +2481,7 @@ try {
       await waitNotes(madeNotes, before + 1);
       await tick(100);
       const a = madeNotes.length === before + 1 ? madeNotes[madeNotes.length - 1].opts.title : null;
-      if (typeof CO.onCatalogListing === "function") CO.onCatalogListing([{ name: "catalog-nl-" + lang + ".ec", id: "k-team-nl-" + lang, sha: "sha-nl-" + lang, rev: 1, mtime: Date.now() }]);
+      if (typeof CO.onCatalogListing === "function") CO.onCatalogListing([{ name: "catalog-nl-" + lang + ".ec", id: "k-team-nl-" + lang, sha: "sha-nl-" + lang, rev: 1, mtime: Date.now(), leadSigned: true }]);
       await waitNotes(madeNotes, before + 2);
       await tick(100);
       const b = madeNotes.length === before + 2 ? madeNotes[madeNotes.length - 1].opts.title : null;
@@ -2492,7 +2503,7 @@ try {
     ST.lsDel("eNotifyEditionOff");
 
     ST.lsSet("eNotifyCatalogOff", "1");
-    const listing2 = [{ name: "catalog-epsilon.ec", id: "k-team-eps", sha: "sha-eps-1", rev: 1, mtime: Date.now() }];
+    const listing2 = [{ name: "catalog-epsilon.ec", id: "k-team-eps", sha: "sha-eps-1", rev: 1, mtime: Date.now(), leadSigned: true }];
     if (typeof CO.onCatalogListing === "function") {
       CO.onCatalogListing(listing2);
     }
@@ -2592,6 +2603,29 @@ try {
   check(d7Focused, "D7-focused the same while focused does not (" + d7FocusedWhy + ")");
   check(d7Unsigned, "D7-unsigned a refused or unsigned file never toasts (" + d7UnsignedWhy + ")");
   check(d7Listing, "D7-listing a new team catalog in the listing toasts once (" + d7ListingWhy + ")");
+  check(d7NotLead, "D7-not-lead a new file in the listing the pinned lead did not sign, or one the shell did not mark, is announced as no one's (" + d7NotLeadWhy + ")");
+  /* Its guard in a scratch copy of the page's modules, never in the tree: lifted, listingNoticeFiles announces the unsigned file. */
+  if (PLANTS_OFF) skip("D7-not-lead-plant lifting plant:listing-lead-signed announces a file the lead did not sign");
+  else {
+    let red = false, why = "plant line absent";
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-ipc-plant-"));
+    try {
+      fs.cpSync(path.join(ROOT, "src", "modules"), scratch, { recursive: true });
+      const at = path.join(scratch, "catalog-offer.js"), lines = fs.readFileSync(at, "utf8").split("\n");
+      const i = lines.findIndex(l => l.indexOf("plant:listing-lead-signed") >= 0);
+      if (i >= 0) {
+        lines.splice(i, 1);
+        lines[i - 1] = lines[i - 1] + ";";
+        fs.writeFileSync(at, lines.join("\n"));
+        const PL = await import(pathToFileURL(at).href);
+        const got = PL.listingNoticeFiles([{ name: "catalog-forged.ec", id: "k-team-forged", rev: 1 }], null);
+        red = got.length === 1;
+        why = JSON.stringify(got.map(f => f.name));
+      }
+    } catch (e) { why = String(e && e.message || e).slice(0, 200); }
+    finally { fs.rmSync(scratch, { recursive: true, force: true }); }
+    check(red, "D7-not-lead-plant lifting plant:listing-lead-signed announces a file the lead did not sign (FAIL D7-not-lead): " + why);
+  }
   check(d7Nameless, "D7-nameless a lead with no name gets the nameless titles in both languages, never a stand-in name (" + d7NamelessWhy + ")");
   check(d7Switches, "D7-switches each switch silences its kind (" + d7SwitchesWhy + ")");
   check(d7Click, "D7-click a click shows the window on the offer or the Library tab (" + d7ClickWhy + ")");

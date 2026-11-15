@@ -8927,9 +8927,11 @@ function collapseEditions(rows) {
   }
   return rows.filter((row, i) => !drop.has(i));
 }
+/* The page is told only whether a pinned lead signed the row's file (leadSigned), which is what lets it name the lead. */
 function stripGenuine(row) {
   if (!row || !Object.prototype.hasOwnProperty.call(row, "genuine")) return row;
   const copy = Object.assign({}, row);
+  if (copy.genuine && !copy.desk && pinnedLeadPubs().length) copy.leadSigned = true; /* plant:listing-lead-row */
   delete copy.genuine;
   return copy;
 }
