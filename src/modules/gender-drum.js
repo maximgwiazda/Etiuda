@@ -50,6 +50,7 @@ function syncGenderGlyph(){
   const tr=d.querySelector(".gd-track");
   if(tr) tr.innerHTML=genderSvg(VAR_GENDERS[(i-1+n)%n],"gd-prev")+genderSvg(s.v,"gd-cur")+genderSvg(VAR_GENDERS[(i+1)%n],"gd-next");
   d.classList.toggle("gd-hand", s.hand);
+  d.classList.toggle("gd-empty", s.empty);
   d.dataset.g=s.v;
   const said=genderSaid(s);
   d.setAttribute("aria-label", t("Customer's gender"));

@@ -4,7 +4,7 @@ import { fillProseIcons } from "./icons.js";
 import { focusFirstEntryOnOpen } from "./on-open.js";
 import { drawIntentRail } from "./rail-list.js";
 import { chordChips } from "./shortcuts.js";
-import { lsGet, lsSet, lsDel, ssGet, ssSet, ssDel } from "./storage.js";
+import { lsGet, lsSet, lsDel, ssGet, ssSet, ssDel, nsGet } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { t, toast } from "./ui-lang.js";
 import { railActive, railWanted, scheduleRailGeometry, syncRailLayout } from "./rail-panel.js";
@@ -16,7 +16,8 @@ import { syncLayoutPrefs, pillsWanted, schedulePillsCollapse } from "./pills-box
 import { closeSettingsMenu, openSettingsMenu } from "./header-menus.js";
 import { wholeThingEmpty } from "./app-state.js";
 import { placeBubble } from "./bubble.js";
-import { eHost, eCatalogFolderShort, eHotkey, eHotkeyLabel, eOpenPicker } from "./host.js";
+import { eHost, eCatalogFolderShort, eCatalogFiles, eFolderCatalogPick, eOnFolderPick, noteCatalogFolderHold, eHotkey, eHotkeyLabel, eOpenPicker } from "./host.js";
+import { hooks } from "./hooks.js";
 import { agentName, setAgentName, keepAgentName, keepTypedName, nameAnswered, nameFieldHtml, wireNameField } from "./agent.js";
 import { esc } from "./esc.js";
 import { cutLeaves, dismissCopy, mgReduceMotion } from "./motion.js";
@@ -132,10 +133,28 @@ function tourRevealCardActions(){
 }
 
 /* The desk's own words for the folder a Load opens, or none in a browser, which has no folder. */
+function sampleLoaded(){
+  return typeof nsGet==="function" && nsGet("Sample")==="1";
+}
+function loadStepPick(){
+  if(typeof eHost==="function" && !eHost()) return null;
+  if(!eCatalogFolderShort()) return null;
+  return typeof eFolderCatalogPick==="function" ? eFolderCatalogPick() : null;
+}
 function loadStepBody(){
   const dir=eCatalogFolderShort();
-  if(!dir) return t("Replies come in a catalog. Click <b>Load catalog file</b> and choose the file. The tour carries on as soon as it is in place, and the catalog stays in this browser, ready whenever you come back.");
-  return t("Replies come in a catalog. Click <b>Load catalog file</b> and choose the team's catalog file in {FOLDER}. The tour carries on as soon as it is in place.")
+  if(!dir) return t("Replies come in a catalog. Click <b>Load catalog file</b> and choose the file; <b>Next</b> stays off until a catalog is in place, and the catalog stays in this browser, ready whenever you come back.");
+  const pick=typeof eFolderCatalogPick==="function" ? eFolderCatalogPick() : null;
+  if(pick && pick.kind==="sample"){
+    return t("Replies come in a catalog. Click <b>Next</b> to open the practice catalog in {FOLDER} and try Etiuda before your team's own arrives, or <b>Load catalog file</b> to choose another.")
+      .split("{FOLDER}").join(esc(dir));
+  }
+  if(pick && pick.file){
+    return t("Replies come in a catalog. Click <b>Next</b> to open {FILE} in {FOLDER}, or <b>Load catalog file</b> to choose another.")
+      .split("{FILE}").join(esc(pick.file))
+      .split("{FOLDER}").join(esc(dir));
+  }
+  return t("Replies come in a catalog. Click <b>Load catalog file</b> and choose the team's catalog file in {FOLDER}; <b>Next</b> stays off until a catalog is in place.")
     .split("{FOLDER}").join(esc(dir));
 }
 /* THE MENU AS IT STANDS: the button while it is shut, and once the person opens it, the row a step
@@ -248,7 +267,7 @@ const TOUR_STEPS=[
     id:"name",
     sel:".brand",
     title:"Welcome to Etiuda",
-    body:"To begin, the name your replies are signed with. Customers see it at the foot of each one, and it can be changed at any time in Settings.",
+    body:"To begin, the name your replies are signed with. Customers see it at the foot of each one, and it can be changed at any time in Settings, under Account.",
     name:true,
     pad:10
   },
@@ -280,7 +299,7 @@ const TOUR_STEPS=[
     tab:"chat",
     title:()=>wheelShown() ? "Customer name and role" : "The customer's name",
     body:()=>wheelShown()
-      ? "The customer's name goes here as the chat gives it, surname and capitals included, and every reply greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>). The wheel beside it says who is on the chat, for internal comments."
+      ? "The customer's name goes here as the chat gives it, surname and capitals included, and every reply greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>). The wheel beside it chooses who in the team this reply names."
       : "The customer's name goes here as the chat gives it, surname and capitals included, and every reply greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>).",
     pad:6
   },
@@ -306,7 +325,12 @@ const TOUR_STEPS=[
     sel:()=>tourPickFirstCard()||$("#list"),
     tab:"chat",
     title:"Cards",
-    body:"A click on a reply copies the whole of it, greeting, name and signature filled in, ready to paste into the chat. A card marked <b>1/2</b> or <b>STEP 1/3</b> holds several, each copied on its own. <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> do the same from the keyboard.",
+    body:()=>{
+      const base=t("A click on a reply copies the whole of it, greeting, name and signature filled in, ready to paste into the chat. A card marked <b>1/2</b> or <b>STEP 1/3</b> holds several, each copied on its own. <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> do the same from the keyboard.");
+      return sampleLoaded()
+        ? base+" "+t("These replies are examples to practise with, not for a live chat.")
+        : base;
+    },
     pad:6,
     prep:()=>{ tourScrollListTop(); tourPickFirstCard(); }
   },
@@ -314,7 +338,7 @@ const TOUR_STEPS=[
     id:"pills",
     sel:"#pills",
     tab:"chat",
-    title:"Category pills",
+    title:"The category bar",
     body:"A click on a category shows only its cards, and <kbd>Ctrl</kbd>+click keeps several. A <b class=\"t-go\">green</b> ring marks one holding a card for the chosen intent, and a <b class=\"t-acc\">blue</b> one a supporting category, useful for any question.",
     pad:8,
     prep:tourEnsurePills
@@ -359,7 +383,7 @@ const TOUR_STEPS=[
     when:cardEditorOpen,
     pad:4,
     title:"The card editor",
-    body:()=>t("<span class=\"t-sec\">Content</span> holds the text in both languages and the internal note; the folds below hold the keywords, the category, the linked intents and the finer settings. <b>Cancel</b> leaves everything as it was.")
+    body:()=>t("<span class=\"t-sec\">Content</span> holds the text in both languages and the internal note; the folds below hold the keywords, the category, the linked intents, the next replies and the advanced settings. <b>Cancel</b> leaves everything as it was.")
       +" "+t("The tour carries on once this window is closed.")
   },
   /* AFTER the editor, not before it: the step above acts on a card that already exists, and this
@@ -479,7 +503,7 @@ const TOUR_STEPS=[
     side:"right",
     pad:6,
     title:"Library",
-    body:"Its parts are on the left: the categories and cards, the intents, and the catalog's files, where a catalog is loaded and your own improvements go out as a file for whoever keeps the wording."
+    body:"Its parts are on the left: <b>Categories & cards</b>, <b>Intents</b>, <b>ROLE suggestions</b> and <b>Catalog & data</b>, where a catalog is loaded and your own improvements go out as a file for whoever keeps the wording."
   },
   {
     id:"libraryList",
@@ -518,13 +542,18 @@ const TOUR_STEPS=[
     side:"right",
     pad:6,
     title:"Settings",
-    body:"The parts are on the left: <b>General</b> for the language, <b>Appearance</b> for the look, and <b>Keyboard shortcuts</b> for every shortcut, Quick replies' included."
+    body:"The parts are on the left: your name is under <b>Account</b>, the language under <b>General</b>, the look under <b>Appearance</b>, and every shortcut, Quick replies' included, under <b>Keyboard shortcuts</b>."
   },
   {
     id:"done",
     sel:".brand",
-    title:"Ready for the first customer",
-    body:"That is the whole tour. <b>Show tour…</b> in the <span data-icon=\"settings\"></span> Menu brings it back, and <b>Settings</b> lists every shortcut.",
+    title:()=>t(sampleLoaded() ? "Ready to practise" : "Ready for the first customer"),
+    body:()=>{
+      const base=t("That is the whole tour. <b>Show tour…</b> in the <span data-icon=\"settings\"></span> Menu brings it back, and <b>Settings</b> lists every shortcut.");
+      return sampleLoaded()
+        ? base+" "+t("Before the first customer, load your team's catalog.")
+        : base;
+    },
     pad:10
   }
 ];
@@ -533,7 +562,20 @@ function stepOn(i){ const s=TOUR_STEPS[i]; return !!s && (!s.when || s.when()) &
 function onFrom(i,dir){ for(let j=i; j>=0 && j<TOUR_STEPS.length; j+=dir) if(stepOn(j)) return j; return -1; }
 /* NEXT ON EVERY STEP, held back only where the steps after need the person's own act (`waits`) and
    its control is on screen. */
-function nextHeld(s){ return !!(s && s.waits) && !!resolveTourTarget(s); }
+function nextHeld(s){
+  if(!s || !s.waits) return false;
+  if(s.id==="load" && loadStepPick()) return false;
+  return !!resolveTourTarget(s);
+}
+function refreshLoadStep(){
+  if(!tourRunning) return;
+  const step=TOUR_STEPS[tourIdx];
+  if(!step || step.id!=="load") return;
+  const els=tourEls();
+  if(els.body){ els.body.innerHTML=t(loadStepBody()); fillProseIcons(els.body); }
+  syncTourNext();
+  scheduleTourPlace();
+}
 function syncTourNext(){
   const els=tourEls(), step=TOUR_STEPS[tourIdx];
   if(!els.next || !step) return;
@@ -801,6 +843,9 @@ function showTourStep(i){
   if(els.body){ els.body.innerHTML=t((typeof step.body==="function"?step.body():step.body)||""); fillProseIcons(els.body); }
   if(els.prev) els.prev.hidden=onFrom(i-1,-1)<0;
   syncTourNext();
+  if(step.id==="load" && !loadStepPick() && typeof eCatalogFiles==="function" && typeof noteCatalogFolderHold==="function"){
+    Promise.resolve(eCatalogFiles()).then(rows=>noteCatalogFolderHold(rows)).catch(()=>{});
+  }
   let nameInp=null;
   if(els.field){
     els.field.hidden=!step.name;
@@ -1078,6 +1123,15 @@ function tourNext(){
   if(!tourRunning) return;
   const step=TOUR_STEPS[tourIdx];
   if(!step || nextHeld(step)) return;
+  const pick=step.id==="load" ? loadStepPick() : null;
+  if(pick){
+    const btn=tourEls().next;
+    if(btn){ if(btn.disabled) return; btn.disabled=true; }
+    Promise.resolve(hooks.loadCatalogFromFolder(pick.file, pick.mtime)).finally(()=>{
+      if(tourRunning && TOUR_STEPS[tourIdx] && TOUR_STEPS[tourIdx].id==="load") syncTourNext();
+    });
+    return;
+  }
   /* The name step's field is its answer: a name given is kept and the question is not asked again;
      left empty, the first signed copy asks, as it would without the tour. */
   if(step.name){
@@ -1116,6 +1170,7 @@ function tourPrev(){
 }
 function wireTourUi(){
   heedJoin();
+  if(typeof eOnFolderPick==="function") eOnFolderPick(refreshLoadStep);
   const els=tourEls();
   if(els.next) els.next.onclick=()=>tourNext();
   if(els.prev) els.prev.onclick=()=>tourPrev();

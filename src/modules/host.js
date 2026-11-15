@@ -158,7 +158,8 @@ function eOnCatalogListing(fn){
    is not the copy Etiuda ships. A later listing replaces that answer. A row with no card count
    still counts, because a caller that hands the listing without one has already decided the file
    is a catalog; a count of -1 is a file that did not read. */
-let folderHold=null;
+let folderHold=null, folderPick=null;
+const folderPickWatchers=[];
 function normFolder(p){
   return String(p||"").replace(/\\/g,"/").replace(/\/+$/,"").toLowerCase();
 }
@@ -176,10 +177,35 @@ function rowHoldsCatalog(f){
   if(f.cards==null) return true;
   return +f.cards>=0;
 }
+function pickFromListing(rows){
+  if(!Array.isArray(rows)) return null;
+  const elig=rows.filter(rowHoldsCatalog);
+  if(!elig.length) return null;
+  const nonSample=elig.filter(f=>!f.sample);
+  const chosen=nonSample.length
+    ? nonSample.slice().sort((a,b)=>(+b.mtime||0)-(+a.mtime||0))[0]
+    : elig.find(f=>f.sample)||null;
+  return chosen ? {kind:chosen.sample?"sample":"file", file:String(chosen.name||""), mtime:+chosen.mtime||0} : null;
+}
+function eFolderCatalogPick(){
+  return folderPick;
+}
+function eOnFolderPick(fn){
+  if(typeof fn==="function") folderPickWatchers.push(fn);
+}
+function samePick(a,b){
+  if(!a && !b) return true;
+  if(!a || !b) return false;
+  return a.kind===b.kind && a.file===b.file && a.mtime===b.mtime;
+}
 /* True when the answer changed, so the empty desk can draw its line again. */
 function noteCatalogFolderHold(rows){
-  const prev=eFolderHoldsCatalog();
+  const prev=eFolderHoldsCatalog(), prevPick=folderPick;
   folderHold=Array.isArray(rows) && rows.some(rowHoldsCatalog);
+  folderPick=pickFromListing(rows);
+  if(!samePick(prevPick, folderPick)){
+    folderPickWatchers.forEach(fn=>{ try{ fn(folderPick); }catch(_){} });
+  }
   return folderHold!==prev;
 }
 /* WHICH FILE IN THAT FOLDER IS THE ONE LOADED, so a list can mark it. The name is written when a
@@ -544,6 +570,8 @@ export {
   eCatalogFiles,
   eOnCatalogListing,
   eFolderHoldsCatalog,
+  eFolderCatalogPick,
+  eOnFolderPick,
   noteCatalogFolderHold,
   eCatalogRing,
   eCatalogLeads,

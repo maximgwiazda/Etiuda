@@ -132,7 +132,7 @@ function toastIfSameCatalog(c){
     toast(t("That file matches the catalog you already have."));
 }
 function loadCatalogFromFolder(name,mtime,desk){
-  eReadCatalogFile(name,desk,true).then(got=>{
+  return eReadCatalogFile(name,desk,true).then(got=>{
     if(!got) return;
     if(!got.text){ toastRefusal(fileReadLine(name, fileReadCode(got))); return; }
     let c=null;
