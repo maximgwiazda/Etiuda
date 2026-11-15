@@ -556,6 +556,7 @@ function runUnitTests() {
   ejectUndoTests();
   tourActTests();
   emptyDeskTests();
+  quickFactsDefaultTests();
   catNowTests();
   deskMarkTests();
   libraryHeadTests();
@@ -951,6 +952,100 @@ function emptyDeskTests() {
   }));
   eq("the empty desk offers Load and no sample button on the desk, from a disk and over a link, in English and in Polish",
     wrong, []);
+}
+
+/* THE EMPTY DESK'S QUICK FACTS TEXT: chosen by host ("on this computer" in the app, "in this browser"
+   in a browser) and translated through the UI language table, while stock.js stays import-free and
+   a catalog's own facts override both. */
+function quickFactsDefaultTests() {
+  const stockSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "stock.js"), "utf8");
+  const factsSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "facts.js"), "utf8");
+  const langSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "ui-lang.js"), "utf8");
+  const plAt = langSrc.indexOf("UI_STRINGS.pl={"), plEnd = langSrc.indexOf("\n};", plAt);
+  const PL = new Function("const UI_STRINGS={};\n" + langSrc.slice(plAt, plEnd + 3) + "\nreturn UI_STRINGS.pl;")();
+  const EN_APP = [
+    "Quick facts are yours to write.",
+    "",
+    "The pencil above opens them for editing:",
+    "fees, deadlines, links, anything used often.",
+    "",
+    "A catalog can bring its own,",
+    "and loading it replaces what is here.",
+    "",
+    "What is typed here stays on this computer.",
+  ].join("\n");
+  const EN_WEB = EN_APP.replace("stays on this computer.", "stays in this browser.");
+  const PL_APP = [
+    "Szybkie fakty można uzupełnić samodzielnie.",
+    "",
+    "Ołówek powyżej otwiera je do edycji:",
+    "opłaty, terminy, odnośniki, wszystko, czego często się używa.",
+    "",
+    "Katalog może zawierać własne,",
+    "a jego wczytanie zastępuje to, co jest tutaj.",
+    "",
+    "To, co się tu wpisze, zostaje na tym komputerze.",
+  ].join("\n");
+  const PL_WEB = PL_APP.replace("zostaje na tym komputerze.", "zostaje w tej przeglądarce.");
+
+  const run = (src, host, lang, packFacts) => {
+    const decls = [
+      extractDecl(stockSrc, "const M="),
+      extractDecl(stockSrc, "const FACTS_BUILT_IN="),
+      extractDecl(stockSrc, "let FACTS="),
+      extractDecl(stockSrc, "let WHO_BASE="),
+      extractDecl(stockSrc, "function setCatalogFacts("),
+      extractDecl(stockSrc, "function resetStock("),
+      src.includes("function defaultFacts(") ? extractDecl(src, "function defaultFacts(") : "",
+      extractDecl(src, "function getFactsText("),
+      extractDecl(src, "function factsIsCustom("),
+    ].filter(Boolean).join("\n");
+    const tr = lang === "pl" ? (s => PL[s] == null ? s : PL[s]) : (s => s);
+    return new Function("pack", "eHost", "t",
+      decls + "\nreturn { getFactsText, factsIsCustom, setCatalogFacts, resetStock };")(
+      { facts: packFacts === undefined ? null : packFacts }, () => !!host, tr);
+  };
+
+  eq("stock.js stays import-free", /^\s*import\b/m.test(stockSrc), false);
+  let got;
+  try {
+    got = [
+      run(factsSrc, true, "en").getFactsText(),
+      run(factsSrc, false, "en").getFactsText(),
+      run(factsSrc, true, "pl").getFactsText(),
+      run(factsSrc, false, "pl").getFactsText(),
+    ];
+  } catch (e) { got = "facts threw: " + e.message; }
+  eq("Quick facts default text matches the copywriter's wording on both hosts and in both languages",
+    got, [EN_APP, EN_WEB, PL_APP, PL_WEB]);
+
+  try {
+    const api = run(factsSrc, true, "pl");
+    api.setCatalogFacts("Free returns.");
+    const cat = api.getFactsText();
+    api.resetStock();
+    const back = api.getFactsText();
+    const same = run(factsSrc, true, "pl", PL_APP).factsIsCustom();
+    const custom = run(factsSrc, true, "pl", "Own notes").factsIsCustom();
+    got = [cat, back, same, custom];
+  } catch (e) { got = "facts threw: " + e.message; }
+  eq("a catalog's own facts override the built-in default across languages, resetStock restores it, and factsIsCustom knows the default from custom text",
+    got, ["Free returns.", PL_APP, false, true]);
+
+  if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  lifting plant:facts-host drops the app-host wording");
+  else {
+    try {
+      const lines = factsSrc.split("\n");
+      const at = lines.findIndex(l => l.indexOf("plant:facts-host") >= 0);
+      if (at < 0) got = "plant:facts-host missing";
+      else {
+        lines.splice(at, 1);
+        const stripped = run(lines.join("\n"), true, "en").getFactsText();
+        got = [stripped.includes("stays on this computer"), stripped.includes("stays in this browser")];
+      }
+    } catch (e) { got = "plant threw: " + e.message; }
+    eq("lifting plant:facts-host turns the app host back to the browser wording", got, [false, true]);
+  }
 }
 
 /* THE TOP BAR NAMES THE LOADED CATALOG'S FILE, extension and all. Maxim, 2026-09-28 17:06: "It's additional

@@ -1,4 +1,4 @@
-import { FACTS } from "./stock.js";
+import { FACTS, FACTS_BUILT_IN } from "./stock.js";
 import { lsGet, lsSet } from "./storage.js";
 import { offerUndo, t, toast } from "./ui-lang.js";
 import { pack, savePack } from "./pack.js";
@@ -7,15 +7,26 @@ import { $, originOf } from "./dom.js";
 import { cutLeaves, dismissCopy } from "./motion.js";
 import { copy } from "./mark.js";
 import { hooks } from "./hooks.js";
+import { eHost } from "./host.js";
 
-// Quick facts: editable personal text (pack.facts); default is built-in FACTS.
+// Quick facts: editable personal text (pack.facts); default is built-in or catalog FACTS.
 // View mode: URL-like tokens are one-click copy (display without https://, copy with).
+/* Built-in Quick facts name where edits live (this computer vs this browser) and follow
+   the desk's UI language; a catalog's own facts replace FACTS and stay as delivered. */
+function defaultFacts(){
+  if(FACTS!==FACTS_BUILT_IN) return FACTS;
+  let host=false;
+  if(eHost()) host=true; /* plant:facts-host */
+  return t(host
+    ? "Quick facts are yours to write.\n\nThe pencil above opens them for editing:\nfees, deadlines, links, anything used often.\n\nA catalog can bring its own,\nand loading it replaces what is here.\n\nWhat is typed here stays on this computer."
+    : "Quick facts are yours to write.\n\nThe pencil above opens them for editing:\nfees, deadlines, links, anything used often.\n\nA catalog can bring its own,\nand loading it replaces what is here.\n\nWhat is typed here stays in this browser.");
+}
 function getFactsText(){
   if(pack && typeof pack.facts==="string") return pack.facts;
-  return FACTS;
+  return defaultFacts();
 }
 function factsIsCustom(){
-  return !!(pack && typeof pack.facts==="string" && pack.facts!==FACTS);
+  return !!(pack && typeof pack.facts==="string" && pack.facts!==defaultFacts());
 }
 function renderFacts(){
   const el=$("#facts");
@@ -60,7 +71,7 @@ function exitFactsEdit(save,discard){
   const ta=$("#factsEdit");
   if(save){
     const next=ta?ta.value:getFactsText();
-    if(next===FACTS) pack.facts=null;
+    if(next===defaultFacts()) pack.facts=null;
     else pack.facts=next;
     savePack();
     renderFacts();
@@ -123,12 +134,12 @@ function wireFactsEditor(){
     pack.facts=null;
     savePack();
     factsDraft=null;
-    if(ta) ta.value=FACTS;
+    if(ta) ta.value=defaultFacts();
     renderFacts();
     setFactsEditMode(false);
     offerUndo("Built-in quick facts restored", ()=>{
       pack.facts=was; savePack();
-      if(ta) ta.value=(was!=null)?was:FACTS;
+      if(ta) ta.value=(was!=null)?was:defaultFacts();
       renderFacts();
     }, null, from);
   };

@@ -5445,6 +5445,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   var stock_exports = {};
   __export(stock_exports, {
     FACTS: () => FACTS,
+    FACTS_BUILT_IN: () => FACTS_BUILT_IN,
     M: () => M,
     WHO_BASE: () => WHO_BASE,
     normWhoList: () => normWhoList,
@@ -5455,11 +5456,13 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   var M = [];
   var FACTS_BUILT_IN = `Quick facts are yours to write.
 
-Use the pencil above to edit it - fees, deadlines, links, anything you use often.
+The pencil above opens them for editing:
+fees, deadlines, links, anything used often.
 
-A catalog can ship its own, and loading it replaces what is here.
+A catalog can bring its own,
+and loading it replaces what is here.
 
-What you type stays in this browser only.`;
+What is typed here stays in this browser.`;
   var FACTS = FACTS_BUILT_IN;
   var WHO_BASE = [];
   function normWhoList(v) {
@@ -8198,6 +8201,8 @@ What you type stays in this browser only.`;
     "Intent panel hidden": "Panel intencji ukryty",
     "Quick facts saved": "Zapisano szybkie fakty",
     "Quick facts match built-in default": "Szybkie fakty zgodne z wbudowanymi",
+    "Quick facts are yours to write.\n\nThe pencil above opens them for editing:\nfees, deadlines, links, anything used often.\n\nA catalog can bring its own,\nand loading it replaces what is here.\n\nWhat is typed here stays on this computer.": "Szybkie fakty można uzupełnić samodzielnie.\n\nOłówek powyżej otwiera je do edycji:\nopłaty, terminy, odnośniki, wszystko, czego często się używa.\n\nKatalog może zawierać własne,\na jego wczytanie zastępuje to, co jest tutaj.\n\nTo, co się tu wpisze, zostaje na tym komputerze.",
+    "Quick facts are yours to write.\n\nThe pencil above opens them for editing:\nfees, deadlines, links, anything used often.\n\nA catalog can bring its own,\nand loading it replaces what is here.\n\nWhat is typed here stays in this browser.": "Szybkie fakty można uzupełnić samodzielnie.\n\nOłówek powyżej otwiera je do edycji:\nopłaty, terminy, odnośniki, wszystko, czego często się używa.\n\nKatalog może zawierać własne,\na jego wczytanie zastępuje to, co jest tutaj.\n\nTo, co się tu wpisze, zostaje w tej przeglądarce.",
     "is now a supporting category": "jest teraz kategorią wspierającą",
     "is an ordinary category": "jest zwykłą kategorią",
     "No {LANG} version for this card": "Ta karta nie ma jeszcze wersji {LANG}",
@@ -10494,7 +10499,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-14";
+  var E_BUILT = "2026-11-15";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -20059,12 +20064,18 @@ What you type stays in this browser only.`;
   }
 
   // src/modules/facts.js
+  function defaultFacts() {
+    if (FACTS !== FACTS_BUILT_IN) return FACTS;
+    let host = false;
+    if (eHost()) host = true;
+    return t(host ? "Quick facts are yours to write.\n\nThe pencil above opens them for editing:\nfees, deadlines, links, anything used often.\n\nA catalog can bring its own,\nand loading it replaces what is here.\n\nWhat is typed here stays on this computer." : "Quick facts are yours to write.\n\nThe pencil above opens them for editing:\nfees, deadlines, links, anything used often.\n\nA catalog can bring its own,\nand loading it replaces what is here.\n\nWhat is typed here stays in this browser.");
+  }
   function getFactsText() {
     if (pack && typeof pack.facts === "string") return pack.facts;
-    return FACTS;
+    return defaultFacts();
   }
   function factsIsCustom() {
-    return !!(pack && typeof pack.facts === "string" && pack.facts !== FACTS);
+    return !!(pack && typeof pack.facts === "string" && pack.facts !== defaultFacts());
   }
   function renderFacts() {
     const el = $("#facts");
@@ -20100,7 +20111,7 @@ What you type stays in this browser only.`;
     const ta = $("#factsEdit");
     if (save) {
       const next = ta ? ta.value : getFactsText();
-      if (next === FACTS) pack.facts = null;
+      if (next === defaultFacts()) pack.facts = null;
       else pack.facts = next;
       savePack();
       renderFacts();
@@ -20175,13 +20186,13 @@ What you type stays in this browser only.`;
       pack.facts = null;
       savePack();
       factsDraft = null;
-      if (ta) ta.value = FACTS;
+      if (ta) ta.value = defaultFacts();
       renderFacts();
       setFactsEditMode(false);
       offerUndo("Built-in quick facts restored", () => {
         pack.facts = was;
         savePack();
-        if (ta) ta.value = was != null ? was : FACTS;
+        if (ta) ta.value = was != null ? was : defaultFacts();
         renderFacts();
       }, null, from);
     };
@@ -28295,7 +28306,7 @@ What you type stays in this browser only.`;
     document.documentElement.lang = uiLang();
     syncSettingsMenu();
     syncShortcutTitles();
-    [applyCatsToGlobal, drawIntentRail, drawPills, drawTabs, syncRoleDrum, syncGenderGlyph, render, paintJoin].forEach((f) => {
+    [applyCatsToGlobal, drawIntentRail, drawPills, drawTabs, syncRoleDrum, syncGenderGlyph, render, paintJoin, renderFacts].forEach((f) => {
       try {
         f();
       } catch (e) {
