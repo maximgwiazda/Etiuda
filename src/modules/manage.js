@@ -1162,16 +1162,37 @@ function applyLibView(page){
     lede.textContent=!sec||q?"":(sec.key==="catmac"&&n)?(n+". "+sec.lede):(sec.key==="intents")?((n?t("Intents: {N}.").replace("{N}",n)+" ":"")+everyLine+sec.lede):sec.lede;
   }
 }
+/* The fades are measured where the page is drawn: the nav and the section shown, or every section a search shows. */
+function markLibCut(page){
+  if(libFold(libQuery)){ markCutText(page); return; }
+  const nav=page.querySelector(".sx-nav"), sec=page.querySelector('details.manage-sec[data-mg="'+libOn+'"]');
+  if(nav) markCutText(nav);
+  if(sec) markCutText(sec);
+}
+/* A section press shows a section the last paint already drew, as Settings' press does, and measures only what it
+   uncovered; false where there is no drawn list to show it in, and the caller paints. */
+function showLibSection(page){
+  if(!page || !page.isConnected || page!==libPage()) return false;
+  applyLibView(page);
+  const at=page.querySelector("#libPage");
+  if(at) at.scrollTop=0;
+  markLibCut(page);
+  if(libOn==="intents") markChipOverflow();
+  if(libOn==="catmac") updateTreeHoverTitles(page);
+  return true;
+}
 function wireLibShell(page){
   if(!page||typeof page.querySelectorAll!=="function") return;
   const buttons=page.querySelectorAll(".sx-sec[data-lm]");
   if(!buttons||!buttons.length) return;
   buttons.forEach(b=>{
     b.onclick=()=>{
+      const wasList=libView==="list" && !libFold(libQuery);
       libView="list";
       libOn=b.getAttribute("data-lm")||libOn;
       libQuery="";
       mgOpen.add(libOn);
+      if(wasList && showLibSection(page)) return;
       paintLibrary();
     };
   });
@@ -1543,6 +1564,9 @@ function libraryHeadHtml(){
 const LIB_SCREEN="library";
 // "list", or "history" while Earlier versions stands in the tab; a fresh open is the list.
 let libView="list";
+/* The list last drawn and the markup it was drawn from. Fronted again with nothing changed, the tab puts that page
+   back rather than drawing it again; any difference in the markup draws it afresh. */
+let libDrawn=null;
 function libHost(){
   if(screenOn!==LIB_SCREEN) return null;
   const host=document.getElementById("screenHost");
@@ -1555,7 +1579,7 @@ function paintLibrary(host,body){
   const isHist=libView==="history";
   const name=catalogFileName();
   const fk=focusKey(document.activeElement,host);
-  host.innerHTML='<div class="sx lm lm-lib lib-screen lib-list'+(isHist?' is-history':'')+'" tabindex="-1">'
+  const html='<div class="sx lm lm-lib lib-screen lib-list'+(isHist?' is-history':'')+'" tabindex="-1">'
     +'<div class="lm-split">'
     +'<nav class="sx-nav" aria-label="'+esc(t("Library"))+'">'+libraryHeadHtml()
     +'<label class="sx-search">'+lmIcon("search")
@@ -1575,18 +1599,31 @@ function paintLibrary(host,body){
         +'<div class="sx-card">'+(body||openManage(true))+'</div></div>')
     +'</div>'
     +(isHist ? '<div class="screen-actions"><div class="mf-left"></div><button type="button" class="btn primary" id="ehClose">'+esc(t("Back to the Library"))+'</button></div>' : '')+'</div>';
-  const page=host.querySelector(".lib-list");
-  if(isHist){
+  const kept=!isHist && libDrawn && libDrawn.html===html && libDrawn.page.isConnected===false ? libDrawn.page : null;
+  if(kept) host.replaceChildren(kept);
+  else host.innerHTML=html;
+  const page=kept || host.querySelector(".lib-list");
+  libDrawn=isHist ? null : { html, page };
+  if(kept){
+    applyLibView(page);
+    const at=page.querySelector("#libPage");
+    if(at) at.scrollTop=0;
+    paintCatalogList();
+    markLibCut(page);
+    updateTreeHoverTitles(page);
+    updateIntentDateTitles(page);
+  } else if(isHist){
     wireLibShell(page);
     openHistory(host.querySelector("#ehView")||host);
     const back=host.querySelector("#ehClose");
     if(back) back.onclick=()=>{ libView="list"; paintLibrary(host); };
   } else {
+    applyLibView(page);
     wireLibrary(page);
     translateTree(page);
     applyLibView(page);
     dressDialogInputs(page);
-    markCutText(page);
+    markLibCut(page);
     updateTreeHoverTitles(page);
     updateIntentDateTitles(page);
   }
@@ -1648,11 +1685,14 @@ function markChipOverflow(){
     intentsList.classList.toggle("chips-narrow", c.room-(aside?0:c.date)<CHIP_COL_NARROW);
   } else if(c.gone) intentsList.classList.add("date-aside");
   updateIntentDateTitles();
+  // Every row read before any is written: a write between two reads lays the page out again for each row.
+  const rows=[];
   intentsList.querySelectorAll(".manage-row.mg-int").forEach(r=>{
     const more=r.querySelector("[data-chips-more]"), mid=r.querySelector(".lw-mid");
     if(!more||!mid) return;
-    const open=r.classList.contains("chips-open");
-    const over=mid.scrollWidth>mid.clientWidth+1;
+    rows.push({ r, more, open:r.classList.contains("chips-open"), over:mid.scrollWidth>mid.clientWidth+1 });
+  });
+  rows.forEach(({ r, more, open, over })=>{
     more.hidden=!open && !over;
     r.classList.toggle("chips-fade", !open && over);
   });
