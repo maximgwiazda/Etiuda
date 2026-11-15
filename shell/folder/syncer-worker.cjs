@@ -46,12 +46,8 @@ const isAllowedPath = S.isAllowedPath;
 function walkFolder(baseDir, sub = "") {
   const out = new Map();
   const current = path.join(baseDir, sub);
-  let entries = [];
-  try {
-    entries = fs.readdirSync(current);
-  } catch {
-    return out;
-  }
+  const entries = S.directoryNames(fs.readdirSync, current);
+  if (entries == null) return null;
   for (const name of entries) {
     if (name.startsWith(".") || name.endsWith(".tmp")) continue;
     const rel = sub ? path.join(sub, name).replace(/\\/g, "/") : name;
@@ -65,9 +61,11 @@ function walkFolder(baseDir, sub = "") {
     if (st.isDirectory && st.isDirectory()) {
       if (sub === "" && (name === "desks" || name === "invites" || name === "catalog-asks")) {
         const inner = walkFolder(baseDir, name);
+        if (inner == null) return null;
         for (const [k, v] of inner.entries()) out.set(k, v);
       } else if (sub === "desks" && /^k-[0-9a-f]{16}$/.test(name)) {
         const inner = walkFolder(baseDir, path.join(sub, name));
+        if (inner == null) return null;
         for (const [k, v] of inner.entries()) out.set(k, v);
       }
     } else {
@@ -111,7 +109,7 @@ function syncOnce() {
     let foundFiles = null;
     try {
       foundFiles = walkFolder(folder);
-      if (!fs.existsSync(folder)) throw new Error("folder not found");
+      if (foundFiles == null || !fs.existsSync(folder)) throw new Error("folder not found");
       if (parentPort) parentPort.postMessage({ type: "status", folder, answers: true });
     } catch (e) {
       if (parentPort) parentPort.postMessage({ type: "status", folder, answers: false });

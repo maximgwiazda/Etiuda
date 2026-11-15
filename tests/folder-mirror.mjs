@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 125;
+const EXPECTED = 128;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const { offWindows } = nodeRequire("./off-windows.cjs");
@@ -3904,6 +3904,122 @@ async function run() {
       return dr1Kept(r) && dr1Faulted(r) && r.row === "" && !r.named;
     });
     check(h.ok, "dr1h lifting plant:own-fault-row leaves the fault off this desk's row: " + JSON.stringify(h));
+  }
+
+  /* r5: a directory that does not list is not an empty share (review 24, finding 5). The mirror keeps every file it had,
+     and this desk's older copy is not written back over the share. */
+  const R5_OWN = "k-" + "ab".repeat(8);
+  const R5_OTHER = "k-" + "cd".repeat(8);
+  async function unreadDesks(mod, name) {
+    const share = folder(name + "-share");
+    const mirror = folder(name + "-mirror");
+    const teamText = JSON.stringify(teamFile({ epoch: 1, rev: 1 }));
+    const put = (dir, rel, text) => {
+      const full = path.join(dir, ...rel.split("/"));
+      fs.mkdirSync(path.dirname(full), { recursive: true });
+      fs.writeFileSync(full, text, "utf8");
+    };
+    put(share, "etiuda-team.json", teamText);
+    put(mirror, "etiuda-team.json", teamText);
+    put(share, "lamp-shop.ec", CAT_A1);
+    put(mirror, "lamp-shop.ec", CAT_A1);
+    put(share, "desks/" + R5_OTHER + "/notes.ec", "{\"kind\":\"other\"}\n");
+    put(mirror, "desks/" + R5_OTHER + "/notes.ec", "{\"kind\":\"other\"}\n");
+    put(share, "desks/" + R5_OWN + "/mine.ec", "{\"kind\":\"share-newer\"}\n");
+    put(mirror, "desks/" + R5_OWN + "/mine.ec", "{\"kind\":\"mirror-older\"}\n");
+    const desks = path.join(share, "desks");
+    const io = {
+      readdir: (d) => {
+        if (path.resolve(d).toLowerCase() === path.resolve(desks).toLowerCase()) {
+          const err = new Error("unreadable"); err.code = "EPERM"; throw err;
+        }
+        return fs.readdirSync(d);
+      },
+      stat: (p) => fs.statSync(p),
+      readFile: (p, enc) => fs.readFileSync(p, enc),
+      writeFile: (p, data) => fs.writeFileSync(p, data),
+      unlink: (p) => fs.unlinkSync(p),
+      mkdir: (d) => fs.mkdirSync(d, { recursive: true }),
+      exists: (p) => fs.existsSync(p),
+      rename: (a, b) => fs.renameSync(a, b)
+    };
+    const answers = [];
+    const prog = mod.createFolderProgram({
+      team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks, own: R5_OWN, io, logger: () => {},
+      onStatus: (s) => answers.push(!!s.answers)
+    });
+    try {
+      prog.syncOnce(); prog.syncOnce(); prog.syncOnce();
+    } finally { prog.stop(); }
+    const other = path.join(mirror, "desks", R5_OTHER, "notes.ec");
+    const mine = path.join(share, "desks", R5_OWN, "mine.ec");
+    return {
+      quiet: answers.length === 3 && answers.every(a => a === false),
+      otherKept: fs.existsSync(other),
+      shareKept: fs.existsSync(mine) && fs.readFileSync(mine, "utf8") === "{\"kind\":\"share-newer\"}\n"
+    };
+  }
+  {
+    const g = await unreadDesks(syncerMod, "r5a");
+    check(g.quiet && g.otherKept && g.shareKept,
+      "r5a a desks directory that does not list is not an answered empty subtree: the mirror keeps the other desk's file and this desk's older copy is not written over the share: "
+      + JSON.stringify(g));
+  }
+  {
+    const aside = offWindows("r5b", "the worker's refused list is made with icacls, which this leg does not run off Windows");
+    if (aside) skip(aside);
+    else {
+      const share = folder("r5b-share");
+      const mirror = folder("r5b-mirror");
+      const teamText = JSON.stringify(teamFile({ epoch: 1, rev: 1 }));
+      const put = (dir, rel, text) => {
+        const full = path.join(dir, ...rel.split("/"));
+        fs.mkdirSync(path.dirname(full), { recursive: true });
+        fs.writeFileSync(full, text, "utf8");
+      };
+      put(share, "etiuda-team.json", teamText);
+      put(mirror, "etiuda-team.json", teamText);
+      put(share, "lamp-shop.ec", CAT_A1);
+      put(mirror, "lamp-shop.ec", CAT_A1);
+      put(share, "desks/" + R5_OTHER + "/notes.ec", "{\"kind\":\"other\"}\n");
+      put(mirror, "desks/" + R5_OTHER + "/notes.ec", "{\"kind\":\"other\"}\n");
+      put(share, "desks/" + R5_OWN + "/mine.ec", "{\"kind\":\"share-newer\"}\n");
+      put(mirror, "desks/" + R5_OWN + "/mine.ec", "{\"kind\":\"mirror-older\"}\n");
+      const desks = path.join(share, "desks");
+      const user = os.userInfo().username;
+      const icacls = nodeRequire("node:child_process").execFileSync;
+      const answers = [];
+      let scans = 0;
+      let ctl = null;
+      try {
+        icacls("icacls", [desks, "/deny", user + ":(RD)"], { windowsHide: true });
+        ctl = new syncerMod.FolderSyncerController({
+          team: TEAM, folder: share, mirror, pin: LEAD, keyFor: () => K1, checks, own: R5_OWN, pollMs: 80, logger: () => {},
+          onStatus: (s) => answers.push(!!s.answers)
+        });
+        const apply = ctl.program.applyScan;
+        ctl.program.applyScan = (msg) => { scans++; return apply(msg); };
+        ctl.start();
+        const until = Date.now() + 3000;
+        while (answers.length < 3 && Date.now() < until) await new Promise(r => setTimeout(r, 40));
+      } finally {
+        if (ctl) ctl.stop();
+        try { icacls("icacls", [desks, "/remove:d", user], { windowsHide: true }); } catch { /* the deny may already be gone */ }
+      }
+      const otherKept = fs.existsSync(path.join(mirror, "desks", R5_OTHER, "notes.ec"));
+      const shareKept = fs.readFileSync(path.join(share, "desks", R5_OWN, "mine.ec"), "utf8") === "{\"kind\":\"share-newer\"}\n";
+      check(answers.length >= 3 && answers.every(a => a === false) && scans === 0 && otherKept && shareKept,
+        "r5b the worker posts a desks directory that does not list as no answer, and neither the mirror nor this desk's share file is rewritten: "
+        + JSON.stringify({ answers: answers.slice(0, 4), scans, otherKept, shareKept }));
+    }
+  }
+  if (PLANTS_OFF) skip("r5c lifting plant:listing-unreadable answers an unreadable desks directory and rewrites the share: NOT RUN");
+  else {
+    const planted = await testPlant("listing-unreadable", syncerFile, async (scratch) => {
+      const got = await unreadDesks(nodeRequire(scratch), "r5c");
+      return !got.quiet || !got.otherKept || !got.shareKept;
+    });
+    check(planted.ok, "r5c lifting plant:listing-unreadable answers an unreadable desks directory and rewrites the share: " + JSON.stringify(planted));
   }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {

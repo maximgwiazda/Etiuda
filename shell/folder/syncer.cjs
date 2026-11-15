@@ -130,6 +130,17 @@ function headGenuine(doc, pin) {
   } catch { return false; }
 }
 
+/* Null where the directory did not list. An empty list is a directory that answered and held nothing, so a caller
+   that treated the two the same would take a share it could not read for an empty one. */
+function directoryNames(readDir, dir) {
+  let entries = [];
+  let unread = false;
+  try { entries = readDir(dir); }
+  catch { unread = true; }
+  if (unread) return null; /* plant:listing-unreadable */
+  return entries;
+}
+
 function isAllowedPath(rel) {
   const norm = String(rel || "").replace(/\\/g, "/");
   const parts = norm.split("/");
@@ -950,16 +961,8 @@ function createFolderProgram(opts) {
   function walkFolder(baseDir, sub = "") {
     const out = new Map();
     const current = path.join(baseDir, sub);
-    let entries = [];
-    if (sub === "") {
-      entries = io.readdir(current);
-    } else {
-      try {
-        entries = io.readdir(current);
-      } catch {
-        return out;
-      }
-    }
+    const entries = directoryNames(io.readdir, current);
+    if (entries == null) return null;
     for (const name of entries) {
       if (name.startsWith(".") || name.endsWith(".tmp")) continue;
       const rel = sub ? path.join(sub, name).replace(/\\/g, "/") : name;
@@ -973,9 +976,11 @@ function createFolderProgram(opts) {
       if (st.isDirectory && st.isDirectory()) {
         if (sub === "" && (name === "desks" || name === "invites" || name === "catalog-asks")) {
           const inner = walkFolder(baseDir, name);
+          if (inner == null) return null;
           for (const [k, v] of inner.entries()) out.set(k, v);
         } else if (sub === "desks") {
           const inner = walkFolder(baseDir, path.join(sub, name));
+          if (inner == null) return null;
           for (const [k, v] of inner.entries()) out.set(k, v);
         }
       } else {
@@ -1667,7 +1672,7 @@ function createFolderProgram(opts) {
     let foundFiles = null;
     try {
       foundFiles = walkFolder(folder);
-      if (!io.exists(folder)) throw new Error("listing failed");
+      if (foundFiles == null || !io.exists(folder)) throw new Error("listing failed");
     } catch (e) {
       return applyScan({ answers: false, listing: [], staged: [] });
     }
@@ -2019,6 +2024,7 @@ module.exports = {
   flushFolderSyncers,
   folderMirrorOf,
   isAllowedPath,
+  directoryNames,
   noteOwed,
   owedAt,
   takenBackList,
