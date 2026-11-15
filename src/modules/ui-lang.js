@@ -1465,6 +1465,8 @@ UI_STRINGS.pl={
   "Decide\u2026":"Zdecyduj\u2026",
   "Syncing now, with what was already on this desk.":"Synchronizacja trwa, razem z tym, co już było na tym stanowisku.",
   "This desk now has your account's content. What was here before is kept on this computer, in Etiuda's \"Set aside\" folder, and is never uploaded.":"To stanowisko ma teraz zawartość tego konta. Poprzednia zawartość jest zachowana na tym komputerze, w folderze Etiudy \"Set aside\", i nigdy nie jest wysyłana.",
+  "That folder is no longer where it was kept, so nothing was opened.":"Tego folderu nie ma już tam, gdzie go zachowano, więc niczego nie otwarto.",
+  "This computer did not open the folder just now. Pressing the button again tries again.":"Ten komputer nie otworzył teraz folderu. Można spróbować ponownie, klikając przycisk jeszcze raz.",
   "Your organisation has not turned this on.":"Organizacja nie włączyła tej funkcji.",
   "Paused since {DATE}. It resumes when this computer reaches our service.":"Wstrzymana od {DATE}. Zostanie wznowiona, gdy komputer połączy się z naszą usługą.",
   "Sync is full, so new changes stay on this computer until something is removed.":"Miejsce na synchronizację jest pełne, więc nowe zmiany zostają na tym komputerze, dopóki czegoś się nie usunie.",

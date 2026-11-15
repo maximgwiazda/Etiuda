@@ -64,11 +64,14 @@ function eOpenCatalogFolder(){
 function eOpenSetAside(){
   const h=eHost();
   if(!h || typeof h.openSetAside!=="function") return Promise.resolve(false);
-  const say=()=>{ toastRefusal(t("This computer did not open the team's folder just now. The same link tries again.")); };
+  const say=why=>{
+    if(why==="gone") toastRefusal(t("That folder is no longer where it was kept, so nothing was opened."));
+    else if(why==="could-not-open") toastRefusal(t("This computer did not open the folder just now. Pressing the button again tries again."));
+  };
   try{
     return Promise.resolve(h.openSetAside()).then(v=>{
       if(v===true) return true;
-      if(v && typeof v==="object" && v.ok===false){ say(); return false; }
+      if(v && typeof v==="object" && v.ok===false){ say(String(v.why||"")); return false; }
       return false;
     }).catch(()=>false);
   }catch(e){ return Promise.resolve(false); }

@@ -38,7 +38,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 21;
+const EXPECTED = 23;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const STORE = path.join(E.ROOT, "shell", "sync", "store.cjs");
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -565,6 +565,52 @@ async function main() {
     check(ok, "c9i Open this folder calls openSetAside with no args and shows a refusal toast when the folder is gone", ok ? undefined : r);
   }
 
+  /* c9j: Open this folder refusal toasts say the copywriter's words per reason (gone vs could-not-open) in EN and PL, never the team's-folder line. */
+  const checkOpenSetAsideRefusal = async pageName => {
+    const want = {
+      en: {
+        gone: "That folder is no longer where it was kept, so nothing was opened.",
+        "could-not-open": "This computer did not open the folder just now. Pressing the button again tries again.",
+      },
+      pl: {
+        gone: "Tego folderu nie ma już tam, gdzie go zachowano, więc niczego nie otwarto.",
+        "could-not-open": "Ten komputer nie otworzył teraz folderu. Można spróbować ponownie, klikając przycisk jeszcze raz.",
+      },
+    };
+    const bad = [];
+    for (const [lang, theme] of [["en", "light"], ["pl", "dark"]]) {
+      const p = await boot({ page: pageName, lang, theme, view: ASK_NOW });
+      try {
+        await sleep(350);
+        await p.evaluate(() => { const bs = [...document.querySelectorAll("#eSyncWhose button")]; if (bs[1]) bs[1].click(); });
+        await sleep(250);
+        for (const why of ["gone", "could-not-open"]) {
+          await p.evaluate(w => {
+            const el = document.getElementById("toast");
+            if (el) { el.className = "toast"; el.textContent = ""; }
+            window.__st.openAsideResult = { ok: false, why: w };
+            const b = document.querySelector("#eSyncChoiceNote button:not(.primary)");
+            if (b) b.click();
+          }, why);
+          await sleep(200);
+          const got = await p.evaluate(() => {
+            const el = document.getElementById("toast");
+            return { shown: !!(el && el.classList.contains("show")), refusal: !!(el && el.classList.contains("refusal")), text: el ? (el.textContent || "").trim() : "" };
+          });
+          if (!got.shown || !got.refusal || got.text !== want[lang][why]
+            || /team's folder|folderu zespołu|same link|odnośnik/i.test(got.text)) {
+            bad.push({ lang, why, got, expected: want[lang][why] });
+          }
+        }
+      } finally { await p.close(); }
+    }
+    return bad;
+  };
+  {
+    const bad = await checkOpenSetAsideRefusal("etiuda.html");
+    check(!bad.length, "c9j Open this folder refusal lines distinguish gone and could-not-open in EN and PL without the team's-folder text", bad.length ? bad : undefined);
+  }
+
   /* r1: storeRow, and roomNext. */
   const rowBad = ST => {
     const now = Date.UTC(2026, 10, 20), D = 24 * 3600 * 1000;
@@ -666,6 +712,21 @@ async function main() {
       detail = red ? "red: calls=" + JSON.stringify(r.calls) : "still held";
       check(red, "p c9i leaving eOpenSetAside out turns c9i red", detail);
     } else check(false, "p c9i leaving eOpenSetAside out turns c9i red", detail);
+  }
+  if (PLANTS_OFF) skip("p c9j saying one refusal line for both reasons turns c9j red");
+  else {
+    const REFUSAL_PLANT = [
+      'else if (why === "could-not-open") toastRefusal(t("This computer did not open the folder just now. Pressing the button again tries again."));',
+      'else if (why === "could-not-open") toastRefusal(t("That folder is no longer where it was kept, so nothing was opened."));',
+    ];
+    const n = PAGE.split(REFUSAL_PLANT[0]).length - 1;
+    let detail = "the plant's anchor is there " + n + " times";
+    if (n === 1) {
+      fs.writeFileSync(path.join(lab, "planted-aside-refusal.html"), PAGE.split(REFUSAL_PLANT[0]).join(REFUSAL_PLANT[1]));
+      const bad = await checkOpenSetAsideRefusal("planted-aside-refusal.html");
+      detail = bad.length ? "red: " + JSON.stringify(bad[0]) : "still held";
+      check(bad.length > 0, "p c9j saying one refusal line for both reasons turns c9j red", detail);
+    } else check(false, "p c9j saying one refusal line for both reasons turns c9j red", detail);
   }
   if (PLANTS_OFF) skip("p c9d firstSay saying at a look that did not make the store turns c9d red");
   else {
