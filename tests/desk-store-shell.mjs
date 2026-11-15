@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 79;
+const EXPECTED = 81;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -191,10 +191,10 @@ function worldOf(o) {
 /* ---- the shell, evaluated whole: `src` is shell/main.js's text or a planted copy of it ---- */
 /* What the leg reads from main.js, appended to its text; a name main.js lacks comes back undefined, so its leg fails alone. */
 const TAIL_NAMES = ["storeView", "storeRoom", "storeSetNow", "storeState", "signinRun", "signinRenew", "signinIo", "signinRenewNow", "signinServiceAsk", "storeServiceAt", "storeOnFor", "storeTurn", "branchIdentity", "signinState", "patchDesk", "storeForget", "signinLandingHtml", "signinListen",
-  "signinOutNow", "storeLeaveNow"];
+  "signinOutNow", "storeLeaveNow", "storeSyncApply"];
 const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing", "storeConsentFlight"];
 const TAIL = "\n__test.T = {" + TAIL_NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
-  + ", get: () => ({" + TAIL_STATE.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "}) };";
+  + ", setJoin: v => { teamJoin = v; }, get: () => ({" + TAIL_STATE.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "}) };";
 function boot(src, o) {
   const opt = o || {};
   const UD = fs.mkdtempSync(path.join(WORK, "ud-"));
@@ -373,6 +373,29 @@ async function syncScene(src) {
   const stopped = !!sync && !sync.running();
   const ok = !!r.now && r.now.state === "on" && running && sent >= 1 && ledger.indexOf("k:eTheme") >= 0 && ledger.indexOf("k:eTeamKeys") < 0 && clear === 0 && stopped;
   return { ok, detail: brief({ state: r.now && r.now.state, running, sent, ledger, clear, stopped }) };
+}
+
+/* (gt) A TEAM'S FOLDER IS NOT THE PERSON'S: joined to a folder team, the catalog folder is the team's mirror; the store's sync neither
+   takes the team's root catalog into the person's store, nor reads the person's own catalog as removed, nor writes a catalog from the
+   store into the team's mirror. */
+async function teamFolderScene(src) {
+  const r = await renewScene(src), T = r.shell.T, sync = T.get().storeSyncing;
+  const own = path.join(r.shell.UD, "Etiuda");
+  fs.mkdirSync(own, { recursive: true });
+  fs.writeFileSync(path.join(own, "Own.ec"), JSON.stringify({ kind: "etiuda-catalog", format: 2, id: "own" }));
+  if (sync) sync.merge();
+  const before = sync ? Object.assign({}, sync.state().ledger["f:Own.ec"] || {}) : {};
+  T.setJoin({ team: "t-folder-team" });
+  const mirror = path.join(r.shell.UD, "folder-mirror", "t-folder-team");
+  fs.mkdirSync(mirror, { recursive: true });
+  fs.writeFileSync(path.join(mirror, "Team.ec"), JSON.stringify({ kind: "etiuda-catalog", format: 2, id: "team" }));
+  if (sync) sync.merge();
+  const ledger = sync ? sync.state().ledger : {};
+  const failed = T.storeSyncApply({ "f:From the store.ec": "{}" }, []);
+  const inMirror = fs.readdirSync(mirror).sort();
+  const ok = !!sync && !!before.h && !ledger["f:Team.ec"] && !!ledger["f:Own.ec"] && ledger["f:Own.ec"].h === before.h && inMirror.join() === "Team.ec"
+    && Array.isArray(failed) && failed.join() === "f:From the store.ec";
+  return { ok, detail: brief({ ownTaken: !!before.h, teamTaken: !!ledger["f:Team.ec"], ownRemoved: !!ledger["f:Own.ec"] && ledger["f:Own.ec"].h === null, inMirror, failed }) };
 }
 
 /* (d4f) The page's view and the switch: the first look that made the store says "on" once; This computer forgets the keys and ends
@@ -875,6 +898,7 @@ const LEGS = [
   ["gc", conflictsScene, "the versions the sync keeps for the person's choice are the row's conflict count: one kept reads conflict, none reads on"],
   ["gs", switchStopScene, "This computer and Everywhere stop the store's sync at once, the relay unreached, not at the next look"],
   ["gr", roomWireScene, "a write the store's relay refuses for its room turns the row full, and the next write it takes turns it on"],
+  ["gt", teamFolderScene, "joined to a folder team, the store's sync takes no team catalog into the person's store, reads the person's own catalog as removed nowhere, and writes nothing from the store into the team's mirror"],
   ["w1", s => anotherScene(s, "look", true), "person A synced and signed out, which leaves no store keys here; person B seated on the same profile with an empty folder: B's look writes nothing of A's K or S into B's folder and makes B's own store"],
   ["w1d", s => anotherScene(s, "look", false), "the same where B signs in straight over A's sign-in"],
   ["w2", s => anotherScene(s, "leave", false), "a This computer A left owed is not written into B's folder with A's keys"],
@@ -932,6 +956,7 @@ const PLANTS = [
   ["gc", swap("function storeConflicts() { return storeSyncView().kept; } /* plant:store-conflicts */", "function storeConflicts() { return 0; } /* plant:store-conflicts */"), "the row counts no conflict"],
   ["gs", swap("  storeSyncStop(); /* plant:store-set-stop */\n", ""), "the switch leaves the sync running"],
   ["gr", swap("      room: storeRoom, /* plant:store-room */\n", ""), "the store's channel tells the row nothing"],
+  ["gt", swap("if (sayJoinPolicy().folder || relayHere() || folderTeamHere() || Object.keys(teamNeedsFolder).length) return \"\"; /* plant:sync-team-folder */", "if (false) return \"\"; /* plant:sync-team-folder */"), "the store's sync lists and writes the team's mirror as the person's folder"],
   ["w1", swap("  if (s.keys || s.leave || storeLeaveHere) {", "  if (false) {"), "a sign-out leaves the store's keys in store.json"],
   ["w1d", swap("  if (s.who === who) return true; /* plant:store-mine */", "  if (true) { s.who = who; return true; } /* plant:store-mine */"), "the keys kept for A are B's"],
   ["w2", swap("  if (s.who === who) return true; /* plant:store-mine */", "  if (true) { s.who = who; return true; } /* plant:store-mine */"), "the leave kept for A is B's"],

@@ -11514,15 +11514,23 @@ function storeSyncOf() {
   });
   return storeSyncing;
 }
-/* This desk's items that follow: its desk keys, and the catalog files at the top of its catalog folder. Null while that folder
-   does not answer, so a folder out of reach is never read as every catalog removed; what is left out for its size is named in
-   storeSyncHeld, so the merge leaves it as it stood. */
+/* The person's own catalog folder, or "" while the catalog folder is a team's (its mirror, its share, a folder policy names): a
+   team's catalogs never enter the person's store and the person's never reach the team, the catalog files waiting meanwhile. */
+function storeSyncFolder() {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  if (sayJoinPolicy().folder || relayHere() || folderTeamHere() || Object.keys(teamNeedsFolder).length) return ""; /* plant:sync-team-folder */
+  return catalogFolder();
+}
+/* This desk's items that follow: its desk keys, and the catalog files at the top of the person's own catalog folder. Null while that
+   folder does not answer, so a folder out of reach is never read as every catalog removed; what is left out (for its size, or every
+   catalog file while the folder is a team's) is named in storeSyncHeld, so the merge leaves it as it stood. */
 let storeSyncHeld = [];
 function storeSyncLocal() {
   if (deskKeys === undefined) deskKeys = readDesk();
-  const dir = catalogFolder(), files = {}, L = SyncLib(), held = [];
+  const dir = storeSyncFolder(), files = {}, L = SyncLib(), held = [];
   storeSyncHeld = held;
-  if (!dir || !folderAnswers(dir)) return null;
+  if (!dir) { held.push("f:"); return L.localItems(deskKeys, {}, held); }
+  if (!folderAnswers(dir)) return null;
   let names = [];
   try { names = fs.readdirSync(dir); } catch (e) { if (e.code !== "ENOENT") return null; }
   for (const n of names) {
@@ -11560,8 +11568,9 @@ function deskSyncedTell(keys) {
 /* A catalog file from another computer, into the catalog folder; one removed there is moved aside under userData\store\kept,
    never deleted. False where it could not be put in place; a removal of a file already gone is done. */
 function storeSyncFile(name, text) {
-  if (!SyncLib().CATALOG_RE.test(name)) return false;
-  const dir = catalogFolder(), at = path.join(dir, name);
+  const dir = storeSyncFolder();
+  if (!dir || !SyncLib().CATALOG_RE.test(name)) return false;
+  const at = path.join(dir, name);
   try {
     if (text === null) {
       fs.mkdirSync(storeSyncDir("kept"), { recursive: true });
