@@ -28444,6 +28444,7 @@ What is typed here stays in this browser.`;
   function markTourDone() {
     lsSet(tourStorageKey(), "1");
     lsSet(tourInviteKey(), "1");
+    lsDel(TOUR_AT);
   }
   function markTourInviteDismissed() {
     lsSet(tourInviteKey(), "1");
@@ -29165,6 +29166,8 @@ What is typed here stays in this browser.`;
     if (step.id !== "pickerIn") tourPickerOpened = false;
     const els = tourEls();
     ssSet(TOUR_AT, step.id);
+    if (i > onFrom(0, 1)) lsSet(TOUR_AT, step.id);
+    else lsDel(TOUR_AT);
     if (!step.menu) closeSettingsMenu();
     runTourStepUndo();
     tourSection(step);
@@ -29223,6 +29226,17 @@ What is typed here stays in this browser.`;
     else clearTourFocus();
   }
   var tourNameWas = false;
+  function tourResumeAt() {
+    const id = lsGet(TOUR_AT);
+    if (!id) return -1;
+    let i = TOUR_STEPS.findIndex((x) => x.id === id);
+    if (i < 0) return -1;
+    if (TOUR_STEPS[i].id === "editor" || TOUR_STEPS[i].id === "addIn" || TOUR_STEPS[i].id === "factsIn") i++;
+    i = onFrom(i, 1);
+    const L = TOUR_STEPS.findIndex((x) => x.id === "load");
+    if (i > L && stepOn(L)) i = L;
+    return i;
+  }
   function startTour(from, auto) {
     if (!auto) {
       closeSettingsMenu();
@@ -29231,7 +29245,8 @@ What is typed here stays in this browser.`;
     }
     const els = tourEls();
     if (!els.root) return;
-    let i = onFrom(Math.max(0, from | 0), 1);
+    const r = from == null ? tourResumeAt() : Math.max(0, from | 0);
+    let i = onFrom(r >= 0 ? r : 0, 1);
     const L = TOUR_STEPS.findIndex((x) => x.id === "load");
     if (i > L && stepOn(L)) i = L;
     if (i < 0) {
