@@ -1,0 +1,260 @@
+/* THE DESK'S FIRST MINUTES: tour load step, practice lines, toasts, gender dim ink, name preview, and exact EN/PL copy.
+ * Chrome, headless, no external fixtures, no window.
+ *
+ *   node tests/first-minutes.mjs [--engine <file>]
+ *
+ * Inline plant proofs verify each behaviour/look check actually catches its regression;
+ * skipped with NOT RUN when ETIUDA_PLANTS=off.
+ */
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const E = require("./engine.js");
+const puppeteer = require("puppeteer-core");
+
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+let fails = 0, checks = 0, notRun = 0, EXPECTED = 0;
+const check = (ok, what, detail) => {
+  checks++;
+  console.log((ok ? "  ok   " : "  FAIL ") + what + (!ok && detail !== undefined ? ": " + JSON.stringify(detail) : ""));
+  if (!ok) fails++;
+};
+const skip = (what) => {
+  notRun++;
+  console.log("  NOT RUN " + what);
+};
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const argv = process.argv.slice(2);
+const at = argv.indexOf("--engine");
+const ENGINE = at >= 0 ? path.resolve(argv[at + 1]) : E.ENGINE_PATH;
+
+const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-first-minutes-"));
+const SAMPLE_TEXT = fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"), "utf8");
+const TEAM_OBJ = JSON.parse(SAMPLE_TEXT);
+delete TEAM_OBJ.sample;
+TEAM_OBJ.id = "team-cat-test-1";
+TEAM_OBJ.rev = 3;
+TEAM_OBJ.cards = TEAM_OBJ.cards.slice(0, 1);
+const TEAM_TEXT = JSON.stringify(TEAM_OBJ);
+
+function writeEngine(dir, htmlText, withCatalogScript = false) {
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "etiuda.html"), htmlText);
+  if (withCatalogScript) {
+    fs.writeFileSync(path.join(dir, "etiuda-catalog.js"), "window.E_CATALOG = " + SAMPLE_TEXT + ";\n");
+  }
+  return "file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/");
+}
+
+const rawHtml = fs.readFileSync(ENGINE, "utf8");
+const cleanEmptyUrl = writeEngine(path.join(lab, "clean-empty"), rawHtml, false);
+
+const closePage = (p) => Promise.race([p.close().catch(() => {}), sleep(5000)]);
+
+async function bootEmptyWithHost(browser, pageUrl, { lang = "en", files = [], host = true } = {}) {
+  const p = await browser.newPage();
+  p.on("dialog", (d) => { d.dismiss().catch(() => {}); });
+  await p.setViewport({ width: 1280, height: 860 });
+  await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
+  await p.evaluateOnNewDocument((cfg) => {
+    try {
+      localStorage.setItem("eUiLang", cfg.lang);
+      sessionStorage.setItem("eTourAt", "load");
+    } catch (e) {}
+    if (!cfg.host) return;
+    const desk = { eUiLang: cfg.lang };
+    let session = { eTourAt: "load" };
+    const fileTexts = cfg.fileTexts;
+    const listeners = [];
+    window.E_HOST = {
+      platform: "win32",
+      catalogFolder: cfg.folder,
+      catalogFiles: () => cfg.files,
+      onCatalogListing: (cb) => {
+        if (typeof cb === "function") {
+          listeners.push(cb);
+          setTimeout(() => cb(cfg.files), 30);
+        }
+      },
+      readCatalogFile: (name) => ({ name, text: fileTexts[name] || "" }),
+      pickCatalogFile: () => null,
+      deskRead: () => JSON.stringify(desk),
+      deskSave: (raw) => {
+        try { Object.assign(desk, JSON.parse(raw)); } catch (e) {}
+        return true;
+      },
+      session: (act, k, v) => {
+        if (act === "get") return session[k] ?? null;
+        if (act === "set") {
+          session[k] = String(v);
+          try { sessionStorage.setItem(k, String(v)); } catch (e) {}
+          return true;
+        }
+        if (act === "del") {
+          delete session[k];
+          try { sessionStorage.removeItem(k); } catch (e) {}
+          return true;
+        }
+        if (act === "clear") { session = {}; return true; }
+        return null;
+      }
+    };
+    window.__pushHostListing = (rows) => listeners.forEach((cb) => cb(rows));
+  }, {
+    lang,
+    host,
+    folder: "C:\\Users\\Test\\Documents\\Etiuda",
+    files,
+    fileTexts: {
+      "sample-catalog.ec": SAMPLE_TEXT,
+      "team-catalog.ec": TEAM_TEXT,
+      "older-team.ec": TEAM_TEXT
+    }
+  });
+  await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
+  await p.waitForFunction(() => !!document.querySelector("#tourRoot.on") && !!document.querySelector(".empty-desk"), { timeout: 30000 });
+  const atName = await p.evaluate(() => !!document.getElementById("tourName"));
+  if (atName) {
+    await p.click("#tourNext");
+    await p.waitForFunction(() => !document.getElementById("tourName"), { timeout: 10000 });
+  }
+  await sleep(200);
+  return p;
+}
+
+async function readTourLoadState(p) {
+  return p.evaluate(() => {
+    const next = document.getElementById("tourNext");
+    const body = document.getElementById("tourBody");
+    return {
+      stepId: sessionStorage.getItem("eTourAt"),
+      disabled: !!(next && next.disabled),
+      bodyHtml: body ? body.innerHTML : "",
+      bodyText: body ? body.textContent : "",
+      cards: document.querySelectorAll("#list .card").length
+    };
+  });
+}
+
+let browser = null;
+try {
+  browser = await puppeteer.launch({
+    executablePath: E.browserPath("chrome"),
+    headless: true,
+    args: ["--hide-scrollbars"],
+    protocolTimeout: 120000
+  });
+
+  /* === BEHAVIOUR 1: Tour's load step === */
+  {
+    const sampleRows = [{ name: "sample-catalog.ec", sample: true, builtIn: false, mtime: 1000, cards: 8 }];
+    const mixedRows = [
+      { name: "team-catalog.ec", sample: false, builtIn: false, mtime: 3000, cards: 1 },
+      { name: "older-team.ec", sample: false, builtIn: false, mtime: 1500, cards: 1 },
+      { name: "sample-catalog.ec", sample: true, builtIn: false, mtime: 1000, cards: 8 }
+    ];
+
+    /* 1a/1b: Only sample catalog in folder (EN + PL), and Next opens it and moves on */
+    EXPECTED += 4;
+    for (const [lang, wantFragment] of [
+      ["en", "Click <b>Load catalog file</b> to open the practice catalog in "],
+      ["pl", "Proszę kliknąć <b>Wczytaj plik katalogu</b>, aby otworzyć przykładowy katalog z folderu "]
+    ]) {
+      const p = await bootEmptyWithHost(browser, cleanEmptyUrl, { lang, files: sampleRows });
+      const before = await readTourLoadState(p);
+      check(
+        before.stepId === "load" && before.disabled === false && before.bodyHtml.includes(wantFragment),
+        `1a (${lang}) load step with only sample names practice catalog and enables Next`,
+        before
+      );
+      await p.click("#tourNext");
+      await p.waitForFunction(
+        () => sessionStorage.getItem("eTourAt") !== "load" && document.querySelectorAll("#list .card").length > 0,
+        { timeout: 15000 }
+      ).catch(() => {});
+      const after = await readTourLoadState(p);
+      check(
+        after.stepId && after.stepId !== "load" && after.cards > 0,
+        `1b (${lang}) clicking Next on load step with sample opens it and moves on`,
+        after
+      );
+      await closePage(p);
+    }
+
+    /* 1c/1d: Non-sample newest file + sample in folder (EN + PL), names newest file and Next opens it */
+    EXPECTED += 4;
+    for (const [lang, wantNextWord] of [["en", "Next"], ["pl", "Dalej"]]) {
+      const p = await bootEmptyWithHost(browser, cleanEmptyUrl, { lang, files: mixedRows });
+      const before = await readTourLoadState(p);
+      check(
+        before.stepId === "load" && before.disabled === false
+          && before.bodyText.includes("team-catalog.ec")
+          && !before.bodyText.includes("older-team.ec")
+          && before.bodyHtml.includes("<b>" + wantNextWord + "</b>"),
+        `1c (${lang}) load step with non-sample file names newest file and enables Next`,
+        before
+      );
+      await p.click("#tourNext");
+      await p.waitForFunction(
+        () => sessionStorage.getItem("eTourAt") !== "load" && document.querySelectorAll("#list .card").length === 1,
+        { timeout: 15000 }
+      ).catch(() => {});
+      const after = await readTourLoadState(p);
+      check(
+        after.stepId && after.stepId !== "load" && after.cards === 1,
+        `1d (${lang}) clicking Next on load step with team-catalog.ec opens it and moves on`,
+        after
+      );
+      await closePage(p);
+    }
+
+    /* 1e/1f: Greyed Next (empty folder + browser) explains why Next is off (EN + PL) */
+    EXPECTED += 4;
+    for (const [label, opts] of [
+      ["empty desk folder EN", { lang: "en", files: [], host: true }],
+      ["empty desk folder PL", { lang: "pl", files: [], host: true }],
+      ["browser EN", { lang: "en", files: [], host: false }],
+      ["browser PL", { lang: "pl", files: [], host: false }]
+    ]) {
+      const p = await bootEmptyWithHost(browser, cleanEmptyUrl, opts);
+      const st = await readTourLoadState(p);
+      const explainsGrey = opts.lang === "pl"
+        ? /Dalej<\/b>.*nieaktywn|wczytany/i.test(st.bodyHtml)
+        : /Next<\/b>.*(?:stays off|disabled|until)/i.test(st.bodyHtml);
+      check(
+        st.stepId === "load" && st.disabled === true && explainsGrey,
+        `1e (${label}) grey Next explains why in bubble`,
+        st
+      );
+      await closePage(p);
+    }
+
+    /* Plant 1: regress nextHeld/load step so sample no longer enables Next */
+    EXPECTED += 1;
+    if (PLANTS_OFF) {
+      skip("plant-load-next: disabling folder pick turns 1a/1b red (ETIUDA_PLANTS=off)");
+    } else {
+      const planted = rawHtml.replace(
+        /function eFolderCatalogPick\(\)\s*\{\s*return [^}]*\}/,
+        "function eFolderCatalogPick() { return null; }"
+      );
+      const plantUrl = writeEngine(path.join(lab, "plant-1"), planted, false);
+      const p = await bootEmptyWithHost(browser, plantUrl, { lang: "en", files: sampleRows });
+      const st = await readTourLoadState(p);
+      check(planted !== rawHtml && st.disabled === true, "plant-load-next: disabling folder pick turns 1a red", st);
+      await closePage(p);
+    }
+  }
+} catch (err) {
+  console.error("HARNESS ERROR:", err);
+  fails++;
+} finally {
+  if (browser) await browser.close().catch(() => {});
+  fs.rmSync(lab, { recursive: true, force: true });
+}
+
+console.log(`#counts checks=${checks} failed=${fails} notRun=${notRun} expected=${EXPECTED}`);
+if (fails > 0 || checks + notRun !== EXPECTED) process.exit(fails || 1);

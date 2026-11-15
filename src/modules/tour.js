@@ -16,7 +16,8 @@ import { syncLayoutPrefs, pillsWanted, schedulePillsCollapse } from "./pills-box
 import { closeSettingsMenu, openSettingsMenu } from "./header-menus.js";
 import { wholeThingEmpty } from "./app-state.js";
 import { placeBubble } from "./bubble.js";
-import { eHost, eCatalogFolderShort, eHotkey, eHotkeyLabel, eOpenPicker } from "./host.js";
+import { eHost, eCatalogFolderShort, eCatalogFiles, eFolderCatalogPick, eOnFolderPick, noteCatalogFolderHold, eHotkey, eHotkeyLabel, eOpenPicker } from "./host.js";
+import { hooks } from "./hooks.js";
 import { agentName, setAgentName, keepAgentName, keepTypedName, nameAnswered, nameFieldHtml, wireNameField } from "./agent.js";
 import { esc } from "./esc.js";
 import { cutLeaves, dismissCopy, mgReduceMotion } from "./motion.js";
@@ -131,10 +132,25 @@ function tourRevealCardActions(){
 }
 
 /* The desk's own words for the folder a Load opens, or none in a browser, which has no folder. */
+function loadStepPick(){
+  if(typeof eHost==="function" && !eHost()) return null;
+  if(!eCatalogFolderShort()) return null;
+  return typeof eFolderCatalogPick==="function" ? eFolderCatalogPick() : null;
+}
 function loadStepBody(){
   const dir=eCatalogFolderShort();
-  if(!dir) return t("Replies come in a catalog. Click <b>Load catalog file</b> and choose the file. The tour carries on as soon as it is in place, and the catalog stays in this browser, ready whenever you come back.");
-  return t("Replies come in a catalog. Click <b>Load catalog file</b> and choose the team's catalog file in {FOLDER}. The tour carries on as soon as it is in place.")
+  if(!dir) return t("Replies come in a catalog. Click <b>Load catalog file</b> and choose the file; <b>Next</b> stays off until a catalog is in place, and the catalog stays in this browser, ready whenever you come back.");
+  const pick=typeof eFolderCatalogPick==="function" ? eFolderCatalogPick() : null;
+  if(pick && pick.kind==="sample"){
+    return t("Click <b>Load catalog file</b> to open the practice catalog in {FOLDER}, to try Etiuda before your team's own arrives.")
+      .split("{FOLDER}").join(esc(dir));
+  }
+  if(pick && pick.file){
+    return t("Replies come in a catalog. Click <b>Next</b> to open {FILE} in {FOLDER}, or <b>Load catalog file</b> to choose another.")
+      .split("{FILE}").join(esc(pick.file))
+      .split("{FOLDER}").join(esc(dir));
+  }
+  return t("Replies come in a catalog. Click <b>Load catalog file</b> and choose the team's catalog file in {FOLDER}; <b>Next</b> stays off until a catalog is in place.")
     .split("{FOLDER}").join(esc(dir));
 }
 /* THE MENU AS IT STANDS: the button while it is shut, and once the person opens it, the row a step
@@ -532,7 +548,20 @@ function stepOn(i){ const s=TOUR_STEPS[i]; return !!s && (!s.when || s.when()) &
 function onFrom(i,dir){ for(let j=i; j>=0 && j<TOUR_STEPS.length; j+=dir) if(stepOn(j)) return j; return -1; }
 /* NEXT ON EVERY STEP, held back only where the steps after need the person's own act (`waits`) and
    its control is on screen. */
-function nextHeld(s){ return !!(s && s.waits) && !!resolveTourTarget(s); }
+function nextHeld(s){
+  if(!s || !s.waits) return false;
+  if(s.id==="load" && loadStepPick()) return false;
+  return !!resolveTourTarget(s);
+}
+function refreshLoadStep(){
+  if(!tourRunning) return;
+  const step=TOUR_STEPS[tourIdx];
+  if(!step || step.id!=="load") return;
+  const els=tourEls();
+  if(els.body){ els.body.innerHTML=t(loadStepBody()); fillProseIcons(els.body); }
+  syncTourNext();
+  scheduleTourPlace();
+}
 function syncTourNext(){
   const els=tourEls(), step=TOUR_STEPS[tourIdx];
   if(!els.next || !step) return;
@@ -798,6 +827,9 @@ function showTourStep(i){
   if(els.body){ els.body.innerHTML=t((typeof step.body==="function"?step.body():step.body)||""); fillProseIcons(els.body); }
   if(els.prev) els.prev.hidden=onFrom(i-1,-1)<0;
   syncTourNext();
+  if(step.id==="load" && !loadStepPick() && typeof eCatalogFiles==="function" && typeof noteCatalogFolderHold==="function"){
+    Promise.resolve(eCatalogFiles()).then(rows=>noteCatalogFolderHold(rows)).catch(()=>{});
+  }
   let nameInp=null;
   if(els.field){
     els.field.hidden=!step.name;
@@ -1045,6 +1077,15 @@ function tourNext(){
   if(!tourRunning) return;
   const step=TOUR_STEPS[tourIdx];
   if(!step || nextHeld(step)) return;
+  const pick=step.id==="load" ? loadStepPick() : null;
+  if(pick){
+    const btn=tourEls().next;
+    if(btn){ if(btn.disabled) return; btn.disabled=true; }
+    Promise.resolve(hooks.loadCatalogFromFolder(pick.file, pick.mtime)).finally(()=>{
+      if(tourRunning && TOUR_STEPS[tourIdx] && TOUR_STEPS[tourIdx].id==="load") syncTourNext();
+    });
+    return;
+  }
   /* The name step's field is its answer: a name given is kept and the question is not asked again;
      left empty, the first signed copy asks, as it would without the tour. */
   if(step.name){
@@ -1083,6 +1124,7 @@ function tourPrev(){
 }
 function wireTourUi(){
   heedJoin();
+  if(typeof eOnFolderPick==="function") eOnFolderPick(refreshLoadStep);
   const els=tourEls();
   if(els.next) els.next.onclick=()=>tourNext();
   if(els.prev) els.prev.onclick=()=>tourPrev();
