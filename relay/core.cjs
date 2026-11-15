@@ -925,7 +925,12 @@ function createCore(deps) {
     if (lapsedDevices && !removing) return lapsedDevices; /* plant:lapse-devices */
     /* A key not enrolled yet whose invitation's desk withdrew its request is not let in, and nothing in the set changes. */
     for (const [id, v] of next) if (!store.get("dev:" + id) && withdrawnBy(id, v.pub)) return no("withdrawn"); /* plant:e4-devices */
-    const withdrawn = store.list("dev:").map(([k]) => k.slice(4)).filter(id => !next.has(id));
+    /* A spelling the set drops while it keeps the same half under the other is renamed, not taken off: its row goes and nothing else. */
+    const keptPubs = new Set([...next.values()].map(v => v.pub));
+    const dropped = store.list("dev:").filter(([k]) => !next.has(k.slice(4)));
+    let renamed = [];
+    renamed = dropped.filter(([, v]) => !!v && keptPubs.has(v.pub)).map(([k]) => k.slice(4)); /* plant:devices-renamed */
+    const withdrawn = dropped.map(([k]) => k.slice(4)).filter(id => renamed.indexOf(id) < 0);
     const withdrawnPubs = withdrawn.map(id => (store.get("dev:" + id) || {}).pub).filter(p => is(HEX64, p));
     store.atomic(() => {
       const ord = (store.get("ord") || 0) + 1;
@@ -935,6 +940,7 @@ function createCore(deps) {
         store.put("gone:" + id, Object.assign({}, was || {}, { at: clock(), ord }, team.store ? { by: b.by.pub } : {}));
         store.del("dev:" + id);
       }
+      for (const id of renamed) store.del("dev:" + id);
       for (const [id, v] of next) { store.put("dev:" + id, v); store.del("gone:" + id); }
       for (const [, v] of next) for (const n of namesOf(v.pub)) store.del("gone:" + n); /* plant:enrol-both-names */
       /* A key taken off gives back what it held: its blobs leave the team's counts at once, are listed and fetched by the lead
@@ -943,7 +949,9 @@ function createCore(deps) {
       const freed = [], heldUntil = clock() + REMOVED_KEEP_MS;
       let grace = false;
       grace = true; /* plant:removed-grace */
-      if (withdrawn.length) for (const [, m] of store.list("blob:")) if (m && withdrawn.indexOf(m.writer) > -1) (grace ? hold(m, heldUntil) : unserve(m, freed)); /* plant:devices-free */
+      let writers = withdrawn;
+      writers = withdrawn.concat(...withdrawnPubs.map(namesOf)); /* plant:hold-either-name */
+      if (withdrawn.length) for (const [, m] of store.list("blob:")) if (m && writers.indexOf(m.writer) > -1) (grace ? hold(m, heldUntil) : unserve(m, freed)); /* plant:devices-free */
       store.put("devrev", b.rev);
       if (from !== undefined) store.put("devfrom", { epoch: from.epoch, rev: from.rev }); /* plant:devices-from-kept */
       for (const [k, s] of store.list("ses:")) {
@@ -1286,7 +1294,9 @@ function createCore(deps) {
       if (!seat.ok) return seat;
       return issue(b.challenge, seated({ key: b.key, inv: null }, seat), seat.note);
     }
-    const dev = store.get("dev:" + b.key), gone = dev ? undefined : removalOf(b.key, b.pub);
+    let member = store.get("dev:" + b.key) !== undefined ? { id: b.key, dev: store.get("dev:" + b.key) } : null;
+    member = enrolledRow(b.key, b.pub); /* plant:hello-member-half */
+    const dev = member ? member.dev : undefined, gone = dev ? undefined : removalOf(b.key, b.pub);
     if (!dev && gone) {
       if (gone.pub !== b.pub) return no("bad-signature"); /* plant:removed-sig */
       /* The invitation's session again, only where the lead registered it after this removal, for its one upload. */
@@ -1311,7 +1321,7 @@ function createCore(deps) {
     seat = seatGate(b.seat, b.pub); /* plant:seat-session */
     if (team.store) seat = storeGate(team, b.seat, b.pub); /* plant:store-session */
     if (!seat.ok) return seat;
-    return issue(b.challenge, seated({ key: b.key, inv: null }, seat), seat.note);
+    return issue(b.challenge, seated({ key: member.id, inv: null }, seat), seat.note);
   }
 
   /* THE STANDING DOOR (board 980, A4): a desk whose person signed in to the licence service asks to join with no invitation, its
@@ -1336,13 +1346,14 @@ function createCore(deps) {
       return no("not-enrolled"); /* plant:door-cert */
     }
     if (b.key === team.lead.keyId || b.pub === team.lead.pub) return no("bad-signature");
-    const dev = store.get("dev:" + b.key);
-    if (dev && dev.pub !== b.pub) return no("bad-signature");
-    if (dev) {
+    let member = store.get("dev:" + b.key) !== undefined ? { id: b.key, dev: store.get("dev:" + b.key) } : null;
+    member = enrolledRow(b.key, b.pub); /* plant:door-member-half */
+    if (member && member.dev.pub !== b.pub) return no("bad-signature");
+    if (member) {
       /* An enrolled desk knocking is a desk session, so the team's seats judge the certificate it knocks with. */
       let seat = { ok: true };
       seat = seatGate(b.door, b.pub); /* plant:seat-door */
-      return seat.ok ? issue(b.challenge, seated({ key: b.key, inv: null }, seat), seat.note) : seat;
+      return seat.ok ? issue(b.challenge, seated({ key: member.id, inv: null }, seat), seat.note) : seat;
     }
     if (removalOf(b.key, b.pub)) return no("removed"); /* plant:door-removed */
     /* A key whose door request the lead dropped is answered as a stranger is for the rate window after the drop. */
@@ -1499,6 +1510,11 @@ function createCore(deps) {
   }
   const enrolledAs = (key, pub) => spellingsOf(key, pub).some(n => store.get("dev:" + n) !== undefined);
   const orderOf = gone => (Number.isSafeInteger(gone.ord) ? gone.ord : -1);
+  /* The enrolled row of a half under whichever spelling the lead used, and that spelling, which a member's session is kept by. */
+  function enrolledRow(key, pub) {
+    for (const n of spellingsOf(key, pub)) { const dev = store.get("dev:" + n); if (dev !== undefined) return { id: n, dev }; }
+    return null;
+  }
   function removalOf(key, pub) {
     if (enrolledAs(key, pub)) return undefined;
     const rows = spellingsOf(key, pub).map(n => store.get("gone:" + n)).filter(Boolean);

@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 603;
+const EXPECTED = 611;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -2167,6 +2167,69 @@ async function main() {
     check(spellTwice.ok && twiceLift.turned && twiceLift.back, "r1m lifting plant:removal-latest with plant:enrol-both-names, either of which alone closes it,"
       + " opens the invitation between the two removals (r1h red), and the product file is never written: " + twiceLift.detail.split("\n")[0]
       + ", sha " + (twiceLift.back ? "unchanged" : "CHANGED"));
+
+    /* The Grok review of Part A as a whole: a set that keeps a half under its other spelling takes nothing off for it; a member hello
+       under the spelling the row does not use is the member's session; a removal holds what the half wrote under either spelling. */
+    const listedTo = async (y, s, id) => ((await since(y, s)).json || []).some(e => e.meta && e.meta.id === id);
+    const edgeScenes = {
+      /* The desk's half kept raw, its branch id dropped (keep), or the desk dropped under both (control). */
+      async rename(keep) {
+        const y = await world();
+        const deskS = await sessionOf(y, y.desk), otherS = await sessionOf(y, y.other);
+        const blob = sealAs(y, y.desk, "desk.txt", 1);
+        const up = await put(y, deskS, blob, { extra: { pub: y.desk.pub } });
+        const set = await devices(y, keep ? [{ id: y.desk.pub, pub: y.desk.pub, desk: y.deskId }, y.devs[1]] : [y.devs[1]]);
+        const listed = await listedTo(y, otherS, blob.id), mine = await since(y, deskS);
+        const st = y.R.stores.get(y.rt), gone = !!st.get("gone:" + y.desk.keyId);
+        const ok = up.status === 200 && set.status === 200 && (keep ? listed && mine.status === 200 && !gone : !listed && refused(mine, "removed") && gone);
+        return { ok, detail: JSON.stringify({ up: up.status, set: set.status, listedToOther: listed, deskReads: said(mine), removalRow: gone }) };
+      },
+      /* A key hello as the branch id of a desk enrolled raw, then that desk taken off. */
+      async otherHello() {
+        const y = await world(), o = y.other;
+        const asK = { keyId: "k-" + sha(Buffer.from(o.pub, "hex")).slice(0, 16), pub: o.pub, privateKey: o.privateKey };
+        const h = await helloAs(y, asK);
+        const s = h.json && h.json.session;
+        const reads = s ? await since(y, s) : { status: 0, json: null };
+        await devices(y, y.devs.slice(0, 1));
+        const after = s ? await since(y, s) : { status: 0, json: null };
+        const ok = h.status === 200 && h.json.invite !== true && reads.status === 200 && refused(after, "removed");
+        return { ok, detail: JSON.stringify({ hello: said(h), invite: !!(h.json && h.json.invite), reads: said(reads), afterRemoval: said(after) }) };
+      },
+      /* While enrolled by its branch id, the desk asks by an invitation as its raw half; then the desk is taken off. */
+      async heldOther() {
+        const y = await world(), raw = rawOf(y.desk), token = hex(32), id = hex(16);
+        await invites(y, [{ id, hash: sha(token) }], []);
+        const h = await boundHello(y, raw, id, token);
+        const ask = sealJoin(y, raw, 1, "desk:k-" + hex(8));
+        const up = await put(y, h.json && h.json.session, ask);
+        const otherS = await sessionOf(y, y.other);
+        const before = await listedTo(y, otherS, ask.id);
+        await devices(y, y.devs.slice(1));
+        const after = await listedTo(y, otherS, ask.id);
+        return { ok: h.status === 200 && up.status === 200 && before && !after,
+          detail: JSON.stringify({ hello: said(h), up: said(up), listedBefore: before, listedAfterRemoval: after }) };
+      },
+    };
+    const renameRun = async () => {
+      const kept = await edgeScenes.rename(true), dropped = await edgeScenes.rename(false);
+      return { ok: kept.ok && dropped.ok, detail: "kept raw " + kept.detail + "; dropped " + dropped.detail };
+    };
+    const renamed = await renameRun();
+    check(renamed.ok, "r1r a set that keeps the desk's half under its raw spelling and drops its branch id takes nothing off: its blob stays listed to"
+      + " the others, its session reads and no removal is written; dropped under both, all three are a removal's: " + renamed.detail);
+    const otherHello = await edgeScenes.otherHello();
+    check(otherHello.ok, "r1s a key hello as the branch id of a desk enrolled raw is the member's session, which reads, and the desk's removal ends it: " + otherHello.detail);
+    const heldOther = await edgeScenes.heldOther();
+    check(heldOther.ok, "r1t a removal holds what the half wrote under its other spelling, so the others no longer list it: " + heldOther.detail);
+    const edgeLift = (tag, line, run) => (PLANTS_OFF ? (skip(line), null) : liftCore(tag, run).then(p => {
+      check(p.turned && p.back, line + ", and the product file is never written: " + p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED"));
+    }));
+    await edgeLift("plant:devices-renamed", "r1u lifting plant:devices-renamed takes the kept half off (r1r red)", async () => !(await renameRun()).ok);
+    await edgeLift("plant:hello-member-half", "r1v lifting plant:hello-member-half refuses the member's hello under its other spelling (r1s red)",
+      async () => !(await edgeScenes.otherHello()).ok);
+    await edgeLift("plant:hold-either-name", "r1w lifting plant:hold-either-name leaves the other spelling's upload listed after the removal (r1t red)",
+      async () => !(await edgeScenes.heldOther()).ok);
 
     /* The two moments are ordered by the relay's own counter, not its clock (edit 4): a clock stepping back between a
        registration and a removal changes neither answer. */
@@ -6976,6 +7039,19 @@ async function main() {
     const doorHalf = await doorHalfRun();
     check(doorHalf.ok, "a4w a door request whose key the lead enrolled and removed leaves its person's cap, whether by the k- id or by the raw half: "
       + doorHalf.detail);
+    /* A desk enrolled raw knocking as its k- id is the member it is: a member's session, and no door request (the Grok review of Part A). */
+    async function enrolledOtherScene() {
+      const w = await doorWorld();
+      const k = keyPair(true), place = deskOf(w);
+      await devices(w, w.devs.concat([{ id: k.pub, pub: k.pub, desk: place }]));
+      const before = doorRows(w).length;
+      const knock = await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now));
+      const list = knock.status === 200 ? await since(w, knock.json.session) : { status: 0, json: null };
+      const ok = knock.status === 200 && !knock.json.door && doorRows(w).length === before && list.status === 200;
+      return { ok, detail: JSON.stringify({ knock: said(knock), door: !!(knock.json && knock.json.door), rows: [before, doorRows(w).length], reads: said(list) }) };
+    }
+    const enrolledOther = await safe(enrolledOtherScene);
+    check(enrolledOther.ok, "a4x a desk enrolled raw knocking by its k- id opens a member's session that reads, and no door request: " + enrolledOther.detail);
 
     /* The test architect's F2: a request the lead drops leaves no spent marker, and its key and person stay held against the door
        for the door's rate window from the drop (his re-tune: not the 30-day keep), so a drop frees neither to knock again at once;
@@ -7200,6 +7276,7 @@ async function main() {
       ["door-key-form", async () => !(await rawIdScene()).ok, "a4n (a removed desk knocks by its raw public half)"],
       ["removal-either-name", async () => !(await rawEnrolledScene()).ok, "a4v (a desk removed by its raw public half knocks by its k- id)"],
       ["door-live-half", async () => !(await doorHalfRun()).ok, "a4w (a request whose key was removed raw keeps its person's place)"],
+      ["door-member-half", async () => !(await enrolledOtherScene()).ok, "a4x (a desk enrolled raw knocks as k- and opens a door request)"],
       ["door-drop-kept", async () => !(await dropScene()).ok, "a4o (a dropped door request frees its key and person)"],
       ["door-drop-key", async () => !(await dropScene()).ok, "a4o (a dropped door request's key knocks again at once)"],
       ["door-drop-person", async () => !(await dropScene()).ok, "a4o (a person's dropped request makes room at the door)"],
@@ -7212,7 +7289,7 @@ async function main() {
       ["door-withdrawn-live", async () => !(await withdrawCostScene()).ok, "a4s (a request taken back still holds its person)"],
     ];
     const base = taken.ok && refusesAll.ok && closed.ok && register.ok && person.ok && rated.ok && live.ok && tries.ok && request.ok && removed.ok
-      && invs.ok && lapsed.ok && handed.ok && rawId.ok && rawEnrolled.ok && doorHalf.ok && drops.ok && seenBack.ok && costBack.ok && unsent.ok && capBack.ok;
+      && invs.ok && lapsed.ok && handed.ok && rawId.ok && rawEnrolled.ok && doorHalf.ok && enrolledOther.ok && drops.ok && seenBack.ok && costBack.ok && unsent.ok && capBack.ok;
     for (const [tag, turns, what] of DOOR_PLANTS) {
       const line = "a4p lifting plant:" + tag + " turns " + what + " red, and the product file is never written";
       if (PLANTS_OFF) { skip(line); continue; }
