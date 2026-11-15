@@ -257,17 +257,17 @@ function teamObject(deps) {
      count. At the bound, each listed team's object is asked once and a dead id is dropped before the new one is refused.
      A reserve answers whether it added the rt: a place it did not add is not the caller's to give back. */
   /* A listed id reserved again (a retried create) while a reserve or the alarm was asking: it may hold by the time the list is
-     written, so an ask's earlier "dead" for it no longer drops it (finding 4 of the fifth Grok review of Part A, board 1003). The
-     ticks live with this wake, which is where the asks and their reserves meet; a miss leaves an id listed, never one dropped. */
-  let asksTick = 0;
-  const reaffirmed = new Map();
+     written, so an ask's earlier "dead" for it no longer drops it (finding 4 of the fifth Grok review of Part A, board 1003). Any id
+     reaffirmed in this wake is kept, whenever its repeat came, since its create may not have run when a later reserve or the alarm
+     asks (the test architect's read of db7889a9). A miss leaves an id listed, never one dropped; the next wake's reap asks again. */
+  const reaffirmed = new Set();
   function reaffirm(rt) {
-    reaffirmed.set(rt, ++asksTick);
+    reaffirmed.add(rt);
     return reply(200, { ok: true, added: false });
   }
-  function heldAgain(id, askedAt) {
+  function heldAgain(id) {
     let counted = false;
-    counted = (reaffirmed.get(id) || 0) > askedAt; /* plant:lead-reaffirm */
+    counted = reaffirmed.has(id); /* plant:lead-reaffirm */
     return counted;
   }
   async function leadAnswer(request) {
@@ -291,7 +291,6 @@ function teamObject(deps) {
     repeats = true; /* plant:lead-repeat */
     if (repeats && rts.indexOf(rt) !== -1) return reaffirm(rt);
     const ns = rts.length >= TEAMS_PER_LEAD ? namespaceOf(deps.teams) : null;
-    const askedAt = asksTick;
     const dead = new Set();
     if (ns) {
       for (const id of rts) {
@@ -311,7 +310,7 @@ function teamObject(deps) {
       let kept = null;
       if (ns) {
         let left = list;
-        left = list.filter(id => !dead.has(id) || heldAgain(id, askedAt)); /* plant:lead-reap */
+        left = list.filter(id => !dead.has(id) || heldAgain(id)); /* plant:lead-reap */
         list = left;
         kept = writeLead(now, list, leadKey);
       }
@@ -343,7 +342,6 @@ function teamObject(deps) {
     const ns = namespaceOf(deps.teams);
     const rts = Array.isArray(row.rts) ? row.rts.filter(x => typeof x === "string") : [];
     if (!ns) return keepLead(row, rts, row.leadKey);
-    const askedAt = asksTick;
     const dead = new Set();
     for (const id of rts) {
       let holds = true;
@@ -358,7 +356,7 @@ function teamObject(deps) {
       if (now === undefined) return null;
       const list = Array.isArray(now.rts) ? now.rts.filter(x => typeof x === "string") : [];
       let live = list;
-      live = list.filter(id => !dead.has(id) || heldAgain(id, askedAt)); /* plant:lead-alarm-reap */
+      live = list.filter(id => !dead.has(id) || heldAgain(id)); /* plant:lead-alarm-reap */
       return writeLead(now, live, now.leadKey);
     });
     if (kept !== null) await alarmLead(kept);

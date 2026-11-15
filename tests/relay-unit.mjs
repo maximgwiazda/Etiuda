@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 616;
+const EXPECTED = 622;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -6030,6 +6030,70 @@ async function main() {
         + " file is never written: " + how(reaffirmLift));
     }
 
+    /* The ledger's earlier window (the test architect's Grok read of db7889a9, finding 2): a retried create's repeat reserve returns
+       BEFORE a later reserve's asks begin, and its create has not run yet, so that reserve finds the id dead. An id reaffirmed in this
+       wake is kept whatever its ask answered: the create then writes a team that is on the list. */
+    async function earlyRepeatScene(teamMod) {
+      const T = teamMod || teamSrc;
+      const store = S.memoryStore(), lead = keyPair(false), listed = [];
+      for (let i = 0; i < CAP; i++) listed.push(hex(16));
+      const back = listed[0], live = { back: false };
+      store.put("lead", { rts: listed.slice(), leadKey: lead.keyId });
+      const ns = { idFromName: n => n, get: id => ({ fetch: async () => {
+        const held = id !== back || live.back;
+        await new Promise(r => setTimeout(r, 1));
+        return new Response(JSON.stringify({ held }), { status: 200 });
+      } }) };
+      const obj = T.teamObject({ store, clock: () => T0L, teams: () => ns, sockets: S.socketHub(), r2: S.memoryBucket(), revoked: () => [] });
+      const ask = rt => obj.fetch(T.leadRequest({ op: "reserve", rt, lead: lead.keyId }))
+        .then(async r => { const text = await r.text(); let json = null; try { json = JSON.parse(text); } catch { json = null; } return { status: r.status, json }; });
+      const repeat = await ask(back);
+      const r = await ask(hex(16));
+      live.back = true;
+      const after = ((store.get("lead") || {}).rts || []).slice();
+      const ok = repeat.status === 200 && !!repeat.json && repeat.json.added === false && after.indexOf(back) >= 0 && refused(r, "team-count")
+        && after.length === CAP;
+      return { ok, detail: JSON.stringify({ repeat: repeat.json, later: r.status === 200 ? "taken" : answer(r), backListed: after.indexOf(back) >= 0, length: after.length }) };
+    }
+    const earlyRepeat = await earlyRepeatScene();
+    check(earlyRepeat.ok, "r2q a repeat reserve that returned before a later reserve's asks began keeps its id listed though the asks find it"
+      + " dead (its create not yet run), and the later reserve is refused team-count: " + earlyRepeat.detail);
+    if (PLANTS_OFF) skip("r2r lifting plant:lead-reaffirm drops that id (r2q red)");
+    else {
+      const earlyLift = await editTeam(lineLifted("plant:lead-reaffirm"), async T => !(await earlyRepeatScene(T)).ok);
+      check(earlyRepeat.ok && earlyLift.turned && earlyLift.back, "r2r lifting plant:lead-reaffirm drops that id (r2q red), and the product file is"
+        + " never written: " + how(earlyLift));
+    }
+
+    /* Defence in depth (the same read): an invitation's session whose bound key the rename leaves removed is marked removed, as devices()
+       marks one on a withdrawal, where its invitation was registered before the removal; one registered after keeps its one upload. */
+    async function boundEndsScene(opts) {
+      const w = await world(opts);
+      const st = w.R.stores.get(w.rt), now = w.R.clock.now, y = keyPair(true);
+      const before = hex(16), afterInv = hex(16), tBefore = hex(32), tAfter = hex(32);
+      const ord = (st.get("ord") || 0) + 1;
+      st.put("inv:" + before, { hash: sha(hex(32)), fails: 0, spent: true, spentAt: now, uploaded: false, at: now, ord, key: y.keyId, pub: y.pub });
+      st.put("gone:" + y.pub, { pub: y.pub, desk: "k-" + hex(8), at: now, ord: ord + 1 });
+      st.put("inv:" + afterInv, { hash: sha(hex(32)), fails: 0, spent: true, spentAt: now, uploaded: false, at: now, ord: ord + 2, key: y.keyId, pub: y.pub });
+      st.put("ord", ord + 2);
+      st.put("ses:" + sha(tBefore), { key: null, inv: before, bound: y.keyId, until: now + C.SESSION_MS });
+      st.put("ses:" + sha(tAfter), { key: null, inv: afterInv, bound: y.keyId, until: now + C.SESSION_MS });
+      w.R.restart();
+      await challenge(w);
+      const markedBefore = (st.get("ses:" + sha(tBefore)) || {}).removed === true;
+      const markedAfter = (st.get("ses:" + sha(tAfter)) || {}).removed === true;
+      return { ok: markedBefore && !markedAfter, detail: JSON.stringify({ registeredBefore: markedBefore, registeredAfter: markedAfter }) };
+    }
+    const boundEnds = await boundEndsScene();
+    check(boundEnds.ok, "r2s at the rename, an invitation's session bound to a desk it leaves removed is marked removed where the invitation"
+      + " was registered before the removal, and left where it was registered after: " + boundEnds.detail);
+    if (PLANTS_OFF) skip("r2t lifting plant:migrate-ends-bound leaves that session unmarked (r2s red)");
+    else {
+      const boundLift = await liftCore("plant:migrate-ends-bound", async () => !(await boundEndsScene()).ok);
+      check(boundEnds.ok && boundLift.turned && boundLift.back, "r2t lifting plant:migrate-ends-bound leaves that session unmarked (r2s red), and"
+        + " the product file is never written: " + how(boundLift));
+    }
+
     // 933a: move signed by old lead is taken, new key hello opens lead session
     const w = await world();
     const newLead = keyPair(false);
@@ -7651,6 +7715,30 @@ async function main() {
       return { again: again.status, kept: after.indexOf(back) >= 0, length: after.length };
     }
     const alarmReaffirmOk = a => !!a && a.again === 200 && a.kept && a.length === 3;
+    /* The earlier window in the alarm: a repeat reserve returns before the alarm's asks begin, its create not yet run, so the alarm
+       finds the id dead; an id reaffirmed in this wake stays on the list the alarm keeps. */
+    async function alarmEarlyScene(T) {
+      const M = T || TEAM13;
+      const store = S.memoryStore(), lead = keyPair(false), listed = [hex(16), hex(16), hex(16)], back = listed[0], live = { back: false };
+      store.put("lead", { rts: listed.slice(), leadKey: lead.keyId });
+      const set = { at: null };
+      const alarm = { async set(t) { set.at = t; }, async get() { return set.at; }, async clear() { set.at = null; } };
+      const ns = { idFromName: n => n, get: id => ({ fetch: async () => {
+        const held = id !== back || live.back;
+        await new Promise(r => setTimeout(r, 1));
+        return new Response(JSON.stringify({ held }), { status: 200 });
+      } }) };
+      const obj = M.teamObject({ store, clock: () => 1800000000000, teams: () => ns, sockets: S.socketHub(), r2: S.memoryBucket(), revoked: () => [], alarm });
+      const again = await obj.fetch(M.leadRequest({ op: "reserve", rt: back, lead: lead.keyId }));
+      await obj.alarm();
+      live.back = true;
+      const after = (store.get("lead") || {}).rts || [];
+      return { again: again.status, kept: after.indexOf(back) >= 0, length: after.length };
+    }
+    const alarmEarlyOk = a => !!a && a.again === 200 && a.kept && a.length === 3;
+    const alarmEarly = await alarmEarlyScene();
+    check(alarmEarlyOk(alarmEarly), "1013t a repeat reserve that returned before the lead's alarm asked keeps its id on the list the alarm"
+      + " keeps, though the alarm finds it dead (its create not yet run): " + JSON.stringify(alarmEarly));
     const alarmBack = await alarmReaffirmScene();
     check(alarmReaffirmOk(alarmBack), "1013r a listed team the lead's alarm asked dead, reserved again while it asked and holding by the write,"
       + " stays on the list the alarm keeps: " + JSON.stringify(alarmBack));
@@ -7698,6 +7786,8 @@ async function main() {
         "lifting plant:lead-alarm-reread loses a reserve taken while the alarm asked", "1013p"],
       ["1013s", lineLifted("plant:lead-reaffirm"), async T => !alarmReaffirmOk(await safe(() => alarmReaffirmScene(T))),
         "lifting plant:lead-reaffirm drops a team the alarm asked dead and that was reserved again", "1013r"],
+      ["1013u", lineLifted("plant:lead-reaffirm"), async T => !alarmEarlyOk(await safe(() => alarmEarlyScene(T))),
+        "lifting plant:lead-reaffirm drops a team reaffirmed before the alarm asked", "1013t"],
     ];
     for (const [id, edit, turns, say, leg] of TEAM_13) {
       const p = await teamCopy(edit, turns);
