@@ -501,7 +501,7 @@ async function main() {
       const startPl = await readNote(pPl);
       if (!startPl || !startPl.at || !startPl.at.ok
         || startPl.lead !== "To stanowisko ma teraz zawartość tego konta."
-        || startPl.full !== "To stanowisko ma teraz zawartość tego konta. Poprzednia zawartość jest zachowana na tym komputerze, w folderze Etiudy \"Set aside\", i nigdy nie jest wysyłana."
+        || startPl.full !== "To stanowisko ma teraz zawartość tego konta. Poprzednia zawartość jest zachowana na tym komputerze, w folderze Etiudy o nazwie Set aside, i nigdy nie jest wysyłana."
         || startPl.full.includes(plFolder)
         || JSON.stringify(startPl.btns) !== JSON.stringify(["Otwórz ten folder", "Zamknij"])) {
         bad.push({ startPl });
