@@ -10167,7 +10167,10 @@ function signinFileHeld(store, text, deskKey) {
   try { d = JSON.parse(String(text)); } catch { d = null; }
   let marked = false;
   marked = !!d && /^[0-9a-f]{64}$/.test(String(deskKey || "")) && signinVerified(String(deskKey), signinMarkBytes(h, store.revoked), d.mark); /* plant:file-mark */
-  if (marked) return store;
+  /* The certificate is this desk's own, judged against this desk's key and not the desk the certificate names. */
+  let mine = true;
+  mine = !h.cert || signinCertOk(h.cert, String(deskKey || "")); /* plant:file-desk-key */
+  if (marked && mine) return store;
   return Object.assign({}, store, { held: Object.assign({}, h, { cert: null, code: "", doors: [], doorsSig: "" }) });
 }
 function signinFileText(s) {

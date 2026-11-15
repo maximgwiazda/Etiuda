@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 160;
+const PLANTS = 161;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 142 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 143 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2643,6 +2643,14 @@ CASES.fileMark = (s, swap) => {
     && none(dropped) && none(rolled) && none(unmarked) && none(otherKey) && none(plain) && wired
     && !!s.signinFileRead(edit(d => { delete d.revoked; })).held.cert;
 };
+/* Review 15b, finding 5: the file's certificate is judged against this desk's key, never against the desk it names: another desk's
+   genuine certificate, or one naming a desk that is no key, holds no seat here even under a mark this desk made. */
+CASES.fileDeskKey = s => {
+  const at = c => { const t = s.signinFileMarkText(s.signinFileText({ held: heldOf({ cert: c, doors: [] }) }), signWith(signKey)); return s.signinFileHeld(s.signinFileRead(t), t, DESK_KEY).held; };
+  const other = cert({ desk: OTHER_DESK_KEY }), odd = cert({ desk: "not-a-desk-key" });
+  return s.signinFileRead(s.signinFileText({ held: heldOf({ cert: other, doors: [] }) })).held.cert !== null && at(other).cert === null && at(other).code === ""
+    && at(odd).cert === null && !!at(cert()).cert;
+};
 /* Review 15b, finding 3: an ended certificate is kept for the lapse's words and never written as the seat; one still running is. */
 CASES.certEndedFlush = (s, swap) => {
   const swapIn = names => (swap && names.some(n => decl(MAIN, "function " + n + "(").indexOf(swap[0]) >= 0) ? swap : undefined);
@@ -3040,6 +3048,7 @@ const LEGS = [
   ["ds25b", "revokedForged", "a list not the vendor's or not later than the one kept is not taken: another root, a made-up signature, keys out of order, an older or the same serial, a later one dropping a kept key, a field more; from an answer or the file alike"],
   ["ds25c", "revokedOffline", "offline, or answered with no list, the last list taken judges: the seat under its key stays lapsed"],
   ["dlt1", "fileMark", "review 15b.1: signin.json as the desk writes it carries this desk's mark over the certificate, the code and the list; the list deleted or replaced by an older genuine one, the mark gone or read under another desk key, leaves no seat and no code while the provider and the refresh token stay; the wiring reads with this desk's key and saves with its mark"],
+  ["dlt5", "fileDeskKey", "review 15b.5: the file's certificate is judged against this desk's key: another desk's genuine one, or one naming no key, holds no seat even under this desk's own mark, where the file's own read alone keeps it"],
   ["dlt3", "certEndedFlush", "review 15b.3: an ended certificate, up to the instant of its until, reads as the calm lapse and is never written as seat.json; one still running is"],
   ["dlt2", "certEarly", "review 15b.2: a certificate issued past now and the five minutes reads as the calm lapse and stands nowhere: no door asked, offered or knocked, no seat.json; one issued inside the five minutes stands"],
   ["ds25d", "revokedLapse", "a seat under a listed key reads as the calm lapse in the view and on the page, and no door is offered, no knock sent, no request or seat.json written; under another key all stand"],
@@ -3552,6 +3561,7 @@ if (!PLANTS_OFF) {
   await plant("dlp1a", ["marked = !!d && /^[0-9a-f]{64}$/.test(String(deskKey || \"\")) && signinVerified(String(deskKey), signinMarkBytes(h, store.revoked), d.mark); /* plant:file-mark */", "marked = true;"], "fileMark");
   await plantWire("dlp1b", ["  signinStore = signinFileHeld(signinStore, text, me ? me.key : \"\"); /* plant:file-held */\n", ""], "fileMark");
   await plantWire("dlp1c", ["signinFileMarkText(signinFileText(signinState()), signinSign)", "signinFileText(signinState())"], "fileMark");
+  await plant("dlp5", ["mine = !h.cert || signinCertOk(h.cert, String(deskKey || \"\")); /* plant:file-desk-key */", "mine = true;"], "fileDeskKey");
   await plantWire("dlp3", ["  if (Date.now() >= cert.until) return false; /* plant:flush-ended */\n", ""], "certEndedFlush");
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),
