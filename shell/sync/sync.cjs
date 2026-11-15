@@ -239,8 +239,9 @@ function mergeOnce(o) {
       ledger[item] = { h: stay.h, by: stay.by, t: stay.t, seen: Object.assign({}, stay.seen) };
       patch[item] = v;
     }
+    /* A removal is a version too, kept with the value null, so the conflict waits on both computers and not only where it was undone. */
     for (const e of top) {
-      if (same(e, stay) || e.h === null || kept.some(k => k.item === item && k.by === e.by && k.t === e.t)) continue; /* plant:keep-both */
+      if (same(e, stay) || kept.some(k => k.item === item && k.by === e.by && k.t === e.t)) continue; /* plant:keep-both */
       const v = valueOf(e, item);
       if (v === undefined) continue;
       copies.push({ item, by: e.by, t: e.t, h: e.h, value: v });

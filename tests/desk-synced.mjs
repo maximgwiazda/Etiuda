@@ -13,6 +13,7 @@
  *   ds5 a key the page still owes (its send unanswered) keeps the person's value, and the next send carries it
  *   ds6 Settings in front is drawn again with what arrived; while its name field holds typing it is not, until the field lets go
  *   ds7 the shell: storeSyncApply sends etiuda:desk-synced with the keys it patched, to the window, and only once the desk took them
+ *   ds8 the shell keeps a removal another computer made, a version of the value null, as a file of its own
  * Plants: the page's take not shown (ds1 and ds2 red); a key the page owes taken over (ds5 red); the screen in front not drawn
  * again (ds6 red); in a copy of shell/main.js, the tell taken out (ds7 red), the product's sha unchanged.
  */
@@ -37,7 +38,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 11;
+const EXPECTED = 12;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const MAIN = path.join(E.ROOT, "shell", "main.js");
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -262,16 +263,18 @@ async function main() {
       for (; i < text.length; i++) { if (text[i] === "{") depth++; else if (text[i] === "}" && --depth === 0) break; }
       return text.slice(at, i + 1);
     };
-    const sent = [], patched = [];
-    const ctx = { sent, patched, theWindow: { isDestroyed: () => false, webContents: { send: (ch, v) => sent.push([ch, v]) } }, JSON,
+    const sent = [], patched = [], written = [];
+    const ctx = { sent, patched, written, theWindow: { isDestroyed: () => false, webContents: { send: (ch, v) => sent.push([ch, v]) } }, JSON,
       Object, refuse: false };
     vm.createContext(ctx);
     vm.runInContext(slice("deskSyncedTell") + "\n" + slice("storeSyncApply") + "\n"
-      + "function patchDesk(t){ patched.push(t); return !refuse; }\nfunction storeSyncFile(){}\nfunction storeSyncDir(){ return ''; }\n"
-      + "const fs={ mkdirSync(){} }; function writeReplacing(){}\n"
+      + "function patchDesk(t){ patched.push(t); return !refuse; }\nfunction storeSyncFile(){}\nfunction storeSyncDir(...rest){ return rest.join('/'); }\n"
+      + "const fs={ mkdirSync(){} }; function writeReplacing(p, t){ written.push([p, t]); }\n"
+      + "const console={ error(l){ written.push(['error', l]); } };\n"
       + "storeSyncApply({ 'k:eTheme': 'dark', 'k:eabc~Pack': '{}', 'f:a.ec': 'x' }, []);\n"
-      + "refuse = true; storeSyncApply({ 'k:eUiLang': 'pl' }, []);\nstoreSyncApply({ 'f:b.ec': 'y' }, []);", ctx);
-    return { sent, patched };
+      + "refuse = true; storeSyncApply({ 'k:eUiLang': 'pl' }, []);\nstoreSyncApply({ 'f:b.ec': 'y' }, []);\n"
+      + "storeSyncApply({}, [{ item: 'k:eabc~Pack#hidden[]c5', by: 'k-0123456789abcdef', t: 7, h: null, value: null }]);", ctx);
+    return { sent, patched, written };
   };
   {
     let r = "";
@@ -282,6 +285,15 @@ async function main() {
       if (!ok) r = JSON.stringify({ sent, patched });
     } catch (e) { r = e.message; }
     check(!r, "ds7 the shell tells the window the keys the sync patched, once the desk took them, and nothing for a catalog file alone", r || undefined);
+  }
+  {
+    let r = "";
+    try {
+      const { written } = shellTells(fs.readFileSync(MAIN, "utf8"));
+      const w = written[0];
+      if (written.length !== 1 || w[0] !== "kept/k-0123456789abcdef-7-removed.txt" || JSON.parse(w[1]).value !== null) r = JSON.stringify(written);
+    } catch (e) { r = e.message; }
+    check(!r, "ds8 the shell keeps a removal another computer made as a version of the value null, in a file of its own", r || undefined);
   }
 
   /* The plants. */

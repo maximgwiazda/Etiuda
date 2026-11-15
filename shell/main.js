@@ -11498,7 +11498,7 @@ function storeSyncApply(patch, copies) {
   for (const c of copies) {
     try {
       fs.mkdirSync(storeSyncDir("kept"), { recursive: true });
-      writeReplacing(storeSyncDir("kept", c.by + "-" + c.t + "-" + c.h.slice(0, 16) + ".txt"), JSON.stringify({ item: c.item, by: c.by, t: c.t, value: c.value }));
+      writeReplacing(storeSyncDir("kept", c.by + "-" + c.t + "-" + (c.h ? c.h.slice(0, 16) : "removed") + ".txt"), JSON.stringify({ item: c.item, by: c.by, t: c.t, value: c.value }));
     } catch (e) { console.error("etiuda: a version another computer made could not be kept - " + e.message); }
   }
 }
