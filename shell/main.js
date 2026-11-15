@@ -11605,6 +11605,7 @@ function pickPage() {
     mayEdit = o.editable === true ? true : o.editable === false ? false : null;
     root.lang = words.lang || "en";
     q.placeholder = words.search || "";
+    if (who) who.placeholder = words.whoHint || "";
     box.setAttribute("aria-label", words.list || "");
     if (who) who.title = words.who || "";
     if (langBtn) langBtn.title = words.langTitle || "";

@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 155 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 7);
+const EXPECTED = 158 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 7);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1320,6 +1320,39 @@ try {
       check(J4(marks) === "[1,1]" && noLook !== script && autoTake !== script && shown(p1) === "T a|T b|T c" && p2.calls.indexOf("take t:post") > -1,
         "4r5 lifting the lookup leaves the resting list, and a lookup that takes the suggestion sends the take 4r1 holds absent: " + J4({ marks, lifted: shown(p1), taken: p2.calls }));
     }
+  }
+
+  /* 4w1 to 4w3: THE WINDOW'S TWO FIELDS SAY WHAT THEY ARE FOR (the product owner's testing note 12). The words are the
+     desk's, the copywriter's, in both languages; the page puts them in the fields as placeholders and nothing else: a
+     placeholder is interface text, so it fills no value and selects nothing, and what a person types does. */
+  {
+    const J4 = JSON.stringify;
+    const runWho = async (pl, selected) => {
+      SYSTEM[0] = pl ? "pl-PL" : "en-US";
+      const opening = pickAnswer("open", {});
+      SYSTEM[0] = "en-US";
+      const L = {}, q2 = { value: "", placeholder: "", focus() {}, setAttribute() {}, addEventListener: (t, fn) => { L[t] = fn; } };
+      const who = { value: "", placeholder: "", title: "", hidden: true, focus() {}, addEventListener() {} };
+      const note = { hidden: true, textContent: "" };
+      const box2 = { set innerHTML(v) {}, get innerHTML() { return ""; }, setAttribute() {}, querySelectorAll: () => [], addEventListener() {} };
+      let onOpen = null;
+      const W = { E_PICK: { find: () => Promise.resolve("{}"), copy() {}, close() {}, ready() {}, onOpen: fn => { onOpen = fn; } } };
+      const D = { getElementById: id => (id === "q" ? q2 : id === "rows" ? box2 : id === "who" ? who : id === "sel" ? note : null),
+        documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle() {} }, lang: "" } };
+      new Function("window", "document", script)(W, D);
+      onOpen(JSON.stringify(Object.assign({}, opening, selected ? { selected: selected } : {})));
+      await tick(5);
+      return { q: { value: q2.value, placeholder: q2.placeholder }, who: { value: who.value, placeholder: who.placeholder }, note: note.hidden };
+    };
+    const en = await runWho(false, ""), pl = await runWho(true, ""), typed = await runWho(false, "a word of mine");
+    check(en.q.placeholder === "Type a word to find a reply" && en.who.placeholder === "customer's name"
+      && en.q.value === "" && en.who.value === "" && en.note === true,
+      "4w1 in English, with both fields empty, the search box says what it is for and so does the name field, and neither is filled or selected: " + J4(en));
+    check(pl.q.placeholder === "Wpisz s\u0142owo, by znale\u017a\u0107 odpowied\u017a" && pl.who.placeholder === "imi\u0119 klienta"
+      && pl.q.value === "" && pl.who.value === "" && pl.note === true,
+      "4w2 in Polish, the same two, the copywriter's words exactly: " + J4(pl));
+    check(typed.q.value === "a word of mine" && typed.q.placeholder === en.q.placeholder && typed.note === false,
+      "4w3 with words in the box the box holds those words and nothing else (the placeholder is only what shows while it is empty): " + J4(typed));
   }
 
   /* THE LEG (board 952, waste 3b): typing in the global picker filters in the picker;

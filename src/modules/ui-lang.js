@@ -1145,7 +1145,7 @@ UI_STRINGS.pl={
   "Press the alternative (Esc to cancel, Ctrl+Backspace to clear)":"Oczekiwanie na skrót alternatywny (Esc anuluje, Ctrl+Backspace usuwa)",
   "Alternative cleared":"Usunięto skrót alternatywny",
   "Back to the default":"Przywrócono domyślny skrót",
-  "search replies":"szukaj odpowiedzi",
+  "Type a word to find a reply":"Wpisz słowo, by znaleźć odpowiedź",
   "Replies":"Odpowiedzi",
   "The reply copied last":"Ostatnio skopiowana odpowiedź",
   "{N} reply":"{N} odpowiedź",

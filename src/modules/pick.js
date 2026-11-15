@@ -210,7 +210,7 @@ function pickLook(){
 /* The page's words. A legend line holds {KEY} where its key goes; the other language is named only where there is one. */
 function pickWords(){
   const other=CONTENT_LANGS.length>1 ? String(nextContentLang(lang)).toUpperCase() : "";
-  return {lang:uiLang(), search:t("search replies"), list:t("Replies"), again:t("The reply copied last"),
+  return {lang:uiLang(), search:t("Type a word to find a reply"), whoHint:t("customer's name"), list:t("Replies"), again:t("The reply copied last"),
           none:t("A different word may do better."), stamp:t("Commits the firm"),
           empty:wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet."),
           who:t("Etiuda fills the reply in for this conversation"),

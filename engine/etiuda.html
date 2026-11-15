@@ -8775,7 +8775,7 @@ What is typed here stays in this browser.`;
     "Press the alternative (Esc to cancel, Ctrl+Backspace to clear)": "Oczekiwanie na skrót alternatywny (Esc anuluje, Ctrl+Backspace usuwa)",
     "Alternative cleared": "Usunięto skrót alternatywny",
     "Back to the default": "Przywrócono domyślny skrót",
-    "search replies": "szukaj odpowiedzi",
+    "Type a word to find a reply": "Wpisz słowo, by znaleźć odpowiedź",
     "Replies": "Odpowiedzi",
     "The reply copied last": "Ostatnio skopiowana odpowiedź",
     "{N} reply": "{N} odpowiedź",
@@ -41655,7 +41655,8 @@ What is typed here stays in this browser.`;
     const other = CONTENT_LANGS.length > 1 ? String(nextContentLang(lang)).toUpperCase() : "";
     return {
       lang: uiLang(),
-      search: t("search replies"),
+      search: t("Type a word to find a reply"),
+      whoHint: t("customer's name"),
       list: t("Replies"),
       again: t("The reply copied last"),
       none: t("A different word may do better."),
