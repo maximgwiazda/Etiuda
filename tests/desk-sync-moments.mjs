@@ -38,7 +38,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 12;
+const EXPECTED = 16;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const STORE = path.join(E.ROOT, "shell", "sync", "store.cjs");
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -63,7 +63,7 @@ async function boot({ lang = "en", theme = "light", page: name = "etiuda.html", 
         ["eTheme", theme], ["eUiLang", lang], ["eStill", "1"], ["eRail", "1"]]) localStorage.setItem(k, v);
     } catch (e) {}
     /* The shell's store as the page sees it: the view, what was said, the switch's presses. */
-    window.__st = { view: view, said: 0, sets: [], tell: null };
+    window.__st = { view: view, said: 0, sets: [], answers: [], tell: null };
     window.__sgn = { offered: ["microsoft", "google"], signedIn: "microsoft", code: "7K3MQ9TV2XRBHN4W", seat: "held", at: Date.now(), reached: true };
     window.E_HOST = {
       signinState: () => window.__sgn,
@@ -71,6 +71,14 @@ async function boot({ lang = "en", theme = "light", page: name = "etiuda.html", 
       storeState: () => window.__st.view,
       storeSaid: () => { window.__st.said++; window.__st.view = Object.assign({}, window.__st.view, { say: "" }); },
       storeSet: async w => { window.__st.sets.push(w); return null; },
+      storeAnswer: async c => {
+        window.__st.answers.push(c);
+        if (c === "later") window.__st.view = Object.assign({}, window.__st.view, { askNow: false });
+        else if (c === "mine" || c === "start") window.__st.view = { shown: true, line: "on", on: true, held: false, why: "", since: 0, say: window.__st.sayAfter || "" };
+        const res = { ok: true, choice: c, folder: c === "start" ? (window.__st.asideFolder || "C:\\Users\\Ada.User\\Set aside\\2026-11-15 18.10") : "", view: window.__st.view };
+        setTimeout(() => { window.__st.tell && window.__st.tell(); }, 10);
+        return res;
+      },
       storeConsent: async () => { window.__st.sets.push("consent"); return "asked"; },
       onStore: fn => { window.__st.tell = fn; },
     };
@@ -292,6 +300,134 @@ async function main() {
     check(ok, "m3 the row, the question and both bubbles (said once, and not available standing alone) in the copywriter's Polish", ok ? undefined : { r1, q, said: said.text, alone: alone.text });
   }
 
+  /* c9e: account-change question bubble (#eSyncWhose), EN light & PL dark, 440px, hung from #signinBtn, waits while #signinPanel open. */
+  const ASK_NOW = { shown: true, line: "ask", on: false, held: false, why: "", since: 0, say: "", askNow: true };
+  {
+    const bad = [];
+    const readWhose = async page => page.evaluate(() => {
+      const b = document.getElementById("eSyncWhose");
+      if (!b) return null;
+      const r = b.getBoundingClientRect();
+      const opts = [...b.querySelectorAll(".e-sync-opt")].map(x => ({ bold: (x.querySelector("b") || {}).textContent || "", text: x.textContent }));
+      const btns = [...b.querySelectorAll("button")].map(x => ({ id: x.id, text: x.textContent, pri: x.classList.contains("primary") }));
+      const lead = b.querySelector("p:not(.e-sync-opt)");
+      return { width: Math.round(r.width), at: window.__bubAt(b, document.getElementById("signinBtn")),
+        h: (b.querySelector("h3") || {}).textContent || "", p: lead ? lead.textContent : "", opts, btns, cls: b.className };
+    });
+
+    const pEn = await boot({ lang: "en", theme: "light", view: ON });
+    await tell(pEn, ASK_NOW);
+    const en = await readWhose(pEn);
+    if (!en || Math.abs(en.width - 440) > 4 || !en.at || !en.at.ok || !/\bbub-ask\b/.test(en.cls)) bad.push({ enGeom: en });
+    if (!en || en.h !== "Is what is on this desk yours?"
+      || en.p !== "Another account was signed in here before, and its settings, edits and own cards are still on this desk. Nothing syncs until you choose."
+      || JSON.stringify(en.opts) !== JSON.stringify([
+        { bold: "It is mine", text: "It is mine: it joins what your account syncs." },
+        { bold: "Start from my account", text: "Start from my account: this desk takes your account's content; what is here is set aside, not deleted." }
+      ])
+      || JSON.stringify(en.btns.map(b => [b.text, b.pri])) !== JSON.stringify([["It is mine", false], ["Start from my account", false], ["Not now", true]])) {
+      bad.push({ enCopy: en });
+    }
+    /* Dismissing with Not now answers "later". */
+    await pEn.evaluate(() => { const bs = [...document.querySelectorAll("#eSyncWhose button")]; if (bs.length) bs[bs.length - 1].click(); });
+    await sleep(200);
+    const afterLater = await pEn.evaluate(() => ({ b: !!document.getElementById("eSyncWhose"), answers: window.__st.answers.slice() }));
+    if (afterLater.b || JSON.stringify(afterLater.answers) !== JSON.stringify(["later"])) bad.push({ enLater: afterLater });
+    await pEn.close();
+
+    /* PL + dark + waits while #signinPanel is open. */
+    const pPl = await boot({ lang: "pl", theme: "dark", view: ON });
+    await pPl.click("#signinBtn");
+    await pPl.waitForFunction(() => { const p = document.getElementById("signinPanel"); return !!p && !p.hidden; }, { timeout: 5000 });
+    await tell(pPl, ASK_NOW);
+    const whileOpen = await pPl.evaluate(() => !!document.getElementById("eSyncWhose"));
+    await pPl.keyboard.press("Escape");
+    await sleep(300);
+    const pl = await readWhose(pPl);
+    if (whileOpen || !pl || Math.abs(pl.width - 440) > 4 || !pl.at || !pl.at.ok) bad.push({ plWait: { whileOpen, pl } });
+    if (!pl || pl.h !== "Czy to, co jest na tym stanowisku, należy do tego konta?"
+      || pl.p !== "Wcześniej było tu zalogowane inne konto, a jego ustawienia, zmiany i własne karty wciąż są na tym stanowisku. Do czasu wyboru nic nie jest synchronizowane."
+      || JSON.stringify(pl.opts) !== JSON.stringify([
+        { bold: "Dołącz do konta", text: "Dołącz do konta: to, co tu jest, trafi do synchronizacji konta." },
+        { bold: "Zacznij od konta", text: "Zacznij od konta: stanowisko przejmie zawartość konta; obecna zostanie odłożona, nie usunięta." }
+      ])
+      || JSON.stringify(pl.btns.map(b => [b.text, b.pri])) !== JSON.stringify([["Dołącz do konta", false], ["Zacznij od konta", false], ["Nie teraz", true]])) {
+      bad.push({ plCopy: pl });
+    }
+    await pPl.close();
+    check(!bad.length, "c9e account-change bubble opens on askNow (440px, waits for sign-in panel, copywriter's EN light & PL dark)", bad.length ? bad : undefined);
+  }
+
+  /* c9f: Settings Account row ("ask") + Decide… button + Escape/Not now -> "later", Mine/Start choices. */
+  const checkSettingsAsk = async (pageName) => {
+    const p = await boot({ page: pageName, lang: "en", theme: "light", view: Object.assign({}, ASK_NOW, { askNow: false }) });
+    const bad = [];
+    try {
+      await sleep(250);
+      const autoOpened = await p.evaluate(() => !!document.getElementById("eSyncWhose"));
+      if (autoOpened) bad.push({ autoOpenedOnAskNowFalse: true });
+      await p.evaluate(() => openSettings("account"));
+      await sleep(150);
+      const rowEn = await p.evaluate(() => {
+        const s = document.querySelector('#setBody [data-row="sync"]');
+        const btn = s ? s.querySelector('[data-sync-act="decide"]') : null;
+        return s ? {
+          line: ((s.querySelector("small") || {}).textContent || ""),
+          seg: !!s.querySelector(".set-seg"), btn: btn ? btn.textContent : ""
+        } : null;
+      });
+      if (!rowEn || rowEn.seg || rowEn.btn !== "Decide\u2026"
+        || rowEn.line !== "Waiting for your answer about what is on this desk. Nothing syncs until then.") {
+        bad.push({ rowEn });
+      }
+      await p.evaluate(() => { const b = document.querySelector('#setBody [data-sync-act="decide"]'); if (b) b.click(); });
+      await sleep(250);
+      const fromRow = await p.evaluate(() => {
+        const b = document.getElementById("eSyncWhose"), ctl = document.querySelector('#setBody [data-sync-act="decide"]');
+        return { b: !!b, at: b ? window.__bubAt(b, ctl) : null };
+      });
+      if (!fromRow.b || !fromRow.at || !fromRow.at.ok) bad.push({ fromRow });
+      await p.keyboard.press("Escape");
+      await sleep(200);
+      const esc = await p.evaluate(() => ({ b: !!document.getElementById("eSyncWhose"), answers: window.__st.answers.slice() }));
+      if (esc.b || JSON.stringify(esc.answers) !== JSON.stringify(["later"])) bad.push({ esc });
+      /* Click It is mine, then Start from my account. */
+      await p.evaluate(() => { const b = document.querySelector('#setBody [data-sync-act="decide"]'); if (b) b.click(); });
+      await sleep(200);
+      await p.evaluate(() => { const bs = [...document.querySelectorAll("#eSyncWhose button")]; if (bs[0]) bs[0].click(); });
+      await sleep(250);
+      const afterMine = await p.evaluate(() => ({ b: !!document.getElementById("eSyncWhose"), answers: window.__st.answers.slice(),
+        seg: !!document.querySelector('#setBody .set-seg[data-seg="sync"]') }));
+      if (afterMine.b || JSON.stringify(afterMine.answers) !== JSON.stringify(["later", "mine"]) || !afterMine.seg) bad.push({ afterMine });
+      await p.evaluate(() => { window.__st.view = Object.assign({}, { shown: true, line: "ask", on: false, held: false, why: "", since: 0, say: "", askNow: false }); openSettings("account"); });
+      await sleep(150);
+      await p.evaluate(() => { const b = document.querySelector('#setBody [data-sync-act="decide"]'); if (b) b.click(); });
+      await sleep(200);
+      await p.evaluate(() => { const bs = [...document.querySelectorAll("#eSyncWhose button")]; if (bs[1]) bs[1].click(); });
+      await sleep(250);
+      const afterStart = await p.evaluate(() => ({ b: !!document.getElementById("eSyncWhose"), answers: window.__st.answers.slice() }));
+      if (afterStart.b || JSON.stringify(afterStart.answers) !== JSON.stringify(["later", "mine", "start"])) bad.push({ afterStart });
+    } finally { await p.close(); }
+    return bad;
+  };
+  {
+    const bad = await checkSettingsAsk("etiuda.html");
+    const pPl = await boot({ lang: "pl", theme: "dark", view: Object.assign({}, ASK_NOW, { askNow: false }) });
+    await pPl.evaluate(() => openSettings("account"));
+    await sleep(150);
+    const rowPl = await pPl.evaluate(() => {
+      const s = document.querySelector('#setBody [data-row="sync"]');
+      const btn = s ? s.querySelector('[data-sync-act="decide"]') : null;
+      return s ? { line: ((s.querySelector("small") || {}).textContent || ""), btn: btn ? btn.textContent : "" } : null;
+    });
+    await pPl.close();
+    if (!rowPl || rowPl.btn !== "Zdecyduj\u2026"
+      || rowPl.line !== "Czeka na decyzję w sprawie zawartości tego stanowiska. Do tego czasu nic nie jest synchronizowane.") {
+      bad.push({ rowPl });
+    }
+    check(!bad.length, "c9f Account row Decide button opens bubble from row, Escape/Not now answers later, choices answer mine/start (EN & PL)", bad.length ? bad : undefined);
+  }
+
   /* r1: storeRow, and roomNext. */
   const rowBad = ST => {
     const now = Date.UTC(2026, 10, 20), D = 24 * 3600 * 1000;
@@ -316,6 +452,8 @@ async function main() {
       [row({ seatless: true, look: { state: "unavailable", why: "no-drive" } }).line === "unavailable" && row({ seatless: true, pol: { on: false, held: false } }).line === "off", "no seat: under a folder not reached and the person's own off"],
       [(r => r.line === "full" && r.on === true)(row({ full: true })), "the store's room full, the switch on"],
       [row({ full: true, conflicts: 1 }).line === "conflict" && row({ full: true, until: now - 3 * D }).line === "paused" && row({ full: true, pol: { on: false, held: false } }).line === "off", "full: under a conflict, a pause and off"],
+      [((r) => r.line === "ask" && r.on === false && r.held === false && r.askNow === true)(row({ ask: true, askNow: true, pol: { on: false, held: false } })), "ask: waiting for account-change answer even with person off"],
+      [row({ ask: true, askNow: true, pol: { on: false, held: true } }).line === "org-off", "ask: under policy off"],
       [ST.roomNext(false, "team-size") === true && ST.roomNext(true, "rate") === true && ST.roomNext(false, "rate") === false && ST.roomNext(true, "") === false, "roomNext: full at team-size, empty at a taken write, else as it was"],
     ];
     return cases.filter(c => !c[0]).map(c => c[1]);
@@ -325,7 +463,7 @@ async function main() {
     check(!bad.length, "r1 storeRow's line for each state, and the store's room", bad.length ? bad : undefined);
   }
   /* The row's two new lines, each lifted in a copy of store.cjs, turn r1 red; the product file is never written. */
-  for (const [tag, what] of [["row-noseat", "no seat read as on"], ["row-full", "the room full read as on"]]) {
+  for (const [tag, what] of [["row-ask", "the hold's question read as off"], ["row-noseat", "no seat read as on"], ["row-full", "the room full read as on"]]) {
     const line = "p r1 " + tag + " lifted in a copy of store.cjs turns r1 red (" + what + "), and the product file is never written";
     if (PLANTS_OFF) { skip(line); continue; }
     const before = sha(STORE), text = fs.readFileSync(STORE, "utf8"), lines = text.split("\n"), at = lines.findIndex(l => l.indexOf("/* plant:" + tag + " */") >= 0);
@@ -353,6 +491,19 @@ async function main() {
       detail = r ? "red: " + r : "still held";
       check(!c9a && !!r && /said again|after two more/.test(r), "p c9a the page's word that it showed the bubble taken out turns c9a red", detail);
     } else check(false, "p c9a the page's word that it showed the bubble taken out turns c9a red", detail);
+  }
+  if (PLANTS_OFF) skip("p c9f Escape or Not now leaving storeAnswer(\"later\") out turns c9f red");
+  else {
+    const LATER_PLANT = ['if (later) syncAnswer("later");', 'void 0;'];
+    const n = PAGE.split(LATER_PLANT[0]).length - 1;
+    let detail = "the plant's anchor is there " + n + " times";
+    if (n === 1) {
+      fs.writeFileSync(path.join(lab, "planted-whose.html"), PAGE.split(LATER_PLANT[0]).join(LATER_PLANT[1]));
+      const bad = await checkSettingsAsk("planted-whose.html");
+      const escHit = bad.some(x => x.esc);
+      detail = escHit ? "red: " + JSON.stringify(bad.find(x => x.esc)) : "still held: " + JSON.stringify(bad);
+      check(escHit, "p c9f Escape or Not now leaving storeAnswer(\"later\") out turns c9f red", detail);
+    } else check(false, "p c9f Escape or Not now leaving storeAnswer(\"later\") out turns c9f red", detail);
   }
   if (PLANTS_OFF) skip("p c9d firstSay saying at a look that did not make the store turns c9d red");
   else {

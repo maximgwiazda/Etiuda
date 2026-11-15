@@ -481,12 +481,12 @@ function signinClicks(root){
 /* ---- sync across computers: what the shell's storeRow answers (shell/sync/store.cjs), the row's words and the one bubble ---------
    The page is told a line (SYNC_LINES), the switch, whether policy holds it, the
    reason, the pause's start and what to say once; never a key, a store or a token. */
-const SYNC_LINES=["on","off","ending","ungiven","org-off","unavailable","paused","conflict","full","noseat"];
+const SYNC_LINES=["on","off","ending","ungiven","org-off","unavailable","paused","conflict","full","noseat","ask"];
 function syncRead(v){
   const o=v && typeof v==="object" ? v : {};
-  if(o.shown!==true || SYNC_LINES.indexOf(o.line)<0) return {shown:false, line:"", on:false, held:false, why:"", since:0, say:""};
+  if(o.shown!==true || SYNC_LINES.indexOf(o.line)<0) return {shown:false, line:"", on:false, held:false, why:"", since:0, say:"", askNow:false};
   return {shown:true, line:o.line, on:o.on===true, held:o.held===true, why:typeof o.why==="string" ? o.why.slice(0,40) : "",
-    since:Number.isFinite(o.since) && o.since>0 ? o.since : 0, say:typeof o.say==="string" ? o.say.slice(0,40) : ""};
+    since:Number.isFinite(o.since) && o.since>0 ? o.since : 0, say:typeof o.say==="string" ? o.say.slice(0,40) : "", askNow:o.askNow===true};
 }
 function syncNow(){
   const h=eHost();
@@ -522,14 +522,73 @@ function syncLine(s, provider){
   if(s.line==="conflict") return t("Changed on two computers: choose which to keep.");
   if(s.line==="full") return t("Sync is full, so new changes stay on this computer until something is removed.");
   if(s.line==="noseat") return t("Waiting for a seat. Sync resumes when this account holds one again, and nothing on this computer is lost.");
+  if(s.line==="ask") return t("Waiting for your answer about what is on this desk. Nothing syncs until then.");
   return t("Your catalogs, edits and settings on every computer you sign in on.");
+}
+let syncWaiting=null, syncWhoseShut=null;
+function syncAnswer(choice){
+  const h=eHost();
+  if(!h || typeof h.storeAnswer!=="function") return Promise.resolve(syncNow());
+  try{ return Promise.resolve(h.storeAnswer(String(choice||""))).then(res=>res && res.view ? syncRead(res.view) : syncNow(), ()=>syncNow()); }
+  catch(e){ return Promise.resolve(syncNow()); }
+}
+/* WHOSE THE DESK IS: asked from the account button automatically while askNow stands, or from Account's Decide button.
+   Escape and Not now answer "later" for this run only; choices close the bubble and hand "mine" or "start" to the shell. */
+function askSyncWhose(origin){
+  if(syncWhoseShut){ syncWhoseShut(false); syncWhoseShut=null; }
+  const target=origin || (()=>$("#signinBtn"));
+  const anchor=typeof target==="function" ? target() : target;
+  if(!anchor || !anchor.getClientRects().length) return;
+  const el=document.createElement("div");
+  el.className="bub bub-ask e-sync-whose";
+  el.id="eSyncWhose";
+  el.setAttribute("role","alertdialog");
+  el.setAttribute("aria-labelledby","eSyncWhoseT");
+  const h3=document.createElement("h3"); h3.id="eSyncWhoseT";
+  h3.textContent=t("Is what is on this desk yours?");
+  const lead=document.createElement("p");
+  lead.textContent=t("Another account was signed in here before, and its settings, edits and own cards are still on this desk. Nothing syncs until you choose.");
+  const opt=(bold, rest)=>{
+    const p=document.createElement("p"); p.className="e-sync-opt";
+    const b=document.createElement("b"); b.textContent=t(bold);
+    p.appendChild(b); p.appendChild(document.createTextNode(": "+t(rest)));
+    return p;
+  };
+  const acts=document.createElement("div"); acts.className="tour-actions";
+  const mkBtn=(label, cls, fn)=>{
+    const b=document.createElement("button"); b.type="button"; b.className=cls;
+    b.textContent=t(label); b.onclick=fn; acts.appendChild(b); return b;
+  };
+  el.appendChild(h3);
+  el.appendChild(lead);
+  el.appendChild(opt("It is mine", "it joins what your account syncs."));
+  el.appendChild(opt("Start from my account", "this desk takes your account's content; what is here is set aside, not deleted."));
+  const shut=(later)=>{
+    removeEventListener("keydown", onEsc, true);
+    if(syncWhoseShut===shut) syncWhoseShut=null;
+    el.remove();
+    if(later) syncAnswer("later");
+  };
+  const onEsc=e=>{ if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); shut(true); } };
+  addEventListener("keydown", onEsc, true);
+  syncWhoseShut=shut;
+  const choose=what=>{ shut(false); syncAnswer(what); };
+  mkBtn("It is mine", "btn", ()=>choose("mine"));
+  mkBtn("Start from my account", "btn", ()=>choose("start"));
+  const laterBtn=mkBtn("Not now", "btn primary", ()=>shut(true));
+  el.appendChild(acts);
+  document.body.appendChild(el);
+  hangBubble(el, target, {width:440});
+  try{ laterBtn.focus({preventScroll:true}); }catch(_){}
 }
 /* SAID ONCE, FROM THE ACCOUNT CONTROL: that sync is on, at the sign-in that made the person's store, or why it is not available. The
    shell hands it until the page says it was shown (storeSaid), so a second view never says it again; while the account panel is open,
    it waits for the panel to close, since both hang from the one button. */
-let syncWaiting=null;
 function syncSay(s){
-  if(!s.say || document.getElementById("eSyncSaid")) return;
+  if(s.line!=="ask" && syncWhoseShut) syncWhoseShut(false);
+  const wantAsk=s.line==="ask" && s.askNow && !document.getElementById("eSyncWhose");
+  const wantSay=!!s.say && !document.getElementById("eSyncSaid");
+  if(!wantAsk && !wantSay) return;
   const btn=$("#signinBtn"), panel=$("#signinPanel");
   if(!btn || !btn.getClientRects().length) return;
   if(panel && !panel.hidden){
@@ -538,6 +597,8 @@ function syncSay(s){
     syncWaiting.observe(panel, {attributes:true, attributeFilter:["hidden"]});
     return;
   }
+  if(wantAsk) askSyncWhose();
+  if(!wantSay) return;
   const words=s.say==="on" ? t("Your catalogs, edits and settings now follow you to every computer you sign in on. You can turn this off in Account.")
     : syncUnavailable(s.say, signinV.signedIn, true);
   const i=words.indexOf(". ");
@@ -642,5 +703,6 @@ export {
   syncRead,
   syncSay,
   syncSet,
+  askSyncWhose,
   wireSignin
 };

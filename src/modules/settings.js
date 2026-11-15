@@ -32,7 +32,7 @@ import { focusKey, focusSame, originOf } from "./dom.js";
 import { orgModel, orgRanks, syncOrgMark } from "./org-model.js";
 import { SIGNIN_NAMES, signinNow, signinShown, signinParts, signinSay, signinNoSeat, signinTold, signinActsHtml, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow, signinDoorsHtml, signinDoorRefusedNow,
   signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect, signinCopyHtml, signinManaged, signinKeepsAccount,
-  signinCapHolds, signinStranded, signinStrandedWords, syncNow, syncLine, syncSet, syncOnChange, syncConsent } from "./signin.js";
+  signinCapHolds, signinStranded, signinStrandedWords, syncNow, syncLine, syncSet, syncOnChange, syncConsent, askSyncWhose } from "./signin.js";
 import { hangBubble } from "./bubble.js";
 
 /* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name,
@@ -373,6 +373,7 @@ function accountGroups(){
    holds is drawn fixed, with the lock. */
 function syncRow(s, provider){
   let sw=s.line==="unavailable" || s.line==="org-off" ? ""
+    : s.line==="ask" ? '<button type="button" class="btn" data-sync-act="decide">'+esc(t("Decide\u2026"))+'</button>'
     : seg("sync",[{v:"off",t:t("Off")},{v:"on",t:t("On")}], s.on?"on":"off", s.held)
       +(s.held ? '<span class="sgn-lock">'+ICON_LOCK+esc(t("Set by your organisation"))+'</span>' : "");
   /* Where the folder's consent was never given, On is the person's trusted click that opens the provider's page (syncConsent). */
@@ -414,11 +415,12 @@ let accountHeard=false;
 function wireAccountRows(box){
   if(!accountHeard){
     accountHeard=true;
-    const again=()=>{ if(document.getElementById("setBody") && !document.getElementById("eSyncAsk")) paintSettings(); };
+    const again=()=>{ if(document.getElementById("setBody") && !document.getElementById("eSyncAsk") && !document.getElementById("eSyncWhose")) paintSettings(); };
     signinOnChange(again); syncOnChange(again);
   }
   box.querySelectorAll('[data-e-open="signin"]').forEach(b=>{ b.onclick=()=>signinStart(b.getAttribute("data-e-provider"), "account"); });
   box.querySelectorAll("[data-signin-act]").forEach(b=>{ b.onclick=()=>signinAct(b.getAttribute("data-signin-act"), b); });
+  box.querySelectorAll('[data-sync-act="decide"]').forEach(b=>{ b.onclick=()=>askSyncWhose(b); });
   box.querySelectorAll(".sgn-link-f").forEach(f=>{ f.onclick=()=>signinLinkSelect(f); });
   box.querySelectorAll('[data-e-open="buy"]').forEach(b=>{ b.onclick=()=>{
     const h=eHost();
