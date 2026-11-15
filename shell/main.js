@@ -10979,7 +10979,7 @@ function armSigninRenew() {
    folder itself. */
 let storeLayer = null;
 function StoreLib() { return storeLayer || (storeLayer = require(path.join(__dirname, "sync", "store.cjs"))); }
-/* store.json beside desk.json, read whole or not at all: {format: 1, keys, said, off?, told?, until?, owed?, leave?, org?, who?}. `keys` the store's keys sealed by
+/* store.json beside desk.json, read whole or not at all: {format: 1, keys, said, off?, told?, until?, owed?, leave?, org?, who?, made?}. `keys` the store's keys sealed by
    safeStorage as base64, "" where none are kept; `said` the reason the desk last said (sayOnce); `off` the person's own switch, absent where on;
    `told` once this computer has had its first look with sync on (firstSay); `until` the last store certificate's end, for the pause;
    `owed` the relay team id of a store Turn off everywhere ended that the licence service has not yet answered, sealed as `keys`; `leave`
@@ -10992,11 +10992,12 @@ function storeFileRead(text) {
   const ok = !!d && typeof d === "object" && !Array.isArray(d) && d.format === 1;
   return { keys: ok && typeof d.keys === "string" ? d.keys : "", said: ok && typeof d.said === "string" ? d.said.slice(0, 40) : "", off: ok && d.off === true,
     org: ok && d.org === true, told: ok && d.told === true, until: ok && Number.isSafeInteger(d.until) && d.until > 0 ? d.until : 0, owed: ok && typeof d.owed === "string" ? d.owed.slice(0, 400) : "",
-    leave: ok && typeof d.leave === "string" ? d.leave.slice(0, 200000) : "", who: ok && typeof d.who === "string" && /^[0-9a-f]{32}$/.test(d.who) ? d.who : "" };
+    leave: ok && typeof d.leave === "string" ? d.leave.slice(0, 200000) : "", who: ok && typeof d.who === "string" && /^[0-9a-f]{32}$/.test(d.who) ? d.who : "",
+    made: ok && typeof d.made === "string" && /^[0-9a-f]{32}$/.test(d.made) ? d.made : "" };
 }
 function storeFileText(s) {
   return JSON.stringify(Object.assign({ format: 1, keys: s.keys || "", said: s.said || "" }, s.off === true ? { off: true } : {}, s.told === true ? { told: true } : {},
-    s.until > 0 ? { until: s.until } : {}, s.owed ? { owed: s.owed } : {}, s.leave ? { leave: s.leave } : {}, s.org === true ? { org: true } : {}, s.who ? { who: s.who } : {}), null, 1) + "\n";
+    s.until > 0 ? { until: s.until } : {}, s.owed ? { owed: s.owed } : {}, s.leave ? { leave: s.leave } : {}, s.org === true ? { org: true } : {}, s.who ? { who: s.who } : {}, s.made ? { made: s.made } : {}), null, 1) + "\n";
 }
 /* WHOSE THE STORE'S STATE IS: store.json belongs to the account named by `who`, a hash of its provider and sub. Seated as another account,
    what was kept is let go before anything reads it (storeMine), so no person's keys, leave or owed end reach another person's folder or
@@ -11014,7 +11015,7 @@ function storeMine() {
   const s = storeState(), who = storeWho(signinState().held);
   if (!who) return false;
   if (s.who === who) return true; /* plant:store-mine */
-  s.keys = ""; s.leave = ""; s.owed = "";
+  s.keys = ""; s.leave = ""; s.owed = ""; s.made = "";
   if (s.who) { s.until = 0; s.said = ""; s.told = false; s.org = false; delete s.off; }
   s.who = who;
   storeLeaveHere = null; storeOwedHere = ""; storeNow = null; storeSay = ""; storeFresh = false;
@@ -11503,8 +11504,12 @@ async function storeLookNow() {
   const look = await L.storeLook({ folder: folder, local: storeLocal, keep: k => { if (ours()) storeKeep(k); },
     grant: (rt, sPub, extra) => storeGrant(me.key, rt, sPub, Object.assign({}, extra, { company: pol.company === true })),
     relay: { create: storeRelayCreate, renew: storeRelayRenew, devices: (keys, cert) => storeRelayDevices(keys, cert, me) },
-    me: { id: me.id, pub: me.key, desk: me.id }, url: STORE_RELAY, rand: n => crypto.randomBytes(n), fresh: storeFresh });
-  return ours() ? storeSettle(look) : null;
+    me: { id: me.id, pub: me.key, desk: me.id }, url: STORE_RELAY, rand: n => crypto.randomBytes(n), fresh: storeFresh, made: storeState().made });
+  if (!ours()) return null;
+  /* A store made here whose grant or making did not finish is named, so the next look still makes it as the one that replaces. */
+  const made = look.state === "paused" && look.made === true && look.keys ? look.keys.rt : look.state === "on" ? "" : storeState().made; /* plant:store-made-kept */
+  if (made !== storeState().made) { storeState().made = made; storeSave(); }
+  return storeSettle(look);
 }
 
 /* ---- the store's sync (shell/sync/sync.cjs) --------------------------------------------------------------------------------

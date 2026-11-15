@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-plants-"));
-const EXPECTED = 29;
+const EXPECTED = 31;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -274,6 +274,20 @@ async function main() {
     }
     return { ok: all, detail: brief(out) };
   }
+  /* M1: a store made while the licence service was out (its grant unreached): the look that finds the service back still says it
+     replaces and makes it at the relay, where this computer names the store it made (io.made); without that the store stays unmade. */
+  async function madeOutageScene() {
+    const w = worldOf("microsoft"), a = computer(w, "a");
+    w.serviceSent.down = true;
+    const l1 = await a.look();
+    w.serviceSent.down = false;
+    const l2 = await a.look({ made: l1.keys ? l1.keys.rt : "" });
+    const last = w.serviceSent.length ? JSON.parse(w.serviceSent[w.serviceSent.length - 1]) : {};
+    const team = l2.keys ? !!(w.R.stores.get(l2.keys.rt) && w.R.stores.get(l2.keys.rt).get("team")) : false;
+    const ok = l1.state === "paused" && l1.why === "unreached" && l1.made === true && l2.state === "on" && l2.keys.rt === l1.keys.rt && team
+      && last.extra && last.extra.replace === true;
+    return { ok, detail: brief({ first: l1.state + "/" + l1.why, firstMade: l1.made, second: l2.state + "/" + (l2.why || ""), sameStore: !!l2.keys && !!l1.keys && l2.keys.rt === l1.keys.rt, team, replace: !!(last.extra && last.extra.replace) }) };
+  }
   /* C4: the folder's file deleted while a computer holds K and S: its next look writes it back, the same store; with no computer holding
      them, the next sign-in makes a new store, and the service is asked a grant for it (the service ends the old one, Studio's S4a). */
   async function deletedScene() {
@@ -387,6 +401,7 @@ async function main() {
     ["C2", keysStayScene, "K and S reach the person's folder and each computer's own sealing alone: no body sent to the service or the relay holds either"],
     ["C3", unreachedScene, "the folder unreached (offline, no drive, Drive off by the organisation, consent refused, full), on each provider, answers unavailable with its reason and throws nothing; each reason is said once, offline never"],
     ["T2", transientScene, "the folder throttled or down, Graph 503 or 429 and Drive 503, 429 or a rate-limit 403, answers offline, never a reason told"],
+    ["M1", madeOutageScene, "a store made while the licence service was out is still granted as a replacement and made at the relay at the next look, its maker naming it"],
     ["C4", deletedScene, "the file deleted while a computer holds K and S is written back, the same store; with none holding them the next sign-in makes a new store and asks the service for it"],
     ["C6", policyScene, "a managed computer with PersonalStore unset does not sync; on or company it does, held; elsewhere sync is on unless the person turned it off"],
     ["E1", () => endedScene("microsoft"), "turned off everywhere on OneDrive: a computer holding K and S reads the ended mark, answers ended and writes nothing back; turned on there since, a new store is made over the mark"],
@@ -432,6 +447,7 @@ async function main() {
     ["the re-read", "C1r", swap("    keys = again.ok && again.text !== null ? keyRead(again.text) : null;", "    keys = again.ok ? fresh : null;"), "each computer keeps the store it made, so two are made and one ends the other"],
     ["the re-read", "C1rg", swap("    keys = again.ok && again.text !== null ? keyRead(again.text) : null;", "    keys = again.ok ? fresh : null;"), "the same on Drive"],
     ["say-once", "C3", lift("say-once"), "a reason is said at every look"],
+    ["made-named", "M1", swap("let made = !!io.made && keys !== null && keys.rt === io.made; /* plant:made-named */", "let made = false; /* plant:made-named */"), "the store this computer made is forgotten at the next look"],
     ["graph-transient", "T2", lift("graph-transient"), "Graph's 503 and 429 read as a refusal"],
     ["drive-transient", "T2", lift("drive-transient"), "Drive's 503, 429 and rate-limit 403 read as a refusal or no Drive"],
     ["write-back", "C4", lift("write-back"), "the deleted file is not written back, so a new store is made"],

@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 94;
+const EXPECTED = 96;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -86,7 +86,7 @@ function worldOf(o) {
   const opt = o || {};
   const R = S.relayEnv({ roots: K.ROOTS, limits: opt.limits });
   R.clock.now = Date.now();
-  const w = { R, access: "stand-in-folder-token-" + crypto.randomBytes(12).toString("hex"), forms: [], service: [], relay: [], graph: [], other: [], file: null, codes: {}, drive: { files: [], calls: [] } };
+  const w = { R, grantDown: !!opt.grantDown, access: "stand-in-folder-token-" + crypto.randomBytes(12).toString("hex"), forms: [], service: [], relay: [], graph: [], other: [], file: null, codes: {}, drive: { files: [], calls: [] } };
   const json = (status, o) => new Response(Buffer.from(JSON.stringify(o)), { status, headers: { "content-type": "application/json" } });
   const GRAPH = "https://graph.microsoft.com/v1.0/me/drive/special/approot", FILE = GRAPH + ":/etiuda-store.json:/content";
   w.fetch = async (url, init) => {
@@ -130,6 +130,7 @@ function worldOf(o) {
     if (u === STAGING + "store/grant") {
       w.service.push(body);
       if (w.grantGate) { const g = w.grantGate; w.grantGate = null; if (w.onGrant) w.onGrant(); await g; }
+      if (w.grantDown) return json(503, { ok: false, reason: "unavailable" });
       const b = JSON.parse(body), lines = ["etiuda-licence-store-grant", b.desk, b.rt, b.lead, b.t].concat(b.company ? ["company"] : [], b.replace ? ["replace"] : []);
       if (!verifyWith(b.desk, Buffer.from(lines.join("\n"), "utf8"), b.sig)) return json(400, { ok: false, reason: "signature" });
       R.clock.now = Date.now();
@@ -865,6 +866,20 @@ async function outageScene(src) {
   const ok = [503, 429].every(s => out[s].during === "unavailable/offline" && !out[s].cachedRefusal && out[s].after === "on") && !out.renewal.cachedRefusal && out.renewal.look !== "unavailable/ungiven";
   return { ok, detail: brief(out) };
 }
+/* (gm) A store made while the licence service was out: store.json names it (made, no key in it), and the look that finds the service
+   back makes it at the relay as the one that replaces; the store is on and the name gone. */
+async function madeOutageShellScene(src) {
+  const r = await renewScene(src, { grantDown: true }), T = r.shell.T, w = r.world;
+  const rt = w.file ? JSON.parse(w.file).rt : "", first = r.now;
+  const kept = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8"));
+  w.grantDown = false;
+  await T.storeTurn();
+  const n = T.get().storeNow, after = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8"));
+  const replace = w.service.filter(b => { try { const j = JSON.parse(b); return j.rt === rt && j.replace === true; } catch { return false; } }).length;
+  const team = !!(w.R.stores.get(rt) && w.R.stores.get(rt).get("team"));
+  const ok = !!rt && !!first && first.state === "paused" && kept.made === rt && !!n && n.state === "on" && team && replace >= 2 && !after.made;
+  return { ok, detail: brief({ first: first && first.state + "/" + first.why, named: kept.made === rt, then: n && n.state + "/" + n.why, team, replaceAsked: replace, nameLeft: !!after.made }) };
+}
 async function consentSwitchScene(src) {
   const r = await signinFlow(src, { refuse: DECLINED });
   const ungiven = !!r.now && r.now.why === "ungiven";
@@ -1008,6 +1023,7 @@ const LEGS = [
   ["g1b", consentBusyScene, "while the switch's request for the folder waits on the browser the desk is busy to the page, and an answer after another account took the seat is neither taken for it nor looked with"],
   ["g2r", keepRefreshScene, "the switch's Google consent sign-in answered with no refresh token keeps the refresh token already sealed for the same account"],
   ["t1", outageScene, "the token address answering 503 or 429 to the look's refresh, or to a renewal's folder refresh, keeps no refusal for the folder: the look says offline and the store is on once it answers"],
+  ["gm", madeOutageShellScene, "a store made while the licence service was out is named in store.json and made at the relay as the replacement once the service answers"],
   ["fa1", refusedAccountScene, "a second Google sign-in whose seat is refused leaves the folder's token the seated account's"],
   ["fa2", overAnotherScene, "an account seated straight over another, with no folder step of its own, is never handed the other's folder token: its look asks its own"],
   ["w1", s => anotherScene(s, "look", true), "person A synced and signed out, which leaves no store keys here; person B seated on the same profile with an empty folder: B's look writes nothing of A's K or S into B's folder and makes B's own store"],
@@ -1067,6 +1083,7 @@ const PLANTS = [
   ["gc", swap("function storeConflicts() { return storeSyncView().kept; } /* plant:store-conflicts */", "function storeConflicts() { return 0; } /* plant:store-conflicts */"), "the row counts no conflict"],
   ["gs", swap("  storeSyncStop(); /* plant:store-set-stop */\n", ""), "the switch leaves the sync running"],
   ["gr", swap("      room: storeRoom, /* plant:store-room */\n", ""), "the store's channel tells the row nothing"],
+  ["gm", swap("  const made = look.state === \"paused\" && look.made === true && look.keys ? look.keys.rt : look.state === \"on\" ? \"\" : storeState().made; /* plant:store-made-kept */", "  const made = \"\"; /* plant:store-made-kept */"), "the store made here is not named, so the next look forgets it"],
   ["t1", swap(" || signinTransient(res)) return; /* plant:folder-transient */", ") return; /* plant:folder-transient */"), "an outage at the token address kept as the folder refused"],
   ["t1", swap("  if (signinTransient(res)) return { why: \"offline\" };", ""), "the look's refresh answered by an outage read as consent never given"],
   ["g2r", swap(" || (sameAccount() ? was.refresh || \"\" : \"\"), /* plant:take-keeps-refresh */", ", /* plant:take-keeps-refresh */"), "the sealed refresh token replaced by none"],

@@ -186,10 +186,10 @@ function storePolicy(managed, policy, personOff) {
 
 /* ---- one look: the folder read, the key adopted, written back or made, and this computer enrolled -------------------------
    `io`: folder (above, or null where the provider has none), local() and keep(keys) (this computer's own sealed copy, or null),
-   grant(rt, sPub) the licence service's store/grant answer {grant, store} or {why}, relay.create(keys, grant), relay.renew(keys, grant), relay.devices(keys, store)
+   grant(rt, sPub) the licence service's store/grant answer {grant, store} or {why}, relay.create(keys, grant), relay.renew(keys, grant), relay.devices(keys, store), made (above)
    (the list signed by S, and by this computer with its store certificate), me {id, pub, desk} this computer's key at the relay, url the relay's address, rand(n).
    Answers {state: "on", keys, store}, {state: "unavailable", why} where the folder could not be reached (the desk works as today),
-   or {state: "paused", why} where the service or relay was not. It shows nothing and asks nothing. */
+   or {state: "paused", why, made} where the service or relay was not. It shows nothing and asks nothing. */
 async function storeLook(io) {
   if (!io.folder) return { state: "unavailable", why: "no-drive" };
   const read = await io.folder.read();
@@ -211,7 +211,9 @@ async function storeLook(io) {
     keys = now.ok && now.text !== null ? keyRead(now.text) : null;
     if (!keys) return { state: "unavailable", why: now.ok ? "refused" : now.why };
   }
-  let made = false;
+  /* A store this computer made whose grant or making at the relay did not finish (io.made, the relay team id the last look answered as made)
+     is still its own to make: the next look says it replaces and makes it. */
+  let made = !!io.made && keys !== null && keys.rt === io.made; /* plant:made-named */
   if (!keys) {
     const fresh = freshKeys(io.rand, io.url);
     const put = ended || gone ? await io.folder.write(keyText(fresh)) : await io.folder.create(keyText(fresh));
@@ -227,12 +229,12 @@ async function storeLook(io) {
   const sPub = pubOf(keys.s);
   /* Only a computer that made the store its folder shows says it replaces the person's others (the service ends them); two may, above. */
   const got = await io.grant(keys.rt, sPub, { replace: made });
-  if (!got || got.why || !got.grant) return { state: "paused", why: got && got.why ? got.why : "unreached", keys };
+  if (!got || got.why || !got.grant) return { state: "paused", why: got && got.why ? got.why : "unreached", keys, made };
   /* Sealed here only once the service grants the store to the person signed in, so a key file it refuses never replaces this computer's own. */
   if (!local || local.rt !== keys.rt || local.k !== keys.k || local.s !== keys.s || local.rev !== keys.rev) io.keep(keys); /* plant:keep-granted */
   if (made) {
     const c = await io.relay.create(keys, got.grant);
-    if (!c.ok) return { state: "paused", why: c.why || "relay", keys };
+    if (!c.ok) return { state: "paused", why: c.why || "relay", keys, made };
   }
   /* Every other look hands the relay the grant it was given, so the store lapses from the person's last seat and not from its making; a
      renewal refused for any other reason changes nothing here and is asked again at the next look. */
