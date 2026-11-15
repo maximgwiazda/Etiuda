@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 132;
+const EXPECTED = 135;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -1896,6 +1896,52 @@ try {
       if (at >= 0) { lines.splice(at, 1); again = await yesRelay(evil, lines.join("\n")); }
       check(!!again && again.channels.length === 1 && again.channels[0] === evil,
         "18c lifting plant:relay-known opens a channel to the other host: " + (again ? JSON.stringify(again.channels) : "plant line absent"));
+    }
+  }
+  /* ---- 19. the catalog folder. The page may store only a path this shell's picker returned, the one already
+     stored, or the one machine policy names. Any other string is left out, and nothing states it. ---- */
+  {
+    const remotePath = p => { const s = String(p || ""); return s.length >= 2 && ((s.charAt(0) === "\\" && s.charAt(1) === "\\") || (s.charAt(0) === "/" && s.charAt(1) === "/")); };
+    const arm = S => {
+      const calls = [];
+      const note = p => { calls.push(String(p)); };
+      S.ctl.pstat = async p => { note(p); if (remotePath(p)) { const e = new Error("stand-in"); e.code = "ENOENT"; throw e; } return realFs.promises.stat(p); };
+      S.ctl.statSync = (real, p, ...a) => { note(p); if (remotePath(p)) { const e = new Error("stand-in"); e.code = "ENOENT"; throw e; } return real(p, ...a); };
+      S.ctl.mkdirSync = (real, p, ...a) => { note(p); if (remotePath(p)) return; return real(p, ...a); };
+      S.ctl.readFileSync = (real, p, ...a) => { note(p); if (remotePath(p)) { const e = new Error("stand-in"); e.code = "ENOENT"; throw e; } return real(p, ...a); };
+      return calls;
+    };
+    const yard = path.join(LAB, "picked-catalog");
+    realFs.mkdirSync(yard, { recursive: true });
+    const honest = loadShell({ openDialog: async () => ({ canceled: false, filePaths: [yard] }) });
+    const picked = await honest.ask("etiuda:pick-catalog-folder", "Library");
+    const saved = honest.ipc("etiuda:desk-patch-save", JSON.stringify({ eCatalogFolder: picked }));
+    const storedHonest = keysOn(honest.deskFile);
+    check(picked === yard && saved === true && !!storedHonest && storedHonest.eCatalogFolder === yard,
+      "19a a folder the shell's picker returned is stored when the page names that same path: picked " + (picked === yard) + ", saved " + saved);
+    const unc = "\\\\evil.example\\share\\etiuda";
+    const probe = (src) => {
+      const S = loadShell({ src: src });
+      const calls = arm(S);
+      S.ipc("etiuda:desk");
+      const folderOf = () => { const k = keysOn(S.deskFile); return k ? k.eCatalogFolder : undefined; };
+      const had = folderOf();
+      const ok = S.ipc("etiuda:desk-patch-save", JSON.stringify({ eCatalogFolder: unc }));
+      return S.ask("etiuda:open-catalog-folder").then(() => ({ ok: ok, had: had, after: folderOf(),
+        remote: calls.filter(remotePath).length }));
+    };
+    const hostile = await probe();
+    check(hostile.ok === false && hostile.after === hostile.had && hostile.remote === 0,
+      "19b a catalog folder the page names, with no picker behind it, is not stored and not stated: saved " + hostile.ok
+      + ", folder " + JSON.stringify(hostile.after) + ", remote calls " + hostile.remote);
+    if (PLANTS_OFF) notRun("19c lifting plant:catalog-folder-wall stores and states the page's path");
+    else {
+      const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:catalog-folder-wall") >= 0);
+      let again = null;
+      if (at >= 0) { lines.splice(at, 1); again = await probe(lines.join("\n")); }
+      check(!!again && (again.after === unc || again.remote > 0),
+        "19c lifting plant:catalog-folder-wall stores and states the page's path: "
+        + (again ? "folder " + JSON.stringify(again.after) + ", remote " + again.remote : "plant line absent"));
     }
   }
 } catch (e) {

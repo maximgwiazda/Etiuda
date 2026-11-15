@@ -8103,15 +8103,45 @@ function onUiLangChanged() {
   try { syncJumpList(); } catch { /* the jump list is optional */ }
 }
 
+/* The last folder this shell's own picker returned, per page, kept until the next pick. A save may
+   name that path again. It is not spent on the first write. */
+const folderOffered = new Map();
+function rememberFolder(senderId, folder) {
+  if (senderId == null || typeof folder !== "string" || !folder) return;
+  folderOffered.set(senderId, folder);
+}
+function offeredFolder(senderId, folder) {
+  return typeof folder === "string" && folder !== "" && folderOffered.get(senderId) === folder;
+}
+/* The page may set the catalog folder to the path the picker returned, the one already stored, or the
+   one machine policy names. Anything else is left out of the write, so it is never stated or opened. */
+function catalogFolderAllowed(next, senderId) {
+  if (typeof next !== "string" || next === "") return false;
+  if (deskKeys && deskKeys[CATALOG_FOLDER_KEY] === next) return true;
+  if (offeredFolder(senderId, next)) return true;
+  let named = "";
+  try { named = sayJoinPolicy().folder || ""; } catch (e) { named = ""; }
+  return !!named && policySameFolder(next, named);
+}
+function confineCatalogFolder(map, senderId) {
+  if (!map || !Object.prototype.hasOwnProperty.call(map, CATALOG_FOLDER_KEY)) return false;
+  const next = map[CATALOG_FOLDER_KEY];
+  if (next === null || next === undefined) return false;
+  if (catalogFolderAllowed(next, senderId)) return false;
+  delete map[CATALOG_FOLDER_KEY]; /* plant:catalog-folder-wall */
+  return true;
+}
 function writeDesk(text, from) {
   let map;
   try { map = JSON.parse(text); } catch { return false; }
   if (!map || typeof map !== "object" || Array.isArray(map)) return false;
   if (deskKeys === undefined) deskKeys = readDesk();
+  const folderRefused = confineCatalogFolder(map, from);
   const langWas = deskKeys ? deskKeys.eUiLang : undefined;
   const merged = mergeDesk(deskKeys, deskGiven.get(from) || {}, map);
   /* A write is skipped only where the live file is known to hold exactly this. A desk recovered
      from a backup has not been written yet, and skipping there would leave the refused file. */
+  if (folderRefused && sameDesk(merged, deskKeys)) return false;
   if (deskWritten && sameDesk(merged, deskKeys)) { deskGiven.set(from, map); return true; }
   try {
     saveDeskFile(sameDesk(merged, map) ? text : JSON.stringify(merged));
@@ -8147,19 +8177,22 @@ function deskText(keys) {
 }
 /* A PATCH NAMES ONLY THE KEYS ONE LOAD CHANGED, a string for a value and null for a key deleted,
    so it is applied as it stands: no other load's key is in it to be undone. */
-function patchDesk(text) {
+function patchDesk(text, from) {
   let patch;
   try { patch = JSON.parse(text); } catch { return false; }
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) return false;
-  const keys = Object.keys(patch);
-  if (keys.some(k => patch[k] !== null && typeof patch[k] !== "string")) return false;
+  if (Object.keys(patch).some(k => patch[k] !== null && typeof patch[k] !== "string")) return false;
   if (deskKeys === undefined) deskKeys = readDesk();
+  const folderRefused = confineCatalogFolder(patch, from);
+  const keys = Object.keys(patch);
   const langWas = deskKeys ? deskKeys.eUiLang : undefined;
   /* Ejecting the catalog is the agent leaving the file this launch was opened with, even when
      that key was never stored and the patch then changes nothing. */
   if (Object.prototype.hasOwnProperty.call(patch, "eCatalog") && patch.eCatalog === null) releaseOpened();
   const has = (k) => Object.prototype.hasOwnProperty.call(deskKeys, k);
-  if (deskWritten && keys.every(k => (patch[k] === null ? !has(k) : deskKeys[k] === patch[k]))) return true;
+  const unchanged = keys.every(k => (patch[k] === null ? !has(k) : deskKeys[k] === patch[k]));
+  if (folderRefused && (unchanged || keys.length === 0)) return false;
+  if (deskWritten && unchanged) return true;
   const merged = Object.assign({}, deskKeys);
   keys.forEach(k => { if (patch[k] === null) delete merged[k]; else merged[k] = patch[k]; });
   try {
@@ -8200,10 +8233,10 @@ ipcMain.on("etiuda:desk-save", (e, text) => {
 ipcMain.handle("etiuda:desk-write", (e, text) =>
   fromEngine(e) && typeof text === "string" && writeDesk(text, e.sender.id));
 ipcMain.on("etiuda:desk-patch-save", (e, text) => {
-  e.returnValue = fromEngine(e) && typeof text === "string" && patchDesk(text);
+  e.returnValue = fromEngine(e) && typeof text === "string" && patchDesk(text, e.sender.id);
 });
 ipcMain.handle("etiuda:desk-patch", (e, text) =>
-  fromEngine(e) && typeof text === "string" && patchDesk(text));
+  fromEngine(e) && typeof text === "string" && patchDesk(text, e.sender.id));
 /* THE TABS' SESSION LIVES HERE, IN MEMORY, PER WINDOW. Chromium's own sessionStorage is written to the
    profile, where a customer's name and a search would outlast the window; this is never written in plain text.
    At an installer's close alone, and only upon an explicit installer signal (--update-close) when safeStorage
@@ -9193,7 +9226,9 @@ ipcMain.handle("etiuda:pick-catalog-folder", async (e, title) => {
     properties: ["openDirectory", "createDirectory"],
   };
   const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
-  return (!r.canceled && r.filePaths && r.filePaths[0]) ? r.filePaths[0] : "";
+  const chosen = (!r.canceled && r.filePaths && r.filePaths[0]) ? r.filePaths[0] : "";
+  if (chosen) rememberFolder(e.sender.id, chosen);
+  return chosen;
 });
 
 /* IMPORT CATALOG'S OWN DIALOG, the shell's for the same reason the folder picker above is: the
