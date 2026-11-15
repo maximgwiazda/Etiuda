@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 69;
+const EXPECTED = 79;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -126,6 +126,7 @@ function worldOf(o) {
     }
     if (u === STAGING + "store/grant") {
       w.service.push(body);
+      if (w.grantGate) { const g = w.grantGate; w.grantGate = null; if (w.onGrant) w.onGrant(); await g; }
       const b = JSON.parse(body), lines = ["etiuda-licence-store-grant", b.desk, b.rt, b.lead, b.t].concat(b.company ? ["company"] : [], b.replace ? ["replace"] : []);
       if (!verifyWith(b.desk, Buffer.from(lines.join("\n"), "utf8"), b.sig)) return json(400, { ok: false, reason: "signature" });
       R.clock.now = Date.now();
@@ -189,7 +190,8 @@ function worldOf(o) {
 
 /* ---- the shell, evaluated whole: `src` is shell/main.js's text or a planted copy of it ---- */
 /* What the leg reads from main.js, appended to its text; a name main.js lacks comes back undefined, so its leg fails alone. */
-const TAIL_NAMES = ["storeView", "storeRoom", "storeSetNow", "storeState", "signinRun", "signinRenew", "signinIo", "signinRenewNow", "signinServiceAsk", "storeServiceAt", "storeOnFor", "storeTurn", "branchIdentity", "signinState", "patchDesk", "storeForget", "signinLandingHtml", "signinListen"];
+const TAIL_NAMES = ["storeView", "storeRoom", "storeSetNow", "storeState", "signinRun", "signinRenew", "signinIo", "signinRenewNow", "signinServiceAsk", "storeServiceAt", "storeOnFor", "storeTurn", "branchIdentity", "signinState", "patchDesk", "storeForget", "signinLandingHtml", "signinListen",
+  "signinOutNow", "storeLeaveNow"];
 const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing", "storeConsentFlight"];
 const TAIL = "\n__test.T = {" + TAIL_NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
   + ", get: () => ({" + TAIL_STATE.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "}) };";
@@ -517,6 +519,59 @@ async function owedScene(src) {
   return { ok, detail: brief({ whileOwed: off.line, keptSealed: !!kept.owed && text.indexOf(rt) < 0, retried: w.ended === rt ? "signed, this store" : w.ended, after: after.line, left: !!left.owed }) };
 }
 
+/* (w) ANOTHER PERSON ON THIS DESK: person A synced here; person B, whose own folder holds no key file, is seated on the same Windows
+   profile, after A signed out (w1, whose sign-out leaves no keys in store.json) or straight over A's sign-in. Nothing of A's reaches B:
+   no key file with A's K or S is written into B's folder by the look (w1, w1d), by a This computer A left owed (w2), and no store/end A
+   left owed is posted under B (w3); B's look makes B's own store. */
+const sealedOf = s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)).toString("base64");
+function seatAnother(T, w, was, sub) {
+  T.signinState().held = Object.assign({}, was, { sub: sealedOf(sub || "sub-of-another-person"), refresh: sealedOf("rt-of-another-person") });
+  w.file = null;
+}
+const hasKeysOf = (text, keys) => !!text && !!keys && (String(text).indexOf(keys.k) >= 0 || String(text).indexOf(keys.s) >= 0);
+async function anotherScene(src, door, out) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  const a = w.file ? JSON.parse(w.file) : null;
+  if (door === "leave") { w.relayDown = true; await T.storeSetNow("here"); w.relayDown = false; }
+  if (door === "owed") { w.endDown = true; await T.storeSetNow("everywhere"); w.endDown = false; }
+  const heldA = T.signinState().held;
+  if (out) T.signinOutNow();
+  const left = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8")), ends = endsPosted(w);
+  seatAnother(T, w, heldA);
+  if (door === "leave") { await T.storeLeaveNow(null); }
+  if (door === "owed") { await T.signinRenewNow(); await new Promise(x => setTimeout(x, 40)); }
+  if (door === "look") { await T.storeTurn(); }
+  const intoB = hasKeysOf(w.file, a), b = w.file ? JSON.parse(w.file) : null;
+  const n = T.get().storeNow;
+  const ok = !!a && !intoB && (door !== "owed" || endsPosted(w) === ends) && (door !== "look" || (!!n && n.state === "on" && !!b && b.rt !== a.rt && b.k !== a.k))
+    && (!out || (!left.keys && !left.leave));
+  return { ok, detail: brief({ door, out: !!out, keptAtOut: !!left.keys || !!left.leave, aKeysInB: intoB, bFile: b ? (b.kind || "?") : null, bStore: !!b && !!a && b.rt !== a.rt, look: n && n.state + "/" + n.why, endsUnderB: endsPosted(w) - ends }) };
+}
+
+/* (w4) A look of A's still out when B is seated keeps nothing for B: its keys are not sealed here under B's name, and its folder
+   token is no longer handed out. */
+async function lookOutScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  const heldA = T.signinState().held;
+  w.file = null;
+  let open = null, asked = null;
+  w.grantGate = new Promise(a => { open = a; });
+  const atGrant = new Promise(a => { w.onGrant = a; });
+  T.storeSetNow("here");
+  await T.storeSetNow("on");
+  const flight = T.get().storeFlight;
+  await atGrant;
+  seatAnother(T, w, heldA);
+  T.storeView();
+  const writesBefore = w.graph.filter(g => /^PUT /.test(g) && g.indexOf("Bearer stand-in") >= 0).length;
+  open();
+  if (flight) await flight;
+  const kept = JSON.parse(fs.readFileSync(path.join(r.shell.UD, "store.json"), "utf8"));
+  const writesAfter = w.graph.filter(g => /^PUT /.test(g) && g.indexOf("Bearer stand-in") >= 0).length;
+  const ok = !kept.keys && writesAfter === writesBefore;
+  return { ok, detail: brief({ keptForB: !!kept.keys, folderWritesAfterB: writesAfter - writesBefore }) };
+}
+
 /* (f) MICROSOFT'S FOLDER ASKED APART: the sign-in asks today's scopes alone; once its code is back, the same browser window is sent on from
    the loopback's landing to ask the folder alone; a refusal, or an administrator's approval needed, leaves the desk signed in and says
    "consent" once; a renewal asks the folder quietly and never opens a browser. The browser is a stand-in over real HTTP to the loopback. */
@@ -820,6 +875,11 @@ const LEGS = [
   ["gc", conflictsScene, "the versions the sync keeps for the person's choice are the row's conflict count: one kept reads conflict, none reads on"],
   ["gs", switchStopScene, "This computer and Everywhere stop the store's sync at once, the relay unreached, not at the next look"],
   ["gr", roomWireScene, "a write the store's relay refuses for its room turns the row full, and the next write it takes turns it on"],
+  ["w1", s => anotherScene(s, "look", true), "person A synced and signed out, which leaves no store keys here; person B seated on the same profile with an empty folder: B's look writes nothing of A's K or S into B's folder and makes B's own store"],
+  ["w1d", s => anotherScene(s, "look", false), "the same where B signs in straight over A's sign-in"],
+  ["w2", s => anotherScene(s, "leave", false), "a This computer A left owed is not written into B's folder with A's keys"],
+  ["w3", s => anotherScene(s, "owed", false), "a store/end A left owed is not posted while B is seated"],
+  ["w4", lookOutScene, "a look of A's still out when B is seated seals nothing here for B and writes nothing more to the folder"],
 ];
 const results = {};
 const scenes = Object.fromEntries(LEGS.map(([id, scene]) => [id, scene]));
@@ -872,6 +932,11 @@ const PLANTS = [
   ["gc", swap("function storeConflicts() { return storeSyncView().kept; } /* plant:store-conflicts */", "function storeConflicts() { return 0; } /* plant:store-conflicts */"), "the row counts no conflict"],
   ["gs", swap("  storeSyncStop(); /* plant:store-set-stop */\n", ""), "the switch leaves the sync running"],
   ["gr", swap("      room: storeRoom, /* plant:store-room */\n", ""), "the store's channel tells the row nothing"],
+  ["w1", swap("  if (s.keys || s.leave || storeLeaveHere) {", "  if (false) {"), "a sign-out leaves the store's keys in store.json"],
+  ["w1d", swap("  if (s.who === who) return true; /* plant:store-mine */", "  if (true) { s.who = who; return true; } /* plant:store-mine */"), "the keys kept for A are B's"],
+  ["w2", swap("  if (s.who === who) return true; /* plant:store-mine */", "  if (true) { s.who = who; return true; } /* plant:store-mine */"), "the leave kept for A is B's"],
+  ["w3", swap("  if (s.who === who) return true; /* plant:store-mine */", "  if (true) { s.who = who; return true; } /* plant:store-mine */"), "the store/end owed for A is B's"],
+  ["w4", swap("  const ours = () => storeState().who === who && storeWho(signinState().held) === who; /* plant:store-look-ours */", "  const ours = () => true; /* plant:store-look-ours */"), "a look ends under whoever is seated"],
   ["d", swap(".indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes", ".indexOf(String(url)) < -1) throw new Error(\"the licence service's door takes"), "the door takes any route"],
 ];
 for (const [id, change, what] of PLANTS) {

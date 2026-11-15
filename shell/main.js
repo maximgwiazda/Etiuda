@@ -10970,7 +10970,7 @@ function armSigninRenew() {
    folder itself. */
 let storeLayer = null;
 function StoreLib() { return storeLayer || (storeLayer = require(path.join(__dirname, "sync", "store.cjs"))); }
-/* store.json beside desk.json, read whole or not at all: {format: 1, keys, said, off?, told?, until?, owed?, leave?, org?}. `keys` the store's keys sealed by
+/* store.json beside desk.json, read whole or not at all: {format: 1, keys, said, off?, told?, until?, owed?, leave?, org?, who?}. `keys` the store's keys sealed by
    safeStorage as base64, "" where none are kept; `said` the reason the desk last said (sayOnce); `off` the person's own switch, absent where on;
    `told` once this computer has had its first look with sync on (firstSay); `until` the last store certificate's end, for the pause;
    `owed` the relay team id of a store Turn off everywhere ended that the licence service has not yet answered, sealed as `keys`; `leave`
@@ -10983,11 +10983,35 @@ function storeFileRead(text) {
   const ok = !!d && typeof d === "object" && !Array.isArray(d) && d.format === 1;
   return { keys: ok && typeof d.keys === "string" ? d.keys : "", said: ok && typeof d.said === "string" ? d.said.slice(0, 40) : "", off: ok && d.off === true,
     org: ok && d.org === true, told: ok && d.told === true, until: ok && Number.isSafeInteger(d.until) && d.until > 0 ? d.until : 0, owed: ok && typeof d.owed === "string" ? d.owed.slice(0, 400) : "",
-    leave: ok && typeof d.leave === "string" ? d.leave.slice(0, 200000) : "" };
+    leave: ok && typeof d.leave === "string" ? d.leave.slice(0, 200000) : "", who: ok && typeof d.who === "string" && /^[0-9a-f]{32}$/.test(d.who) ? d.who : "" };
 }
 function storeFileText(s) {
   return JSON.stringify(Object.assign({ format: 1, keys: s.keys || "", said: s.said || "" }, s.off === true ? { off: true } : {}, s.told === true ? { told: true } : {},
-    s.until > 0 ? { until: s.until } : {}, s.owed ? { owed: s.owed } : {}, s.leave ? { leave: s.leave } : {}, s.org === true ? { org: true } : {}), null, 1) + "\n";
+    s.until > 0 ? { until: s.until } : {}, s.owed ? { owed: s.owed } : {}, s.leave ? { leave: s.leave } : {}, s.org === true ? { org: true } : {}, s.who ? { who: s.who } : {}), null, 1) + "\n";
+}
+/* WHOSE THE STORE'S STATE IS: store.json belongs to the account named by `who`, a hash of its provider and sub. Seated as another account,
+   what was kept is let go before anything reads it (storeMine), so no person's keys, leave or owed end reach another person's folder or
+   the service under them; a file kept before `who` existed keeps all but those three. Signed out, nothing is anyone's. */
+let storeWhoMemo = { sealed: "", who: "" };
+function storeWho(held) {
+  if (!held || !held.sub) return "";
+  if (storeWhoMemo.sealed === held.provider + ":" + held.sub) return storeWhoMemo.who;
+  const sub = signinKept(safeStorage, held.sub);
+  const who = sub ? crypto.createHash("sha256").update("etiuda-store-who\n" + held.provider + "\n" + sub, "utf8").digest("hex").slice(0, 32) : "";
+  storeWhoMemo = { sealed: held.provider + ":" + held.sub, who: who };
+  return who;
+}
+function storeMine() {
+  const s = storeState(), who = storeWho(signinState().held);
+  if (!who) return false;
+  if (s.who === who) return true; /* plant:store-mine */
+  s.keys = ""; s.leave = ""; s.owed = "";
+  if (s.who) { s.until = 0; s.said = ""; s.told = false; s.org = false; delete s.off; }
+  s.who = who;
+  storeLeaveHere = null; storeOwedHere = ""; storeNow = null; storeSay = ""; storeFresh = false;
+  storeSyncStop();
+  storeSave();
+  return true;
 }
 let storeKept;
 function storeState() {
@@ -11021,6 +11045,7 @@ function storeOn() { return storePolicyNow().on === true; }
 let storeAccess = null, storeNow = null, storeFlight = null;
 function storeTokenTake(t) {
   if (!t || typeof t.provider !== "string" || typeof t.token !== "string") return;
+  storeMine();
   storeAccess = { provider: t.provider, token: t.token, until: Number(t.until) || 0 };
   /* The last answer to an asked consent decides whose refusal stands: a token or a person's no clears the organisation's. */
   const s = storeState(), org = t.token ? false : t.why === "org" ? true : t.why === "ungiven" ? false : s.org === true;
@@ -11029,9 +11054,13 @@ function storeTokenTake(t) {
 /* Why the folder holds no token: "consent" where its organisation refused it, which the person cannot mend; else "ungiven", consent
    never given (declined, unticked, never asked, or the window not sent on), which the switch mends (storeConsentAsk). */
 function storeUngiven() { return storeState().org === true ? "consent" : "ungiven"; } /* plant:store-ungiven */
+/* At a sign out: the store's keys, and those of a This computer still owed, leave the desk with the person; the folder holds them
+   for their return. */
 function storeForget() {
   storeAccess = null; storeNow = null; storeSay = ""; storeFresh = false;
   storeSyncStop();
+  const s = storeState();
+  if (s.keys || s.leave || storeLeaveHere) { s.keys = ""; s.leave = ""; storeLeaveHere = null; storeSave(); } /* plant:signout-store-keys */
   if (storeState().org === true) { storeState().org = false; storeSave(); }
 }
 /* The folder's requests, at OneDrive's App Folder and Drive's appDataFolder alone, through the shell's own network as the sign-in's:
@@ -11069,7 +11098,7 @@ async function storeTokenFor(p, held) {
 /* This desk's sealed copy of the store's keys, and its keeping: nothing where the system seals nothing for real. */
 function storeLocal() {
   const s = storeState();
-  if (!s.keys) return null;
+  if (!s.keys || !storeMine()) return null;
   try { return StoreLib().keyRead(String(safeStorage.decryptString(Buffer.from(s.keys, "base64")))); } catch { return null; }
 }
 function storeKeep(keys) {
@@ -11205,6 +11234,7 @@ async function storeEndPost(rt) {
    service answers, the row saying so meanwhile; where nothing seals for real it is owed in memory alone, until the desk closes. */
 let storeOwedHere = "";
 function storeOwedRt() {
+  if (!storeMine()) return "";
   const o = storeState().owed;
   if (!o) return storeOwedHere;
   try { return String(safeStorage.decryptString(Buffer.from(o, "base64"))); } catch { return ""; }
@@ -11240,6 +11270,7 @@ async function storeEndEverywhere(keys) {
    renewal with a fresh one; On here drops it, this computer being on the list again. Where nothing seals for real, in memory alone. */
 let storeLeaveHere = null, storeLeaveFlight = null;
 function storeLeaveKeys() {
+  if (!storeMine()) return null;
   const v = storeState().leave;
   if (!v) return storeLeaveHere;
   try { return StoreLib().keyRead(String(safeStorage.decryptString(Buffer.from(v, "base64")))); } catch { return null; }
@@ -11287,6 +11318,7 @@ function storeRoom(reason) {
 /* NO SEAT: the renewal refused for want of a free seat ("full"), or answered with no certificate on a computer that has synced (it
    holds the store's keys). A freed seat ("signin") is the sign-in's own moment, as the paused line's rule says. */
 function storeView() {
+  storeMine();
   const held = signinState().held, synced = !!storeState().keys;
   const provider = held && signinOffered().some(p => p.id === held.provider) && (held.cert || synced) ? held.provider : "";
   return StoreLib().storeRow({ provider, pol: storePolicyNow(), look: storeNow, until: storeState().until, now: Date.now(),
@@ -11301,6 +11333,7 @@ function tellStore() {
    its last look; "everywhere" also ends the store at the licence service, which deletes the relay's copy, and leaves the ended mark
    in the person's folder, so no other computer writes the key back. Policy that holds the switch refuses all three. */
 async function storeSetNow(what) {
+  if (!storeMine()) return storeView();
   if (storePolicyNow().held) return storeView(); /* plant:store-set-held */
   const s = storeState();
   if (what === "on") {
@@ -11435,14 +11468,20 @@ async function storeLookNow() {
   if (!pol.on) storeSyncStop();
   if (!pol.on) return null; /* plant:store-off */
   if (!sealsForReal(safeStorage, process.platform)) return storeSettle({ state: "unavailable", why: "" });
-  const L = StoreLib();
-  const folder = L.folderFor(p.id, { ask: storeAsk, token: () => (storeAccess ? storeAccess.token : "") });
+  if (!storeMine()) return null;
+  const L = StoreLib(), who = storeState().who;
+  /* The look keeps to the account it began under: its folder token and its keeping, whoever is seated by the time it ends. */
+  const ours = () => storeState().who === who && storeWho(signinState().held) === who; /* plant:store-look-ours */
+  let access = null;
+  const folder = L.folderFor(p.id, { ask: storeAsk, token: () => (access && ours() ? access.token : "") });
   const token = folder ? await storeTokenFor(p, held) : {};
   if (token.why) return storeSettle({ state: "unavailable", why: token.why });
-  return storeSettle(await L.storeLook({ folder: folder, local: storeLocal, keep: storeKeep,
+  access = storeAccess;
+  const look = await L.storeLook({ folder: folder, local: storeLocal, keep: k => { if (ours()) storeKeep(k); },
     grant: (rt, sPub, extra) => storeGrant(me.key, rt, sPub, Object.assign({}, extra, { company: pol.company === true })),
     relay: { create: storeRelayCreate, renew: storeRelayRenew, devices: (keys, cert) => storeRelayDevices(keys, cert, me) },
-    me: { id: me.id, pub: me.key, desk: me.id }, url: STORE_RELAY, rand: n => crypto.randomBytes(n), fresh: storeFresh }));
+    me: { id: me.id, pub: me.key, desk: me.id }, url: STORE_RELAY, rand: n => crypto.randomBytes(n), fresh: storeFresh });
+  return ours() ? storeSettle(look) : null;
 }
 
 /* ---- the store's sync (shell/sync/sync.cjs) --------------------------------------------------------------------------------
