@@ -25,20 +25,22 @@
  *   1. Luminance is `L = 0.2126*R + 0.7152*G + 0.0722*B`.
  *   2. Sample top-middle vertically over `dy = -3..+5` CSS px across `rect.top` at `1/dpr` CSS px steps
  *      (avoiding any header control overlapping `#factsPanel`'s left half); sample corner along the
- *      45-degree radial from distance `s = R + 3` down to `s = R - 4` CSS px from corner centre
- *      (`cx, cy`), using top-left for card/menu/dialog/facts/intentRail and top-right for pills
- *      (where top-left children sit flush against the padding box).
- *   3. `bgOut = median(vals[0..2])`, `bgIn = median(vals[M-3..M-1])`, `floor = max(bgOut, bgIn) + 1.5`.
+ *      45-degree radial from distance `s = R + 1.5` down to `s = R - 4` CSS px from corner centre
+ *      (`cx, cy`) at `1/dpr` CSS px steps using bilinear interpolation at pixel centres
+ *      `(px - 0.5, py - 0.5)`, using top-left for card/menu/dialog/facts/intentRail and top-right
+ *      for pills (where top-left children sit flush against the padding box).
+ *   3. `bgOut = median(vals[0..bgOutCount-1])` (`3` for top-middle, `dpr` for the corner radial),
+ *      `bgIn = median(vals[M-3..M-1])`, `floor = max(bgOut, bgIn) + 1.5`.
  *   4. Slice `seg = vals[first..last]` spanning the first to last sample strictly above `floor`;
  *      if empty or `peak - max(bgOut, bgIn) < 12`, `runs = 0`. Otherwise start `runs = 1`.
  *   5. Valley split: any contiguous block of interior indices `i` (`1 <= i <= seg.length - 2`) where
  *      `seg[i] <= max(seg[0..i-1]) - 2` and `seg[i] <= max(seg[i+1..end]) - 2` increments `runs` by 1
  *      (a dark gap between two lighter lines).
  *   6. Step-shelf split: let `shelfEnd` be the count of leading samples in `seg` below
- *      `bgIn + 0.75 * (peak - bgIn)`. If `shelfEnd >= dpr`, `shelfEnd < seg.length`, and
- *      `seg[shelfEnd] - seg[shelfEnd - 1] >= 14`, the leading dimmer border strip is a distinct outer
- *      line abutting a brighter inner rim; add 1 to `runs` (a < `dpr`-wide leading sample is outer
- *      edge anti-aliasing of a single line, not a second line).
+ *      `bgIn + 0.75 * (peak - bgIn)`. If `shelfEnd >= dpr`, `shelfEnd < seg.length`,
+ *      `seg[shelfEnd - 1] >= bgOut + 10`, and `seg[shelfEnd] - seg[shelfEnd - 1] >= 14`, the leading
+ *      dimmer border strip is a distinct outer line abutting a brighter inner rim; add 1 to `runs`
+ *      (a < `dpr`-wide leading sample or faint fringe below `bgOut + 10` is outer anti-aliasing, not a second line).
  *
  * Inline plant proof (2 checks, or NOT RUN when ETIUDA_PLANTS=off): restores `inset:0` (removing
  * `inset:-1px` / `calc(-1 * var(--rim-bw))`) on the five surfaces in a scratch copy of
@@ -86,10 +88,10 @@ const BASE_BOXES = {
   },
 };
 
-function countRuns(vals, dpr) {
+function countRuns(vals, dpr, bgOutCount = 3) {
   const sorted = a => [...a].sort((x, y) => x - y);
   const med = a => { const s = sorted(a); return s[Math.floor(s.length / 2)]; };
-  const bgOut = med(vals.slice(0, 3));
+  const bgOut = med(vals.slice(0, bgOutCount));
   const bgIn = med(vals.slice(-3));
   const base = Math.max(bgOut, bgIn);
   const floor = base + 1.5;
@@ -122,7 +124,9 @@ function countRuns(vals, dpr) {
     const shelfCap = bgIn + 0.75 * (peak - bgIn);
     let shelfEnd = 0;
     while (shelfEnd < seg.length && seg[shelfEnd] < shelfCap) shelfEnd++;
-    if (shelfEnd >= dpr && shelfEnd < seg.length && seg[shelfEnd] - seg[shelfEnd - 1] >= 14) {
+    if (shelfEnd >= dpr && shelfEnd < seg.length
+        && seg[shelfEnd - 1] >= bgOut + 10
+        && seg[shelfEnd] - seg[shelfEnd - 1] >= 14) {
       runs++;
     }
   }
@@ -185,11 +189,21 @@ async function measureSurface(page, selector, opts) {
     const g = c.getContext("2d");
     g.drawImage(img, 0, 0);
     const dpr = o.dpr;
-    const lum = (px, py) => {
-      const ix = Math.max(0, Math.min(c.width - 1, Math.round(px)));
-      const iy = Math.max(0, Math.min(c.height - 1, Math.round(py)));
-      const d = g.getImageData(ix, iy, 1, 1).data;
+    const lumAt = (ix, iy) => {
+      const cx = Math.max(0, Math.min(c.width - 1, ix));
+      const cy = Math.max(0, Math.min(c.height - 1, iy));
+      const d = g.getImageData(cx, cy, 1, 1).data;
       return 0.2126 * d[0] + 0.7152 * d[1] + 0.0722 * d[2];
+    };
+    const lum = (px, py) => lumAt(Math.round(px), Math.round(py));
+    const lumBilin = (px, py) => {
+      const x = px - 0.5, y = py - 0.5;
+      const x0 = Math.floor(x), y0 = Math.floor(y);
+      const fx = x - x0, fy = y - y0;
+      return (1 - fx) * (1 - fy) * lumAt(x0, y0)
+        + fx * (1 - fy) * lumAt(x0 + 1, y0)
+        + (1 - fx) * fy * lumAt(x0, y0 + 1)
+        + fx * fy * lumAt(x0 + 1, y0 + 1);
     };
 
     /* 1. Top middle line (avoid #intentComboWrap overlapping #factsPanel left half). */
@@ -207,12 +221,12 @@ async function measureSurface(page, selector, opts) {
     const dirX = o.corner === "tr" ? 1 : -1;
     const dirY = -1;
     const cornerLine = [];
-    const totalSteps = Math.round(7 * dpr);
+    const totalSteps = Math.round(5.5 * dpr);
     for (let t = 0; t <= totalSteps; t++) {
-      const s = radius + 3 - t / dpr;
+      const s = radius + 1.5 - t / dpr;
       const sx = cx + dirX * (s / Math.SQRT2);
       const sy = cy + dirY * (s / Math.SQRT2);
-      cornerLine.push(lum(sx * dpr, sy * dpr));
+      cornerLine.push(lumBilin(sx * dpr, sy * dpr));
     }
 
     /* 3. Rim-band brightest pixels (2 CSS px on padded surfaces, 1 CSS px on pills so child
@@ -272,8 +286,8 @@ async function measureSurface(page, selector, opts) {
   }, png, selector, opts);
 
   if (raw.missing) return raw;
-  const mid = countRuns(raw.midLine, opts.dpr);
-  const corner = countRuns(raw.cornerLine, opts.dpr);
+  const mid = countRuns(raw.midLine, opts.dpr, 3);
+  const corner = countRuns(raw.cornerLine, opts.dpr, opts.dpr);
   const footRatio = (raw.topPeak - raw.restSide) > 10
     ? (raw.botPeak - raw.restSide) / (raw.topPeak - raw.restSide)
     : 999;
