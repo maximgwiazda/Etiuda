@@ -11510,15 +11510,18 @@ function storeSyncOf() {
       try { fs.mkdirSync(storeSyncDir(), { recursive: true }); writeReplacing(storeSyncDir(STORE_SYNC_FILE), JSON.stringify(s)); }
       catch (e) { console.error("etiuda: the store's sync state could not be kept - " + e.message); }
     },
-    local: storeSyncLocal, apply: storeSyncApply, pubOf: StoreLib().pubOf, canonBytes: C.signedBytes, now: Date.now,
+    local: storeSyncLocal, held: () => storeSyncHeld, apply: storeSyncApply, pubOf: StoreLib().pubOf, canonBytes: C.signedBytes, now: Date.now,
   });
   return storeSyncing;
 }
 /* This desk's items that follow: its desk keys, and the catalog files at the top of its catalog folder. Null while that folder
-   does not answer, so a folder out of reach is never read as every catalog removed. */
+   does not answer, so a folder out of reach is never read as every catalog removed; what is left out for its size is named in
+   storeSyncHeld, so the merge leaves it as it stood. */
+let storeSyncHeld = [];
 function storeSyncLocal() {
   if (deskKeys === undefined) deskKeys = readDesk();
-  const dir = catalogFolder(), files = {}, L = SyncLib();
+  const dir = catalogFolder(), files = {}, L = SyncLib(), held = [];
+  storeSyncHeld = held;
   if (!dir || !folderAnswers(dir)) return null;
   let names = [];
   try { names = fs.readdirSync(dir); } catch (e) { if (e.code !== "ENOENT") return null; }
@@ -11527,23 +11530,27 @@ function storeSyncLocal() {
     try {
       const f = path.join(dir, n), st = fs.statSync(f);
       if (st.isFile() && st.size <= L.CATALOG_MAX) files[n] = fs.readFileSync(f, "utf8");
+      else if (st.isFile()) held.push("f:" + n);
     } catch { return null; }
   }
-  return L.localItems(deskKeys, files);
+  return L.localItems(deskKeys, files, held);
 }
+/* The merge's patch and copies put in place; answers the items that could not be, so the sync takes none of them as taken (sync.cjs
+   unapplied). */
 function storeSyncApply(patch, copies) {
-  const keys = {};
+  const keys = {}, failed = [];
   for (const item of Object.keys(patch)) {
     if (item.startsWith("k:")) keys[item.slice(2)] = patch[item];
-    else storeSyncFile(item.slice(2), patch[item]);
+    else if (storeSyncFile(item.slice(2), patch[item]) === false) failed.push(item);
   }
-  if (Object.keys(keys).length && patchDesk(JSON.stringify(keys))) deskSyncedTell(keys);
+  if (Object.keys(keys).length) { if (patchDesk(JSON.stringify(keys))) deskSyncedTell(keys); else failed.push(...Object.keys(keys).map(k => "k:" + k)); } /* plant:apply-desk-failed */
   for (const c of copies) {
     try {
       fs.mkdirSync(storeSyncDir("kept"), { recursive: true });
       writeReplacing(storeSyncDir("kept", c.by + "-" + c.t + "-" + (c.h ? c.h.slice(0, 16) : "removed") + ".txt"), JSON.stringify({ item: c.item, by: c.by, t: c.t, value: c.value }));
-    } catch (e) { console.error("etiuda: a version another computer made could not be kept - " + e.message); }
+    } catch (e) { failed.push(c.item); console.error("etiuda: a version another computer made could not be kept - " + e.message); }
   }
+  return failed;
 }
 /* The open page keeps its own copy of the desk, so it is told what was put in place (src/modules/storage.js eDeskTake). */
 function deskSyncedTell(keys) {
@@ -11551,9 +11558,9 @@ function deskSyncedTell(keys) {
   if (win && !win.isDestroyed()) try { win.webContents.send("etiuda:desk-synced", JSON.stringify(keys)); } catch { /* the page has gone */ } /* plant:desk-synced-tell */
 }
 /* A catalog file from another computer, into the catalog folder; one removed there is moved aside under userData\store\kept,
-   never deleted. */
+   never deleted. False where it could not be put in place; a removal of a file already gone is done. */
 function storeSyncFile(name, text) {
-  if (!SyncLib().CATALOG_RE.test(name)) return;
+  if (!SyncLib().CATALOG_RE.test(name)) return false;
   const dir = catalogFolder(), at = path.join(dir, name);
   try {
     if (text === null) {
@@ -11563,7 +11570,12 @@ function storeSyncFile(name, text) {
       fs.mkdirSync(dir, { recursive: true });
       writeReplacing(at, text);
     }
-  } catch (e) { if (e.code !== "ENOENT") console.error("etiuda: a catalog from another computer could not be put in place - " + e.message); }
+    return true;
+  } catch (e) {
+    if (e.code === "ENOENT" && text === null) return true;
+    console.error("etiuda: a catalog from another computer could not be put in place - " + e.message);
+    return false;
+  }
 }
 /* A change on this desk, merged into its place a moment later, so a burst of writes is one merge. */
 function storeSyncSoon() {

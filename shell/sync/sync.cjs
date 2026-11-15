@@ -47,22 +47,28 @@ const isSetting = item => String(item).startsWith("k:") && SETTINGS.indexOf(Stri
 const fileRel = (id, item) => "desks/" + id + "/c/" + sha(item).slice(0, 32) + ".ec";
 const syncRel = id => "desks/" + id + "/" + SYNC_NAME;
 
-/* This computer's items as they stand: its desk keys and catalog files, each that follows, value by item. */
-function localItems(keys, files) {
+/* This computer's items as they stand: its desk keys and catalog files, each that follows, value by item. One past its cap is left out
+   and named in `held` where given, so the merge leaves it as it was rather than reading it as removed. */
+function localItems(keys, files, held) {
   const out = {};
   for (const k of Object.keys(plain(keys) ? keys : {})) {
     const v = keys[k];
-    if (typeof v !== "string" || v.length > VALUE_MAX || !follows("k:" + k)) continue;
+    if (typeof v !== "string" || !follows("k:" + k)) continue;
+    if (v.length > VALUE_MAX) { if (Array.isArray(held)) held.push("k:" + k); continue; } /* plant:held-value */
     const parts = LAYER_RE.test(k) ? fieldsOf(v) : null; /* plant:fields */
     if (!parts) { out["k:" + k] = v; continue; }
     for (const p of Object.keys(parts)) out["k:" + k + "#" + p] = parts[p];
   }
   for (const n of Object.keys(plain(files) ? files : {})) {
     const v = files[n];
-    if (typeof v === "string" && Buffer.byteLength(v, "utf8") <= CATALOG_MAX && follows("f:" + n)) out["f:" + n] = v;
+    if (typeof v !== "string" || !follows("f:" + n)) continue;
+    if (Buffer.byteLength(v, "utf8") <= CATALOG_MAX) out["f:" + n] = v;
+    else if (Array.isArray(held)) held.push("f:" + n);
   }
   return out;
 }
+/* Whether `item` is one of `held`: an item named, a layer key's every field, or every item of a kind ("f:", the catalog files). */
+const heldBy = (held, item) => held.some(h => item === h || (h.endsWith(":") ? item.startsWith(h) : item.startsWith(h + "#")));
 
 /* A layer's sets, by member, "<field>[]<member's id>": hiding, starring, deleting or adding one card or request is that member's change
    alone, and showing it again or removing it is recorded for that member, so only the same member changed both ways is a conflict.
@@ -179,7 +185,7 @@ const unionSeen = (...es) => {
    copies, own}: patch {item: value, or null to remove} to apply here; copies the other side of each item both changed, to keep for
    the person ({item, by, t, value}); own {rel: text} this computer's place to write into the mirror. */
 function mergeOnce(o) {
-  const me = o.me, now = Math.floor(o.now), local = o.local || {};
+  const me = o.me, now = Math.floor(o.now), local = o.local || {}, held = Array.isArray(o.held) ? o.held : [];
   const ledger = Object.assign({}, (o.state && o.state.ledger) || {});
   let kept = ((o.state && o.state.kept) || []).slice();
   /* A version kept for the person is let go once a later one stands over it, chosen on another computer. */
@@ -189,6 +195,7 @@ function mergeOnce(o) {
   for (const item of new Set(Object.keys(ledger).concat(Object.keys(local)))) {
     const was = ledger[item], h = has(local, item) ? sha(local[item]) : null;
     if (was ? was.h === h : h === null) continue; /* plant:recorded */
+    if (h === null && heldBy(held, item)) continue; /* plant:held-kept */
     const t = Math.max(now, was ? was.t + 1 : 0);
     ledger[item] = { h, by: me, t, seen: was ? (was.by === me ? Object.assign({}, was.seen) : unionSeen(was)) : {} };
   }
@@ -201,7 +208,7 @@ function mergeOnce(o) {
   const items = new Set(Object.keys(ledger));
   for (const t of o.theirs || []) for (const item of Object.keys(t.items)) items.add(item);
   for (const item of items) {
-    if (!follows(item)) continue;
+    if (!follows(item) || heldBy(held, item)) continue;
     const mine = ledger[item] || null;
     const others = [];
     for (const t of o.theirs || []) {
@@ -255,9 +262,27 @@ function mergeOnce(o) {
     for (const item of Object.keys(patch)) if (layerOf(item) === key) delete patch[item];
     patch["k:" + key] = layerText(after, key);
   }
+  return { state: { ledger, kept }, patch, copies, own: placeOf(me, ledger, after), after };
+}
+/* This computer's place in the store: its sync file and the catalogs its ledger holds. */
+function placeOf(me, ledger, after) {
   const own = { [syncRel(me)]: syncText(me, ledger, after) };
   for (const item of Object.keys(ledger)) if (item.startsWith("f:") && has(after, item)) own[fileRel(me, item)] = after[item];
-  return { state: { ledger, kept }, patch, copies, own };
+  return own;
+}
+/* A merge whose patch or copies the desk could not put in place (`failed`, as apply names them: an item, or a layer key for all its
+   fields): those items stand as they stood before it, ledger and kept versions alike, so nothing is taken as taken and the next merge
+   tries again; this computer's place says only what it holds. */
+function unapplied(prev, r, failed, local, me) {
+  if (!Array.isArray(failed) || !failed.length) return r;
+  const under = item => heldBy(failed.map(String), item);
+  const was = (prev && prev.ledger) || {}, ledger = Object.assign({}, r.state.ledger);
+  for (const item of Object.keys(ledger)) if (under(item)) { if (has(was, item)) ledger[item] = was[item]; else delete ledger[item]; }
+  const kept = r.state.kept.filter(k => !under(k.item)).concat(((prev && prev.kept) || []).filter(k => under(k.item)));
+  const after = {};
+  for (const item of Object.keys(r.after)) if (!under(item)) after[item] = r.after[item];
+  for (const item of Object.keys(local || {})) if (under(item)) after[item] = local[item];
+  return { state: { ledger, kept }, patch: r.patch, copies: r.copies, own: placeOf(me, ledger, after), after };
 }
 
 /* The person chose one version of an item both changed (`value`, null to remove): taken here over every version it was chosen from,
@@ -304,7 +329,8 @@ function storeChannelOptions(keys, me, cert, mirrorRoot, pubOf) {
    `o`: me {id, pub, privateKey}; mirrorRoot, where each store's mirror sits by its relay team id; channel(options) the relay channel
    made from storeChannelOptions with the caller's own request, write, say and clock; io(mirror) the channel's diskIO over a mirror;
    load() and save(state) this computer's sync state {rt, ledger, kept}; local() its items now (localItems), or null where they could
-   not be read; apply(patch, copies) puts the merge's patch in place and keeps each copy for the person; pubOf and canonBytes; now().
+   not be read, and held() those it left out (localItems' `held`); apply(patch, copies) puts the merge's patch in place and keeps each
+   copy for the person, answering the items it could not (unapplied); pubOf and canonBytes; now().
    WHILE PAUSED nothing is lost: edits go on into the last store's mirror, which is this computer's outbox, and the channel, started
    again at the next look that is on, sends what waited and takes what came. A store the folder now names in place of the one this
    computer had (another computer's replace ended it) is adopted at that look, and this computer's whole place written into it, so
@@ -333,8 +359,9 @@ function createStoreSync(o) {
     busy = true;
     try {
       const io = o.io(mirrorOf(state.rt)), t = theirs(io, state.rt);
-      const r = mergeOnce({ me: o.me.id, now: o.now(), state, local, theirs: t.list, fileOf: t.fileOf });
-      if (Object.keys(r.patch).length || r.copies.length) o.apply(r.patch, r.copies);
+      const held = typeof o.held === "function" ? o.held() : [];
+      let r = mergeOnce({ me: o.me.id, now: o.now(), state, local, held, theirs: t.list, fileOf: t.fileOf });
+      if (Object.keys(r.patch).length || r.copies.length) r = unapplied(state, r, o.apply(r.patch, r.copies), local, o.me.id); /* plant:unapplied */
       state = Object.assign({ rt: state.rt }, r.state);
       o.save(state);
       write(io, r.own);
@@ -380,4 +407,4 @@ function createStoreSync(o) {
 }
 
 module.exports = { SYNC_NAME, SYNC_KIND, SETTINGS, LAYER_RE, CATALOG_RE, CATALOG_MAX, follows, isSetting, fileRel, syncRel, localItems, syncRead, syncText,
-  fieldsOf, layerText, mergeOnce, resolve, createStoreSync, STORE_TEAM, storeTeamDoc, storeChannelOptions, sha };
+  fieldsOf, layerText, mergeOnce, unapplied, resolve, createStoreSync, STORE_TEAM, storeTeamDoc, storeChannelOptions, sha };

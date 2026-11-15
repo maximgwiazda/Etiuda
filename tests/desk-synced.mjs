@@ -38,7 +38,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 12;
+const EXPECTED = 14;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const MAIN = path.join(E.ROOT, "shell", "main.js");
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -263,18 +263,18 @@ async function main() {
       for (; i < text.length; i++) { if (text[i] === "{") depth++; else if (text[i] === "}" && --depth === 0) break; }
       return text.slice(at, i + 1);
     };
-    const sent = [], patched = [], written = [];
-    const ctx = { sent, patched, written, theWindow: { isDestroyed: () => false, webContents: { send: (ch, v) => sent.push([ch, v]) } }, JSON,
+    const sent = [], patched = [], written = [], answers = [];
+    const ctx = { sent, patched, written, answers, theWindow: { isDestroyed: () => false, webContents: { send: (ch, v) => sent.push([ch, v]) } }, JSON,
       Object, refuse: false };
     vm.createContext(ctx);
     vm.runInContext(slice("deskSyncedTell") + "\n" + slice("storeSyncApply") + "\n"
-      + "function patchDesk(t){ patched.push(t); return !refuse; }\nfunction storeSyncFile(){}\nfunction storeSyncDir(...rest){ return rest.join('/'); }\n"
+      + "function patchDesk(t){ patched.push(t); return !refuse; }\nfunction storeSyncFile(n){ return n !== 'b.ec'; }\nfunction storeSyncDir(...rest){ return rest.join('/'); }\n"
       + "const fs={ mkdirSync(){} }; function writeReplacing(p, t){ written.push([p, t]); }\n"
       + "const console={ error(l){ written.push(['error', l]); } };\n"
-      + "storeSyncApply({ 'k:eTheme': 'dark', 'k:eabc~Pack': '{}', 'f:a.ec': 'x' }, []);\n"
-      + "refuse = true; storeSyncApply({ 'k:eUiLang': 'pl' }, []);\nstoreSyncApply({ 'f:b.ec': 'y' }, []);\n"
+      + "answers.push(storeSyncApply({ 'k:eTheme': 'dark', 'k:eabc~Pack': '{}', 'f:a.ec': 'x' }, []));\n"
+      + "refuse = true; answers.push(storeSyncApply({ 'k:eUiLang': 'pl' }, []));\nanswers.push(storeSyncApply({ 'f:b.ec': 'y' }, []));\n"
       + "storeSyncApply({}, [{ item: 'k:eabc~Pack#hidden[]c5', by: 'k-0123456789abcdef', t: 7, h: null, value: null }]);", ctx);
-    return { sent, patched, written };
+    return { sent, patched, written, answers };
   };
   {
     let r = "";
@@ -294,6 +294,14 @@ async function main() {
       if (written.length !== 1 || w[0] !== "kept/k-0123456789abcdef-7-removed.txt" || JSON.parse(w[1]).value !== null) r = JSON.stringify(written);
     } catch (e) { r = e.message; }
     check(!r, "ds8 the shell keeps a removal another computer made as a version of the value null, in a file of its own", r || undefined);
+  }
+  /* ds9: what the desk refused (a patch) or could not write (a catalog file) is answered to the sync, which then takes none of it as taken
+     (tests/desk-sync.mjs G5a holds the sync's half). */
+  const answeredOk = a => JSON.stringify(a) === JSON.stringify([[], ["k:eUiLang"], ["f:b.ec"]]);
+  {
+    let r = "";
+    try { const { answers } = shellTells(fs.readFileSync(MAIN, "utf8")); if (!answeredOk(answers)) r = JSON.stringify(answers); } catch (e) { r = e.message; }
+    check(!r, "ds9 the shell answers the sync the items it could not put in place: a patch the desk refused, a catalog file not written", r || undefined);
   }
 
   /* The plants. */
@@ -326,6 +334,21 @@ async function main() {
       if (text.split(from).length === 2) {
         const { sent } = shellTells(text.split(from).join("if (false) try { void keys; }"));
         red = sent.length === 0;
+        detail = red ? "red" : "still held";
+      }
+      check(red && sha(MAIN) === before, line, red ? undefined : detail);
+    }
+  }
+  {
+    const line = "p ds9 a refused patch not answered, in a copy of shell/main.js, turns ds9 red, and the product file is never written";
+    if (PLANTS_OFF) skip(line);
+    else {
+      const before = sha(MAIN), text = fs.readFileSync(MAIN, "utf8");
+      const from = "else failed.push(...Object.keys(keys).map(k => \"k:\" + k)); } /* plant:apply-desk-failed */";
+      let red = false, detail = "the plant's anchor is absent";
+      if (text.split(from).length === 2) {
+        const { answers } = shellTells(text.split(from).join("} /* plant:apply-desk-failed */"));
+        red = !answeredOk(answers);
         detail = red ? "red" : "still held";
       }
       check(red && sha(MAIN) === before, line, red ? undefined : detail);

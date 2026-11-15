@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-sync-"));
-const EXPECTED = 31;
+const EXPECTED = 36;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -136,7 +136,7 @@ function transport(R, sent, down) {
 function computer(world, label, view) {
   const me = keyPair(), sealed = { keys: null }, desk = { keys: {}, files: {} }, kept = [], down = { on: false };
   const dir = path.join(WORK, world.name + "-" + label);
-  let syncState = null, sync = null;
+  let syncState = null, sync = null, heldNow = [];
   const folderView = view || world.f;
   const lookIo = () => ({ folder: ST.folderFor("microsoft", { ask: world.f.askFor(folderView), token: () => "access-token" }), local: () => sealed.keys,
     keep: k => { sealed.keys = JSON.parse(JSON.stringify(k)); }, grant: async (rt, sPub, ...rest) => {
@@ -148,13 +148,17 @@ function computer(world, label, view) {
       me: { id: me.id, pub: me.pub, privateKey: me.privateKey }, mirrorRoot: dir,
       channel: opts => CH.createChannel(Object.assign(opts, { request: transport(world.R, world.uploads, down), clock: () => world.R.clock.now, watch: false, pollMs: 1e9, say: l => { if (process.env.SYNC_SAY) console.log("   say " + label + ": " + l); } })),
       io: m => CH.diskIO(m), load: () => syncState, save: s => { syncState = JSON.parse(JSON.stringify(s)); },
-      local: () => SY.localItems(desk.keys, desk.files),
+      local: () => { heldNow = []; return SY.localItems(desk.keys, desk.files, heldNow); }, held: () => heldNow,
+      /* What the desk refuses to take (desk.refuse) is answered as not put in place, as the shell answers a failed write or patch. */
       apply: (patch, copies) => {
+        const failed = [];
         for (const item of Object.keys(patch)) {
+          if (desk.refuse && desk.refuse.has(item)) { failed.push(item); continue; }
           const at = item.slice(2), box = item.startsWith("k:") ? desk.keys : desk.files;
           if (patch[item] === null) delete box[at]; else box[at] = patch[item];
         }
-        for (const c of copies) kept.push(c);
+        for (const c of copies) { if (desk.refuse && desk.refuse.has(c.item)) failed.push(c.item); else kept.push(c); }
+        return failed;
       },
       pubOf: ST.pubOf, canonBytes: CH.signedBytes, now: () => world.R.clock.now,
     });
@@ -522,8 +526,43 @@ async function main() {
     return { ok, detail: brief({ sweptOn, a: la.state, b: lb.state, fresh, aMade: la.made, reached, oldGone: !row() }) };
   }
 
+  /* G5a: a catalog file and an edit another computer made that this one could not put in place (a write that failed, a patch refused)
+     are not taken as taken: nothing is recorded as removed, the other computer keeps both, and they arrive once the desk takes them. */
+  async function unappliedScene() {
+    const { w, a, b } = await twoOn("g5a");
+    const L = "e3f9a1~Pack";
+    b.desk.files["New.ec"] = "{\"v\":1}";
+    b.desk.keys[L] = JSON.stringify({ edits: { c1: "from b" } });
+    a.desk.refuse = new Set(["f:New.ec", "k:" + L]);
+    await settle(a, b);
+    const missed = !a.desk.files["New.ec"] && !a.desk.keys[L];
+    a.desk.refuse = null;
+    await settle(a, b);
+    const ok = missed && b.desk.files["New.ec"] === "{\"v\":1}" && a.desk.files["New.ec"] === "{\"v\":1}" && !!b.desk.keys[L] && a.desk.keys[L] === b.desk.keys[L]
+      && a.kept.length === 0 && b.kept.length === 0;
+    return { ok, detail: brief({ missedWhileRefused: missed, bKeepsFile: !!b.desk.files["New.ec"], aGotFile: !!a.desk.files["New.ec"], bKeepsEdit: !!b.desk.keys[L], aGotEdit: a.desk.keys[L] === b.desk.keys[L], keptA: a.kept.length, keptB: b.kept.length }) };
+  }
+  /* G5b: a catalog file grown past the cap, and a layer value past its own, on the computer that has them: left out of what it syncs, never
+     recorded as removed, so the other computer keeps its copy and its layer. */
+  async function oversizeScene() {
+    const { w, a, b } = await twoOn("g5b");
+    const L = "e3f9a1~Pack";
+    a.desk.files["Big.ec"] = "{\"v\":1}";
+    a.desk.keys[L] = JSON.stringify({ edits: { c1: "small" } });
+    await settle(a, b);
+    const shared = b.desk.files["Big.ec"] === "{\"v\":1}" && b.desk.keys[L] === a.desk.keys[L];
+    a.desk.files["Big.ec"] = "{\"v\":\"" + "x".repeat(SY.CATALOG_MAX) + "\"}";
+    a.desk.keys[L] = JSON.stringify({ edits: { c1: "y".repeat(8 * 1024 * 1024) } });
+    await settle(a, b);
+    const ok = shared && b.desk.files["Big.ec"] === "{\"v\":1}" && !!b.desk.keys[L] && JSON.parse(b.desk.keys[L]).edits.c1 === "small" && a.desk.files["Big.ec"].length > SY.CATALOG_MAX
+      && b.kept.length === 0;
+    return { ok, detail: brief({ shared, bKeepsFile: b.desk.files["Big.ec"] === "{\"v\":1}", bKeepsLayer: !!b.desk.keys[L], keptB: b.kept.length }) };
+  }
+
   const results = {};
   const LEGS = [
+    ["G5a", unappliedScene, "a catalog file and an edit this computer could not put in place are not taken as taken: nothing recorded removed, the other computer keeps both, and they arrive once taken"],
+    ["G5b", oversizeScene, "a catalog file and a layer value grown past their caps are left out, never recorded as removed: the other computer keeps its copy and its layer"],
     ["S1", followsScene, "a setting, an edit over a catalog and a catalog file changed on one computer reach the other through the relay, nothing of them in the clear"],
     ["C7", staysScene, "a team key, a team mirror's file, a sign-in token and the desk's identity key on the desk reach neither the computer's place, nor the relay, nor the folder's file"],
     ["C8", bothScene, "the same edit and catalog changed on two computers offline: both versions stand on both, each its own in place; one side's change and a setting's later write merge without a copy; the person's choice stands on both"],
@@ -585,6 +624,9 @@ async function main() {
     ["outbox emptied", "C10o", swap("if (old) old.stop().catch(() => {}); /* plant:outbox-kept */", "if (old) { old.stop().catch(() => {}); const l = o.local() || {}; for (const i of Object.keys(state.ledger)) if (has(l, i)) state.ledger[i] = Object.assign({}, state.ledger[i], { h: sha(l[i]) }); } /* plant:outbox-kept */"), "the outbox emptied at the lapse: what waited is taken as sent"],
     ["resume", "C10o", lift("resume"), "sync does not start again at the next look that is on"],
     ["adopt", "C1a", lift("adopt"), "the store adopted is not where this computer's place is written, so its edits stay in the ended store"],
+    ["unapplied", "G5a", swap("r = unapplied(state, r, o.apply(r.patch, r.copies), local, o.me.id); /* plant:unapplied */", "o.apply(r.patch, r.copies); /* plant:unapplied */"), "what the desk could not put in place is taken as taken, and the next merge removes it on the other computer"],
+    ["held-kept", "G5b", lift("held-kept"), "an item left out for its size is recorded as removed"],
+    ["held-value", "G5b", lift("held-value"), "a layer value past its cap is synced whole"],
   ];
   /* The store's own guards, each lifted in a copy of store.cjs. */
   const STORE_PLANTS = [
