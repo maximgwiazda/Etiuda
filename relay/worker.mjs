@@ -17,6 +17,11 @@ function bodyOf(bytes) {
   try { return JSON.parse(bytes.toString("utf8")); } catch { return null; }
 }
 
+/* Whether a lead object's 200 to a reserve added the rt (relay/team.cjs, leadAnswer); only a place it added is given back. */
+async function addedBy(reserved) {
+  try { const b = await reserved.json(); return !!b && b.added === true; } catch { return false; }
+}
+
 function rtOf(body) {
   const rt = body && typeof body === "object" ? body.rt : undefined;
   return typeof rt === "string" && /^[0-9a-f]{32}$/.test(rt) ? rt : null;
@@ -127,8 +132,9 @@ export function routeWith(roots, clockOf) {
       const leadId = body.lead.keyId;
       const reserved = await teams.get(teams.idFromName("lead:" + leadId)).fetch(team.leadRequest({ op: "reserve", rt, lead: leadId }));
       if (reserved.status !== 200) return reserved;
+      const added = await addedBy(reserved);
       const res = await teams.get(teams.idFromName(rt)).fetch(carry(request, keys, bytes));
-      if (res.status !== 200) await teams.get(teams.idFromName("lead:" + leadId)).fetch(team.leadRequest({ op: "release", rt })); /* plant:lead-free */
+      if (res.status !== 200 && added) await teams.get(teams.idFromName("lead:" + leadId)).fetch(team.leadRequest({ op: "release", rt })); /* plant:lead-free */
       return noted(res, decided, body.grant);
     }
     if (hit.what === "lead") {
@@ -142,9 +148,11 @@ export function routeWith(roots, clockOf) {
       let reserved = { status: 200 };
       reserved = await teams.get(teams.idFromName("lead:" + newLeadId)).fetch(team.leadRequest({ op: "reserve", rt, lead: newLeadId })); /* plant:worker-lead-bound */
       if (reserved.status !== 200) return reserved;
+      let added = true;
+      added = await addedBy(reserved); /* plant:lead-added-move */
       const res = await teams.get(teams.idFromName(rt)).fetch(carry(request, keys, bytes));
       if (res.status !== 200) {
-        await teams.get(teams.idFromName("lead:" + newLeadId)).fetch(team.leadRequest({ op: "release", rt })); /* plant:lead-free-on-fail */
+        if (added) await teams.get(teams.idFromName("lead:" + newLeadId)).fetch(team.leadRequest({ op: "release", rt })); /* plant:lead-free-on-fail */
         return res;
       }
       const oldLeadId = res.headers.get("etiuda-old-lead");

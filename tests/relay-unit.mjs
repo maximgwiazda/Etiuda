@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 571;
+const EXPECTED = 573;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -5594,6 +5594,26 @@ async function main() {
 
     /* A refused repeat, a handover naming the lead the team already has under a forged signature, leaves that team's place on the
        lead's list: a reserve says whether it added the rt, and only a place it added is given back (Argon's review, finding 4). */
+    const answer = r => (r.json && r.json.error) || r.status;
+    async function repeatFreeScene(worker) {
+      const R = envAt(), lead = keyPair(false), now = R.clock.now;
+      const made = await fill(R, lead, CAP, now);
+      if (!made.ok) return { ok: false, detail: "fill " + made.status };
+      const rt = made.rts[0];
+      const moved = await call(R, "POST", "/relay/v1/t/" + rt + "/lead", { json: leadMoveBody(rt, lead, lead, now, { sig: "0".repeat(128) }), worker });
+      const list = leadList(R, lead);
+      const over = await call(R, "POST", "/relay/v1/teams", { json: createBody(hex(16), lead, now), worker });
+      const kept = !!list && list.indexOf(rt) >= 0 && list.length === CAP;
+      return { ok: refused(moved, "bad-signature") && kept && refused(over, "team-count"),
+        detail: JSON.stringify({ moved: answer(moved), kept, length: list ? list.length : -1, over: answer(over) }) };
+    }
+    const repeatFree = await repeatFreeScene();
+    check(repeatFree.ok, "r1f a refused handover to the team's own lead keeps that team on the lead's list, and the lead's next new team is"
+      + " still refused team-count at the bound: " + repeatFree.detail);
+    const addedLift = await editWorker(lineLifted("plant:lead-added-move"), async mod => !(await repeatFreeScene(mod.routeWith(K.ROOTS, env => env.NOW()))).ok);
+    check(repeatFree.ok && addedLift.turned && addedLift.back, "r1g lifting plant:lead-added-move gives the live team's place back on that refusal"
+      + " (r1f red), and the product file is never written: " + how(addedLift));
+
     // 933a: move signed by old lead is taken, new key hello opens lead session
     const w = await world();
     const newLead = keyPair(false);
