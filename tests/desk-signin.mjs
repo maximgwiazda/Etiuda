@@ -48,7 +48,7 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 150;
+const PLANTS = 151;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
@@ -205,8 +205,10 @@ const answer = (obj, status) => ({ status: status || 200, bytes: Buffer.from(JSO
 const strayAnswer = (obj, status) => Object.assign(answer(obj, status), { stray: true });
 /* The service's own making of the nonce and of the desk's signed bytes, written here from the lines the interface names. */
 const serviceNonce = (key, seed) => crypto.createHash("sha256").update("etiuda-licence-signin-nonce\n" + key + "\n" + seed).digest("hex");
-const serviceBytes = (provider, idToken, desk, t) => Buffer.from("etiuda-licence-signin-desk\n" + [provider,
-  crypto.createHash("sha256").update(idToken).digest("hex"), desk, t].join("\n"), "utf8");
+/* A first sign-in's seed is the bytes' last line, "seed:" and its hex, where the body carries one (the service's requests.mjs seedLine,
+   since review 2's finding 12); a renewal, which sends no seed, signs the lines before it alone. */
+const serviceBytes = (provider, idToken, desk, t, seed) => Buffer.from("etiuda-licence-signin-desk\n" + [provider,
+  crypto.createHash("sha256").update(idToken).digest("hex"), desk, t].concat(seed ? ["seed:" + seed] : []).join("\n"), "utf8");
 const signWith = k => bytes => crypto.sign(null, bytes, k.privateKey).toString("hex");
 /* The service's bytes for the desk's sign-out, written here from the interface: its line `etiuda-licence-signout-desk`, then the
    desk's public half and t, one a line. */
@@ -323,9 +325,10 @@ CASES.deskBody = s => {
   const token = jwt(msClaims("n")), seed = "2".repeat(64), t = NOW;
   const first = s.signinDeskBody("microsoft", token, DESK_KEY, seed, t, signWith(signKey));
   const renew = s.signinDeskBody("microsoft", token, DESK_KEY, "", t, signWith(signKey));
-  const bytes = serviceBytes("microsoft", token, DESK_KEY, t);
-  const ok = b => !!b && crypto.verify(null, bytes, signKey.publicKey, Buffer.from(b.sig, "hex")) && !crypto.verify(null, bytes, otherKey.publicKey, Buffer.from(b.sig, "hex"));
-  return ok(first) && ok(renew) && Object.keys(first).join() === "provider,idToken,desk,seed,t,sig" && first.seed === seed && first.desk === DESK_KEY
+  const ok = (b, bytes) => !!b && crypto.verify(null, bytes, signKey.publicKey, Buffer.from(b.sig, "hex")) && !crypto.verify(null, bytes, otherKey.publicKey, Buffer.from(b.sig, "hex"));
+  /* The first sign-in's seed is inside what the desk signs, so a copy with it taken out does not verify as a renewal's bytes. */
+  return ok(first, serviceBytes("microsoft", token, DESK_KEY, t, seed)) && !crypto.verify(null, serviceBytes("microsoft", token, DESK_KEY, t), signKey.publicKey, Buffer.from(first.sig, "hex"))
+    && ok(renew, serviceBytes("microsoft", token, DESK_KEY, t)) && Object.keys(first).join() === "provider,idToken,desk,seed,t,sig" && first.seed === seed && first.desk === DESK_KEY
     && Object.keys(renew).join() === "provider,idToken,desk,t,sig" && first.t === t
     && s.signinDeskBody("elsewhere", token, DESK_KEY, seed, t, signWith(signKey)) === null && s.signinDeskBody("microsoft", token, DESK_KEY, seed, t, () => "") === null;
 };
@@ -3310,8 +3313,12 @@ if (!PLANTS_OFF) {
   await plant("dsp6", ["if (!renewal && (typeof c.nonce !== \"string\" || !signinSame(c.nonce, nonce))) return { ok: false, reason: \"signin-unbound\" }; /* plant:token-nonce */", ""], "tokenNonce");
   await plant("dsp7", ["if (!signinOurs(query, pending)) return { ok: false, reason: \"signin-state\" }; /* plant:state */", ""], "state");
   await plant("dsp8", ["return \"signin-notallowed\"; /* plant:not-allowed */", "return \"signin-refused\";"], "notAllowed");
-  await plant("dsp9", ["const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t })) || \"\"); /* plant:desk-signed */",
-    "const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t + 1 })) || \"\");"], "deskBody");
+  await plant("dsp9", ["const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t, seed: seed || \"\" })) || \"\"); /* plant:desk-signed */",
+    "const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t + 1, seed: seed || \"\" })) || \"\");"], "deskBody");
+  /* Review 2's finding 12, its residual: the seed signed as the bytes' last line. Planted out, the first sign-in's signature is over a
+     renewal's bytes, which ds3a refuses. */
+  await plant("dsp9s", ["const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t, seed: seed || \"\" })) || \"\"); /* plant:desk-signed */",
+    "const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t })) || \"\");"], "deskBody");
   await plant("dsp10", ["if (seed) body.seed = String(seed); /* plant:seed-first */", "body.seed = String(seed);"], "deskBody");
   await plant("dsp11", ["if (String(url) !== SIGNIN_SERVICE && String(url) !== SIGNOUT_SERVICE) throw new Error(\"the licence service's door takes signin/desk and signout/desk only\"); /* plant:service-host */", ""], "serviceDoor");
   await plant("dsp27", ["if (String(url) !== SIGNIN_SERVICE && String(url) !== SIGNOUT_SERVICE) throw new Error(\"the licence service's door takes signin/desk and signout/desk only\"); /* plant:service-host */", ""], "signoutDoor");
