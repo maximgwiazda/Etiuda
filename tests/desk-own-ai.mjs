@@ -502,7 +502,7 @@ try {
     const SUBJECT = /model|message|search/i, SUBJECT_PL = /model|wiadomoś|wyszuk/i;
     const CLAIMS = ["Reads a copied message on this computer", "The model ranks the suggestions; nothing leaves this computer",
       "The model built into Etiuda, which works on this computer alone.", "From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the model on this computer.",
-      "The model ranks the search beside word matches; nothing leaves this computer", "When the picker opens with a customer's message copied"];
+      "The model ranks the search beside word matches; nothing leaves this computer", "When Quick replies opens with a customer's message copied"];
     /* True whenever they are drawn, and not drawn while the organisation's model ranks with both switches on: the built-in
        choice's hint, the pause's line, the too-slow line ("the built-in model's order stands"), the incomplete setting's line,
        both switches off. */

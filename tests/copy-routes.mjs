@@ -237,7 +237,7 @@ try {
       check(ok7(r.d, false), "2d control: the keyboard copy of a card that does not commit, toast not stamped: " + JSON.stringify(r.d));
       check(ok7(r.e, false), "2e control: the click copy of a card that does not commit, toast not stamped: " + JSON.stringify(r.e));
       check(ok7(r.f, false), "2f control: the picker's ask copy of a card that does not commit, toast not stamped: " + JSON.stringify(r.f));
-      const HINT = "Next time, Ctrl+Shift+Space opens the replies over any window and pastes the one chosen.";
+      const HINT = "Next time, Ctrl+Shift+Space opens Quick replies over any window and pastes the one chosen.";
       globalThis.window.E_HOST = { hotkeyState: () => ({ accel: "Control+Shift+Space", held: true }), openPicker: () => {} };
       ST.nsDel("PickerHint");
       const hadToastHtml = Object.getOwnPropertyDescriptor(toastEl, "innerHTML");
@@ -258,7 +258,7 @@ try {
       ST.nsDel("PickerHint");
       globalThis.window.E_HOST = { hotkeyState: () => ({ accel: "Control+Alt+Space", held: true }), openPicker: () => {} };
       route("key", "c-loose");
-      const altHint = "Next time, Ctrl+Alt+Space opens the replies over any window and pastes the one chosen.";
+      const altHint = "Next time, Ctrl+Alt+Space opens Quick replies over any window and pastes the one chosen.";
       const altSaw = toastEl.innerHTML.includes(altHint);
       check(altSaw, "2i the hint names a non-default hotkey when the host holds one: " + JSON.stringify({ altSaw, toast: toastEl.innerHTML }));
       delete globalThis.window.E_HOST;

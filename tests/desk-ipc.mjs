@@ -1944,7 +1944,7 @@ try {
       w.isMinimized = () => false;
       const tray = mainTest.ensureTray();
       const labels = (tray && tray.menu && tray.menu.template || []).map(item => item.type === "separator" ? "|" : item.label);
-      const want = ["Open Etiuda", "Bring the replies over any window", "Notifications: on", "Settings", "|", "Quit Etiuda"];
+      const want = ["Open Etiuda", "Quick replies", "Notifications: on", "Settings", "|", "Quit Etiuda"];
       const notes = (tray && tray.menu && tray.menu.template || []).find(item => item.label === "Notifications: on");
       if (notes && notes.click) notes.click();
       const labels2 = (tray && tray.menu && tray.menu.template || []).map(item => item.label);
@@ -2137,7 +2137,7 @@ try {
         const taskTitles = taskItems.map(t => t.title);
         const taskArgs = taskItems.map(t => t.args);
         const tasksMatch = taskItems.length === 4
-          && taskArgs[0] === "--picker" && taskTitles[0] === "Bring the replies over any window"
+          && taskArgs[0] === "--picker" && taskTitles[0] === "Quick replies"
           && taskArgs[1] === "--new-tab" && taskTitles[1] === "New tab"
           && taskArgs[2] === "--library" && taskTitles[2] === "Library"
           && taskArgs[3] === "--settings" && taskTitles[3] === "Settings";

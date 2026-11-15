@@ -703,8 +703,8 @@ const t0 = Date.now();
      front of it with Next and Back. No step outside a window is ever met with a window or Quick facts
      standing, so Next and Back closed every window they left. */
   const inside = walk.filter(r => windowed.indexOf(r.id) > -1);
-  const badIn = inside.filter(r => !r.look.next || r.look.held || !r.look.back || r.look.z !== "240" || r.look.behind || !(r.look.window || r.look.facts))
-    .map(r => r.id + " " + JSON.stringify({ next: r.look.next, back: r.look.back, z: r.look.z, open: r.look.window || r.look.facts }));
+  const badIn = inside.filter(r => !r.look.next || r.look.held || !r.look.back || r.look.z !== "240" || r.look.behind || !(r.look.window || r.look.facts || r.look.screen))
+    .map(r => r.id + " " + JSON.stringify({ next: r.look.next, back: r.look.back, z: r.look.z, open: r.look.window || r.look.facts || r.look.screen }));
   const stood = walk.filter(r => windowed.indexOf(r.id) < 0 && (r.look.window || r.look.facts)).map(r => r.id);
   check(inside.map(r => r.id).join(",") === planned.filter(id => windowed.indexOf(id) > -1).join(",") && badIn.length === 0 && stood.length === 0,
     "each window opens by the click or by Next, and the tour goes into it, in front of it with Next and Back,"
@@ -713,12 +713,12 @@ const t0 = Date.now();
      bubble beside it, never over its rows; Back inside the Library closes it and stands on the Library
      step again; Next there opens the Library for the person; "then the same with Settings". */
   const lib = walk.find(r => r.id === "library"), libAgain = walk.find(r => r.id === "library" && r.visit === 2);
-  const chain = ["menu", "library", "libraryIn", "settings", "settingsIn"].map(id => walk.filter(r => r.id === id))
+  const chain = ["menu", "library", "libraryIn", "libraryRail", "libraryList", "settings", "settingsIn", "settingsRail"].map(id => walk.filter(r => r.id === id))
     .every(rs => rs.length > 0 && rs.every(r => r.to === r.want));
-  check(!!lib && lib.look.menu && lib.look.clear && !!libAgain && !libAgain.look.window && chain,
+  check(!!lib && lib.look.menu && lib.look.clear && !!libAgain && !libAgain.look.screen && chain,
     "the Menu step's Next brings the Library step with the menu open and the bubble clear of its rows, Back inside"
     + " the Library closes it onto that step, and Library and Settings each take the tour inside: "
-    + JSON.stringify(lib ? { menu: lib.look.menu, clear: lib.look.clear, backClosed: !!libAgain && !libAgain.look.window, chain } : null));
+    + JSON.stringify(lib ? { menu: lib.look.menu, clear: lib.look.clear, backClosed: !!libAgain && !libAgain.look.screen, chain } : null));
   const last = walk[walk.length - 1];
   check(!!walkEnd && !walkEnd.up && !!last && last.id === "done" && last.to === null,
     "and Finish on the last step takes the overlay off the screen, rather than only flagging the tour done");

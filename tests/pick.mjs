@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 136;
+const EXPECTED = 137;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -333,7 +333,7 @@ try {
   shellFs.appendFileSync = (p, data, ...rest) => { noteWrite(data); return fs.appendFileSync(p, data, ...rest); };
   shellFs.readdirSync = (p, ...rest) => (listed.push(path.resolve(String(p)).toLowerCase()), fs.readdirSync(p, ...rest));
   shellFs.existsSync = p => /[\\/]caret\.exe$/i.test(String(p)) ? caret.there : fs.existsSync(p);
-  const EXPOSE = ["hotkeyRefusal", "pickerPlace", "pickClipText", "PICK_SIZE", "HOTKEY_DEFAULT"];
+  const EXPOSE = ["hotkeyRefusal", "pickerPlace", "pickerGrow", "pickClipText", "PICK_SIZE", "HOTKEY_DEFAULT"];
   process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
   const SH = new Function("require", "__dirname", "__filename", "module", "exports", "console",
     SRC + "\nreturn { " + EXPOSE.map(n => n + ": " + n).join(", ") + " };")(
@@ -928,6 +928,15 @@ try {
     + JSON.stringify(edge) + " " + JSON.stringify(small));
   check(SH.pickClipText("a\nb\r\nc", "win32") === "a\r\nb\r\nc" && SH.pickClipText("a\nb", "linux") === "a\nb",
     "2p the line ends are Windows' pair there and left alone elsewhere");
+  /* The tour's step in the window: taller by the bubble's room, grown upwards so the rows stay where they opened, and held
+     inside the work area where there is no room above. */
+  const opened2q = { x: 300, y: 500, width: 600, height: 424 }, wa = { x: 0, y: 0, width: 1920, height: 1040 };
+  const grown = SH.pickerGrow(opened2q, 188, wa), high = SH.pickerGrow({ x: 300, y: 40, width: 600, height: 424 }, 188, wa),
+    tiny = SH.pickerGrow({ x: 0, y: 0, width: 400, height: 300 }, 188, { x: 0, y: 0, width: 400, height: 300 });
+  check(grown.y === 312 && grown.height === 612 && grown.y + grown.height === opened2q.y + opened2q.height && grown.x === 300 && grown.width === 600
+    && high.y === 0 && high.height === 612 && tiny.height === 300 && tiny.y === 0,
+    "2p2 while the tour's step stands in it the window grows upwards by the bubble's room, its rows where they opened, inside the work area: "
+    + JSON.stringify([grown, high, tiny]));
 
   /* The folder the shell takes for its app root is the lab's copy, and the checkout's own root is
      never listed, so no file a checkout happens to hold there can reach the boot. */
@@ -1504,7 +1513,7 @@ try {
   CM.setContentLangs(["en"]);
   const wOne = pickAnswer("open").words.keyOther;
   CM.setContentLangs(langsWere);
-  check(w7.keyCopy === "{KEY} copies" && w7.keyOther === "{KEY} in PL" && wPl === "{KEY} in EN" && wOne === "" && w7.keyClose === "{KEY} closes"
+  check(w7.keyCopy === "{KEY} copies, and pastes where it can" && w7.keyOther === "{KEY} in PL" && wPl === "{KEY} in EN" && wOne === "" && w7.keyClose === "{KEY} closes"
     && w7.pasted === "Pasted" && w7.copied === "Copied, press Ctrl+V" && w7.who === "Etiuda fills the reply in for this conversation",
     "7c the page is given the words for its keys and its note, the other language named by its code, and none where there is one: "
     + JSON.stringify([w7.keyCopy, w7.keyOther, wPl, wOne, w7.keyClose, w7.pasted, w7.copied]));
@@ -1631,7 +1640,7 @@ try {
     globalThis.document = docWas; globalThis.addEventListener = addWas; delete globalThis.removeEventListener; HKS.hooks.openSettings = openWas;
     if (hostWas === undefined) delete globalThis.window.E_HOST; else globalThis.window.E_HOST = hostWas;
   }
-  check(taken7 === "Ctrl+Shift+Space belongs to another program just now. A combination of Etiuda's own, chosen in Settings, brings the replies over any window.Choose a combinationDismiss"
+  check(taken7 === "Ctrl+Shift+Space belongs to another program just now. A combination of Etiuda's own, chosen in Settings, opens Quick replies over any window.Choose a combinationDismiss"
     && acted === "gone/keys" && held7 === null && none7 === null && H7.eHotkeyLabel("Control+Alt+F9") === "Ctrl+Alt+F9",
     "7h a combination another program holds is said when the desk is up, naming it, with a button to Settings' keys that takes the"
     + " notice down; one held, or no host, says nothing: " + JSON.stringify([taken7, acted, !!held7, !!none7]));
@@ -1669,8 +1678,8 @@ try {
   const pickerMark = '<svg class="sx-ic" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4.5h6v6M20.5 4.5l-6 6M10.5 20.5h-6v-6M4.5 20.5l6-6"/></svg>';
   const titleHeld = "The replies beside the pointer, over any program: Ctrl+Shift+Space brings them from anywhere, and Settings is where the combination is changed.";
   const titleNotHeld = "The replies beside the pointer, over any program; a combination that brings them from anywhere is chosen in Settings.";
-  check(rows7.join(" | ") === pickerMark + "<span>Bring the replies over any window</span> | "
-    + pickerMark + "<span>Bring the replies over any window</span> | hidden | hidden"
+  check(rows7.join(" | ") === pickerMark + "<span>Quick replies</span> | "
+    + pickerMark + "<span>Quick replies</span> | hidden | hidden"
     && titles7[0] === titleHeld && titles7[1] === titleNotHeld && clicked === "1/shut",
     "7m the Menu has a row for the picker without kbd, and its tooltip names the live combination when held ("
     + rows7.join(" | ") + " / " + clicked + ")");
@@ -1689,24 +1698,30 @@ try {
     TT = new Function("scope", "with(scope){\n" + between(TSRC, "let tourPicks=", "// The wheel waits") + "\n"
       + between(TSRC, "const TOUR_STEPS=[", "\n];\n") + "\n];\nreturn { TOUR_STEPS, tourHeardPick };\n}")(scope7);
   } catch (e) { TT = null; }
-  const tids = TT ? TT.TOUR_STEPS.map(s => s.id) : [], ps = TT ? TT.TOUR_STEPS.find(s => s.id === "picker") : null;
+  const tids = TT ? TT.TOUR_STEPS.map(s => s.id) : [], ps = TT ? TT.TOUR_STEPS.find(s => s.id === "picker") : null,
+    pi = TT ? TT.TOUR_STEPS.find(s => s.id === "pickerIn") : null;
   let tourSays = "no step";
-  if (ps) {
+  if (ps && pi) {
     const whens = [null, { accel: "Control+Shift+Space", held: false, taken: true }, { accel: "Control+Shift+Space", held: true, taken: false }]
       .map(h => { hk7 = h; return ps.when(); });
     const chipsSeen = (ps.body().match(/<kbd>Ctrl<\/kbd>\+<kbd>Shift<\/kbd>\+<kbd>Space<\/kbd>/g) || []).length;
-    const doneBefore = ps.done();
+    own7.tourRunning = true;
+    own7.tourIdx = tids.indexOf("menu");
     TT.tourHeardPick();
-    const doneAfter = ps.done();
-    ps.open();
-    tourSays = JSON.stringify([tids.indexOf("picker") - tids.indexOf("menu"), whens, chipsSeen, doneBefore, doneAfter, actsHeard, doorKnocks,
-      ps.title, ps.menu, ps.side === own7.menuSide]);
+    const doneElse = ps.done(), piElse = pi.when();
+    own7.tourIdx = tids.indexOf("picker");
+    const doneBefore = ps.done(), piBefore = pi.when();
+    TT.tourHeardPick();
+    const doneAfter = ps.done(), piAfter = pi.when();
+    tourSays = JSON.stringify([tids.indexOf("picker") - tids.indexOf("menu"), tids.indexOf("pickerIn") - tids.indexOf("picker"),
+      whens, chipsSeen, doneElse, piElse, doneBefore, piBefore, doneAfter, piAfter, !ps.open, actsHeard, doorKnocks,
+      ps.title, pi.title, ps.menu, pi.menu, ps.side === own7.menuSide, !!pi.elsewhere && !pi.sel]);
   }
-  const resets = /function showTourStep\(i\)\{[\s\S]*?tourStepPicks=tourPicks;[\s\S]*?\n\}/.test(TSRC);
+  const resets = /function showTourStep\(i\)\{[\s\S]*?if\(step\.id!=="pickerIn"\) tourPickerOpened=false;[\s\S]*?\n\}/.test(TSRC);
   const heard = /if\(op==="open"\)\{\s*try\{ tourHeardPick\(\); \}catch\(e\)\{\}/.test(fs.readFileSync(path.join(ROOT, "src", "modules", "pick.js"), "utf8"));
-  check(tourSays === JSON.stringify([1, [false, false, true], 2, false, true, 1, 1, "Replies over any window", true, true]) && resets && heard,
-    "7n the tour has a step for the picker straight after the Menu's, on only while a combination is held, naming it as keys; it is done"
-    + " once the picker opens after the step began, and its Next opens it: " + tourSays + (resets ? "" : ", NO reset at each step")
+  check(tourSays === JSON.stringify([1, 1, [false, false, true], 2, false, false, false, false, true, true, true, 1, 0,
+    "Quick replies", "Quick replies", true, true, true, true]) && resets && heard,
+    "7n the tour has a step for the picker straight after the Menu's and the window's own step after it, carried by the window's page, without opening the picker on Next: " + tourSays + (resets ? "" : ", NO reset at each step")
     + (heard ? "" : ", the picker's opening NOT heard"));
 
   /* The global picker switches and opens conversations with the desk's own tab keys. */

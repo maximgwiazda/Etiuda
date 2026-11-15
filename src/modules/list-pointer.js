@@ -465,7 +465,7 @@ function manualToastMsg(m, l, vi, total){
     const h = eHost(), hk = eHotkey();
     if(h && typeof h.openPicker === "function" && hk && hk.held){
       nsSet("PickerHint", "1");
-      return t("Copied. Next time, {KEYS} opens the replies over any window and pastes the one chosen.").replace("{KEYS}", eHotkeyLabel(hk.accel));
+      return t("Copied. Next time, {KEYS} opens Quick replies over any window and pastes the one chosen.").replace("{KEYS}", eHotkeyLabel(hk.accel));
     }
   }
   return copiedToastMsg(m, l, vi, total);

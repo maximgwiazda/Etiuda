@@ -738,31 +738,36 @@ function tourActTests() {
   const timers = [];
   /* The page: which window stands (`win`: the card editor, the Library's tab or Settings), Quick facts, the Menu,
      and whether the controls a step presses are on screen. Each control opens what a person's click opens. */
-  const page = { tourRunning: true, tourIdx: 0, target: {}, win: null, facts: false, menu: false, shown: true, moved: [], ends: [] };
+  const page = { tourRunning: true, tourIdx: 0, target: {}, win: null, chatTabs: 1, facts: false, menu: false, shown: true, moved: [], ends: [] };
   const control = (sel, open) => ({ matches: s => s === sel, getClientRects: () => (page.shown ? [{}] : []), click: open });
   const pencil = control('[data-act="edit"]', () => { page.win = "editor"; });
   const fab = control("#addCardFab", () => { page.win = "editor"; });
   const factsBtn = control("#factsBtn", () => { page.facts = true; });
+  const chatTabEl = control("#tabsBar .tab[data-tid]", () => { if (page.win === "library" || page.win === "settings") page.win = null; });
+  const addTabEl = control("#tabsWrap .tab-add", () => { page.chatTabs++; if (page.win === "library" || page.win === "settings") page.win = null; });
   const rows = { manage: control('[data-act="manage"]', () => { page.menu = false; page.win = "library"; }),
     settings: control('[data-act="settings"]', () => { page.menu = false; page.win = "settings"; }) };
   const next = { hidden: false, disabled: false, textContent: "" };
   const own = {
     t: s => s, chordChips: () => "K", tourEls: () => ({ next }), resolveTourTarget: () => page.target,
+    eOpenPicker: () => { page.pickerOpens++; }, hotkeyHeld: () => page.hotkey, hotkeyChips: () => "K",
     setTimeout: (fn, ms) => { timers.push({ fn, ms, live: true }); return timers.length; },
     clearTimeout: id => { if (id && timers[id - 1]) timers[id - 1].live = false; },
     showTourStep: i => { page.tourIdx = i; page.moved.push(T.TOUR_STEPS[i].id); }, endTour: done => { page.ends.push(done); },
-    cardBtn: sel => (sel === '[data-act="edit"]' ? pencil : {}), $: sel => ({ "#addCardFab": fab, "#factsBtn": factsBtn, "#tourName": { value: "" } })[sel],
+    cardBtn: sel => (sel === '[data-act="edit"]' ? pencil : {}), $: sel => ({ "#addCardFab": fab, "#factsBtn": factsBtn, "#tourName": { value: "" }, "#tabsWrap .tab-add": addTabEl })[sel],
     menuOpen: () => page.menu, openSettingsMenu: () => { page.menu = true; },
     menuTarget: act => (page.menu ? rows[act] || {} : {}),
-    /* The card editor is the pop-up. The Library and Settings are screen tabs: libraryOpen and
-       settingsOpen are the module's own, over this page, so a tab that is not the window they
-       name leaves their inside step off. */
+    /* The card editor is the pop-up. The Library and Settings are screen tabs, read through the steps' own `tab`
+       (tabInFront), so a tab that is not in front leaves its steps off. */
     modalOpen: () => page.win === "editor", closeModal: () => { page.win = null; }, closeAllDialogs: () => { page.win = null; },
     get screenOn() { return page.win === "library" || page.win === "settings" ? page.win : ""; },
     closeScreenTab: id => { if (page.win === id) page.win = null; },
     document: {
       getElementById: id => (id === "setBody" && page.win === "settings") || (id === "meCancel" && page.win === "editor") ? { id } : null,
-      querySelector: sel => sel === "#screenHost details.manage-sec" && page.win === "library" ? {} : null
+      querySelector: sel => sel === "#screenHost details.manage-sec" && page.win === "library" ? {}
+        : sel === "#tabsWrap .tab-add" ? addTabEl : null,
+      querySelectorAll: sel => sel === "#tabsBar .tab[data-tid]" ? (page.chatTabs > 0 ? [chatTabEl] : [])
+        : sel === "#libPage .mg-tree > *" && page.win === "library" ? [{ getClientRects: () => [{}], classList: { contains: () => false } }] : []
     },
     factsPanelOpen: () => page.facts, closeFactsPanel: () => { page.facts = false; },
     cardEditorOpen: () => page.win === "editor",
@@ -776,17 +781,18 @@ function tourActTests() {
   });
   let T = null;
   try {
-    T = new Function("scope", "with(scope){\n" + ["function tourPress(", "function tourPressRow(", "function shutTourWindow(",
-      "function loadStepBody(", "const libraryOpen=", "const settingsOpen=", "const TOUR_STEPS=", "function stepOn(", "function onFrom(", "function nextHeld(", "function syncTourNext(",
+    T = new Function("scope", "with(scope){\n" + ["function hasChatTab(", "function chatTabTarget(", "function openChatTab(", "function tourPress(", "function tourPressRow(", "function shutTourWindow(",
+      "let tourPicks=", "function tourHeardPick(", "function tourPickBubble(", "function tourPickGo(",
+      "function loadStepBody(", "function tabInFront(", "function chatDetour(", "function libraryFirstRow(", "const TOUR_STEPS=", "function stepOn(", "function onFrom(", "function nextHeld(", "function syncTourNext(",
       "const TOUR_ACT_MS=", "let tourActT=", "function tourActSoon(", "function tourActCheck(", "function tourFollowWindow(",
       "function tourNext(", "function tourOn(", "function tourPrev("]
       .map(m => extractDecl(src, m)).join("\n")
-      + "\nreturn {TOUR_STEPS, nextHeld, syncTourNext, tourActSoon, TOUR_ACT_MS, tourNext, tourPrev};\n}")(scope);
+      + "\nreturn {TOUR_STEPS, nextHeld, syncTourNext, tourActSoon, TOUR_ACT_MS, tourNext, tourPrev, tourHeardPick, tourPickBubble, tourPickGo};\n}")(scope);
   } catch (e) { T = null; eq("tour.js carries the step table and the functions that move the tour", e.message, "sliced"); }
   if (!T) return;
   const ids = T.TOUR_STEPS.map(s => s.id), at = id => ids.indexOf(id);
   const fire = () => { const live = timers.filter(x => x.live); timers.forEach(x => { x.live = false; }); live.forEach(x => x.fn()); return live.map(x => x.ms); };
-  const reset = (id, state) => { Object.assign(page, { win: null, facts: false, menu: false, shown: true, empty: false, moved: [], ends: [] }, state || {}); page.tourIdx = at(id); };
+  const reset = (id, state) => { Object.assign(page, { win: null, chatTabs: 1, facts: false, menu: false, shown: true, empty: false, moved: [], ends: [], tourReturnId: "", hotkey: "", pickerOpens: 0, tourPickerOpened: false }, state || {}); page.tourIdx = at(id); };
   const where = () => ids[page.tourIdx] + (page.win ? " [" + page.win + "]" : "") + (page.facts ? " [facts]" : "") + (page.menu ? " [menu]" : "");
 
   const held = () => ids.filter((id, i) => { page.tourIdx = i; next.disabled = false; T.syncTourNext(); return next.disabled || next.hidden; });
@@ -805,8 +811,8 @@ function tourActTests() {
      + " window steps only describes, waiting for no act",
     [ids.join(","), T.TOUR_STEPS.filter(s => s.name).map(s => s.id), T.TOUR_STEPS.filter(s => !waitsOn(s) && !s.name).map(s => s.id),
      T.TOUR_STEPS.filter(s => "does" in s).map(s => s.id)],
-    ["name,load,pax,search,rail,cards,pills,tabs,seg,buttons,editor,add,addIn,facts,factsIn,theme,menu,picker,library,libraryIn,settings,settingsIn,done",
-     ["name"], ["pax", "search", "rail", "cards", "pills", "tabs", "seg", "theme", "done"], []]);
+    ["name,chatTab,load,pax,search,rail,cards,pills,tabs,seg,buttons,editor,add,addIn,facts,factsIn,theme,menu,picker,pickerIn,library,libraryIn,libraryRail,libraryList,settings,settingsIn,settingsRail,done",
+     ["name"], ["pax", "search", "rail", "cards", "pills", "tabs", "seg", "theme", "pickerIn", "libraryRail", "libraryList", "settingsRail", "done"], []]);
 
   /* The person's act: on a step that describes, nothing they do moves the tour; the Menu step moves on once the
      Menu is open; a step that opens a window follows the window in. Each read once the act settles. */
@@ -827,12 +833,13 @@ function tourActTests() {
   eq("and where its control is not on screen Next opens nothing and moves on past the window's own step",
     hidden, ["buttons>add", "add>facts", "facts>theme"]);
 
-  /* Inside a window: Next closes it and moves on; Back closes it and returns to the step that opens it. */
+  /* Inside a window: Next closes a pop-up and moves on, and leaves a tab open for the steps hung from it; Back closes
+     either and returns to the step that opens it. */
   const inWin = { editor: { win: "editor" }, addIn: { win: "editor" }, factsIn: { facts: true }, libraryIn: { win: "library" }, settingsIn: { win: "settings" } };
   const nexts = Object.keys(inWin).map(id => { reset(id, inWin[id]); T.tourNext(); return id + ">" + where(); });
   const backs = Object.keys(inWin).map(id => { reset(id, inWin[id]); T.tourPrev(); return id + "<" + where(); });
-  eq("inside a window Next closes it and moves on, and Back closes it and returns to the step that opens it",
-    [nexts, backs], [["editor>add", "addIn>facts", "factsIn>theme", "libraryIn>settings", "settingsIn>done"],
+  eq("inside a window Next closes a pop-up and moves on, leaves a tab open for its next step, and Back closes either and returns to the step that opens it",
+    [nexts, backs], [["editor>add", "addIn>facts", "factsIn>theme", "libraryIn>libraryRail [library]", "settingsIn>settingsRail [settings]"],
       ["editor<buttons", "addIn<add", "factsIn<facts", "libraryIn<library", "settingsIn<settings"]]);
 
   /* Closing the tab is the act that moves an inside step on. While the tab stands, an act leaves
@@ -850,12 +857,115 @@ function tourActTests() {
     [settingsStays, settingsClosed, libraryStays, libraryClosed],
     ["settingsIn [settings]", "done", "libraryIn [library]", "settings"]);
 
+  /* THE LIBRARY'S AND SETTINGS' STEPS, EACH NEEDING ITS TAB: Next walks the tab, its rail and (the Library's) its list
+     with the tab left open; a step whose tab is no longer in front gives way to the next that can stand; Back inside
+     leaves the tab, but Back from the tab's own step closes it. */
+  const walkTab = (id, n) => { const out = []; for (let i = 0; i < n; i++) { T.tourNext(); out.push(where()); } return id + ">" + out.join(">"); };
+  reset("libraryIn", { win: "library" }); const libWalk = walkTab("libraryIn", 3);
+  reset("settingsIn", { win: "settings" }); const setWalk = walkTab("settingsIn", 2);
+  reset("libraryRail", { win: "library" }); page.win = null; T.tourActSoon(); fire(); const libAway = where();
+  reset("libraryList", { win: "library" }); T.tourPrev(); const listBack = where();
+  reset("settingsRail", { win: "settings" }); T.tourPrev(); const railBack = where();
+  eq("the Library's three steps and Settings' two each stand on their own tab, Next leaving it open, and give way when it is not in front",
+    [libWalk, setWalk, libAway, listBack, railBack],
+    ["libraryIn>libraryRail [library]>libraryList [library]>settings [library]", "settingsIn>settingsRail [settings]>done [settings]",
+      "settings", "libraryRail [library]", "settingsIn [settings]"]);
+
   /* The load step: Next does nothing while the desk is empty and its control stands, and Finish ends the tour done. */
   reset("load", { empty: true }); T.tourNext();
   const loadNext = where();
   reset("done"); T.tourNext();
   eq("Next on the load step does nothing while it is held back, and on the last step it ends the tour as done",
     [loadNext, page.ends], ["load", [true]]);
+
+  /* A non-chat tab active: the tour inserts chatTab before explaining chat-tab controls, waits for a chat tab
+     click (or Next clicks one / + when none is open), returns to an interrupted chat step, and resolveTourTarget
+     never returns an element hidden under a screen tab. */
+  reset("name", { win: "settings" }); T.tourNext();
+  const fromSettings = where();
+  const chatStep = T.TOUR_STEPS.find(s => s.id === "chatTab");
+  let chatWaitStays = null, chatActMoved = null, chatNextMoved = null, chatNewTabMoved = null, chatNewAdded = null, chatBack = null;
+  if (chatStep) {
+    reset("chatTab", { win: "settings" }); T.tourActSoon(); fire(); chatWaitStays = where();
+    page.win = null; T.tourActSoon(); fire(); chatActMoved = where();
+    reset("chatTab", { win: "settings" }); T.tourNext(); chatNextMoved = where();
+    reset("chatTab", { win: "settings", chatTabs: 0 }); T.tourNext(); chatNewTabMoved = where(); chatNewAdded = page.chatTabs;
+    reset("cards", { win: "settings" }); T.tourActSoon(); fire(); chatBack = where();
+    if (where() === "chatTab [settings]") { page.win = null; T.tourActSoon(); fire(); chatBack += ">" + where(); }
+  }
+  /* Back from the detour returns to the step before the one it came from, not to the tour's start. */
+  reset("seg", { win: "settings" }); T.tourActSoon(); fire(); const detoured = where(); T.tourPrev(); const detourBack = where();
+  reset("chatTab", { win: "settings" }); T.tourPrev(); const plainBack = where();
+  eq("Back from the detour to a conversation goes to the step before the one it came from, and from a plain detour to the step before it",
+    [detoured, detourBack, plainBack], ["chatTab [settings]", "tabs [settings]", "name [settings]"]);
+  const hiddenShellEl = { getClientRects: () => [{}], closest: sel => (sel.indexOf(".shell") > -1 ? {} : null) };
+  const hiddenVizEl = { getClientRects: () => [{}], closest: () => null, checkVisibility: () => false };
+  const visibleEl = { getClientRects: () => [{}], closest: () => null, checkVisibility: () => true };
+  let resolvedHidden = "missing", resolvedViz = "missing", resolvedVisible = "missing";
+  try {
+    let rScreen = "settings";
+    const rScope = {
+      get screenOn() { return rScreen; },
+      document: { querySelector: sel => (sel === "#intentRail" ? hiddenShellEl : sel === "#hidden" ? hiddenVizEl : visibleEl) }
+    };
+    const rFn = new Function("scope", "with(scope){\n" + extractDecl(src, "function resolveTourTarget(") + "\nreturn resolveTourTarget;}")(rScope);
+    resolvedHidden = rFn({ sel: "#intentRail" }) === null;
+    resolvedViz = rFn({ sel: "#hidden" }) === null;
+    rScreen = "";
+    resolvedVisible = rFn({ sel: ".brand" }) === visibleEl;
+  } catch (_) {}
+  eq("a non-chat tab active asks to switch to a chat tab (or open one) before chat-tab steps, waits for the click, and never outlines off-screen elements",
+    [fromSettings, chatWaitStays, chatActMoved, chatNextMoved, chatNewTabMoved, chatNewAdded, chatBack, resolvedHidden, resolvedViz, resolvedVisible],
+    ["chatTab [settings]", "chatTab [settings]", "pax", "pax", "pax", 1, "chatTab [settings]>cards", true, true, true]);
+
+  /* Stepping from factsIn to theme ("Light and dark") or Back from factsIn leaves any open screen tab alone. */
+  reset("factsIn", { facts: true, win: "library" }); T.tourNext();
+  const factsToThemeWin = where();
+  reset("factsIn", { facts: true, win: "settings" }); T.tourPrev();
+  const factsBackWin = where();
+  reset("theme", { win: "library" }); T.tourNext();
+  const themeNextWin = where();
+  eq("Light and dark (and leaving Quick facts) leaves open screen tabs open",
+    [factsToThemeWin, factsBackWin, themeNextWin],
+    ["theme [library]", "facts [settings]", "menu [library]"]);
+
+  /* Quick replies step: Next goes to Library without opening the window; opening it on that step enters pickerIn, and nowhere else. */
+  reset("picker", { hotkey: "Ctrl+Shift+Space", menu: true }); T.tourNext();
+  const pickerNextStep = where(), pickerNextOpens = page.pickerOpens;
+  reset("picker", { hotkey: "Ctrl+Shift+Space", menu: true }); T.tourHeardPick(); fire();
+  const pickerOpenedStep = where();
+  let pickerInNext = null, pickerInBack = null;
+  if (at("pickerIn") >= 0) {
+    reset("pickerIn", { hotkey: "Ctrl+Shift+Space", tourPickerOpened: true }); T.tourNext(); pickerInNext = where();
+    reset("pickerIn", { hotkey: "Ctrl+Shift+Space", tourPickerOpened: true }); T.tourPrev(); pickerInBack = where();
+  }
+  reset("cards", { hotkey: "Ctrl+Shift+Space" }); T.tourHeardPick(); fire();
+  const cardsHeardStep = where(), pickerInWhenOnCards = at("pickerIn") >= 0 ? T.TOUR_STEPS[at("pickerIn")].when() : null;
+  eq("Next on the picker step moves to Library without opening the window; opening it on that step shows pickerIn",
+    [pickerNextStep, pickerNextOpens, pickerOpenedStep, pickerInNext, pickerInBack, cardsHeardStep, pickerInWhenOnCards],
+    ["library [menu]", 0, "pickerIn [menu]", "library", "picker", "cards", false]);
+
+  /* THE WINDOW CARRIES ITS OWN STEP: the opening on the picker's step hands it the step's words and the tour's three
+     buttons, and how the window was left comes back: Next or Esc on, Back to the Menu's row, Skip tour ends the tour;
+     before the opening's act has moved the tour in as well. Nothing on any other step. */
+  reset("picker", { hotkey: "Ctrl+Shift+Space", menu: true });
+  const bub = T.tourPickBubble(), bubOff = (reset("cards"), T.tourPickBubble());
+  const goes = [["pickerIn", "next"], ["pickerIn", "back"], ["picker", "next"], ["picker", "skip"], ["cards", "next"]].map(([id, go]) => {
+    reset(id, { hotkey: "Ctrl+Shift+Space", tourPickerOpened: id !== "cards" }); T.tourPickGo(go); return go + ":" + where() + (page.ends.length ? " ended " + page.ends.join() : "");
+  });
+  const inStep = T.TOUR_STEPS.find(s => s.id === "pickerIn");
+  eq("the Quick replies window carries its step: its words and the tour's buttons at an opening on the picker's step, and its Next or Esc, Back and Skip tour move the desk's tour",
+    [bub && [bub.title, /<kbd>Esc<\/kbd>/.test(bub.body), bub.skip, bub.back, bub.next], bubOff, goes, !!inStep.elsewhere, inStep.sel || null],
+    [["Quick replies", true, "Skip tour", "Back", "Next"], null, ["next:library", "back:picker", "next:library", "skip:pickerIn ended false", "next:cards"], true, null]);
+
+  /* The name "Quick replies" in Menu, Settings (hotkeyRowHtml), and tour steps, all through UI_STRINGS. */
+  const menuSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "header-menus.js"), "utf8");
+  const setSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "settings.js"), "utf8");
+  const pickerStep = T.TOUR_STEPS.find(s => s.id === "picker"), pickerInStep = T.TOUR_STEPS.find(s => s.id === "pickerIn");
+  eq("Menu, Settings shortcuts, and the tour name the feature Quick replies via ui-lang.js",
+    [menuSrc.indexOf('t("Quick replies")') >= 0, setSrc.indexOf('t("Quick replies")') >= 0,
+      pickerStep && pickerStep.title, pickerInStep && pickerInStep.title],
+    [true, true, "Quick replies", "Quick replies"]);
 
   /* THE SMOKE WALKS THIS TOUR, not a remembered one. tests/tour-walk.js says which way the walk takes on each step,
      and the smoke takes it; this holds its rows to the table above: the same ids in order, Next pressed only where

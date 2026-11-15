@@ -23,7 +23,7 @@ import { intentIdAt, intentIdxOfId, isIntentHiddenIdx } from "./intent-id.js";
 import { pickIntent } from "./intent-pick.js";
 import { buildSuggestModel } from "./clip-suggest.js";
 import { activeTabName } from "./tabs.js";
-import { tourHeardPick } from "./tour.js";
+import { tourHeardPick, tourPickBubble, tourPickGo } from "./tour.js";
 import { hooks } from "./hooks.js";
 import { dockNow } from "./next-dock.js";
 import { scChord, scChord2 } from "./shortcuts.js";
@@ -36,7 +36,8 @@ const PICK_ROWS=50;
 /* The desk's colours as its sheet computed them, sent at every opening so the picker wears the
    theme on screen now. */
 const PICK_LOOK=["--panel","--panel-raised","--ink","--dim","--line","--line-strong","--accent",
-  "--accent-soft","--warn","--field","--field-line","--field-edge","--sans","--mono","--radius-sm","--intent-type"];
+  "--accent-soft","--warn","--field","--field-line","--field-edge","--sans","--mono","--radius-sm","--intent-type",
+  "--bub","--bub-ink","--bub-dim","--bub-shadow","--sans-display"];
 
 /* A put-away card is never offered, whatever is chosen: the list offers it at the foot of its own
    shelf, and the picker has no shelf to be at the foot of. A query searches every category, as the
@@ -214,7 +215,7 @@ function pickWords(){
           empty:wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet."),
           who:t("Etiuda fills the reply in for this conversation"),
           langTitle:t("Click to switch replies to the next language"),
-          keyCopy:t("{KEY} copies"), keyOther:other ? t("{KEY} in {LANG}").split("{LANG}").join(other) : "",
+          keyCopy:t("{KEY} copies, and pastes where it can"), keyOther:other ? t("{KEY} in {LANG}").split("{LANG}").join(other) : "",
           keyClose:t("{KEY} closes"), pasted:t("Pasted"), copied:t("Copied, press Ctrl+V")};
 }
 /* THE TEXT THE DESK'S OWN COPY WOULD MAKE, counted as the desk counts a copy: the fill of the block
@@ -352,6 +353,8 @@ function answerPick(op,argText){
     const paxVal=pickDeskPax();
     const curEpoch = suggestEpoch();
     const out=Object.assign({look:pickLook(), words:pickWords(), chords:pickChords(), last:pickLastRow(), who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length, picked:intentIdxs.map(i=>intentIdAt(i)), epoch:curEpoch, ai:eAiOn()}, pickFound(""));
+    const tour=tourPickBubble();
+    if(tour) out.tour=tour;
     if(a.profiles || (a.epoch !== undefined && a.epoch !== curEpoch)){
       try{ out.profiles=suggestModel(); }catch(e){}
     }
@@ -398,6 +401,7 @@ function answerPick(op,argText){
     const paxVal=pickDeskPax();
     return withIndex(Object.assign({words:pickWords(), who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length}, pickFound("")), "");
   }
+  if(op==="tour"){ try{ tourPickGo(String(a.go||"")); }catch(e){} return {ok:1}; }
   if(op==="find") return pickFound(a.q);
   /* The main search, asked by the shell for the head of its list and then given an order of it. */
   if(op==="search-shortlist") return searchShortlist(String(a.q==null?"":a.q));
@@ -416,7 +420,7 @@ function hotkeyNotice(){
   const hk=eHotkey();
   if(!hk || !hk.accel || !hk.taken || document.getElementById("eHotkeyNote")) return;
   eNotice("eHotkeyNote", t("{KEYS} belongs to another program just now.").split("{KEYS}").join(eHotkeyLabel(hk.accel)),
-    t("A combination of Etiuda's own, chosen in Settings, brings the replies over any window."), null,
+    t("A combination of Etiuda's own, chosen in Settings, opens Quick replies over any window."), null,
     {label:t("Choose a combination"), run:()=>hooks.openSettings("keys")});
 }
 function wirePick(){

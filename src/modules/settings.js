@@ -82,17 +82,17 @@ function suggestCountLine(){
 function suggestNoteText(){
   const st=orgModel();
   return orgRanks(st) && eAiOn()
-    ? t("When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. While the organisation's model is on, the copied message, at most its first 1,500 characters, is sent to {HOST} as the picker opens, so that the model there can suggest the intents; this desk keeps no copy of it. The statistics count only how often suggestions appeared and how many were taken.").split("{HOST}").join(String(st.host||""))
-    : t("When the picker opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as the picker opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.");
+    ? t("When Quick replies opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. While the organisation's model is on, the copied message, at most its first 1,500 characters, is sent to {HOST} as Quick replies opens, so that the model there can suggest the intents; this desk keeps no copy of it. The statistics count only how often suggestions appeared and how many were taken.").split("{HOST}").join(String(st.host||""))
+    : t("When Quick replies opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as Quick replies opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.");
 }
 function hotkeyRowHtml(){
   if(!hotkeyHost()) return "";
   const st=hotkeyState();
   return '<div class="sc-list"><div class="sc-row" id="setHotkeyRow"><div class="sc-label">'
-    +esc(t("Bring the replies over any window"))
+    +esc(t("Quick replies"))
     +'<small id="setHotkeyNote">'+esc(st.taken
       ? t("Another program uses this combination just now; a different one will do.")
-      : t("Works from any program; Enter copies a reply and goes back to the window you were in."))+'</small>'
+      : t("Works from any program; Enter copies a reply and pastes it into the window you were in, wherever Windows allows."))+'</small>'
     +'<small id="setSuggestNote">'+esc(suggestNoteText())+'</small>'
     +'<small id="setSuggestCounts">'+esc(suggestCountLine())+'</small>'
     +'</div><div class="sc-binds"><button type="button" class="sc-bind sc-long'+(st.accel?"":" sc-empty")+'" id="setHotkey"'
@@ -110,7 +110,7 @@ function syncHotkeyRow(box,now){
   b.textContent=hkListening ? t("Press keys…") : hotkeyLabel(st.accel);
   if(note) note.textContent=st.taken
     ? t("Another program uses this combination just now; a different one will do.")
-    : t("Works from any program; Enter copies a reply and goes back to the window you were in.");
+    : t("Works from any program; Enter copies a reply and pastes it into the window you were in, wherever Windows allows.");
   const help=box.querySelector("#setSuggestNote"), counts=box.querySelector("#setSuggestCounts");
   if(help) help.textContent=suggestNoteText();
   if(counts) counts.textContent=suggestCountLine();
