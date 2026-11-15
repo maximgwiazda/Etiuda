@@ -102,10 +102,40 @@ function sameBytes(a, b) {
   try { return fs.readFileSync(a).equals(fs.readFileSync(b)); } catch { return false; }
 }
 
+/* The id from the latest own message. Null until one arrives, so the first listing still uses the init string.
+   A listing applies it and does not yield: a read is not served before that listing is posted. */
+let ownLive = null;
+let scanAfterOwn = false;
+let pollContinuing = false;
+
+function schedulePoll() {
+  if (pollTimer) clearTimeout(pollTimer);
+  if (stopped) return;
+  pollTimer = setTimeout(() => {
+    if (stopped) return;
+    pollContinuing = true;
+    askThenScan();
+  }, pollMs);
+  if (pollTimer && pollTimer.unref) pollTimer.unref();
+}
+/* Ask for the id, then list once it is here. The list itself runs straight through. */
+function askThenScan() {
+  if (stopped) return;
+  if (!parentPort) {
+    try { syncOnce(); } catch {}
+    if (pollContinuing) { pollContinuing = false; schedulePoll(); }
+    return;
+  }
+  scanAfterOwn = true;
+  parentPort.postMessage({ type: "need-own" });
+}
 function syncOnce() {
   if (inFlight || stopped) return;
   inFlight = true;
   try {
+    let id = own;
+    id = ownLive !== null ? ownLive : id; /* plant:worker-own-now */
+    own = typeof id === "string" ? id : own;
     let owedRels = new Set();
     try { owedRels = flushOutbox(); } catch {}
     let foundFiles = null;
@@ -205,7 +235,7 @@ function init(data) {
       if (stopped) return;
       clearTimeout(kickDebounce);
       kickDebounce = setTimeout(() => {
-        if (!stopped) { try { syncOnce(); } catch {} }
+        if (!stopped) askThenScan();
       }, 200);
       if (kickDebounce && kickDebounce.unref) kickDebounce.unref();
     });
@@ -217,17 +247,8 @@ function init(data) {
     folderWatcher = null;
   }
 
-  function loop() {
-    if (stopped) return;
-    try {
-      syncOnce();
-    } catch {}
-    if (!stopped) {
-      pollTimer = setTimeout(loop, pollMs);
-      if (pollTimer && pollTimer.unref) pollTimer.unref();
-    }
-  }
-  loop();
+  try { syncOnce(); } catch {}
+  schedulePoll();
 }
 
 if (parentPort) {
@@ -246,8 +267,22 @@ if (parentPort) {
         if (seen && (seen.size !== h.size || seen.mtimeMs !== h.mtimeMs)) heldSeen.delete(h.rel);
       }
       for (const rel of Array.from(heldSeen.keys())) if (!still.has(rel)) heldSeen.delete(rel);
+    } else if (msg.type === "own") {
+      ownLive = typeof msg.own === "string" ? msg.own : "";
+      /* A push rides ahead of a kick, which runs the listing. A reply to need-own runs it here. */
+      if (msg.push || !scanAfterOwn || stopped) return;
+      scanAfterOwn = false;
+      const cont = pollContinuing;
+      pollContinuing = false;
+      try { syncOnce(); } catch {}
+      if (cont) schedulePoll();
     } else if (msg.type === "kick") {
-      if (!stopped) { try { syncOnce(); } catch {} }
+      if (stopped) return;
+      const cont = pollContinuing;
+      scanAfterOwn = false;
+      pollContinuing = false;
+      try { syncOnce(); } catch {}
+      if (cont) schedulePoll();
     } else if (msg.type === "read") {
       let got = null;
       try { got = S.shareReadFile(folder, msg.name); } catch { got = null; }
@@ -276,6 +311,8 @@ if (parentPort) {
       if (held) { clearTimeout(held.timer); S.shareRelease(held); }
     } else if (msg.type === "stop") {
       stopped = true;
+      scanAfterOwn = false;
+      pollContinuing = false;
       for (const held of casHeld.values()) { clearTimeout(held.timer); S.shareRelease(held); }
       casHeld.clear();
       if (pollTimer) clearTimeout(pollTimer);

@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 138;
+const EXPECTED = 140;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const { offWindows } = nodeRequire("./off-windows.cjs");
@@ -4334,6 +4334,72 @@ async function run() {
       return got.mainCopies === 1;
     });
     check(planted.ok, "r6c lifting plant:held-settled-reread on the main thread reads a refused file only once: " + JSON.stringify(planted));
+  }
+
+  /* r8: the worker's flush uses the desk id own() returns at that listing, not the string from startup (review 24, finding 8). */
+  async function ownClear(mod, name) {
+    const share = folder(name + "-share");
+    const mirror = folder(name + "-mirror");
+    const desk = "k-0123456789abcdef";
+    const rel = "desks/" + desk + "/lamp.ec";
+    const id = { now: "" };
+    const ctl = new mod.FolderSyncerController({
+      team: "t-" + crypto.randomBytes(8).toString("hex"), folder: share, mirror, pin: null, checks, pollMs: 60000,
+      own: () => id.now
+    });
+    let scans = 0, landed = null;
+    const apply = ctl.program.applyScan.bind(ctl.program);
+    ctl.program.applyScan = (msg) => { scans++; return apply(msg); };
+    const land = ctl.program.landed.bind(ctl.program);
+    ctl.program.landed = (results) => { landed = results; return land(results); };
+    const until = (pred) => new Promise(resolve => {
+      const t = setInterval(() => { if (pred()) { clearInterval(t); resolve(); } }, 15);
+      setTimeout(() => { clearInterval(t); resolve(); }, 4000);
+    });
+    ctl.start();
+    await until(() => scans >= 1);
+    id.now = desk;
+    const mirrorFile = path.join(mirror, "desks", desk, "lamp.ec");
+    fs.mkdirSync(path.dirname(mirrorFile), { recursive: true });
+    fs.writeFileSync(mirrorFile, "newer\n");
+    const shareFile = path.join(share, "desks", desk, "lamp.ec");
+    fs.mkdirSync(path.dirname(shareFile), { recursive: true });
+    fs.writeFileSync(shareFile, "old\n");
+    fs.chmodSync(shareFile, 0o444);
+    let text = "old\n", writable = false, ok = false;
+    try {
+      mod.noteOwed(mirror, rel);
+      ctl.kick();
+      await until(() => landed != null);
+      try { writable = !!(fs.statSync(shareFile).mode & 0o200); } catch {}
+      text = fs.readFileSync(shareFile, "utf8");
+      ok = !!(landed && landed[0] && landed[0].ok);
+    } finally {
+      ctl.stop();
+      try { fs.chmodSync(shareFile, 0o666); } catch {}
+    }
+    return { text, writable, ok };
+  }
+  {
+    const aside = offWindows("r8a", "a read-only mark does not refuse the write off Windows, so a frozen desk id leaves nothing uncleared");
+    if (aside) skip(aside);
+    else {
+      const g = await ownClear(syncerMod, "r8a");
+      check(g.ok && g.text === "newer\n" && g.writable,
+        "r8a a desk id that arrives after the syncer starts clears a read-only file in that desk's folder: " + JSON.stringify(g));
+    }
+  }
+  {
+    const aside = offWindows("r8b", "a read-only mark does not refuse the write off Windows, so lifting plant:worker-own-now leaves nothing uncleared");
+    if (PLANTS_OFF) skip("r8b lifting plant:worker-own-now flushes with the id from startup: NOT RUN");
+    else if (aside) skip(aside);
+    else {
+      const planted = await testPlant("worker-own-now", path.join(ROOT, "shell", "folder", "syncer-worker.cjs"), async (scratch) => {
+        const got = await ownClear(nodeRequire(path.join(syncerCopy(scratch, "syncer-worker.cjs"), "syncer.cjs")), "r8b");
+        return got.text === "old\n" && !got.writable;
+      });
+      check(planted.ok, "r8b lifting plant:worker-own-now flushes with the id from startup: " + JSON.stringify(planted));
+    }
   }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {

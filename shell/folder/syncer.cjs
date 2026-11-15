@@ -1913,6 +1913,8 @@ class FolderSyncerController {
         } else if (msg.type === "landed") {
           this.program.landed(msg.results);
           this.flushCheck();
+        } else if (msg.type === "need-own") {
+          if (this.worker && !this.stopped) this.worker.postMessage({ type: "own", own: this.ownNow() });
         } else if (msg.type === "read" || msg.type === "cas") {
           this.answer(msg);
         }
@@ -1970,7 +1972,7 @@ class FolderSyncerController {
       const w = { resolve, timer: null };
       w.timer = setTimeout(() => this.flushDone(w, false), Math.max(0, Number(ms) || 0));
       this.flushWaits.push(w);
-      this.worker.postMessage({ type: "kick" });
+      this.wake();
     });
   }
   owing() {
@@ -1984,7 +1986,7 @@ class FolderSyncerController {
       for (const w of this.flushWaits.slice()) this.flushDone(w, true);
       return;
     }
-    if (this.worker && !this.stopped) this.worker.postMessage({ type: "kick" });
+    this.wake();
   }
   flushDone(w, ok) {
     const at = this.flushWaits.indexOf(w);
@@ -2047,11 +2049,17 @@ class FolderSyncerController {
     return this.ask({ type: "cas", name: String(name || ""), sha: String(sha || ""), create: create === true }, judge);
   }
 
+  /* The id at this listing, then a scan. A push does not list by itself: the kick that follows does, and the list does not yield. */
+  wake() {
+    if (!this.worker || this.stopped) return;
+    this.worker.postMessage({ type: "own", own: this.ownNow(), push: true });
+    this.worker.postMessage({ type: "kick" });
+  }
+
   kick() {
     if (this.stopped) return;
-    if (this.worker) {
-      this.worker.postMessage({ type: "kick" });
-    } else if (this.program) {
+    if (this.worker) this.wake();
+    else if (this.program) {
       try { this.program.syncOnce(); } catch {}
     }
   }
