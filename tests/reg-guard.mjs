@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "shell");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 7;
+const EXPECTED = 12;
 let checks = 0, skipped = 0, failed = 0;
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) failed++; };
 const skip = (what) => { skipped++; console.log("  NOT RUN " + what); };
@@ -144,6 +144,93 @@ else {
     got = probe(copy, false);
   }
   check(got.reached >= 1, "g7 lifting plant:reg-guard lets the unmarked call reach reg: " + JSON.stringify(got));
+}
+/* ---- the window half: a shell the harness launches in Electron, where the guard lets a reg call through ---- */
+const engineSrc = code(fs.readFileSync(path.join(ROOT, "tests", "engine.js"), "utf8"));
+const launchFn = (() => { const at = engineSrc.indexOf("function shellLaunch("); return at < 0 ? "" : engineSrc.slice(at, engineSrc.indexOf("\n}", at)); })();
+check(/reg-stand-preload\.cjs/.test(launchFn) && /--require "' \+ regStandAt \+ '"/.test(launchFn) && /NODE_OPTIONS/.test(launchFn),
+  "g8 shellLaunch, the one door a harness launch of the shell goes through, preloads reg-stand-preload.cjs into Electron's main process");
+const PRELOAD_PROBE = String.raw`
+"use strict";
+Object.defineProperty(process, "type", { value: "browser" });
+Object.defineProperty(process, "platform", { value: "win32" });
+const W = require(process.env.WIN_PROXY);
+const switches = W.windowsProxySwitches();
+const st = globalThis.__ETIUDA_REG_STAND__;
+process.stdout.write(JSON.stringify({ stood: !!st, proxy: st ? st.calls.proxy : null, reached: st ? st.calls.reached : null, switches }));
+`;
+const preloadProbe = path.join(lab, "preload-probe.cjs");
+fs.writeFileSync(preloadProbe, PRELOAD_PROBE);
+const pre = (() => {
+  const r = spawnSync(process.execPath, ["--require", path.join(ROOT, "tests", "reg-stand-preload.cjs"), preloadProbe],
+    { encoding: "utf8", windowsHide: true, timeout: 30000, env: Object.assign({}, process.env, { WIN_PROXY: realWp }) });
+  try { return JSON.parse(r.stdout); } catch { return { error: (r.stderr || "").slice(0, 300) }; }
+})();
+check(pre.stood === true && pre.proxy >= 1 && pre.reached === 0 && Array.isArray(pre.switches) && pre.switches.length === 0,
+  "g9 a main process with the preload, taken for Electron's, reads the proxy keys from the stand-in and none from the machine: " + JSON.stringify(pre));
+/* The harness's own reads: a reg.exe named as the program anywhere under tests/ or tools/ but the stood-in one. tools/runner runs on a
+   hosted runner alone; tests/relay-channel.mjs 942f runs after reg-stand is in place and holds it with regStand.held(). */
+/* The install guard reads the account's keys only off a desk (g11 below), on a hosted runner, and its self-test writes its own lab key only
+   off a desk (it refuses where the sentinel stands). */
+const HARNESS_OK = new Set(["tests/relay-channel.mjs", "tests/install-guard.cjs", "tests/install-guard-selftest.js"]);
+const harnessFiles = ["tests", "tools"].flatMap((d) => shellFiles(path.join(ROOT, d)))
+  .map((p) => path.relative(ROOT, p).replace(/\\/g, "/"))
+  .filter((r) => !r.startsWith("tools/runner/") && !HARNESS_OK.has(r) && r !== "tests/reg-guard.mjs");
+const direct = harnessFiles.filter((r) => /\b(?:execFileSync|execFile|spawnSync|spawn)\s*\(\s*["'`][^"'`]*reg(?:\.exe)?["'`]/i.test(code(fs.readFileSync(path.join(ROOT, r), "utf8"))));
+check(direct.length === 0, "g10 no harness file starts reg.exe itself" + (direct.length ? ": " + direct.join(", ") : ""));
+
+/* ---- the install guard on a desk: it refuses before it reads ---- */
+const GUARD_PROBE = String.raw`
+"use strict";
+const cp = require("node:child_process");
+const { syncBuiltinESMExports } = require("node:module");
+const path = require("node:path");
+const isReg = (f) => /^reg(\.exe)?$/i.test(path.win32.basename(String(f || "")));
+let reached = 0;
+for (const k of ["execFileSync", "execFile", "spawnSync", "spawn"]) {
+  const real = cp[k];
+  cp[k] = function (file) {
+    if (isReg(file)) { reached++; return { status: 1, stdout: "", stderr: "", error: null }; }
+    return real.apply(this, arguments);
+  };
+}
+syncBuiltinESMExports();
+Object.defineProperty(process, "platform", { value: "win32" });
+const G = require(process.env.GUARD);
+const home = process.env.GUARD_HOME;
+let g = {};
+try { g = G.guardStart({ env: { USERPROFILE: home }, home }); } catch (e) { g = { refusals: [], before: null }; }
+process.stdout.write(JSON.stringify({ reached, refusals: (g.refusals || []).length, read: !!g.before }));
+`;
+const guardProbe = path.join(lab, "guard-probe.cjs");
+fs.writeFileSync(guardProbe, GUARD_PROBE);
+const deskHome = fs.mkdtempSync(path.join(lab, "desk-home-"));
+fs.writeFileSync(path.join(deskHome, ".etiuda-no-installers"), "");
+function guardRun(guardFile) {
+  const r = spawnSync(process.execPath, [guardProbe], { encoding: "utf8", windowsHide: true, timeout: 30000,
+    env: Object.assign({}, process.env, { GUARD: guardFile, GUARD_HOME: deskHome }) });
+  try { return JSON.parse(r.stdout); } catch { return { error: (r.stderr || "").slice(0, 300) }; }
+}
+const realGuard = path.join(ROOT, "tests", "install-guard.cjs");
+const onDesk = guardRun(realGuard);
+check(onDesk.reached === 0 && onDesk.refusals >= 1 && onDesk.read === false,
+  "g11 on a desk (the no-installers sentinel in its home) the install guard refuses before it reads: no reg call, no snapshot: " + JSON.stringify(onDesk));
+if (PLANTS_OFF) skip("g12 lifting plant:guard-desk-first reads the desk's registry before refusing: NOT RUN");
+else {
+  const lines = fs.readFileSync(realGuard, "utf8").split("\n");
+  const at = lines.findIndex((l) => l.includes("/* plant:guard-desk-first */"));
+  let got = { error: "no plant:guard-desk-first line" };
+  if (at >= 0) {
+    lines[at] = "";
+    const copyDir = fs.mkdtempSync(path.join(lab, "guard-copy-"));
+    /* The copy beside its own requires: the guard takes tools/test-identity.cjs by a relative path. */
+    fs.mkdirSync(path.join(copyDir, "tests"));
+    fs.mkdirSync(path.join(copyDir, "tools"));
+    fs.copyFileSync(path.join(ROOT, "tools", "test-identity.cjs"), path.join(copyDir, "tools", "test-identity.cjs"));
+    fs.writeFileSync(path.join(copyDir, "tests", "install-guard.cjs"), lines.join("\n"));
+    got = guardRun(path.join(copyDir, "tests", "install-guard.cjs"));
+  }
+  check(got.reached >= 1, "g12 lifting plant:guard-desk-first reads the desk's registry before refusing: " + JSON.stringify(got));
 }
 try { fs.rmSync(lab, { recursive: true, force: true }); } catch { /* the temp folder's own clean-up */ }
 

@@ -32,6 +32,7 @@ export const HELPERS = {
   "tests/pick-desk.js": "a machine-window gate, not in either chain",
   "tests/plants-tree.mjs": "the scratch copy the planting gates re-run themselves in, not a gate",
   "tests/reg-stand.cjs": "a stand-in module tests/relay-channel.mjs requires, not a gate",
+  "tests/reg-stand-preload.cjs": "reg-stand preloaded into a harness-launched shell by tests/engine.js shellLaunch, not a gate",
   "tests/storage-keys.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
   "tests/tour-walk.js": "the tour's walk tests/smoke.js requires and runs",
   "tests/update-install.js": "a machine-window gate, not in either chain",

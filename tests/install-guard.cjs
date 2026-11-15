@@ -219,6 +219,9 @@ function guardStart(opts) {
   const o = opts || {}, env = o.env || process.env;
   const sentinel = deskSentinelAt(env, o.home);
   const desk = fs.existsSync(sentinel) ? ["this computer carries " + sentinel + ", a desk where installers never run"] : [];
+  /* A desk refuses before anything is read: a test run reads no part of a desk's registry, as it writes none, and the snapshot
+     is only for comparing a test install's before and after, which a desk never has (tests/reg-guard.mjs g11). */
+  if (desk.length && !o.run) return { refusals: desk, before: null }; /* plant:guard-desk-first */
   if (process.platform !== "win32" && !o.run) return { refusals: desk.concat(["the install guard reads a Windows registry and this is " + process.platform]), before: null };
   const places = placesOfAccount(o.run, env);
   const before = snapshot(places, o.run, o.extra);
