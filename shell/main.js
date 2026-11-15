@@ -693,6 +693,17 @@ function engineVersion() {
   engineVersionRead = m[1];
   return engineVersionRead;
 }
+let engineBuiltRead = null;
+function engineBuilt() {
+  if (engineBuiltRead !== null) return engineBuiltRead;
+  let m = null;
+  try { m = /\bE_BUILT\s*=\s*"([0-9]{4})-([0-9]{2})-([0-9]{2})"/.exec(fs.readFileSync(ENGINE, "utf8")); } catch { m = null; }
+  if (!m || +m[1] < 2020 || +m[1] > 2099) return "";
+  const at = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  if (at.getUTCFullYear() !== +m[1] || at.getUTCMonth() !== +m[2] - 1 || at.getUTCDate() !== +m[3]) return "";
+  engineBuiltRead = m[1] + "-" + m[2] + "-" + m[3];
+  return engineBuiltRead;
+}
 /* The release a catalog asks for where this engine is older, else "". */
 function needsNewerEngine(data) {
   const want = /^([0-9]{1,6})\.([0-9]{1,6})\.([0-9]{1,6})/.exec(String((data && data.minEngine) || ""));
@@ -10655,6 +10666,7 @@ function keepNote(note, kept) {
   if (note.serial < kept.serial) return "refused"; /* plant:note-serial */
   if (note.serial === kept.serial) return noteBytes(note).equals(noteBytes(kept)) ? "same" : "refused";
   if (versionAbove(kept.version, note.version)) return "refused"; /* plant:note-downgrade */
+  if (note.released < kept.released) return "refused"; /* plant:note-released-older */
   return "taken";
 }
 /* Whether release `a` is above release `b`, each three whole numbers; false where either is not. */
@@ -10714,20 +10726,21 @@ function keptNote() {
 }
 /* What the page shows: the version offered where the kept note's is above this engine's and machine policy leaves the look
    on, and how the latest look went. */
+function noteFreshForBuild(n, built) { return !!n && noteDay(built) && !(n.released < built); } /* plant:note-released-built */
 function updateState() {
   const kept = keptNote();
-  return { offer: !updateLookOff() && kept && versionAbove(kept.version, engineVersion()) ? kept.version : "", look: noteLook };
+  return { offer: !updateLookOff() && noteFreshForBuild(kept, engineBuilt()) && versionAbove(kept.version, engineVersion()) ? kept.version : "", look: noteLook };
 }
 async function lookForNote(fetchFn) {
   let look = "failed";
   try {
     const body = await fetchNote(fetchFn, NOTE_URL), got = readNote(body);
-    const running = engineVersion();
-    if (got.note && /^[0-9]+\.[0-9]+\.[0-9]+$/.test(running)) { /* plant:note-known-running */
+    const running = engineVersion(), built = engineBuilt();
+    if (got.note && /^[0-9]+\.[0-9]+\.[0-9]+$/.test(running) && noteDay(built)) { /* plant:note-known-running */
       const kept = keptNote();
-      /* A look reads only when its note stands at or above the running version: a note below it says nothing of newer
-         releases, kept or not (Argon's update-offer finding 1), and must not be kept as a serial floor. */
-      const proves = !versionAbove(running, got.note.version);
+      /* A look reads only when its note stands at or above the running version and was not released before this build:
+         a past or lower note proves nothing of newer releases and must not be kept as a serial floor. */
+      const proves = !versionAbove(running, got.note.version) && noteFreshForBuild(got.note, built);
       if (proves) { /* plant:note-weigh-before-keep */
         const take = keepNote(got.note, kept);
         if (take === "same") {
