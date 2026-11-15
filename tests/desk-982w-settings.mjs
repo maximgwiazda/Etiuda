@@ -25,7 +25,7 @@
  *       the renewal that asks): nothing in the card reaches past it, nothing in it is cut, and buttons on lines of their own
  *       take the card's width; at 1280 in English the two stand side by side at their own widths
  *   s13 in English at 1440 px, in Appearance and Notifications, each choice whose row is wide enough stands at its row's
- *       right with its top within a few pixels of the words' first line and its right edge at the row's right padding;
+ *       right, its middle and its icon's within 1.5 px of the middle of the words' first line, its right edge at the row's right padding;
  *       at 546 px in Polish the same choices still stand under their words
  *   s13p lifting plant:settings-row-top in a scratch copy turns s13 red (skipped under ETIUDA_PLANTS=off)
  */
@@ -594,8 +594,9 @@ try {
   check(!s12bad.length, "s12 Account's sign-in card at 560 px in Polish (not signed in, the preview's press, the renewal that asks): nothing past the card, nothing cut, the buttons each on a line of their own at the card's width; at 1280 in English side by side at their own widths", s12bad);
 
   /* s13: at 1440 px in English, in Appearance and Notifications, each choice whose row is wide enough stands at its row's
-     right, its top within a few pixels of the row's words' first line, and its right edge at the row's right padding; at
-     546 px in Polish those same choices stand under their words. */
+     right, its middle and the row's icon's middle within 1.5 px of the middle of the row's words' first line (the designer,
+     2026-11-15: centred on that line, not top to top), and its right edge at the row's right padding; at 546 px in Polish
+     those same choices stand under their words. */
   async function readChoicesAt1440(p) {
     const bad = [], wide = [];
     for (const sec of ["appearance", "notifications"]) {
@@ -623,12 +624,14 @@ try {
           const range = document.createRange();
           range.selectNodeContents(lab.firstChild || lab);
           const rects = range.getClientRects();
-          const firstTop = rects.length ? rects[0].top : l.top;
+          const firstMid = rects.length ? rects[0].top + rects[0].height / 2 : l.top + l.height / 2;
+          const ic = row.querySelector(".sx-ic"), ir = ic ? ic.getBoundingClientRect() : null;
+          const dIc = ir ? Math.round((ir.top + ir.height / 2 - firstMid) * 10) / 10 : 0;
           const under = c.top >= l.bottom - 1;
-          const dy = Math.round((s.top - firstTop) * 10) / 10;
+          const dy = Math.round((s.top + s.height / 2 - firstMid) * 10) / 10;
           const rDiff = Math.round((inR - s.right) * 10) / 10;
-          if (under || c.left < l.right - 1 || Math.abs(dy) > 6 || Math.abs(rDiff) > 2)
-            out.push({ sec, id, under, dy, rDiff, inW: Math.round(inW), natW: Math.round(natW) });
+          if (under || c.left < l.right - 1 || Math.abs(dy) > 1.5 || Math.abs(dIc) > 1.5 || Math.abs(rDiff) > 2)
+            out.push({ sec, id, under, dy, dIc, rDiff, inW: Math.round(inW), natW: Math.round(natW) });
         }
         return { out, seenWide };
       }, sec);

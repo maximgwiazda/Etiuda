@@ -3922,7 +3922,12 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
    so side by side the words take the room, and alone on its line the control takes the row. Beside the words, the
    control and icon stand on the first line while single-line tiles keep their line centred. */
 .sx:not(.lm) .set-row{display:flex;flex-wrap:wrap;gap:8px 14px}
-.sx:not(.lm) .set-row{align-items:flex-start;align-content:center} /* plant:settings-row-top */
+.sx:not(.lm) .set-row{align-items:baseline;align-content:center} /* plant:settings-row-top */
+/* The control's words sit on the words' first line, so its middle is that line's middle (the designer, 2026-11-15), in a
+   row of one line as of four. The icon has no line of its own: on the baseline its foot stands there, and 4.5px down (half
+   its 20px less the 14px words' ascent above their line's middle, measured) its middle is that line's middle too, beside
+   the control or above it. */
+.sx:not(.lm) .set-row>.sx-ic{align-self:baseline;translate:0 4.5px}
 .sx:not(.lm) .set-row>.sx-ic{flex:0 0 20px;margin-right:8px}
 .sx:not(.lm) .set-label{flex:999 1 min(260px,calc(100% - 42px))}
 .sx:not(.lm) .set-ctl{flex:1 1 auto;min-width:0;justify-content:flex-start}
