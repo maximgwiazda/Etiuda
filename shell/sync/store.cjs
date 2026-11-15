@@ -195,8 +195,10 @@ async function storeLook(io) {
      where a new store is made over the mark. */
   const ended = read.text !== null && endedRead(read.text);
   if (ended && io.fresh !== true) return { state: "ended" }; /* plant:ended-off */
-  let keys = read.text === null || ended ? null : keyRead(read.text);
-  const local = ended ? null : io.local();
+  /* The relay holds the store the folder names no more (io.gone, its id; swept, or ended by the service): it is replaced as an ended one is. */
+  const gone = !ended && !!io.gone && read.text !== null && (keyRead(read.text) || {}).rt === io.gone;
+  let keys = read.text === null || ended || gone ? null : keyRead(read.text);
+  const local = ended || gone ? null : io.local();
   if (!keys && local) {
     /* The file deleted or unreadable, this computer holding the keys: written back, so no other computer starts afresh. A deleted one
        is made again only where no file has come since; one another computer wrote meanwhile is adopted. */
@@ -209,7 +211,7 @@ async function storeLook(io) {
   let made = false;
   if (!keys) {
     const fresh = freshKeys(io.rand, io.url);
-    const put = ended ? await io.folder.write(keyText(fresh)) : await io.folder.create(keyText(fresh));
+    const put = ended || gone ? await io.folder.write(keyText(fresh)) : await io.folder.create(keyText(fresh));
     if (!put.ok && put.why !== "taken") return { state: "unavailable", why: put.why };
     /* Read again, so two computers making a store at once both adopt the file that stands where each sees the other's write. Where each
        reads back its own (a replica not yet reconciled) both replace, and the earlier store ends: its computer adopts the folder's store
@@ -229,8 +231,13 @@ async function storeLook(io) {
     if (!c.ok) return { state: "paused", why: c.why || "relay", keys };
   }
   /* Every other look hands the relay the grant it was given, so the store lapses from the person's last seat and not from its making; a
-     renewal not taken changes nothing here and is asked again at the next look. */
-  else if (typeof io.relay.renew === "function") await Promise.resolve(io.relay.renew(keys, got.grant)).catch(() => null); /* plant:store-renew */
+     renewal refused for any other reason changes nothing here and is asked again at the next look. */
+  else if (typeof io.relay.renew === "function") {
+    let r = null;
+    r = await Promise.resolve(io.relay.renew(keys, got.grant)).catch(() => null); /* plant:store-renew */
+    /* Swept while every computer was away, or a seat regained after the sweep: a fresh store, once, which this computer's sync fills. */
+    if (r && r.ok === false && r.why === "not-enrolled" && !io.gone) return storeLook(Object.assign({}, io, { gone: keys.rt })); /* plant:store-remake */
+  }
   if (!keys.devices.some(d => d.pub === io.me.pub)) {
     /* This computer enrols itself with S, the list kept in the folder's file so the next computer signs the whole of it. */
     const next = Object.assign({}, keys, { devices: keys.devices.concat([{ id: io.me.id, pub: io.me.pub, desk: io.me.desk }]).slice(-DEVICES_MAX), rev: keys.rev + 1 });

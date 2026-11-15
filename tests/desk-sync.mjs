@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-sync-"));
-const EXPECTED = 27;
+const EXPECTED = 31;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -488,6 +488,40 @@ async function main() {
     return { ok, detail: brief(r) };
   };
 
+  /* C12, a store the relay swept, made again: two computers on one store, both away until the relay sweeps it (`away`, the seat held
+     throughout), or the seat lost, the store swept, and a seat bought again (`regained`). At the next look a fresh store stands in the
+     folder, the first computer back made it, the second adopts it, and an edit made on each while away reaches the other. */
+  async function remakeScene(name, way) {
+    const w = worldOf(name), a = computer(w, "a"), b = computer(w, "b");
+    const L = T0 + 10 * DAY;
+    w.serviceSent.seat = way === "away" ? { lost: Infinity, paidUntil: T0 + 400 * DAY } : { lost: Infinity, trialEnds: L };
+    if ((await a.look()).state !== "on" || (await b.look()).state !== "on") throw new Error("the store did not come on");
+    await a.look();
+    a.desk.keys.eTheme = "dark";
+    await settle(a, b);
+    const rt = a.sealed.keys.rt, row = () => (w.R.stores.get(rt) ? w.R.stores.get(rt).get("team") : null);
+    for (let d = 1; w.R.clock.now + DAY < L; d++) { w.R.clock.now = T0 + d * DAY; await a.look(); await b.look(); await w.R.ring(rt); }
+    /* Away: no look at all; regained: looks go on, refused once the trial is over. The alarm rings each day as the runtime rings it. */
+    let sweptOn = null;
+    for (let d = 0; d <= 120 && sweptOn === null; d++) {
+      w.R.clock.now = L + d * DAY;
+      if (way === "regained") { await a.look(); await b.look(); }
+      await w.R.ring(rt);
+      if (!row()) sweptOn = d;
+    }
+    a.desk.keys.eUiLang = "pl";
+    b.desk.files["Away.ec"] = "{\"made\":\"while away\"}";
+    if (way === "regained") w.serviceSent.seat = { lost: Infinity, paidUntil: w.R.clock.now + 400 * DAY };
+    w.R.clock.now += DAY;
+    const la = await a.look(), lb = await b.look();
+    await a.look();
+    await settle(a, b);
+    const fresh = !!la.keys && la.keys.rt !== rt && !!lb.keys && lb.keys.rt === la.keys.rt && la.made === true && lb.made !== true;
+    const reached = b.desk.keys.eUiLang === "pl" && a.desk.files["Away.ec"] === "{\"made\":\"while away\"}" && b.desk.keys.eTheme === "dark";
+    const ok = sweptOn !== null && la.state === "on" && lb.state === "on" && fresh && reached && !row();
+    return { ok, detail: brief({ sweptOn, a: la.state, b: lb.state, fresh, aMade: la.made, reached, oldGone: !row() }) };
+  }
+
   const results = {};
   const LEGS = [
     ["S1", followsScene, "a setting, an edit over a catalog and a catalog file changed on one computer reach the other through the relay, nothing of them in the clear"],
@@ -503,6 +537,8 @@ async function main() {
     ["C11u", seatLeg("C11u"), "a trial seat freed 40 days before the trial would end: sync stops, and the store is swept at the last grant's end, 40 days on, the one case past 30 days after the last look"],
     ["C11p", seatLeg("C11p"), "a paid licence that ends: sync stops, and the store is swept 90 days after the last look that held a seat, 89 days on"],
     ["C11f", seatLeg("C11f"), "a paid seat freed with the licence running: sync stops, and the store is swept 90 days after the last look that held a seat, 89 days on"],
+    ["C12a", () => remakeScene("c12a", "away"), "a store the relay swept while both computers were away, the seat held: the first back makes a fresh store, the second adopts it, and what each made while away reaches the other"],
+    ["C12r", () => remakeScene("c12r", "regained"), "a seat bought again after the store was swept: a fresh store is made and adopted, and what each computer made meanwhile reaches the other"],
     ["C1a", raceScene, "two computers that each read back their own store both replace and the earlier store ends; the earlier computer adopts the folder's store at its next look and every edit it made reaches the new store"],
   ];
   for (const [id, scene, line] of LEGS) {
@@ -550,28 +586,31 @@ async function main() {
     ["resume", "C10o", lift("resume"), "sync does not start again at the next look that is on"],
     ["adopt", "C1a", lift("adopt"), "the store adopted is not where this computer's place is written, so its edits stay in the ended store"],
   ];
-  /* The store's renewal lifted in a copy of store.cjs: the store lapses from its making, 45 days, with the seat still held. */
-  {
-    const line = "p C11t the renewal lifted in a copy of shell/sync/store.cjs turns C11t red (the store lapses 45 days after it was made, the seat still held), and the product file is never written";
-    if (PLANTS_OFF) skip(line);
-    else {
-      const STORE = path.join(ROOT, "shell", "sync", "store.cjs"), digest = sha(fs.readFileSync(STORE)), was = ST;
-      let turned = false, detail = "plant line absent";
-      try {
-        const next = lift("store-renew")(fs.readFileSync(STORE, "utf8"));
-        if (next !== null) {
-          const dir = path.join(WORK, "p-store-renew");
-          fs.mkdirSync(dir, { recursive: true });
-          fs.writeFileSync(path.join(dir, "store.cjs"), next);
-          ST = require(path.join(dir, "store.cjs"));
-          const r = await safe(seatLeg("C11t"));
-          turned = r.ok !== true;
-          detail = turned ? "the leg turned red: " + r.detail : "the leg still held";
-        }
-      } catch (e) { detail = e && e.message ? e.message : String(e); }
-      finally { ST = was; }
-      check(results.C11t && results.C11t.ok === true && turned && sha(fs.readFileSync(STORE)) === digest, line + ": " + detail);
-    }
+  /* The store's own guards, each lifted in a copy of store.cjs. */
+  const STORE_PLANTS = [
+    ["store-renew", "C11t", "the renewal lifted: the store lapses 45 days after it was made, the seat still held"],
+    ["store-remake", "C12a", "no fresh store where the relay swept the old one: both computers stay on a store that is gone"],
+    ["store-remake", "C12r", "no fresh store after a seat bought again: the computers stay on the swept store"],
+  ];
+  for (const [tag, id, what] of STORE_PLANTS) {
+    const line = "p " + id + " " + tag + " lifted in a copy of shell/sync/store.cjs turns " + id + " red (" + what + "), and the product file is never written";
+    if (PLANTS_OFF) { skip(line); continue; }
+    const STORE = path.join(ROOT, "shell", "sync", "store.cjs"), digest = sha(fs.readFileSync(STORE)), was = ST;
+    let turned = false, detail = "plant line absent";
+    try {
+      const next = lift(tag)(fs.readFileSync(STORE, "utf8"));
+      if (next !== null) {
+        const dir = path.join(WORK, "p-" + tag + "-" + id);
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, "store.cjs"), next);
+        ST = require(path.join(dir, "store.cjs"));
+        const r = await safe(scenes[id]);
+        turned = r.ok !== true;
+        detail = turned ? "the leg turned red: " + r.detail : "the leg still held";
+      }
+    } catch (e) { detail = e && e.message ? e.message : String(e); }
+    finally { ST = was; }
+    check(results[id] && results[id].ok === true && turned && sha(fs.readFileSync(STORE)) === digest, line + ": " + detail);
   }
   for (const [name, id, change, what] of PLANTS) {
     const line = "p " + id + " " + name + " in a copy of shell/sync/sync.cjs turns " + id + " red (" + what + "), and the product file is never written";
