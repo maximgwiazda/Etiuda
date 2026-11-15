@@ -3790,6 +3790,8 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx-sec .sx-ic{color:var(--dim)}
 .sx-sec:hover,.sx-sec:focus-visible{background:var(--sx-hover)}
 .sx-sec.on,.sx-sec.on:hover,.sx-sec.on:focus-visible{background:var(--sx-sel-fill);box-shadow:var(--sx-sel-lift);font-weight:600}
+/* The chosen row still shows focus when the keys reach it: a ring inside its edge, so the mark stays one row (k6). */
+.sx-sec.on:focus-visible{outline:2px solid var(--sx-acc);outline-offset:-2px}
 .sx-sec.on .sx-ic{color:var(--sx-acc)}
 /* ONE ROW OF THE RAIL MARKED AT A TIME: the hand used last owns the mark (data-hand on the root, header-menus.js). Under the
    pointer a focused row other than the hovered one goes unmarked; under the keys the hovered row does. */
