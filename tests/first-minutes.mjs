@@ -233,8 +233,8 @@ try {
     /* 1a/1b: Only sample catalog in folder (EN + PL), and Next opens it and moves on */
     EXPECTED += 4;
     for (const [lang, wantFragment] of [
-      ["en", "Click <b>Load catalog file</b> to open the practice catalog in "],
-      ["pl", "Proszę kliknąć <b>Wczytaj plik katalogu</b>, aby otworzyć przykładowy katalog z folderu "]
+      ["en", "Replies come in a catalog. Click <b>Next</b> to open the practice catalog in "],
+      ["pl", "Odpowiedzi są w katalogu. Proszę kliknąć <b>Dalej</b>, aby otworzyć przykładowy katalog z folderu "]
     ]) {
       const p = await bootEmptyWithHost(browser, cleanEmptyUrl, { lang, files: sampleRows });
       const before = await readTourLoadState(p);
@@ -849,8 +849,8 @@ try {
 
     // Item 1 (load step with practice catalog) checked in EN & PL
     for (const [lang, expected] of [
-      ["en", "Click <b>Load catalog file</b> to open the practice catalog in " + folderShort + ", to try Etiuda before your team's own arrives."],
-      ["pl", "Prosz\u0119 klikn\u0105\u0107 <b>Wczytaj plik katalogu</b>, aby otworzy\u0107 przyk\u0142adowy katalog z folderu " + folderShort + " i wypr\u00f3bowa\u0107 Etiud\u0119, zanim dotrze katalog zespo\u0142u."]
+      ["en", "Replies come in a catalog. Click <b>Next</b> to open the practice catalog in " + folderShort + " and try Etiuda before your team's own arrives, or <b>Load catalog file</b> to choose another."],
+      ["pl", "Odpowiedzi s\u0105 w katalogu. Prosz\u0119 klikn\u0105\u0107 <b>Dalej</b>, aby otworzy\u0107 przyk\u0142adowy katalog z folderu " + folderShort + " i wypr\u00f3bowa\u0107 Etiud\u0119, zanim dotrze katalog zespo\u0142u, albo <b>Wczytaj plik katalogu</b>, aby wybra\u0107 inny."]
     ]) {
       const p = await bootEmptyWithHost(browser, cleanEmptyUrl, { lang, files: sampleRows });
       const st = await readTourLoadState(p);

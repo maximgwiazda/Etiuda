@@ -145,7 +145,7 @@ function loadStepBody(){
   if(!dir) return t("Replies come in a catalog. Click <b>Load catalog file</b> and choose the file; <b>Next</b> stays off until a catalog is in place, and the catalog stays in this browser, ready whenever you come back.");
   const pick=typeof eFolderCatalogPick==="function" ? eFolderCatalogPick() : null;
   if(pick && pick.kind==="sample"){
-    return t("Click <b>Load catalog file</b> to open the practice catalog in {FOLDER}, to try Etiuda before your team's own arrives.")
+    return t("Replies come in a catalog. Click <b>Next</b> to open the practice catalog in {FOLDER} and try Etiuda before your team's own arrives, or <b>Load catalog file</b> to choose another.")
       .split("{FOLDER}").join(esc(dir));
   }
   if(pick && pick.file){
