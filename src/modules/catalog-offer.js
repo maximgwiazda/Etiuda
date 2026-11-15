@@ -228,11 +228,11 @@ function ecDeskRowHtml(f,o){
 function ecMineHtml(line,glyph,fault){
   return '<small class="ec-mine"'+(fault?' data-ec-fault="'+esc(fault)+'"':'')+'>'+(glyph?ICON_DESK:'')+'<span>'+esc(line)+'</span></small>';
 }
-/* A FOLDER FILE'S SIGNATURE, checked as a load would check it and kept per name and date: the
-   rows are files nobody has loaded, so each is read once to be told apart. */
+/* A FOLDER FILE'S SIGNATURE, checked as a load would check it and kept per name, date and the hash of its bytes (the
+   listing's bytesSha): the rows are files nobody has loaded, so each is read once to be told apart. */
 const ecTrustOf=new Map();
 function ecFileTrust(f){
-  const at=f.name+"|"+f.mtime;
+  const at=f.name+"|"+f.mtime+"|"+String(f.bytesSha||""); /* plant:ec-trust-bytes */
   if(!ecTrustOf.has(at)) ecTrustOf.set(at, eReadCatalogFile(f.name).then(got=>{
     if(!got) return {state:"",print:""};
     const c=parseCatalogFile(got.text);

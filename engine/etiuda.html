@@ -16978,6 +16978,8 @@ What you type stays in this browser only.`;
       // Whether a pinned lead signed it (the shell's catalogLeadOk), which alone lets a notice name the lead.
       leadSigned: !!(f && f.leadSigned === true),
       /* plant:listing-lead-mapped */
+      // The hash of the file's bytes, by which a row's key is kept (catalog-offer.js ecFileTrust).
+      bytesSha: String(f && f.bytesSha || ""),
       // "taken-back" on this desk's own file where the team's folder has taken its writes back three times.
       fault: String(f && f.fault || ""),
       // The copy Etiuda ships, rather than a folder's own file.
@@ -34425,7 +34427,7 @@ What you type stays in this browser only.`;
   }
   var ecTrustOf = /* @__PURE__ */ new Map();
   function ecFileTrust(f) {
-    const at = f.name + "|" + f.mtime;
+    const at = f.name + "|" + f.mtime + "|" + String(f.bytesSha || "");
     if (!ecTrustOf.has(at)) ecTrustOf.set(at, eReadCatalogFile(f.name).then((got) => {
       if (!got) return { state: "", print: "" };
       const c = parseCatalogFile(got.text);

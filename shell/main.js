@@ -8813,7 +8813,7 @@ function ecFacts(file, deskFolder) {
       out = { mtime: Math.round(st.mtimeMs), cards: data.cards.length, edition: data.date != null ? String(data.date) : "",
               macros: n.macros, intents: n.intents, cats: n.cats, awaiting: n.awaiting, id: data.id != null ? String(data.id) : "",
               rev: +data.rev || 0, grew: ecGrew(data), sha: signedSha(data), deskName: d && typeof d.name === "string" ? d.name : "",
-              deskOk: deskFileGenuine(data, deskFolder),
+              deskOk: deskFileGenuine(data, deskFolder), bytesSha: crypto.createHash("sha256").update(text, "utf8").digest("hex").slice(0, 32),
               genuine: !!(pinnedLeadPubs().length ? catalogLeadOk(data) : catalogSigValid(data)) };
     }
   } catch (e) {
@@ -8944,7 +8944,7 @@ function listingRows() {
     return { name: path.basename(f), mtime: mt, cards: x ? x.cards : -1, edition: x ? x.edition : "",
              macros: x ? x.macros : -1, intents: x ? x.intents : -1, cats: x ? x.cats : -1, awaiting: x ? x.awaiting : [],
              sample: isTheSample(f), id: x ? x.id : "", rev: x ? x.rev : 0, grew: x ? x.grew : null, sha: x ? x.sha : "",
-             genuine: !!(x && x.genuine), relay: onRelay,
+             genuine: !!(x && x.genuine), relay: onRelay, bytesSha: x ? x.bytesSha : "",
              // The copy Etiuda ships, rather than a folder's own file of any name.
              builtIn: path.dirname(f) === BUILT_IN_DIR };
   });

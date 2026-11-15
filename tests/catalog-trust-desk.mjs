@@ -431,6 +431,12 @@ async function launch(plan) {
       await settle();
       obs.library.push(readLibrary());
     },
+    /* A FILE'S BYTES REPLACED UNDER ITS OWN DATE ("file,with"): the other file copied over it and the first file's time put back. */
+    swap: arg => {
+      const [a, b] = String(arg).split(","), at = path.join(LAB, a), st = fs.statSync(at);
+      fs.copyFileSync(path.join(LAB, b), at);
+      fs.utimesSync(at, st.atime, st.mtime);
+    },
     /* A host whose answer about the pinned leads never comes, as a shell that hangs would leave it. */
     hangleads: () => { globalThis.E_HOST.catalogLeads = () => new Promise(() => {}); },
     // The Library read once a row's own wait for its check (2 s) is over, and a little more.
@@ -712,7 +718,7 @@ if (process.argv[2] === "--launch") {
    ================================================================================================ */
 async function parent() {
   const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-  const EXPECTED = 139 + (PLANTS_OFF ? 0 : 1);
+  const EXPECTED = 140 + (PLANTS_OFF ? 0 : 2);
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -1822,6 +1828,40 @@ async function parent() {
       check(!!p16f && (p16f.offers || []).length === 1 && p16f.reloaded === true && p16f.heldRev === 3,
         "r16f lifting plant:offer-yes-valid loads the unchecked file at the first Yes (FAIL r16e): "
         + JSON.stringify(p16f ? { offers: (p16f.offers || []).length, reloaded: p16f.reloaded, rev: p16f.heldRev } : "plant line absent"));
+    }
+
+    /* r16g (Grok's review 16, finding 2): a row's key belongs to the bytes it was read from. A signed file not in use shows its
+       gold key; its bytes are then replaced by another catalog whose signature fails, its file time put back, and the Library drawn
+       again in the same page: the row does not keep the gold key. other.ec is written first, so the boot holds lamp-2.ec. r16h: the cache's key without the bytes, in a copy of src/. */
+    const other16 = Object.assign(payload("2026-09-05", "Other Shop"), { id: "other-shop" });
+    const r16gLab = () => {
+      const lab = scenario([["catalogs/other.ec", sign(other16)], ["catalogs/lamp-2.ec", sign(atRev(2, "2026-09-01"))],
+        ["catalogs/etiuda-ring.json", JSON.stringify({ format: V2.V2_RING_FORMAT, kind: V2.V2_RING_KIND, keys: JSON.parse(ring).keys
+          .concat([{ catalog: "other-shop", keyId: KEY_ID, alg: V2.V2_SIG_ALG, public: pubHex(pair.publicKey) }]) })]]);
+      fs.mkdirSync(path.join(lab, "elsewhere"));
+      fs.writeFileSync(path.join(lab, "elsewhere", "forged.ec"), JSON.stringify(bend(sign(Object.assign({}, other16, { name: "Other Shop, forged" })))), "utf8");
+      run(lab, ["boot", "settle", "offer", "yes", "settle"]);
+      return lab;
+    };
+    const plan16g = ["library", "swap:catalogs/other.ec,elsewhere/forged.ec", "library"];
+    const lab16g = r16gLab();
+    const g16 = run(lab16g, plan16g, true);
+    const before16 = row(g16, "other.ec", 0), after16 = row(g16, "other.ec", 1);
+    check(!!before16 && !!before16.key && before16.key.gold && !!after16 && !(after16.key && after16.key.gold) && !(g16.errors || []).length,
+      "r16g a row whose file's bytes changed under the same file time does not keep the gold key its old bytes earned: before "
+      + said(before16) + ", after " + said(after16));
+    if (PLANTS_OFF) console.log("  SKIP  r16h rewriting plant:ec-trust-bytes keeps the old gold key (ETIUDA_PLANTS=off)");
+    else {
+      const lab16h = r16gLab();
+      fs.cpSync(path.join(ROOT, "src"), path.join(lab16h, "src"), { recursive: true });
+      const offerFile = path.join(lab16h, "src", "modules", "catalog-offer.js"), from = '+"|"+String(f.bytesSha||"")';
+      const lines = fs.readFileSync(offerFile, "utf8").split("\n"), at = lines.findIndex(l => l.indexOf("plant:ec-trust-bytes") >= 0);
+      const ok = at >= 0 && lines[at].split(from).length === 2;
+      if (ok) { lines[at] = lines[at].replace(from, () => ""); fs.writeFileSync(offerFile, lines.join("\n"), "utf8"); }
+      const h16 = ok ? run(lab16h, plan16g, true, { modRoot: lab16h }) : null;
+      const kept = h16 ? row(h16, "other.ec", 1) : null;
+      check(!!kept && !!kept.key && kept.key.gold, "r16h rewriting plant:ec-trust-bytes keeps the old gold key on the changed file (FAIL r16g): "
+        + (h16 ? said(kept) : "plant line absent"));
     }
 
     /* AN EQUAL REV IS NOT AN UPDATE UNLESS IT VERIFIED UNDER THE HELD KEY. Unsigned, with a later date, keeps
