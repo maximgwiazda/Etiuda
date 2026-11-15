@@ -464,7 +464,7 @@ function closeModal(){
   modalEl.hidden=true;
   edPlaceKind=null; edDrag=null; edAgain=null; edRestEnd(); edUnstand();
   modalEl.classList.remove("ed-win");
-  modalCard.classList.remove("about-modal","about-page","mt-modal");
+  modalCard.classList.remove("about-modal","about-page");
   modalCard.innerHTML="";
   let back=modalOpener;
   const kbd=modalOpenerKbd, key=modalOpenerKey;

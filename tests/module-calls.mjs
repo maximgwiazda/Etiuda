@@ -6193,18 +6193,15 @@ const CARD_B = {
       }
     });
 
-    check("maintenance.js", "D3-7 Clear local changes and Reset shortcuts are not in Maintenance, tab or rescue window, which says where they went; Settings has Reset shortcuts and no Clear", () => {
+    check("maintenance.js", "D3-7 Clear local changes and Reset shortcuts are not in Maintenance, which says where they went; Settings has Reset shortcuts and no Clear", () => {
       shutAll();
       MN.openMaintenance();
       const tab = screenHost.innerHTML;
-      shutAll();
-      modal.hidden = true;
-      MN.openMaintenanceModal();
-      const rescue = modalCard.innerHTML + " " + (byId["#modalCard"].innerHTML || "");
       const said = "Reset defaults is in Settings, under Data and defaults, and Clear local changes is in the Library, under Catalog &amp; data.";
       const gone = h => h.indexOf("mtClear") < 0 && h.indexOf("mtShortcuts") < 0 && h.indexOf(">Clear local") < 0 && h.indexOf(">Reset shortcuts<") < 0;
       const all = SET.settingsBodyHtml();
-      return (gone(tab) && tab.indexOf(said) >= 0 && tab.indexOf('id="mtEject"') >= 0 && gone(modalCard.innerHTML + rescue)
+      return (typeof MN.openMaintenanceModal !== "function"
+        && gone(tab) && tab.indexOf(said) >= 0 && tab.indexOf('id="mtEject"') >= 0
         && all.indexOf('id="setClear"') < 0 && all.indexOf(">Clear local") < 0 && all.indexOf('id="setReset"') >= 0
         && all.indexOf('id="setResetKeys"') >= 0) || "tab " + tab.slice(-300);
     });
@@ -6238,7 +6235,7 @@ const CARD_B = {
 
 /* ------------------------------------------------------------------ screen-tabs.js (run D1)
    The desk's one mechanism for named tabs: Maintenance in a tab with today's content,
-   Ctrl+Shift+M default key, F2 freed, modal fallback, session tabs hold conversations only,
+   Ctrl+Shift+M default key, F2 freed, the dialog stays shut, session tabs hold conversations only,
    keys suppressed while in front, unsaved edit close guard. */
 {
   const hadDoc = globalThis.document, hadAdd = globalThis.addEventListener, hadCs = globalThis.getComputedStyle;
@@ -6544,19 +6541,15 @@ const CARD_B = {
       return matchesF2 && !matchesChord;
     });
 
-    // 10. a throw in screen-tabs opens the modal instead
-    check("screen-tabs.js", "D1-10 a throw in screen-tabs opens the modal instead", () => {
-      try {
-        STAB._setThrowForTest(true);
-        modal.hidden = true;
-        modalCard.className = "modal-card";
-        MN.openMaintenance();
-        return modal.hidden === false && modalCard.classList.contains("mt-modal");
-      } finally {
-        STAB._setThrowForTest(false);
-        modal.hidden = true;
-        modalCard.className = "modal-card";
-      }
+    // 10. Maintenance opens on the screen and the dialog stays shut
+    check("screen-tabs.js", "D1-10 opening Maintenance opens the screen and leaves the dialog shut", () => {
+      start([["t-a", "Anna"], ["t-b", "Bartek"]], "t-a");
+      modal.hidden = true;
+      modalCard.className = "modal-card";
+      MN.openMaintenance();
+      const screen = STAB.screenOn === "maintenance" && STAB.screens.includes("maintenance");
+      const shut = modal.hidden === true && !modalCard.classList.contains("mt-modal");
+      return (screen && shut) || JSON.stringify({ screen: screen, shut: shut, on: STAB.screenOn, hidden: modal.hidden });
     });
 
     // 11. Ctrl+Shift+M inside a pop-up leaves at once and keeps the edit on Undo,
@@ -7478,8 +7471,7 @@ const CARD_B = {
     if (html.indexOf("What this computer reports, and ways to set things right.") < 0) return "subtitle";
     if (html.indexOf("Readings") < 0) return "readings heading";
     if (html.indexOf("Open the log folder") >= 0) return "log folder was built";
-    if (typeof MN.openMaintenanceModal === "function" && MN.openMaintenanceModal.toString().indexOf("mtMaintBody") < 0)
-      return "rescue window does not use the screen body";
+    if (typeof MN.openMaintenanceModal === "function") return "rescue window is still there";
     ST.lsSet("eUiLang", "pl");
     try {
       const plHost = { innerHTML: "", querySelector() { return null; } };
@@ -8653,7 +8645,7 @@ const CARD_B = {
         const c0 = at().join(",");
         drag(600, 160, 900, 600);
         return eq([names.sort().join(",") + " of " + sites, about, at().join(",") === c0, store() === kept].join(" || "),
-          "card-editor.js:card,editors.js:category,editors.js:intent of 7 || false||| || true || true");
+          "card-editor.js:card,editors.js:category,editors.js:intent of 6 || false||| || true || true");
       });
   } finally {
     Date.now = hadNow;

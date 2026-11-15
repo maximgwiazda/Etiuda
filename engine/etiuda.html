@@ -3151,9 +3151,6 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 .btn.danger{color:#c44;border-color:color-mix(in srgb,#c44 47%,var(--bg))}
 /* About Etiuda dialog, and the pages it opens */
 .modal-card.about-modal,.modal-card.about-page{max-width:520px}
-/* THE PANEL TAKES THE WINDOW'S WIDTH, and the readings as many columns as it holds, so the whole of
-   it stands on one screen without scrolling in any reasonably big window. */
-.modal-card.mt-modal{max-width:min(1240px,calc(100vw - 40px))}
 /* Light and OPEN, not bold: the one place the product says its own name was the heaviest
    text in the app. 350 + tracking gives the presence the bold was for. 350 needs Segoe UI
    Variable (Win11); older systems snap to 400 - degrades to plainer, never to broken. */
@@ -13574,7 +13571,6 @@ What you type stays in this browser only.`;
   // src/modules/screen-tabs.js
   var screen_tabs_exports = {};
   __export(screen_tabs_exports, {
-    _setThrowForTest: () => _setThrowForTest,
     clearScreenOn: () => clearScreenOn,
     closeScreenTab: () => closeScreenTab,
     dropScreenTab: () => dropScreenTab,
@@ -13593,12 +13589,8 @@ What you type stays in this browser only.`;
   var screens = [];
   var screenOn = "";
   var prevTabId = null;
-  var _throwForTest = false;
   var onScreenChange = null;
   var onScreenReturn = null;
-  function _setThrowForTest(v) {
-    _throwForTest = Boolean(v);
-  }
   function registerScreen(id, def) {
     REGISTRY[id] = def;
   }
@@ -13618,7 +13610,6 @@ What you type stays in this browser only.`;
     return Boolean(screenOn);
   }
   function openScreenTab(id) {
-    if (_throwForTest) throw new Error("screen tabs throw simulation");
     if (!screens.includes(id)) {
       screens.push(id);
     }
@@ -16020,7 +16011,6 @@ What you type stays in this browser only.`;
     mtReportText: () => mtReportText,
     mtTeamLine: () => mtTeamLine,
     openMaintenance: () => openMaintenance,
-    openMaintenanceModal: () => openMaintenanceModal,
     openUnfinishedReset: () => openUnfinishedReset,
     wireMaintenanceActions: () => wireMaintenanceActions,
     wireMaintenanceWatch: () => wireMaintenanceWatch
@@ -18842,7 +18832,7 @@ What you type stays in this browser only.`;
     edRestEnd();
     edUnstand();
     modalEl.classList.remove("ed-win");
-    modalCard.classList.remove("about-modal", "about-page", "mt-modal");
+    modalCard.classList.remove("about-modal", "about-page");
     modalCard.innerHTML = "";
     let back = modalOpener;
     const kbd = modalOpenerKbd, key = modalOpenerKey;
@@ -31617,13 +31607,8 @@ What you type stays in this browser only.`;
   }
   var mtLiveT = 0;
   function mtGridEl() {
-    if (modalEl && !modalEl.hidden && modalCard && modalCard.classList.contains("mt-modal")) {
-      return modalCard.querySelector(".mt-grid");
-    }
     const sh = typeof document !== "undefined" ? document.getElementById("screenHost") : null;
-    if (sh && !sh.hidden) {
-      return sh.querySelector(".mt-grid");
-    }
+    if (sh && !sh.hidden) return sh.querySelector(".mt-grid");
     return null;
   }
   function mtPanelOpen() {
@@ -31884,16 +31869,6 @@ What you type stays in this browser only.`;
       wireMtShell(host.querySelector ? host.querySelector(".sx.lm-mt") : null);
     }
   });
-  function openMaintenanceModal(backFn) {
-    openDialog({
-      cls: "mt-modal",
-      back: backFn || null,
-      title: "Maintenance",
-      body: mtMaintBody() + '<p class="mt-moved" id="mtMoved">' + esc(t(MT_MOVED)) + "</p>",
-      actions: '<div class="mf-left"><button type="button" class="btn danger" id="mtEject">' + esc(t("Eject catalog")) + '</button></div><button type="button" class="btn" id="mtCopy" title="' + esc(t("Copy the report: counts and environment only, never your content")) + '">' + esc(t("Copy report")) + '</button><button type="button" class="btn primary" id="mtClose">' + esc(t("Done")) + "</button>",
-      wire: () => wireMaintenanceActions(null, () => dismissModal())
-    });
-  }
   function openMaintenance(backFn) {
     if (typeof modalFront === "function" && modalFront() && typeof edDirty === "function" && edDirty()) {
       try {
@@ -31908,12 +31883,7 @@ What you type stays in this browser only.`;
       } catch (_) {
       }
     }
-    try {
-      openScreenTab("maintenance");
-      return;
-    } catch (_) {
-    }
-    openMaintenanceModal(backFn);
+    openScreenTab("maintenance");
   }
 
   // src/modules/editors.js
