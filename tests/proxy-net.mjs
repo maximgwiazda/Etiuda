@@ -16,7 +16,9 @@
  *       frame from the server ends it, and its own frames are masked.
  *   p6  proxiedConnect end to end: through the proxy with the held answer the relay's socket opens and carries text; DIRECT
  *       takes the runtime's own socket; a proxy asking Windows sign-in or a SOCKS proxy closes it unopened, said once; a
- *       lookup with no answer in time, refused or naming nothing closes it unopened and never goes direct; with the
+ *       lookup with no answer in time, refused or naming nothing closes it unopened and never goes direct; the list is
+ *       walked in order, past a proxy that cannot be reached or one of a type it does not speak, never to a DIRECT after
+ *       the latter, and a proxy that answers ends the walk; with the
  *       platform's own TLS, a relay certificate no root signs closes it unopened, said once.
  *   p7  shell/main.js: every call goes through deskFetch, deskFetch hands the asker's listener, and relayConnect asks the
  *       session's resolveProxy and takes proxiedConnect.
@@ -410,6 +412,33 @@ async function p6() {
   P.proxiedConnect("wss://etiuda.dev/relay/v1/socket", {}, { message: () => {}, close: () => closedG++ }, gOpts(() => "DIRECT"));
   await sleep(50);
   check(viaDirect === 1 && closedG === 5, "p6i a resolver answering DIRECT without a Promise is still Chromium's answer, and takes the runtime's own socket: " + viaDirect);
+
+  /* The list walked in Chromium's order: port 1 is a proxy that cannot be reached. */
+  const walk = async (answer, proxyAt) => {
+    const ev = { open: 0, msgs: [], close: 0, direct: 0 };
+    const h = P.proxiedConnect("wss://etiuda.dev:" + S.port + "/relay/v1/socket", {}, { open: () => ev.open++, message: t => ev.msgs.push(t), close: () => ev.close++ },
+      { resolve: async () => answer, tlsConnect: s => s, direct: () => { ev.direct++; return { send() {}, close() {} }; },
+        asker: { heldFor: () => ({ username: USER, password: PASS, scheme: "basic" }), refused: () => {}, tell: () => {} } });
+    for (let i = 0; i < 60 && !ev.msgs.length && !ev.close && !ev.direct; i++) await sleep(10);
+    await sleep(30);
+    h.close();
+    return ev;
+  };
+  const deny = await standProxy("deny");
+  const bSeen = basic.seen.length;
+  const j = await walk("PROXY 127.0.0.1:1; PROXY 127.0.0.1:" + basic.port + "; DIRECT");
+  check(j.open === 1 && j.msgs[0] === "hello" && j.direct === 0 && basic.seen.length === bSeen + 1,
+    "p6j a first proxy that cannot be reached gives way to the next PROXY, through which the socket opens: " + JSON.stringify(j));
+  const k = await walk("PROXY 127.0.0.1:1; DIRECT");
+  check(k.direct === 1 && k.open === 0, "p6k past proxies that cannot be reached, a DIRECT Chromium lists is taken, as its own fallback does: " + JSON.stringify(k));
+  const l1 = await walk("SOCKS5 127.0.0.1:1080; DIRECT"), l2 = await walk("HTTPS 127.0.0.1:8443; PROXY 127.0.0.1:" + basic.port);
+  check(l1.direct === 0 && l1.close === 1 && l2.open === 1 && l2.direct === 0,
+    "p6l a SOCKS or HTTPS proxy is passed over to a later PROXY, never to a DIRECT after it: " + JSON.stringify([l1, l2]));
+  const bSeen2 = basic.seen.length;
+  const m = await walk("PROXY 127.0.0.1:" + deny.port + "; PROXY 127.0.0.1:" + basic.port + "; DIRECT");
+  check(m.close === 1 && m.open === 0 && m.direct === 0 && deny.seen.length === 1 && basic.seen.length === bSeen2,
+    "p6m a proxy that answers, here with a 403, ends the walk: the next is not tried and nothing goes direct: " + JSON.stringify(m));
+  deny.server.close();
   for (const s of [S, basic, win]) s.server.close();
   await tlsCase();
 }
@@ -492,6 +521,8 @@ const PLANTS = [
   /* Rewritten: no answer read as DIRECT again, which must take the runtime's own socket p6g expects closed. */
   ["shell/proxy-net.cjs", "plant:proxy-resolve-closed", "p6", '""', '"DIRECT"'],
   ["shell/proxy-net.cjs", "plant:proxy-scheme-first", "p4"],
+  ["shell/proxy-net.cjs", "plant:proxy-next-hop", "p6"],
+  ["shell/proxy-net.cjs", "plant:proxy-passed-over", "p6"],
   ["shell/proxy-net.cjs", "plant:proxy-credentials", "p3"],
   /* Rewritten: the held answer's slot without its scheme, so any challenge from that proxy is handed it. */
   ["shell/proxy-net.cjs", "plant:proxy-scheme-held", "p2", 'key + " " + scheme', "key"],
@@ -529,6 +560,6 @@ for (const [id, fn] of Object.entries(PARTS)) {
   try { await fn(); } catch (e) { check(false, id + " threw: " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | ")); }
 }
 clearInterval(alive);
-const EXPECTED = 53 +(PLANTS_OFF ? 0 : PLANTS.length);
+const EXPECTED = 57 + (PLANTS_OFF ? 0 : PLANTS.length);
 if (!ONLY) console.log((failed === 0 && ran === EXPECTED ? "proxy-net: ok" : "proxy-net: FAIL") + ", ran " + ran + " of " + EXPECTED + ", red " + failed);
 process.exit(Math.min(63, failed + (ONLY || ran === EXPECTED ? 0 : 1)));

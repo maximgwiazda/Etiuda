@@ -299,26 +299,41 @@ function proxiedConnect(url, headers, on, o) {
       say("the relay's live connection was given no proxy answer in time, so the relay is asked every minute instead");
       return closeOnce();
     }
-    const first = list[0];
-    if (first.type === "DIRECT") {
-      inner = opts.direct(url, headers, handlers);
-      if (!inner) closeOnce();
-      return;
-    }
-    if (first.type !== "PROXY") {
-      say("the relay's live connection does not go through a " + first.type + " proxy, so the relay is asked every minute instead");
-      return closeOnce();
-    }
+    /* The list in Chromium's order. A PROXY that cannot be reached gives way to the next entry, as Chromium's own fallback
+       does, and any other answer from one ends the walk. A type the socket does not speak is passed over, and a DIRECT
+       after it is not taken, since Chromium would have gone through that proxy. */
     const port = Number(u.port) || 443;
-    let sock;
-    try { sock = await tunnel(first, { host: u.hostname, port }, opts.asker ? opts.asker.heldFor(first.host, first.port) : null, opts); }
-    catch (e) {
-      if (e && e.code === "proxy-auth") {
-        if (opts.asker && e.sent) opts.asker.refused(first.host, first.port);
-        const basic = (e.schemes || []).includes("basic");
-        say(basic ? "the relay's live connection waits for a sign-in to the proxy at " + proxyKey(first.host, first.port) + ", so the relay is asked every minute until then"
-          : "the proxy at " + proxyKey(first.host, first.port) + " asks the relay's live connection for a sign-in it cannot give (" + (e.schemes || []).join(", ") + "), so the relay is asked every minute instead");
-      } else say("the proxy at " + proxyKey(first.host, first.port) + " did not let the relay's live connection through, so the relay is asked every minute instead");
+    let sock = null, first = null, passedOver = false;
+    for (const hop of list) {
+      if (gone) return closeOnce();
+      if (hop.type === "DIRECT") {
+        if (passedOver) break;
+        inner = opts.direct(url, headers, handlers);
+        if (!inner) closeOnce();
+        return;
+      }
+      if (hop.type !== "PROXY") {
+        passedOver = true; /* plant:proxy-passed-over */
+        say("the relay's live connection does not go through a " + hop.type + " proxy, so it is passed over");
+        continue;
+      }
+      const at = proxyKey(hop.host, hop.port);
+      try { sock = await tunnel(hop, { host: u.hostname, port }, opts.asker ? opts.asker.heldFor(hop.host, hop.port) : null, opts); first = hop; break; }
+      catch (e) {
+        const unreached = !!e && (e.code === "proxy-timeout" || (e.code === "proxy-refused" && e.status === undefined));
+        if (unreached) say("the proxy at " + at + " could not be reached for the relay's live connection, so the next one Chromium names is tried");
+        if (unreached) continue; /* plant:proxy-next-hop */
+        if (e && e.code === "proxy-auth") {
+          if (opts.asker && e.sent) opts.asker.refused(hop.host, hop.port);
+          const basic = (e.schemes || []).includes("basic");
+          say(basic ? "the relay's live connection waits for a sign-in to the proxy at " + at + ", so the relay is asked every minute until then"
+            : "the proxy at " + at + " asks the relay's live connection for a sign-in it cannot give (" + (e.schemes || []).join(", ") + "), so the relay is asked every minute instead");
+        } else say("the proxy at " + at + " did not let the relay's live connection through, so the relay is asked every minute instead");
+        return closeOnce();
+      }
+    }
+    if (!sock) {
+      say("no proxy Chromium names for the relay's live connection could carry it, so the relay is asked every minute instead");
       return closeOnce();
     }
     if (gone) { sock.destroy(); return closeOnce(); }
