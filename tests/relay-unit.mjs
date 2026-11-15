@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 564;
+const EXPECTED = 585;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -1744,6 +1744,33 @@ async function main() {
     const newestLift = await liftCore("plant:e5-newest", async () => { const x = await secondLink(); return x.up2 === 200 && x.answered === 200 && x.read !== 200; });
     check(newestLift.turned && newestLift.back, "995q lifting plant:e5-newest resumes the first invitation's session, which is not served the answer to the second (FAIL 995o: read not 200): "
       + newestLift.detail + ", sha " + (newestLift.back ? "restored" : "differs"));
+    /* E5 under the other spelling (the Grok review of the relay's mend, finding 3): the request withdrawn as the branch id, the new one
+       asked as the raw public half; that ask ends the withdrawal, so the lead's yes enrols the key. */
+    async function secondLinkRaw() {
+      const w = await world();
+      const who = keyPair(true), raw = { keyId: who.pub, pub: who.pub, privateKey: who.privateKey }, place = "desk:k-" + hex(8);
+      const id1 = hex(16), id2 = hex(16), tok1 = hex(32), tok2 = hex(32);
+      w.R.clock.now += 1;
+      await invites(w, [{ id: id1, hash: sha(tok1) }], []);
+      const s1 = (await boundHello(w, who, id1, tok1)).json.session;
+      const ask1 = sealJoin(w, who, 1, place);
+      const up1 = await put(w, s1, ask1, { extra: { pub: who.pub } });
+      const gone = await put(w, s1, deletionOf(w, who, place, ask1.id, 2));
+      w.R.clock.now += 1;
+      await invites(w, [{ id: id2, hash: sha(tok2) }], []);
+      const hello2 = await boundHello(w, raw, id2, tok2);
+      const place2 = "desk:k-" + hex(8);
+      const up2 = await put(w, hello2.json && hello2.json.session, sealJoin(w, raw, 1, place2));
+      const yes = await devices(w, w.devs.concat([{ id: who.keyId, pub: who.pub, desk: place2.slice(5) }]));
+      return { up1: up1.status, gone: gone.status, up2: up2.status, yes: yes.json && yes.json.error || yes.status, first: !!inviteRow(w, id1).withdrawn };
+    }
+    const rawSecondOk = x => x.up1 === 200 && x.gone === 200 && x.up2 === 200 && x.yes === 200 && !x.first;
+    const rawSecond = await secondLinkRaw();
+    check(rawSecondOk(rawSecond), "r1p a request withdrawn as the branch id and asked anew as the raw public half: the ask ends the withdrawal, and the lead's yes"
+      + " enrols the key: " + JSON.stringify(rawSecond));
+    const halfLift = await liftCore("plant:e5-half", async () => { const x = await secondLinkRaw(); return x.up2 === 200 && x.yes === "withdrawn"; });
+    check(rawSecondOk(rawSecond) && halfLift.turned && halfLift.back, "r1q lifting plant:e5-half leaves the withdrawal under the branch id standing, so the"
+      + " yes is refused (r1p red): " + halfLift.detail.split("\n")[0] + ", sha " + (halfLift.back ? "restored" : "differs"));
     /* G2: the lead moves the team to epoch 2 after the request, and the desk's withdrawal, sealed at the request's epoch 1, is taken. */
     async function movedWithdraw() {
       const w = await world();
@@ -2009,6 +2036,137 @@ async function main() {
     });
     check(heldPlant.turned && heldPlant.back, "962h dropping registeredAfter from the removed key's resume reopens that invitation's session, and the product file is never written: "
       + heldPlant.detail + ", sha " + (heldPlant.back ? "unchanged" : "CHANGED"));
+
+    /* One public key answers to two names, its raw half and its branch id, and the lead's rows are kept under the one it used: a
+       removed key naming itself by the other is answered as under the name it was removed by (Argon's review of the relay, finding 1).
+       Each scene runs under the branch id the desk was enrolled by, the control, and under its raw half; both must hold. */
+    const rawOf = k => ({ keyId: k.pub, pub: k.pub, privateKey: k.privateKey });
+    const rawScenes = {
+      /* An invitation registered before the removal, its token unused: answered removed, the token unspent. */
+      async before(raw) {
+        const y = await world();
+        const token = hex(32), id = hex(16);
+        await invites(y, [{ id, hash: sha(token) }], []);
+        y.R.clock.now += 1;
+        await devices(y, y.devs.slice(1));
+        const hello = await boundHello(y, raw ? rawOf(y.desk) : y.desk, id, token);
+        const inv = y.R.stores.get(y.rt).get("inv:" + id);
+        return { ok: refused(hello, "removed") && !(inv && inv.spent), detail: said(hello) + ", spent " + !!(inv && inv.spent) };
+      },
+      /* An invitation registered after the removal: its session is quiet, and lists and fetches nothing. */
+      async after(raw) {
+        const y = await world();
+        const lead = await sessionOf(y, y.lead);
+        const b = sealAs(y, y.lead, "root.txt", 1);
+        await put(y, lead, b, { extra: { pub: y.lead.pub } });
+        await devices(y, y.devs.slice(1));
+        y.R.clock.now += 1;
+        const token = hex(32), id = hex(16);
+        await invites(y, [{ id, hash: sha(token) }], []);
+        const hello = await boundHello(y, raw ? rawOf(y.desk) : y.desk, id, token);
+        const s = hello.json && hello.json.session;
+        const listed = await since(y, s), fetched = await getBlob(y, s, b.id);
+        return { ok: hello.status === 200 && refused(listed, "removed") && refused(fetched, "removed"),
+          detail: said(hello) + ", list " + said(listed) + ", fetch " + said(fetched) };
+      },
+      /* A binding made while the key was enrolled, then the removal: the bound session reads nothing, and a key hello is removed. */
+      async held(raw) {
+        const y = await world();
+        const token = hex(32), id = hex(16), who = raw ? rawOf(y.desk) : y.desk;
+        await invites(y, [{ id, hash: sha(token) }], []);
+        const hello = await boundHello(y, who, id, token);
+        await devices(y, y.devs.slice(1));
+        const listed = await since(y, hello.json && hello.json.session);
+        const again = await helloAs(y, who);
+        return { ok: hello.status === 200 && refused(listed, "removed") && refused(again, "removed"),
+          detail: said(hello) + ", list " + said(listed) + ", key hello " + said(again) };
+      },
+    };
+    const rawRun = async name => {
+      const control = await rawScenes[name](false), raw = await rawScenes[name](true);
+      return { ok: control.ok && raw.ok, detail: "branch id " + control.detail + "; raw half " + raw.detail };
+    };
+    const rawBefore = await rawRun("before");
+    check(rawBefore.ok, "r1a a removed key's token hello on an invitation registered before its removal is answered removed, the token unspent,"
+      + " whether it names itself by the branch id it was removed by or by its raw public half: " + rawBefore.detail);
+    const rawAfter = await rawRun("after");
+    check(rawAfter.ok, "r1b a removed key's session on an invitation registered after its removal is quiet, listing and fetching nothing,"
+      + " under either name: " + rawAfter.detail);
+    const rawHeld = await rawRun("held");
+    check(rawHeld.ok, "r1c a key that bound an invitation while enrolled and was then removed reads nothing on that session and is answered"
+      + " removed on a key hello, under either name: " + rawHeld.detail);
+    const rawLift = await liftCore("plant:removal-either-name", async () => !(await rawRun("before")).ok && !(await rawRun("after")).ok
+      && !(await rawRun("held")).ok);
+    check(rawBefore.ok && rawAfter.ok && rawHeld.ok && rawLift.turned && rawLift.back, "r1d lifting plant:removal-either-name turns r1a, r1b and r1c red"
+      + " under the raw half, and the product file is never written: " + rawLift.detail.split("\n")[0] + ", sha " + (rawLift.back ? "unchanged" : "CHANGED"));
+    const markLift = await liftCore("plant:withdraw-invite-pub", async () => !(await rawRun("held")).ok);
+    check(rawHeld.ok && markLift.turned && markLift.back, "r1e lifting plant:withdraw-invite-pub leaves the session bound under the raw half"
+      + " reading after the removal (r1c red), and the product file is never written: " + markLift.detail.split("\n")[0]
+      + ", sha " + (markLift.back ? "unchanged" : "CHANGED"));
+
+    /* Two removals of one public half under its two spellings: the later, by the relay's order, is the key's removal, and enrolling one
+       spelling clears a removal kept under the other (the Grok review of the relay's mend, finding 1). */
+    const spellScenes = {
+      /* Enrolled raw, removed; an invitation; enrolled as k-, removed again: the invitation is from before the later removal. */
+      async twice() {
+        const y = await world(), p = keyPair(true), place = "k-" + hex(8);
+        await devices(y, y.devs.concat([{ id: p.pub, pub: p.pub, desk: place }]));
+        await devices(y, y.devs);
+        const token = hex(32), id = hex(16);
+        await invites(y, [{ id, hash: sha(token) }], []);
+        await devices(y, y.devs.concat([{ id: p.keyId, pub: p.pub, desk: place }]));
+        await devices(y, y.devs);
+        const asK = await boundHello(y, p, id, token), asRaw = await boundHello(y, rawOf(p), id, token);
+        const inv = y.R.stores.get(y.rt).get("inv:" + id);
+        return { ok: refused(asK, "removed") && refused(asRaw, "removed") && !(inv && inv.spent),
+          detail: "branch id " + said(asK) + ", raw half " + said(asRaw) + ", spent " + !!(inv && inv.spent) };
+      },
+      /* As twice, with the raw removal kept beside the k- enrolment, as a relay before the enrol cleared both spellings left it. */
+      async oneList() {
+        const y = await world(), p = keyPair(true), place = "k-" + hex(8), st = () => y.R.stores.get(y.rt);
+        await devices(y, y.devs.concat([{ id: p.pub, pub: p.pub, desk: place }]));
+        await devices(y, y.devs);
+        const left = st().get("gone:" + p.pub);
+        const token = hex(32), id = hex(16);
+        await invites(y, [{ id, hash: sha(token) }], []);
+        await devices(y, y.devs.concat([{ id: p.keyId, pub: p.pub, desk: place }]));
+        st().put("gone:" + p.pub, left);
+        await devices(y, y.devs);
+        const hello = await boundHello(y, p, id, token);
+        const inv = st().get("inv:" + id);
+        return { ok: !!left && refused(hello, "removed") && !(inv && inv.spent), detail: said(hello) + ", spent " + !!(inv && inv.spent) };
+      },
+      /* Enrolled raw, removed, enrolled as k-: no removal stays under the raw spelling. */
+      async cleared() {
+        const y = await world(), p = keyPair(true), place = "k-" + hex(8);
+        await devices(y, y.devs.concat([{ id: p.pub, pub: p.pub, desk: place }]));
+        await devices(y, y.devs);
+        const was = y.R.stores.get(y.rt).get("gone:" + p.pub) !== undefined;
+        await devices(y, y.devs.concat([{ id: p.keyId, pub: p.pub, desk: place }]));
+        const left = y.R.stores.get(y.rt).get("gone:" + p.pub) !== undefined;
+        return { ok: was && !left, detail: "raw removal before " + was + ", after the k- enrolment " + left };
+      },
+    };
+    const spellTwice = await spellScenes.twice();
+    check(spellTwice.ok, "r1h a half enrolled raw and removed, then enrolled by its branch id and removed again, is answered removed on an invitation"
+      + " registered between the two removals, under either spelling, the token unspent: " + spellTwice.detail);
+    const spellOne = await spellScenes.oneList();
+    check(spellOne.ok, "r1i a raw removal left beside a later k- enrolment, as a relay before this mend kept it, and then the k- removed: an invitation registered between is answered removed: " + spellOne.detail);
+    const spellCleared = await spellScenes.cleared();
+    check(spellCleared.ok, "r1j enrolling a half by its branch id clears the removal kept under its raw spelling: " + spellCleared.detail);
+    const latestLift = await liftCore("plant:removal-latest", async () => !(await spellScenes.oneList()).ok);
+    check(spellOne.ok && latestLift.turned && latestLift.back, "r1k lifting plant:removal-latest takes the first removal found, not the latest (r1i red),"
+      + " and the product file is never written: " + latestLift.detail.split("\n")[0] + ", sha " + (latestLift.back ? "unchanged" : "CHANGED"));
+    const bothLift = await liftCore("plant:enrol-both-names", async () => !(await spellScenes.cleared()).ok);
+    check(spellCleared.ok && bothLift.turned && bothLift.back, "r1l lifting plant:enrol-both-names leaves the raw removal beside the k- enrolment (r1j red),"
+      + " and the product file is never written: " + bothLift.detail.split("\n")[0] + ", sha " + (bothLift.back ? "unchanged" : "CHANGED"));
+    const twiceLift = await liftCore("plant:removal-latest", async () => {
+      const inner = await liftCore("plant:enrol-both-names", async () => !(await spellScenes.twice()).ok);
+      return inner.turned && inner.back;
+    });
+    check(spellTwice.ok && twiceLift.turned && twiceLift.back, "r1m lifting plant:removal-latest with plant:enrol-both-names, either of which alone closes it,"
+      + " opens the invitation between the two removals (r1h red), and the product file is never written: " + twiceLift.detail.split("\n")[0]
+      + ", sha " + (twiceLift.back ? "unchanged" : "CHANGED"));
 
     /* The two moments are ordered by the relay's own counter, not its clock (edit 4): a clock stepping back between a
        registration and a removal changes neither answer. */
@@ -5525,6 +5683,49 @@ async function main() {
       return call(w.R, "POST", "/relay/v1/t/" + w.rt + "/lead", { json: leadMoveBody(w.rt, w.lead, newLead, now, opts) });
     };
 
+    /* A refused repeat, a handover naming the lead the team already has under a forged signature, leaves that team's place on the
+       lead's list: a reserve says whether it added the rt, and only a place it added is given back (Argon's review, finding 4). */
+    const answer = r => (r.json && r.json.error) || r.status;
+    async function repeatFreeScene(worker) {
+      const R = envAt(), lead = keyPair(false), now = R.clock.now;
+      const made = await fill(R, lead, CAP, now);
+      if (!made.ok) return { ok: false, detail: "fill " + made.status };
+      const rt = made.rts[0];
+      const moved = await call(R, "POST", "/relay/v1/t/" + rt + "/lead", { json: leadMoveBody(rt, lead, lead, now, { sig: "0".repeat(128) }), worker });
+      const list = leadList(R, lead);
+      const over = await call(R, "POST", "/relay/v1/teams", { json: createBody(hex(16), lead, now), worker });
+      const kept = !!list && list.indexOf(rt) >= 0 && list.length === CAP;
+      return { ok: refused(moved, "bad-signature") && kept && refused(over, "team-count"),
+        detail: JSON.stringify({ moved: answer(moved), kept, length: list ? list.length : -1, over: answer(over) }) };
+    }
+    const repeatFree = await repeatFreeScene();
+    check(repeatFree.ok, "r1f a refused handover to the team's own lead keeps that team on the lead's list, and the lead's next new team is"
+      + " still refused team-count at the bound: " + repeatFree.detail);
+    const addedLift = await editWorker(lineLifted("plant:lead-added-move"), async mod => !(await repeatFreeScene(mod.routeWith(K.ROOTS, env => env.NOW()))).ok);
+    check(repeatFree.ok && addedLift.turned && addedLift.back, "r1g lifting plant:lead-added-move gives the live team's place back on that refusal"
+      + " (r1f red), and the product file is never written: " + how(addedLift));
+
+    /* A handover to a desk key under a spelling its row does not use, raw or studio-, is refused as under its own (the Grok review of the
+       relay's mend, finding 2): enrolled by its branch id, or enrolled and removed by its raw half. */
+    async function deskLeadScene() {
+      const studioOf = k => ({ keyId: "studio-" + sha(Buffer.from(k.pub, "hex")).slice(0, 16), pub: k.pub, privateKey: k.privateKey });
+      const rawK = k => ({ keyId: k.pub, pub: k.pub, privateKey: k.privateKey });
+      const a = await world(), asRaw = await moveLead(a, rawK(a.desk));
+      const b = await world(), asStudio = await moveLead(b, studioOf(b.desk));
+      const c = await world();
+      await devices(c, c.devs.slice(0, 1));
+      const removedAsK = await moveLead(c, Object.assign({}, c.other, { keyId: "k-" + sha(Buffer.from(c.other.pub, "hex")).slice(0, 16) }));
+      const lead = (a.R.stores.get(a.rt).get("team") || {}).lead || {};
+      const ok = refused(asRaw, "not-enrolled") && refused(asStudio, "not-enrolled") && refused(removedAsK, "not-enrolled") && lead.keyId === a.lead.keyId;
+      return { ok, detail: JSON.stringify({ enrolledAsKToRaw: answer(asRaw), enrolledAsKToStudio: answer(asStudio), removedRawToK: answer(removedAsK) }) };
+    }
+    const deskLead = await deskLeadScene();
+    check(deskLead.ok, "r1n a handover to a desk key under a spelling its row does not use (raw, studio-, or k- for a key removed raw) is refused not-enrolled: "
+      + deskLead.detail);
+    const deskLeadLift = await liftCore("plant:lead-desk-half", async () => !(await deskLeadScene()).ok);
+    check(deskLead.ok && deskLeadLift.turned && deskLeadLift.back, "r1o lifting plant:lead-desk-half takes those handovers (r1n red), and the product file is never written: "
+      + how(deskLeadLift));
+
     // 933a: move signed by old lead is taken, new key hello opens lead session
     const w = await world();
     const newLead = keyPair(false);
@@ -6658,6 +6859,44 @@ async function main() {
     const rawId = await safe(rawIdScene);
     check(rawId.ok, "a4n a desk knocks at the door by its k- id alone: the removed desk naming itself by its raw public half is refused and"
       + " opens no request, and so is any desk by that form: " + rawId.detail);
+    /* The other way round (Argon's review of the relay, finding 1): a desk the lead enrolled, and removed, by its raw public half is
+       answered removed when it knocks by its k- id, and opens no request. */
+    async function rawEnrolledScene() {
+      const w = await doorWorld();
+      const k = keyPair(true), place = deskOf(w);
+      const on = await devices(w, w.devs.concat([{ id: k.pub, pub: k.pub, desk: place }]));
+      const off = await devices(w, w.devs);
+      const before = doorRows(w).length;
+      const back = await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now));
+      const ok = on.status === 200 && off.status === 200 && refused(back, "removed") && doorRows(w).length === before;
+      return { ok, detail: JSON.stringify({ on: said(on), off: said(off), back: said(back), rows: [before, doorRows(w).length] }) };
+    }
+    const rawEnrolled = await safe(rawEnrolledScene);
+    check(rawEnrolled.ok, "a4v a desk enrolled and removed by its raw public half is refused removed at the door by its k- id, and opens no request: "
+      + rawEnrolled.detail);
+    /* A door request whose key the lead enrolled and removed by its raw half leaves its person's cap, as under its k- id (the Grok review
+       of the relay's mend, finding 4). The person's three desks knock; the first is enrolled and removed; a fourth then knocks. */
+    async function doorHalfScene(raw) {
+      const w = await doorWorld();
+      const person = hex(32), ks = [];
+      for (let i = 0; i < C.DOOR_PER_PERSON; i++) {
+        const k = keyPair(true);
+        ks.push(k);
+        await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now, { person }));
+      }
+      const first = ks[0], id = raw ? first.pub : first.keyId;
+      await devices(w, w.devs.concat([{ id, pub: first.pub, desk: deskOf(w) }]));
+      await devices(w, w.devs);
+      const k = keyPair(true), fourth = await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now, { person }));
+      return { ok: fourth.status === 200, detail: said(fourth) };
+    }
+    async function doorHalfRun() {
+      const control = await safe(() => doorHalfScene(false)), raw = await safe(() => doorHalfScene(true));
+      return { ok: control.ok && raw.ok, detail: "removed by k- " + control.detail + "; removed raw " + raw.detail };
+    }
+    const doorHalf = await doorHalfRun();
+    check(doorHalf.ok, "a4w a door request whose key the lead enrolled and removed leaves its person's cap, whether by the k- id or by the raw half: "
+      + doorHalf.detail);
 
     /* The test architect's F2: a request the lead drops leaves no spent marker, and its key and person stay held against the door
        for the door's rate window from the drop (his re-tune: not the 30-day keep), so a drop frees neither to knock again at once;
@@ -6880,6 +7119,8 @@ async function main() {
       ["door-lapse-open", async () => !(await lapseScene()).ok, "a4l (a read-only team opens its door)"],
       ["door-handover", async () => !(await handoverScene()).ok, "a4m (the old lead's door stands after a handover)"],
       ["door-key-form", async () => !(await rawIdScene()).ok, "a4n (a removed desk knocks by its raw public half)"],
+      ["removal-either-name", async () => !(await rawEnrolledScene()).ok, "a4v (a desk removed by its raw public half knocks by its k- id)"],
+      ["door-live-half", async () => !(await doorHalfRun()).ok, "a4w (a request whose key was removed raw keeps its person's place)"],
       ["door-drop-kept", async () => !(await dropScene()).ok, "a4o (a dropped door request frees its key and person)"],
       ["door-drop-key", async () => !(await dropScene()).ok, "a4o (a dropped door request's key knocks again at once)"],
       ["door-drop-person", async () => !(await dropScene()).ok, "a4o (a person's dropped request makes room at the door)"],
@@ -6892,7 +7133,7 @@ async function main() {
       ["door-withdrawn-live", async () => !(await withdrawCostScene()).ok, "a4s (a request taken back still holds its person)"],
     ];
     const base = taken.ok && refusesAll.ok && closed.ok && register.ok && person.ok && rated.ok && live.ok && tries.ok && request.ok && removed.ok
-      && invs.ok && lapsed.ok && handed.ok && rawId.ok && drops.ok && seenBack.ok && costBack.ok && unsent.ok && capBack.ok;
+      && invs.ok && lapsed.ok && handed.ok && rawId.ok && rawEnrolled.ok && doorHalf.ok && drops.ok && seenBack.ok && costBack.ok && unsent.ok && capBack.ok;
     for (const [tag, turns, what] of DOOR_PLANTS) {
       const line = "a4p lifting plant:" + tag + " turns " + what + " red, and the product file is never written";
       if (PLANTS_OFF) { skip(line); continue; }
