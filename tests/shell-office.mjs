@@ -207,6 +207,8 @@ function loadShell(opts) {
     try { out = cp.execFileSync(file, args, opt); } catch (e) { err = e; if (err && err.code === undefined && err.status !== undefined) err.code = err.status; }
     setImmediate(() => cb(err, err ? "" : out));
   };
+  /* The shell's guard lets only a marked stand-in through outside Electron (shell/win-proxy.cjs, regOpts). */
+  nodeRequire("./reg-stand.cjs").markStand(cp.execFileSync, cp.execFile);
   const clock = o.clock || { setTimeout: setTimeout, clearTimeout: clearTimeout };
   /* A file of the shell's own that main.js requires from beside itself is evaluated here too, so the
      stand-ins above reach its own requires: the planted reg tool is the proxy reader's. */
@@ -1054,7 +1056,7 @@ try {
         + " or file is none, and no text at all is none");
       const ownReader = /function (?:proxySwitchesFrom|windowsProxySwitches)\(/.test(SRC);
       check(!!rd && typeof P.windowsProxySwitches === "function" && typeof P.windowsProxyChange === "function" && !ownReader
-        && SRC.split('const { windowsProxySwitches, windowsProxyChange } = require(path.join(__dirname, "win-proxy.cjs"));').length === 2,
+        && SRC.split('const { windowsProxySwitches, windowsProxyChange, regOpts } = require(path.join(__dirname, "win-proxy.cjs"));').length === 2,
         "6m the shell holds no reader of its own and takes windowsProxySwitches from shell/win-proxy.cjs beside it, the file 6j and 6k"
         + " read alone: " + (rd ? "found" : "NOT FOUND") + (ownReader ? ", and a reader of its own" : ""));
       const builder = nodeRequire(path.join(ROOT, "electron-builder.js"));

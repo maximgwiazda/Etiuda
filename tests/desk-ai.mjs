@@ -144,6 +144,8 @@ function loadMain(opts) {
     utilityProcess: inert,
   };
   const aiCopy = o.aiSrc ? aiFrom(o.aiSrc) : null;
+  /* A leg's own child_process is a stand-in, marked so the shell's guard lets its reg calls through (tests/reg-stand.cjs). */
+  if (o.childProcess) nodeRequire("./reg-stand.cjs").markStand(o.childProcess.execFileSync, o.childProcess.execFile);
   const fakeRequire = n => (n === "electron" ? electron : aiCopy && /desk-ai\.cjs$/.test(String(n)) ? aiCopy
     : o.fs && n === "node:fs" ? o.fs : o.childProcess && n === "node:child_process" ? o.childProcess : nodeRequire(n));
   const T = { policyText: o.policyText || "", useRealPolicyReader: !!o.childProcess };

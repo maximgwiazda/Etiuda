@@ -115,7 +115,7 @@ function folderSyncerFailed(e) {
    Windows' own setting is followed where it names a setup script or a server (machine policy first,
    then per-machine under ProxySettingsPerUser 0). Where none is named and the Connections flags say
    direct only, no proxy is passed; automatic detection or a failed read leaves Chromium's resolver. */
-const { windowsProxySwitches, windowsProxyChange } = require(path.join(__dirname, "win-proxy.cjs"));
+const { windowsProxySwitches, windowsProxyChange, regOpts } = require(path.join(__dirname, "win-proxy.cjs"));
 for (const s of windowsProxySwitches()) app.commandLine.appendSwitch(...s);
 /* Those switches hold for the run, so Windows' setting is read again where it may have changed: after sleep, and when a
    call fails other than for being offline, at most once a minute. A change goes to the session, which resolves by it. */
@@ -4287,7 +4287,7 @@ function policyLookLater() {
   let at = null;
   try { at = policyScratch(); } catch { joinPolicyAsking = false; return; }
   try {
-    execFile(REG_TOOL, ["export", POLICY_KEY, at.file, "/y"], { windowsHide: true, timeout: 5000 }, err => {
+    execFile(REG_TOOL, ["export", POLICY_KEY, at.file, "/y"], regOpts(execFile, { windowsHide: true, timeout: 5000 }), err => {
       let got = { text: "", unread: !(err && (err.code === 1 || err.status === 1)) };
       try { if (!err) got = policyExported(at); } catch { got = { text: "", unread: true }; }
       finally { policyScratchGone(at); joinPolicyAsking = false; }
@@ -4312,7 +4312,7 @@ function readJoinPolicy(lang) {
       let at = null;
       try {
         at = policyScratch();
-        execFileSync(REG_TOOL, ["export", POLICY_KEY, at.file, "/y"], { windowsHide: true, timeout: 5000, stdio: "ignore" });
+        execFileSync(REG_TOOL, ["export", POLICY_KEY, at.file, "/y"], regOpts(execFileSync, { windowsHide: true, timeout: 5000, stdio: "ignore" }));
         ({ text, unread } = policyExported(at));
       } catch (e) { text = ""; unread = !(e && e.status === 1); } /* plant:policy-unread */
       finally { policyScratchGone(at); }
@@ -5652,7 +5652,7 @@ function liveSyncIo() {
       const left = deadline - Date.now();
       if (left < 1) break;
       try {
-        absorb(execFileSync(REG_TOOL, queries[i], { windowsHide: true, timeout: left, encoding: "buffer", maxBuffer: 1024 * 1024 }));
+        absorb(execFileSync(REG_TOOL, queries[i], regOpts(execFileSync, { windowsHide: true, timeout: left, encoding: "buffer", maxBuffer: 1024 * 1024 })));
       } catch (e) { /* a missing key is an empty record */ }
     }
   }
@@ -8556,7 +8556,7 @@ function accentOnTitleBars() {
   try {
     const out = execFileSync(REG_TOOL,
       ["query", "HKCU\\Software\\Microsoft\\Windows\\DWM", "/v", "ColorPrevalence"],
-      { encoding: "utf8", windowsHide: true });
+      regOpts(execFileSync, { encoding: "utf8", windowsHide: true }));
     const m = out.match(/ColorPrevalence\s+REG_DWORD\s+0x([0-9a-fA-F]+)/);
     return !!m && parseInt(m[1], 16) === 1;
   } catch { return false; }

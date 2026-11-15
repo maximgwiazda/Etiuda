@@ -19,6 +19,9 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
+/* reg.exe stood in before the shell loads, so no read reaches this machine's registry (tests/reg-stand.cjs): machine policy is
+   none, the proxy keys are missing. Without it the shell's guard refuses the read and the policy reader says it could not read. */
+nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 /* The floor: every leg below runs, or the file says it did not complete. */
 const EXPECTED = 22;
 

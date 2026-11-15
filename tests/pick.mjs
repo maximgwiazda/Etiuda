@@ -1194,10 +1194,13 @@ try {
        once more per call and nowhere else, and no other loader (a dynamic import, createRequire, a binding) is in the
        shell at all. */
     const cpRequires = (shellCode.match(/\brequire\s*\(\s*"(?:node:)?child_process"\s*\)/g) || []).length;
-    const runMentions = (shellBare.match(/\bexecFileSync\b/g) || []).length, runCalls = (shellBare.match(/\bexecFileSync\s*\(/g) || []).length;
+    /* THE GUARD NAMES ITS CALLEE (shell/win-proxy.cjs, regOpts): each reg call passes its options as regOpts(execFileSync, ...) or
+     regOpts(execFile, ...), one more mention of that name per guarded call and nowhere else. */
+  const guardSync = (shellBare.match(/\bregOpts\(\s*execFileSync\s*,/g) || []).length, guardAsync = (shellBare.match(/\bregOpts\(\s*execFile\s*,/g) || []).length;
+  const runMentions = (shellBare.match(/\bexecFileSync\b/g) || []).length - guardSync, runCalls = (shellBare.match(/\bexecFileSync\s*\(/g) || []).length;
     /* THE CARET HELPER'S CALLS, execFile in main.js alone: its program is `tool`, bound only to caretTool(), whose two
        places are caret.exe beside the asar and in build/, and its name is mentioned once in the require and once per call. */
-    const asyncMentions = (shellBare.match(/\bexecFile\b/g) || []).length, asyncCalls = (shellBare.match(/\bexecFile\s*\(/g) || []).length;
+    const asyncMentions = (shellBare.match(/\bexecFile\b/g) || []).length - guardAsync, asyncCalls = (shellBare.match(/\bexecFile\s*\(/g) || []).length;
     const toolBinds = shellCode.match(/\bconst tool=caretTool\(\);/g) || [], toolNames = (shellBare.match(/\btool\b/g) || []).length;
     const caretToolNames = (shellBare.match(/\bcaretTool\b/g) || []).length;
     const caretPlaces = /function caretTool\(\)\{if\(process\.platform!=="win32"\)return null;const at=app\.isPackaged\?path\.join\(process\.resourcesPath,"caret\.exe"\):path\.join\(__dirname,"\.\.","dist","\.caret","caret\.exe"\);return fs\.existsSync\(at\)\?at:null\}/.test(shellCode);

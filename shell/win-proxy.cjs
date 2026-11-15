@@ -15,6 +15,25 @@ const USER_CONN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Inter
 const MACHINE_KEY = "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
 const MACHINE_CONN_KEY = "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\\Connections";
 
+/* A RUN OUTSIDE ELECTRON READS NO REGISTRY: a test run reads no part of the real machine's registry, as it writes none.
+   Every reg.exe call in the shell (here and in shell/main.js) passes its options through regOpts, naming the very
+   function that will run it. In Electron's main process the call goes ahead. Anywhere else (a leg loading the shell in
+   bare node, Electron run as node) it goes ahead only where that function is a stand-in marked with STAND, as
+   tests/reg-stand.cjs marks its own, and is refused before reg.exe starts. The guard sits at the call, so a new leg
+   cannot forget it; tests/reg-guard.mjs holds every call to it. */
+const STAND = Symbol.for("etiuda.reg-stand");
+function regOpts(run, opts) {
+  let refuse = false;
+  refuse = process.type !== "browser" && !(typeof run === "function" && run[STAND] === true); /* plant:reg-guard */
+  if (!refuse) return opts;
+  regOpts.refused++;
+  const e = new Error("reg-guard: outside Electron the registry is read only through a marked stand-in (tests/reg-stand.cjs)");
+  e.code = "ETIUDA_REG_GUARD";
+  throw e;
+}
+regOpts.refused = 0;
+
+
 /** A named script or an enabled server in one key's reg print, as switches ([name, value] pairs), or null. A server
  *  counts only while ProxyEnable is 1, and carries ProxyOverride as its bypass list. Where both are named, the script
  *  wins unless the Connections flags are read and leave the script off (bit 0x04), which marks it a leftover. */
@@ -60,7 +79,7 @@ function proxySwitchesFrom(text, connText) {
 function readKey(key) {
   try {
     return { ok: true, text: execFileSync(REG_TOOL, ["query", key],
-      { encoding: "utf8", windowsHide: true, timeout: 5000 }) };
+      regOpts(execFileSync, { encoding: "utf8", windowsHide: true, timeout: 5000 })) };
   } catch (e) {
     const isMissing = !!e && e.status === 1 && !/did not answer/i.test(String(e.message || ""));
     return { ok: isMissing, text: "", failed: !isMissing };
@@ -70,12 +89,14 @@ function readKey(key) {
 /** The same read without waiting: the answer, or a failure judged as readKey judges it. */
 function readKeyLater(key) {
   return new Promise(resolve => {
-    execFile(REG_TOOL, ["query", key], { encoding: "utf8", windowsHide: true, timeout: 5000 }, (e, out) => {
-      if (!e) { resolve({ ok: true, text: String(out || "") }); return; }
-      const code = e.code !== undefined ? e.code : e.status;
-      const isMissing = code === 1 && !/did not answer/i.test(String(e.message || ""));
-      resolve({ ok: isMissing, text: "", failed: !isMissing });
-    });
+    try {
+      execFile(REG_TOOL, ["query", key], regOpts(execFile, { encoding: "utf8", windowsHide: true, timeout: 5000 }), (e, out) => {
+        if (!e) { resolve({ ok: true, text: String(out || "") }); return; }
+        const code = e.code !== undefined ? e.code : e.status;
+        const isMissing = code === 1 && !/did not answer/i.test(String(e.message || ""));
+        resolve({ ok: isMissing, text: "", failed: !isMissing });
+      });
+    } catch { resolve({ ok: false, text: "", failed: true }); }
   });
 }
 
@@ -137,4 +158,4 @@ async function windowsProxyChange() {
   return proxyConfigOf(out);
 }
 
-module.exports = { proxySwitchesFrom, windowsProxySwitches, windowsProxyChange, proxyConfigOf };
+module.exports = { proxySwitchesFrom, windowsProxySwitches, windowsProxyChange, proxyConfigOf, regOpts, STAND };

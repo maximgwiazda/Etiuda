@@ -13,6 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const EXPECTED = 29;
@@ -615,12 +616,16 @@ if (M && J) {
       "function placeCandidates(", "function placeResolve(", "function placeKept(", "function readSyncRecords(",
       "function liveSyncIo(", "function invitePlacePlan("];
     const body = OPEN_DECLS.map(m => sliceDecl(SRC, m)).join("\n");
-    const opened = new Function("crypto", "Buffer", "require", "process", body + "\nreturn { invitePlacePlan };")(
+    /* The slice's reg calls meet the shell's own guard, so its stand-ins are marked (tests/reg-stand.cjs, markStand). */
+    const mcRequire = createRequire(import.meta.url);
+    const reopenExecFile = function () { throw new Error("execFile"); };
+    mcRequire("./reg-stand.cjs").markStand(reopenSpy, reopenExecFile);
+    const opened = new Function("crypto", "Buffer", "require", "process", "regOpts", body + "\nreturn { invitePlacePlan };")(
       crypto, Buffer, function (name) {
-        if (name === "node:child_process" || name === "child_process") return { execFileSync: reopenSpy, execFile: function () { throw new Error("execFile"); } };
+        if (name === "node:child_process" || name === "child_process") return { execFileSync: reopenSpy, execFile: reopenExecFile };
         if (name === "node:fs" || name === "fs") return { readFileSync: function () { return ""; } };
         throw new Error("require " + name);
-      }, { platform: "win32", env: {} });
+      }, { platform: "win32", env: {} }, mcRequire("../shell/win-proxy.cjs").regOpts);
     const parsed = { folder: annaFolder, place: { kind: "onedrive", rel: "Etiuda", root: "OneDrive" } };
     firstPlan = opened.invitePlacePlan(parsed);
     const grew = reopenCalls.length;

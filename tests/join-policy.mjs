@@ -68,9 +68,14 @@ function sliceDecl(src, marker) {
   }
   throw new Error("an unterminated declaration: " + marker);
 }
+/* A slice's reg calls meet the shell's own guard (shell/win-proxy.cjs, regOpts), so the functions handed in for execFileSync and
+   execFile are marked as stand-ins; markStand refuses node's own. */
+const REG_OPTS = nodeRequire("../shell/win-proxy.cjs").regOpts;
 function load(src, markers, names, params, args) {
   const body = markers.map(m => sliceDecl(src, m)).join("\n");
-  return new Function(...params, body + "\nreturn { " + names.join(", ") + " };")(...args);
+  const given = params.map((p, i) => args[i]);
+  params.forEach((p, i) => { if (p === "execFileSync" || p === "execFile") nodeRequire("./reg-stand.cjs").markStand(given[i]); });
+  return new Function(...params, "regOpts", body + "\nreturn { " + names.join(", ") + " };")(...given, REG_OPTS);
 }
 
 const POLICY_DECLS = ["const REG_TOOL =", "const POLICY_KEY =", "const POLICY_REREAD_MS =", "const POLICY_LOOK_MS =", "const POLICY_LOOK_GRACE_MS =", "const POLICY_LEAD_RE =", "const POLICY_WORDS =",
@@ -818,7 +823,9 @@ function standInReg(registry, page) {
     const bytes = consoleBytes(out, page);
     return opt && opt.encoding && opt.encoding !== "buffer" ? bytes.toString(opt.encoding) : bytes;
   };
-  return { calls, asked, cp: { execFileSync, execFile: () => { throw new Error("no program runs here"); } } };
+  const execFile = () => { throw new Error("no program runs here"); };
+  nodeRequire("./reg-stand.cjs").markStand(execFileSync, execFile);
+  return { calls, asked, cp: { execFileSync, execFile } };
 }
 /* Every leg below asks the Windows arm of the reader, so the shell runs as Windows on any machine. */
 function asWindows(fn) {
