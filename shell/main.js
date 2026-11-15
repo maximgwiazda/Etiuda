@@ -11081,6 +11081,8 @@ function pickPage() {
      makes the box a query like any other. A suggestion is still taken only by the agent. */
   const selNote = document.getElementById("sel");
   let chosen = "";
+  /* Whether the selected words can be edited where they stand: true, false, or null. The window does not show it. */
+  let mayEdit = null;
   const blank = () => !q.value.trim() || (!!chosen && q.value === chosen); /* plant:pick-selected-rest */
   /* THE KEYSTROKE FILTERS HERE, on the rows the open handed over. The order is the desk's
      search: the same terms, the same tiers, the same lift. An open without that index still
@@ -11574,6 +11576,7 @@ function pickPage() {
     words = o.words || {};
     chords = o.chords || {};
     chosen = typeof o.selected === "string" ? o.selected : ""; /* plant:pick-selected-box */
+    mayEdit = o.editable === true ? true : o.editable === false ? false : null;
     root.lang = words.lang || "en";
     q.placeholder = words.search || "";
     box.setAttribute("aria-label", words.list || "");
@@ -11890,21 +11893,68 @@ function caretWhich() {
     done(!err && m && +m[2] !== process.pid ? m[1] : null);
   }));
 }
-/* THE WORDS SELECTED in the window in front, read by the helper through UI Automation without touching the clipboard; ""
-   where nothing is selected, the control cannot be read, the helper refuses or does not answer within CARET_SELECTION_MS,
-   and then the clipboard's text stands in, as before. The helper is let run a little longer, so it ends on its own. */
+/* THE WORDS SELECTED in the window in front, and whether they can be edited there. The helper's first line is the fact
+   and the rest are the words. Nothing selected, no text pattern, a refusal, a failure, or no answer within
+   CARET_SELECTION_MS leaves the words empty and the fact unknown, and then the clipboard stands in. */
 const CARET_SELECTION_MS = 300;
+/* A line that is not one of the five facts is not a selection: the words it might have carried are not used. */
+function readSelectionFact(out) {
+  const raw = String(out || "");
+  const at = raw.indexOf("\n");
+  const head = (at < 0 ? raw : raw.slice(0, at)).replace(/\r$/, "");
+  let body = at < 0 ? "" : raw.slice(at + 1);
+  if (body.length > MESSAGE_MAX_CHARS) body = body.slice(0, MESSAGE_MAX_CHARS);
+  if (head === "ro" && body.trim()) return { words: body, editable: false, fact: "read-only", reason: "" }; /* plant:editable-field */
+  if (head === "ed" && body.trim()) return { words: body, editable: true, fact: "editable", reason: "" };
+  if (head === "u mixed" && body.trim()) return { words: body, editable: null, fact: "unknown", reason: "mixed" };
+  if (head === "u unsupported" && body.trim()) return { words: body, editable: null, fact: "unknown", reason: "not supported" };
+  if (head === "u contradicted" && body.trim()) return { words: body, editable: null, fact: "unknown", reason: "contradicted" };
+  if (head === "ro" || head === "ed" || head === "u mixed" || head === "u unsupported" || head === "u contradicted")
+    return { words: "", editable: null, fact: "unknown", reason: "no selection" };
+  return { words: "", editable: null, fact: "unknown", reason: "clipboard" };
+}
+function pickFactLine(fact, reason) {
+  if (fact === "read-only" || fact === "editable") return fact;
+  const allowed = reason === "no selection" || reason === "no text pattern" || reason === "not supported" || reason === "mixed" || reason === "contradicted" || reason === "clipboard" || reason === "timeout" || reason === "refused"; /* plant:editable-trace */
+  return "unknown (" + (allowed ? reason : "clipboard") + ")";
+}
+/* One line per opening, beside tray-trace.txt: which of the three, and for unknown the reason. Never the words, their
+   length, or the window. Two thousand lines a run, and the file at 64 KiB, the same bound as the tray's. */
+const PICK_TRACE_FILE = "pick-trace.txt", PICK_TRACE_MAX_BYTES = 64 * 1024, PICK_TRACE_RUN_LINES = 2000;
+const pickTraceState = { lines: 0 };
+function pickTraceWrite(line) {
+  if (pickTraceState.lines >= PICK_TRACE_RUN_LINES) return;
+  pickTraceState.lines++;
+  try {
+    const at = path.join(app.getPath("userData"), PICK_TRACE_FILE);
+    let size = 0;
+    try { size = fs.statSync(at).size; } catch { size = 0; }
+    if (size > PICK_TRACE_MAX_BYTES) {
+      const text = fs.readFileSync(at, "utf8"), cut = text.indexOf("\n", text.length - PICK_TRACE_MAX_BYTES / 2);
+      fs.writeFileSync(at, cut < 0 ? "" : text.slice(cut + 1));
+    }
+    fs.appendFileSync(at, line + "\n");
+  } catch { /* an unwritten line costs only itself */ }
+}
+function pickTrace(fact, reason) {
+  pickTraceWrite(new Date().toISOString() + " quick reply: " + pickFactLine(fact, reason));
+}
 function caretSelection() {
+  const empty = reason => ({ words: "", editable: null, fact: "unknown", reason: reason });
   const tool = caretTool();
-  if (!tool) return Promise.resolve("");
+  if (!tool) return Promise.resolve(empty("clipboard"));
   return new Promise(done => {
     let told = false;
     const tell = t => { if (!told) { told = true; done(t); } };
-    const late = setTimeout(() => tell(""), CARET_SELECTION_MS); /* plant:selection-wait */
+    const late = setTimeout(() => tell(empty("timeout")), CARET_SELECTION_MS); /* plant:selection-wait */
     execFile(tool, ["selection"], { windowsHide: true, timeout: CARET_SELECTION_MS * 4, encoding: "utf8", maxBuffer: 64 * 1024 }, (err, out) => {
       clearTimeout(late);
-      const text = err ? "" : String(out || "").slice(0, MESSAGE_MAX_CHARS);
-      tell(text.trim() ? text : "");
+      if (err) {
+        const code = err.code;
+        tell(empty(code === 1 || code === 2 ? "no selection" : code === 3 ? "no text pattern" : code === 6 ? "refused" : "clipboard"));
+        return;
+      }
+      tell(readSelectionFact(out));
     });
   });
 }
@@ -12163,14 +12213,16 @@ function pickToggle() {
   pickTarget = null;
   const which = caretWhich().then(t => { if (press === pickPress) pickTarget = t; });
   /* The selection first, asked beside which window is in front and before anything of this program comes forward; the
-     clipboard is read only where none came, and written nothing at the press. */
-  caretSelection().then(words => {
-    if (words) pickWithClip(press, which, words, true); /* plant:selection-first */
-    else withClipText(text => pickWithClip(press, which, text, false));
+     clipboard is read only where none came, and written nothing at the press. One trace line names the fact. */
+  caretSelection().then(got => {
+    const words = got && got.words;
+    if (words) { pickTrace(got.fact || "unknown", got.reason || ""); pickWithClip(press, which, words, true, got.editable); } /* plant:selection-first */
+    else { pickTrace("unknown", (got && got.reason) || "clipboard"); withClipText(text => pickWithClip(press, which, text, false, null)); }
   }).catch(e => { console.error("etiuda: the picker could not open - " + e.message); pickOpening = false; });
 }
-/* `selected`: the text is the window's selection, which the picker shows in its box; a clipboard's text never reaches it. */
-function pickWithClip(press, which, text, selected) {
+/* `selected`: the text is the window's selection, which the picker shows in its box; a clipboard's text never reaches it.
+   `editable` is true, false, or null where the helper could not say, and the page stores it without showing it. */
+function pickWithClip(press, which, text, selected, editable) {
   let clip = text;
   const shown = selected ? String(text) : "";
   const isOwn = isOwnText(clip);
@@ -12215,6 +12267,7 @@ function pickWithClip(press, which, text, selected) {
     }
     delete open.profiles;
     if (shown) open.selected = shown;
+    open.editable = editable === true ? true : editable === false ? false : null;
     clip = "";
     const aiOn = open.ai !== false;
     delete open.ai;

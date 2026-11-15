@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 144 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 4);
+const EXPECTED = 149 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 5);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -300,11 +300,20 @@ try {
   const cpReal = nodeRequire("node:child_process");
   const cpStub = Object.assign({}, cpReal, { execFile: (file, args, opts, done) => {
     caret.runs.push({ file: String(file), args: (args || []).map(String), at: caret.pickerCalls() });
-    /* The selection: caret.sel's text, "hang" for no answer, a number for that exit; nothing selected (exit 1) by default. */
+    /* The selection. A string is editable words. An object is {fact, text} or {code}. "hang" never answers.
+       A number, or nothing, is that exit (1 when nothing is selected). The fact is the helper's first line. */
     if (args && args[0] === "selection") {
       const sel = caret.sel;
       if (sel === "hang") return;
-      setImmediate(() => typeof sel === "string" ? done(null, sel, "") : done(Object.assign(new Error("exit"), { code: sel == null ? 1 : sel }), "", ""));
+      setImmediate(() => {
+        if (sel && typeof sel === "object") {
+          if ("code" in sel) done(Object.assign(new Error("exit"), { code: sel.code }), "", "");
+          else done(null, String(sel.fact == null ? "" : sel.fact) + "\n" + String(sel.text == null ? "" : sel.text), "");
+          return;
+        }
+        if (typeof sel === "string") { done(null, "ed\n" + sel, ""); return; }
+        done(Object.assign(new Error("exit"), { code: sel == null ? 1 : sel }), "", "");
+      });
       return;
     }
     setImmediate(() => done(caret.fail && args && args[0] === "paste" ? Object.assign(new Error("refused"), { code: 3 }) : null,
@@ -885,16 +894,110 @@ try {
       const runToggle = async src => {
         const calls = [];
         new Function("pickWin", "pickOpening", "theWindow", "hidePickNote", "pickPress", "pickTarget", "caretWhich", "caretSelection",
-          "withClipText", "pickWithClip", "hidePicker", src + "\npickToggle();")(null, false, { isDestroyed: () => false }, () => {}, 0, null,
-          () => Promise.resolve(null), () => Promise.resolve("the words"), then => then("the clipboard"),
-          (p, w, text, sel) => calls.push([text, sel]), () => {});
+          "withClipText", "pickWithClip", "hidePicker", "pickTrace", src + "\npickToggle();")(null, false, { isDestroyed: () => false }, () => {}, 0, null,
+          () => Promise.resolve(null), () => Promise.resolve({ words: "the words", editable: true, fact: "editable", reason: "" }),
+          then => then("the clipboard"),
+          (p, w, text, sel, editable) => calls.push([text, sel, editable]), () => {}, () => {});
         await tick(20);
         return calls;
       };
-      const kept = await runToggle(TOGGLE), wrong = firstLine.length === 1 ? await runToggle(rewritten) : [["the words", true]];
-      check(keptWait && !liftedWait && J2(kept) === J2([["the words", true]]) && J2(wrong) === J2([["the clipboard", false]]),
+      const kept = await runToggle(TOGGLE), wrong = firstLine.length === 1 ? await runToggle(rewritten) : [["the words", true, true]];
+      check(keptWait && !liftedWait && J2(kept) === J2([["the words", true, true]]) && J2(wrong) === J2([["the clipboard", false, null]]),
         "2s4 lifting plant:selection-wait leaves the opening waiting on a silent helper, and rewriting plant:selection-first opens on the"
         + " clipboard over a selection: " + J2({ keptWait, liftedWait, kept, wrong }));
+    }
+  }
+
+  /* 2e1 to 2e5: WHETHER THOSE WORDS CAN BE EDITED. The helper's first line is the fact. The shell carries it beside the
+     words as editable (true, false or null) and appends one trace line: the time, which of the three, and for unknown the
+     reason. The stand-in's words are searched for in the trace and are not there. */
+  {
+    const traceAt = path.join(UD, "pick-trace.txt");
+    const traceText = () => fs.existsSync(traceAt) ? fs.readFileSync(traceAt, "utf8") : "";
+    const LINE = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z) quick reply: (read-only|editable|unknown \((no selection|no text pattern|not supported|mixed|contradicted|clipboard|timeout|refused)\))$/;
+    const WORD = "quillfern";
+    const saidFact = raw => { const line = String(raw || "").replace(/\n$/, ""); const m = LINE.exec(line); return m ? m[2] : "BAD " + JSON.stringify(line); };
+    const openFact = async sel => {
+      const before = traceText();
+      caret.sel = sel; clipHeld = "the kettle brews tea for the guests";
+      const r0 = clipReads, o0 = opened.length, t0 = Date.now();
+      held.get("Control+Shift+Space")();
+      await until(() => opened.length > o0 && pw.visible, 5000);
+      const o = opened[opened.length - 1] || {};
+      const ms = Date.now() - t0;
+      const after = traceText();
+      const added = after.startsWith(before) ? after.slice(before.length) : after;
+      held.get("Control+Shift+Space")();
+      await until(() => !pw.visible);
+      return { selected: "selected" in o ? o.selected : "", editable: "editable" in o ? o.editable : "missing",
+        reads: clipReads - r0, ms, added };
+    };
+    if (WIN) {
+      const ro = await openFact({ fact: "ro", text: WORD + " read only" });
+      const ed = await openFact({ fact: "ed", text: WORD + " can edit" });
+      check(ro.editable === false && ro.selected === WORD + " read only" && saidFact(ro.added) === "read-only" && ro.reads === 0
+        && ed.editable === true && ed.selected === WORD + " can edit" && saidFact(ed.added) === "editable" && ed.reads === 0
+        && traceText().indexOf(WORD) < 0,
+        "2e1 a read-only selection and an editable one each open on those words with that fact, and the trace names which, without the words: "
+        + JSON.stringify({ ro: { editable: ro.editable, fact: saidFact(ro.added) }, ed: { editable: ed.editable, fact: saidFact(ed.added) } }));
+      const mx = await openFact({ fact: "u mixed", text: WORD + " mixed" });
+      const ns = await openFact({ fact: "u unsupported", text: WORD + " unsupported" });
+      const cx = await openFact({ fact: "u contradicted", text: WORD + " contradicted" });
+      check(mx.editable === null && mx.selected === WORD + " mixed" && saidFact(mx.added) === "unknown (mixed)" && mx.reads === 0
+        && ns.editable === null && ns.selected === WORD + " unsupported" && saidFact(ns.added) === "unknown (not supported)"
+        && cx.editable === null && cx.selected === WORD + " contradicted" && saidFact(cx.added) === "unknown (contradicted)"
+        && traceText().indexOf(WORD) < 0,
+        "2e2 mixed, unsupported and contradicted keep the words, carry unknown, and the trace names the reason, without the words: "
+        + JSON.stringify({ mx: saidFact(mx.added), ns: saidFact(ns.added), cx: saidFact(cx.added) }));
+      const e1 = await openFact({ code: 1 }), e2 = await openFact({ code: 2 }), e3 = await openFact({ code: 3 });
+      const e6 = await openFact({ code: 6 }), e70 = await openFact({ code: 70 });
+      const bad = await openFact({ fact: "guessed", text: WORD + " guessed" }), hang = await openFact("hang");
+      check(e1.selected === "" && e1.editable === null && e1.reads === 1 && saidFact(e1.added) === "unknown (no selection)"
+        && e2.selected === "" && e2.editable === null && saidFact(e2.added) === "unknown (no selection)"
+        && e3.selected === "" && e3.editable === null && e3.reads === 1 && saidFact(e3.added) === "unknown (no text pattern)"
+        && e6.selected === "" && e6.editable === null && e6.reads === 1 && saidFact(e6.added) === "unknown (refused)"
+        && e70.selected === "" && e70.editable === null && e70.reads === 1 && saidFact(e70.added) === "unknown (clipboard)"
+        && bad.selected === "" && bad.editable === null && bad.reads === 1 && saidFact(bad.added) === "unknown (clipboard)"
+        && hang.selected === "" && hang.editable === null && hang.reads === 1 && hang.ms < 1500 && saidFact(hang.added) === "unknown (timeout)"
+        && traceText().indexOf(WORD) < 0,
+        "2e3 no selection, no text pattern, a refusal, a failed helper, a line the shell does not know, and no answer within 300 ms are unknown,"
+        + " and the trace names which: " + JSON.stringify({ e1: saidFact(e1.added), e2: saidFact(e2.added), e3: saidFact(e3.added),
+          e6: saidFact(e6.added), e70: saidFact(e70.added), bad: saidFact(bad.added), hang: saidFact(hang.added), ms: hang.ms }));
+      const text = traceText();
+      const lines = text.split("\n").filter(l => l.length);
+      const badLines = lines.filter(l => !LINE.test(l));
+      const bounds = /const PICK_TRACE_FILE = "pick-trace\.txt", PICK_TRACE_MAX_BYTES = 64 \* 1024, PICK_TRACE_RUN_LINES = 2000;/.test(SRC);
+      check(lines.length > 0 && badLines.length === 0 && text.indexOf(WORD) < 0 && text.indexOf("zebraquill") < 0 && bounds,
+        "2e4 every trace line is the time and the fact alone, the stand-in's words are not in the file, and the file is kept like the tray's: "
+        + lines.length + " line(s), " + badLines.length + " bad, bounds " + bounds);
+    } else {
+      check(true, "2e1 not Windows: no helper, so the fact is unknown");
+      check(true, "2e2 not Windows: no helper to leave a fact unknown");
+      check(true, "2e3 not Windows: no helper to refuse or to time out");
+      check(true, "2e4 not Windows: no helper, so no trace of a selection");
+    }
+    caret.sel = null; clipHeld = "";
+    if (process.env.ETIUDA_PLANTS === "off") console.log("  NOT RUN  2e5 the editability field's two plants (ETIUDA_PLANTS=off)");
+    else {
+      const decl = (src, name) => { const at = src.indexOf("function " + name + "("); let i = src.indexOf("{", at), d = 0;
+        for (; i < src.length; i++) { if (src[i] === "{") d++; else if (src[i] === "}" && --d === 0) break; } return at < 0 ? "" : src.slice(at, i + 1); };
+      const FACT = decl(SRC, "readSelectionFact"), LINEF = decl(SRC, "pickFactLine");
+      const fieldHits = FACT.split("\n").filter(l => l.indexOf("plant:editable-field") >= 0);
+      const factMut = FACT.replace("editable: false", "editable: null");
+      const runFact = src => src ? new Function("MESSAGE_MAX_CHARS", src + "\nreturn readSelectionFact;")(1500) : () => null;
+      const keptF = FACT ? runFact(FACT)("ro\n" + WORD) : null;
+      const turnedF = fieldHits.length === 1 && factMut !== FACT ? runFact(factMut)("ro\n" + WORD) : null;
+      const from = 'const allowed = reason === "no selection" || reason === "no text pattern" || reason === "not supported" || reason === "mixed" || reason === "contradicted" || reason === "clipboard" || reason === "timeout" || reason === "refused"; /* plant:editable-trace */';
+      const traceHits = LINEF.split("\n").filter(l => l.indexOf("plant:editable-trace") >= 0);
+      const lineMut = LINEF.replace(from, 'const allowed = true; /* plant:editable-trace */');
+      const runLine = src => src ? new Function(src + "\nreturn pickFactLine;")() : () => "";
+      const keptL = LINEF ? runLine(LINEF)("unknown", WORD) : "";
+      const leaked = traceHits.length === 1 && lineMut !== LINEF ? runLine(lineMut)("unknown", WORD) : "";
+      check(fieldHits.length === 1 && keptF && keptF.editable === false && keptF.words === WORD
+        && turnedF && turnedF.editable === null && turnedF.words === WORD
+        && traceHits.length === 1 && keptL === "unknown (clipboard)" && leaked.indexOf(WORD) >= 0,
+        "2e5 rewriting plant:editable-field reports a read-only selection as unknown, and rewriting plant:editable-trace lets the reason carry the words: "
+        + JSON.stringify({ field: fieldHits.length, kept: keptF && keptF.editable, turned: turnedF && turnedF.editable, trace: traceHits.length, keptL, leaked }));
     }
   }
 
@@ -1161,6 +1264,17 @@ try {
         "4s4 lifting plant:pick-selected-box leaves the box empty, and rewriting plant:pick-selected-rest hides the strip behind the words: "
         + J3({ marks, box: b1.opened.box, stepped: b2.stepped }));
     }
+    const sameFace = (a, b) => a.opened.box === b.opened.box && a.opened.note === b.opened.note
+      && J3(a.stepped) === J3(b.stepped) && J3(a.edited) === J3(b.edited);
+    const onEdit = await runSel(script, { selected: SEL, suggest: SUGGEST, editable: true });
+    const offEdit = await runSel(script, { selected: SEL, suggest: SUGGEST, editable: false });
+    const unkEdit = await runSel(script, { selected: SEL, suggest: SUGGEST, editable: null });
+    const holds = /let mayEdit = null;/.test(script)
+      && /mayEdit = o\.editable === true \? true : o\.editable === false \? false : null;/.test(script);
+    check(withSel.opened.box === onEdit.opened.box && withSel.opened.note === onEdit.opened.note
+      && sameFace(onEdit, offEdit) && sameFace(offEdit, unkEdit) && holds,
+      "4e1 the page stores whether the selection can be edited, and the box, the note and the strip stay as they were for true, false and unknown: "
+      + J3({ box: onEdit.opened.box, note: onEdit.opened.note, holds }));
   }
 
   /* THE LEG (board 952, waste 3b): typing in the global picker filters in the picker;
