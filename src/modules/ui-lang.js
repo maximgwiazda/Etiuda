@@ -1799,15 +1799,24 @@ const I18N_ATTRS=["title","aria-label","placeholder"];
    The sweep neither translates nor descends into them, which lets it cover regions mixing
    engine words with the employer's; without it an intent named exactly like a UI string
    would be silently rewritten. */
+const TW_SHOW_ELEMENT=1, TW_FILTER_ACCEPT=1, TW_FILTER_REJECT=2;
 function translateTree(root){
   /* NOT "return early on English". Every node this touched remembers its English source, and
      t() on English hands that source straight back - so running the sweep is exactly how the
      English is put back. Returning early meant a language could be entered and never left. */
-  if(!root) return;
-  const els=root.querySelectorAll ? root.querySelectorAll("*") : [];
-  const all=root.nodeType===1 ? [root].concat(Array.prototype.slice.call(els)) : Array.prototype.slice.call(els);
-  all.forEach(el=>{
-    if(el.closest && el.closest("[data-i18n-skip]")) return;
+  if(!root) return 0;
+  const marked=el=>!!(el && el.nodeType===1 && el.hasAttribute && el.hasAttribute("data-i18n-skip"));
+  /* Born on the root, the walker only filters the nodes it moves to. A marked root is refused
+     before the walk, or its children would be entered. */
+  if(marked(root)) return 0;
+  const doc=root.ownerDocument || (typeof document!=="undefined" ? document : null);
+  if(!doc || typeof doc.createTreeWalker!=="function") throw new Error("translateTree: the document has no TreeWalker");
+  let visited=0;
+  const one=el=>{
+    /* Count every element the walker returned. A marked one in the count means the walk entered
+       a skipped subtree; the filter's reject is what keeps it out. */
+    visited++;
+    if(marked(el)) return;
     I18N_ATTRS.forEach(a=>{
       const v=el.getAttribute && el.getAttribute(a);
       if(!v) return;
@@ -1837,7 +1846,11 @@ function translateTree(root){
         if(out!==txt){ n.eI18nSrc=src; n.nodeValue=raw.replace(txt, out); }
       });
     }
-  });
+  };
+  const walker=doc.createTreeWalker(root, TW_SHOW_ELEMENT, {acceptNode:node=>marked(node)?TW_FILTER_REJECT:TW_FILTER_ACCEPT});
+  one(root);
+  for(let node=walker.nextNode(); node; node=walker.nextNode()) one(node);
+  return visited;
 }
 /** The app's own furniture, never the catalog's content. */
 function translateChrome(){

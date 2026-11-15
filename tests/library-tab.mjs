@@ -235,7 +235,49 @@ function makeDocument() {
   doc.createDocumentFragment = () => new El("fragment", doc);
   doc.createElementNS = (_ns, t) => new El(t, doc);
   doc.createTextNode = s => new TextNode(s);
-  doc.createTreeWalker = () => ({ nextNode: () => null });
+  /* SHOW_ELEMENT is 1 and SHOW_TEXT is 4. 2 rejects a node and its subtree, 3 steps over the
+     node and still enters, 1 yields it. A marked catalog subtree is rejected whole, which is
+     the walk translateTree asks for. */
+  doc.createTreeWalker = (root, whatToShow, filter) => {
+    const show = whatToShow == null ? 0xFFFFFFFF : (whatToShow >>> 0);
+    const acceptFn = !filter ? null : typeof filter === "function" ? filter : node => filter.acceptNode(node);
+    const bitOf = node => node.nodeType === 1 ? 1 : node.nodeType === 3 ? 4 : 0;
+    const verdict = node => {
+      const bit = bitOf(node);
+      if (!bit || (show & bit) === 0) return 3;
+      if (!acceptFn) return 1;
+      const v = acceptFn(node);
+      return v == null ? 1 : v;
+    };
+    const nextSib = node => {
+      const p = node.parentNode;
+      if (!p || !p.childNodes) return null;
+      const i = p.childNodes.indexOf(node);
+      return i >= 0 && i + 1 < p.childNodes.length ? p.childNodes[i + 1] : null;
+    };
+    let current = root;
+    return {
+      get currentNode() { return current; },
+      nextNode() {
+        let node = current, result = 1;
+        for (;;) {
+          if (result !== 2 && node.childNodes && node.childNodes[0]) node = node.childNodes[0];
+          else {
+            let stepped = false;
+            while (node) {
+              if (node === root) return null;
+              const sib = nextSib(node);
+              if (sib) { node = sib; stepped = true; break; }
+              node = node.parentNode;
+            }
+            if (!stepped || !node) return null;
+          }
+          result = verdict(node);
+          if (result === 1) { current = node; return node; }
+        }
+      },
+    };
+  };
   doc.documentElement = new El("html", doc);
   doc.head = doc.documentElement.appendChild(new El("head", doc));
   doc.body = doc.documentElement.appendChild(new El("body", doc));
@@ -911,12 +953,18 @@ await checkAsync("L20 a card titled Settings keeps that title through an interfa
     const uiSettings = UL.t("Settings");
     const uiLibrary = UL.t("Library");
     const uiTip = UL.t("Opens this card's editor");
+    const page = host().querySelector(".lib-list");
+    const all = page ? [page, ...page.querySelectorAll("*")] : [];
+    const skipped = all.filter(el => el.closest("[data-i18n-skip]")).length;
+    const visited = page ? UL.translateTree(page) : -1;
+    console.log("L20 visited " + visited + " of " + all.length + " elements on the Library page; " + skipped + " sit in a skip mark and were not entered");
+    const walkKept = visited === all.length - skipped && skipped > 0 && visited < all.length;
     const titlesKept = titles.length >= 2 && titles.every(w => w === "Settings");
     const catKept = got.cat === "Library";
     const uiMoved = got.menu === uiSettings && uiSettings !== "Settings"
       && got.heading === uiLibrary && uiLibrary !== "Library"
       && got.chipTip === uiTip && uiTip !== "Opens this card's editor";
-    return titlesKept && catKept && uiMoved || JSON.stringify({ got, uiSettings, uiLibrary, uiTip });
+    return titlesKept && catKept && uiMoved && walkKept || JSON.stringify({ got, uiSettings, uiLibrary, uiTip, visited, all: all.length, skipped });
   } finally {
     try { if (had == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", had); } catch (e) {}
     try { RP.setUiLang(had === "pl" ? "pl" : "en"); } catch (e) {}

@@ -9365,12 +9365,19 @@ What you type stays in this browser only.`;
     return p(d.getDate()) + "." + p(d.getMonth() + 1) + "." + d.getFullYear() + " " + p(d.getHours()) + ":" + p(d.getMinutes());
   }
   var I18N_ATTRS = ["title", "aria-label", "placeholder"];
+  var TW_SHOW_ELEMENT = 1;
+  var TW_FILTER_ACCEPT = 1;
+  var TW_FILTER_REJECT = 2;
   function translateTree(root) {
-    if (!root) return;
-    const els = root.querySelectorAll ? root.querySelectorAll("*") : [];
-    const all = root.nodeType === 1 ? [root].concat(Array.prototype.slice.call(els)) : Array.prototype.slice.call(els);
-    all.forEach((el) => {
-      if (el.closest && el.closest("[data-i18n-skip]")) return;
+    if (!root) return 0;
+    const marked = (el) => !!(el && el.nodeType === 1 && el.hasAttribute && el.hasAttribute("data-i18n-skip"));
+    if (marked(root)) return 0;
+    const doc = root.ownerDocument || (typeof document !== "undefined" ? document : null);
+    if (!doc || typeof doc.createTreeWalker !== "function") throw new Error("translateTree: the document has no TreeWalker");
+    let visited = 0;
+    const one = (el) => {
+      visited++;
+      if (marked(el)) return;
       I18N_ATTRS.forEach((a) => {
         const v = el.getAttribute && el.getAttribute(a);
         if (!v) return;
@@ -9400,7 +9407,11 @@ What you type stays in this browser only.`;
           }
         });
       }
-    });
+    };
+    const walker = doc.createTreeWalker(root, TW_SHOW_ELEMENT, { acceptNode: (node) => marked(node) ? TW_FILTER_REJECT : TW_FILTER_ACCEPT });
+    one(root);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) one(node);
+    return visited;
   }
   function translateChrome() {
     [
