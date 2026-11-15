@@ -33,7 +33,7 @@ import { rebuildCards } from "./rebuild.js";
 import { render } from "./render.js";
 import { paintCatalogList } from "./catalog-offer.js";
 import { eHasHistory, openHistory } from "./catalog-history.js";
-import { eCatalogFolder, eCatalogFolderShort, eChooseCatalogFolder, eHost, eOpenCatalogFolder } from "./host.js";
+import { eCatalogFolder, eCatalogFolderPinned, eCatalogFolderShort, eChooseCatalogFolder, eHost, eOpenCatalogFolder } from "./host.js";
 import { cards, catOrder, mgOpen, cardCounts } from "./app-state.js";
 import { joinDoorButton, openJoinPaste, teamLeads } from "./team-join.js";
 import { openScreenTab, registerScreen, screenOn } from "./screen-tabs.js";
@@ -52,9 +52,9 @@ function catalogFolderTail(withId){
     +' title="'+esc(eCatalogFolder())+'"'
     +' aria-label="'+esc(t("Open this folder"))+': '+esc(eCatalogFolder())+'">'
     +esc(eCatalogFolderShort())+'</code>'
-    +'<button type="button" class="btn icbtn ec-where-edit"'+editId+' title="'
+    +(eCatalogFolderPinned()?'':'<button type="button" class="btn icbtn ec-where-edit"'+editId+' title="'
     +esc(t("Change folder…"))+'" aria-label="'+esc(t("Change folder…"))+'">'
-    +ICON_EDIT+'</button>'
+    +ICON_EDIT+'</button>')
     +'</span>';
 }
 /** One collapsible Manage section. `body` is trusted markup; `title` is not. */

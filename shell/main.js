@@ -2825,8 +2825,9 @@ function branchIdOf(pubHex) {
   return "k-" + crypto.createHash("sha256").update(Buffer.from(pubHex, "hex")).digest("hex").slice(0, 16);
 }
 /* {id, key, box} for the page, or null where no key can be kept safely. Where encryption is only
-   unavailable nothing is made and nothing is replaced. A pair the envelope throws on is that of another
-   account, so it is kept aside, never deleted, and a new one is made: silence would hide the desk. */
+   unavailable nothing is made and nothing is replaced. A pair the envelope throws on is kept aside, never
+   deleted; a pair kept aside that opens again comes back in its place, and only where none does is a new
+   one made: silence would hide the desk. */
 function branchIdentity(make) {
   if (deskKeys === undefined) deskKeys = readDesk();
   /* Asked not to make one, it answers the public halves of the pair there is, or null: nothing is opened or made. */
@@ -2835,6 +2836,22 @@ function branchIdentity(make) {
   if (!branchSealable()) return null;
   const was = deskBranch, wasOld = deskBranchOld;
   if (!deskBranch || !openPrivate(deskBranch.sign.priv)) {
+    const back = wasOld.slice().reverse().find(p => !!openPrivate(p.sign.priv) && !!openPrivate(p.box.priv)); /* plant:branch-back */
+    if (back) {
+      try {
+        deskBranchOld = wasOld.filter(p => p !== back).concat(was ? [was] : []);
+        deskBranch = back;
+        saveDeskFile(JSON.stringify(deskKeys));
+        deskWritten = true;
+        console.log("etiuda: the desk's branch key could not be opened, and the pair kept aside opens again, so it is the desk's key once more");
+        return { id: branchIdOf(deskBranch.sign.pub), key: deskBranch.sign.pub, box: deskBranch.box.pub };
+      } catch (e) {
+        deskBranch = was;
+        deskBranchOld = wasOld;
+        console.error("etiuda: the desk's branch key could not be kept - " + e.message);
+        return null;
+      }
+    }
     try {
       if (deskBranch) { deskBranchOld = wasOld.concat([deskBranch]); deskBranch = null; }
       const s = crypto.generateKeyPairSync("ed25519"), b = crypto.generateKeyPairSync("x25519");
@@ -4150,11 +4167,13 @@ function policyNoUpdate(values) {
   const s = String(v.value).trim();
   return !((v.type === "dword" || v.type === "REG_SZ" || v.type === "REG_EXPAND_SZ") && (s === "" || s === "0"));
 }
-/* `text` is the text of reg export's file for the policy key, or empty where there is none.
-   Returns {folder, lead, bad, noUpdate, values}: folder and lead empty where unused, bad the names of the words to say, noUpdate
-   true where policy turns the version look off, values policyValues' reading for the readers of the key's other values. */
-function joinPolicyFacts(text) {
+/* `text` is the text of reg export's file for the policy key, or empty where there is none; `unread` true where the key was
+   there to read and the read failed. Returns {folder, lead, bad, noUpdate, values, unread}: folder and lead empty where unused, bad
+   the names of the words to say, noUpdate true where policy turns the version look off, values policyValues' reading for the
+   readers of the key's other values, unread true where a read failed or a text would not parse, so no part of it is used. */
+function joinPolicyFacts(text, unread) {
   const values = text ? policyValues(text) : null;
+  const doubt = unread === true || (!!text && values === null);
   const noUpdate = policyNoUpdate(values);
   const folder = policyRegSz(values, "TeamFolder");
   const lead = policyRegSz(values, "LeadKey");
@@ -4169,36 +4188,36 @@ function joinPolicyFacts(text) {
     }
     else bad.push("folder");
   }
+  /* An expandable folder is filled from the desk's environment; the lead is taken as written whatever its type, so no
+     variable a person sets becomes the key this desk trusts. */
   if (lead.set) {
-    if (lead.type === "REG_SZ" && policyLeadOk(lead.value)) { leadOk = true; leadValue = lead.value; }
-    else if (lead.type === "REG_EXPAND_SZ") {
-      const exp = policyExpand(lead.value);
-      if (exp !== null && policyLeadOk(exp)) { leadOk = true; leadValue = exp; }
-      else bad.push("lead");
-    }
+    if ((lead.type === "REG_SZ" || lead.type === "REG_EXPAND_SZ") && policyLeadOk(lead.value)) { leadOk = true; leadValue = lead.value; } /* plant:lead-as-written */
     else bad.push("lead");
   }
   if ((folder.set || lead.set) && (!folderOk || !leadOk)) {
     if (folder.set && folderOk && !leadOk) bad.push("beside");
     if (lead.set && leadOk && !folderOk) bad.push("beside");
-    return { folder: "", lead: "", bad: bad, noUpdate: noUpdate, values: values };
+    return { folder: "", lead: "", bad: bad, noUpdate: noUpdate, values: values, unread: doubt };
   }
-  return { folder: folderValue, lead: leadValue, bad: bad, noUpdate: noUpdate, values: values };
+  return { folder: folderValue, lead: leadValue, bad: bad, noUpdate: noUpdate, values: values, unread: doubt };
 }
-/* The facts with their sentences in `lang`, "pl" or anything else for English: {folder, lead, said, noUpdate}. */
+/* The facts with their sentences in `lang`, "pl" or anything else for English: {folder, lead, said, noUpdate, unread}. */
 function policyWords(facts, lang) {
   const words = POLICY_WORDS[lang === "pl" ? "pl" : "en"];
-  return { folder: facts.folder, lead: facts.lead, said: facts.bad.map(k => words[k]), noUpdate: facts.noUpdate === true };
+  return { folder: facts.folder, lead: facts.lead, said: facts.bad.map(k => words[k]), noUpdate: facts.noUpdate === true, unread: facts.unread === true };
 }
 function joinPolicyFrom(text, lang) { return policyWords(joinPolicyFacts(text), lang); }
-let joinPolicyRead = null;
-/* Read once a run, whatever the language. The one program started is reg.exe at its fixed path, exporting
+/* A read that failed is asked again at the first ask once this has passed, so one failure does not stand for the run. */
+const POLICY_REREAD_MS = 60 * 60 * 1000;
+let joinPolicyRead = null, joinPolicyReadAt = 0;
+/* Read once a run, whatever the language, unless the read failed (POLICY_REREAD_MS). The one program started is reg.exe at its fixed path, exporting
    this one key to a scratch file, which holds the registry's own UTF-16 where reg's printing would be in the
-   console's code page. A failure, and any system but Windows, is no policy. The scratch file and its folder
-   go whatever happens, and nothing of them is logged. */
+   console's code page. A failure, and any system but Windows, is no policy; reg's own exit 1 is a key that is not there,
+   and any other failure is a read that failed, kept as unread. The scratch file and its folder go whatever happens, and
+   nothing of them is logged. */
 function readJoinPolicy(lang) {
-  if (joinPolicyRead === null) {
-    let text = "";
+  if (joinPolicyRead === null || (joinPolicyRead.unread && Date.now() - joinPolicyReadAt >= POLICY_REREAD_MS)) { /* plant:policy-reread */
+    let text = "", unread = false;
     if (process.platform === "win32") {
       let dir = "", file = "";
       try {
@@ -4207,19 +4226,25 @@ function readJoinPolicy(lang) {
         execFileSync(REG_TOOL, ["export", POLICY_KEY, file, "/y"], { windowsHide: true, timeout: 5000, stdio: "ignore" });
         const bytes = fs.readFileSync(file);
         if (bytes.length % 2 === 0 && bytes[0] === 0xff && bytes[1] === 0xfe) text = bytes.subarray(2).toString("utf16le");
-      } catch { text = ""; }
+        else unread = true;
+      } catch (e) { text = ""; unread = !(e && e.status === 1); } /* plant:policy-unread */
       finally {
         if (file) { try { fs.unlinkSync(file); } catch { /* never written */ } }
         if (dir) { try { fs.rmdirSync(dir); } catch { /* never made */ } }
       }
     }
-    joinPolicyRead = joinPolicyFacts(text);
+    joinPolicyRead = joinPolicyFacts(text, unread);
+    joinPolicyReadAt = Date.now();
   }
   return policyWords(joinPolicyRead, lang);
 }
-/* True where machine policy turns the version look off; read with the team values, once a run. */
+/* True where machine policy turns the version look off, or where the key was there and its read failed, so a switch the read
+   missed is not taken as unset; read with the team values. updateLookUnsure says which. */
 function updateLookOff() {
-  try { return readJoinPolicy("en").noUpdate === true; } catch { return false; }
+  try { const p = readJoinPolicy("en"); return p.noUpdate === true || p.unread === true; } catch { return true; } /* plant:look-off-unread */
+}
+function updateLookUnsure() {
+  try { return readJoinPolicy("en").unread === true; } catch { return true; }
 }
 /* THE DESK'S OPTIONAL CUSTOMER MODEL (board 992). Off by default; on, the organisation's own service ranks the search and the
    suggestions, and deskAiConfig is the one place its address and key are handed on. The person's choice and fields are kept in
@@ -4458,12 +4483,17 @@ ipcMain.on("etiuda:desk-ai-settings", (e) => {
 });
 ipcMain.handle("etiuda:desk-ai-save", (e, fields) => (fromEngine(e) ? deskAiSave(fields) : { ok: false, why: "refused", settings: null }));
 ipcMain.handle("etiuda:desk-ai-test", (e) => (fromEngine(e) ? deskAiTest() : { ok: false, why: "refused", host: "", model: "" }));
-let joinPolicySaid = false;
+let joinPolicySaid = null;
 function sayJoinPolicy() {
   let lang = "en";
   try { if (shellWords().lang === "pl") lang = "pl"; } catch { lang = "en"; }
   const got = readJoinPolicy(lang);
-  if (!joinPolicySaid) { joinPolicySaid = true; got.said.forEach(teamSay); policyLetsInviteGo(got); }
+  if (joinPolicySaid !== joinPolicyRead) {
+    joinPolicySaid = joinPolicyRead;
+    got.said.forEach(teamSay);
+    if (got.unread) teamSay("machine policy for Etiuda was there to read and could not be read, so this desk runs as though none were set");
+    policyLetsInviteGo(got);
+  }
   return got;
 }
 /* Case-insensitive path comparison on Windows. A UNC path and a mapped drive read as different folders. */
@@ -6006,6 +6036,9 @@ function joinView() {
   if (deskKeys === undefined) deskKeys = readDesk();
   const root = catalogFolder();
   const view = { sealed: null, join: null, joined: null, leads: leadsView() };
+  /* What machine policy set and this desk cannot use, in the desk's language, for Settings to print as it stands. */
+  const policySaid = sayJoinPolicy().said;
+  if (policySaid.length) view.policySaid = policySaid.slice(); /* plant:policy-said-view */
   if (relayHere()) view.onRelay = true;
   if (!folderAnswers(root)) return view;
   heedTeam();
@@ -6754,9 +6787,17 @@ function awaitsFirstEdition(team) {
   }
   return doc.catalogs.some(id => !have.has(String(id)));
 }
+/* Whether machine policy holds this desk to team `t`, so a leave could not be undone: its lead named and pinned for `t`, or a
+   folder named alone, under which every invitation is refused. `named` is readJoinPolicy's answer. */
+function policyHoldsTeam(t, named) {
+  const pin = teamPins[t];
+  if (!pin || !named) return false;
+  if (named.lead) return named.lead === pin.public;
+  return !!named.folder; /* plant:folder-holds-team */
+}
 function leadsView() {
   const teams = Object.keys(teamPins).filter(t => SEALED_TEAM_RE.test(t) && !!teamPins[t] && typeof teamPins[t].public === "string");
-  const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", named = teams.length ? readJoinPolicy("en").lead : "";
+  const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", named = teams.length ? readJoinPolicy("en") : null;
   const ftHere = folderTeamHere();
   const reading = ftHere && folderStillReading() ? shellWords().stillReading : "";
   return teams.map(t => {
@@ -6769,7 +6810,7 @@ function leadsView() {
     const row = { team: t, print: leadPrint(teamPins[t].public), admitted: admitted, seen: teamSeen.has(t),
       lead: shown.lead || "", folder: shown.folder || "",
       removed: (admitted && !!me && !!roster && roster.desks.indexOf(me) < 0) || relayRemoved,
-      policy: !!named && named === teamPins[t].public };
+      policy: policyHoldsTeam(t, named) };
     if (relayHost) row.relay = relayHost; /* plant:settings-relay-row */
     if (relayRemoved) row.relayRemoved = true;
     const head = headShown(t);
@@ -6826,6 +6867,8 @@ function forgetLead(team, left) {
   team = String(team || "");
   if (deskKeys === undefined) deskKeys = readDesk();
   if (!SEALED_TEAM_RE.test(team) || !teamPins[team]) return joinView();
+  /* Settings offers no Leave where policy holds the team; one sent anyway changes nothing. "It does not match" still forgets. */
+  if (left === true && policyHoldsTeam(team, readJoinPolicy("en"))) return joinView();
   const ch = teamChannel[team];
   if (ch && ch.kind === "relay") setRelayTeamAside(ch.rt); /* plant:leave-aside */
   /* The note this desk left in a folder team's mirror goes too, owed to that share, so a later return does not send it. */
@@ -7081,6 +7124,11 @@ function setTeamNeedsFolder(teamId, doc, mirrorDir) {
 }
 
 function pickMovedFolder(teamId, pickedFolder) {
+  const named = sayJoinPolicy().folder;
+  if (named && !policySameFolder(pickedFolder, named)) {
+    teamSay("a folder picked for team " + teamId + " is not the one machine policy names, so this desk stays with the policy's folder");
+    return { ok: false, error: "policy" };
+  }
   const need = teamNeedsFolder[teamId];
   const pinned = teamPins[teamId];
   const minRev = need ? need.rev : 0;
@@ -8658,6 +8706,8 @@ ipcMain.on("etiuda:host", (e) => {
        them and the offer's line names the folder it accepts from. The preload asks for the
        catalog first, so catalogFrom is already the answer by the time this is read. */
     catalogFolder: catalogFolder(),
+    // The folder machine policy names, or "": the page shows it over the desk key and offers no other.
+    catalogFolderPolicy: sayJoinPolicy().folder,
     catalogFile: catalogFrom ? path.basename(catalogFrom) : "",
     catalogIn: folderShown(catalogFrom),
     catalogBuiltIn: isBuiltIn(catalogFrom),
@@ -9191,6 +9241,7 @@ ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e)
    setting is the engine's, through the ordinary desk key the search order above reads. */
 ipcMain.handle("etiuda:pick-catalog-folder", async (e, title) => {
   if (!fromEngine(e)) return "";
+  if (sayJoinPolicy().folder) return ""; /* plant:pick-under-policy */
   const win = BrowserWindow.fromWebContents(e.sender);
   const opts = {
     title: String(title || "Etiuda").slice(0, 120),
@@ -10800,7 +10851,12 @@ async function lookForNote(fetchFn) {
 /* A first look a minute after the window opens, then hourly. Never from the harness's own window, so no leg reaches out. */
 function armNoteLook() {
   /* Not from any harness start (harnessLaunch: --user-data-dir or a test variable), so no leg ever asks production etiuda.dev. */
-  if (PLACED_ASIDE || harnessLaunch() || updateLookOff() || noteTimer || !net || typeof net.fetch !== "function") return;
+  if (PLACED_ASIDE || harnessLaunch() || noteTimer || !net || typeof net.fetch !== "function") return;
+  if (updateLookOff()) {
+    /* A key there and unread is asked again when the reader would read it again, and the look follows that answer. */
+    if (updateLookUnsure()) { noteTimer = setTimeout(() => { noteTimer = null; armNoteLook(); }, POLICY_REREAD_MS); if (noteTimer.unref) noteTimer.unref(); } /* plant:look-rearm */
+    return;
+  }
   const next = () => {
     lookForNote((u, init) => deskFetch(u, init)).catch(() => {});
     noteTimer = setTimeout(next, NOTE_EVERY_MS);

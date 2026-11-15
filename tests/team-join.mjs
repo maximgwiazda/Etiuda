@@ -39,7 +39,7 @@ const ASIDE = {
   "15ep": offWindows("15ep", "15em stands aside off Windows, so lifting plant:w2-folder-not-writable has no green leg there to turn"),
 };
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 179;
+const EXPECTED = 184;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -4773,6 +4773,127 @@ try {
         + detail + ", sha " + (same ? "restored" : "differs"));
     }
   }
+
+  /* ---- Grok's review 8 of the desk's policy (findings 3, 2 and 6), Windows only: off it the shell reads no policy ---------- */
+  /* 15r8a: what machine policy set and this desk cannot use is printed in Settings, first in the team section, in the shell's
+     own sentences: a lead that is not 64 lower-case hex and the folder dropped beside it. A good key prints no such row. */
+  await legTry("15r8a", async () => {
+    if (!WIN) { check(true, "15r8a off Windows the shell reads no machine policy, so Settings prints none"); return; }
+    const named = folder("r8a-named");
+    const Dbad = await underPolicy([["TeamFolder", named], ["LeadKey", "NO"]], "r8a-bad", folder("r8a-bad-own"));
+    const Dgood = await underPolicy([["TeamFolder", named], ["LeadKey", LEAD.public]], "r8a-good", folder("r8a-good-own"));
+    const bodyR8 = document.body;
+    if (!document.body) document.body = { classList: { contains: () => false, toggle: noop, add: noop, remove: noop }, appendChild: el => el };
+    let bad = "", good = "";
+    try { bad = await settingsAt(Dbad, "en"); good = await settingsAt(Dgood, "en"); } finally { document.body = bodyR8; }
+    const LEAD_WORDS = "The team lead's key set in Group Policy is not written as 64 lowercase hexadecimal characters, so this desk does not trust it.";
+    const BESIDE_WORDS = "The other value set beside it is not used either: the two are taken together or not at all.";
+    const row = (bad.match(/<div class="set-row" data-row="teampolicy">[\s\S]*?<\/div><\/div>/) || [""])[0];
+    const f = { row: row.indexOf("<small>" + escPage(LEAD_WORDS) + "</small><small>" + escPage(BESIDE_WORDS) + "</small>") >= 0,
+      first: bad.indexOf('data-row="teampolicy"') >= 0 && bad.indexOf('data-row="teampolicy"') < Math.min(...['data-row="join"', 'data-leave-team'].map(s => bad.indexOf(s)).filter(n => n >= 0).concat([bad.length])),
+      none: good.indexOf('data-row="teampolicy"') < 0 };
+    check(Object.keys(f).every(k => f[k]), "15r8a a policy value this desk cannot use is printed in Settings in the shell's own sentences,"
+      + " first in the team section, and a good key prints none: " + JSON.stringify(f));
+  });
+
+  /* 15r8b: while machine policy names the folder, the desk's folder is that one on both sides (finding 2). The shell tells the
+     page the policy's folder, its folder picker opens no dialog and answers nothing, and Open a folder for a moved team is
+     refused for any other folder; the page shows the policy's folder over the desk key and its Change folder opens no picker
+     and offers no button. THE CONTROL, the same desk with no policy: the dialog opens and its folder is answered. */
+  await legTry("15r8b", async () => {
+    if (!WIN) { check(true, "15r8b off Windows the shell reads no machine policy, so the folder is the desk's own"); return; }
+    const named = folder("r8b-named"), other = folder("r8b-other");
+    const deskUnder = async (rows, name) => {
+      const opened = [];
+      const dialog = { showOpenDialog: async () => { opened.push(1); return { canceled: false, filePaths: [other] }; } };
+      REG.policy = rows ? regText(rows) : null;
+      try { const D = await deskWith(name, folder(name + "-own"), null, null, { dialog: dialog }); D.opened = opened; return D; }
+      finally { REG.policy = null; }
+    };
+    const outcome = async D => {
+      const facts = D.sync("etiuda:host") || {};
+      const picked = await D.ask("etiuda:pick-catalog-folder", "Choose");
+      const moved = await D.join("pick-moved-folder", TEAM, other);
+      return { pinned: facts.catalogFolderPolicy || "", picked: picked, dialogs: D.opened.length, moved: moved && moved.error };
+    };
+    const under = await outcome(await deskUnder([["TeamFolder", named]], "r8b-under"));
+    const plain = await outcome(await deskUnder(null, "r8b-plain"));
+    const HO = await import(MOD("host.js"));
+    const hostWas = window.E_HOST, keyWas = ST.lsGet("eCatalogFolder");
+    let pagePicks = 0, page = {};
+    try {
+      ST.lsSet("eCatalogFolder", other);
+      window.E_HOST = { catalogFolder: named, catalogFolderPolicy: named, pickCatalogFolder: () => { pagePicks++; return other; } };
+      const chose = await HO.eChooseCatalogFolder("Choose");
+      page.pinned = { shown: HO.eCatalogFolder(), chose: chose, picks: pagePicks, key: ST.lsGet("eCatalogFolder") };
+      window.E_HOST = { catalogFolder: named, pickCatalogFolder: () => { pagePicks++; return named; } };
+      page.plain = { shown: HO.eCatalogFolder() };
+    } finally {
+      window.E_HOST = hostWas;
+      if (keyWas == null) ST.lsDel("eCatalogFolder"); else ST.lsSet("eCatalogFolder", keyWas);
+    }
+    const manage = fs.readFileSync(path.join(ROOT, "src", "modules", "manage.js"), "utf8");
+    const tail = (manage.match(/function catalogFolderTail\(withId\)\{[\s\S]*?\n\}/) || [""])[0];
+    const f = { shell: under.pinned === named && under.picked === "" && under.dialogs === 0 && under.moved === "policy",
+      control: plain.pinned === "" && plain.picked === other && plain.dialogs === 1 && plain.moved !== "policy",
+      page: page.pinned.shown === named && page.pinned.chose === "" && page.pinned.picks === 0 && page.pinned.key === other && page.plain.shown === other,
+      button: /eCatalogFolderPinned\(\)/.test(tail) };
+    check(Object.keys(f).every(k => f[k]), "15r8b while machine policy names the folder, the shell and the page show that folder, the folder"
+      + " picker opens nothing, a moved team's Open a folder is refused for another folder, and the Library offers no Change folder;"
+      + " the control opens the dialog: " + JSON.stringify(f) + " " + JSON.stringify({ under: under, plain: plain, page: page }));
+    if (PLANTS_OFF) { skip("15r8b lifting plant:pick-under-policy opens the folder dialog under the policy (ETIUDA_PLANTS=off)"); return; }
+    const lines = SRC.split("\n"), at = lines.map((l, i) => (l.includes("/* plant:pick-under-policy */") ? i : -1)).filter(i => i >= 0);
+    let liftedPick = null;
+    if (at.length === 1) {
+      lines.splice(at[0], 1);
+      const opened = [];
+      REG.policy = regText([["TeamFolder", named]]);
+      try {
+        const D = await deskWith("r8b-lifted", folder("r8b-lifted-own"), null, lines.join("\n"),
+          { dialog: { showOpenDialog: async () => { opened.push(1); return { canceled: false, filePaths: [other] }; } } });
+        liftedPick = { picked: await D.ask("etiuda:pick-catalog-folder", "Choose"), dialogs: opened.length };
+      } finally { REG.policy = null; }
+    }
+    check(!!liftedPick && liftedPick.picked === other && liftedPick.dialogs === 1,
+      "15r8b lifting plant:pick-under-policy opens the folder dialog under the policy and answers its folder: " + JSON.stringify(liftedPick));
+  });
+
+  /* 15r8c: with the folder named alone, every invitation is refused, so a leave could not be undone (finding 6): the team's
+     row is the policy's, Settings offers no Leave and says the organisation's IT sets the team, and a leave sent anyway leaves
+     the pin and bars nothing. THE CONTROL, the same desk with no policy: Leave is offered and takes the pin. Lifting
+     plant:folder-holds-team offers Leave again under the folder. */
+  await legTry("15r8c", async () => {
+    if (!WIN) { check(true, "15r8c off Windows the shell reads no machine policy, so Leave stands as it does with none"); return; }
+    const named = folder("r8c-named");
+    const pinnedHere = { teamPins: { [TEAM]: { keyId: LEAD.keyId, public: LEAD.public } }, teamShown: { [TEAM]: { folder: named, lead: "Lamp lead" } } };
+    const caseOf = async (rows, name, src) => {
+      REG.policy = rows ? regText(rows) : null;
+      let D = null;
+      try { D = await deskWith(name, folder(name + "-own"), pinnedHere, src); } finally { REG.policy = null; }
+      const row = leadIn(await D.join("leads"));
+      const bodyWas = document.body;
+      if (!document.body) document.body = { classList: { contains: () => false, toggle: noop, add: noop, remove: noop }, appendChild: el => el };
+      let html = "";
+      try { html = await settingsAt(D, "en"); } finally { document.body = bodyWas; }
+      await D.join("leave", TEAM);
+      const env = D.envelope();
+      return { policy: !!row && row.policy === true, leaveShown: html.indexOf('data-leave-team="' + TEAM + '"') >= 0,
+        itSays: html.indexOf(escPage("The organisation's IT sets this desk's team.")) >= 0,
+        pinKept: !!(env.teamPins && env.teamPins[TEAM]), barred: (env.teamBarred || []).indexOf(TEAM) >= 0 };
+    };
+    const under = await caseOf([["TeamFolder", named]], "r8c-under");
+    const plain = await caseOf(null, "r8c-plain");
+    const f = { under: under.policy && !under.leaveShown && under.itSays && under.pinKept && !under.barred,
+      control: !plain.policy && plain.leaveShown && !plain.itSays && !plain.pinKept && plain.barred };
+    check(f.under && f.control, "15r8c with the folder named alone, the team's row is the policy's, Settings offers no Leave and says"
+      + " the organisation's IT sets the team, and a leave sent anyway keeps the pin; the control leaves: " + JSON.stringify({ under: under, plain: plain }));
+    if (PLANTS_OFF) { skip("15r8c lifting plant:folder-holds-team offers Leave under the folder again (ETIUDA_PLANTS=off)"); return; }
+    const lines = SRC.split("\n"), at = lines.map((l, i) => (l.includes("/* plant:folder-holds-team */") ? i : -1)).filter(i => i >= 0);
+    let lifted = null;
+    if (at.length === 1) { lines[at[0]] = "  return false;"; lifted = await caseOf([["TeamFolder", named]], "r8c-lifted", lines.join("\n")); }
+    check(!!lifted && !lifted.policy && lifted.leaveShown && !lifted.pinKept,
+      "15r8c lifting plant:folder-holds-team offers Leave under the folder again, and the leave takes the pin: " + JSON.stringify(lifted));
+  });
 
   /* Last, over every desk above: the log of each holds none of the secrets any invitation carried. */
   const leaked = [];

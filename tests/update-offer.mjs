@@ -27,9 +27,9 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 19;
+const PLANTS = 20;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 72 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 73 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -105,6 +105,8 @@ function shellOf(o) {
     PLACED_ASIDE: !!opt.aside,
     harnessLaunch: () => !!opt.harness,
     updateLookOff: () => !!opt.policyOff,
+    updateLookUnsure: () => !!opt.policyUnread,
+    POLICY_REREAD_MS: 60 * 60 * 1000,
     net: opt.net === undefined ? { fetch: () => { throw new Error("no network in a leg"); } } : opt.net,
     ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { handle[ch] = fn; } },
     fromEngine: e => !!(e && e.engine),
@@ -435,6 +437,18 @@ try {
   const S5g = shellOf({ ud: S4.ud, policyOff: true });
   check(S5g.updateState().offer === "" && shellOf({ ud: S4.ud }).updateState().offer === "2.0.1",
     "u5d4 under that policy a note kept before offers nothing, and the same folder without it still offers 2.0.1");
+  /* u5d5: a policy key there and unread keeps the look off, and the look is asked again once the shell would read the key
+     again (Grok's review 17 of the update offer, finding 4): the read then working and naming no switch arms the first look. */
+  const unsureTimers = [], unsureOpt = { policyOff: true, policyUnread: true, net: { fetch: () => { throw new Error("reached"); } },
+    setTimeout: (fn, ms) => { unsureTimers.push({ fn: fn, ms: ms }); return { unref() {} }; } };
+  const S5h = shellOf(unsureOpt);
+  S5h.armNoteLook();
+  const waited = unsureTimers.map(t => t.ms);
+  unsureOpt.policyOff = false; unsureOpt.policyUnread = false;
+  if (unsureTimers[0]) unsureTimers[0].fn();
+  check(JSON.stringify(waited) === JSON.stringify([3600000]) && unsureTimers.length === 2 && unsureTimers[1].ms === 60000,
+    "u5d5 an unread policy key arms no look and asks again in an hour, and the read then naming no switch arms the first look: "
+    + JSON.stringify(unsureTimers.map(t => t.ms)));
   /* The preload: a trusted click whose path holds the release page's button tells main so; an untrusted one, or a middle
      click, does not; and E_HOST carries the three verbs. */
   const pre = { sync: [], invoke: [], listeners: {} };
@@ -544,11 +558,11 @@ try {
   if (PLANTS_OFF) console.log("  NOT RUN u-plants: ETIUDA_PLANTS=off");
   else {
     const SEC = section(MAIN);
-    const lifted = (tag, replacement) => {
+    const lifted = (tag, replacement, o) => {
       const lines = SEC.split("\n"), at = lines.findIndex(l => l.indexOf(tag) >= 0);
       if (at < 0 || lines.findIndex((l, i) => i > at && l.indexOf(tag) >= 0) >= 0) throw new Error(tag + " is not in the section once");
       lines.splice(at, 1, ...(replacement === undefined ? [] : [replacement]));
-      return shellOf({ text: lines.join("\n") });
+      return shellOf(Object.assign({ text: lines.join("\n") }, o || {}));
     };
     const P = lifted("plant:note-size");
     check(!!P.readNote(big).note, "u-plant note-size lifted lets the 1100-byte note through");
@@ -575,6 +589,10 @@ try {
     await PU.lookForNote(serve(note({ serial: 5, version: "2.0.0" })));
     PU.on["etiuda:update-click"]({ engine: true });
     check(PU.handle["etiuda:update-open"]({ engine: true }) === true && PU.opened.length === 1, "u-plant update-open-offer turned opens a page with no offer standing");
+    const rearm = [];
+    lifted("plant:look-rearm", undefined, { policyOff: true, policyUnread: true, net: { fetch: () => { throw new Error("reached"); } },
+      setTimeout: (fn, ms) => { rearm.push(ms); return { unref() {} }; } }).armNoteLook();
+    check(rearm.length === 0, "u-plant look-rearm lifted leaves an unread key's look off for the run: " + JSON.stringify(rearm));
     const pageSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "update-offer.js"), "utf8");
     const fnAt = pageSrc.indexOf("function updateInMenu("), fnEnd = pageSrc.indexOf("\n}\n", fnAt) + 2;
     const fnText = pageSrc.slice(fnAt, fnEnd).split("\n").filter(l => l.indexOf("plant:later-holds") < 0).join("\n");
