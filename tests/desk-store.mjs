@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-plants-"));
-const EXPECTED = 24;
+const EXPECTED = 26;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -107,6 +107,7 @@ function serviceStandIn(R, sent) {
   return async (rt, sPub, extra) => {
     sent.push(JSON.stringify({ rt, sPub, extra }));
     if (sent.down) return { why: "unreached" };
+    if (sent.refuse) return { why: sent.refuse };
     const now = R.clock.now;
     if (extra && extra.replace === true) for (const old of [...kept].filter(x => x !== rt)) {
       const n = { kind: "etiuda-service-notice", format: 1, what: "store-end", rt: old, code: CODE, issued: now, via: via(now), sig: { alg: "ed25519", keyId: K.DELEGATE.id, value: "" } };
@@ -338,8 +339,28 @@ async function main() {
     return { ok, detail: brief({ down, folderLeftItOut: only(fileDown), up, retriedList: only(posts[1]), held, replaced, ended, postsAfter: posts.length - n, offline }) };
   }
 
+  /* G1: the folder's key file replaced by another store's, well formed, and the service refusing that store as another person's: this
+     computer's sealed copy is still its own store, kept only once the service grants a store (and on a grant, the folder's). */
+  async function grantRefusedScene() {
+    const w = worldOf("microsoft"), a = computer(w, "a");
+    const la = await a.look();
+    const mine = a.sealed.keys ? JSON.parse(JSON.stringify(a.sealed.keys)) : null;
+    const other = ST.freshKeys(n => crypto.randomBytes(n), "https://relay.test/relay/v1");
+    w.f.text = ST.keyText(other);
+    w.serviceSent.refuse = "store";
+    const refused = await a.look();
+    const kept = a.sealed.keys;
+    w.serviceSent.refuse = "";
+    const granted = await a.look();
+    const after = a.sealed.keys, folder = ST.keyRead(w.f.text);
+    const ok = la.state === "on" && !!mine && refused.state === "paused" && refused.why === "store" && !!kept && kept.rt === mine.rt && kept.k === mine.k && kept.s === mine.s
+      && !!after && !!folder && after.rt === folder.rt && after.rt !== mine.rt;
+    return { ok, detail: brief({ first: la.state, refused: refused.state + "/" + refused.why, keptOwn: !!kept && !!mine && kept.rt === mine.rt && kept.k === mine.k, granted: granted.state, keptFolders: !!after && !!folder && after.rt === folder.rt }) };
+  }
+
   const results = {};
   const LEGS = [
+    ["G1", grantRefusedScene, "a key file of another store in the folder, refused by the service as another person's, leaves this computer's sealed copy its own; granted, the folder's store is kept"],
     ["L1", leaveScene, "This computer leaves: the folder's list without it written before the relay is asked, posted again when tried again though the folder already leaves it out; a list the relay holds, another store or the ended mark is done, the folder unreached is not"],
     ["C1", () => firstAndSecondScene("microsoft"), "on OneDrive's App Folder the first computer finds no key and makes the store, and a second computer of the person reads it and opens a session at its first look; neither shows nor asks anything"],
     ["C1g", () => firstAndSecondScene("google"), "the same on Google Drive's appDataFolder"],
@@ -385,6 +406,7 @@ async function main() {
   const swap = (from, to) => text => (text.split(from).length === 2 ? text.split(from).join(to) : null);
   const scenes = Object.fromEntries(LEGS.map(([id, scene]) => [id, scene]));
   const PLANTS = [
+    ["seal after grant", "G1", swap("  const sPub = pubOf(keys.s);\n", "  io.keep(keys);\n  const sPub = pubOf(keys.s);\n"), "the folder's keys sealed before the service has granted their store"],
     ["made", "C1", lift("made"), "the first computer makes the file but not the store at the relay"],
     ["made", "C1g", lift("made"), "the same on Drive"],
     ["a copy to the service", "C2", swap("const got = await io.grant(keys.rt, sPub, { replace: made });", "const got = await io.grant(keys.rt, sPub, { replace: made, s: keys.s });"), "S rides beside the grant's request"],

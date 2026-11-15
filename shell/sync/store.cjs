@@ -221,11 +221,12 @@ async function storeLook(io) {
     if (!keys) return { state: "unavailable", why: again.ok ? "refused" : again.why };
     made = keys.rt === fresh.rt; /* plant:made */
   }
-  if (!local || local.rt !== keys.rt || local.k !== keys.k || local.s !== keys.s || local.rev !== keys.rev) io.keep(keys);
   const sPub = pubOf(keys.s);
   /* Only a computer that made the store its folder shows says it replaces the person's others (the service ends them); two may, above. */
   const got = await io.grant(keys.rt, sPub, { replace: made });
   if (!got || got.why || !got.grant) return { state: "paused", why: got && got.why ? got.why : "unreached", keys };
+  /* Sealed here only once the service grants the store to the person signed in, so a key file it refuses never replaces this computer's own. */
+  if (!local || local.rt !== keys.rt || local.k !== keys.k || local.s !== keys.s || local.rev !== keys.rev) io.keep(keys); /* plant:keep-granted */
   if (made) {
     const c = await io.relay.create(keys, got.grant);
     if (!c.ok) return { state: "paused", why: c.why || "relay", keys };
