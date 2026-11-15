@@ -52,7 +52,7 @@ function updateAbout(running){
   const s=updateNow;
   const second=s.offer ? t("Newest available: {VERSION}").split("{VERSION}").join(s.offer)
     : s.look==="read" ? t("This is the newest version.")
-    : s.look==="older" ? t("No newer version has been published.")
+    : s.look==="older" ? t("No version newer than this build has been published.")
     : t("Whether a newer version exists could not be checked just now. This one works as it is.");
   return { lines:[t("This version: {VERSION}").split("{VERSION}").join(String(running)), second], offer:s.offer };
 }

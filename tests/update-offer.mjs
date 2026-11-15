@@ -503,8 +503,8 @@ try {
   check(dot.hidden && row.hidden && UP.updateAbout("2.0.0").lines[1] === "This is the newest version.",
     "u6h with nothing newer the dot and the row go, and About says This is the newest version.");
   onUpdate({ offer: "", look: "older" });
-  check(dot.hidden && row.hidden && UP.updateAbout("2.0.0").lines[1] === "No newer version has been published.",
-    "u6n a build newer than every published note shows nothing, and About says No newer version has been published., not that the check failed");
+  check(dot.hidden && row.hidden && UP.updateAbout("2.0.0").lines[1] === "No version newer than this build has been published.",
+    "u6n a build newer than every published note shows nothing, and About says No version newer than this build has been published., not that the check failed");
   onUpdate({ offer: "", look: "failed" });
   const failLine = "Whether a newer version exists could not be checked just now. This one works as it is.";
   check(dot.hidden && row.hidden && UP.updateAbout("2.0.0").lines[1] === failLine, "u6i a look that failed shows nothing but About's could-not-check line");
