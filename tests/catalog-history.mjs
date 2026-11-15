@@ -21,7 +21,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 27;
+const EXPECTED = 28 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 1);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -51,7 +51,7 @@ const safeStorage = {
 };
 /* One evaluation of main.js is one run of the app: its handlers, and a line appended to its body that hands over what
    a leg needs to reach. A second boot over the same folders is the next launch. */
-function boot() {
+function boot(src) {
   const on = {}, handle = {}, test = {};
   const electron = {
     app: { getPath: n => (n === "documents" ? DOCS : UD), setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
@@ -62,7 +62,7 @@ function boot() {
   };
   process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
   new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
-    fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8")
+    (src || fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8"))
     + "\n__test.catalogChanged = catalogChanged; __test.teamKeys = teamKeys;"
     + " __test.historyKept = typeof historyKept === \"function\" ? historyKept : null;"
     + " __test.relayHere = function() { return relayHere(); };"
@@ -168,6 +168,74 @@ try {
   check(!!saved && saved.ok === true && outV.length === 2 && outV.some(v => v.sha === sha(Buffer.from(before)) && !v.wrote)
     && outV.some(v => v.sha === sha(Buffer.from(exported)) && v.wrote),
     "1h an export over an existing file keeps the bytes it replaces, then what it wrote (" + outV.length + " versions)");
+
+  /* 1i (Grok's review 23, finding 6): where the history cannot keep anything (its folder is a file here), an export over an
+     existing file and the desk's own write each stop, the file left byte for byte as it was; the same two with the history
+     back write as before. */
+  {
+    const OUT2 = path.join(ELSEWHERE, "r23", "shop.ec"), was = catalog("shop", 7, "Was here");
+    fs.mkdirSync(path.dirname(OUT2), { recursive: true });
+    write(OUT2, was);
+    const ownWas = OWN ? fs.readFileSync(OWN, "utf8") : "";
+    const ownNext = catalog(me ? me.id + "-" + tail : "x", 1, "Mine again", { desk: me ? { id: me.id, key: me.key, box: me.box, name: "Ala K." } : {} });
+    const exportTo = async () => {
+      process.env.ETIUDA_TEST_SAVE_AS = path.dirname(OUT2);
+      try {
+        await A.ask("etiuda:choose-catalog-save", "Export", "shop.ec", "Etiuda catalog");
+        return await A.ask("etiuda:write-catalog-save", catalog("shop-y", 1, "Exported again"), null);
+      } finally { delete process.env.ETIUDA_TEST_SAVE_AS; }
+    };
+    fs.renameSync(HIST, HIST + ".away");
+    fs.writeFileSync(HIST, "not a folder");
+    let broken = null;
+    try {
+      const out = await exportTo(), own = await A.ask("etiuda:branch-write", "shop-" + tail, ownNext);
+      broken = { exportOk: !!out && out.ok === true, exportKept: fs.readFileSync(OUT2, "utf8") === was,
+        ownOk: !!own && own.ok === true, ownKept: !!OWN && fs.readFileSync(OWN, "utf8") === ownWas };
+    } finally {
+      fs.unlinkSync(HIST);
+      fs.renameSync(HIST + ".away", HIST);
+    }
+    const outBack = await exportTo(), ownBack = await A.ask("etiuda:branch-write", "shop-" + tail, ownNext);
+    const back = { exportOk: !!outBack && outBack.ok === true, exportWrote: fs.readFileSync(OUT2, "utf8") !== was,
+      ownOk: !!ownBack && ownBack.ok === true, ownWrote: !!OWN && fs.readFileSync(OWN, "utf8") !== ownWas,
+      wasKept: of(OUT2).some(v => v.sha === sha(Buffer.from(was))) };
+    check(!broken.exportOk && broken.exportKept && !broken.ownOk && broken.ownKept
+      && back.exportOk && back.exportWrote && back.ownOk && back.ownWrote && back.wasKept,
+      "1i where the history cannot keep the bytes a write replaces, an export and the desk's own write stop and the file stays as it"
+      + " was; THE CONTROL, the history back, both write and the replaced bytes are kept: " + JSON.stringify({ broken: broken, back: back }));
+    /* The plants, lifted in a second run of a copy over the same folders: each write goes through again with the history broken. */
+    if (process.env.ETIUDA_PLANTS === "off") { console.log("  SKIP 1i lifting plant:export-keeps-first and plant:branch-keeps-first (ETIUDA_PLANTS=off)"); }
+    else {
+      const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").split("\n");
+      const lift = (tag, line) => { const at = MAIN.map((l, i) => (l.indexOf(tag) >= 0 ? i : -1)).filter(i => i >= 0); if (at.length !== 1) return null; const c = MAIN.slice(); c[at[0]] = line; return c.join("\n"); };
+      const liftedSrc = lift("plant:export-keeps-first", "    if (false) {");
+      let turned = null;
+      if (liftedSrc && lift("plant:branch-keeps-first", "") !== null) {
+        const src = liftedSrc.split("\n").map(l => (l.indexOf("plant:branch-keeps-first") >= 0 ? "" : l)).join("\n");
+        const B = boot(src);
+        await B.ask("etiuda:branch-identity", true);
+        const outWas = fs.readFileSync(OUT2, "utf8"), ownNow = OWN ? fs.readFileSync(OWN, "utf8") : "";
+        const ownThird = catalog(me ? me.id + "-" + tail : "x", 1, "Mine a third time", { desk: me ? { id: me.id, key: me.key, box: me.box, name: "Ala K." } : {} });
+        fs.renameSync(HIST, HIST + ".away");
+        fs.writeFileSync(HIST, "not a folder");
+        try {
+          process.env.ETIUDA_TEST_SAVE_AS = path.dirname(OUT2);
+          await B.ask("etiuda:choose-catalog-save", "Export", "shop.ec", "Etiuda catalog");
+          await B.ask("etiuda:write-catalog-save", catalog("shop-z", 1, "Lifted"), null);
+          delete process.env.ETIUDA_TEST_SAVE_AS;
+          await B.ask("etiuda:branch-write", "shop-" + tail, ownThird);
+          turned = { exportOver: fs.readFileSync(OUT2, "utf8") !== outWas, ownOver: !!OWN && fs.readFileSync(OWN, "utf8") !== ownNow };
+        } finally {
+          delete process.env.ETIUDA_TEST_SAVE_AS;
+          fs.unlinkSync(HIST);
+          fs.renameSync(HIST + ".away", HIST);
+        }
+      }
+      check(!!turned && turned.exportOver && turned.ownOver,
+        "1i lifting plant:export-keeps-first and plant:branch-keeps-first writes over both files with the history broken: " + JSON.stringify(turned));
+    }
+  }
 
   /* ---- the list, the open and the putting back ---------------------------------------------------------------------- */
   const list = await A.ask("etiuda:history-list");

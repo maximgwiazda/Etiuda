@@ -3080,9 +3080,13 @@ function writeBranch(stem, text) {
     }
     const written = toLead ? JSON.stringify(sealBranchLead(toLead.box, toLead.team, String(toLead.lead.keyId), me.id, boxed), null, 1) + "\n"
       : seal ? JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, signed), null, 1) + "\n" : signed;
+    /* The history is this desk's own, kept on this computer, so it keeps the copy itself and not the lead's envelope. The new
+       bytes are kept before they land, and a file there the history never kept is kept first: a write the history cannot
+       follow is held, so no edition is lost without a copy. */
+    const keptText = toLead ? signed : written;
+    const prior = historyRead().versions.some(v => v.path === path.resolve(at.dest)) ? { none: true } : historyKeepFile(at.dest);
+    if (!prior || (Buffer.byteLength(keptText, "utf8") <= BRANCH_TEXT_MAX && !historyKeep(at.dest, keptText, true))) return branchHold(stem, text); /* plant:branch-keeps-first */
     writeReplacing(at.dest, written);
-    /* The history is this desk's own, kept on this computer, so it keeps the copy itself and not the lead's envelope. */
-    historyKeep(at.dest, toLead ? signed : written, true);
     tidy();
     branchRevs[id] = doc.rev;
     persistDeskEnvelope();
@@ -7490,7 +7494,7 @@ function historyKeepFile(file) {
   try { text = fs.readFileSync(file, "utf8"); }
   catch (e) { return e.code === "ENOENT" ? { none: true } : null; }
   const buf = Buffer.from(text, "utf8");
-  if (!text || historyShipped(buf, sha256Hex(buf))) return { none: true };
+  if (!text || isBuiltIn(path.resolve(String(file))) || buf.length > BRANCH_TEXT_MAX || historyShipped(buf, sha256Hex(buf))) return { none: true };
   const entry = historyKeep(file, text, false);
   return entry ? { entry: entry } : null;
 }
@@ -9268,7 +9272,11 @@ ipcMain.handle("etiuda:write-catalog-save", async (e, text, from) => {
       console.error("etiuda: " + p.file + " was not written: it is a sealed team's catalog this desk cannot seal");
       return { name: path.basename(p.file), ok: false, sealed: true };
     }
-    historyKeepFile(p.file);
+    /* The bytes an export replaces are kept first, or nothing is written: no catalog is lost without a copy. */
+    if (!historyKeepFile(p.file)) { /* plant:export-keeps-first */
+      console.error("etiuda: " + p.file + " was not written: the bytes it would replace could not be kept first");
+      return { name: path.basename(p.file), ok: false };
+    }
     await writeReplacingAsync(p.file, out);
     historyKeep(p.file, out, true);
     return out === String(text || "") ? { name: path.basename(p.file), ok: true } : { name: path.basename(p.file), ok: true, sealed: true };
