@@ -150,6 +150,15 @@ function shut(ws, reason) {
 /* A sweep whose delete of some object failed rings again after this long, for those objects alone. */
 const SWEEP_RETRY_MS = 60 * 60 * 1000;
 
+/* The one log line of a wake that renamed or dropped rows: the counts by family, and nothing that names a key, a desk or a team.
+   Null where nothing changed. */
+function migrationLine(n) {
+  const renamed = n.dev + n.gone + n.bk + n.inv + n.dd + n.tf, dropped = n.devDropped + n.ses;
+  if (renamed + dropped === 0) return null;
+  return "relay one-spelling migration: renamed " + renamed + " (dev " + n.dev + ", gone " + n.gone + ", bk " + n.bk + ", inv " + n.inv
+    + ", dd " + n.dd + ", tf " + n.tf + "); dropped " + dropped + " (dev " + n.devDropped + ", ses " + n.ses + ")";
+}
+
 function teamObject(deps) {
   /* Keys the Worker decided for this request. Empty is a list, so a flag, not the array, says whether it was sent.
      Those keys stay for a later call with no header, while this wake lasts, and in the team's own row ("kept") across a hibernation,
@@ -190,6 +199,17 @@ function teamObject(deps) {
   }
   const c = core.createCore({ store: deps.store, clock: deps.clock, limits: deps.limits, roots: deps.roots,
     revoked: revokedNow });
+  /* The old relay's raw-keyed rows, renamed once on the first wake that finds a team (core.migrateDeskIds). Nobody can list a
+     deployed relay's storage, so the wake that changed anything says so in one line of counts, with no key or id in it; a wake that
+     changed nothing writes no line. A throw rolls the step back and the next wake tries again. */
+  let migrate = false;
+  migrate = true; /* plant:desk-id-migrate */
+  if (migrate) {
+    try {
+      const line = migrationLine(core.migrateDeskIds(deps.store));
+      if (line) (typeof deps.log === "function" ? deps.log : console.log)(line);
+    } catch { /* left for the next wake */ }
+  }
   const r2 = deps.r2, sockets = deps.sockets, alarm = deps.alarm || null;
   const prefix = apiPrefixOf(Object.prototype.hasOwnProperty.call(deps, "prefix") ? { API_PREFIX: deps.prefix } : undefined);
   const answer = (r, shape) => (r.ok ? reply(200, shape(r)) : refused(r));
@@ -230,34 +250,57 @@ function teamObject(deps) {
       return reply(200, { ok: true });
     }
     const row = deps.store.get("lead");
-    let rts = row && Array.isArray(row.rts) ? row.rts.filter(x => typeof x === "string") : [];
+    const rts = row && Array.isArray(row.rts) ? row.rts.filter(x => typeof x === "string") : [];
     const leadKey = lead || (row && row.leadKey) || null;
-    if (rts.indexOf(rt) !== -1) return reply(200, { ok: true, added: false }); /* plant:lead-repeat */
-    let full = rts.length >= TEAMS_PER_LEAD;
-    if (full) {
-      const ns = namespaceOf(deps.teams);
-      if (ns) {
-        const live = [];
-        for (const id of rts) {
-          let holds = true;
-          try { holds = await asksHeld(ns, id, leadKey); } catch { holds = true; }
-          if (holds) live.push(id);
-        }
-        rts = live; /* plant:lead-reap */
-        await keepLead(row, rts, leadKey);
-        full = rts.length >= TEAMS_PER_LEAD;
+    let repeats = false;
+    repeats = true; /* plant:lead-repeat */
+    if (repeats && rts.indexOf(rt) !== -1) return reply(200, { ok: true, added: false });
+    const ns = rts.length >= TEAMS_PER_LEAD ? namespaceOf(deps.teams) : null;
+    const dead = new Set();
+    if (ns) {
+      for (const id of rts) {
+        let holds = true;
+        try { holds = await asksHeld(ns, id, leadKey); } catch { holds = true; }
+        if (!holds) dead.add(id);
       }
     }
-    if (full) return refusedFor("team-count"); /* plant:team-count */
-    rts.push(rt);
-    await keepLead(row, rts, leadKey);
-    return reply(200, { ok: true, added: true });
+    /* Another reserve may have written the list while this one asked (finding 5 of the fourth Grok review of 3cc09cb5): the list is
+       read again after the asks, the ids found dead are dropped from what stands now, and the count, the push and the write are one
+       atomic step, so a place another reserve took is counted. The alarm follows the step. */
+    const step = deps.store.atomic(() => {
+      let now = row;
+      now = deps.store.get("lead"); /* plant:lead-reread */
+      let list = now && Array.isArray(now.rts) ? now.rts.filter(x => typeof x === "string") : [];
+      if (repeats && list.indexOf(rt) !== -1) return { answer: reply(200, { ok: true, added: false }), kept: null };
+      let kept = null;
+      if (ns) {
+        let left = list;
+        left = list.filter(id => !dead.has(id)); /* plant:lead-reap */
+        list = left;
+        kept = writeLead(now, list, leadKey);
+      }
+      const full = list.length >= TEAMS_PER_LEAD;
+      if (full) return { answer: refusedFor("team-count"), kept }; /* plant:team-count */
+      list.push(rt);
+      return { answer: reply(200, { ok: true, added: true }), kept: writeLead(now, list, leadKey) };
+    });
+    if (step.kept !== null) await alarmLead(step.kept);
+    return step.answer;
   }
-  /* The lead's list written, or deleted where it names no team, and its alarm set LEAD_KEEP_MS on or cleared with it. */
-  async function keepLead(row, rts, leadKey) {
-    if (!rts.length) { deps.store.del("lead"); if (alarm) await alarm.clear(); return; } /* plant:lead-empty */
+  /* The lead's list written, or deleted where it names no team, and its alarm set LEAD_KEEP_MS on or cleared with it. The write is
+     synchronous, so it can sit inside an atomic step, and answers whether a list was kept; the alarm follows it. */
+  function writeLead(row, rts, leadKey) {
+    if (!rts.length) { deps.store.del("lead"); return false; } /* plant:lead-empty */
     deps.store.put("lead", Object.assign({}, row, { rts }, leadKey ? { leadKey } : {}));
-    if (alarm) await alarm.set(deps.clock() + LEAD_KEEP_MS);
+    return true;
+  }
+  async function alarmLead(kept) {
+    if (!alarm) return;
+    if (kept) await alarm.set(deps.clock() + LEAD_KEEP_MS);
+    else await alarm.clear();
+  }
+  async function keepLead(row, rts, leadKey) {
+    await alarmLead(writeLead(row, rts, leadKey));
   }
   /* A lead's list asked again: each team it names asked whether it still holds, a throw keeping the id; the list kept as what holds. */
   async function leadAlarm(row) {
