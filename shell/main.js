@@ -4176,14 +4176,16 @@ function policyWords(facts, lang) {
   return { folder: facts.folder, lead: facts.lead, said: facts.bad.map(k => words[k]), noUpdate: facts.noUpdate === true, unread: facts.unread === true };
 }
 function joinPolicyFrom(text, lang) { return policyWords(joinPolicyFacts(text), lang); }
-let joinPolicyRead = null;
-/* Read once a run, whatever the language. The one program started is reg.exe at its fixed path, exporting
+/* A read that failed is asked again at the first ask once this has passed, so one failure does not stand for the run. */
+const POLICY_REREAD_MS = 60 * 60 * 1000;
+let joinPolicyRead = null, joinPolicyReadAt = 0;
+/* Read once a run, whatever the language, unless the read failed (POLICY_REREAD_MS). The one program started is reg.exe at its fixed path, exporting
    this one key to a scratch file, which holds the registry's own UTF-16 where reg's printing would be in the
    console's code page. A failure, and any system but Windows, is no policy; reg's own exit 1 is a key that is not there,
    and any other failure is a read that failed, kept as unread. The scratch file and its folder go whatever happens, and
    nothing of them is logged. */
 function readJoinPolicy(lang) {
-  if (joinPolicyRead === null) {
+  if (joinPolicyRead === null || (joinPolicyRead.unread && Date.now() - joinPolicyReadAt >= POLICY_REREAD_MS)) { /* plant:policy-reread */
     let text = "", unread = false;
     if (process.platform === "win32") {
       let dir = "", file = "";
@@ -4201,12 +4203,17 @@ function readJoinPolicy(lang) {
       }
     }
     joinPolicyRead = joinPolicyFacts(text, unread);
+    joinPolicyReadAt = Date.now();
   }
   return policyWords(joinPolicyRead, lang);
 }
-/* True where machine policy turns the version look off; read with the team values, once a run. */
+/* True where machine policy turns the version look off, or where the key was there and its read failed, so a switch the read
+   missed is not taken as unset; read with the team values. updateLookUnsure says which. */
 function updateLookOff() {
-  try { return readJoinPolicy("en").noUpdate === true; } catch { return false; }
+  try { const p = readJoinPolicy("en"); return p.noUpdate === true || p.unread === true; } catch { return true; } /* plant:look-off-unread */
+}
+function updateLookUnsure() {
+  try { return readJoinPolicy("en").unread === true; } catch { return true; }
 }
 /* THE DESK'S OPTIONAL CUSTOMER MODEL (board 992). Off by default; on, the organisation's own service ranks the search and the
    suggestions, and deskAiConfig is the one place its address and key are handed on. The person's choice and fields are kept in
@@ -4445,13 +4452,13 @@ ipcMain.on("etiuda:desk-ai-settings", (e) => {
 });
 ipcMain.handle("etiuda:desk-ai-save", (e, fields) => (fromEngine(e) ? deskAiSave(fields) : { ok: false, why: "refused", settings: null }));
 ipcMain.handle("etiuda:desk-ai-test", (e) => (fromEngine(e) ? deskAiTest() : { ok: false, why: "refused", host: "", model: "" }));
-let joinPolicySaid = false;
+let joinPolicySaid = null;
 function sayJoinPolicy() {
   let lang = "en";
   try { if (shellWords().lang === "pl") lang = "pl"; } catch { lang = "en"; }
   const got = readJoinPolicy(lang);
-  if (!joinPolicySaid) {
-    joinPolicySaid = true;
+  if (joinPolicySaid !== joinPolicyRead) {
+    joinPolicySaid = joinPolicyRead;
     got.said.forEach(teamSay);
     if (got.unread) teamSay("machine policy for Etiuda was there to read and could not be read, so this desk runs as though none were set");
     policyLetsInviteGo(got);
@@ -10774,7 +10781,12 @@ async function lookForNote(fetchFn) {
 /* A first look a minute after the window opens, then hourly. Never from the harness's own window, so no leg reaches out. */
 function armNoteLook() {
   /* Not from any harness start (harnessLaunch: --user-data-dir or a test variable), so no leg ever asks production etiuda.dev. */
-  if (PLACED_ASIDE || harnessLaunch() || updateLookOff() || noteTimer || !net || typeof net.fetch !== "function") return;
+  if (PLACED_ASIDE || harnessLaunch() || noteTimer || !net || typeof net.fetch !== "function") return;
+  if (updateLookOff()) {
+    /* A key there and unread is asked again when the reader would read it again, and the look follows that answer. */
+    if (updateLookUnsure()) { noteTimer = setTimeout(() => { noteTimer = null; armNoteLook(); }, POLICY_REREAD_MS); if (noteTimer.unref) noteTimer.unref(); } /* plant:look-rearm */
+    return;
+  }
   const next = () => {
     lookForNote((u, init) => deskFetch(u, init)).catch(() => {});
     noteTimer = setTimeout(next, NOTE_EVERY_MS);

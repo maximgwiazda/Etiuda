@@ -27,7 +27,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
-const EXPECTED = 15;
+const EXPECTED = 17;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -73,7 +73,7 @@ function load(src, markers, names, params, args) {
   return new Function(...params, body + "\nreturn { " + names.join(", ") + " };")(...args);
 }
 
-const POLICY_DECLS = ["const REG_TOOL =", "const POLICY_KEY =", "const POLICY_LEAD_RE =", "const POLICY_WORDS =",
+const POLICY_DECLS = ["const REG_TOOL =", "const POLICY_KEY =", "const POLICY_REREAD_MS =", "const POLICY_LEAD_RE =", "const POLICY_WORDS =",
   "const POLICY_HEAD =", "const POLICY_EXPORT_LINE =", "function policyValues(", "function policyExpand(",
   "function policyRegSz(", "function policyFolderOk(", "function policyLeadOk(", "function policyNoUpdate(", "function joinPolicyFacts(",
   "function policyWords(", "function joinPolicyFrom(", "let joinPolicyRead =", "function readJoinPolicy("];
@@ -1118,6 +1118,55 @@ function policyToPage(shell) {
       return p.length ? "" : name + " lifted and 19m still green";
     }).filter(Boolean);
     check(lifts.length === 0, "19m lifting plant:policy-said-view and plant:policy-unread each turns 19m red: " + (lifts.join("; ") || "both red"));
+  }
+}
+
+/* 19n: A READ THAT FAILED KEEPS THE VERSION LOOK OFF, AND IS TRIED AGAIN (Grok's review 17 of the update offer, finding 4).
+   reg stopped at its timeout: the look is off, since a DeskNoUpdateCheck the read missed is not taken as unset, and a second
+   ask at once starts no second reg. Two hours on, the key is read again, and its 0 leaves the look on; a read that worked is
+   not read again. Lifting plant:policy-reread keeps the failed read for the run, and plant:look-off-unread lets it arm. */
+function lookUnderFailedRead(src) {
+  const problems = [];
+  let calls = 0;
+  const answer = (file, args) => {
+    calls++;
+    if (calls === 1) { const e = new Error("spawnSync reg.exe ETIMEDOUT"); e.code = "ETIMEDOUT"; e.status = null; throw e; }
+    fs.writeFileSync(args[2], exportBytes([["DeskNoUpdateCheck", "REG_DWORD", 0]]));
+    return null;
+  };
+  const R = load(src, POLICY_DECLS.concat(["function updateLookOff("]).filter(m => src.indexOf(m) >= 0), ["readJoinPolicy", "updateLookOff"],
+    POLICY_NAMES, [answer, { platform: "win32" }, fs, os, path]);
+  const realNow = Date.now;
+  let shift = 0;
+  Date.now = () => realNow() + shift;
+  try {
+    const first = R.updateLookOff(), again = R.updateLookOff(), callsSoon = calls;
+    shift = 2 * 60 * 60 * 1000;
+    const later = R.updateLookOff(), callsLater = calls;
+    shift = 5 * 60 * 60 * 1000;
+    R.updateLookOff();
+    if (first !== true || again !== true || callsSoon !== 1) problems.push("the failed read: off " + first + " then " + again + ", reg " + callsSoon + " time(s)");
+    if (later !== false || callsLater !== 2) problems.push("two hours on: off " + later + ", reg " + callsLater + " time(s)");
+    if (calls !== 2) problems.push("a read that worked was read again: reg " + calls + " time(s)");
+  } finally { Date.now = realNow; }
+  return problems;
+}
+{
+  let problems = [];
+  try { problems = lookUnderFailedRead(SRC); } catch (e) { problems.push("harness: " + e.message); }
+  check(problems.length === 0, "19n a policy read that failed keeps the version look off and is tried again after its interval, once,"
+    + " and a read that worked stands: " + (problems.join("; ") || "off, then read again and on"));
+  if (PLANTS_OFF) skip("19n lifting plant:policy-reread and plant:look-off-unread each turns 19n red (ETIUDA_PLANTS=off)");
+  else {
+    const lifts = [["policy-reread", "  if (joinPolicyRead === null) {"],
+      ["look-off-unread", "  try { return readJoinPolicy(\"en\").noUpdate === true; } catch { return false; }"]].map(([name, line]) => {
+      const src = liftPlant(SRC, name, line);
+      if (!src) return name + " not on exactly one line";
+      let p = [];
+      try { p = lookUnderFailedRead(src); } catch (e) { p = ["harness: " + e.message]; }
+      return p.length ? "" : name + " lifted and 19n still green";
+    }).filter(Boolean);
+    check(lifts.length === 0, "19n lifting plant:policy-reread and plant:look-off-unread each turns 19n red: " + (lifts.join("; ") || "both red"));
   }
 }
 
