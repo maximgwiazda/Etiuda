@@ -73,7 +73,7 @@ function load(src, markers, names, params, args) {
   return new Function(...params, body + "\nreturn { " + names.join(", ") + " };")(...args);
 }
 
-const POLICY_DECLS = ["const REG_TOOL =", "const POLICY_KEY =", "const POLICY_REREAD_MS =", "const POLICY_LEAD_RE =", "const POLICY_WORDS =",
+const POLICY_DECLS = ["const REG_TOOL =", "const POLICY_KEY =", "const POLICY_REREAD_MS =", "const POLICY_LOOK_MS =", "const POLICY_LEAD_RE =", "const POLICY_WORDS =",
   "const POLICY_HEAD =", "const POLICY_EXPORT_LINE =", "function policyValues(", "function policyExpand(",
   "function policyRegSz(", "function policyFolderOk(", "function policyLeadOk(", "function policyNoUpdate(", "function joinPolicyFacts(",
   "function policyWords(", "function joinPolicyFrom(", "const POLICY_GOOD_FILE =", "function policyGoodLoad(", "function policyGoodSave(",
@@ -1129,7 +1129,7 @@ function policyToPage(shell) {
 /* 19n: A READ THAT FAILED KEEPS THE VERSION LOOK OFF, AND IS TRIED AGAIN (Grok's review 17 of the update offer, finding 4).
    reg stopped at its timeout: the look is off, since a DeskNoUpdateCheck the read missed is not taken as unset, and a second
    ask at once starts no second reg. Two hours on, the key is read again, and its 0 leaves the look on; a read that worked is
-   not read again. Lifting plant:policy-reread keeps the failed read for the run, and plant:look-off-unread lets it arm. */
+   read again only once its minute has passed (review 28, finding 4). Lifting plant:policy-reread keeps the failed read for the run, and plant:look-off-unread lets it arm. */
 function lookUnderFailedRead(src) {
   const problems = [];
   let calls = 0;
@@ -1152,7 +1152,7 @@ function lookUnderFailedRead(src) {
     R.updateLookOff();
     if (first !== true || again !== true || callsSoon !== 1) problems.push("the failed read: off " + first + " then " + again + ", reg " + callsSoon + " time(s)");
     if (later !== false || callsLater !== 2) problems.push("two hours on: off " + later + ", reg " + callsLater + " time(s)");
-    if (calls !== 2) problems.push("a read that worked was read again: reg " + calls + " time(s)");
+    if (calls !== 3) problems.push("a read that worked, three hours on, was read " + (calls - 2) + " more time(s), not once");
   } finally { Date.now = realNow; }
   return problems;
 }

@@ -4244,14 +4244,18 @@ function policyGoodSave(facts) {
 }
 /* A read that failed is asked again at the first ask once this has passed, so one failure does not stand for the run. */
 const POLICY_REREAD_MS = 60 * 60 * 1000;
+/* How often a running desk reads the key again, so a policy turned off, or an AiKey removed, stops the next send within about
+   a minute (review 28, finding 4). */
+const POLICY_LOOK_MS = 60 * 1000;
 let joinPolicyRead = null, joinPolicyReadAt = 0, joinPolicyGood = null;
-/* Read once a run, whatever the language, unless the read failed (POLICY_REREAD_MS). The one program started is reg.exe at its fixed path, exporting
+/* Read at the first ask, whatever the language, then again at an ask a minute later (POLICY_LOOK_MS), and an hour after a read
+   that failed (POLICY_REREAD_MS), which the minute already covers. The one program started is reg.exe at its fixed path, exporting
    this one key to a scratch file, which holds the registry's own UTF-16 where reg's printing would be in the
    console's code page. A failure, and any system but Windows, is no policy; reg's own exit 1 is a key that is not there,
    and any other failure is a read that failed, kept as unread. The scratch file and its folder go whatever happens, and
    nothing of them is logged. */
 function readJoinPolicy(lang) {
-  if (joinPolicyRead === null || (joinPolicyRead.unread && Date.now() - joinPolicyReadAt >= POLICY_REREAD_MS)) { /* plant:policy-reread */
+  if (joinPolicyRead === null || (joinPolicyRead.unread && Date.now() - joinPolicyReadAt >= POLICY_REREAD_MS) || Date.now() - joinPolicyReadAt >= POLICY_LOOK_MS) { /* plant:policy-reread */
     let text = "", unread = false;
     if (process.platform === "win32") {
       let dir = "", file = "";
@@ -4354,16 +4358,19 @@ function deskAiJoin(me, org) {
   const pick = (a, b) => (a ? { value: a, managed: true } : { value: typeof b === "string" ? b : "", managed: false });
   const choiceSet = o.on === true || o.on === false;
   const provider = pick(o.provider, p.provider), model = pick(o.model, p.model);
+  const endpointBad = Array.isArray(o.ignored) && o.ignored.indexOf("AiEndpoint") > -1; /* plant:policy-bad-endpoint */
   /* The person's address belongs to the service the person chose, so it is not carried over to another the policy chose. */
   const endpoint = pick(o.endpoint, o.provider && o.provider !== p.provider ? "" : p.endpoint);
   const service = deskAiService(provider.value);
-  const at = !service ? "" : endpoint.value ? deskAiEndpointShape(endpoint.value, provider.value) : service.endpoint;
-  const home = endpoint.managed || (at !== "" && service && at === service.endpoint);
+  const at = !service || endpointBad ? "" : endpoint.value ? deskAiEndpointShape(endpoint.value, provider.value) : service.endpoint;
+  /* A policy key goes only to a service or address the policy itself named, never to a vendor chosen here alone. */
+  const keyUnpinned = !!o.key && !provider.managed && !endpoint.managed && !endpointBad; /* plant:policy-key-pinned-service */
+  const home = !endpointBad && !keyUnpinned && (endpoint.managed || (at !== "" && service && at === service.endpoint));
   return {
     on: choiceSet ? o.on : p.choice === "organisation",
-    provider: provider.value, given: endpoint.value, endpoint: at, model: model.value,
-    managed: { choice: choiceSet, provider: provider.managed, endpoint: endpoint.managed, model: model.managed, key: !!o.key },
-    keyAway: !!o.key && !home,
+    provider: provider.value, given: endpointBad ? "" : endpoint.value, endpoint: at, model: model.value,
+    managed: { choice: choiceSet, provider: provider.managed, endpoint: endpoint.managed || endpointBad, model: model.managed, key: !!o.key },
+    keyAway: !!o.key && !home, keyNoService: keyUnpinned,
   };
 }
 function deskAiReadyOf(j, key) { return !!(j && deskAiService(j.provider) && j.endpoint && j.model && key); }
@@ -4374,7 +4381,7 @@ function deskAiAnswer(j, keyIn, ignored, sealable, stored) {
   return {
     choice: j.on ? "organisation" : "builtin", on: !!j.on, ready: !!j.on && deskAiReadyOf(j, keyIn),
     provider: j.provider, endpoint: j.given, at: j.endpoint, host: host, model: j.model,
-    keyKept: !!keyIn || !!stored, keyAway: !!j.keyAway, managed: Object.assign({}, j.managed),
+    keyKept: !!keyIn || !!stored, keyAway: !!j.keyAway, keyNoService: !!j.keyNoService, managed: Object.assign({}, j.managed),
     ignored: Array.isArray(ignored) ? ignored.slice() : [], sealable: !!sealable,
     services: Object.keys(DESK_AI_SERVICES).map(id => ({ id: id, endpoint: DESK_AI_SERVICES[id].endpoint })),
   };
@@ -4422,18 +4429,20 @@ function deskAiPolicy() {
   return deskAiPolicyFrom(joinPolicyRead && joinPolicyRead.values);
 }
 /* WHAT IS IN FORCE, KEPT IN MEMORY: every search, picker opening and the page's two-second look asks deskAiConfig, so the two
-   files are read and the key unsealed once, and again only after deskAiForget (every save or forget from Settings) or a new
-   reading of machine policy. A file edited behind the running desk's back is read at the next save or start. */
+   files are read and the key unsealed once, and again only after deskAiForget (every save or forget from Settings), a file
+   change on disk (such as deleting the key file) or a new reading of machine policy (at most once a minute). */
 let deskAiKept = null;
 function deskAiForget() { deskAiKept = null; }
 /* Everything in force now: {joined, policy, key}, the key the one a request would carry, "" where none would go. */
 function deskAiNow() {
   const policy = deskAiPolicy();
-  if (deskAiKept && deskAiKept.from === joinPolicyRead) return deskAiKept.now;
+  const stampOf = name => { try { const st = fs.statSync(deskAiPath(name)); return st.mtimeMs + ":" + st.size; } catch { return ""; } };
+  const stamp = stampOf(DESK_AI_FILE) + "|" + stampOf(DESK_AI_KEY_FILE);
+  if (deskAiKept && deskAiKept.from === joinPolicyRead && deskAiKept.stamp === stamp) return deskAiKept.now; /* plant:desk-ai-key-stamp */
   const joined = deskAiJoin(deskAiPerson(), policy);
   const key = policy.key ? (joined.keyAway ? "" : policy.key) : deskAiKeyFor(joined.endpoint);
   const now = { joined: joined, policy: policy, key: key };
-  deskAiKept = { from: joinPolicyRead, now: now };
+  deskAiKept = { from: joinPolicyRead, stamp: stamp, now: now };
   return now;
 }
 /** THE ONE PLACE THE ADDRESS AND THE KEY ARE HANDED ON. Null while the option is off or anything a request needs is missing;
@@ -4506,6 +4515,7 @@ function deskAiTest() {
   try { now = deskAiNow(); } catch { return Promise.resolve({ ok: false, why: "none", host: "", model: "" }); }
   const j = now.joined, a = deskAiAnswer(j, !!now.key, [], false);
   const said = why => Promise.resolve({ ok: false, why: why, host: a.host, model: j.model });
+  if (j.keyNoService) return said("keyNoService");
   if (!deskAiService(j.provider)) return said("provider");
   if (!j.endpoint) return said("endpoint");
   if (!j.model) return said("model");

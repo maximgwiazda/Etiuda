@@ -33,16 +33,18 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "shell");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 60;
+const EXPECTED = 68;
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The shell-to-page event that carries each re-order's outcome; the page-to-shell sync request "etiuda:ai-state" is another. */
 const RANKING_CH = "etiuda:ai-ranking";
 
-let asserted = 0, failed = 0;
+let asserted = 0, failed = 0, notRun = 0;
 function check(ok, line) {
   asserted++;
   if (ok) console.log("  ok   " + line);
   else { failed++; console.log("  FAIL " + line); }
 }
+function skipPlant(line) { notRun++; console.log("  NOT RUN " + line); }
 /* A section that throws says so and stops there; the floor below then counts the checks it did not reach. */
 async function block(fn) {
   try { await fn(); } catch (e) { failed++; console.log("  FAIL a section stopped: " + String(e && e.message || e).split(/\r?\n/)[0]); }
@@ -93,8 +95,9 @@ const MAIN_TAIL = "\n__test.setWindow = w => { theWindow = w; }; __test.embedSug
   + " __test.deskReorder = typeof deskReorder === 'undefined' ? { ask: async () => null } : deskReorder;"
   + " __test.orgSearch = typeof orgSearch === 'function' ? orgSearch : async () => {};"
   + " __test.deskAiProbe = typeof deskAiProbe === 'function' ? deskAiProbe : async () => ({});"
-  /* Machine policy is read as none, so the real reader never runs reg.exe in a leg. */
-  + " if (typeof joinPolicyFacts === 'function') joinPolicyRead = joinPolicyFacts('');";
+  + " __test.deskAiConfig = typeof deskAiConfig === 'function' ? deskAiConfig : () => null;"
+  /* Machine policy is read from __test.policyText unless a leg uses a stubbed child_process. */
+  + " if (!__test.useRealPolicyReader && typeof joinPolicyFacts === 'function') { joinPolicyRead = joinPolicyFacts(__test.policyText || ''); if (typeof joinPolicyReadAt !== 'undefined') joinPolicyReadAt = Date.now(); }";
 const ENGINE = { sender: { id: 1, once: () => {} }, senderFrame: { parent: null, url: "file:///C:/lab/engine/etiuda.html" } };
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 
@@ -142,8 +145,8 @@ function loadMain(opts) {
   };
   const aiCopy = o.aiSrc ? aiFrom(o.aiSrc) : null;
   const fakeRequire = n => (n === "electron" ? electron : aiCopy && /desk-ai\.cjs$/.test(String(n)) ? aiCopy
-    : o.fs && n === "node:fs" ? o.fs : nodeRequire(n));
-  const T = {};
+    : o.fs && n === "node:fs" ? o.fs : o.childProcess && n === "node:child_process" ? o.childProcess : nodeRequire(n));
+  const T = { policyText: o.policyText || "", useRealPolicyReader: !!o.childProcess };
   const quiet = { log: () => {}, error: () => {}, warn: () => {}, info: () => {} };
   new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test", (o.mainSrc || MAIN_SRC) + MAIN_TAIL)(
     fakeRequire, SHELL, path.join(SHELL, "main.js"), { exports: {} }, {}, quiet, T);
@@ -786,7 +789,7 @@ await block(async () => {
   const r = await cacheDrive();
   check(r.two.setting === 1 && r.two.key === 1 && r.asked === 2 && r.saved && r.after === 3 && r.model === "plant-model-2",
     "da13 two searches read the setting and the key once between them, and a save makes the next read fresh: " + JSON.stringify(r));
-  const lifted = await cacheDrive(edited(MAIN_SRC, "  if (deskAiKept && deskAiKept.from === joinPolicyRead) return deskAiKept.now;\n", ""));
+  const lifted = await cacheDrive(edited(MAIN_SRC, "  if (deskAiKept && deskAiKept.from === joinPolicyRead && deskAiKept.stamp === stamp) return deskAiKept.now; /* plant:desk-ai-key-stamp */\n", ""));
   check(lifted.two.setting > 1, "da13p with the kept configuration lifted, the leg above fails: " + JSON.stringify(lifted.two));
 });
 
@@ -1000,9 +1003,221 @@ await block(async () => {
     "da21 the picker's note names the cap the shell sends, " + MESSAGE_MAX_CHARS + " characters, in English and Polish: " + (line ? "found" : "no line"));
 });
 
+/* da22 (review finding 2): a rejected policy AiEndpoint withholds the policy key and sends nothing, never falling back to the
+   provider's published address. */
+function policyExportText(rows) {
+  const esc = s => String(s).replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
+  const line = ([n, t, v]) => "\"" + esc(n) + "\"=" + (t === "REG_DWORD" ? "dword:" + (Number(v) >>> 0).toString(16).padStart(8, "0") : "\"" + esc(v) + "\"");
+  return ["Windows Registry Editor Version 5.00", "", "[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]"].concat(rows.map(line), [""]).join("\r\n") + "\r\n";
+}
+async function badPolicyEndpointDrive(provider, endpoint, mainSrc) {
+  const fetch = fetchOf(() => ({ status: 200, text: chatSaying("[2,1]") }));
+  const policyText = policyExportText([
+    ["DeskOrganisationModel", "REG_DWORD", 1],
+    ["AiProvider", "REG_SZ", provider],
+    ["AiEndpoint", "REG_SZ", endpoint],
+    ["AiModel", "REG_SZ", "plant-model"],
+    ["AiKey", "REG_SZ", "sk-test-0000"],
+  ]);
+  const ctx = loadMain({ fetch, mainSrc, policyText, answer: (op, a) => op === "search-shortlist" ? { q: a.q, gen: 1, cards: ["c1", "c2"], intents: [] } : openAnswer(op) });
+  builtinFrom(ctx.T, [{ id: "t:post", score: 0.9 }]);
+  const cfg = ctx.T.deskAiConfig();
+  const e = Object.assign({ returnValue: undefined }, ENGINE);
+  ctx.on["etiuda:desk-ai-settings"](e);
+  const st = e.returnValue;
+  const tested = await ctx.handle["etiuda:desk-ai-test"](ENGINE);
+  ctx.on["etiuda:search-set"](ENGINE, true);
+  await ctx.handle["etiuda:search-prepare"](ENGINE, ROWS);
+  await ctx.handle["etiuda:search-rank"](ENGINE, "lantern wick");
+  await tick(AI.SETTLE_MS + 60);
+  await openPicker(ctx, MESSAGE, 80);
+  return { cfg, st, tested, fetches: fetch.calls.length, urls: fetch.calls.map(c => c.url) };
+}
+await block(async () => {
+  const bads = [
+    ["openai", "http://bad.example/v1/"],
+    ["anthropic", "https://user:pw@bad.example/v1/"],
+    ["google", "https://bad.example/v1/?q=1"],
+    ["openai", "https://bad.example/v1/#frag"],
+  ];
+  const runs = [];
+  for (const [p, ep] of bads) runs.push(await badPolicyEndpointDrive(p, ep));
+  const good = await badPolicyEndpointDrive("openai", "https://good.example/v1/");
+  check(runs.every(r => r.cfg === null && r.fetches === 0 && r.tested && r.tested.ok === false && r.st && r.st.ready === false && r.st.keyAway === true && r.st.at === "")
+    && good.cfg !== null && good.fetches >= 2 && good.urls.every(u => u.indexOf("https://good.example/v1/") === 0),
+    "da22 a rejected policy AiEndpoint withholds the policy key and sends nothing, while a valid one sends: bad fetches "
+    + JSON.stringify(runs.map(r => r.fetches)) + ", good fetches " + good.fetches);
+  if (PLANTS_OFF) skipPlant("da22p lifting plant:policy-bad-endpoint sends the policy key to the provider's published address (ETIUDA_PLANTS=off)");
+  else {
+    const lifted = await badPolicyEndpointDrive("openai", "http://bad.example/v1/",
+      edited(MAIN_SRC, "const endpointBad = Array.isArray(o.ignored) && o.ignored.indexOf(\"AiEndpoint\") > -1; /* plant:policy-bad-endpoint */",
+        "const endpointBad = false;"));
+    check(lifted.fetches > 0 && lifted.urls.some(u => u.indexOf("https://api.openai.com/v1/") === 0),
+      "da22p with plant:policy-bad-endpoint lifted, the policy key leaks to the published address and the leg above fails: "
+      + JSON.stringify({ fetches: lifted.fetches, urls: lifted.urls }));
+  }
+});
+
+/* da23 (review finding 3): a policy key with neither a provider nor an address sends nothing, even when the person picks
+   openai, anthropic or google with no custom address. */
+async function unpinnedPolicyKeyDrive(personProvider, policyExtraRows, mainSrc) {
+  const fetch = fetchOf(() => ({ status: 200, text: chatSaying("[2,1]") }));
+  const rows = [
+    ["DeskOrganisationModel", "REG_DWORD", 1],
+    ["AiModel", "REG_SZ", "plant-model"],
+    ["AiKey", "REG_SZ", "sk-test-0000"],
+  ].concat(policyExtraRows || []);
+  const ctx = loadMain({ fetch, mainSrc, policyText: policyExportText(rows),
+    answer: (op, a) => op === "search-shortlist" ? { q: a.q, gen: 1, cards: ["c1", "c2"], intents: [] } : openAnswer(op) });
+  if (personProvider) {
+    fs.writeFileSync(path.join(ctx.electron.app.getPath("userData"), "desk-ai.json"),
+      JSON.stringify({ format: 1, kind: "etiuda-desk-ai", choice: "organisation", provider: personProvider, endpoint: "", model: "" }));
+  }
+  builtinFrom(ctx.T, [{ id: "t:post", score: 0.9 }]);
+  const cfg = ctx.T.deskAiConfig();
+  const e = Object.assign({ returnValue: undefined }, ENGINE);
+  ctx.on["etiuda:desk-ai-settings"](e);
+  const st = e.returnValue;
+  const tested = await ctx.handle["etiuda:desk-ai-test"](ENGINE);
+  ctx.on["etiuda:search-set"](ENGINE, true);
+  await ctx.handle["etiuda:search-prepare"](ENGINE, ROWS);
+  await ctx.handle["etiuda:search-rank"](ENGINE, "lantern wick");
+  await tick(AI.SETTLE_MS + 60);
+  await openPicker(ctx, MESSAGE, 80);
+  return { cfg, st, tested, fetches: fetch.calls.length, urls: fetch.calls.map(c => c.url) };
+}
+await block(async () => {
+  const blocked = [];
+  for (const p of ["", "openai", "anthropic", "google"]) blocked.push(await unpinnedPolicyKeyDrive(p, []));
+  blocked.push(await unpinnedPolicyKeyDrive("openai", [["AiProvider", "REG_SZ", "nosuch"]]));
+  const pinnedProvider = await unpinnedPolicyKeyDrive("anthropic", [["AiProvider", "REG_SZ", "openai"]]);
+  const pinnedEndpoint = await unpinnedPolicyKeyDrive("openai", [["AiEndpoint", "REG_SZ", "https://good.example/v1/"]]);
+  check(blocked.every(r => r.cfg === null && r.fetches === 0 && r.tested && r.tested.ok === false && r.tested.why === "keyNoService"
+      && r.st && r.st.ready === false && r.st.keyAway === true && r.st.keyNoService === true)
+    && pinnedProvider.cfg !== null && pinnedProvider.fetches >= 2 && pinnedProvider.urls.every(u => u.indexOf("https://api.openai.com/v1/") === 0)
+    && pinnedEndpoint.cfg !== null && pinnedEndpoint.fetches >= 2 && pinnedEndpoint.urls.every(u => u.indexOf("https://good.example/v1/") === 0),
+    "da23 a policy key with neither a provider nor an address sends nothing for a test, search or picker, while naming one in policy sends: "
+    + "blocked fetches " + JSON.stringify(blocked.map(r => r.fetches)) + ", whys " + JSON.stringify(blocked.map(r => r.tested && r.tested.why))
+    + ", pinned fetches " + JSON.stringify([pinnedProvider.fetches, pinnedEndpoint.fetches]));
+  if (PLANTS_OFF) skipPlant("da23p lifting plant:policy-key-pinned-service sends the policy key to the person's chosen vendor (ETIUDA_PLANTS=off)");
+  else {
+    const lifted = await unpinnedPolicyKeyDrive("openai", [],
+      edited(MAIN_SRC, "const keyUnpinned = !!o.key && !provider.managed && !endpoint.managed && !endpointBad; /* plant:policy-key-pinned-service */",
+        "const keyUnpinned = false;"));
+    check(lifted.fetches > 0 && lifted.urls.some(u => u.indexOf("https://api.openai.com/v1/") === 0),
+      "da23p with plant:policy-key-pinned-service lifted, the policy key goes to the person's chosen vendor and the leg above fails: "
+      + JSON.stringify({ fetches: lifted.fetches, urls: lifted.urls }));
+  }
+});
+
+/* da24 (review finding 4, policy): policy is re-read at most once a minute so turning the switch off or removing AiKey
+   stops a running desk's next ask, without reading reg on every query inside the minute. */
+async function policyRereadDrive(nextRows, mainSrc) {
+  const realNow = Date.now;
+  let clockShift = 0, reads = 0;
+  Date.now = () => realNow() + clockShift;
+  try {
+    let currentRows = [
+      ["DeskOrganisationModel", "REG_DWORD", 1],
+      ["AiProvider", "REG_SZ", "openai"],
+      ["AiModel", "REG_SZ", "plant-model"],
+      ["AiKey", "REG_SZ", "sk-test-0000"],
+    ];
+    const fakeCp = {
+      execFile: () => {},
+      execFileSync: (tool, args) => {
+        reads++;
+        const bytes = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(policyExportText(currentRows), "utf16le")]);
+        fs.writeFileSync(args[2], bytes);
+      },
+    };
+    const fetch = fetchOf(() => ({ status: 200, text: chatSaying("[2,1]") }));
+    const ctx = loadMain({ fetch, mainSrc, childProcess: fakeCp,
+      answer: (op, a) => op === "search-shortlist" ? { q: a.q, gen: 1, cards: ["c1", "c2"], intents: [] } : openAnswer(op) });
+    builtinFrom(ctx.T, [{ id: "t:post", score: 0.9 }]);
+    ctx.on["etiuda:search-set"](ENGINE, true);
+    await ctx.handle["etiuda:search-prepare"](ENGINE, ROWS);
+    await ctx.handle["etiuda:search-rank"](ENGINE, "lantern wick");
+    await tick(AI.SETTLE_MS + 60);
+    clockShift += 100;
+    await ctx.handle["etiuda:search-rank"](ENGINE, "kettle tea");
+    await tick(AI.SETTLE_MS + 60);
+    const readsWithin = reads, fetchesBefore = fetch.calls.length;
+    currentRows = nextRows;
+    clockShift += 60001;
+    const cfgAfter = ctx.T.deskAiConfig();
+    await ctx.handle["etiuda:search-rank"](ENGINE, "parcel post");
+    await tick(AI.SETTLE_MS + 60);
+    await openPicker(ctx, MESSAGE, 80);
+    return { readsWithin, readsAfter: reads, fetchesBefore, fetchesAfter: fetch.calls.length, cfgAfter };
+  } finally {
+    Date.now = realNow;
+  }
+}
+await block(async () => {
+  const off = await policyRereadDrive([
+    ["DeskOrganisationModel", "REG_DWORD", 0],
+    ["AiProvider", "REG_SZ", "openai"],
+    ["AiModel", "REG_SZ", "plant-model"],
+    ["AiKey", "REG_SZ", "sk-test-0000"],
+  ]);
+  const noKey = await policyRereadDrive([
+    ["DeskOrganisationModel", "REG_DWORD", 1],
+    ["AiProvider", "REG_SZ", "openai"],
+    ["AiModel", "REG_SZ", "plant-model"],
+  ]);
+  check(off.readsWithin === 1 && off.readsAfter === 2 && off.fetchesBefore === 2 && off.fetchesAfter === 2 && off.cfgAfter === null
+    && noKey.readsWithin === 1 && noKey.readsAfter === 2 && noKey.fetchesBefore === 2 && noKey.fetchesAfter === 2 && noKey.cfgAfter === null,
+    "da24 policy is cached within a minute and re-read after a minute, so turning DeskOrganisationModel off or removing AiKey stops the next send: "
+    + "off " + JSON.stringify(off) + ", noKey " + JSON.stringify(noKey));
+  if (PLANTS_OFF) skipPlant("da24p lifting plant:policy-reread keeps sending after policy turns off (ETIUDA_PLANTS=off)");
+  else {
+    const lifted = await policyRereadDrive([["DeskOrganisationModel", "REG_DWORD", 0]],
+      edited(MAIN_SRC, "if (joinPolicyRead === null || (joinPolicyRead.unread && Date.now() - joinPolicyReadAt >= POLICY_REREAD_MS) || Date.now() - joinPolicyReadAt >= POLICY_LOOK_MS) { /* plant:policy-reread */",
+        "if (joinPolicyRead === null) {"));
+    check(lifted.fetchesAfter > lifted.fetchesBefore,
+      "da24p with plant:policy-reread lifted, the running desk keeps sending after policy turns off and the leg above fails: "
+      + JSON.stringify(lifted));
+  }
+});
+
+/* da25 (review finding 4, key file): deleting desk-ai-key.json from userData stops the running desk's next ask without a save or restart. */
+async function keyFileRemovedDrive(mainSrc) {
+  const fetch = fetchOf(() => ({ status: 200, text: chatSaying("[2,1]") }));
+  const ctx = loadMain({ fetch, mainSrc, safeStorage: SEAL,
+    answer: (op, a) => op === "search-shortlist" ? { q: a.q, gen: 1, cards: ["c1", "c2"], intents: [] } : openAnswer(op) });
+  builtinFrom(ctx.T, [{ id: "t:post", score: 0.9 }]);
+  writeOrgSetting(ctx);
+  ctx.on["etiuda:search-set"](ENGINE, true);
+  await ctx.handle["etiuda:search-prepare"](ENGINE, ROWS);
+  await ctx.handle["etiuda:search-rank"](ENGINE, "lantern wick");
+  await tick(AI.SETTLE_MS + 60);
+  const before = fetch.calls.length;
+  fs.unlinkSync(path.join(ctx.electron.app.getPath("userData"), "desk-ai-key.json"));
+  const cfgAfter = ctx.T.deskAiConfig();
+  await ctx.handle["etiuda:search-rank"](ENGINE, "kettle tea");
+  await tick(AI.SETTLE_MS + 60);
+  await openPicker(ctx, MESSAGE, 80);
+  return { before, after: fetch.calls.length, cfgAfter };
+}
+await block(async () => {
+  const r = await keyFileRemovedDrive();
+  check(r.before === 1 && r.after === 1 && r.cfgAfter === null,
+    "da25 deleting desk-ai-key.json stops a running desk's next ask without a save or restart: " + JSON.stringify(r));
+  if (PLANTS_OFF) skipPlant("da25p lifting plant:desk-ai-key-stamp keeps sending after desk-ai-key.json is deleted (ETIUDA_PLANTS=off)");
+  else {
+    const lifted = await keyFileRemovedDrive(edited(MAIN_SRC,
+      "if (deskAiKept && deskAiKept.from === joinPolicyRead && deskAiKept.stamp === stamp) return deskAiKept.now; /* plant:desk-ai-key-stamp */",
+      "if (deskAiKept && deskAiKept.from === joinPolicyRead) return deskAiKept.now;"));
+    check(lifted.after > lifted.before,
+      "da25p with plant:desk-ai-key-stamp lifted, the running desk keeps sending after desk-ai-key.json is deleted and the leg above fails: "
+      + JSON.stringify(lifted));
+  }
+});
+
 check(wallHits === 0, "da0 no leg called the global fetch: " + wallHits);
-const done = asserted === EXPECTED;
-if (!done) console.log("  FAIL the file ran " + asserted + " checks, not the " + EXPECTED + " it declares");
-console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
-console.log(failed === 0 && done ? "RESULT: ok " + asserted + " check(s)" : "RESULT: FAIL " + failed + " of " + asserted);
+const done = asserted + notRun === EXPECTED;
+if (!done) console.log("  FAIL the file ran " + (asserted + notRun) + " checks (" + asserted + " ran, " + notRun + " not run), not the " + EXPECTED + " it declares");
+console.log("#counts checks=" + asserted + " failed=" + failed + " notRun=" + notRun + " expected=" + EXPECTED);
+console.log(failed === 0 && done ? "RESULT: ok " + asserted + " check(s)" + (notRun ? ", " + notRun + " NOT RUN" : "") : "RESULT: FAIL " + failed + " of " + asserted);
 process.exit(Math.min(63, failed + (done ? 0 : 1)));

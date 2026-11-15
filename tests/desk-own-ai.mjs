@@ -43,12 +43,14 @@ const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const E = require("./engine.js");
 
-let failed = 0, asserted = 0;
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+let failed = 0, asserted = 0, notRun = 0;
 function check(ok, line, detail) {
   asserted++;
   if (ok) console.log("  ok   " + line);
   else { failed++; console.log("  FAIL " + line + (detail === undefined ? "" : ": " + JSON.stringify(detail))); }
 }
+function skipPlant(line) { notRun++; console.log("  NOT RUN " + line); }
 
 /* ============================================================================================================================
    The shell's part.
@@ -595,6 +597,98 @@ try {
     check(!problems.length, "db6 while the organisation's model ranks, the AI section's lede says what is sent by the two switches and follows a switch "
       + "moved on the open page, and the picker's note follows the suggestion switch: " + (problems.join("; ") || "three ledes, two notes"));
   }
+
+  /* db7 (review finding 3): a policy key with neither a provider nor an address says so in Settings and on a refused test, in both languages. */
+  {
+    const problems = [];
+    const noSvc = Object.assign({}, BUILTIN, {
+      choice: "organisation", on: true, ready: false, provider: "openai", host: "api.openai.com", model: "m-own",
+      keyAway: true, keyNoService: true, managed: Object.assign({}, FREE, { choice: true, model: true, key: true }),
+    });
+    const wantSettings = {
+      en: "Your organisation has set a key for an AI service without naming the service, so nothing is sent. Its IT department can name it.",
+      pl: "Organizacja ustawiła klucz do usługi AI, ale nie wskazała tej usługi, więc nic nie jest wysyłane. Może ją wskazać dział IT organizacji.",
+    };
+    const wantTest = {
+      en: "Not sent: the organisation set a key without naming its service.",
+      pl: "Nie wysłano: organizacja ustawiła klucz bez wskazania usługi.",
+    };
+    await setHost(page, noSvc);
+    await page.evaluate(() => {
+      window.__ai.origTest = window.E_HOST.deskAiTest;
+      window.E_HOST.deskAiTest = () => Promise.resolve({ ok: false, why: "keyNoService", host: "", model: "m-own" });
+    });
+    for (const lang of ["en", "pl"]) {
+      await page.evaluate(l => { localStorage.setItem("eUiLang", l); try { setUiLang(l); } catch (e) {} }, lang);
+      await closeTab(); await page.evaluate(() => openSettings("data")); await sleep(150);
+      const got = await page.evaluate(async () => {
+        const row = document.querySelector('[data-row="orgmodel"]');
+        const btn = document.getElementById("omTest");
+        if (btn) btn.click();
+        await new Promise(r => setTimeout(r, 80));
+        return { row: row ? row.textContent : "", test: (document.getElementById("omTestLine") || {}).textContent || "" };
+      });
+      if (!got.row.includes(wantSettings[lang])) problems.push(lang + " settings: " + JSON.stringify(got.row.slice(0, 140)));
+      if (got.test !== wantTest[lang]) problems.push(lang + " test: " + JSON.stringify(got.test));
+    }
+    await page.evaluate(() => {
+      if (window.__ai.origTest) window.E_HOST.deskAiTest = window.__ai.origTest;
+      localStorage.setItem("eUiLang", "en"); try { setUiLang("en"); } catch (e) {}
+    });
+    check(!problems.length, "db7 a policy key without a named service shows the copywriter's lines in Settings and on a test in English and Polish: "
+      + (problems.join("; ") || "two screens, two languages"));
+  }
+
+  /* db8 (review finding 7): while slow, the mark's title states that one query a minute is still sent to {HOST}, in both languages and with or without the built-in model. */
+  {
+    const wantSlow = {
+      en: {
+        builtin: "api.openai.com usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the built-in model's order stands, and the desk still sends one query a minute to api.openai.com.",
+        words:   "api.openai.com usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the word matches' order stands, and the desk still sends one query a minute to api.openai.com.",
+      },
+      pl: {
+        builtin: "api.openai.com na ogół odpowiada dłużej niż 4 sekundy, za długo, by zmieniać kolejność listy, która jest już czytana, więc zostaje kolejność modelu wbudowanego, a stanowisko nadal wysyła do api.openai.com jedno zapytanie na minutę.",
+        words:   "api.openai.com na ogół odpowiada dłużej niż 4 sekundy, za długo, by zmieniać kolejność listy, która jest już czytana, więc zostaje kolejność dopasowań słów, a stanowisko nadal wysyła do api.openai.com jedno zapytanie na minutę.",
+      },
+    };
+    const checkSlowMark = async targetPage => {
+      const issues = [];
+      await closeTab().catch(() => {});
+      await setHost(targetPage, ORG_ON);
+      for (const hasModel of [true, false]) {
+        await targetPage.evaluate(m => { window.__ai.model = m; }, hasModel);
+        for (const lang of ["en", "pl"]) {
+          await targetPage.evaluate(l => { localStorage.setItem("eUiLang", l); try { setUiLang(l); } catch (e) {} }, lang);
+          await ranked(targetPage, { ranking: "organisation", failures: 0, pausedUntil: 0, slow: true });
+          const mark = await markNow(targetPage);
+          const expected = wantSlow[lang][hasModel ? "builtin" : "words"];
+          if (!mark.there || mark.dot) issues.push(lang + "/" + hasModel + " mark state: " + JSON.stringify(mark));
+          else if (mark.title !== expected) issues.push(lang + "/" + hasModel + " title: " + JSON.stringify(mark.title));
+        }
+      }
+      await targetPage.evaluate(() => { window.__ai.model = true; });
+      return issues;
+    };
+    const problems = await checkSlowMark(page);
+    await setHost(page, ORG_ON);
+    await page.evaluate(() => { localStorage.setItem("eUiLang", "en"); try { setUiLang("en"); } catch (e) {} });
+    check(!problems.length, "db8 while slow, the mark says one query a minute is still sent to the host, in English and Polish with or without the built-in model: "
+      + (problems.join("; ") || "two modes, two languages"));
+
+    if (PLANTS_OFF) skipPlant("db8p lifting the slow-mark reminder clause lets the title silently drop the one-query-a-minute notice (ETIUDA_PLANTS=off)");
+    else {
+      const built = fs.readFileSync(path.join(lab, "etiuda.html"), "utf8");
+      const needle = ", and the desk still sends one query a minute to {HOST}.";
+      if (built.split(needle).length < 2) check(false, "db8p slow-mark reminder anchor found in engine/etiuda.html", "anchor missing");
+      else {
+        const plantedPath = path.join(lab, "etiuda-plant.html");
+        fs.writeFileSync(plantedPath, built.split(needle).join("."), "utf8");
+        await page.goto("file:///" + plantedPath.replace(/\\/g, "/"), { waitUntil: "load", timeout: 60000 });
+        const lifted = await checkSlowMark(page);
+        check(lifted.length > 0, "db8p lifting the slow-mark reminder clause breaks the check above: " + JSON.stringify(lifted.slice(0, 1)));
+      }
+    }
+  }
   await page.close();
 } catch (e) {
   check(false, "the page's part ran", (e && e.message) || String(e));
@@ -602,7 +696,8 @@ try {
   if (browser) await browser.close();
 }
 
-const EXPECTED = 12;
-if (asserted !== EXPECTED) { failed++; asserted++; console.log("  FAIL ran " + asserted + " checks, expected " + EXPECTED); }
-console.log((failed ? "desk-own-ai: " + failed + " of " + asserted + " failed" : "desk-own-ai: all " + asserted + " passed"));
+const EXPECTED = 15;
+const done = asserted + notRun === EXPECTED;
+if (!done) { failed++; console.log("  FAIL ran " + (asserted + notRun) + " checks (" + asserted + " ran, " + notRun + " not run), expected " + EXPECTED); }
+console.log((failed || !done ? "desk-own-ai: " + failed + " of " + asserted + " failed" : "desk-own-ai: all " + asserted + " passed" + (notRun ? ", " + notRun + " NOT RUN" : "")));
 process.exit(Math.min(failed, 63));
