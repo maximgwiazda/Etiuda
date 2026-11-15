@@ -36,7 +36,7 @@ const OVERLAY = [
   'tools/ablate.mjs',
   '.github/workflows/verify.yml',
 ];
-const BASE_EXPECTED = 21;
+const BASE_EXPECTED = 38;
 const EXPECTED = BASE_EXPECTED + (PLANTS ? 1 : 0);
 
 let failed = 0;
@@ -185,6 +185,11 @@ function sourceCases(buildSrc) {
     named ? named.join(' ') : 'INPUTS is absent');
   check('the build says the day does not depend on the time zone and a shallow clone agrees',
     buildSrc.includes('time zone') && buildSrc.includes('shallow clone'));
+  const ignore = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8').split('\n').map(l => l.trim());
+  check('the build record is ignored', ignore.includes('/engine/etiuda.build.json'));
+  const pageLines = ['/engine/etiuda.html', 'engine/etiuda.html', '/engine/etiuda.csp.json',
+    'engine/etiuda.csp.json', '/engine/bubble.css', 'engine/bubble.css'];
+  check('the page, the pin and the bubble stay tracked', !ignore.some(l => pageLines.includes(l)));
 }
 
 function clockCase() {
@@ -423,7 +428,92 @@ function plantCase() {
   }
 }
 
-try {
+const RECORD_REL = 'engine/etiuda.build.json';
+
+async function recordCases() {
+  note('record');
+  delete process.env.ETIUDA_BUILD_DAY;
+  delete process.env.ETIUDA_BUILD_COMMIT_DAY;
+  restoreOutputs(scratch);
+  const recordPath = path.join(scratch, RECORD_REL);
+  if (fs.existsSync(recordPath)) fs.unlinkSync(recordPath);
+  const built = runBuild(scratch, {});
+  check('the build writes its record beside the page',
+    built.status === 0 && fs.existsSync(recordPath),
+    'status=' + built.status);
+  const href = pathToFileURL(path.join(scratch, 'tools', 'build.mjs')).href;
+  const mod = await import(href);
+  const answers = typeof mod.outputsCurrent === 'function';
+  check('the build answers whether its outputs are current', answers);
+  if (!answers) return;
+  check('the record stays outside the freshness list',
+    Array.isArray(mod.OUTPUTS) && mod.OUTPUTS.length === 3
+    && !mod.OUTPUTS.some(p => String(p).endsWith('etiuda.build.json'))
+    && String(mod.RECORD_FILE).endsWith('etiuda.build.json')
+    && !mod.OUTPUTS.includes(mod.RECORD_FILE));
+  const rec = JSON.parse(fs.readFileSync(recordPath, 'utf8'));
+  check('an untouched tree is current',
+    mod.outputsCurrent() === true && rec.kind === 'etiuda-build-record' && rec.schema === 1
+    && rec.day === stampOf(scratch) && typeof rec.inputs === 'string' && /^[0-9a-f]{64}$/.test(rec.inputs));
+  const lic = path.join(scratch, 'shell', 'license_en.txt');
+  const st = fs.statSync(lic);
+  const later = new Date(st.mtimeMs + 180000);
+  fs.utimesSync(lic, later, later);
+  try {
+    check('touching an input\'s time leaves the tree current', mod.outputsCurrent() === true);
+  } finally {
+    fs.utimesSync(lic, st.atime, st.mtime);
+  }
+  const orig = fs.readFileSync(lic);
+  fs.writeFileSync(lic, Buffer.concat([orig, Buffer.from('\n')]));
+  try {
+    check('a changed input is not current', mod.outputsCurrent() === false);
+  } finally {
+    fs.writeFileSync(lic, orig);
+  }
+  check('restoring the input makes the tree current', mod.outputsCurrent() === true);
+  process.env.ETIUDA_BUILD_DAY = '2001-02-03';
+  try {
+    check('a changed day is not current', mod.outputsCurrent() === false);
+  } finally {
+    delete process.env.ETIUDA_BUILD_DAY;
+  }
+  check('clearing the handed day makes the tree current', mod.outputsCurrent() === true);
+  const htmlPath = path.join(scratch, 'engine', 'etiuda.html');
+  const htmlBytes = fs.readFileSync(htmlPath);
+  fs.unlinkSync(htmlPath);
+  try {
+    check('a missing output is not current', mod.outputsCurrent() === false);
+  } finally {
+    fs.writeFileSync(htmlPath, htmlBytes);
+  }
+  check('putting the output back makes the tree current', mod.outputsCurrent() === true);
+  const recBytes = fs.readFileSync(recordPath);
+  fs.unlinkSync(recordPath);
+  try {
+    check('a missing record is not current', mod.outputsCurrent() === false);
+  } finally {
+    fs.writeFileSync(recordPath, recBytes);
+  }
+  check('putting the record back makes the tree current', mod.outputsCurrent() === true);
+  fs.writeFileSync(recordPath, '{}\n');
+  try {
+    check('a record of the wrong shape is not current', mod.outputsCurrent() === false);
+  } finally {
+    fs.writeFileSync(recordPath, recBytes);
+  }
+  const before = fingerprint(scratch) + sha256(fs.readFileSync(recordPath));
+  process.env.ETIUDA_BUILD_DAY = '15/11/2026';
+  try {
+    const current = mod.outputsCurrent();
+    const after = fingerprint(scratch) + sha256(fs.readFileSync(recordPath));
+    check('a malformed handed day is not current and writes nothing', current === false && after === before);
+  } finally {
+    delete process.env.ETIUDA_BUILD_DAY;
+  }
+}
+
+async function leg() {
   const buildSrc = fs.readFileSync(path.join(ROOT, 'tools', 'build.mjs'), 'utf8');
   sourceCases(buildSrc);
   parent = fs.mkdtempSync(path.join(os.tmpdir(), 'bod-day-'));
@@ -471,7 +561,12 @@ try {
   shallowCase(cs);
   noRepoCase();
   plantCase();
+  await recordCases();
   complete = asserted === EXPECTED;
+}
+
+try {
+  await leg();
 } catch (e) {
   failed++;
   console.log('  FAIL the leg stopped: ' + oneLine(e && e.stack || e));

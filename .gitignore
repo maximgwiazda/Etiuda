@@ -79,6 +79,9 @@ catalogs/
 *.asar
 *.7z
 *.log
+# The build's note of the inputs it hashed and the day it stamped. Gitignored on purpose:
+# every build rewrites it, and the page, the pin and the bubble stay tracked.
+/engine/etiuda.build.json
 
 # --- Scratch --------------------------------------------------------------------------------
 # Probes, previews, screenshots, timings. Real work, none of it the product.
