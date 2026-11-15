@@ -25,7 +25,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 84;
+const EXPECTED = 85;
 const PLANT_CHECKS = 12;
 const VECTORS = path.join(ROOT, "tests", "card-flag-vectors.json");
 
@@ -261,6 +261,14 @@ function rewriteLine(file, marker, edit) {
   lines[at] = edit(lines[at]);
   fs.writeFileSync(file, lines.join("\n"));
 }
+/* The desk's seen for a vectors case: the card as a format 2 file holds it, loaded and hashed by the engine's own code. */
+function deskSeen(vectors, c) {
+  try {
+    const rt = V2.catalogFromV2({ format: 2, kind: "etiuda-catalog", id: "vectors", rev: 1, langs: vectors.langs.map((code) => ({ code: code, label: code.toUpperCase() })),
+      tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }], cards: [c.card] });
+    return F.flagWordsHash(rt.cards[0], c.lang);
+  } catch (e) { return "threw " + (e && e.message ? e.message : e); }
+}
 let plantN = 0;
 async function runPlants() {
   const names = ["plant:flag-holds", "plant:flag-sort", "plant:flag-note-cap", "plant:flag-note-control", "plant:flag-layer", "plant:flag-settle-words", "plant:flag-named", "plant:flag-no-answered", "plant:flag-reach", "plant:flag-full", "plant:flag-random", "plant:flag-vector"];
@@ -362,6 +370,12 @@ async function runPlants() {
   As0.setCards([{ id: "c-a", t: "Hello", en: "Good day." }, { id: "c-b", t: "Card B", en: "Body B." }]);
   const one = Rand.flagCard("c-a"), two = Rand.flagCard("c-b");
   check(!!(one && two) && one.r === two.r && one.r === "04".repeat(16), "plant:flag-random a fixed fill makes both flags the same r");
+
+  const wrong = JSON.parse(fs.readFileSync(VECTORS, "utf8"));
+  const bad = wrong.seen.cases[1];
+  bad.seen = bad.seen.slice(0, 63) + (bad.seen.endsWith("0") ? "1" : "0");
+  const off = wrong.seen.cases.filter((c) => deskSeen(wrong, c) !== c.seen).map((c) => c.name);
+  check(off.length === 1 && off[0] === bad.name, "plant:flag-vector one character wrong in one vector is seen by the comparison, and by that case alone", off.join());
 }
 
 try {
@@ -595,18 +609,11 @@ try {
   check(vectors.kind === "etiuda-card-flag-vectors" && vectors.seen.cases.every((c) => keysOf(c) === "card,lang,name,seen" && /^[0-9a-f]{64}$/.test(c.seen)
       && ["plain", "alts", "steps"].includes(c.card.bodyShape) && vectors.langs.includes(c.lang)),
     "the vectors file is plain JSON: each case a format 2 card, a language and 64 hex characters");
-  check(wanted.every((n) => names.includes(n)) && vectors.seen.cases.some((c) => c.lang !== firstLang(c) && !!c.card.title[c.lang]) && names.length === 13
+  check(wanted.every((n) => names.includes(n)) && vectors.seen.cases.some((c) => c.lang !== firstLang(c) && !!c.card.title[c.lang]) && names.length === 14
       && new Set(vectors.seen.cases.map((c) => c.seen)).size === names.length,
     "the vectors cover plain, alternatives, steps, a note, an empty field, CRLF, Polish and a flagged language that is not the card's first");
-  const deskSeen = (c) => {
-    try {
-      const rt = V2.catalogFromV2({ format: 2, kind: "etiuda-catalog", id: "vectors", rev: 1, langs: vectors.langs.map((code) => ({ code: code, label: code.toUpperCase() })),
-        tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }], cards: [c.card] });
-      return F.flagWordsHash(rt.cards[0], c.lang);
-    } catch (e) { return "threw " + (e && e.message ? e.message : e); }
-  };
   vectors.seen.cases.forEach((c) => {
-    const got = deskSeen(c);
+    const got = deskSeen(vectors, c);
     check(got === c.seen, "vector " + c.name + ": the desk's seen for the card as the file holds it, in " + c.lang, got + " wanted " + c.seen);
   });
   check(vectors.seen.cases.every((c) => seenFromFile(c.card, c.lang) === c.seen), "the rule written in the vectors file, read by a second reader that holds none of the engine's code, gives every seen");

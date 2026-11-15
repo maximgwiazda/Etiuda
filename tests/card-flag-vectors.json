@@ -246,6 +246,22 @@
      }
     },
     "seen": "ba96ad02c6f1f613e4bd1032801868270cd54e5dea32aaa38b4fc6c888f4fb6b"
+   },
+   {
+    "name": "labelled-alternatives",
+    "lang": "en",
+    "card": {
+     "id": "c-labelled",
+     "shelf": "t-op",
+     "bodyShape": "alts",
+     "title": {
+      "en": "Closing line"
+     },
+     "body": {
+      "en": "[alt:warm]\nThank you, and take care.\n\n[alt:brief]\nThanks, goodbye."
+     }
+    },
+    "seen": "efcc4b1a6dca200871c8f03756b8aac338b3e8fabaf7d568d13526a35012b388"
    }
   ]
  },
