@@ -290,11 +290,12 @@ try {
       epoch: epoch || 1, roster: [], rev
     }, leadPair.privateKey, LEAD.keyId);
   }
-  function plantRing(folder) {
-    fs.writeFileSync(path.join(folder, "etiuda-ring.json"), JSON.stringify({
-      format: 1, kind: "etiuda-ring",
-      keys: [{ catalog: "lamp-board", keyId: LEAD.keyId, alg: "Ed25519", public: LEAD.public }]
-    }));
+  /* The desk holds the lead's pin, as a member desk has it: these checks are about siblings and the floor, and a ring pins
+     nothing (a lead is heeded by machine policy, an invitation or an admission's wrap). */
+  function pinLead(ud) {
+    const at = path.join(ud, "desk.json"), env = JSON.parse(fs.readFileSync(at, "utf8"));
+    env.teamPins = Object.assign({}, env.teamPins, { [teamId]: { keyId: LEAD.keyId, public: LEAD.public } });
+    fs.writeFileSync(at, JSON.stringify(env));
   }
   function floorOf(ud) {
     const env = JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
@@ -303,7 +304,7 @@ try {
   }
   {
     const { ud, folder } = fresh();
-    plantRing(folder);
+    pinLead(ud);
     const canon = teamDoc(1, 1), sib = teamDoc(4, 1);
     const canonAt = put(folder, "etiuda-team.json", canon);
     const sibAt = put(folder, "etiuda-team (1).json", sib);
@@ -328,7 +329,7 @@ try {
   }
   {
     const { ud, folder } = fresh();
-    plantRing(folder);
+    pinLead(ud);
     put(folder, "etiuda-team.json", teamDoc(4, 1));
     put(folder, "etiuda-team (1).json", teamDoc(2, 1));
     syncMirror(ud, folder);
@@ -341,7 +342,7 @@ try {
   }
   {
     const { ud, folder } = fresh();
-    plantRing(folder);
+    pinLead(ud);
     put(folder, "etiuda-team.json", teamDoc(1, 1));
     const bad = teamDoc(9, 1);
     bad.sig.value = "ab".repeat(64);
@@ -356,7 +357,7 @@ try {
   }
   {
     const { ud, folder } = fresh();
-    plantRing(folder);
+    pinLead(ud);
     put(folder, "etiuda-team.json", teamDoc(2, 1));
     put(folder, "etiuda-team (1).json", teamDoc(6, 1));
     syncMirror(ud, folder);
@@ -376,7 +377,7 @@ try {
   }
   {
     const { ud, folder } = fresh();
-    plantRing(folder);
+    pinLead(ud);
     const canon = teamDoc(1, 1), conf = teamDoc(4, 1);
     const canonAt = put(folder, "etiuda-team.json", canon);
     const confAt = put(folder, "etiuda-team_conf(1).json", conf);
@@ -429,7 +430,7 @@ try {
     let red = false;
     if (sib.found) {
       const { ud, folder } = fresh();
-      plantRing(folder);
+      pinLead(ud);
       put(folder, "etiuda-team.json", teamDoc(1, 1));
       put(folder, "etiuda-team (1).json", teamDoc(4, 1));
       syncMirror(ud, folder);

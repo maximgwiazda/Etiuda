@@ -80,11 +80,11 @@ function loadDesk(ud) {
   api.setStatsClock(CLOCK);
   return { api, ask, said, ud, sent, win, setPage: fn => { page = fn; }, invoke };
 }
-function newDesk(folder) {
+function newDesk(folder, pins) {
   const ud = path.join(LAB, "desk-" + (++seq));
   fs.mkdirSync(ud, { recursive: true });
-  fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
-    keys: { eCatalogFolder: folder, eUiLang: "en", eAgent: "North desk" } }), "utf8");
+  fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1,
+    keys: { eCatalogFolder: folder, eUiLang: "en", eAgent: "North desk" } }, pins ? { teamPins: pins } : {})), "utf8");
   const D = loadDesk(ud);
   D.share = folder;
   return D;
@@ -173,9 +173,10 @@ try {
   };
   async function joined(badWrap) {
     const share = folder();
-    const D = newDesk(share);
-    const me = await D.ask("etiuda:branch-identity", true);
     const team = "t-" + crypto.randomBytes(8).toString("hex");
+    /* The lead's pin, as a member desk has it, so a desk whose wrap is not its own still knows its lead: a ring pins nothing (review 14). */
+    const D = newDesk(share, { [team]: { keyId: LEAD.keyId, public: LEAD.public } });
+    const me = await D.ask("etiuda:branch-identity", true);
     const key = crypto.randomBytes(32);
     const who = badWrap ? "k-" + "ab".repeat(8) : me.id;
     const box = { share, D, me, team, key };
