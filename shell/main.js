@@ -6303,14 +6303,27 @@ function invitePlacePlan(parsed) {
   try { return placeResolve(parsed.folder, parsed.place, roots, function () { return true; }); }
   catch (e) { return { path: parsed.folder, how: "absolute", why: "plain" }; }
 }
+/* A path whose first look leaves this computer: UNC (\\server\...), a device path (\\?\ or \\.\), or //.
+   A drive letter is not one. The invitation's own local folder is still asked, and a folder the person
+   picks in this shell's dialog is asked after they pick it. */
+function pageRemotePath(p) {
+  const s = typeof p === "string" ? p : "";
+  return s.length >= 2 && ((s.charAt(0) === "\\" && s.charAt(1) === "\\") || (s.charAt(0) === "/" && s.charAt(1) === "/"));
+}
 /* The folder yes will write into. A root candidate is asked first, then the absolute path the invitation carried, and
-   only then does the caller open the picker. An old invitation, with no place, is asked at its path as before. */
+   only then does the caller open the picker. An old invitation, with no place, is asked at its path as before.
+   A remote path is not asked: stating it would reach another computer. The picker is the person's choice. */
+async function askInviteFolder(dir, asks) {
+  if (pageRemotePath(dir)) return false; /* plant:invite-remote-folder */
+  const fn = asks || askFolder;
+  return !!(dir && await fn(dir));
+}
 async function chooseInviteFolder(parsed) {
   let kept = null;
   try { kept = placeKept(parsed && parsed.place); }
   catch (e) { kept = null; }
   if (!kept) {
-    if (await askFolder(parsed.folder)) return { path: parsed.folder, ask: false };
+    if (await askInviteFolder(parsed.folder)) return { path: parsed.folder, ask: false };
     return { ask: true };
   }
   if (kept.kind === "gdrive") await driveLook();
@@ -6319,7 +6332,7 @@ async function chooseInviteFolder(parsed) {
   catch (e) { roots = []; }
   if (kept.kind === "unc") {
     const built = placeJoin(kept.root, kept.rel);
-    if (built && await askFolder(built)) return { path: built, ask: false };
+    if (await askInviteFolder(built)) return { path: built, ask: false };
     return { ask: true };
   }
   let candidates = [];
@@ -6328,9 +6341,9 @@ async function chooseInviteFolder(parsed) {
   let asks = askFolder;
   if (kept.kind === "gdrive") asks = askDirItself; /* plant:drive-itself */
   for (let i = 0; i < candidates.length; i++) {
-    if (candidates[i] && await asks(candidates[i])) return { path: candidates[i], ask: false };
+    if (await askInviteFolder(candidates[i], asks)) return { path: candidates[i], ask: false };
   }
-  if (await askFolder(parsed.folder)) return { path: parsed.folder, ask: false };
+  if (await askInviteFolder(parsed.folder)) return { path: parsed.folder, ask: false };
   return { ask: true };
 }
 /* The person's yes, with the check code they typed, which a folder invitation needs and a relay invitation does not,
@@ -6354,6 +6367,8 @@ async function takeInvite(text, name, check) {
   const me = branchIdentity();
   if (!me) return Object.assign({}, joinView(), { refused: "unread" });
   let ask = null;
+  if (parsed.relay && !knownRelayAddress(parsed.relay.url))
+    return Object.assign({}, joinView(), { refused: "unread" });
   if (parsed.relay && stranded) {
     if (!branchSealable()) return Object.assign({}, joinView(), { refused: "unread" });
     /* The request is written before the old lead is let go, so a write that fails leaves this desk as it was: left behind, with
@@ -6528,6 +6543,8 @@ function askWritten(ask) {
    invitation sets is the one board 907 lets the desk follow a relay address under. */
 /* `ahead`: a left-behind desk's yes, its request made and written before it let the old lead go (relayAsk, askWritten). */
 function takeRelayInvite(parsed, name, me, ahead) {
+  if (!parsed || !parsed.relay || !knownRelayAddress(parsed.relay.url))
+    return Object.assign({}, joinView(), { refused: "unread" });
   if (!branchSealable()) return Object.assign({}, joinView(), { refused: "unread" });
   const ask = ahead || relayAsk(parsed, name, me);
   if (ask.refused) return Object.assign({}, joinView(), { refused: ask.refused });
@@ -6967,6 +6984,15 @@ function forgetLead(team, left) {
 const BUILTIN_RELAY_URL = "https://etiuda.dev/relay/v1";
 /* A test service build's second built-in relay, fixed here as the first is and never read from a file or the environment. */
 const STAGING_RELAY_URL = "https://etiuda.dev/relay-staging/v1";
+/* An invitation may name only this build's relay or the staging relay. A harness start may also name
+   the https address a leg points at a stand-in. A customer's start may not, so a page cannot choose a host. */
+function knownRelayAddress(u) {
+  if (typeof u !== "string") return false;
+  const at = u.trim().replace(/\/+$/, "");
+  if (at === BUILTIN_RELAY_URL || at === STAGING_RELAY_URL) return true;
+  if (!harnessLaunch()) return false; /* plant:relay-known */
+  return /^https:\/\/[a-z0-9.-]+(?::[0-9]{1,5})?(?:\/[A-Za-z0-9._~-]+)*\/?$/.test(at);
+}
 function isBuiltinRelayUrl(u) {
   if (typeof u !== "string") return false;
   const at = u.trim().replace(/\/+$/, "");
@@ -7155,7 +7181,10 @@ function setTeamNeedsFolder(teamId, doc, mirrorDir) {
   sendJoin(theWindow);
 }
 
-function pickMovedFolder(teamId, pickedFolder) {
+/* The page may name only the folder this shell's picker returned for it. Anything else is not read. A folder machine policy
+   names is the only one a moved team may take, picked or not. */
+function pickMovedFolder(teamId, pickedFolder, senderId) {
+  if (!offeredFolder(senderId, pickedFolder)) return { ok: false, error: "unpicked" }; /* plant:moved-folder-offered */
   const named = sayJoinPolicy().folder;
   if (named && !policySameFolder(pickedFolder, named)) {
     teamSay("a folder picked for team " + teamId + " is not the one machine policy names, so this desk stays with the policy's folder");
@@ -8204,15 +8233,45 @@ function onUiLangChanged() {
   try { syncJumpList(); } catch { /* the jump list is optional */ }
 }
 
+/* The last folder this shell's own picker returned, per page, kept until the next pick. A save may
+   name that path again. It is not spent on the first write. */
+const folderOffered = new Map();
+function rememberFolder(senderId, folder) {
+  if (senderId == null || typeof folder !== "string" || !folder) return;
+  folderOffered.set(senderId, folder);
+}
+function offeredFolder(senderId, folder) {
+  return typeof folder === "string" && folder !== "" && folderOffered.get(senderId) === folder;
+}
+/* The page may set the catalog folder to the path the picker returned, the one already stored, or the
+   one machine policy names. Anything else is left out of the write, so it is never stated or opened. */
+function catalogFolderAllowed(next, senderId) {
+  if (typeof next !== "string" || next === "") return false;
+  if (deskKeys && deskKeys[CATALOG_FOLDER_KEY] === next) return true;
+  if (offeredFolder(senderId, next)) return true;
+  let named = "";
+  try { named = sayJoinPolicy().folder || ""; } catch (e) { named = ""; }
+  return !!named && policySameFolder(next, named);
+}
+function confineCatalogFolder(map, senderId) {
+  if (!map || !Object.prototype.hasOwnProperty.call(map, CATALOG_FOLDER_KEY)) return false;
+  const next = map[CATALOG_FOLDER_KEY];
+  if (next === null || next === undefined) return false;
+  if (catalogFolderAllowed(next, senderId)) return false;
+  delete map[CATALOG_FOLDER_KEY]; /* plant:catalog-folder-wall */
+  return true;
+}
 function writeDesk(text, from) {
   let map;
   try { map = JSON.parse(text); } catch { return false; }
   if (!map || typeof map !== "object" || Array.isArray(map)) return false;
   if (deskKeys === undefined) deskKeys = readDesk();
+  const folderRefused = confineCatalogFolder(map, from);
   const langWas = deskKeys ? deskKeys.eUiLang : undefined;
   const merged = mergeDesk(deskKeys, deskGiven.get(from) || {}, map);
   /* A write is skipped only where the live file is known to hold exactly this. A desk recovered
      from a backup has not been written yet, and skipping there would leave the refused file. */
+  if (folderRefused && sameDesk(merged, deskKeys)) return false;
   if (deskWritten && sameDesk(merged, deskKeys)) { deskGiven.set(from, map); return true; }
   try {
     saveDeskFile(sameDesk(merged, map) ? text : JSON.stringify(merged));
@@ -8248,19 +8307,22 @@ function deskText(keys) {
 }
 /* A PATCH NAMES ONLY THE KEYS ONE LOAD CHANGED, a string for a value and null for a key deleted,
    so it is applied as it stands: no other load's key is in it to be undone. */
-function patchDesk(text) {
+function patchDesk(text, from) {
   let patch;
   try { patch = JSON.parse(text); } catch { return false; }
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) return false;
-  const keys = Object.keys(patch);
-  if (keys.some(k => patch[k] !== null && typeof patch[k] !== "string")) return false;
+  if (Object.keys(patch).some(k => patch[k] !== null && typeof patch[k] !== "string")) return false;
   if (deskKeys === undefined) deskKeys = readDesk();
+  const folderRefused = confineCatalogFolder(patch, from);
+  const keys = Object.keys(patch);
   const langWas = deskKeys ? deskKeys.eUiLang : undefined;
   /* Ejecting the catalog is the agent leaving the file this launch was opened with, even when
      that key was never stored and the patch then changes nothing. */
   if (Object.prototype.hasOwnProperty.call(patch, "eCatalog") && patch.eCatalog === null) releaseOpened();
   const has = (k) => Object.prototype.hasOwnProperty.call(deskKeys, k);
-  if (deskWritten && keys.every(k => (patch[k] === null ? !has(k) : deskKeys[k] === patch[k]))) return true;
+  const unchanged = keys.every(k => (patch[k] === null ? !has(k) : deskKeys[k] === patch[k]));
+  if (folderRefused && (unchanged || keys.length === 0)) return false;
+  if (deskWritten && unchanged) return true;
   const merged = Object.assign({}, deskKeys);
   keys.forEach(k => { if (patch[k] === null) delete merged[k]; else merged[k] = patch[k]; });
   try {
@@ -8301,10 +8363,10 @@ ipcMain.on("etiuda:desk-save", (e, text) => {
 ipcMain.handle("etiuda:desk-write", (e, text) =>
   fromEngine(e) && typeof text === "string" && writeDesk(text, e.sender.id));
 ipcMain.on("etiuda:desk-patch-save", (e, text) => {
-  e.returnValue = fromEngine(e) && typeof text === "string" && patchDesk(text);
+  e.returnValue = fromEngine(e) && typeof text === "string" && patchDesk(text, e.sender.id);
 });
 ipcMain.handle("etiuda:desk-patch", (e, text) =>
-  fromEngine(e) && typeof text === "string" && patchDesk(text));
+  fromEngine(e) && typeof text === "string" && patchDesk(text, e.sender.id));
 /* THE TABS' SESSION LIVES HERE, IN MEMORY, PER WINDOW. Chromium's own sessionStorage is written to the
    profile, where a customer's name and a search would outlast the window; this is never written in plain text.
    At an installer's close alone, and only upon an explicit installer signal (--update-close) when safeStorage
@@ -9290,7 +9352,7 @@ ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e)
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
   : op === "lapse-seen" ? lapseSeen(file, name) : op === "fork-seen" ? forkDismissed(file) : op === "stranded-seen" ? strandedDismissed(file)
   : op === "forget" ? forgetLead(file) : op === "leave" ? forgetLead(file, true) : op === "read" ? readInviteLooked(file) : op === "invite" ? takeInvite(file, name, check)
-  : op === "pick-moved-folder" ? pickMovedFolder(file, name)
+  : op === "pick-moved-folder" ? pickMovedFolder(file, name, e.sender.id)
   : op === "held" ? heldLinkAnswer() : op === "link" ? takeHeldLink(name) : op === "link-no" ? declineHeldLink() : joinView())); /* plant:link-no */
 
 /* The engine calls no OS API, so the folder picker is the shell's. The CAPTION comes from the
@@ -9307,7 +9369,9 @@ ipcMain.handle("etiuda:pick-catalog-folder", async (e, title) => {
     properties: ["openDirectory", "createDirectory"],
   };
   const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
-  return (!r.canceled && r.filePaths && r.filePaths[0]) ? r.filePaths[0] : "";
+  const chosen = (!r.canceled && r.filePaths && r.filePaths[0]) ? r.filePaths[0] : "";
+  if (chosen) rememberFolder(e.sender.id, chosen);
+  return chosen;
 });
 
 /* IMPORT CATALOG'S OWN DIALOG, the shell's for the same reason the folder picker above is: the

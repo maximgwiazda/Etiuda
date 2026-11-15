@@ -277,7 +277,14 @@ async function launch(plan) {
   if (plan.pickActions && Array.isArray(plan.pickActions)) {
     for (const action of plan.pickActions) {
       if (invokeHandlers["etiuda:team-join"]) {
-        const res = await invokeHandlers["etiuda:team-join"](ev, "pick-moved-folder", plan.teamId, action.folder);
+        /* The shell reads a moved folder only after its own picker returned that path. */
+        const savedPicks = plan.dialogPicks;
+        plan.dialogPicks = [action.folder];
+        const picked = invokeHandlers["etiuda:pick-catalog-folder"]
+          ? await invokeHandlers["etiuda:pick-catalog-folder"](ev, "Library")
+          : "";
+        plan.dialogPicks = savedPicks;
+        const res = await invokeHandlers["etiuda:team-join"](ev, "pick-moved-folder", plan.teamId, picked);
         pickResults.push(res);
         await new Promise(r => setTimeout(r, 200));
       }

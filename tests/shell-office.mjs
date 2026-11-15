@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 134;
+const EXPECTED = 147;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -32,6 +32,10 @@ function check(ok, line) {
 function skip(line) {
   skipped++;
   console.log("  SKIP  " + line);
+}
+function notRun(line) {
+  skipped++;
+  console.log("  NOT RUN " + line);
 }
 
 const LAB = realFs.mkdtempSync(path.join(os.tmpdir(), "etiuda-shell-office-"));
@@ -166,13 +170,16 @@ function loadShell(opts) {
     app: { getPath: n => (n === "documents" ? DOCS : UD), setPath: (k, v) => { if (o.paths) o.paths.push([k, v]); }, requestSingleInstanceLock: () => !!o.ready, isPackaged: !!o.packaged,
            isReady: () => !!(o.ready || o.isReady),
            quit: noop, on: (ev, fn) => { (appOn[ev] = appOn[ev] || []).push(fn); }, getVersion: () => "0.0.0",
+           getLocale: () => "en", getPreferredSystemLanguages: () => ["en"],
            commandLine: { appendSwitch: (...a) => { switches.push(a); }, hasSwitch: k => onLine.has(k),
                           removeSwitch: k => { if (onLine.delete(k)) removed.push(k); } },
            whenReady: () => (o.ready ? Promise.resolve() : new Promise(noop)) },
     ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
     BrowserWindow: o.ready ? new Proxy(function () {}, { construct: (t, args) => { if (o.order) o.order.push(["window"]); return o.window ? o.window(args[0]) : win; },
       get: (t, k) => (k === "fromWebContents" ? () => win : k === "getAllWindows" ? () => [win] : undefined) }) : inert,
-    Menu: inert, dialog: o.dialogs ? { showSaveDialog: async (...a) => { o.dialogs.push(a); return { canceled: true }; } } : inert, net: inert, protocol: o.ready ? anything() : inert,
+    Menu: inert, dialog: o.openDialog
+      ? { showOpenDialog: async (...a) => o.openDialog(...a), showSaveDialog: async (...a) => { if (o.dialogs) o.dialogs.push(a); return { canceled: true }; } }
+      : o.dialogs ? { showSaveDialog: async (...a) => { o.dialogs.push(a); return { canceled: true }; } } : inert, net: inert, protocol: o.ready ? anything() : inert,
     session: o.session || (o.ready ? anything() : inert),
     screen: o.screen || inert, shell: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" },
     powerMonitor: { on: (ev, fn) => { power[ev] = fn; } },
@@ -215,6 +222,7 @@ function loadShell(opts) {
     new Function("require", "module", "exports", "__dirname", "__filename", (o.ownSrc && o.ownSrc[path.basename(n)]) || realFs.readFileSync(n, "utf8"))(fakeRequire, m, m.exports, path.dirname(n), n);
     return m.exports; };
   const fakeRequire = n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? fs : n === "node:child_process" ? cp
+    : (o.relay && typeof n === "string" && (n.endsWith(path.join("relay", "channel.cjs")) || n.endsWith("relay/channel.cjs"))) ? o.relay
     : (path.isAbsolute(n) && /\.cjs$/.test(n)) ? (own[n] || (own[n] = ownModule(n))) : nodeRequire(n));
   const env = Object.assign({ XDG_CURRENT_DESKTOP: "GNOME" }, o.env || {}), envWas = {};
   for (const k of Object.keys(env)) { envWas[k] = process.env[k]; if (env[k] === null) delete process.env[k]; else process.env[k] = env[k]; }
@@ -1859,6 +1867,229 @@ try {
       let lifted = null;
       if (at >= 0) { lines.splice(at, 1); lifted = handed({ env: set }, lines.join("\n")); }
       check(!!lifted && lifted.length === 0, "16 lifting plant:handed-said leaves the handover unsaid: " + JSON.stringify(lifted));
+    }
+  }
+  /* ---- 17. a folder invitation. A UNC, a device path or // is never stated. A local folder the invitation names,
+     which the confirm has shown, is still asked and joined with no dialog. ---- */
+  {
+    const crypto = nodeRequire("node:crypto");
+    const remotePath = p => { const s = String(p || ""); return s.length >= 2 && ((s.charAt(0) === "\\" && s.charAt(1) === "\\") || (s.charAt(0) === "/" && s.charAt(1) === "/")); };
+    const leadPub = "ab".repeat(32);
+    const codeFor = secret => {
+      const mac = crypto.createHmac("sha256", Buffer.from(secret, "hex")).update(Buffer.from(leadPub, "hex")).digest();
+      return String(mac.readUIntBE(0, 6) % 100000).padStart(5, "0");
+    };
+    const blobFor = folder => {
+      const secret = crypto.randomBytes(16).toString("hex");
+      const doc = { team: "t-" + crypto.randomBytes(8).toString("hex"), folder: folder,
+        lead: { keyId: "lead-one", public: leadPub, name: "Ada Lane" }, secret: secret };
+      return { secret: secret, text: "etiuda-join:" + Buffer.from(JSON.stringify(doc)).toString("base64url") };
+    };
+    const dialogOpts = args => { const last = args[args.length - 1]; return last && typeof last === "object" ? last : {}; };
+    const arm = S => {
+      const calls = [];
+      S.ctl.pstat = async p => {
+        calls.push("pstat " + String(p));
+        if (remotePath(p)) { const e = new Error("stand-in"); e.code = "ENOENT"; throw e; }
+        return realFs.promises.stat(p);
+      };
+      S.ctl.statSync = (real, p, ...a) => {
+        calls.push("statSync " + String(p));
+        if (remotePath(p)) { const e = new Error("stand-in"); e.code = "ENOENT"; throw e; }
+        return real(p, ...a);
+      };
+      S.ctl.readFileSync = (real, p, ...a) => {
+        calls.push("readFileSync " + String(p));
+        if (remotePath(p)) { const e = new Error("stand-in"); e.code = "ENOENT"; throw e; }
+        return real(p, ...a);
+      };
+      return calls;
+    };
+    const touched = (calls, needle) => calls.some(c => c.indexOf(needle) >= 0 || remotePath(c.slice(c.indexOf(" ") + 1)));
+    const yesFolder = async (folder, src) => {
+      const dialogs = [];
+      const S = loadShell({ src: src, openDialog: async (...a) => { dialogs.push(dialogOpts(a)); return { canceled: true, filePaths: [] }; } });
+      const calls = arm(S);
+      await S.ask("etiuda:branch-identity", true);
+      const inv = blobFor(folder);
+      const res = await S.ask("etiuda:team-join", "invite", inv.text, "Ada", codeFor(inv.secret));
+      return { res: res, calls: calls, dialogs: dialogs, keys: keysOn(S.deskFile) };
+    };
+    const unc = "\\\\evil.example\\share\\etiuda";
+    const hostile = await yesFolder(unc);
+    const uncCalls = hostile.calls.filter(c => remotePath(c.slice(c.indexOf(" ") + 1)));
+    const adopted = hostile.keys && remotePath(hostile.keys.eCatalogFolder);
+    const dialogRemote = hostile.dialogs.some(d => remotePath(d.defaultPath));
+    check(uncCalls.length === 0 && !adopted && !dialogRemote && !(hostile.res && hostile.res.join && hostile.res.join.invite),
+      "17a a UNC folder on an invitation is not stated, not adopted and not handed to the dialog: calls " + uncCalls.length
+      + ", adopted " + adopted + ", dialog " + dialogRemote + ", answered " + (hostile.res && (hostile.res.refused || hostile.res.canceled || "taken")));
+    const device = await yesFolder("\\\\?\\C:\\etiuda");
+    const slashed = await yesFolder("//evil.example/share/etiuda");
+    const devCalls = device.calls.concat(slashed.calls).filter(c => remotePath(c.slice(c.indexOf(" ") + 1)));
+    check(devCalls.length === 0 && !(device.res && device.res.join) && !(slashed.res && slashed.res.join),
+      "17b a device path and a // path are not stated either: calls " + devCalls.length);
+    const yard = path.join(LAB, "yard-17");
+    realFs.mkdirSync(yard, { recursive: true });
+    const honest = await yesFolder(yard);
+    const stated = honest.calls.some(c => c.indexOf(yard) >= 0);
+    const joined = honest.keys && honest.keys.eCatalogFolder === yard && honest.res && !honest.res.refused && !honest.res.canceled;
+    check(stated && joined && honest.dialogs.length === 0 && !touched(honest.calls, unc),
+      "17c a local folder the invitation names is asked and joined, with no dialog: stated " + stated
+      + ", joined " + joined + ", dialogs " + honest.dialogs.length + ", answered " + (honest.res && (honest.res.refused || honest.res.canceled || "taken")));
+    if (PLANTS_OFF) notRun("17d lifting plant:invite-remote-folder states the UNC share");
+    else {
+      const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:invite-remote-folder") >= 0);
+      let again = null;
+      if (at >= 0) { lines.splice(at, 1); again = await yesFolder(unc, lines.join("\n")); }
+      const saw = again && again.calls.filter(c => remotePath(c.slice(c.indexOf(" ") + 1))).length;
+      check(!!again && saw > 0, "17d lifting plant:invite-remote-folder states the UNC share: " + (again ? saw + " call(s)" : "plant line absent"));
+    }
+  }
+  /* ---- 18. a relay invitation. A customer's start opens a channel only to the built-in relay or staging.
+     A harness start may aim at the stand-in the legs already use. ---- */
+  {
+    const crypto = nodeRequire("node:crypto");
+    const realRelay = nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
+    const leadPub = "ab".repeat(32);
+    const relayBlob = url => {
+      const doc = { team: "t-" + crypto.randomBytes(8).toString("hex"),
+        relay: { rt: crypto.randomBytes(16).toString("hex"), url: url,
+          token: crypto.randomBytes(32).toString("hex"), inv: crypto.randomBytes(16).toString("hex") },
+        lead: { keyId: "lead-one", public: leadPub, name: "Ada Lane" }, secret: crypto.randomBytes(16).toString("hex") };
+      return "etiuda-join:" + Buffer.from(JSON.stringify(doc)).toString("base64url");
+    };
+    const withoutHarness = async fn => {
+      const keys = ["ETIUDA_TEST_OFFSCREEN", "ETIUDA_TEST_DOCUMENTS", "ETIUDA_TEST_DEVTOOLS"];
+      const saved = {};
+      keys.forEach(k => { saved[k] = process.env[k]; delete process.env[k]; });
+      const argv = process.argv.slice();
+      process.argv = process.argv.filter(a => !/^--user-data-dir(=|$)/.test(String(a)));
+      try { return await fn(); }
+      finally {
+        process.argv = argv;
+        keys.forEach(k => { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; });
+      }
+    };
+    const yesRelay = async (url, src) => {
+      const channels = [];
+      const relay = { inviteSealKey: realRelay.inviteSealKey, inviteWrapKey: realRelay.inviteWrapKey,
+        createChannel: opts => { channels.push(String(opts && opts.url || ""));
+          return { start() {}, stop: async () => {}, kick() {}, online: () => false, program: { pinned: () => null } }; } };
+      const S = loadShell({ src: src, relay: relay });
+      await S.ask("etiuda:branch-identity", true);
+      let res = null;
+      await withoutHarness(async () => { res = await S.ask("etiuda:team-join", "invite", relayBlob(url), "Ada", ""); });
+      return { res: res, channels: channels };
+    };
+    const evil = "https://evil.example/relay/v1";
+    const builtin = "https://etiuda.dev/relay/v1";
+    const foreign = await yesRelay(evil);
+    check(!!(foreign.res && foreign.res.refused) && foreign.channels.length === 0,
+      "18a a relay invitation to any other host is refused before a channel opens: answered "
+      + (foreign.res && (foreign.res.refused || "taken")) + ", channels " + foreign.channels.length);
+    const home = await yesRelay(builtin);
+    check(!(home.res && home.res.refused) && home.channels.length === 1 && home.channels[0] === builtin,
+      "18b the same yes to the built-in relay opens that channel and no other: answered "
+      + (home.res && (home.res.refused || "taken")) + ", channels " + JSON.stringify(home.channels));
+    if (PLANTS_OFF) notRun("18c lifting plant:relay-known opens a channel to the other host");
+    else {
+      const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:relay-known") >= 0);
+      let again = null;
+      if (at >= 0) { lines.splice(at, 1); again = await yesRelay(evil, lines.join("\n")); }
+      check(!!again && again.channels.length === 1 && again.channels[0] === evil,
+        "18c lifting plant:relay-known opens a channel to the other host: " + (again ? JSON.stringify(again.channels) : "plant line absent"));
+    }
+  }
+  /* ---- 19. the catalog folder. The page may store only a path this shell's picker returned, the one already
+     stored, or the one machine policy names. Any other string is left out, and nothing states it. ---- */
+  {
+    const remotePath = p => { const s = String(p || ""); return s.length >= 2 && ((s.charAt(0) === "\\" && s.charAt(1) === "\\") || (s.charAt(0) === "/" && s.charAt(1) === "/")); };
+    const arm = S => {
+      const calls = [];
+      const note = p => { calls.push(String(p)); };
+      S.ctl.pstat = async p => { note(p); if (remotePath(p)) { const e = new Error("stand-in"); e.code = "ENOENT"; throw e; } return realFs.promises.stat(p); };
+      S.ctl.statSync = (real, p, ...a) => { note(p); if (remotePath(p)) { const e = new Error("stand-in"); e.code = "ENOENT"; throw e; } return real(p, ...a); };
+      S.ctl.mkdirSync = (real, p, ...a) => { note(p); if (remotePath(p)) return; return real(p, ...a); };
+      S.ctl.readFileSync = (real, p, ...a) => { note(p); if (remotePath(p)) { const e = new Error("stand-in"); e.code = "ENOENT"; throw e; } return real(p, ...a); };
+      return calls;
+    };
+    const yard = path.join(LAB, "picked-catalog");
+    realFs.mkdirSync(yard, { recursive: true });
+    const honest = loadShell({ openDialog: async () => ({ canceled: false, filePaths: [yard] }) });
+    const picked = await honest.ask("etiuda:pick-catalog-folder", "Library");
+    const saved = honest.ipc("etiuda:desk-patch-save", JSON.stringify({ eCatalogFolder: picked }));
+    const storedHonest = keysOn(honest.deskFile);
+    check(picked === yard && saved === true && !!storedHonest && storedHonest.eCatalogFolder === yard,
+      "19a a folder the shell's picker returned is stored when the page names that same path: picked " + (picked === yard) + ", saved " + saved);
+    const unc = "\\\\evil.example\\share\\etiuda";
+    const probe = (src) => {
+      const S = loadShell({ src: src });
+      const calls = arm(S);
+      S.ipc("etiuda:desk");
+      const folderOf = () => { const k = keysOn(S.deskFile); return k ? k.eCatalogFolder : undefined; };
+      const had = folderOf();
+      const ok = S.ipc("etiuda:desk-patch-save", JSON.stringify({ eCatalogFolder: unc }));
+      return S.ask("etiuda:open-catalog-folder").then(() => ({ ok: ok, had: had, after: folderOf(),
+        remote: calls.filter(remotePath).length }));
+    };
+    const hostile = await probe();
+    check(hostile.ok === false && hostile.after === hostile.had && hostile.remote === 0,
+      "19b a catalog folder the page names, with no picker behind it, is not stored and not stated: saved " + hostile.ok
+      + ", folder " + JSON.stringify(hostile.after) + ", remote calls " + hostile.remote);
+    if (PLANTS_OFF) notRun("19c lifting plant:catalog-folder-wall stores and states the page's path");
+    else {
+      const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:catalog-folder-wall") >= 0);
+      let again = null;
+      if (at >= 0) { lines.splice(at, 1); again = await probe(lines.join("\n")); }
+      check(!!again && (again.after === unc || again.remote > 0),
+        "19c lifting plant:catalog-folder-wall stores and states the page's path: "
+        + (again ? "folder " + JSON.stringify(again.after) + ", remote " + again.remote : "plant line absent"));
+    }
+  }
+  /* ---- 20. a folder a moved team now lives in. The page may name only the path this shell's picker
+     returned. Any other string is not read, so a remote share is never opened. ---- */
+  {
+    const remotePath = p => { const s = String(p || ""); return s.length >= 2 && ((s.charAt(0) === "\\" && s.charAt(1) === "\\") || (s.charAt(0) === "/" && s.charAt(1) === "/")); };
+    const teamId = "t-" + "ab".repeat(8);
+    const unc = "\\\\evil.example\\share\\moved";
+    const arm = S => {
+      const calls = [];
+      const note = (p) => { calls.push(String(p)); };
+      S.ctl.readFileSync = (real, p, ...a) => { note(p); if (remotePath(p)) { const e = new Error("stand-in"); e.code = "ENOENT"; throw e; } return real(p, ...a); };
+      S.ctl.statSync = (real, p, ...a) => { note(p); if (remotePath(p)) { const e = new Error("stand-in"); e.code = "ENOENT"; throw e; } return real(p, ...a); };
+      return calls;
+    };
+    const askMoved = async (src, folder, openDialog) => {
+      const S = loadShell({ src: src, openDialog: openDialog });
+      const calls = arm(S);
+      let picked = "";
+      if (openDialog) picked = await S.ask("etiuda:pick-catalog-folder", "Library");
+      const res = await S.ask("etiuda:team-join", "pick-moved-folder", teamId, folder);
+      return { res: res, calls: calls, picked: picked, said: S.said.slice() };
+    };
+    const hostile = await askMoved(undefined, unc);
+    const remoteReads = hostile.calls.filter(remotePath).length;
+    const saidWrong = hostile.said.some(s => String(s).indexOf("That folder holds no files") >= 0);
+    check(hostile.res && hostile.res.ok === false && hostile.res.error === "unpicked" && remoteReads === 0 && !saidWrong,
+      "20a a moved-folder path the page names, with no picker behind it, is not read: answered "
+      + (hostile.res && hostile.res.error) + ", remote calls " + remoteReads);
+    const yard = path.join(LAB, "moved-picked");
+    realFs.mkdirSync(yard, { recursive: true });
+    realFs.writeFileSync(path.join(yard, "etiuda-team.json"), "{}\n", "utf8");
+    const honest = await askMoved(undefined, yard, async () => ({ canceled: false, filePaths: [yard] }));
+    const readTeam = honest.calls.some(p => String(p).indexOf("etiuda-team.json") >= 0 && !remotePath(p));
+    check(honest.picked === yard && honest.res && honest.res.error !== "unpicked" && readTeam,
+      "20b the folder the picker returned is read when the page names that same path: picked " + (honest.picked === yard)
+      + ", answered " + (honest.res && (honest.res.ok ? "taken" : honest.res.error)) + ", read " + readTeam);
+    if (PLANTS_OFF) notRun("20c lifting plant:moved-folder-offered reads the page's path");
+    else {
+      const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:moved-folder-offered") >= 0);
+      let again = null;
+      if (at >= 0) { lines.splice(at, 1); again = await askMoved(lines.join("\n"), unc); }
+      const againRemote = again ? again.calls.filter(remotePath).length : 0;
+      check(!!again && againRemote > 0,
+        "20c lifting plant:moved-folder-offered reads the page's path: "
+        + (again ? "remote " + againRemote + ", answered " + (again.res && again.res.error) : "plant line absent"));
     }
   }
 } catch (e) {

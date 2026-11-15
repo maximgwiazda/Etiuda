@@ -14,6 +14,8 @@
  */
 process.removeAllListeners("warning");
 process.on("warning", () => {});
+/* This file's relay invitations name a stand-in host. That host is accepted only on a harness start. */
+process.env.ETIUDA_TEST_OFFSCREEN = "1";
 
 import fs from "node:fs";
 import os from "node:os";
