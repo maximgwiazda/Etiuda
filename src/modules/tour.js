@@ -22,6 +22,7 @@ import { esc } from "./esc.js";
 import { cutLeaves, dismissCopy, mgReduceMotion } from "./motion.js";
 import { joinStands, onJoinPainted } from "./team-join.js";
 import { closeScreenTab, screenOn } from "./screen-tabs.js";
+import { hooks } from "./hooks.js";
 
 /* ---------- Guided tour ----------------------------------------------------
    Bubbles over the live page, which stays usable under them: nothing is darkened, and a click
@@ -33,7 +34,7 @@ function tourActive(){ return !!tourRunning; }
 function tourStorageKey(){ return "eTourDone_v"+TOUR_VER; }
 function tourInviteKey(){ return "eTourInvite_v"+TOUR_VER; }
 function markTourDone(){
-  lsSet(tourStorageKey(),"1"); lsSet(tourInviteKey(),"1");
+  lsSet(tourStorageKey(),"1"); lsSet(tourInviteKey(),"1"); lsDel(TOUR_AT);
 }
 function markTourInviteDismissed(){
   lsSet(tourInviteKey(),"1");
@@ -779,6 +780,8 @@ function showTourStep(i){
   const els=tourEls();
   // Where the tour stands survives a reload, the shell's recovery of a stopped page included.
   ssSet(TOUR_AT,step.id);
+  if(i>onFrom(0,1)) lsSet(TOUR_AT,step.id); else lsDel(TOUR_AT); /* plant:tour-save-step */
+  if(typeof syncTourMenu==="function") syncTourMenu();
   // Only a step about the Menu's rows (`menu`) leaves it open.
   if(!step.menu) closeSettingsMenu();
   /* A showcase must not outlive its step: whatever the PREVIOUS step's prep borrowed is given
@@ -837,6 +840,33 @@ function showTourStep(i){
 let tourNameWas=false;
 /** From the Menu, or by itself (`auto`): a first run, or a reload in the middle of one, which
  *  finds whatever the person had open still open, and leaves it so. */
+/** Persistent index where a manually opened tour resumes, or -1 if none kept. */
+function tourResumeAt(){
+  const id=lsGet(TOUR_AT);
+  if(!id) return -1;
+  let i=TOUR_STEPS.findIndex(x=>x.id===id);
+  if(i<0) return -1;
+  if(TOUR_STEPS[i].id==="editor"||TOUR_STEPS[i].id==="addIn"||TOUR_STEPS[i].id==="factsIn") i++;
+  i=onFrom(i,1);
+  const L=TOUR_STEPS.findIndex(x=>x.id==="load");
+  if(i>L && stepOn(L)) i=L;
+  return i;
+}
+/** Position of the kept step on the Menu row, or null when no step is kept. */
+function tourMenuState(){
+  const i=tourResumeAt();
+  if(i<0) return null;
+  const step=TOUR_STEPS[i];
+  if(!step) return null;
+  const on=TOUR_STEPS.map((_,k)=>k).filter(k=>stepOn(k) && !TOUR_STEPS[k].inside);
+  const at=step.inside ? TOUR_STEPS.findIndex(x=>x.opens===step.id) : i;
+  const n=on.indexOf(at)+1;
+  if(n<1 || !on.length) return null;
+  return {at, id:step.id, n, of:on.length};
+}
+function syncTourMenu(){
+  if(typeof hooks!=="undefined" && typeof hooks.syncSettingsMenu==="function") hooks.syncSettingsMenu();
+}
 function startTour(from,auto){
   if(!auto){
     closeSettingsMenu();
@@ -845,7 +875,8 @@ function startTour(from,auto){
   }
   const els=tourEls();
   if(!els.root) return;
-  let i=onFrom(Math.max(0,from|0),1);
+  const r=from==null ? tourResumeAt() : Math.max(0,from|0);
+  let i=onFrom(r>=0 ? r : 0,1);
   // Back on an empty desk after the load step, the load step is where the tour stands.
   const L=TOUR_STEPS.findIndex(x=>x.id==="load");
   if(i>L && stepOn(L)) i=L;
@@ -898,6 +929,7 @@ function maybeStartTour(){
 /* THE DESK STARTED AGAIN UNDER A RUNNING TOUR: a step the new desk no longer offers, the load step
    once a catalog is in, gives way to the next one that it does. */
 function tourAfterRestart(){
+  if(typeof syncTourMenu==="function") syncTourMenu();
   if(!tourRunning || tourIdx<0) return;
   const i=onFrom(tourIdx,1);
   if(i<0) endTour(true); else showTourStep(i);
@@ -939,6 +971,7 @@ function endTour(completed){
   if(completed) markTourDone();
   else markTourInviteDismissed();
   ssDel(TOUR_AT);
+  if(typeof syncTourMenu==="function") syncTourMenu();
   if(els.root){ els.root.classList.remove("behind"); els.root.classList.remove("away"); }
   if(!completed) toast("The tour waits in the Menu, under Show tour…");
   focusFirstEntryOnOpen();
@@ -1130,6 +1163,7 @@ export {
   wireTourUi,
   tourHasFocus,
   tourDueAtBoot,
+  tourMenuState,
   maybeStartTour,
   afterTour
 };

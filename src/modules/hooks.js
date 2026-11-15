@@ -27,6 +27,7 @@ const SLOTS = [
   "render",
   "closeSettingsMenu",
   "syncSettingsMenu",
+  "tourMenuState",
   "endTour",
   "startTour",
   "tourActive",

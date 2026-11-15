@@ -996,6 +996,7 @@ UI_STRINGS.pl={
   "Library…":"Biblioteka…",
   "Settings…":"Ustawienia…",
   "Show tour…":"Pokaż przewodnik…",
+  "Continue the tour ({N} of {OF})":"Wróć do przewodnika (krok {N} z {OF})",
   "About Etiuda":"O Etiudzie",
   "Hide intent panel":"Ukryj panel intencji",
   "Show intent panel":"Pokaż panel intencji",
