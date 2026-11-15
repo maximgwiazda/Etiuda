@@ -351,11 +351,18 @@ function updateIntentDateTitles(root){
     else row.removeAttribute("title");
   });
 }
-function updateTreeHoverTitles(root){
+function updateTreeHoverTitles(root, scope){
   const tree = (root || document).querySelector(".mg-tree");
   if(!tree) return;
+  const isSingle = scope && scope.matches && scope.matches(".manage-row.mg-card");
+  if(!isSingle && tree.closest("[hidden]")) return;
   const head = tree.querySelector(".lw-head");
   if(!head) return;
+  const rows = isSingle
+    ? [scope]
+    : Array.from((scope || tree).querySelectorAll(".mg-cat-body:not([hidden]) > .manage-row.mg-card:not([hidden])"))
+        .filter(r => !r.closest("[hidden]"));
+  if(!rows.length) return;
   const isColShown = cls => {
     const el = head.querySelector("." + cls);
     return el && el.offsetParent && getComputedStyle(el).display !== "none";
@@ -370,10 +377,14 @@ function updateTreeHoverTitles(root){
     dt: !isColShown("lw-h-dt"),
   };
   const dragHint = mgCardDragTip();
-  const cardRows = tree.querySelectorAll(".mg-cat-body .manage-row.mg-card");
-  cardRows.forEach(row => {
+  let byId = null;
+  if(rows.length > 1){
+    byId = new Map();
+    for(const c of (cards || [])) if(c && c.id && !byId.has(c.id)) byId.set(c.id, c);
+  }
+  rows.forEach(row => {
     const cid = row.getAttribute("data-cardrow");
-    const m = (cards || []).find(c => c && c.id === cid);
+    const m = byId ? byId.get(cid) : (cards || []).find(c => c && c.id === cid);
     if(!m) return;
     const lines = [dragHint];
     if(hiddenCols.op){
@@ -1770,9 +1781,10 @@ function wireLibrary(page){
       e.preventDefault(); e.stopPropagation();
       // pinned like the sections; catToggle does its own measuring inside modalResize
       mgPinCard();
-      catToggle(btn.closest(".mg-cat"), btn.getAttribute("data-toggle"));
-      markCutText(btn.closest(".mg-cat"));
-      updateTreeHoverTitles(page);
+      const cat=btn.closest(".mg-cat");
+      catToggle(cat, btn.getAttribute("data-toggle"));
+      markCutText(cat);
+      if(cat && cat.classList.contains("is-open")) updateTreeHoverTitles(page, cat);
     };
   });
 
@@ -1788,7 +1800,7 @@ function wireLibrary(page){
     };
   });
   page.querySelectorAll(".mg-cat-body .manage-row.mg-card").forEach(r=>{
-    r.addEventListener("pointerenter", ()=>updateTreeHoverTitles(page), {passive:true});
+    r.addEventListener("pointerenter", ()=>updateTreeHoverTitles(page, r), {passive:true});
   });
   const treeEl = page.querySelector(".mg-tree");
   const cardBox = (treeEl && treeEl.closest(".sx-card")) || treeEl;
