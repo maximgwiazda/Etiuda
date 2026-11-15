@@ -376,6 +376,28 @@ function writeWhole(file, bytes, io) {
     throw e;
   }
 }
+/* A root catalog owe: the flush compares it with the share before it writes. A file under desks/ is this desk's own. */
+function rootCatalogOwe(rel) {
+  return String(rel || "").indexOf("/") < 0 && /\.ec$/i.test(rel);
+}
+/* The epoch, counter and rev sitting in the clear. The flush runs where the worker holds no key, so a sealed catalog is
+   compared by its envelope's epoch only; an ordinary catalog is compared by the rev the file itself names. */
+function clearMarks(text) {
+  let doc = null;
+  try { doc = JSON.parse(String(text || "")); } catch { return {}; }
+  if (!doc || typeof doc !== "object") return {};
+  const rev = doc.rev === null || doc.rev === "" ? NaN : +doc.rev;
+  return {
+    epoch: doc.kind === "etiuda-sealed" && Number.isInteger(doc.epoch) ? doc.epoch : null,
+    n: Number.isSafeInteger(doc.n) ? doc.n : null,
+    rev: Number.isSafeInteger(rev) ? rev : null
+  };
+}
+function shareTextNewer(shareText, mirrorText) {
+  const a = clearMarks(shareText), b = clearMarks(mirrorText);
+  for (const k of ["epoch", "n", "rev"]) if (a[k] != null && b[k] != null && a[k] !== b[k]) return a[k] > b[k];
+  return false;
+}
 /* "file" where the share's file is marked read-only, "folder" where the share would not take a new file there, "" otherwise. */
 function readOnlyOf(e, dest, io) {
   if (!e || (e.code !== "EPERM" && e.code !== "EACCES")) return "";
@@ -404,8 +426,27 @@ function flushOwed(folder, mirror, items, io, own) {
       out.push({ rel, sha: del ? null : it.sha, del, ok: false, code: "ELOOP" });
       continue;
     }
+    let heldLock = null;
     try {
+      if (rootCatalogOwe(rel)) {
+        heldLock = shareLock(dest);
+        if (!heldLock) {
+          out.push({ rel, sha: del ? null : it.sha, del, ok: false, busy: true, code: "EBUSY" });
+          continue;
+        }
+      }
+      let shareText = null;
+      if (heldLock) {
+        try { shareText = fs.readFileSync(dest, "utf8"); }
+        catch (e) { if (!e || e.code !== "ENOENT") throw e; shareText = ""; }
+      }
       if (del) {
+        let mirrorText = "";
+        try { mirrorText = fs.readFileSync(path.join(mirror, ...parts), "utf8"); } catch { mirrorText = ""; }
+        if (heldLock && shareText && mirrorText && shareTextNewer(shareText, mirrorText)) {
+          out.push({ rel, sha: null, del: true, ok: false, changed: true });
+          continue;
+        }
         try { io.unlink(dest); } catch (e) { if (!e || e.code !== "ENOENT") throw e; }
         out.push({ rel, sha: null, del: true, ok: true });
         continue;
@@ -413,6 +454,12 @@ function flushOwed(folder, mirror, items, io, own) {
       const bytes = io.readFile(path.join(mirror, ...parts));
       const sha = sha256hex(bytes);
       if (sha !== it.sha) continue;
+      let newer = false;
+      if (heldLock) newer = shareTextNewer(shareText, bytes.toString("utf8")); /* plant:flush-share-newer */
+      if (newer) {
+        out.push({ rel, sha, del: false, ok: false, changed: true });
+        continue;
+      }
       for (let i = 1; i < parts.length; i++) {
         try { fs.mkdirSync(path.join(folder, ...parts.slice(0, i))); } catch (e) { if (!e || e.code !== "EEXIST") throw e; }
       }
@@ -424,6 +471,8 @@ function flushOwed(folder, mirror, items, io, own) {
       out.push({ rel, sha, del: false, ok: true, size: st ? st.size : null, mtimeMs: st ? (st.mtimeMs || 0) : null });
     } catch (e) {
       out.push({ rel, sha: del ? null : it.sha, del, ok: false, code: (e && e.code) || "EIO", readOnly: readOnlyOf(e, dest, io) });
+    } finally {
+      if (heldLock) shareRelease(heldLock);
     }
   }
   return out;
@@ -795,6 +844,13 @@ function createFolderProgram(opts) {
               clearRels.push(r);
               if (saidWait.has(r.rel)) { saidWait.delete(r.rel); logger("etiuda: " + r.rel + " has reached the team's folder " + folder); }
               if (!r.del && r.size != null) knownMtimes.set(r.rel, { size: r.size, mtimeMs: r.mtimeMs });
+            } else if (r.changed) {
+              if (!!rec.del !== !!r.del || (!rec.del && rec.sha !== r.sha)) continue;
+              clearRels.push(r);
+              if (saidWait.get(r.rel) !== "changed") {
+                saidWait.set(r.rel, "changed");
+                logger("etiuda: " + path.join(folder, r.rel) + " was not written over the team's folder, which holds a newer copy");
+              }
             } else if (rec.code !== r.code || (rec.readOnly || "") !== (r.readOnly || "")) {
               updateRels.push(r);
               if (saidWait.get(r.rel) !== r.code) {

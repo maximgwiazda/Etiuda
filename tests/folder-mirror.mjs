@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 133;
+const EXPECTED = 135;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const { offWindows } = nodeRequire("./off-windows.cjs");
@@ -4208,6 +4208,59 @@ async function run() {
       return got.canonRev !== 11 || got.canonLead !== LEAD.keyId;
     });
     check(planted.ok, "r2b lifting plant:sibling-rev-before-pin lets an older conflict sibling move the pin: " + JSON.stringify(planted));
+  }
+
+  /* r1: a flush of a root catalog does not write over a newer copy on the share (review 24, finding 1). */
+  const R1_NEW = "{\"format\":2,\"kind\":\"etiuda-catalog\",\"id\":\"lamp\",\"rev\":5,\"name\":\"New\"}\n";
+  const R1_KEPT = "{\"format\":2,\"kind\":\"etiuda-catalog\",\"id\":\"lamp\",\"rev\":3,\"name\":\"Old\"}\n";
+  const R1_OLD = "{\"format\":2,\"kind\":\"etiuda-catalog\",\"id\":\"lamp\",\"rev\":1,\"name\":\"Older\"}\n";
+  function putBack(mod, name) {
+    const share = folder(name + "-share");
+    const mirror = folder(name + "-mirror");
+    const said = [];
+    fs.writeFileSync(path.join(share, "lamp.ec"), R1_NEW, "utf8");
+    fs.writeFileSync(path.join(mirror, "lamp.ec"), R1_KEPT, "utf8");
+    fs.writeFileSync(path.join(share, "old.ec"), R1_OLD, "utf8");
+    fs.writeFileSync(path.join(mirror, "old.ec"), R1_KEPT, "utf8");
+    fs.writeFileSync(path.join(share, "busy.ec"), R1_OLD, "utf8");
+    fs.writeFileSync(path.join(mirror, "busy.ec"), R1_KEPT, "utf8");
+    fs.writeFileSync(path.join(share, "busy.ec.lock"), JSON.stringify({ kind: "etiuda-lock", token: "held", at: Date.now() }), "utf8");
+    const prog = mod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, checks, logger: (m) => said.push(String(m)) });
+    try {
+      mod.noteOwed(mirror, "lamp.ec");
+      mod.noteOwed(mirror, "old.ec");
+      mod.noteOwed(mirror, "busy.ec");
+      const results = mod.flushOwed(share, mirror, mod.owedList(mirror), null, "");
+      prog.landed(results);
+      const byRel = {};
+      for (const r of results) byRel[r.rel] = r;
+      const owed = mod.owedList(mirror).map(x => x.rel).sort();
+      return {
+        shareKept: fs.readFileSync(path.join(share, "lamp.ec"), "utf8") === R1_NEW,
+        olderReplaced: fs.readFileSync(path.join(share, "old.ec"), "utf8") === R1_KEPT,
+        busyKept: fs.readFileSync(path.join(share, "busy.ec"), "utf8") === R1_OLD,
+        changed: !!(byRel["lamp.ec"] && byRel["lamp.ec"].changed && !byRel["lamp.ec"].ok),
+        busy: !!(byRel["busy.ec"] && byRel["busy.ec"].busy && !byRel["busy.ec"].ok),
+        owed,
+        told: said.some(l => l.indexOf("lamp.ec") >= 0 && l.indexOf("newer copy") >= 0 && l.indexOf(" - ") < 0),
+        retry: said.some(l => l.indexOf("lamp.ec") >= 0 && l.indexOf("kept on this computer") >= 0)
+      };
+    } finally { prog.stop(); }
+  }
+  {
+    const g = putBack(syncerMod, "r1a");
+    const oweCleared = g.owed.indexOf("lamp.ec") < 0 && g.owed.indexOf("old.ec") < 0 && g.owed.indexOf("busy.ec") >= 0;
+    check(g.shareKept && g.olderReplaced && g.busyKept && g.changed && g.busy && oweCleared && g.told && !g.retry,
+      "r1a a newer root catalog on the share is left there, the owe is cleared and said once, a busy lock keeps its owe, and an older share catalog is still replaced: "
+      + JSON.stringify(g));
+  }
+  if (PLANTS_OFF) skip("r1b lifting plant:flush-share-newer writes this desk's older catalog over the share's newer one: NOT RUN");
+  else {
+    const planted = await testPlant("flush-share-newer", syncerFile, async (scratch) => {
+      const got = putBack(nodeRequire(scratch), "r1b");
+      return !got.shareKept;
+    });
+    check(planted.ok, "r1b lifting plant:flush-share-newer writes this desk's older catalog over the share's newer one: " + JSON.stringify(planted));
   }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {
