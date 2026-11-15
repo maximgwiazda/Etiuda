@@ -19,9 +19,11 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
-const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
+/* Machine policy is none but where a leg (930g) writes the export a policy names. */
+const REG = { policy: null };
+const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
-const EXPECTED = 27;
+const EXPECTED = 29;
 const WORK = path.join(ROOT, "shell", "main.js");
 const GOOD = fs.readFileSync(WORK);
 const GOOD_HASH = crypto.createHash("sha256").update(GOOD).digest("hex");
@@ -42,7 +44,7 @@ const COPY = path.join(APP, "main.js");
 const EXPOSE = ["spanSignedBytes", "spanDocument", "spanPeriod", "setStatsClock", "statsPulse", "flushHeldStats",
   "openSealed", "sealCatalog", "openStatsSealed", "sealStatsLead", "statsAnswerSignedBytes", "statsAnswerGenuine",
   "signedBytesOf", "branchSign", "branchIdOf", "deskFileGenuine", "teamWhole", "wrapTeamKey", "signedSha",
-  "catalogChanged", "channelHash", "isCatalogName", "deskTrustChecks", "handoverSignedBytes"];
+  "catalogChanged", "channelHash", "isCatalogName", "deskTrustChecks", "handoverSignedBytes", "patchDesk"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -395,6 +397,62 @@ try {
       "  /* plant:stats-box-kept */", runF);
     check(g.ok, "930f a handover whose team file keeps the box the last answer was sealed to seals nothing more; a team file naming a box of its own seals to it"
       + (g.why ? ": " + g.why.split("\n")[0] : ""));
+  }
+
+  /* ---- 930g: a team the organisation's policy set seals nothing until Settings has shown the sentence; 930h: the page keeps
+     the teams it showed it for ------------------------------------------------------------------------------------------ */
+  {
+    const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
+      + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
+    const runG = async () => {
+      REG.policy = regText([["LeadKey", LEAD.public]]);
+      let box = null;
+      try { box = await joined(false); adopt(box, "rolling-30", lead.privateKey, LEAD, 2); }
+      finally { REG.policy = null; }
+      const before = fs.existsSync(statsAt(box));
+      box.D.api.patchDesk(JSON.stringify({ eStatsTold: JSON.stringify([box.team]) }));
+      box.D.api.catalogChanged(box.D.win);
+      box.D.api.flushHeldStats();
+      const inner = openStats(box);
+      console.log("  --- 930g before told " + before + ", after " + (inner ? inner.cards[0].n : "none")
+        + ", said " + box.D.said.filter(l => /wait until this desk has shown/.test(l)).length);
+      return process.platform !== "win32" || (!before && !!inner && inner.cards[0].n === 2);
+    };
+    const g = await proveOr("930g", "  untold = !!named && named === String(use.seal.lead && use.seal.lead.public) && !statsTold(use.seal.team); /* plant:stats-untold */",
+      "  /* plant:stats-untold */", runG);
+    check(g.ok, "930g a desk whose team the organisation's policy set seals nothing until Settings has shown the sentence on what the lead sees,"
+      + " and seals the held answer once it has" + (g.why ? ": " + g.why.split("\n")[0] : ""));
+    /* The page's half, loaded from a copy whose imports point back at the modules folder. */
+    const modulesUrl = pathToFileURL(path.join(ROOT, "src", "modules")).href;
+    const settingsText = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
+    const pageCopy = async (text) => {
+      const dir = fs.mkdtempSync(path.join(LAB, "settings-"));
+      const at = path.join(dir, "settings.js");
+      fs.writeFileSync(at, text.replace(/from "\.\//g, 'from "' + modulesUrl + '/').replace("export {", "export {\n  statsToldNext,"));
+      return import(pathToFileURL(at).href);
+    };
+    const runH = async (text) => {
+      const M = await pageCopy(text);
+      const leads = [{ team: "t-one" }, { team: "t-gone", removed: true }, { team: "t-two" }];
+      const shown = M.statsToldNext("teams", "", leads, ["t-old"]), all = M.statsToldNext("", "", leads, []);
+      const other = M.statsToldNext("account", "", leads, []), searched = M.statsToldNext("teams", "lead", leads, []), same = M.statsToldNext("all", "", leads, ["t-one", "t-two"]);
+      const wired = /box\.innerHTML=settingsPageHtml\(sxOn,sxQuery\);\n  noteStatsTold\(\);/.test(text);
+      return JSON.stringify(shown) === JSON.stringify(["t-old", "t-one", "t-two"]) && JSON.stringify(all) === JSON.stringify(["t-one", "t-two"])
+        && other === null && searched === null && same === null && wired;
+    };
+    let h = { ok: false, why: "" };
+    try {
+      const green = await runH(settingsText);
+      let red = null;
+      if (!PLANTS_OFF) {
+        const planted = settingsText.replace("  if(String(query||\"\").trim() || (on && on!==\"all\" && on!==\"teams\")) return null; /* plant:told-shown */", "  /* plant:told-shown */");
+        red = planted === settingsText ? "plant missed" : !(await runH(planted));
+        console.log("  red  930h " + (red === true ? "failed under the plant" : "STILL PASSED under the plant"));
+      } else console.log("  SKIP  the plant of 930h (ETIUDA_PLANTS=off)");
+      h = { ok: green && (PLANTS_OFF || red === true), why: "" };
+    } catch (e) { h = { ok: false, why: e.stack || e.message }; }
+    check(h.ok, "930h the page records the teams it showed the sentence for: the teams section or every setting with no search, never another"
+      + " section or a search, and only teams still listing this desk; the Settings paint records it" + (h.why ? ": " + h.why.split("\n")[0] : ""));
   }
 
   /* ---- 891b: one watch event ----------------------------------------------------------------------------------- */

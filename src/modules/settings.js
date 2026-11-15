@@ -848,10 +848,25 @@ function sxRefocus(host,fk,inPage){
   const to=page && inPage && page.querySelector(inPage);
   if(to) try{ to.focus({preventScroll:true}); }catch(e){ to.focus(); }
 }
+/* The teams whose sentence on what the lead sees has been drawn: the teams section, or every setting, with no search. The shell
+   seals statistics for a team the organisation set only once it is in this list. The new list, or null where nothing is added. */
+function statsToldNext(on, query, leads, was){
+  if(String(query||"").trim() || (on && on!=="all" && on!=="teams")) return null; /* plant:told-shown */
+  const old=Array.isArray(was)?was.map(String):[];
+  const add=(leads||[]).filter(l=>l && !l.removed && typeof l.team==="string" && l.team).map(l=>l.team).filter(x=>old.indexOf(x)<0);
+  return add.length ? old.concat(add) : null;
+}
+function noteStatsTold(){
+  let was=[];
+  try{ was=JSON.parse(lsGet("eStatsTold")||"[]"); }catch(e){ was=[]; }
+  const next=statsToldNext(sxOn, sxQuery, teamLeads(), was);
+  if(next) lsSet("eStatsTold", JSON.stringify(next));
+}
 function paintSettings(){
   const host=settingsHost(), box=host && host.querySelector("#setBody");
   if(!box) return;
   box.innerHTML=settingsPageHtml(sxOn,sxQuery);
+  noteStatsTold();
   paintKeysInline();
   wireHotkeyRow(box);
   wirePage(box);
