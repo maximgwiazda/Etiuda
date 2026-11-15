@@ -22,6 +22,8 @@
  *        budget, so ls1 to ls3 would see the fault
  *   ls5  a change made while the Library is away reaches it: a card starred from the desk is starred in the Library
  *        when its tab is fronted again, so a page put back is never a stale one
+ *   ls6  each search keystroke in #libSearch and Escape to clear draws at most 10 elements (only the filtered list)
+ *   ls7  typing a search filters to matching rows with focus held on #libSearch, and Escape restores the section
  * The catalog is the shipped sample, of a real catalog's size. Exit code is the number of failed checks; 78 when the
  * run could not complete.
  */
@@ -36,7 +38,7 @@ const puppeteer = require("puppeteer-core");
 let fails = 0, checks = 0;
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 8, REPS = 5, BUDGET = 1000;
+const EXPECTED = 10, REPS = 5, BUDGET = 1000, KEY_BUDGET = 10;
 const argv = process.argv.slice(2);
 const at = argv.indexOf("--engine");
 const ENGINE = at >= 0 ? path.resolve(argv[at + 1]) : E.ENGINE_PATH;
@@ -142,6 +144,47 @@ try {
   check(shown === star.want, "ls5 a card starred from the desk while the Library was away reads aria-pressed " + shown
     + " in the Library fronted again (wanted " + star.want + ")");
   await p.evaluate(id => window.toggleFavourite(id), star.id);
+
+  /* Search keystrokes in #libSearch and Escape to clear: only the filtered list updates, never a full redraw. */
+  await (await p.$('#libSecs .sx-sec[data-lm="data"]')).click();
+  await sleep(200);
+  await p.focus("#libSearch");
+  const keyRows = [];
+  for (const k of ["o", "r", "d", "e", "r", "z", "Backspace", "Escape"]) {
+    await mark();
+    await p.evaluate(() => { window.__ev = []; });
+    await p.keyboard.press(k);
+    await sleep(200);
+    const drawn = await count();
+    await mark();
+    const d = await p.evaluate(() => window.__ev.filter(e => /key|input/.test(e.n)).reduce((m, e) => Math.max(m, e.d), 0));
+    keyRows.push({ drawn, paint: d });
+  }
+  const keySay = keyRows.map(r => r.drawn + "/" + r.paint).join(" ");
+  check(most(keyRows) <= KEY_BUDGET, "ls6 search keystrokes and Escape in #libSearch: most drawn " + most(keyRows)
+    + ", median " + median(keyRows.map(r => r.paint)) + " ms to paint (" + keySay + "); at most " + KEY_BUDGET + " drawn");
+
+  await p.focus("#libSearch");
+  for (const k of ["o", "r", "d", "e", "r"]) { await p.keyboard.press(k); await sleep(80); }
+  const midSearch = await p.evaluate(() => ({
+    focused: document.activeElement && document.activeElement.id === "libSearch",
+    title: (document.getElementById("libTitle") || {}).textContent || "",
+    shownIntents: [...document.querySelectorAll(".mg-intents .manage-row[data-introw]")].filter(r => !r.hasAttribute("hidden")).length,
+    totalIntents: document.querySelectorAll(".mg-intents .manage-row[data-introw]").length,
+    isFind: document.querySelector(".lib-list") && document.querySelector(".lib-list").classList.contains("is-find"),
+  }));
+  await p.keyboard.press("Escape");
+  await sleep(200);
+  const afterEsc = await p.evaluate(() => ({
+    focused: document.activeElement && document.activeElement.id === "libSearch",
+    val: (document.getElementById("libSearch") || {}).value,
+    isFind: document.querySelector(".lib-list") && document.querySelector(".lib-list").classList.contains("is-find"),
+    dataHidden: document.querySelector('details.manage-sec[data-mg="data"]').hasAttribute("hidden"),
+  }));
+  check(midSearch.focused && midSearch.title === "order" && midSearch.isFind
+    && midSearch.shownIntents > 0 && midSearch.shownIntents < midSearch.totalIntents
+    && afterEsc.focused && afterEsc.val === "" && !afterEsc.isFind && !afterEsc.dataHidden,
+    "ls7 search filters to matching rows with focus held on #libSearch, and Escape clears back to the section");
   done = true;
 } catch (e) {
   console.log("  FAIL the run stopped: " + String(e && e.message || e));
