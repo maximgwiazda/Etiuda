@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 92;
+const EXPECTED = 101;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -1866,32 +1866,16 @@ try {
       && !!rLamp.inner && rLamp.inner.grew.id === "lamp-shop",
       "14ff a listed catalog opened from the team's envelope: yes, and the file lands sealed under the team's key: " + shown(rLamp));
 
-    /* the same edition in the folder under two teams' keys: the write has no seal for it and holds, so the channel says no */
-    put(FLG, "kiln.ec", seal(K1, 1, KILN));
-    const kilnHanded = await read(DF, "kiln.ec");
-    take(DF, kilnHanded);
-    const kilnSealed = DF.ipc("etiuda:branch-reach");
-    /* The desk meets a second team in a folder of its own, which keeps that team's key; the same edition under that key then
-       also stands in this folder. */
-    const OTHER2 = folder("flag-other");
-    fs.writeFileSync(path.join(OTHER2, "etiuda-ring.json"), fs.readFileSync(path.join(FLG, "etiuda-ring.json")));
-    put(OTHER2, "etiuda-team.json", JSON.stringify(teamFile({ team: TX2, epoch: 1, roster: [entry(meF, KX2, 1, TX2)], catalogs: listing })));
-    put(OTHER2, "kiln-x.ec", seal(KX2, 1, KILN, TX2));
-    const pointAt = (D, dir) => {
-      const e = D.envelope();
-      e.keys = Object.assign({}, e.keys, { eCatalogFolder: dir });
-      fs.writeFileSync(path.join(D.ud, "desk.json"), JSON.stringify(e), "utf8");
-      D.close();
-      return loadDesk(D.ud);
-    };
-    DF = pointAt(DF, OTHER2);
-    await DF.ask("etiuda:catalog-files");
-    DF = pointAt(DF, FLG);
-    put(FLG, "kiln-x.ec", seal(KX2, 1, KILN, TX2));
-    const rKiln = await flagCase(DF, kilnHanded);
-    check(kilnSealed === true && rKiln.reach === false && agreed(rKiln) && rKiln.w.held === true,
-      "14fg a listed catalog whose edition the folder holds under two teams' keys has no seal and is held: before the second envelope the channel said "
-      + kilnSealed + "; now " + shown(rKiln));
+    /* a listed catalog opened from the team's envelope where the team's file has moved to an epoch this desk holds no key for:
+       the write has no seal for it and holds, so the channel says no; the team's file back at its epoch, it says yes again */
+    const beforeEpoch = await flagCase(DF, await read(DF, "lamps.ec"));
+    fs.unlinkSync(beforeEpoch.g.file);
+    put(FLG, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(meF, K1, 1)], catalogs: listing })));
+    const rStale = await flagCase(DF, await read(DF, "lamps.ec"));
+    check(beforeEpoch.reach === true && agreed(beforeEpoch) && rStale.reach === false && agreed(rStale) && rStale.w.held === true,
+      "14fg a listed catalog opened from the team's envelope, with no seal to be had: no, and the write holds the file: with the key "
+      + shown(beforeEpoch) + "; without " + shown(rStale));
+    teamA();
 
     /* The plants: a line of the gate lifted from a copy of main.js, the same cases on it. */
     const liftMain = tag => {
