@@ -34,7 +34,7 @@ const nodeRequire = createRequire(import.meta.url);
    open now asks machine policy whether to keep the desk (section 12), and 77z drives exactly that. Before the shell loads. */
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 128;
+const EXPECTED = 134;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const ASIDE_D6_LOGIN = nodeRequire("./off-windows.cjs").offWindows("D6-login",
   "the shell sets no login item off Windows, so Reset's turn-off has nothing to reach");
