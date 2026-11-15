@@ -1,4 +1,5 @@
-/* Dark theme one-line glass rim (`--rim`) and quieter foot (`--rim-foot`) across all six surfaces.
+/* Dark theme one-line glass rim (`--rim`) and quieter foot (`--rim-foot`) across all six surfaces,
+ * preserving each surface's own overflow, scrolling and resize behaviour from engine main.
  *
  *   node tests/desk-one-line.mjs
  *
@@ -11,15 +12,23 @@
  *   pills      #pillsSlot.pills-overflow .pills
  *   intentRail #intentRail (floating overlay peek below the rail-col width floor)
  *
- * Per surface and scale (6 surfaces x 2 scales x 5 assertions = 60 main checks):
- *   1. Page geometry: ::after inset equals -borderTopWidth (-1px) on all four sides and its
- *      borderTopLeftRadius matches the surface's own borderTopLeftRadius.
+ * Per surface and scale (6 surfaces x 2 scales x 6 base + 4 scroll + 1 facts resize = 82 main checks):
+ *   1. Page geometry: the ring's box equals the surface's border box (inset -borderWidth from
+ *      padding box) and its corner radius equals the surface's own — whether drawn via el::after
+ *      (card), via the surface's own border (`border-color:transparent` + `background-clip:
+ *      border-area`), or via host ::after (`#pillsSlot.pills-overflow::after` matching `.pills`).
  *   2. Bounding box: width and height equal the unmodified base box recorded below (within 0.1px).
  *   3. Top middle screenshot line: sampled outside-to-inside across the top edge centre, yields 1 run.
  *   4. 45-degree corner screenshot line: sampled outside-to-inside along the corner radial, yields 1 run.
  *   5. Quieter foot: (botPeak - restSide) / (topPeak - restSide) <= 0.25, measured against the middle
  *      side rest using the 2px rim zone ([top, top + 2) and [bottom - 2, bottom)) on padded
  *      surfaces and the 1px outer border band ([top, top + 1) and [bottom - 1, bottom)) on pills.
+ *   6. Main overflow/resize parity: computed overflow-x, overflow-y and resize match engine main
+ *      f9d5cd8e (recorded in MAIN_BEHAVIOUR below).
+ *   7. Scroll behaviour (dialog, facts, pills, intentRail): making the surface taller than its box
+ *      allows scrollTop to move when set.
+ *   8. Quick facts resize (facts): applying an inline size as a resize-handle drag does changes
+ *      the panel's bounding box to that size.
  *
  * Exact run-counting rule (1D luminance array `vals[0..M-1]`, outside to inside, 1 sample/device px):
  *   1. Luminance is `L = 0.2126*R + 0.7152*G + 0.0722*B`.
@@ -42,9 +51,11 @@
  *      dimmer border strip is a distinct outer line abutting a brighter inner rim; add 1 to `runs`
  *      (a < `dpr`-wide leading sample or faint fringe below `bgOut + 10` is outer anti-aliasing, not a second line).
  *
- * Inline plant proof (2 checks, or NOT RUN when ETIUDA_PLANTS=off): restores `inset:0` (removing
- * `inset:-1px` / `calc(-1 * var(--rim-bw))`) on the five surfaces in a scratch copy of
- * engine/etiuda.html and verifies the checks catch the planted double-line regression at 1x and 2x.
+ * Inline plant proofs (3 checks, or NOT RUN when ETIUDA_PLANTS=off):
+ *   - Plant 1 (1x and 2x): restores the old two-line rule (`inset:0` / inner radius on the five
+ *     surfaces) in a scratch copy of engine/etiuda.html and verifies the checks catch it.
+ *   - Plant 2 (1x): sets `overflow:clip` on `.facts-panel` in a scratch copy of engine/etiuda.html
+ *     and verifies the new overflow and scroll checks turn red.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -57,7 +68,7 @@ if (!process.env.ETIUDA_FIXTURES) process.env.ETIUDA_FIXTURES = "C:/Users/maxim/
 const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
 
-const EXPECTED = 62;
+const EXPECTED = 85;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let checks = 0, fails = 0, skipped = 0;
@@ -68,7 +79,7 @@ function check(ok, what, detail) {
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-/* Unmodified base bounding boxes at DPR 1 and DPR 2 (recorded on unmodified base commit). */
+/* Unmodified base bounding boxes at DPR 1 and DPR 2 (recorded on unmodified base commit f9d5cd8e). */
 const BASE_BOXES = {
   1: {
     card:       { w: 435.33, h: 45 },
@@ -86,6 +97,16 @@ const BASE_BOXES = {
     pills:      { w: 822, h: 193.5 },
     intentRail: { w: 228, h: 711 },
   },
+};
+
+/* Computed overflow-x, overflow-y, resize, scroll and resize behaviour recorded on engine main f9d5cd8e. */
+const MAIN_BEHAVIOUR = {
+  card:       { overflowX: "visible", overflowY: "visible", resize: "none", scrolls: false, resizable: false },
+  menu:       { overflowX: "visible", overflowY: "visible", resize: "none", scrolls: false, resizable: false },
+  dialog:     { overflowX: "hidden",  overflowY: "hidden",  resize: "none", scrolls: true,  resizable: false },
+  facts:      { overflowX: "auto",    overflowY: "auto",    resize: "both", scrolls: true,  resizable: true  },
+  pills:      { overflowX: "hidden",  overflowY: "hidden",  resize: "none", scrolls: true,  resizable: false },
+  intentRail: { overflowX: "hidden",  overflowY: "hidden",  resize: "none", scrolls: true,  resizable: false },
 };
 
 function countRuns(vals, dpr, bgOutCount = 3) {
@@ -177,6 +198,8 @@ async function measureSurface(page, selector, opts) {
     const r = el.getBoundingClientRect();
     const cs = getComputedStyle(el);
     const af = getComputedStyle(el, "::after");
+    const hostEl = o.ringHost ? document.querySelector(o.ringHost) : null;
+    const haf = hostEl ? getComputedStyle(hostEl, "::after") : null;
     const combo = document.getElementById("intentComboWrap");
     const comboR = combo ? combo.getBoundingClientRect().right : 0;
 
@@ -265,18 +288,67 @@ async function measureSurface(page, selector, opts) {
     sideSamples.sort((a, b) => a - b);
     const restSide = sideSamples[Math.floor(sideSamples.length / 2)] || 0;
 
+    let scrollCheck = null;
+    if (o.testScroll) {
+      const prev = el.scrollTop;
+      const filler = document.createElement("div");
+      filler.style.cssText = "height:3000px;width:1px;flex:0 0 auto;pointer-events:none";
+      el.appendChild(filler);
+      el.scrollTop = 120;
+      const moved = el.scrollTop;
+      filler.remove();
+      el.scrollTop = prev;
+      scrollCheck = { prev, moved, scrolled: moved > prev };
+    }
+
+    let resizeCheck = null;
+    if (o.testResize) {
+      const prevW = el.style.width, prevH = el.style.height;
+      el.style.width = "420px";
+      el.style.height = "260px";
+      const nr = el.getBoundingClientRect();
+      el.style.width = prevW;
+      el.style.height = prevH;
+      const rr = el.getBoundingClientRect();
+      resizeCheck = {
+        from: { w: Math.round(r.width * 100) / 100, h: Math.round(r.height * 100) / 100 },
+        to: { w: Math.round(nr.width * 100) / 100, h: Math.round(nr.height * 100) / 100 },
+        restored: { w: Math.round(rr.width * 100) / 100, h: Math.round(rr.height * 100) / 100 },
+      };
+    }
+
     return {
       box: { w: Math.round(r.width * 100) / 100, h: Math.round(r.height * 100) / 100 },
       css: {
         bw: parseFloat(cs.borderTopWidth),
         radius: parseFloat(cs.borderTopLeftRadius),
+        overflowX: cs.overflowX,
+        overflowY: cs.overflowY,
+        resize: cs.resize,
+        borderColor: cs.borderTopColor,
+        bgClip: cs.backgroundClip,
+        bgImage: cs.backgroundImage,
         afterTop: parseFloat(af.top),
         afterRight: parseFloat(af.right),
         afterBottom: parseFloat(af.bottom),
         afterLeft: parseFloat(af.left),
         afterRadius: parseFloat(af.borderTopLeftRadius),
         afterContent: af.content,
+        hostAfter: haf ? {
+          content: haf.content,
+          opacity: parseFloat(haf.opacity),
+          top: parseFloat(haf.top),
+          left: parseFloat(haf.left),
+          width: parseFloat(haf.width),
+          height: parseFloat(haf.height),
+          radius: parseFloat(haf.borderTopLeftRadius),
+          bw: parseFloat(haf.borderTopWidth),
+          bgClip: haf.backgroundClip,
+          bgImage: haf.backgroundImage,
+        } : null,
       },
+      scrollCheck,
+      resizeCheck,
       midLine,
       cornerLine,
       topPeak,
@@ -294,6 +366,8 @@ async function measureSurface(page, selector, opts) {
   return {
     box: raw.box,
     css: raw.css,
+    scrollCheck: raw.scrollCheck,
+    resizeCheck: raw.resizeCheck,
     mid,
     corner,
     topPeak: Math.round(raw.topPeak * 10) / 10,
@@ -327,7 +401,7 @@ async function captureAllSurfaces(browser, url, dpr) {
     await p1.evaluate(() => { document.activeElement?.blur?.(); });
     await p1.mouse.move(10, 10);
     await sleep(450);
-    results.dialog = await measureSurface(p1, ".modal:not([hidden]) .modal-card", { dpr, corner: "tl" });
+    results.dialog = await measureSurface(p1, ".modal:not([hidden]) .modal-card", { dpr, corner: "tl", testScroll: true });
     await p1.keyboard.press("Escape");
     await sleep(250);
 
@@ -339,7 +413,7 @@ async function captureAllSurfaces(browser, url, dpr) {
     await p1.evaluate(() => { document.activeElement?.blur?.(); });
     await p1.mouse.move(10, 10);
     await sleep(300);
-    results.facts = await measureSurface(p1, "#factsPanel", { dpr, corner: "tl", avoidCombo: true });
+    results.facts = await measureSurface(p1, "#factsPanel", { dpr, corner: "tl", avoidCombo: true, testScroll: true, testResize: true });
   } finally {
     await p1.close();
   }
@@ -355,10 +429,16 @@ async function captureAllSurfaces(browser, url, dpr) {
     await p2.mouse.move(pb.r - 30, pb.t + 12);
     await p2.waitForFunction(() => {
       const el = document.querySelector("#pillsSlot.pills-overflow .pills");
-      return el && parseFloat(getComputedStyle(el, "::after").opacity) === 1;
+      const slot = document.querySelector("#pillsSlot.pills-overflow");
+      const a = el && getComputedStyle(el, "::after");
+      const sa = slot && getComputedStyle(slot, "::after");
+      return (a && a.content !== "none" && parseFloat(a.opacity) === 1)
+        || (sa && sa.content !== "none" && parseFloat(sa.opacity) === 1);
     }, { timeout: 10000 });
     await sleep(400);
-    results.pills = await measureSurface(p2, "#pillsSlot.pills-overflow .pills", { dpr, corner: "tr", bandPx: 1 });
+    results.pills = await measureSurface(p2, "#pillsSlot.pills-overflow .pills", {
+      dpr, corner: "tr", bandPx: 1, ringHost: "#pillsSlot.pills-overflow", testScroll: true,
+    });
 
     await p2.mouse.move(2, 400);
     await p2.waitForFunction(() => {
@@ -373,12 +453,40 @@ async function captureAllSurfaces(browser, url, dpr) {
     });
     await p2.mouse.move(rb.l + 114, rb.b - 25);
     await sleep(350);
-    results.intentRail = await measureSurface(p2, "#intentRail", { dpr, corner: "tl" });
+    results.intentRail = await measureSurface(p2, "#intentRail", { dpr, corner: "tl", testScroll: true });
   } finally {
     await p2.close();
   }
 
   return results;
+}
+
+function checkRingGeometry(r) {
+  const css = r.css;
+  const targetInset = -css.bw;
+  const eq = (x, y) => Number.isFinite(x) && Number.isFinite(y) && Math.abs(x - y) <= 0.15;
+  const hasOwnAfter = css.afterContent && css.afterContent !== "none" && css.afterContent !== "normal";
+  const hasHostAfter = css.hostAfter && css.hostAfter.content && css.hostAfter.content !== "none" && css.hostAfter.content !== "normal";
+  if (hasOwnAfter) {
+    return eq(css.afterTop, targetInset)
+      && eq(css.afterRight, targetInset)
+      && eq(css.afterBottom, targetInset)
+      && eq(css.afterLeft, targetInset)
+      && eq(css.afterRadius, css.radius);
+  }
+  if (hasHostAfter) {
+    const h = css.hostAfter;
+    return h.opacity > 0.5
+      && String(h.bgImage).includes("radial-gradient")
+      && (String(h.bgClip).includes("border-area") || eq(h.bw, 1))
+      && eq(h.top, 0) && eq(h.left, 0)
+      && eq(h.width, r.box.w) && eq(h.height, r.box.h)
+      && eq(h.radius, css.radius);
+  }
+  return eq(css.bw, 1)
+    && css.borderColor === "rgba(0, 0, 0, 0)"
+    && String(css.bgClip).includes("border-area")
+    && String(css.bgImage).includes("radial-gradient");
 }
 
 function assertScale(dpr, results, mode) {
@@ -388,37 +496,45 @@ function assertScale(dpr, results, mode) {
   for (const name of names) {
     const r = results[name];
     const b = wantBoxes[name];
+    const m = MAIN_BEHAVIOUR[name];
     const tag = `${dpr}x ${name}`;
     if (!r || r.missing) {
       if (mode === "assert") {
-        for (const sub of ["inset/radius", "box", "top-middle", "45deg corner", "foot"]) check(false, `${tag} ${sub}`, "missing element");
+        check(false, `${tag} present`, "missing element");
       } else {
         caught.push(name);
       }
       continue;
     }
     const css = r.css;
-    const targetInset = -css.bw;
-    const eq = (x, y) => Number.isFinite(x) && Number.isFinite(y) && Math.abs(x - y) <= 0.15;
-    const geomOk = eq(css.afterTop, targetInset)
-      && eq(css.afterRight, targetInset)
-      && eq(css.afterBottom, targetInset)
-      && eq(css.afterLeft, targetInset)
-      && eq(css.afterRadius, css.radius);
+    const geomOk = checkRingGeometry(r);
     const boxOk = Math.abs(r.box.w - b.w) <= 0.1 && Math.abs(r.box.h - b.h) <= 0.1;
     const midOk = r.mid.runs === 1;
     const cornerOk = r.corner.runs === 1;
     const footOk = r.footRatio <= 0.25 && (r.topPeak - r.restSide) > 10;
+    const overflowOk = css.overflowX === m.overflowX && css.overflowY === m.overflowY && css.resize === m.resize;
+    const scrollOk = !m.scrolls || !!(r.scrollCheck && r.scrollCheck.scrolled);
+    const resizeOk = !m.resizable || !!(r.resizeCheck
+      && Math.abs(r.resizeCheck.to.w - 420) <= 0.5
+      && Math.abs(r.resizeCheck.to.h - 260) <= 0.5
+      && Math.abs(r.resizeCheck.restored.w - r.resizeCheck.from.w) <= 0.5);
 
     if (mode === "assert") {
-      check(geomOk, `${tag} page ::after inset (-${css.bw}px) & radius (${css.radius}px)`, css);
+      check(geomOk, `${tag} ring box & radius (${css.radius}px)`, { bw: css.bw, afterContent: css.afterContent, afterTop: css.afterTop, afterRadius: css.afterRadius, bgClip: css.bgClip, hostAfter: css.hostAfter });
       check(boxOk, `${tag} bounding box matches base (${b.w}x${b.h})`, r.box);
       check(midOk, `${tag} top-middle pixel line has 1 run`, r.mid);
       check(cornerOk, `${tag} 45deg corner pixel line has 1 run`, r.corner);
       check(footOk, `${tag} foot <= 0.25 of top above side rest (${r.footRatio})`, { topPeak: r.topPeak, botPeak: r.botPeak, restSide: r.restSide, footRatio: r.footRatio });
-    } else {
+      check(overflowOk, `${tag} overflow & resize match main (${m.overflowX}/${m.overflowY}/${m.resize})`, { overflowX: css.overflowX, overflowY: css.overflowY, resize: css.resize });
+      if (m.scrolls) check(scrollOk, `${tag} scrolls when taller than its box`, r.scrollCheck);
+      if (m.resizable) check(resizeOk, `${tag} resize style changes box size`, r.resizeCheck);
+    } else if (mode === "plant-rim") {
       if (!geomOk || !cornerOk || !midOk) {
         caught.push({ name, geomOk, midRuns: r.mid.runs, cornerRuns: r.corner.runs, afterTop: css.afterTop, afterRadius: css.afterRadius });
+      }
+    } else if (mode === "plant-clip") {
+      if (!overflowOk || !scrollOk) {
+        caught.push({ name, overflowOk, scrollOk, overflowX: css.overflowX, overflowY: css.overflowY, resize: css.resize, scrollCheck: r.scrollCheck });
       }
     }
   }
@@ -428,26 +544,54 @@ function assertScale(dpr, results, mode) {
 function makePlantedRun() {
   const lab = E.runFolder("catalogV2", "sampleV2");
   const htmlPath = path.join(lab.dir, "etiuda.html");
-  let src = fs.readFileSync(htmlPath, "utf8");
+  const src = fs.readFileSync(htmlPath, "utf8");
   const fiveHead = /(:root:not\(\[data-theme=light\]\) #intentRail::after,[\s\S]*?\.pills-slot\.pills-overflow \.pills::after\{[^}]*?inset:)[^;]+(;[\s\S]*?border-radius:)inherit(;)/;
   const fiveSupports = /(@supports \(background-clip:border-area\)\{[\s\S]*?#intentRail::after,[\s\S]*?\.pills-slot\.pills-overflow \.pills::after\{)inset:[^;]+;/;
   let patched = src.replace(fiveHead, "$10$2calc(var(--radius) - 1px)$3").replace(fiveSupports, "$1");
   if (patched === src) {
-    patched = src.replace("</head>",
-      "<style id='ePlantRim'>:root:not([data-theme=light]) #intentRail::after,"
+    patched = src.replace("<header>",
+      "<style id='ePlantRim'>"
+      + ":root:not([data-theme=light]) #intentRail,"
+      + ":root:not([data-theme=light]) .modal-card,"
+      + ":root:not([data-theme=light]) .menu,"
+      + ":root:not([data-theme=light]) .facts-panel{"
+      + "border-color:var(--line)!important;background-image:none!important}"
+      + ":root:not([data-theme=light]) .modal-card,:root:not([data-theme=light]) .menu{background-color:var(--panel-raised)!important}"
+      + ":root:not([data-theme=light]) #intentRail,:root:not([data-theme=light]) .facts-panel{background-color:var(--glass-mid,var(--panel-raised))!important}"
+      + ":root:not([data-theme=light]) .pills-slot.pills-overflow::after{display:none!important}"
+      + ":root:not([data-theme=light]) #intentRail::after,"
       + ":root:not([data-theme=light]) .modal-card::after,"
       + ":root:not([data-theme=light]) .menu::after,"
       + ":root:not([data-theme=light]) .facts-panel::after,"
-      + ":root:not([data-theme=light]) .pills-slot.pills-overflow .pills::after"
-      + "{inset:0!important;border-radius:calc(var(--radius) - 1px)!important}"
-      + ":root:not([data-theme=light]) .modal-card::after{border-radius:15px!important}</style></head>");
+      + ":root:not([data-theme=light]) .pills-slot.pills-overflow .pills::after{"
+      + "content:''!important;position:absolute!important;inset:0!important;"
+      + "border-radius:calc(var(--radius) - 1px)!important;padding:1px!important;"
+      + "background:var(--rim)!important;background-origin:border-box!important;background-clip:border-box!important;"
+      + "border:0!important;pointer-events:none!important;z-index:3!important;opacity:1!important;"
+      + "-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0)!important;-webkit-mask-composite:xor!important;"
+      + "mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0)!important;mask-composite:exclude!important}"
+      + ":root:not([data-theme=light]) .modal-card::after{border-radius:15px!important}"
+      + "</style>\n<header>");
   }
+  if (patched === src) throw new Error("makePlantedRun: failed to inject rim plant");
+  fs.writeFileSync(htmlPath, patched, "utf8");
+  return lab;
+}
+
+function makeClipPlantedRun() {
+  const lab = E.runFolder("catalogV2", "sampleV2");
+  const htmlPath = path.join(lab.dir, "etiuda.html");
+  const src = fs.readFileSync(htmlPath, "utf8");
+  const patched = src.replace("<header>",
+    "<style id='ePlantClip'>:root:not([data-theme=light]) .facts-panel{overflow:clip!important;overflow-clip-margin:var(--rim-bw)!important}</style>\n<header>");
+  if (patched === src) throw new Error("makeClipPlantedRun: failed to inject overflow:clip plant");
   fs.writeFileSync(htmlPath, patched, "utf8");
   return lab;
 }
 
 const RUN = E.runFolder("catalogV2", "sampleV2");
 let plantLab = null;
+let plantClipLab = null;
 let browser = null;
 try {
   browser = await puppeteer.launch({ executablePath: E.browserPath("chrome"), headless: true, args: ["--hide-scrollbars"], protocolTimeout: 120000 });
@@ -459,17 +603,36 @@ try {
   }
 
   if (PLANTS_OFF) {
-    skipped += 2;
-    console.log("  NOT RUN plant proof at 1x and 2x (ETIUDA_PLANTS=off)");
+    skipped += 3;
+    console.log("  NOT RUN plant proof 1x/2x: restoring inset:0 on the five surfaces (ETIUDA_PLANTS=off)");
+    console.log("  NOT RUN plant proof 1x: setting overflow:clip on .facts-panel (ETIUDA_PLANTS=off)");
   } else {
     plantLab = makePlantedRun();
     for (const dpr of [1, 2]) {
       const res = await captureAllSurfaces(browser, plantLab.url, dpr);
-      const caught = assertScale(dpr, res, "plant");
+      const caught = assertScale(dpr, res, "plant-rim");
       const names = caught.map(x => typeof x === "string" ? x : x.name);
       const wantFive = ["menu", "dialog", "facts", "pills", "intentRail"];
       check(wantFive.every(n => names.includes(n)),
         `plant proof ${dpr}x: restoring inset:0 on the five surfaces is caught`, caught);
+    }
+
+    plantClipLab = makeClipPlantedRun();
+    const pClip = await bootPage(browser, plantClipLab.url, 1400, 900, 1);
+    try {
+      await pClip.click("#factsBtn");
+      await pClip.waitForFunction(() => {
+        const f = document.getElementById("factsPanel");
+        return f && !f.hidden && getComputedStyle(f).opacity === "1";
+      }, { timeout: 10000 });
+      await pClip.evaluate(() => { document.activeElement?.blur?.(); });
+      await sleep(250);
+      const factsRes = await measureSurface(pClip, "#factsPanel", { dpr: 1, corner: "tl", avoidCombo: true, testScroll: true, testResize: true });
+      const clipCaught = assertScale(1, { facts: factsRes }, "plant-clip").filter(x => x.name === "facts");
+      check(clipCaught.length === 1 && !clipCaught[0].overflowOk && !clipCaught[0].scrollOk,
+        "plant proof 1x: setting overflow:clip on .facts-panel turns overflow and scroll checks red", clipCaught);
+    } finally {
+      await pClip.close();
     }
   }
 } catch (e) {
@@ -478,6 +641,7 @@ try {
   if (browser) await browser.close();
   try { RUN.drop(); } catch (e) {}
   try { if (plantLab) plantLab.drop(); } catch (e) {}
+  try { if (plantClipLab) plantClipLab.drop(); } catch (e) {}
 }
 
 console.log(`#counts checks=${checks} skipped=${skipped} failed=${fails} expected=${EXPECTED}`);
