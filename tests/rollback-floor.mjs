@@ -582,12 +582,23 @@ try {
       + booted.rev + ", next " + (next == null ? "nothing" : "rev " + nextRev) + ", mark " + markOf(D));
   }
 
+  /* A desk whose lead is pinned for TEAM before anything is read, as an invitation leaves it. */
+  const pinnedDesk = (name, SHARE, team) => {
+    const ud = path.join(LAB, name);
+    fs.mkdirSync(ud, { recursive: true });
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
+      keys: { eCatalogFolder: SHARE, eUiLang: "en" }, teamPins: { [team]: { keyId: LEAD.keyId, public: LEAD.public } } }), "utf8");
+    const d = loadDesk(ud);
+    syncFolder(SHARE);
+    return d;
+  };
   /* ---- the epoch mark and the desk-file mark: a write never lowers either, and emptying teamKeys does not ---- */
   {
     const SHARE = folder("epoch-mark");
     put(SHARE, "etiuda-ring.json", RING);
-    const D = newDesk("epoch-mark", SHARE);
+    /* The desk holds the lead's pin, as a member desk has it: a ring pins nothing (review 14), and this check is the floor's. */
     const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+    const D = pinnedDesk("epoch-mark", SHARE, TEAM);
     const seen = (desk) => (desk.envelope().teamEpochSeen || {})[TEAM];
     put(SHARE, "etiuda-team.json", teamFile(TEAM, 4, []));
     D.api.readCatalog();
@@ -653,8 +664,9 @@ try {
   {
     const SHARE = folder("epoch-reread");
     put(SHARE, "etiuda-ring.json", RING);
-    const D = newDesk("epoch-reread", SHARE);
+    /* The desk holds the lead's pin, as a member desk has it: a ring pins nothing (review 14), and this check is the floor's. */
     const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+    const D = pinnedDesk("epoch-reread", SHARE, TEAM);
     const seen = () => (D.envelope().teamEpochSeen || {})[TEAM];
     put(SHARE, "etiuda-team.json", teamFile(TEAM, 4, []));
     D.api.readCatalog();
@@ -1758,21 +1770,12 @@ try {
   const ringIntr = { format: 1, kind: "etiuda-ring",
     keys: [{ catalog: "quay-board", keyId: INTR.keyId, alg: "Ed25519", public: INTR.public }] };
   const saidSince = (D, from, ...parts) => D.said.slice(from).some(l => parts.every(p => l.indexOf(p) >= 0));
-  /* A desk whose lead is pinned for TEAM before anything is read, as an invitation leaves it. */
-  const pinnedDesk = (name, SHARE, team) => {
-    const ud = path.join(LAB, name);
-    fs.mkdirSync(ud, { recursive: true });
-    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
-      keys: { eCatalogFolder: SHARE, eUiLang: "en" }, teamPins: { [team]: { keyId: LEAD.keyId, public: LEAD.public } } }), "utf8");
-    const d = loadDesk(ud);
-    syncFolder(SHARE);
-    return d;
-  };
   {
     const SHARE = folder("team-rev");
     put(SHARE, "etiuda-ring.json", RING);
-    const D = newDesk("team-rev", SHARE);
+    /* The desk holds the lead's pin, as a member desk has it: a ring pins nothing (review 14), and this check is the floor's. */
     const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+    const D = pinnedDesk("team-rev", SHARE, TEAM);
     const at = path.join(SHARE, "etiuda-team.json");
     let t = Date.now();
     const heed = (desk, text) => { put(SHARE, "etiuda-team.json", text); t += 5000; touch(at, t); desk.api.readCatalog(); };
@@ -1893,10 +1896,11 @@ try {
     put(SHARE, "etiuda-ring.json", RING);
     const ud = path.join(LAB, name);
     fs.mkdirSync(ud, { recursive: true });
-    fs.writeFileSync(path.join(ud, "desk.json"),
-      JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: SHARE, eUiLang: "en" } }), "utf8");
-    const D = load(ud);
     const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+    /* The lead's pin, as a member desk has it: a ring pins nothing (review 14), and these checks are the floor's. */
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: SHARE, eUiLang: "en" },
+      teamPins: { [TEAM]: { keyId: LEAD.keyId, public: LEAD.public } } }), "utf8");
+    const D = load(ud);
     const at = path.join(SHARE, "etiuda-team.json");
     let t = Date.now();
     const heed = (desk, text) => { put(SHARE, "etiuda-team.json", text); t += 5000; touch(at, t); desk.api.readCatalog(); };
@@ -1934,7 +1938,7 @@ try {
 
     const SHARE = folder("floor-none");
     put(SHARE, "etiuda-ring.json", RING);
-    const D3 = newDesk("floor-none", SHARE), TEAM3 = "t-" + crypto.randomBytes(8).toString("hex");
+    const TEAM3 = "t-" + crypto.randomBytes(8).toString("hex"), D3 = pinnedDesk("floor-none", SHARE, TEAM3);
     const at3 = path.join(SHARE, "etiuda-team.json");
     put(SHARE, "etiuda-team.json", revTeam(TEAM3, 2, [member(1)]));
     touch(at3, Date.now() + 5000);
@@ -2039,10 +2043,10 @@ try {
     const relayFileRing = pinOf("first-relay", RING, { channel: RELAY });
     const folderFileRing = pinOf("first-folder", RING, { channel: { kind: "folder" } });
     const relaySigned = pinOf("first-signed", null, { channel: RELAY, ring: RING });
-    check(relayFileRing === "not pinned" && folderFileRing === "pinned" && relaySigned === "not pinned",
-      "900i a first pin with no invitation: on the relay etiuda-ring.json vouches for nothing and neither does the signed file's own"
-      + " ring, while on the folder the ring file vouches as before; the third arm, the relay's first step's allowance, is"
-      + " inverted by its fourth (board 907): " + [relayFileRing, folderFileRing, relaySigned].join(" | "));
+    check(relayFileRing === "not pinned" && folderFileRing === "not pinned" && relaySigned === "not pinned",
+      "900i a first pin with no invitation, no admission and no policy: on the relay etiuda-ring.json vouches for nothing and neither"
+      + " does the signed file's own ring (board 907), and on the folder the ring file vouches for nothing either, since a lead is"
+      + " heeded only by machine policy, an invitation or an admission's wrap (review 14): " + [relayFileRing, folderFileRing, relaySigned].join(" | "));
   }
 
   /* ---- updates 2, the desk's half: a desk.json a later Etiuda saved (its schema above this one's) is refused whole. No

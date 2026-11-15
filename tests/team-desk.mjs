@@ -353,9 +353,9 @@ try {
   /* ---- outside the team ---------------------------------------------------------------------------------------- */
   const strange = await read(D2, "lamps.ec");
   const env2 = D2.envelope();
-  check(strange === envA2 && !("teamKeys" in env2) && JSON.stringify(env2.teamPins) === JSON.stringify({ [TEAM]: LEAD }),
-    "14h a desk the roster does not carry opens nothing: it is handed the envelope, keeps no key, and has pinned the lead only"
-    + " because the ring lists that key (" + (strange === envA2 ? "envelope" : "opened") + ")");
+  check(strange === envA2 && !("teamKeys" in env2) && !(env2.teamPins && env2.teamPins[TEAM]),
+    "14h a desk the roster does not carry opens nothing: it is handed the envelope, keeps no key, and pins no lead, though the ring"
+    + " lists that key, since a ring pins nothing (review 14) (" + (strange === envA2 ? "envelope" : "opened") + ")");
 
   /* ---- a team file under another key, after the pin: a forger names the team, the lead's keyId and desk one ---- */
   const forged = teamFile({ epoch: 2, public: pubHex(forger.publicKey), signer: forger.privateKey, roster: [entry(me1, KF, 2)] });
