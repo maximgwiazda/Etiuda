@@ -1162,6 +1162,10 @@ UI_STRINGS.pl={
   "Choose a combination":"Wybierz kombinację",
   "The replies beside the pointer, over any program: {KEYS} brings them from anywhere, and Settings is where the combination is changed.":"Odpowiedzi obok wskaźnika, nad każdym programem: kombinacja {KEYS} przywołuje je z dowolnego miejsca, a zmienić ją można w Ustawieniach.",
   "The replies beside the pointer, over any program; a combination that brings them from anywhere is chosen in Settings.":"Odpowiedzi obok wskaźnika, nad każdym programem; kombinację, która przywoła je z dowolnego miejsca, wybiera się w Ustawieniach.",
+  "Switch to a chat tab":"Przełącz na kartę rozmowy", /* copy: copywriter */
+  "Open a chat tab":"Otwórz kartę rozmowy", /* copy: copywriter */
+  "Click a chat tab to view your replies.":"Kliknij kartę rozmowy, aby zobaczyć swoje odpowiedzi.", /* copy: copywriter */
+  "Click <b>+</b> to open a new chat tab.":"Kliknij <b>+</b>, aby otworzyć nową kartę rozmowy.", /* copy: copywriter */
   "Replies over any window":"Odpowiedzi nad dowolnym oknem",
   "{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.":"{KEY} przywołuje te odpowiedzi obok wskaźnika, nad każdym programem: wystarczy wpisać słowo, a Enter skopiuje odpowiedź i wróci do poprzedniego okna. Można spróbować od razu, naciskając {KEY}; Esc zamyka listę.",
   "Bring the replies over any window":"Przywołaj odpowiedzi nad dowolne okno",

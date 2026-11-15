@@ -40,6 +40,7 @@ const STEP_WAIT_MS = 30000; // a step that has not moved by this ceiling is a fi
 
 const PLAN = [
   { id: "name", next: true, type: { sel: "#tourName", text: "Invented Agent" } },
+  { id: "chatTab", screen: true, next: true },
   { id: "load", reload: true },
   { id: "pax", next: true, aim: "#pax" },
   { id: "search", next: true, aim: "#intent" },
@@ -76,10 +77,10 @@ function rowOf(id, visit) {
 /** Where the tour should stand once the row is done: the step before it for a `back`, the window
  *  it opens, else the next row, passing over the load step on a desk that already holds a catalog
  *  and over a host's step where the walk has no host. Null after the last. */
-function after(id, loaded, visit, host) {
+function after(id, loaded, visit, host, screen) {
   const i = PLAN.findIndex(r => r.id === id), r = rowOf(id, visit);
   if (i < 0) return undefined;
-  const passed = j => (loaded && PLAN[j].reload) || (!host && PLAN[j].host);
+  const passed = j => (loaded && PLAN[j].reload) || (!host && PLAN[j].host) || (!screen && PLAN[j].screen);
   const on = j => !passed(j) && !PLAN[j].inside;
   if (r.back) { for (let j = i - 1; j >= 0; j--) if (on(j)) return PLAN[j].id; return null; }
   if (r.into) return r.into;

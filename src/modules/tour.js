@@ -28,7 +28,7 @@ import { closeScreenTab, screenOn } from "./screen-tabs.js";
    anywhere never takes a step down. It starts by itself on a first run and from Menu, Show tour.
    Bump TOUR_VER to re-offer after a major layout change. */
 const TOUR_VER=3;
-let tourIdx=-1, tourRunning=false, tourRaf=0, tourGlideEl=null;
+let tourIdx=-1, tourRunning=false, tourRaf=0, tourGlideEl=null, tourReturnId="";
 function tourActive(){ return !!tourRunning; }
 function tourStorageKey(){ return "eTourDone_v"+TOUR_VER; }
 function tourInviteKey(){ return "eTourInvite_v"+TOUR_VER; }
@@ -146,6 +146,30 @@ function menuTarget(act){
   return (act && m.querySelector('[data-act="'+act+'"]')) || m;
 }
 const menuSide=()=>menuOpen() ? "left" : null;
+/* THE ACTIVE TAB: when a step explains the chat tab and a screen tab is in front, the tour asks
+   to click an open chat tab (or + where none is open), following the Menu step's pattern. */
+function hasChatTab(){
+  if(typeof document==="undefined" || typeof document.querySelectorAll!=="function") return false;
+  const all=document.querySelectorAll("#tabsBar .tab[data-tid]");
+  for(let i=0;i<all.length;i++){
+    const el=all[i];
+    if(!el.getClientRects || el.getClientRects().length) return true;
+  }
+  return false;
+}
+function chatTabTarget(){
+  if(typeof document==="undefined" || typeof document.querySelectorAll!=="function") return null;
+  const all=document.querySelectorAll("#tabsBar .tab[data-tid]");
+  for(let i=0;i<all.length;i++){
+    const el=all[i];
+    if(!el.getClientRects || el.getClientRects().length) return el;
+  }
+  return document.querySelector("#tabsWrap .tab-add");
+}
+function openChatTab(){
+  const el=chatTabTarget();
+  if(el && typeof el.click==="function") el.click();
+}
 // The window each inside step stands in.
 const cardEditorOpen=()=>modalOpen() && !!document.getElementById("meCancel");
 const libraryOpen=()=>screenOn==="library" && !!document.querySelector("#screenHost details.manage-sec");
@@ -177,6 +201,18 @@ const TOUR_STEPS=[
     name:true,
     pad:10
   },
+  {
+    id:"chatTab",
+    sel:()=>chatTabTarget(),
+    title:()=>hasChatTab() ? "Switch to a chat tab" : "Open a chat tab",
+    body:()=>hasChatTab()
+      ? "Click a chat tab to view your replies."
+      : "Click <b>+</b> to open a new chat tab.",
+    when:()=>!!screenOn,
+    done:()=>!screenOn,
+    open:()=>openChatTab(),
+    pad:8
+  },
   /* ONLY WHILE THE DESK IS EMPTY: the step is done by loading, and the tour carries on from the
      step after it (tourAfterRestart). A card made by hand ends it too. */
   {
@@ -184,6 +220,7 @@ const TOUR_STEPS=[
     sel:"#emptyLoad",
     title:"A catalog of replies",
     body:loadStepBody,
+    chat:true,
     when:()=>wholeThingEmpty(),
     waits:true,
     pad:6
@@ -191,6 +228,7 @@ const TOUR_STEPS=[
   {
     id:"pax",
     sel:".field-wrap.paxrole",
+    chat:true,
     title:()=>wheelShown() ? "Customer name and role" : "The customer's name",
     body:()=>wheelShown()
       ? "The customer's name goes here as the chat gives it, surname and capitals included, and every reply greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>). The wheel beside it says who is on the chat, for internal comments."
@@ -200,6 +238,7 @@ const TOUR_STEPS=[
   {
     id:"search",
     sel:"#intentComboWrap",
+    chat:true,
     title:"Search",
     body:"A word near what the customer means, such as 'refund', is enough: the intents on the left rank themselves and the cards narrow to match, in both languages. <kbd>Enter</kbd> picks the marked intent, and <kbd>Esc</kbd> clears the box.",
     pad:6
@@ -207,6 +246,7 @@ const TOUR_STEPS=[
   {
     id:"rail",
     sel:"#intentRail",
+    chat:true,
     title:"Intent panel",
     body:"An intent names what the customer has come about. A click on one brings its replies forward, ringed <b class=\"t-go\">green</b>, with its phrase filling <span class=\"fillmiss\">INTENT</span> wherever a reply uses it. <kbd>Ctrl</kbd>+click picks several, and the star keeps the ones used most at the top.",
     pad:8,
@@ -215,6 +255,7 @@ const TOUR_STEPS=[
   {
     id:"cards",
     sel:()=>tourPickFirstCard()||$("#list"),
+    chat:true,
     title:"Cards",
     body:"A click on a reply copies the whole of it, greeting, name and signature filled in, ready to paste into the chat. A card marked <b>1/2</b> or <b>STEP 1/3</b> holds several, each copied on its own. <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> do the same from the keyboard.",
     pad:6,
@@ -223,6 +264,7 @@ const TOUR_STEPS=[
   {
     id:"pills",
     sel:"#pills",
+    chat:true,
     title:"Category pills",
     body:"A click on a category shows only its cards, and <kbd>Ctrl</kbd>+click keeps several. A <b class=\"t-go\">green</b> ring marks one holding a card for the chosen intent, and a <b class=\"t-acc\">blue</b> one a supporting category, useful for any question.",
     pad:8,
@@ -239,6 +281,7 @@ const TOUR_STEPS=[
   {
     id:"seg",
     sel:"#seg",
+    chat:true,
     title:"English / Polish",
     // A function, not a string: the key it names is rebindable, so it is read at show time
     body:()=>t("Replies in this conversation follow the language chosen here, so each customer is answered in their own. {KEY} switches it from anywhere.")
@@ -251,6 +294,7 @@ const TOUR_STEPS=[
   {
     id:"buttons",
     sel:()=>cardBtn(".cacts"),
+    chat:true,
     prep:tourRevealCardActions,
     title:"A card's buttons",
     body:"The star lifts a card to the top of its category, and under <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> into <b class=\"t-fav\"><span data-icon=\"star\"></span>Favourites</b>.<br>The eye puts it away, greyed at the foot of its category, and brings it back from there.<br>The pencil opens it for editing, and <b>Reset</b> in the editor brings back the catalog's own words.<br>Click the pencil on this card.",
@@ -274,6 +318,7 @@ const TOUR_STEPS=[
   {
     id:"add",
     sel:"#addCardFab",
+    chat:true,
     title:"A card of your own",
     body:()=>t("Click <b>+</b> to write a card of your own, in the category open now or in any other chosen in the editor.")
       +" "+t("Once the window is open, the tour goes inside with it."),
@@ -423,9 +468,13 @@ function tourActSoon(){
 function tourActCheck(){
   const step=TOUR_STEPS[tourIdx];
   if(!step) return;
+  if(step.chat && screenOn){
+    const ct=TOUR_STEPS.findIndex(x=>x.id==="chatTab");
+    if(ct>=0){ tourReturnId=step.id; showTourStep(ct); return; }
+  }
+  if(step.done && step.done()){ tourOn(); return; }
   if(!stepOn(tourIdx)){ showTourStep(onFrom(tourIdx+1,1)); return; }
   if(step.opens){ tourFollowWindow(); return; }
-  if(step.done && step.done()) tourOn();
 }
 
 
@@ -450,8 +499,11 @@ function resolveTourTarget(step){
   } else if(step.sel){
     el=document.querySelector(step.sel);
   }
-  if(el && el.getClientRects && el.getClientRects().length===0) return null;
-  return el||null;
+  if(!el) return null;
+  if(el.getClientRects && el.getClientRects().length===0) return null;
+  if(screenOn && el.closest && el.closest(".stage > .scroller > .shell, .dotfield, .pills-slot, .pills-probe, .fab-stack, #railHit, #lanes")) return null;
+  if(typeof el.checkVisibility==="function" && !el.checkVisibility({contentVisibilityAuto:true, visibilityProperty:true})) return null;
+  return el;
 }
 /* A length from computed style: a percentage of `rel`, a keyword of the axis, or pixels. */
 function tourPx(tok, rel){
@@ -635,6 +687,11 @@ function scheduleTourPlace(){
 }
 function showTourStep(i){
   if(i<0||i>=TOUR_STEPS.length){ endTour(true); return; }
+  const next=TOUR_STEPS[i];
+  if(next && next.chat && screenOn){
+    const ct=TOUR_STEPS.findIndex(x=>x.id==="chatTab");
+    if(ct>=0){ tourReturnId=next.id; showTourStep(ct); return; }
+  }
   // Whether the keyboard is driving the tour: only then does a new step take the focus.
   const keyed=tourHasFocus();
   tourIdx=i;
@@ -714,6 +771,7 @@ function startTour(from,auto){
   if(i>L && stepOn(L)) i=L;
   if(i<0){ ssDel(TOUR_AT); return; }
   tourRunning=true;
+  tourReturnId="";
   tourIdx=i;
   tourNameWas=nameAnswered();
   cutLeaves();
@@ -770,6 +828,7 @@ function afterTour(fn){ tourAfter.push(fn); }
 function endTour(completed){
   if(!tourRunning && tourIdx<0) return;
   tourRunning=false;
+  tourReturnId="";
   tourIdx=-1;
   const els=tourEls();
   /* The bubble and its ring leave on the dismiss tier as copies, lifted out of the root that hides
@@ -919,6 +978,12 @@ function tourNext(){
 }
 // On to the next step that is on, or the end.
 function tourOn(){
+  if(TOUR_STEPS[tourIdx] && TOUR_STEPS[tourIdx].id==="chatTab" && tourReturnId){
+    const rid=tourReturnId;
+    tourReturnId="";
+    const r=TOUR_STEPS.findIndex(x=>x.id===rid);
+    if(r>=0 && stepOn(r)){ showTourStep(r); return; }
+  }
   const n=onFrom(tourIdx+1,1);
   if(n<0) endTour(true);
   else showTourStep(n);
@@ -928,6 +993,7 @@ function tourPrev(){
   if(!tourRunning) return;
   const step=TOUR_STEPS[tourIdx];
   if(step && step.inside) shutTourWindow();
+  tourReturnId="";
   const n=onFrom(tourIdx-1,-1);
   if(n>=0) showTourStep(n);
 }
@@ -945,7 +1011,7 @@ function wireTourUi(){
   // A window opening or closing over the page moves the bubble behind it or back.
   if(typeof MutationObserver==="function"){
     try{
-      const mo=new MutationObserver(()=>{ if(tourRunning){ if(!tourFollowWindow()) syncTourBehind(); scheduleTourPlace(); } });
+      const mo=new MutationObserver(()=>{ if(tourRunning){ const s=TOUR_STEPS[tourIdx]; if(s && s.chat && screenOn){ const ct=TOUR_STEPS.findIndex(x=>x.id==="chatTab"); if(ct>=0){ tourReturnId=s.id; showTourStep(ct); return; } } if(!tourFollowWindow()) syncTourBehind(); scheduleTourPlace(); } });
       mo.observe(document.body,{childList:true});
       const shared=$("#modal");
       if(shared) mo.observe(shared,{attributes:true, attributeFilter:["hidden","class"]});   // class: an editor resting or back in front

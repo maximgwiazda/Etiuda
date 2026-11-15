@@ -8765,6 +8765,14 @@ What you type stays in this browser only.`;
     "Choose a combination": "Wybierz kombinację",
     "The replies beside the pointer, over any program: {KEYS} brings them from anywhere, and Settings is where the combination is changed.": "Odpowiedzi obok wskaźnika, nad każdym programem: kombinacja {KEYS} przywołuje je z dowolnego miejsca, a zmienić ją można w Ustawieniach.",
     "The replies beside the pointer, over any program; a combination that brings them from anywhere is chosen in Settings.": "Odpowiedzi obok wskaźnika, nad każdym programem; kombinację, która przywoła je z dowolnego miejsca, wybiera się w Ustawieniach.",
+    "Switch to a chat tab": "Przełącz na kartę rozmowy",
+    /* copy: copywriter */
+    "Open a chat tab": "Otwórz kartę rozmowy",
+    /* copy: copywriter */
+    "Click a chat tab to view your replies.": "Kliknij kartę rozmowy, aby zobaczyć swoje odpowiedzi.",
+    /* copy: copywriter */
+    "Click <b>+</b> to open a new chat tab.": "Kliknij <b>+</b>, aby otworzyć nową kartę rozmowy.",
+    /* copy: copywriter */
     "Replies over any window": "Odpowiedzi nad dowolnym oknem",
     "{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.": "{KEY} przywołuje te odpowiedzi obok wskaźnika, nad każdym programem: wystarczy wpisać słowo, a Enter skopiuje odpowiedź i wróci do poprzedniego okna. Można spróbować od razu, naciskając {KEY}; Esc zamyka listę.",
     "Bring the replies over any window": "Przywołaj odpowiedzi nad dowolne okno",
@@ -10494,7 +10502,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-14";
+  var E_BUILT = "2026-11-15";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -28399,6 +28407,7 @@ What you type stays in this browser only.`;
   var tourRunning = false;
   var tourRaf = 0;
   var tourGlideEl = null;
+  var tourReturnId = "";
   function tourActive() {
     return !!tourRunning;
   }
@@ -28515,6 +28524,28 @@ What you type stays in this browser only.`;
     return act && m.querySelector('[data-act="' + act + '"]') || m;
   }
   var menuSide = () => menuOpen() ? "left" : null;
+  function hasChatTab() {
+    if (typeof document === "undefined" || typeof document.querySelectorAll !== "function") return false;
+    const all = document.querySelectorAll("#tabsBar .tab[data-tid]");
+    for (let i = 0; i < all.length; i++) {
+      const el = all[i];
+      if (!el.getClientRects || el.getClientRects().length) return true;
+    }
+    return false;
+  }
+  function chatTabTarget() {
+    if (typeof document === "undefined" || typeof document.querySelectorAll !== "function") return null;
+    const all = document.querySelectorAll("#tabsBar .tab[data-tid]");
+    for (let i = 0; i < all.length; i++) {
+      const el = all[i];
+      if (!el.getClientRects || el.getClientRects().length) return el;
+    }
+    return document.querySelector("#tabsWrap .tab-add");
+  }
+  function openChatTab() {
+    const el = chatTabTarget();
+    if (el && typeof el.click === "function") el.click();
+  }
   var cardEditorOpen = () => modalOpen() && !!document.getElementById("meCancel");
   var libraryOpen = () => screenOn === "library" && !!document.querySelector("#screenHost details.manage-sec");
   var settingsOpen = () => screenOn === "settings" && !!document.getElementById("setBody");
@@ -28558,6 +28589,16 @@ What you type stays in this browser only.`;
       name: true,
       pad: 10
     },
+    {
+      id: "chatTab",
+      sel: () => chatTabTarget(),
+      title: () => hasChatTab() ? "Switch to a chat tab" : "Open a chat tab",
+      body: () => hasChatTab() ? "Click a chat tab to view your replies." : "Click <b>+</b> to open a new chat tab.",
+      when: () => !!screenOn,
+      done: () => !screenOn,
+      open: () => openChatTab(),
+      pad: 8
+    },
     /* ONLY WHILE THE DESK IS EMPTY: the step is done by loading, and the tour carries on from the
        step after it (tourAfterRestart). A card made by hand ends it too. */
     {
@@ -28565,6 +28606,7 @@ What you type stays in this browser only.`;
       sel: "#emptyLoad",
       title: "A catalog of replies",
       body: loadStepBody,
+      chat: true,
       when: () => wholeThingEmpty(),
       waits: true,
       pad: 6
@@ -28572,6 +28614,7 @@ What you type stays in this browser only.`;
     {
       id: "pax",
       sel: ".field-wrap.paxrole",
+      chat: true,
       title: () => wheelShown() ? "Customer name and role" : "The customer's name",
       body: () => wheelShown() ? "The customer's name goes here as the chat gives it, surname and capitals included, and every reply greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>). The wheel beside it says who is on the chat, for internal comments." : "The customer's name goes here as the chat gives it, surname and capitals included, and every reply greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>).",
       pad: 6
@@ -28579,6 +28622,7 @@ What you type stays in this browser only.`;
     {
       id: "search",
       sel: "#intentComboWrap",
+      chat: true,
       title: "Search",
       body: "A word near what the customer means, such as 'refund', is enough: the intents on the left rank themselves and the cards narrow to match, in both languages. <kbd>Enter</kbd> picks the marked intent, and <kbd>Esc</kbd> clears the box.",
       pad: 6
@@ -28586,6 +28630,7 @@ What you type stays in this browser only.`;
     {
       id: "rail",
       sel: "#intentRail",
+      chat: true,
       title: "Intent panel",
       body: 'An intent names what the customer has come about. A click on one brings its replies forward, ringed <b class="t-go">green</b>, with its phrase filling <span class="fillmiss">INTENT</span> wherever a reply uses it. <kbd>Ctrl</kbd>+click picks several, and the star keeps the ones used most at the top.',
       pad: 8,
@@ -28594,6 +28639,7 @@ What you type stays in this browser only.`;
     {
       id: "cards",
       sel: () => tourPickFirstCard() || $("#list"),
+      chat: true,
       title: "Cards",
       body: "A click on a reply copies the whole of it, greeting, name and signature filled in, ready to paste into the chat. A card marked <b>1/2</b> or <b>STEP 1/3</b> holds several, each copied on its own. <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> do the same from the keyboard.",
       pad: 6,
@@ -28605,6 +28651,7 @@ What you type stays in this browser only.`;
     {
       id: "pills",
       sel: "#pills",
+      chat: true,
       title: "Category pills",
       body: 'A click on a category shows only its cards, and <kbd>Ctrl</kbd>+click keeps several. A <b class="t-go">green</b> ring marks one holding a card for the chosen intent, and a <b class="t-acc">blue</b> one a supporting category, useful for any question.',
       pad: 8,
@@ -28620,6 +28667,7 @@ What you type stays in this browser only.`;
     {
       id: "seg",
       sel: "#seg",
+      chat: true,
       title: "English / Polish",
       // A function, not a string: the key it names is rebindable, so it is read at show time
       body: () => t("Replies in this conversation follow the language chosen here, so each customer is answered in their own. {KEY} switches it from anywhere.").replace("{KEY}", chordChips("langToggle")),
@@ -28631,6 +28679,7 @@ What you type stays in this browser only.`;
     {
       id: "buttons",
       sel: () => cardBtn(".cacts"),
+      chat: true,
       prep: tourRevealCardActions,
       title: "A card's buttons",
       body: `The star lifts a card to the top of its category, and under <span class="t-pill"><span data-icon="all"></span>All</span> into <b class="t-fav"><span data-icon="star"></span>Favourites</b>.<br>The eye puts it away, greyed at the foot of its category, and brings it back from there.<br>The pencil opens it for editing, and <b>Reset</b> in the editor brings back the catalog's own words.<br>Click the pencil on this card.`,
@@ -28653,6 +28702,7 @@ What you type stays in this browser only.`;
     {
       id: "add",
       sel: "#addCardFab",
+      chat: true,
       title: "A card of your own",
       body: () => t("Click <b>+</b> to write a card of your own, in the category open now or in any other chosen in the editor.") + " " + t("Once the window is open, the tour goes inside with it."),
       opens: "addIn",
@@ -28797,6 +28847,18 @@ What you type stays in this browser only.`;
   function tourActCheck() {
     const step = TOUR_STEPS[tourIdx];
     if (!step) return;
+    if (step.chat && screenOn) {
+      const ct = TOUR_STEPS.findIndex((x) => x.id === "chatTab");
+      if (ct >= 0) {
+        tourReturnId = step.id;
+        showTourStep(ct);
+        return;
+      }
+    }
+    if (step.done && step.done()) {
+      tourOn();
+      return;
+    }
     if (!stepOn(tourIdx)) {
       showTourStep(onFrom(tourIdx + 1, 1));
       return;
@@ -28805,7 +28867,6 @@ What you type stays in this browser only.`;
       tourFollowWindow();
       return;
     }
-    if (step.done && step.done()) tourOn();
   }
   function tourEls() {
     return {
@@ -28832,8 +28893,11 @@ What you type stays in this browser only.`;
     } else if (step.sel) {
       el = document.querySelector(step.sel);
     }
-    if (el && el.getClientRects && el.getClientRects().length === 0) return null;
-    return el || null;
+    if (!el) return null;
+    if (el.getClientRects && el.getClientRects().length === 0) return null;
+    if (screenOn && el.closest && el.closest(".stage > .scroller > .shell, .dotfield, .pills-slot, .pills-probe, .fab-stack, #railHit, #lanes")) return null;
+    if (typeof el.checkVisibility === "function" && !el.checkVisibility({ contentVisibilityAuto: true, visibilityProperty: true })) return null;
+    return el;
   }
   function tourPx(tok, rel) {
     if (tok == null) return 0;
@@ -29005,6 +29069,15 @@ What you type stays in this browser only.`;
       endTour(true);
       return;
     }
+    const next = TOUR_STEPS[i];
+    if (next && next.chat && screenOn) {
+      const ct = TOUR_STEPS.findIndex((x) => x.id === "chatTab");
+      if (ct >= 0) {
+        tourReturnId = next.id;
+        showTourStep(ct);
+        return;
+      }
+    }
     const keyed = tourHasFocus();
     tourIdx = i;
     tourStepPicks = tourPicks;
@@ -29084,6 +29157,7 @@ What you type stays in this browser only.`;
       return;
     }
     tourRunning = true;
+    tourReturnId = "";
     tourIdx = i;
     tourNameWas = nameAnswered();
     cutLeaves();
@@ -29155,6 +29229,7 @@ What you type stays in this browser only.`;
   function endTour(completed) {
     if (!tourRunning && tourIdx < 0) return;
     tourRunning = false;
+    tourReturnId = "";
     tourIdx = -1;
     const els = tourEls();
     if (els.root && !els.root.hidden) {
@@ -29315,6 +29390,15 @@ What you type stays in this browser only.`;
     tourOn();
   }
   function tourOn() {
+    if (TOUR_STEPS[tourIdx] && TOUR_STEPS[tourIdx].id === "chatTab" && tourReturnId) {
+      const rid = tourReturnId;
+      tourReturnId = "";
+      const r = TOUR_STEPS.findIndex((x) => x.id === rid);
+      if (r >= 0 && stepOn(r)) {
+        showTourStep(r);
+        return;
+      }
+    }
     const n = onFrom(tourIdx + 1, 1);
     if (n < 0) endTour(true);
     else showTourStep(n);
@@ -29323,6 +29407,7 @@ What you type stays in this browser only.`;
     if (!tourRunning) return;
     const step = TOUR_STEPS[tourIdx];
     if (step && step.inside) shutTourWindow();
+    tourReturnId = "";
     const n = onFrom(tourIdx - 1, -1);
     if (n >= 0) showTourStep(n);
   }
@@ -29340,6 +29425,15 @@ What you type stays in this browser only.`;
       try {
         const mo = new MutationObserver(() => {
           if (tourRunning) {
+            const s = TOUR_STEPS[tourIdx];
+            if (s && s.chat && screenOn) {
+              const ct = TOUR_STEPS.findIndex((x) => x.id === "chatTab");
+              if (ct >= 0) {
+                tourReturnId = s.id;
+                showTourStep(ct);
+                return;
+              }
+            }
             if (!tourFollowWindow()) syncTourBehind();
             scheduleTourPlace();
           }
