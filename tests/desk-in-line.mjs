@@ -26,6 +26,8 @@
  *               its foot a row with its icon and its keys plain, and a new key's tag Studio's small pill beside the keys
  *   ilk1, ilk2  the keyboard shortcuts, in that section and in All settings, light and dark: one card of ruled rows, as
  *               Studio's card of rows (a row's top line, no gap, no radius of its own)
+ *   ilw1, ilw2  a plain button inside a white card wears Studio's thin edge and white face, on the light theme only;
+ *               the toolbar's button keeps its grey fill, and a primary or danger button keeps its own colour
  *   ild1..ild6  Settings, the Library and Maintenance, light and dark: the page is dotted as Studio's is, measured as the
  *               pixels of an empty 48 px patch that stand off the ground, and its first words stand on the ground (Max's
  *               note 9: "Desk has no dotted background behind Settings/Library/Maintenance, unlike similar tabs in Studio.")
@@ -425,6 +427,51 @@ try {
     await closePage(p);
   }
   // shortcuts>>
+
+  // <<buttons
+  /* Studio's plain button on a white card is a white face with a 1px edge in the strong line. The desk's toolbar
+     button is the control: the same grey fill, in both themes. Dark cards are not white, so the edge stays off them. */
+  EXPECTED += 2;
+  for (const theme of ["light", "dark"]) {
+    const p = await boot(browser, theme);
+    const got = await p.evaluate(() => {
+      const alpha = (c) => { if (!c || c === "transparent") return 0; const m = /\/\s*([\d.]+)\)$/.exec(c) || /rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)/.exec(c); return m ? parseFloat(m[1]) : 1; };
+      const swatch = (prop, value) => {
+        const el = document.createElement("i"); el.style[prop] = value; document.body.appendChild(el);
+        const out = prop === "background" ? getComputedStyle(el).backgroundColor : getComputedStyle(el).color; el.remove(); return out;
+      };
+      const face = (el) => {
+        if (!el) return null;
+        const cs = getComputedStyle(el);
+        return { w: cs.borderTopWidth, borderAlpha: alpha(cs.borderTopColor), c: cs.borderTopColor, bg: cs.backgroundColor,
+          color: cs.color, text: (el.textContent || "").trim().slice(0, 24) };
+      };
+      openSettings("about");
+      const cardBtn = [...document.querySelectorAll("#setBody .sx-card .btn")].find((b) => b.offsetParent !== null
+        && !b.classList.contains("primary") && !b.classList.contains("danger"));
+      const tool = document.querySelector("#theme");
+      const card = cardBtn && cardBtn.closest(".sx-card");
+      const cardFace = face(cardBtn), toolFace = face(tool);
+      const danger = document.createElement("button"); danger.className = "btn danger"; danger.type = "button";
+      const primary = document.createElement("button"); primary.className = "btn primary"; primary.type = "button";
+      if (card) { card.appendChild(danger); card.appendChild(primary); }
+      const out = { card: cardFace, tool: toolFace, danger: face(danger), primary: face(primary),
+        lineStrong: swatch("color", "var(--line-strong)"), panel: swatch("background", "var(--panel)"),
+        mix: swatch("background", "color-mix(in srgb, var(--ink) 4%, transparent)") };
+      danger.remove(); primary.remove();
+      return out;
+    });
+    const fill = (b) => b && b.w === "1px" && b.borderAlpha === 0 && b.bg === got.mix && b.bg !== got.panel;
+    const thin = (b) => b && b.w === "1px" && b.c === got.lineStrong && b.bg === got.panel;
+    const own = (b) => b && b.c !== got.lineStrong && b.bg !== got.panel;
+    const light = theme === "light";
+    check((light ? thin(got.card) : fill(got.card)) && fill(got.tool) && own(got.danger) && fill(got.primary),
+      "ilw" + (light ? "1" : "2") + " " + theme + ": a plain button in a card " + (light ? "wears the thin edge and a white face" : "keeps the grey fill")
+        + ", the toolbar keeps its fill, and primary and danger keep their own colour",
+      got);
+    await closePage(p);
+  }
+  // buttons>>
 
   done = true;
 } catch (e) {
