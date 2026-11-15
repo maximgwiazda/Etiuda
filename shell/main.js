@@ -5500,6 +5500,7 @@ function liveSyncIo() {
       }
     }
   }
+  let whole = true;
   if (process.platform === "win32") {
     const deadline = Date.now() + 5000;
     const queries = [
@@ -5512,10 +5513,10 @@ function liveSyncIo() {
     ];
     for (let i = 0; i < queries.length; i++) {
       const left = deadline - Date.now();
-      if (left < 1) break;
+      if (left < 1) { whole = false; break; }
       try {
         absorb(execFileSync(REG_TOOL, queries[i], { windowsHide: true, timeout: left, encoding: "buffer", maxBuffer: 1024 * 1024 }));
-      } catch (e) { /* a missing key is an empty record */ }
+      } catch (e) { /* a missing key is an empty record; a read the deadline cut leaves the records partial */ if (e && e.code === "ETIMEDOUT") whole = false; }
     }
   }
   const io = {
@@ -5530,6 +5531,8 @@ function liveSyncIo() {
     subkeys: function (key) { return sub[String(key)] ? sub[String(key)].slice() : []; },
     readFile: function (p) { try { return fs.readFileSync(p, "utf8"); } catch (e) { return ""; } }
   };
+  /* Kept for the life of the process only when every read answered; a partial one is read again at the next ask. */
+  if (!whole) return io; /* plant:syncio-whole */
   liveSyncIo.cached = io;
   return io;
 }

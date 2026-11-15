@@ -15,7 +15,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXPECTED = 29;
+const EXPECTED = 31;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -642,6 +642,49 @@ if (M && J) {
     + (reopenErr || (firstPlan ? firstPlan.why + " " + firstPlan.path : "no first"))
     + " then " + (secondPlan ? secondPlan.why + " " + secondPlan.path : "no second")
     + ", calls " + reopenCalls.length + (stayed ? " stayed" : " grew") + (regOk ? "" : " not reg"));
+
+  /* A READ THE DEADLINE CUT SHORT IS NOT KEPT. Where a query ends by its timeout, the records are read again at the next
+     ask, so a slow start does not leave the mapped letters out for the life of the process; a whole read is kept (17c).
+     17e lifts the guard in a copy of the text in memory. */
+  const BSL = String.fromCharCode(92), CRLF = String.fromCharCode(13, 10), PLANTS_ON = process.env.ETIUDA_PLANTS !== "off";
+  const partialScene = (src) => {
+    const calls = [];
+    let slow = true;
+    const spy = function (file, args) {
+      calls.push(String(args && args[1]));
+      if (slow && args && args[4] === "RemotePath") throw Object.assign(new Error("timed out"), { code: "ETIMEDOUT" });
+      if (!args || args[4] !== "RemotePath") return Buffer.from("", "utf8");
+      return Buffer.from("HKEY_CURRENT_USER" + BSL + "Network" + BSL + "Z" + CRLF + "    RemotePath    REG_SZ    unc-root" + CRLF, "utf8");
+    };
+    const body = ["const { execFile, execFileSync } =", "const fs = require(\"node:fs\");", "const REG_TOOL =", "function liveSyncIo("]
+      .map(m => sliceDecl(src, m)).join("\n");
+    const live = new Function("crypto", "Buffer", "require", "process", body + "\nreturn liveSyncIo;")(
+      crypto, Buffer, function (name) {
+        if (name === "node:child_process" || name === "child_process") return { execFileSync: spy, execFile: function () { throw new Error("execFile"); } };
+        if (name === "node:fs" || name === "fs") return { readFileSync: function () { return ""; } };
+        throw new Error("require " + name);
+      }, { platform: "win32", env: {} });
+    const key = "HKCU:" + BSL + "Network" + BSL + "Z";
+    const first = live().reg(key, "RemotePath"), afterFirst = calls.length;
+    slow = false;
+    const second = live().reg(key, "RemotePath"), afterSecond = calls.length;
+    live();
+    return { first, afterFirst, second, afterSecond, afterThird: calls.length };
+  };
+  const partialOk = (r) => !!r && r.first === "" && r.afterFirst === 6 && r.second === "unc-root" && r.afterSecond === 12 && r.afterThird === 12;
+  let partial = null, partialErr = "";
+  try { partial = partialScene(SRC); } catch (e) { partialErr = e && e.message ? e.message : "the read failed"; }
+  check(!partialErr && partialOk(partial),
+    "17d a record read cut short by its timeout is read again at the next ask, and a whole read is kept: " + (partialErr || JSON.stringify(partial)));
+  const wholeAt = SRC.split("\n").findIndex(line => line.indexOf("plant:syncio-whole") >= 0);
+  let liftedRed = false;
+  if (wholeAt >= 0 && PLANTS_ON) {
+    const copy = SRC.split("\n");
+    copy.splice(wholeAt, 1);
+    try { liftedRed = !partialOk(partialScene(copy.join("\n"))); } catch (e) { liftedRed = true; }
+  }
+  if (PLANTS_ON) check(wholeAt >= 0 && liftedRed, "17e lifting plant:syncio-whole keeps the partial read for the process, and 17d turns red: line " + wholeAt + ", red " + liftedRed);
+  else check(true, "17e lifting plant:syncio-whole (ETIUDA_PLANTS=off: not run)");
 }
 
 console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
