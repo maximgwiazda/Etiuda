@@ -7082,8 +7082,9 @@ async function main() {
     const wire = [between(teamText, "const STATUS = {", "};"), between(teamText, "const CLOSE = {", "};"), between(teamText, "const ROUTE_TAIL = ", ";"),
       between(teamText, "const METHODS = {", "};"), JSON.stringify(B.REASONS), forms].join("\n");
     /* Where this half met the relay seats (integration, Held for decision 49), the digest is the relay seats branch's wire: its seats grant
-       and its status; this half changes neither. */
-    const WIRE_SHA = "14a768f8859deccb5bf6a8dd75737783e4add8b5c520fc2645d57e8096cf7e98";
+       and its status; this half changes neither. A person's store moved it: the notice route, and the store grant, store certificate,
+       notice and store computer list byte forms. */
+    const WIRE_SHA = "b0600e3bd930923b6883f91e36950927599ea25a06bcf6904af17bf31995e516";
     check(sha(wire) === WIRE_SHA && forms.length > 200,
       "1013w the relay's wire is as it was: its routes, methods, refusals and their words, socket closes and signed byte forms digest to "
       + WIRE_SHA.slice(0, 12) + ": " + sha(wire).slice(0, 12));
