@@ -31,7 +31,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 134;
+const EXPECTED = 140;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const ASIDE_D6_LOGIN = nodeRequire("./off-windows.cjs").offWindows("D6-login",
   "the shell sets no login item off Windows, so Reset's turn-off has nothing to reach");
@@ -2269,6 +2269,9 @@ try {
     w.sent = [];
     w.sentEvents = [];
     mainTest.onSecondInstance(["--picker"]);
+    /* The pick opens once the helper has answered for the selection, or its short wait has run out (Quick replies on the
+       selection), so the page is asked a moment after the act: waited for, bounded, never read on the same tick. */
+    for (let i = 0; i < 100 && w.sent.indexOf("etiuda:pick-ask") < 0; i++) await new Promise(r => setTimeout(r, 30));
     const pickerOk = shows === 0 && w.sent.indexOf("etiuda:pick-ask") >= 0;
 
     d8Args = settingsOk && libraryOk && newTabOk && pickerOk;
