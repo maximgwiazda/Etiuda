@@ -510,8 +510,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --bg:#0f1013; --panel:#131418; --ink:#e3e6ea; --dim:#8f98a6; --line:#262a31;
   --dots-ink:color-mix(in srgb,var(--dim) 30%,transparent);
   /* The dark half of the WinUI dress - see the light block for the law. */
-  /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
-  --band:#0a0d13; --header-bg:#191b20;
+  /* The band is the light theme's cobalt in the dark too, as Studio's violet is one colour in both themes. */
+  --band:#0f4c9d; --header-bg:#191b20;
   --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30);
   --accent:#409afc; --accent-fill:#136adc; --accent-soft:#16233a; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
@@ -551,8 +551,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --bg:#0f1013; --panel:#131418; --ink:#e3e6ea; --dim:#8f98a6; --line:#262a31;
   --dots-ink:color-mix(in srgb,var(--dim) 30%,transparent);
   /* The dark half of the WinUI dress - see the light block for the law. */
-  /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
-  --band:#0a0d13; --header-bg:#191b20;
+  /* The band is the light theme's cobalt in the dark too, as Studio's violet is one colour in both themes. */
+  --band:#0f4c9d; --header-bg:#191b20;
   --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30);
   --accent:#409afc; --accent-fill:#136adc; --accent-soft:#16233a; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
@@ -700,7 +700,7 @@ body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,4
 .row{display:flex;gap:8px;align-items:flex-end;flex-wrap:nowrap;max-width:var(--app-max);
   margin:-10px auto 0;padding-top:4px;min-width:0;position:relative;color:#f2f6ff}
 .row::before{content:"";position:absolute;top:0;bottom:0;left:calc(-1 * var(--app-pad));
-  right:calc(-1 * var(--app-pad));background:var(--band);z-index:-1}
+  right:calc(-1 * var(--app-pad));background:color-mix(in srgb,var(--band) 62%,var(--bg));z-index:-1}
 /* Band furniture: what stands on the blue dresses in white. What stands there is the brand,
    the tab strip and the window's own three controls; the tools live on the row below. */
 .row .tabs-nav{color:rgba(var(--band-ink-rgb),.7)}
@@ -797,19 +797,17 @@ body.e-backdrop header{
    unchanged. Spec section 10. */
 body.e-backdrop .row::before{
   background:color-mix(in srgb,var(--band-accent,var(--band)) 62%,transparent)}
-/* THE PALE BAND. Every title bar on this desktop goes near-white in a light session and ours
-   read as the one dark strip on the screen. The scrim stays a scrim - 62 per cent, the material
-   still moving through it - and the furniture that stands on it turns dark, which is the swap
-   Windows makes for caption text rather than a second design. Deep enough to hold the selected
-   tab's own face apart from it, and dark ink clears 4.5:1 on it over any material. */
-:root[data-theme=light] body.e-backdrop{
-  --band:#dee3ec;
-  --band-ink:#0f172a; --band-ink-rgb:15,23,42;
-  --tab-edge:rgba(var(--band-ink-rgb),.28);
-  --strip-hover:rgba(var(--band-ink-rgb),.10)}
+/* THE TINTED BAND, Studio's construction in the desk's colour: the cobalt at 62 per cent over the material with white
+   furniture on it, in both themes, so the tabs always stand clear of it. Without the material the same mix stands over
+   the page's colour (.row::before), so turning the material off leaves the band's colour where it was. */
+:root body.e-backdrop{
+  --band:#0f4c9d;
+  --band-ink:#fff; --band-ink-rgb:255,255,255;
+  --tab-edge:rgba(255,255,255,.32);
+  --strip-hover:rgba(255,255,255,.18)}
 /* AN ACCENT OUTRANKS THE THEME, both ways: Windows hands over one colour and the caption
    furniture follows its lightness, so the engine says which way this one faces (host.js) and
-   these two answer it. Same specificity as the rule above and written after it deliberately. */
+   these two answer it. They out-specify the rule above by their class. */
 :root body.e-backdrop.e-band-pale{
   --band-ink:#0f172a; --band-ink-rgb:15,23,42;
   --tab-edge:rgba(var(--band-ink-rgb),.28);
@@ -988,12 +986,6 @@ span[data-icon]{line-height:0}
    Hover is WHITE, not accent - it stands on the band, where accent-on-blue would vanish. */
 .tab:hover,.tab:focus-visible,.tab:focus-within{color:var(--band-ink);--tab-face:var(--strip-hover)}
 :root{--strip-hover:rgba(255,255,255,.18)}
-/* Charcoal cannot use the same alpha. White is not part of this design, so an alpha over it
-   says nothing about either band: .18 reaches 1.676:1 on the dark band, louder than the
-   selected tab's own 1.129:1, and the tab under the cursor outranked the tab you were in.
-   Mixed from the SELECTED face instead, the hover is a fraction of what it previews and cannot
-   overtake it, whatever either surface later becomes. 55% sits halfway there, at 1.063:1. */
-:root:not([data-theme=light]){--strip-hover:color-mix(in srgb,var(--header-bg) 55%,transparent)}
 /* The selected tab meets the chrome via BOX-SHADOW: the band/chrome boundary SNAPS to the
    device grid while margins do not, so border tricks miss at every dpr but 1. A shadow
    escapes the tab's tight overflow; 2px down, 2px extent covers however it snapped. */

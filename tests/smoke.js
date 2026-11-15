@@ -1188,10 +1188,10 @@ const t0 = Date.now();
       [themeColours[th].accent, themeColours[th].fill, themeColours[th].pill, themeColours[th].segs.length,
         themeColours[th].segs.filter(c => !near(c, themeColours[th].bub)).length])) + ")");
 
-  /* AN INACTIVE TAB'S DOT, with no category on it, is the band's ink: the theme's text colour on
-     the pale band a light desk draws (the host's backdrop, body.e-backdrop, set here as the host
-     sets it) and white on every deep band. Read off a copy of the selected tab without its
-     selection or category, put on the page for the reading and taken out again. */
+  /* AN INACTIVE TAB'S DOT, with no category on it, is the band's ink: white on the cobalt band of
+     both themes, with the host's backdrop (body.e-backdrop, set here as the host sets it) and
+     without it. Read off a copy of the selected tab without its selection or category, put on the
+     page for the reading and taken out again. */
   const tabDots = await p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const cx = Object.assign(document.createElement("canvas"), { width: 1, height: 1 }).getContext("2d", { willReadFrequently: true });
@@ -1220,9 +1220,8 @@ const t0 = Date.now();
     return out;
   });
   const white = c => c[0] === 255 && c[1] === 255 && c[2] === 255;
-  check(!!tabDots && tabDots.every(r => near(r.dot, r.band) && r.dot[3] === 1)
-    && near(tabDots[0].dot, tabDots[0].ink) && !white(tabDots[0].dot) && white(tabDots[1].dot),
-    "an inactive tab's dot is the theme's text colour on a light desk's pale band and white on dark and on any deep band ("
+  check(!!tabDots && tabDots.every(r => near(r.dot, r.band) && r.dot[3] === 1 && white(r.dot)),
+    "an inactive tab's dot is the band's ink, white on the cobalt band in both themes, with the backdrop and without it ("
     + JSON.stringify(tabDots && tabDots.map(r => [r.th, r.back, r.dot])) + ")");
 
   /* THE TRADEMARK NOTICE sits third from last in About's credit, after the copyright, once, in the interface's language,

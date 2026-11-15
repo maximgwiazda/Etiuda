@@ -19,6 +19,8 @@
  *   ilm5, ilm6  the marked menu row is Studio's quiet fill, its step above the ground Studio's, no ring, the icon dim, no fade
  *   ilm7        an object's menu keeps one mark under the pointer and the keys
  *   ils1, ils2  the selected tab wears no colour spine, dark and light (Max: "please get rid of it")
+ *   ilb1, ilb2  the band is the cobalt at 62 per cent over the material and over the page's colour without it, white on it,
+ *               and a Windows accent still takes its place (the product designer's values of 2026-11-15)
  * Exit code is the number of failed checks; 78 when the run could not complete.
  */
 import fs from "node:fs";
@@ -228,6 +230,38 @@ try {
     await closePage(p);
   }
   // spine>>
+
+  // <<band
+  EXPECTED += 2;
+  for (const theme of ["light", "dark"]) {
+    const p = await boot(browser, theme);
+    const got = await p.evaluate(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const cx = Object.assign(document.createElement("canvas"), { width: 1, height: 1 }).getContext("2d", { willReadFrequently: true });
+      /* A colour as a 0..255 triple and an alpha, whatever notation the page computes it in. */
+      const px = (c) => { cx.clearRect(0, 0, 1, 1); cx.fillStyle = "#000"; cx.fillStyle = c; cx.fillRect(0, 0, 1, 1); const d = cx.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], Math.round(d[3] / 255 * 100) / 100]; };
+      const band = () => px(getComputedStyle(document.querySelector(".row"), "::before").backgroundColor);
+      const ink = () => px(getComputedStyle(document.querySelector(".brand")).color);
+      const body = document.body, root = document.documentElement;
+      const out = {};
+      body.classList.remove("e-backdrop", "e-band-pale", "e-band-deep"); await wait(80);
+      out.bare = band(); out.bareInk = ink();
+      body.classList.add("e-backdrop"); await wait(80);
+      out.material = band(); out.materialInk = ink();
+      root.style.setProperty("--band-accent", "#c42b1c"); body.classList.add("e-band-deep"); await wait(80);
+      out.accent = band();
+      root.style.removeProperty("--band-accent"); body.classList.remove("e-band-deep", "e-backdrop");
+      return out;
+    });
+    /* The cobalt #0f4c9d at 62 per cent: over the material (alpha .62), over the page's own colour without it. */
+    const bare = theme === "light" ? [103, 141, 192] : [15, 53, 105];
+    const near = (a, b, tol) => a && b.every((v, i) => Math.abs(a[i] - v) <= (tol || 1));
+    check(near(got.bare, bare) && got.bare[3] === 1 && near(got.material, [15, 76, 157]) && got.material[3] === 0.62
+      && near(got.bareInk, [255, 255, 255]) && near(got.materialInk, [255, 255, 255]) && near(got.accent, [196, 43, 28]) && got.accent[3] === 0.62,
+      "ilb" + (theme === "light" ? 1 : 2) + " " + theme + ": the band is the cobalt at 62 per cent over the material and over the page's colour without it, white on it, and a Windows accent still takes its place", got);
+    await closePage(p);
+  }
+  // band>>
 
   done = true;
 } catch (e) {
