@@ -13,6 +13,8 @@
  * same leg is run there by a child of this file, which must go red.
  *
  * No catalog and no content: the desk is the empty one, and the one saved copy is an invented name.
+ * L20 puts on a catalog whose card is titled Settings and whose category is named Library, switches
+ * the interface language, and reads the title back from every place the page shows it.
  */
 process.removeAllListeners("warning");
 process.on("warning", () => {});
@@ -178,7 +180,7 @@ function parseInto(root, html) {
     }
     const el = new El(m[2], root.ownerDocument);
     let a; const attr = new RegExp(ATTR.source, "g");
-    while ((a = attr.exec(m[3] || ""))) el.setAttribute(a[1], (a[2] ?? a[3] ?? a[4] ?? "").replace(/&quot;/g, "\"").replace(/&amp;/g, "&"));
+    while ((a = attr.exec(m[3] || ""))) el.setAttribute(a[1], (a[2] ?? a[3] ?? a[4] ?? "").replace(/&quot;/g, "\"").replace(/&#39;/g, "'").replace(/&amp;/g, "&"));
     stack[stack.length - 1].appendChild(el);
     if (!m[4] && !VOID.has(el.localName)) stack.push(el);
   }
@@ -233,7 +235,49 @@ function makeDocument() {
   doc.createDocumentFragment = () => new El("fragment", doc);
   doc.createElementNS = (_ns, t) => new El(t, doc);
   doc.createTextNode = s => new TextNode(s);
-  doc.createTreeWalker = () => ({ nextNode: () => null });
+  /* SHOW_ELEMENT is 1 and SHOW_TEXT is 4. 2 rejects a node and its subtree, 3 steps over the
+     node and still enters, 1 yields it. A marked catalog subtree is rejected whole, which is
+     the walk translateTree asks for. */
+  doc.createTreeWalker = (root, whatToShow, filter) => {
+    const show = whatToShow == null ? 0xFFFFFFFF : (whatToShow >>> 0);
+    const acceptFn = !filter ? null : typeof filter === "function" ? filter : node => filter.acceptNode(node);
+    const bitOf = node => node.nodeType === 1 ? 1 : node.nodeType === 3 ? 4 : 0;
+    const verdict = node => {
+      const bit = bitOf(node);
+      if (!bit || (show & bit) === 0) return 3;
+      if (!acceptFn) return 1;
+      const v = acceptFn(node);
+      return v == null ? 1 : v;
+    };
+    const nextSib = node => {
+      const p = node.parentNode;
+      if (!p || !p.childNodes) return null;
+      const i = p.childNodes.indexOf(node);
+      return i >= 0 && i + 1 < p.childNodes.length ? p.childNodes[i + 1] : null;
+    };
+    let current = root;
+    return {
+      get currentNode() { return current; },
+      nextNode() {
+        let node = current, result = 1;
+        for (;;) {
+          if (result !== 2 && node.childNodes && node.childNodes[0]) node = node.childNodes[0];
+          else {
+            let stepped = false;
+            while (node) {
+              if (node === root) return null;
+              const sib = nextSib(node);
+              if (sib) { node = sib; stepped = true; break; }
+              node = node.parentNode;
+            }
+            if (!stepped || !node) return null;
+          }
+          result = verdict(node);
+          if (result === 1) { current = node; return node; }
+        }
+      },
+    };
+  };
   doc.documentElement = new El("html", doc);
   doc.head = doc.documentElement.appendChild(new El("head", doc));
   doc.body = doc.documentElement.appendChild(new El("body", doc));
@@ -842,6 +886,95 @@ await checkAsync("L19 the clear's Undo puts back the override, the own card, the
 });
 
 
+/* A card titled with the interface's own word for Settings, and a category named with its word for
+   Library. The switch is the one Settings uses. The Menu's Settings and the Library heading are the
+   interface's own copies of those words, and they move; the card, the chip that names it, and the
+   category do not. */
+await checkAsync("L20 a card titled Settings keeps that title through an interface language switch, in the Library and wherever else the page shows it, while the interface's own Settings and Library move", async () => {
+  if (wired) return wired;
+  const CAT = await import(MOD("catalog.js"));
+  const RP = await import(MOD("repaint.js"));
+  const UL = await import(MOD("ui-lang.js"));
+  const ST = await import(MOD("storage.js"));
+  const had = ST.lsGet("eUiLang");
+  const catalog = {
+    format: 2, kind: "etiuda-catalog", id: "lamp-words", rev: 1, name: "Lamp words", date: "2026-01-09",
+    langs: [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }],
+    tags: [
+      { id: "t-shelf", kind: "shelf", label: { en: "Library" } },
+      { id: "t-ask", kind: "request", clause: { en: "a fresh wick", pl: "nowy knot" } },
+    ],
+    cards: [
+      { id: "c-set", shelf: "t-shelf", bodyShape: "plain", requests: ["t-ask"],
+        title: { en: "Settings" }, body: { en: "The lamp is ready." } },
+    ],
+  };
+  try {
+    if (!CAT.storeCatalog(CAT.parseCatalogFile(JSON.stringify(catalog)))) return "the catalog was not stored";
+    H.hooks.restartDesk();
+    await settle();
+    MG.openManage();
+    await settle();
+    const section = host().querySelector('.sx-sec[data-lm="catmac"]');
+    if (section) { section.click(); await settle(); }
+    const lab = host().querySelector('.mg-card-lab');
+    const chip = host().querySelector(".lw-chip");
+    const catName = host().querySelector("textarea.mg-cat-lab2");
+    const menuSettings = doc.querySelector('#settingsMenu [data-act="settings"]');
+    const heading = host().querySelector(".screen-head h2");
+    const chipTip = chip ? chip.getAttribute("title") : "";
+    const before = {
+      lab: lab ? lab.textContent.trim() : "",
+      chip: chip ? chip.textContent.trim() : "",
+      cat: catName ? catName.textContent.trim() : "",
+      menu: menuSettings ? menuSettings.textContent.trim() : "",
+      heading: heading ? heading.textContent.trim() : "",
+      chipTip,
+    };
+    if (before.lab !== "Settings" || before.chip !== "Settings" || before.cat !== "Library"
+      || before.menu !== "Settings" || before.heading !== "Library" || before.chipTip !== "Opens this card's editor") {
+      return "before the switch: " + JSON.stringify(before);
+    }
+    RP.setUiLang("pl");
+    await settle();
+    const titles = [...doc.querySelectorAll(".mg-card-lab, .lw-chip, .lw-ct .t, .ctitle")]
+      .map(el => el.textContent.trim()).filter(Boolean);
+    const catAfter = host().querySelector("textarea.mg-cat-lab2");
+    const menuAfter = doc.querySelector('#settingsMenu [data-act="settings"]');
+    const headingAfter = host().querySelector(".screen-head h2");
+    const chipAfter = host().querySelector(".lw-chip");
+    const got = {
+      titles,
+      cat: catAfter ? catAfter.textContent.trim() : "",
+      menu: menuAfter ? menuAfter.textContent.trim() : "",
+      heading: headingAfter ? headingAfter.textContent.trim() : "",
+      chipTip: chipAfter ? chipAfter.getAttribute("title") : "",
+    };
+    const uiSettings = UL.t("Settings");
+    const uiLibrary = UL.t("Library");
+    const uiTip = UL.t("Opens this card's editor");
+    const page = host().querySelector(".lib-list");
+    const all = page ? [page, ...page.querySelectorAll("*")] : [];
+    const skipped = all.filter(el => el.closest("[data-i18n-skip]")).length;
+    const visited = page ? UL.translateTree(page) : -1;
+    console.log("L20 visited " + visited + " of " + all.length + " elements on the Library page; " + skipped + " sit in a skip mark and were not entered");
+    /* A root inside a marked ancestor is refused too, as the old sweep's closest() refused it. */
+    const markedHost = page ? page.querySelector("[data-i18n-skip]") : null;
+    let inner = -1;
+    if (markedHost) { const probe = doc.createElement("span"); probe.textContent = "Settings"; markedHost.appendChild(probe); inner = UL.translateTree(probe); probe.remove(); }
+    const walkKept = visited === all.length - skipped && skipped > 0 && visited < all.length && inner === 0;
+    const titlesKept = titles.length >= 2 && titles.every(w => w === "Settings");
+    const catKept = got.cat === "Library";
+    const uiMoved = got.menu === uiSettings && uiSettings !== "Settings"
+      && got.heading === uiLibrary && uiLibrary !== "Library"
+      && got.chipTip === uiTip && uiTip !== "Opens this card's editor";
+    return titlesKept && catKept && uiMoved && walkKept || JSON.stringify({ got, uiSettings, uiLibrary, uiTip, visited, all: all.length, skipped, inner });
+  } finally {
+    try { if (had == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", had); } catch (e) {}
+    try { RP.setUiLang(had === "pl" ? "pl" : "en"); } catch (e) {}
+  }
+});
+
 /* ================================================================================================
    THE FAILURE PATHS: each plant lifted in a scratch copy of src/, the leg it guards run there by a child.
    ================================================================================================ */
@@ -850,20 +983,30 @@ const PLANTS = [
   { tag: "restart-keeps-screen", file: "restart.js", leg: "L5" },
   { tag: "library-page-open", file: "manage.js", leg: "L16" },
   { tag: "clear-keep-list", file: "local-memory.js", leg: "L18" },
+  { tag: "card-title-unmarked", file: "manage.js", leg: "L20",
+    lift: src => src.includes('<span class="mg-card-lab" data-i18n-skip>')
+      ? src.replace('<span class="mg-card-lab" data-i18n-skip>', '<span class="mg-card-lab">') : null },
 ];
 if (childAt < 0) {
   for (const p of PLANTS) {
     check(p.leg + "-plant lifting plant:" + p.tag + " in a scratch copy turns " + p.leg + " red", () => {
       const file = path.join(ROOT, "src", "modules", p.file);
       const src = fs.readFileSync(file, "utf8");
+      let lifted = null;
       const lines = src.split("\n");
-      const at = lines.findIndex(l => l.includes("plant:" + p.tag));
-      if (at < 0) return "plant:" + p.tag + " is not in " + p.file;
+      if (p.lift) {
+        lifted = p.lift(src);
+        if (lifted == null) return "plant:" + p.tag + " found nothing to lift in " + p.file;
+      } else {
+        const at = lines.findIndex(l => l.includes("plant:" + p.tag));
+        if (at < 0) return "plant:" + p.tag + " is not in " + p.file;
+        lines.splice(at, 1);
+        lifted = lines.join("\n");
+      }
       const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-library-tab-"));
       try {
         fs.cpSync(path.join(ROOT, "src"), path.join(scratch, "src"), { recursive: true });
-        lines.splice(at, 1);
-        fs.writeFileSync(path.join(scratch, "src", "modules", p.file), lines.join("\n"));
+        fs.writeFileSync(path.join(scratch, "src", "modules", p.file), lifted);
         const r = spawnSync(process.execPath, [SELF, "--child", path.join(scratch, "src"), p.leg], { encoding: "utf8", timeout: 120000 });
         const line = String(r.stdout || "").split("\n").find(l => l.startsWith("#child "));
         if (!line) return "the child said nothing: " + String(r.stderr || "").slice(0, 300);

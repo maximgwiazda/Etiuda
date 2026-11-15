@@ -9398,12 +9398,20 @@ What is typed here stays in this browser.`;
     return p(d.getDate()) + "." + p(d.getMonth() + 1) + "." + d.getFullYear() + " " + p(d.getHours()) + ":" + p(d.getMinutes());
   }
   var I18N_ATTRS = ["title", "aria-label", "placeholder"];
+  var TW_SHOW_ELEMENT = 1;
+  var TW_FILTER_ACCEPT = 1;
+  var TW_FILTER_REJECT = 2;
   function translateTree(root) {
-    if (!root) return;
-    const els = root.querySelectorAll ? root.querySelectorAll("*") : [];
-    const all = root.nodeType === 1 ? [root].concat(Array.prototype.slice.call(els)) : Array.prototype.slice.call(els);
-    all.forEach((el) => {
-      if (el.closest && el.closest("[data-i18n-skip]")) return;
+    if (!root || root.nodeType !== 1) return 0;
+    const marked = (el) => !!(el && el.nodeType === 1 && el.hasAttribute && el.hasAttribute("data-i18n-skip"));
+    if (marked(root)) return 0;
+    if (typeof root.closest === "function" && root.closest("[data-i18n-skip]")) return 0;
+    const doc = root.ownerDocument || (typeof document !== "undefined" ? document : null);
+    if (!doc || typeof doc.createTreeWalker !== "function") throw new Error("translateTree: the document has no TreeWalker");
+    let visited = 0;
+    const one = (el) => {
+      visited++;
+      if (marked(el)) return;
       I18N_ATTRS.forEach((a) => {
         const v = el.getAttribute && el.getAttribute(a);
         if (!v) return;
@@ -9433,7 +9441,11 @@ What is typed here stays in this browser.`;
           }
         });
       }
-    });
+    };
+    const walker = doc.createTreeWalker(root, TW_SHOW_ELEMENT, { acceptNode: (node) => marked(node) ? TW_FILTER_REJECT : TW_FILTER_ACCEPT });
+    one(root);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) one(node);
+    return visited;
   }
   function translateChrome() {
     [
@@ -35733,7 +35745,7 @@ What is typed here stays in this browser.`;
     const sent = mgCardSent(m, maxSent);
     const src = mgCardSource(m);
     const sentTipAttr = sent.tip ? ' title="' + esc(sent.tip) + '"' : "";
-    return '<div class="manage-row mg-card mg-card-row' + (hid ? " is-hidden" : "") + '" data-cardrow="' + esc(m.id) + '" data-band="' + esc(mgCardBand(m)) + '" title="' + esc(mgCardDragTip()) + '"><span class="lw-nm"><span class="mg-card-lab">' + esc(cardTitle(m) || "") + "</span>" + (cardCommits(m) ? stampHtml("mg-stamp") : "") + '</span><span class="lw-c op lw-h-op cut-peek">' + openHtml + '</span><span class="lw-c lg lw-h-lg">' + langsHtml + '</span><span class="lw-c st lw-h-st">' + repHtml + '</span><span class="lw-c in lw-h-in">' + intHtml + '</span><span class="lw-c us lw-h-us"' + sentTipAttr + ">" + sent.inner + '</span><span class="lw-c sr lw-h-sr">' + src.html + "</span>" + (mgDatesOn ? '<span class="lw-c dt lw-h-dt" data-i18n-skip>' + esc(mgDay(mgCardAt(m))) + "</span>" : "") + '<span class="cacts"><button type="button" data-edit-card="' + esc(m.id) + '" title="Open the full editor" aria-label="Edit card">' + ICON_EDIT + "</button>" + hideShow + '<button type="button" class="danger mg-trash" data-remove-card="' + esc(m.id) + '" title="Delete this card" aria-label="Delete card">' + ICON_TRASH + '</button><button type="button" class="star-btn' + (fav ? " on" : "") + '" data-fav-card="' + esc(m.id) + '" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
+    return '<div class="manage-row mg-card mg-card-row' + (hid ? " is-hidden" : "") + '" data-cardrow="' + esc(m.id) + '" data-band="' + esc(mgCardBand(m)) + '" title="' + esc(mgCardDragTip()) + '"><span class="lw-nm"><span class="mg-card-lab" data-i18n-skip>' + esc(cardTitle(m) || "") + "</span>" + (cardCommits(m) ? stampHtml("mg-stamp") : "") + '</span><span class="lw-c op lw-h-op cut-peek">' + openHtml + '</span><span class="lw-c lg lw-h-lg">' + langsHtml + '</span><span class="lw-c st lw-h-st">' + repHtml + '</span><span class="lw-c in lw-h-in">' + intHtml + '</span><span class="lw-c us lw-h-us"' + sentTipAttr + ">" + sent.inner + '</span><span class="lw-c sr lw-h-sr">' + src.html + "</span>" + (mgDatesOn ? '<span class="lw-c dt lw-h-dt" data-i18n-skip>' + esc(mgDay(mgCardAt(m))) + "</span>" : "") + '<span class="cacts"><button type="button" data-edit-card="' + esc(m.id) + '" title="Open the full editor" aria-label="Edit card">' + ICON_EDIT + "</button>" + hideShow + '<button type="button" class="danger mg-trash" data-remove-card="' + esc(m.id) + '" title="Delete this card" aria-label="Delete card">' + ICON_TRASH + '</button><button type="button" class="star-btn' + (fav ? " on" : "") + '" data-fav-card="' + esc(m.id) + '" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
   }
   function mgCardColVal(m, col) {
     if (col === "nm") return (cardTitle(m) || "").toLowerCase();
@@ -35929,7 +35941,7 @@ What is typed here stays in this browser.`;
       const nTip = esc(t("Cards in this category: {N}").replace("{N}", n));
       const key = "cat:" + k;
       const op = mgOpen.has(key);
-      const name = fixed || k === "__orphan" ? '<span class="mg-cat-fixed">' + esc(label2) + "</span>" : '<textarea class="mg-cat-lab2" rows="1" data-rename="' + esc(k) + '" spellcheck="false" autocomplete="off" aria-label="' + esc(t("Category name")) + '">' + esc(label2) + "</textarea>";
+      const name = fixed || k === "__orphan" ? '<span class="mg-cat-fixed">' + esc(label2) + "</span>" : '<textarea class="mg-cat-lab2" rows="1" data-rename="' + esc(k) + '" spellcheck="false" autocomplete="off" aria-label="' + esc(t("Category name")) + '" data-i18n-skip>' + esc(label2) + "</textarea>";
       const x = !n && k !== "__orphan" ? '<button type="button" class="mg-cat-x2 icbtn" data-delcat="' + esc(k) + '" title="Delete this empty category" aria-label="Delete category">' + ICON_TRASH + "</button>" : "";
       const add = k === "__orphan" ? "" : (function() {
         const tip = esc(t("Add a card to {CAT}").replace("{CAT}", label2));
@@ -36347,7 +36359,7 @@ What is typed here stays in this browser.`;
     } else {
       chipsHtml = cardList.map((o) => {
         const title = (typeof cardTitle === "function" ? cardTitle(o.m) : "") || "";
-        return '<button type="button" class="lw-chip" data-card-id="' + esc(o.m.id) + '" title="' + esc(t("Opens this card's editor")) + '" aria-label="' + esc(title) + " · " + esc(t("Opens this card's editor")) + '">' + esc(title) + "</button>";
+        return '<button type="button" class="lw-chip" data-card-id="' + esc(o.m.id) + '" title="' + esc(t("Opens this card's editor")) + '" aria-label="' + esc(title) + " · " + esc(t("Opens this card's editor")) + '"><span data-i18n-skip>' + esc(title) + "</span></button>";
       }).join("");
     }
     const datesOn = typeof mgIntentDatesOn !== "undefined" && mgIntentDatesOn, day = datesOn ? mgDay(mgIntentAt(i)) : "";
@@ -36637,14 +36649,14 @@ What is typed here stays in this browser.`;
         next = names[(i + 1) % n] || "";
       }
     }
-    return '<div class="lw-wheel"><div class="lw-drum"><span class="rd-prev p">' + esc(prev) + '</span><span class="rd-cur c">' + esc(cur) + '</span><span class="rd-next q">' + esc(next) + '</span></div><div class="lw-drumfield">' + esc(t("customer's name")) + "</div></div>";
+    return '<div class="lw-wheel"><div class="lw-drum"><span class="rd-prev p" data-i18n-skip>' + esc(prev) + '</span><span class="rd-cur c" data-i18n-skip>' + esc(cur) + '</span><span class="rd-next q" data-i18n-skip>' + esc(next) + '</span></div><div class="lw-drumfield">' + esc(t("customer's name")) + "</div></div>";
   }
   function mgWhoRowsHtml(names, markedName) {
     const tiles = names.map((name) => {
       const on = name === markedName ? " on" : "";
       const moveTitle = t("Move {NAME}").replace("{NAME}", name);
       const takeTitle = t("Take {NAME} off the wheel").replace("{NAME}", name);
-      return '<div class="lw-name' + on + '" tabindex="0" role="listitem" data-wrow="' + esc(name) + '"><span class="g" aria-label="' + esc(moveTitle) + '" title="' + esc(moveTitle) + '">' + ICON_GRIP + '</span><span class="n">' + esc(name) + '</span><button type="button" class="lw-del" aria-label="' + esc(takeTitle) + '" title="' + esc(takeTitle) + '">' + ICON_REMOVE + "</button></div>";
+      return '<div class="lw-name' + on + '" tabindex="0" role="listitem" data-wrow="' + esc(name) + '"><span class="g" aria-label="' + esc(moveTitle) + '" title="' + esc(moveTitle) + '">' + ICON_GRIP + '</span><span class="n" data-i18n-skip>' + esc(name) + '</span><button type="button" class="lw-del" aria-label="' + esc(takeTitle) + '" title="' + esc(takeTitle) + '">' + ICON_REMOVE + "</button></div>";
     }).join("");
     const addRow = '<div class="lw-name add"><span class="g">+</span><input type="text" id="mgAddWho" placeholder="' + esc(t("Add a name")) + '" aria-label="' + esc(t("Add a name")) + '" title="' + esc(t("Enter adds it; commas between names add several")) + '" spellcheck="false" autocomplete="off"><kbd>Enter</kbd></div>';
     return tiles + addRow;
@@ -36656,7 +36668,7 @@ What is typed here stays in this browser.`;
     const reads = '<div class="lw-reads">' + uses.map((m) => {
       const title = cardTitle(m);
       const filled = fillCardReply(m, markedName);
-      return '<div class="lw-ct" role="button" tabindex="0" data-card-id="' + esc(m.id) + '" title="' + esc(t("Opens this card's editor")) + '" aria-label="' + esc(t("Opens this card's editor")) + '"><div class="t">' + esc(title) + '</div><div class="r">' + filled + "</div></div>";
+      return '<div class="lw-ct" role="button" tabindex="0" data-card-id="' + esc(m.id) + '" title="' + esc(t("Opens this card's editor")) + '" aria-label="' + esc(t("Opens this card's editor")) + '"><div class="t" data-i18n-skip>' + esc(title) + '</div><div class="r" data-i18n-skip>' + filled + "</div></div>";
     }).join("") + "</div>";
     return '<div class="lw-side"><div class="lw-h">' + esc(t("On the wheel")) + "</div>" + wheel + '<div class="lw-h lw-h2">' + esc(t("How it reads")) + ' · <span class="lw-role-count">' + esc(countStr) + "</span></div>" + reads + "</div>";
   }
