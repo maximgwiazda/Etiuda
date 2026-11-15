@@ -896,6 +896,17 @@ function tourActTests() {
     [fromSettings, chatWaitStays, chatActMoved, chatNextMoved, chatNewTabMoved, chatNewAdded, chatBack, resolvedHidden, resolvedViz, resolvedVisible],
     ["chatTab [settings]", "chatTab [settings]", "pax", "pax", "pax", 1, "chatTab [settings]>cards", true, true, true]);
 
+  /* Stepping from factsIn to theme ("Light and dark") or Back from factsIn leaves any open screen tab alone. */
+  reset("factsIn", { facts: true, win: "library" }); T.tourNext();
+  const factsToThemeWin = where();
+  reset("factsIn", { facts: true, win: "settings" }); T.tourPrev();
+  const factsBackWin = where();
+  reset("theme", { win: "library" }); T.tourNext();
+  const themeNextWin = where();
+  eq("Light and dark (and leaving Quick facts) leaves open screen tabs open",
+    [factsToThemeWin, factsBackWin, themeNextWin],
+    ["theme [library]", "facts [settings]", "menu [library]"]);
+
   /* THE SMOKE WALKS THIS TOUR, not a remembered one. tests/tour-walk.js says which way the walk takes on each step,
      and the smoke takes it; this holds its rows to the table above: the same ids in order, Next pressed only where
      the table does not hold it back, the same window opened by the same step, an act only where a step waits for

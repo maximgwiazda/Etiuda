@@ -28556,11 +28556,17 @@ What you type stays in this browser only.`;
     if (!menuOpen()) openSettingsMenu();
     tourPress(menuTarget(act), '[data-act="' + act + '"]');
   }
-  function shutTourWindow() {
-    if (modalOpen()) closeAllDialogs();
-    else if (screenOn === "library") closeScreenTab("library");
-    else if (screenOn === "settings") closeScreenTab("settings");
-    if (factsPanelOpen()) closeFactsPanel();
+  function shutTourWindow(step) {
+    const id = step && step.id;
+    if (id === "editor" || id === "addIn") {
+      if (modalOpen()) closeAllDialogs();
+    } else if (id === "factsIn") {
+      if (factsPanelOpen()) closeFactsPanel();
+    } else if (id === "libraryIn") {
+      if (screenOn === "library") closeScreenTab("library");
+    } else if (id === "settingsIn") {
+      if (screenOn === "settings") closeScreenTab("settings");
+    }
   }
   var tourPicks = 0;
   var tourStepPicks = 0;
@@ -29379,7 +29385,7 @@ What you type stays in this browser only.`;
       if (v) keepAgentName(v);
       else if (agentName()) setAgentName("");
     }
-    if (step.inside) shutTourWindow();
+    if (step.inside) shutTourWindow(step);
     if (step.open) {
       try {
         step.open();
@@ -29406,7 +29412,7 @@ What you type stays in this browser only.`;
   function tourPrev() {
     if (!tourRunning) return;
     const step = TOUR_STEPS[tourIdx];
-    if (step && step.inside) shutTourWindow();
+    if (step && step.inside) shutTourWindow(step);
     tourReturnId = "";
     const n = onFrom(tourIdx - 1, -1);
     if (n >= 0) showTourStep(n);

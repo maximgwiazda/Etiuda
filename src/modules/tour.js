@@ -179,9 +179,14 @@ const settingsOpen=()=>screenOn==="settings" && !!document.getElementById("setBo
 function tourPress(el, sel){ if(el && el.matches && el.matches(sel) && el.getClientRects().length) el.click(); }
 // A Menu row, with the Menu opened first where it is shut.
 function tourPressRow(act){ if(!menuOpen()) openSettingsMenu(); tourPress(menuTarget(act), '[data-act="'+act+'"]'); }
-// The window an inside step stands in, closed as the person would close it.
-// A screen tab the tour went into closes with the step. A pop-up over it closes first.
-function shutTourWindow(){ if(modalOpen()) closeAllDialogs(); else if(screenOn==="library") closeScreenTab("library"); else if(screenOn==="settings") closeScreenTab("settings"); if(factsPanelOpen()) closeFactsPanel(); }
+// The window an inside step stands in, closed as the person would close it (and nothing else).
+function shutTourWindow(step){
+  const id=step && step.id;
+  if(id==="editor" || id==="addIn"){ if(modalOpen()) closeAllDialogs(); }
+  else if(id==="factsIn"){ if(factsPanelOpen()) closeFactsPanel(); }
+  else if(id==="libraryIn"){ if(screenOn==="library") closeScreenTab("library"); }
+  else if(id==="settingsIn"){ if(screenOn==="settings") closeScreenTab("settings"); }
+}
 /* THE PICKER'S STEP, where the shell holds a combination: done once the picker opens after the step began (pick.js
    says when it does), and Next opens it by the pointer. */
 let tourPicks=0, tourStepPicks=0;
@@ -969,7 +974,7 @@ function tourNext(){
     const inp=$("#tourName"), v=inp ? inp.value.trim() : "";
     if(v) keepAgentName(v); else if(agentName()) setAgentName("");
   }
-  if(step.inside) shutTourWindow();
+  if(step.inside) shutTourWindow(step);
   if(step.open){
     try{ step.open(); }catch(_){}
     if(tourFollowWindow()) return;
@@ -992,7 +997,7 @@ function tourOn(){
 function tourPrev(){
   if(!tourRunning) return;
   const step=TOUR_STEPS[tourIdx];
-  if(step && step.inside) shutTourWindow();
+  if(step && step.inside) shutTourWindow(step);
   tourReturnId="";
   const n=onFrom(tourIdx-1,-1);
   if(n>=0) showTourStep(n);
