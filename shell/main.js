@@ -6271,6 +6271,8 @@ async function takeInvite(text, name, check) {
   const me = branchIdentity();
   if (!me) return Object.assign({}, joinView(), { refused: "unread" });
   let ask = null;
+  if (parsed.relay && !knownRelayAddress(parsed.relay.url))
+    return Object.assign({}, joinView(), { refused: "unread" });
   if (parsed.relay && stranded) {
     if (!branchSealable()) return Object.assign({}, joinView(), { refused: "unread" });
     /* The request is written before the old lead is let go, so a write that fails leaves this desk as it was: left behind, with
@@ -6445,6 +6447,8 @@ function askWritten(ask) {
    invitation sets is the one board 907 lets the desk follow a relay address under. */
 /* `ahead`: a left-behind desk's yes, its request made and written before it let the old lead go (relayAsk, askWritten). */
 function takeRelayInvite(parsed, name, me, ahead) {
+  if (!parsed || !parsed.relay || !knownRelayAddress(parsed.relay.url))
+    return Object.assign({}, joinView(), { refused: "unread" });
   if (!branchSealable()) return Object.assign({}, joinView(), { refused: "unread" });
   const ask = ahead || relayAsk(parsed, name, me);
   if (ask.refused) return Object.assign({}, joinView(), { refused: ask.refused });
@@ -6874,6 +6878,15 @@ function forgetLead(team, left) {
 const BUILTIN_RELAY_URL = "https://etiuda.dev/relay/v1";
 /* A test service build's second built-in relay, fixed here as the first is and never read from a file or the environment. */
 const STAGING_RELAY_URL = "https://etiuda.dev/relay-staging/v1";
+/* An invitation may name only this build's relay or the staging relay. A harness start may also name
+   the https address a leg points at a stand-in. A customer's start may not, so a page cannot choose a host. */
+function knownRelayAddress(u) {
+  if (typeof u !== "string") return false;
+  const at = u.trim().replace(/\/+$/, "");
+  if (at === BUILTIN_RELAY_URL || at === STAGING_RELAY_URL) return true;
+  if (!harnessLaunch()) return false; /* plant:relay-known */
+  return /^https:\/\/[a-z0-9.-]+(?::[0-9]{1,5})?(?:\/[A-Za-z0-9._~-]+)*\/?$/.test(at);
+}
 function isBuiltinRelayUrl(u) {
   if (typeof u !== "string") return false;
   const at = u.trim().replace(/\/+$/, "");

@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 129;
+const EXPECTED = 132;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -212,6 +212,7 @@ function loadShell(opts) {
     new Function("require", "module", "exports", "__dirname", "__filename", realFs.readFileSync(n, "utf8"))(fakeRequire, m, m.exports, path.dirname(n), n);
     return m.exports; };
   const fakeRequire = n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? fs : n === "node:child_process" ? cp
+    : (o.relay && typeof n === "string" && (n.endsWith(path.join("relay", "channel.cjs")) || n.endsWith("relay/channel.cjs"))) ? o.relay
     : (path.isAbsolute(n) && /\.cjs$/.test(n)) ? (own[n] || (own[n] = ownModule(n))) : nodeRequire(n));
   const env = Object.assign({ XDG_CURRENT_DESKTOP: "GNOME" }, o.env || {}), envWas = {};
   for (const k of Object.keys(env)) { envWas[k] = process.env[k]; if (env[k] === null) delete process.env[k]; else process.env[k] = env[k]; }
@@ -1840,6 +1841,61 @@ try {
       if (at >= 0) { lines.splice(at, 1); again = await yesFolder(unc, lines.join("\n")); }
       const saw = again && again.calls.filter(c => remotePath(c.slice(c.indexOf(" ") + 1))).length;
       check(!!again && saw > 0, "17d lifting plant:invite-remote-folder states the UNC share: " + (again ? saw + " call(s)" : "plant line absent"));
+    }
+  }
+  /* ---- 18. a relay invitation. A customer's start opens a channel only to the built-in relay or staging.
+     A harness start may aim at the stand-in the legs already use. ---- */
+  {
+    const crypto = nodeRequire("node:crypto");
+    const realRelay = nodeRequire(path.join(ROOT, "shell", "relay", "channel.cjs"));
+    const leadPub = "ab".repeat(32);
+    const relayBlob = url => {
+      const doc = { team: "t-" + crypto.randomBytes(8).toString("hex"),
+        relay: { rt: crypto.randomBytes(16).toString("hex"), url: url,
+          token: crypto.randomBytes(32).toString("hex"), inv: crypto.randomBytes(16).toString("hex") },
+        lead: { keyId: "lead-one", public: leadPub, name: "Ada Lane" }, secret: crypto.randomBytes(16).toString("hex") };
+      return "etiuda-join:" + Buffer.from(JSON.stringify(doc)).toString("base64url");
+    };
+    const withoutHarness = async fn => {
+      const keys = ["ETIUDA_TEST_OFFSCREEN", "ETIUDA_TEST_DOCUMENTS", "ETIUDA_TEST_DEVTOOLS"];
+      const saved = {};
+      keys.forEach(k => { saved[k] = process.env[k]; delete process.env[k]; });
+      const argv = process.argv.slice();
+      process.argv = process.argv.filter(a => !/^--user-data-dir(=|$)/.test(String(a)));
+      try { return await fn(); }
+      finally {
+        process.argv = argv;
+        keys.forEach(k => { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; });
+      }
+    };
+    const yesRelay = async (url, src) => {
+      const channels = [];
+      const relay = { inviteSealKey: realRelay.inviteSealKey, inviteWrapKey: realRelay.inviteWrapKey,
+        createChannel: opts => { channels.push(String(opts && opts.url || ""));
+          return { start() {}, stop: async () => {}, kick() {}, online: () => false, program: { pinned: () => null } }; } };
+      const S = loadShell({ src: src, relay: relay });
+      await S.ask("etiuda:branch-identity", true);
+      let res = null;
+      await withoutHarness(async () => { res = await S.ask("etiuda:team-join", "invite", relayBlob(url), "Ada", ""); });
+      return { res: res, channels: channels };
+    };
+    const evil = "https://evil.example/relay/v1";
+    const builtin = "https://etiuda.dev/relay/v1";
+    const foreign = await yesRelay(evil);
+    check(!!(foreign.res && foreign.res.refused) && foreign.channels.length === 0,
+      "18a a relay invitation to any other host is refused before a channel opens: answered "
+      + (foreign.res && (foreign.res.refused || "taken")) + ", channels " + foreign.channels.length);
+    const home = await yesRelay(builtin);
+    check(!(home.res && home.res.refused) && home.channels.length === 1 && home.channels[0] === builtin,
+      "18b the same yes to the built-in relay opens that channel and no other: answered "
+      + (home.res && (home.res.refused || "taken")) + ", channels " + JSON.stringify(home.channels));
+    if (PLANTS_OFF) notRun("18c lifting plant:relay-known opens a channel to the other host");
+    else {
+      const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:relay-known") >= 0);
+      let again = null;
+      if (at >= 0) { lines.splice(at, 1); again = await yesRelay(evil, lines.join("\n")); }
+      check(!!again && again.channels.length === 1 && again.channels[0] === evil,
+        "18c lifting plant:relay-known opens a channel to the other host: " + (again ? JSON.stringify(again.channels) : "plant line absent"));
     }
   }
 } catch (e) {
