@@ -774,7 +774,17 @@ function createFolderProgram(opts) {
     }
   }
   let judgedAt = 0; // moves with what a refusal is judged against: the pin, the team file and the ring
-  const dropped = new Set(); // refusals let go since the worker was last told, so it copies those files again
+  const dropped = new Set(); // paths whose stamps or refusals were let go since the worker was last told, so it copies those files again
+  /* A staged copy dropped without judging or landing is forgotten in both the program and the worker, so the share's copy
+     is read again at a later scan for as long as it stays there. */
+  function dropUnjudged(item, forget = true) {
+    if (!item) return;
+    if (forget && item.relPath) {
+      knownMtimes.delete(item.relPath);
+      dropped.add(item.relPath);
+    }
+    if (item.tmpPath) { try { io.unlink(item.tmpPath); } catch {} }
+  }
   /* A refused or parked copy is held while its size and mtime stay, and, for a refusal, while the pin, the team file, the
      ring and the key for its epoch stay as they were when it was judged. Once that stamp is old enough to stand for the
      bytes it is staged once more, and not again while the stamp stays. The mirror's own copy is never removed for it. The
@@ -1073,9 +1083,7 @@ function createFolderProgram(opts) {
     } else {
       while (pending.length >= PENDING_MAX) {
         const evicted = pending.shift();
-        if (evicted && evicted.tmpPath) {
-          try { io.unlink(evicted.tmpPath); } catch {}
-        }
+        dropUnjudged(evicted);
         if (evicted && evicted.relPath) {
           try { io.unlink(path.join(pendingDir, evicted.relPath)); } catch {}
         }
@@ -1216,7 +1224,7 @@ function createFolderProgram(opts) {
         continue;
       }
       if (isOwed(item.relPath)) {
-        if (item.tmpPath) { try { io.unlink(item.tmpPath); } catch {} }
+        dropUnjudged(item);
         try { io.unlink(path.join(pendingDir, item.relPath)); } catch {}
         continue;
       }
@@ -1303,6 +1311,7 @@ function createFolderProgram(opts) {
   function runRetry() {
     if (stopped) return;
     const applied = [];
+    let retryDropped = false;
     floorsDirty = null;
     for (const [rel, item] of Array.from(renameWait.entries())) {
       const meta = renameMeta.get(rel);
@@ -1314,10 +1323,11 @@ function createFolderProgram(opts) {
       }
       if (!meta || meta.exhausted) continue;
       if (isOwed(rel)) {
-        try { io.unlink(item.tmpPath); } catch {}
+        dropUnjudged(item);
         renameWait.delete(rel);
         renameMeta.delete(rel);
         renameSaid.delete(rel);
+        retryDropped = true;
         continue;
       }
       try {
@@ -1344,8 +1354,8 @@ function createFolderProgram(opts) {
     }
     if (applied.length > 0) {
       onChange({ team, applied });
-      if (typeof opts.onRetryApplied === "function") opts.onRetryApplied(applied);
     }
+    if ((applied.length > 0 || retryDropped) && typeof opts.onRetryApplied === "function") opts.onRetryApplied(applied);
     scheduleRetry();
   }
 
@@ -1380,10 +1390,9 @@ function createFolderProgram(opts) {
       let neither = false;
       neither = !!fork && fork.kind === "two"; /* plant:syncer-fork-two */
       if (neither) {
-        for (const s of teamItems) {
-          knownMtimes.delete(s.relPath);
-          try { io.unlink(s.tmpPath); } catch {}
-        }
+        let forget = false;
+        forget = true; /* plant:fork-two-forget */
+        for (const s of teamItems) dropUnjudged(s, forget);
         staged = staged.filter(s => teamItems.indexOf(s) < 0);
       }
     }
@@ -1392,9 +1401,7 @@ function createFolderProgram(opts) {
     const teamStaged = staged.filter(s => s.relPath === "etiuda-team.json")[0];
     /* Dropped, not refused, and the stamp forgotten, so the next listing stages the share's copy once the path is no longer owed. */
     if (teamStaged && teamOwed) {
-      knownMtimes.delete(teamStaged.relPath);
-      dropped.add(teamStaged.relPath);
-      try { io.unlink(teamStaged.tmpPath); } catch {}
+      dropUnjudged(teamStaged);
     } else if (teamStaged) {
       let text = null;
       try { text = io.readFile(teamStaged.tmpPath, "utf8"); } catch {}
@@ -1480,9 +1487,7 @@ function createFolderProgram(opts) {
     for (const sibItem of teamSiblingsStaged) {
       /* A sibling lands at its own path and, where it is newer, moves the rev the canonical file is judged by. Neither happens while that file is owed. */
       if (teamOwed || isOwed(sibItem.relPath)) {
-        knownMtimes.delete(sibItem.relPath);
-        dropped.add(sibItem.relPath);
-        try { io.unlink(sibItem.tmpPath); } catch {}
+        dropUnjudged(sibItem);
         continue;
       }
       let text = null;
@@ -1530,13 +1535,15 @@ function createFolderProgram(opts) {
       let mayLand = true;
       if (isOwed(relPath)) mayLand = false; /* plant:outbox-owe-keep */
       if (!mayLand) {
-        try { io.unlink(tmpPath); } catch {}
+        let forget = false;
+        forget = true; /* plant:step3-owe-forget */
+        dropUnjudged(item, forget);
         continue;
       }
       if (ownRel(relPath) && tookBack(item)) continue;
       let text = null;
       try { text = io.readFile(tmpPath, "utf8"); } catch {
-        try { io.unlink(tmpPath); } catch {}
+        dropUnjudged(item);
         continue;
       }
 
