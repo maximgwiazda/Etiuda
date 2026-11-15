@@ -36713,6 +36713,7 @@ What you type stays in this browser only.`;
   var CHIP_COL_NARROW = 320;
   var CHIP_COL_DATE = 520;
   var chipOverflowRO = null;
+  var treeHoverRO = null;
   function chipRoom(list2) {
     let room = null, gone = false, gap = 0, more = null;
     list2.querySelectorAll(".manage-row.mg-int").forEach((r) => {
@@ -36839,10 +36840,12 @@ What you type stays in this browser only.`;
     const treeEl = page.querySelector(".mg-tree");
     const cardBox = treeEl && treeEl.closest(".sx-card") || treeEl;
     if (cardBox && typeof ResizeObserver !== "undefined") {
-      const ro = new ResizeObserver(() => {
-        updateTreeHoverTitles(page);
+      if (!treeHoverRO) treeHoverRO = new ResizeObserver(() => {
+        const cur = libPage();
+        if (cur) updateTreeHoverTitles(cur);
       });
-      ro.observe(cardBox);
+      treeHoverRO.disconnect();
+      treeHoverRO.observe(cardBox);
     }
     page.querySelectorAll("[data-role-always]").forEach((btn) => {
       btn.onclick = () => {

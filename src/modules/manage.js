@@ -1667,7 +1667,7 @@ registerScreen(LIB_SCREEN,{ title:()=>t("Library"), render:host=>paintLibrary(ho
    2026-11-11: at 1280 it cost the first row most of a chip). One observer for the list: a new one on
    every paint kept each previous list. */
 const CHIP_COL_NARROW=320, CHIP_COL_DATE=520;
-let chipOverflowRO=null;
+let chipOverflowRO=null, treeHoverRO=null;
 /* The chips' column on the narrowest shown row without the date, the chevron's place taken from it,
    and what the date would take besides. Read from the parts of a row that never move (its width less
    the mark, name, number, buttons and gaps), never from its chips: with every row open there is no
@@ -1793,10 +1793,12 @@ function wireLibrary(page){
   const treeEl = page.querySelector(".mg-tree");
   const cardBox = (treeEl && treeEl.closest(".sx-card")) || treeEl;
   if(cardBox && typeof ResizeObserver !== "undefined"){
-    const ro = new ResizeObserver(() => {
-      updateTreeHoverTitles(page);
+    if(!treeHoverRO) treeHoverRO = new ResizeObserver(() => {
+      const cur = libPage();
+      if(cur) updateTreeHoverTitles(cur);
     });
-    ro.observe(cardBox);
+    treeHoverRO.disconnect();
+    treeHoverRO.observe(cardBox);
   }
 
   // ---- card rows in the category tree
