@@ -258,7 +258,15 @@ function migrateDeskIds(store) {
       if (!plain(x) || x.removed === true) continue;
       let ends = false;
       ends = !!x.key && removed.has(x.key); /* plant:migrate-ends */
-      if (ends) { store.put(k, Object.assign({}, x, { removed: true })); n.ended++; }
+      /* An invitation's session bound to a key left removed, as devices() marks one on a withdrawal, where the invitation was
+         registered before the removal; one registered after keeps its one upload. */
+      const inv = !x.key && x.inv ? store.get("inv:" + x.inv) : undefined;
+      const bound = inv ? x.bound || inv.key : null, gone = bound && removed.has(bound) ? store.get("gone:" + bound) : undefined;
+      /* registeredAfter's test, which lives inside createCore. */
+      const after = !!gone && [inv.ord, gone.ord].every(Number.isSafeInteger) && inv.ord > gone.ord;
+      let endsBound = false;
+      endsBound = !!gone && !after; /* plant:migrate-ends-bound */
+      if (ends || endsBound) { store.put(k, Object.assign({}, x, { removed: true })); n.ended++; }
     }
     store.put(MIGRATED, 1);
   });
