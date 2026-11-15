@@ -19,13 +19,16 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
-const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
+/* Machine policy is none but where a leg (930g) writes the export a policy names. */
+const REG = { policy: null };
+const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
-const EXPECTED = 20;
+const EXPECTED = 32;
 const WORK = path.join(ROOT, "shell", "main.js");
 const GOOD = fs.readFileSync(WORK);
 const GOOD_HASH = crypto.createHash("sha256").update(GOOD).digest("hex");
 const CLOCK = new Date(2026, 3, 15, 12, 0, 0, 0).getTime();
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -41,7 +44,7 @@ const COPY = path.join(APP, "main.js");
 const EXPOSE = ["spanSignedBytes", "spanDocument", "spanPeriod", "setStatsClock", "statsPulse", "flushHeldStats",
   "openSealed", "sealCatalog", "openStatsSealed", "sealStatsLead", "statsAnswerSignedBytes", "statsAnswerGenuine",
   "signedBytesOf", "branchSign", "branchIdOf", "deskFileGenuine", "teamWhole", "wrapTeamKey", "signedSha",
-  "catalogChanged", "channelHash", "isCatalogName", "deskTrustChecks"];
+  "catalogChanged", "channelHash", "isCatalogName", "deskTrustChecks", "handoverSignedBytes", "teamUse"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -223,11 +226,20 @@ try {
     return { ok: red && green === true, why: why, red: red };
   }
 
+  /* The legs of the desk-statistics review (930): each proved as prove() proves, its plant skipped under ETIUDA_PLANTS=off. */
+  async function proveOr(name, needle, repl, run) {
+    if (!PLANTS_OFF) return prove(name, needle, repl, run);
+    let green = false, why = "";
+    try { green = await run(); } catch (e) { why = e.stack || e.message; }
+    console.log("  SKIP  the plant of " + name + " (ETIUDA_PLANTS=off)");
+    return { ok: green === true, why: why, red: null };
+  }
+
   /* ---- 891a: another key, unsigned, or a broken file writes nothing ------------------------------------------ */
   {
     const g = await prove("891a",
-      "if (!lead || !spanGenuine(doc, lead)) return;",
-      "if (false && (!lead || !spanGenuine(doc, lead))) return;",
+      "if (!lead || !spanGenuine(doc, lead)) return statsWithdrawn();",
+      "if (false && (!lead || !spanGenuine(doc, lead))) return statsWithdrawn();",
       async () => {
         const box = await joined(false);
         if (!box.D.api.isCatalogName("stats-span.json") || box.D.api.isCatalogName("etiuda-request.ereq")) return false;
@@ -252,6 +264,249 @@ try {
       });
     check(g.ok, "891a a span signed by another key, or unsigned, or not JSON, writes nothing and leaves a good answer where it was"
       + (g.why ? ": " + g.why.split("\n")[0] : ""));
+  }
+
+  /* ---- 930a to 930c: a card, an intent and the engine string are reduced to ids, a day, codes and whole numbers --- */
+  {
+    const marked = "smuggled-" + crypto.randomBytes(4).toString("hex");
+    const hostile = () => JSON.stringify({
+      engine: "2.0.0 " + marked + " " + "x".repeat(5000),
+      cards: [{ id: "c-lamp", n: 2, at: "2026-04-02", note: marked, langs: { en: 2 } }, { id: "c-wick", n: 1, word: marked },
+        { id: "x".repeat(300), n: 1 }, { id: "c-gone", n: 0 }],
+      intents: [{ id: "i-ask", n: 1, label: marked }, { id: "i-none", n: "many" }],
+      misses: 0, langs: { en: 2 }, since: "2026-01-01", catalog: { id: "north-lamps", rev: 3 }
+    });
+    const run = async () => {
+      const box = await joined(false);
+      put(box.share, "stats-span.json", spanDoc(box.D, "rolling-30", lead.privateKey, LEAD));
+      box.D.setPage(hostile);
+      box.D.api.catalogChanged(box.D.win);
+      const inner = openStats(box);
+      if (!inner) return false;
+      const text = JSON.stringify(inner);
+      const cardsOk = JSON.stringify(inner.cards) === JSON.stringify([{ id: "c-lamp", n: 2, at: "2026-04-02", langs: { en: 2 } }, { id: "c-wick", n: 1 }]);
+      const intentsOk = JSON.stringify(inner.intents) === JSON.stringify([{ id: "i-ask", n: 1 }]);
+      return text.indexOf(marked) < 0 && cardsOk && intentsOk && inner.engine === "";
+    };
+    const proofs = [
+      ["930a", "    const row = { id: id, n: n }; /* plant:stats-card-row */", "    const row = Object.assign({}, card, { id: id, n: n }); delete row.langs; /* plant:stats-card-row */",
+        "a card the page sent keeps its id, count, day and language counts, and nothing else it carried"],
+      ["930b", "    intents: intentCounts(data.intents), /* plant:stats-intents */", "    intents: Array.isArray(data.intents) ? data.intents : [], /* plant:stats-intents */",
+        "an intent keeps its id and count, and nothing else it carried"],
+      ["930c", "    engine: typeof data.engine === \"string\" && /^[0-9A-Za-z.+-]{1,40}$/.test(data.engine) ? data.engine : \"\", /* plant:stats-engine */",
+        "    engine: String(data.engine || \"\"), /* plant:stats-engine */", "the engine field is a version string or empty, never any text the page sent"],
+    ];
+    for (const [name, needle, repl, says] of proofs) {
+      const g = await proveOr(name, needle, repl, run);
+      check(g.ok, name + " " + says + (g.why ? ": " + g.why.split("\n")[0] : ""));
+    }
+  }
+
+  /* ---- 930d: a span removed, or no longer genuine, after it was adopted stops the sealing ------------------------ */
+  {
+    const g = await proveOr("930d",
+      "  statsSpan = \"\"; statsPeriod = null; statsHeld = null; statsWroteKey = \"\"; /* plant:stats-withdrawn */",
+      "  /* plant:stats-withdrawn */",
+      async () => {
+        const outcomes = [];
+        for (const how of ["deleted", "unsigned", "another key"]) {
+          const box = await joined(false);
+          adopt(box, "rolling-30", lead.privateKey, LEAD, 2);
+          if (!openStats(box) || openStats(box).cards[0].n !== 2) return false;
+          const span = path.join(box.share, "stats-span.json");
+          if (how === "deleted") { fs.unlinkSync(span); syncMirror(box); }
+          else if (how === "unsigned") put(box.share, "stats-span.json", "{\"format\":1,\"kind\":\"etiuda-stats-span\",\"span\":\"rolling-30\"}");
+          else put(box.share, "stats-span.json", spanDoc(box.D, "rolling-30", other.privateKey, OTHER));
+          box.D.api.catalogChanged(box.D.win);
+          box.D.api.setStatsClock(CLOCK + 120000);
+          const res = await box.D.ask("etiuda:stats-write", pageBody(9));
+          box.D.api.flushHeldStats();
+          box.D.api.setStatsClock(CLOCK + 2 * 864e5);
+          box.D.api.statsPulse();
+          const stopped = !(res && res.syncMs) && openStats(box).cards[0].n === 2;
+          adopt(box, "rolling-30", lead.privateKey, LEAD, 11);
+          const back = openStats(box);
+          outcomes.push(how + ":" + (stopped ? "stopped" : "SEALED") + ":" + (back && back.cards[0].n === 11 ? "back" : "not back"));
+        }
+        console.log("  --- 930d " + outcomes.join(", "));
+        return outcomes.every(o => /:stopped:back$/.test(o));
+      });
+    check(g.ok, "930d a span deleted, made unsigned or signed by another key after it was adopted stops the sealing: later counts, the close and"
+      + " midnight seal nothing; a genuine span read again starts it" + (g.why ? ": " + g.why.split("\n")[0] : ""));
+  }
+
+  /* ---- 930e: a new box re-seals the same figures; 930f: a box a handover left in place seals nothing more ---------- */
+  {
+    const boxB = crypto.generateKeyPairSync("x25519"), next = crypto.generateKeyPairSync("ed25519");
+    const NEXT = { keyId: "quay-lead-next", public: pubHex(next.publicKey) };
+    const docOf = (box, leadRec, key, epoch, roster, handover) => {
+      const o = { format: 1, kind: "etiuda-team", id: box.team, catalogs: ["north-lamps"], lead: leadRec, sealed: true, exportsSealed: false, epoch: epoch, roster: roster };
+      if (handover) o.handover = handover;
+      o.sig = { alg: "Ed25519", keyId: leadRec.keyId };
+      o.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(o)), key).toString("hex");
+      return JSON.stringify(o, null, 1) + "\n";
+    };
+    const opens = (box, priv) => { try { return !!box.D.api.openStatsSealed(priv, JSON.parse(fs.readFileSync(statsAt(box), "utf8")), box.me.id); } catch { return false; } };
+    const runE = async () => {
+      const box = await joined(false);
+      adopt(box, "range-2026-04-01-2026-04-10", lead.privateKey, LEAD, 2);
+      if (!opens(box, leadBox.privateKey)) return false;
+      put(box.share, "etiuda-team.json", docOf(box, { keyId: LEAD.keyId, public: LEAD.public, box: pubHex(boxB.publicKey) }, lead.privateKey, 1, [entry(box.D, box.me, box.key, box.team, 1)]));
+      box.D.api.catalogChanged(box.D.win);
+      const inner = (() => { try { return JSON.parse(box.D.api.openStatsSealed(boxB.privateKey, JSON.parse(fs.readFileSync(statsAt(box), "utf8")), box.me.id)); } catch { return null; } })();
+      return !!inner && inner.cards[0].n === 2 && !opens(box, leadBox.privateKey);
+    };
+    const e = await proveOr("930e", "if (now && now.seal && last.team === now.seal.team && last.box && last.box !== now.seal.box) askStats(win, \"span\"); /* plant:stats-box-reseal */",
+      "/* plant:stats-box-reseal */", runE);
+    check(e.ok, "930e a team file naming another box for the lead seals the unchanged figures again to that box, and the old box opens the file no more"
+      + (e.why ? ": " + e.why.split("\n")[0] : ""));
+    const e2 = await proveOr("930e2", "  const key = statsContentKey(out) + (got && got.seal ? \"\\n\" + statsSealKey(got.seal) : \"\"); /* plant:stats-seal-key */",
+      "  const key = statsContentKey(out); /* plant:stats-seal-key */", runE);
+    check(e2.ok, "930e2 the box is part of what was written, so the same figures under a new box are not taken as unchanged"
+      + (e2.why ? ": " + e2.why.split("\n")[0] : ""));
+    const step = () => {
+      const st = { format: 1, kind: "etiuda-team-handover", team: "", from: { keyId: LEAD.keyId, public: LEAD.public }, to: { keyId: NEXT.keyId, public: NEXT.public },
+        sig: { alg: "Ed25519", keyId: LEAD.keyId } };
+      return st;
+    };
+    const handed = (box, boxPub) => {
+      const st = step();
+      st.team = box.team;
+      st.sig.value = crypto.sign(null, box.D.api.handoverSignedBytes(st), lead.privateKey).toString("hex");
+      return docOf(box, { keyId: NEXT.keyId, public: NEXT.public, box: boxPub }, next.privateKey, 1, [entry(box.D, box.me, box.key, box.team, 1)], [st]);
+    };
+    const runF = async () => {
+      const box = await joined(false);
+      adopt(box, "rolling-30", lead.privateKey, LEAD, 2);
+      if (!opens(box, leadBox.privateKey)) return false;
+      put(box.share, "etiuda-team.json", handed(box, LEAD.box));
+      box.D.api.catalogChanged(box.D.win);
+      put(box.share, "stats-span.json", spanDoc(box.D, "rolling-30", next.privateKey, NEXT));
+      box.D.api.catalogChanged(box.D.win);
+      box.D.api.setStatsClock(CLOCK + 120000);
+      const kept = await box.D.ask("etiuda:stats-write", pageBody(5));
+      const stillTwo = (() => { try { return JSON.parse(box.D.api.openStatsSealed(leadBox.privateKey, JSON.parse(fs.readFileSync(statsAt(box), "utf8")), box.me.id)).cards[0].n === 2; } catch { return false; } })();
+      put(box.share, "etiuda-team.json", handed(box, pubHex(boxB.publicKey)));
+      box.D.api.catalogChanged(box.D.win);
+      box.D.api.setStatsClock(CLOCK + 240000);
+      const fresh = await box.D.ask("etiuda:stats-write", pageBody(6));
+      const inner = (() => { try { return JSON.parse(box.D.api.openStatsSealed(boxB.privateKey, JSON.parse(fs.readFileSync(statsAt(box), "utf8")), box.me.id)); } catch { return null; } })();
+      console.log("  --- 930f kept-box write " + JSON.stringify(kept) + ", old box opens two " + stillTwo + ", new box " + (inner ? inner.cards[0].n : "none"));
+      return !(kept && kept.syncMs) && stillTwo && !!inner && inner.cards[0].n === 6 && !opens(box, leadBox.privateKey);
+    };
+    const g = await proveOr("930f", "  kept = last.team === seal.team && last.box === seal.box && typeof last.keyId === \"string\" && last.keyId !== seal.keyId; /* plant:stats-box-kept */",
+      "  /* plant:stats-box-kept */", runF);
+    check(g.ok, "930f a handover whose team file keeps the box the last answer was sealed to seals nothing more; a team file naming a box of its own seals to it"
+      + (g.why ? ": " + g.why.split("\n")[0] : ""));
+  }
+
+  /* ---- 930g: a team the organisation's policy set seals its statistics as any team does, never held for Settings ---- */
+  {
+    const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
+      + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
+    const g = await proveOr("930g", "  if (!use.member || use.stale || !use.seal) return null;",
+      "  if (!use.member || use.stale || !use.seal) return null;\n  if (readJoinPolicy(\"en\").lead) return null;",
+      async () => {
+        REG.policy = regText([["LeadKey", LEAD.public]]);
+        let box = null;
+        try { box = await joined(false); adopt(box, "rolling-30", lead.privateKey, LEAD, 2); }
+        finally { REG.policy = null; }
+        const inner = openStats(box);
+        return process.platform !== "win32" || (!!inner && inner.cards[0].n === 2);
+      });
+    check(g.ok, "930g a desk whose team the organisation's policy set seals its statistics at adoption as any team does, never held until Settings is opened"
+      + (g.why ? ": " + g.why.split("\n")[0] : ""));
+  }
+
+  /* ---- 930i to 930k: the statistics box (lead.stats), which follows the lead's signing key --------------------------- */
+  {
+    const S1 = crypto.generateKeyPairSync("x25519"), S2 = crypto.generateKeyPairSync("x25519"), heir = crypto.generateKeyPairSync("ed25519");
+    const HEIR = { keyId: "quay-lead-heir", public: pubHex(heir.publicKey) };
+    const signed = (box, leadRec, key, handover) => {
+      const o = { format: 1, kind: "etiuda-team", id: box.team, catalogs: ["north-lamps"], lead: leadRec, sealed: true, exportsSealed: false, epoch: 1,
+        roster: [entry(box.D, box.me, box.key, box.team, 1)] };
+      if (handover) o.handover = handover;
+      o.sig = { alg: "Ed25519", keyId: leadRec.keyId };
+      o.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(o)), key).toString("hex");
+      return JSON.stringify(o, null, 1) + "\n";
+    };
+    const openWith = (box, priv) => { try { return JSON.parse(box.D.api.openStatsSealed(priv, JSON.parse(fs.readFileSync(statsAt(box), "utf8")), box.me.id)); } catch { return null; } };
+    /* The new-computer handover: the lead's box kept, the statistics box the new key's. */
+    const handedOn = async () => {
+      const box = await joined(false);
+      put(box.share, "etiuda-team.json", signed(box, { keyId: LEAD.keyId, public: LEAD.public, box: LEAD.box, stats: pubHex(S1.publicKey) }, lead.privateKey));
+      adopt(box, "rolling-30", lead.privateKey, LEAD, 2);
+      const before = openWith(box, S1.privateKey);
+      const st = { format: 1, kind: "etiuda-team-handover", team: box.team, from: { keyId: LEAD.keyId, public: LEAD.public },
+        to: { keyId: HEIR.keyId, public: HEIR.public }, sig: { alg: "Ed25519", keyId: LEAD.keyId } };
+      st.sig.value = crypto.sign(null, box.D.api.handoverSignedBytes(st), lead.privateKey).toString("hex");
+      put(box.share, "etiuda-team.json", signed(box, { keyId: HEIR.keyId, public: HEIR.public, box: LEAD.box, stats: pubHex(S2.publicKey) }, heir.privateKey, [st]));
+      box.D.api.catalogChanged(box.D.win);
+      put(box.share, "stats-span.json", spanDoc(box.D, "rolling-30", heir.privateKey, HEIR));
+      box.D.api.catalogChanged(box.D.win);
+      box.D.api.setStatsClock(CLOCK + 120000);
+      const res = await box.D.ask("etiuda:stats-write", pageBody(7));
+      return { box, before, res, after: openWith(box, S2.privateKey), oldLeadBox: openWith(box, leadBox.privateKey), oldStats: openWith(box, S1.privateKey) };
+    };
+    const i = await proveOr("930i", "  if (use.seal.stats) box = use.seal.stats; /* plant:stats-box-own */", "  /* plant:stats-box-own */", async () => {
+      const x = await handedOn();
+      console.log("  --- 930i before " + (x.before ? x.before.cards[0].n : "none") + ", after the handover " + (x.after ? x.after.cards[0].n : "none"));
+      return !!x.before && x.before.cards[0].n === 2 && !!x.after && x.after.cards[0].n === 7;
+    });
+    check(i.ok, "930i a team handed on to a new key, the lead's box kept and the statistics box the new key's, keeps sending: the next answer is sealed"
+      + " to the new statistics box" + (i.why ? ": " + i.why.split("\n")[0] : ""));
+    const j = await proveOr("930j", "  if (use.seal.stats) box = use.seal.stats; /* plant:stats-box-own */", "  /* plant:stats-box-own */", async () => {
+      const x = await handedOn();
+      return !!x.after && x.oldLeadBox === null && x.oldStats === null;
+    });
+    check(j.ok, "930j after that handover the old key opens nothing sealed: neither the lead's box it kept nor its own statistics box opens the answer"
+      + (j.why ? ": " + j.why.split("\n")[0] : ""));
+    /* A team file whose statistics box is malformed: taken as it is, the desk still on the team, and nothing sealed, not even to the
+       lead's box, until a team file names a well-formed one; then the answer is sealed to it. */
+    const notOwn = async (stats, leadRec, key) => {
+      const box = await joined(false);
+      const doc = signed(box, Object.assign({ keyId: LEAD.keyId, public: LEAD.public, box: LEAD.box, stats }, leadRec || {}), key || lead.privateKey);
+      put(box.share, "etiuda-team.json", doc);
+      adopt(box, "rolling-30", lead.privateKey, LEAD, 2);
+      const whole = box.D.api.teamWhole(JSON.parse(doc)), use = box.D.api.teamUse(), none = !fs.existsSync(statsAt(box));
+      put(box.share, "etiuda-team.json", signed(box, { keyId: LEAD.keyId, public: LEAD.public, box: LEAD.box, stats: pubHex(S1.publicKey) }, lead.privateKey));
+      box.D.api.catalogChanged(box.D.win);
+      box.D.api.setStatsClock(CLOCK + 120000);
+      await box.D.ask("etiuda:stats-write", pageBody(8));
+      const after = openWith(box, S1.privateKey);
+      return { whole, member: !!use && use.member === true, none, after: after ? after.cards[0].n : null };
+    };
+    const k = await proveOr("930k", "  if (use.seal.statsBad) { /* plant:stats-box-bad */", "  if (false) { /* plant:stats-box-bad */", async () => {
+      const x = await notOwn("not a box");
+      console.log("  --- 930k " + JSON.stringify(x));
+      return x.whole && x.member && x.none && x.after === 8;
+    });
+    check(k.ok, "930k a team file whose statistics box is malformed is taken, the desk still on the team, and seals nothing, not even to the lead's box,"
+      + " until a team file names a well-formed one" + (k.why ? ": " + k.why.split("\n")[0] : ""));
+    /* A handover whose team file still names the former lead's statistics box, as one the old key's Studio wrote would: the box the
+       last answer was sealed to, under another key, so statsBoxKept seals nothing more and the desk stays on the team. */
+    const l = await proveOr("930l", "  kept = last.team === seal.team && last.box === seal.box && typeof last.keyId === \"string\" && last.keyId !== seal.keyId; /* plant:stats-box-kept */",
+      "  /* plant:stats-box-kept */", async () => {
+      const box = await joined(false);
+      put(box.share, "etiuda-team.json", signed(box, { keyId: LEAD.keyId, public: LEAD.public, box: LEAD.box, stats: pubHex(S1.publicKey) }, lead.privateKey));
+      adopt(box, "rolling-30", lead.privateKey, LEAD, 2);
+      const before = openWith(box, S1.privateKey);
+      const st = { format: 1, kind: "etiuda-team-handover", team: box.team, from: { keyId: LEAD.keyId, public: LEAD.public },
+        to: { keyId: HEIR.keyId, public: HEIR.public }, sig: { alg: "Ed25519", keyId: LEAD.keyId } };
+      st.sig.value = crypto.sign(null, box.D.api.handoverSignedBytes(st), lead.privateKey).toString("hex");
+      put(box.share, "etiuda-team.json", signed(box, { keyId: HEIR.keyId, public: HEIR.public, box: LEAD.box, stats: pubHex(S1.publicKey) }, heir.privateKey, [st]));
+      box.D.api.catalogChanged(box.D.win);
+      put(box.share, "stats-span.json", spanDoc(box.D, "rolling-30", heir.privateKey, HEIR));
+      box.D.api.catalogChanged(box.D.win);
+      box.D.api.setStatsClock(CLOCK + 120000);
+      await box.D.ask("etiuda:stats-write", pageBody(9));
+      const after = openWith(box, S1.privateKey), use = box.D.api.teamUse();
+      const x = { before: before ? before.cards[0].n : null, after: after ? after.cards[0].n : null, member: !!use && use.member === true };
+      console.log("  --- 930l " + JSON.stringify(x));
+      return x.before === 2 && x.after === 2 && x.member;
+    });
+    check(l.ok, "930l a team file after a handover that still names the former lead's statistics box, the box the last answer was sealed to,"
+      + " seals nothing more, the desk still on the team" + (l.why ? ": " + l.why.split("\n")[0] : ""));
   }
 
   /* ---- 891b: one watch event ----------------------------------------------------------------------------------- */

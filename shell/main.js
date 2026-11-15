@@ -1819,6 +1819,8 @@ let statsPeriod = null;
 let statsHeld = null;
 let statsNoBoxSaid = "";
 let statsWroteKey = "";
+/* The team, lead key id and box the last answer was sealed to, {team, keyId, box}, kept in stats-seal.json beside desk.json. */
+let statsSealedTo = null;
 let statsLastWrite = 0;
 let statsClock = null;
 let statsMidnightTimer = null;
@@ -2142,7 +2144,15 @@ function statsSeal() {
   if (!use.member || use.stale || !use.seal) return null;
   const me = branchIdentity(false);
   if (!me || !/^k-[0-9a-f]{16}$/.test(me.id)) return null;
-  const box = typeof use.seal.box === "string" ? use.seal.box : "";
+  /* The statistics box the team file names (lead.stats, which follows the lead's signing key), else the lead's box, as a team
+     file from before the statistics box has it. */
+  let box = typeof use.seal.box === "string" ? use.seal.box : "";
+  if (use.seal.stats) box = use.seal.stats; /* plant:stats-box-own */
+  if (use.seal.statsBad) { /* plant:stats-box-bad */
+    if (statsNoBoxSaid !== use.seal.team + "|bad") console.log("etiuda: statistics are not sealed: the team file's statistics box is malformed");
+    statsNoBoxSaid = use.seal.team + "|bad";
+    return null;
+  }
   if (!/^[0-9a-f]{64}$/.test(box)) {
     if (statsNoBoxSaid !== use.seal.team) {
       statsNoBoxSaid = use.seal.team;
@@ -2150,7 +2160,7 @@ function statsSeal() {
     }
     return null;
   }
-  if (statsNoBoxSaid === use.seal.team) statsNoBoxSaid = "";
+  if (statsNoBoxSaid === use.seal.team || statsNoBoxSaid === use.seal.team + "|bad") statsNoBoxSaid = "";
   return { seal: { box: box, team: use.seal.team, epoch: use.seal.epoch, key: use.seal.key,
     keyId: String(use.seal.lead && use.seal.lead.keyId), desk: me.id } };
 }
@@ -2204,6 +2214,31 @@ function flushHeldStats() {
   if (!statsHeld) return;
   writeStatsAnswer(statsHeld, "", "close");
 }
+function statsSealKey(seal) { return seal.box + "\n" + seal.keyId; }
+/* THE BOX GOES WITH ITS HOLDER: once the lead's key has been handed on, nothing is sealed while the team file still names the box
+   the last answer was sealed to, until it names a box of its own. Said once. */
+function statsLastSeal() {
+  if (statsSealedTo === null) {
+    try { statsSealedTo = JSON.parse(fs.readFileSync(path.join(app.getPath("userData"), "stats-seal.json"), "utf8")); } catch { statsSealedTo = {}; }
+  }
+  return statsSealedTo && typeof statsSealedTo === "object" ? statsSealedTo : {};
+}
+let statsBoxKeptSaid = "";
+function statsBoxKept(seal) {
+  const last = statsLastSeal();
+  let kept = false;
+  kept = last.team === seal.team && last.box === seal.box && typeof last.keyId === "string" && last.keyId !== seal.keyId; /* plant:stats-box-kept */
+  if (kept && statsBoxKeptSaid !== statsSealKey(seal)) {
+    statsBoxKeptSaid = statsSealKey(seal);
+    console.log("etiuda: statistics are not sealed: the team's lead was handed on and the team file still names the old box");
+  }
+  return kept;
+}
+function statsSealNote(seal) {
+  statsSealedTo = { team: seal.team, keyId: seal.keyId, box: seal.box };
+  try { writeReplacing(path.join(app.getPath("userData"), "stats-seal.json"), JSON.stringify(statsSealedTo) + "\n"); }
+  catch (e) { console.error("etiuda: the box statistics were sealed to could not be kept - " + e.message); }
+}
 function writeStatsAnswer(text, askId, forced) {
   const why = reasonForAsk(askId, forced);
   if (!statsSpan || !statsPeriod) return { ok: false };
@@ -2217,11 +2252,11 @@ function writeStatsAnswer(text, askId, forced) {
     format: 1,
     kind: "etiuda-statistics",
     desk: id,
-    engine: String(data.engine || ""),
+    engine: typeof data.engine === "string" && /^[0-9A-Za-z.+-]{1,40}$/.test(data.engine) ? data.engine : "", /* plant:stats-engine */
     period: { from: String(statsPeriod.from), to: String(statsPeriod.to) },
     sync: channelStamp(now),
     cards: cardCounts(data.cards),
-    intents: Array.isArray(data.intents) ? data.intents : [],
+    intents: intentCounts(data.intents), /* plant:stats-intents */
     misses: data.misses | 0,
     /* One counter per language the page actually counted, keyed by code: the desk's languages
        are its catalog's, so a pair here would silently drop every other one. */
@@ -2246,16 +2281,18 @@ function writeStatsAnswer(text, askId, forced) {
   }
   if ((data.suggestTaken | 0) > 0) out.suggestTaken = data.suggestTaken | 0;
   if ((data.suggestOpen | 0) > 0) out.suggestOpen = data.suggestOpen | 0;
-  const key = statsContentKey(out);
+  /* The box is part of what was written, so the same figures under a new box are sealed again. */
+  let got = statsSeal();
+  const key = statsContentKey(out) + (got && got.seal ? "\n" + statsSealKey(got.seal) : ""); /* plant:stats-seal-key */
   if (key === statsWroteKey) { statsHeld = null; return { ok: true, unchanged: true }; }
   const bypass = why === "span" || why === "midnight" || why === "close";
   if (!bypass && statsLastWrite && (now.getTime() - statsLastWrite) < STATS_PACE_MS) {
     statsHeld = String(text || "");
     return { ok: true, paced: true, why: why };
   }
-  let got = statsSeal();
   if (got && got.away) { statsHeld = String(text || ""); return { ok: false }; }
   if (!got || !got.seal) return { ok: false };
+  if (statsBoxKept(got.seal)) return { ok: false };
   const at = statsFile();
   if (!at) return { ok: false };
   out.hash = channelHash(out);
@@ -2276,10 +2313,12 @@ function writeStatsAnswer(text, askId, forced) {
   statsHeld = null;
   statsWroteKey = key;
   statsLastWrite = now.getTime();
+  statsSealNote(got.seal);
   return { ok: true, sync: out.sync, syncMs: now.getTime(), why: why };
 }
 /* The span file, if it verifies. Anything else is left unadopted: a bad replacement does not write and does not
-   delete the answer already sealed. A missing file is not a new span either. */
+   delete the answer already sealed. A missing file is not a new span either. A span once adopted that is gone or no
+   longer genuine stops the sealing until a genuine one is read again; a folder not answering stops nothing. */
 function readSpanText() {
   const file = path.join(catalogFolder(), SPAN_NAME);
   try {
@@ -2293,17 +2332,23 @@ function readSpanText() {
     return { away: true };
   }
 }
+function statsWithdrawn() {
+  if (!statsSpan) return;
+  statsSpan = ""; statsPeriod = null; statsHeld = null; statsWroteKey = ""; /* plant:stats-withdrawn */
+  armMidnight();
+}
 function tryLiveStats(win) {
   if (!folderAnswers(catalogFolder())) return;
   const got = readSpanText();
-  if (!got.text) return;
+  if (got.away) return;
+  if (!got.text) return statsWithdrawn();
   const doc = spanDocument(got.text);
-  if (!doc) return;
+  if (!doc) return statsWithdrawn();
   const lead = pinnedLead();
-  if (!lead || !spanGenuine(doc, lead)) return;
+  if (!lead || !spanGenuine(doc, lead)) return statsWithdrawn();
   const next = String(doc.span);
   const period = spanPeriod(next, statsNow());
-  if (!period) return;
+  if (!period) return statsWithdrawn();
   if (next !== statsSpan) {
     statsSpan = next;
     statsPeriod = period;
@@ -2311,7 +2356,10 @@ function tryLiveStats(win) {
     askStats(win, "span");
     return;
   }
-  if (statsHeld) writeStatsAnswer(statsHeld);
+  if (statsHeld) { writeStatsAnswer(statsHeld); return; }
+  /* A team file that names another box for the lead seals the answer again at once, its figures unchanged or not. */
+  const now = statsSeal(), last = statsLastSeal();
+  if (now && now.seal && last.team === now.seal.team && last.box && last.box !== now.seal.box) askStats(win, "span"); /* plant:stats-box-reseal */
 }
 
 /* ---- HPKE, RFC 9180 base mode: DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-128-GCM ----------
@@ -3238,9 +3286,11 @@ function teamUse() {
   if (!key || key.length !== 32) return { member: false };
   const stale = doc.epoch !== epoch || epoch < (teamEpochSeen[team] || 0) || teamFileBehind(doc); /* plant:s0b-floor-use */
   const box = typeof doc.lead.box === "string" ? doc.lead.box : "";
+  /* A lead.stats that is not 64 hex seals nothing, and the file is taken as it is. */
+  const stats = typeof doc.lead.stats === "string" && /^[0-9a-f]{64}$/.test(doc.lead.stats) ? doc.lead.stats : "";
   const catalogs = Array.isArray(doc.catalogs) ? doc.catalogs.map(String) : [];
   return { member: true, stale: stale, catalogs: catalogs, content: stale ? null : teamContentOf(doc), consent: stale ? "" : consentOf(doc),
-    seal: { team: team, epoch: epoch, key: key, lead: pin, box: box } };
+    seal: { team: team, epoch: epoch, key: key, lead: pin, box: box, stats: stats, statsBad: doc.lead.stats !== undefined && !stats } };
 }
 function inUseFile() {
   const me = branchIdentity(false);
@@ -8997,22 +9047,35 @@ function ecBlocks(text, shape) {
    is the length of the intents array the offer dialog counts; categories are the shelf ids, the
    keys the runtime files a card under. Counted in the catalog's PRIMARY language, which the
    format makes safe: a card dividing differently in another language is refused at load. */
-/* Whatever the page sent, reduced to codes and whole numbers. Anything that is not a usable
-   code is dropped here rather than forwarded into a document that leaves this machine. */
-/* Per card, the languages that card was copied in, reduced the same way as the desk's
-   language totals. A card sent without the field is returned as it arrived. */
+/* Whatever the page sent, reduced to ids, days, codes and whole numbers, field by field. Anything that is not
+   one of those is dropped here rather than forwarded into a document that leaves this machine. */
+/* A card is its id, its count, the day it was last copied, and the languages it was copied in. */
 function cardCounts(list) {
   if (!Array.isArray(list)) return [];
-  return list.map(card => {
-    if (!card || typeof card !== "object" || Array.isArray(card) || !Object.prototype.hasOwnProperty.call(card, "langs")) return card;
-    const kept = langCounts(card.langs);
-    const langs = {};
+  const out = [];
+  list.forEach(card => {
+    if (!card || typeof card !== "object" || Array.isArray(card)) return;
+    const id = typeof card.id === "string" && card.id.length <= 256 ? card.id : "", n = card.n | 0;
+    if (!id || n < 1) return;
+    const row = { id: id, n: n }; /* plant:stats-card-row */
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(card.at || ""))) row.at = String(card.at);
+    const kept = langCounts(card.langs), langs = {};
     Object.keys(kept).forEach(code => { if ((kept[code] | 0) > 0) langs[code] = kept[code] | 0; });
-    const out = {};
-    Object.keys(card).forEach(k => { if (k !== "langs") out[k] = card[k]; });
-    if (Object.keys(langs).length) out.langs = langs;
-    return out;
+    if (Object.keys(langs).length) row.langs = langs;
+    out.push(row);
   });
+  return out;
+}
+/* An intent is its id and its count. */
+function intentCounts(list) {
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  list.forEach(it => {
+    if (!it || typeof it !== "object" || Array.isArray(it)) return;
+    const id = typeof it.id === "string" && it.id.length <= 256 ? it.id : "", n = it.n | 0;
+    if (id && n > 0) out.push({ id: id, n: n });
+  });
+  return out;
 }
 function langCounts(v) {
   const out = {};
