@@ -27,9 +27,9 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 11;
+const PLANTS = 19;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 59 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 72 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -48,6 +48,24 @@ function section(src) {
   if (from < 0 || at < from || src.indexOf(HEAD, at + 1) >= 0 || src.indexOf(FROM, from + 1) >= 0 || end < 0)
     throw new Error("the link rule and the version note's section are not in shell/main.js once, in that order");
   return src.slice(from, end);
+}
+const META_FROM = "let engineVersionRead = null;";
+const META_TAIL = "\n/* AN EDITION FOR A NEWER ENGINE";
+function metaSection(src) {
+  const from = src.indexOf(META_FROM), end = src.indexOf(META_TAIL, from);
+  if (from < 0 || src.indexOf(META_FROM, from + 1) >= 0 || end < 0)
+    throw new Error("engineVersion is not in shell/main.js once before catalogWaitNewer");
+  return src.slice(from, end);
+}
+function engineMetaOf(o) {
+  const opt = o || {};
+  const text = opt.text || metaSection(MAIN);
+  const env = {
+    fs: opt.fs || fs,
+    ENGINE: opt.enginePath || path.join(ROOT, "engine", "etiuda.html"),
+  };
+  const names = Object.keys(env);
+  return new Function(...names, text + "\nreturn { engineVersion, engineBuilt, needsNewerEngine };")(...names.map(n => env[n]));
 }
 const SPKI = (() => {
   const m = /const SPKI_ED25519 = Buffer\.from\("([0-9a-f]+)", "hex"\);/.exec(MAIN);
@@ -81,6 +99,7 @@ function shellOf(o) {
     SPKI_ED25519: SPKI,
     app: { getPath: () => ud },
     engineVersion: () => (opt.running === undefined ? "2.0.0" : opt.running),
+    engineBuilt: () => (opt.built === undefined ? "2026-11-15" : opt.built),
     writeReplacing: opt.writeReplacing || ((f, t) => fs.writeFileSync(f, t, "utf8")),
     theWindow: { isDestroyed: () => false, webContents: { send: (ch, v) => sent.push([ch, v]) } },
     PLACED_ASIDE: !!opt.aside,
@@ -169,8 +188,18 @@ try {
     && S0.keepNote(S0.readNote(note({ serial: 6, version: "2.0.2" })).note, kept0) === "taken"
     && S0.keepNote(kept0, null) === "taken",
     "u2g against a kept serial 5: a lower serial and the same serial with other bytes are refused, the same bytes are the same, a higher serial is taken");
+  check(S0.keepNote(S0.readNote(note({ serial: 6, version: "2.0.0" })).note, kept0) === "refused"
+    && S0.keepNote(S0.readNote(note({ serial: 6, version: "2.0.1", url: "https://etiuda.dev/desk/2.0.1-r2/" })).note, kept0) === "taken",
+    "u2j against a kept serial 5 at 2.0.1: a higher serial with a lower release (2.0.0) is refused, while the same release (2.0.1) is taken");
+  check(S0.keepNote(S0.readNote(note({ serial: 6, version: "2.0.2", released: "2026-11-20" })).note, kept0) === "refused"
+    && S0.keepNote(S0.readNote(note({ serial: 6, version: "2.0.2", released: "2026-12-01" })).note, kept0) === "taken",
+    "u2k against a kept note released 2026-12-01: an earlier release date (2026-11-20) at a higher serial is refused, while the same date is taken");
   check(S0.versionAbove("2.0.1", "2.0.0") && S0.versionAbove("2.10.0", "2.9.9") && !S0.versionAbove("2.0.1", "2.0.1")
     && !S0.versionAbove("2.0.0", "2.0.1") && !S0.versionAbove("2.0.1", ""), "u2h releases compare as three numbers, an equal one is not above");
+  check(S0.versionAbove("2.0.0", "2.0.0-dev") && !S0.versionAbove("2.0.0-dev", "2.0.0") && !S0.versionAbove("2.0.0-dev", "2.0.0-dev")
+    && S0.versionAbove("2.0.0-beta", "2.0.0-alpha") && S0.versionAbove("2.0.0-alpha.2", "2.0.0-alpha.1")
+    && S0.versionAbove("2.0.0-alpha.1", "2.0.0-alpha") && S0.versionAbove("2.0.0-alpha", "2.0.0-1") && S0.versionAbove("2.0.0-dev", "1.9.9"),
+    "u2l a pre-release sits below its release and compares identifiers under semver");
   const wrongKeyId = note({}, root, n => { n.sig.keyId = "other-key"; return JSON.stringify(n); });
   /* sig.keyId lies outside the signed bytes and the format never uses it (the test architect, 23:43, refuting Argon's
      finding 7): a correctly signed note is read whatever it names there, so a key file named otherwise never locks the desk out. */
@@ -262,8 +291,8 @@ try {
     "u4k a higher serial naming 2.0.2 replaces the kept note and is offered");
   const S4fresh = shellOf({ running: "2.0.2" });
   const lBelow = await S4fresh.lookForNote(serve(note({ serial: 1, version: "2.0.1" })));
-  check(lBelow === "failed" && S4fresh.updateState().offer === "",
-    "u4l with nothing kept, a note below the running version gives look \"failed\": " + lBelow);
+  check(lBelow === "failed" && S4fresh.updateState().offer === "" && !fs.existsSync(path.join(S4fresh.ud, S4fresh.NOTE_FILE)),
+    "u4l with nothing kept, a note below the running version gives look \"failed\" and writes nothing: " + lBelow);
   /* u4l2: the same note looked at again, now kept, still proves nothing about newer releases: a look reads only when its
      note stands at or above the running version (Argon's update-offer finding 1, its second half). */
   const lAgain = await S4fresh.lookForNote(serve(note({ serial: 1, version: "2.0.1" })));
@@ -280,6 +309,86 @@ try {
   const lThrow = await Sw.lookForNote(serve(note({ serial: 6, version: "2.0.2" })));
   check(lThrow === "failed" && Sw.updateState().offer === "2.0.1",
     "u4n a write that throws leaves the offer as it was and the look \"failed\": " + lThrow);
+  /* u4o, u4p (review finding 3): an unreadable engine version is not cached as "", and makes the look fail with nothing kept. */
+  let engineBody = null;
+  const metaRead = engineMetaOf({
+    enginePath: "/fake/etiuda.html",
+    fs: { readFileSync: () => { if (engineBody === null) throw new Error("ENOENT"); return engineBody; } }
+  });
+  const evMiss = metaRead.engineVersion();
+  engineBody = "<html>no marker here</html>";
+  const evNoMarker = metaRead.engineVersion();
+  engineBody = 'var E_VERSION = "2.0.0";';
+  const evOk = metaRead.engineVersion();
+  engineBody = null;
+  const evCached = metaRead.engineVersion();
+  check(evMiss === "" && evNoMarker === "" && evOk === "2.0.0" && evCached === "2.0.0",
+    "u4o a failed read of the engine version is not cached as empty, while a good read is cached: " + JSON.stringify([evMiss, evNoMarker, evOk, evCached]));
+  const SnoVer = shellOf({ running: "" });
+  const lNoVer = await SnoVer.lookForNote(serve(note({ serial: 5, version: "1.0.0" })));
+  check(lNoVer === "failed" && SnoVer.updateState().offer === "" && SnoVer.updateState().look === "failed"
+    && !fs.existsSync(path.join(SnoVer.ud, SnoVer.NOTE_FILE)),
+    "u4p with no engine version known, any accepted note gives look \"failed\", no offer, and writes nothing: " + lNoVer);
+  /* u4q, u4r (review finding 2): a higher serial with a lower version never replaces the kept note and never sets a floor. */
+  const Sdown = shellOf({ running: "2.0.0" });
+  const n5 = note({ serial: 5, version: "2.0.5", url: "https://etiuda.dev/desk/2.0.5/" });
+  await Sdown.lookForNote(serve(n5));
+  const lDown = await Sdown.lookForNote(serve(note({ serial: 6, version: "2.0.1" })));
+  const lAfterDown = await Sdown.lookForNote(serve(n5));
+  check(lDown === "failed" && Sdown.updateState().offer === "2.0.5"
+    && fs.readFileSync(path.join(Sdown.ud, Sdown.NOTE_FILE), "utf8") === n5 && lAfterDown === "read",
+    "u4q a higher serial with a lower version leaves the kept 2.0.5 in place and later 2.0.5 still reads: " + [lDown, lAfterDown].join(", "));
+  const Sfloor = shellOf({ running: "2.0.5" });
+  const lOldHigh = await Sfloor.lookForNote(serve(note({ serial: 6, version: "2.0.0", url: "https://etiuda.dev/desk/2.0.0/" })));
+  const oldNotKept = !fs.existsSync(path.join(Sfloor.ud, Sfloor.NOTE_FILE));
+  const lRealLow = await Sfloor.lookForNote(serve(note({ serial: 5, version: "2.0.6", url: "https://etiuda.dev/desk/2.0.6/" })));
+  check(lOldHigh === "failed" && oldNotKept && lRealLow === "read" && Sfloor.updateState().offer === "2.0.6"
+    && Sfloor.readNote(fs.readFileSync(path.join(Sfloor.ud, Sfloor.NOTE_FILE))).note.serial === 5,
+    "u4r a higher serial below the running version is not kept and never blocks a later real 2.0.6 at serial 5: " + [lOldHigh, oldNotKept, lRealLow].join(", "));
+  /* u4s, u4t, u4u (review finding 1): E_BUILT is read without caching failures, and a note released before E_BUILT is refused. */
+  let builtBody = null;
+  const builtRead = engineMetaOf({
+    enginePath: "/fake/etiuda.html",
+    fs: { readFileSync: () => { if (builtBody === null) throw new Error("ENOENT"); return builtBody; } }
+  });
+  const ebMiss = typeof builtRead.engineBuilt === "function" ? builtRead.engineBuilt() : "missing-fn";
+  builtBody = 'var E_BUILT = "@E_BUILT@";';
+  const ebPlaceholder = typeof builtRead.engineBuilt === "function" ? builtRead.engineBuilt() : "missing-fn";
+  builtBody = 'var E_BUILT = "2026-02-30";';
+  const ebBadDay = typeof builtRead.engineBuilt === "function" ? builtRead.engineBuilt() : "missing-fn";
+  builtBody = 'var E_BUILT = "2026-11-15";';
+  const ebOk = typeof builtRead.engineBuilt === "function" ? builtRead.engineBuilt() : "missing-fn";
+  builtBody = null;
+  const ebCached = typeof builtRead.engineBuilt === "function" ? builtRead.engineBuilt() : "missing-fn";
+  check(ebMiss === "" && ebPlaceholder === "" && ebBadDay === "" && ebOk === "2026-11-15" && ebCached === "2026-11-15",
+    "u4s a failed or unbuilt read of E_BUILT is not cached as empty, while a real calendar day is cached: " + JSON.stringify([ebMiss, ebPlaceholder, ebBadDay, ebOk, ebCached]));
+  const Sreplay = shellOf({ running: "2.0.0", built: "2026-11-15" });
+  const lOldSame = await Sreplay.lookForNote(serve(note({ serial: 4, version: "2.0.0", released: "2020-06-01", url: "https://etiuda.dev/desk/2.0.0/" })));
+  const noKeepSame = !fs.existsSync(path.join(Sreplay.ud, Sreplay.NOTE_FILE));
+  const lOldOffer = await Sreplay.lookForNote(serve(note({ serial: 4, version: "2.0.1", released: "2020-06-01", url: "https://etiuda.dev/desk/2.0.1/" })));
+  const noKeepOffer = !fs.existsSync(path.join(Sreplay.ud, Sreplay.NOTE_FILE));
+  const offerOld = Sreplay.updateState().offer;
+  const lSameDay = await Sreplay.lookForNote(serve(note({ serial: 10, version: "2.0.5", released: "2026-11-15", url: "https://etiuda.dev/desk/2.0.5/" })));
+  check(lOldSame === "older" && noKeepSame && lOldOffer === "older" && noKeepOffer && offerOld === ""
+    && lSameDay === "read" && Sreplay.updateState().offer === "2.0.5",
+    "u4t a 2020-06-01 note for 2.0.0 or 2.0.1, released before this build, says no newer version has been published, offers nothing and is not kept, while a 2.0.5 note on the build day reads and offers: "
+    + JSON.stringify([lOldSame, noKeepSame, lOldOffer, noKeepOffer, lSameDay, Sreplay.updateState().offer]));
+  const SnoBuilt = shellOf({ running: "2.0.0", built: "" });
+  const lNoBuilt = await SnoBuilt.lookForNote(serve(note({ serial: 5, version: "2.0.1", released: "2026-12-01" })));
+  check(lNoBuilt === "failed" && SnoBuilt.updateState().offer === "" && !fs.existsSync(path.join(SnoBuilt.ud, SnoBuilt.NOTE_FILE)),
+    "u4u with no build date known, an accepted note fails the look and writes nothing: " + lNoBuilt);
+  /* u4v, u4w (review finding 5): a pre-release build preserves its -suffix and is offered the release sharing its triple. */
+  const treeMeta = engineMetaOf();
+  check(treeMeta.engineVersion() === "2.0.0-dev"
+    && treeMeta.needsNewerEngine({ minEngine: "2.0.0" }) === ""
+    && treeMeta.needsNewerEngine({ minEngine: "2.0.1" }) === "2.0.1",
+    "u4v the built engine's version preserves -dev while catalog minEngine still judges the three release numbers: " + treeMeta.engineVersion());
+  const Sdev = shellOf({ running: "2.0.0-dev" });
+  const lDevOlder = await Sdev.lookForNote(serve(note({ serial: 4, version: "1.9.9", url: "https://etiuda.dev/desk/1.9.9/" })));
+  const devNoKeep = !fs.existsSync(path.join(Sdev.ud, Sdev.NOTE_FILE));
+  const lDevRel = await Sdev.lookForNote(serve(note({ serial: 5, version: "2.0.0", url: "https://etiuda.dev/desk/2.0.0/" })));
+  check(lDevOlder === "failed" && devNoKeep && lDevRel === "read" && Sdev.updateState().offer === "2.0.0",
+    "u4w a 2.0.0-dev build refuses 1.9.9 and is offered 2.0.0 when served: " + JSON.stringify([lDevOlder, devNoKeep, lDevRel, Sdev.updateState().offer]));
 
   /* ---- u5: the release page, and the timer ------------------------------------------------------------------------- */
   const open = S4e.handle["etiuda:update-open"], click = ev => { const e = Object.assign({}, ev); S4e.on["etiuda:update-click"](e); return e; };
@@ -393,6 +502,9 @@ try {
   onUpdate({ offer: "", look: "read" });
   check(dot.hidden && row.hidden && UP.updateAbout("2.0.0").lines[1] === "This is the newest version.",
     "u6h with nothing newer the dot and the row go, and About says This is the newest version.");
+  onUpdate({ offer: "", look: "older" });
+  check(dot.hidden && row.hidden && UP.updateAbout("2.0.0").lines[1] === "No version newer than this build has been published.",
+    "u6n a build newer than every published note shows nothing, and About says No version newer than this build has been published., not that the check failed");
   onUpdate({ offer: "", look: "failed" });
   const failLine = "Whether a newer version exists could not be checked just now. This one works as it is.";
   check(dot.hidden && row.hidden && UP.updateAbout("2.0.0").lines[1] === failLine, "u6i a look that failed shows nothing but About's could-not-check line");
@@ -429,7 +541,7 @@ try {
     "u7d the built engine carries the offer's words and markup");
 
   /* ---- u-plants: each guard lifted in memory, its case read again ------------------------------------------------- */
-  if (PLANTS_OFF) console.log("  SKIP  u-plants: ETIUDA_PLANTS=off");
+  if (PLANTS_OFF) console.log("  NOT RUN u-plants: ETIUDA_PLANTS=off");
   else {
     const SEC = section(MAIN);
     const lifted = (tag, replacement) => {
@@ -468,6 +580,54 @@ try {
     const fnText = pageSrc.slice(fnAt, fnEnd).split("\n").filter(l => l.indexOf("plant:later-holds") < 0).join("\n");
     const liftedMenu = new Function(fnText + "\nreturn updateInMenu;")();
     check(fnAt > 0 && liftedMenu(st, held, T) === "2.0.1", "u-plant later-holds lifted shows the put-off release within its week");
+    const metaLines = metaSection(MAIN).split("\n"), mvAt = metaLines.findIndex(l => l.indexOf("plant:engine-version-nocache") >= 0);
+    if (mvAt < 0 || metaLines.findIndex((l, i) => i > mvAt && l.indexOf("plant:engine-version-nocache") >= 0) >= 0)
+      throw new Error("plant:engine-version-nocache is not in engineVersion once");
+    metaLines.splice(mvAt, 1, '  if (!m) { engineVersionRead = ""; return ""; }');
+    let pBody = null;
+    const metaLifted = engineMetaOf({
+      text: metaLines.join("\n"),
+      enginePath: "/fake/etiuda.html",
+      fs: { readFileSync: () => { if (pBody === null) throw new Error("ENOENT"); return pBody; } }
+    });
+    metaLifted.engineVersion();
+    pBody = 'var E_VERSION = "2.0.0";';
+    check(metaLifted.engineVersion() === "", "u-plant engine-version-nocache lifted keeps caching empty on a failed read");
+    const PK = (() => {
+      const lines = SEC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:note-known-running") >= 0);
+      if (at < 0 || lines.findIndex((l, i) => i > at && l.indexOf("plant:note-known-running") >= 0) >= 0)
+        throw new Error("plant:note-known-running is not in the section once");
+      lines.splice(at, 1, "    if (got.note) {");
+      return shellOf({ text: lines.join("\n"), running: "" });
+    })();
+    check((await PK.lookForNote(serve(note({ serial: 5, version: "1.0.0" })))) === "read",
+      "u-plant note-known-running turned reads an accepted note as newest when engineVersion is empty");
+    const PD = lifted("plant:note-downgrade");
+    check(PD.keepNote(PD.readNote(note({ serial: 6, version: "2.0.0" })).note, kept0) === "taken",
+      "u-plant note-downgrade lifted takes a higher serial whose version is below the kept note");
+    const PW = (() => {
+      const lines = SEC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:note-weigh-before-keep") >= 0);
+      if (at < 0 || lines.findIndex((l, i) => i > at && l.indexOf("plant:note-weigh-before-keep") >= 0) >= 0)
+        throw new Error("plant:note-weigh-before-keep is not in the section once");
+      lines.splice(at, 1, "      if (true) {");
+      return shellOf({ text: lines.join("\n"), running: "2.0.5" });
+    })();
+    await PW.lookForNote(serve(note({ serial: 6, version: "2.0.0", url: "https://etiuda.dev/desk/2.0.0/" })));
+    check((await PW.lookForNote(serve(note({ serial: 5, version: "2.0.6", url: "https://etiuda.dev/desk/2.0.6/" })))) === "failed",
+      "u-plant note-weigh-before-keep turned keeps a below-running note and lets it block a later real release");
+    const PRO = lifted("plant:note-released-older");
+    check(PRO.keepNote(PRO.readNote(note({ serial: 6, version: "2.0.2", released: "2026-11-20" })).note, kept0) === "taken",
+      "u-plant note-released-older lifted takes a higher serial with an earlier release date");
+    const PRB = lifted("plant:note-released-built", "function noteFreshForBuild() { return true; }");
+    check((await PRB.lookForNote(serve(note({ serial: 4, version: "2.0.1", released: "2020-06-01", url: "https://etiuda.dev/desk/2.0.1/" })))) === "read"
+      && PRB.updateState().offer === "2.0.1",
+      "u-plant note-released-built turned reads and offers a replayed 2020-06-01 note");
+    const POS = lifted("plant:note-older-said", "      }");
+    check((await POS.lookForNote(serve(note({ serial: 4, version: "2.0.0", released: "2020-06-01", url: "https://etiuda.dev/desk/2.0.0/" })))) === "failed",
+      "u-plant note-older-said lifted calls a sound note released before this build a failed look");
+    const PPR = lifted("plant:note-prerelease");
+    check(PPR.versionAbove("2.0.0", "2.0.0-dev") === false,
+      "u-plant note-prerelease lifted treats 2.0.0 as not above 2.0.0-dev");
   }
 } catch (e) {
   check(false, "the leg stopped: " + (e && e.stack ? e.stack.split("\n").slice(0, 3).join(" / ") : String(e)));

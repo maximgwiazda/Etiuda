@@ -688,14 +688,26 @@ let engineVersionRead = null;
 function engineVersion() {
   if (engineVersionRead !== null) return engineVersionRead;
   let m = null;
-  try { m = /\bE_VERSION\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)[^"]*"/.exec(fs.readFileSync(ENGINE, "utf8")); } catch { m = null; }
-  engineVersionRead = m ? m[1] : "";
+  try { m = /\bE_VERSION\s*=\s*"((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?)"/.exec(fs.readFileSync(ENGINE, "utf8")); } catch { m = null; }
+  if (!m) return ""; /* plant:engine-version-nocache */
+  engineVersionRead = m[1];
   return engineVersionRead;
+}
+let engineBuiltRead = null;
+function engineBuilt() {
+  if (engineBuiltRead !== null) return engineBuiltRead;
+  let m = null;
+  try { m = /\bE_BUILT\s*=\s*"([0-9]{4})-([0-9]{2})-([0-9]{2})"/.exec(fs.readFileSync(ENGINE, "utf8")); } catch { m = null; }
+  if (!m || +m[1] < 2020 || +m[1] > 2099) return "";
+  const at = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  if (at.getUTCFullYear() !== +m[1] || at.getUTCMonth() !== +m[2] - 1 || at.getUTCDate() !== +m[3]) return "";
+  engineBuiltRead = m[1] + "-" + m[2] + "-" + m[3];
+  return engineBuiltRead;
 }
 /* The release a catalog asks for where this engine is older, else "". */
 function needsNewerEngine(data) {
   const want = /^([0-9]{1,6})\.([0-9]{1,6})\.([0-9]{1,6})/.exec(String((data && data.minEngine) || ""));
-  const have = /^([0-9]+)\.([0-9]+)\.([0-9]+)$/.exec(want ? engineVersion() : "");
+  const have = /^([0-9]+)\.([0-9]+)\.([0-9]+)/.exec(want ? engineVersion() : "");
   if (!want || !have) return "";
   for (let i = 1; i <= 3; i++) if (+want[i] !== +have[i]) return +want[i] > +have[i] ? [want[1], want[2], want[3]].map(Number).join(".") : "";
   return "";
@@ -10653,13 +10665,29 @@ function keepNote(note, kept) {
   if (!kept) return "taken";
   if (note.serial < kept.serial) return "refused"; /* plant:note-serial */
   if (note.serial === kept.serial) return noteBytes(note).equals(noteBytes(kept)) ? "same" : "refused";
+  if (versionAbove(kept.version, note.version)) return "refused"; /* plant:note-downgrade */
+  if (note.released < kept.released) return "refused"; /* plant:note-released-older */
   return "taken";
 }
-/* Whether release `a` is above release `b`, each three whole numbers; false where either is not. */
+const SEMVER_RE = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+/* Whether release `a` is above release `b` under semver precedence; false where either is not a release. */
 function versionAbove(a, b) {
-  const x = NOTE_VERSION_RE.exec(String(a)), y = /^([0-9]+)\.([0-9]+)\.([0-9]+)$/.exec(String(b));
+  const x = SEMVER_RE.exec(String(a)), y = SEMVER_RE.exec(String(b));
   if (!x || !y) return false;
   for (let i = 1; i <= 3; i++) if (+x[i] !== +y[i]) return +x[i] > +y[i];
+  if (!x[4] && y[4]) return true; /* plant:note-prerelease */
+  if (x[4] && !y[4]) return false;
+  if (x[4] && y[4]) {
+    const ax = x[4].split("."), ay = y[4].split(".");
+    for (let i = 0; i < ax.length && i < ay.length; i++) {
+      if (ax[i] === ay[i]) continue;
+      const nx = /^(0|[1-9][0-9]*)$/.test(ax[i]), ny = /^(0|[1-9][0-9]*)$/.test(ay[i]);
+      if (nx && ny) return +ax[i] > +ay[i];
+      if (nx !== ny) return !nx;
+      return ax[i] > ay[i];
+    }
+    return ax.length > ay.length;
+  }
   return false; /* plant:note-equal */
 }
 /* The note's bytes through `fetchFn`: one GET over https to etiuda.dev, no redirect followed, nothing cached, no cookie,
@@ -10700,7 +10728,8 @@ async function fetchNote(fetchFn, url, ms) {
   finally { clearTimeout(timer); read.catch(() => {}); late.catch(() => {}); }
 }
 /* The last note the desk took, in update-note.json beside desk.json, read back through the same checks; and how the latest
-   look went: "read" for a note that held, "failed" for anything else, "" before the first look ends. */
+   look went: "read" for a note that held, "older" for a sound note released before this build (a test build is newer than every
+   published note, so nothing newer has been published), "failed" for anything else, "" before the first look ends. */
 const NOTE_FILE = "update-note.json", NOTE_FIRST_MS = 60 * 1000, NOTE_EVERY_MS = 60 * 60 * 1000;
 let noteKept, noteLook = "", noteTimer = null;
 function keptNote() {
@@ -10712,32 +10741,36 @@ function keptNote() {
 }
 /* What the page shows: the version offered where the kept note's is above this engine's and machine policy leaves the look
    on, and how the latest look went. */
+function noteFreshForBuild(n, built) { return !!n && noteDay(built) && !(n.released < built); } /* plant:note-released-built */
 function updateState() {
   const kept = keptNote();
-  return { offer: !updateLookOff() && kept && versionAbove(kept.version, engineVersion()) ? kept.version : "", look: noteLook };
+  return { offer: !updateLookOff() && noteFreshForBuild(kept, engineBuilt()) && versionAbove(kept.version, engineVersion()) ? kept.version : "", look: noteLook };
 }
 async function lookForNote(fetchFn) {
   let look = "failed";
   try {
     const body = await fetchNote(fetchFn, NOTE_URL), got = readNote(body);
-    if (got.note) {
+    const running = engineVersion(), built = engineBuilt();
+    if (got.note && SEMVER_RE.test(running) && noteDay(built)) { /* plant:note-known-running */
       const kept = keptNote();
-      const take = keepNote(got.note, kept);
-      /* A look reads only when its note stands at or above the running version: a note below it says nothing of newer
-         releases, kept or not (Argon's update-offer finding 1). */
-      const proves = !versionAbove(engineVersion(), got.note.version);
-      if (take === "same") {
-        look = proves ? "read" : "failed";
-      } else if (take === "taken") {
-        try {
-          writeReplacing(path.join(app.getPath("userData"), NOTE_FILE), body.toString("utf8"));
-          noteKept = got.note;
-          look = proves ? "read" : "failed";
-        } catch (e) {
-          console.error("etiuda: the version note could not be kept - " + e.message);
-          look = "failed";
+      /* A look reads only when its note stands at or above the running version and was not released before this build:
+         a past or lower note proves nothing of newer releases and must not be kept as a serial floor. */
+      const proves = !versionAbove(running, got.note.version) && noteFreshForBuild(got.note, built);
+      if (proves) { /* plant:note-weigh-before-keep */
+        const take = keepNote(got.note, kept);
+        if (take === "same") {
+          look = "read";
+        } else if (take === "taken") {
+          try {
+            writeReplacing(path.join(app.getPath("userData"), NOTE_FILE), body.toString("utf8"));
+            noteKept = got.note;
+            look = "read";
+          } catch (e) {
+            console.error("etiuda: the version note could not be kept - " + e.message);
+            look = "failed";
+          }
         }
-      }
+      } else if (!noteFreshForBuild(got.note, built)) look = "older"; /* plant:note-older-said */
     }
   } catch { look = "failed"; }
   noteLook = look;
