@@ -2944,7 +2944,9 @@ function markLab(o) {
     startTour: () => log.push(["tour", Math.round(clock)]),
     applyUiLang: () => log.push(["repaint", Math.round(clock)]),
     focusFirstEntryOnOpen: () => {}, focusEmptyLoadOnOpen: () => {}, greeting: () => "", render: () => {},
-    warmMenu: () => warms.push(Math.round(clock))
+    warmMenu: () => warms.push(Math.round(clock)),
+    /* a desk past the first-opening sign-in: no screen to show, so nothing waits on it */
+    bootFirstSignin: () => {}, firstSigninStands: () => false, onFirstSigninClosed: fn => fn()
   };
   sb.window = sb;
   if (o && o.host) sb.E_HOST = o.host;
@@ -3253,6 +3255,7 @@ function launchLab(o) {
     sb.greeting = () => "";
     sb.render = () => {};
     sb.warmMenu = () => {};
+    sb.bootFirstSignin = () => {}; sb.firstSigninStands = () => false; sb.onFirstSigninClosed = fn => fn(); /* no first sign-in to show */
     sb.setInterval = () => 0;
     sb.applyUiLang = () => { if (typeof o.onLang === "function") o.onLang(); };
   }
@@ -3764,6 +3767,7 @@ function launchFollowsTests() {
     const sb = { document: doc, requestAnimationFrame: fn => frames.push(fn), setTimeout: () => 0, setInterval: () => 0,
       ssGet: () => "1", ssSet: () => {}, mgReduceMotion: () => false, markCovered: () => false, fifthPhase: () => 0,
       afterShown: fn => fn(), greeting: () => "", render: () => {}, applyUiLang: () => {}, warmMenu: () => {},
+      bootFirstSignin: () => {}, firstSigninStands: () => false, onFirstSigninClosed: fn => fn(), /* no first sign-in to show */
       launchMark: () => ({}), setEntrySel: () => {}, dialogStanding: () => !!o.dialog,
       listEntryEls: () => (o.cards ? [{ dataset: { v: "0" }, closest: () => ({ dataset: { id: "c1" } }) }] : []),
       whenLaunchLanded: fn => { if (launching) held.push(fn); else fn(); } };
