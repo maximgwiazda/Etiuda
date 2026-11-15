@@ -11076,6 +11076,12 @@ function pickPage() {
   const who = document.getElementById("who"), count = document.getElementById("count"), keys = document.getElementById("keys"), langBtn = document.getElementById("lang");
   let rows = [], last = null, words = {}, chords = {}, at = 0, asked = 0, said = "", sent = null, closing = false;
   let suggest = [], sgAt = -1, picked = [];
+  /* THE WORDS SELECTED on the screen stand in the box as given, and the box counts as at rest while they do: the strip of
+     what the shell suggests for them shows, as for a copied message, and the rows are the resting list. Typing over them
+     makes the box a query like any other. A suggestion is still taken only by the agent. */
+  const selNote = document.getElementById("sel");
+  let chosen = "";
+  const blank = () => !q.value.trim() || (!!chosen && q.value === chosen); /* plant:pick-selected-rest */
   /* THE KEYSTROKE FILTERS HERE, on the rows the open handed over. The order is the desk's
      search: the same terms, the same tiers, the same lift. An open without that index still
      asks the desk. */
@@ -11341,7 +11347,7 @@ function pickPage() {
     if (tip) tip.style.left = (Math.max(22, Math.min(cx - left, w - 22)) - 6) + "px";
     return add;
   };
-  const list = () => (!q.value.trim() && last)
+  const list = () => (blank() && last)
     ? [Object.assign({ again: true }, last)].concat(rows.filter(r => r.id !== last.id || r.vi !== last.vi)) : rows;
   /* A CARD OF SEVERAL REPLIES IS ONE GROUP: its title once, over its replies, each named by its tag. The first nine
      rows after the reply copied last carry Ctrl and their digit, and that one Ctrl+0. */
@@ -11373,7 +11379,7 @@ function pickPage() {
   }
   /* Drawn only while suggestions are on and the query is empty, so a quiet clipboard adds no element. */
   function paintStrip() {
-    const on = suggest.length > 0 && !String(q.value || "").trim();
+    const on = suggest.length > 0 && blank();
     const host = document.getElementById ? document.getElementById("sg") : null;
     if (!on) {
       if (host && host.remove) host.remove();
@@ -11499,6 +11505,12 @@ function pickPage() {
     langBtn.hidden = (o.langs | 0) < 2;
     langBtn.textContent = String(o.lang).toUpperCase();
   };
+  const paintSel = () => {
+    if (!selNote) return;
+    const on = !!chosen && q.value === chosen;
+    selNote.hidden = !on;
+    selNote.textContent = on ? (words.selected || "") : "";
+  };
   const paintOpen = (o, fresh) => {
     if (o.words) {
       words = o.words;
@@ -11520,9 +11532,10 @@ function pickPage() {
     suggest = Array.isArray(o.suggest) ? o.suggest.filter(s => s && s.id) : [];
     picked = Array.isArray(o.picked) ? o.picked : [];
     sgAt = -1;
-    q.value = ""; at = (last && list().length > 1) ? 1 : 0; asked++;
+    q.value = chosen; at = (last && list().length > 1) ? 1 : 0; asked++;
     box.scrollTop = 0;
     paint(false);
+    paintSel();
     if (fresh && who && !who.hidden) who.focus();
     else q.focus();
   };
@@ -11560,6 +11573,7 @@ function pickPage() {
     root.classList.toggle("still", !!look.still);
     words = o.words || {};
     chords = o.chords || {};
+    chosen = typeof o.selected === "string" ? o.selected : ""; /* plant:pick-selected-box */
     root.lang = words.lang || "en";
     q.placeholder = words.search || "";
     box.setAttribute("aria-label", words.list || "");
@@ -11570,6 +11584,7 @@ function pickPage() {
     P.ready(paintTour(o.tour));
   });
   q.addEventListener("input", () => {
+    if (chosen && q.value !== chosen) { chosen = ""; paintSel(); }
     paintStrip();
     if (bank) {
       asked++;
@@ -11611,7 +11626,7 @@ function pickPage() {
     const step = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : e.key === "PageDown" ? 8 : e.key === "PageUp" ? -8 : 0;
     if (step) {
       e.preventDefault();
-      const stripOn = suggest.length > 0 && !q.value.trim();
+      const stripOn = suggest.length > 0 && blank();
       if (sgAt >= 0 && stripOn) {
         if (Math.abs(step) === 1 && step < 0) {
           sgAt = sgAt <= 0 ? suggest.length - 1 : sgAt - 1;
@@ -11638,7 +11653,7 @@ function pickPage() {
     }
     if (e.key === "Enter") {
       e.preventDefault();
-      if (sgAt >= 0 && suggest[sgAt] && !q.value.trim()) { takeSuggest(suggest[sgAt].id, !!(e.ctrlKey || e.metaKey)); return; }
+      if (sgAt >= 0 && suggest[sgAt] && blank()) { takeSuggest(suggest[sgAt].id, !!(e.ctrlKey || e.metaKey)); return; }
       take(all[at], e.shiftKey);
       return;
     }
@@ -11743,6 +11758,7 @@ function pickerDoc() {
     + '#sg button.on{background:color-mix(in srgb,var(--accent) 20%,transparent);color:var(--accent)}\n'
     + '#sg button.picked{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}\n'
     + '#sg button.picked.on{background:color-mix(in srgb,var(--accent) 28%,transparent);color:var(--accent)}\n'
+    + '#sel{flex:0 0 auto;padding:0 12px;color:var(--dim);font-size:12px}\n#sel[hidden]{display:none}\n'
     + '#rows{flex:1 1 auto;min-height:0;margin:0;padding:0;list-style:none;overflow-x:hidden;overflow-y:auto;'
     + 'overscroll-behavior:contain;scrollbar-width:thin}\n'
     + '#rows li{display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:var(--radius-sm);'
@@ -11791,7 +11807,7 @@ function pickerDoc() {
     + '</style>\n'
     + '<div id="top"><input id="q" type="text" role="combobox" aria-expanded="true" aria-controls="rows" aria-autocomplete="list"'
     + ' autocomplete="off" spellcheck="false"><input id="who" type="text" autocomplete="off" spellcheck="false" hidden>'
-    + '<button id="lang" type="button" hidden></button></div>\n'
+    + '<button id="lang" type="button" hidden></button></div>\n<div id="sel" hidden></div>\n'
     + '<ul id="rows" role="listbox"></ul>\n'
     + '<footer><span id="count" aria-live="polite"></span><span id="keys"></span></footer>\n'
     + '<script>' + PICK_SCRIPT + '</script>\n';

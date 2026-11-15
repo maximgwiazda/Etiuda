@@ -116,6 +116,7 @@ UI_STRINGS.pl={
   "Create a card":"Utwórz kartę",
   "Create a card in {CAT}":"Utwórz kartę w kategorii {CAT}",
   "A different word may do better.":"Inne słowo może trafić lepiej.",
+  "The words you selected. Type to change them.":"Zaznaczone słowa. Można je zmienić, pisząc.",
   "Press":"Naciśnij",
   "{KEY} clears the search and the intents and shows every card.":"{KEY} czyści wyszukiwanie i intencje i pokazuje wszystkie karty.",
   "Etiuda is ready for its first replies.":"Etiuda czeka na pierwsze odpowiedzi.",

@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 141 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 2);
+const EXPECTED = 144 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 3);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1098,6 +1098,70 @@ try {
   reopen();
   pageL["box:click"]({ target: { closest: () => ({ dataset: { i: "1" } }) } });
   check(lastCall() === 'copy {"id":"a","vi":0}', "4l a click on a row copies that row: " + lastCall());
+
+  /* 4s1 to 4s4: THE WORDS SELECTED ON THE SCREEN (Quick replies on the selection). The page is run again over a stand-in that
+     also holds the note under the box. The words stand in the box with the note, and the box counts as at rest while they do:
+     the strip of what the shell suggested for them stands as for a copied message (a step up from the first row reaches it,
+     and Enter takes it, the agent's act), and nothing is searched or taken by itself. Typing over them hides the note and
+     searches what is typed. 4s4 changes each of the two plants in a copy of the script and expects its leg red. */
+  {
+    const SEL = "my parcel has not arrived and the tracking says nothing";
+    const runSel = async (scriptText, o) => {
+      const L = {}, q2 = { value: "", placeholder: "", focus() {}, setAttribute() {}, addEventListener: (t, fn) => { L[t] = fn; } };
+      let html = "";
+      const box2 = { set innerHTML(v) { html = v; }, get innerHTML() { return html; }, setAttribute() {}, querySelectorAll: () => [], addEventListener() {} };
+      const note = { hidden: true, textContent: "" };
+      const calls = [];
+      let onOpen = null;
+      const W = { E_PICK: {
+        find: qy => { calls.push("find " + qy); return Promise.resolve(JSON.stringify({ rows: [R("found")] })); },
+        takeSuggest: id => { calls.push("take " + id); return Promise.resolve(JSON.stringify({ rows: [R("s1")] })); },
+        copy: w => { calls.push("copy " + w); }, close() {}, ready() {}, onOpen: fn => { onOpen = fn; } } };
+      const D = { getElementById: id => (id === "q" ? q2 : id === "rows" ? box2 : id === "sel" ? note : null),
+        documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle() {} }, lang: "" } };
+      new Function("window", "document", scriptText)(W, D);
+      const key = k => L.keydown({ key: k, code: k, ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, preventDefault() {} });
+      onOpen(JSON.stringify(Object.assign({ rows: pRows, words: { selected: "The words you selected. Type to change them.", none: "none" } }, o)));
+      await tick(5);
+      const opened = { box: q2.value, note: note.hidden ? "" : note.textContent, calls: calls.slice() };
+      key("ArrowUp"); key("Enter");
+      await tick(5);
+      const stepped = calls.slice(opened.calls.length);
+      onOpen(JSON.stringify(Object.assign({ rows: pRows, words: { selected: "The words you selected. Type to change them." } }, o)));
+      await tick(5);
+      const c0 = calls.length;
+      q2.value = SEL + " please";
+      if (L.input) L.input();
+      await tick(5);
+      key("ArrowUp"); key("Enter");
+      await tick(5);
+      return { opened, stepped, edited: { note: note.hidden ? "" : note.textContent, calls: calls.slice(c0) } };
+    };
+    const SUGGEST = [{ id: "t:post", name: "Post" }, { id: "t:lamp", name: "Lamps" }];
+    const withSel = await runSel(script, { selected: SEL, suggest: SUGGEST });
+    const plain = await runSel(script, {});
+    const J3 = JSON.stringify;
+    check(withSel.opened.box === SEL && withSel.opened.note === "The words you selected. Type to change them." && withSel.opened.calls.length === 0,
+      "4s1 the words selected stand in the box with the note under it, and nothing is searched or taken by itself: " + J3(withSel.opened));
+    check(J3(withSel.stepped) === J3(["take t:lamp"]),
+      "4s2 while they stand, the strip of what the shell suggested for them is there: a step up from the first row and Enter take it: " + J3(withSel.stepped));
+    check(withSel.edited.note === "" && withSel.edited.calls[0] === "find " + SEL + " please" && withSel.edited.calls.indexOf("take t:lamp") < 0
+      && plain.opened.box === "" && plain.opened.note === "",
+      "4s3 typing over the words hides the note and searches what is typed, the strip gone; an opening on no selection has an empty box and"
+      + " no note: " + J3({ edited: withSel.edited, plain: plain.opened }));
+    if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  4s4 the page's two plants (ETIUDA_PLANTS=off)");
+    else {
+      const lines = script.split("\n");
+      const marks = ["pick-selected-box", "pick-selected-rest"].map(tag => lines.filter(l => l.indexOf("plant:" + tag) >= 0).length);
+      const noBox = lines.filter(l => l.indexOf("plant:pick-selected-box") < 0).join("\n");
+      const from = " || (!!chosen && q.value === chosen)";
+      const noRest = lines.map(l => (l.indexOf("plant:pick-selected-rest") >= 0 ? l.replace(from, "") : l)).join("\n");
+      const b1 = await runSel(noBox, { selected: SEL, suggest: SUGGEST }), b2 = await runSel(noRest, { selected: SEL, suggest: SUGGEST });
+      check(J3(marks) === "[1,1]" && noRest !== script && b1.opened.box === "" && J3(b2.stepped) !== J3(["take t:lamp"]),
+        "4s4 lifting plant:pick-selected-box leaves the box empty, and rewriting plant:pick-selected-rest hides the strip behind the words: "
+        + J3({ marks, box: b1.opened.box, stepped: b2.stepped }));
+    }
+  }
 
   /* THE LEG (board 952, waste 3b): typing in the global picker filters in the picker;
      a keystroke in the picker sends no IPC, by count. The answer's first frame is measured. */
