@@ -3,10 +3,11 @@
    signed in by provider, the sign-in code and how the seat stands, and shows nothing where no provider is offered, so a desk
    with no registration configured looks as it did. Settings' Account draws the same view with signinParts. */
 import { $ } from "./dom.js";
-import { eHost } from "./host.js";
+import { eHost, eCatalogFolderPinned } from "./host.js";
 import { esc } from "./esc.js";
 import { t, uiLang } from "./ui-lang.js";
 import { agentName } from "./agent.js";
+import { lsGet, lsSet } from "./storage.js";
 import { teamLeads } from "./team-join.js";
 import { hooks } from "./hooks.js";
 
@@ -54,6 +55,20 @@ function signinNow(){
 }
 /* Whether the door exists: a provider offered, or somebody signed in. */
 function signinShown(v){ return !!(v && (v.offered.length || v.signedIn)); }
+/* FIRST-OPENING SIGN-IN GATE AND MEMORY: shown once on a desk that offers a provider, has
+   nobody signed in, has never shown the screen before, and is not pinned by policy (a policy
+   desk joins its team from HKLM policy without asking first). Written when the screen opens
+   so stopping mid-screen never traps the person behind it again while Sign in stays in the bar. */
+const FIRST_SIGNIN_KEY="eFirstSigninSeen";
+function firstSigninSeen(){ return lsGet(FIRST_SIGNIN_KEY)==="1"; }
+function markFirstSigninSeen(){ return lsSet(FIRST_SIGNIN_KEY,"1",true); }
+function firstSigninDue(v, opts){
+  const s=v===undefined ? signinV : signinRead(v);
+  const o=opts && typeof opts==="object" ? opts : null;
+  const seen=o && "seen" in o ? !!o.seen : firstSigninSeen();
+  const policy=o && "policy" in o ? !!o.policy : eCatalogFolderPinned();
+  return !!(s && s.offered.length && !s.signedIn && !seen && !policy);
+}
 /* The code in four groups of four, as it is read aloud; Copy takes it without the spaces. */
 function signinCodeText(code){ return String(code||"").replace(/(.{4})(?=.)/g,"$1 "); }
 function signinWhen(at){
@@ -402,7 +417,11 @@ function wireSignin(){
 }
 
 export {
+  FIRST_SIGNIN_KEY,
   SIGNIN_NAMES,
+  firstSigninDue,
+  firstSigninSeen,
+  markFirstSigninSeen,
   signinAct,
   signinActsHtml,
   signinChanged,
