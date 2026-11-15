@@ -344,6 +344,14 @@ function eBranchIdentity(make){
       .catch(()=>null);
   }catch(e){ return Promise.resolve(null); }
 }
+/* Whether a flag made now would leave in a file a lead can read. The shell already holds the
+   catalog in use, so the question takes no argument. False in a browser, and false where the
+   shell would hold the file, remove it, or seal it to the lead's box alone. */
+function eBranchReach(){
+  const h=eHost();
+  if(!h || typeof h.branchReach!=="function") return false;
+  try{ return h.branchReach()===true; }catch(e){ return false; }
+}
 function eWriteBranch(stem,text){
   if(!eHasBranch()) return Promise.resolve({ok:false});
   try{
@@ -562,6 +570,7 @@ export {
   TEST_BAND_EN,
   eBranchIdentity,
   eHasBranch,
+  eBranchReach,
   eWriteBranch,
   eHasShared,
   eSharedRead,

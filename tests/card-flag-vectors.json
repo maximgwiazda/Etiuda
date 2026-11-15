@@ -1,0 +1,281 @@
+{
+ "format": 1,
+ "kind": "etiuda-card-flag-vectors",
+ "about": "What `seen` is, for cards as a format 2 catalog file holds them, and what `f` is for an `r`. The engine's desk and Studio are both held to this one file. Plain JSON: nothing here needs the engine's code.",
+ "langs": [
+  "en",
+  "pl",
+  "de"
+ ],
+ "seen": {
+  "rule": [
+   "seen is SHA-256, written as 64 lower-case hex characters, of the UTF-8 bytes of the canonical JSON of one object, built from the card for one language code L.",
+   "The object has up to three members. title is card.title[L], body is card.body[L], note is card.note[L]. A member whose field is absent, not a string, or empty after trimming is left out. Where all three are left out the object is {} and its canonical JSON is the two characters {}.",
+   "Trimming is JavaScript's String.prototype.trim on each field: leading and trailing white space goes, a CR inside a text stays.",
+   "For card.bodyShape plain (or no bodyShape) the body is the trimmed text as the file holds it, CR and LF kept as written.",
+   "For card.bodyShape alts or steps the body is first read as blocks and written back, in this order. Reading: split the text on LF. A line is a marker when its trim matches ^\\[(step|alt)(:[^\\]]*)?\\]$. A marker closes the block before it (if there was a marker before it) and opens a new one; lines before the first marker are dropped; a text with no marker reads as empty. A block's text is its lines joined with LF, then trimmed; an alt marker with a label (the :label part) keeps its own line, trimmed, as the first line of its block, and a bare marker is dropped. Empty blocks are dropped and the rest are joined with a blank line (LF LF). Then trim again, and if it is empty, leave the body out. Writing back: split on a blank line (LF, any white space, LF), trim each piece, drop empty ones; a piece whose first line, trimmed, is a marker stays as it is, any other piece gets [alt] (alts) or [step] (steps) and an LF in front; join the pieces with LF LF.",
+   "Canonical JSON is JSON.stringify for a string, and for an object its members in ascending order of key (by UTF-16 code unit), each as the JSON string of the key, a colon, and the canonical value, joined with commas inside braces; no white space anywhere. Non-ASCII characters are written as themselves, not as \\u escapes; control characters (CR, LF) are escaped as \\r and \\n.",
+   "A body in alts or steps is the one place where text is not kept as written: a CR line end at the end of a block, or on a blank line between blocks, is gone, while a CR line end inside a block stays. The cases crlf-plain and crlf-alternatives hold both."
+  ],
+  "cases": [
+   {
+    "name": "plain",
+    "lang": "en",
+    "card": {
+     "id": "c-plain",
+     "shelf": "t-op",
+     "bodyShape": "plain",
+     "title": {
+      "en": "Opening line"
+     },
+     "body": {
+      "en": "Good day, how can I help?"
+     }
+    },
+    "seen": "9f2ab34c8ed4d648a481ff5d878a3883eb17d694435e95f10863bd401a6bcd19"
+   },
+   {
+    "name": "alternatives",
+    "lang": "en",
+    "card": {
+     "id": "c-alts",
+     "shelf": "t-op",
+     "bodyShape": "alts",
+     "title": {
+      "en": "Two ways to open"
+     },
+     "body": {
+      "en": "[alt]\nGood day, how can I help?\n\n[alt]\nHello, what can I do for you?"
+     }
+    },
+    "seen": "c6c2ac9a9654462503e07c9c31dc93023c96b04489e6fce067ab2203547eb4bf"
+   },
+   {
+    "name": "steps",
+    "lang": "en",
+    "card": {
+     "id": "c-steps",
+     "shelf": "t-op",
+     "bodyShape": "steps",
+     "title": {
+      "en": "Refund"
+     },
+     "body": {
+      "en": "[step]\nAsk what happened.\n\n[step]\nSay what happens next."
+     }
+    },
+    "seen": "b84bf35008da742f39ce55dc830fc2d9980612fc8bff3996c7b60f5677296558"
+   },
+   {
+    "name": "note",
+    "lang": "en",
+    "card": {
+     "id": "c-note",
+     "shelf": "t-op",
+     "bodyShape": "plain",
+     "title": {
+      "en": "Closing line"
+     },
+     "body": {
+      "en": "Thank you for waiting."
+     },
+     "note": {
+      "en": "Keep it short."
+     }
+    },
+    "seen": "1b6090e7b5127985c68067178334a39c900448cfd96745356095775c1554a70e"
+   },
+   {
+    "name": "empty-field",
+    "lang": "en",
+    "card": {
+     "id": "c-empty",
+     "shelf": "t-op",
+     "bodyShape": "plain",
+     "title": {
+      "en": "Closing line"
+     },
+     "body": {
+      "en": "Thank you for waiting."
+     },
+     "note": {
+      "en": ""
+     }
+    },
+    "seen": "0052935ccecc92181d8279c1c8e91b5b713ba640471a32649e785d4ab3dfa5bb"
+   },
+   {
+    "name": "padded",
+    "lang": "en",
+    "card": {
+     "id": "c-padded",
+     "shelf": "t-op",
+     "bodyShape": "plain",
+     "title": {
+      "en": "  Padded title  "
+     },
+     "body": {
+      "en": "\n\nBody with edges.\n\n"
+     },
+     "note": {
+      "en": "   "
+     }
+    },
+    "seen": "c36510838c5fb177b1d6baa62abaad7dfcf66077d51fbebae930bc7865e4929f"
+   },
+   {
+    "name": "crlf-plain",
+    "lang": "en",
+    "card": {
+     "id": "c-crlf",
+     "shelf": "t-op",
+     "bodyShape": "plain",
+     "title": {
+      "en": "Two lines"
+     },
+     "body": {
+      "en": "First line.\r\nSecond line."
+     }
+    },
+    "seen": "3c08ff7ae2631059ad3c6d416b2b2418d0f5fb0108c2b6f04b731dd8cac0eefe"
+   },
+   {
+    "name": "crlf-alternatives",
+    "lang": "en",
+    "card": {
+     "id": "c-crlf-alts",
+     "shelf": "t-op",
+     "bodyShape": "alts",
+     "title": {
+      "en": "Two lines in an alternative"
+     },
+     "body": {
+      "en": "[alt]\r\nFirst way,\r\nsecond line.\r\n\r\n[alt]\r\nSecond way."
+     }
+    },
+    "seen": "896b14ef71bb225970372dda3273dd91eeda0d0d04f3ce7c4749ed735c54a026"
+   },
+   {
+    "name": "polish",
+    "lang": "pl",
+    "card": {
+     "id": "c-polish",
+     "shelf": "t-op",
+     "bodyShape": "plain",
+     "title": {
+      "en": "Greeting",
+      "pl": "Powitanie"
+     },
+     "body": {
+      "en": "Good day.",
+      "pl": "Dzień dobry, w czym mogę pomóc?"
+     },
+     "note": {
+      "en": "Say it warmly.",
+      "pl": "Zażółć gęślą jaźń, to sprawdza ogonki."
+     }
+    },
+    "seen": "b8a3fd72dcf28bd5a4bb5ba185b7b0b91a25e410ae3f0bd7d76279693c580df1"
+   },
+   {
+    "name": "second-language-steps",
+    "lang": "pl",
+    "card": {
+     "id": "c-polish-steps",
+     "shelf": "t-op",
+     "bodyShape": "steps",
+     "title": {
+      "en": "Refund",
+      "pl": "Zwrot"
+     },
+     "body": {
+      "en": "[step]\nAsk.\n\n[step]\nRaise.",
+      "pl": "[step]\nZapytaj, co się stało.\n\n[step]\nPowiedz, co będzie dalej."
+     }
+    },
+    "seen": "0c6ead3dd102ac57c04dd75976b6a9f3903bc7ac759e30a94f9e264f1e8dcb2c"
+   },
+   {
+    "name": "third-language",
+    "lang": "de",
+    "card": {
+     "id": "c-german",
+     "shelf": "t-op",
+     "bodyShape": "plain",
+     "title": {
+      "en": "Greeting",
+      "pl": "Powitanie",
+      "de": "Gruß"
+     },
+     "body": {
+      "en": "Good day.",
+      "pl": "Dzień dobry.",
+      "de": "Schönen Tag, wie kann ich helfen? Café, naïve."
+     }
+    },
+    "seen": "b3b4590c74c971cbf49bb0054e7f57d5cce3a688ca36c0144d9399d8a84dfe7c"
+   },
+   {
+    "name": "no-words-in-language",
+    "lang": "pl",
+    "card": {
+     "id": "c-english-only",
+     "shelf": "t-op",
+     "bodyShape": "plain",
+     "title": {
+      "en": "Greeting"
+     },
+     "body": {
+      "en": "Good day."
+     }
+    },
+    "seen": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+   },
+   {
+    "name": "beyond-bmp",
+    "lang": "en",
+    "card": {
+     "id": "c-astral",
+     "shelf": "t-op",
+     "bodyShape": "plain",
+     "title": {
+      "en": "Smile"
+     },
+     "body": {
+      "en": "Glad to help 😀"
+     }
+    },
+    "seen": "ba96ad02c6f1f613e4bd1032801868270cd54e5dea32aaa38b4fc6c888f4fb6b"
+   },
+   {
+    "name": "labelled-alternatives",
+    "lang": "en",
+    "card": {
+     "id": "c-labelled",
+     "shelf": "t-op",
+     "bodyShape": "alts",
+     "title": {
+      "en": "Closing line"
+     },
+     "body": {
+      "en": "[alt:warm]\nThank you, and take care.\n\n[alt:brief]\nThanks, goodbye."
+     }
+    },
+    "seen": "efcc4b1a6dca200871c8f03756b8aac338b3e8fabaf7d568d13526a35012b388"
+   }
+  ]
+ },
+ "f": {
+  "rule": "f is SHA-256, as 64 lower-case hex characters, of the ASCII bytes of the text etiuda-flag, one LF, then r (32 lower-case hex characters).",
+  "cases": [
+   {
+    "r": "00112233445566778899aabbccddeeff",
+    "f": "df252501ac7ac3564642e18c20689b043f0ba395fc70ca7a4e363cf815382ba6"
+   },
+   {
+    "r": "ffeeddccbbaa99887766554433221100",
+    "f": "25b7d02cf626306d57fb016d8bc336a2beaf19cb2ba38247463d2adc342761f6"
+   }
+  ]
+ }
+}

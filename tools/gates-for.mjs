@@ -200,6 +200,7 @@ export const SCANS = {
   "tests/join-policy.mjs": ["shell/policy/**"],
   "tests/allusers-folder.mjs": ["shell/installer/allusers-folder.nsh", "shell/installer.nsh", "tools/patch-nsis.cjs", "README.md", "shell/policy/readme.txt", "package-lock.json"],
   "tests/catalog-shared.mjs": ["src/modules/catalog-file.js", "src/modules/catalog-offer.js", "src/modules/ui-lang.js"],
+  "tests/card-flag.mjs": ["src/modules/card-flag.js", "src/modules/catalog-file.js", "src/modules/catalog-v2.js", "src/modules/storage.js", "src/modules/hooks.js", "src/modules/host.js", "src/main.js", "shell/main.js", "shell/preload.js"],
   "tests/catalog-in-use.mjs": ["src/modules/catalog-offer.js", "src/modules/catalog-file.js", "src/modules/catalog-history.js", "src/modules/settings.js", "src/modules/ui-lang.js", "src/modules/local-memory.js", "shell/preload.js"],
   "tests/desk-ipc.mjs": ["src/template.html", "src/modules/{hooks,theme,storage,motion,dom}.js"],
   "tests/stats-live.mjs": ["src/modules/host.js", "shell/preload.js", "src/modules/settings.js", "src/modules/ui-lang.js"],

@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 92;
+const EXPECTED = 101;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -1774,6 +1774,138 @@ try {
     } finally {
       for (const n of spyNames) fs[n] = spyOrig[n];
       try { if (s && typeof s.stop === "function") s.stop(); } catch {}
+    }
+  }
+
+  /* ---- a flag can be made where the desk's file would reach a lead: branchReach asks the write's own gate and seal step ----
+     The cases are driven on one team desk: each takes the catalog, asks the channel, then writes the file the page would send,
+     and the two must agree. The plants lift a line of the gate in a scratch copy of main.js: the answer follows the gate. */
+  {
+    const FLG = folder("flag");
+    let DF = newDesk("flag", FLG);
+    const meF = await DF.ask("etiuda:branch-identity", true);
+    const TX2 = "t-" + crypto.randomBytes(8).toString("hex"), KX2 = crypto.randomBytes(32);
+    const listing = ["lamp-shop", "tea-room", "kiln-hall"];
+    fs.writeFileSync(path.join(FLG, "etiuda-ring.json"), JSON.stringify({ format: 1, kind: "etiuda-ring",
+      keys: ["lamp-shop", "tea-room", "kiln-hall", "mug-bar", "jar-store"].map(c => ({ catalog: c, keyId: LEAD.keyId, alg: "Ed25519", public: LEAD.public })) }), "utf8");
+    const teamA = () => put(FLG, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 1, roster: [entry(meF, K1, 1)], catalogs: listing })));
+    teamA();
+    const sha8 = id => crypto.createHash("sha256").update(String(id)).digest("hex").slice(0, 8);
+    const pinOf = t => "sha256:" + crypto.createHash("sha256").update(Buffer.from(V2.v2SignedBytes(JSON.parse(t)))).digest("hex");
+    const made = (id, name) => text(catalog(id, 1, name, "2026-02-01"));
+    const LAMP = made("lamp-shop", "Lamp Shop"), TEA = made("tea-room", "Tea Room"), KILN = made("kiln-hall", "Kiln Hall");
+    const MUG = made("mug-bar", "Mug Bar"), JAR = made("jar-store", "Jar Store");
+    /* A copy a colleague made: unsigned, under an id of its own, growing from the edition `sha` names. */
+    const copyOf = (id, from, sha) => { const d = JSON.parse(from); delete d.sig; d.id = id; d.rev = 1; d.grew = { id: JSON.parse(from).id, rev: 1, sha: sha }; return JSON.stringify(d); };
+    /* The desk's file of a catalog as the page builds it (branchCatalog), and where the write puts it. */
+    const grow = handed => {
+      const from = JSON.parse(handed), doc = JSON.parse(handed);
+      delete doc.sig;
+      doc.id = meF.id + "-" + sha8(from.id);
+      doc.rev = 1;
+      doc.grew = { id: from.id, rev: from.rev, sha: pinOf(handed) };
+      if (from.grew && from.grew.id) doc.grew.root = String(from.grew.root || from.grew.id);
+      doc.desk = { id: meF.id, key: meF.key, box: meF.box };
+      const stem = "mine-" + sha8(from.id);
+      return { stem: stem, text: JSON.stringify(doc), file: path.join(FLG, "desks", meF.id, stem + ".ec") };
+    };
+    const take = (D, handed) => D.ipc("etiuda:catalog-taken", pinOf(handed), handed);
+    const ownFiles = () => (fs.existsSync(path.join(FLG, "desks", meF.id)) ? fs.readdirSync(path.join(FLG, "desks", meF.id)) : []).filter(n => !/^in-use/.test(n));
+    /* Take the catalog, ask the channel, write the file: what each said, and what landed. */
+    const flagCase = async (D, handed) => {
+      take(D, handed);
+      const g = grow(handed), reach = D.ipc("etiuda:branch-reach");
+      const w = await D.ask("etiuda:branch-write", g.stem, g.text);
+      const raw = fs.existsSync(g.file) ? JSON.parse(fs.readFileSync(g.file, "utf8")) : null;
+      const inner = raw && raw.kind === "etiuda-sealed" ? JSON.parse(D1.api.openSealed(K1, raw) || "null") : null;
+      return { reach: reach, w: w, raw: raw, inner: inner, g: g };
+    };
+    const agreed = r => r.reach === true ? !!r.w.ok && !r.w.held && !!r.raw : !r.raw && (!!r.w.held || r.w.withheld === true);
+    const shown = r => "answer " + r.reach + ", write " + said(r.w) + ", file " + (r.raw ? (r.raw.kind === "etiuda-sealed" ? "sealed, team " + (r.raw.team === TEAM ? "A" : "other") + " epoch " + r.raw.epoch : "plain") : "none");
+
+    /* the team lists the catalog itself: the file is the edition's own copy, plain where the edition was never sealed */
+    put(FLG, "tea.ec", TEA);
+    const teaHanded = await read(DF, "tea.ec");
+    const rTea = await flagCase(DF, teaHanded);
+    check(teaHanded === TEA && rTea.reach === true && agreed(rTea) && rTea.raw.kind === "etiuda-catalog" && rTea.raw.grew.id === "tea-room",
+      "14fa a team's own listed catalog: the channel says yes, and the file lands plain, as the gate and the seal step answer: " + shown(rTea));
+
+    /* a copy under an id of its own, listed by the first hop of its chain, which a lead signed */
+    const copy = copyOf("tea-copy", TEA, pinOf(TEA));
+    const rCopy = await flagCase(DF, copy);
+    check(rCopy.reach === true && agreed(rCopy) && rCopy.raw.kind === "etiuda-catalog" && rCopy.raw.grew.id === "tea-copy" && rCopy.raw.grew.root === "tea-room",
+      "14fb a copy whose chain's first hop the lead signed: yes, and the file lands: " + shown(rCopy));
+
+    /* asking writes no record of the file it would have written, and no file */
+    const copy2 = copyOf("tea-copy-two", TEA, pinOf(TEA));
+    take(DF, copy2);
+    const deskBytes = fs.readFileSync(path.join(DF.ud, "desk.json")), filesBefore = ownFiles().join();
+    const asked2 = DF.ipc("etiuda:branch-reach");
+    check(asked2 === true && Buffer.compare(deskBytes, fs.readFileSync(path.join(DF.ud, "desk.json"))) === 0 && ownFiles().join() === filesBefore,
+      "14fc asking leaves the desk's record and the share as they were: the answer " + asked2 + ", the desk's file "
+      + (Buffer.compare(deskBytes, fs.readFileSync(path.join(DF.ud, "desk.json"))) === 0 ? "unchanged" : "changed") + ", own files "
+      + (ownFiles().join() === filesBefore ? "the same" : "changed"));
+
+    /* a catalog the agent marked private, the team not listing it: nothing leaves */
+    put(FLG, "mug.ec", MUG);
+    await DF.ask("etiuda:team-join", "private", "mug-bar", "on");
+    const rMug = await flagCase(DF, await read(DF, "mug.ec"));
+    check(rMug.reach === false && agreed(rMug) && rMug.w.withheld === true,
+      "14fd a private catalog: no, and the write withholds the file: " + shown(rMug));
+
+    /* a catalog the team does not list: held at this desk, nothing leaves (the lead's box is not in this fixture) */
+    put(FLG, "jar.ec", JAR);
+    const rJar = await flagCase(DF, await read(DF, "jar.ec"));
+    check(rJar.reach === false && agreed(rJar) && rJar.w.held === true,
+      "14fe a catalog the team does not list: no, and the write holds the file: " + shown(rJar));
+
+    /* a catalog opened from the team's envelope: the file is sealed under the team's key, as the seal step answers */
+    put(FLG, "lamps.ec", seal(K1, 1, LAMP));
+    const rLamp = await flagCase(DF, await read(DF, "lamps.ec"));
+    check(rLamp.reach === true && agreed(rLamp) && rLamp.raw.kind === "etiuda-sealed" && rLamp.raw.team === TEAM && rLamp.raw.epoch === 1
+      && !!rLamp.inner && rLamp.inner.grew.id === "lamp-shop",
+      "14ff a listed catalog opened from the team's envelope: yes, and the file lands sealed under the team's key: " + shown(rLamp));
+
+    /* a listed catalog opened from the team's envelope where the team's file has moved to an epoch this desk holds no key for:
+       the write has no seal for it and holds, so the channel says no; the team's file back at its epoch, it says yes again */
+    const beforeEpoch = await flagCase(DF, await read(DF, "lamps.ec"));
+    fs.unlinkSync(beforeEpoch.g.file);
+    put(FLG, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(meF, K1, 1)], catalogs: listing })));
+    const rStale = await flagCase(DF, await read(DF, "lamps.ec"));
+    check(beforeEpoch.reach === true && agreed(beforeEpoch) && rStale.reach === false && agreed(rStale) && rStale.w.held === true,
+      "14fg a listed catalog opened from the team's envelope, with no seal to be had: no, and the write holds the file: with the key "
+      + shown(beforeEpoch) + "; without " + shown(rStale));
+    teamA();
+
+    /* The plants: a line of the gate lifted from a copy of main.js, the same cases on it. */
+    const liftMain = tag => {
+      const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:" + tag + " ") >= 0);
+      if (at < 0) return null;
+      lines.splice(at, 1);
+      return { src: lines.join("\n") };
+    };
+    const planted = async (tag, handed) => {
+      const plant = liftMain(tag);
+      if (!plant) return null;
+      const P = loadDesk(DF.ud, null, plant);
+      try { return await flagCase(P, handed); } finally { P.close(); }
+    };
+    if (PLANTS_OFF) skip("NOT RUN 14fh lifting plant:s5-first-hop in a scratch copy of shell/main.js: the channel follows the gate");
+    else {
+      const forged = copyOf("tea-forged", TEA, "sha256:" + "ab".repeat(32));
+      const real = await flagCase(DF, forged);
+      const lifted = await planted("s5-first-hop", forged);
+      check(!!lifted && real.reach === false && agreed(real) && lifted.reach === true && agreed(lifted),
+        "14fh lifting plant:s5-first-hop lists a copy whose first hop no lead signed, and the channel follows: the shell as built says "
+        + shown(real) + "; with the line lifted " + (lifted ? shown(lifted) : "the plant line is absent"));
+    }
+    if (PLANTS_OFF) skip("NOT RUN 14fi lifting plant:s0b-chain-listed in a scratch copy of shell/main.js: the channel follows the gate");
+    else {
+      fs.unlinkSync(rTea.g.file);
+      const lifted = await planted("s0b-chain-listed", teaHanded);
+      check(!!lifted && lifted.reach === false && agreed(lifted),
+        "14fi lifting plant:s0b-chain-listed lists no catalog, and the channel follows: the team's own listed catalog, which 14fa wrote, now gives "
+        + (lifted ? shown(lifted) : "the plant line is absent"));
     }
   }
 } catch (e) {

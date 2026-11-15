@@ -63,6 +63,7 @@ const SLOTS = [
   "cardFillKey",
   "keepPoolAcross",
   "restartDesk",
+  "scheduleDeskBranch",
 ];
 
 const hooks = Object.create(null);

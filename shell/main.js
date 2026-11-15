@@ -3105,6 +3105,26 @@ function sealFor(catalogId, pin, root) {
     return key.length === 32 ? { team: team, epoch: epoch, key: key, plain: cover.exportsSealed === false } : null;
   } catch { return null; }
 }
+/* Whether the folder a desk file goes to is there to hold it: answering, and a directory. */
+function branchRootReady(root) {
+  try { return folderAnswers(root) && fs.statSync(root).isDirectory(); } catch { return false; }
+}
+/* How the desk's file of `doc` is sealed at `root`: {seal} with the team's cover, or {seal: null} where it goes plain or to the
+   lead's box, and null where it cannot be sealed and is held. A file grown from a catalog this desk opened from an envelope,
+   or from a copy whose chain held one (sealed as the root's first hop was), is that catalog. The write and branchReach both ask it. */
+function branchSealStep(doc, toLead, root) {
+  let sealId = "", sealPin = "";
+  if (doc.grew && typeof doc.grew === "object" && teamOpened.has(String(doc.grew.id))) { sealId = String(doc.grew.id); sealPin = String(doc.grew.sha || ""); }
+  if (!sealId && !toLead) {
+    const ids = lineageOf(doc), top = ids.length > 2 ? ids[ids.length - 1] : "";
+    let chained = false;
+    chained = !!top && ids.slice(1).some(c => teamOpened.has(c)); /* plant:e6d-chain-seal */
+    if (chained) { sealId = top; sealPin = firstHopSha(ids[ids.length - 2], top); }
+  }
+  if (!sealId || toLead) return { seal: null };
+  const seal = PIN_RE.test(sealPin) ? sealFor(sealId, sealPin, root) : null;
+  return seal ? { seal: seal } : null;
+}
 /* The file is <stem>-<8 hex>.ec and its catalog id ends in the same 8 hex, so two catalogs with one stem
    are two files. An empty text takes every file of that id away. Anything else is a catalog the page
    built, which the desk signs only when it names this desk, and writes by replacement with the edition
@@ -3118,12 +3138,11 @@ function writeBranch(stem, text) {
   const me = branchIdentity();
   if (!me) return branchHold(stem, text); /* plant:w1-early-hold */
   const id = me.id + "-" + tail[1];
-  let doc = null, seal = null, grewId = "";
+  let doc = null, seal = null;
   if (text) {
     try { doc = JSON.parse(text); } catch { return branchHold(stem, text); /* plant:w1-early-hold */ }
     const d = doc && typeof doc === "object" ? doc.desk : null;
     if (!d || d.id !== me.id || d.key !== me.key || d.box !== me.box || doc.id !== id) return branchHold(stem, text); /* plant:w1-early-hold */
-    if (doc.grew && typeof doc.grew === "object" && teamOpened.has(String(doc.grew.id))) grewId = String(doc.grew.id);
   }
   let toLead = null, toLeadAt = "", withheld = false;
   if (doc) {
@@ -3135,23 +3154,13 @@ function writeBranch(stem, text) {
   const at = branchDest(stem);
   if (!at) return branchHold(stem, text); /* plant:w1-early-hold */
   try {
-    if (!folderAnswers(at.root) || !fs.statSync(at.root).isDirectory()) return branchHold(stem, text);
+    if (!branchRootReady(at.root)) return branchHold(stem, text);
     /* A file grown from a catalog this desk opened from an envelope is that catalog, so it is signed and then sealed for the
        team that sealed the edition it grew from; where that team, its cover at this folder or its key cannot be had, or the
        team has left this desk out, it is held, never written in the clear. */
-    let sealId = grewId, sealPin = grewId ? String(doc.grew.sha || "") : "";
-    /* A copy of a copy holds what its chain held: where any hop past its own id was opened from an envelope, it is sealed as the
-       root's first hop was, or held. */
-    if (!grewId && !toLead && doc) {
-      const ids = lineageOf(doc), root = ids.length > 2 ? ids[ids.length - 1] : "";
-      let chained = false;
-      chained = !!root && ids.slice(1).some(c => teamOpened.has(c)); /* plant:e6d-chain-seal */
-      if (chained) { sealId = root; sealPin = firstHopSha(ids[ids.length - 2], root); }
-    }
-    if (sealId && !toLead && doc) {
-      seal = PIN_RE.test(sealPin) ? sealFor(sealId, sealPin, at.root) : null;
-      if (!seal) return branchHold(stem, text);
-    }
+    const sealed = doc ? branchSealStep(doc, toLead, at.root) : { seal: null };
+    if (!sealed) return branchHold(stem, text);
+    seal = sealed.seal;
     const same = ownFilesWithId(at.dir, id);
     /* A file this desk did not sign does not raise the rev. The share is anybody's to write. */
     const lastRev = same.reduce((hi, e) => (branchGenuine(e.doc) ? Math.max(hi, +e.doc.rev || 0) : hi), branchRevs[id] || 0);
@@ -3601,11 +3610,17 @@ function teamFileBehind(doc) {
   return rev === null || teamRevRefused((teamRevSeen[String(doc.id)] || {})[doc.lead.public], doc.epoch, rev);
 }
 const LINEAGE_MAX = 4096, LINEAGE_HOPS = 64;
+let lineageAsked = null; /* while branchReach asks about a file it will not write: the roots such a file states, by its id */
 /* The catalog ids a document descends through, itself first: its grew, then each grew this desk has seen for those ids. Each
    hop it sees is kept (catalogLineage), so a copy of a copy is judged by its whole chain. */
 function lineageOf(doc) {
   const id = doc && typeof doc.id === "string" ? doc.id : "";
   const g = doc && doc.grew && typeof doc.grew === "object" ? String(doc.grew.id || "") : "";
+  if (lineageAsked) { /* a question about a file never written keeps no record */
+    const stated = doc && doc.grew && typeof doc.grew === "object" && typeof doc.grew.root === "string" ? doc.grew.root : "";
+    if (id && stated && stated !== id) lineageAsked[id] = stated;
+    return lineageOfId(id || g, id ? g : "");
+  }
   if (id && g && g !== id && PIN_RE.test(String(doc.grew.sha || ""))) catalogLineageSha[id] = String(doc.grew.sha);
   if (id && g && g !== id && catalogLineage[id] !== g) {
     catalogLineage[id] = g;
@@ -3626,7 +3641,7 @@ function lineageOf(doc) {
 /* The ids the private mark reads: the stored chain and every root a copy along it has stated. */
 function privateChain(ids) {
   const out = ids.slice();
-  ids.forEach(c => { const r = catalogRoots[c]; if (r && out.indexOf(r) < 0) out.push(r); }); /* plant:s0b-grew-root */
+  ids.forEach(c => { const r = catalogRoots[c] || (lineageAsked && lineageAsked[c]); if (r && out.indexOf(r) < 0) out.push(r); }); /* plant:s0b-grew-root */
   return out;
 }
 function lineageOfId(id, parent) {
@@ -3751,6 +3766,36 @@ function branchGate(doc) {
   if (teamListedDoc(doc, use)) return {};
   if (!contentApplies(use.seal.team, use.consent) || !/^[0-9a-f]{64}$/.test(String(use.seal.box || ""))) return { hold: true }; /* plant:s0b-branch-switch */
   return { box: use.seal, at: use.content ? String(use.content.at) : "" };
+}
+/* The desk's own file for the catalog in use as the page would send it now (branchCatalog): the id this desk's key and the
+   grown-from id give it, and grew naming the edition. Null where no edition is held or this desk has no key of its own. */
+function deskDocNow() {
+  const me = branchIdentity(false), edition = loadedText ? catalogDocIn(loadedText) : null;
+  if (!me || !edition || edition.kind !== "etiuda-catalog" || typeof edition.id !== "string" || !edition.id) return null;
+  let pin = "";
+  try { pin = signedSha(edition); } catch { return null; }
+  if (!PIN_RE.test(pin)) return null;
+  const doc = { format: 2, kind: "etiuda-catalog", id: me.id + "-" + crypto.createHash("sha256").update(edition.id).digest("hex").slice(0, 8), rev: 1,
+    grew: { id: edition.id, rev: +edition.rev || 0, sha: pin }, desk: { id: me.id, key: me.key, box: me.box } };
+  const og = edition.grew && typeof edition.grew === "object" ? edition.grew : null;
+  if (og && (og.root || og.id)) doc.grew.root = String(og.root || og.id);
+  return doc;
+}
+/* Whether a flag made for the catalog in use would leave in a desk file a lead can read, answered by the code that writes the
+   file: branchGate and branchSealStep, over the file this desk would write now. The page asks with no argument. True only on a
+   team, where that file would be written plain or under the team's key; a hold, a removal and a seal to the lead's box alone
+   are false. Nothing is written, and lineageOf keeps no record of the question. */
+function branchReach() {
+  const doc = deskDocNow();
+  if (!doc) return false;
+  lineageAsked = {};
+  try {
+    const use = teamUse();
+    if (!(use.member && use.seal)) return false;
+    const gate = branchGate(doc), root = sharedFolderForWrite();
+    if (gate.none || gate.hold || gate.box || !branchRootReady(root)) return false;
+    return branchSealStep(doc, null, root) !== null;
+  } finally { lineageAsked = null; }
 }
 /* What this desk put on the share that the lead may no longer read (board 962, stage 0b, Claude alpha's ruling B): an answer to
    the lead's box once the switch no longer applies, any answer about a catalog now private, and working copies likewise. */
@@ -9509,6 +9554,10 @@ ipcMain.handle("etiuda:stats-close", (e, text) => {
 /* The desk's branch: its public identity, and the write of its own file. See writeBranch. */
 ipcMain.handle("etiuda:branch-identity", (e, make) => (fromEngine(e) ? branchIdentity(make === false ? false : true) : null));
 ipcMain.handle("etiuda:branch-write", (e, stem, text) => (fromEngine(e) ? writeBranch(stem, text) : { ok: false }));
+ipcMain.on("etiuda:branch-reach", (e) => {
+  if (!fromEngine(e)) { e.returnValue = false; return; }
+  e.returnValue = branchReach(); /* plant:flag-reach */
+});
 /* The desk's earlier versions: the list, one version's catalog, and putting one back. A version is named by its hash and
    the file it was kept for, and only a pair the history holds is answered. */
 ipcMain.handle("etiuda:history-list", (e) => (fromEngine(e) ? historyView() : []));
