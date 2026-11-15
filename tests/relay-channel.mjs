@@ -1702,6 +1702,9 @@ if (deskOn()) try {
     "signedSha", "catalogDocIn", "noteHanded", "writeInUse", "inUseCatalogId", "pickEdition", "catalogRead"];
   const noop = () => {};
   const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
+  /* Chromium with no proxy configured answers DIRECT, so a desk's socket goes straight to the relay: proxy-net treats a lookup
+     that answers nothing as no route at all (review 7 finding 2), so the desk shells below take this session, not inert. */
+  const directSession = { defaultSession: new Proxy({ resolveProxy: () => Promise.resolve("DIRECT") }, { get: (t, k) => (k in t ? t[k] : inert) }) };
   const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
   const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
   let deskTransport = transport("main");
@@ -1744,7 +1747,7 @@ if (deskOn()) try {
       app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
         getVersion: () => "0.0.0", whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
       ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
-      BrowserWindow: inert, Menu: inert, dialog: inert, net, protocol: inert, session: inert, shell: inert,
+      BrowserWindow: inert, Menu: inert, dialog: inert, net, protocol: inert, session: directSession, shell: inert,
       screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage, powerMonitor: inert,
     };
     process.env.XDG_CURRENT_DESKTOP = "GNOME";
@@ -1860,7 +1863,7 @@ if (deskOn()) try {
       app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
         getVersion: () => "0.0.0", whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
       ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
-      BrowserWindow: inert, Menu: inert, dialog: inert, net, protocol: inert, session: inert, shell: inert,
+      BrowserWindow: inert, Menu: inert, dialog: inert, net, protocol: inert, session: directSession, shell: inert,
       screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage, powerMonitor: inert,
     };
     const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
@@ -3806,7 +3809,7 @@ if (deskOn()) try {
           app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
             getVersion: () => "0.0.0", whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
           ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
-          BrowserWindow: DeskWindow, Menu: inert, dialog: inert, net, protocol: inert, session: inert, shell: inert,
+          BrowserWindow: DeskWindow, Menu: inert, dialog: inert, net, protocol: inert, session: directSession, shell: inert,
           screen, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage, powerMonitor: inert,
         };
         process.env.XDG_CURRENT_DESKTOP = "GNOME";
