@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 132;
+const EXPECTED = 134;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -1528,6 +1528,64 @@ async function answerStartBusyRenameScene(src) {
   return { ok, detail: brief({ okAns: ans && ans.ok, attempts, alphaMoved: !!alphaMoved, storeMoved: !!storeMoved }) };
 }
 
+/* (x6k) A set-aside whose later step fails (beta.ec's move) and whose move back of `failBack` fails too, "" for none. What the stand-in
+   for the file system refuses is only ever a rename, so nothing real is held open. */
+async function keptOf(src, failBack) {
+  let failing = false;
+  const inAside = s => String(s).indexOf(path.sep + "Set aside" + path.sep) >= 0;
+  const fsWrap = real => new Proxy(real, {
+    get(target, prop) {
+      if (prop === "renameSync") {
+        return (from, to) => {
+          if (failing && !inAside(from) && /beta\.ec$/i.test(String(from))) throw new Error("disk full");
+          if (failing && failBack && inAside(from) && path.basename(String(from)) === failBack) throw new Error("disk full");
+          return target.renameSync(from, to);
+        };
+      }
+      const v = target[prop];
+      return typeof v === "function" ? v.bind(target) : v;
+    }
+  });
+  const r = await renewScene(src, { boot: { fsWrap } }), T = r.shell.T, w = r.world, UD = r.shell.UD;
+  if (typeof T.storeAnswerNow !== "function") return { why: "no storeAnswerNow" };
+  const catDir = T.storeSyncFolder();
+  fs.mkdirSync(catDir, { recursive: true });
+  const aBytes = Buffer.from("ALPHA_KEPT_WHOLE\n"), bBytes = Buffer.from("BETA_KEPT_WHOLE\n");
+  fs.writeFileSync(path.join(catDir, "alpha.ec"), aBytes);
+  fs.writeFileSync(path.join(catDir, "beta.ec"), bBytes);
+  const syncA = T.get().storeSyncing;
+  if (syncA) { syncA.merge(); const c = syncA.channel(); if (c) { c.kick(); await c.idle(); } }
+  const heldA = T.signinState().held;
+  T.signinOutNow();
+  seatAnother(T, w, heldA);
+  await T.storeTurn();
+  const treeBefore = storeTree(UD);
+  failing = true;
+  const ans = await T.storeAnswerNow("start");
+  failing = false;
+  const root = path.join(UD, "Set aside"), dirs = fs.existsSync(root) ? fs.readdirSync(root) : [];
+  const f = ans && typeof ans.folder === "string" ? ans.folder : "";
+  const read = p => (p && fs.existsSync(p) ? fs.readFileSync(p) : null);
+  const opened = await r.shell.ipc.handle["etiuda:open-set-aside"]({ senderFrame: { parent: null, url: "file:///desk/engine/etiuda.html" } });
+  const alphaAside = read(f && path.join(f, "alpha.ec")), alphaHome = read(path.join(catDir, "alpha.ec")), betaHome = read(path.join(catDir, "beta.ec"));
+  return { kept: !!ans && ans.ok === false && ans.kept === true, under: !!f && path.dirname(f) === root && fs.existsSync(f), dirs: dirs.length,
+    treeBefore: treeBefore !== "", storeHome: storeTree(UD) === treeBefore ? "whole" : storeTree(UD) === "" ? "none" : "changed",
+    storeAside: f && treeBefore && storeTree(f) === treeBefore ? "whole" : "no",
+    alphaAside: alphaAside ? alphaAside.equals(aBytes) : null, alphaHome: alphaHome ? alphaHome.equals(aBytes) : null, betaHome: betaHome ? betaHome.equals(bBytes) : null,
+    logged: !!f && r.shell.said.some(l => l.indexOf(f) >= 0), opened: opened === true ? (r.shell.openedPaths.slice(-1)[0] === f ? "it" : "another") : opened && opened.why || "no",
+    line: T.storeView().line };
+}
+/* (x6k) The catalog's move back failing, then the store folder's, then none: nothing the person had is deleted. */
+async function answerStartKeptScene(src) {
+  const cat = await keptOf(src, "alpha.ec"), store = await keptOf(src, "store"), none = await keptOf(src, "");
+  const ok = cat.kept && cat.under && cat.dirs === 1 && cat.alphaAside === true && cat.alphaHome === null && cat.betaHome === true && cat.treeBefore && cat.storeHome === "whole"
+      && cat.logged && cat.opened === "it" && cat.line === "ask"
+    && store.kept && store.under && store.dirs === 1 && store.treeBefore && store.storeAside === "whole" && store.storeHome === "none" && store.alphaHome === true && store.betaHome === true
+      && store.alphaAside === null && store.logged && store.opened === "it" && store.line === "ask"
+    && !none.kept && none.dirs === 0 && none.treeBefore && none.storeHome === "whole" && none.alphaHome === true && none.betaHome === true && none.opened === "gone" && none.line === "ask";
+  return { ok, detail: brief({ cat, store, none }) };
+}
+
 const LEGS = [
   ["d4h", leaveScene, "This computer leaves the store's list: the relay withdraws its key and the folder's file names it no more, under the last look's store certificate, nothing left owed"],
   ["d4i", leaveOwedScene, "the relay not reached at This computer: the folder's file leaves it out at once, the keys kept sealed as owed, and the next seated renewal has the relay withdraw it"],
@@ -1587,6 +1645,7 @@ const LEGS = [
   ["x6w", answerNeighboursScene, "after an answer lifts the hold, A's keys, owed leave, owed store/end and folder token still never reach B"],
   ["x6o", openSetAsideScene, "opening the set-aside folder uses its no-arg IPC channel, opens only the newest Start from my account folder, refuses page args, and opens/creates nothing when gone"],
   ["x6p", answerStartBusyRenameScene, "set-aside moves whose first rename fails busy retry via renamePatiently and succeed"],
+  ["x6k", answerStartKeptScene, "a set-aside whose later step fails and whose move back of the catalog, or of the store folder, fails keeps that whole in the set-aside folder, which stays, the log names it, the answer carries it and the button opens it; where every move back succeeds the folder goes"],
 ];
 const results = {};
 const scenes = Object.fromEntries(LEGS.map(([id, scene]) => [id, scene]));
@@ -1680,6 +1739,7 @@ const PLANTS = [
   ["x6o", swap("  if (!folder || !isDir) return { ok: false, why: \"gone\" }; /* plant:open-aside-gone */", "  if (!folder) return { ok: false, why: \"gone\" }; /* plant:open-aside-gone */"), "a gone set-aside folder still calls shell.openPath"],
   ["x6p", swap("  try { renamePatiently(from, to); } /* plant:aside-move-patient */", "  try { fs.renameSync(from, to); } /* plant:aside-move-patient */"), "storeMoveFile uses a bare fs.renameSync instead of renamePatiently"],
   ["x6p", swap("    if (fs.existsSync(sDir)) { renamePatiently(sDir, sDest); movedStore = { from: sDir, to: sDest }; } /* plant:aside-store-patient */", "    if (fs.existsSync(sDir)) { fs.renameSync(sDir, sDest); movedStore = { from: sDir, to: sDest }; } /* plant:aside-store-patient */"), "storeSetAside moves userData/store with a bare fs.renameSync"],
+  ["x6k", swap("    if (aside && back) { try { fs.rmSync(aside, { recursive: true, force: true }); } catch {} } /* plant:aside-kept */", "    if (aside) { try { fs.rmSync(aside, { recursive: true, force: true }); } catch {} } /* plant:aside-kept */"), "the set-aside folder removed whether or not every move back succeeded"],
 ];
 for (const [id, change, what] of PLANTS) {
   const line = "p " + id + " in a copy of shell/main.js turns " + id + " red (" + what + ")";

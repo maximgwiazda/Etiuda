@@ -15,6 +15,7 @@
  *       given it is the shell's storeConsent, from an On marked for the trusted click, with no bubble before the provider's page
  *   m3  the row and the question in Polish
  *   r1  storeRow's line for each state
+ *   c9k a Start from my account that failed with something kept in the set-aside folder: the notice's second sentence, its button
  * Plants: the page's word to the shell that it showed the bubble taken out (c9a red: said again after Dismiss); firstSay saying at a
  * look that did not make the store (c9d red).
  */
@@ -38,7 +39,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 23;
+const EXPECTED = 25;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const STORE = path.join(E.ROOT, "shell", "sync", "store.cjs");
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -611,6 +612,47 @@ async function main() {
     check(!bad.length, "c9j Open this folder refusal lines distinguish gone and could-not-open in EN and PL without the team's-folder text", bad.length ? bad : undefined);
   }
 
+  /* c9k: a Start from my account that failed with something kept in the set-aside folder: the notice's second sentence alone, its
+     Open this folder button calling openSetAside with no arguments, no path in the text (EN light & PL dark). */
+  const checkKeptNotice = async pageName => {
+    const want = {
+      en: { text: "What was here before is kept on this computer, in Etiuda's \"Set aside\" folder, and is never uploaded.", btns: ["Open this folder", "Dismiss"] },
+      pl: { text: "Poprzednia zawartość jest zachowana na tym komputerze, w folderze Etiudy o nazwie Set aside, i nigdy nie jest wysyłana.", btns: ["Otwórz ten folder", "Zamknij"] },
+    };
+    const folder = "C:\\Users\\Ada.User\\Set aside\\2026-11-15 18.10";
+    const bad = [];
+    for (const [lang, theme] of [["en", "light"], ["pl", "dark"]]) {
+      const p = await boot({ page: pageName, lang, theme, view: ASK_NOW });
+      try {
+        await sleep(350);
+        await p.evaluate(f => {
+          window.E_HOST.storeAnswer = async c => { window.__st.answers.push(c);
+            return { ok: false, choice: c, folder: f, kept: true, view: { shown: true, line: "ask", on: false, held: false, why: "", since: 0, say: "", askNow: false } }; };
+          const bs = [...document.querySelectorAll("#eSyncWhose button")]; if (bs[1]) bs[1].click();
+        }, folder);
+        await sleep(250);
+        const got = await p.evaluate(() => {
+          const n = document.getElementById("eSyncChoiceNote");
+          if (!n) return null;
+          const q = n.querySelector("p"), b = q ? q.querySelector("b") : null;
+          return { at: window.__bubAt(n, document.getElementById("signinBtn")), lead: b ? b.textContent : "", full: q ? q.textContent : "",
+            btns: [...n.querySelectorAll("button")].map(x => x.textContent), answers: window.__st.answers.slice() };
+        });
+        await p.evaluate(() => { const b = document.querySelector("#eSyncChoiceNote button:not(.primary)"); if (b) b.click(); });
+        await sleep(150);
+        const calls = await p.evaluate(() => window.__st.openAsideCalls);
+        if (!got || !got.at || !got.at.ok || got.lead !== want[lang].text || got.full !== want[lang].text || got.full.includes(folder)
+          || JSON.stringify(got.btns) !== JSON.stringify(want[lang].btns) || JSON.stringify(got.answers) !== JSON.stringify(["start"])
+          || !Array.isArray(calls) || calls.length !== 1 || calls[0].length !== 0) bad.push({ lang, got, calls });
+      } finally { await p.close(); }
+    }
+    return bad;
+  };
+  {
+    const bad = await checkKeptNotice("etiuda.html");
+    check(!bad.length, "c9k a Start from my account that failed with something kept in the set-aside folder says the notice's second sentence alone, with Open this folder (EN & PL, no path in text)", bad.length ? bad : undefined);
+  }
+
   /* r1: storeRow, and roomNext. */
   const rowBad = ST => {
     const now = Date.UTC(2026, 10, 20), D = 24 * 3600 * 1000;
@@ -727,6 +769,18 @@ async function main() {
       detail = bad.length ? "red: " + JSON.stringify(bad[0]) : "still held";
       check(bad.length > 0, "p c9j saying one refusal line for both reasons turns c9j red", detail);
     } else check(false, "p c9j saying one refusal line for both reasons turns c9j red", detail);
+  }
+  if (PLANTS_OFF) skip("p c9k leaving the kept answer's notice out turns c9k red");
+  else {
+    const KEPT_PLANT = ['if (res && !res.ok && res.kept === true) syncChoiceNotice("kept");', 'void 0;'];
+    const n = PAGE.split(KEPT_PLANT[0]).length - 1;
+    let detail = "the plant's anchor is there " + n + " times";
+    if (n === 1) {
+      fs.writeFileSync(path.join(lab, "planted-kept.html"), PAGE.split(KEPT_PLANT[0]).join(KEPT_PLANT[1]));
+      const bad = await checkKeptNotice("planted-kept.html");
+      detail = bad.length ? "red: " + JSON.stringify(bad[0]) : "still held";
+      check(bad.length > 0, "p c9k leaving the kept answer's notice out turns c9k red", detail);
+    } else check(false, "p c9k leaving the kept answer's notice out turns c9k red", detail);
   }
   if (PLANTS_OFF) skip("p c9d firstSay saying at a look that did not make the store turns c9d red");
   else {

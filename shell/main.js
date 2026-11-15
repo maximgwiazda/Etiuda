@@ -11448,6 +11448,8 @@ function storeMoveFile(from, to) {
     try { fs.unlinkSync(from); } catch (e2) { try { fs.unlinkSync(to); } catch {} throw e2; }
   }
 }
+/* {folder, kept}: the dated folder, or "" where nothing was set aside; `kept` where a set-aside failed and what could not be put back
+   is still in that folder. */
 function storeSetAside() {
   const ud = app.getPath("userData");
   let aside = "", movedStore = null;
@@ -11476,17 +11478,21 @@ function storeSetAside() {
     for (const k of Object.keys(deskKeys || {})) if (L.follows("k:" + k)) clear[k] = null;
     if (Object.keys(clear).length && !patchDesk(JSON.stringify(clear))) throw new Error("desk.json could not be updated"); /* plant:answer-aside-clear */
     if (Object.keys(clear).length) deskSyncedTell(clear);
-    return aside;
+    return { folder: aside, kept: false };
   } catch (e) {
+    let back = true;
     for (let i = movedFiles.length - 1; i >= 0; i--) {
-      try { storeMoveFile(movedFiles[i].to, movedFiles[i].from); } catch {}
+      try { storeMoveFile(movedFiles[i].to, movedFiles[i].from); } catch { back = false; }
     }
     try {
       if (movedStore) storeMoveFile(movedStore.to, movedStore.from); /* plant:answer-aside-rollback */
-    } catch {}
-    if (aside) { try { fs.rmSync(aside, { recursive: true, force: true }); } catch {} }
+    } catch { back = false; }
     console.error("etiuda: could not set aside the desk - " + e.message);
-    return "";
+    /* The folder goes only where every move back succeeded: what one could not put back is in it, whole. */
+    if (aside && back) { try { fs.rmSync(aside, { recursive: true, force: true }); } catch {} } /* plant:aside-kept */
+    if (!aside || back) return { folder: "", kept: false };
+    console.error("etiuda: what could not be put back is kept in " + aside);
+    return { folder: aside, kept: true };
   }
 }
 async function storeAnswerNow(choice) {
@@ -11501,9 +11507,11 @@ async function storeAnswerNow(choice) {
   if (choice !== "mine" && choice !== "start") return { ok: false, choice: "", folder: "", view: storeView() };
   let folder = "";
   if (choice === "start") {
-    folder = storeSetAside();
-    if (!folder) return { ok: false, choice: "start", folder: "", view: storeView() };
-    storeSetAsideFolder = folder;
+    const set = storeSetAside();
+    if (set.folder) storeSetAsideFolder = set.folder;
+    if (set.kept) return { ok: false, choice: "start", folder: set.folder, kept: true, view: storeView() };
+    if (!set.folder) return { ok: false, choice: "start", folder: "", view: storeView() };
+    folder = set.folder;
     clearTimeout(storeSyncTimer); storeSyncTimer = null;
     storeSyncStop(); storeSyncing = null; /* plant:answer-aside-syncing */
   }

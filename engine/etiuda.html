@@ -28295,13 +28295,13 @@ What you type stays in this browser only.`;
     return d;
   }
   function syncChoiceNotice(choice) {
-    if (choice !== "mine" && choice !== "start") return;
+    if (choice !== "mine" && choice !== "start" && choice !== "kept") return;
     const btn = $("#signinBtn");
     if (!btn || !btn.getClientRects().length) return;
     const tpl = choice === "mine" ? t("Syncing now, with what was already on this desk.") : t(`This desk now has your account's content. What was here before is kept on this computer, in Etiuda's "Set aside" folder, and is never uploaded.`);
     const i = tpl.indexOf(". ");
-    const head = i < 0 ? tpl : tpl.slice(0, i + 1), tail = i < 0 ? "" : " " + tpl.slice(i + 2);
-    const extra = choice === "start" ? { label: t("Open this folder"), onClick: () => eOpenSetAside() } : null;
+    const head = choice === "kept" ? i < 0 ? tpl : tpl.slice(i + 2) : i < 0 ? tpl : tpl.slice(0, i + 1), tail = choice === "kept" || i < 0 ? "" : " " + tpl.slice(i + 2);
+    const extra = choice !== "mine" ? { label: t("Open this folder"), onClick: () => eOpenSetAside() } : null;
     const d = syncNoticeBubble("eSyncChoiceNote", head, tail, () => $("#signinBtn"), true, () => {
       const said2 = document.getElementById("eSyncSaid");
       if (said2) hangBubble(said2, () => $("#signinBtn"));
@@ -28315,6 +28315,7 @@ What you type stays in this browser only.`;
     try {
       return Promise.resolve(h.storeAnswer(String(choice || ""))).then((res) => {
         if (res && res.ok) syncChoiceNotice(res.choice);
+        if (res && !res.ok && res.kept === true) syncChoiceNotice("kept");
         return res && res.view ? syncRead(res.view) : syncNow();
       }, () => syncNow());
     } catch (e) {
