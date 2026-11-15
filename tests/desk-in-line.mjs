@@ -24,6 +24,8 @@
  *   ild7        every section of the three screens: no word stands on the dots without a ground of its own
  *   ilh1..ilh5  the designer's like-for-like items Max approved: each rail's head is Studio's small capitals label, the row at
  *               its foot a row with its icon and its keys plain, and a new key's tag Studio's small pill beside the keys
+ *   ilk1, ilk2  the keyboard shortcuts, in that section and in All settings, light and dark: one card of ruled rows, as
+ *               Studio's card of rows (a row's top line, no gap, no radius of its own)
  *   ild1..ild6  Settings, the Library and Maintenance, light and dark: the page is dotted as Studio's is, measured as the
  *               pixels of an empty 48 px patch that stand off the ground, and its first words stand on the ground (Max's
  *               note 9: "Desk has no dotted background behind Settings/Library/Maintenance, unlike similar tabs in Studio.")
@@ -378,6 +380,51 @@ try {
     await closePage(p);
   }
   // heads>>
+
+  // <<shortcuts
+  /* Studio's keyboard list is one card: the rows share it, a later row is ruled by a top line in the card's line colour,
+     and nothing sits between them. The section and All settings are read apart, because each draws the list into its own card. */
+  EXPECTED += 2;
+  for (const theme of ["light", "dark"]) {
+    const p = await boot(browser, theme);
+    const got = await p.evaluate(() => {
+      const alpha = (bg) => { if (!bg || bg === "transparent") return 0; const m = /\/\s*([\d.]+)\)$/.exec(bg) || /rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)/.exec(bg); return m ? parseFloat(m[1]) : 1; };
+      const read = (root) => {
+        const rows = [...root.querySelectorAll(".sc-row")].filter((r) => r.offsetParent !== null);
+        if (rows.length < 2) return { n: rows.length };
+        const list = rows[0].closest(".sc-list"), card = rows[0].closest(".sx-card");
+        const lcs = getComputedStyle(list), cs = getComputedStyle(rows[1]), ccs = card ? getComputedStyle(card) : null;
+        const a = rows[0].getBoundingClientRect(), b = rows[1].getBoundingClientRect();
+        let beside = 0;
+        for (let i = 0; i < Math.min(rows.length, 6); i++) for (let j = i + 1; j < Math.min(rows.length, 6); j++) {
+          const A = rows[i].getBoundingClientRect(), B = rows[j].getBoundingClientRect();
+          if (Math.abs(A.top - B.top) < 8 && Math.abs(A.left - B.left) > 40) beside++;
+        }
+        const probe = document.createElement("i");
+        probe.style.borderTop = "1px solid var(--line)"; probe.style.background = "var(--panel)";
+        document.body.appendChild(probe);
+        const pcs = getComputedStyle(probe);
+        const line = pcs.borderTopColor, panel = pcs.backgroundColor;
+        probe.remove();
+        return { n: rows.length, gap: lcs.gap, radius: cs.borderTopLeftRadius, top: cs.borderTopWidth, side: cs.borderRightWidth,
+          topColor: cs.borderTopColor, line, firstTop: getComputedStyle(rows[0]).borderTopWidth,
+          vGap: Math.round(b.top - a.bottom), beside, oneCard: rows.every((r) => r.closest(".sx-card") === card),
+          cardBare: !ccs || alpha(ccs.backgroundColor) === 0, cardIsPanel: ccs && ccs.backgroundColor === panel };
+      };
+      openSettings("keys");
+      const keys = read(document.getElementById("setBody"));
+      openSettings("all");
+      const all = read(document.querySelector('#setBody [data-sec="keys"]'));
+      return { keys, all };
+    });
+    const ruled = (x) => x && x.n >= 8 && x.gap === "0px" && x.radius === "0px" && x.top === "1px" && x.side === "0px"
+      && x.topColor === x.line && x.firstTop === "0px" && x.vGap === 0 && x.beside === 0 && x.oneCard && !x.cardBare && x.cardIsPanel;
+    check(ruled(got.keys) && ruled(got.all),
+      "ilk" + (theme === "light" ? "1" : "2") + " " + theme + ": the shortcuts stand in one card, a later row ruled by a top line, no gap and no radius of its own, in the section and in All settings",
+      got);
+    await closePage(p);
+  }
+  // shortcuts>>
 
   done = true;
 } catch (e) {
