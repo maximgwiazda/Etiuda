@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 81;
+const EXPECTED = 85;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -114,8 +114,8 @@ function worldOf(o) {
       /* Google's answer names the scopes granted: the folder's only where the person left its line ticked. */
       const c = w.codes[new URLSearchParams(body).get("code")], now = Date.now();
       if (!c) return json(400, { error: "invalid_grant" });
-      return json(200, { token_type: "Bearer", id_token: jwt({ iss: "https://accounts.google.com", aud: G_CLIENT, sub: SUB, nonce: c.nonce, exp: Math.floor(now / 1000) + 3600 }),
-        scope: c.folder ? "openid " + DRIVE_SCOPE : "openid", access_token: c.folder ? w.access : "stand-in-google-token-not-the-folder", refresh_token: "rt-google", expires_in: 3600 });
+      return json(200, { token_type: "Bearer", id_token: jwt({ iss: "https://accounts.google.com", aud: G_CLIENT, sub: c.sub || SUB, nonce: c.nonce, exp: Math.floor(now / 1000) + 3600 }),
+        scope: c.folder ? "openid " + DRIVE_SCOPE : "openid", access_token: c.folder ? c.access || w.access : "stand-in-google-token-not-the-folder", refresh_token: "rt-google", expires_in: 3600 });
     }
     if (u === STAGING + "signin/desk") {
       w.service.push(body);
@@ -624,7 +624,7 @@ function browserOf(world, mode) {
     const asks = /Files\.ReadWrite\.AppFolder|drive\.appdata/.test(q.get("scope") || "");
     if (asks && mode.refuse) return mode.refuse;
     const code = "code-" + (++codeN) + "-" + crypto.randomBytes(6).toString("hex");
-    world.codes[code] = { nonce: q.get("nonce"), folder: (folder || asks) && !mode.untick };
+    world.codes[code] = { nonce: q.get("nonce"), folder: (folder || asks) && !mode.untick, sub: mode.sub, access: mode.access };
     return "code=" + code;
   };
   b.go = async url => {
@@ -771,6 +771,42 @@ async function pressOn(r, clicked) {
   if (look) await look;
   return { answer, opened: r.shell.opened.slice(before), page: answer === "asked" ? r.b.pages[r.b.pages.length - 1] || { status: 0, body: "" } : null };
 }
+/* (fa) A FOLDER TOKEN IS THE SEATED ACCOUNT'S: a second Google sign-in whose seat the service refuses leaves the folder's token the
+   seated account's, not the refused one's (fa1); and an account signed in straight over another, with no folder token of its own yet, is
+   never handed the other's (fa2). */
+async function pressAgain(r, provider) {
+  const last = r.b.last;
+  r.shell.ipc.on["etiuda:signin-click"](r.e, provider);
+  await r.shell.ipc.handle["etiuda:signin"](r.e, provider);
+  await until(() => r.b.last !== last, 5000);
+  await r.b.last;
+  await new Promise(a => setTimeout(a, 60));
+  const look = r.shell.T.get().storeFlight;
+  if (look) await look;
+}
+async function refusedAccountScene(src) {
+  const r = await signinFlow(src, { provider: "google" }), T = r.shell.T;
+  const heldA = T.signinState().held, tokA = T.get().storeAccess ? T.get().storeAccess.token : "";
+  r.world.seatRefused = "signin";
+  r.mode.sub = "sub-of-another-person";
+  r.mode.access = "stand-in-folder-token-of-another-" + crypto.randomBytes(6).toString("hex");
+  await pressAgain(r, "google");
+  const a = T.get().storeAccess, held = T.signinState().held;
+  const ok = !!tokA && tokA === r.world.access && !!held && held.sub === heldA.sub && !(a && a.token === r.mode.access);
+  return { ok, detail: brief({ firstToken: !!tokA, stillA: !!held && held.sub === heldA.sub, tokenIsRefusedAccounts: !!a && a.token === r.mode.access }) };
+}
+async function overAnotherScene(src) {
+  const r = await signinFlow(src, { quiet: true }), T = r.shell.T, w = r.world;
+  const tokA = T.get().storeAccess ? T.get().storeAccess.token : "", onA = T.get().storeNow;
+  /* B seated over A with no folder step of its own (its quiet refresh too slow for the landing, say): B's own refresh answers B's token. */
+  seatAnother(T, w, T.signinState().held);
+  w.access = "stand-in-folder-token-of-another-" + crypto.randomBytes(6).toString("hex");
+  const from = w.graph.length;
+  await T.storeTurn();
+  const n = T.get().storeNow, usedA = w.graph.slice(from).filter(g => g.endsWith("Bearer " + tokA)).length;
+  const ok = !!tokA && !!onA && onA.state === "on" && !!n && n.state === "on" && usedA === 0;
+  return { ok, detail: brief({ firstOn: onA && onA.state, look: n && n.state + "/" + n.why, folderAskedWithA: usedA }) };
+}
 async function consentSwitchScene(src) {
   const r = await signinFlow(src, { refuse: DECLINED });
   const ungiven = !!r.now && r.now.why === "ungiven";
@@ -899,6 +935,8 @@ const LEGS = [
   ["gs", switchStopScene, "This computer and Everywhere stop the store's sync at once, the relay unreached, not at the next look"],
   ["gr", roomWireScene, "a write the store's relay refuses for its room turns the row full, and the next write it takes turns it on"],
   ["gt", teamFolderScene, "joined to a folder team, the store's sync takes no team catalog into the person's store, reads the person's own catalog as removed nowhere, and writes nothing from the store into the team's mirror"],
+  ["fa1", refusedAccountScene, "a second Google sign-in whose seat is refused leaves the folder's token the seated account's"],
+  ["fa2", overAnotherScene, "an account seated straight over another, with no folder step of its own, is never handed the other's folder token: its look asks its own"],
   ["w1", s => anotherScene(s, "look", true), "person A synced and signed out, which leaves no store keys here; person B seated on the same profile with an empty folder: B's look writes nothing of A's K or S into B's folder and makes B's own store"],
   ["w1d", s => anotherScene(s, "look", false), "the same where B signs in straight over A's sign-in"],
   ["w2", s => anotherScene(s, "leave", false), "a This computer A left owed is not written into B's folder with A's keys"],
@@ -956,6 +994,9 @@ const PLANTS = [
   ["gc", swap("function storeConflicts() { return storeSyncView().kept; } /* plant:store-conflicts */", "function storeConflicts() { return 0; } /* plant:store-conflicts */"), "the row counts no conflict"],
   ["gs", swap("  storeSyncStop(); /* plant:store-set-stop */\n", ""), "the switch leaves the sync running"],
   ["gr", swap("      room: storeRoom, /* plant:store-room */\n", ""), "the store's channel tells the row nothing"],
+  ["fa1", swap("io = Object.assign(signinIo(run), { folderToken: t => { folderGot = t; } });", "io = signinIo(run);"), "the run's folder token kept before the sign-in is taken"],
+  ["fa2", text => { const x = swap("storeAccess.who === storeWho(held) ? storeAccess : null; /* plant:access-who */", "true ? storeAccess : null; /* plant:access-who */")(text);
+    return x && swap("  if (storeAccess && storeAccess.who !== who) storeAccess = null;", "")(x); }, "a folder token reused for whoever is seated"],
   ["gt", swap("if (sayJoinPolicy().folder || relayHere() || folderTeamHere() || Object.keys(teamNeedsFolder).length) return \"\"; /* plant:sync-team-folder */", "if (false) return \"\"; /* plant:sync-team-folder */"), "the store's sync lists and writes the team's mirror as the person's folder"],
   ["w1", swap("  if (s.keys || s.leave || storeLeaveHere) {", "  if (false) {"), "a sign-out leaves the store's keys in store.json"],
   ["w1d", swap("  if (s.who === who) return true; /* plant:store-mine */", "  if (true) { s.who = who; return true; } /* plant:store-mine */"), "the keys kept for A are B's"],

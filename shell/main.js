@@ -10817,7 +10817,9 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
   if (!sealsForReal(safeStorage, process.platform)) { signinSaid = "signin-keyring"; tellSignin(); return signinView(); } /* plant:signin-keyring */
   const me = branchIdentity(true);
   if (!me) { signinSaid = "signin-none"; return signinView(); }
-  const run = { loop: null, provider: p.id, url: "" }, io = signinIo(run);
+  /* The folder's token the run hands is kept only once this sign-in is taken, so a refused account's never stands for the seated one. */
+  let folderGot = null;
+  const run = { loop: null, provider: p.id, url: "" }, io = Object.assign(signinIo(run), { folderToken: t => { folderGot = t; } });
   signinBusy = run;
   signinSaid = "";
   tellSignin();
@@ -10830,7 +10832,7 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
       let ans = await signinSeat(io, p.id, me.key, got.idToken, got.seed, Date.now, got.accessToken);
       let took = !!access;
       if (!access && !ans.ok && ans.reason === "access-token") { const m = await signinSeatAccess(io, p, me.key, got, got.seed, Date.now); ans = m.ans; got = m.got; took = m.access; }
-      signinTake(p.id, got, ans, Date.now(), took);
+      if (signinTake(p.id, got, ans, Date.now(), took) && folderGot) storeTokenTake(folderGot); /* plant:folder-take-after */
       signinFlush();
       if (ans.ok && ans.cert) {
         storeEndAgain().catch(() => false); storeLeaveNow(null);
@@ -11009,6 +11011,7 @@ function storeMine() {
   if (s.who) { s.until = 0; s.said = ""; s.told = false; s.org = false; delete s.off; }
   s.who = who;
   storeLeaveHere = null; storeOwedHere = ""; storeNow = null; storeSay = ""; storeFresh = false;
+  if (storeAccess && storeAccess.who !== who) storeAccess = null;
   storeSyncStop();
   storeSave();
   return true;
@@ -11040,13 +11043,14 @@ function storePolicyNow() {
   return storeOnFor(joinPolicyRead && joinPolicyRead.values, storeState().off);
 }
 function storeOn() { return storePolicyNow().on === true; }
-/* The folder's access token from the provider's last answer, {provider, token, until}, token "" where the folder's scope was refused;
+/* The folder's access token from the provider's last answer, {provider, token, until, who}, token "" where the folder's scope was refused,
+   `who` the account seated when it was taken (storeWho), and only that account's look asks with it;
    and the last look's result, {state, why, store, made, say}. Both in memory alone. */
 let storeAccess = null, storeNow = null, storeFlight = null;
 function storeTokenTake(t) {
   if (!t || typeof t.provider !== "string" || typeof t.token !== "string") return;
   storeMine();
-  storeAccess = { provider: t.provider, token: t.token, until: Number(t.until) || 0 };
+  storeAccess = { provider: t.provider, token: t.token, until: Number(t.until) || 0, who: storeWho(signinState().held) };
   /* The last answer to an asked consent decides whose refusal stands: a token or a person's no clears the organisation's. */
   const s = storeState(), org = t.token ? false : t.why === "org" ? true : t.why === "ungiven" ? false : s.org === true;
   if (org !== (s.org === true)) { s.org = org; storeSave(); }
@@ -11084,7 +11088,7 @@ async function storeAsk(method, url, headers, body) {
    managed path asks the service's resource alone), one quiet refresh for the folder's scope. {} where one stands, else {why}. */
 const STORE_TOKEN_SLACK_MS = 60 * 1000;
 async function storeTokenFor(p, held) {
-  const a = storeAccess && storeAccess.provider === p.id ? storeAccess : null;
+  const a = storeAccess && storeAccess.provider === p.id && storeAccess.who === storeWho(held) ? storeAccess : null; /* plant:access-who */
   if (a && a.token && a.until > Date.now() + STORE_TOKEN_SLACK_MS) return {};
   if (a && !a.token) return { why: storeUngiven() };
   const folder = signinFolderScope(p.id, ""), refresh = held.refresh ? signinKept(safeStorage, held.refresh) : "";
@@ -11464,11 +11468,11 @@ async function storeLookNow() {
   const held = signinState().held, me = branchIdentity(false);
   const p = held ? signinOffered().find(x => x.id === held.provider) : null;
   if (!p || !me || !held.cert || !signinCertOk(held.cert, me.key) || signinRevokedHas(held.revoked, held.cert)) return null;
+  if (sealsForReal(safeStorage, process.platform) && !storeMine()) return null;
   const pol = storePolicyNow();
   if (!pol.on) storeSyncStop();
   if (!pol.on) return null; /* plant:store-off */
   if (!sealsForReal(safeStorage, process.platform)) return storeSettle({ state: "unavailable", why: "" });
-  if (!storeMine()) return null;
   const L = StoreLib(), who = storeState().who;
   /* The look keeps to the account it began under: its folder token and its keeping, whoever is seated by the time it ends. */
   const ours = () => storeState().who === who && storeWho(signinState().held) === who; /* plant:store-look-ours */
