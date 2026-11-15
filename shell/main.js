@@ -3870,9 +3870,9 @@ function tryHeldUse() {
 
 /* ---- the team: its file beside the catalogs, its lead's key pinned, and this desk's team keys -----------
    A team file verifies under the lead key it names, so it is whole and nothing more: anybody who can write the
-   share can sign one. Its lead's key is pinned where the ring lists it for a catalog the team covers, or at the
-   first admission, a file whose roster carries a wrap this desk opens; nothing in a file under any other key is
-   then used, unless the file's handovers lead to that key from the pinned one, and the pin then moves to it. Each
+   share can sign one. Its lead's key is pinned by machine policy, by an invitation, or at the first admission, a
+   file whose roster carries a wrap this desk opens (decisions, the ruled ways in); a ring pins nothing. Nothing in a
+   file under any other key is then used, unless the file's handovers lead to that key from the pinned one, and the pin then moves to it. Each
    epoch's key is kept, so an edition sealed before a new epoch still opens. */
 const TEAM_MAX = 1024 * 1024;
 let teamPins = {};                             // team id -> {keyId, public}: the lead's key, once trusted
@@ -3976,14 +3976,6 @@ function rosterIdsOf(doc) {
 function deskIdsOnce(list) {
   return Array.from(new Set(list.map(String).filter(id => /^k-[0-9a-f]{16}$/.test(id)))).sort();
 }
-/* Whether a ring document lists this team's lead key for a catalog the team covers, read as v2RingRead reads a ring.
-   The file itself is the shell's to read. */
-function memberRingVouches(doc, ring) {
-  const covers = Array.isArray(doc.catalogs) ? doc.catalogs.map(String) : [];
-  return !!ring && typeof ring === "object" && +ring.format === 1 && ring.kind === "etiuda-ring" && Array.isArray(ring.keys)
-    && ring.keys.some(e => !!e && typeof e === "object" && covers.indexOf(String(e.catalog)) >= 0 && e.keyId === doc.lead.keyId
-      && e.alg === "Ed25519" && e.public === doc.lead.public);
-}
 /* A copy of the membership a heed is given, so the caller's pins, keys and barred list stay as they were. */
 function memberStateCopy(state) {
   const pins = Object.assign({}, state && state.pins);
@@ -3995,12 +3987,11 @@ function memberStateCopy(state) {
 /* What heeding one team file changes for one member. `doc` is the parsed file, or null. `state` is
    {pins, keys, barred, join}: pins is a team id to {keyId, public}, keys is a team id to the epochs
    already kept, barred is the team ids with no first admission, and join is the one request or null.
-   `seen` is {file, member, ring}: file is the path the words name, member is null or {id, sk} where sk
-   is the opened box key, false where that box would not open, or null where it has not been opened yet,
-   and ring is the parsed ring, null where there is none, or absent where it has not been read.
+   `seen` is {file, member}: file is the path the words name, member is null or {id, sk} where sk
+   is the opened box key, false where that box would not open, or null where it has not been opened yet.
    Returns the new state, the key (a buffer, null, or false where the box would not open) and the lines
    to say. A new epoch's key is returned for the caller to seal; it is not written into state, because
-   a seal can fail. Where needKey or needRing is set, nothing was decided and the caller calls again.
+   a seal can fail. Where needKey is set, nothing was decided and the caller calls again.
    A key below state.epochSeen for that team is not kept. Pure: only these declarations, crypto, Buffer and the arguments. */
 function memberHeed(doc, state, seen) {
   const file = seen && typeof seen.file === "string" ? seen.file : "";
@@ -4008,7 +3999,7 @@ function memberHeed(doc, state, seen) {
   const out = memberStateCopy(state);
   const said = [];
   const ret = (extra) => Object.assign({ state: out, key: null, said: said, stampClear: false, changed: false,
-    stop: false, needKey: false, needRing: false, team: "", epoch: 0, keep: false, unbar: false, pinned: false }, extra);
+    stop: false, needKey: false, team: "", epoch: 0, keep: false, unbar: false, pinned: false }, extra);
   if (!teamWhole(doc)) {
     said.push(file + " is not a team file whole under its lead's key, so nothing in it is used");
     return ret({ stop: true });
@@ -4042,8 +4033,9 @@ function memberHeed(doc, state, seen) {
   if (hasWrap && (member.sk === null || member.sk === undefined)) return ret({ needKey: true, team: doc.id });
   let key = null;
   if (hasWrap) key = member.sk ? unwrapTeamKey(member.sk, entry.wrap, doc.id, doc.epoch, member.id) : false;
-  if (!hadPin && !key && !invited && look.ring === undefined) return ret({ needRing: true, key: key, stampClear: key === false, team: doc.id });
-  if (!hadPin && !key && !invited && !memberRingVouches(doc, look.ring)) return ret({ stop: true, key: key, stampClear: key === false, team: doc.id });
+  let heeded = true;
+  heeded = hadPin || !!key || invited; /* plant:j14-no-ring */
+  if (!heeded) return ret({ stop: true, key: key, stampClear: key === false, team: doc.id });
   let changed = false, pinned = false, unbar = false;
   if (!hadPin || handed) { out.pins[doc.id] = lead; pinned = true; changed = true; }
   if (!hadPin) {
@@ -4539,7 +4531,7 @@ function memberHeedUnderPolicy(doc, state, seen, policy) {
     const out = memberStateCopy(state);
     const said = [file + " is signed by a key other than the lead's this desk trusts for team " + doc.id + ", so nothing in it is used"];
     return { state: out, key: null, said: said, stampClear: false, changed: false, stop: true,
-      needKey: false, needRing: false, team: String(doc.id), epoch: 0, keep: false, unbar: false, pinned: false };
+      needKey: false, team: String(doc.id), epoch: 0, keep: false, unbar: false, pinned: false };
   }
   const prior = state && state.pins ? state.pins[doc.id] : null;
   const already = !!prior && prior.public === lead.public && prior.keyId === lead.keyId;
@@ -4549,7 +4541,7 @@ function memberHeedUnderPolicy(doc, state, seen, policy) {
   const barred = seeded.barred.indexOf(doc.id);
   if (barred >= 0) seeded.barred.splice(barred, 1);
   const r = memberHeed(doc, seeded, seen);
-  if (r.stop || r.needKey || r.needRing) return r;
+  if (r.stop || r.needKey) return r;
   r.pinned = true;
   r.changed = true;
   if (barred >= 0) r.unbar = true;
@@ -4573,14 +4565,6 @@ function relayRingAt(root) {
 function readRing() {
   const root = catalogFolder(), relay = relayRingAt(root);
   return relay === undefined ? readRingFile(root) : relay;
-}
-/* The ring a team file's first pin is heeded with: on the folder the ring file, and on the relay none at all. The relay's
-   first step let a relay file's own signed ring vouch for the key that signed it; its fourth step inverts that (board 907):
-   on the relay a first pin comes from an invitation, machine policy or an answered request, never from a ring. The
-   signed ring is still the one a catalog's signature is read against (relayRingAt). */
-function ringHeeded(doc, root) {
-  const channel = teamChannelOf(doc);
-  return !channel ? null : channel.kind === "relay" ? null : readRingFile(root); /* plant:ring-relay */
 }
 function teamSay(line) {
   if (teamSaid.has(line)) return;
@@ -4671,20 +4655,16 @@ function heedTeam() {
   const state = { pins: teamPins, keys: teamKeys, barred: Array.from(teamBarred), join: teamJoin, epochSeen: teamEpochSeen };
   const member = deskBranch ? { id: branchIdOf(deskBranch.sign.pub), sk: null } : null;
   const policyLead = sayJoinPolicy().lead;
-  let seen = { file: used, member: member, ring: undefined };
+  let seen = { file: used, member: member };
   let r = memberHeedUnderPolicy(doc, state, seen, policyLead);
   if (r.needKey) {
     const sk = openPrivate(deskBranch.box.priv);
-    seen = { file: file, member: { id: member.id, sk: sk || false }, ring: undefined };
-    r = memberHeedUnderPolicy(doc, state, seen, policyLead);
-  }
-  if (r.needRing) {
-    seen = { file: file, member: seen.member, ring: ringHeeded(doc, root) };
+    seen = { file: file, member: { id: member.id, sk: sk || false } };
     r = memberHeedUnderPolicy(doc, state, seen, policyLead);
   }
   r.said.forEach(teamSay);
   if (r.stampClear) teamStamp = "";
-  if (r.stop || r.needKey || r.needRing) return;
+  if (r.stop || r.needKey) return;
   /* A whole file is heeded only where its rev and channel read, and where it is not an older epoch than the floor kept
      for its team and lead key, nor a lower rev at that epoch. */
   const rev = teamRevOf(doc), channel = teamChannelOf(doc);
@@ -5811,7 +5791,7 @@ function askJoin(file, name) {
     return joinView();
   const nonce = crypto.randomBytes(32).toString("hex"), team = String(d.team);
   const j = { team: team, file: path.basename(at), nonce: nonce, commit: joinCommit(team, me.key, me.box, nonce), asked: Date.now(),
-              held: newestEpoch(team), name: String(name || "").trim().slice(0, 120), before: inviteBefore(team) };
+              held: newestEpoch(team), name: String(name || "").trim().slice(0, 120) };
   try { writeJoin(joinRequestDoc(j, null)); }
   catch (e) {
     console.error("etiuda: the request to join could not be written - " + e.message);
@@ -5894,12 +5874,6 @@ function cancelJoin() {
      newer key from elsewhere, one the roster's wrap gave, means the desk is admitted, and Cancel leaves what it set (921n). */
   const b = j && j.invite && j.invite.before, wrapped = (j && j.invite && ((j.invite.relay && j.invite.relay.wrapped) || j.invite.wrapped)) || [];
   if (b && newestEpoch(j.team, wrapped) === (b.epoch || 0)) undoInvite(j.team, b, j.invite); /* plant:c7-cancel */
-  /* A request with no invitation whose answer pinned a lead the desk did not trust before, and no admission since: Cancel takes
-     back that pin and the bar or leave it lifted, since the opening was signed only by the lead of the folder's own file. */
-  const a = j && !j.invite ? j.before : null;
-  let answered = false;
-  answered = !!a && !a.pin && teamPinFrom[j.team] === "answer" && newestEpoch(j.team) === (a.epoch || 0); /* plant:j14-cancel-answer */
-  if (answered) undoInvite(j.team, a, {});
   persistDeskEnvelope();
   return joinView();
 }
@@ -6124,7 +6098,7 @@ function joinKept(j) {
     && Number.isInteger(j.held) && j.held >= 0 && typeof j.name === "string"
     && (o === undefined || (!!o && !!o.lead && typeof o.lead.keyId === "string" && JOIN_HEX_RE.test(String(o.lead.public))
       && JOIN_HEX_RE.test(String(o.nonce))))
-    && (j.refused === undefined || j.refused === true) && (j.before === undefined || beforeKept(j.before));
+    && (j.refused === undefined || j.refused === true);
   if (!ok) return null;
   if (j.invite === undefined) return j;
   const inv = j.invite, who = inv && inv.lead;
@@ -6936,8 +6910,8 @@ function forgetLead(team, left) {
 
 /* ---- the relay: the team folder as a mirror the channel layer keeps (board 900, relay slice 1, step 4) -----------------
    The desk follows a relay address only for a team whose lead was pinned by an invitation, machine policy or an answered
-   request (board 907): a ring and a wrapped key both travel in a file anybody who can write the share may sign, so a first
-   pin by a file's own vouching is no wider than today's folder ring. Its relay address is followed only when the lead-signed
+   request (board 907): a wrapped key travels in a file anybody who can write the share may sign, so a desk that pinned its
+   lead by a file's own wrap is held to more. Its relay address is followed only when the lead-signed
    roster names this desk, no machine policy names a folder, and the address is the built-in relay (board 945 stage 3 (a), which
    widens 907 knowingly: whoever planted that first team file can move such a desk to a built-in relay team they lead). A folder
    named by machine policy wins over any relay, and the desk says so. */

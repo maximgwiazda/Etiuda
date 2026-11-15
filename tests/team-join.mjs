@@ -39,7 +39,7 @@ const ASIDE = {
   "15ep": offWindows("15ep", "15em stands aside off Windows, so lifting plant:w2-folder-not-writable has no green leg there to turn"),
 };
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 190;
+const EXPECTED = 191;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -462,8 +462,9 @@ try {
     "15nb an opening signed by anyone but that lead is not taken: the desk waits and reveals nothing ("
     + (openState.join ? openState.join.state : "no join") + ", said " + JSON.stringify(openSaid) + ")");
 
-  /* ---- review 14, finding 1: a writer of the share swaps in a team file and an unsigned ring under its own key, and opens the
-     request with that key. The answer pins it before any admission; Cancel takes that pin back, with the bar and the leave. ---- */
+  /* ---- review 14, finding 1, and the ruled ways in (decisions: a desk joins by machine policy, by Studio admitting its request, or by
+     an invitation): a writer of the share swaps in a team file and an unsigned ring under its own key. A ring pins nothing, so the
+     forger's opening pins nothing either, and the bar and the leave stand; with no request at all the swapped file pins nothing. ---- */
   const answeredForger = async (name, src) => {
     const share = folder(name + "-share");
     put(share, "etiuda-team.json", teamFile([], { lead: FORGED, signer: forger.privateKey }));
@@ -477,30 +478,45 @@ try {
     const D = loadDesk(ud, src);
     syncFolder(share);
     const me = await D.ask("etiuda:branch-identity", true);
-    const barredBefore = JSON.stringify(D.envelope().teamBarred || null) + JSON.stringify(D.envelope().teamLeft || null);
     await D.join("ask", "lamps.ec", "Rut");
     const req = JSON.parse(fs.readFileSync(path.join(share, "desks", me.id, "join.json"), "utf8"));
     put(share, P.JOINS_NAME, signJoinsDoc([{ desk: me.id, commit: req.commit, nonce: nonce() }], forger.privateKey, FORGED));
-    const coded = await D.join("state");
     await D.join("state");
-    const e1 = D.envelope(), pinned = !!(e1.teamPins && e1.teamPins[TEAM] && e1.teamPins[TEAM].public === FORGED.public);
+    await D.join("state");
+    const e1 = D.envelope();
+    const barredStill = e => JSON.stringify(e.teamBarred || null) === JSON.stringify([TEAM]) && !!(e.teamLeft && e.teamLeft[TEAM] === left);
     await D.join("cancel");
     const e2 = D.envelope();
-    return { code: !!(coded.join && coded.join.state === "code"), pinned, from: e1.teamPinFrom ? e1.teamPinFrom[TEAM] : null,
-      barredBefore: barredBefore === JSON.stringify([TEAM]) + JSON.stringify({ [TEAM]: left }),
-      pinAfter: !!(e2.teamPins && e2.teamPins[TEAM]), barredAfter: JSON.stringify(e2.teamBarred || null) === JSON.stringify([TEAM]),
-      leftAfter: !!(e2.teamLeft && e2.teamLeft[TEAM] === left), joinAfter: !!e2.teamJoin };
+    return { pinned: !!(e1.teamPins && e1.teamPins[TEAM]), barred: barredStill(e1), opens: D.api.readCatalog() !== null,
+      pinAfter: !!(e2.teamPins && e2.teamPins[TEAM]), barredAfter: barredStill(e2), joinAfter: !!e2.teamJoin };
   };
   const af = await answeredForger("j14a");
-  check(af.code && af.pinned && af.from === "answer" && af.barredBefore && !af.pinAfter && af.barredAfter && af.leftAfter && !af.joinAfter,
-    "j14a review 14.1: a forger's team file, its unsigned ring and its signed opening pin its key as the answer before any admission, and"
-    + " Cancel takes that pin back and puts the bar and the leave it lifted back as they were: " + JSON.stringify(af));
-  if (PLANTS_OFF) skip("j14a2 lifting plant:j14-cancel-answer leaves the answered pin after Cancel (ETIUDA_PLANTS=off)");
+  check(!af.pinned && af.barred && !af.opens && !af.pinAfter && af.barredAfter && !af.joinAfter,
+    "j14a review 14.1: a forger's team file, its unsigned ring and its signed opening pin nothing on a desk that left the team, and the bar"
+    + " and the leave stand, before Cancel and after: " + JSON.stringify(af));
+  const ringOnly = async (name, src) => {
+    const share = folder(name + "-share");
+    put(share, "etiuda-team.json", teamFile([], { lead: FORGED, signer: forger.privateKey }));
+    put(share, "etiuda-ring.json", { format: 1, kind: "etiuda-ring", keys: [{ catalog: "lamp-shop", keyId: FORGED.keyId, alg: "Ed25519", public: FORGED.public }] });
+    put(share, "lamps.ec", P.sealCatalog(K1, TEAM, 1, A1));
+    const ud = path.join(LAB, name);
+    fs.mkdirSync(ud, { recursive: true });
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" } }), "utf8");
+    const D = loadDesk(ud, src);
+    syncFolder(share);
+    await D.ask("etiuda:branch-identity", true);
+    const v = await D.join("state");
+    return { pinned: !!(D.envelope().teamPins && D.envelope().teamPins[TEAM]), leads: v && v.leads ? v.leads.length : -1 };
+  };
+  const ro14 = await ringOnly("j14f");
+  check(!ro14.pinned && ro14.leads === 0,
+    "j14f the ruled ways in: a desk with no pin, no invitation and no admission, beside a swapped team file and an unsigned ring that lists"
+    + " its key, heeds nothing and pins nothing: " + JSON.stringify(ro14));
+  if (PLANTS_OFF) skip("j14f2 lifting plant:j14-no-ring heeds that file and pins its key (ETIUDA_PLANTS=off)");
   else {
-    const planted = SRC.split("\n").map(l => (l.indexOf("plant:j14-cancel-answer") >= 0 ? "  answered = false;" : l)).join("\n");
-    const pf = SRC.indexOf("plant:j14-cancel-answer") >= 0 ? await answeredForger("j14a-plant", planted) : null;
-    check(!!pf && pf.pinned && pf.pinAfter, "j14a2 lifting plant:j14-cancel-answer leaves the answered pin after Cancel (FAIL j14a): "
-      + JSON.stringify(pf));
+    const planted = SRC.split("\n").map(l => (l.indexOf("plant:j14-no-ring") >= 0 ? "  heeded = true;" : l)).join("\n");
+    const pr = SRC.indexOf("plant:j14-no-ring") >= 0 ? await ringOnly("j14f-plant", planted) : null;
+    check(!!pr && pr.pinned, "j14f2 lifting plant:j14-no-ring heeds that file and pins its key (FAIL j14f): " + JSON.stringify(pr));
   }
 
   /* ---- review 14, finding 4: the lead opens a request and then refuses it; the refusal read after the opening ends it. ---- */
@@ -970,12 +986,12 @@ try {
       && belongChecks[2] === false && belongChecks[3] === false
       && belongChecks[4] === false && belongChecks[5] === false,
     "15cl a chosen copy of the shared folder is accepted only where it holds that team's own team file under the invited lead, and refused otherwise, a ring there vouching for another key included (review 14.5): " + JSON.stringify(belongChecks));
-  if (PLANTS_OFF) skip("j14e lifting plant:j14-picked-lead takes a chosen folder a ring vouches for under another key (ETIUDA_PLANTS=off)");
+  if (PLANTS_OFF) skip("j14e lifting plant:j14-picked-lead takes a chosen folder under another key (ETIUDA_PLANTS=off)");
   else {
-    const planted = SRC.split("\n").map(l => (l.indexOf("plant:j14-picked-lead") >= 0 ? "  handed = handedTo(doc, parsed.lead) || Boolean(readRingFile(folder) && memberRingVouches(doc, readRingFile(folder)));" : l)).join("\n");
+    const planted = SRC.split("\n").map(l => (l.indexOf("plant:j14-picked-lead") >= 0 ? "  handed = true;" : l)).join("\n");
     const Dp = SRC.indexOf("plant:j14-picked-lead") >= 0 ? loadDesk(folder("j14e-ud"), planted) : null;
     const took = Dp ? Dp.api.inviteFolderBelongs(ringYard, invented) : null;
-    check(took === true, "j14e lifting plant:j14-picked-lead takes a chosen folder a ring vouches for under another key (FAIL 15cl): " + JSON.stringify(took));
+    check(took === true, "j14e lifting plant:j14-picked-lead takes a chosen folder under another key (FAIL 15cl): " + JSON.stringify(took));
   }
 
   const Dk = await deskWith("kept", folder("kept-own"));
