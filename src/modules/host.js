@@ -135,6 +135,10 @@ function mapListing(v){
                                            desk:(f&&f.desk&&typeof f.desk==="object"&&f.desk.id)?{id:String(f.desk.id),name:String(f.desk.name||"")}:null,
                                            reached:!!(f&&f.reached),
                                            relay:!!(f&&f.relay),
+                                           // Whether a pinned lead signed it (the shell's catalogLeadOk), which alone lets a notice name the lead.
+                                           leadSigned:!!(f&&f.leadSigned===true), /* plant:listing-lead-mapped */
+                                           // The hash of the file's bytes, by which a row's key is kept (catalog-offer.js ecFileTrust).
+                                           bytesSha:String(f&&f.bytesSha||""),
                                            // "taken-back" on this desk's own file where the team's folder has taken its writes back three times.
                                            fault:String(f&&f.fault||""),
                                            // The copy Etiuda ships, rather than a folder's own file.

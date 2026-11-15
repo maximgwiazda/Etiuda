@@ -431,6 +431,12 @@ async function launch(plan) {
       await settle();
       obs.library.push(readLibrary());
     },
+    /* A FILE'S BYTES REPLACED UNDER ITS OWN DATE ("file,with"): the other file copied over it and the first file's time put back. */
+    swap: arg => {
+      const [a, b] = String(arg).split(","), at = path.join(LAB, a), st = fs.statSync(at);
+      fs.copyFileSync(path.join(LAB, b), at);
+      fs.utimesSync(at, st.atime, st.mtime);
+    },
     /* A host whose answer about the pinned leads never comes, as a shell that hangs would leave it. */
     hangleads: () => { globalThis.E_HOST.catalogLeads = () => new Promise(() => {}); },
     // The Library read once a row's own wait for its check (2 s) is over, and a little more.
@@ -711,7 +717,8 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 138;
+  const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+  const EXPECTED = 141 + (PLANTS_OFF ? 0 : 3);
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -1508,6 +1515,9 @@ async function parent() {
        lead's is named. */
     const EARLIER = "This file is an earlier edition than the catalog loaded now.";
     const OLDER_WARN = "This edition is older than the one in use on this desk, so some of its replies may be out of date.";
+    /* Review 16's finding 6 (Claude alpha's ruling; Claudette's words, 2026-11-15): a lower rev of the same catalog that is not known
+       for sure, its own signature failing or the catalog in use not verified, says what its own number says and no more. */
+    const OLDER_SAID = "By its own edition number, this file is older than the catalog in use on this desk.";
     const OPEN_OLDER = "Open the older edition";
     const KEEP_NEWER = "Keep the newer one";
     const atRev = (rev, date) => Object.assign(payload(date), { rev: rev });
@@ -1581,10 +1591,10 @@ async function parent() {
     const load76e = run(lab76e, ["dom", "library", "load:lamp-own.ec", "settle", "said", "yes", "settle"], true);
     const bootOffer = boot76e.offers[0] || {}, ownOffer = load76e.offers[load76e.offers.length - 1] || {};
     check(boot76e.heldRev === 2 && boot76e.heldAtEnd === V2.V2_SIG_VALID && bootOffer.shown === true && !(bootOffer.signer || []).length
-      && ownOffer.shown === true && !(ownOffer.warn || []).length && ownOffer.title === "Replace catalog?"
+      && ownOffer.shown === true && JSON.stringify(ownOffer.warn || []) === JSON.stringify([OLDER_SAID]) && ownOffer.title === "Replace catalog?"
       && load76e.reloaded === true && load76e.heldRev === 1 && load76e.heldId === ID && load76e.heldAtEnd === V2.V2_SIG_NONE
       && !(boot76e.errors || []).length && !(load76e.errors || []).length,
-      "76e on a desk whose lead signs the catalog, the lead's edition boots naming no other key, and an unsigned variant of it, opened on purpose, is offered plainly and loads: "
+      "76e on a desk whose lead signs the catalog, the lead's edition boots naming no other key, and an unsigned variant of it, opened on purpose, is offered plainly, saying it is older by its own edition number, and loads: "
       + JSON.stringify({ boot: boot76e.heldRev, bootSigner: bootOffer.signer || null, shown: ownOffer.shown, warn: (ownOffer.warn || []).length, title: ownOffer.title || "",
         rev: load76e.heldRev, trust: load76e.heldAtEnd, errors: (boot76e.errors || []).concat(load76e.errors || []).slice(0, 2) }));
 
@@ -1637,10 +1647,10 @@ async function parent() {
     const other76h = run(lab76h, ["wire", "watch:second-1.ec", "settle", "offer"], true);
     const sameOffer = same76h.offers[0] || {}, otherOffer76 = other76h.offers[0] || {};
     check(boot76h.heldRev === 2 && boot76h.heldAtEnd === V2.V2_SIG_VALID && sameOffer.shown === false
-      && otherOffer76.shown === true && !(otherOffer76.warn || []).length && otherOffer76.title === "Replace catalog?"
+      && otherOffer76.shown === true && JSON.stringify(otherOffer76.warn || []) === JSON.stringify([OLDER_SAID]) && otherOffer76.title === "Replace catalog?"
       && otherOffer76.yes === "Load it" && other76h.heldRev === 2
       && ![boot76h, same76h, other76h].some(o => (o.errors || []).length),
-      "76h the page's floor holds a lower rev under the held key and not one under another key the ring lists, which is offered plainly, not as older: "
+      "76h the page's floor holds a lower rev under the held key and not one under another key the ring lists, which is offered plainly, not as older, saying it is older by its own edition number: "
       + JSON.stringify({ boot: boot76h.heldRev, sameKey: sameOffer.shown, otherKey: otherOffer76.shown, warn: (otherOffer76.warn || []).length,
         title: otherOffer76.title || "", yes: otherOffer76.yes || "",
         still: other76h.heldRev, errors: [boot76h, same76h, other76h].flatMap(o => o.errors || []).slice(0, 2) }));
@@ -1666,6 +1676,8 @@ async function parent() {
        what is held unverified, held under another key, held under the same key, and the same key id on a file that does not
        verify: only the third is called older. */
     const plainly = o => o.shown === true && !(o.warn || []).length && o.title === "Replace catalog?" && o.yes === "Load it";
+    /* A lower rev not known for sure: offered as plainly, with the one sentence its own number allows (review 16's finding 6). */
+    const plainSaid = o => o.shown === true && JSON.stringify(o.warn || []) === JSON.stringify([OLDER_SAID]) && o.title === "Replace catalog?" && o.yes === "Load it";
     const said76 = o => JSON.stringify({ shown: o.shown, title: o.title || "", warn: (o.warn || []).length, yes: o.yes || "", trust: o.trust || null });
     const lab76l = scenario([["catalogs/lamp-2.ec", sign(atRev(2, "2026-09-01"))], ["catalogs/etiuda-ring.json", ring],
       ["huge.ec", atRev(1e15, "2026-08-01")]]);
@@ -1673,18 +1685,18 @@ async function parent() {
     const take76l = run(lab76l, ["wire", "click:huge.ec", "settle", "offer", "yes", "settle"], true);
     const load76l = run(lab76l, ["wire", "click:catalogs/lamp-2.ec", "settle", "offer"], true);
     const o76l = load76l.offers[load76l.offers.length - 1] || {};
-    check(take76l.heldAtEnd === V2.V2_SIG_NONE && take76l.heldRev === 1e15 && plainly(o76l)
+    check(take76l.heldAtEnd === V2.V2_SIG_NONE && take76l.heldRev === 1e15 && plainSaid(o76l)
       && ![boot76l, take76l, load76l].some(o => (o.errors || []).length),
-      "76l with an unsigned catalog held at a higher rev, the genuine edition opened on purpose is offered plainly, not as older: " + said76(o76l) + ", errors " + JSON.stringify([boot76l, take76l, load76l].flatMap(o => o.errors || []).slice(0, 2)));
+      "76l with an unsigned catalog held at a higher rev, the genuine edition opened on purpose is offered plainly, not as older, saying it is older by its own edition number: " + said76(o76l) + ", errors " + JSON.stringify([boot76l, take76l, load76l].flatMap(o => o.errors || []).slice(0, 2)));
 
     const lab76m = scenario([["catalogs/lamp-1.ec", sign(atRev(1, "2026-08-01"))], ["catalogs/lamp-2.ec", sign2(atRev(2, "2026-09-01"))],
       ["catalogs/etiuda-ring.json", ring2]]);
     const boot76m = run(lab76m, ["boot", "settle", "offer", "yes", "settle"]);
     const load76m = run(lab76m, ["dom", "library", "load:lamp-1.ec", "settle", "said", "settle", "offer"], true);
     const o76m = load76m.offers[load76m.offers.length - 1] || {};
-    check(boot76m.heldRev === 2 && boot76m.heldAtEnd === V2.V2_SIG_VALID && plainly(o76m)
+    check(boot76m.heldRev === 2 && boot76m.heldAtEnd === V2.V2_SIG_VALID && plainSaid(o76m)
       && ![boot76m, load76m].some(o => (o.errors || []).length),
-      "76m with a catalog held verified under another key, a lower rev under this key, opened on purpose, is offered plainly, not as older: " + said76(o76m));
+      "76m with a catalog held verified under another key, a lower rev under this key, opened on purpose, is offered plainly, not as older, saying it is older by its own edition number: " + said76(o76m));
 
     const lab76n = scenario([["catalogs/lamp-1.ec", sign(atRev(1, "2026-08-01"))], ["catalogs/lamp-2.ec", sign(atRev(2, "2026-09-01"))],
       ["catalogs/etiuda-ring.json", ring]]);
@@ -1700,9 +1712,43 @@ async function parent() {
     const boot76o = run(lab76o, ["boot", "settle", "offer", "yes", "settle"]);
     const load76o = run(lab76o, ["dom", "library", "load:lamp-1.ec", "settle", "said", "settle", "offer"], true);
     const o76o = load76o.offers[load76o.offers.length - 1] || {};
-    check(boot76o.heldRev === 2 && plainly(o76o) && (o76o.trust || []).some(l => CHANGED.test(l))
+    check(boot76o.heldRev === 2 && plainSaid(o76o) && (o76o.trust || []).some(l => CHANGED.test(l))
       && ![boot76o, load76o].some(o => (o.errors || []).length),
-      "76o a lower rev naming the held catalog's key id, whose signature then fails, is offered plainly once that is known: " + said76(o76o));
+      "76o a lower rev naming the held catalog's key id, whose signature then fails, is offered plainly once that is known, saying it is older"
+      + " by its own edition number: " + said76(o76o) + " " + JSON.stringify(o76o.warn || null));
+
+    /* 76y, review 16's finding 6 as Grok gave it: the catalog in use held at rev 2 with its signature failing (its trust invalid), and
+       a rev 1 the lead really signed opened on purpose from the Library: offered plainly, saying it is older by its own number. */
+    const lab76y = scenario([["catalogs/lamp-1.ec", sign(atRev(1, "2026-08-01"))], ["catalogs/etiuda-ring.json", ring],
+      ["bent-2.ec", bend(sign(atRev(2, "2026-09-01")))]]);
+    run(lab76y, ["boot", "settle", "offer", "yes", "settle"]);
+    /* The bent rev 2 double-clicked and taken, so the catalog in use is rev 2 with its trust invalid. */
+    const boot76y = run(lab76y, ["wire", "click:bent-2.ec", "settle", "offer", "yes", "settle"], true);
+    /* Opened on purpose by a double-click, which Grok's sequence names beside the Library's Load; what the Library said is printed. */
+    const lib76y = run(lab76y, ["dom", "library", "load:lamp-1.ec", "settle", "said", "settle", "offer"], true);
+    const load76y = run(lab76y, ["wire", "click:catalogs/lamp-1.ec", "settle", "offer"], true);
+    const o76y = load76y.offers[load76y.offers.length - 1] || {};
+    check(boot76y.heldRev === 2 && boot76y.heldAtEnd === V2.V2_SIG_INVALID && plainSaid(o76y)
+      && ![boot76y, load76y].some(o => (o.errors || []).length),
+      "76y with the catalog in use not verified, a lower rev the lead signed, opened on purpose, is offered plainly, saying it is older by its"
+      + " own edition number: " + said76(o76y) + " " + JSON.stringify({ held: boot76y.heldAtEnd, rev: boot76y.heldRev, warn: o76y.warn || null,
+        library: { offers: (lib76y.offers || []).length, toast: lib76y.toast || "", said: lib76y.said || null } }));
+    /* 76z: lifting plant:older-said (the sentence for a lower rev not known for sure) turns 76y red, in a copy of src/. */
+    if (PLANTS_OFF) console.log("  SKIP  76z lifting plant:older-said offers the lower unverified rev with no sentence (ETIUDA_PLANTS=off)");
+    else {
+      const lab76z = scenario([["catalogs/lamp-1.ec", sign(atRev(1, "2026-08-01"))], ["catalogs/etiuda-ring.json", ring],
+        ["bent-2.ec", bend(sign(atRev(2, "2026-09-01")))]]);
+      run(lab76z, ["boot", "settle", "offer", "yes", "settle"]);
+      run(lab76z, ["wire", "click:bent-2.ec", "settle", "offer", "yes", "settle"], true);
+      fs.cpSync(path.join(ROOT, "src"), path.join(lab76z, "src"), { recursive: true });
+      const offerFile = path.join(lab76z, "src", "modules", "catalog-offer.js");
+      const lines = fs.readFileSync(offerFile, "utf8").split("\n"), at = lines.findIndex(l => l.indexOf("plant:older-said") >= 0);
+      if (at >= 0) { lines[at] = "  const olderSaid=false;"; fs.writeFileSync(offerFile, lines.join("\n"), "utf8"); }
+      const p76z = at >= 0 ? run(lab76z, ["wire", "click:catalogs/lamp-1.ec", "settle", "offer"], true, { modRoot: lab76z }) : null;
+      const oz = p76z ? (p76z.offers[p76z.offers.length - 1] || {}) : {};
+      check(!!p76z && oz.shown === true && !(oz.warn || []).length && !plainSaid(oz),
+        "76z lifting plant:older-said offers the lower unverified rev with no sentence (FAIL 76y): " + (p76z ? said76(oz) : "plant line absent"));
+    }
 
     /* AN UPDATE IS A HIGHER REV UNDER THE KEY THE HELD CATALOG VERIFIED UNDER. The higher file sits in a folder the
        shell does not scan, so the boot holds rev 2 and only a double-click offers rev 3. Unsigned, another key, an
@@ -1796,6 +1842,66 @@ async function parent() {
       && ![boot76v, again76v].some(o => (o.errors || []).length),
       "76v a higher rev whose signature has already failed when the offer opens is offered plainly: " + said76(o76v)
       + ", errors " + JSON.stringify([boot76v, again76v].flatMap(o => o.errors || []).slice(0, 2)));
+
+    /* r16e (Grok's review 16, finding 3): Yes pressed while the offer still calls a higher rev the update under the held key and its
+       check has not answered (the leads never answer here, so the 2 s wait runs out): nothing loads, the words turn plain, and a
+       second Yes loads it as a plain replacement. r16f: the guard lifted in a copy of src/ in the lab loads it at the first Yes. */
+    const plan16e = ["wire", "hangleads", "click:elsewhere/lamp-3.ec", "offer", "yesAtOnce", "wait:2600", "offer", "yes", "wait:2600"];
+    const r16eLab = () => { const lab = higherLab(bend(sign(atRev(3, "2026-09-20"))), ring); run(lab, ["boot", "settle", "offer", "yes", "settle"]); return lab; };
+    const lab16e = r16eLab();
+    const boot16e = launches[launches.length - 1];
+    const open16e = run(lab16e, plan16e, true);
+    const o16e = open16e.offers || [];
+    check(boot16e.heldRev === 2 && boot16e.heldAtEnd === V2.V2_SIG_VALID && o16e.length === 2 && asUpdate(o16e[0]) && plainly(o16e[1])
+      && open16e.reloaded === true && open16e.heldRev === 3 && !(open16e.errors || []).length,
+      "r16e a Yes given while the offer calls an unchecked higher rev the update under the held key loads nothing until it is valid: the words"
+      + " turn plain, and a second Yes loads it: " + JSON.stringify({ offers: o16e.map(said76), reloaded: open16e.reloaded, rev: open16e.heldRev, errors: open16e.errors || [] }));
+    if (PLANTS_OFF) console.log("  SKIP  r16f lifting plant:offer-yes-valid loads the unchecked file at the first Yes (ETIUDA_PLANTS=off)");
+    else {
+      const lab16f = r16eLab();
+      fs.cpSync(path.join(ROOT, "src"), path.join(lab16f, "src"), { recursive: true });
+      const offerFile = path.join(lab16f, "src", "modules", "catalog-offer.js");
+      const lines = fs.readFileSync(offerFile, "utf8").split("\n"), at = lines.findIndex(l => l.indexOf("plant:offer-yes-valid") >= 0);
+      if (at >= 0) { lines.splice(at, 1); fs.writeFileSync(offerFile, lines.join("\n"), "utf8"); }
+      const p16f = at >= 0 ? run(lab16f, plan16e, true, { modRoot: lab16f }) : null;
+      check(!!p16f && (p16f.offers || []).length === 1 && p16f.reloaded === true && p16f.heldRev === 3,
+        "r16f lifting plant:offer-yes-valid loads the unchecked file at the first Yes (FAIL r16e): "
+        + JSON.stringify(p16f ? { offers: (p16f.offers || []).length, reloaded: p16f.reloaded, rev: p16f.heldRev } : "plant line absent"));
+    }
+
+    /* r16g (Grok's review 16, finding 2): a row's key belongs to the bytes it was read from. A signed file not in use shows its
+       gold key; its bytes are then replaced by another catalog whose signature fails, its file time put back, and the Library drawn
+       again in the same page: the row does not keep the gold key. other.ec is written first, so the boot holds lamp-2.ec. r16h: the cache's key without the bytes, in a copy of src/. */
+    const other16 = Object.assign(payload("2026-09-05", "Other Shop"), { id: "other-shop" });
+    const r16gLab = () => {
+      const lab = scenario([["catalogs/other.ec", sign(other16)], ["catalogs/lamp-2.ec", sign(atRev(2, "2026-09-01"))],
+        ["catalogs/etiuda-ring.json", JSON.stringify({ format: V2.V2_RING_FORMAT, kind: V2.V2_RING_KIND, keys: JSON.parse(ring).keys
+          .concat([{ catalog: "other-shop", keyId: KEY_ID, alg: V2.V2_SIG_ALG, public: pubHex(pair.publicKey) }]) })]]);
+      fs.mkdirSync(path.join(lab, "elsewhere"));
+      fs.writeFileSync(path.join(lab, "elsewhere", "forged.ec"), JSON.stringify(bend(sign(Object.assign({}, other16, { name: "Other Shop, forged" })))), "utf8");
+      run(lab, ["boot", "settle", "offer", "yes", "settle"]);
+      return lab;
+    };
+    const plan16g = ["library", "swap:catalogs/other.ec,elsewhere/forged.ec", "library"];
+    const lab16g = r16gLab();
+    const g16 = run(lab16g, plan16g, true);
+    const before16 = row(g16, "other.ec", 0), after16 = row(g16, "other.ec", 1);
+    check(!!before16 && !!before16.key && before16.key.gold && !!after16 && !(after16.key && after16.key.gold) && !(g16.errors || []).length,
+      "r16g a row whose file's bytes changed under the same file time does not keep the gold key its old bytes earned: before "
+      + said(before16) + ", after " + said(after16));
+    if (PLANTS_OFF) console.log("  SKIP  r16h rewriting plant:ec-trust-bytes keeps the old gold key (ETIUDA_PLANTS=off)");
+    else {
+      const lab16h = r16gLab();
+      fs.cpSync(path.join(ROOT, "src"), path.join(lab16h, "src"), { recursive: true });
+      const offerFile = path.join(lab16h, "src", "modules", "catalog-offer.js"), from = '+"|"+String(f.bytesSha||"")';
+      const lines = fs.readFileSync(offerFile, "utf8").split("\n"), at = lines.findIndex(l => l.indexOf("plant:ec-trust-bytes") >= 0);
+      const ok = at >= 0 && lines[at].split(from).length === 2;
+      if (ok) { lines[at] = lines[at].replace(from, () => ""); fs.writeFileSync(offerFile, lines.join("\n"), "utf8"); }
+      const h16 = ok ? run(lab16h, plan16g, true, { modRoot: lab16h }) : null;
+      const kept = h16 ? row(h16, "other.ec", 1) : null;
+      check(!!kept && !!kept.key && kept.key.gold, "r16h rewriting plant:ec-trust-bytes keeps the old gold key on the changed file (FAIL r16g): "
+        + (h16 ? said(kept) : "plant line absent"));
+    }
 
     /* AN EQUAL REV IS NOT AN UPDATE UNLESS IT VERIFIED UNDER THE HELD KEY. Unsigned, with a later date, keeps
        the trust line and is offered as a replacement. The same key id, once its signature has failed, likewise. */

@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
    none, the proxy keys are missing. Without it the shell's guard refuses the read and the policy reader says it could not read. */
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 22;
+const EXPECTED = 24;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -346,6 +346,38 @@ try {
     const same = fs.readFileSync(mainPath).equals(before);
     check(turned && same, "15wa lifting plant:open-folder-why turns 15w7 red (the folder link says nothing): "
       + detail + ", sha " + (same ? "restored" : "differs"));
+  }
+  /* r16i (Grok's review 16, finding 7): a pinned lead's signature written in upper-case hex is the same bytes, and reads valid on a
+     desk that trusts that lead, as in lower case. r16j: the page's form test back to lower case only, in a scratch copy of src/. */
+  {
+    const leadsWas = window.E_HOST.catalogLeads;
+    window.E_HOST.catalogLeads = async () => [{ keyId: KEY_ID, public: pubHex(pair.publicKey) }];
+    const upper = sign(fixture, pair.privateKey);
+    upper.sig.value = upper.sig.value.toUpperCase();
+    try {
+      const lower = await stateOf(JSON.stringify(signed)), up = await stateOf(JSON.stringify(upper));
+      check(lower === V2.V2_SIG_VALID && up === V2.V2_SIG_VALID,
+        "r16i on a desk that trusts the lead, the lead's signature in upper-case hex reads valid, as in lower case: " + up + ", lower " + lower);
+      if (process.env.ETIUDA_PLANTS === "off") { asserted++; console.log("  SKIP  r16j lifting plant:page-hex-case (ETIUDA_PLANTS=off)"); }
+      else {
+        let got = "plant line absent";
+        const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-catalog-trust-plant-"));
+        try {
+          fs.cpSync(path.join(ROOT, "src", "modules"), scratch, { recursive: true });
+          const at = path.join(scratch, "catalog-trust.js"), from = "/^[0-9a-fA-F]{128}$/";
+          const lines = fs.readFileSync(at, "utf8").split("\n"), i = lines.findIndex(l => l.indexOf("plant:page-hex-case") >= 0);
+          if (i >= 0 && lines[i].split(from).length === 2) {
+            lines[i] = lines[i].replace(from, () => "/^[0-9a-f]{128}$/");
+            fs.writeFileSync(at, lines.join("\n"));
+            const PT = await import(pathToFileURL(at).href);
+            const PC = await import(pathToFileURL(path.join(scratch, "catalog.js")).href);
+            got = await PT.catalogTrust(PC.parseCatalogFile(JSON.stringify(upper)));
+          }
+        } catch (e) { got = "threw " + String(e && e.message || e).slice(0, 120); }
+        finally { fs.rmSync(scratch, { recursive: true, force: true }); }
+        check(got === V2.V2_SIG_INVALID || got === V2.V2_SIG_UNKNOWN, "r16j rewriting plant:page-hex-case to lower case only reads the upper-case signature as not the lead's (FAIL r16i): " + got);
+      }
+    } finally { window.E_HOST.catalogLeads = leadsWas; }
   }
 } catch (e) {
   failed++;

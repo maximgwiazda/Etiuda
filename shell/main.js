@@ -766,7 +766,8 @@ function catalogPeek(text) {
    When pinPublic is given, returns a boolean verifying the signature against that public key. */
 function catalogSigValid(data, pinPublic) {
   const sig = data && data.sig;
-  if (!data || !sig || sig.alg !== "Ed25519" || !/^[0-9a-f]{128}$/.test(String(sig.value || ""))) return pinPublic !== undefined ? false : "";
+  /* A signature is its 64 bytes in hex, of either case: the same bytes verify whichever case the signing tool wrote. */
+  if (!data || !sig || sig.alg !== "Ed25519" || !/^[0-9a-fA-F]{128}$/.test(String(sig.value || ""))) return pinPublic !== undefined ? false : ""; /* plant:sig-hex-case */
   if (pinPublic !== undefined) {
     if (!/^[0-9a-f]{64}$/.test(String(pinPublic || ""))) return false;
     try {
@@ -907,11 +908,16 @@ function catalogLeadOk(data) {
   const bound = folderLeadPublics();
   if (bound === null) return catalogSigValid(data);
   const sig = data && data.sig;
-  if (!bound.length || !data || !sig || sig.alg !== "Ed25519" || !/^[0-9a-f]{128}$/.test(String(sig.value || ""))) return "";
+  if (!bound.length || !data || !sig || sig.alg !== "Ed25519" || !/^[0-9a-fA-F]{128}$/.test(String(sig.value || ""))) return ""; /* plant:lead-hex-case */
   for (const pub of bound) {
     if (catalogSigValid(data, pub)) return pub;
   }
   return "";
+}
+/* The public a catalog verifies under as this desk trusts it: while a lead is pinned, that lead's (catalogLeadOk), so the
+   share's unsigned ring file never stands in for it; else the ring's. */
+function catalogTrustedPub(data) {
+  return pinnedLeadPubs().length ? catalogLeadOk(data) : catalogSigValid(data); /* plant:trusted-pub-lead */
 }
 /* The leads the page verifies against, the same publics catalogLeadOk uses. A whole team file narrows them to that
    team's pin. Where that lead is not pinned, one key that verifies nothing, so another team's pin is not read and
@@ -992,7 +998,7 @@ function readCatalog() {
   for (const file of catalogPlaces()) {
     if (refusedByEngine(file)) continue;
     let text;
-    try { text = fs.readFileSync(file, "utf8"); } catch { refuseOpened(file, "read"); continue; }
+    try { text = catalogFileText(file); } catch { refuseOpened(file, "read"); continue; }
     try {
       const peeked = catalogPeek(text);
       if (!isV2(peeked.data)) throw new Error("not an Etiuda catalog (format 2)");
@@ -1693,6 +1699,13 @@ const IN_USE_KIND = "etiuda-in-use", IN_USE_STEM = "in-use";
    would otherwise have the pin and not the text. Written only once in-use.ec names it. */
 const LOADED_CATALOG_FILE = "catalog-loaded.txt";
 const LOADED_CATALOG_MAX = 16 * 1024 * 1024;
+/* A catalog file in the folder is read only up to what the largest catalog kept here takes sealed (twice its bytes in hex,
+   and room for the envelope); a larger one would hold the main process for its read and parse, and is refused unread. */
+const CATALOG_FILE_MAX = 2 * LOADED_CATALOG_MAX + 64 * 1024;
+function catalogFileText(file) {
+  if (fs.statSync(file).size > CATALOG_FILE_MAX) throw new Error("larger than any catalog this desk keeps, so it is not read"); /* plant:catalog-file-max */
+  return fs.readFileSync(file, "utf8");
+}
 const ASK_DIR = "catalog-asks", ASK_KIND = "etiuda-catalog-ask", ASK_PREFIX = "etiuda-catalog-ask\n";
 const ANSWER_KIND = "etiuda-catalog-answer", ANSWER_NAME = "catalog-answer.ec";
 const ASK_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
@@ -2758,12 +2771,12 @@ function catalogRevSlot(id, pub) {
   return Number.isInteger(n) ? n : 0;
 }
 /* A rev already held for this signing public is not replaced by a lower one. Equal is not a raise.
-   Only the public catalogSigValid just verified is written, so one key's mark never moves another's.
+   Only the public catalogTrustedPub just verified is written, so one key's mark never moves another's.
    An unsigned file, whoever wrote it into the share, does not. */
 function keepCatalogRev(json) {
   const x = catalogMarkOf(json);
   if (!x) return;
-  const pub = catalogSigValid(catalogDocIn(json));
+  const pub = catalogTrustedPub(catalogDocIn(json));
   if (!pub || !(x.rev > catalogRevSlot(x.id, pub))) return;
   if (!catalogRevs[x.id] || typeof catalogRevs[x.id] !== "object" || Array.isArray(catalogRevs[x.id])) catalogRevs[x.id] = {};
   catalogRevs[x.id][pub] = x.rev;
@@ -2774,7 +2787,7 @@ function keepCatalogRev(json) {
 function belowCatalogRev(json) {
   const x = catalogMarkOf(json);
   if (!x) return false;
-  const pub = catalogSigValid(catalogDocIn(json));
+  const pub = catalogTrustedPub(catalogDocIn(json));
   if (!pub) return false;
   return x.rev < catalogRevSlot(x.id, pub);
 }
@@ -3193,7 +3206,7 @@ function catalogTitleClean(name) {
   return name.replace(INVITE_HIDDEN_RE, "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 120);
 }
 function catalogSignerOf(doc) {
-  return catalogSigValid(doc) && doc.sig && typeof doc.sig.keyId === "string" ? String(doc.sig.keyId) : "";
+  return catalogTrustedPub(doc) && doc.sig && typeof doc.sig.keyId === "string" ? String(doc.sig.keyId) : "";
 }
 function deskTitle() {
   const n = deskKeys && typeof deskKeys.eAgent === "string" ? deskKeys.eAgent.trim().slice(0, 120) : "";
@@ -5014,8 +5027,10 @@ function teamSealedHere(team) {
   const kept = teamKeys[team] || {};
   const ids = new Set();
   if (!Object.keys(kept).length) return { best: "", ids: ids };
-  /* The newest of the team's sealed files this desk can open: the highest key number, then the highest rev inside it (the
-     test architect's C1 to the desk pilot; a sealed envelope carries no rev outside its ciphertext). */
+  /* The newest of the team's sealed files this desk can open whose inner catalog the team's pinned lead signed: the highest
+     key number, then the highest rev inside it (the test architect's C1 to the desk pilot; a sealed envelope carries no rev
+     outside its ciphertext). The team key is every member's, so a seal alone makes no file the lead's. */
+  const pin = teamPins[team];
   let best = "", bestEpoch = -1, bestRev = -1;
   let files = ecFilesIn(catalogFolder());
   if (!files.length) {
@@ -5026,8 +5041,11 @@ function teamSealedHere(team) {
     let d = null;
     try { if (fs.statSync(f).size <= BRANCH_TEXT_MAX) d = catalogPayload(fs.readFileSync(f, "utf8")).data; } catch { continue; }
     if (!(d && d.kind === SEALED_KIND && String(d.team) === team && Number.isInteger(d.epoch) && kept[d.epoch])) continue;
-    let rev = -1;
-    try { const text = openSealed(teamKeyAt(team, d.epoch), d); const doc = text ? JSON.parse(text) : null; if (doc && Number.isInteger(doc.rev)) rev = doc.rev; if (doc && typeof doc.id === "string") ids.add(doc.id); } catch { rev = -1; }
+    let rev = -1, doc = null;
+    try { const text = openSealed(teamKeyAt(team, d.epoch), d); doc = text ? JSON.parse(text) : null; } catch { doc = null; }
+    if (!(doc && pin && catalogSigValid(doc, String(pin.public || "")))) continue; /* plant:sealed-lead-only */
+    if (Number.isInteger(doc.rev)) rev = doc.rev;
+    if (typeof doc.id === "string") ids.add(doc.id);
     if (d.epoch > bestEpoch || (d.epoch === bestEpoch && rev > bestRev)) { best = path.basename(f); bestEpoch = d.epoch; bestRev = rev; } /* plant:relay-open-newest */
   }
   return { best: best, ids: ids };
@@ -9095,7 +9113,7 @@ function ecFacts(file, deskFolder) {
   /* A read that fails (another program holds the file) says nothing about the file, so it is not remembered: only a
      verdict on the text is. */
   let text;
-  try { text = fs.readFileSync(file, "utf8"); } catch { return null; }
+  try { text = catalogFileText(file); } catch { return null; }
   let out = null;
   try {
     const { data } = catalogRead(text);
@@ -9106,7 +9124,7 @@ function ecFacts(file, deskFolder) {
       out = { mtime: Math.round(st.mtimeMs), cards: data.cards.length, edition: data.date != null ? String(data.date) : "",
               macros: n.macros, intents: n.intents, cats: n.cats, awaiting: n.awaiting, id: data.id != null ? String(data.id) : "",
               rev: +data.rev || 0, grew: ecGrew(data), sha: signedSha(data), deskName: d && typeof d.name === "string" ? d.name : "",
-              deskOk: deskFileGenuine(data, deskFolder),
+              deskOk: deskFileGenuine(data, deskFolder), bytesSha: crypto.createHash("sha256").update(text, "utf8").digest("hex").slice(0, 32),
               genuine: !!(pinnedLeadPubs().length ? catalogLeadOk(data) : catalogSigValid(data)) };
     }
   } catch (e) {
@@ -9226,9 +9244,11 @@ function collapseEditions(rows) {
   }
   return rows.filter((row, i) => !drop.has(i));
 }
+/* The page is told only whether a pinned lead signed the row's file (leadSigned), which is what lets it name the lead. */
 function stripGenuine(row) {
   if (!row || !Object.prototype.hasOwnProperty.call(row, "genuine")) return row;
   const copy = Object.assign({}, row);
+  if (copy.genuine && !copy.desk && pinnedLeadPubs().length) copy.leadSigned = true; /* plant:listing-lead-row */
   delete copy.genuine;
   return copy;
 }
@@ -9241,7 +9261,7 @@ function listingRows() {
     return { name: path.basename(f), mtime: mt, cards: x ? x.cards : -1, edition: x ? x.edition : "",
              macros: x ? x.macros : -1, intents: x ? x.intents : -1, cats: x ? x.cats : -1, awaiting: x ? x.awaiting : [],
              sample: isTheSample(f), id: x ? x.id : "", rev: x ? x.rev : 0, grew: x ? x.grew : null, sha: x ? x.sha : "",
-             genuine: !!(x && x.genuine), relay: onRelay,
+             genuine: !!(x && x.genuine), relay: onRelay, bytesSha: x ? x.bytesSha : "",
              // The copy Etiuda ships, rather than a folder's own file of any name.
              builtIn: path.dirname(f) === BUILT_IN_DIR };
   });
@@ -9385,7 +9405,7 @@ ipcMain.handle("etiuda:catalog-read", (e, name, desk, asked, offer) => {
     if (who && !(ecFacts(file, who) || {}).deskOk) throw new Error("not a desk's own file");
     const offTeam = !!who && !deskRoster()(who);
     if (offTeam && !asked) throw new Error("its desk is not on the team's roster");
-    const raw = fs.readFileSync(file, "utf8");
+    const raw = catalogFileText(file);
     if (asked) {
       const blocked = sealBlockedWhy(raw);
       if (blocked) {

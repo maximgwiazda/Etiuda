@@ -228,11 +228,11 @@ function ecDeskRowHtml(f,o){
 function ecMineHtml(line,glyph,fault){
   return '<small class="ec-mine"'+(fault?' data-ec-fault="'+esc(fault)+'"':'')+'>'+(glyph?ICON_DESK:'')+'<span>'+esc(line)+'</span></small>';
 }
-/* A FOLDER FILE'S SIGNATURE, checked as a load would check it and kept per name and date: the
-   rows are files nobody has loaded, so each is read once to be told apart. */
+/* A FOLDER FILE'S SIGNATURE, checked as a load would check it and kept per name, date and the hash of its bytes (the
+   listing's bytesSha): the rows are files nobody has loaded, so each is read once to be told apart. */
 const ecTrustOf=new Map();
 function ecFileTrust(f){
-  const at=f.name+"|"+f.mtime;
+  const at=f.name+"|"+f.mtime+"|"+String(f.bytesSha||""); /* plant:ec-trust-bytes */
   if(!ecTrustOf.has(at)) ecTrustOf.set(at, eReadCatalogFile(f.name).then(got=>{
     if(!got) return {state:"",print:""};
     const c=parseCatalogFile(got.text);
@@ -512,10 +512,12 @@ function underHeldKey(c){
   const doc=catalogDocOf(c), kid=doc&&doc.sig&&doc.sig.keyId ? String(doc.sig.keyId) : "", held=heldCatalogSigner();
   return heldCatalogTrust()===V2_SIG_VALID && !!held && kid===held;
 }
-/* An offer that said "older" or "updated" for a file whose own signature then failed says it plainly instead. */
-function offerPlainly(wrap){
+/* An offer that said "older" or "updated" for a file whose own signature then failed says it plainly instead. A lower rev
+   (`lower`) keeps saying it is older, by its own edition number and no more (review 16's finding 6). */
+function offerPlainly(wrap,lower){
   const warn=wrap.querySelector(".ec-warn"), title=wrap.querySelector("#ecTitle"), no=wrap.querySelector("#ecNo"), yes=wrap.querySelector("#ecYes");
-  if(warn) warn.remove();
+  if(warn && lower) warn.textContent=t("By its own edition number, this file is older than the catalog in use on this desk.");
+  else if(warn) warn.remove();
   if(title) title.textContent=t("Replace catalog?");
   if(no) no.textContent=t("Keep current");
   if(yes) yes.textContent=t("Load it");
@@ -579,13 +581,17 @@ function eOfferCatalogDialog(c,src){
   const updating=isCatalogUpdate(c,active);
   /* OLDER IS A LOWER REV UNDER THE KEY THE HELD CATALOG VERIFIED UNDER, and only then do the title, the warning and the
      answers say so. THE UPDATE'S WORDS ARE FOR A FILE VERIFIED UNDER THAT SAME KEY, a higher rev or the same one.
-     Unsigned or unverified is offered plainly at any rev, and the offer is still made. An earlier date under that
-     same key keeps its own sentence. */
+     Unsigned or unverified is offered plainly at any rev, and the offer is still made; a lower rev of it says it is older
+     by its own edition number (olderSaid, below). An earlier date under that same key keeps its own sentence. */
   const sameKey=updating && underHeldKey(c), settled=trustSettled(c);
   const verifiedHere=settled==="" || settled===V2_SIG_VALID;
   const datedEarlier=!!active && catalogEditionOlder(c.version, active.version);
   const revHigher=!!active && String(c&&c.id||"")!=="" && String(c.id)===String(active.id||"") && (+c.rev>(+active.rev||0));
   const olderSure=revOlder && sameKey && verifiedHere;
+  /* A LOWER REV NOT KNOWN FOR SURE (review 16's finding 6; Claude alpha's ruling: an unverified lower revision gets the older-edition
+     sentence): unsigned, its own signature failing, another key's, or the catalog in use not verified. It is still offered plainly, the
+     title and the answers as above, and says what its own number says, older, and no more (Claudette's words, 2026-11-15). */
+  const olderSaid=updating && revOlder && !olderSure; /* plant:older-said */
   const updateSure=revHigher && sameKey && verifiedHere && !datedEarlier;
   const plain=updating && !olderSure && !updateSure && (
     (revOlder || !sameKey) && (revOlder || datedEarlier) || revHigher && !sameKey || revHigher && !verifiedHere && !datedEarlier
@@ -614,6 +620,8 @@ function eOfferCatalogDialog(c,src){
         :replacing?"Replace catalog?":"Load catalog file?"))+'</h3>'
     +(olderSure
         ? '<p class="ec-warn">'+esc(t("This edition is older than the one in use on this desk, so some of its replies may be out of date."))+'</p>'
+        : olderSaid
+        ? '<p class="ec-warn">'+esc(t("By its own edition number, this file is older than the catalog in use on this desk."))+'</p>'
         : '')
     +(updating && !olderSure && !plain
         ? '<p class="ec-sub">'+esc(t(older
@@ -705,15 +713,18 @@ function eOfferCatalogDialog(c,src){
   /* A signature still unread is taken on trust. When it fails, the offer becomes a replacement:
      the words, the waiting dot and the edition load all drop, and the file is still offered. */
   const latePlain=olderSure || updateSure || (sameKey && verifiedHere && !revHigher && !older && !plain);
-  if(latePlain && !settled) catalogTrust(c).then(state=>{
-    if(state!==V2_SIG_VALID && wrap.isConnected){
-      offerPlainly(wrap);
-      const holdsLine=wrap.querySelector(".ec-holds");
-      if(holdsLine) holdsLine.remove();
-      fresh=false;
-      if(edWaiting && edWaiting.c===c){ edWaiting=null; paintCatWaiting(); }
-      place();
-    }
+  let claimed=latePlain && !settled;
+  const turnPlain=()=>{
+    claimed=false;
+    offerPlainly(wrap,revOlder);
+    const holdsLine=wrap.querySelector(".ec-holds");
+    if(holdsLine) holdsLine.remove();
+    fresh=false;
+    if(edWaiting && edWaiting.c===c){ edWaiting=null; paintCatWaiting(); }
+    place();
+  };
+  if(claimed) catalogTrust(c).then(state=>{
+    if(state!==V2_SIG_VALID && wrap.isConnected && claimed) turnPlain();
   });
   const close=()=>{ removeEventListener("resize",place); dismissNode(wrap); if(offerStanding===close) offerStanding=null; if(offerShown&&offerShown.close===close) offerShown=null; };
   offerStanding=close;
@@ -732,7 +743,13 @@ function eOfferCatalogDialog(c,src){
   wrap.querySelector("#ecYes").onclick=()=>{
     if(taking) return;
     taking=true;
-    whenTrusted(c).then(()=>{ taking=false; close(); acceptOffer(c,sig,src,fresh ? {held:active, changes:changes, name:ed} : null); });
+    whenTrusted(c).then(state=>{
+      taking=false;
+      /* A Yes given to words that called the file verified loads only a file that is: otherwise the words turn plain, the
+         question stands, and a second Yes loads it as a plain replacement. */
+      if(claimed && state!==V2_SIG_VALID && wrap.isConnected){ turnPlain(); return; } /* plant:offer-yes-valid */
+      close(); acceptOffer(c,sig,src,fresh ? {held:active, changes:changes, name:ed} : null);
+    });
   };
   wrap.querySelectorAll("[data-ec-open]").forEach(wireFolderLink);
   wrap.querySelector("#ecNo").onclick=()=>{
@@ -958,6 +975,12 @@ function dropOffersLeft(all){
     paintCatWaiting();
   }
 }
+/* The team's new catalogs a listing may announce as the lead's: a file the shell found signed by the pinned lead (leadSigned),
+   never merely one that parsed, and not the catalog held. */
+function listingNoticeFiles(all,held){
+  return (all||[]).filter(f=>!f.desk && !f.builtIn && !f.sample && f.id && !(held && held.id===f.id))
+    .filter(f=>f.leadSigned===true); /* plant:listing-lead-signed */
+}
 function onCatalogListing(all){
   /* The empty desk's folder line follows whether this listing holds a catalog. Only a change, and
      only while that desk is what is on screen, draws it again. */
@@ -972,10 +995,7 @@ function onCatalogListing(all){
     const tLeads=teamLeads().filter(l=>l&&!l.removed);
     if(tLeads.length>0){
       const leadName=(tLeads[0]&&tLeads[0].lead)||"";
-      const teamFiles=(all||[]).filter(f=>!f.desk && !f.builtIn && !f.sample && f.id);
-      const held=storedCatalog();
-      for(const f of teamFiles){
-        if(held && held.id===f.id) continue;
+      for(const f of listingNoticeFiles(all,storedCatalog())){
         const key=f.id||f.name;
         if(key && !listingNotified.has(key)){
           listingNotified.add(key);
@@ -1091,5 +1111,6 @@ export {
   paintCatWaiting,
   loadCatalogFromFolder,
   onCatalogListing,
+  listingNoticeFiles,
   wireHostCatalogWatch
 };
