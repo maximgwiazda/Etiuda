@@ -13,7 +13,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-store-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 54;
+const EXPECTED = 58;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -261,6 +261,38 @@ async function main() {
     out.good = good.status;
     return { ok, detail: brief(out) };
   }
+  /* Argon's review of the relay, finding 2: a computer another took off the store signs no list while its certificate's day runs, so it
+     neither enrols itself again nor takes the rest off; one that left by itself enrols itself again, as turning sync back on does. */
+  async function removedSignerScene() {
+    const w = await storeTeam(), a = w.desks.a, b = w.desks.b, rows = () => w.R.stores.get(w.rt);
+    const off = await devicesOf(w, listOf(w, ["a"]));
+    w.R.clock.now += MIN;
+    const evict = await devicesOf(w, listOf(w, ["b"]), { by: b });
+    const rejoin = await devicesOf(w, listOf(w, ["a", "b"]), { by: b });
+    const held = !!rows().get("gone:" + b.keyId) && !!rows().get("dev:" + a.keyId) && !rows().get("dev:" + b.keyId);
+    const v = await storeTeam(), vb = v.desks.b;
+    const left = await devicesOf(v, listOf(v, ["a"]), { by: vb });
+    v.R.clock.now += MIN;
+    const back = await devicesOf(v, listOf(v, ["a", "b"]), { by: vb });
+    const ok = off.status === 200 && refused(evict, "seat-lapsed") && refused(rejoin, "seat-lapsed") && held && left.status === 200 && back.status === 200;
+    return { ok, detail: brief({ takenOff: said(off), evicts: said(evict), putsItselfBack: said(rejoin), held, leftItself: said(left), cameBack: said(back) }) };
+  }
+  /* The same finding: a list's `from` is covered by the computer's signature, so S alone, lifting a computer's signature onto a list that
+     names the newest team file possible, is refused, and the person's next list is taken; a `from` the computer signed is taken. */
+  async function listFromScene() {
+    const w = await storeTeam(), a = w.desks.a, keys = listOf(w, ["a", "b"]);
+    const rev = w.rev + 1, t = w.R.clock.now, top = { epoch: Number.MAX_SAFE_INTEGER, rev: Number.MAX_SAFE_INTEGER };
+    const by = { pub: a.pub, sig: signHex(a, C.storeDevicesBytes(w.rt, rev, t, keys)) }, seat = storeCert(a.pub, w.code, t, DAY);
+    const lifted = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/devices",
+      { json: { keys, rev, t, from: top, sig: signHex(w.lead, C.devicesBytes(w.rt, rev, t, keys, top)), seat, by } });
+    w.rev = rev;
+    const next = await devicesOf(w, keys);
+    const rev2 = w.rev + 1, from = { epoch: 1, rev: 1 };
+    const signed = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/devices", { json: { keys, rev: rev2, t, from,
+      sig: signHex(w.lead, C.devicesBytes(w.rt, rev2, t, keys, from)), seat, by: { pub: a.pub, sig: signHex(a, C.storeDevicesBytes(w.rt, rev2, t, keys, from)) } } });
+    const ok = refused(lifted, "seat-lapsed") && next.status === 200 && signed.status === 200;
+    return { ok, detail: brief({ liftedOntoTop: said(lifted), nextList: said(next), signedFrom: said(signed) }) };
+  }
   /* A store stays a store and a team a team: a relay grant renews no store and moves no store's lead; a store grant renews no team; a
      repeat create of the store under a store grant for another person is refused, and for its own person taken. */
   async function stickyScene() {
@@ -399,6 +431,8 @@ async function main() {
     ["st2c", certScene, "a store certificate lapsed, of another kind, over a day, forged, under a delegation that may not sign licences, or from a revoked service key, is refused seat-lapsed; a fresh one opens"],
     ["st2d", noDoorScene, "a store takes no invitation and opens no door"],
     ["st2e", listScene, "a store's computer list signed by S alone, or by a computer without a current store certificate for the person, or not signed by that computer, is refused; the person's own takes"],
+    ["st2f", removedSignerScene, "a computer another took off the store signs no list in its certificate's day, neither putting itself back nor taking the rest off; one that left by itself puts itself back"],
+    ["st2g", listFromScene, "a list's from is covered by the computer's signature: S lifting that signature onto a list naming the newest file possible is refused and the next list is taken"],
     ["st3a", stickyScene, "a store stays a store and a team a team, and a store's person never changes"],
     ["st3b", grantShapeScene, "a store grant without its code, with a code out of shape, with seats, or signed over the relay grant's label is refused at the create"],
     ["st4a", endScene, "the service's store-end deletes every object before it answers, leaves only the ended mark, and the id is never made again"],
@@ -464,6 +498,8 @@ async function main() {
     ["core", "store-no-door", "st2d", "a store opens a door"],
     ["core", "store-devices", "st2e", "S alone writes a store's computer list"],
     ["core", "store-devices-sig", "st2e", "the certificate's computer need not sign the list"],
+    ["core", "store-devices-removed", "st2f", "a computer another took off signs the list"],
+    ["core", "store-devices-from", "st2g", "a list's from rides outside the computer's signature"],
     ["core", "store-kind-fits", "st3a", "a grant of the other kind fits"],
     ["core", "store-code-fits", "st3a", "a store grant for another person fits"],
     ["core", "store-create-fits", "st3a", "a repeat create asks no fit"],

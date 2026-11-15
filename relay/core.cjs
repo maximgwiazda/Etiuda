@@ -127,8 +127,10 @@ const devicesBytes = (rt, rev, t, keys, from) => Buffer.from("etiuda-relay-devic
 /* `wraps` left out when the caller does not pass it, so a slice 1 signature over add and drop still matches. */
 const invitesBytes = (rt, t, add, drop, wraps) => Buffer.from("etiuda-relay-invites\n" + rt + "\n" + t + "\n"
   + canon(wraps === undefined ? { add, drop } : { add, drop, wraps }), "utf8");
-/* A store's list is also signed by one of the person's computers holding a current store certificate, over the same list under a line of its own. */
-const storeDevicesBytes = (rt, rev, t, keys) => Buffer.from("etiuda-relay-store-devices\n" + rt + "\n" + rev + "\n" + t + "\n" + canon(keys), "utf8");
+/* A store's list is also signed by one of the person's computers holding a current store certificate, over the same list and its
+   `from` under a line of its own, `from` left out as devicesBytes leaves it, since S alone, which the folder holds, signs the rest. */
+const storeDevicesBytes = (rt, rev, t, keys, from) => Buffer.from("etiuda-relay-store-devices\n" + rt + "\n" + rev + "\n" + t + "\n" + canon(keys)
+  + (from === undefined ? "" : "\n" + canon({ from })), "utf8");
 const helloBytes = (rt, nonce, keyId) => Buffer.from("etiuda-relay-hello\n" + rt + "\n" + nonce + "\n" + keyId + "\n", "utf8");
 const LEAD_PREFIX = "etiuda-relay-lead\n";
 const leadBytes = (rt, toKeyId, toPub, t) => Buffer.from(LEAD_PREFIX + rt + "\n" + toKeyId + "\n" + toPub + "\n" + t, "utf8");
@@ -662,10 +664,18 @@ function createCore(deps) {
     return { ok: true, note: null };
   }
 
+  /* A computer another took off the store signs no list: it holds S and its certificate for the rest of its day. One that took itself
+     off signs again, as turning sync back on asks; the removal row names its signer (devices). */
   function storeListed(team, b) {
     const by = plain(b.by) ? b.by : {};
     if (!is(HEX64, by.pub) || !is(HEX128, by.sig) || !storeGate(team, b.seat, by.pub).ok) return false;
-    return verified(by.pub, storeDevicesBytes(team.rt, b.rev, b.t, b.keys), by.sig); /* plant:store-devices-sig */
+    const gone = removalOf(by.pub, by.pub);
+    let takenOff = false;
+    takenOff = !!gone && gone.by !== by.pub; /* plant:store-devices-removed */
+    if (takenOff) return false;
+    let from;
+    from = b.from; /* plant:store-devices-from */
+    return verified(by.pub, storeDevicesBytes(team.rt, b.rev, b.t, b.keys, from), by.sig); /* plant:store-devices-sig */
   }
 
   /* A hello, a session or a later call under one, where the grant in force was signed by a key now on the list. */
@@ -896,7 +906,7 @@ function createCore(deps) {
       if (withdrawn.length) store.put("ord", ord); /* plant:order-gone */
       for (const id of withdrawn) {
         const was = store.get("dev:" + id);
-        store.put("gone:" + id, Object.assign({}, was || {}, { at: clock(), ord }));
+        store.put("gone:" + id, Object.assign({}, was || {}, { at: clock(), ord }, team.store ? { by: b.by.pub } : {}));
         store.del("dev:" + id);
       }
       for (const [id, v] of next) { store.put("dev:" + id, v); store.del("gone:" + id); }
