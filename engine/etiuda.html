@@ -15408,8 +15408,7 @@ What is typed here stays in this browser.`;
       const who = typed2 ? esc(typed2) : '<span class="e-name-ph">' + esc(t("Kate")) + "</span>";
       const init = esc(agentParts(typed2 || t("Kate")).init);
       if (!shown2.length) {
-        const parts2 = greetLine("{NAME}", lang).split("{NAME}");
-        prev.innerHTML = esc(parts2[0]) + who + esc(parts2[1] || "");
+        prev.innerHTML = who;
         return;
       }
       prev.innerHTML = shown2.map((l) => esc(l).split("{AGENT}").join(who).split("{INIT}").join(init)).join("<br>");

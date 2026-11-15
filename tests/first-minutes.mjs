@@ -690,6 +690,68 @@ try {
       );
     }
   }
+
+  /* === LOOK 5: Name step preview shows the name alone, not a greetLine sentence === */
+  {
+    const probeNamePreview = async (pageUrl, { lang = "en" } = {}) => {
+      const ctx = await browser.createBrowserContext();
+      const p = await ctx.newPage();
+      p.on("dialog", (d) => { d.dismiss().catch(() => {}); });
+      await p.setViewport({ width: 1280, height: 860 });
+      await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
+      await p.evaluateOnNewDocument((l) => {
+        try {
+          localStorage.setItem("eUiLang", l);
+          sessionStorage.setItem("eTourAt", "name");
+        } catch (e) {}
+      }, lang);
+      await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
+      await p.waitForFunction(() => !!document.querySelector("#tourRoot.on") && !!document.getElementById("tourName"), { timeout: 20000 });
+      await sleep(150);
+      const emptyPrev = await p.evaluate(() => {
+        const el = document.getElementById("tourNamePrev");
+        return el ? el.textContent : "";
+      });
+      await p.type("#tourName", "Marta Nowak");
+      await sleep(80);
+      const typedPrev = await p.evaluate(() => {
+        const el = document.getElementById("tourNamePrev");
+        return el ? el.textContent : "";
+      });
+      await closePage(p);
+      return { emptyPrev, typedPrev };
+    };
+
+    EXPECTED += 3;
+    const en = await probeNamePreview(cleanEmptyUrl, { lang: "en" });
+    check(
+      en.emptyPrev === "Kate" && en.typedPrev === "Marta Nowak",
+      "5a (en) name step preview shows Kate when empty and the typed name alone when filled",
+      en
+    );
+    const pl = await probeNamePreview(cleanEmptyUrl, { lang: "pl" });
+    check(
+      pl.emptyPrev === "Kasia" && pl.typedPrev === "Marta Nowak",
+      "5a (pl) name step preview shows Kasia when empty and the typed name alone when filled",
+      pl
+    );
+
+    if (PLANTS_OFF) {
+      skip("plant-name-preview: restoring greetLine sentence turns 5a red (ETIUDA_PLANTS=off)");
+    } else {
+      const planted = rawHtml.replace(
+        /if\s*\(!shown\d*\.length\)\s*\{\s*prev\.innerHTML\s*=\s*who;\s*return;\s*\}/,
+        'if (prev) { prev.innerHTML = "Good morning, my name is " + who; return; }'
+      );
+      const plantUrl = writeEngine(path.join(lab, "plant-5"), planted, false);
+      const pg = await probeNamePreview(plantUrl, { lang: "en" });
+      check(
+        planted !== rawHtml && pg.typedPrev !== "Marta Nowak",
+        "plant-name-preview: restoring greetLine sentence turns 5a red",
+        pg
+      );
+    }
+  }
 } catch (err) {
   console.error("HARNESS ERROR:", err);
   fails++;
