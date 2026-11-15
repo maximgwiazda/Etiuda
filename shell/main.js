@@ -4160,13 +4160,14 @@ function policyWords(facts, lang) {
   return { folder: facts.folder, lead: facts.lead, said: facts.bad.map(k => words[k]), noUpdate: facts.noUpdate === true };
 }
 function joinPolicyFrom(text, lang) { return policyWords(joinPolicyFacts(text), lang); }
-let joinPolicyRead = null;
-/* Read once a run, whatever the language. The one program started is reg.exe at its fixed path, exporting
+let joinPolicyRead = null, joinPolicyReadAt = 0;
+/* Read at most once a minute, whatever the language. The one program started is reg.exe at its fixed path, exporting
    this one key to a scratch file, which holds the registry's own UTF-16 where reg's printing would be in the
    console's code page. A failure, and any system but Windows, is no policy. The scratch file and its folder
    go whatever happens, and nothing of them is logged. */
 function readJoinPolicy(lang) {
-  if (joinPolicyRead === null) {
+  const now = Date.now();
+  if (joinPolicyRead === null || now - joinPolicyReadAt >= 60000) { /* plant:policy-reread */
     let text = "";
     if (process.platform === "win32") {
       let dir = "", file = "";
@@ -4183,6 +4184,7 @@ function readJoinPolicy(lang) {
       }
     }
     joinPolicyRead = joinPolicyFacts(text);
+    joinPolicyReadAt = now;
   }
   return policyWords(joinPolicyRead, lang);
 }
@@ -4327,18 +4329,20 @@ function deskAiPolicy() {
   return deskAiPolicyFrom(joinPolicyRead && joinPolicyRead.values);
 }
 /* WHAT IS IN FORCE, KEPT IN MEMORY: every search, picker opening and the page's two-second look asks deskAiConfig, so the two
-   files are read and the key unsealed once, and again only after deskAiForget (every save or forget from Settings) or a new
-   reading of machine policy. A file edited behind the running desk's back is read at the next save or start. */
+   files are read and the key unsealed once, and again only after deskAiForget (every save or forget from Settings), a file
+   change on disk (such as deleting the key file) or a new reading of machine policy (at most once a minute). */
 let deskAiKept = null;
 function deskAiForget() { deskAiKept = null; }
 /* Everything in force now: {joined, policy, key}, the key the one a request would carry, "" where none would go. */
 function deskAiNow() {
   const policy = deskAiPolicy();
-  if (deskAiKept && deskAiKept.from === joinPolicyRead) return deskAiKept.now;
+  const stampOf = name => { try { const st = fs.statSync(deskAiPath(name)); return st.mtimeMs + ":" + st.size; } catch { return ""; } };
+  const stamp = stampOf(DESK_AI_FILE) + "|" + stampOf(DESK_AI_KEY_FILE);
+  if (deskAiKept && deskAiKept.from === joinPolicyRead && deskAiKept.stamp === stamp) return deskAiKept.now; /* plant:desk-ai-key-stamp */
   const joined = deskAiJoin(deskAiPerson(), policy);
   const key = policy.key ? (joined.keyAway ? "" : policy.key) : deskAiKeyFor(joined.endpoint);
   const now = { joined: joined, policy: policy, key: key };
-  deskAiKept = { from: joinPolicyRead, now: now };
+  deskAiKept = { from: joinPolicyRead, stamp: stamp, now: now };
   return now;
 }
 /** THE ONE PLACE THE ADDRESS AND THE KEY ARE HANDED ON. Null while the option is off or anything a request needs is missing;

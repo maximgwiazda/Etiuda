@@ -33,7 +33,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "shell");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 64;
+const EXPECTED = 68;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The shell-to-page event that carries each re-order's outcome; the page-to-shell sync request "etiuda:ai-state" is another. */
 const RANKING_CH = "etiuda:ai-ranking";
@@ -97,7 +97,7 @@ const MAIN_TAIL = "\n__test.setWindow = w => { theWindow = w; }; __test.embedSug
   + " __test.deskAiProbe = typeof deskAiProbe === 'function' ? deskAiProbe : async () => ({});"
   + " __test.deskAiConfig = typeof deskAiConfig === 'function' ? deskAiConfig : () => null;"
   /* Machine policy is read from __test.policyText unless a leg uses a stubbed child_process. */
-  + " if (!__test.useRealPolicyReader && typeof joinPolicyFacts === 'function') joinPolicyRead = joinPolicyFacts(__test.policyText || '');";
+  + " if (!__test.useRealPolicyReader && typeof joinPolicyFacts === 'function') { joinPolicyRead = joinPolicyFacts(__test.policyText || ''); if (typeof joinPolicyReadAt !== 'undefined') joinPolicyReadAt = Date.now(); }";
 const ENGINE = { sender: { id: 1, once: () => {} }, senderFrame: { parent: null, url: "file:///C:/lab/engine/etiuda.html" } };
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 
@@ -789,7 +789,7 @@ await block(async () => {
   const r = await cacheDrive();
   check(r.two.setting === 1 && r.two.key === 1 && r.asked === 2 && r.saved && r.after === 3 && r.model === "plant-model-2",
     "da13 two searches read the setting and the key once between them, and a save makes the next read fresh: " + JSON.stringify(r));
-  const lifted = await cacheDrive(edited(MAIN_SRC, "  if (deskAiKept && deskAiKept.from === joinPolicyRead) return deskAiKept.now;\n", ""));
+  const lifted = await cacheDrive(edited(MAIN_SRC, "  if (deskAiKept && deskAiKept.from === joinPolicyRead && deskAiKept.stamp === stamp) return deskAiKept.now; /* plant:desk-ai-key-stamp */\n", ""));
   check(lifted.two.setting > 1, "da13p with the kept configuration lifted, the leg above fails: " + JSON.stringify(lifted.two));
 });
 
@@ -1107,6 +1107,111 @@ await block(async () => {
     check(lifted.fetches > 0 && lifted.urls.some(u => u.indexOf("https://api.openai.com/v1/") === 0),
       "da23p with plant:policy-key-pinned-service lifted, the policy key goes to the person's chosen vendor and the leg above fails: "
       + JSON.stringify({ fetches: lifted.fetches, urls: lifted.urls }));
+  }
+});
+
+/* da24 (review finding 4, policy): policy is re-read at most once a minute so turning the switch off or removing AiKey
+   stops a running desk's next ask, without reading reg on every query inside the minute. */
+async function policyRereadDrive(nextRows, mainSrc) {
+  const realNow = Date.now;
+  let clockShift = 0, reads = 0;
+  Date.now = () => realNow() + clockShift;
+  try {
+    let currentRows = [
+      ["DeskOrganisationModel", "REG_DWORD", 1],
+      ["AiProvider", "REG_SZ", "openai"],
+      ["AiModel", "REG_SZ", "plant-model"],
+      ["AiKey", "REG_SZ", "sk-test-0000"],
+    ];
+    const fakeCp = {
+      execFile: () => {},
+      execFileSync: (tool, args) => {
+        reads++;
+        const bytes = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(policyExportText(currentRows), "utf16le")]);
+        fs.writeFileSync(args[2], bytes);
+      },
+    };
+    const fetch = fetchOf(() => ({ status: 200, text: chatSaying("[2,1]") }));
+    const ctx = loadMain({ fetch, mainSrc, childProcess: fakeCp,
+      answer: (op, a) => op === "search-shortlist" ? { q: a.q, gen: 1, cards: ["c1", "c2"], intents: [] } : openAnswer(op) });
+    builtinFrom(ctx.T, [{ id: "t:post", score: 0.9 }]);
+    ctx.on["etiuda:search-set"](ENGINE, true);
+    await ctx.handle["etiuda:search-prepare"](ENGINE, ROWS);
+    await ctx.handle["etiuda:search-rank"](ENGINE, "lantern wick");
+    await tick(AI.SETTLE_MS + 60);
+    clockShift += 100;
+    await ctx.handle["etiuda:search-rank"](ENGINE, "kettle tea");
+    await tick(AI.SETTLE_MS + 60);
+    const readsWithin = reads, fetchesBefore = fetch.calls.length;
+    currentRows = nextRows;
+    clockShift += 60001;
+    const cfgAfter = ctx.T.deskAiConfig();
+    await ctx.handle["etiuda:search-rank"](ENGINE, "parcel post");
+    await tick(AI.SETTLE_MS + 60);
+    await openPicker(ctx, MESSAGE, 80);
+    return { readsWithin, readsAfter: reads, fetchesBefore, fetchesAfter: fetch.calls.length, cfgAfter };
+  } finally {
+    Date.now = realNow;
+  }
+}
+await block(async () => {
+  const off = await policyRereadDrive([
+    ["DeskOrganisationModel", "REG_DWORD", 0],
+    ["AiProvider", "REG_SZ", "openai"],
+    ["AiModel", "REG_SZ", "plant-model"],
+    ["AiKey", "REG_SZ", "sk-test-0000"],
+  ]);
+  const noKey = await policyRereadDrive([
+    ["DeskOrganisationModel", "REG_DWORD", 1],
+    ["AiProvider", "REG_SZ", "openai"],
+    ["AiModel", "REG_SZ", "plant-model"],
+  ]);
+  check(off.readsWithin === 1 && off.readsAfter === 2 && off.fetchesBefore === 2 && off.fetchesAfter === 2 && off.cfgAfter === null
+    && noKey.readsWithin === 1 && noKey.readsAfter === 2 && noKey.fetchesBefore === 2 && noKey.fetchesAfter === 2 && noKey.cfgAfter === null,
+    "da24 policy is cached within a minute and re-read after a minute, so turning DeskOrganisationModel off or removing AiKey stops the next send: "
+    + "off " + JSON.stringify(off) + ", noKey " + JSON.stringify(noKey));
+  if (PLANTS_OFF) skipPlant("da24p lifting plant:policy-reread keeps sending after policy turns off (ETIUDA_PLANTS=off)");
+  else {
+    const lifted = await policyRereadDrive([["DeskOrganisationModel", "REG_DWORD", 0]],
+      edited(MAIN_SRC, "if (joinPolicyRead === null || now - joinPolicyReadAt >= 60000) { /* plant:policy-reread */",
+        "if (joinPolicyRead === null) {"));
+    check(lifted.fetchesAfter > lifted.fetchesBefore,
+      "da24p with plant:policy-reread lifted, the running desk keeps sending after policy turns off and the leg above fails: "
+      + JSON.stringify(lifted));
+  }
+});
+
+/* da25 (review finding 4, key file): deleting desk-ai-key.json from userData stops the running desk's next ask without a save or restart. */
+async function keyFileRemovedDrive(mainSrc) {
+  const fetch = fetchOf(() => ({ status: 200, text: chatSaying("[2,1]") }));
+  const ctx = loadMain({ fetch, mainSrc, safeStorage: SEAL,
+    answer: (op, a) => op === "search-shortlist" ? { q: a.q, gen: 1, cards: ["c1", "c2"], intents: [] } : openAnswer(op) });
+  builtinFrom(ctx.T, [{ id: "t:post", score: 0.9 }]);
+  writeOrgSetting(ctx);
+  ctx.on["etiuda:search-set"](ENGINE, true);
+  await ctx.handle["etiuda:search-prepare"](ENGINE, ROWS);
+  await ctx.handle["etiuda:search-rank"](ENGINE, "lantern wick");
+  await tick(AI.SETTLE_MS + 60);
+  const before = fetch.calls.length;
+  fs.unlinkSync(path.join(ctx.electron.app.getPath("userData"), "desk-ai-key.json"));
+  const cfgAfter = ctx.T.deskAiConfig();
+  await ctx.handle["etiuda:search-rank"](ENGINE, "kettle tea");
+  await tick(AI.SETTLE_MS + 60);
+  await openPicker(ctx, MESSAGE, 80);
+  return { before, after: fetch.calls.length, cfgAfter };
+}
+await block(async () => {
+  const r = await keyFileRemovedDrive();
+  check(r.before === 1 && r.after === 1 && r.cfgAfter === null,
+    "da25 deleting desk-ai-key.json stops a running desk's next ask without a save or restart: " + JSON.stringify(r));
+  if (PLANTS_OFF) skipPlant("da25p lifting plant:desk-ai-key-stamp keeps sending after desk-ai-key.json is deleted (ETIUDA_PLANTS=off)");
+  else {
+    const lifted = await keyFileRemovedDrive(edited(MAIN_SRC,
+      "if (deskAiKept && deskAiKept.from === joinPolicyRead && deskAiKept.stamp === stamp) return deskAiKept.now; /* plant:desk-ai-key-stamp */",
+      "if (deskAiKept && deskAiKept.from === joinPolicyRead) return deskAiKept.now;"));
+    check(lifted.after > lifted.before,
+      "da25p with plant:desk-ai-key-stamp lifted, the running desk keeps sending after desk-ai-key.json is deleted and the leg above fails: "
+      + JSON.stringify(lifted));
   }
 });
 
