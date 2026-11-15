@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 580;
+const EXPECTED = 589;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -2009,6 +2009,73 @@ async function main() {
     });
     check(heldPlant.turned && heldPlant.back, "962h dropping registeredAfter from the removed key's resume reopens that invitation's session, and the product file is never written: "
       + heldPlant.detail + ", sha " + (heldPlant.back ? "unchanged" : "CHANGED"));
+
+    /* One public key answers to two names, its raw half and its branch id, and the lead's rows are kept under the one it used: a
+       removed key naming itself by the other is answered as under the name it was removed by (Argon's review of the relay, finding 1).
+       Each scene runs under the branch id the desk was enrolled by, the control, and under its raw half; both must hold. */
+    const rawOf = k => ({ keyId: k.pub, pub: k.pub, privateKey: k.privateKey });
+    const rawScenes = {
+      /* An invitation registered before the removal, its token unused: answered removed, the token unspent. */
+      async before(raw) {
+        const y = await world();
+        const token = hex(32), id = hex(16);
+        await invites(y, [{ id, hash: sha(token) }], []);
+        y.R.clock.now += 1;
+        await devices(y, y.devs.slice(1));
+        const hello = await boundHello(y, raw ? rawOf(y.desk) : y.desk, id, token);
+        const inv = y.R.stores.get(y.rt).get("inv:" + id);
+        return { ok: refused(hello, "removed") && !(inv && inv.spent), detail: said(hello) + ", spent " + !!(inv && inv.spent) };
+      },
+      /* An invitation registered after the removal: its session is quiet, and lists and fetches nothing. */
+      async after(raw) {
+        const y = await world();
+        const lead = await sessionOf(y, y.lead);
+        const b = sealAs(y, y.lead, "root.txt", 1);
+        await put(y, lead, b, { extra: { pub: y.lead.pub } });
+        await devices(y, y.devs.slice(1));
+        y.R.clock.now += 1;
+        const token = hex(32), id = hex(16);
+        await invites(y, [{ id, hash: sha(token) }], []);
+        const hello = await boundHello(y, raw ? rawOf(y.desk) : y.desk, id, token);
+        const s = hello.json && hello.json.session;
+        const listed = await since(y, s), fetched = await getBlob(y, s, b.id);
+        return { ok: hello.status === 200 && refused(listed, "removed") && refused(fetched, "removed"),
+          detail: said(hello) + ", list " + said(listed) + ", fetch " + said(fetched) };
+      },
+      /* A binding made while the key was enrolled, then the removal: the bound session reads nothing, and a key hello is removed. */
+      async held(raw) {
+        const y = await world();
+        const token = hex(32), id = hex(16), who = raw ? rawOf(y.desk) : y.desk;
+        await invites(y, [{ id, hash: sha(token) }], []);
+        const hello = await boundHello(y, who, id, token);
+        await devices(y, y.devs.slice(1));
+        const listed = await since(y, hello.json && hello.json.session);
+        const again = await helloAs(y, who);
+        return { ok: hello.status === 200 && refused(listed, "removed") && refused(again, "removed"),
+          detail: said(hello) + ", list " + said(listed) + ", key hello " + said(again) };
+      },
+    };
+    const rawRun = async name => {
+      const control = await rawScenes[name](false), raw = await rawScenes[name](true);
+      return { ok: control.ok && raw.ok, detail: "branch id " + control.detail + "; raw half " + raw.detail };
+    };
+    const rawBefore = await rawRun("before");
+    check(rawBefore.ok, "r1a a removed key's token hello on an invitation registered before its removal is answered removed, the token unspent,"
+      + " whether it names itself by the branch id it was removed by or by its raw public half: " + rawBefore.detail);
+    const rawAfter = await rawRun("after");
+    check(rawAfter.ok, "r1b a removed key's session on an invitation registered after its removal is quiet, listing and fetching nothing,"
+      + " under either name: " + rawAfter.detail);
+    const rawHeld = await rawRun("held");
+    check(rawHeld.ok, "r1c a key that bound an invitation while enrolled and was then removed reads nothing on that session and is answered"
+      + " removed on a key hello, under either name: " + rawHeld.detail);
+    const rawLift = await liftCore("plant:removal-either-name", async () => !(await rawRun("before")).ok && !(await rawRun("after")).ok
+      && !(await rawRun("held")).ok);
+    check(rawBefore.ok && rawAfter.ok && rawHeld.ok && rawLift.turned && rawLift.back, "r1d lifting plant:removal-either-name turns r1a, r1b and r1c red"
+      + " under the raw half, and the product file is never written: " + rawLift.detail.split("\n")[0] + ", sha " + (rawLift.back ? "unchanged" : "CHANGED"));
+    const markLift = await liftCore("plant:withdraw-invite-pub", async () => !(await rawRun("held")).ok);
+    check(rawHeld.ok && markLift.turned && markLift.back, "r1e lifting plant:withdraw-invite-pub leaves the session bound under the raw half"
+      + " reading after the removal (r1c red), and the product file is never written: " + markLift.detail.split("\n")[0]
+      + ", sha " + (markLift.back ? "unchanged" : "CHANGED"));
 
     /* The two moments are ordered by the relay's own counter, not its clock (edit 4): a clock stepping back between a
        registration and a removal changes neither answer. */
@@ -5528,6 +5595,28 @@ async function main() {
       return call(w.R, "POST", "/relay/v1/t/" + w.rt + "/lead", { json: leadMoveBody(w.rt, w.lead, newLead, now, opts) });
     };
 
+    /* A refused repeat, a handover naming the lead the team already has under a forged signature, leaves that team's place on the
+       lead's list: a reserve says whether it added the rt, and only a place it added is given back (Argon's review, finding 4). */
+    const answer = r => (r.json && r.json.error) || r.status;
+    async function repeatFreeScene(worker) {
+      const R = envAt(), lead = keyPair(false), now = R.clock.now;
+      const made = await fill(R, lead, CAP, now);
+      if (!made.ok) return { ok: false, detail: "fill " + made.status };
+      const rt = made.rts[0];
+      const moved = await call(R, "POST", "/relay/v1/t/" + rt + "/lead", { json: leadMoveBody(rt, lead, lead, now, { sig: "0".repeat(128) }), worker });
+      const list = leadList(R, lead);
+      const over = await call(R, "POST", "/relay/v1/teams", { json: createBody(hex(16), lead, now), worker });
+      const kept = !!list && list.indexOf(rt) >= 0 && list.length === CAP;
+      return { ok: refused(moved, "bad-signature") && kept && refused(over, "team-count"),
+        detail: JSON.stringify({ moved: answer(moved), kept, length: list ? list.length : -1, over: answer(over) }) };
+    }
+    const repeatFree = await repeatFreeScene();
+    check(repeatFree.ok, "r1f a refused handover to the team's own lead keeps that team on the lead's list, and the lead's next new team is"
+      + " still refused team-count at the bound: " + repeatFree.detail);
+    const addedLift = await editWorker(lineLifted("plant:lead-added-move"), async mod => !(await repeatFreeScene(mod.routeWith(K.ROOTS, env => env.NOW()))).ok);
+    check(repeatFree.ok && addedLift.turned && addedLift.back, "r1g lifting plant:lead-added-move gives the live team's place back on that refusal"
+      + " (r1f red), and the product file is never written: " + how(addedLift));
+
     // 933a: move signed by old lead is taken, new key hello opens lead session
     const w = await world();
     const newLead = keyPair(false);
@@ -6661,6 +6750,21 @@ async function main() {
     const rawId = await safe(rawIdScene);
     check(rawId.ok, "a4n a desk knocks at the door by its k- id alone: the removed desk naming itself by its raw public half is refused and"
       + " opens no request, and so is any desk by that form: " + rawId.detail);
+    /* The other way round (Argon's review of the relay, finding 1): a desk the lead enrolled, and removed, by its raw public half is
+       answered removed when it knocks by its k- id, and opens no request. */
+    async function rawEnrolledScene() {
+      const w = await doorWorld();
+      const k = keyPair(true), place = deskOf(w);
+      const on = await devices(w, w.devs.concat([{ id: k.pub, pub: k.pub, desk: place }]));
+      const off = await devices(w, w.devs);
+      const before = doorRows(w).length;
+      const back = await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now));
+      const ok = on.status === 200 && off.status === 200 && refused(back, "removed") && doorRows(w).length === before;
+      return { ok, detail: JSON.stringify({ on: said(on), off: said(off), back: said(back), rows: [before, doorRows(w).length] }) };
+    }
+    const rawEnrolled = await safe(rawEnrolledScene);
+    check(rawEnrolled.ok, "a4v a desk enrolled and removed by its raw public half is refused removed at the door by its k- id, and opens no request: "
+      + rawEnrolled.detail);
 
     /* The test architect's F2: a request the lead drops leaves no spent marker, and its key and person stay held against the door
        for the door's rate window from the drop (his re-tune: not the 30-day keep), so a drop frees neither to knock again at once;
@@ -6883,6 +6987,7 @@ async function main() {
       ["door-lapse-open", async () => !(await lapseScene()).ok, "a4l (a read-only team opens its door)"],
       ["door-handover", async () => !(await handoverScene()).ok, "a4m (the old lead's door stands after a handover)"],
       ["door-key-form", async () => !(await rawIdScene()).ok, "a4n (a removed desk knocks by its raw public half)"],
+      ["removal-either-name", async () => !(await rawEnrolledScene()).ok, "a4v (a desk removed by its raw public half knocks by its k- id)"],
       ["door-drop-kept", async () => !(await dropScene()).ok, "a4o (a dropped door request frees its key and person)"],
       ["door-drop-key", async () => !(await dropScene()).ok, "a4o (a dropped door request's key knocks again at once)"],
       ["door-drop-person", async () => !(await dropScene()).ok, "a4o (a person's dropped request makes room at the door)"],
@@ -6895,7 +7000,7 @@ async function main() {
       ["door-withdrawn-live", async () => !(await withdrawCostScene()).ok, "a4s (a request taken back still holds its person)"],
     ];
     const base = taken.ok && refusesAll.ok && closed.ok && register.ok && person.ok && rated.ok && live.ok && tries.ok && request.ok && removed.ok
-      && invs.ok && lapsed.ok && handed.ok && rawId.ok && drops.ok && seenBack.ok && costBack.ok && unsent.ok && capBack.ok;
+      && invs.ok && lapsed.ok && handed.ok && rawId.ok && rawEnrolled.ok && drops.ok && seenBack.ok && costBack.ok && unsent.ok && capBack.ok;
     for (const [tag, turns, what] of DOOR_PLANTS) {
       const line = "a4p lifting plant:" + tag + " turns " + what + " red, and the product file is never written";
       if (PLANTS_OFF) { skip(line); continue; }

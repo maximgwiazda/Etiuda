@@ -14,6 +14,9 @@
  *   b3  the notices, from the control of the thing they concern, and a second from one control from the first
  *   b4  the rescue the boot guard draws at a start whose storage refuses, from Etiuda's name
  *   b5  the questions and three Undos in Polish light, English dark and Polish dark
+ *   b6  the confirmations' buttons in the family's order, light and dark: the acting choice first, on the fill's dark,
+ *       and the way out filled (white) and last: Close Etiuda?, loading over one's own cards, Clear local changes?, the
+ *       reset left unfinished
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -33,7 +36,7 @@ const check = (ok, what, detail) => {
   if (!ok) fails++;
 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 10;
+const EXPECTED = 11;
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-bubbles-"));
 fs.copyFileSync(E.ENGINE_PATH, path.join(lab, "etiuda.html"));
@@ -361,6 +364,33 @@ async function runRescue(label) {
   check(!!r.ok, label, r);
 }
 
+/* THE FAMILY'S ORDER. Each act opens one confirmation and names the button that leaves things as they are. */
+const SHAPES = [
+  ["Close Etiuda?", () => { document.body.classList.add("e-host"); document.getElementById("pax").value = "A traveller";
+    document.getElementById("pax").dispatchEvent(new Event("input", { bubbles: true })); askClose(() => {}); return { bub: "#eCloseAsk", out: "eCloseStay" }; }],
+  ["loading over one's own cards", () => { askLoose(() => {}); return { bub: "#eLoose", out: "eLooseExport" }; }],
+  ["Clear local changes?", () => { openManage(); document.getElementById("mgWipe").click(); return { bub: "#eClearAsk", out: "eClearStay" }; }],
+  ["the reset left unfinished", () => { openUnfinishedReset({ paths: ["a folder"] }); return { bub: "#eResetAsk", out: "mtResetStop" }; }],
+];
+async function runShapes(page, theme, bad) {
+  for (const [what, act] of SHAPES) {
+    let sel;
+    try { sel = await page.evaluate(act); } catch (e) { bad.push({ what, theme, why: "act threw" }); continue; }
+    await sleep(300);
+    const r = await page.evaluate(sel => {
+      const bub = document.querySelector(sel.bub);
+      const btns = bub ? [...bub.querySelectorAll(".tour-actions .btn")].filter(b => b.getClientRects().length) : [];
+      const white = b => { const m = getComputedStyle(b).backgroundColor.match(/[\d.]+/g) || [];
+        return +m[0] > 240 && +m[1] > 240 && +m[2] > 240 && (m[3] === undefined || +m[3] > 0.9); };
+      return { ids: btns.map(b => b.id), filled: btns.filter(white).map(b => b.id) };
+    }, sel);
+    const ok = r.ids.length >= 2 && r.ids[r.ids.length - 1] === sel.out && r.filled.length === 1 && r.filled[0] === sel.out;
+    if (!ok) bad.push({ what, theme, ...r });
+    await tidy(page);
+    await sleep(60);
+  }
+}
+
 async function runQuestions(page, label) {
   const bad = [];
   for (const [what, act] of QUESTIONS) {
@@ -394,6 +424,13 @@ try {
     await runUndos(q, "b5 " + lang + " " + theme + ": three Undos ({N})", ["Tab closed, by its X", "Card deleted in its editor, on the desk", "Settings reset"]);
     await q.close();
   }
+  const shapeBad = [];
+  for (const theme of ["light", "dark"]) {
+    const p = await boot({ theme });
+    await runShapes(p, theme, shapeBad);
+    await p.close();
+  }
+  check(!shapeBad.length, "b6 the confirmations' way out is filled and last, the acting choice first on the fill's dark (" + SHAPES.length + ", light and dark)", shapeBad);
 } catch (e) {
   check(false, "run crashed: " + (e && e.stack ? e.stack.split("\n").slice(0, 3).join(" | ") : e));
 } finally {

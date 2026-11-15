@@ -51,7 +51,7 @@ import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXPECTED = 14;
+const EXPECTED = 15;
 const DT = 1000 / 60;
 const SETTLE = 400;
 const WINDOW = 1700;
@@ -90,7 +90,7 @@ function loadFifth() {
 function makeLab() {
   let seq = 0, frames = [];
   const lab = {
-    layouts: 0, styleReads: 0, dWrites: 0, clientReads: 0, draws: [], pieces: [], puts: [], dirty: false, arm: false, t: 0
+    layouts: 0, styleReads: 0, dWrites: 0, clientReads: 0, draws: [], pieces: [], puts: [], dirty: false, arm: false, t: 0, canvases: []
   };
   const mark = () => { if (lab.arm) lab.dirty = true; };
   const tile = {
@@ -140,8 +140,10 @@ function makeLab() {
       lab.draws.push({ d: p.d, phase: sb.__f.fifthPhase(), w: ctx.lineWidth, cap: ctx.lineCap, join: ctx.lineJoin,
         tx: ctx.tx, ty: ctx.ty, sc: ctx.sc, a: ctx.a, md: ctx.d, e: ctx.e, f: ctx.f, ink: ctx.strokeStyle });
     };
-    const cv = { className: "", _w: 0, _h: 0, setAttribute() {}, getContext: () => ctx };
+    // A canvas the browser makes is 300 by 150 until something sizes it.
+    const cv = { className: "", _w: 300, _h: 150, setAttribute() {}, getContext: () => ctx };
     if (first) lab.canvas = cv;
+    lab.canvases.push(cv);
     // The bitmap size is a layout. A repaint that sets it again would put the layouts back.
     Object.defineProperty(cv, "width", { get() { return cv._w; }, set(v) { if (lab.arm && v !== cv._w) mark(); cv._w = v; } });
     Object.defineProperty(cv, "height", { get() { return cv._h; }, set(v) { if (lab.arm && v !== cv._h) mark(); cv._h = v; } });
@@ -238,6 +240,7 @@ function makeLab() {
 
 const header = makeLab();
 header.wire();
+const freshBmp = header.canvases.map(c => c._w + "x" + c._h);
 header.play(SETTLE);
 header.zero();
 header.arm = true;
@@ -303,6 +306,9 @@ check(beforeBmp === 25 && afterBmp === 50 && ratio.draws.length >= 30 && ratio.d
   "898e a ratio change resizes the bitmap from " + beforeBmp + " to " + afterBmp
   + " and the next window strokes at " + (ratioLast ? ratioLast.a : "nothing")
   + ", with " + ratio.layouts + " layout(s) and " + ratio.clientReads + " size read(s)");
+/* A bitmap left at the browser's 300 by 150 is squeezed into the 25 px tile, and the mark reads as a dot at ratio 1. */
+check(freshBmp.length === 2 && freshBmp.every(b => b === "25x25"),
+  "898g at ratio 1 the wire fits both fresh canvases (the browser's 300 by 150) to the tile: " + freshBmp.join(", "));
 
 const force = makeLab();
 force.wire();

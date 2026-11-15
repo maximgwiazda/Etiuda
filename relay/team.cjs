@@ -199,7 +199,8 @@ function teamObject(deps) {
     await ns.get(ns.idFromName("lead:" + leadKey)).fetch(leadRequest({ op: "release", rt: heldRt }));
   }
   /* Reserve or release one rt on this lead's list. A repeat of an id already listed is taken and does not raise the
-     count. At the bound, each listed team's object is asked once and a dead id is dropped before the new one is refused. */
+     count. At the bound, each listed team's object is asked once and a dead id is dropped before the new one is refused.
+     A reserve answers whether it added the rt: a place it did not add is not the caller's to give back. */
   async function leadAnswer(request) {
     const bytes = await readCapped(request, JSON_MAX);
     let body = null;
@@ -217,7 +218,7 @@ function teamObject(deps) {
     const row = deps.store.get("lead");
     let rts = row && Array.isArray(row.rts) ? row.rts.filter(x => typeof x === "string") : [];
     const leadKey = lead || (row && row.leadKey) || null;
-    if (rts.indexOf(rt) !== -1) return reply(200, { ok: true }); /* plant:lead-repeat */
+    if (rts.indexOf(rt) !== -1) return reply(200, { ok: true, added: false }); /* plant:lead-repeat */
     let full = rts.length >= TEAMS_PER_LEAD;
     if (full) {
       const ns = namespaceOf(deps.teams);
@@ -236,7 +237,7 @@ function teamObject(deps) {
     if (full) return refusedFor("team-count"); /* plant:team-count */
     rts.push(rt);
     await keepLead(row, rts, leadKey);
-    return reply(200, { ok: true });
+    return reply(200, { ok: true, added: true });
   }
   /* The lead's list written, or deleted where it names no team, and its alarm set LEAD_KEEP_MS on or cleared with it. */
   async function keepLead(row, rts, leadKey) {

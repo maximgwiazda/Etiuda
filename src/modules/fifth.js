@@ -169,7 +169,7 @@ function headerPaint(node){
     const dpr=globalThis.devicePixelRatio||1;
     const w0=tile.clientWidth, h0=tile.clientHeight;
     const w=w0>0?w0:box.w, h=h0>0?h0:box.h;
-    if(w===box.w && h===box.h && dpr===box.dpr && cv.width) return;
+    // A fresh canvas is 300 by 150, so only the bitmap's own size says it is fitted; writing a size clears it.
     box.w=w; box.h=h; box.dpr=dpr;
     const bw=Math.max(1, Math.round(w*dpr)), bh=Math.max(1, Math.round(h*dpr));
     if(cv.width!==bw) cv.width=bw;

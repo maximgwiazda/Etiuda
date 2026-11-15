@@ -25894,7 +25894,6 @@ What you type stays in this browser only.`;
       const dpr = globalThis.devicePixelRatio || 1;
       const w0 = tile.clientWidth, h0 = tile.clientHeight;
       const w = w0 > 0 ? w0 : box.w, h = h0 > 0 ? h0 : box.h;
-      if (w === box.w && h === box.h && dpr === box.dpr && cv.width) return;
       box.w = w;
       box.h = h;
       box.dpr = dpr;
@@ -32255,7 +32254,7 @@ What you type stays in this browser only.`;
     if (page && !page.classList.contains("on")) page.click();
     const el = resetAsk(
       "mt-reset-unfinished",
-      '<h3 id="eResetAskT" data-i18n-skip></h3><p>' + esc(t(RESET_NEXT)) + '</p><div class="tour-actions"><button type="button" class="btn" id="mtResetStop">' + esc(t("Stop the reset")) + '</button><button type="button" class="btn danger" id="mtResetAgain">' + esc(t("Try again")) + "</button></div>",
+      '<h3 id="eResetAskT" data-i18n-skip></h3><p>' + esc(t(RESET_NEXT)) + '</p><div class="tour-actions"><button type="button" class="btn danger" id="mtResetAgain">' + esc(t("Try again")) + '</button><button type="button" class="btn primary" id="mtResetStop">' + esc(t("Stop the reset")) + "</button></div>",
       "mtResetStop"
     );
     el.querySelector("#eResetAskT").textContent = line;
@@ -36642,16 +36641,37 @@ What you type stays in this browser only.`;
       lede.textContent = !sec || q ? "" : sec.key === "catmac" && n ? n + ". " + sec.lede : sec.key === "intents" ? (n ? t("Intents: {N}.").replace("{N}", n) + " " : "") + everyLine + sec.lede : sec.lede;
     }
   }
+  function markLibCut(page) {
+    if (libFold(libQuery)) {
+      markCutText(page);
+      return;
+    }
+    const nav = page.querySelector(".sx-nav"), sec = page.querySelector('details.manage-sec[data-mg="' + libOn + '"]');
+    if (nav) markCutText(nav);
+    if (sec) markCutText(sec);
+  }
+  function showLibSection(page) {
+    if (!page || !page.isConnected || page !== libPage()) return false;
+    applyLibView(page);
+    const at = page.querySelector("#libPage");
+    if (at) at.scrollTop = 0;
+    markLibCut(page);
+    if (libOn === "intents") markChipOverflow();
+    if (libOn === "catmac") updateTreeHoverTitles(page);
+    return true;
+  }
   function wireLibShell(page) {
     if (!page || typeof page.querySelectorAll !== "function") return;
     const buttons = page.querySelectorAll(".sx-sec[data-lm]");
     if (!buttons || !buttons.length) return;
     buttons.forEach((b) => {
       b.onclick = () => {
+        const wasList = libView === "list" && !libFold(libQuery);
         libView = "list";
         libOn = b.getAttribute("data-lm") || libOn;
         libQuery = "";
         mgOpen.add(libOn);
+        if (wasList && showLibSection(page)) return;
         paintLibrary();
       };
     });
@@ -36939,6 +36959,7 @@ What you type stays in this browser only.`;
   }
   var LIB_SCREEN = "library";
   var libView = "list";
+  var libDrawn = null;
   function libHost() {
     if (screenOn !== LIB_SCREEN) return null;
     const host = document.getElementById("screenHost");
@@ -36954,9 +36975,21 @@ What you type stays in this browser only.`;
     const isHist = libView === "history";
     const name = catalogFileName();
     const fk = focusKey(document.activeElement, host);
-    host.innerHTML = '<div class="sx lm lm-lib lib-screen lib-list' + (isHist ? " is-history" : "") + '" tabindex="-1"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Library")) + '">' + libraryHeadHtml() + '<label class="sx-search">' + lmIcon("search") + '<input type="search" id="libSearch" autocomplete="off" spellcheck="false" placeholder="' + esc(libFind()) + '" aria-label="' + esc(libFind()) + '" value="' + esc(libQuery) + '"></label><div class="sx-secs" id="libSecs">' + libNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="libMaint">' + lmIcon("statistics") + esc(t("Maintenance")) + " <kbd>" + esc(formatActionChord("maintenance")) + "</kbd></button></div></nav>" + (isHist ? '<div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + " · <span data-i18n-skip>" + esc(t("Saved copies")) + '</span></div><div class="screen-head"><h2>' + esc(t("Saved copies")) + '</h2></div><div class="sx-card"><div id="ehView"></div></div></div>' : '<div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + (name ? " · <span data-i18n-skip>" + esc(name) + "</span>" : "") + '</div><h2 id="libTitle" data-i18n-skip></h2><p class="lede" id="libLede" data-i18n-skip></p><div class="sx-card">' + (body || openManage(true)) + "</div></div>") + "</div>" + (isHist ? '<div class="screen-actions"><div class="mf-left"></div><button type="button" class="btn primary" id="ehClose">' + esc(t("Back to the Library")) + "</button></div>" : "") + "</div>";
-    const page = host.querySelector(".lib-list");
-    if (isHist) {
+    const html = '<div class="sx lm lm-lib lib-screen lib-list' + (isHist ? " is-history" : "") + '" tabindex="-1"><div class="lm-split"><nav class="sx-nav" aria-label="' + esc(t("Library")) + '">' + libraryHeadHtml() + '<label class="sx-search">' + lmIcon("search") + '<input type="search" id="libSearch" autocomplete="off" spellcheck="false" placeholder="' + esc(libFind()) + '" aria-label="' + esc(libFind()) + '" value="' + esc(libQuery) + '"></label><div class="sx-secs" id="libSecs">' + libNavHtml() + '</div><div class="sx-foot"><button type="button" class="sx-maint" id="libMaint">' + lmIcon("statistics") + esc(t("Maintenance")) + " <kbd>" + esc(formatActionChord("maintenance")) + "</kbd></button></div></nav>" + (isHist ? '<div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + " · <span data-i18n-skip>" + esc(t("Saved copies")) + '</span></div><div class="screen-head"><h2>' + esc(t("Saved copies")) + '</h2></div><div class="sx-card"><div id="ehView"></div></div></div>' : '<div class="sx-page" id="libPage"><div class="sx-crumb">' + esc(t("Library")) + (name ? " · <span data-i18n-skip>" + esc(name) + "</span>" : "") + '</div><h2 id="libTitle" data-i18n-skip></h2><p class="lede" id="libLede" data-i18n-skip></p><div class="sx-card">' + (body || openManage(true)) + "</div></div>") + "</div>" + (isHist ? '<div class="screen-actions"><div class="mf-left"></div><button type="button" class="btn primary" id="ehClose">' + esc(t("Back to the Library")) + "</button></div>" : "") + "</div>";
+    const kept = !isHist && libDrawn && libDrawn.html === html && libDrawn.page.isConnected === false ? libDrawn.page : null;
+    if (kept) host.replaceChildren(kept);
+    else host.innerHTML = html;
+    const page = kept || host.querySelector(".lib-list");
+    libDrawn = isHist ? null : { html, page };
+    if (kept) {
+      applyLibView(page);
+      const at2 = page.querySelector("#libPage");
+      if (at2) at2.scrollTop = 0;
+      paintCatalogList();
+      markLibCut(page);
+      updateTreeHoverTitles(page);
+      updateIntentDateTitles(page);
+    } else if (isHist) {
       wireLibShell(page);
       openHistory(host.querySelector("#ehView") || host);
       const back = host.querySelector("#ehClose");
@@ -36965,11 +36998,12 @@ What you type stays in this browser only.`;
         paintLibrary(host);
       };
     } else {
+      applyLibView(page);
       wireLibrary(page);
       translateTree(page);
       applyLibView(page);
       dressDialogInputs(page);
-      markCutText(page);
+      markLibCut(page);
       updateTreeHoverTitles(page);
       updateIntentDateTitles(page);
     }
@@ -37025,11 +37059,13 @@ What you type stays in this browser only.`;
       intentsList.classList.toggle("chips-narrow", c.room - (aside ? 0 : c.date) < CHIP_COL_NARROW);
     } else if (c.gone) intentsList.classList.add("date-aside");
     updateIntentDateTitles();
+    const rows = [];
     intentsList.querySelectorAll(".manage-row.mg-int").forEach((r) => {
       const more = r.querySelector("[data-chips-more]"), mid = r.querySelector(".lw-mid");
       if (!more || !mid) return;
-      const open = r.classList.contains("chips-open");
-      const over = mid.scrollWidth > mid.clientWidth + 1;
+      rows.push({ r, more, open: r.classList.contains("chips-open"), over: mid.scrollWidth > mid.clientWidth + 1 });
+    });
+    rows.forEach(({ r, more, open, over }) => {
       more.hidden = !open && !over;
       r.classList.toggle("chips-fade", !open && over);
     });
