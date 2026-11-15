@@ -578,6 +578,118 @@ try {
       );
     }
   }
+
+  /* === LOOK 4: Gender mark beside empty customer name === */
+  {
+    const readGenderVisual = (p) => p.evaluate(() => {
+      const drum = document.getElementById("genderDrum");
+      const svg = drum ? drum.querySelector(".gd-cur") : null;
+      const rs = getComputedStyle(document.documentElement);
+      const parseRgb = (s) => {
+        const el = document.createElement("span");
+        el.style.color = s;
+        document.body.appendChild(el);
+        const c = getComputedStyle(el).color;
+        el.remove();
+        return c;
+      };
+      return {
+        dimInk: parseRgb(rs.getPropertyValue("--dim").trim()),
+        fullInk: parseRgb(rs.getPropertyValue("--ink").trim()),
+        curColor: svg ? getComputedStyle(svg).color : "",
+        hand: !!(drum && drum.classList.contains("gd-hand")),
+        empty: !!(drum && drum.classList.contains("gd-empty")),
+        title: drum ? drum.title : "",
+        g: drum ? drum.dataset.g : ""
+      };
+    });
+
+    const probeGender = async (pageUrl) => {
+      const ctx = await browser.createBrowserContext();
+      const p = await ctx.newPage();
+      p.on("dialog", (d) => { d.dismiss().catch(() => {}); });
+      await p.setViewport({ width: 1280, height: 860 });
+      await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
+      await p.evaluateOnNewDocument(() => {
+        try {
+          localStorage.setItem("eUiLang", "en");
+          localStorage.setItem("eAgent", "Anna");
+          localStorage.setItem("eNameAsked", "1");
+          localStorage.setItem("eTourDone_v3", "1");
+        } catch (e) {}
+      });
+      await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
+      await p.waitForFunction(
+        () => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0,
+        { timeout: 30000 }
+      );
+      if (await p.$("#ecYes")) await p.click("#ecYes");
+      await p.waitForFunction(
+        () => document.querySelectorAll("#list .card").length > 0 && !document.getElementById("ecYes")
+          && !document.querySelector(".e-launch-veil"),
+        { timeout: 30000 }
+      );
+      await sleep(150);
+
+      const whenEmpty = await readGenderVisual(p);
+      await p.focus("#pax");
+      await p.keyboard.type("Anna");
+      await sleep(100);
+      const whenTyped = await readGenderVisual(p);
+
+      await p.click("#genderDrum");
+      await sleep(100);
+      const whenHand = await readGenderVisual(p);
+
+      await p.evaluate(() => {
+        const el = document.getElementById("pax");
+        el.value = "";
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      await sleep(100);
+      const whenCleared = await readGenderVisual(p);
+
+      await closePage(p);
+      return { whenEmpty, whenTyped, whenHand, whenCleared };
+    };
+
+    EXPECTED += 4;
+    const g = await probeGender(cleanSampleUrl);
+    check(
+      g.whenEmpty.curColor === g.whenEmpty.dimInk && g.whenEmpty.hand === false && !!g.whenEmpty.title,
+      "4a empty #pax draws gender mark in dim ink (--dim) with tooltip",
+      g.whenEmpty
+    );
+    check(
+      g.whenTyped.curColor === g.whenTyped.fullInk && g.whenTyped.curColor !== g.whenTyped.dimInk
+        && g.whenTyped.hand === false && g.whenTyped.g === "f",
+      "4b typing a customer name gives gender mark full ink (--ink) while staying auto-detected",
+      g.whenTyped
+    );
+    check(
+      g.whenHand.hand === true && g.whenHand.curColor === g.whenHand.fullInk
+        && g.whenHand.g !== g.whenTyped.g && g.whenHand.title !== g.whenTyped.title
+        && g.whenCleared.hand === false && g.whenCleared.curColor === g.whenCleared.dimInk,
+      "4c click tooltip/behaviour stay and clearing #pax returns mark to dim ink",
+      { whenHand: g.whenHand, whenCleared: g.whenCleared }
+    );
+
+    if (PLANTS_OFF) {
+      skip("plant-gender-dim: keeping gd-cur dim without gd-hand turns 4b red (ETIUDA_PLANTS=off)");
+    } else {
+      const planted = rawHtml.replace(
+        /#genderDrum\.gd-empty:not\(\.gd-hand\) \.gd-cur\{color:var\(--dim\)\}/,
+        "#genderDrum:not(.gd-hand) .gd-cur{color:var(--dim)}"
+      );
+      const plantUrl = writeEngine(path.join(lab, "plant-4"), planted, true);
+      const pg = await probeGender(plantUrl);
+      check(
+        planted !== rawHtml && pg.whenTyped.curColor === pg.whenTyped.dimInk,
+        "plant-gender-dim: keeping gd-cur dim without gd-hand turns 4b red",
+        pg.whenTyped
+      );
+    }
+  }
 } catch (err) {
   console.error("HARNESS ERROR:", err);
   fails++;

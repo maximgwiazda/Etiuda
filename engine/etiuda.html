@@ -1535,8 +1535,9 @@ body.role-waits #roleDrum{display:none}
 #roleDrum:hover .rd-prev,#roleDrum:hover .rd-next,#roleDrum:focus-visible .rd-prev,#roleDrum:focus-visible .rd-next{opacity:.5}
 #roleDrum .rd-track.rd-up{animation:rd-up var(--m-move) var(--m-ease)}
 #roleDrum .rd-track.rd-down{animation:rd-down var(--m-move) var(--m-ease)}
-/* The gender glyph at the box's right end: grey when read from the name, ink and the accent's dot when
-   set by hand. A click, the wheel and the arrow keys turn it (gender-turn.js). */
+/* The gender glyph at the box's right end: dim when the customer name is empty, full ink once
+   typed, and heavier stroke plus the accent's dot when set by hand. A click, the wheel and the
+   arrow keys turn it (gender-turn.js). */
 #genderDrum{position:relative;flex:0 0 auto;width:var(--gender-glyph);border-left:1px solid var(--field-line);
   overflow:hidden;user-select:none;-webkit-user-select:none;outline:none;
   border-radius:0 var(--radius-sm) var(--radius-sm) 0;
@@ -1547,7 +1548,8 @@ body.role-waits #roleDrum{display:none}
 .paxrole .field-clear{right:calc(var(--gender-glyph) + 4px)}
 #genderDrum .gd-track{position:absolute;inset:0}
 #genderDrum svg{position:absolute;left:50%;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
-#genderDrum .gd-cur{top:50%;width:15px;height:15px;transform:translate(-50%,-50%);stroke-width:1.65;color:var(--dim)}
+#genderDrum .gd-cur{top:50%;width:15px;height:15px;transform:translate(-50%,-50%);stroke-width:1.65;color:var(--ink)}
+#genderDrum.gd-empty:not(.gd-hand) .gd-cur{color:var(--dim)}
 #genderDrum.gd-hand .gd-cur{color:var(--ink);stroke-width:1.9}
 #genderDrum .gd-prev,#genderDrum .gd-next{width:7px;height:7px;transform:translateX(-50%);stroke-width:2.4;
   color:var(--ink);opacity:0;transition:opacity var(--m-tone) ease}
@@ -12853,6 +12855,7 @@ What is typed here stays in this browser.`;
     const tr = d.querySelector(".gd-track");
     if (tr) tr.innerHTML = genderSvg(VAR_GENDERS[(i - 1 + n) % n], "gd-prev") + genderSvg(s.v, "gd-cur") + genderSvg(VAR_GENDERS[(i + 1) % n], "gd-next");
     d.classList.toggle("gd-hand", s.hand);
+    d.classList.toggle("gd-empty", s.empty);
     d.dataset.g = s.v;
     const said = genderSaid(s);
     d.setAttribute("aria-label", t("Customer's gender"));
