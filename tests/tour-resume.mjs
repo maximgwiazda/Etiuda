@@ -20,7 +20,7 @@ const E = require("./engine.js");
 const puppeteer = require("puppeteer-core");
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 15;
+const EXPECTED = 22;
 let fails = 0, checks = 0, skipped = 0;
 
 function check(ok, what, detail) {
@@ -165,6 +165,45 @@ async function openMenuAndStartTour(page) {
   return waitTourOn(page);
 }
 
+async function readMenuTourLabel(page) {
+  await page.waitForFunction(() => !document.querySelector(".e-launch-veil"), { timeout: 15000 });
+  await page.evaluate(() => {
+    const m = document.getElementById("settingsMenu");
+    if (m && m.hidden) document.getElementById("settingsBtn").click();
+  });
+  await page.waitForFunction(() => {
+    const m = document.getElementById("settingsMenu");
+    return !!(m && !m.hidden && m.querySelector('[data-act="tour"]'));
+  }, { timeout: 10000 });
+  const label = await page.evaluate(() => {
+    const b = document.querySelector('#settingsMenu [data-act="tour"]');
+    return b ? b.textContent.trim() : "";
+  });
+  await page.evaluate(() => {
+    const m = document.getElementById("settingsMenu");
+    if (m && !m.hidden) document.getElementById("settingsBtn").click();
+  });
+  return label;
+}
+
+async function setUiLang(page, lang) {
+  await page.evaluate(() => {
+    const m = document.getElementById("settingsMenu");
+    if (m && m.hidden) document.getElementById("settingsBtn").click();
+  });
+  await page.waitForFunction(() => {
+    const m = document.getElementById("settingsMenu");
+    return !!(m && !m.hidden && m.querySelector('[data-act="settings"]'));
+  }, { timeout: 10000 });
+  await page.click('#settingsMenu [data-act="settings"]');
+  await page.waitForSelector("#setUiLang", { timeout: 10000 });
+  await page.select("#setUiLang", lang);
+  await page.waitForFunction(l => localStorage.getItem("eUiLang") === l, {}, lang);
+  await sleep(120);
+  await page.click('#tabsBar .tab[data-tid]');
+  await sleep(120);
+}
+
 async function buildLiftedHtml(tag, outPath) {
   const tourPath = path.join(E.ROOT, "src", "modules", "tour.js");
   const lines = fs.readFileSync(tourPath, "utf8").split("\n");
@@ -205,6 +244,8 @@ try {
   st = await clickSkip(page);
   check(!st.on && st.ssAt === null && st.lsAt === null && st.lsInvite === "1",
     "skipping on step 1 leaves persistent step empty", st);
+  check((await readMenuTourLabel(page)) === "Show tour…",
+    "Menu row reads Show tour… when no step kept (EN)", await readMenuTourLabel(page));
 
   st = await openMenuAndStartTour(page);
   check(st.on && st.ssAt === "name", "Menu tour starts on welcome when nothing kept", st);
@@ -212,6 +253,8 @@ try {
   st = await clickSkip(page);
   check(!st.on && st.ssAt === null && st.lsAt === "load",
     "skipping on load step clears session step and keeps persistent step", st);
+  check((await readMenuTourLabel(page)) === "Continue the tour (2 of 17)",
+    "Menu row counts applicable steps on empty desk (2 of 17)", await readMenuTourLabel(page));
 
   await browser.close();
   browser = await launchWithProfile(profileEmpty);
@@ -220,6 +263,8 @@ try {
   st = await tourState(page);
   check(!st.on && st.lsAt === "load",
     "fresh launch with kept step does not auto-start tour", st);
+  check((await readMenuTourLabel(page)) === "Continue the tour (2 of 17)",
+    "Menu row keeps Continue the tour (2 of 17) after relaunch", await readMenuTourLabel(page));
   st = await openMenuAndStartTour(page);
   check(st.on && st.ssAt === "load" && st.title === "A catalog of replies",
     "opening tour from Menu after relaunch resumes on kept load step", st);
@@ -248,6 +293,12 @@ try {
   st = await tourState(page);
   check(!st.on && st.lsAt === "rail",
     "relaunching catalog desk does not auto-start partway tour", st);
+  check((await readMenuTourLabel(page)) === "Continue the tour (4 of 16)",
+    "Menu row reads Continue the tour (4 of 16) in EN", await readMenuTourLabel(page));
+  await setUiLang(page, "pl");
+  check((await readMenuTourLabel(page)) === "Wróć do przewodnika (krok 4 z 16)",
+    "Menu row reads Wróć do przewodnika (krok 4 z 16) in PL", await readMenuTourLabel(page));
+  await setUiLang(page, "en");
   st = await openMenuAndStartTour(page);
   check(st.on && st.ssAt === "rail" && st.title === "Intent panel",
     "opening from Menu after quit resumes on rail", st);
@@ -277,6 +328,12 @@ try {
 
   await page.click('#tabsBar .tab[data-tid]');
   await sleep(120);
+  check((await readMenuTourLabel(page)) === "Show tour…",
+    "Menu row resets to Show tour… after Finish (EN)", await readMenuTourLabel(page));
+  await setUiLang(page, "pl");
+  check((await readMenuTourLabel(page)) === "Pokaż przewodnik…",
+    "Menu row reads Pokaż przewodnik… when no step kept (PL)", await readMenuTourLabel(page));
+  await setUiLang(page, "en");
   st = await openMenuAndStartTour(page);
   check(st.on && st.ssAt === "name" && st.title === "Welcome to Etiuda",
     "opening tour from Menu after Finish starts on step 1", st);

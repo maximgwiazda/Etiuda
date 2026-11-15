@@ -6600,6 +6600,7 @@ What is typed here stays in this browser.`;
     "render",
     "closeSettingsMenu",
     "syncSettingsMenu",
+    "tourMenuState",
     "endTour",
     "startTour",
     "tourActive",
@@ -8596,6 +8597,7 @@ What is typed here stays in this browser.`;
     "Library…": "Biblioteka…",
     "Settings…": "Ustawienia…",
     "Show tour…": "Pokaż przewodnik…",
+    "Continue the tour ({N} of {OF})": "Wróć do przewodnika (krok {N} z {OF})",
     "About Etiuda": "O Etiudzie",
     "Hide intent panel": "Ukryj panel intencji",
     "Show intent panel": "Pokaż panel intencji",
@@ -18483,6 +18485,7 @@ What is typed here stays in this browser.`;
     tourDueAtBoot: () => tourDueAtBoot,
     tourHasFocus: () => tourHasFocus,
     tourHeardPick: () => tourHeardPick,
+    tourMenuState: () => tourMenuState,
     tourPickBubble: () => tourPickBubble,
     tourPickGo: () => tourPickGo,
     wireTourUi: () => wireTourUi
@@ -28012,8 +28015,10 @@ What is typed here stays in this browser.`;
         break;
       }
     }
-    if (n) n.nodeValue = text;
-    else btn.appendChild(document.createTextNode(text));
+    if (n) {
+      delete n.eI18nSrc;
+      n.nodeValue = text;
+    } else btn.appendChild(document.createTextNode(text));
   }
   function wireHeaderMenus() {
     paintMenuIcons();
@@ -28185,6 +28190,11 @@ What is typed here stays in this browser.`;
     syncPickerRow();
     syncUpdateOffer();
     syncOrgMark();
+    const tourBtn = $('#settingsMenu [data-act="tour"]');
+    if (tourBtn) {
+      const st = typeof hooks.tourMenuState === "function" ? hooks.tourMenuState() : null;
+      menuLabel(tourBtn, st ? t("Continue the tour ({N} of {OF})").replace("{N}", st.n).replace("{OF}", st.of) : t("Show tour…"));
+    }
     const pillsBtn = $("#menuPills");
     const railBtn = $("#menuRail");
     if (pillsBtn) {
@@ -29168,6 +29178,7 @@ What is typed here stays in this browser.`;
     ssSet(TOUR_AT, step.id);
     if (i > onFrom(0, 1)) lsSet(TOUR_AT, step.id);
     else lsDel(TOUR_AT);
+    if (typeof syncTourMenu === "function") syncTourMenu();
     if (!step.menu) closeSettingsMenu();
     runTourStepUndo();
     tourSection(step);
@@ -29236,6 +29247,20 @@ What is typed here stays in this browser.`;
     const L = TOUR_STEPS.findIndex((x) => x.id === "load");
     if (i > L && stepOn(L)) i = L;
     return i;
+  }
+  function tourMenuState() {
+    const i = tourResumeAt();
+    if (i < 0) return null;
+    const step = TOUR_STEPS[i];
+    if (!step) return null;
+    const on = TOUR_STEPS.map((_, k) => k).filter((k) => stepOn(k) && !TOUR_STEPS[k].inside);
+    const at = step.inside ? TOUR_STEPS.findIndex((x) => x.opens === step.id) : i;
+    const n = on.indexOf(at) + 1;
+    if (n < 1 || !on.length) return null;
+    return { at, id: step.id, n, of: on.length };
+  }
+  function syncTourMenu() {
+    if (typeof hooks !== "undefined" && typeof hooks.syncSettingsMenu === "function") hooks.syncSettingsMenu();
   }
   function startTour(from, auto) {
     if (!auto) {
@@ -29314,6 +29339,7 @@ What is typed here stays in this browser.`;
     }, TOUR_BREATH_MS));
   }
   function tourAfterRestart() {
+    if (typeof syncTourMenu === "function") syncTourMenu();
     if (!tourRunning || tourIdx < 0) return;
     const i = onFrom(tourIdx, 1);
     if (i < 0) endTour(true);
@@ -29365,6 +29391,7 @@ What is typed here stays in this browser.`;
     if (completed) markTourDone();
     else markTourInviteDismissed();
     ssDel(TOUR_AT);
+    if (typeof syncTourMenu === "function") syncTourMenu();
     if (els.root) {
       els.root.classList.remove("behind");
       els.root.classList.remove("away");
@@ -42076,6 +42103,7 @@ What is typed here stays in this browser.`;
       tourActive,
       closeSettingsMenu,
       syncSettingsMenu,
+      tourMenuState,
       render,
       rebuildCards,
       clearIntents,

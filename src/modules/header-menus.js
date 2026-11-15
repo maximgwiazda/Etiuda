@@ -57,7 +57,7 @@ function menuLabel(btn, text){
     const c=btn.childNodes[i];
     if(c.nodeType===3 && c.nodeValue.trim()){ n=c; break; }
   }
-  if(n) n.nodeValue=text;
+  if(n){ delete n.eI18nSrc; n.nodeValue=text; }
   else btn.appendChild(document.createTextNode(text));
 }
 
@@ -231,6 +231,13 @@ function syncSettingsMenu(){
   syncPickerRow();
   syncUpdateOffer();
   syncOrgMark();
+  const tourBtn=$('#settingsMenu [data-act="tour"]');
+  if(tourBtn){
+    const st=typeof hooks.tourMenuState==="function" ? hooks.tourMenuState() : null;
+    menuLabel(tourBtn, st
+      ? t("Continue the tour ({N} of {OF})").replace("{N}", st.n).replace("{OF}", st.of)
+      : t("Show tour…"));
+  }
   const pillsBtn=$("#menuPills");
   const railBtn=$("#menuRail");
   if(pillsBtn){

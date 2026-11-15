@@ -257,6 +257,7 @@ function boot(){
     tourActive: tour.tourActive,
     closeSettingsMenu: headerMenus.closeSettingsMenu,
     syncSettingsMenu: headerMenus.syncSettingsMenu,
+    tourMenuState: tour.tourMenuState,
     render: render.render,
     rebuildCards: rebuild.rebuildCards,
     clearIntents: intentPick.clearIntents,
