@@ -23,7 +23,6 @@ import { esc } from "./esc.js";
 import { cutLeaves, dismissCopy, mgReduceMotion } from "./motion.js";
 import { joinStands, onJoinPainted } from "./team-join.js";
 import { closeScreenTab, screenOn } from "./screen-tabs.js";
-import { hooks } from "./hooks.js";
 
 /* ---------- Guided tour ----------------------------------------------------
    Bubbles over the live page, which stays usable under them: nothing is darkened, and a click
