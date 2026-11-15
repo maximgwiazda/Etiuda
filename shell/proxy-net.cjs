@@ -48,22 +48,23 @@ const answerOf = a => (a && typeof a === "object" && typeof a.username === "stri
   ? { username: a.username, password: a.password, scheme: typeof a.scheme === "string" ? a.scheme.toLowerCase() : "" } : null;
 
 /** One asker per app. `o.ask({ host, port, scheme, realm, again })` resolves to { username, password } or null, and is
- *  called at most once at a time per proxy; `o.say(line)` is told what happened, once per line, never a credential. */
+ *  called at most once at a time per proxy and scheme; `o.say(line)` is told what happened, once per line, never a credential.
+ *  An answer is held for the scheme it was asked for and handed only to a challenge of that scheme. */
 function proxyAsker(o) {
   const opts = o || {};
   const waitMs = opts.waitMs || ASK_WAIT_MS, declineMs = opts.declineMs || DECLINE_MS;
   const now = typeof opts.now === "function" ? opts.now : Date.now;
   const held = new Map(), declined = new Map(), asking = new Map(), told = new Set();
   const tell = line => { if (told.has(line)) return; told.add(line); try { if (typeof opts.say === "function") opts.say(line); } catch { /* the log is gone */ } };
-  function askFor(key, info) {
-    if (asking.has(key)) return asking.get(key);
+  function askFor(slot, key, info) {
+    if (asking.has(slot)) return asking.get(slot);
     const p = Promise.resolve().then(() => opts.ask(info)).then(a => answerOf(a && Object.assign({}, a, { scheme: info.scheme })), () => null).then(a => {
-      asking.delete(key);
-      if (a) { held.set(key, a); declined.delete(key); tell("the proxy at " + key + " was given a sign-in"); }
+      asking.delete(slot);
+      if (a) { held.set(slot, a); declined.delete(key); tell("the proxy at " + key + " was given a sign-in"); }
       else { declined.set(key, now()); tell("the proxy at " + key + " was not given a sign-in, so calls through it are refused for now"); }
       return a;
     });
-    asking.set(key, p);
+    asking.set(slot, p);
     return p;
   }
   /** A `login` listener for one request: a second challenge on the same request means the last answer was refused. */
@@ -73,27 +74,28 @@ function proxyAsker(o) {
       let done = false, timer = null;
       const finish = a => { if (done) return; done = true; clearTimeout(timer); try { if (a) callback(a.username, a.password); else callback(); } catch { /* the request has gone */ } };
       if (!authInfo || authInfo.isProxy !== true) return finish(null); /* plant:proxy-server-only */
-      const key = proxyKey(authInfo.host, authInfo.port);
+      const key = proxyKey(authInfo.host, authInfo.port), scheme = String(authInfo.scheme || "").toLowerCase();
+      const slot = key + " " + scheme; /* plant:proxy-scheme-held */
       tries += 1;
       const at = declined.get(key);
       if (at !== undefined && now() - at < declineMs) return finish(null); /* plant:proxy-declined */
-      const had = held.get(key);
+      const had = held.get(slot);
       if (had && tries === 1) return finish(had);
-      if (had) held.delete(key);
+      if (had) held.delete(slot);
       if (tries > 3) return finish(null);
       tell("the proxy at " + key + " asked for a sign-in (" + String(authInfo.scheme || "unknown").toLowerCase() + ")");
       timer = setTimeout(() => finish(null), waitMs);
       if (timer.unref) timer.unref();
-      askFor(key, { host: String(authInfo.host || ""), port: Number(authInfo.port) || 0, scheme: String(authInfo.scheme || ""),
+      askFor(slot, key, { host: String(authInfo.host || ""), port: Number(authInfo.port) || 0, scheme: String(authInfo.scheme || ""),
         realm: String(authInfo.realm || ""), again: !!had || tries > 1 }).then(finish);
     };
   }
   return {
     forRequest,
-    /** The answer held for this proxy, for the socket's tunnel; null where none was given. */
-    heldFor: (host, port) => held.get(proxyKey(host, port)) || null,
-    /** The socket's tunnel was refused with this answer: it is forgotten, and the next call asks again. */
-    refused: (host, port) => { held.delete(proxyKey(host, port)); },
+    /** The answer given to this proxy's Basic challenge, the only one the socket's tunnel sends; null where none was given. */
+    heldFor: (host, port) => held.get(proxyKey(host, port) + " basic") || null,
+    /** The socket's tunnel was refused with that Basic answer: it alone is forgotten, and the next Basic challenge asks again. */
+    refused: (host, port) => { held.delete(proxyKey(host, port) + " basic"); },
     tell,
   };
 }
@@ -133,17 +135,13 @@ function fetchThrough(electronNet, input, init, login) {
   });
 }
 
-/** An HTTP CONNECT tunnel to target through proxy. A held answer goes as Basic on the first CONNECT only where it was given
- *  for Basic, else only after a 407 offering Basic. Resolves to the open socket; rejects with code "proxy-auth" (`schemes`, the
- *  challenge's in lower case; `sent`, whether an answer went), "proxy-refused" or "proxy-timeout". */
+/** An HTTP CONNECT tunnel to target through proxy. A held answer goes as Basic only where it was given for Basic; one given for
+ *  any other scheme goes on no CONNECT, whatever a 407 offers. Resolves to the open socket; rejects with code "proxy-auth"
+ *  (`schemes`, the challenge's in lower case; `sent`, whether an answer went), "proxy-refused" or "proxy-timeout". */
 function tunnel(proxy, target, answer, o) {
-  const a = answerOf(answer);
-  let first = a;
-  if (!a || a.scheme !== "basic") first = null; /* plant:proxy-scheme-first */
-  return connectOnce(proxy, target, first, o).catch(e => {
-    if (e && e.code === "proxy-auth" && a && !first && (e.schemes || []).includes("basic")) return connectOnce(proxy, target, a, o);
-    throw e;
-  });
+  let a = answerOf(answer);
+  if (a && a.scheme !== "basic") a = null; /* plant:proxy-scheme-first */
+  return connectOnce(proxy, target, a, o);
 }
 /* One CONNECT, carrying `auth` as Basic where it is given. */
 function connectOnce(proxy, target, auth, o) {
