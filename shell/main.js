@@ -10016,6 +10016,11 @@ function signinCertOk(c, deskKey) {
     .concat(c.deskOnly === true ? ["desk-only"] : []).map(String).join("\n"), "utf8"); /* plant:cert-desk-only-bytes */
   return signinVerified(d.key.pub, bytes, c.sig.value); /* plant:cert-sig */
 }
+/* A certificate issued later than now, past the same five minutes the ID token and the relay's door allow (certWhy "future"),
+   stands nowhere yet: no door, no seat, no "held". */
+function signinCertEarly(cert, now) {
+  return !!cert && Number.isSafeInteger(cert.issued) && cert.issued > now + SIGNIN_SKEW_MS; /* plant:cert-early */
+}
 /* THE DOORS THE SERVICE HANDS (board 980, the door-finding; Max, 2026-11-12 18:46 and 18:57): beside a certificate, the doors of
    the relay teams on its licence, each {team, rt, url, keyId, lead, box}. A door is kept only whole: the team id and relay id in
    their shapes, the address by signinDoorAddressOk on this desk's flag, the lead's key and
@@ -10126,6 +10131,7 @@ async function signinSeat(io, provider, deskKey, idToken, seed, now) {
 /* THE CALM LAPSE: the kept certificate's `until` passed with no new one. It decides nothing on the desk but Account's words; the
    desk works on, and the next certificate ends it. */
 function signinLapsed(held, now) {
+  if (!!held && !!held.cert && signinCertEarly(held.cert, now)) return true; /* plant:lapse-early */
   if (!!held && !!held.cert && signinRevokedHas(held.revoked, held.cert)) return true; /* plant:lapse-revoked */
   return !!held && !!held.cert && now >= held.cert.until; /* plant:lapse-until */
 }
@@ -10171,6 +10177,7 @@ function seatFileText(deskId, cert) { return JSON.stringify({ format: 2, desk: S
 function signinDoorRequest(doc, deskId, deskKey, cert, door, now) {
   if (!doc || typeof doc !== "object" || doc.invite !== undefined || !/^[0-9a-f]{32}$/.test(String(door))) return null;
   if (!signinCertOk(cert, deskKey) || !(cert.until > now)) return null; /* plant:door-cert */
+  if (signinCertEarly(cert, now)) return null; /* plant:door-early */
   return Object.assign({}, doc, { seat: JSON.parse(seatFileText(deskId, cert)), door: String(door) }); /* plant:door-fields */
 }
 /* The sign-in's file beside desk.json, read whole or not at all: {held: {provider, refresh, sub, seed, code, cert, at, checked,
@@ -10178,6 +10185,8 @@ function signinDoorRequest(doc, deskId, deskKey, cert, door, now) {
    `refresh` and `sub` are signinKeep's, "" where none is kept, and nothing else in it is a secret; `ask` says the person's own
    sign-in is wanted again; a file of another format holds nothing. `packed` is signinDoorAddressOk's. */
 const SIGNIN_FILE = "signin.json";
+/* A signin.json past this is no sign-in, as an answer past SIGNIN_ANSWER_MAX is none: the file the desk writes stays far below it. */
+const SIGNIN_FILE_MAX = 256 * 1024;
 function signinFileRead(text, packed) {
   let d = null;
   try { d = JSON.parse(String(text)); } catch { d = null; }
@@ -10200,6 +10209,36 @@ function signinFileRead(text, packed) {
   /* The desk key whose sign out the service has not taken yet: asked again at the renewal's next turn (signinOutAgain). */
   if (/^[0-9a-f]{64}$/.test(String(d.out))) out.out = String(d.out); /* plant:out-kept */
   return out;
+}
+/* THE FILE'S MARK: as signin.json is written this desk's key signs the certificate's signature, the code and the revocation list the
+   file keeps. Read back, a held seat whose mark does not hold under this desk's key keeps no certificate and no code, so an edit can
+   neither take a list back nor bring in a certificate this desk was not given; the next answer seats the desk again. */
+function signinMarkBytes(held, revoked) {
+  const c = held && held.cert, r = revoked && typeof revoked === "object" ? revoked : null;
+  return Buffer.from("etiuda-signin-kept\n" + [c && c.sig ? String(c.sig.value) : "", held && held.code ? String(held.code) : "",
+    r ? String(r.serial) : "0", r && r.sig ? String(r.sig.value) : ""].join("\n"), "utf8");
+}
+/* signinFileText's text with the mark `sign` makes over it; the text as it was where nothing is held or nothing signs. */
+function signinFileMarkText(text, sign) {
+  let d = null;
+  try { d = JSON.parse(String(text)); } catch { return text; }
+  if (!d || !d.held || typeof sign !== "function") return text;
+  const mark = String(sign(signinMarkBytes(d.held, d.revoked)) || "");
+  return /^[0-9a-f]{128}$/.test(mark) ? JSON.stringify(Object.assign(d, { mark: mark }), null, 1) + "\n" : text;
+}
+/* The file's held seat as this desk takes it: as read where its mark holds under `deskKey`, else with no certificate, code or doors. */
+function signinFileHeld(store, text, deskKey) {
+  const h = store && store.held;
+  if (!h || (!h.cert && !h.code)) return store;
+  let d = null;
+  try { d = JSON.parse(String(text)); } catch { d = null; }
+  let marked = false;
+  marked = !!d && /^[0-9a-f]{64}$/.test(String(deskKey || "")) && signinVerified(String(deskKey), signinMarkBytes(h, store.revoked), d.mark); /* plant:file-mark */
+  /* The certificate is this desk's own, judged against this desk's key and not the desk the certificate names. */
+  let mine = true;
+  mine = !h.cert || signinCertOk(h.cert, String(deskKey || "")); /* plant:file-desk-key */
+  if (marked && mine) return store;
+  return Object.assign({}, store, { held: Object.assign({}, h, { cert: null, code: "", doors: [], doorsSig: "" }) });
 }
 function signinFileText(s) {
   const revoked = signinRevokedNext(s.revoked || null, s.held ? s.held.revoked : null);
@@ -10248,12 +10287,19 @@ function signinLabHeld() {
 function signinState() {
   if (signinStore !== undefined) return signinStore;
   let text = "";
-  try { text = fs.readFileSync(path.join(app.getPath("userData"), SIGNIN_FILE), "utf8"); } catch { text = ""; }
+  try {
+    const at = path.join(app.getPath("userData"), SIGNIN_FILE);
+    let within = true;
+    within = fs.statSync(at).size <= SIGNIN_FILE_MAX; /* plant:file-max */
+    text = within ? fs.readFileSync(at, "utf8") : "";
+  } catch { text = ""; }
   signinStore = signinFileRead(text, SIGNIN_DESK_PACKED); /* plant:door-file-packed */
+  const me = branchIdentity(false);
+  signinStore = signinFileHeld(signinStore, text, me ? me.key : ""); /* plant:file-held */
   return signinStore;
 }
 function signinSave() {
-  try { writeReplacing(path.join(app.getPath("userData"), SIGNIN_FILE), signinFileText(signinState())); }
+  try { writeReplacing(path.join(app.getPath("userData"), SIGNIN_FILE), signinFileMarkText(signinFileText(signinState()), signinSign)); } /* plant:file-mark-save */
   catch (e) { console.error("etiuda: the sign-in could not be kept - " + e.message); }
 }
 function signinSign(bytes) {
@@ -10271,6 +10317,9 @@ function signinTeamHere() {
 function signinFlush() {
   const held = signinState().held, cert = held && held.cert, me = branchIdentity(false);
   if (!cert || !me || !signinTeamHere()) return false;
+  if (signinCertEarly(cert, Date.now())) return false; /* plant:flush-early */
+  /* An ended certificate stays for the lapse's words and is no seat to publish: a door takes that instant as its end. */
+  if (Date.now() >= cert.until) return false; /* plant:flush-ended */
   if (signinRevokedHas(held.revoked, cert)) return false; /* plant:revoked-flush */
   try {
     const root = sharedFolderForWrite();
@@ -10301,6 +10350,7 @@ function signinDoorInvite(team, rt) {
   if (inv.withdrawing === true) return inv.rt === rt && /^[0-9a-f]{64}$/.test(String(inv.box)) && /^[0-9a-f]{32}$/.test(String(inv.inv)) ? { door: null, box: inv.box, inv: inv.inv } : null; /* plant:door-withdraw-invite */
   const held = signinState().held, cert = held && held.cert, me = branchIdentity(false);
   if (inv.rt !== rt || !me || !/^[0-9a-f]{64}$/.test(String(inv.box)) || !signinCertOk(cert, me.key) || !(cert.until > Date.now())) return null; /* plant:door-invite-cert */
+  if (signinCertEarly(cert, Date.now())) return null; /* plant:door-invite-early */
   if (signinRevokedHas(held.revoked, cert)) return null; /* plant:revoked-knock */
   const out = { door: cert, box: inv.box };
   if (/^[0-9a-f]{32}$/.test(String(inv.inv))) out.inv = inv.inv;
@@ -10332,6 +10382,7 @@ function signinDoorKept(team, mirror, id) {
 function signinDoorsShown(held, now) {
   const me = branchIdentity(false);
   if (!held || !held.cert || !me || !signinCertOk(held.cert, me.key) || !(held.cert.until > now) || pinnedLead() || teamJoin) return []; /* plant:door-shown */
+  if (signinCertEarly(held.cert, now)) return []; /* plant:door-shown-early */
   if (Object.keys(teamPins).some(teamPinStands)) return []; /* plant:door-pin-stands */
   if (signinRevokedHas(held.revoked, held.cert)) return []; /* plant:revoked-offer */
   if (!signinDoorsSigned(held.doors, held.doorsSig, held.cert)) return []; /* plant:door-shown-signed */
@@ -10393,7 +10444,10 @@ function signinView() {
   const real = signinOffered().map(p => p.id), held = signinState().held, now = Date.now(), preview = signinPreviewing();
   const offered = preview ? Object.keys(SIGNIN_PROVIDERS) : real;
   const signedIn = held && real.indexOf(held.provider) >= 0 ? held.provider : "";
-  return { offered: offered, preview: preview, signedIn: signedIn, code: signedIn ? held.code : "",
+  /* The code shown and handed to Buy is the held certificate's own where one is held, as the answer took it. */
+  let code = signedIn ? held.code : "";
+  if (signedIn && held.cert && typeof held.cert.code === "string") code = held.cert.code; /* plant:view-cert-code */
+  return { offered: offered, preview: preview, signedIn: signedIn, code: code,
     seat: !signedIn ? "" : held.cert ? (signinLapsed(held, now) ? "lapsed" : "held") : "none",
     deskOnly: !!signedIn && !!held.cert && held.cert.deskOnly === true, /* plant:view-desk-only */
     at: signedIn ? held.at : 0, reached: !signedIn || held.reached !== false, ask: !!signedIn && held.ask === true,
