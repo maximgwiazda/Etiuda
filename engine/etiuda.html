@@ -7991,6 +7991,7 @@ What is typed here stays in this browser.`;
     "This version: {VERSION}": "Ta wersja: {VERSION}",
     "Newest available: {VERSION}": "Najnowsza dostępna: {VERSION}",
     "This is the newest version.": "To najnowsza wersja.",
+    "No newer version has been published.": "Nie opublikowano nowszej wersji.",
     "Whether a newer version exists could not be checked just now. This one works as it is.": "Nie udało się teraz sprawdzić, czy jest nowsza wersja. Ta działa bez zmian.",
     "Focus {PAX}": "Kursor w {PAX}",
     "Focus ROLE": "Kursor w ROLE",
@@ -27309,7 +27310,7 @@ What is typed here stays in this browser.`;
     const o = v && typeof v === "object" ? v : {};
     return {
       offer: typeof o.offer === "string" && /^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/.test(o.offer) ? o.offer : "",
-      look: o.look === "read" || o.look === "failed" ? o.look : ""
+      look: o.look === "read" || o.look === "older" || o.look === "failed" ? o.look : ""
     };
   }
   function updateLaterHeld() {
@@ -27344,7 +27345,7 @@ What is typed here stays in this browser.`;
   function updateAbout(running) {
     if (!updateHost()) return null;
     const s = updateNow;
-    const second = s.offer ? t("Newest available: {VERSION}").split("{VERSION}").join(s.offer) : s.look === "read" ? t("This is the newest version.") : t("Whether a newer version exists could not be checked just now. This one works as it is.");
+    const second = s.offer ? t("Newest available: {VERSION}").split("{VERSION}").join(s.offer) : s.look === "read" ? t("This is the newest version.") : s.look === "older" ? t("No newer version has been published.") : t("Whether a newer version exists could not be checked just now. This one works as it is.");
     return { lines: [t("This version: {VERSION}").split("{VERSION}").join(String(running)), second], offer: s.offer };
   }
   function syncUpdateOffer() {

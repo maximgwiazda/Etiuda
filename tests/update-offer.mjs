@@ -27,9 +27,9 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 18;
+const PLANTS = 19;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 71 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 72 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -367,10 +367,11 @@ try {
   const noKeepSame = !fs.existsSync(path.join(Sreplay.ud, Sreplay.NOTE_FILE));
   const lOldOffer = await Sreplay.lookForNote(serve(note({ serial: 4, version: "2.0.1", released: "2020-06-01", url: "https://etiuda.dev/desk/2.0.1/" })));
   const noKeepOffer = !fs.existsSync(path.join(Sreplay.ud, Sreplay.NOTE_FILE));
+  const offerOld = Sreplay.updateState().offer;
   const lSameDay = await Sreplay.lookForNote(serve(note({ serial: 10, version: "2.0.5", released: "2026-11-15", url: "https://etiuda.dev/desk/2.0.5/" })));
-  check(lOldSame === "failed" && noKeepSame && lOldOffer === "failed" && noKeepOffer
+  check(lOldSame === "older" && noKeepSame && lOldOffer === "older" && noKeepOffer && offerOld === ""
     && lSameDay === "read" && Sreplay.updateState().offer === "2.0.5",
-    "u4t a replayed 2020-06-01 note for 2.0.0 or 2.0.1 fails and is not kept, while a 2.0.5 note on the build day reads and offers: "
+    "u4t a 2020-06-01 note for 2.0.0 or 2.0.1, released before this build, says no newer version has been published, offers nothing and is not kept, while a 2.0.5 note on the build day reads and offers: "
     + JSON.stringify([lOldSame, noKeepSame, lOldOffer, noKeepOffer, lSameDay, Sreplay.updateState().offer]));
   const SnoBuilt = shellOf({ running: "2.0.0", built: "" });
   const lNoBuilt = await SnoBuilt.lookForNote(serve(note({ serial: 5, version: "2.0.1", released: "2026-12-01" })));
@@ -501,6 +502,9 @@ try {
   onUpdate({ offer: "", look: "read" });
   check(dot.hidden && row.hidden && UP.updateAbout("2.0.0").lines[1] === "This is the newest version.",
     "u6h with nothing newer the dot and the row go, and About says This is the newest version.");
+  onUpdate({ offer: "", look: "older" });
+  check(dot.hidden && row.hidden && UP.updateAbout("2.0.0").lines[1] === "No newer version has been published.",
+    "u6n a build newer than every published note shows nothing, and About says No newer version has been published., not that the check failed");
   onUpdate({ offer: "", look: "failed" });
   const failLine = "Whether a newer version exists could not be checked just now. This one works as it is.";
   check(dot.hidden && row.hidden && UP.updateAbout("2.0.0").lines[1] === failLine, "u6i a look that failed shows nothing but About's could-not-check line");
@@ -618,6 +622,9 @@ try {
     check((await PRB.lookForNote(serve(note({ serial: 4, version: "2.0.1", released: "2020-06-01", url: "https://etiuda.dev/desk/2.0.1/" })))) === "read"
       && PRB.updateState().offer === "2.0.1",
       "u-plant note-released-built turned reads and offers a replayed 2020-06-01 note");
+    const POS = lifted("plant:note-older-said", "      }");
+    check((await POS.lookForNote(serve(note({ serial: 4, version: "2.0.0", released: "2020-06-01", url: "https://etiuda.dev/desk/2.0.0/" })))) === "failed",
+      "u-plant note-older-said lifted calls a sound note released before this build a failed look");
     const PPR = lifted("plant:note-prerelease");
     check(PPR.versionAbove("2.0.0", "2.0.0-dev") === false,
       "u-plant note-prerelease lifted treats 2.0.0 as not above 2.0.0-dev");

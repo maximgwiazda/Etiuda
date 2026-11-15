@@ -387,6 +387,7 @@ UI_STRINGS.pl={
   "This version: {VERSION}":"Ta wersja: {VERSION}",
   "Newest available: {VERSION}":"Najnowsza dostępna: {VERSION}",
   "This is the newest version.":"To najnowsza wersja.",
+  "No newer version has been published.":"Nie opublikowano nowszej wersji.",
   "Whether a newer version exists could not be checked just now. This one works as it is.":"Nie udało się teraz sprawdzić, czy jest nowsza wersja. Ta działa bez zmian.",
   "Focus {PAX}":"Kursor w {PAX}",
   "Focus ROLE":"Kursor w ROLE",

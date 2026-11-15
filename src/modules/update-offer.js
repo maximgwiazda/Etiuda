@@ -14,12 +14,12 @@ function updateHost(){
   const h=eHost();
   return h && typeof h.updateState==="function" ? h : null;
 }
-/* The shell's answer as the page keeps it: a release of three numbers or "", and "read", "failed" or "". */
+/* The shell's answer as the page keeps it: a release of three numbers or "", and "read", "older", "failed" or "". */
 function updateRead(v){
   const o=v && typeof v==="object" ? v : {};
   return {
     offer: typeof o.offer==="string" && /^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/.test(o.offer) ? o.offer : "",
-    look: o.look==="read" || o.look==="failed" ? o.look : ""
+    look: o.look==="read" || o.look==="older" || o.look==="failed" ? o.look : ""
   };
 }
 /* What Later stored, {version, until}, or null. */
@@ -52,6 +52,7 @@ function updateAbout(running){
   const s=updateNow;
   const second=s.offer ? t("Newest available: {VERSION}").split("{VERSION}").join(s.offer)
     : s.look==="read" ? t("This is the newest version.")
+    : s.look==="older" ? t("No newer version has been published.")
     : t("Whether a newer version exists could not be checked just now. This one works as it is.");
   return { lines:[t("This version: {VERSION}").split("{VERSION}").join(String(running)), second], offer:s.offer };
 }

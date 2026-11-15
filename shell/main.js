@@ -10728,7 +10728,8 @@ async function fetchNote(fetchFn, url, ms) {
   finally { clearTimeout(timer); read.catch(() => {}); late.catch(() => {}); }
 }
 /* The last note the desk took, in update-note.json beside desk.json, read back through the same checks; and how the latest
-   look went: "read" for a note that held, "failed" for anything else, "" before the first look ends. */
+   look went: "read" for a note that held, "older" for a sound note released before this build (a test build is newer than every
+   published note, so nothing newer has been published), "failed" for anything else, "" before the first look ends. */
 const NOTE_FILE = "update-note.json", NOTE_FIRST_MS = 60 * 1000, NOTE_EVERY_MS = 60 * 60 * 1000;
 let noteKept, noteLook = "", noteTimer = null;
 function keptNote() {
@@ -10769,7 +10770,7 @@ async function lookForNote(fetchFn) {
             look = "failed";
           }
         }
-      }
+      } else if (!noteFreshForBuild(got.note, built)) look = "older"; /* plant:note-older-said */
     }
   } catch { look = "failed"; }
   noteLook = look;
