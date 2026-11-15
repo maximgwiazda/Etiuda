@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const nodeRequire = createRequire(import.meta.url);
-const EXPECTED = 17;
+const EXPECTED = 19;
 const OUTPUTS = ['engine/etiuda.html', 'engine/etiuda.csp.json', 'engine/bubble.css'];
 
 let failed = 0, asserted = 0, complete = false;
@@ -59,7 +59,7 @@ function sourceCases() {
     src.split('const framed = !!readPin().why;').length - 1 === 1);
   check('prestart is the build', pkg.scripts && pkg.scripts.prestart === 'node tools/build.mjs');
   check('start is still the shell', pkg.scripts && pkg.scripts.start === 'electron .');
-  check('the build page is marked for the copywriter', src.includes('Waiting for the copywriter.'));
+  check('the build page has no copywriter placeholder', !src.includes('Waiting for the copywriter.'));
 }
 
 function orderCase() {
@@ -188,19 +188,24 @@ function shellCases() {
   }
   check('the shell loads', true);
   const doc = loaded.api.startDocument();
-  const builds = doc.split('npm run build').length - 1;
-  check('with nothing built the page names the command twice', builds === 2, 'count=' + builds);
-  check('with nothing built the page says the program could not start', doc.includes('Etiuda could not start.'));
+  const builds = doc.split('<code>npm run build</code>').length - 1;
+  check('with nothing built the command is set as code twice', builds === 2, 'count=' + builds);
+  check('with nothing built the English lead is there',
+    doc.includes("Etiuda's page has not been built in this folder yet."));
+  check('with nothing built the English line is there',
+    doc.includes('Run <code>npm run build</code> here, then open Etiuda again.'));
   check('with nothing built the page is not the install-again refusal', !doc.includes('Installing Etiuda again'));
-  check('with nothing built the Polish line is there', doc.includes('Etiuda nie mogła się uruchomić.')
-    && doc.includes('Polecenie npm run build'));
+  check('with nothing built the Polish lead is there',
+    doc.includes('W tym folderze nie zbudowano jeszcze strony Etiudy.'));
+  check('with nothing built the Polish line is there',
+    doc.includes('Należy uruchomić tu <code>npm run build</code>, a potem ponownie otworzyć Etiudę.'));
   writePage(appDir);
   const pageOnly = loaded.api.startDocument();
-  check('a page without its pin names the command', pageOnly.split('npm run build').length - 1 === 2);
+  check('a page without its pin names the command as code', pageOnly.split('<code>npm run build</code>').length - 1 === 2);
   writePin(appDir, 'not json');
   const bad = loaded.api.startDocument();
   check('a pin that cannot be read says to install again', bad.includes('Installing Etiuda again'));
-  check('a pin that cannot be read is not the build page', !bad.includes('writes the page'));
+  check('a pin that cannot be read is not the build page', !bad.includes('has not been built'));
   writePin(appDir, JSON.stringify({
     kind: 'etiuda-script-hashes', schema: 1, hashes: [pinHash()],
   }) + '\n');

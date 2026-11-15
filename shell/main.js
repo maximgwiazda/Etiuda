@@ -12907,7 +12907,7 @@ function refusalDoc(why) {
     + '</div></div>\n';
 }
 
-/* The page or the pin is not on disk, so nothing is being served yet. Waiting for the copywriter. */
+/* The page or the pin is not on disk, so nothing is being served yet. */
 function pageNeedsBuild() {
   return !fs.existsSync(ENGINE) || !fs.existsSync(PIN);
 }
@@ -12921,10 +12921,10 @@ function missingBuildDoc() {
     + '<div style="max-width:44em;margin:14vh auto;padding:0 28px">'
     + '<div style="background:#7f1d1d;border-radius:12px;padding:20px 22px;'
     + 'box-shadow:0 2px 14px rgba(0,0,0,.4)">'
-    + card("Etiuda could not start.",
-        "npm run build, in this folder, writes the page. Opening Etiuda again shows it.")
-    + card("Etiuda nie mogła się uruchomić.",
-        "Polecenie npm run build, w tym folderze, zapisuje stronę. Ponowne otwarcie Etiudy ją pokazuje.")
+    + card("Etiuda's page has not been built in this folder yet.",
+        "Run <code>npm run build</code> here, then open Etiuda again.")
+    + card("W tym folderze nie zbudowano jeszcze strony Etiudy.",
+        "Należy uruchomić tu <code>npm run build</code>, a potem ponownie otworzyć Etiudę.")
     + '<p style="margin:0 0 16px"><a href="' + CLOSE_MARK + '" style="display:inline-block;'
     + 'padding:7px 16px;border-radius:8px;border:1px solid rgba(255,255,255,.45);'
     + 'color:#fff;text-decoration:none;font-weight:600">Close Etiuda &middot; Zamknij Etiud&#281;</a></p>'
