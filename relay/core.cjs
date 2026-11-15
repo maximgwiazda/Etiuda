@@ -128,6 +128,7 @@ function verified(pubHex, bytes, sigHex) {
 
 /* A device's key id is its public key, or the branch id shell/main.js makes of it (branchIdOf). */
 const keyMatches = (id, pub) => is(HEX64, pub) && (id === pub || id === "k-" + sha256(Buffer.from(pub, "hex")).slice(0, 16));
+const namesOf = pub => [pub, "k-" + sha256(Buffer.from(pub, "hex")).slice(0, 16)];
 
 /* A lead's key id is one of those, or the id Etiuda Studio makes of the key ("studio-" and the first 16 hex of its sha256). Only a create
    takes the Studio form; a desk's key id is judged by keyMatches alone. */
@@ -569,7 +570,9 @@ function createCore(deps) {
     if (!verified(team.lead.pub, leadBytes(rt, to.keyId, to.pub, b.t), b.sig)) return no("bad-signature"); /* plant:lead-move-sig */
     if (Number.isSafeInteger(team.handoverT) && b.t <= team.handoverT) return no("replay-rev"); /* plant:lead-handover-order */
     if (to.pub === team.lead.pub) return no("bad-signature"); /* plant:lead-same-key */
-    if (store.get("dev:" + to.keyId) || store.get("gone:" + to.keyId)) return no("not-enrolled"); /* plant:lead-desk-refusal */
+    let deskHalf = false;
+    deskHalf = enrolledAs(to.pub, to.pub) || !!removalOf(to.pub, to.pub); /* plant:lead-desk-half */
+    if (deskHalf || store.get("dev:" + to.keyId) || store.get("gone:" + to.keyId)) return no("not-enrolled"); /* plant:lead-desk-refusal */
     const why = grantWhy(b.grant, to.pub, clock(), roots, revokedNow());
     if (why === "revoked") return no("revoked"); /* plant:lead-grant-revoked */
     if (why !== null) return no("bad-grant"); /* plant:lead-grant-why */
@@ -652,8 +655,9 @@ function createCore(deps) {
     removing = onlyRemoves(b.keys); /* plant:lapse-withdraw */
     if (lapsedDevices && !removing) return lapsedDevices; /* plant:lapse-devices */
     /* A key not enrolled yet whose invitation's desk withdrew its request is not let in, and nothing in the set changes. */
-    for (const id of next.keys()) if (!store.get("dev:" + id) && withdrawnBy(id)) return no("withdrawn"); /* plant:e4-devices */
+    for (const [id, v] of next) if (!store.get("dev:" + id) && withdrawnBy(id, v.pub)) return no("withdrawn"); /* plant:e4-devices */
     const withdrawn = store.list("dev:").map(([k]) => k.slice(4)).filter(id => !next.has(id));
+    const withdrawnPubs = withdrawn.map(id => (store.get("dev:" + id) || {}).pub).filter(p => is(HEX64, p));
     store.atomic(() => {
       const ord = (store.get("ord") || 0) + 1;
       if (withdrawn.length) store.put("ord", ord); /* plant:order-gone */
@@ -663,6 +667,7 @@ function createCore(deps) {
         store.del("dev:" + id);
       }
       for (const [id, v] of next) { store.put("dev:" + id, v); store.del("gone:" + id); }
+      for (const [, v] of next) for (const n of namesOf(v.pub)) store.del("gone:" + n); /* plant:enrol-both-names */
       /* A key taken off gives back what it held: its blobs leave the team's counts at once, are listed and fetched by the lead
          alone for REMOVED_KEEP_MS of time the team can read, and are deleted at the first list or upload after it. No tombstone
          is kept, so the key put back starts its chains again. */
@@ -681,8 +686,10 @@ function createCore(deps) {
       /* An invitation's session is held by no key of its own, so the key it binds is read from the session or the invitation:
          every invitation standing now was registered before this removal, and its session reads nothing from here on. */
       for (const [k, s] of store.list("ses:")) {
-        const bound = s.inv ? s.bound || (store.get("inv:" + s.inv) || {}).key : null;
-        if (bound && withdrawn.indexOf(bound) > -1) store.put(k, Object.assign({}, s, { removed: true })); /* plant:withdraw-invite-sessions */
+        const inv = s.inv ? store.get("inv:" + s.inv) || {} : {}, bound = s.inv ? s.bound || inv.key : null;
+        let byPub = false;
+        byPub = !!bound && inv.key === bound && withdrawnPubs.indexOf(inv.pub) > -1; /* plant:withdraw-invite-pub */
+        if (bound && (withdrawn.indexOf(bound) > -1 || byPub)) store.put(k, Object.assign({}, s, { removed: true })); /* plant:withdraw-invite-sessions */
       }
     });
     return { ok: true, rev: b.rev, withdrawn };
@@ -693,9 +700,9 @@ function createCore(deps) {
     return a.epoch < b.epoch || (a.epoch === b.epoch && a.rev < b.rev);
   }
 
-  /* Whether the request a token hello bound to this key was withdrawn by its desk and not asked again. */
-  function withdrawnBy(key) {
-    return store.list("inv:").some(([, v]) => v.withdrawn === true && v.key === key);
+  /* Whether the request a token hello bound to this key, under either name, was withdrawn by its desk and not asked again. */
+  function withdrawnBy(key, pub) {
+    return store.list("inv:").some(([, v]) => v.withdrawn === true && (v.key === key || (is(HEX64, pub) && v.pub === pub)));
   }
 
   /* A set that takes at least one key off the enrolled set and keeps each other key as it is, at its own desk. */
@@ -965,7 +972,7 @@ function createCore(deps) {
     if (ended) return endNow();
     /* A key already removed opens no read on an invitation registered before that removal. The token is not spent. */
     if (binds) {
-      const gone = store.get("gone:" + b.key);
+      const gone = removalOf(b.key, b.pub);
       if (gone && !registeredAfter(inv, gone)) return no("removed"); /* plant:token-removed */
     }
     /* A token is spent only while the team works: a lapsed team could not enrol the key it would bind. */
@@ -1002,7 +1009,7 @@ function createCore(deps) {
       if (team.lead.pub !== b.pub) return no("bad-signature"); /* plant:lead-sig */
       return issue(b.challenge, { key: b.key, inv: null });
     }
-    const dev = store.get("dev:" + b.key), gone = store.get("gone:" + b.key);
+    const dev = store.get("dev:" + b.key), gone = dev ? undefined : removalOf(b.key, b.pub);
     if (!dev && gone) {
       if (gone.pub !== b.pub) return no("bad-signature"); /* plant:removed-sig */
       /* The invitation's session again, only where the lead registered it after this removal, for its one upload. */
@@ -1050,7 +1057,7 @@ function createCore(deps) {
     if (b.key === team.lead.keyId || b.pub === team.lead.pub) return no("bad-signature");
     const dev = store.get("dev:" + b.key);
     if (dev) return dev.pub === b.pub ? issue(b.challenge, { key: b.key, inv: null }) : no("bad-signature");
-    if (store.get("gone:" + b.key)) return no("removed"); /* plant:door-removed */
+    if (removalOf(b.key, b.pub)) return no("removed"); /* plant:door-removed */
     /* A key whose door request the lead dropped is answered as a stranger is for the rate window after the drop. */
     const dropped = store.list("dd:").filter(([, v]) => doorDropLive(v, clock()));
     let droppedKey = false;
@@ -1100,8 +1107,11 @@ function createCore(deps) {
      desk, whose knock counted against the hourly rate alone; its row and the deletion's record stay for their keep, outside the caps. */
   function doorLive(v, now) {
     if (!!v && v.withdrawn === true) return false; /* plant:door-withdrawn-live */
-    return !!v && v.door === true && Number.isSafeInteger(v.spentAt) && now - v.spentAt <= KEEP_MS
+    const held = !!v && v.door === true && Number.isSafeInteger(v.spentAt) && now - v.spentAt <= KEEP_MS
       && !store.get("dev:" + v.key) && !store.get("gone:" + v.key);
+    let settled = false;
+    settled = held && (enrolledAs(v.key, v.pub) || !!removalOf(v.key, v.pub)); /* plant:door-live-half */
+    return held && !settled;
   }
   /* What a held door request (doorLive) costs its person: asking, up at the lead's, for its keep; never sent up, the door's rate window
      from its knock, as one the lead dropped. */
@@ -1186,6 +1196,24 @@ function createCore(deps) {
     return !!inv && !!gone && Number.isSafeInteger(inv.ord) && Number.isSafeInteger(gone.ord) && inv.ord > gone.ord;
   }
 
+  /* ONE KEY, TWO SPELLINGS: keyMatches lets a public half be named raw or by its branch id, and the lead's rows are kept under the
+     spelling the lead used, so a lookup by one spelling misses the other. A key is enrolled where any spelling has a dev: row; else its
+     removal is its latest gone: row by the relay's order, an older removal under the other spelling being no longer the key's. */
+  function spellingsOf(key, pub) {
+    let names = [key];
+    names = keyMatches(key, pub) ? namesOf(pub) : [key]; /* plant:removal-either-name */
+    return names;
+  }
+  const enrolledAs = (key, pub) => spellingsOf(key, pub).some(n => store.get("dev:" + n) !== undefined);
+  const orderOf = gone => (Number.isSafeInteger(gone.ord) ? gone.ord : -1);
+  function removalOf(key, pub) {
+    if (enrolledAs(key, pub)) return undefined;
+    const rows = spellingsOf(key, pub).map(n => store.get("gone:" + n)).filter(Boolean);
+    let gone = rows[0];
+    gone = rows.reduce((a, g) => (orderOf(g) > orderOf(a) ? g : a), rows[0]); /* plant:removal-latest */
+    return gone;
+  }
+
   /* An invitation's session bound to a key removed earlier may put its one request and may not read. */
   function quietSession(s) {
     if (!s || !s.inv || s.key) return false;
@@ -1193,7 +1221,7 @@ function createCore(deps) {
     if (!inv) return false;
     const who = s.bound || inv.key;
     if (!who) return false;
-    const gone = store.get("gone:" + who);
+    const gone = removalOf(who, inv.key === who ? inv.pub : undefined);
     return registeredAfter(inv, gone);
   }
 
@@ -1406,9 +1434,9 @@ function createCore(deps) {
     if (clock() - inv.spentAt > KEEP_MS) return no("token-spent"); /* plant:invite-keep */
     if (s.bound && m.writer !== s.bound) return no("no-hello"); /* plant:invite-bound */
     if (m.writer === team.lead.keyId || store.get("dev:" + m.writer) !== undefined) return no("no-hello"); /* plant:invite-stranger */
-    const goneRec = store.get("gone:" + m.writer);
-    if (goneRec && !registeredAfter(inv, goneRec)) return no("removed"); /* plant:invite-removed */
     const pub = m.pub !== null ? m.pub : m.writer;
+    const goneRec = removalOf(m.writer, pub);
+    if (goneRec && !registeredAfter(inv, goneRec)) return no("removed"); /* plant:invite-removed */
     if (!keyMatches(m.writer, pub)) return no("bad-signature"); /* plant:invite-key */
     if (pub === team.lead.pub) return no("no-hello"); /* plant:invite-lead-pub */
     const ownDesk = !!(goneRec && registeredAfter(inv, goneRec) && m.place === "desk:" + goneRec.desk);
@@ -1552,7 +1580,9 @@ function createCore(deps) {
           next.asked = m.id;
           delete next.withdrawn; /* plant:e4-ask-again */
           /* A request is the key's current one, on whichever invitation: an earlier invitation's withdrawal by the same key ends. */
-          for (const [k, v] of store.list("inv:")) if (v.withdrawn === true && v.key === m.writer) { const x = Object.assign({}, v); delete x.withdrawn; store.put(k, x); } /* plant:e5-clear */
+          let half = null;
+          half = is(HEX64, j.a.pub) ? j.a.pub : null; /* plant:e5-half */
+          for (const [k, v] of store.list("inv:")) if (v.withdrawn === true && (v.key === m.writer || (half !== null && v.pub === half))) { const x = Object.assign({}, v); delete x.withdrawn; store.put(k, x); } /* plant:e5-clear */
         }
         store.put("inv:" + j.a.invite, next); /* plant:invite-mark */
       }
