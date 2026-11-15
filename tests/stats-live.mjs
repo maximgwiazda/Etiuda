@@ -19,9 +19,11 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
-const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
+/* Machine policy is none but where a leg (930g) writes the export a policy names. */
+const REG = { policy: null };
+const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
-const EXPECTED = 27;
+const EXPECTED = 28;
 const WORK = path.join(ROOT, "shell", "main.js");
 const GOOD = fs.readFileSync(WORK);
 const GOOD_HASH = crypto.createHash("sha256").update(GOOD).digest("hex");
@@ -394,6 +396,24 @@ try {
     const g = await proveOr("930f", "  kept = last.team === seal.team && last.box === seal.box && typeof last.keyId === \"string\" && last.keyId !== seal.keyId; /* plant:stats-box-kept */",
       "  /* plant:stats-box-kept */", runF);
     check(g.ok, "930f a handover whose team file keeps the box the last answer was sealed to seals nothing more; a team file naming a box of its own seals to it"
+      + (g.why ? ": " + g.why.split("\n")[0] : ""));
+  }
+
+  /* ---- 930g: a team the organisation's policy set seals its statistics as any team does, never held for Settings ---- */
+  {
+    const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
+      + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
+    const g = await proveOr("930g", "  if (!use.member || use.stale || !use.seal) return null;",
+      "  if (!use.member || use.stale || !use.seal) return null;\n  if (readJoinPolicy(\"en\").lead) return null;",
+      async () => {
+        REG.policy = regText([["LeadKey", LEAD.public]]);
+        let box = null;
+        try { box = await joined(false); adopt(box, "rolling-30", lead.privateKey, LEAD, 2); }
+        finally { REG.policy = null; }
+        const inner = openStats(box);
+        return process.platform !== "win32" || (!!inner && inner.cards[0].n === 2);
+      });
+    check(g.ok, "930g a desk whose team the organisation's policy set seals its statistics at adoption as any team does, never held until Settings is opened"
       + (g.why ? ": " + g.why.split("\n")[0] : ""));
   }
 
