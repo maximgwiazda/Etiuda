@@ -35,9 +35,11 @@ const plain = v => !!v && typeof v === "object" && !Array.isArray(v);
 
 /* An item is "k:<desk key>", "f:<catalog file name>", or one field of a personal layer's key, "k:<key>#<field>" or, for a field that
    is a map, "k:<key>#<field>/<its key>", so two computers changing different cards of one catalog both stand with no copy kept. */
+/* A part of a field item that names an object's own machinery is no field: it would reach Object.prototype where it is put back. */
+const PROTO_PART = /(^|[/#]|\[\])(__proto__|constructor|prototype)($|[/[])/;
 function follows(item) {
   const s = String(item), at = s.indexOf("#");
-  if (s.startsWith("k:") && at > 0) return LAYER_RE.test(s.slice(2, at)) && at < s.length - 1;
+  if (s.startsWith("k:") && at > 0) return LAYER_RE.test(s.slice(2, at)) && at < s.length - 1 && !PROTO_PART.test(s.slice(at)); /* plant:follows-proto */
   if (s.startsWith("k:")) return SETTINGS.indexOf(s.slice(2)) >= 0 || LAYER_RE.test(s.slice(2)); /* plant:follows */
   if (s.startsWith("f:")) return CATALOG_RE.test(s.slice(2));
   return false;
@@ -113,7 +115,7 @@ const layerOf = item => { const s = String(item), at = s.indexOf("#"); return s.
 /* A layer key's value put back together from its field items, null where none stands. A set's members keep the order they stand in
    `items`, this computer's own first and those taken after; a member already in the field whole is not added twice. */
 function layerText(items, key) {
-  const pre = "k:" + key + "#", out = {};
+  const pre = "k:" + key + "#", out = Object.create(null);
   let any = false;
   for (const item of Object.keys(items).sort()) {
     if (!item.startsWith(pre)) continue;
@@ -123,7 +125,7 @@ function layerText(items, key) {
     any = true;
     if (at < 0) out[rest] = v;
     else if (rest.startsWith(MEMBER, at)) { if (!Array.isArray(out[f])) out[f] = []; }
-    else { if (!plain(out[f])) out[f] = {}; out[f][rest.slice(at + 1)] = v; }
+    else { if (!plain(out[f]) || !has(out, f)) out[f] = Object.create(null); out[f][rest.slice(at + 1)] = v; } /* plant:layer-own */
   }
   for (const item of Object.keys(items)) {
     if (!item.startsWith(pre)) continue;

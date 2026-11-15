@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-sync-"));
-const EXPECTED = 36;
+const EXPECTED = 39;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -559,8 +559,26 @@ async function main() {
     return { ok, detail: brief({ shared, bKeepsFile: b.desk.files["Big.ec"] === "{\"v\":1}", bKeepsLayer: !!b.desk.keys[L], keptB: b.kept.length }) };
   }
 
+  /* G5p: a field or map key named __proto__ (or constructor) from another computer's sync file: not an item that follows, and put back
+     into a layer it touches nothing beyond that layer; the main process's Object.prototype is never written. */
+  async function protoScene() {
+    const bad = ["k:e3f9a1~Pack#__proto__/polluted", "k:e3f9a1~Pack#edits/__proto__", "k:e3f9a1~Pack#constructor/polluted", "k:e3f9a1~Pack#hidden[]__proto__"];
+    const fine = ["k:e3f9a1~Pack#edits/c1", "k:e3f9a1~Pack#hidden[]c__proto__d", "k:e3f9a1~Pack#prototypes"].filter(i => !SY.follows(i));
+    const followed = bad.filter(i => SY.follows(i));
+    const doc = { kind: SY.SYNC_KIND, format: 1, by: "k-0123456789abcdef", items: {} };
+    for (const i of bad) doc.items[i] = { h: SY.sha("1"), by: "k-0123456789abcdef", t: 1, seen: {}, v: "1" };
+    const read = SY.syncRead(JSON.stringify(doc), "k-0123456789abcdef");
+    let text = null;
+    try { text = SY.layerText({ "k:e3f9a1~Pack#__proto__/polluted": "1", "k:e3f9a1~Pack#edits/c1": "\"kept\"" }, "e3f9a1~Pack"); } catch { text = "threw"; }
+    const polluted = ({}).polluted !== undefined;
+    delete Object.prototype.polluted;
+    const ok = followed.length === 0 && fine.length === 0 && !!read && Object.keys(read.items).length === 0 && !polluted && typeof text === "string" && text.indexOf("kept") >= 0;
+    return { ok, detail: brief({ followed, refusedFine: fine, readItems: read ? Object.keys(read.items).length : null, polluted, layer: text }) };
+  }
+
   const results = {};
   const LEGS = [
+    ["G5p", protoScene, "a layer field or map key named __proto__ or constructor from another computer is no item that follows, and put back into a layer never writes Object.prototype"],
     ["G5a", unappliedScene, "a catalog file and an edit this computer could not put in place are not taken as taken: nothing recorded removed, the other computer keeps both, and they arrive once taken"],
     ["G5b", oversizeScene, "a catalog file and a layer value grown past their caps are left out, never recorded as removed: the other computer keeps its copy and its layer"],
     ["S1", followsScene, "a setting, an edit over a catalog and a catalog file changed on one computer reach the other through the relay, nothing of them in the clear"],
@@ -627,6 +645,9 @@ async function main() {
     ["unapplied", "G5a", swap("r = unapplied(state, r, o.apply(r.patch, r.copies), local, o.me.id); /* plant:unapplied */", "o.apply(r.patch, r.copies); /* plant:unapplied */"), "what the desk could not put in place is taken as taken, and the next merge removes it on the other computer"],
     ["held-kept", "G5b", lift("held-kept"), "an item left out for its size is recorded as removed"],
     ["held-value", "G5b", lift("held-value"), "a layer value past its cap is synced whole"],
+    ["follows-proto", "G5p", swap(" && !PROTO_PART.test(s.slice(at)); /* plant:follows-proto */", "; /* plant:follows-proto */"), "a field named __proto__ follows"],
+    ["layer-own", "G5p", text => { const x = swap("const pre = \"k:\" + key + \"#\", out = Object.create(null);", "const pre = \"k:\" + key + \"#\", out = {};")(text);
+      return x && swap("if (!plain(out[f]) || !has(out, f)) out[f] = Object.create(null);", "if (!plain(out[f])) out[f] = {};")(x); }, "a layer put back on ordinary objects, so a __proto__ field writes Object.prototype"],
   ];
   /* The store's own guards, each lifted in a copy of store.cjs. */
   const STORE_PLANTS = [
