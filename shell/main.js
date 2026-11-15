@@ -3128,9 +3128,13 @@ function writeBranch(stem, text) {
     }
     const written = toLead ? JSON.stringify(sealBranchLead(toLead.box, toLead.team, String(toLead.lead.keyId), me.id, boxed), null, 1) + "\n"
       : seal ? JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, signed), null, 1) + "\n" : signed;
+    /* The history is this desk's own, kept on this computer, so it keeps the copy itself and not the lead's envelope. The new
+       bytes are kept before they land, and a file there the history never kept is kept first: a write the history cannot
+       follow is held, so no edition is lost without a copy. */
+    const keptText = toLead ? signed : written;
+    const prior = historyRead().versions.some(v => v.path === path.resolve(at.dest)) ? { none: true } : historyKeepFile(at.dest);
+    if (!prior || (Buffer.byteLength(keptText, "utf8") <= BRANCH_TEXT_MAX && !historyKeep(at.dest, keptText, true))) return branchHold(stem, text); /* plant:branch-keeps-first */
     writeReplacing(at.dest, written);
-    /* The history is this desk's own, kept on this computer, so it keeps the copy itself and not the lead's envelope. */
-    historyKeep(at.dest, toLead ? signed : written, true);
     tidy();
     branchRevs[id] = doc.rev;
     persistDeskEnvelope();
@@ -7444,7 +7448,7 @@ function relayRun() {
 /* ---- the desk's own history of the catalogs it reads and writes --------------------------------------------------
    One gzip per content, named by its SHA-256, and an index of where and when each was seen, beside desk.json: nobody
    else's desk reads this folder. A version stays 30 days after it was last seen and the newest of each file whatever its
-   age; past the cap the longest unseen go first. A sealed file is kept as sealed. */
+   age; past the cap the longest unseen go first, the newest of each file last. A sealed file is kept as sealed. */
 const HISTORY_KIND = "etiuda-catalog-history", HISTORY_INDEX = "index.json";
 const HISTORY_DAY_MS = 24 * 60 * 60 * 1000, HISTORY_DAYS = 30, HISTORY_CAP = 100 * 1024 * 1024;
 // A version seen again within this long is not written down again.
@@ -7529,7 +7533,10 @@ function historyKept(versions, now, days, cap) {
     each.forEach(n => { sum += n; });
     return sum;
   };
-  const spare = kept.filter(v => !pinned(v)).sort((a, b) => a.last - b.last || a.first - b.first);
+  const byAge = (a, b) => a.last - b.last || a.first - b.first;
+  /* The newest of each file goes last, the longest unseen of them first, so the cap holds whatever paths were opened. */
+  const spare = kept.filter(v => !pinned(v)).sort(byAge)
+    .concat(kept.filter(v => pinned(v)).sort(byAge)); /* plant:history-cap-pinned */
   while (spare.length && weight(kept) > cap) {
     const v = spare.shift();
     kept = kept.filter(x => x !== v);
@@ -7594,7 +7601,7 @@ function historyKeepFile(file) {
   try { text = fs.readFileSync(file, "utf8"); }
   catch (e) { return e.code === "ENOENT" ? { none: true } : null; }
   const buf = Buffer.from(text, "utf8");
-  if (!text || historyShipped(buf, sha256Hex(buf))) return { none: true };
+  if (!text || isBuiltIn(path.resolve(String(file))) || buf.length > BRANCH_TEXT_MAX || historyShipped(buf, sha256Hex(buf))) return { none: true };
   const entry = historyKeep(file, text, false);
   return entry ? { entry: entry } : null;
 }
@@ -7650,19 +7657,30 @@ function historyOpen(sha, file) {
   }
 }
 /* Writes a kept version back over its file in the catalog folder, by the rule at historyFree and only after the bytes it
-   replaces are kept themselves: `replaced` names them, so the page can offer them back. */
+   replaces are kept themselves: `replaced` names them, so the page can offer them back. The kept bytes are judged as they
+   are written, whatever the index says of them, and the write is sharedWrite's: under the lock beside the file, {busy}
+   while another desk holds it, except in a folder team's mirror, which is this desk's own and which the syncer swaps. */
 function historyPutBack(sha, file) {
   if (relayHere()) return { ok: false }; /* See sharedWrite. */
   const v = historyFind(sha, file), root = path.resolve(catalogFolder());
   if (!v || !historyFree(v) || !v.path || path.dirname(v.path) !== root || !/\.ec$/i.test(v.path) || !folderAnswers(catalogFolder())) return { ok: false };
+  const mirror = folderMirrorHere();
+  let held = null;
+  if (!mirror || path.resolve(mirror) !== root) { /* plant:put-back-lock */
+    try { held = sharedLock(v.path); }
+    catch (e) { console.error("etiuda: the lock beside " + v.path + " could not be taken - " + e.message); return { ok: false, busy: true }; }
+    if (!held) return { ok: false, busy: true };
+  }
   try {
     const text = historyText(v.sha);
+    if (!historyFree(historyFacts(text))) return { ok: false }; /* plant:put-back-bytes */
     let was = "";
     try { was = fs.readFileSync(v.path, "utf8"); } catch (e) { if (e.code !== "ENOENT") throw e; }
     if (was && sha256Hex(Buffer.from(was, "utf8")) === v.sha) return { ok: true, unchanged: true };
     if (was && !historyFree(historyFacts(was))) return { ok: false };
     const before = historyKeepFile(v.path);
     if (!before) return { ok: false };
+    if (held && !sharedHolds(held)) return { ok: false, busy: true };
     writeReplacing(v.path, text);
     historyKeep(v.path, text, true);
     console.log("etiuda: " + v.path + " was put back as this desk kept it");
@@ -7670,6 +7688,8 @@ function historyPutBack(sha, file) {
   } catch (e) {
     console.error("etiuda: " + v.path + " could not be put back - " + e.message);
     return { ok: false };
+  } finally {
+    if (held && sharedHolds(held)) { try { fs.unlinkSync(held.lock); } catch { /* stale in SHARED_LOCK_MS */ } }
   }
 }
 
@@ -9049,12 +9069,22 @@ function listingRows() {
 ipcMain.handle("etiuda:catalog-files", (e) => (fromEngine(e) ? listingRows() : []));
 /* The page asks. The files stay until the next start: this process still holds them. The catalog
    folder is the setting in the desk file, not the live mirror, which can point somewhere else. */
-/* The new process asks for the single-instance lock. Releasing it first is what lets that
-   process get it; the marker waits if the new process never arrives. */
+/* The team folders a reset never sweeps, whatever their path: machine policy's folder and every folder team's share. The
+   desk file's own are read again by the next start itself (shell/desk-reset.cjs deskFacts). */
+function resetShares() {
+  const out = [];
+  try { const named = readJoinPolicy("en").folder; if (named) out.push(named); } catch { /* no policy is read as none */ }
+  Object.keys(teamShown).forEach(t => { const s = teamShown[t]; if (s && typeof s.folder === "string" && s.folder) out.push(s.folder); });
+  return out;
+}
+/* The new process asks for the single-instance lock. Releasing it is what lets that process get it, and it is released
+   at will-quit, once before-quit has drained every write, so no new start honours the marker while this one still writes
+   in the desk folder; the marker waits if the new process never arrives. */
+let resetRelaunching = false;
 function relaunchAfterReset() {
   setImmediate(() => {
     try {
-      if (typeof app.releaseSingleInstanceLock === "function") app.releaseSingleInstanceLock();
+      resetRelaunching = true; /* plant:reset-lock-late */
       if (typeof app.relaunch === "function") app.relaunch();
       if (typeof app.quit === "function") app.quit();
       else if (typeof app.exit === "function") app.exit(0);
@@ -9070,7 +9100,7 @@ ipcMain.handle("etiuda:desk-reset", (e) => {
     const keys = typeof env.keys === "string" ? JSON.parse(env.keys || "{}") : (env.keys || {});
     catalogSetting = String(keys[CATALOG_FOLDER_KEY] || "");
   } catch (err) { catalogSetting = ""; }
-  const staged = stageReset({ userData: userData, catalogSetting: catalogSetting, defaultCatalog: defaultCatalogFolder() });
+  const staged = stageReset({ userData: userData, catalogSetting: catalogSetting, defaultCatalog: defaultCatalogFolder(), shares: resetShares() });
   if (staged && staged.ok) {
     try { setStartWithWindows(false); } catch (err) { /* start with Windows could not be changed */ }
     relaunchAfterReset();
@@ -9367,7 +9397,11 @@ ipcMain.handle("etiuda:write-catalog-save", async (e, text, from) => {
       console.error("etiuda: " + p.file + " was not written: it is a sealed team's catalog this desk cannot seal");
       return { name: path.basename(p.file), ok: false, sealed: true };
     }
-    historyKeepFile(p.file);
+    /* The bytes an export replaces are kept first, or nothing is written: no catalog is lost without a copy. */
+    if (!historyKeepFile(p.file)) { /* plant:export-keeps-first */
+      console.error("etiuda: " + p.file + " was not written: the bytes it would replace could not be kept first");
+      return { name: path.basename(p.file), ok: false };
+    }
     await writeReplacingAsync(p.file, out);
     historyKeep(p.file, out, true);
     return out === String(text || "") ? { name: path.basename(p.file), ok: true } : { name: path.basename(p.file), ok: true, sealed: true };
@@ -13182,7 +13216,7 @@ if (!theOnlyOne || (Array.isArray(process.argv) && process.argv.includes("--upda
   app.quit();
 } else {
   try {
-    const honoured = honourPendingReset({ userData: app.getPath("userData"), holdsLock: true });
+    const honoured = honourPendingReset({ userData: app.getPath("userData"), holdsLock: true, defaultCatalog: defaultCatalogFolder, shares: resetShares });
     if (honoured && honoured.ok) {
       try { setStartWithWindows(false); } catch (err) { /* start with Windows could not be changed */ }
     }
@@ -13236,4 +13270,6 @@ app.on("window-all-closed", () => {
 app.on("will-quit", () => {
   try { if (deskTray && typeof deskTray.destroy === "function") deskTray.destroy(); } catch { /* already gone */ }
   try { globalShortcut.unregisterAll(); } catch { /* none held */ }
+  /* See relaunchAfterReset: the lock goes only now, after before-quit's drain, and only for a reset's relaunch. */
+  if (resetRelaunching) { try { if (typeof app.releaseSingleInstanceLock === "function") app.releaseSingleInstanceLock(); } catch { /* the exit lets it go */ } }
 });

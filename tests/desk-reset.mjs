@@ -775,7 +775,8 @@ async function noticePage(mod) {
   const lang = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
   const plOk = Object.keys(UNFINISHED_PL).every(en => lang.indexOf(JSON.stringify(en) + ":" + JSON.stringify(UNFINISHED_PL[en])) >= 0);
   const wired = mainTxt.indexOf("deliverResetNotice(") >= 0 && preTxt.indexOf("etiuda:reset-unfinished") >= 0;
-  const releases = /releaseSingleInstanceLock[\s\S]{0,240}relaunch/.test(mainTxt);
+  /* Since review 23's finding 5 the lock goes at will-quit, after before-quit's drain; 4r23d drives it. */
+  const releases = /app\.on\("will-quit"[\s\S]{0,600}releaseSingleInstanceLock/.test(mainTxt) && /function relaunchAfterReset\(\) \{[\s\S]{0,400}app\.relaunch\(\)/.test(mainTxt);
   if (!mod || typeof mod.deliverResetNotice !== "function" || !maint || typeof maint.armResetNotice !== "function") {
     check(false, "4d10 the page does not carry the notice");
     check(plOk, "4d10 the notice is the copywriter's, both languages");
@@ -828,6 +829,228 @@ async function noticePage(mod) {
   if (globalThis.localStorage) globalThis.localStorage.setItem("eUiLang", "en");
 }
 
+/* ---- Grok's review 23 of the desk's Reset and history: each case on stand-in folders in a lab of its own ---------- */
+/* A copy of shell/desk-reset.cjs with the line holding `tag` replaced by `line`, required from the lab; null where the
+   tag is not on exactly one line. */
+function liftedReset(lab, tag, line) {
+  let src = "";
+  try { src = fs.readFileSync(path.join(ROOT, "shell", "desk-reset.cjs"), "utf8"); } catch (e) { return null; }
+  const lines = src.split("\n"), at = lines.map((l, i) => (l.indexOf(tag) >= 0 ? i : -1)).filter(i => i >= 0);
+  if (at.length !== 1) return null;
+  lines[at[0]] = line;
+  const file = path.join(lab, "lifted-" + tag.replace(/[^a-z0-9-]/gi, "") + "-" + Math.random().toString(16).slice(2) + ".cjs");
+  fs.writeFileSync(file, lines.join("\n"));
+  return require(file);
+}
+/* A desk folder and a default catalog folder under `lab/name`: the desk file `desk` (an object), the default holding a
+   team's catalog, team file and ring. */
+function deskPair(lab, name, desk) {
+  const user = path.join(lab, name, "user"), docs = path.join(lab, name, "Documents", "Etiuda");
+  write(path.join(user, "desk.json"), JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: "" } }, desk || {})));
+  write(path.join(user, "etiuda-license.js"), "lic");
+  write(path.join(docs, "shop.ec"), "the team's catalog");
+  write(path.join(docs, "etiuda-team.json"), "the team's file");
+  write(path.join(docs, "etiuda-ring.json"), "the team's ring");
+  return { user: user, docs: docs };
+}
+function sharesLeg(mod, M, lab, name) {
+  /* 4r23a: the default folder is the team's share: its folder team names it, or machine policy does. */
+  const team = deskPair(lab, name + "-team", { teamShown: { "t-0123456789abcdef": { folder: "", lead: "Lamp lead" } } });
+  const env = JSON.parse(fs.readFileSync(path.join(team.user, "desk.json"), "utf8"));
+  env.teamShown["t-0123456789abcdef"].folder = team.docs;
+  write(path.join(team.user, "desk.json"), JSON.stringify(env));
+  M.stageReset({ userData: team.user, catalogSetting: "", defaultCatalog: team.docs });
+  const byTeam = M.honourPendingReset({ userData: team.user, holdsLock: true, defaultCatalog: team.docs });
+  const policy = deskPair(lab, name + "-policy");
+  M.stageReset({ userData: policy.user, catalogSetting: "", defaultCatalog: policy.docs });
+  const byPolicy = M.honourPendingReset({ userData: policy.user, holdsLock: true, defaultCatalog: policy.docs, shares: () => [policy.docs] });
+  const stays = d => ["shop.ec", "etiuda-team.json", "etiuda-ring.json"].every(n => fs.existsSync(path.join(d, n)));
+  return { team: !!byTeam && byTeam.ok === true && gone(path.join(team.user, "desk.json")) && stays(team.docs),
+    policy: !!byPolicy && byPolicy.ok === true && gone(path.join(policy.user, "desk.json")) && stays(policy.docs) };
+}
+function review23Leg(mod) {
+  if (!mod) { check(false, "4r23 shell/desk-reset.cjs is not there"); return; }
+  const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-reset-r23-"));
+  try {
+    const f4 = sharesLeg(mod, mod, lab, "f4");
+    /* THE CONTROL: the same desk with no team and no policy loses the default folder's desk files, as 4d5 says. */
+    const plain = deskPair(lab, "f4-plain");
+    mod.stageReset({ userData: plain.user, catalogSetting: "", defaultCatalog: plain.docs });
+    mod.honourPendingReset({ userData: plain.user, holdsLock: true, defaultCatalog: plain.docs });
+    const control = gone(path.join(plain.docs, "shop.ec")) && gone(path.join(plain.docs, "etiuda-team.json"));
+    check(f4.team && f4.policy && control, "4r23a a default folder that is the team's share, by its folder team or by machine policy, is"
+      + " left whole by a reset that still takes the desk; the control, no team, loses its desk files: " + JSON.stringify({ f4: f4, control: control }));
+    if (!PLANTS) skip("4r23a lifting plant:reset-share-root takes the share as a root again (ETIUDA_PLANTS=off)");
+    else {
+      const L = liftedReset(lab, "plant:reset-share-root", "    const onShare = false;");
+      const lifted = L ? sharesLeg(mod, L, lab, "f4-lifted") : null;
+      check(!!lifted && !lifted.team && !lifted.policy, "4r23a lifting plant:reset-share-root takes the share as a root again: " + JSON.stringify(lifted));
+    }
+    /* 4r23b (finding 1): a marker naming another folder as the default, or as the setting, roots nothing there. The next
+       start roots only the default it computes itself and the setting the desk file holds. */
+    const markerRoots = (M, name) => {
+      const p = deskPair(lab, name);
+      const other = path.join(lab, name, "other");
+      write(path.join(other, "shop.ec"), "not the desk's");
+      write(path.join(other, "etiuda-team.json"), "not the desk's");
+      write(path.join(p.user, M.MARKER_NAME), JSON.stringify({ v: 1, userData: p.user, catalogSetting: "", defaultCatalog: other, attempts: 0 }));
+      const done = M.honourPendingReset({ userData: p.user, holdsLock: true, defaultCatalog: p.docs });
+      return { done: !!done && done.ok === true, desk: gone(path.join(p.user, "desk.json")),
+        other: fs.existsSync(path.join(other, "shop.ec")) && fs.existsSync(path.join(other, "etiuda-team.json")),
+        own: gone(path.join(p.docs, "shop.ec")) };
+    };
+    const f1 = markerRoots(mod, "f1");
+    check(f1.done && f1.desk && f1.other && f1.own, "4r23b a marker naming another folder as the default roots nothing"
+      + " there: the next start sweeps the default it computes and the desk file's setting, and the other folder stays: " + JSON.stringify(f1));
+    if (!PLANTS) skip("4r23b lifting plant:reset-own-default takes the marker's default again (ETIUDA_PLANTS=off)");
+    else {
+      const L = liftedReset(lab, "plant:reset-own-default", "    defaultCatalog: doc.defaultCatalog, catalogSetting: doc.catalogSetting,");
+      const lifted = L ? markerRoots(L, "f1-lifted") : null;
+      check(!!lifted && !lifted.other, "4r23b lifting plant:reset-own-default takes the marker's default again: " + JSON.stringify(lifted));
+    }
+    /* 4r23c (finding 3): this desk's own folder under desks/ in the default folder, its catalog, its request and its
+       invitations, goes with the rest the confirm names, for its key now and one kept aside; another desk's folder there,
+       and anything that is not under desks/<own id>, stays. */
+    const ownFolders = (M, name) => {
+      const crypto = require("node:crypto");
+      const idOf = pub => "k-" + crypto.createHash("sha256").update(Buffer.from(pub, "hex")).digest("hex").slice(0, 16);
+      const now = "ab".repeat(32), old = "cd".repeat(32);
+      const pair = pub => ({ sign: { pub: pub, priv: "x" }, box: { pub: "ef".repeat(32), priv: "y" } });
+      const p = deskPair(lab, name, { branch: pair(now), branchOld: [pair(old)] });
+      const mine = path.join(p.docs, "desks", idOf(now)), aside = path.join(p.docs, "desks", idOf(old));
+      const theirs = path.join(p.docs, "desks", "k-0123456789abcdef");
+      write(path.join(mine, "shop-0a0b0c0d.ec"), "mine");
+      write(path.join(mine, "join.json"), "my request");
+      write(path.join(mine, "invites", "i.json"), "my invitation");
+      write(path.join(aside, "shop-0a0b0c0d.ec"), "mine, an older key");
+      write(path.join(theirs, "shop-0a0b0c0d.ec"), "theirs");
+      M.stageReset({ userData: p.user, catalogSetting: "", defaultCatalog: p.docs });
+      const done = M.honourPendingReset({ userData: p.user, holdsLock: true, defaultCatalog: p.docs });
+      return { done: !!done && done.ok === true, mine: gone(mine), aside: gone(aside), theirs: fs.existsSync(path.join(theirs, "shop-0a0b0c0d.ec")) };
+    };
+    const f3 = ownFolders(mod, "f3");
+    check(f3.done && f3.mine && f3.aside && f3.theirs, "4r23c this desk's own folder under desks/ in the default folder goes, for its key"
+      + " now and one kept aside, catalog, request and invitations alike, and another desk's folder there stays: " + JSON.stringify(f3));
+    if (!PLANTS) skip("4r23c lifting plant:reset-own-desks leaves the desk's own folder under desks/ (ETIUDA_PLANTS=off)");
+    else {
+      const L = liftedReset(lab, "plant:reset-own-desks", "        const keepIt = true;");
+      const lifted = L ? ownFolders(L, "f3-lifted") : null;
+      check(!!lifted && !lifted.mine, "4r23c lifting plant:reset-own-desks leaves the desk's own folder under desks/: " + JSON.stringify(lifted));
+    }
+  } finally {
+    fs.rmSync(lab, { recursive: true, force: true });
+  }
+}
+
+/* 4r23d (Grok's review 23, finding 5): the shell's reset press, run in the real shell/main.js under a stand-in electron over a
+   lab folder. The single-instance lock is let go only at will-quit, after before-quit has ended, so a new start cannot take
+   it and honour the marker while this process still flushes; the relaunch and the quit are asked at once. */
+async function lockHeldLeg(src, lab, name) {
+  const ud = path.join(lab, name, "user"), docs = path.join(lab, name, "Documents");
+  write(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eUiLang: "en" } }));
+  fs.mkdirSync(docs, { recursive: true });
+  const events = [], appOn = {}, handle = {};
+  const noop = () => {};
+  const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
+  const electron = {
+    app: { getPath: n => (n === "documents" ? docs : ud), setPath: noop, requestSingleInstanceLock: () => false, getVersion: () => "0.0.0",
+      on: (k, fn) => { (appOn[k] = appOn[k] || []).push(fn); }, whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop, hasSwitch: () => false },
+      quit: () => events.push("quit"), relaunch: () => events.push("relaunch"), releaseSingleInstanceLock: () => events.push("release"),
+      setLoginItemSettings: noop, getLoginItemSettings: () => ({ openAtLogin: false }) },
+    ipcMain: { on: noop, handle: (ch, fn) => { handle[ch] = fn; } },
+    BrowserWindow: inert, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert, shell: inert, screen: inert,
+    systemPreferences: inert, nativeTheme: { themeSource: "system" }, globalShortcut: { unregisterAll: noop },
+    safeStorage: { isEncryptionAvailable: () => false, encryptString: () => { throw new Error("no"); }, decryptString: () => { throw new Error("no"); } },
+  };
+  process.env.XDG_CURRENT_DESKTOP = "GNOME";
+  new Function("require", "__dirname", "__filename", "module", "exports", "console", src)(
+    n => (n === "electron" ? electron : require(n)), path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {},
+    { log: noop, error: noop, warn: noop });
+  events.length = 0;
+  const ev = { sender: { id: 1, once: noop }, senderFrame: { parent: null, url: "file:///C:/lab/engine/etiuda.html" } };
+  const staged = await Promise.resolve(handle["etiuda:desk-reset"](ev));
+  await new Promise(r => setImmediate(r));
+  const beforeQuit = events.slice();
+  (appOn["before-quit"] || []).forEach(fn => fn({ preventDefault: noop }));
+  const afterBeforeQuit = events.slice();
+  (appOn["will-quit"] || []).forEach(fn => fn({ preventDefault: noop }));
+  return { staged: !!staged && staged.ok === true, asked: beforeQuit, atBeforeQuit: afterBeforeQuit, atWillQuit: events.slice() };
+}
+async function lockLegs() {
+  const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-reset-lock-held-"));
+  try {
+    const src = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
+    let r = null;
+    try { r = await lockHeldLeg(src, lab, "now"); } catch (e) { r = { error: String(e && e.message || e) }; }
+    const ok = !!r && r.staged && r.asked.indexOf("relaunch") >= 0 && r.asked.indexOf("quit") >= 0 && r.atBeforeQuit.indexOf("release") < 0
+      && r.atWillQuit.indexOf("release") >= 0;
+    check(ok, "4r23d the reset press asks the relaunch and the quit, and lets the single-instance lock go only at will-quit, after"
+      + " before-quit: " + JSON.stringify(r));
+    if (!PLANTS) skip("4r23d lifting plant:reset-lock-late lets the lock go with the press again (ETIUDA_PLANTS=off)");
+    else {
+      const lines = src.split("\n"), at = lines.map((l, i) => (l.indexOf("plant:reset-lock-late") >= 0 ? i : -1)).filter(i => i >= 0);
+      let lifted = null;
+      if (at.length === 1) {
+        lines[at[0]] = "      if (typeof app.releaseSingleInstanceLock === \"function\") app.releaseSingleInstanceLock();";
+        try { lifted = await lockHeldLeg(lines.join("\n"), lab, "lifted"); } catch (e) { lifted = { error: String(e && e.message || e) }; }
+      }
+      check(!!lifted && Array.isArray(lifted.asked) && lifted.asked.indexOf("release") >= 0,
+        "4r23d lifting plant:reset-lock-late lets the lock go with the press again: " + JSON.stringify(lifted));
+    }
+  } finally {
+    fs.rmSync(lab, { recursive: true, force: true });
+  }
+}
+
+/* 4r23e (Grok's review 23, finding 7): a folder in the desk folder that cannot be listed is a failed entry, not a throw. The
+   pass records what it owes, says so, and the next start reads that list rather than throwing at the same folder; once the
+   folder can be listed and the person tries again, the reset finishes. */
+function unlistedLeg(M, lab, name) {
+  const nodeFs = require("node:fs");
+  const origReaddir = nodeFs.readdirSync;
+  const dir = path.join(lab, name);
+  write(path.join(dir, "desk.json"), "go");
+  write(path.join(dir, "locked", "inside.txt"), "held");
+  write(path.join(dir, M.MARKER_NAME), markerBody(dir));
+  const locked = p => path.resolve(String(p)).toLowerCase() === path.join(dir, "locked").toLowerCase();
+  nodeFs.readdirSync = function (p, ...rest) {
+    if (locked(p)) { const e = new Error("EACCES: permission denied, scandir"); e.code = "EACCES"; e.path = String(p); throw e; }
+    return origReaddir.call(this, p, ...rest);
+  };
+  const out = {};
+  try {
+    try { out.first = M.honourPendingReset({ userData: dir, holdsLock: true }); } catch (e) { out.threw = String(e && e.code || e); }
+    let marker = null;
+    try { marker = JSON.parse(fs.readFileSync(path.join(dir, M.MARKER_NAME), "utf8")); } catch (e) { marker = null; }
+    out.owed = !!marker && Array.isArray(marker.owed) && marker.owed.some(p => locked(p));
+    try { out.second = M.honourPendingReset({ userData: dir, holdsLock: true }); } catch (e) { out.threwAgain = String(e && e.code || e); }
+  } finally { nodeFs.readdirSync = origReaddir; }
+  M.retryPendingReset({ userData: dir, holdsLock: true });
+  try { out.after = M.honourPendingReset({ userData: dir, holdsLock: true }); } catch (e) { out.after = { threw: String(e) }; }
+  out.finished = gone(path.join(dir, "locked")) && gone(path.join(dir, M.MARKER_NAME));
+  return out;
+}
+function unlistedLegs(mod) {
+  if (!mod) return;
+  const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-reset-unlisted-"));
+  try {
+    const r = unlistedLeg(mod, lab, "now");
+    const ok = !r.threw && !r.threwAgain && !!r.first && r.first.notice === true && r.owed && !!r.second && r.second.notice === true
+      && !!r.after && r.after.ok === true && r.finished;
+    check(ok, "4r23e a folder that cannot be listed is a failed entry: the pass records it as owed and says so, the next start does"
+      + " not throw, and once it can be listed and the person tries again the reset finishes: " + JSON.stringify(r));
+    if (!PLANTS) skip("4r23e lifting plant:reset-unlisted throws at the folder again (ETIUDA_PLANTS=off)");
+    else {
+      const L = liftedReset(lab, "plant:reset-unlisted", "    names = namesOf(p);");
+      let lifted = null;
+      try { lifted = L ? unlistedLeg(L, lab, "lifted") : null; } catch (e) { lifted = { threw: String(e) }; }
+      check(!!lifted && !!lifted.threw, "4r23e lifting plant:reset-unlisted throws at the folder again: " + JSON.stringify(lifted));
+    }
+  } finally {
+    fs.rmSync(lab, { recursive: true, force: true });
+  }
+}
+
 let mod = null, decision = null;
 try { mod = require(path.join(ROOT, "shell", "desk-reset.cjs")); } catch (e) { mod = null; }
 try { decision = require(path.join(ROOT, "tests", "install-plan.js")).uninstallDataDecision; } catch (e) { decision = null; }
@@ -835,6 +1058,9 @@ try { decision = require(path.join(ROOT, "tests", "install-plan.js")).uninstallD
 await uiLeg();
 shellLeg(mod);
 await unfinishedLeg(mod);
+review23Leg(mod);
+await lockLegs();
+unlistedLegs(mod);
 installLeg(decision);
 plantLeg(mod, decision);
 console.log("desk-reset " + (failed ? "FAILED " + failed + " of " : "passed ") + asserted
