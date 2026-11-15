@@ -688,7 +688,7 @@ let engineVersionRead = null;
 function engineVersion() {
   if (engineVersionRead !== null) return engineVersionRead;
   let m = null;
-  try { m = /\bE_VERSION\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)[^"]*"/.exec(fs.readFileSync(ENGINE, "utf8")); } catch { m = null; }
+  try { m = /\bE_VERSION\s*=\s*"((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?)"/.exec(fs.readFileSync(ENGINE, "utf8")); } catch { m = null; }
   if (!m) return ""; /* plant:engine-version-nocache */
   engineVersionRead = m[1];
   return engineVersionRead;
@@ -707,7 +707,7 @@ function engineBuilt() {
 /* The release a catalog asks for where this engine is older, else "". */
 function needsNewerEngine(data) {
   const want = /^([0-9]{1,6})\.([0-9]{1,6})\.([0-9]{1,6})/.exec(String((data && data.minEngine) || ""));
-  const have = /^([0-9]+)\.([0-9]+)\.([0-9]+)$/.exec(want ? engineVersion() : "");
+  const have = /^([0-9]+)\.([0-9]+)\.([0-9]+)/.exec(want ? engineVersion() : "");
   if (!want || !have) return "";
   for (let i = 1; i <= 3; i++) if (+want[i] !== +have[i]) return +want[i] > +have[i] ? [want[1], want[2], want[3]].map(Number).join(".") : "";
   return "";
@@ -10669,11 +10669,25 @@ function keepNote(note, kept) {
   if (note.released < kept.released) return "refused"; /* plant:note-released-older */
   return "taken";
 }
-/* Whether release `a` is above release `b`, each three whole numbers; false where either is not. */
+const SEMVER_RE = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+/* Whether release `a` is above release `b` under semver precedence; false where either is not a release. */
 function versionAbove(a, b) {
-  const x = NOTE_VERSION_RE.exec(String(a)), y = /^([0-9]+)\.([0-9]+)\.([0-9]+)$/.exec(String(b));
+  const x = SEMVER_RE.exec(String(a)), y = SEMVER_RE.exec(String(b));
   if (!x || !y) return false;
   for (let i = 1; i <= 3; i++) if (+x[i] !== +y[i]) return +x[i] > +y[i];
+  if (!x[4] && y[4]) return true; /* plant:note-prerelease */
+  if (x[4] && !y[4]) return false;
+  if (x[4] && y[4]) {
+    const ax = x[4].split("."), ay = y[4].split(".");
+    for (let i = 0; i < ax.length && i < ay.length; i++) {
+      if (ax[i] === ay[i]) continue;
+      const nx = /^(0|[1-9][0-9]*)$/.test(ax[i]), ny = /^(0|[1-9][0-9]*)$/.test(ay[i]);
+      if (nx && ny) return +ax[i] > +ay[i];
+      if (nx !== ny) return !nx;
+      return ax[i] > ay[i];
+    }
+    return ax.length > ay.length;
+  }
   return false; /* plant:note-equal */
 }
 /* The note's bytes through `fetchFn`: one GET over https to etiuda.dev, no redirect followed, nothing cached, no cookie,
@@ -10736,7 +10750,7 @@ async function lookForNote(fetchFn) {
   try {
     const body = await fetchNote(fetchFn, NOTE_URL), got = readNote(body);
     const running = engineVersion(), built = engineBuilt();
-    if (got.note && /^[0-9]+\.[0-9]+\.[0-9]+$/.test(running) && noteDay(built)) { /* plant:note-known-running */
+    if (got.note && SEMVER_RE.test(running) && noteDay(built)) { /* plant:note-known-running */
       const kept = keptNote();
       /* A look reads only when its note stands at or above the running version and was not released before this build:
          a past or lower note proves nothing of newer releases and must not be kept as a serial floor. */
