@@ -125,13 +125,13 @@ let cleaned = null, same = null, shellNote = "";
 try {
   const fn = new Function(sliceDecl(shell, "function langCounts(") + "\n" + sliceDecl(shell, "function cardCounts(")
     + "\nreturn cardCounts;")();
-  const bare = { id: "card-x", n: 3 };
-  same = fn([bare])[0] === bare;
+  const bare = { id: "card-x", n: 3, note: "a field of no use" };
+  same = JSON.stringify(fn([bare])[0]) === JSON.stringify({ id: "card-x", n: 3 });
   cleaned = fn([{ id: "card-x", n: 3, langs: { pl: 2, en: 1, "good morning": 9, "pl:note": 1, de: 0 } }])[0];
 } catch (e) {
   shellNote = e && e.message ? e.message : String(e);
 }
-check(same === true, "a card the page sent without languages is written unchanged" + (shellNote ? " (" + shellNote + ")" : ""));
+check(same === true, "a card the page sent without languages keeps its id and count, and nothing else it carried" + (shellNote ? " (" + shellNote + ")" : ""));
 check(!!cleaned && JSON.stringify(cleaned.langs) === JSON.stringify({ pl: 2, en: 1 })
   && JSON.stringify(cleaned).indexOf("good morning") < 0 && JSON.stringify(cleaned).indexOf("pl:note") < 0,
   "the file keeps the counts and drops a phrase: " + JSON.stringify(cleaned && cleaned.langs) + (shellNote ? " (" + shellNote + ")" : ""));

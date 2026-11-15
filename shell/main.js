@@ -2173,11 +2173,11 @@ function writeStatsAnswer(text, askId, forced) {
     format: 1,
     kind: "etiuda-statistics",
     desk: id,
-    engine: String(data.engine || ""),
+    engine: typeof data.engine === "string" && /^[0-9A-Za-z.+-]{1,40}$/.test(data.engine) ? data.engine : "", /* plant:stats-engine */
     period: { from: String(statsPeriod.from), to: String(statsPeriod.to) },
     sync: channelStamp(now),
     cards: cardCounts(data.cards),
-    intents: Array.isArray(data.intents) ? data.intents : [],
+    intents: intentCounts(data.intents), /* plant:stats-intents */
     misses: data.misses | 0,
     /* One counter per language the page actually counted, keyed by code: the desk's languages
        are its catalog's, so a pair here would silently drop every other one. */
@@ -8676,22 +8676,35 @@ function ecBlocks(text, shape) {
    is the length of the intents array the offer dialog counts; categories are the shelf ids, the
    keys the runtime files a card under. Counted in the catalog's PRIMARY language, which the
    format makes safe: a card dividing differently in another language is refused at load. */
-/* Whatever the page sent, reduced to codes and whole numbers. Anything that is not a usable
-   code is dropped here rather than forwarded into a document that leaves this machine. */
-/* Per card, the languages that card was copied in, reduced the same way as the desk's
-   language totals. A card sent without the field is returned as it arrived. */
+/* Whatever the page sent, reduced to ids, days, codes and whole numbers, field by field. Anything that is not
+   one of those is dropped here rather than forwarded into a document that leaves this machine. */
+/* A card is its id, its count, the day it was last copied, and the languages it was copied in. */
 function cardCounts(list) {
   if (!Array.isArray(list)) return [];
-  return list.map(card => {
-    if (!card || typeof card !== "object" || Array.isArray(card) || !Object.prototype.hasOwnProperty.call(card, "langs")) return card;
-    const kept = langCounts(card.langs);
-    const langs = {};
+  const out = [];
+  list.forEach(card => {
+    if (!card || typeof card !== "object" || Array.isArray(card)) return;
+    const id = typeof card.id === "string" && card.id.length <= 256 ? card.id : "", n = card.n | 0;
+    if (!id || n < 1) return;
+    const row = { id: id, n: n }; /* plant:stats-card-row */
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(card.at || ""))) row.at = String(card.at);
+    const kept = langCounts(card.langs), langs = {};
     Object.keys(kept).forEach(code => { if ((kept[code] | 0) > 0) langs[code] = kept[code] | 0; });
-    const out = {};
-    Object.keys(card).forEach(k => { if (k !== "langs") out[k] = card[k]; });
-    if (Object.keys(langs).length) out.langs = langs;
-    return out;
+    if (Object.keys(langs).length) row.langs = langs;
+    out.push(row);
   });
+  return out;
+}
+/* An intent is its id and its count. */
+function intentCounts(list) {
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  list.forEach(it => {
+    if (!it || typeof it !== "object" || Array.isArray(it)) return;
+    const id = typeof it.id === "string" && it.id.length <= 256 ? it.id : "", n = it.n | 0;
+    if (id && n > 0) out.push({ id: id, n: n });
+  });
+  return out;
 }
 function langCounts(v) {
   const out = {};

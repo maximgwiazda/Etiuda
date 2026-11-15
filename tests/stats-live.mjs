@@ -21,11 +21,12 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
-const EXPECTED = 20;
+const EXPECTED = 23;
 const WORK = path.join(ROOT, "shell", "main.js");
 const GOOD = fs.readFileSync(WORK);
 const GOOD_HASH = crypto.createHash("sha256").update(GOOD).digest("hex");
 const CLOCK = new Date(2026, 3, 15, 12, 0, 0, 0).getTime();
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -222,6 +223,15 @@ try {
     return { ok: red && green === true, why: why, red: red };
   }
 
+  /* The legs of the desk-statistics review (930): each proved as prove() proves, its plant skipped under ETIUDA_PLANTS=off. */
+  async function proveOr(name, needle, repl, run) {
+    if (!PLANTS_OFF) return prove(name, needle, repl, run);
+    let green = false, why = "";
+    try { green = await run(); } catch (e) { why = e.stack || e.message; }
+    console.log("  SKIP  the plant of " + name + " (ETIUDA_PLANTS=off)");
+    return { ok: green === true, why: why, red: null };
+  }
+
   /* ---- 891a: another key, unsigned, or a broken file writes nothing ------------------------------------------ */
   {
     const g = await prove("891a",
@@ -251,6 +261,42 @@ try {
       });
     check(g.ok, "891a a span signed by another key, or unsigned, or not JSON, writes nothing and leaves a good answer where it was"
       + (g.why ? ": " + g.why.split("\n")[0] : ""));
+  }
+
+  /* ---- 930a to 930c: a card, an intent and the engine string are reduced to ids, a day, codes and whole numbers --- */
+  {
+    const marked = "smuggled-" + crypto.randomBytes(4).toString("hex");
+    const hostile = () => JSON.stringify({
+      engine: "2.0.0 " + marked + " " + "x".repeat(5000),
+      cards: [{ id: "c-lamp", n: 2, at: "2026-04-02", note: marked, langs: { en: 2 } }, { id: "c-wick", n: 1, word: marked },
+        { id: "x".repeat(300), n: 1 }, { id: "c-gone", n: 0 }],
+      intents: [{ id: "i-ask", n: 1, label: marked }, { id: "i-none", n: "many" }],
+      misses: 0, langs: { en: 2 }, since: "2026-01-01", catalog: { id: "north-lamps", rev: 3 }
+    });
+    const run = async () => {
+      const box = await joined(false);
+      put(box.share, "stats-span.json", spanDoc(box.D, "rolling-30", lead.privateKey, LEAD));
+      box.D.setPage(hostile);
+      box.D.api.catalogChanged(box.D.win);
+      const inner = openStats(box);
+      if (!inner) return false;
+      const text = JSON.stringify(inner);
+      const cardsOk = JSON.stringify(inner.cards) === JSON.stringify([{ id: "c-lamp", n: 2, at: "2026-04-02", langs: { en: 2 } }, { id: "c-wick", n: 1 }]);
+      const intentsOk = JSON.stringify(inner.intents) === JSON.stringify([{ id: "i-ask", n: 1 }]);
+      return text.indexOf(marked) < 0 && cardsOk && intentsOk && inner.engine === "";
+    };
+    const proofs = [
+      ["930a", "    const row = { id: id, n: n }; /* plant:stats-card-row */", "    const row = Object.assign({}, card, { id: id, n: n }); delete row.langs; /* plant:stats-card-row */",
+        "a card the page sent keeps its id, count, day and language counts, and nothing else it carried"],
+      ["930b", "    intents: intentCounts(data.intents), /* plant:stats-intents */", "    intents: Array.isArray(data.intents) ? data.intents : [], /* plant:stats-intents */",
+        "an intent keeps its id and count, and nothing else it carried"],
+      ["930c", "    engine: typeof data.engine === \"string\" && /^[0-9A-Za-z.+-]{1,40}$/.test(data.engine) ? data.engine : \"\", /* plant:stats-engine */",
+        "    engine: String(data.engine || \"\"), /* plant:stats-engine */", "the engine field is a version string or empty, never any text the page sent"],
+    ];
+    for (const [name, needle, repl, says] of proofs) {
+      const g = await proveOr(name, needle, repl, run);
+      check(g.ok, name + " " + says + (g.why ? ": " + g.why.split("\n")[0] : ""));
+    }
   }
 
   /* ---- 891b: one watch event ----------------------------------------------------------------------------------- */
