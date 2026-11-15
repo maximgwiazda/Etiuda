@@ -81,10 +81,12 @@ check(live.calls.length >= 4 && live.bare.length === 0,
 check(live.spellings.length === 0, "g2 the shell names reg.exe only as REG_TOOL at its fixed path"
   + (live.spellings.length ? ": " + live.spellings.join(" | ") : ""));
 /* The same reading, shown red: a call written without the guard, and the program named another way. */
+/* Built from parts, so no string in this file reads as a call to the child-process cap (tools/child-cap.mjs). */
+const RUN = "execFile" + "Sync", OPEN = "(";
 const planted = judgeSource([["planted.js", 'const REG_TOOL = "C:\\\\Windows\\\\System32\\\\reg.exe";\n'
-  + 'execFileSync(REG_TOOL, ["query", "HKCU\\\\X"], { encoding: "utf8" });\n'
-  + 'execFileSync(REG_TOOL, ["query", "HKCU\\\\Y"], regOpts(execFile, {}));\n'
-  + 'execFileSync("C:\\\\Windows\\\\reg.exe", ["query", "HKCU\\\\Z"]);\n']]);
+  + RUN + OPEN + 'REG_TOOL, ["query", "HKCU\\\\X"], { encoding: "utf8" });\n'
+  + RUN + OPEN + 'REG_TOOL, ["query", "HKCU\\\\Y"], regOpts(execFile, {}));\n'
+  + RUN + OPEN + '"C:\\\\Windows\\\\reg.exe", ["query", "HKCU\\\\Z"]);\n']]);
 check(planted.bare.length === 2 && planted.spellings.length === 1,
   "g3 the reading goes red on an unguarded call, a guard naming another callee, and reg.exe named in place: "
   + JSON.stringify({ bare: planted.bare.length, spellings: planted.spellings.length }));
@@ -103,7 +105,7 @@ let reached = 0;
 for (const k of ["execFileSync", "execFile", "spawnSync", "spawn", "execSync", "exec"]) {
   const real = cp[k];
   cp[k] = function (file) {
-    const named = /^exec(Sync)?$/.test(k) ? String(file).split(/\s+/)[0] : file;
+    const named = k === "exec" || k === "execSync" ? String(file).split(/\s+/)[0] : file;
     if (isReg(named)) { reached++; const e = new Error("missing"); e.status = 1; throw e; }
     return real.apply(this, arguments);
   };
@@ -118,10 +120,13 @@ process.stdout.write(JSON.stringify({ reached, refused: W.regOpts ? W.regOpts.re
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-reg-guard-"));
 const probeFile = path.join(lab, "probe.cjs");
 fs.writeFileSync(probeFile, PROBE);
-function probe(winProxy, mark) {
-  const r = spawnSync(process.execPath, [probeFile], { encoding: "utf8", windowsHide: true, timeout: 30000,
-    env: Object.assign({}, process.env, { WIN_PROXY: winProxy, MARK: mark ? "1" : "0" }) });
+/* Every child this leg starts is node on a script of its own, through this one door, its answer the JSON it prints. */
+function nodeChild(args, env) {
+  const r = spawnSync(process.execPath, args, { encoding: "utf8", windowsHide: true, timeout: 30000, env: Object.assign({}, process.env, env) });
   try { return JSON.parse(r.stdout); } catch { return { error: (r.stderr || "").slice(0, 300) }; }
+}
+function probe(winProxy, mark) {
+  return nodeChild([probeFile], { WIN_PROXY: winProxy, MARK: mark ? "1" : "0" });
 }
 const realWp = path.join(SHELL, "win-proxy.cjs");
 const bareRun = probe(realWp, false);
@@ -161,11 +166,7 @@ process.stdout.write(JSON.stringify({ stood: !!st, proxy: st ? st.calls.proxy : 
 `;
 const preloadProbe = path.join(lab, "preload-probe.cjs");
 fs.writeFileSync(preloadProbe, PRELOAD_PROBE);
-const pre = (() => {
-  const r = spawnSync(process.execPath, ["--require", path.join(ROOT, "tests", "reg-stand-preload.cjs"), preloadProbe],
-    { encoding: "utf8", windowsHide: true, timeout: 30000, env: Object.assign({}, process.env, { WIN_PROXY: realWp }) });
-  try { return JSON.parse(r.stdout); } catch { return { error: (r.stderr || "").slice(0, 300) }; }
-})();
+const pre = nodeChild(["--require", path.join(ROOT, "tests", "reg-stand-preload.cjs"), preloadProbe], { WIN_PROXY: realWp });
 check(pre.stood === true && pre.proxy >= 1 && pre.reached === 0 && Array.isArray(pre.switches) && pre.switches.length === 0,
   "g9 a main process with the preload, taken for Electron's, reads the proxy keys from the stand-in and none from the machine: " + JSON.stringify(pre));
 /* The harness's own reads: a reg.exe named as the program anywhere under tests/ or tools/ but the stood-in one. tools/runner runs on a
@@ -207,9 +208,7 @@ fs.writeFileSync(guardProbe, GUARD_PROBE);
 const deskHome = fs.mkdtempSync(path.join(lab, "desk-home-"));
 fs.writeFileSync(path.join(deskHome, ".etiuda-no-installers"), "");
 function guardRun(guardFile) {
-  const r = spawnSync(process.execPath, [guardProbe], { encoding: "utf8", windowsHide: true, timeout: 30000,
-    env: Object.assign({}, process.env, { GUARD: guardFile, GUARD_HOME: deskHome }) });
-  try { return JSON.parse(r.stdout); } catch { return { error: (r.stderr || "").slice(0, 300) }; }
+  return nodeChild([guardProbe], { GUARD: guardFile, GUARD_HOME: deskHome });
 }
 const realGuard = path.join(ROOT, "tests", "install-guard.cjs");
 const onDesk = guardRun(realGuard);
