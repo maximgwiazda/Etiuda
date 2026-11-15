@@ -22,7 +22,7 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 135;
+const EXPECTED = 138;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition. The lead's Studio can take a copy of a catalog the team lists at any time, without asking here, sealed for the team. Any other catalog stays on this desk: its content reaches the lead only if the lead turns on copies of unlisted catalogs in Studio, and this desk is told before anything is sent. A catalog the team does not list can be marked private here, and is then never sent. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie). Kopię katalogu z listy zespołu Studio lidera może pobrać w każdej chwili, bez pytania tutaj, zapieczętowaną dla zespołu. Każdy inny katalog zostaje na tym stanowisku: jego treść trafi do lidera tylko wtedy, gdy lider włączy w Studiu kopie katalogów spoza listy, a to stanowisko zostanie o tym powiadomione, zanim cokolwiek zostanie wysłane. Katalog spoza listy zespołu można tutaj oznaczyć jako prywatny i wtedy nigdy nie jest wysyłany. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -298,6 +298,28 @@ try {
       let p = null;
       if (at >= 0) { lines.splice(at, 1); p = await leadRows("listing-lead-plant", lines.join("\n")); }
       check(!!p && !p.lead, "r16d lifting plant:listing-lead-row tells the page no file is the lead's (FAIL r16c): " + JSON.stringify(p));
+    }
+  }
+
+  /* ---- r16k: the pinned lead's catalog with its signature in upper-case hex is chosen at boot, as in lower case (finding 7) ---- */
+  const upperBoot = async (name, src) => {
+    const box = await arm(name, src);
+    const doc = catalog(2, { date: "2026-04-03" });
+    doc.sig.value = doc.sig.value.toUpperCase();
+    put(box.share, "board.ec", textOf(doc));
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)]);
+    const booted = box.D.sync("etiuda:catalog");
+    return !!booted && JSON.parse(booted).rev === 2;
+  };
+  {
+    const chosen = await upperBoot("upper-boot");
+    check(chosen, "r16k the pinned lead's catalog whose signature is written in upper-case hex is chosen at boot: " + chosen);
+    for (const [leg, mark] of [["r16l", "plant:lead-hex-case"], ["r16m", "plant:sig-hex-case"]]) {
+      if (PLANTS_OFF) { skip(leg + " rewriting " + mark + " to lower case only leaves the upper-case file unchosen"); continue; }
+      const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf(mark) >= 0), from = "[0-9a-fA-F]{128}";
+      let p = null;
+      if (at >= 0 && lines[at].split(from).length === 2) { lines[at] = lines[at].replace(from, () => "[0-9a-f]{128}"); p = await upperBoot("upper-boot-" + mark.slice(6), lines.join("\n")); }
+      check(p === false, leg + " rewriting " + mark + " to lower case only leaves the upper-case file unchosen (FAIL r16k): " + p);
     }
   }
 

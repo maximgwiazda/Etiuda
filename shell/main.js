@@ -735,7 +735,8 @@ function catalogPeek(text) {
    When pinPublic is given, returns a boolean verifying the signature against that public key. */
 function catalogSigValid(data, pinPublic) {
   const sig = data && data.sig;
-  if (!data || !sig || sig.alg !== "Ed25519" || !/^[0-9a-f]{128}$/.test(String(sig.value || ""))) return pinPublic !== undefined ? false : "";
+  /* A signature is its 64 bytes in hex, of either case: the same bytes verify whichever case the signing tool wrote. */
+  if (!data || !sig || sig.alg !== "Ed25519" || !/^[0-9a-fA-F]{128}$/.test(String(sig.value || ""))) return pinPublic !== undefined ? false : ""; /* plant:sig-hex-case */
   if (pinPublic !== undefined) {
     if (!/^[0-9a-f]{64}$/.test(String(pinPublic || ""))) return false;
     try {
@@ -876,7 +877,7 @@ function catalogLeadOk(data) {
   const bound = folderLeadPublics();
   if (bound === null) return catalogSigValid(data);
   const sig = data && data.sig;
-  if (!bound.length || !data || !sig || sig.alg !== "Ed25519" || !/^[0-9a-f]{128}$/.test(String(sig.value || ""))) return "";
+  if (!bound.length || !data || !sig || sig.alg !== "Ed25519" || !/^[0-9a-fA-F]{128}$/.test(String(sig.value || ""))) return ""; /* plant:lead-hex-case */
   for (const pub of bound) {
     if (catalogSigValid(data, pub)) return pub;
   }

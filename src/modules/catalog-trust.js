@@ -46,7 +46,7 @@ function deskSigState(doc,leads){
   if(!leads.length) return byRing();
   if(!sig || typeof sig!=="object" || sig.value==null || String(sig.value)==="") return Promise.resolve({state:V2_SIG_NONE, pub:""});
   // The shell's own test of the signature's form, so a value it would not verify is not verified here.
-  const formed=sig.alg===V2_SIG_ALG && /^[0-9a-f]{128}$/.test(String(sig.value));
+  const formed=sig.alg===V2_SIG_ALG && /^[0-9a-fA-F]{128}$/.test(String(sig.value)); /* plant:page-hex-case */
   const byLead=l=>formed ? v2SigState(doc,{[id]:{[kid]:l.public}}).then(s=>s===V2_SIG_VALID ? l.public : "") : Promise.resolve("");
   return leads.reduce((was,l)=>was.then(pub=>pub || byLead(l)),Promise.resolve(""))
     .then(pub=>pub ? {state:V2_SIG_VALID, pub:pub} : byRing().then(r=>({pub:"", state:
