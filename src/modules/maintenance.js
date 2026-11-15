@@ -7,7 +7,7 @@ import { catalogMacroCount, sampleUntouched } from "./catalog-file.js";
 import { catalogLoaded } from "./catalog-boot.js";
 import { remPx, colMode, colFloor, colCount, COL_GAP } from "./columns.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
-import { dismissModal, closeModal, openDialog, edDirty, modalFront } from "./dialog.js";
+import { dismissModal, closeModal, edDirty, modalFront } from "./dialog.js";
 import { E_VERSION } from "./env.js";
 import { eHost, eCatalogFile, eCatalogIn, eCatalogBuiltIn, eCatalogFolder, E_CATALOG_FOLDER_KEY, E_CATALOG_SCRIPT } from "./host.js";
 import { lsGet, lsKeys, nsGet, E_NS, E_LS_OK, E_SS_OK, eDeskFileShown, eSaveTrouble, eLastSaved, eHomeless, eDeskHome,
@@ -24,7 +24,7 @@ import { RAIL_DOCK_MIN, railLocked, railMaxWidth } from "./rail-panel.js";
 import { pageScroller } from "./page-scroll.js";
 import { intentOrder } from "./intent-id.js";
 import { esc } from "./esc.js";
-import { list, modalEl, modalCard, $ } from "./dom.js";
+import { list, $ } from "./dom.js";
 import { systemTheme, themeChoice, themeTrace, traceNote } from "./theme.js";
 import { copy } from "./mark.js";
 import { pillsLocked } from "./pills-box.js";
@@ -444,13 +444,8 @@ function mtMaintBody(){
    nothing in the readings can hold focus - the buttons sit in the pinned row. */
 let mtLiveT=0;
 function mtGridEl(){
-  if(modalEl && !modalEl.hidden && modalCard && modalCard.classList.contains("mt-modal")){
-    return modalCard.querySelector(".mt-grid");
-  }
   const sh=typeof document!=="undefined"?document.getElementById("screenHost"):null;
-  if(sh && !sh.hidden){
-    return sh.querySelector(".mt-grid");
-  }
+  if(sh && !sh.hidden) return sh.querySelector(".mt-grid");
   return null;
 }
 function mtPanelOpen(){
@@ -710,21 +705,6 @@ registerScreen("maintenance", {
   }
 });
 
-function openMaintenanceModal(backFn){
-  openDialog({
-    cls: "mt-modal",
-    back: backFn||null,
-    title: "Maintenance",
-    body: mtMaintBody()+'<p class="mt-moved" id="mtMoved">'+esc(t(MT_MOVED))+'</p>',
-    actions: '<div class="mf-left">'
-      +'<button type="button" class="btn danger" id="mtEject">'+esc(t("Eject catalog"))+'</button>'
-      +'</div>'
-      +'<button type="button" class="btn" id="mtCopy" title="'+esc(t("Copy the report: counts and environment only, never your content"))+'">'+esc(t("Copy report"))+'</button>'
-      +'<button type="button" class="btn primary" id="mtClose">'+esc(t("Done"))+'</button>',
-    wire: () => wireMaintenanceActions(null, () => dismissModal())
-  });
-}
-
 function openMaintenance(backFn){
   /* An editor holding typed, unsaved changes keeps them: the shortcut does nothing rather than close it with no way
      back (the test architect, 2026-11-09). A clean modal closes before Maintenance comes forward. */
@@ -732,15 +712,10 @@ function openMaintenance(backFn){
     try { toast(t("Maintenance can open once the edit in progress is saved or cancelled.")); } catch(_) {}
     return;
   }
-  /* A resting editor is held under Maintenance by openDialog and comes back when it closes. */
   if(typeof closeModal === "function" && modalFront()){
     try { closeModal(); } catch(_) {}
   }
-  try {
-    openScreenTab("maintenance");
-    return;
-  } catch (_) {}
-  openMaintenanceModal(backFn);
+  openScreenTab("maintenance");
 }
 
 export {
@@ -749,7 +724,6 @@ export {
   wireMaintenanceWatch,
   mtRefreshLive,
   openMaintenance,
-  openMaintenanceModal,
   mtGridHtml,
   wireMaintenanceActions,
   mtHealthTiles,

@@ -689,7 +689,6 @@ UI_STRINGS.pl={
   "In an editor: the language tab before this one":"W edytorze: poprzedni język",
   "In an editor: the language tab after this one":"W edytorze: następny język",
   "Switch the language being edited":"Przełącz edytowany język",
-  "Restored your cards and stars from an earlier build.":"Przywrócono własne karty i gwiazdki z wcześniejszej wersji.",
   "Your intent edits and stars are set aside: this catalog cannot say which intent each belongs to.":"Odłożono własne zmiany i gwiazdki przy intencjach: ten katalog nie wskazuje, której intencji dotyczą.",
   "Edited cards this catalog does not have are kept as your own: {CARDS}.":"Zmienione karty, których ten katalog nie ma, zostają jako własne: {CARDS}.",
   "Starred cards this catalog does not have are off your list: {CARDS}.":"Karty z gwiazdką, których ten katalog nie ma, znikają z listy: {CARDS}.",

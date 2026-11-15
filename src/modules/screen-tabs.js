@@ -9,14 +9,9 @@ const REGISTRY = {};
 export const screens = [];
 export let screenOn = "";
 let prevTabId = null;
-let _throwForTest = false;
 
 let onScreenChange = null;
 let onScreenReturn = null;
-
-export function _setThrowForTest(v) {
-  _throwForTest = Boolean(v);
-}
 
 export function registerScreen(id, def) {
   REGISTRY[id] = def;
@@ -43,7 +38,6 @@ export function isScreenOn() {
 }
 
 export function openScreenTab(id) {
-  if (_throwForTest) throw new Error("screen tabs throw simulation");
   if (!screens.includes(id)) {
     screens.push(id);
   }

@@ -1312,9 +1312,6 @@ body.shed-segfold #seg::before{width:100%;transform:none}
 .menu .menu-upd-acts button{width:auto}
 .menu #menuUpdateSee{color:var(--accent)}
 body.pills-off .pills-slot{display:none}
-/* The retreat is a fixed clone (see animatePillsBox). This class must not put the slot
-   back into flow: the snap has already taken its final display. */
-.pills-slot.pills-anim{overflow:hidden}
 /* Ctrl/Cmd peeks the hidden pills. ONE declaration, because the peeked bar must be a
    plain flat bar BY CONSTRUCTION: syncPillsCollapse() clears pills-overflow whenever the
    bar is off, so no clipped-bar or popover rule can match a bar that is not on screen. */
@@ -3149,16 +3146,11 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    actions bar decides which of its buttons leads, so outside one the class paints nothing and
    is not written. Measured, it had been on four buttons that read as plain. */
 .modal-actions .btn.primary,.screen-actions .btn.primary{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;font-weight:600}
-/* Two buttons at the same edge read as one loosely spaced group, and one of these forgets your
-   work while the other brings a file in. A hairline says they are two things. */
-.modal-actions .mf-left .mf-sep{align-self:stretch;width:1px;margin:3px;background:var(--line-strong);
-  border-radius:1px}
 /* A SCREEN TAB'S HEADING AND BAR keep the dialog's: the file's name beside the title, and the bar's left group with
    its hairline, as the Library's bar had them. */
 .screen-head{display:flex;align-items:baseline;gap:.7ch;min-width:0}
 .screen-head .screen-name{font-weight:400;color:var(--dim);min-width:0;overflow:hidden;white-space:nowrap}
 .screen-actions .mf-left{display:flex;gap:8px;margin-right:auto;flex-wrap:wrap}
-.screen-actions .mf-left .mf-sep{align-self:stretch;width:1px;margin:3px;background:var(--line-strong);border-radius:1px}
 .screen-page:focus{outline:none}
 /* A VARIANT THAT MUST SURVIVE A STATE SAYS SO ITSELF. The ground is restated here, not
    inherited from the variant rule two lines up: that rule ties .btn:not([disabled]):hover on
@@ -3181,9 +3173,6 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 .btn.danger{color:#c44;border-color:color-mix(in srgb,#c44 47%,var(--bg))}
 /* About Etiuda dialog, and the pages it opens */
 .modal-card.about-modal,.modal-card.about-page{max-width:520px}
-/* THE PANEL TAKES THE WINDOW'S WIDTH, and the readings as many columns as it holds, so the whole of
-   it stands on one screen without scrolling in any reasonably big window. */
-.modal-card.mt-modal{max-width:min(1240px,calc(100vw - 40px))}
 /* Light and OPEN, not bold: the one place the product says its own name was the heaviest
    text in the app. 350 + tracking gives the presence the bold was for. 350 needs Segoe UI
    Variable (Win11); older systems snap to 400 - degrades to plainer, never to broken. */
@@ -3564,16 +3553,8 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   padding:3px 6px;border:1px solid transparent;border-radius:var(--radius-xs);background:transparent;
   color:var(--ink);font:13px var(--sans);
   overflow:hidden;white-space:nowrap}
-.manage-row .mg-badge{flex:0 0 auto}
 .manage-row .mg-stamp{flex:0 0 auto;display:inline-flex;color:var(--warn)}
 .mg-stamp .ic{width:16px;height:16px}
-/* Local copy counter on Manage rows - appears once a card has been copied at least once.
-   SCOPED TO THE ROW so it can refuse to flex: `.manage-row span` gives every span a basis of
-   120px and permission to grow - written for the category label, which is the only span in
-   these rows that should - and one bare class loses to it. Unscoped, this counter demanded
-   120px beside a title that already filled the row, and the buttons wrapped to a line of
-   their own. Every other span here is already scoped for the same reason. */
-.manage-row .mg-uses{flex:0 0 auto;font:10px var(--mono);color:var(--dim);opacity:.75;padding:0 3px}
 /* Eye icon: stroked with currentColor so it inherits every existing hover colour rule */
 .ic-eye{width:15px;height:15px;display:block;fill:none;stroke:currentColor;stroke-width:1.5;
   stroke-linecap:round;stroke-linejoin:round;vertical-align:middle}
@@ -4817,7 +4798,7 @@ body.e-lanes #pillsSlot{display:none}
 }@layer base{
 /* Tabular figures wherever a number sits beside a label, so a count ticking from 9 to 10
    does not shuffle the text around it. */
-.pill b,.mg-uses,.mg-count,.mg-cat-n,.cbadge,.rail-badge,.tag{
+.pill b,.mg-count,.mg-cat-n,.cbadge,.rail-badge,.tag{
   font-variant-numeric:tabular-nums}
 /* The star's own path (_STAR), spawned by the click handler as a fixed overlay so it
    survives the re-render that follows the click. 299: under the toast, above everything
@@ -6635,7 +6616,6 @@ What is typed here stays in this browser.`;
     nsGet: () => nsGet,
     nsKey: () => nsKey,
     nsSet: () => nsSet,
-    orbitOldLayer: () => orbitOldLayer,
     setLayer: () => setLayer,
     ssDel: () => ssDel,
     ssGet: () => ssGet,
@@ -7113,22 +7093,6 @@ What is typed here stays in this browser.`;
       l.push(ns);
       lsSet(E_LAYERS, JSON.stringify(l));
     }
-  }
-  var E_ORBITED = "e~orbited";
-  function orbitOldLayer() {
-    if (lsGet(E_ORBITED) != null) return 0;
-    let moved = 0;
-    if (E_LAYER !== E_NS && lyGet("Pack") == null) {
-      LAYER_KEYS.forEach((n) => {
-        const v = lsGet(E_NS + n);
-        if (v != null && lsSet(E_LAYER + n, v)) {
-          lsDel(E_NS + n);
-          moved++;
-        }
-      });
-    }
-    lsSet(E_ORBITED, "1");
-    return moved;
   }
   var E_CARRIED = "e~carried";
   var E_OLD_KEY_RE = /^pb(?:[A-Z]|[0-9a-z]+~)/;
@@ -8365,7 +8329,6 @@ What is typed here stays in this browser.`;
     "In an editor: the language tab before this one": "W edytorze: poprzedni język",
     "In an editor: the language tab after this one": "W edytorze: następny język",
     "Switch the language being edited": "Przełącz edytowany język",
-    "Restored your cards and stars from an earlier build.": "Przywrócono własne karty i gwiazdki z wcześniejszej wersji.",
     "Your intent edits and stars are set aside: this catalog cannot say which intent each belongs to.": "Odłożono własne zmiany i gwiazdki przy intencjach: ten katalog nie wskazuje, której intencji dotyczą.",
     "Edited cards this catalog does not have are kept as your own: {CARDS}.": "Zmienione karty, których ten katalog nie ma, zostają jako własne: {CARDS}.",
     "Starred cards this catalog does not have are off your list: {CARDS}.": "Karty z gwiazdką, których ten katalog nie ma, znikają z listy: {CARDS}.",
@@ -9915,21 +9878,8 @@ What is typed here stays in this browser.`;
       return o;
     });
   }
-  function normalizeBaseCardEntry(m) {
-    const o = Object.assign({}, m || {});
-    delete o._custom;
-    delete o._overridden;
-    delete o._base;
-    if (!o.id) o.id = catalogCardId(o);
-    o._base = 1;
-    return o;
-  }
   function rebuildBaseCards() {
-    if (Array.isArray(pack.baseCards) && pack.baseCards.length) {
-      BASE_M = pack.baseCards.map(normalizeBaseCardEntry);
-    } else {
-      BASE_M = snapshotStockBaseCards();
-    }
+    BASE_M = snapshotStockBaseCards();
   }
   function retiredCards() {
     const removed = new Set(pack.removed || []), ov = pack.overrides || {};
@@ -10125,57 +10075,6 @@ What is typed here stays in this browser.`;
     showDeskRefused();
     syncSaveNotice();
   }
-  var NS_CARRY = ["Pack", "Stats", "Days", "CatOrder", "Cols", "Floor"];
-  var NS_DROP_POSITIONAL = ["intentOverrides", "intentHidden", "intentFavourites", "intentRemoved", "baseCards"];
-  function packWithoutPositional(raw) {
-    try {
-      const p = JSON.parse(raw);
-      if (!p || typeof p !== "object") return null;
-      NS_DROP_POSITIONAL.forEach((k) => {
-        delete p[k];
-      });
-      return JSON.stringify(p);
-    } catch (e) {
-      return null;
-    }
-  }
-  function carryNsLayer(from) {
-    let moved = 0;
-    NS_CARRY.forEach((n) => {
-      let v = lsGet(from + n);
-      const to = (LAYER_KEYS.indexOf(n) > -1 ? eLayer() : E_NS) + n;
-      if (v == null || lsGet(to) != null) return;
-      if (n === "Pack") {
-        v = packWithoutPositional(v);
-        if (v == null) return;
-      }
-      if (lsSet(to, v)) moved++;
-    });
-    if (moved) setTimeout(() => {
-      try {
-        toast(t("Restored your cards and stars from an earlier build."));
-      } catch (e) {
-      }
-    }, 1400);
-    return moved;
-  }
-  var NS_ADOPTED = "e~nsAdopted:";
-  function adoptStrandedPack() {
-    try {
-      if (E_NS === "e" || eLayer() !== E_NS) return false;
-      const mine = eLayer() + "Pack", known = eLayers();
-      const found = lsKeys().filter((k) => k !== mine && /^e[0-9a-z]+~Pack$/.test(k) && known.indexOf(k.slice(0, -"Pack".length)) < 0);
-      if (found.length !== 1) return false;
-      const from = found[0].slice(0, -"Pack".length);
-      const mark = NS_ADOPTED + from;
-      if (lsGet(mark) != null) return false;
-      const moved = lyGet("Pack") ? 0 : carryNsLayer(from);
-      lsSet(mark, "1");
-      return moved > 0;
-    } catch (e) {
-      return false;
-    }
-  }
   var TAG_KEYED = "tag";
   var ASIDE = "IntentsAside";
   var INTENT_LISTS = ["intentHidden", "intentFavourites", "intentRemoved"];
@@ -10302,7 +10201,6 @@ What is typed here stays in this browser.`;
   }
   function loadPack() {
     let p = null;
-    adoptStrandedPack();
     try {
       const raw = lyGet("Pack");
       if (raw) p = JSON.parse(raw);
@@ -10371,50 +10269,7 @@ What is typed here stays in this browser.`;
       if (!pack.editBases[k] || typeof pack.editBases[k] !== "object" || Array.isArray(pack.editBases[k])) delete pack.editBases[k];
     });
     if (pack.intentKeys !== TAG_KEYED) pack.intentKeys = "";
-    migrateBpToCin();
     migrateIntentKeys();
-  }
-  function migrateBpToCin() {
-    if (pack.catLabels && pack.catLabels.bp != null) {
-      if (pack.catLabels.cin == null) {
-        pack.catLabels.cin = pack.catLabels.bp === "Boarding pass" ? "Check-in" : pack.catLabels.bp;
-      }
-      delete pack.catLabels.bp;
-    }
-    if (pack.customCats && pack.customCats.bp != null) {
-      if (pack.customCats.cin == null) pack.customCats.cin = pack.customCats.bp;
-      delete pack.customCats.bp;
-    }
-    (pack.custom || []).forEach((m) => {
-      if (m && m.c === "bp") m.c = "cin";
-    });
-    Object.keys(pack.overrides || {}).forEach((id) => {
-      const o = pack.overrides[id];
-      if (o && o.c === "bp") o.c = "cin";
-    });
-    Object.keys(pack.intentOverrides || {}).forEach((id) => {
-      const o = pack.intentOverrides[id];
-      if (o && o.cat === "bp") o.cat = "cin";
-      if (o && Array.isArray(o.cat)) o.cat = o.cat.map((k) => k === "bp" ? "cin" : k);
-    });
-    (pack.intentCustom || []).forEach((c) => {
-      if (!c) return;
-      if (c.cat === "bp") c.cat = "cin";
-      if (Array.isArray(c.cat)) c.cat = c.cat.map((k) => k === "bp" ? "cin" : k);
-    });
-    if (Array.isArray(pack.hidden)) {
-      pack.hidden = pack.hidden.map((id) => String(id).replace(/^b:bp:/, "b:cin:"));
-    }
-    if (Array.isArray(pack.favourites)) {
-      pack.favourites = pack.favourites.map((id) => String(id).replace(/^b:bp:/, "b:cin:"));
-    }
-    Object.keys(pack.overrides || {}).forEach((id) => {
-      if (/^b:bp:/.test(id)) {
-        const neu = id.replace(/^b:bp:/, "b:cin:");
-        if (!pack.overrides[neu]) pack.overrides[neu] = pack.overrides[id];
-        delete pack.overrides[id];
-      }
-    });
   }
   function whoOptions() {
     return Array.isArray(pack && pack.who) ? pack.who : WHO_BASE;
@@ -10500,8 +10355,6 @@ What is typed here stays in this browser.`;
     });
     stats.days = open;
     const older = statsOlderTouched(pack, newest);
-    layer.macroOrder = pack.cardOrder;
-    layer.baseMacros = pack.baseCards;
     let ok = true;
     try {
       if (!countsOnly) ok = lySet("Pack", JSON.stringify(layer)) && ok;
@@ -13847,7 +13700,6 @@ What is typed here stays in this browser.`;
   // src/modules/screen-tabs.js
   var screen_tabs_exports = {};
   __export(screen_tabs_exports, {
-    _setThrowForTest: () => _setThrowForTest,
     clearScreenOn: () => clearScreenOn,
     closeScreenTab: () => closeScreenTab,
     dropScreenTab: () => dropScreenTab,
@@ -13866,12 +13718,8 @@ What is typed here stays in this browser.`;
   var screens = [];
   var screenOn = "";
   var prevTabId = null;
-  var _throwForTest = false;
   var onScreenChange = null;
   var onScreenReturn = null;
-  function _setThrowForTest(v) {
-    _throwForTest = Boolean(v);
-  }
   function registerScreen(id, def) {
     REGISTRY[id] = def;
   }
@@ -13891,7 +13739,6 @@ What is typed here stays in this browser.`;
     return Boolean(screenOn);
   }
   function openScreenTab(id) {
-    if (_throwForTest) throw new Error("screen tabs throw simulation");
     if (!screens.includes(id)) {
       screens.push(id);
     }
@@ -16448,7 +16295,6 @@ What is typed here stays in this browser.`;
     mtReportText: () => mtReportText,
     mtTeamLine: () => mtTeamLine,
     openMaintenance: () => openMaintenance,
-    openMaintenanceModal: () => openMaintenanceModal,
     openUnfinishedReset: () => openUnfinishedReset,
     wireMaintenanceActions: () => wireMaintenanceActions,
     wireMaintenanceWatch: () => wireMaintenanceWatch
@@ -19286,7 +19132,7 @@ What is typed here stays in this browser.`;
     edRestEnd();
     edUnstand();
     modalEl.classList.remove("ed-win");
-    modalCard.classList.remove("about-modal", "about-page", "mt-modal");
+    modalCard.classList.remove("about-modal", "about-page");
     modalCard.innerHTML = "";
     let back = modalOpener;
     const kbd = modalOpenerKbd, key = modalOpenerKey;
@@ -30037,7 +29883,6 @@ What is typed here stays in this browser.`;
     E_APPLIED = bootCatalog();
     if (E_APPLIED) eApplyCatalog(E_APPLIED);
     setLayer(layerNsOf(E_APPLIED));
-    orbitOldLayer();
   }
 
   // src/modules/catalog-merge.js
@@ -32362,13 +32207,8 @@ What is typed here stays in this browser.`;
   }
   var mtLiveT = 0;
   function mtGridEl() {
-    if (modalEl && !modalEl.hidden && modalCard && modalCard.classList.contains("mt-modal")) {
-      return modalCard.querySelector(".mt-grid");
-    }
     const sh = typeof document !== "undefined" ? document.getElementById("screenHost") : null;
-    if (sh && !sh.hidden) {
-      return sh.querySelector(".mt-grid");
-    }
+    if (sh && !sh.hidden) return sh.querySelector(".mt-grid");
     return null;
   }
   function mtPanelOpen() {
@@ -32629,16 +32469,6 @@ What is typed here stays in this browser.`;
       wireMtShell(host.querySelector ? host.querySelector(".sx.lm-mt") : null);
     }
   });
-  function openMaintenanceModal(backFn) {
-    openDialog({
-      cls: "mt-modal",
-      back: backFn || null,
-      title: "Maintenance",
-      body: mtMaintBody() + '<p class="mt-moved" id="mtMoved">' + esc(t(MT_MOVED)) + "</p>",
-      actions: '<div class="mf-left"><button type="button" class="btn danger" id="mtEject">' + esc(t("Eject catalog")) + '</button></div><button type="button" class="btn" id="mtCopy" title="' + esc(t("Copy the report: counts and environment only, never your content")) + '">' + esc(t("Copy report")) + '</button><button type="button" class="btn primary" id="mtClose">' + esc(t("Done")) + "</button>",
-      wire: () => wireMaintenanceActions(null, () => dismissModal())
-    });
-  }
   function openMaintenance(backFn) {
     if (typeof modalFront === "function" && modalFront() && typeof edDirty === "function" && edDirty()) {
       try {
@@ -32653,12 +32483,7 @@ What is typed here stays in this browser.`;
       } catch (_) {
       }
     }
-    try {
-      openScreenTab("maintenance");
-      return;
-    } catch (_) {
-    }
-    openMaintenanceModal(backFn);
+    openScreenTab("maintenance");
   }
 
   // src/modules/editors.js

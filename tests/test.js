@@ -549,7 +549,7 @@ function runUnitTests() {
   catalogLangTests();
   catalogIdentityTests();
   catalogNsTests();
-  strandedAdoptionTests();
+  layerStaysPutTests();
   unreadablePackTests();
   langSegWiringTests();
   deskStatsTests();
@@ -2479,47 +2479,43 @@ function catalogNsTests() {
      [named(src), named('<script id="eEmbedded"></script>'), named("function eEmbeddedCatalog(){}")], [false, true, true]);
 }
 
-/* THE ADOPTIONS NEVER CARRY ONE CATALOG'S LAYER INTO ANOTHER'S. A build with a catalog inside it
-   adopts a lone layer an earlier build of that catalog stranded; since each catalog keeps a layer of
-   its own, a lone layer can be another catalog's. Both movers and the order loadPack runs them in,
-   sliced out of pack.js over a store this supplies, with the layer in view and the desk's list of
-   written layers supplied as storage.js keeps them. */
-function strandedAdoptionTests() {
-  const src = sourceText();
-  const decl = m => extractDecl(src, m);
-  const nsFor = new Function(decl("function eNsFor(") + "\nreturn eNsFor;")();
-  const body = ["const NS_CARRY=", "const NS_DROP_POSITIONAL=", "function packWithoutPositional(",
-                "function carryNsLayer(", "const NS_ADOPTED=", "function adoptStrandedPack("]
-                 .map(decl).join("\n") + "\nadoptStrandedPack();";
-  const EMBEDDED = { id: "lamp-shop" };
-  const own = nsFor(EMBEDDED.id), other = nsFor("fern-shop"), stranger = nsFor("an older seed");
-  const boot = (store, inView, written) => {
-    const lsGet = k => (k in store) ? store[k] : null;
-    new Function("eEmbeddedCatalog", "eNsFor", "E_NS", "lsGet", "lsSet", "lsKeys", "LAYER_KEYS", "eLayer", "eLayers",
-                 "lyGet", "t", "toast", "setTimeout", body)(
-      () => EMBEDDED, nsFor, own, lsGet, (k, v) => { store[k] = String(v); return true; }, () => Object.keys(store),
-      ["Pack", "Stats", "Days", "CatOrder", "IntentOrder", "IntentsAside", "LinksAside", "RequestsAside", "Exported"],
-      () => inView, () => written.slice(), n => lsGet(inView + n), s => s, () => {}, fn => fn());
-    return store;
-  };
-  const PACK = tag => JSON.stringify({ favourites: [tag] });
-  const under = (store, ns) => Object.keys(store).filter(k => k.indexOf(ns) === 0).sort();
-  const marks = store => Object.keys(store).filter(k => k.indexOf("e~nsAdopted:") === 0).length;
-
-  const s1 = boot({ [own + "Pack"]: PACK("an edit over the build's own catalog") }, other, [other]);
-  eq("a catalog loaded over the build's own finds none of that catalog's layer in its own, and nothing is marked",
-     [under(s1, other), marks(s1)], [[], 0]);
-  const s2 = boot({ [other + "Pack"]: PACK("an edit over another catalog") }, own, [other]);
-  eq("the build's own catalog back in view takes nothing from a layer this desk wrote for another catalog",
-     [under(s2, own), marks(s2)], [[], 0]);
-  const s3 = boot({ [stranger + "Pack"]: PACK("an edit under an older seed") }, other, [other]);
-  const s3Other = under(s3, other), s3Marks = marks(s3);
-  boot(s3, own, [other]);
-  eq("a stranded layer waits while another catalog is in view, and reaches the build's own catalog when it is",
-     [s3Other, s3Marks, JSON.parse(s3[own + "Pack"] || "{}").favourites], [[], 0, ["an edit under an older seed"]]);
-  const s4 = boot({ [stranger + "Pack"]: PACK("an edit an earlier build stranded") }, own, [other]);
-  eq("a lone stranded layer no catalog of this desk wrote is still adopted by the build's own catalog",
-     JSON.parse(s4[own + "Pack"] || "{}").favourites, ["an edit an earlier build stranded"]);
+/* A CATALOG'S LAYER STAYS ITS OWN. loadPack reads the layer in view and leaves every other
+   namespace's pack where it was. */
+function layerStaysPutTests() {
+  const cp = require("child_process");
+  const script = [
+    'process.removeAllListeners("warning");',
+    'process.on("warning", () => {});',
+    'import { pathToFileURL } from "node:url";',
+    'import { join } from "node:path";',
+    'const root = process.env.LAYER_STAYS_ROOT;',
+    'const mod = (n) => pathToFileURL(join(root, "src", "modules", n)).href;',
+    'const ST = await import(mod("storage.js"));',
+    'const PK = await import(mod("pack.js"));',
+    'const own = "eab12~", other = "ecd34~", lone = "e99aa~";',
+    'const packOf = (tag) => JSON.stringify({ favourites: [tag], intentKeys: "tag" });',
+    'const ownPack = packOf("own-card"), otherPack = packOf("other-card"), lonePack = packOf("lone-card");',
+    'ST.setLayer(own);',
+    'ST.lsSet(own + "Pack", ownPack);',
+    'ST.lsSet(other + "Pack", otherPack);',
+    'ST.lsSet(lone + "Pack", lonePack);',
+    'PK.resetPack();',
+    'PK.loadPack();',
+    'process.stdout.write(JSON.stringify({',
+    '  fav: PK.pack.favourites,',
+    '  other: ST.lsGet(other + "Pack") === otherPack,',
+    '  lone: ST.lsGet(lone + "Pack") === lonePack',
+    '}));'
+  ].join("\n");
+  const r = cp.spawnSync(process.execPath, ["--input-type=module", "-"], {
+    input: script, encoding: "utf8", cwd: E.ROOT, timeout: 60000, windowsHide: true,
+    env: Object.assign({}, process.env, { LAYER_STAYS_ROOT: E.ROOT })
+  });
+  let got = null;
+  try { got = JSON.parse(String(r.stdout || "").trim().split(/\r?\n/).filter(Boolean).pop() || "null"); } catch (e) {}
+  eq("loadPack reads the layer in view and leaves every other namespace's pack where it was",
+     [r.status, got && got.fav, got && got.other, got && got.lone],
+     [0, ["own-card"], true, true]);
 }
 
 /* THE PACK LOADER TOLERATES AN UNREADABLE LAYER, not JSON or JSON of the wrong shape: the desk starts,
