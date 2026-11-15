@@ -8,6 +8,8 @@
  *   cw1  the words selected in a text box come back whole, as UTF-8, Polish letters included, exit 0
  *   cw2  a password box is refused (exit 6) and no text comes back
  *   cw3  a box with nothing selected answers exit 1 and no text
+ *   cw4  a read-only text box with a selection answers read-only on the first line, and the words after it
+ *   cw5  an editable text box with a selection answers editable on the first line, and the words after it
  *
  * Both programs are compiled into a lab in the temp folder with the C# compiler Windows carries, the helper as
  * electron-builder.js compiles it. The box is closed by the process id this file started it with. Windows only. */
@@ -25,8 +27,8 @@ const ROOT = path.resolve(__dirname, "..");
 const CSC = path.join(process.env.WINDIR || "C:/Windows", "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe");
 if (!fs.existsSync(CSC)) { console.log("  FAIL no C# compiler at " + CSC); process.exit(1); }
 
-/* The box: argument 1 is "text" or "password" or "none"; it shows the words, selects the middle ones, takes the focus and
-   prints "ready" once it is in front. Invented words, nobody's. */
+/* The box: argument 1 is "text", "readonly", "password" or "none"; it shows the words, selects the middle ones, takes
+   the focus and prints "ready" once it is in front. Invented words, nobody's. A read-only box still has the selection. */
 const BOX_CS = [
   "using System; using System.Windows.Forms;",
   "static class Box {",
@@ -34,6 +36,7 @@ const BOX_CS = [
   "    var f = new Form { Text = \"caret selection lab\", Width = 520, Height = 140, TopMost = true };",
   "    var t = new TextBox { Dock = DockStyle.Fill, Text = \"lamp oil \\u017C\\u00F3\\u0142ty knot and wick\" };",
   "    if (a.Length > 0 && a[0] == \"password\") t.UseSystemPasswordChar = true;",
+  "    if (a.Length > 0 && a[0] == \"readonly\") t.ReadOnly = true;",
   "    f.Controls.Add(t);",
   "    f.Shown += (s, e) => { f.Activate(); t.Focus(); if (a.Length == 0 || a[0] != \"none\") { t.SelectionStart = 9; t.SelectionLength = 10; }",
   "      else { t.SelectionStart = 0; t.SelectionLength = 0; } Console.Out.WriteLine(\"ready\"); Console.Out.Flush(); };",
@@ -72,14 +75,30 @@ function withBox(mode) {
   });
 }
 
+/* The helper's first line is the fact and the rest are the words. A refusal or an empty selection prints nothing. */
+function factOf(raw) {
+  const text = String(raw || "");
+  const at = text.indexOf("\n");
+  return { fact: at < 0 ? "" : text.slice(0, at).replace(/\r$/, ""), words: at < 0 ? text : text.slice(at + 1) };
+}
+
 (async () => {
   try {
     const sel = await withBox("text");
-    check(sel.status === 0 && sel.text === "\u017C\u00F3\u0142ty knot", "cw1 the words selected in a text box come back whole, as UTF-8: " + JSON.stringify(sel));
+    const selFact = factOf(sel.text);
+    check(sel.status === 0 && selFact.words === "\u017C\u00F3\u0142ty knot", "cw1 the words selected in a text box come back whole, as UTF-8: " + JSON.stringify(sel));
     const pw = await withBox("password");
     check(pw.status === 6 && pw.text === "", "cw2 a password box is refused and no text comes back: " + JSON.stringify(pw));
     const none = await withBox("none");
     check(none.status === 1 && none.text === "", "cw3 a box with nothing selected answers that and no text: " + JSON.stringify(none));
+    const ro = await withBox("readonly");
+    const roFact = factOf(ro.text);
+    check(ro.status === 0 && roFact.fact === "ro" && roFact.words === "\u017C\u00F3\u0142ty knot",
+      "cw4 a read-only text box with a selection answers read-only: " + JSON.stringify(ro));
+    const ed = await withBox("text");
+    const edFact = factOf(ed.text);
+    check(ed.status === 0 && edFact.fact === "ed" && edFact.words === "\u017C\u00F3\u0142ty knot",
+      "cw5 an editable text box with a selection answers editable: " + JSON.stringify(ed));
   } finally { fs.rmSync(lab, { recursive: true, force: true }); }
   console.log("#counts checks=" + ran + " failed=" + failed);
   console.log(failed ? "  RESULT: FAIL " + failed + " of " + ran : "  RESULT: ok " + ran + " check(s)");
