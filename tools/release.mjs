@@ -199,6 +199,12 @@ gate('line endings and dashes', () => {
   const files = sh('git ls-files').split(/\r?\n/).filter(f => /\.(js|mjs|html|json|md|css)$/.test(f));
   const crs = files.filter(f => readFileSync(join(ROOT, f), 'utf8').includes('\r'));
   if (crs.length) return crs.length + ' tracked file(s) hold a CR: ' + crs.slice(0, 5).join(', ');
+  /* The page is what this gate reads next, and the build is what writes it. Running the build
+     here means the bytes under judgement are the build's, committed or just written. */
+  const built = spawnSync(process.execPath, [join(ROOT, 'tools', 'build.mjs')], {
+    cwd: ROOT, stdio: 'inherit',
+  });
+  if (built.status !== 0) return 'the build did not write the page';
   const engine = readFileSync(join(ROOT, 'engine', 'etiuda.html'), 'utf8');
   /* Built from char codes: an en dash written into this file would be the very thing
      the gate refuses, and this file is tracked in the same tree. */
@@ -208,6 +214,12 @@ gate('line endings and dashes', () => {
   console.log('  ' + files.length + ' tracked text file(s), all LF, and no em or en dash in the artefact');
   return true;
 });
+
+/* Asked to stop once the page has been judged. The next block is the window wall. */
+if (args.includes('--up-to') && args[args.indexOf('--up-to') + 1] === 'page') {
+  console.log('  dry run: stopped after the page, before the window wall');
+  process.exit(0);
+}
 
 /* The shell gate opens windows, so the window wall is asked here, before the minutes of npm test,
    and a refusal stops the run as refused (exit 78), not as a failed gate (tests/engine.js). */
