@@ -689,7 +689,8 @@ function engineVersion() {
   if (engineVersionRead !== null) return engineVersionRead;
   let m = null;
   try { m = /\bE_VERSION\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)[^"]*"/.exec(fs.readFileSync(ENGINE, "utf8")); } catch { m = null; }
-  engineVersionRead = m ? m[1] : "";
+  if (!m) return ""; /* plant:engine-version-nocache */
+  engineVersionRead = m[1];
   return engineVersionRead;
 }
 /* The release a catalog asks for where this engine is older, else "". */
@@ -10720,12 +10721,13 @@ async function lookForNote(fetchFn) {
   let look = "failed";
   try {
     const body = await fetchNote(fetchFn, NOTE_URL), got = readNote(body);
-    if (got.note) {
+    const running = engineVersion();
+    if (got.note && /^[0-9]+\.[0-9]+\.[0-9]+$/.test(running)) { /* plant:note-known-running */
       const kept = keptNote();
       const take = keepNote(got.note, kept);
       /* A look reads only when its note stands at or above the running version: a note below it says nothing of newer
          releases, kept or not (Argon's update-offer finding 1). */
-      const proves = !versionAbove(engineVersion(), got.note.version);
+      const proves = !versionAbove(running, got.note.version);
       if (take === "same") {
         look = proves ? "read" : "failed";
       } else if (take === "taken") {

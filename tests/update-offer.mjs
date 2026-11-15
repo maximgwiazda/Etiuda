@@ -27,9 +27,9 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 11;
+const PLANTS = 13;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 59 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 61 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -48,6 +48,24 @@ function section(src) {
   if (from < 0 || at < from || src.indexOf(HEAD, at + 1) >= 0 || src.indexOf(FROM, from + 1) >= 0 || end < 0)
     throw new Error("the link rule and the version note's section are not in shell/main.js once, in that order");
   return src.slice(from, end);
+}
+const META_FROM = "let engineVersionRead = null;";
+const META_TAIL = "\n/* The release a catalog asks for";
+function metaSection(src) {
+  const from = src.indexOf(META_FROM), end = src.indexOf(META_TAIL, from);
+  if (from < 0 || src.indexOf(META_FROM, from + 1) >= 0 || end < 0)
+    throw new Error("engineVersion is not in shell/main.js once before needsNewerEngine");
+  return src.slice(from, end);
+}
+function engineMetaOf(o) {
+  const opt = o || {};
+  const text = opt.text || metaSection(MAIN);
+  const env = {
+    fs: opt.fs || fs,
+    ENGINE: opt.enginePath || path.join(ROOT, "engine", "etiuda.html"),
+  };
+  const names = Object.keys(env);
+  return new Function(...names, text + "\nreturn { engineVersion };")(...names.map(n => env[n]));
 }
 const SPKI = (() => {
   const m = /const SPKI_ED25519 = Buffer\.from\("([0-9a-f]+)", "hex"\);/.exec(MAIN);
@@ -280,6 +298,26 @@ try {
   const lThrow = await Sw.lookForNote(serve(note({ serial: 6, version: "2.0.2" })));
   check(lThrow === "failed" && Sw.updateState().offer === "2.0.1",
     "u4n a write that throws leaves the offer as it was and the look \"failed\": " + lThrow);
+  /* u4o, u4p (review finding 3): an unreadable engine version is not cached as "", and makes the look fail with nothing kept. */
+  let engineBody = null;
+  const metaRead = engineMetaOf({
+    enginePath: "/fake/etiuda.html",
+    fs: { readFileSync: () => { if (engineBody === null) throw new Error("ENOENT"); return engineBody; } }
+  });
+  const evMiss = metaRead.engineVersion();
+  engineBody = "<html>no marker here</html>";
+  const evNoMarker = metaRead.engineVersion();
+  engineBody = 'var E_VERSION = "2.0.0";';
+  const evOk = metaRead.engineVersion();
+  engineBody = null;
+  const evCached = metaRead.engineVersion();
+  check(evMiss === "" && evNoMarker === "" && evOk === "2.0.0" && evCached === "2.0.0",
+    "u4o a failed read of the engine version is not cached as empty, while a good read is cached: " + JSON.stringify([evMiss, evNoMarker, evOk, evCached]));
+  const SnoVer = shellOf({ running: "" });
+  const lNoVer = await SnoVer.lookForNote(serve(note({ serial: 5, version: "1.0.0" })));
+  check(lNoVer === "failed" && SnoVer.updateState().offer === "" && SnoVer.updateState().look === "failed"
+    && !fs.existsSync(path.join(SnoVer.ud, SnoVer.NOTE_FILE)),
+    "u4p with no engine version known, any accepted note gives look \"failed\", no offer, and writes nothing: " + lNoVer);
 
   /* ---- u5: the release page, and the timer ------------------------------------------------------------------------- */
   const open = S4e.handle["etiuda:update-open"], click = ev => { const e = Object.assign({}, ev); S4e.on["etiuda:update-click"](e); return e; };
@@ -429,7 +467,7 @@ try {
     "u7d the built engine carries the offer's words and markup");
 
   /* ---- u-plants: each guard lifted in memory, its case read again ------------------------------------------------- */
-  if (PLANTS_OFF) console.log("  SKIP  u-plants: ETIUDA_PLANTS=off");
+  if (PLANTS_OFF) console.log("  NOT RUN u-plants: ETIUDA_PLANTS=off");
   else {
     const SEC = section(MAIN);
     const lifted = (tag, replacement) => {
@@ -468,6 +506,28 @@ try {
     const fnText = pageSrc.slice(fnAt, fnEnd).split("\n").filter(l => l.indexOf("plant:later-holds") < 0).join("\n");
     const liftedMenu = new Function(fnText + "\nreturn updateInMenu;")();
     check(fnAt > 0 && liftedMenu(st, held, T) === "2.0.1", "u-plant later-holds lifted shows the put-off release within its week");
+    const metaLines = metaSection(MAIN).split("\n"), mvAt = metaLines.findIndex(l => l.indexOf("plant:engine-version-nocache") >= 0);
+    if (mvAt < 0 || metaLines.findIndex((l, i) => i > mvAt && l.indexOf("plant:engine-version-nocache") >= 0) >= 0)
+      throw new Error("plant:engine-version-nocache is not in engineVersion once");
+    metaLines.splice(mvAt, 1, '  if (!m) { engineVersionRead = ""; return ""; }');
+    let pBody = null;
+    const metaLifted = engineMetaOf({
+      text: metaLines.join("\n"),
+      enginePath: "/fake/etiuda.html",
+      fs: { readFileSync: () => { if (pBody === null) throw new Error("ENOENT"); return pBody; } }
+    });
+    metaLifted.engineVersion();
+    pBody = 'var E_VERSION = "2.0.0";';
+    check(metaLifted.engineVersion() === "", "u-plant engine-version-nocache lifted keeps caching empty on a failed read");
+    const PK = (() => {
+      const lines = SEC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:note-known-running") >= 0);
+      if (at < 0 || lines.findIndex((l, i) => i > at && l.indexOf("plant:note-known-running") >= 0) >= 0)
+        throw new Error("plant:note-known-running is not in the section once");
+      lines.splice(at, 1, "    if (got.note) {");
+      return shellOf({ text: lines.join("\n"), running: "" });
+    })();
+    check((await PK.lookForNote(serve(note({ serial: 5, version: "1.0.0" })))) === "read",
+      "u-plant note-known-running turned reads an accepted note as newest when engineVersion is empty");
   }
 } catch (e) {
   check(false, "the leg stopped: " + (e && e.stack ? e.stack.split("\n").slice(0, 3).join(" / ") : String(e)));
