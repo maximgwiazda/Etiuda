@@ -1,7 +1,9 @@
 "use strict";
 /* The relay's team object: every check and every change of state, synchronous over the store its caller passes in
    (get, put, del, list by prefix after a key, and atomic, which keeps a function's writes as one). It holds no team
-   key, opens no blob and keeps no path or name: an upload's metadata is taken field by field and the rest dropped. */
+   key, opens no blob and keeps no path or name: an upload's metadata is taken field by field and the rest dropped. A desk is named
+   by its branch id alone; rows an older relay kept under a raw key are renamed once (migrateDeskIds, where its one limit is written:
+   blobs sealed under the raw key keep that writer name). */
 const crypto = require("node:crypto");
 const { Buffer } = require("node:buffer");
 const B = require("../shell/relay/blob.cjs");
@@ -161,9 +163,13 @@ const plain = v => !!v && typeof v === "object" && !Array.isArray(v);
    wrote. Where two rows meet under one branch id: a removal beats an enrolment of the same key, the later of two removals stands, a
    row already under the branch id keeps its place against a raw one, the newer binding wins as indexBinding keeps it, and two try
    counts add. A session held by a raw half is dropped: its desk says hello again under its branch id, and no removal can miss it.
-   The lead's own session keeps its id, raw or not. Blob, tomb, held and put rows keep their writer, and the counters and rates
-   keyed by it theirs: the writer is inside the upload's signed bytes. A spent challenge's key (chu:) is left to expire with it.
-   Answers what changed, by family. */
+   The lead's own session keeps its id, raw or not. A spent challenge's key (chu:) is left to expire with it. Answers what changed,
+   by family.
+   THE LIMIT, NOT CLOSED: blob, tomb, held and put rows keep their writer, and the counters and rates keyed by it theirs, because
+   the writer's name is inside the upload's signed bytes. So for a desk an older relay stored under its raw key, the blobs it sealed
+   before the migration keep the old writer name: after that desk's removal they stay readable by the team, and the desk cannot
+   supersede its own old chains (the lead still can). Closing it would mean reading a second spelling in one place, which reopens
+   the fault the one-spelling rule ends. */
 const MIGRATED = "mig:desk-id";
 function migrateDeskIds(store) {
   const n = { dev: 0, gone: 0, bk: 0, inv: 0, dd: 0, tf: 0, devDropped: 0, ses: 0 };
