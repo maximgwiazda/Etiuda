@@ -9072,7 +9072,7 @@ What you type stays in this browser only.`;
     "Only on this computer.": "Tylko na tym komputerze.",
     "Off everywhere. The synced copy is deleted as soon as this computer reaches our service.": "Wyłączona wszędzie. Zsynchronizowana kopia zostanie usunięta, gdy tylko ten komputer połączy się z naszą usługą.",
     "Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account.": "Wyłączona. Po włączeniu {PROVIDER} poprosi o zgodę na użycie przez Etiudę jej folderu na tym koncie.",
-    "Changed on two computers: choose which to keep.": "Zmieniono na dwóch komputerach: należy wybrać, którą wersję zostawić.",
+    "Changed on two computers: the newer change is in use, and the older one is kept, so nothing is lost.": "Zmieniono na dwóch komputerach: obowiązuje nowsza zmiana, a starsza jest zachowana, więc nic nie zginęło.",
     "Your catalogs, edits and settings now follow you to every computer you sign in on. You can turn this off in Account.": "Własne katalogi, zmiany i ustawienia będą teraz dostępne na każdym komputerze, na którym nastąpi zalogowanie. Można to wyłączyć w Koncie.",
     "Not available on this account: {REASON}. Everything works on this computer as before.": "Niedostępna na tym koncie: {REASON}. Na tym komputerze wszystko działa jak dotąd.",
     "Sync across computers is not available on this account: {REASON}. Everything works on this computer as before.": "Synchronizacja między komputerami jest niedostępna na tym koncie: {REASON}. Na tym komputerze wszystko działa jak dotąd.",
@@ -10594,7 +10594,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-15";
+  var E_BUILT = "2026-11-16";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -28250,7 +28250,7 @@ What you type stays in this browser only.`;
     if (s.line === "ungiven") return named(t("Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account."), "{PROVIDER}", SIGNIN_NAMES[provider] || "Microsoft");
     if (s.line === "unavailable") return syncUnavailable(s.why, provider);
     if (s.line === "paused") return named(t("Paused since {DATE}. It resumes when this computer reaches our service."), "{DATE}", syncDate(s.since));
-    if (s.line === "conflict") return t("Changed on two computers: choose which to keep.");
+    if (s.line === "conflict") return t("Changed on two computers: the newer change is in use, and the older one is kept, so nothing is lost.");
     if (s.line === "full") return t("Sync is full, so new changes stay on this computer until something is removed.");
     if (s.line === "noseat") return t("Waiting for a seat. Sync resumes when this account holds one again, and nothing on this computer is lost.");
     if (s.line === "ask") return t("Waiting for your answer about what is on this desk. Nothing syncs until then.");

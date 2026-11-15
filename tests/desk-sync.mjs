@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-sync-"));
-const EXPECTED = 47;
+const EXPECTED = 50;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -242,8 +242,9 @@ async function main() {
       .concat(Object.keys(b.desk.files).filter(n => n === "relay-mirror.json"));
     return { ok: leaks.length === 0 && followed && strays.length === 0, detail: brief({ leaks, followed, strays, placeFiles: place.length }) };
   }
-  /* C8: two computers offline edit the same item: both versions stand on both computers, each keeping its own in place and the other's for
-     the person; an item only one changed takes that change; a setting takes the later write; the person's choice then stands on both. */
+  /* C8: two computers offline edit the same item: the later write is in place on both and the earlier kept aside on both, nothing lost;
+     an item only one changed takes that change; a setting takes the later write; a version chosen with resolve, handed only the value,
+     is put in place and stands on both, the versions kept let go. */
   async function bothScene() {
     const { w, a, b } = await twoOn("c8");
     const L = "e3f9a1~Pack", F = "Quay.ec";
@@ -272,19 +273,19 @@ async function main() {
     const versions = (c, item) => [here(c, item)].concat(c.kept.filter(k => k.item === item).map(k => k.value)).sort();
     const want = { [C1]: [JSON.stringify("from a"), JSON.stringify("from b")].sort(), ["f:" + F]: ["{\"v\":\"a\"}", "{\"v\":\"b\"}"] };
     const kept = Object.keys(want).every(item => JSON.stringify(versions(a, item)) === JSON.stringify(want[item]) && JSON.stringify(versions(b, item)) === JSON.stringify(want[item]));
-    const ownInPlace = a.desk.keys[L].indexOf("from a") > 0 && b.desk.keys[L].indexOf("from b") > 0;
+    const newerInPlace = a.desk.keys[L].indexOf("from b") > 0 && b.desk.keys[L].indexOf("from b") > 0 && a.desk.files[F] === "{\"v\":\"b\"}" && b.desk.files[F] === "{\"v\":\"b\"}";
     const oneSide = b.desk.keys["e77~CatOrder"] === "[\"x\"]" && !a.kept.concat(b.kept).some(k => k.item === "k:e77~CatOrder");
     const later = a.desk.keys.eTheme === "system" && b.desk.keys.eTheme === "system" && !a.kept.concat(b.kept).some(k => k.item === "k:eTheme");
-    /* The person chooses on a: the choice reaches b and the version kept there is let go. */
+    /* The earlier versions chosen on b, where the later is in place, by the value alone: put in place there, they reach a, and the versions
+       kept on both are let go. */
     w.R.clock.now += MIN;
-    const pick = JSON.stringify({ edits: { c1: "from b" } });
-    a.desk.keys[L] = pick;
-    a.sync().resolve(C1, JSON.stringify("from b"));
+    b.sync().resolve(C1, JSON.stringify("from a"));
+    b.sync().resolve("f:" + F, "{\"v\":\"a\"}");
     await settle(a, b);
-    const chosen = JSON.parse(a.desk.keys[L]).edits.c1 === "from b" && JSON.parse(b.desk.keys[L]).edits.c1 === "from b"
-      && !a.sync().state().kept.some(k => k.item === C1) && !b.sync().state().kept.some(k => k.item === C1);
-    const ok = shared && kept && ownInPlace && oneSide && later && chosen;
-    return { ok, detail: brief({ shared, kept, ownInPlace, oneSide, later, chosen, keptA: a.kept.length, keptB: b.kept.length }) };
+    const chosen = JSON.parse(a.desk.keys[L]).edits.c1 === "from a" && JSON.parse(b.desk.keys[L]).edits.c1 === "from a" && a.desk.files[F] === "{\"v\":\"a\"}" && b.desk.files[F] === "{\"v\":\"a\"}"
+      && !a.sync().state().kept.length && !b.sync().state().kept.length;
+    const ok = shared && kept && newerInPlace && oneSide && later && chosen;
+    return { ok, detail: brief({ shared, kept, newerInPlace, oneSide, later, chosen, a: [here(a, C1), a.desk.files[F]], b: [here(b, C1), b.desk.files[F]], keptA: a.kept.length, keptB: b.kept.length }) };
   }
   /* C8f: two computers offline change different cards of one catalog's layer, and one adds a card of its own: every change stands on both,
      the layer whole, and no version is kept, since no card was changed on both. */
@@ -357,36 +358,36 @@ async function main() {
     const gone = setOf(packOf(a).custom) === setOf([card("u:base", "base"), card("u:bb", "made on b")]) && setOf(packOf(b).custom) === setOf(packOf(a).custom) && a.kept.length + b.kept.length === 0;
     return { ok: both && none && gone, detail: brief({ both, none, gone, a: (packOf(a).custom || []).map(m => m.id), b: (packOf(b).custom || []).map(m => m.id), keptA: a.kept.length, keptB: b.kept.length }) };
   }
-  /* The same card hidden on one computer and shown again on the other, beside a different card hidden on each: that card alone is a
-     conflict. Each computer keeps its own in place, the hide waits for the person where it was shown, and the person's choice stands on both. */
+  /* The same card shown again on one computer and hidden later on the other, beside a different card hidden on each: that card alone is a
+     conflict. The later hide is in place on both, and the earlier showing again is kept aside on both as a removal, the value null; a
+     version chosen with resolve stands on both. */
   async function sameScene(chooser) {
     const { w, a, b } = await twoOn("c8x");
     a.desk.keys[L8] = JSON.stringify({ cardOrder: ["c5", "c6", "c7"], hidden: ["c0"] });
     await settle(a, b);
     a.down.on = true; b.down.on = true;
     w.R.clock.now += MIN;
-    repack(a, p => p.hidden.push("c5"));
-    repack(a, p => p.hidden.push("c6"));
-    w.R.clock.now += MIN;
     repack(b, p => p.hidden.push("c5"));
     w.R.clock.now += MIN;
     repack(b, p => { p.hidden = p.hidden.filter(id => id !== "c5"); });
     repack(b, p => p.hidden.push("c7"));
+    w.R.clock.now += MIN;
+    repack(a, p => p.hidden.push("c5"));
+    repack(a, p => p.hidden.push("c6"));
     a.down.on = false; b.down.on = false;
     await settle(a, b);
-    const own = setOf(packOf(a).hidden) === setOf(["c0", "c5", "c6", "c7"]) && setOf(packOf(b).hidden) === setOf(["c0", "c6", "c7"]);
+    const own = setOf(packOf(a).hidden) === setOf(["c0", "c5", "c6", "c7"]) && setOf(packOf(b).hidden) === setOf(["c0", "c5", "c6", "c7"]);
     const all = a.kept.concat(b.kept);
-    /* The one conflict waits on both computers: b keeps a's hide, a keeps b's showing again as a removal, the value null. */
-    const one = all.length === 2 && b.kept.length === 1 && b.kept[0].item.indexOf("c5") >= 0 && b.kept[0].value === JSON.stringify("c5")
+    /* The one conflict kept on both computers: the earlier showing again, b's own on b and taken from b on a, as a removal. */
+    const one = all.length === 2 && b.kept.length === 1 && b.kept[0].item.indexOf("c5") >= 0 && b.kept[0].value === null
       && a.kept.length === 1 && a.kept[0].item === b.kept[0].item && a.kept[0].value === null
       && b.sync().state().kept.length === 1 && a.sync().state().kept.length === 1;
-    /* The person chooses on either computer, the hide on b or the showing again on a: it stands on both and nothing waits any more. */
+    /* Chosen on either computer, by the value alone: the showing again kept aside on b, or the hide in place on a. */
     let chosen = false;
     if (one) {
       w.R.clock.now += MIN;
-      const at = chooser === "a" ? a : b, want = chooser === "a" ? ["c0", "c6", "c7"] : ["c0", "c5", "c6", "c7"];
-      const p = packOf(at); p.hidden = want.slice(); at.desk.keys[L8] = JSON.stringify(p);
-      at.sync().resolve(at.kept[0].item, at.kept[0].value);
+      const at = chooser === "a" ? a : b, want = chooser === "a" ? ["c0", "c5", "c6", "c7"] : ["c0", "c6", "c7"];
+      at.sync().resolve(at.kept[0].item, chooser === "a" ? JSON.stringify("c5") : null);
       await settle(a, b);
       chosen = setOf(packOf(a).hidden) === setOf(want) && setOf(packOf(b).hidden) === setOf(want)
         && a.sync().state().kept.length === 0 && b.sync().state().kept.length === 0 && a.kept.length + b.kept.length === 2;
@@ -580,8 +581,9 @@ async function main() {
     return { ok, detail: brief({ followed, refusedFine: fine, readItems: read ? Object.keys(read.items).length : null, polluted, layer: text }) };
   }
 
-  /* G5k: the same card changed on both computers offline, round after round: each round's versions are kept for the person, and a
-     version its own writer has since overtaken is let go, so each computer keeps one version per other writer, not one per round. */
+  /* G5k: the same card changed on both computers offline, round after round, b's change the later each round: each round's earlier
+     version is kept aside, and one its own writer has since overtaken is let go, so each computer keeps a's last round alone, not one
+     per round. */
   async function keptGrowthScene() {
     const { w, a, b } = await twoOn("g5k");
     const L = "e3f9a1~Pack", C1 = "k:" + L + "#edits/c1";
@@ -599,7 +601,8 @@ async function main() {
       await settle(a, b);
     }
     const keptA = a.sync().state().kept.filter(k => k.item === C1), keptB = b.sync().state().kept.filter(k => k.item === C1);
-    const ok = keptA.length === 1 && keptB.length === 1 && keptA[0].by === b.me.id && keptB[0].by === a.me.id;
+    const last = sha(JSON.stringify("a3"));
+    const ok = keptA.length === 1 && keptB.length === 1 && keptA[0].by === a.me.id && keptB[0].by === a.me.id && keptA[0].h === last && keptB[0].h === last;
     return { ok, detail: brief({ keptA: keptA.length, keptB: keptB.length }) };
   }
   /* G5i: another computer's sync file past ITEMS_MAX items is refused whole, never read as its first ITEMS_MAX with the rest dropped. */
@@ -648,19 +651,19 @@ async function main() {
   const results = {};
   const LEGS = [
     ["J1", joinScene, "a second computer joining a store that holds content takes the store's settings, removes its untouched sample where the store removed it, keeps its own card and catalog on both, and offers a setting only it holds, with no version kept"],
-    ["G5k", keptGrowthScene, "the same card changed on both computers offline three rounds running: each keeps one version per other writer, the overtaken ones let go"],
+    ["G5k", keptGrowthScene, "the same card changed on both computers offline three rounds running: each keeps the earlier writer's last round alone, the overtaken ones let go"],
     ["G5i", itemsCapScene, "another computer's sync file past ITEMS_MAX items is refused whole, not read with its tail dropped; one at the cap is read whole"],
     ["G5p", protoScene, "a layer field or map key named __proto__ or constructor from another computer is no item that follows, and put back into a layer never writes Object.prototype"],
     ["G5a", unappliedScene, "a catalog file and an edit this computer could not put in place are not taken as taken: nothing recorded removed, the other computer keeps both, and they arrive once taken"],
     ["G5b", oversizeScene, "a catalog file and a layer value grown past their caps are left out, never recorded as removed: the other computer keeps its copy and its layer"],
     ["S1", followsScene, "a setting, an edit over a catalog and a catalog file changed on one computer reach the other through the relay, nothing of them in the clear"],
     ["C7", staysScene, "a team key, a team mirror's file, a sign-in token and the desk's identity key on the desk reach neither the computer's place, nor the relay, nor the folder's file"],
-    ["C8", bothScene, "the same edit and catalog changed on two computers offline: both versions stand on both, each its own in place; one side's change and a setting's later write merge without a copy; the person's choice stands on both"],
+    ["C8", bothScene, "the same edit and catalog changed on two computers offline: the later write in place on both and the earlier kept aside on both; one side's change and a setting's later write merge without a copy; a version chosen by its value alone is put in place and stands on both"],
     ["C8f", fieldsScene, "different cards of one catalog changed on two computers offline, and a card added on one: every change stands on both and no version is kept"],
     ["C8h", hiddenScene, "a different card hidden on each computer offline: both end hidden on both with no version kept, and a card shown again on one is shown again on both"],
     ["C8o", ownScene, "an own card added on each computer offline: both kept on both with no version kept, and one deleted on one is gone from both"],
-    ["C8x", () => sameScene("b"), "the same card hidden on one computer and shown again on the other, beside a different card hidden on each: that card is the one conflict, waiting on both computers, each keeping its own in place, and the person's choice of the hide on the computer that showed it stands on both"],
-    ["C8y", () => sameScene("a"), "the same conflict chosen on the computer that hid the card, for the showing again kept there as a removal: it stands on both and nothing waits"],
+    ["C8x", () => sameScene("b"), "the same card shown again on one computer and hidden later on the other, beside a different card hidden on each: that card is the one conflict, the later hide in place on both and the earlier showing again kept on both as a removal; the showing again chosen on the computer that made it stands on both"],
+    ["C8y", () => sameScene("a"), "the same conflict chosen on the computer that hid the card, for the hide in place: it stands on both and nothing waits"],
     ["C10o", outboxScene, "a lapsed store certificate pauses sync and sends nothing; edits wait in the outbox and at the next look that is on are sent, and what came is taken"],
     ["C11t", seatLeg("C11t"), "a trial that ends, its store renewed at each look: working the day before, sync stops at the seat's end, and the relay sweeps the store 30 days after the last look that held a seat, 29 days on"],
     ["C11u", seatLeg("C11u"), "a trial seat freed 40 days before the trial would end: sync stops, and the store is swept at the last grant's end, 40 days on, the one case past 30 days after the last look"],
@@ -706,14 +709,17 @@ async function main() {
     ["join sample", "J1", lift("join-pristine"), "an untouched sample on a joining computer taken as its own, so the one deleted elsewhere comes back as a conflict"],
     ["join reached", "J1", lift("join-reached"), "a computer that has never synced merges before a cycle reached the store, so its first merge cannot know it joins"],
     ["one item added", "C7", swap("return SETTINGS.indexOf(s.slice(2)) >= 0 || LAYER_RE.test(s.slice(2)); /* plant:follows */", "return SETTINGS.indexOf(s.slice(2)) >= 0 || LAYER_RE.test(s.slice(2)) || s === \"k:eTeamKeys\"; /* plant:follows */"), "a team's keys follow"],
+    ["later stands", "C8", swap("const stay = top.reduce(", "const stay = mine && top.some(e => same(e, mine)) ? mine : top.reduce("), "each computer keeps its own in place, so where its own was the earlier the newer change is not in use"],
+    ["own unkept", "C8", swap(" ? ownOf(e, item) : valueOf(e, item); /* plant:keep-own */", " ? undefined : valueOf(e, item); /* plant:keep-own */"), "a computer's own earlier version not kept aside where the later one replaces it"],
+    ["choice unapplied", "C8", swap("const failed = o.apply(key ? { [\"k:\" + key]: layerText(after, key) } : { [item]: value }, []); /* plant:choose-applied */", "const failed = []; /* plant:choose-applied */"), "a choice recorded without its value put in place, so the version that stood is read as a newer change"],
     ["last-write-wins", "C8", swap("if (isSetting(item)) top = [", "if (true) top = ["), "a conflict is settled by the later write, the earlier version lost"],
     ["keep-both", "C8", lift("keep-both"), "the other side of a conflict is not kept"],
     ["whole keys", "C8f", swap("const parts = LAYER_RE.test(k) ? fieldsOf(v) : null; /* plant:fields */", "const parts = null; /* plant:fields */"), "a layer merged as one item, so two cards changed on two computers are a conflict"],
     ["hidden whole", "C8h", swap("const SET_IDS = [\"hidden\", ", "const SET_IDS = ["), "hidden cards merged as one list, so a different card hidden on each computer is a conflict"],
     ["removal unrecorded", "C8h", swap("if (was ? was.h === h : h === null) continue; /* plant:recorded */", "if (was ? was.h === h || (h === null && item.indexOf(\"[]\") > 0) : h === null) continue; /* plant:recorded */"), "a card shown again is not recorded for that card, so the other computer keeps it hidden"],
     ["own whole", "C8o", swap("const SET_OWN = [\"custom\", \"intentCustom\"];", "const SET_OWN = [\"intentCustom\"];"), "own cards merged as one list, so a card added on each computer is a conflict"],
-    ["removal unkept", "C8x", swap("if (same(e, stay) || kept.some(", "if (same(e, stay) || e.h === null || kept.some("), "a removal kept as no version, so the conflict waits only where the card was shown again"],
-    ["member by later write", "C8x", swap("if (isSetting(item)) top = [", "if (isSetting(item) || item.indexOf(\"[]\") > 0) top = ["), "the same card hidden and shown again settled by the later write, the other computer's choice lost"],
+    ["removal unkept", "C8x", swap("if (same(e, stay) || kept.some(", "if (same(e, stay) || e.h === null || kept.some("), "a removal kept as no version, so the earlier showing again is lost on both computers"],
+    ["member by later write", "C8x", swap("if (isSetting(item)) top = [", "if (isSetting(item) || item.indexOf(\"[]\") > 0) top = ["), "the same card hidden and shown again settled by the later write with nothing kept, the earlier version lost"],
     ["outbox emptied", "C10o", swap("if (old) old.stop().catch(() => {}); /* plant:outbox-kept */", "if (old) { old.stop().catch(() => {}); const l = o.local() || {}; for (const i of Object.keys(state.ledger)) if (has(l, i)) state.ledger[i] = Object.assign({}, state.ledger[i], { h: sha(l[i]) }); } /* plant:outbox-kept */"), "the outbox emptied at the lapse: what waited is taken as sent"],
     ["resume", "C10o", lift("resume"), "sync does not start again at the next look that is on"],
     ["adopt", "C1a", lift("adopt"), "the store adopted is not where this computer's place is written, so its edits stay in the ended store"],

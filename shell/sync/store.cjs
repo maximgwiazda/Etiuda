@@ -313,8 +313,8 @@ function pausedLine(cert, now, signinRefused) {
    (the store's room at the relay refused a write, roomNext). Answers
    {shown, line, on, held, why, since, say}: line "org-off" where policy keeps sync off, "off" where the person turned it off,
    "ungiven" where the folder's consent was never given (off, the switch the person's own way to ask for it), "unavailable" where
-   the folder could not be reached for a reason the person cannot mend (never offline), "noseat", "conflict", "paused" after
-   PAUSE_SAY_MS, "full", else "on". Nothing of a key, a store or a token. Pure. */
+   the folder could not be reached for a reason the person cannot mend (never offline), "noseat", "paused" after PAUSE_SAY_MS,
+   "full", "conflict" (a version kept aside), else "on", the first that holds in that order. Nothing of a key, a store or a token. Pure. */
 function storeRow(o) {
   if (o.provider !== "microsoft" && o.provider !== "google") return { shown: false };
   const pol = o.pol || {}, say = typeof o.say === "string" ? o.say : "";
@@ -326,9 +326,10 @@ function storeRow(o) {
   if (look && look.state === "unavailable" && look.why === "ungiven") return Object.assign(base, { line: "ungiven", on: false, say: "" }); /* plant:row-ungiven */
   if (look && look.state === "unavailable" && look.why !== "offline") return Object.assign(base, { line: "unavailable", why: String(look.why || "") });
   if (o.seatless === true) return Object.assign(base, { line: "noseat" }); /* plant:row-noseat */
-  if (Number(o.conflicts) > 0) return Object.assign(base, { line: "conflict" });
+  /* A pause and the room full say changes are not reaching the store, so each is said over a conflict, which says nothing is lost. */
   const p = pausedLine({ until: o.until }, o.now, o.signinRefused);
   if (p) return Object.assign(base, { line: "paused", since: p.since });
+  if (Number(o.conflicts) > 0 && o.full !== true) return Object.assign(base, { line: "conflict" }); /* plant:row-conflict */
   return Object.assign(base, { line: o.full === true ? "full" : "on" }); /* plant:row-full */
 }
 /* The store's room: full once the relay (or the channel's own count) refuses a write as "team-size", the changes staying owed on this
