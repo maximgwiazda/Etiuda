@@ -934,6 +934,8 @@ UI_STRINGS.pl={
   "Showing Polish cards; click or press {KEY} for English":"Widoczne karty po polsku; kliknij albo naciśnij {KEY}, aby przejść na angielski",
   "Scroll tabs left":"Przewiń rozmowy w lewo",
   "Scroll tabs right":"Przewiń rozmowy w prawo",
+  "Open tabs":"Otwarte rozmowy",
+  "All open tabs":"Wszystkie otwarte rozmowy",
   "The new tab starts with cleared fields and your settings kept.":"Nowa rozmowa ma puste pola i zachowane ustawienia.",
   "New tab (same shared settings; cleared PAX, intent, ROLE, categories)":"Nowa rozmowa (te same wspólne ustawienia; wyczyszczone PAX, intencja, ROLE, kategorie)",
   "One tab for each customer you are talking to, each with its own PAX, intent, ROLE and categories":"Osobna rozmowa dla każdego klienta, z własnym PAX, intencją, ROLE i kategoriami",

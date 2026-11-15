@@ -8,7 +8,7 @@ import { $ } from "./dom.js";
 import { cutLeaves, dismissCopy } from "./motion.js";
 import { togglePills, pillsWanted, pillsLocked } from "./pills-box.js";
 import { toggleRail, railWanted, railLocked, syncRailPinBtn } from "./rail-panel.js";
-import { tabInsertAnimating } from "./tabs.js";
+import { closeTabList, openTabList, tabInsertAnimating, wireTabListBeforeOpen } from "./tabs.js";
 import { t } from "./ui-lang.js";
 import { CONTENT_LANGS, nextContentLang } from "./content-model.js";
 import { scReady, formatActionChord } from "./shortcuts.js";
@@ -114,6 +114,82 @@ function wireHeaderMenus(){
        seg reads as folded, so clicking the inactive one inverted the request into a no-op. */
     else if(act==="lang"){ closeMoreMenu(); const el=$("#seg button.on")||$("#seg button"); if(el) el.click(); }
   };
+  wireTabListBeforeOpen(()=>{ closeSettingsMenu(); closeMoreMenu(); closeFactsPanel(); cutLeaves(); });
+  const tlBtn=$("#tabsListBtn"), tlMenu=$("#tabsListMenu");
+  if(tlBtn) tlBtn.onclick=e=>{
+    e.stopPropagation();
+    if(!tlMenu) return;
+    if(tlMenu.hidden) openTabList(e.detail===0);
+    else closeTabList(e.detail===0);
+  };
+  if(tlBtn) tlBtn.onkeydown=e=>{
+    if(!tlMenu) return;
+    if(!e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.key===" " || e.code==="Space")){
+      e.preventDefault(); e.stopPropagation();
+      if(tlMenu.hidden) openTabList(true); else closeTabList(true);
+      return;
+    }
+    if(tlMenu.hidden) return;
+    if(e.key==="ArrowDown" || e.key==="ArrowUp"){
+      e.preventDefault(); e.stopPropagation();
+      const items=[].slice.call(tlMenu.querySelectorAll(".tabs-list-item"));
+      const pick=e.key==="ArrowDown" ? (tlMenu.querySelector(".tabs-list-row.on .tabs-list-item") || items[0]) : items[items.length-1];
+      if(pick) try{ pick.focus({preventScroll:true}); }catch(_){ pick.focus(); }
+    }
+  };
+  if(tlMenu) tlMenu.onkeydown=e=>{
+    if(e.ctrlKey||e.altKey||e.metaKey) return;
+    const items=[].slice.call(tlMenu.querySelectorAll(".tabs-list-item"));
+    if(e.key==="Escape"){
+      e.preventDefault(); e.stopPropagation();
+      closeTabList(true);
+      return;
+    }
+    const cur=document.activeElement;
+    if(!e.shiftKey && (e.key===" " || e.code==="Space") && cur && cur.closest && cur.closest(".tabs-list-rows")){
+      e.preventDefault(); e.stopPropagation();
+      if(typeof cur.click==="function") cur.click();
+      return;
+    }
+    if(!items.length) return;
+    const curRow=cur && cur.closest ? cur.closest(".tabs-list-row") : null;
+    const curIdx=curRow ? items.findIndex(it=>it.closest(".tabs-list-row")===curRow) : -1;
+    if(e.key==="ArrowDown" || e.key==="ArrowUp"){
+      e.preventDefault(); e.stopPropagation();
+      const nextIdx=curIdx<0
+        ? (e.key==="ArrowDown" ? 0 : items.length-1)
+        : (e.key==="ArrowDown" ? (curIdx+1)%items.length : (curIdx-1+items.length)%items.length);
+      try{ items[nextIdx].focus({preventScroll:true}); }catch(_){ items[nextIdx].focus(); }
+      try{ items[nextIdx].scrollIntoView({block:"nearest"}); }catch(_){}
+      return;
+    }
+    if(e.key==="Home" || e.key==="End"){
+      e.preventDefault(); e.stopPropagation();
+      const target=e.key==="Home" ? items[0] : items[items.length-1];
+      try{ target.focus({preventScroll:true}); }catch(_){ target.focus(); }
+      try{ target.scrollIntoView({block:"nearest"}); }catch(_){}
+      return;
+    }
+    if(e.key==="ArrowRight" && cur && cur.classList && cur.classList.contains("tabs-list-item") && curRow){
+      const x=curRow.querySelector(".tabs-list-x");
+      if(x){ e.preventDefault(); e.stopPropagation(); try{ x.focus({preventScroll:true}); }catch(_){ x.focus(); } }
+      return;
+    }
+    if(e.key==="ArrowLeft" && cur && cur.classList && cur.classList.contains("tabs-list-x") && curRow){
+      const it=curRow.querySelector(".tabs-list-item");
+      if(it){ e.preventDefault(); e.stopPropagation(); try{ it.focus({preventScroll:true}); }catch(_){ it.focus(); } }
+      return;
+    }
+    if(e.key==="Tab"){
+      const stops=[].slice.call(tlMenu.querySelectorAll(".tabs-list-item, .tabs-list-x"));
+      if(!stops.length) return;
+      const i=stops.indexOf(cur);
+      e.preventDefault(); e.stopPropagation();
+      const next=i<0 ? stops[0] : stops[(i+(e.shiftKey?-1:1)+stops.length)%stops.length];
+      try{ next.focus({preventScroll:true}); }catch(_){ next.focus(); }
+      try{ next.scrollIntoView({block:"nearest"}); }catch(_){}
+    }
+  };
   /* ONE ROW MARKED AT A TIME. Moving over a menu row gives it the focus, which is the menu's one mark, and leaving the rows
      hands the focus to the menu itself, so no row stays marked and the arrows start again from the top; a move and not an
      over, so a menu opening under a resting pointer keeps the row the keys were given. The hand used last is written on the
@@ -121,25 +197,27 @@ function wireHeaderMenus(){
   const setHand=h=>{ const r=document.documentElement; if(r && r.dataset && r.dataset.hand!==h) r.dataset.hand=h; };
   addEventListener("pointermove",e=>{
     setHand("pointer");
-    const row=e.target && e.target.closest ? e.target.closest('.menu button[role="menuitem"]') : null;
+    const row=e.target && e.target.closest ? e.target.closest('.menu button[role="menuitem"], .menu .tabs-list-x') : null;
     if(row && row!==document.activeElement && !row.disabled) row.focus({preventScroll:true});
   }, true);
   addEventListener("keydown",()=>setHand("keys"), true);
   addEventListener("pointerout",e=>{
-    const row=e.target && e.target.closest ? e.target.closest('.menu button[role="menuitem"]') : null;
+    if(document.documentElement.dataset && document.documentElement.dataset.hand==="keys") return;
+    const row=e.target && e.target.closest ? e.target.closest('.menu button[role="menuitem"], .menu .tabs-list-x') : null;
     if(!row || row!==document.activeElement) return;
     const box=row.closest(".menu");
-    const to=e.relatedTarget && e.relatedTarget.closest ? e.relatedTarget.closest('button[role="menuitem"]') : null;
+    const to=e.relatedTarget && e.relatedTarget.closest ? e.relatedTarget.closest('button[role="menuitem"], .tabs-list-x') : null;
     if(!box || (to && box.contains(to))) return;
     if(!box.hidden) box.focus({preventScroll:true});
   }, true);
   addEventListener("pointerdown",e=>{
     // Touching anything ends the keyboard peek - hover takes over from here.
     endPillNavPeek();
-    const sw=$("#settingsWrap"), fw=$("#factsWrap"), mw=$("#moreWrap");
+    const sw=$("#settingsWrap"), fw=$("#factsWrap"), mw=$("#moreWrap"), tlw=$("#tabsListWrap");
     if(sw && !sw.contains(e.target)) closeSettingsMenu();
     if(fw && !fw.contains(e.target)) closeFactsPanel();
     if(mw && !mw.contains(e.target)) closeMoreMenu();
+    if(tlw && !tlw.contains(e.target)) closeTabList(false);
   });
   addEventListener("keydown",e=>{
     /* A MENU HOLDING THE FOCUS KEEPS ITS KEYS: the arrows, Home, End and Tab walk its items,
@@ -322,7 +400,7 @@ function closeMoreMenu(){
 function openMoreMenu(byKey){
   const m=$("#moreMenu"), b=$("#moreBtn");
   if(!m||!b) return;
-  closeSettingsMenu(); closeFactsPanel(); cutLeaves();
+  closeSettingsMenu(); closeTabList(false); closeFactsPanel(); cutLeaves();
   syncMoreBtn();   // the rows reflect this instant's measurement, not the last resize's
   m.hidden=false;
   b.classList.add("on");
@@ -367,7 +445,7 @@ function openSettingsMenu(byKey){
   const menu=$("#settingsMenu"), btn=$("#settingsBtn");
   if(!menu||!btn) return;
   menuDrawn=true;
-  closeFactsPanel(); cutLeaves();
+  closeMoreMenu(); closeTabList(false); closeFactsPanel(); cutLeaves();
   syncSettingsMenu();
   menu.hidden=false;
   btn.classList.add("on");

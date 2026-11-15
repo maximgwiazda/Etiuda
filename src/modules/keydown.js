@@ -17,6 +17,7 @@ import { $, intentEl } from "./dom.js";
 import { closeNotePane } from "./note-pane.js";
 import { eHost } from "./host.js";
 import { closeMoreMenu, closeSettingsMenu } from "./header-menus.js";
+import { closeTabList } from "./tabs.js";
 import { hooks } from "./hooks.js";
 
 /* Reaching for the search box dismisses the loose overlays: quick facts and the settings
@@ -31,6 +32,9 @@ function closeLooseOverlays(){
   // The chevron's menu hangs off the same row and is the same kind of loose overlay.
   if($("#moreMenu") && !$("#moreMenu").hidden){
     closeMoreMenu();
+  }
+  if($("#tabsListMenu") && !$("#tabsListMenu").hidden){
+    closeTabList(false);
   }
   if(factsPanelOpen()){
     closeFactsPanel();
@@ -185,6 +189,9 @@ function wireGlobalKeydown(){
       }
       if($("#moreMenu")&&!$("#moreMenu").hidden){
         e.preventDefault(); closeMoreMenu(); return;
+      }
+      if($("#tabsListMenu")&&!$("#tabsListMenu").hidden){
+        e.preventDefault(); closeTabList(true); return;
       }
       if(factsPanelOpen()){ e.preventDefault(); closeFactsPanel(); return; }
     }
