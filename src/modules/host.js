@@ -60,6 +60,19 @@ function eOpenCatalogFolder(){
     }).catch(()=>false);
   }catch(e){ return Promise.resolve(false); }
 }
+
+function eOpenSetAside(){
+  const h=eHost();
+  if(!h || typeof h.openSetAside!=="function") return Promise.resolve(false);
+  const say=()=>{ toastRefusal(t("This computer did not open the team's folder just now. The same link tries again.")); };
+  try{
+    return Promise.resolve(h.openSetAside()).then(v=>{
+      if(v===true) return true;
+      if(v && typeof v==="object" && v.ok===false){ say(); return false; }
+      return false;
+    }).catch(()=>false);
+  }catch(e){ return Promise.resolve(false); }
+}
 /* A link to that folder answers a click, Enter and Space alike. */
 function wireFolderLink(el){
   el.onclick=()=>eOpenCatalogFolder();
@@ -564,6 +577,7 @@ export {
   eTellSearch,
   eOpenPicker,
   eOpenCatalogFolder,
+  eOpenSetAside,
   wireFolderLink,
   eOpenedWith,
   eOpenedRefused,

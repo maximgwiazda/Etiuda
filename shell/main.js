@@ -11406,10 +11406,26 @@ async function storeSetNow(what) {
   tellStore();
   return storeView();
 }
+let storeSetAsideFolder = "";
 ipcMain.on("etiuda:store-state", (e) => { e.returnValue = fromEngine(e) ? storeView() : null; });
 ipcMain.handle("etiuda:store-set", (e, what) => (fromEngine(e) ? storeSetNow(String(what || "")) : null));
 ipcMain.handle("etiuda:store-answer", (e, choice) => (fromEngine(e) ? storeAnswerNow(String(choice || "")) : null));
+ipcMain.handle("etiuda:open-set-aside", (e, ...args) => {
+  if (!fromEngine(e)) return false;
+  if (args.length) return false; /* plant:open-aside-no-args */
+  return storeOpenSetAside();
+});
 ipcMain.on("etiuda:store-said", (e) => { e.returnValue = null; if (fromEngine(e)) storeSay = ""; });
+
+async function storeOpenSetAside() {
+  const folder = storeSetAsideFolder;
+  let isDir = false;
+  try { isDir = !!folder && fs.statSync(folder).isDirectory(); } catch { /* gone */ }
+  if (!folder || !isDir) return { ok: false, why: "gone" }; /* plant:open-aside-gone */
+  const why = await shell.openPath(folder).catch((err) => String(err && err.message || err || "open"));
+  if (why) { console.error("etiuda: " + folder + " could not be opened - " + why); return { ok: false, why: "could-not-open" }; }
+  return true;
+}
 
 function storeSetAsideDir(now = Date.now()) {
   const d = new Date(now), p = n => String(n).padStart(2, "0");
@@ -11484,6 +11500,7 @@ async function storeAnswerNow(choice) {
   if (choice === "start") {
     folder = storeSetAside();
     if (!folder) return { ok: false, choice: "start", folder: "", view: storeView() };
+    storeSetAsideFolder = folder;
     clearTimeout(storeSyncTimer); storeSyncTimer = null;
     storeSyncStop(); storeSyncing = null; /* plant:answer-aside-syncing */
   }

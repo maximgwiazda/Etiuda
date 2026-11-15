@@ -297,6 +297,7 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   storeState: () => ipcRenderer.sendSync("etiuda:store-state"),
   storeSet: (what) => ipcRenderer.invoke("etiuda:store-set", String(what || "")),
   storeAnswer: (choice) => ipcRenderer.invoke("etiuda:store-answer", String(choice || "")),
+  openSetAside: () => ipcRenderer.invoke("etiuda:open-set-aside"),
   storeSaid: () => ipcRenderer.sendSync("etiuda:store-said"),
   onStore: (fn) => ipcRenderer.on("etiuda:store", () => { try { fn(); } catch { /* the page has gone */ } }),
   onSignin: (fn) => ipcRenderer.on("etiuda:signin", (_e, v) => { try { fn(v && typeof v === "object" ? v : {}); } catch { /* the page has gone */ } }),

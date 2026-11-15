@@ -38,7 +38,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 19;
+const EXPECTED = 21;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const STORE = path.join(E.ROOT, "shell", "sync", "store.cjs");
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -63,7 +63,7 @@ async function boot({ lang = "en", theme = "light", page: name = "etiuda.html", 
         ["eTheme", theme], ["eUiLang", lang], ["eStill", "1"], ["eRail", "1"]]) localStorage.setItem(k, v);
     } catch (e) {}
     /* The shell's store as the page sees it: the view, what was said, the switch's presses. */
-    window.__st = { view: view, said: 0, sets: [], answers: [], tell: null };
+    window.__st = { view: view, said: 0, sets: [], answers: [], openAsideCalls: [], openAsideResult: true, tell: null };
     window.__sgn = { offered: ["microsoft", "google"], signedIn: "microsoft", code: "7K3MQ9TV2XRBHN4W", seat: "held", at: Date.now(), reached: true };
     window.E_HOST = {
       signinState: () => window.__sgn,
@@ -79,6 +79,7 @@ async function boot({ lang = "en", theme = "light", page: name = "etiuda.html", 
         setTimeout(() => { window.__st.tell && window.__st.tell(); }, 10);
         return res;
       },
+      openSetAside: async (...args) => { window.__st.openAsideCalls.push(args); return window.__st.openAsideResult; },
       storeConsent: async () => { window.__st.sets.push("consent"); return "asked"; },
       onStore: fn => { window.__st.tell = fn; },
     };
@@ -463,8 +464,9 @@ async function main() {
       const start = await readNote(pEn);
       if (!start || !start.at || !start.at.ok || start.tags !== 0
         || start.lead !== "This desk now has your account's content."
-        || start.full !== "This desk now has your account's content. What was here before is kept on this computer in " + folder + ", and is never uploaded."
-        || JSON.stringify(start.btns) !== JSON.stringify(["Dismiss"])) {
+        || start.full !== "This desk now has your account's content. What was here before is kept on this computer, in Etiuda's \"Set aside\" folder, and is never uploaded."
+        || start.full.includes(folder)
+        || JSON.stringify(start.btns) !== JSON.stringify(["Open this folder", "Dismiss"])) {
         bad.push({ startEn: start });
       }
       /* Failed answer shows no notice. */
@@ -499,8 +501,9 @@ async function main() {
       const startPl = await readNote(pPl);
       if (!startPl || !startPl.at || !startPl.at.ok
         || startPl.lead !== "To stanowisko ma teraz zawartość tego konta."
-        || startPl.full !== "To stanowisko ma teraz zawartość tego konta. Poprzednia zawartość jest zachowana na tym komputerze w folderze " + plFolder + " i nigdy nie jest wysyłana."
-        || JSON.stringify(startPl.btns) !== JSON.stringify(["Zamknij"])) {
+        || startPl.full !== "To stanowisko ma teraz zawartość tego konta. Poprzednia zawartość jest zachowana na tym komputerze, w folderze Etiudy \"Set aside\", i nigdy nie jest wysyłana."
+        || startPl.full.includes(plFolder)
+        || JSON.stringify(startPl.btns) !== JSON.stringify(["Otwórz ten folder", "Zamknij"])) {
         bad.push({ startPl });
       }
     } finally { await pPl.close(); }
@@ -508,7 +511,7 @@ async function main() {
   };
   {
     const bad = await checkChoiceNotices("etiuda.html");
-    check(!bad.length, "c9g choice notices after It is mine and Start from my account (EN light & PL dark, safe {FOLDER} split)", bad.length ? bad : undefined);
+    check(!bad.length, "c9g choice notices after It is mine and Start from my account (EN light & PL dark, Open this folder button, no path in text)", bad.length ? bad : undefined);
   }
 
   /* c9h: if firstSay (eSyncSaid) fires while #eSyncChoiceNote is open, it hangs cleanly without overlapping it. */
@@ -524,7 +527,7 @@ async function main() {
       const overlap = !(rs.right <= rn.left || rs.left >= rn.right || rs.bottom <= rn.top || rs.top >= rn.bottom);
       return { hasNote: true, hasSaid: true, overlap, noteAt: window.__bubAt(n, document.getElementById("signinBtn")), saidAtNote: window.__bubAt(s, n) };
     });
-    await p.evaluate(() => { const b = document.querySelector("#eSyncChoiceNote button"); if (b) b.click(); });
+    await p.evaluate(() => { const b = document.querySelector("#eSyncChoiceNote button.primary"); if (b) b.click(); });
     await sleep(200);
     const afterDismiss = await p.evaluate(() => {
       const n = document.getElementById("eSyncChoiceNote"), s = document.getElementById("eSyncSaid");
@@ -534,6 +537,32 @@ async function main() {
     const ok = stacked.hasNote && stacked.hasSaid && !stacked.overlap && stacked.noteAt && stacked.noteAt.ok
       && stacked.saidAtNote && stacked.saidAtNote.ok && !afterDismiss.note && afterDismiss.said && afterDismiss.saidAtBtn && afterDismiss.saidAtBtn.ok;
     check(ok, "c9h firstSay firing beside the choice notice stacks below it without overlap and re-anchors on Dismiss", ok ? undefined : { stacked, afterDismiss });
+  }
+
+  /* c9i: Open this folder calls E_HOST.openSetAside with no arguments, and shows a refusal toast when the folder is gone. */
+  const checkOpenSetAside = async pageName => {
+    const p = await boot({ page: pageName, lang: "en", theme: "light", view: ASK_NOW });
+    try {
+      await sleep(350);
+      await p.evaluate(() => { const bs = [...document.querySelectorAll("#eSyncWhose button")]; if (bs[1]) bs[1].click(); });
+      await sleep(250);
+      await p.evaluate(() => { const b = document.querySelector("#eSyncChoiceNote button:not(.primary)"); if (b) b.click(); });
+      await sleep(150);
+      const calls = await p.evaluate(() => window.__st.openAsideCalls);
+      await p.evaluate(() => { window.__st.openAsideResult = { ok: false, why: "gone" }; const b = document.querySelector("#eSyncChoiceNote button:not(.primary)"); if (b) b.click(); });
+      await sleep(200);
+      const refusal = await p.evaluate(() => {
+        const el = document.getElementById("toast");
+        return { shown: !!(el && el.classList.contains("show")), refusal: !!(el && el.classList.contains("refusal")), text: el ? (el.textContent || "").trim() : "", calls: window.__st.openAsideCalls.length };
+      });
+      return { calls, refusal };
+    } finally { await p.close(); }
+  };
+  {
+    const r = await checkOpenSetAside("etiuda.html");
+    const ok = Array.isArray(r.calls) && r.calls.length === 1 && r.calls[0].length === 0
+      && r.refusal.calls === 2 && r.refusal.shown && r.refusal.refusal && r.refusal.text.length > 0;
+    check(ok, "c9i Open this folder calls openSetAside with no args and shows a refusal toast when the folder is gone", ok ? undefined : r);
   }
 
   /* r1: storeRow, and roomNext. */
@@ -615,7 +644,7 @@ async function main() {
   }
   if (PLANTS_OFF) skip("p c9g leaving choice notice out turns c9g red");
   else {
-    const NOTE_PLANT = ['if (res && res.ok) syncChoiceNotice(res.choice, res.folder);', 'void 0;'];
+    const NOTE_PLANT = ['if (res && res.ok) syncChoiceNotice(res.choice);', 'void 0;'];
     const n = PAGE.split(NOTE_PLANT[0]).length - 1;
     let detail = "the plant's anchor is there " + n + " times";
     if (n === 1) {
@@ -624,6 +653,19 @@ async function main() {
       detail = bad.length ? "red: " + JSON.stringify(bad[0]) : "still held";
       check(bad.length > 0, "p c9g leaving choice notice out turns c9g red", detail);
     } else check(false, "p c9g leaving choice notice out turns c9g red", detail);
+  }
+  if (PLANTS_OFF) skip("p c9i leaving eOpenSetAside out turns c9i red");
+  else {
+    const ASIDE_PLANT = ['onClick: () => eOpenSetAside()', 'onClick: () => {}'];
+    const n = PAGE.split(ASIDE_PLANT[0]).length - 1;
+    let detail = "the plant's anchor is there " + n + " times";
+    if (n === 1) {
+      fs.writeFileSync(path.join(lab, "planted-aside.html"), PAGE.split(ASIDE_PLANT[0]).join(ASIDE_PLANT[1]));
+      const r = await checkOpenSetAside("planted-aside.html");
+      const red = !(r.calls && r.calls.length);
+      detail = red ? "red: calls=" + JSON.stringify(r.calls) : "still held";
+      check(red, "p c9i leaving eOpenSetAside out turns c9i red", detail);
+    } else check(false, "p c9i leaving eOpenSetAside out turns c9i red", detail);
   }
   if (PLANTS_OFF) skip("p c9d firstSay saying at a look that did not make the store turns c9d red");
   else {

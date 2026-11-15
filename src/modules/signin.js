@@ -3,7 +3,7 @@
    signed in by provider, the sign-in code and how the seat stands, and shows nothing where no provider is offered, so a desk
    with no registration configured looks as it did. Settings' Account draws the same view with signinParts. */
 import { $ } from "./dom.js";
-import { eHost } from "./host.js";
+import { eHost, eOpenSetAside } from "./host.js";
 import { esc } from "./esc.js";
 import { t, uiLang } from "./ui-lang.js";
 import { agentName } from "./agent.js";
@@ -526,7 +526,7 @@ function syncLine(s, provider){
   return t("Your catalogs, edits and settings on every computer you sign in on.");
 }
 let syncWaiting=null, syncWhoseShut=null;
-function syncNoticeBubble(id, headText, tailText, anchor, primary, onDismiss){
+function syncNoticeBubble(id, headText, tailText, anchor, primary, onDismiss, extra){
   const prev=document.getElementById(id); if(prev) prev.remove();
   const d=document.createElement("div");
   d.id=id; d.className="bub bub-ask e-sync-said"; d.setAttribute("role","status");
@@ -535,6 +535,12 @@ function syncNoticeBubble(id, headText, tailText, anchor, primary, onDismiss){
   if(tailText) p.appendChild(document.createTextNode(tailText));
   d.appendChild(p);
   const row=document.createElement("div"); row.className="tour-actions";
+  if(extra && extra.label){
+    const o=document.createElement("button");
+    o.type="button"; o.className="btn"; o.textContent=extra.label;
+    o.onclick=extra.onClick;
+    row.appendChild(o);
+  }
   const x=document.createElement("button");
   x.type="button"; x.className=primary ? "btn primary" : "btn"; x.textContent=t("Dismiss");
   x.onclick=()=>{ d.remove(); if(onDismiss) onDismiss(); };
@@ -543,19 +549,18 @@ function syncNoticeBubble(id, headText, tailText, anchor, primary, onDismiss){
   hangBubble(d, anchor);
   return d;
 }
-function syncChoiceNotice(choice, folder){
+function syncChoiceNotice(choice){
   if(choice!=="mine" && choice!=="start") return;
-  if(choice==="start" && !folder) return;
   const btn=$("#signinBtn");
   if(!btn || !btn.getClientRects().length) return;
   const tpl=choice==="mine" ? t("Syncing now, with what was already on this desk.")
-    : t("This desk now has your account's content. What was here before is kept on this computer in {FOLDER}, and is never uploaded.");
+    : t("This desk now has your account's content. What was here before is kept on this computer, in Etiuda's \"Set aside\" folder, and is never uploaded.");
   const i=tpl.indexOf(". ");
-  const fill=s=>s.split("{FOLDER}").join(String(folder||""));
-  const head=fill(i<0 ? tpl : tpl.slice(0,i+1)), tail=i<0 ? "" : " "+fill(tpl.slice(i+2));
+  const head=i<0 ? tpl : tpl.slice(0,i+1), tail=i<0 ? "" : " "+tpl.slice(i+2);
+  const extra=choice==="start" ? { label: t("Open this folder"), onClick: () => eOpenSetAside() } : null;
   const d=syncNoticeBubble("eSyncChoiceNote", head, tail, ()=>$("#signinBtn"), true, ()=>{
     const said=document.getElementById("eSyncSaid"); if(said) hangBubble(said, ()=>$("#signinBtn"));
-  });
+  }, extra);
   const said=document.getElementById("eSyncSaid"); if(said) hangBubble(said, d);
 }
 function syncAnswer(choice){
@@ -563,7 +568,7 @@ function syncAnswer(choice){
   if(!h || typeof h.storeAnswer!=="function") return Promise.resolve(syncNow());
   try{
     return Promise.resolve(h.storeAnswer(String(choice||""))).then(res=>{
-      if (res && res.ok) syncChoiceNotice(res.choice, res.folder);
+      if (res && res.ok) syncChoiceNotice(res.choice);
       return res && res.view ? syncRead(res.view) : syncNow();
     }, ()=>syncNow());
   }catch(e){ return Promise.resolve(syncNow()); }

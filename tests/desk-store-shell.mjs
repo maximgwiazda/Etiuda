@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 126;
+const EXPECTED = 129;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -203,7 +203,7 @@ const TAIL = "\n__test.T = {" + TAIL_NAMES.map(n => n + ": typeof " + n + " === 
 function boot(src, o) {
   const opt = o || {};
   const UD = opt.ud || fs.mkdtempSync(path.join(WORK, "ud-"));
-  const said = [], opened = [], ipc = { on: {}, handle: {} };
+  const said = [], opened = [], openedPaths = [], ipc = { on: {}, handle: {} };
   const quiet = { log: s => said.push(String(s)), error: s => said.push(String(s)), warn: () => {}, info: () => {}, debug: () => {} };
   const noop = () => {};
   const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined, construct: () => inert });
@@ -220,7 +220,7 @@ function boot(src, o) {
       setJumpList: () => ({ result: "ok" }), getJumpListSettings: () => ({ minItems: 0 }) },
     ipcMain: { on: (ch, fn) => { ipc.on[ch] = fn; }, handle: (ch, fn) => { ipc.handle[ch] = fn; } }, BrowserWindow: Object.assign(function () { return inert; }, { fromWebContents: () => inert, getAllWindows: () => [] }),
     Menu: { setApplicationMenu: noop, buildFromTemplate: t => ({ items: t, popup() {} }) }, dialog: inert, protocol: inert, session: inert, screen: inert,
-    shell: new Proxy({}, { get: (t, k) => (k === "openExternal" ? (u => { opened.push(String(u)); return Promise.resolve(opt.browser ? opt.browser(String(u)) : undefined).then(() => undefined); }) : inert) }),
+    shell: new Proxy({}, { get: (t, k) => (k === "openExternal" ? (u => { opened.push(String(u)); return Promise.resolve(opt.browser ? opt.browser(String(u)) : undefined).then(() => undefined); }) : k === "openPath" ? (p => { openedPaths.push(String(p)); return Promise.resolve(opt.openPath ? String(opt.openPath(String(p)) || "") : ""); }) : inert) }),
     systemPreferences: inert, nativeTheme: { themeSource: "system" }, Notification: Object.assign(function () { return inert; }, { isSupported: () => false }),
     Tray: function () { return inert; }, nativeImage: { createFromPath: p => ({ path: p, isEmpty: () => false }) }, safeStorage,
     net: { fetch: (u, init) => (opt.world ? opt.world.fetch(u, init) : Promise.reject(new TypeError("fetch failed"))) },
@@ -241,7 +241,7 @@ function boot(src, o) {
   } finally {
     for (const k of Object.keys(env)) { if (was[k] === undefined) delete process.env[k]; else process.env[k] = was[k]; }
   }
-  return { T: holder.T, UD, said, opened, ipc, lab: env.ETIUDA_SIGNIN_LAB };
+  return { T: holder.T, UD, said, opened, openedPaths, ipc, lab: env.ETIUDA_SIGNIN_LAB };
 }
 function filesUnder(dir) {
   const out = [];
@@ -1436,6 +1436,50 @@ async function roomWireScene(src) {
   const ok = on === "on" && tried >= 1 && full === "full" && after === "on";
   return { ok, detail: brief({ on, tried, full, after }) };
 }
+async function openSetAsideScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world, UD = r.shell.UD;
+  const e = { senderFrame: { parent: null, url: "file:///desk/engine/etiuda.html" } };
+  const open = r.shell.ipc.handle["etiuda:open-set-aside"];
+  if (typeof open !== "function") return { ok: false, detail: "no etiuda:open-set-aside channel" };
+
+  const before = await open(e);
+  const openedBefore = r.shell.openedPaths.length;
+
+  const heldA = T.signinState().held;
+  T.signinOutNow();
+  seatAnother(T, w, heldA);
+  await T.storeTurn();
+  const a1 = await T.storeAnswerNow("start");
+  const f1 = a1 && a1.folder ? a1.folder : "";
+  const r1 = await open(e);
+  const p1 = r.shell.openedPaths.slice();
+
+  const otherDir = path.join(UD, "elsewhere");
+  fs.mkdirSync(otherDir, { recursive: true });
+  const withArg = await open(e, otherDir);
+  const openedAfterArg = r.shell.openedPaths.length;
+
+  T.signinOutNow();
+  T.signinState().held = heldA;
+  await T.storeTurn();
+  const a2 = await T.storeAnswerNow("start");
+  const f2 = a2 && a2.folder ? a2.folder : "";
+  const r2 = await open(e);
+  const p2 = r.shell.openedPaths.slice();
+
+  fs.rmSync(f2, { recursive: true, force: true });
+  const rGone = await open(e);
+  const created = fs.existsSync(f2);
+  const openedAfterGone = r.shell.openedPaths.length;
+
+  const ok = before && before.ok === false && openedBefore === 0
+    && !!f1 && !!f2 && f2 !== f1
+    && r1 === true && p1.length === 1 && p1[0] === f1
+    && withArg === false && openedAfterArg === 1
+    && r2 === true && p2.length === 2 && p2[1] === f2
+    && rGone && rGone.ok === false && rGone.why === "gone" && !created && openedAfterGone === 2;
+  return { ok, detail: brief({ before, openedBefore, f1: path.basename(f1), f2: path.basename(f2), r1, p1: p1.map(x => path.basename(x)), withArg, openedAfterArg, r2, p2: p2.map(x => path.basename(x)), rGone, created, openedAfterGone }) };
+}
 
 const LEGS = [
   ["d4h", leaveScene, "This computer leaves the store's list: the relay withdraws its key and the folder's file names it no more, under the last look's store certificate, nothing left owed"],
@@ -1494,6 +1538,7 @@ const LEGS = [
   ["x6n", answerNotNowScene, "Not now leaves store.json and the hold unchanged, suppresses auto-ask in this run, and asks again on a new run"],
   ["x6f", answerStartRollbackScene, "a failure halfway during set-aside puts back everything moved, leaves no half-made folder, keeps the hold and says so"],
   ["x6w", answerNeighboursScene, "after an answer lifts the hold, A's keys, owed leave, owed store/end and folder token still never reach B"],
+  ["x6o", openSetAsideScene, "opening the set-aside folder uses its no-arg IPC channel, opens only the newest Start from my account folder, refuses page args, and opens/creates nothing when gone"],
 ];
 const results = {};
 const scenes = Object.fromEntries(LEGS.map(([id, scene]) => [id, scene]));
@@ -1583,6 +1628,8 @@ const PLANTS = [
   ["x6n", swap("  storeNotNow.add(who); /* plant:answer-notnow */", "  /* plant:answer-notnow */"), "Not now does not remember the dismissal for this run"],
   ["x6f", swap("  if (movedStore) storeMoveFile(movedStore.to, movedStore.from); /* plant:answer-aside-rollback */", "  /* plant:answer-aside-rollback */"), "a failure during set-aside does not put userData/store back"],
   ["x6w", swap("  s.keys = \"\"; s.leave = \"\"; s.owed = \"\"; s.made = \"\"; /* plant:answer-mine-keys */", "  /* plant:answer-mine-keys */"), "answering the hold leaves the earlier account's keys, leave and owed end"],
+  ["x6o", swap("  if (args.length) return false; /* plant:open-aside-no-args */", "  if (false) return false; /* plant:open-aside-no-args */"), "the channel accepts a path argument handed by the page"],
+  ["x6o", swap("  if (!folder || !isDir) return { ok: false, why: \"gone\" }; /* plant:open-aside-gone */", "  if (!folder) return { ok: false, why: \"gone\" }; /* plant:open-aside-gone */"), "a gone set-aside folder still calls shell.openPath"],
 ];
 for (const [id, change, what] of PLANTS) {
   const line = "p " + id + " in a copy of shell/main.js turns " + id + " red (" + what + ")";
