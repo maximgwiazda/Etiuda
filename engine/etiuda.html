@@ -2228,15 +2228,16 @@ body:not(.deck-off) #list .card,body:not(.deck-off) #list .list-sep{transition:o
 :root[data-theme=light] #list .deck-under{opacity:.3}
 #list .deck-fresh{transition:none!important}
 /* THE GLASS RIM: light catching an edge, drawn as a 1px ring cut from this gradient. A
-   line along the top and the bottom edge, brightest at the top's left and the bottom's right and
-   fading along the edge, wide and shallow so the sides are all but dark. The two catches are one
-   mirrored pair (top and bottom read alike) and a steady line holds both edges, so the brightest
-   point is within about one and a half times the dimmest and the line does not read thicker where it is brighter. Static.
+   line along the top and a quieter line along the foot, brightest at the top's left and
+   fading along the edge, wide and shallow so the sides are all but dark. The foot catch at
+   the bottom's right and the lower edge stop are scaled by --rim-foot so the foot sits well
+   below the top without altering the top's brightness or adding thickness. Static.
    Dark themes only. */
 :root:not([data-theme=light]){
+  --rim-foot:.2;
   --rim:radial-gradient(520px 36px at 0 0,rgba(255,255,255,.2),rgba(255,255,255,.08) 40%,transparent 85%),
-        radial-gradient(520px 36px at 100% 100%,rgba(255,255,255,.2),rgba(255,255,255,.08) 40%,transparent 85%),
-        linear-gradient(rgba(255,255,255,.18),transparent 12px calc(100% - 12px),rgba(255,255,255,.18)),
+        radial-gradient(520px 36px at 100% 100%,rgba(255,255,255,calc(.2 * var(--rim-foot))),rgba(255,255,255,calc(.08 * var(--rim-foot))) 40%,transparent 85%),
+        linear-gradient(rgba(255,255,255,.18),transparent 12px calc(100% - 12px),rgba(255,255,255,calc(.18 * var(--rim-foot)))),
         linear-gradient(rgba(255,255,255,.02),rgba(255,255,255,.02))}
 /* The macro's bevel gives way to the rim; the ring sits over its border. */
 :root:not([data-theme=light]) .txt{--card-shadow:0 0 #0000}
@@ -2961,34 +2962,37 @@ body.e-host .modal.ed-win:not(.ed-rest) .modal-bg{app-region:no-drag;-webkit-app
 body.ed-bars #list{padding-bottom:var(--ed-bars-h)}
 :root:not([data-theme=light]) .modal.ed-multi:not(.ed-rest) #modalCard::after{display:none}
 body:has(.modal.ed-rest:not([hidden])) header:has(.menu:not([hidden]):not(.e-warm),.facts-panel:not([hidden]),.sgn-panel:not([hidden])){z-index:57}
-/* The intent panel, the dialogs, the menus, Quick facts and the opened pill bar wear the rim inside their
-   border; their bevel gives way to it. A surface that scrolls as a whole carries the ring with its content. */
+/* The intent panel, the dialogs, the menus, Quick facts and the opened pill bar wear the rim over their
+   border like the macro card; their bevel gives way to it. The clipping surfaces use overflow:clip with
+   overflow-clip-margin:var(--rim-bw) so child clipping keeps its padding bound without cutting off the ring. */
 :root:not([data-theme=light]) #intentRail,
 :root:not([data-theme=light]) .facts-panel,
 :root:not([data-theme=light]) .pills-slot.pills-overflow .pills{--bevel:var(--bevel-off)}
+:root:not([data-theme=light]) #intentRail,
+:root:not([data-theme=light]) .modal-card,
+:root:not([data-theme=light]) .facts-panel,
+:root:not([data-theme=light]) .pills-slot.pills-overflow .pills{overflow:clip;overflow-clip-margin:var(--rim-bw)}
 :root:not([data-theme=light]) #intentRail::after,
 :root:not([data-theme=light]) .modal-card::after,
 :root:not([data-theme=light]) .menu::after,
 :root:not([data-theme=light]) .facts-panel::after,
-:root:not([data-theme=light]) .pills-slot.pills-overflow .pills::after{content:"";position:absolute;inset:0;
-  border-radius:calc(var(--radius) - 1px);padding:1px;background:var(--rim);pointer-events:none;z-index:3;
+:root:not([data-theme=light]) .pills-slot.pills-overflow .pills::after{content:"";position:absolute;inset:-1px;
+  border-radius:inherit;padding:1px;background:var(--rim);pointer-events:none;z-index:3;
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
   mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude}
-:root:not([data-theme=light]) .modal-card::after{border-radius:15px}
 /* The pill bar is flat while it is closed, so its ring fades in with the glass and the shadow. */
 :root:not([data-theme=light]) .pills-slot.pills-overflow .pills::after{opacity:0;transition:opacity var(--m-reveal) var(--m-ease)}
 :root:not([data-theme=light]) body.pills-lines-expand .pills-slot.pills-overflow .pills::after,
 :root:not([data-theme=light]) .pills-slot.pills-overflow:hover .pills::after,
 :root:not([data-theme=light]) .pills-slot.pills-overflow.pills-navpeek .pills::after,
 :root:not([data-theme=light]) .pills-slot.pills-overflow.pills-expand .pills::after{opacity:1}
-/* Inside their own border, so the same real border as the macro's: no inset to match, the pseudo's box is the
-   padding box and its 1px border snaps with it. */
+/* Over their own border like the macro: the pseudo shifts outward by --rim-bw so border-area sits flush on the 1px border. */
 @supports (background-clip:border-area){
   :root:not([data-theme=light]) #intentRail::after,
   :root:not([data-theme=light]) .modal-card::after,
   :root:not([data-theme=light]) .menu::after,
   :root:not([data-theme=light]) .facts-panel::after,
-  :root:not([data-theme=light]) .pills-slot.pills-overflow .pills::after{padding:0;border:1px solid transparent;
+  :root:not([data-theme=light]) .pills-slot.pills-overflow .pills::after{inset:calc(-1 * var(--rim-bw));padding:0;border:1px solid transparent;
     background-origin:border-box;background-clip:border-area;
     -webkit-mask:none;mask:none}
 }
