@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 125;
+const EXPECTED = 127;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -623,6 +623,43 @@ try {
     realFs.utimesSync(NEW, new Date(2026, 0, 3), new Date(2026, 0, 3));
     check(nameOf(S.api.readCatalog()) === refusedCatalog().name,
       "2f saved again, it is read again: a fixed file is not held against its next edition");
+  }
+
+  /* ---- 2g, 2h (Grok's review 16, finding 8): a catalog file larger than any catalog this desk keeps is refused unread ----------
+     A file of 33 MB beside a sound catalog: the walk, the listing and an asked read open the sound one and never read the large
+     one's bytes. 2h: the size line lifted from a copy of the source reads it. */
+  {
+    const big = async src => {
+      const S = loadShell(src ? { src } : undefined);
+      const folder = path.join(S.DOCS, "Etiuda");
+      realFs.mkdirSync(folder, { recursive: true });
+      const GOOD = path.join(folder, "lamps.ec"), HUGE = path.join(folder, "huge.ec");
+      realFs.writeFileSync(GOOD, JSON.stringify(goodCatalog()), "utf8");
+      const fd = realFs.openSync(HUGE, "w");
+      try { realFs.writeSync(fd, Buffer.alloc(33 * 1024 * 1024 + 512 * 1024, 0x20)); } finally { realFs.closeSync(fd); }
+      realFs.utimesSync(HUGE, new Date(2026, 0, 5), new Date(2026, 0, 5));
+      realFs.utimesSync(GOOD, new Date(2026, 0, 1), new Date(2026, 0, 1));
+      let reads = 0;
+      S.ctl.any = (n, file) => { if (n === "readFileSync" && String(file) === HUGE) reads++; };
+      let name = null;
+      try { name = JSON.parse(S.api.readCatalog() || "null").name; } catch { name = null; }
+      await S.ask("etiuda:catalog-files");
+      const asked = await S.ask("etiuda:catalog-read", "huge.ec", null, true);
+      S.ctl.any = null;
+      try { realFs.unlinkSync(HUGE); } catch { /* the lab goes at the end */ }
+      return { name, reads, askedText: asked ? String(asked.text || "").length : -1 };
+    };
+    const r = await big();
+    check(r.name === goodCatalog().name && r.reads === 0 && r.askedText === 0,
+      "2g a catalog file of 33 MB beside a sound one is never read by the walk, the listing or an asked read, and the sound one is handed: "
+      + JSON.stringify(r));
+    if (PLANTS_OFF) skip("2h lifting plant:catalog-file-max reads the large file");
+    else {
+      const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:catalog-file-max") >= 0);
+      let p = null;
+      if (at >= 0) { lines.splice(at, 1); p = await big(lines.join("\n")); }
+      check(!!p && p.reads > 0, "2h lifting plant:catalog-file-max reads the large file (FAIL 2g): " + JSON.stringify(p));
+    }
   }
 
   /* ---- 3. the engine's half: src/modules/catalog.js and host.js over a stub host ------------ */

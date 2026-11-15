@@ -967,7 +967,7 @@ function readCatalog() {
   for (const file of catalogPlaces()) {
     if (refusedByEngine(file)) continue;
     let text;
-    try { text = fs.readFileSync(file, "utf8"); } catch { refuseOpened(file, "read"); continue; }
+    try { text = catalogFileText(file); } catch { refuseOpened(file, "read"); continue; }
     try {
       const peeked = catalogPeek(text);
       if (!isV2(peeked.data)) throw new Error("not an Etiuda catalog (format 2)");
@@ -1668,6 +1668,13 @@ const IN_USE_KIND = "etiuda-in-use", IN_USE_STEM = "in-use";
    would otherwise have the pin and not the text. Written only once in-use.ec names it. */
 const LOADED_CATALOG_FILE = "catalog-loaded.txt";
 const LOADED_CATALOG_MAX = 16 * 1024 * 1024;
+/* A catalog file in the folder is read only up to what the largest catalog kept here takes sealed (twice its bytes in hex,
+   and room for the envelope); a larger one would hold the main process for its read and parse, and is refused unread. */
+const CATALOG_FILE_MAX = 2 * LOADED_CATALOG_MAX + 64 * 1024;
+function catalogFileText(file) {
+  if (fs.statSync(file).size > CATALOG_FILE_MAX) throw new Error("larger than any catalog this desk keeps, so it is not read"); /* plant:catalog-file-max */
+  return fs.readFileSync(file, "utf8");
+}
 const ASK_DIR = "catalog-asks", ASK_KIND = "etiuda-catalog-ask", ASK_PREFIX = "etiuda-catalog-ask\n";
 const ANSWER_KIND = "etiuda-catalog-answer", ANSWER_NAME = "catalog-answer.ec";
 const ASK_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
@@ -8803,7 +8810,7 @@ function ecFacts(file, deskFolder) {
   /* A read that fails (another program holds the file) says nothing about the file, so it is not remembered: only a
      verdict on the text is. */
   let text;
-  try { text = fs.readFileSync(file, "utf8"); } catch { return null; }
+  try { text = catalogFileText(file); } catch { return null; }
   let out = null;
   try {
     const { data } = catalogRead(text);
@@ -9079,7 +9086,7 @@ ipcMain.handle("etiuda:catalog-read", (e, name, desk, asked, offer) => {
     if (who && !(ecFacts(file, who) || {}).deskOk) throw new Error("not a desk's own file");
     const offTeam = !!who && !deskRoster()(who);
     if (offTeam && !asked) throw new Error("its desk is not on the team's roster");
-    const raw = fs.readFileSync(file, "utf8");
+    const raw = catalogFileText(file);
     if (asked) {
       const blocked = sealBlockedWhy(raw);
       if (blocked) {
