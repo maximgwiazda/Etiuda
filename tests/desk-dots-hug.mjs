@@ -29,12 +29,22 @@
  *       words match UI_STRINGS.pl
  *   (5) Inline plant proof (skipped with NOT RUN when ETIUDA_PLANTS=off): disabling the
  *       hugging pass in a scratch copy turns the leg red.
+ *   (6) Every control the pass marks, in both themes: no inline background written by the
+ *       pass; hovered, pressed (where a pressed rule exists) and focused, the computed
+ *       background matches the same control on f9d5cd8e; after a theme switch with no
+ *       redraw, the ground is the new theme's.
+ *   (7) On the loaded desk a pass with nothing to change stays under 2 ms (median of 11)
+ *       on #list and on main, does not enter the cards, and runs once per paint.
+ *   (8) A selection in text the pass does not move survives the pass.
+ *   (9) Two further plants (also NOT RUN when ETIUDA_PLANTS=off): writing the inline
+ *       ground back, and deleting the card skip so the walk enters the cards.
  *
  * Exit code is the number of failed checks; 78 when the run could not complete.
  */
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
@@ -420,6 +430,80 @@ async function eyeStripCheck(p, decoder, theme) {
   };
 }
 
+/* f9d5cd8e is the build the hover and press colours are judged against. Reuse a scratch
+   worktree under this root when one is already there; otherwise make it and remove it. */
+const baseDir = path.join(E.ROOT, "scratch-f9d5-hug");
+let baseOwned = false;
+function gitBin() {
+  const candidates = ["git", "C:\\Program Files\\Git\\bin\\git.exe", "C:\\Program Files\\Git\\cmd\\git.exe"];
+  for (const c of candidates) {
+    try { execFileSync(c, ["--version"], { stdio: "ignore" }); return c; } catch (e) { /* next */ }
+  }
+  return null;
+}
+function ensureBaseline() {
+  const html = path.join(baseDir, "engine", "etiuda.html");
+  const git = gitBin();
+  if (!git) throw new Error("git not found for the f9d5cd8e worktree");
+  if (!fs.existsSync(html)) {
+    execFileSync(git, ["worktree", "add", "--detach", baseDir, "f9d5cd8e"], { cwd: E.ROOT, stdio: "pipe" });
+    baseOwned = true;
+  }
+  const head = execFileSync(git, ["rev-parse", "HEAD"], { cwd: baseDir, encoding: "utf8" }).trim();
+  if (!head.startsWith("f9d5cd8e")) throw new Error("baseline HEAD is " + head);
+  return html;
+}
+
+const CTRL_SEL = "button,a,input,select,textarea,.chip,kbd,.btn,.seg,[role=button],.cell-chip,.count";
+async function killMotion(page) {
+  await page.addStyleTag({ content: "*,*::before,*::after{transition:none!important;animation:none!important}" });
+}
+async function listCtrls(page) {
+  return page.evaluate((sel) => {
+    document.querySelectorAll("[data-hug-n]").forEach((el) => el.removeAttribute("data-hug-n"));
+    const root = document.querySelector("#screenHost .sx-page") || document.querySelector(".stage > .scroller main");
+    const all = root ? Array.from(root.querySelectorAll(sel)) : [];
+    return all.map((el, n) => {
+      el.setAttribute("data-hug-n", String(n));
+      const cls = typeof el.className === "string"
+        ? el.className.trim().split(/\s+/).filter((c) => c && c.indexOf("e-dot-") !== 0).sort().join(".")
+        : "";
+      return {
+        n,
+        marked: el.classList.contains("e-dot-ctrl") || el.classList.contains("e-dot-hug"),
+        inlineBg: el.style.backgroundColor || "",
+        inlineImg: el.style.backgroundImage || "",
+        disabled: !!(el.disabled || el.hasAttribute("disabled")),
+        id: el.id || "",
+        cls,
+        text: (el.innerText || el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 48)
+      };
+    });
+  }, CTRL_SEL);
+}
+function ctrlKey(c) {
+  return (c.id ? "id:" + c.id : c.cls + "|" + c.text) + (c.disabled ? ":off" : ":on");
+}
+async function readPaint(client, page, n, pseudos) {
+  const doc = await client.send("DOM.getDocument", { depth: 0 });
+  const found = await client.send("DOM.querySelector", { nodeId: doc.root.nodeId, selector: '[data-hug-n="' + n + '"]' });
+  if (!found.nodeId) return null;
+  await client.send("CSS.forcePseudoState", { nodeId: found.nodeId, forcedPseudoClasses: pseudos });
+  const paint = await page.evaluate((num) => {
+    const el = document.querySelector('[data-hug-n="' + num + '"]');
+    if (!el) return null;
+    const cs = getComputedStyle(el);
+    return { backgroundColor: cs.backgroundColor, backgroundImage: cs.backgroundImage, filter: cs.filter, opacity: cs.opacity };
+  }, String(n));
+  if (pseudos.length) await client.send("CSS.forcePseudoState", { nodeId: found.nodeId, forcedPseudoClasses: [] });
+  return paint;
+}
+function paintDiff(a, b, fields) {
+  if (!a || !b) return "missing";
+  for (const f of fields) if (a[f] !== b[f]) return f;
+  return "";
+}
+
 let browser = null, decoder = null, done = false;
 const summaryByScreen = {};
 const record = (res) => {
@@ -428,7 +512,7 @@ const record = (res) => {
 };
 
 try {
-  browser = await puppeteer.launch({ executablePath: E.browserPath("chrome"), headless: true, args: ["--hide-scrollbars"], protocolTimeout: 120000 });
+  browser = await puppeteer.launch({ executablePath: E.browserPath("chrome"), headless: true, args: ["--hide-scrollbars"], protocolTimeout: 180000 });
   decoder = await browser.newPage();
 
   const rawHtml = fs.readFileSync(ENGINE, "utf8");
@@ -654,6 +738,425 @@ try {
     }
   }
 
+  /* 7-9. State colours against f9d5cd8e, desk cost, one pass per paint, selection, two plants. */
+  let curL = null, curD = null, baseL = null, baseD = null, perfPage = null;
+  try {
+    const baseHtml = fs.readFileSync(ensureBaseline(), "utf8");
+    const countedHtml = rawHtml.replace(
+      /function hugDottedGround\s*\(\s*root\s*\)\s*\{/,
+      "function hugDottedGround(root){hugDottedGround.n=(hugDottedGround.n||0)+1;"
+    );
+    if (countedHtml === rawHtml) throw new Error("could not instrument hugDottedGround");
+    const urlCur = writeDeskFiles(path.join(lab, "state-cur"), countedHtml, true);
+    const urlBase = writeDeskFiles(path.join(lab, "state-base"), baseHtml, true);
+    const vp = { width: 1280, height: 800 };
+    try {
+    curL = await boot(browser, urlCur, "light", "en", true, vp);
+    curD = await boot(browser, urlCur, "dark", "en", true, vp);
+    baseL = await boot(browser, urlBase, "light", "en", true, vp);
+    baseD = await boot(browser, urlBase, "dark", "en", true, vp);
+    await killMotion(curL); await killMotion(curD); await killMotion(baseL); await killMotion(baseD);
+    const cdpL = await curL.createCDPSession();
+    const cdpD = await curD.createCDPSession();
+    const bdpL = await baseL.createCDPSession();
+    const bdpD = await baseD.createCDPSession();
+    for (const c of [cdpL, cdpD, bdpL, bdpD]) { await c.send("DOM.enable"); await c.send("CSS.enable"); }
+
+    const inlineSample = [], hoverSample = [], pressSample = [], focusSample = [];
+    const themeLightSample = [], themeDarkSample = [];
+    let inlineSeen = 0, inlineFails = 0, hoverSeen = 0, hoverFails = 0;
+    let pressSeen = 0, pressFails = 0, focusSeen = 0, focusFails = 0;
+    let themeLightSeen = 0, themeLightFails = 0, themeDarkSeen = 0, themeDarkFails = 0;
+    let hugSteady = true;
+    let loggedOpacity = false;
+    const seenKey = new Set();
+    const note = (arr, fails, row) => { if (arr.length < 4) arr.push(row); return fails + 1; };
+
+    const openAll = async (which, key) => {
+      const go = async (page) => {
+        if (which === "settings") await page.evaluate(() => window.openScreenTab("settings"));
+        else if (which === "library") await page.evaluate(() => window.openManage());
+        else await page.evaluate(() => window.openScreenTab("maintenance"));
+        if (key) {
+          await page.evaluate((w, k) => {
+            const attr = w === "settings" ? "data-sx" : w === "library" ? "data-lm" : "data-mt";
+            const b = document.querySelector('#screenHost .sx-nav .sx-sec[' + attr + '="' + k + '"]');
+            if (b) b.click();
+          }, which, key);
+        }
+      };
+      await Promise.all([go(curL), go(curD), go(baseL), go(baseD)]);
+      await sleep(160);
+    };
+    const keysOf = async (which) => {
+      const attr = which === "settings" ? "data-sx" : which === "library" ? "data-lm" : "data-mt";
+      await openAll(which, null);
+      if (which === "settings") await curL.waitForSelector("#screenHost .sx-nav .sx-sec", { timeout: 10000 });
+      else if (which === "library") await curL.waitForSelector("#screenHost .sx-nav .sx-sec[data-lm]", { timeout: 10000 });
+      else await curL.waitForSelector("#screenHost .sx-nav .sx-sec[data-mt]", { timeout: 10000 });
+      return curL.evaluate((a) => Array.from(document.querySelectorAll("#screenHost .sx-nav .sx-sec[" + a + "]")).map((x) => x.getAttribute(a)), attr);
+    };
+
+    for (const which of ["settings", "library", "maintenance"]) {
+      const keys = await keysOf(which);
+      for (const key of keys) {
+        await openAll(which, key);
+        const [lCur, dCur, lBase, dBase] = await Promise.all([listCtrls(curL), listCtrls(curD), listCtrls(baseL), listCtrls(baseD)]);
+        if (lCur.length !== lBase.length || dCur.length !== dBase.length || lCur.length !== dCur.length) {
+          inlineFails = note(inlineSample, inlineFails, { screen: which + "/" + key, lengths: [lCur.length, lBase.length, dCur.length, dBase.length] });
+          continue;
+        }
+        const hugBeforeL = await curL.evaluate(() => window.hugDottedGround.n || 0);
+        const hugBeforeD = await curD.evaluate(() => window.hugDottedGround.n || 0);
+        await curL.evaluate(() => { document.documentElement.dataset.theme = "dark"; });
+        await curD.evaluate(() => { document.documentElement.dataset.theme = "light"; });
+        const hugAfterL = await curL.evaluate(() => window.hugDottedGround.n || 0);
+        const hugAfterD = await curD.evaluate(() => window.hugDottedGround.n || 0);
+        if (hugAfterL !== hugBeforeL || hugAfterD !== hugBeforeD) hugSteady = false;
+        const switchedL = await listCtrls(curL);
+        const switchedD = await listCtrls(curD);
+        await curL.evaluate(() => { document.documentElement.dataset.theme = "light"; });
+        await curD.evaluate(() => { document.documentElement.dataset.theme = "dark"; });
+
+        for (let i = 0; i < lCur.length; i++) {
+          if (!lCur[i].marked && !dCur[i].marked) continue;
+          const slot = lCur[i].marked ? lCur[i] : dCur[i];
+          const uname = which + "/" + key + " " + (slot.id || slot.text || slot.cls);
+          if (lCur[i].marked) {
+            inlineSeen++;
+            if (lCur[i].inlineBg || lCur[i].inlineImg) inlineFails = note(inlineSample, inlineFails, { theme: "light", ctrl: uname, inlineBg: lCur[i].inlineBg, inlineImg: lCur[i].inlineImg.slice(0, 80) });
+          }
+          if (dCur[i].marked) {
+            inlineSeen++;
+            if (dCur[i].inlineBg || dCur[i].inlineImg) inlineFails = note(inlineSample, inlineFails, { theme: "dark", ctrl: uname, inlineBg: dCur[i].inlineBg, inlineImg: dCur[i].inlineImg.slice(0, 80) });
+          }
+          const k = ctrlKey(slot);
+          if (seenKey.has(k)) continue;
+          seenKey.add(k);
+          if (lCur[i].marked) {
+            const restB = await readPaint(bdpL, baseL, lCur[i].n, []);
+            const hoverB = await readPaint(bdpL, baseL, lCur[i].n, ["hover"]);
+            const hoverC = await readPaint(cdpL, curL, lCur[i].n, ["hover"]);
+            const hd = paintDiff(hoverC, hoverB, ["backgroundColor", "backgroundImage"]);
+            hoverSeen++;
+            if (hd) hoverFails = note(hoverSample, hoverFails, { theme: "light", ctrl: uname, field: hd, got: hoverC && hoverC[hd], want: hoverB && hoverB[hd] });
+            if (!lCur[i].disabled) {
+              const focusB = await readPaint(bdpL, baseL, lCur[i].n, ["focus-visible"]);
+              const focusC = await readPaint(cdpL, curL, lCur[i].n, ["focus-visible"]);
+              const fd = paintDiff(focusC, focusB, ["backgroundColor", "backgroundImage"]);
+              focusSeen++;
+              if (fd) focusFails = note(focusSample, focusFails, { theme: "light", ctrl: uname, field: fd, got: focusC && focusC[fd], want: focusB && focusB[fd] });
+            }
+            const activeB = await readPaint(bdpL, baseL, lCur[i].n, ["active"]);
+            const pressed = paintDiff(activeB, restB, ["backgroundColor", "backgroundImage", "filter"]);
+            if (pressed) {
+              const activeC = await readPaint(cdpL, curL, lCur[i].n, ["active"]);
+              const pd = paintDiff(activeC, activeB, ["backgroundColor", "backgroundImage", "filter"]);
+              pressSeen++;
+              if (pd) pressFails = note(pressSample, pressFails, { theme: "light", ctrl: uname, field: pd, got: activeC && activeC[pd], want: activeB && activeB[pd] });
+            }
+            if (!loggedOpacity && lCur[i].disabled && restB) {
+              const restC = await readPaint(cdpL, curL, lCur[i].n, []);
+              loggedOpacity = true;
+              console.log("#disabled-opacity " + JSON.stringify({ ctrl: uname, cur: restC && restC.opacity, base: restB.opacity }));
+            }
+          }
+          if (dCur[i].marked) {
+            const restB = await readPaint(bdpD, baseD, dCur[i].n, []);
+            const hoverB = await readPaint(bdpD, baseD, dCur[i].n, ["hover"]);
+            const hoverC = await readPaint(cdpD, curD, dCur[i].n, ["hover"]);
+            const hd = paintDiff(hoverC, hoverB, ["backgroundColor", "backgroundImage"]);
+            hoverSeen++;
+            if (hd) hoverFails = note(hoverSample, hoverFails, { theme: "dark", ctrl: uname, field: hd, got: hoverC && hoverC[hd], want: hoverB && hoverB[hd] });
+            if (!dCur[i].disabled) {
+              const focusB = await readPaint(bdpD, baseD, dCur[i].n, ["focus-visible"]);
+              const focusC = await readPaint(cdpD, curD, dCur[i].n, ["focus-visible"]);
+              const fd = paintDiff(focusC, focusB, ["backgroundColor", "backgroundImage"]);
+              focusSeen++;
+              if (fd) focusFails = note(focusSample, focusFails, { theme: "dark", ctrl: uname, field: fd, got: focusC && focusC[fd], want: focusB && focusB[fd] });
+            }
+            const activeB = await readPaint(bdpD, baseD, dCur[i].n, ["active"]);
+            const pressed = paintDiff(activeB, restB, ["backgroundColor", "backgroundImage", "filter"]);
+            if (pressed) {
+              const activeC = await readPaint(cdpD, curD, dCur[i].n, ["active"]);
+              const pd = paintDiff(activeC, activeB, ["backgroundColor", "backgroundImage", "filter"]);
+              pressSeen++;
+              if (pd) pressFails = note(pressSample, pressFails, { theme: "dark", ctrl: uname, field: pd, got: activeC && activeC[pd], want: activeB && activeB[pd] });
+            }
+          }
+        }
+        /* Theme switch paints. data-hug-n was stamped while each page was briefly in the other
+           theme, then restored. Read the switched ground without a redraw and compare it to the
+           page that booted in that theme. */
+        const themePaints = await Promise.all([
+          curL.evaluate(() => {
+            document.documentElement.dataset.theme = "dark";
+            const out = Array.from(document.querySelectorAll("[data-hug-n]")).map((el) => {
+              const cs = getComputedStyle(el);
+              return { n: el.getAttribute("data-hug-n"), backgroundColor: cs.backgroundColor, backgroundImage: cs.backgroundImage };
+            });
+            document.documentElement.dataset.theme = "light";
+            return out;
+          }),
+          curD.evaluate(() => {
+            return Array.from(document.querySelectorAll("[data-hug-n]")).map((el) => {
+              const cs = getComputedStyle(el);
+              return { n: el.getAttribute("data-hug-n"), backgroundColor: cs.backgroundColor, backgroundImage: cs.backgroundImage };
+            });
+          })
+        ]);
+        /* curD was switched to light and restored to dark before this read, so curD is dark.
+           curL's evaluate switches to dark, reads, and restores light. data-hug-n was last
+           stamped by listCtrls(curL) AFTER curL was restored to light, and listCtrls(curD)
+           ran BEFORE curD was switched, then listCtrls(switchedD) and listCtrls(curD) again
+           at the end of the restore. The last listCtrls on each page is the restore one,
+           and both pages were re-stamped. themePaints reads whatever data-hug-n is set now.
+           Both pages are in their boot themes during the curD read and after curL's restore.
+           The curL read is taken while dark. Compare by data-hug-n. */
+        const darkNow = new Map(themePaints[0].map((p) => [p.n, p]));
+        const darkBoot = new Map(themePaints[1].map((p) => [p.n, p]));
+        const lightNowP = await curD.evaluate(() => {
+          const n0 = window.hugDottedGround.n || 0;
+          document.documentElement.dataset.theme = "light";
+          const out = Array.from(document.querySelectorAll("[data-hug-n]")).map((el) => {
+            const cs = getComputedStyle(el);
+            return { n: el.getAttribute("data-hug-n"), backgroundColor: cs.backgroundColor, backgroundImage: cs.backgroundImage };
+          });
+          const n1 = window.hugDottedGround.n || 0;
+          document.documentElement.dataset.theme = "dark";
+          return { out, steady: n1 === n0 };
+        });
+        const lightBoot = await curL.evaluate(() => {
+          return Array.from(document.querySelectorAll("[data-hug-n]")).map((el) => {
+            const cs = getComputedStyle(el);
+            return { n: el.getAttribute("data-hug-n"), backgroundColor: cs.backgroundColor, backgroundImage: cs.backgroundImage };
+          });
+        });
+        if (!lightNowP.steady) hugSteady = false;
+        const lightBootM = new Map(lightBoot.map((p) => [p.n, p]));
+        const lightNowM = new Map(lightNowP.out.map((p) => [p.n, p]));
+        for (let i = 0; i < lCur.length; i++) {
+          if (!lCur[i].marked) continue;
+          const n = String(lCur[i].n);
+          const a = darkNow.get(n), b = darkBoot.get(n);
+          themeLightSeen++;
+          if (!a || !b || a.backgroundColor !== b.backgroundColor || a.backgroundImage !== b.backgroundImage) {
+            themeLightFails = note(themeLightSample, themeLightFails, {
+              ctrl: which + "/" + key + " " + (lCur[i].id || lCur[i].text),
+              got: a && a.backgroundImage && a.backgroundImage.slice(0, 100),
+              want: b && b.backgroundImage && b.backgroundImage.slice(0, 100),
+              gotC: a && a.backgroundColor, wantC: b && b.backgroundColor
+            });
+          }
+          const c = lightNowM.get(n), d = lightBootM.get(n);
+          themeDarkSeen++;
+          if (!c || !d || c.backgroundColor !== d.backgroundColor || c.backgroundImage !== d.backgroundImage) {
+            themeDarkFails = note(themeDarkSample, themeDarkFails, {
+              ctrl: which + "/" + key + " " + (lCur[i].id || lCur[i].text),
+              got: c && c.backgroundImage && c.backgroundImage.slice(0, 100),
+              want: d && d.backgroundImage && d.backgroundImage.slice(0, 100),
+              gotC: c && c.backgroundColor, wantC: d && d.backgroundColor
+            });
+          }
+        }
+        const hugEndL = await curL.evaluate(() => window.hugDottedGround.n || 0);
+        const hugEndD = await curD.evaluate(() => window.hugDottedGround.n || 0);
+        if (hugEndL !== hugAfterL || hugEndD !== hugBeforeD) hugSteady = false;
+      }
+    }
+    console.log("#state " + JSON.stringify({
+      inlineSeen, inlineFails, hoverSeen, hoverFails, pressSeen, pressFails, focusSeen, focusFails,
+      themeLightSeen, themeLightFails, themeDarkSeen, themeDarkFails, hugSteady
+    }));
+    EXPECTED += 1;
+    check(inlineSeen > 0 && inlineFails === 0, "marked controls carry no inline background in either theme", inlineFails ? { inlineSeen, inlineFails, sample: inlineSample } : { inlineSeen });
+    EXPECTED += 1;
+    check(hoverSeen > 0 && hoverFails === 0, "hovered background matches the same control on f9d5cd8e", hoverFails ? { hoverSeen, hoverFails, sample: hoverSample } : { hoverSeen });
+    EXPECTED += 1;
+    check(pressSeen > 0 && pressFails === 0, "pressed background matches f9d5cd8e where a pressed rule exists", pressFails ? { pressSeen, pressFails, sample: pressSample } : { pressSeen });
+    EXPECTED += 1;
+    check(focusSeen > 0 && focusFails === 0, "focused background matches the same control on f9d5cd8e", focusFails ? { focusSeen, focusFails, sample: focusSample } : { focusSeen });
+    EXPECTED += 1;
+    check(themeLightSeen > 0 && themeLightFails === 0 && hugSteady, "a light page switched to dark with no redraw wears the dark ground", themeLightFails || !hugSteady ? { themeLightSeen, themeLightFails, hugSteady, sample: themeLightSample } : { themeLightSeen });
+    EXPECTED += 1;
+    check(themeDarkSeen > 0 && themeDarkFails === 0 && hugSteady, "a dark page switched to light with no redraw wears the light ground", themeDarkFails || !hugSteady ? { themeDarkSeen, themeDarkFails, hugSteady, sample: themeDarkSample } : { themeDarkSeen });
+    await Promise.all([closePage(curL), closePage(curD), closePage(baseL), closePage(baseD)]);
+    curL = curD = baseL = baseD = null;
+    } catch (e) {
+      EXPECTED += 1;
+      check(false, "state colour checks stopped", String((e && e.stack) || e).split("\n").slice(0, 8));
+      for (const p of [curL, curD, baseL, baseD]) if (p) await closePage(p);
+      curL = curD = baseL = baseD = null;
+    }
+
+    /* Desk cost, one pass per paint, selection. The counter is the instrumented copy. */
+    perfPage = await boot(browser, urlCur, "light", "en", true, vp);
+    await killMotion(perfPage);
+    const deskPerf = await perfPage.evaluate(() => {
+      const time = (root) => {
+        const runs = [];
+        for (let i = 0; i < 11; i++) {
+          const t0 = performance.now();
+          window.hugDottedGround(root);
+          runs.push(performance.now() - t0);
+        }
+        runs.sort((a, b) => a - b);
+        const cards = root.querySelectorAll(".card").length;
+        return {
+          median: Math.round(runs[5] * 1000) / 1000,
+          max: Math.round(runs[10] * 1000) / 1000,
+          els: root.querySelectorAll("*").length,
+          cards,
+          inside: root.querySelectorAll(".card *").length,
+          cardIn: window.hugDottedGround.cardIn == null ? null : window.hugDottedGround.cardIn
+        };
+      };
+      const list = document.getElementById("list");
+      const main = document.querySelector(".stage > .scroller main");
+      return { list: time(list), main: time(main) };
+    });
+    console.log("#desk-perf " + JSON.stringify(deskPerf));
+    EXPECTED += 1;
+    check(!!deskPerf && deskPerf.list.median < 2 && deskPerf.list.cardIn === 0,
+      "loaded desk #list pass with nothing to change stays under 2 ms and out of the cards", deskPerf && deskPerf.list);
+    EXPECTED += 1;
+    check(!!deskPerf && deskPerf.main.median < 2 && deskPerf.main.cardIn === 0,
+      "loaded desk main pass with nothing to change stays under 2 ms and out of the cards", deskPerf && deskPerf.main);
+
+    const calls = await perfPage.evaluate(async () => {
+      window.hugDottedGround.n = 0;
+      window.render();
+      const render = window.hugDottedGround.n;
+      window.hugDottedGround.n = 0;
+      const q = document.getElementById("intent");
+      q.value = "zzzznohit999";
+      q.dispatchEvent(new Event("input", { bubbles: true }));
+      const until = performance.now() + 5000;
+      while (performance.now() < until && !document.querySelector("#list .empty")) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      return { render, search: window.hugDottedGround.n, empty: !!document.querySelector("#list .empty") };
+    });
+    console.log("#calls " + JSON.stringify(calls));
+    EXPECTED += 1;
+    check(calls.render === 1, "one hug on a desk render", calls);
+    EXPECTED += 1;
+    check(calls.search === 1 && calls.empty, "one hug on one search keystroke", calls);
+
+    await perfPage.evaluate(() => window.openScreenTab("settings"));
+    await perfPage.waitForSelector("#screenHost .sx-page", { timeout: 10000 });
+    await sleep(200);
+    const selInfo = await perfPage.evaluate(() => {
+      const spans = Array.from(document.querySelectorAll("#screenHost .sx-page span.e-dot-hug"))
+        .filter((el) => el.firstChild && el.firstChild.nodeType === 3 && el.firstChild.nodeValue.trim());
+      if (spans.length < 1) return { found: 0 };
+      const keep = spans[0];
+      const text = keep.firstChild;
+      const sel = getSelection();
+      const range = document.createRange();
+      range.setStart(text, 0);
+      range.setEnd(text, text.nodeValue.length);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      const before = sel.toString();
+      const root = document.querySelector("#screenHost .sx-page");
+      let mutations = 0;
+      const obs = new MutationObserver((recs) => { mutations += recs.length; });
+      obs.observe(root, { subtree: true, attributes: true, childList: true, characterData: true });
+      window.hugDottedGround(root);
+      obs.disconnect();
+      const after = sel.toString();
+      const collapsed = sel.isCollapsed;
+      const other = spans.length > 1 ? spans[1] : keep;
+      const raw = other.firstChild;
+      const parent = other.parentNode;
+      parent.insertBefore(raw, other);
+      other.remove();
+      const range2 = document.createRange();
+      range2.setStart(raw, 0);
+      range2.setEnd(raw, raw.nodeValue.length);
+      sel.removeAllRanges();
+      sel.addRange(range2);
+      const wrapBefore = sel.toString();
+      window.hugDottedGround(root);
+      return {
+        found: spans.length,
+        before, after, collapsed, mutations,
+        wrapBefore,
+        wrapAfter: sel.toString(),
+        wrapCollapsed: sel.isCollapsed,
+        wrapAnchor: sel.anchorNode ? sel.anchorNode.nodeName : null
+      };
+    });
+    console.log("#selection " + JSON.stringify(selInfo));
+    EXPECTED += 1;
+    check(!!selInfo && selInfo.found > 0 && selInfo.after === selInfo.before && selInfo.collapsed === false && selInfo.mutations === 0,
+      "a selection in text the pass does not move survives, and the pass touches nothing", selInfo);
+    EXPECTED += 1;
+    check(!!selInfo && selInfo.found > 0 && typeof selInfo.wrapBefore === "string",
+      "a wrap of selected text was observed", selInfo && { found: selInfo.found, wrapCollapsed: selInfo.wrapCollapsed, wrapAfter: selInfo.wrapAfter });
+    await closePage(perfPage);
+    perfPage = null;
+
+    /* Plants: inline ground written back, and the card skip deleted. */
+    EXPECTED += 1;
+    if (PLANTS_OFF) {
+      skip("plant-inline-ground: writing the inline ground back shows on a marked control (ETIUDA_PLANTS=off)");
+    } else {
+      const planted = rawHtml.replace(
+        /([\w.]+)\.classList\.add\("e-dot-ctrl"\)/,
+        '$1.classList.add("e-dot-ctrl"); $1.style.backgroundColor="var(--bg)"'
+      );
+      if (planted === rawHtml) {
+        check(false, "plant-inline-ground: could not locate the e-dot-ctrl class add");
+      } else {
+        const plantUrl = writeDeskFiles(path.join(lab, "plant-inline"), planted, true);
+        const pp = await boot(browser, plantUrl, "light", "en", true, { width: 1280, height: 800 });
+        await pp.evaluate(() => window.openScreenTab("settings"));
+        await pp.waitForSelector("#setResetKeys", { timeout: 10000 });
+        await sleep(150);
+        const hit = await pp.evaluate(() => {
+          const el = document.getElementById("setResetKeys");
+          return el ? el.style.backgroundColor : "";
+        });
+        check(!!hit, "plant-inline-ground: writing the inline ground back shows on a marked control", { backgroundColor: hit });
+        await closePage(pp);
+      }
+    }
+    EXPECTED += 1;
+    if (PLANTS_OFF) {
+      skip("plant-enter-cards: deleting the card skip lets the walk enter the cards (ETIUDA_PLANTS=off)");
+    } else {
+      const re = /if\s*\(\s*el\.classList\s*&&\s*el\.classList\.contains\(\s*"card"\s*\)\s*\)\s*return\s*;/;
+      if (!re.test(rawHtml)) {
+        check(false, "plant-enter-cards: could not locate the card skip");
+      } else {
+        const planted = rawHtml.replace(re, "0;");
+        const plantUrl = writeDeskFiles(path.join(lab, "plant-cards"), planted, true);
+        const pp = await boot(browser, plantUrl, "light", "en", true, vp);
+        const entered = await pp.evaluate(() => {
+          const list = document.getElementById("list");
+          const runs = [];
+          for (let i = 0; i < 11; i++) {
+            const t0 = performance.now();
+            window.hugDottedGround(list);
+            runs.push(performance.now() - t0);
+          }
+          runs.sort((a, b) => a - b);
+          return { cardIn: window.hugDottedGround.cardIn == null ? null : window.hugDottedGround.cardIn, median: Math.round(runs[5] * 1000) / 1000 };
+        });
+        console.log("#plant-cards " + JSON.stringify(entered));
+        check(!!entered && entered.cardIn > 0, "plant-enter-cards: deleting the card skip lets the walk enter the cards", entered);
+        await closePage(pp);
+      }
+    }
+  } catch (e) {
+    EXPECTED += 1;
+    check(false, "state and cost checks stopped", String((e && e.stack) || e).split("\n").slice(0, 6));
+  } finally {
+    for (const p of [curL, curD, baseL, baseD, perfPage]) if (p) await closePage(p);
+  }
+
   done = true;
 } catch (e) {
   console.log("  FAIL the run stopped: " + String((e && e.message) || e));
@@ -662,6 +1165,14 @@ try {
   if (decoder) await closePage(decoder).catch(() => {});
   if (browser) await Promise.race([browser.close(), sleep(10000).then(() => { const c = browser.process(); if (c) c.kill(); })]);
   E.removeLab(lab);
+  if (baseOwned) {
+    try {
+      const git = gitBin();
+      if (git) execFileSync(git, ["worktree", "remove", baseDir], { cwd: E.ROOT, stdio: "pipe" });
+    } catch (err) {
+      console.log("#baseline-remove " + String((err && err.stderr) || (err && err.message) || err).split("\n")[0]);
+    }
+  }
 }
 if (done && checks + notRun !== EXPECTED) {
   console.log("  FAIL ran " + (checks + notRun) + " checks, expected " + EXPECTED);

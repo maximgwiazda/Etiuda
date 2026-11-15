@@ -1190,7 +1190,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .seg button.on{background:transparent}
 
 .btn{padding:7px 11px;border:1px solid transparent;border-radius:var(--radius-sm);
-  background:color-mix(in srgb,var(--ink) 4%,transparent);
+  --btn-rest:color-mix(in srgb,var(--ink) 4%,transparent);background:var(--btn-rest);
   color:var(--ink);font:13px var(--sans);cursor:default;white-space:nowrap;flex:0 0 auto}
 /* .tour-sel rides along here on purpose: the tour's ←/→ selection must look exactly like
    hover, so both states share one declaration and cannot drift apart. */
@@ -3866,11 +3866,17 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .e-dot-hug{display:inline;background:var(--bg);box-shadow:0 0 0 3px var(--bg);border-radius:3px;
   -webkit-box-decoration-break:clone;box-decoration-break:clone}
 .e-dot-ic{background:var(--bg);box-shadow:0 0 0 3px var(--bg);border-radius:4px}
+.e-dot-flex{min-width:0}
 .sx-page :is(h2,.sx-group>h3,.sx-block>h3,.sx-lookside>h3){width:fit-content}
 .sx-page .mt-readings{background:var(--bg)}
 .sx-page .lw-name.add{background:var(--bg);box-shadow:0 0 0 3px var(--bg);border-radius:10px}
 .sx-crumb+h2{margin-top:2px}
-.e-dot-ctrl{background-color:var(--bg)}
+/* The page ground, and only while the control rests. Hover, focus and press do not match
+   this rule, so they keep the colours they already have. A button's veil is its own token,
+   laid over that ground: a colour read off the screen would stay after the theme changed. */
+.e-dot-ctrl:not(:hover):not(:focus-visible):not(:active){background-color:var(--bg)}
+.e-dot-ctrl.btn:not([disabled]):not(:hover):not(:focus-visible):not(:active){
+  background-image:linear-gradient(var(--btn-rest),var(--btn-rest))}
 .empty .btn:not(.primary){background:color-mix(in srgb,var(--ink) 4%,var(--bg))}
 .e-dot-ctrl[disabled],.empty .btn[disabled]{opacity:1;color:color-mix(in srgb,var(--ink) 45%,var(--bg));border-color:transparent}
 .sx-page .sc-row{min-width:0}
@@ -9533,20 +9539,25 @@ What is typed here stays in this browser.`;
     return false;
   }
   function hugDottedGround(root) {
+    hugDottedGround.cardIn = 0;
     if (!root || root.nodeType !== 1 || typeof getComputedStyle !== "function") return 0;
     const doc = root.ownerDocument || (typeof document !== "undefined" ? document : null);
     if (!doc) return 0;
     const targets = dgTargets(root);
     if (!targets.length) return 0;
     const wraps = [], icons = [], inlineCtrls = [], blockCtrls = [];
+    let cardIn2 = 0;
     targets.forEach(({ ground, start }) => {
       if (start !== ground) {
         for (let p = start.parentElement; p && p !== ground; p = p.parentElement) {
+          if (p.classList && p.classList.contains("card")) return;
           if (dgAlpha(getComputedStyle(p).backgroundColor) >= 0.95) return;
         }
       }
       const visit = (el) => {
         if (!el || el.nodeType !== 1 || el.hidden || el.hasAttribute("data-dg")) return;
+        if (el.classList && el.classList.contains("card")) return;
+        if (typeof el.closest === "function" && el.closest(".card")) cardIn2++;
         if (el.classList && el.classList.contains("e-dot-hug")) return;
         const cs = getComputedStyle(el);
         if (cs.display === "none") return;
@@ -9563,7 +9574,7 @@ What is typed here stays in this browser.`;
           if (effBg >= 0.95) return;
           if (typeof el.matches === "function" && el.matches(DG_CTRL_SEL)) {
             if (cs.display === "inline") inlineCtrls.push(el);
-            else blockCtrls.push({ el, bgAlpha, bgColor: cs.backgroundColor, hasBgImg: !!el.style.backgroundImage });
+            else blockCtrls.push(el);
             return;
           }
         }
@@ -9620,17 +9631,23 @@ What is typed here stays in this browser.`;
       };
       visit(start);
     });
+    hugDottedGround.cardIn = cardIn2;
     let wrapped = 0;
-    for (let i = 0; i < icons.length; i++) icons[i].classList.add("e-dot-ic");
+    for (let i = 0; i < icons.length; i++) {
+      if (!icons[i].classList.contains("e-dot-ic")) icons[i].classList.add("e-dot-ic");
+    }
     for (let i = 0; i < inlineCtrls.length; i++) {
-      inlineCtrls[i].classList.add("e-dot-hug");
-      wrapped++;
+      if (!inlineCtrls[i].classList.contains("e-dot-hug")) {
+        inlineCtrls[i].classList.add("e-dot-hug");
+        wrapped++;
+      }
     }
     for (let i = 0; i < blockCtrls.length; i++) {
-      const b = blockCtrls[i];
-      if (b.bgAlpha > 0 && b.bgAlpha < 0.95 && !b.hasBgImg) b.el.style.backgroundImage = "linear-gradient(" + b.bgColor + "," + b.bgColor + ")";
-      b.el.classList.add("e-dot-ctrl");
-      b.el.style.backgroundColor = "var(--bg)";
+      const el = blockCtrls[i];
+      if (!el.classList.contains("e-dot-ctrl")) {
+        el.classList.add("e-dot-ctrl");
+        wrapped++;
+      }
     }
     for (let i = 0; i < wraps.length; i++) {
       const { parent, run, insideFlex } = wraps[i];
@@ -9649,7 +9666,7 @@ What is typed here stays in this browser.`;
       hug.className = "e-dot-hug";
       const outer = insideFlex ? doc.createElement("span") : hug;
       if (insideFlex) {
-        outer.style.minWidth = "0";
+        outer.className = "e-dot-flex";
         outer.appendChild(hug);
       }
       run[0].parentNode.insertBefore(outer, run[0]);

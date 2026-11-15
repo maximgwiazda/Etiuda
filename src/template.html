@@ -1190,7 +1190,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .seg button.on{background:transparent}
 
 .btn{padding:7px 11px;border:1px solid transparent;border-radius:var(--radius-sm);
-  background:color-mix(in srgb,var(--ink) 4%,transparent);
+  --btn-rest:color-mix(in srgb,var(--ink) 4%,transparent);background:var(--btn-rest);
   color:var(--ink);font:13px var(--sans);cursor:default;white-space:nowrap;flex:0 0 auto}
 /* .tour-sel rides along here on purpose: the tour's ←/→ selection must look exactly like
    hover, so both states share one declaration and cannot drift apart. */
@@ -3866,11 +3866,17 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .e-dot-hug{display:inline;background:var(--bg);box-shadow:0 0 0 3px var(--bg);border-radius:3px;
   -webkit-box-decoration-break:clone;box-decoration-break:clone}
 .e-dot-ic{background:var(--bg);box-shadow:0 0 0 3px var(--bg);border-radius:4px}
+.e-dot-flex{min-width:0}
 .sx-page :is(h2,.sx-group>h3,.sx-block>h3,.sx-lookside>h3){width:fit-content}
 .sx-page .mt-readings{background:var(--bg)}
 .sx-page .lw-name.add{background:var(--bg);box-shadow:0 0 0 3px var(--bg);border-radius:10px}
 .sx-crumb+h2{margin-top:2px}
-.e-dot-ctrl{background-color:var(--bg)}
+/* The page ground, and only while the control rests. Hover, focus and press do not match
+   this rule, so they keep the colours they already have. A button's veil is its own token,
+   laid over that ground: a colour read off the screen would stay after the theme changed. */
+.e-dot-ctrl:not(:hover):not(:focus-visible):not(:active){background-color:var(--bg)}
+.e-dot-ctrl.btn:not([disabled]):not(:hover):not(:focus-visible):not(:active){
+  background-image:linear-gradient(var(--btn-rest),var(--btn-rest))}
 .empty .btn:not(.primary){background:color-mix(in srgb,var(--ink) 4%,var(--bg))}
 .e-dot-ctrl[disabled],.empty .btn[disabled]{opacity:1;color:color-mix(in srgb,var(--ink) 45%,var(--bg));border-color:transparent}
 .sx-page .sc-row{min-width:0}

@@ -1875,7 +1875,8 @@ function translateTree(root){
 /* GROUND-RULE HUGGER: finds every visible element standing directly on a dotted ground (nothing
    opaque between it and the dots), never by a list of text class names, and moves its inline
    words into an inline .e-dot-hug span so cleared pixels hug every line and never wipe beside a
-   short line. Existing nodes are moved rather than rewritten, keeping all text-node handles. */
+   short line. Existing nodes are moved rather than rewritten, keeping all text-node handles.
+   A card is not entered: nothing inside it stands on the dots. */
 const DG_CTRL_SEL="button,a,input,select,textarea,.chip,kbd,.btn,.seg,[role=button],.cell-chip,.count";
 function dgAlpha(c){
   if(!c || c==="transparent") return 0;
@@ -1913,6 +1914,7 @@ function dgRunHasWords(run){
   return false;
 }
 function hugDottedGround(root){
+  hugDottedGround.cardIn=0;
   if(!root || root.nodeType!==1 || typeof getComputedStyle!=="function") return 0;
   const doc=root.ownerDocument || (typeof document!=="undefined" ? document : null);
   if(!doc) return 0;
@@ -1921,14 +1923,19 @@ function hugDottedGround(root){
   /* Two-phase Read then Write: collecting every style/wrap decision before mutating the DOM
      avoids interleaved style-recalc thrashing on large trees like Library with full catalogs. */
   const wraps=[], icons=[], inlineCtrls=[], blockCtrls=[];
+  let cardIn=0;
   targets.forEach(({ground, start})=>{
     if(start!==ground){
       for(let p=start.parentElement; p && p!==ground; p=p.parentElement){
+        if(p.classList && p.classList.contains("card")) return;
         if(dgAlpha(getComputedStyle(p).backgroundColor)>=0.95) return;
       }
     }
     const visit=el=>{
       if(!el || el.nodeType!==1 || el.hidden || el.hasAttribute("data-dg")) return;
+      /* A card is its own ground. The line the plant removes: without it the walk enters the cards. */
+      if(el.classList && el.classList.contains("card")) return;
+      if(typeof el.closest==="function" && el.closest(".card")) cardIn++;
       if(el.classList && el.classList.contains("e-dot-hug")) return;
       const cs=getComputedStyle(el);
       if(cs.display==="none") return;
@@ -1945,7 +1952,7 @@ function hugDottedGround(root){
         if(effBg>=0.95) return;
         if(typeof el.matches==="function" && el.matches(DG_CTRL_SEL)){
           if(cs.display==="inline") inlineCtrls.push(el);
-          else blockCtrls.push({el, bgAlpha, bgColor:cs.backgroundColor, hasBgImg:!!el.style.backgroundImage});
+          else blockCtrls.push(el);
           return;
         }
       }
@@ -2003,14 +2010,14 @@ function hugDottedGround(root){
     };
     visit(start);
   });
+  hugDottedGround.cardIn=cardIn;
+  /* Classes only. An inline ground beats hover, and a colour read off the screen stays after the theme changes. */
   let wrapped=0;
-  for(let i=0;i<icons.length;i++) icons[i].classList.add("e-dot-ic");
-  for(let i=0;i<inlineCtrls.length;i++){ inlineCtrls[i].classList.add("e-dot-hug"); wrapped++; }
+  for(let i=0;i<icons.length;i++){ if(!icons[i].classList.contains("e-dot-ic")) icons[i].classList.add("e-dot-ic"); }
+  for(let i=0;i<inlineCtrls.length;i++){ if(!inlineCtrls[i].classList.contains("e-dot-hug")){ inlineCtrls[i].classList.add("e-dot-hug"); wrapped++; } }
   for(let i=0;i<blockCtrls.length;i++){
-    const b=blockCtrls[i];
-    if(b.bgAlpha>0 && b.bgAlpha<0.95 && !b.hasBgImg) b.el.style.backgroundImage="linear-gradient("+b.bgColor+","+b.bgColor+")";
-    b.el.classList.add("e-dot-ctrl");
-    b.el.style.backgroundColor="var(--bg)";
+    const el=blockCtrls[i];
+    if(!el.classList.contains("e-dot-ctrl")){ el.classList.add("e-dot-ctrl"); wrapped++; }
   }
   for(let i=0;i<wraps.length;i++){
     const {parent, run, insideFlex}=wraps[i];
@@ -2028,7 +2035,7 @@ function hugDottedGround(root){
     const hug=doc.createElement("span");
     hug.className="e-dot-hug";
     const outer=insideFlex ? doc.createElement("span") : hug;
-    if(insideFlex){ outer.style.minWidth="0"; outer.appendChild(hug); }
+    if(insideFlex){ outer.className="e-dot-flex"; outer.appendChild(hug); }
     run[0].parentNode.insertBefore(outer, run[0]);
     for(let j=0;j<run.length;j++) hug.appendChild(run[j]);
     wrapped++;
