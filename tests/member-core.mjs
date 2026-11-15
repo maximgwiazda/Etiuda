@@ -51,6 +51,11 @@ function load(src, markers, names) {
 
 /* What a slice of the member core needs, in the order a reader finds them in shell/main.js.
    hpkeSeal, wrapTeamKey and branchIdOf are not on this list: the heed opens a wrap, it does not make one. */
+/* The slices of the shell that read the registry meet its own guard (regOpts, shell/win-proxy.cjs): a box is handed the
+   guard itself, and each stand-in for reg.exe is marked as one (tests/reg-stand.cjs, markStand). */
+const regRequire = createRequire(import.meta.url);
+const REG_OPTS = regRequire("../shell/win-proxy.cjs").regOpts;
+const markReg = fn => { regRequire("./reg-stand.cjs").markStand(fn); return fn; };
 const MEMBER_DECLS = ["const HPKE_KEM =", "const HPKE_SUITE =", "const SPKI_X25519 =", "function hpkeLabeledExtract(",
   "function hpkeLabeledExpand(", "function hpkeX25519Public(", "function hpkeShared(", "function hpkeSchedule(",
   "function hpkeOpen(", "const SEALED_TEAM_RE =", "const TEAM_WRAP_LABEL =", "function teamWrapInfo(",
@@ -661,12 +666,12 @@ if (M && J) {
     };
     const body = ["const { execFile, execFileSync } =", "const fs = require(\"node:fs\");", "const REG_TOOL =", "function liveSyncIo("]
       .map(m => sliceDecl(src, m)).join("\n");
-    const live = new Function("crypto", "Buffer", "require", "process", body + "\nreturn liveSyncIo;")(
+    const live = new Function("crypto", "Buffer", "require", "process", "regOpts", body + "\nreturn liveSyncIo;")(
       crypto, Buffer, function (name) {
-        if (name === "node:child_process" || name === "child_process") return { execFileSync: spy, execFile: function () { throw new Error("execFile"); } };
+        if (name === "node:child_process" || name === "child_process") return { execFileSync: markReg(spy), execFile: markReg(function () { throw new Error("execFile"); }) };
         if (name === "node:fs" || name === "fs") return { readFileSync: function () { return ""; } };
         throw new Error("require " + name);
-      }, { platform: "win32", env: {} });
+      }, { platform: "win32", env: {} }, REG_OPTS);
     const key = "HKCU:" + BSL + "Network" + BSL + "Z";
     const first = live().reg(key, "RemotePath"), afterFirst = calls.length;
     slow = false;
@@ -704,12 +709,12 @@ if (M && J) {
     };
     const body = ["const { execFile, execFileSync } =", "const fs = require(\"node:fs\");", "const REG_TOOL =", "function liveSyncIo("]
       .map(m => sliceDecl(src, m)).join("\n");
-    const live = new Function("crypto", "Buffer", "require", "process", "Date", body + "\nreturn liveSyncIo;")(
+    const live = new Function("crypto", "Buffer", "require", "process", "Date", "regOpts", body + "\nreturn liveSyncIo;")(
       crypto, Buffer, function (name) {
-        if (name === "node:child_process" || name === "child_process") return { execFileSync: spy, execFile: function () { throw new Error("execFile"); } };
+        if (name === "node:child_process" || name === "child_process") return { execFileSync: markReg(spy), execFile: markReg(function () { throw new Error("execFile"); }) };
         if (name === "node:fs" || name === "fs") return { readFileSync: function () { return ""; } };
         throw new Error("require " + name);
-      }, { platform: "win32", env: {} }, { now: () => clock });
+      }, { platform: "win32", env: {} }, { now: () => clock }, REG_OPTS);
     live();
     const afterFirst = calls.length;
     live();
@@ -752,21 +757,21 @@ if (M && J) {
       "function placeKindOk(", "function driveTops(", "function placeSlash(", "function placeLeaf(", "function placeJoin(",
       "function placeUnder(", "function placeRest(", "function syncRootsFrom(", "function placeOf(",
       "function placeCandidates(", "function placeResolve(", "function placeKept(", "function readSyncRecords(",
-      "function liveSyncIo(", "function invitePlacePlan(", "function driveLook(", "function readInvite("];
-    const asyncDecls = ["function driveSeen(", "function readInviteLooked(", "function chooseInviteFolder("];
+      "function liveSyncIo(", "function invitePlacePlan(", "function driveLook(", "function readInvite(", "function pageRemotePath("];
+    const asyncDecls = ["function driveSeen(", "function readInviteLooked(", "function chooseInviteFolder(", "function askInviteFolder("];
     const body = decls.map(m => sliceDecl(src, m)).concat(asyncDecls.map(m => "async " + sliceDecl(src, m))).join("\n");
     const parsed = { team: "t-harbour", lead: { name: "Lead", public: "ab".repeat(32) }, secret: "cd".repeat(16),
       folder: "G:" + BSL + "My Drive" + BSL + "Harbour", place: { kind: "gdrive", root: "My Drive", rel: "Harbour" } };
     const peers = {
       inviteParse: () => parsed, joinView: () => ({}), inviteDoor: () => null, inviteSettled: () => null, inviteStranded: () => false,
       teamBarred: new Set(), teamLeft: {}, folderHost: () => ({ host: "", cloud: "", local: true }), inviteCode: () => "CODE",
-      askFolder: async () => false, askDirItself: async () => false, FOLDER_ASK_MS: 50,
+      askFolder: async () => false, askDirItself: async () => false, FOLDER_ASK_MS: 50, regOpts: REG_OPTS,
     };
     const names = Object.keys(peers);
     const acts = new Function("crypto", "Buffer", "require", "process", ...names,
       body + "\nreturn { readInviteLooked, chooseInviteFolder, placeKept };")(
       crypto, Buffer, function (name) {
-        if (name === "node:child_process" || name === "child_process") return { execFileSync: spy, execFile: function () { throw new Error("execFile"); } };
+        if (name === "node:child_process" || name === "child_process") return { execFileSync: markReg(spy), execFile: markReg(function () { throw new Error("execFile"); }) };
         if (name === "node:fs" || name === "fs") return { readFileSync: function () { return ""; }, promises: { readdir: async () => [] } };
         throw new Error("require " + name);
       }, { platform: "win32", env: {} }, ...names.map(n => peers[n]));
