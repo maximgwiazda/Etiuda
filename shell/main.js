@@ -10143,6 +10143,33 @@ function signinFileRead(text, packed) {
   if (/^[0-9a-f]{64}$/.test(String(d.out))) out.out = String(d.out); /* plant:out-kept */
   return out;
 }
+/* THE FILE'S MARK: as signin.json is written this desk's key signs the certificate's signature, the code and the revocation list the
+   file keeps. Read back, a held seat whose mark does not hold under this desk's key keeps no certificate and no code, so an edit can
+   neither take a list back nor bring in a certificate this desk was not given; the next answer seats the desk again. */
+function signinMarkBytes(held, revoked) {
+  const c = held && held.cert, r = revoked && typeof revoked === "object" ? revoked : null;
+  return Buffer.from("etiuda-signin-kept\n" + [c && c.sig ? String(c.sig.value) : "", held && held.code ? String(held.code) : "",
+    r ? String(r.serial) : "0", r && r.sig ? String(r.sig.value) : ""].join("\n"), "utf8");
+}
+/* signinFileText's text with the mark `sign` makes over it; the text as it was where nothing is held or nothing signs. */
+function signinFileMarkText(text, sign) {
+  let d = null;
+  try { d = JSON.parse(String(text)); } catch { return text; }
+  if (!d || !d.held || typeof sign !== "function") return text;
+  const mark = String(sign(signinMarkBytes(d.held, d.revoked)) || "");
+  return /^[0-9a-f]{128}$/.test(mark) ? JSON.stringify(Object.assign(d, { mark: mark }), null, 1) + "\n" : text;
+}
+/* The file's held seat as this desk takes it: as read where its mark holds under `deskKey`, else with no certificate, code or doors. */
+function signinFileHeld(store, text, deskKey) {
+  const h = store && store.held;
+  if (!h || (!h.cert && !h.code)) return store;
+  let d = null;
+  try { d = JSON.parse(String(text)); } catch { d = null; }
+  let marked = false;
+  marked = !!d && /^[0-9a-f]{64}$/.test(String(deskKey || "")) && signinVerified(String(deskKey), signinMarkBytes(h, store.revoked), d.mark); /* plant:file-mark */
+  if (marked) return store;
+  return Object.assign({}, store, { held: Object.assign({}, h, { cert: null, code: "", doors: [], doorsSig: "" }) });
+}
 function signinFileText(s) {
   const revoked = signinRevokedNext(s.revoked || null, s.held ? s.held.revoked : null);
   return JSON.stringify(Object.assign({ format: 2, held: s.held ? Object.assign({}, s.held, { revoked: undefined }) : null }, s.out ? { out: s.out } : {},
@@ -10192,10 +10219,12 @@ function signinState() {
   let text = "";
   try { text = fs.readFileSync(path.join(app.getPath("userData"), SIGNIN_FILE), "utf8"); } catch { text = ""; }
   signinStore = signinFileRead(text, SIGNIN_DESK_PACKED); /* plant:door-file-packed */
+  const me = branchIdentity(false);
+  signinStore = signinFileHeld(signinStore, text, me ? me.key : ""); /* plant:file-held */
   return signinStore;
 }
 function signinSave() {
-  try { writeReplacing(path.join(app.getPath("userData"), SIGNIN_FILE), signinFileText(signinState())); }
+  try { writeReplacing(path.join(app.getPath("userData"), SIGNIN_FILE), signinFileMarkText(signinFileText(signinState()), signinSign)); } /* plant:file-mark-save */
   catch (e) { console.error("etiuda: the sign-in could not be kept - " + e.message); }
 }
 function signinSign(bytes) {

@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 157;
+const PLANTS = 160;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 141 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 142 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -93,7 +93,7 @@ const NAMES = ["SIGNIN_PROVIDERS", "signinOffered", "signinNonce", "signinAuthor
   "signinSettle", "signinRenewHeld", "seatFileText", "SEAT_NAME", "signinFileRead", "signinFileText", "branchIdOf", "inviteRead",
   "SIGNOUT_SERVICE", "signoutDeskBytes", "signoutDeskBody", "signoutAsk", "signinDoorRequest", "signinKnown", "signinPreviewing",
   "signinCodeForm", "signinSecretRead", "SIGNIN_SECRET_FILE", "SIGNIN_SECRET_SHAPE", "sealsForReal", "SIGNIN_WAIT_MS", "signinLabAt", "signinLabRead",
-  "signinLabUse", "signinDoorAddressOk", "DOOR_RELAYS", "BUILTIN_RELAY_URL", "signinDoorsSigned", "signinRevokedOk", "signinRevokedNext", "signinRevokedHas", "signinCertEarly", "SIGNIN_SKEW_MS"];
+  "signinLabUse", "signinDoorAddressOk", "DOOR_RELAYS", "BUILTIN_RELAY_URL", "signinDoorsSigned", "signinRevokedOk", "signinRevokedNext", "signinRevokedHas", "signinCertEarly", "SIGNIN_SKEW_MS", "signinFileMarkText", "signinFileHeld", "signinMarkBytes"];
 NAMES.push("SIGNIN_TRACE_ASKED", "signinTraceLine", "signinTraceSaid");
 NAMES.push("signinLanding", "signinLandingHtml", "signinLandingCsp", "SIGNIN_LAND_MS");
 /* The section, evaluated: `swap` is [from, to], put in place of the one line that holds `from`, for a plant; `invSwap` the same in the
@@ -2624,6 +2624,25 @@ CASES.certEarly = (s, swap) => {
   return s.signinCertOk(early, DESK_KEY) === true && lapsed && asked(early) === null && !!asked(near) && offered(he) === 0 && offered(hn) === 2
     && flushed(he) === false && flushed(hn) === true && knocked(he) === null && !!knocked(hn);
 };
+/* Review 15b, finding 1: the list that judges a held seat cannot be taken back by editing signin.json. The file as the desk writes it
+   carries this desk's mark; the list deleted, or replaced by an older genuine one, leaves no seat, and nothing to flush or knock with,
+   until the next answer. The wiring reads with this desk's key and saves with its mark. */
+CASES.fileMark = (s, swap) => {
+  const kept = revokedList(2, [SERVICE_PUB, STRANGER_PUB]), older = revokedList(1, [STRANGER_PUB]);
+  const text = s.signinFileMarkText(s.signinFileText({ held: heldOf({ revoked: kept }) }), signWith(signKey));
+  const read = (t, key) => s.signinFileHeld(s.signinFileRead(t), t, key === undefined ? DESK_KEY : key);
+  const edit = fn => { const d = JSON.parse(text); fn(d); return JSON.stringify(d, null, 1) + "\n"; };
+  const whole = read(text), dropped = read(edit(d => { delete d.revoked; })), rolled = read(edit(d => { d.revoked = older; }));
+  const unmarked = read(edit(d => { delete d.mark; })), otherKey = read(text, OTHER_DESK_KEY);
+  const plain = s.signinFileHeld(s.signinFileRead(s.signinFileText({ held: heldOf() })), s.signinFileText({ held: heldOf() }), DESK_KEY);
+  const none = c => !!c && c.held && c.held.cert === null && c.held.code === "" && c.held.provider === "microsoft" && c.held.refresh === "sealed:rt-1";
+  const wire = swap && WIRING.split(swap[0]).length === 2 ? WIRING.replace(swap[0], swap[1]) : WIRING;
+  const wired = /\n  signinStore = signinFileHeld\(signinStore, text, me \? me\.key : ""\);/.test(wire)
+    && /signinFileMarkText\(signinFileText\(signinState\(\)\), signinSign\)/.test(wire);
+  return !!whole.held.cert && whole.held.code === CODE && s.signinLapsed(whole.held, NOW) === true && whole.revoked.serial === 2
+    && none(dropped) && none(rolled) && none(unmarked) && none(otherKey) && none(plain) && wired
+    && !!s.signinFileRead(edit(d => { delete d.revoked; })).held.cert;
+};
 /* Review 15b, finding 3: an ended certificate is kept for the lapse's words and never written as the seat; one still running is. */
 CASES.certEndedFlush = (s, swap) => {
   const swapIn = names => (swap && names.some(n => decl(MAIN, "function " + n + "(").indexOf(swap[0]) >= 0) ? swap : undefined);
@@ -3020,6 +3039,7 @@ const LEGS = [
   ["ds25a", "revokedTaken", "the revoked keys' list is taken, signed, from the service's answer at a first sign-in and at the renewal, from a refusal too, and kept in signin.json"],
   ["ds25b", "revokedForged", "a list not the vendor's or not later than the one kept is not taken: another root, a made-up signature, keys out of order, an older or the same serial, a later one dropping a kept key, a field more; from an answer or the file alike"],
   ["ds25c", "revokedOffline", "offline, or answered with no list, the last list taken judges: the seat under its key stays lapsed"],
+  ["dlt1", "fileMark", "review 15b.1: signin.json as the desk writes it carries this desk's mark over the certificate, the code and the list; the list deleted or replaced by an older genuine one, the mark gone or read under another desk key, leaves no seat and no code while the provider and the refresh token stay; the wiring reads with this desk's key and saves with its mark"],
   ["dlt3", "certEndedFlush", "review 15b.3: an ended certificate, up to the instant of its until, reads as the calm lapse and is never written as seat.json; one still running is"],
   ["dlt2", "certEarly", "review 15b.2: a certificate issued past now and the five minutes reads as the calm lapse and stands nowhere: no door asked, offered or knocked, no seat.json; one issued inside the five minutes stands"],
   ["ds25d", "revokedLapse", "a seat under a listed key reads as the calm lapse in the view and on the page, and no door is offered, no knock sent, no request or seat.json written; under another key all stand"],
@@ -3529,6 +3549,9 @@ if (!PLANTS_OFF) {
   await plantWire("dlp2d", ["  if (signinCertEarly(cert, Date.now())) return null; /* plant:door-invite-early */\n", ""], "certEarly");
   await plantWire("dlp2e", ["  if (signinCertEarly(held.cert, now)) return []; /* plant:door-shown-early */\n", ""], "certEarly");
   await plantWire("dlp2f", ["  if (signinCertEarly(cert, Date.now())) return false; /* plant:flush-early */\n", ""], "certEarly");
+  await plant("dlp1a", ["marked = !!d && /^[0-9a-f]{64}$/.test(String(deskKey || \"\")) && signinVerified(String(deskKey), signinMarkBytes(h, store.revoked), d.mark); /* plant:file-mark */", "marked = true;"], "fileMark");
+  await plantWire("dlp1b", ["  signinStore = signinFileHeld(signinStore, text, me ? me.key : \"\"); /* plant:file-held */\n", ""], "fileMark");
+  await plantWire("dlp1c", ["signinFileMarkText(signinFileText(signinState()), signinSign)", "signinFileText(signinState())"], "fileMark");
   await plantWire("dlp3", ["  if (Date.now() >= cert.until) return false; /* plant:flush-ended */\n", ""], "certEndedFlush");
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),
