@@ -354,7 +354,7 @@ function teamObject(deps) {
     if (what === "door") return answer(c.door(rt, body), r => ({ ok: true, refs: r.refs }));
     if (what === "devices") {
       const r = c.devices(rt, body);
-      if (r.ok) closeWhere(a => r.withdrawn.indexOf(a.key) > -1, "removed"); /* plant:withdraw-sockets */
+      if (r.ok) closeWhere(a => (r.marked || r.withdrawn).indexOf(a.key) > -1, "removed"); /* plant:withdraw-sockets */
       if (r.ok) closeWhere(a => !!a.inv && !c.sessionByHash(a.ses).ok, "no-hello");
       if (r.ok && r.withdrawn.length) await arm(); /* plant:arm-gone */
       return answer(r, x => ({ rev: x.rev }));

@@ -932,6 +932,9 @@ function createCore(deps) {
     renamed = dropped.filter(([, v]) => !!v && keptPubs.has(v.pub)).map(([k]) => k.slice(4)); /* plant:devices-renamed */
     const withdrawn = dropped.map(([k]) => k.slice(4)).filter(id => renamed.indexOf(id) < 0);
     const withdrawnPubs = withdrawn.map(id => (store.get("dev:" + id) || {}).pub).filter(p => is(HEX64, p));
+    /* Every spelling of a withdrawn half: a session issued under a spelling the lead renamed since is ended with it. */
+    let marked = withdrawn;
+    marked = withdrawn.concat(...withdrawnPubs.map(namesOf)); /* plant:session-mark-names */
     store.atomic(() => {
       const ord = (store.get("ord") || 0) + 1;
       if (withdrawn.length) store.put("ord", ord); /* plant:order-gone */
@@ -955,7 +958,7 @@ function createCore(deps) {
       store.put("devrev", b.rev);
       if (from !== undefined) store.put("devfrom", { epoch: from.epoch, rev: from.rev }); /* plant:devices-from-kept */
       for (const [k, s] of store.list("ses:")) {
-        if (s.key && withdrawn.indexOf(s.key) > -1) store.put(k, Object.assign({}, s, { removed: true })); /* plant:withdraw-sessions */
+        if (s.key && marked.indexOf(s.key) > -1) store.put(k, Object.assign({}, s, { removed: true })); /* plant:withdraw-sessions */
         /* A key put back is on the team again. The session marked removed while it was off does not stay, so that bearer is no hello. */
         else if (s.key && s.removed && next.has(s.key)) store.del(k); /* plant:readd-session */
         if (s.bound && next.has(s.bound)) store.del(k); /* plant:enrol-sessions */
@@ -965,11 +968,11 @@ function createCore(deps) {
       for (const [k, s] of store.list("ses:")) {
         const inv = s.inv ? store.get("inv:" + s.inv) || {} : {}, bound = s.inv ? s.bound || inv.key : null;
         let byPub = false;
-        byPub = !!bound && inv.key === bound && withdrawnPubs.indexOf(inv.pub) > -1; /* plant:withdraw-invite-pub */
+        byPub = !!bound && is(HEX64, inv.pub) && keyMatches(bound, inv.pub) && withdrawnPubs.indexOf(inv.pub) > -1; /* plant:withdraw-invite-pub */
         if (bound && (withdrawn.indexOf(bound) > -1 || byPub)) store.put(k, Object.assign({}, s, { removed: true })); /* plant:withdraw-invite-sessions */
       }
     });
-    return { ok: true, rev: b.rev, withdrawn };
+    return { ok: true, rev: b.rev, withdrawn, marked };
   }
 
   /* Whether team file `a` is older than `b`: an earlier epoch, or an earlier rev of the same epoch. */
@@ -1269,13 +1272,18 @@ function createCore(deps) {
   /* An invitation spent by a token hello that bound this key, inside its keep: the binding ends when the keep does, at the
      time of use, whether or not a list has pruned the record by then (C2 of the read of cf90c15). After the one upload the
      same key still opens a session, until it is enrolled, the invitation is dropped or the keep ends. */
-  function boundInvite(key) {
-    const id = store.get("bk:" + key);
-    if (!is(HEX32, id)) return null;
-    const v = store.get("inv:" + id);
-    if (!v || !v.spent || v.key !== key || !is(HEX64, v.pub)) return null;
-    if (clock() - v.spentAt > KEEP_MS) return null; /* plant:bound-keep */
-    return { id, inv: v };
+  function boundInvite(key, pub) {
+    let names = [key];
+    names = spellingsOf(key, pub); /* plant:bound-either-name */
+    for (const n of names) {
+      const id = store.get("bk:" + n);
+      if (!is(HEX32, id)) continue;
+      const v = store.get("inv:" + id);
+      if (!v || !v.spent || v.key !== n || !is(HEX64, v.pub)) continue;
+      if (clock() - v.spentAt > KEEP_MS) continue; /* plant:bound-keep */
+      return { id, inv: v };
+    }
+    return null;
   }
 
   function byKey(team, rt, b) {
@@ -1300,7 +1308,7 @@ function createCore(deps) {
     if (!dev && gone) {
       if (gone.pub !== b.pub) return no("bad-signature"); /* plant:removed-sig */
       /* The invitation's session again, only where the lead registered it after this removal, for its one upload. */
-      const held = boundInvite(b.key);
+      const held = boundInvite(b.key, b.pub);
       if (held && registeredAfter(held.inv, gone) && held.inv.pub === b.pub)
         return issue(b.challenge, { key: null, inv: held.id, bound: b.key, letGo: held.inv.uploaded === true }, () => {
           for (const [k, x] of store.list("ses:")) if (x.inv === held.id) store.del(k);
@@ -1309,7 +1317,7 @@ function createCore(deps) {
     }
     if (!dev) {
       /* A key on no list that a token hello bound: the invitation's session again, for its one upload and then its answer alone, and only one held. */
-      const held = boundInvite(b.key);
+      const held = boundInvite(b.key, b.pub);
       if (held && held.inv.pub === b.pub) /* plant:invite-resume */
         return issue(b.challenge, { key: null, inv: held.id, bound: b.key, letGo: held.inv.uploaded === true }, () => {
           for (const [k, x] of store.list("ses:")) if (x.inv === held.id) store.del(k);
@@ -1365,7 +1373,7 @@ function createCore(deps) {
       return no("not-enrolled");
     }
     /* A key already bound to a request, by the door or by a token, opens that request's session again and asks nothing new. */
-    const bound = boundInvite(b.key);
+    const bound = boundInvite(b.key, b.pub);
     if (bound && bound.inv.pub === b.pub)
       return issue(b.challenge, { key: null, inv: bound.id, bound: b.key, letGo: bound.inv.uploaded === true }, () => {
         for (const [k, x] of store.list("ses:")) if (x.inv === bound.id) store.del(k);
@@ -1510,6 +1518,13 @@ function createCore(deps) {
   }
   const enrolledAs = (key, pub) => spellingsOf(key, pub).some(n => store.get("dev:" + n) !== undefined);
   const orderOf = gone => (Number.isSafeInteger(gone.ord) ? gone.ord : -1);
+  /* The enrolled row a key id names, under it or under the other spelling of the same half (a session's key, a blob's writer). */
+  function enrolledByName(id) {
+    const dev = store.get("dev:" + id);
+    if (dev !== undefined) return { id, dev };
+    for (const [k, v] of store.list("dev:")) if (v && keyMatches(id, v.pub)) return { id: k.slice(4), dev: v };
+    return null;
+  }
   /* The enrolled row of a half under whichever spelling the lead used, and that spelling, which a member's session is kept by. */
   function enrolledRow(key, pub) {
     for (const n of spellingsOf(key, pub)) { const dev = store.get("dev:" + n); if (dev !== undefined) return { id: n, dev }; }
@@ -1736,7 +1751,9 @@ function createCore(deps) {
     if (s.inv) return admitInvite(team, s, m);
     if (s.key !== m.writer) return no("no-hello"); /* plant:put-writer */
     const lead = m.writer === team.lead.keyId;
-    const dev = lead ? null : store.get("dev:" + m.writer);
+    let row = lead || store.get("dev:" + m.writer) === undefined ? null : { dev: store.get("dev:" + m.writer) };
+    row = lead ? null : enrolledByName(m.writer); /* plant:admit-either-name */
+    const dev = row ? row.dev : null;
     if (!lead && !dev) return no("removed");
     if (lead && ANSWER_PLACE.test(String(m.place))) {
       if (m.id !== String(m.place).slice(7)) return no("outside-place");
