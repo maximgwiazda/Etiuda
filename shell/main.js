@@ -5999,12 +5999,15 @@ function joinView() {
       const named = sealedOutside();
       if (named && named.team === j.team) { j.file = named.file; persistDeskEnvelope(); }
     }
-    if (!j.opened && !j.refused) {
+    /* The reveal answers only the first opening read (15l); a refusal of this commitment read after it still ends the request. */
+    let readJoins = false;
+    readJoins = !j.refused; /* plant:j14-refused-after-open */
+    if (readJoins) {
       let joins = null;
       try { joins = JSON.parse(fs.readFileSync(path.join(root, JOINS_NAME), "utf8")); } catch { /* none yet */ }
       const got = joinOpening(joins, j.team, me.id, j.commit, joinTrustPubs(j.team, root));
       if (got && got.refused) { j.refused = true; persistDeskEnvelope(); }
-      else if (got) {
+      else if (got && !j.opened) {
         try { writeJoin(joinRequestDoc(j, got)); j.opened = got; persistDeskEnvelope(); }
         catch (e) { console.error("etiuda: the request to join could not be answered - " + e.message); }
       }

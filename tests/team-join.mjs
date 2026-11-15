@@ -39,7 +39,7 @@ const ASIDE = {
   "15ep": offWindows("15ep", "15em stands aside off Windows, so lifting plant:w2-folder-not-writable has no green leg there to turn"),
 };
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 181;
+const EXPECTED = 183;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -501,6 +501,41 @@ try {
     const pf = SRC.indexOf("plant:j14-cancel-answer") >= 0 ? await answeredForger("j14a-plant", planted) : null;
     check(!!pf && pf.pinned && pf.pinAfter, "j14a2 lifting plant:j14-cancel-answer leaves the answered pin after Cancel (FAIL j14a): "
       + JSON.stringify(pf));
+  }
+
+  /* ---- review 14, finding 4: the lead opens a request and then refuses it; the refusal read after the opening ends it. ---- */
+  const refusedAfterOpen = async (name, src) => {
+    const share = folder(name + "-share");
+    put(share, "etiuda-team.json", teamFile([]));
+    put(share, "lamps.ec", P.sealCatalog(K1, TEAM, 1, A1));
+    const ud = path.join(LAB, name);
+    fs.mkdirSync(ud, { recursive: true });
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: share, eUiLang: "en" } }), "utf8");
+    const D = loadDesk(ud, src);
+    syncFolder(share);
+    const me = await D.ask("etiuda:branch-identity", true);
+    await D.join("ask", "lamps.ec", "Lena");
+    const req = JSON.parse(fs.readFileSync(path.join(share, "desks", me.id, "join.json"), "utf8"));
+    const lamp = nonce();
+    put(share, P.JOINS_NAME, joins([{ desk: me.id, commit: req.commit, nonce: lamp }]));
+    const coded = await D.join("state");
+    put(share, P.JOINS_NAME, joins([{ desk: me.id, commit: req.commit, refused: true }]));
+    const after = await D.join("state");
+    put(share, P.JOINS_NAME, joins([{ desk: me.id, commit: req.commit, nonce: nonce() }]));
+    const reopened = await D.join("state");
+    return { coded: coded.join ? coded.join.state : null, after: after.join ? after.join.state : null, reopened: reopened.join ? reopened.join.state : null,
+      reveal: JSON.parse(fs.readFileSync(path.join(share, "desks", me.id, "join.json"), "utf8")).opened.nonce === lamp };
+  };
+  const ro = await refusedAfterOpen("j14d");
+  check(ro.coded === "code" && ro.after === "refused" && ro.reopened === "refused" && ro.reveal,
+    "j14d review 14.4: a refusal of this commitment read after the opening the desk revealed against ends the request as refused, and a"
+    + " later opening neither lifts it nor moves the reveal (commit then reveal holds): " + JSON.stringify(ro));
+  if (PLANTS_OFF) skip("j14d2 lifting plant:j14-refused-after-open leaves the opened request saying its code after the refusal (ETIUDA_PLANTS=off)");
+  else {
+    const planted = SRC.split("\n").map(l => (l.indexOf("plant:j14-refused-after-open") >= 0 ? "    readJoins = !j.opened && !j.refused;" : l)).join("\n");
+    const pr = SRC.indexOf("plant:j14-refused-after-open") >= 0 ? await refusedAfterOpen("j14d-plant", planted) : null;
+    check(!!pr && pr.after === "code", "j14d2 lifting plant:j14-refused-after-open leaves the opened request saying its code after the refusal"
+      + " (FAIL j14d): " + JSON.stringify(pr));
   }
 
   /* ---- the envelope keeps the request across a restart ------------------------------------------------------------ */
