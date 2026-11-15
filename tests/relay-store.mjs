@@ -13,7 +13,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-store-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 48;
+const EXPECTED = 54;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -363,6 +363,35 @@ async function main() {
     check(r.ok === true, id + " " + line + ": " + r.detail);
     return r;
   };
+  /* st5: a store's own schedule. A store made sixty days before the person's seat goes, renewed once a day by the service's grant rule
+     (store/grant: ending at the trial's or the paid licence's end and at most the relay's longest span on, paid where it is no trial, none
+     once the seat is gone), its alarm rung each day as the runtime rings it. `days` from the seat going to the instant the row says it is
+     swept, `emptied` the day the row was found gone. */
+  const L5 = 60;
+  async function scheduleRun(seat) {
+    const R = envOf();
+    R.clock.now = T0;
+    const L = T0 + L5 * DAY, s = seat(L), trial = s.trialEnds != null, lead = keyPair(false), rt = hex(16);
+    const grantAt = at => storeGrant(lead.pub, CODE, at, { fields: { until: Math.min(trial ? s.trialEnds : s.paidUntil, at + C.GRANT_MAX_MS), paid: !trial } });
+    const made = await createAs(R, rt, lead, grantAt(T0));
+    if (made.status !== 200) throw new Error("the store was not made: " + said(made));
+    let renewed = 0;
+    for (let d = 1; T0 + d * DAY < L; d++) {
+      R.clock.now = T0 + d * DAY;
+      const r = await call(R, "POST", "/relay/v1/t/" + rt + "/grant", { json: { grant: grantAt(R.clock.now) } });
+      if (r.status === 200) renewed++;
+      await R.ring(rt);
+    }
+    const row = () => (R.stores.get(rt) ? R.stores.get(rt).get("team") : null);
+    const at = row(), swept = at ? C.lapseOf(at, L).swept : null;
+    let emptied = null;
+    for (let d = 1; d <= 200 && emptied === null; d++) { R.clock.now = L + d * DAY; await R.ring(rt); if (!row()) emptied = d; }
+    return { renewed, days: swept === null ? null : (swept - L) / DAY, emptied };
+  }
+  const schedule = (seat, want) => async () => {
+    const r = await scheduleRun(seat);
+    return { ok: r.renewed === L5 - 1 && r.days === want && r.emptied === want, detail: brief(r) };
+  };
   const LEGS = [
     ["st1a", opensScene, "a store made by a store grant: a desk with a current store certificate for the person's code opens a session, uploads, lists and reads"],
     ["C11", enrolledByFileScene, "a key enrolled with the folder's S, holding no current store certificate for the person's code (none, another person's, another desk's), opens no session and reads no blob; the person's desk still opens"],
@@ -374,6 +403,10 @@ async function main() {
     ["st3b", grantShapeScene, "a store grant without its code, with a code out of shape, with seats, or signed over the relay grant's label is refused at the create"],
     ["st4a", endScene, "the service's store-end deletes every object before it answers, leaves only the ended mark, and the id is never made again"],
     ["st4b", noticeRefusedScene, "a notice of another kind, an unknown kind, another id, stale, older than the store, under a delegation that may not grant, forged, revoked, for another person, or for a lead's team, is refused and the store stays whole"],
+    ["st5t", schedule(L => ({ trialEnds: L }), 29), "a trial that ends: the store is swept 30 days after its last grant was issued, the day before, so 29 days on"],
+    ["st5u", schedule(L => ({ trialEnds: L + 40 * DAY }), 40), "a trial seat freed 40 days before the trial would end: swept at its last grant's end, 40 days on, the one case past 30 days after the last grant"],
+    ["st5p", schedule(L => ({ paidUntil: L }), 89), "a paid licence that ends: swept 90 days after the last grant was issued, 89 days on"],
+    ["st5f", schedule(L => ({ paidUntil: L + 365 * DAY }), 89), "a paid seat freed with the licence running: swept 90 days after the last grant was issued, 89 days on"],
   ];
   for (const [id, scene, line] of LEGS) await leg(id, scene, line);
 
@@ -451,6 +484,8 @@ async function main() {
     ["core", "notice-revoked", "st4b", "a revoked key's notice is taken"],
     ["core", "notice-code", "st4b", "a notice for another person ends the store, or one ends a lead's team"],
     ["core", "notice-after-store", "st4b", "a notice older than the store ends it"],
+    ["core", "store-schedule", "st5f", "a store swept by the team rule, 90 days after its last grant's end"],
+    ["core", "store-issue-renew", "st5p", "a renewal that moves nothing else keeps the first issue, so the store goes sooner than 90 days after the last"],
   ];
   for (const [file, tag, id, what] of PLANTS) {
     const line = "p " + id + " lifting plant:" + tag + " in a copy of relay/" + file + ".cjs turns " + id + " red (" + what + "), and the product file is never written";

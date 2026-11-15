@@ -47,6 +47,10 @@ const META_MAX = 4096;
 const WORK_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
 const READ_AFTER_MS = 90 * 24 * 60 * 60 * 1000;
 const TRIAL_KEEP_MS = 30 * 24 * 60 * 60 * 1000;
+/* A PERSON'S STORE keeps its own schedule (storeLapseOf): swept STORE_KEEP_* after the last store grant it took was issued, never before that
+   grant's end. The service gives one only while the person holds a seat, and each look of a seated computer asks one. */
+const STORE_KEEP_PAID_MS = 90 * 24 * 60 * 60 * 1000;
+const STORE_KEEP_TRIAL_MS = 30 * 24 * 60 * 60 * 1000;
 /* THE STANDING DOOR's own bounds. Anyone can obtain a seat certificate for some licence, so beside the relay's caps the door
    holds: the licence references one team names, a certificate's size before anything reads it, the requests a team holds from
    keys it has not enrolled, those of one person (the licence service's three desks a person), the new ones in an hour, and the
@@ -410,6 +414,7 @@ const RANK = { working: 3, "read-only": 2, lapsed: 1, gone: 0 };
    until has nothing to count from: it reads as lapsed and is never swept by the clock. */
 function lapseOf(team, now) {
   if (!team || !Number.isSafeInteger(team.until)) return { state: "lapsed", until: null, readOnly: null, swept: null };
+  if (storeRow(team)) return storeLapseOf(team, now); /* plant:store-schedule */
   const u = team.until;
   let p = u;
   p = paidEnd(team); /* plant:lapse-trial */
@@ -420,8 +425,20 @@ function lapseOf(team, now) {
   const swept = p === null ? u + TRIAL_KEEP_MS : Math.max(u + TRIAL_KEEP_MS, p + READ_AFTER_MS);
   return { state: RANK[paid] >= RANK[trial] ? paid : trial, until: u, readOnly, swept };
 }
+/* A store row that has kept its last grant's issue (storeIssued): working to its grant's end, then renewal alone, then swept. */
+const storeRow = team => !!team && typeof team.store === "string" && Number.isSafeInteger(team.storeIssued) && Number.isSafeInteger(team.until);
+function storeLapseOf(team, now) {
+  const u = team.until, swept = Math.max(u, team.storeIssued + (team.storePaid === true ? STORE_KEEP_PAID_MS : STORE_KEEP_TRIAL_MS));
+  return { state: now < u ? "working" : now < swept ? "lapsed" : "gone", until: u, readOnly: null, swept };
+}
+/* What a store row keeps of a store grant it takes: the latest issue, and whether that grant was paid. */
+function storeIssue(team, grant) {
+  if (!isStoreGrant(grant) || (team && Number.isSafeInteger(team.storeIssued) && team.storeIssued >= grant.issued)) return {};
+  return { storeIssued: grant.issued, storePaid: grant.paid === true };
+}
 /* The instant a team turns lapsed, or null where it goes from read-only or working straight to gone. */
 function lapsedFrom(team) {
+  if (storeRow(team)) { const s = storeLapseOf(team, 0); return s.until < s.swept ? s.until : null; }
   const l = lapseOf(team, 0);
   if (l.until === null) return null;
   const p = paidEnd(team), from = p === null ? l.until : Math.max(l.until, p + READ_AFTER_MS);
@@ -691,6 +708,7 @@ function createCore(deps) {
       Object.assign(row, paidApart);
       if (typeof row.secret !== "string") row.secret = random(32);
       if (!team && isStoreGrant(b.grant)) Object.assign(row, { store: storeMark(row.secret, b.grant.code), storeAt: clock() });
+      if (takes) Object.assign(row, storeIssue(team, b.grant));
       store.put("team", row);
       if (team) resumeHeld(team, clock());
       store.del("swept");
@@ -735,9 +753,12 @@ function createCore(deps) {
     const made = needsMade ? random(8) : team.made; /* plant:renew-made */
     let clears = true;
     clears = moves; /* plant:renew-moved */
+    /* A store grant issued later than the one kept is taken for its issue even where it moves nothing else (storeLapseOf). */
+    let issue = {};
+    issue = team.store ? storeIssue(team, b.grant) : {}; /* plant:store-issue-renew */
     store.atomic(() => {
-      if (needsMade || moves) {
-        const row = Object.assign({}, team, { until: next.until, paid: next.paid, made });
+      if (needsMade || moves || Number.isSafeInteger(issue.storeIssued)) {
+        const row = Object.assign({}, team, { until: next.until, paid: next.paid, made }, issue);
         delete row.paidUntil;
         if (next.paidUntil !== undefined) row.paidUntil = next.paidUntil;
         store.put("team", row);
@@ -2036,7 +2057,7 @@ function createCore(deps) {
     const now = clock(), l = lapseOf(team, now), times = [];
     if (l.readOnly !== null && l.readOnly > now) times.push(l.readOnly);
     if (l.swept !== null && l.swept > now) times.push(l.swept);
-    if (paidEnd(team) === null && l.until !== null && l.until > now) times.push(l.until);
+    if ((paidEnd(team) === null || storeRow(team)) && l.until !== null && l.until > now) times.push(l.until);
     return times.length ? Math.min.apply(null, times) : null;
   }
 
@@ -2049,7 +2070,7 @@ function createCore(deps) {
 
 module.exports = {
   CHALLENGE_MS, CHALLENGE_SHARE, SESSION_MS, CALL_SKEW_MS, DELEGATION_MAX_MS, KEEP_MS, REMOVED_KEEP_MS, GONE_KEEP_MS, SWEPT_KEEP_MS, TOKEN_TRIES, INVITES_MAX, INVITE_UPLOAD_MAX, BLOB_MIN, BLOBS_MAX,
-  SESSIONS_MAX, SESSION_SHARE, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, lapseOf, keptGrant, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
+  SESSIONS_MAX, SESSION_SHARE, KEYS_MAX, SINCE_MAX, ROOT_PUB, GRANT_MAX_MS, WORK_AFTER_MS, READ_AFTER_MS, TRIAL_KEEP_MS, STORE_KEEP_PAID_MS, STORE_KEEP_TRIAL_MS, lapseOf, keptGrant, canon, createBytes, create2Bytes, devicesBytes, invitesBytes, helloBytes,
   LEAD_PREFIX, leadBytes, judgeLead,
   DOOR_REFS_MAX, DOOR_CERT_MAX, DOOR_LIVE_MAX, DOOR_PER_PERSON, DOOR_RATE_MAX, DOOR_RATE_MS, DOOR_TRY_SHARE, CERT_SPAN_MS, SEAT_MARGIN_MS, POOLED_GRACE_MS, SEAT_QUIET_MS, FREED_MAX,
   doorBytes, doorHelloBytes, certBytes, certWhy, storeDevicesBytes,

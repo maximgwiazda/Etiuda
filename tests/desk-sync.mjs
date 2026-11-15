@@ -477,10 +477,10 @@ async function main() {
     return { before, after: after.state, running: a.sync().running(), days: swept === null ? null : (swept - L) / DAY, emptied };
   }
   const SEATS = {
-    C11t: [L => ({ trialEnds: L }), r => r.days === 30 && r.emptied === 30],
-    C11u: [L => ({ trialEnds: L + 40 * DAY, lost: L }), r => r.days === 70 && r.emptied === 70],
-    C11p: [L => ({ paidUntil: L }), r => r.days === 90 && r.emptied === 90],
-    C11f: [L => ({ paidUntil: L + 365 * DAY, lost: L }), r => r.days === 134 && r.emptied === 134],
+    C11t: [L => ({ trialEnds: L }), r => r.days === 29 && r.emptied === 29],
+    C11u: [L => ({ trialEnds: L + 40 * DAY, lost: L }), r => r.days === 40 && r.emptied === 40],
+    C11p: [L => ({ paidUntil: L }), r => r.days === 89 && r.emptied === 89],
+    C11f: [L => ({ paidUntil: L + 365 * DAY, lost: L }), r => r.days === 89 && r.emptied === 89],
   };
   const seatLeg = id => async () => {
     const r = await seatScene(id.toLowerCase(), SEATS[id][0]);
@@ -499,10 +499,10 @@ async function main() {
     ["C8x", () => sameScene("b"), "the same card hidden on one computer and shown again on the other, beside a different card hidden on each: that card is the one conflict, waiting on both computers, each keeping its own in place, and the person's choice of the hide on the computer that showed it stands on both"],
     ["C8y", () => sameScene("a"), "the same conflict chosen on the computer that hid the card, for the showing again kept there as a removal: it stands on both and nothing waits"],
     ["C10o", outboxScene, "a lapsed store certificate pauses sync and sends nothing; edits wait in the outbox and at the next look that is on are sent, and what came is taken"],
-    ["C11t", seatLeg("C11t"), "a trial that ends, its store renewed at each look: working the day before, sync stops at the seat's end, and the relay sweeps the store 30 days on"],
-    ["C11u", seatLeg("C11u"), "a trial seat freed 40 days before the trial would end: sync stops, and the store is swept 30 days after the last grant's end, 70 days on"],
-    ["C11p", seatLeg("C11p"), "a paid licence that ends: sync stops, and the store is swept 90 days on"],
-    ["C11f", seatLeg("C11f"), "a paid seat freed with the licence running: sync stops, and the store is swept 90 days after the last grant's end, 134 days on"],
+    ["C11t", seatLeg("C11t"), "a trial that ends, its store renewed at each look: working the day before, sync stops at the seat's end, and the relay sweeps the store 30 days after the last look that held a seat, 29 days on"],
+    ["C11u", seatLeg("C11u"), "a trial seat freed 40 days before the trial would end: sync stops, and the store is swept at the last grant's end, 40 days on, the one case past 30 days after the last look"],
+    ["C11p", seatLeg("C11p"), "a paid licence that ends: sync stops, and the store is swept 90 days after the last look that held a seat, 89 days on"],
+    ["C11f", seatLeg("C11f"), "a paid seat freed with the licence running: sync stops, and the store is swept 90 days after the last look that held a seat, 89 days on"],
     ["C1a", raceScene, "two computers that each read back their own store both replace and the earlier store ends; the earlier computer adopts the folder's store at its next look and every edit it made reaches the new store"],
   ];
   for (const [id, scene, line] of LEGS) {
