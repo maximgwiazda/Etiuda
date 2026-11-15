@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 590;
+const EXPECTED = 592;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -5912,6 +5912,43 @@ async function main() {
       const retryLift = await editTeam(lineLifted("plant:migrate-retry"), async T => !(await retryScene(T)).ok);
       check(retried.ok && retryLift.turned && retryLift.back, "r2n lifting plant:migrate-retry leaves the warm object unrenamed (r2m red), and"
         + " the product file is never written: " + how(retryLift));
+    }
+
+    /* 4 (board 1003): a listed id asked dead, then reserved again while the asks run (a retried create) and holding by the write, is
+       not dropped: the lead's count is not left one short, and the new reserve at the bound is refused. */
+    async function reaffirmScene(teamMod) {
+      const T = teamMod || teamSrc;
+      const store = S.memoryStore(), lead = keyPair(false), listed = [];
+      for (let i = 0; i < CAP; i++) listed.push(hex(16));
+      const back = listed[0], live = { back: false };
+      store.put("lead", { rts: listed.slice(), leadKey: lead.keyId });
+      const ns = { idFromName: n => n, get: id => ({ fetch: async () => {
+        const held = id !== back || live.back;
+        await new Promise(r => setTimeout(r, 2));
+        return new Response(JSON.stringify({ held }), { status: 200 });
+      } }) };
+      const obj = T.teamObject({ store, clock: () => T0L, teams: () => ns, sockets: S.socketHub(), r2: S.memoryBucket(), revoked: () => [] });
+      const ask = rt => obj.fetch(T.leadRequest({ op: "reserve", rt, lead: lead.keyId }))
+        .then(async r => { const text = await r.text(); let json = null; try { json = JSON.parse(text); } catch { json = null; } return { status: r.status, json }; });
+      const fresh = hex(16);
+      const pending = ask(fresh);
+      await new Promise(r => setTimeout(r, 8));
+      const repeat = await ask(back);
+      live.back = true;
+      const r = await pending;
+      const after = ((store.get("lead") || {}).rts || []).slice();
+      const ok = repeat.status === 200 && repeat.json && repeat.json.added === false && after.indexOf(back) >= 0 && refused(r, "team-count")
+        && after.indexOf(fresh) < 0 && after.length === CAP;
+      return { ok, detail: JSON.stringify({ repeat: repeat.json, fresh: r.status === 200 ? "taken" : answer(r), backListed: after.indexOf(back) >= 0, length: after.length }) };
+    }
+    const reaffirmed = await reaffirmScene();
+    check(reaffirmed.ok, "r2o a listed team asked dead and reserved again while the asks ran stays on the lead's list, and the new reserve at"
+      + " the bound is refused team-count: " + reaffirmed.detail);
+    if (PLANTS_OFF) skip("r2p lifting plant:lead-reaffirm drops that team (r2o red)");
+    else {
+      const reaffirmLift = await editTeam(lineLifted("plant:lead-reaffirm"), async T => !(await reaffirmScene(T)).ok);
+      check(reaffirmed.ok && reaffirmLift.turned && reaffirmLift.back, "r2p lifting plant:lead-reaffirm drops that team (r2o red), and the product"
+        + " file is never written: " + how(reaffirmLift));
     }
 
     // 933a: move signed by old lead is taken, new key hello opens lead session

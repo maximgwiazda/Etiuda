@@ -239,6 +239,20 @@ function teamObject(deps) {
   /* Reserve or release one rt on this lead's list. A repeat of an id already listed is taken and does not raise the
      count. At the bound, each listed team's object is asked once and a dead id is dropped before the new one is refused.
      A reserve answers whether it added the rt: a place it did not add is not the caller's to give back. */
+  /* A listed id reserved again (a retried create) while a reserve or the alarm was asking: it may hold by the time the list is
+     written, so an ask's earlier "dead" for it no longer drops it (finding 4 of the fifth Grok review of Part A, board 1003). The
+     ticks live with this wake, which is where the asks and their reserves meet; a miss leaves an id listed, never one dropped. */
+  let asksTick = 0;
+  const reaffirmed = new Map();
+  function reaffirm(rt) {
+    reaffirmed.set(rt, ++asksTick);
+    return reply(200, { ok: true, added: false });
+  }
+  function heldAgain(id, askedAt) {
+    let counted = false;
+    counted = (reaffirmed.get(id) || 0) > askedAt; /* plant:lead-reaffirm */
+    return counted;
+  }
   async function leadAnswer(request) {
     const bytes = await readCapped(request, JSON_MAX);
     let body = null;
@@ -258,8 +272,9 @@ function teamObject(deps) {
     const leadKey = lead || (row && row.leadKey) || null;
     let repeats = false;
     repeats = true; /* plant:lead-repeat */
-    if (repeats && rts.indexOf(rt) !== -1) return reply(200, { ok: true, added: false });
+    if (repeats && rts.indexOf(rt) !== -1) return reaffirm(rt);
     const ns = rts.length >= TEAMS_PER_LEAD ? namespaceOf(deps.teams) : null;
+    const askedAt = asksTick;
     const dead = new Set();
     if (ns) {
       for (const id of rts) {
@@ -275,10 +290,10 @@ function teamObject(deps) {
       let now = row;
       now = deps.store.get("lead"); /* plant:lead-reread */
       let list = now && Array.isArray(now.rts) ? now.rts.filter(x => typeof x === "string") : [];
-      if (repeats && list.indexOf(rt) !== -1) return reply(200, { ok: true, added: false });
+      if (repeats && list.indexOf(rt) !== -1) return reaffirm(rt);
       if (ns) {
         let kept = list;
-        kept = list.filter(id => !dead.has(id) ); /* plant:lead-reap */
+        kept = list.filter(id => !dead.has(id) || heldAgain(id, askedAt)); /* plant:lead-reap */
         list = kept;
         deps.store.put("lead", Object.assign({}, now, { rts: list, leadKey }));
       }
