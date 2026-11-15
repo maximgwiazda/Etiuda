@@ -1164,10 +1164,27 @@ function applyLibView(page){
 }
 /* The fades are measured where the page is drawn: the nav and the section shown, or every section a search shows. */
 function markLibCut(page){
-  if(libFold(libQuery)){ markCutText(page); return; }
-  const nav=page.querySelector(".sx-nav"), sec=page.querySelector('details.manage-sec[data-mg="'+libOn+'"]');
+  const nav=page.querySelector(".sx-nav");
   if(nav) markCutText(nav);
+  if(libFold(libQuery)){
+    page.querySelectorAll("details.manage-sec").forEach(sec=>{ if(!sec.hasAttribute("hidden")) markCutText(sec); });
+    return;
+  }
+  const sec=page.querySelector('details.manage-sec[data-mg="'+libOn+'"]');
   if(sec) markCutText(sec);
+}
+/* A search keystroke filters the drawn list in place rather than drawing the Library again. */
+function filterLibPage(page){
+  if(!page || !page.isConnected || page!==libPage() || libView!=="list") return false;
+  applyLibView(page);
+  const at=page.querySelector("#libPage");
+  if(at) at.scrollTop=0;
+  markLibCut(page);
+  const intSec=page.querySelector('details.manage-sec[data-mg="intents"]');
+  if(intSec && !intSec.hasAttribute("hidden")) markChipOverflow();
+  const catSec=page.querySelector('details.manage-sec[data-mg="catmac"]');
+  if(catSec && !catSec.hasAttribute("hidden")) updateTreeHoverTitles(page);
+  return true;
 }
 /* A section press shows a section the last paint already drew, as Settings' press does, and measures only what it
    uncovered; false where there is no drawn list to show it in, and the caller paints. */
@@ -1185,21 +1202,23 @@ function wireLibShell(page){
   if(!page||typeof page.querySelectorAll!=="function") return;
   const buttons=page.querySelectorAll(".sx-sec[data-lm]");
   if(!buttons||!buttons.length) return;
+  const find=page.querySelector("#libSearch");
   buttons.forEach(b=>{
     b.onclick=()=>{
-      const wasList=libView==="list" && !libFold(libQuery);
+      const wasList=libView==="list";
       libView="list";
       libOn=b.getAttribute("data-lm")||libOn;
       libQuery="";
       mgOpen.add(libOn);
+      if(find) find.value="";
       if(wasList && showLibSection(page)) return;
       paintLibrary();
     };
   });
-  const find=page.querySelector("#libSearch");
   if(find){
     find.oninput=()=>{
       libQuery=find.value;
+      if(filterLibPage(page)) return;
       const at=find.selectionStart;
       paintLibrary();
       const again=document.getElementById("libSearch");
@@ -1212,6 +1231,8 @@ function wireLibShell(page){
       e.preventDefault();
       if(e.stopPropagation) e.stopPropagation();
       libQuery="";
+      find.value="";
+      if(filterLibPage(page)) return;
       paintLibrary();
     });
   }
@@ -1579,7 +1600,14 @@ function paintLibrary(host,body){
   const isHist=libView==="history";
   const name=catalogFileName();
   const fk=focusKey(document.activeElement,host);
-  const html='<div class="sx lm lm-lib lib-screen lib-list'+(isHist?' is-history':'')+'" tabindex="-1">'
+  const bodyHtml=isHist ? "" : (body||openManage(true));
+  const key=isHist ? "" : [
+    name, libFind(), libSections().map(s=>s.key+":"+s.name).join("\0"),
+    formatActionChord("maintenance"), bodyHtml
+  ].join("\x01");
+  const kept=!isHist && libDrawn && libDrawn.key===key && libDrawn.page.isConnected===false ? libDrawn.page : null;
+  if(kept) host.replaceChildren(kept);
+  else host.innerHTML='<div class="sx lm lm-lib lib-screen lib-list'+(isHist?' is-history':'')+'" tabindex="-1">'
     +'<div class="lm-split">'
     +'<nav class="sx-nav" aria-label="'+esc(t("Library"))+'">'+libraryHeadHtml()
     +'<label class="sx-search">'+lmIcon("search")
@@ -1596,15 +1624,14 @@ function paintLibrary(host,body){
       : '<div class="sx-page" id="libPage"><div class="sx-crumb">'+esc(t("Library"))
         +(name?' · <span data-i18n-skip>'+esc(name)+'</span>':'')+'</div>'
         +'<h2 id="libTitle" data-i18n-skip></h2><p class="lede" id="libLede" data-i18n-skip></p>'
-        +'<div class="sx-card">'+(body||openManage(true))+'</div></div>')
+        +'<div class="sx-card">'+bodyHtml+'</div></div>')
     +'</div>'
     +(isHist ? '<div class="screen-actions"><div class="mf-left"></div><button type="button" class="btn primary" id="ehClose">'+esc(t("Back to the Library"))+'</button></div>' : '')+'</div>';
-  const kept=!isHist && libDrawn && libDrawn.html===html && libDrawn.page.isConnected===false ? libDrawn.page : null;
-  if(kept) host.replaceChildren(kept);
-  else host.innerHTML=html;
   const page=kept || host.querySelector(".lib-list");
-  libDrawn=isHist ? null : { html, page };
+  libDrawn=isHist ? null : { key, page };
   if(kept){
+    const findEl=page.querySelector("#libSearch");
+    if(findEl && findEl.value!==libQuery) findEl.value=libQuery;
     applyLibView(page);
     const at=page.querySelector("#libPage");
     if(at) at.scrollTop=0;
