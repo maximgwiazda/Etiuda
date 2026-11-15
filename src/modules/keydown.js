@@ -18,6 +18,7 @@ import { closeNotePane } from "./note-pane.js";
 import { eHost } from "./host.js";
 import { closeMoreMenu, closeSettingsMenu } from "./header-menus.js";
 import { closeTabList } from "./tabs.js";
+import { firstSigninOpenNow, skipFirstSignin } from "./signin.js";
 import { hooks } from "./hooks.js";
 
 /* Reaching for the search box dismisses the loose overlays: quick facts and the settings
@@ -142,6 +143,18 @@ function wireGlobalKeydown(){
       if(e.key==="Tab" && !e.ctrlKey && !e.altKey && !e.metaKey){
         const to=tabTargetIn(cover.querySelector(".modal-card"), e.shiftKey);
         if(to){ e.preventDefault(); try{ to.focus({preventScroll:true}); }catch(x){ to.focus(); } }
+      }
+      return;
+    }
+
+    if(firstSigninOpenNow()){
+      if(eventMatchesAction(e,"escape") || e.key==="Escape"){
+        e.preventDefault(); e.stopPropagation(); skipFirstSignin(); return;
+      }
+      if(e.key==="Tab" && !e.ctrlKey && !e.altKey && !e.metaKey){
+        const to=tabTargetIn($("#firstSignin"), e.shiftKey);
+        if(to){ e.preventDefault(); try{ to.focus({preventScroll:true}); }catch(x){ to.focus(); } }
+        return;
       }
       return;
     }

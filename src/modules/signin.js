@@ -80,14 +80,63 @@ function tellFirstSigninClosed(){
   const w=firstSigninWaits; firstSigninWaits=[];
   w.forEach(fn=>fn());
 }
+function firstSigninOpenNow(){ return !!firstSigninOpen; }
+function firstSigninMarkHtml(){
+  const svg=typeof document!=="undefined" ? document.querySelector(".brand-tile svg") : null;
+  if(!svg) return "";
+  return '<div class="fs-mark" aria-hidden="true">'+svg.outerHTML.replace(/id="depth"/g,'id="depth-first-signin"').replace(/url\(#depth\)/g,"url(#depth-first-signin)")+'</div>';
+}
 function paintFirstSignin(){
   if(!firstSigninOpen || typeof document==="undefined") return;
   const el=$("#firstSignin"); if(!el) return;
-  if(!el.querySelector("#firstSigninSkip")){
-    el.innerHTML='<div class="fs-wrap"><button type="button" class="btn" id="firstSigninSkip">Not now</button></div>';
+  const hadFocus=el.contains(document.activeElement);
+  const d=signinDoor(signinV);
+  const skipBtn='<button type="button" class="btn fs-skip-btn" id="firstSigninSkip">'+esc(t("Not now"))+'</button>';
+  const skipLine='<p class="fs-skip-line">'+esc(t("The desk opens as it is, and Sign in stays in the bar at the top for later."))+'</p>';
+  let rightBody="";
+  if(d && d.moment==="before"){
+    rightBody=signinPanelHtml(Object.assign({}, d, {heading:"", line:"", privacy:"", foot:""}))
+      +'<p class="sgn-lede fs-right-note">'+esc(t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in."))+'</p>'
+      +(d.privacy ? '<p class="sgn-cap fs-privacy">'+esc(d.privacy)+'</p>' : "")
+      +'<div class="fs-skip">'+skipBtn+skipLine+'</div>';
+  }else if(d){
+    rightBody=signinPanelHtml(Object.assign({}, d, {foot:""}));
   }
-  const skip=$("#firstSigninSkip");
-  if(skip) skip.onclick=()=>closeFirstSignin();
+  el.innerHTML='<div class="fs-grid">'
+    +'<div class="fs-left"><div class="fs-left-in"><div class="fs-body">'
+      +firstSigninMarkHtml()
+      +'<h1 id="fsHeading">'+esc(t("Sign in to Etiuda"))+'</h1>'
+      +'<p class="fs-lede">'+esc(t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three."))+'</p>'
+      +'<h2 class="fs-steps-h">'+esc(t("What happens"))+'</h2>'
+      +'<ol class="fs-steps">'
+        +'<li><span class="fs-step-n" aria-hidden="true">1</span><span>'+esc(t("The browser opens the sign-in page"))+'</span></li>'
+        +'<li><span class="fs-step-n" aria-hidden="true">2</span><span>'+esc(t("You choose your account there"))+'</span></li>'
+        +'<li><span class="fs-step-n" aria-hidden="true">3</span><span>'+esc(t("Etiuda carries on here by itself"))+'</span></li>'
+      +'</ol>'
+    +'</div><p class="fs-foot">'+esc(t("No licence key to keep"))+'</p></div></div>'
+    +'<div class="fs-right"><div class="fs-right-in">'
+      +'<h2 class="fs-rh">'+esc(t("Signing in"))+'</h2>'
+      +rightBody
+    +'</div></div></div>';
+  if(d && d.moment==="refused"){
+    const acts=el.querySelector(".sgn-acts");
+    if(acts){
+      acts.insertAdjacentHTML("beforeend", skipBtn);
+      acts.insertAdjacentHTML("afterend", skipLine);
+    }else{
+      const rin=el.querySelector(".fs-right-in");
+      if(rin) rin.insertAdjacentHTML("beforeend", '<div class="fs-skip">'+skipBtn+skipLine+'</div>');
+    }
+  }
+  if(hadFocus){
+    const first=el.querySelector("button:not(:disabled), input");
+    if(first) try{ first.focus({preventScroll:true}); }catch(e){ first.focus(); }
+  }
+}
+function skipFirstSignin(){
+  if(!firstSigninPending && !firstSigninOpen) return;
+  if(signinV && signinV.busy) signinCall("signinStop");
+  closeFirstSignin();
 }
 function openFirstSignin(){
   firstSigninPending=false;
@@ -98,6 +147,10 @@ function openFirstSignin(){
   const el=$("#firstSignin");
   if(el){ el.hidden=false; el.setAttribute("aria-hidden","false"); }
   paintFirstSignin();
+  if(el){
+    const first=el.querySelector("button:not(:disabled), input");
+    if(first) try{ first.focus({preventScroll:true}); }catch(e){ first.focus(); }
+  }
 }
 function closeFirstSignin(){
   if(!firstSigninPending && !firstSigninOpen) return;
@@ -422,7 +475,7 @@ function signinAct(act, btn){
   if(act==="copy" || act==="copylink"){
     return signinCopy(act==="copy" ? signinV.code : signinV.busy ? signinV.link : "").then(ok=>{ if(ok) signinCopied(btn); return ok; });
   }
-  if(act==="choose"){ signinChoosing=true; signinV=Object.assign({}, signinV, {said:""}); paintSigninPanel(); signinTell(); return; }
+  if(act==="choose"){ signinChoosing=true; signinV=Object.assign({}, signinV, {said:""}); paintSigninPanel(); if(firstSigninOpen) paintFirstSignin(); signinTell(); return; }
   if(act==="stop"){ signinCall("signinStop"); return; }
   if(act==="again"){ signinCall("signinAgain"); return; }
   if(act==="check"){ signinCall("signinCheck").then(v=>{ if(v) signinChanged(v, false); }); return; }
@@ -462,9 +515,16 @@ function wireSignin(){
   signinNow();
   firstSigninPending=firstSigninDue();
   if(typeof h.onSignin==="function") h.onSignin(v=>signinChanged(v, false));
-  const btn=$("#signinBtn"), panel=$("#signinPanel"), wrap=$("#signinWrap");
+  const btn=$("#signinBtn"), panel=$("#signinPanel"), wrap=$("#signinWrap"), fs=$("#firstSignin");
   if(btn) btn.onclick=e=>{ e.stopPropagation(); if(signinOpen) closeSigninPanel(true); else openSigninPanel(); };
   signinClicks(panel);
+  if(fs){
+    signinClicks(fs);
+    fs.addEventListener("click", e=>{
+      const s=e.target && e.target.closest ? e.target.closest("#firstSigninSkip") : null;
+      if(s) skipFirstSignin();
+    });
+  }
   addEventListener("pointerdown", e=>{ if(signinOpen && wrap && !wrap.contains(e.target)) closeSigninPanel(false); });
   addEventListener("keydown", e=>{
     if(e.key==="Escape" && signinOpen && wrap && wrap.contains(document.activeElement)){ e.stopPropagation(); closeSigninPanel(true); }
@@ -478,11 +538,14 @@ export {
   bootFirstSignin,
   closeFirstSignin,
   firstSigninDue,
+  firstSigninOpenNow,
   firstSigninSeen,
   firstSigninStands,
   markFirstSigninSeen,
   onFirstSigninClosed,
+  paintFirstSignin,
   signinAct,
+  skipFirstSignin,
   signinActsHtml,
   signinChanged,
   signinChoosingNow,

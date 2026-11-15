@@ -91,7 +91,7 @@ async function launchDeskPage(browser, cfg) {
         window.__signinStarts.push(p);
         window.__signinState = Object.assign({}, window.__signinState, { busy: p, link: "https://example.invalid/auth" });
         window.__signinCbs.forEach(fn => fn(window.__signinState));
-        return true;
+        return window.__signinState;
       },
       signinAct: async a => {
         window.__signinActs = (window.__signinActs || []).concat(a);
@@ -198,6 +198,257 @@ try {
     await ctx.close();
   } finally {
     fs.rmSync(labDir, { recursive: true, force: true });
+  }
+
+  /* Part 3: the screen (EN/PL, light/dark, sizes, keyboard, states, sign-in completion) */
+  /* fs3a: EN light desktop 1280x860 — layout, dotted ground, 52px mark without wavy line, exact copy */
+  {
+    const { ctx, page } = await launchDeskPage(browser, {
+      signin: { offered: ["microsoft", "google"], signedIn: "" },
+      desk: { eTheme: "light", eUiLang: "en" }
+    });
+    await sleep(400);
+    const ui = await page.evaluate(() => {
+      const scr = document.getElementById("firstSignin");
+      const left = scr && scr.querySelector(".fs-left");
+      const right = scr && scr.querySelector(".fs-right");
+      const mark = scr && scr.querySelector(".fs-mark");
+      const band = document.querySelector("header .row");
+      const tabs = document.getElementById("tabsWrap");
+      const fills = document.querySelector("header .fills");
+      const pills = document.getElementById("pillsSlot");
+      const rail = document.getElementById("intentRail");
+      const lRect = left && left.getBoundingClientRect();
+      const rRect = right && right.getBoundingClientRect();
+      const mRect = mark && mark.getBoundingClientRect();
+      const bRect = band && band.getBoundingClientRect();
+      const txt = scr ? scr.innerText : "";
+      const rawTxt = scr ? scr.textContent : "";
+      const lStyle = left ? getComputedStyle(left) : null;
+      const rStyle = right ? getComputedStyle(right) : null;
+      const h1 = scr && scr.querySelector("#fsHeading");
+      const h1Style = h1 ? getComputedStyle(h1) : null;
+      const waveLike = scr ? scr.querySelector(".fs-wave, .launch-wave, path.wave") : null;
+      const steps = scr ? [...scr.querySelectorAll(".fs-steps li")].map(li => li.innerText.trim()) : [];
+      return {
+        hasScr: !!scr && !scr.hidden,
+        sideBySide: !!lRect && !!rRect && Math.abs(lRect.y - rRect.y) < 4 && rRect.left >= lRect.right - 2 && lRect.width > 300 && rRect.width > 300,
+        dotted: !!lStyle && lStyle.backgroundImage.includes("radial-gradient"),
+        markSize: mRect ? { w: Math.round(mRect.width), h: Math.round(mRect.height) } : null,
+        markHasSvg: !!(mark && mark.querySelector("svg")),
+        noWave: !waveLike && (mark ? mark.parentElement.querySelectorAll("svg").length === 1 : false),
+        bandVisible: !!bRect && bRect.height > 20,
+        hasBrand: !!(band && band.querySelector(".brand[aria-label='Etiuda']")),
+        chromeHidden: (!tabs || getComputedStyle(tabs).display === "none")
+          && (!fills || getComputedStyle(fills).display === "none")
+          && (!pills || getComputedStyle(pills).display === "none")
+          && (!rail || getComputedStyle(rail).display === "none"),
+        txt,
+        rawTxt,
+        steps,
+        h1Font: h1Style ? parseFloat(h1Style.fontSize) : 0,
+        panelBg: rStyle ? rStyle.backgroundColor : ""
+      };
+    });
+    check(ui.hasScr && ui.sideBySide && ui.dotted && ui.chromeHidden && ui.bandVisible && ui.hasBrand,
+      "fs3a two-half layout under blue band with dotted left ground and no rail/tabs/search/pills");
+    check(ui.markHasSvg && ui.markSize && ui.markSize.w === 52 && ui.markSize.h === 52 && ui.noWave,
+      "fs3a 52px mark present with no wavy underline");
+    const hasAllEn = [
+      "Sign in to Etiuda",
+      "Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three.",
+      "The browser opens the sign-in page",
+      "You choose your account there",
+      "Etiuda carries on here by itself",
+      "No licence key to keep",
+      "Signing in",
+      "Sign in with Microsoft",
+      "Sign in with Google",
+      "Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.",
+      "Not now",
+      "The desk opens as it is, and Sign in stays in the bar at the top for later."
+    ].every(s => ui.txt.includes(s)) && ui.rawTxt.includes("What happens") && !ui.txt.includes("HELD");
+    check(hasAllEn && ui.steps.length === 3,
+      "fs3a exact English copy and three numbered steps present");
+    await ctx.close();
+  }
+
+  /* fs3b: Polish + Dark theme + Small viewport sizes */
+  for (const [label, cfg] of [
+    ["PL light wide", { desk: { eTheme: "light", eUiLang: "pl" }, signin: { offered: ["microsoft", "google"], signedIn: "" }, width: 1200, height: 800 }],
+    ["EN dark wide", { desk: { eTheme: "dark", eUiLang: "en" }, signin: { offered: ["microsoft", "google"], signedIn: "" }, width: 1200, height: 800 }],
+    ["PL dark narrow", { desk: { eTheme: "dark", eUiLang: "pl" }, signin: { offered: ["microsoft", "google"], signedIn: "" }, width: 620, height: 640 }]
+  ]) {
+    const { ctx, page } = await launchDeskPage(browser, cfg);
+    await sleep(400);
+    const res = await page.evaluate(() => {
+      const scr = document.getElementById("firstSignin");
+      const h1 = scr && scr.querySelector("#fsHeading");
+      const skip = document.getElementById("firstSigninSkip");
+      const h1C = h1 ? getComputedStyle(h1).color : "";
+      const bgC = scr && scr.querySelector(".fs-left") ? getComputedStyle(scr.querySelector(".fs-left")).backgroundColor : "";
+      const overflowX = document.documentElement.scrollWidth > document.documentElement.clientWidth;
+      const skipBox = skip ? skip.getBoundingClientRect() : null;
+      return {
+        theme: document.documentElement.getAttribute("data-theme"),
+        lang: document.documentElement.lang,
+        txt: scr ? scr.innerText : "",
+        rawTxt: scr ? scr.textContent : "",
+        h1C, bgC, overflowX,
+        skipVisible: !!skipBox && skipBox.width > 40 && skipBox.height > 20
+      };
+    });
+    const isPl = cfg.desk.eUiLang === "pl";
+    const copyOk = isPl
+      ? ["Logowanie do Etiudy", "W przeglądarce otwiera się strona logowania",
+         "Tam wybiera się konto", "Etiuda sama przechodzi dalej", "Bez klucza licencji do pilnowania",
+         "Logowanie", "Nie teraz", "Stanowisko otworzy się bez zmian, a przycisk Zaloguj się zostaje na pasku u góry na później."].every(s => res.txt.includes(s))
+         && res.rawTxt.includes("Co się stanie")
+      : res.txt.includes("Sign in to Etiuda") && res.txt.includes("Not now");
+    check(copyOk && res.theme === cfg.desk.eTheme && !res.overflowX && res.skipVisible && res.h1C !== res.bgC,
+      "fs3b theme/lang/viewport clean (" + label + ")");
+    await ctx.close();
+  }
+
+  /* fs3c: Keyboard Tab reaches every interactive control; Escape runs Not now */
+  {
+    const { ctx, page } = await launchDeskPage(browser, {
+      signin: { offered: ["microsoft", "google"], signedIn: "" }
+    });
+    await sleep(400);
+    const seenIds = [];
+    for (let k = 0; k < 5; k++) {
+      await page.keyboard.press("Tab");
+      const info = await page.evaluate(() => {
+        const a = document.activeElement;
+        return {
+          inScr: !!(a && a.closest && a.closest("#firstSignin")),
+          tag: a ? a.tagName : "",
+          prov: a && a.dataset ? a.dataset.eProvider || "" : "",
+          id: a ? a.id || "" : "",
+          text: a ? (a.innerText || "").trim() : ""
+        };
+      });
+      seenIds.push(info.prov || info.id || info.text);
+      if (!info.inScr) { seenIds.push("OUTSIDE"); break; }
+    }
+    const reachedAll = seenIds.includes("microsoft") && seenIds.includes("google") && seenIds.includes("firstSigninSkip") && !seenIds.includes("OUTSIDE");
+    await page.keyboard.press("Escape");
+    await sleep(1500);
+    const afterEsc = await page.evaluate(() => ({
+      closed: !document.body.classList.contains("e-first-signin"),
+      tourOn: !!(document.getElementById("tourRoot") && document.getElementById("tourRoot").classList.contains("on"))
+    }));
+    check(reachedAll && afterEsc.closed && afterEsc.tourOn,
+      "fs3c Tab cycles inside screen across all controls and Escape triggers Not now -> tour");
+    await ctx.close();
+  }
+
+  /* fs3d: Second boot after Not now on same desk does not show the screen again */
+  {
+    const { ctx, page } = await launchDeskPage(browser, {
+      signin: { offered: ["microsoft", "google"], signedIn: "" }
+    });
+    await sleep(400);
+    const up1 = await page.evaluate(() => document.body.classList.contains("e-first-signin"));
+    if (up1) await page.click("#firstSigninSkip");
+    await sleep(200);
+    const savedDesk = await page.evaluate(() => window.__deskStore);
+    await ctx.close();
+
+    const { ctx: ctx2, page: page2 } = await launchDeskPage(browser, {
+      desk: savedDesk,
+      signin: { offered: ["microsoft", "google"], signedIn: "" }
+    });
+    await sleep(1600);
+    const secondBoot = await page2.evaluate(() => ({
+      screenUp: document.body.classList.contains("e-first-signin"),
+      tourOn: !!(document.getElementById("tourRoot") && document.getElementById("tourRoot").classList.contains("on"))
+    }));
+    check(up1 && !secondBoot.screenUp && secondBoot.tourOn,
+      "fs3d Not now remembers desk mark across second boot");
+    await ctx2.close();
+  }
+
+  /* fs3e: waiting state inside screen; refused state shows Not now beside refusal act; Try again returns to choice */
+  {
+    const { ctx, page } = await launchDeskPage(browser, {
+      signin: { offered: ["microsoft", "google"], signedIn: "" }
+    });
+    await sleep(400);
+    if (await page.evaluate(() => !!document.querySelector("#firstSignin [data-e-provider='microsoft']"))) {
+      await page.click("#firstSignin [data-e-provider='microsoft']");
+    }
+    await sleep(200);
+    const waiting = await page.evaluate(() => {
+      const scr = document.getElementById("firstSignin");
+      return {
+        txt: scr ? scr.innerText : "",
+        hasBar: !!(scr && scr.querySelector(".sgn-run")),
+        hasCancel: !!(scr && scr.querySelector("[data-signin-act='stop']")),
+        hasLink: !!(scr && scr.querySelector(".sgn-link-f")),
+        noHeaderPop: !document.getElementById("signinPanel") || document.getElementById("signinPanel").hidden
+      };
+    });
+    check(waiting.txt.includes("Finish signing in in the browser") && waiting.hasBar && waiting.hasCancel && waiting.hasLink && waiting.noHeaderPop,
+      "fs3e sign-in under way shows waiting state inside screen");
+
+    await page.evaluate(() => {
+      window.__signinState = { offered: ["microsoft", "google"], signedIn: "", busy: "", said: "unreached" };
+      window.__signinCbs.forEach(fn => fn(window.__signinState));
+    });
+    await sleep(200);
+    const refused = await page.evaluate(() => {
+      const scr = document.getElementById("firstSignin");
+      const act = scr && scr.querySelector("[data-signin-act='choose']");
+      const skip = document.getElementById("firstSigninSkip");
+      const aBox = act && act.getBoundingClientRect();
+      const sBox = skip && skip.getBoundingClientRect();
+      return {
+        txt: scr ? scr.innerText : "",
+        hasAct: !!act,
+        hasSkip: !!skip,
+        beside: !!(aBox && sBox && Math.abs(aBox.y - sBox.y) < 12 && sBox.left >= aBox.right)
+      };
+    });
+    check(refused.txt.includes("The sign-in service could not be reached.") && refused.hasAct && refused.hasSkip && refused.beside,
+      "fs3e refusal state shows panel message with Not now beside action button");
+
+    if (refused.hasAct) await page.click("#firstSignin [data-signin-act='choose']");
+    await sleep(150);
+    const backToChoice = await page.evaluate(() => !!document.querySelector("#firstSignin [data-e-provider='microsoft']"));
+    check(backToChoice, "fs3e Try again returns to provider buttons");
+    await ctx.close();
+  }
+
+  /* fs3f: sign-in success closes screen, starts tour, leaves tour name field empty */
+  {
+    const { ctx, page } = await launchDeskPage(browser, {
+      signin: { offered: ["microsoft", "google"], signedIn: "" }
+    });
+    await sleep(400);
+    await page.evaluate(() => {
+      window.__signinState = {
+        offered: ["microsoft", "google"], signedIn: "microsoft",
+        code: "7K3MQ9TV2XRBHN4W", seat: "held", at: Date.now(), reached: true
+      };
+      window.__signinCbs.forEach(fn => fn(window.__signinState));
+    });
+    await sleep(1600);
+    const res = await page.evaluate(() => {
+      const tour = document.getElementById("tourRoot");
+      const inp = document.getElementById("tourName");
+      const headerPop = document.getElementById("signinPanel");
+      return {
+        screenClosed: !document.body.classList.contains("e-first-signin"),
+        headerPopClosed: !headerPop || headerPop.hidden,
+        tourStarted: !!tour && !tour.hidden && tour.classList.contains("on"),
+        nameEmpty: !!inp && inp.value === ""
+      };
+    });
+    check(res.screenClosed && res.headerPopClosed && res.tourStarted && res.nameEmpty,
+      "fs3f sign-in completion closes screen without popping header panel and leaves tour name empty");
+    await ctx.close();
   }
 } finally {
   await browser.close();
