@@ -1804,7 +1804,10 @@ function translateTree(root){
   /* NOT "return early on English". Every node this touched remembers its English source, and
      t() on English hands that source straight back - so running the sweep is exactly how the
      English is put back. Returning early meant a language could be entered and never left. */
-  if(!root) return 0;
+  if(!root || root.nodeType!==1) return 0;
+  /* A stand-in with no nodeType is not an element, and the old list was empty for it too.
+     A real element whose document has no walker still throws below, so a missing walker
+     is not a quiet return to closest(). */
   const marked=el=>!!(el && el.nodeType===1 && el.hasAttribute && el.hasAttribute("data-i18n-skip"));
   /* Born on the root, the walker only filters the nodes it moves to. A marked root is refused
      before the walk, or its children would be entered. */

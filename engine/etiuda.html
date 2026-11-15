@@ -9369,7 +9369,7 @@ What you type stays in this browser only.`;
   var TW_FILTER_ACCEPT = 1;
   var TW_FILTER_REJECT = 2;
   function translateTree(root) {
-    if (!root) return 0;
+    if (!root || root.nodeType !== 1) return 0;
     const marked = (el) => !!(el && el.nodeType === 1 && el.hasAttribute && el.hasAttribute("data-i18n-skip"));
     if (marked(root)) return 0;
     const doc = root.ownerDocument || (typeof document !== "undefined" ? document : null);
