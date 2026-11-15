@@ -9407,7 +9407,6 @@ What is typed here stays in this browser.`;
     if (marked(root)) return 0;
     if (typeof root.closest === "function" && root.closest("[data-i18n-skip]")) return 0;
     const doc = root.ownerDocument || (typeof document !== "undefined" ? document : null);
-    if (!doc || typeof doc.createTreeWalker !== "function") throw new Error("translateTree: the document has no TreeWalker");
     let visited = 0;
     const one = (el) => {
       visited++;
@@ -9442,9 +9441,21 @@ What is typed here stays in this browser.`;
         });
       }
     };
-    const walker = doc.createTreeWalker(root, TW_SHOW_ELEMENT, { acceptNode: (node) => marked(node) ? TW_FILTER_REJECT : TW_FILTER_ACCEPT });
     one(root);
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) one(node);
+    if (doc && typeof doc.createTreeWalker === "function") {
+      const walker = doc.createTreeWalker(root, TW_SHOW_ELEMENT, { acceptNode: (node) => marked(node) ? TW_FILTER_REJECT : TW_FILTER_ACCEPT });
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) one(node);
+      return visited;
+    }
+    const down = (el) => {
+      Array.prototype.forEach.call(el.children || [], (c) => {
+        if (c && c.nodeType === 1 && !marked(c)) {
+          one(c);
+          down(c);
+        }
+      });
+    };
+    down(root);
     return visited;
   }
   function translateChrome() {

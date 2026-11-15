@@ -1811,9 +1811,7 @@ function translateTree(root){
      t() on English hands that source straight back - so running the sweep is exactly how the
      English is put back. Returning early meant a language could be entered and never left. */
   if(!root || root.nodeType!==1) return 0;
-  /* A stand-in with no nodeType is not an element, and the old list was empty for it too.
-     A real element whose document has no walker still throws below, so a missing walker
-     is not a quiet return to closest(). */
+  /* A stand-in with no nodeType is not an element, and the old list was empty for it too. */
   const marked=el=>!!(el && el.nodeType===1 && el.hasAttribute && el.hasAttribute("data-i18n-skip"));
   /* Born on the root, the walker only filters the nodes it moves to. A marked root is refused
      before the walk, or its children would be entered. */
@@ -1821,7 +1819,6 @@ function translateTree(root){
   /* A root inside a marked ancestor is refused too, as the old sweep's closest() refused it. */
   if(typeof root.closest==="function" && root.closest("[data-i18n-skip]")) return 0;
   const doc=root.ownerDocument || (typeof document!=="undefined" ? document : null);
-  if(!doc || typeof doc.createTreeWalker!=="function") throw new Error("translateTree: the document has no TreeWalker");
   let visited=0;
   const one=el=>{
     /* Count every element the walker returned. A marked one in the count means the walk entered
@@ -1858,9 +1855,16 @@ function translateTree(root){
       });
     }
   };
-  const walker=doc.createTreeWalker(root, TW_SHOW_ELEMENT, {acceptNode:node=>marked(node)?TW_FILTER_REJECT:TW_FILTER_ACCEPT});
   one(root);
-  for(let node=walker.nextNode(); node; node=walker.nextNode()) one(node);
+  if(doc && typeof doc.createTreeWalker==="function"){
+    const walker=doc.createTreeWalker(root, TW_SHOW_ELEMENT, {acceptNode:node=>marked(node)?TW_FILTER_REJECT:TW_FILTER_ACCEPT});
+    for(let node=walker.nextNode(); node; node=walker.nextNode()) one(node);
+    return visited;
+  }
+  /* A document with no walker (a test's stand-in; every page the desk draws has one): the same walk by hand, the same
+     elements in the same order, a marked element and everything under it left out. */
+  const down=el=>{ Array.prototype.forEach.call(el.children || [], c=>{ if(c && c.nodeType===1 && !marked(c)){ one(c); down(c); } }); };
+  down(root);
   return visited;
 }
 /** The app's own furniture, never the catalog's content. */
