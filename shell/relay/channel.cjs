@@ -2034,7 +2034,7 @@ function createChannel(opts) {
   const mirror = path.resolve(o.mirror);
   const clock = typeof o.clock === "function" ? o.clock : Date.now;
   const say = typeof o.say === "function" ? o.say : () => {};
-  const room = typeof o.room === "function" ? o.room : () => {};
+  const room = typeof o.room === "function" ? r => { try { o.room(r); } catch { /* the caller's own fault */ } } : () => {}; /* plant:room-wrapped */
   const io = o.io || diskIO(mirror, o.write);
   const stateFile = o.stateFile;
   const saveState = s => {
