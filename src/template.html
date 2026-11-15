@@ -651,7 +651,10 @@ input,textarea,[contenteditable="true"],.mg-cat-lab2{cursor:text}
 input[type=checkbox],input[type=radio],input[type=range],input[type=hidden],select,button{cursor:default}
 html{height:100%;overflow:hidden}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);
-  display:flex;flex-direction:column;height:100%;overflow:hidden}
+  display:flex;flex-direction:column;height:100%;overflow:hidden;
+  user-select:none;-webkit-user-select:none}
+input,textarea,[contenteditable="true"],[contenteditable=""],.mono,code,pre,.ec-fp,.e-join-code,.e-join-key,.e-lead-key,.e-ksig,.e-notice-err,.mt-row .v{
+  user-select:text;-webkit-user-select:text}
 /* Reserve the scrollbar lane: filtering swings the list across one viewport many times a
    minute, and each crossing otherwise reflows the whole centred column sideways. */
 .stage{flex:1 1 auto;min-height:0;display:grid;grid-template:minmax(0,1fr)/minmax(0,1fr)}
@@ -2278,7 +2281,8 @@ body:not(.deck-off) #list .card,body:not(.deck-off) #list .list-sep{transition:o
   color:var(--dim);font-size:13px}
 .swap{margin:0 0 10px;font-size:13px;color:var(--dim)}
 .swap code{background:var(--accent-soft);color:var(--accent);padding:1px 6px;border-radius:4px;
-  font:12px var(--mono);cursor:default;display:inline-block;margin:2px 3px 2px 0}
+  font:12px var(--mono);cursor:default;user-select:none;-webkit-user-select:none;
+  display:inline-block;margin:2px 3px 2px 0}
 .swap code:hover{outline:1px solid var(--accent)}
 .swap code.on{background:var(--accent-fill);color:#fff}
 .swap code.on::after{content:" ✕";opacity:.7}
@@ -2875,9 +2879,6 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
   background:var(--accent-soft);color:var(--accent);text-transform:none}
 .cbadge.ed{background:var(--ed-soft);color:var(--ed)}
 .modal{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
-/* A dialog's and a bubble's words do not select like a page's; what a field holds and a path a person copies still do. */
-.modal,.bub{user-select:none;-webkit-user-select:none}
-.modal :is(input,textarea,select,[contenteditable="true"],.mono,code),.bub :is(input,textarea,.mono,code){user-select:text;-webkit-user-select:text}
 /* A keyframe, not a transition - the element returns from display:none with no previous
    value. The way out is a copy on the dismiss tier (.e-gone), which the next surface to open
    ends, so a flow that closes one dialog and opens another never cross-fades the two.
