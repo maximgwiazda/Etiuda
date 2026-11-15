@@ -1648,7 +1648,10 @@ try {
       const pick = facts(D.api.readCatalog() || "").name || "nothing";
       D.sent.length = 0;
       D.api.catalogChanged(D.win);
-      return { booted: booted.rev, pick, newer: sent(D) };
+      /* What the pick saw, for a platform where m3 and m4 read otherwise (Claude gamma's Linux sweep: red there, cause unknown): each
+         catalog file on the share with its file time, as the desk's own listing would order them. */
+      const seen = fs.readdirSync(share).filter(n => /\.ec$/i.test(n)).map(n => n + "@" + Math.round(fs.statSync(path.join(share, n)).mtimeMs)).join(" ");
+      return { booted: booted.rev, pick, newer: sent(D), seen };
     };
     const m = working(null);
     check(m.booted === 2 && m.pick === "Quay Board" && m.newer.length === 0,
@@ -1680,9 +1683,9 @@ try {
         s3 = lift("plant:pick-many-none");
       const p1 = s1 ? working(s1) : null, p2 = s2 ? working(s2) : null, p3 = s3 ? empty(s3) : null;
       check(!!p1 && p1.pick === "Pebble Board" && p1.newer.length === 0, "962s5m3 lifting plant:pick-in-use picks the second catalog, and the watch still sends nothing for it (FAIL 962s5m): "
-        + (p1 ? "pick " + p1.pick + ", sent " + (p1.newer.join(",") || "nothing") : "plant line absent"));
+        + (p1 ? "pick " + p1.pick + ", sent " + (p1.newer.join(",") || "nothing") + ", share " + p1.seen : "plant line absent"));
       check(!!p2 && p2.newer.length === 1, "962s5m4 lifting plant:pick-in-use with plant:changed-in-use sends the second catalog over the first (FAIL 962s5m): "
-        + (p2 ? p2.newer.join(",") || "nothing" : "plant line absent"));
+        + (p2 ? (p2.newer.join(",") || "nothing") + ", pick " + p2.pick + ", share " + p2.seen : "plant line absent"));
       check(!!p3 && p3.rev != null, "962s5m5 lifting plant:pick-many-none opens one of two catalogs on an empty desk (FAIL 962s5m2): " + (p3 ? p3.rev : "plant line absent"));
     }
     /* 962s5m6 (round two): a desk working in a catalog its team does not list keeps it as its pick, and is sent nothing of
