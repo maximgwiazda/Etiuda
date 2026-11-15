@@ -2794,8 +2794,9 @@ function branchIdOf(pubHex) {
   return "k-" + crypto.createHash("sha256").update(Buffer.from(pubHex, "hex")).digest("hex").slice(0, 16);
 }
 /* {id, key, box} for the page, or null where no key can be kept safely. Where encryption is only
-   unavailable nothing is made and nothing is replaced. A pair the envelope throws on is that of another
-   account, so it is kept aside, never deleted, and a new one is made: silence would hide the desk. */
+   unavailable nothing is made and nothing is replaced. A pair the envelope throws on is kept aside, never
+   deleted; a pair kept aside that opens again comes back in its place, and only where none does is a new
+   one made: silence would hide the desk. */
 function branchIdentity(make) {
   if (deskKeys === undefined) deskKeys = readDesk();
   /* Asked not to make one, it answers the public halves of the pair there is, or null: nothing is opened or made. */
@@ -2804,6 +2805,22 @@ function branchIdentity(make) {
   if (!branchSealable()) return null;
   const was = deskBranch, wasOld = deskBranchOld;
   if (!deskBranch || !openPrivate(deskBranch.sign.priv)) {
+    const back = wasOld.slice().reverse().find(p => !!openPrivate(p.sign.priv) && !!openPrivate(p.box.priv)); /* plant:branch-back */
+    if (back) {
+      try {
+        deskBranchOld = wasOld.filter(p => p !== back).concat(was ? [was] : []);
+        deskBranch = back;
+        saveDeskFile(JSON.stringify(deskKeys));
+        deskWritten = true;
+        console.log("etiuda: the desk's branch key could not be opened, and the pair kept aside opens again, so it is the desk's key once more");
+        return { id: branchIdOf(deskBranch.sign.pub), key: deskBranch.sign.pub, box: deskBranch.box.pub };
+      } catch (e) {
+        deskBranch = was;
+        deskBranchOld = wasOld;
+        console.error("etiuda: the desk's branch key could not be kept - " + e.message);
+        return null;
+      }
+    }
     try {
       if (deskBranch) { deskBranchOld = wasOld.concat([deskBranch]); deskBranch = null; }
       const s = crypto.generateKeyPairSync("ed25519"), b = crypto.generateKeyPairSync("x25519");

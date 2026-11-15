@@ -31,7 +31,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 128;
+const EXPECTED = 130;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const ASIDE_D6_LOGIN = nodeRequire("./off-windows.cjs").offWindows("D6-login",
   "the shell sets no login item off Windows, so Reset's turn-off has nothing to reach");
@@ -852,6 +852,58 @@ try {
     + (env.branchOld || []).length + "), the old desk's files left as they were, and the log says it once ("
     + said.filter(l => /branch key could not be opened/.test(l)).length + ")");
   decryptFails = null;
+
+  /* 77z2: A PAIR KEPT ASIDE THAT OPENS AGAIN COMES BACK (Grok's review 8, finding 5). A desk file kept while the seal was
+     lost, then the old seal back: the pair in force no longer opens and the one kept aside does, so the desk's id is the
+     old one again and the pair that will not open is kept aside in its place; nothing new is made. The shell is evaluated
+     apart, over a desk file of its own, so the state the legs above leave stands. Lifting plant:branch-back makes a new
+     pair instead. */
+  const branchBackRun = mark => {
+    const ud = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-branch-back-"));
+    const sealPair = () => {
+      const s = crypto.generateKeyPairSync("ed25519"), b = crypto.generateKeyPairSync("x25519");
+      const pub = k => k.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
+      const seal = k => safeStorage.encryptString(k.export({ type: "pkcs8", format: "der" }).toString("base64")).toString("base64");
+      return { sign: { pub: pub(s.publicKey), priv: seal(s.privateKey) }, box: { pub: pub(b.publicKey), priv: seal(b.privateKey) } };
+    };
+    const kept = sealPair(), now = sealPair();
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: {}, branch: now, branchOld: [kept] }), "utf8");
+    let src = shellSrc("main.js");
+    if (mark) {
+      const lines = src.split("\n"), at = lines.map((l, i) => (l.includes("/* plant:" + mark + " */") ? i : -1)).filter(i => i >= 0);
+      if (at.length !== 1) return { error: "plant:" + mark + " is on " + at.length + " line(s)" };
+      lines[at[0]] = "    const back = null;";
+      src = lines.join("\n");
+    }
+    const out = {}, lines = [];
+    const isolatedElectron = Object.assign({}, electron, {
+      app: Object.assign({}, electron.app, { getPath: () => ud, on: noop, whenReady: () => new Promise(noop) }),
+      ipcMain: { on: noop, handle: noop },
+    });
+    const isolatedReq = n => (n === "electron" ? isolatedElectron : nodeRequire(n));
+    const hush = { log: s => lines.push(String(s)), error: s => lines.push(String(s)), warn: noop };
+    decryptFails = now.sign.priv;
+    try {
+      new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
+        src + "\n__test.branchIdentity = branchIdentity;")(isolatedReq, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, hush, out);
+      const me = out.branchIdentity(true);
+      const env = JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
+      const idOf = p => "k-" + crypto.createHash("sha256").update(Buffer.from(p.sign.pub, "hex")).digest("hex").slice(0, 16);
+      return { back: !!me && me.id === idOf(kept) && env.branch && env.branch.sign.pub === kept.sign.pub,
+        aside: JSON.stringify(env.branchOld) === JSON.stringify([now]), made: !!me && me.id !== idOf(kept) && me.id !== idOf(now),
+        said: lines.filter(l => /branch key/.test(l)).length };
+    } catch (e) { return { error: String((e && e.message) || e) }; }
+    finally { decryptFails = null; try { fs.rmSync(ud, { recursive: true, force: true }); } catch { /* the temp folder's own */ } }
+  };
+  const rKeptBack = branchBackRun("");
+  check(rKeptBack.back === true && rKeptBack.aside === true && rKeptBack.made === false && rKeptBack.said === 1,
+    "77z2 a pair kept aside that opens again comes back: the desk's id is the old one, the pair that will not open is kept aside in its place, nothing new is made, and the log says it once (" + JSON.stringify(rKeptBack) + ")");
+  if (PLANTS_OFF) skip("77z2 lifting plant:branch-back makes a new pair while the kept one opens (ETIUDA_PLANTS=off)");
+  else {
+    const rKeptLift = branchBackRun("branch-back");
+    check(!rKeptLift.error && rKeptLift.made === true && rKeptLift.back === false,
+      "77z2 lifting plant:branch-back makes a new pair while the kept one opens (" + JSON.stringify(rKeptLift) + ")");
+  }
 
   /* ---- Clement's named edits and the rulings that came with them: a star and a hide on an unedited layer,
      a file whose signature alone is spoiled, every form of every private half, the edition after a removal, and the
