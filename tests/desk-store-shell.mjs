@@ -195,7 +195,7 @@ function worldOf(o) {
 
 /* ---- the shell, evaluated whole: `src` is shell/main.js's text or a planted copy of it ---- */
 /* What the leg reads from main.js, appended to its text; a name main.js lacks comes back undefined, so its leg fails alone. */
-const TAIL_NAMES = ["storeView", "storeRoom", "storeSetNow", "storeAnswerNow", "storeSetAsideDir", "storeSyncFolder", "storeState", "signinRun", "signinRenew", "signinIo", "signinRenewNow", "signinServiceAsk", "storeServiceAt", "storeOnFor", "storeTurn", "branchIdentity", "signinState", "patchDesk", "storeForget", "signinLandingHtml", "signinListen",
+const TAIL_NAMES = ["storeView", "storeRoom", "storeSetNow", "storeAnswerNow", "storeSetAsideDir", "storeSyncFolder", "storeState", "storeTokenTake", "signinRun", "signinRenew", "signinIo", "signinRenewNow", "signinServiceAsk", "storeServiceAt", "storeOnFor", "storeTurn", "branchIdentity", "signinState", "patchDesk", "storeForget", "signinLandingHtml", "signinListen",
   "signinOutNow", "storeLeaveNow", "storeSyncApply", "storeSyncSoon"];
 const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing", "storeConsentFlight", "storeSyncTimer"];
 const TAIL = "\n__test.T = {" + TAIL_NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
@@ -963,8 +963,16 @@ async function answerNeighboursScene(src) {
   if (Tt.get().storeFlight) await Tt.get().storeFlight;
   const usedOldTok = wt.graph.slice(graphFrom).some(g => g.indexOf("Bearer " + oldTok) >= 0);
 
-  const ok = !leaveLeaked && !endLeaked && !usedOldTok;
-  return { ok, detail: brief({ leaveLeaked, endLeaked, usedOldTok }) };
+  /* B's own org refusal recorded while held is kept when B answers, while A's org refusal never leaks to B. */
+  const rOrg = await renewScene(src), To2 = rOrg.shell.T, wo2 = rOrg.world;
+  seatAnother(To2, wo2, To2.signinState().held);
+  To2.storeTokenTake({ provider: "microsoft", token: "", until: 0, why: "org" });
+  await To2.storeAnswerNow("mine");
+  if (To2.get().storeFlight) await To2.get().storeFlight;
+  const orgKept = To2.storeView().why === "consent";
+
+  const ok = !leaveLeaked && !endLeaked && !usedOldTok && orgKept;
+  return { ok, detail: brief({ leaveLeaked, endLeaked, usedOldTok, orgKept }) };
 }
 
 /* (w4) A look of A's still out when B is seated keeps nothing for B: its keys are not sealed here under B's name, and its folder

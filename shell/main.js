@@ -11430,10 +11430,11 @@ function storeMoveFile(from, to) {
   }
 }
 function storeSetAside() {
-  const ud = app.getPath("userData"), aside = storeSetAsideDir();
-  let movedStore = null;
+  const ud = app.getPath("userData");
+  let aside = "", movedStore = null;
   const movedFiles = [];
   try {
+    aside = storeSetAsideDir();
     for (const name of ["desk.json", STORE_FILE]) {
       const src = path.join(ud, name);
       if (fs.existsSync(src)) fs.copyFileSync(src, path.join(aside, name));
@@ -11464,7 +11465,7 @@ function storeSetAside() {
     try {
       if (movedStore) storeMoveFile(movedStore.to, movedStore.from); /* plant:answer-aside-rollback */
     } catch {}
-    try { fs.rmSync(aside, { recursive: true, force: true }); } catch {}
+    if (aside) { try { fs.rmSync(aside, { recursive: true, force: true }); } catch {} }
     console.error("etiuda: could not set aside the desk - " + e.message);
     return "";
   }
@@ -11488,10 +11489,10 @@ async function storeAnswerNow(choice) {
   }
   s.who = who; s.last = who; s.ask = ""; /* plant:answer-mine-who */
   s.keys = ""; s.leave = ""; s.owed = ""; s.made = ""; /* plant:answer-mine-keys */
-  s.until = 0; delete s.off; s.org = false; s.said = ""; delete s.told;
+  s.until = 0; delete s.off; s.said = ""; delete s.told;
   storeLeaveHere = null; storeOwedHere = ""; storeNow = null; storeSay = ""; storeFresh = false; storeFullNow = false;
   storeNotNow.delete(who);
-  if (storeAccess && storeAccess.who !== who) { storeAccess = null; }
+  if (!storeAccess || storeAccess.who !== who) { storeAccess = null; s.org = false; }
   storeSyncStop();
   storeSave();
   storeFlight = null;
