@@ -3797,6 +3797,19 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .stage>.scroller>.shell{contain-intrinsic-size:auto none}
 #screenHost{grid-area:1/1;position:relative;z-index:1;display:flex;flex-direction:column;min-height:0;background:var(--bg);color:var(--ink);overflow-y:auto}
 #screenHost[hidden]{display:none!important}
+/* ---------- First-opening sign-in screen ---------- */
+body.e-first-signin .fab-stack,
+body.e-first-signin .pills-slot,
+body.e-first-signin .pills-probe,
+body.e-first-signin #railHit,
+body.e-first-signin #lanes,
+body.e-first-signin .fills,
+body.e-first-signin #tabsWrap,
+body.e-first-signin .stage>.scroller>.shell{display:none!important}
+body.e-first-signin header{padding-bottom:0;border-bottom:0}
+body.e-first-signin .stage>.dotfield{content-visibility:hidden}
+.fs-screen{grid-area:1/1;position:relative;z-index:2;min-height:0;background:var(--bg);color:var(--ink);overflow:auto}
+.fs-screen[hidden]{display:none!important}
 .screen-page{display:flex;flex-direction:column;max-width:1240px;width:100%;margin:0 auto;padding:20px 28px;gap:20px;box-sizing:border-box}
 .screen-head h2{margin:0;font-size:20px;font-weight:600}
 .screen-body{flex:1 1 auto;min-height:0}
@@ -5067,6 +5080,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 </div>
 </div>
 <div id="screenHost" class="screen-host" hidden></div>
+<section id="firstSignin" class="fs-screen" hidden role="dialog" aria-modal="true" aria-labelledby="fsHeading" data-i18n-skip></section>
 </div>
 
 <!-- role=status/aria-live so copy confirmations reach screen readers without stealing focus -->
@@ -27644,6 +27658,95 @@ What is typed here stays in this browser.`;
   function signinShown(v) {
     return !!(v && (v.offered.length || v.signedIn));
   }
+  var FIRST_SIGNIN_KEY = "eFirstSigninSeen";
+  function firstSigninSeen() {
+    return lsGet(FIRST_SIGNIN_KEY) === "1";
+  }
+  function markFirstSigninSeen() {
+    return lsSet(FIRST_SIGNIN_KEY, "1", true);
+  }
+  function firstSigninDue(v, opts) {
+    const s = v === void 0 ? signinV : signinRead(v);
+    const o = opts && typeof opts === "object" ? opts : null;
+    const seen = o && "seen" in o ? !!o.seen : firstSigninSeen();
+    const policy = o && "policy" in o ? !!o.policy : eCatalogFolderPinned();
+    return !!(s && s.offered.length && !s.signedIn && !seen && !policy);
+  }
+  var firstSigninPending = false;
+  var firstSigninOpen = false;
+  var firstSigninWaits = [];
+  function firstSigninStands() {
+    return !!(firstSigninPending || firstSigninOpen);
+  }
+  function onFirstSigninClosed(fn) {
+    if (typeof fn !== "function") return;
+    if (!firstSigninStands()) {
+      fn();
+      return;
+    }
+    firstSigninWaits.push(fn);
+  }
+  function tellFirstSigninClosed() {
+    const w = firstSigninWaits;
+    firstSigninWaits = [];
+    w.forEach((fn) => fn());
+  }
+  function paintFirstSignin() {
+    if (!firstSigninOpen || typeof document === "undefined") return;
+    const el = $("#firstSignin");
+    if (!el) return;
+    if (!el.querySelector("#firstSigninSkip")) {
+      el.innerHTML = '<div class="fs-wrap"><button type="button" class="btn" id="firstSigninSkip">Not now</button></div>';
+    }
+    const skip = $("#firstSigninSkip");
+    if (skip) skip.onclick = () => closeFirstSignin();
+  }
+  function openFirstSignin() {
+    firstSigninPending = false;
+    firstSigninOpen = true;
+    markFirstSigninSeen();
+    if (typeof document === "undefined") return;
+    document.body.classList.add("e-first-signin");
+    const el = $("#firstSignin");
+    if (el) {
+      el.hidden = false;
+      el.setAttribute("aria-hidden", "false");
+    }
+    paintFirstSignin();
+  }
+  function closeFirstSignin() {
+    if (!firstSigninPending && !firstSigninOpen) return;
+    firstSigninPending = false;
+    firstSigninOpen = false;
+    if (typeof document !== "undefined") {
+      document.body.classList.remove("e-first-signin");
+      const el = $("#firstSignin");
+      if (el) {
+        el.hidden = true;
+        el.setAttribute("aria-hidden", "true");
+        el.innerHTML = "";
+      }
+    }
+    tellFirstSigninClosed();
+  }
+  function bootFirstSignin(land) {
+    if (!firstSigninPending && !firstSigninDue()) return;
+    if (!firstSigninDue()) {
+      firstSigninPending = false;
+      tellFirstSigninClosed();
+      return;
+    }
+    firstSigninPending = true;
+    const run = () => {
+      if (!firstSigninDue()) {
+        closeFirstSignin();
+        return;
+      }
+      openFirstSignin();
+    };
+    if (typeof land === "function") land(run);
+    else run();
+  }
   function signinCodeText(code) {
     return String(code || "").replace(/(.{4})(?=.)/g, "$1 ");
   }
@@ -27947,6 +28050,18 @@ What is typed here stays in this browser.`;
   function signinChanged(v, answered) {
     signinV = signinRead(v);
     paintSigninButton();
+    if (firstSigninOpen || firstSigninPending) {
+      if (signinV.signedIn) {
+        closeFirstSignin();
+        signinTell();
+        return;
+      }
+      if (firstSigninOpen) {
+        paintFirstSignin();
+        signinTell();
+        return;
+      }
+    }
     if (answered && signinShown(signinV) && !signinV.busy) signinOpen = true;
     if (signinOpen) paintSigninPanel();
     signinTell();
@@ -28077,6 +28192,7 @@ What is typed here stays in this browser.`;
     const h = signinHost();
     if (!h) return;
     signinNow();
+    firstSigninPending = firstSigninDue();
     if (typeof h.onSignin === "function") h.onSignin((v) => signinChanged(v, false));
     const btn = $("#signinBtn"), panel = $("#signinPanel"), wrap = $("#signinWrap");
     if (btn) btn.onclick = (e) => {
@@ -28664,6 +28780,7 @@ What is typed here stays in this browser.`;
   }
   function wireOnOpen() {
     deskLaunch();
+    bootFirstSignin(whenLaunchLanded);
     markEReady();
     const formed = (fn) => whenLaunchLanded(fn);
     const MENU_WARM_MS = 900;
@@ -28673,7 +28790,10 @@ What is typed here stays in this browser.`;
     }, MENU_WARM_MS));
     focusFirstEntryOnOpen();
     requestAnimationFrame(() => requestAnimationFrame(focusFirstEntryOnOpen));
-    formed(focusEmptyLoadOnOpen);
+    formed(() => {
+      if (firstSigninStands()) onFirstSigninClosed(focusEmptyLoadOnOpen);
+      else focusEmptyLoadOnOpen();
+    });
     lastGreet = greeting();
     setInterval(() => {
       const g = greeting();
@@ -29563,6 +29683,19 @@ What is typed here stays in this browser.`;
       }
     });
   }
+  var tourAfterSignin = null;
+  var signinHeeded = false;
+  function heedFirstSignin() {
+    if (signinHeeded) return;
+    signinHeeded = true;
+    onFirstSigninClosed(() => {
+      if (tourAfterSignin && !firstSigninStands()) {
+        const go = tourAfterSignin;
+        tourAfterSignin = null;
+        go();
+      }
+    });
+  }
   function maybeStartTour() {
     const at = ssGet(TOUR_AT);
     if (!at && (tourSeen() || tourInviteDismissed())) return;
@@ -29571,6 +29704,11 @@ What is typed here stays in this browser.`;
     let floor = false, formed = false;
     const go = () => {
       if (!(floor && formed && due())) return;
+      if (typeof firstSigninStands === "function" && firstSigninStands()) {
+        heedFirstSignin();
+        tourAfterSignin = go;
+        return;
+      }
       if (joinStands()) {
         heedJoin();
         tourAfterJoin = go;
@@ -34794,6 +34932,10 @@ What is typed here stays in this browser.`;
     const at = +(nsGet("CatalogNoAt") || 0), mt = eCatalogMtime(), asked = eOpenedWith();
     if (!asked && tourDueAtBoot()) {
       afterTour(eOfferCatalogAtBoot);
+      return false;
+    }
+    if (!asked && firstSigninStands()) {
+      onFirstSigninClosed(eOfferCatalogAtBoot);
       return false;
     }
     const found = eCatalog(), held = storedCatalog();

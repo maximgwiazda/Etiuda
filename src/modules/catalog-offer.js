@@ -14,6 +14,7 @@ import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalog
 import { ejectCatalog } from "./local-memory.js";
 import { lsGet, lsSet, nsGet, nsSet } from "./storage.js";
 import { tourDueAtBoot, afterTour } from "./tour.js";
+import { firstSigninStands, onFirstSigninClosed } from "./signin.js";
 import { placeBubble } from "./bubble.js";
 import { markCut, markCutText } from "./cut-text.js";
 import { cutLeaves, dismissNode, mgReduceMotion, M_MS, E_EASE, E_SPRING } from "./motion.js";
@@ -108,6 +109,7 @@ function offerAtBoot(){
   const at=+(nsGet("CatalogNoAt")||0), mt=eCatalogMtime(), asked=eOpenedWith();
   // A first run's tour asks for a catalog in its own step, so a found file waits for it to end.
   if(!asked && tourDueAtBoot()){ afterTour(eOfferCatalogAtBoot); return false; }
+  if(!asked && firstSigninStands()){ onFirstSigninClosed(eOfferCatalogAtBoot); return false; }
   /* THE SAMPLE NEVER ASKS TO REPLACE A CATALOG THE PERSON CHOSE: it is found at every launch where
      Etiuda is installed and waits in the Library. Only an edition of the sample itself asks. */
   const found=eCatalog(), held=storedCatalog();

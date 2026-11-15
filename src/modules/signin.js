@@ -69,6 +69,57 @@ function firstSigninDue(v, opts){
   const policy=o && "policy" in o ? !!o.policy : eCatalogFolderPinned();
   return !!(s && s.offered.length && !s.signedIn && !seen && !policy);
 }
+let firstSigninPending=false, firstSigninOpen=false, firstSigninWaits=[];
+function firstSigninStands(){ return !!(firstSigninPending || firstSigninOpen); }
+function onFirstSigninClosed(fn){
+  if(typeof fn!=="function") return;
+  if(!firstSigninStands()){ fn(); return; }
+  firstSigninWaits.push(fn);
+}
+function tellFirstSigninClosed(){
+  const w=firstSigninWaits; firstSigninWaits=[];
+  w.forEach(fn=>fn());
+}
+function paintFirstSignin(){
+  if(!firstSigninOpen || typeof document==="undefined") return;
+  const el=$("#firstSignin"); if(!el) return;
+  if(!el.querySelector("#firstSigninSkip")){
+    el.innerHTML='<div class="fs-wrap"><button type="button" class="btn" id="firstSigninSkip">Not now</button></div>';
+  }
+  const skip=$("#firstSigninSkip");
+  if(skip) skip.onclick=()=>closeFirstSignin();
+}
+function openFirstSignin(){
+  firstSigninPending=false;
+  firstSigninOpen=true;
+  markFirstSigninSeen();
+  if(typeof document==="undefined") return;
+  document.body.classList.add("e-first-signin");
+  const el=$("#firstSignin");
+  if(el){ el.hidden=false; el.setAttribute("aria-hidden","false"); }
+  paintFirstSignin();
+}
+function closeFirstSignin(){
+  if(!firstSigninPending && !firstSigninOpen) return;
+  firstSigninPending=false;
+  firstSigninOpen=false;
+  if(typeof document!=="undefined"){
+    document.body.classList.remove("e-first-signin");
+    const el=$("#firstSignin");
+    if(el){ el.hidden=true; el.setAttribute("aria-hidden","true"); el.innerHTML=""; }
+  }
+  tellFirstSigninClosed();
+}
+function bootFirstSignin(land){
+  if(!firstSigninPending && !firstSigninDue()) return;
+  if(!firstSigninDue()){ firstSigninPending=false; tellFirstSigninClosed(); return; }
+  firstSigninPending=true;
+  const run=()=>{
+    if(!firstSigninDue()){ closeFirstSignin(); return; }
+    openFirstSignin();
+  };
+  if(typeof land==="function") land(run); else run();
+}
 /* The code in four groups of four, as it is read aloud; Copy takes it without the spaces. */
 function signinCodeText(code){ return String(code||"").replace(/(.{4})(?=.)/g,"$1 "); }
 function signinWhen(at){
@@ -336,6 +387,10 @@ function closeSigninPanel(back){
 function signinChanged(v, answered){
   signinV=signinRead(v);
   paintSigninButton();
+  if(firstSigninOpen || firstSigninPending){
+    if(signinV.signedIn){ closeFirstSignin(); signinTell(); return; }
+    if(firstSigninOpen){ paintFirstSignin(); signinTell(); return; }
+  }
   if(answered && signinShown(signinV) && !signinV.busy) signinOpen=true;
   if(signinOpen) paintSigninPanel();
   signinTell();
@@ -405,6 +460,7 @@ function wireSignin(){
   const h=signinHost();
   if(!h) return;
   signinNow();
+  firstSigninPending=firstSigninDue();
   if(typeof h.onSignin==="function") h.onSignin(v=>signinChanged(v, false));
   const btn=$("#signinBtn"), panel=$("#signinPanel"), wrap=$("#signinWrap");
   if(btn) btn.onclick=e=>{ e.stopPropagation(); if(signinOpen) closeSigninPanel(true); else openSigninPanel(); };
@@ -419,9 +475,13 @@ function wireSignin(){
 export {
   FIRST_SIGNIN_KEY,
   SIGNIN_NAMES,
+  bootFirstSignin,
+  closeFirstSignin,
   firstSigninDue,
   firstSigninSeen,
+  firstSigninStands,
   markFirstSigninSeen,
+  onFirstSigninClosed,
   signinAct,
   signinActsHtml,
   signinChanged,

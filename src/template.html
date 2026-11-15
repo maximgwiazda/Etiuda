@@ -3797,6 +3797,19 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .stage>.scroller>.shell{contain-intrinsic-size:auto none}
 #screenHost{grid-area:1/1;position:relative;z-index:1;display:flex;flex-direction:column;min-height:0;background:var(--bg);color:var(--ink);overflow-y:auto}
 #screenHost[hidden]{display:none!important}
+/* ---------- First-opening sign-in screen ---------- */
+body.e-first-signin .fab-stack,
+body.e-first-signin .pills-slot,
+body.e-first-signin .pills-probe,
+body.e-first-signin #railHit,
+body.e-first-signin #lanes,
+body.e-first-signin .fills,
+body.e-first-signin #tabsWrap,
+body.e-first-signin .stage>.scroller>.shell{display:none!important}
+body.e-first-signin header{padding-bottom:0;border-bottom:0}
+body.e-first-signin .stage>.dotfield{content-visibility:hidden}
+.fs-screen{grid-area:1/1;position:relative;z-index:2;min-height:0;background:var(--bg);color:var(--ink);overflow:auto}
+.fs-screen[hidden]{display:none!important}
 .screen-page{display:flex;flex-direction:column;max-width:1240px;width:100%;margin:0 auto;padding:20px 28px;gap:20px;box-sizing:border-box}
 .screen-head h2{margin:0;font-size:20px;font-weight:600}
 .screen-body{flex:1 1 auto;min-height:0}
@@ -5067,6 +5080,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 </div>
 </div>
 <div id="screenHost" class="screen-host" hidden></div>
+<section id="firstSignin" class="fs-screen" hidden role="dialog" aria-modal="true" aria-labelledby="fsHeading" data-i18n-skip></section>
 </div>
 
 <!-- role=status/aria-live so copy confirmations reach screen readers without stealing focus -->
