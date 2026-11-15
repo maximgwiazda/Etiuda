@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 110;
+const EXPECTED = 112;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -576,7 +576,7 @@ async function anotherScene(src, door, out) {
   return { ok, detail: brief({ door, out: !!out, keptAtOut: !!left.keys || !!left.leave, aKeysInB: intoB, bFile: b ? (b.kind || "?") : null, bStore: !!b && !!a && b.rt !== a.rt, look: n && n.state + "/" + n.why, endsUnderB: endsPosted(w) - ends }) };
 }
 
-/* (x) A DIFFERENT ACCOUNT AFTER ANOTHER ON THIS PROFILE, the safe half of Claude alpha's decision of 2026-11-15: A synced here; B is
+/* (x) A DIFFERENT ACCOUNT AFTER ANOTHER ON THIS PROFILE, until the desk can ask whose its content is: A synced here; B is
    seated, after A signed out (x1) or straight over A (x1d). Until the person is asked, nothing is uploaded to B's store and nothing is
    merged: no look, no relay call, no store made, the sync stopped and no merge set going by a change on the desk, and the desk's sync
    state, its mirror and desk.json as they were. Same account back is the ordinary case (x2). A, back after B, finds its own switch and
@@ -601,6 +601,28 @@ async function heldScene(src, out) {
   const got = { look: n ? n.state : null, relayCalls: w.relay.length - relay, bFolder: !!w.file, syncing: !!now && now.running(), mergeSet: timer,
     syncState: storeTree(UD) === tree ? "as it was" : "changed", desk: deskText(UD) === desk ? "as it was" : "changed", whose: kept.who === whoA ? "A" : "not A" };
   const ok = !!a && a.kind === "etiuda-store-key" && !n && got.relayCalls === 0 && !got.bFolder && !got.syncing && !timer && got.syncState === "as it was" && got.desk === "as it was" && got.whose === "A";
+  return { ok, detail: brief(got) };
+}
+/* (x4) What the desk needs to ask once is kept, and nothing goes: with B seated, store.json names A's account as the content's and B's as
+   seated; B's sign-out deletes nothing of the store's state, its mirror or desk.json; A back, the seated mark is gone. */
+const whoOf = (provider, sub) => crypto.createHash("sha256").update("etiuda-store-who\n" + provider + "\n" + sub, "utf8").digest("hex").slice(0, 32);
+async function recordScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world, UD = r.shell.UD;
+  const sync = T.get().storeSyncing, ch = sync && sync.channel();
+  if (ch) await ch.idle();
+  const heldA = T.signinState().held, whoA = whoOf(heldA.provider, SUB), whoB = whoOf(heldA.provider, "sub-of-another-person");
+  const tree = storeTree(UD), desk = deskText(UD);
+  seatAnother(T, w, heldA);
+  await T.storeTurn();
+  const seated = storeJson(UD) || {};
+  T.signinOutNow();
+  const out = storeJson(UD) || {}, keptTree = storeTree(UD) === tree, keptDesk = deskText(UD) === desk;
+  T.signinState().held = heldA;
+  T.storeView();
+  const back = storeJson(UD) || {};
+  const got = { whose: seated.who === whoA ? "A" : "not A", seated: seated.next === whoB ? "B" : seated.next ? "other" : "none", afterOut: out.who === whoA && out.next === whoB,
+    syncState: keptTree ? "as it was" : "changed", desk: keptDesk ? "as it was" : "changed", backWhose: back.who === whoA ? "A" : "not A", backSeated: back.next ? "kept" : "gone" };
+  const ok = got.whose === "A" && got.seated === "B" && got.afterOut && keptTree && keptDesk && got.backWhose === "A" && got.backSeated === "gone";
   return { ok, detail: brief(got) };
 }
 async function sameBackScene(src) {
@@ -1147,6 +1169,7 @@ const LEGS = [
   ["w4", lookOutScene, "a look of A's still out when B is seated seals nothing here for B and writes nothing more to the folder"],
   ["x1", s => heldScene(s, true), "A synced and signed out; B seated on the same profile: nothing is looked at, uploaded or merged for B (no relay call, no store in B's folder, the sync stopped, no merge set going), and the desk's sync state, mirror and desk.json stay as they were, the store state A's"],
   ["x1d", s => heldScene(s, false), "the same where B signs in straight over A"],
+  ["x4", recordScene, "with B seated over A's content store.json names A's account as the content's and B's as seated, what a later build needs to ask once; B's sign-out deletes nothing of the store's state, mirror or desk.json; A back, the seated mark is gone"],
   ["x2", sameBackScene, "the ordinary case: the same account signed out and back finds its store on, the same store, its sync running, nothing asked"],
   ["x3", backScene, "A turned sync off here, signed out; B came and went; A back finds its own switch off as it left it; with it on, A back finds its own store and sync, nothing of B's turn left in the desk's sync state"],
 ];
@@ -1223,6 +1246,7 @@ const PLANTS = [
   ["w3", swap("  if (s.who === who) return true; /* plant:store-mine */", "  if (true) { s.who = who; return true; } /* plant:store-mine */"), "the store/end owed for A is B's"],
   ["x1", swap("  held = !!who && !!s.who && s.who !== who; /* plant:store-held */", "  held = false; /* plant:store-held */"), "another account takes the desk's store state and looks, makes and syncs as its own"],
   ["x1", swap("  if (!storeSyncing || storeHeld()) return; /* plant:store-held-merge */", "  if (!storeSyncing) return; /* plant:store-held-merge */"), "a change on the desk sets the merge going while another account is seated"],
+  ["x4", swap("    if (s.keys || s.leave || s.next !== who) { s.keys = \"\"; s.leave = \"\"; s.next = who; storeSave(); } /* plant:store-next */", "    if (s.keys || s.leave) { s.keys = \"\"; s.leave = \"\"; storeSave(); } /* plant:store-next */"), "the account seated over the content is not kept"],
   ["x1d", swap("  held = !!who && !!s.who && s.who !== who; /* plant:store-held */", "  held = false; /* plant:store-held */"), "another account seated straight over takes the store as its own"],
   ["x3", swap("  held = !!who && !!s.who && s.who !== who; /* plant:store-held */", "  held = false; /* plant:store-held */"), "B's seat takes the state, so B's turn leaves its store in the desk's sync state before A is back"],
   ["w4", swap("  const ours = () => storeState().who === who && storeWho(signinState().held) === who; /* plant:store-look-ours */", "  const ours = () => true; /* plant:store-look-ours */"), "a look ends under whoever is seated"],

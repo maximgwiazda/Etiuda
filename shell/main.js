@@ -10991,7 +10991,7 @@ function armSigninRenew() {
    folder itself. */
 let storeLayer = null;
 function StoreLib() { return storeLayer || (storeLayer = require(path.join(__dirname, "sync", "store.cjs"))); }
-/* store.json beside desk.json, read whole or not at all: {format: 1, keys, said, off?, told?, until?, owed?, leave?, org?, who?, made?}. `keys` the store's keys sealed by
+/* store.json beside desk.json, read whole or not at all: {format: 1, keys, said, off?, told?, until?, owed?, leave?, org?, who?, made?, next?}. `keys` the store's keys sealed by
    safeStorage as base64, "" where none are kept; `said` the reason the desk last said (sayOnce); `off` the person's own switch, absent where on;
    `told` once this computer has had its first look with sync on (firstSay); `until` the last store certificate's end, for the pause;
    `owed` the relay team id of a store Turn off everywhere ended that the licence service has not yet answered, sealed as `keys`; `leave`
@@ -11005,11 +11005,11 @@ function storeFileRead(text) {
   return { keys: ok && typeof d.keys === "string" ? d.keys : "", said: ok && typeof d.said === "string" ? d.said.slice(0, 40) : "", off: ok && d.off === true,
     org: ok && d.org === true, told: ok && d.told === true, until: ok && Number.isSafeInteger(d.until) && d.until > 0 ? d.until : 0, owed: ok && typeof d.owed === "string" ? d.owed.slice(0, 400) : "",
     leave: ok && typeof d.leave === "string" ? d.leave.slice(0, 200000) : "", who: ok && typeof d.who === "string" && /^[0-9a-f]{32}$/.test(d.who) ? d.who : "",
-    made: ok && typeof d.made === "string" && /^[0-9a-f]{32}$/.test(d.made) ? d.made : "" };
+    made: ok && typeof d.made === "string" && /^[0-9a-f]{32}$/.test(d.made) ? d.made : "", next: ok && typeof d.next === "string" && /^[0-9a-f]{32}$/.test(d.next) ? d.next : "" };
 }
 function storeFileText(s) {
   return JSON.stringify(Object.assign({ format: 1, keys: s.keys || "", said: s.said || "" }, s.off === true ? { off: true } : {}, s.told === true ? { told: true } : {},
-    s.until > 0 ? { until: s.until } : {}, s.owed ? { owed: s.owed } : {}, s.leave ? { leave: s.leave } : {}, s.org === true ? { org: true } : {}, s.who ? { who: s.who } : {}, s.made ? { made: s.made } : {}), null, 1) + "\n";
+    s.until > 0 ? { until: s.until } : {}, s.owed ? { owed: s.owed } : {}, s.leave ? { leave: s.leave } : {}, s.org === true ? { org: true } : {}, s.who ? { who: s.who } : {}, s.made ? { made: s.made } : {}, s.next ? { next: s.next } : {}), null, 1) + "\n";
 }
 /* WHOSE THE STORE'S STATE IS: store.json belongs to the account named by `who`, a hash of its provider and sub; the first account seated
    takes it, a file kept before `who` existed losing its keys, leave and owed end. Another account seated after it holds the store: nothing
@@ -11033,9 +11033,11 @@ function storeHeld() {
 function storeMine() {
   const s = storeState(), who = storeWho(signinState().held);
   if (!who) return false;
+  if (s.who === who && s.next) { s.next = ""; storeSave(); }
   if (s.who === who) return true; /* plant:store-mine */
+  /* `next` names the account seated over the desk's content, what the desk needs to ask once whose that content is. */
   if (storeHeld()) {
-    if (s.keys || s.leave) { s.keys = ""; s.leave = ""; storeSave(); }
+    if (s.keys || s.leave || s.next !== who) { s.keys = ""; s.leave = ""; s.next = who; storeSave(); } /* plant:store-next */
     storeLeaveHere = null; storeNow = null; storeSay = ""; storeFresh = false;
     storeSyncStop();
     return false;
