@@ -6,7 +6,8 @@
  *   p1  Chromium's proxy list is read into entries (DIRECT, PROXY, the rest kept by type).
  *   p2  the asker: a server's challenge is cancelled unasked; a proxy's is asked once per proxy however many calls wait,
  *       the answer is held for later calls, a refused answer is asked again, "Not now" holds, and a call waits a bounded time;
- *       an answer given for one scheme is never handed to a challenge of another, nor dropped when a Basic one is refused.
+ *       an answer given for one scheme is never handed to a challenge of another, nor dropped when a Basic one is refused;
+ *       a challenge's host and resolveProxy's name for the same proxy are one key, an IPv6 address bracketed or not.
  *   p3  fetchThrough is net.fetch with a login listener: a stand-in of Electron's request, which cancels a challenge when
  *       nothing listens, is answered from the asker, and the answer's body and status arrive as a Response.
  *   p4  the CONNECT tunnel through a stand-in proxy asking Basic: no answer and a wrong one are refused with the schemes,
@@ -255,6 +256,16 @@ async function p2() {
   const backNtlm = await new Promise(res => S.forRequest()(proxyInfo(4128, "ntlm"), (u, p) => res({ u, p })));
   check(backNtlm.p === PASS && schemes.length === 2 && S.heldFor("proxy.lab.invalid", 4128) === null,
     "p2o the socket's refused Basic answer is forgotten alone: the NTLM one still answers its own challenge unasked, asked " + schemes.length);
+
+  /* The challenge's host is the proxy as configured (Chromium's auth URL is the proxy server's host and port, an IPv6
+     address bracketed); the socket's is parseProxyList's from resolveProxy's answer. One proxy must be one key. */
+  const K = P.proxyAsker({ ask: async () => ({ username: USER, password: PASS }) });
+  await new Promise(res => K.forRequest()({ isProxy: true, scheme: "basic", host: "[2001:DB8::5]", port: 8080, realm: "lab" }, res));
+  await new Promise(res => K.forRequest()({ isProxy: true, scheme: "basic", host: "Proxy.Lab.Invalid", port: 8081, realm: "lab" }, res));
+  const [v6, name] = P.parseProxyList("PROXY [2001:db8::5]:8080; PROXY proxy.lab.invalid:8081");
+  check(!!K.heldFor(v6.host, v6.port) && !!K.heldFor(name.host, name.port),
+    "p2p an answer given to a proxy's challenge is found under the host resolveProxy names for it, an IPv6 address as well as a name: "
+    + JSON.stringify([!!K.heldFor(v6.host, v6.port), !!K.heldFor(name.host, name.port)]));
 }
 
 async function p3() {
@@ -526,6 +537,8 @@ const PLANTS = [
   ["shell/proxy-net.cjs", "plant:proxy-credentials", "p3"],
   /* Rewritten: the held answer's slot without its scheme, so any challenge from that proxy is handed it. */
   ["shell/proxy-net.cjs", "plant:proxy-scheme-held", "p2", 'key + " " + scheme', "key"],
+  /* Rewritten: the key keeps an IPv6 address's brackets, so the challenge's host and resolveProxy's are two keys. */
+  ["shell/proxy-net.cjs", "plant:proxy-key-brackets", "p2", '.replace(/^\\[(.*)\\]$/, "$1")', ""],
   /* Not lifted but rewritten: the platform's check turned off, which must open the socket p6h expects refused. */
   ["shell/proxy-net.cjs", "plant:proxy-tls-verify", "p6", 'ALPNProtocols: ["http/1.1"] })', 'ALPNProtocols: ["http/1.1"], rejectUnauthorized: false })'],
   ["shell/main.js", "plant:desk-fetch-login", "p7"],
@@ -560,6 +573,6 @@ for (const [id, fn] of Object.entries(PARTS)) {
   try { await fn(); } catch (e) { check(false, id + " threw: " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | ")); }
 }
 clearInterval(alive);
-const EXPECTED = 57 + (PLANTS_OFF ? 0 : PLANTS.length);
+const EXPECTED = 58 + (PLANTS_OFF ? 0 : PLANTS.length);
 if (!ONLY) console.log((failed === 0 && ran === EXPECTED ? "proxy-net: ok" : "proxy-net: FAIL") + ", ran " + ran + " of " + EXPECTED + ", red " + failed);
 process.exit(Math.min(63, failed + (ONLY || ran === EXPECTED ? 0 : 1)));

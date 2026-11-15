@@ -42,7 +42,8 @@ function parseProxyList(text) {
   return out;
 }
 
-const proxyKey = (host, port) => String(host || "").toLowerCase() + ":" + (Number(port) || 0);
+/* One key for one proxy, from a challenge's host (Chromium's, an IPv6 address in brackets) or from parseProxyList's (bare). */
+const proxyKey = (host, port) => String(host || "").toLowerCase().replace(/^\[(.*)\]$/, "$1") + ":" + (Number(port) || 0); /* plant:proxy-key-brackets */
 /* An answer keeps the scheme it was given for, so the socket's tunnel sends a password in the clear only where Basic was asked. */
 const answerOf = a => (a && typeof a === "object" && typeof a.username === "string" && a.username !== "" && typeof a.password === "string")
   ? { username: a.username, password: a.password, scheme: typeof a.scheme === "string" ? a.scheme.toLowerCase() : "" } : null;
