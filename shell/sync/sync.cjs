@@ -150,8 +150,11 @@ function syncRead(text, by) {
   let j = null;
   try { j = JSON.parse(String(text)); } catch { j = null; }
   if (!plain(j) || j.kind !== SYNC_KIND || j.format !== 1 || j.by !== by || !plain(j.items)) return null;
+  /* Past the cap the file is refused whole: a tail dropped would read as items that computer never had. */
+  const names = Object.keys(j.items);
+  if (names.length > ITEMS_MAX) return null; /* plant:items-cap */
   const items = {};
-  for (const item of Object.keys(j.items).slice(0, ITEMS_MAX)) {
+  for (const item of names) {
     if (!follows(item)) continue;
     const e = entryOf(j.items[item]);
     if (!e) continue;
@@ -191,7 +194,7 @@ function mergeOnce(o) {
   const ledger = Object.assign({}, (o.state && o.state.ledger) || {});
   let kept = ((o.state && o.state.kept) || []).slice();
   /* A version kept for the person is let go once a later one stands over it, chosen on another computer. */
-  const settled = (item, win) => { kept = kept.filter(k => k.item !== item || !over(win, Object.assign({ seen: {} }, k))); };
+  const settled = (item, win, tops) => { kept = kept.filter(k => k.item !== item || !(tops || [win]).some(e => over(e, Object.assign({ seen: {} }, k)))); };
   const patch = {}, copies = [];
   /* This computer's own changes first: an item whose value is not the one its entry names was changed here. */
   for (const item of new Set(Object.keys(ledger).concat(Object.keys(local)))) {
@@ -248,6 +251,9 @@ function mergeOnce(o) {
       ledger[item] = { h: stay.h, by: stay.by, t: stay.t, seen: Object.assign({}, stay.seen) };
       patch[item] = v;
     }
+    /* A version kept before is let go once its own writer has overtaken it (or this computer took it), so a conflict renewed round after
+       round keeps the latest of each side, not every round. */
+    settled(item, null, top); /* plant:kept-overtaken */
     /* A removal is a version too, kept with the value null, so the conflict waits on both computers and not only where it was undone. */
     for (const e of top) {
       if (same(e, stay) || kept.some(k => k.item === item && k.by === e.by && k.t === e.t)) continue; /* plant:keep-both */

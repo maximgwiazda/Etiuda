@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-sync-"));
-const EXPECTED = 39;
+const EXPECTED = 43;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -576,8 +576,43 @@ async function main() {
     return { ok, detail: brief({ followed, refusedFine: fine, readItems: read ? Object.keys(read.items).length : null, polluted, layer: text }) };
   }
 
+  /* G5k: the same card changed on both computers offline, round after round: each round's versions are kept for the person, and a
+     version its own writer has since overtaken is let go, so each computer keeps one version per other writer, not one per round. */
+  async function keptGrowthScene() {
+    const { w, a, b } = await twoOn("g5k");
+    const L = "e3f9a1~Pack", C1 = "k:" + L + "#edits/c1";
+    a.desk.keys[L] = JSON.stringify({ edits: { c1: "start" } });
+    await settle(a, b);
+    for (let round = 1; round <= 3; round++) {
+      a.down.on = true; b.down.on = true;
+      w.R.clock.now += MIN;
+      a.desk.keys[L] = JSON.stringify({ edits: { c1: "a" + round } });
+      a.edit();
+      w.R.clock.now += MIN;
+      b.desk.keys[L] = JSON.stringify({ edits: { c1: "b" + round } });
+      b.edit();
+      a.down.on = false; b.down.on = false;
+      await settle(a, b);
+    }
+    const keptA = a.sync().state().kept.filter(k => k.item === C1), keptB = b.sync().state().kept.filter(k => k.item === C1);
+    const ok = keptA.length === 1 && keptB.length === 1 && keptA[0].by === b.me.id && keptB[0].by === a.me.id;
+    return { ok, detail: brief({ keptA: keptA.length, keptB: keptB.length }) };
+  }
+  /* G5i: another computer's sync file past ITEMS_MAX items is refused whole, never read as its first ITEMS_MAX with the rest dropped. */
+  async function itemsCapScene() {
+    const by = "k-0123456789abcdef", items = {};
+    for (let i = 0; i <= 65536; i++) items["k:e" + i.toString(36) + "~Pack#edits/c"] = { h: null, by, t: 1, seen: {} };
+    const over = SY.syncRead(JSON.stringify({ kind: SY.SYNC_KIND, format: 1, by, items }), by);
+    delete items[Object.keys(items)[0]];
+    const at = SY.syncRead(JSON.stringify({ kind: SY.SYNC_KIND, format: 1, by, items }), by);
+    const ok = over === null && !!at && Object.keys(at.items).length === 65536;
+    return { ok, detail: brief({ overRead: over === null ? "refused" : Object.keys(over.items).length, atCap: at ? Object.keys(at.items).length : null }) };
+  }
+
   const results = {};
   const LEGS = [
+    ["G5k", keptGrowthScene, "the same card changed on both computers offline three rounds running: each keeps one version per other writer, the overtaken ones let go"],
+    ["G5i", itemsCapScene, "another computer's sync file past ITEMS_MAX items is refused whole, not read with its tail dropped; one at the cap is read whole"],
     ["G5p", protoScene, "a layer field or map key named __proto__ or constructor from another computer is no item that follows, and put back into a layer never writes Object.prototype"],
     ["G5a", unappliedScene, "a catalog file and an edit this computer could not put in place are not taken as taken: nothing recorded removed, the other computer keeps both, and they arrive once taken"],
     ["G5b", oversizeScene, "a catalog file and a layer value grown past their caps are left out, never recorded as removed: the other computer keeps its copy and its layer"],
@@ -645,6 +680,8 @@ async function main() {
     ["unapplied", "G5a", swap("r = unapplied(state, r, o.apply(r.patch, r.copies), local, o.me.id); /* plant:unapplied */", "o.apply(r.patch, r.copies); /* plant:unapplied */"), "what the desk could not put in place is taken as taken, and the next merge removes it on the other computer"],
     ["held-kept", "G5b", lift("held-kept"), "an item left out for its size is recorded as removed"],
     ["held-value", "G5b", lift("held-value"), "a layer value past its cap is synced whole"],
+    ["kept-overtaken", "G5k", lift("kept-overtaken"), "every round of a renewed conflict kept, none let go"],
+    ["items-cap", "G5i", lift("items-cap"), "a file past the cap read with its tail dropped"],
     ["follows-proto", "G5p", swap(" && !PROTO_PART.test(s.slice(at)); /* plant:follows-proto */", "; /* plant:follows-proto */"), "a field named __proto__ follows"],
     ["layer-own", "G5p", text => { const x = swap("const pre = \"k:\" + key + \"#\", out = Object.create(null);", "const pre = \"k:\" + key + \"#\", out = {};")(text);
       return x && swap("if (!plain(out[f]) || !has(out, f)) out[f] = Object.create(null);", "if (!plain(out[f])) out[f] = {};")(x); }, "a layer put back on ordinary objects, so a __proto__ field writes Object.prototype"],
