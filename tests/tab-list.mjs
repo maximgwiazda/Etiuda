@@ -358,7 +358,7 @@ try {
   // 3. Light EN & Dark PL: menu style, heading, whole names, active once, one-row mark rule, switch, cross, keys, screenshots
   const cases = [
     { theme: "light", uiLang: "en", wantHead: "Open tabs", wantBtn: "All open tabs", wantScreen: "Settings" },
-    { theme: "dark",  uiLang: "pl", wantHead: "Otwarte rozmowy", wantBtn: "Wszystkie otwarte rozmowy", wantScreen: "Ustawienia" }
+    { theme: "dark",  uiLang: "pl", wantHead: "Otwarte zakładki", wantBtn: "Wszystkie otwarte zakładki", wantScreen: "Ustawienia" }
   ];
   for (const cfg of cases) {
     const names = [
