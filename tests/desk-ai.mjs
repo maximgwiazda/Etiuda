@@ -33,7 +33,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "shell");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 68;
+const EXPECTED = 72;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The shell-to-page event that carries each re-order's outcome; the page-to-shell sync request "etiuda:ai-state" is another. */
 const RANKING_CH = "etiuda:ai-ranking";
@@ -96,8 +96,8 @@ const MAIN_TAIL = "\n__test.setWindow = w => { theWindow = w; }; __test.embedSug
   + " __test.orgSearch = typeof orgSearch === 'function' ? orgSearch : async () => {};"
   + " __test.deskAiProbe = typeof deskAiProbe === 'function' ? deskAiProbe : async () => ({});"
   + " __test.deskAiConfig = typeof deskAiConfig === 'function' ? deskAiConfig : () => null;"
-  /* Machine policy is read from __test.policyText unless a leg uses a stubbed child_process. */
-  + " if (!__test.useRealPolicyReader && typeof joinPolicyFacts === 'function') { joinPolicyRead = joinPolicyFacts(__test.policyText || ''); if (typeof joinPolicyReadAt !== 'undefined') joinPolicyReadAt = Date.now(); }";
+  /* Machine policy is __test.policyText, and no look at the real key ever starts, unless a leg stubs child_process. */
+  + " if (!__test.useRealPolicyReader && typeof joinPolicyFacts === 'function') { joinPolicyRead = joinPolicyFacts(__test.policyText || ''); if (typeof joinPolicyReadAt !== 'undefined') joinPolicyReadAt = Date.now(); if (typeof joinPolicyAskedAt !== 'undefined') joinPolicyAskedAt = Date.now(); if (typeof joinPolicyAsking !== 'undefined') joinPolicyAsking = true; }";
 const ENGINE = { sender: { id: 1, once: () => {} }, senderFrame: { parent: null, url: "file:///C:/lab/engine/etiuda.html" } };
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 
@@ -1123,13 +1123,11 @@ async function policyRereadDrive(nextRows, mainSrc) {
       ["AiModel", "REG_SZ", "plant-model"],
       ["AiKey", "REG_SZ", "sk-test-0000"],
     ];
+    const writeRows = file => fs.writeFileSync(file, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(policyExportText(currentRows), "utf16le")]));
+    /* The first read waits (execFileSync); the minute's look does not (execFile), and answers on a later turn. */
     const fakeCp = {
-      execFile: () => {},
-      execFileSync: (tool, args) => {
-        reads++;
-        const bytes = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(policyExportText(currentRows), "utf16le")]);
-        fs.writeFileSync(args[2], bytes);
-      },
+      execFile: (tool, args, opts, cb) => { reads++; setTimeout(() => { try { writeRows(args[2]); cb(null, "", ""); } catch (e) { cb(e); } }, 10); },
+      execFileSync: (tool, args) => { reads++; writeRows(args[2]); },
     };
     const fetch = fetchOf(() => ({ status: 200, text: chatSaying("[2,1]") }));
     const ctx = loadMain({ fetch, mainSrc, childProcess: fakeCp,
@@ -1145,6 +1143,8 @@ async function policyRereadDrive(nextRows, mainSrc) {
     const readsWithin = reads, fetchesBefore = fetch.calls.length;
     currentRows = nextRows;
     clockShift += 60001;
+    ctx.T.deskAiConfig();
+    await tick(60);
     const cfgAfter = ctx.T.deskAiConfig();
     await ctx.handle["etiuda:search-rank"](ENGINE, "parcel post");
     await tick(AI.SETTLE_MS + 60);
@@ -1170,14 +1170,79 @@ await block(async () => {
     && noKey.readsWithin === 1 && noKey.readsAfter === 2 && noKey.fetchesBefore === 2 && noKey.fetchesAfter === 2 && noKey.cfgAfter === null,
     "da24 policy is cached within a minute and re-read after a minute, so turning DeskOrganisationModel off or removing AiKey stops the next send: "
     + "off " + JSON.stringify(off) + ", noKey " + JSON.stringify(noKey));
-  if (PLANTS_OFF) skipPlant("da24p lifting plant:policy-reread keeps sending after policy turns off (ETIUDA_PLANTS=off)");
+  if (PLANTS_OFF) skipPlant("da24p lifting plant:policy-look-later keeps sending after policy turns off (ETIUDA_PLANTS=off)");
   else {
     const lifted = await policyRereadDrive([["DeskOrganisationModel", "REG_DWORD", 0]],
-      edited(MAIN_SRC, "if (joinPolicyRead === null || (joinPolicyRead.unread && Date.now() - joinPolicyReadAt >= POLICY_REREAD_MS) || Date.now() - joinPolicyReadAt >= POLICY_LOOK_MS) { /* plant:policy-reread */",
-        "if (joinPolicyRead === null) {"));
+      edited(MAIN_SRC, "  if (Date.now() - joinPolicyAskedAt >= POLICY_LOOK_MS) policyLookLater(); /* plant:policy-look-later */", ""));
     check(lifted.fetchesAfter > lifted.fetchesBefore,
-      "da24p with plant:policy-reread lifted, the running desk keeps sending after policy turns off and the leg above fails: "
+      "da24p with plant:policy-look-later lifted, the running desk keeps sending after policy turns off and the leg above fails: "
       + JSON.stringify(lifted));
+  }
+});
+
+/* da26 (the test architect's edit on review 28's finding 4): the minute's look at machine policy, reached from a search keystroke,
+   does not hold the main process. A recording stand-in for the registry counts reg calls made with and without waiting: past the
+   minute, the keystroke makes no call that waits, one that does not, and the facts it brings are in force for the next send. */
+async function keystrokeRegDrive(mainSrc, lookMs, quietMs) {
+  const realNow = Date.now;
+  let clockShift = 0, waited = 0, notWaited = 0;
+  Date.now = () => realNow() + clockShift;
+  try {
+    let rows = [["DeskOrganisationModel", "REG_DWORD", 1], ["AiProvider", "REG_SZ", "openai"], ["AiModel", "REG_SZ", "plant-model"], ["AiKey", "REG_SZ", "sk-test-0000"]];
+    const write = file => fs.writeFileSync(file, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(policyExportText(rows), "utf16le")]));
+    const fakeCp = {
+      execFileSync: (tool, args) => { waited++; write(args[2]); },
+      execFile: (tool, args, opts, cb) => { notWaited++; setTimeout(() => { try { write(args[2]); cb(null, "", ""); } catch (e) { cb(e); } }, lookMs || 20); },
+    };
+    const fetch = fetchOf(() => ({ status: 200, text: chatSaying("[2,1]") }));
+    const ctx = loadMain({ fetch, mainSrc, childProcess: fakeCp,
+      answer: (op, a) => op === "search-shortlist" ? { q: a.q, gen: 1, cards: ["c1", "c2"], intents: [] } : openAnswer(op) });
+    builtinFrom(ctx.T, [{ id: "t:post", score: 0.9 }]);
+    ctx.on["etiuda:search-set"](ENGINE, true);
+    await ctx.handle["etiuda:search-prepare"](ENGINE, ROWS);
+    await ctx.handle["etiuda:search-rank"](ENGINE, "lantern wick");
+    await tick(AI.SETTLE_MS + 60);
+    const atStart = { waited, notWaited }, fetchesBefore = fetch.calls.length;
+    rows = [["DeskOrganisationModel", "REG_DWORD", 0]];
+    clockShift += quietMs || 60001;
+    const w0 = waited, n0 = notWaited;
+    await ctx.handle["etiuda:search-rank"](ENGINE, "kettle tea");
+    const keystroke = { waited: waited - w0, notWaited: notWaited - n0 };
+    await tick(AI.SETTLE_MS + 60);
+    const fetchesGap = fetch.calls.length;
+    await tick((lookMs || 20) + 60);
+    await ctx.handle["etiuda:search-rank"](ENGINE, "parcel post");
+    await tick(AI.SETTLE_MS + 60);
+    return { atStart, keystroke, fetchesBefore, fetchesGap, fetchesAfter: fetch.calls.length, cfgAfter: ctx.T.deskAiConfig() };
+  } finally {
+    Date.now = realNow;
+  }
+}
+await block(async () => {
+  const r = await keystrokeRegDrive();
+  check(r.atStart.waited === 1 && r.keystroke.waited === 0 && r.keystroke.notWaited === 1 && r.fetchesAfter === r.fetchesBefore && r.cfgAfter === null,
+    "da26 past the minute, a search keystroke starts machine policy's look without waiting for reg (none waited on, one not), and once it"
+    + " lands the policy turned off stops the sends: " + JSON.stringify(r));
+  if (PLANTS_OFF) skipPlant("da26p lifting plant:policy-look-later leaves the look undone and the desk sending (ETIUDA_PLANTS=off)");
+  else {
+    const lines = MAIN_SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:policy-look-later") >= 0);
+    let p = null;
+    if (at >= 0) { lines.splice(at, 1); p = await keystrokeRegDrive(lines.join("\n")); }
+    check(!!p && p.keystroke.notWaited === 0 && p.fetchesAfter > p.fetchesBefore,
+      "da26p lifting plant:policy-look-later leaves the look undone and the desk sending after the policy turned off: " + JSON.stringify(p));
+  }
+});
+
+/* da27: after a quiet spell the facts are older than the look and its grace, so the first send waits for the look rather than go
+   under them: the look here takes 1 s, the keystroke sends nothing in that time, and nothing once the policy it finds is off. */
+await block(async () => {
+  const r = await keystrokeRegDrive(undefined, 1000, 10 * 60 * 1000);
+  check(r.keystroke.waited === 0 && r.keystroke.notWaited === 1 && r.fetchesGap === r.fetchesBefore && r.fetchesAfter === r.fetchesBefore,
+    "da27 after ten quiet minutes a keystroke sends nothing while the look is out, and nothing once it finds the policy off: " + JSON.stringify(r));
+  if (PLANTS_OFF) skipPlant("da27p rewriting plant:send-policy-fresh sends under ten-minute-old facts (ETIUDA_PLANTS=off)");
+  else {
+    const p = await keystrokeRegDrive(edited(MAIN_SRC, "  return c && !policyFresh() ? null : c; /* plant:send-policy-fresh */", "  return c;"), 1000, 10 * 60 * 1000);
+    check(p.fetchesGap > p.fetchesBefore, "da27p rewriting plant:send-policy-fresh sends under ten-minute-old facts while the look is out: " + JSON.stringify(p));
   }
 });
 

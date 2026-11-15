@@ -4244,44 +4244,82 @@ function policyGoodSave(facts) {
 }
 /* A read that failed is asked again at the first ask once this has passed, so one failure does not stand for the run. */
 const POLICY_REREAD_MS = 60 * 60 * 1000;
-/* How often a running desk reads the key again, so a policy turned off, or an AiKey removed, stops the next send within about
-   a minute (review 28, finding 4). */
+/* How often a running desk looks at the key again, so a policy turned off, or an AiKey removed, stops the next send within about
+   a minute (review 28, finding 4). The look runs without waiting (execFile): the facts last read serve every ask until it
+   lands, and a send waits for facts no older than the look and its grace (policyFresh). */
 const POLICY_LOOK_MS = 60 * 1000;
-let joinPolicyRead = null, joinPolicyReadAt = 0, joinPolicyGood = null;
-/* Read at the first ask, whatever the language, then again at an ask a minute later (POLICY_LOOK_MS), and an hour after a read
-   that failed (POLICY_REREAD_MS), which the minute already covers. The one program started is reg.exe at its fixed path, exporting
+const POLICY_LOOK_GRACE_MS = 15 * 1000;
+let joinPolicyRead = null, joinPolicyReadAt = 0, joinPolicyGood = null, joinPolicyAskedAt = 0, joinPolicyAsking = false;
+/* The scratch file reg exports the key into, and its folder; both go whatever happens, and nothing of them is logged. */
+function policyScratch() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-policy-"));
+  return { dir: dir, file: path.join(dir, "policy.reg") };
+}
+function policyScratchGone(at) {
+  if (!at) return;
+  if (at.file) { try { fs.unlinkSync(at.file); } catch { /* never written */ } }
+  if (at.dir) { try { fs.rmdirSync(at.dir); } catch { /* never made */ } }
+}
+/* What reg's export left: the text of the registry's own UTF-16, or unread where the file is not that. */
+function policyExported(at) {
+  const bytes = fs.readFileSync(at.file);
+  return bytes.length % 2 === 0 && bytes[0] === 0xff && bytes[1] === 0xfe ? { text: bytes.subarray(2).toString("utf16le"), unread: false }
+    : { text: "", unread: true };
+}
+/* A read's facts made the ones in force: a good read is kept as the last good read, and a read that failed holds it. */
+function policyTake(text, unread) {
+  const read = joinPolicyFacts(text, unread);
+  if (!read.unread) { joinPolicyGood = read; policyGoodSave(read); }
+  else {
+    /* A read that failed holds the last good read, every pin and switch it set, said as unread; with none, it is none. */
+    const good = joinPolicyGood || (joinPolicyGood = policyGoodLoad());
+    if (good) { read.folder = good.folder; read.lead = good.lead; read.bad = good.bad; read.noUpdate = good.noUpdate; read.values = good.values; read.held = true; } /* plant:policy-hold-good */
+  }
+  joinPolicyRead = read;
+  joinPolicyReadAt = Date.now();
+  joinPolicyAskedAt = joinPolicyReadAt;
+}
+/* The minute's look, without waiting: one at a time, its facts taken when reg answers, judged as the first read judges them. */
+function policyLookLater() {
+  if (joinPolicyAsking || process.platform !== "win32") return;
+  joinPolicyAsking = true;
+  joinPolicyAskedAt = Date.now();
+  let at = null;
+  try { at = policyScratch(); } catch { joinPolicyAsking = false; return; }
+  try {
+    execFile(REG_TOOL, ["export", POLICY_KEY, at.file, "/y"], { windowsHide: true, timeout: 5000 }, err => {
+      let got = { text: "", unread: !(err && (err.code === 1 || err.status === 1)) };
+      try { if (!err) got = policyExported(at); } catch { got = { text: "", unread: true }; }
+      finally { policyScratchGone(at); joinPolicyAsking = false; }
+      try { policyTake(got.text, got.unread); } catch { /* the facts in force stand */ }
+    });
+  } catch { policyScratchGone(at); joinPolicyAsking = false; }
+}
+/* Whether the facts in force are recent enough for a send: read within the look and its grace, or no policy to look at. */
+function policyFresh() {
+  return process.platform !== "win32" || (!!joinPolicyRead && Date.now() - joinPolicyReadAt < POLICY_LOOK_MS + POLICY_LOOK_GRACE_MS);
+}
+/* Read at the first ask, whatever the language, and again at the first ask an hour after a read that failed
+   (POLICY_REREAD_MS), both waiting, since that ask needs the answer; between them, looked at again a minute after the last
+   read, without waiting (POLICY_LOOK_MS). The one program started is reg.exe at its fixed path, exporting
    this one key to a scratch file, which holds the registry's own UTF-16 where reg's printing would be in the
    console's code page. A failure, and any system but Windows, is no policy; reg's own exit 1 is a key that is not there,
-   and any other failure is a read that failed, kept as unread. The scratch file and its folder go whatever happens, and
-   nothing of them is logged. */
+   and any other failure is a read that failed, kept as unread. */
 function readJoinPolicy(lang) {
-  if (joinPolicyRead === null || (joinPolicyRead.unread && Date.now() - joinPolicyReadAt >= POLICY_REREAD_MS) || Date.now() - joinPolicyReadAt >= POLICY_LOOK_MS) { /* plant:policy-reread */
+  if (joinPolicyRead === null || (joinPolicyRead.unread && Date.now() - joinPolicyReadAt >= POLICY_REREAD_MS)) { /* plant:policy-reread */
     let text = "", unread = false;
     if (process.platform === "win32") {
-      let dir = "", file = "";
+      let at = null;
       try {
-        dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-policy-"));
-        file = path.join(dir, "policy.reg");
-        execFileSync(REG_TOOL, ["export", POLICY_KEY, file, "/y"], { windowsHide: true, timeout: 5000, stdio: "ignore" });
-        const bytes = fs.readFileSync(file);
-        if (bytes.length % 2 === 0 && bytes[0] === 0xff && bytes[1] === 0xfe) text = bytes.subarray(2).toString("utf16le");
-        else unread = true;
+        at = policyScratch();
+        execFileSync(REG_TOOL, ["export", POLICY_KEY, at.file, "/y"], { windowsHide: true, timeout: 5000, stdio: "ignore" });
+        ({ text, unread } = policyExported(at));
       } catch (e) { text = ""; unread = !(e && e.status === 1); } /* plant:policy-unread */
-      finally {
-        if (file) { try { fs.unlinkSync(file); } catch { /* never written */ } }
-        if (dir) { try { fs.rmdirSync(dir); } catch { /* never made */ } }
-      }
+      finally { policyScratchGone(at); }
     }
-    const read = joinPolicyFacts(text, unread);
-    if (!read.unread) { joinPolicyGood = read; policyGoodSave(read); }
-    else {
-      /* A read that failed holds the last good read, every pin and switch it set, said as unread; with none, it is none. */
-      const good = joinPolicyGood || (joinPolicyGood = policyGoodLoad());
-      if (good) { read.folder = good.folder; read.lead = good.lead; read.bad = good.bad; read.noUpdate = good.noUpdate; read.values = good.values; read.held = true; } /* plant:policy-hold-good */
-    }
-    joinPolicyRead = read;
-    joinPolicyReadAt = Date.now();
+    policyTake(text, unread);
   }
+  if (Date.now() - joinPolicyAskedAt >= POLICY_LOOK_MS) policyLookLater(); /* plant:policy-look-later */
   return policyWords(joinPolicyRead, lang);
 }
 /* True where machine policy turns the version look off, its last good read standing in where a read failed, or where a read
@@ -12264,7 +12302,13 @@ function deskAiState(state) {
 function deskAiFetch(u, init) {
   return deskFetch(u, init);
 }
-const deskReorder = deskAi.createReorder({ config: () => deskAiConfig(), fetch: deskAiFetch, onState: deskAiState });
+/* A send waits for machine policy's facts to be recent (policyFresh): after a quiet spell the first ask starts the look and
+   sends nothing, and the asks after it lands send under what it found. */
+function deskAiSendConfig() {
+  const c = deskAiConfig();
+  return c && !policyFresh() ? null : c; /* plant:send-policy-fresh */
+}
+const deskReorder = deskAi.createReorder({ config: deskAiSendConfig, fetch: deskAiFetch, onState: deskAiState });
 /* An agent's key, click, wheel or scroll in each window, counted, so an order that comes after one is dropped. */
 let deskTouches = 0, pickTouches = 0;
 function countTouches(wc, bump) {
