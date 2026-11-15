@@ -1775,6 +1775,8 @@ let statsPeriod = null;
 let statsHeld = null;
 let statsNoBoxSaid = "";
 let statsWroteKey = "";
+/* The team, lead key id and box the last answer was sealed to, {team, keyId, box}, kept in stats-seal.json beside desk.json. */
+let statsSealedTo = null;
 let statsLastWrite = 0;
 let statsClock = null;
 let statsMidnightTimer = null;
@@ -2160,6 +2162,31 @@ function flushHeldStats() {
   if (!statsHeld) return;
   writeStatsAnswer(statsHeld, "", "close");
 }
+function statsSealKey(seal) { return seal.box + "\n" + seal.keyId; }
+/* THE BOX GOES WITH ITS HOLDER: once the lead's key has been handed on, nothing is sealed while the team file still names the box
+   the last answer was sealed to, until it names a box of its own. Said once. */
+function statsLastSeal() {
+  if (statsSealedTo === null) {
+    try { statsSealedTo = JSON.parse(fs.readFileSync(path.join(app.getPath("userData"), "stats-seal.json"), "utf8")); } catch { statsSealedTo = {}; }
+  }
+  return statsSealedTo && typeof statsSealedTo === "object" ? statsSealedTo : {};
+}
+let statsBoxKeptSaid = "";
+function statsBoxKept(seal) {
+  const last = statsLastSeal();
+  let kept = false;
+  kept = last.team === seal.team && last.box === seal.box && typeof last.keyId === "string" && last.keyId !== seal.keyId; /* plant:stats-box-kept */
+  if (kept && statsBoxKeptSaid !== statsSealKey(seal)) {
+    statsBoxKeptSaid = statsSealKey(seal);
+    console.log("etiuda: statistics are not sealed: the team's lead was handed on and the team file still names the old box");
+  }
+  return kept;
+}
+function statsSealNote(seal) {
+  statsSealedTo = { team: seal.team, keyId: seal.keyId, box: seal.box };
+  try { writeReplacing(path.join(app.getPath("userData"), "stats-seal.json"), JSON.stringify(statsSealedTo) + "\n"); }
+  catch (e) { console.error("etiuda: the box statistics were sealed to could not be kept - " + e.message); }
+}
 function writeStatsAnswer(text, askId, forced) {
   const why = reasonForAsk(askId, forced);
   if (!statsSpan || !statsPeriod) return { ok: false };
@@ -2202,16 +2229,18 @@ function writeStatsAnswer(text, askId, forced) {
   }
   if ((data.suggestTaken | 0) > 0) out.suggestTaken = data.suggestTaken | 0;
   if ((data.suggestOpen | 0) > 0) out.suggestOpen = data.suggestOpen | 0;
-  const key = statsContentKey(out);
+  /* The box is part of what was written, so the same figures under a new box are sealed again. */
+  let got = statsSeal();
+  const key = statsContentKey(out) + (got && got.seal ? "\n" + statsSealKey(got.seal) : ""); /* plant:stats-seal-key */
   if (key === statsWroteKey) { statsHeld = null; return { ok: true, unchanged: true }; }
   const bypass = why === "span" || why === "midnight" || why === "close";
   if (!bypass && statsLastWrite && (now.getTime() - statsLastWrite) < STATS_PACE_MS) {
     statsHeld = String(text || "");
     return { ok: true, paced: true, why: why };
   }
-  let got = statsSeal();
   if (got && got.away) { statsHeld = String(text || ""); return { ok: false }; }
   if (!got || !got.seal) return { ok: false };
+  if (statsBoxKept(got.seal)) return { ok: false };
   const at = statsFile();
   if (!at) return { ok: false };
   out.hash = channelHash(out);
@@ -2232,6 +2261,7 @@ function writeStatsAnswer(text, askId, forced) {
   statsHeld = null;
   statsWroteKey = key;
   statsLastWrite = now.getTime();
+  statsSealNote(got.seal);
   return { ok: true, sync: out.sync, syncMs: now.getTime(), why: why };
 }
 /* The span file, if it verifies. Anything else is left unadopted: a bad replacement does not write and does not
@@ -2274,7 +2304,10 @@ function tryLiveStats(win) {
     askStats(win, "span");
     return;
   }
-  if (statsHeld) writeStatsAnswer(statsHeld);
+  if (statsHeld) { writeStatsAnswer(statsHeld); return; }
+  /* A team file that names another box for the lead seals the answer again at once, its figures unchanged or not. */
+  const now = statsSeal(), last = statsLastSeal();
+  if (now && now.seal && last.team === now.seal.team && last.box && last.box !== now.seal.box) askStats(win, "span"); /* plant:stats-box-reseal */
 }
 
 /* ---- HPKE, RFC 9180 base mode: DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-128-GCM ----------
