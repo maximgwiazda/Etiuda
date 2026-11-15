@@ -160,11 +160,14 @@ const plain = v => !!v && typeof v === "object" && !Array.isArray(v);
    team object that holds a team, so every lookup keeps the one spelling and nothing reads both; the mark row says it is done, and
    a sweep's wipe takes the mark with the rest. A raw half is 64 lowercase hex, and where the row's own record carries the public half
    (a dev: or gone: row's pub, a binding's invitation's pub) the two agree; anything else stays where it is, as no row the old relay
-   wrote. Where two rows meet under one branch id: a removal beats an enrolment of the same key, the later of two removals stands, a
-   row already under the branch id keeps its place against a raw one, the newer binding wins as indexBinding keeps it, and two try
-   counts add. A session held by a raw half is dropped: its desk says hello again under its branch id, and no removal can miss it.
-   The lead's own session keeps its id, raw or not. A spent challenge's key (chu:) is left to expire with it. Answers what changed,
-   by family.
+   wrote. Where two rows meet under one branch id: a removal beats an enrolment of the same key (the older relay's devices() left
+   gone: on the spelling a list dropped and dev: on the one it added; Claude alpha's ruling on the fifth Grok review: the removal
+   wins, and the lead's next list names the desk again), the later of two removals stands, a row already under the branch id keeps
+   its place against a raw one, the newer binding wins as indexBinding keeps it, and two try counts add. A session held by a raw half
+   is dropped: its desk says hello again under its branch id, and no removal can miss it. The lead's own session keeps its id, raw or
+   not. A desk the rename leaves removed loses, in the same step, any door request bound to it and the sessions its own key holds.
+   A spent challenge's key (chu:) is left to expire with it. Answers what changed, by family and as counts, with the removed branch
+   ids and dropped door requests for the caller's sockets alone.
    THE LIMIT, NOT CLOSED: blob, tomb, held and put rows keep their writer, and the counters and rates keyed by it theirs, because
    the writer's name is inside the upload's signed bytes. So for a desk an older relay stored under its raw key, the blobs it sealed
    before the migration keep the old writer name: after that desk's removal they stay readable by the team, and the desk cannot
@@ -172,7 +175,7 @@ const plain = v => !!v && typeof v === "object" && !Array.isArray(v);
    the fault the one-spelling rule ends. */
 const MIGRATED = "mig:desk-id";
 function migrateDeskIds(store) {
-  const n = { dev: 0, gone: 0, bk: 0, inv: 0, dd: 0, tf: 0, devDropped: 0, ses: 0 };
+  const n = { dev: 0, gone: 0, bk: 0, inv: 0, dd: 0, tf: 0, devDropped: 0, ses: 0, door: 0, conflicts: 0, ended: 0, removedKeys: [], droppedInvs: [] };
   if (store.get(MIGRATED) !== undefined) return n;
   const team = store.get("team");
   if (team === undefined) return n;
@@ -181,6 +184,7 @@ function migrateDeskIds(store) {
   const pubOf = v => (plain(v) && typeof v.pub === "string" ? v.pub : null);
   const rank = v => [plain(v) && Number.isSafeInteger(v.ord) ? v.ord : -1, plain(v) && Number.isSafeInteger(v.at) ? v.at : -1];
   const later = (a, b) => { const x = rank(a), y = rank(b); return x[0] !== y[0] ? x[0] > y[0] : x[1] >= y[1]; };
+  const removed = new Set(), conflicted = new Set();
   store.atomic(() => {
     for (const [k, v] of store.list("gone:")) {
       const half = k.slice(5);
@@ -189,14 +193,15 @@ function migrateDeskIds(store) {
       store.put("gone:" + id, cur !== undefined && later(cur, v) ? cur : v);
       store.del(k);
       n.gone++;
-      if (store.get("dev:" + id) !== undefined) { store.del("dev:" + id); n.devDropped++; }
+      removed.add(id);
+      if (store.get("dev:" + id) !== undefined) { store.del("dev:" + id); n.devDropped++; conflicted.add(id); }
     }
     for (const [k, v] of store.list("dev:")) {
       const half = k.slice(4);
       if (!pubOf(v) || !raw(half, pubOf(v))) continue;
       const id = deskIdOf(half);
       store.del(k);
-      if (store.get("gone:" + id) !== undefined) { n.devDropped++; continue; }
+      if (store.get("gone:" + id) !== undefined) { n.devDropped++; conflicted.add(id); removed.add(id); continue; }
       if (store.get("dev:" + id) === undefined) store.put("dev:" + id, v);
       n.dev++;
     }
@@ -230,8 +235,35 @@ function migrateDeskIds(store) {
       if (!plain(s) || s.key === leadId) continue;
       if (raw(s.key) || raw(s.bound)) { store.del(k); n.ses++; }
     }
+    /* A desk the rename leaves removed. A door request bound to it is dropped with its binding, its try rows and its sessions: the
+       door lets no removed key back in, and only an invitation the lead registered after the removal does. A session held by the
+       key itself is marked removed in this same step, as devices() marks a withdrawn key's, so a session the older relay issued under
+       the branch id reads nothing more; the caller closes its sockets. An invitation's session stays: a token invitation registered
+       after the removal keeps its one upload. */
+    for (const id of removed) {
+      for (const [k, v] of store.list("inv:")) {
+        let drops = false;
+        drops = plain(v) && v.door === true && v.key === id; /* plant:migrate-door */
+        if (!drops) continue;
+        const inv = k.slice(4);
+        store.del(k);
+        if (store.get("bk:" + id) === inv) store.del("bk:" + id);
+        for (const [t] of store.list("tf:" + inv + ":")) store.del(t);
+        for (const [sk, x] of store.list("ses:")) if (plain(x) && x.inv === inv) { store.del(sk); n.ses++; }
+        n.door++;
+        n.droppedInvs.push(inv);
+      }
+    }
+    for (const [k, x] of store.list("ses:")) {
+      if (!plain(x) || x.removed === true) continue;
+      let ends = false;
+      ends = !!x.key && removed.has(x.key); /* plant:migrate-ends */
+      if (ends) { store.put(k, Object.assign({}, x, { removed: true })); n.ended++; }
+    }
     store.put(MIGRATED, 1);
   });
+  n.conflicts = conflicted.size;
+  n.removedKeys = [...removed];
   return n;
 }
 const only = (o, names) => Object.keys(o).every(k => names.indexOf(k) > -1);

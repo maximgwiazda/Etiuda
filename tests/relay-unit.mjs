@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 584;
+const EXPECTED = 590;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -1398,7 +1398,7 @@ async function main() {
   const swapped = (from, to) => t => (t.split(from).length === 2 ? t.split(from).join(to) : null);
   /* What a copy of relay/core.cjs hands the live exports object, which the team's module and the Worker keep: the object's
      factory and the three functions the Worker and the grant legs call, so a line lifted from any of them is lifted for all. */
-  const ADOPTED = ["createCore", "judgeCreate", "grantWhy", "grantOk", "grantBytes", "delegationBytes", "revocationBytes", "revokedKeysOf", "acceptRevocations", "create2Bytes", "ROOT_PUB", "lapseOf"];
+  const ADOPTED = ["createCore", "judgeCreate", "grantWhy", "grantOk", "grantBytes", "delegationBytes", "revocationBytes", "revokedKeysOf", "acceptRevocations", "create2Bytes", "ROOT_PUB", "lapseOf", "migrateDeskIds"];
   const adopt = (live, fresh) => { for (const k of ADOPTED) live[k] = fresh[k]; };
   /* The text of relay/core.cjs the live exports stand for: the product's, or while a plant is on, that plant's edit, so a plant run
      inside another lifts a line of the edited text and both stay lifted. `edit` maps that text to the edited text, or to null where
@@ -5737,7 +5737,7 @@ async function main() {
       const line = first[0] || "";
       const leaked = seeded.secrets.filter(sx => line.indexOf(sx) >= 0 || line.indexOf(sx.slice(0, 8)) >= 0).length;
       const hexRun = /[0-9a-f]{8,}/.test(line);
-      const WANT = "relay one-spelling migration: renamed 5 (dev 1, gone 2, bk 1, inv 1, dd 0, tf 0); dropped 2 (dev 1, ses 1)";
+      const WANT = "relay one-spelling migration: renamed 5 (dev 1, gone 2, bk 1, inv 1, dd 0, tf 0); dropped 2 (dev 1, ses 1, door 0); conflicts 1; sessions ended 0";
       return { ok: first.length === 1 && line === WANT && afterSecond === 1 && plainLines.length === 0 && leaked === 0 && !hexRun,
         line, detail: JSON.stringify({ first: first.length, line, afterSecondWake: afterSecond, nothingToRename: plainLines.length,
           seededFound: leaked, hexRun }) };
@@ -5813,6 +5813,105 @@ async function main() {
       const raceLift = await editTeam(lineLifted("plant:lead-reread"), async T => !(await leadRaceScene(T)).ok);
       check(leadRace.ok && raceLift.turned && raceLift.back, "r1v lifting plant:lead-reread loses the first reserve's rt (r1u red), and the product"
         + " file is never written: " + how(raceLift));
+    }
+
+    /* THE FIFTH GROK REVIEW OF PART A (9d49440f), findings 1 to 4, as Claude alpha decided them.
+       1: the older relay's devices() left gone: on the spelling a list dropped and dev: on the one it added, one desk under both. The
+       removal wins at the rename, and the desk's live session ends in the same step: a session the older relay issued under the
+       branch id is marked removed and its socket closed. */
+    async function conflictScene(opts) {
+      const w = await world(opts);
+      const st = w.R.stores.get(w.rt), now = w.R.clock.now;
+      const token = await sessionOf(w, w.desk);
+      const ord = (st.get("ord") || 0) + 1;
+      st.put("ord", ord);
+      st.put("gone:" + w.desk.pub, { pub: w.desk.pub, desk: w.deskId, at: now, ord });
+      /* The stand-in's restart closes every socket, where the runtime keeps a hibernated one across a wake; so the socket is opened
+         on the woken object while its step is planted to fail (the wake, then the socket's own request), and the next request commits. */
+      const real = st.get;
+      let fails = 2;
+      st.get = k => { if (k === "mig:desk-id" && fails > 0) { fails -= 1; throw new Error("planted"); } return real.call(st, k); };
+      w.R.restart();
+      let sock = null;
+      try { sock = await socket(w, token); } finally { st.get = real; }
+      const ws = sock && sock.socket ? wsOf(w, sock.socket) : null;
+      const read = await since(w, token);
+      const closed = !!ws && !!ws.closed && ws.closed.code !== 1012;
+      const again = await helloAs(w, w.desk);
+      const marked = st.list("ses:").some(([k, s]) => k === "ses:" + sha(token) && s && s.removed === true);
+      return { ok: read.status !== 200 && refused(again, "removed") && marked && closed && st.get("dev:" + w.desk.keyId) === undefined,
+        detail: JSON.stringify({ read: answer(read), socketClosed: ws && ws.closed, hello: answer(again), marked }) };
+    }
+    const conflict = await conflictScene();
+    check(conflict.ok, "r2i a desk the older relay kept enrolled under one spelling and removed under the other is removed at the rename, and"
+      + " the session it held under its branch id reads nothing more, marked removed, its socket closed: " + conflict.detail);
+    if (PLANTS_OFF) skip("r2j lifting plant:migrate-ends leaves that session reading (r2i red)");
+    else {
+      const endsLift = await liftCore("plant:migrate-ends", async () => !(await conflictScene()).ok);
+      check(conflict.ok && endsLift.turned && endsLift.back, "r2j lifting plant:migrate-ends leaves that session reading (r2i red), and the"
+        + " product file is never written: " + how(endsLift));
+    }
+
+    /* 2: a door request the older relay opened under the branch id while the desk's removal sat under its raw half (its door read
+       gone: under the branch id alone). The rename drops it, with its binding and its session: the door lets no removed key back. */
+    async function doorRawScene(opts) {
+      const w = await world(opts);
+      const st = w.R.stores.get(w.rt), now = w.R.clock.now, y = keyPair(true), inv = hex(16), token = hex(32);
+      const ord = (st.get("ord") || 0) + 1;
+      st.put("gone:" + y.pub, { pub: y.pub, desk: "k-" + hex(8), at: now, ord });
+      st.put("ord", ord + 1);
+      st.put("inv:" + inv, { door: true, spent: true, spentAt: now, uploaded: false, fails: 0, key: y.keyId, pub: y.pub, box: hex(32),
+        person: hex(32), at: now, ord: ord + 1 });
+      st.put("bk:" + y.keyId, inv);
+      st.put("ses:" + sha(token), { key: null, inv, bound: y.keyId, until: now + C.SESSION_MS });
+      w.R.restart();
+      const hello = await helloAs(w, y);
+      const left = st.get("inv:" + inv) !== undefined || st.get("bk:" + y.keyId) !== undefined || st.get("ses:" + sha(token)) !== undefined;
+      return { ok: refused(hello, "removed") && !left, detail: JSON.stringify({ hello: answer(hello), rowsLeft: left }) };
+    }
+    const doorRaw = await doorRawScene();
+    check(doorRaw.ok, "r2k a door request opened while the desk's removal sat under its raw half is dropped at the rename, its binding and"
+      + " session with it, and the desk's branch-id hello is answered removed, not resumed: " + doorRaw.detail);
+    if (PLANTS_OFF) skip("r2l lifting plant:migrate-door resumes that door request (r2k red)");
+    else {
+      const doorLift = await liftCore("plant:migrate-door", async () => !(await doorRawScene()).ok);
+      check(doorRaw.ok && doorLift.turned && doorLift.back, "r2l lifting plant:migrate-door resumes that door request (r2k red), and the product"
+        + " file is never written: " + how(doorLift));
+    }
+
+    /* 3: a step that throws is not swallowed. Planted: the step's first read throws on the first wake and on two requests after it.
+       One line says it failed, once across all three; the requests answered meanwhile see the rows unrenamed (the removal under the raw
+       half is invisible: not-enrolled); the next request's try commits before it is routed, and the desk is answered removed. */
+    async function retryScene(teamMod) {
+      const lines = [], log = line => lines.push(String(line));
+      const w = await world(teamMod ? { team: teamMod, log } : { log });
+      const st = w.R.stores.get(w.rt), now = w.R.clock.now, z = keyPair(true);
+      const ord = (st.get("ord") || 0) + 1;
+      st.put("ord", ord);
+      st.put("gone:" + z.pub, { pub: z.pub, desk: "k-" + hex(8), at: now, ord });
+      const real = st.get;
+      let fails = 3;
+      st.get = k => { if (k === "mig:desk-id" && fails > 0) { fails -= 1; throw new Error("planted"); } return real.call(st, k); };
+      w.R.restart();
+      let during = null, after = null;
+      try {
+        during = await helloAs(w, z);
+        after = await helloAs(w, z);
+      } finally { st.get = real; }
+      const failed = lines.filter(l => /failed/.test(l)).length, counted = lines.filter(l => /renamed/.test(l)).length;
+      const leaked = lines.some(l => /[0-9a-f]{8,}/.test(l) || l.indexOf(z.keyId) >= 0);
+      return { ok: fails === 0 && refused(during, "not-enrolled") && refused(after, "removed") && failed === 1 && counted === 1 && !leaked,
+        lines, detail: JSON.stringify({ planted: 3 - fails, during: answer(during), after: answer(after), failedLines: failed, countLines: counted, lines }) };
+    }
+    const retried = await retryScene();
+    check(retried.ok, "r2m a migration step that throws on the first wake and on two requests after it writes one line saying it failed,"
+      + " with no key, the requests meanwhile see the raw removal invisible, and the next request's try commits before it is routed: the"
+      + " desk is answered removed: " + retried.detail);
+    if (PLANTS_OFF) skip("r2n lifting plant:migrate-retry leaves the warm object unrenamed (r2m red)");
+    else {
+      const retryLift = await editTeam(lineLifted("plant:migrate-retry"), async T => !(await retryScene(T)).ok);
+      check(retried.ok && retryLift.turned && retryLift.back, "r2n lifting plant:migrate-retry leaves the warm object unrenamed (r2m red), and"
+        + " the product file is never written: " + how(retryLift));
     }
 
     // 933a: move signed by old lead is taken, new key hello opens lead session
