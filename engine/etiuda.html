@@ -34797,18 +34797,21 @@ What you type stays in this browser only.`;
     });
     noteForeignSigner(c, wrap, place);
     const latePlain = olderSure || updateSure || sameKey && verifiedHere && !revHigher && !older && !plain;
-    if (latePlain && !settled) catalogTrust(c).then((state) => {
-      if (state !== V2_SIG_VALID && wrap.isConnected) {
-        offerPlainly(wrap);
-        const holdsLine = wrap.querySelector(".ec-holds");
-        if (holdsLine) holdsLine.remove();
-        fresh = false;
-        if (edWaiting && edWaiting.c === c) {
-          edWaiting = null;
-          paintCatWaiting();
-        }
-        place();
+    let claimed = latePlain && !settled;
+    const turnPlain = () => {
+      claimed = false;
+      offerPlainly(wrap);
+      const holdsLine = wrap.querySelector(".ec-holds");
+      if (holdsLine) holdsLine.remove();
+      fresh = false;
+      if (edWaiting && edWaiting.c === c) {
+        edWaiting = null;
+        paintCatWaiting();
       }
+      place();
+    };
+    if (claimed) catalogTrust(c).then((state) => {
+      if (state !== V2_SIG_VALID && wrap.isConnected && claimed) turnPlain();
     });
     const close = () => {
       removeEventListener("resize", place);
@@ -34828,8 +34831,12 @@ What you type stays in this browser only.`;
     wrap.querySelector("#ecYes").onclick = () => {
       if (taking) return;
       taking = true;
-      whenTrusted(c).then(() => {
+      whenTrusted(c).then((state) => {
         taking = false;
+        if (claimed && state !== V2_SIG_VALID && wrap.isConnected) {
+          turnPlain();
+          return;
+        }
         close();
         acceptOffer(c, sig, src, fresh ? { held: active, changes, name: ed } : null);
       });

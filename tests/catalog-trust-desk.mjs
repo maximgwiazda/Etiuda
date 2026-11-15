@@ -711,7 +711,8 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 138;
+  const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+  const EXPECTED = 139 + (PLANTS_OFF ? 0 : 1);
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -1796,6 +1797,32 @@ async function parent() {
       && ![boot76v, again76v].some(o => (o.errors || []).length),
       "76v a higher rev whose signature has already failed when the offer opens is offered plainly: " + said76(o76v)
       + ", errors " + JSON.stringify([boot76v, again76v].flatMap(o => o.errors || []).slice(0, 2)));
+
+    /* r16e (Grok's review 16, finding 3): Yes pressed while the offer still calls a higher rev the update under the held key and its
+       check has not answered (the leads never answer here, so the 2 s wait runs out): nothing loads, the words turn plain, and a
+       second Yes loads it as a plain replacement. r16f: the guard lifted in a copy of src/ in the lab loads it at the first Yes. */
+    const plan16e = ["wire", "hangleads", "click:elsewhere/lamp-3.ec", "offer", "yesAtOnce", "wait:2600", "offer", "yes", "wait:2600"];
+    const r16eLab = () => { const lab = higherLab(bend(sign(atRev(3, "2026-09-20"))), ring); run(lab, ["boot", "settle", "offer", "yes", "settle"]); return lab; };
+    const lab16e = r16eLab();
+    const boot16e = launches[launches.length - 1];
+    const open16e = run(lab16e, plan16e, true);
+    const o16e = open16e.offers || [];
+    check(boot16e.heldRev === 2 && boot16e.heldAtEnd === V2.V2_SIG_VALID && o16e.length === 2 && asUpdate(o16e[0]) && plainly(o16e[1])
+      && open16e.reloaded === true && open16e.heldRev === 3 && !(open16e.errors || []).length,
+      "r16e a Yes given while the offer calls an unchecked higher rev the update under the held key loads nothing until it is valid: the words"
+      + " turn plain, and a second Yes loads it: " + JSON.stringify({ offers: o16e.map(said76), reloaded: open16e.reloaded, rev: open16e.heldRev, errors: open16e.errors || [] }));
+    if (PLANTS_OFF) console.log("  SKIP  r16f lifting plant:offer-yes-valid loads the unchecked file at the first Yes (ETIUDA_PLANTS=off)");
+    else {
+      const lab16f = r16eLab();
+      fs.cpSync(path.join(ROOT, "src"), path.join(lab16f, "src"), { recursive: true });
+      const offerFile = path.join(lab16f, "src", "modules", "catalog-offer.js");
+      const lines = fs.readFileSync(offerFile, "utf8").split("\n"), at = lines.findIndex(l => l.indexOf("plant:offer-yes-valid") >= 0);
+      if (at >= 0) { lines.splice(at, 1); fs.writeFileSync(offerFile, lines.join("\n"), "utf8"); }
+      const p16f = at >= 0 ? run(lab16f, plan16e, true, { modRoot: lab16f }) : null;
+      check(!!p16f && (p16f.offers || []).length === 1 && p16f.reloaded === true && p16f.heldRev === 3,
+        "r16f lifting plant:offer-yes-valid loads the unchecked file at the first Yes (FAIL r16e): "
+        + JSON.stringify(p16f ? { offers: (p16f.offers || []).length, reloaded: p16f.reloaded, rev: p16f.heldRev } : "plant line absent"));
+    }
 
     /* AN EQUAL REV IS NOT AN UPDATE UNLESS IT VERIFIED UNDER THE HELD KEY. Unsigned, with a later date, keeps
        the trust line and is offered as a replacement. The same key id, once its signature has failed, likewise. */

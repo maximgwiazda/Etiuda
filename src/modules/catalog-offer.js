@@ -705,15 +705,18 @@ function eOfferCatalogDialog(c,src){
   /* A signature still unread is taken on trust. When it fails, the offer becomes a replacement:
      the words, the waiting dot and the edition load all drop, and the file is still offered. */
   const latePlain=olderSure || updateSure || (sameKey && verifiedHere && !revHigher && !older && !plain);
-  if(latePlain && !settled) catalogTrust(c).then(state=>{
-    if(state!==V2_SIG_VALID && wrap.isConnected){
-      offerPlainly(wrap);
-      const holdsLine=wrap.querySelector(".ec-holds");
-      if(holdsLine) holdsLine.remove();
-      fresh=false;
-      if(edWaiting && edWaiting.c===c){ edWaiting=null; paintCatWaiting(); }
-      place();
-    }
+  let claimed=latePlain && !settled;
+  const turnPlain=()=>{
+    claimed=false;
+    offerPlainly(wrap);
+    const holdsLine=wrap.querySelector(".ec-holds");
+    if(holdsLine) holdsLine.remove();
+    fresh=false;
+    if(edWaiting && edWaiting.c===c){ edWaiting=null; paintCatWaiting(); }
+    place();
+  };
+  if(claimed) catalogTrust(c).then(state=>{
+    if(state!==V2_SIG_VALID && wrap.isConnected && claimed) turnPlain();
   });
   const close=()=>{ removeEventListener("resize",place); dismissNode(wrap); if(offerStanding===close) offerStanding=null; if(offerShown&&offerShown.close===close) offerShown=null; };
   offerStanding=close;
@@ -732,7 +735,13 @@ function eOfferCatalogDialog(c,src){
   wrap.querySelector("#ecYes").onclick=()=>{
     if(taking) return;
     taking=true;
-    whenTrusted(c).then(()=>{ taking=false; close(); acceptOffer(c,sig,src,fresh ? {held:active, changes:changes, name:ed} : null); });
+    whenTrusted(c).then(state=>{
+      taking=false;
+      /* A Yes given to words that called the file verified loads only a file that is: otherwise the words turn plain, the
+         question stands, and a second Yes loads it as a plain replacement. */
+      if(claimed && state!==V2_SIG_VALID && wrap.isConnected){ turnPlain(); return; } /* plant:offer-yes-valid */
+      close(); acceptOffer(c,sig,src,fresh ? {held:active, changes:changes, name:ed} : null);
+    });
   };
   wrap.querySelectorAll("[data-ec-open]").forEach(wireFolderLink);
   wrap.querySelector("#ecNo").onclick=()=>{
