@@ -929,7 +929,7 @@ function maybeStartTour(){
   let floor=false, formed=false;
   const go=()=>{
     if(!(floor && formed && due())) return;
-    if(typeof firstSigninStands==="function" && firstSigninStands()){ heedFirstSignin(); tourAfterSignin=go; return; }
+    if(typeof firstSigninStands==="function" && firstSigninStands()){ heedFirstSignin(); tourAfterSignin=go; return; } /* plant:first-signin-order */
     if(joinStands()){ heedJoin(); tourAfterJoin=go; return; } /* plant:tour-waits-join */
     startTour(i,true);
   };

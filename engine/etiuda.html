@@ -27720,7 +27720,8 @@ What is typed here stays in this browser.`;
     const o = opts && typeof opts === "object" ? opts : null;
     const seen = o && "seen" in o ? !!o.seen : firstSigninSeen();
     const policy = o && "policy" in o ? !!o.policy : eCatalogFolderPinned();
-    return !!(s && s.offered.length && !s.signedIn && !seen && !policy);
+    if (policy) return false;
+    return !!(s && s.offered.length && !s.signedIn && !seen);
   }
   var firstSigninPending = false;
   var firstSigninOpen = false;

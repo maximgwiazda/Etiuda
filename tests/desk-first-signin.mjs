@@ -10,19 +10,54 @@ import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import * as esbuild from "esbuild";
+import { OPTIONS } from "../tools/bundler-probe/build.mjs";
 import puppeteer from "puppeteer-core";
 
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ENGINE_URL = "file:///" + path.join(ROOT, "engine", "etiuda.html").replace(/\\/g, "/");
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+const EXPECTED = 33;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-let asserted = 0, failed = 0;
+let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
   asserted++;
   if (ok) console.log("  ok   " + line);
   else { failed++; console.log("  FAIL " + line); }
+}
+function notRun(line) {
+  skipped++;
+  console.log("  NOT RUN " + line);
+}
+
+async function buildLiftedHtml(relMod, tag, outPath) {
+  const modPath = path.join(ROOT, relMod);
+  const lines = fs.readFileSync(modPath, "utf8").split("\n");
+  const plantAt = lines.findIndex(l => l.includes("plant:" + tag));
+  if (plantAt < 0) return -1;
+  lines.splice(plantAt, 1);
+  const liftedSource = lines.join("\n");
+  const filterRe = new RegExp(relMod.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\//g, "[\\\\/]") + "$");
+  const built = await esbuild.build({
+    ...OPTIONS,
+    entryPoints: [path.join(ROOT, "src", "main.js")],
+    plugins: [{
+      name: "lift-plant-" + tag,
+      setup(b) {
+        b.onLoad({ filter: filterRe }, () => ({ contents: liftedSource, loader: "js" }));
+      }
+    }]
+  });
+  let js = built.outputFiles[0].text
+    .split('"@E_BUILT@"').join('"2026-11-15"')
+    .split('"@EULA_EN@"').join('""')
+    .split('"@EULA_PL@"').join('""');
+  const template = fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8");
+  fs.writeFileSync(outPath, template.replace("/*@APP*/\n", () => js), "utf8");
+  return plantAt;
 }
 
 const P = await import(pathToFileURL(path.join(ROOT, "src", "modules", "signin.js")).href);
@@ -450,9 +485,82 @@ try {
       "fs3f sign-in completion closes screen without popping header panel and leaves tour name empty");
     await ctx.close();
   }
+
+  /* Part 4: inline plant proofs (ETIUDA_PLANTS=off skips cleanly with NOT RUN) */
+  const plantSpecs = [
+    ["fs4a lifting plant:first-signin-gate causes policy desk to wrongly open the sign-in screen", "first-signin-gate", async lab => {
+      const htmlPath = path.join(lab, "gate.html");
+      const plantAt = await buildLiftedHtml("src/modules/signin.js", "first-signin-gate", htmlPath);
+      if (plantAt < 0) return false;
+      const { ctx, page } = await launchDeskPage(browser, {
+        url: "file:///" + htmlPath.replace(/\\/g, "/"),
+        policy: "C:\\Policy\\Team",
+        signin: { offered: ["microsoft"], signedIn: "" }
+      });
+      await sleep(1500);
+      const openedOnPolicy = await page.evaluate(() => document.body.classList.contains("e-first-signin"));
+      await ctx.close();
+      return openedOnPolicy === true;
+    }],
+    ["fs4b lifting plant:first-signin-order causes tour to start while sign-in screen is open", "first-signin-order", async lab => {
+      const htmlPath = path.join(lab, "order.html");
+      const plantAt = await buildLiftedHtml("src/modules/tour.js", "first-signin-order", htmlPath);
+      if (plantAt < 0) return false;
+      const { ctx, page } = await launchDeskPage(browser, {
+        url: "file:///" + htmlPath.replace(/\\/g, "/"),
+        signin: { offered: ["microsoft"], signedIn: "" }
+      });
+      await sleep(2200);
+      const overlapped = await page.evaluate(() => {
+        const tour = document.getElementById("tourRoot");
+        return document.body.classList.contains("e-first-signin")
+          && !!tour && !tour.hidden && tour.classList.contains("on");
+      });
+      await ctx.close();
+      return overlapped === true;
+    }],
+    ["fs4c lifting plant:first-signin-mark causes second boot to reopen the screen", "first-signin-mark", async lab => {
+      const htmlPath = path.join(lab, "mark.html");
+      const plantAt = await buildLiftedHtml("src/modules/signin.js", "first-signin-mark", htmlPath);
+      if (plantAt < 0) return false;
+      const url = "file:///" + htmlPath.replace(/\\/g, "/");
+      const { ctx, page } = await launchDeskPage(browser, { url, signin: { offered: ["microsoft"], signedIn: "" } });
+      await sleep(400);
+      const savedDesk = await page.evaluate(() => {
+        const s = document.getElementById("firstSigninSkip");
+        if (s) s.click();
+        return window.__deskStore;
+      });
+      await ctx.close();
+      const { ctx: ctx2, page: page2 } = await launchDeskPage(browser, {
+        url,
+        desk: savedDesk,
+        signin: { offered: ["microsoft"], signedIn: "" }
+      });
+      await sleep(400);
+      const reopened = await page2.evaluate(() => document.body.classList.contains("e-first-signin"));
+      await ctx2.close();
+      return reopened === true;
+    }]
+  ];
+
+  const plantLab = PLANTS_OFF ? "" : fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-first-signin-plant-"));
+  try {
+    for (const [label, tag, run] of plantSpecs) {
+      if (PLANTS_OFF) notRun(label + " (ETIUDA_PLANTS=off)");
+      else check(await run(plantLab), label);
+    }
+  } finally {
+    if (plantLab) try { fs.rmSync(plantLab, { recursive: true, force: true }); } catch (_) {}
+  }
 } finally {
   await browser.close();
 }
 
+console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);
+if (asserted + skipped < EXPECTED) {
+  console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " checks ran");
+  process.exit(78);
+}
 console.log("\n" + asserted + " checks, " + failed + " failed");
 process.exit(Math.min(63, failed));

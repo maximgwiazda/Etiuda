@@ -67,7 +67,8 @@ function firstSigninDue(v, opts){
   const o=opts && typeof opts==="object" ? opts : null;
   const seen=o && "seen" in o ? !!o.seen : firstSigninSeen();
   const policy=o && "policy" in o ? !!o.policy : eCatalogFolderPinned();
-  return !!(s && s.offered.length && !s.signedIn && !seen && !policy);
+  if(policy) return false; /* plant:first-signin-gate */
+  return !!(s && s.offered.length && !s.signedIn && !seen);
 }
 let firstSigninPending=false, firstSigninOpen=false, firstSigninWaits=[];
 function firstSigninStands(){ return !!(firstSigninPending || firstSigninOpen); }
@@ -141,7 +142,7 @@ function skipFirstSignin(){
 function openFirstSignin(){
   firstSigninPending=false;
   firstSigninOpen=true;
-  markFirstSigninSeen();
+  markFirstSigninSeen(); /* plant:first-signin-mark */
   if(typeof document==="undefined") return;
   document.body.classList.add("e-first-signin");
   const el=$("#firstSignin");
