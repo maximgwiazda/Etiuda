@@ -828,6 +828,68 @@ async function noticePage(mod) {
   if (globalThis.localStorage) globalThis.localStorage.setItem("eUiLang", "en");
 }
 
+/* ---- Grok's review 23 of the desk's Reset and history: each case on stand-in folders in a lab of its own ---------- */
+/* A copy of shell/desk-reset.cjs with the line holding `tag` replaced by `line`, required from the lab; null where the
+   tag is not on exactly one line. */
+function liftedReset(lab, tag, line) {
+  let src = "";
+  try { src = fs.readFileSync(path.join(ROOT, "shell", "desk-reset.cjs"), "utf8"); } catch (e) { return null; }
+  const lines = src.split("\n"), at = lines.map((l, i) => (l.indexOf(tag) >= 0 ? i : -1)).filter(i => i >= 0);
+  if (at.length !== 1) return null;
+  lines[at[0]] = line;
+  const file = path.join(lab, "lifted-" + tag.replace(/[^a-z0-9-]/gi, "") + "-" + Math.random().toString(16).slice(2) + ".cjs");
+  fs.writeFileSync(file, lines.join("\n"));
+  return require(file);
+}
+/* A desk folder and a default catalog folder under `lab/name`: the desk file `desk` (an object), the default holding a
+   team's catalog, team file and ring. */
+function deskPair(lab, name, desk) {
+  const user = path.join(lab, name, "user"), docs = path.join(lab, name, "Documents", "Etiuda");
+  write(path.join(user, "desk.json"), JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: "" } }, desk || {})));
+  write(path.join(user, "etiuda-license.js"), "lic");
+  write(path.join(docs, "shop.ec"), "the team's catalog");
+  write(path.join(docs, "etiuda-team.json"), "the team's file");
+  write(path.join(docs, "etiuda-ring.json"), "the team's ring");
+  return { user: user, docs: docs };
+}
+function sharesLeg(mod, M, lab, name) {
+  /* 4r23a: the default folder is the team's share: its folder team names it, or machine policy does. */
+  const team = deskPair(lab, name + "-team", { teamShown: { "t-0123456789abcdef": { folder: "", lead: "Lamp lead" } } });
+  const env = JSON.parse(fs.readFileSync(path.join(team.user, "desk.json"), "utf8"));
+  env.teamShown["t-0123456789abcdef"].folder = team.docs;
+  write(path.join(team.user, "desk.json"), JSON.stringify(env));
+  M.stageReset({ userData: team.user, catalogSetting: "", defaultCatalog: team.docs });
+  const byTeam = M.honourPendingReset({ userData: team.user, holdsLock: true, defaultCatalog: team.docs });
+  const policy = deskPair(lab, name + "-policy");
+  M.stageReset({ userData: policy.user, catalogSetting: "", defaultCatalog: policy.docs });
+  const byPolicy = M.honourPendingReset({ userData: policy.user, holdsLock: true, defaultCatalog: policy.docs, shares: () => [policy.docs] });
+  const stays = d => ["shop.ec", "etiuda-team.json", "etiuda-ring.json"].every(n => fs.existsSync(path.join(d, n)));
+  return { team: !!byTeam && byTeam.ok === true && gone(path.join(team.user, "desk.json")) && stays(team.docs),
+    policy: !!byPolicy && byPolicy.ok === true && gone(path.join(policy.user, "desk.json")) && stays(policy.docs) };
+}
+function review23Leg(mod) {
+  if (!mod) { check(false, "4r23 shell/desk-reset.cjs is not there"); return; }
+  const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-reset-r23-"));
+  try {
+    const f4 = sharesLeg(mod, mod, lab, "f4");
+    /* THE CONTROL: the same desk with no team and no policy loses the default folder's desk files, as 4d5 says. */
+    const plain = deskPair(lab, "f4-plain");
+    mod.stageReset({ userData: plain.user, catalogSetting: "", defaultCatalog: plain.docs });
+    mod.honourPendingReset({ userData: plain.user, holdsLock: true, defaultCatalog: plain.docs });
+    const control = gone(path.join(plain.docs, "shop.ec")) && gone(path.join(plain.docs, "etiuda-team.json"));
+    check(f4.team && f4.policy && control, "4r23a a default folder that is the team's share, by its folder team or by machine policy, is"
+      + " left whole by a reset that still takes the desk; the control, no team, loses its desk files: " + JSON.stringify({ f4: f4, control: control }));
+    if (!PLANTS) skip("4r23a lifting plant:reset-share-root takes the share as a root again (ETIUDA_PLANTS=off)");
+    else {
+      const L = liftedReset(lab, "plant:reset-share-root", "    const onShare = false;");
+      const lifted = L ? sharesLeg(mod, L, lab, "f4-lifted") : null;
+      check(!!lifted && !lifted.team && !lifted.policy, "4r23a lifting plant:reset-share-root takes the share as a root again: " + JSON.stringify(lifted));
+    }
+  } finally {
+    fs.rmSync(lab, { recursive: true, force: true });
+  }
+}
+
 let mod = null, decision = null;
 try { mod = require(path.join(ROOT, "shell", "desk-reset.cjs")); } catch (e) { mod = null; }
 try { decision = require(path.join(ROOT, "tests", "install-plan.js")).uninstallDataDecision; } catch (e) { decision = null; }
@@ -835,6 +897,7 @@ try { decision = require(path.join(ROOT, "tests", "install-plan.js")).uninstallD
 await uiLeg();
 shellLeg(mod);
 await unfinishedLeg(mod);
+review23Leg(mod);
 installLeg(decision);
 plantLeg(mod, decision);
 console.log("desk-reset " + (failed ? "FAILED " + failed + " of " : "passed ") + asserted

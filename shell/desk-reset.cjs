@@ -103,8 +103,28 @@ function refused(detail, userData, roots, keep) {
   };
 }
 
+/* What the desk file says about the folders a reset may touch: the team folders it names (each folder team's, and an
+   invitation's still asked), read from desk.json or the newest backup that parses; empty where none does. */
+function deskFacts(user) {
+  const names = ["desk.json"];
+  for (let n = 1; n <= 9; n++) names.push("desk.bak" + n + ".json");
+  for (let i = 0; i < names.length; i++) {
+    let doc = null;
+    try { doc = JSON.parse(fs.readFileSync(path.join(user, names[i]), "utf8")); } catch (e) { continue; }
+    if (!doc || typeof doc !== "object") continue;
+    const shares = [];
+    const shown = doc.teamShown && typeof doc.teamShown === "object" ? doc.teamShown : {};
+    Object.keys(shown).forEach(t => { const s = shown[t]; if (s && typeof s.folder === "string" && s.folder) shares.push(s.folder); });
+    const inv = doc.teamJoin && typeof doc.teamJoin === "object" ? doc.teamJoin.invite : null;
+    if (inv && typeof inv.folder === "string" && inv.folder) shares.push(inv.folder);
+    return { shares: shares };
+  }
+  return { shares: [] };
+}
+
 /* The default catalog is a root only when the setting names it, or names nothing. A folder
-   the user chose is never a root. The default, when it is itself a link, is skipped. */
+   the user chose is never a root, nor is a team's share, `shares`, even at the default's path.
+   The default, when it is itself a link, is skipped. */
 function planReset(opts) {
   const o = opts || {};
   const rawUser = String(o.userData || "");
@@ -115,13 +135,15 @@ function planReset(opts) {
   if (userSt && !userSt.isDirectory()) return refused("the desk folder is not a folder", user);
   const setting = String(o.catalogSetting || "").trim();
   const rawDefault = String(o.defaultCatalog || "");
+  const shares = (Array.isArray(o.shares) ? o.shares : []).map(String).filter(s => path.isAbsolute(s));
   const roots = [user];
   let catalog = "";
   if (path.isAbsolute(rawDefault)) {
     const def = path.resolve(rawDefault);
     const named = !setting || samePath(setting, def);
     const defSt = lstatOf(def);
-    if (named && !(defSt && defSt.isSymbolicLink())) {
+    const onShare = shares.some(s => within(s, def)); /* plant:reset-share-root */
+    if (named && !onShare && !(defSt && defSt.isSymbolicLink())) {
       catalog = def;
       if (!samePath(def, user)) roots.push(def);
     }
@@ -343,10 +365,13 @@ function honourPendingReset(opts) {
     dropMarker(marker);
     return { pending: true, ok: false, changed: false };
   }
+  let given = [];
+  try { given = typeof opts.shares === "function" ? opts.shares() : opts.shares; } catch (e) { given = []; }
   const planOpts = {
     userData: user,
     catalogSetting: doc.catalogSetting,
-    defaultCatalog: doc.defaultCatalog
+    defaultCatalog: doc.defaultCatalog,
+    shares: deskFacts(user).shares.concat(Array.isArray(given) ? given : [])
   };
   let done;
   if (Array.isArray(doc.owed) && doc.owed.length) {

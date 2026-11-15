@@ -8943,6 +8943,14 @@ function listingRows() {
 ipcMain.handle("etiuda:catalog-files", (e) => (fromEngine(e) ? listingRows() : []));
 /* The page asks. The files stay until the next start: this process still holds them. The catalog
    folder is the setting in the desk file, not the live mirror, which can point somewhere else. */
+/* The team folders a reset never sweeps, whatever their path: machine policy's folder and every folder team's share. The
+   desk file's own are read again by the next start itself (shell/desk-reset.cjs deskFacts). */
+function resetShares() {
+  const out = [];
+  try { const named = readJoinPolicy("en").folder; if (named) out.push(named); } catch { /* no policy is read as none */ }
+  Object.keys(teamShown).forEach(t => { const s = teamShown[t]; if (s && typeof s.folder === "string" && s.folder) out.push(s.folder); });
+  return out;
+}
 /* The new process asks for the single-instance lock. Releasing it first is what lets that
    process get it; the marker waits if the new process never arrives. */
 function relaunchAfterReset() {
@@ -8964,7 +8972,7 @@ ipcMain.handle("etiuda:desk-reset", (e) => {
     const keys = typeof env.keys === "string" ? JSON.parse(env.keys || "{}") : (env.keys || {});
     catalogSetting = String(keys[CATALOG_FOLDER_KEY] || "");
   } catch (err) { catalogSetting = ""; }
-  const staged = stageReset({ userData: userData, catalogSetting: catalogSetting, defaultCatalog: defaultCatalogFolder() });
+  const staged = stageReset({ userData: userData, catalogSetting: catalogSetting, defaultCatalog: defaultCatalogFolder(), shares: resetShares() });
   if (staged && staged.ok) {
     try { setStartWithWindows(false); } catch (err) { /* start with Windows could not be changed */ }
     relaunchAfterReset();
@@ -12832,7 +12840,7 @@ if (!theOnlyOne || (Array.isArray(process.argv) && process.argv.includes("--upda
   app.quit();
 } else {
   try {
-    const honoured = honourPendingReset({ userData: app.getPath("userData"), holdsLock: true });
+    const honoured = honourPendingReset({ userData: app.getPath("userData"), holdsLock: true, shares: resetShares });
     if (honoured && honoured.ok) {
       try { setStartWithWindows(false); } catch (err) { /* start with Windows could not be changed */ }
     }
