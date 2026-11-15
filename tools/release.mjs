@@ -205,6 +205,14 @@ gate('line endings and dashes', () => {
     cwd: ROOT, stdio: 'inherit',
   });
   if (built.status !== 0) return 'the build did not write the page';
+  /* While the built outputs are tracked, a release ships only committed bytes: if the build
+     changed any tracked file under engine/, stop here and say to build and commit first.
+     Untracked outputs are either ignored (status empty) or marked `?? ` (filtered out),
+     so the later step where outputs leave git passes without removing this check. */
+  const engineDiff = sh('git status --porcelain -- engine/')
+    .split(/\r?\n/)
+    .filter(l => l && !l.startsWith('?? ') && !l.startsWith('!! '));
+  if (engineDiff.length) return 'build and commit first: ' + engineDiff.map(l => l.trim()).join(', '); /* plant:release-tracked-build */
   const engine = readFileSync(join(ROOT, 'engine', 'etiuda.html'), 'utf8');
   /* Built from char codes: an en dash written into this file would be the very thing
      the gate refuses, and this file is tracked in the same tree. */

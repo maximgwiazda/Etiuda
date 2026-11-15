@@ -14,13 +14,15 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { checkoutKnown, restoreAblation, dirty } from '../tools/ablate.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const EXPECTED = 21;
+const PLANTS = process.env.ETIUDA_PLANTS !== 'off';
+const BASE_EXPECTED = 28;
+const EXPECTED = BASE_EXPECTED + (PLANTS ? 1 : 0);
 const OUTPUT_RELS = ['engine/etiuda.html', 'engine/etiuda.csp.json', 'engine/bubble.css'];
 const OVERLAY = ['tools/release.mjs', 'tools/ablate.mjs'];
 const DRY = 'dry run: stopped after the page, before the window wall';
 
 let failed = 0, asserted = 0, complete = false;
-let parent = '', scratch = '';
+let parent = '', scratch = '', d1 = '';
 
 function oneLine(s) {
   return String(s || '').replace(/[\u0000-\u001f]+/g, ' ').slice(0, 300);
@@ -101,6 +103,10 @@ function sourceCases() {
   const readAt = gateBody.indexOf("'engine', 'etiuda.html'");
   check('the line-endings gate builds before it reads the page',
     buildAt > -1 && readAt > buildAt && gateBody.includes("return 'the build did not write the page'"));
+  const trackedAt = gateBody.indexOf('git status --porcelain -- engine/');
+  const dashAt = gateBody.indexOf('em or en dash(es)');
+  check('the gate refuses stale tracked engine outputs right after the build',
+    buildAt > -1 && trackedAt > buildAt && dashAt > trackedAt && gateBody.includes('build and commit first'));
   const stopAt = rel.indexOf("args[args.indexOf('--up-to') + 1] === 'page'");
   const exitAt = rel.indexOf('process.exit(0)');
   const wallAt = rel.indexOf('windowWallRefusal');
@@ -132,11 +138,145 @@ function sourceCases() {
   check('this checkout\'s source and engine are clean', dirty() === '', dirty());
 }
 
-async function scratchCases() {
-  parent = fs.mkdtempSync(path.join(os.tmpdir(), 'bod-readers-'));
-  scratch = path.join(parent, 'full');
-  const homes = path.join(parent, 'homes');
-  fs.mkdirSync(homes, { recursive: true });
+function copyRel(fromRoot, toRoot, rel) {
+  const src = path.join(fromRoot, ...rel.split('/'));
+  const dst = path.join(toRoot, ...rel.split('/'));
+  fs.mkdirSync(path.dirname(dst), { recursive: true });
+  fs.copyFileSync(src, dst);
+}
+function writeLf(file, text) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, text.replace(/\r\n/g, '\n'), 'utf8');
+}
+function gitOk(cwd, args) {
+  const r = git(cwd, args);
+  if (r.status !== 0) throw new Error('git ' + args.join(' ') + ' failed: ' + oneLine(r.stderr || r.stdout));
+  return r.stdout;
+}
+function d1Cases(parentDir, homes) {
+  d1 = path.join(parentDir, 'd1');
+  fs.mkdirSync(path.join(d1, 'engine'), { recursive: true });
+  gitOk(parentDir, ['init', d1]);
+  gitOk(d1, ['config', 'user.name', 'test']);
+  gitOk(d1, ['config', 'user.email', 'test@example.com']);
+  gitOk(d1, ['config', 'core.autocrlf', 'false']);
+  gitOk(d1, ['config', 'core.eol', 'lf']);
+  fs.writeFileSync(path.join(d1, '.git', 'etiuda-names'), 'dummy\n', 'utf8');
+  const hook = path.join(d1, '.git', 'hooks', 'pre-commit');
+  fs.writeFileSync(hook, '#!/bin/sh\nexit 0\n', 'utf8');
+  try { fs.chmodSync(hook, 0o755); } catch {}
+  fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(d1, 'node_modules'), 'junction');
+
+  for (const rel of [
+    'tools/release.mjs', 'tools/sellable.mjs', 'tools/sbom.mjs',
+    'tools/esigner.cjs', 'tools/test-service.cjs', 'tools/signin-secret.cjs', 'tools/seller-address.cjs',
+    'tools/build.mjs', 'tools/bundler-probe/build.mjs',
+    'tests/engine.js', 'electron-builder.js',
+  ]) copyRel(ROOT, d1, rel);
+
+  writeLf(path.join(d1, '.gitignore'), 'engine/etiuda.build.json\nnode_modules/\n');
+  writeLf(path.join(d1, 'package.json'), JSON.stringify({ name: 'etiuda', private: true, version: '0.0.0' }) + '\n');
+  writeLf(path.join(d1, 'shell', 'license_en.txt'), 'Licence EN\n');
+  writeLf(path.join(d1, 'shell', 'license_pl.txt'), 'Licence PL\n');
+  writeLf(path.join(d1, 'src', 'modules', 'env.js'), 'export const E_VERSION = "2.0.0-dev";\nexport const MARK = 1;\n');
+  writeLf(path.join(d1, 'src', 'main.js'), [
+    'import { E_VERSION, MARK } from "./modules/env.js";',
+    'var E_BUILT = "@E_BUILT@";',
+    'var EULA = ["@EULA_EN@", "@EULA_PL@"];',
+    'globalThis.__d1 = { E_VERSION, MARK, E_BUILT, EULA };',
+    '',
+  ].join('\n'));
+  writeLf(path.join(d1, 'src', 'template.html'), [
+    '<!DOCTYPE html>',
+    '<meta charset="utf-8">',
+    '<title>Etiuda</title>',
+    '<style>',
+    '/*@BUBBLE-BEGIN*/',
+    '.bub { color: inherit; }',
+    '.bub-tip { color: inherit; }',
+    '/*@BUBBLE-END*/',
+    '</style>',
+    '<script>window.E_DATA = 1;</script>',
+    '<script>',
+    '/*@APP*/',
+    '</script>',
+    '',
+  ].join('\n'));
+
+  const built = spawnSync(process.execPath, ['tools/build.mjs'], {
+    cwd: d1, env: releaseEnv(homes), encoding: 'utf8', windowsHide: true,
+  });
+  if (built.status !== 0) throw new Error('d1 build failed: ' + oneLine(built.stderr || built.stdout));
+  gitOk(d1, ['add', '-A']);
+  const initCommit = git(d1, ['commit', '-m', 'Initial tracked page.']);
+  check('d1 scratch repo is ready', initCommit.status === 0, initCommit.stderr || initCommit.stdout);
+  if (initCommit.status !== 0) return;
+
+  const current = runRelease(d1, homes);
+  check('a committed page that is current passes gate 4',
+    current.status === 0 && current.out.includes(DRY) && !current.out.includes('build and commit first'),
+    'exit ' + current.status + ' ' + oneLine(current.out));
+
+  const committedHtml = gitOk(d1, ['show', 'HEAD:engine/etiuda.html']);
+  writeLf(path.join(d1, 'src', 'modules', 'env.js'), 'export const E_VERSION = "2.0.0-dev";\nexport const MARK = 2;\n');
+  gitOk(d1, ['add', 'src/modules/env.js']);
+  gitOk(d1, ['commit', '-m', 'Source moved without rebuilding the page.']);
+
+  const stale = runRelease(d1, homes);
+  const headHtmlAfter = gitOk(d1, ['show', 'HEAD:engine/etiuda.html']);
+  const staleStop = (stale.out.split(/\n/).find(l => l.includes('STOP:')) || '');
+  check('a stale committed page stops release with build and commit first',
+    stale.status !== 0 && stale.out.includes('build and commit first')
+    && !stale.out.includes(DRY) && !stale.out.includes('#refused window-wall') && !/\n\[5\] /.test(stale.out),
+    'exit ' + stale.status + ' ' + oneLine(staleStop || stale.out));
+  check('the commit still holds the stale page bytes', headHtmlAfter === committedHtml);
+
+  gitOk(d1, ['checkout', '--', ...OUTPUT_RELS]);
+
+  if (!PLANTS) {
+    console.log('NOT RUN plant:release-tracked-build (ETIUDA_PLANTS=off)');
+  } else {
+    const relPath = path.join(d1, 'tools', 'release.mjs');
+    const relSrc = fs.readFileSync(relPath, 'utf8');
+    const marker = '/* plant:release-tracked-build */';
+    if (!relSrc.includes(marker)) {
+      check('lifting the tracked-build check lets a stale page pass gate 4', false, 'marker absent');
+    } else {
+      const liftedSrc = relSrc.split('\n').filter(l => !l.includes(marker)).join('\n');
+      fs.writeFileSync(relPath, liftedSrc, 'utf8');
+      gitOk(d1, ['add', 'tools/release.mjs']);
+      gitOk(d1, ['commit', '-m', 'Lift tracked-build check.']);
+      const liftedRun = runRelease(d1, homes);
+      check('lifting the tracked-build check lets a stale page pass gate 4',
+        liftedRun.status === 0 && liftedRun.out.includes(DRY) && !liftedRun.out.includes('build and commit first'),
+        'exit ' + liftedRun.status + ' ' + oneLine(liftedRun.out));
+      fs.writeFileSync(relPath, relSrc, 'utf8');
+      gitOk(d1, ['add', 'tools/release.mjs']);
+      gitOk(d1, ['commit', '-m', 'Restore tracked-build check.']);
+      gitOk(d1, ['checkout', '--', ...OUTPUT_RELS]);
+    }
+  }
+
+  gitOk(d1, ['rm', '--cached', '-q', '--', ...OUTPUT_RELS]);
+  removeOutputs(d1);
+  gitOk(d1, ['commit', '-m', 'Outputs leave git.']);
+  const untrackedRaw = runRelease(d1, homes);
+  check('untracked unignored outputs pass gate 4',
+    untrackedRaw.status === 0 && untrackedRaw.out.includes(DRY) && !untrackedRaw.out.includes('build and commit first'),
+    'exit ' + untrackedRaw.status + ' ' + oneLine(untrackedRaw.out));
+
+  removeOutputs(d1);
+  writeLf(path.join(d1, '.gitignore'), 'engine/etiuda.build.json\nnode_modules/\n' + OUTPUT_RELS.join('\n') + '\n');
+  gitOk(d1, ['add', '.gitignore']);
+  gitOk(d1, ['commit', '-m', 'Ignore untracked outputs.']);
+  const untrackedIgnored = runRelease(d1, homes);
+  check('untracked ignored outputs pass gate 4',
+    untrackedIgnored.status === 0 && untrackedIgnored.out.includes(DRY) && !untrackedIgnored.out.includes('build and commit first'),
+    'exit ' + untrackedIgnored.status + ' ' + oneLine(untrackedIgnored.out));
+}
+
+async function scratchCases(parentDir, homes) {
+  scratch = path.join(parentDir, 'full');
   note('worktree ' + scratch);
   const added = git(ROOT, ['worktree', 'add', '--detach', scratch, 'HEAD']);
   if (added.status !== 0) {
@@ -252,6 +392,10 @@ async function scratchCases() {
 function cleanup() {
   const modules = path.join(ROOT, 'node_modules');
   const before = fs.existsSync(modules);
+  if (d1) {
+    try { dropJunction(d1); }
+    catch (e) { console.log('  FAIL d1 junction left in place: ' + oneLine(e.message)); return; }
+  }
   if (scratch) {
     try { dropJunction(scratch); }
     catch (e) { console.log('  FAIL junction left in place: ' + oneLine(e.message)); return; }
@@ -265,7 +409,11 @@ function cleanup() {
 
 try {
   sourceCases();
-  await scratchCases();
+  parent = fs.mkdtempSync(path.join(os.tmpdir(), 'bod-readers-'));
+  const homes = path.join(parent, 'homes');
+  fs.mkdirSync(homes, { recursive: true });
+  d1Cases(parent, homes);
+  await scratchCases(parent, homes);
   complete = asserted === EXPECTED;
 } catch (e) {
   failed++;
