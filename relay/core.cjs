@@ -637,11 +637,20 @@ function createCore(deps) {
     since = !!named && plain(cert) && Number.isSafeInteger(cert.issued) && cert.issued >= named.at; /* plant:freed-issued */
     if (named && !since) return no("seat-lapsed"); /* plant:seat-freed */
     if (cert === undefined || certWhy(cert, deskPub, [seats.licence], now, roots, revokedNow(), true) !== null) return no("seat-lapsed"); /* plant:seat-cert */
+    const seat = { pub: deskPub, licence: seats.licence, issued: cert.issued, until: cert.until, pooled: cert.pooled === true };
     if (now < cert.until) {
       const seen = store.get("seatSeen");
       const newer = !(plain(seen) && seen.licence === seats.licence && seen.issued >= cert.issued);
-      return { ok: true, note: newer ? () => store.put("seatSeen", { licence: seats.licence, issued: cert.issued }) : null }; /* plant:seat-seen */
+      return { ok: true, seat, note: newer ? () => store.put("seatSeen", { licence: seats.licence, issued: cert.issued }) : null }; /* plant:seat-seen */
     }
+    const ran = seatRunOut(seats, seat, now, true);
+    return ran.ok ? { ok: true, seat, note: null } : ran;
+  }
+
+  /* A run-out certificate (`seat`, as seatGate keeps it) judged against the team's evidence at `now`; `mark` keeps a refusal ("pr:"),
+     which only a hello does. */
+  function seatRunOut(seats, seat, now, mark) {
+    const deskPub = seat.pub, cert = seat;
     const seen = store.get("seatSeen");
     let evidence = seats.live;
     if (plain(seen) && seen.licence === seats.licence && seen.issued > evidence) evidence = seen.issued; /* plant:seat-evidence-seen */
@@ -655,7 +664,7 @@ function createCore(deps) {
     let refusedOnce = false;
     refusedOnce = within && store.get(refusedKey) !== undefined; /* plant:pooled-refused-read */
     if (within && quiet && !refusedOnce) return { ok: true, note: null }; /* plant:pooled-grace */
-    if (within && !refusedOnce) store.atomic(() => store.put(refusedKey, { until: cert.until + POOLED_GRACE_MS })); /* plant:pooled-refused-mark */
+    if (mark && within && !refusedOnce) store.atomic(() => store.put(refusedKey, { until: cert.until + POOLED_GRACE_MS })); /* plant:pooled-refused-mark */
     return no("seat-lapsed"); /* plant:seat-lapsed */
     return { ok: true, note: null };
   }
@@ -673,7 +682,7 @@ function createCore(deps) {
   function storeGate(team, cert, deskPub) {
     if (storeCertWhy(cert, deskPub, clock(), roots, revokedNow()) !== null) return no("seat-lapsed"); /* plant:store-cert */
     if (storeMark(team.secret, cert.code) !== team.store) return no("seat-lapsed"); /* plant:store-code */
-    return { ok: true, note: null };
+    return { ok: true, note: null, end: cert.until };
   }
 
   /* A computer another took off the store signs no list: it holds S and its certificate for the rest of its day. One that took itself
@@ -1272,7 +1281,7 @@ function createCore(deps) {
       let seat = { ok: true };
       seat = seatGate(b.seat, b.pub); /* plant:seat-lead */
       if (!seat.ok) return seat;
-      return issue(b.challenge, { key: b.key, inv: null }, seat.note);
+      return issue(b.challenge, seated({ key: b.key, inv: null }, seat), seat.note);
     }
     const dev = store.get("dev:" + b.key), gone = dev ? undefined : removalOf(b.key, b.pub);
     if (!dev && gone) {
@@ -1299,7 +1308,7 @@ function createCore(deps) {
     seat = seatGate(b.seat, b.pub); /* plant:seat-session */
     if (team.store) seat = storeGate(team, b.seat, b.pub); /* plant:store-session */
     if (!seat.ok) return seat;
-    return issue(b.challenge, { key: b.key, inv: null }, seat.note);
+    return issue(b.challenge, seated({ key: b.key, inv: null }, seat), seat.note);
   }
 
   /* THE STANDING DOOR (board 980, A4): a desk whose person signed in to the licence service asks to join with no invitation, its
@@ -1330,7 +1339,7 @@ function createCore(deps) {
       /* An enrolled desk knocking is a desk session, so the team's seats judge the certificate it knocks with. */
       let seat = { ok: true };
       seat = seatGate(b.door, b.pub); /* plant:seat-door */
-      return seat.ok ? issue(b.challenge, { key: b.key, inv: null }, seat.note) : seat;
+      return seat.ok ? issue(b.challenge, seated({ key: b.key, inv: null }, seat), seat.note) : seat;
     }
     if (removalOf(b.key, b.pub)) return no("removed"); /* plant:door-removed */
     /* A key whose door request the lead dropped is answered as a stranger is for the rate window after the drop. */
@@ -1431,6 +1440,8 @@ function createCore(deps) {
     return { ok: true, refs: b.refs.slice() };
   }
 
+  /* What a session's gate said, kept with it: a seat's certificate, judged again at each use (seatLapsed), and a store certificate's end. */
+  const seated = (who, seat) => Object.assign(who, plain(seat.seat) ? { seat: seat.seat } : {}, Number.isSafeInteger(seat.end) ? { end: seat.end } : {});
   /* The session is kept by its sha256, so the store holds nothing a reader could present. */
   function issue(nonce, who, also) {
     const lapsedSession = lapseGate(false);
@@ -1438,7 +1449,9 @@ function createCore(deps) {
     let mayGo = false;
     mayGo = who.letGo === true; /* plant:let-go-session */
     if (lapsedSession && !mayGo) return lapsedSession; /* plant:lapse-session */
-    const token = random(32), now = clock(), until = now + SESSION_MS;
+    const token = random(32), now = clock();
+    let until = now + SESSION_MS;
+    until = Number.isSafeInteger(who.end) ? Math.min(until, who.end) : until; /* plant:session-store-end */
     if (!roomForChallenge(now)) return no("rate");
     let keyShare = false;
     keyShare = !who.inv && challengeShare(null, who.key) >= CHALLENGE_SHARE; /* plant:challenge-key-share */
@@ -1454,7 +1467,8 @@ function createCore(deps) {
       for (const k of evicted) store.del(k);
       held = held.filter(([k]) => !evicted.has(k));
       for (const [k] of held.slice(0, Math.max(0, held.length - SESSIONS_MAX + 1))) store.del(k); /* plant:session-cap */
-      store.put("ses:" + sha256(token), who.bound ? { key: who.key, inv: who.inv, bound: who.bound, until } : { key: who.key, inv: who.inv, until });
+      store.put("ses:" + sha256(token), Object.assign(who.bound ? { key: who.key, inv: who.inv, bound: who.bound, until } : { key: who.key, inv: who.inv, until },
+        plain(who.seat) ? { seat: who.seat } : {}));
     });
     const out = who.inv ? { ok: true, session: token, until, invite: true, lapse: told() } : { ok: true, session: token, until, lapse: told() };
     /* A door request's session names its id, which is where the lead's answer is written: the desk has no invitation to read it from. */
@@ -1551,11 +1565,29 @@ function createCore(deps) {
     if (s.removed) return no("removed"); /* plant:session-removed */
     const blocked = grantRefused();
     if (blocked) return blocked;
+    let lapsed = null;
+    lapsed = seatLapsed(s); /* plant:session-seat */
+    if (lapsed) return lapsed;
     const out = { ok: true, hash: h, key: s.key, inv: s.inv, bound: s.bound || null, until: s.until };
     if (quietSession(out)) out.quiet = true; /* plant:rejoin-quiet */
     return out;
   }
   const sessionOf = token => sessionByHash(is(HEX64, token) ? sha256(token) : null);
+  /* A key's session on a team with seats, judged again at each use from the certificate its hello carried: a freed name, a run-out the
+     evidence now passes by the margin, or a pooled grace the service ended refuses it as seatGate refuses a new hello. A session that
+     carried none, or another licence's, holds no seat. */
+  function seatLapsed(s) {
+    const seats = s.key && !s.inv ? store.get("seats") : undefined;
+    if (!plain(seats)) return null;
+    const seat = s.seat;
+    if (!plain(seat) || seat.licence !== seats.licence) return no("seat-lapsed");
+    const named = Array.isArray(seats.freed) ? seats.freed.find(f => plain(f) && f.key === seat.pub) : undefined;
+    if (named && !(seat.issued >= named.at)) return no("seat-lapsed");
+    const now = clock();
+    if (now < seat.until) return null;
+    const ran = seatRunOut(seats, seat, now, false);
+    return ran.ok ? null : ran;
+  }
 
   function expired(m, now) {
     return m.del && now - m.at > KEEP_MS; /* plant:deletion-keep */

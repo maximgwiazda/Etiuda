@@ -13,7 +13,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-store-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 58;
+const EXPECTED = 60;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -293,6 +293,20 @@ async function main() {
     const ok = refused(lifted, "seat-lapsed") && next.status === 200 && signed.status === 200;
     return { ok, detail: brief({ liftedOntoTop: said(lifted), nextList: said(next), signedFrom: said(signed) }) };
   }
+  /* The second house on review 1 (Grok, finding 1): a store certificate has no run-out grace, so a store session ends at its certificate's
+     end, not 30 minutes after the hello. */
+  async function storeEndScene() {
+    const w = await storeTeam(), a = w.desks.a, made = w.R.clock.now;
+    a.cert = storeCert(a.pub, w.code, made, HOUR);
+    w.R.clock.now = made + HOUR - 10 * MIN;
+    const s = await hello(w, a, a.cert);
+    const token = s.json && s.json.session;
+    const before = await call(w.R, "GET", "/relay/v1/t/" + w.rt + "/since/0", { token });
+    w.R.clock.now = made + HOUR + MIN;
+    const after = await call(w.R, "GET", "/relay/v1/t/" + w.rt + "/since/0", { token });
+    const ok = opened(s) && s.json.until <= made + HOUR && before.status === 200 && after.status === 401 && !!after.json && after.json.error === "no-hello";
+    return { ok, detail: brief({ session: said(s), untilPastCert: s.json ? s.json.until - (made + HOUR) : null, before: said(before), minuteAfterCert: said(after) }) };
+  }
   /* A store stays a store and a team a team: a relay grant renews no store and moves no store's lead; a store grant renews no team; a
      repeat create of the store under a store grant for another person is refused, and for its own person taken. */
   async function stickyScene() {
@@ -433,6 +447,7 @@ async function main() {
     ["st2e", listScene, "a store's computer list signed by S alone, or by a computer without a current store certificate for the person, or not signed by that computer, is refused; the person's own takes"],
     ["st2f", removedSignerScene, "a computer another took off the store signs no list in its certificate's day, neither putting itself back nor taking the rest off; one that left by itself puts itself back"],
     ["st2g", listFromScene, "a list's from is covered by the computer's signature: S lifting that signature onto a list naming the newest file possible is refused and the next list is taken"],
+    ["st2h", storeEndScene, "a store session ends at its store certificate's end, and its bearer a minute later is no-hello"],
     ["st3a", stickyScene, "a store stays a store and a team a team, and a store's person never changes"],
     ["st3b", grantShapeScene, "a store grant without its code, with a code out of shape, with seats, or signed over the relay grant's label is refused at the create"],
     ["st4a", endScene, "the service's store-end deletes every object before it answers, leaves only the ended mark, and the id is never made again"],
@@ -500,6 +515,7 @@ async function main() {
     ["core", "store-devices-sig", "st2e", "the certificate's computer need not sign the list"],
     ["core", "store-devices-removed", "st2f", "a computer another took off signs the list"],
     ["core", "store-devices-from", "st2g", "a list's from rides outside the computer's signature"],
+    ["core", "session-store-end", "st2h", "a store session runs its 30 minutes past its certificate"],
     ["core", "store-kind-fits", "st3a", "a grant of the other kind fits"],
     ["core", "store-code-fits", "st3a", "a store grant for another person fits"],
     ["core", "store-create-fits", "st3a", "a repeat create asks no fit"],

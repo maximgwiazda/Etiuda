@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 87;
+const EXPECTED = 91;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -875,6 +875,41 @@ async function main() {
     return { ok, detail: brief({ named: said(named), freedList: said(listA), socket: ws ? ws.closed : "none", colleague: said(listC), cameBack: said(sb), renamed: said(again), cameBackList: said(listB) }) };
   }
   await leg("s22e", freedSessionScene, "a pooled desk newly named as freed loses its session and its socket at once, a colleague's stays, and a renewal naming it again at the same instant leaves the session its person came back to");
+  /* The second house on review 1 (Grok, finding 1): a live bearer is judged again at each use by what its hello's certificate said, so a
+     run-out the team's evidence now passes by the margin, or a pooled grace the service ends by proving again, stops that bearer as it
+     stops a new hello. */
+  const listWith = (w, r) => call(w.R, "GET", "/relay/v1/t/" + w.rt + "/since/0", { token: opened(r) ? r.json.session : "" });
+  async function liveRunOutScene() {
+    const w = await team({ seats: true }), a = w.desks.a;
+    a.cert = certFor(a.pub, w.licence, T0, HOUR);
+    w.R.clock.now = T0 + 2 * HOUR;
+    const sa = await sessionAs(w, "a");
+    const before = await listWith(w, sa);
+    w.R.clock.now += 5 * MIN;
+    prove(w, "c", DAY);
+    const sc = await sessionAs(w, "c");
+    const after = await listWith(w, sa);
+    const ok = opened(sa) && before.status === 200 && opened(sc) && refused(after, "seat-lapsed");
+    return { ok, detail: brief({ runOutOpened: said(sa), listedBefore: said(before), colleague: said(sc), listedAfterEvidence: said(after) }) };
+  }
+  await leg("s23a", liveRunOutScene, "a desk's session opened on a run-out certificate before the margin is refused seat-lapsed on its next use once a colleague proves past the margin");
+  async function liveGraceScene() {
+    const w = await team({ seats: true }), a = w.desks.a, end = T0 + DAY;
+    a.cert = certFor(a.pub, w.licence, T0, DAY, { fields: { pooled: true } });
+    w.R.clock.now = end + 2 * HOUR;
+    prove(w, "c", DAY);
+    await sessionAs(w, "c");
+    w.R.clock.now = end + 2 * HOUR + C.SEAT_QUIET_MS + MIN;
+    const sa = await sessionAs(w, "a");
+    const before = await listWith(w, sa);
+    w.R.clock.now += 5 * MIN;
+    prove(w, "c", DAY);
+    const sc = await sessionAs(w, "c");
+    const after = await listWith(w, sa);
+    const ok = opened(sa) && before.status === 200 && opened(sc) && refused(after, "seat-lapsed");
+    return { ok, detail: brief({ graceOpened: said(sa), listedBefore: said(before), serviceProves: said(sc), listedAfter: said(after) }) };
+  }
+  await leg("s23b", liveGraceScene, "a pooled desk's session opened in its quiet grace is refused seat-lapsed on its next use once the service proves anyone again");
   await leg("s22a", freedScene, "(d) a pooled desk the grant names as freed is refused outright, its certificate current, and opens again once a later grant no longer names it");
   await leg("s22b", nightOnlyScene, "(a)'s measured limit: a removed pooled desk first tried only at night, never refused while the evidence was fresh, is honoured to its end plus 72 hours under (a) alone, as expected; with (d), the grant naming it, it is refused outright, at night, late in the grace and after");
   await leg("s22c", freedShapeScene, "a grant's freed list out of shape (empty, not a list, not keys, a key twice, a bare key, an entry without its instant, one freed after the grant's issue, one with another field, past FREED_MAX, a thousand) is refused shape, and a good one and a full one taken");
@@ -946,6 +981,8 @@ async function main() {
     ["freed-new", "s22e", freedSessionScene, "a renewal naming a desk again ends the session its person came back to"],
     ["freed-sockets", "s22e", freedSessionScene, "a freed desk's socket stays open"],
     ["seats-release-mark", "s15d", releaseReplayScene, "the released grant, posted again, gates the team"],
+    ["session-seat", "s23a", liveRunOutScene, "a live bearer is never judged again, so a run-out past the margin still reads"],
+    ["session-seat", "s23b", liveGraceScene, "a live bearer is never judged again, so a pooled grace the service ended still reads"],
     ["freed-issued", "s22d", freedSinceScene, "the issue-time comparison dropped, so a certificate issued after the freeing is refused"],
     ["seats-freed-kept", "s22b", nightOnlyScene, "a grant's freed list is not kept"],
     ["grant-freed-shape", "s22c", freedShapeScene, "a freed list out of shape is taken"],
