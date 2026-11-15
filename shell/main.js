@@ -10372,7 +10372,10 @@ function signinView() {
   const real = signinOffered().map(p => p.id), held = signinState().held, now = Date.now(), preview = signinPreviewing();
   const offered = preview ? Object.keys(SIGNIN_PROVIDERS) : real;
   const signedIn = held && real.indexOf(held.provider) >= 0 ? held.provider : "";
-  return { offered: offered, preview: preview, signedIn: signedIn, code: signedIn ? held.code : "",
+  /* The code shown and handed to Buy is the held certificate's own where one is held, as the answer took it. */
+  let code = signedIn ? held.code : "";
+  if (signedIn && held.cert && typeof held.cert.code === "string") code = held.cert.code; /* plant:view-cert-code */
+  return { offered: offered, preview: preview, signedIn: signedIn, code: code,
     seat: !signedIn ? "" : held.cert ? (signinLapsed(held, now) ? "lapsed" : "held") : "none",
     deskOnly: !!signedIn && !!held.cert && held.cert.deskOnly === true, /* plant:view-desk-only */
     at: signedIn ? held.at : 0, reached: !signedIn || held.reached !== false, ask: !!signedIn && held.ask === true,
