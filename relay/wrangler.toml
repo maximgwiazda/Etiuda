@@ -54,3 +54,12 @@ new_sqlite_classes = ["RelayTeam"]
 binding = "BLOBS"
 bucket_name = "etiuda-relay-next"
 jurisdiction = "eu"
+
+# Staging alone keeps the relay's own console lines in Workers Logs, so the one-spelling migration's count is there when an old
+# staging team next wakes, whoever is watching. No per-request invocation record is kept, and traces stay off (wrangler's
+# default). The live block above keeps the relay's logs off: logging on the live relay is a production and privacy question.
+[env.staging.observability]
+enabled = true
+
+[env.staging.observability.logs]
+invocation_logs = false

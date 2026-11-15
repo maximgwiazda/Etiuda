@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 583;
+const EXPECTED = 584;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -268,6 +268,36 @@ async function main() {
       && !/REVOKED/.test(top) && has(staging, /^# REVOKED, the root-signed list of revoked service keys: the chief of staff sets it at deploy\.$/m)
       && !/^REVOKED\s*=/m.test(toml),
       "979l the top of relay/wrangler.toml is the live Worker etiuda-relay-staging, its route etiuda.dev/relay/v1/*, its eu bucket and Durable Object, with no API_PREFIX, and [env.staging] names etiuda-relay-next, the route etiuda.dev/relay-staging/v1/*, the prefix, the eu bucket etiuda-relay-next and its Durable Object, and says it is deployed only by wrangler deploy --env staging, by a chief of staff, and REVOKED is named only as a comment the chief of staff sets at deploy, with no value");
+    /* Workers Logs on staging alone (Claude alpha, 2026-11-15): staging keeps the relay's own console lines, the migration's count among
+       them, with no per-request invocation record; the live block keeps its logs off, a production and privacy question. Each table
+       is read with comments stripped, and an inline observability, logs or traces key anywhere counts against it. */
+    const sameT = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const tablesOf = text => {
+      const out = new Map([["", []]]);
+      let cur = "";
+      for (const raw of text.split(/\r?\n/)) {
+        const line = raw.replace(/#.*$/, "").trim();
+        if (!line) continue;
+        const h = /^\[\[?([^\]]+)\]\]?$/.exec(line);
+        if (h) { cur = h[1].trim(); if (!out.has(cur)) out.set(cur, []); continue; }
+        out.get(cur).push(line.replace(/\s+/g, " "));
+      }
+      return out;
+    };
+    const logsHeld = text => {
+      const t = tablesOf(text);
+      const obs = [...t.keys()].filter(k => /(^|\.)(observability|logs|traces)(\.|$)/.test(k)).sort();
+      const inline = [...t.values()].some(lines => lines.some(l => /^(observability|logs|traces)\b/.test(l)));
+      return sameT(obs, ["env.staging.observability", "env.staging.observability.logs", "observability"]) && !inline
+        && sameT(t.get("observability"), ["enabled = false"]) && sameT(t.get("env.staging.observability"), ["enabled = true"])
+        && sameT(t.get("env.staging.observability.logs"), ["invocation_logs = false"]);
+    };
+    const logsControl = !logsHeld(toml + "\n[observability.logs]\nenabled = true\n") && !logsHeld(toml.replace("invocation_logs = false", "invocation_logs = true"))
+      && !logsHeld(toml + "\n[env.staging.observability.traces]\nenabled = true\n");
+    check(logsHeld(toml) && logsControl,
+      "979m relay/wrangler.toml keeps the live Worker's logs off ([observability] enabled = false and nothing else, no logs table) and turns"
+      + " Workers Logs on for env.staging alone, its one setting enabled = true with invocation_logs = false; the leg refuses a logs table on"
+      + " the live block, invocation records on staging, and traces on staging");
   }
 
   /* ---- 1: the bytes and the routes ---- */
