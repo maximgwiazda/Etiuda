@@ -32,6 +32,8 @@ async function asked(ask, method, url, headers, body) {
 function graphWhy(res, onDrive) {
   const s = res.status, j = jsonOf(res), code = j && j.error && typeof j.error.code === "string" ? j.error.code : "";
   if (s === 507 || code === "quotaLimitReached" || code === "insufficientStorage") return "full";
+  /* Throttled or down: offline, tried again at the next look, never a reason the person is told. */
+  if (s === 429 || s >= 500) return "offline"; /* plant:graph-transient */
   if (s === 401 || code === "accessDenied" || /scope|consent/i.test(code)) return "consent";
   if (s === 403) return "consent";
   if (s === 404 && onDrive) return "no-drive";
@@ -73,6 +75,7 @@ function driveWhy(res) {
   const j = jsonOf(res), errs = j && j.error && Array.isArray(j.error.errors) ? j.error.errors : [];
   const reasons = errs.map(e => String(e && e.reason || ""));
   if (reasons.some(r => r === "storageQuotaExceeded" || r === "quotaExceeded")) return "full";
+  if (res.status === 429 || res.status >= 500 || reasons.some(r => r === "rateLimitExceeded" || r === "userRateLimitExceeded" || r === "backendError")) return "offline"; /* plant:drive-transient */
   if (reasons.some(r => r === "insufficientPermissions" || r === "insufficientScopes") || res.status === 401) return "consent";
   if (reasons.some(r => r === "domainPolicy" || r === "accessNotConfigured" || r === "dailyLimitExceededUnreg" || r === "notAccessibleForUser")) return "no-drive";
   if (res.status === 403) return "no-drive";

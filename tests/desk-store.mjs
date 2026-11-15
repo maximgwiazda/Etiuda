@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-plants-"));
-const EXPECTED = 26;
+const EXPECTED = 29;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -47,6 +47,7 @@ function graphStandIn() {
     st.calls.push(method + " " + url.replace(/^https:\/\/graph\.microsoft\.com\/v1\.0/, ""));
     if (st.offline) throw new TypeError("fetch failed");
     const json = (status, o) => ({ status, bytes: Buffer.from(JSON.stringify(o)) });
+    if (st.status) return json(st.status, { error: { code: st.code || "serviceNotAvailable" } });
     if (!/^Bearer \S+$/.test(String(headers && headers.authorization))) return json(401, { error: { code: "InvalidAuthenticationToken" } });
     if (!st.consent) return json(403, { error: { code: "accessDenied" } });
     if (!st.drive) return json(404, { error: { code: "itemNotFound" } });
@@ -74,6 +75,7 @@ function driveStandIn() {
     if (st.offline) throw new TypeError("fetch failed");
     const json = (status, o) => ({ status, bytes: Buffer.from(JSON.stringify(o)) });
     const err = (status, reason) => json(status, { error: { code: status, errors: [{ reason }] } });
+    if (st.status) return err(st.status, st.reason || "backendError");
     if (st.policy === "consent") return err(403, "insufficientPermissions");
     if (st.policy === "domain") return err(403, "domainPolicy");
     const byId = id => st.files.find(f => f.id === id);
@@ -256,6 +258,22 @@ async function main() {
     const ok = all && said.join() === "no-drive,consent" && on.say === null && again.say === "consent";
     return { ok, detail: brief({ looks: out, said, afterSync: again.say }) };
   }
+  /* T2: the folder throttled or down (Graph 503 or 429, Drive 503, 429 or 403 rateLimitExceeded or userRateLimitExceeded): offline,
+     never a reason the person is told; the provider's lasting refusals keep their reasons (C3). */
+  async function transientScene() {
+    const out = {};
+    let all = true;
+    for (const [kind, set] of [["microsoft:503", f => { f.status = 503; }], ["microsoft:429", f => { f.status = 429; f.code = "TooManyRequests"; }],
+      ["google:503", f => { f.status = 503; }], ["google:429", f => { f.status = 429; f.reason = "rateLimitExceeded"; }],
+      ["google:403-rate", f => { f.status = 403; f.reason = "rateLimitExceeded"; }], ["google:403-user", f => { f.status = 403; f.reason = "userRateLimitExceeded"; }]]) {
+      const w = worldOf(kind.split(":")[0]), a = computer(w, "a");
+      set(w.f);
+      const l = await a.look();
+      out[kind] = l.state + "/" + l.why;
+      all = all && l.state === "unavailable" && l.why === "offline";
+    }
+    return { ok: all, detail: brief(out) };
+  }
   /* C4: the folder's file deleted while a computer holds K and S: its next look writes it back, the same store; with no computer holding
      them, the next sign-in makes a new store, and the service is asked a grant for it (the service ends the old one, Studio's S4a). */
   async function deletedScene() {
@@ -368,6 +386,7 @@ async function main() {
     ["C1rg", () => raceScene("google"), "the same on Drive, where both files are made and the one made first is read by both"],
     ["C2", keysStayScene, "K and S reach the person's folder and each computer's own sealing alone: no body sent to the service or the relay holds either"],
     ["C3", unreachedScene, "the folder unreached (offline, no drive, Drive off by the organisation, consent refused, full), on each provider, answers unavailable with its reason and throws nothing; each reason is said once, offline never"],
+    ["T2", transientScene, "the folder throttled or down, Graph 503 or 429 and Drive 503, 429 or a rate-limit 403, answers offline, never a reason told"],
     ["C4", deletedScene, "the file deleted while a computer holds K and S is written back, the same store; with none holding them the next sign-in makes a new store and asks the service for it"],
     ["C6", policyScene, "a managed computer with PersonalStore unset does not sync; on or company it does, held; elsewhere sync is on unless the person turned it off"],
     ["E1", () => endedScene("microsoft"), "turned off everywhere on OneDrive: a computer holding K and S reads the ended mark, answers ended and writes nothing back; turned on there since, a new store is made over the mark"],
@@ -413,6 +432,8 @@ async function main() {
     ["the re-read", "C1r", swap("    keys = again.ok && again.text !== null ? keyRead(again.text) : null;", "    keys = again.ok ? fresh : null;"), "each computer keeps the store it made, so two are made and one ends the other"],
     ["the re-read", "C1rg", swap("    keys = again.ok && again.text !== null ? keyRead(again.text) : null;", "    keys = again.ok ? fresh : null;"), "the same on Drive"],
     ["say-once", "C3", lift("say-once"), "a reason is said at every look"],
+    ["graph-transient", "T2", lift("graph-transient"), "Graph's 503 and 429 read as a refusal"],
+    ["drive-transient", "T2", lift("drive-transient"), "Drive's 503, 429 and rate-limit 403 read as a refusal or no Drive"],
     ["write-back", "C4", lift("write-back"), "the deleted file is not written back, so a new store is made"],
     ["policy-managed", "C6", lift("policy-managed"), "a managed computer with the policy unset syncs"],
     ["pause-days", "C10", lift("pause-days"), "the paused line shows at the first lapse"],

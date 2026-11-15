@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 91;
+const EXPECTED = 94;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -102,6 +102,9 @@ function worldOf(o) {
         return json(200, Object.assign({ token_type: "Bearer", id_token: jwt({ iss: "https://login.microsoftonline.com/" + TID + "/v2.0", tid: TID, aud: MS_CLIENT, sub: c.sub || SUB, nonce: c.nonce,
           preferred_username: "person@example.test", exp: Math.floor(now / 1000) + 3600 }), access_token: c.folder ? w.access : "stand-in-graph-token-not-the-folder", expires_in: 3600 }, c.folder ? {} : { refresh_token: "rt-first" }));
       }
+      /* An outage at the token address: every refresh (w.tokenDown), or only one asking the folder's scope (w.folderDown). */
+      const folderAsked = /Files\.ReadWrite\.AppFolder/.test(new URLSearchParams(body).get("scope") || "");
+      if (w.tokenDown || (w.folderDown && folderAsked)) return json(w.tokenDown || w.folderDown, { error: "temporarily_unavailable" });
       /* As Microsoft answers a refresh asking a scope the person never consented to. */
       if (opt.refuseFolder && /Files\.ReadWrite\.AppFolder/.test(new URLSearchParams(body).get("scope") || ""))
         return json(400, { error: "invalid_grant", error_description: "AADSTS65001: The user or administrator has not consented to use the application." });
@@ -838,6 +841,30 @@ async function consentBusyScene(src) {
   const ok = answer === "asked" && busy === "microsoft" && !(a && a.token === w.access) && asked === 0 && refreshed === 0;
   return { ok, detail: brief({ answer, busy, tokenTakenForB: !!a && a.token === w.access, folderAskedAfter: asked, lookRefreshedAfter: refreshed }) };
 }
+/* (t) AN OUTAGE IS NOT A REFUSAL: the token address answering 503 or 429 to the look's quiet refresh, or to a renewal's folder refresh
+   while the plain one answers, keeps no "no consent" for the folder: the look says offline, and once the address answers the store is on. */
+async function outageScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world, out = {};
+  for (const status of [503, 429]) {
+    if (T.get().storeAccess) T.get().storeAccess.until = 0;
+    w.tokenDown = status;
+    await T.storeTurn();
+    const a = T.get().storeAccess, n = T.get().storeNow;
+    w.tokenDown = 0;
+    await T.storeTurn();
+    out[status] = { during: n && n.state + "/" + n.why, cachedRefusal: !!a && a.token === "", after: T.get().storeNow && T.get().storeNow.state };
+  }
+  if (T.get().storeAccess) T.get().storeAccess.until = 0;
+  w.folderDown = 503;
+  await T.signinRenewNow();
+  const lf = T.get().storeFlight;
+  if (lf) await lf;
+  const a = T.get().storeAccess, n = T.get().storeNow;
+  w.folderDown = 0;
+  out.renewal = { cachedRefusal: !!a && a.token === "", look: n && n.state + "/" + n.why };
+  const ok = [503, 429].every(s => out[s].during === "unavailable/offline" && !out[s].cachedRefusal && out[s].after === "on") && !out.renewal.cachedRefusal && out.renewal.look !== "unavailable/ungiven";
+  return { ok, detail: brief(out) };
+}
 async function consentSwitchScene(src) {
   const r = await signinFlow(src, { refuse: DECLINED });
   const ungiven = !!r.now && r.now.why === "ungiven";
@@ -980,6 +1007,7 @@ const LEGS = [
   ["gt", teamFolderScene, "joined to a folder team, the store's sync takes no team catalog into the person's store, reads the person's own catalog as removed nowhere, and writes nothing from the store into the team's mirror"],
   ["g1b", consentBusyScene, "while the switch's request for the folder waits on the browser the desk is busy to the page, and an answer after another account took the seat is neither taken for it nor looked with"],
   ["g2r", keepRefreshScene, "the switch's Google consent sign-in answered with no refresh token keeps the refresh token already sealed for the same account"],
+  ["t1", outageScene, "the token address answering 503 or 429 to the look's refresh, or to a renewal's folder refresh, keeps no refusal for the folder: the look says offline and the store is on once it answers"],
   ["fa1", refusedAccountScene, "a second Google sign-in whose seat is refused leaves the folder's token the seated account's"],
   ["fa2", overAnotherScene, "an account seated straight over another, with no folder step of its own, is never handed the other's folder token: its look asks its own"],
   ["w1", s => anotherScene(s, "look", true), "person A synced and signed out, which leaves no store keys here; person B seated on the same profile with an empty folder: B's look writes nothing of A's K or S into B's folder and makes B's own store"],
@@ -1006,8 +1034,8 @@ const PLANTS = [
   ["b", swap(" storeTurn(); } /* plant:store-renew */\n", " } /* plant:store-renew */\n"), "the look taken out of the renewal"],
   ["b2", swap("  if (folder && res.status !== 200) {\n    try {", "  if (false) {\n    try {"), "the refused scope is not asked again without it"],
   ["c", swap("{ format: 1, keys: s.keys || \"\", said: s.said || \"\" }", "{ format: 1, keys: s.keys || \"\", said: s.said || \"\", t: storeAccess && storeAccess.token }"), "the token written to the state file"],
-  ["c", swap("  if (folder) signinFolderTake(io, folderRes || { status: 0 }, p.id, now()); /* plant:folder-take-renew */\n",
-    "  if (folder) signinFolderTake(io, folderRes || { status: 0 }, p.id, now()); /* plant:folder-take-renew */\n  signinTrace(io, p.id, \"refresh\", \"ok\", { detail: String(JSON.parse(Buffer.from(folderRes.bytes).toString()).access_token) });\n"), "the token traced past the trace's own hiding"],
+  ["c", swap("  if (folder) signinFolderTake(io, folderRes || (signinTransient(folderFirst) ? folderFirst : { status: 0 }), p.id, now()); /* plant:folder-take-renew */\n",
+    "  if (folder) signinFolderTake(io, folderRes || (signinTransient(folderFirst) ? folderFirst : { status: 0 }), p.id, now()); /* plant:folder-take-renew */\n  signinTrace(io, p.id, \"refresh\", \"ok\", { detail: String(JSON.parse(Buffer.from(folderRes.bytes).toString()).access_token) });\n"), "the token traced past the trace's own hiding"],
   ["e", swap("  if (!(d.relay === undefined || DOOR_RELAYS.installed.concat(DOOR_RELAYS.unpackaged).indexOf(d.relay) >= 0)) return null; /* plant:lab-relay */\n", ""), "a lab may name any relay"],
   ["g", swap("  if (sync) sync.turn(look); /* plant:store-sync-turn */\n", ""), "the look's answer does not turn the sync"],
   ["d4j", swap("seatless: !!held && (!held.cert || held.said === \"full\"), full: storeFullNow }); /* plant:store-view-room */", "seatless: false, full: false }); /* plant:store-view-room */"), "the row is told neither the room nor the seat"],
@@ -1039,6 +1067,8 @@ const PLANTS = [
   ["gc", swap("function storeConflicts() { return storeSyncView().kept; } /* plant:store-conflicts */", "function storeConflicts() { return 0; } /* plant:store-conflicts */"), "the row counts no conflict"],
   ["gs", swap("  storeSyncStop(); /* plant:store-set-stop */\n", ""), "the switch leaves the sync running"],
   ["gr", swap("      room: storeRoom, /* plant:store-room */\n", ""), "the store's channel tells the row nothing"],
+  ["t1", swap(" || signinTransient(res)) return; /* plant:folder-transient */", ") return; /* plant:folder-transient */"), "an outage at the token address kept as the folder refused"],
+  ["t1", swap("  if (signinTransient(res)) return { why: \"offline\" };", ""), "the look's refresh answered by an outage read as consent never given"],
   ["g2r", swap(" || (sameAccount() ? was.refresh || \"\" : \"\"), /* plant:take-keeps-refresh */", ", /* plant:take-keeps-refresh */"), "the sealed refresh token replaced by none"],
   ["g1b", swap("  signinBusy = run; /* plant:consent-busy */", "  /* plant:consent-busy */"), "the consent's wait is no sign-in in progress to the page"],
   ["g1b", swap("{ folderToken: t => { if (same()) storeTokenTake(t); } }); /* plant:consent-held */", "{ folderToken: t => { storeTokenTake(t); } }); /* plant:consent-held */"), "the consent's answer taken for whoever is seated"],

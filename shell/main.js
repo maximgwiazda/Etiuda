@@ -9734,8 +9734,10 @@ function signinRefreshForm(p, refreshToken, access, folder) {
 /* The folder's access token in a provider's answer `res`, handed to io.folderToken and nowhere else: {provider, token, until}, its life
    expires_in seconds or an hour where it names none, token "" where the answer holds none. */
 const SIGNIN_FOLDER_TOKEN_MAX = 16 * 1024;
+/* An answer from a provider that is down or busy (5xx, 429): no answer about the folder at all, so nothing is kept for it. */
+const signinTransient = res => !!res && (res.status === 429 || res.status >= 500);
 function signinFolderTake(io, res, provider, now) {
-  if (!io || typeof io.folderToken !== "function") return;
+  if (!io || typeof io.folderToken !== "function" || signinTransient(res)) return; /* plant:folder-transient */
   let j = null;
   try { j = JSON.parse(Buffer.from(res && res.bytes ? res.bytes : []).toString("utf8")); } catch { j = null; }
   /* An answer naming its scopes without the folder's (Google's folder line unticked) holds no token for the folder. */
@@ -10039,6 +10041,7 @@ async function signinRenew(io, p, deskKey, refreshToken, seed, sub, now, access)
   try { res = await io.tokenAsk(signinKnown(p.id).token, signinRefreshForm(p, refreshToken, access, folder)); }
   catch (e) { signinTrace(io, p.id, "refresh", "signin-unreached", { detail: e && e.message }, hide); return { ok: false, reason: "signin-unreached" }; }
   /* The folder's scope refused, as where it was never consented: asked once more as before the folder existed, so the seat renews alike. */
+  const folderFirst = res;
   if (folder && res.status !== 200) {
     try { res = await io.tokenAsk(signinKnown(p.id).token, signinRefreshForm(p, refreshToken, access)); }
     catch (e) { signinTrace(io, p.id, "refresh", "signin-unreached", { detail: e && e.message }, hide); return { ok: false, reason: "signin-unreached" }; }
@@ -10055,7 +10058,7 @@ async function signinRenew(io, p, deskKey, refreshToken, seed, sub, now, access)
   }
   signinTrace(io, p.id, "refresh", "ok", { status: said.status, detail: signinTraceClaims(res, nonce, now()).replace(/^.*, nonce /, "nonce ")
     + ", refresh token " + (got.refreshToken ? "replaced" : "kept") }, hide);
-  if (folder) signinFolderTake(io, folderRes || { status: 0 }, p.id, now()); /* plant:folder-take-renew */
+  if (folder) signinFolderTake(io, folderRes || (signinTransient(folderFirst) ? folderFirst : { status: 0 }), p.id, now()); /* plant:folder-take-renew */
   return Object.assign({ ok: true, idToken: got.idToken, refreshToken: got.refreshToken || refreshToken, sub: got.sub }, access ? { accessToken: got.accessToken } : {});
 }
 /* THE FOLDER ASKED APART (signinFolderApart), after a seated sign-in `got` where sync may be on: quietly first, by its refresh token,
@@ -11100,6 +11103,7 @@ async function storeTokenFor(p, held) {
   let res = null;
   try { res = await signinRequest((u, init) => deskFetch(u, init), signinKnown(p.id).token, signinRefreshForm(p, refresh, "", folder)); }
   catch { return { why: "offline" }; }
+  if (signinTransient(res)) return { why: "offline" };
   signinFolderTake({ folderToken: storeTokenTake }, res, p.id, Date.now());
   return storeAccess && storeAccess.provider === p.id && storeAccess.token ? {} : { why: storeUngiven() };
 }
