@@ -384,6 +384,8 @@ export function appendChainLine(record, chainsPath = CHAINS_PATH) {
   /* A release run that inherited a base's other legs (the test architect's C3): the base's git tree. */
   if (record.inherits) line.inherits = record.inherits;
   if (Array.isArray(record.carried) && record.carried.length) line.carried = record.carried;
+  /* An area run's mark of what its floor, hygiene and argument gates read from outside the tree (outsideMark). */
+  if (record.gate === "area" && typeof record.outside === "string") line.outside = record.outside;
   /* Every run records which files ran, so an area run can check coverage (the test architect's criterion, 2026-11-08). */
   if (Array.isArray(record.ran)) line.ran = record.ran;
   else if (record.inherits) line.ran = [];
@@ -658,7 +660,27 @@ function namersOf(root, changed, scanFiles) {
     return false;
   });
 }
-export function planAreaResume(root, steps, tree, chainsPath = CHAINS_PATH) {
+/* WHAT A FLOOR, HYGIENE OR ARGUMENT GATE READS FROM OUTSIDE THE TREE (Claude alpha's count of 2026-11-15, the test architect's
+   build). Of the floor's six, tests/test.js reads ETIUDA_FIXTURES when it is set (the held-back catalog among them); the rest read
+   the tree alone, update-install's launches given a scratch home. Any gate may read ETIUDA_PLANTS and ETIUDA_PROFILE. So an area run
+   writes this mark beside its gates: the switches, and the fixtures folder's names, sizes and times. On the same tree a stopped
+   run's green floor, hygiene and argument gates carry only where the mark is unchanged. Not here, because no merge gate reads them:
+   tools/pre-commit's name scan (.git/etiuda-names, the main tree's catalog) runs at a commit, and engine-selftest is release only. */
+export function outsideMark(env = process.env) {
+  const parts = ["plants=" + String(env.ETIUDA_PLANTS || ""), "profile=" + String(env.ETIUDA_PROFILE || "")];
+  const dir = String(env.ETIUDA_FIXTURES || "");
+  let listed = "";
+  if (dir) {
+    try {
+      listed = fs.readdirSync(dir).sort().map(n => {
+        try { const st = fs.statSync(path.join(dir, n)); return n + ":" + st.size + ":" + Math.floor(st.mtimeMs); } catch (e) { return n + ":?"; }
+      }).join("|");
+    } catch (e) { listed = "unread"; }
+  }
+  parts.push("fixtures=" + dir + "#" + crypto.createHash("sha256").update(listed).digest("hex").slice(0, 16));
+  return parts.join(";");
+}
+export function planAreaResume(root, steps, tree, chainsPath = CHAINS_PATH, outsideNow = outsideMark()) {
   if (!TREE_SHA.test(String(tree || ""))) return { reason: "the tree is not a clean commit (" + tree + ")" };
   let base = null;
   const lines = readChainLines(chainsPath);
@@ -686,15 +708,25 @@ export function planAreaResume(root, steps, tree, chainsPath = CHAINS_PATH) {
   const walkers = [...scan].filter(f => { try { return WALKS_TREE.test(fs.readFileSync(path.join(root, f), "utf8")); } catch (e) { return true; } });
   const walking = filesReaching(root, walkers, [...scan]);
   const run = [], carried = [];
+  /* THE SAME TREE WITH THE SAME OUTSIDE (result-line ar10 to ar12): nothing changed since the stopped run, and nothing it read from
+     outside the tree (outsideMark) either, so a green floor, hygiene or argument gate has nothing new to show. An argument gate shares
+     its gate name with every other run of its file, so it carries only where its file is run once in this plan. A base line with no
+     mark (written before the mark) lends none of these. */
+  let outsideSame = false;
+  outsideSame = same && typeof base.outside === "string" && base.outside === outsideNow; /* plant:same-outside-carries */
+  const runsOf = new Map();
+  for (const st of steps) runsOf.set(stepFile(st), (runsOf.get(stepFile(st)) || 0) + 1);
   for (const st of steps) {
     const file = stepFile(st), name = gateName(st.file);
     const plain = !(st.args || []).length && !(st.env && Object.keys(st.env).length);
     /* THE SAME TREE (nothing changed since the stopped run, a load flake): a gate that lists a folder has nothing new to list, so it
-       carries like any other (result-line ar9; Claude alpha's question of 2026-11-15). The floor, the hygiene legs, a gate with an
-       argument and the gate that ended the run still run. */
+       carries like any other (result-line ar9; Claude alpha's question of 2026-11-15). The floor, the hygiene legs and a gate with an
+       argument carry too where the outside is unchanged (above); the gate that ended the run still runs, as it is not green. */
     let moved = reaching.has(file) || walking.has(file);
     if (same) moved = false; /* plant:same-tree-carries */
-    if (plain && green.has(name) && !moved && !isFloorStep(st) && !isHygiene(file)) carried.push(name);
+    const special = isFloorStep(st) || isHygiene(file) || !plain;
+    const may = special ? outsideSame && runsOf.get(file) === 1 && !(st.env && Object.keys(st.env).length) : true;
+    if (may && green.has(name) && !moved) carried.push(name);
     else run.push(st);
   }
   return { base, changed, steps: run, carried };
@@ -2097,6 +2129,7 @@ async function main() {
     ran: ranFiles,
     repo,
     plan: areaPlan,
+    outside: gateLabel === "area" ? outsideMark() : undefined,
   }, CHAINS_PATH);
 
   /* Whole-run summary for a release or nightly profile run (state/briefs/reform-2026-10-27/test-regimen.md rule 4, decisions 2026-11-05 11:43). */

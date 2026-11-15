@@ -43,7 +43,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. One leg is platform-bound: where a short
    path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
-const EXPECTED = 122;  /* 113, +5 an area run carrying on after a test-only fix (ar1 to ar5), +3 what a test reads or starts by name (ar6 to ar8), +1 the same tree carries its own greens (ar9) */
+const EXPECTED = 125;  /* 113, +5 an area run carrying on after a test-only fix (ar1 to ar5), +3 what a test reads or starts by name (ar6 to ar8), +1 the same tree carries its own greens (ar9), +3 the same outside carries the floor and a single argument gate (ar10 to ar12) */
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
@@ -87,11 +87,12 @@ function areaResumeLegs() {
     args: n === "d" ? ["--x"] : [] }));
   const line = (b, extra) => JSON.stringify(Object.assign({ gate: "area", tree: l.lab, head: b.head, gitTree: b.tree,
     counts: { exitCode: 1 }, gates: ["a", "b", "w", "d", "pick", "c"].map(n => ({ gate: "tests-" + n, exit: n === "c" ? 1 : 0 })) }, extra || {}));
-  const ask = () => {
+  const ask = (steps, mark) => {
     const driver = path.join(l.root, "ask.mjs");
     fs.writeFileSync(driver, "import { pathToFileURL } from 'node:url';\n"
       + "const m = await import(pathToFileURL(" + JSON.stringify(path.join(l.lab, "tools", "gate-run.mjs")) + ").href);\n"
-      + "const r = m.planAreaResume(" + JSON.stringify(l.lab) + ", " + JSON.stringify(STEPS) + ", process.argv[2], " + JSON.stringify(chains) + ");\n"
+      + "const r = m.planAreaResume(" + JSON.stringify(l.lab) + ", " + JSON.stringify(steps || STEPS) + ", process.argv[2], " + JSON.stringify(chains)
+      + (mark === undefined ? "" : ", " + JSON.stringify(mark)) + ");\n"
       + "console.log(JSON.stringify({ reason: r.reason || '', carried: r.carried || null, run: r.steps ? r.steps.map(x => x.file) : null }));\n");
     const tree = g("rev-parse", "HEAD^{tree}").stdout.trim();
     const r = spawnSync(process.execPath, [driver, tree], { cwd: l.lab, encoding: "utf8", timeout: 30000,
@@ -131,6 +132,21 @@ function areaResumeLegs() {
   const f = ask();
   check(JSON.stringify(f.carried) === '["tests-a","tests-b","tests-w"]',
     "ar9 on the same tree a stopped run's greens carry, the folder-lister w included; c (ended the run), d (an argument) and the floor run: " + said(f));
+
+  /* ar10 to ar12: THE SAME TREE WITH THE SAME OUTSIDE (outsideMark; Claude alpha's count of 2026-11-15). Where the stopped run's mark
+     of what it read from outside the tree is the mark now, the floor's pick and the argument gate d carry too; a changed mark carries
+     them not; an argument gate whose file is run twice in the plan never carries, since both runs share one gate name. */
+  fs.writeFileSync(chains, line(now, { outside: "mark-1" }) + "\n");
+  const h = ask(undefined, "mark-1");
+  check(JSON.stringify(h.carried) === '["tests-a","tests-b","tests-w","tests-d","tests-pick"]',
+    "ar10 on the same tree with the same outside mark the floor's pick and the argument gate d carry too; c (ended the run) runs: " + said(h));
+  const i = ask(undefined, "mark-2");
+  check(JSON.stringify(i.carried) === '["tests-a","tests-b","tests-w"]',
+    "ar11 a changed outside mark carries the floor and the argument gate not: " + said(i));
+  const twice = STEPS.concat([{ file: "tests/d.mjs", cmd: "node tests/d.mjs --y", args: ["--y"] }]);
+  const k = ask(twice, "mark-1");
+  check(JSON.stringify(k.carried) === '["tests-a","tests-b","tests-w","tests-pick"]',
+    "ar12 an argument gate whose file runs twice in the plan does not carry, the two runs sharing one gate name: " + said(k));
 }
 
 
