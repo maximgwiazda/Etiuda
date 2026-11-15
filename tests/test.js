@@ -2926,7 +2926,7 @@ function markLab(o) {
     extractDecl(open, "let eReadyDone="), extractDecl(open, "let lastGreet;"), extractDecl(open, "function markEReady("),
     extractDecl(open, "function deskLaunch("), extractDecl(open, "function wireOnOpen(")];
   let clock = 0, seq = 0, frames = [], timers = [], landed = null, waiting = [];
-  const log = [], warms = [], handed = [];
+  const log = [], warms = [], handed = [], focuses = [], bodyClasses = new Set();
   const sb = {
     mgReduceMotion: () => !!sb.still, fifthPhase: () => 0,
     performance: { now: () => clock },
@@ -2936,7 +2936,7 @@ function markLab(o) {
     clearTimeout: id => { timers = timers.filter(x => x.id !== id); },
     requestIdleCallback: fn => { timers.push({ id: ++seq, at: clock, fn }); return seq; },
     setInterval: () => 0,
-    document: { querySelector: () => null },
+    document: { querySelector: () => null, body: { classList: { add: c => bodyClasses.add(c), remove: c => bodyClasses.delete(c) } } },
     syncLaunchMark: (host, opts) => { handed.push([host, opts]); if (host) landed = false; },
     whenLaunchLanded: fn => { if (landed === false) waiting.push(fn); else fn(); },
     ssSet: () => {}, launchMark: () => null,
@@ -2944,13 +2944,23 @@ function markLab(o) {
     joinStands: () => false, heedJoin: () => {},
     startTour: () => log.push(["tour", Math.round(clock)]),
     applyUiLang: () => log.push(["repaint", Math.round(clock)]),
-    focusFirstEntryOnOpen: () => {}, focusEmptyLoadOnOpen: () => {}, greeting: () => "", render: () => {},
+    focusFirstEntryOnOpen: () => {}, focusEmptyLoadOnOpen: () => focuses.push(Math.round(clock)), greeting: () => "", render: () => {},
     warmMenu: () => warms.push(Math.round(clock)),
     /* a desk past the first-opening sign-in: no screen to show, so nothing waits on it */
     bootFirstSignin: () => {}, firstSigninStands: () => false, onFirstSigninClosed: fn => fn()
   };
   sb.window = sb;
   if (o && o.host) sb.E_HOST = o.host;
+  if (o && o.signin) {
+    /* The real gate-to-screen sequence (signin.js's own state and its five movers) over a due flag the lab owns; the screen's
+       drawing is a stand-in, since what is asked is when the desk's boot waits, speaks and takes focus around it. */
+    const sg = read("signin.js");
+    ["let firstSigninPending=", "function firstSigninStands(", "function onFirstSigninClosed(", "function tellFirstSigninClosed(",
+      "function skipFirstSignin(", "function openFirstSignin(", "function closeFirstSignin(", "function bootFirstSignin("]
+      .forEach(m => slices.push(extractDecl(sg, m)));
+    sb.firstSigninDue = () => !!o.signin.due && !sb.seenMark; sb.markFirstSigninSeen = () => { sb.seenMark = true; };
+    sb.paintFirstSignin = () => {}; sb.signinV = null; sb.signinCall = () => {}; sb.$ = () => null;
+  }
   require("vm").runInNewContext(mark + "\n" + slices.join("\n") + "\n", sb);
   const timersTo = t => {
     for (;;) {
@@ -2966,7 +2976,7 @@ function markLab(o) {
   // The drawing lands at t: what waited runs then, each in the order it asked.
   const land = t => { timersTo(t); landed = true; const w = waiting; waiting = []; w.forEach(fn => fn()); };
   const host = { block: true };
-  return { sb, log, warms, handed, frame, timersTo, land, make: () => sb.syncEmptyMark(host), host };
+  return { sb, log, warms, handed, focuses, bodyClasses, frame, timersTo, land, make: () => sb.syncEmptyMark(host), host };
 }
 function markClockTests() {
   let got;
@@ -3110,6 +3120,26 @@ function markClockTests() {
   } catch (e) { got = "the lab threw: " + e.message; }
   eq("the menu's warm copy is drawn once, 900 ms after the mark has landed, and 900 ms after boot without one",
     got, [[2600], [900]]);
+
+  /* A FIRST OPENING WITH THE SIGN-IN SCREEN: the six boot rules above are held by a desk past the screen; here the screen
+     stands. Its first paint is the chrome in its own language and no screen yet (a launch) or the screen at once (none);
+     the warm copy keeps its 900 ms; the empty desk's focus waits for the answer and takes the desk when the screen is
+     answered or skipped; a desk with no screen due takes it at the landing as before. */
+  try {
+    const snap = w => [w.bodyClasses.has("e-first-signin"), w.sb.firstSigninStands(), w.focuses.slice(), w.warms.slice(), w.log.slice()];
+    const c = markLab({ signin: { due: true } }); c.make(); c.sb.wireOnOpen(); c.frame(10); c.frame(20);
+    const bootC = snap(c);
+    c.land(1700); c.timersTo(4000);
+    const heldC = snap(c); c.sb.skipFirstSignin(); const doneC = snap(c);
+    const n = markLab({ signin: { due: true } }); n.sb.wireOnOpen(); n.frame(10); n.frame(20); n.timersTo(4000);
+    const heldN = snap(n); n.sb.skipFirstSignin(); const doneN = snap(n);
+    const k = markLab({ signin: { due: false } }); k.make(); k.sb.wireOnOpen(); k.frame(10); k.frame(20); k.land(1700); k.timersTo(4000);
+    got = [bootC, heldC, doneC, heldN, doneN, snap(k)];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a first opening with the sign-in screen: the chrome speaks its language at boot, the warm copy keeps its timing, and the empty desk's focus waits for the screen's answer and then comes as before",
+    got, [[false, true, [], [], [["repaint", 0]]], [true, true, [], [2600], [["repaint", 0]]], [false, false, [4000], [2600], [["repaint", 0]]],
+      [true, true, [], [900], [["repaint", 0]]], [false, false, [4000], [900], [["repaint", 0]]],
+      [false, false, [1700], [2600], [["repaint", 0]]]]);
 }
 /* THE LAUNCH MARK: launch-mark.js runs in a VM on a page, a clock, a frame queue and a promise written here (the
    promise settles in the same task, so a timeline is read without awaiting). Its figure is held to fifth.js's, its
