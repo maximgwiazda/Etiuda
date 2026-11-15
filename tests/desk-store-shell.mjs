@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 134;
+const EXPECTED = 136;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -423,6 +423,35 @@ async function pristineScene(src) {
   const ok = !!local && typeof local["f:sample-catalog.ec"] === "string" && typeof local["f:sample-catalog-copy.ec"] === "string"
     && Array.isArray(pristine) && pristine.join() === "f:sample-catalog.ec";
   return { ok, detail: brief({ read: local ? Object.keys(local).filter(k => k.startsWith("f:")) : null, pristine }) };
+}
+
+/* (rv) A REMOVAL ACROSS VOLUMES: a catalog another computer removed, where the catalog folder sits on another volume than the
+   profile (every rename of it refused as EXDEV), is copied under store/kept and unlinked; where the unlink fails, the copy goes, the
+   file stays where it was byte for byte, and the removal is answered as not put in place, so the next merge tries again. */
+async function removalVolumeScene(src) {
+  let unlinkFails = false;
+  const fsWrap = real => new Proxy(real, {
+    get(target, prop) {
+      if (prop === "renameSync") return (from, to) => { if (/Harbour\.ec$/.test(String(from))) throw Object.assign(new Error("cross-device link not permitted"), { code: "EXDEV" }); return target.renameSync(from, to); };
+      if (prop === "unlinkSync") return f => { if (unlinkFails && /[\\/]Etiuda[\\/]Harbour\.ec$/.test(String(f))) throw Object.assign(new Error("busy"), { code: "EPERM" }); return target.unlinkSync(f); };
+      const v = target[prop];
+      return typeof v === "function" ? v.bind(target) : v;
+    }
+  });
+  const { T, UD } = boot(src, { fsWrap });
+  const dir = T.storeSyncFolder(), at = path.join(dir, "Harbour.ec"), keptDir = path.join(UD, "store", "kept");
+  const bytes = Buffer.from(JSON.stringify({ kind: "etiuda-catalog", format: 2, id: "harbour" }));
+  const keptNow = () => (fs.existsSync(keptDir) ? fs.readdirSync(keptDir) : []);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(at, bytes);
+  unlinkFails = true;
+  const half = T.storeSyncApply({ "f:Harbour.ec": null }, []);
+  const stayed = fs.existsSync(at) && fs.readFileSync(at).equals(bytes), keptHalf = keptNow();
+  unlinkFails = false;
+  const done = T.storeSyncApply({ "f:Harbour.ec": null }, []);
+  const kept = keptNow(), moved = kept.length === 1 && /Harbour\.ec$/.test(kept[0]) && fs.readFileSync(path.join(keptDir, kept[0])).equals(bytes);
+  const ok = Array.isArray(half) && half.join() === "f:Harbour.ec" && stayed && keptHalf.length === 0 && Array.isArray(done) && done.length === 0 && !fs.existsSync(at) && moved;
+  return { ok, detail: brief({ half, stayed, keptHalf, done, gone: !fs.existsSync(at), kept }) };
 }
 
 /* (d4f) The page's view and the switch: the first look that made the store says "on" once; This computer forgets the keys and ends
@@ -1579,6 +1608,7 @@ const LEGS = [
   ["gs", switchStopScene, "This computer and Everywhere stop the store's sync at once, the relay unreached, not at the next look"],
   ["gr", roomWireScene, "a write the store's relay refuses for its room turns the row full, and the next write it takes turns it on"],
   ["jp", pristineScene, "the store's sync names the shipped sample untouched in the person's folder by its bytes, and a copy with one byte changed as the person's own"],
+  ["rv", removalVolumeScene, "a catalog another computer removed, the catalog folder on another volume than the profile: copied aside and unlinked; an unlink that fails leaves it where it was, the copy gone, the removal not taken as applied"],
   ["gt", teamFolderScene, "joined to a folder team, the store's sync takes no team catalog into the person's store, reads the person's own catalog as removed nowhere, and writes nothing from the store into the team's mirror"],
   ["g1b", consentBusyScene, "while the switch's request for the folder waits on the browser the desk is busy to the page, and an answer after another account took the seat is neither taken for it nor looked with"],
   ["g2r", keepRefreshScene, "the switch's Google consent sign-in answered with no refresh token keeps the refresh token already sealed for the same account"],
@@ -1676,6 +1706,7 @@ const PLANTS = [
     const y = x && swap("  if (storeAccess && storeAccess.who !== who) storeAccess = null;", "")(x);
     return y && swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = false; /* plant:store-held */")(y); }, "a folder token reused for whoever is seated, the hold lifted"],
   ["jp", swap(" if (isTheSample(f)) pristine.push(\"f:\" + n); } /* plant:sync-pristine */", " } /* plant:sync-pristine */"), "the untouched sample not named, so a joining computer brings back a sample deleted elsewhere"],
+  ["rv", swap("      storeMoveFile(at, storeSyncDir(\"kept\", Date.now() + \"-\" + name)); /* plant:sync-remove-volume */", "      renamePatiently(at, storeSyncDir(\"kept\", Date.now() + \"-\" + name)); /* plant:sync-remove-volume */"), "a removal moved by rename alone, so a catalog folder on another volume never takes one"],
   ["gt", swap("if (sayJoinPolicy().folder || relayHere() || folderTeamHere() || Object.keys(teamNeedsFolder).length) return \"\"; /* plant:sync-team-folder */", "if (false) return \"\"; /* plant:sync-team-folder */"), "the store's sync lists and writes the team's mirror as the person's folder"],
   ["w1", swap("  if (s.keys || s.leave || storeLeaveHere) {", "  if (false) {"), "a sign-out leaves the store's keys in store.json"],
   ["w1d", text => { const x = swap("  if (s.who === who) return true; /* plant:store-mine */", "  if (true) { s.who = who; return true; } /* plant:store-mine */")(text);

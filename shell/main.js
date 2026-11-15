@@ -11742,7 +11742,8 @@ function deskSyncedTell(keys) {
   if (win && !win.isDestroyed()) try { win.webContents.send("etiuda:desk-synced", JSON.stringify(keys)); } catch { /* the page has gone */ } /* plant:desk-synced-tell */
 }
 /* A catalog file from another computer, into the catalog folder; one removed there is moved aside under userData\store\kept,
-   never deleted. False where it could not be put in place; a removal of a file already gone is done. */
+   never deleted, by storeMoveFile, which copies and unlinks where the catalog folder is on another volume. False where it could not
+   be put in place; a removal of a file already gone is done. */
 function storeSyncFile(name, text) {
   const dir = storeSyncFolder();
   if (!dir || !SyncLib().CATALOG_RE.test(name)) return false;
@@ -11750,7 +11751,7 @@ function storeSyncFile(name, text) {
   try {
     if (text === null) {
       fs.mkdirSync(storeSyncDir("kept"), { recursive: true });
-      renamePatiently(at, storeSyncDir("kept", Date.now() + "-" + name));
+      storeMoveFile(at, storeSyncDir("kept", Date.now() + "-" + name)); /* plant:sync-remove-volume */
     } else {
       fs.mkdirSync(dir, { recursive: true });
       writeReplacing(at, text);
