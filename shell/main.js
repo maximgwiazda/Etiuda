@@ -10994,12 +10994,12 @@ function armSigninRenew() {
    folder itself. */
 let storeLayer = null;
 function StoreLib() { return storeLayer || (storeLayer = require(path.join(__dirname, "sync", "store.cjs"))); }
-/* store.json beside desk.json, read whole or not at all: {format: 1, keys, said, off?, told?, until?, owed?, leave?, org?, who?, made?, last?, ask?}. `keys` the store's keys sealed by
+/* store.json beside desk.json, read whole or not at all: {format: 1, keys, said, off?, told?, until?, owed?, leave?, org?, who?, made?, last?, ask?, aside?}. `keys` the store's keys sealed by
    safeStorage as base64, "" where none are kept; `said` the reason the desk last said (sayOnce); `off` the person's own switch, absent where on;
    `told` once this computer has had its first look with sync on (firstSay); `until` the last store certificate's end, for the pause;
    `owed` the relay team id of a store Turn off everywhere ended that the licence service has not yet answered, sealed as `keys`; `leave`
    the keys of the store This computer has not yet left (storeLeaveNow), sealed as `keys`; `org` where the organisation refused the folder
-   (storeUngiven). */
+   (storeUngiven); `aside` the name of the folder the latest Start from my account made under Set aside (storeAsideFolder). */
 const STORE_FILE = "store.json";
 function storeFileRead(text) {
   let d = null;
@@ -11009,11 +11009,13 @@ function storeFileRead(text) {
     org: ok && d.org === true, told: ok && d.told === true, until: ok && Number.isSafeInteger(d.until) && d.until > 0 ? d.until : 0, owed: ok && typeof d.owed === "string" ? d.owed.slice(0, 400) : "",
     leave: ok && typeof d.leave === "string" ? d.leave.slice(0, 200000) : "", who: ok && typeof d.who === "string" && /^[0-9a-f]{32}$/.test(d.who) ? d.who : "",
     made: ok && typeof d.made === "string" && /^[0-9a-f]{32}$/.test(d.made) ? d.made : "", last: ok && typeof d.last === "string" && /^[0-9a-f]{32}$/.test(d.last) ? d.last : "",
-    ask: ok && typeof d.ask === "string" && /^[0-9a-f]{32}$/.test(d.ask) ? d.ask : "" };
+    ask: ok && typeof d.ask === "string" && /^[0-9a-f]{32}$/.test(d.ask) ? d.ask : "",
+    aside: ok && typeof d.aside === "string" && /^\d{4}-\d{2}-\d{2} \d{2}\.\d{2}(?: \(\d{1,6}\))?$/.test(d.aside) ? d.aside : "" }; /* plant:store-aside-name */
 }
 function storeFileText(s) {
   return JSON.stringify(Object.assign({ format: 1, keys: s.keys || "", said: s.said || "" }, s.off === true ? { off: true } : {}, s.told === true ? { told: true } : {},
-    s.until > 0 ? { until: s.until } : {}, s.owed ? { owed: s.owed } : {}, s.leave ? { leave: s.leave } : {}, s.org === true ? { org: true } : {}, s.who ? { who: s.who } : {}, s.made ? { made: s.made } : {}, s.last ? { last: s.last } : {}, s.ask ? { ask: s.ask } : {}), null, 1) + "\n";
+    s.until > 0 ? { until: s.until } : {}, s.owed ? { owed: s.owed } : {}, s.leave ? { leave: s.leave } : {}, s.org === true ? { org: true } : {}, s.who ? { who: s.who } : {}, s.made ? { made: s.made } : {}, s.last ? { last: s.last } : {}, s.ask ? { ask: s.ask } : {},
+    s.aside ? { aside: s.aside } : {}), null, 1) + "\n"; /* plant:store-aside-kept */
 }
 /* WHOSE THE STORE'S STATE IS: store.json belongs to the account named by `who`, a hash of its provider and sub; the first account seated
    takes it, a file kept before `who` existed losing its keys, leave and owed end. An account seated that is not the one last seated holds
@@ -11409,7 +11411,6 @@ async function storeSetNow(what) {
   tellStore();
   return storeView();
 }
-let storeSetAsideFolder = "";
 ipcMain.on("etiuda:store-state", (e) => { e.returnValue = fromEngine(e) ? storeView() : null; });
 ipcMain.handle("etiuda:store-set", (e, what) => (fromEngine(e) ? storeSetNow(String(what || "")) : null));
 ipcMain.handle("etiuda:store-answer", (e, choice) => (fromEngine(e) ? storeAnswerNow(String(choice || "")) : null));
@@ -11420,8 +11421,14 @@ ipcMain.handle("etiuda:open-set-aside", (e, ...args) => {
 });
 ipcMain.on("etiuda:store-said", (e) => { e.returnValue = null; if (fromEngine(e)) storeSay = ""; });
 
+/* The latest set-aside's folder, by the name store.json keeps, only ever of the shape storeSetAsideDir makes and under its root, so it
+   cannot be a folder this desk did not make; "" where none. */
+function storeAsideFolder() {
+  const name = storeState().aside;
+  return name ? path.join(app.getPath("userData"), "Set aside", name) : "";
+}
 async function storeOpenSetAside() {
-  const folder = storeSetAsideFolder;
+  const folder = storeAsideFolder();
   let isDir = false;
   try { isDir = !!folder && fs.statSync(folder).isDirectory(); } catch { /* gone */ }
   if (!folder || !isDir) return { ok: false, why: "gone" }; /* plant:open-aside-gone */
@@ -11508,7 +11515,7 @@ async function storeAnswerNow(choice) {
   let folder = "";
   if (choice === "start") {
     const set = storeSetAside();
-    if (set.folder) storeSetAsideFolder = set.folder;
+    if (set.folder) { s.aside = path.basename(set.folder); storeSave(); }
     if (set.kept) return { ok: false, choice: "start", folder: set.folder, kept: true, view: storeView() };
     if (!set.folder) return { ok: false, choice: "start", folder: "", view: storeView() };
     folder = set.folder;

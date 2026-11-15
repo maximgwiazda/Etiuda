@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 134;
+const EXPECTED = 137;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -1585,6 +1585,41 @@ async function answerStartKeptScene(src) {
     && !none.kept && none.dirs === 0 && none.treeBefore && none.storeHome === "whole" && none.alphaHome === true && none.betaHome === true && none.opened === "gone" && none.line === "ask";
   return { ok, detail: brief({ cat, store, none }) };
 }
+/* (x6r) After a restart the button's channel opens the latest answer's folder, not an earlier one nor a newer-named folder the desk
+   did not make; that folder removed, it answers gone; a name in store.json of another shape opens nothing. */
+async function openAfterRestartScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world, UD = r.shell.UD;
+  if (typeof T.storeAnswerNow !== "function") return { ok: false, detail: "no storeAnswerNow" };
+  const e = { senderFrame: { parent: null, url: "file:///desk/engine/etiuda.html" } };
+  const heldA = T.signinState().held;
+  T.signinOutNow();
+  seatAnother(T, w, heldA);
+  await T.storeTurn();
+  const a1 = await T.storeAnswerNow("start");
+  T.signinOutNow();
+  T.signinState().held = heldA;
+  await T.storeTurn();
+  const a2 = await T.storeAnswerNow("start");
+  if (T.get().storeSyncTimer) clearTimeout(T.get().storeSyncTimer);
+  const f1 = a1 && a1.folder ? a1.folder : "", f2 = a2 && a2.folder ? a2.folder : "";
+  const decoy = path.join(UD, "Set aside", "2099-12-31 23.59");
+  fs.mkdirSync(decoy, { recursive: true });
+  const restart = async () => { const s = boot(src, { ud: UD, world: w, lab: labOf() }); const got = await s.ipc.handle["etiuda:open-set-aside"](e); return { got, paths: s.openedPaths.slice() }; };
+  const one = await restart();
+  fs.rmSync(f2, { recursive: true, force: true });
+  const gone = await restart();
+  const elsewhere = path.join(UD, "elsewhere");
+  fs.mkdirSync(elsewhere, { recursive: true });
+  const st = storeJson(UD) || {};
+  fs.writeFileSync(path.join(UD, "store.json"), JSON.stringify(Object.assign({}, st, { aside: "../elsewhere" })));
+  const shaped = await restart();
+  const name = p => (p ? path.basename(p) : "");
+  const ok = !!f1 && !!f2 && f1 !== f2 && one.got === true && one.paths.length === 1 && one.paths[0] === f2
+    && gone.got && gone.got.ok === false && gone.got.why === "gone" && gone.paths.length === 0 && fs.existsSync(f1) && fs.existsSync(decoy)
+    && shaped.got && shaped.got.ok === false && shaped.got.why === "gone" && shaped.paths.length === 0;
+  return { ok, detail: brief({ f1: name(f1), f2: name(f2), one: { got: one.got, paths: one.paths.map(name) }, gone: { got: gone.got, paths: gone.paths.map(name) },
+    shaped: { got: shaped.got, paths: shaped.paths.map(name) } }) };
+}
 
 const LEGS = [
   ["d4h", leaveScene, "This computer leaves the store's list: the relay withdraws its key and the folder's file names it no more, under the last look's store certificate, nothing left owed"],
@@ -1646,6 +1681,7 @@ const LEGS = [
   ["x6o", openSetAsideScene, "opening the set-aside folder uses its no-arg IPC channel, opens only the newest Start from my account folder, refuses page args, and opens/creates nothing when gone"],
   ["x6p", answerStartBusyRenameScene, "set-aside moves whose first rename fails busy retry via renamePatiently and succeed"],
   ["x6k", answerStartKeptScene, "a set-aside whose later step fails and whose move back of the catalog, or of the store folder, fails keeps that whole in the set-aside folder, which stays, the log names it, the answer carries it and the button opens it; where every move back succeeds the folder goes"],
+  ["x6r", openAfterRestartScene, "after a restart the button's channel opens the latest answer's set-aside folder, never an earlier one or a newer-named folder the desk did not make; that folder removed it answers gone, and a name of another shape in store.json opens nothing"],
 ];
 const results = {};
 const scenes = Object.fromEntries(LEGS.map(([id, scene]) => [id, scene]));
@@ -1740,6 +1776,8 @@ const PLANTS = [
   ["x6p", swap("  try { renamePatiently(from, to); } /* plant:aside-move-patient */", "  try { fs.renameSync(from, to); } /* plant:aside-move-patient */"), "storeMoveFile uses a bare fs.renameSync instead of renamePatiently"],
   ["x6p", swap("    if (fs.existsSync(sDir)) { renamePatiently(sDir, sDest); movedStore = { from: sDir, to: sDest }; } /* plant:aside-store-patient */", "    if (fs.existsSync(sDir)) { fs.renameSync(sDir, sDest); movedStore = { from: sDir, to: sDest }; } /* plant:aside-store-patient */"), "storeSetAside moves userData/store with a bare fs.renameSync"],
   ["x6k", swap("    if (aside && back) { try { fs.rmSync(aside, { recursive: true, force: true }); } catch {} } /* plant:aside-kept */", "    if (aside) { try { fs.rmSync(aside, { recursive: true, force: true }); } catch {} } /* plant:aside-kept */"), "the set-aside folder removed whether or not every move back succeeded"],
+  ["x6r", swap("    s.aside ? { aside: s.aside } : {}), null, 1)", "    {}), null, 1)"), "the set-aside folder's name not kept in store.json, so a restart forgets it"],
+  ["x6r", swap(".test(d.aside) ? d.aside : \"\" }; /* plant:store-aside-name */", ".test(d.aside) || ok && typeof d.aside === \"string\" ? d.aside : \"\" }; /* plant:store-aside-name */"), "any name in store.json read as the set-aside folder's"],
 ];
 for (const [id, change, what] of PLANTS) {
   const line = "p " + id + " in a copy of shell/main.js turns " + id + " red (" + what + ")";
