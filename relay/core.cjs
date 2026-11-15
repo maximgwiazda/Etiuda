@@ -1,7 +1,9 @@
 "use strict";
 /* The relay's team object: every check and every change of state, synchronous over the store its caller passes in
    (get, put, del, list by prefix after a key, and atomic, which keeps a function's writes as one). It holds no team
-   key, opens no blob and keeps no path or name: an upload's metadata is taken field by field and the rest dropped. */
+   key, opens no blob and keeps no path or name: an upload's metadata is taken field by field and the rest dropped. A desk is named
+   by its branch id alone; rows an older relay kept under a raw key are renamed once (migrateDeskIds, where its one limit is written:
+   blobs sealed under the raw key keep that writer name). */
 const crypto = require("node:crypto");
 const { Buffer } = require("node:buffer");
 const B = require("../shell/relay/blob.cjs");
@@ -72,6 +74,8 @@ const SEAT_MARGIN_MS = 60 * 60 * 1000;
    service that proved anyone recently would have renewed it, so a pooled desk taken over while the service works is cut as any desk. */
 const POOLED_GRACE_MS = 72 * 60 * 60 * 1000;
 const SEAT_QUIET_MS = 6 * 60 * 60 * 1000;
+/* At most a day for a pooled desk's certificate, as the licence service signs it; any other seat's, CERT_SPAN_MS. */
+const POOLED_CERT_SPAN_MS = 24 * 60 * 60 * 1000;
 
 const HEX24 = /^[0-9a-f]{24}$/, HEX32 = /^[0-9a-f]{32}$/, HEX64 = /^[0-9a-f]{64}$/, HEX128 = /^[0-9a-f]{128}$/;
 /* A key id takes blob.cjs's id shape, so no newline or separator rides in it. A desk id is isDeskId: that shape, and not a
@@ -127,8 +131,10 @@ const devicesBytes = (rt, rev, t, keys, from) => Buffer.from("etiuda-relay-devic
 /* `wraps` left out when the caller does not pass it, so a slice 1 signature over add and drop still matches. */
 const invitesBytes = (rt, t, add, drop, wraps) => Buffer.from("etiuda-relay-invites\n" + rt + "\n" + t + "\n"
   + canon(wraps === undefined ? { add, drop } : { add, drop, wraps }), "utf8");
-/* A store's list is also signed by one of the person's computers holding a current store certificate, over the same list under a line of its own. */
-const storeDevicesBytes = (rt, rev, t, keys) => Buffer.from("etiuda-relay-store-devices\n" + rt + "\n" + rev + "\n" + t + "\n" + canon(keys), "utf8");
+/* A store's list is also signed by one of the person's computers holding a current store certificate, over the same list and its
+   `from` under a line of its own, `from` left out as devicesBytes leaves it, since S alone, which the folder holds, signs the rest. */
+const storeDevicesBytes = (rt, rev, t, keys, from) => Buffer.from("etiuda-relay-store-devices\n" + rt + "\n" + rev + "\n" + t + "\n" + canon(keys)
+  + (from === undefined ? "" : "\n" + canon({ from })), "utf8");
 const helloBytes = (rt, nonce, keyId) => Buffer.from("etiuda-relay-hello\n" + rt + "\n" + nonce + "\n" + keyId + "\n", "utf8");
 const LEAD_PREFIX = "etiuda-relay-lead\n";
 const leadBytes = (rt, toKeyId, toPub, t) => Buffer.from(LEAD_PREFIX + rt + "\n" + toKeyId + "\n" + toPub + "\n" + t, "utf8");
@@ -147,11 +153,16 @@ function verified(pubHex, bytes, sigHex) {
   } catch { return false; }
 }
 
-/* A device's key id is its public key, or the branch id shell/main.js makes of it (branchIdOf). */
+/* A lead's key id may be its public key, or the branch id shell/main.js makes of it (branchIdOf). */
 const keyMatches = (id, pub) => is(HEX64, pub) && (id === pub || id === "k-" + sha256(Buffer.from(pub, "hex")).slice(0, 16));
+/* ONE SPELLING FOR A DESK: a desk names itself by its branch id alone, checked against the public half it brings, at every entry (the
+   devices list, both hellos, the door, an invitation's upload), so every row and comparison inside holds that one form and nothing is
+   looked up twice. Shell/main.js and Studio name desks by no other. */
+const deskIdOf = pub => "k-" + sha256(Buffer.from(pub, "hex")).slice(0, 16);
+const deskKeyMatches = (id, pub) => is(HEX64, pub) && id === deskIdOf(pub);
 
-/* A lead's key id is one of those, or the id Etiuda Studio makes of the key ("studio-" and the first 16 hex of its sha256). Only a create
-   takes the Studio form; a desk's key id is judged by keyMatches alone. */
+/* A lead's key id is one of keyMatches's two, or the id Etiuda Studio makes of the key ("studio-" and the first 16 hex of its sha256).
+   Only a create takes the Studio form. */
 function leadKeyMatches(id, pub) {
   if (keyMatches(id, pub)) return true;
   return is(HEX64, pub) && id === "studio-" + sha256(Buffer.from(pub, "hex")).slice(0, 16); /* plant:lead-studio-id */
@@ -193,6 +204,126 @@ const SIG_FIELDS = ["alg", "keyId", "value"];
 const MAY_MAX = 16;
 
 const plain = v => !!v && typeof v === "object" && !Array.isArray(v);
+
+/* THE OLD RELAY'S ROWS (findings 1 to 3 of the fourth Grok review of 3cc09cb5). 77a902d9 took a desk under its raw public half as
+   readily as under its branch id, and stored its rows under whichever its call sent. They are renamed once, on the first wake of a
+   team object that holds a team, so every lookup keeps the one spelling and nothing reads both; the mark row says it is done, and
+   a sweep's wipe takes the mark with the rest. A raw half is 64 lowercase hex, and where the row's own record carries the public half
+   (a dev: or gone: row's pub, a binding's invitation's pub) the two agree; anything else stays where it is, as no row the old relay
+   wrote. Where two rows meet under one branch id: a removal beats an enrolment of the same key (the older relay's devices() left
+   gone: on the spelling a list dropped and dev: on the one it added; Claude alpha's ruling on the fifth Grok review: the removal
+   wins, and the lead's next list names the desk again), the later of two removals stands, a row already under the branch id keeps
+   its place against a raw one, the newer binding wins as indexBinding keeps it, and two try counts add. A session held by a raw half
+   is dropped: its desk says hello again under its branch id, and no removal can miss it. The lead's own session keeps its id, raw or
+   not. A desk the rename leaves removed loses, in the same step, any door request bound to it and the sessions its own key holds.
+   A spent challenge's key (chu:) is left to expire with it. Answers what changed, by family and as counts, with the removed branch
+   ids and dropped door requests for the caller's sockets alone.
+   THE LIMIT, NOT CLOSED: blob, tomb, held and put rows keep their writer, and the counters and rates keyed by it theirs, because
+   the writer's name is inside the upload's signed bytes. So for a desk an older relay stored under its raw key, the blobs it sealed
+   before the migration keep the old writer name: after that desk's removal they stay readable by the team, and the desk cannot
+   supersede its own old chains (the lead still can). Closing it would mean reading a second spelling in one place, which reopens
+   the fault the one-spelling rule ends. */
+const MIGRATED = "mig:desk-id";
+function migrateDeskIds(store) {
+  const n = { dev: 0, gone: 0, bk: 0, inv: 0, dd: 0, tf: 0, devDropped: 0, ses: 0, door: 0, conflicts: 0, ended: 0, removedKeys: [], droppedInvs: [] };
+  if (store.get(MIGRATED) !== undefined) return n;
+  const team = store.get("team");
+  if (team === undefined) return n;
+  const leadId = plain(team) && plain(team.lead) ? team.lead.keyId : null;
+  const raw = (id, pub) => is(HEX64, id) && (pub === undefined || pub === id);
+  const pubOf = v => (plain(v) && typeof v.pub === "string" ? v.pub : null);
+  const rank = v => [plain(v) && Number.isSafeInteger(v.ord) ? v.ord : -1, plain(v) && Number.isSafeInteger(v.at) ? v.at : -1];
+  const later = (a, b) => { const x = rank(a), y = rank(b); return x[0] !== y[0] ? x[0] > y[0] : x[1] >= y[1]; };
+  const removed = new Set(), conflicted = new Set();
+  store.atomic(() => {
+    for (const [k, v] of store.list("gone:")) {
+      const half = k.slice(5);
+      if (!pubOf(v) || !raw(half, pubOf(v))) continue;
+      const id = deskIdOf(half), cur = store.get("gone:" + id);
+      store.put("gone:" + id, cur !== undefined && later(cur, v) ? cur : v);
+      store.del(k);
+      n.gone++;
+      removed.add(id);
+      if (store.get("dev:" + id) !== undefined) { store.del("dev:" + id); n.devDropped++; conflicted.add(id); }
+    }
+    for (const [k, v] of store.list("dev:")) {
+      const half = k.slice(4);
+      if (!pubOf(v) || !raw(half, pubOf(v))) continue;
+      const id = deskIdOf(half);
+      store.del(k);
+      if (store.get("gone:" + id) !== undefined) { n.devDropped++; conflicted.add(id); removed.add(id); continue; }
+      if (store.get("dev:" + id) === undefined) store.put("dev:" + id, v);
+      n.dev++;
+    }
+    for (const [k, v] of store.list("bk:")) {
+      const half = k.slice(3), inv = is(HEX32, v) ? store.get("inv:" + v) : undefined;
+      if (!pubOf(inv) || !raw(half, pubOf(inv))) continue;
+      const id = deskIdOf(half), cur = store.get("bk:" + id), held = is(HEX32, cur) ? store.get("inv:" + cur) : undefined;
+      if (!(plain(held) && (held.spentAt || 0) >= (inv.spentAt || 0))) store.put("bk:" + id, v);
+      store.del(k);
+      n.bk++;
+    }
+    for (const [k, v] of store.list("inv:")) {
+      if (!plain(v) || !raw(v.key, pubOf(v) || undefined)) continue;
+      store.put(k, Object.assign({}, v, { key: deskIdOf(v.key) }));
+      n.inv++;
+    }
+    for (const [k, v] of store.list("dd:")) {
+      if (!plain(v) || !raw(v.key)) continue;
+      store.put(k, Object.assign({}, v, { key: deskIdOf(v.key) }));
+      n.dd++;
+    }
+    for (const [k, v] of store.list("tf:")) {
+      const cut = k.lastIndexOf(":"), half = k.slice(cut + 1);
+      if (!raw(half)) continue;
+      const to = k.slice(0, cut + 1) + deskIdOf(half), cur = store.get(to);
+      store.put(to, (typeof cur === "number" ? cur : 0) + (typeof v === "number" ? v : 0));
+      store.del(k);
+      n.tf++;
+    }
+    for (const [k, s] of store.list("ses:")) {
+      if (!plain(s) || s.key === leadId) continue;
+      if (raw(s.key) || raw(s.bound)) { store.del(k); n.ses++; }
+    }
+    /* A desk the rename leaves removed. A door request bound to it is dropped with its binding, its try rows and its sessions: the
+       door lets no removed key back in, and only an invitation the lead registered after the removal does. A session held by the
+       key itself is marked removed in this same step, as devices() marks a withdrawn key's, so a session the older relay issued under
+       the branch id reads nothing more; the caller closes its sockets. An invitation's session stays: a token invitation registered
+       after the removal keeps its one upload. */
+    for (const id of removed) {
+      for (const [k, v] of store.list("inv:")) {
+        let drops = false;
+        drops = plain(v) && v.door === true && v.key === id; /* plant:migrate-door */
+        if (!drops) continue;
+        const inv = k.slice(4);
+        store.del(k);
+        if (store.get("bk:" + id) === inv) store.del("bk:" + id);
+        for (const [t] of store.list("tf:" + inv + ":")) store.del(t);
+        for (const [sk, x] of store.list("ses:")) if (plain(x) && x.inv === inv) { store.del(sk); n.ses++; }
+        n.door++;
+        n.droppedInvs.push(inv);
+      }
+    }
+    for (const [k, x] of store.list("ses:")) {
+      if (!plain(x) || x.removed === true) continue;
+      let ends = false;
+      ends = !!x.key && removed.has(x.key); /* plant:migrate-ends */
+      /* An invitation's session bound to a key left removed, as devices() marks one on a withdrawal, where the invitation was
+         registered before the removal; one registered after keeps its one upload. */
+      const inv = !x.key && x.inv ? store.get("inv:" + x.inv) : undefined;
+      const bound = inv ? x.bound || inv.key : null, gone = bound && removed.has(bound) ? store.get("gone:" + bound) : undefined;
+      /* registeredAfter's test, which lives inside createCore. */
+      const after = !!gone && [inv.ord, gone.ord].every(Number.isSafeInteger) && inv.ord > gone.ord;
+      let endsBound = false;
+      endsBound = !!gone && !after; /* plant:migrate-ends-bound */
+      if (ends || endsBound) { store.put(k, Object.assign({}, x, { removed: true })); n.ended++; }
+    }
+    store.put(MIGRATED, 1);
+  });
+  n.conflicts = conflicted.size;
+  n.removedKeys = [...removed];
+  return n;
+}
 const only = (o, names) => Object.keys(o).every(k => names.indexOf(k) > -1);
 const exactly = (o, names) => only(o, names) && names.every(k => Object.prototype.hasOwnProperty.call(o, k));
 const sigShaped = s => plain(s) && exactly(s, SIG_FIELDS) && s.alg === "ed25519" && isId(s.keyId) && is(HEX128, s.value);
@@ -315,6 +446,7 @@ function certWhy(cert, deskPub, refs, now, roots, revoked, runOut) {
     || cert.until <= cert.issued || !plain(cert.sig) || !exactly(cert.sig, SIG_FIELDS) || cert.sig.alg !== "Ed25519" || !isId(cert.sig.keyId)
     || !is(HEX128, cert.sig.value)) return "shape";
   if (cert.until - cert.issued > CERT_SPAN_MS) return "span"; /* plant:cert-span */
+  if (cert.pooled === true && cert.until - cert.issued > POOLED_CERT_SPAN_MS) return "span"; /* plant:cert-pooled-span */
   if (cert.desk !== deskPub) return "desk"; /* plant:cert-desk */
   if (refs.indexOf(cert.licence) < 0) return "licence"; /* plant:cert-licence */
   if (cert.issued > now + CALL_SKEW_MS) return "future"; /* plant:cert-future */
@@ -570,6 +702,18 @@ function createCore(deps) {
   const roots = deps.roots === undefined ? [ROOT_PUB] : deps.roots;
   const revokedNow = typeof deps.revoked === "function" ? deps.revoked : () => [];
   const random = n => crypto.randomBytes(n).toString("hex");
+  /* WHILE THE ONE-SPELLING MIGRATION HAS NOT COMMITTED (team.cjs's flag; Claude alpha's ruling on the hole it leaves), no desk that is
+     not yet in becomes in: a removal kept only under a raw half is invisible until then. The entries are the token hello (an
+     invitation's spend), the door knock, the key hello's resume of a bound invitation, and an invitation's upload (its admission,
+     a withdrawal included). Each answers the relay's temporary refusal before anything is spent or counted, so the invitation is
+     still good once the step commits. The lead's calls and an enrolled desk's hellos, reads and writes go on. */
+  const entriesOpen = typeof deps.entriesOpen === "function" ? deps.entriesOpen : () => true;
+  function entriesShut() {
+    let shut = false;
+    shut = !entriesOpen(); /* plant:entries-shut */
+    return shut;
+  }
+  const later = () => ({ ok: false, reason: "unavailable", said: "The relay could not answer that.", temporary: true });
   const fresh = t => isFresh(t, clock());
   const bodyOf = b => (b && typeof b === "object" && !Array.isArray(b) ? b : {});
 
@@ -596,16 +740,28 @@ function createCore(deps) {
       if (lifts && was && at > was.at) store.del("seats");
       return;
     }
+    /* The release's issue is kept as a mark, so a seats grant issued before it, posted again, gates nothing. */
     if (grant.seats.release === true) {
-      if (was && was.licence === grant.seats.licence && at > was.at) { store.del("seats"); store.del("seatSeen"); } /* plant:seats-release */
+      if (was && was.licence === grant.seats.licence && at > was.at) { store.del("seats"); store.del("seatSeen"); store.put("seatsOff", { at }); } /* plant:seats-release */
       return;
     }
+    const off = store.get("seatsOff");
     if (was && at < was.at) return; /* plant:seats-older */
+    if (plain(off) && at <= off.at) return; /* plant:seats-release-mark */
     let live = grant.seats.live;
     if (was && was.licence === grant.seats.licence && was.live > live) live = was.live; /* plant:seats-live-kept */
     const kept = { licence: grant.seats.licence, live, at };
     if (Array.isArray(grant.seats.freed)) kept.freed = grant.seats.freed.map(f => ({ key: f.key, at: f.at })); /* plant:seats-freed-kept */
     store.put("seats", kept);
+    /* A key newly named, or named from a later instant than the grant before, loses the sessions it holds now, as a removal's do; its
+       next hello is judged by seatGate, so one whose person came back opens again. */
+    const before = was && Array.isArray(was.freed) ? was.freed : [];
+    let newly = (kept.freed || []).map(f => f.key);
+    newly = (kept.freed || []).filter(f => !before.some(x => x.key === f.key && x.at >= f.at)).map(f => f.key); /* plant:freed-new */
+    if (newly.length) {
+      const team = store.get("team") || {}, pubOf = id => (team.lead && id === team.lead.keyId ? team.lead.pub : (store.get("dev:" + id) || {}).pub);
+      for (const [k, s] of store.list("ses:")) if (s && s.key && newly.indexOf(pubOf(s.key)) > -1) store.del(k); /* plant:freed-sessions */
+    }
   }
   /* A desk's or a Studio's session on a team whose grant carries seats, before it is issued: `cert` judged by certWhy for the seats' licence, its run
      ending decided here. A current one opens the session and its issue is kept as evidence; a run-out one opens it until the evidence
@@ -622,11 +778,20 @@ function createCore(deps) {
     since = !!named && plain(cert) && Number.isSafeInteger(cert.issued) && cert.issued >= named.at; /* plant:freed-issued */
     if (named && !since) return no("seat-lapsed"); /* plant:seat-freed */
     if (cert === undefined || certWhy(cert, deskPub, [seats.licence], now, roots, revokedNow(), true) !== null) return no("seat-lapsed"); /* plant:seat-cert */
+    const seat = { pub: deskPub, licence: seats.licence, issued: cert.issued, until: cert.until, pooled: cert.pooled === true };
     if (now < cert.until) {
       const seen = store.get("seatSeen");
       const newer = !(plain(seen) && seen.licence === seats.licence && seen.issued >= cert.issued);
-      return { ok: true, note: newer ? () => store.put("seatSeen", { licence: seats.licence, issued: cert.issued }) : null }; /* plant:seat-seen */
+      return { ok: true, seat, note: newer ? () => store.put("seatSeen", { licence: seats.licence, issued: cert.issued }) : null }; /* plant:seat-seen */
     }
+    const ran = seatRunOut(seats, seat, now, true);
+    return ran.ok ? { ok: true, seat, note: null } : ran;
+  }
+
+  /* A run-out certificate (`seat`, as seatGate keeps it) judged against the team's evidence at `now`; `mark` keeps a refusal ("pr:"),
+     which only a hello does. */
+  function seatRunOut(seats, seat, now, mark) {
+    const deskPub = seat.pub, cert = seat;
     const seen = store.get("seatSeen");
     let evidence = seats.live;
     if (plain(seen) && seen.licence === seats.licence && seen.issued > evidence) evidence = seen.issued; /* plant:seat-evidence-seen */
@@ -640,7 +805,7 @@ function createCore(deps) {
     let refusedOnce = false;
     refusedOnce = within && store.get(refusedKey) !== undefined; /* plant:pooled-refused-read */
     if (within && quiet && !refusedOnce) return { ok: true, note: null }; /* plant:pooled-grace */
-    if (within && !refusedOnce) store.atomic(() => store.put(refusedKey, { until: cert.until + POOLED_GRACE_MS })); /* plant:pooled-refused-mark */
+    if (mark && within && !refusedOnce) store.atomic(() => store.put(refusedKey, { until: cert.until + POOLED_GRACE_MS })); /* plant:pooled-refused-mark */
     return no("seat-lapsed"); /* plant:seat-lapsed */
     return { ok: true, note: null };
   }
@@ -658,13 +823,21 @@ function createCore(deps) {
   function storeGate(team, cert, deskPub) {
     if (storeCertWhy(cert, deskPub, clock(), roots, revokedNow()) !== null) return no("seat-lapsed"); /* plant:store-cert */
     if (storeMark(team.secret, cert.code) !== team.store) return no("seat-lapsed"); /* plant:store-code */
-    return { ok: true, note: null };
+    return { ok: true, note: null, end: cert.until };
   }
 
+  /* A computer another took off the store signs no list: it holds S and its certificate for the rest of its day. One that took itself
+     off signs again, as turning sync back on asks; the removal row names its signer (devices). */
   function storeListed(team, b) {
     const by = plain(b.by) ? b.by : {};
     if (!is(HEX64, by.pub) || !is(HEX128, by.sig) || !storeGate(team, b.seat, by.pub).ok) return false;
-    return verified(by.pub, storeDevicesBytes(team.rt, b.rev, b.t, b.keys), by.sig); /* plant:store-devices-sig */
+    const gone = store.get("gone:" + deskIdOf(by.pub));
+    let takenOff = false;
+    takenOff = !!gone && gone.by !== by.pub; /* plant:store-devices-removed */
+    if (takenOff) return false;
+    let from;
+    from = b.from; /* plant:store-devices-from */
+    return verified(by.pub, storeDevicesBytes(team.rt, b.rev, b.t, b.keys, from), by.sig); /* plant:store-devices-sig */
   }
 
   /* A hello, a session or a later call under one, where the grant in force was signed by a key now on the list. */
@@ -786,7 +959,7 @@ function createCore(deps) {
     if (!verified(team.lead.pub, leadBytes(rt, to.keyId, to.pub, b.t), b.sig)) return no("bad-signature"); /* plant:lead-move-sig */
     if (Number.isSafeInteger(team.handoverT) && b.t <= team.handoverT) return no("replay-rev"); /* plant:lead-handover-order */
     if (to.pub === team.lead.pub) return no("bad-signature"); /* plant:lead-same-key */
-    if (store.get("dev:" + to.keyId) || store.get("gone:" + to.keyId)) return no("not-enrolled"); /* plant:lead-desk-refusal */
+    if (store.get("dev:" + deskIdOf(to.pub)) || store.get("gone:" + deskIdOf(to.pub))) return no("not-enrolled"); /* plant:lead-desk-refusal */
     const why = grantWhy(b.grant, to.pub, clock(), roots, revokedNow());
     if (why === "revoked") return no("revoked"); /* plant:lead-grant-revoked */
     if (why !== null) return no("bad-grant"); /* plant:lead-grant-why */
@@ -864,7 +1037,9 @@ function createCore(deps) {
     for (const k of b.keys) {
       /* The lead's key is no desk, under whichever of its two id forms the lead did not take for itself. */
       if (k && k.pub === team.lead.pub) return no("bad-signature"); /* plant:devices-lead-pub */
-      const shaped = plain(k) && only(k, ["id", "pub", "desk"]) && isId(k.id) && keyMatches(k.id, k.pub) && B.isDeskId(k.desk) && k.id !== team.lead.keyId;
+      let named = keyMatches(k && k.id, k && k.pub);
+      named = deskKeyMatches(k && k.id, k && k.pub); /* plant:desk-id-devices */
+      const shaped = plain(k) && only(k, ["id", "pub", "desk"]) && isId(k.id) && named && B.isDeskId(k.desk) && k.id !== team.lead.keyId;
       if (!shaped || next.has(k.id)) return no("bad-signature"); /* plant:devices-shape */
       next.set(k.id, { pub: k.pub, desk: k.desk });
     }
@@ -894,7 +1069,7 @@ function createCore(deps) {
       if (withdrawn.length) store.put("ord", ord); /* plant:order-gone */
       for (const id of withdrawn) {
         const was = store.get("dev:" + id);
-        store.put("gone:" + id, Object.assign({}, was || {}, { at: clock(), ord }));
+        store.put("gone:" + id, Object.assign({}, was || {}, { at: clock(), ord }, team.store ? { by: b.by.pub } : {}));
         store.del("dev:" + id);
       }
       for (const [id, v] of next) { store.put("dev:" + id, v); store.del("gone:" + id); }
@@ -1166,8 +1341,11 @@ function createCore(deps) {
     return marked;
   }
   function byToken(rt, b) {
+    if (entriesShut()) return later();
     /* The binding is judged before the token, so a hello that does not bind answers the same whether or not the invitation is known. */
-    const binds = isId(b.key) && is(HEX128, b.sig) && keyMatches(b.key, b.pub) && verified(b.pub, helloBytes(rt, b.challenge, b.key), b.sig);
+    let named = keyMatches(b.key, b.pub);
+    named = deskKeyMatches(b.key, b.pub); /* plant:desk-id-token */
+    const binds = isId(b.key) && is(HEX128, b.sig) && named && verified(b.pub, helloBytes(rt, b.challenge, b.key), b.sig);
     let allowUnbound = true;
     allowUnbound = false; /* plant:S3-unbound */
     if (!binds && !allowUnbound) return no("bad-signature");
@@ -1243,15 +1421,20 @@ function createCore(deps) {
       let seat = { ok: true };
       seat = seatGate(b.seat, b.pub); /* plant:seat-lead */
       if (!seat.ok) return seat;
-      return issue(b.challenge, { key: b.key, inv: null }, seat.note);
+      return issue(b.challenge, seated({ key: b.key, inv: null }, seat), seat.note);
     }
+    /* A key naming itself any way but its branch id is no desk: answered as one on no list (the old lead's raw id among them), with
+       nothing looked up. */
+    let deskNamed = true;
+    deskNamed = deskKeyMatches(b.key, b.pub); /* plant:desk-id-hello */
+    if (!deskNamed) return no("not-enrolled");
     const dev = store.get("dev:" + b.key), gone = store.get("gone:" + b.key);
     if (!dev && gone) {
       if (gone.pub !== b.pub) return no("bad-signature"); /* plant:removed-sig */
       /* The invitation's session again, only where the lead registered it after this removal, for its one upload. */
       const held = boundInvite(b.key);
       if (held && registeredAfter(held.inv, gone) && held.inv.pub === b.pub)
-        return issue(b.challenge, { key: null, inv: held.id, bound: b.key, letGo: held.inv.uploaded === true }, () => {
+        return entriesShut() ? later() : issue(b.challenge, { key: null, inv: held.id, bound: b.key, letGo: held.inv.uploaded === true }, () => {
           for (const [k, x] of store.list("ses:")) if (x.inv === held.id) store.del(k);
         });
       return no("removed"); /* plant:removed-key */
@@ -1260,7 +1443,7 @@ function createCore(deps) {
       /* A key on no list that a token hello bound: the invitation's session again, for its one upload and then its answer alone, and only one held. */
       const held = boundInvite(b.key);
       if (held && held.inv.pub === b.pub) /* plant:invite-resume */
-        return issue(b.challenge, { key: null, inv: held.id, bound: b.key, letGo: held.inv.uploaded === true }, () => {
+        return entriesShut() ? later() : issue(b.challenge, { key: null, inv: held.id, bound: b.key, letGo: held.inv.uploaded === true }, () => {
           for (const [k, x] of store.list("ses:")) if (x.inv === held.id) store.del(k);
         });
       return no("not-enrolled"); /* plant:key-enrolled */
@@ -1270,7 +1453,7 @@ function createCore(deps) {
     seat = seatGate(b.seat, b.pub); /* plant:seat-session */
     if (team.store) seat = storeGate(team, b.seat, b.pub); /* plant:store-session */
     if (!seat.ok) return seat;
-    return issue(b.challenge, { key: b.key, inv: null }, seat.note);
+    return issue(b.challenge, seated({ key: b.key, inv: null }, seat), seat.note);
   }
 
   /* THE STANDING DOOR (board 980, A4): a desk whose person signed in to the licence service asks to join with no invitation, its
@@ -1280,11 +1463,11 @@ function createCore(deps) {
      session reads the lead's answer alone from the start, so a stranger holding a certificate learns nothing of the team. A key
      the lead removed is never let back in by it: only an invitation registered after the removal takes such a key. */
   function byDoor(team, rt, b) {
-    /* The key's id in its k- form alone, as doorSealKey binds it: removals and devices are kept by that id, so a desk naming itself
-       by its raw public half would pass by its own removal unseen and spend the door's caps. */
+    if (entriesShut()) return later();
+    /* The key's id in its k- form alone, as every desk entry takes it (deskKeyMatches) and doorSealKey binds it. */
     let named = true;
-    named = is(HEX64, b.pub) && b.key === "k-" + sha256(Buffer.from(b.pub, "hex")).slice(0, 16); /* plant:door-key-form */
-    const binds = isId(b.key) && named && keyMatches(b.key, b.pub) && is(HEX64, b.box) && is(HEX128, b.sig)
+    named = deskKeyMatches(b.key, b.pub); /* plant:door-key-form */
+    const binds = isId(b.key) && named && is(HEX64, b.box) && is(HEX128, b.sig)
       && verified(b.pub, doorHelloBytes(rt, b.challenge, b.key, b.box), b.sig);
     if (!binds) return no("bad-signature"); /* plant:door-bind */
     const held = store.get("door"), refs = plain(held) && Array.isArray(held.refs) ? held.refs : [];
@@ -1301,7 +1484,7 @@ function createCore(deps) {
       /* An enrolled desk knocking is a desk session, so the team's seats judge the certificate it knocks with. */
       let seat = { ok: true };
       seat = seatGate(b.door, b.pub); /* plant:seat-door */
-      return seat.ok ? issue(b.challenge, { key: b.key, inv: null }, seat.note) : seat;
+      return seat.ok ? issue(b.challenge, seated({ key: b.key, inv: null }, seat), seat.note) : seat;
     }
     if (store.get("gone:" + b.key)) return no("removed"); /* plant:door-removed */
     /* A key whose door request the lead dropped is answered as a stranger is for the rate window after the drop. */
@@ -1399,6 +1582,8 @@ function createCore(deps) {
     return { ok: true, refs: b.refs.slice() };
   }
 
+  /* What a session's gate said, kept with it: a seat's certificate, judged again at each use (seatLapsed), and a store certificate's end. */
+  const seated = (who, seat) => Object.assign(who, plain(seat.seat) ? { seat: seat.seat } : {}, Number.isSafeInteger(seat.end) ? { end: seat.end } : {});
   /* The session is kept by its sha256, so the store holds nothing a reader could present. */
   function issue(nonce, who, also) {
     const lapsedSession = lapseGate(false);
@@ -1406,7 +1591,9 @@ function createCore(deps) {
     let mayGo = false;
     mayGo = who.letGo === true; /* plant:let-go-session */
     if (lapsedSession && !mayGo) return lapsedSession; /* plant:lapse-session */
-    const token = random(32), now = clock(), until = now + SESSION_MS;
+    const token = random(32), now = clock();
+    let until = now + SESSION_MS;
+    until = Number.isSafeInteger(who.end) ? Math.min(until, who.end) : until; /* plant:session-store-end */
     if (!roomForChallenge(now)) return no("rate");
     let keyShare = false;
     keyShare = !who.inv && challengeShare(null, who.key) >= CHALLENGE_SHARE; /* plant:challenge-key-share */
@@ -1422,7 +1609,8 @@ function createCore(deps) {
       for (const k of evicted) store.del(k);
       held = held.filter(([k]) => !evicted.has(k));
       for (const [k] of held.slice(0, Math.max(0, held.length - SESSIONS_MAX + 1))) store.del(k); /* plant:session-cap */
-      store.put("ses:" + sha256(token), who.bound ? { key: who.key, inv: who.inv, bound: who.bound, until } : { key: who.key, inv: who.inv, until });
+      store.put("ses:" + sha256(token), Object.assign(who.bound ? { key: who.key, inv: who.inv, bound: who.bound, until } : { key: who.key, inv: who.inv, until },
+        plain(who.seat) ? { seat: who.seat } : {}));
     });
     const out = who.inv ? { ok: true, session: token, until, invite: true, lapse: told() } : { ok: true, session: token, until, lapse: told() };
     /* A door request's session names its id, which is where the lead's answer is written: the desk has no invitation to read it from. */
@@ -1501,11 +1689,29 @@ function createCore(deps) {
     if (s.removed) return no("removed"); /* plant:session-removed */
     const blocked = grantRefused();
     if (blocked) return blocked;
+    let lapsed = null;
+    lapsed = seatLapsed(s); /* plant:session-seat */
+    if (lapsed) return lapsed;
     const out = { ok: true, hash: h, key: s.key, inv: s.inv, bound: s.bound || null, until: s.until };
     if (quietSession(out)) out.quiet = true; /* plant:rejoin-quiet */
     return out;
   }
   const sessionOf = token => sessionByHash(is(HEX64, token) ? sha256(token) : null);
+  /* A key's session on a team with seats, judged again at each use from the certificate its hello carried: a freed name, a run-out the
+     evidence now passes by the margin, or a pooled grace the service ended refuses it as seatGate refuses a new hello. A session that
+     carried none, or another licence's, holds no seat. */
+  function seatLapsed(s) {
+    const seats = s.key && !s.inv ? store.get("seats") : undefined;
+    if (!plain(seats)) return null;
+    const seat = s.seat;
+    if (!plain(seat) || seat.licence !== seats.licence) return no("seat-lapsed");
+    const named = Array.isArray(seats.freed) ? seats.freed.find(f => plain(f) && f.key === seat.pub) : undefined;
+    if (named && !(seat.issued >= named.at)) return no("seat-lapsed");
+    const now = clock();
+    if (now < seat.until) return null;
+    const ran = seatRunOut(seats, seat, now, false);
+    return ran.ok ? null : ran;
+  }
 
   function expired(m, now) {
     return m.del && now - m.at > KEEP_MS; /* plant:deletion-keep */
@@ -1651,6 +1857,7 @@ function createCore(deps) {
      admits nothing; nor does one past its keep that no list has pruned yet, so a session opened just inside the keep makes
      no upload after it, a list between or not (C2 of the read of cf90c15). */
   function admitInvite(team, s, m) {
+    if (entriesShut()) return later();
     const inv = store.get("inv:" + s.inv);
     if (!inv && spentMarker(s.inv)) return no("token-spent");
     if (!inv) return no("no-hello");
@@ -1659,11 +1866,15 @@ function createCore(deps) {
     if (inv.spentAt === undefined) return no("token-spent"); /* plant:invite-pruned */
     if (clock() - inv.spentAt > KEEP_MS) return no("token-spent"); /* plant:invite-keep */
     if (s.bound && m.writer !== s.bound) return no("no-hello"); /* plant:invite-bound */
+    /* The writer's one spelling before any row is read under it (finding 4 of the fourth Grok review of 3cc09cb5). */
+    const pub = m.pub !== null ? m.pub : m.writer;
+    let keyFirst = false;
+    keyFirst = true; /* plant:rows-after-key */
+    if (keyFirst && !deskKeyMatches(m.writer, pub)) return no("bad-signature"); /* plant:invite-key */
     if (m.writer === team.lead.keyId || store.get("dev:" + m.writer) !== undefined) return no("no-hello"); /* plant:invite-stranger */
     const goneRec = store.get("gone:" + m.writer);
     if (goneRec && !registeredAfter(inv, goneRec)) return no("removed"); /* plant:invite-removed */
-    const pub = m.pub !== null ? m.pub : m.writer;
-    if (!keyMatches(m.writer, pub)) return no("bad-signature"); /* plant:invite-key */
+    if (!keyFirst && !deskKeyMatches(m.writer, pub)) return no("bad-signature");
     if (pub === team.lead.pub) return no("no-hello"); /* plant:invite-lead-pub */
     const ownDesk = !!(goneRec && registeredAfter(inv, goneRec) && m.place === "desk:" + goneRec.desk);
     let atDesk = true;
@@ -2075,6 +2286,6 @@ module.exports = {
   DOOR_REFS_MAX, DOOR_CERT_MAX, DOOR_LIVE_MAX, DOOR_PER_PERSON, DOOR_RATE_MAX, DOOR_RATE_MS, DOOR_TRY_SHARE, CERT_SPAN_MS, SEAT_MARGIN_MS, POOLED_GRACE_MS, SEAT_QUIET_MS, FREED_MAX,
   doorBytes, doorHelloBytes, certBytes, certWhy, storeDevicesBytes,
   STORE_GRANT_KIND, STORE_CERT_KIND, STORE_CERT_SPAN_MS, NOTICE_KIND, storeCertBytes, storeCertWhy, noticeBytes, noticeWhy,
-  grantBytes, delegationBytes, revocationBytes, revokedKeysOf, acceptRevocations, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, leadKeyMatches, parseMeta,
+  grantBytes, delegationBytes, revocationBytes, revokedKeysOf, acceptRevocations, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, deskKeyMatches, deskIdOf, migrateDeskIds, MIGRATED, leadKeyMatches, parseMeta,
   createCore,
 };

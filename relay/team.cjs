@@ -59,7 +59,7 @@ function routeOf(method, pathname, prefix) {
 }
 
 const reply = (status, value, extra) => new Response(JSON.stringify(value), { status, headers: extra ? Object.assign({}, HEADERS, extra) : HEADERS });
-const refused = r => reply(STATUS[r.reason] || 400, Object.assign({ error: r.reason, said: r.said }, typeof r.floor === "number" ? { floor: r.floor } : {}));
+const refused = r => r && r.temporary === true ? unavailable() : reply(STATUS[r.reason] || 400, Object.assign({ error: r.reason, said: r.said }, typeof r.floor === "number" ? { floor: r.floor } : {}));
 const refusedFor = reason => refused(B.refusal(reason));
 const missing = () => refusedFor("missing");
 const fault = () => reply(500, { error: "fault", said: "The relay could not answer that." });
@@ -150,11 +150,28 @@ function shut(ws, reason) {
 /* A sweep whose delete of some object failed rings again after this long, for those objects alone. */
 const SWEEP_RETRY_MS = 60 * 60 * 1000;
 
+/* The one log line of a wake that renamed or dropped rows: the counts by family, and nothing that names a key, a desk or a team.
+   Null where nothing changed. */
+function migrationLine(n) {
+  const renamed = n.dev + n.gone + n.bk + n.inv + n.dd + n.tf, dropped = n.devDropped + n.ses + n.door;
+  if (renamed + dropped + n.ended === 0) return null;
+  return "relay one-spelling migration: renamed " + renamed + " (dev " + n.dev + ", gone " + n.gone + ", bk " + n.bk + ", inv " + n.inv
+    + ", dd " + n.dd + ", tf " + n.tf + "); dropped " + dropped + " (dev " + n.devDropped + ", ses " + n.ses + ", door " + n.door
+    + "); conflicts " + n.conflicts + "; sessions ended " + n.ended;
+}
+/* The one line of a migration step that threw, written once while the object keeps trying. */
+const MIGRATION_FAILED = "relay one-spelling migration: failed; tried again at each request until it commits";
+
 function teamObject(deps) {
   /* Keys the Worker decided for this request. Empty is a list, so a flag, not the array, says whether it was sent.
-     Those keys stay for a later call with no header, while this wake lasts. With none, the call reads deps.revoked,
+     Those keys stay for a later call with no header, while this wake lasts, and in the team's own row ("kept") across a hibernation,
+     since a headerless wake (a socket's message, the alarm) cannot ask the list object. With neither, the call reads deps.revoked,
      and a result that is not a list is no list. */
   let headerSet = false, headerKeys = null, carried = null;
+  function keptStored() {
+    const row = deps.store.get("kept");
+    return row && Array.isArray(row.keys) && row.keys.every(k => typeof k === "string") ? row.keys.slice() : null;
+  }
   function useKept(request) {
     const raw = request && request.headers ? request.headers.get("etiuda-kept") : null;
     if (typeof raw !== "string") { headerSet = false; headerKeys = null; return; }
@@ -164,25 +181,63 @@ function teamObject(deps) {
     headerSet = true;
     headerKeys = parsed.slice();
     carried = headerKeys.slice();
+    /* Written only for a team that exists and only when the list moved, so a stranger's request stores nothing. */
+    const was = keptStored() || [];
+    const moved = was.length !== carried.length || carried.some(k => was.indexOf(k) < 0);
+    if (moved && deps.store.get("team") !== undefined) deps.store.put("kept", { keys: carried.slice() });
   }
   function revokedNow() {
     if (headerSet) return headerKeys.slice();
     const read = typeof deps.revoked === "function" ? deps.revoked() : [];
     const envKeys = Array.isArray(read) ? read : [];
+    if (!carried) {
+      let kept = null;
+      kept = keptStored(); /* plant:kept-stored */
+      if (kept) carried = kept;
+    }
     if (!carried) return envKeys.slice();
     const out = carried.slice();
     for (const k of envKeys) if (out.indexOf(k) < 0) out.push(k);
     return out;
   }
   const c = core.createCore({ store: deps.store, clock: deps.clock, limits: deps.limits, roots: deps.roots,
-    revoked: revokedNow });
+    revoked: revokedNow, entriesOpen: () => migrated });
   const r2 = deps.r2, sockets = deps.sockets, alarm = deps.alarm || null;
   const prefix = apiPrefixOf(Object.prototype.hasOwnProperty.call(deps, "prefix") ? { API_PREFIX: deps.prefix } : undefined);
   const answer = (r, shape) => (r.ok ? reply(200, shape(r)) : refused(r));
 
   async function fetch(request) {
+    if (retry) ensureMigrated();
     try { return await route(request); } catch { return fault(); }
   }
+
+  /* The old relay's raw-keyed rows, renamed once on the first wake that finds a team (core.migrateDeskIds). Nobody can list a
+     deployed relay's storage, so the step that changed anything says so in one line of counts, with no key or id in it, and a step
+     that changed nothing writes no line. A desk the rename leaves removed has its sockets closed here, its sessions marked in the step.
+     A step that throws rolls back and is not swallowed: it writes one line saying so, once, and the flag stands, so every request
+     tries the step again before it is routed, until it commits, and then never again. A request whose try throws again is answered
+     over the unrenamed rows: a removal kept only under a raw half is invisible to it. */
+  let migrate = false;
+  migrate = true; /* plant:desk-id-migrate */
+  let migrated = !migrate, failSaid = false;
+  function logLine(line) {
+    (typeof deps.log === "function" ? deps.log : console.log)(line);
+  }
+  function ensureMigrated() {
+    if (migrated) return;
+    let n = null;
+    try { n = core.migrateDeskIds(deps.store); } catch {
+      if (!failSaid) { failSaid = true; logLine(MIGRATION_FAILED); }
+      return;
+    }
+    migrated = true;
+    const line = migrationLine(n);
+    if (line) logLine(line);
+    if (n.removedKeys.length) closeWhere(a => n.removedKeys.indexOf(a.key) > -1, "removed");
+    if (n.droppedInvs.length) closeWhere(a => !!a.inv && n.droppedInvs.indexOf(a.inv) > -1, "no-hello");
+  }
+  let retry = false;
+  retry = true; /* plant:migrate-retry */
 
   /* Whether the team object still holds a team. A throw is a blip: the caller keeps the id. */
   async function asksHeld(ns, rt, leadKey) {
@@ -199,7 +254,22 @@ function teamObject(deps) {
     await ns.get(ns.idFromName("lead:" + leadKey)).fetch(leadRequest({ op: "release", rt: heldRt }));
   }
   /* Reserve or release one rt on this lead's list. A repeat of an id already listed is taken and does not raise the
-     count. At the bound, each listed team's object is asked once and a dead id is dropped before the new one is refused. */
+     count. At the bound, each listed team's object is asked once and a dead id is dropped before the new one is refused.
+     A reserve answers whether it added the rt: a place it did not add is not the caller's to give back. */
+  /* A listed id reserved again (a retried create) while a reserve or the alarm was asking: it may hold by the time the list is
+     written, so an ask's earlier "dead" for it no longer drops it (finding 4 of the fifth Grok review of Part A, board 1003). Any id
+     reaffirmed in this wake is kept, whenever its repeat came, since its create may not have run when a later reserve or the alarm
+     asks (the test architect's read of db7889a9). A miss leaves an id listed, never one dropped; the next wake's reap asks again. */
+  const reaffirmed = new Set();
+  function reaffirm(rt) {
+    reaffirmed.add(rt);
+    return reply(200, { ok: true, added: false });
+  }
+  function heldAgain(id) {
+    let counted = false;
+    counted = reaffirmed.has(id); /* plant:lead-reaffirm */
+    return counted;
+  }
   async function leadAnswer(request) {
     const bytes = await readCapped(request, JSON_MAX);
     let body = null;
@@ -215,47 +285,81 @@ function teamObject(deps) {
       return reply(200, { ok: true });
     }
     const row = deps.store.get("lead");
-    let rts = row && Array.isArray(row.rts) ? row.rts.filter(x => typeof x === "string") : [];
+    const rts = row && Array.isArray(row.rts) ? row.rts.filter(x => typeof x === "string") : [];
     const leadKey = lead || (row && row.leadKey) || null;
-    if (rts.indexOf(rt) !== -1) return reply(200, { ok: true }); /* plant:lead-repeat */
-    let full = rts.length >= TEAMS_PER_LEAD;
-    if (full) {
-      const ns = namespaceOf(deps.teams);
-      if (ns) {
-        const live = [];
-        for (const id of rts) {
-          let holds = true;
-          try { holds = await asksHeld(ns, id, leadKey); } catch { holds = true; }
-          if (holds) live.push(id);
-        }
-        rts = live; /* plant:lead-reap */
-        await keepLead(row, rts, leadKey);
-        full = rts.length >= TEAMS_PER_LEAD;
+    let repeats = false;
+    repeats = true; /* plant:lead-repeat */
+    if (repeats && rts.indexOf(rt) !== -1) return reaffirm(rt);
+    const ns = rts.length >= TEAMS_PER_LEAD ? namespaceOf(deps.teams) : null;
+    const dead = new Set();
+    if (ns) {
+      for (const id of rts) {
+        let holds = true;
+        try { holds = await asksHeld(ns, id, leadKey); } catch { holds = true; }
+        if (!holds) dead.add(id);
       }
     }
-    if (full) return refusedFor("team-count"); /* plant:team-count */
-    rts.push(rt);
-    await keepLead(row, rts, leadKey);
-    return reply(200, { ok: true });
+    /* Another reserve may have written the list while this one asked (finding 5 of the fourth Grok review of 3cc09cb5): the list is
+       read again after the asks, the ids found dead are dropped from what stands now, and the count, the push and the write are one
+       atomic step, so a place another reserve took is counted. The alarm follows the step. */
+    const step = deps.store.atomic(() => {
+      let now = row;
+      now = deps.store.get("lead"); /* plant:lead-reread */
+      let list = now && Array.isArray(now.rts) ? now.rts.filter(x => typeof x === "string") : [];
+      if (repeats && list.indexOf(rt) !== -1) return { answer: reaffirm(rt), kept: null };
+      let kept = null;
+      if (ns) {
+        let left = list;
+        left = list.filter(id => !dead.has(id) || heldAgain(id)); /* plant:lead-reap */
+        list = left;
+        kept = writeLead(now, list, leadKey);
+      }
+      const full = list.length >= TEAMS_PER_LEAD;
+      if (full) return { answer: refusedFor("team-count"), kept }; /* plant:team-count */
+      list.push(rt);
+      return { answer: reply(200, { ok: true, added: true }), kept: writeLead(now, list, leadKey) };
+    });
+    if (step.kept !== null) await alarmLead(step.kept);
+    return step.answer;
   }
-  /* The lead's list written, or deleted where it names no team, and its alarm set LEAD_KEEP_MS on or cleared with it. */
-  async function keepLead(row, rts, leadKey) {
-    if (!rts.length) { deps.store.del("lead"); if (alarm) await alarm.clear(); return; } /* plant:lead-empty */
+  /* The lead's list written, or deleted where it names no team, and its alarm set LEAD_KEEP_MS on or cleared with it. The write is
+     synchronous, so it can sit inside an atomic step, and answers whether a list was kept; the alarm follows it. */
+  function writeLead(row, rts, leadKey) {
+    if (!rts.length) { deps.store.del("lead"); return false; } /* plant:lead-empty */
     deps.store.put("lead", Object.assign({}, row, { rts }, leadKey ? { leadKey } : {}));
-    if (alarm) await alarm.set(deps.clock() + LEAD_KEEP_MS);
+    return true;
+  }
+  async function alarmLead(kept) {
+    if (!alarm) return;
+    if (kept) await alarm.set(deps.clock() + LEAD_KEEP_MS);
+    else await alarm.clear();
+  }
+  async function keepLead(row, rts, leadKey) {
+    await alarmLead(writeLead(row, rts, leadKey));
   }
   /* A lead's list asked again: each team it names asked whether it still holds, a throw keeping the id; the list kept as what holds. */
   async function leadAlarm(row) {
     const ns = namespaceOf(deps.teams);
     const rts = Array.isArray(row.rts) ? row.rts.filter(x => typeof x === "string") : [];
     if (!ns) return keepLead(row, rts, row.leadKey);
-    const live = [];
+    const dead = new Set();
     for (const id of rts) {
       let holds = true;
       try { holds = await asksHeld(ns, id, row.leadKey || null); } catch { holds = true; }
-      if (holds) live.push(id);
+      if (!holds) dead.add(id);
     }
-    return keepLead(row, live, row.leadKey); /* plant:lead-alarm-reap */
+    /* A reserve or a release may have written the list while the alarm asked: what stands now is kept, less the ids found dead, in one
+       atomic step, and a list a release took away meanwhile stays gone. */
+    const kept = deps.store.atomic(() => {
+      let now = row;
+      now = deps.store.get("lead"); /* plant:lead-alarm-reread */
+      if (now === undefined) return null;
+      const list = Array.isArray(now.rts) ? now.rts.filter(x => typeof x === "string") : [];
+      let live = list;
+      live = list.filter(id => !dead.has(id) || heldAgain(id)); /* plant:lead-alarm-reap */
+      return writeLead(now, live, now.leadKey);
+    });
+    if (kept !== null) await alarmLead(kept);
   }
 
   async function route(request) {
@@ -310,6 +414,8 @@ function teamObject(deps) {
     }
     if (what === "grant") {
       const renewed = c.renew(rt, body);
+      /* A pooled desk the grant newly names as freed holds no session now (takeSeats); its socket goes with it. */
+      if (renewed.ok) closeWhere(a => !!a.key && !c.sessionByHash(a.ses).ok, "no-hello"); /* plant:freed-sockets */
       if (renewed.ok) await arm(); /* plant:arm-renew */
       return answer(renewed, r => ({ ok: true, lapse: r.lapse }));
     }
@@ -450,7 +556,9 @@ function teamObject(deps) {
   }
 
   /* The instant a swept id's mark ends, or null where it holds none or no instant. */
+  /* A store the service ended keeps its mark for good (notice: its id is never made again); every other swept mark ends. */
   function sweptEnd() {
+    if (deps.store.get("swept") === "ended") return null; /* plant:ended-kept */
     const at = deps.store.get("sweptAt");
     return deps.store.get("swept") !== undefined && Number.isSafeInteger(at) ? at + core.SWEPT_KEEP_MS : null;
   }
@@ -508,6 +616,7 @@ function teamObject(deps) {
 
   function webSocketMessage(ws, message) {
     headerSet = false;
+    if (retry) ensureMigrated();
     const s = c.sessionByHash(attachmentOf(ws).ses);
     if (!s.ok) return shut(ws, s.reason);
     const lapsed = c.lapseGate(false);
@@ -522,7 +631,8 @@ function teamObject(deps) {
     try { ws.close(1000, ""); } catch { /* already closed */ }
   }
 
-  return { fetch, webSocketMessage, webSocketClose, alarm: onAlarm };
+  ensureMigrated();
+  return { fetch, webSocketMessage, webSocketClose, alarm: async () => { if (retry) ensureMigrated(); return onAlarm(); } };
 }
 
 /* The object's storage as the core's store, over its SQLite: one table of keys and JSON values. The table is made by the first

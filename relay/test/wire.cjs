@@ -44,6 +44,21 @@ function generateKey() {
   return { keyId: publicKey, publicKey: publicKey, privateKey: privateKey };
 }
 
+/* A desk's key, named as the relay and the desk name it: its branch id, "k-" and the first 16 hex of the sha256 of its public
+   half (shell/main.js branchIdOf). A lead keeps generateKey's id, its public half. */
+function branchIdOfKey(publicHex) {
+  return "k-" + crypto.createHash("sha256").update(Buffer.from(String(publicHex), "hex")).digest("hex").slice(0, 16);
+}
+function generateDeskKey() {
+  const k = generateKey();
+  k.keyId = branchIdOfKey(k.publicKey);
+  return k;
+}
+/* A desk in a team file, in the engine's roster form: its id the branch id of its key. */
+function rosterEntry(key) {
+  return { desk: { id: key.keyId, key: key.publicKey } };
+}
+
 function privateKeyOf(hex) {
   return crypto.createPrivateKey({ key: Buffer.from(hex, "hex"), type: "pkcs8", format: "der" });
 }
@@ -218,7 +233,7 @@ function pathInPlace(path, role) {
 module.exports = {
   BLOB_MAX, TEAM_MAX, RATE_MAX, RATE_WINDOW_MS, TOKEN_TRIES, DELETE_KEEP_MS, NONCE_LIFE_MS, ECHO_MS, PAD_FLOOR,
   UPLOAD_PREFIX, DESK_PREFIX, HEAD_PREFIX, HELLO_LABEL, AAD_LABEL,
-  randomId, teamKey, pathId, tokenHash, generateKey,
+  randomId, teamKey, pathId, tokenHash, generateKey, generateDeskKey, branchIdOfKey, rosterEntry,
   sign, verify, canon, signedBytes,
   signTeam, teamGenuine, signHead, headGenuine,
   aadBytes, uploadMessage, deskMessage, helloMessage,

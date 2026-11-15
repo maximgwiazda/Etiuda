@@ -621,8 +621,8 @@ function openUnfinishedReset(info){
   const el=resetAsk("mt-reset-unfinished",
     '<h3 id="eResetAskT" data-i18n-skip></h3>'
     +'<p>'+esc(t(RESET_NEXT))+'</p>'
-    +'<div class="tour-actions"><button type="button" class="btn" id="mtResetStop">'+esc(t("Stop the reset"))+'</button>'
-    +'<button type="button" class="btn danger" id="mtResetAgain">'+esc(t("Try again"))+'</button></div>',
+    +'<div class="tour-actions"><button type="button" class="btn danger" id="mtResetAgain">'+esc(t("Try again"))+'</button>'
+    +'<button type="button" class="btn primary" id="mtResetStop">'+esc(t("Stop the reset"))+'</button></div>',
     "mtResetStop");
   el.querySelector("#eResetAskT").textContent=line;
   const done=()=>dismissNode(el);

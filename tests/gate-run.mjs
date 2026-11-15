@@ -578,7 +578,10 @@ function main() {
       /* The held lane runs a script file: machine-lock run passes its command through a shell, which an inline -e script does not survive. */
       fs.writeFileSync(path.join(lab.lab, "tests", "hold.mjs"), "setTimeout(() => process.exit(0), 30000);" + String.fromCharCode(10));
       const holder = spawn(process.execPath, [path.join(lab.lab, "tools", "machine-lock.mjs"), "run", "--", process.execPath, path.join(lab.lab, "tests", "hold.mjs")],
-        { cwd: lab.lab, env: Object.assign({}, process.env, { ETIUDA_LOCK_PATH: path.join(lab.root, "machine.lock") }), stdio: "ignore", windowsHide: true });
+        /* Off Windows the holder leads its own process group, so the stop below takes machine-lock's wrapper and the held child together;
+           a SIGKILL to the wrapper alone left the child holding the lane, and 16d's control found it still held (Claude gamma's sweep). */
+        { cwd: lab.lab, env: Object.assign({}, process.env, { ETIUDA_LOCK_PATH: path.join(lab.root, "machine.lock") }), stdio: "ignore", windowsHide: true,
+          detached: process.platform !== "win32" });
       const lockFile = path.join(lab.root, "machine.lock");
       const t0 = Date.now();
       while (!fs.existsSync(lockFile) && Date.now() - t0 < 15000) spawnSync(process.execPath, ["-e", "setTimeout(()=>{},200)"]);
@@ -587,7 +590,7 @@ function main() {
         ra = runTool(lab, ["area", "HEAD~1...HEAD"], { ETIUDA_LOCK_TIMEOUT_MS: "1500" });
       } finally {
         if (process.platform === "win32") spawnSync("taskkill", ["/PID", String(holder.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
-        else { try { holder.kill("SIGKILL"); } catch {} }
+        else { try { process.kill(-holder.pid, "SIGKILL"); } catch { try { holder.kill("SIGKILL"); } catch {} } }
       }
       check(!!ra && ra.exit !== 0 && ra.out.indexOf("could not acquire machine lock") >= 0 && ra.out.indexOf("fail-closed") < 0,
         "16c an area run takes a lane: with every lane held it is refused rather than run beside them: exit " + (ra && ra.exit));

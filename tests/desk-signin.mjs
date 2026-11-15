@@ -49,7 +49,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+<<<<<<< HEAD
 const PLANTS = 165;
+=======
+const PLANTS = 164;
+>>>>>>> 2d0563ee
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
@@ -3094,11 +3098,12 @@ CASES.relaySeatPage = async (s, page) => {
    the relay does, signed or not. */
 CASES.pooledCert = s => {
   const req = createRequire(import.meta.url), core = req(path.join(ROOT, "relay", "core.cjs"));
-  const pooled = cert({ pooled: true }), forged = Object.assign(cert(), { pooled: true }), odd = cert({ pooled: "yes" });
+  const day = { until: NOW + 86400000 }, pooled = cert(Object.assign({ pooled: true }, day)), forged = Object.assign(cert(day), { pooled: true });
+  const odd = cert(Object.assign({ pooled: "yes" }, day)), long = cert({ pooled: true, until: NOW + 86400000 + 60000 });
   const kept = s.signinFileRead(s.signinFileText({ held: heldOf({ cert: pooled, doors: [] }) })).held.cert;
   const relay = c => core.certWhy(c, DESK_KEY, [c.licence], NOW, [TEST_ROOT]) === null;
   return s.signinCertOk(pooled, DESK_KEY) === true && !s.signinCertOk(forged, DESK_KEY) && !s.signinCertOk(odd, DESK_KEY)
-    && !!kept && kept.pooled === true && relay(pooled) && !relay(forged) && !relay(odd);
+    && !!kept && kept.pooled === true && relay(pooled) && !relay(forged) && !relay(odd) && !s.signinCertOk(long, DESK_KEY) && !relay(long);
 };
 const LEGS = [
   ["ds1a", "offered", "as shipped both are configured with Etiuda's own client ids and offered in order, no secret in the tree; with no client id nothing is offered; a configured table offers what it configures, in order"],
@@ -3237,7 +3242,7 @@ const LEGS = [
   ["ds49b", "relaySeatWire", "the team whose relay refused this desk's seat is kept and told once, said removed where the service found no role and renew otherwise, cleared by its own open or the channel let go"],
   ["ds49c", "seatRenewGap", "a relay session carries the desk's own standing certificate or none, and a run-out one is renewed first at most once an hour, a renewal already out waited on"],
   ["ds49d", "relaySeatPage", "Account says the relay's refusal as what it is to the person, in the copywriter's English and Polish: no longer given access, or the sign-in to renew with the providers under it; nothing signed out; no-role at a first sign-in and a renewal"],
-  ["ds50a", "pooledCert", "a pooled desk's certificate (pooled: true, signed as the line \"pooled\") is a seat on the desk, kept by signin.json, and the relay's certWhy takes it alike; the mark outside the signature, or of another value, is no certificate"],
+  ["ds50a", "pooledCert", "a pooled desk's certificate (pooled: true, signed as the line \"pooled\") is a seat on the desk, kept by signin.json, and the relay's certWhy takes it alike; the mark outside the signature, or of another value, is no certificate, nor is one running past a day"],
   ["ds22g", "doorsShownSigned", "doors held without the signature are offered nowhere and a press on one joins nothing; signed ones are offered"],
 ];
 for (let [id, name, line] of LEGS) {
@@ -3749,6 +3754,7 @@ if (!PLANTS_OFF) {
   await plant("dsp151", ["return !!list && Array.isArray(list.keys) && !!cert && !!cert.via && !!cert.via.key && list.keys.indexOf(String(cert.via.key.pub)) >= 0; /* plant:revoked-has */", "return false;"], "revokedLapse");
   await plant("dsp159", ["    .concat(c.pooled === true ? [\"pooled\"] : []) /* plant:cert-pooled-line */\n", ""], "pooledCert");
   await plant("dsp160", ["      .concat(c.pooled === true ? [\"pooled\"] : []) /* plant:cert-pooled-field */\n", ""], "pooledCert");
+  await plant("dsp166", ["    && (c.pooled !== true || c.until - c.issued <= SIGNIN_POOLED_SPAN_MS) /* plant:cert-pooled-span */\n", ""], "pooledCert");
   await plant("dsp161", ["const said = { 403: [\"token\", \"signin\", \"no-role\"], 409: [\"full\", \"desks\", \"access-token\"] }[res.status]; /* plant:no-role-read */",
     "const said = { 403: [\"token\", \"signin\"], 409: [\"full\", \"desks\", \"access-token\"] }[res.status];"], "relaySeatAnswer");
   await plantWire("dsp162", ["  if (was !== signinRelaySeatTeam) tellSignin(); /* plant:relay-seat-told */\n", ""], "relaySeatWire");

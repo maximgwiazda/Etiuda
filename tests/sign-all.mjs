@@ -160,7 +160,11 @@ async function build(name, text, { cert = true, door = null } = {}) {
 try {
   /* ---- 1. the build signs every PE file ----------------------------------------------------------------------- */
   let real = null;
-  if (!EB) {
+  /* The build lays the app out from Electron's own dist, which off Windows holds no Etiuda.exe and no DLL to sign; the gate's half
+     below then reads a smaller app of the same shape, so it runs everywhere (Claude gamma's Linux sweep, 2026-11-14). */
+  const aside1 = require('./off-windows.cjs').offWindows('1a-1e', 'electron-builder lays out a Windows app only from Windows\'s Electron dist, which this platform does not have');
+  if (aside1) skip(aside1, 5);
+  else if (!EB) {
     if (ebMissing) check(false, '1a-1e electron-builder\'s own code could not be read: ' + ebMissing);
     else skip('1a-1e need app-builder-lib in node_modules to ask electron-builder itself', 5);
   } else if (!fs.existsSync(DIST)) skip('1a-1e need Electron\'s dist in node_modules to lay the app out as it ships', 5);

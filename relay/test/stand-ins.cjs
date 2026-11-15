@@ -107,7 +107,8 @@ function socketHub() {
 
 /* The Worker's env: TEAMS a namespace whose objects run relay/team.cjs over the stores here, BLOBS the bucket.
    `restart()` drops every live object and its sockets; storage, the bucket and the alarms stay. `opts.roots` are the roots its team
-   objects accept a grant under, `opts.team` a copy of relay/team.cjs to run in its place, and NOW is the clock a leg gives the
+   objects accept a grant under, `opts.team` a copy of relay/team.cjs to run in its place, `opts.log` what takes a wake's log line in
+   place of console.log, and NOW is the clock a leg gives the
    Worker. `alarms` holds each object's one alarm by name, and `ring(name)` runs that object's alarm where it is set and due, as
    the runtime would, answering whether it rang. */
 function relayEnv(opts) {
@@ -130,6 +131,7 @@ function relayEnv(opts) {
     const hub = socketHub();
     hubs.set(name, hub);
     const obj = (o.team || team).teamObject({ store: stores.get(name), r2: bucket, clock: () => clock.now, sockets: hub, limits: o.limits, roots: o.roots,
+      log: o.log,
       revoked: () => {
         /* `wakeReadsText`: a woken object reads the REVOKED text alone, as the runtime's does (relay/team.cjs plant:revoked-wake),
            so a leg can see what a route that carries no kept list would let through. */
