@@ -5811,7 +5811,7 @@ function askJoin(file, name) {
     return joinView();
   const nonce = crypto.randomBytes(32).toString("hex"), team = String(d.team);
   const j = { team: team, file: path.basename(at), nonce: nonce, commit: joinCommit(team, me.key, me.box, nonce), asked: Date.now(),
-              held: newestEpoch(team), name: String(name || "").trim().slice(0, 120) };
+              held: newestEpoch(team), name: String(name || "").trim().slice(0, 120), before: inviteBefore(team) };
   try { writeJoin(joinRequestDoc(j, null)); }
   catch (e) {
     console.error("etiuda: the request to join could not be written - " + e.message);
@@ -5894,6 +5894,12 @@ function cancelJoin() {
      newer key from elsewhere, one the roster's wrap gave, means the desk is admitted, and Cancel leaves what it set (921n). */
   const b = j && j.invite && j.invite.before, wrapped = (j && j.invite && ((j.invite.relay && j.invite.relay.wrapped) || j.invite.wrapped)) || [];
   if (b && newestEpoch(j.team, wrapped) === (b.epoch || 0)) undoInvite(j.team, b, j.invite); /* plant:c7-cancel */
+  /* A request with no invitation whose answer pinned a lead the desk did not trust before, and no admission since: Cancel takes
+     back that pin and the bar or leave it lifted, since the opening was signed only by the lead of the folder's own file. */
+  const a = j && !j.invite ? j.before : null;
+  let answered = false;
+  answered = !!a && !a.pin && teamPinFrom[j.team] === "answer" && newestEpoch(j.team) === (a.epoch || 0); /* plant:j14-cancel-answer */
+  if (answered) undoInvite(j.team, a, {});
   persistDeskEnvelope();
   return joinView();
 }
@@ -6057,12 +6063,15 @@ function joinView() {
       const named = sealedOutside();
       if (named && named.team === j.team) { j.file = named.file; persistDeskEnvelope(); }
     }
-    if (!j.opened && !j.refused) {
+    /* The reveal answers only the first opening read (15l); a refusal of this commitment read after it still ends the request. */
+    let readJoins = false;
+    readJoins = !j.refused; /* plant:j14-refused-after-open */
+    if (readJoins) {
       let joins = null;
       try { joins = JSON.parse(fs.readFileSync(path.join(root, JOINS_NAME), "utf8")); } catch { /* none yet */ }
       const got = joinOpening(joins, j.team, me.id, j.commit, joinTrustPubs(j.team, root));
       if (got && got.refused) { j.refused = true; persistDeskEnvelope(); }
-      else if (got) {
+      else if (got && !j.opened) {
         try { writeJoin(joinRequestDoc(j, got)); j.opened = got; persistDeskEnvelope(); }
         catch (e) { console.error("etiuda: the request to join could not be answered - " + e.message); }
       }
@@ -6115,7 +6124,7 @@ function joinKept(j) {
     && Number.isInteger(j.held) && j.held >= 0 && typeof j.name === "string"
     && (o === undefined || (!!o && !!o.lead && typeof o.lead.keyId === "string" && JOIN_HEX_RE.test(String(o.lead.public))
       && JOIN_HEX_RE.test(String(o.nonce))))
-    && (j.refused === undefined || j.refused === true);
+    && (j.refused === undefined || j.refused === true) && (j.before === undefined || beforeKept(j.before));
   if (!ok) return null;
   if (j.invite === undefined) return j;
   const inv = j.invite, who = inv && inv.lead;
@@ -6208,16 +6217,16 @@ function inviteFolderTeam(parsed) {
   return teamWhole(doc) && doc.id === parsed.team && doc.lead && doc.lead.keyId === parsed.lead.keyId && doc.lead.public === parsed.lead.public
     ? "" : "foreign";
 }
-/* True only where `folder` holds this team's own team file, whole under the invited lead, under a lead handed over to
-   from it, or vouched for by a ring in that folder. False for any other. */
+/* True only where `folder` holds this team's own team file, whole under the invited lead or under a lead handed over to from
+   it. A ring there is not asked: the invitation pins its own lead, and a file under any other key is never heeded after. */
 function inviteFolderBelongs(folder, parsed) {
   if (!folder || !parsed || !parsed.team || !parsed.lead) return false;
   const doc = teamTextChosen(folder).doc;
   if (!doc || !teamWhole(doc) || doc.id !== parsed.team) return false;
   if (doc.lead && doc.lead.keyId === parsed.lead.keyId && doc.lead.public === parsed.lead.public) return true;
-  if (handedTo(doc, parsed.lead)) return true;
-  const ring = readRingFile(folder);
-  return Boolean(ring && memberRingVouches(doc, ring));
+  let handed = false;
+  handed = handedTo(doc, parsed.lead); /* plant:j14-picked-lead */
+  return handed;
 }
 /* What an invitation says, and nothing written: the folder it names is not opened, stated or watched. */
 function readInvite(text) {
