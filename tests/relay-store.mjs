@@ -13,7 +13,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-store-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 60;
+const EXPECTED = 62;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -367,6 +367,19 @@ async function main() {
     return { ok, detail: brief({ upload: up.r.status, objectsBefore: before, end: said(end), objectsAfter: after, rows, heldSession: held.status,
       hello: said(ch), createAgain: said(again), secondNotice: said(twice) }) };
   }
+  /* The second house on review 1 (Grok, finding 4): a store the service ended is never made again, a year on and past the alarm that
+     forgets another swept mark included. */
+  async function endKeptScene() {
+    const w = await storeTeam();
+    const end = await postNotice(w, noticeOf(w.rt, w.code, w.R.clock.now));
+    w.R.clock.now += C.SWEPT_KEEP_MS + DAY;
+    await w.R.ring(w.rt);
+    const mark = w.R.stores.get(w.rt) ? w.R.stores.get(w.rt).get("swept") : undefined;
+    const again = await createAs(w.R, w.rt, w.lead, storeGrant(w.lead.pub, w.code, w.R.clock.now));
+    const other = keyPair(false), stranger = await createAs(w.R, w.rt, other, storeGrant(other.pub, OTHER, w.R.clock.now));
+    const ok = end.status === 200 && mark === "ended" && refused(again, "swept-other-lead") && refused(stranger, "swept-other-lead");
+    return { ok, detail: brief({ end: said(end), markAYearOn: mark === undefined ? "gone" : mark, sameLead: said(again), anotherLead: said(stranger) }) };
+  }
   /* A notice the relay must not take, each refused bad-grant and leaving the store whole (its row, its object, desk a's session): of
      another kind, a kind it does not know, for another id, stale, issued before the store was made (the relay's clock stepped back),
      under a delegation that may not grant, forged, from a revoked key, for another person; and a good notice for a lead's own team. */
@@ -451,6 +464,7 @@ async function main() {
     ["st3a", stickyScene, "a store stays a store and a team a team, and a store's person never changes"],
     ["st3b", grantShapeScene, "a store grant without its code, with a code out of shape, with seats, or signed over the relay grant's label is refused at the create"],
     ["st4a", endScene, "the service's store-end deletes every object before it answers, leaves only the ended mark, and the id is never made again"],
+    ["st4c", endKeptScene, "a store the service ended keeps its ended mark a year on and past the alarm, and its id is made again by neither its lead nor another"],
     ["st4b", noticeRefusedScene, "a notice of another kind, an unknown kind, another id, stale, older than the store, under a delegation that may not grant, forged, revoked, for another person, or for a lead's team, is refused and the store stays whole"],
     ["st5t", schedule(L => ({ trialEnds: L }), 29), "a trial that ends: the store is swept 30 days after its last grant was issued, the day before, so 29 days on"],
     ["st5u", schedule(L => ({ trialEnds: L + 40 * DAY }), 40), "a trial seat freed 40 days before the trial would end: swept at its last grant's end, 40 days on, the one case past 30 days after the last grant"],
@@ -526,6 +540,7 @@ async function main() {
     ["core", "notice-ended-mark", "st4a", "an ended store's id keeps S's mark, so S makes it again"],
     ["core", "store-ended-create", "st4a", "an ended id is made again"],
     ["team", "notice-sweep-now", "st4a", "the notice answers before the store is gone"],
+    ["team", "ended-kept", "st4c", "the alarm forgets an ended store's mark after a year, so its id is made again"],
     ["core", "notice-judged", "st4b", "a notice is not judged"],
     ["core", "notice-kind", "st4b", "a notice of another kind is taken"],
     ["core", "notice-what", "st4b", "an unknown kind of notice is taken"],

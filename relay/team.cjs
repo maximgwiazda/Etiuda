@@ -467,7 +467,9 @@ function teamObject(deps) {
   }
 
   /* The instant a swept id's mark ends, or null where it holds none or no instant. */
+  /* A store the service ended keeps its mark for good (notice: its id is never made again); every other swept mark ends. */
   function sweptEnd() {
+    if (deps.store.get("swept") === "ended") return null; /* plant:ended-kept */
     const at = deps.store.get("sweptAt");
     return deps.store.get("swept") !== undefined && Number.isSafeInteger(at) ? at + core.SWEPT_KEEP_MS : null;
   }
