@@ -15,7 +15,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXPECTED = 31;
+const EXPECTED = 37;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -685,6 +685,113 @@ if (M && J) {
   }
   if (PLANTS_ON) check(wholeAt >= 0 && liftedRed, "17e lifting plant:syncio-whole keeps the partial read for the process, and 17d turns red: line " + wholeAt + ", red " + liftedRed);
   else check(true, "17e lifting plant:syncio-whole (ETIUDA_PLANTS=off: not run)");
+
+  /* THE DEADLINE AND AN OVERFLOW (the test architect's lows on 01802957): a read stopped at the deadline (left < 1) is not kept,
+     an answer past maxBuffer (ENOBUFS) is a partial read and not kept either, and a missing reg.exe (ENOENT) is a whole read of
+     nothing, kept: that answer does not change while the process lives. Each guard lifted in a copy turns its arm red. */
+  const edgeScene = (src, kind) => {
+    const calls = [];
+    let clock = 1e12, once = true;
+    const spy = function (file, args) {
+      calls.push(String(args && args[1]));
+      if (kind === "deadline" && once) { once = false; clock += 6000; return Buffer.from("", "utf8"); }
+      if (kind === "overflow" && once && args && args[4] === "RemotePath") { once = false; throw Object.assign(new Error("overflow"), { code: "ENOBUFS" }); }
+      if (kind === "missing") throw Object.assign(new Error("spawn reg.exe ENOENT"), { code: "ENOENT" });
+      return Buffer.from("", "utf8");
+    };
+    const body = ["const { execFile, execFileSync } =", "const fs = require(\"node:fs\");", "const REG_TOOL =", "function liveSyncIo("]
+      .map(m => sliceDecl(src, m)).join("\n");
+    const live = new Function("crypto", "Buffer", "require", "process", "Date", body + "\nreturn liveSyncIo;")(
+      crypto, Buffer, function (name) {
+        if (name === "node:child_process" || name === "child_process") return { execFileSync: spy, execFile: function () { throw new Error("execFile"); } };
+        if (name === "node:fs" || name === "fs") return { readFileSync: function () { return ""; } };
+        throw new Error("require " + name);
+      }, { platform: "win32", env: {} }, { now: () => clock });
+    live();
+    const afterFirst = calls.length;
+    live();
+    return { afterFirst, afterSecond: calls.length };
+  };
+  const edgeOk = {
+    deadline: r => !!r && r.afterFirst === 1 && r.afterSecond === 7,
+    overflow: r => !!r && r.afterFirst === 6 && r.afterSecond === 12,
+    missing: r => !!r && r.afterFirst === 6 && r.afterSecond === 6,
+  };
+  const edges = {};
+  let edgeErr = "";
+  try { for (const k of Object.keys(edgeOk)) edges[k] = edgeScene(SRC, k); } catch (e) { edgeErr = e && e.message ? e.message : "the read failed"; }
+  check(!edgeErr && Object.keys(edgeOk).every(k => edgeOk[k](edges[k])),
+    "17f a read stopped at the deadline and one past maxBuffer are read again at the next ask, and a missing reg.exe is kept: " + (edgeErr || JSON.stringify(edges)));
+  for (const [tag, kind] of [["syncio-deadline", "deadline"], ["syncio-overflow", "overflow"]]) {
+    const at = SRC.split("\n").findIndex(line => line.indexOf("plant:" + tag) >= 0);
+    let red = false;
+    if (at >= 0 && PLANTS_ON) {
+      const copy = SRC.split("\n");
+      copy.splice(at, 1);
+      try { red = !edgeOk[kind](edgeScene(copy.join("\n"), kind)); } catch (e) { red = true; }
+    }
+    if (PLANTS_ON) check(at >= 0 && red, "17g lifting plant:" + tag + " keeps that read for the process, and 17f turns red: line " + at + ", red " + red);
+    else check(true, "17g lifting plant:" + tag + " (ETIUDA_PLANTS=off: not run)");
+  }
+
+  /* ONE ACT ASKS THE RECORDS ONCE (the test architect's cost note on 01802957): a pasted invitation's confirm and a folder choice
+     for a place on Drive each look at Drive's roots and plan from the same read of the records, so on a machine whose reg stays
+     slow one act waits on the deadline once, not twice. Every RemotePath read here times out, so no read is kept and each ask
+     shows as six reg calls. */
+  const actScene = (src) => {
+    const calls = [];
+    const spy = function (file, args) {
+      calls.push(String(args && args[1]));
+      if (args && args[4] === "RemotePath") throw Object.assign(new Error("timed out"), { code: "ETIMEDOUT" });
+      return Buffer.from("", "utf8");
+    };
+    const decls = ["const { execFile, execFileSync } =", "const fs = require(\"node:fs\");", "const REG_TOOL =",
+      "function placeKindOk(", "function driveTops(", "function placeSlash(", "function placeLeaf(", "function placeJoin(",
+      "function placeUnder(", "function placeRest(", "function syncRootsFrom(", "function placeOf(",
+      "function placeCandidates(", "function placeResolve(", "function placeKept(", "function readSyncRecords(",
+      "function liveSyncIo(", "function invitePlacePlan(", "function driveLook(", "function readInvite("];
+    const asyncDecls = ["function driveSeen(", "function readInviteLooked(", "function chooseInviteFolder("];
+    const body = decls.map(m => sliceDecl(src, m)).concat(asyncDecls.map(m => "async " + sliceDecl(src, m))).join("\n");
+    const parsed = { team: "t-harbour", lead: { name: "Lead", public: "ab".repeat(32) }, secret: "cd".repeat(16),
+      folder: "G:" + BSL + "My Drive" + BSL + "Harbour", place: { kind: "gdrive", root: "My Drive", rel: "Harbour" } };
+    const peers = {
+      inviteParse: () => parsed, joinView: () => ({}), inviteDoor: () => null, inviteSettled: () => null, inviteStranded: () => false,
+      teamBarred: new Set(), teamLeft: {}, folderHost: () => ({ host: "", cloud: "", local: true }), inviteCode: () => "CODE",
+      askFolder: async () => false, askDirItself: async () => false, FOLDER_ASK_MS: 50,
+    };
+    const names = Object.keys(peers);
+    const acts = new Function("crypto", "Buffer", "require", "process", ...names,
+      body + "\nreturn { readInviteLooked, chooseInviteFolder, placeKept };")(
+      crypto, Buffer, function (name) {
+        if (name === "node:child_process" || name === "child_process") return { execFileSync: spy, execFile: function () { throw new Error("execFile"); } };
+        if (name === "node:fs" || name === "fs") return { readFileSync: function () { return ""; }, promises: { readdir: async () => [] } };
+        throw new Error("require " + name);
+      }, { platform: "win32", env: {} }, ...names.map(n => peers[n]));
+    return { acts, calls, parsed };
+  };
+  const asksPerAct = async (src) => {
+    const p = actScene(src);
+    const kept = p.acts.placeKept(p.parsed.place);
+    await p.acts.readInviteLooked("etiuda-join:harbour");
+    const c = actScene(src);
+    await c.acts.chooseInviteFolder(c.parsed);
+    return { gdrive: !!kept && kept.kind === "gdrive", paste: p.calls.length / 6, choose: c.calls.length / 6 };
+  };
+  const onceOk = r => !!r && r.gdrive && r.paste === 1 && r.choose === 1;
+  let asks = null, asksErr = "";
+  try { asks = await asksPerAct(SRC); } catch (e) { asksErr = e && e.message ? e.message : "the act failed"; }
+  check(!asksErr && onceOk(asks), "17h one paste and one folder choice for a place on Drive each read the records once: " + (asksErr || JSON.stringify(asks)));
+  for (const tag of ["one-ask-paste", "one-ask-choose"]) {
+    const at = SRC.split("\n").findIndex(line => line.indexOf("plant:" + tag) >= 0);
+    let red = false;
+    if (at >= 0 && PLANTS_ON) {
+      const copy = SRC.split("\n");
+      copy.splice(at, 1);
+      try { red = !onceOk(await asksPerAct(copy.join("\n"))); } catch (e) { red = true; }
+    }
+    if (PLANTS_ON) check(at >= 0 && red, "17i lifting plant:" + tag + " reads the records a second time in that act, and 17h turns red: line " + at + ", red " + red);
+    else check(true, "17i lifting plant:" + tag + " (ETIUDA_PLANTS=off: not run)");
+  }
 }
 
 console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);

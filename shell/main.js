@@ -5501,6 +5501,9 @@ function liveSyncIo() {
     }
   }
   let whole = true;
+  /* A read the deadline cut, or one past maxBuffer, is partial; a missing key or a missing reg.exe answers whole. */
+  let cut = ["ETIMEDOUT"];
+  cut = ["ETIMEDOUT", "ENOBUFS"]; /* plant:syncio-overflow */
   if (process.platform === "win32") {
     const deadline = Date.now() + 5000;
     const queries = [
@@ -5513,10 +5516,10 @@ function liveSyncIo() {
     ];
     for (let i = 0; i < queries.length; i++) {
       const left = deadline - Date.now();
-      if (left < 1) { whole = false; break; }
+      if (left < 1) { whole = false; break; } /* plant:syncio-deadline */
       try {
         absorb(execFileSync(REG_TOOL, queries[i], { windowsHide: true, timeout: left, encoding: "buffer", maxBuffer: 1024 * 1024 }));
-      } catch (e) { /* a missing key is an empty record; a read the deadline cut leaves the records partial */ if (e && e.code === "ETIMEDOUT") whole = false; }
+      } catch (e) { /* a missing key is an empty record; a read the deadline cut leaves the records partial */ if (e && cut.indexOf(e.code) >= 0) whole = false; }
     }
   }
   const io = {
@@ -5576,11 +5579,12 @@ async function driveSeen(records, readdir, ms) {
   return found;
 }
 /* One look at a time, on Windows alone, kept on liveSyncIo for the readers that cannot wait for one; a later look
-   replaces it, so a Drive started after the desk is found at the next invitation. */
-function driveLook() {
+   replaces it, so a Drive started after the desk is found at the next invitation. `io`, where given, is the read of the
+   records the caller plans from too, so one act reads them once. */
+function driveLook(io) {
   if (driveLook.running) return driveLook.running;
   let rec = null;
-  try { rec = readSyncRecords(Object.assign({}, liveSyncIo(), { drives: null })); } catch (e) { rec = null; }
+  try { rec = readSyncRecords(Object.assign({}, io || liveSyncIo(), { drives: null })); } catch (e) { rec = null; }
   const run = process.platform === "win32" && rec ? driveSeen(rec, d => fs.promises.readdir(d), FOLDER_ASK_MS) : Promise.resolve([]);
   const looking = run.then(found => { liveSyncIo.drives = found; return found; }, () => liveSyncIo.drives || [])
     .then(found => { driveLook.running = null; return found; });
@@ -6159,7 +6163,7 @@ function inviteFolderBelongs(folder, parsed) {
   return Boolean(ring && memberRingVouches(doc, ring));
 }
 /* What an invitation says, and nothing written: the folder it names is not opened, stated or watched. */
-function readInvite(text) {
+function readInvite(text, io) {
   const parsed = inviteParse(text);
   const view = joinView();
   const shut = inviteDoor(parsed);
@@ -6180,7 +6184,7 @@ function readInvite(text) {
   let carried = null;
   try { carried = parsed.place ? placeKept(parsed.place) : null; } catch (e) { carried = null; }
   if (carried) {
-    const plan = invitePlacePlan(parsed);
+    const plan = invitePlacePlan(parsed, io);
     if (plan && typeof plan.path === "string" && plan.path) shownFolder = plan.path;
     carried = { how: plan && plan.how ? plan.how : "", why: plan && plan.why ? plan.why : "", kind: carried.kind };
   }
@@ -6196,16 +6200,18 @@ function readInvite(text) {
 async function readInviteLooked(text) {
   let kept = null;
   try { const parsed = inviteParse(text); kept = parsed && !parsed.relay ? placeKept(parsed.place) : null; } catch (e) { kept = null; }
-  if (kept && kept.kind === "gdrive") await driveLook();
-  return readInvite(text);
+  let io = null, pass = null;
+  if (kept && kept.kind === "gdrive") { io = liveSyncIo(); await driveLook(io); }
+  pass = io; /* plant:one-ask-paste */
+  return readInvite(text, pass);
 }
 /* Where the invitation's place would land on this computer, with every candidate treated as there: the confirm shows
    the plan and does not stat, because a path on another computer answers a stat by connecting. A record that cannot
    be read leaves the absolute path. */
-function invitePlacePlan(parsed) {
+function invitePlacePlan(parsed, io) {
   if (!parsed || !parsed.place) return { path: parsed && parsed.folder ? parsed.folder : "", how: "absolute", why: "plain" };
   let roots = [];
-  try { roots = syncRootsFrom(readSyncRecords(null)); }
+  try { roots = syncRootsFrom(readSyncRecords(io || null)); }
   catch (e) { roots = []; }
   try { return placeResolve(parsed.folder, parsed.place, roots, function () { return true; }); }
   catch (e) { return { path: parsed.folder, how: "absolute", why: "plain" }; }
@@ -6220,9 +6226,11 @@ async function chooseInviteFolder(parsed) {
     if (await askFolder(parsed.folder)) return { path: parsed.folder, ask: false };
     return { ask: true };
   }
-  if (kept.kind === "gdrive") await driveLook();
+  let io = null, pass = null;
+  if (kept.kind === "gdrive") { io = liveSyncIo(); await driveLook(io); }
+  pass = io; /* plant:one-ask-choose */
   let roots = [];
-  try { roots = syncRootsFrom(readSyncRecords(null)); }
+  try { roots = syncRootsFrom(readSyncRecords(pass)); }
   catch (e) { roots = []; }
   if (kept.kind === "unc") {
     const built = placeJoin(kept.root, kept.rel);
