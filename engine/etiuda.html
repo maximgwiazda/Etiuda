@@ -386,7 +386,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      the ink of whichever theme is on; the two shares are PICKED BY EYE from a sheet of twelve
      (ruled 2026-09-17) rather than derived, because a pale ground swallows a dot that a dark one
      shows. Declared in all four token blocks, like every theme-dependent token here. */
-  --dots-ink:color-mix(in srgb,var(--dim) 60%,transparent);
+  --dots-ink:color-mix(in srgb,var(--dim) 42%,transparent);
   /* The WinUI dress: header fields sit ABOVE their chrome - lighter than it in both themes -
      and wear a darker bottom edge; focus underlines in accent instead of ringing. The band
      is the blue behind brand and tabs; the chrome is the header below it. */
@@ -592,7 +592,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
 :root[data-theme=light]{
   color-scheme:light;
   --bg:#f7f8fa; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#e4e8ee; --line-strong:#cfd6e0;
-  --dots-ink:color-mix(in srgb,var(--dim) 60%,transparent);
+  --dots-ink:color-mix(in srgb,var(--dim) 42%,transparent);
   /* The light half of the WinUI dress - the law lives at the base :root block. */
   --band:#0f4c9d; --header-bg:#f0f2f5;
   /* Field edge at least 3:1 against every ground it meets (--bg, --panel, --header-bg, and --field),
@@ -1191,7 +1191,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .seg button.on{background:transparent}
 
 .btn{padding:7px 11px;border:1px solid transparent;border-radius:var(--radius-sm);
-  background:color-mix(in srgb,var(--ink) 4%,transparent);
+  --btn-rest:color-mix(in srgb,var(--ink) 4%,transparent);background:var(--btn-rest);
   color:var(--ink);font:13px var(--sans);cursor:default;white-space:nowrap;flex:0 0 auto}
 /* .tour-sel rides along here on purpose: the tour's ←/→ selection must look exactly like
    hover, so both states share one declaration and cannot drift apart. */
@@ -1909,8 +1909,8 @@ main{max-width:none;margin:16px 0 0;padding:0}
 /* The count and the fold sit at the far end of the group's own rule, so the eye meets the
    name first and the control only when it is looking for one. See .list-sep.e-catsep::after. */
 .list-sep .sep-n{flex:none;margin-left:8px;font:600 12px/calc(11px * 1.5) var(--sans);color:var(--dim);
-  opacity:1;font-variant-numeric:tabular-nums;background:var(--bg);padding:0 2px 0 8px}
-.list-sep .sep-fold{flex:none;margin-left:6px;padding:2px;border:0;background:transparent;
+  opacity:1;font-variant-numeric:tabular-nums;background:var(--bg);padding:0 2px 0 5px}
+.list-sep .sep-fold{flex:none;margin-left:6px;padding:2px;border:0;background:var(--bg);
   color:var(--dim);border-radius:6px;cursor:default;line-height:0}
 .list-sep .sep-fold:hover,.list-sep .sep-fold:focus-visible{color:var(--accent)}
 /* Right chevron pointing down when open, and back to the right when shut - the same rotation
@@ -1992,7 +1992,7 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 html.eddrag, html.eddrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
 .cbadge.hit{background:var(--go-soft);color:var(--go)}
 .cbadge.cat{background:var(--accent-soft);color:var(--accent)}
-.cbadge.fav{background:var(--fav-soft);color:var(--fav)}
+.cbadge.fav{background-color:var(--bg);background-image:linear-gradient(var(--fav-soft),var(--fav-soft));color:var(--fav)}
 /* The hue is worn by exactly TWO things: the pill's dot and the card's top-edge tag -
    NO icon carries it, so the editor's swatch means the dot and the edge, nothing else.
    Shape stays the channel that survives colour-blindness. All is chrome and wears nothing. */
@@ -2068,10 +2068,11 @@ html.eddrag, html.eddrag *{cursor:default!important;user-select:none!important;-
    mark in a slot of one width at the head, so every pixel the row holds over that slot belongs
    to the title, and the title is faded by the cut pass only when the row itself runs out. */
 .ctitle,.ccat{min-width:0;overflow:hidden;white-space:nowrap}
-.chead .ctitle{flex:0 1 auto}
+.chead .ctitle{flex:0 1 auto;background:var(--bg);box-shadow:0 0 0 3px var(--bg);border-radius:3px}
+.chead .cat-ic{background:var(--bg);box-shadow:0 0 0 3px var(--bg);border-radius:3px}
 .chead .cbadge{flex:0 0 auto}
 /* A card that commits the firm: the stamp after its title, in the warning colour. */
-.chead .cstamp{flex:0 0 auto;display:inline-flex;color:var(--warn)}
+.chead .cstamp{flex:0 0 auto;display:inline-flex;color:var(--warn);background:var(--bg);box-shadow:0 0 0 3px var(--bg);border-radius:3px}
 .cstamp .ic,.nx-stamp .ic{width:16px;height:16px}
 .intent-pick{max-height:200px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius-sm);
   padding:4px;background:var(--bg);display:flex;flex-direction:column;gap:1px;min-width:0}
@@ -2280,8 +2281,9 @@ body:not(.deck-off) #list .card,body:not(.deck-off) #list .list-sep{transition:o
 /* The two in-card notices keep the slabs' own gutter, which is none: the card has no padding
    left to inset them from. */
 .miss{margin:0 0 10px;padding:9px 12px;border:1px dashed var(--line-strong);border-radius:var(--radius-sm);
-  color:var(--dim);font-size:13px}
+  background:var(--bg);color:var(--dim);font-size:13px}
 .swap{margin:0 0 10px;font-size:13px;color:var(--dim)}
+.swap b{background:var(--bg);box-shadow:0 0 0 3px var(--bg);border-radius:3px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .swap code{background:var(--accent-soft);color:var(--accent);padding:1px 6px;border-radius:4px;
   font:12px var(--mono);cursor:default;user-select:none;-webkit-user-select:none;
   display:inline-block;margin:2px 3px 2px 0}
@@ -2307,10 +2309,11 @@ body:not(.deck-off) #list .card,body:not(.deck-off) #list .list-sep{transition:o
    18px row, and a taller row moves every card under it. */
 .list-sep.e-catsep>span:first-child,.list-sep.e-favsep>span:first-child{font-size:12px;
   line-height:calc(11px * 1.5);letter-spacing:.07em;color:var(--dim);opacity:1;
-  background:var(--bg);padding:0 8px 0 0}
+  background:var(--bg);padding:0 5px 0 0}
 .list-sep.e-catsep .sep-n,.list-sep.e-favsep .sep-n,
 .list-sep.e-catsep .sep-fold,.list-sep.e-favsep .sep-fold{order:9}
 .list-sep i{flex:1;height:1px;border-radius:0;background:var(--line)}
+.list-sep>span{background:var(--bg);padding:0 5px;border-radius:3px}
 .list-sep span{white-space:nowrap}
 /* One button slot per row, swapped by state: the hide button appears only on the hovered
    row and only while Ctrl is held - on every row at once it was a wall of icons.
@@ -2422,11 +2425,12 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
    change. .empty stays a plain centred block - its content is raw text with inline markup. */
 /* text-wrap:pretty keeps a one-word orphan off the last line; a no-op where unsupported. */
 .empty{text-align:center;color:var(--dim);padding:64px 16px 72px;font-size:14px;text-wrap:pretty}
+.empty:not(.empty-desk):not(.empty-cat){background:linear-gradient(var(--bg),var(--bg)) no-repeat 50% 61px / 54px 54px}
 .empty::before{content:"";display:block;width:48px;height:48px;margin:0 auto 16px;
-  background:var(--dim);opacity:.4;
+  background:color-mix(in srgb,var(--dim) 40%,var(--bg));opacity:1;
   -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat;
   mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='9.5' width='18' height='11' rx='2.5'/%3E%3Cpath d='M6 6.5h12M8.5 3.5h7'/%3E%3C/svg%3E") center/contain no-repeat}
-.empty kbd{font:12px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+.empty kbd{font:12px var(--mono);border:1px solid var(--line);border-radius:4px;padding:1px 5px;background:var(--bg)}
 /* THE EMPTY DESK draws no picture of its own: the drawing the other empty states carry is dropped from its block. */
 .empty.empty-desk::before{content:none}
 .empty-desk{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:72px 16px 80px}
@@ -2438,7 +2442,7 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
 .empty-desk .mid-or a{color:inherit;text-decoration:none;border-bottom:1px solid currentColor;cursor:pointer}
 .empty-desk .mid-or a:hover{color:var(--accent)}
 .empty-desk #emptyJoin{margin-top:16px}
-.empty-desk .mid-folder{margin-top:28px;font-size:12.5px;opacity:.75}
+.empty-desk .mid-folder{margin-top:28px;font-size:12.5px;color:color-mix(in srgb,var(--ink) 75%,var(--bg))}
 /* THE LAUNCH (launch-mark.js): opening variant A, turning over window ground, landing on the corner mark; nothing of the UI before landing. --e-launch-out is the give-way fade. */
 .e-launch-veil{position:fixed;inset:0;z-index:100;width:100vw;height:100vh;background:var(--bg);display:block;
   margin:0;padding:0;overflow:hidden;transition:opacity var(--e-launch-out,.35s) ease-out}
@@ -2468,7 +2472,8 @@ code.open-folder:hover,code.open-folder:focus-visible{color:var(--accent);text-d
 /* The category's own icon stands in for the generic drawing, at its size and its weight. */
 .empty-cat::before{content:none}
 .empty .empty-ic{display:block;width:48px;height:48px;margin:0 auto 16px;vertical-align:0;
-  opacity:.4;stroke-width:1.2}
+  color:color-mix(in srgb,var(--dim) 40%,var(--bg));background:var(--bg);box-shadow:0 0 0 4px var(--bg);
+  border-radius:6px;stroke-width:1.2}
 /* A sealed catalog's empty desk and its bubble: the title with its lock, the code in two threes, and six drawn places
    while the code is still to come. */
 .e-join-t{font-size:19px;font-weight:600;color:var(--ink);display:inline-flex;align-items:center;gap:8px}
@@ -2476,17 +2481,17 @@ code.open-folder:hover,code.open-folder:focus-visible{color:var(--accent);text-d
 .e-join p{margin:8px auto 0;max-width:620px}
 .e-join-code{font:600 34px var(--mono);color:var(--ink);margin:18px 0 6px;display:flex;justify-content:center;gap:.6em}
 .e-join-wait i{display:inline-block;width:.62em;height:3px;margin:0 .1em;vertical-align:middle;border-radius:2px;background:var(--dim);opacity:.6}
-.e-join-meta{font:12px var(--mono);opacity:.75;margin-top:8px}
+.e-join-meta{font:12px var(--mono);color:color-mix(in srgb,var(--dim) 75%,var(--bg));margin-top:8px}
 .e-join-acts{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:16px}
-.e-join-paste{display:block;width:min(520px,100%);box-sizing:border-box;margin:14px auto 0;min-height:4.5em;padding:8px 10px;border:1px solid var(--line-strong);border-radius:8px;background:transparent;color:var(--ink);font:13px/1.45 var(--mono);resize:vertical}
-.e-join-bub .e-join-paste{width:100%;color:var(--bub-ink)}
+.e-join-paste{display:block;width:min(520px,100%);box-sizing:border-box;margin:14px auto 0;min-height:4.5em;padding:8px 10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--bg);color:var(--ink);font:13px/1.45 var(--mono);resize:vertical}
+.e-join-bub .e-join-paste{width:100%;color:var(--bub-ink);background:transparent}
 .e-join-ask{margin:12px auto 0;max-width:520px}
-.e-join-why{margin:4px auto 0;max-width:520px;font-size:12px;opacity:.75}
-.e-join-check{display:block;width:6.5em;box-sizing:border-box;margin:8px auto 0;padding:6px 8px;border:1px solid var(--line-strong);border-radius:8px;background:transparent;color:var(--ink);font:600 18px var(--mono);letter-spacing:.2em;text-align:center}
+.e-join-why{margin:4px auto 0;max-width:520px;font-size:12px;color:color-mix(in srgb,var(--dim) 75%,var(--bg))}
+.e-join-check{display:block;width:6.5em;box-sizing:border-box;margin:8px auto 0;padding:6px 8px;border:1px solid var(--line-strong);border-radius:8px;background:var(--bg);color:var(--ink);font:600 18px var(--mono);letter-spacing:.2em;text-align:center}
 .e-join .btn:disabled,.e-join-bub .btn:disabled{opacity:.45}
 .e-join-bub .e-join-ask{margin:8px 0 0;color:var(--bub-ink)}
 .e-join-bub .e-join-why{margin:2px 0 0;color:var(--bub-dim)}
-.e-join-bub .e-join-check{margin:6px 0 0;color:var(--bub-ink)}
+.e-join-bub .e-join-check{margin:6px 0 0;color:var(--bub-ink);background:transparent}
 .e-join-bub .e-join-code{color:var(--bub-ink);font-size:28px;justify-content:flex-start;margin:8px 0 2px}
 .e-join-bub .e-join-wait i{background:var(--bub-dim)}
 .e-join-bub .e-join-meta{color:var(--bub-dim);margin:0 0 8px}
@@ -2872,6 +2877,8 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
    in the row without a tile under the cursor read as the one that had stopped working. */
 .cacts button.star-btn.on{color:var(--fav);background:transparent;box-shadow:none}
 .cacts button.star-btn.on:hover,.cacts button.star-btn.on:focus-visible{background:var(--fav-soft)}
+.chead .cacts button:not(:hover):not(:focus-visible),
+.chead .cacts button.star-btn.on:not(:hover):not(:focus-visible){background-color:var(--bg)}
 /* A tint alone is too faint once Tab lands here. The edge is the dialog button's, and it
    belongs to focus only: hover already has its tile. */
 .cacts button:focus-visible{box-shadow:inset 0 0 0 1px var(--accent)}
@@ -2879,7 +2886,7 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 .cacts button.star-btn:focus-visible{box-shadow:inset 0 0 0 1px var(--fav)}
 .cbadge{font:600 11px var(--sans);letter-spacing:0;padding:1px 7px;border-radius:6px;
   background:var(--accent-soft);color:var(--accent);text-transform:none}
-.cbadge.ed{background:var(--ed-soft);color:var(--ed)}
+.cbadge.ed{background-color:var(--bg);background-image:linear-gradient(var(--ed-soft),var(--ed-soft));color:var(--ed)}
 .modal{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
 /* A keyframe, not a transition - the element returns from display:none with no previous
    value. The way out is a copy on the dismiss tier (.e-gone), which the next surface to open
@@ -3896,12 +3903,26 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx{--sx-dots:color-mix(in srgb,var(--dim) 42%,transparent)}
 :root:not([data-theme=light]) .sx{--sx-dots:color-mix(in srgb,var(--dim) 30%,transparent)}
 .sx-page{background-image:radial-gradient(circle at center,var(--sx-dots) 0 .7px,transparent 1.2px);background-size:16px 16px}
-.sx-page :is(h2,.lede,.sx-crumb,.sx-group>h3,.sx-block>h3,.sx-lookside>h3){display:table;background:var(--bg);
-  box-shadow:0 0 0 5px var(--bg);border-radius:4px}
-/* What else stands on the page outside a card keeps the page's ground under it: a note, a reading's or a list's heading,
-   the Library's open lists and its rows of actions. */
-.sx-page :is(.sx-note,.sx-lookside>p,.mt-readings,.mt-sub,.lw-h,.sc-sep,.mg-data-acts,.mt-reset,.lw-name.add){background:var(--bg);
-  box-shadow:0 0 0 5px var(--bg);border-radius:4px}
+/* Inline words on a dotted ground clear only their own line width (with a 3px cushion) so
+   multi-line blocks never carve out a rectangle beside a shorter line. Controls and icons
+   carry an opaque canvas ground of their own size. */
+.e-dot-hug{display:inline;background:var(--bg);box-shadow:0 0 0 3px var(--bg);border-radius:3px;
+  -webkit-box-decoration-break:clone;box-decoration-break:clone}
+.e-dot-ic{background:var(--bg);box-shadow:0 0 0 3px var(--bg);border-radius:4px}
+.e-dot-flex{min-width:0}
+.sx-page :is(h2,.sx-group>h3,.sx-block>h3,.sx-lookside>h3){width:fit-content}
+.sx-page .mt-readings{background:var(--bg)}
+.sx-page .lw-name.add{background:var(--bg);box-shadow:0 0 0 3px var(--bg);border-radius:10px}
+.sx-crumb+h2{margin-top:2px}
+/* The page ground, and only while the control rests. Hover, focus and press do not match
+   this rule, so they keep the colours they already have. A button's veil is its own token,
+   laid over that ground: a colour read off the screen would stay after the theme changed. */
+.e-dot-ctrl:not(:hover):not(:focus-visible):not(:active){background-color:var(--bg)}
+.e-dot-ctrl.btn:not([disabled]):not(:hover):not(:focus-visible):not(:active){
+  background-image:linear-gradient(var(--btn-rest),var(--btn-rest))}
+.empty .btn:not(.primary){background:color-mix(in srgb,var(--ink) 4%,var(--bg))}
+.e-dot-ctrl[disabled],.empty .btn[disabled]{opacity:1;color:color-mix(in srgb,var(--ink) 45%,var(--bg));border-color:transparent}
+.sx-page .sc-row{min-width:0}
 .sx-group{margin:0 0 20px}
 .sx-group h3{font:600 12px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin:0 0 8px}
 .sx-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-sm);overflow:hidden}
@@ -3951,7 +3972,8 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
   .sx:not(.lm) .sx-block[data-sec="keys"]{break-before:column;break-after:column}
 }
 .sx:not(.lm) .sx-block>h3{font:600 15px/1.3 var(--sans);letter-spacing:0;text-transform:none;color:var(--ink);margin:0 0 10px}
-.sx:not(.lm) .sx-block>h3 button{font:inherit;color:inherit;background:none;border:0;padding:0;text-align:left}
+.sx:not(.lm) .sx-block>h3 button{display:inline;font:inherit;color:inherit;background:var(--bg);box-shadow:0 0 0 3px var(--bg);
+  border-radius:3px;-webkit-box-decoration-break:clone;box-decoration-break:clone;border:0;padding:0;text-align:left}
 .sx:not(.lm) .sx-block>h3 button:hover,.sx:not(.lm) .sx-block>h3 button:focus-visible{color:var(--accent)}
 .sx:not(.lm) .sx-block .sx-group{margin:0 0 10px}
 .sx:not(.lm) .sx-block .set-row{min-height:54px;min-width:0}
@@ -3962,7 +3984,8 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx:not(.lm) .sx-lookrows{min-width:0}
 .sx:not(.lm) .sx-lookside>h3{font:600 12px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin:0 0 8px}
 .sx:not(.lm) .sx-lookside>p{font-size:13px;color:var(--dim);margin:10px 0 0}
-.sx:not(.lm) a.sx-crumb{color:var(--dim);text-decoration:none}
+.sx:not(.lm) a.sx-crumb{color:var(--dim);text-decoration:none;background:var(--bg);box-shadow:0 0 0 3px var(--bg);
+  border-radius:3px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .sx-mini{border:1px solid var(--line-strong);border-radius:12px;overflow:hidden;background:var(--bg);aspect-ratio:16/9;
   display:flex;flex-direction:column}
 .sx-mini,.sx-mini *{pointer-events:none}
@@ -7167,6 +7190,7 @@ What is typed here stays in this browser.`;
     catalogCountsLine: () => catalogCountsLine,
     counted: () => counted,
     fileStamp: () => fileStamp,
+    hugDottedGround: () => hugDottedGround,
     noteUndoTyping: () => noteUndoTyping,
     offerUndo: () => offerUndo,
     systemUiLang: () => systemUiLang,
@@ -9489,7 +9513,7 @@ What is typed here stays in this browser.`;
           el.setAttribute(a, out);
         }
       });
-      if (el.children && el.children.length === 0 && el.textContent && el.textContent.trim()) {
+      if (!(el.classList && el.classList.contains("e-dot-hug")) && el.children && el.children.length === 0 && el.textContent && el.textContent.trim()) {
         const src = el.getAttribute("data-i18n-text") || el.textContent.trim();
         const out = t(src);
         if (out !== el.textContent.trim()) {
@@ -9513,6 +9537,7 @@ What is typed here stays in this browser.`;
     if (doc && typeof doc.createTreeWalker === "function") {
       const walker = doc.createTreeWalker(root, TW_SHOW_ELEMENT, { acceptNode: (node) => marked(node) ? TW_FILTER_REJECT : TW_FILTER_ACCEPT });
       for (let node = walker.nextNode(); node; node = walker.nextNode()) one(node);
+      hugDottedGround(root);
       return visited;
     }
     const down = (el) => {
@@ -9524,7 +9549,187 @@ What is typed here stays in this browser.`;
       });
     };
     down(root);
+    hugDottedGround(root);
     return visited;
+  }
+  var DG_CTRL_SEL = "button,a,input,select,textarea,.chip,kbd,.btn,.seg,[role=button],.cell-chip,.count";
+  function dgAlpha(c) {
+    if (!c || c === "transparent") return 0;
+    let m = c.match(/\/\s*([\d.]+%?)\s*\)/);
+    if (m) return m[1].endsWith("%") ? parseFloat(m[1]) / 100 : parseFloat(m[1]);
+    m = c.match(/^rgba\(([^)]+)\)/);
+    if (m) return parseFloat(m[1].split(",")[3]);
+    return 1;
+  }
+  function dgTargets(root) {
+    const out = [];
+    if (!root || root.nodeType !== 1) return out;
+    const closest = typeof root.closest === "function" ? root.closest.bind(root) : null;
+    const sx = closest && closest(".sx-page");
+    if (sx) {
+      out.push({ ground: sx, start: root });
+      return out;
+    }
+    const main = closest && closest(".stage > .scroller main");
+    if (main) {
+      out.push({ ground: main, start: root });
+      return out;
+    }
+    if (typeof root.querySelectorAll === "function") {
+      root.querySelectorAll(".sx-page").forEach((p) => out.push({ ground: p, start: p }));
+      root.querySelectorAll(".stage > .scroller main").forEach((m) => out.push({ ground: m, start: m }));
+    }
+    return out;
+  }
+  function dgTrimRun(run) {
+    while (run.length && (run[0].nodeType === 3 && (!run[0].nodeValue || !run[0].nodeValue.trim()) || run[0].nodeType === 1 && run[0].tagName === "BR")) run.shift();
+    while (run.length && (run[run.length - 1].nodeType === 3 && (!run[run.length - 1].nodeValue || !run[run.length - 1].nodeValue.trim()) || run[run.length - 1].nodeType === 1 && run[run.length - 1].tagName === "BR")) run.pop();
+    return run;
+  }
+  function dgRunHasWords(run) {
+    for (let i = 0; i < run.length; i++) {
+      const n = run[i];
+      if (n.nodeType === 3 && n.nodeValue && n.nodeValue.trim()) return true;
+      if (n.nodeType === 1 && n.textContent && n.textContent.trim()) return true;
+    }
+    return false;
+  }
+  function hugDottedGround(root) {
+    hugDottedGround.cardIn = 0;
+    if (!root || root.nodeType !== 1 || typeof getComputedStyle !== "function") return 0;
+    const doc = root.ownerDocument || (typeof document !== "undefined" ? document : null);
+    if (!doc) return 0;
+    const targets = dgTargets(root);
+    if (!targets.length) return 0;
+    const wraps = [], icons = [], inlineCtrls = [], blockCtrls = [];
+    let cardIn2 = 0;
+    targets.forEach(({ ground, start }) => {
+      if (start !== ground) {
+        for (let p = start.parentElement; p && p !== ground; p = p.parentElement) {
+          if (p.classList && p.classList.contains("card")) return;
+          if (dgAlpha(getComputedStyle(p).backgroundColor) >= 0.95) return;
+        }
+      }
+      const visit = (el) => {
+        if (!el || el.nodeType !== 1 || el.hidden || el.hasAttribute("data-dg")) return;
+        if (el.classList && el.classList.contains("card")) return;
+        if (typeof el.closest === "function" && el.closest(".card")) cardIn2++;
+        if (el.classList && el.classList.contains("e-dot-hug")) return;
+        const cs = getComputedStyle(el);
+        if (cs.display === "none") return;
+        if (cs.clip === "rect(0px, 0px, 0px, 0px)" || cs.clipPath === "inset(50%)") return;
+        const bgAlpha = dgAlpha(cs.backgroundColor);
+        const elOp = parseFloat(cs.opacity);
+        const effBg = bgAlpha * (Number.isNaN(elOp) ? 1 : elOp);
+        if (el !== ground) {
+          const tag = (el.tagName || "").toUpperCase();
+          if (tag === "SVG" || tag === "IMG") {
+            if (effBg < 0.95 && el.classList) icons.push(el);
+            return;
+          }
+          if (effBg >= 0.95) return;
+          if (typeof el.matches === "function" && el.matches(DG_CTRL_SEL)) {
+            if (cs.display === "inline") inlineCtrls.push(el);
+            else blockCtrls.push(el);
+            return;
+          }
+        }
+        const isFlex = /flex|grid/.test(cs.display);
+        const kids = el.childNodes;
+        if (!kids || !kids.length) return;
+        if (isFlex || el === ground) {
+          for (let i = 0; i < kids.length; i++) {
+            const k = kids[i];
+            if (k.nodeType === 3 && k.nodeValue && k.nodeValue.trim()) {
+              if (el !== ground) {
+                const run2 = dgTrimRun([k]);
+                if (run2.length && dgRunHasWords(run2)) wraps.push({ parent: el, run: run2, insideFlex: isFlex });
+              }
+            } else if (k.nodeType === 1) {
+              visit(k);
+            }
+          }
+          return;
+        }
+        let run = [];
+        const flush = () => {
+          if (run.length) {
+            const trimmed = dgTrimRun(run.slice());
+            if (trimmed.length && dgRunHasWords(trimmed)) wraps.push({ parent: el, run: trimmed, insideFlex: false });
+            run = [];
+          }
+        };
+        for (let i = 0; i < kids.length; i++) {
+          const k = kids[i];
+          if (k.nodeType === 3) {
+            run.push(k);
+            continue;
+          }
+          if (k.nodeType !== 1) continue;
+          if (k.hidden) continue;
+          const ktag = (k.tagName || "").toUpperCase();
+          if (ktag === "BR") {
+            run.push(k);
+            continue;
+          }
+          const kcs = getComputedStyle(k);
+          if (kcs.display === "none") continue;
+          const ka = dgAlpha(kcs.backgroundColor);
+          const isFlow = (kcs.display === "inline" || kcs.display === "inline-block") && ktag !== "SVG" && ktag !== "IMG" && !(typeof k.matches === "function" && k.matches("input,select,textarea,button,.btn,.seg")) && !(k.classList && k.classList.contains("e-dot-hug")) && ka < 0.95;
+          if (isFlow) {
+            run.push(k);
+          } else {
+            flush();
+            visit(k);
+          }
+        }
+        flush();
+      };
+      visit(start);
+    });
+    hugDottedGround.cardIn = cardIn2;
+    let wrapped = 0;
+    for (let i = 0; i < icons.length; i++) {
+      if (!icons[i].classList.contains("e-dot-ic")) icons[i].classList.add("e-dot-ic");
+    }
+    for (let i = 0; i < inlineCtrls.length; i++) {
+      if (!inlineCtrls[i].classList.contains("e-dot-hug")) {
+        inlineCtrls[i].classList.add("e-dot-hug");
+        wrapped++;
+      }
+    }
+    for (let i = 0; i < blockCtrls.length; i++) {
+      const el = blockCtrls[i];
+      if (!el.classList.contains("e-dot-ctrl")) {
+        el.classList.add("e-dot-ctrl");
+        wrapped++;
+      }
+    }
+    for (let i = 0; i < wraps.length; i++) {
+      const { parent, run, insideFlex } = wraps[i];
+      if (!run[0] || !run[0].parentNode) continue;
+      if (parent.hasAttribute && parent.hasAttribute("data-i18n-text")) {
+        const src = parent.getAttribute("data-i18n-text");
+        for (let j = 0; j < run.length; j++) {
+          if (run[j].nodeType === 3 && run[j].nodeValue && run[j].nodeValue.trim()) {
+            if (!run[j].eI18nSrc) run[j].eI18nSrc = src;
+            break;
+          }
+        }
+        parent.removeAttribute("data-i18n-text");
+      }
+      const hug = doc.createElement("span");
+      hug.className = "e-dot-hug";
+      const outer = insideFlex ? doc.createElement("span") : hug;
+      if (insideFlex) {
+        outer.className = "e-dot-flex";
+        outer.appendChild(hug);
+      }
+      run[0].parentNode.insertBefore(outer, run[0]);
+      for (let j = 0; j < run.length; j++) hug.appendChild(run[j]);
+      wrapped++;
+    }
+    return wrapped;
   }
   function translateChrome() {
     [
@@ -27103,6 +27308,7 @@ What is typed here stays in this browser.`;
       putEntrySel(null);
       markSearchHits(terms);
       syncEmptyMark(null);
+      hugDottedGround(list);
       return;
     }
     const other = nextContentLang(lang);
@@ -27203,6 +27409,7 @@ What is typed here stays in this browser.`;
     scheduleCutScan();
     markSearchHits(terms);
     syncEmptyMark(null);
+    hugDottedGround(list);
   }
 
   // src/modules/repaint.js
@@ -32373,6 +32580,7 @@ What is typed here stays in this browser.`;
         if (head) head.textContent = t("Readings");
       }
       g.outerHTML = mtGridHtml();
+      if (root) hugDottedGround(root);
     }, 120);
   }
   function wireMaintenanceWatch() {
@@ -32591,6 +32799,7 @@ What is typed here stays in this browser.`;
       if (title && page) title.textContent = page.name;
       const lede = root.querySelector("#mtLede");
       if (lede) lede.textContent = mtOn === "health" ? "" : mtLede()[mtOn] || "";
+      hugDottedGround(root);
     };
     buttons.forEach((b) => {
       b.onclick = () => show(b.getAttribute("data-mt"));
@@ -32612,6 +32821,7 @@ What is typed here stays in this browser.`;
       host.innerHTML = mtShellHtml();
       wireMaintenanceActions(host, closeFn);
       wireMtShell(host.querySelector ? host.querySelector(".sx.lm-mt") : null);
+      hugDottedGround(host);
     }
   });
   function openMaintenance(backFn) {
@@ -36915,6 +37125,7 @@ What is typed here stays in this browser.`;
       const everyLine = every ? t("Cards linked to every intent: {N}.").replace("{N}", every) + " " : "";
       lede.textContent = !sec || q ? "" : sec.key === "catmac" && n ? n + ". " + sec.lede : sec.key === "intents" ? (n ? t("Intents: {N}.").replace("{N}", n) + " " : "") + everyLine + sec.lede : sec.lede;
     }
+    hugDottedGround(page.querySelector("#libPage") || page);
   }
   function markLibCut(page) {
     const nav = page.querySelector(".sx-nav");
@@ -37070,6 +37281,7 @@ What is typed here stays in this browser.`;
     const fk = focusKey(document.activeElement, sec);
     sec.innerHTML = mgWhoSectionHtml();
     wireRolePage(page);
+    hugDottedGround(sec);
     if (fk) focusSame(sec, fk);
     const cnt = page.querySelector('details.manage-sec[data-mg="who"] .mg-count');
     if (cnt) cnt.textContent = String(whoOptions().length);
@@ -37831,6 +38043,7 @@ What is typed here stays in this browser.`;
     const help = box.querySelector("#setSuggestNote"), counts2 = box.querySelector("#setSuggestCounts");
     if (help) help.textContent = suggestNoteText();
     if (counts2) counts2.textContent = suggestCountLine();
+    hugDottedGround(box);
   }
   function hotkeyListen(box, on, now) {
     hkListening = !!on;
@@ -38295,6 +38508,7 @@ What is typed here stays in this browser.`;
     const lede = sxOn === "ai" && !sxQuery ? box.querySelector("p.lede") : null, note = box.querySelector("#setSuggestNote");
     if (lede) lede.textContent = aiLede();
     if (note) note.textContent = suggestNoteText();
+    hugDottedGround(box);
   }
   function aiGroups() {
     const st = orgModel(), w = (a, b) => aiWords(st, a, b);

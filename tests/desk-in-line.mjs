@@ -305,7 +305,7 @@ try {
           const cx = Object.assign(document.createElement("canvas"), { width: 1, height: 1 }).getContext("2d");
           cx.fillStyle = getComputedStyle(document.querySelector("#screenHost .sx")).backgroundColor; cx.fillRect(0, 0, 1, 1);
           const ground = Array.from(cx.getImageData(0, 0, 1, 1).data).slice(0, 3);
-          const word = page.querySelector(".sx-crumb, h2, .lede, .sx-block>h3"), wordBg = word ? getComputedStyle(word).backgroundColor : null;
+          const word = page.querySelector(".sx-crumb, h2, .lede, .sx-block>h3"), wordHug = word ? (word.querySelector(".e-dot-hug") || word) : null, wordBg = wordHug ? getComputedStyle(wordHug).backgroundColor : null;
           const sx = getComputedStyle(document.querySelector("#screenHost .sx")).backgroundColor;
           for (let y = r.bottom - S - 8; y > r.top + 8; y -= 16) for (let x = r.right - S - 24; x > r.left + 8; x -= 16) {
             let clear = true;

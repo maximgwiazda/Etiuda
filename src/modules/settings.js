@@ -3,7 +3,7 @@ import { loadShortcuts, formatActionChord } from "./shortcuts.js";
 import { scStopCapture, wireShortcutsList, shortcutsShown, scFold, scCaptureId } from "./shortcuts-list.js";
 import { lsGet, lsSet, lsDel, nsGet, nsSet, nsDel, nsKey } from "./storage.js";
 import { drawPills, drawTabs } from "./tabs.js";
-import { UI_LANGS, uiLang, offerUndo, t, toast, toastRefusal, fileStamp, counted, translateTree } from "./ui-lang.js";
+import { UI_LANGS, uiLang, offerUndo, t, toast, toastRefusal, fileStamp, counted, translateTree, hugDottedGround } from "./ui-lang.js";
 import { setUiLang } from "./repaint.js";
 import { applyDefaultRailWidth, applyStoredRailWidth, railLocked, rebuildRailMQ, syncRailLayout, toggleRailLock } from "./rail-panel.js";
 import { esc } from "./esc.js";
@@ -114,6 +114,7 @@ function syncHotkeyRow(box,now){
   const help=box.querySelector("#setSuggestNote"), counts=box.querySelector("#setSuggestCounts");
   if(help) help.textContent=suggestNoteText();
   if(counts) counts.textContent=suggestCountLine();
+  hugDottedGround(box);
 }
 function hotkeyListen(box,on,now){
   hkListening=!!on;
@@ -481,6 +482,7 @@ function syncAiWords(){
   const lede=sxOn==="ai" && !sxQuery ? box.querySelector("p.lede") : null, note=box.querySelector("#setSuggestNote");
   if(lede) lede.textContent=aiLede();
   if(note) note.textContent=suggestNoteText();
+  hugDottedGround(box);
 }
 /* Drawn wherever a model can rank: the built-in one this desk carries, or the organisation's while it is on and ready. */
 function aiGroups(){

@@ -11,7 +11,7 @@ import { cardSearchScore } from "./card-score.js";
 import { cardHitsSelectedIntent, cardHitsAlwaysCat } from "./card-intent.js";
 import { esc } from "./esc.js";
 import { list, $ } from "./dom.js";
-import { t, uiLang } from "./ui-lang.js";
+import { t, uiLang, hugDottedGround } from "./ui-lang.js";
 import { catIconSvg, catSlot } from "./cat-identity.js";
 import { chordChips } from "./shortcuts.js";
 import { applyCardColumns, remPx } from "./columns.js";
@@ -199,6 +199,7 @@ function render(){
     putEntrySel(null);
     markSearchHits(terms);
     syncEmptyMark(null);
+    hugDottedGround(list);
     return;
   }
   const other = nextContentLang(lang);
@@ -363,6 +364,7 @@ function render(){
   scheduleCutScan();
   markSearchHits(terms);
   syncEmptyMark(null);
+  hugDottedGround(list);
 }
 export {
   rankedCards,
