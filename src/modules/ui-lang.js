@@ -594,6 +594,8 @@ UI_STRINGS.pl={
   "Intent panel hidden":"Panel intencji ukryty",
   "Quick facts saved":"Zapisano szybkie fakty",
   "Quick facts match built-in default":"Szybkie fakty zgodne z wbudowanymi",
+  "Quick facts are yours to write.\n\nThe pencil above opens them for editing:\nfees, deadlines, links, anything used often.\n\nA catalog can bring its own,\nand loading it replaces what is here.\n\nWhat is typed here stays on this computer.":"Szybkie fakty można uzupełnić samodzielnie.\n\nOłówek powyżej otwiera je do edycji:\nopłaty, terminy, odnośniki, wszystko, czego często się używa.\n\nKatalog może zawierać własne,\na jego wczytanie zastępuje to, co jest tutaj.\n\nTo, co się tu wpisze, zostaje na tym komputerze.",
+  "Quick facts are yours to write.\n\nThe pencil above opens them for editing:\nfees, deadlines, links, anything used often.\n\nA catalog can bring its own,\nand loading it replaces what is here.\n\nWhat is typed here stays in this browser.":"Szybkie fakty można uzupełnić samodzielnie.\n\nOłówek powyżej otwiera je do edycji:\nopłaty, terminy, odnośniki, wszystko, czego często się używa.\n\nKatalog może zawierać własne,\na jego wczytanie zastępuje to, co jest tutaj.\n\nTo, co się tu wpisze, zostaje w tej przeglądarce.",
   "is now a supporting category":"jest teraz kategorią wspierającą",
   "is an ordinary category":"jest zwykłą kategorią",
   "No {LANG} version for this card":"Ta karta nie ma jeszcze wersji {LANG}",

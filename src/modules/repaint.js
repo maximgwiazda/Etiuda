@@ -10,6 +10,7 @@ import { render } from "./render.js";
 import { refreshDialogName } from "./dialog.js";
 import { syncSettingsMenu } from "./header-menus.js";
 import { paintJoin } from "./team-join.js";
+import { renderFacts } from "./facts.js";
 
 // ---- repainting after a language change: it reaches the whole app, so it stays here ----
 /* Every localised string is re-read here rather than at construction, so switching language
@@ -29,7 +30,7 @@ function applyUiLang(){
   /* References, never names looked up on window: a top-level function is a property of window
      in a classic script and is not one in a module, so a lookup by string turns quietly false
      and these surfaces stop repainting with nothing thrown and nothing logged. */
-  [applyCatsToGlobal,drawIntentRail,drawPills,drawTabs,syncRoleDrum,syncGenderGlyph,render,paintJoin].forEach(f=>{
+  [applyCatsToGlobal,drawIntentRail,drawPills,drawTabs,syncRoleDrum,syncGenderGlyph,render,paintJoin,renderFacts].forEach(f=>{
     try{ f(); }catch(e){}
   });
   translateChrome();
