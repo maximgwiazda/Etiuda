@@ -578,7 +578,8 @@ function lanePageKeyTests() {
   const own = { document: doc, addEventListener: (k, fn) => { if (k === "keydown") world.listener = fn; },
     $: s => (s === "#lanes" ? lanesBox : null), scCaptureId: "", SC_DEFS: [], intentEl: null,
     tourActive: off, tourHasFocus: off, openCover: () => null, modalOpen: off, modalFront: off, edToDesk: off, factsPanelOpen: off,
-    eventMatchesAction: off, eHost: off, hooks: { runShortcut: off }, mgReduceMotion: off };
+    eventMatchesAction: off, eHost: off, hooks: { runShortcut: off }, mgReduceMotion: off,
+    firstSigninOpenNow: off, skipFirstSignin: off /* a desk past the first-opening sign-in: no screen is up */ };
   Object.defineProperty(own, "lanesOn", { get: () => world.open });
   const scope = new Proxy({}, {
     has: (o, k) => typeof k === "string",
