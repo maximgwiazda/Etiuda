@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 156;
+const EXPECTED = 158;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const { offWindows } = nodeRequire("./off-windows.cjs");
@@ -2219,6 +2219,66 @@ async function run() {
         "44x once the team file is no longer owed, the next listing lands the newer copy the owed scan held back: "
         + JSON.stringify({ heldBack: afterDrop === held, told, landed: afterScan === newer, owed: syncerMod.owedList(mirror).map(x => x.rel) }));
     } finally { prog.stop(); }
+  }
+  async function owedOrdinaryWorker(mod, name) {
+    const share = folder(name + "-share"), mirror = folder(name + "-mirror");
+    const rel = "shared-44.ec";
+    const held = plainShared(5), newer = plainShared(10);
+    const shareFile = path.join(share, rel), mirrorFile = path.join(mirror, rel);
+    fs.writeFileSync(shareFile, newer, "utf8");
+    const past = new Date(Date.now() - 60000);
+    fs.utimesSync(shareFile, past, past);
+    fs.writeFileSync(mirrorFile, held, "utf8");
+    const ctl = new mod.FolderSyncerController({
+      team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks, pollMs: 60000
+    });
+    let scans = 0, owedScan = 0;
+    const stagedByScan = [];
+    const apply = ctl.program.applyScan.bind(ctl.program);
+    ctl.program.applyScan = (msg) => {
+      scans++;
+      const list = (msg.staged || []).map(s => s.relPath);
+      stagedByScan.push(list);
+      if (owedScan === 0 && list.indexOf(rel) >= 0) {
+        owedScan = scans;
+        mod.noteOwed(mirror, rel);
+      }
+      return apply(msg);
+    };
+    const until = (pred, ms) => new Promise(resolve => {
+      const end = Date.now() + (ms || 4000);
+      const t = setInterval(() => {
+        if (pred() || Date.now() >= end) { clearInterval(t); resolve(pred()); }
+      }, 15);
+    });
+    try {
+      ctl.start();
+      await until(() => owedScan > 0);
+      const afterDrop = fs.readFileSync(mirrorFile, "utf8");
+      fs.unlinkSync(path.join(mirror, ".outbox.json"));
+      const beforeSecond = scans;
+      ctl.kick();
+      await until(() => scans > beforeSecond);
+      const restaged = stagedByScan.slice(owedScan).some(list => list.indexOf(rel) >= 0);
+      const afterClear = fs.readFileSync(mirrorFile, "utf8");
+      return { owedScan, afterDropHeld: afterDrop === held, restaged, landed: afterClear === newer };
+    } finally {
+      ctl.stop();
+    }
+  }
+  {
+    const g = await owedOrdinaryWorker(syncerMod, "44ab");
+    check(g.owedScan > 0 && g.afterDropHeld && g.restaged && g.landed,
+      "44ab an ordinary file staged while owed is staged again and landed by the worker once the debt is cleared: " + JSON.stringify(g));
+  }
+  if (PLANTS_OFF) skip("44ab2 lifting plant:step3-owe-forget leaves an owed ordinary file unstaged by the worker after the debt is cleared: NOT RUN");
+  else {
+    const r = await testPlant("step3-owe-forget", syncerFile, async (scratchSyncer, scratchDir) => {
+      fs.copyFileSync(path.join(ROOT, "shell", "folder", "syncer-worker.cjs"), path.join(scratchDir, "syncer-worker.cjs"));
+      const g = await owedOrdinaryWorker(nodeRequire(scratchSyncer), "44ab2");
+      return g.owedScan > 0 && g.afterDropHeld && !g.restaged && !g.landed;
+    });
+    check(r.ok, "44ab2 lifting plant:step3-owe-forget leaves an owed ordinary file unstaged by the worker after the debt is cleared: " + JSON.stringify(r));
   }
   {
     const share = folder("44y-share"), mirror = folder("44y-mirror");
