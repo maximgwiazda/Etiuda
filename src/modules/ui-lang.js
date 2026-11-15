@@ -1726,6 +1726,11 @@ function toastHtml(m, refusal, stamped){
   if(stamped) return '<span>'+esc(m)+'</span><span class="t-stamp">'+ICON_STAMP+esc(t("Commits the firm"))+'</span>';
   return null;
 }
+function toastDurationMs(m, ms, stamped){
+  const len=String(m||"").trim().length+(stamped?t("Commits the firm").length+2:0);
+  const byLen=Math.max(TOAST_MS, Math.round(900+len*55));
+  return Math.max(+ms||0, byLen);
+}
 function toast(m, ms, refusal, stamped){
   toastSerial++;
   /* Every message the app speaks passes through here, so this is the one place a toast needs
@@ -1746,7 +1751,7 @@ function toast(m, ms, refusal, stamped){
   clearTimeout(tt); clearTimeout(toastSwap);
   if(dip){ el.classList.add("swap"); toastSwap=setTimeout(put,M_MS.dismiss); }
   else put();
-  tt=setTimeout(()=>el.classList.remove("show"),(ms||TOAST_MS)+(dip?M_MS.dismiss:0));
+  tt=setTimeout(()=>el.classList.remove("show"),toastDurationMs(m,ms,stamped)+(dip?M_MS.dismiss:0));
 }
 /* A REFUSAL IS NOT A CONFIRMATION: its own ground and the warning glyph, and a longer life. */
 function toastRefusal(m){ toast(m, TOAST_REFUSAL_MS, true); }

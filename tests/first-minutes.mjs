@@ -435,6 +435,149 @@ try {
       await closePage(pDone);
     }
   }
+
+  /* === BEHAVIOUR 3: Toasts stay for a time following their length (1700 ms floor) === */
+  {
+    const runToastProbe = async (pageUrl, { lang = "en" } = {}) => {
+      const ctx = await browser.createBrowserContext();
+      const p = await ctx.newPage();
+      p.on("dialog", (d) => { d.dismiss().catch(() => {}); });
+      await p.setViewport({ width: 1280, height: 860 });
+      await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
+      await p.evaluateOnNewDocument((l) => {
+        const reloadingForTour = !!sessionStorage.getItem("eTourAt");
+        try {
+          localStorage.setItem("eUiLang", l);
+          localStorage.setItem("eAgent", "Anna");
+          localStorage.setItem("eNameAsked", "1");
+          if (!reloadingForTour) localStorage.setItem("eTourDone_v3", "1");
+        } catch (e) {}
+        if (!window.E_HOST) {
+          const desk = { eUiLang: l, eAgent: "Anna", eNameAsked: "1", ...(reloadingForTour ? {} : { eTourDone_v3: "1" }) };
+          window.E_HOST = {
+            platform: "win32",
+            openPicker: () => {},
+            hotkeyState: () => ({ accel: "Control+Shift+Q", held: true, taken: false }),
+            deskRead: () => JSON.stringify(desk),
+            deskSave: (raw) => { try { Object.assign(desk, JSON.parse(raw)); } catch (e) {} return true; }
+          };
+        }
+        window.__toastLog = [];
+        const origSet = window.setTimeout;
+        window.setTimeout = function (fn, ms, ...rest) {
+          const id = origSet.call(window, fn, ms, ...rest);
+          try {
+            const src = typeof fn === "function" ? fn.toString() : "";
+            const el = document.getElementById("toast");
+            if (el && src.includes('classList.remove("show")') && el.classList.contains("show")) {
+              window.__toastLog.push({ text: el.textContent, ms: Number(ms) });
+            }
+          } catch (e) {}
+          return id;
+        };
+      }, lang);
+      await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
+      await p.waitForFunction(
+        () => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0,
+        { timeout: 30000 }
+      );
+      if (await p.$("#ecYes")) await p.click("#ecYes");
+      await p.waitForFunction(
+        () => document.querySelectorAll("#list .card").length > 0 && !document.getElementById("ecYes")
+          && !document.querySelector(".e-launch-veil"),
+        { timeout: 30000 }
+      );
+      await sleep(200);
+
+      /* First copy triggers first-copy toast */
+      await p.click("#list .card");
+      await sleep(100);
+      /* Saving an edited card triggers a short toast ("Card saved") testing the 1700 ms floor */
+      await p.evaluate(() => {
+        const el = document.getElementById("toast");
+        if (el) el.classList.remove("show");
+        const btn = document.querySelector('#list .card [data-act="edit"]');
+        if (btn) btn.click();
+      });
+      await p.waitForSelector("#modal:not([hidden]) #meSave", { timeout: 10000 });
+      await p.evaluate(() => {
+        const inp = document.querySelector("#modal .mf .field-wrap input");
+        if (inp) {
+          inp.value = inp.value + " x";
+          inp.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+      });
+      await p.click("#meSave");
+      await sleep(200);
+      await p.click("#meCancel");
+      await p.waitForFunction(() => document.getElementById("modal").hidden, { timeout: 10000 });
+      const copyLog = await p.evaluate(() => window.__toastLog.slice());
+
+      /* Skip tour triggers Skip toast; check live DOM retention past 1700 ms (at 1900 ms) */
+      await p.evaluate(() => {
+        localStorage.removeItem("eTourDone_v3");
+        localStorage.removeItem("eTourInvite_v3");
+        sessionStorage.setItem("eTourAt", "pax");
+      });
+      await p.reload({ waitUntil: "load", timeout: 60000 });
+      await p.waitForFunction(() => !!document.querySelector("#tourRoot.on") && !!document.getElementById("tourSkip"), { timeout: 15000 });
+      await p.evaluate(() => {
+        const el = document.getElementById("toast");
+        if (el) el.classList.remove("show");
+      });
+      await p.click("#tourSkip");
+      await sleep(100);
+      const skipAt100 = await p.evaluate(() => {
+        const el = document.getElementById("toast");
+        return !!(el && el.classList.contains("show"));
+      });
+      await sleep(1850);
+      const skipAt1950 = await p.evaluate(() => {
+        const el = document.getElementById("toast");
+        return !!(el && el.classList.contains("show"));
+      });
+      const skipLog = await p.evaluate(() => window.__toastLog.slice());
+      await closePage(p);
+      return { copyLog, skipLog, skipAt100, skipAt1950 };
+    };
+
+    EXPECTED += 4;
+    const res = await runToastProbe(cleanSampleUrl, { lang: "en" });
+    const firstCopy = res.copyLog[0] || { text: "", ms: 0 };
+    const shortCopy = res.copyLog[1] || { text: "", ms: 0 };
+    const skipEntry = res.skipLog[res.skipLog.length - 1] || { text: "", ms: 0 };
+    check(
+      shortCopy.ms >= 1700 && shortCopy.text.length < skipEntry.text.length,
+      "3a short toast respects 1700 ms floor",
+      { shortCopy, skipEntry }
+    );
+    check(
+      skipEntry.ms > shortCopy.ms && skipEntry.ms >= 2800 && firstCopy.ms > skipEntry.ms && firstCopy.ms >= 5500,
+      "3b toast durations scale cleanly with message length (short <= skip < firstCopy)",
+      { shortCopy, skipEntry, firstCopy }
+    );
+    check(
+      res.skipAt100 === true && res.skipAt1950 === true,
+      "3c Skip toast actually remains visible past 1700 ms (at 1950 ms)",
+      { skipAt100: res.skipAt100, skipAt1950: res.skipAt1950, skipEntry }
+    );
+
+    if (PLANTS_OFF) {
+      skip("plant-toast-fixed: fixing duration to TOAST_MS turns 3c red (ETIUDA_PLANTS=off)");
+    } else {
+      const planted = rawHtml.replace(
+        /function toastDurationMs\([^)]*\)\s*\{[^}]*\}/,
+        "function toastDurationMs() { return TOAST_MS; }"
+      );
+      const plantUrl = writeEngine(path.join(lab, "plant-3"), planted, true);
+      const pr = await runToastProbe(plantUrl, { lang: "en" });
+      check(
+        planted !== rawHtml && pr.skipAt100 === true && pr.skipAt1950 === false,
+        "plant-toast-fixed: fixing duration to TOAST_MS turns 3c red",
+        { skipAt100: pr.skipAt100, skipAt1950: pr.skipAt1950 }
+      );
+    }
+  }
 } catch (err) {
   console.error("HARNESS ERROR:", err);
   fails++;
