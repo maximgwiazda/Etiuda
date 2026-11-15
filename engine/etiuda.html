@@ -10511,6 +10511,7 @@ What is typed here stays in this browser.`;
     catalogToV2: () => catalogToV2,
     isV2: () => isV2,
     v2AltLabel: () => v2AltLabel,
+    v2Canonical: () => v2Canonical,
     v2CatKey: () => v2CatKey,
     v2ChangedAt: () => v2ChangedAt,
     v2ContentHash: () => v2ContentHash,
@@ -10589,7 +10590,9 @@ What is typed here stays in this browser.`;
     "grew",
     "desk",
     "name",
-    "variables"
+    "variables",
+    "flags",
+    "answered"
   ];
   var V2_GREET_PARTS = 3;
   var DEFAULT_LANGS = [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }];
@@ -11391,6 +11394,7 @@ What is typed here stays in this browser.`;
     if (c.desk && typeof c.desk === "object") out.desk = v2Copy(c.desk);
     if (c.variables && typeof c.variables === "object") out.variables = v2Copy(c.variables);
     v2Restore(out, c.ext, V2_HEAD_NAMED);
+    if (Array.isArray(c.flags) && c.flags.length) out.flags = v2Copy(c.flags);
     if (v2Str(c.id)) out.modified = true;
     out.hash = v2ContentHash(out);
     return out;
