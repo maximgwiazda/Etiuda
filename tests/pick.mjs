@@ -1504,7 +1504,7 @@ try {
   CM.setContentLangs(["en"]);
   const wOne = pickAnswer("open").words.keyOther;
   CM.setContentLangs(langsWere);
-  check(w7.keyCopy === "{KEY} copies" && w7.keyOther === "{KEY} in PL" && wPl === "{KEY} in EN" && wOne === "" && w7.keyClose === "{KEY} closes"
+  check(w7.keyCopy === "{KEY} copies, and pastes where it can" && w7.keyOther === "{KEY} in PL" && wPl === "{KEY} in EN" && wOne === "" && w7.keyClose === "{KEY} closes"
     && w7.pasted === "Pasted" && w7.copied === "Copied, press Ctrl+V" && w7.who === "Etiuda fills the reply in for this conversation",
     "7c the page is given the words for its keys and its note, the other language named by its code, and none where there is one: "
     + JSON.stringify([w7.keyCopy, w7.keyOther, wPl, wOne, w7.keyClose, w7.pasted, w7.copied]));
@@ -1631,7 +1631,7 @@ try {
     globalThis.document = docWas; globalThis.addEventListener = addWas; delete globalThis.removeEventListener; HKS.hooks.openSettings = openWas;
     if (hostWas === undefined) delete globalThis.window.E_HOST; else globalThis.window.E_HOST = hostWas;
   }
-  check(taken7 === "Ctrl+Shift+Space belongs to another program just now. A combination of Etiuda's own, chosen in Settings, brings the replies over any window.Choose a combinationDismiss"
+  check(taken7 === "Ctrl+Shift+Space belongs to another program just now. A combination of Etiuda's own, chosen in Settings, opens Quick replies over any window.Choose a combinationDismiss"
     && acted === "gone/keys" && held7 === null && none7 === null && H7.eHotkeyLabel("Control+Alt+F9") === "Ctrl+Alt+F9",
     "7h a combination another program holds is said when the desk is up, naming it, with a button to Settings' keys that takes the"
     + " notice down; one held, or no host, says nothing: " + JSON.stringify([taken7, acted, !!held7, !!none7]));

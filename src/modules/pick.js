@@ -214,7 +214,7 @@ function pickWords(){
           empty:wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet."),
           who:t("Etiuda fills the reply in for this conversation"),
           langTitle:t("Click to switch replies to the next language"),
-          keyCopy:t("{KEY} copies"), keyOther:other ? t("{KEY} in {LANG}").split("{LANG}").join(other) : "",
+          keyCopy:t("{KEY} copies, and pastes where it can"), keyOther:other ? t("{KEY} in {LANG}").split("{LANG}").join(other) : "",
           keyClose:t("{KEY} closes"), pasted:t("Pasted"), copied:t("Copied, press Ctrl+V")};
 }
 /* THE TEXT THE DESK'S OWN COPY WOULD MAKE, counted as the desk counts a copy: the fill of the block
@@ -416,7 +416,7 @@ function hotkeyNotice(){
   const hk=eHotkey();
   if(!hk || !hk.accel || !hk.taken || document.getElementById("eHotkeyNote")) return;
   eNotice("eHotkeyNote", t("{KEYS} belongs to another program just now.").split("{KEYS}").join(eHotkeyLabel(hk.accel)),
-    t("A combination of Etiuda's own, chosen in Settings, brings the replies over any window."), null,
+    t("A combination of Etiuda's own, chosen in Settings, opens Quick replies over any window."), null,
     {label:t("Choose a combination"), run:()=>hooks.openSettings("keys")});
 }
 function wirePick(){

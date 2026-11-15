@@ -10885,7 +10885,7 @@ const SHELL_WORDS = {
         pickTeamFolder: "Choose the team's shared folder",
         stillReading: "Etiuda is still reading the team's shared folder, so the catalog is not open yet. Once that is done, Etiuda offers the catalog in a window of its own, and loading it from there opens it.",
         trayOpen: "Open Etiuda",
-        trayReplies: "Bring the replies over any window",
+        trayReplies: "Quick replies",
         trayNotesOn: "Notifications: on",
         trayNotesOff: "Notifications: off",
         traySettings: "Settings",
@@ -10894,7 +10894,7 @@ const SHELL_WORDS = {
         trayKeepsRunning: "Etiuda keeps running in the tray",
         trayKeepsBody: "Its shortcut still works and the team's updates still arrive. To quit, right-click the tray icon and choose Quit Etiuda; Settings, under General, can make closing the window quit instead.",
         jumpRecent: "Recent catalogs",
-        jumpReplies: "Bring the replies over any window",
+        jumpReplies: "Quick replies",
         jumpNewTab: "New tab",
         jumpLibrary: "Library",
         jumpSettings: "Settings" },
@@ -10909,7 +10909,7 @@ const SHELL_WORDS = {
         pickTeamFolder: "Wybierz wspólny folder zespołu",
         stillReading: "Etiuda jeszcze wczytuje wspólny folder zespołu, więc katalog nie jest na razie otwarty. Gdy wczytywanie dobiegnie końca, Etiuda zaproponuje katalog w osobnym oknie; wystarczy go stamtąd wczytać, aby się otworzył.",
         trayOpen: "Otwórz Etiudę",
-        trayReplies: "Przywołaj odpowiedzi nad dowolne okno",
+        trayReplies: "Szybkie odpowiedzi",
         trayNotesOn: "Powiadomienia: wł.",
         trayNotesOff: "Powiadomienia: wył.",
         traySettings: "Ustawienia",
@@ -10918,7 +10918,7 @@ const SHELL_WORDS = {
         trayKeepsRunning: "Etiuda działa dalej w zasobniku",
         trayKeepsBody: "Skrót nadal działa, a aktualizacje od zespołu wciąż docierają. Program zamyka pozycja Zakończ Etiudę w menu ikony zasobnika; w Ustawieniach, w części Ogólne, można ustawić, by zamknięcie okna kończyło działanie.",
         jumpRecent: "Ostatnie katalogi",
-        jumpReplies: "Przywołaj odpowiedzi nad dowolne okno",
+        jumpReplies: "Szybkie odpowiedzi",
         jumpNewTab: "Nowa rozmowa",
         jumpLibrary: "Biblioteka",
         jumpSettings: "Ustawienia" },
@@ -12720,13 +12720,13 @@ function ensureTray() {
   return deskTray;
 }
 /* THE JUMP LIST. Recent catalogs this desk itself loaded most recently, newest first,
-   five at most, files that still exist, and the four tasks: Bring the replies over any window,
+   five at most, files that still exist, and the four tasks: Quick replies,
    New tab, Library, Settings. A file that is now gone drops out. */
 function syncJumpList() {
   try {
     const w = trayWords();
     const tasks = [
-      { title: w.jumpReplies || w.trayReplies || "Bring the replies over any window", args: "--picker" },
+      { title: w.jumpReplies || w.trayReplies || "Quick replies", args: "--picker" },
       { title: w.jumpNewTab || "New tab", args: "--new-tab" },
       { title: w.jumpLibrary || "Library", args: "--library" },
       { title: w.jumpSettings || w.traySettings || "Settings", args: "--settings" },

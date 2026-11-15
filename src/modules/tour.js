@@ -216,10 +216,8 @@ const TOUR_STEPS=[
   {
     id:"chatTab",
     sel:()=>chatTabTarget(),
-    title:()=>hasChatTab() ? "Switch to a chat tab" : "Open a chat tab",
-    body:()=>hasChatTab()
-      ? "Click a chat tab to view your replies."
-      : "Click <b>+</b> to open a new chat tab.",
+    title:"A conversation",
+    body:"The next steps are about a conversation. Click a conversation's tab to carry on.",
     when:()=>!!screenOn,
     done:()=>!screenOn,
     open:()=>openChatTab(),
@@ -394,7 +392,7 @@ const TOUR_STEPS=[
     sel:()=>menuTarget("picker"),
     side:menuSide,
     title:"Quick replies",
-    body:()=>t("{KEY} brings Quick replies over any program, beside the pointer. Press {KEY} or click this Menu row to try it; Next skips ahead.")
+    body:()=>t("{KEY} opens Quick replies over any program, beside the pointer. To try it, press {KEY} or click <b>Quick replies</b> here.")
       .split("{KEY}").join(hotkeyChips()),
     when:()=>!!hotkeyHeld(),
     done:()=>tourPickerOpened,
@@ -406,7 +404,7 @@ const TOUR_STEPS=[
     sel:()=>menuTarget("picker"),
     side:menuSide,
     title:"Quick replies",
-    body:"Type a word to filter Quick replies, press Enter to copy and go back to the window you were in, or press Esc to close it.",
+    body:"A word finds the reply. <kbd>Enter</kbd> copies it, and pastes it into the window you were in wherever Windows allows. <kbd>Esc</kbd> closes Quick replies.",
     when:()=>tourPickerOpened,
     menu:true,
     pad:8
