@@ -512,10 +512,12 @@ function underHeldKey(c){
   const doc=catalogDocOf(c), kid=doc&&doc.sig&&doc.sig.keyId ? String(doc.sig.keyId) : "", held=heldCatalogSigner();
   return heldCatalogTrust()===V2_SIG_VALID && !!held && kid===held;
 }
-/* An offer that said "older" or "updated" for a file whose own signature then failed says it plainly instead. */
-function offerPlainly(wrap){
+/* An offer that said "older" or "updated" for a file whose own signature then failed says it plainly instead. A lower rev
+   (`lower`) keeps saying it is older, by its own edition number and no more (review 16's finding 6). */
+function offerPlainly(wrap,lower){
   const warn=wrap.querySelector(".ec-warn"), title=wrap.querySelector("#ecTitle"), no=wrap.querySelector("#ecNo"), yes=wrap.querySelector("#ecYes");
-  if(warn) warn.remove();
+  if(warn && lower) warn.textContent=t("By its own edition number, this file is older than the catalog in use on this desk.");
+  else if(warn) warn.remove();
   if(title) title.textContent=t("Replace catalog?");
   if(no) no.textContent=t("Keep current");
   if(yes) yes.textContent=t("Load it");
@@ -579,13 +581,17 @@ function eOfferCatalogDialog(c,src){
   const updating=isCatalogUpdate(c,active);
   /* OLDER IS A LOWER REV UNDER THE KEY THE HELD CATALOG VERIFIED UNDER, and only then do the title, the warning and the
      answers say so. THE UPDATE'S WORDS ARE FOR A FILE VERIFIED UNDER THAT SAME KEY, a higher rev or the same one.
-     Unsigned or unverified is offered plainly at any rev, and the offer is still made. An earlier date under that
-     same key keeps its own sentence. */
+     Unsigned or unverified is offered plainly at any rev, and the offer is still made; a lower rev of it says it is older
+     by its own edition number (olderSaid, below). An earlier date under that same key keeps its own sentence. */
   const sameKey=updating && underHeldKey(c), settled=trustSettled(c);
   const verifiedHere=settled==="" || settled===V2_SIG_VALID;
   const datedEarlier=!!active && catalogEditionOlder(c.version, active.version);
   const revHigher=!!active && String(c&&c.id||"")!=="" && String(c.id)===String(active.id||"") && (+c.rev>(+active.rev||0));
   const olderSure=revOlder && sameKey && verifiedHere;
+  /* A LOWER REV NOT KNOWN FOR SURE (review 16's finding 6; Claude alpha's ruling: an unverified lower revision gets the older-edition
+     sentence): unsigned, its own signature failing, another key's, or the catalog in use not verified. It is still offered plainly, the
+     title and the answers as above, and says what its own number says, older, and no more (Claudette's words, 2026-11-15). */
+  const olderSaid=updating && revOlder && !olderSure; /* plant:older-said */
   const updateSure=revHigher && sameKey && verifiedHere && !datedEarlier;
   const plain=updating && !olderSure && !updateSure && (
     (revOlder || !sameKey) && (revOlder || datedEarlier) || revHigher && !sameKey || revHigher && !verifiedHere && !datedEarlier
@@ -614,6 +620,8 @@ function eOfferCatalogDialog(c,src){
         :replacing?"Replace catalog?":"Load catalog file?"))+'</h3>'
     +(olderSure
         ? '<p class="ec-warn">'+esc(t("This edition is older than the one in use on this desk, so some of its replies may be out of date."))+'</p>'
+        : olderSaid
+        ? '<p class="ec-warn">'+esc(t("By its own edition number, this file is older than the catalog in use on this desk."))+'</p>'
         : '')
     +(updating && !olderSure && !plain
         ? '<p class="ec-sub">'+esc(t(older
@@ -708,7 +716,7 @@ function eOfferCatalogDialog(c,src){
   let claimed=latePlain && !settled;
   const turnPlain=()=>{
     claimed=false;
-    offerPlainly(wrap);
+    offerPlainly(wrap,revOlder);
     const holdsLine=wrap.querySelector(".ec-holds");
     if(holdsLine) holdsLine.remove();
     fresh=false;

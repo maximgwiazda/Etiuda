@@ -8096,6 +8096,7 @@ What you type stays in this browser only.`;
     "Older catalog file found": "Znaleziono starszy plik katalogu",
     "Load it anyway": "Wczytaj mimo to",
     "This edition is older than the one in use on this desk, so some of its replies may be out of date.": "To wydanie jest starsze niż to, którego się tu używa, więc część odpowiedzi może być nieaktualna.",
+    "By its own edition number, this file is older than the catalog in use on this desk.": "Według własnego numeru wydania ten plik jest starszy niż katalog używany na tym stanowisku.",
     "Open the older edition": "Otwórz starsze wydanie",
     "Keep the newer one": "Zostaw nowsze",
     "This file is signed with the key {KEY}, which is not the team lead's.": "Ten plik jest podpisany kluczem {KEY}, który nie jest kluczem lidera zespołu.",
@@ -34681,9 +34682,10 @@ What you type stays in this browser only.`;
     const doc = catalogDocOf(c), kid = doc && doc.sig && doc.sig.keyId ? String(doc.sig.keyId) : "", held = heldCatalogSigner();
     return heldCatalogTrust() === V2_SIG_VALID && !!held && kid === held;
   }
-  function offerPlainly(wrap) {
+  function offerPlainly(wrap, lower) {
     const warn = wrap.querySelector(".ec-warn"), title = wrap.querySelector("#ecTitle"), no = wrap.querySelector("#ecNo"), yes = wrap.querySelector("#ecYes");
-    if (warn) warn.remove();
+    if (warn && lower) warn.textContent = t("By its own edition number, this file is older than the catalog in use on this desk.");
+    else if (warn) warn.remove();
     if (title) title.textContent = t("Replace catalog?");
     if (no) no.textContent = t("Keep current");
     if (yes) yes.textContent = t("Load it");
@@ -34728,6 +34730,7 @@ What you type stays in this browser only.`;
     const datedEarlier = !!active && catalogEditionOlder(c.version, active.version);
     const revHigher = !!active && String(c && c.id || "") !== "" && String(c.id) === String(active.id || "") && +c.rev > (+active.rev || 0);
     const olderSure = revOlder && sameKey && verifiedHere;
+    const olderSaid = updating && revOlder && !olderSure;
     const updateSure = revHigher && sameKey && verifiedHere && !datedEarlier;
     const plain = updating && !olderSure && !updateSure && ((revOlder || !sameKey) && (revOlder || datedEarlier) || revHigher && !sameKey || revHigher && !verifiedHere && !datedEarlier || !revHigher && !(sameKey && verifiedHere) && !datedEarlier);
     const older = updating && !olderSure && !plain && datedEarlier;
@@ -34745,7 +34748,7 @@ What you type stays in this browser only.`;
        another taken up, which the question asks and no sentence beneath it can improve on. The
        two editions of ONE catalog keep their sentence: what is at stake there is what happens to
        this desk's own work, which the screen cannot show. */
-    '<h3 id="ecTitle">' + esc(t(olderSure || older ? "Older catalog file found" : updating && !plain ? "Updated catalog file found" : replacing ? "Replace catalog?" : "Load catalog file?")) + "</h3>" + (olderSure ? '<p class="ec-warn">' + esc(t("This edition is older than the one in use on this desk, so some of its replies may be out of date.")) + "</p>" : "") + (updating && !olderSure && !plain ? '<p class="ec-sub">' + esc(t(older ? "This file is an earlier edition than the one loaded now." : "This catalog has changed since it was loaded.")) + "</p>" : "") + '<div class="ec-what"><b>' + esc(catalogNameOfFile(String(src.file || "") || E_CATALOG_SCRIPT)) + "</b>" + offerEditionHtml(editionNameOf(c)) + (updating && editionLabel(editionNameOf(active)) && editionLabel(editionNameOf(active)) !== editionLabel(editionNameOf(c)) ? '<div class="ec-counts">' + esc(editionSaid(editionNameOf(active), t("You have rev {R}."), t("You have {E}."))) + "</div>" : "") + (changeHtml ? "" : '<div class="ec-counts">' + catalogCountsLine(
+    '<h3 id="ecTitle">' + esc(t(olderSure || older ? "Older catalog file found" : updating && !plain ? "Updated catalog file found" : replacing ? "Replace catalog?" : "Load catalog file?")) + "</h3>" + (olderSure ? '<p class="ec-warn">' + esc(t("This edition is older than the one in use on this desk, so some of its replies may be out of date.")) + "</p>" : olderSaid ? '<p class="ec-warn">' + esc(t("By its own edition number, this file is older than the catalog in use on this desk.")) + "</p>" : "") + (updating && !olderSure && !plain ? '<p class="ec-sub">' + esc(t(older ? "This file is an earlier edition than the one loaded now." : "This catalog has changed since it was loaded.")) + "</p>" : "") + '<div class="ec-what"><b>' + esc(catalogNameOfFile(String(src.file || "") || E_CATALOG_SCRIPT)) + "</b>" + offerEditionHtml(editionNameOf(c)) + (updating && editionLabel(editionNameOf(active)) && editionLabel(editionNameOf(active)) !== editionLabel(editionNameOf(c)) ? '<div class="ec-counts">' + esc(editionSaid(editionNameOf(active), t("You have rev {R}."), t("You have {E}."))) + "</div>" : "") + (changeHtml ? "" : '<div class="ec-counts">' + catalogCountsLine(
       "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
       n,
       catalogMacroCount(c),
@@ -34805,7 +34808,7 @@ What you type stays in this browser only.`;
     let claimed = latePlain && !settled;
     const turnPlain = () => {
       claimed = false;
-      offerPlainly(wrap);
+      offerPlainly(wrap, revOlder);
       const holdsLine = wrap.querySelector(".ec-holds");
       if (holdsLine) holdsLine.remove();
       fresh = false;

@@ -492,6 +492,7 @@ UI_STRINGS.pl={
   "Older catalog file found":"Znaleziono starszy plik katalogu",
   "Load it anyway":"Wczytaj mimo to",
   "This edition is older than the one in use on this desk, so some of its replies may be out of date.":"To wydanie jest starsze niż to, którego się tu używa, więc część odpowiedzi może być nieaktualna.",
+  "By its own edition number, this file is older than the catalog in use on this desk.":"Według własnego numeru wydania ten plik jest starszy niż katalog używany na tym stanowisku.",
   "Open the older edition":"Otwórz starsze wydanie",
   "Keep the newer one":"Zostaw nowsze",
   "This file is signed with the key {KEY}, which is not the team lead's.":"Ten plik jest podpisany kluczem {KEY}, który nie jest kluczem lidera zespołu.",
