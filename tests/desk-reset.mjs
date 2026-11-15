@@ -1002,6 +1002,55 @@ async function lockLegs() {
   }
 }
 
+/* 4r23e (Grok's review 23, finding 7): a folder in the desk folder that cannot be listed is a failed entry, not a throw. The
+   pass records what it owes, says so, and the next start reads that list rather than throwing at the same folder; once the
+   folder can be listed and the person tries again, the reset finishes. */
+function unlistedLeg(M, lab, name) {
+  const nodeFs = require("node:fs");
+  const origReaddir = nodeFs.readdirSync;
+  const dir = path.join(lab, name);
+  write(path.join(dir, "desk.json"), "go");
+  write(path.join(dir, "locked", "inside.txt"), "held");
+  write(path.join(dir, M.MARKER_NAME), markerBody(dir));
+  const locked = p => path.resolve(String(p)).toLowerCase() === path.join(dir, "locked").toLowerCase();
+  nodeFs.readdirSync = function (p, ...rest) {
+    if (locked(p)) { const e = new Error("EACCES: permission denied, scandir"); e.code = "EACCES"; e.path = String(p); throw e; }
+    return origReaddir.call(this, p, ...rest);
+  };
+  const out = {};
+  try {
+    try { out.first = M.honourPendingReset({ userData: dir, holdsLock: true }); } catch (e) { out.threw = String(e && e.code || e); }
+    let marker = null;
+    try { marker = JSON.parse(fs.readFileSync(path.join(dir, M.MARKER_NAME), "utf8")); } catch (e) { marker = null; }
+    out.owed = !!marker && Array.isArray(marker.owed) && marker.owed.some(p => locked(p));
+    try { out.second = M.honourPendingReset({ userData: dir, holdsLock: true }); } catch (e) { out.threwAgain = String(e && e.code || e); }
+  } finally { nodeFs.readdirSync = origReaddir; }
+  M.retryPendingReset({ userData: dir, holdsLock: true });
+  try { out.after = M.honourPendingReset({ userData: dir, holdsLock: true }); } catch (e) { out.after = { threw: String(e) }; }
+  out.finished = gone(path.join(dir, "locked")) && gone(path.join(dir, M.MARKER_NAME));
+  return out;
+}
+function unlistedLegs(mod) {
+  if (!mod) return;
+  const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-reset-unlisted-"));
+  try {
+    const r = unlistedLeg(mod, lab, "now");
+    const ok = !r.threw && !r.threwAgain && !!r.first && r.first.notice === true && r.owed && !!r.second && r.second.notice === true
+      && !!r.after && r.after.ok === true && r.finished;
+    check(ok, "4r23e a folder that cannot be listed is a failed entry: the pass records it as owed and says so, the next start does"
+      + " not throw, and once it can be listed and the person tries again the reset finishes: " + JSON.stringify(r));
+    if (!PLANTS) skip("4r23e lifting plant:reset-unlisted throws at the folder again (ETIUDA_PLANTS=off)");
+    else {
+      const L = liftedReset(lab, "plant:reset-unlisted", "    names = namesOf(p);");
+      let lifted = null;
+      try { lifted = L ? unlistedLeg(L, lab, "lifted") : null; } catch (e) { lifted = { threw: String(e) }; }
+      check(!!lifted && !!lifted.threw, "4r23e lifting plant:reset-unlisted throws at the folder again: " + JSON.stringify(lifted));
+    }
+  } finally {
+    fs.rmSync(lab, { recursive: true, force: true });
+  }
+}
+
 let mod = null, decision = null;
 try { mod = require(path.join(ROOT, "shell", "desk-reset.cjs")); } catch (e) { mod = null; }
 try { decision = require(path.join(ROOT, "tests", "install-plan.js")).uninstallDataDecision; } catch (e) { decision = null; }
@@ -1011,6 +1060,7 @@ shellLeg(mod);
 await unfinishedLeg(mod);
 review23Leg(mod);
 await lockLegs();
+unlistedLegs(mod);
 installLeg(decision);
 plantLeg(mod, decision);
 console.log("desk-reset " + (failed ? "FAILED " + failed + " of " : "passed ") + asserted

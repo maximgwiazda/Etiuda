@@ -221,13 +221,15 @@ function attempt(fn) {
   return last;
 }
 
-/* A link is unlinked as a link. Its target, and anything only reached through it, stays. */
+/* A link is unlinked as a link. Its target, and anything only reached through it, stays. A folder
+   that cannot be listed is a failed entry like a file that will not unlink, so the pass records it. */
 function removeEntry(p) {
   const st = lstatOf(p);
   if (!st) return null;
   if (st.isSymbolicLink()) return attempt(() => fs.unlinkSync(p));
   if (st.isDirectory()) {
-    const names = namesOf(p);
+    let names;
+    try { names = namesOf(p); } catch (e) { if (!e.path) e.path = p; return e; } /* plant:reset-unlisted */
     for (let i = 0; i < names.length; i++) {
       const err = removeEntry(path.join(p, names[i]));
       if (err) return err;
@@ -251,11 +253,14 @@ function applyReset(plan) {
       return { ok: false, reason: "refused", changed: changed };
     if (plan.userData && samePath(remove[i], plan.userData)) continue;
     const err = removeEntry(remove[i]);
-    if (err) return {
-      ok: false, reason: String(err.code || err.message || "refused"), changed: changed,
-      owed: expandRemaining(remove, i),
-      blocked: err.path ? path.resolve(String(err.path)) : remove[i]
-    };
+    if (err) {
+      const unlisted = [];
+      return {
+        ok: false, reason: String(err.code || err.message || "refused"), changed: changed,
+        owed: expandRemaining(remove, i, unlisted), unlisted: unlisted,
+        blocked: err.path ? path.resolve(String(err.path)) : remove[i]
+      };
+    }
     changed = true;
   }
   return { ok: true, changed: changed, owed: [] };
@@ -263,14 +268,16 @@ function applyReset(plan) {
 
 /* What a failed pass still has to remove: the entry that stopped it, and every later entry,
    each directory listed as the files still inside it and then itself. A later start unlinks
-   those paths and does not walk again, so a file created after the pass is not among them. */
-function expandRemaining(remove, fromIndex) {
+   those paths and does not walk again, so a file created after the pass is not among them;
+   a directory that could not be listed goes into `unlisted`, and is the one a later start walks. */
+function expandRemaining(remove, fromIndex, unlisted) {
   const out = [];
   const walk = (p) => {
     const st = lstatOf(p);
     if (!st) return;
     if (st.isSymbolicLink() || !st.isDirectory()) { out.push(path.resolve(p)); return; }
-    const names = namesOf(p);
+    let names = [];
+    try { names = namesOf(p); } catch (e) { names = []; if (Array.isArray(unlisted)) unlisted.push(path.resolve(p)); }
     for (let i = 0; i < names.length; i++) walk(path.join(p, names[i]));
     out.push(path.resolve(p));
   };
@@ -298,6 +305,8 @@ function owedAllowed(p, user, roots) {
 /* Only the paths the failed pass recorded. */
 function applyOwed(doc, roots) {
   const owed = Array.isArray(doc.owed) ? doc.owed : [];
+  const unlisted = new Set((Array.isArray(doc.unlisted) ? doc.unlisted : []).map(p => path.resolve(String(p || ""))));
+  const stillUnlisted = list => list.filter(p => unlisted.has(p));
   const user = doc.userData;
   const left = [];
   let changed = false;
@@ -307,7 +316,7 @@ function applyOwed(doc, roots) {
     if (!owedAllowed(p, user, roots)) continue;
     const st = lstatOf(p);
     if (!st) continue;
-    const err = removeExact(p);
+    const err = unlisted.has(p) ? removeEntry(p) : removeExact(p);
     if (err) {
       left.push(p);
       for (let j = i + 1; j < owed.length; j++) {
@@ -315,7 +324,7 @@ function applyOwed(doc, roots) {
         if (owedAllowed(rest, user, roots) && lstatOf(rest)) left.push(rest);
       }
       return {
-        ok: false, changed: changed, owed: left,
+        ok: false, changed: changed, owed: left, unlisted: stillUnlisted(left),
         blocked: err.path ? path.resolve(String(err.path)) : p,
         reason: String(err.code || err.message || "refused")
       };
@@ -452,6 +461,7 @@ function rememberOwed(user, doc, done) {
     catalogSetting: String(doc.catalogSetting || ""),
     attempts: (doc.attempts || 0) + 1,
     owed: done.owed,
+    unlisted: Array.isArray(done.unlisted) ? done.unlisted : [],
     owedAt: doc.owedAt || new Date().toISOString(),
     blocked: blocked || "",
     held: true
