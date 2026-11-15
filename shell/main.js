@@ -11011,9 +11011,10 @@ function storeFileText(s) {
   return JSON.stringify(Object.assign({ format: 1, keys: s.keys || "", said: s.said || "" }, s.off === true ? { off: true } : {}, s.told === true ? { told: true } : {},
     s.until > 0 ? { until: s.until } : {}, s.owed ? { owed: s.owed } : {}, s.leave ? { leave: s.leave } : {}, s.org === true ? { org: true } : {}, s.who ? { who: s.who } : {}, s.made ? { made: s.made } : {}), null, 1) + "\n";
 }
-/* WHOSE THE STORE'S STATE IS: store.json belongs to the account named by `who`, a hash of its provider and sub. Seated as another account,
-   what was kept is let go before anything reads it (storeMine), so no person's keys, leave or owed end reach another person's folder or
-   the service under them; a file kept before `who` existed keeps all but those three. Signed out, nothing is anyone's. */
+/* WHOSE THE STORE'S STATE IS: store.json belongs to the account named by `who`, a hash of its provider and sub; the first account seated
+   takes it, a file kept before `who` existed losing its keys, leave and owed end. Another account seated after it holds the store: nothing
+   reads that state, nothing is looked at, uploaded or merged, and the state stays the first account's for its return (storeHeld). Signed
+   out, nothing is anyone's. */
 let storeWhoMemo = { sealed: "", who: "" };
 function storeWho(held) {
   if (!held || !held.sub) return "";
@@ -11023,12 +11024,23 @@ function storeWho(held) {
   storeWhoMemo = { sealed: held.provider + ":" + held.sub, who: who };
   return who;
 }
+function storeHeld() {
+  const s = storeState(), who = storeWho(signinState().held);
+  let held = false;
+  held = !!who && !!s.who && s.who !== who; /* plant:store-held */
+  return held;
+}
 function storeMine() {
   const s = storeState(), who = storeWho(signinState().held);
   if (!who) return false;
   if (s.who === who) return true; /* plant:store-mine */
+  if (storeHeld()) {
+    if (s.keys || s.leave) { s.keys = ""; s.leave = ""; storeSave(); }
+    storeLeaveHere = null; storeNow = null; storeSay = ""; storeFresh = false;
+    storeSyncStop();
+    return false;
+  }
   s.keys = ""; s.leave = ""; s.owed = ""; s.made = "";
-  if (s.who) { s.until = 0; s.said = ""; s.told = false; s.org = false; delete s.off; }
   s.who = who;
   storeLeaveHere = null; storeOwedHere = ""; storeNow = null; storeSay = ""; storeFresh = false;
   if (storeAccess && storeAccess.who !== who) storeAccess = null;
@@ -11631,7 +11643,7 @@ function storeSyncFile(name, text) {
 }
 /* A change on this desk, merged into its place a moment later, so a burst of writes is one merge. */
 function storeSyncSoon() {
-  if (!storeSyncing) return;
+  if (!storeSyncing || storeHeld()) return; /* plant:store-held-merge */
   clearTimeout(storeSyncTimer);
   storeSyncTimer = setTimeout(() => { storeSyncTimer = null; try { storeSyncing.merge(); } catch (e) { console.error("etiuda: the store's sync - " + e.message); } }, STORE_SYNC_MS);
   if (storeSyncTimer.unref) storeSyncTimer.unref();

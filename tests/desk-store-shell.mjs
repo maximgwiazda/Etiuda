@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 102;
+const EXPECTED = 110;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -196,8 +196,8 @@ function worldOf(o) {
 /* ---- the shell, evaluated whole: `src` is shell/main.js's text or a planted copy of it ---- */
 /* What the leg reads from main.js, appended to its text; a name main.js lacks comes back undefined, so its leg fails alone. */
 const TAIL_NAMES = ["storeView", "storeRoom", "storeSetNow", "storeState", "signinRun", "signinRenew", "signinIo", "signinRenewNow", "signinServiceAsk", "storeServiceAt", "storeOnFor", "storeTurn", "branchIdentity", "signinState", "patchDesk", "storeForget", "signinLandingHtml", "signinListen",
-  "signinOutNow", "storeLeaveNow", "storeSyncApply"];
-const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing", "storeConsentFlight"];
+  "signinOutNow", "storeLeaveNow", "storeSyncApply", "storeSyncSoon"];
+const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing", "storeConsentFlight", "storeSyncTimer"];
 const TAIL = "\n__test.T = {" + TAIL_NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
   + ", setJoin: v => { teamJoin = v; }, get: () => ({" + TAIL_STATE.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "}) };";
 function boot(src, o) {
@@ -550,7 +550,7 @@ async function owedScene(src) {
 /* (w) ANOTHER PERSON ON THIS DESK: person A synced here; person B, whose own folder holds no key file, is seated on the same Windows
    profile, after A signed out (w1, whose sign-out leaves no keys in store.json) or straight over A's sign-in. Nothing of A's reaches B:
    no key file with A's K or S is written into B's folder by the look (w1, w1d), by a This computer A left owed (w2), and no store/end A
-   left owed is posted under B (w3); B's look makes B's own store. */
+   left owed is posted under B (w3); B's look makes no store of B's on this desk while the desk's content is A's (x). */
 const sealedOf = s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)).toString("base64");
 function seatAnother(T, w, was, sub) {
   T.signinState().held = Object.assign({}, was, { sub: sealedOf(sub || "sub-of-another-person"), refresh: sealedOf("rt-of-another-person") });
@@ -571,9 +571,71 @@ async function anotherScene(src, door, out) {
   if (door === "look") { await T.storeTurn(); }
   const intoB = hasKeysOf(w.file, a), b = w.file ? JSON.parse(w.file) : null;
   const n = T.get().storeNow;
-  const ok = !!a && !intoB && (door !== "owed" || endsPosted(w) === ends) && (door !== "look" || (!!n && n.state === "on" && !!b && b.rt !== a.rt && b.k !== a.k))
+  const ok = !!a && !intoB && (door !== "owed" || endsPosted(w) === ends) && (door !== "look" || (!n && !b))
     && (!out || (!left.keys && !left.leave));
   return { ok, detail: brief({ door, out: !!out, keptAtOut: !!left.keys || !!left.leave, aKeysInB: intoB, bFile: b ? (b.kind || "?") : null, bStore: !!b && !!a && b.rt !== a.rt, look: n && n.state + "/" + n.why, endsUnderB: endsPosted(w) - ends }) };
+}
+
+/* (x) A DIFFERENT ACCOUNT AFTER ANOTHER ON THIS PROFILE, the safe half of Claude alpha's decision of 2026-11-15: A synced here; B is
+   seated, after A signed out (x1) or straight over A (x1d). Until the person is asked, nothing is uploaded to B's store and nothing is
+   merged: no look, no relay call, no store made, the sync stopped and no merge set going by a change on the desk, and the desk's sync
+   state, its mirror and desk.json as they were. Same account back is the ordinary case (x2). A, back after B, finds its own switch and
+   its own store as it left them (x3). */
+const storeTree = UD => { const root = path.join(UD, "store"); if (!fs.existsSync(root)) return ""; return filesUnder(root).sort().map(p => path.relative(root, p) + "=" + crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex")).join("|"); };
+const deskText = UD => { try { return fs.readFileSync(path.join(UD, "desk.json"), "utf8"); } catch { return null; } };
+const storeJson = UD => { try { return JSON.parse(fs.readFileSync(path.join(UD, "store.json"), "utf8")); } catch { return null; } };
+async function heldScene(src, out) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world, UD = r.shell.UD;
+  const sync = T.get().storeSyncing, ch = sync && sync.channel();
+  if (ch) await ch.idle();
+  const a = w.file ? JSON.parse(w.file) : null, heldA = T.signinState().held, whoA = (storeJson(UD) || {}).who;
+  if (out) T.signinOutNow();
+  const tree = storeTree(UD), desk = deskText(UD), relay = w.relay.length;
+  seatAnother(T, w, heldA);
+  await T.storeTurn();
+  T.storeView();
+  T.storeSyncSoon();
+  const timer = !!T.get().storeSyncTimer;
+  if (T.get().storeSyncTimer) clearTimeout(T.get().storeSyncTimer);
+  const n = T.get().storeNow, now = T.get().storeSyncing, kept = storeJson(UD) || {};
+  const got = { look: n ? n.state : null, relayCalls: w.relay.length - relay, bFolder: !!w.file, syncing: !!now && now.running(), mergeSet: timer,
+    syncState: storeTree(UD) === tree ? "as it was" : "changed", desk: deskText(UD) === desk ? "as it was" : "changed", whose: kept.who === whoA ? "A" : "not A" };
+  const ok = !!a && a.kind === "etiuda-store-key" && !n && got.relayCalls === 0 && !got.bFolder && !got.syncing && !timer && got.syncState === "as it was" && got.desk === "as it was" && got.whose === "A";
+  return { ok, detail: brief(got) };
+}
+async function sameBackScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  const a = w.file ? JSON.parse(w.file) : null, heldA = T.signinState().held;
+  T.signinOutNow();
+  T.signinState().held = heldA;
+  await T.storeTurn();
+  const n = T.get().storeNow, sync = T.get().storeSyncing, b = w.file ? JSON.parse(w.file) : null;
+  const ok = !!a && !!n && n.state === "on" && !!b && b.rt === a.rt && !!sync && sync.running() && sync.state().rt === a.rt;
+  return { ok, detail: brief({ look: n && n.state, sameStore: !!b && !!a && b.rt === a.rt, syncing: !!sync && sync.running() }) };
+}
+async function backOf(src, off) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world, UD = r.shell.UD;
+  const heldA = T.signinState().held, rtA = w.file ? JSON.parse(w.file).rt : "";
+  if (off) await T.storeSetNow("here");
+  const sync = T.get().storeSyncing, ch = sync && sync.channel();
+  if (ch) await ch.idle();
+  const aFile = w.file;
+  T.signinOutNow();
+  const tree = storeTree(UD);
+  seatAnother(T, w, heldA);
+  await T.storeTurn();
+  T.signinOutNow();
+  T.signinState().held = heldA;
+  w.file = aFile;
+  const between = storeTree(UD) === tree;
+  await T.storeTurn();
+  const st = storeJson(UD) || {}, view = T.storeView(), n = T.get().storeNow, again = T.get().storeSyncing;
+  return { off: st.off === true, line: view.line, look: n ? n.state : null, between, rt: again && again.state().rt === rtA ? "A's" : "other", syncing: !!again && again.running() };
+}
+async function backScene(src) {
+  const off = await backOf(src, true), on = await backOf(src, false);
+  const ok = off.off && off.line === "off" && !off.look && off.between && on.look === "on" && on.between && on.rt === "A's" && on.syncing;
+  return { ok, detail: brief({ off, on }) };
 }
 
 /* (w4) A look of A's still out when B is seated keeps nothing for B: its keys are not sealed here under B's name, and its folder
@@ -812,7 +874,8 @@ async function overAnotherScene(src) {
   const from = w.graph.length;
   await T.storeTurn();
   const n = T.get().storeNow, usedA = w.graph.slice(from).filter(g => g.endsWith("Bearer " + tokA)).length;
-  const ok = !!tokA && !!onA && onA.state === "on" && !!n && n.state === "on" && usedA === 0;
+  /* Held since the desk's content is A's (x1d): B makes no look, and A's token is asked with nowhere. */
+  const ok = !!tokA && !!onA && onA.state === "on" && !n && usedA === 0;
   return { ok, detail: brief({ firstOn: onA && onA.state, look: n && n.state + "/" + n.why, folderAskedWithA: usedA }) };
 }
 /* (g1b) THE CONSENT WINDOW IS A SIGN-IN IN PROGRESS: while the switch's own request waits on the browser, the page is told the desk is
@@ -1077,11 +1140,15 @@ const LEGS = [
   ["f8", folderSlowScene, "a folder step slower than eight seconds still sends the window on for the folder, lands its page and opens the store"],
   ["fa1", refusedAccountScene, "a second Google sign-in whose seat is refused leaves the folder's token the seated account's"],
   ["fa2", overAnotherScene, "an account seated straight over another, with no folder step of its own, is never handed the other's folder token: its look asks its own"],
-  ["w1", s => anotherScene(s, "look", true), "person A synced and signed out, which leaves no store keys here; person B seated on the same profile with an empty folder: B's look writes nothing of A's K or S into B's folder and makes B's own store"],
+  ["w1", s => anotherScene(s, "look", true), "person A synced and signed out, which leaves no store keys here; person B seated on the same profile with an empty folder: B's look writes nothing of A's K or S into B's folder, and makes no store of B's while the desk's content is A's (x1)"],
   ["w1d", s => anotherScene(s, "look", false), "the same where B signs in straight over A's sign-in"],
   ["w2", s => anotherScene(s, "leave", false), "a This computer A left owed is not written into B's folder with A's keys"],
   ["w3", s => anotherScene(s, "owed", false), "a store/end A left owed is not posted while B is seated"],
   ["w4", lookOutScene, "a look of A's still out when B is seated seals nothing here for B and writes nothing more to the folder"],
+  ["x1", s => heldScene(s, true), "A synced and signed out; B seated on the same profile: nothing is looked at, uploaded or merged for B (no relay call, no store in B's folder, the sync stopped, no merge set going), and the desk's sync state, mirror and desk.json stay as they were, the store state A's"],
+  ["x1d", s => heldScene(s, false), "the same where B signs in straight over A"],
+  ["x2", sameBackScene, "the ordinary case: the same account signed out and back finds its store on, the same store, its sync running, nothing asked"],
+  ["x3", backScene, "A turned sync off here, signed out; B came and went; A back finds its own switch off as it left it; with it on, A back finds its own store and sync, nothing of B's turn left in the desk's sync state"],
 ];
 const results = {};
 const scenes = Object.fromEntries(LEGS.map(([id, scene]) => [id, scene]));
@@ -1143,15 +1210,21 @@ const PLANTS = [
   ["g2r", swap(" || (sameAccount() ? was.refresh || \"\" : \"\"), /* plant:take-keeps-refresh */", ", /* plant:take-keeps-refresh */"), "the sealed refresh token replaced by none"],
   ["g1b", swap("  signinBusy = run; /* plant:consent-busy */", "  /* plant:consent-busy */"), "the consent's wait is no sign-in in progress to the page"],
   ["g1b", swap("{ folderToken: t => { if (same()) storeTokenTake(t); } }); /* plant:consent-held */", "{ folderToken: t => { storeTokenTake(t); } }); /* plant:consent-held */"), "the consent's answer taken for whoever is seated"],
-  ["g1b", swap("return signinState().held && storeWho(signinState().held) === storeWho(held) ? storeTurn() : null; }); /* plant:consent-same-look */", "return signinState().held ? storeTurn() : null; }); /* plant:consent-same-look */"), "the look after the consent run for whoever is seated"],
+  ["g1b", text => { const x = swap("return signinState().held && storeWho(signinState().held) === storeWho(held) ? storeTurn() : null; }); /* plant:consent-same-look */", "return signinState().held ? storeTurn() : null; }); /* plant:consent-same-look */")(text);
+    return x && swap("  held = !!who && !!s.who && s.who !== who; /* plant:store-held */", "  held = false; /* plant:store-held */")(x); }, "the look after the consent run for whoever is seated, the hold lifted"],
   ["fa1", swap("io = Object.assign(signinIo(run), { folderToken: t => { folderGot = t; } });", "io = signinIo(run);"), "the run's folder token kept before the sign-in is taken"],
   ["fa2", text => { const x = swap("storeAccess.who === storeWho(held) ? storeAccess : null; /* plant:access-who */", "true ? storeAccess : null; /* plant:access-who */")(text);
-    return x && swap("  if (storeAccess && storeAccess.who !== who) storeAccess = null;", "")(x); }, "a folder token reused for whoever is seated"],
+    const y = x && swap("  if (storeAccess && storeAccess.who !== who) storeAccess = null;", "")(x);
+    return y && swap("  held = !!who && !!s.who && s.who !== who; /* plant:store-held */", "  held = false; /* plant:store-held */")(y); }, "a folder token reused for whoever is seated, the hold lifted"],
   ["gt", swap("if (sayJoinPolicy().folder || relayHere() || folderTeamHere() || Object.keys(teamNeedsFolder).length) return \"\"; /* plant:sync-team-folder */", "if (false) return \"\"; /* plant:sync-team-folder */"), "the store's sync lists and writes the team's mirror as the person's folder"],
   ["w1", swap("  if (s.keys || s.leave || storeLeaveHere) {", "  if (false) {"), "a sign-out leaves the store's keys in store.json"],
   ["w1d", swap("  if (s.who === who) return true; /* plant:store-mine */", "  if (true) { s.who = who; return true; } /* plant:store-mine */"), "the keys kept for A are B's"],
   ["w2", swap("  if (s.who === who) return true; /* plant:store-mine */", "  if (true) { s.who = who; return true; } /* plant:store-mine */"), "the leave kept for A is B's"],
   ["w3", swap("  if (s.who === who) return true; /* plant:store-mine */", "  if (true) { s.who = who; return true; } /* plant:store-mine */"), "the store/end owed for A is B's"],
+  ["x1", swap("  held = !!who && !!s.who && s.who !== who; /* plant:store-held */", "  held = false; /* plant:store-held */"), "another account takes the desk's store state and looks, makes and syncs as its own"],
+  ["x1", swap("  if (!storeSyncing || storeHeld()) return; /* plant:store-held-merge */", "  if (!storeSyncing) return; /* plant:store-held-merge */"), "a change on the desk sets the merge going while another account is seated"],
+  ["x1d", swap("  held = !!who && !!s.who && s.who !== who; /* plant:store-held */", "  held = false; /* plant:store-held */"), "another account seated straight over takes the store as its own"],
+  ["x3", swap("  held = !!who && !!s.who && s.who !== who; /* plant:store-held */", "  held = false; /* plant:store-held */"), "B's seat takes the state, so B's turn leaves its store in the desk's sync state before A is back"],
   ["w4", swap("  const ours = () => storeState().who === who && storeWho(signinState().held) === who; /* plant:store-look-ours */", "  const ours = () => true; /* plant:store-look-ours */"), "a look ends under whoever is seated"],
   ["d", swap(".indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes", ".indexOf(String(url)) < -1) throw new Error(\"the licence service's door takes"), "the door takes any route"],
 ];
