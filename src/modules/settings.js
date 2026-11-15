@@ -89,7 +89,7 @@ function hotkeyRowHtml(){
   if(!hotkeyHost()) return "";
   const st=hotkeyState();
   return '<div class="sc-list"><div class="sc-row" id="setHotkeyRow"><div class="sc-label">'
-    +esc(t("Bring the replies over any window"))
+    +esc(t("Quick replies"))
     +'<small id="setHotkeyNote">'+esc(st.taken
       ? t("Another program uses this combination just now; a different one will do.")
       : t("Works from any program; Enter copies a reply and goes back to the window you were in."))+'</small>'

@@ -393,8 +393,8 @@ const TOUR_STEPS=[
     id:"picker",
     sel:()=>menuTarget("picker"),
     side:menuSide,
-    title:"Replies over any window",
-    body:()=>t("{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.")
+    title:"Quick replies",
+    body:()=>t("{KEY} brings Quick replies over any program, beside the pointer. Press {KEY} or click this Menu row to try it; Next skips ahead.")
       .split("{KEY}").join(hotkeyChips()),
     when:()=>!!hotkeyHeld(),
     done:()=>tourPickerOpened,
@@ -405,8 +405,8 @@ const TOUR_STEPS=[
     id:"pickerIn",
     sel:()=>menuTarget("picker"),
     side:menuSide,
-    title:"Replies over any window",
-    body:"Type a word to filter the replies, press Enter to copy and go back to the window you were in, or press Esc to close it.",
+    title:"Quick replies",
+    body:"Type a word to filter Quick replies, press Enter to copy and go back to the window you were in, or press Esc to close it.",
     when:()=>tourPickerOpened,
     menu:true,
     pad:8

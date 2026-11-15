@@ -8773,11 +8773,12 @@ What you type stays in this browser only.`;
     /* copy: copywriter */
     "Click <b>+</b> to open a new chat tab.": "Kliknij <b>+</b>, aby otworzyć nową kartę rozmowy.",
     /* copy: copywriter */
-    "Replies over any window": "Odpowiedzi nad dowolnym oknem",
-    "Type a word to filter the replies, press Enter to copy and go back to the window you were in, or press Esc to close it.": "Wpisz słowo, aby przefiltrować odpowiedzi, naciśnij Enter, aby skopiować i wrócić do poprzedniego okna, lub Esc, aby zamknąć okno.",
+    "Quick replies": "Szybkie odpowiedzi",
     /* copy: copywriter */
-    "{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.": "{KEY} przywołuje te odpowiedzi obok wskaźnika, nad każdym programem: wystarczy wpisać słowo, a Enter skopiuje odpowiedź i wróci do poprzedniego okna. Można spróbować od razu, naciskając {KEY}; Esc zamyka listę.",
-    "Bring the replies over any window": "Przywołaj odpowiedzi nad dowolne okno",
+    "Type a word to filter Quick replies, press Enter to copy and go back to the window you were in, or press Esc to close it.": "Wpisz słowo, aby przefiltrować Szybkie odpowiedzi, naciśnij Enter, aby skopiować i wrócić do poprzedniego okna, lub Esc, aby zamknąć okno.",
+    /* copy: copywriter */
+    "{KEY} brings Quick replies over any program, beside the pointer. Press {KEY} or click this Menu row to try it; Next skips ahead.": "{KEY} przywołuje Szybkie odpowiedzi obok wskaźnika, nad każdym programem. Naciśnij {KEY} lub kliknij ten wiersz Menu, aby wypróbować; Dalej przechodzi do kolejnego kroku.",
+    /* copy: copywriter */
     "Suggested from the copied message": "Propozycje na podstawie skopiowanej wiadomości",
     "Intents suggested from the message on the clipboard. None is chosen until one is clicked.": "Intencje zaproponowane na podstawie wiadomości ze schowka. Żadna nie jest wybrana, dopóki się jej nie kliknie.",
     "Suggestions taken: {N}": "Wybrane propozycje: {N}",
@@ -28155,7 +28156,7 @@ What you type stays in this browser only.`;
     if (!row2) return;
     row2.hidden = !hk || !h || typeof h.openPicker !== "function";
     if (row2.hidden) return;
-    row2.innerHTML = sxIcon("expand") + "<span>" + esc(t("Bring the replies over any window")) + "</span>";
+    row2.innerHTML = sxIcon("expand") + "<span>" + esc(t("Quick replies")) + "</span>";
     row2.title = hk.held ? t("The replies beside the pointer, over any program: {KEYS} brings them from anywhere, and Settings is where the combination is changed.").replace("{KEYS}", eHotkeyLabel(hk.accel)) : t("The replies beside the pointer, over any program; a combination that brings them from anywhere is chosen in Settings.");
   }
   function syncSettingsMenu() {
@@ -28772,8 +28773,8 @@ What you type stays in this browser only.`;
       id: "picker",
       sel: () => menuTarget("picker"),
       side: menuSide,
-      title: "Replies over any window",
-      body: () => t("{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.").split("{KEY}").join(hotkeyChips()),
+      title: "Quick replies",
+      body: () => t("{KEY} brings Quick replies over any program, beside the pointer. Press {KEY} or click this Menu row to try it; Next skips ahead.").split("{KEY}").join(hotkeyChips()),
       when: () => !!hotkeyHeld(),
       done: () => tourPickerOpened,
       menu: true,
@@ -28783,8 +28784,8 @@ What you type stays in this browser only.`;
       id: "pickerIn",
       sel: () => menuTarget("picker"),
       side: menuSide,
-      title: "Replies over any window",
-      body: "Type a word to filter the replies, press Enter to copy and go back to the window you were in, or press Esc to close it.",
+      title: "Quick replies",
+      body: "Type a word to filter Quick replies, press Enter to copy and go back to the window you were in, or press Esc to close it.",
       when: () => tourPickerOpened,
       menu: true,
       pad: 8
@@ -37148,7 +37149,7 @@ What you type stays in this browser only.`;
   function hotkeyRowHtml() {
     if (!hotkeyHost()) return "";
     const st = hotkeyState();
-    return '<div class="sc-list"><div class="sc-row" id="setHotkeyRow"><div class="sc-label">' + esc(t("Bring the replies over any window")) + '<small id="setHotkeyNote">' + esc(st.taken ? t("Another program uses this combination just now; a different one will do.") : t("Works from any program; Enter copies a reply and goes back to the window you were in.")) + '</small><small id="setSuggestNote">' + esc(suggestNoteText()) + '</small><small id="setSuggestCounts">' + esc(suggestCountLine()) + '</small></div><div class="sc-binds"><button type="button" class="sc-bind sc-long' + (st.accel ? "" : " sc-empty") + '" id="setHotkey" style="flex-basis:100%" title="' + esc(t("Click, then press the new key combo")) + '">' + esc(hotkeyLabel(st.accel)) + "</button></div></div></div>";
+    return '<div class="sc-list"><div class="sc-row" id="setHotkeyRow"><div class="sc-label">' + esc(t("Quick replies")) + '<small id="setHotkeyNote">' + esc(st.taken ? t("Another program uses this combination just now; a different one will do.") : t("Works from any program; Enter copies a reply and goes back to the window you were in.")) + '</small><small id="setSuggestNote">' + esc(suggestNoteText()) + '</small><small id="setSuggestCounts">' + esc(suggestCountLine()) + '</small></div><div class="sc-binds"><button type="button" class="sc-bind sc-long' + (st.accel ? "" : " sc-empty") + '" id="setHotkey" style="flex-basis:100%" title="' + esc(t("Click, then press the new key combo")) + '">' + esc(hotkeyLabel(st.accel)) + "</button></div></div></div>";
   }
   function syncHotkeyRow(box, now) {
     if (!box) return;

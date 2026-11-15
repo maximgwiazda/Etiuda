@@ -1669,8 +1669,8 @@ try {
   const pickerMark = '<svg class="sx-ic" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4.5h6v6M20.5 4.5l-6 6M10.5 20.5h-6v-6M4.5 20.5l6-6"/></svg>';
   const titleHeld = "The replies beside the pointer, over any program: Ctrl+Shift+Space brings them from anywhere, and Settings is where the combination is changed.";
   const titleNotHeld = "The replies beside the pointer, over any program; a combination that brings them from anywhere is chosen in Settings.";
-  check(rows7.join(" | ") === pickerMark + "<span>Bring the replies over any window</span> | "
-    + pickerMark + "<span>Bring the replies over any window</span> | hidden | hidden"
+  check(rows7.join(" | ") === pickerMark + "<span>Quick replies</span> | "
+    + pickerMark + "<span>Quick replies</span> | hidden | hidden"
     && titles7[0] === titleHeld && titles7[1] === titleNotHeld && clicked === "1/shut",
     "7m the Menu has a row for the picker without kbd, and its tooltip names the live combination when held ("
     + rows7.join(" | ") + " / " + clicked + ")");
@@ -1711,7 +1711,7 @@ try {
   const resets = /function showTourStep\(i\)\{[\s\S]*?if\(step\.id!=="pickerIn"\) tourPickerOpened=false;[\s\S]*?\n\}/.test(TSRC);
   const heard = /if\(op==="open"\)\{\s*try\{ tourHeardPick\(\); \}catch\(e\)\{\}/.test(fs.readFileSync(path.join(ROOT, "src", "modules", "pick.js"), "utf8"));
   check(tourSays === JSON.stringify([1, 1, [false, false, true], 2, false, false, false, false, true, true, true, 1, 0,
-    "Replies over any window", "Replies over any window", true, true, true, true]) && resets && heard,
+    "Quick replies", "Quick replies", true, true, true, true]) && resets && heard,
     "7n the tour has a step for the picker straight after the Menu's and an extra window step after it, without opening the picker on Next: " + tourSays + (resets ? "" : ", NO reset at each step")
     + (heard ? "" : ", the picker's opening NOT heard"));
 

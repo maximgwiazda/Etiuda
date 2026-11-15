@@ -925,6 +925,15 @@ function tourActTests() {
     [pickerNextStep, pickerNextOpens, pickerOpenedStep, pickerInNext, pickerInBack, cardsHeardStep, pickerInWhenOnCards],
     ["library [menu]", 0, "pickerIn [menu]", "library", "picker", "cards", false]);
 
+  /* The name "Quick replies" in Menu, Settings (hotkeyRowHtml), and tour steps, all through UI_STRINGS. */
+  const menuSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "header-menus.js"), "utf8");
+  const setSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "settings.js"), "utf8");
+  const pickerStep = T.TOUR_STEPS.find(s => s.id === "picker"), pickerInStep = T.TOUR_STEPS.find(s => s.id === "pickerIn");
+  eq("Menu, Settings shortcuts, and the tour name the feature Quick replies via ui-lang.js",
+    [menuSrc.indexOf('t("Quick replies")') >= 0, setSrc.indexOf('t("Quick replies")') >= 0,
+      pickerStep && pickerStep.title, pickerInStep && pickerInStep.title],
+    [true, true, "Quick replies", "Quick replies"]);
+
   /* THE SMOKE WALKS THIS TOUR, not a remembered one. tests/tour-walk.js says which way the walk takes on each step,
      and the smoke takes it; this holds its rows to the table above: the same ids in order, Next pressed only where
      the table does not hold it back, the same window opened by the same step, an act only where a step waits for

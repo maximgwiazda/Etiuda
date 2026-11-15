@@ -202,7 +202,7 @@ function syncPickerRow(){
   if(!row) return;
   row.hidden=!hk || !h || typeof h.openPicker!=="function";
   if(row.hidden) return;
-  row.innerHTML=sxIcon("expand")+'<span>'+esc(t("Bring the replies over any window"))+'</span>';
+  row.innerHTML=sxIcon("expand")+'<span>'+esc(t("Quick replies"))+'</span>';
   row.title=hk.held
     ? t("The replies beside the pointer, over any program: {KEYS} brings them from anywhere, and Settings is where the combination is changed.").replace("{KEYS}", eHotkeyLabel(hk.accel))
     : t("The replies beside the pointer, over any program; a combination that brings them from anywhere is chosen in Settings.");
