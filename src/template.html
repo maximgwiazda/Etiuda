@@ -1249,8 +1249,7 @@ body.shed-segfold #seg::before{width:100%;transform:none}
   input:not([type=checkbox]):not([type=radio]),textarea,select{font-size:16px!important}
 }
 #settingsBtn.on,#moreBtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
-/* A menu row is an icon and a word. The icon is dim until the pointer or the keyboard reaches
-   the row, when it turns accent; the words stay ink. The language badge fills the same slot the
+/* A menu row is an icon and a word, the icon dim and the words ink. The language badge fills the same slot the
    icons do, so those rows share one left edge. */
 .menu.menu-ic button{display:flex;align-items:center;gap:9px}
 .menu.menu-ic button .ic{flex:0 0 auto;color:var(--dim)}
@@ -1265,11 +1264,13 @@ body.shed-segfold #seg::before{width:100%;transform:none}
 .menu button{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:4px 10px;border:0;border-radius:6px;
   background:transparent;color:var(--ink);font:13px/20px var(--sans);cursor:default}
 .menu button .sx-ic,.menu button .ic{flex:none;width:16px;height:16px;color:var(--dim)}
-.menu button:hover,.menu button:focus-visible{background:color-mix(in srgb,var(--accent) 9%,transparent);color:var(--ink);
-  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 16%,transparent)}
-.menu button:hover .sx-ic,.menu button:focus-visible .sx-ic,
-.menu button:hover .ic,.menu button:focus-visible .ic,
-.menu button:hover .more-lang-badge,.menu button:focus-visible .more-lang-badge{color:var(--accent)}
+/* ONE ROW MARKED AT A TIME, in Studio's menu look: the mark is the focus alone, a quiet fill with no ring, and the pointer
+   moving over a row hands it the focus (header-menus.js), so the pointer and the keys share one mark. A :hover mark, or
+   a fade between two rows, would be a second one. */
+.menu{--menu-mark:#e8ecf1}
+:root:not([data-theme=light]) .menu{--menu-mark:#2a2f37}
+.menu:focus{outline:none}
+.menu button:focus{background:var(--menu-mark);color:var(--ink);outline:none}
 .menu .menu-sep{height:1px;margin:3px 6px;background:var(--line);border:0;padding:0;pointer-events:none}
 /* A row's key at its right edge, in the row's quieter ink. */
 #menuPicker{display:flex;align-items:center;gap:9px}
@@ -3790,13 +3791,12 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 /* ---------- The Settings screen tab ---------- */
 /* On the desk's own tokens, never glass. Opening Settings shows every section on one page. A section opened
    alone keeps Appearance and Layout beside a small desk, and lays every other section's rows out as tiles.
-   The selected rail row is one class and the three --sx-sel tokens, so its treatment changes in one place:
-   a soft fill of the accent with a fine ring of it, the name bold, the icon in the accent. */
-.sx{--sx-acc:var(--accent);--sx-sel-fill:color-mix(in srgb,var(--sx-acc) 11%,transparent);
-  --sx-sel-ring:color-mix(in srgb,var(--sx-acc) 16%,transparent);--sx-hover:color-mix(in srgb,var(--ink) 3.5%,transparent);
+   The rail's rows wear Studio's look, its values ported: the selected row is the panel's face lifted by a soft
+   shadow, the name bold, the icon in the accent; a row under the hand takes the ink at 5 per cent over the rail. */
+.sx{--sx-acc:var(--accent);--sx-sel-fill:var(--panel);--sx-sel-lift:0 1px 2px rgba(15,23,42,.1);
+  --sx-hover:color-mix(in srgb,var(--ink) 5%,var(--header-bg));
   flex:1 1 auto;min-height:0;display:flex;background:var(--bg);color:var(--ink);font:14px/1.45 var(--sans)}
-:root:not([data-theme=light]) .sx{--sx-sel-fill:color-mix(in srgb,var(--sx-acc) 20%,transparent);
-  --sx-sel-ring:color-mix(in srgb,var(--sx-acc) 26%,transparent);--sx-hover:color-mix(in srgb,var(--ink) 4%,transparent)}
+:root:not([data-theme=light]) .sx{--sx-sel-lift:0 1px 2px rgba(0,0,0,.5)}
 .sx *{box-sizing:border-box}
 .sx-ic{display:block;width:18px;height:18px;flex:0 0 auto}
 .sx-nav{flex:0 0 var(--side-w);min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:16px 10px;
@@ -3809,16 +3809,19 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx-search input{flex:1 1 auto;min-width:0;padding:7px 0;border:0;outline:0;background:transparent;color:var(--ink);
   font:13.5px var(--sans);cursor:text}
 .sx-secs{display:flex;flex-direction:column;gap:2px}
-.sx-sec{display:flex;align-items:center;gap:11px;width:100%;padding:8px 10px;border:0;border-radius:var(--radius-xs);
+.sx-sec{display:flex;align-items:center;gap:11px;width:100%;padding:8px 10px;border:0;border-radius:var(--radius-sm);
   background:transparent;color:var(--ink);font:14px var(--sans);text-align:left}
 .sx-sec .sx-ic{color:var(--dim)}
 .sx-sec:hover,.sx-sec:focus-visible{background:var(--sx-hover)}
-.sx-sec.on{background:var(--sx-sel-fill);box-shadow:inset 0 0 0 1px var(--sx-sel-ring);font-weight:600}
-.sx-sec.on:focus-visible{box-shadow:inset 0 0 0 2px var(--sx-sel-ring)}
+.sx-sec.on,.sx-sec.on:hover,.sx-sec.on:focus-visible{background:var(--sx-sel-fill);box-shadow:var(--sx-sel-lift);font-weight:600}
 .sx-sec.on .sx-ic{color:var(--sx-acc)}
+/* ONE ROW OF THE RAIL MARKED AT A TIME: the hand used last owns the mark (data-hand on the root, header-menus.js). Under the
+   pointer a focused row other than the hovered one goes unmarked; under the keys the hovered row does. */
+:root[data-hand=pointer] .sx-nav:hover :is(.sx-sec,.sx-maint):focus-visible:not(:hover):not(.on){background:transparent}
+:root[data-hand=keys] .sx-nav :is(.sx-sec,.sx-maint):hover:not(:focus-visible):not(.on){background:transparent}
 .sx-foot{margin-top:auto;padding-top:10px;border-top:1px solid var(--line)}
 .sx-maint{padding:6px 10px;border:0;border-radius:var(--radius-xs);background:transparent;color:var(--dim);font:12.5px var(--sans)}
-.sx-maint:hover{background:var(--sx-hover);color:var(--ink)}
+.sx-maint:hover,.sx-maint:focus-visible{background:var(--sx-hover);color:var(--ink)}
 .sx kbd{font:11.5px var(--mono);padding:1px 5px;border:1px solid var(--line-strong);border-radius:4px}
 .sx-page{flex:1 1 auto;min-width:0;overflow-y:auto;padding:24px 32px 32px}
 .sx-crumb{color:var(--dim);font-size:13px;margin-bottom:2px}
@@ -4729,7 +4732,7 @@ body.e-lanes #pillsSlot{display:none}
 /* Colour-only, at the tone tier - these fire on hover with the pointer already moving. Transform
    and layout are deliberately NOT transitioned: drag, the FLIP reorders and the pill bar
    own their timing, and a transitioned transform under a drag fights the hand. */
-.pill,.btn,.seg button,.tab,.menu button,
+.pill,.btn,.seg button,.tab,
 .tab-x,.field-clear,.combo-clear{
   transition:background-color var(--m-tone) ease,color var(--m-tone) ease,border-color var(--m-tone) ease}
 /* THE REPEATING ROWS EASE ON HOVER, NEVER ON THE FLIP: hundreds of them, so a theme press that started
@@ -4940,7 +4943,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
            automatically. Rows delegate with .click(), which works at display:none. -->
       <div class="menu-wrap" id="moreWrap" hidden>
         <button class="btn icbtn" id="moreBtn" type="button" title="The tools this window is too narrow to show" aria-haspopup="true" aria-expanded="false" aria-label="More tools"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4.8 5.4 9.4 10l-4.6 4.6"/><path d="M10.6 5.4 15.2 10l-4.6 4.6"/></svg></button>
-        <div class="menu menu-ic" id="moreMenu" hidden role="menu">
+        <div class="menu menu-ic" id="moreMenu" hidden role="menu" tabindex="-1">
           <!-- Each row wears the icon of the button it stands in for - a control that lost its
                place must not lose its face. The language row's slot holds the language in force,
                which doubles as the state readout; where it would take you is in the title. -->
@@ -4954,7 +4957,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
      the one step that is whole device pixels at 1x, 1.5x and 2x - verified by rasterising,
      not by reading the numbers. -->
         <button class="btn icbtn" id="settingsBtn" type="button" title="Cards, the intent panel and the category bar" aria-haspopup="true" aria-expanded="false" aria-label="Menu"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4 5h12M4 10h12M4 15h12"/></svg><span class="upd-dot" id="updDot" role="img" data-i18n-skip hidden></span></button>
-        <div class="menu" id="settingsMenu" hidden role="menu">
+        <div class="menu" id="settingsMenu" hidden role="menu" tabindex="-1">
           <!-- The update offer, first while one stands and Later has not put it off: words in update-offer.js. -->
           <div class="menu-upd" id="menuUpdate" role="group" aria-labelledby="menuUpdateT" data-i18n-skip hidden><div class="menu-upd-t" id="menuUpdateT"></div><div class="menu-upd-acts"><button type="button" role="menuitem" data-act="update-see" data-e-open="update" id="menuUpdateSee"></button><button type="button" role="menuitem" data-act="update-later" id="menuUpdateLater"></button></div></div>
           <div class="menu-sep" id="menuUpdateSep" hidden></div>
