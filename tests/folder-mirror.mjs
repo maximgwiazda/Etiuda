@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 142;
+const EXPECTED = 149;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const { offWindows } = nodeRequire("./off-windows.cjs");
@@ -3909,7 +3909,8 @@ async function run() {
   }
 
   /* r5: a directory that does not list is not an empty share (review 24, finding 5). The mirror keeps every file it had,
-     and this desk's older copy is not written back over the share. */
+     and this desk's older copy is not written back over the share. Since N1 the unlisted folder is unknown for itself alone,
+     so the share still answers; a root that does not list still does not. */
   const R5_OWN = "k-" + "ab".repeat(8);
   const R5_OTHER = "k-" + "cd".repeat(8);
   async function unreadDesks(mod, name) {
@@ -3956,15 +3957,15 @@ async function run() {
     const other = path.join(mirror, "desks", R5_OTHER, "notes.ec");
     const mine = path.join(share, "desks", R5_OWN, "mine.ec");
     return {
-      quiet: answers.length === 3 && answers.every(a => a === false),
+      answered: answers.length === 3 && answers.every(a => a === true),
       otherKept: fs.existsSync(other),
       shareKept: fs.existsSync(mine) && fs.readFileSync(mine, "utf8") === "{\"kind\":\"share-newer\"}\n"
     };
   }
   {
     const g = await unreadDesks(syncerMod, "r5a");
-    check(g.quiet && g.otherKept && g.shareKept,
-      "r5a a desks directory that does not list is not an answered empty subtree: the mirror keeps the other desk's file and this desk's older copy is not written over the share: "
+    check(g.answered && g.otherKept && g.shareKept,
+      "r5a a desks directory that does not list is not an answered empty subtree, and the rest of the share still answers: the mirror keeps the other desk's file and this desk's older copy is not written over the share: "
       + JSON.stringify(g));
   }
   {
@@ -4003,15 +4004,15 @@ async function run() {
         ctl.program.applyScan = (msg) => { scans++; return apply(msg); };
         ctl.start();
         const until = Date.now() + 3000;
-        while (answers.length < 3 && Date.now() < until) await new Promise(r => setTimeout(r, 40));
+        while ((answers.length < 3 || scans < 3) && Date.now() < until) await new Promise(r => setTimeout(r, 40));
       } finally {
         if (ctl) ctl.stop();
         try { icacls("icacls", [desks, "/remove:d", user], { windowsHide: true }); } catch { /* the deny may already be gone */ }
       }
       const otherKept = fs.existsSync(path.join(mirror, "desks", R5_OTHER, "notes.ec"));
       const shareKept = fs.readFileSync(path.join(share, "desks", R5_OWN, "mine.ec"), "utf8") === "{\"kind\":\"share-newer\"}\n";
-      check(answers.length >= 3 && answers.every(a => a === false) && scans === 0 && otherKept && shareKept,
-        "r5b the worker posts a desks directory that does not list as no answer, and neither the mirror nor this desk's share file is rewritten: "
+      check(answers.length >= 3 && answers.every(a => a === true) && scans >= 3 && otherKept && shareKept,
+        "r5b the worker lists the share around a desks directory that does not list, and neither the mirror nor this desk's share file is rewritten: "
         + JSON.stringify({ answers: answers.slice(0, 4), scans, otherKept, shareKept }));
     }
   }
@@ -4019,9 +4020,161 @@ async function run() {
   else {
     const planted = await testPlant("listing-unreadable", syncerFile, async (scratch) => {
       const got = await unreadDesks(nodeRequire(scratch), "r5c");
-      return !got.quiet || !got.otherKept || !got.shareKept;
+      return !got.otherKept || !got.shareKept;
     });
     check(planted.ok, "r5c lifting plant:listing-unreadable answers an unreadable desks directory and rewrites the share: " + JSON.stringify(planted));
+  }
+
+  /* n1: a member's folder that does not list is unknown for that folder alone (review 24, N1, Claudius's scoping of finding 5).
+     The rest of the share still syncs, nothing under the folder is judged gone or taken back, the flush writes nothing into it,
+     and once it lists again its content is read as usual. The root itself unreadable stays a share not answering (r5's legs). */
+  const N1_OTHER = "k-" + "c1".repeat(8);
+  const N1_OWN = "k-" + "a1".repeat(8);
+  async function unreadMember(mod, name) {
+    const share = folder(name + "-share");
+    const mirror = folder(name + "-mirror");
+    const past = (Date.now() - 60000) / 1000;
+    const put = (dir, rel, text, at) => {
+      const full = path.join(dir, ...rel.split("/"));
+      fs.mkdirSync(path.dirname(full), { recursive: true });
+      fs.writeFileSync(full, text, "utf8");
+      fs.utimesSync(full, at || past, at || past);
+    };
+    const read = (dir, rel) => { try { return fs.readFileSync(path.join(dir, ...rel.split("/")), "utf8"); } catch { return null; } };
+    const stats = (n) => JSON.stringify({ format: 1, kind: "etiuda-stats-sealed", team: TEAM, n }) + "\n";
+    const cat = (rev) => "{\"format\":2,\"kind\":\"etiuda-catalog\",\"id\":\"fresh\",\"rev\":" + rev + "}\n";
+    const other = "desks/" + N1_OTHER + "/stats.estat", mine = "desks/" + N1_OWN + "/stats.estat";
+    for (const dir of [share, mirror]) { put(dir, "fresh.ec", cat(1)); put(dir, other, stats(1)); put(dir, mine, stats(1)); }
+    const locked = new Set([N1_OTHER, N1_OWN].map(k => path.resolve(share, "desks", k).toLowerCase()));
+    const io = {
+      readdir: (d) => {
+        if (locked.has(path.resolve(d).toLowerCase())) { const err = new Error("unreadable"); err.code = "EPERM"; throw err; }
+        return fs.readdirSync(d);
+      },
+      stat: (p) => fs.statSync(p),
+      readFile: (p, enc) => fs.readFileSync(p, enc),
+      writeFile: (p, data) => fs.writeFileSync(p, data),
+      unlink: (p) => fs.unlinkSync(p),
+      mkdir: (d) => fs.mkdirSync(d, { recursive: true }),
+      exists: (p) => fs.existsSync(p),
+      rename: (a, b) => fs.renameSync(a, b)
+    };
+    const answers = [];
+    const prog = mod.createFolderProgram({
+      team: TEAM, folder: share, mirror, pin: null, checks, own: N1_OWN, io, logger: () => {},
+      onStatus: (s) => answers.push(!!s.answers)
+    });
+    try {
+      prog.syncOnce();
+      put(share, "fresh.ec", cat(2), past + 10);
+      put(share, other, stats(2), past + 10);
+      fs.writeFileSync(path.join(mirror, ...mine.split("/")), stats(3), "utf8");
+      mod.noteOwed(mirror, mine);
+      prog.syncOnce(); prog.syncOnce(); prog.syncOnce();
+      const during = {
+        answers: answers.length === 4 && answers.every(a => a === true),
+        arrived: read(mirror, "fresh.ec") === cat(2),
+        otherKept: read(mirror, other) === stats(1),
+        ownNotWritten: read(share, mine) === stats(1),
+        ownOwed: mod.owedList(mirror).some(x => x.rel === mine)
+      };
+      locked.clear();
+      prog.syncOnce(); prog.syncOnce();
+      const after = {
+        otherRead: read(mirror, other) === stats(2),
+        ownWritten: read(share, mine) === stats(3),
+        owed: mod.owedList(mirror).length
+      };
+      return { during, after };
+    } finally { prog.stop(); }
+  }
+  const n1Green = (g) => Object.values(g.during).every(v => v === true) && g.after.otherRead && g.after.ownWritten && g.after.owed === 0;
+  {
+    const g = await unreadMember(syncerMod, "n1a");
+    check(n1Green(g),
+      "n1a one member's folder that does not list is unknown for that folder alone: a change elsewhere on the share arrives, nothing under"
+      + " the folder is taken for gone, this desk's owed file is not written into its own unlisted folder, and once both list again"
+      + " the member's file is read and the owe is written: " + JSON.stringify(g));
+  }
+  {
+    const aside = offWindows("n1b", "the member folder's refused list is made with icacls, which this leg does not run off Windows");
+    if (aside) skip(aside);
+    else {
+      const share = folder("n1b-share");
+      const mirror = folder("n1b-mirror");
+      const past = (Date.now() - 60000) / 1000;
+      const put = (dir, rel, text, at) => {
+        const full = path.join(dir, ...rel.split("/"));
+        fs.mkdirSync(path.dirname(full), { recursive: true });
+        fs.writeFileSync(full, text, "utf8");
+        fs.utimesSync(full, at || past, at || past);
+      };
+      const read = (dir, rel) => { try { return fs.readFileSync(path.join(dir, ...rel.split("/")), "utf8"); } catch { return null; } };
+      const stats = (n) => JSON.stringify({ format: 1, kind: "etiuda-stats-sealed", team: TEAM, n }) + "\n";
+      const cat = (rev) => "{\"format\":2,\"kind\":\"etiuda-catalog\",\"id\":\"fresh\",\"rev\":" + rev + "}\n";
+      const other = "desks/" + N1_OTHER + "/stats.estat";
+      for (const dir of [share, mirror]) { put(dir, "fresh.ec", cat(1)); put(dir, other, stats(1)); }
+      const memberDir = path.join(share, "desks", N1_OTHER);
+      const user = os.userInfo().username;
+      const icacls = nodeRequire("node:child_process").execFileSync;
+      const answers = [];
+      let scans = 0, ctl = null, denied = false;
+      const out = {};
+      const until = async (pred, ms) => { const t = Date.now() + ms; while (!pred() && Date.now() < t) await new Promise(r => setTimeout(r, 40)); return pred(); };
+      try {
+        icacls("icacls", [memberDir, "/deny", user + ":(RD)"], { windowsHide: true });
+        denied = true;
+        ctl = new syncerMod.FolderSyncerController({
+          team: TEAM, folder: share, mirror, pin: null, checks, own: N1_OWN, pollMs: 80, logger: () => {},
+          onStatus: (s) => answers.push(!!s.answers)
+        });
+        const apply = ctl.program.applyScan;
+        ctl.program.applyScan = (msg) => { scans++; return apply(msg); };
+        ctl.start();
+        await until(() => scans >= 1, 4000);
+        put(share, "fresh.ec", cat(2), past + 10);
+        put(share, other, stats(2), past + 10);
+        const s0 = scans;
+        await until(() => scans >= s0 + 4, 4000);
+        out.answers = answers.length >= 4 && answers.every(a => a === true);
+        out.arrived = read(mirror, "fresh.ec") === cat(2);
+        out.otherKept = read(mirror, other) === stats(1);
+        icacls("icacls", [memberDir, "/remove:d", user], { windowsHide: true });
+        denied = false;
+        await until(() => read(mirror, other) === stats(2), 4000);
+        out.otherRead = read(mirror, other) === stats(2);
+      } finally {
+        if (ctl) ctl.stop();
+        if (denied) { try { icacls("icacls", [memberDir, "/remove:d", user], { windowsHide: true }); } catch { /* the deny may already be gone */ } }
+      }
+      check(out.answers && out.arrived && out.otherKept && out.otherRead,
+        "n1b the worker lists the share around a member's folder that does not list: the change elsewhere arrives, the member's file stays"
+        + " in the mirror, and once the folder lists its new copy is read: " + JSON.stringify(out));
+    }
+  }
+  if (PLANTS_OFF) skip("n1c lifting plant:unread-subtree-scoped makes one member's unlisted folder stop the whole share: NOT RUN");
+  else {
+    const planted = await testPlant("unread-subtree-scoped", syncerFile, async (scratch) => {
+      const g = await unreadMember(nodeRequire(scratch), "n1c");
+      return !g.during.answers && !g.during.arrived;
+    });
+    check(planted.ok, "n1c lifting plant:unread-subtree-scoped makes one member's unlisted folder stop the whole share: " + JSON.stringify(planted));
+  }
+  if (PLANTS_OFF) skip("n1d lifting plant:unread-subtree-kept takes the unlisted member's file for gone: NOT RUN");
+  else {
+    const planted = await testPlant("unread-subtree-kept", syncerFile, async (scratch) => {
+      const g = await unreadMember(nodeRequire(scratch), "n1d");
+      return g.during.answers && !g.during.otherKept;
+    });
+    check(planted.ok, "n1d lifting plant:unread-subtree-kept takes the unlisted member's file for gone: " + JSON.stringify(planted));
+  }
+  if (PLANTS_OFF) skip("n1e lifting plant:unread-not-written writes this desk's owe into its own unlisted folder: NOT RUN");
+  else {
+    const planted = await testPlant("unread-not-written", syncerFile, async (scratch) => {
+      const g = await unreadMember(nodeRequire(scratch), "n1e");
+      return g.during.answers && !g.during.ownNotWritten;
+    });
+    check(planted.ok, "n1e lifting plant:unread-not-written writes this desk's owe into its own unlisted folder: " + JSON.stringify(planted));
   }
 
   /* r4: a junction or a file link on the share is not a file inside it (review 24, finding 4). A real file still syncs. */
@@ -4263,6 +4416,68 @@ async function run() {
       return !got.shareKept;
     });
     check(planted.ok, "r1b lifting plant:flush-share-newer writes this desk's older catalog over the share's newer one: " + JSON.stringify(planted));
+  }
+
+  /* r1c: the put-back case of finding 1. The desk had read the share's newer catalog, the person put an older one back into the
+     mirror, and the flush left the share's copy there (changed). The stamp the desk read before no longer stands for what the
+     mirror holds, so the share's copy is read again: on the main thread's own listing and in the worker. */
+  async function putBackThenScan(mod, name, worker) {
+    const share = folder(name + "-share");
+    const mirror = folder(name + "-mirror");
+    const shareFile = path.join(share, "lamp.ec"), mirrorFile = path.join(mirror, "lamp.ec");
+    fs.writeFileSync(shareFile, R1_NEW, "utf8");
+    const past = (Date.now() - 60000) / 1000;
+    fs.utimesSync(shareFile, past, past);
+    const read = () => { try { return fs.readFileSync(mirrorFile, "utf8"); } catch { return null; } };
+    const said = [];
+    if (!worker) {
+      const prog = mod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: null, checks, logger: (m) => said.push(String(m)) });
+      try {
+        prog.syncOnce();
+        const first = read();
+        fs.writeFileSync(mirrorFile, R1_KEPT, "utf8");
+        mod.noteOwed(mirror, "lamp.ec");
+        prog.syncOnce();
+        prog.syncOnce();
+        return { first: first === R1_NEW, back: read() === R1_NEW, shareKept: fs.readFileSync(shareFile, "utf8") === R1_NEW,
+          owed: mod.owedList(mirror).length, told: said.some(l => l.indexOf("newer copy") >= 0) };
+      } finally { prog.stop(); }
+    }
+    let scans = 0;
+    const ctl = new mod.FolderSyncerController({ team: TEAM, folder: share, mirror, pin: null, checks, pollMs: 80, logger: (m) => said.push(String(m)) });
+    const apply = ctl.program.applyScan.bind(ctl.program);
+    ctl.program.applyScan = (msg) => { scans++; return apply(msg); };
+    const until = async (pred, ms) => { const t = Date.now() + ms; while (!pred() && Date.now() < t) await new Promise(r => setTimeout(r, 30)); return pred(); };
+    try {
+      ctl.start();
+      await until(() => read() === R1_NEW, 4000);
+      const first = read();
+      fs.writeFileSync(mirrorFile, R1_KEPT, "utf8");
+      ctl.owe("lamp.ec");
+      await until(() => !ctl.owing(), 4000);
+      const s0 = scans;
+      await until(() => scans >= s0 + 4, 4000);
+      return { first: first === R1_NEW, back: read() === R1_NEW, shareKept: fs.readFileSync(shareFile, "utf8") === R1_NEW,
+        owed: mod.owedList(mirror).length, told: said.some(l => l.indexOf("newer copy") >= 0), scans: scans - s0 };
+    } finally { ctl.stop(); }
+  }
+  {
+    const main = await putBackThenScan(syncerMod, "r1c-main", false);
+    const worker = await putBackThenScan(syncerMod, "r1c-worker", true);
+    const ok = (g) => g.first && g.back && g.shareKept && g.owed === 0 && g.told;
+    check(ok(main) && ok(worker) && worker.scans >= 4,
+      "r1c put back, flush, scan: the share's newer catalog is left there and read into the mirror again, on the main thread's listing and the worker's: "
+      + JSON.stringify({ main, worker }));
+  }
+  if (PLANTS_OFF) skip("r1d lifting plant:changed-forgets leaves the put-back older catalog in the mirror for good: NOT RUN");
+  else {
+    const planted = await testPlant("changed-forgets", syncerFile, async (scratch) => {
+      const dir = syncerCopy(scratch, "syncer.cjs");
+      const main = await putBackThenScan(nodeRequire(path.join(dir, "syncer.cjs")), "r1d-main", false);
+      const worker = await putBackThenScan(nodeRequire(path.join(dir, "syncer.cjs")), "r1d-worker", true);
+      return main.first && !main.back && worker.first && !worker.back;
+    });
+    check(planted.ok, "r1d lifting plant:changed-forgets leaves the put-back older catalog in the mirror for good: " + JSON.stringify(planted));
   }
 
   /* r6: a refused file is staged again once its stamp is old enough, and a third scan does not copy it again (review 24, finding 6). */

@@ -140,6 +140,29 @@ function directoryNames(readDir, dir) {
   if (unread) return null; /* plant:listing-unreadable */
   return entries;
 }
+/* A subtree below the share's root that does not list is unknown for itself alone (review 24, N1): the walk names it in
+   `out.unread` and goes on, so one member's folder this account cannot list does not stop the whole team's sync. Nothing
+   under it is judged gone, nothing is staged from it, and the flush writes nothing into it. False where the walk must fail
+   whole instead. The root is never scoped here: a root that does not list is a share not answering. */
+function scopeUnread(out, rel) {
+  let scoped = false;
+  scoped = true; /* plant:unread-subtree-scoped */
+  if (scoped) (out.unread || (out.unread = [])).push(normRel(rel));
+  return scoped;
+}
+/* A listed subtree's files and its own unknown subtrees, taken into the walk above it. */
+function takeInner(out, inner) {
+  for (const [k, v] of inner.entries()) out.set(k, v);
+  if (inner.unread) for (const u of inner.unread) (out.unread || (out.unread = [])).push(u);
+}
+/* The first folder on the way to `parts` that is there and does not list, by its error code, or "". */
+function unreadOnTheWay(folder, parts, io) {
+  for (let i = 1; i < parts.length; i++) {
+    try { io.readdir(path.join(folder, ...parts.slice(0, i))); }
+    catch (e) { return e && e.code === "ENOENT" ? "" : ((e && e.code) || "EACCES"); }
+  }
+  return "";
+}
 
 /* True when a path under the share root meets a link, or a name that is neither a directory nor a file. The root is the
    folder the desk chose, so a link there is that folder. A missing leaf is not a link: a new file may be written there
@@ -430,6 +453,13 @@ function flushOwed(folder, mirror, items, io, own) {
     /* A junction or a file link is not a place this desk writes: the owe stays and the share's other files still sync. */
     if (linkInside(folder, dest)) {
       out.push({ rel, sha: del ? null : it.sha, del, ok: false, code: "ELOOP" });
+      continue;
+    }
+    /* A folder on the way that does not list is unknown, so nothing is written into it or removed from it: the owe stays. */
+    let unknown = "";
+    unknown = unreadOnTheWay(folder, parts, io); /* plant:unread-not-written */
+    if (unknown) {
+      out.push({ rel, sha: del ? null : it.sha, del, ok: false, code: unknown });
       continue;
     }
     let heldLock = null;
@@ -831,11 +861,16 @@ function createFolderProgram(opts) {
 
   /* ---- the outbox and the floors, read afresh at each use: the main thread may note a debt with noteOwed between scans */
   const saidWait = new Map(); // relPath -> the code last said for it
+  const unreadSaid = new Set(); // the unlisted subtrees already said, said again only after one listed
   function owe(rel) { return noteOwed(mirror, rel, io); }
   function owed() { return owedList(mirror, io); }
   function isOwed(rel) { return owedAt(mirror, rel, io); }
   function landed(results) {
     if (!Array.isArray(results) || !results.length) return;
+    /* A copy the share holds newer than this desk's was left there, and the mirror holds this desk's bytes now, so the stamp
+       read before no longer stands for what the mirror holds: forgotten here and in the worker (held's forget), so the share's
+       copy is read again at the next listing (review 24, finding 1's put-back case). Forgetting costs one read at most. */
+    for (const r of results) if (r && r.changed && r.rel) { knownMtimes.delete(r.rel); dropped.add(r.rel); } /* plant:changed-forgets */
     let decided = false;
     const clearRels = [];
     const updateRels = [];
@@ -1076,12 +1111,12 @@ function createFolderProgram(opts) {
       if (st.isDirectory && st.isDirectory()) {
         if (sub === "" && (name === "desks" || name === "invites" || name === "catalog-asks")) {
           const inner = walkFolder(baseDir, name);
-          if (inner == null) return null;
-          for (const [k, v] of inner.entries()) out.set(k, v);
+          if (inner == null) { if (scopeUnread(out, name)) continue; return null; }
+          takeInner(out, inner);
         } else if (sub === "desks") {
           const inner = walkFolder(baseDir, path.join(sub, name));
-          if (inner == null) return null;
-          for (const [k, v] of inner.entries()) out.set(k, v);
+          if (inner == null) { if (scopeUnread(out, rel)) continue; return null; }
+          takeInner(out, inner);
         }
       } else if (st.isFile && st.isFile()) {
         if (isAllowedPath(rel)) {
@@ -1721,7 +1756,15 @@ function createFolderProgram(opts) {
       return null;
     };
     let faultMoved = false;
+    /* A subtree the listing could not read is unknown: nothing in it is judged gone or taken back, and its counts start again. */
+    const unread = (Array.isArray(scanData.unread) ? scanData.unread : []).map(normRel);
+    const unknownAt = (rel) => { const r = normRel(rel); return unread.some(u => r === u || r.startsWith(u + "/")); };
+    for (const u of unread) if (!unreadSaid.has(u)) { unreadSaid.add(u); logger("etiuda: " + path.join(folder, u) + " does not list, so nothing in it is judged until it does"); }
+    for (const u of Array.from(unreadSaid)) if (unread.indexOf(u) < 0) unreadSaid.delete(u);
     for (const relPath of currentMirrorFiles) {
+      let unknown = false;
+      unknown = unknownAt(relPath); /* plant:unread-subtree-kept */
+      if (unknown) { missingCount.delete(relPath); backSeen.delete(normRel(relPath)); continue; }
       let mine = false;
       mine = ownRel(relPath); /* plant:own-never-unlinked */
       if (mine) {
@@ -1753,7 +1796,7 @@ function createFolderProgram(opts) {
     /* The mark that this mirror has taken one answered listing: until then a desk under machine policy reads its folder. */
     let primed = false;
     try {
-      if (!io.exists(path.join(mirror, PRIMED_NAME))) { io.writeFile(path.join(mirror, PRIMED_NAME), ""); primed = true; }
+      if (!unread.length && !io.exists(path.join(mirror, PRIMED_NAME))) { io.writeFile(path.join(mirror, PRIMED_NAME), ""); primed = true; }
     } catch {}
     if (applied.length > 0 || primed || faultMoved) {
       onChange(primed ? { team, applied, primed: true } : { team, applied });
@@ -1827,6 +1870,7 @@ function createFolderProgram(opts) {
     return applyScan({
       answers: true,
       listing: Array.from(foundFiles.entries()),
+      unread: foundFiles.unread || [],
       staged
     });
   }
@@ -1913,6 +1957,7 @@ class FolderSyncerController {
           this.flushCheck();
         } else if (msg.type === "landed") {
           this.program.landed(msg.results);
+          this.sendHeld();
           this.flushCheck();
         } else if (msg.type === "need-own") {
           if (this.worker && !this.stopped) this.worker.postMessage({ type: "own", own: this.ownNow() });
@@ -2143,6 +2188,8 @@ module.exports = {
   folderMirrorOf,
   isAllowedPath,
   directoryNames,
+  scopeUnread,
+  takeInner,
   linkInside,
   noteOwed,
   owedAt,

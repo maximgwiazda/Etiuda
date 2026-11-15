@@ -61,14 +61,15 @@ function walkFolder(baseDir, sub = "") {
       continue;
     }
     if (st.isDirectory && st.isDirectory()) {
+      /* A subtree that does not list is unknown for itself alone (syncer.cjs, scopeUnread); the root's walk still answers null. */
       if (sub === "" && (name === "desks" || name === "invites" || name === "catalog-asks")) {
         const inner = walkFolder(baseDir, name);
-        if (inner == null) return null;
-        for (const [k, v] of inner.entries()) out.set(k, v);
+        if (inner == null) { if (S.scopeUnread(out, name)) continue; return null; }
+        S.takeInner(out, inner);
       } else if (sub === "desks" && /^k-[0-9a-f]{16}$/.test(name)) {
         const inner = walkFolder(baseDir, path.join(sub, name));
-        if (inner == null) return null;
-        for (const [k, v] of inner.entries()) out.set(k, v);
+        if (inner == null) { if (S.scopeUnread(out, rel)) continue; return null; }
+        S.takeInner(out, inner);
       }
     } else if (st.isFile && st.isFile()) {
       if (isAllowedPath(rel)) {
@@ -216,6 +217,7 @@ function syncOnce() {
         folder,
         answers: true,
         listing: Array.from(foundFiles.entries()),
+        unread: foundFiles.unread || [],
         staged
       });
     }
