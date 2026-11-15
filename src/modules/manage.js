@@ -219,7 +219,7 @@ function mgCardRow(m, maxSent){
   return '<div class="manage-row mg-card mg-card-row' + (hid ? " is-hidden" : "") + '" data-cardrow="' + esc(m.id) + '"' +
       ' data-band="' + esc(mgCardBand(m)) + '" title="' + esc(mgCardDragTip()) + '">' +
     '<span class="lw-nm">' +
-      '<span class="mg-card-lab">' + esc(cardTitle(m) || "") + '</span>' +
+      '<span class="mg-card-lab" data-i18n-skip>' + esc(cardTitle(m) || "") + '</span>' +
       (cardCommits(m) ? stampHtml("mg-stamp") : "") +
     '</span>' +
     '<span class="lw-c op lw-h-op cut-peek">' + openHtml + '</span>' +
@@ -459,7 +459,7 @@ function mgCatTree(){
        updates the category directly. Fixed / orphan categories use a span. */
     const name=(fixed || k==="__orphan")
       ? '<span class="mg-cat-fixed">'+esc(label)+'</span>'
-      : '<textarea class="mg-cat-lab2" rows="1" data-rename="'+esc(k)+'" spellcheck="false" autocomplete="off" aria-label="'+esc(t("Category name"))+'">'+esc(label)+'</textarea>';
+      : '<textarea class="mg-cat-lab2" rows="1" data-rename="'+esc(k)+'" spellcheck="false" autocomplete="off" aria-label="'+esc(t("Category name"))+'" data-i18n-skip>'+esc(label)+'</textarea>';
     /* × only on an empty category - the same rule the header pill uses, so no route anywhere
        in the UI deletes a category with cards still in it. */
     const x=(!n && k!=="__orphan")
@@ -969,7 +969,7 @@ function mgIntentRow(i,catOf,linked,intentCardsMap){
   } else {
     chipsHtml=cardList.map(o=>{
       const title=(typeof cardTitle==="function"?cardTitle(o.m):"")||"";
-      return '<button type="button" class="lw-chip" data-card-id="'+esc(o.m.id)+'" title="'+esc(t("Opens this card's editor"))+'" aria-label="'+esc(title)+' · '+esc(t("Opens this card's editor"))+'">'+esc(title)+'</button>';
+      return '<button type="button" class="lw-chip" data-card-id="'+esc(o.m.id)+'" title="'+esc(t("Opens this card's editor"))+'" aria-label="'+esc(title)+' · '+esc(t("Opens this card's editor"))+'"><span data-i18n-skip>'+esc(title)+'</span></button>';
     }).join("");
   }
 
@@ -1263,9 +1263,9 @@ function roleWheelHtml(names, markedName){
   }
   return '<div class="lw-wheel">'+
     '<div class="lw-drum">'+
-      '<span class="rd-prev p">'+esc(prev)+'</span>'+
-      '<span class="rd-cur c">'+esc(cur)+'</span>'+
-      '<span class="rd-next q">'+esc(next)+'</span>'+
+      '<span class="rd-prev p" data-i18n-skip>'+esc(prev)+'</span>'+
+      '<span class="rd-cur c" data-i18n-skip>'+esc(cur)+'</span>'+
+      '<span class="rd-next q" data-i18n-skip>'+esc(next)+'</span>'+
     '</div>'+
     '<div class="lw-drumfield">'+esc(t("customer's name"))+'</div>'+
   '</div>';
@@ -1278,7 +1278,7 @@ function mgWhoRowsHtml(names, markedName){
     const takeTitle = t("Take {NAME} off the wheel").replace("{NAME}", name);
     return '<div class="lw-name'+on+'" tabindex="0" role="listitem" data-wrow="'+esc(name)+'">'+
       '<span class="g" aria-label="'+esc(moveTitle)+'" title="'+esc(moveTitle)+'">'+ICON_GRIP+'</span>'+
-      '<span class="n">'+esc(name)+'</span>'+
+      '<span class="n" data-i18n-skip>'+esc(name)+'</span>'+
       '<button type="button" class="lw-del" aria-label="'+esc(takeTitle)+'" title="'+esc(takeTitle)+'">'+ICON_REMOVE+'</button>'+
     '</div>';
   }).join("");
@@ -1304,8 +1304,8 @@ function mgWhoSideHtml(names, markedName){
       const title = cardTitle(m);
       const filled = fillCardReply(m, markedName);
       return '<div class="lw-ct" role="button" tabindex="0" data-card-id="'+esc(m.id)+'" title="'+esc(t("Opens this card's editor"))+'" aria-label="'+esc(t("Opens this card's editor"))+'">'+
-        '<div class="t">'+esc(title)+'</div>'+
-        '<div class="r">'+filled+'</div>'+
+        '<div class="t" data-i18n-skip>'+esc(title)+'</div>'+
+        '<div class="r" data-i18n-skip>'+filled+'</div>'+
       '</div>';
     }).join("")+
   '</div>';
