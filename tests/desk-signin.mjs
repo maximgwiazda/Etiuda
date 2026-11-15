@@ -49,11 +49,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 164;
+const PLANTS = 165;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 148 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 149 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2826,6 +2826,20 @@ CASES.landCap = async s => {
   const after = await fetchLoop(loop.port, at);
   return back.status === 303 && page.status === 200 && landIs(page.body, "back", "en") && took >= 100 && took < 3000 && typeof after.status !== "number";
 };
+/* Cancel after the reply, before the desk has landed: the held GET is answered the cancelled page and the loopback closes at once,
+   where close() alone would leave it to the cap. */
+CASES.landCancel = async s => {
+  const loop = await s.signinListen(http, landPage(s), 10000, stateIs("st-9"), 5000);
+  const back = await fetchLoop(loop.port, "/?state=st-9&code=c9");
+  const at = String(back.headers.location || "");
+  const asked = fetchLoop(loop.port, at);
+  await tick(60);
+  if (typeof loop.cancel === "function") loop.cancel();
+  const page = await asked;
+  await tick(30);
+  const after = await fetchLoop(loop.port, "/other");
+  return back.status === 303 && page.status === 200 && landIs(page.body, "cancelled", "en") && typeof after.status !== "number";
+};
 /* A stray before the reply is answered 400 with the earlier tab's page and the wait goes on; after the reply, another GET of "/" and
    any other path are 404 and the landing still serves its path. */
 CASES.landStray = async s => {
@@ -3193,6 +3207,7 @@ const LEGS = [
   ["ds24a", "landSeat", "the sign-in's own reply is answered 303 to a path of the loopback's own with no code, no state and no query; landed, that path's one GET is the seat's page in the copywriter's words under a policy that fetches, frames and runs nothing, and the loopback closes"],
   ["ds24b", "landHeld", "the clean path asked before the desk knows is held unanswered, and land() answers it with that outcome"],
   ["ds24c", "landCap", "nothing landed within the cap: the held GET is answered the neutral page and the loopback closes"],
+  ["ds24k", "landCancel", "Cancel after the reply and before the landing answers the held GET the cancelled page and closes the loopback at once"],
   ["ds24d", "landStray", "a stray state is answered 400 with the earlier tab's page and the wait goes on; after the reply, another GET of / and any other path or query are 404 and the landing still serves"],
   ["ds24e", "landOnce", "a second GET of the clean path is refused at once, and the first still gets its page"],
   ["ds24f", "landKinds", "each end tells its landing: cancelled (access_denied, AADSTS65004), the organisation (consent_required, AADSTS65001, 90094), could not be finished for any other end the desk knows (the provider's refusal, a code it no longer takes, the service refusing or away); a seat, no seat yet (no certificate, waiting, full)"],
@@ -3699,6 +3714,7 @@ if (!PLANTS_OFF) {
   await plant("dsp120", ["res.writeHead(303, Object.assign({ location: clean, \"content-length\": 0 }, SIGNIN_LOOP_HEADERS)); /* plant:land-redirect */",
     "res.writeHead(303, Object.assign({ location: clean + \"?\" + query, \"content-length\": 0 }, SIGNIN_LOOP_HEADERS));"], "landSeat");
   await plant("dsp121", ["if (clean && !served && req.method === \"GET\" && u === clean) { /* plant:land-once */", "if (clean && req.method === \"GET\" && u === clean) {"], "landOnce");
+  await plant("dsp167", ["cancel: () => { /* plant:loop-cancel */", "cancel: () => { return; /* plant:loop-cancel */"], "landCancel");
   await plant("dsp122", ["timer = setTimeout(() => { if (!landed) landed = \"back\"; if (held)", "timer = setTimeout(() => { if (held)"], "landCap");
   await plant("dsp123", ["return why === \"signin-notallowed\" ? \"org\" : \"appfail\"; /* plant:land-org */", "return \"appfail\";"], "landKinds");
   await plant("dsp124", ["if (ans.ok === true) return ans.cert ? \"seat\" : \"noseat\"; /* plant:land-seat */", "if (ans.ok === true) return \"seat\";"], "landKinds");

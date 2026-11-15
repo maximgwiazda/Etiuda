@@ -9909,12 +9909,16 @@ function signinLandingCsp(html) {
   return "default-src 'none'; style-src " + (hashes.length ? hashes.join(" ") : "'none'") + "; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 }
 const SIGNIN_LAND_MS = 8 * 1000;
+/* Where Microsoft's folder is asked apart after the sign-in, the landing waits for the code's exchange, the seat and the folder's quiet
+   refresh, each bounded by SIGNIN_TIMEOUT_MS, so the window can still be sent on for the folder. */
+const SIGNIN_FOLDER_LAND_MS = SIGNIN_LAND_MS + 3 * SIGNIN_TIMEOUT_MS;
 const SIGNIN_LOOP_HEADERS = Object.freeze({ "cache-control": "no-store", "referrer-policy": "no-referrer", "x-content-type-options": "nosniff", connection: "close" });
 /* The loopback the browser comes back to, opened only for one sign-in: 127.0.0.1 at a port the system picks. The GET of "/" whose
    query `takes(query)` owns is answered 303 to a path made for this sign-in, so no code or state stays in the address bar; any other
    GET of "/" 400 with `pageFor("earlier")` and ignored; any other path or verb 404. Before that GET it closes after `ms` or on close(),
    and `caught` rejects, with {closed: true} for a close. After it, land(kind) answers that path's one GET with `pageFor(kind)`, the
-   GET held until then; at `landMs` it is answered `pageFor("back")` and the loopback closes. Resolves {port, caught, close, land, onward}. */
+   GET held until then; at `landMs` it is answered `pageFor("back")` and the loopback closes. cancel() closes it at any point, a held GET
+   answered `pageFor("cancelled")`. Resolves {port, caught, close, cancel, land, onward}. */
 function signinListen(httpMod, pageFor, ms, takes, landMs) {
   return new Promise((resolve, reject) => {
     let done = false, timer = null, up = false, caughtYes = null, caughtNo = null, clean = "", landed = "", held = null, served = false, next = "", sent = false;
@@ -9983,7 +9987,13 @@ function signinListen(httpMod, pageFor, ms, takes, landMs) {
       timer = setTimeout(() => { if (!done) { done = true; shut(); caughtNo({ closed: false }); } }, ms === undefined ? SIGNIN_WAIT_MS : ms);
       if (timer.unref) timer.unref();
       resolve({ port: server.address().port, caught: caught, land: land, onward: onward,
-        close: () => { if (!done) { done = true; shut(); caughtNo({ closed: true }); } } });
+        close: () => { if (!done) { done = true; shut(); caughtNo({ closed: true }); } },
+        cancel: () => { /* plant:loop-cancel */
+          if (!done) { done = true; caughtNo({ closed: true }); }
+          if (!landed) landed = "cancelled";
+          if (held) { serve(held, 200, landed); held = null; }
+          shut();
+        } });
     });
   });
 }
@@ -10756,7 +10766,7 @@ function signinPageHtml(kind) {
 }
 function signinIo(run) {
   return {
-    listen: (pageFor, takes) => signinListen(http, pageFor, SIGNIN_WAIT_MS, takes).then(l => { run.loop = l; return l; }),
+    listen: (pageFor, takes) => signinListen(http, pageFor, SIGNIN_WAIT_MS, takes, run.landMs).then(l => { run.loop = l; return l; }),
     /* The page is told the provider's page before the browser is asked, so a browser that does not open (Linux resolves
        the system browser call all the same) leaves the person its link to paste. */
     openPage: url => { if (!signinPageOk(url)) return false; run.url = url; tellSignin(); return Promise.resolve(handOut(url)).then(() => true); }, /* plant:signin-open */
@@ -10827,6 +10837,7 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
   /* The folder's token the run hands is kept only once this sign-in is taken, so a refused account's never stands for the seated one. */
   let folderGot = null;
   const run = { loop: null, provider: p.id, url: "" }, io = Object.assign(signinIo(run), { folderToken: t => { folderGot = t; } });
+  if (io.store === true && signinFolderApart(p.id)) run.landMs = SIGNIN_FOLDER_LAND_MS; /* plant:folder-land-ms */
   signinBusy = run;
   signinSaid = "";
   tellSignin();
@@ -10850,7 +10861,8 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
     } else { signinSaid = got.reason; landing = signinLanding(got, undefined, managed); }
   } catch { signinSaid = "unreached"; }
   finally {
-    signinBusy = null;
+    /* The folder's step after the sign-in (signinFolderAfter) keeps the sign-in in progress until it lands. */
+    if (!run.after) signinBusy = null; /* plant:folder-busy */
     /* The browser's landing page, held at the loopback until now, says how it ended. */
     if (run.loop && typeof run.loop.land === "function") run.loop.land(landing); /* plant:land-wired */
   }
@@ -10869,7 +10881,7 @@ ipcMain.handle("etiuda:signin-again", (e) => {
 ipcMain.handle("etiuda:signin-stop", (e) => {
   if (!fromEngine(e)) return false;
   const run = signinBusy;
-  if (run && run.loop) run.loop.close();
+  if (run && run.loop) { if (typeof run.loop.cancel === "function") run.loop.cancel(); else run.loop.close(); } /* plant:stop-cancel */
   return !!run;
 });
 /* Sign out: this computer forgets the account, its tokens, code and certificate, takes its seat.json out of the team's folder and
@@ -11393,9 +11405,12 @@ function signinFolderAfter(run, io, p, deskKey, got) {
   if (!loop || typeof loop.onward !== "function") { storeTurn(); return; }
   let kind = "";
   run.loop = Object.assign({}, loop, { land: k => { kind = String(k || ""); } });
+  run.after = true;
+  run.url = "";
   const stepIo = { rand: io.rand, trace: io.trace, tokenAsk: io.tokenAsk, folderToken: t => { if (signinState().held === heldAt) storeTokenTake(t); } };
   signinFolderAsk(stepIo, p, loop, deskKey, got, Date.now).catch(() => "").then(folder => {
     loop.land(folder || kind || "back"); /* plant:folder-land */
+    if (signinBusy === run) { signinBusy = null; tellSignin(); }
     if (signinState().held === heldAt) storeTurn();
   });
 }

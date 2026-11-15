@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 96;
+const EXPECTED = 102;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -104,6 +104,7 @@ function worldOf(o) {
       }
       /* An outage at the token address: every refresh (w.tokenDown), or only one asking the folder's scope (w.folderDown). */
       const folderAsked = /Files\.ReadWrite\.AppFolder/.test(new URLSearchParams(body).get("scope") || "");
+      if (w.folderDelay && folderAsked) await new Promise(a => setTimeout(a, w.folderDelay));
       if (w.tokenDown || (w.folderDown && folderAsked)) return json(w.tokenDown || w.folderDown, { error: "temporarily_unavailable" });
       /* As Microsoft answers a refresh asking a scope the person never consented to. */
       if (opt.refuseFolder && /Files\.ReadWrite\.AppFolder/.test(new URLSearchParams(body).get("scope") || ""))
@@ -640,6 +641,7 @@ function browserOf(world, mode) {
     for (let i = 0; i < 3 && r.status === 303 && r.location.indexOf(MS_AUTH + "?") === 0; i++) {
       b.urls.push(r.location);
       const q2 = new URL(r.location).searchParams;
+      if (mode.holdFolder) { b.atFolder = true; await mode.holdFolder; }
       r = await loopGet(port, "/?" + answer(q2, true) + "&state=" + encodeURIComponent(q2.get("state")));
       if (r.status === 303) r = await loopGet(port, r.location);
       b.again.push(await loopGet(port, "/?code=again&state=" + encodeURIComponent(q2.get("state"))));
@@ -652,6 +654,7 @@ function browserOf(world, mode) {
 /* One press of Microsoft's button through the shell's own handler, sync on unless `mode.store` says otherwise. */
 async function signinFlow(src, mode) {
   const world = worldOf({ refuseFolder: mode.quiet !== true });
+  world.folderDelay = mode.folderDelay || 0;
   const b = browserOf(world, mode);
   const shell = boot(src, { world, lab: labOf(), store: mode.store, browser: u => { setTimeout(() => { b.last = b.go(u).catch(() => {}); }, 5); } });
   const { T } = shell;
@@ -880,6 +883,51 @@ async function madeOutageShellScene(src) {
   const ok = !!rt && !!first && first.state === "paused" && kept.made === rt && !!n && n.state === "on" && team && replace >= 2 && !after.made;
   return { ok, detail: brief({ first: first && first.state + "/" + first.why, named: kept.made === rt, then: n && n.state + "/" + n.why, team, replaceAsked: replace, nameLeft: !!after.made }) };
 }
+/* (f7) THE FOLDER'S STEP IS STILL THE SIGN-IN: while the browser, sent on for the folder, has not answered, the page is told the sign-in
+   is in progress and Cancel closes the loopback, so the browser's late answer reaches nothing and no folder token is kept. */
+async function folderCancelScene(src) {
+  let release = null;
+  const mode = { holdFolder: new Promise(a => { release = a; }) };
+  const world = worldOf({ refuseFolder: true }), b = browserOf(world, mode);
+  const shell = boot(src, { world, lab: labOf(), browser: u => { setTimeout(() => { b.last = b.go(u).catch(() => {}); }, 5); } });
+  const T = shell.T, e = { senderFrame: { parent: null, url: "file:///desk/engine/etiuda.html" }, returnValue: undefined };
+  shell.ipc.on["etiuda:signin-click"](e, "microsoft");
+  await shell.ipc.handle["etiuda:signin"](e, "microsoft");
+  await until(() => b.atFolder === true, 8000);
+  const e2 = Object.assign({}, e);
+  shell.ipc.on["etiuda:signin-state"](e2);
+  const busy = e2.returnValue ? e2.returnValue.busy : "";
+  const stopped = await shell.ipc.handle["etiuda:signin-stop"](e);
+  mode.holdFolder = null;
+  release();
+  await until(() => b.pages.length > 0, 8000);
+  await new Promise(a => setTimeout(a, 60));
+  const a = T.get().storeAccess, reached = b.pages.length ? b.pages[0].status : -1;
+  const ok = !!T.signinState().held && busy === "microsoft" && stopped === true && reached === 0 && !(a && a.token);
+  return { ok, detail: brief({ seated: !!T.signinState().held, busy, stopped, lateAnswerReached: reached, folderToken: !!(a && a.token) }) };
+}
+/* (f7q) Cancel while the folder's quiet refresh is still out, the code already back: the loopback closes at once, so the window is never
+   sent on for the folder. */
+async function folderCancelQuietScene(src) {
+  const world = worldOf({ refuseFolder: true }), b = browserOf(world, {});
+  world.folderDelay = 1500;
+  const shell = boot(src, { world, lab: labOf(), browser: u => { setTimeout(() => { b.last = b.go(u).catch(() => {}); }, 5); } });
+  const T = shell.T, e = { senderFrame: { parent: null, url: "file:///desk/engine/etiuda.html" }, returnValue: undefined };
+  shell.ipc.on["etiuda:signin-click"](e, "microsoft");
+  await shell.ipc.handle["etiuda:signin"](e, "microsoft");
+  const stopped = await shell.ipc.handle["etiuda:signin-stop"](e);
+  await until(() => b.pages.length > 0, 8000);
+  await new Promise(a => setTimeout(a, 1700));
+  const ok = !!T.signinState().held && stopped === true && b.urls.length === 1;
+  return { ok, detail: brief({ seated: !!T.signinState().held, stopped, browserSteps: b.urls.length, page: b.pages.length ? b.pages[0].status : -1 }) };
+}
+/* (f8) A folder step slower than the plain landing's cap: the quiet refresh taking longer than eight seconds and refused, the window is
+   still sent on for the folder, which lands its own page and opens the store. */
+async function folderSlowScene(src) {
+  const r = await signinFlow(src, { folderDelay: 8600 });
+  const ok = !!r.held && !!r.held.cert && r.b.urls.length === 2 && folderPage(r.page, "on") && !!r.now && r.now.state === "on";
+  return { ok, detail: brief({ seat: !!(r.held && r.held.cert), browserSteps: r.b.urls.length, page: r.page.status + (folderPage(r.page, "on") ? " folder-on" : ""), state: r.now && r.now.state + "/" + r.now.why }) };
+}
 async function consentSwitchScene(src) {
   const r = await signinFlow(src, { refuse: DECLINED });
   const ungiven = !!r.now && r.now.why === "ungiven";
@@ -1024,6 +1072,9 @@ const LEGS = [
   ["g2r", keepRefreshScene, "the switch's Google consent sign-in answered with no refresh token keeps the refresh token already sealed for the same account"],
   ["t1", outageScene, "the token address answering 503 or 429 to the look's refresh, or to a renewal's folder refresh, keeps no refusal for the folder: the look says offline and the store is on once it answers"],
   ["gm", madeOutageShellScene, "a store made while the licence service was out is named in store.json and made at the relay as the replacement once the service answers"],
+  ["f7", folderCancelScene, "while the browser sent on for the folder has not answered, the sign-in is in progress to the page and Cancel closes the loopback, so a late answer keeps no folder token"],
+  ["f7q", folderCancelQuietScene, "Cancel while the folder's quiet refresh is out, the code already back, closes the loopback at once: the window is never sent on"],
+  ["f8", folderSlowScene, "a folder step slower than eight seconds still sends the window on for the folder, lands its page and opens the store"],
   ["fa1", refusedAccountScene, "a second Google sign-in whose seat is refused leaves the folder's token the seated account's"],
   ["fa2", overAnotherScene, "an account seated straight over another, with no folder step of its own, is never handed the other's folder token: its look asks its own"],
   ["w1", s => anotherScene(s, "look", true), "person A synced and signed out, which leaves no store keys here; person B seated on the same profile with an empty folder: B's look writes nothing of A's K or S into B's folder and makes B's own store"],
@@ -1083,6 +1134,9 @@ const PLANTS = [
   ["gc", swap("function storeConflicts() { return storeSyncView().kept; } /* plant:store-conflicts */", "function storeConflicts() { return 0; } /* plant:store-conflicts */"), "the row counts no conflict"],
   ["gs", swap("  storeSyncStop(); /* plant:store-set-stop */\n", ""), "the switch leaves the sync running"],
   ["gr", swap("      room: storeRoom, /* plant:store-room */\n", ""), "the store's channel tells the row nothing"],
+  ["f7", swap("    if (!run.after) signinBusy = null; /* plant:folder-busy */", "    signinBusy = null; /* plant:folder-busy */"), "the sign-in ends before its folder step, so Cancel cannot reach it"],
+  ["f7q", swap("{ if (typeof run.loop.cancel === \"function\") run.loop.cancel(); else run.loop.close(); } /* plant:stop-cancel */", "run.loop.close(); /* plant:stop-cancel */"), "Cancel closes nothing once the code is back"],
+  ["f8", swap("  if (io.store === true && signinFolderApart(p.id)) run.landMs = SIGNIN_FOLDER_LAND_MS; /* plant:folder-land-ms */", ""), "the plain landing's cap cuts the folder step"],
   ["gm", swap("  const made = look.state === \"paused\" && look.made === true && look.keys ? look.keys.rt : look.state === \"on\" ? \"\" : storeState().made; /* plant:store-made-kept */", "  const made = \"\"; /* plant:store-made-kept */"), "the store made here is not named, so the next look forgets it"],
   ["t1", swap(" || signinTransient(res)) return; /* plant:folder-transient */", ") return; /* plant:folder-transient */"), "an outage at the token address kept as the folder refused"],
   ["t1", swap("  if (signinTransient(res)) return { why: \"offline\" };", ""), "the look's refresh answered by an outage read as consent never given"],
