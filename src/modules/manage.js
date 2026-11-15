@@ -105,7 +105,7 @@ function mgDay(ms){
 
 function stripLeadingGreetingAndPax(s){
   let str = String(s || "").trim();
-  return str.replace(/^(?:\{(?:GREET|PAX)(?::[^{}]*)?\}[,\s.!?\-–—]*\s*)+/i, "");
+  return str.replace(/^(?:\{(?:GREET|PAX)(?::[^{}]*)?\}[,\s.!?\-\u2013\u2014]*\s*)+/i, "");
 }
 
 function mgCardOpensWithText(m){
