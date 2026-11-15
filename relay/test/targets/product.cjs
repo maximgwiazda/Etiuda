@@ -138,6 +138,13 @@ function createTarget(limits) {
 
   const teamPath = (rt, rest) => "/relay/v1/t/" + rt + "/" + rest;
 
+  /* Every key goes to the relay as the harness names it: a desk by its branch id, a lead by its own (relay/core.cjs
+     deskKeyMatches), so a raw public half an attack hands in reaches the relay as it is. The public half of a key named by
+     its branch id is kept from where the harness hands it over (an enrol, a seal, a create). */
+  const pubOfName = new Map();
+  const notePub = (keyId, pub) => { if (keyId && /^[0-9a-f]{64}$/.test(String(pub || ""))) pubOfName.set(String(keyId), String(pub)); };
+  const pubOf = id => pubOfName.get(String(id)) || id;
+
   function postDevices(rt, team, nextDevices) {
     const rev = team.rev + 1;
     const list = [...nextDevices].map(([id, v]) => ({ id, pub: v.pub, desk: v.desk }));
@@ -162,11 +169,13 @@ function createTarget(limits) {
       const pub = input.pub !== undefined ? input.pub : input.publicKey;
       const sig = input.sig !== undefined ? input.sig : input.signature;
       if (key !== undefined) body.key = key;
+      notePub(key, pub);
       if (pub !== undefined) body.pub = pub;
       if (sig !== undefined) body.sig = sig;
     } else {
       body = { challenge: input.nonce, key: input.keyId, sig: input.signature };
       if (input.publicKey !== undefined) body.pub = input.publicKey;
+      notePub(input.keyId, input.publicKey);
     }
     const r = http("POST", teamPath(input.relayTeamId, "session"), { json: body });
     if (r.status !== 200) return refusalOf(r);
@@ -222,12 +231,13 @@ function createTarget(limits) {
   function sessionFor(rt, keyId, renew) {
     const held = sessions.get(rt + ":" + keyId);
     if (held && !renew && now < held.until) return { ok: true, token: held.token, held: true };
+    const pub = pubOf(keyId), name = keyId;
     const privateKey = keys.get(keyId);
     if (!privateKey) return { ok: true, token: null, held: false };
     const ch = challenge({ relayTeamId: rt });
     if (!ch.nonce) return ch;
-    const r = http("POST", teamPath(rt, "session"), { json: { challenge: ch.nonce, key: keyId, pub: keyId,
-      sig: sign(privateKey, C.helloBytes(rt, ch.nonce, keyId)) } });
+    const r = http("POST", teamPath(rt, "session"), { json: { challenge: ch.nonce, key: name, pub,
+      sig: sign(privateKey, C.helloBytes(rt, ch.nonce, name)) } });
     if (r.status !== 200) return refusalOf(r);
     sessions.set(rt + ":" + keyId, { token: r.json.session, until: r.json.until });
     return { ok: true, token: r.json.session, held: false };
@@ -249,6 +259,9 @@ function createTarget(limits) {
   function metaOf(blob) {
     const extra = {};
     for (const k of Object.keys(blob)) if (!Buffer.isBuffer(blob[k]) && typeof blob[k] !== "function") extra[k] = blob[k];
+    /* A writer named by its branch id carries its public half beside it, as the desk's channel sends it, for the relay to judge
+       the id by (an invitation's upload, core.cjs admitInvite). */
+    if (extra.pub === undefined && /^k-/.test(String(blob.writerKeyId)) && pubOf(blob.writerKeyId) !== blob.writerKeyId) extra.pub = pubOf(blob.writerKeyId);
     return Object.assign(extra, { v: 1, id: blob.id, supersedes: blob.supersedes == null ? null : blob.supersedes, epoch: blob.epoch,
       writer: blob.writerKeyId, counter: blob.counter, del: !!blob.deletion, sig: blob.signature, nonce: blob.nonce, place: blob.place });
   }
@@ -281,16 +294,18 @@ function createTarget(limits) {
       const r = http("POST", "/relay/v1/teams", { json });
       if (r.status !== 200) return refusalOf(r);
       keys.set(lead.keyId, lead.privateKey);
+      notePub(lead.keyId, lead.publicKey);
       teams.set(rt, { lead, rev: 0, devices: new Map() });
       return { relayTeamId: rt, teamId };
     },
     /* The relay takes the team's epoch from the lead's own uploads; it is given no key, so there is nothing to record. */
     addEpoch({ relayTeamId, epoch }) { return { ok: true, relayTeamId, epoch }; },
-    enrol({ relayTeamId, deskId, keyId }) {
+    enrol({ relayTeamId, deskId, keyId, publicKey }) {
       const team = teams.get(relayTeamId);
       if (!team) return { ok: false, reason: "not-enrolled", said: "", served: false };
       const nextDevices = new Map(team.devices);
-      nextDevices.set(keyId, { pub: keyId, desk: deskId });
+      notePub(keyId, publicKey);
+      nextDevices.set(keyId, { pub: pubOf(keyId), desk: deskId });
       const posted = postDevices(relayTeamId, team, nextDevices);
       /* Enrolling the bound key ends its invitation sessions at the relay, so the desk's next call says hello as itself. */
       const held = sessions.get(relayTeamId + ":" + keyId);
@@ -343,6 +358,17 @@ function createTarget(limits) {
     challenge,
     hello,
     helloMessage(relayTeamId, nonce, keyId) { return C.helloBytes(relayTeamId, nonce, keyId); },
+    /* A desk's knock at the team's standing door, its key as the harness names it, with no certificate the door registered:
+       the door answers the spelling before it reads the certificate (relay/core.cjs byDoor, door-key-form). */
+    doorHello({ relayTeamId, key }) {
+      const ch = challenge({ relayTeamId });
+      if (!ch.nonce) return ch;
+      const name = key.keyId;
+      const box = crypto.randomBytes(32).toString("hex");
+      const sig = sign(key.privateKey, core.doorHelloBytes(relayTeamId, ch.nonce, name, box));
+      const r = http("POST", teamPath(relayTeamId, "session"), { json: { challenge: ch.nonce, key: name, pub: key.publicKey, box, sig, door: {} } });
+      return r.status === 200 ? { ok: true, session: r.json.session } : refusalOf(r);
+    },
 
     list({ relayTeamId, session }) {
       const got = listed(relayTeamId, session);
@@ -387,6 +413,7 @@ function createTarget(limits) {
     /* ---- the program: channel.cjs and blob.cjs ---- */
     seal(opts) {
       if (opts && opts.writer && opts.writer.keyId && opts.writer.privateKey) keys.set(opts.writer.keyId, opts.writer.privateKey);
+      if (opts && opts.writer) notePub(opts.writer.keyId, opts.writer.publicKey);
       return B.seal(opts);
     },
     acceptBlob(input) { return prog.acceptBlob(input); },

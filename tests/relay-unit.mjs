@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 585;
+const EXPECTED = 594;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -103,10 +103,10 @@ const refused = (r, reason) => !!r && r.status >= 400 && r.status < 500 && !!r.j
 const relayEnv = o => S.relayEnv(Object.assign({ roots: K.ROOTS }, o || {}));
 const createBody = (rt, lead, t, o) => K.createBody(rt, lead, t, bytes => signHex(lead, bytes), o);
 
-/* A team with its lead, and two desks enrolled: `desk` by its branch id, `other` by its public key. */
+/* A team with its lead, and two desks enrolled, each by its branch id, the one spelling a desk takes. */
 async function world(opts) {
   const R = (opts && opts.R) || relayEnv(opts);
-  const w = { R, rt: hex(16), lead: keyPair(false), desk: keyPair(true), other: keyPair(false), rev: 0, devs: [] };
+  const w = { R, rt: hex(16), lead: keyPair(false), desk: keyPair(true), other: keyPair(true), rev: 0, devs: [] };
   w.deskId = "k-" + hex(8);
   w.otherId = "k-" + hex(8);
   const made = await create(w, w.lead, R.clock.now);
@@ -268,6 +268,36 @@ async function main() {
       && !/REVOKED/.test(top) && has(staging, /^# REVOKED, the root-signed list of revoked service keys: the chief of staff sets it at deploy\.$/m)
       && !/^REVOKED\s*=/m.test(toml),
       "979l the top of relay/wrangler.toml is the live Worker etiuda-relay-staging, its route etiuda.dev/relay/v1/*, its eu bucket and Durable Object, with no API_PREFIX, and [env.staging] names etiuda-relay-next, the route etiuda.dev/relay-staging/v1/*, the prefix, the eu bucket etiuda-relay-next and its Durable Object, and says it is deployed only by wrangler deploy --env staging, by a chief of staff, and REVOKED is named only as a comment the chief of staff sets at deploy, with no value");
+    /* Workers Logs on staging alone (Claude alpha, 2026-11-15): staging keeps the relay's own console lines, the migration's count among
+       them, with no per-request invocation record; the live block keeps its logs off, a production and privacy question. Each table
+       is read with comments stripped, and an inline observability, logs or traces key anywhere counts against it. */
+    const sameT = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const tablesOf = text => {
+      const out = new Map([["", []]]);
+      let cur = "";
+      for (const raw of text.split(/\r?\n/)) {
+        const line = raw.replace(/#.*$/, "").trim();
+        if (!line) continue;
+        const h = /^\[\[?([^\]]+)\]\]?$/.exec(line);
+        if (h) { cur = h[1].trim(); if (!out.has(cur)) out.set(cur, []); continue; }
+        out.get(cur).push(line.replace(/\s+/g, " "));
+      }
+      return out;
+    };
+    const logsHeld = text => {
+      const t = tablesOf(text);
+      const obs = [...t.keys()].filter(k => /(^|\.)(observability|logs|traces)(\.|$)/.test(k)).sort();
+      const inline = [...t.values()].some(lines => lines.some(l => /^(observability|logs|traces)\b/.test(l)));
+      return sameT(obs, ["env.staging.observability", "env.staging.observability.logs", "observability"]) && !inline
+        && sameT(t.get("observability"), ["enabled = false"]) && sameT(t.get("env.staging.observability"), ["enabled = true"])
+        && sameT(t.get("env.staging.observability.logs"), ["invocation_logs = false"]);
+    };
+    const logsControl = !logsHeld(toml + "\n[observability.logs]\nenabled = true\n") && !logsHeld(toml.replace("invocation_logs = false", "invocation_logs = true"))
+      && !logsHeld(toml + "\n[env.staging.observability.traces]\nenabled = true\n");
+    check(logsHeld(toml) && logsControl,
+      "979m relay/wrangler.toml keeps the live Worker's logs off ([observability] enabled = false and nothing else, no logs table) and turns"
+      + " Workers Logs on for env.staging alone, its one setting enabled = true with invocation_logs = false; the leg refuses a logs table on"
+      + " the live block, invocation records on staging, and traces on staging");
   }
 
   /* ---- 1: the bytes and the routes ---- */
@@ -353,7 +383,7 @@ async function main() {
     check(bad.every(r => refused(r, "bad-signature")) && w.rev === 1,
       "3e a key whose id is neither its public key nor its branch id, the lead's own key, a key twice or a desk id out of shape is refused");
     const many = [];
-    for (let i = 0; i < 1001; i++) { const k = keyPair(false); many.push({ id: k.keyId, pub: k.pub, desk: "k-" + i.toString(16).padStart(6, "0") }); }
+    for (let i = 0; i < 1001; i++) { const k = keyPair(true); many.push({ id: k.keyId, pub: k.pub, desk: "k-" + i.toString(16).padStart(6, "0") }); }
     const full = await devices(w, many);
     check(refused(full, "team-size") && w.rev === 1, "3f more than 1000 enrolled keys are refused");
     const devStale = await withVerifyCount(() => call(w.R, "POST", "/relay/v1/t/" + w.rt + "/devices", { json: {
@@ -561,7 +591,7 @@ async function main() {
     w.R.clock.now += 5 * MIN + 1;
     const past = await helloAs(w, w.desk, { nonce: n6 });
     check(at5.status === 200 && refused(past, "nonce-stale"), "6c a challenge opens a session at 5 minutes and is refused one millisecond later");
-    const stranger = keyPair(false);
+    const stranger = keyPair(true);
     const notOn = await helloAs(w, stranger);
     check(refused(notOn, "not-enrolled"), "6d a hello by a key never enrolled is refused");
     const n7 = await challenge(w);
@@ -1247,10 +1277,17 @@ async function main() {
       "13a a path, a body or a name sent beside an upload's metadata is never kept");
     const strip = s => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:"'])\/\/.*$/gm, "$1");
     const FORBIDDEN = /\bconsole\b|createDecipheriv|\bopenBlob\b|\bunframe\b|\bdecrypt/;
+    /* The one line the relay writes: the wake that renamed the old relay's raw-keyed rows, its counts alone (r1q holds what it says).
+       That call is taken out of team.cjs by its exact text, once, and it must stand there exactly once, so no second call rides it. */
+    const MIGRATION_LOG = '(typeof deps.log === "function" ? deps.log : console.log)(line)';
     const srcs = ["core.cjs", "team.cjs", "worker.mjs"].map(f => strip(fs.readFileSync(path.join(ROOT, "relay", f), "utf8")));
-    const control = FORBIDDEN.test(strip("const x = 1;\nconsole.log(x);")) && !FORBIDDEN.test(strip("/* console.log */ const y = 2;"));
-    check(srcs.every(s => !FORBIDDEN.test(s)) && control,
-      "13b the relay's sources log nothing and open no blob, by a scan with comments stripped that finds a planted call and not a commented one");
+    const allowedOnce = srcs[1].split(MIGRATION_LOG).length === 2;
+    srcs[1] = srcs[1].replace(MIGRATION_LOG, " ");
+    const control = FORBIDDEN.test(strip("const x = 1;\nconsole.log(x);")) && !FORBIDDEN.test(strip("/* console.log */ const y = 2;"))
+      && FORBIDDEN.test(("a" + MIGRATION_LOG + "b" + MIGRATION_LOG).replace(MIGRATION_LOG, " "));
+    check(srcs.every(s => !FORBIDDEN.test(s)) && allowedOnce && control,
+      "13b the relay's sources log nothing but the migration's one line of counts, and open no blob, by a scan with comments stripped that"
+      + " finds a planted call, a second copy of that line, and not a commented one");
   }
 
   /* ---- 14: sockets ---- */
@@ -1361,7 +1398,7 @@ async function main() {
   const swapped = (from, to) => t => (t.split(from).length === 2 ? t.split(from).join(to) : null);
   /* What a copy of relay/core.cjs hands the live exports object, which the team's module and the Worker keep: the object's
      factory and the three functions the Worker and the grant legs call, so a line lifted from any of them is lifted for all. */
-  const ADOPTED = ["createCore", "judgeCreate", "grantWhy", "grantOk", "grantBytes", "delegationBytes", "revocationBytes", "revokedKeysOf", "acceptRevocations", "create2Bytes", "ROOT_PUB", "lapseOf"];
+  const ADOPTED = ["createCore", "judgeCreate", "grantWhy", "grantOk", "grantBytes", "delegationBytes", "revocationBytes", "revokedKeysOf", "acceptRevocations", "create2Bytes", "ROOT_PUB", "lapseOf", "migrateDeskIds"];
   const adopt = (live, fresh) => { for (const k of ADOPTED) live[k] = fresh[k]; };
   /* The text of relay/core.cjs the live exports stand for: the product's, or while a plant is on, that plant's edit, so a plant run
      inside another lifts a line of the edited text and both stay lifted. `edit` maps that text to the edited text, or to null where
@@ -1744,33 +1781,6 @@ async function main() {
     const newestLift = await liftCore("plant:e5-newest", async () => { const x = await secondLink(); return x.up2 === 200 && x.answered === 200 && x.read !== 200; });
     check(newestLift.turned && newestLift.back, "995q lifting plant:e5-newest resumes the first invitation's session, which is not served the answer to the second (FAIL 995o: read not 200): "
       + newestLift.detail + ", sha " + (newestLift.back ? "restored" : "differs"));
-    /* E5 under the other spelling (the Grok review of the relay's mend, finding 3): the request withdrawn as the branch id, the new one
-       asked as the raw public half; that ask ends the withdrawal, so the lead's yes enrols the key. */
-    async function secondLinkRaw() {
-      const w = await world();
-      const who = keyPair(true), raw = { keyId: who.pub, pub: who.pub, privateKey: who.privateKey }, place = "desk:k-" + hex(8);
-      const id1 = hex(16), id2 = hex(16), tok1 = hex(32), tok2 = hex(32);
-      w.R.clock.now += 1;
-      await invites(w, [{ id: id1, hash: sha(tok1) }], []);
-      const s1 = (await boundHello(w, who, id1, tok1)).json.session;
-      const ask1 = sealJoin(w, who, 1, place);
-      const up1 = await put(w, s1, ask1, { extra: { pub: who.pub } });
-      const gone = await put(w, s1, deletionOf(w, who, place, ask1.id, 2));
-      w.R.clock.now += 1;
-      await invites(w, [{ id: id2, hash: sha(tok2) }], []);
-      const hello2 = await boundHello(w, raw, id2, tok2);
-      const place2 = "desk:k-" + hex(8);
-      const up2 = await put(w, hello2.json && hello2.json.session, sealJoin(w, raw, 1, place2));
-      const yes = await devices(w, w.devs.concat([{ id: who.keyId, pub: who.pub, desk: place2.slice(5) }]));
-      return { up1: up1.status, gone: gone.status, up2: up2.status, yes: yes.json && yes.json.error || yes.status, first: !!inviteRow(w, id1).withdrawn };
-    }
-    const rawSecondOk = x => x.up1 === 200 && x.gone === 200 && x.up2 === 200 && x.yes === 200 && !x.first;
-    const rawSecond = await secondLinkRaw();
-    check(rawSecondOk(rawSecond), "r1p a request withdrawn as the branch id and asked anew as the raw public half: the ask ends the withdrawal, and the lead's yes"
-      + " enrols the key: " + JSON.stringify(rawSecond));
-    const halfLift = await liftCore("plant:e5-half", async () => { const x = await secondLinkRaw(); return x.up2 === 200 && x.yes === "withdrawn"; });
-    check(rawSecondOk(rawSecond) && halfLift.turned && halfLift.back, "r1q lifting plant:e5-half leaves the withdrawal under the branch id standing, so the"
-      + " yes is refused (r1p red): " + halfLift.detail.split("\n")[0] + ", sha " + (halfLift.back ? "restored" : "differs"));
     /* G2: the lead moves the team to epoch 2 after the request, and the desk's withdrawal, sealed at the request's epoch 1, is taken. */
     async function movedWithdraw() {
       const w = await world();
@@ -1796,7 +1806,7 @@ async function main() {
     async function revokedWithdraw() {
       const R = relayEnv();
       R.clock.now = 1700000000000;
-      const w = { R, rt: hex(16), lead: keyPair(false), desk: keyPair(true), other: keyPair(false), rev: 0, devs: [] };
+      const w = { R, rt: hex(16), lead: keyPair(false), desk: keyPair(true), other: keyPair(true), rev: 0, devs: [] };
       w.deskId = "k-" + hex(8);
       w.otherId = "k-" + hex(8);
       const made = await call(R, "POST", "/relay/v1/teams", { json: createBody(w.rt, w.lead, R.clock.now,
@@ -2037,136 +2047,73 @@ async function main() {
     check(heldPlant.turned && heldPlant.back, "962h dropping registeredAfter from the removed key's resume reopens that invitation's session, and the product file is never written: "
       + heldPlant.detail + ", sha " + (heldPlant.back ? "unchanged" : "CHANGED"));
 
-    /* One public key answers to two names, its raw half and its branch id, and the lead's rows are kept under the one it used: a
-       removed key naming itself by the other is answered as under the name it was removed by (Argon's review of the relay, finding 1).
-       Each scene runs under the branch id the desk was enrolled by, the control, and under its raw half; both must hold. */
+    /* ONE SPELLING FOR A DESK (Argon's review 1 finding 1, and the two Grok reviews of its mend): a desk naming itself any way but its
+       branch id is refused at every entry, so no row or session inside holds another spelling. The door's is a4n; an invitation's
+       upload is held to the key its hello bound (invite-bound). */
     const rawOf = k => ({ keyId: k.pub, pub: k.pub, privateKey: k.privateKey });
-    const rawScenes = {
-      /* An invitation registered before the removal, its token unused: answered removed, the token unspent. */
-      async before(raw) {
-        const y = await world();
-        const token = hex(32), id = hex(16);
+    const spelling = {
+      /* The lead's list naming a desk by its raw half is refused whole, and nothing moves. */
+      async devices() {
+        const y = await world(), p = keyPair(true), rev = y.rev;
+        const r = await devices(y, y.devs.concat([{ id: p.pub, pub: p.pub, desk: "k-" + hex(8) }]));
+        const st = y.R.stores.get(y.rt);
+        return { ok: refused(r, "bad-signature") && y.rev === rev && st.get("dev:" + p.pub) === undefined && st.get("dev:" + p.keyId) === undefined,
+          detail: JSON.stringify({ list: said(r), rev: [rev, y.rev] }) };
+      },
+      /* A token hello by the raw half, from a key enrolled and from the same key once removed, is refused and spends nothing. */
+      async token() {
+        const y = await world(), token = hex(32), id = hex(16);
         await invites(y, [{ id, hash: sha(token) }], []);
+        const enrolled = await boundHello(y, rawOf(y.desk), id, token);
         y.R.clock.now += 1;
         await devices(y, y.devs.slice(1));
-        const hello = await boundHello(y, raw ? rawOf(y.desk) : y.desk, id, token);
+        const removed = await boundHello(y, rawOf(y.desk), id, token);
         const inv = y.R.stores.get(y.rt).get("inv:" + id);
-        return { ok: refused(hello, "removed") && !(inv && inv.spent), detail: said(hello) + ", spent " + !!(inv && inv.spent) };
+        return { ok: refused(enrolled, "bad-signature") && refused(removed, "bad-signature") && !(inv && inv.spent),
+          detail: JSON.stringify({ enrolled: said(enrolled), removed: said(removed), spent: !!(inv && inv.spent) }) };
       },
-      /* An invitation registered after the removal: its session is quiet, and lists and fetches nothing. */
-      async after(raw) {
+      /* A key hello by the raw half is answered as a key on no list, enrolled or removed, and opens nothing even where a row under the
+         raw half stands (as a relay before this rule could have kept one); the branch id still opens. */
+      async hello() {
         const y = await world();
-        const lead = await sessionOf(y, y.lead);
-        const b = sealAs(y, y.lead, "root.txt", 1);
-        await put(y, lead, b, { extra: { pub: y.lead.pub } });
+        const enrolled = await helloAs(y, rawOf(y.desk));
+        y.R.stores.get(y.rt).put("dev:" + y.other.pub, { pub: y.other.pub, desk: y.otherId });
+        const rowRaw = await helloAs(y, rawOf(y.other));
         await devices(y, y.devs.slice(1));
-        y.R.clock.now += 1;
-        const token = hex(32), id = hex(16);
-        await invites(y, [{ id, hash: sha(token) }], []);
-        const hello = await boundHello(y, raw ? rawOf(y.desk) : y.desk, id, token);
-        const s = hello.json && hello.json.session;
-        const listed = await since(y, s), fetched = await getBlob(y, s, b.id);
-        return { ok: hello.status === 200 && refused(listed, "removed") && refused(fetched, "removed"),
-          detail: said(hello) + ", list " + said(listed) + ", fetch " + said(fetched) };
-      },
-      /* A binding made while the key was enrolled, then the removal: the bound session reads nothing, and a key hello is removed. */
-      async held(raw) {
-        const y = await world();
-        const token = hex(32), id = hex(16), who = raw ? rawOf(y.desk) : y.desk;
-        await invites(y, [{ id, hash: sha(token) }], []);
-        const hello = await boundHello(y, who, id, token);
-        await devices(y, y.devs.slice(1));
-        const listed = await since(y, hello.json && hello.json.session);
-        const again = await helloAs(y, who);
-        return { ok: hello.status === 200 && refused(listed, "removed") && refused(again, "removed"),
-          detail: said(hello) + ", list " + said(listed) + ", key hello " + said(again) };
+        const removed = await helloAs(y, rawOf(y.desk));
+        const own = await helloAs(y, y.other);
+        return { ok: refused(enrolled, "not-enrolled") && refused(rowRaw, "not-enrolled") && refused(removed, "not-enrolled") && own.status === 200,
+          detail: JSON.stringify({ enrolled: said(enrolled), rawRow: said(rowRaw), removed: said(removed), ownSpelling: said(own) }) };
       },
     };
-    const rawRun = async name => {
-      const control = await rawScenes[name](false), raw = await rawScenes[name](true);
-      return { ok: control.ok && raw.ok, detail: "branch id " + control.detail + "; raw half " + raw.detail };
-    };
-    const rawBefore = await rawRun("before");
-    check(rawBefore.ok, "r1a a removed key's token hello on an invitation registered before its removal is answered removed, the token unspent,"
-      + " whether it names itself by the branch id it was removed by or by its raw public half: " + rawBefore.detail);
-    const rawAfter = await rawRun("after");
-    check(rawAfter.ok, "r1b a removed key's session on an invitation registered after its removal is quiet, listing and fetching nothing,"
-      + " under either name: " + rawAfter.detail);
-    const rawHeld = await rawRun("held");
-    check(rawHeld.ok, "r1c a key that bound an invitation while enrolled and was then removed reads nothing on that session and is answered"
-      + " removed on a key hello, under either name: " + rawHeld.detail);
-    const rawLift = await liftCore("plant:removal-either-name", async () => !(await rawRun("before")).ok && !(await rawRun("after")).ok
-      && !(await rawRun("held")).ok);
-    check(rawBefore.ok && rawAfter.ok && rawHeld.ok && rawLift.turned && rawLift.back, "r1d lifting plant:removal-either-name turns r1a, r1b and r1c red"
-      + " under the raw half, and the product file is never written: " + rawLift.detail.split("\n")[0] + ", sha " + (rawLift.back ? "unchanged" : "CHANGED"));
-    const markLift = await liftCore("plant:withdraw-invite-pub", async () => !(await rawRun("held")).ok);
-    check(rawHeld.ok && markLift.turned && markLift.back, "r1e lifting plant:withdraw-invite-pub leaves the session bound under the raw half"
-      + " reading after the removal (r1c red), and the product file is never written: " + markLift.detail.split("\n")[0]
-      + ", sha " + (markLift.back ? "unchanged" : "CHANGED"));
-
-    /* Two removals of one public half under its two spellings: the later, by the relay's order, is the key's removal, and enrolling one
-       spelling clears a removal kept under the other (the Grok review of the relay's mend, finding 1). */
-    const spellScenes = {
-      /* Enrolled raw, removed; an invitation; enrolled as k-, removed again: the invitation is from before the later removal. */
-      async twice() {
-        const y = await world(), p = keyPair(true), place = "k-" + hex(8);
-        await devices(y, y.devs.concat([{ id: p.pub, pub: p.pub, desk: place }]));
-        await devices(y, y.devs);
-        const token = hex(32), id = hex(16);
-        await invites(y, [{ id, hash: sha(token) }], []);
-        await devices(y, y.devs.concat([{ id: p.keyId, pub: p.pub, desk: place }]));
-        await devices(y, y.devs);
-        const asK = await boundHello(y, p, id, token), asRaw = await boundHello(y, rawOf(p), id, token);
-        const inv = y.R.stores.get(y.rt).get("inv:" + id);
-        return { ok: refused(asK, "removed") && refused(asRaw, "removed") && !(inv && inv.spent),
-          detail: "branch id " + said(asK) + ", raw half " + said(asRaw) + ", spent " + !!(inv && inv.spent) };
-      },
-      /* As twice, with the raw removal kept beside the k- enrolment, as a relay before the enrol cleared both spellings left it. */
-      async oneList() {
-        const y = await world(), p = keyPair(true), place = "k-" + hex(8), st = () => y.R.stores.get(y.rt);
-        await devices(y, y.devs.concat([{ id: p.pub, pub: p.pub, desk: place }]));
-        await devices(y, y.devs);
-        const left = st().get("gone:" + p.pub);
-        const token = hex(32), id = hex(16);
-        await invites(y, [{ id, hash: sha(token) }], []);
-        await devices(y, y.devs.concat([{ id: p.keyId, pub: p.pub, desk: place }]));
-        st().put("gone:" + p.pub, left);
-        await devices(y, y.devs);
-        const hello = await boundHello(y, p, id, token);
-        const inv = st().get("inv:" + id);
-        return { ok: !!left && refused(hello, "removed") && !(inv && inv.spent), detail: said(hello) + ", spent " + !!(inv && inv.spent) };
-      },
-      /* Enrolled raw, removed, enrolled as k-: no removal stays under the raw spelling. */
-      async cleared() {
-        const y = await world(), p = keyPair(true), place = "k-" + hex(8);
-        await devices(y, y.devs.concat([{ id: p.pub, pub: p.pub, desk: place }]));
-        await devices(y, y.devs);
-        const was = y.R.stores.get(y.rt).get("gone:" + p.pub) !== undefined;
-        await devices(y, y.devs.concat([{ id: p.keyId, pub: p.pub, desk: place }]));
-        const left = y.R.stores.get(y.rt).get("gone:" + p.pub) !== undefined;
-        return { ok: was && !left, detail: "raw removal before " + was + ", after the k- enrolment " + left };
-      },
-    };
-    const spellTwice = await spellScenes.twice();
-    check(spellTwice.ok, "r1h a half enrolled raw and removed, then enrolled by its branch id and removed again, is answered removed on an invitation"
-      + " registered between the two removals, under either spelling, the token unspent: " + spellTwice.detail);
-    const spellOne = await spellScenes.oneList();
-    check(spellOne.ok, "r1i a raw removal left beside a later k- enrolment, as a relay before this mend kept it, and then the k- removed: an invitation registered between is answered removed: " + spellOne.detail);
-    const spellCleared = await spellScenes.cleared();
-    check(spellCleared.ok, "r1j enrolling a half by its branch id clears the removal kept under its raw spelling: " + spellCleared.detail);
-    const latestLift = await liftCore("plant:removal-latest", async () => !(await spellScenes.oneList()).ok);
-    check(spellOne.ok && latestLift.turned && latestLift.back, "r1k lifting plant:removal-latest takes the first removal found, not the latest (r1i red),"
-      + " and the product file is never written: " + latestLift.detail.split("\n")[0] + ", sha " + (latestLift.back ? "unchanged" : "CHANGED"));
-    const bothLift = await liftCore("plant:enrol-both-names", async () => !(await spellScenes.cleared()).ok);
-    check(spellCleared.ok && bothLift.turned && bothLift.back, "r1l lifting plant:enrol-both-names leaves the raw removal beside the k- enrolment (r1j red),"
-      + " and the product file is never written: " + bothLift.detail.split("\n")[0] + ", sha " + (bothLift.back ? "unchanged" : "CHANGED"));
-    const twiceLift = await liftCore("plant:removal-latest", async () => {
-      const inner = await liftCore("plant:enrol-both-names", async () => !(await spellScenes.twice()).ok);
-      return inner.turned && inner.back;
-    });
-    check(spellTwice.ok && twiceLift.turned && twiceLift.back, "r1m lifting plant:removal-latest with plant:enrol-both-names, either of which alone closes it,"
-      + " opens the invitation between the two removals (r1h red), and the product file is never written: " + twiceLift.detail.split("\n")[0]
-      + ", sha " + (twiceLift.back ? "unchanged" : "CHANGED"));
+    for (const [id, name, line] of [["r2a", "devices", "a lead's list naming a desk by its raw public half is refused whole, and nothing moves"],
+      ["r2b", "token", "a token hello by a desk's raw public half, enrolled or removed, is refused and spends no token"],
+      ["r2c", "hello", "a key hello by a desk's raw public half is refused as a key on no list, enrolled, removed or with a raw row standing, and the branch id still opens"]]) {
+      const r = await spelling[name]();
+      check(r.ok, id + " " + line + ": " + r.detail);
+    }
+    /* A signed list is taken whole or not at all (the test architect's ruling): one malformed entry, a desk named by its raw half,
+       enrols nobody, the well-named desk beside it included, and the rev does not move. */
+    async function wholeListScene() {
+      const y = await world(), good = keyPair(true), bad = keyPair(true), rev = y.rev;
+      const r = await devices(y, y.devs.concat([{ id: good.keyId, pub: good.pub, desk: "k-" + hex(8) }, { id: bad.pub, pub: bad.pub, desk: "k-" + hex(8) }]));
+      const st = y.R.stores.get(y.rt);
+      return { ok: refused(r, "bad-signature") && y.rev === rev && st.get("dev:" + good.keyId) === undefined && st.get("dev:" + bad.pub) === undefined
+        && st.get("dev:" + bad.keyId) === undefined, detail: JSON.stringify({ list: said(r), rev: [rev, y.rev], goodEnrolled: st.get("dev:" + good.keyId) !== undefined }) };
+    }
+    const wholeList = await wholeListScene();
+    check(wholeList.ok, "r2g a list with one malformed entry enrols nobody, the well-named desk beside it included, and the rev does not move: " + wholeList.detail);
+    if (PLANTS_OFF) skip("r2h lifting plant:devices-shape takes the malformed list (r2g red)");
+    else {
+      const wl = await liftCore("plant:devices-shape", async () => !(await wholeListScene()).ok);
+      check(wl.turned && wl.back, "r2h lifting plant:devices-shape takes the malformed list (r2g red), and the product file is never written: " + wl.detail.split("\n")[0] + ", sha " + (wl.back ? "unchanged" : "CHANGED"));
+    }
+    for (const [id, tag, name] of [["r2d", "desk-id-devices", "devices"], ["r2e", "desk-id-token", "token"], ["r2f", "desk-id-hello", "hello"]]) {
+      const line = id + " lifting plant:" + tag + " lets the raw half in at that entry (its leg red)";
+      if (PLANTS_OFF) { skip(line); continue; }
+      const p = await liftCore("plant:" + tag, async () => !(await spelling[name]()).ok);
+      check(p.turned && p.back, line + ", and the product file is never written: " + p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED"));
+    }
 
     /* The two moments are ordered by the relay's own counter, not its clock (edit 4): a clock stepping back between a
        registration and a removal changes neither answer. */
@@ -3599,6 +3546,8 @@ async function main() {
         const token = hex(32), id = hex(16), place = "desk:k-" + hex(8);
         await invites(w, [{ id, hash: sha(token) }], []);
         const hello = await tokenHello(w, id, token, null, as);
+        /* The raw form is no desk at all: its token hello is refused before anything binds (one spelling for a desk). */
+        if (otherForm(form) === "pub") { if (!refused(hello, "bad-signature")) return false; continue; }
         const sealFor = (who, p) => B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32),
           writer: { keyId: who.keyId, privateKey: who.privateKey }, path: "desks/" + p.slice(5) + "/join.json", body: "ask", counter: 1, place: p, kind: "file" });
         const up = hello.status === 200 ? await put(w, hello.json.session, sealFor(as, place), { extra: { pub: as.pub } }) : null;
@@ -3852,7 +3801,7 @@ async function main() {
       const opts = o || {};
       const R = opts.R || relayEnv(opts.T ? { team: opts.T } : {});
       R.clock.now = T0L;
-      const w = { R, rt: hex(16), lead: keyPair(false), desk: keyPair(true), other: keyPair(false), rev: 0, devs: [], until: T0L + END };
+      const w = { R, rt: hex(16), lead: keyPair(false), desk: keyPair(true), other: keyPair(true), rev: 0, devs: [], until: T0L + END };
       w.deskId = "k-" + hex(8);
       w.otherId = "k-" + hex(8);
       const body = K.createBody(w.rt, w.lead, T0L, bytes => signHex(w.lead, bytes), { grantOpts: { fields: { paid, until: w.until } } });
@@ -5683,8 +5632,6 @@ async function main() {
       return call(w.R, "POST", "/relay/v1/t/" + w.rt + "/lead", { json: leadMoveBody(w.rt, w.lead, newLead, now, opts) });
     };
 
-    /* A refused repeat, a handover naming the lead the team already has under a forged signature, leaves that team's place on the
-       lead's list: a reserve says whether it added the rt, and only a place it added is given back (Argon's review, finding 4). */
     const answer = r => (r.json && r.json.error) || r.status;
     async function repeatFreeScene(worker) {
       const R = envAt(), lead = keyPair(false), now = R.clock.now;
@@ -5705,8 +5652,8 @@ async function main() {
     check(repeatFree.ok && addedLift.turned && addedLift.back, "r1g lifting plant:lead-added-move gives the live team's place back on that refusal"
       + " (r1f red), and the product file is never written: " + how(addedLift));
 
-    /* A handover to a desk key under a spelling its row does not use, raw or studio-, is refused as under its own (the Grok review of the
-       relay's mend, finding 2): enrolled by its branch id, or enrolled and removed by its raw half. */
+    /* A handover to a desk's key, enrolled or removed, is refused whatever form the lead's id takes (raw, k- or studio-): the
+       desk is looked up by its one id, the branch id of the public half the handover names. */
     async function deskLeadScene() {
       const studioOf = k => ({ keyId: "studio-" + sha(Buffer.from(k.pub, "hex")).slice(0, 16), pub: k.pub, privateKey: k.privateKey });
       const rawK = k => ({ keyId: k.pub, pub: k.pub, privateKey: k.privateKey });
@@ -5714,17 +5661,295 @@ async function main() {
       const b = await world(), asStudio = await moveLead(b, studioOf(b.desk));
       const c = await world();
       await devices(c, c.devs.slice(0, 1));
-      const removedAsK = await moveLead(c, Object.assign({}, c.other, { keyId: "k-" + sha(Buffer.from(c.other.pub, "hex")).slice(0, 16) }));
+      const removedAsRaw = await moveLead(c, rawK(c.other));
       const lead = (a.R.stores.get(a.rt).get("team") || {}).lead || {};
-      const ok = refused(asRaw, "not-enrolled") && refused(asStudio, "not-enrolled") && refused(removedAsK, "not-enrolled") && lead.keyId === a.lead.keyId;
-      return { ok, detail: JSON.stringify({ enrolledAsKToRaw: answer(asRaw), enrolledAsKToStudio: answer(asStudio), removedRawToK: answer(removedAsK) }) };
+      const ok = refused(asRaw, "not-enrolled") && refused(asStudio, "not-enrolled") && refused(removedAsRaw, "not-enrolled") && lead.keyId === a.lead.keyId;
+      return { ok, detail: JSON.stringify({ enrolledToRaw: answer(asRaw), enrolledToStudio: answer(asStudio), removedToRaw: answer(removedAsRaw) }) };
     }
     const deskLead = await deskLeadScene();
-    check(deskLead.ok, "r1n a handover to a desk key under a spelling its row does not use (raw, studio-, or k- for a key removed raw) is refused not-enrolled: "
+    check(deskLead.ok, "r1n a handover to a desk's key, enrolled or removed, is refused not-enrolled under the lead's raw or studio- id form: "
       + deskLead.detail);
-    const deskLeadLift = await liftCore("plant:lead-desk-half", async () => !(await deskLeadScene()).ok);
-    check(deskLead.ok && deskLeadLift.turned && deskLeadLift.back, "r1o lifting plant:lead-desk-half takes those handovers (r1n red), and the product file is never written: "
-      + how(deskLeadLift));
+    if (PLANTS_OFF) skip("r1o lifting plant:lead-desk-refusal takes those handovers (r1n red)");
+    else {
+      const deskLeadLift = await liftCore("plant:lead-desk-refusal", async () => !(await deskLeadScene()).ok);
+      check(deskLead.ok && deskLeadLift.turned && deskLeadLift.back, "r1o lifting plant:lead-desk-refusal takes those handovers (r1n red), and the product file is never written: "
+        + how(deskLeadLift));
+    }
+
+    /* THE OLD RELAY'S ROWS (findings 1 to 3 of the fourth Grok review of Part A, 3cc09cb5). 77a902d9 stored a desk's rows under
+       whichever spelling its call sent, the raw public half among them. The store here holds what that relay wrote under raw halves,
+       in the shapes of its own lines: an enrolled desk's dev: row (devices 672), a removed desk's gone: row over an invitation the lead
+       registered before the removal (669), a bound desk's binding and the invitation its token hello spent (byToken 988, indexBinding
+       931), a session held by a raw half (issue 1184), a desk enrolled under its branch id whose removal that relay kept under the raw
+       half, and a 64-hex row whose record names another key. Then the object wakes again, as after a deploy. */
+    async function oldRowsScene(opts) {
+      const w = await world(opts);
+      const st = w.R.stores.get(w.rt), now = w.R.clock.now;
+      const x = keyPair(true), y = keyPair(true), z = keyPair(true), q = keyPair(true);
+      const yToken = hex(32), yInv = hex(16), zToken = hex(32), zInv = hex(16), xToken = hex(32), stray = hex(32);
+      const desks = ["k-" + hex(8), "k-" + hex(8), "k-" + hex(8), "k-" + hex(8), "k-" + hex(8)];
+      await invites(w, [{ id: yInv, hash: sha(yToken) }, { id: zInv, hash: sha(zToken) }], []);
+      const ord = (st.get("ord") || 0) + 1;
+      st.put("ord", ord);
+      st.put("dev:" + x.pub, { pub: x.pub, desk: desks[0] });
+      st.put("gone:" + y.pub, { pub: y.pub, desk: desks[1], at: now, ord });
+      st.put("inv:" + zInv, Object.assign({}, st.get("inv:" + zInv), { spent: true, spentAt: now, key: z.pub, pub: z.pub }));
+      st.put("bk:" + z.pub, zInv);
+      st.put("ses:" + sha(xToken), { key: x.pub, inv: null, until: now + C.SESSION_MS });
+      st.put("dev:" + q.keyId, { pub: q.pub, desk: desks[2] });
+      st.put("gone:" + q.pub, { pub: q.pub, desk: desks[3], at: now, ord });
+      st.put("dev:" + stray, { pub: keyPair(true).pub, desk: desks[4] });
+      w.R.restart();
+      const xHello = await helloAs(w, x), zHello = await helloAs(w, z), qHello = await helloAs(w, q);
+      const yDoor = await tokenHello(w, yInv, yToken, null, y);
+      const ySpent = (st.get("inv:" + yInv) || {}).spent === true;
+      const oldSession = await since(w, xToken);
+      const toY = await moveLead(w, y), toX = await moveLead(w, x);
+      const keys = st.dump().map(([k]) => k);
+      const rawLeft = [x, y, z, q].filter(k => keys.some(key => key.indexOf(k.pub) >= 0)).length;
+      const strayKept = st.get("dev:" + stray) !== undefined;
+      const ok = xHello.status === 200 && !!xHello.json.session && zHello.status === 200 && zHello.json.invite === true
+        && refused(qHello, "removed") && refused(yDoor, "removed") && !ySpent && oldSession.status !== 200
+        && refused(toY, "not-enrolled") && refused(toX, "not-enrolled") && rawLeft === 0 && strayKept;
+      const secrets = [w.rt, yToken, yInv, zToken, zInv, xToken, sha(xToken), stray].concat(desks);
+      for (const k of [x, y, z, q]) secrets.push(k.pub, k.keyId);
+      return { ok, w, secrets, detail: JSON.stringify({ enrolledHello: answer(xHello), boundHello: answer(zHello),
+        removedOverEnrolled: answer(qHello), removedToken: answer(yDoor), tokenSpent: ySpent, rawSession: answer(oldSession),
+        toRemoved: answer(toY), toEnrolled: answer(toX), rawRowsLeft: rawLeft, strayKept }) };
+    }
+    const oldRows = await oldRowsScene();
+    check(oldRows.ok, "r1p a store the old relay wrote under raw halves, woken again: a handover to its enrolled or removed desk is refused, its"
+      + " removed desk's token is answered removed and left unspent, its enrolled and bound desks' branch-id hellos pass, a removal beats an"
+      + " enrolment of the same key, its raw session is gone, no row stays under a raw half, and a row whose record names another key"
+      + " stays where it is: " + oldRows.detail);
+    /* The one line the wake writes: once, with the counts alone; nothing on a second wake or where nothing was renamed. */
+    async function migrationLogScene(teamMod) {
+      const lines = [], log = line => lines.push(String(line));
+      const opts = teamMod ? { team: teamMod, log } : { log };
+      const seeded = await oldRowsScene(opts);
+      const first = lines.slice();
+      seeded.w.R.restart();
+      await challenge(seeded.w);
+      const afterSecond = lines.length;
+      const plainLines = [], plainWorld = await world(Object.assign({}, opts, { log: line => plainLines.push(String(line)) }));
+      plainWorld.R.restart();
+      await helloAs(plainWorld, plainWorld.desk);
+      const line = first[0] || "";
+      const leaked = seeded.secrets.filter(sx => line.indexOf(sx) >= 0 || line.indexOf(sx.slice(0, 8)) >= 0).length;
+      const hexRun = /[0-9a-f]{8,}/.test(line);
+      const WANT = "relay one-spelling migration: renamed 5 (dev 1, gone 2, bk 1, inv 1, dd 0, tf 0); dropped 2 (dev 1, ses 1, door 0); conflicts 1; sessions ended 0";
+      return { ok: first.length === 1 && line === WANT && afterSecond === 1 && plainLines.length === 0 && leaked === 0 && !hexRun,
+        line, detail: JSON.stringify({ first: first.length, line, afterSecondWake: afterSecond, nothingToRename: plainLines.length,
+          seededFound: leaked, hexRun }) };
+    }
+    const migLog = await migrationLogScene();
+    check(migLog.ok, "r1q the wake that renames logs one line, the counts by family and none of the seeded keys, ids or tokens (each searched"
+      + " for, whole and by its first 8 characters); a second wake and a store with nothing to rename log nothing: " + migLog.detail);
+    if (PLANTS_OFF) skip("r1r lifting plant:desk-id-migrate leaves the raw rows (r1p red) and logs nothing (r1q red)");
+    else {
+      const migLift = await editTeam(lineLifted("plant:desk-id-migrate"), async T => !(await oldRowsScene({ team: T })).ok && !(await migrationLogScene(T)).ok);
+      check(oldRows.ok && migLog.ok && migLift.turned && migLift.back, "r1r lifting plant:desk-id-migrate leaves the raw rows (r1p red) and logs"
+        + " nothing (r1q red), and the product file is never written: " + how(migLift));
+    }
+
+    /* An invitation's upload is judged on its writer's spelling before any row is read under that writer (finding 4): a writer whose
+       id does not come from the public half the upload brings is refused bad-signature with no dev: or gone: row looked up. */
+    async function inviteOrderScene() {
+      const w = await world();
+      const token = hex(32), id = hex(16), joiner = keyPair(true), liar = keyPair(true), place = "desk:k-" + hex(8);
+      await invites(w, [{ id, hash: sha(token) }], []);
+      const s = (await tokenHello(w, id, token, null, joiner)).json.session;
+      const blob = B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32), writer: { keyId: joiner.keyId, privateKey: joiner.privateKey },
+        path: "desks/" + place.slice(5) + "/join.json", body: "ask", counter: 1, place, kind: "file" });
+      const st = w.R.stores.get(w.rt), real = st.get, read = [];
+      st.get = k => { read.push(k); return real.call(st, k); };
+      let r = null;
+      try { r = await put(w, s, blob, { extra: { pub: liar.pub } }); } finally { st.get = real; }
+      /* From admitInvite's own read of the invitation on: quietSession reads the session's bound key's gone: row before, keyed by
+         the session's hello, not by the upload. */
+      const from = read.lastIndexOf("inv:" + id);
+      const rowsRead = read.slice(from + 1).filter(k => k === "dev:" + joiner.keyId || k === "gone:" + joiner.keyId).map(k => k.split(":")[0]);
+      return { ok: refused(r, "bad-signature") && rowsRead.length === 0, detail: JSON.stringify({ answer: answer(r), rowsRead }) };
+    }
+    const inviteOrder = await inviteOrderScene();
+    check(inviteOrder.ok, "r1s an invitation's upload whose writer does not come from its public half is refused bad-signature before its judgement reads"
+      + " any dev: or gone: row under that writer: " + inviteOrder.detail);
+    if (PLANTS_OFF) skip("r1t lifting plant:rows-after-key reads those rows first (r1s red)");
+    else {
+      const orderLift = await liftCore("plant:rows-after-key", async () => !(await inviteOrderScene()).ok);
+      check(inviteOrder.ok && orderLift.turned && orderLift.back, "r1t lifting plant:rows-after-key reads those rows first (r1s red), and the product"
+        + " file is never written: " + how(orderLift));
+    }
+
+    /* Two reserves at the bound, interleaved (finding 5): each asks every listed team whether it still holds, through a stand-in that
+       answers after a delay, while the other asks too. Each rt a reserve took is on the list after both, or the second is refused. */
+    async function leadRaceScene(teamMod) {
+      const T = teamMod || teamSrc;
+      const store = S.memoryStore(), lead = keyPair(false), listed = [];
+      for (let i = 0; i < CAP; i++) listed.push(hex(16));
+      const dead = listed[0];
+      store.put("lead", { rts: listed.slice(), leadKey: lead.keyId });
+      const ns = { idFromName: n => n, get: id => ({ fetch: async () => {
+        await new Promise(r => setTimeout(r, 2));
+        return new Response(JSON.stringify({ held: id !== dead }), { status: 200 });
+      } }) };
+      const obj = T.teamObject({ store, clock: () => T0L, teams: () => ns, sockets: S.socketHub(), r2: S.memoryBucket(), revoked: () => [] });
+      const ask = rt => obj.fetch(T.leadRequest({ op: "reserve", rt, lead: lead.keyId }))
+        .then(async r => { const text = await r.text(); let json = null; try { json = JSON.parse(text); } catch { json = null; } return { status: r.status, json }; });
+      const a = hex(16), b = hex(16);
+      const [ra, rb] = await Promise.all([ask(a), ask(b)]);
+      const after = ((store.get("lead") || {}).rts || []).slice();
+      const took = r => r.status === 200 && !!r.json && r.json.ok === true;
+      const counted = rt => after.indexOf(rt) >= 0;
+      const ok = (took(ra) || took(rb)) && (!took(ra) || counted(a)) && (!took(rb) || counted(b)) && after.length <= CAP && !counted(dead);
+      return { ok, detail: JSON.stringify({ first: took(ra) ? "taken" : answer(ra), second: took(rb) ? "taken" : answer(rb),
+        firstCounted: counted(a), secondCounted: counted(b), length: after.length }) };
+    }
+    const leadRace = await leadRaceScene();
+    check(leadRace.ok, "r1u two reserves interleaved at the bound, each asking the listed teams through a delayed stand-in: every rt a reserve"
+      + " took is on the lead's list after both, and the list stays within the bound: " + leadRace.detail);
+    if (PLANTS_OFF) skip("r1v lifting plant:lead-reread loses the first reserve's rt (r1u red)");
+    else {
+      const raceLift = await editTeam(lineLifted("plant:lead-reread"), async T => !(await leadRaceScene(T)).ok);
+      check(leadRace.ok && raceLift.turned && raceLift.back, "r1v lifting plant:lead-reread loses the first reserve's rt (r1u red), and the product"
+        + " file is never written: " + how(raceLift));
+    }
+
+    /* THE FIFTH GROK REVIEW OF PART A (9d49440f), findings 1 to 4, as Claude alpha decided them.
+       1: the older relay's devices() left gone: on the spelling a list dropped and dev: on the one it added, one desk under both. The
+       removal wins at the rename, and the desk's live session ends in the same step: a session the older relay issued under the
+       branch id is marked removed and its socket closed. */
+    async function conflictScene(opts) {
+      const w = await world(opts);
+      const st = w.R.stores.get(w.rt), now = w.R.clock.now;
+      const token = await sessionOf(w, w.desk);
+      const ord = (st.get("ord") || 0) + 1;
+      st.put("ord", ord);
+      st.put("gone:" + w.desk.pub, { pub: w.desk.pub, desk: w.deskId, at: now, ord });
+      /* The stand-in's restart closes every socket, where the runtime keeps a hibernated one across a wake; so the socket is opened
+         on the woken object while its step is planted to fail (the wake, then the socket's own request), and the next request commits. */
+      const real = st.get;
+      let fails = 2;
+      st.get = k => { if (k === "mig:desk-id" && fails > 0) { fails -= 1; throw new Error("planted"); } return real.call(st, k); };
+      w.R.restart();
+      let sock = null;
+      try { sock = await socket(w, token); } finally { st.get = real; }
+      const ws = sock && sock.socket ? wsOf(w, sock.socket) : null;
+      const read = await since(w, token);
+      const closed = !!ws && !!ws.closed && ws.closed.code !== 1012;
+      const again = await helloAs(w, w.desk);
+      const marked = st.list("ses:").some(([k, s]) => k === "ses:" + sha(token) && s && s.removed === true);
+      return { ok: read.status !== 200 && refused(again, "removed") && marked && closed && st.get("dev:" + w.desk.keyId) === undefined,
+        detail: JSON.stringify({ read: answer(read), socketClosed: ws && ws.closed, hello: answer(again), marked }) };
+    }
+    const conflict = await conflictScene();
+    check(conflict.ok, "r2i a desk the older relay kept enrolled under one spelling and removed under the other is removed at the rename, and"
+      + " the session it held under its branch id reads nothing more, marked removed, its socket closed: " + conflict.detail);
+    if (PLANTS_OFF) skip("r2j lifting plant:migrate-ends leaves that session reading (r2i red)");
+    else {
+      const endsLift = await liftCore("plant:migrate-ends", async () => !(await conflictScene()).ok);
+      check(conflict.ok && endsLift.turned && endsLift.back, "r2j lifting plant:migrate-ends leaves that session reading (r2i red), and the"
+        + " product file is never written: " + how(endsLift));
+    }
+
+    /* 2: a door request the older relay opened under the branch id while the desk's removal sat under its raw half (its door read
+       gone: under the branch id alone). The rename drops it, with its binding and its session: the door lets no removed key back. */
+    async function doorRawScene(opts) {
+      const w = await world(opts);
+      const st = w.R.stores.get(w.rt), now = w.R.clock.now, y = keyPair(true), inv = hex(16), token = hex(32);
+      const ord = (st.get("ord") || 0) + 1;
+      st.put("gone:" + y.pub, { pub: y.pub, desk: "k-" + hex(8), at: now, ord });
+      st.put("ord", ord + 1);
+      st.put("inv:" + inv, { door: true, spent: true, spentAt: now, uploaded: false, fails: 0, key: y.keyId, pub: y.pub, box: hex(32),
+        person: hex(32), at: now, ord: ord + 1 });
+      st.put("bk:" + y.keyId, inv);
+      st.put("ses:" + sha(token), { key: null, inv, bound: y.keyId, until: now + C.SESSION_MS });
+      w.R.restart();
+      const hello = await helloAs(w, y);
+      const left = st.get("inv:" + inv) !== undefined || st.get("bk:" + y.keyId) !== undefined || st.get("ses:" + sha(token)) !== undefined;
+      return { ok: refused(hello, "removed") && !left, detail: JSON.stringify({ hello: answer(hello), rowsLeft: left }) };
+    }
+    const doorRaw = await doorRawScene();
+    check(doorRaw.ok, "r2k a door request opened while the desk's removal sat under its raw half is dropped at the rename, its binding and"
+      + " session with it, and the desk's branch-id hello is answered removed, not resumed: " + doorRaw.detail);
+    if (PLANTS_OFF) skip("r2l lifting plant:migrate-door resumes that door request (r2k red)");
+    else {
+      const doorLift = await liftCore("plant:migrate-door", async () => !(await doorRawScene()).ok);
+      check(doorRaw.ok && doorLift.turned && doorLift.back, "r2l lifting plant:migrate-door resumes that door request (r2k red), and the product"
+        + " file is never written: " + how(doorLift));
+    }
+
+    /* 3: a step that throws is not swallowed. Planted: the step's first read throws on the first wake and on two requests after it.
+       One line says it failed, once across all three; the requests answered meanwhile see the rows unrenamed (the removal under the raw
+       half is invisible: not-enrolled); the next request's try commits before it is routed, and the desk is answered removed. */
+    async function retryScene(teamMod) {
+      const lines = [], log = line => lines.push(String(line));
+      const w = await world(teamMod ? { team: teamMod, log } : { log });
+      const st = w.R.stores.get(w.rt), now = w.R.clock.now, z = keyPair(true);
+      const ord = (st.get("ord") || 0) + 1;
+      st.put("ord", ord);
+      st.put("gone:" + z.pub, { pub: z.pub, desk: "k-" + hex(8), at: now, ord });
+      const real = st.get;
+      let fails = 3;
+      st.get = k => { if (k === "mig:desk-id" && fails > 0) { fails -= 1; throw new Error("planted"); } return real.call(st, k); };
+      w.R.restart();
+      let during = null, after = null;
+      try {
+        during = await helloAs(w, z);
+        after = await helloAs(w, z);
+      } finally { st.get = real; }
+      const failed = lines.filter(l => /failed/.test(l)).length, counted = lines.filter(l => /renamed/.test(l)).length;
+      const leaked = lines.some(l => /[0-9a-f]{8,}/.test(l) || l.indexOf(z.keyId) >= 0);
+      return { ok: fails === 0 && refused(during, "not-enrolled") && refused(after, "removed") && failed === 1 && counted === 1 && !leaked,
+        lines, detail: JSON.stringify({ planted: 3 - fails, during: answer(during), after: answer(after), failedLines: failed, countLines: counted, lines }) };
+    }
+    const retried = await retryScene();
+    check(retried.ok, "r2m a migration step that throws on the first wake and on two requests after it writes one line saying it failed,"
+      + " with no key, the requests meanwhile see the raw removal invisible, and the next request's try commits before it is routed: the"
+      + " desk is answered removed: " + retried.detail);
+    if (PLANTS_OFF) skip("r2n lifting plant:migrate-retry leaves the warm object unrenamed (r2m red)");
+    else {
+      const retryLift = await editTeam(lineLifted("plant:migrate-retry"), async T => !(await retryScene(T)).ok);
+      check(retried.ok && retryLift.turned && retryLift.back, "r2n lifting plant:migrate-retry leaves the warm object unrenamed (r2m red), and"
+        + " the product file is never written: " + how(retryLift));
+    }
+
+    /* 4 (board 1003): a listed id asked dead, then reserved again while the asks run (a retried create) and holding by the write, is
+       not dropped: the lead's count is not left one short, and the new reserve at the bound is refused. */
+    async function reaffirmScene(teamMod) {
+      const T = teamMod || teamSrc;
+      const store = S.memoryStore(), lead = keyPair(false), listed = [];
+      for (let i = 0; i < CAP; i++) listed.push(hex(16));
+      const back = listed[0], live = { back: false };
+      store.put("lead", { rts: listed.slice(), leadKey: lead.keyId });
+      const ns = { idFromName: n => n, get: id => ({ fetch: async () => {
+        const held = id !== back || live.back;
+        await new Promise(r => setTimeout(r, 2));
+        return new Response(JSON.stringify({ held }), { status: 200 });
+      } }) };
+      const obj = T.teamObject({ store, clock: () => T0L, teams: () => ns, sockets: S.socketHub(), r2: S.memoryBucket(), revoked: () => [] });
+      const ask = rt => obj.fetch(T.leadRequest({ op: "reserve", rt, lead: lead.keyId }))
+        .then(async r => { const text = await r.text(); let json = null; try { json = JSON.parse(text); } catch { json = null; } return { status: r.status, json }; });
+      const fresh = hex(16);
+      const pending = ask(fresh);
+      await new Promise(r => setTimeout(r, 8));
+      const repeat = await ask(back);
+      live.back = true;
+      const r = await pending;
+      const after = ((store.get("lead") || {}).rts || []).slice();
+      const ok = repeat.status === 200 && repeat.json && repeat.json.added === false && after.indexOf(back) >= 0 && refused(r, "team-count")
+        && after.indexOf(fresh) < 0 && after.length === CAP;
+      return { ok, detail: JSON.stringify({ repeat: repeat.json, fresh: r.status === 200 ? "taken" : answer(r), backListed: after.indexOf(back) >= 0, length: after.length }) };
+    }
+    const reaffirmed = await reaffirmScene();
+    check(reaffirmed.ok, "r2o a listed team asked dead and reserved again while the asks ran stays on the lead's list, and the new reserve at"
+      + " the bound is refused team-count: " + reaffirmed.detail);
+    if (PLANTS_OFF) skip("r2p lifting plant:lead-reaffirm drops that team (r2o red)");
+    else {
+      const reaffirmLift = await editTeam(lineLifted("plant:lead-reaffirm"), async T => !(await reaffirmScene(T)).ok);
+      check(reaffirmed.ok && reaffirmLift.turned && reaffirmLift.back, "r2p lifting plant:lead-reaffirm drops that team (r2o red), and the product"
+        + " file is never written: " + how(reaffirmLift));
+    }
 
     // 933a: move signed by old lead is taken, new key hello opens lead session
     const w = await world();
@@ -6382,7 +6607,14 @@ async function main() {
   {
     const DIR = path.join(ROOT, "relay", "test", "previous");
     const PREV = await import(pathToFileURL(path.join(DIR, "replay.mjs")).href);
-    const files = fs.readdirSync(DIR).filter(f => /^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9a-f]{8}\.json$/.test(f)).sort();
+    const files = fs.readdirSync(DIR).filter(f => /^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9a-f]{8}(-[a-z]+)?\.json$/.test(f)).sort();
+    /* THE ONE DECLARED EXEMPTION (the test architect's ruling on one spelling for a desk): 59713def's recorder enrolled one desk by
+       its raw public half at step 3, which this relay refuses, and the list is taken whole or not at all, so that team has no desk
+       from there. Every step before it is answered as before; step 3 is answered the refusal, pinned here; the steps after it
+       are covered instead by 2026-11-01-59713def-branch.json, the same release's requests recorded on its own tree with that desk
+       named by its branch id, answered as before step for step. */
+    const EXEMPT = { "2026-11-01-59713def.json": { at: 3, status: 403, error: "bad-signature", from: 4,
+      why: "the raw-key enrol refused at step 3, so no desk is on the team after it; 2026-11-01-59713def-branch.json covers these steps" } };
     const fixtures = files.map(f => JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8")));
     const freshEnv = () => S.relayEnv({ roots: K.ROOTS });
     const results = [];
@@ -6395,20 +6627,30 @@ async function main() {
     const table = ["teams POST", "devices POST", "invites POST", "hello POST", "session POST", "grant POST", "lead POST", "socket GET", "wrap GET",
       "states GET", "since GET", "b GET", "b PUT"];
     const unasked = table.filter(r => !asked.has(r));
-    const steps = results.reduce((n, r) => n + r.steps, 0), differ = results.flatMap((r, i) => r.differ.map(d => files[i] + " step " + d.step + " (" + d.what + ")"));
-    check(files.length >= 1 && steps >= 50 && differ.length === 0 && unasked.length === 0,
+    const steps = results.reduce((n, r) => n + r.steps, 0);
+    const pinned = [], exempt = [];
+    const differ = results.flatMap((r, i) => r.differ.filter(d => {
+      const ex = EXEMPT[files[i]];
+      if (ex && d.step === ex.at) { pinned.push(d.got.status === ex.status && !!d.got.json && d.got.json.error === ex.error ? files[i] : files[i] + " answered " + d.got.status); return false; }
+      if (ex && d.step >= ex.from) { exempt.push(d.step); return false; }
+      return true;
+    }).map(d => files[i] + " step " + d.step + " (" + d.what + ")"));
+    const pinnedOk = Object.keys(EXEMPT).every(f => files.indexOf(f) < 0 || pinned.indexOf(f) >= 0);
+    check(files.length >= 2 && steps >= 100 && differ.length === 0 && pinnedOk && unasked.length === 0,
       "1153a the previous release's requests, " + steps + " steps over " + files.length + " frozen fixture(s) (" + files.join(", ") + "), every route of the table among them,"
-      + " are answered by this relay as they were: " + (differ.length ? "answered otherwise at " + differ.slice(0, 3).join("; ") : "all as before")
+      + " are answered by this relay as they were, but for the one declared exemption: " + (differ.length ? "answered otherwise at " + differ.slice(0, 3).join("; ") : "all as before")
+      + "; the raw-key enrol answered the refusal: " + (pinnedOk ? "yes" : JSON.stringify(pinned)) + "; exempt after it, covered by the branch-id fixture: " + exempt.length + " step(s)"
       + (unasked.length ? ", never asked: " + unasked.join(", ") : ""));
     /* The control: the replay sees a change. With plant:session-life lifted from a copy of the core, a session past its thirty
        minutes still reads, and the step that recorded its refusal is answered otherwise; one recorded answer altered in a copy of
        the fixture is found at its step. */
     const how = p => p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED");
+    const control = fixtures[files.indexOf("2026-11-01-59713def-branch.json")] || fixtures[0];
     const lifted = await liftCore("plant:session-life", async () => {
-      const r = await PREV.replay(fixtures[0], W, freshEnv);
+      const r = await PREV.replay(control, W, freshEnv);
       return r.differ.some(d => /past its thirty minutes/.test(d.what));
     });
-    const altered = JSON.parse(JSON.stringify(fixtures[0] || { steps: [] }));
+    const altered = JSON.parse(JSON.stringify(control || { steps: [] }));
     const at = altered.steps.findIndex(st => st.res && st.res.status === 410);
     if (at >= 0) altered.steps[at].res.status = 404;
     const seen = at >= 0 ? (await PREV.replay(altered, W, freshEnv)).differ.map(d => d.step) : [];
@@ -6859,44 +7101,6 @@ async function main() {
     const rawId = await safe(rawIdScene);
     check(rawId.ok, "a4n a desk knocks at the door by its k- id alone: the removed desk naming itself by its raw public half is refused and"
       + " opens no request, and so is any desk by that form: " + rawId.detail);
-    /* The other way round (Argon's review of the relay, finding 1): a desk the lead enrolled, and removed, by its raw public half is
-       answered removed when it knocks by its k- id, and opens no request. */
-    async function rawEnrolledScene() {
-      const w = await doorWorld();
-      const k = keyPair(true), place = deskOf(w);
-      const on = await devices(w, w.devs.concat([{ id: k.pub, pub: k.pub, desk: place }]));
-      const off = await devices(w, w.devs);
-      const before = doorRows(w).length;
-      const back = await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now));
-      const ok = on.status === 200 && off.status === 200 && refused(back, "removed") && doorRows(w).length === before;
-      return { ok, detail: JSON.stringify({ on: said(on), off: said(off), back: said(back), rows: [before, doorRows(w).length] }) };
-    }
-    const rawEnrolled = await safe(rawEnrolledScene);
-    check(rawEnrolled.ok, "a4v a desk enrolled and removed by its raw public half is refused removed at the door by its k- id, and opens no request: "
-      + rawEnrolled.detail);
-    /* A door request whose key the lead enrolled and removed by its raw half leaves its person's cap, as under its k- id (the Grok review
-       of the relay's mend, finding 4). The person's three desks knock; the first is enrolled and removed; a fourth then knocks. */
-    async function doorHalfScene(raw) {
-      const w = await doorWorld();
-      const person = hex(32), ks = [];
-      for (let i = 0; i < C.DOOR_PER_PERSON; i++) {
-        const k = keyPair(true);
-        ks.push(k);
-        await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now, { person }));
-      }
-      const first = ks[0], id = raw ? first.pub : first.keyId;
-      await devices(w, w.devs.concat([{ id, pub: first.pub, desk: deskOf(w) }]));
-      await devices(w, w.devs);
-      const k = keyPair(true), fourth = await doorHello(w, k, certFor(k.pub, w.ref, w.R.clock.now, { person }));
-      return { ok: fourth.status === 200, detail: said(fourth) };
-    }
-    async function doorHalfRun() {
-      const control = await safe(() => doorHalfScene(false)), raw = await safe(() => doorHalfScene(true));
-      return { ok: control.ok && raw.ok, detail: "removed by k- " + control.detail + "; removed raw " + raw.detail };
-    }
-    const doorHalf = await doorHalfRun();
-    check(doorHalf.ok, "a4w a door request whose key the lead enrolled and removed leaves its person's cap, whether by the k- id or by the raw half: "
-      + doorHalf.detail);
 
     /* The test architect's F2: a request the lead drops leaves no spent marker, and its key and person stay held against the door
        for the door's rate window from the drop (his re-tune: not the 30-day keep), so a drop frees neither to knock again at once;
@@ -7119,8 +7323,6 @@ async function main() {
       ["door-lapse-open", async () => !(await lapseScene()).ok, "a4l (a read-only team opens its door)"],
       ["door-handover", async () => !(await handoverScene()).ok, "a4m (the old lead's door stands after a handover)"],
       ["door-key-form", async () => !(await rawIdScene()).ok, "a4n (a removed desk knocks by its raw public half)"],
-      ["removal-either-name", async () => !(await rawEnrolledScene()).ok, "a4v (a desk removed by its raw public half knocks by its k- id)"],
-      ["door-live-half", async () => !(await doorHalfRun()).ok, "a4w (a request whose key was removed raw keeps its person's place)"],
       ["door-drop-kept", async () => !(await dropScene()).ok, "a4o (a dropped door request frees its key and person)"],
       ["door-drop-key", async () => !(await dropScene()).ok, "a4o (a dropped door request's key knocks again at once)"],
       ["door-drop-person", async () => !(await dropScene()).ok, "a4o (a person's dropped request makes room at the door)"],
@@ -7133,12 +7335,69 @@ async function main() {
       ["door-withdrawn-live", async () => !(await withdrawCostScene()).ok, "a4s (a request taken back still holds its person)"],
     ];
     const base = taken.ok && refusesAll.ok && closed.ok && register.ok && person.ok && rated.ok && live.ok && tries.ok && request.ok && removed.ok
-      && invs.ok && lapsed.ok && handed.ok && rawId.ok && rawEnrolled.ok && doorHalf.ok && drops.ok && seenBack.ok && costBack.ok && unsent.ok && capBack.ok;
+      && invs.ok && lapsed.ok && handed.ok && rawId.ok && drops.ok && seenBack.ok && costBack.ok && unsent.ok && capBack.ok;
     for (const [tag, turns, what] of DOOR_PLANTS) {
       const line = "a4p lifting plant:" + tag + " turns " + what + " red, and the product file is never written";
       if (PLANTS_OFF) { skip(line); continue; }
       const p = await liftCore("plant:" + tag, turns);
       check(base && p.turned && p.back, line + ": " + p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED"));
+    }
+
+    /* WHILE THE MIGRATION HAS NOT COMMITTED, NO NEW DESK IS LET IN (Claude alpha, on the hole named in addendum 7). The step is planted
+       to throw while a switch is on, so every request's retry throws again. Meanwhile a door knock by a desk removed under its raw half,
+       and a token hello on an invitation the lead registered before that removal, answer the relay's temporary 503 and spend nothing;
+       an enrolled desk's read and the lead's upload still answer. Once the switch is off the next request's retry commits: the removed
+       desk's knock answers removed, its token is refused removed and left unspent, and a desk not removed is let in at the door. */
+    async function shutScene() {
+      const lines = [];
+      const R = relayEnv({ log: line => lines.push(String(line)) });
+      R.clock.now = T0;
+      const w = await world({ R });
+      w.ref = hex(16);
+      await doorSet(w, [w.ref]);
+      const st = w.R.stores.get(w.rt), now = w.R.clock.now, y = keyPair(true), fresh = keyPair(true);
+      const token = hex(32), inv = hex(16);
+      await invites(w, [{ id: inv, hash: sha(token) }], []);
+      const ord = (st.get("ord") || 0) + 1;
+      st.put("ord", ord);
+      st.put("gone:" + y.pub, { pub: y.pub, desk: "k-" + hex(8), at: now, ord });
+      const deskS = await sessionOf(w, w.desk), leadS = await sessionOf(w, w.lead);
+      const real = st.get, failing = { on: true };
+      st.get = k => { if (k === "mig:desk-id" && failing.on) throw new Error("planted"); return real.call(st, k); };
+      w.R.restart();
+      const out = {};
+      try {
+        out.knock = await doorHello(w, y, certFor(y.pub, w.ref, now));
+        out.token = await tokenHello(w, inv, token, null, y);
+        out.read = await since(w, deskS);
+        out.lead = await put(w, leadS, sealAs(w, w.lead, "guide.ec", 1));
+        out.spentDuring = (st.get("inv:" + inv) || {}).spent === true;
+        out.doorRowsDuring = doorRows(w).length;
+      } finally { failing.on = false; }
+      out.knockAfter = await doorHello(w, y, certFor(y.pub, w.ref, now));
+      out.tokenAfter = await tokenHello(w, inv, token, null, y);
+      out.spentAfter = (st.get("inv:" + inv) || {}).spent === true;
+      out.freshAfter = await doorHello(w, fresh, certFor(fresh.pub, w.ref, now));
+      st.get = real;
+      const later = r => r.status === 503 && !!r.json && r.json.error === "unavailable";
+      const failed = lines.filter(l => /failed/.test(l)).length;
+      const ok = later(out.knock) && later(out.token) && !out.spentDuring && out.doorRowsDuring === 0 && out.read.status === 200
+        && out.lead.status === 200 && refused(out.knockAfter, "removed") && refused(out.tokenAfter, "removed") && !out.spentAfter
+        && out.freshAfter.status === 200 && out.freshAfter.json.invite === true && failed === 1;
+      return { ok, detail: JSON.stringify({ knock: said(out.knock), token: said(out.token), spentDuring: out.spentDuring, read: out.read.status,
+        lead: said(out.lead), knockAfter: said(out.knockAfter), tokenAfter: said(out.tokenAfter), spentAfter: out.spentAfter,
+        freshAfter: said(out.freshAfter), failedLines: failed }) };
+    }
+    const shut = await safe(shutScene);
+    check(shut.ok, "a4v while the migration's step keeps failing, a door knock by a desk removed under its raw half and a token hello on an"
+      + " invitation registered before the removal answer the relay's temporary 503 and spend nothing, while an enrolled desk's read and the"
+      + " lead's upload answer; once the step commits, that knock and token answer removed, unspent, and a desk not removed is let in: "
+      + shut.detail);
+    if (PLANTS_OFF) skip("a4w lifting plant:entries-shut lets the removed desk in while the step fails (a4v red)");
+    else {
+      const shutLift = await liftCore("plant:entries-shut", async () => !(await safe(shutScene)).ok);
+      check(shut.ok && shutLift.turned && shutLift.back, "a4w lifting plant:entries-shut lets the removed desk in while the step fails (a4v red),"
+        + " and the product file is never written: " + shutLift.detail.split("\n")[0] + ", sha " + (shutLift.back ? "unchanged" : "CHANGED"));
     }
   }
 
