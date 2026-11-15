@@ -25,8 +25,9 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 67;
-const PLANT_CHECKS = 11;
+const EXPECTED = 84;
+const PLANT_CHECKS = 12;
+const VECTORS = path.join(ROOT, "tests", "card-flag-vectors.json");
 
 let checks = 0, fails = 0, notRun = 0, done = false;
 const check = (ok, what, detail) => {
@@ -203,6 +204,35 @@ function wordsOf(card, code) {
   return obj;
 }
 const seenOf = (card, code) => sha256(V2.v2Canonical(wordsOf(card, code)));
+/* A second reader of the vectors' written rule, from a card as the file holds it, with none of the engine's code. */
+function seenFromFile(card, code) {
+  const marker = /^\[(step|alt)(:[^\]]*)?\]$/;
+  const shaped = card.bodyShape === "alts" || card.bodyShape === "steps";
+  const unmark = (text) => {
+    const blocks = []; let cur = [], label = "", started = false;
+    const close = () => { const b = cur.join("\n").trim(); blocks.push(label ? (b ? label + "\n" + b : label) : b); };
+    text.split("\n").forEach((line) => {
+      const m = marker.exec(line.trim());
+      if (m) { if (started) close(); cur = []; started = true; label = m[1] === "alt" && m[2] ? line.trim() : ""; return; }
+      cur.push(line);
+    });
+    if (started) close();
+    return blocks.filter(Boolean).join("\n\n");
+  };
+  const mark = (text, open) => text.split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean)
+    .map((b) => (marker.test((b.split("\n")[0] || "").trim()) ? b : open + "\n" + b)).join("\n\n");
+  const canon = (v) => (typeof v === "string" ? JSON.stringify(v) : "{" + Object.keys(v).sort().map((k) => JSON.stringify(k) + ":" + canon(v[k])).join(",") + "}");
+  const obj = {};
+  ["title", "body", "note"].forEach((field) => {
+    const raw = (card[field] || {})[code];
+    let v = typeof raw === "string" ? raw : "";
+    if (field === "body" && shaped) v = unmark(v);
+    v = v.trim();
+    if (!v) return;
+    obj[field] = field === "body" && shaped ? mark(v, card.bodyShape === "steps" ? "[step]" : "[alt]") : v;
+  });
+  return sha256(canon(obj));
+}
 const keysOf = (o) => Object.keys(o).sort().join(",");
 const TIME_KEY = /at|date|time|when/i;
 
@@ -233,7 +263,7 @@ function rewriteLine(file, marker, edit) {
 }
 let plantN = 0;
 async function runPlants() {
-  const names = ["plant:flag-holds", "plant:flag-sort", "plant:flag-note-cap", "plant:flag-note-control", "plant:flag-layer", "plant:flag-settle-words", "plant:flag-named", "plant:flag-no-answered", "plant:flag-reach", "plant:flag-full", "plant:flag-random"];
+  const names = ["plant:flag-holds", "plant:flag-sort", "plant:flag-note-cap", "plant:flag-note-control", "plant:flag-layer", "plant:flag-settle-words", "plant:flag-named", "plant:flag-no-answered", "plant:flag-reach", "plant:flag-full", "plant:flag-random", "plant:flag-vector"];
   if (PLANTS_OFF) { names.forEach(skip); return; }
   const dir = fs.mkdtempSync(path.join(BASE, "plant-"));
   fs.cpSync(path.join(ROOT, "src", "modules"), dir, { recursive: true });
@@ -558,7 +588,31 @@ try {
   check(F.flagHolds() === true && !("flags" in whileHeld) && !("answered" in whileHeld), "a flag in the layer is not part of an export");
   F.unflagCard("c-a");
 
-  console.log("EXAMPLE seen-plain " + F.flagWordsHash(plainCard, "en"));
+  const vectors = JSON.parse(fs.readFileSync(VECTORS, "utf8"));
+  const names = vectors.seen.cases.map((c) => c.name);
+  const wanted = ["plain", "alternatives", "steps", "note", "empty-field", "crlf-plain", "crlf-alternatives", "polish"];
+  const firstLang = (c) => Object.keys(c.card.title || {})[0];
+  check(vectors.kind === "etiuda-card-flag-vectors" && vectors.seen.cases.every((c) => keysOf(c) === "card,lang,name,seen" && /^[0-9a-f]{64}$/.test(c.seen)
+      && ["plain", "alts", "steps"].includes(c.card.bodyShape) && vectors.langs.includes(c.lang)),
+    "the vectors file is plain JSON: each case a format 2 card, a language and 64 hex characters");
+  check(wanted.every((n) => names.includes(n)) && vectors.seen.cases.some((c) => c.lang !== firstLang(c) && !!c.card.title[c.lang]) && names.length === 13
+      && new Set(vectors.seen.cases.map((c) => c.seen)).size === names.length,
+    "the vectors cover plain, alternatives, steps, a note, an empty field, CRLF, Polish and a flagged language that is not the card's first");
+  const deskSeen = (c) => {
+    try {
+      const rt = V2.catalogFromV2({ format: 2, kind: "etiuda-catalog", id: "vectors", rev: 1, langs: vectors.langs.map((code) => ({ code: code, label: code.toUpperCase() })),
+        tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }], cards: [c.card] });
+      return F.flagWordsHash(rt.cards[0], c.lang);
+    } catch (e) { return "threw " + (e && e.message ? e.message : e); }
+  };
+  vectors.seen.cases.forEach((c) => {
+    const got = deskSeen(c);
+    check(got === c.seen, "vector " + c.name + ": the desk's seen for the card as the file holds it, in " + c.lang, got + " wanted " + c.seen);
+  });
+  check(vectors.seen.cases.every((c) => seenFromFile(c.card, c.lang) === c.seen), "the rule written in the vectors file, read by a second reader that holds none of the engine's code, gives every seen");
+  check(vectors.f.cases.length >= 2 && vectors.f.cases.every((x) => F.flagDigest(x.r) === x.f && sha256("etiuda-flag\n" + x.r) === x.f && /^[0-9a-f]{32}$/.test(x.r)),
+    "an r and its f in the vectors file: the desk's digest is SHA-256 of etiuda-flag, a line feed, then r");
+
   console.log("EXAMPLE canon-plain " + V2.v2Canonical(wordsOf(plainCard, "en")));
   console.log("EXAMPLE seen-steps " + F.flagWordsHash(stepsCard, "en"));
   console.log("EXAMPLE canon-steps " + V2.v2Canonical(wordsOf(stepsCard, "en")));
