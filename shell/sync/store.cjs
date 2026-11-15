@@ -230,8 +230,11 @@ async function storeLook(io) {
   /* Only a computer that made the store its folder shows says it replaces the person's others (the service ends them); two may, above. */
   const got = await io.grant(keys.rt, sPub, { replace: made });
   if (!got || got.why || !got.grant) return { state: "paused", why: got && got.why ? got.why : "unreached", keys, made };
-  /* Sealed here only once the service grants the store to the person signed in, so a key file it refuses never replaces this computer's own. */
-  if (!local || local.rt !== keys.rt || local.k !== keys.k || local.s !== keys.s || local.rev !== keys.rev) io.keep(keys); /* plant:keep-granted */
+  /* Sealed here only once the service grants the store to the person signed in, so a key file it refuses never replaces this computer's own;
+     and a list naming this computer only once the relay holds it (below), so a list the relay may lack is posted again at the next look. */
+  const mine = k => k.devices.some(d => d.pub === io.me.pub);
+  const taken = k => !!local && local.rt === k.rt && local.rev === k.rev && mine(local); /* plant:enrol-taken */
+  if (!mine(keys) && (!local || local.rt !== keys.rt || local.k !== keys.k || local.s !== keys.s || local.rev !== keys.rev)) io.keep(keys); /* plant:keep-granted */
   if (made) {
     const c = await io.relay.create(keys, got.grant);
     if (!c.ok) return { state: "paused", why: c.why || "relay", keys, made };
@@ -244,15 +247,20 @@ async function storeLook(io) {
     /* Swept while every computer was away, or a seat regained after the sweep: a fresh store, once, which this computer's sync fills. */
     if (r && r.ok === false && r.why === "not-enrolled" && !io.gone) return storeLook(Object.assign({}, io, { gone: keys.rt })); /* plant:store-remake */
   }
-  if (!keys.devices.some(d => d.pub === io.me.pub)) {
-    /* This computer enrols itself with S, the list kept in the folder's file so the next computer signs the whole of it. */
+  if (!mine(keys)) {
+    /* This computer enrols itself with S, the list kept in the folder's file so the next computer signs the whole of it. Written to the
+       folder before the relay, as storeLeave does: the relay refuses any revision at or below its own, so it must never hold one the
+       folder lacks. */
     const next = Object.assign({}, keys, { devices: keys.devices.concat([{ id: io.me.id, pub: io.me.pub, desk: io.me.desk }]).slice(-DEVICES_MAX), rev: keys.rev + 1 });
-    const d = await io.relay.devices(next, got.store);
-    if (!d.ok) return { state: "paused", why: d.why || "relay", keys };
-    const w = await io.folder.write(keyText(next));
-    if (!w.ok) return { state: "unavailable", why: w.why, keys: next };
-    io.keep(next);
+    const w = await io.folder.write(keyText(next)); /* plant:enrol-folder-first */
+    if (!w.ok) return { state: "unavailable", why: w.why, keys };
     keys = next;
+  }
+  if (!taken(keys)) {
+    /* A list it holds already (replay-rev) is done, as for storeLeave. */
+    const d = await io.relay.devices(keys, got.store);
+    if (!d.ok && d.why !== "replay-rev") return { state: "paused", why: d.why || "relay", keys };
+    io.keep(keys);
   }
   return { state: "on", keys, store: got.store, made };
 }
