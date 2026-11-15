@@ -32,12 +32,23 @@ function noticeFaults(text, lang) {
   return faults;
 }
 
-let checks = 0, failed = 0;
+let checks = 0, failed = 0, skipped = 0;
 function check(ok, what) {
   checks++;
   console.log((ok ? "  ok   " : "  FAIL ") + what);
   if (!ok) failed++;
 }
+/* A FIXTURE THE LEG NEEDS AND THE MACHINE LACKS IS NOT RUN, NEVER RED (the test architect's, 2026-11-15, on Claudius's
+   ask): npm installs only this platform's native pair, so on a Windows desk the linux-x64 pair of onnxruntime-node is
+   there only where someone put it. Absent, the checks that need it are named as not run with the reason; present, they
+   run in full, and a pair present with the wrong bytes is a red as before. The release runner installs the pair. */
+function notRun(what, why) {
+  skipped++;
+  console.log("  NOT RUN " + what + " (" + why + ")");
+}
+const EXPECTED = 20;
+/* Where the pinned runtime is read from: the engine's own install, or MODEL_PACK_MODULES for the leg's own proof. */
+const MODULES = process.env.MODEL_PACK_MODULES || path.join(ROOT, "node_modules");
 
 const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-model-pack-"));
 function py(args) {
@@ -222,7 +233,7 @@ function runtimeFor(platform) {
 }
 function runtimeFault(items) {
   for (const item of items) {
-    const at = path.join(ROOT, "node_modules", ...item.name.split("/"));
+    const at = path.join(MODULES, ...item.name.split("/"));
     if (!fs.existsSync(at)) return item.name + " absent";
     const got = sha256(fs.readFileSync(at));
     if (got !== item.sha256) return item.name + " " + got.slice(0, 12);
@@ -239,11 +250,15 @@ const dropped = winListed.concat(linListed).some(item => /DirectML\.dll$|dxcompi
 const winDirect = ["onnxruntime.dll", "onnxruntime_binding.node", "tokenizers.cjs"].every(part => winListed.some(item => item.name.endsWith(part)));
 const linDirect = ["libonnxruntime.so.1", "onnxruntime_binding.node", "tokenizers.cjs"].every(part => linListed.some(item => item.name.endsWith(part)));
 const crossed = winListed.some(item => item.name.includes("/linux/")) || linListed.some(item => item.name.includes("/win32/"));
-check(winListed.length >= 4 && linListed.length >= 4 && !winFault && !linFault && winDirect && linDirect
+/* The fixture: the linux-x64 pair wholly absent (both files). One of the two present is a broken install, and a red. */
+const linPairAbsent = linNative.length === 2 && linNative.every(item => !fs.existsSync(path.join(MODULES, ...item.name.split("/"))));
+const linFaultSeen = linPairAbsent ? runtimeFault(linListed.filter(item => !linNative.includes(item))) : linFault;
+check(winListed.length >= 4 && linListed.length >= 4 && !winFault && !linFaultSeen && winDirect && linDirect
     && winNative.length === 2 && linNative.length === 2 && !dropped && !crossed,
   "m7 the pinned Windows and linux-x64 runtimes match node_modules, each with its own native pair and the shared tokenizer, without DirectML: "
   + "win32 " + winListed.length + " linux " + linListed.length
-  + (winFault ? " win " + winFault : "") + (linFault ? " linux " + linFault : ""));
+  + (winFault ? " win " + winFault : "") + (linFaultSeen ? " linux " + linFaultSeen : "")
+  + (linPairAbsent ? " (the linux-x64 pair itself is not installed here, so its bytes are not judged: see m8)" : ""));
 
 const destMissingLinux = path.join(LAB, "dest-missing-linux");
 const missingLinux = fs.existsSync(PACK) ? pack(["--dest", destMissingLinux, "--model", path.join(LAB, "no-such-linux"), "--platform", "linux"]) : { status: 127, stdout: "", stderr: "no packer" };
@@ -259,30 +274,36 @@ check(wrongLinux.status === 1 && /sha256|checksum/.test((wrongLinux.stderr || ""
   "m5e a Linux pack refuses a model file whose sha256 is wrong and does not copy it, as the Windows pack does: exit " + wrongLinux.status
   + " copied=" + acceptedLinux + " " + JSON.stringify(((wrongLinux.stderr || "") + (wrongLinux.stdout || "")).trim().slice(0, 180)));
 
-const destLinux = path.join(LAB, "dest-linux");
-let linuxLine = "";
-try {
-  const packed = await prepareEmbed({
-    dest: destLinux,
-    modelDir: readyModel,
-    pin: JSON.parse(fs.readFileSync(readyPin, "utf8")),
-    platform: "linux",
-    log: () => {},
-  });
-  linuxLine = packed.included ? "included" : "absent";
-} catch (error) { linuxLine = String((error && error.message) || error); }
-const soAt = path.join(destLinux, "runtime", "node_modules", "onnxruntime-node", "bin", "napi-v6", "linux", "x64", "libonnxruntime.so.1");
-const bindAt = path.join(destLinux, "runtime", "node_modules", "onnxruntime-node", "bin", "napi-v6", "linux", "x64", "onnxruntime_binding.node");
-const dllAt = path.join(destLinux, "runtime", "node_modules", "onnxruntime-node", "bin", "napi-v6", "win32", "x64", "onnxruntime.dll");
-const tokAt = path.join(destLinux, "runtime", "node_modules", "@huggingface", "tokenizers", "dist", "tokenizers.cjs");
-const modelAt = path.join(destLinux, "model", "model_q4.onnx");
-let soHash = "";
-if (fs.existsSync(soAt)) soHash = sha256(fs.readFileSync(soAt));
-const soPinned = linNative.find(item => item.name.endsWith("libonnxruntime.so.1"));
-check(linuxLine === "included" && fs.existsSync(modelAt) && fs.existsSync(bindAt) && fs.existsSync(tokAt) && !fs.existsSync(dllAt)
-    && !!soPinned && soHash === soPinned.sha256,
-  "m8 a Linux pack copies the model, the tokenizer runtime and the linux-x64 pair, and not the Windows binaries: " + linuxLine
-  + " so=" + soHash.slice(0, 12));
+if (linPairAbsent) {
+  notRun("m8 a Linux pack copies the model, the tokenizer runtime and the linux-x64 pair, and not the Windows binaries",
+    "the linux-x64 pair of onnxruntime-node is not installed in " + MODULES + "; npm installs only this platform's pair, and the release runner proves m8");
+} else {
+  const destLinux = path.join(LAB, "dest-linux");
+  let linuxLine = "";
+  try {
+    const packed = await prepareEmbed({
+      dest: destLinux,
+      modelDir: readyModel,
+      pin: JSON.parse(fs.readFileSync(readyPin, "utf8")),
+      platform: "linux",
+      runtimeDir: MODULES,
+      log: () => {},
+    });
+    linuxLine = packed.included ? "included" : "absent";
+  } catch (error) { linuxLine = String((error && error.message) || error); }
+  const soAt = path.join(destLinux, "runtime", "node_modules", "onnxruntime-node", "bin", "napi-v6", "linux", "x64", "libonnxruntime.so.1");
+  const bindAt = path.join(destLinux, "runtime", "node_modules", "onnxruntime-node", "bin", "napi-v6", "linux", "x64", "onnxruntime_binding.node");
+  const dllAt = path.join(destLinux, "runtime", "node_modules", "onnxruntime-node", "bin", "napi-v6", "win32", "x64", "onnxruntime.dll");
+  const tokAt = path.join(destLinux, "runtime", "node_modules", "@huggingface", "tokenizers", "dist", "tokenizers.cjs");
+  const modelAt = path.join(destLinux, "model", "model_q4.onnx");
+  let soHash = "";
+  if (fs.existsSync(soAt)) soHash = sha256(fs.readFileSync(soAt));
+  const soPinned = linNative.find(item => item.name.endsWith("libonnxruntime.so.1"));
+  check(linuxLine === "included" && fs.existsSync(modelAt) && fs.existsSync(bindAt) && fs.existsSync(tokAt) && !fs.existsSync(dllAt)
+      && !!soPinned && soHash === soPinned.sha256,
+    "m8 a Linux pack copies the model, the tokenizer runtime and the linux-x64 pair, and not the Windows binaries: " + linuxLine
+    + " so=" + soHash.slice(0, 12));
+}
 
 const shellMain = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const aiState = shellMain.indexOf('ipcMain.on("etiuda:ai-state"');
@@ -310,5 +331,9 @@ check(fs.existsSync(MAKE) && makeSelf.status === 0 && /sha256 refused/.test(make
   + makeSelf.status + " " + JSON.stringify(makeOut.trim().slice(-240)));
 
 try { fs.rmSync(LAB, { recursive: true, force: true }); } catch { /* the lab is under tmp */ }
-console.log("#counts checks=" + checks + " failed=" + failed);
+console.log("#counts checks=" + checks + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);
+if (checks + skipped !== EXPECTED) {
+  console.error("SUITE DID NOT COMPLETE: " + (checks + skipped) + " of " + EXPECTED + " checks ran");
+  process.exit(78);
+}
 process.exit(Math.min(failed, 63));
