@@ -39,7 +39,7 @@ const ASIDE = {
   "15ep": offWindows("15ep", "15em stands aside off Windows, so lifting plant:w2-folder-not-writable has no green leg there to turn"),
 };
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 179;
+const EXPECTED = 181;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -3085,12 +3085,12 @@ try {
     + " catalog opens on the empty desk with nothing pressed, the catalogs said open only then: " + wrapSaid(wrapped));
   /* 987r: with an older edition of the team's catalog in the mirror under a name listed first, the shell names the newest (the
      test architect's C1 to the desk pilot: relayOpenFile took the first it found). */
-  const olderA1 = JSON.stringify(Object.assign(JSON.parse(A1), { rev: 0 }));
+  const olderA1 = JSON.stringify(sign(Object.assign(JSON.parse(A1), { rev: 0 }), lead.privateKey, LEAD.keyId));
   const newest = await wrapScene("f3-newest", null, TJ, [["a-older.ec", olderA1]]);
   check(JSON.stringify(newest.loads) === JSON.stringify(["board.ec"]), "987r with an older edition listed first, the shell opens the team's newest: " + JSON.stringify(newest.loads));
   /* 962s5i by the relay: with two of the team's catalogs in the mirror, the shell names neither, and the empty desk opens nothing;
      one catalog with two editions opens its newest, as 987r. */
-  const annexA1 = JSON.stringify(Object.assign(JSON.parse(A1), { id: "lamp-annex", name: "Lamp Annex" }));
+  const annexA1 = JSON.stringify(sign(Object.assign(JSON.parse(A1), { id: "lamp-annex", name: "Lamp Annex" }), lead.privateKey, LEAD.keyId));
   const twoRelay = await wrapScene("s5i-relay", null, TJ, [["annex.ec", annexA1]]);
   check(twoRelay.keyed && twoRelay.loads.length === 0 && JSON.stringify(newest.loads) === JSON.stringify(["board.ec"]),
     "962s5i3 a relay desk keyed for a team whose catalogs in the mirror are two opens neither by itself, and with one catalog opens its newest: two "
@@ -3102,6 +3102,23 @@ try {
     let w = null;
     if (at >= 0) { lines.splice(at, 1); w = await wrapScene("s5i-relay-plant", lines.join("\n"), TJ, [["annex.ec", annexA1]]); }
     check(!!w && w.loads.length === 1, "962s5i4 lifting plant:open-many-none opens one of the two catalogs by itself (FAIL 962s5i3): " + (w ? JSON.stringify(w.loads) : "plant line absent"));
+  }
+  /* 987t: a higher rev any member sealed with the team's key, signed by a key that is not the pinned lead's or not signed at all,
+     is not the one opened; the lead's own lower rev is (Grok's review 16, finding 4). */
+  const memberHigh = JSON.stringify(sign(Object.assign(JSON.parse(A1), { rev: 5, name: "Lamp Shop, a member's" }), forger.privateKey, LEAD.keyId));
+  const memberBare = JSON.stringify(Object.assign(JSON.parse(A1), { rev: 6, sig: undefined }));
+  const memberRows = [["z-member.ec", memberHigh], ["z-member-bare.ec", memberBare]];
+  const leadOnly = await wrapScene("f3-lead-only", null, TJ, memberRows);
+  check(JSON.stringify(leadOnly.loads) === JSON.stringify(["board.ec"]),
+    "987t a higher rev a member sealed, signed by another key or not at all, is not opened on the empty desk; the lead's edition is: "
+    + JSON.stringify(leadOnly.loads));
+  if (PLANTS_OFF) skip("987u lifting plant:sealed-lead-only opens a member's higher rev");
+  else {
+    const lines = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:sealed-lead-only") >= 0);
+    let w = null;
+    if (at >= 0) { lines.splice(at, 1); w = await wrapScene("f3-plant-lead-only", lines.join("\n"), TJ, memberRows); }
+    check(!!w && w.loads.length === 1 && w.loads[0] !== "board.ec", "987u lifting plant:sealed-lead-only opens a member's higher rev (FAIL 987t): " + (w ? JSON.stringify(w.loads) : "plant line absent"));
   }
   if (PLANTS_OFF) skip("987s lifting plant:relay-open-newest names no catalog");
   else {

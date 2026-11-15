@@ -4856,8 +4856,10 @@ function teamSealedHere(team) {
   const kept = teamKeys[team] || {};
   const ids = new Set();
   if (!Object.keys(kept).length) return { best: "", ids: ids };
-  /* The newest of the team's sealed files this desk can open: the highest key number, then the highest rev inside it (the
-     test architect's C1 to the desk pilot; a sealed envelope carries no rev outside its ciphertext). */
+  /* The newest of the team's sealed files this desk can open whose inner catalog the team's pinned lead signed: the highest
+     key number, then the highest rev inside it (the test architect's C1 to the desk pilot; a sealed envelope carries no rev
+     outside its ciphertext). The team key is every member's, so a seal alone makes no file the lead's. */
+  const pin = teamPins[team];
   let best = "", bestEpoch = -1, bestRev = -1;
   let files = ecFilesIn(catalogFolder());
   if (!files.length) {
@@ -4868,8 +4870,11 @@ function teamSealedHere(team) {
     let d = null;
     try { if (fs.statSync(f).size <= BRANCH_TEXT_MAX) d = catalogPayload(fs.readFileSync(f, "utf8")).data; } catch { continue; }
     if (!(d && d.kind === SEALED_KIND && String(d.team) === team && Number.isInteger(d.epoch) && kept[d.epoch])) continue;
-    let rev = -1;
-    try { const text = openSealed(teamKeyAt(team, d.epoch), d); const doc = text ? JSON.parse(text) : null; if (doc && Number.isInteger(doc.rev)) rev = doc.rev; if (doc && typeof doc.id === "string") ids.add(doc.id); } catch { rev = -1; }
+    let rev = -1, doc = null;
+    try { const text = openSealed(teamKeyAt(team, d.epoch), d); doc = text ? JSON.parse(text) : null; } catch { doc = null; }
+    if (!(doc && pin && catalogSigValid(doc, String(pin.public || "")))) continue; /* plant:sealed-lead-only */
+    if (Number.isInteger(doc.rev)) rev = doc.rev;
+    if (typeof doc.id === "string") ids.add(doc.id);
     if (d.epoch > bestEpoch || (d.epoch === bestEpoch && rev > bestRev)) { best = path.basename(f); bestEpoch = d.epoch; bestRev = rev; } /* plant:relay-open-newest */
   }
   return { best: best, ids: ids };
