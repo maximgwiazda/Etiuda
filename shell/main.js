@@ -10654,6 +10654,7 @@ function keepNote(note, kept) {
   if (!kept) return "taken";
   if (note.serial < kept.serial) return "refused"; /* plant:note-serial */
   if (note.serial === kept.serial) return noteBytes(note).equals(noteBytes(kept)) ? "same" : "refused";
+  if (versionAbove(kept.version, note.version)) return "refused"; /* plant:note-downgrade */
   return "taken";
 }
 /* Whether release `a` is above release `b`, each three whole numbers; false where either is not. */
@@ -10724,20 +10725,22 @@ async function lookForNote(fetchFn) {
     const running = engineVersion();
     if (got.note && /^[0-9]+\.[0-9]+\.[0-9]+$/.test(running)) { /* plant:note-known-running */
       const kept = keptNote();
-      const take = keepNote(got.note, kept);
       /* A look reads only when its note stands at or above the running version: a note below it says nothing of newer
-         releases, kept or not (Argon's update-offer finding 1). */
+         releases, kept or not (Argon's update-offer finding 1), and must not be kept as a serial floor. */
       const proves = !versionAbove(running, got.note.version);
-      if (take === "same") {
-        look = proves ? "read" : "failed";
-      } else if (take === "taken") {
-        try {
-          writeReplacing(path.join(app.getPath("userData"), NOTE_FILE), body.toString("utf8"));
-          noteKept = got.note;
-          look = proves ? "read" : "failed";
-        } catch (e) {
-          console.error("etiuda: the version note could not be kept - " + e.message);
-          look = "failed";
+      if (proves) { /* plant:note-weigh-before-keep */
+        const take = keepNote(got.note, kept);
+        if (take === "same") {
+          look = "read";
+        } else if (take === "taken") {
+          try {
+            writeReplacing(path.join(app.getPath("userData"), NOTE_FILE), body.toString("utf8"));
+            noteKept = got.note;
+            look = "read";
+          } catch (e) {
+            console.error("etiuda: the version note could not be kept - " + e.message);
+            look = "failed";
+          }
         }
       }
     }

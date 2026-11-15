@@ -27,9 +27,9 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 13;
+const PLANTS = 15;
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 61 + (PLANTS_OFF ? 0 : PLANTS);
+const EXPECTED = 64 + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -187,6 +187,9 @@ try {
     && S0.keepNote(S0.readNote(note({ serial: 6, version: "2.0.2" })).note, kept0) === "taken"
     && S0.keepNote(kept0, null) === "taken",
     "u2g against a kept serial 5: a lower serial and the same serial with other bytes are refused, the same bytes are the same, a higher serial is taken");
+  check(S0.keepNote(S0.readNote(note({ serial: 6, version: "2.0.0" })).note, kept0) === "refused"
+    && S0.keepNote(S0.readNote(note({ serial: 6, version: "2.0.1", url: "https://etiuda.dev/desk/2.0.1-r2/" })).note, kept0) === "taken",
+    "u2j against a kept serial 5 at 2.0.1: a higher serial with a lower release (2.0.0) is refused, while the same release (2.0.1) is taken");
   check(S0.versionAbove("2.0.1", "2.0.0") && S0.versionAbove("2.10.0", "2.9.9") && !S0.versionAbove("2.0.1", "2.0.1")
     && !S0.versionAbove("2.0.0", "2.0.1") && !S0.versionAbove("2.0.1", ""), "u2h releases compare as three numbers, an equal one is not above");
   const wrongKeyId = note({}, root, n => { n.sig.keyId = "other-key"; return JSON.stringify(n); });
@@ -280,8 +283,8 @@ try {
     "u4k a higher serial naming 2.0.2 replaces the kept note and is offered");
   const S4fresh = shellOf({ running: "2.0.2" });
   const lBelow = await S4fresh.lookForNote(serve(note({ serial: 1, version: "2.0.1" })));
-  check(lBelow === "failed" && S4fresh.updateState().offer === "",
-    "u4l with nothing kept, a note below the running version gives look \"failed\": " + lBelow);
+  check(lBelow === "failed" && S4fresh.updateState().offer === "" && !fs.existsSync(path.join(S4fresh.ud, S4fresh.NOTE_FILE)),
+    "u4l with nothing kept, a note below the running version gives look \"failed\" and writes nothing: " + lBelow);
   /* u4l2: the same note looked at again, now kept, still proves nothing about newer releases: a look reads only when its
      note stands at or above the running version (Argon's update-offer finding 1, its second half). */
   const lAgain = await S4fresh.lookForNote(serve(note({ serial: 1, version: "2.0.1" })));
@@ -318,6 +321,22 @@ try {
   check(lNoVer === "failed" && SnoVer.updateState().offer === "" && SnoVer.updateState().look === "failed"
     && !fs.existsSync(path.join(SnoVer.ud, SnoVer.NOTE_FILE)),
     "u4p with no engine version known, any accepted note gives look \"failed\", no offer, and writes nothing: " + lNoVer);
+  /* u4q, u4r (review finding 2): a higher serial with a lower version never replaces the kept note and never sets a floor. */
+  const Sdown = shellOf({ running: "2.0.0" });
+  const n5 = note({ serial: 5, version: "2.0.5", url: "https://etiuda.dev/desk/2.0.5/" });
+  await Sdown.lookForNote(serve(n5));
+  const lDown = await Sdown.lookForNote(serve(note({ serial: 6, version: "2.0.1" })));
+  const lAfterDown = await Sdown.lookForNote(serve(n5));
+  check(lDown === "failed" && Sdown.updateState().offer === "2.0.5"
+    && fs.readFileSync(path.join(Sdown.ud, Sdown.NOTE_FILE), "utf8") === n5 && lAfterDown === "read",
+    "u4q a higher serial with a lower version leaves the kept 2.0.5 in place and later 2.0.5 still reads: " + [lDown, lAfterDown].join(", "));
+  const Sfloor = shellOf({ running: "2.0.5" });
+  const lOldHigh = await Sfloor.lookForNote(serve(note({ serial: 6, version: "2.0.0", url: "https://etiuda.dev/desk/2.0.0/" })));
+  const oldNotKept = !fs.existsSync(path.join(Sfloor.ud, Sfloor.NOTE_FILE));
+  const lRealLow = await Sfloor.lookForNote(serve(note({ serial: 5, version: "2.0.6", url: "https://etiuda.dev/desk/2.0.6/" })));
+  check(lOldHigh === "failed" && oldNotKept && lRealLow === "read" && Sfloor.updateState().offer === "2.0.6"
+    && Sfloor.readNote(fs.readFileSync(path.join(Sfloor.ud, Sfloor.NOTE_FILE))).note.serial === 5,
+    "u4r a higher serial below the running version is not kept and never blocks a later real 2.0.6 at serial 5: " + [lOldHigh, oldNotKept, lRealLow].join(", "));
 
   /* ---- u5: the release page, and the timer ------------------------------------------------------------------------- */
   const open = S4e.handle["etiuda:update-open"], click = ev => { const e = Object.assign({}, ev); S4e.on["etiuda:update-click"](e); return e; };
@@ -528,6 +547,19 @@ try {
     })();
     check((await PK.lookForNote(serve(note({ serial: 5, version: "1.0.0" })))) === "read",
       "u-plant note-known-running turned reads an accepted note as newest when engineVersion is empty");
+    const PD = lifted("plant:note-downgrade");
+    check(PD.keepNote(PD.readNote(note({ serial: 6, version: "2.0.0" })).note, kept0) === "taken",
+      "u-plant note-downgrade lifted takes a higher serial whose version is below the kept note");
+    const PW = (() => {
+      const lines = SEC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:note-weigh-before-keep") >= 0);
+      if (at < 0 || lines.findIndex((l, i) => i > at && l.indexOf("plant:note-weigh-before-keep") >= 0) >= 0)
+        throw new Error("plant:note-weigh-before-keep is not in the section once");
+      lines.splice(at, 1, "      if (true) {");
+      return shellOf({ text: lines.join("\n"), running: "2.0.5" });
+    })();
+    await PW.lookForNote(serve(note({ serial: 6, version: "2.0.0", url: "https://etiuda.dev/desk/2.0.0/" })));
+    check((await PW.lookForNote(serve(note({ serial: 5, version: "2.0.6", url: "https://etiuda.dev/desk/2.0.6/" })))) === "failed",
+      "u-plant note-weigh-before-keep turned keeps a below-running note and lets it block a later real release");
   }
 } catch (e) {
   check(false, "the leg stopped: " + (e && e.stack ? e.stack.split("\n").slice(0, 3).join(" / ") : String(e)));
