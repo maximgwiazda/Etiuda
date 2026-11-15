@@ -202,6 +202,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
      desk's own catalog file by its stem, an empty text taking it away. Nothing here hands out a key. */
   branchIdentity: (make) => ipcRenderer.invoke("etiuda:branch-identity", make === false ? false : true),
   writeBranch: (stem, text) => ipcRenderer.invoke("etiuda:branch-write", String(stem || ""), String(text || "")),
+  /* Whether a flag made now would reach a lead. No argument: the shell holds the catalog in use. */
+  branchReach: () => ipcRenderer.sendSync("etiuda:branch-reach"),
   /* The desk's earlier versions of its catalogs: the list, {name, text} for one, and putting one back in the catalog
      folder, answered {ok, replaced}. A version is its hash and the file it was kept for. */
   historyList: () => ipcRenderer.invoke("etiuda:history-list"),

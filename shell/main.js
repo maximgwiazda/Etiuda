@@ -3752,6 +3752,52 @@ function branchGate(doc) {
   if (!contentApplies(use.seal.team, use.consent) || !/^[0-9a-f]{64}$/.test(String(use.seal.box || ""))) return { hold: true }; /* plant:s0b-branch-switch */
   return { box: use.seal, at: use.content ? String(use.content.at) : "" };
 }
+/* Whether a flag made for the catalog in use would leave in a desk file a lead can read. The page
+   asks with no argument: this shell already holds that catalog. True only on a team, for a catalog
+   that is not private, where branchGate would write the file plain or under the team's key. A hold,
+   a removal and a seal to the lead's box alone are false. Nothing here is written. */
+function branchReach() {
+  const use = teamUse(), onTeam = !!(use.member && use.seal);
+  if (!onTeam) return false;
+  let edition = null;
+  try { edition = loadedText ? JSON.parse(loadedText) : null; } catch { return false; }
+  if (!edition || typeof edition !== "object" || edition.kind !== "etiuda-catalog" || typeof edition.id !== "string" || !edition.id) return false;
+  let pin = "";
+  try { pin = signedSha(edition); } catch { return false; }
+  if (!PIN_RE.test(pin)) return false;
+  const grewId = String(edition.id);
+  let chain = lineageOfId(grewId);
+  if (chain.length < 2 && edition.grew && typeof edition.grew === "object" && edition.grew.id && String(edition.grew.id) !== grewId)
+    chain = [grewId].concat(lineageOfId(String(edition.grew.id)).filter(id => id !== grewId));
+  const deskChain = ["flag-probe"].concat(chain);
+  const catalogs = Array.isArray(use.catalogs) ? use.catalogs : [];
+  const root = deskChain[deskChain.length - 1];
+  const listedRoot = catalogs.indexOf(root) >= 0;
+  const priv = deskChain.slice();
+  deskChain.forEach(id => { const r = catalogRoots[id]; if (r && priv.indexOf(r) < 0) priv.push(r); });
+  const og = edition.grew && typeof edition.grew === "object" ? edition.grew : null;
+  const stated = og && (og.root || og.id) ? String(og.root || og.id) : "";
+  if (stated && priv.indexOf(stated) < 0) priv.push(stated);
+  if (!listedRoot && priv.some(id => catalogPrivate.has(id))) return false;
+  const pub = String(use.seal.lead && use.seal.lead.public || "");
+  let listed = false;
+  if (listedRoot) {
+    const hop = deskChain.length === 2 ? pin : deskChain.length > 2 ? firstHopSha(deskChain[deskChain.length - 2], root) : "";
+    listed = leadSignedPin(hop, pub);
+  }
+  if (!listed) return false;
+  let sealId = teamOpened.has(grewId) ? grewId : "";
+  let sealPin = sealId ? pin : "";
+  if (!sealId && deskChain.length > 2 && deskChain.slice(1).some(id => teamOpened.has(id))) {
+    sealId = root;
+    sealPin = firstHopSha(deskChain[deskChain.length - 2], root);
+  }
+  if (sealId) {
+    const seal = PIN_RE.test(sealPin) ? sealFor(sealId, sealPin, catalogFolder()) : null;
+    if (!seal) return false;
+  }
+  return true;
+}
 /* What this desk put on the share that the lead may no longer read (board 962, stage 0b, Claude alpha's ruling B): an answer to
    the lead's box once the switch no longer applies, any answer about a catalog now private, and working copies likewise. */
 function withdrawClosed() {
@@ -9509,6 +9555,10 @@ ipcMain.handle("etiuda:stats-close", (e, text) => {
 /* The desk's branch: its public identity, and the write of its own file. See writeBranch. */
 ipcMain.handle("etiuda:branch-identity", (e, make) => (fromEngine(e) ? branchIdentity(make === false ? false : true) : null));
 ipcMain.handle("etiuda:branch-write", (e, stem, text) => (fromEngine(e) ? writeBranch(stem, text) : { ok: false }));
+ipcMain.on("etiuda:branch-reach", (e) => {
+  if (!fromEngine(e)) { e.returnValue = false; return; }
+  e.returnValue = branchReach(); /* plant:flag-reach */
+});
 /* The desk's earlier versions: the list, one version's catalog, and putting one back. A version is named by its hash and
    the file it was kept for, and only a pair the history holds is answered. */
 ipcMain.handle("etiuda:history-list", (e) => (fromEngine(e) ? historyView() : []));
