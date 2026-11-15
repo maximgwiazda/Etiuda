@@ -8499,7 +8499,7 @@ function closeHeld(win, e) {
   if (decision === "hide" && ensureTray() && !(lost && !lost.back)) {
     try { if (e && typeof e.preventDefault === "function") e.preventDefault(); } catch { /* already held */ }
     try { if (win && typeof win.hide === "function") win.hide(); } catch { /* this window cannot hide */ }
-    try { maybeFirstClose(win); } catch { /* the toast is a courtesy */ }
+    try { firstCloseTraced(win); } catch { /* the toast is a courtesy */ }
     return true;
   }
   if (win && (win.etiudaInstallerClose || win.etiudaSessionEnd || win.etiudaRefusalClose)) return false;
@@ -12698,10 +12698,10 @@ function setTrayNotes(on) {
   rebuildTrayMenu();
 }
 let trayNoticeTold = false;
-function maybeFirstClose(win) {
+function maybeFirstClose(win, traced) {
   const w = trayWords();
-  notifyFirstClose({
-    electron: { Notification: Notification, app: app },
+  return notifyFirstClose({
+    electron: traced || { Notification: Notification, app: app },
     appId: APP_IDS.desktop,
     title: w.trayKeepsRunning,
     body: w.trayKeepsBody,
@@ -12709,6 +12709,91 @@ function maybeFirstClose(win) {
     setTold: () => { trayNoticeTold = true; },
     onClick: () => showDesk(win),
   });
+}
+/* Each first-close attempt through maybeFirstClose as before, with its trace line; once told, no attempt and no line. */
+function firstCloseTraced(win) {
+  if (trayNoticeTold === true) return maybeFirstClose(win);
+  let t = null;
+  try {
+    t = trayToastTrace({ Notification: Notification, app: app, harness: harnessLaunch(), defaultAumid: legacyLoginName(),
+      state: trayTraceState, write: trayTraceWrite });
+  } catch { t = null; }
+  if (!t) return maybeFirstClose(win);
+  let got;
+  try { got = maybeFirstClose(win, t.electron); } catch (e) { t.end(null, e); throw e; } /* plant:trace-caught */
+  t.end(got, null);
+  return got;
+}
+/* THE FIRST-CLOSE TRACE: each attempt at the first-close toast appends one line to tray-trace.txt in the user-data folder,
+   naming what Notification.isSupported() answered, the app user model id in force, harnessLaunch() and the outcome, and
+   Windows's own answer on a line of its own when it comes. The attempt is made exactly as it is without the trace. */
+const TRAY_TRACE_FILE = "tray-trace.txt", TRAY_TRACE_MAX_BYTES = 64 * 1024, TRAY_TRACE_RUN_LINES = 6;
+const trayTraceState = { aumid: "", lines: 0 };
+function trayTraceWrite(line) {
+  if (trayTraceState.lines >= TRAY_TRACE_RUN_LINES) return;
+  trayTraceState.lines++;
+  try {
+    const at = path.join(app.getPath("userData"), TRAY_TRACE_FILE);
+    let size = 0;
+    try { size = fs.statSync(at).size; } catch { size = 0; }
+    if (size > TRAY_TRACE_MAX_BYTES) {
+      const text = fs.readFileSync(at, "utf8"), cut = text.indexOf("\n", text.length - TRAY_TRACE_MAX_BYTES / 2);
+      fs.writeFileSync(at, cut < 0 ? "" : text.slice(cut + 1));
+    }
+    fs.appendFileSync(at, line + "\n");
+  } catch { /* an unwritten line costs only itself */ }
+}
+/* Stand-ins for Electron's Notification and app around one attempt, each passing every call through unchanged; end(got, err)
+   writes the attempt's line. o: { Notification, app, harness, defaultAumid, state, write }. */
+function trayToastTrace(o) {
+  const Real = o.Notification, seen = { supported: "", aumid: "", error: "" };
+  const first = e => String(e && e.message || e).split("\n")[0].replace(/[A-Za-z]:\\Users\\[^\\\s"']+/gi, "%USERPROFILE%").slice(0, 200);
+  const stamp = () => new Date().toISOString();
+  let Stand = Real;
+  if (typeof Real === "function") {
+    Stand = function (opts) {
+      let n;
+      try { n = new Real(opts); } catch (e) { seen.error = first(e); throw e; }
+      const show = n.show;
+      try { n.show = function () { try { return show.apply(n, arguments); } catch (e) { seen.error = first(e); throw e; } }; }
+      catch { /* Electron's own show stays */ }
+      try {
+        n.on("show", () => o.write(stamp() + " first close, Windows: shown"));
+        n.on("failed", (ev, err) => o.write(stamp() + " first close, Windows: failed: " + first(err)));
+      } catch { /* no events: the attempt's line stands alone */ }
+      return n;
+    };
+    if (typeof Real.isSupported === "function") Stand.isSupported = function () {
+      try { const r = Real.isSupported(); seen.supported = String(r); return r; }
+      catch (e) { seen.supported = "threw: " + first(e); throw e; }
+    };
+  }
+  const realApp = o.app;
+  const standApp = realApp ? new Proxy(realApp, { get(t, k) {
+    if (k === "setAppUserModelId" && typeof t.setAppUserModelId === "function") {
+      return id => { t.setAppUserModelId(id); seen.aumid = o.state.aumid = String(id); };
+    }
+    const v = t[k];
+    return typeof v === "function" ? v.bind(t) : v;
+  } }) : realApp;
+  function end(got, err) {
+    try {
+      let outcome;
+      if (err) outcome = "thrown: " + first(err);
+      else if (got) outcome = "shown"; /* plant:trace-shown */
+      else if (o.harness) outcome = "not attempted (harnessLaunch)";
+      else if (seen.error) outcome = "thrown: " + seen.error; /* plant:trace-thrown */
+      else if (seen.supported === "false") outcome = "not supported"; /* plant:trace-unsupported */
+      else if (typeof Real !== "function") outcome = "not attempted (no Notification)";
+      else outcome = "not shown (no reason seen)";
+      const aumid = seen.aumid ? seen.aumid + " (this attempt set it)"
+        : o.state.aumid ? o.state.aumid + " (an earlier first close set it)"
+        : o.defaultAumid + " (Electron's default, unless another toast set one)";
+      o.write(stamp() + " first close: isSupported=" + (seen.supported || "not asked") + " aumid=" + aumid
+        + " harnessLaunch=" + !!o.harness + " outcome=" + outcome);
+    } catch { /* the trace never stands in the close's way */ }
+  }
+  return { electron: { Notification: Stand, app: standApp }, end };
 }
 /* Quit from the tray seals open conversations the way an installer close does, then leaves without asking.
    Where the seal fails, the window comes back and the page is asked, and the process stays. */

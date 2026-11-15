@@ -10,6 +10,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CJS_PATH = path.join(ROOT, "shell", "tray.cjs");
 const nodeRequire = createRequire(import.meta.url);
@@ -388,6 +389,123 @@ async function run() {
       try {
         fs.rmSync(scratchDir, { recursive: true, force: true });
       } catch {}
+    }
+  }
+
+  /* 10. THE FIRST-CLOSE TRACE (shell/main.js firstCloseTraced, trayToastTrace, trayTraceWrite), read from main.js and run
+     with this tray.cjs and stand-ins for Electron's Notification, each boot a fresh process over a scratch user-data folder:
+     one line per attempt naming each outcome, and the same calls reaching Electron as the untraced close makes. Each outcome's
+     line carrying a plant tag is cut in memory and the same reading made again. */
+  {
+    const mainText = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
+    const fnOf = (src, name) => {
+      const at = src.search(new RegExp("^function " + name + "\\(", "m"));
+      const end = at < 0 ? -1 : src.indexOf("\n}", at);
+      return end < 0 ? "" : src.slice(at, end + 2);
+    };
+    const SHOW_ERR = "the toast could not be made\nsecond line", SHOW_REFUSED = "show refused: C:\\Users\\Someone\\AppData\\icon.png", WINDOWS_SAID = "0x80070490 element not found";
+    /* kind: shows, unsupported, ctor-throws, show-throws, words-throw; harness: the marker's answer; closes: how many */
+    const boot = (src, kind, harness, closes, traced) => {
+      const ud = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-tray-trace-"));
+      const rec = { supportedAsked: 0, aumid: [], made: [], shown: 0, clicks: 0, told: false, threw: [] };
+      let lastNote = null;
+      class FakeNote {
+        constructor(opts) {
+          if (kind === "ctor-throws") throw new Error(SHOW_ERR);
+          rec.made.push(JSON.stringify(opts));
+          this.handlers = {};
+          lastNote = this;
+        }
+        static isSupported() { rec.supportedAsked++; return kind !== "unsupported"; }
+        on(ev, fn) { (this.handlers[ev] = this.handlers[ev] || []).push(fn); if (ev === "click") rec.clicks++; return this; }
+        emit(ev, ...a) { for (const fn of this.handlers[ev] || []) fn(...a); }
+        show() { if (kind === "show-throws") throw new Error(SHOW_REFUSED); rec.shown++; }
+      }
+      const fakeApp = { getPath: () => ud, getName: () => "etiuda", setAppUserModelId: (id) => { rec.aumid.push(id); } };
+      const consts = (src.match(/^const TRAY_TRACE_FILE[^\n]*\n^const trayTraceState[^\n]*$/m) || [""])[0];
+      const body = [consts, "let trayNoticeTold = false;", fnOf(src, "legacyLoginName"), fnOf(src, "notifyFirstClose"),
+        fnOf(src, "maybeFirstClose"), fnOf(src, "firstCloseTraced"), fnOf(src, "trayToastTrace"), fnOf(src, "trayTraceWrite"),
+        "return { close: " + (traced ? "firstCloseTraced" : "maybeFirstClose") + ", told: () => trayNoticeTold };"].join("\n");
+      let lines = [], why = "";
+      try {
+        const made = new Function("fs", "path", "app", "Notification", "harnessLaunch", "notifyFirstCloseOf", "trayWords", "showDesk",
+          "APP_IDS", body)(fs, path, fakeApp, FakeNote, () => harness, trayMod.notifyFirstClose,
+          () => { if (kind === "words-throw") throw new Error("words unread"); return { trayKeepsRunning: "Title", trayKeepsBody: "Body" }; },
+          () => {}, APP_IDS);
+        for (let i = 0; i < closes; i++) {
+          try { made.close({}); } catch (e) { rec.threw.push(e.message); }
+          if (i === 0 && lastNote && kind === "shows") lastNote.emit("failed", {}, WINDOWS_SAID);
+          if (i === 0 && lastNote && kind === "shows-ok") lastNote.emit("show", {});
+        }
+        rec.told = made.told();
+        const at = path.join(ud, "tray-trace.txt");
+        lines = fs.existsSync(at) ? fs.readFileSync(at, "utf8").split("\n").filter(Boolean) : [];
+      } catch (e) {
+        why = String(e && e.message || e).split("\n")[0];
+      } finally {
+        fs.rmSync(ud, { recursive: true, force: true });
+      }
+      return { rec, lines, why };
+    };
+    const STAMP = "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d\\.\\d{3}Z first close: ";
+    const reads = (src) => ({
+      shows: boot(src, "shows", false, 2, true),
+      showsOk: boot(src, "shows-ok", false, 1, true),
+      unsupported: boot(src, "unsupported", false, 1, true),
+      ctorThrows: boot(src, "ctor-throws", false, 1, true),
+      showThrows: boot(src, "show-throws", false, 1, true),
+      harness: boot(src, "shows", true, 1, true),
+      wordsThrow: boot(src, "words-throw", false, 1, true),
+      capped: boot(src, "unsupported", false, 10, true),
+    });
+    const r = reads(mainText);
+    const say = (x) => JSON.stringify(x.lines) + (x.why ? " (" + x.why + ")" : "");
+    check(r.shows.lines.length === 2
+      && new RegExp(STAMP + "isSupported=true aumid=app\\.etiuda\\.desktop \\(this attempt set it\\) harnessLaunch=false outcome=shown$").test(r.shows.lines[0])
+      && /Z first close, Windows: failed: 0x80070490 element not found$/.test(r.shows.lines[1]) && r.shows.rec.shown === 1 && r.shows.rec.told
+      && r.showsOk.lines.length === 2 && /Z first close, Windows: shown$/.test(r.showsOk.lines[1]),
+      "ft1 a toast that shows: one line naming isSupported=true, the app id this attempt set, harnessLaunch=false and outcome=shown; "
+      + "Windows's failed or shown event on a line of its own; the second close, told, writes nothing: " + say(r.shows) + " " + say(r.showsOk));
+    check(r.unsupported.lines.length === 1
+      && new RegExp(STAMP + "isSupported=false aumid=electron\\.app\\.etiuda \\(Electron's default, unless another toast set one\\) harnessLaunch=false outcome=not supported$").test(r.unsupported.lines[0]),
+      "ft2 Notification.isSupported() false: the line says not supported and the app id in force is Electron's default: " + say(r.unsupported));
+    check(r.ctorThrows.lines.length === 1
+      && new RegExp(STAMP + "isSupported=true aumid=app\\.etiuda\\.desktop \\(this attempt set it\\) harnessLaunch=false outcome=thrown: the toast could not be made$").test(r.ctorThrows.lines[0]),
+      "ft3 the Notification made to throw: the line says thrown with the message's first line, which tray.cjs swallows: " + say(r.ctorThrows));
+    check(r.showThrows.lines.length === 1 && /outcome=thrown: show refused: %USERPROFILE%\\AppData\\icon\.png$/.test(r.showThrows.lines[0]),
+      "ft4 show() made to throw: the line says thrown with its message, the user's own folder named %USERPROFILE%: " + say(r.showThrows));
+    check(r.harness.lines.length === 1 && r.harness.rec.made.length === 0
+      && new RegExp(STAMP + "isSupported=not asked aumid=electron\\.app\\.etiuda .* harnessLaunch=true outcome=not attempted \\(harnessLaunch\\)$").test(r.harness.lines[0]),
+      "ft5 a harness launch: no toast made and nothing asked of Notification, and the line says harnessLaunch=true, not attempted: " + say(r.harness));
+    check(r.wordsThrow.lines.length === 1 && /outcome=thrown: words unread$/.test(r.wordsThrow.lines[0])
+      && r.wordsThrow.rec.threw.join() === "words unread",
+      "ft6 a throw before tray.cjs is reached: the line says thrown: words unread, and the throw still reaches the close as before: " + say(r.wordsThrow));
+    check(r.capped.lines.length === 6, "ft7 ten closes that never show write six lines a run, no more: " + r.capped.lines.length);
+    /* the control: the same calls reach Electron with the trace and without it */
+    const diffs = (src) => { const same = [];
+    for (const [kind, harness, closes] of [["shows", false, 2], ["unsupported", false, 1], ["ctor-throws", false, 1], ["show-throws", false, 1],
+      ["shows", true, 1], ["words-throw", false, 1]]) {
+      const a = boot(src, kind, harness, closes, true).rec, b = boot(src, kind, harness, closes, false).rec;
+      const key = (x) => JSON.stringify([x.supportedAsked, x.aumid, x.made, x.shown, x.clicks, x.told, x.threw]);
+      if (key(a) !== key(b)) same.push(kind + (harness ? " (harness)" : "") + ": traced " + key(a) + " untraced " + key(b));
+    }
+    return same; };
+    const same = diffs(mainText);
+    check(same.length === 0, "ft8 no change of behaviour: isSupported asked, the app id set, the toast made, shown, its click wired, told "
+      + "and any throw are the same with the trace and without it, in all six cases" + (same.length ? ": " + same.join("; ") : ""));
+    /* The inline plant proofs ft9 to ft13 honour ETIUDA_PLANTS=off (plant-hold's pk-off), named as not run. */
+    if (PLANTS_OFF) console.log("  NOT RUN ft9 to ft13, the trace's plant proofs (ETIUDA_PLANTS=off)");
+    else {
+      for (const [tag, id, pick, was] of [["trace-shown", "ft9", "shows", /outcome=shown$/], ["trace-unsupported", "ft10", "unsupported", /outcome=not supported$/],
+        ["trace-thrown", "ft11", "ctorThrows", /outcome=thrown: the toast could not be made$/], ["trace-caught", "ft12", "wordsThrow", /outcome=thrown: words unread$/]]) {
+        const cut = mainText.split("\n").filter((l) => l.indexOf("plant:" + tag) < 0).join("\n");
+        const lifted = reads(cut)[pick];
+        check(mainText.indexOf("plant:" + tag) > -1 && !(lifted.lines[0] && was.test(lifted.lines[0])),
+          id + " control: cutting plant:" + tag + " takes that outcome from the line: " + say(lifted));
+      }
+      const swallowed = mainText.replace("return show.apply(n, arguments);", "return undefined;");
+      const seenBroken = swallowed !== mainText ? diffs(swallowed) : [];
+      check(seenBroken.length > 0, "ft13 control: a stand-in whose show() no longer reaches Electron's is caught by ft8: " + seenBroken.length + " case(s) differ");
     }
   }
 
