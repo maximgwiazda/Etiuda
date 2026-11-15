@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 125;
+const EXPECTED = 129;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -32,6 +32,10 @@ function check(ok, line) {
 function skip(line) {
   skipped++;
   console.log("  SKIP  " + line);
+}
+function notRun(line) {
+  skipped++;
+  console.log("  NOT RUN " + line);
 }
 
 const LAB = realFs.mkdtempSync(path.join(os.tmpdir(), "etiuda-shell-office-"));
@@ -163,13 +167,16 @@ function loadShell(opts) {
   const electron = {
     app: { getPath: n => (n === "documents" ? DOCS : UD), setPath: (k, v) => { if (o.paths) o.paths.push([k, v]); }, requestSingleInstanceLock: () => !!o.ready, isPackaged: !!o.packaged,
            quit: noop, on: (ev, fn) => { (appOn[ev] = appOn[ev] || []).push(fn); }, getVersion: () => "0.0.0",
+           getLocale: () => "en", getPreferredSystemLanguages: () => ["en"],
            commandLine: { appendSwitch: (...a) => { switches.push(a); }, hasSwitch: k => onLine.has(k),
                           removeSwitch: k => { if (onLine.delete(k)) removed.push(k); } },
            whenReady: () => (o.ready ? Promise.resolve() : new Promise(noop)) },
     ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
     BrowserWindow: o.ready ? new Proxy(function () {}, { construct: (t, args) => { if (o.order) o.order.push(["window"]); return o.window ? o.window(args[0]) : win; },
       get: (t, k) => (k === "fromWebContents" ? () => win : k === "getAllWindows" ? () => [win] : undefined) }) : inert,
-    Menu: inert, dialog: o.dialogs ? { showSaveDialog: async (...a) => { o.dialogs.push(a); return { canceled: true }; } } : inert, net: inert, protocol: o.ready ? anything() : inert,
+    Menu: inert, dialog: o.openDialog
+      ? { showOpenDialog: async (...a) => o.openDialog(...a), showSaveDialog: async (...a) => { if (o.dialogs) o.dialogs.push(a); return { canceled: true }; } }
+      : o.dialogs ? { showSaveDialog: async (...a) => { o.dialogs.push(a); return { canceled: true }; } } : inert, net: inert, protocol: o.ready ? anything() : inert,
     session: o.session || (o.ready ? anything() : inert),
     screen: o.screen || inert, shell: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" },
     powerMonitor: { on: (ev, fn) => { power[ev] = fn; } },
@@ -1757,6 +1764,82 @@ try {
       let lifted = null;
       if (at >= 0) { lines.splice(at, 1); lifted = handed({ env: set }, lines.join("\n")); }
       check(!!lifted && lifted.length === 0, "16 lifting plant:handed-said leaves the handover unsaid: " + JSON.stringify(lifted));
+    }
+  }
+  /* ---- 17. a folder invitation. A UNC, a device path or // is never stated. A local folder the invitation names,
+     which the confirm has shown, is still asked and joined with no dialog. ---- */
+  {
+    const crypto = nodeRequire("node:crypto");
+    const remotePath = p => { const s = String(p || ""); return s.length >= 2 && ((s.charAt(0) === "\\" && s.charAt(1) === "\\") || (s.charAt(0) === "/" && s.charAt(1) === "/")); };
+    const leadPub = "ab".repeat(32);
+    const codeFor = secret => {
+      const mac = crypto.createHmac("sha256", Buffer.from(secret, "hex")).update(Buffer.from(leadPub, "hex")).digest();
+      return String(mac.readUIntBE(0, 6) % 100000).padStart(5, "0");
+    };
+    const blobFor = folder => {
+      const secret = crypto.randomBytes(16).toString("hex");
+      const doc = { team: "t-" + crypto.randomBytes(8).toString("hex"), folder: folder,
+        lead: { keyId: "lead-one", public: leadPub, name: "Ada Lane" }, secret: secret };
+      return { secret: secret, text: "etiuda-join:" + Buffer.from(JSON.stringify(doc)).toString("base64url") };
+    };
+    const dialogOpts = args => { const last = args[args.length - 1]; return last && typeof last === "object" ? last : {}; };
+    const arm = S => {
+      const calls = [];
+      S.ctl.pstat = async p => {
+        calls.push("pstat " + String(p));
+        if (remotePath(p)) { const e = new Error("stand-in"); e.code = "ENOENT"; throw e; }
+        return realFs.promises.stat(p);
+      };
+      S.ctl.statSync = (real, p, ...a) => {
+        calls.push("statSync " + String(p));
+        if (remotePath(p)) { const e = new Error("stand-in"); e.code = "ENOENT"; throw e; }
+        return real(p, ...a);
+      };
+      S.ctl.readFileSync = (real, p, ...a) => {
+        calls.push("readFileSync " + String(p));
+        if (remotePath(p)) { const e = new Error("stand-in"); e.code = "ENOENT"; throw e; }
+        return real(p, ...a);
+      };
+      return calls;
+    };
+    const touched = (calls, needle) => calls.some(c => c.indexOf(needle) >= 0 || remotePath(c.slice(c.indexOf(" ") + 1)));
+    const yesFolder = async (folder, src) => {
+      const dialogs = [];
+      const S = loadShell({ src: src, openDialog: async (...a) => { dialogs.push(dialogOpts(a)); return { canceled: true, filePaths: [] }; } });
+      const calls = arm(S);
+      await S.ask("etiuda:branch-identity", true);
+      const inv = blobFor(folder);
+      const res = await S.ask("etiuda:team-join", "invite", inv.text, "Ada", codeFor(inv.secret));
+      return { res: res, calls: calls, dialogs: dialogs, keys: keysOn(S.deskFile) };
+    };
+    const unc = "\\\\evil.example\\share\\etiuda";
+    const hostile = await yesFolder(unc);
+    const uncCalls = hostile.calls.filter(c => remotePath(c.slice(c.indexOf(" ") + 1)));
+    const adopted = hostile.keys && remotePath(hostile.keys.eCatalogFolder);
+    const dialogRemote = hostile.dialogs.some(d => remotePath(d.defaultPath));
+    check(uncCalls.length === 0 && !adopted && !dialogRemote && !(hostile.res && hostile.res.join && hostile.res.join.invite),
+      "17a a UNC folder on an invitation is not stated, not adopted and not handed to the dialog: calls " + uncCalls.length
+      + ", adopted " + adopted + ", dialog " + dialogRemote + ", answered " + (hostile.res && (hostile.res.refused || hostile.res.canceled || "taken")));
+    const device = await yesFolder("\\\\?\\C:\\etiuda");
+    const slashed = await yesFolder("//evil.example/share/etiuda");
+    const devCalls = device.calls.concat(slashed.calls).filter(c => remotePath(c.slice(c.indexOf(" ") + 1)));
+    check(devCalls.length === 0 && !(device.res && device.res.join) && !(slashed.res && slashed.res.join),
+      "17b a device path and a // path are not stated either: calls " + devCalls.length);
+    const yard = path.join(LAB, "yard-17");
+    realFs.mkdirSync(yard, { recursive: true });
+    const honest = await yesFolder(yard);
+    const stated = honest.calls.some(c => c.indexOf(yard) >= 0);
+    const joined = honest.keys && honest.keys.eCatalogFolder === yard && honest.res && !honest.res.refused && !honest.res.canceled;
+    check(stated && joined && honest.dialogs.length === 0 && !touched(honest.calls, unc),
+      "17c a local folder the invitation names is asked and joined, with no dialog: stated " + stated
+      + ", joined " + joined + ", dialogs " + honest.dialogs.length + ", answered " + (honest.res && (honest.res.refused || honest.res.canceled || "taken")));
+    if (PLANTS_OFF) notRun("17d lifting plant:invite-remote-folder states the UNC share");
+    else {
+      const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:invite-remote-folder") >= 0);
+      let again = null;
+      if (at >= 0) { lines.splice(at, 1); again = await yesFolder(unc, lines.join("\n")); }
+      const saw = again && again.calls.filter(c => remotePath(c.slice(c.indexOf(" ") + 1))).length;
+      check(!!again && saw > 0, "17d lifting plant:invite-remote-folder states the UNC share: " + (again ? saw + " call(s)" : "plant line absent"));
     }
   }
 } catch (e) {

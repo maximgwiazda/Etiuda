@@ -6207,14 +6207,27 @@ function invitePlacePlan(parsed) {
   try { return placeResolve(parsed.folder, parsed.place, roots, function () { return true; }); }
   catch (e) { return { path: parsed.folder, how: "absolute", why: "plain" }; }
 }
+/* A path whose first look leaves this computer: UNC (\\server\...), a device path (\\?\ or \\.\), or //.
+   A drive letter is not one. The invitation's own local folder is still asked, and a folder the person
+   picks in this shell's dialog is asked after they pick it. */
+function pageRemotePath(p) {
+  const s = typeof p === "string" ? p : "";
+  return s.length >= 2 && ((s.charAt(0) === "\\" && s.charAt(1) === "\\") || (s.charAt(0) === "/" && s.charAt(1) === "/"));
+}
 /* The folder yes will write into. A root candidate is asked first, then the absolute path the invitation carried, and
-   only then does the caller open the picker. An old invitation, with no place, is asked at its path as before. */
+   only then does the caller open the picker. An old invitation, with no place, is asked at its path as before.
+   A remote path is not asked: stating it would reach another computer. The picker is the person's choice. */
+async function askInviteFolder(dir, asks) {
+  if (pageRemotePath(dir)) return false; /* plant:invite-remote-folder */
+  const fn = asks || askFolder;
+  return !!(dir && await fn(dir));
+}
 async function chooseInviteFolder(parsed) {
   let kept = null;
   try { kept = placeKept(parsed && parsed.place); }
   catch (e) { kept = null; }
   if (!kept) {
-    if (await askFolder(parsed.folder)) return { path: parsed.folder, ask: false };
+    if (await askInviteFolder(parsed.folder)) return { path: parsed.folder, ask: false };
     return { ask: true };
   }
   if (kept.kind === "gdrive") await driveLook();
@@ -6223,7 +6236,7 @@ async function chooseInviteFolder(parsed) {
   catch (e) { roots = []; }
   if (kept.kind === "unc") {
     const built = placeJoin(kept.root, kept.rel);
-    if (built && await askFolder(built)) return { path: built, ask: false };
+    if (await askInviteFolder(built)) return { path: built, ask: false };
     return { ask: true };
   }
   let candidates = [];
@@ -6232,9 +6245,9 @@ async function chooseInviteFolder(parsed) {
   let asks = askFolder;
   if (kept.kind === "gdrive") asks = askDirItself; /* plant:drive-itself */
   for (let i = 0; i < candidates.length; i++) {
-    if (candidates[i] && await asks(candidates[i])) return { path: candidates[i], ask: false };
+    if (await askInviteFolder(candidates[i], asks)) return { path: candidates[i], ask: false };
   }
-  if (await askFolder(parsed.folder)) return { path: parsed.folder, ask: false };
+  if (await askInviteFolder(parsed.folder)) return { path: parsed.folder, ask: false };
   return { ask: true };
 }
 /* The person's yes, with the check code they typed, which a folder invitation needs and a relay invitation does not,
