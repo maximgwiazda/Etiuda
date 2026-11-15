@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 89;
+const EXPECTED = 91;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -114,8 +114,8 @@ function worldOf(o) {
       /* Google's answer names the scopes granted: the folder's only where the person left its line ticked. */
       const c = w.codes[new URLSearchParams(body).get("code")], now = Date.now();
       if (!c) return json(400, { error: "invalid_grant" });
-      return json(200, { token_type: "Bearer", id_token: jwt({ iss: "https://accounts.google.com", aud: G_CLIENT, sub: c.sub || SUB, nonce: c.nonce, exp: Math.floor(now / 1000) + 3600 }),
-        scope: c.folder ? "openid " + DRIVE_SCOPE : "openid", access_token: c.folder ? c.access || w.access : "stand-in-google-token-not-the-folder", refresh_token: "rt-google", expires_in: 3600 });
+      return json(200, Object.assign({ token_type: "Bearer", id_token: jwt({ iss: "https://accounts.google.com", aud: G_CLIENT, sub: c.sub || SUB, nonce: c.nonce, exp: Math.floor(now / 1000) + 3600 }),
+        scope: c.folder ? "openid " + DRIVE_SCOPE : "openid", access_token: c.folder ? c.access || w.access : "stand-in-google-token-not-the-folder", expires_in: 3600 }, c.noRefresh ? {} : { refresh_token: "rt-google" }));
     }
     if (u === STAGING + "signin/desk") {
       w.service.push(body);
@@ -624,7 +624,7 @@ function browserOf(world, mode) {
     const asks = /Files\.ReadWrite\.AppFolder|drive\.appdata/.test(q.get("scope") || "");
     if (asks && mode.refuse) return mode.refuse;
     const code = "code-" + (++codeN) + "-" + crypto.randomBytes(6).toString("hex");
-    world.codes[code] = { nonce: q.get("nonce"), folder: (folder || asks) && !mode.untick, sub: mode.sub, access: mode.access };
+    world.codes[code] = { nonce: q.get("nonce"), folder: (folder || asks) && !mode.untick, sub: mode.sub, access: mode.access, noRefresh: mode.noRefresh };
     return "code=" + code;
   };
   b.go = async url => {
@@ -854,6 +854,18 @@ async function consentSwitchScene(src) {
   return { ok, detail: brief({ ungiven, unclicked: unclicked.answer, answer: on.answer, opened: on.opened.length, scope: q.get("scope"), hint: q.get("login_hint"), prompt: q.get("prompt"),
     state: now && now.state, why: now && now.why, adminWhy: admin.now && admin.now.why, adminPress: adminPress.answer, adminOpened: adminPress.opened.length }) };
 }
+/* (g2r) A second Google authorization of the same account that names no refresh token (the switch's consent sign-in) keeps the one
+   already sealed, as a renewal does, so the person is not asked to sign in again. */
+async function keepRefreshScene(src) {
+  const r = await signinFlow(src, { provider: "google", untick: true }), T = r.shell.T;
+  const was = T.signinState().held ? T.signinState().held.refresh : "";
+  r.mode.untick = false;
+  r.mode.noRefresh = true;
+  const on = await pressOn(r, true);
+  const held = T.signinState().held;
+  const ok = !!was && on.answer === "asked" && !!held && !!held.cert && held.refresh === was;
+  return { ok, detail: brief({ sealedFirst: !!was, answer: on.answer, seat: !!(held && held.cert), refreshKept: !!held && held.refresh === was, refreshLeft: !!held && !!held.refresh }) };
+}
 async function googleSwitchScene(src) {
   const r = await signinFlow(src, { provider: "google", untick: true });
   const first = r.qs[0] || new URLSearchParams();
@@ -967,6 +979,7 @@ const LEGS = [
   ["gr", roomWireScene, "a write the store's relay refuses for its room turns the row full, and the next write it takes turns it on"],
   ["gt", teamFolderScene, "joined to a folder team, the store's sync takes no team catalog into the person's store, reads the person's own catalog as removed nowhere, and writes nothing from the store into the team's mirror"],
   ["g1b", consentBusyScene, "while the switch's request for the folder waits on the browser the desk is busy to the page, and an answer after another account took the seat is neither taken for it nor looked with"],
+  ["g2r", keepRefreshScene, "the switch's Google consent sign-in answered with no refresh token keeps the refresh token already sealed for the same account"],
   ["fa1", refusedAccountScene, "a second Google sign-in whose seat is refused leaves the folder's token the seated account's"],
   ["fa2", overAnotherScene, "an account seated straight over another, with no folder step of its own, is never handed the other's folder token: its look asks its own"],
   ["w1", s => anotherScene(s, "look", true), "person A synced and signed out, which leaves no store keys here; person B seated on the same profile with an empty folder: B's look writes nothing of A's K or S into B's folder and makes B's own store"],
@@ -1026,6 +1039,7 @@ const PLANTS = [
   ["gc", swap("function storeConflicts() { return storeSyncView().kept; } /* plant:store-conflicts */", "function storeConflicts() { return 0; } /* plant:store-conflicts */"), "the row counts no conflict"],
   ["gs", swap("  storeSyncStop(); /* plant:store-set-stop */\n", ""), "the switch leaves the sync running"],
   ["gr", swap("      room: storeRoom, /* plant:store-room */\n", ""), "the store's channel tells the row nothing"],
+  ["g2r", swap(" || (sameAccount() ? was.refresh || \"\" : \"\"), /* plant:take-keeps-refresh */", ", /* plant:take-keeps-refresh */"), "the sealed refresh token replaced by none"],
   ["g1b", swap("  signinBusy = run; /* plant:consent-busy */", "  /* plant:consent-busy */"), "the consent's wait is no sign-in in progress to the page"],
   ["g1b", swap("{ folderToken: t => { if (same()) storeTokenTake(t); } }); /* plant:consent-held */", "{ folderToken: t => { storeTokenTake(t); } }); /* plant:consent-held */"), "the consent's answer taken for whoever is seated"],
   ["g1b", swap("return signinState().held && storeWho(signinState().held) === storeWho(held) ? storeTurn() : null; }); /* plant:consent-same-look */", "return signinState().held ? storeTurn() : null; }); /* plant:consent-same-look */"), "the look after the consent run for whoever is seated"],

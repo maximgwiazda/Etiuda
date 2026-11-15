@@ -10777,7 +10777,9 @@ function signinTake(provider, got, ans, now, access) {
   /* The service said this account's tenant is managed, or that it is not (an ordinary seat): kept whatever the answer, for Buy. */
   if (ans.managed === true || ans.ok) { const was = !!s.licenceManaged; if (ans.managed === true) s.licenceManaged = true; else delete s.licenceManaged; if (was !== !!s.licenceManaged && !ans.ok) signinSave(); }
   if (!ans.ok && ans.reason !== "full") return false; /* plant:take-refused */
-  const base = { provider: provider, refresh: signinKeep(safeStorage, process.platform, got.refreshToken),
+  /* An answer naming no refresh token (a second authorization of the same account) keeps the one sealed, as a renewal does. */
+  const was = s.held, sameAccount = () => !!was && was.provider === provider && !!was.sub && signinSame(signinKept(safeStorage, was.sub), String(got.sub));
+  const base = { provider: provider, refresh: signinKeep(safeStorage, process.platform, got.refreshToken) || (sameAccount() ? was.refresh || "" : ""), /* plant:take-keeps-refresh */
     sub: signinKeep(safeStorage, process.platform, got.sub), seed: got.seed, code: "", cert: null, at: 0, checked: now, reached: true, said: "", ask: false, doors: [] };
   base.revoked = s.revoked || null; /* plant:revoked-survives */
   if (access === true) base.access = true;
