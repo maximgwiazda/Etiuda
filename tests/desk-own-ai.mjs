@@ -595,6 +595,47 @@ try {
     check(!problems.length, "db6 while the organisation's model ranks, the AI section's lede says what is sent by the two switches and follows a switch "
       + "moved on the open page, and the picker's note follows the suggestion switch: " + (problems.join("; ") || "three ledes, two notes"));
   }
+
+  /* db7 (review finding 3): a policy key with neither a provider nor an address says so in Settings and on a refused test, in both languages. */
+  {
+    const problems = [];
+    const noSvc = Object.assign({}, BUILTIN, {
+      choice: "organisation", on: true, ready: false, provider: "openai", host: "api.openai.com", model: "m-own",
+      keyAway: true, keyNoService: true, managed: Object.assign({}, FREE, { choice: true, model: true, key: true }),
+    });
+    const wantSettings = {
+      en: "Your organisation has set a key for an AI service without naming the service, so nothing is sent. Its IT department can name it.",
+      pl: "Organizacja ustawiła klucz do usługi AI, ale nie wskazała tej usługi, więc nic nie jest wysyłane. Może ją wskazać dział IT organizacji.",
+    };
+    const wantTest = {
+      en: "Not sent: the organisation set a key without naming its service.",
+      pl: "Nie wysłano: organizacja ustawiła klucz bez wskazania usługi.",
+    };
+    await setHost(page, noSvc);
+    await page.evaluate(() => {
+      window.__ai.origTest = window.E_HOST.deskAiTest;
+      window.E_HOST.deskAiTest = () => Promise.resolve({ ok: false, why: "keyNoService", host: "", model: "m-own" });
+    });
+    for (const lang of ["en", "pl"]) {
+      await page.evaluate(l => { localStorage.setItem("eUiLang", l); try { setUiLang(l); } catch (e) {} }, lang);
+      await closeTab(); await page.evaluate(() => openSettings("data")); await sleep(150);
+      const got = await page.evaluate(async () => {
+        const row = document.querySelector('[data-row="orgmodel"]');
+        const btn = document.getElementById("omTest");
+        if (btn) btn.click();
+        await new Promise(r => setTimeout(r, 80));
+        return { row: row ? row.textContent : "", test: (document.getElementById("omTestLine") || {}).textContent || "" };
+      });
+      if (!got.row.includes(wantSettings[lang])) problems.push(lang + " settings: " + JSON.stringify(got.row.slice(0, 140)));
+      if (got.test !== wantTest[lang]) problems.push(lang + " test: " + JSON.stringify(got.test));
+    }
+    await page.evaluate(() => {
+      if (window.__ai.origTest) window.E_HOST.deskAiTest = window.__ai.origTest;
+      localStorage.setItem("eUiLang", "en"); try { setUiLang("en"); } catch (e) {}
+    });
+    check(!problems.length, "db7 a policy key without a named service shows the copywriter's lines in Settings and on a test in English and Polish: "
+      + (problems.join("; ") || "two screens, two languages"));
+  }
   await page.close();
 } catch (e) {
   check(false, "the page's part ran", (e && e.message) || String(e));
@@ -602,7 +643,7 @@ try {
   if (browser) await browser.close();
 }
 
-const EXPECTED = 12;
+const EXPECTED = 13;
 if (asserted !== EXPECTED) { failed++; asserted++; console.log("  FAIL ran " + asserted + " checks, expected " + EXPECTED); }
 console.log((failed ? "desk-own-ai: " + failed + " of " + asserted + " failed" : "desk-own-ai: all " + asserted + " passed"));
 process.exit(Math.min(failed, 63));

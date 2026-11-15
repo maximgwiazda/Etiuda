@@ -510,7 +510,8 @@ function orgModelRows(){
   const lines=[];
   if(!org) lines.push(t("The built-in model sends nothing anywhere."));
   else if(orgRanks(st)) lines.push(t("The search text and the copied message the suggestions are made from are sent to {HOST}, and nowhere else.").split("{HOST}").join(String(st.host||"")));
-  else lines.push(t("Until the service, the model and the key are complete, the built-in model ranks and nothing is sent.")); // placeholder: Claudette
+  else if(!st.keyNoService) lines.push(t("Until the service, the model and the key are complete, the built-in model ranks and nothing is sent.")); // placeholder: Claudette
+  if(st.keyNoService) lines.push(t("Your organisation has set a key for an AI service without naming the service, so nothing is sent. Its IT department can name it."));
   if(m.choice) lines.push(set, t("Whoever manages Etiuda for the organisation can change this."));
   (st.ignored||[]).forEach(n=>lines.push(t("Group Policy names an AI service setting Etiuda cannot use, so it is ignored: {NAME}").split("{NAME}").join(String(n))));
   const choice=seg("orgmodel",[{v:"builtin",t:t("Built-in, on this computer")},{v:"organisation",t:t("The organisation's")}], org?"organisation":"builtin", !!m.choice);
@@ -567,6 +568,7 @@ function orgTestLine(r){
     : why==="endpoint" ? t("Needed for this service: the full https address the organisation gives for it.")
     : why==="model" ? t("No model is named for the AI service, so nothing was sent. The model is named from the Menu, under Settings, then Data and defaults.")
     : why==="key" ? t("No key is kept for this address, so nothing was sent.") // placeholder: Claudette
+    : why==="keyNoService" ? t("Not sent: the organisation set a key without naming its service.")
     : why==="keyAway" ? t("The organisation's Group Policy sets the AI service's key, and that key goes only to the address the policy sets or to the service's own, never to an address typed here, so nothing was sent.")
     : why==="late" ? t("The AI service did not answer in time, so the request was given up.")
     : why==="busy" ? t("The AI service is busy and asked Etiuda to wait; a later try may go through.")

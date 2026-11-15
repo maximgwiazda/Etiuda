@@ -33,7 +33,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "shell");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 62;
+const EXPECTED = 64;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The shell-to-page event that carries each re-order's outcome; the page-to-shell sync request "etiuda:ai-state" is another. */
 const RANKING_CH = "etiuda:ai-ranking";
@@ -1054,6 +1054,58 @@ await block(async () => {
         "const endpointBad = false;"));
     check(lifted.fetches > 0 && lifted.urls.some(u => u.indexOf("https://api.openai.com/v1/") === 0),
       "da22p with plant:policy-bad-endpoint lifted, the policy key leaks to the published address and the leg above fails: "
+      + JSON.stringify({ fetches: lifted.fetches, urls: lifted.urls }));
+  }
+});
+
+/* da23 (review finding 3): a policy key with neither a provider nor an address sends nothing, even when the person picks
+   openai, anthropic or google with no custom address. */
+async function unpinnedPolicyKeyDrive(personProvider, policyExtraRows, mainSrc) {
+  const fetch = fetchOf(() => ({ status: 200, text: chatSaying("[2,1]") }));
+  const rows = [
+    ["DeskOrganisationModel", "REG_DWORD", 1],
+    ["AiModel", "REG_SZ", "plant-model"],
+    ["AiKey", "REG_SZ", "sk-test-0000"],
+  ].concat(policyExtraRows || []);
+  const ctx = loadMain({ fetch, mainSrc, policyText: policyExportText(rows),
+    answer: (op, a) => op === "search-shortlist" ? { q: a.q, gen: 1, cards: ["c1", "c2"], intents: [] } : openAnswer(op) });
+  if (personProvider) {
+    fs.writeFileSync(path.join(ctx.electron.app.getPath("userData"), "desk-ai.json"),
+      JSON.stringify({ format: 1, kind: "etiuda-desk-ai", choice: "organisation", provider: personProvider, endpoint: "", model: "" }));
+  }
+  builtinFrom(ctx.T, [{ id: "t:post", score: 0.9 }]);
+  const cfg = ctx.T.deskAiConfig();
+  const e = Object.assign({ returnValue: undefined }, ENGINE);
+  ctx.on["etiuda:desk-ai-settings"](e);
+  const st = e.returnValue;
+  const tested = await ctx.handle["etiuda:desk-ai-test"](ENGINE);
+  ctx.on["etiuda:search-set"](ENGINE, true);
+  await ctx.handle["etiuda:search-prepare"](ENGINE, ROWS);
+  await ctx.handle["etiuda:search-rank"](ENGINE, "lantern wick");
+  await tick(AI.SETTLE_MS + 60);
+  await openPicker(ctx, MESSAGE, 80);
+  return { cfg, st, tested, fetches: fetch.calls.length, urls: fetch.calls.map(c => c.url) };
+}
+await block(async () => {
+  const blocked = [];
+  for (const p of ["", "openai", "anthropic", "google"]) blocked.push(await unpinnedPolicyKeyDrive(p, []));
+  blocked.push(await unpinnedPolicyKeyDrive("openai", [["AiProvider", "REG_SZ", "nosuch"]]));
+  const pinnedProvider = await unpinnedPolicyKeyDrive("anthropic", [["AiProvider", "REG_SZ", "openai"]]);
+  const pinnedEndpoint = await unpinnedPolicyKeyDrive("openai", [["AiEndpoint", "REG_SZ", "https://good.example/v1/"]]);
+  check(blocked.every(r => r.cfg === null && r.fetches === 0 && r.tested && r.tested.ok === false && r.tested.why === "keyNoService"
+      && r.st && r.st.ready === false && r.st.keyAway === true && r.st.keyNoService === true)
+    && pinnedProvider.cfg !== null && pinnedProvider.fetches >= 2 && pinnedProvider.urls.every(u => u.indexOf("https://api.openai.com/v1/") === 0)
+    && pinnedEndpoint.cfg !== null && pinnedEndpoint.fetches >= 2 && pinnedEndpoint.urls.every(u => u.indexOf("https://good.example/v1/") === 0),
+    "da23 a policy key with neither a provider nor an address sends nothing for a test, search or picker, while naming one in policy sends: "
+    + "blocked fetches " + JSON.stringify(blocked.map(r => r.fetches)) + ", whys " + JSON.stringify(blocked.map(r => r.tested && r.tested.why))
+    + ", pinned fetches " + JSON.stringify([pinnedProvider.fetches, pinnedEndpoint.fetches]));
+  if (PLANTS_OFF) skipPlant("da23p lifting plant:policy-key-pinned-service sends the policy key to the person's chosen vendor (ETIUDA_PLANTS=off)");
+  else {
+    const lifted = await unpinnedPolicyKeyDrive("openai", [],
+      edited(MAIN_SRC, "const keyUnpinned = !!o.key && !provider.managed && !endpoint.managed && !endpointBad; /* plant:policy-key-pinned-service */",
+        "const keyUnpinned = false;"));
+    check(lifted.fetches > 0 && lifted.urls.some(u => u.indexOf("https://api.openai.com/v1/") === 0),
+      "da23p with plant:policy-key-pinned-service lifted, the policy key goes to the person's chosen vendor and the leg above fails: "
       + JSON.stringify({ fetches: lifted.fetches, urls: lifted.urls }));
   }
 });

@@ -1052,6 +1052,8 @@ UI_STRINGS.pl={
   "No AI service is set up yet. One is chosen from the Menu, under Settings, then Data and defaults.":"Usługa AI nie jest jeszcze ustawiona. Wybiera się ją z menu, w Ustawieniach, w części Dane i ustawienia domyślne.",
   "No model is named for the AI service, so nothing was sent. The model is named from the Menu, under Settings, then Data and defaults.":"Dla usługi AI nie wskazano modelu, więc nic nie zostało wysłane. Model wskazuje się z menu, w Ustawieniach, w części Dane i ustawienia domyślne.",
   "The organisation's Group Policy sets the AI service's key, and that key goes only to the address the policy sets or to the service's own, never to an address typed here, so nothing was sent.":"Klucz usługi AI ustawiono w zasadach grupy organizacji, a ten klucz trafia tylko pod adres z tych zasad albo pod własny adres usługi, nigdy pod adres wpisany tutaj, więc nic nie zostało wysłane.",
+  "Your organisation has set a key for an AI service without naming the service, so nothing is sent. Its IT department can name it.":"Organizacja ustawiła klucz do usługi AI, ale nie wskazała tej usługi, więc nic nie jest wysyłane. Może ją wskazać dział IT organizacji.",
+  "Not sent: the organisation set a key without naming its service.":"Nie wysłano: organizacja ustawiła klucz bez wskazania usługi.",
   "The AI service did not answer in time, so the request was given up.":"Usługa AI nie odpowiedziała na czas, więc zapytanie przerwano.",
   "The AI service is busy and asked Etiuda to wait; a later try may go through.":"Usługa AI jest zajęta i poprosiła Etiudę o odczekanie; późniejsza próba może się udać.",
   "organisation's model":"model organizacji",

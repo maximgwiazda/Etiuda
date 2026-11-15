@@ -4261,12 +4261,14 @@ function deskAiJoin(me, org) {
   const endpoint = pick(o.endpoint, o.provider && o.provider !== p.provider ? "" : p.endpoint);
   const service = deskAiService(provider.value);
   const at = !service || endpointBad ? "" : endpoint.value ? deskAiEndpointShape(endpoint.value, provider.value) : service.endpoint;
-  const home = !endpointBad && (endpoint.managed || (at !== "" && service && at === service.endpoint));
+  /* A policy key goes only to a service or address the policy itself named, never to a vendor chosen here alone. */
+  const keyUnpinned = !!o.key && !provider.managed && !endpoint.managed && !endpointBad; /* plant:policy-key-pinned-service */
+  const home = !endpointBad && !keyUnpinned && (endpoint.managed || (at !== "" && service && at === service.endpoint));
   return {
     on: choiceSet ? o.on : p.choice === "organisation",
     provider: provider.value, given: endpointBad ? "" : endpoint.value, endpoint: at, model: model.value,
     managed: { choice: choiceSet, provider: provider.managed, endpoint: endpoint.managed || endpointBad, model: model.managed, key: !!o.key },
-    keyAway: !!o.key && !home,
+    keyAway: !!o.key && !home, keyNoService: keyUnpinned,
   };
 }
 function deskAiReadyOf(j, key) { return !!(j && deskAiService(j.provider) && j.endpoint && j.model && key); }
@@ -4277,7 +4279,7 @@ function deskAiAnswer(j, keyIn, ignored, sealable, stored) {
   return {
     choice: j.on ? "organisation" : "builtin", on: !!j.on, ready: !!j.on && deskAiReadyOf(j, keyIn),
     provider: j.provider, endpoint: j.given, at: j.endpoint, host: host, model: j.model,
-    keyKept: !!keyIn || !!stored, keyAway: !!j.keyAway, managed: Object.assign({}, j.managed),
+    keyKept: !!keyIn || !!stored, keyAway: !!j.keyAway, keyNoService: !!j.keyNoService, managed: Object.assign({}, j.managed),
     ignored: Array.isArray(ignored) ? ignored.slice() : [], sealable: !!sealable,
     services: Object.keys(DESK_AI_SERVICES).map(id => ({ id: id, endpoint: DESK_AI_SERVICES[id].endpoint })),
   };
@@ -4409,6 +4411,7 @@ function deskAiTest() {
   try { now = deskAiNow(); } catch { return Promise.resolve({ ok: false, why: "none", host: "", model: "" }); }
   const j = now.joined, a = deskAiAnswer(j, !!now.key, [], false);
   const said = why => Promise.resolve({ ok: false, why: why, host: a.host, model: j.model });
+  if (j.keyNoService) return said("keyNoService");
   if (!deskAiService(j.provider)) return said("provider");
   if (!j.endpoint) return said("endpoint");
   if (!j.model) return said("model");
