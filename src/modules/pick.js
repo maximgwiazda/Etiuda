@@ -210,7 +210,7 @@ function pickLook(){
 /* The page's words. A legend line holds {KEY} where its key goes; the other language is named only where there is one. */
 function pickWords(){
   const other=CONTENT_LANGS.length>1 ? String(nextContentLang(lang)).toUpperCase() : "";
-  return {lang:uiLang(), search:t("search replies"), list:t("Replies"), again:t("The reply copied last"),
+  return {lang:uiLang(), search:t("Type a word to find a reply"), whoHint:t("customer's name"), list:t("Replies"), again:t("The reply copied last"),
           none:t("A different word may do better."), stamp:t("Commits the firm"),
           empty:wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet."),
           who:t("Etiuda fills the reply in for this conversation"),
@@ -384,6 +384,19 @@ function answerPick(op,argText){
     const paxVal=pickDeskPax();
     const picked=intentIdxs.map(i=>intentIdAt(i));
     return withIndex(Object.assign({who:activeTabName(), name:paxVal, lang:lang, langs:CONTENT_LANGS.length, last:pickLastRow(), picked:picked}, pickFound("")), "");
+  }
+  /* THE REPLIES OF A SUGGESTION, LOOKED AT AND NOT TAKEN: the rows the window would show once it were taken, found
+     with the intent borrowed for the length of the lookup and given back as it was. Nothing is picked, selected,
+     counted or drawn on the desk, so only the agent's own click or Enter takes a suggestion (embed-suggest e6). */
+  if(op==="suggest-rows"){
+    const id=String(a.id||"").slice(0,80);
+    const idx=intentIdxOfId(id);
+    if(!id||idx<0||isIntentHiddenIdx(idx)) return null;
+    const mine=intentIdxs.slice();
+    let found;
+    try{ intentIdxs.length=0; intentIdxs.push(idx); found=pickFound(""); }
+    finally{ intentIdxs.length=0; mine.forEach(i=>intentIdxs.push(i)); }
+    return {rows:found.rows, count:found.count};
   }
   if(op==="tab"){
     if(a.id!=="tabNext" && a.id!=="tabPrev" && a.id!=="tabNew") return null;

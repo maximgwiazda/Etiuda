@@ -11862,19 +11862,42 @@ function pickPage() {
     if (tip) tip.style.left = (Math.max(22, Math.min(cx - left, w - 22)) - 6) + "px";
     return add;
   };
-  const list = () => (blank() && last)
+  /* The replies of the first suggestion, shown as the rows while the selected words stand as given: asked of the desk, which
+     answers them and takes nothing. rowsOf names the suggestion they belong to. */
+  let rowsOf = "", rowsAsk = 0, took = false;
+  const list = () => (blank() && last && !rowsOf)
     ? [Object.assign({ again: true }, last)].concat(rows.filter(r => r.id !== last.id || r.vi !== last.vi)) : rows;
+  function lookRows() {
+    const first = !!chosen && q.value === chosen && suggest.length > 0 ? suggest[0].id : "";
+    if (took || !first || typeof P.rowsOf !== "function") { if (!took && !first) rowsOf = ""; return; }
+    if (first === rowsOf) return;
+    const mine = ++rowsAsk; /* plant:pick-rows-take */
+    Promise.resolve(P.rowsOf(first)).then(text => {
+      if (mine !== rowsAsk || !chosen || q.value !== chosen || !suggest.length || suggest[0].id !== first) return;
+      let o = {};
+      try { o = JSON.parse(text) || {}; } catch (e) { o = {}; }
+      if (!Array.isArray(o.rows) || !o.rows.length) return;
+      rows = o.rows;
+      said = o.count || "";
+      rowsOf = first;
+      at = 0;
+      box.scrollTop = 0;
+      paint(false);
+    });
+  }
   /* A CARD OF SEVERAL REPLIES IS ONE GROUP: its title once, over its replies, each named by its tag. The first nine
      rows after the reply copied last carry Ctrl and their digit, and that one Ctrl+0. */
   const same = (a, b) => !!a && !!b && !a.again && !b.again && a.id === b.id;
   function takeSuggest(id, multi) {
     if (typeof P.takeSuggest !== "function") return;
     const mine = ++asked;
+    rowsAsk++;
     Promise.resolve(P.takeSuggest(id, !!multi)).then(text => {
       if (mine !== asked) return;
       let o = {};
       try { o = JSON.parse(text) || {}; } catch (e) { o = {}; }
       if (!Array.isArray(o.rows)) return;
+      took = true; rowsOf = "";
       rows = o.rows;
       said = o.count || "";
       takeIndex(o, false);
@@ -12047,10 +12070,12 @@ function pickPage() {
     suggest = Array.isArray(o.suggest) ? o.suggest.filter(s => s && s.id) : [];
     picked = Array.isArray(o.picked) ? o.picked : [];
     sgAt = -1;
+    rowsOf = ""; rowsAsk++; took = false;
     q.value = chosen; at = (last && list().length > 1) ? 1 : 0; asked++;
     box.scrollTop = 0;
     paint(false);
     paintSel();
+    lookRows(); /* plant:pick-rows-look */
     if (fresh && who && !who.hidden) who.focus();
     else q.focus();
   };
@@ -12079,6 +12104,7 @@ function pickPage() {
       suggest = (Array.isArray(o.suggest) ? o.suggest : []).filter(s => s && s.id);
       if (sgAt >= suggest.length) sgAt = -1;
       paint(false);
+      lookRows();
       return;
     }
     const look = o.look || {}, root = document.documentElement;
@@ -12092,6 +12118,7 @@ function pickPage() {
     mayEdit = o.editable === true ? true : o.editable === false ? false : null;
     root.lang = words.lang || "en";
     q.placeholder = words.search || "";
+    if (who) who.placeholder = words.whoHint || "";
     box.setAttribute("aria-label", words.list || "");
     if (who) who.title = words.who || "";
     if (langBtn) langBtn.title = words.langTitle || "";
@@ -12101,6 +12128,7 @@ function pickPage() {
   });
   q.addEventListener("input", () => {
     if (chosen && q.value !== chosen) { chosen = ""; paintSel(); }
+    rowsOf = ""; rowsAsk++;
     paintStrip();
     if (bank) {
       asked++;
@@ -12194,7 +12222,9 @@ function pickPage() {
         takeIndex(o, false);
         if (!Array.isArray(o.rest) && !String(q.value || "").trim()) { restRows = rows.slice(); restSaid = said; }
         paintLang(o);
+        rowsOf = ""; rowsAsk++;
         paint(false);
+        lookRows();
         if (o.name != null) { who.value = o.name; sent = who.value; }
       });
     };
@@ -12881,6 +12911,11 @@ ipcMain.handle("etiuda:pick-lang", (e) => {
 ipcMain.handle("etiuda:pick-intent", (e, id, multi) => {
   if (!fromPicker(e)) return "null";
   return askDesk("suggest-take", { id: String(id || "").slice(0, 80), multi: multi ? 1 : 0 }).then(v => JSON.stringify(v));
+});
+/* THE REPLIES OF A SUGGESTION, asked for and not taken: the desk answers the rows alone and changes nothing. */
+ipcMain.handle("etiuda:pick-rows", (e, id) => {
+  if (!fromPicker(e)) return "null";
+  return askDesk("suggest-rows", { id: String(id || "").slice(0, 80) }).then(v => JSON.stringify(v));
 });
 /* THE COPY. The desk's page makes the text by its own route and counts it, in the other language for `other`; this
    writes it to the clipboard, has the caret helper press Ctrl+V in the window the agent came from, steps aside, and
