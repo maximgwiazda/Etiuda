@@ -35,7 +35,8 @@ let inFlight = false;
 let folderWatcher = null;
 let kickDebounce = null;
 const knownMtimes = new Map(); // relPath -> { size, mtimeMs }
-const heldStamps = new Map();     // relPath -> { size, mtimeMs } the main thread refused or parked, not copied again while it stays
+const heldStamps = new Map();     // relPath -> { size, mtimeMs } the main thread refused or parked
+const heldSeen = new Map();       // that stamp, once it had stood long enough to be staged again
 const sentNow = new Map();         // relPath -> the sha (or "del") this worker wrote, until the outbox stops owing it
 const casHeld = new Map();         // ask id -> the lock a compare and swap holds
 const CAS_HOLD_MS = 20000;
@@ -124,7 +125,15 @@ function syncOnce() {
     for (const [relPath, st] of foundFiles.entries()) {
       if (owedRels.has(relPath)) continue;
       const hold = heldStamps.get(relPath);
-      if (hold && hold.size === st.size && hold.mtimeMs === st.mtimeMs) continue; /* plant:worker-held */
+      /* A held stamp is copied again once it is old enough to stand for its bytes, and that once is remembered
+         across the next held list, so a torn first read is not the last read and a settled file is not copied every scan. */
+      if (hold && hold.size === st.size && hold.mtimeMs === st.mtimeMs) {
+        const seen = heldSeen.get(relPath);
+        let reread = false;
+        reread = S.stampStands(st, Date.now()) && !(seen && seen.size === st.size && seen.mtimeMs === st.mtimeMs); /* plant:held-settled-reread */
+        if (reread) heldSeen.set(relPath, { size: st.size, mtimeMs: st.mtimeMs });
+        if (!reread) continue; /* plant:worker-held */
+      }
       const mirrorFile = path.join(mirror, relPath);
       let alreadyInMirror = false;
       const known = knownMtimes.get(relPath);
@@ -227,9 +236,16 @@ if (parentPort) {
     if (msg.type === "init") {
       init(msg.data);
     } else if (msg.type === "held") {
-      for (const rel of msg.forget || []) knownMtimes.delete(rel);
+      for (const rel of msg.forget || []) { knownMtimes.delete(rel); heldSeen.delete(rel); }
       heldStamps.clear();
-      for (const h of msg.held || []) if (h && h.rel) heldStamps.set(h.rel, { size: h.size, mtimeMs: h.mtimeMs });
+      const still = new Set();
+      for (const h of msg.held || []) if (h && h.rel) {
+        heldStamps.set(h.rel, { size: h.size, mtimeMs: h.mtimeMs });
+        still.add(h.rel);
+        const seen = heldSeen.get(h.rel);
+        if (seen && (seen.size !== h.size || seen.mtimeMs !== h.mtimeMs)) heldSeen.delete(h.rel);
+      }
+      for (const rel of Array.from(heldSeen.keys())) if (!still.has(rel)) heldSeen.delete(rel);
     } else if (msg.type === "kick") {
       if (!stopped) { try { syncOnce(); } catch {} }
     } else if (msg.type === "read") {

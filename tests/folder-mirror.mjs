@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 135;
+const EXPECTED = 138;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const { offWindows } = nodeRequire("./off-windows.cjs");
@@ -4263,6 +4263,77 @@ async function run() {
       return !got.shareKept;
     });
     check(planted.ok, "r1b lifting plant:flush-share-newer writes this desk's older catalog over the share's newer one: " + JSON.stringify(planted));
+  }
+
+  /* r6: a refused file is staged again once its stamp is old enough, and a third scan does not copy it again (review 24, finding 6). */
+  async function settledRefuse(mod, name) {
+    const share = folder(name + "-share");
+    const mirror = folder(name + "-mirror");
+    const at = path.join(share, "lamp.ec");
+    fs.writeFileSync(at, "not a catalog\n");
+    const past = new Date(Date.now() - 10000);
+    fs.utimesSync(at, past, past);
+    const ctl = new mod.FolderSyncerController({
+      team: "t-" + crypto.randomBytes(8).toString("hex"), folder: share, mirror, pin: null, checks, pollMs: 60000
+    });
+    let scans = 0, copies = 0;
+    const apply = ctl.program.applyScan.bind(ctl.program);
+    ctl.program.applyScan = (msg) => {
+      scans++;
+      copies += (msg.staged || []).filter(s => s.relPath === "lamp.ec").length;
+      return apply(msg);
+    };
+    const until = (n) => new Promise(resolve => {
+      const t = setInterval(() => { if (scans >= n) { clearInterval(t); resolve(); } }, 15);
+      setTimeout(() => { clearInterval(t); resolve(); }, 4000);
+    });
+    ctl.start();
+    await until(1);
+    ctl.kick();
+    await until(2);
+    ctl.kick();
+    await until(3);
+    ctl.stop();
+    const shareMain = folder(name + "-share-main");
+    const mirrorMain = folder(name + "-mirror-main");
+    const atMain = path.join(shareMain, "lamp.ec");
+    fs.writeFileSync(atMain, "not a catalog\n");
+    fs.utimesSync(atMain, past, past);
+    let mainCopies = 0;
+    const io = {
+      readdir: (dir) => fs.readdirSync(dir), stat: (p) => fs.statSync(p),
+      readFile: (p, enc) => { if (String(p) === atMain) mainCopies++; return fs.readFileSync(p, enc); },
+      writeFile: (p, data) => fs.writeFileSync(p, data), unlink: (p) => fs.unlinkSync(p),
+      mkdir: (dir) => fs.mkdirSync(dir, { recursive: true }), exists: (p) => fs.existsSync(p),
+      rename: (from, to) => fs.renameSync(from, to)
+    };
+    const prog = mod.createFolderProgram({
+      team: "t-" + crypto.randomBytes(8).toString("hex"), folder: shareMain, mirror: mirrorMain, checks, io
+    });
+    prog.syncOnce(); prog.syncOnce(); prog.syncOnce();
+    prog.stop();
+    return { scans, copies, mainCopies };
+  }
+  {
+    const g = await settledRefuse(syncerMod, "r6a");
+    check(g.copies === 2 && g.scans >= 3 && g.mainCopies === 2,
+      "r6a a refused file whose stamp has stood is staged once more, and a third scan does not stage it again: " + JSON.stringify(g));
+  }
+  if (PLANTS_OFF) skip("r6b lifting plant:held-settled-reread in the worker never stages a refused file again: NOT RUN");
+  else {
+    const planted = await testPlant("held-settled-reread", path.join(ROOT, "shell", "folder", "syncer-worker.cjs"), async (scratch) => {
+      const got = await settledRefuse(nodeRequire(path.join(syncerCopy(scratch, "syncer-worker.cjs"), "syncer.cjs")), "r6b");
+      return got.copies === 1 && got.scans >= 3;
+    });
+    check(planted.ok, "r6b lifting plant:held-settled-reread in the worker never stages a refused file again: " + JSON.stringify(planted));
+  }
+  if (PLANTS_OFF) skip("r6c lifting plant:held-settled-reread on the main thread reads a refused file only once: NOT RUN");
+  else {
+    const planted = await testPlant("held-settled-reread", syncerFile, async (scratch) => {
+      const got = await settledRefuse(nodeRequire(path.join(syncerCopy(scratch, "syncer.cjs"), "syncer.cjs")), "r6c");
+      return got.mainCopies === 1;
+    });
+    check(planted.ok, "r6c lifting plant:held-settled-reread on the main thread reads a refused file only once: " + JSON.stringify(planted));
   }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {

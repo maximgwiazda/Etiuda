@@ -694,6 +694,7 @@ function createFolderProgram(opts) {
   const clock = typeof opts.now === "function" ? opts.now : Date.now;
   const knownMtimes = new Map(); // relPath -> { size, mtimeMs }
   const refusedMtimes = new Map(); // relPath -> { size, mtimeMs, at, epoch, key }
+  const heldSettled = new Map(); // a held stamp already staged again once it stood long enough
   const renameWait = new Map(); // relPath -> the staged item whose rename into the mirror was refused
   const renameMeta = new Map(); // relPath -> { target, onLand, tries, exhausted }
   const renameSaid = new Set();
@@ -744,10 +745,10 @@ function createFolderProgram(opts) {
   }
   let judgedAt = 0; // moves with what a refusal is judged against: the pin, the team file and the ring
   const dropped = new Set(); // refusals let go since the worker was last told, so it copies those files again
-  /* A refused or parked copy is held: not copied from the share again while its size and mtime stay, and, for a refusal, while
-     the pin, the team file, the ring and the key for its epoch stay as they were when it was judged. The mirror's own copy is
-     never removed for it. The hold lives in memory, so "copied once" holds within one run: after a restart a held or parked
-     file is copied once more, and a parked file waiting for its key is read again from the share (the test architect, 18:47). */
+  /* A refused or parked copy is held while its size and mtime stay, and, for a refusal, while the pin, the team file, the
+     ring and the key for its epoch stay as they were when it was judged. Once that stamp is old enough to stand for the
+     bytes it is staged once more, and not again while the stamp stays. The mirror's own copy is never removed for it. The
+     hold lives in memory, so after a restart a held or parked file is copied once more (the test architect, 18:47). */
   function refuse(item, epoch) {
     if (!item || item.size == null) return;
     const ep = Number.isInteger(epoch) ? epoch : null;
@@ -1784,8 +1785,14 @@ function createFolderProgram(opts) {
       let alreadyInMirror = false;
       const prev = knownMtimes.get(relPath);
       const hold = holds.get(relPath);
-      if (hold && hold.size === st.size && hold.mtimeMs === st.mtimeMs) alreadyInMirror = true;
-      else if (prev && prev.size === st.size && prev.mtimeMs === st.mtimeMs && io.exists(mirrorFile) && stampStands(st, prev.at)) alreadyInMirror = true;
+      if (hold && hold.size === st.size && hold.mtimeMs === st.mtimeMs) {
+        const seen = heldSettled.get(relPath);
+        let reread = false;
+        reread = stampStands(st, clock()) && !(seen && seen.size === st.size && seen.mtimeMs === st.mtimeMs); /* plant:held-settled-reread */
+        if (reread) heldSettled.set(relPath, { size: st.size, mtimeMs: st.mtimeMs });
+        else alreadyInMirror = true;
+      } else heldSettled.delete(relPath);
+      if (!alreadyInMirror && prev && prev.size === st.size && prev.mtimeMs === st.mtimeMs && io.exists(mirrorFile) && stampStands(st, prev.at)) alreadyInMirror = true;
       const waiting = renameWait.get(relPath);
       if (waiting && (alreadyInMirror || waiting.size !== st.size || waiting.mtimeMs !== st.mtimeMs)) {
         try { if (waiting.tmpPath) io.unlink(waiting.tmpPath); } catch {}
