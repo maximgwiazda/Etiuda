@@ -19,8 +19,9 @@
  *   ilm5, ilm6  the marked menu row is Studio's quiet fill, its step above the ground Studio's, no ring, the icon dim, no fade
  *   ilm7        an object's menu keeps one mark under the pointer and the keys
  *   ils1, ils2  the selected tab wears no colour spine, dark and light (Max: "please get rid of it")
- *   ilb1, ilb2  the band is the cobalt at 62 per cent over the material and over the page's colour without it, white on it,
- *               and a Windows accent still takes its place (the product designer's values of 2026-11-15)
+ *   ilb1, ilb2  the band is the cobalt at 62 per cent over the material and, without it, over the page's colour (78 per cent
+ *               on a light page), white on it, and a Windows accent still takes its place (the product designer's values)
+ *   ilb3        without the material, white on the light band clears 4.5:1, from the painted colour
  *   ild7        every section of the three screens: no word stands on the dots without a ground of its own
  *   ilh1..ilh5  the designer's like-for-like items Max approved: each rail's head is Studio's small capitals label, the row at
  *               its foot a row with its icon and its keys plain, and a new key's tag Studio's small pill beside the keys
@@ -238,7 +239,7 @@ try {
   // spine>>
 
   // <<band
-  EXPECTED += 2;
+  EXPECTED += 3;
   for (const theme of ["light", "dark"]) {
     const p = await boot(browser, theme);
     const got = await p.evaluate(async () => {
@@ -259,12 +260,19 @@ try {
       root.style.removeProperty("--band-accent"); body.classList.remove("e-band-deep", "e-backdrop");
       return out;
     });
-    /* The cobalt #0f4c9d at 62 per cent: over the material (alpha .62), over the page's own colour without it. */
-    const bare = theme === "light" ? [103, 141, 192] : [15, 53, 105];
+    /* The cobalt #0f4c9d at 62 per cent over the material (alpha .62); without it over the page's own colour, at 78 per
+       cent on a light page (#4272b1) and 62 on a dark one (#0f3569). */
+    const bare = theme === "light" ? [66, 114, 177] : [15, 53, 105];
     const near = (a, b, tol) => a && b.every((v, i) => Math.abs(a[i] - v) <= (tol || 1));
     check(near(got.bare, bare) && got.bare[3] === 1 && near(got.material, [15, 76, 157]) && got.material[3] === 0.62
       && near(got.bareInk, [255, 255, 255]) && near(got.materialInk, [255, 255, 255]) && near(got.accent, [196, 43, 28]) && got.accent[3] === 0.62,
       "ilb" + (theme === "light" ? 1 : 2) + " " + theme + ": the band is the cobalt at 62 per cent over the material and over the page's colour without it, white on it, and a Windows accent still takes its place", got);
+    if (theme === "light") {
+      /* WCAG's relative luminance of the painted colour, against white. */
+      const lum = (c) => c.slice(0, 3).map((v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }).reduce((a, v, i) => a + v * [0.2126, 0.7152, 0.0722][i], 0);
+      const ratio = got.bare ? 1.05 / (lum(got.bare) + 0.05) : 0;
+      check(ratio >= 4.5, "ilb3 light, without the material: white on the band clears 4.5:1 (" + ratio.toFixed(2) + ":1)", got.bare);
+    }
     await closePage(p);
   }
   // band>>

@@ -701,6 +701,8 @@ body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,4
   margin:-10px auto 0;padding-top:4px;min-width:0;position:relative;color:#f2f6ff}
 .row::before{content:"";position:absolute;top:0;bottom:0;left:calc(-1 * var(--app-pad));
   right:calc(-1 * var(--app-pad));background:color-mix(in srgb,var(--band) 62%,var(--bg));z-index:-1}
+/* Without the material a light page takes the band deeper, 78 per cent, so its white words clear 4.5:1. */
+:root[data-theme=light] body:not(.e-backdrop) .row::before{background:color-mix(in srgb,var(--band) 78%,var(--bg))}
 /* Band furniture: what stands on the blue dresses in white. What stands there is the brand,
    the tab strip and the window's own three controls; the tools live on the row below. */
 .row .tabs-nav{color:rgba(var(--band-ink-rgb),.7)}
