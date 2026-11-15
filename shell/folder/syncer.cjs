@@ -1390,10 +1390,9 @@ function createFolderProgram(opts) {
       let neither = false;
       neither = !!fork && fork.kind === "two"; /* plant:syncer-fork-two */
       if (neither) {
-        for (const s of teamItems) {
-          knownMtimes.delete(s.relPath);
-          try { io.unlink(s.tmpPath); } catch {}
-        }
+        let forget = false;
+        forget = true; /* plant:fork-two-forget */
+        for (const s of teamItems) dropUnjudged(s, forget);
         staged = staged.filter(s => teamItems.indexOf(s) < 0);
       }
     }
