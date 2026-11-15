@@ -24,6 +24,7 @@
  *        when its tab is fronted again, so a page put back is never a stale one
  *   ls6  each search keystroke in #libSearch and Escape to clear draws at most 10 elements (only the filtered list)
  *   ls7  typing a search filters to matching rows with focus held on #libSearch, and Escape restores the section
+ *   ls8  after several Library repaints, one ResizeObserver lives for the tree's card box and one for the intents list
  * The catalog is the shipped sample, of a real catalog's size. Exit code is the number of failed checks; 78 when the
  * run could not complete.
  */
@@ -38,7 +39,7 @@ const puppeteer = require("puppeteer-core");
 let fails = 0, checks = 0;
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 10, REPS = 5, BUDGET = 1000, KEY_BUDGET = 10;
+const EXPECTED = 11, REPS = 5, BUDGET = 1000, KEY_BUDGET = 10;
 const argv = process.argv.slice(2);
 const at = argv.indexOf("--engine");
 const ENGINE = at >= 0 ? path.resolve(argv[at + 1]) : E.ENGINE_PATH;
@@ -62,6 +63,29 @@ try {
     window.__ev = [];
     new PerformanceObserver(l => { for (const e of l.getEntries()) window.__ev.push({ n: e.name, d: e.duration }); })
       .observe({ type: "event", durationThreshold: 16, buffered: true });
+    const OrigRO = window.ResizeObserver;
+    const roBag = [];
+    window.__roBag = roBag;
+    if (typeof OrigRO === "function") {
+      function TrackedRO(cb) {
+        const ro = new OrigRO(cb);
+        const rec = { cardBox: false, intents: false, dead: true };
+        roBag.push(rec);
+        const obs = ro.observe.bind(ro), disc = ro.disconnect.bind(ro);
+        ro.observe = function (el, opts) {
+          rec.dead = false;
+          if (el && el.classList) {
+            if (el.classList.contains("mg-intents")) rec.intents = true;
+            if (el.classList.contains("sx-card") || el.classList.contains("mg-tree")) rec.cardBox = true;
+          }
+          return obs(el, opts);
+        };
+        ro.disconnect = function () { rec.dead = true; return disc(); };
+        return ro;
+      }
+      TrackedRO.prototype = OrigRO.prototype;
+      window.ResizeObserver = TrackedRO;
+    }
   });
   await p.goto(url, { waitUntil: "load", timeout: 60000 });
   await p.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
@@ -185,6 +209,21 @@ try {
     && midSearch.shownIntents > 0 && midSearch.shownIntents < midSearch.totalIntents
     && afterEsc.focused && afterEsc.val === "" && !afterEsc.isFind && !afterEsc.dataHidden,
     "ls7 search filters to matching rows with focus held on #libSearch, and Escape clears back to the section");
+
+  /* Observers alive after N fresh Library paints: one ResizeObserver for the card box and one for intents. */
+  const roRes = await p.evaluate(() => {
+    for (let i = 0; i < 4; i++) window.openManage();
+    const bag = window.__roBag || [];
+    const card = bag.filter(r => r.cardBox);
+    const ints = bag.filter(r => r.intents);
+    return {
+      cardMade: card.length, cardLive: card.filter(r => !r.dead).length,
+      intMade: ints.length, intLive: ints.filter(r => !r.dead).length
+    };
+  });
+  check(roRes.cardMade === 1 && roRes.cardLive === 1 && roRes.intMade === 1 && roRes.intLive === 1,
+    "ls8 after 4 Library repaints, 1 ResizeObserver lives for the tree's card box (" + roRes.cardMade + " made, "
+    + roRes.cardLive + " live) and 1 for intents (" + roRes.intMade + " made, " + roRes.intLive + " live)");
   done = true;
 } catch (e) {
   console.log("  FAIL the run stopped: " + String(e && e.message || e));
