@@ -3799,6 +3799,13 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .sx-crumb{color:var(--dim);font-size:13px;margin-bottom:2px}
 .sx-page h2{font:300 30px/1.15 var(--sans-display);margin:0 0 4px}
 .sx-page .lede{color:var(--dim);font-size:14px;margin:0 0 20px}
+/* THE DOTTED PAGE of Settings, the Library and Maintenance, Studio's own: a 16 px grid of fine dots in the dim ink,
+   and the words standing on the page each on a patch of the page's ground, so no dot crosses a letter. */
+.sx{--sx-dots:color-mix(in srgb,var(--dim) 42%,transparent)}
+:root:not([data-theme=light]) .sx{--sx-dots:color-mix(in srgb,var(--dim) 30%,transparent)}
+.sx-page{background-image:radial-gradient(circle at center,var(--sx-dots) 0 .7px,transparent 1.2px);background-size:16px 16px}
+.sx-page :is(h2,.lede,.sx-crumb,.sx-group>h3,.sx-block>h3,.sx-lookside>h3){display:table;background:var(--bg);
+  box-shadow:0 0 0 5px var(--bg);border-radius:4px}
 .sx-group{margin:0 0 20px}
 .sx-group h3{font:600 12px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin:0 0 8px}
 .sx-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-sm);overflow:hidden}

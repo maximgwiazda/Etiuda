@@ -21,6 +21,9 @@
  *   ils1, ils2  the selected tab wears no colour spine, dark and light (Max: "please get rid of it")
  *   ilb1, ilb2  the band is the cobalt at 62 per cent over the material and over the page's colour without it, white on it,
  *               and a Windows accent still takes its place (the product designer's values of 2026-11-15)
+ *   ild1..ild6  Settings, the Library and Maintenance, light and dark: the page is dotted as Studio's is, measured as the
+ *               pixels of an empty 48 px patch that stand off the ground, and its first words stand on the ground (Max's
+ *               note 9: "Desk has no dotted background behind Settings/Library/Maintenance, unlike similar tabs in Studio.")
  * Exit code is the number of failed checks; 78 when the run could not complete.
  */
 import fs from "node:fs";
@@ -262,6 +265,54 @@ try {
     await closePage(p);
   }
   // band>>
+
+  // <<dots
+  EXPECTED += 6;
+  {
+    /* What the eye sees: in an empty patch of the page, the pixels that stand off the page's ground. */
+    const decoder = await browser.newPage();
+    const offGround = async (png, ground) => decoder.evaluate(async (b64, ground) => {
+      const img = new Image(); img.src = "data:image/png;base64," + b64; await img.decode();
+      const c = Object.assign(document.createElement("canvas"), { width: img.width, height: img.height }); const x = c.getContext("2d"); x.drawImage(img, 0, 0);
+      const d = x.getImageData(0, 0, img.width, img.height).data; let n = 0;
+      for (let i = 0; i < d.length; i += 4) if (Math.abs(d[i] - ground[0]) + Math.abs(d[i + 1] - ground[1]) + Math.abs(d[i + 2] - ground[2]) >= 12) n++;
+      return n;
+    }, png, ground);
+    let n = 0;
+    for (const theme of ["light", "dark"]) {
+      const p = await boot(browser, theme);
+      for (const which of ["settings", "library", "maintenance"]) {
+        n++;
+        await openScreen(p, which);
+        const spot = await p.evaluate(() => {
+          const page = document.querySelector("#screenHost .sx-page"); if (!page) return null;
+          const r = page.getBoundingClientRect(), S = 48;
+          const cx = Object.assign(document.createElement("canvas"), { width: 1, height: 1 }).getContext("2d");
+          cx.fillStyle = getComputedStyle(document.querySelector("#screenHost .sx")).backgroundColor; cx.fillRect(0, 0, 1, 1);
+          const ground = Array.from(cx.getImageData(0, 0, 1, 1).data).slice(0, 3);
+          const word = page.querySelector(".sx-crumb, h2, .lede, .sx-block>h3"), wordBg = word ? getComputedStyle(word).backgroundColor : null;
+          const sx = getComputedStyle(document.querySelector("#screenHost .sx")).backgroundColor;
+          for (let y = r.bottom - S - 8; y > r.top + 8; y -= 16) for (let x = r.right - S - 24; x > r.left + 8; x -= 16) {
+            let clear = true;
+            for (const [dx, dy] of [[0, 0], [S / 2, 0], [S, 0], [0, S / 2], [S / 2, S / 2], [S, S / 2], [0, S], [S / 2, S], [S, S]]) {
+              const e = document.elementFromPoint(x + dx, y + dy); if (e !== page) { clear = false; break; }
+            }
+            if (clear) return { x: Math.round(x), y: Math.round(y), w: S, h: S, ground, wordOnGround: wordBg === sx };
+          }
+          return { ground, none: true };
+        });
+        if (!spot || spot.none) { check(false, "ild" + n + " " + which + ", " + theme + ": an empty patch of the page to look at", spot); continue; }
+        const png = await p.screenshot({ clip: { x: spot.x, y: spot.y, width: spot.w, height: spot.h }, encoding: "base64", captureBeyondViewport: false });
+        const lit = await offGround(png, spot.ground);
+        /* A 48 px patch of a 16 px grid holds nine dots; each covers at least a pixel. */
+        check(lit >= 9 && lit <= 48 * 48 / 4 && spot.wordOnGround,
+          "ild" + n + " " + which + ", " + theme + ": the page is dotted as Studio's is (" + lit + " pixels of a 48 px patch stand off the ground) and its first words stand on a patch of the ground", { lit, spot });
+      }
+      await closePage(p);
+    }
+    await closePage(decoder);
+  }
+  // dots>>
 
   done = true;
 } catch (e) {
