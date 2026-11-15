@@ -809,7 +809,9 @@ function createCore(deps) {
     if (!verified(team.lead.pub, leadBytes(rt, to.keyId, to.pub, b.t), b.sig)) return no("bad-signature"); /* plant:lead-move-sig */
     if (Number.isSafeInteger(team.handoverT) && b.t <= team.handoverT) return no("replay-rev"); /* plant:lead-handover-order */
     if (to.pub === team.lead.pub) return no("bad-signature"); /* plant:lead-same-key */
-    if (store.get("dev:" + to.keyId) || store.get("gone:" + to.keyId)) return no("not-enrolled"); /* plant:lead-desk-refusal */
+    let deskHalf = false;
+    deskHalf = enrolledAs(to.pub, to.pub) || !!removalOf(to.pub, to.pub); /* plant:lead-desk-half */
+    if (deskHalf || store.get("dev:" + to.keyId) || store.get("gone:" + to.keyId)) return no("not-enrolled"); /* plant:lead-desk-refusal */
     const why = grantWhy(b.grant, to.pub, clock(), roots, revokedNow());
     if (why === "revoked") return no("revoked"); /* plant:lead-grant-revoked */
     if (why !== null) return no("bad-grant"); /* plant:lead-grant-why */
@@ -922,6 +924,7 @@ function createCore(deps) {
         store.del("dev:" + id);
       }
       for (const [id, v] of next) { store.put("dev:" + id, v); store.del("gone:" + id); }
+      for (const [, v] of next) for (const n of namesOf(v.pub)) store.del("gone:" + n); /* plant:enrol-both-names */
       /* A key taken off gives back what it held: its blobs leave the team's counts at once, are listed and fetched by the lead
          alone for REMOVED_KEEP_MS of time the team can read, and are deleted at the first list or upload after it. No tombstone
          is kept, so the key put back starts its chains again. */
@@ -1379,8 +1382,11 @@ function createCore(deps) {
      desk, whose knock counted against the hourly rate alone; its row and the deletion's record stay for their keep, outside the caps. */
   function doorLive(v, now) {
     if (!!v && v.withdrawn === true) return false; /* plant:door-withdrawn-live */
-    return !!v && v.door === true && Number.isSafeInteger(v.spentAt) && now - v.spentAt <= KEEP_MS
+    const held = !!v && v.door === true && Number.isSafeInteger(v.spentAt) && now - v.spentAt <= KEEP_MS
       && !store.get("dev:" + v.key) && !store.get("gone:" + v.key);
+    let settled = false;
+    settled = held && (enrolledAs(v.key, v.pub) || !!removalOf(v.key, v.pub)); /* plant:door-live-half */
+    return held && !settled;
   }
   /* What a held door request (doorLive) costs its person: asking, up at the lead's, for its keep; never sent up, the door's rate window
      from its knock, as one the lead dropped. */
@@ -1466,14 +1472,22 @@ function createCore(deps) {
     return !!inv && !!gone && Number.isSafeInteger(inv.ord) && Number.isSafeInteger(gone.ord) && inv.ord > gone.ord;
   }
 
-  /* A key's removal under either name keyMatches lets its public half take, and none while it is enrolled under either: the lead's
-     rows are kept under the name the lead used, so a key naming itself by the other would pass its own removal unseen. */
-  function removalOf(key, pub) {
+  /* ONE KEY, TWO SPELLINGS: keyMatches lets a public half be named raw or by its branch id, and the lead's rows are kept under the
+     spelling the lead used, so a lookup by one spelling misses the other. A key is enrolled where any spelling has a dev: row; else its
+     removal is its latest gone: row by the relay's order, an older removal under the other spelling being no longer the key's. */
+  function spellingsOf(key, pub) {
     let names = [key];
     names = keyMatches(key, pub) ? namesOf(pub) : [key]; /* plant:removal-either-name */
-    if (names.some(n => store.get("dev:" + n) !== undefined)) return undefined;
-    for (const n of names) { const gone = store.get("gone:" + n); if (gone) return gone; }
-    return undefined;
+    return names;
+  }
+  const enrolledAs = (key, pub) => spellingsOf(key, pub).some(n => store.get("dev:" + n) !== undefined);
+  const orderOf = gone => (Number.isSafeInteger(gone.ord) ? gone.ord : -1);
+  function removalOf(key, pub) {
+    if (enrolledAs(key, pub)) return undefined;
+    const rows = spellingsOf(key, pub).map(n => store.get("gone:" + n)).filter(Boolean);
+    let gone = rows[0];
+    gone = rows.reduce((a, g) => (orderOf(g) > orderOf(a) ? g : a), rows[0]); /* plant:removal-latest */
+    return gone;
   }
 
   /* An invitation's session bound to a key removed earlier may put its one request and may not read. */
@@ -1842,7 +1856,9 @@ function createCore(deps) {
           next.asked = m.id;
           delete next.withdrawn; /* plant:e4-ask-again */
           /* A request is the key's current one, on whichever invitation: an earlier invitation's withdrawal by the same key ends. */
-          for (const [k, v] of store.list("inv:")) if (v.withdrawn === true && v.key === m.writer) { const x = Object.assign({}, v); delete x.withdrawn; store.put(k, x); } /* plant:e5-clear */
+          let half = null;
+          half = is(HEX64, j.a.pub) ? j.a.pub : null; /* plant:e5-half */
+          for (const [k, v] of store.list("inv:")) if (v.withdrawn === true && (v.key === m.writer || (half !== null && v.pub === half))) { const x = Object.assign({}, v); delete x.withdrawn; store.put(k, x); } /* plant:e5-clear */
         }
         store.put("inv:" + j.a.invite, next); /* plant:invite-mark */
       }
