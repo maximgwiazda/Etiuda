@@ -114,6 +114,25 @@ function wireHeaderMenus(){
        seg reads as folded, so clicking the inactive one inverted the request into a no-op. */
     else if(act==="lang"){ closeMoreMenu(); const el=$("#seg button.on")||$("#seg button"); if(el) el.click(); }
   };
+  /* ONE ROW MARKED AT A TIME. Moving over a menu row gives it the focus, which is the menu's one mark, and leaving the rows
+     hands the focus to the menu itself, so no row stays marked and the arrows start again from the top; a move and not an
+     over, so a menu opening under a resting pointer keeps the row the keys were given. The hand used last is written on the
+     root for the rails of Settings, the Library and Maintenance, whose rows do not take the focus from a pointer. */
+  const setHand=h=>{ const r=document.documentElement; if(r && r.dataset && r.dataset.hand!==h) r.dataset.hand=h; };
+  addEventListener("pointermove",e=>{
+    setHand("pointer");
+    const row=e.target && e.target.closest ? e.target.closest('.menu button[role="menuitem"]') : null;
+    if(row && row!==document.activeElement && !row.disabled) row.focus({preventScroll:true});
+  }, true);
+  addEventListener("keydown",()=>setHand("keys"), true);
+  addEventListener("pointerout",e=>{
+    const row=e.target && e.target.closest ? e.target.closest('.menu button[role="menuitem"]') : null;
+    if(!row || row!==document.activeElement) return;
+    const box=row.closest(".menu");
+    const to=e.relatedTarget && e.relatedTarget.closest ? e.relatedTarget.closest('button[role="menuitem"]') : null;
+    if(!box || (to && box.contains(to))) return;
+    if(!box.hidden) box.focus({preventScroll:true});
+  }, true);
   addEventListener("pointerdown",e=>{
     // Touching anything ends the keyboard peek - hover takes over from here.
     endPillNavPeek();
