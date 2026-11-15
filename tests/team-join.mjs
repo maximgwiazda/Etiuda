@@ -39,7 +39,7 @@ const ASIDE = {
   "15ep": offWindows("15ep", "15em stands aside off Windows, so lifting plant:w2-folder-not-writable has no green leg there to turn"),
 };
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 184;
+const EXPECTED = 185;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -966,10 +966,17 @@ try {
     P.inviteFolderBelongs ? P.inviteFolderBelongs(underForger, invented) : false,
     P.inviteFolderBelongs ? P.inviteFolderBelongs(broken, invented) : false,
   ];
-  check(belongChecks[0] === true && belongChecks[1] === true
+  check(belongChecks[0] === true && belongChecks[1] === false
       && belongChecks[2] === false && belongChecks[3] === false
       && belongChecks[4] === false && belongChecks[5] === false,
-    "15cl a chosen copy of the shared folder is accepted only where it holds that team's own team file under the invited lead or vouched for by a ring, and refused otherwise: " + JSON.stringify(belongChecks));
+    "15cl a chosen copy of the shared folder is accepted only where it holds that team's own team file under the invited lead, and refused otherwise, a ring there vouching for another key included (review 14.5): " + JSON.stringify(belongChecks));
+  if (PLANTS_OFF) skip("j14e lifting plant:j14-picked-lead takes a chosen folder a ring vouches for under another key (ETIUDA_PLANTS=off)");
+  else {
+    const planted = SRC.split("\n").map(l => (l.indexOf("plant:j14-picked-lead") >= 0 ? "  handed = handedTo(doc, parsed.lead) || Boolean(readRingFile(folder) && memberRingVouches(doc, readRingFile(folder)));" : l)).join("\n");
+    const Dp = SRC.indexOf("plant:j14-picked-lead") >= 0 ? loadDesk(folder("j14e-ud"), planted) : null;
+    const took = Dp ? Dp.api.inviteFolderBelongs(ringYard, invented) : null;
+    check(took === true, "j14e lifting plant:j14-picked-lead takes a chosen folder a ring vouches for under another key (FAIL 15cl): " + JSON.stringify(took));
+  }
 
   const Dk = await deskWith("kept", folder("kept-own"));
   const secretK = newSecret();

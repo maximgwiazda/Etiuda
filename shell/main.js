@@ -6153,16 +6153,16 @@ function inviteFolderTeam(parsed) {
   return teamWhole(doc) && doc.id === parsed.team && doc.lead && doc.lead.keyId === parsed.lead.keyId && doc.lead.public === parsed.lead.public
     ? "" : "foreign";
 }
-/* True only where `folder` holds this team's own team file, whole under the invited lead, under a lead handed over to
-   from it, or vouched for by a ring in that folder. False for any other. */
+/* True only where `folder` holds this team's own team file, whole under the invited lead or under a lead handed over to from
+   it. A ring there is not asked: the invitation pins its own lead, and a file under any other key is never heeded after. */
 function inviteFolderBelongs(folder, parsed) {
   if (!folder || !parsed || !parsed.team || !parsed.lead) return false;
   const doc = teamTextChosen(folder).doc;
   if (!doc || !teamWhole(doc) || doc.id !== parsed.team) return false;
   if (doc.lead && doc.lead.keyId === parsed.lead.keyId && doc.lead.public === parsed.lead.public) return true;
-  if (handedTo(doc, parsed.lead)) return true;
-  const ring = readRingFile(folder);
-  return Boolean(ring && memberRingVouches(doc, ring));
+  let handed = false;
+  handed = handedTo(doc, parsed.lead); /* plant:j14-picked-lead */
+  return handed;
 }
 /* What an invitation says, and nothing written: the folder it names is not opened, stated or watched. */
 function readInvite(text) {
