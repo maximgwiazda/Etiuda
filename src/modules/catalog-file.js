@@ -30,6 +30,7 @@ import { rebuildCards } from "./rebuild.js";
 import { cards } from "./app-state.js";
 import { carryCardLayer } from "./card-carry.js";
 import { hooks } from "./hooks.js";
+import { flagFileList, flagHolds, settleFlags } from "./card-flag.js";
 import { edCatalogTaken, modalFront } from "./dialog.js";
 import { recordCatalogTrust } from "./catalog-trust.js";
 
@@ -390,6 +391,8 @@ function branchCatalog(who,origin){
   if(og&&(og.root||og.id)) c.grew.root=String(og.root||og.id);
   c.desk={id:who.id, key:who.key, box:who.box};
   if(name) c.desk.name=name;
+  const flags=flagFileList();
+  if(flags.length) c.flags=flags;
   return c;
 }
 /* NO DATE LEAVES IN THE DESK'S OWN FILE (Claude α's decision 12, 2026-11-11): nothing in it tells the lead when the person
@@ -618,6 +621,8 @@ function takeCatalog(c,opts){
      leave the one loaded standing over its own stars, hides and order. */
   const kept=pinned(c);
   if(!storeCatalog(kept)) return false;
+  /* Ended flags leave the layer before the restart asks for the file, so the next write omits them. */
+  try{ settleFlags(c, catalogDocOf(c)); }catch(e){}
   tellTaken(c);
   if(same){
     if (tabSaveTimer || (tabs && tabs.length)) {
@@ -747,11 +752,12 @@ function deskBranchHolds(){
     return Array.isArray(v) ? v.length>0 : !!v && typeof v==="object" && Object.keys(v).length>0;
   })) return true;
   const primary=CONTENT_LANGS[0]||"en";
-  return CONTENT_LANGS.slice(1).some(l=>{
+  if(CONTENT_LANGS.slice(1).some(l=>{
     const bag=catPackKey(l,primary);
     if(LOOSE_FIELDS.indexOf(bag)>=0) return false;
     return differs(bag,k=>catCatalogLabel(l,k));
-  });
+  })) return true;
+  return flagHolds(); /* plant:flag-holds */
 }
 /** Watermark visibility. The flag is read from storage rather than the live catalog because it
  *  has to survive activateCatalog()'s reload, and because a Reset wipes every e* key - so a
