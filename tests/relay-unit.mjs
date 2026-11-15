@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 593;
+const EXPECTED = 599;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -2230,6 +2230,56 @@ async function main() {
       async () => !(await edgeScenes.otherHello()).ok);
     await edgeLift("plant:hold-either-name", "r1w lifting plant:hold-either-name leaves the other spelling's upload listed after the removal (r1t red)",
       async () => !(await edgeScenes.heldOther()).ok);
+
+    /* The second Grok review of Part A: a session issued before its spelling was renamed is ended by the half's later removal, socket
+       and all; a key hello under either spelling resumes the invitation the other bound; an upload on that session is the member's. */
+    const respell = async y => devices(y, [{ id: y.desk.pub, pub: y.desk.pub, desk: y.deskId }, y.devs[1]]);
+    const renameScenes = {
+      async thenRemoved() {
+        const y = await world();
+        const lead = await sessionOf(y, y.lead), b = sealAs(y, y.lead, "root.txt", 1);
+        await put(y, lead, b, { extra: { pub: y.lead.pub } });
+        const deskS = await sessionOf(y, y.desk);
+        const sub = await socket(y, deskS), ws = sub && sub.socket ? wsOf(y, sub.socket) : null;
+        const renamed = await respell(y);
+        const between = await since(y, deskS);
+        const off = await devices(y, [y.devs[1]]);
+        const listed = await since(y, deskS), fetched = await getBlob(y, deskS, b.id);
+        const ok = renamed.status === 200 && between.status === 200 && off.status === 200 && refused(listed, "removed") && refused(fetched, "removed")
+          && !!ws && !!ws.closed;
+        return { ok, detail: JSON.stringify({ renamed: renamed.status, readsBetween: said(between), removal: off.status, list: said(listed), fetch: said(fetched),
+          socket: ws ? (ws.closed ? ws.closed.code : "open") : "none" }) };
+      },
+      async boundOther() {
+        const y = await world(), token = hex(32), id = hex(16);
+        await devices(y, y.devs.slice(1));
+        y.R.clock.now += 1;
+        await invites(y, [{ id, hash: sha(token) }], []);
+        const bound = await boundHello(y, rawOf(y.desk), id, token);
+        const asK = await helloAs(y, y.desk), asRaw = await helloAs(y, rawOf(y.desk));
+        const inv = r => r.status === 200 && !!r.json && r.json.invite === true;
+        return { ok: bound.status === 200 && inv(asK) && inv(asRaw), detail: JSON.stringify({ bound: said(bound), helloAsK: said(asK), inviteK: inv(asK), helloRaw: said(asRaw), inviteRaw: inv(asRaw) }) };
+      },
+      async uploadAfter() {
+        const y = await world();
+        const deskS = await sessionOf(y, y.desk);
+        const renamed = await respell(y);
+        const up = await put(y, deskS, sealAs(y, y.desk, "after.txt", 1), { extra: { pub: y.desk.pub } });
+        return { ok: renamed.status === 200 && up.status === 200, detail: JSON.stringify({ renamed: renamed.status, upload: said(up) }) };
+      },
+    };
+    const thenRemoved = await renameScenes.thenRemoved();
+    check(thenRemoved.ok, "r1x a session issued as the branch id, the desk then respelled raw and removed: that session reads nothing and its socket is closed: " + thenRemoved.detail);
+    const boundOther = await renameScenes.boundOther();
+    check(boundOther.ok, "r1y after a removal, an invitation bound as the raw half is resumed by a key hello under either spelling: " + boundOther.detail);
+    const uploadAfter = await renameScenes.uploadAfter();
+    check(uploadAfter.ok, "r1z an upload on the session issued as the branch id, after the desk was respelled raw, is the member's: " + uploadAfter.detail);
+    await edgeLift("plant:session-mark-names", "r1x2 lifting plant:session-mark-names leaves the respelled session reading after the removal (r1x red)",
+      async () => !(await renameScenes.thenRemoved()).ok);
+    await edgeLift("plant:bound-either-name", "r1y2 lifting plant:bound-either-name misses the binding under the other spelling (r1y red)",
+      async () => !(await renameScenes.boundOther()).ok);
+    await edgeLift("plant:admit-either-name", "r1z2 lifting plant:admit-either-name answers the respelled member's upload removed (r1z red)",
+      async () => !(await renameScenes.uploadAfter()).ok);
 
     /* The two moments are ordered by the relay's own counter, not its clock (edit 4): a clock stepping back between a
        registration and a removal changes neither answer. */
