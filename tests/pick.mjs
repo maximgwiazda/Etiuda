@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 144 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 3);
+const EXPECTED = 144 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 4);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1399,16 +1399,21 @@ try {
      2026-11-15 16:28): the helper reads the focused control's selected text through UI Automation. Exactly that is added:
      three usings (System.Text, System.Windows.Automation and its .Text), the two UI Automation client libraries at the
      compile, and a read that names only the focused element, its password flag, the text pattern, the selection and its
-     text, and nothing that sets, selects, scrolls, moves or invokes; a password field is refused before any text is read. */
+     text, and nothing that sets, selects, scrolls, moves or invokes; a password field is refused before any text is read.
+     WIDENED again the same day for whether those words can be edited: the range's IsReadOnly attribute, the Value pattern's
+     IsReadOnly (not its value), and the control type. Twenty names where there were nine. Nothing that changes a control. */
   const uiaRead = cs => {
-    const uiaNames = [...new Set(cs.match(/\b(?:AutomationElement|TextPattern|TextPatternRange)\b(?:\.\w+)?|\.(?:FocusedElement|TryGetCurrentPattern|GetSelection|GetText|IsPassword)\b/g) || [])].sort();
-    const uiaWrites = cs.match(/\b(?:SetValue|ValuePattern|InvokePattern|SelectionItemPattern|SelectionPattern|AddToSelection|RemoveFromSelection|SetFocus|ScrollIntoView|ExpandCollapsePattern|TogglePattern|Invoke|Move\w*|ExpandToEnclosingUnit|RangeFromPoint|FromPoint|FromHandle|TreeWalker|FindAll|FindFirst|GetVisibleRanges|DocumentRange|Select)\b\s*\(?/g) || [];
+    const uiaNames = [...new Set(cs.match(/\b(?:AutomationElement|TextPattern|TextPatternRange|ValuePattern|ControlType)\b(?:\.\w+)?|\.(?:FocusedElement|TryGetCurrentPattern|GetSelection|GetText|GetAttributeValue|IsPassword|IsReadOnly)\b/g) || [])].sort();
+    const uiaWrites = cs.match(/\b(?:SetValue|InvokePattern|SelectionItemPattern|SelectionPattern|AddToSelection|RemoveFromSelection|SetFocus|ScrollIntoView|ExpandCollapsePattern|TogglePattern|Invoke|Move\w*|ExpandToEnclosingUnit|RangeFromPoint|FromPoint|FromHandle|TreeWalker|FindAll|FindFirst|GetVisibleRanges|DocumentRange|Select)\b\s*\(?/g) || [];
+    const valueRead = /\.Current\.Value\b|\bSetValue\b|\bValueProperty\b/.test(cs);
     const passwordFirst = /if \(e\.Current\.IsPassword\) return 6;\s*object found;\s*if \(!e\.TryGetCurrentPattern\(TextPattern\.Pattern, out found\)\) return 3;/.test(cs);
-    return { uiaNames, uiaWrites, passwordFirst, ok: J(uiaNames) === J(UIA_NAMES) && uiaWrites.length === 0 && passwordFirst };
+    return { uiaNames, uiaWrites, valueRead, passwordFirst, ok: J(uiaNames) === J(UIA_NAMES) && uiaWrites.length === 0 && !valueRead && passwordFirst };
   };
-  const UIA_NAMES = [".GetSelection", ".GetText", ".IsPassword", ".TryGetCurrentPattern", "AutomationElement",
-    "AutomationElement.FocusedElement", "TextPattern", "TextPattern.Pattern", "TextPatternRange"].sort();
-  const { uiaNames, uiaWrites, passwordFirst } = uiaRead(CS);
+  const UIA_NAMES = [".GetAttributeValue", ".GetSelection", ".GetText", ".IsPassword", ".IsReadOnly", ".TryGetCurrentPattern",
+    "AutomationElement", "AutomationElement.FocusedElement", "AutomationElement.NotSupported", "ControlType", "ControlType.Document",
+    "ControlType.Edit", "ControlType.Text", "TextPattern", "TextPattern.IsReadOnlyAttribute", "TextPattern.MixedAttributeValue",
+    "TextPattern.Pattern", "TextPatternRange", "ValuePattern", "ValuePattern.Pattern"].sort();
+  const { uiaNames, uiaWrites, valueRead, passwordFirst } = uiaRead(CS);
   check(J(imports) === J(["GetAsyncKeyState", "GetForegroundWindow", "GetWindowThreadProcessId", "IsWindow", "MapVirtualKey", "SendInput",
       "SetForegroundWindow"]) && dllCount === imports.length && attrs.length === imports.length && attrsOk
     && J(usings) === J(["using System.Diagnostics;", "using System.Runtime.InteropServices;", "using System.Threading;", "using System;",
@@ -1418,7 +1423,9 @@ try {
     && J(pressedValues) === J([0x11, 0x56]) && builds,
     "5f the caret helper electron-builder.js compiles, with -noconfig, calls " + imports.length + " user32 functions by their own names,"
     + " uses no library beyond its seven usings, reads the selection through UI Automation naming " + uiaNames.length + " members and"
-    + (uiaWrites.length ? " ALSO " + uiaWrites.join(", ") : " nothing that changes a control") + (passwordFirst ? ", a password field refused first," : ", NO password refusal first,")
+    + (uiaWrites.length ? " ALSO " + uiaWrites.join(", ") : " nothing that changes a control")
+    + (valueRead ? ", READS the value" : ", the value unread")
+    + (passwordFirst ? ", a password field refused first," : ", NO password refusal first,")
     + " and presses the keys 0x" + pressedValues.map(v => (v || 0).toString(16)).join(" and 0x")
     + " (Control, V) in " + pressed.length + " presses" + (csForbid.length ? "; also names " + csForbid.join(", ") : ""));
   /* Two plants on copies of the helper's text: the password refusal lifted, and the focus set before the read. */
@@ -1429,8 +1436,28 @@ try {
       "5fp the helper's read with its password refusal lifted, and with the focus set before it, each fails 5f's reading");
   }
   /* THE HELPER'S OWN CHECK, run where the C# compiler is: caret.cs compiled into a scratch folder as electron-builder.js compiles
-     it, and its check verb, which touches no window, prints the selection's cap over a fixed text as UTF-8: Polish whole, at
-     most 1500 characters, and a pair that makes one character never cut in half. No window of this computer is read. */
+     it, and its check verb, which touches no window, prints the selection's cap over a fixed text as UTF-8, then the editability
+     rule. No window of this computer is read.
+     The rule, one row per cell. attr is the range's IsReadOnly (ro true, ed false, ns not supported, mx mixed). second is one
+     opinion: Value.IsReadOnly when that pattern is present, otherwise ControlType.Text as read-only; Edit and Document stay
+     silent. "?" is that opinion split (Value says editable, the type is Text). Agree, or a definite attribute with a silent
+     second: that answer. They disagree, the range is mixed, or the attribute is missing and the second is silent: unknown.
+       fact ro ro ro                  fact ro ed ? contradicted     fact ro . ro              fact ro ? ? contradicted
+       fact ed ro ? contradicted      fact ed ed ed                 fact ed . ed              fact ed ? ? contradicted
+       fact ns ro ro                  fact ns ed ed                 fact ns . ? not-supported fact ns ? ? not-supported
+       fact mx ro ? mixed             fact mx ed ? mixed            fact mx . ? mixed         fact mx ? ? mixed
+     The second opinion on its own, value then control type:
+       second ro text ro   second ro edit ro   second ro doc ro   second ro other ro
+       second ed text ?    second ed edit ed   second ed doc ed   second ed other ed
+       second . text ro    second . edit .     second . doc .     second . other . */
+  const FACT_ROWS = [
+    "fact ro ro ro", "fact ro ed ? contradicted", "fact ro . ro", "fact ro ? ? contradicted",
+    "fact ed ro ? contradicted", "fact ed ed ed", "fact ed . ed", "fact ed ? ? contradicted",
+    "fact ns ro ro", "fact ns ed ed", "fact ns . ? not-supported", "fact ns ? ? not-supported",
+    "fact mx ro ? mixed", "fact mx ed ? mixed", "fact mx . ? mixed", "fact mx ? ? mixed",
+    "second ro text ro", "second ro edit ro", "second ro doc ro", "second ro other ro",
+    "second ed text ?", "second ed edit ed", "second ed doc ed", "second ed other ed",
+    "second . text ro", "second . edit .", "second . doc .", "second . other ."];
   {
     const csc = path.join(process.env.WINDIR || "C:/Windows", "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe");
     let said5h = "no C# compiler here, so not compiled";
@@ -1445,13 +1472,46 @@ try {
         const ran = made.status === 0 ? spawnSync(exe, ["check"], { windowsHide: true, timeout: 10000 }) : null;
         const out = ran && ran.stdout ? ran.stdout.toString("utf8") : "";
         const want = "Za\u017C\u00F3\u0142\u0107 g\u0119\u015Bl\u0105 ja\u017A\u0144 " + "x".repeat(1481);
-        ok5h = !!ran && ran.status === 0 && out === want;
+        const capOk = out.startsWith(want + "\n");
+        const tableOk = out.slice(want.length + 1) === FACT_ROWS.join("\n");
+        ok5h = !!ran && ran.status === 0 && capOk && tableOk;
         said5h = made.status !== 0 ? "did not compile: " + String(made.stdout || made.stderr).split("\n")[0]
-          : "check exit " + (ran && ran.status) + ", " + out.length + " characters, " + (out === want ? "as wanted" : "NOT as wanted");
+          : "check exit " + (ran && ran.status) + ", cap " + (capOk ? "held" : "NOT held") + ", " + FACT_ROWS.length
+            + " rows " + (tableOk ? "held" : "NOT held");
       } finally { fs.rmSync(lab, { recursive: true, force: true }); }
     }
     check(ok5h, "5fs the caret helper compiles as electron-builder.js compiles it, and its window-free check caps a text at 1500 characters in"
-      + " UTF-8, Polish whole and no character cut in half: " + said5h);
+      + " UTF-8 and prints the editability rule, Polish whole and no character cut in half: " + said5h);
+  }
+  /* The contradicted cell, rewritten to agree, is a different rule: check then prints read-only where the two opinions disagree. */
+  if (process.env.ETIUDA_PLANTS === "off") console.log("  NOT RUN  5fq the editability rule's plant (ETIUDA_PLANTS=off)");
+  else {
+    const csc = path.join(process.env.WINDIR || "C:/Windows", "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe");
+    const raw = fs.readFileSync(path.join(ROOT, "shell", "caret.cs"), "utf8");
+    const from = 'return "? contradicted"; // plant:fact-contradict';
+    const hits = raw.split("\n").filter(l => l.indexOf("plant:fact-contradict") >= 0);
+    const mutant = raw.replace(from, 'return "ro"; // plant:fact-contradict');
+    let turned = false, said = hits.length === 1 ? "marked" : "marker missing";
+    if (hits.length === 1 && mutant !== raw && (process.platform !== "win32" || !fs.existsSync(csc))) {
+      turned = true;
+      said = "no compiler; the marked return is present and the mutation differs";
+    } else if (hits.length === 1 && mutant !== raw) {
+      const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-caret-plant-")), exe = path.join(lab, "caret.exe"), cs = path.join(lab, "caret.cs");
+      try {
+        fs.writeFileSync(cs, mutant, "utf8");
+        const { spawnSync } = nodeRequire("node:child_process");
+        const made = spawnSync(csc, ["-noconfig", "-nologo", "-optimize", "-target:winexe", "-platform:anycpu", "-r:System.dll",
+          "-lib:" + path.join(path.dirname(csc), "WPF"), "-r:UIAutomationClient.dll", "-r:UIAutomationTypes.dll", "-out:" + exe, cs],
+          { encoding: "utf8", windowsHide: true, timeout: 60000 });
+        const ran = made.status === 0 ? spawnSync(exe, ["check"], { windowsHide: true, timeout: 10000 }) : null;
+        const lines = ran && ran.stdout ? ran.stdout.toString("utf8").split("\n") : [];
+        turned = lines.indexOf("fact ro ed ro") >= 0 && lines.indexOf("fact ro ed ? contradicted") < 0;
+        said = made.status !== 0 ? "mutant did not compile: " + String(made.stdout || made.stderr).split("\n")[0]
+          : "mutant check " + (turned ? "prints read-only for a contradiction" : "did not turn: " + lines.filter(l => l.indexOf("fact ro ed") === 0).join(" | "));
+      } finally { fs.rmSync(lab, { recursive: true, force: true }); }
+    }
+    check(hits.length === 1 && mutant !== raw && turned,
+      "5fq rewriting plant:fact-contradict so a read-only attribute and an editable second opinion agree makes check print read-only there: " + said);
   }
   /* THE PASTE IS STARTED FROM ONE PLACE: the copy, right after its clipboard write, so no other handler presses a key. */
   const pasteNames = (shellBare.match(/\bcaretPaste\b/g) || []).length;
