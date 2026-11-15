@@ -9951,6 +9951,11 @@ function signinCertOk(c, deskKey) {
     .concat(c.deskOnly === true ? ["desk-only"] : []).map(String).join("\n"), "utf8"); /* plant:cert-desk-only-bytes */
   return signinVerified(d.key.pub, bytes, c.sig.value); /* plant:cert-sig */
 }
+/* A certificate issued later than now, past the same five minutes the ID token and the relay's door allow (certWhy "future"),
+   stands nowhere yet: no door, no seat, no "held". */
+function signinCertEarly(cert, now) {
+  return !!cert && Number.isSafeInteger(cert.issued) && cert.issued > now + SIGNIN_SKEW_MS; /* plant:cert-early */
+}
 /* THE DOORS THE SERVICE HANDS (board 980, the door-finding; Max, 2026-11-12 18:46 and 18:57): beside a certificate, the doors of
    the relay teams on its licence, each {team, rt, url, keyId, lead, box}. A door is kept only whole: the team id and relay id in
    their shapes, the address by signinDoorAddressOk on this desk's flag, the lead's key and
@@ -10061,6 +10066,7 @@ async function signinSeat(io, provider, deskKey, idToken, seed, now) {
 /* THE CALM LAPSE: the kept certificate's `until` passed with no new one. It decides nothing on the desk but Account's words; the
    desk works on, and the next certificate ends it. */
 function signinLapsed(held, now) {
+  if (!!held && !!held.cert && signinCertEarly(held.cert, now)) return true; /* plant:lapse-early */
   if (!!held && !!held.cert && signinRevokedHas(held.revoked, held.cert)) return true; /* plant:lapse-revoked */
   return !!held && !!held.cert && now >= held.cert.until; /* plant:lapse-until */
 }
@@ -10106,6 +10112,7 @@ function seatFileText(deskId, cert) { return JSON.stringify({ format: 2, desk: S
 function signinDoorRequest(doc, deskId, deskKey, cert, door, now) {
   if (!doc || typeof doc !== "object" || doc.invite !== undefined || !/^[0-9a-f]{32}$/.test(String(door))) return null;
   if (!signinCertOk(cert, deskKey) || !(cert.until > now)) return null; /* plant:door-cert */
+  if (signinCertEarly(cert, now)) return null; /* plant:door-early */
   return Object.assign({}, doc, { seat: JSON.parse(seatFileText(deskId, cert)), door: String(door) }); /* plant:door-fields */
 }
 /* The sign-in's file beside desk.json, read whole or not at all: {held: {provider, refresh, sub, seed, code, cert, at, checked,
@@ -10206,6 +10213,7 @@ function signinTeamHere() {
 function signinFlush() {
   const held = signinState().held, cert = held && held.cert, me = branchIdentity(false);
   if (!cert || !me || !signinTeamHere()) return false;
+  if (signinCertEarly(cert, Date.now())) return false; /* plant:flush-early */
   if (signinRevokedHas(held.revoked, cert)) return false; /* plant:revoked-flush */
   try {
     const root = sharedFolderForWrite();
@@ -10236,6 +10244,7 @@ function signinDoorInvite(team, rt) {
   if (inv.withdrawing === true) return inv.rt === rt && /^[0-9a-f]{64}$/.test(String(inv.box)) && /^[0-9a-f]{32}$/.test(String(inv.inv)) ? { door: null, box: inv.box, inv: inv.inv } : null; /* plant:door-withdraw-invite */
   const held = signinState().held, cert = held && held.cert, me = branchIdentity(false);
   if (inv.rt !== rt || !me || !/^[0-9a-f]{64}$/.test(String(inv.box)) || !signinCertOk(cert, me.key) || !(cert.until > Date.now())) return null; /* plant:door-invite-cert */
+  if (signinCertEarly(cert, Date.now())) return null; /* plant:door-invite-early */
   if (signinRevokedHas(held.revoked, cert)) return null; /* plant:revoked-knock */
   const out = { door: cert, box: inv.box };
   if (/^[0-9a-f]{32}$/.test(String(inv.inv))) out.inv = inv.inv;
@@ -10267,6 +10276,7 @@ function signinDoorKept(team, mirror, id) {
 function signinDoorsShown(held, now) {
   const me = branchIdentity(false);
   if (!held || !held.cert || !me || !signinCertOk(held.cert, me.key) || !(held.cert.until > now) || pinnedLead() || teamJoin) return []; /* plant:door-shown */
+  if (signinCertEarly(held.cert, now)) return []; /* plant:door-shown-early */
   if (Object.keys(teamPins).some(teamPinStands)) return []; /* plant:door-pin-stands */
   if (signinRevokedHas(held.revoked, held.cert)) return []; /* plant:revoked-offer */
   if (!signinDoorsSigned(held.doors, held.doorsSig, held.cert)) return []; /* plant:door-shown-signed */

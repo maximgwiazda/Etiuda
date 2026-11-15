@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 150;
+const PLANTS = 156;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 139 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 140 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -93,7 +93,7 @@ const NAMES = ["SIGNIN_PROVIDERS", "signinOffered", "signinNonce", "signinAuthor
   "signinSettle", "signinRenewHeld", "seatFileText", "SEAT_NAME", "signinFileRead", "signinFileText", "branchIdOf", "inviteRead",
   "SIGNOUT_SERVICE", "signoutDeskBytes", "signoutDeskBody", "signoutAsk", "signinDoorRequest", "signinKnown", "signinPreviewing",
   "signinCodeForm", "signinSecretRead", "SIGNIN_SECRET_FILE", "SIGNIN_SECRET_SHAPE", "sealsForReal", "SIGNIN_WAIT_MS", "signinLabAt", "signinLabRead",
-  "signinLabUse", "signinDoorAddressOk", "DOOR_RELAYS", "BUILTIN_RELAY_URL", "signinDoorsSigned", "signinRevokedOk", "signinRevokedNext", "signinRevokedHas"];
+  "signinLabUse", "signinDoorAddressOk", "DOOR_RELAYS", "BUILTIN_RELAY_URL", "signinDoorsSigned", "signinRevokedOk", "signinRevokedNext", "signinRevokedHas", "signinCertEarly", "SIGNIN_SKEW_MS"];
 NAMES.push("SIGNIN_TRACE_ASKED", "signinTraceLine", "signinTraceSaid");
 NAMES.push("signinLanding", "signinLandingHtml", "signinLandingCsp", "SIGNIN_LAND_MS");
 /* The section, evaluated: `swap` is [from, to], put in place of the one line that holds `from`, for a plant; `invSwap` the same in the
@@ -584,7 +584,7 @@ CASES.renewWire = async (s, swap) => {
 /* ---- the seat's write, evaluated with stand-ins: the folder, the team, the files ---------------------------------------- */
 const FLUSH_DECLS = ["function signinTeamHere(", "function signinFlush("];
 const FLUSH_STANDS = ["signinState", "branchIdentity", "pinnedLead", "teamJoin", "sharedFolderForWrite", "folderAnswers", "fs", "path", "writeReplacing",
-  "seatFileText", "SEAT_NAME", "console", "signinRevokedHas"];
+  "seatFileText", "SEAT_NAME", "console", "signinRevokedHas", "signinCertEarly", "Date"];
 /* `st`: {held, lead, join, root, files (a Set of paths), writes}; the desk's flush as the wiring has it, its mark kept between calls. */
 function loadFlush(s, st, swap) {
   let text = FLUSH_DECLS.map(d => { try { return decl(MAIN, d); } catch { return ""; } }).filter(Boolean).join("\n");
@@ -595,7 +595,8 @@ function loadFlush(s, st, swap) {
   const vals = { signinState: () => ({ held: st.held }), branchIdentity: () => ({ id: DESK_ID, key: DESK_KEY }), pinnedLead: () => st.lead,
     sharedFolderForWrite: () => st.root, folderAnswers: () => true, path,
     fs: { existsSync: p => st.files.has(p), mkdirSync: () => {} }, writeReplacing: (p, t) => { st.files.add(p); st.writes.push({ p, t }); },
-    seatFileText: s.seatFileText, SEAT_NAME: s.SEAT_NAME, console: { error() {} }, signinRevokedHas: s.signinRevokedHas };
+    seatFileText: s.seatFileText, SEAT_NAME: s.SEAT_NAME, console: { error() {} }, signinRevokedHas: s.signinRevokedHas, signinCertEarly: s.signinCertEarly,
+    Date: { now: () => NOW } };
   return new Function(...FLUSH_STANDS, "let signinWrote = \"\";\n" + text + "\nreturn signinFlush;")(...FLUSH_STANDS.map(n => n === "teamJoin" ? st.join : vals[n]));
 }
 /* A desk signed in before it asked to join a folder team writes its seat beside the request at once, as it does where its lead is
@@ -671,7 +672,7 @@ CASES.doorRequest = s => {
 };
 const DOOR_DECLS = ["function signinDoorInvite(", "function signinDoorKept("];
 const DOOR_STANDS = ["teamJoin", "signinState", "branchIdentity", "signinCertOk", "signinDoorRequest", "persistDeskEnvelope", "memberRequestDoc",
-  "writeJoin", "fs", "path", "Date", "console", "signinDoorAddressOk", "SIGNIN_DESK_PACKED", "signinRevokedHas"];
+  "writeJoin", "fs", "path", "Date", "console", "signinDoorAddressOk", "SIGNIN_DESK_PACKED", "signinRevokedHas", "signinCertEarly"];
 /* `st`: {join, held, files (a Map of path to text), writes, persists}; the door's two wiring functions with stand-ins, the request
    signed by this desk's key as writeJoin signs it. */
 function loadDoor(s, st, swap) {
@@ -693,7 +694,7 @@ function loadDoor(s, st, swap) {
     },
     fs: { readFileSync: p => { if (!st.files.has(p)) throw new Error("ENOENT"); return st.files.get(p); } }, path,
     Date: { now: () => NOW }, console: { error() {} }, signinDoorAddressOk: st.addressOk || s.signinDoorAddressOk, signinRevokedHas: s.signinRevokedHas,
-    SIGNIN_DESK_PACKED: st.packed === undefined ? true : st.packed };
+    signinCertEarly: s.signinCertEarly, SIGNIN_DESK_PACKED: st.packed === undefined ? true : st.packed };
   return new Function(...DOOR_STANDS, text + "\nreturn { signinDoorInvite, signinDoorKept };")(...DOOR_STANDS.map(n => vals[n]));
 }
 const doorJoin = over => ({ team: TEAM, nonce: "4".repeat(64), commit: "1".repeat(64), asked: NOW, held: 0, name: "Desk",
@@ -781,7 +782,7 @@ const DOORJOIN_DECLS = ["function signinDoorsShown(", "function signinDoorJoin("
 const DOORJOIN_STANDS = ["init", "readDesk", "signinState", "branchIdentity", "signinCertOk", "pinnedLead", "joinView", "inviteBeforeFor", "joinCommit",
   "newestEpoch", "teamPins", "teamSeen", "teamPinFrom", "relayMirrorOf", "teamShown", "teamRelayGone", "relayCatalogNamed", "persistDeskEnvelope",
   "relayRun", "catalogFolderChanged", "leadPrint", "crypto", "URL", "Date", "signinDoorAddressOk", "SIGNIN_DESK_PACKED",
-  "deskBranch", "branchIdOf", "teamRoster", "teamLeft", "teamBarred", "sayJoinPolicy", "path", "process", "signinDoorsSigned", "signinRevokedHas"];
+  "deskBranch", "branchIdOf", "teamRoster", "teamLeft", "teamBarred", "sayJoinPolicy", "path", "process", "signinDoorsSigned", "signinRevokedHas", "signinCertEarly"];
 /* The door's offer and its join with stand-ins: `st` {held, pinned, join, pins, counts}. */
 function loadDoorJoin(s, st, swap) {
   let text = DOORJOIN_DECLS.map(d => tryDeclText(d)).filter(Boolean).join("\n");
@@ -798,7 +799,8 @@ function loadDoorJoin(s, st, swap) {
     sayJoinPolicy: () => st.policy || {}, path, process, persistDeskEnvelope: () => { st.persists++; }, relayRun: () => { st.runs++; },
     catalogFolderChanged: () => {}, leadPrint: pub => crypto.createHash("sha256").update(Buffer.from(String(pub), "hex")).digest("hex").slice(0, 16),
     crypto, URL, Date: { now: () => NOW }, signinDoorAddressOk: st.addressOk || s.signinDoorAddressOk,
-    SIGNIN_DESK_PACKED: st.packed === undefined ? true : st.packed, signinDoorsSigned: s.signinDoorsSigned, signinRevokedHas: s.signinRevokedHas };
+    SIGNIN_DESK_PACKED: st.packed === undefined ? true : st.packed, signinDoorsSigned: s.signinDoorsSigned, signinRevokedHas: s.signinRevokedHas,
+    signinCertEarly: s.signinCertEarly };
   const body = "let deskKeys = {}, teamJoin = init.join, teamStamp = \"x\", joinTold = true;\n" + text
     + "\nreturn { signinDoorsShown, signinDoorJoin, join: () => teamJoin };";
   return new Function(...DOORJOIN_STANDS, body)(...DOORJOIN_STANDS.map(n => vals[n]));
@@ -915,7 +917,7 @@ CASES.doorEnded = (s, swap) => {
   const doorText = ["function signinDoorInvite(", "function signinDoorKept("].map(d => lift(main, d)).filter(Boolean).join("\n");
   const ask = join => new Function(...DOOR_STANDS, doorText + "\nreturn { signinDoorInvite };")(join, () => ({ held: heldOf() }),
     () => ({ id: DESK_ID, key: DESK_KEY, box: DESK_BOX }), s.signinCertOk, s.signinDoorRequest, () => {}, null, null, fs, path, { now: () => NOW }, console,
-    s.signinDoorAddressOk, true, s.signinRevokedHas)
+    s.signinDoorAddressOk, true, s.signinRevokedHas, s.signinCertEarly)
     .signinDoorInvite(TEAM, RT);
   const knocks = !!ask(doorJoin()) && ask(doorJoin({ inv: DOOR_ID })) !== null;
   const quiet = ask(doorJoin({ end: "turned" })) === null && ask(doorJoin({ inv: DOOR_ID, end: "removed" })) === null;
@@ -2608,6 +2610,20 @@ CASES.revokedLapse = (s, swap) => {
   return lapsed && view && page && offered(h) === 0 && offered(free) === 2 && flushed(h) === false && flushed(free) === true
     && knocked(h) === null && !!knocked(free) && wrote(h) === false && wrote(free) === true;
 };
+/* Review 15b, finding 2: a certificate issued past now and the five minutes is live nowhere yet, read as the calm lapse; one inside
+   the five minutes stands as any other. */
+CASES.certEarly = (s, swap) => {
+  const early = cert({ issued: NOW + 10 * DAY_MS, until: NOW + 25 * DAY_MS }), near = cert({ issued: NOW + 4 * 60 * 1000, until: NOW + 20 * DAY_MS });
+  const he = heldOf({ cert: early, doors: DOORS_TWO() }), hn = heldOf({ cert: near, doors: DOORS_TWO() });
+  const swapIn = names => (swap && names.some(n => decl(MAIN, "function " + n + "(").indexOf(swap[0]) >= 0) ? swap : undefined);
+  const lapsed = s.signinLapsed(he, NOW) === true && s.signinLapsed(hn, NOW) === false && viewWith(s, he).seat === "lapsed" && viewWith(s, hn).seat === "held";
+  const asked = c => s.signinDoorRequest({ format: 1, kind: "etiuda-join" }, DESK_ID, DESK_KEY, c, DOOR_ID, NOW);
+  const offered = held => { const st = doorJoinStand({ held }); return loadDoorJoin(s, st, swapIn(["signinDoorsShown", "signinDoorJoin"])).signinDoorsShown(st.held, NOW).length; };
+  const flushed = held => { const st = { held, lead: { team: TEAM }, join: null, root: "/share/a", files: new Set(), writes: [] }; return loadFlush(s, st, swapIn(["signinFlush"]))(); };
+  const knocked = held => { const st = doorStand(doorJoin(), held); return loadDoor(s, st, swapIn(["signinDoorInvite", "signinDoorKept"])).signinDoorInvite(TEAM, RT); };
+  return s.signinCertOk(early, DESK_KEY) === true && lapsed && asked(early) === null && !!asked(near) && offered(he) === 0 && offered(hn) === 2
+    && flushed(he) === false && flushed(hn) === true && knocked(he) === null && !!knocked(hn);
+};
 /* The next sign-in mends it: a certificate under a key the list does not name ends the lapse, the list kept. */
 CASES.revokedMend = s => {
   const list = revokedList(1, [SERVICE_PUB]), h = heldOf({ revoked: list });
@@ -2997,6 +3013,7 @@ const LEGS = [
   ["ds25a", "revokedTaken", "the revoked keys' list is taken, signed, from the service's answer at a first sign-in and at the renewal, from a refusal too, and kept in signin.json"],
   ["ds25b", "revokedForged", "a list not the vendor's or not later than the one kept is not taken: another root, a made-up signature, keys out of order, an older or the same serial, a later one dropping a kept key, a field more; from an answer or the file alike"],
   ["ds25c", "revokedOffline", "offline, or answered with no list, the last list taken judges: the seat under its key stays lapsed"],
+  ["dlt2", "certEarly", "review 15b.2: a certificate issued past now and the five minutes reads as the calm lapse and stands nowhere: no door asked, offered or knocked, no seat.json; one issued inside the five minutes stands"],
   ["ds25d", "revokedLapse", "a seat under a listed key reads as the calm lapse in the view and on the page, and no door is offered, no knock sent, no request or seat.json written; under another key all stand"],
   ["ds25e", "revokedMend", "the next sign-in mends it: a certificate under a key the list does not name ends the lapse, the list kept"],
   ["ds25f", "revokedSurvives", "the list is kept beside held in signin.json and outlives a sign-out: a sign-in afterwards, as this account or another, starts from it, so an older list in the answer is refused; with none kept, the answer's list is taken"],
@@ -3497,6 +3514,13 @@ if (!PLANTS_OFF) {
   await plantWire("dsp150", ["  if (held && signinRevokedHas(held.revoked, held.cert)) return false; /* plant:revoked-request */\n", ""], "revokedLapse");
   await plantWire("dsp152", ["  base.revoked = s.revoked || null; /* plant:revoked-survives */\n", ""], "revokedSurvives");
   await plant("dsp151", ["return !!list && Array.isArray(list.keys) && !!cert && !!cert.via && !!cert.via.key && list.keys.indexOf(String(cert.via.key.pub)) >= 0; /* plant:revoked-has */", "return false;"], "revokedLapse");
+  /* Review 15b, finding 2: the early certificate's helper and each judge that asks it. */
+  await plant("dlp2a", ["return !!cert && Number.isSafeInteger(cert.issued) && cert.issued > now + SIGNIN_SKEW_MS; /* plant:cert-early */", "return false;"], "certEarly");
+  await plant("dlp2b", ["if (!!held && !!held.cert && signinCertEarly(held.cert, now)) return true; /* plant:lapse-early */", ""], "certEarly");
+  await plant("dlp2c", ["if (signinCertEarly(cert, now)) return null; /* plant:door-early */", ""], "certEarly");
+  await plantWire("dlp2d", ["  if (signinCertEarly(cert, Date.now())) return null; /* plant:door-invite-early */\n", ""], "certEarly");
+  await plantWire("dlp2e", ["  if (signinCertEarly(held.cert, now)) return []; /* plant:door-shown-early */\n", ""], "certEarly");
+  await plantWire("dlp2f", ["  if (signinCertEarly(cert, Date.now())) return false; /* plant:flush-early */\n", ""], "certEarly");
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
   check(gated !== MAIN && outsideNames(gated).slice().sort().join() !== expectOutside.slice().sort().join(),
     "dsp14 plant a sign-in gate on the desk file's write turns ds5a red");
