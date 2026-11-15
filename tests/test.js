@@ -4347,7 +4347,7 @@ function menuWarmTests() {
       $: sel => (sel === "#settingsMenu" ? menu : sel === "#settingsBtn" ? btn : null),
       requestAnimationFrame: fn => { frames.push(fn); return frames.length; },
       setTimeout: (fn, ms) => { timers.push({ at: clock + ms, fn }); return timers.length; },
-      closeFactsPanel() {}, cutLeaves() {}, syncSettingsMenu() {}, takeKeyboard() {}
+      closeFactsPanel() {}, closeMoreMenu() {}, closeTabList() {}, cutLeaves() {}, syncSettingsMenu() {}, takeKeyboard() {}
     };
     require("vm").runInNewContext([extractDecl(src, "let menuDrawn="), extractDecl(src, "function warmMenu("),
       extractDecl(src, "function openSettingsMenu(")].join("\n"), sb);

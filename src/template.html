@@ -711,10 +711,16 @@ body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,4
 :root[data-theme=light] body:not(.e-backdrop) .row::before{background:color-mix(in srgb,var(--band) 78%,var(--bg))}
 /* Band furniture: what stands on the blue dresses in white. What stands there is the brand,
    the tab strip and the window's own three controls; the tools live on the row below. */
-.row .tabs-nav{color:rgba(var(--band-ink-rgb),.7)}
-.row .tabs-nav:hover:not(:disabled),.row .tabs-nav:focus-visible:not(:disabled){color:var(--band-ink)}
+.row .tabs-nav,.row .tabs-list-btn{color:rgba(var(--band-ink-rgb),.7)}
+.row .tabs-nav:hover:not(:disabled),.row .tabs-nav:focus-visible:not(:disabled),
+.row .tabs-list-btn:hover,.row .tabs-list-btn:focus-visible,.row .tabs-list-btn.on{color:var(--band-ink)}
 .row .tabs-nav:hover:not(:disabled) .tabs-nav-mark,
-.row .tabs-nav:focus-visible:not(:disabled) .tabs-nav-mark{color:var(--band-ink);background:var(--strip-hover)}
+.row .tabs-nav:focus-visible:not(:disabled) .tabs-nav-mark,
+.row .tabs-list-btn:hover .tabs-list-mark,
+.row .tabs-list-btn:focus-visible .tabs-list-mark,
+.row .tabs-list-btn.on .tabs-list-mark{color:var(--band-ink);background:var(--strip-hover)}
+.tabs-list-btn:focus-visible{outline:none}
+.tabs-list-btn:focus-visible .tabs-list-mark{box-shadow:inset 0 0 0 1.5px var(--band-ink)}
 .brand{color:var(--band-ink)}
 /* THE LANGUAGE SWITCH ON PAPER. It carries the band's idea onto the second row rather than
    abandoning it: the thumb is a RAISED SURFACE and the language's colour is in the lettering,
@@ -777,7 +783,7 @@ body.e-host.e-max .win-g-max{display:none}
    rectangle. So each thing inside it that answers a click says no-drag, the popovers included:
    a menu or the facts panel opens across the band's own rectangle and would be dead under it. */
 body.e-host .row{app-region:drag;-webkit-app-region:drag;user-select:none}
-body.e-host .row button,body.e-host .row input,body.e-host .row .tab{
+body.e-host .row button,body.e-host .row input,body.e-host .row .tab,body.e-host .row .menu{
   app-region:no-drag;-webkit-app-region:no-drag}
 body.e-host .row .cat-now.is-waiting{app-region:no-drag;-webkit-app-region:no-drag}
 
@@ -955,6 +961,14 @@ span[data-icon]{line-height:0}
   background:var(--tab-edge);pointer-events:none}
 #tabsPrev::after{right:0}
 #tabsNext::before{left:0}
+.tabs-wrap:has(#tabsListMenu:not([hidden])){z-index:80}
+.tabs-list-wrap{display:none;flex:0 0 auto;align-self:flex-end;position:relative;z-index:5}
+.tabs-wrap.tabs-over .tabs-list-wrap{display:inline-flex}
+.tabs-list-btn{flex:0 0 auto;width:20px;height:32px;margin:0;padding:0;border:0;border-radius:0;
+  background:transparent;color:var(--dim);font:inherit;cursor:default;
+  display:inline-flex;align-items:center;justify-content:center;
+  appearance:none;-webkit-appearance:none;box-shadow:none}
+.tabs-list-mark{display:inline-flex;align-items:center;justify-content:center;padding:2px;border-radius:4px}
 .tab{display:inline-flex;align-items:center;gap:6px;
   flex:1 1 0;/* share width; applyTabWidths usually sets fixed width */
   width:0;
@@ -1051,7 +1065,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .tab-x{border:0;background:transparent;color:rgba(var(--band-ink-rgb),.7);cursor:default;padding:2px;
   border-radius:4px;flex:0 0 auto;opacity:.75;
   display:inline-flex;align-items:center;justify-content:center}
-.tab-x .ic,.tab-add-mark .ic,.tabs-nav-mark .ic{width:16px;height:16px;stroke-width:1.5}
+.tab-x .ic,.tab-add-mark .ic,.tabs-nav-mark .ic,.tabs-list-mark .ic{width:16px;height:16px;stroke-width:1.5}
 .tab:hover .tab-x,.tab:focus-visible .tab-x,.tab:focus-within .tab-x,.tab-x:focus-visible{opacity:1}
 .tab-x:hover,.tab-x:focus-visible{color:#c44;background:rgba(196,68,68,.14);opacity:1}
 /* No hairline between the last tab and + - if the strip's end ever needs marking again,
@@ -1255,6 +1269,29 @@ body.shed-segfold #seg::before{width:100%;transform:none}
 :root:not([data-theme=light]) .menu{--menu-mark:#2a2f37}
 .menu:focus{outline:none}
 .menu button:focus{background:var(--menu-mark);color:var(--ink);outline:none}
+.tabs-wrap .menu.tabs-list-menu{min-width:240px;width:max-content;max-width:min(360px,calc(100vw - 24px));
+  max-height:min(420px,calc(100vh - 80px));overflow-y:auto;gap:2px}
+.tabs-list-head{padding:5px 10px 6px;margin-bottom:3px;border-bottom:1px solid var(--line);
+  font:600 11px/1.2 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);user-select:none}
+.tabs-list-rows{display:flex;flex-direction:column;gap:1px}
+.tabs-list-row{display:flex;align-items:center;gap:2px;border-radius:6px}
+.tabs-list-row:focus-within{background:var(--menu-mark)}
+.menu .tabs-list-item{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:9px;width:auto;
+  padding:5px 8px 5px 10px;border-radius:6px;background:transparent;color:var(--ink)}
+.menu .tabs-list-item:focus{background:transparent;color:var(--ink);outline:none}
+.tabs-list-row.on .tabs-list-item{font-weight:600}
+.tabs-list-name{flex:1 1 auto;min-width:0;white-space:normal;overflow-wrap:anywhere;line-height:1.35}
+.tabs-list-dot{flex:none;width:7px;height:7px;margin:0 4.5px;border-radius:50%;
+  background-color:var(--ecat,var(--dim));background-image:var(--tab-accent-img,none)}
+.tabs-list-row.on .tabs-list-dot{background-color:var(--ecat,var(--accent))}
+.menu .tabs-list-item .tabs-list-check{flex:none;width:15px;height:15px;color:var(--accent);stroke-width:2}
+.menu .tabs-list-x{flex:none;width:24px;height:24px;padding:0;margin-right:3px;border-radius:4px;
+  justify-content:center;color:var(--dim);background:transparent}
+.menu .tabs-list-x:focus{background:transparent;color:var(--dim);outline:none}
+.menu .tabs-list-x .ic{width:14px;height:14px;color:currentColor}
+.menu .tabs-list-x:hover,.menu .tabs-list-x:focus-visible{color:#c44;background:rgba(196,68,68,.14)}
+:root:not([data-hand=pointer]) .menu .tabs-list-item:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+:root:not([data-hand=pointer]) .menu .tabs-list-x:focus-visible{outline:2px solid #c44;outline-offset:-2px}
 .menu .menu-sep{height:1px;margin:3px 6px;background:var(--line);border:0;padding:0;pointer-events:none}
 /* A row's key at its right edge, in the row's quieter ink. */
 #menuPicker{display:flex;align-items:center;gap:9px}
@@ -4879,6 +4916,13 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
         <button type="button" class="tabs-nav" id="tabsPrev" tabindex="-1" aria-label="Scroll tabs left" title="Scroll tabs left"><span class="tabs-nav-mark"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M11.9 4.6L6.5 10l5.4 5.4"/></svg></span></button>
         <div class="tabs-bar" id="tabsBar" role="tablist"></div>
         <button type="button" class="tabs-nav" id="tabsNext" tabindex="-1" aria-label="Scroll tabs right" title="Scroll tabs right"><span class="tabs-nav-mark"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M8.1 4.6L13.5 10l-5.4 5.4"/></svg></span></button>
+        <div class="tabs-list-wrap" id="tabsListWrap">
+          <button type="button" class="tabs-list-btn" id="tabsListBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="tabsListMenu" aria-label="All open tabs" title="All open tabs"><span class="tabs-list-mark"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.2 7.6 10 12.4l4.8-4.8"/></svg></span></button>
+          <div class="menu tabs-list-menu" id="tabsListMenu" hidden role="menu" tabindex="-1" aria-labelledby="tabsListHead">
+            <div class="tabs-list-head" id="tabsListHead">Open tabs</div>
+            <div class="tabs-list-rows" id="tabsListRows" role="none" data-i18n-skip></div>
+          </div>
+        </div>
       </div>
     </div>
     <!-- THE CATALOG IN USE, by name, or that none is: inert, and no door to the Library. -->

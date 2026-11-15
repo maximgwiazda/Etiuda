@@ -205,6 +205,7 @@ export const SCANS = {
   "tests/stats-live.mjs": ["src/modules/host.js", "shell/preload.js", "src/modules/settings.js", "src/modules/ui-lang.js"],
   "tests/library-tab.mjs": ["src/modules/*.js"],
   "tests/tab-focus.mjs": ["src/template.html", "src/modules/list-pointer.js", "src/modules/run-shortcut.js", "src/modules/tabs.js", "shell/main.js", "shell/preload.js", "src/modules/host.js"],
+  "tests/tab-list.mjs": ["src/template.html", "src/modules/tabs.js", "src/modules/header-menus.js", "src/modules/keydown.js", "src/modules/ui-lang.js", "engine/etiuda.html"],
   "tests/shell-office.mjs": ["shell/*.ec"],
   "tests/pick.mjs": ["shell/*.js", "src/modules/*.js", "src/main.js", "shell/caret.cs", "electron-builder.js", "src/modules/tour.js", "src/modules/pick.js"],
   "tests/tour-ring.js": ["src/modules/tour.js", "src/modules/motion.js", "engine/etiuda.html"],
