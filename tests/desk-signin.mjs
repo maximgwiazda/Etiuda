@@ -49,11 +49,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 163;
+const PLANTS = 164;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 147 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 148 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -616,7 +616,7 @@ CASES.renewWire = async (s, swap) => {
 /* ---- the seat's write, evaluated with stand-ins: the folder, the team, the files ---------------------------------------- */
 const FLUSH_DECLS = ["function signinTeamHere(", "function signinFlush("];
 const FLUSH_STANDS = ["signinState", "branchIdentity", "pinnedLead", "teamJoin", "sharedFolderForWrite", "folderAnswers", "fs", "path", "writeReplacing",
-  "seatFileText", "SEAT_NAME", "console", "signinRevokedHas"];
+  "seatFileText", "SEAT_NAME", "console", "signinRevokedHas", "signinCertOk"];
 /* `st`: {held, lead, join, root, files (a Set of paths), writes}; the desk's flush as the wiring has it, its mark kept between calls. */
 function loadFlush(s, st, swap) {
   let text = FLUSH_DECLS.map(d => { try { return decl(MAIN, d); } catch { return ""; } }).filter(Boolean).join("\n");
@@ -627,7 +627,7 @@ function loadFlush(s, st, swap) {
   const vals = { signinState: () => ({ held: st.held }), branchIdentity: () => ({ id: DESK_ID, key: DESK_KEY }), pinnedLead: () => st.lead,
     sharedFolderForWrite: () => st.root, folderAnswers: () => true, path,
     fs: { existsSync: p => st.files.has(p), mkdirSync: () => {} }, writeReplacing: (p, t) => { st.files.add(p); st.writes.push({ p, t }); },
-    seatFileText: s.seatFileText, SEAT_NAME: s.SEAT_NAME, console: { error() {} }, signinRevokedHas: s.signinRevokedHas };
+    seatFileText: s.seatFileText, SEAT_NAME: s.SEAT_NAME, console: { error() {} }, signinRevokedHas: s.signinRevokedHas, signinCertOk: s.signinCertOk };
   return new Function(...FLUSH_STANDS, "let signinWrote = \"\";\n" + text + "\nreturn signinFlush;")(...FLUSH_STANDS.map(n => n === "teamJoin" ? st.join : vals[n]));
 }
 /* A desk signed in before it asked to join a folder team writes its seat beside the request at once, as it does where its lead is
@@ -650,6 +650,12 @@ CASES.flushJoin = async (s, swap) => {
     return first === true && again === false && gone === true && moved === true && st.writes.map(w => w.p).join() === [seatAt("/share/a"), seatAt("/share/a"), seatAt("/share/b")].join();
   });
   return asking && relay && none && pinned;
+};
+/* A certificate whose desk is another key (the desk's key made again since it was given) is never written as this desk's seat. */
+CASES.flushOwnKey = async (s, swap) => {
+  const run = held => { const st = { held, lead: { team: TEAM }, join: null, root: "/share/a", files: new Set(), writes: [] }; const r = loadFlush(s, st, swap)(); return { r, n: st.writes.length }; };
+  const other = run(heldOf({ cert: cert({ desk: OTHER_DESK_KEY }) })), own = run(heldOf());
+  return other.r === false && other.n === 0 && own.r === true && own.n === 1;
 };
 /* The flush's callers outside the wiring: a request to join written, and any join taken or finished or folder changed, deferred. */
 CASES.flushCallers = () => {
@@ -3119,6 +3125,7 @@ const LEGS = [
   ["ds9d", "signoutNone", "no signout/desk is sent where no client id is configured or the desk was never signed in; a sign-in in the browser is left alone"],
   ["ds9e", "signoutDoor", "the service's door carries signout/desk at its own address alone, no redirect, nothing cached, no cookie"],
   ["ds10a", "flushJoin", "a desk signed in first writes its seat beside its request to join a folder team, and again where the file went or the folder changed"],
+  ["ds10d", "flushOwnKey", "a certificate given to another desk key is never written as this desk's seat; this key's is"],
   ["ds10b", "flushCallers", "the seat is written when a request to join is written, and after a join taken or finished or a folder changed"],
   ["ds10c", "flushJoinReach", "a folder invitation taken and an admission heeded both reach the folder change, and so the seat's write"],
   ["ds11a", "doorRequest", "a request at the relay's door carries the seat as seat.json has it and the relay's id, and names no invitation"],
@@ -3714,6 +3721,7 @@ if (!PLANTS_OFF) {
   await plant("dsp146", ["if (!!held && !!held.cert && signinRevokedHas(held.revoked, held.cert)) return true; /* plant:lapse-revoked */", ""], "revokedLapse");
   await plantWire("dsp147", ["  if (signinRevokedHas(held.revoked, held.cert)) return []; /* plant:revoked-offer */\n", ""], "revokedLapse");
   await plantWire("dsp148", ["  if (signinRevokedHas(held.revoked, cert)) return false; /* plant:revoked-flush */\n", ""], "revokedLapse");
+  await plantWire("dsp166", ["  if (!signinCertOk(cert, me.key)) return false; /* plant:flush-own-key */", "  /* plant:flush-own-key */"], "flushOwnKey");
   await plantWire("dsp149", ["  if (signinRevokedHas(held.revoked, cert)) return null; /* plant:revoked-knock */\n", ""], "revokedLapse");
   await plantWire("dsp150", ["  if (held && signinRevokedHas(held.revoked, held.cert)) return false; /* plant:revoked-request */\n", ""], "revokedLapse");
   await plantWire("dsp152", ["  base.revoked = s.revoked || null; /* plant:revoked-survives */\n", ""], "revokedSurvives");

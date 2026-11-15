@@ -10600,6 +10600,8 @@ function signinFlush() {
   const held = signinState().held, cert = held && held.cert, me = branchIdentity(false);
   if (!cert || !me || !signinTeamHere()) return false;
   if (signinRevokedHas(held.revoked, cert)) return false; /* plant:revoked-flush */
+  /* Only a certificate given to this desk key is its seat: one kept from a key made again since is never written under the new id. */
+  if (!signinCertOk(cert, me.key)) return false; /* plant:flush-own-key */
   try {
     const root = sharedFolderForWrite();
     if (!folderAnswers(root)) return false;
