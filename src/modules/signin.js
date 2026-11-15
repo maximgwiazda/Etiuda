@@ -526,11 +526,47 @@ function syncLine(s, provider){
   return t("Your catalogs, edits and settings on every computer you sign in on.");
 }
 let syncWaiting=null, syncWhoseShut=null;
+function syncNoticeBubble(id, headText, tailText, anchor, primary, onDismiss){
+  const prev=document.getElementById(id); if(prev) prev.remove();
+  const d=document.createElement("div");
+  d.id=id; d.className="bub bub-ask e-sync-said"; d.setAttribute("role","status");
+  const p=document.createElement("p"), b=document.createElement("b");
+  b.textContent=headText; p.appendChild(b);
+  if(tailText) p.appendChild(document.createTextNode(tailText));
+  d.appendChild(p);
+  const row=document.createElement("div"); row.className="tour-actions";
+  const x=document.createElement("button");
+  x.type="button"; x.className=primary ? "btn primary" : "btn"; x.textContent=t("Dismiss");
+  x.onclick=()=>{ d.remove(); if(onDismiss) onDismiss(); };
+  row.appendChild(x); d.appendChild(row);
+  document.body.appendChild(d);
+  hangBubble(d, anchor);
+  return d;
+}
+function syncChoiceNotice(choice, folder){
+  if(choice!=="mine" && choice!=="start") return;
+  if(choice==="start" && !folder) return;
+  const btn=$("#signinBtn");
+  if(!btn || !btn.getClientRects().length) return;
+  const tpl=choice==="mine" ? t("Syncing now, with what was already on this desk.")
+    : t("This desk now has your account's content. What was here before is kept on this computer in {FOLDER}, and is never uploaded.");
+  const i=tpl.indexOf(". ");
+  const fill=s=>s.split("{FOLDER}").join(String(folder||""));
+  const head=fill(i<0 ? tpl : tpl.slice(0,i+1)), tail=i<0 ? "" : " "+fill(tpl.slice(i+2));
+  const d=syncNoticeBubble("eSyncChoiceNote", head, tail, ()=>$("#signinBtn"), true, ()=>{
+    const said=document.getElementById("eSyncSaid"); if(said) hangBubble(said, ()=>$("#signinBtn"));
+  });
+  const said=document.getElementById("eSyncSaid"); if(said) hangBubble(said, d);
+}
 function syncAnswer(choice){
   const h=eHost();
   if(!h || typeof h.storeAnswer!=="function") return Promise.resolve(syncNow());
-  try{ return Promise.resolve(h.storeAnswer(String(choice||""))).then(res=>res && res.view ? syncRead(res.view) : syncNow(), ()=>syncNow()); }
-  catch(e){ return Promise.resolve(syncNow()); }
+  try{
+    return Promise.resolve(h.storeAnswer(String(choice||""))).then(res=>{
+      if (res && res.ok) syncChoiceNotice(res.choice, res.folder);
+      return res && res.view ? syncRead(res.view) : syncNow();
+    }, ()=>syncNow());
+  }catch(e){ return Promise.resolve(syncNow()); }
 }
 /* WHOSE THE DESK IS: asked from the account button automatically while askNow stands, or from Account's Decide button.
    Escape and Not now answer "later" for this run only; choices close the bubble and hand "mine" or "start" to the shell. */
@@ -602,24 +638,7 @@ function syncSay(s){
   const words=s.say==="on" ? t("Your catalogs, edits and settings now follow you to every computer you sign in on. You can turn this off in Account.")
     : syncUnavailable(s.say, signinV.signedIn, true);
   const i=words.indexOf(". ");
-  const d=document.createElement("div");
-  d.id="eSyncSaid";
-  d.className="bub bub-ask e-sync-said";
-  d.setAttribute("role","status");
-  const p=document.createElement("p"), b=document.createElement("b");
-  b.textContent=i<0 ? words : words.slice(0,i+1);
-  p.appendChild(b);
-  if(i>=0) p.appendChild(document.createTextNode(" "+words.slice(i+2)));
-  d.appendChild(p);
-  const row=document.createElement("div");
-  row.className="tour-actions";
-  const x=document.createElement("button");
-  x.type="button"; x.className="btn"; x.textContent=t("Dismiss");
-  x.onclick=()=>d.remove();
-  row.appendChild(x);
-  d.appendChild(row);
-  document.body.appendChild(d);
-  hangBubble(d, ()=>$("#signinBtn"));
+  syncNoticeBubble("eSyncSaid", i<0 ? words : words.slice(0,i+1), i<0 ? "" : " "+words.slice(i+2), ()=>document.getElementById("eSyncChoiceNote") || $("#signinBtn"), false);
   const h=eHost();
   try{ if(h && typeof h.storeSaid==="function") h.storeSaid(); }catch(e){ /* the shell has gone */ } /* plant:sync-said-told */
 }

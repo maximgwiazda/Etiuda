@@ -1463,6 +1463,8 @@ UI_STRINGS.pl={
   "this desk takes your account's content; what is here is set aside, not deleted.":"stanowisko przejmie zawartość konta; obecna zostanie odłożona, nie usunięta.",
   "Waiting for your answer about what is on this desk. Nothing syncs until then.":"Czeka na decyzję w sprawie zawartości tego stanowiska. Do tego czasu nic nie jest synchronizowane.",
   "Decide\u2026":"Zdecyduj\u2026",
+  "Syncing now, with what was already on this desk.":"Synchronizacja trwa, razem z tym, co już było na tym stanowisku.",
+  "This desk now has your account's content. What was here before is kept on this computer in {FOLDER}, and is never uploaded.":"To stanowisko ma teraz zawartość tego konta. Poprzednia zawartość jest zachowana na tym komputerze w folderze {FOLDER} i nigdy nie jest wysyłana.",
   "Your organisation has not turned this on.":"Organizacja nie włączyła tej funkcji.",
   "Paused since {DATE}. It resumes when this computer reaches our service.":"Wstrzymana od {DATE}. Zostanie wznowiona, gdy komputer połączy się z naszą usługą.",
   "Sync is full, so new changes stay on this computer until something is removed.":"Miejsce na synchronizację jest pełne, więc nowe zmiany zostają na tym komputerze, dopóki czegoś się nie usunie.",

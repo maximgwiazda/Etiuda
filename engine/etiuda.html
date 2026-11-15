@@ -9094,6 +9094,8 @@ What you type stays in this browser only.`;
     "this desk takes your account's content; what is here is set aside, not deleted.": "stanowisko przejmie zawartość konta; obecna zostanie odłożona, nie usunięta.",
     "Waiting for your answer about what is on this desk. Nothing syncs until then.": "Czeka na decyzję w sprawie zawartości tego stanowiska. Do tego czasu nic nie jest synchronizowane.",
     "Decide…": "Zdecyduj…",
+    "Syncing now, with what was already on this desk.": "Synchronizacja trwa, razem z tym, co już było na tym stanowisku.",
+    "This desk now has your account's content. What was here before is kept on this computer in {FOLDER}, and is never uploaded.": "To stanowisko ma teraz zawartość tego konta. Poprzednia zawartość jest zachowana na tym komputerze w folderze {FOLDER} i nigdy nie jest wysyłana.",
     "Your organisation has not turned this on.": "Organizacja nie włączyła tej funkcji.",
     "Paused since {DATE}. It resumes when this computer reaches our service.": "Wstrzymana od {DATE}. Zostanie wznowiona, gdy komputer połączy się z naszą usługą.",
     "Sync is full, so new changes stay on this computer until something is removed.": "Miejsce na synchronizację jest pełne, więc nowe zmiany zostają na tym komputerze, dopóki czegoś się nie usunie.",
@@ -28234,11 +28236,58 @@ What you type stays in this browser only.`;
   }
   var syncWaiting = null;
   var syncWhoseShut = null;
+  function syncNoticeBubble(id, headText, tailText, anchor, primary, onDismiss) {
+    const prev = document.getElementById(id);
+    if (prev) prev.remove();
+    const d = document.createElement("div");
+    d.id = id;
+    d.className = "bub bub-ask e-sync-said";
+    d.setAttribute("role", "status");
+    const p = document.createElement("p"), b = document.createElement("b");
+    b.textContent = headText;
+    p.appendChild(b);
+    if (tailText) p.appendChild(document.createTextNode(tailText));
+    d.appendChild(p);
+    const row2 = document.createElement("div");
+    row2.className = "tour-actions";
+    const x = document.createElement("button");
+    x.type = "button";
+    x.className = primary ? "btn primary" : "btn";
+    x.textContent = t("Dismiss");
+    x.onclick = () => {
+      d.remove();
+      if (onDismiss) onDismiss();
+    };
+    row2.appendChild(x);
+    d.appendChild(row2);
+    document.body.appendChild(d);
+    hangBubble(d, anchor);
+    return d;
+  }
+  function syncChoiceNotice(choice, folder) {
+    if (choice !== "mine" && choice !== "start") return;
+    if (choice === "start" && !folder) return;
+    const btn = $("#signinBtn");
+    if (!btn || !btn.getClientRects().length) return;
+    const tpl = choice === "mine" ? t("Syncing now, with what was already on this desk.") : t("This desk now has your account's content. What was here before is kept on this computer in {FOLDER}, and is never uploaded.");
+    const i = tpl.indexOf(". ");
+    const fill2 = (s) => s.split("{FOLDER}").join(String(folder || ""));
+    const head = fill2(i < 0 ? tpl : tpl.slice(0, i + 1)), tail = i < 0 ? "" : " " + fill2(tpl.slice(i + 2));
+    const d = syncNoticeBubble("eSyncChoiceNote", head, tail, () => $("#signinBtn"), true, () => {
+      const said2 = document.getElementById("eSyncSaid");
+      if (said2) hangBubble(said2, () => $("#signinBtn"));
+    });
+    const said = document.getElementById("eSyncSaid");
+    if (said) hangBubble(said, d);
+  }
   function syncAnswer(choice) {
     const h = eHost();
     if (!h || typeof h.storeAnswer !== "function") return Promise.resolve(syncNow());
     try {
-      return Promise.resolve(h.storeAnswer(String(choice || ""))).then((res) => res && res.view ? syncRead(res.view) : syncNow(), () => syncNow());
+      return Promise.resolve(h.storeAnswer(String(choice || ""))).then((res) => {
+        if (res && res.ok) syncChoiceNotice(res.choice, res.folder);
+        return res && res.view ? syncRead(res.view) : syncNow();
+      }, () => syncNow());
     } catch (e) {
       return Promise.resolve(syncNow());
     }
@@ -28338,26 +28387,7 @@ What you type stays in this browser only.`;
     if (!wantSay) return;
     const words = s.say === "on" ? t("Your catalogs, edits and settings now follow you to every computer you sign in on. You can turn this off in Account.") : syncUnavailable(s.say, signinV.signedIn, true);
     const i = words.indexOf(". ");
-    const d = document.createElement("div");
-    d.id = "eSyncSaid";
-    d.className = "bub bub-ask e-sync-said";
-    d.setAttribute("role", "status");
-    const p = document.createElement("p"), b = document.createElement("b");
-    b.textContent = i < 0 ? words : words.slice(0, i + 1);
-    p.appendChild(b);
-    if (i >= 0) p.appendChild(document.createTextNode(" " + words.slice(i + 2)));
-    d.appendChild(p);
-    const row2 = document.createElement("div");
-    row2.className = "tour-actions";
-    const x = document.createElement("button");
-    x.type = "button";
-    x.className = "btn";
-    x.textContent = t("Dismiss");
-    x.onclick = () => d.remove();
-    row2.appendChild(x);
-    d.appendChild(row2);
-    document.body.appendChild(d);
-    hangBubble(d, () => $("#signinBtn"));
+    syncNoticeBubble("eSyncSaid", i < 0 ? words : words.slice(0, i + 1), i < 0 ? "" : " " + words.slice(i + 2), () => document.getElementById("eSyncChoiceNote") || $("#signinBtn"), false);
     const h = eHost();
     try {
       if (h && typeof h.storeSaid === "function") h.storeSaid();

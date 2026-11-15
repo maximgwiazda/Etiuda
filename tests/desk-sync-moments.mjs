@@ -38,7 +38,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 16;
+const EXPECTED = 19;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const STORE = path.join(E.ROOT, "shell", "sync", "store.cjs");
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -428,6 +428,114 @@ async function main() {
     check(!bad.length, "c9f Account row Decide button opens bubble from row, Escape/Not now answers later, choices answer mine/start (EN & PL)", bad.length ? bad : undefined);
   }
 
+  /* c9g: choice notices after "mine" and "start" (EN & PL, path with dots & angle brackets, ok:false shows none). */
+  const checkChoiceNotices = async (pageName) => {
+    const bad = [];
+    const readNote = page => page.evaluate(() => {
+      const n = document.getElementById("eSyncChoiceNote");
+      if (!n) return null;
+      const p = n.querySelector("p"), b = p ? p.querySelector("b") : null;
+      const btns = [...n.querySelectorAll("button")].map(x => x.textContent);
+      return { at: window.__bubAt(n, document.getElementById("signinBtn")), cls: n.className,
+        lead: b ? b.textContent : "", full: p ? p.textContent : "", btns,
+        tags: n.querySelectorAll("tag,script").length, overflowWrap: p ? getComputedStyle(p).overflowWrap : "" };
+    });
+
+    const pEn = await boot({ page: pageName, lang: "en", theme: "light", view: ASK_NOW });
+    try {
+      await sleep(350);
+      await pEn.evaluate(() => { const bs = [...document.querySelectorAll("#eSyncWhose button")]; if (bs[0]) bs[0].click(); });
+      await sleep(250);
+      const mine = await readNote(pEn);
+      if (!mine || !mine.at || !mine.at.ok || mine.full !== "Syncing now, with what was already on this desk."
+        || mine.lead !== "Syncing now, with what was already on this desk." || JSON.stringify(mine.btns) !== JSON.stringify(["Dismiss"])) {
+        bad.push({ mineEn: mine });
+      }
+      await pEn.evaluate(() => { const b = document.querySelector("#eSyncChoiceNote button"); if (b) b.click(); });
+      await sleep(150);
+      if (await pEn.evaluate(() => !!document.getElementById("eSyncChoiceNote"))) bad.push({ mineDismiss: true });
+
+      const folder = "C:\\Users\\Ada.User\\Set aside\\<tag>\\2026-11-15 18.10\\Extra.Subfolder\\LongPathName";
+      await pEn.evaluate(f => { window.__st.asideFolder = f; window.__st.view = { shown: true, line: "ask", on: false, held: false, why: "", since: 0, say: "", askNow: true }; window.__st.tell(); }, folder);
+      await sleep(350);
+      await pEn.evaluate(() => { const bs = [...document.querySelectorAll("#eSyncWhose button")]; if (bs[1]) bs[1].click(); });
+      await sleep(250);
+      const start = await readNote(pEn);
+      if (!start || !start.at || !start.at.ok || start.tags !== 0
+        || start.lead !== "This desk now has your account's content."
+        || start.full !== "This desk now has your account's content. What was here before is kept on this computer in " + folder + ", and is never uploaded."
+        || JSON.stringify(start.btns) !== JSON.stringify(["Dismiss"])) {
+        bad.push({ startEn: start });
+      }
+      /* Failed answer shows no notice. */
+      await pEn.evaluate(() => {
+        const prev = window.E_HOST.storeAnswer;
+        window.E_HOST.storeAnswer = async c => ({ ok: false, choice: c, folder: "", view: { shown: true, line: "ask", on: false, held: false, why: "", since: 0, say: "", askNow: false } });
+        window.__st._prev = prev;
+        window.__st.view = { shown: true, line: "ask", on: false, held: false, why: "", since: 0, say: "", askNow: true };
+        window.__st.tell();
+      });
+      await sleep(350);
+      await pEn.evaluate(() => { const n = document.getElementById("eSyncChoiceNote"); if (n) n.remove(); const bs = [...document.querySelectorAll("#eSyncWhose button")]; if (bs[1]) bs[1].click(); });
+      await sleep(200);
+      if (await pEn.evaluate(() => !!document.getElementById("eSyncChoiceNote"))) bad.push({ failedShowed: true });
+    } finally { await pEn.close(); }
+
+    const pPl = await boot({ page: pageName, lang: "pl", theme: "dark", view: ASK_NOW });
+    try {
+      await sleep(350);
+      await pPl.evaluate(() => { const bs = [...document.querySelectorAll("#eSyncWhose button")]; if (bs[0]) bs[0].click(); });
+      await sleep(250);
+      const minePl = await readNote(pPl);
+      if (!minePl || !minePl.at || !minePl.at.ok || minePl.full !== "Synchronizacja trwa, razem z tym, co już było na tym stanowisku."
+        || JSON.stringify(minePl.btns) !== JSON.stringify(["Zamknij"])) {
+        bad.push({ minePl });
+      }
+      const plFolder = "D:\\Dane\\Jan.Kowalski\\Set aside\\2026-11-15 18.10";
+      await pPl.evaluate(f => { window.__st.asideFolder = f; window.__st.view = { shown: true, line: "ask", on: false, held: false, why: "", since: 0, say: "", askNow: true }; window.__st.tell(); }, plFolder);
+      await sleep(350);
+      await pPl.evaluate(() => { const bs = [...document.querySelectorAll("#eSyncWhose button")]; if (bs[1]) bs[1].click(); });
+      await sleep(250);
+      const startPl = await readNote(pPl);
+      if (!startPl || !startPl.at || !startPl.at.ok
+        || startPl.lead !== "To stanowisko ma teraz zawartość tego konta."
+        || startPl.full !== "To stanowisko ma teraz zawartość tego konta. Poprzednia zawartość jest zachowana na tym komputerze w folderze " + plFolder + " i nigdy nie jest wysyłana."
+        || JSON.stringify(startPl.btns) !== JSON.stringify(["Zamknij"])) {
+        bad.push({ startPl });
+      }
+    } finally { await pPl.close(); }
+    return bad;
+  };
+  {
+    const bad = await checkChoiceNotices("etiuda.html");
+    check(!bad.length, "c9g choice notices after It is mine and Start from my account (EN light & PL dark, safe {FOLDER} split)", bad.length ? bad : undefined);
+  }
+
+  /* c9h: if firstSay (eSyncSaid) fires while #eSyncChoiceNote is open, it hangs cleanly without overlapping it. */
+  {
+    const p = await boot({ lang: "en", theme: "light", view: ASK_NOW });
+    await sleep(350);
+    await p.evaluate(() => { window.__st.sayAfter = "on"; const bs = [...document.querySelectorAll("#eSyncWhose button")]; if (bs[1]) bs[1].click(); });
+    await sleep(350);
+    const stacked = await p.evaluate(() => {
+      const n = document.getElementById("eSyncChoiceNote"), s = document.getElementById("eSyncSaid");
+      if (!n || !s) return { hasNote: !!n, hasSaid: !!s };
+      const rn = n.getBoundingClientRect(), rs = s.getBoundingClientRect();
+      const overlap = !(rs.right <= rn.left || rs.left >= rn.right || rs.bottom <= rn.top || rs.top >= rn.bottom);
+      return { hasNote: true, hasSaid: true, overlap, noteAt: window.__bubAt(n, document.getElementById("signinBtn")), saidAtNote: window.__bubAt(s, n) };
+    });
+    await p.evaluate(() => { const b = document.querySelector("#eSyncChoiceNote button"); if (b) b.click(); });
+    await sleep(200);
+    const afterDismiss = await p.evaluate(() => {
+      const n = document.getElementById("eSyncChoiceNote"), s = document.getElementById("eSyncSaid");
+      return { note: !!n, said: !!s, saidAtBtn: s ? window.__bubAt(s, document.getElementById("signinBtn")) : null };
+    });
+    await p.close();
+    const ok = stacked.hasNote && stacked.hasSaid && !stacked.overlap && stacked.noteAt && stacked.noteAt.ok
+      && stacked.saidAtNote && stacked.saidAtNote.ok && !afterDismiss.note && afterDismiss.said && afterDismiss.saidAtBtn && afterDismiss.saidAtBtn.ok;
+    check(ok, "c9h firstSay firing beside the choice notice stacks below it without overlap and re-anchors on Dismiss", ok ? undefined : { stacked, afterDismiss });
+  }
+
   /* r1: storeRow, and roomNext. */
   const rowBad = ST => {
     const now = Date.UTC(2026, 10, 20), D = 24 * 3600 * 1000;
@@ -504,6 +612,18 @@ async function main() {
       detail = escHit ? "red: " + JSON.stringify(bad.find(x => x.esc)) : "still held: " + JSON.stringify(bad);
       check(escHit, "p c9f Escape or Not now leaving storeAnswer(\"later\") out turns c9f red", detail);
     } else check(false, "p c9f Escape or Not now leaving storeAnswer(\"later\") out turns c9f red", detail);
+  }
+  if (PLANTS_OFF) skip("p c9g leaving choice notice out turns c9g red");
+  else {
+    const NOTE_PLANT = ['if (res && res.ok) syncChoiceNotice(res.choice, res.folder);', 'void 0;'];
+    const n = PAGE.split(NOTE_PLANT[0]).length - 1;
+    let detail = "the plant's anchor is there " + n + " times";
+    if (n === 1) {
+      fs.writeFileSync(path.join(lab, "planted-note.html"), PAGE.split(NOTE_PLANT[0]).join(NOTE_PLANT[1]));
+      const bad = await checkChoiceNotices("planted-note.html");
+      detail = bad.length ? "red: " + JSON.stringify(bad[0]) : "still held";
+      check(bad.length > 0, "p c9g leaving choice notice out turns c9g red", detail);
+    } else check(false, "p c9g leaving choice notice out turns c9g red", detail);
   }
   if (PLANTS_OFF) skip("p c9d firstSay saying at a look that did not make the store turns c9d red");
   else {
