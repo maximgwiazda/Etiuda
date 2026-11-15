@@ -722,8 +722,6 @@ body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,4
 .row .tabs-list-btn:hover .tabs-list-mark,
 .row .tabs-list-btn:focus-visible .tabs-list-mark,
 .row .tabs-list-btn.on .tabs-list-mark{color:var(--band-ink);background:var(--strip-hover)}
-.tabs-list-btn:focus-visible{outline:none}
-.tabs-list-btn:focus-visible .tabs-list-mark{box-shadow:inset 0 0 0 1.5px var(--band-ink)}
 .brand{color:var(--band-ink)}
 /* THE LANGUAGE SWITCH ON PAPER. It carries the band's idea onto the second row rather than
    abandoning it: the thumb is a RAISED SURFACE and the language's colour is in the lettering,
@@ -1107,7 +1105,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .tab-add:disabled:hover .tab-add-mark{color:inherit;background:transparent}
 .fill{display:flex;gap:6px;align-items:center}
 /* WinUI textbox: the field above its chrome, a darker bottom edge, and focus as a 2px accent
-   underline drawn inset - never a ring, and never a border that moves the layout. THE CHROME
+   underline drawn inset instead of a focus ring, and never a border that moves the layout. THE CHROME
    IS ON THE WRAP, never on the input: cut text fades under a mask, and a mask over an input
    takes its border and its ground along with the words. :focus-within lights the box from
    inside. */
@@ -1281,7 +1279,7 @@ body.shed-segfold #seg::before{width:100%;transform:none}
 .tabs-list-row:focus-within{background:var(--menu-mark)}
 .menu .tabs-list-item{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:9px;width:auto;
   padding:5px 8px 5px 10px;border-radius:6px;background:transparent;color:var(--ink)}
-.menu .tabs-list-item:focus{background:transparent;color:var(--ink);outline:none}
+.menu .tabs-list-item:focus:not(:focus-visible){background:transparent;color:var(--ink);outline:none}
 .tabs-list-row.on .tabs-list-item{font-weight:600}
 .tabs-list-name{flex:1 1 auto;min-width:0;white-space:normal;overflow-wrap:anywhere;line-height:1.35}
 .tabs-list-dot{flex:none;width:7px;height:7px;margin:0 4.5px;border-radius:50%;
@@ -1290,11 +1288,11 @@ body.shed-segfold #seg::before{width:100%;transform:none}
 .menu .tabs-list-item .tabs-list-check{flex:none;width:15px;height:15px;color:var(--accent);stroke-width:2}
 .menu .tabs-list-x{flex:none;width:24px;height:24px;padding:0;margin-right:3px;border-radius:4px;
   justify-content:center;color:var(--dim);background:transparent}
-.menu .tabs-list-x:focus{background:transparent;color:var(--dim);outline:none}
+.menu .tabs-list-x:focus:not(:focus-visible){background:transparent;color:var(--dim);outline:none}
 .menu .tabs-list-x .ic{width:14px;height:14px;color:currentColor}
 .menu .tabs-list-x:hover,.menu .tabs-list-x:focus-visible{color:#c44;background:rgba(196,68,68,.14)}
-:root:not([data-hand=pointer]) .menu .tabs-list-item:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
-:root:not([data-hand=pointer]) .menu .tabs-list-x:focus-visible{outline:2px solid #c44;outline-offset:-2px}
+.menu .tabs-list-item:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.menu .tabs-list-x:focus-visible{outline:2px solid #c44;outline-offset:-2px}
 .menu .menu-sep{height:1px;margin:3px 6px;background:var(--line);border:0;padding:0;pointer-events:none}
 /* A row's key at its right edge, in the row's quieter ink. */
 #menuPicker{display:flex;align-items:center;gap:9px}
@@ -1604,10 +1602,11 @@ body.role-waits #roleDrum{display:none}
    copied, for the reason the rest of this release keeps repeating. A text field on that screen
    joins them: one dressing for anything in a settings row that takes a value. */
 .fill select,.set-row select,.set-row input[type=text],.om-fields select,.om-fields input{padding:7px 9px;border:1px solid var(--edge);border-radius:var(--radius-sm);
-  background:var(--field);color:var(--ink);font:13px var(--sans);cursor:default;outline:none;
+  background:var(--field);color:var(--ink);font:13px var(--sans);cursor:default;
   box-shadow:inset 0 -1px 0 0 var(--field-edge)}
-.fill select:focus,.set-row select:focus,.set-row input[type=text]:focus,.om-fields select:focus,.om-fields input:focus,
-.fill select:focus-visible,.set-row select:focus-visible,.set-row input[type=text]:focus-visible,.om-fields select:focus-visible,.om-fields input:focus-visible{
+.set-row input[type=text],.om-fields input{outline:none}
+.set-row input[type=text]:focus,.om-fields input:focus,
+.set-row input[type=text]:focus-visible,.om-fields input:focus-visible{
   outline:none;border-color:var(--edge);box-shadow:inset 0 -2px 0 0 var(--accent)}
 .set-row input[type=text]{width:var(--name-field);max-width:100%;cursor:text}
 /* {INTENT} combobox - a real dropdown that still accepts free text */
@@ -3117,13 +3116,14 @@ body:has(.modal.ed-rest:not([hidden])) header:has(.menu:not([hidden]):not(.e-war
 /* text fields only - checkboxes inside .intent-pick must not inherit width:100% */
 .mf input:not([type=checkbox]):not([type=radio]):not([type=hidden]),
 .mf select,.mf textarea{width:100%;padding:8px 10px;border:1px solid var(--edge);
-  border-radius:var(--radius-sm);background:var(--bg);color:var(--ink);font:14px var(--sans);outline:none;
+  border-radius:var(--radius-sm);background:var(--bg);color:var(--ink);font:14px var(--sans);
   box-shadow:inset 0 -1px 0 0 var(--field-edge)}
+.mf input:not([type=checkbox]):not([type=radio]):not([type=hidden]),.mf textarea{outline:none}
 .mf textarea{min-height:110px;resize:vertical;font:13px/1.45 var(--sans);white-space:pre-wrap}
 .mf input:not([type=checkbox]):not([type=radio]):focus,
-.mf select:focus,.mf textarea:focus,
+.mf textarea:focus,
 .mf input:not([type=checkbox]):not([type=radio]):focus-visible,
-.mf select:focus-visible,.mf textarea:focus-visible{outline:none;border-color:var(--edge);box-shadow:inset 0 -2px 0 0 var(--accent)}
+.mf textarea:focus-visible{outline:none;border-color:var(--edge);box-shadow:inset 0 -2px 0 0 var(--accent)}
 /* Left empty and asked for by Save. Declared after focus and matching it on weight, so the
    field the dialog has just jumped to still reads as the wrong one rather than the live one. */
 .cat-pick.is-missing{border-color:#c44;box-shadow:0 0 0 2px rgba(196,68,68,.16)}
@@ -3538,7 +3538,7 @@ details.manage-sec>summary h3{margin:0}
   background:transparent;color:var(--ink);font:600 13px var(--sans);min-width:2.5em;max-width:16em;
   width:auto;field-sizing:content;cursor:text;user-select:text;resize:none;overflow:hidden;white-space:pre;vertical-align:middle}
 .mg-cat-lab2:hover{border-color:var(--line)}
-.mg-cat-lab2:focus{outline:none;border-color:var(--accent);background:var(--panel)}
+.mg-cat-lab2:focus{outline:none;border-color:var(--accent);background:var(--panel);box-shadow:inset 0 -2px 0 0 var(--accent)}
 .mg-cat-fixed{font:600 13px var(--sans);color:var(--ink);padding:1px 3px}
 .mg-cat-body{padding:2px 0 6px 28px;display:flex;flex-direction:column;gap:5px}
 .mg-cat-acts{margin-left:auto;display:flex;gap:2px;flex:0 0 auto;align-items:center}
@@ -3696,7 +3696,7 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 .mf-own-body label:has(input:checked:not(:disabled))+.mf-ex{color:var(--ink)}
 @media (max-width:560px){ .mf-cols .mf-own-body{grid-row:auto} }
 .mf-switch{appearance:none;-webkit-appearance:none;position:relative;flex:0 0 auto;width:28px;height:16px;
-  margin:1px 0 0 3px;border-radius:8px;background:var(--line-strong);outline:none}
+  margin:1px 0 0 3px;border-radius:8px;background:var(--line-strong)}
 .mf-switch::after{content:"";position:absolute;left:2px;top:2px;width:12px;height:12px;border-radius:50%;
   background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25)}
 .mf-switch:checked{background:var(--accent-fill)}
@@ -4064,7 +4064,7 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
   padding:9px 12px 9px 10px;font:600 11.5px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);
   border-bottom:1px solid var(--line-strong);position:sticky;top:-24px;background:var(--panel);z-index:3;user-select:none
 }
-.lw-head .lw-c,.lw-head .lw-nm{color:var(--dim)!important;font:inherit!important;cursor:default;outline:none}
+.lw-head .lw-c,.lw-head .lw-nm{color:var(--dim)!important;font:inherit!important;cursor:default}
 .lw-head [data-sort-col]{cursor:default}
 .lw-head [data-sort-col]:hover,.lw-head [data-sort-col]:focus-visible{color:var(--ink)!important}
 .lw-sort-line{
@@ -4432,7 +4432,7 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .e-offer .ec-more{font-size:12.5px;margin-top:2px}
 .e-offer .ec-diff{appearance:none;-webkit-appearance:none;border:0;background:none;padding:0;margin:0 0 8px;
   font:600 13.5px var(--sans);color:var(--bub-ink);text-decoration:underline;text-underline-offset:3px}
-.e-offer .ec-diff:focus-visible{outline:2px solid #fff;outline-offset:2px;border-radius:2px}
+.e-offer .ec-diff:focus-visible{outline:2px solid var(--bub-ink);outline-offset:2px;border-radius:2px}
 /* THE PANEL BEHIND IT: the cards at the left, the chosen one at the right as it was, as it becomes and,
    where the agent has an edit, as the agent wrote it. */
 .modal-card.ed-modal{max-width:min(1120px,100%)}
@@ -4531,7 +4531,7 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
 /* A field on the fill: paper, so what is typed reads as the reader's own. */
 .bub .e-name-inp,.bub .e-proxy-inp,.bub .e-reset-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
   border:1px solid transparent;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans)}
-.bub .e-name-inp:focus-visible,.bub .e-proxy-inp:focus-visible,.bub .e-reset-inp:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.bub .e-name-inp:focus-visible,.bub .e-proxy-inp:focus-visible,.bub .e-reset-inp:focus-visible{outline:2px solid var(--bub-ink);outline-offset:2px}
 .bub .e-proxy-inp+.e-proxy-inp{margin-top:8px}
 .bub .e-proxy-inp:last-of-type{margin-bottom:10px}
 .bub .e-greet{color:var(--bub-ink);margin:8px 0 10px}
@@ -4607,10 +4607,9 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
 .tour-actions .btn.primary:not([disabled]):hover,.tour-actions .btn.primary:not([disabled]):focus-visible,
 .tour-actions .btn.primary.tour-sel{filter:brightness(.94)}
 .tour-actions .tour-skip{margin-right:auto}
-/* ←/→ move real focus so Enter and screen readers work, but .tour-sel already draws the
-   selection using the hover rules. Suppress the UA focus ring, or the browser stacks a
-   second, thicker outline on top of it. */
-.tour-actions .btn:focus,.tour-actions .btn:focus-visible{outline:none;box-shadow:none}
+/* ←/→ move real focus so Enter and screen readers work; .tour-sel already draws the
+   selection using the hover rules, while keyboard focus adds the bubble's ink ring. */
+.tour-actions .btn:focus,.tour-actions .btn:focus-visible{box-shadow:none}
 /* First-run invite (compact, bottom-right) */
 /* Unmistakable, not loud - the mark only has to be READ. A low-alpha solid fill: a
    hairline outline shimmers on fractional pixels as the page scrolls, a soft fill sits
@@ -4878,14 +4877,16 @@ body.e-lanes #pillsSlot{display:none}
 @keyframes eLashesOut{0%{opacity:1}20%,100%{opacity:0}}
 @keyframes eEyeBloom{0%{transform:scale(1);opacity:.95}50%{transform:scale(1.03);opacity:.95}
   62%{transform:scale(1.16);opacity:.95;animation-timing-function:ease-in}100%{transform:scale(1.5);opacity:0}}
-/* NO RING ON A BUTTON, and the hover look in its place: every control below restates its own
-   hover rule for :focus-visible, so one declaration serves both states and they cannot drift.
-   The browser's own ring is named here as well - it returns the moment a rule stops saying so -
-   and a text field keeps whatever it has, which is a different cue for a different thing. */
-.btn:focus-visible,.tab:focus-visible,.tab-label:focus-visible,.tab-x:focus-visible,.tab-add:focus-visible,
-.seg button:focus-visible,.field-clear:focus-visible,.combo-clear:focus-visible,
-.rail-item:focus-visible,.rail-add:focus-visible,.rail-lock:focus-visible,
-button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:none}
+/* Every keyboard-focused control draws a solid 2 px accent ring, except the two controls that keep
+   their own mark (a text field's 2 px inset underline, and an open menu row's fill). Coloured
+   grounds (the band and the bubble) take the ground's own ink so the ring stays legible there. */
+*:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.row :is(.tabs-nav,.tabs-list-btn,.tab-add,.cat-now.is-waiting):focus-visible,
+body.e-host .row .win-btn:focus-visible{outline:2px solid var(--band-ink);outline-offset:1px}
+body.e-host .row .win-btn:focus-visible{outline-offset:-2px}
+.row .tab:not(.on) :is(.tab-label,.tab-x):focus-visible{outline:2px solid var(--band-ink);outline-offset:-2px}
+.row .tab.on :is(.tab-label,.tab-x):focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.bub :is(.btn,.tour-actions .btn):focus-visible{outline:2px solid var(--bub-ink);outline-offset:1px}
 /* HIGH CONTRAST paints every ground and edge in the system's own two colours, so what a tint says
    here vanishes there: the mark, the focus, the chosen tab, language and category, and the tour's
    selected button. The system's highlight colour stands in for them, and only there. After the
