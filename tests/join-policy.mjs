@@ -27,7 +27,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
-const EXPECTED = 13;
+const EXPECTED = 15;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -794,6 +794,8 @@ function standInReg(registry, page) {
     calls.push({ file: String(file), args: args, opt: opt });
     const key = file === REG_EXE && args[1] === ASKED ? (typeof registry === "function" ? registry(asked().length) : registry) : null;
     const fail = () => { const e = new Error("reg.exe exited 1"); e.status = 1; throw e; };
+    /* "late" is reg stopped at the reader's timeout, as execFileSync reports one: no exit status, a signal. */
+    if (key === "late") { const e = new Error("spawnSync reg.exe ETIMEDOUT"); e.code = "ETIMEDOUT"; e.status = null; e.signal = "SIGTERM"; throw e; }
     if (!key) fail();
     let out = "";
     if (args[0] === "export" && args.length === 4 && args[3] === "/y") {
@@ -816,7 +818,7 @@ function asWindows(fn) {
 }
 /* One desk: its desk.json, the shell evaluated afresh over it with the stand-in reg, and its own .cjs files evaluated
    with the same require so the proxy reader meets the stand-in too. setLang changes the desk's language as a write would. */
-function loadDesk(name, desk, reg) {
+function loadDesk(name, desk, reg, shell) {
   const ud = path.join(LAB, name);
   fs.mkdirSync(ud, { recursive: true });
   fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1 }, desk)), "utf8");
@@ -845,7 +847,7 @@ function loadDesk(name, desk, reg) {
   };
   process.env.XDG_CURRENT_DESKTOP = "GNOME";
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
-    SHELL + "\nreturn { catalogFolder, heedTeam, teamCovering,"
+    (shell || SHELL) + "\nreturn { catalogFolder, heedTeam, teamCovering, joinView,"
     + " setLang: l => { if (deskKeys === undefined) deskKeys = readDesk(); deskKeys = Object.assign({}, deskKeys, { eUiLang: l }); } };")(
     req, path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   return { api, said, ud, envelope: () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8")) };
@@ -1073,6 +1075,49 @@ function leadFromEnvironment(Pd) {
     catch (e) { turned = []; problems.push("the lifted copy: " + e.message); }
     check(!!src && turned.length > 0, "19l lifting plant:lead-as-written fills the lead from the environment again: "
       + (src ? turned.length + " problem(s)" : "the plant is not on exactly one line"));
+  }
+}
+
+/* 19m: WHAT POLICY SET AND THE DESK CANNOT USE REACHES THE PAGE, AND A READ THAT FAILED IS TOLD FROM A KEY THAT IS NOT THERE
+   (Grok's review 8, finding 3). A bad value's sentences, in the desk's language, are the join view's policySaid, for Settings
+   to print as they stand; a good key gives none. A read reg did not finish (its timeout) is unread and said once in the log;
+   reg's exit 1, the key absent, is not. Lifting plant:policy-said-view leaves the sentences in the log alone, and lifting
+   plant:policy-unread reads a stopped reg as no key. */
+const UNREAD_LINE = /machine policy for Etiuda was there to read and could not be read/;
+let r8Desks = 0;
+function policyToPage(shell) {
+  const problems = [];
+  const mine = path.join(LAB, "r8-folder");
+  fs.mkdirSync(mine, { recursive: true });
+  const viewOf = (registry, lang) => {
+    const D = asWindows(() => loadDesk("r8-" + (r8Desks++), { keys: { eCatalogFolder: mine, eUiLang: lang } }, standInReg(registry, 65001), shell));
+    return { D: D, view: asWindows(() => D.api.joinView()) || {} };
+  };
+  const bad = viewOf({ rows: [["TeamFolder", "REG_SZ", "D:\\Quay\\team"], ["LeadKey", "REG_SZ", "   "]] }, "pl");
+  if (JSON.stringify(bad.view.policySaid) !== JSON.stringify([PL.lead, PL.beside])) problems.push("a bad lead's sentences " + JSON.stringify(bad.view.policySaid));
+  const good = viewOf({ rows: [["TeamFolder", "REG_SZ", mine], ["LeadKey", "REG_SZ", HEX]] }, "en");
+  if (good.view.policySaid !== undefined) problems.push("a good key said " + JSON.stringify(good.view.policySaid));
+  const late = viewOf("late", "en"), absent = viewOf(null, "en");
+  const told = D => D.said.filter(l => UNREAD_LINE.test(l)).length;
+  if (told(late.D) !== 1 || late.view.policySaid !== undefined) problems.push("a stopped reg: said " + told(late.D) + " time(s), " + JSON.stringify(late.view.policySaid));
+  if (told(absent.D) !== 0 || absent.view.policySaid !== undefined) problems.push("no key: said " + told(absent.D) + " time(s)");
+  return problems;
+}
+{
+  let problems = [];
+  try { problems = policyToPage(null); } catch (e) { problems.push("harness: " + ((e && e.stack) || e)); }
+  check(problems.length === 0, "19m a bad policy value's sentences reach the join view in the desk's language, a good key's none, and a read"
+    + " reg did not finish is said once as unread where a key that is not there is not: " + (problems.join("; ") || "two sentences in Polish, one unread line"));
+  if (PLANTS_OFF) skip("19m lifting plant:policy-said-view and plant:policy-unread each turns 19m red (ETIUDA_PLANTS=off)");
+  else {
+    const lifts = [["policy-said-view", "  /* plant lifted */"], ["policy-unread", "      } catch { text = \"\"; }"]].map(([name, line]) => {
+      const src = liftPlant(SHELL, name, line);
+      if (!src) return name + " not on exactly one line";
+      let p = [];
+      try { p = policyToPage(src); } catch (e) { p = ["harness: " + e.message]; }
+      return p.length ? "" : name + " lifted and 19m still green";
+    }).filter(Boolean);
+    check(lifts.length === 0, "19m lifting plant:policy-said-view and plant:policy-unread each turns 19m red: " + (lifts.join("; ") || "both red"));
   }
 }
 

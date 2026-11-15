@@ -4136,11 +4136,13 @@ function policyNoUpdate(values) {
   const s = String(v.value).trim();
   return !((v.type === "dword" || v.type === "REG_SZ" || v.type === "REG_EXPAND_SZ") && (s === "" || s === "0"));
 }
-/* `text` is the text of reg export's file for the policy key, or empty where there is none.
-   Returns {folder, lead, bad, noUpdate, values}: folder and lead empty where unused, bad the names of the words to say, noUpdate
-   true where policy turns the version look off, values policyValues' reading for the readers of the key's other values. */
-function joinPolicyFacts(text) {
+/* `text` is the text of reg export's file for the policy key, or empty where there is none; `unread` true where the key was
+   there to read and the read failed. Returns {folder, lead, bad, noUpdate, values, unread}: folder and lead empty where unused, bad
+   the names of the words to say, noUpdate true where policy turns the version look off, values policyValues' reading for the
+   readers of the key's other values, unread true where a read failed or a text would not parse, so no part of it is used. */
+function joinPolicyFacts(text, unread) {
   const values = text ? policyValues(text) : null;
+  const doubt = unread === true || (!!text && values === null);
   const noUpdate = policyNoUpdate(values);
   const folder = policyRegSz(values, "TeamFolder");
   const lead = policyRegSz(values, "LeadKey");
@@ -4164,24 +4166,25 @@ function joinPolicyFacts(text) {
   if ((folder.set || lead.set) && (!folderOk || !leadOk)) {
     if (folder.set && folderOk && !leadOk) bad.push("beside");
     if (lead.set && leadOk && !folderOk) bad.push("beside");
-    return { folder: "", lead: "", bad: bad, noUpdate: noUpdate, values: values };
+    return { folder: "", lead: "", bad: bad, noUpdate: noUpdate, values: values, unread: doubt };
   }
-  return { folder: folderValue, lead: leadValue, bad: bad, noUpdate: noUpdate, values: values };
+  return { folder: folderValue, lead: leadValue, bad: bad, noUpdate: noUpdate, values: values, unread: doubt };
 }
-/* The facts with their sentences in `lang`, "pl" or anything else for English: {folder, lead, said, noUpdate}. */
+/* The facts with their sentences in `lang`, "pl" or anything else for English: {folder, lead, said, noUpdate, unread}. */
 function policyWords(facts, lang) {
   const words = POLICY_WORDS[lang === "pl" ? "pl" : "en"];
-  return { folder: facts.folder, lead: facts.lead, said: facts.bad.map(k => words[k]), noUpdate: facts.noUpdate === true };
+  return { folder: facts.folder, lead: facts.lead, said: facts.bad.map(k => words[k]), noUpdate: facts.noUpdate === true, unread: facts.unread === true };
 }
 function joinPolicyFrom(text, lang) { return policyWords(joinPolicyFacts(text), lang); }
 let joinPolicyRead = null;
 /* Read once a run, whatever the language. The one program started is reg.exe at its fixed path, exporting
    this one key to a scratch file, which holds the registry's own UTF-16 where reg's printing would be in the
-   console's code page. A failure, and any system but Windows, is no policy. The scratch file and its folder
-   go whatever happens, and nothing of them is logged. */
+   console's code page. A failure, and any system but Windows, is no policy; reg's own exit 1 is a key that is not there,
+   and any other failure is a read that failed, kept as unread. The scratch file and its folder go whatever happens, and
+   nothing of them is logged. */
 function readJoinPolicy(lang) {
   if (joinPolicyRead === null) {
-    let text = "";
+    let text = "", unread = false;
     if (process.platform === "win32") {
       let dir = "", file = "";
       try {
@@ -4190,13 +4193,14 @@ function readJoinPolicy(lang) {
         execFileSync(REG_TOOL, ["export", POLICY_KEY, file, "/y"], { windowsHide: true, timeout: 5000, stdio: "ignore" });
         const bytes = fs.readFileSync(file);
         if (bytes.length % 2 === 0 && bytes[0] === 0xff && bytes[1] === 0xfe) text = bytes.subarray(2).toString("utf16le");
-      } catch { text = ""; }
+        else unread = true;
+      } catch (e) { text = ""; unread = !(e && e.status === 1); } /* plant:policy-unread */
       finally {
         if (file) { try { fs.unlinkSync(file); } catch { /* never written */ } }
         if (dir) { try { fs.rmdirSync(dir); } catch { /* never made */ } }
       }
     }
-    joinPolicyRead = joinPolicyFacts(text);
+    joinPolicyRead = joinPolicyFacts(text, unread);
   }
   return policyWords(joinPolicyRead, lang);
 }
@@ -4446,7 +4450,12 @@ function sayJoinPolicy() {
   let lang = "en";
   try { if (shellWords().lang === "pl") lang = "pl"; } catch { lang = "en"; }
   const got = readJoinPolicy(lang);
-  if (!joinPolicySaid) { joinPolicySaid = true; got.said.forEach(teamSay); policyLetsInviteGo(got); }
+  if (!joinPolicySaid) {
+    joinPolicySaid = true;
+    got.said.forEach(teamSay);
+    if (got.unread) teamSay("machine policy for Etiuda was there to read and could not be read, so this desk runs as though none were set");
+    policyLetsInviteGo(got);
+  }
   return got;
 }
 /* Case-insensitive path comparison on Windows. A UNC path and a mapped drive read as different folders. */
@@ -5989,6 +5998,9 @@ function joinView() {
   if (deskKeys === undefined) deskKeys = readDesk();
   const root = catalogFolder();
   const view = { sealed: null, join: null, joined: null, leads: leadsView() };
+  /* What machine policy set and this desk cannot use, in the desk's language, for Settings to print as it stands. */
+  const policySaid = sayJoinPolicy().said;
+  if (policySaid.length) view.policySaid = policySaid.slice(); /* plant:policy-said-view */
   if (relayHere()) view.onRelay = true;
   if (!folderAnswers(root)) return view;
   heedTeam();

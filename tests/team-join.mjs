@@ -39,7 +39,7 @@ const ASIDE = {
   "15ep": offWindows("15ep", "15em stands aside off Windows, so lifting plant:w2-folder-not-writable has no green leg there to turn"),
 };
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 179;
+const EXPECTED = 180;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -4773,6 +4773,28 @@ try {
         + detail + ", sha " + (same ? "restored" : "differs"));
     }
   }
+
+  /* ---- Grok's review 8 of the desk's policy (findings 3, 2 and 6), Windows only: off it the shell reads no policy ---------- */
+  /* 15r8a: what machine policy set and this desk cannot use is printed in Settings, first in the team section, in the shell's
+     own sentences: a lead that is not 64 lower-case hex and the folder dropped beside it. A good key prints no such row. */
+  await legTry("15r8a", async () => {
+    if (!WIN) { check(true, "15r8a off Windows the shell reads no machine policy, so Settings prints none"); return; }
+    const named = folder("r8a-named");
+    const Dbad = await underPolicy([["TeamFolder", named], ["LeadKey", "NO"]], "r8a-bad", folder("r8a-bad-own"));
+    const Dgood = await underPolicy([["TeamFolder", named], ["LeadKey", LEAD.public]], "r8a-good", folder("r8a-good-own"));
+    const bodyR8 = document.body;
+    if (!document.body) document.body = { classList: { contains: () => false, toggle: noop, add: noop, remove: noop }, appendChild: el => el };
+    let bad = "", good = "";
+    try { bad = await settingsAt(Dbad, "en"); good = await settingsAt(Dgood, "en"); } finally { document.body = bodyR8; }
+    const LEAD_WORDS = "The team lead's key set in Group Policy is not written as 64 lowercase hexadecimal characters, so this desk does not trust it.";
+    const BESIDE_WORDS = "The other value set beside it is not used either: the two are taken together or not at all.";
+    const row = (bad.match(/<div class="set-row" data-row="teampolicy">[\s\S]*?<\/div><\/div>/) || [""])[0];
+    const f = { row: row.indexOf("<small>" + escPage(LEAD_WORDS) + "</small><small>" + escPage(BESIDE_WORDS) + "</small>") >= 0,
+      first: bad.indexOf('data-row="teampolicy"') >= 0 && bad.indexOf('data-row="teampolicy"') < Math.min(...['data-row="join"', 'data-leave-team'].map(s => bad.indexOf(s)).filter(n => n >= 0).concat([bad.length])),
+      none: good.indexOf('data-row="teampolicy"') < 0 };
+    check(Object.keys(f).every(k => f[k]), "15r8a a policy value this desk cannot use is printed in Settings in the shell's own sentences,"
+      + " first in the team section, and a good key prints none: " + JSON.stringify(f));
+  });
 
   /* Last, over every desk above: the log of each holds none of the secrets any invitation carried. */
   const leaked = [];
