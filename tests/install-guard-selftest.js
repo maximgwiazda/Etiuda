@@ -218,7 +218,9 @@ ok(/not the test build/.test(G.setupRefusal(idOf(t.productName, "no mark"), "des
   fs.mkdirSync(withIt); fs.mkdirSync(without);
   fs.writeFileSync(path.join(withIt, G.DESK_SENTINEL), "lab");
   const env = Object.assign({}, process.env, { [G.ACCOUNT_FLAG]: require("node:os").userInfo().username });
-  const a = G.guardStart({ home: withIt, env }), b = G.guardStart({ home: without, env });
+  /* Both with the stand-in registry: without it, the home with no sentinel read this machine's Shell Folders and its real Etiuda
+     profiles on every run (the test architect's real-profile measurement, 2026-11-15). */
+  const a = G.guardStart({ home: withIt, env, run: stand(placesReg) }), b = G.guardStart({ home: without, env, run: stand(placesReg) });
   ok(a.refusals.some(r => r.indexOf(G.DESK_SENTINEL) > -1), "d1 a home carrying " + G.DESK_SENTINEL + " refuses, the account flag set to this account notwithstanding");
   ok(!b.refusals.some(r => r.indexOf(G.DESK_SENTINEL) > -1), "d2 control: a home without it adds no refusal of its own");
   ok(G.deskSentinelAt({ USERPROFILE: without }) === path.join(without, G.DESK_SENTINEL), "d3 the sentinel is read in the account's home (USERPROFILE)");
