@@ -37944,27 +37944,10 @@ What you type stays in this browser only.`;
       to.focus();
     }
   }
-  function statsToldNext(on, query, leads, was) {
-    if (String(query || "").trim() || on && on !== "all" && on !== "teams") return null;
-    const old = Array.isArray(was) ? was.map(String) : [];
-    const add = (leads || []).filter((l) => l && !l.removed && typeof l.team === "string" && l.team).map((l) => l.team).filter((x) => old.indexOf(x) < 0);
-    return add.length ? old.concat(add) : null;
-  }
-  function noteStatsTold() {
-    let was = [];
-    try {
-      was = JSON.parse(lsGet("eStatsTold") || "[]");
-    } catch (e) {
-      was = [];
-    }
-    const next = statsToldNext(sxOn, sxQuery, teamLeads(), was);
-    if (next) lsSet("eStatsTold", JSON.stringify(next));
-  }
   function paintSettings() {
     const host = settingsHost(), box = host && host.querySelector("#setBody");
     if (!box) return;
     box.innerHTML = settingsPageHtml(sxOn, sxQuery);
-    noteStatsTold();
     paintKeysInline();
     wireHotkeyRow(box);
     wirePage(box);

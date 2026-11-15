@@ -2092,16 +2092,6 @@ function statsFile() {
   if (path.dirname(dest) !== dir || path.basename(dest) !== "stats.estat") return null;
   return { root: root, dir: dir, dest: dest };
 }
-/* THE PERSON IS TOLD FIRST: a team the organisation's policy set seals no statistics until this desk's Settings has shown the
-   sentence on what the team's lead sees (the page keeps the teams it showed it for in eStatsTold); a team joined by invitation
-   was told on the invitation itself. Said once. */
-let statsUntoldSaid = "";
-function statsTold(team) {
-  if (deskKeys === undefined) deskKeys = readDesk();
-  let list = [];
-  try { list = JSON.parse(String((deskKeys && deskKeys.eStatsTold) || "[]")); } catch { list = []; }
-  return Array.isArray(list) && list.indexOf(team) >= 0;
-}
 /* The lead's box from the team file this desk already verified, or null where statistics are not sealed.
    A stale epoch seals nothing, which is teamUse's own rule. No box is said once, and the team key is not a fallback. */
 function statsSeal() {
@@ -2110,13 +2100,6 @@ function statsSeal() {
   if (!use.member || use.stale || !use.seal) return null;
   const me = branchIdentity(false);
   if (!me || !/^k-[0-9a-f]{16}$/.test(me.id)) return null;
-  const named = readJoinPolicy("en").lead;
-  let untold = false;
-  untold = !!named && named === String(use.seal.lead && use.seal.lead.public) && !statsTold(use.seal.team); /* plant:stats-untold */
-  if (untold) {
-    if (statsUntoldSaid !== use.seal.team) { statsUntoldSaid = use.seal.team; console.log("etiuda: statistics wait until this desk has shown that they are collected"); }
-    return { untold: true };
-  }
   const box = typeof use.seal.box === "string" ? use.seal.box : "";
   if (!/^[0-9a-f]{64}$/.test(box)) {
     if (statsNoBoxSaid !== use.seal.team) {
@@ -2255,7 +2238,7 @@ function writeStatsAnswer(text, askId, forced) {
     statsHeld = String(text || "");
     return { ok: true, paced: true, why: why };
   }
-  if (got && (got.away || got.untold)) { statsHeld = String(text || ""); return { ok: false }; }
+  if (got && got.away) { statsHeld = String(text || ""); return { ok: false }; }
   if (!got || !got.seal) return { ok: false };
   if (statsBoxKept(got.seal)) return { ok: false };
   const at = statsFile();
