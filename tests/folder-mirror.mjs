@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 128;
+const EXPECTED = 131;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const { offWindows } = nodeRequire("./off-windows.cjs");
@@ -4020,6 +4020,121 @@ async function run() {
       return !got.quiet || !got.otherKept || !got.shareKept;
     });
     check(planted.ok, "r5c lifting plant:listing-unreadable answers an unreadable desks directory and rewrites the share: " + JSON.stringify(planted));
+  }
+
+  /* r4: a junction or a file link on the share is not a file inside it (review 24, finding 4). A real file still syncs. */
+  const R4_OWN = "k-" + "ef".repeat(8);
+  async function linkScene(mod, name) {
+    const share = folder(name + "-share");
+    const mirror = folder(name + "-mirror");
+    const outside = folder(name + "-outside");
+    const ownDir = path.join(outside, "desks", R4_OWN);
+    fs.mkdirSync(ownDir, { recursive: true });
+    fs.mkdirSync(path.join(mirror, "desks", R4_OWN), { recursive: true });
+    const real = "{\"format\":1,\"kind\":\"etiuda-stats-span\",\"span\":\"real\"}\n";
+    const secret = "{\"format\":1,\"kind\":\"etiuda-stats-span\",\"span\":\"secret\"}\n";
+    fs.writeFileSync(path.join(share, "stats-span.json"), real, "utf8");
+    fs.writeFileSync(path.join(outside, "secret-span.json"), secret, "utf8");
+    fs.writeFileSync(path.join(ownDir, "file.ec"), "OUTSIDE\n", "utf8");
+    fs.writeFileSync(path.join(mirror, "desks", R4_OWN, "file.ec"), "MIRROR\n", "utf8");
+    const link = path.join(share, "stats-span-link.json");
+    const junction = path.join(share, "desks");
+    const execFileSync = nodeRequire("node:child_process").execFileSync;
+    execFileSync("cmd", ["/c", "mklink", link, path.join(outside, "secret-span.json")], { windowsHide: true });
+    execFileSync("cmd", ["/c", "mklink", "/J", junction, path.join(outside, "desks")], { windowsHide: true });
+    const rel = "desks/" + R4_OWN + "/file.ec";
+    try {
+      const sha = crypto.createHash("sha256").update(fs.readFileSync(path.join(mirror, "desks", R4_OWN, "file.ec"))).digest("hex");
+      const flushed = mod.flushOwed(share, mirror, [{ rel, sha, del: false }], null, R4_OWN);
+      const outsideAfter = fs.readFileSync(path.join(ownDir, "file.ec"), "utf8");
+      const prog = mod.createFolderProgram({
+        team: TEAM, folder: share, mirror, pin: LEAD, checks, own: R4_OWN, logger: () => {}
+      });
+      try { prog.syncOnce(); } finally { prog.stop(); }
+      const removed = mod.flushOwed(share, mirror, [{ rel, del: true }], null, R4_OWN);
+      const outsideFile = path.join(ownDir, "file.ec");
+      const keptOnDelete = fs.existsSync(outsideFile) && fs.readFileSync(outsideFile, "utf8") === "OUTSIDE\n";
+      const landedReal = fs.existsSync(path.join(mirror, "stats-span.json"))
+        && fs.readFileSync(path.join(mirror, "stats-span.json"), "utf8") === real;
+      const linkFile = path.join(mirror, "stats-span-link.json");
+      const followed = fs.existsSync(linkFile) && fs.readFileSync(linkFile, "utf8") === secret;
+      return {
+        wroteThrough: outsideAfter !== "OUTSIDE\n",
+        followed,
+        landedReal,
+        keptOnDelete,
+        refused: flushed.length === 1 && flushed[0].ok === false && removed.length === 1 && removed[0].ok === false
+      };
+    } finally {
+      try { execFileSync("cmd", ["/c", "rmdir", junction], { windowsHide: true }); } catch { /* the junction may already be gone */ }
+      try { fs.unlinkSync(link); } catch { /* the file link may already be gone */ }
+    }
+  }
+  {
+    const aside = offWindows("r4a", "a junction and a file link are made with mklink, which this leg does not run off Windows");
+    if (aside) skip(aside);
+    else {
+      const g = await linkScene(syncerMod, "r4a");
+      check(!g.wroteThrough && !g.followed && g.landedReal && g.keptOnDelete && g.refused,
+        "r4a a junction is not written or removed through, a file link is not staged, and a real file still lands: " + JSON.stringify(g));
+    }
+  }
+  {
+    const aside = offWindows("r4b", "the worker's junction is made with mklink, which this leg does not run off Windows");
+    if (aside) skip(aside);
+    else {
+      const share = folder("r4b-share");
+      const mirror = folder("r4b-mirror");
+      const outside = folder("r4b-outside");
+      const ownDir = path.join(outside, "desks", R4_OWN);
+      fs.mkdirSync(ownDir, { recursive: true });
+      fs.mkdirSync(path.join(mirror, "desks", R4_OWN), { recursive: true });
+      const real = "{\"format\":1,\"kind\":\"etiuda-stats-span\",\"span\":\"real\"}\n";
+      const secret = "{\"format\":1,\"kind\":\"etiuda-stats-span\",\"span\":\"secret\"}\n";
+      fs.writeFileSync(path.join(share, "stats-span.json"), real, "utf8");
+      fs.writeFileSync(path.join(outside, "secret-span.json"), secret, "utf8");
+      fs.writeFileSync(path.join(ownDir, "file.ec"), "OUTSIDE\n", "utf8");
+      fs.writeFileSync(path.join(mirror, "desks", R4_OWN, "file.ec"), "MIRROR\n", "utf8");
+      const link = path.join(share, "stats-span-link.json");
+      const junction = path.join(share, "desks");
+      const execFileSync = nodeRequire("node:child_process").execFileSync;
+      execFileSync("cmd", ["/c", "mklink", link, path.join(outside, "secret-span.json")], { windowsHide: true });
+      execFileSync("cmd", ["/c", "mklink", "/J", junction, path.join(outside, "desks")], { windowsHide: true });
+      const rel = "desks/" + R4_OWN + "/file.ec";
+      let ctl = null;
+      const out = {};
+      try {
+        syncerMod.noteOwed(mirror, rel);
+        ctl = new syncerMod.FolderSyncerController({
+          team: TEAM, folder: share, mirror, pin: LEAD, keyFor: () => K1, checks, own: R4_OWN, pollMs: 80, logger: () => {}
+        });
+        ctl.start();
+        const until = Date.now() + 3000;
+        while (Date.now() < until && !fs.existsSync(path.join(mirror, "stats-span.json"))) await new Promise(r => setTimeout(r, 40));
+        out.outside = fs.readFileSync(path.join(ownDir, "file.ec"), "utf8");
+        out.landedReal = fs.existsSync(path.join(mirror, "stats-span.json"))
+          && fs.readFileSync(path.join(mirror, "stats-span.json"), "utf8") === real;
+        out.followed = fs.existsSync(path.join(mirror, "stats-span-link.json"));
+      } finally {
+        if (ctl) ctl.stop();
+        try { execFileSync("cmd", ["/c", "rmdir", junction], { windowsHide: true }); } catch { /* the junction may already be gone */ }
+        try { fs.unlinkSync(link); } catch { /* the file link may already be gone */ }
+      }
+      check(out.outside === "OUTSIDE\n" && out.landedReal === true && out.followed === false,
+        "r4b the worker neither writes through a junction nor stages a file link, and a real file still lands: " + JSON.stringify(out));
+    }
+  }
+  {
+    const aside = offWindows("r4c", "lifting plant:share-link follows a junction made with mklink, which this leg does not run off Windows");
+    if (PLANTS_OFF) skip("r4c lifting plant:share-link writes through a junction and stages a file link: NOT RUN");
+    else if (aside) skip(aside);
+    else {
+      const planted = await testPlant("share-link", syncerFile, async (scratch) => {
+        const got = await linkScene(nodeRequire(scratch), "r4c");
+        return got.wroteThrough || got.followed || !got.keptOnDelete;
+      });
+      check(planted.ok, "r4c lifting plant:share-link writes through a junction and stages a file link: " + JSON.stringify(planted));
+    }
   }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {

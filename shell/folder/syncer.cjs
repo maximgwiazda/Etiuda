@@ -141,6 +141,33 @@ function directoryNames(readDir, dir) {
   return entries;
 }
 
+/* True when a path under the share root meets a link, or a name that is neither a directory nor a file. The root is the
+   folder the desk chose, so a link there is that folder. A missing leaf is not a link: a new file may be written there
+   when every ancestor that exists is a real directory. stat follows, and only after a link has already been refused. */
+function linkInside(root, full) {
+  const rel = path.relative(String(root || ""), String(full || ""));
+  if (!rel || rel === ".") return false;
+  if (rel.startsWith("..") || path.isAbsolute(rel)) return true;
+  const parts = rel.split(/[\\/]/).filter(Boolean);
+  let cur = root;
+  for (let i = 0; i < parts.length; i++) {
+    cur = path.join(cur, parts[i]);
+    let lst = null;
+    try { lst = fs.lstatSync(cur); }
+    catch (e) { return !(e && e.code === "ENOENT"); }
+    let linked = false;
+    linked = lst.isSymbolicLink(); /* plant:share-link */
+    if (linked) return true;
+    let followed = null;
+    try { followed = fs.statSync(cur); }
+    catch { return true; }
+    const last = i === parts.length - 1;
+    if (!last && !followed.isDirectory()) return true;
+    if (last && !followed.isDirectory() && !followed.isFile()) return true;
+  }
+  return false;
+}
+
 function isAllowedPath(rel) {
   const norm = String(rel || "").replace(/\\/g, "/");
   const parts = norm.split("/");
@@ -372,6 +399,11 @@ function flushOwed(folder, mirror, items, io, own) {
     if (rootCode) { out.push({ rel, sha: del ? null : it.sha, del, ok: false, code: rootCode }); continue; }
     const parts = rel.split("/");
     const dest = path.join(folder, ...parts);
+    /* A junction or a file link is not a place this desk writes: the owe stays and the share's other files still sync. */
+    if (linkInside(folder, dest)) {
+      out.push({ rel, sha: del ? null : it.sha, del, ok: false, code: "ELOOP" });
+      continue;
+    }
     try {
       if (del) {
         try { io.unlink(dest); } catch (e) { if (!e || e.code !== "ENOENT") throw e; }
@@ -437,13 +469,16 @@ function shareRelease(held) {
 function shareReadFile(folder, name) {
   const base = shareName(name);
   if (!base) return null;
-  try { return { text: fs.readFileSync(path.join(folder, base), "utf8") }; }
+  const file = path.join(folder, base);
+  if (linkInside(folder, file)) return null;
+  try { return { text: fs.readFileSync(file, "utf8") }; }
   catch (e) { return e && e.code === "ENOENT" ? { text: "" } : null; }
 }
 function shareCasBegin(folder, name, sha, create) {
   const base = shareName(name);
   if (!base) return { done: true, result: { ok: false } };
   const file = path.join(folder, base);
+  if (linkInside(folder, file)) return { done: true, result: { ok: false, busy: true } };
   let held = null;
   try { held = shareLock(file); } catch { held = null; }
   if (!held) return { done: true, result: { ok: false, busy: true } };
@@ -464,6 +499,7 @@ function shareCasBegin(folder, name, sha, create) {
 function shareCasCommit(held, mirror, text) {
   try {
     if (!held || !shareHolds(held)) return { ok: false, changed: true };
+    if (linkInside(path.dirname(held.file), held.file)) return { ok: false, busy: true };
     writeWhole(held.file, Buffer.from(String(text), "utf8"), defaultIO);
     writeWhole(path.join(mirror, held.base), Buffer.from(String(text), "utf8"), defaultIO); /* plant:cas-mirror-back */
     let st = null;
@@ -967,6 +1003,7 @@ function createFolderProgram(opts) {
       if (name.startsWith(".") || name.endsWith(".tmp")) continue;
       const rel = sub ? path.join(sub, name).replace(/\\/g, "/") : name;
       const full = path.join(baseDir, rel);
+      if (linkInside(baseDir, full)) continue;
       let st = null;
       try {
         st = io.stat(full);
@@ -983,7 +1020,7 @@ function createFolderProgram(opts) {
           if (inner == null) return null;
           for (const [k, v] of inner.entries()) out.set(k, v);
         }
-      } else {
+      } else if (st.isFile && st.isFile()) {
         if (isAllowedPath(rel)) {
           out.set(rel, { size: st.size, mtimeMs: st.mtimeMs || 0 });
         }
@@ -1700,6 +1737,7 @@ function createFolderProgram(opts) {
 
       if (!alreadyInMirror) {
         const srcFile = path.join(folder, relPath);
+        if (linkInside(folder, srcFile)) continue;
         const rand = crypto.randomBytes(8).toString("hex");
         const tmpFile = path.join(stagingDir, rand + ".tmp");
         try {
@@ -2025,6 +2063,7 @@ module.exports = {
   folderMirrorOf,
   isAllowedPath,
   directoryNames,
+  linkInside,
   noteOwed,
   owedAt,
   takenBackList,

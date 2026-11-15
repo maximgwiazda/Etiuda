@@ -52,6 +52,7 @@ function walkFolder(baseDir, sub = "") {
     if (name.startsWith(".") || name.endsWith(".tmp")) continue;
     const rel = sub ? path.join(sub, name).replace(/\\/g, "/") : name;
     const full = path.join(baseDir, rel);
+    if (S.linkInside(baseDir, full)) continue;
     let st = null;
     try {
       st = fs.statSync(full);
@@ -68,7 +69,7 @@ function walkFolder(baseDir, sub = "") {
         if (inner == null) return null;
         for (const [k, v] of inner.entries()) out.set(k, v);
       }
-    } else {
+    } else if (st.isFile && st.isFile()) {
       if (isAllowedPath(rel)) {
         out.set(rel, { size: st.size, mtimeMs: st.mtimeMs || 0 });
       }
@@ -147,6 +148,7 @@ function syncOnce() {
 
       if (!alreadyInMirror) {
         const srcFile = path.join(folder, relPath);
+        if (S.linkInside(folder, srcFile)) continue;
         const rand = crypto.randomBytes(8).toString("hex");
         const tmpFile = path.join(stagingDir, rand + ".tmp");
         const readAt = Date.now();
