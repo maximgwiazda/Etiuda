@@ -130,6 +130,67 @@ function headGenuine(doc, pin) {
   } catch { return false; }
 }
 
+/* Null where the directory did not list. An empty list is a directory that answered and held nothing, so a caller
+   that treated the two the same would take a share it could not read for an empty one. */
+function directoryNames(readDir, dir) {
+  let entries = [];
+  let unread = false;
+  try { entries = readDir(dir); }
+  catch { unread = true; }
+  if (unread) return null; /* plant:listing-unreadable */
+  return entries;
+}
+/* A subtree below the share's root that does not list is unknown for itself alone (review 24, N1): the walk names it in
+   `out.unread` and goes on, so one member's folder this account cannot list does not stop the whole team's sync. Nothing
+   under it is judged gone, nothing is staged from it, and the flush writes nothing into it. False where the walk must fail
+   whole instead. The root is never scoped here: a root that does not list is a share not answering. */
+function scopeUnread(out, rel) {
+  let scoped = false;
+  scoped = true; /* plant:unread-subtree-scoped */
+  if (scoped) (out.unread || (out.unread = [])).push(normRel(rel));
+  return scoped;
+}
+/* A listed subtree's files and its own unknown subtrees, taken into the walk above it. */
+function takeInner(out, inner) {
+  for (const [k, v] of inner.entries()) out.set(k, v);
+  if (inner.unread) for (const u of inner.unread) (out.unread || (out.unread = [])).push(u);
+}
+/* The first folder on the way to `parts` that is there and does not list, by its error code, or "". */
+function unreadOnTheWay(folder, parts, io) {
+  for (let i = 1; i < parts.length; i++) {
+    try { io.readdir(path.join(folder, ...parts.slice(0, i))); }
+    catch (e) { return e && e.code === "ENOENT" ? "" : ((e && e.code) || "EACCES"); }
+  }
+  return "";
+}
+
+/* True when a path under the share root meets a link, or a name that is neither a directory nor a file. The root is the
+   folder the desk chose, so a link there is that folder. A missing leaf is not a link: a new file may be written there
+   when every ancestor that exists is a real directory. stat follows, and only after a link has already been refused. */
+function linkInside(root, full) {
+  const rel = path.relative(String(root || ""), String(full || ""));
+  if (!rel || rel === ".") return false;
+  if (rel.startsWith("..") || path.isAbsolute(rel)) return true;
+  const parts = rel.split(/[\\/]/).filter(Boolean);
+  let cur = root;
+  for (let i = 0; i < parts.length; i++) {
+    cur = path.join(cur, parts[i]);
+    let lst = null;
+    try { lst = fs.lstatSync(cur); }
+    catch (e) { return !(e && e.code === "ENOENT"); }
+    let linked = false;
+    linked = lst.isSymbolicLink(); /* plant:share-link */
+    if (linked) return true;
+    let followed = null;
+    try { followed = fs.statSync(cur); }
+    catch { return true; }
+    const last = i === parts.length - 1;
+    if (!last && !followed.isDirectory()) return true;
+    if (last && !followed.isDirectory() && !followed.isFile()) return true;
+  }
+  return false;
+}
+
 function isAllowedPath(rel) {
   const norm = String(rel || "").replace(/\\/g, "/");
   const parts = norm.split("/");
@@ -208,8 +269,9 @@ function writeOutbox(mirror, st, io) {
   io.writeFile(tmp, JSON.stringify(doc));
   try { renameRetrying(tmp, file, io); } catch (e) { try { io.unlink(tmp); } catch {} throw e; }
 }
-/* Runs fn; on the main thread a busy code is tried again, 20 tries RENAME_WAIT_MS apart, off it the code is thrown. */
-function outboxBusyRetrying(fn, onDone, timerSet) {
+/* Runs fn; on the main thread a busy code is tried again, 20 tries RENAME_WAIT_MS apart, off it the code is thrown.
+   keepGoing is a new owe: past 20 it is said once and still tried, so the record is not dropped while the rename refuses. */
+function outboxBusyRetrying(fn, onDone, timerSet, keepGoing) {
   try {
     fn();
     if (onDone) onDone();
@@ -226,10 +288,15 @@ function outboxBusyRetrying(fn, onDone, timerSet) {
       fn();
       if (onDone) onDone();
     } catch (e) {
-      if (tries < 20 && e && RENAME_BUSY.indexOf(e.code) >= 0) {
-        timer = setTimeout(step, RENAME_WAIT_MS);
-        if (timer.unref) timer.unref();
-        if (timerSet) timerSet.add(timer);
+      if (e && RENAME_BUSY.indexOf(e.code) >= 0) {
+        let keep = tries < 20;
+        if (keepGoing) keep = true; /* plant:outbox-busy-keep */
+        if (keepGoing && tries === 20) console.log("etiuda: an owed write could not be recorded yet (" + e.code + "), and it is tried again");
+        if (keep) {
+          timer = setTimeout(step, RENAME_WAIT_MS);
+          if (timer.unref) timer.unref();
+          if (timerSet) timerSet.add(timer);
+        }
       }
     }
   };
@@ -238,13 +305,13 @@ function outboxBusyRetrying(fn, onDone, timerSet) {
   if (timerSet) timerSet.add(timer);
   return false;
 }
-function writeOutboxRetrying(mirror, mutate, io, onDone, timerSet) {
+function writeOutboxRetrying(mirror, mutate, io, onDone, timerSet, keepGoing) {
   io = io || defaultIO;
   return outboxBusyRetrying(() => {
     const st = readOutbox(mirror, io);
     mutate(st);
     writeOutbox(mirror, st, io);
-  }, onDone, timerSet);
+  }, onDone, timerSet, keepGoing);
 }
 function owedRecord(mirror, rel, io) {
   let bytes = null;
@@ -256,7 +323,7 @@ function noteOwed(mirror, rel, io) {
   io = io || defaultIO;
   const norm = normRel(rel);
   if (!isAllowedPath(norm)) return false;
-  writeOutboxRetrying(mirror, st => { st.owe[norm] = owedRecord(mirror, norm, io); }, io);
+  writeOutboxRetrying(mirror, st => { st.owe[norm] = owedRecord(mirror, norm, io); }, io, null, null, true);
   return true;
 }
 function owedList(mirror, io) {
@@ -338,6 +405,28 @@ function writeWhole(file, bytes, io) {
     throw e;
   }
 }
+/* A root catalog owe: the flush compares it with the share before it writes. A file under desks/ is this desk's own. */
+function rootCatalogOwe(rel) {
+  return String(rel || "").indexOf("/") < 0 && /\.ec$/i.test(rel);
+}
+/* The epoch, counter and rev sitting in the clear. The flush runs where the worker holds no key, so a sealed catalog is
+   compared by its envelope's epoch only; an ordinary catalog is compared by the rev the file itself names. */
+function clearMarks(text) {
+  let doc = null;
+  try { doc = JSON.parse(String(text || "")); } catch { return {}; }
+  if (!doc || typeof doc !== "object") return {};
+  const rev = doc.rev === null || doc.rev === "" ? NaN : +doc.rev;
+  return {
+    epoch: doc.kind === "etiuda-sealed" && Number.isInteger(doc.epoch) ? doc.epoch : null,
+    n: Number.isSafeInteger(doc.n) ? doc.n : null,
+    rev: Number.isSafeInteger(rev) ? rev : null
+  };
+}
+function shareTextNewer(shareText, mirrorText) {
+  const a = clearMarks(shareText), b = clearMarks(mirrorText);
+  for (const k of ["epoch", "n", "rev"]) if (a[k] != null && b[k] != null && a[k] !== b[k]) return a[k] > b[k];
+  return false;
+}
 /* "file" where the share's file is marked read-only, "folder" where the share would not take a new file there, "" otherwise. */
 function readOnlyOf(e, dest, io) {
   if (!e || (e.code !== "EPERM" && e.code !== "EACCES")) return "";
@@ -361,8 +450,39 @@ function flushOwed(folder, mirror, items, io, own) {
     if (rootCode) { out.push({ rel, sha: del ? null : it.sha, del, ok: false, code: rootCode }); continue; }
     const parts = rel.split("/");
     const dest = path.join(folder, ...parts);
+    /* A junction or a file link is not a place this desk writes: the owe stays and the share's other files still sync. */
+    if (linkInside(folder, dest)) {
+      out.push({ rel, sha: del ? null : it.sha, del, ok: false, code: "ELOOP" });
+      continue;
+    }
+    /* A folder on the way that does not list is unknown, so nothing is written into it or removed from it: the owe stays. */
+    let unknown = "";
+    unknown = unreadOnTheWay(folder, parts, io); /* plant:unread-not-written */
+    if (unknown) {
+      out.push({ rel, sha: del ? null : it.sha, del, ok: false, code: unknown });
+      continue;
+    }
+    let heldLock = null;
     try {
+      if (rootCatalogOwe(rel)) {
+        heldLock = shareLock(dest);
+        if (!heldLock) {
+          out.push({ rel, sha: del ? null : it.sha, del, ok: false, busy: true, code: "EBUSY" });
+          continue;
+        }
+      }
+      let shareText = null;
+      if (heldLock) {
+        try { shareText = fs.readFileSync(dest, "utf8"); }
+        catch (e) { if (!e || e.code !== "ENOENT") throw e; shareText = ""; }
+      }
       if (del) {
+        let mirrorText = "";
+        try { mirrorText = fs.readFileSync(path.join(mirror, ...parts), "utf8"); } catch { mirrorText = ""; }
+        if (heldLock && shareText && mirrorText && shareTextNewer(shareText, mirrorText)) {
+          out.push({ rel, sha: null, del: true, ok: false, changed: true });
+          continue;
+        }
         try { io.unlink(dest); } catch (e) { if (!e || e.code !== "ENOENT") throw e; }
         out.push({ rel, sha: null, del: true, ok: true });
         continue;
@@ -370,6 +490,12 @@ function flushOwed(folder, mirror, items, io, own) {
       const bytes = io.readFile(path.join(mirror, ...parts));
       const sha = sha256hex(bytes);
       if (sha !== it.sha) continue;
+      let newer = false;
+      if (heldLock) newer = shareTextNewer(shareText, bytes.toString("utf8")); /* plant:flush-share-newer */
+      if (newer) {
+        out.push({ rel, sha, del: false, ok: false, changed: true });
+        continue;
+      }
       for (let i = 1; i < parts.length; i++) {
         try { fs.mkdirSync(path.join(folder, ...parts.slice(0, i))); } catch (e) { if (!e || e.code !== "EEXIST") throw e; }
       }
@@ -381,6 +507,8 @@ function flushOwed(folder, mirror, items, io, own) {
       out.push({ rel, sha, del: false, ok: true, size: st ? st.size : null, mtimeMs: st ? (st.mtimeMs || 0) : null });
     } catch (e) {
       out.push({ rel, sha: del ? null : it.sha, del, ok: false, code: (e && e.code) || "EIO", readOnly: readOnlyOf(e, dest, io) });
+    } finally {
+      if (heldLock) shareRelease(heldLock);
     }
   }
   return out;
@@ -426,13 +554,16 @@ function shareRelease(held) {
 function shareReadFile(folder, name) {
   const base = shareName(name);
   if (!base) return null;
-  try { return { text: fs.readFileSync(path.join(folder, base), "utf8") }; }
+  const file = path.join(folder, base);
+  if (linkInside(folder, file)) return null;
+  try { return { text: fs.readFileSync(file, "utf8") }; }
   catch (e) { return e && e.code === "ENOENT" ? { text: "" } : null; }
 }
 function shareCasBegin(folder, name, sha, create) {
   const base = shareName(name);
   if (!base) return { done: true, result: { ok: false } };
   const file = path.join(folder, base);
+  if (linkInside(folder, file)) return { done: true, result: { ok: false, busy: true } };
   let held = null;
   try { held = shareLock(file); } catch { held = null; }
   if (!held) return { done: true, result: { ok: false, busy: true } };
@@ -453,6 +584,7 @@ function shareCasBegin(folder, name, sha, create) {
 function shareCasCommit(held, mirror, text) {
   try {
     if (!held || !shareHolds(held)) return { ok: false, changed: true };
+    if (linkInside(path.dirname(held.file), held.file)) return { ok: false, busy: true };
     writeWhole(held.file, Buffer.from(String(text), "utf8"), defaultIO);
     writeWhole(path.join(mirror, held.base), Buffer.from(String(text), "utf8"), defaultIO); /* plant:cas-mirror-back */
     let st = null;
@@ -592,6 +724,7 @@ function createFolderProgram(opts) {
   const clock = typeof opts.now === "function" ? opts.now : Date.now;
   const knownMtimes = new Map(); // relPath -> { size, mtimeMs }
   const refusedMtimes = new Map(); // relPath -> { size, mtimeMs, at, epoch, key }
+  const heldSettled = new Map(); // a held stamp already staged again once it stood long enough
   const renameWait = new Map(); // relPath -> the staged item whose rename into the mirror was refused
   const renameMeta = new Map(); // relPath -> { target, onLand, tries, exhausted }
   const renameSaid = new Set();
@@ -642,10 +775,10 @@ function createFolderProgram(opts) {
   }
   let judgedAt = 0; // moves with what a refusal is judged against: the pin, the team file and the ring
   const dropped = new Set(); // refusals let go since the worker was last told, so it copies those files again
-  /* A refused or parked copy is held: not copied from the share again while its size and mtime stay, and, for a refusal, while
-     the pin, the team file, the ring and the key for its epoch stay as they were when it was judged. The mirror's own copy is
-     never removed for it. The hold lives in memory, so "copied once" holds within one run: after a restart a held or parked
-     file is copied once more, and a parked file waiting for its key is read again from the share (the test architect, 18:47). */
+  /* A refused or parked copy is held while its size and mtime stay, and, for a refusal, while the pin, the team file, the
+     ring and the key for its epoch stay as they were when it was judged. Once that stamp is old enough to stand for the
+     bytes it is staged once more, and not again while the stamp stays. The mirror's own copy is never removed for it. The
+     hold lives in memory, so after a restart a held or parked file is copied once more (the test architect, 18:47). */
   function refuse(item, epoch) {
     if (!item || item.size == null) return;
     const ep = Number.isInteger(epoch) ? epoch : null;
@@ -728,11 +861,16 @@ function createFolderProgram(opts) {
 
   /* ---- the outbox and the floors, read afresh at each use: the main thread may note a debt with noteOwed between scans */
   const saidWait = new Map(); // relPath -> the code last said for it
+  const unreadSaid = new Set(); // the unlisted subtrees already said, said again only after one listed
   function owe(rel) { return noteOwed(mirror, rel, io); }
   function owed() { return owedList(mirror, io); }
   function isOwed(rel) { return owedAt(mirror, rel, io); }
   function landed(results) {
     if (!Array.isArray(results) || !results.length) return;
+    /* A copy the share holds newer than this desk's was left there, and the mirror holds this desk's bytes now, so the stamp
+       read before no longer stands for what the mirror holds: forgotten here and in the worker (held's forget), so the share's
+       copy is read again at the next listing (review 24, finding 1's put-back case). Forgetting costs one read at most. */
+    for (const r of results) if (r && r.changed && r.rel) { knownMtimes.delete(r.rel); dropped.add(r.rel); } /* plant:changed-forgets */
     let decided = false;
     const clearRels = [];
     const updateRels = [];
@@ -748,6 +886,13 @@ function createFolderProgram(opts) {
               clearRels.push(r);
               if (saidWait.has(r.rel)) { saidWait.delete(r.rel); logger("etiuda: " + r.rel + " has reached the team's folder " + folder); }
               if (!r.del && r.size != null) knownMtimes.set(r.rel, { size: r.size, mtimeMs: r.mtimeMs });
+            } else if (r.changed) {
+              if (!!rec.del !== !!r.del || (!rec.del && rec.sha !== r.sha)) continue;
+              clearRels.push(r);
+              if (saidWait.get(r.rel) !== "changed") {
+                saidWait.set(r.rel, "changed");
+                logger("etiuda: " + path.join(folder, r.rel) + " was not written over the team's folder, which holds a newer copy");
+              }
             } else if (rec.code !== r.code || (rec.readOnly || "") !== (r.readOnly || "")) {
               updateRels.push(r);
               if (saidWait.get(r.rel) !== r.code) {
@@ -950,20 +1095,13 @@ function createFolderProgram(opts) {
   function walkFolder(baseDir, sub = "") {
     const out = new Map();
     const current = path.join(baseDir, sub);
-    let entries = [];
-    if (sub === "") {
-      entries = io.readdir(current);
-    } else {
-      try {
-        entries = io.readdir(current);
-      } catch {
-        return out;
-      }
-    }
+    const entries = directoryNames(io.readdir, current);
+    if (entries == null) return null;
     for (const name of entries) {
       if (name.startsWith(".") || name.endsWith(".tmp")) continue;
       const rel = sub ? path.join(sub, name).replace(/\\/g, "/") : name;
       const full = path.join(baseDir, rel);
+      if (linkInside(baseDir, full)) continue;
       let st = null;
       try {
         st = io.stat(full);
@@ -973,12 +1111,14 @@ function createFolderProgram(opts) {
       if (st.isDirectory && st.isDirectory()) {
         if (sub === "" && (name === "desks" || name === "invites" || name === "catalog-asks")) {
           const inner = walkFolder(baseDir, name);
-          for (const [k, v] of inner.entries()) out.set(k, v);
+          if (inner == null) { if (scopeUnread(out, name)) continue; return null; }
+          takeInner(out, inner);
         } else if (sub === "desks") {
           const inner = walkFolder(baseDir, path.join(sub, name));
-          for (const [k, v] of inner.entries()) out.set(k, v);
+          if (inner == null) { if (scopeUnread(out, rel)) continue; return null; }
+          takeInner(out, inner);
         }
-      } else {
+      } else if (st.isFile && st.isFile()) {
         if (isAllowedPath(rel)) {
           out.set(rel, { size: st.size, mtimeMs: st.mtimeMs || 0 });
         }
@@ -1339,22 +1479,19 @@ function createFolderProgram(opts) {
           let pinOk = true;
           const leadMatch = pin && doc.lead && doc.lead.public === pin.public && doc.lead.keyId === pin.keyId;
           let handedMatch = false;
-          if (pin && doc.lead && handedTo(doc, pin)) {
-            handedMatch = true;
-            follow(doc);
-          }
+          if (pin && doc.lead && handedTo(doc, pin)) handedMatch = true;
           if (pin && !leadMatch && !handedMatch) pinOk = false;
-          if (pinOk) {
-            const rev = teamRevOf(doc) || 0;
-            const olderEpoch = doc.epoch < mirrorEpoch;
-            const olderRevAtEpoch = doc.epoch === mirrorEpoch && rev < mirrorRev;
-            if (!olderEpoch && !olderRevAtEpoch) {
-              const target = path.join(mirror, sibItem.relPath);
-              if (landStaged(sibItem, target, true, () => applyTeamLand(doc, rev, false))) {
-                applied.push(sibItem.relPath);
-              }
-            } else {
-              try { io.unlink(sibItem.tmpPath); } catch {}
+          /* An older or equal sibling, or one whose rev this desk does not read, is not a handover and does not land.
+             The pin stays, so the lead's next file is still accepted. */
+          const revVal = teamRevOf(doc);
+          let stale = false;
+          stale = revVal === null || doc.epoch < mirrorEpoch || (doc.epoch === mirrorEpoch && (revVal || 0) <= mirrorRev); /* plant:sibling-rev-before-pin */
+          if (handedMatch && !stale) follow(doc);
+          if (pinOk && !stale) {
+            const rev = revVal || 0;
+            const target = path.join(mirror, sibItem.relPath);
+            if (landStaged(sibItem, target, true, () => applyTeamLand(doc, rev, false))) {
+              applied.push(sibItem.relPath);
             }
           } else {
             try { io.unlink(sibItem.tmpPath); } catch {}
@@ -1619,7 +1756,15 @@ function createFolderProgram(opts) {
       return null;
     };
     let faultMoved = false;
+    /* A subtree the listing could not read is unknown: nothing in it is judged gone or taken back, and its counts start again. */
+    const unread = (Array.isArray(scanData.unread) ? scanData.unread : []).map(normRel);
+    const unknownAt = (rel) => { const r = normRel(rel); return unread.some(u => r === u || r.startsWith(u + "/")); };
+    for (const u of unread) if (!unreadSaid.has(u)) { unreadSaid.add(u); logger("etiuda: " + path.join(folder, u) + " does not list, so nothing in it is judged until it does"); }
+    for (const u of Array.from(unreadSaid)) if (unread.indexOf(u) < 0) unreadSaid.delete(u);
     for (const relPath of currentMirrorFiles) {
+      let unknown = false;
+      unknown = unknownAt(relPath); /* plant:unread-subtree-kept */
+      if (unknown) { missingCount.delete(relPath); backSeen.delete(normRel(relPath)); continue; }
       let mine = false;
       mine = ownRel(relPath); /* plant:own-never-unlinked */
       if (mine) {
@@ -1651,7 +1796,7 @@ function createFolderProgram(opts) {
     /* The mark that this mirror has taken one answered listing: until then a desk under machine policy reads its folder. */
     let primed = false;
     try {
-      if (!io.exists(path.join(mirror, PRIMED_NAME))) { io.writeFile(path.join(mirror, PRIMED_NAME), ""); primed = true; }
+      if (!unread.length && !io.exists(path.join(mirror, PRIMED_NAME))) { io.writeFile(path.join(mirror, PRIMED_NAME), ""); primed = true; }
     } catch {}
     if (applied.length > 0 || primed || faultMoved) {
       onChange(primed ? { team, applied, primed: true } : { team, applied });
@@ -1667,7 +1812,7 @@ function createFolderProgram(opts) {
     let foundFiles = null;
     try {
       foundFiles = walkFolder(folder);
-      if (!io.exists(folder)) throw new Error("listing failed");
+      if (foundFiles == null || !io.exists(folder)) throw new Error("listing failed");
     } catch (e) {
       return applyScan({ answers: false, listing: [], staged: [] });
     }
@@ -1683,8 +1828,14 @@ function createFolderProgram(opts) {
       let alreadyInMirror = false;
       const prev = knownMtimes.get(relPath);
       const hold = holds.get(relPath);
-      if (hold && hold.size === st.size && hold.mtimeMs === st.mtimeMs) alreadyInMirror = true;
-      else if (prev && prev.size === st.size && prev.mtimeMs === st.mtimeMs && io.exists(mirrorFile) && stampStands(st, prev.at)) alreadyInMirror = true;
+      if (hold && hold.size === st.size && hold.mtimeMs === st.mtimeMs) {
+        const seen = heldSettled.get(relPath);
+        let reread = false;
+        reread = stampStands(st, clock()) && !(seen && seen.size === st.size && seen.mtimeMs === st.mtimeMs); /* plant:held-settled-reread */
+        if (reread) heldSettled.set(relPath, { size: st.size, mtimeMs: st.mtimeMs });
+        else alreadyInMirror = true;
+      } else heldSettled.delete(relPath);
+      if (!alreadyInMirror && prev && prev.size === st.size && prev.mtimeMs === st.mtimeMs && io.exists(mirrorFile) && stampStands(st, prev.at)) alreadyInMirror = true;
       const waiting = renameWait.get(relPath);
       if (waiting && (alreadyInMirror || waiting.size !== st.size || waiting.mtimeMs !== st.mtimeMs)) {
         try { if (waiting.tmpPath) io.unlink(waiting.tmpPath); } catch {}
@@ -1695,6 +1846,7 @@ function createFolderProgram(opts) {
 
       if (!alreadyInMirror) {
         const srcFile = path.join(folder, relPath);
+        if (linkInside(folder, srcFile)) continue;
         const rand = crypto.randomBytes(8).toString("hex");
         const tmpFile = path.join(stagingDir, rand + ".tmp");
         try {
@@ -1718,6 +1870,7 @@ function createFolderProgram(opts) {
     return applyScan({
       answers: true,
       listing: Array.from(foundFiles.entries()),
+      unread: foundFiles.unread || [],
       staged
     });
   }
@@ -1756,6 +1909,7 @@ class FolderSyncerController {
     this.onChange = opts.onChange;
     this.onFail = opts.onFail;
     this.pollMs = opts.pollMs || FOLDER_SYNC_CADENCE_MS;
+    this.askMs = opts.askMs > 0 ? opts.askMs : SHARE_ASK_MS;
     this.worker = null;
     this.stopped = false;
     this.asked = 0;
@@ -1803,7 +1957,10 @@ class FolderSyncerController {
           this.flushCheck();
         } else if (msg.type === "landed") {
           this.program.landed(msg.results);
+          this.sendHeld();
           this.flushCheck();
+        } else if (msg.type === "need-own") {
+          if (this.worker && !this.stopped) this.worker.postMessage({ type: "own", own: this.ownNow() });
         } else if (msg.type === "read" || msg.type === "cas") {
           this.answer(msg);
         }
@@ -1861,7 +2018,7 @@ class FolderSyncerController {
       const w = { resolve, timer: null };
       w.timer = setTimeout(() => this.flushDone(w, false), Math.max(0, Number(ms) || 0));
       this.flushWaits.push(w);
-      this.worker.postMessage({ type: "kick" });
+      this.wake();
     });
   }
   owing() {
@@ -1875,7 +2032,7 @@ class FolderSyncerController {
       for (const w of this.flushWaits.slice()) this.flushDone(w, true);
       return;
     }
-    if (this.worker && !this.stopped) this.worker.postMessage({ type: "kick" });
+    this.wake();
   }
   flushDone(w, ok) {
     const at = this.flushWaits.indexOf(w);
@@ -1888,15 +2045,17 @@ class FolderSyncerController {
   ask(msg, judge) {
     const id = ++this.asked;
     return new Promise(resolve => {
-      const timer = setTimeout(() => this.settle(id, msg.type === "read" ? null : { ok: false, busy: true }), SHARE_ASK_MS);
+      const timer = setTimeout(() => this.settle(id, msg.type === "read" ? null : { ok: false, busy: true }, true), this.askMs);
       if (timer.unref) timer.unref();
       this.waits.set(id, { resolve, timer, judge });
       this.worker.postMessage(Object.assign({ id }, msg));
     });
   }
-  settle(id, value) {
+  settle(id, value, fromTimer) {
     const w = this.waits.get(id);
     if (!w) return;
+    /* A timer already queued when the commit was posted must not answer busy over that commit. */
+    if (fromTimer && w.committing) return;
     this.waits.delete(id);
     clearTimeout(w.timer);
     w.resolve(value);
@@ -1909,7 +2068,10 @@ class FolderSyncerController {
       if (!w) { if (this.worker) this.worker.postMessage({ type: "cas-abort", id: msg.id }); return; }
       let verdict = null;
       try { verdict = w.judge(msg.now); } catch { verdict = { result: { ok: false, busy: true } }; }
-      if (verdict && typeof verdict.text === "string") this.worker.postMessage({ type: "cas-commit", id: msg.id, text: verdict.text });
+      if (verdict && typeof verdict.text === "string") {
+        w.committing = true; clearTimeout(w.timer); /* plant:ask-commit-holds */
+        this.worker.postMessage({ type: "cas-commit", id: msg.id, text: verdict.text });
+      }
       else { this.worker.postMessage({ type: "cas-abort", id: msg.id }); this.settle(msg.id, (verdict && verdict.result) || { ok: false }); }
       return;
     }
@@ -1938,11 +2100,17 @@ class FolderSyncerController {
     return this.ask({ type: "cas", name: String(name || ""), sha: String(sha || ""), create: create === true }, judge);
   }
 
+  /* The id at this listing, then a scan. A push does not list by itself: the kick that follows does, and the list does not yield. */
+  wake() {
+    if (!this.worker || this.stopped) return;
+    this.worker.postMessage({ type: "own", own: this.ownNow(), push: true });
+    this.worker.postMessage({ type: "kick" });
+  }
+
   kick() {
     if (this.stopped) return;
-    if (this.worker) {
-      this.worker.postMessage({ type: "kick" });
-    } else if (this.program) {
+    if (this.worker) this.wake();
+    else if (this.program) {
       try { this.program.syncOnce(); } catch {}
     }
   }
@@ -2019,6 +2187,10 @@ module.exports = {
   flushFolderSyncers,
   folderMirrorOf,
   isAllowedPath,
+  directoryNames,
+  scopeUnread,
+  takeInner,
+  linkInside,
   noteOwed,
   owedAt,
   takenBackList,

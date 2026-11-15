@@ -22,7 +22,7 @@ import { createLab } from "./lab-owner.mjs";
 const SELF = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(SELF), "..");
 const nodeRequire = createRequire(import.meta.url);
-const EXPECTED = 21;
+const EXPECTED = 23;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -614,6 +614,74 @@ async function main() {
   check(!threwC && owedBeforeC && triesAt1250 === 20 && triesStable && owedWhileRefused && keptBoth && clearedNext,
     "998w control: an outbox read refused every time stops at 20 tries, leaves the record and sibling in place, and clears on the next pass: "
     + JSON.stringify({ threwC, owedBeforeC, triesAt1250, triesStable, owedWhileRefused, keptBoth, clearedNext }));
+
+  /* r7: a new owe whose rename stays busy past 20 tries is said once and still recorded once the rename is allowed. */
+  async function busyOwe(mod, name) {
+    const mirror = path.join(LAB, name + "-mirror");
+    fs.mkdirSync(mirror, { recursive: true });
+    const rel = "lamp.ec";
+    fs.writeFileSync(path.join(mirror, rel), "{\"rev\":1}\n", "utf8");
+    let renames = 0;
+    const lines = [];
+    const orig = console.log;
+    console.log = (...a) => { lines.push(a.map(String).join(" ")); };
+    const io = {
+      readdir: d => fs.readdirSync(d),
+      stat: p => fs.statSync(p),
+      readFile: (p, enc) => fs.readFileSync(p, enc),
+      writeFile: (p, data) => fs.writeFileSync(p, data),
+      unlink: p => fs.unlinkSync(p),
+      mkdir: d => fs.mkdirSync(d, { recursive: true }),
+      exists: p => fs.existsSync(p),
+      rename: (a, b) => {
+        renames++;
+        if (renames <= 20) throw busy("EBUSY");
+        fs.renameSync(a, b);
+      }
+    };
+    try {
+      const accepted = mod.noteOwed(mirror, rel, io);
+      const until = Date.now() + 2500;
+      let recorded = false;
+      while (Date.now() < until) {
+        recorded = mod.owedList(mirror, io).some(x => x.rel === rel);
+        if (recorded) break;
+        await sleep(40);
+      }
+      return {
+        accepted,
+        recorded,
+        renames,
+        said: lines.some(l => l.indexOf("could not be recorded") >= 0 && l.indexOf(" - ") < 0)
+      };
+    } finally { console.log = orig; }
+  }
+  {
+    const g = await busyOwe(syncer, "r7a");
+    check(g.accepted === true && g.recorded === true && g.renames > 20 && g.said === true,
+      "r7a an owed write whose rename is busy twenty times is said and still recorded once the rename is allowed: " + JSON.stringify(g));
+  }
+  {
+    const line = "r7b lifting plant:outbox-busy-keep drops an owed write after twenty busy renames: NOT RUN";
+    if (PLANTS_OFF) { asserted++; console.log("  skip " + line); }
+    else {
+      const src = path.join(ROOT, "shell", "folder", "syncer.cjs");
+      const before = fs.readFileSync(src);
+      const parts = before.toString("utf8").split("\n");
+      const at = parts.findIndex(l => l.includes("plant:outbox-busy-keep"));
+      if (at < 0) throw new Error("plant:outbox-busy-keep absent");
+      parts.splice(at, 1);
+      const scratchDir = fs.mkdtempSync(path.join(LAB, "plant-outbox-busy-"));
+      const scratch = path.join(scratchDir, "syncer.cjs");
+      fs.writeFileSync(scratch, parts.join("\n"), "utf8");
+      let got = null;
+      try { got = await busyOwe(nodeRequire(scratch), "r7b"); }
+      catch { got = null; }
+      const same = fs.readFileSync(src).equals(before);
+      check(!!got && got.recorded === false && got.renames === 20 && same,
+        "r7b lifting plant:outbox-busy-keep drops an owed write after twenty busy renames: " + JSON.stringify({ got, same }));
+    }
+  }
 
   if (asserted !== EXPECTED) check(false, "completed " + asserted + " of " + EXPECTED + " checks");
   console.log("syncer-rename-busy: " + (asserted - failed) + " passed, " + failed + " failed, " + asserted + " of " + EXPECTED);

@@ -7812,6 +7812,33 @@ function sharedFile(name) {
   if (!base || base !== path.basename(base) || !/\.ec$/i.test(base) || !folderAnswers(root)) return "";
   return path.resolve(root, base);
 }
+/* The canonical file a conflict copy was made from, when that file is in the same folder.
+   The longest stem wins, so a shorter name cannot claim a tail that is not its own. "" where
+   the name is not a conflict copy, or no canonical file sits beside it, and that only copy can still be written. */
+function canonicalEditionName(name) {
+  const base = path.basename(String(name || ""));
+  if (!base || !isConflictName(base)) return "";
+  const root = sharedFolderForWrite();
+  if (!root || !folderAnswers(root)) return "";
+  let names = [];
+  try { names = fs.readdirSync(root); } catch { return ""; }
+  let best = "";
+  for (let i = 0; i < names.length; i++) {
+    const n = names[i];
+    if (n === base || isConflictName(n)) continue;
+    if (!conflictSiblingName(n, base)) continue;
+    if (n.length > best.length) best = n;
+  }
+  return best;
+}
+/* A direct edit named as a conflict copy reads and writes the canonical file, so the compare
+   hash and the bytes are the same file. Without the plant the name is used as it was given. */
+function editionWriteName(name) {
+  const base = path.basename(String(name || ""));
+  let chosen = base;
+  chosen = canonicalEditionName(base) || chosen; /* plant:direct-canon-name */
+  return chosen || base;
+}
 /* The edition the layer grew from, as the file held it: the file itself while it is that edition, else the copy the
    history kept, seen again as it is used so the history does not let it go while a desk still merges against it. */
 function sharedBase(file, text, pin) {
@@ -7834,7 +7861,7 @@ function sharedBase(file, text, pin) {
    file will not read. `free` is false for a signed or sealed file or edition, and nothing of either is handed then. */
 function sharedRead(name, pin) {
   if (relayHere()) return null; /* See sharedWrite. */
-  const file = sharedFile(name);
+  const file = sharedFile(editionWriteName(name));
   if (!file) return null;
   const share = shareSyncer(path.dirname(file));
   if (share) return share.then(s => (s ? s.shareRead(path.basename(file)) : null)).then(got => (got ? sharedReadOf(file, got.text, pin) : null));
@@ -7897,7 +7924,7 @@ function shareMustSeal(root) {
    and a relay mirror is refused outright, since a write there would stay on this desk. */
 function sharedWrite(name, text, sha, create) {
   if (relayHere()) return { ok: false, refused: true };
-  const file = sharedFile(name);
+  const file = sharedFile(editionWriteName(name));
   text = String(text || "");
   if (!file || !text || text.length > BRANCH_TEXT_MAX) return { ok: false };
   let data = null;
@@ -9126,10 +9153,10 @@ function ecGrew(data) {
   const g = data && data.grew;
   return g && typeof g === "object" && typeof g.id === "string" ? { id: g.id, rev: +g.rev || 0, sha: String(g.sha || "") } : null;
 }
-/* One row per catalog id. A genuine edition beats one that does not verify. Among those that
-   agree, the higher rev wins, and an equal rev keeps the name that is not a conflict copy of
-   another, else the earlier name. An id that did not parse keeps its own row. `genuine` is how
-   the choice is made and is not a field of the row the page is sent. */
+/* Both editions of one catalog stay in the list, each under its own file's name. Dropping one
+   left its cards unnamed. A genuine edition still beats one that does not verify when the plant
+   below is lifted, and among those the higher rev wins. An id that did not parse keeps its own
+   row. `genuine` is how that choice is made and is not a field of the row the page is sent. */
 function isConflictName(name) {
   const n = path.basename(String(name || ""));
   const ext = path.extname(n);
@@ -9174,6 +9201,12 @@ function collapseEditions(rows) {
     const names = idxs.map(i => rows[i].name);
     const hasConflict = names.some(n => conflictNamedAmong(n, names) || isConflictName(n));
     if (!hasConflict) continue; /* plant:f3-conflict-only */
+    /* The plant keeps every conflict edition. Without it the old drop returns, and one file's cards go unnamed. */
+    if (hasConflict) {
+      let both = false;
+      both = true; /* plant:editions-both */
+      if (both) continue;
+    }
     let keep = idxs[0];
     for (let n = 1; n < idxs.length; n++) {
       if (betterEdition(rows[idxs[n]], rows[keep], names)) keep = idxs[n];
