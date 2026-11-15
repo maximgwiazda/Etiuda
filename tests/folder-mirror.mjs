@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 140;
+const EXPECTED = 142;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const { offWindows } = nodeRequire("./off-windows.cjs");
@@ -4400,6 +4400,43 @@ async function run() {
       });
       check(planted.ok, "r8b lifting plant:worker-own-now flushes with the id from startup: " + JSON.stringify(planted));
     }
+  }
+
+  /* r10: once a commit is posted, the page is answered with that commit, not with the ask timer (review 24, finding 10). */
+  async function askScript(mod, name, heldAt, doneAt) {
+    const share = folder(name + "-share");
+    const mirror = folder(name + "-mirror");
+    const askMs = 40;
+    const ctl = new mod.FolderSyncerController({
+      team: "t-" + crypto.randomBytes(8).toString("hex"), folder: share, mirror, checks, useWorker: false, pollMs: 60000, askMs
+    });
+    let abort = false;
+    ctl.worker = {
+      postMessage(msg) {
+        if (msg.type === "cas") setTimeout(() => ctl.answer({ type: "cas", id: msg.id, held: true, now: "old\n" }), heldAt);
+        else if (msg.type === "cas-commit") setTimeout(() => ctl.answer({ type: "cas", id: msg.id, done: true, result: { ok: true } }), doneAt);
+        else if (msg.type === "cas-abort") abort = true;
+      }
+    };
+    const result = await ctl.ask({ type: "cas", name: "shop.ec", sha: "abc", create: false }, () => ({ text: "newer\n" }));
+    if (heldAt > askMs) await new Promise(res => setTimeout(res, heldAt));
+    ctl.stop();
+    return { ok: !!(result && result.ok === true), busy: !!(result && result.busy === true), abort };
+  }
+  {
+    const held = await askScript(syncerMod, "r10a", 5, 70);
+    const early = await askScript(syncerMod, "r10a-early", 60, 0);
+    check(held.ok && !held.busy && early.busy && early.abort && !early.ok,
+      "r10a a commit already posted answers the page, and a timer that runs before the lock is held still lets that lock go: "
+      + JSON.stringify({ held, early }));
+  }
+  if (PLANTS_OFF) skip("r10b lifting plant:ask-commit-holds answers busy after the commit was posted: NOT RUN");
+  else {
+    const planted = await testPlant("ask-commit-holds", syncerFile, async (scratch) => {
+      const got = await askScript(nodeRequire(scratch), "r10b", 5, 70);
+      return got.busy && !got.ok;
+    });
+    check(planted.ok, "r10b lifting plant:ask-commit-holds answers busy after the commit was posted: " + JSON.stringify(planted));
   }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {

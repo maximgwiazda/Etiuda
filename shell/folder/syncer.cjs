@@ -1865,6 +1865,7 @@ class FolderSyncerController {
     this.onChange = opts.onChange;
     this.onFail = opts.onFail;
     this.pollMs = opts.pollMs || FOLDER_SYNC_CADENCE_MS;
+    this.askMs = opts.askMs > 0 ? opts.askMs : SHARE_ASK_MS;
     this.worker = null;
     this.stopped = false;
     this.asked = 0;
@@ -1999,15 +2000,17 @@ class FolderSyncerController {
   ask(msg, judge) {
     const id = ++this.asked;
     return new Promise(resolve => {
-      const timer = setTimeout(() => this.settle(id, msg.type === "read" ? null : { ok: false, busy: true }), SHARE_ASK_MS);
+      const timer = setTimeout(() => this.settle(id, msg.type === "read" ? null : { ok: false, busy: true }, true), this.askMs);
       if (timer.unref) timer.unref();
       this.waits.set(id, { resolve, timer, judge });
       this.worker.postMessage(Object.assign({ id }, msg));
     });
   }
-  settle(id, value) {
+  settle(id, value, fromTimer) {
     const w = this.waits.get(id);
     if (!w) return;
+    /* A timer already queued when the commit was posted must not answer busy over that commit. */
+    if (fromTimer && w.committing) return;
     this.waits.delete(id);
     clearTimeout(w.timer);
     w.resolve(value);
@@ -2020,7 +2023,10 @@ class FolderSyncerController {
       if (!w) { if (this.worker) this.worker.postMessage({ type: "cas-abort", id: msg.id }); return; }
       let verdict = null;
       try { verdict = w.judge(msg.now); } catch { verdict = { result: { ok: false, busy: true } }; }
-      if (verdict && typeof verdict.text === "string") this.worker.postMessage({ type: "cas-commit", id: msg.id, text: verdict.text });
+      if (verdict && typeof verdict.text === "string") {
+        w.committing = true; clearTimeout(w.timer); /* plant:ask-commit-holds */
+        this.worker.postMessage({ type: "cas-commit", id: msg.id, text: verdict.text });
+      }
       else { this.worker.postMessage({ type: "cas-abort", id: msg.id }); this.settle(msg.id, (verdict && verdict.result) || { ok: false }); }
       return;
     }
