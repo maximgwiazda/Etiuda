@@ -893,6 +893,11 @@ function tourActTests() {
     reset("cards", { win: "settings" }); T.tourActSoon(); fire(); chatBack = where();
     if (where() === "chatTab [settings]") { page.win = null; T.tourActSoon(); fire(); chatBack += ">" + where(); }
   }
+  /* Back from the detour returns to the step before the one it came from, not to the tour's start. */
+  reset("seg", { win: "settings" }); T.tourActSoon(); fire(); const detoured = where(); T.tourPrev(); const detourBack = where();
+  reset("chatTab", { win: "settings" }); T.tourPrev(); const plainBack = where();
+  eq("Back from the detour to a conversation goes to the step before the one it came from, and from a plain detour to the step before it",
+    [detoured, detourBack, plainBack], ["chatTab [settings]", "tabs [settings]", "name [settings]"]);
   const hiddenShellEl = { getClientRects: () => [{}], closest: sel => (sel.indexOf(".shell") > -1 ? {} : null) };
   const hiddenVizEl = { getClientRects: () => [{}], closest: () => null, checkVisibility: () => false };
   const visibleEl = { getClientRects: () => [{}], closest: () => null, checkVisibility: () => true };

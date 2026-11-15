@@ -1075,8 +1075,10 @@ function tourPrev(){
   if(!tourRunning) return;
   const step=TOUR_STEPS[tourIdx];
   if(step && step.inside) shutTourWindow(step, true);
+  // Back from the detour to a conversation goes to the step before the one it came from, not before the detour.
+  const came=step && step.id==="chatTab" && tourReturnId ? TOUR_STEPS.findIndex(x=>x.id===tourReturnId) : -1;
   tourReturnId="";
-  const n=onFrom(tourIdx-1,-1);
+  const n=onFrom((came>=0 ? came : tourIdx)-1,-1);
   if(n>=0) showTourStep(n);
 }
 function wireTourUi(){

@@ -29465,8 +29465,9 @@ What you type stays in this browser only.`;
     if (!tourRunning) return;
     const step = TOUR_STEPS[tourIdx];
     if (step && step.inside) shutTourWindow(step, true);
+    const came = step && step.id === "chatTab" && tourReturnId ? TOUR_STEPS.findIndex((x) => x.id === tourReturnId) : -1;
     tourReturnId = "";
-    const n = onFrom(tourIdx - 1, -1);
+    const n = onFrom((came >= 0 ? came : tourIdx) - 1, -1);
     if (n >= 0) showTourStep(n);
   }
   function wireTourUi() {
