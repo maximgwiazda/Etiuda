@@ -28,7 +28,13 @@ const E_CATALOG_FOLDER_KEY="eCatalogFolder";
 const E_CATALOG_SCRIPT="etiuda-catalog.js";
 function eCatalogFolder(){
   const h=eHost(); if(!h) return "";
+  if(h.catalogFolderPolicy) return String(h.catalogFolderPolicy);
   return String(lsGet(E_CATALOG_FOLDER_KEY)||h.catalogFolder||"");
+}
+/* True where machine policy names the folder, so no other is offered or chosen. */
+function eCatalogFolderPinned(){
+  const h=eHost();
+  return !!(h && h.catalogFolderPolicy);
 }
 /* THE FOLDER AS WINDOWS NAMES IT, which is the last two segments: a full path is the answer to
    "where exactly" and belongs on hover, while the sentence in front of a person has to fit one
@@ -190,6 +196,7 @@ function eLoadedCatalogFile(){
    so the two cannot drift about what a closed dialog or a refused write means. Resolves to the
    folder actually set, and "" for anything that leaves the setting where it was. */
 function eChooseCatalogFolder(title){
+  if(eCatalogFolderPinned()) return Promise.resolve("");
   return ePickCatalogFolder(title).then(dir=>{
     if(!dir || dir===eCatalogFolder()) return "";
     if(lsSet(E_CATALOG_FOLDER_KEY,dir,true)===false){ toastRefusal(t("That setting could not be saved.")); return ""; }
@@ -541,6 +548,7 @@ export {
   eCatalogRing,
   eCatalogLeads,
   eChooseCatalogFolder,
+  eCatalogFolderPinned,
   eLoadedCatalogFile,
   eCatalogIn,
   eCatalogBuiltIn,

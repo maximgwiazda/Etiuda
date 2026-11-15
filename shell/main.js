@@ -7083,6 +7083,11 @@ function setTeamNeedsFolder(teamId, doc, mirrorDir) {
 }
 
 function pickMovedFolder(teamId, pickedFolder) {
+  const named = sayJoinPolicy().folder;
+  if (named && !policySameFolder(pickedFolder, named)) {
+    teamSay("a folder picked for team " + teamId + " is not the one machine policy names, so this desk stays with the policy's folder");
+    return { ok: false, error: "policy" };
+  }
   const need = teamNeedsFolder[teamId];
   const pinned = teamPins[teamId];
   const minRev = need ? need.rev : 0;
@@ -8660,6 +8665,8 @@ ipcMain.on("etiuda:host", (e) => {
        them and the offer's line names the folder it accepts from. The preload asks for the
        catalog first, so catalogFrom is already the answer by the time this is read. */
     catalogFolder: catalogFolder(),
+    // The folder machine policy names, or "": the page shows it over the desk key and offers no other.
+    catalogFolderPolicy: sayJoinPolicy().folder,
     catalogFile: catalogFrom ? path.basename(catalogFrom) : "",
     catalogIn: folderShown(catalogFrom),
     catalogBuiltIn: isBuiltIn(catalogFrom),
@@ -9193,6 +9200,7 @@ ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e)
    setting is the engine's, through the ordinary desk key the search order above reads. */
 ipcMain.handle("etiuda:pick-catalog-folder", async (e, title) => {
   if (!fromEngine(e)) return "";
+  if (sayJoinPolicy().folder) return ""; /* plant:pick-under-policy */
   const win = BrowserWindow.fromWebContents(e.sender);
   const opts = {
     title: String(title || "Etiuda").slice(0, 120),

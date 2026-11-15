@@ -39,7 +39,7 @@ const ASIDE = {
   "15ep": offWindows("15ep", "15em stands aside off Windows, so lifting plant:w2-folder-not-writable has no green leg there to turn"),
 };
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 180;
+const EXPECTED = 182;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -4794,6 +4794,68 @@ try {
       none: good.indexOf('data-row="teampolicy"') < 0 };
     check(Object.keys(f).every(k => f[k]), "15r8a a policy value this desk cannot use is printed in Settings in the shell's own sentences,"
       + " first in the team section, and a good key prints none: " + JSON.stringify(f));
+  });
+
+  /* 15r8b: while machine policy names the folder, the desk's folder is that one on both sides (finding 2). The shell tells the
+     page the policy's folder, its folder picker opens no dialog and answers nothing, and Open a folder for a moved team is
+     refused for any other folder; the page shows the policy's folder over the desk key and its Change folder opens no picker
+     and offers no button. THE CONTROL, the same desk with no policy: the dialog opens and its folder is answered. */
+  await legTry("15r8b", async () => {
+    if (!WIN) { check(true, "15r8b off Windows the shell reads no machine policy, so the folder is the desk's own"); return; }
+    const named = folder("r8b-named"), other = folder("r8b-other");
+    const deskUnder = async (rows, name) => {
+      const opened = [];
+      const dialog = { showOpenDialog: async () => { opened.push(1); return { canceled: false, filePaths: [other] }; } };
+      REG.policy = rows ? regText(rows) : null;
+      try { const D = await deskWith(name, folder(name + "-own"), null, null, { dialog: dialog }); D.opened = opened; return D; }
+      finally { REG.policy = null; }
+    };
+    const outcome = async D => {
+      const facts = D.sync("etiuda:host") || {};
+      const picked = await D.ask("etiuda:pick-catalog-folder", "Choose");
+      const moved = await D.join("pick-moved-folder", TEAM, other);
+      return { pinned: facts.catalogFolderPolicy || "", picked: picked, dialogs: D.opened.length, moved: moved && moved.error };
+    };
+    const under = await outcome(await deskUnder([["TeamFolder", named]], "r8b-under"));
+    const plain = await outcome(await deskUnder(null, "r8b-plain"));
+    const HO = await import(MOD("host.js"));
+    const hostWas = window.E_HOST, keyWas = ST.lsGet("eCatalogFolder");
+    let pagePicks = 0, page = {};
+    try {
+      ST.lsSet("eCatalogFolder", other);
+      window.E_HOST = { catalogFolder: named, catalogFolderPolicy: named, pickCatalogFolder: () => { pagePicks++; return other; } };
+      const chose = await HO.eChooseCatalogFolder("Choose");
+      page.pinned = { shown: HO.eCatalogFolder(), chose: chose, picks: pagePicks, key: ST.lsGet("eCatalogFolder") };
+      window.E_HOST = { catalogFolder: named, pickCatalogFolder: () => { pagePicks++; return named; } };
+      page.plain = { shown: HO.eCatalogFolder() };
+    } finally {
+      window.E_HOST = hostWas;
+      if (keyWas == null) ST.lsDel("eCatalogFolder"); else ST.lsSet("eCatalogFolder", keyWas);
+    }
+    const manage = fs.readFileSync(path.join(ROOT, "src", "modules", "manage.js"), "utf8");
+    const tail = (manage.match(/function catalogFolderTail\(withId\)\{[\s\S]*?\n\}/) || [""])[0];
+    const f = { shell: under.pinned === named && under.picked === "" && under.dialogs === 0 && under.moved === "policy",
+      control: plain.pinned === "" && plain.picked === other && plain.dialogs === 1 && plain.moved !== "policy",
+      page: page.pinned.shown === named && page.pinned.chose === "" && page.pinned.picks === 0 && page.pinned.key === other && page.plain.shown === other,
+      button: /eCatalogFolderPinned\(\)/.test(tail) };
+    check(Object.keys(f).every(k => f[k]), "15r8b while machine policy names the folder, the shell and the page show that folder, the folder"
+      + " picker opens nothing, a moved team's Open a folder is refused for another folder, and the Library offers no Change folder;"
+      + " the control opens the dialog: " + JSON.stringify(f) + " " + JSON.stringify({ under: under, plain: plain, page: page }));
+    if (PLANTS_OFF) { skip("15r8b lifting plant:pick-under-policy opens the folder dialog under the policy (ETIUDA_PLANTS=off)"); return; }
+    const lines = SRC.split("\n"), at = lines.map((l, i) => (l.includes("/* plant:pick-under-policy */") ? i : -1)).filter(i => i >= 0);
+    let liftedPick = null;
+    if (at.length === 1) {
+      lines.splice(at[0], 1);
+      const opened = [];
+      REG.policy = regText([["TeamFolder", named]]);
+      try {
+        const D = await deskWith("r8b-lifted", folder("r8b-lifted-own"), null, lines.join("\n"),
+          { dialog: { showOpenDialog: async () => { opened.push(1); return { canceled: false, filePaths: [other] }; } } });
+        liftedPick = { picked: await D.ask("etiuda:pick-catalog-folder", "Choose"), dialogs: opened.length };
+      } finally { REG.policy = null; }
+    }
+    check(!!liftedPick && liftedPick.picked === other && liftedPick.dialogs === 1,
+      "15r8b lifting plant:pick-under-policy opens the folder dialog under the policy and answers its folder: " + JSON.stringify(liftedPick));
   });
 
   /* Last, over every desk above: the log of each holds none of the secrets any invitation carried. */

@@ -16814,6 +16814,7 @@ What you type stays in this browser only.`;
     eCatalogFile: () => eCatalogFile,
     eCatalogFiles: () => eCatalogFiles,
     eCatalogFolder: () => eCatalogFolder,
+    eCatalogFolderPinned: () => eCatalogFolderPinned,
     eCatalogFolderShort: () => eCatalogFolderShort,
     eCatalogIn: () => eCatalogIn,
     eCatalogLeads: () => eCatalogLeads,
@@ -16867,7 +16868,12 @@ What you type stays in this browser only.`;
   function eCatalogFolder() {
     const h = eHost();
     if (!h) return "";
+    if (h.catalogFolderPolicy) return String(h.catalogFolderPolicy);
     return String(lsGet(E_CATALOG_FOLDER_KEY) || h.catalogFolder || "");
+  }
+  function eCatalogFolderPinned() {
+    const h = eHost();
+    return !!(h && h.catalogFolderPolicy);
   }
   function eCatalogFolderShort(dir) {
     const full = dir == null ? eCatalogFolder() : String(dir);
@@ -17024,6 +17030,7 @@ What you type stays in this browser only.`;
     return eCatalogAccepted(eCatalog()) ? eCatalogFile() : "";
   }
   function eChooseCatalogFolder(title) {
+    if (eCatalogFolderPinned()) return Promise.resolve("");
     return ePickCatalogFolder(title).then((dir) => {
       if (!dir || dir === eCatalogFolder()) return "";
       if (lsSet(E_CATALOG_FOLDER_KEY, dir, true) === false) {
@@ -35406,7 +35413,7 @@ What you type stays in this browser only.`;
   function catalogFolderTail(withId) {
     const pathId = withId ? ' id="mgCatFolderPath"' : "";
     const editId = withId ? ' id="mgCatFolder"' : "";
-    return '<span class="ec-where"><code class="open-folder"' + pathId + ' role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '" aria-label="' + esc(t("Open this folder")) + ": " + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + '</code><button type="button" class="btn icbtn ec-where-edit"' + editId + ' title="' + esc(t("Change folder…")) + '" aria-label="' + esc(t("Change folder…")) + '">' + ICON_EDIT + "</button></span>";
+    return '<span class="ec-where"><code class="open-folder"' + pathId + ' role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '" aria-label="' + esc(t("Open this folder")) + ": " + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>" + (eCatalogFolderPinned() ? "" : '<button type="button" class="btn icbtn ec-where-edit"' + editId + ' title="' + esc(t("Change folder…")) + '" aria-label="' + esc(t("Change folder…")) + '">' + ICON_EDIT + "</button>") + "</span>";
   }
   function mgSec(key, title, body, count, tail) {
     return '<details class="manage-sec" data-mg="' + esc(key) + '"' + (mgOpen.has(key) ? " open" : "") + '><summary><span class="acc-tw" aria-hidden="true">' + ICON_CHEVRON_R + "</span><h3>" + esc(title) + "</h3>" + (count != null ? '<span class="mg-count">' + esc(String(count)) + "</span>" : "") + (tail || "") + '</summary><div class="manage-secbody">' + body + "</div></details>";
