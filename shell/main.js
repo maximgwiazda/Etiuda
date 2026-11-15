@@ -112,11 +112,24 @@ function folderSyncerFailed(e) {
 }
 
 /* THE PROXY IS CHOSEN HERE, BEFORE READY: a setProxy after ready would not stop the first lookup.
-   Windows' own setting is followed where it names a setup script or a server (per-machine under
-   ProxySettingsPerUser 0). Where none is named and the Connections flags say direct only, no proxy
-   is passed; automatic detection or a failed read leaves Chromium's resolver. */
-const { windowsProxySwitches } = require(path.join(__dirname, "win-proxy.cjs"));
+   Windows' own setting is followed where it names a setup script or a server (machine policy first,
+   then per-machine under ProxySettingsPerUser 0). Where none is named and the Connections flags say
+   direct only, no proxy is passed; automatic detection or a failed read leaves Chromium's resolver. */
+const { windowsProxySwitches, windowsProxyChange } = require(path.join(__dirname, "win-proxy.cjs"));
 for (const s of windowsProxySwitches()) app.commandLine.appendSwitch(...s);
+/* Those switches hold for the run, so Windows' setting is read again where it may have changed: after sleep, and when a
+   call fails other than for being offline, at most once a minute. A change goes to the session, which resolves by it. */
+const PROXY_RECHECK_MS = 60 * 1000;
+let proxyCheckedAt = 0;
+function proxyRecheck(e) {
+  try {
+    if (e && (e.name === "AbortError" || /ERR_INTERNET_DISCONNECTED/.test(String(e.message || "")))) return;
+    if (!app.isReady() || Date.now() - proxyCheckedAt < PROXY_RECHECK_MS) return; /* plant:proxy-recheck-bound */
+    proxyCheckedAt = Date.now();
+    const cfg = windowsProxyChange();
+    if (cfg) Promise.resolve(session.defaultSession.setProxy(cfg)).catch(() => { /* the switches stand */ });
+  } catch { /* the switches stand */ }
+}
 /* A PROXY THAT ASKS FOR A SIGN-IN (shell/proxy-net.cjs): every call the shell makes goes through deskFetch, and a challenge
    Chromium cannot answer with the Windows account is asked of the person on the page, once per proxy, the answer held in
    memory for this run and never written or logged. The relay's socket follows the proxy Chromium names (relayConnect). */
@@ -128,7 +141,7 @@ const deskProxy = proxyNet.proxyAsker({
   say: line => console.error("etiuda: " + line),
 });
 function deskFetch(u, init) {
-  if (net && typeof net.request === "function") return proxyNet.fetchThrough(net, u, init, deskProxy.forRequest()); /* plant:desk-fetch-login */
+  if (net && typeof net.request === "function") return proxyNet.fetchThrough(net, u, init, deskProxy.forRequest()).catch(e => { proxyRecheck(e); throw e; }); /* plant:desk-fetch-login */
   return net && typeof net.fetch === "function" ? net.fetch(u, init) : Promise.reject(new Error("no network here"));
 }
 /* Every question still open goes to the page whenever it loads, so one asked before the window opened waits for it. */
@@ -12869,7 +12882,7 @@ if (!theOnlyOne || (Array.isArray(process.argv) && process.argv.includes("--upda
         try { syncJumpList(); } catch { /* the jump list still stands */ }
         hotkeyReady = true; syncHotkey();
         // Asked for here: powerMonitor is not to be used before the app is ready.
-        require("electron").powerMonitor.on("resume", () => resumeFromSleep(theWindow));
+        require("electron").powerMonitor.on("resume", () => { resumeFromSleep(theWindow); proxyCheckedAt = 0; proxyRecheck(); });
       });
     });
   });

@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 125;
+const EXPECTED = 134;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -46,7 +46,7 @@ const APP = path.join(LAB, "app");
 const EXPOSE = ["renamePatiently", "writeReplacing", "saveWindowPlace", "windowFile", "readCatalog", "channelHash",
   "SAMPLE_EDITIONS", "catalogChanged", "sendListing", "spellingFromPackage", "chromiumDesktop", "keyringSwitch",
   "RENAME_RETRIES", "RENAME_WAIT_MS", "uniqueTempPath", "drainWrites", "tabsFile", "handleUpdateClose",
-  "WRITE_DRAIN_BOUND_MS", "writeReplacingAsync"];
+  "WRITE_DRAIN_BOUND_MS", "writeReplacingAsync", "proxyRecheck"];
 
 /* node:fs with a hook per call: `ctl.renameSync = (real, ...args) => ...` decides that call,
    and a call without a hook goes to the real one. `ctl.any` sees every synchronous call first,
@@ -142,7 +142,9 @@ const QUIET_CONN = connDump(1, CONN_KEY);
    opts.session: the electron session in place of the stand-in; opts.order: an array a window's construction is pushed to;
    opts.bus: the session bus dbus-send meets, a function of its arguments (leg 14); opts.env: variables set while the file loads (null removes one), over XDG_CURRENT_DESKTOP=GNOME, so the keyring switch of
    leg 14 is asked for only where a leg names a desktop that wants it. opts.window: a function of the options that builds the desk's
-   window in place of the stand-in; opts.screen: electron's screen; opts.place: window.json's contents (leg 15); opts.packaged: app.isPackaged (leg 16). */
+   window in place of the stand-in; opts.screen: electron's screen; opts.place: window.json's contents (leg 15); opts.packaged: app.isPackaged (leg 16);
+   opts.isReady: app.isReady answers true with no window built (leg 6x); opts.ownSrc: a shell file's text by name, in place of
+   the file beside main.js (leg 6P). */
 function loadShell(opts) {
   const o = opts || {};
   const dir = path.join(LAB, "load" + (++loads));
@@ -162,6 +164,7 @@ function loadShell(opts) {
   const win = anything({ isDestroyed: () => false, webContents: wc });
   const electron = {
     app: { getPath: n => (n === "documents" ? DOCS : UD), setPath: (k, v) => { if (o.paths) o.paths.push([k, v]); }, requestSingleInstanceLock: () => !!o.ready, isPackaged: !!o.packaged,
+           isReady: () => !!(o.ready || o.isReady),
            quit: noop, on: (ev, fn) => { (appOn[ev] = appOn[ev] || []).push(fn); }, getVersion: () => "0.0.0",
            commandLine: { appendSwitch: (...a) => { switches.push(a); }, hasSwitch: k => onLine.has(k),
                           removeSwitch: k => { if (onLine.delete(k)) removed.push(k); } },
@@ -202,7 +205,7 @@ function loadShell(opts) {
      stand-ins above reach its own requires: the planted reg tool is the proxy reader's. */
   const own = {};
   const ownModule = n => { const m = { exports: {} };
-    new Function("require", "module", "exports", "__dirname", "__filename", realFs.readFileSync(n, "utf8"))(fakeRequire, m, m.exports, path.dirname(n), n);
+    new Function("require", "module", "exports", "__dirname", "__filename", (o.ownSrc && o.ownSrc[path.basename(n)]) || realFs.readFileSync(n, "utf8"))(fakeRequire, m, m.exports, path.dirname(n), n);
     return m.exports; };
   const fakeRequire = n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? fs : n === "node:child_process" ? cp
     : (path.isAbsolute(n) && /\.cjs$/.test(n)) ? (own[n] || (own[n] = ownModule(n))) : nodeRequire(n));
@@ -1003,11 +1006,14 @@ try {
       check(stripped !== SRC && bare.switches.length === 0,
         "6d THE CONTROL: the same shell with that one line removed asks for no switch, so 6a can fail: "
         + JSON.stringify(bare.switches));
-      const server = loadShell({ reg: regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", "proxy.example.test:3128"],
-        ["ProxyOverride", "REG_SZ", "<local>"]]) });
-      check(JSON.stringify(asked(server)) === '["proxy-server=proxy.example.test:3128"]',
-        "6e a configured proxy server is followed, and the no-proxy switch is not asked: " + JSON.stringify(asked(server)));
-      const script = loadShell({ reg: regDump([["ProxyEnable", "REG_DWORD", "0x0"], ["AutoConfigURL", "REG_SZ", "http://wpad.example.test/proxy.pac"]]) });
+      /* The user's key alone names it; the machine policy key answers as it does on a desk with no policy. */
+      const userOnly = dump => args => (String(args && args[1] || "") === POLICY_KEY ? regDump([], POLICY_KEY) : dump);
+      const server = loadShell({ reg: userOnly(regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", "proxy.example.test:3128"],
+        ["ProxyOverride", "REG_SZ", "<local>;*.corp.example.test"]])) });
+      check(JSON.stringify(asked(server)) === '["proxy-server=proxy.example.test:3128","proxy-bypass-list=<local>;*.corp.example.test"]',
+        "6e a configured proxy server is followed with Windows' own exceptions as its bypass list, and the no-proxy switch is not asked: "
+        + JSON.stringify(asked(server)));
+      const script = loadShell({ reg: userOnly(regDump([["ProxyEnable", "REG_DWORD", "0x0"], ["AutoConfigURL", "REG_SZ", "http://wpad.example.test/proxy.pac"]])) });
       check(JSON.stringify(asked(script)) === '["proxy-pac-url=http://wpad.example.test/proxy.pac"]',
         "6f a configured setup-script address is followed: " + JSON.stringify(asked(script)));
       const stale = loadShell({ reg: regDump([["ProxyEnable", "REG_DWORD", "0x0"], ["ProxyServer", "REG_SZ", "proxy.example.test:3128"]]) });
@@ -1040,8 +1046,8 @@ try {
         "6k the reader on its own: a script outranks a server, a per-scheme server list passes whole, an address that is not http, https"
         + " or file is none, and no text at all is none");
       const ownReader = /function (?:proxySwitchesFrom|windowsProxySwitches)\(/.test(SRC);
-      check(!!rd && typeof P.windowsProxySwitches === "function" && !ownReader
-        && SRC.split('const { windowsProxySwitches } = require(path.join(__dirname, "win-proxy.cjs"));').length === 2,
+      check(!!rd && typeof P.windowsProxySwitches === "function" && typeof P.windowsProxyChange === "function" && !ownReader
+        && SRC.split('const { windowsProxySwitches, windowsProxyChange } = require(path.join(__dirname, "win-proxy.cjs"));').length === 2,
         "6m the shell holds no reader of its own and takes windowsProxySwitches from shell/win-proxy.cjs beside it, the file 6j and 6k"
         + " read alone: " + (rd ? "found" : "NOT FOUND") + (ownReader ? ", and a reader of its own" : ""));
       const builder = nodeRequire(path.join(ROOT, "electron-builder.js"));
@@ -1118,6 +1124,92 @@ try {
       check(SRC.split(LINE).length === 2 && JSON.stringify(asked(blind)) === '["no-proxy-server"]',
         "6S THE CONTROL: a shell that ignores the reader and always asks for no proxy, handed a per-machine"
         + " server, does not give the server, so 6s goes red on it: " + JSON.stringify(asked(blind)));
+      /* ---- 6v to 6y and 6P: the proxy a policy names, a leftover script, and Windows read again after the start ---- */
+      const quietUser = { [USER_KEY]: regDump([["ProxyEnable", "REG_DWORD", "0x0"]], USER_KEY), [USER_CONN_KEY]: connDump(0x01, USER_CONN_KEY) };
+      const policyCase = o => {
+        const byServer = loadShell(Object.assign({ reg: regKeys(Object.assign({ [POLICY_KEY]: serverOn(POLICY_KEY, "policy.example.test:8080") }, quietUser)) }, o));
+        const byScript = loadShell(Object.assign({ reg: regKeys(Object.assign({ [POLICY_KEY]: regDump([["AutoConfigURL", "REG_SZ", "http://pac.example.test/p.pac"]], POLICY_KEY) }, quietUser)) }, o));
+        return [asked(byServer), asked(byScript)];
+      };
+      const POLICY_WANT = '[["proxy-server=policy.example.test:8080"],["proxy-pac-url=http://pac.example.test/p.pac"]]';
+      const pc = policyCase();
+      check(JSON.stringify(pc) === POLICY_WANT,
+        "6v a server or a setup script named in the machine policy key itself is followed, where the user's settings say direct"
+        + " only, and --no-proxy-server is not asked: " + JSON.stringify(pc));
+      const leftover = (flags, o) => asked(loadShell(Object.assign({ reg: regKeys({
+        [POLICY_KEY]: regDump([], POLICY_KEY),
+        [USER_KEY]: regDump([["AutoConfigURL", "REG_SZ", "http://old.example.test/proxy.pac"], ["ProxyEnable", "REG_DWORD", "0x1"],
+          ["ProxyServer", "REG_SZ", "proxy.example.test:3128"]], USER_KEY),
+        [USER_CONN_KEY]: flags === null ? new Error("reg.exe failed") : connDump(flags, USER_CONN_KEY),
+      }) }, o)));
+      const LEFT_WANT = '[["proxy-server=proxy.example.test:3128"],["proxy-server=proxy.example.test:3128"],["proxy-pac-url=http://old.example.test/proxy.pac"],["proxy-pac-url=http://old.example.test/proxy.pac"]]';
+      const lc = [leftover(0x03), leftover(0x01), leftover(0x05), leftover(null)];
+      check(JSON.stringify(lc) === LEFT_WANT,
+        "6w a setup script left beside an enabled server gives way to the server where the Connections flags leave the script off"
+        + " (0x03, 0x01), and is followed where they turn it on (0x05) or cannot be read: " + JSON.stringify(lc));
+      /* A desk started direct only, then moved to a network whose proxy Windows names: the session is told, once a minute at most. */
+      const laterCase = o => {
+        let phase = "direct";
+        const set = [];
+        const S = loadShell(Object.assign({ isReady: true, session: { defaultSession: { setProxy: cfg => { set.push(cfg); return Promise.resolve(); } } },
+          reg: args => regKeys(phase === "direct" ? Object.assign({ [POLICY_KEY]: regDump([], POLICY_KEY) }, quietUser) : {
+            [POLICY_KEY]: regDump([], POLICY_KEY), [USER_KEY]: serverOn(USER_KEY, "proxy.example.test:3128"), [USER_CONN_KEY]: connDump(0x03, USER_CONN_KEY) })(args) }, o));
+        const start = asked(S), r0 = S.regCalls.length;
+        phase = "server";
+        if (S.api.proxyRecheck) S.api.proxyRecheck(new Error("net::ERR_NAME_NOT_RESOLVED"));
+        const r1 = S.regCalls.length;
+        if (S.api.proxyRecheck) S.api.proxyRecheck(new Error("net::ERR_CONNECTION_TIMED_OUT"));
+        return { start, set, reads: [r1 - r0, S.regCalls.length - r1] };
+      };
+      const LATER_WANT = '{"start":["no-proxy-server"],"set":[{"mode":"fixed_servers","proxyRules":"proxy.example.test:3128"}],"reads":[3,0]}';
+      const lt = laterCase();
+      check(JSON.stringify(lt) === LATER_WANT,
+        "6x a desk started direct only reads Windows again when a call fails, and hands the session the server Windows now names;"
+        + " a second failure within the minute reads nothing: " + JSON.stringify(lt));
+      const stillCase = o => {
+        const set = [];
+        const S = loadShell(Object.assign({ isReady: true, session: { defaultSession: { setProxy: cfg => { set.push(cfg); return Promise.resolve(); } } },
+          reg: regKeys(Object.assign({ [POLICY_KEY]: regDump([], POLICY_KEY) }, quietUser)) }, o));
+        const r0 = S.regCalls.length;
+        if (S.api.proxyRecheck) {
+          S.api.proxyRecheck(Object.assign(new Error("aborted"), { name: "AbortError" }));
+          S.api.proxyRecheck(new Error("net::ERR_INTERNET_DISCONNECTED"));
+        }
+        const r1 = S.regCalls.length;
+        if (S.api.proxyRecheck) S.api.proxyRecheck(new Error("net::ERR_NAME_NOT_RESOLVED"));
+        return { reads: [r1 - r0, S.regCalls.length - r1], set: set.length };
+      };
+      const STILL_WANT = '{"reads":[0,3],"set":0}';
+      const st = stillCase();
+      const wired = SRC.split(".catch(e => { proxyRecheck(e); throw e; }); /* plant:desk-fetch-login */").length === 2
+        && SRC.split('powerMonitor.on("resume", () => { resumeFromSleep(theWindow); proxyCheckedAt = 0; proxyRecheck(); });').length === 2;
+      check(JSON.stringify(st) === STILL_WANT && wired,
+        "6y an aborted call or one made offline reads nothing, an unchanged setting tells the session nothing, and deskFetch's"
+        + " failures and waking from sleep are what ask: " + JSON.stringify(st) + (wired ? "" : ", NOT WIRED"));
+      /* Each plant in a copy: lifted, or its first form put as the second; its own leg's case run on it, and red expected. */
+      const WIN_SRC = realFs.readFileSync(path.join(ROOT, "shell", "win-proxy.cjs"), "utf8");
+      const planted = (text, mark, from, to) => {
+        const lines = text.split("\n"), marked = lines.filter(l => l.indexOf(mark) >= 0);
+        const ok = marked.length === 1 && (!from || marked[0].split(from).length === 2);
+        return ok ? (from ? lines.map(l => (l.indexOf(mark) >= 0 ? l.replace(from, () => to) : l)) : lines.filter(l => l.indexOf(mark) < 0)).join("\n") : null;
+      };
+      const PROXY_PLANTS = [
+        ["win", "plant:proxy-policy-named", null, null, o => JSON.stringify(policyCase(o)) !== POLICY_WANT],
+        ["win", "plant:proxy-script-flag", 'hasScript && !(hasServer && typeof flags === "number" && (flags & 0x04) === 0)', "hasScript",
+          o => JSON.stringify([leftover(0x03, o), leftover(0x01, o), leftover(0x05, o), leftover(null, o)]) !== LEFT_WANT],
+        ["win", "plant:proxy-bypass", "/^\\S{1,2048}$/.test(bypass) ?", "false ?",
+          o => JSON.stringify(asked(loadShell(Object.assign({ reg: userOnly(regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", "proxy.example.test:3128"],
+            ["ProxyOverride", "REG_SZ", "<local>"]])) }, o)))) !== '["proxy-server=proxy.example.test:3128","proxy-bypass-list=<local>"]'],
+        ["win", "plant:proxy-change-same", null, null, o => JSON.stringify(stillCase(o)) !== STILL_WANT],
+        ["main", "plant:proxy-recheck-bound", null, null, o => JSON.stringify(laterCase(o)) !== LATER_WANT],
+      ];
+      for (const [where, mark, from, to, red] of PROXY_PLANTS) {
+        if (PLANTS_OFF) { skip("6P " + mark + " turns its leg red (ETIUDA_PLANTS=off)"); continue; }
+        const text = planted(where === "win" ? WIN_SRC : SRC, mark, from, to);
+        let turned = false;
+        try { turned = text !== null && red(where === "win" ? { ownSrc: { "win-proxy.cjs": text } } : { src: text }); } catch (e) { turned = false; }
+        check(turned, "6P " + (from ? "rewriting " : "lifting ") + mark + " turns its leg red" + (text === null ? ": the mark is not on one line" : ""));
+      }
     } finally { Object.defineProperty(process, "platform", platformWas); }
   }
   /* ---- 7. every IPC channel asks who is speaking before it answers ---------------------------

@@ -705,7 +705,9 @@ reachability probe; automatic detection (0x09) or a failed read leaves Chromium'
 still fires on the first hostname lookup. `tests/shell-office.mjs` leg 6 reads the switches the real
 `shell/main.js` sets, with electron stubbed and the keys planted, never read from the machine: the server,
 the script, the quiet answers, a per-machine server under policy, DefaultConnectionSettings flags 0x09
-and 0x01, a failed read leaving the resolver, and none once the line is cut out of a copy. That leg
+and 0x01, a failed read leaving the resolver, and none once the line is cut out of a copy; 6v to 6y add
+a proxy named in the policy key itself, a leftover script beside a server, and Windows read again after
+the start when a call fails or the desk wakes, its change handed to the session (6P, five plants). That leg
 proves the switch is set; only Electron can prove what Chromium then does. `tests/desk.js` runs C and D
 do that, each on a profile of its own with `--log-net-log`: C is the shell with the line cut out and
 must show discovery, and D, the shipped shell: where automatic detection is left to Chromium (0x09), D
