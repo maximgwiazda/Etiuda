@@ -11494,13 +11494,18 @@ function storeSyncApply(patch, copies) {
     if (item.startsWith("k:")) keys[item.slice(2)] = patch[item];
     else storeSyncFile(item.slice(2), patch[item]);
   }
-  if (Object.keys(keys).length) patchDesk(JSON.stringify(keys));
+  if (Object.keys(keys).length && patchDesk(JSON.stringify(keys))) deskSyncedTell(keys);
   for (const c of copies) {
     try {
       fs.mkdirSync(storeSyncDir("kept"), { recursive: true });
       writeReplacing(storeSyncDir("kept", c.by + "-" + c.t + "-" + c.h.slice(0, 16) + ".txt"), JSON.stringify({ item: c.item, by: c.by, t: c.t, value: c.value }));
     } catch (e) { console.error("etiuda: a version another computer made could not be kept - " + e.message); }
   }
+}
+/* The open page keeps its own copy of the desk, so it is told what was put in place (src/modules/storage.js eDeskTake). */
+function deskSyncedTell(keys) {
+  const win = theWindow;
+  if (win && !win.isDestroyed()) try { win.webContents.send("etiuda:desk-synced", JSON.stringify(keys)); } catch { /* the page has gone */ } /* plant:desk-synced-tell */
 }
 /* A catalog file from another computer, into the catalog folder; one removed there is moved aside under userData\store\kept,
    never deleted. */

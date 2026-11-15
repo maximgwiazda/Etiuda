@@ -1,6 +1,6 @@
 import { $ } from "./dom.js";
 import { t, toastRefusal } from "./ui-lang.js";
-import { lsGet, lsSet, nsGet } from "./storage.js";
+import { lsGet, lsSet, nsGet, eDeskTake } from "./storage.js";
 import { eCatalog, eCatalogAccepted, eCatalogHanded, storedCatalog } from "./catalog.js";
 import { pack, setStatsFlush } from "./pack.js";
 import { statsDoc } from "./desk-stats.js";
@@ -471,6 +471,11 @@ function wireHost(){
   document.body.classList.add("e-host");
   if(h.testService===true) testServiceBand(document); /* plant:ts-band */
   if(typeof h.onStatsAsk==="function") h.onStatsAsk(answerStats);
+  /* What the store's sync put on the desk, taken and shown without a reload (restart.js takeSyncedDesk). */
+  if(typeof h.onDeskSynced==="function") h.onDeskSynced(text=>{
+    const keys=eDeskTake(text);
+    if(keys.length){ try{ hooks.takeSyncedDesk(keys); }catch(e){} } /* plant:desk-synced-shown */
+  });
   if(h.backdrop) document.body.classList.add("e-backdrop");
   if(h.platform) document.body.classList.add("e-"+String(h.platform).replace(/[^a-z0-9]/gi,""));
   eSetMaximized(!!h.maximized);

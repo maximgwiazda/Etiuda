@@ -1234,6 +1234,7 @@ onJoinPainted(()=>{
 export {
   openSettings,
   applyPrefs,
+  repaintScreen,
   hotkeyFromEvent,
   wireHotkeyRow,
   settingsBodyHtml,

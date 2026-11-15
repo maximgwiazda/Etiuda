@@ -136,6 +136,23 @@ function deskArm(){
     document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden") deskFlush(); });
   }catch(e){}
 }
+/* WHAT THE HOST PUT ON THE DESK BEHIND THIS PAGE, taken into the page's copy: a key this page still owes keeps the page's value,
+   which its own send carries. Returns the keys taken. */
+function eDeskTake(text){
+  if(!E_DESK || eWiping) return [];
+  let o=null;
+  try{ o=JSON.parse(text); }catch(e){ return []; }
+  if(!o || typeof o!=="object" || Array.isArray(o)) return [];
+  const taken=[];
+  Object.keys(o).forEach(k=>{
+    const v=o[k];
+    if((v!==null && typeof v!=="string") || eDeskOwed.has(k) || eDeskCarried.has(k)) return; /* plant:desk-take-owed */
+    if(v===null ? !(k in E_DESK.map) : E_DESK.map[k]===v) return;
+    if(v===null) delete E_DESK.map[k]; else E_DESK.map[k]=v;
+    taken.push(k);
+  });
+  return taken;
+}
 /* WHETHER WHAT THE PERSON DID IS ON THE DISK. A desk sending its whole map settles every earlier
    failure with one good write; a browser, and a desk sending patches, write key by key, so each
    failed key is settled only by its own next write. The notice that reads this is syncSaveNotice
@@ -365,6 +382,7 @@ export {
   orbitOldLayer,
   eCarryOldKeys,
   eSaveTrouble,
+  eDeskTake,
   eLastSaved,
   eDeskFile,
   eDeskFileShown,

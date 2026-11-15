@@ -4,15 +4,15 @@
    stay. Reached through hooks; tests/swap.mjs holds the result to a fresh start from the same
    storage, so a step added to boot() that reads any of the three belongs here too. */
 import { closeNotePane } from "./note-pane.js";
-import { resetPack, loadPack } from "./pack.js";
+import { resetPack, loadPack, takePack } from "./pack.js";
 import { resetAppState, putLang, lang } from "./app-state.js";
-import { resetIntentIds, snapshotBaseIntents } from "./intent-id.js";
+import { resetIntentIds, snapshotBaseIntents, setIntentOrderLoaded } from "./intent-id.js";
 import { dropCardPool } from "./card-pool.js";
 import { forgetRowNaturals } from "./shed.js";
 import { eForgetRecency } from "./recency.js";
 import { forgetLookEdits } from "./desk-look.js";
 import { rearmTrustRecheck } from "./catalog-trust.js";
-import { lsGet } from "./storage.js";
+import { lsGet, eLayer, LAYER_KEYS } from "./storage.js";
 import { uiLang, translateChrome } from "./ui-lang.js";
 import { applyBootCatalog } from "./catalog-boot.js";
 import { syncLangSeg, applyLangUI } from "./lang-seg.js";
@@ -25,17 +25,19 @@ import { rebuildCards } from "./rebuild.js";
 import { rebuildRailMQ, syncRailLayout, placeRailNow } from "./rail-panel.js";
 import { syncPillsCollapse } from "./pills-box.js";
 import { drawIntentRail } from "./rail-list.js";
-import { initTabs } from "./tabs.js";
+import { initTabs, drawPills } from "./tabs.js";
 import { syncSampleMark } from "./catalog-file.js";
 import { paintCatNow, paintCatWaiting } from "./catalog-offer.js";
 import { forgetEditionMarks } from "./edition-marks.js";
 import { syncRoleWheel } from "./agent.js";
-import { applyPrefs } from "./settings.js";
+import { applyPrefs, repaintScreen } from "./settings.js";
 import { focusFirstEntryOnOpen } from "./on-open.js";
 import { screenOn, screens, frontScreenTab } from "./screen-tabs.js";
 import { mtRefreshLive } from "./maintenance.js";
 import { tourAfterRestart, maybeStartTour } from "./tour.js";
 import { paintJoin, teamJoinShown } from "./team-join.js";
+import { render } from "./render.js";
+import { mgRefreshAround } from "./manage.js";
 
 function restartDesk(){
   const wasScreen=screenOn;
@@ -86,6 +88,38 @@ function restartDesk(){
   if(teamJoinShown()) paintJoin();
 }
 
+/* WHAT ANOTHER COMPUTER PUT ON THIS DESK, through the store's sync, shown where the person is with nothing started again: the layer
+   in view read again and drawn, the preferences applied, the screen in front drawn again unless a field on it holds the keyboard,
+   then once it lets go. An editor open over an entry that changed keeps its typing and says so (dialog.js edSubjectCheck). */
+function takeSyncedDesk(keys){
+  const layer=eLayer(), mine=n=>keys.indexOf(layer+n)>-1;
+  const packed=mine("Pack"), ordered=mine("CatOrder"), intents=mine("IntentOrder");
+  if(packed) takePack();
+  if(intents) setIntentOrderLoaded(false);
+  if(packed || ordered) loadCatOrder();
+  if(packed || ordered || intents){ rebuildCards(); drawPills(); drawIntentRail(); }
+  if(keys.some(k=>!LAYER_KEYS.some(n=>k===layer+n))) applyPrefs(); else render();
+  drawScreenSynced();
+}
+let screenSyncedOwed=false;
+function drawScreenSynced(){
+  const sh=document.getElementById("screenHost"), a=document.activeElement;
+  if(!screenOn || !sh) return;
+  const tag=a ? String(a.tagName||"").toLowerCase() : "";
+  const typing=!!a && sh.contains(a) && (a.isContentEditable || tag==="textarea" || tag==="select"
+    || (tag==="input" && !/^(checkbox|radio|range|button|submit|reset|color)$/i.test(a.type||"")));
+  if(typing){
+    if(!screenSyncedOwed){
+      screenSyncedOwed=true;
+      sh.addEventListener("focusout",()=>{ screenSyncedOwed=false; setTimeout(drawScreenSynced,0); },{once:true});
+    }
+    return;
+  }
+  if(screenOn==="settings") repaintScreen(); /* plant:synced-screen */
+  else if(screenOn==="library") mgRefreshAround(()=>{});
+}
+
 export {
-  restartDesk
+  restartDesk,
+  takeSyncedDesk
 };

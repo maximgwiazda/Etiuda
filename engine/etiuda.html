@@ -6529,6 +6529,7 @@ What you type stays in this browser only.`;
     showDeskNotices: () => showDeskNotices,
     showPackMigrationWarning: () => showPackMigrationWarning,
     syncSaveNotice: () => syncSaveNotice,
+    takePack: () => takePack,
     whoOptions: () => whoOptions
   });
 
@@ -6547,6 +6548,7 @@ What you type stays in this browser only.`;
     eDeskNewer: () => eDeskNewer,
     eDeskRefused: () => eDeskRefused,
     eDeskRefusedSeen: () => eDeskRefusedSeen,
+    eDeskTake: () => eDeskTake,
     eHomeless: () => eHomeless,
     eLastSaved: () => eLastSaved,
     eLayer: () => eLayer,
@@ -6636,7 +6638,8 @@ What you type stays in this browser only.`;
     "shedWordmarkW",
     "cardFillKey",
     "keepPoolAcross",
-    "restartDesk"
+    "restartDesk",
+    "takeSyncedDesk"
   ];
   var hooks = /* @__PURE__ */ Object.create(null);
   function wireHooks(map) {
@@ -6791,6 +6794,26 @@ What you type stays in this browser only.`;
       });
     } catch (e) {
     }
+  }
+  function eDeskTake(text) {
+    if (!E_DESK || eWiping) return [];
+    let o = null;
+    try {
+      o = JSON.parse(text);
+    } catch (e) {
+      return [];
+    }
+    if (!o || typeof o !== "object" || Array.isArray(o)) return [];
+    const taken = [];
+    Object.keys(o).forEach((k) => {
+      const v = o[k];
+      if (v !== null && typeof v !== "string" || eDeskOwed.has(k) || eDeskCarried.has(k)) return;
+      if (v === null ? !(k in E_DESK.map) : E_DESK.map[k] === v) return;
+      if (v === null) delete E_DESK.map[k];
+      else E_DESK.map[k] = v;
+      taken.push(k);
+    });
+    return taken;
   }
   var eUnsaved = null;
   var eSavedAt = 0;
@@ -10411,6 +10434,11 @@ What you type stays in this browser only.`;
     }
     return ok;
   }
+  function takePack() {
+    flushStats();
+    loadPack();
+    ePackEpoch++;
+  }
   var STATS_SAVE_MS = 1500;
   var eStatsT = 0;
   var eStatsWired = false;
@@ -10552,7 +10580,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-11-14";
+  var E_BUILT = "2026-11-15";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -17366,6 +17394,15 @@ What you type stays in this browser only.`;
     document.body.classList.add("e-host");
     if (h.testService === true) testServiceBand(document);
     if (typeof h.onStatsAsk === "function") h.onStatsAsk(answerStats);
+    if (typeof h.onDeskSynced === "function") h.onDeskSynced((text) => {
+      const keys = eDeskTake(text);
+      if (keys.length) {
+        try {
+          hooks.takeSyncedDesk(keys);
+        } catch (e) {
+        }
+      }
+    });
     if (h.backdrop) document.body.classList.add("e-backdrop");
     if (h.platform) document.body.classList.add("e-" + String(h.platform).replace(/[^a-z0-9]/gi, ""));
     eSetMaximized(!!h.maximized);
@@ -37280,6 +37317,7 @@ What you type stays in this browser only.`;
     applyPrefs: () => applyPrefs,
     hotkeyFromEvent: () => hotkeyFromEvent,
     openSettings: () => openSettings,
+    repaintScreen: () => repaintScreen,
     resetAllSettings: () => resetAllSettings,
     settingsBodyHtml: () => settingsBodyHtml,
     settingsFound: () => settingsFound,
@@ -41170,7 +41208,8 @@ What you type stays in this browser only.`;
   // src/modules/restart.js
   var restart_exports = {};
   __export(restart_exports, {
-    restartDesk: () => restartDesk
+    restartDesk: () => restartDesk,
+    takeSyncedDesk: () => takeSyncedDesk
   });
   function restartDesk() {
     const wasScreen = screenOn;
@@ -41216,6 +41255,41 @@ What you type stays in this browser only.`;
     tourAfterRestart();
     maybeStartTour();
     if (teamJoinShown()) paintJoin();
+  }
+  function takeSyncedDesk(keys) {
+    const layer = eLayer(), mine = (n) => keys.indexOf(layer + n) > -1;
+    const packed = mine("Pack"), ordered = mine("CatOrder"), intents = mine("IntentOrder");
+    if (packed) takePack();
+    if (intents) setIntentOrderLoaded(false);
+    if (packed || ordered) loadCatOrder();
+    if (packed || ordered || intents) {
+      rebuildCards();
+      drawPills();
+      drawIntentRail();
+    }
+    if (keys.some((k) => !LAYER_KEYS.some((n) => k === layer + n))) applyPrefs();
+    else render();
+    drawScreenSynced();
+  }
+  var screenSyncedOwed = false;
+  function drawScreenSynced() {
+    const sh = document.getElementById("screenHost"), a = document.activeElement;
+    if (!screenOn || !sh) return;
+    const tag = a ? String(a.tagName || "").toLowerCase() : "";
+    const typing = !!a && sh.contains(a) && (a.isContentEditable || tag === "textarea" || tag === "select" || tag === "input" && !/^(checkbox|radio|range|button|submit|reset|color)$/i.test(a.type || ""));
+    if (typing) {
+      if (!screenSyncedOwed) {
+        screenSyncedOwed = true;
+        sh.addEventListener("focusout", () => {
+          screenSyncedOwed = false;
+          setTimeout(drawScreenSynced, 0);
+        }, { once: true });
+      }
+      return;
+    }
+    if (screenOn === "settings") repaintScreen();
+    else if (screenOn === "library") mgRefreshAround(() => {
+    });
   }
 
   // src/modules/pick.js
@@ -42090,6 +42164,7 @@ What you type stays in this browser only.`;
       loadCatalogFromFolder,
       offerPickedCatalog: eOfferPickedCatalog,
       restartDesk,
+      takeSyncedDesk,
       runShortcut
     });
     eCarryOldKeys();
