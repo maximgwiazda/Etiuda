@@ -39,7 +39,7 @@ const ASIDE = {
   "15ep": offWindows("15ep", "15em stands aside off Windows, so lifting plant:w2-folder-not-writable has no green leg there to turn"),
 };
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 183;
+const EXPECTED = 184;
 
 let asserted = 0, failed = 0, skipped = 0;
 function check(ok, line) {
@@ -792,6 +792,31 @@ try {
     finally { untap.forEach(u => u()); }
     return touched;
   };
+  /* ---- review 14, finding 2, refuted: Leave is this desk's own act and tells the lead nothing, so the lead's roster still names
+     it, and the lead's Studio takes a desk with the same keys on its roster as admitted and lists no request for it. A new
+     invitation from that lead, accepted by the person's yes, makes it a member again by that roster's key; held until a new
+     opening, it would wait for one the lead is never shown. ---- */
+  {
+    const share = folder("j14b-share");
+    const Dj = await deskWith("j14b", share);
+    const mej = await Dj.ask("etiuda:branch-identity", true);
+    put(share, "etiuda-team.json", teamFile([entry(mej, K1, 1)]));
+    put(share, "lamps.ec", P.sealCatalog(K1, TEAM, 1, A1));
+    await Dj.join("state");
+    const inBefore = Dj.api.readCatalog() === A1.trim();
+    await Dj.join("leave", TEAM);
+    const leftNow = !!(Dj.envelope().teamLeft && Dj.envelope().teamLeft[TEAM]) && Dj.api.readCatalog() === null;
+    const blob = inviteBlob({ team: TEAM, folder: share, lead: lampLead, secret: newSecret() });
+    const offered = await Dj.join("read", blob);
+    const took = await Dj.join("invite", blob, "Kai", codeFor(blob));
+    const after = await Dj.join("state"), e = Dj.envelope();
+    check(inBefore && leftNow && offered && !offered.refused && took && !took.refused
+      && !!(e.teamPins && e.teamPins[TEAM] && e.teamPins[TEAM].public === LEAD.public) && !(e.teamLeft && e.teamLeft[TEAM])
+      && Dj.api.readCatalog() === A1.trim() && !e.teamJoin && !!(after && (after.joined || after.join === null)),
+      "j14b review 14.2 refuted: after Leave, a new invitation from the same lead, taken by the person's yes, makes the desk a member"
+      + " again by the roster that still names it, the leave lifted only by that yes: member before " + inBefore + ", left " + leftNow
+      + ", offered " + !!(offered && !offered.refused) + ", taken " + !!(took && !took.refused) + ", request ended " + !e.teamJoin);
+  }
   const hostile = folder("hostile");
   const forgedLead = { keyId: FORGED.keyId, public: FORGED.public, name: "Lamp lead" };
   const Dp = await deskWith("pinned", folder("pinned-own"),
