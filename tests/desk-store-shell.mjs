@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 67;
+const EXPECTED = 69;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -732,6 +732,23 @@ async function googleSwitchScene(src) {
     seat: !!(held && held.cert), token: !!access && access.token === r.world.access, state: now && now.state, why: now && now.why, store: opened, files: d.files.length, rtGranted: granted.indexOf(rt) >= 0, drive: d.calls.slice(0, 6), graph: r.world.graph.length }) };
 }
 
+/* (gn) A look after the one that made the store hands the relay its new grant (POST /t/<rt>/grant, the grant alone), and the relay's row
+   then runs to that grant's end, so the store lapses from the person's last seat and not from its making. */
+async function renewGrantScene(src) {
+  const r = await renewScene(src), T = r.shell.T, R = r.world.R;
+  const rt = r.world.file ? JSON.parse(r.world.file).rt : "", row = () => (rt && R.stores.get(rt) ? R.stores.get(rt).get("team") : null);
+  const before = row() ? row().until : null;
+  await new Promise(x => setTimeout(x, 25));
+  await T.signinRenewNow();
+  const flight = T.get().storeFlight;
+  if (flight) await flight;
+  const renewals = r.world.relay.map(b => { try { return JSON.parse(b); } catch { return null; } }).filter(b => b && Object.keys(b).join() === "grant");
+  const last = renewals.length ? renewals[renewals.length - 1].grant : null, after = row() ? row().until : null;
+  const now = T.get().storeNow;
+  const ok = !!now && now.state === "on" && renewals.length === 1 && !!last && last.kind === "etiuda-store-grant" && after === last.until && before !== null && after > before;
+  return { ok, detail: brief({ state: now && now.state, renewals: renewals.length, moved: before !== null && after !== null ? after - before : null, toGrant: !!last && after === last.until }) };
+}
+
 /* (gc, gs, gr) Where the sync meets the row and the switch. gc: the versions the sync keeps for the person's choice are the row's
    conflict count. gs: This computer and Everywhere stop the sync's channel at once, not at the next look. gr: a write the store's relay
    refuses for its room turns the row full, and the next write it takes turns it on (the relay in memory, its room made small). */
@@ -795,6 +812,7 @@ const LEGS = [
   ["f5", renewQuietScene, "a renewal whose folder scope is refused asks it quietly, opens no browser and says nothing more"],
   ["f6", onwardOnceScene, "the loopback sends the window on at most once per sign-in, and takes the folder's reply once"],
   ["g1", consentSwitchScene, "after a declined folder the look says \"ungiven\", Off with its switch: On without a trusted click opens nothing; with one, exactly one request for the folder alone naming the account, which lands the store on; an administrator's need keeps \"consent\" and the call opens nothing"],
+  ["gn", renewGrantScene, "a look after the one that made the store hands the relay its new grant alone, and the relay's row runs to that grant's end"],
   ["g2", googleSwitchScene, "on Google the folder line unticked at sign-in says \"ungiven\"; On opens exactly one Google sign-in asking the folder with it, naming the account, and the same account's seat and the folder's token are kept; the store opens in Drive's app data folder by that token"],
   ["h", folderPagesScene, "the folder's three landing pages carry the copywriter's words whole in English and Polish, closing as the sign-in's pages close, and the seat page is unchanged"],
   ["d", doorScene, "the licence service's door takes signin/desk, signout/desk, store/grant and store/end of its own host, and refuses every other route"],
@@ -846,6 +864,7 @@ const PLANTS = [
   ["f6", swap("if (!clean || landed || sent) return null; /* plant:onward-once */", "if (!clean || landed) return null; /* plant:onward-once */"), "the loopback sends the window on more than once"],
   ["g1", swap("function storeUngiven() { return storeState().org === true ? \"consent\" : \"ungiven\"; }", "function storeUngiven() { return \"consent\"; }"), "a consent never given read as the organisation's, so no switch"],
   ["g1", swap("    await handOut(pending.url); /* plant:consent-open */", "    await handOut(pending.url); handOut(pending.url); /* plant:consent-open */"), "the switch opens the request twice"],
+  ["gn", swap("renew: storeRelayRenew, ", ""), "the look hands the relay no renewal, so the store lapses from its making"],
   ["g2", swap("const token = !lacks && ", "const token = "), "Google's answer without the folder's scope taken as the folder's token"],
   ["g2", swap("  const folder = L.folderFor(p.id, {", "  const folder = L.folderFor(\"microsoft\", {"), "the store's folder asked of Microsoft whatever the sign-in, so the store never opens in Google Drive"],
   ["f3", swap("    loop.land(folder || kind || \"back\"); /* plant:folder-land */", "    loop.land(kind || \"back\"); /* plant:folder-land */"), "the second step lands the sign-in's page, not the folder's"],

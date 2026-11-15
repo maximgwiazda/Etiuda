@@ -183,7 +183,7 @@ function storePolicy(managed, policy, personOff) {
 
 /* ---- one look: the folder read, the key adopted, written back or made, and this computer enrolled -------------------------
    `io`: folder (above, or null where the provider has none), local() and keep(keys) (this computer's own sealed copy, or null),
-   grant(rt, sPub) the licence service's store/grant answer {grant, store} or {why}, relay.create(keys, grant), relay.devices(keys, store)
+   grant(rt, sPub) the licence service's store/grant answer {grant, store} or {why}, relay.create(keys, grant), relay.renew(keys, grant), relay.devices(keys, store)
    (the list signed by S, and by this computer with its store certificate), me {id, pub, desk} this computer's key at the relay, url the relay's address, rand(n).
    Answers {state: "on", keys, store}, {state: "unavailable", why} where the folder could not be reached (the desk works as today),
    or {state: "paused", why} where the service or relay was not. It shows nothing and asks nothing. */
@@ -228,6 +228,9 @@ async function storeLook(io) {
     const c = await io.relay.create(keys, got.grant);
     if (!c.ok) return { state: "paused", why: c.why || "relay", keys };
   }
+  /* Every other look hands the relay the grant it was given, so the store lapses from the person's last seat and not from its making; a
+     renewal not taken changes nothing here and is asked again at the next look. */
+  else if (typeof io.relay.renew === "function") await Promise.resolve(io.relay.renew(keys, got.grant)).catch(() => null); /* plant:store-renew */
   if (!keys.devices.some(d => d.pub === io.me.pub)) {
     /* This computer enrols itself with S, the list kept in the folder's file so the next computer signs the whole of it. */
     const next = Object.assign({}, keys, { devices: keys.devices.concat([{ id: io.me.id, pub: io.me.pub, desk: io.me.desk }]).slice(-DEVICES_MAX), rev: keys.rev + 1 });

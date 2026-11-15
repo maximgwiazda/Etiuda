@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-sync-"));
-const EXPECTED = 22;
+const EXPECTED = 27;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -77,8 +77,13 @@ function serviceStandIn(R, sent) {
       sent.notices.push(old + " " + r.status);
       kept.delete(old);
     }
+    /* `sent.seat` {lost, trialEnds | paidUntil}: the service's own rule (store/grant), no grant once the seat is gone, the grant ending at the
+       trial's or the paid licence's end and at most the relay's longest span on, paid where it is no trial. */
+    const seat = sent.seat, trial = !!seat && seat.trialEnds != null;
+    if (seat && (now >= seat.lost || now >= (trial ? seat.trialEnds : seat.paidUntil))) return { why: "signin" };
     kept.add(rt);
-    const g = { kind: "etiuda-store-grant", format: 1, lead: sPub, code: CODE, issued: now, until: now + 30 * DAY, paid: true, via: via(now),
+    const g = { kind: "etiuda-store-grant", format: 1, lead: sPub, code: CODE, issued: now,
+      until: seat ? Math.min(trial ? seat.trialEnds : seat.paidUntil, now + C.GRANT_MAX_MS) : now + 30 * DAY, paid: seat ? !trial : true, via: via(now),
       sig: { alg: "ed25519", keyId: K.DELEGATE.id, value: "" } };
     g.sig.value = signWith(K.DELEGATE.privateKey, C.grantBytes(g));
     return { grant: g, cert: deskPub => {
@@ -102,6 +107,10 @@ function relayIo(R, sent, me) {
     async create(keys, grant) {
       const sPub = ST.pubOf(keys.s), t = R.clock.now;
       const r = await relayCall(R, sent, "POST", "/teams", { rt: keys.rt, lead: { keyId: sPub, pub: sPub }, t, grant, sig: signWith(sKey(keys.s), C.create2Bytes(keys.rt, sPub, t, grant)) });
+      return r.status === 200 ? { ok: true } : { ok: false, why: r.json && r.json.error };
+    },
+    async renew(keys, grant) {
+      const r = await relayCall(R, sent, "POST", "/t/" + keys.rt + "/grant", { grant });
       return r.status === 200 ? { ok: true } : { ok: false, why: r.json && r.json.error };
     },
     async devices(keys, cert) {
@@ -433,6 +442,52 @@ async function main() {
       edit: b.desk.keys["e3f9a1~Pack"] === a.desk.keys["e3f9a1~Pack"], late: b.desk.files["Late.ec"] === "{\"after\":\"the end\"}" }) };
   }
 
+  /* C11, the person's seat goes: the store made at T0, its computer looking once a day as the shell does at each renewal, the seat gone
+     at L, sixty days on, past the relay's longest grant span; then a day at a time, the store's alarm rung as the runtime rings it. Answers
+     what the person meets: whether the store still worked the day before L, the last look's state after L, the days from L to the
+     instant the relay's row says it is swept, and the day the store was found emptied. */
+  const L_AT = 60;
+  async function seatScene(name, seat) {
+    const w = worldOf(name), a = computer(w, "a");
+    const L = T0 + L_AT * DAY;
+    w.serviceSent.seat = Object.assign({ lost: Infinity }, seat(L));
+    const first = await a.look();
+    if (first.state !== "on") throw new Error("the store did not come on: " + first.state);
+    const rt = first.keys.rt;
+    a.desk.keys.eTheme = "dark";
+    await settle(a);
+    const teamAt = () => { const s = w.R.stores.get(rt); return s ? s.get("team") : null; };
+    let before = null;
+    for (let d = 1; w.R.clock.now + DAY < L; d++) {
+      w.R.clock.now = T0 + d * DAY;
+      await a.look();
+      await w.R.ring(rt);
+      if (w.R.clock.now + DAY >= L) before = C.lapseOf(teamAt(), w.R.clock.now).state;
+    }
+    w.R.clock.now = L;
+    const after = await a.look();
+    const row = teamAt(), swept = row ? C.lapseOf(row, L).swept : null;
+    let emptied = null;
+    for (let d = 1; d <= 200 && emptied === null; d++) {
+      w.R.clock.now = L + d * DAY;
+      await a.look();
+      await w.R.ring(rt);
+      if (!teamAt()) emptied = d;
+    }
+    return { before, after: after.state, running: a.sync().running(), days: swept === null ? null : (swept - L) / DAY, emptied };
+  }
+  const SEATS = {
+    C11t: [L => ({ trialEnds: L }), r => r.days === 30 && r.emptied === 30],
+    C11u: [L => ({ trialEnds: L + 40 * DAY, lost: L }), r => r.days === 70 && r.emptied === 70],
+    C11p: [L => ({ paidUntil: L }), r => r.days === 90 && r.emptied === 90],
+    C11f: [L => ({ paidUntil: L + 365 * DAY, lost: L }), r => r.days === 134 && r.emptied === 134],
+  };
+  const seatLeg = id => async () => {
+    const r = await seatScene(id.toLowerCase(), SEATS[id][0]);
+    const ok = r.before === "working" && r.after !== "on" && !r.running && SEATS[id][1](r);
+    return { ok, detail: brief(r) };
+  };
+
   const results = {};
   const LEGS = [
     ["S1", followsScene, "a setting, an edit over a catalog and a catalog file changed on one computer reach the other through the relay, nothing of them in the clear"],
@@ -444,6 +499,10 @@ async function main() {
     ["C8x", () => sameScene("b"), "the same card hidden on one computer and shown again on the other, beside a different card hidden on each: that card is the one conflict, waiting on both computers, each keeping its own in place, and the person's choice of the hide on the computer that showed it stands on both"],
     ["C8y", () => sameScene("a"), "the same conflict chosen on the computer that hid the card, for the showing again kept there as a removal: it stands on both and nothing waits"],
     ["C10o", outboxScene, "a lapsed store certificate pauses sync and sends nothing; edits wait in the outbox and at the next look that is on are sent, and what came is taken"],
+    ["C11t", seatLeg("C11t"), "a trial that ends, its store renewed at each look: working the day before, sync stops at the seat's end, and the relay sweeps the store 30 days on"],
+    ["C11u", seatLeg("C11u"), "a trial seat freed 40 days before the trial would end: sync stops, and the store is swept 30 days after the last grant's end, 70 days on"],
+    ["C11p", seatLeg("C11p"), "a paid licence that ends: sync stops, and the store is swept 90 days on"],
+    ["C11f", seatLeg("C11f"), "a paid seat freed with the licence running: sync stops, and the store is swept 90 days after the last grant's end, 134 days on"],
     ["C1a", raceScene, "two computers that each read back their own store both replace and the earlier store ends; the earlier computer adopts the folder's store at its next look and every edit it made reaches the new store"],
   ];
   for (const [id, scene, line] of LEGS) {
@@ -491,6 +550,29 @@ async function main() {
     ["resume", "C10o", lift("resume"), "sync does not start again at the next look that is on"],
     ["adopt", "C1a", lift("adopt"), "the store adopted is not where this computer's place is written, so its edits stay in the ended store"],
   ];
+  /* The store's renewal lifted in a copy of store.cjs: the store lapses from its making, 45 days, with the seat still held. */
+  {
+    const line = "p C11t the renewal lifted in a copy of shell/sync/store.cjs turns C11t red (the store lapses 45 days after it was made, the seat still held), and the product file is never written";
+    if (PLANTS_OFF) skip(line);
+    else {
+      const STORE = path.join(ROOT, "shell", "sync", "store.cjs"), digest = sha(fs.readFileSync(STORE)), was = ST;
+      let turned = false, detail = "plant line absent";
+      try {
+        const next = lift("store-renew")(fs.readFileSync(STORE, "utf8"));
+        if (next !== null) {
+          const dir = path.join(WORK, "p-store-renew");
+          fs.mkdirSync(dir, { recursive: true });
+          fs.writeFileSync(path.join(dir, "store.cjs"), next);
+          ST = require(path.join(dir, "store.cjs"));
+          const r = await safe(seatLeg("C11t"));
+          turned = r.ok !== true;
+          detail = turned ? "the leg turned red: " + r.detail : "the leg still held";
+        }
+      } catch (e) { detail = e && e.message ? e.message : String(e); }
+      finally { ST = was; }
+      check(results.C11t && results.C11t.ok === true && turned && sha(fs.readFileSync(STORE)) === digest, line + ": " + detail);
+    }
+  }
   for (const [name, id, change, what] of PLANTS) {
     const line = "p " + id + " " + name + " in a copy of shell/sync/sync.cjs turns " + id + " red (" + what + "), and the product file is never written";
     if (PLANTS_OFF) { skip(line); continue; }

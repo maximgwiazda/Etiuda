@@ -11140,6 +11140,10 @@ async function storeRelayCreate(keys, grant) {
   const sPub = StoreLib().pubOf(keys.s), t = Date.now();
   return storeRelayPost(at + "/teams", { rt: keys.rt, lead: { keyId: sPub, pub: sPub }, t: t, grant: grant, sig: storeLeadSign(keys.s, storeCreateBytes(keys.rt, sPub, t, grant)) });
 }
+async function storeRelayRenew(keys, grant) {
+  const at = storeRelayAt(keys);
+  return at ? storeRelayPost(at + "/t/" + keys.rt + "/grant", { grant: grant }) : { ok: false, why: "relay" };
+}
 async function storeRelayDevices(keys, cert, me) {
   const at = storeRelayAt(keys);
   if (!at) return { ok: false, why: "relay" };
@@ -11437,7 +11441,7 @@ async function storeLookNow() {
   if (token.why) return storeSettle({ state: "unavailable", why: token.why });
   return storeSettle(await L.storeLook({ folder: folder, local: storeLocal, keep: storeKeep,
     grant: (rt, sPub, extra) => storeGrant(me.key, rt, sPub, Object.assign({}, extra, { company: pol.company === true })),
-    relay: { create: storeRelayCreate, devices: (keys, cert) => storeRelayDevices(keys, cert, me) },
+    relay: { create: storeRelayCreate, renew: storeRelayRenew, devices: (keys, cert) => storeRelayDevices(keys, cert, me) },
     me: { id: me.id, pub: me.key, desk: me.id }, url: STORE_RELAY, rand: n => crypto.randomBytes(n), fresh: storeFresh }));
 }
 
