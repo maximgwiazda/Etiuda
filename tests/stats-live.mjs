@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
-const EXPECTED = 28;
+const EXPECTED = 31;
 const WORK = path.join(ROOT, "shell", "main.js");
 const GOOD = fs.readFileSync(WORK);
 const GOOD_HASH = crypto.createHash("sha256").update(GOOD).digest("hex");
@@ -415,6 +415,58 @@ try {
       });
     check(g.ok, "930g a desk whose team the organisation's policy set seals its statistics at adoption as any team does, never held until Settings is opened"
       + (g.why ? ": " + g.why.split("\n")[0] : ""));
+  }
+
+  /* ---- 930i to 930k: the statistics box (lead.stats), which follows the lead's signing key --------------------------- */
+  {
+    const S1 = crypto.generateKeyPairSync("x25519"), S2 = crypto.generateKeyPairSync("x25519"), heir = crypto.generateKeyPairSync("ed25519");
+    const HEIR = { keyId: "quay-lead-heir", public: pubHex(heir.publicKey) };
+    const signed = (box, leadRec, key, handover) => {
+      const o = { format: 1, kind: "etiuda-team", id: box.team, catalogs: ["north-lamps"], lead: leadRec, sealed: true, exportsSealed: false, epoch: 1,
+        roster: [entry(box.D, box.me, box.key, box.team, 1)] };
+      if (handover) o.handover = handover;
+      o.sig = { alg: "Ed25519", keyId: leadRec.keyId };
+      o.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(o)), key).toString("hex");
+      return JSON.stringify(o, null, 1) + "\n";
+    };
+    const openWith = (box, priv) => { try { return JSON.parse(box.D.api.openStatsSealed(priv, JSON.parse(fs.readFileSync(statsAt(box), "utf8")), box.me.id)); } catch { return null; } };
+    /* The new-computer handover: the lead's box kept, the statistics box the new key's. */
+    const handedOn = async () => {
+      const box = await joined(false);
+      put(box.share, "etiuda-team.json", signed(box, { keyId: LEAD.keyId, public: LEAD.public, box: LEAD.box, stats: pubHex(S1.publicKey) }, lead.privateKey));
+      adopt(box, "rolling-30", lead.privateKey, LEAD, 2);
+      const before = openWith(box, S1.privateKey);
+      const st = { format: 1, kind: "etiuda-team-handover", team: box.team, from: { keyId: LEAD.keyId, public: LEAD.public },
+        to: { keyId: HEIR.keyId, public: HEIR.public }, sig: { alg: "Ed25519", keyId: LEAD.keyId } };
+      st.sig.value = crypto.sign(null, box.D.api.handoverSignedBytes(st), lead.privateKey).toString("hex");
+      put(box.share, "etiuda-team.json", signed(box, { keyId: HEIR.keyId, public: HEIR.public, box: LEAD.box, stats: pubHex(S2.publicKey) }, heir.privateKey, [st]));
+      box.D.api.catalogChanged(box.D.win);
+      put(box.share, "stats-span.json", spanDoc(box.D, "rolling-30", heir.privateKey, HEIR));
+      box.D.api.catalogChanged(box.D.win);
+      box.D.api.setStatsClock(CLOCK + 120000);
+      const res = await box.D.ask("etiuda:stats-write", pageBody(7));
+      return { box, before, res, after: openWith(box, S2.privateKey), oldLeadBox: openWith(box, leadBox.privateKey), oldStats: openWith(box, S1.privateKey) };
+    };
+    const i = await proveOr("930i", "  if (use.seal.stats) box = use.seal.stats; /* plant:stats-box-own */", "  /* plant:stats-box-own */", async () => {
+      const x = await handedOn();
+      console.log("  --- 930i before " + (x.before ? x.before.cards[0].n : "none") + ", after the handover " + (x.after ? x.after.cards[0].n : "none"));
+      return !!x.before && x.before.cards[0].n === 2 && !!x.after && x.after.cards[0].n === 7;
+    });
+    check(i.ok, "930i a team handed on to a new key, the lead's box kept and the statistics box the new key's, keeps sending: the next answer is sealed"
+      + " to the new statistics box" + (i.why ? ": " + i.why.split("\n")[0] : ""));
+    const j = await proveOr("930j", "  if (use.seal.stats) box = use.seal.stats; /* plant:stats-box-own */", "  /* plant:stats-box-own */", async () => {
+      const x = await handedOn();
+      return !!x.after && x.oldLeadBox === null && x.oldStats === null;
+    });
+    check(j.ok, "930j after that handover the old key opens nothing sealed: neither the lead's box it kept nor its own statistics box opens the answer"
+      + (j.why ? ": " + j.why.split("\n")[0] : ""));
+    const k = await proveOr("930k", "      && (lead.stats === undefined || /^[0-9a-f]{64}$/.test(lead.stats)) /* plant:team-stats-shape */", "      /* plant:team-stats-shape */", async () => {
+      const box = await joined(false);
+      put(box.share, "etiuda-team.json", signed(box, { keyId: LEAD.keyId, public: LEAD.public, box: LEAD.box, stats: "not a box" }, lead.privateKey));
+      adopt(box, "rolling-30", lead.privateKey, LEAD, 2);
+      return !fs.existsSync(statsAt(box));
+    });
+    check(k.ok, "930k a team file whose statistics box is not 64 hex is not a team file whole, and nothing is sealed under it" + (k.why ? ": " + k.why.split("\n")[0] : ""));
   }
 
   /* ---- 891b: one watch event ----------------------------------------------------------------------------------- */

@@ -2100,7 +2100,10 @@ function statsSeal() {
   if (!use.member || use.stale || !use.seal) return null;
   const me = branchIdentity(false);
   if (!me || !/^k-[0-9a-f]{16}$/.test(me.id)) return null;
-  const box = typeof use.seal.box === "string" ? use.seal.box : "";
+  /* The statistics box the team file names (lead.stats, which follows the lead's signing key), else the lead's box, as a team
+     file from before the statistics box has it. */
+  let box = typeof use.seal.box === "string" ? use.seal.box : "";
+  if (use.seal.stats) box = use.seal.stats; /* plant:stats-box-own */
   if (!/^[0-9a-f]{64}$/.test(box)) {
     if (statsNoBoxSaid !== use.seal.team) {
       statsNoBoxSaid = use.seal.team;
@@ -3215,7 +3218,8 @@ function teamUse() {
   const box = typeof doc.lead.box === "string" ? doc.lead.box : "";
   const catalogs = Array.isArray(doc.catalogs) ? doc.catalogs.map(String) : [];
   return { member: true, stale: stale, catalogs: catalogs, content: stale ? null : teamContentOf(doc), consent: stale ? "" : consentOf(doc),
-    seal: { team: team, epoch: epoch, key: key, lead: pin, box: box } };
+    seal: { team: team, epoch: epoch, key: key, lead: pin, box: box,
+      stats: typeof doc.lead.stats === "string" && /^[0-9a-f]{64}$/.test(doc.lead.stats) ? doc.lead.stats : "" } };
 }
 function inUseFile() {
   const me = branchIdentity(false);
@@ -3917,6 +3921,7 @@ function teamWhole(doc) {
     return +doc.format === 1 && doc.kind === "etiuda-team" && SEALED_TEAM_RE.test(String(doc.id)) && Number.isInteger(doc.epoch)
       && doc.epoch >= 1 && Array.isArray(doc.roster) && !!lead && typeof lead === "object" && typeof lead.keyId === "string"
       && /^[0-9a-f]{64}$/.test(String(lead.public)) && (lead.box === undefined || /^[0-9a-f]{64}$/.test(lead.box))
+      && (lead.stats === undefined || /^[0-9a-f]{64}$/.test(lead.stats)) /* plant:team-stats-shape */
       && !!sig && sig.keyId === lead.keyId && /^[0-9a-f]{128}$/.test(String(sig.value))
       && crypto.verify(null, signedBytesOf(teamCovered), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(lead.public, "hex")]),
         format: "der", type: "spki" }), Buffer.from(sig.value, "hex"));
