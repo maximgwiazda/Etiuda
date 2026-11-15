@@ -3847,6 +3847,62 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 .stage>.scroller>.shell{contain-intrinsic-size:auto none}
 #screenHost{grid-area:1/1;position:relative;z-index:1;display:flex;flex-direction:column;min-height:0;background:var(--bg);color:var(--ink);overflow-y:auto}
 #screenHost[hidden]{display:none!important}
+/* ---------- First-opening sign-in screen ---------- */
+body.e-first-signin .fab-stack,
+body.e-first-signin .pills-slot,
+body.e-first-signin .pills-probe,
+body.e-first-signin #railHit,
+body.e-first-signin #intentRail,
+body.e-first-signin #lanes,
+body.e-first-signin .fills,
+body.e-first-signin #tabsWrap,
+body.e-first-signin .stage>.scroller>.shell{display:none!important}
+body.e-first-signin header{padding-bottom:0;border-bottom:0}
+body.e-first-signin .stage>.dotfield{content-visibility:hidden}
+.fs-screen{grid-area:1/1;position:relative;z-index:2;min-height:0;background:var(--bg);color:var(--ink);overflow:auto;display:flex;flex-direction:column}
+.fs-screen[hidden]{display:none!important}
+.fs-grid{display:grid;grid-template-columns:1fr 1fr;flex:1 1 auto;min-height:100%}
+.fs-left{display:flex;flex-direction:column;align-items:center;padding:36px clamp(28px,5vw,56px) 24px;
+  background-color:var(--bg);
+  background-image:radial-gradient(circle at center,var(--dots-ink) 0 .7px,color-mix(in srgb,var(--dots-ink) 0%,transparent) 1.2px);
+  background-size:16px 16px}
+.fs-left-in{width:100%;max-width:390px;min-height:100%;display:flex;flex-direction:column}
+.fs-body{margin:auto 0;padding:8px 0 24px}
+.fs-mark{width:52px;height:52px;color:var(--mark-ink);display:inline-flex;align-items:center;justify-content:center;margin:0 0 24px}
+.fs-mark svg{width:100%;height:100%;display:block}
+.fs-left h1{margin:0 0 12px;font:600 clamp(22px,2.3vw,27px)/1.2 var(--sans);letter-spacing:-.015em;color:var(--ink)}
+.fs-lede{margin:0 0 28px;font:14px/1.55 var(--sans);color:var(--dim);max-width:38ch}
+.fs-steps-h{margin:0 0 12px;font:600 11px/1.2 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.fs-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+.fs-steps li{display:flex;align-items:center;gap:11px;font:13.5px/1.4 var(--sans);color:var(--ink)}
+.fs-step-n{width:22px;height:22px;flex:none;display:inline-flex;align-items:center;justify-content:center;
+  border-radius:50%;border:1px solid var(--line-strong);background:var(--panel);color:var(--dim);
+  font:600 11.5px/1 var(--sans);font-variant-numeric:tabular-nums}
+.fs-foot{margin:8px 0 0;padding-top:12px;font:12px/1.4 var(--sans);color:var(--dim)}
+.fs-right{display:flex;flex-direction:column;justify-content:center;align-items:center;
+  padding:36px clamp(28px,5vw,56px);background:var(--panel);border-left:1px solid var(--line)}
+.fs-right-in{width:100%;max-width:390px}
+.fs-rh{margin:0 0 14px;font:600 20px/1.25 var(--sans);color:var(--ink)}
+.fs-right-in h4{margin:0 0 6px;font:600 16px/1.3 var(--sans);color:var(--ink)}
+.fs-right-note{margin:14px 0 0}
+.fs-privacy{margin:10px 0 0}
+.fs-right-in .sgn-acts{margin-top:16px}
+.fs-skip{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.fs-skip-line{margin:10px 0 0;font:12.5px/1.45 var(--sans);color:var(--dim)}
+.fs-screen .sgn-p:focus-visible,.fs-screen .btn:focus-visible{box-shadow:0 0 0 2px var(--accent)}
+@media (max-width:780px){
+  .fs-grid{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  .fs-left{padding:26px 22px 18px}
+  .fs-left-in{min-height:0}
+  .fs-body{margin:0;padding:0 0 16px}
+  .fs-mark{margin-bottom:16px}
+  .fs-right{padding:24px 22px 32px;border-left:0;border-top:1px solid var(--line);justify-content:flex-start}
+}
+@media (max-height:660px){
+  .fs-left,.fs-right{padding-top:22px;padding-bottom:22px}
+  .fs-mark{margin-bottom:14px}
+  .fs-lede{margin-bottom:18px}
+}
 .screen-page{display:flex;flex-direction:column;max-width:1240px;width:100%;margin:0 auto;padding:20px 28px;gap:20px;box-sizing:border-box}
 .screen-head h2{margin:0;font-size:20px;font-weight:600}
 .screen-body{flex:1 1 auto;min-height:0}
@@ -5134,6 +5190,7 @@ body.e-host .row .win-btn:focus-visible{outline-offset:-2px}
 </div>
 </div>
 <div id="screenHost" class="screen-host" hidden></div>
+<section id="firstSignin" class="fs-screen" hidden role="dialog" aria-modal="true" aria-labelledby="fsHeading" data-i18n-skip></section>
 </div>
 
 <!-- role=status/aria-live so copy confirmations reach screen readers without stealing focus -->

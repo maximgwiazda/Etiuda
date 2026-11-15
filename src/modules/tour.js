@@ -22,6 +22,7 @@ import { agentName, setAgentName, keepAgentName, keepTypedName, nameAnswered, na
 import { esc } from "./esc.js";
 import { cutLeaves, dismissCopy, mgReduceMotion } from "./motion.js";
 import { joinStands, onJoinPainted } from "./team-join.js";
+import { firstSigninStands, onFirstSigninClosed } from "./signin.js";
 import { closeScreenTab, screenOn } from "./screen-tabs.js";
 
 /* ---------- Guided tour ----------------------------------------------------
@@ -956,6 +957,14 @@ function heedJoin(){
     if(tourAfterJoin && !joinStands()){ const go=tourAfterJoin; tourAfterJoin=null; go(); }
   });
 }
+let tourAfterSignin=null, signinHeeded=false;
+function heedFirstSignin(){
+  if(signinHeeded) return;
+  signinHeeded=true;
+  onFirstSigninClosed(()=>{
+    if(tourAfterSignin && !firstSigninStands()){ const go=tourAfterSignin; tourAfterSignin=null; go(); }
+  });
+}
 function maybeStartTour(){
   const at=ssGet(TOUR_AT);
   if(!at && (tourSeen()||tourInviteDismissed())) return;
@@ -964,6 +973,7 @@ function maybeStartTour(){
   let floor=false, formed=false;
   const go=()=>{
     if(!(floor && formed && due())) return;
+    if(typeof firstSigninStands==="function" && firstSigninStands()){ heedFirstSignin(); tourAfterSignin=go; return; } /* plant:first-signin-order */
     if(joinStands()){ heedJoin(); tourAfterJoin=go; return; } /* plant:tour-waits-join */
     startTour(i,true);
   };
