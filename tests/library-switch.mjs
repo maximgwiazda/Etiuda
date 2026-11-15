@@ -25,6 +25,7 @@
  *   ls6  each search keystroke in #libSearch and Escape to clear draws at most 10 elements (only the filtered list)
  *   ls7  typing a search filters to matching rows with focus held on #libSearch, and Escape restores the section
  *   ls8  after several Library repaints, one ResizeObserver lives for the tree's card box and one for the intents list
+ *   ls9  hover-title updates touch only shown rows (0 when collapsed, 1 on pointerenter, not all 248)
  * The catalog is the shipped sample, of a real catalog's size. Exit code is the number of failed checks; 78 when the
  * run could not complete.
  */
@@ -39,7 +40,7 @@ const puppeteer = require("puppeteer-core");
 let fails = 0, checks = 0;
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 11, REPS = 5, BUDGET = 1000, KEY_BUDGET = 10;
+const EXPECTED = 12, REPS = 5, BUDGET = 1000, KEY_BUDGET = 10;
 const argv = process.argv.slice(2);
 const at = argv.indexOf("--engine");
 const ENGINE = at >= 0 ? path.resolve(argv[at + 1]) : E.ENGINE_PATH;
@@ -224,6 +225,49 @@ try {
   check(roRes.cardMade === 1 && roRes.cardLive === 1 && roRes.intMade === 1 && roRes.intLive === 1,
     "ls8 after 4 Library repaints, 1 ResizeObserver lives for the tree's card box (" + roRes.cardMade + " made, "
     + roRes.cardLive + " live) and 1 for intents (" + roRes.intMade + " made, " + roRes.intLive + " live)");
+
+  /* Hover-title updates: only shown rows (0 when collapsed, 1 on pointerenter, and the opened category on toggle). */
+  await (await p.$('#libSecs .sx-sec[data-lm="data"]')).click();
+  await sleep(150);
+  const htRes = await p.evaluate(() => {
+    const origSet = Element.prototype.setAttribute;
+    let writes = 0;
+    Element.prototype.setAttribute = function (k, v) {
+      if (k === "title" && this.classList && this.classList.contains("mg-card")) writes++;
+      return origSet.call(this, k, v);
+    };
+    try {
+      writes = 0;
+      document.querySelector('#libSecs .sx-sec[data-lm="catmac"]').click();
+      const onCollapsed = writes;
+      const cat = document.querySelector(".mg-tree .mg-cat");
+      const catRows = cat ? cat.querySelectorAll(".mg-cat-body .manage-row.mg-card").length : 0;
+      const tog = cat && cat.querySelector("[data-toggle]");
+      writes = 0;
+      if (tog) tog.click();
+      const onOpen = writes;
+      const row = cat && cat.querySelector(".mg-cat-body .manage-row.mg-card");
+      writes = 0;
+      if (row) row.dispatchEvent(new PointerEvent("pointerenter"));
+      const onHover = writes;
+      const tipPlain = row ? row.getAttribute("title") || "" : "";
+      const sortBtn = document.querySelector(".lw-head .lw-h-us");
+      if (sortBtn) sortBtn.click();
+      const rowAfter = document.querySelector(".mg-tree .mg-cat.is-open .mg-cat-body .manage-row.mg-card");
+      if (rowAfter) rowAfter.dispatchEvent(new PointerEvent("pointerenter"));
+      const tipSorted = rowAfter ? rowAfter.getAttribute("title") || "" : "";
+      if (sortBtn) { sortBtn.click(); sortBtn.click(); }
+      const togBack = document.querySelector(".mg-tree .mg-cat.is-open [data-toggle]");
+      if (togBack) togBack.click();
+      return { onCollapsed, onOpen, catRows, onHover, tipPlain, tipSorted };
+    } finally {
+      Element.prototype.setAttribute = origSet;
+    }
+  });
+  check(htRes.onCollapsed === 0 && htRes.onOpen === htRes.catRows && htRes.catRows > 0 && htRes.onHover === 1
+    && htRes.tipPlain.startsWith("Drag to reorder") && htRes.tipSorted.startsWith("Dragging waits for the catalog's order"),
+    "ls9 hover titles touch only shown rows (collapsed " + htRes.onCollapsed + ", opened " + htRes.onOpen + "/" + htRes.catRows
+    + ", pointerenter " + htRes.onHover + ")");
   done = true;
 } catch (e) {
   console.log("  FAIL the run stopped: " + String(e && e.message || e));
