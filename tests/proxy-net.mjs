@@ -450,6 +450,19 @@ async function p6() {
   check(m.close === 1 && m.open === 0 && m.direct === 0 && deny.seen.length === 1 && basic.seen.length === bSeen2,
     "p6m a proxy that answers, here with a 403, ends the walk: the next is not tried and nothing goes direct: " + JSON.stringify(m));
   deny.server.close();
+
+  /* An IPv6 relay address: Node's URL keeps the brackets on hostname, so the CONNECT line names "[addr]:port". The control,
+     the tunnel handed a bare address, shows the stand-in tells the two forms apart. */
+  const n0 = basic.seen.length, evN = { open: 0, msgs: [] };
+  const hN = P.proxiedConnect("wss://[::1]:" + S.port + "/relay/v1/socket", {}, { open: () => evN.open++, message: t => evN.msgs.push(t), close: () => {} },
+    { resolve: async () => "PROXY 127.0.0.1:" + basic.port, tlsConnect: s => s, direct: () => null,
+      asker: { heldFor: () => ({ username: USER, password: PASS, scheme: "basic" }), refused: () => {}, tell: () => {} } });
+  for (let i = 0; i < 60 && !evN.msgs.length; i++) await sleep(10);
+  hN.close();
+  const bare = await P.tunnel({ host: "127.0.0.1", port: basic.port }, { host: "::1", port: S.port }, { username: USER, password: PASS, scheme: "basic" }).then(s => { s.destroy(); return "open"; }, e => e.code);
+  const targets = basic.seen.slice(n0).map(x => x.target);
+  check(evN.open === 1 && targets[0] === "[::1]:" + S.port && bare === "open" && targets[1] === "::1:" + S.port,
+    "p6n an IPv6 relay address goes into CONNECT bracketed, and the socket opens through it: " + JSON.stringify(targets));
   for (const s of [S, basic, win]) s.server.close();
   await tlsCase();
 }
@@ -573,6 +586,6 @@ for (const [id, fn] of Object.entries(PARTS)) {
   try { await fn(); } catch (e) { check(false, id + " threw: " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | ")); }
 }
 clearInterval(alive);
-const EXPECTED = 58 + (PLANTS_OFF ? 0 : PLANTS.length);
+const EXPECTED = 59 + (PLANTS_OFF ? 0 : PLANTS.length);
 if (!ONLY) console.log((failed === 0 && ran === EXPECTED ? "proxy-net: ok" : "proxy-net: FAIL") + ", ran " + ran + " of " + EXPECTED + ", red " + failed);
 process.exit(Math.min(63, failed + (ONLY || ran === EXPECTED ? 0 : 1)));
