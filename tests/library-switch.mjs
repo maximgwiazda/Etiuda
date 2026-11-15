@@ -22,6 +22,12 @@
  *        budget, so ls1 to ls3 would see the fault
  *   ls5  a change made while the Library is away reaches it: a card starred from the desk is starred in the Library
  *        when its tab is fronted again, so a page put back is never a stale one
+ *   ls6  each search keystroke in #libSearch and Escape to clear draws at most 10 elements (only the filtered list)
+ *   ls7  typing a search filters to matching rows with focus held on #libSearch, and Escape restores the section
+ *   ls8  after several Library repaints, one ResizeObserver lives for the tree's card box and one for the intents list
+ *   ls9  hover-title updates touch only shown rows (0 when collapsed, 1 on pointerenter, not all 248)
+ *   ls10 an intents press measures only 1 row in chipRoom and only viewport-shown rows before paint (0 on repeat)
+ *   ls11 visible and offscreen intent rows keep identical chevrons and fades after resize
  * The catalog is the shipped sample, of a real catalog's size. Exit code is the number of failed checks; 78 when the
  * run could not complete.
  */
@@ -36,7 +42,7 @@ const puppeteer = require("puppeteer-core");
 let fails = 0, checks = 0;
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 8, REPS = 5, BUDGET = 1000;
+const EXPECTED = 14, REPS = 5, BUDGET = 1000, KEY_BUDGET = 10;
 const argv = process.argv.slice(2);
 const at = argv.indexOf("--engine");
 const ENGINE = at >= 0 ? path.resolve(argv[at + 1]) : E.ENGINE_PATH;
@@ -60,6 +66,29 @@ try {
     window.__ev = [];
     new PerformanceObserver(l => { for (const e of l.getEntries()) window.__ev.push({ n: e.name, d: e.duration }); })
       .observe({ type: "event", durationThreshold: 16, buffered: true });
+    const OrigRO = window.ResizeObserver;
+    const roBag = [];
+    window.__roBag = roBag;
+    if (typeof OrigRO === "function") {
+      function TrackedRO(cb) {
+        const ro = new OrigRO(cb);
+        const rec = { cardBox: false, intents: false, dead: true };
+        roBag.push(rec);
+        const obs = ro.observe.bind(ro), disc = ro.disconnect.bind(ro);
+        ro.observe = function (el, opts) {
+          rec.dead = false;
+          if (el && el.classList) {
+            if (el.classList.contains("mg-intents")) rec.intents = true;
+            if (el.classList.contains("sx-card") || el.classList.contains("mg-tree")) rec.cardBox = true;
+          }
+          return obs(el, opts);
+        };
+        ro.disconnect = function () { rec.dead = true; return disc(); };
+        return ro;
+      }
+      TrackedRO.prototype = OrigRO.prototype;
+      window.ResizeObserver = TrackedRO;
+    }
   });
   await p.goto(url, { waitUntil: "load", timeout: 60000 });
   await p.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
@@ -142,6 +171,172 @@ try {
   check(shown === star.want, "ls5 a card starred from the desk while the Library was away reads aria-pressed " + shown
     + " in the Library fronted again (wanted " + star.want + ")");
   await p.evaluate(id => window.toggleFavourite(id), star.id);
+
+  /* Search keystrokes in #libSearch and Escape to clear: only the filtered list updates, never a full redraw. */
+  await (await p.$('#libSecs .sx-sec[data-lm="data"]')).click();
+  await sleep(200);
+  await p.focus("#libSearch");
+  const keyRows = [];
+  for (const k of ["o", "r", "d", "e", "r", "z", "Backspace", "Escape"]) {
+    await mark();
+    await p.evaluate(() => { window.__ev = []; });
+    await p.keyboard.press(k);
+    await sleep(200);
+    const drawn = await count();
+    await mark();
+    const d = await p.evaluate(() => window.__ev.filter(e => /key|input/.test(e.n)).reduce((m, e) => Math.max(m, e.d), 0));
+    keyRows.push({ drawn, paint: d });
+  }
+  const keySay = keyRows.map(r => r.drawn + "/" + r.paint).join(" ");
+  check(most(keyRows) <= KEY_BUDGET, "ls6 search keystrokes and Escape in #libSearch: most drawn " + most(keyRows)
+    + ", median " + median(keyRows.map(r => r.paint)) + " ms to paint (" + keySay + "); at most " + KEY_BUDGET + " drawn");
+
+  await p.focus("#libSearch");
+  for (const k of ["o", "r", "d", "e", "r"]) { await p.keyboard.press(k); await sleep(80); }
+  const midSearch = await p.evaluate(() => ({
+    focused: document.activeElement && document.activeElement.id === "libSearch",
+    title: (document.getElementById("libTitle") || {}).textContent || "",
+    shownIntents: [...document.querySelectorAll(".mg-intents .manage-row[data-introw]")].filter(r => !r.hasAttribute("hidden")).length,
+    totalIntents: document.querySelectorAll(".mg-intents .manage-row[data-introw]").length,
+    isFind: document.querySelector(".lib-list") && document.querySelector(".lib-list").classList.contains("is-find"),
+  }));
+  await p.keyboard.press("Escape");
+  await sleep(200);
+  const afterEsc = await p.evaluate(() => ({
+    focused: document.activeElement && document.activeElement.id === "libSearch",
+    val: (document.getElementById("libSearch") || {}).value,
+    isFind: document.querySelector(".lib-list") && document.querySelector(".lib-list").classList.contains("is-find"),
+    dataHidden: document.querySelector('details.manage-sec[data-mg="data"]').hasAttribute("hidden"),
+  }));
+  check(midSearch.focused && midSearch.title === "order" && midSearch.isFind
+    && midSearch.shownIntents > 0 && midSearch.shownIntents < midSearch.totalIntents
+    && afterEsc.focused && afterEsc.val === "" && !afterEsc.isFind && !afterEsc.dataHidden,
+    "ls7 search filters to matching rows with focus held on #libSearch, and Escape clears back to the section");
+
+  /* Observers alive after N fresh Library paints: one ResizeObserver for the card box and one for intents. */
+  const roRes = await p.evaluate(() => {
+    for (let i = 0; i < 4; i++) window.openManage();
+    const bag = window.__roBag || [];
+    const card = bag.filter(r => r.cardBox);
+    const ints = bag.filter(r => r.intents);
+    return {
+      cardMade: card.length, cardLive: card.filter(r => !r.dead).length,
+      intMade: ints.length, intLive: ints.filter(r => !r.dead).length
+    };
+  });
+  check(roRes.cardMade === 1 && roRes.cardLive === 1 && roRes.intMade === 1 && roRes.intLive === 1,
+    "ls8 after 4 Library repaints, 1 ResizeObserver lives for the tree's card box (" + roRes.cardMade + " made, "
+    + roRes.cardLive + " live) and 1 for intents (" + roRes.intMade + " made, " + roRes.intLive + " live)");
+
+  /* Hover-title updates: only shown rows (0 when collapsed, 1 on pointerenter, and the opened category on toggle). */
+  await (await p.$('#libSecs .sx-sec[data-lm="data"]')).click();
+  await sleep(150);
+  const htRes = await p.evaluate(() => {
+    const origSet = Element.prototype.setAttribute;
+    let writes = 0;
+    Element.prototype.setAttribute = function (k, v) {
+      if (k === "title" && this.classList && this.classList.contains("mg-card")) writes++;
+      return origSet.call(this, k, v);
+    };
+    try {
+      writes = 0;
+      document.querySelector('#libSecs .sx-sec[data-lm="catmac"]').click();
+      const onCollapsed = writes;
+      const cat = document.querySelector(".mg-tree .mg-cat");
+      const catRows = cat ? cat.querySelectorAll(".mg-cat-body .manage-row.mg-card").length : 0;
+      const tog = cat && cat.querySelector("[data-toggle]");
+      writes = 0;
+      if (tog) tog.click();
+      const onOpen = writes;
+      const row = cat && cat.querySelector(".mg-cat-body .manage-row.mg-card");
+      writes = 0;
+      if (row) row.dispatchEvent(new PointerEvent("pointerenter"));
+      const onHover = writes;
+      const tipPlain = row ? row.getAttribute("title") || "" : "";
+      const sortBtn = document.querySelector(".lw-head .lw-h-us");
+      if (sortBtn) sortBtn.click();
+      const rowAfter = document.querySelector(".mg-tree .mg-cat.is-open .mg-cat-body .manage-row.mg-card");
+      if (rowAfter) rowAfter.dispatchEvent(new PointerEvent("pointerenter"));
+      const tipSorted = rowAfter ? rowAfter.getAttribute("title") || "" : "";
+      if (sortBtn) { sortBtn.click(); sortBtn.click(); }
+      const togBack = document.querySelector(".mg-tree .mg-cat.is-open [data-toggle]");
+      if (togBack) togBack.click();
+      return { onCollapsed, onOpen, catRows, onHover, tipPlain, tipSorted };
+    } finally {
+      Element.prototype.setAttribute = origSet;
+    }
+  });
+  check(htRes.onCollapsed === 0 && htRes.onOpen === htRes.catRows && htRes.catRows > 0 && htRes.onHover === 1
+    && htRes.tipPlain.startsWith("Drag to reorder") && htRes.tipSorted.startsWith("Dragging waits for the catalog's order"),
+    "ls9 hover titles touch only shown rows (collapsed " + htRes.onCollapsed + ", opened " + htRes.onOpen + "/" + htRes.catRows
+    + ", pointerenter " + htRes.onHover + ")");
+
+  /* Intents press measurement: chipRoom reads 1 row, markChipOverflow measures only viewport rows before paint,
+     and repeat presses at the same width measure 0 rows. */
+  await p.evaluate(() => {
+    document.querySelector('#libSecs .sx-sec[data-lm="data"]').click();
+    window.openManage();
+    if (!document.querySelector('details.manage-sec[data-mg="intents"]').hasAttribute("hidden"))
+      document.querySelector('#libSecs .sx-sec[data-lm="data"]').click();
+  });
+  await sleep(150);
+  const intMeasure = await p.evaluate(async () => {
+    const swDesc = Object.getOwnPropertyDescriptor(Element.prototype, "scrollWidth");
+    const origCS = window.getComputedStyle;
+    let midReads = 0, roomReads = 0;
+    Object.defineProperty(Element.prototype, "scrollWidth", {
+      configurable: true,
+      get() {
+        if (this.classList && this.classList.contains("lw-mid") && this.closest(".mg-intents")) midReads++;
+        return swDesc.get.call(this);
+      }
+    });
+    window.getComputedStyle = function (el, pseudo) {
+      if (el && el.classList && el.classList.contains("mg-int")) roomReads++;
+      return origCS.call(window, el, pseudo);
+    };
+    try {
+      const total = document.querySelectorAll(".mg-intents .manage-row.mg-int").length;
+      midReads = 0; roomReads = 0;
+      document.querySelector('#libSecs .sx-sec[data-lm="intents"]').click();
+      const coldMid = midReads, coldRoom = roomReads;
+      await new Promise(r => setTimeout(r, 150));
+      document.querySelector('#libSecs .sx-sec[data-lm="data"]').click();
+      await new Promise(r => setTimeout(r, 100));
+      midReads = 0; roomReads = 0;
+      document.querySelector('#libSecs .sx-sec[data-lm="intents"]').click();
+      await new Promise(r => setTimeout(r, 150));
+      const repeatMid = midReads, repeatRoom = roomReads;
+      return { total, coldMid, coldRoom, repeatMid, repeatRoom };
+    } finally {
+      Object.defineProperty(Element.prototype, "scrollWidth", swDesc);
+      window.getComputedStyle = origCS;
+    }
+  });
+  check(intMeasure.total > 40 && intMeasure.coldRoom <= 2 && intMeasure.coldMid <= 35
+    && intMeasure.repeatMid === 0 && intMeasure.repeatRoom === 0,
+    "ls10 intents press measures 1 row in chipRoom (" + intMeasure.coldRoom + ") and only viewport rows ("
+    + intMeasure.coldMid + "/" + intMeasure.total + ") before paint, 0 on repeat ("
+    + intMeasure.repeatMid + "/" + intMeasure.repeatRoom + ")");
+
+  const intVis = await p.evaluate(async () => {
+    const frames = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const box = document.querySelector(".sx-card:has(.mg-intents)");
+    box.style.width = box.style.maxWidth = "860px";
+    await frames(); await frames();
+    const rows = [...document.querySelectorAll(".mg-intents .manage-row.mg-int")].filter(r => r.querySelector("[data-chips-more]"));
+    const bad = rows.filter(r => {
+      const mid = r.querySelector(".lw-mid"), more = r.querySelector("[data-chips-more]");
+      const over = mid.scrollWidth > mid.clientWidth + 1;
+      return more.hidden !== !over || r.classList.contains("chips-fade") !== over;
+    });
+    box.style.width = box.style.maxWidth = "";
+    await frames();
+    return { rows: rows.length, bad: bad.length };
+  });
+  check(intVis.rows > 0 && intVis.bad === 0,
+    "ls11 all " + intVis.rows + " intent rows (visible and offscreen) match expected chevrons and fades after resize ("
+    + intVis.bad + " mismatched)");
   done = true;
 } catch (e) {
   console.log("  FAIL the run stopped: " + String(e && e.message || e));
