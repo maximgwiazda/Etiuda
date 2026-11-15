@@ -1,14 +1,14 @@
 import { CATS, intentCount, SW_IDS } from "./content-model.js";
 import { M, WHO_BASE, normWhoList } from "./stock.js";
-import { E_KEY_RE, E_NS, lsDel, lsGet, lsKeys, lsSet, ssDel, LAYER_KEYS, eLayer, eLayers, lyGet, lySet, lyDel,
+import { E_KEY_RE, lsDel, lsKeys, ssDel, lyGet, lySet, lyDel,
   eSaveTrouble, eDeskNewer, eDeskRefused, eDeskRefusedSeen, eHomeless, eDeskHome } from "./storage.js";
 import { t, toast, fileStamp } from "./ui-lang.js";
 import { hooks } from "./hooks.js";
 import { hangBubble } from "./bubble.js";
 import { statsOlderTouched } from "./desk-stats.js";
 
-// Personal cards: stock built-ins in M; optional pack.baseCards (imported catalog)
-// replaces M; edits/hides/customs in pack.overrides / .custom / .hidden. PAX and ROLE are
+// Personal cards: stock built-ins in M, and the applied catalog replaces them;
+// edits/hides/customs in pack.overrides / .custom / .hidden. PAX and ROLE are
 // per-tab session state, seeded in initTabs() from legacy localStorage if needed.
 const BASE_CATS=Object.assign({},CATS);
 let BASE_M=[];
@@ -29,22 +29,9 @@ function snapshotStockBaseCards(){
     return o;
   });
 }
-function normalizeBaseCardEntry(m){
-  const o=Object.assign({},m||{});
-  delete o._custom;
-  delete o._overridden;
-  delete o._base;
-  if(!o.id) o.id=catalogCardId(o);
-  o._base=1;
-  return o;
-}
-/** Rebuild BASE_M from imported catalog (pack.baseCards) or stock M. */
+/** Rebuild BASE_M from stock M, which a catalog replaces when one is applied. */
 function rebuildBaseCards(){
-  if(Array.isArray(pack.baseCards)&&pack.baseCards.length){
-    BASE_M=pack.baseCards.map(normalizeBaseCardEntry);
-  } else {
-    BASE_M=snapshotStockBaseCards();
-  }
+  BASE_M=snapshotStockBaseCards();
 }
 /* A retired card sleeps: out of the list and every search, still the card its star, edit and counts
    belong to. The card as the list would have shown it; one this desk removed stays removed. */
@@ -61,11 +48,8 @@ function emptyPack(){
     baseCards:null,editBases:{}};
 }
 let pack=emptyPack();
-/* 1.5.0 renamed pack keys (macroOrder -> cardOrder, baseMacros -> baseCards), and every
-   browser and standalone in circulation holds the OLD names - this tool is distributed by
-   copying a file. Read either, KEEP WRITING BOTH: writing only the new name silently costs
-   someone their ordering in an older build. Drop the shim only when no pre-1.5.0 build is
-   in use. Returns true if anything was migrated. */
+/* A stored pack may name the card order and the card set by the older keys. Read them
+   when the current keys are absent. Returns true if anything was migrated. */
 function migratePackKeys(p){
   if(!p||typeof p!=="object") return false;
   let did=false;
@@ -196,61 +180,6 @@ function showDeskNotices(){
   showDeskRefused();
   syncSaveNotice();
 }
-/* WHAT MAY CROSS A CATALOG BOUNDARY: everything addressed by CONTENT. A card id is derived
-   from the card, so it either matches over there or is filtered out harmlessly - but every
-   layer written before the tag model addressed an intent by its INDEX, and these carry that
-   index into a namespace that reads it as a tag id. IntentOrder is out of NS_CARRY for the
-   same reason, and baseCards would replace the card set wholesale. */
-const NS_CARRY=["Pack","Stats","Days","CatOrder","Cols","Floor"];
-const NS_DROP_POSITIONAL=["intentOverrides","intentHidden","intentFavourites","intentRemoved","baseCards"];
-function packWithoutPositional(raw){
-  try{
-    const p=JSON.parse(raw);
-    if(!p||typeof p!=="object") return null;
-    NS_DROP_POSITIONAL.forEach(k=>{ delete p[k]; });
-    return JSON.stringify(p);
-  }catch(e){ return null; }   // unparseable: loadPack could not have used it either
-}
-/* The mover the adoption below uses. A key this namespace already holds is never
-   overwritten: what is here is later than what is anywhere else, whatever brought it. */
-function carryNsLayer(from){
-  let moved=0;
-  NS_CARRY.forEach(n=>{
-    let v=lsGet(from+n);
-    const to=(LAYER_KEYS.indexOf(n)>-1 ? eLayer() : E_NS)+n;
-    if(v==null || lsGet(to)!=null) return;
-    if(n==="Pack"){ v=packWithoutPositional(v); if(v==null) return; }
-    if(lsSet(to,v)) moved++;
-  });
-  // Deferred: the toast host does not exist this early in the boot.
-  if(moved) setTimeout(()=>{ try{ toast(t("Restored your cards and stars from an earlier build.")); }catch(e){} },1400);
-  return moved;
-}
-/* ONE SHOT PER SOURCE, and the marker is what makes it one: it sits OUTSIDE E_KEY_RE, so a
-   Clear cannot take it with it and hand the same layer back at the next boot, undoing the
-   Clear. Written wherever the question was actually answered - "this namespace already has a
-   layer" is an answer - and never where there is nothing yet to answer. */
-const NS_ADOPTED="e~nsAdopted:";
-/* THE SOURCE IS INFERRED: exactly ONE other pack is
-   stranded in the storage area file:// pages share. Two would mean a machine with two catalogs
-   on it, and guessing between them is worse than leaving both alone. Runs only for a build that
-   HAS an embedded catalog - the bare engine's pack belongs to whatever catalog was imported
-   into it, which is not this one - and only into that catalog's layer, from none this desk
-   wrote for another: personal content never crosses from one catalog to another. */
-function adoptStrandedPack(){
-  try{
-    if(E_NS==="e" || eLayer()!==E_NS) return false;
-    const mine=eLayer()+"Pack", known=eLayers();
-    const found=lsKeys().filter(k=>k!==mine && /^e[0-9a-z]+~Pack$/.test(k) && known.indexOf(k.slice(0,-"Pack".length))<0);
-    if(found.length!==1) return false;
-    const from=found[0].slice(0,-"Pack".length);
-    const mark=NS_ADOPTED+from;
-    if(lsGet(mark)!=null) return false;
-    const moved=lyGet("Pack") ? 0 : carryNsLayer(from);
-    lsSet(mark,"1");
-    return moved>0;
-  }catch(e){ return false; }
-}
 /* ---- positions, then tag ids ---------------------------------------------------------------
    Everything in the layer that names an intent named it by its POSITION before 2.0.0, and this
    build reads those names as tag ids. The re-key runs once, against the catalog applied at this
@@ -322,7 +251,7 @@ function setAsideIntentLayer(order){
   pack.intentCounts={};
   INTENT_LISTS.forEach(name=>{ pack[name]=[]; });
   lyDel("IntentOrder");
-  // Deferred with the same hand as the adoption above: no toast host exists this early.
+  // Deferred: no toast host exists this early in the boot.
   setTimeout(()=>{ try{ toast(t("Your intent edits and stars are set aside: this catalog cannot say which intent each belongs to.")); }catch(e){} },1400);
 }
 function migrateIntentKeys(){
@@ -354,7 +283,6 @@ function withCounts(p){
 }
 function loadPack(){
   let p=null;
-  adoptStrandedPack();
   try{ const raw=lyGet("Pack"); if(raw) p=JSON.parse(raw); }catch(e){}
   if(!p||typeof p!=="object"||Array.isArray(p)) p=null;
   p=withCounts(p);
@@ -363,7 +291,7 @@ function loadPack(){
      banner offers Reset, which is the honest remedy. */
   try{ migratePackKeys(p); }
   catch(e){ packMigrationFailed=true; try{ console.error("pack migration failed",e); }catch(_){} }
-  // The old names are written by writePack and never held: the live pack speaks the new vocabulary.
+  // Read above and never held: the live pack speaks the current keys.
   if(p){ delete p.macroOrder; delete p.baseMacros; }
   pack=Object.assign(emptyPack(), p||{});
   if(!Array.isArray(pack.hidden)) pack.hidden=[];
@@ -408,59 +336,14 @@ function loadPack(){
   if(pack.facts!=null && typeof pack.facts!=="string") pack.facts=null;
   // null = follow the catalog; an array = the user has edited the list, [] included
   if(pack.who!=null){ if(!Array.isArray(pack.who)) pack.who=null; else pack.who=normWhoList(pack.who); }
-  // Imported card catalog: null / non-array = use stock M
+  // The field is a list or nothing.
   if(pack.baseCards!=null && !Array.isArray(pack.baseCards)) pack.baseCards=null;
   if(Array.isArray(pack.baseCards)&&!pack.baseCards.length) pack.baseCards=null;
   if(!pack.editBases||typeof pack.editBases!=="object"||Array.isArray(pack.editBases)) pack.editBases={};
   else Object.keys(pack.editBases).forEach(k=>{ if(!pack.editBases[k]||typeof pack.editBases[k]!=="object"||Array.isArray(pack.editBases[k])) delete pack.editBases[k]; });
   if(pack.intentKeys!==TAG_KEYED) pack.intentKeys="";
-  migrateBpToCin();
-  /* Last, so it re-keys what the normalisation above has already made whole - and after
-     migrateBpToCin, whose own remap reads intentOverrides by whatever key it finds. */
+  /* Last, so it re-keys what the normalisation above has already made whole. */
   migrateIntentKeys();
-}
-// Boarding pass (bp) was merged into Check-in (cin). Remap saved packs so nothing
-// still points at the removed category key.
-function migrateBpToCin(){
-  if(pack.catLabels && pack.catLabels.bp!=null){
-    if(pack.catLabels.cin==null){
-      pack.catLabels.cin = pack.catLabels.bp==="Boarding pass" ? "Check-in" : pack.catLabels.bp;
-    }
-    delete pack.catLabels.bp;
-  }
-  if(pack.customCats && pack.customCats.bp!=null){
-    if(pack.customCats.cin==null) pack.customCats.cin = pack.customCats.bp;
-    delete pack.customCats.bp;
-  }
-  (pack.custom||[]).forEach(m=>{ if(m && m.c==="bp") m.c="cin"; });
-  Object.keys(pack.overrides||{}).forEach(id=>{
-    const o=pack.overrides[id];
-    if(o && o.c==="bp") o.c="cin";
-  });
-  Object.keys(pack.intentOverrides||{}).forEach(id=>{
-    const o=pack.intentOverrides[id];
-    if(o && o.cat==="bp") o.cat="cin";
-    if(o && Array.isArray(o.cat)) o.cat=o.cat.map(k=>k==="bp"?"cin":k);
-  });
-  (pack.intentCustom||[]).forEach(c=>{
-    if(!c) return;
-    if(c.cat==="bp") c.cat="cin";
-    if(Array.isArray(c.cat)) c.cat=c.cat.map(k=>k==="bp"?"cin":k);
-  });
-  // Drop orphan hide/override keys for the old built-in boarding-pass ids
-  if(Array.isArray(pack.hidden)){
-    pack.hidden=pack.hidden.map(id=>String(id).replace(/^b:bp:/,"b:cin:"));
-  }
-  if(Array.isArray(pack.favourites)){
-    pack.favourites=pack.favourites.map(id=>String(id).replace(/^b:bp:/,"b:cin:"));
-  }
-  Object.keys(pack.overrides||{}).forEach(id=>{
-    if(/^b:bp:/.test(id)){
-      const neu=id.replace(/^b:bp:/,"b:cin:");
-      if(!pack.overrides[neu]) pack.overrides[neu]=pack.overrides[id];
-      delete pack.overrides[id];
-    }
-  });
 }
 
 // Three layers, same shape as roles and facts: engine (nothing) -> catalog -> user edit.
@@ -543,11 +426,6 @@ function writePack(countsOnly){
   Object.keys(pack).forEach(k=>{ if(k!=="days") (STATS_FIELDS.indexOf(k)>-1 ? stats : layer)[k]=pack[k]; });
   stats.days=open;
   const older=statsOlderTouched(pack,newest);
-  /* Written under BOTH names - see migratePackKeys(): an older build opened against the
-     same storage reads macroOrder/baseMacros and finds them. The duplicates are written
-     here rather than kept on `pack`, so the live object carries the new vocabulary only. */
-  layer.macroOrder=pack.cardOrder;
-  layer.baseMacros=pack.baseCards;
   /* A refused write raises the lasting notice from the storage layer; see syncSaveNotice. */
   let ok=true;
   try{

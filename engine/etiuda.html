@@ -6564,7 +6564,6 @@ What you type stays in this browser only.`;
     nsGet: () => nsGet,
     nsKey: () => nsKey,
     nsSet: () => nsSet,
-    orbitOldLayer: () => orbitOldLayer,
     setLayer: () => setLayer,
     ssDel: () => ssDel,
     ssGet: () => ssGet,
@@ -7041,22 +7040,6 @@ What you type stays in this browser only.`;
       l.push(ns);
       lsSet(E_LAYERS, JSON.stringify(l));
     }
-  }
-  var E_ORBITED = "e~orbited";
-  function orbitOldLayer() {
-    if (lsGet(E_ORBITED) != null) return 0;
-    let moved = 0;
-    if (E_LAYER !== E_NS && lyGet("Pack") == null) {
-      LAYER_KEYS.forEach((n) => {
-        const v = lsGet(E_NS + n);
-        if (v != null && lsSet(E_LAYER + n, v)) {
-          lsDel(E_NS + n);
-          moved++;
-        }
-      });
-    }
-    lsSet(E_ORBITED, "1");
-    return moved;
   }
   var E_CARRIED = "e~carried";
   var E_OLD_KEY_RE = /^pb(?:[A-Z]|[0-9a-z]+~)/;
@@ -8290,7 +8273,6 @@ What you type stays in this browser only.`;
     "In an editor: the language tab before this one": "W edytorze: poprzedni język",
     "In an editor: the language tab after this one": "W edytorze: następny język",
     "Switch the language being edited": "Przełącz edytowany język",
-    "Restored your cards and stars from an earlier build.": "Przywrócono własne karty i gwiazdki z wcześniejszej wersji.",
     "Your intent edits and stars are set aside: this catalog cannot say which intent each belongs to.": "Odłożono własne zmiany i gwiazdki przy intencjach: ten katalog nie wskazuje, której intencji dotyczą.",
     "Edited cards this catalog does not have are kept as your own: {CARDS}.": "Zmienione karty, których ten katalog nie ma, zostają jako własne: {CARDS}.",
     "Starred cards this catalog does not have are off your list: {CARDS}.": "Karty z gwiazdką, których ten katalog nie ma, znikają z listy: {CARDS}.",
@@ -9810,21 +9792,8 @@ What you type stays in this browser only.`;
       return o;
     });
   }
-  function normalizeBaseCardEntry(m) {
-    const o = Object.assign({}, m || {});
-    delete o._custom;
-    delete o._overridden;
-    delete o._base;
-    if (!o.id) o.id = catalogCardId(o);
-    o._base = 1;
-    return o;
-  }
   function rebuildBaseCards() {
-    if (Array.isArray(pack.baseCards) && pack.baseCards.length) {
-      BASE_M = pack.baseCards.map(normalizeBaseCardEntry);
-    } else {
-      BASE_M = snapshotStockBaseCards();
-    }
+    BASE_M = snapshotStockBaseCards();
   }
   function retiredCards() {
     const removed = new Set(pack.removed || []), ov = pack.overrides || {};
@@ -10020,57 +9989,6 @@ What you type stays in this browser only.`;
     showDeskRefused();
     syncSaveNotice();
   }
-  var NS_CARRY = ["Pack", "Stats", "Days", "CatOrder", "Cols", "Floor"];
-  var NS_DROP_POSITIONAL = ["intentOverrides", "intentHidden", "intentFavourites", "intentRemoved", "baseCards"];
-  function packWithoutPositional(raw) {
-    try {
-      const p = JSON.parse(raw);
-      if (!p || typeof p !== "object") return null;
-      NS_DROP_POSITIONAL.forEach((k) => {
-        delete p[k];
-      });
-      return JSON.stringify(p);
-    } catch (e) {
-      return null;
-    }
-  }
-  function carryNsLayer(from) {
-    let moved = 0;
-    NS_CARRY.forEach((n) => {
-      let v = lsGet(from + n);
-      const to = (LAYER_KEYS.indexOf(n) > -1 ? eLayer() : E_NS) + n;
-      if (v == null || lsGet(to) != null) return;
-      if (n === "Pack") {
-        v = packWithoutPositional(v);
-        if (v == null) return;
-      }
-      if (lsSet(to, v)) moved++;
-    });
-    if (moved) setTimeout(() => {
-      try {
-        toast(t("Restored your cards and stars from an earlier build."));
-      } catch (e) {
-      }
-    }, 1400);
-    return moved;
-  }
-  var NS_ADOPTED = "e~nsAdopted:";
-  function adoptStrandedPack() {
-    try {
-      if (E_NS === "e" || eLayer() !== E_NS) return false;
-      const mine = eLayer() + "Pack", known = eLayers();
-      const found = lsKeys().filter((k) => k !== mine && /^e[0-9a-z]+~Pack$/.test(k) && known.indexOf(k.slice(0, -"Pack".length)) < 0);
-      if (found.length !== 1) return false;
-      const from = found[0].slice(0, -"Pack".length);
-      const mark = NS_ADOPTED + from;
-      if (lsGet(mark) != null) return false;
-      const moved = lyGet("Pack") ? 0 : carryNsLayer(from);
-      lsSet(mark, "1");
-      return moved > 0;
-    } catch (e) {
-      return false;
-    }
-  }
   var TAG_KEYED = "tag";
   var ASIDE = "IntentsAside";
   var INTENT_LISTS = ["intentHidden", "intentFavourites", "intentRemoved"];
@@ -10197,7 +10115,6 @@ What you type stays in this browser only.`;
   }
   function loadPack() {
     let p = null;
-    adoptStrandedPack();
     try {
       const raw = lyGet("Pack");
       if (raw) p = JSON.parse(raw);
@@ -10266,50 +10183,7 @@ What you type stays in this browser only.`;
       if (!pack.editBases[k] || typeof pack.editBases[k] !== "object" || Array.isArray(pack.editBases[k])) delete pack.editBases[k];
     });
     if (pack.intentKeys !== TAG_KEYED) pack.intentKeys = "";
-    migrateBpToCin();
     migrateIntentKeys();
-  }
-  function migrateBpToCin() {
-    if (pack.catLabels && pack.catLabels.bp != null) {
-      if (pack.catLabels.cin == null) {
-        pack.catLabels.cin = pack.catLabels.bp === "Boarding pass" ? "Check-in" : pack.catLabels.bp;
-      }
-      delete pack.catLabels.bp;
-    }
-    if (pack.customCats && pack.customCats.bp != null) {
-      if (pack.customCats.cin == null) pack.customCats.cin = pack.customCats.bp;
-      delete pack.customCats.bp;
-    }
-    (pack.custom || []).forEach((m) => {
-      if (m && m.c === "bp") m.c = "cin";
-    });
-    Object.keys(pack.overrides || {}).forEach((id) => {
-      const o = pack.overrides[id];
-      if (o && o.c === "bp") o.c = "cin";
-    });
-    Object.keys(pack.intentOverrides || {}).forEach((id) => {
-      const o = pack.intentOverrides[id];
-      if (o && o.cat === "bp") o.cat = "cin";
-      if (o && Array.isArray(o.cat)) o.cat = o.cat.map((k) => k === "bp" ? "cin" : k);
-    });
-    (pack.intentCustom || []).forEach((c) => {
-      if (!c) return;
-      if (c.cat === "bp") c.cat = "cin";
-      if (Array.isArray(c.cat)) c.cat = c.cat.map((k) => k === "bp" ? "cin" : k);
-    });
-    if (Array.isArray(pack.hidden)) {
-      pack.hidden = pack.hidden.map((id) => String(id).replace(/^b:bp:/, "b:cin:"));
-    }
-    if (Array.isArray(pack.favourites)) {
-      pack.favourites = pack.favourites.map((id) => String(id).replace(/^b:bp:/, "b:cin:"));
-    }
-    Object.keys(pack.overrides || {}).forEach((id) => {
-      if (/^b:bp:/.test(id)) {
-        const neu = id.replace(/^b:bp:/, "b:cin:");
-        if (!pack.overrides[neu]) pack.overrides[neu] = pack.overrides[id];
-        delete pack.overrides[id];
-      }
-    });
   }
   function whoOptions() {
     return Array.isArray(pack && pack.who) ? pack.who : WHO_BASE;
@@ -10395,8 +10269,6 @@ What you type stays in this browser only.`;
     });
     stats.days = open;
     const older = statsOlderTouched(pack, newest);
-    layer.macroOrder = pack.cardOrder;
-    layer.baseMacros = pack.baseCards;
     let ok = true;
     try {
       if (!countsOnly) ok = lySet("Pack", JSON.stringify(layer)) && ok;
@@ -29421,7 +29293,6 @@ What you type stays in this browser only.`;
     E_APPLIED = bootCatalog();
     if (E_APPLIED) eApplyCatalog(E_APPLIED);
     setLayer(layerNsOf(E_APPLIED));
-    orbitOldLayer();
   }
 
   // src/modules/catalog-merge.js
