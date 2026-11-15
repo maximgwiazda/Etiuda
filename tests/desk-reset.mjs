@@ -885,6 +885,28 @@ function review23Leg(mod) {
       const lifted = L ? sharesLeg(mod, L, lab, "f4-lifted") : null;
       check(!!lifted && !lifted.team && !lifted.policy, "4r23a lifting plant:reset-share-root takes the share as a root again: " + JSON.stringify(lifted));
     }
+    /* 4r23b (finding 1): a marker naming another folder as the default, or as the setting, roots nothing there. The next
+       start roots only the default it computes itself and the setting the desk file holds. */
+    const markerRoots = (M, name) => {
+      const p = deskPair(lab, name);
+      const other = path.join(lab, name, "other");
+      write(path.join(other, "shop.ec"), "not the desk's");
+      write(path.join(other, "etiuda-team.json"), "not the desk's");
+      write(path.join(p.user, M.MARKER_NAME), JSON.stringify({ v: 1, userData: p.user, catalogSetting: "", defaultCatalog: other, attempts: 0 }));
+      const done = M.honourPendingReset({ userData: p.user, holdsLock: true, defaultCatalog: p.docs });
+      return { done: !!done && done.ok === true, desk: gone(path.join(p.user, "desk.json")),
+        other: fs.existsSync(path.join(other, "shop.ec")) && fs.existsSync(path.join(other, "etiuda-team.json")),
+        own: gone(path.join(p.docs, "shop.ec")) };
+    };
+    const f1 = markerRoots(mod, "f1");
+    check(f1.done && f1.desk && f1.other && f1.own, "4r23b a marker naming another folder as the default roots nothing"
+      + " there: the next start sweeps the default it computes and the desk file's setting, and the other folder stays: " + JSON.stringify(f1));
+    if (!PLANTS) skip("4r23b lifting plant:reset-own-default takes the marker's default again (ETIUDA_PLANTS=off)");
+    else {
+      const L = liftedReset(lab, "plant:reset-own-default", "    defaultCatalog: doc.defaultCatalog, catalogSetting: doc.catalogSetting,");
+      const lifted = L ? markerRoots(L, "f1-lifted") : null;
+      check(!!lifted && !lifted.other, "4r23b lifting plant:reset-own-default takes the marker's default again: " + JSON.stringify(lifted));
+    }
   } finally {
     fs.rmSync(lab, { recursive: true, force: true });
   }

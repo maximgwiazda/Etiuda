@@ -103,8 +103,9 @@ function refused(detail, userData, roots, keep) {
   };
 }
 
-/* What the desk file says about the folders a reset may touch: the team folders it names (each folder team's, and an
-   invitation's still asked), read from desk.json or the newest backup that parses; empty where none does. */
+/* What the desk file says about the folders a reset may touch: the catalog folder setting, and the team folders it names
+   (each folder team's, and an invitation's still asked), read from desk.json or the newest backup that parses; empty
+   where none does. */
 function deskFacts(user) {
   const names = ["desk.json"];
   for (let n = 1; n <= 9; n++) names.push("desk.bak" + n + ".json");
@@ -112,14 +113,17 @@ function deskFacts(user) {
     let doc = null;
     try { doc = JSON.parse(fs.readFileSync(path.join(user, names[i]), "utf8")); } catch (e) { continue; }
     if (!doc || typeof doc !== "object") continue;
+    let keys = doc.keys;
+    if (typeof keys === "string") { try { keys = JSON.parse(keys || "{}"); } catch (e) { keys = {}; } }
+    const setting = keys && typeof keys === "object" && typeof keys.eCatalogFolder === "string" ? keys.eCatalogFolder : "";
     const shares = [];
     const shown = doc.teamShown && typeof doc.teamShown === "object" ? doc.teamShown : {};
     Object.keys(shown).forEach(t => { const s = shown[t]; if (s && typeof s.folder === "string" && s.folder) shares.push(s.folder); });
     const inv = doc.teamJoin && typeof doc.teamJoin === "object" ? doc.teamJoin.invite : null;
     if (inv && typeof inv.folder === "string" && inv.folder) shares.push(inv.folder);
-    return { shares: shares };
+    return { setting: setting, shares: shares };
   }
-  return { shares: [] };
+  return { setting: "", shares: [] };
 }
 
 /* The default catalog is a root only when the setting names it, or names nothing. A folder
@@ -316,13 +320,7 @@ function stageReset(opts) {
   const user = plan.userData;
   const marker = path.join(user, MARKER_NAME);
   if (pathOutside([user], marker)) return { ok: false, reason: "refused", changed: false };
-  const body = JSON.stringify({
-    v: 1,
-    userData: user,
-    catalogSetting: String((opts && opts.catalogSetting) || ""),
-    defaultCatalog: String((opts && opts.defaultCatalog) || ""),
-    attempts: 0
-  });
+  const body = JSON.stringify({ v: 1, userData: user, catalogSetting: String((opts && opts.catalogSetting) || ""), attempts: 0 });
   const tmp = marker + ".tmp";
   try {
     fs.writeFileSync(tmp, body);
@@ -339,7 +337,11 @@ function dropMarker(marker) {
 }
 
 /* Dropped only when the pass completes, or the marker will not parse, or it names another
-   folder. A failed pass leaves it held. Without the lock, nothing here is read. */
+   folder. A failed pass leaves it held. Without the lock, nothing here is read. No folder the
+   marker names is a root: the default is the caller's own (`defaultCatalog`, a path or a
+   function answering one), and the setting and the team folders are the desk file's. The
+   marker's setting is read only where the desk file has none, and it can only keep the
+   default from being a root. */
 function honourPendingReset(opts) {
   if (!opts || opts.holdsLock !== true) return { pending: false, changed: false };
   const raw = String((opts && opts.userData) || "");
@@ -365,13 +367,14 @@ function honourPendingReset(opts) {
     dropMarker(marker);
     return { pending: true, ok: false, changed: false };
   }
-  let given = [];
+  let given = [], own = "";
   try { given = typeof opts.shares === "function" ? opts.shares() : opts.shares; } catch (e) { given = []; }
+  try { own = String((typeof opts.defaultCatalog === "function" ? opts.defaultCatalog() : opts.defaultCatalog) || ""); } catch (e) { own = ""; }
+  const facts = deskFacts(user);
   const planOpts = {
     userData: user,
-    catalogSetting: doc.catalogSetting,
-    defaultCatalog: doc.defaultCatalog,
-    shares: deskFacts(user).shares.concat(Array.isArray(given) ? given : [])
+    defaultCatalog: own, catalogSetting: facts.setting || String(doc.catalogSetting || ""), /* plant:reset-own-default */
+    shares: facts.shares.concat(Array.isArray(given) ? given : [])
   };
   let done;
   if (Array.isArray(doc.owed) && doc.owed.length) {
@@ -428,7 +431,6 @@ function rememberOwed(user, doc, done) {
     v: 1,
     userData: user,
     catalogSetting: String(doc.catalogSetting || ""),
-    defaultCatalog: String(doc.defaultCatalog || ""),
     attempts: (doc.attempts || 0) + 1,
     owed: done.owed,
     owedAt: doc.owedAt || new Date().toISOString(),

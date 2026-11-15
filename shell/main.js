@@ -12840,7 +12840,7 @@ if (!theOnlyOne || (Array.isArray(process.argv) && process.argv.includes("--upda
   app.quit();
 } else {
   try {
-    const honoured = honourPendingReset({ userData: app.getPath("userData"), holdsLock: true, shares: resetShares });
+    const honoured = honourPendingReset({ userData: app.getPath("userData"), holdsLock: true, defaultCatalog: defaultCatalogFolder, shares: resetShares });
     if (honoured && honoured.ok) {
       try { setStartWithWindows(false); } catch (err) { /* start with Windows could not be changed */ }
     }
