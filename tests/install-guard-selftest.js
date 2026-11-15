@@ -23,6 +23,8 @@ if (process.argv.includes("--lab-key")) {
   const KEY = "HKCU\\Software\\EtiudaGuardLab";
   const reg = args => spawnSync("reg", args, { encoding: "utf8", windowsHide: true });
   if (process.platform !== "win32") { console.log("NOT RUN: no registry on " + process.platform); process.exit(0); }
+  /* It writes the account's registry, so never on a desk (the floor: no registry write on the laptop). */
+  if (fs.existsSync(G.deskSentinelAt(process.env))) { console.log("REFUSED: this computer carries " + G.deskSentinelAt(process.env) + ", a desk, and this leg writes the registry"); process.exit(78); }
   if (G.regQuery(KEY).present) { console.log("REFUSED: " + KEY + " already stands; it is somebody's, and this leg makes its own"); process.exit(78); }
   const lab = [{ label: "the lab key", kind: "reg", at: KEY, app: "desk", role: "lab", extra: true }];
   try {

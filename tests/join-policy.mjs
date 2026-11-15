@@ -68,17 +68,23 @@ function sliceDecl(src, marker) {
   }
   throw new Error("an unterminated declaration: " + marker);
 }
+/* A slice's reg calls meet the shell's own guard (shell/win-proxy.cjs, regOpts), so the functions handed in for execFileSync and
+   execFile are marked as stand-ins; markStand refuses node's own. */
+const REG_OPTS = nodeRequire("../shell/win-proxy.cjs").regOpts;
 function load(src, markers, names, params, args) {
   const body = markers.map(m => sliceDecl(src, m)).join("\n");
-  return new Function(...params, body + "\nreturn { " + names.join(", ") + " };")(...args);
+  const given = params.map((p, i) => args[i]);
+  params.forEach((p, i) => { if (p === "execFileSync" || p === "execFile") nodeRequire("./reg-stand.cjs").markStand(given[i]); });
+  return new Function(...params, "regOpts", body + "\nreturn { " + names.join(", ") + " };")(...given, REG_OPTS);
 }
 
-const POLICY_DECLS = ["const REG_TOOL =", "const POLICY_KEY =", "const POLICY_REREAD_MS =", "const POLICY_LEAD_RE =", "const POLICY_WORDS =",
+const POLICY_DECLS = ["const REG_TOOL =", "const POLICY_KEY =", "const POLICY_REREAD_MS =", "const POLICY_LOOK_MS =", "const POLICY_LOOK_GRACE_MS =", "const POLICY_LEAD_RE =", "const POLICY_WORDS =",
   "const POLICY_HEAD =", "const POLICY_EXPORT_LINE =", "function policyValues(", "function policyExpand(",
   "function policyRegSz(", "function policyFolderOk(", "function policyLeadOk(", "function policyNoUpdate(", "function joinPolicyFacts(",
   "function policyWords(", "function joinPolicyFrom(", "const POLICY_GOOD_FILE =", "function policyGoodLoad(", "function policyGoodSave(",
-  "let joinPolicyRead =", "function readJoinPolicy("];
-const POLICY_NAMES = ["execFileSync", "process", "fs", "os", "path", "app", "writeReplacing"];
+  "let joinPolicyRead =", "function policyScratch(", "function policyScratchGone(", "function policyExported(", "function policyTake(",
+  "function policyLookLater(", "function readJoinPolicy("];
+const POLICY_NAMES = ["execFileSync", "process", "fs", "os", "path", "app", "writeReplacing", "execFile"];
 const MEMBER_DECLS = ["const HPKE_KEM =", "const HPKE_SUITE =", "const SPKI_X25519 =", "function hpkeLabeledExtract(",
   "function hpkeLabeledExpand(", "function hpkeX25519Public(", "function hpkeShared(", "function hpkeSchedule(",
   "function hpkeOpen(", "const SEALED_TEAM_RE =", "const TEAM_WRAP_LABEL =", "function teamWrapInfo(",
@@ -493,16 +499,20 @@ function shape(r) {
   const problems = [];
   if (!P) problems.push(loadError);
   else {
-    let reader = "", facts = "", values = "", keyLine = "";
+    let reader = "", facts = "", values = "", keyLine = "", look = "";
     try {
       reader = sliceDecl(SRC, "function readJoinPolicy(");
+      look = sliceDecl(SRC, "function policyLookLater(");
       facts = sliceDecl(SRC, "function joinPolicyFacts(");
       values = sliceDecl(SRC, "function policyValues(");
       keyLine = sliceDecl(SRC, "const POLICY_KEY =");
     } catch (e) { problems.push(e.message); }
     if (reader) {
       if (reader.split("execFileSync(").length !== 2) problems.push("exec count " + reader.split("execFileSync(").length);
-      if (!reader.includes('execFileSync(REG_TOOL, ["export", POLICY_KEY, file, "/y"]')) problems.push("not REG_TOOL exporting the key");
+      if (!reader.includes('execFileSync(REG_TOOL, ["export", POLICY_KEY, at.file, "/y"]')) problems.push("not REG_TOOL exporting the key");
+      /* The minute's look, which does not wait, runs the same one program on the same one key. */
+      if (look.split("execFile(").length !== 2 || !look.includes('execFile(REG_TOOL, ["export", POLICY_KEY, at.file, "/y"]')) problems.push("the look is not REG_TOOL exporting the key once");
+      if (/execFileSync|powershell|cmd\.exe|spawn\s*\(|\bfork\s*\(|child_process|console\.|teamSay/i.test(look)) problems.push("the look runs or says something else");
       if (/execFileSync\(\s*["'`]/.test(reader)) problems.push("a program named in place of REG_TOOL");
       if (/powershell|cmd\.exe|spawn\s*\(|\bfork\s*\(|child_process|dbus-send/i.test(reader + facts + values)) problems.push("another program");
       if (/console\.|teamSay|\.said\b/.test(reader + facts + values)) problems.push("the reader says something itself");
@@ -813,7 +823,9 @@ function standInReg(registry, page) {
     const bytes = consoleBytes(out, page);
     return opt && opt.encoding && opt.encoding !== "buffer" ? bytes.toString(opt.encoding) : bytes;
   };
-  return { calls, asked, cp: { execFileSync, execFile: () => { throw new Error("no program runs here"); } } };
+  const execFile = () => { throw new Error("no program runs here"); };
+  nodeRequire("./reg-stand.cjs").markStand(execFileSync, execFile);
+  return { calls, asked, cp: { execFileSync, execFile } };
 }
 /* Every leg below asks the Windows arm of the reader, so the shell runs as Windows on any machine. */
 function asWindows(fn) {
@@ -1129,10 +1141,11 @@ function policyToPage(shell) {
 /* 19n: A READ THAT FAILED KEEPS THE VERSION LOOK OFF, AND IS TRIED AGAIN (Grok's review 17 of the update offer, finding 4).
    reg stopped at its timeout: the look is off, since a DeskNoUpdateCheck the read missed is not taken as unset, and a second
    ask at once starts no second reg. Two hours on, the key is read again, and its 0 leaves the look on; a read that worked is
-   not read again. Lifting plant:policy-reread keeps the failed read for the run, and plant:look-off-unread lets it arm. */
+   looked at again once its minute has passed (review 28, finding 4), without waiting: one asynchronous call, no second
+   synchronous one. Lifting plant:policy-reread keeps the failed read for the run, and plant:look-off-unread lets it arm. */
 function lookUnderFailedRead(src) {
   const problems = [];
-  let calls = 0;
+  let calls = 0, looks = 0;
   const answer = (file, args) => {
     calls++;
     if (calls === 1) { const e = new Error("spawnSync reg.exe ETIMEDOUT"); e.code = "ETIMEDOUT"; e.status = null; throw e; }
@@ -1140,7 +1153,7 @@ function lookUnderFailedRead(src) {
     return null;
   };
   const R = load(src, POLICY_DECLS.concat(["function updateLookOff("]).filter(m => src.indexOf(m) >= 0), ["readJoinPolicy", "updateLookOff"],
-    POLICY_NAMES, [answer, { platform: "win32" }, fs, os, path]);
+    POLICY_NAMES, [answer, { platform: "win32" }, fs, os, path, undefined, undefined, () => { looks++; }]);
   const realNow = Date.now;
   let shift = 0;
   Date.now = () => realNow() + shift;
@@ -1152,7 +1165,7 @@ function lookUnderFailedRead(src) {
     R.updateLookOff();
     if (first !== true || again !== true || callsSoon !== 1) problems.push("the failed read: off " + first + " then " + again + ", reg " + callsSoon + " time(s)");
     if (later !== false || callsLater !== 2) problems.push("two hours on: off " + later + ", reg " + callsLater + " time(s)");
-    if (calls !== 2) problems.push("a read that worked was read again: reg " + calls + " time(s)");
+    if (calls !== 2 || looks !== 1) problems.push("a read that worked, three hours on: " + (calls - 2) + " more read(s) waited on, " + looks + " look(s) without waiting, not 0 and 1");
   } finally { Date.now = realNow; }
   return problems;
 }

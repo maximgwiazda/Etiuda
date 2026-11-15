@@ -1171,7 +1171,10 @@ try {
   /* 5c AS A JUDGEMENT OF A TEXT, so a planted copy can be judged the same way. WIDENED 2026-11-15 by the lead engineer
      (Claudius) on the test architect's word: win-proxy.cjs reads Windows' proxy again without waiting (execFile), so two
      files now take execFile beside execFileSync and there are three asynchronous calls (the caret's two and win-proxy's one).
-     The program set is unchanged: win-proxy's one execFile call is pinned to REG_TOOL by its own text. */
+     The program set is unchanged: win-proxy's one execFile call is pinned to REG_TOOL by its own text. WIDENED again the same
+     day by the lead engineer (Claudius delta5) on the test architect's edit to review 28: the desk AI's minute look at machine
+     policy runs without waiting, so four asynchronous calls, main.js's one beside the caret's pinned to REG_TOOL exporting
+     POLICY_KEY by its own text. */
   const judge5c = (shellCode, shellBare, winSrc) => {
     const reqs = (shellCode.match(/\brequire\s*\(\s*[^)]*\)/g) || []).map(r => r.replace(/^require\s*\(\s*|\s*\)$/g, "").replace(/^["']|["']$/g, ""))
       .map(r => { const m = /^path\.join\(__dirname,((?:"[\w.-]+",)*"[\w.-]+)$/.exec(r); return m ? "./" + m[1].replace(/"/g, "").split(",").join("/") : r; });
@@ -1191,18 +1194,25 @@ try {
        once more per call and nowhere else, and no other loader (a dynamic import, createRequire, a binding) is in the
        shell at all. */
     const cpRequires = (shellCode.match(/\brequire\s*\(\s*"(?:node:)?child_process"\s*\)/g) || []).length;
-    const runMentions = (shellBare.match(/\bexecFileSync\b/g) || []).length, runCalls = (shellBare.match(/\bexecFileSync\s*\(/g) || []).length;
+    /* THE GUARD NAMES ITS CALLEE (shell/win-proxy.cjs, regOpts): each reg call passes its options as regOpts(execFileSync, ...) or
+     regOpts(execFile, ...), one more mention of that name per guarded call and nowhere else. */
+  const guardSync = (shellBare.match(/\bregOpts\(\s*execFileSync\s*,/g) || []).length, guardAsync = (shellBare.match(/\bregOpts\(\s*execFile\s*,/g) || []).length;
+  const runMentions = (shellBare.match(/\bexecFileSync\b/g) || []).length - guardSync, runCalls = (shellBare.match(/\bexecFileSync\s*\(/g) || []).length;
     /* THE CARET HELPER'S CALLS, execFile in main.js alone: its program is `tool`, bound only to caretTool(), whose two
        places are caret.exe beside the asar and in build/, and its name is mentioned once in the require and once per call. */
-    const asyncMentions = (shellBare.match(/\bexecFile\b/g) || []).length, asyncCalls = (shellBare.match(/\bexecFile\s*\(/g) || []).length;
+    const asyncMentions = (shellBare.match(/\bexecFile\b/g) || []).length - guardAsync, asyncCalls = (shellBare.match(/\bexecFile\s*\(/g) || []).length;
     const toolBinds = shellCode.match(/\bconst tool=caretTool\(\);/g) || [], toolNames = (shellBare.match(/\btool\b/g) || []).length;
     const caretToolNames = (shellBare.match(/\bcaretTool\b/g) || []).length;
     const caretPlaces = /function caretTool\(\)\{if\(process\.platform!=="win32"\)return null;const at=app\.isPackaged\?path\.join\(process\.resourcesPath,"caret\.exe"\):path\.join\(__dirname,"\.\.","dist","\.caret","caret\.exe"\);return fs\.existsSync\(at\)\?at:null\}/.test(shellCode);
     const loaders = shellBare.match(/\bimport\s*\(|\bprocess\s*\.\s*(?:binding|_linkedBinding|dlopen)\b|\bcreateRequire\b|\bmodule\s*\.\s*require\b|\brequire\s*\.\s*(?:cache|main)\b/g) || [];
     const cpNames = cps.map(m => m[1].split(",").map(x => x.trim()).sort().join(","));
     const winCalls = (winSrc.match(/\bexecFile\s*\(/g) || []).length, winPinned = winCalls === 1 && /\bexecFile\s*\(\s*REG_TOOL\b/.test(winSrc);
-    return { ok: reqs.length > 0 && strange.length === 0 && cps.length === cpRequires && cpNames.every(n => n === "execFileSync" || n === "execFile,execFileSync") && cpNames.filter(n => n !== "execFileSync").length === 2 && asyncCalls === 3 && asyncMentions === asyncCalls + 2 && toolBinds.length === 2 && caretPlaces && caretToolNames === 3 && toolNames === toolBinds.length * 3 && programs.length > 0 && programs.every(p => (p === "REG_TOOL" && regTool) || p === "tool" /* Linux alone: three questions to the session bus about the keyring, none about a window, the screen, the clipboard or a key (tests/shell-office.mjs 14) */ || (p === "BUS_TOOL" && busTool)) && cpRequires === 2 && runMentions === runCalls + cpRequires && loaders.length === 0 && winPinned,
-      say: "5c the shell loads no module and runs no program it did not have (every one is read against the must-hold before it joins): " + (strange.join(", ") || reqs.length + " requires known") + "; " + (cp ? cp[1].trim() : "no child_process") + " runs " + (programs.join(", ") || "nothing") + "; child_process required " + cpRequires + " time(s), its name mentioned " + runMentions + " time(s) for " + runCalls + " call(s)" + (loaders.length ? "; other loaders " + loaders.join(", ") : "") + "; win-proxy's execFile call(s) " + winCalls + (winPinned ? " to REG_TOOL" : " NOT PINNED to REG_TOOL") };
+    const outside = shellCode.split(winSrc).join("");
+    const mainRegLater = (outside.match(/\bexecFile\s*\(\s*REG_TOOL\b/g) || []).length;
+    const policyPinned = mainRegLater === 1 && /\bexecFile\s*\(\s*REG_TOOL\s*,\s*\[\s*"export"\s*,\s*POLICY_KEY\s*,/.test(outside);
+    return { ok: reqs.length > 0 && strange.length === 0 && cps.length === cpRequires && cpNames.every(n => n === "execFileSync" || n === "execFile,execFileSync") && cpNames.filter(n => n !== "execFileSync").length === 2 && asyncCalls === 4 && asyncMentions === asyncCalls + 2 && toolBinds.length === 2 && caretPlaces && caretToolNames === 3 && toolNames === toolBinds.length * 3 && programs.length > 0 && programs.every(p => (p === "REG_TOOL" && regTool) || p === "tool" /* Linux alone: three questions to the session bus about the keyring, none about a window, the screen, the clipboard or a key (tests/shell-office.mjs 14) */ || (p === "BUS_TOOL" && busTool)) && cpRequires === 2 && runMentions === runCalls + cpRequires && loaders.length === 0 && winPinned && policyPinned,
+      say: "5c the shell loads no module and runs no program it did not have (every one is read against the must-hold before it joins): " + (strange.join(", ") || reqs.length + " requires known") + "; " + (cp ? cp[1].trim() : "no child_process") + " runs " + (programs.join(", ") || "nothing") + "; child_process required " + cpRequires + " time(s), its name mentioned " + runMentions + " time(s) for " + runCalls + " call(s)" + (loaders.length ? "; other loaders " + loaders.join(", ") : "") + "; win-proxy's execFile call(s) " + winCalls + (winPinned ? " to REG_TOOL" : " NOT PINNED to REG_TOOL")
+        + "; main.js's REG_TOOL execFile call(s) " + mainRegLater + (policyPinned ? " exporting POLICY_KEY" : " NOT PINNED to exporting POLICY_KEY") };
   };
   const WIN_SRC = blank(fs.readFileSync(path.join(ROOT, "shell", "win-proxy.cjs"), "utf8"));
   const five = judge5c(shellCode, shellBare, WIN_SRC);
@@ -1210,10 +1220,15 @@ try {
   const PLANTS_OFF_5C = process.env.ETIUDA_PLANTS === "off";
   const plant5c = (from, to) => { const w = WIN_SRC.replace(from, to), c = shellCode.split(WIN_SRC).join(w);
     return w !== WIN_SRC && c !== shellCode && !judge5c(c, mask(c), w).ok; };
+  /* And two on main.js's own: its policy look given another key, and a second call to REG_TOOL beside it. */
+  const plantMain = (from, to) => { const c = shellCode.replace(from, to); return c !== shellCode && !judge5c(c, mask(c), WIN_SRC).ok; };
   const p5 = PLANTS_OFF_5C ? null : [plant5c(/\bexecFile\(REG_TOOL\b/, 'execFile("cmd.exe"'),
-    plant5c(/\bexecFile\(REG_TOOL,/, "execFile(REG_TOOL,[]);execFile(REG_TOOL,")];
+    plant5c(/\bexecFile\(REG_TOOL,/, "execFile(REG_TOOL,[]);execFile(REG_TOOL,"),
+    plantMain(/\bexecFile\(REG_TOOL,\["export",POLICY_KEY,/, 'execFile(REG_TOOL,["export",USER_KEY,'),
+    plantMain(/\bexecFile\(REG_TOOL,\["export",POLICY_KEY,/, 'execFile(REG_TOOL,[]);execFile(REG_TOOL,["export",POLICY_KEY,')];
   check(five.ok && (p5 === null || p5.every(Boolean)),
-    five.say + (p5 === null ? "; plants NOT RUN (ETIUDA_PLANTS=off)" : "; plants another program " + (p5[0] ? "red" : "MISSED") + ", a second call " + (p5[1] ? "red" : "MISSED")));
+    five.say + (p5 === null ? "; plants NOT RUN (ETIUDA_PLANTS=off)" : "; plants another program " + (p5[0] ? "red" : "MISSED") + ", a second call " + (p5[1] ? "red" : "MISSED")
+      + ", the policy look on another key " + (p5[2] ? "red" : "MISSED") + ", a second REG_TOOL call in main.js " + (p5[3] ? "red" : "MISSED")));
   /* THE PAGE IS GRANTED ONE PERMISSION, the clipboard's write, and every handler that could grant another answers
      from that list alone (board 818): "clipboard-read" added to the list stayed green, since no API name is in it.
      The list is named three times, its declaration and its two handlers, and nowhere else, so
