@@ -1367,11 +1367,11 @@ function createFolderProgram(opts) {
 
     /* The team file and its conflict siblings staged together are one look: the desk says a lead key shown in two hands
        there (checks.forkSeen), and where the pin is handed to two keys none of them is taken, each read again at the next scan.
-       While the outbox owes the team file that look waits, and nothing staged for it is judged until the debt is gone. */
+       The look runs while that file is owed. Steps 1 and 1b still land nothing of it until the debt is gone. */
     let teamOwed = false;
     teamOwed = isOwed("etiuda-team.json"); /* plant:team-owe-keep */
     const teamItems = staged.filter(s => s.relPath === "etiuda-team.json" || isTeamConflict(s.relPath));
-    if (pin && teamItems.length && !teamOwed) {
+    if (pin && teamItems.length) { /* plant:owed-fork-look */
       const docs = [];
       for (const s of teamItems) {
         try { const d = JSON.parse(io.readFile(s.tmpPath, "utf8")); if (d && teamWhole(d) && d.id === team) docs.push(d); } catch {}
