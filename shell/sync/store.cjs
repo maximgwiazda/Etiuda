@@ -299,6 +299,16 @@ function sayOnce(kept, look) {
   return { say: why, kept: why };
 }
 
+/* ---- the look tried again by itself, after one that failed for a passing reason: the folder, the licence service or the relay not
+   answering, or the relay's rate. The gap before try `tries` (from 0), growing, and 0 once LOOK_AGAIN_MS is spent or for any other
+   answer; a sign-in, a renewal or the switch looks again in any case. Pure. ---- */
+const LOOK_AGAIN_MS = [60e3, 120e3, 240e3, 480e3, 960e3, 1920e3, 3840e3];
+const PASSING = ["offline", "unreached", "relay", "rate"];
+function lookAgainIn(look, tries) {
+  if (!look || (look.state !== "unavailable" && look.state !== "paused") || PASSING.indexOf(String(look.why)) < 0) return 0; /* plant:again-passing */
+  return Number.isSafeInteger(tries) && tries >= 0 && tries < LOOK_AGAIN_MS.length ? LOOK_AGAIN_MS[tries] : 0; /* plant:again-bound */
+}
+
 /* ---- the honest pause: a store certificate lapsed pauses sync; the row speaks only after PAUSE_SAY_MS ---- */
 const PAUSE_SAY_MS = 3 * 24 * 60 * 60 * 1000;
 function pausedLine(cert, now, signinRefused) {
@@ -345,5 +355,5 @@ function firstSay(told, look) {
   return { say: look.made === true ? "on" : "", told: true }; /* plant:first-say */
 }
 
-module.exports = { KEY_FILE, KEY_KIND, FILE_MAX, DEVICES_MAX, GRAPH, DRIVE, DRIVE_UPLOAD, PAUSE_SAY_MS, graphFolder, driveFolder, folderFor, keyText, keyRead,
+module.exports = { KEY_FILE, KEY_KIND, FILE_MAX, DEVICES_MAX, GRAPH, DRIVE, DRIVE_UPLOAD, PAUSE_SAY_MS, LOOK_AGAIN_MS, lookAgainIn, graphFolder, driveFolder, folderFor, keyText, keyRead,
   freshKeys, pubOf, storePolicy, storeLook, storeLeave, sayOnce, pausedLine, storeRow, roomNext, firstSay, endedText, endedRead };
