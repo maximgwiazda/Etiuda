@@ -1753,6 +1753,7 @@ Module.prototype._compile = function (content, filename) {
     "badge-room.js": "the badge's room, a sweep tests/smoke.js requires and runs; alone it is the quick run of that sweep",
     "tour-walk.js": "the tour's walk tests/smoke.js requires and runs; its plan is held to the step table by tests/test.js",
     "install-plan.js": "the library tests/update-install.js judges with; every clause is held by tests/install-plan-selftest.js in npm test",
+    "caret-selection-desk.js": "a machine-window gate: the caret helper reads a real text box's selection, so it runs by hand behind the window wall before a release; its node half is tests/pick.mjs 5f, 5fs and 2s1 to 2s4 in npm test",
     "pick-desk.js": "a machine-window gate: it takes the real foreground and presses real keys, so it runs by hand with nobody at the keyboard; its node half is tests/pick.mjs in npm test",
     "update-install.js": "a machine-window gate: it needs an older installer, and for --all-users an elevated shell, so no chain can run it; its plan and verdicts are held by tests/install-plan-selftest.js",
     "silent-update-desk.js": "a machine-window gate: an installer-style close with draft kept; its node half is tests/desk-ipc.mjs in npm test",
