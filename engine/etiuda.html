@@ -9372,6 +9372,7 @@ What you type stays in this browser only.`;
     if (!root || root.nodeType !== 1) return 0;
     const marked = (el) => !!(el && el.nodeType === 1 && el.hasAttribute && el.hasAttribute("data-i18n-skip"));
     if (marked(root)) return 0;
+    if (typeof root.closest === "function" && root.closest("[data-i18n-skip]")) return 0;
     const doc = root.ownerDocument || (typeof document !== "undefined" ? document : null);
     if (!doc || typeof doc.createTreeWalker !== "function") throw new Error("translateTree: the document has no TreeWalker");
     let visited = 0;

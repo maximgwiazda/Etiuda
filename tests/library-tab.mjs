@@ -958,13 +958,17 @@ await checkAsync("L20 a card titled Settings keeps that title through an interfa
     const skipped = all.filter(el => el.closest("[data-i18n-skip]")).length;
     const visited = page ? UL.translateTree(page) : -1;
     console.log("L20 visited " + visited + " of " + all.length + " elements on the Library page; " + skipped + " sit in a skip mark and were not entered");
-    const walkKept = visited === all.length - skipped && skipped > 0 && visited < all.length;
+    /* A root inside a marked ancestor is refused too, as the old sweep's closest() refused it. */
+    const markedHost = page ? page.querySelector("[data-i18n-skip]") : null;
+    let inner = -1;
+    if (markedHost) { const probe = doc.createElement("span"); probe.textContent = "Settings"; markedHost.appendChild(probe); inner = UL.translateTree(probe); probe.remove(); }
+    const walkKept = visited === all.length - skipped && skipped > 0 && visited < all.length && inner === 0;
     const titlesKept = titles.length >= 2 && titles.every(w => w === "Settings");
     const catKept = got.cat === "Library";
     const uiMoved = got.menu === uiSettings && uiSettings !== "Settings"
       && got.heading === uiLibrary && uiLibrary !== "Library"
       && got.chipTip === uiTip && uiTip !== "Opens this card's editor";
-    return titlesKept && catKept && uiMoved && walkKept || JSON.stringify({ got, uiSettings, uiLibrary, uiTip, visited, all: all.length, skipped });
+    return titlesKept && catKept && uiMoved && walkKept || JSON.stringify({ got, uiSettings, uiLibrary, uiTip, visited, all: all.length, skipped, inner });
   } finally {
     try { if (had == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", had); } catch (e) {}
     try { RP.setUiLang(had === "pl" ? "pl" : "en"); } catch (e) {}

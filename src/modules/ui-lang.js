@@ -1812,6 +1812,8 @@ function translateTree(root){
   /* Born on the root, the walker only filters the nodes it moves to. A marked root is refused
      before the walk, or its children would be entered. */
   if(marked(root)) return 0;
+  /* A root inside a marked ancestor is refused too, as the old sweep's closest() refused it. */
+  if(typeof root.closest==="function" && root.closest("[data-i18n-skip]")) return 0;
   const doc=root.ownerDocument || (typeof document!=="undefined" ? document : null);
   if(!doc || typeof doc.createTreeWalker!=="function") throw new Error("translateTree: the document has no TreeWalker");
   let visited=0;
