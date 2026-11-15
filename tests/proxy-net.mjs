@@ -5,20 +5,25 @@
  *
  *   p1  Chromium's proxy list is read into entries (DIRECT, PROXY, the rest kept by type).
  *   p2  the asker: a server's challenge is cancelled unasked; a proxy's is asked once per proxy however many calls wait,
- *       the answer is held for later calls, a refused answer is asked again, "Not now" holds, and a call waits a bounded time.
+ *       the answer is held for later calls, a refused answer is asked again, "Not now" holds, and a call waits a bounded time;
+ *       an answer given for one scheme is never handed to a challenge of another, nor dropped when a Basic one is refused;
+ *       a challenge's host and resolveProxy's name for the same proxy are one key, an IPv6 address bracketed or not.
  *   p3  fetchThrough is net.fetch with a login listener: a stand-in of Electron's request, which cancels a challenge when
  *       nothing listens, is answered from the asker, and the answer's body and status arrive as a Response.
  *   p4  the CONNECT tunnel through a stand-in proxy asking Basic: no answer and a wrong one are refused with the schemes,
  *       the right one opens; a proxy asking only Windows sign-in names its schemes; a 403 is a refusal; an answer given
- *       for Digest never goes to a Digest proxy, and goes to a Basic one only after its 407.
+ *       for Digest or Windows sign-in goes on no CONNECT, even to a proxy whose 407 offers Basic beside them.
  *   p5  the WebSocket client inside: the handshake's accept is checked, fragments join, a ping is answered, a masked
  *       frame from the server ends it, and its own frames are masked.
  *   p6  proxiedConnect end to end: through the proxy with the held answer the relay's socket opens and carries text; DIRECT
- *       takes the runtime's own socket; a proxy asking Windows sign-in or a SOCKS proxy closes it unopened, said once; with
- *       the platform's own TLS, a relay certificate no root signs closes it unopened, said once.
+ *       takes the runtime's own socket; a proxy asking Windows sign-in or a SOCKS proxy closes it unopened, said once; a
+ *       lookup with no answer in time, refused or naming nothing closes it unopened and never goes direct; the list is
+ *       walked in order, past a proxy that cannot be reached or one of a type it does not speak, never to a DIRECT after
+ *       the latter, and a proxy that answers ends the walk; with the
+ *       platform's own TLS, a relay certificate no root signs closes it unopened, said once.
  *   p7  shell/main.js: every call goes through deskFetch, deskFetch hands the asker's listener, and relayConnect asks the
  *       session's resolveProxy and takes proxiedConnect.
- *   p8  each plant lifted (or, for the TLS check, rewritten) turns its own case red.
+ *   p8  each plant lifted (or, for the TLS check, rewritten) turns its own case red; skipped under ETIUDA_PLANTS=off.
  *
  *     node tests/proxy-net.mjs        exit code is the number of failed checks, capped at 63
  */
@@ -38,7 +43,7 @@ const nodeRequire = createRequire(import.meta.url);
 const NET_FILE = process.env.PROXY_NET_FILE || path.join(ROOT, "shell", "proxy-net.cjs");
 const MAIN_FILE = process.env.PROXY_MAIN_FILE || path.join(ROOT, "shell", "main.js");
 const ONLY = process.env.PROXY_NET_ONLY || "";
-const EXPECTED = 63;
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const USER = "proxy-person", PASS = "invented-" + crypto.randomBytes(4).toString("hex");
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -58,8 +63,9 @@ try { P = nodeRequire(NET_FILE); } catch (e) { P = null; console.log("  FAIL she
 
 /* ---- stand-ins ---------------------------------------------------------------------------------------------------- */
 
-/* A CONNECT proxy on 127.0.0.1. `mode` "basic" asks Basic of USER:PASS, "windows" asks NTLM and Negotiate only, "deny"
-   answers 403, "open" asks nothing. It records each CONNECT's target and whether it carried the right answer. */
+/* A CONNECT proxy on 127.0.0.1. `mode` "basic" asks Basic of USER:PASS, "mixed" offers Negotiate, NTLM and Basic and opens
+   on that Basic answer, "windows" asks NTLM and Negotiate only, "deny" answers 403, "open" asks nothing. It records each
+   CONNECT's target and whether it carried the right answer. */
 function standProxy(mode) {
   const seen = [];
   const server = net.createServer(sock => {
@@ -78,6 +84,7 @@ function standProxy(mode) {
       if (mode === "deny") { sock.end("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n"); return; }
       if (mode === "digest") { sock.end("HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Digest realm=\"lab\", nonce=\"n1\", qop=\"auth\"\r\nContent-Length: 0\r\n\r\n"); return; }
       if (mode === "windows") { sock.end("HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Negotiate\r\nProxy-Authenticate: NTLM\r\nContent-Length: 0\r\n\r\n"); return; }
+      if (mode === "mixed" && !right) { sock.end("HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Negotiate\r\nProxy-Authenticate: NTLM\r\nProxy-Authenticate: Basic realm=\"lab\"\r\nContent-Length: 0\r\n\r\n"); return; }
       if (mode === "basic" && !right) { sock.end("HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"lab\"\r\nContent-Length: 0\r\n\r\n"); return; }
       const up = net.connect({ host: "127.0.0.1", port: Number(m[2]) }, () => {
         sock.write("HTTP/1.1 200 Connection established\r\n\r\n");
@@ -237,6 +244,28 @@ async function p2() {
   const other = P.proxyAsker({ ask: () => Promise.resolve({ username: "", password: "x" }) });
   const blank = await new Promise(res => other.forRequest()(proxyInfo(9), (u, p) => res({ u, p })));
   check(blank.u === undefined, "p2m an empty name is no answer");
+
+  /* A password given for Windows sign-in, then a Basic challenge from the same proxy: Basic would carry it in the clear. */
+  const schemes = [];
+  const S = P.proxyAsker({ ask: info => { schemes.push(info.scheme); return Promise.resolve({ username: USER, password: info.scheme === "ntlm" ? PASS : PASS + "-basic" }); } });
+  const viaNtlm = await new Promise(res => S.forRequest()(proxyInfo(4128, "ntlm"), (u, p) => res({ u, p })));
+  const viaBasic = await new Promise(res => S.forRequest()(proxyInfo(4128, "basic"), (u, p) => res({ u, p })));
+  check(viaNtlm.p === PASS && viaBasic.p === PASS + "-basic" && schemes.join(",") === "ntlm,basic",
+    "p2n an answer given for NTLM is not handed to a Basic challenge from the same proxy, which asks for its own: asked " + schemes.join(","));
+  S.refused("proxy.lab.invalid", 4128);
+  const backNtlm = await new Promise(res => S.forRequest()(proxyInfo(4128, "ntlm"), (u, p) => res({ u, p })));
+  check(backNtlm.p === PASS && schemes.length === 2 && S.heldFor("proxy.lab.invalid", 4128) === null,
+    "p2o the socket's refused Basic answer is forgotten alone: the NTLM one still answers its own challenge unasked, asked " + schemes.length);
+
+  /* The challenge's host is the proxy as configured (Chromium's auth URL is the proxy server's host and port, an IPv6
+     address bracketed); the socket's is parseProxyList's from resolveProxy's answer. One proxy must be one key. */
+  const K = P.proxyAsker({ ask: async () => ({ username: USER, password: PASS }) });
+  await new Promise(res => K.forRequest()({ isProxy: true, scheme: "basic", host: "[2001:DB8::5]", port: 8080, realm: "lab" }, res));
+  await new Promise(res => K.forRequest()({ isProxy: true, scheme: "basic", host: "Proxy.Lab.Invalid", port: 8081, realm: "lab" }, res));
+  const [v6, name] = P.parseProxyList("PROXY [2001:db8::5]:8080; PROXY proxy.lab.invalid:8081");
+  check(!!K.heldFor(v6.host, v6.port) && !!K.heldFor(name.host, name.port),
+    "p2p an answer given to a proxy's challenge is found under the host resolveProxy names for it, an IPv6 address as well as a name: "
+    + JSON.stringify([!!K.heldFor(v6.host, v6.port), !!K.heldFor(name.host, name.port)]));
 }
 
 async function p3() {
@@ -291,12 +320,13 @@ async function p4() {
   const dg = await P.tunnel({ host: "127.0.0.1", port: digest.port }, { host: "127.0.0.1", port: ep }, { username: USER, password: PASS, scheme: "digest" }).catch(e => e);
   check(dg.code === "proxy-auth" && dg.sent === false && digest.seen.length === 1 && digest.seen.every(x => x.auth === "none"),
     "p4g an answer given for a Digest challenge is not sent on CONNECT to a proxy offering Digest: " + JSON.stringify(digest.seen));
-  const before = basic.seen.length;
-  const late = await P.tunnel(at, { host: "127.0.0.1", port: ep }, { username: USER, password: PASS, scheme: "digest" });
-  late.destroy();
-  const two = basic.seen.slice(before).map(x => x.auth).join(",");
-  check(two === "none,right", "p4h that answer goes as Basic only after a 407 offering Basic: " + two);
-  for (const s of [basic, win, deny, digest]) s.server.close();
+  const before = basic.seen.length, mixed = await standProxy("mixed");
+  const late = await P.tunnel(at, { host: "127.0.0.1", port: ep }, { username: USER, password: PASS, scheme: "digest" }).then(s => { s.destroy(); return { code: "open" }; }, e => e);
+  const strong = await P.tunnel({ host: "127.0.0.1", port: mixed.port }, { host: "127.0.0.1", port: ep }, { username: USER, password: PASS, scheme: "ntlm" }).then(s => { s.destroy(); return { code: "open" }; }, e => e);
+  const two = basic.seen.slice(before).concat(mixed.seen).map(x => x.auth).join(",");
+  check(late.code === "proxy-auth" && late.sent === false && strong.code === "proxy-auth" && strong.sent === false && two === "none,none",
+    "p4h an answer given for Digest or NTLM goes on no CONNECT, even after a 407 offering Basic beside them: " + two);
+  for (const s of [basic, win, deny, digest, mixed]) s.server.close();
   echo.close();
 }
 
@@ -379,13 +409,60 @@ async function p6() {
   await sleep(150);
   check(ev5.close === 1 && refusedCalled === 1, "p6f an answer the proxy refuses is handed back as refused, so it is asked again");
   const thenable = new Proxy(function () {}, { get: () => thenable, apply: () => thenable });
-  let viaDirect = 0;
-  P.proxiedConnect("wss://etiuda.dev/relay/v1/socket", {}, { message: () => {}, close: () => {} },
-    { resolve: () => thenable, direct: () => { viaDirect++; return { send() {}, close() {} }; } });
-  P.proxiedConnect("wss://etiuda.dev/relay/v1/socket", {}, { message: () => {}, close: () => {} },
-    { resolve: () => new Promise(() => {}), resolveWaitMs: 50, direct: () => { viaDirect++; return { send() {}, close() {} }; } });
-  await sleep(150);
-  check(viaDirect === 2, "p6g a resolver answering with no Promise, or not in time, leaves the runtime's own socket: " + viaDirect + " of 2");
+  let viaDirect = 0, closedG = 0;
+  const saidG = [];
+  const gOpts = resolve => ({ resolve, resolveWaitMs: 50, direct: () => { viaDirect++; return { send() {}, close() {} }; },
+    asker: { heldFor: () => null, refused: () => {}, tell: l => saidG.push(l) } });
+  for (const resolve of [() => thenable, () => new Promise(() => {}), async () => { throw new Error("no lookup"); }, async () => "", async () => "junk here"]) {
+    P.proxiedConnect("wss://etiuda.dev/relay/v1/socket", {}, { message: () => {}, close: () => closedG++ }, gOpts(resolve));
+  }
+  await sleep(200);
+  check(viaDirect === 0 && closedG === 5 && saidG.length === 5 && saidG.every(l => /every minute/.test(l)),
+    "p6g a lookup that never answers, answers late, is refused or names nothing closes the socket unopened, said, and never"
+    + " goes direct: " + viaDirect + " direct, " + closedG + " of 5 closed");
+  P.proxiedConnect("wss://etiuda.dev/relay/v1/socket", {}, { message: () => {}, close: () => closedG++ }, gOpts(() => "DIRECT"));
+  await sleep(50);
+  check(viaDirect === 1 && closedG === 5, "p6i a resolver answering DIRECT without a Promise is still Chromium's answer, and takes the runtime's own socket: " + viaDirect);
+
+  /* The list walked in Chromium's order: port 1 is a proxy that cannot be reached. */
+  const walk = async (answer, proxyAt) => {
+    const ev = { open: 0, msgs: [], close: 0, direct: 0 };
+    const h = P.proxiedConnect("wss://etiuda.dev:" + S.port + "/relay/v1/socket", {}, { open: () => ev.open++, message: t => ev.msgs.push(t), close: () => ev.close++ },
+      { resolve: async () => answer, tlsConnect: s => s, direct: () => { ev.direct++; return { send() {}, close() {} }; },
+        asker: { heldFor: () => ({ username: USER, password: PASS, scheme: "basic" }), refused: () => {}, tell: () => {} } });
+    for (let i = 0; i < 60 && !ev.msgs.length && !ev.close && !ev.direct; i++) await sleep(10);
+    await sleep(30);
+    h.close();
+    return ev;
+  };
+  const deny = await standProxy("deny");
+  const bSeen = basic.seen.length;
+  const j = await walk("PROXY 127.0.0.1:1; PROXY 127.0.0.1:" + basic.port + "; DIRECT");
+  check(j.open === 1 && j.msgs[0] === "hello" && j.direct === 0 && basic.seen.length === bSeen + 1,
+    "p6j a first proxy that cannot be reached gives way to the next PROXY, through which the socket opens: " + JSON.stringify(j));
+  const k = await walk("PROXY 127.0.0.1:1; DIRECT");
+  check(k.direct === 1 && k.open === 0, "p6k past proxies that cannot be reached, a DIRECT Chromium lists is taken, as its own fallback does: " + JSON.stringify(k));
+  const l1 = await walk("SOCKS5 127.0.0.1:1080; DIRECT"), l2 = await walk("HTTPS 127.0.0.1:8443; PROXY 127.0.0.1:" + basic.port);
+  check(l1.direct === 0 && l1.close === 1 && l2.open === 1 && l2.direct === 0,
+    "p6l a SOCKS or HTTPS proxy is passed over to a later PROXY, never to a DIRECT after it: " + JSON.stringify([l1, l2]));
+  const bSeen2 = basic.seen.length;
+  const m = await walk("PROXY 127.0.0.1:" + deny.port + "; PROXY 127.0.0.1:" + basic.port + "; DIRECT");
+  check(m.close === 1 && m.open === 0 && m.direct === 0 && deny.seen.length === 1 && basic.seen.length === bSeen2,
+    "p6m a proxy that answers, here with a 403, ends the walk: the next is not tried and nothing goes direct: " + JSON.stringify(m));
+  deny.server.close();
+
+  /* An IPv6 relay address: Node's URL keeps the brackets on hostname, so the CONNECT line names "[addr]:port". The control,
+     the tunnel handed a bare address, shows the stand-in tells the two forms apart. */
+  const n0 = basic.seen.length, evN = { open: 0, msgs: [] };
+  const hN = P.proxiedConnect("wss://[::1]:" + S.port + "/relay/v1/socket", {}, { open: () => evN.open++, message: t => evN.msgs.push(t), close: () => {} },
+    { resolve: async () => "PROXY 127.0.0.1:" + basic.port, tlsConnect: s => s, direct: () => null,
+      asker: { heldFor: () => ({ username: USER, password: PASS, scheme: "basic" }), refused: () => {}, tell: () => {} } });
+  for (let i = 0; i < 60 && !evN.msgs.length; i++) await sleep(10);
+  hN.close();
+  const bare = await P.tunnel({ host: "127.0.0.1", port: basic.port }, { host: "::1", port: S.port }, { username: USER, password: PASS, scheme: "basic" }).then(s => { s.destroy(); return "open"; }, e => e.code);
+  const targets = basic.seen.slice(n0).map(x => x.target);
+  check(evN.open === 1 && targets[0] === "[::1]:" + S.port && bare === "open" && targets[1] === "::1:" + S.port,
+    "p6n an IPv6 relay address goes into CONNECT bracketed, and the socket opens through it: " + JSON.stringify(targets));
   for (const s of [S, basic, win]) s.server.close();
   await tlsCase();
 }
@@ -465,8 +542,16 @@ const PLANTS = [
   ["shell/proxy-net.cjs", "plant:ws-accept", "p5"],
   ["shell/proxy-net.cjs", "plant:ws-unmasked", "p5"],
   ["shell/proxy-net.cjs", "plant:proxy-resolve-bound", "p6"],
+  /* Rewritten: no answer read as DIRECT again, which must take the runtime's own socket p6g expects closed. */
+  ["shell/proxy-net.cjs", "plant:proxy-resolve-closed", "p6", '""', '"DIRECT"'],
   ["shell/proxy-net.cjs", "plant:proxy-scheme-first", "p4"],
+  ["shell/proxy-net.cjs", "plant:proxy-next-hop", "p6"],
+  ["shell/proxy-net.cjs", "plant:proxy-passed-over", "p6"],
   ["shell/proxy-net.cjs", "plant:proxy-credentials", "p3"],
+  /* Rewritten: the held answer's slot without its scheme, so any challenge from that proxy is handed it. */
+  ["shell/proxy-net.cjs", "plant:proxy-scheme-held", "p2", 'key + " " + scheme', "key"],
+  /* Rewritten: the key keeps an IPv6 address's brackets, so the challenge's host and resolveProxy's are two keys. */
+  ["shell/proxy-net.cjs", "plant:proxy-key-brackets", "p2", '.replace(/^\\[(.*)\\]$/, "$1")', ""],
   /* Not lifted but rewritten: the platform's check turned off, which must open the socket p6h expects refused. */
   ["shell/proxy-net.cjs", "plant:proxy-tls-verify", "p6", 'ALPNProtocols: ["http/1.1"] })', 'ALPNProtocols: ["http/1.1"], rejectUnauthorized: false })'],
   ["shell/main.js", "plant:desk-fetch-login", "p7"],
@@ -474,6 +559,7 @@ const PLANTS = [
   ["shell/main.js", "plant:relay-fetch-proxy", "p7"],
 ];
 async function p8() {
+  if (PLANTS_OFF) { console.log("  SKIP  p8: ETIUDA_PLANTS=off"); return; }
   const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-proxy-net-"));
   try {
     for (const [file, mark, part, from, to] of PLANTS) {
@@ -500,5 +586,6 @@ for (const [id, fn] of Object.entries(PARTS)) {
   try { await fn(); } catch (e) { check(false, id + " threw: " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | ")); }
 }
 clearInterval(alive);
+const EXPECTED = 59 + (PLANTS_OFF ? 0 : PLANTS.length);
 if (!ONLY) console.log((failed === 0 && ran === EXPECTED ? "proxy-net: ok" : "proxy-net: FAIL") + ", ran " + ran + " of " + EXPECTED + ", red " + failed);
 process.exit(Math.min(63, failed + (ONLY || ran === EXPECTED ? 0 : 1)));

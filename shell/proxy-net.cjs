@@ -42,28 +42,30 @@ function parseProxyList(text) {
   return out;
 }
 
-const proxyKey = (host, port) => String(host || "").toLowerCase() + ":" + (Number(port) || 0);
+/* One key for one proxy, from a challenge's host (Chromium's, an IPv6 address in brackets) or from parseProxyList's (bare). */
+const proxyKey = (host, port) => String(host || "").toLowerCase().replace(/^\[(.*)\]$/, "$1") + ":" + (Number(port) || 0); /* plant:proxy-key-brackets */
 /* An answer keeps the scheme it was given for, so the socket's tunnel sends a password in the clear only where Basic was asked. */
 const answerOf = a => (a && typeof a === "object" && typeof a.username === "string" && a.username !== "" && typeof a.password === "string")
   ? { username: a.username, password: a.password, scheme: typeof a.scheme === "string" ? a.scheme.toLowerCase() : "" } : null;
 
 /** One asker per app. `o.ask({ host, port, scheme, realm, again })` resolves to { username, password } or null, and is
- *  called at most once at a time per proxy; `o.say(line)` is told what happened, once per line, never a credential. */
+ *  called at most once at a time per proxy and scheme; `o.say(line)` is told what happened, once per line, never a credential.
+ *  An answer is held for the scheme it was asked for and handed only to a challenge of that scheme. */
 function proxyAsker(o) {
   const opts = o || {};
   const waitMs = opts.waitMs || ASK_WAIT_MS, declineMs = opts.declineMs || DECLINE_MS;
   const now = typeof opts.now === "function" ? opts.now : Date.now;
   const held = new Map(), declined = new Map(), asking = new Map(), told = new Set();
   const tell = line => { if (told.has(line)) return; told.add(line); try { if (typeof opts.say === "function") opts.say(line); } catch { /* the log is gone */ } };
-  function askFor(key, info) {
-    if (asking.has(key)) return asking.get(key);
+  function askFor(slot, key, info) {
+    if (asking.has(slot)) return asking.get(slot);
     const p = Promise.resolve().then(() => opts.ask(info)).then(a => answerOf(a && Object.assign({}, a, { scheme: info.scheme })), () => null).then(a => {
-      asking.delete(key);
-      if (a) { held.set(key, a); declined.delete(key); tell("the proxy at " + key + " was given a sign-in"); }
+      asking.delete(slot);
+      if (a) { held.set(slot, a); declined.delete(key); tell("the proxy at " + key + " was given a sign-in"); }
       else { declined.set(key, now()); tell("the proxy at " + key + " was not given a sign-in, so calls through it are refused for now"); }
       return a;
     });
-    asking.set(key, p);
+    asking.set(slot, p);
     return p;
   }
   /** A `login` listener for one request: a second challenge on the same request means the last answer was refused. */
@@ -73,27 +75,28 @@ function proxyAsker(o) {
       let done = false, timer = null;
       const finish = a => { if (done) return; done = true; clearTimeout(timer); try { if (a) callback(a.username, a.password); else callback(); } catch { /* the request has gone */ } };
       if (!authInfo || authInfo.isProxy !== true) return finish(null); /* plant:proxy-server-only */
-      const key = proxyKey(authInfo.host, authInfo.port);
+      const key = proxyKey(authInfo.host, authInfo.port), scheme = String(authInfo.scheme || "").toLowerCase();
+      const slot = key + " " + scheme; /* plant:proxy-scheme-held */
       tries += 1;
       const at = declined.get(key);
       if (at !== undefined && now() - at < declineMs) return finish(null); /* plant:proxy-declined */
-      const had = held.get(key);
+      const had = held.get(slot);
       if (had && tries === 1) return finish(had);
-      if (had) held.delete(key);
+      if (had) held.delete(slot);
       if (tries > 3) return finish(null);
       tell("the proxy at " + key + " asked for a sign-in (" + String(authInfo.scheme || "unknown").toLowerCase() + ")");
       timer = setTimeout(() => finish(null), waitMs);
       if (timer.unref) timer.unref();
-      askFor(key, { host: String(authInfo.host || ""), port: Number(authInfo.port) || 0, scheme: String(authInfo.scheme || ""),
+      askFor(slot, key, { host: String(authInfo.host || ""), port: Number(authInfo.port) || 0, scheme: String(authInfo.scheme || ""),
         realm: String(authInfo.realm || ""), again: !!had || tries > 1 }).then(finish);
     };
   }
   return {
     forRequest,
-    /** The answer held for this proxy, for the socket's tunnel; null where none was given. */
-    heldFor: (host, port) => held.get(proxyKey(host, port)) || null,
-    /** The socket's tunnel was refused with this answer: it is forgotten, and the next call asks again. */
-    refused: (host, port) => { held.delete(proxyKey(host, port)); },
+    /** The answer given to this proxy's Basic challenge, the only one the socket's tunnel sends; null where none was given. */
+    heldFor: (host, port) => held.get(proxyKey(host, port) + " basic") || null,
+    /** The socket's tunnel was refused with that Basic answer: it alone is forgotten, and the next Basic challenge asks again. */
+    refused: (host, port) => { held.delete(proxyKey(host, port) + " basic"); },
     tell,
   };
 }
@@ -133,17 +136,13 @@ function fetchThrough(electronNet, input, init, login) {
   });
 }
 
-/** An HTTP CONNECT tunnel to target through proxy. A held answer goes as Basic on the first CONNECT only where it was given
- *  for Basic, else only after a 407 offering Basic. Resolves to the open socket; rejects with code "proxy-auth" (`schemes`, the
- *  challenge's in lower case; `sent`, whether an answer went), "proxy-refused" or "proxy-timeout". */
+/** An HTTP CONNECT tunnel to target through proxy. A held answer goes as Basic only where it was given for Basic; one given for
+ *  any other scheme goes on no CONNECT, whatever a 407 offers. Resolves to the open socket; rejects with code "proxy-auth"
+ *  (`schemes`, the challenge's in lower case; `sent`, whether an answer went), "proxy-refused" or "proxy-timeout". */
 function tunnel(proxy, target, answer, o) {
-  const a = answerOf(answer);
-  let first = a;
-  if (!a || a.scheme !== "basic") first = null; /* plant:proxy-scheme-first */
-  return connectOnce(proxy, target, first, o).catch(e => {
-    if (e && e.code === "proxy-auth" && a && !first && (e.schemes || []).includes("basic")) return connectOnce(proxy, target, a, o);
-    throw e;
-  });
+  let a = answerOf(answer);
+  if (a && a.scheme !== "basic") a = null; /* plant:proxy-scheme-first */
+  return connectOnce(proxy, target, a, o);
 }
 /* One CONNECT, carrying `auth` as Basic where it is given. */
 function connectOnce(proxy, target, auth, o) {
@@ -287,34 +286,55 @@ function proxiedConnect(url, headers, on, o) {
   const handlers = { open: () => { if (!gone && typeof on.open === "function") on.open(); }, message: t => { if (!gone) on.message(t); }, close: closeOnce };
   (async () => {
     const u = new URL(String(url));
-    /* Electron's resolveProxy answers with a Promise; anything else, or no answer in time, is DIRECT, the socket it was. */
-    const asked = opts.resolve("https://" + u.host + u.pathname);
+    /* Only Chromium's answer chooses the route, and DIRECT only where it names DIRECT: no answer in time, a refused lookup or
+       one naming nothing closes the socket unopened, and the minute's asking, which goes through Chromium, stands in. */
+    const NO_ROUTE = ""; /* plant:proxy-resolve-closed */
     let bound = null;
-    const late = new Promise(r => { bound = setTimeout(() => r("DIRECT"), opts.resolveWaitMs || RESOLVE_WAIT_MS); if (bound.unref) bound.unref(); });
-    const answer = asked instanceof Promise ? await Promise.race([asked.catch(() => "DIRECT"), late]) : "DIRECT"; /* plant:proxy-resolve-bound */
+    const waits = [Promise.resolve().then(() => opts.resolve("https://" + u.host + u.pathname)).then(a => (typeof a === "string" ? a : NO_ROUTE), () => NO_ROUTE)];
+    waits.push(new Promise(r => { bound = setTimeout(() => r(NO_ROUTE), opts.resolveWaitMs || RESOLVE_WAIT_MS); if (bound.unref) bound.unref(); })); /* plant:proxy-resolve-bound */
+    const answer = await Promise.race(waits);
     clearTimeout(bound);
-    const list = parseProxyList(typeof answer === "string" ? answer : "DIRECT");
-    const first = list[0] || { type: "DIRECT" };
+    const list = parseProxyList(answer);
     if (gone) return closeOnce();
-    if (first.type === "DIRECT") {
-      inner = opts.direct(url, headers, handlers);
-      if (!inner) closeOnce();
-      return;
-    }
-    if (first.type !== "PROXY") {
-      say("the relay's live connection does not go through a " + first.type + " proxy, so the relay is asked every minute instead");
+    if (!list.length) {
+      say("the relay's live connection was given no proxy answer in time, so the relay is asked every minute instead");
       return closeOnce();
     }
+    /* The list in Chromium's order. A PROXY that cannot be reached gives way to the next entry, as Chromium's own fallback
+       does, and any other answer from one ends the walk. A type the socket does not speak is passed over, and a DIRECT
+       after it is not taken, since Chromium would have gone through that proxy. */
     const port = Number(u.port) || 443;
-    let sock;
-    try { sock = await tunnel(first, { host: u.hostname, port }, opts.asker ? opts.asker.heldFor(first.host, first.port) : null, opts); }
-    catch (e) {
-      if (e && e.code === "proxy-auth") {
-        if (opts.asker && e.sent) opts.asker.refused(first.host, first.port);
-        const basic = (e.schemes || []).includes("basic");
-        say(basic ? "the relay's live connection waits for a sign-in to the proxy at " + proxyKey(first.host, first.port) + ", so the relay is asked every minute until then"
-          : "the proxy at " + proxyKey(first.host, first.port) + " asks the relay's live connection for a sign-in it cannot give (" + (e.schemes || []).join(", ") + "), so the relay is asked every minute instead");
-      } else say("the proxy at " + proxyKey(first.host, first.port) + " did not let the relay's live connection through, so the relay is asked every minute instead");
+    let sock = null, first = null, passedOver = false;
+    for (const hop of list) {
+      if (gone) return closeOnce();
+      if (hop.type === "DIRECT") {
+        if (passedOver) break;
+        inner = opts.direct(url, headers, handlers);
+        if (!inner) closeOnce();
+        return;
+      }
+      if (hop.type !== "PROXY") {
+        passedOver = true; /* plant:proxy-passed-over */
+        say("the relay's live connection does not go through a " + hop.type + " proxy, so it is passed over");
+        continue;
+      }
+      const at = proxyKey(hop.host, hop.port);
+      try { sock = await tunnel(hop, { host: u.hostname, port }, opts.asker ? opts.asker.heldFor(hop.host, hop.port) : null, opts); first = hop; break; }
+      catch (e) {
+        const unreached = !!e && (e.code === "proxy-timeout" || (e.code === "proxy-refused" && e.status === undefined));
+        if (unreached) say("the proxy at " + at + " could not be reached for the relay's live connection, so the next one Chromium names is tried");
+        if (unreached) continue; /* plant:proxy-next-hop */
+        if (e && e.code === "proxy-auth") {
+          if (opts.asker && e.sent) opts.asker.refused(hop.host, hop.port);
+          const basic = (e.schemes || []).includes("basic");
+          say(basic ? "the relay's live connection waits for a sign-in to the proxy at " + at + ", so the relay is asked every minute until then"
+            : "the proxy at " + at + " asks the relay's live connection for a sign-in it cannot give (" + (e.schemes || []).join(", ") + "), so the relay is asked every minute instead");
+        } else say("the proxy at " + at + " did not let the relay's live connection through, so the relay is asked every minute instead");
+        return closeOnce();
+      }
+    }
+    if (!sock) {
+      say("no proxy Chromium names for the relay's live connection could carry it, so the relay is asked every minute instead");
       return closeOnce();
     }
     if (gone) { sock.destroy(); return closeOnce(); }

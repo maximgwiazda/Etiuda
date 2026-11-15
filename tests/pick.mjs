@@ -1168,46 +1168,52 @@ try {
     /* node:net and node:stream, only in shell/proxy-net.cjs: the relay socket's tunnel through a proxy, and a call's answer read as a stream. */
     "node:net", "node:stream",
     "./win-proxy.cjs", "./proxy-net.cjs", "./page-watch.cjs", "./clip-suggest.cjs", "./desk-ai.cjs", "./desk-reset.cjs", "./tray.cjs", "./embed/suggest.cjs", "./core.cjs", "./relay/channel.cjs", "./blob.cjs"];
-  const reqs = (shellCode.match(/\brequire\s*\(\s*[^)]*\)/g) || []).map(r => r.replace(/^require\s*\(\s*|\s*\)$/g, "").replace(/^["']|["']$/g, ""))
-    .map(r => { const m = /^path\.join\(__dirname,((?:"[\w.-]+",)*"[\w.-]+)$/.exec(r); return m ? "./" + m[1].replace(/"/g, "").split(",").join("/") : r; });
-  const strange = reqs.filter(r => MODS.indexOf(r) < 0);
-  const cps = [...shellCode.matchAll(/\{([^}]*)\}\s*=\s*require\(\s*"node:child_process"\s*\)/g)];
-  const cp = cps[0] || null;
-  /* EVERY PROGRAM BY A CONSTANT HELD HERE TO ITS FIXED PATH, never a bare name a PATH search resolves (board 880, 2026-10-13):
-     the registry tool for the proxy, policy and theme reads, and dbus-send on Linux, which Studio already runs at its fixed
-     path. A bare "reg" or "dbus-send" runs whatever a directory earlier in PATH holds under that name. */
-  const regTool = /\bconst REG_TOOL="C:\\\\Windows\\\\System32\\\\reg\.exe"/.test(shellCode);
-  const busTool = /\bconst BUS_TOOL="\/usr\/bin\/dbus-send"/.test(shellCode);
-  const runs = shellCode.match(/(?<![.\w])(execFileSync|execFile|execSync|exec|spawnSync|spawn|fork)\s*\(\s*("[^"]*"|[^,)]*)/g) || [];
-  const programs = runs.map(r => r.replace(/^[^(]*\(\s*/, ""));
-  /* ONE HANDLE ON child_process, and the one name it gives is only ever called (board 818): a second
-     `require("node:child_process")` held whole and called as `.spawn(...)` passed the call pattern above, which reads
-     a bare name only. So the module is required once in each file that runs a program, its one name is mentioned
-     once more per call and nowhere else, and no other loader (a dynamic import, createRequire, a binding) is in the
-     shell at all. */
-  const cpRequires = (shellCode.match(/\brequire\s*\(\s*"(?:node:)?child_process"\s*\)/g) || []).length;
-  const runMentions = (shellBare.match(/\bexecFileSync\b/g) || []).length, runCalls = (shellBare.match(/\bexecFileSync\s*\(/g) || []).length;
-  /* THE CARET HELPER'S CALLS, execFile in main.js alone: its program is `tool`, bound only to caretTool(), whose two
-     places are caret.exe beside the asar and in build/, and its name is mentioned once in the require and once per call. */
-  const asyncMentions = (shellBare.match(/\bexecFile\b/g) || []).length, asyncCalls = (shellBare.match(/\bexecFile\s*\(/g) || []).length;
-  const toolBinds = shellCode.match(/\bconst tool=caretTool\(\);/g) || [], toolNames = (shellBare.match(/\btool\b/g) || []).length;
-  const caretToolNames = (shellBare.match(/\bcaretTool\b/g) || []).length;
-  const caretPlaces = /function caretTool\(\)\{if\(process\.platform!=="win32"\)return null;const at=app\.isPackaged\?path\.join\(process\.resourcesPath,"caret\.exe"\):path\.join\(__dirname,"\.\.","dist","\.caret","caret\.exe"\);return fs\.existsSync\(at\)\?at:null\}/.test(shellCode);
-  const loaders = shellBare.match(/\bimport\s*\(|\bprocess\s*\.\s*(?:binding|_linkedBinding|dlopen)\b|\bcreateRequire\b|\bmodule\s*\.\s*require\b|\brequire\s*\.\s*(?:cache|main)\b/g) || [];
-  const cpNames = cps.map(m => m[1].split(",").map(x => x.trim()).sort().join(","));
-  check(reqs.length > 0 && strange.length === 0 && cps.length === cpRequires
-    && cpNames.every(n => n === "execFileSync" || n === "execFile,execFileSync") && cpNames.filter(n => n !== "execFileSync").length === 1
-    && asyncCalls === 2 && asyncMentions === asyncCalls + 1 && toolBinds.length === 2 && caretPlaces && caretToolNames === 3
-    && toolNames === toolBinds.length * 3
-    && programs.length > 0 && programs.every(p => (p === "REG_TOOL" && regTool) || p === "tool"
-      /* Linux alone: three questions to the session bus about the keyring, none about a window, the screen, the
-         clipboard or a key (tests/shell-office.mjs 14) */
-      || (p === "BUS_TOOL" && busTool))
-    && cpRequires === 2 && runMentions === runCalls + cpRequires && loaders.length === 0,
-    "5c the shell loads no module and runs no program it did not have (every one is read against the must-hold before it joins): "
-    + (strange.join(", ") || reqs.length + " requires known") + "; " + (cp ? cp[1].trim() : "no child_process") + " runs " + (programs.join(", ") || "nothing")
-    + "; child_process required " + cpRequires + " time(s), its name mentioned " + runMentions + " time(s) for " + runCalls + " call(s)"
-    + (loaders.length ? "; other loaders " + loaders.join(", ") : ""));
+  /* 5c AS A JUDGEMENT OF A TEXT, so a planted copy can be judged the same way. WIDENED 2026-11-15 by the lead engineer
+     (Claudius) on the test architect's word: win-proxy.cjs reads Windows' proxy again without waiting (execFile), so two
+     files now take execFile beside execFileSync and there are three asynchronous calls (the caret's two and win-proxy's one).
+     The program set is unchanged: win-proxy's one execFile call is pinned to REG_TOOL by its own text. */
+  const judge5c = (shellCode, shellBare, winSrc) => {
+    const reqs = (shellCode.match(/\brequire\s*\(\s*[^)]*\)/g) || []).map(r => r.replace(/^require\s*\(\s*|\s*\)$/g, "").replace(/^["']|["']$/g, ""))
+      .map(r => { const m = /^path\.join\(__dirname,((?:"[\w.-]+",)*"[\w.-]+)$/.exec(r); return m ? "./" + m[1].replace(/"/g, "").split(",").join("/") : r; });
+    const strange = reqs.filter(r => MODS.indexOf(r) < 0);
+    const cps = [...shellCode.matchAll(/\{([^}]*)\}\s*=\s*require\(\s*"node:child_process"\s*\)/g)];
+    const cp = cps[0] || null;
+    /* EVERY PROGRAM BY A CONSTANT HELD HERE TO ITS FIXED PATH, never a bare name a PATH search resolves (board 880, 2026-10-13):
+       the registry tool for the proxy, policy and theme reads, and dbus-send on Linux, which Studio already runs at its fixed
+       path. A bare "reg" or "dbus-send" runs whatever a directory earlier in PATH holds under that name. */
+    const regTool = /\bconst REG_TOOL="C:\\\\Windows\\\\System32\\\\reg\.exe"/.test(shellCode);
+    const busTool = /\bconst BUS_TOOL="\/usr\/bin\/dbus-send"/.test(shellCode);
+    const runs = shellCode.match(/(?<![.\w])(execFileSync|execFile|execSync|exec|spawnSync|spawn|fork)\s*\(\s*("[^"]*"|[^,)]*)/g) || [];
+    const programs = runs.map(r => r.replace(/^[^(]*\(\s*/, ""));
+    /* ONE HANDLE ON child_process, and the one name it gives is only ever called (board 818): a second
+       `require("node:child_process")` held whole and called as `.spawn(...)` passed the call pattern above, which reads
+       a bare name only. So the module is required once in each file that runs a program, its one name is mentioned
+       once more per call and nowhere else, and no other loader (a dynamic import, createRequire, a binding) is in the
+       shell at all. */
+    const cpRequires = (shellCode.match(/\brequire\s*\(\s*"(?:node:)?child_process"\s*\)/g) || []).length;
+    const runMentions = (shellBare.match(/\bexecFileSync\b/g) || []).length, runCalls = (shellBare.match(/\bexecFileSync\s*\(/g) || []).length;
+    /* THE CARET HELPER'S CALLS, execFile in main.js alone: its program is `tool`, bound only to caretTool(), whose two
+       places are caret.exe beside the asar and in build/, and its name is mentioned once in the require and once per call. */
+    const asyncMentions = (shellBare.match(/\bexecFile\b/g) || []).length, asyncCalls = (shellBare.match(/\bexecFile\s*\(/g) || []).length;
+    const toolBinds = shellCode.match(/\bconst tool=caretTool\(\);/g) || [], toolNames = (shellBare.match(/\btool\b/g) || []).length;
+    const caretToolNames = (shellBare.match(/\bcaretTool\b/g) || []).length;
+    const caretPlaces = /function caretTool\(\)\{if\(process\.platform!=="win32"\)return null;const at=app\.isPackaged\?path\.join\(process\.resourcesPath,"caret\.exe"\):path\.join\(__dirname,"\.\.","dist","\.caret","caret\.exe"\);return fs\.existsSync\(at\)\?at:null\}/.test(shellCode);
+    const loaders = shellBare.match(/\bimport\s*\(|\bprocess\s*\.\s*(?:binding|_linkedBinding|dlopen)\b|\bcreateRequire\b|\bmodule\s*\.\s*require\b|\brequire\s*\.\s*(?:cache|main)\b/g) || [];
+    const cpNames = cps.map(m => m[1].split(",").map(x => x.trim()).sort().join(","));
+    const winCalls = (winSrc.match(/\bexecFile\s*\(/g) || []).length, winPinned = winCalls === 1 && /\bexecFile\s*\(\s*REG_TOOL\b/.test(winSrc);
+    return { ok: reqs.length > 0 && strange.length === 0 && cps.length === cpRequires && cpNames.every(n => n === "execFileSync" || n === "execFile,execFileSync") && cpNames.filter(n => n !== "execFileSync").length === 2 && asyncCalls === 3 && asyncMentions === asyncCalls + 2 && toolBinds.length === 2 && caretPlaces && caretToolNames === 3 && toolNames === toolBinds.length * 3 && programs.length > 0 && programs.every(p => (p === "REG_TOOL" && regTool) || p === "tool" /* Linux alone: three questions to the session bus about the keyring, none about a window, the screen, the clipboard or a key (tests/shell-office.mjs 14) */ || (p === "BUS_TOOL" && busTool)) && cpRequires === 2 && runMentions === runCalls + cpRequires && loaders.length === 0 && winPinned,
+      say: "5c the shell loads no module and runs no program it did not have (every one is read against the must-hold before it joins): " + (strange.join(", ") || reqs.length + " requires known") + "; " + (cp ? cp[1].trim() : "no child_process") + " runs " + (programs.join(", ") || "nothing") + "; child_process required " + cpRequires + " time(s), its name mentioned " + runMentions + " time(s) for " + runCalls + " call(s)" + (loaders.length ? "; other loaders " + loaders.join(", ") : "") + "; win-proxy's execFile call(s) " + winCalls + (winPinned ? " to REG_TOOL" : " NOT PINNED to REG_TOOL") };
+  };
+  const WIN_SRC = blank(fs.readFileSync(path.join(ROOT, "shell", "win-proxy.cjs"), "utf8"));
+  const five = judge5c(shellCode, shellBare, WIN_SRC);
+  /* Two plants, judged on copies of the text: win-proxy's call given another program, and a second call added there. */
+  const PLANTS_OFF_5C = process.env.ETIUDA_PLANTS === "off";
+  const plant5c = (from, to) => { const w = WIN_SRC.replace(from, to), c = shellCode.split(WIN_SRC).join(w);
+    return w !== WIN_SRC && c !== shellCode && !judge5c(c, mask(c), w).ok; };
+  const p5 = PLANTS_OFF_5C ? null : [plant5c(/\bexecFile\(REG_TOOL\b/, 'execFile("cmd.exe"'),
+    plant5c(/\bexecFile\(REG_TOOL,/, "execFile(REG_TOOL,[]);execFile(REG_TOOL,")];
+  check(five.ok && (p5 === null || p5.every(Boolean)),
+    five.say + (p5 === null ? "; plants NOT RUN (ETIUDA_PLANTS=off)" : "; plants another program " + (p5[0] ? "red" : "MISSED") + ", a second call " + (p5[1] ? "red" : "MISSED")));
   /* THE PAGE IS GRANTED ONE PERMISSION, the clipboard's write, and every handler that could grant another answers
      from that list alone (board 818): "clipboard-read" added to the list stayed green, since no API name is in it.
      The list is named three times, its declaration and its two handlers, and nowhere else, so
