@@ -56,7 +56,7 @@ function routeOf(method, pathname, prefix) {
 }
 
 const reply = (status, value, extra) => new Response(JSON.stringify(value), { status, headers: extra ? Object.assign({}, HEADERS, extra) : HEADERS });
-const refused = r => reply(STATUS[r.reason] || 400, Object.assign({ error: r.reason, said: r.said }, typeof r.floor === "number" ? { floor: r.floor } : {}));
+const refused = r => r && r.temporary === true ? unavailable() : reply(STATUS[r.reason] || 400, Object.assign({ error: r.reason, said: r.said }, typeof r.floor === "number" ? { floor: r.floor } : {}));
 const refusedFor = reason => refused(B.refusal(reason));
 const missing = () => refusedFor("missing");
 const fault = () => reply(500, { error: "fault", said: "The relay could not answer that." });
@@ -184,7 +184,7 @@ function teamObject(deps) {
     return out;
   }
   const c = core.createCore({ store: deps.store, clock: deps.clock, limits: deps.limits, roots: deps.roots,
-    revoked: revokedNow });
+    revoked: revokedNow, entriesOpen: () => migrated });
   const r2 = deps.r2, sockets = deps.sockets, alarm = deps.alarm || null;
   const prefix = apiPrefixOf(Object.prototype.hasOwnProperty.call(deps, "prefix") ? { API_PREFIX: deps.prefix } : undefined);
   const answer = (r, shape) => (r.ok ? reply(200, shape(r)) : refused(r));

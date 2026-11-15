@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 592;
+const EXPECTED = 594;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -7341,6 +7341,63 @@ async function main() {
       if (PLANTS_OFF) { skip(line); continue; }
       const p = await liftCore("plant:" + tag, turns);
       check(base && p.turned && p.back, line + ": " + p.detail.split("\n")[0] + ", sha " + (p.back ? "unchanged" : "CHANGED"));
+    }
+
+    /* WHILE THE MIGRATION HAS NOT COMMITTED, NO NEW DESK IS LET IN (Claude alpha, on the hole named in addendum 7). The step is planted
+       to throw while a switch is on, so every request's retry throws again. Meanwhile a door knock by a desk removed under its raw half,
+       and a token hello on an invitation the lead registered before that removal, answer the relay's temporary 503 and spend nothing;
+       an enrolled desk's read and the lead's upload still answer. Once the switch is off the next request's retry commits: the removed
+       desk's knock answers removed, its token is refused removed and left unspent, and a desk not removed is let in at the door. */
+    async function shutScene() {
+      const lines = [];
+      const R = relayEnv({ log: line => lines.push(String(line)) });
+      R.clock.now = T0;
+      const w = await world({ R });
+      w.ref = hex(16);
+      await doorSet(w, [w.ref]);
+      const st = w.R.stores.get(w.rt), now = w.R.clock.now, y = keyPair(true), fresh = keyPair(true);
+      const token = hex(32), inv = hex(16);
+      await invites(w, [{ id: inv, hash: sha(token) }], []);
+      const ord = (st.get("ord") || 0) + 1;
+      st.put("ord", ord);
+      st.put("gone:" + y.pub, { pub: y.pub, desk: "k-" + hex(8), at: now, ord });
+      const deskS = await sessionOf(w, w.desk), leadS = await sessionOf(w, w.lead);
+      const real = st.get, failing = { on: true };
+      st.get = k => { if (k === "mig:desk-id" && failing.on) throw new Error("planted"); return real.call(st, k); };
+      w.R.restart();
+      const out = {};
+      try {
+        out.knock = await doorHello(w, y, certFor(y.pub, w.ref, now));
+        out.token = await tokenHello(w, inv, token, null, y);
+        out.read = await since(w, deskS);
+        out.lead = await put(w, leadS, sealAs(w, w.lead, "guide.ec", 1));
+        out.spentDuring = (st.get("inv:" + inv) || {}).spent === true;
+        out.doorRowsDuring = doorRows(w).length;
+      } finally { failing.on = false; }
+      out.knockAfter = await doorHello(w, y, certFor(y.pub, w.ref, now));
+      out.tokenAfter = await tokenHello(w, inv, token, null, y);
+      out.spentAfter = (st.get("inv:" + inv) || {}).spent === true;
+      out.freshAfter = await doorHello(w, fresh, certFor(fresh.pub, w.ref, now));
+      st.get = real;
+      const later = r => r.status === 503 && !!r.json && r.json.error === "unavailable";
+      const failed = lines.filter(l => /failed/.test(l)).length;
+      const ok = later(out.knock) && later(out.token) && !out.spentDuring && out.doorRowsDuring === 0 && out.read.status === 200
+        && out.lead.status === 200 && refused(out.knockAfter, "removed") && refused(out.tokenAfter, "removed") && !out.spentAfter
+        && out.freshAfter.status === 200 && out.freshAfter.json.invite === true && failed === 1;
+      return { ok, detail: JSON.stringify({ knock: said(out.knock), token: said(out.token), spentDuring: out.spentDuring, read: out.read.status,
+        lead: said(out.lead), knockAfter: said(out.knockAfter), tokenAfter: said(out.tokenAfter), spentAfter: out.spentAfter,
+        freshAfter: said(out.freshAfter), failedLines: failed }) };
+    }
+    const shut = await safe(shutScene);
+    check(shut.ok, "a4v while the migration's step keeps failing, a door knock by a desk removed under its raw half and a token hello on an"
+      + " invitation registered before the removal answer the relay's temporary 503 and spend nothing, while an enrolled desk's read and the"
+      + " lead's upload answer; once the step commits, that knock and token answer removed, unspent, and a desk not removed is let in: "
+      + shut.detail);
+    if (PLANTS_OFF) skip("a4w lifting plant:entries-shut lets the removed desk in while the step fails (a4v red)");
+    else {
+      const shutLift = await liftCore("plant:entries-shut", async () => !(await safe(shutScene)).ok);
+      check(shut.ok && shutLift.turned && shutLift.back, "a4w lifting plant:entries-shut lets the removed desk in while the step fails (a4v red),"
+        + " and the product file is never written: " + shutLift.detail.split("\n")[0] + ", sha " + (shutLift.back ? "unchanged" : "CHANGED"));
     }
   }
 

@@ -566,6 +566,18 @@ function createCore(deps) {
   const roots = deps.roots === undefined ? [ROOT_PUB] : deps.roots;
   const revokedNow = typeof deps.revoked === "function" ? deps.revoked : () => [];
   const random = n => crypto.randomBytes(n).toString("hex");
+  /* WHILE THE ONE-SPELLING MIGRATION HAS NOT COMMITTED (team.cjs's flag; Claude alpha's ruling on the hole it leaves), no desk that is
+     not yet in becomes in: a removal kept only under a raw half is invisible until then. The entries are the token hello (an
+     invitation's spend), the door knock, the key hello's resume of a bound invitation, and an invitation's upload (its admission,
+     a withdrawal included). Each answers the relay's temporary refusal before anything is spent or counted, so the invitation is
+     still good once the step commits. The lead's calls and an enrolled desk's hellos, reads and writes go on. */
+  const entriesOpen = typeof deps.entriesOpen === "function" ? deps.entriesOpen : () => true;
+  function entriesShut() {
+    let shut = false;
+    shut = !entriesOpen(); /* plant:entries-shut */
+    return shut;
+  }
+  const later = () => ({ ok: false, reason: "unavailable", said: "The relay could not answer that.", temporary: true });
   const fresh = t => isFresh(t, clock());
   const bodyOf = b => (b && typeof b === "object" && !Array.isArray(b) ? b : {});
 
@@ -1051,6 +1063,7 @@ function createCore(deps) {
     return marked;
   }
   function byToken(rt, b) {
+    if (entriesShut()) return later();
     /* The binding is judged before the token, so a hello that does not bind answers the same whether or not the invitation is known. */
     let named = keyMatches(b.key, b.pub);
     named = deskKeyMatches(b.key, b.pub); /* plant:desk-id-token */
@@ -1136,7 +1149,7 @@ function createCore(deps) {
       /* The invitation's session again, only where the lead registered it after this removal, for its one upload. */
       const held = boundInvite(b.key);
       if (held && registeredAfter(held.inv, gone) && held.inv.pub === b.pub)
-        return issue(b.challenge, { key: null, inv: held.id, bound: b.key, letGo: held.inv.uploaded === true }, () => {
+        return entriesShut() ? later() : issue(b.challenge, { key: null, inv: held.id, bound: b.key, letGo: held.inv.uploaded === true }, () => {
           for (const [k, x] of store.list("ses:")) if (x.inv === held.id) store.del(k);
         });
       return no("removed"); /* plant:removed-key */
@@ -1145,7 +1158,7 @@ function createCore(deps) {
       /* A key on no list that a token hello bound: the invitation's session again, for its one upload and then its answer alone, and only one held. */
       const held = boundInvite(b.key);
       if (held && held.inv.pub === b.pub) /* plant:invite-resume */
-        return issue(b.challenge, { key: null, inv: held.id, bound: b.key, letGo: held.inv.uploaded === true }, () => {
+        return entriesShut() ? later() : issue(b.challenge, { key: null, inv: held.id, bound: b.key, letGo: held.inv.uploaded === true }, () => {
           for (const [k, x] of store.list("ses:")) if (x.inv === held.id) store.del(k);
         });
       return no("not-enrolled"); /* plant:key-enrolled */
@@ -1161,6 +1174,7 @@ function createCore(deps) {
      session reads the lead's answer alone from the start, so a stranger holding a certificate learns nothing of the team. A key
      the lead removed is never let back in by it: only an invitation registered after the removal takes such a key. */
   function byDoor(team, rt, b) {
+    if (entriesShut()) return later();
     /* The key's id in its k- form alone, as every desk entry takes it (deskKeyMatches) and doorSealKey binds it. */
     let named = true;
     named = deskKeyMatches(b.key, b.pub); /* plant:door-key-form */
@@ -1524,6 +1538,7 @@ function createCore(deps) {
      admits nothing; nor does one past its keep that no list has pruned yet, so a session opened just inside the keep makes
      no upload after it, a list between or not (C2 of the read of cf90c15). */
   function admitInvite(team, s, m) {
+    if (entriesShut()) return later();
     const inv = store.get("inv:" + s.inv);
     if (!inv && spentMarker(s.inv)) return no("token-spent");
     if (!inv) return no("no-hello");
