@@ -10213,6 +10213,8 @@ async function signoutAsk(io, deskKey, now) {
    "pooled" then "desk-only" after the key id, as Studio's seatCertBytes makes them; without them the bytes are as before. */
 const SIGNIN_CODE = /^[0-9A-HJKMNP-TV-Z]{16}$/;
 const SIGNIN_CERT_SPAN_MS = 30 * 24 * 60 * 60 * 1000, SIGNIN_VIA_SPAN_MS = 366 * 24 * 60 * 60 * 1000;
+/* A pooled desk's certificate runs at most a day, as relay/core.cjs POOLED_CERT_SPAN_MS takes it. */
+const SIGNIN_POOLED_SPAN_MS = 24 * 60 * 60 * 1000;
 const SIGNIN_KEY_ID = /^[a-z0-9][a-z0-9-]{2,63}$/;
 function signinVerified(pub, bytes, value) {
   try {
@@ -10231,6 +10233,7 @@ function signinCertOk(c, deskKey) {
     && String(c.desk) === String(deskKey) && /^[0-9a-f]{64}$/.test(String(c.person)) && SIGNIN_CODE.test(String(c.code)) /* plant:cert-desk */
     && Number.isSafeInteger(c.issued) && Number.isSafeInteger(c.until) && c.issued > 0 && c.until > c.issued
     && c.until - c.issued <= SIGNIN_CERT_SPAN_MS /* plant:cert-span */
+    && (c.pooled !== true || c.until - c.issued <= SIGNIN_POOLED_SPAN_MS) /* plant:cert-pooled-span */
     && plainObj(c.sig) && exactly(c.sig, ["alg", "keyId", "value"]) && c.sig.alg === "Ed25519" && SIGNIN_KEY_ID.test(String(c.sig.keyId))
     && /^[0-9a-f]{128}$/.test(String(c.sig.value)))) return false;
   const d = c.via;
