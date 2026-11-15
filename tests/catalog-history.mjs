@@ -21,7 +21,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 30 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 2);
+const EXPECTED = 31 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 3);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -315,6 +315,26 @@ try {
   const capped = K ? K(capSet, now, 30, 100).map(v => v.id).sort().join() : "no historyKept";
   check(capped === "c,d,f",
     "4b past the cap the longest unseen go first, the newest of each file never, and one content kept for two files weighs once, so c outlives a and b (" + capped + ")");
+
+  /* 4d (Grok's review 23, finding 8): the cap binds the newest of each file too, once nothing else is left to drop, so the
+     history cannot grow with every path the desk has opened; the longest unseen of them goes first. */
+  const pinSet = [V("x", "/x", now - 9 * DAY, 40), V("y", "/y", now - 2 * DAY, 40), V("z", "/z", now - DAY, 40), V("w", "/w", now - 20 * DAY, 40)];
+  const pinCapped = K ? K(pinSet, now, 30, 100).map(v => v.id).sort().join() : "no historyKept";
+  const roomy = K ? K(pinSet, now, 30, 1e9).map(v => v.id).sort().join() : "no historyKept";
+  check(pinCapped === "y,z" && roomy === "w,x,y,z",
+    "4d past the cap with only the newest of each file left, the longest unseen of those go too (" + pinCapped + "); THE CONTROL, under the cap, every one stays (" + roomy + ")");
+  if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP 4d lifting plant:history-cap-pinned (ETIUDA_PLANTS=off)");
+  else {
+    const MAIN4 = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").split("\n");
+    const at4 = MAIN4.map((l, i) => (l.indexOf("plant:history-cap-pinned") >= 0 ? i : -1)).filter(i => i >= 0);
+    let liftedCap = null;
+    if (at4.length === 1) {
+      const c = MAIN4.slice(); c[at4[0]] = "";
+      const P4 = boot(c.join("\n")).test.historyKept;
+      liftedCap = P4 ? P4(pinSet, now, 30, 100).map(v => v.id).sort().join() : null;
+    }
+    check(liftedCap === "w,x,y,z", "4d lifting plant:history-cap-pinned keeps every newest past the cap again (" + liftedCap + ")");
+  }
 
   /* For real, a month on: the edition shop.ec held first is dropped from the index and its copy from the disk. */
   const realNow = Date.now;

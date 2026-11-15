@@ -7344,7 +7344,7 @@ function relayRun() {
 /* ---- the desk's own history of the catalogs it reads and writes --------------------------------------------------
    One gzip per content, named by its SHA-256, and an index of where and when each was seen, beside desk.json: nobody
    else's desk reads this folder. A version stays 30 days after it was last seen and the newest of each file whatever its
-   age; past the cap the longest unseen go first. A sealed file is kept as sealed. */
+   age; past the cap the longest unseen go first, the newest of each file last. A sealed file is kept as sealed. */
 const HISTORY_KIND = "etiuda-catalog-history", HISTORY_INDEX = "index.json";
 const HISTORY_DAY_MS = 24 * 60 * 60 * 1000, HISTORY_DAYS = 30, HISTORY_CAP = 100 * 1024 * 1024;
 // A version seen again within this long is not written down again.
@@ -7429,7 +7429,10 @@ function historyKept(versions, now, days, cap) {
     each.forEach(n => { sum += n; });
     return sum;
   };
-  const spare = kept.filter(v => !pinned(v)).sort((a, b) => a.last - b.last || a.first - b.first);
+  const byAge = (a, b) => a.last - b.last || a.first - b.first;
+  /* The newest of each file goes last, the longest unseen of them first, so the cap holds whatever paths were opened. */
+  const spare = kept.filter(v => !pinned(v)).sort(byAge)
+    .concat(kept.filter(v => pinned(v)).sort(byAge)); /* plant:history-cap-pinned */
   while (spare.length && weight(kept) > cap) {
     const v = spare.shift();
     kept = kept.filter(x => x !== v);
