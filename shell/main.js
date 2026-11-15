@@ -7184,12 +7184,12 @@ function setTeamNeedsFolder(teamId, doc, mirrorDir) {
 /* The page may name only the folder this shell's picker returned for it. Anything else is not read. A folder machine policy
    names is the only one a moved team may take, picked or not. */
 function pickMovedFolder(teamId, pickedFolder, senderId) {
-  if (!offeredFolder(senderId, pickedFolder)) return { ok: false, error: "unpicked" }; /* plant:moved-folder-offered */
   const named = sayJoinPolicy().folder;
   if (named && !policySameFolder(pickedFolder, named)) {
     teamSay("a folder picked for team " + teamId + " is not the one machine policy names, so this desk stays with the policy's folder");
     return { ok: false, error: "policy" };
   }
+  if (!offeredFolder(senderId, pickedFolder)) return { ok: false, error: "unpicked" }; /* plant:moved-folder-offered */
   const need = teamNeedsFolder[teamId];
   const pinned = teamPins[teamId];
   const minRev = need ? need.rev : 0;
