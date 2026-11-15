@@ -18,7 +18,7 @@ import { drawIntentRail } from "./rail-list.js";
 import { normWhoList, WHO_BASE } from "./stock.js";
 import { lySet } from "./storage.js";
 import { drawPills } from "./tabs.js";
-import { t, catalogCountsLine, counted, toast, translateTree, offerUndo, uiLang } from "./ui-lang.js";
+import { t, catalogCountsLine, counted, toast, translateTree, offerUndo, uiLang, hugDottedGround } from "./ui-lang.js";
 import { isFavourite, isIntentFavourite, pack, whoOptions, savePack } from "./pack.js";
 import { removeCard, removeIntent, setIntentHidden, syncIntentOrder, toggleFavourite, toggleIntentFavourite } from "./favourites.js";
 import { primaryCatKeys, intentCardCounts, allIntentCardCount, normalizeCardIntents } from "./card-intent.js";
@@ -1177,6 +1177,7 @@ function applyLibView(page){
     const everyLine=every?t("Cards linked to every intent: {N}.").replace("{N}",every)+" ":"";
     lede.textContent=!sec||q?"":(sec.key==="catmac"&&n)?(n+". "+sec.lede):(sec.key==="intents")?((n?t("Intents: {N}.").replace("{N}",n)+" ":"")+everyLine+sec.lede):sec.lede;
   }
+  hugDottedGround(page.querySelector("#libPage") || page);
 }
 /* The fades are measured where the page is drawn: the nav and the section shown, or every section a search shows. */
 function markLibCut(page){
@@ -1379,6 +1380,7 @@ function refreshRolePage(page){
   const fk = focusKey(document.activeElement, sec);
   sec.innerHTML = mgWhoSectionHtml();
   wireRolePage(page);
+  hugDottedGround(sec);
   if(fk) focusSame(sec, fk);
   const cnt = page.querySelector('details.manage-sec[data-mg="who"] .mg-count');
   if(cnt) cnt.textContent = String(whoOptions().length);

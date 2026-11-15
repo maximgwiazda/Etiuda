@@ -1839,7 +1839,7 @@ function translateTree(root){
     });
     /* Text only where the element holds nothing but text: a button, a label, a heading. Anything
        with element children is left alone, because replacing its text would delete them. */
-    if(el.children && el.children.length===0 && el.textContent && el.textContent.trim()){
+    if(!(el.classList && el.classList.contains("e-dot-hug")) && el.children && el.children.length===0 && el.textContent && el.textContent.trim()){
       const src=el.getAttribute("data-i18n-text") || el.textContent.trim();
       const out=t(src);
       if(out!==el.textContent.trim()){ el.setAttribute("data-i18n-text", src); el.textContent=out; }
@@ -1862,13 +1862,178 @@ function translateTree(root){
   if(doc && typeof doc.createTreeWalker==="function"){
     const walker=doc.createTreeWalker(root, TW_SHOW_ELEMENT, {acceptNode:node=>marked(node)?TW_FILTER_REJECT:TW_FILTER_ACCEPT});
     for(let node=walker.nextNode(); node; node=walker.nextNode()) one(node);
+    hugDottedGround(root);
     return visited;
   }
   /* A document with no walker (a test's stand-in; every page the desk draws has one): the same walk by hand, the same
      elements in the same order, a marked element and everything under it left out. */
   const down=el=>{ Array.prototype.forEach.call(el.children || [], c=>{ if(c && c.nodeType===1 && !marked(c)){ one(c); down(c); } }); };
   down(root);
+  hugDottedGround(root);
   return visited;
+}
+/* GROUND-RULE HUGGER: finds every visible element standing directly on a dotted ground (nothing
+   opaque between it and the dots), never by a list of text class names, and moves its inline
+   words into an inline .e-dot-hug span so cleared pixels hug every line and never wipe beside a
+   short line. Existing nodes are moved rather than rewritten, keeping all text-node handles. */
+const DG_CTRL_SEL="button,a,input,select,textarea,.chip,kbd,.btn,.seg,[role=button],.cell-chip,.count";
+function dgAlpha(c){
+  if(!c || c==="transparent") return 0;
+  let m=c.match(/\/\s*([\d.]+%?)\s*\)/);
+  if(m) return m[1].endsWith("%") ? parseFloat(m[1])/100 : parseFloat(m[1]);
+  m=c.match(/^rgba\(([^)]+)\)/);
+  if(m) return parseFloat(m[1].split(",")[3]);
+  return 1;
+}
+function dgTargets(root){
+  const out=[];
+  if(!root || root.nodeType!==1) return out;
+  const closest=typeof root.closest==="function" ? root.closest.bind(root) : null;
+  const sx=closest && closest(".sx-page");
+  if(sx){ out.push({ground:sx, start:root}); return out; }
+  const main=closest && closest(".stage > .scroller main");
+  if(main){ out.push({ground:main, start:root}); return out; }
+  if(typeof root.querySelectorAll==="function"){
+    root.querySelectorAll(".sx-page").forEach(p=>out.push({ground:p, start:p}));
+    root.querySelectorAll(".stage > .scroller main").forEach(m=>out.push({ground:m, start:m}));
+  }
+  return out;
+}
+function dgTrimRun(run){
+  while(run.length && ((run[0].nodeType===3 && (!run[0].nodeValue || !run[0].nodeValue.trim())) || (run[0].nodeType===1 && run[0].tagName==="BR"))) run.shift();
+  while(run.length && ((run[run.length-1].nodeType===3 && (!run[run.length-1].nodeValue || !run[run.length-1].nodeValue.trim())) || (run[run.length-1].nodeType===1 && run[run.length-1].tagName==="BR"))) run.pop();
+  return run;
+}
+function dgRunHasWords(run){
+  for(let i=0;i<run.length;i++){
+    const n=run[i];
+    if(n.nodeType===3 && n.nodeValue && n.nodeValue.trim()) return true;
+    if(n.nodeType===1 && n.textContent && n.textContent.trim()) return true;
+  }
+  return false;
+}
+function hugDottedGround(root){
+  if(!root || root.nodeType!==1 || typeof getComputedStyle!=="function") return 0;
+  const doc=root.ownerDocument || (typeof document!=="undefined" ? document : null);
+  if(!doc) return 0;
+  const targets=dgTargets(root);
+  if(!targets.length) return 0;
+  /* Two-phase Read then Write: collecting every style/wrap decision before mutating the DOM
+     avoids interleaved style-recalc thrashing on large trees like Library with full catalogs. */
+  const wraps=[], icons=[], inlineCtrls=[], blockCtrls=[];
+  targets.forEach(({ground, start})=>{
+    if(start!==ground){
+      for(let p=start.parentElement; p && p!==ground; p=p.parentElement){
+        if(dgAlpha(getComputedStyle(p).backgroundColor)>=0.95) return;
+      }
+    }
+    const visit=el=>{
+      if(!el || el.nodeType!==1 || el.hidden || el.hasAttribute("data-dg")) return;
+      if(el.classList && el.classList.contains("e-dot-hug")) return;
+      const cs=getComputedStyle(el);
+      if(cs.display==="none") return;
+      if(cs.clip==="rect(0px, 0px, 0px, 0px)" || cs.clipPath==="inset(50%)") return;
+      const bgAlpha=dgAlpha(cs.backgroundColor);
+      const elOp=parseFloat(cs.opacity);
+      const effBg=bgAlpha * (Number.isNaN(elOp) ? 1 : elOp);
+      if(el!==ground){
+        const tag=(el.tagName||"").toUpperCase();
+        if(tag==="SVG" || tag==="IMG"){
+          if(effBg<0.95 && el.classList) icons.push(el);
+          return;
+        }
+        if(effBg>=0.95) return;
+        if(typeof el.matches==="function" && el.matches(DG_CTRL_SEL)){
+          if(cs.display==="inline") inlineCtrls.push(el);
+          else blockCtrls.push({el, bgAlpha, bgColor:cs.backgroundColor, hasBgImg:!!el.style.backgroundImage});
+          return;
+        }
+      }
+      const isFlex=/flex|grid/.test(cs.display);
+      const kids=el.childNodes;
+      if(!kids || !kids.length) return;
+      if(isFlex || el===ground){
+        for(let i=0;i<kids.length;i++){
+          const k=kids[i];
+          if(k.nodeType===3 && k.nodeValue && k.nodeValue.trim()){
+            if(el!==ground){
+              const run=dgTrimRun([k]);
+              if(run.length && dgRunHasWords(run)) wraps.push({parent:el, run, insideFlex:isFlex});
+            }
+          }else if(k.nodeType===1){
+            visit(k);
+          }
+        }
+        return;
+      }
+      let run=[];
+      const flush=()=>{
+        if(run.length){
+          const trimmed=dgTrimRun(run.slice());
+          if(trimmed.length && dgRunHasWords(trimmed)) wraps.push({parent:el, run:trimmed, insideFlex:false});
+          run=[];
+        }
+      };
+      for(let i=0;i<kids.length;i++){
+        const k=kids[i];
+        if(k.nodeType===3){
+          run.push(k);
+          continue;
+        }
+        if(k.nodeType!==1) continue;
+        if(k.hidden) continue;
+        const ktag=(k.tagName||"").toUpperCase();
+        if(ktag==="BR"){ run.push(k); continue; }
+        const kcs=getComputedStyle(k);
+        if(kcs.display==="none") continue;
+        const ka=dgAlpha(kcs.backgroundColor);
+        const isFlow=(kcs.display==="inline" || kcs.display==="inline-block")
+          && ktag!=="SVG" && ktag!=="IMG"
+          && !(typeof k.matches==="function" && k.matches("input,select,textarea,button,.btn,.seg"))
+          && !(k.classList && k.classList.contains("e-dot-hug"))
+          && ka<0.95;
+        if(isFlow){
+          run.push(k);
+        }else{
+          flush();
+          visit(k);
+        }
+      }
+      flush();
+    };
+    visit(start);
+  });
+  let wrapped=0;
+  for(let i=0;i<icons.length;i++) icons[i].classList.add("e-dot-ic");
+  for(let i=0;i<inlineCtrls.length;i++){ inlineCtrls[i].classList.add("e-dot-hug"); wrapped++; }
+  for(let i=0;i<blockCtrls.length;i++){
+    const b=blockCtrls[i];
+    if(b.bgAlpha>0 && b.bgAlpha<0.95 && !b.hasBgImg) b.el.style.backgroundImage="linear-gradient("+b.bgColor+","+b.bgColor+")";
+    b.el.classList.add("e-dot-ctrl");
+    b.el.style.backgroundColor="var(--bg)";
+  }
+  for(let i=0;i<wraps.length;i++){
+    const {parent, run, insideFlex}=wraps[i];
+    if(!run[0] || !run[0].parentNode) continue;
+    if(parent.hasAttribute && parent.hasAttribute("data-i18n-text")){
+      const src=parent.getAttribute("data-i18n-text");
+      for(let j=0;j<run.length;j++){
+        if(run[j].nodeType===3 && run[j].nodeValue && run[j].nodeValue.trim()){
+          if(!run[j].eI18nSrc) run[j].eI18nSrc=src;
+          break;
+        }
+      }
+      parent.removeAttribute("data-i18n-text");
+    }
+    const hug=doc.createElement("span");
+    hug.className="e-dot-hug";
+    const outer=insideFlex ? doc.createElement("span") : hug;
+    if(insideFlex){ outer.style.minWidth="0"; outer.appendChild(hug); }
+    run[0].parentNode.insertBefore(outer, run[0]);
+    for(let j=0;j<run.length;j++) hug.appendChild(run[j]);
+    wrapped++;
+  }
+  return wrapped;
 }
 /** The app's own furniture, never the catalog's content. */
 function translateChrome(){
@@ -1897,6 +2062,7 @@ export {
   fileStamp,
   translateTree,
   translateChrome,
+  hugDottedGround,
   toast,
   toastHtml,
   toastRefusal,

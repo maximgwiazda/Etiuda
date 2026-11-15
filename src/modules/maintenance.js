@@ -15,7 +15,7 @@ import { lsGet, lsKeys, nsGet, E_NS, E_LS_OK, E_SS_OK, eDeskFileShown, eSaveTrou
 import { ejectCatalog } from "./local-memory.js";
 import { tabs } from "./tabs.js";
 import { mgSystemStill, M_STILL_Q } from "./motion.js";
-import { tc, fileStamp, t, toast } from "./ui-lang.js";
+import { tc, fileStamp, t, toast, hugDottedGround } from "./ui-lang.js";
 import { cutLeaves, dismissNode } from "./motion.js";
 import { hangBubble } from "./bubble.js";
 import { openScreenTab, registerScreen } from "./screen-tabs.js";
@@ -465,6 +465,7 @@ function mtRefreshLive(){
       if(head) head.textContent=t("Readings");
     }
     g.outerHTML=mtGridHtml();
+    if(root) hugDottedGround(root);
   },120);
 }
 /* Width crossings arrive as resize, which the one listener already carries. These are the
@@ -687,6 +688,7 @@ function wireMtShell(root){
     if(title&&page) title.textContent=page.name;
     const lede=root.querySelector("#mtLede");
     if(lede) lede.textContent=mtOn==="health"?"":(mtLede()[mtOn]||"");
+    hugDottedGround(root);
   };
   buttons.forEach(b=>{ b.onclick=()=>show(b.getAttribute("data-mt")); });
   const gear=root.querySelector("#mtSettings");
@@ -702,6 +704,7 @@ registerScreen("maintenance", {
     host.innerHTML = mtShellHtml();
     wireMaintenanceActions(host, closeFn);
     wireMtShell(host.querySelector ? host.querySelector(".sx.lm-mt") : null);
+    hugDottedGround(host);
   }
 });
 
