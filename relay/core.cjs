@@ -72,6 +72,8 @@ const SEAT_MARGIN_MS = 60 * 60 * 1000;
    service that proved anyone recently would have renewed it, so a pooled desk taken over while the service works is cut as any desk. */
 const POOLED_GRACE_MS = 72 * 60 * 60 * 1000;
 const SEAT_QUIET_MS = 6 * 60 * 60 * 1000;
+/* At most a day for a pooled desk's certificate, as the licence service signs it; any other seat's, CERT_SPAN_MS. */
+const POOLED_CERT_SPAN_MS = 24 * 60 * 60 * 1000;
 
 const HEX24 = /^[0-9a-f]{24}$/, HEX32 = /^[0-9a-f]{32}$/, HEX64 = /^[0-9a-f]{64}$/, HEX128 = /^[0-9a-f]{128}$/;
 /* A key id takes blob.cjs's id shape, so no newline or separator rides in it. A desk id is isDeskId: that shape, and not a
@@ -318,6 +320,7 @@ function certWhy(cert, deskPub, refs, now, roots, revoked, runOut) {
     || cert.until <= cert.issued || !plain(cert.sig) || !exactly(cert.sig, SIG_FIELDS) || cert.sig.alg !== "Ed25519" || !isId(cert.sig.keyId)
     || !is(HEX128, cert.sig.value)) return "shape";
   if (cert.until - cert.issued > CERT_SPAN_MS) return "span"; /* plant:cert-span */
+  if (cert.pooled === true && cert.until - cert.issued > POOLED_CERT_SPAN_MS) return "span"; /* plant:cert-pooled-span */
   if (cert.desk !== deskPub) return "desk"; /* plant:cert-desk */
   if (refs.indexOf(cert.licence) < 0) return "licence"; /* plant:cert-licence */
   if (cert.issued > now + CALL_SKEW_MS) return "future"; /* plant:cert-future */

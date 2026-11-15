@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 91;
+const EXPECTED = 93;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -910,6 +910,18 @@ async function main() {
     return { ok, detail: brief({ graceOpened: said(sa), listedBefore: said(before), serviceProves: said(sc), listedAfter: said(after) }) };
   }
   await leg("s23b", liveGraceScene, "a pooled desk's session opened in its quiet grace is refused seat-lapsed on its next use once the service proves anyone again");
+  /* The same review, finding 2: a pooled desk's certificate runs a day, at most, as the licence service signs it; any other seat's, 30. */
+  async function pooledSpanScene() {
+    const k = keyPair(false), lic = hex(16);
+    const why = (span, pooled) => C.certWhy(certFor(k.pub, lic, T0, span, pooled ? { fields: { pooled: true } } : {}), k.pub, [lic], T0 + MIN, K.ROOTS);
+    const w = await team({ seats: true }), a = w.desks.a;
+    a.cert = certFor(a.pub, w.licence, T0, 2 * DAY, { fields: { pooled: true } });
+    const s = await sessionAs(w, "a");
+    const got = { pooledDay: why(DAY, true), pooledDayAndMinute: why(DAY + MIN, true), ordinary30: why(30 * DAY, false) };
+    const ok = got.pooledDay === null && got.pooledDayAndMinute === "span" && got.ordinary30 === null && refused(s, "seat-lapsed");
+    return { ok, detail: brief(Object.assign(got, { twoDayPooledSession: said(s) })) };
+  }
+  await leg("s21e", pooledSpanScene, "a pooled certificate over a day is refused as span, and a desk's session on a two-day one is seat-lapsed; a day is taken, and an ordinary certificate's 30 days");
   await leg("s22a", freedScene, "(d) a pooled desk the grant names as freed is refused outright, its certificate current, and opens again once a later grant no longer names it");
   await leg("s22b", nightOnlyScene, "(a)'s measured limit: a removed pooled desk first tried only at night, never refused while the evidence was fresh, is honoured to its end plus 72 hours under (a) alone, as expected; with (d), the grant naming it, it is refused outright, at night, late in the grace and after");
   await leg("s22c", freedShapeScene, "a grant's freed list out of shape (empty, not a list, not keys, a key twice, a bare key, an entry without its instant, one freed after the grant's issue, one with another field, past FREED_MAX, a thousand) is refused shape, and a good one and a full one taken");
@@ -986,6 +998,7 @@ async function main() {
     ["freed-issued", "s22d", freedSinceScene, "the issue-time comparison dropped, so a certificate issued after the freeing is refused"],
     ["seats-freed-kept", "s22b", nightOnlyScene, "a grant's freed list is not kept"],
     ["grant-freed-shape", "s22c", freedShapeScene, "a freed list out of shape is taken"],
+    ["cert-pooled-span", "s21e", pooledSpanScene, "a pooled certificate runs 30 days"],
     ["cert-pooled-bytes", "s21c", pooledSignedScene, "the pooled mark rides outside the signature"],
     ["seat-seen", "s10 W=7d", () => studioClosedScene(W7), "no certificate taken at a session is kept as evidence"],
     ["seat-evidence-seen", "s10 W=1d", () => studioClosedScene(W1), "the evidence reads the grant's live alone"],
