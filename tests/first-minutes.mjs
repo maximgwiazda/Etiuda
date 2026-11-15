@@ -51,11 +51,84 @@ function writeEngine(dir, htmlText, withCatalogScript = false) {
 
 const rawHtml = fs.readFileSync(ENGINE, "utf8");
 const cleanEmptyUrl = writeEngine(path.join(lab, "clean-empty"), rawHtml, false);
+const cleanSampleUrl = writeEngine(path.join(lab, "clean-sample"), rawHtml, true);
+function writeTeamEngine(dir, htmlText) {
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "etiuda.html"), htmlText);
+  fs.writeFileSync(path.join(dir, "etiuda-catalog.js"), "window.E_CATALOG = " + TEAM_TEXT + ";\n");
+  return "file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/");
+}
+const cleanTeamUrl = writeTeamEngine(path.join(lab, "clean-team"), rawHtml);
 
-const closePage = (p) => Promise.race([p.close().catch(() => {}), sleep(5000)]);
+const closePage = (p) => {
+  const ctx = p && p.browserContext ? p.browserContext() : null;
+  const target = ctx && ctx !== p.browser().defaultBrowserContext() ? ctx : p;
+  return Promise.race([target.close().catch(() => {}), sleep(5000)]);
+};
+
+async function bootCatalogTour(browser, pageUrl, { lang = "en", stepId = "cards", editCard = false } = {}) {
+  const ctx = await browser.createBrowserContext();
+  const p = await ctx.newPage();
+  p.on("dialog", (d) => { d.dismiss().catch(() => {}); });
+  await p.setViewport({ width: 1280, height: 860 });
+  await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
+  await p.evaluateOnNewDocument((cfg) => {
+    try {
+      localStorage.setItem("eUiLang", cfg.lang);
+      localStorage.setItem("eAgent", "Anna");
+      localStorage.setItem("eNameAsked", "1");
+      if (!localStorage.getItem("__fmAccepted")) {
+        localStorage.setItem("eTourDone_v3", "1");
+      } else {
+        sessionStorage.setItem("eTourAt", cfg.stepId);
+      }
+    } catch (e) {}
+  }, { lang, stepId });
+  await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
+  await p.waitForFunction(
+    () => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0,
+    { timeout: 30000 }
+  );
+  if (await p.$("#ecYes")) await p.click("#ecYes");
+  await p.waitForFunction(
+    () => document.querySelectorAll("#list .card").length > 0 && !document.getElementById("ecYes")
+      && !document.querySelector(".e-launch-veil"),
+    { timeout: 30000 }
+  );
+  if (editCard) {
+    await p.evaluate(() => {
+      const btn = document.querySelector('#list .card [data-act="edit"]');
+      if (btn) btn.click();
+    });
+    await p.waitForSelector("#modal:not([hidden]) #meSave", { timeout: 10000 });
+    await p.evaluate(() => {
+      const inp = document.querySelector("#modal .mf .field-wrap input");
+      if (inp) {
+        inp.value = inp.value + " edited";
+        inp.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+    await p.click("#meSave");
+    await sleep(250);
+    await p.click("#meCancel");
+    await p.waitForFunction(() => document.getElementById("modal").hidden, { timeout: 10000 });
+    await sleep(150);
+  }
+  await p.evaluate((id) => {
+    localStorage.setItem("__fmAccepted", "1");
+    localStorage.removeItem("eTourDone_v3");
+    localStorage.removeItem("eTourInvite_v3");
+    sessionStorage.setItem("eTourAt", id);
+  }, stepId);
+  await p.reload({ waitUntil: "load", timeout: 60000 });
+  await p.waitForFunction(() => !!document.querySelector("#tourRoot.on"), { timeout: 15000 });
+  await sleep(200);
+  return p;
+}
 
 async function bootEmptyWithHost(browser, pageUrl, { lang = "en", files = [], host = true } = {}) {
-  const p = await browser.newPage();
+  const ctx = await browser.createBrowserContext();
+  const p = await ctx.newPage();
   p.on("dialog", (d) => { d.dismiss().catch(() => {}); });
   await p.setViewport({ width: 1280, height: 860 });
   await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
@@ -246,6 +319,120 @@ try {
       const st = await readTourLoadState(p);
       check(planted !== rawHtml && st.disabled === true, "plant-load-next: disabling folder pick turns 1a red", st);
       await closePage(p);
+    }
+  }
+
+  /* === BEHAVIOUR 2: Practice lines in tour === */
+  {
+    const readTourBubble = (p) => p.evaluate(() => {
+      const t = document.getElementById("tourTitle");
+      const b = document.getElementById("tourBody");
+      const sm = document.getElementById("sampleMark");
+      return {
+        stepId: sessionStorage.getItem("eTourAt"),
+        title: t ? t.textContent : "",
+        bodyText: b ? b.textContent : "",
+        sampleMarkHidden: sm ? sm.hidden : null
+      };
+    });
+
+    const cardsExtra = {
+      en: "These replies are examples to practise with, not for a live chat.",
+      pl: "Te odpowiedzi to przykłady do ćwiczeń, nie do prawdziwej rozmowy."
+    };
+    const doneTitle = {
+      sample: { en: "Ready to practise", pl: "Gotowe do ćwiczeń" },
+      team: { en: "Ready for the first customer", pl: "Gotowe na pierwszego klienta" }
+    };
+    const doneExtra = {
+      en: "Before the first customer, load your team's catalog.",
+      pl: "Przed pierwszym klientem trzeba wczytać katalog zespołu."
+    };
+
+    /* 2a/2b: Sample catalog shows practice lines on cards + done in EN & PL, and watermark stays shown */
+    EXPECTED += 4;
+    for (const lang of ["en", "pl"]) {
+      const pCards = await bootCatalogTour(browser, cleanSampleUrl, { lang, stepId: "cards" });
+      const stCards = await readTourBubble(pCards);
+      check(
+        stCards.sampleMarkHidden === false && stCards.bodyText.includes(cardsExtra[lang]),
+        `2a (${lang}) untouched sample shows diagonal stamp and cards practice sentence`,
+        stCards
+      );
+      await closePage(pCards);
+
+      const pDone = await bootCatalogTour(browser, cleanSampleUrl, { lang, stepId: "done" });
+      const stDone = await readTourBubble(pDone);
+      check(
+        stDone.title === doneTitle.sample[lang] && stDone.bodyText.includes(doneExtra[lang]),
+        `2b (${lang}) sample shows Ready to practise title and team catalog sentence on done`,
+        stDone
+      );
+      await closePage(pDone);
+    }
+
+    /* 2c: Saving a card on sample hides the diagonal stamp, yet tour practice lines STAY on! */
+    EXPECTED += 2;
+    {
+      const pCards = await bootCatalogTour(browser, cleanSampleUrl, { lang: "en", stepId: "cards", editCard: true });
+      const stCards = await readTourBubble(pCards);
+      check(
+        stCards.sampleMarkHidden === true && stCards.bodyText.includes(cardsExtra.en),
+        "2c (en) saved card hides diagonal stamp while cards practice sentence stays on",
+        stCards
+      );
+      await closePage(pCards);
+
+      const pDone = await bootCatalogTour(browser, cleanSampleUrl, { lang: "pl", stepId: "done", editCard: true });
+      const stDone = await readTourBubble(pDone);
+      check(
+        stDone.sampleMarkHidden === true && stDone.title === doneTitle.sample.pl && stDone.bodyText.includes(doneExtra.pl),
+        "2c (pl) saved card hides diagonal stamp while done practice title and sentence stay on",
+        stDone
+      );
+      await closePage(pDone);
+    }
+
+    /* 2d: Team catalog shows normal done title and no practice sentences */
+    EXPECTED += 4;
+    for (const lang of ["en", "pl"]) {
+      const pCards = await bootCatalogTour(browser, cleanTeamUrl, { lang, stepId: "cards" });
+      const stCards = await readTourBubble(pCards);
+      check(
+        !stCards.bodyText.includes(cardsExtra[lang]),
+        `2d (${lang}) non-sample catalog omits cards practice sentence`,
+        stCards
+      );
+      await closePage(pCards);
+
+      const pDone = await bootCatalogTour(browser, cleanTeamUrl, { lang, stepId: "done" });
+      const stDone = await readTourBubble(pDone);
+      check(
+        stDone.title === doneTitle.team[lang] && !stDone.bodyText.includes(doneExtra[lang]),
+        `2d (${lang}) non-sample catalog keeps Ready for the first customer and omits practice sentence`,
+        stDone
+      );
+      await closePage(pDone);
+    }
+
+    /* Plant 2: gate practice lines on sampleUntouched() instead of pack's own sample mark -> 2c turns red */
+    EXPECTED += 1;
+    if (PLANTS_OFF) {
+      skip("plant-practice-mark: gating on sampleUntouched turns 2c red (ETIUDA_PLANTS=off)");
+    } else {
+      const planted = rawHtml.replace(
+        /function sampleLoaded\(\)\s*\{[^}]*\}/,
+        "function sampleLoaded() { return typeof nsGet === 'function' && nsGet('Sample') === '1' && sampleUntouched(); }"
+      );
+      const plantUrl = writeEngine(path.join(lab, "plant-2"), planted, true);
+      const pDone = await bootCatalogTour(browser, plantUrl, { lang: "en", stepId: "done", editCard: true });
+      const stDone = await readTourBubble(pDone);
+      check(
+        planted !== rawHtml && stDone.title !== doneTitle.sample.en && !stDone.bodyText.includes(doneExtra.en),
+        "plant-practice-mark: gating on sampleUntouched turns 2c red",
+        stDone
+      );
+      await closePage(pDone);
     }
   }
 } catch (err) {

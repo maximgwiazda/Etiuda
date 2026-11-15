@@ -4,7 +4,7 @@ import { fillProseIcons } from "./icons.js";
 import { focusFirstEntryOnOpen } from "./on-open.js";
 import { drawIntentRail } from "./rail-list.js";
 import { chordChips } from "./shortcuts.js";
-import { lsGet, lsSet, lsDel, ssGet, ssSet, ssDel } from "./storage.js";
+import { lsGet, lsSet, lsDel, ssGet, ssSet, ssDel, nsGet } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { t, toast } from "./ui-lang.js";
 import { railActive, railWanted, scheduleRailGeometry, syncRailLayout } from "./rail-panel.js";
@@ -132,6 +132,9 @@ function tourRevealCardActions(){
 }
 
 /* The desk's own words for the folder a Load opens, or none in a browser, which has no folder. */
+function sampleLoaded(){
+  return typeof nsGet==="function" && nsGet("Sample")==="1";
+}
 function loadStepPick(){
   if(typeof eHost==="function" && !eHost()) return null;
   if(!eCatalogFolderShort()) return null;
@@ -321,7 +324,12 @@ const TOUR_STEPS=[
     sel:()=>tourPickFirstCard()||$("#list"),
     tab:"chat",
     title:"Cards",
-    body:"A click on a reply copies the whole of it, greeting, name and signature filled in, ready to paste into the chat. A card marked <b>1/2</b> or <b>STEP 1/3</b> holds several, each copied on its own. <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> do the same from the keyboard.",
+    body:()=>{
+      const base=t("A click on a reply copies the whole of it, greeting, name and signature filled in, ready to paste into the chat. A card marked <b>1/2</b> or <b>STEP 1/3</b> holds several, each copied on its own. <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> do the same from the keyboard.");
+      return sampleLoaded()
+        ? base+" "+t("These replies are examples to practise with, not for a live chat.")
+        : base;
+    },
     pad:6,
     prep:()=>{ tourScrollListTop(); tourPickFirstCard(); }
   },
@@ -538,8 +546,13 @@ const TOUR_STEPS=[
   {
     id:"done",
     sel:".brand",
-    title:"Ready for the first customer",
-    body:"That is the whole tour. <b>Show tour…</b> in the <span data-icon=\"settings\"></span> Menu brings it back, and <b>Settings</b> lists every shortcut.",
+    title:()=>t(sampleLoaded() ? "Ready to practise" : "Ready for the first customer"),
+    body:()=>{
+      const base=t("That is the whole tour. <b>Show tour…</b> in the <span data-icon=\"settings\"></span> Menu brings it back, and <b>Settings</b> lists every shortcut.");
+      return sampleLoaded()
+        ? base+" "+t("Before the first customer, load your team's catalog.")
+        : base;
+    },
     pad:10
   }
 ];
