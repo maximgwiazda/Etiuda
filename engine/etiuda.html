@@ -3919,8 +3919,10 @@ body.screen-on .stage>.scroller>.shell,body.screen-on .stage>.dotfield{content-v
 }
 /* A ROW'S CONTROL GOES UNDER ITS WORDS where they would get under 260px beside it, at the row's full width, its
    options equal shares on one line. The words' basis is that 260px and their grow outweighs the control's 999 to 1,
-   so side by side the words take the room, and alone on its line the control takes the row. */
+   so side by side the words take the room, and alone on its line the control takes the row. Beside the words, the
+   control and icon stand on the first line while single-line tiles keep their line centred. */
 .sx:not(.lm) .set-row{display:flex;flex-wrap:wrap;gap:8px 14px}
+.sx:not(.lm) .set-row{align-items:flex-start;align-content:center} /* plant:settings-row-top */
 .sx:not(.lm) .set-row>.sx-ic{flex:0 0 20px;margin-right:8px}
 .sx:not(.lm) .set-label{flex:999 1 min(260px,calc(100% - 42px))}
 .sx:not(.lm) .set-ctl{flex:1 1 auto;min-width:0;justify-content:flex-start}
