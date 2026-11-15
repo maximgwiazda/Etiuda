@@ -198,6 +198,25 @@ function tourHeardPick(){
     tourActSoon();
   }
 }
+/* What the Quick replies window shows of the tour as it opens on the picker's step: the window's own step and the
+   tour's three buttons, or null on any other step. */
+function tourPickBubble(){
+  const s=TOUR_STEPS[tourIdx], p=TOUR_STEPS.find(x=>x.id==="pickerIn");
+  if(!tourRunning || !s || !p || (s.id!=="picker" && s.id!=="pickerIn")) return null;
+  return {title:t(p.title), body:t(p.body), skip:t("Skip tour"), back:t("Back"), next:t("Next")};
+}
+/* The window closed while it carried the step: by its Next, Esc or a click away (`next`), its Back, or Skip tour. It
+   may close before the opening's act has moved the tour into the step, which is where it is then. */
+function tourPickGo(go){
+  const s=TOUR_STEPS[tourIdx];
+  if(!tourRunning || !s) return;
+  if(s.id==="picker" && tourPickerOpened) tourIdx=TOUR_STEPS.findIndex(x=>x.id==="pickerIn");
+  if(!TOUR_STEPS[tourIdx] || TOUR_STEPS[tourIdx].id!=="pickerIn") return;
+  clearTimeout(tourActT);
+  if(go==="skip") endTour(false);
+  else if(go==="back") tourPrev();
+  else tourOn();
+}
 function hotkeyHeld(){ const hk=eHotkey(); return hk && hk.held ? hk.accel : ""; }
 function hotkeyChips(){ return eHotkeyLabel(hotkeyHeld()).split("+").map(k=>'<kbd>'+esc(k)+'</kbd>').join("+"); }
 // The wheel waits on the sample until a reply names somebody (agent.js), and the step says so.
@@ -399,15 +418,15 @@ const TOUR_STEPS=[
     menu:true,
     pad:8
   },
+  /* THE QUICK REPLIES WINDOW'S OWN PAGE CARRIES THIS STEP (`elsewhere`, tourPickBubble): the desk's bubble stands
+     aside while it does, and the window's Next or Esc, Back and Skip tour come back through tourPickGo. */
   {
     id:"pickerIn",
-    sel:()=>menuTarget("picker"),
-    side:menuSide,
     title:"Quick replies",
     body:"A word finds the reply. <kbd>Enter</kbd> copies it, and pastes it into the window you were in wherever Windows allows. <kbd>Esc</kbd> closes Quick replies.",
     when:()=>tourPickerOpened,
-    menu:true,
-    pad:8
+    elsewhere:true,
+    menu:true
   },
   {
     id:"library",
@@ -906,6 +925,7 @@ function syncTourBehind(){
   els.root.classList.toggle("behind", tourRunning && (asked || (covered && !(step && step.modal))));
   let away=false;
   away=tourRunning && joinStands(); /* plant:tour-away-join */
+  if(tourRunning && step && step.elsewhere) away=true;
   els.root.classList.toggle("away", away);
 }
 function tourHasFocus(){
@@ -1056,6 +1076,8 @@ function wireTourUi(){
 export {
   tourAfterRestart,
   tourHeardPick,
+  tourPickBubble,
+  tourPickGo,
   tourActive,
   scheduleTourPlace,
   startTour,

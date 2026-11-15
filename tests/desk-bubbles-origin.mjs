@@ -17,6 +17,10 @@
  *   b6  the confirmations' buttons in the family's order, light and dark: the acting choice first, on the fill's dark,
  *       and the way out filled (white) and last: Close Etiuda?, loading over one's own cards, Clear local changes?, the
  *       reset left unfinished
+ *   b7  the tour's step for the Quick replies window, carried by that window's own page (the shell's pickerDoc, its
+ *       host stood in for and answered by the desk page's own "open"): above the search box, the pointer on the box,
+ *       the rows below it uncovered, the room it reports what it takes; the desk's bubble stands aside meanwhile, and
+ *       the window's Next moves the desk's tour on; English light and Polish dark
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -36,7 +40,7 @@ const check = (ok, what, detail) => {
   if (!ok) fails++;
 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 11;
+const EXPECTED = 13;
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-bubbles-"));
 fs.copyFileSync(E.ENGINE_PATH, path.join(lab, "etiuda.html"));
@@ -391,6 +395,84 @@ async function runShapes(page, theme, bad) {
   }
 }
 
+/* THE QUICK REPLIES WINDOW'S OWN PAGE, as the shell builds it: pickPage's source inlined into pickerDoc, the policy left out. */
+const MAIN_SRC = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+function pickerDocFile() {
+  const a = MAIN_SRC.indexOf("function pickPage() {"), z = MAIN_SRC.indexOf("\nconst PICK_SCRIPT", a);
+  const d0 = MAIN_SRC.indexOf("function pickerDoc() {"), d1 = MAIN_SRC.indexOf("\n}\n", d0) + 3;
+  if (a < 0 || z < 0 || d0 < 0) throw new Error("pickPage or pickerDoc not found in shell/main.js");
+  const doc = new Function("policyFor", "PICK_HASH", "PICK_SCRIPT", MAIN_SRC.slice(d0, d1) + "\nreturn pickerDoc();")(() => "", "", "(" + MAIN_SRC.slice(a, z) + ")();");
+  const at = path.join(lab, "quick-replies.html");
+  fs.writeFileSync(at, doc);
+  return "file:///" + at.replace(/\\/g, "/");
+}
+async function runQuickReplies(lang, theme) {
+  const label = "b7 " + lang + " " + theme + ": the Quick replies window carries the tour's step, from its search box, over no row, and its Next moves the tour on";
+  const desk = await browser.newPage();
+  await desk.setViewport({ width: 1280, height: 860, deviceScaleFactor: 1 });
+  await desk.evaluateOnNewDocument((lang, theme) => {
+    try {
+      for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eAgent", "Bench Agent"], ["eNameAsked", "1"],
+        ["eTheme", theme], ["eUiLang", lang], ["eStill", "1"], ["eRail", "1"]]) localStorage.setItem(k, v);
+      sessionStorage.setItem("eTourAt", "picker");
+    } catch (e) {}
+    const st = { offered: [], signedIn: "", seat: "none", reached: true };
+    window.E_HOST = { hotkeyState: () => ({ accel: "Control+Shift+Space", held: true, taken: false }), onPickAsk: fn => { window.__pick = fn; },
+      openPicker() {}, signinState: () => st, signIn: async () => st, signinCheck: async () => st };
+  }, lang, theme);
+  let r = null;
+  try {
+    await desk.goto(url, { waitUntil: "load", timeout: 60000 });
+    await desk.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
+    if (await desk.$("#ecYes")) await desk.click("#ecYes");
+    await desk.waitForFunction(() => sessionStorage.getItem("eTourAt") === "picker" && !document.getElementById("tourRoot").hidden
+      && typeof window.__pick === "function", { timeout: 30000 });
+    const open = await desk.evaluate(() => window.__pick("open", "{}"));
+    await desk.waitForFunction(() => sessionStorage.getItem("eTourAt") === "pickerIn", { timeout: 5000 }).catch(() => {});
+    const deskAside = await desk.evaluate(() => sessionStorage.getItem("eTourAt") === "pickerIn"
+      && getComputedStyle(document.getElementById("tourRoot")).visibility === "hidden");
+    const o = JSON.parse(open);
+    if (o.look) o.look.glass = false;
+    const win = await browser.newPage();
+    await win.setViewport({ width: 600, height: 424, deviceScaleFactor: 1 });
+    await win.evaluateOnNewDocument(() => {
+      window.__went = [];
+      window.E_PICK = { find: async () => "null", who: async () => "null", tab: async () => "null", lang: async () => "null", copy: async () => {},
+        takeSuggest: async () => "null", close() { window.__went.push("close"); }, ready(add) { window.__room = add; },
+        tour(go) { window.__went.push(go); }, onOpen(fn) { window.__open = fn; } };
+    });
+    await win.goto(pickerDocFile(), { waitUntil: "load" });
+    await win.evaluate(text => window.__open(text), JSON.stringify(o));
+    const room = await win.evaluate(() => window.__room | 0);
+    await win.setViewport({ width: 600, height: 424 + room, deviceScaleFactor: 1 });
+    await sleep(200);
+    await win.evaluate(MEASURE);
+    const m = await win.evaluate(() => {
+      const bub = document.getElementById("tour"), q = document.getElementById("q");
+      const at = window.__bubAt(bub, q);
+      const b = bub ? bub.getBoundingClientRect() : null, first = document.querySelector("#rows li");
+      const rowsTop = first ? first.getBoundingClientRect().top : document.getElementById("rows").getBoundingClientRect().top;
+      const words = bub ? [...bub.querySelectorAll("button[data-go]")].map(x => x.getAttribute("data-go")).join(",") : "";
+      return Object.assign(at, { clearOfRows: !!b && b.bottom <= q.getBoundingClientRect().top && b.bottom <= rowsTop,
+        roomTrue: !!b && Math.abs(window.__room - (q.getBoundingClientRect().top - 8)) <= 1 && b.top >= 11, buttons: words,
+        kbd: bub ? bub.querySelectorAll("p kbd").length : 0 });
+    });
+    await win.click('#tour button[data-go="next"]');
+    const went = await win.evaluate(() => window.__went.join(","));
+    if (process.env.BUB_SHOTS) await win.screenshot({ path: path.join(process.env.BUB_SHOTS, "quick-replies-" + lang + "-" + theme + ".png") });
+    await win.close();
+    await desk.evaluate(() => window.__pick("tour", JSON.stringify({ go: "next" })));
+    await desk.waitForFunction(() => sessionStorage.getItem("eTourAt") === "library", { timeout: 5000 }).catch(() => {});
+    const deskOn = await desk.evaluate(() => sessionStorage.getItem("eTourAt"));
+    r = Object.assign(m, { tourOpen: !!o.tour, deskAside, went, deskOn });
+    r.ok = !!(m.ok && m.side === "above" && m.clearOfRows && m.roomTrue && m.buttons === "skip,back,next" && m.kbd >= 2 && r.tourOpen
+      && deskAside && went === "next" && deskOn === "library");
+  } catch (e) { r = { why: "crashed: " + String(e && e.message || e).split(String.fromCharCode(10))[0] }; }
+  await desk.close();
+  if (process.env.BUB_LOG) console.log("       " + JSON.stringify(r));
+  check(!!(r && r.ok), label, r);
+}
+
 async function runQuestions(page, label) {
   const bad = [];
   for (const [what, act] of QUESTIONS) {
@@ -430,6 +512,8 @@ try {
     await runShapes(p, theme, shapeBad);
     await p.close();
   }
+  await runQuickReplies("en", "light");
+  await runQuickReplies("pl", "dark");
   check(!shapeBad.length, "b6 the confirmations' way out is filled and last, the acting choice first on the fill's dark (" + SHAPES.length + ", light and dark)", shapeBad);
 } catch (e) {
   check(false, "run crashed: " + (e && e.stack ? e.stack.split("\n").slice(0, 3).join(" | ") : e));

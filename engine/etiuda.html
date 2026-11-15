@@ -18479,6 +18479,8 @@ What you type stays in this browser only.`;
     tourDueAtBoot: () => tourDueAtBoot,
     tourHasFocus: () => tourHasFocus,
     tourHeardPick: () => tourHeardPick,
+    tourPickBubble: () => tourPickBubble,
+    tourPickGo: () => tourPickGo,
     wireTourUi: () => wireTourUi
   });
 
@@ -28563,6 +28565,21 @@ What you type stays in this browser only.`;
       tourActSoon();
     }
   }
+  function tourPickBubble() {
+    const s = TOUR_STEPS[tourIdx], p = TOUR_STEPS.find((x) => x.id === "pickerIn");
+    if (!tourRunning || !s || !p || s.id !== "picker" && s.id !== "pickerIn") return null;
+    return { title: t(p.title), body: t(p.body), skip: t("Skip tour"), back: t("Back"), next: t("Next") };
+  }
+  function tourPickGo(go) {
+    const s = TOUR_STEPS[tourIdx];
+    if (!tourRunning || !s) return;
+    if (s.id === "picker" && tourPickerOpened) tourIdx = TOUR_STEPS.findIndex((x) => x.id === "pickerIn");
+    if (!TOUR_STEPS[tourIdx] || TOUR_STEPS[tourIdx].id !== "pickerIn") return;
+    clearTimeout(tourActT);
+    if (go === "skip") endTour(false);
+    else if (go === "back") tourPrev();
+    else tourOn();
+  }
   function hotkeyHeld() {
     const hk = eHotkey();
     return hk && hk.held ? hk.accel : "";
@@ -28762,15 +28779,15 @@ What you type stays in this browser only.`;
       menu: true,
       pad: 8
     },
+    /* THE QUICK REPLIES WINDOW'S OWN PAGE CARRIES THIS STEP (`elsewhere`, tourPickBubble): the desk's bubble stands
+       aside while it does, and the window's Next or Esc, Back and Skip tour come back through tourPickGo. */
     {
       id: "pickerIn",
-      sel: () => menuTarget("picker"),
-      side: menuSide,
       title: "Quick replies",
       body: "A word finds the reply. <kbd>Enter</kbd> copies it, and pastes it into the window you were in wherever Windows allows. <kbd>Esc</kbd> closes Quick replies.",
       when: () => tourPickerOpened,
-      menu: true,
-      pad: 8
+      elsewhere: true,
+      menu: true
     },
     {
       id: "library",
@@ -29305,6 +29322,7 @@ What you type stays in this browser only.`;
     els.root.classList.toggle("behind", tourRunning && (asked || covered && !(step && step.modal)));
     let away = false;
     away = tourRunning && joinStands();
+    if (tourRunning && step && step.elsewhere) away = true;
     els.root.classList.toggle("away", away);
   }
   function tourHasFocus() {
@@ -41168,7 +41186,12 @@ What you type stays in this browser only.`;
     "--sans",
     "--mono",
     "--radius-sm",
-    "--intent-type"
+    "--intent-type",
+    "--bub",
+    "--bub-ink",
+    "--bub-dim",
+    "--bub-shadow",
+    "--sans-display"
   ];
   function pickKeep(terms) {
     return (m) => !(m && m._hidden) && (terms.length > 0 || cardInActiveCats(m, terms));
@@ -41492,6 +41515,8 @@ What you type stays in this browser only.`;
       const paxVal = pickDeskPax();
       const curEpoch = suggestEpoch();
       const out = Object.assign({ look: pickLook(), words: pickWords(), chords: pickChords(), last: pickLastRow(), who: activeTabName(), name: paxVal, lang, langs: CONTENT_LANGS.length, picked: intentIdxs.map((i) => intentIdAt(i)), epoch: curEpoch, ai: eAiOn() }, pickFound(""));
+      const tour = tourPickBubble();
+      if (tour) out.tour = tour;
       if (a.profiles || a.epoch !== void 0 && a.epoch !== curEpoch) {
         try {
           out.profiles = suggestModel();
@@ -41547,6 +41572,13 @@ What you type stays in this browser only.`;
       runShortcut("langToggle");
       const paxVal = pickDeskPax();
       return withIndex(Object.assign({ words: pickWords(), who: activeTabName(), name: paxVal, lang, langs: CONTENT_LANGS.length }, pickFound("")), "");
+    }
+    if (op === "tour") {
+      try {
+        tourPickGo(String(a.go || ""));
+      } catch (e) {
+      }
+      return { ok: 1 };
     }
     if (op === "find") return pickFound(a.q);
     if (op === "search-shortlist") return searchShortlist(String(a.q == null ? "" : a.q));

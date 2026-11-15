@@ -14,7 +14,8 @@ if (PICKER) {
     copy: (what) => ipcRenderer.invoke("etiuda:pick-copy", String(what || "")),
     takeSuggest: (id, multi) => ipcRenderer.invoke("etiuda:pick-intent", String(id || ""), multi ? 1 : 0).then(v => String(v || "null")),
     close: () => ipcRenderer.send("etiuda:pick-close"),
-    ready: () => ipcRenderer.send("etiuda:pick-ready"),
+    ready: (add) => ipcRenderer.send("etiuda:pick-ready", Number(add) || 0),
+    tour: (go) => ipcRenderer.send("etiuda:pick-tour", String(go || "")),
     onOpen: (fn) => ipcRenderer.on("etiuda:pick-open", (_e, text) => fn(String(text || ""))),
   });
 }

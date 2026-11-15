@@ -11053,6 +11053,13 @@ function pickerPlace(pt, area, size) {
   y = Math.min(Math.max(y, area.y), area.y + area.height - h);
   return { x: Math.round(x), y: Math.round(y), width: Math.round(w), height: Math.round(h) };
 }
+/* While the tour's step stands in the picker, the window is taller by its bubble and grows upwards, so the rows stay where
+   they opened; held inside the work area. Pure. */
+const PICK_TOUR_MAX = 400;
+function pickerGrow(at, add, area) {
+  const h = Math.min(at.height + add, area.height);
+  return { x: at.x, y: Math.max(area.y, at.y + at.height - h), width: at.width, height: h };
+}
 /* On Windows the page's own copy puts CRLF on the clipboard (Chromium turns each line feed into
    the platform's pair as it writes), so the picker's copy does the same and the two paste alike. */
 function pickClipText(text, platform) {
@@ -11300,6 +11307,40 @@ function pickPage() {
     + ' stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10.2 12.5l.6-4.2a2.6 2.6 0 1 1 3.4 0l.6 4.2"/>'
     + '<path d="M5 17v-2.5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2V17z" fill="currentColor"/><path d="M6 20.5h13"/></svg>';
   const stamp = () => '<span class="st" title="' + esc(words.stamp) + '">' + ICON_STAMP + '</span>';
+  /* THE TOUR'S STEP FOR THIS WINDOW, while the desk's tour stands on it: the family's bubble above the search box, its
+     pointer on the box's centre, and the room it takes, which the shell adds above the rows. Its words are the desk's;
+     only <b> and <kbd> pass as markup. */
+  const paintTour = tour => {
+    const old = document.getElementById("tour");
+    if (old && old.remove) old.remove();
+    if (document.body) document.body.style.paddingTop = "";
+    if (!tour || !tour.title || !document.createElement || !document.body) return 0;
+    const mark = s => esc(s).replace(/&lt;(\/?)(b|kbd)&gt;/g, "<$1$2>");
+    const c = document.createElement("div");
+    c.id = "tour";
+    c.className = "tour-card bub";
+    c.setAttribute("data-side", "above");
+    c.setAttribute("role", "dialog");
+    c.innerHTML = '<h3>' + esc(tour.title) + '</h3><p>' + mark(tour.body) + '</p><div class="tour-actions">'
+      + '<button type="button" class="tour-skip" data-go="skip">' + esc(tour.skip) + '</button>'
+      + '<button type="button" data-go="back">' + esc(tour.back) + '</button>'
+      + '<button type="button" class="primary" data-go="next">' + esc(tour.next) + '</button></div><i class="bub-tip" aria-hidden="true"></i>';
+    c.addEventListener("mousedown", ev => ev.preventDefault());
+    c.addEventListener("click", ev => {
+      const b = ev.target && ev.target.closest && ev.target.closest("button[data-go]");
+      if (b && typeof P.tour === "function") P.tour(b.getAttribute("data-go"));
+    });
+    document.body.appendChild(c);
+    const GAP = 10, EDGE = 12, h = c.offsetHeight, add = EDGE + h + GAP;
+    document.body.style.paddingTop = (8 + add) + "px";
+    const r = q.getBoundingClientRect(), w = c.offsetWidth, cx = r.left + r.width / 2;
+    const left = Math.max(EDGE, Math.min(cx - w / 2, window.innerWidth - w - EDGE));
+    c.style.left = left + "px";
+    c.style.top = (r.top - GAP - h) + "px";
+    const tip = c.querySelector(".bub-tip");
+    if (tip) tip.style.left = (Math.max(22, Math.min(cx - left, w - 22)) - 6) + "px";
+    return add;
+  };
   const list = () => (!q.value.trim() && last)
     ? [Object.assign({ again: true }, last)].concat(rows.filter(r => r.id !== last.id || r.vi !== last.vi)) : rows;
   /* A CARD OF SEVERAL REPLIES IS ONE GROUP: its title once, over its replies, each named by its tag. The first nine
@@ -11525,7 +11566,7 @@ function pickPage() {
     if (langBtn) langBtn.title = words.langTitle || "";
     legend();
     paintOpen(o, false);
-    P.ready();
+    P.ready(paintTour(o.tour));
   });
   q.addEventListener("input", () => {
     paintStrip();
@@ -11723,6 +11764,25 @@ function pickerDoc() {
     + 'footer{flex:0 0 auto;display:flex;align-items:center;gap:14px;padding:6px 10px 0;border-top:1px solid var(--line);'
     + 'color:var(--dim);font-size:12px;white-space:nowrap;overflow:hidden}\n'
     + '#count{margin-right:auto}\n#keys{display:flex;gap:14px}\n#keys kbd{margin-right:5px}\n'
+    + ':root{--bub:#2563eb;--bub-ink:#fff;--bub-dim:rgba(255,255,255,.92);--bub-shadow:rgba(37,99,235,.32);--sans-display:var(--sans)}\n'
+    + '.bub{position:fixed;box-sizing:border-box;overflow:visible;padding:12px 14px;background:var(--bub);color:var(--bub-ink);'
+    + 'border-radius:14px;filter:drop-shadow(0 10px 22px var(--bub-shadow))}\n'
+    + '.bub-tip{position:absolute;width:12px;height:12px;background:var(--bub);transform:rotate(45deg);border-radius:2px;pointer-events:none}\n'
+    + '.bub[data-side=above]>.bub-tip{bottom:-6px}\n'
+    + '.tour-card{width:min(360px,calc(100vw - 24px));line-height:1.5}\n'
+    + '.tour-card h3{margin:0 0 6px;font:700 15.5px/1.3 var(--sans-display);letter-spacing:-.2px}\n'
+    + '.tour-card p{margin:0 0 10px;font-size:13.5px;line-height:1.5;color:var(--bub-dim);text-wrap:balance}\n'
+    + '.tour-card p b{color:var(--bub-ink);font-weight:600}\n'
+    + '.tour-card kbd{font:11px var(--mono);border:1px solid color-mix(in srgb,var(--bub-ink) 34%,transparent);border-radius:4px;'
+    + 'padding:1px 5px;color:var(--bub-ink);background:color-mix(in srgb,var(--bub-ink) 14%,transparent)}\n'
+    + '.tour-actions{display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:2px;padding-top:10px;'
+    + 'border-top:1px solid rgba(255,255,255,.24)}\n'
+    + '.tour-actions button{padding:7px 11px;border:1px solid transparent;border-radius:var(--radius-sm);background:rgba(0,0,0,.14);'
+    + 'color:#fff;font:600 13px var(--sans);cursor:default;white-space:nowrap;outline:none}\n'
+    + '.tour-actions button:hover,.tour-actions button:focus-visible{background:rgba(0,0,0,.26)}\n'
+    + '.tour-actions button.primary{background:#fff;border-color:#fff;color:var(--bub)}\n'
+    + '.tour-actions button.primary:hover,.tour-actions button.primary:focus-visible{background:#fff;filter:brightness(.94)}\n'
+    + '.tour-actions .tour-skip{margin-right:auto}\n'
     + ':root.still #rows li{transition:none}\n'
     + '@media (prefers-reduced-motion:reduce){#rows li{transition:none}}\n'
     + '@media (forced-colors:active){#rows li.on{outline:2px solid Highlight;outline-offset:-2px}'
@@ -11792,6 +11852,9 @@ function showPickNote(pasted) {
 }
 
 let pickWin = null, pickLoaded = null, pickOpening = false, pickShown = null;
+/* The tour's step in this opening (pickTour), the room its bubble takes (pickTourAdd, from the page) and how the window
+   was left (pickTourGo), told to the desk once it hides. */
+let pickTour = false, pickTourAdd = 0, pickTourGo = "";
 /* THE CARET HELPER (shell/caret.cs): beside the asar, or in dist/.caret from the tree; null where there
    is none, which is every platform but Windows, and then the agent pastes as before. */
 const CARET_WHICH_MS = 1500, CARET_WAIT_MS = 150, CARET_PASTE_MS = 4000;
@@ -11869,6 +11932,7 @@ function hidePicker(handBack) {
   if (!pickWin || pickWin.isDestroyed() || !pickWin.isVisible()) return;
   if (handBack) pickWin.blur();
   pickWin.hide();
+  if (pickTour) { const go = pickTourGo || "next"; pickTour = false; pickTourGo = ""; askDesk("tour", { go: go }); }
 }
 /* The desk's own window, forward and focused: where a reply needs the agent's name first, and where
    the hotkey lands while the page cannot answer. */
@@ -12131,19 +12195,22 @@ function pickWithClip(press, which, text) {
       pickSaid = Object.assign({}, open.words || {}, { look: open.look || {} });
       return ensurePicker().then(() => {
         if (!pickWin || pickWin.isDestroyed()) return null;
-        let at = null;
+        let at = null, area = null;
         try {
           const pt = screen.getCursorScreenPoint();
-          at = pickerPlace(pt, screen.getDisplayNearestPoint(pt).workArea, PICK_SIZE);
+          area = screen.getDisplayNearestPoint(pt).workArea;
+          at = pickerPlace(pt, area, PICK_SIZE);
         } catch (e) { console.error("etiuda: the pointer could not be read, so the picker is centred - " + e.message); }
         if (at) pickWin.setBounds(at);
         else pickWin.center();
         const win = pickWin;
+        pickTour = !!open.tour; pickTourAdd = 0; pickTourGo = "";
         const drawn = new Promise(done => { pickShown = done; setTimeout(done, 300); });
         win.webContents.send("etiuda:pick-open", JSON.stringify(open));
         const asked = Promise.race([which, new Promise(done => setTimeout(done, CARET_WAIT_MS))]);
         return Promise.all([drawn, asked]).then(() => {
           pickShown = null;
+          if (pickTourAdd && at && area && !win.isDestroyed()) win.setBounds(pickerGrow(at, pickTourAdd, area));
           if (!win.isDestroyed()) { win.show(); win.focus(); }
           /* Not waited for: the opening ends here, and the order, if it comes and is still wanted, paints the strip again. */
           if (orgOrder) orgOrder.then(order => {
@@ -12163,7 +12230,17 @@ ipcMain.on("etiuda:pick-answer", (e, n, text) => {
   const done = pickAsks.get(n);
   if (done) done(String(text == null ? "null" : text));
 });
-ipcMain.on("etiuda:pick-ready", (e) => { if (fromPicker(e) && pickShown) pickShown(); });
+ipcMain.on("etiuda:pick-ready", (e, add) => {
+  if (!fromPicker(e) || !pickShown) return;
+  pickTourAdd = pickTour ? Math.max(0, Math.min(PICK_TOUR_MAX, Math.round(Number(add) || 0))) : 0;
+  pickShown();
+});
+/* The tour's buttons in the picker: the window closes, and the desk hears which was pressed. */
+ipcMain.on("etiuda:pick-tour", (e, go) => {
+  if (!fromPicker(e) || !pickTour) return;
+  pickTourGo = ["next", "back", "skip"].indexOf(go) > -1 ? go : "next";
+  hidePicker(true);
+});
 ipcMain.on("etiuda:pick-close", (e) => { if (fromPicker(e)) hidePicker(true); });
 /* The desk's own door to the picker, its Menu row and its tour, opening it by the pointer as the hotkey does. */
 ipcMain.on("etiuda:pick-show", (e) => {

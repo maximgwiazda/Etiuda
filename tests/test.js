@@ -782,12 +782,12 @@ function tourActTests() {
   let T = null;
   try {
     T = new Function("scope", "with(scope){\n" + ["function hasChatTab(", "function chatTabTarget(", "function openChatTab(", "function tourPress(", "function tourPressRow(", "function shutTourWindow(",
-      "let tourPicks=", "function tourHeardPick(",
+      "let tourPicks=", "function tourHeardPick(", "function tourPickBubble(", "function tourPickGo(",
       "function loadStepBody(", "const libraryOpen=", "const settingsOpen=", "const TOUR_STEPS=", "function stepOn(", "function onFrom(", "function nextHeld(", "function syncTourNext(",
       "const TOUR_ACT_MS=", "let tourActT=", "function tourActSoon(", "function tourActCheck(", "function tourFollowWindow(",
       "function tourNext(", "function tourOn(", "function tourPrev("]
       .map(m => extractDecl(src, m)).join("\n")
-      + "\nreturn {TOUR_STEPS, nextHeld, syncTourNext, tourActSoon, TOUR_ACT_MS, tourNext, tourPrev, tourHeardPick};\n}")(scope);
+      + "\nreturn {TOUR_STEPS, nextHeld, syncTourNext, tourActSoon, TOUR_ACT_MS, tourNext, tourPrev, tourHeardPick, tourPickBubble, tourPickGo};\n}")(scope);
   } catch (e) { T = null; eq("tour.js carries the step table and the functions that move the tour", e.message, "sliced"); }
   if (!T) return;
   const ids = T.TOUR_STEPS.map(s => s.id), at = id => ids.indexOf(id);
@@ -924,6 +924,19 @@ function tourActTests() {
   eq("Next on the picker step moves to Library without opening the window; opening it on that step shows pickerIn",
     [pickerNextStep, pickerNextOpens, pickerOpenedStep, pickerInNext, pickerInBack, cardsHeardStep, pickerInWhenOnCards],
     ["library [menu]", 0, "pickerIn [menu]", "library", "picker", "cards", false]);
+
+  /* THE WINDOW CARRIES ITS OWN STEP: the opening on the picker's step hands it the step's words and the tour's three
+     buttons, and how the window was left comes back: Next or Esc on, Back to the Menu's row, Skip tour ends the tour;
+     before the opening's act has moved the tour in as well. Nothing on any other step. */
+  reset("picker", { hotkey: "Ctrl+Shift+Space", menu: true });
+  const bub = T.tourPickBubble(), bubOff = (reset("cards"), T.tourPickBubble());
+  const goes = [["pickerIn", "next"], ["pickerIn", "back"], ["picker", "next"], ["picker", "skip"], ["cards", "next"]].map(([id, go]) => {
+    reset(id, { hotkey: "Ctrl+Shift+Space", tourPickerOpened: id !== "cards" }); T.tourPickGo(go); return go + ":" + where() + (page.ends.length ? " ended " + page.ends.join() : "");
+  });
+  const inStep = T.TOUR_STEPS.find(s => s.id === "pickerIn");
+  eq("the Quick replies window carries its step: its words and the tour's buttons at an opening on the picker's step, and its Next or Esc, Back and Skip tour move the desk's tour",
+    [bub && [bub.title, /<kbd>Esc<\/kbd>/.test(bub.body), bub.skip, bub.back, bub.next], bubOff, goes, !!inStep.elsewhere, inStep.sel || null],
+    [["Quick replies", true, "Skip tour", "Back", "Next"], null, ["next:library", "back:picker", "next:library", "skip:pickerIn ended false", "next:cards"], true, null]);
 
   /* The name "Quick replies" in Menu, Settings (hotkeyRowHtml), and tour steps, all through UI_STRINGS. */
   const menuSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "header-menus.js"), "utf8");

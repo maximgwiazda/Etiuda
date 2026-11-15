@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 136;
+const EXPECTED = 137;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -333,7 +333,7 @@ try {
   shellFs.appendFileSync = (p, data, ...rest) => { noteWrite(data); return fs.appendFileSync(p, data, ...rest); };
   shellFs.readdirSync = (p, ...rest) => (listed.push(path.resolve(String(p)).toLowerCase()), fs.readdirSync(p, ...rest));
   shellFs.existsSync = p => /[\\/]caret\.exe$/i.test(String(p)) ? caret.there : fs.existsSync(p);
-  const EXPOSE = ["hotkeyRefusal", "pickerPlace", "pickClipText", "PICK_SIZE", "HOTKEY_DEFAULT"];
+  const EXPOSE = ["hotkeyRefusal", "pickerPlace", "pickerGrow", "pickClipText", "PICK_SIZE", "HOTKEY_DEFAULT"];
   process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
   const SH = new Function("require", "__dirname", "__filename", "module", "exports", "console",
     SRC + "\nreturn { " + EXPOSE.map(n => n + ": " + n).join(", ") + " };")(
@@ -928,6 +928,15 @@ try {
     + JSON.stringify(edge) + " " + JSON.stringify(small));
   check(SH.pickClipText("a\nb\r\nc", "win32") === "a\r\nb\r\nc" && SH.pickClipText("a\nb", "linux") === "a\nb",
     "2p the line ends are Windows' pair there and left alone elsewhere");
+  /* The tour's step in the window: taller by the bubble's room, grown upwards so the rows stay where they opened, and held
+     inside the work area where there is no room above. */
+  const opened2q = { x: 300, y: 500, width: 600, height: 424 }, wa = { x: 0, y: 0, width: 1920, height: 1040 };
+  const grown = SH.pickerGrow(opened2q, 188, wa), high = SH.pickerGrow({ x: 300, y: 40, width: 600, height: 424 }, 188, wa),
+    tiny = SH.pickerGrow({ x: 0, y: 0, width: 400, height: 300 }, 188, { x: 0, y: 0, width: 400, height: 300 });
+  check(grown.y === 312 && grown.height === 612 && grown.y + grown.height === opened2q.y + opened2q.height && grown.x === 300 && grown.width === 600
+    && high.y === 0 && high.height === 612 && tiny.height === 300 && tiny.y === 0,
+    "2p2 while the tour's step stands in it the window grows upwards by the bubble's room, its rows where they opened, inside the work area: "
+    + JSON.stringify([grown, high, tiny]));
 
   /* The folder the shell takes for its app root is the lab's copy, and the checkout's own root is
      never listed, so no file a checkout happens to hold there can reach the boot. */
@@ -1706,13 +1715,13 @@ try {
     const doneAfter = ps.done(), piAfter = pi.when();
     tourSays = JSON.stringify([tids.indexOf("picker") - tids.indexOf("menu"), tids.indexOf("pickerIn") - tids.indexOf("picker"),
       whens, chipsSeen, doneElse, piElse, doneBefore, piBefore, doneAfter, piAfter, !ps.open, actsHeard, doorKnocks,
-      ps.title, pi.title, ps.menu, pi.menu, ps.side === own7.menuSide, pi.side === own7.menuSide]);
+      ps.title, pi.title, ps.menu, pi.menu, ps.side === own7.menuSide, !!pi.elsewhere && !pi.sel]);
   }
   const resets = /function showTourStep\(i\)\{[\s\S]*?if\(step\.id!=="pickerIn"\) tourPickerOpened=false;[\s\S]*?\n\}/.test(TSRC);
   const heard = /if\(op==="open"\)\{\s*try\{ tourHeardPick\(\); \}catch\(e\)\{\}/.test(fs.readFileSync(path.join(ROOT, "src", "modules", "pick.js"), "utf8"));
   check(tourSays === JSON.stringify([1, 1, [false, false, true], 2, false, false, false, false, true, true, true, 1, 0,
     "Quick replies", "Quick replies", true, true, true, true]) && resets && heard,
-    "7n the tour has a step for the picker straight after the Menu's and an extra window step after it, without opening the picker on Next: " + tourSays + (resets ? "" : ", NO reset at each step")
+    "7n the tour has a step for the picker straight after the Menu's and the window's own step after it, carried by the window's page, without opening the picker on Next: " + tourSays + (resets ? "" : ", NO reset at each step")
     + (heard ? "" : ", the picker's opening NOT heard"));
 
   /* The global picker switches and opens conversations with the desk's own tab keys. */
