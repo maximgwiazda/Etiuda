@@ -24,6 +24,10 @@
  *   s12 Account's sign-in card at 560 px in Polish, wherever the providers' buttons stand (not signed in, the preview's press,
  *       the renewal that asks): nothing in the card reaches past it, nothing in it is cut, and buttons on lines of their own
  *       take the card's width; at 1280 in English the two stand side by side at their own widths
+ *   s13 in English at 1440 px, in Appearance and Notifications, each choice whose row is wide enough stands at its row's
+ *       right, its middle and its icon's within 1.5 px of the middle of the words' first line, its right edge at the row's right padding;
+ *       at 546 px in Polish the same choices still stand under their words
+ *   s13p lifting plant:settings-row-top in a scratch copy turns s13 red (skipped under ETIUDA_PLANTS=off)
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -36,12 +40,15 @@ const puppeteer = require("puppeteer-core");
 const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
 
-let fails = 0, checks = 0;
+const EXPECTED = 14;
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
+let fails = 0, checks = 0, skipped = 0;
 const check = (ok, what, detail) => {
   checks++;
   console.log((ok ? "  ok   " : "  FAIL ") + what + (ok || detail === undefined ? "" : ": " + JSON.stringify(detail)));
   if (!ok) fails++;
 };
+const skip = what => { skipped++; console.log("  NOT RUN " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-982w-"));
@@ -51,7 +58,7 @@ fs.writeFileSync(path.join(lab, "etiuda-catalog.js"),
 const url = "file:///" + path.join(lab, "etiuda.html").replace(/\\/g, "/");
 let browser = null;
 
-async function boot(viewport = { width: 1280, height: 900 }, more = []) {
+async function boot(viewport = { width: 1280, height: 900 }, more = [], pageUrl = url) {
   const page = await browser.newPage();
   await page.setViewport({ ...viewport, deviceScaleFactor: 1 });
   await page.evaluateOnNewDocument((more) => {
@@ -67,7 +74,7 @@ async function boot(viewport = { width: 1280, height: 900 }, more = []) {
       ]) localStorage.setItem(k, v);
     } catch (e) {}
   }, more);
-  await page.goto(url, { waitUntil: "load", timeout: 60000 });
+  await page.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   const yes = await page.$("#ecYes");
   if (yes) await page.click("#ecYes");
@@ -586,6 +593,103 @@ try {
   await sp.close();
   check(!s12bad.length, "s12 Account's sign-in card at 560 px in Polish (not signed in, the preview's press, the renewal that asks): nothing past the card, nothing cut, the buttons each on a line of their own at the card's width; at 1280 in English side by side at their own widths", s12bad);
 
+  /* s13: at 1440 px in English, in Appearance and Notifications, each choice whose row is wide enough stands at its row's
+     right, its middle and the row's icon's middle within 1.5 px of the middle of the row's words' first line (the designer,
+     2026-11-15: centred on that line, not top to top), and its right edge at the row's right padding; at 546 px in Polish
+     those same choices stand under their words. */
+  async function readChoicesAt1440(p) {
+    const bad = [], wide = [];
+    for (const sec of ["appearance", "notifications"]) {
+      await p.evaluate(s => openSettings(s), sec);
+      await sleep(80);
+      const res = await p.evaluate(sec => {
+        const out = [], seenWide = [];
+        for (const row of document.querySelectorAll("#setBody .set-row")) {
+          const seg = row.querySelector(".set-seg"), lab = row.querySelector(".set-label"), ctl = row.querySelector(".set-ctl");
+          if (!seg || !lab || !ctl || !ctl.offsetParent) continue;
+          const id = row.getAttribute("data-row") || "";
+          const r = row.getBoundingClientRect(), cs = getComputedStyle(row);
+          const inL = r.left + parseFloat(cs.paddingLeft) + parseFloat(cs.borderLeftWidth);
+          const inR = r.right - parseFloat(cs.paddingRight) - parseFloat(cs.borderRightWidth);
+          const inW = inR - inL;
+          const clone = seg.cloneNode(true);
+          clone.style.cssText = "position:fixed;visibility:hidden;width:max-content;flex:none";
+          row.appendChild(clone);
+          const natW = clone.getBoundingClientRect().width;
+          clone.remove();
+          const wideEnough = inW - 42 - 14 - natW >= 259.5;
+          if (!wideEnough) continue;
+          seenWide.push(sec + ":" + id);
+          const l = lab.getBoundingClientRect(), c = ctl.getBoundingClientRect(), s = seg.getBoundingClientRect();
+          const range = document.createRange();
+          range.selectNodeContents(lab.firstChild || lab);
+          const rects = range.getClientRects();
+          const firstMid = rects.length ? rects[0].top + rects[0].height / 2 : l.top + l.height / 2;
+          const ic = row.querySelector(".sx-ic"), ir = ic ? ic.getBoundingClientRect() : null;
+          const dIc = ir ? Math.round((ir.top + ir.height / 2 - firstMid) * 10) / 10 : 0;
+          const under = c.top >= l.bottom - 1;
+          const dy = Math.round((s.top + s.height / 2 - firstMid) * 10) / 10;
+          const rDiff = Math.round((inR - s.right) * 10) / 10;
+          if (under || c.left < l.right - 1 || Math.abs(dy) > 1.5 || Math.abs(dIc) > 1.5 || Math.abs(rDiff) > 2)
+            out.push({ sec, id, under, dy, dIc, rDiff, inW: Math.round(inW), natW: Math.round(natW) });
+        }
+        return { out, seenWide };
+      }, sec);
+      bad.push(...res.out);
+      wide.push(...res.seenWide);
+    }
+    return { bad, wide };
+  }
+  const s13en = await boot({ width: 1440, height: 900 }, [["eUiLang", "en"], ["eTheme", "light"]]);
+  const s13wide = await readChoicesAt1440(s13en);
+  await s13en.close();
+  const s13pl = await boot({ width: 1280, height: 900 }, [["eUiLang", "pl"], ["eTheme", "dark"]]);
+  await s13pl.setViewport({ width: 546, height: 900, deviceScaleFactor: 1 });
+  await sleep(100);
+  const s13narrow = [];
+  for (const sec of ["appearance", "notifications"]) {
+    await s13pl.evaluate(s => openSettings(s), sec);
+    await sleep(80);
+    const res = await s13pl.evaluate(sec => {
+      const out = [], seen = [];
+      for (const row of document.querySelectorAll("#setBody .set-row")) {
+        const seg = row.querySelector(".set-seg"), lab = row.querySelector(".set-label"), ctl = row.querySelector(".set-ctl");
+        if (!seg || !lab || !ctl || !ctl.offsetParent) continue;
+        const id = row.getAttribute("data-row") || "";
+        seen.push(sec + ":" + id);
+        const l = lab.getBoundingClientRect(), c = ctl.getBoundingClientRect(), s = seg.getBoundingClientRect();
+        const r = row.getBoundingClientRect(), cs = getComputedStyle(row);
+        const inL = r.left + parseFloat(cs.paddingLeft) + parseFloat(cs.borderLeftWidth);
+        const inR = r.right - parseFloat(cs.paddingRight) - parseFloat(cs.borderRightWidth);
+        if (c.top < l.bottom - 1 || Math.abs(s.left - inL) > 2 || Math.abs(s.right - inR) > 2)
+          out.push({ sec, id, cTop: Math.round(c.top), lBot: Math.round(l.bottom), sW: Math.round(s.width), inW: Math.round(inR - inL) });
+      }
+      return { out, seen };
+    }, sec);
+    s13narrow.push(...res.out);
+  }
+  await s13pl.close();
+  check(s13wide.wide.length >= 5 && !s13wide.bad.length && !s13narrow.length,
+    "s13 at 1440 px in English each wide-enough choice in Appearance and Notifications stands at the row's right aligned with the words' first line, and at 546 px in Polish stands under them",
+    { wide: s13wide.wide, wideBad: s13wide.bad, narrowBad: s13narrow });
+
+  if (PLANTS_OFF) {
+    skip("s13p lifting plant:settings-row-top turns s13 red (ETIUDA_PLANTS=off)");
+  } else {
+    const marker = "plant:settings-row-top";
+    const builtHtml = fs.readFileSync(E.ENGINE_PATH, "utf8");
+    const cutHtml = builtHtml.split("\n").filter(l => l.indexOf(marker) < 0).join("\n");
+    const plantedFile = path.join(lab, "etiuda-planted.html");
+    fs.writeFileSync(plantedFile, cutHtml);
+    const plantedUrl = "file:///" + plantedFile.replace(/\\/g, "/");
+    const pp = await boot({ width: 1440, height: 900 }, [["eUiLang", "en"], ["eTheme", "light"]], plantedUrl);
+    const planted = await readChoicesAt1440(pp);
+    await pp.close();
+    check(builtHtml.indexOf(marker) >= 0 && cutHtml !== builtHtml && planted.bad.length > 0,
+      "s13p lifting plant:settings-row-top in a scratch copy turns s13 red",
+      { hasMarker: builtHtml.indexOf(marker) >= 0, bad: planted.bad });
+  }
+
 } catch (e) {
   check(false, "run crashed: " + (e && e.message ? e.message : e));
 } finally {
@@ -594,5 +698,5 @@ try {
 }
 
 console.log("RESULT checks=" + checks + " failed=" + fails);
-console.log("#counts checks=" + checks + " skipped=0 failed=" + fails + " expected=12");
-process.exit(fails || checks !== 12 ? 1 : 0);
+console.log("#counts checks=" + checks + " skipped=" + skipped + " failed=" + fails + " expected=" + EXPECTED);
+process.exit(fails || checks + skipped !== EXPECTED ? 1 : 0);
