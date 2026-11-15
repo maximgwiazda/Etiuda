@@ -11874,6 +11874,24 @@ function caretWhich() {
     done(!err && m && +m[2] !== process.pid ? m[1] : null);
   }));
 }
+/* THE WORDS SELECTED in the window in front, read by the helper through UI Automation without touching the clipboard; ""
+   where nothing is selected, the control cannot be read, the helper refuses or does not answer within CARET_SELECTION_MS,
+   and then the clipboard's text stands in, as before. The helper is let run a little longer, so it ends on its own. */
+const CARET_SELECTION_MS = 300;
+function caretSelection() {
+  const tool = caretTool();
+  if (!tool) return Promise.resolve("");
+  return new Promise(done => {
+    let told = false;
+    const tell = t => { if (!told) { told = true; done(t); } };
+    const late = setTimeout(() => tell(""), CARET_SELECTION_MS); /* plant:selection-wait */
+    execFile(tool, ["selection"], { windowsHide: true, timeout: CARET_SELECTION_MS * 4, encoding: "utf8", maxBuffer: 64 * 1024 }, (err, out) => {
+      clearTimeout(late);
+      const text = err ? "" : String(out || "").slice(0, MESSAGE_MAX_CHARS);
+      tell(text.trim() ? text : "");
+    });
+  });
+}
 /* Started while the picker is still in front: Windows lets a program started by the window in front
    hand the front to another, and to nothing else. The reply is on the clipboard whatever it answers, and `done` hears
    whether Ctrl+V was pressed. */
@@ -12128,10 +12146,17 @@ function pickToggle() {
   const press = ++pickPress;
   pickTarget = null;
   const which = caretWhich().then(t => { if (press === pickPress) pickTarget = t; });
-  withClipText(text => pickWithClip(press, which, text));
+  /* The selection first, asked beside which window is in front and before anything of this program comes forward; the
+     clipboard is read only where none came, and written nothing at the press. */
+  caretSelection().then(words => {
+    if (words) pickWithClip(press, which, words, true); /* plant:selection-first */
+    else withClipText(text => pickWithClip(press, which, text, false));
+  }).catch(e => { console.error("etiuda: the picker could not open - " + e.message); pickOpening = false; });
 }
-function pickWithClip(press, which, text) {
+/* `selected`: the text is the window's selection, which the picker shows in its box; a clipboard's text never reaches it. */
+function pickWithClip(press, which, text, selected) {
   let clip = text;
+  const shown = selected ? String(text) : "";
   const isOwn = isOwnText(clip);
   const want = !isOwn && readsLikeMessage(clip);
   const clipHash = crypto.createHash("sha256").update(String(clip).replace(/\r\n/g, "\n")).digest("hex");
@@ -12173,6 +12198,7 @@ function pickWithClip(press, which, text) {
       } catch (err) { console.error("etiuda: suggestions could not be scored"); }
     }
     delete open.profiles;
+    if (shown) open.selected = shown;
     clip = "";
     const aiOn = open.ai !== false;
     delete open.ai;

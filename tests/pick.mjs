@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 138 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 1);
+const EXPECTED = 141 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 2);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -296,10 +296,17 @@ try {
   const held = new Map(), taken = new Set(["Control+Shift+F9"]), clip = [];
   /* THE CARET HELPER is never run here: its calls are recorded, with how many calls the picker had seen
      at the time, and answered as the helper would. Only Windows has one; elsewhere none is asked. */
-  const caret = { there: true, front: "4242 1", runs: [], pickerCalls: () => -1, fail: false };
+  const caret = { there: true, front: "4242 1", runs: [], pickerCalls: () => -1, fail: false, sel: null };
   const cpReal = nodeRequire("node:child_process");
   const cpStub = Object.assign({}, cpReal, { execFile: (file, args, opts, done) => {
     caret.runs.push({ file: String(file), args: (args || []).map(String), at: caret.pickerCalls() });
+    /* The selection: caret.sel's text, "hang" for no answer, a number for that exit; nothing selected (exit 1) by default. */
+    if (args && args[0] === "selection") {
+      const sel = caret.sel;
+      if (sel === "hang") return;
+      setImmediate(() => typeof sel === "string" ? done(null, sel, "") : done(Object.assign(new Error("exit"), { code: sel == null ? 1 : sel }), "", ""));
+      return;
+    }
     setImmediate(() => done(caret.fail && args && args[0] === "paste" ? Object.assign(new Error("refused"), { code: 3 }) : null,
       args && args[0] === "which" ? caret.front : "", ""));
   } });
@@ -823,6 +830,74 @@ try {
     "2z with no helper beside the program nothing is run, and the reply waits on the clipboard as before: " + (caret.runs.length - from) + " run(s)");
   caret.there = true;
 
+  /* 2s1 to 2s4: THE SELECTION FIRST (Quick replies on the selection, Max's ruling 2026-11-15). The helper answers the words
+     selected: the picker shows them in its box and suggests from them, the clipboard is not read, and nothing is written to
+     it at the press. Nothing selected, a refusal (a password field) or no answer within about 300 ms: the clipboard as
+     before. The selected words reach the picker's page and nowhere else: not the desk's page, a log or the disk. */
+  {
+    const SEL = "zebraquill please mend the lantern glass today. Thank you, Ola.", CLIP = "the kettle brews tea for the guests";
+    const opening = async sel => {
+      caret.sel = sel; clipHeld = CLIP;
+      const r0 = clipReads, c0 = clip.length, o0 = opened.length, w0 = written.length, s0 = said.length, d0 = desk.sent.length, t0 = Date.now();
+      held.get("Control+Shift+Space")();
+      await until(() => opened.length > o0 && pw.visible, 5000);
+      const o = opened[opened.length - 1] || {};
+      const ms = Date.now() - t0;
+      const ask = desk.sent.slice(d0).filter(a => a[0] === "etiuda:pick-ask" && a[2] === "open").map(a => String(a[3] || ""))[0] || "";
+      const elsewhere = written.slice(w0).join("\n") + said.slice(s0).join("\n") + desk.sent.slice(d0).map(a => JSON.stringify(a)).join("\n");
+      held.get("Control+Shift+Space")();
+      await until(() => !pw.visible);
+      return { selected: o.selected || "", asked: ask, reads: clipReads - r0, writes: clip.length - c0, ms,
+        leaked: elsewhere.indexOf("lantern glass today. Thank you, Ola.") > -1 };
+    };
+    caret.there = true;
+    const got = await opening(SEL), none = await opening(null), refused = await opening(6), hung = await opening("hang");
+    caret.sel = null; clipHeld = "";
+    const J2 = JSON.stringify;
+    if (WIN) {
+      check(got.selected === SEL && got.asked !== "{}" && /profiles|epoch/.test(got.asked) && got.reads === 0 && got.writes === 0 && !got.leaked,
+        "2s1 a selection opens the picker on those words and asks the desk for what suggests from a message, read without the clipboard and written nowhere else, and nothing goes on the"
+        + " clipboard at the press: " + J2(got));
+      check(none.selected === "" && none.reads === 1 && none.writes === 0 && refused.selected === "" && refused.reads === 1 && refused.writes === 0,
+        "2s2 nothing selected, or the helper refusing the control, opens on the clipboard as before: " + J2({ none, refused }));
+      check(hung.selected === "" && hung.reads === 1 && hung.writes === 0 && hung.ms < 1500,
+        "2s3 a helper that does not answer gives way to the clipboard within its wait: " + J2(hung));
+    } else {
+      check(got.selected === "" && got.reads === 1, "2s1 not Windows: no helper, so the clipboard as before: " + J2(got));
+      check(true, "2s2 not Windows: no helper to refuse");
+      check(true, "2s3 not Windows: no helper to wait for");
+    }
+    /* 2s4: the two plants, each run on the function it guards, sliced from shell/main.js: the wait lifted leaves the opening
+       waiting on a helper that never answers, and the selection's branch rewritten never uses the words. */
+    if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  2s4 the selection's two plants (ETIUDA_PLANTS=off)");
+    else {
+      const decl = (src, name) => { const at = src.indexOf("function " + name + "("); let i = src.indexOf("{", at), d = 0;
+        for (; i < src.length; i++) { if (src[i] === "{") d++; else if (src[i] === "}" && --d === 0) break; } return at < 0 ? "" : src.slice(at, i + 1); };
+      const SELSRC = decl(SRC, "caretSelection"), TOGGLE = decl(SRC, "pickToggle");
+      const waitLine = SELSRC.split("\n").filter(l => l.indexOf("plant:selection-wait") >= 0);
+      const lifted = SELSRC.split("\n").filter(l => l.indexOf("plant:selection-wait") < 0).join("\n");
+      const runSel = src => new Function("caretTool", "execFile", "MESSAGE_MAX_CHARS", "CARET_SELECTION_MS", src + "\nreturn caretSelection();")(
+        () => "caret.exe", () => {}, 1500, 300);
+      const settles = p => Promise.race([p.then(() => true), new Promise(r => setTimeout(() => r(false), 1200))]);
+      const keptWait = await settles(runSel(SELSRC)), liftedWait = waitLine.length === 1 ? await settles(runSel(lifted)) : true;
+      const firstLine = TOGGLE.split("\n").filter(l => l.indexOf("plant:selection-first") >= 0);
+      const rewritten = TOGGLE.split("\n").map(l => l.indexOf("plant:selection-first") >= 0 ? l.replace("if (words)", "if (false)") : l).join("\n");
+      const runToggle = async src => {
+        const calls = [];
+        new Function("pickWin", "pickOpening", "theWindow", "hidePickNote", "pickPress", "pickTarget", "caretWhich", "caretSelection",
+          "withClipText", "pickWithClip", "hidePicker", src + "\npickToggle();")(null, false, { isDestroyed: () => false }, () => {}, 0, null,
+          () => Promise.resolve(null), () => Promise.resolve("the words"), then => then("the clipboard"),
+          (p, w, text, sel) => calls.push([text, sel]), () => {});
+        await tick(20);
+        return calls;
+      };
+      const kept = await runToggle(TOGGLE), wrong = firstLine.length === 1 ? await runToggle(rewritten) : [["the words", true]];
+      check(keptWait && !liftedWait && J2(kept) === J2([["the words", true]]) && J2(wrong) === J2([["the clipboard", false]]),
+        "2s4 lifting plant:selection-wait leaves the opening waiting on a silent helper, and rewriting plant:selection-first opens on the"
+        + " clipboard over a selection: " + J2({ keptWait, liftedWait, kept, wrong }));
+    }
+  }
+
   /* NO KEY READS THE CLIPBOARD. Alt+V is pressed on both windows as Electron delivers a key: nothing is read,
      no channel the shell opens is the clipboard's, and neither page's bridge offers a read. Openings read once
      each, above; this sweep must not add another. */
@@ -1188,7 +1263,9 @@ try {
   const cpRequires = (shellCode.match(/\brequire\s*\(\s*"(?:node:)?child_process"\s*\)/g) || []).length;
   const runMentions = (shellBare.match(/\bexecFileSync\b/g) || []).length, runCalls = (shellBare.match(/\bexecFileSync\s*\(/g) || []).length;
   /* THE CARET HELPER'S CALLS, execFile in main.js alone: its program is `tool`, bound only to caretTool(), whose two
-     places are caret.exe beside the asar and in build/, and its name is mentioned once in the require and once per call. */
+     places are caret.exe beside the asar and in build/, and its name is mentioned once in the require and once per call.
+     WIDENED 2026-11-15 by the lead engineer (Claudius delta5) by exactly one call, the selection's (Quick replies on the
+     selection): three calls, three bindings of tool, caretTool named four times. */
   const asyncMentions = (shellBare.match(/\bexecFile\b/g) || []).length, asyncCalls = (shellBare.match(/\bexecFile\s*\(/g) || []).length;
   const toolBinds = shellCode.match(/\bconst tool=caretTool\(\);/g) || [], toolNames = (shellBare.match(/\btool\b/g) || []).length;
   const caretToolNames = (shellBare.match(/\bcaretTool\b/g) || []).length;
@@ -1197,7 +1274,7 @@ try {
   const cpNames = cps.map(m => m[1].split(",").map(x => x.trim()).sort().join(","));
   check(reqs.length > 0 && strange.length === 0 && cps.length === cpRequires
     && cpNames.every(n => n === "execFileSync" || n === "execFile,execFileSync") && cpNames.filter(n => n !== "execFileSync").length === 1
-    && asyncCalls === 2 && asyncMentions === asyncCalls + 1 && toolBinds.length === 2 && caretPlaces && caretToolNames === 3
+    && asyncCalls === 3 && asyncMentions === asyncCalls + 1 && toolBinds.length === 3 && caretPlaces && caretToolNames === 4
     && toolNames === toolBinds.length * 3
     && programs.length > 0 && programs.every(p => (p === "REG_TOOL" && regTool) || p === "tool"
       /* Linux alone: three questions to the session bus about the keyring, none about a window, the screen, the
