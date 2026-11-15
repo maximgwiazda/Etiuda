@@ -386,7 +386,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      the ink of whichever theme is on; the two shares are PICKED BY EYE from a sheet of twelve
      (ruled 2026-09-17) rather than derived, because a pale ground swallows a dot that a dark one
      shows. Declared in all four token blocks, like every theme-dependent token here. */
-  --dots-ink:color-mix(in srgb,var(--dim) 60%,transparent);
+  --dots-ink:color-mix(in srgb,var(--dim) 42%,transparent);
   /* The WinUI dress: header fields sit ABOVE their chrome - lighter than it in both themes -
      and wear a darker bottom edge; focus underlines in accent instead of ringing. The band
      is the blue behind brand and tabs; the chrome is the header below it. */
@@ -592,7 +592,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
 :root[data-theme=light]{
   color-scheme:light;
   --bg:#f7f8fa; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#e4e8ee; --line-strong:#cfd6e0;
-  --dots-ink:color-mix(in srgb,var(--dim) 60%,transparent);
+  --dots-ink:color-mix(in srgb,var(--dim) 42%,transparent);
   /* The light half of the WinUI dress - the law lives at the base :root block. */
   --band:#0f4c9d; --header-bg:#f0f2f5;
   /* Field edge at least 3:1 against every ground it meets (--bg, --panel, --header-bg, and --field),

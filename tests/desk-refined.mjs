@@ -30,7 +30,7 @@ const selOf = s => String(s || "").replace(/\s+/g, " ").trim();
 const DOT = squash("radial-gradient(circle at center,var(--dots-ink) 0 .7px,color-mix(in srgb,var(--dots-ink) 0%,transparent) 1.2px)");
 const LIFT = squash("0 1px 2px rgba(15,23,42,.05),0 4px 16px rgba(15,23,42,.06)");
 const NEAR = squash("0 1px 2px rgba(15,23,42,.05)");
-const INK_LIGHT = squash("color-mix(in srgb,var(--dim) 60%,transparent)");
+const INK_LIGHT = squash("color-mix(in srgb,var(--dim) 42%,transparent)");
 const INK_DARK = squash("color-mix(in srgb,var(--dim) 30%,transparent)");
 const SEAM = squash("rgba(255,255,255,.075)");
 
@@ -89,9 +89,9 @@ function findings(css) {
 }
 
 const GOOD = [
-  ":root{--dots-ink:color-mix(in srgb,var(--dim) 60%,transparent);--card-border:var(--line);",
+  ":root{--dots-ink:color-mix(in srgb,var(--dim) 42%,transparent);--card-border:var(--line);",
   "--card-shadow:0 1px 2px rgba(15,23,42,.05);--card-lift:0 1px 2px rgba(15,23,42,.05),0 4px 16px rgba(15,23,42,.06)}",
-  ":root[data-theme=light]{--dots-ink:color-mix(in srgb,var(--dim) 60%,transparent);--card-border:var(--line);",
+  ":root[data-theme=light]{--dots-ink:color-mix(in srgb,var(--dim) 42%,transparent);--card-border:var(--line);",
   "--card-shadow:0 1px 2px rgba(15,23,42,.05);--card-lift:0 1px 2px rgba(15,23,42,.05),0 4px 16px rgba(15,23,42,.06)}",
   ":root:not([data-theme=light]){--dots-ink:color-mix(in srgb,var(--dim) 30%,transparent);--card-border:rgba(255,255,255,.075);",
   "--card-shadow:var(--bevel);--card-lift:0 0 #0000}",
