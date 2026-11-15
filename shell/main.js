@@ -2104,6 +2104,11 @@ function statsSeal() {
      file from before the statistics box has it. */
   let box = typeof use.seal.box === "string" ? use.seal.box : "";
   if (use.seal.stats) box = use.seal.stats; /* plant:stats-box-own */
+  if (use.seal.statsBad) { /* plant:stats-box-bad */
+    if (statsNoBoxSaid !== use.seal.team + "|bad") console.log("etiuda: statistics are not sealed: the team file's statistics box is not the lead's own");
+    statsNoBoxSaid = use.seal.team + "|bad";
+    return null;
+  }
   if (!/^[0-9a-f]{64}$/.test(box)) {
     if (statsNoBoxSaid !== use.seal.team) {
       statsNoBoxSaid = use.seal.team;
@@ -2111,7 +2116,7 @@ function statsSeal() {
     }
     return null;
   }
-  if (statsNoBoxSaid === use.seal.team) statsNoBoxSaid = "";
+  if (statsNoBoxSaid === use.seal.team || statsNoBoxSaid === use.seal.team + "|bad") statsNoBoxSaid = "";
   return { seal: { box: box, team: use.seal.team, epoch: use.seal.epoch, key: use.seal.key,
     keyId: String(use.seal.lead && use.seal.lead.keyId), desk: me.id } };
 }
@@ -2164,6 +2169,25 @@ function statsPulse() {
 function flushHeldStats() {
   if (!statsHeld) return;
   writeStatsAnswer(statsHeld, "", "close");
+}
+/* The X25519 form of an Ed25519 public key, as Studio derives the statistics box from the signing key (src/sign.mjs statsBoxOf):
+   u = (1 + y) / (1 - y) mod 2^255 - 19, so the desk can tell the lead's own box from any other. "" where it has none. */
+const ED_P = (1n << 255n) - 19n;
+let leadStatsMemo = ["", ""];
+function leadStatsBox(pubHex) {
+  if (typeof pubHex !== "string" || !/^[0-9a-f]{64}$/.test(pubHex)) return "";
+  if (leadStatsMemo[0] === pubHex) return leadStatsMemo[1];
+  const b = Buffer.from(pubHex, "hex").reverse();
+  b[0] &= 0x7f;
+  const y = BigInt("0x" + b.toString("hex"));
+  let u = "";
+  if (y < ED_P && y !== 1n) {
+    let r = 1n, x = (1n - y + ED_P) % ED_P, e = ED_P - 2n;
+    while (e > 0n) { if (e & 1n) r = r * x % ED_P; x = x * x % ED_P; e >>= 1n; }
+    u = Buffer.from(((1n + y) * r % ED_P).toString(16).padStart(64, "0"), "hex").reverse().toString("hex");
+  }
+  leadStatsMemo = [pubHex, u];
+  return u;
 }
 function statsSealKey(seal) { return seal.box + "\n" + seal.keyId; }
 /* THE BOX GOES WITH ITS HOLDER: once the lead's key has been handed on, nothing is sealed while the team file still names the box
@@ -3216,10 +3240,12 @@ function teamUse() {
   if (!key || key.length !== 32) return { member: false };
   const stale = doc.epoch !== epoch || epoch < (teamEpochSeen[team] || 0) || teamFileBehind(doc); /* plant:s0b-floor-use */
   const box = typeof doc.lead.box === "string" ? doc.lead.box : "";
+  /* lead.stats counts only as the lead's own key's statistics box; any other value seals nothing, and the file is taken as it is. */
+  let stats = "";
+  stats = doc.lead.stats === leadStatsBox(doc.lead.public) ? doc.lead.stats : ""; /* plant:stats-box-lead */
   const catalogs = Array.isArray(doc.catalogs) ? doc.catalogs.map(String) : [];
   return { member: true, stale: stale, catalogs: catalogs, content: stale ? null : teamContentOf(doc), consent: stale ? "" : consentOf(doc),
-    seal: { team: team, epoch: epoch, key: key, lead: pin, box: box,
-      stats: typeof doc.lead.stats === "string" && /^[0-9a-f]{64}$/.test(doc.lead.stats) ? doc.lead.stats : "" } };
+    seal: { team: team, epoch: epoch, key: key, lead: pin, box: box, stats: stats, statsBad: doc.lead.stats !== undefined && !stats } };
 }
 function inUseFile() {
   const me = branchIdentity(false);
@@ -3921,7 +3947,6 @@ function teamWhole(doc) {
     return +doc.format === 1 && doc.kind === "etiuda-team" && SEALED_TEAM_RE.test(String(doc.id)) && Number.isInteger(doc.epoch)
       && doc.epoch >= 1 && Array.isArray(doc.roster) && !!lead && typeof lead === "object" && typeof lead.keyId === "string"
       && /^[0-9a-f]{64}$/.test(String(lead.public)) && (lead.box === undefined || /^[0-9a-f]{64}$/.test(lead.box))
-      && (lead.stats === undefined || /^[0-9a-f]{64}$/.test(lead.stats)) /* plant:team-stats-shape */
       && !!sig && sig.keyId === lead.keyId && /^[0-9a-f]{128}$/.test(String(sig.value))
       && crypto.verify(null, signedBytesOf(teamCovered), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(lead.public, "hex")]),
         format: "der", type: "spki" }), Buffer.from(sig.value, "hex"));

@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 const syncerMod = nodeRequire(path.join(ROOT, "shell", "folder", "syncer.cjs"));
-const EXPECTED = 31;
+const EXPECTED = 32;
 const WORK = path.join(ROOT, "shell", "main.js");
 const GOOD = fs.readFileSync(WORK);
 const GOOD_HASH = crypto.createHash("sha256").update(GOOD).digest("hex");
@@ -44,7 +44,7 @@ const COPY = path.join(APP, "main.js");
 const EXPOSE = ["spanSignedBytes", "spanDocument", "spanPeriod", "setStatsClock", "statsPulse", "flushHeldStats",
   "openSealed", "sealCatalog", "openStatsSealed", "sealStatsLead", "statsAnswerSignedBytes", "statsAnswerGenuine",
   "signedBytesOf", "branchSign", "branchIdOf", "deskFileGenuine", "teamWhole", "wrapTeamKey", "signedSha",
-  "catalogChanged", "channelHash", "isCatalogName", "deskTrustChecks", "handoverSignedBytes"];
+  "catalogChanged", "channelHash", "isCatalogName", "deskTrustChecks", "handoverSignedBytes", "teamUse"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -419,7 +419,14 @@ try {
 
   /* ---- 930i to 930k: the statistics box (lead.stats), which follows the lead's signing key --------------------------- */
   {
-    const S1 = crypto.generateKeyPairSync("x25519"), S2 = crypto.generateKeyPairSync("x25519"), heir = crypto.generateKeyPairSync("ed25519");
+    /* A statistics box as Studio derives it (src/sign.mjs statsBoxOf): the X25519 key of the signing key's own seed, whose public half
+       is the X25519 form of the lead's public key. */
+    const statsKeyOf = ed => {
+      const seed = ed.export({ type: "pkcs8", format: "der" }).subarray(-32), raw = crypto.createHash("sha512").update(seed).digest().subarray(0, 32);
+      const privateKey = crypto.createPrivateKey({ key: Buffer.concat([Buffer.from("302e020100300506032b656e04220420", "hex"), raw]), format: "der", type: "pkcs8" });
+      return { privateKey, publicKey: crypto.createPublicKey(privateKey) };
+    };
+    const heir = crypto.generateKeyPairSync("ed25519"), S1 = statsKeyOf(lead.privateKey), S2 = statsKeyOf(heir.privateKey);
     const HEIR = { keyId: "quay-lead-heir", public: pubHex(heir.publicKey) };
     const signed = (box, leadRec, key, handover) => {
       const o = { format: 1, kind: "etiuda-team", id: box.team, catalogs: ["north-lamps"], lead: leadRec, sealed: true, exportsSealed: false, epoch: 1,
@@ -460,13 +467,36 @@ try {
     });
     check(j.ok, "930j after that handover the old key opens nothing sealed: neither the lead's box it kept nor its own statistics box opens the answer"
       + (j.why ? ": " + j.why.split("\n")[0] : ""));
-    const k = await proveOr("930k", "      && (lead.stats === undefined || /^[0-9a-f]{64}$/.test(lead.stats)) /* plant:team-stats-shape */", "      /* plant:team-stats-shape */", async () => {
+    /* A team file whose statistics box is not the lead's own: taken as it is, the desk still on the team, and nothing sealed, not even to
+       the lead's box, until a team file names the lead's own; then the answer is sealed to it. */
+    const notOwn = async (stats, leadRec, key) => {
       const box = await joined(false);
-      put(box.share, "etiuda-team.json", signed(box, { keyId: LEAD.keyId, public: LEAD.public, box: LEAD.box, stats: "not a box" }, lead.privateKey));
+      const doc = signed(box, Object.assign({ keyId: LEAD.keyId, public: LEAD.public, box: LEAD.box, stats }, leadRec || {}), key || lead.privateKey);
+      put(box.share, "etiuda-team.json", doc);
       adopt(box, "rolling-30", lead.privateKey, LEAD, 2);
-      return !fs.existsSync(statsAt(box));
+      const whole = box.D.api.teamWhole(JSON.parse(doc)), use = box.D.api.teamUse(), none = !fs.existsSync(statsAt(box));
+      put(box.share, "etiuda-team.json", signed(box, { keyId: LEAD.keyId, public: LEAD.public, box: LEAD.box, stats: pubHex(S1.publicKey) }, lead.privateKey));
+      box.D.api.catalogChanged(box.D.win);
+      box.D.api.setStatsClock(CLOCK + 120000);
+      await box.D.ask("etiuda:stats-write", pageBody(8));
+      const after = openWith(box, S1.privateKey);
+      return { whole, member: !!use && use.member === true, none, after: after ? after.cards[0].n : null };
+    };
+    const k = await proveOr("930k", "  if (use.seal.statsBad) { /* plant:stats-box-bad */", "  if (false) { /* plant:stats-box-bad */", async () => {
+      const x = await notOwn("not a box");
+      console.log("  --- 930k " + JSON.stringify(x));
+      return x.whole && x.member && x.none && x.after === 8;
     });
-    check(k.ok, "930k a team file whose statistics box is not 64 hex is not a team file whole, and nothing is sealed under it" + (k.why ? ": " + k.why.split("\n")[0] : ""));
+    check(k.ok, "930k a team file whose statistics box is malformed is taken, the desk still on the team, and seals nothing, not even to the lead's box,"
+      + " until a team file names the lead's own" + (k.why ? ": " + k.why.split("\n")[0] : ""));
+    const l = await proveOr("930l", "  stats = doc.lead.stats === leadStatsBox(doc.lead.public) ? doc.lead.stats : \"\"; /* plant:stats-box-lead */",
+      "  stats = /^[0-9a-f]{64}$/.test(String(doc.lead.stats)) ? doc.lead.stats : \"\"; /* plant:stats-box-lead */", async () => {
+      const x = await notOwn(pubHex(S2.publicKey));
+      console.log("  --- 930l " + JSON.stringify(x));
+      return x.whole && x.member && x.none && x.after === 8;
+    });
+    check(l.ok, "930l a well-formed statistics box that is not the lead's own (another key's, as one carried forward across a handover would be)"
+      + " seals nothing, the desk still on the team" + (l.why ? ": " + l.why.split("\n")[0] : ""));
   }
 
   /* ---- 891b: one watch event ----------------------------------------------------------------------------------- */
