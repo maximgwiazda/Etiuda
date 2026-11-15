@@ -6104,8 +6104,10 @@ function checkCatalogRoundTrip() {
      and catalogFromV2 reads it; a key written by one and unread by the other is a field that
      leaves in an export and never comes back. isV2 and v2Problems count as readers: format,
      kind and hash are what they are for. `modified` is written and never read back on purpose,
-     being a property of the export rather than of the catalog. */
-  const FILE_ALLOW = new Set(["modified"]);
+     being a property of the export rather than of the catalog. `flags` is written into a desk's
+     own file and not read back onto the catalog: a load does not take another desk's flags, and
+     an export does not carry them. */
+  const FILE_ALLOW = new Set(["modified", "flags"]);
   const exp3 = extractDecl(src, "function catalogToV2(");
   const imp3 = extractDecl(src, "function catalogFromV2(") + extractDecl(src, "function isV2(")
              + extractDecl(src, "function v2Problems(");
