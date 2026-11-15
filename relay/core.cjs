@@ -612,6 +612,15 @@ function createCore(deps) {
     const kept = { licence: grant.seats.licence, live, at };
     if (Array.isArray(grant.seats.freed)) kept.freed = grant.seats.freed.map(f => ({ key: f.key, at: f.at })); /* plant:seats-freed-kept */
     store.put("seats", kept);
+    /* A key newly named, or named from a later instant than the grant before, loses the sessions it holds now, as a removal's do; its
+       next hello is judged by seatGate, so one whose person came back opens again. */
+    const before = was && Array.isArray(was.freed) ? was.freed : [];
+    let newly = (kept.freed || []).map(f => f.key);
+    newly = (kept.freed || []).filter(f => !before.some(x => x.key === f.key && x.at >= f.at)).map(f => f.key); /* plant:freed-new */
+    if (newly.length) {
+      const team = store.get("team") || {}, pubOf = id => (team.lead && id === team.lead.keyId ? team.lead.pub : (store.get("dev:" + id) || {}).pub);
+      for (const [k, s] of store.list("ses:")) if (s && s.key && newly.indexOf(pubOf(s.key)) > -1) store.del(k); /* plant:freed-sessions */
+    }
   }
   /* A desk's or a Studio's session on a team whose grant carries seats, before it is issued: `cert` judged by certWhy for the seats' licence, its run
      ending decided here. A current one opens the session and its issue is kept as evidence; a run-out one opens it until the evidence

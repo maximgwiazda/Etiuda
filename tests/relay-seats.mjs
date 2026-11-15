@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 82;
+const EXPECTED = 87;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -40,6 +40,8 @@ function keyPair(branch) {
 const signHex = (key, bytes) => crypto.sign(null, bytes, key.privateKey).toString("hex");
 
 let B = null, C = null, S = null, K = null, W = null;
+/* A copy of relay/team.cjs a plant runs the team's objects over, or null for the product's. */
+let TEAM_COPY = null;
 
 async function call(R, method, p, o) {
   const opts = o || {};
@@ -89,7 +91,7 @@ function revokedText(keys) {
 /* A team: its lead, and desks enrolled, by name. `seats` the first grant's seats, or none for an ordinary team. */
 async function team(o) {
   const opts = o || {};
-  const R = S.relayEnv({ roots: K.ROOTS });
+  const R = S.relayEnv(Object.assign({ roots: K.ROOTS }, TEAM_COPY ? { team: TEAM_COPY } : {}));
   R.clock.now = opts.at || T0;
   const w = { R, rt: hex(16), lead: keyPair(false), rev: 0, desks: {}, licence: opts.licence || hex(16) };
   const seats = opts.seats === undefined ? undefined : opts.seats === true ? { licence: w.licence, live: R.clock.now } : opts.seats;
@@ -349,7 +351,7 @@ async function main() {
     }
     return dir;
   }
-  const PRODUCT = { core: path.join(ROOT, "relay", "core.cjs"), blob: path.join(ROOT, "shell", "relay", "blob.cjs") };
+  const PRODUCT = { core: path.join(ROOT, "relay", "core.cjs"), team: path.join(ROOT, "relay", "team.cjs"), blob: path.join(ROOT, "shell", "relay", "blob.cjs") };
   function coreFrom(text) {
     const dir = copyOf({ "relay/core.cjs": text, "shell/relay/blob.cjs": forwardTo(PRODUCT.blob) });
     return require(path.join(dir, "relay", "core.cjs"));
@@ -845,6 +847,34 @@ async function main() {
     return { ok, detail: brief({ issuedHourBefore: said(before), issuedHourAfter: said(after) }) };
   }
   await leg("s22d", freedSinceScene, "a desk named as freed at T: a certificate on its key issued at T - 1 h is refused, and one issued at T + 1 h opens under the grant still naming it");
+  /* The relay owner's decision on Argon's question (finding 5): a pooled desk the grant newly names as freed loses the sessions it holds
+     and their sockets at once, as a removed desk does, and a colleague's stay; a renewal naming it again at the same instant leaves the
+     session its person came back to with a certificate issued since. */
+  async function freedSessionScene() {
+    const w = await team({ seats: true }), a = w.desks.a, T = T0 + 5 * MIN;
+    a.cert = certFor(a.pub, w.licence, T0, DAY, { fields: { pooled: true } });
+    prove(w, "c", DAY);
+    const sa = await sessionAs(w, "a"), sc = await sessionAs(w, "c");
+    const token = opened(sa) ? sa.json.session : "";
+    const up = await W.fetch(new Request("https://relay.test/relay/v1/t/" + w.rt + "/socket", { method: "GET", headers: { authorization: "Bearer " + token, upgrade: "websocket" } }), w.R.env);
+    const sockId = up.headers.get("x-stand-in-socket");
+    const ws = [...w.R.hubs.values()].map(h => h.open.find(x => x.id === sockId)).find(Boolean) || null;
+    w.R.clock.now = T;
+    const named = await renew(w, grantAt(w.lead.pub, T, { licence: w.licence, live: T, freed: [{ key: a.pub, at: T }] }));
+    const listA = await call(w.R, "GET", "/relay/v1/t/" + w.rt + "/since/0", { token });
+    const listC = await call(w.R, "GET", "/relay/v1/t/" + w.rt + "/since/0", { token: opened(sc) ? sc.json.session : "" });
+    w.R.clock.now = T + 5 * MIN;
+    a.cert = certFor(a.pub, w.licence, w.R.clock.now, DAY, { fields: { pooled: true } });
+    const sb = await sessionAs(w, "a");
+    w.R.clock.now = T + 10 * MIN;
+    const again = await renew(w, grantAt(w.lead.pub, w.R.clock.now, { licence: w.licence, live: w.R.clock.now, freed: [{ key: a.pub, at: T }] }, { fields: { until: T + 31 * DAY } }));
+    const listB = await call(w.R, "GET", "/relay/v1/t/" + w.rt + "/since/0", { token: opened(sb) ? sb.json.session : "" });
+    const shut = !!ws && !!ws.closed && ws.closed.code === 4401;
+    const ok = opened(sa) && opened(sc) && named.status === 200 && listA.status === 401 && !!listA.json && listA.json.error === "no-hello"
+      && shut && listC.status === 200 && opened(sb) && again.status === 200 && listB.status === 200;
+    return { ok, detail: brief({ named: said(named), freedList: said(listA), socket: ws ? ws.closed : "none", colleague: said(listC), cameBack: said(sb), renamed: said(again), cameBackList: said(listB) }) };
+  }
+  await leg("s22e", freedSessionScene, "a pooled desk newly named as freed loses its session and its socket at once, a colleague's stays, and a renewal naming it again at the same instant leaves the session its person came back to");
   await leg("s22a", freedScene, "(d) a pooled desk the grant names as freed is refused outright, its certificate current, and opens again once a later grant no longer names it");
   await leg("s22b", nightOnlyScene, "(a)'s measured limit: a removed pooled desk first tried only at night, never refused while the evidence was fresh, is honoured to its end plus 72 hours under (a) alone, as expected; with (d), the grant naming it, it is refused outright, at night, late in the grace and after");
   await leg("s22c", freedShapeScene, "a grant's freed list out of shape (empty, not a list, not keys, a key twice, a bare key, an entry without its instant, one freed after the grant's issue, one with another field, past FREED_MAX, a thousand) is refused shape, and a good one and a full one taken");
@@ -869,24 +899,34 @@ async function main() {
 
   /* ---- the plants: each guard lifted in a copy of relay/core.cjs turns its named leg red, and the product file is never written ---- */
   const ADOPTED = ["createCore", "judgeCreate", "grantWhy", "grantOk", "judgeLead", "certWhy"];
+  /* A plant line lifted in a copy of relay/core.cjs, or of relay/team.cjs where the core carries no such line (the team's objects then
+     run over the copy, beside the live core). */
   async function lifted(tag, fn) {
-    const digest = sha(fs.readFileSync(PRODUCT.core)), kept = {};
+    const digest = sha(fs.readFileSync(PRODUCT.core)), teamDigest = sha(fs.readFileSync(PRODUCT.team)), kept = {};
     for (const k of ADOPTED) kept[k] = C[k];
     let turned = false, detail = "plant line absent";
     try {
       const lines = fs.readFileSync(PRODUCT.core, "utf8").split(/\n/);
       const at = lines.findIndex(l => l.indexOf("/* plant:" + tag + " */") >= 0);
+      const teamLines = fs.readFileSync(PRODUCT.team, "utf8").split(/\n/);
+      const teamAt = at >= 0 ? -1 : teamLines.findIndex(l => l.indexOf("/* plant:" + tag + " */") >= 0);
       if (at >= 0) {
         lines.splice(at, 1);
         const fresh = coreFrom(lines.join("\n"));
         for (const k of ADOPTED) C[k] = fresh[k];
+      } else if (teamAt >= 0) {
+        teamLines.splice(teamAt, 1);
+        const dir = copyOf({ "relay/team.cjs": teamLines.join("\n"), "relay/core.cjs": forwardTo(PRODUCT.core), "shell/relay/blob.cjs": forwardTo(PRODUCT.blob) });
+        TEAM_COPY = require(path.join(dir, "relay", "team.cjs"));
+      }
+      if (at >= 0 || teamAt >= 0) {
         const r = await safe(fn);
         turned = r.ok !== true;
         detail = turned ? "the check lifted" : "the check still held";
       }
     } catch (e) { detail = e && e.stack ? e.stack.split("\n")[0] : String(e); }
-    finally { for (const k of ADOPTED) C[k] = kept[k]; }
-    return { turned, back: sha(fs.readFileSync(PRODUCT.core)) === digest, detail };
+    finally { for (const k of ADOPTED) C[k] = kept[k]; TEAM_COPY = null; }
+    return { turned, back: sha(fs.readFileSync(PRODUCT.core)) === digest && sha(fs.readFileSync(PRODUCT.team)) === teamDigest, detail };
   }
   const W7 = 7 * DAY, W1 = DAY;
   const PLANTS = [
@@ -902,6 +942,9 @@ async function main() {
     ["pooled-refused-read", "s21d", pooledNightScene, "a kept refusal is never read"],
     ["pooled-refused-prune", "s21d", pooledNightScene, "a kept refusal outlives the grace"],
     ["seat-freed", "s22a", freedScene, "a freed pooled desk is not refused"],
+    ["freed-sessions", "s22e", freedSessionScene, "a freed desk's open session lives out its 30 minutes"],
+    ["freed-new", "s22e", freedSessionScene, "a renewal naming a desk again ends the session its person came back to"],
+    ["freed-sockets", "s22e", freedSessionScene, "a freed desk's socket stays open"],
     ["seats-release-mark", "s15d", releaseReplayScene, "the released grant, posted again, gates the team"],
     ["freed-issued", "s22d", freedSinceScene, "the issue-time comparison dropped, so a certificate issued after the freeing is refused"],
     ["seats-freed-kept", "s22b", nightOnlyScene, "a grant's freed list is not kept"],

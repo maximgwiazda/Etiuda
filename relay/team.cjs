@@ -311,6 +311,8 @@ function teamObject(deps) {
     }
     if (what === "grant") {
       const renewed = c.renew(rt, body);
+      /* A pooled desk the grant newly names as freed holds no session now (takeSeats); its socket goes with it. */
+      if (renewed.ok) closeWhere(a => !!a.key && !c.sessionByHash(a.ses).ok, "no-hello"); /* plant:freed-sockets */
       if (renewed.ok) await arm(); /* plant:arm-renew */
       return answer(renewed, r => ({ ok: true, lapse: r.lapse }));
     }
