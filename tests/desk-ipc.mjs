@@ -31,7 +31,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 130;
+const EXPECTED = 132;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const ASIDE_D6_LOGIN = nodeRequire("./off-windows.cjs").offWindows("D6-login",
   "the shell sets no login item off Windows, so Reset's turn-off has nothing to reach");
@@ -2625,6 +2625,32 @@ try {
     } catch (e) { why = String(e && e.message || e).slice(0, 200); }
     finally { fs.rmSync(scratch, { recursive: true, force: true }); }
     check(red, "D7-not-lead-plant lifting plant:listing-lead-signed announces a file the lead did not sign (FAIL D7-not-lead): " + why);
+  }
+  /* The flag reaches the page through host.js's listing shape (mapListing), which keeps only the fields it names: the shell's
+     leadSigned row, read through eCatalogFiles, still says so on the page side. Lifted in a scratch copy, it is dropped. */
+  {
+    const mapped = async dir => {
+      const H = await import(pathToFileURL(path.join(dir, "host.js")).href + "?m=" + Math.random());
+      const was = window.E_HOST;
+      window.E_HOST = { catalogFiles: () => [{ name: "lead.ec", id: "k-lead", leadSigned: true }, { name: "bare.ec", id: "k-bare" }] };
+      try { const rows = await H.eCatalogFiles(); return rows.map(r => r.name + ":" + r.leadSigned).join(","); }
+      finally { window.E_HOST = was; }
+    };
+    const got = await mapped(path.join(ROOT, "src", "modules"));
+    check(got === "lead.ec:true,bare.ec:false", "D7-lead-mapped the shell's leadSigned reaches the page through the listing's shape, and a row without it is false: " + got);
+    if (PLANTS_OFF) skip("D7-lead-mapped-plant lifting plant:listing-lead-mapped drops the flag on its way to the page");
+    else {
+      let why = "plant line absent";
+      const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-ipc-map-"));
+      try {
+        fs.cpSync(path.join(ROOT, "src", "modules"), scratch, { recursive: true });
+        const at = path.join(scratch, "host.js"), lines = fs.readFileSync(at, "utf8").split("\n");
+        const i = lines.findIndex(l => l.indexOf("plant:listing-lead-mapped") >= 0);
+        if (i >= 0) { lines.splice(i, 1); fs.writeFileSync(at, lines.join("\n")); why = await mapped(scratch); }
+      } catch (e) { why = String(e && e.message || e).slice(0, 200); }
+      finally { fs.rmSync(scratch, { recursive: true, force: true }); }
+      check(why !== "plant line absent" && why.indexOf("lead.ec:true") < 0, "D7-lead-mapped-plant lifting plant:listing-lead-mapped drops the flag on its way to the page (FAIL D7-lead-mapped): " + why);
+    }
   }
   check(d7Nameless, "D7-nameless a lead with no name gets the nameless titles in both languages, never a stand-in name (" + d7NamelessWhy + ")");
   check(d7Switches, "D7-switches each switch silences its kind (" + d7SwitchesWhy + ")");
