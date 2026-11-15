@@ -20,11 +20,11 @@ function shortcutsListHtml(q){
       (listening?esc(t("Press keys…")):(empty?esc(t("none")):esc(shown)))+'</button>';
   };
   const row=d=>{
-    const chg=d.newKey ? ' <span class="chg">'+esc(t("new key"))+'</span>' : '';
+    const chg=d.newKey ? '<span class="chg">'+esc(t("new key"))+'</span>' : '';
     return '<div class="sc-row" data-sc="'+esc(d.id)+'">'+
-      '<div class="sc-label">'+esc(t(d.label))+chg+
+      '<div class="sc-label">'+esc(t(d.label))+
         (d.hint?'<small>'+esc(t(d.hint))+'</small>':'')+
-      '</div><div class="sc-binds">'+bind(d,1)+(d.fixed?"":bind(d,2))+'</div></div>';
+      '</div>'+chg+'<div class="sc-binds">'+bind(d,1)+(d.fixed?"":bind(d,2))+'</div></div>';
   };
   /* Rebindable rows first, fixed rows grouped under their own separator - the split is the
      explanation a per-row tooltip could not give: tooltips on disabled buttons never reach

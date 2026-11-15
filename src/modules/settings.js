@@ -765,7 +765,7 @@ function settingsScreenHtml(){
     +'<label class="sx-search">'+sxIcon("search")+'<input type="search" id="sxSearch" autocomplete="off" spellcheck="false"'
     +' placeholder="'+esc(t("Search settings"))+'" aria-label="'+esc(t("Search settings"))+'" value="'+esc(sxQuery)+'"></label>'
     +'<div class="sx-secs" id="sxSecs">'+settingsNavHtml(navOn())+'</div>'
-    +'<div class="sx-foot"><button type="button" class="sx-maint" id="sxMaint">'+esc(t("Maintenance"))+' <kbd>'
+    +'<div class="sx-foot"><button type="button" class="sx-maint" id="sxMaint">'+sxIcon("statistics")+esc(t("Maintenance"))+' <kbd>'
     +esc(formatActionChord("maintenance"))+'</kbd></button></div></nav>'
     +'<div class="sx-page" id="setBody"></div></div>';
 }

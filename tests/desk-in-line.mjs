@@ -22,6 +22,8 @@
  *   ilb1, ilb2  the band is the cobalt at 62 per cent over the material and over the page's colour without it, white on it,
  *               and a Windows accent still takes its place (the product designer's values of 2026-11-15)
  *   ild7        every section of the three screens: no word stands on the dots without a ground of its own
+ *   ilh1..ilh5  the designer's like-for-like items Max approved: each rail's head is Studio's small capitals label, the row at
+ *               its foot a row with its icon and its keys plain, and a new key's tag Studio's small pill beside the keys
  *   ild1..ild6  Settings, the Library and Maintenance, light and dark: the page is dotted as Studio's is, measured as the
  *               pixels of an empty 48 px patch that stand off the ground, and its first words stand on the ground (Max's
  *               note 9: "Desk has no dotted background behind Settings/Library/Maintenance, unlike similar tabs in Studio.")
@@ -341,6 +343,41 @@ try {
     await closePage(p);
   }
   // dots>>
+
+  // <<heads
+  EXPECTED += 5;
+  for (const theme of ["light", "dark"]) {
+    const p = await boot(browser, theme);
+    const heads = [], foots = [];
+    for (const which of ["settings", "library", "maintenance"]) {
+      await openScreen(p, which);
+      const got = await p.evaluate(() => {
+        const nav = document.querySelector("#screenHost .sx-nav");
+        const h = nav.querySelector("h1, .screen-head h2, .sx-nav-title h2"), cs = h ? getComputedStyle(h) : null;
+        const probe = document.createElement("i"); probe.style.color = "var(--dim)"; nav.appendChild(probe); const dim = getComputedStyle(probe).color; probe.remove();
+        const f = nav.querySelector(".sx-foot .sx-maint"), fc = f ? getComputedStyle(f) : null, k = f && f.querySelector("kbd"), kc = k ? getComputedStyle(k) : null;
+        return { head: cs ? [cs.fontSize, cs.fontWeight, cs.textTransform, cs.color === dim] : null,
+          foot: fc ? [!!f.querySelector("svg.sx-ic"), fc.display, fc.padding, fc.fontSize, kc ? kc.borderTopWidth + " " + kc.backgroundColor : "no keys"] : null };
+      });
+      heads.push(which + " " + JSON.stringify(got.head)); foots.push(which + " " + JSON.stringify(got.foot));
+    }
+    if (theme === "light") {
+      check(heads.every((x) => x.endsWith('["11px","600","uppercase",true]')), "ilh1 the head of each rail is Studio's small capitals label in the dim ink", heads);
+      check(foots.every((x) => /\[true,"flex","7px 10px","13\.5px","(0px rgba\(0, 0, 0, 0\)|no keys)"\]$/.test(x)),
+        "ilh2 the row at each rail's foot is a row like those above it: its icon, Studio's padding and size, its keys plain", foots);
+    }
+    await openScreen(p, "settings");
+    await p.evaluate(() => { const x = document.querySelector('#screenHost .sx-nav .sx-sec[data-sx="keys"]'); if (x) x.click(); });
+    await sleep(500);
+    const tags = await p.evaluate(() => Array.from(document.querySelectorAll("#screenHost .sc-row .chg")).map((c) => {
+      const cs = getComputedStyle(c); return [c.parentElement.classList.contains("sc-row"), !!(c.nextElementSibling && c.nextElementSibling.classList.contains("sc-binds")), cs.borderTopLeftRadius, cs.backgroundColor];
+    }));
+    const bg = theme === "light" ? "rgb(232, 236, 241)" : "rgb(32, 36, 43)";
+    if (theme === "light") check(tags.length >= 1 && tags.every((x) => x[0] && x[1] && x[2] === "999px"), "ilh3 a new key's tag stands beside the keys, a pill of its own, not in the row's name", tags);
+    check(tags.length >= 1 && tags.every((x) => x[3] === bg), "ilh" + (theme === "light" ? 4 : 5) + " " + theme + ": the tag wears Studio's quiet ground", tags);
+    await closePage(p);
+  }
+  // heads>>
 
   done = true;
 } catch (e) {
