@@ -233,28 +233,40 @@ function teamObject(deps) {
       return reply(200, { ok: true });
     }
     const row = deps.store.get("lead");
-    let rts = row && Array.isArray(row.rts) ? row.rts.filter(x => typeof x === "string") : [];
+    const rts = row && Array.isArray(row.rts) ? row.rts.filter(x => typeof x === "string") : [];
     const leadKey = lead || (row && row.leadKey) || null;
-    if (rts.indexOf(rt) !== -1) return reply(200, { ok: true, added: false }); /* plant:lead-repeat */
-    let full = rts.length >= TEAMS_PER_LEAD;
-    if (full) {
-      const ns = namespaceOf(deps.teams);
-      if (ns) {
-        const live = [];
-        for (const id of rts) {
-          let holds = true;
-          try { holds = await asksHeld(ns, id, leadKey); } catch { holds = true; }
-          if (holds) live.push(id);
-        }
-        rts = live; /* plant:lead-reap */
-        deps.store.put("lead", Object.assign({}, row, { rts, leadKey }));
-        full = rts.length >= TEAMS_PER_LEAD;
+    let repeats = false;
+    repeats = true; /* plant:lead-repeat */
+    if (repeats && rts.indexOf(rt) !== -1) return reply(200, { ok: true, added: false });
+    const ns = rts.length >= TEAMS_PER_LEAD ? namespaceOf(deps.teams) : null;
+    const dead = new Set();
+    if (ns) {
+      for (const id of rts) {
+        let holds = true;
+        try { holds = await asksHeld(ns, id, leadKey); } catch { holds = true; }
+        if (!holds) dead.add(id);
       }
     }
-    if (full) return refusedFor("team-count"); /* plant:team-count */
-    rts.push(rt);
-    deps.store.put("lead", Object.assign({}, row, { rts, leadKey }));
-    return reply(200, { ok: true, added: true });
+    /* Another reserve may have written the list while this one asked (finding 5 of the fourth Grok review of 3cc09cb5): the list is
+       read again after the asks, the ids found dead are dropped from what stands now, and the count, the push and the put are one
+       atomic step, so a place another reserve took is counted. */
+    return deps.store.atomic(() => {
+      let now = row;
+      now = deps.store.get("lead"); /* plant:lead-reread */
+      let list = now && Array.isArray(now.rts) ? now.rts.filter(x => typeof x === "string") : [];
+      if (repeats && list.indexOf(rt) !== -1) return reply(200, { ok: true, added: false });
+      if (ns) {
+        let kept = list;
+        kept = list.filter(id => !dead.has(id)); /* plant:lead-reap */
+        list = kept;
+        deps.store.put("lead", Object.assign({}, now, { rts: list, leadKey }));
+      }
+      const full = list.length >= TEAMS_PER_LEAD;
+      if (full) return refusedFor("team-count"); /* plant:team-count */
+      list.push(rt);
+      deps.store.put("lead", Object.assign({}, now, { rts: list, leadKey }));
+      return reply(200, { ok: true, added: true });
+    });
   }
 
   async function route(request) {

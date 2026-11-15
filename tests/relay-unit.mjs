@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 581;
+const EXPECTED = 583;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -5749,6 +5749,40 @@ async function main() {
       const orderLift = await liftCore("plant:rows-after-key", async () => !(await inviteOrderScene()).ok);
       check(inviteOrder.ok && orderLift.turned && orderLift.back, "r1t lifting plant:rows-after-key reads those rows first (r1s red), and the product"
         + " file is never written: " + how(orderLift));
+    }
+
+    /* Two reserves at the bound, interleaved (finding 5): each asks every listed team whether it still holds, through a stand-in that
+       answers after a delay, while the other asks too. Each rt a reserve took is on the list after both, or the second is refused. */
+    async function leadRaceScene(teamMod) {
+      const T = teamMod || teamSrc;
+      const store = S.memoryStore(), lead = keyPair(false), listed = [];
+      for (let i = 0; i < CAP; i++) listed.push(hex(16));
+      const dead = listed[0];
+      store.put("lead", { rts: listed.slice(), leadKey: lead.keyId });
+      const ns = { idFromName: n => n, get: id => ({ fetch: async () => {
+        await new Promise(r => setTimeout(r, 2));
+        return new Response(JSON.stringify({ held: id !== dead }), { status: 200 });
+      } }) };
+      const obj = T.teamObject({ store, clock: () => T0L, teams: () => ns, sockets: S.socketHub(), r2: S.memoryBucket(), revoked: () => [] });
+      const ask = rt => obj.fetch(T.leadRequest({ op: "reserve", rt, lead: lead.keyId }))
+        .then(async r => { const text = await r.text(); let json = null; try { json = JSON.parse(text); } catch { json = null; } return { status: r.status, json }; });
+      const a = hex(16), b = hex(16);
+      const [ra, rb] = await Promise.all([ask(a), ask(b)]);
+      const after = ((store.get("lead") || {}).rts || []).slice();
+      const took = r => r.status === 200 && !!r.json && r.json.ok === true;
+      const counted = rt => after.indexOf(rt) >= 0;
+      const ok = (took(ra) || took(rb)) && (!took(ra) || counted(a)) && (!took(rb) || counted(b)) && after.length <= CAP && !counted(dead);
+      return { ok, detail: JSON.stringify({ first: took(ra) ? "taken" : answer(ra), second: took(rb) ? "taken" : answer(rb),
+        firstCounted: counted(a), secondCounted: counted(b), length: after.length }) };
+    }
+    const leadRace = await leadRaceScene();
+    check(leadRace.ok, "r1u two reserves interleaved at the bound, each asking the listed teams through a delayed stand-in: every rt a reserve"
+      + " took is on the lead's list after both, and the list stays within the bound: " + leadRace.detail);
+    if (PLANTS_OFF) skip("r1v lifting plant:lead-reread loses the first reserve's rt (r1u red)");
+    else {
+      const raceLift = await editTeam(lineLifted("plant:lead-reread"), async T => !(await leadRaceScene(T)).ok);
+      check(leadRace.ok && raceLift.turned && raceLift.back, "r1v lifting plant:lead-reread loses the first reserve's rt (r1u red), and the product"
+        + " file is never written: " + how(raceLift));
     }
 
     // 933a: move signed by old lead is taken, new key hello opens lead session
