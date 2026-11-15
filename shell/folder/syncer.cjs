@@ -1381,22 +1381,19 @@ function createFolderProgram(opts) {
           let pinOk = true;
           const leadMatch = pin && doc.lead && doc.lead.public === pin.public && doc.lead.keyId === pin.keyId;
           let handedMatch = false;
-          if (pin && doc.lead && handedTo(doc, pin)) {
-            handedMatch = true;
-            follow(doc);
-          }
+          if (pin && doc.lead && handedTo(doc, pin)) handedMatch = true;
           if (pin && !leadMatch && !handedMatch) pinOk = false;
-          if (pinOk) {
-            const rev = teamRevOf(doc) || 0;
-            const olderEpoch = doc.epoch < mirrorEpoch;
-            const olderRevAtEpoch = doc.epoch === mirrorEpoch && rev < mirrorRev;
-            if (!olderEpoch && !olderRevAtEpoch) {
-              const target = path.join(mirror, sibItem.relPath);
-              if (landStaged(sibItem, target, true, () => applyTeamLand(doc, rev, false))) {
-                applied.push(sibItem.relPath);
-              }
-            } else {
-              try { io.unlink(sibItem.tmpPath); } catch {}
+          /* An older or equal sibling, or one whose rev this desk does not read, is not a handover and does not land.
+             The pin stays, so the lead's next file is still accepted. */
+          const revVal = teamRevOf(doc);
+          let stale = false;
+          stale = revVal === null || doc.epoch < mirrorEpoch || (doc.epoch === mirrorEpoch && (revVal || 0) <= mirrorRev); /* plant:sibling-rev-before-pin */
+          if (handedMatch && !stale) follow(doc);
+          if (pinOk && !stale) {
+            const rev = revVal || 0;
+            const target = path.join(mirror, sibItem.relPath);
+            if (landStaged(sibItem, target, true, () => applyTeamLand(doc, rev, false))) {
+              applied.push(sibItem.relPath);
             }
           } else {
             try { io.unlink(sibItem.tmpPath); } catch {}

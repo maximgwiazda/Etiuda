@@ -35,7 +35,7 @@ const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child
 const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
   + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
 
-const EXPECTED = 131;
+const EXPECTED = 133;
 /* The plants of 45 are skipped where ETIUDA_PLANTS is off, and a skipped leg counts toward the floor. */
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const { offWindows } = nodeRequire("./off-windows.cjs");
@@ -4135,6 +4135,79 @@ async function run() {
       });
       check(planted.ok, "r4c lifting plant:share-link writes through a junction and stages a file link: " + JSON.stringify(planted));
     }
+  }
+
+  /* r2: a conflict sibling moves the pin only when it is newer than the team file the mirror holds (review 24, finding 2). */
+  function handoverFile(rev, next) {
+    const step = { format: 1, kind: "etiuda-team-handover", team: TEAM, to: { keyId: next.keyId, public: next.public }, sig: { alg: "Ed25519", keyId: LEAD.keyId } };
+    step.sig.value = crypto.sign(null, Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), signedBytesOf(step)]), lead.privateKey).toString("hex");
+    return sign({
+      format: 1, kind: "etiuda-team", id: TEAM, catalogs: ["lamp-shop"], lead: { keyId: next.keyId, public: next.public },
+      sealed: true, epoch: 1, rev, roster: [], handover: [step]
+    }, next.priv, next.keyId);
+  }
+  function sibPin(mod, name, rev) {
+    const share = folder(name + "-share");
+    const mirror = folder(name + "-mirror");
+    const nextKey = crypto.generateKeyPairSync("ed25519");
+    const next = { keyId: "lead-next", public: pubHex(nextKey.publicKey), priv: nextKey.privateKey };
+    fs.mkdirSync(path.join(mirror, ".staging"), { recursive: true });
+    fs.writeFileSync(path.join(mirror, "etiuda-team.json"), JSON.stringify(teamFile({ epoch: 1, rev: 10 })), "utf8");
+    const prog = mod.createFolderProgram({ team: TEAM, folder: share, mirror, pin: LEAD, checks, logger: () => {} });
+    const sibName = "etiuda-team (conflicted copy).json";
+    const stage = (rel, doc, tag) => {
+      const tmp = path.join(mirror, ".staging", tag + ".json");
+      fs.writeFileSync(tmp, JSON.stringify(doc), "utf8");
+      const st = fs.statSync(tmp);
+      prog.applyScan({
+        answers: true,
+        listing: [[rel, { size: st.size, mtimeMs: st.mtimeMs }]],
+        staged: [{ relPath: rel, tmpPath: tmp, size: st.size, mtimeMs: st.mtimeMs }]
+      });
+    };
+    try {
+      stage(sibName, handoverFile(rev, next), "sib");
+      const sibLanded = fs.existsSync(path.join(mirror, sibName));
+      /* A file the old lead signs above the sibling: it lands only while the pin is still that lead. */
+      stage("etiuda-team.json", teamFile({ epoch: 1, rev: rev > 10 ? 14 : 11 }), "by-a");
+      let canon = null;
+      try { canon = JSON.parse(fs.readFileSync(path.join(mirror, "etiuda-team.json"), "utf8")); } catch { canon = null; }
+      let newerLanded = false;
+      if (rev > 10) {
+        stage("etiuda-team.json", sign({
+          format: 1, kind: "etiuda-team", id: TEAM, catalogs: ["lamp-shop"],
+          lead: { keyId: next.keyId, public: next.public }, sealed: true, epoch: 1, rev: 15, roster: []
+        }, next.priv, next.keyId), "by-b");
+        try { newerLanded = JSON.parse(fs.readFileSync(path.join(mirror, "etiuda-team.json"), "utf8")).rev === 15; } catch { newerLanded = false; }
+      }
+      return {
+        sibLanded,
+        canonRev: canon && canon.rev,
+        canonLead: canon && canon.lead && canon.lead.keyId,
+        newerLanded
+      };
+    } finally { prog.stop(); }
+  }
+  {
+    const older = sibPin(syncerMod, "r2a-old", 9);
+    const equal = sibPin(syncerMod, "r2a-eq", 10);
+    const nil = sibPin(syncerMod, "r2a-nil", 1.5);
+    const newer = sibPin(syncerMod, "r2a-new", 12);
+    const held = !older.sibLanded && older.canonRev === 11 && older.canonLead === LEAD.keyId
+      && !equal.sibLanded && equal.canonRev === 11 && equal.canonLead === LEAD.keyId
+      && !nil.sibLanded && nil.canonRev === 11 && nil.canonLead === LEAD.keyId;
+    const moved = newer.sibLanded && newer.canonRev === 10 && newer.canonLead === LEAD.keyId && newer.newerLanded === true;
+    check(held && moved,
+      "r2a an older, equal or unreadable conflict sibling does not move the pin or land, a newer one does, and the lead it names then lands: "
+      + JSON.stringify({ older, equal, nil, newer }));
+  }
+  if (PLANTS_OFF) skip("r2b lifting plant:sibling-rev-before-pin lets an older conflict sibling move the pin: NOT RUN");
+  else {
+    const planted = await testPlant("sibling-rev-before-pin", syncerFile, async (scratch) => {
+      const got = sibPin(nodeRequire(scratch), "r2b", 9);
+      return got.canonRev !== 11 || got.canonLead !== LEAD.keyId;
+    });
+    check(planted.ok, "r2b lifting plant:sibling-rev-before-pin lets an older conflict sibling move the pin: " + JSON.stringify(planted));
   }
 
   if (syncerMod && typeof syncerMod.stopAllFolderSyncers === "function") {
