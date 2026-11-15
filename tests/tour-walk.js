@@ -60,13 +60,17 @@ const PLAN = [
   { id: "picker", host: true, next: true, aim: '#settingsMenu [data-act="picker"]' },
   { id: "pickerIn", host: true, onOpen: true, next: true },
   { id: "library", click: ['#settingsMenu [data-act="manage"]'], into: "libraryIn", again: { next: true } },
-  { id: "libraryIn", inside: true, aim: "#screenHost details.manage-sec", back: true, again: { close: '#tabsBar .tab.screen[data-sid="library"] .tab-x' } },
+  { id: "libraryIn", inside: true, aim: '#tabsBar .tab.screen[data-sid="library"]', back: true, again: { next: true } },
+  { id: "libraryRail", next: true, aim: "#libSecs .sx-sec" },
+  { id: "libraryList", next: true, aim: "#libPage .mg-tree > *:not(.lw-head)" },
   { id: "settings", click: ["#settingsBtn", '#settingsMenu [data-act="settings"]'], into: "settingsIn" },
-  { id: "settingsIn", inside: true, aim: "#setBody", next: true },
+  { id: "settingsIn", inside: true, aim: '#tabsBar .tab.screen[data-sid="settings"]', next: true },
+  { id: "settingsRail", next: true, aim: "#sxSecs .sx-sec" },
   { id: "done", next: true }
 ];
-/* The Library and Settings are screen tabs: each inside step's aim is the tab's own content, so a step that
-   follows the tab in but rings nothing, or rings the page under it, is a missed aim. */
+/* The Library and Settings are screen tabs: each step's aim is what it hangs from (the tab in the tab bar, its section
+   rail, the first row of its list), so a step that follows the tab in but rings nothing, or rings the page under it, is a
+   missed aim. Next leaves the tab open; Back from the tab's own step closes it. */
 
 /** The row for a step, on the walk's `visit` to it (1 the first): a second visit takes `again`. */
 function rowOf(id, visit) {
@@ -142,8 +146,8 @@ function LOOK() {
     up: !!root && !root.hidden && getComputedStyle(root).display !== "none" && root.getBoundingClientRect().width > 0,
     next: shown(q("tourNext")), held: !!q("tourNext") && q("tourNext").disabled, back: shown(q("tourPrev")),
     z: root ? getComputedStyle(root).zIndex : "", behind: !!root && root.classList.contains("behind"),
-    window: !!document.querySelector("body > .modal:not([hidden]):not(.e-gone)")
-      || document.body.classList.contains("screen-on"),
+    window: !!document.querySelector("body > .modal:not([hidden]):not(.e-gone)"),
+    screen: document.body.classList.contains("screen-on"),
     facts: shown(q("factsPanel")),
     menu: !!m,
     clear: !m || !c || c.right <= m.left || c.left >= m.right || c.bottom <= m.top || c.top >= m.bottom,

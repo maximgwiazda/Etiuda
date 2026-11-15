@@ -146,8 +146,18 @@ function menuTarget(act){
   return (act && m.querySelector('[data-act="'+act+'"]')) || m;
 }
 const menuSide=()=>menuOpen() ? "left" : null;
-/* THE ACTIVE TAB: when a step explains the chat tab and a screen tab is in front, the tour asks
-   to click an open chat tab (or + where none is open), following the Menu step's pattern. */
+/* THE TAB A STEP NEEDS (`tab`): a conversation's ("chat"), or the Library's or Settings' own. A conversation step met
+   while another tab is in front gives way to the step that asks for one (chatDetour); a step of the Library or Settings
+   stands only while its tab is in front (stepOn). */
+function tabInFront(tab){ return tab==="chat" ? !screenOn : screenOn===tab; }
+function chatDetour(s){
+  if(!s || s.tab!=="chat" || tabInFront("chat")) return false;
+  const ct=TOUR_STEPS.findIndex(x=>x.id==="chatTab");
+  if(ct<0) return false;
+  tourReturnId=s.id;
+  showTourStep(ct);
+  return true;
+}
 function hasChatTab(){
   if(typeof document==="undefined" || typeof document.querySelectorAll!=="function") return false;
   const all=document.querySelectorAll("#tabsBar .tab[data-tid]");
@@ -172,20 +182,29 @@ function openChatTab(){
 }
 // The window each inside step stands in.
 const cardEditorOpen=()=>modalOpen() && !!document.getElementById("meCancel");
-const libraryOpen=()=>screenOn==="library" && !!document.querySelector("#screenHost details.manage-sec");
-const settingsOpen=()=>screenOn==="settings" && !!document.getElementById("setBody");
+/* THE SECTION A STEP IS SHOWN ON (`sec`), pressed in its tab's rail as a person presses it, where another is showing. */
+function tourSection(s){
+  const row=s && s.sec && document.querySelector('#screenHost .sx-sec[data-lm="'+s.sec+'"]');
+  if(row && !row.classList.contains("on")) row.click();
+}
+// The first row of the Library's list as it stands, its section's heading row passed over.
+function libraryFirstRow(){
+  const rows=document.querySelectorAll("#libPage .mg-tree > *");
+  for(let i=0;i<rows.length;i++) if(rows[i].getClientRects().length && !rows[i].classList.contains("lw-head")) return rows[i];
+  return null;
+}
 /* NEXT PRESSES THE STEP'S OWN CONTROL for the person, and only where it stands on screen: never the
    card or the list a step falls back to ringing. */
 function tourPress(el, sel){ if(el && el.matches && el.matches(sel) && el.getClientRects().length) el.click(); }
 // A Menu row, with the Menu opened first where it is shut.
 function tourPressRow(act){ if(!menuOpen()) openSettingsMenu(); tourPress(menuTarget(act), '[data-act="'+act+'"]'); }
-// The window an inside step stands in, closed as the person would close it (and nothing else).
-function shutTourWindow(step){
+/* The window an inside step stands in, closed as the person would close it (and nothing else). A tab is left open on
+   Next, the steps after it being there from any tab, and closed only by Back from the step that went into it. */
+function shutTourWindow(step, back){
   const id=step && step.id;
   if(id==="editor" || id==="addIn"){ if(modalOpen()) closeAllDialogs(); }
   else if(id==="factsIn"){ if(factsPanelOpen()) closeFactsPanel(); }
-  else if(id==="libraryIn"){ if(screenOn==="library") closeScreenTab("library"); }
-  else if(id==="settingsIn"){ if(screenOn==="settings") closeScreenTab("settings"); }
+  else if(back && (step.tab==="library" || step.tab==="settings")){ if(screenOn===step.tab) closeScreenTab(step.tab); }
 }
 /* THE PICKER'S STEP, where the shell holds a combination: done once the picker opens while this step
    is shown (pick.js says when it does); Next simply moves on without opening the picker. */
@@ -237,8 +256,8 @@ const TOUR_STEPS=[
     sel:()=>chatTabTarget(),
     title:"A conversation",
     body:"The next steps are about a conversation. Click a conversation's tab to carry on.",
-    when:()=>!!screenOn,
-    done:()=>!screenOn,
+    when:()=>!tabInFront("chat"),
+    done:()=>tabInFront("chat"),
     open:()=>openChatTab(),
     pad:8
   },
@@ -249,7 +268,7 @@ const TOUR_STEPS=[
     sel:"#emptyLoad",
     title:"A catalog of replies",
     body:loadStepBody,
-    chat:true,
+    tab:"chat",
     when:()=>wholeThingEmpty(),
     waits:true,
     pad:6
@@ -257,7 +276,7 @@ const TOUR_STEPS=[
   {
     id:"pax",
     sel:".field-wrap.paxrole",
-    chat:true,
+    tab:"chat",
     title:()=>wheelShown() ? "Customer name and role" : "The customer's name",
     body:()=>wheelShown()
       ? "The customer's name goes here as the chat gives it, surname and capitals included, and every reply greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>). The wheel beside it says who is on the chat, for internal comments."
@@ -267,7 +286,7 @@ const TOUR_STEPS=[
   {
     id:"search",
     sel:"#intentComboWrap",
-    chat:true,
+    tab:"chat",
     title:"Search",
     body:"A word near what the customer means, such as 'refund', is enough: the intents on the left rank themselves and the cards narrow to match, in both languages. <kbd>Enter</kbd> picks the marked intent, and <kbd>Esc</kbd> clears the box.",
     pad:6
@@ -275,7 +294,7 @@ const TOUR_STEPS=[
   {
     id:"rail",
     sel:"#intentRail",
-    chat:true,
+    tab:"chat",
     title:"Intent panel",
     body:"An intent names what the customer has come about. A click on one brings its replies forward, ringed <b class=\"t-go\">green</b>, with its phrase filling <span class=\"fillmiss\">INTENT</span> wherever a reply uses it. <kbd>Ctrl</kbd>+click picks several, and the star keeps the ones used most at the top.",
     pad:8,
@@ -284,7 +303,7 @@ const TOUR_STEPS=[
   {
     id:"cards",
     sel:()=>tourPickFirstCard()||$("#list"),
-    chat:true,
+    tab:"chat",
     title:"Cards",
     body:"A click on a reply copies the whole of it, greeting, name and signature filled in, ready to paste into the chat. A card marked <b>1/2</b> or <b>STEP 1/3</b> holds several, each copied on its own. <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> do the same from the keyboard.",
     pad:6,
@@ -293,7 +312,7 @@ const TOUR_STEPS=[
   {
     id:"pills",
     sel:"#pills",
-    chat:true,
+    tab:"chat",
     title:"Category pills",
     body:"A click on a category shows only its cards, and <kbd>Ctrl</kbd>+click keeps several. A <b class=\"t-go\">green</b> ring marks one holding a card for the chosen intent, and a <b class=\"t-acc\">blue</b> one a supporting category, useful for any question.",
     pad:8,
@@ -310,7 +329,7 @@ const TOUR_STEPS=[
   {
     id:"seg",
     sel:"#seg",
-    chat:true,
+    tab:"chat",
     title:"English / Polish",
     // A function, not a string: the key it names is rebindable, so it is read at show time
     body:()=>t("Replies in this conversation follow the language chosen here, so each customer is answered in their own. {KEY} switches it from anywhere.")
@@ -318,12 +337,12 @@ const TOUR_STEPS=[
     pad:6
   },
   /* A STEP THAT OPENS A WINDOW (`opens`) moves on when the person opens it or when Next opens it for
-     them (`open`); the step inside (`inside`) stands while its window does, and its Next or Back
-     closes the window before moving. */
+     them (`open`); the step inside (`inside`) stands while its window does. Its Back closes the window,
+     and so does its Next, but for a tab, which stays for the steps hung from it (shutTourWindow). */
   {
     id:"buttons",
     sel:()=>cardBtn(".cacts"),
-    chat:true,
+    tab:"chat",
     prep:tourRevealCardActions,
     title:"A card's buttons",
     body:"The star lifts a card to the top of its category, and under <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> into <b class=\"t-fav\"><span data-icon=\"star\"></span>Favourites</b>.<br>The eye puts it away, greyed at the foot of its category, and brings it back from there.<br>The pencil opens it for editing, and <b>Reset</b> in the editor brings back the catalog's own words.<br>Click the pencil on this card.",
@@ -347,7 +366,7 @@ const TOUR_STEPS=[
   {
     id:"add",
     sel:"#addCardFab",
-    chat:true,
+    tab:"chat",
     title:"A card of your own",
     body:()=>t("Click <b>+</b> to write a card of your own, in the category open now or in any other chosen in the editor.")
       +" "+t("Once the window is open, the tour goes inside with it."),
@@ -441,15 +460,34 @@ const TOUR_STEPS=[
     menu:true,
     pad:8
   },
+  /* THE LIBRARY AND SETTINGS, EACH FROM WHAT IS ON SCREEN: the tab in the tab bar, its section rail, and (the Library's)
+     the first row of its list. Next leaves the tab open. */
   {
     id:"libraryIn",
-    sel:"#screenHost",
+    sel:'#tabsBar .tab.screen[data-sid="library"]',
+    tab:"library",
     inside:true,
-    when:libraryOpen,
     pad:4,
     title:"Library",
-    body:()=>t("<b><span data-icon=\"settings\"></span> → Library</b> holds every card, intent and category, to add, edit, hide or move. Catalog files are loaded here too, and your own improvements go out from here as a file for whoever keeps the wording.")
-      +" "+t("The tour carries on once this tab is closed.")
+    body:"The Library has a tab of its own, beside the conversations. The whole catalog is here."
+  },
+  {
+    id:"libraryRail",
+    sel:"#libSecs",
+    tab:"library",
+    side:"right",
+    pad:6,
+    title:"Library",
+    body:"Its parts are on the left: the categories and cards, the intents, and the catalog's files, where a catalog is loaded and your own improvements go out as a file for whoever keeps the wording."
+  },
+  {
+    id:"libraryList",
+    sel:()=>libraryFirstRow(),
+    tab:"library",
+    sec:"catmac",
+    pad:4,
+    title:"Library",
+    body:"A click on a row opens it, to edit, hide or move."
   },
   {
     id:"settings",
@@ -465,13 +503,21 @@ const TOUR_STEPS=[
   },
   {
     id:"settingsIn",
-    sel:"#screenHost",
+    sel:'#tabsBar .tab.screen[data-sid="settings"]',
+    tab:"settings",
     inside:true,
-    when:settingsOpen,
     pad:4,
     title:"Settings",
-    body:()=>t("<b><span data-icon=\"settings\"></span> → Settings</b>: your name, the language of the buttons, the look and the shortcuts. Nothing here touches a card.")
-      +" "+t("The tour carries on once this tab is closed.")
+    body:"Settings has a tab of its own too. Nothing here touches a card."
+  },
+  {
+    id:"settingsRail",
+    sel:"#sxSecs",
+    tab:"settings",
+    side:"right",
+    pad:6,
+    title:"Settings",
+    body:"The parts are on the left: <b>General</b> for the language, <b>Appearance</b> for the look, and <b>Keyboard shortcuts</b> for every shortcut, Quick replies' included."
   },
   {
     id:"done",
@@ -481,8 +527,8 @@ const TOUR_STEPS=[
     pad:10
   }
 ];
-// A step is on when it has no condition or its condition holds now.
-function stepOn(i){ const s=TOUR_STEPS[i]; return !!s && (!s.when || s.when()); }
+// A step is on when its condition holds now, and a step of the Library or Settings while its tab is in front.
+function stepOn(i){ const s=TOUR_STEPS[i]; return !!s && (!s.when || s.when()) && (!s.tab || s.tab==="chat" || tabInFront(s.tab)); }
 function onFrom(i,dir){ for(let j=i; j>=0 && j<TOUR_STEPS.length; j+=dir) if(stepOn(j)) return j; return -1; }
 /* NEXT ON EVERY STEP, held back only where the steps after need the person's own act (`waits`) and
    its control is on screen. */
@@ -506,10 +552,7 @@ function tourActSoon(){
 function tourActCheck(){
   const step=TOUR_STEPS[tourIdx];
   if(!step) return;
-  if(step.chat && screenOn){
-    const ct=TOUR_STEPS.findIndex(x=>x.id==="chatTab");
-    if(ct>=0){ tourReturnId=step.id; showTourStep(ct); return; }
-  }
+  if(chatDetour(step)) return;
   if(step.done && step.done()){ tourOn(); return; }
   if(!stepOn(tourIdx)){ showTourStep(onFrom(tourIdx+1,1)); return; }
   if(step.opens){ tourFollowWindow(); return; }
@@ -726,10 +769,7 @@ function scheduleTourPlace(){
 function showTourStep(i){
   if(i<0||i>=TOUR_STEPS.length){ endTour(true); return; }
   const next=TOUR_STEPS[i];
-  if(next && next.chat && screenOn){
-    const ct=TOUR_STEPS.findIndex(x=>x.id==="chatTab");
-    if(ct>=0){ tourReturnId=next.id; showTourStep(ct); return; }
-  }
+  if(chatDetour(next)) return;
   // Whether the keyboard is driving the tour: only then does a new step take the focus.
   const keyed=tourHasFocus();
   tourIdx=i;
@@ -747,6 +787,7 @@ function showTourStep(i){
      pointed at, and without this the lock persisted past the step, past the tour, and past
      the session - the panel sat over the cards of every later step and stayed. */
   runTourStepUndo();
+  tourSection(step);
   if(step.prep){
     try{ step.prep(); }catch(_){}
   }
@@ -998,8 +1039,8 @@ function observeTourTarget(tb){
     if(tb && tb.nodeType===1) tourTargetRO.observe(tb);
   }catch(_){}
 }
-/* NEXT DOES FOR THE PERSON WHAT THE STEP ASKS: it closes the window a step stands inside, opens the
-   one a step invites them to open and follows it in, and moves on. */
+/* NEXT DOES FOR THE PERSON WHAT THE STEP ASKS: it closes the pop-up a step stands inside, opens the
+   window a step invites them to open and follows it in, and moves on. */
 function tourNext(){
   if(!tourRunning) return;
   const step=TOUR_STEPS[tourIdx];
@@ -1010,7 +1051,7 @@ function tourNext(){
     const inp=$("#tourName"), v=inp ? inp.value.trim() : "";
     if(v) keepAgentName(v); else if(agentName()) setAgentName("");
   }
-  if(step.inside) shutTourWindow(step);
+  if(step.inside) shutTourWindow(step, false);
   if(step.open){
     try{ step.open(); }catch(_){}
     if(tourFollowWindow()) return;
@@ -1033,7 +1074,7 @@ function tourOn(){
 function tourPrev(){
   if(!tourRunning) return;
   const step=TOUR_STEPS[tourIdx];
-  if(step && step.inside) shutTourWindow(step);
+  if(step && step.inside) shutTourWindow(step, true);
   tourReturnId="";
   const n=onFrom(tourIdx-1,-1);
   if(n>=0) showTourStep(n);
@@ -1052,7 +1093,7 @@ function wireTourUi(){
   // A window opening or closing over the page moves the bubble behind it or back.
   if(typeof MutationObserver==="function"){
     try{
-      const mo=new MutationObserver(()=>{ if(tourRunning){ const s=TOUR_STEPS[tourIdx]; if(s && s.chat && screenOn){ const ct=TOUR_STEPS.findIndex(x=>x.id==="chatTab"); if(ct>=0){ tourReturnId=s.id; showTourStep(ct); return; } } if(!tourFollowWindow()) syncTourBehind(); scheduleTourPlace(); } });
+      const mo=new MutationObserver(()=>{ if(tourRunning){ if(chatDetour(TOUR_STEPS[tourIdx])) return; if(!tourFollowWindow()) syncTourBehind(); scheduleTourPlace(); } });
       mo.observe(document.body,{childList:true});
       const shared=$("#modal");
       if(shared) mo.observe(shared,{attributes:true, attributeFilter:["hidden","class"]});   // class: an editor resting or back in front

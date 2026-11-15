@@ -21,6 +21,11 @@
  *       host stood in for and answered by the desk page's own "open"): above the search box, the pointer on the box,
  *       the rows below it uncovered, the room it reports what it takes; the desk's bubble stands aside meanwhile, and
  *       the window's Next moves the desk's tour on; English light and Polish dark
+ *   b8  the tour's steps that hang from a tab: the Library's tab, its section rail and the first row of its list,
+ *       Settings' tab and its rail, each walked by the tour's own Next from the Menu's Library step, and the step back
+ *       to a conversation from the conversation's tab with Settings in front; the pointer within the control's span and
+ *       no further than the tour's gap (12 px) and a pixel from its ring, the ring round the control, the Library's tab
+ *       still open when Settings' steps stand; English light and Polish dark
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -40,7 +45,7 @@ const check = (ok, what, detail) => {
   if (!ok) fails++;
 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 13;
+const EXPECTED = 15;
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-bubbles-"));
 fs.copyFileSync(E.ENGINE_PATH, path.join(lab, "etiuda.html"));
@@ -408,6 +413,9 @@ function pickerDocFile() {
 }
 async function runQuickReplies(lang, theme) {
   const label = "b7 " + lang + " " + theme + ": the Quick replies window carries the tour's step, from its search box, over no row, and its Next moves the tour on";
+  /* The desk under a host reads its catalog from the host, which this stand-in has none of: a plain boot first leaves the
+     sample catalog in this browser's storage, so the desk below opens holding it whatever ran before. */
+  await (await boot({ lang, theme })).close();
   const desk = await browser.newPage();
   await desk.setViewport({ width: 1280, height: 860, deviceScaleFactor: 1 });
   await desk.evaluateOnNewDocument((lang, theme) => {
@@ -473,6 +481,69 @@ async function runQuickReplies(lang, theme) {
   check(!!(r && r.ok), label, r);
 }
 
+/* THE TOUR'S STEPS FROM A TAB. Each is reached by the tour's own Next and measured against the control it names. */
+const TOUR_AT = String.raw`window.__tourAt = function(ctl){
+  const bub=document.getElementById("tourCard"), hole=document.getElementById("tourHole");
+  const side=bub.getAttribute("data-side"), tip=bub.querySelector(":scope > .bub-tip");
+  if(!ctl || !ctl.getClientRects().length) return {why:"no control on screen", side:side};
+  if(!tip || !tip.getClientRects().length) return {why:"no pointer", side:side};
+  const t=tip.getBoundingClientRect(), c=ctl.getBoundingClientRect(), h=hole.getBoundingClientRect();
+  let perp, along, lo, hi;
+  if(side==="below"){ perp=t.top-h.bottom; along=t.left+t.width/2; lo=c.left; hi=c.right; }
+  else if(side==="above"){ perp=h.top-t.bottom; along=t.left+t.width/2; lo=c.left; hi=c.right; }
+  else if(side==="right"){ perp=t.left-h.right; along=t.top+t.height/2; lo=c.top; hi=c.bottom; }
+  else if(side==="left"){ perp=h.left-t.right; along=t.top+t.height/2; lo=c.top; hi=c.bottom; }
+  else return {why:"side "+side};
+  const b=bub.getBoundingClientRect(), shown=b.top>=-1 && b.left>=-1 && b.bottom<=innerHeight+1 && b.right<=innerWidth+1;
+  const ringed=h.left<=c.left+1 && h.top<=Math.max(0,c.top)+1 && h.right>=c.right-1 && h.bottom>=c.bottom-1;
+  const ok=shown && ringed && perp>=-2 && perp<=13 && along>=lo-0.5 && along<=hi+0.5;
+  return {ok:ok, side:side, perp:Math.round(perp*10)/10, along:Math.round(along), span:[Math.round(lo),Math.round(hi)], ringed:ringed};
+};`;
+async function runTourTabs(lang, theme) {
+  const label = "b8 " + lang + " " + theme + ": the tour's Library and Settings steps hang from the tab, the rail and the list, and the step back to a conversation from its tab";
+  const page = await boot({ lang, theme });
+  const bad = [], seen = [];
+  const stand = id => page.waitForFunction(id => sessionStorage.getItem("eTourAt") === id, { timeout: 8000 }, id).then(() => true, () => false);
+  const next = () => page.evaluate(() => document.getElementById("tourNext").click());
+  const at = async (id, ctl) => {
+    if (!await stand(id)) { bad.push({ id, why: "the tour stands on " + await page.evaluate(() => sessionStorage.getItem("eTourAt")) }); return; }
+    await sleep(500);
+    await page.evaluate(TOUR_AT);
+    const r = await page.evaluate(ctl => window.__tourAt(typeof ctl === "string" ? document.querySelector(ctl)
+      : [...document.querySelectorAll(ctl.all)].find(e => e.getClientRects().length && !e.classList.contains("lw-head"))), ctl);
+    seen.push(id + ":" + r.side);
+    if (!r.ok) bad.push(Object.assign({ id }, r));
+  };
+  try {
+    await page.evaluate(() => { sessionStorage.setItem("eTourAt", "library"); maybeStartTour(); });
+    await page.waitForFunction(() => sessionStorage.getItem("eTourAt") === "library" && !document.getElementById("tourRoot").hidden, { timeout: 15000 });
+    await sleep(400);
+    await next();
+    await at("libraryIn", '#tabsBar .tab.screen[data-sid="library"]');
+    await next();
+    await at("libraryRail", "#libSecs");
+    await next();
+    await at("libraryList", { all: "#libPage .mg-tree > *" });
+    await next();
+    await stand("settings");
+    await sleep(400);
+    await next();
+    await at("settingsIn", '#tabsBar .tab.screen[data-sid="settings"]');
+    const libStays = await page.evaluate(() => !!document.querySelector('#tabsBar .tab.screen[data-sid="library"]'));
+    if (!libStays) bad.push({ id: "settingsIn", why: "the Library's tab was closed by the tour" });
+    await next();
+    await at("settingsRail", "#sxSecs");
+    await page.evaluate(() => { endTour(true); startTour(0); });
+    await stand("name");
+    await sleep(400);
+    await next();
+    await at("chatTab", "#tabsBar .tab[data-tid]");
+  } catch (e) { bad.push({ why: "crashed: " + String(e && e.message || e).split(String.fromCharCode(10))[0] }); }
+  if (process.env.BUB_LOG) console.log("       " + seen.join(" ") + " " + JSON.stringify(bad));
+  await page.close();
+  check(!bad.length && seen.length === 6, label + " (" + seen.join(", ") + ")", bad);
+}
+
 async function runQuestions(page, label) {
   const bad = [];
   for (const [what, act] of QUESTIONS) {
@@ -514,6 +585,8 @@ try {
   }
   await runQuickReplies("en", "light");
   await runQuickReplies("pl", "dark");
+  await runTourTabs("en", "light");
+  await runTourTabs("pl", "dark");
   check(!shapeBad.length, "b6 the confirmations' way out is filled and last, the acting choice first on the fill's dark (" + SHAPES.length + ", light and dark)", shapeBad);
 } catch (e) {
   check(false, "run crashed: " + (e && e.stack ? e.stack.split("\n").slice(0, 3).join(" | ") : e));
