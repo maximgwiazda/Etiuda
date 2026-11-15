@@ -18,6 +18,7 @@
  *               pointer reaches one; leaving the rows, none; opened by the keys, the first; an arrow key moves the one mark)
  *   ilm5, ilm6  the marked menu row is Studio's quiet fill, its step above the ground Studio's, no ring, the icon dim, no fade
  *   ilm7        an object's menu keeps one mark under the pointer and the keys
+ *   ils1, ils2  the selected tab wears no colour spine, dark and light (Max: "please get rid of it")
  * Exit code is the number of failed checks; 78 when the run could not complete.
  */
 import fs from "node:fs";
@@ -217,6 +218,16 @@ try {
     }
   }
   // menu>>
+
+  // <<spine
+  EXPECTED += 2;
+  for (const theme of ["dark", "light"]) {
+    const p = await boot(browser, theme);
+    const after = await p.evaluate(() => { const t = document.querySelector("#tabsBar .tab.on"); return t ? getComputedStyle(t, "::after").content : null; });
+    check(after === "none", "ils" + (theme === "dark" ? 1 : 2) + " " + theme + ": the selected tab wears no colour spine over its shoulders", after);
+    await closePage(p);
+  }
+  // spine>>
 
   done = true;
 } catch (e) {
