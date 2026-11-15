@@ -200,6 +200,13 @@ function loadShell(opts) {
     }
     return planted;
   } };
+  /* The read again without waiting (win-proxy.cjs readKeyLater): the same planted answers, handed back on a later turn, a
+     failure carrying its exit code as execFile's does. */
+  cp.execFile = (file, args, opt, cb) => {
+    let out, err = null;
+    try { out = cp.execFileSync(file, args, opt); } catch (e) { err = e; if (err && err.code === undefined && err.status !== undefined) err.code = err.status; }
+    setImmediate(() => cb(err, err ? "" : out));
+  };
   const clock = o.clock || { setTimeout: setTimeout, clearTimeout: clearTimeout };
   /* A file of the shell's own that main.js requires from beside itself is evaluated here too, so the
      stand-ins above reach its own requires: the planted reg tool is the proxy reader's. */
@@ -1148,7 +1155,7 @@ try {
         "6w a setup script left beside an enabled server gives way to the server where the Connections flags leave the script off"
         + " (0x03, 0x01), and is followed where they turn it on (0x05) or cannot be read: " + JSON.stringify(lc));
       /* A desk started direct only, then moved to a network whose proxy Windows names: the session is told, once a minute at most. */
-      const laterCase = o => {
+      const laterCase = async o => {
         let phase = "direct";
         const set = [];
         const S = loadShell(Object.assign({ isReady: true, session: { defaultSession: { setProxy: cfg => { set.push(cfg); return Promise.resolve(); } } },
@@ -1156,31 +1163,34 @@ try {
             [POLICY_KEY]: regDump([], POLICY_KEY), [USER_KEY]: serverOn(USER_KEY, "proxy.example.test:3128"), [USER_CONN_KEY]: connDump(0x03, USER_CONN_KEY) })(args) }, o));
         const start = asked(S), r0 = S.regCalls.length;
         phase = "server";
-        if (S.api.proxyRecheck) S.api.proxyRecheck(new Error("net::ERR_NAME_NOT_RESOLVED"));
+        /* The read again does not hold the process: when proxyRecheck returns, the session has been told nothing yet. */
+        const running = S.api.proxyRecheck ? S.api.proxyRecheck(new Error("net::ERR_NAME_NOT_RESOLVED")) : null;
+        const atReturn = set.length;
+        await running;
         const r1 = S.regCalls.length;
-        if (S.api.proxyRecheck) S.api.proxyRecheck(new Error("net::ERR_CONNECTION_TIMED_OUT"));
-        return { start, set, reads: [r1 - r0, S.regCalls.length - r1] };
+        if (S.api.proxyRecheck) await S.api.proxyRecheck(new Error("net::ERR_CONNECTION_TIMED_OUT"));
+        return { start, atReturn, set, reads: [r1 - r0, S.regCalls.length - r1] };
       };
-      const LATER_WANT = '{"start":["no-proxy-server"],"set":[{"mode":"fixed_servers","proxyRules":"proxy.example.test:3128"}],"reads":[3,0]}';
-      const lt = laterCase();
+      const LATER_WANT = '{"start":["no-proxy-server"],"atReturn":0,"set":[{"mode":"fixed_servers","proxyRules":"proxy.example.test:3128"}],"reads":[3,0]}';
+      const lt = await laterCase();
       check(JSON.stringify(lt) === LATER_WANT,
-        "6x a desk started direct only reads Windows again when a call fails, and hands the session the server Windows now names;"
+        "6x a desk started direct only reads Windows again when a call fails, without holding the process while the reg tool answers, and hands the session the server Windows now names;"
         + " a second failure within the minute reads nothing: " + JSON.stringify(lt));
-      const stillCase = o => {
+      const stillCase = async o => {
         const set = [];
         const S = loadShell(Object.assign({ isReady: true, session: { defaultSession: { setProxy: cfg => { set.push(cfg); return Promise.resolve(); } } },
           reg: regKeys(Object.assign({ [POLICY_KEY]: regDump([], POLICY_KEY) }, quietUser)) }, o));
         const r0 = S.regCalls.length;
         if (S.api.proxyRecheck) {
-          S.api.proxyRecheck(Object.assign(new Error("aborted"), { name: "AbortError" }));
-          S.api.proxyRecheck(new Error("net::ERR_INTERNET_DISCONNECTED"));
+          await S.api.proxyRecheck(Object.assign(new Error("aborted"), { name: "AbortError" }));
+          await S.api.proxyRecheck(new Error("net::ERR_INTERNET_DISCONNECTED"));
         }
         const r1 = S.regCalls.length;
-        if (S.api.proxyRecheck) S.api.proxyRecheck(new Error("net::ERR_NAME_NOT_RESOLVED"));
+        if (S.api.proxyRecheck) await S.api.proxyRecheck(new Error("net::ERR_NAME_NOT_RESOLVED"));
         return { reads: [r1 - r0, S.regCalls.length - r1], set: set.length };
       };
       const STILL_WANT = '{"reads":[0,3],"set":0}';
-      const st = stillCase();
+      const st = await stillCase();
       const wired = SRC.split(".catch(e => { proxyRecheck(e); throw e; }); /* plant:desk-fetch-login */").length === 2
         && SRC.split('powerMonitor.on("resume", () => { resumeFromSleep(theWindow); proxyCheckedAt = 0; proxyRecheck(); });').length === 2;
       check(JSON.stringify(st) === STILL_WANT && wired,
@@ -1200,14 +1210,14 @@ try {
         ["win", "plant:proxy-bypass", "/^\\S{1,2048}$/.test(bypass) ?", "false ?",
           o => JSON.stringify(asked(loadShell(Object.assign({ reg: userOnly(regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", "proxy.example.test:3128"],
             ["ProxyOverride", "REG_SZ", "<local>"]])) }, o)))) !== '["proxy-server=proxy.example.test:3128","proxy-bypass-list=<local>"]'],
-        ["win", "plant:proxy-change-same", null, null, o => JSON.stringify(stillCase(o)) !== STILL_WANT],
-        ["main", "plant:proxy-recheck-bound", null, null, o => JSON.stringify(laterCase(o)) !== LATER_WANT],
+        ["win", "plant:proxy-change-same", null, null, async o => JSON.stringify(await stillCase(o)) !== STILL_WANT],
+        ["main", "plant:proxy-recheck-bound", null, null, async o => JSON.stringify(await laterCase(o)) !== LATER_WANT],
       ];
       for (const [where, mark, from, to, red] of PROXY_PLANTS) {
         if (PLANTS_OFF) { skip("6P " + mark + " turns its leg red (ETIUDA_PLANTS=off)"); continue; }
         const text = planted(where === "win" ? WIN_SRC : SRC, mark, from, to);
         let turned = false;
-        try { turned = text !== null && red(where === "win" ? { ownSrc: { "win-proxy.cjs": text } } : { src: text }); } catch (e) { turned = false; }
+        try { turned = text !== null && await red(where === "win" ? { ownSrc: { "win-proxy.cjs": text } } : { src: text }); } catch (e) { turned = false; }
         check(turned, "6P " + (from ? "rewriting " : "lifting ") + mark + " turns its leg red" + (text === null ? ": the mark is not on one line" : ""));
       }
     } finally { Object.defineProperty(process, "platform", platformWas); }

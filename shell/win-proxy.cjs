@@ -2,9 +2,11 @@
 /* WINDOWS' OWN PROXY SETTING, read before Chromium starts so that a proxy a company has configured is
    followed, and again where the shell asks (windowsProxyChange). The one program it starts is Windows'
    reg tool at its fixed system path, asked for three keys, each once a read: machine policy, then either the user's or the machine's Internet Settings and
-   Connections. A second program, or a key beside those, is a change to that program's check first.
+   Connections. A second program, or a key beside those, is a change to that program's check first. The read before Chromium starts
+   waits for its answer (execFileSync); a read again while the desk runs never does (execFile), so a slow reg tool freezes nothing
+   (the test architect's read of Grok's review 7, 2026-11-15).
    CommonJS, so a shell can require it. */
-const { execFileSync } = require("node:child_process");
+const { execFile, execFileSync } = require("node:child_process");
 
 const REG_TOOL = "C:\\Windows\\System32\\reg.exe";
 const POLICY_KEY = "HKLM\\Software\\Policies\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
@@ -65,6 +67,18 @@ function readKey(key) {
   }
 }
 
+/** The same read without waiting: the answer, or a failure judged as readKey judges it. */
+function readKeyLater(key) {
+  return new Promise(resolve => {
+    execFile(REG_TOOL, ["query", key], { encoding: "utf8", windowsHide: true, timeout: 5000 }, (e, out) => {
+      if (!e) { resolve({ ok: true, text: String(out || "") }); return; }
+      const code = e.code !== undefined ? e.code : e.status;
+      const isMissing = code === 1 && !/did not answer/i.test(String(e.message || ""));
+      resolve({ ok: isMissing, text: "", failed: !isMissing });
+    });
+  });
+}
+
 /* The keys asked for in turn, each read handed back to it. A proxy named in the machine policy key itself is followed before the settings it would override, and the
    Connections flags are read whenever the settings are, since they judge a script named beside a server. */
 function* askWindows() {
@@ -89,6 +103,13 @@ function readWindows() {
   while (!step.done) step = ask.next(readKey(step.value));
   return step.value;
 }
+/** The same questions, each answer awaited, so the process goes on while the reg tool answers. */
+async function readWindowsLater() {
+  const ask = askWindows();
+  let step = ask.next();
+  while (!step.done) step = ask.next(await readKeyLater(step.value));
+  return step.value;
+}
 let lastAnswer = null;
 /** What Windows is set to now, as switches. Any system but Windows or a failed read leaves Chromium's resolver. */
 function windowsProxySwitches() {
@@ -107,10 +128,10 @@ function proxyConfigOf(switches) {
   return { mode: "system" };
 }
 
-/** Windows' setting read again, as the session's proxy config where it differs from the last read, else null. */
-function windowsProxyChange() {
+/** Windows' setting read again, without waiting, as the session's proxy config where it differs from the last read, else null. */
+async function windowsProxyChange() {
   if (process.platform !== "win32") return null;
-  const out = readWindows(), now = JSON.stringify(out);
+  const out = await readWindowsLater(), now = JSON.stringify(out);
   if (now === lastAnswer) return null; /* plant:proxy-change-same */
   lastAnswer = now;
   return proxyConfigOf(out);

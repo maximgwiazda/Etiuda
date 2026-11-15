@@ -120,15 +120,21 @@ for (const s of windowsProxySwitches()) app.commandLine.appendSwitch(...s);
 /* Those switches hold for the run, so Windows' setting is read again where it may have changed: after sleep, and when a
    call fails other than for being offline, at most once a minute. A change goes to the session, which resolves by it. */
 const PROXY_RECHECK_MS = 60 * 1000;
-let proxyCheckedAt = 0;
+let proxyCheckedAt = 0, proxyChecking = null;
+/* The read again waits on nothing here: the reg tool answers in its own time and the session is told when it does. One read
+   at a time; the promise is handed back so a caller that wants the answer can wait for it. */
 function proxyRecheck(e) {
   try {
-    if (e && (e.name === "AbortError" || /ERR_INTERNET_DISCONNECTED/.test(String(e.message || "")))) return;
-    if (!app.isReady() || Date.now() - proxyCheckedAt < PROXY_RECHECK_MS) return; /* plant:proxy-recheck-bound */
+    if (e && (e.name === "AbortError" || /ERR_INTERNET_DISCONNECTED/.test(String(e.message || "")))) return null;
+    if (proxyChecking) return proxyChecking;
+    if (!app.isReady() || Date.now() - proxyCheckedAt < PROXY_RECHECK_MS) return null; /* plant:proxy-recheck-bound */
     proxyCheckedAt = Date.now();
-    const cfg = windowsProxyChange();
-    if (cfg) Promise.resolve(session.defaultSession.setProxy(cfg)).catch(() => { /* the switches stand */ });
-  } catch { /* the switches stand */ }
+    proxyChecking = Promise.resolve(windowsProxyChange())
+      .then(cfg => (cfg ? Promise.resolve(session.defaultSession.setProxy(cfg)) : null))
+      .catch(() => { /* the switches stand */ })
+      .then(() => { proxyChecking = null; });
+    return proxyChecking;
+  } catch { return null; /* the switches stand */ }
 }
 /* A PROXY THAT ASKS FOR A SIGN-IN (shell/proxy-net.cjs): every call the shell makes goes through deskFetch, and a challenge
    Chromium cannot answer with the Windows account is asked of the person on the page, once per proxy, the answer held in
