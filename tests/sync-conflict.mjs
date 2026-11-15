@@ -1,12 +1,13 @@
-/* SYNC-CONFLICT COPIES, recognised by identity (board 945, item 3).
+/* SYNC-CONFLICT COPIES, recognised by identity (board 945, item 3; review 24, finding 3).
  *
  *     node tests/sync-conflict.mjs
  *
- * A copy a sync client makes of a file it could not reconcile is not a second catalog and not a
- * second team file. The Library shows one row per catalog id, the newest genuine edition. A
- * conflict sibling of etiuda-team.json that is a genuine team file at a higher epoch or rev is
- * the team file the desk heeds, and the floor still refuses an older one. Nothing in the folder
- * is renamed or deleted. The plant lines are removed only in a scratch copy of shell/main.js.
+ * A copy a sync client makes of a file it could not reconcile stays listed under its own name,
+ * beside the other edition of the same catalog. Nothing is merged and nothing in the folder is
+ * renamed or deleted. A direct edit named as the conflict copy writes the canonical file, and the
+ * read that supplies the compare is that same file. A conflict sibling of etiuda-team.json that
+ * is a genuine team file at a higher epoch or rev is the team file the desk heeds, and the floor
+ * still refuses an older one. The plant lines are removed only in a scratch copy of shell/main.js.
  *
  * Invented catalogs, keys and teams only.
  */
@@ -24,12 +25,17 @@ const nodeRequire = createRequire(import.meta.url);
 const V2 = await import(pathToFileURL(path.join(ROOT, "src", "modules", "catalog-v2.js")).href);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 
-const EXPECTED = 21;
+const EXPECTED = 24;
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0;
 function check(ok, line) {
   asserted++;
   if (ok) process.stdout.write("  ok   " + line + "\n");
   else { failed++; process.stdout.write("  FAIL " + line + "\n"); }
+}
+function skip(line) {
+  asserted++;
+  process.stdout.write("  skip " + line + "\n");
 }
 const sha = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
 const fileSha = (p) => sha(fs.readFileSync(p));
@@ -142,7 +148,7 @@ function scratchSource(tag) {
 try {
   const homeSrc = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 
-  /* ---- the Library: one row per catalog id --------------------------------------------------- */
+  /* ---- the Library: both editions of one catalog stay listed ---------------------------------- */
   {
     const { ud, folder } = fresh();
     const plain = catalog("lamp-board", 1), newer = catalog("lamp-board", 4);
@@ -164,14 +170,16 @@ try {
     const one = rowsOf(rows, "one-board"), sync = rowsOf(rows, "sync-board");
     const tea = rowsOf(rows, "tea-board");
     const blanks = (rows || []).filter(r => !r.id);
-    check(lamp.length === 1 && lamp[0].rev === 4 && lamp[0].name === "guide (1).ec" && lamp[0].cards > 0
+    check(lamp.length === 2 && lamp.some(r => r.rev === 4 && r.name === "guide (1).ec" && r.cards > 0)
+      && lamp.some(r => r.rev === 1 && r.name === "guide.ec" && r.cards > 0)
       && sameSnap(before, snap(folder)),
-      "f3a one row for one catalog id: the newer conflict copy, and the folder's bytes are unchanged ("
-      + lamp.length + " row(s), rev " + (lamp[0] && lamp[0].rev) + ")");
-    check(drop.length === 1 && drop[0].rev === 7 && one.length === 1 && one[0].rev === 8
-      && sync.length === 1 && sync[0].rev === 6,
-      "f3b a Dropbox, OneDrive and Syncthing copy each collapse to the newer rev ("
-      + [drop[0] && drop[0].rev, one[0] && one[0].rev, sync[0] && sync[0].rev].join(", ") + ")");
+      "f3a both editions of one catalog stay listed, and the folder's bytes are unchanged ("
+      + lamp.map(r => r.name + " rev " + r.rev).join(", ") + ")");
+    check(drop.length === 2 && drop.some(r => r.rev === 7) && drop.some(r => r.rev === 2)
+      && one.length === 2 && one.some(r => r.rev === 8) && one.some(r => r.rev === 3)
+      && sync.length === 2 && sync.some(r => r.rev === 6) && sync.some(r => r.rev === 2),
+      "f3b a Dropbox, OneDrive and Syncthing copy each stay listed beside the other edition ("
+      + [drop.length, one.length, sync.length].join(", ") + ")");
     check(tea.length === 1 && tea[0].name === "other.ec" && blanks.length === 1,
       "f3c THE CONTROL: a second catalog stays its own row, and a file that will not parse stays its own row ("
       + tea.length + " and " + blanks.length + ")");
@@ -196,14 +204,15 @@ try {
     const A = boot(ud);
     const rows = await A.ask("etiuda:catalog-files");
     const signed = rowsOf(rows, "signed-board"), both = rowsOf(rows, "both-board"), tie = rowsOf(rows, "tie-board");
-    check(signed.length === 1 && signed[0].rev === 2 && signed[0].name === "signed.ec" && signed[0].cards > 0
+    check(signed.length === 2 && signed.some(r => r.rev === 2 && r.name === "signed.ec" && r.cards > 0)
+      && signed.some(r => r.name === "signed (1).ec" && r.rev === 9)
       && sameSnap(before, snap(folder)),
-      "f3d a higher unsigned conflict copy does not beat the genuine edition, and does not refuse it ("
-      + (signed[0] && signed[0].name) + " rev " + (signed[0] && signed[0].rev) + ")");
-    check(both.length === 1 && both[0].rev === 5,
-      "f3e of two genuine editions the newer rev is the one row (" + (both[0] && both[0].rev) + ")");
-    check(tie.length === 1 && tie[0].name === "tie.ec",
-      "f3f equal revs offer one row, the name that is not a conflict copy (" + (tie[0] && tie[0].name) + ")");
+      "f3d a higher unsigned conflict copy stays listed and does not refuse the genuine edition ("
+      + signed.map(r => r.name + " rev " + r.rev).join(", ") + ")");
+    check(both.length === 2 && both.some(r => r.rev === 5) && both.some(r => r.rev === 1),
+      "f3e of two genuine editions both stay listed (" + both.map(r => r.rev).sort((a, b) => a - b).join(", ") + ")");
+    check(tie.length === 2 && tie.some(r => r.name === "tie.ec") && tie.some(r => r.name === "tie (1).ec"),
+      "f3f equal revs offer both names (" + tie.map(r => r.name).sort().join(", ") + ")");
     const pred = A.test.conflictSiblingName;
     check(typeof pred === "function" && pred("guide.ec", "guide (1).ec") && pred("guide.ec", "guide-LAPTOP.ec")
       && !pred("guide.ec", "guide-v2.ec") && !pred("guide.ec", "guide-EN.ec")
@@ -227,9 +236,11 @@ try {
     const tie = rowsOf(rows, "tie-board");
     const pred = A.test.conflictSiblingName;
     const isConf = A.test.isConflictName;
-    check(support.length === 1 && support[0].rev === 4 && support[0].name === "support_conf(1).ec"
+    check(support.length === 3 && support.some(r => r.rev === 4 && r.name === "support_conf(1).ec")
+      && support.some(r => r.name === "support.ec" && r.rev === 1)
+      && support.some(r => r.name === "support_conf(2).ec" && r.rev === 3)
       && known.length === 1 && known[0].rev === 5
-      && tie.length === 1 && tie[0].name === "tie.ec"
+      && tie.length === 2 && tie.some(r => r.name === "tie.ec") && tie.some(r => r.name === "tie_conf(1).ec")
       && typeof pred === "function" && pred("support.ec", "support_conf(1).ec")
       && pred("support.ec", "support_conf(2).ec")
       && pred("etiuda-team.json", "etiuda-team_conf(1).json")
@@ -237,11 +248,11 @@ try {
       && typeof isConf === "function" && isConf("support_conf(1).ec") && isConf("support_conf(2).ec")
       && !isConf("support_config.ec") && !isConf("support_conf.ec")
       && sameSnap(before, snap(folder)),
-      "f4a Drive _conf(n) copy collapses to one Library catalog row and is a conflict name ("
-      + support.length + " row(s), rev " + (support[0] && support[0].rev) + ")");
+      "f4a Drive _conf(n) copies stay listed beside the canonical file and are conflict names ("
+      + support.length + " row(s))");
   }
 
-  /* ---- a desk's own files, one row per id ---------------------------------------------------- */
+  /* ---- a desk's own files stay listed, one beside the other ---------------------------------- */
   {
     const { ud, folder } = fresh();
     const A = boot(ud);
@@ -258,9 +269,10 @@ try {
     const before = snap(folder);
     const rows = await A.ask("etiuda:catalog-files");
     const prop = rowsOf(rows, id), more = rowsOf(rows, otherId);
-    check(!!low && !!high && prop.length === 1 && prop[0].rev === 6 && prop[0].desk && prop[0].desk.id === me.id
+    check(!!low && !!high && prop.length === 2 && prop.some(r => r.rev === 6) && prop.some(r => r.rev === 2)
+      && prop.every(r => r.desk && r.desk.id === me.id)
       && more.length === 1 && sameSnap(before, snap(folder)),
-      "f3h a desk's conflict copy is one proposal row, the newer genuine rev, and a second id stays ("
+      "f3h a desk's conflict copy stays listed beside the other rev, and a second id stays ("
       + prop.length + " and " + more.length + ")");
   }
 
@@ -409,6 +421,35 @@ try {
       "f3p ordinary editions with different names stay uncollapsed (2 rows)");
   }
 
+  /* A direct edit named as the conflict copy. The compare hash and the write are the canonical file. */
+  async function directOf(source) {
+    const { ud, folder } = fresh();
+    const canonDoc = catalog("lamp-board", 3);
+    const confDoc = catalog("lamp-board", 5);
+    confDoc.cards[0].title = { en: "Other" };
+    const canonAt = put(folder, "guide.ec", canonDoc);
+    const confAt = put(folder, "guide (1).ec", confDoc);
+    const beforeCanon = fileSha(canonAt), beforeConf = fileSha(confAt);
+    const A = boot(ud, source);
+    const read = await A.ask("etiuda:shared-read", "guide (1).ec", "");
+    const next = catalog("lamp-board", 4);
+    next.cards[0].title = { en: "Edited" };
+    const text = JSON.stringify(next) + "\n";
+    const wrote = await A.ask("etiuda:shared-write", "guide (1).ec", text, read && read.sha, false);
+    return {
+      ok: !!(wrote && wrote.ok),
+      canonMoved: fileSha(canonAt) !== beforeCanon,
+      confHeld: fileSha(confAt) === beforeConf,
+      readCanon: !!(read && read.sha === beforeCanon)
+    };
+  }
+  {
+    const got = await directOf();
+    check(got.ok && got.canonMoved && got.confHeld && got.readCanon,
+      "f3t a direct edit named as the conflict copy writes the canonical file, and the conflict copy's bytes stay: "
+      + JSON.stringify(got));
+  }
+
   /* ---- plants: the guarding line, removed only in a scratch copy ----------------------------- */
   {
     const one = scratchSource("f3-one-row");
@@ -454,6 +495,32 @@ try {
     }
     check(conf.found && conf.same && red && sha(fs.readFileSync(path.join(ROOT, "shell", "main.js"))) === conf.digest,
       "f3q removing plant:f3-conflict-only in a scratch copy collapses non-conflict editions, and the checkout is unchanged");
+  }
+  if (PLANTS_OFF) skip("f3s lifting plant:direct-canon-name writes the conflict copy: NOT RUN");
+  else {
+    const src = scratchSource("direct-canon-name");
+    let red = false;
+    if (src.found) {
+      const got = await directOf(fs.readFileSync(src.scratch, "utf8"));
+      red = got.ok && !got.canonMoved && !got.confHeld;
+    }
+    check(src.found && src.same && red && sha(fs.readFileSync(path.join(ROOT, "shell", "main.js"))) === src.digest,
+      "f3s lifting plant:direct-canon-name writes the conflict copy, and the checkout is unchanged");
+  }
+  if (PLANTS_OFF) skip("f3u lifting plant:editions-both lists one edition again: NOT RUN");
+  else {
+    const src = scratchSource("editions-both");
+    let red = false;
+    if (src.found) {
+      const { ud, folder } = fresh();
+      put(folder, "guide.ec", catalog("lamp-board", 1));
+      put(folder, "guide (1).ec", catalog("lamp-board", 4));
+      const A = boot(ud, fs.readFileSync(src.scratch, "utf8"));
+      const lamp = rowsOf(await A.ask("etiuda:catalog-files"), "lamp-board");
+      red = lamp.length === 1;
+    }
+    check(src.found && src.same && red && sha(fs.readFileSync(path.join(ROOT, "shell", "main.js"))) === src.digest,
+      "f3u lifting plant:editions-both lists one edition again, and the checkout is unchanged");
   }
 
   /* homeSrc is read so a later edit of the checkout is visible against the plant digest. */

@@ -798,14 +798,16 @@ async function run() {
     d.api.readCatalog();
     const rows = await d.ask("etiuda:catalog-files");
     const supportRows = (rows || []).filter(r => r && r.id === "support");
-    const oneSupport = supportRows.length === 1 && supportRows[0].rev === 4 && supportRows[0].name === "support_conf(1).ec";
+    const bothSupport = supportRows.length === 2
+      && supportRows.some(r => r.name === "support.ec" && r.rev === 1)
+      && supportRows.some(r => r.name === "support_conf(1).ec" && r.rev === 4);
     const envAfter = JSON.parse(fs.readFileSync(envPath, "utf8"));
     const floor = envAfter.teamRevSeen && envAfter.teamRevSeen[TEAM] && envAfter.teamRevSeen[TEAM][LEAD.public];
     const heededRev = floor ? floor.rev : 0;
 
-    const ok = readsMirror && confLanded && mirrorConfRev === 4 && heededRev === 4 && oneSupport && !droppedUnread && shareKept;
+    const ok = readsMirror && confLanded && mirrorConfRev === 4 && heededRev === 4 && bothSupport && !droppedUnread && shareKept;
     check(ok,
-      "41c4 a Drive conflict copy on the share is taken through the scans: the mirror's team file is the higher rev, the Library shows one support catalog, and the conflict copy is not dropped unread: "
+      "41c4 a Drive conflict copy on the share is taken through the scans: the mirror's team file is the higher rev, the Library shows both support catalogs, and the conflict copy is not dropped unread: "
       + "heeded rev " + heededRev + ", mirror conflict rev " + mirrorConfRev + ", canonical rev " + mirrorCanonRev
       + ", support rows " + supportRows.length + (supportRows[0] ? " (" + supportRows[0].name + " rev " + supportRows[0].rev + ")" : "")
       + ", reads mirror " + readsMirror + ", dropped unread " + droppedUnread + ", share kept " + shareKept);
