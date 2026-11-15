@@ -10,6 +10,7 @@
 // The build options are `bundler-probe`'s, unchanged, so the conditions spec 9 binds are proved
 // by that probe rather than restated here.
 import { readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -102,6 +103,86 @@ export function stampFor(previous, htmlAt, day) {
   return kept && htmlAt(kept) === previous ? kept : day;
 }
 
+/* A day the caller handed in. Empty is the same as absent. Anything else that is not a real
+   calendar day is refused before a single file is written, and the value itself is not repeated. */
+export function calendarDay(s) {
+  if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const y = +s.slice(0, 4), m = +s.slice(5, 7), d = +s.slice(8, 10);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+export function handedDay() {
+  const raw = process.env.ETIUDA_BUILD_DAY;
+  if (raw === undefined || raw === '') return null;
+  if (!calendarDay(raw)) throw new Error('ETIUDA_BUILD_DAY is not a day (YYYY-MM-DD); nothing was written'); /* plant:build-day */
+  return raw;
+}
+
+/* What a clean tree is judged on. A change outside this list does not move the day. A change
+   to a file's time alone is not a change: git status is the record. */
+export const INPUTS = [
+  'src',
+  'tools/build.mjs',
+  'tools/bundler-probe/build.mjs',
+  'shell/license_en.txt',
+  'shell/license_pl.txt',
+];
+
+export const COMMIT_DAY = 'ETIUDA_BUILD_COMMIT_DAY';
+/* Off unless ETIUDA_BUILD_COMMIT_DAY is exactly 1. On, the day is the committer date the
+   commit records (git log -1 --format=%cs). That recorded date does not depend on the
+   machine's time zone, and a shallow clone reads the same day. Today is used only when an
+   input is uncommitted. A tree with no repository takes the handed-in day, or today. */
+export function commitDayOn() {
+  return process.env[COMMIT_DAY] === '1';
+}
+
+function gitOut(args) {
+  try {
+    const out = execFileSync('git', args, {
+      cwd: ROOT,
+      encoding: 'utf8',
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return { ok: true, out: out || '' };
+  } catch (e) {
+    const err = String((e && e.stderr) || '') + String((e && e.message) || '');
+    const noRepo = !!(e && (e.status === 128 || /not a git repository/i.test(err)));
+    return { ok: false, noRepo, err };
+  }
+}
+
+/* null when this folder is not a repository, true when an input differs from the commit. */
+export function inputsDirty() {
+  const st = gitOut(['status', '--porcelain', '--untracked-files=all', '--', ...INPUTS]);
+  if (!st.ok) {
+    if (st.noRepo) return null;
+    throw new Error('the build could not read git status; nothing was written');
+  }
+  return st.out.trim() !== '';
+}
+
+function committerDay() {
+  const r = gitOut(['log', '-1', '--format=%cs']);
+  if (!r.ok) return null;
+  const line = r.out.trim();
+  return calendarDay(line) ? line : null;
+}
+
+function dayUnhanded(previous, htmlAt) {
+  if (!commitDayOn()) return stampFor(previous, htmlAt, today());
+  const dirty = inputsDirty();
+  if (dirty === null || dirty === true) return today();
+  return committerDay() || today();
+}
+
+function dayFor(previous, htmlAt) {
+  const handed = handedDay();
+  if (handed) return handed;
+  return dayUnhanded(previous, htmlAt);
+}
+
 // LF in this tree. A CR reaching the artifact would report as every line changed in the next
 // diff, so it is refused at the source rather than explained afterwards.
 function read(name) {
@@ -112,6 +193,7 @@ function read(name) {
 
 export async function build() {
   const t0 = Date.now();
+  handedDay();
   // absWorkingDir pins the module banners esbuild writes above each module to paths relative to
   // this repository. Without it they are relative to the caller's directory, and this artifact
   // is published.
@@ -132,7 +214,7 @@ export async function build() {
   const htmlAt = day => template.split(ANCHOR).join(bundle.split(BUILT_SLOT).join(JSON.stringify(day)));
   let previous = '';
   try { previous = readFileSync(OUT_FILE, 'utf8'); } catch { /* a first build */ }
-  const day = stampFor(previous, htmlAt, today());
+  const day = dayFor(previous, htmlAt);
   const html = htmlAt(day);
   if (builtStamp(html) !== day) throw new Error('the build day ' + day + ' cannot be read back out of the artifact');
   writeFileSync(OUT_FILE, html, 'utf8');
@@ -148,11 +230,16 @@ export async function build() {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const before = (() => { try { return sha256(readFileSync(OUT_FILE, 'utf8')); } catch { return '(absent)'; } })();
-  const r = await build();
-  console.log('engine/etiuda.html  ' + r.bytes + ' bytes, ' + r.bundleBytes + ' of them the bundle, ' + r.ms + ' ms');
-  console.log('  was ' + before.slice(0, 16));
-  console.log('  now ' + r.sha256.slice(0, 16));
-  console.log('engine/etiuda.csp.json  ' + r.hashes.length + ' pinned script hash(es)');
-  console.log('engine/bubble.css  ' + r.cssBytes + ' bytes');
+  try {
+    const before = (() => { try { return sha256(readFileSync(OUT_FILE, 'utf8')); } catch { return '(absent)'; } })();
+    const r = await build();
+    console.log('engine/etiuda.html  ' + r.bytes + ' bytes, ' + r.bundleBytes + ' of them the bundle, ' + r.ms + ' ms');
+    console.log('  was ' + before.slice(0, 16));
+    console.log('  now ' + r.sha256.slice(0, 16));
+    console.log('engine/etiuda.csp.json  ' + r.hashes.length + ' pinned script hash(es)');
+    console.log('engine/bubble.css  ' + r.cssBytes + ' bytes');
+  } catch (e) {
+    console.error(e && e.message ? e.message : String(e));
+    process.exit(1);
+  }
 }
