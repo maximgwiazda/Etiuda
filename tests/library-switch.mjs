@@ -26,6 +26,8 @@
  *   ls7  typing a search filters to matching rows with focus held on #libSearch, and Escape restores the section
  *   ls8  after several Library repaints, one ResizeObserver lives for the tree's card box and one for the intents list
  *   ls9  hover-title updates touch only shown rows (0 when collapsed, 1 on pointerenter, not all 248)
+ *   ls10 an intents press measures only 1 row in chipRoom and only viewport-shown rows before paint (0 on repeat)
+ *   ls11 visible and offscreen intent rows keep identical chevrons and fades after resize
  * The catalog is the shipped sample, of a real catalog's size. Exit code is the number of failed checks; 78 when the
  * run could not complete.
  */
@@ -40,7 +42,7 @@ const puppeteer = require("puppeteer-core");
 let fails = 0, checks = 0;
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 12, REPS = 5, BUDGET = 1000, KEY_BUDGET = 10;
+const EXPECTED = 14, REPS = 5, BUDGET = 1000, KEY_BUDGET = 10;
 const argv = process.argv.slice(2);
 const at = argv.indexOf("--engine");
 const ENGINE = at >= 0 ? path.resolve(argv[at + 1]) : E.ENGINE_PATH;
@@ -268,6 +270,73 @@ try {
     && htRes.tipPlain.startsWith("Drag to reorder") && htRes.tipSorted.startsWith("Dragging waits for the catalog's order"),
     "ls9 hover titles touch only shown rows (collapsed " + htRes.onCollapsed + ", opened " + htRes.onOpen + "/" + htRes.catRows
     + ", pointerenter " + htRes.onHover + ")");
+
+  /* Intents press measurement: chipRoom reads 1 row, markChipOverflow measures only viewport rows before paint,
+     and repeat presses at the same width measure 0 rows. */
+  await p.evaluate(() => {
+    document.querySelector('#libSecs .sx-sec[data-lm="data"]').click();
+    window.openManage();
+    if (!document.querySelector('details.manage-sec[data-mg="intents"]').hasAttribute("hidden"))
+      document.querySelector('#libSecs .sx-sec[data-lm="data"]').click();
+  });
+  await sleep(150);
+  const intMeasure = await p.evaluate(async () => {
+    const swDesc = Object.getOwnPropertyDescriptor(Element.prototype, "scrollWidth");
+    const origCS = window.getComputedStyle;
+    let midReads = 0, roomReads = 0;
+    Object.defineProperty(Element.prototype, "scrollWidth", {
+      configurable: true,
+      get() {
+        if (this.classList && this.classList.contains("lw-mid") && this.closest(".mg-intents")) midReads++;
+        return swDesc.get.call(this);
+      }
+    });
+    window.getComputedStyle = function (el, pseudo) {
+      if (el && el.classList && el.classList.contains("mg-int")) roomReads++;
+      return origCS.call(window, el, pseudo);
+    };
+    try {
+      const total = document.querySelectorAll(".mg-intents .manage-row.mg-int").length;
+      midReads = 0; roomReads = 0;
+      document.querySelector('#libSecs .sx-sec[data-lm="intents"]').click();
+      const coldMid = midReads, coldRoom = roomReads;
+      await new Promise(r => setTimeout(r, 150));
+      document.querySelector('#libSecs .sx-sec[data-lm="data"]').click();
+      await new Promise(r => setTimeout(r, 100));
+      midReads = 0; roomReads = 0;
+      document.querySelector('#libSecs .sx-sec[data-lm="intents"]').click();
+      await new Promise(r => setTimeout(r, 150));
+      const repeatMid = midReads, repeatRoom = roomReads;
+      return { total, coldMid, coldRoom, repeatMid, repeatRoom };
+    } finally {
+      Object.defineProperty(Element.prototype, "scrollWidth", swDesc);
+      window.getComputedStyle = origCS;
+    }
+  });
+  check(intMeasure.total > 40 && intMeasure.coldRoom <= 2 && intMeasure.coldMid <= 35
+    && intMeasure.repeatMid === 0 && intMeasure.repeatRoom === 0,
+    "ls10 intents press measures 1 row in chipRoom (" + intMeasure.coldRoom + ") and only viewport rows ("
+    + intMeasure.coldMid + "/" + intMeasure.total + ") before paint, 0 on repeat ("
+    + intMeasure.repeatMid + "/" + intMeasure.repeatRoom + ")");
+
+  const intVis = await p.evaluate(async () => {
+    const frames = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const box = document.querySelector(".sx-card:has(.mg-intents)");
+    box.style.width = box.style.maxWidth = "860px";
+    await frames(); await frames();
+    const rows = [...document.querySelectorAll(".mg-intents .manage-row.mg-int")].filter(r => r.querySelector("[data-chips-more]"));
+    const bad = rows.filter(r => {
+      const mid = r.querySelector(".lw-mid"), more = r.querySelector("[data-chips-more]");
+      const over = mid.scrollWidth > mid.clientWidth + 1;
+      return more.hidden !== !over || r.classList.contains("chips-fade") !== over;
+    });
+    box.style.width = box.style.maxWidth = "";
+    await frames();
+    return { rows: rows.length, bad: bad.length };
+  });
+  check(intVis.rows > 0 && intVis.bad === 0,
+    "ls11 all " + intVis.rows + " intent rows (visible and offscreen) match expected chevrons and fades after resize ("
+    + intVis.bad + " mismatched)");
   done = true;
 } catch (e) {
   console.log("  FAIL the run stopped: " + String(e && e.message || e));
