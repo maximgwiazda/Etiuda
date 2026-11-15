@@ -4256,15 +4256,16 @@ function deskAiJoin(me, org) {
   const pick = (a, b) => (a ? { value: a, managed: true } : { value: typeof b === "string" ? b : "", managed: false });
   const choiceSet = o.on === true || o.on === false;
   const provider = pick(o.provider, p.provider), model = pick(o.model, p.model);
+  const endpointBad = Array.isArray(o.ignored) && o.ignored.indexOf("AiEndpoint") > -1; /* plant:policy-bad-endpoint */
   /* The person's address belongs to the service the person chose, so it is not carried over to another the policy chose. */
   const endpoint = pick(o.endpoint, o.provider && o.provider !== p.provider ? "" : p.endpoint);
   const service = deskAiService(provider.value);
-  const at = !service ? "" : endpoint.value ? deskAiEndpointShape(endpoint.value, provider.value) : service.endpoint;
-  const home = endpoint.managed || (at !== "" && service && at === service.endpoint);
+  const at = !service || endpointBad ? "" : endpoint.value ? deskAiEndpointShape(endpoint.value, provider.value) : service.endpoint;
+  const home = !endpointBad && (endpoint.managed || (at !== "" && service && at === service.endpoint));
   return {
     on: choiceSet ? o.on : p.choice === "organisation",
-    provider: provider.value, given: endpoint.value, endpoint: at, model: model.value,
-    managed: { choice: choiceSet, provider: provider.managed, endpoint: endpoint.managed, model: model.managed, key: !!o.key },
+    provider: provider.value, given: endpointBad ? "" : endpoint.value, endpoint: at, model: model.value,
+    managed: { choice: choiceSet, provider: provider.managed, endpoint: endpoint.managed || endpointBad, model: model.managed, key: !!o.key },
     keyAway: !!o.key && !home,
   };
 }

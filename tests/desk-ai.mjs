@@ -33,16 +33,18 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "shell");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 60;
+const EXPECTED = 62;
+const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The shell-to-page event that carries each re-order's outcome; the page-to-shell sync request "etiuda:ai-state" is another. */
 const RANKING_CH = "etiuda:ai-ranking";
 
-let asserted = 0, failed = 0;
+let asserted = 0, failed = 0, notRun = 0;
 function check(ok, line) {
   asserted++;
   if (ok) console.log("  ok   " + line);
   else { failed++; console.log("  FAIL " + line); }
 }
+function skipPlant(line) { notRun++; console.log("  NOT RUN " + line); }
 /* A section that throws says so and stops there; the floor below then counts the checks it did not reach. */
 async function block(fn) {
   try { await fn(); } catch (e) { failed++; console.log("  FAIL a section stopped: " + String(e && e.message || e).split(/\r?\n/)[0]); }
@@ -93,8 +95,9 @@ const MAIN_TAIL = "\n__test.setWindow = w => { theWindow = w; }; __test.embedSug
   + " __test.deskReorder = typeof deskReorder === 'undefined' ? { ask: async () => null } : deskReorder;"
   + " __test.orgSearch = typeof orgSearch === 'function' ? orgSearch : async () => {};"
   + " __test.deskAiProbe = typeof deskAiProbe === 'function' ? deskAiProbe : async () => ({});"
-  /* Machine policy is read as none, so the real reader never runs reg.exe in a leg. */
-  + " if (typeof joinPolicyFacts === 'function') joinPolicyRead = joinPolicyFacts('');";
+  + " __test.deskAiConfig = typeof deskAiConfig === 'function' ? deskAiConfig : () => null;"
+  /* Machine policy is read from __test.policyText unless a leg uses a stubbed child_process. */
+  + " if (!__test.useRealPolicyReader && typeof joinPolicyFacts === 'function') joinPolicyRead = joinPolicyFacts(__test.policyText || '');";
 const ENGINE = { sender: { id: 1, once: () => {} }, senderFrame: { parent: null, url: "file:///C:/lab/engine/etiuda.html" } };
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 
@@ -142,8 +145,8 @@ function loadMain(opts) {
   };
   const aiCopy = o.aiSrc ? aiFrom(o.aiSrc) : null;
   const fakeRequire = n => (n === "electron" ? electron : aiCopy && /desk-ai\.cjs$/.test(String(n)) ? aiCopy
-    : o.fs && n === "node:fs" ? o.fs : nodeRequire(n));
-  const T = {};
+    : o.fs && n === "node:fs" ? o.fs : o.childProcess && n === "node:child_process" ? o.childProcess : nodeRequire(n));
+  const T = { policyText: o.policyText || "", useRealPolicyReader: !!o.childProcess };
   const quiet = { log: () => {}, error: () => {}, warn: () => {}, info: () => {} };
   new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test", (o.mainSrc || MAIN_SRC) + MAIN_TAIL)(
     fakeRequire, SHELL, path.join(SHELL, "main.js"), { exports: {} }, {}, quiet, T);
@@ -1000,9 +1003,64 @@ await block(async () => {
     "da21 the picker's note names the cap the shell sends, " + MESSAGE_MAX_CHARS + " characters, in English and Polish: " + (line ? "found" : "no line"));
 });
 
+/* da22 (review finding 2): a rejected policy AiEndpoint withholds the policy key and sends nothing, never falling back to the
+   provider's published address. */
+function policyExportText(rows) {
+  const esc = s => String(s).replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
+  const line = ([n, t, v]) => "\"" + esc(n) + "\"=" + (t === "REG_DWORD" ? "dword:" + (Number(v) >>> 0).toString(16).padStart(8, "0") : "\"" + esc(v) + "\"");
+  return ["Windows Registry Editor Version 5.00", "", "[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]"].concat(rows.map(line), [""]).join("\r\n") + "\r\n";
+}
+async function badPolicyEndpointDrive(provider, endpoint, mainSrc) {
+  const fetch = fetchOf(() => ({ status: 200, text: chatSaying("[2,1]") }));
+  const policyText = policyExportText([
+    ["DeskOrganisationModel", "REG_DWORD", 1],
+    ["AiProvider", "REG_SZ", provider],
+    ["AiEndpoint", "REG_SZ", endpoint],
+    ["AiModel", "REG_SZ", "plant-model"],
+    ["AiKey", "REG_SZ", "sk-test-0000"],
+  ]);
+  const ctx = loadMain({ fetch, mainSrc, policyText, answer: (op, a) => op === "search-shortlist" ? { q: a.q, gen: 1, cards: ["c1", "c2"], intents: [] } : openAnswer(op) });
+  builtinFrom(ctx.T, [{ id: "t:post", score: 0.9 }]);
+  const cfg = ctx.T.deskAiConfig();
+  const e = Object.assign({ returnValue: undefined }, ENGINE);
+  ctx.on["etiuda:desk-ai-settings"](e);
+  const st = e.returnValue;
+  const tested = await ctx.handle["etiuda:desk-ai-test"](ENGINE);
+  ctx.on["etiuda:search-set"](ENGINE, true);
+  await ctx.handle["etiuda:search-prepare"](ENGINE, ROWS);
+  await ctx.handle["etiuda:search-rank"](ENGINE, "lantern wick");
+  await tick(AI.SETTLE_MS + 60);
+  await openPicker(ctx, MESSAGE, 80);
+  return { cfg, st, tested, fetches: fetch.calls.length, urls: fetch.calls.map(c => c.url) };
+}
+await block(async () => {
+  const bads = [
+    ["openai", "http://bad.example/v1/"],
+    ["anthropic", "https://user:pw@bad.example/v1/"],
+    ["google", "https://bad.example/v1/?q=1"],
+    ["openai", "https://bad.example/v1/#frag"],
+  ];
+  const runs = [];
+  for (const [p, ep] of bads) runs.push(await badPolicyEndpointDrive(p, ep));
+  const good = await badPolicyEndpointDrive("openai", "https://good.example/v1/");
+  check(runs.every(r => r.cfg === null && r.fetches === 0 && r.tested && r.tested.ok === false && r.st && r.st.ready === false && r.st.keyAway === true && r.st.at === "")
+    && good.cfg !== null && good.fetches >= 2 && good.urls.every(u => u.indexOf("https://good.example/v1/") === 0),
+    "da22 a rejected policy AiEndpoint withholds the policy key and sends nothing, while a valid one sends: bad fetches "
+    + JSON.stringify(runs.map(r => r.fetches)) + ", good fetches " + good.fetches);
+  if (PLANTS_OFF) skipPlant("da22p lifting plant:policy-bad-endpoint sends the policy key to the provider's published address (ETIUDA_PLANTS=off)");
+  else {
+    const lifted = await badPolicyEndpointDrive("openai", "http://bad.example/v1/",
+      edited(MAIN_SRC, "const endpointBad = Array.isArray(o.ignored) && o.ignored.indexOf(\"AiEndpoint\") > -1; /* plant:policy-bad-endpoint */",
+        "const endpointBad = false;"));
+    check(lifted.fetches > 0 && lifted.urls.some(u => u.indexOf("https://api.openai.com/v1/") === 0),
+      "da22p with plant:policy-bad-endpoint lifted, the policy key leaks to the published address and the leg above fails: "
+      + JSON.stringify({ fetches: lifted.fetches, urls: lifted.urls }));
+  }
+});
+
 check(wallHits === 0, "da0 no leg called the global fetch: " + wallHits);
-const done = asserted === EXPECTED;
-if (!done) console.log("  FAIL the file ran " + asserted + " checks, not the " + EXPECTED + " it declares");
-console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
-console.log(failed === 0 && done ? "RESULT: ok " + asserted + " check(s)" : "RESULT: FAIL " + failed + " of " + asserted);
+const done = asserted + notRun === EXPECTED;
+if (!done) console.log("  FAIL the file ran " + (asserted + notRun) + " checks (" + asserted + " ran, " + notRun + " not run), not the " + EXPECTED + " it declares");
+console.log("#counts checks=" + asserted + " failed=" + failed + " notRun=" + notRun + " expected=" + EXPECTED);
+console.log(failed === 0 && done ? "RESULT: ok " + asserted + " check(s)" + (notRun ? ", " + notRun + " NOT RUN" : "") : "RESULT: FAIL " + failed + " of " + asserted);
 process.exit(Math.min(63, failed + (done ? 0 : 1)));
