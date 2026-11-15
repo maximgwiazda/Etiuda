@@ -1000,6 +1000,7 @@ export {
   LOOSE_FIELDS,
   deskBranchHolds,
   writeDeskBranch,
+  scheduleDeskBranch,
   sharedOwnPin,
   sharedOwnWrite
 };
