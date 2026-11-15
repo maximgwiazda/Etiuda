@@ -58,6 +58,7 @@ const PLAN = [
   { id: "theme", next: true, aim: "#theme" },
   { id: "menu", next: true, aim: "#settingsBtn" },
   { id: "picker", host: true, next: true, aim: '#settingsMenu [data-act="picker"]' },
+  { id: "pickerIn", host: true, onOpen: true, next: true },
   { id: "library", click: ['#settingsMenu [data-act="manage"]'], into: "libraryIn", again: { next: true } },
   { id: "libraryIn", inside: true, aim: "#screenHost details.manage-sec", back: true, again: { close: '#tabsBar .tab.screen[data-sid="library"] .tab-x' } },
   { id: "settings", click: ["#settingsBtn", '#settingsMenu [data-act="settings"]'], into: "settingsIn" },
@@ -80,7 +81,7 @@ function rowOf(id, visit) {
 function after(id, loaded, visit, host, screen) {
   const i = PLAN.findIndex(r => r.id === id), r = rowOf(id, visit);
   if (i < 0) return undefined;
-  const passed = j => (loaded && PLAN[j].reload) || (!host && PLAN[j].host) || (!screen && PLAN[j].screen);
+  const passed = j => (loaded && PLAN[j].reload) || (!host && PLAN[j].host) || (!screen && PLAN[j].screen) || PLAN[j].onOpen;
   const on = j => !passed(j) && !PLAN[j].inside;
   if (r.back) { for (let j = i - 1; j >= 0; j--) if (on(j)) return PLAN[j].id; return null; }
   if (r.into) return r.into;

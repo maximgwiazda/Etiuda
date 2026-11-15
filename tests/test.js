@@ -750,6 +750,7 @@ function tourActTests() {
   const next = { hidden: false, disabled: false, textContent: "" };
   const own = {
     t: s => s, chordChips: () => "K", tourEls: () => ({ next }), resolveTourTarget: () => page.target,
+    eOpenPicker: () => { page.pickerOpens++; }, hotkeyHeld: () => page.hotkey, hotkeyChips: () => "K",
     setTimeout: (fn, ms) => { timers.push({ fn, ms, live: true }); return timers.length; },
     clearTimeout: id => { if (id && timers[id - 1]) timers[id - 1].live = false; },
     showTourStep: i => { page.tourIdx = i; page.moved.push(T.TOUR_STEPS[i].id); }, endTour: done => { page.ends.push(done); },
@@ -781,16 +782,17 @@ function tourActTests() {
   let T = null;
   try {
     T = new Function("scope", "with(scope){\n" + ["function hasChatTab(", "function chatTabTarget(", "function openChatTab(", "function tourPress(", "function tourPressRow(", "function shutTourWindow(",
+      "let tourPicks=", "function tourHeardPick(",
       "function loadStepBody(", "const libraryOpen=", "const settingsOpen=", "const TOUR_STEPS=", "function stepOn(", "function onFrom(", "function nextHeld(", "function syncTourNext(",
       "const TOUR_ACT_MS=", "let tourActT=", "function tourActSoon(", "function tourActCheck(", "function tourFollowWindow(",
       "function tourNext(", "function tourOn(", "function tourPrev("]
       .map(m => extractDecl(src, m)).join("\n")
-      + "\nreturn {TOUR_STEPS, nextHeld, syncTourNext, tourActSoon, TOUR_ACT_MS, tourNext, tourPrev};\n}")(scope);
+      + "\nreturn {TOUR_STEPS, nextHeld, syncTourNext, tourActSoon, TOUR_ACT_MS, tourNext, tourPrev, tourHeardPick};\n}")(scope);
   } catch (e) { T = null; eq("tour.js carries the step table and the functions that move the tour", e.message, "sliced"); }
   if (!T) return;
   const ids = T.TOUR_STEPS.map(s => s.id), at = id => ids.indexOf(id);
   const fire = () => { const live = timers.filter(x => x.live); timers.forEach(x => { x.live = false; }); live.forEach(x => x.fn()); return live.map(x => x.ms); };
-  const reset = (id, state) => { Object.assign(page, { win: null, chatTabs: 1, facts: false, menu: false, shown: true, empty: false, moved: [], ends: [], tourReturnId: "" }, state || {}); page.tourIdx = at(id); };
+  const reset = (id, state) => { Object.assign(page, { win: null, chatTabs: 1, facts: false, menu: false, shown: true, empty: false, moved: [], ends: [], tourReturnId: "", hotkey: "", pickerOpens: 0, tourPickerOpened: false }, state || {}); page.tourIdx = at(id); };
   const where = () => ids[page.tourIdx] + (page.win ? " [" + page.win + "]" : "") + (page.facts ? " [facts]" : "") + (page.menu ? " [menu]" : "");
 
   const held = () => ids.filter((id, i) => { page.tourIdx = i; next.disabled = false; T.syncTourNext(); return next.disabled || next.hidden; });
@@ -809,8 +811,8 @@ function tourActTests() {
      + " window steps only describes, waiting for no act",
     [ids.join(","), T.TOUR_STEPS.filter(s => s.name).map(s => s.id), T.TOUR_STEPS.filter(s => !waitsOn(s) && !s.name).map(s => s.id),
      T.TOUR_STEPS.filter(s => "does" in s).map(s => s.id)],
-    ["name,chatTab,load,pax,search,rail,cards,pills,tabs,seg,buttons,editor,add,addIn,facts,factsIn,theme,menu,picker,library,libraryIn,settings,settingsIn,done",
-     ["name"], ["pax", "search", "rail", "cards", "pills", "tabs", "seg", "theme", "done"], []]);
+    ["name,chatTab,load,pax,search,rail,cards,pills,tabs,seg,buttons,editor,add,addIn,facts,factsIn,theme,menu,picker,pickerIn,library,libraryIn,settings,settingsIn,done",
+     ["name"], ["pax", "search", "rail", "cards", "pills", "tabs", "seg", "theme", "pickerIn", "done"], []]);
 
   /* The person's act: on a step that describes, nothing they do moves the tour; the Menu step moves on once the
      Menu is open; a step that opens a window follows the window in. Each read once the act settles. */
@@ -906,6 +908,22 @@ function tourActTests() {
   eq("Light and dark (and leaving Quick facts) leaves open screen tabs open",
     [factsToThemeWin, factsBackWin, themeNextWin],
     ["theme [library]", "facts [settings]", "menu [library]"]);
+
+  /* Quick replies step: Next goes to Library without opening the window; opening it on that step enters pickerIn, and nowhere else. */
+  reset("picker", { hotkey: "Ctrl+Shift+Space", menu: true }); T.tourNext();
+  const pickerNextStep = where(), pickerNextOpens = page.pickerOpens;
+  reset("picker", { hotkey: "Ctrl+Shift+Space", menu: true }); T.tourHeardPick(); fire();
+  const pickerOpenedStep = where();
+  let pickerInNext = null, pickerInBack = null;
+  if (at("pickerIn") >= 0) {
+    reset("pickerIn", { hotkey: "Ctrl+Shift+Space", tourPickerOpened: true }); T.tourNext(); pickerInNext = where();
+    reset("pickerIn", { hotkey: "Ctrl+Shift+Space", tourPickerOpened: true }); T.tourPrev(); pickerInBack = where();
+  }
+  reset("cards", { hotkey: "Ctrl+Shift+Space" }); T.tourHeardPick(); fire();
+  const cardsHeardStep = where(), pickerInWhenOnCards = at("pickerIn") >= 0 ? T.TOUR_STEPS[at("pickerIn")].when() : null;
+  eq("Next on the picker step moves to Library without opening the window; opening it on that step shows pickerIn",
+    [pickerNextStep, pickerNextOpens, pickerOpenedStep, pickerInNext, pickerInBack, cardsHeardStep, pickerInWhenOnCards],
+    ["library [menu]", 0, "pickerIn [menu]", "library", "picker", "cards", false]);
 
   /* THE SMOKE WALKS THIS TOUR, not a remembered one. tests/tour-walk.js says which way the walk takes on each step,
      and the smoke takes it; this holds its rows to the table above: the same ids in order, Next pressed only where

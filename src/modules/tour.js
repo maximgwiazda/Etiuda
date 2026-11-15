@@ -187,10 +187,17 @@ function shutTourWindow(step){
   else if(id==="libraryIn"){ if(screenOn==="library") closeScreenTab("library"); }
   else if(id==="settingsIn"){ if(screenOn==="settings") closeScreenTab("settings"); }
 }
-/* THE PICKER'S STEP, where the shell holds a combination: done once the picker opens after the step began (pick.js
-   says when it does), and Next opens it by the pointer. */
+/* THE PICKER'S STEP, where the shell holds a combination: done once the picker opens while this step
+   is shown (pick.js says when it does); Next simply moves on without opening the picker. */
 let tourPicks=0, tourStepPicks=0;
-function tourHeardPick(){ tourPicks++; tourActSoon(); }
+let tourPickerOpened=false;
+function tourHeardPick(){
+  tourPicks++;
+  if(tourRunning && TOUR_STEPS[tourIdx] && TOUR_STEPS[tourIdx].id==="picker"){
+    tourPickerOpened=true;
+    tourActSoon();
+  }
+}
 function hotkeyHeld(){ const hk=eHotkey(); return hk && hk.held ? hk.accel : ""; }
 function hotkeyChips(){ return eHotkeyLabel(hotkeyHeld()).split("+").map(k=>'<kbd>'+esc(k)+'</kbd>').join("+"); }
 // The wheel waits on the sample until a reply names somebody (agent.js), and the step says so.
@@ -390,8 +397,17 @@ const TOUR_STEPS=[
     body:()=>t("{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.")
       .split("{KEY}").join(hotkeyChips()),
     when:()=>!!hotkeyHeld(),
-    done:()=>tourPicks>tourStepPicks,
-    open:()=>eOpenPicker(),
+    done:()=>tourPickerOpened,
+    menu:true,
+    pad:8
+  },
+  {
+    id:"pickerIn",
+    sel:()=>menuTarget("picker"),
+    side:menuSide,
+    title:"Replies over any window",
+    body:"Type a word to filter the replies, press Enter to copy and go back to the window you were in, or press Esc to close it.",
+    when:()=>tourPickerOpened,
     menu:true,
     pad:8
   },
@@ -702,6 +718,7 @@ function showTourStep(i){
   tourIdx=i;
   tourStepPicks=tourPicks;
   const step=TOUR_STEPS[i];
+  if(step.id!=="pickerIn") tourPickerOpened=false;
   const els=tourEls();
   // Where the tour stands survives a reload, the shell's recovery of a stopped page included.
   ssSet(TOUR_AT,step.id);
@@ -834,6 +851,7 @@ function endTour(completed){
   if(!tourRunning && tourIdx<0) return;
   tourRunning=false;
   tourReturnId="";
+  tourPickerOpened=false;
   tourIdx=-1;
   const els=tourEls();
   /* The bubble and its ring leave on the dismiss tier as copies, lifted out of the root that hides

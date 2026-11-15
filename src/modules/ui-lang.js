@@ -1167,6 +1167,7 @@ UI_STRINGS.pl={
   "Click a chat tab to view your replies.":"Kliknij kartę rozmowy, aby zobaczyć swoje odpowiedzi.", /* copy: copywriter */
   "Click <b>+</b> to open a new chat tab.":"Kliknij <b>+</b>, aby otworzyć nową kartę rozmowy.", /* copy: copywriter */
   "Replies over any window":"Odpowiedzi nad dowolnym oknem",
+  "Type a word to filter the replies, press Enter to copy and go back to the window you were in, or press Esc to close it.":"Wpisz słowo, aby przefiltrować odpowiedzi, naciśnij Enter, aby skopiować i wrócić do poprzedniego okna, lub Esc, aby zamknąć okno.", /* copy: copywriter */
   "{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.":"{KEY} przywołuje te odpowiedzi obok wskaźnika, nad każdym programem: wystarczy wpisać słowo, a Enter skopiuje odpowiedź i wróci do poprzedniego okna. Można spróbować od razu, naciskając {KEY}; Esc zamyka listę.",
   "Bring the replies over any window":"Przywołaj odpowiedzi nad dowolne okno",
   "Suggested from the copied message":"Propozycje na podstawie skopiowanej wiadomości",

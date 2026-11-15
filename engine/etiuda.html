@@ -8774,6 +8774,8 @@ What you type stays in this browser only.`;
     "Click <b>+</b> to open a new chat tab.": "Kliknij <b>+</b>, aby otworzyć nową kartę rozmowy.",
     /* copy: copywriter */
     "Replies over any window": "Odpowiedzi nad dowolnym oknem",
+    "Type a word to filter the replies, press Enter to copy and go back to the window you were in, or press Esc to close it.": "Wpisz słowo, aby przefiltrować odpowiedzi, naciśnij Enter, aby skopiować i wrócić do poprzedniego okna, lub Esc, aby zamknąć okno.",
+    /* copy: copywriter */
     "{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.": "{KEY} przywołuje te odpowiedzi obok wskaźnika, nad każdym programem: wystarczy wpisać słowo, a Enter skopiuje odpowiedź i wróci do poprzedniego okna. Można spróbować od razu, naciskając {KEY}; Esc zamyka listę.",
     "Bring the replies over any window": "Przywołaj odpowiedzi nad dowolne okno",
     "Suggested from the copied message": "Propozycje na podstawie skopiowanej wiadomości",
@@ -28570,9 +28572,13 @@ What you type stays in this browser only.`;
   }
   var tourPicks = 0;
   var tourStepPicks = 0;
+  var tourPickerOpened = false;
   function tourHeardPick() {
     tourPicks++;
-    tourActSoon();
+    if (tourRunning && TOUR_STEPS[tourIdx] && TOUR_STEPS[tourIdx].id === "picker") {
+      tourPickerOpened = true;
+      tourActSoon();
+    }
   }
   function hotkeyHeld() {
     const hk = eHotkey();
@@ -28769,8 +28775,17 @@ What you type stays in this browser only.`;
       title: "Replies over any window",
       body: () => t("{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.").split("{KEY}").join(hotkeyChips()),
       when: () => !!hotkeyHeld(),
-      done: () => tourPicks > tourStepPicks,
-      open: () => eOpenPicker(),
+      done: () => tourPickerOpened,
+      menu: true,
+      pad: 8
+    },
+    {
+      id: "pickerIn",
+      sel: () => menuTarget("picker"),
+      side: menuSide,
+      title: "Replies over any window",
+      body: "Type a word to filter the replies, press Enter to copy and go back to the window you were in, or press Esc to close it.",
+      when: () => tourPickerOpened,
       menu: true,
       pad: 8
     },
@@ -29088,6 +29103,7 @@ What you type stays in this browser only.`;
     tourIdx = i;
     tourStepPicks = tourPicks;
     const step = TOUR_STEPS[i];
+    if (step.id !== "pickerIn") tourPickerOpened = false;
     const els = tourEls();
     ssSet(TOUR_AT, step.id);
     if (!step.menu) closeSettingsMenu();
@@ -29236,6 +29252,7 @@ What you type stays in this browser only.`;
     if (!tourRunning && tourIdx < 0) return;
     tourRunning = false;
     tourReturnId = "";
+    tourPickerOpened = false;
     tourIdx = -1;
     const els = tourEls();
     if (els.root && !els.root.hidden) {

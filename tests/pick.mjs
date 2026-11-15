@@ -1689,24 +1689,30 @@ try {
     TT = new Function("scope", "with(scope){\n" + between(TSRC, "let tourPicks=", "// The wheel waits") + "\n"
       + between(TSRC, "const TOUR_STEPS=[", "\n];\n") + "\n];\nreturn { TOUR_STEPS, tourHeardPick };\n}")(scope7);
   } catch (e) { TT = null; }
-  const tids = TT ? TT.TOUR_STEPS.map(s => s.id) : [], ps = TT ? TT.TOUR_STEPS.find(s => s.id === "picker") : null;
+  const tids = TT ? TT.TOUR_STEPS.map(s => s.id) : [], ps = TT ? TT.TOUR_STEPS.find(s => s.id === "picker") : null,
+    pi = TT ? TT.TOUR_STEPS.find(s => s.id === "pickerIn") : null;
   let tourSays = "no step";
-  if (ps) {
+  if (ps && pi) {
     const whens = [null, { accel: "Control+Shift+Space", held: false, taken: true }, { accel: "Control+Shift+Space", held: true, taken: false }]
       .map(h => { hk7 = h; return ps.when(); });
     const chipsSeen = (ps.body().match(/<kbd>Ctrl<\/kbd>\+<kbd>Shift<\/kbd>\+<kbd>Space<\/kbd>/g) || []).length;
-    const doneBefore = ps.done();
+    own7.tourRunning = true;
+    own7.tourIdx = tids.indexOf("menu");
     TT.tourHeardPick();
-    const doneAfter = ps.done();
-    ps.open();
-    tourSays = JSON.stringify([tids.indexOf("picker") - tids.indexOf("menu"), whens, chipsSeen, doneBefore, doneAfter, actsHeard, doorKnocks,
-      ps.title, ps.menu, ps.side === own7.menuSide]);
+    const doneElse = ps.done(), piElse = pi.when();
+    own7.tourIdx = tids.indexOf("picker");
+    const doneBefore = ps.done(), piBefore = pi.when();
+    TT.tourHeardPick();
+    const doneAfter = ps.done(), piAfter = pi.when();
+    tourSays = JSON.stringify([tids.indexOf("picker") - tids.indexOf("menu"), tids.indexOf("pickerIn") - tids.indexOf("picker"),
+      whens, chipsSeen, doneElse, piElse, doneBefore, piBefore, doneAfter, piAfter, !ps.open, actsHeard, doorKnocks,
+      ps.title, pi.title, ps.menu, pi.menu, ps.side === own7.menuSide, pi.side === own7.menuSide]);
   }
-  const resets = /function showTourStep\(i\)\{[\s\S]*?tourStepPicks=tourPicks;[\s\S]*?\n\}/.test(TSRC);
+  const resets = /function showTourStep\(i\)\{[\s\S]*?if\(step\.id!=="pickerIn"\) tourPickerOpened=false;[\s\S]*?\n\}/.test(TSRC);
   const heard = /if\(op==="open"\)\{\s*try\{ tourHeardPick\(\); \}catch\(e\)\{\}/.test(fs.readFileSync(path.join(ROOT, "src", "modules", "pick.js"), "utf8"));
-  check(tourSays === JSON.stringify([1, [false, false, true], 2, false, true, 1, 1, "Replies over any window", true, true]) && resets && heard,
-    "7n the tour has a step for the picker straight after the Menu's, on only while a combination is held, naming it as keys; it is done"
-    + " once the picker opens after the step began, and its Next opens it: " + tourSays + (resets ? "" : ", NO reset at each step")
+  check(tourSays === JSON.stringify([1, 1, [false, false, true], 2, false, false, false, false, true, true, true, 1, 0,
+    "Replies over any window", "Replies over any window", true, true, true, true]) && resets && heard,
+    "7n the tour has a step for the picker straight after the Menu's and an extra window step after it, without opening the picker on Next: " + tourSays + (resets ? "" : ", NO reset at each step")
     + (heard ? "" : ", the picker's opening NOT heard"));
 
   /* The global picker switches and opens conversations with the desk's own tab keys. */
