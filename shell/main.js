@@ -10120,6 +10120,8 @@ function signinDoorRequest(doc, deskId, deskKey, cert, door, now) {
    `refresh` and `sub` are signinKeep's, "" where none is kept, and nothing else in it is a secret; `ask` says the person's own
    sign-in is wanted again; a file of another format holds nothing. `packed` is signinDoorAddressOk's. */
 const SIGNIN_FILE = "signin.json";
+/* A signin.json past this is no sign-in, as an answer past SIGNIN_ANSWER_MAX is none: the file the desk writes stays far below it. */
+const SIGNIN_FILE_MAX = 256 * 1024;
 function signinFileRead(text, packed) {
   let d = null;
   try { d = JSON.parse(String(text)); } catch { d = null; }
@@ -10220,7 +10222,12 @@ function signinLabHeld() {
 function signinState() {
   if (signinStore !== undefined) return signinStore;
   let text = "";
-  try { text = fs.readFileSync(path.join(app.getPath("userData"), SIGNIN_FILE), "utf8"); } catch { text = ""; }
+  try {
+    const at = path.join(app.getPath("userData"), SIGNIN_FILE);
+    let within = true;
+    within = fs.statSync(at).size <= SIGNIN_FILE_MAX; /* plant:file-max */
+    text = within ? fs.readFileSync(at, "utf8") : "";
+  } catch { text = ""; }
   signinStore = signinFileRead(text, SIGNIN_DESK_PACKED); /* plant:door-file-packed */
   const me = branchIdentity(false);
   signinStore = signinFileHeld(signinStore, text, me ? me.key : ""); /* plant:file-held */

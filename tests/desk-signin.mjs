@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 163;
+const PLANTS = 164;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 145 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 146 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -93,7 +93,7 @@ const NAMES = ["SIGNIN_PROVIDERS", "signinOffered", "signinNonce", "signinAuthor
   "signinSettle", "signinRenewHeld", "seatFileText", "SEAT_NAME", "signinFileRead", "signinFileText", "branchIdOf", "inviteRead",
   "SIGNOUT_SERVICE", "signoutDeskBytes", "signoutDeskBody", "signoutAsk", "signinDoorRequest", "signinKnown", "signinPreviewing",
   "signinCodeForm", "signinSecretRead", "SIGNIN_SECRET_FILE", "SIGNIN_SECRET_SHAPE", "sealsForReal", "SIGNIN_WAIT_MS", "signinLabAt", "signinLabRead",
-  "signinLabUse", "signinDoorAddressOk", "DOOR_RELAYS", "BUILTIN_RELAY_URL", "signinDoorsSigned", "signinRevokedOk", "signinRevokedNext", "signinRevokedHas", "signinCertEarly", "SIGNIN_SKEW_MS", "signinFileMarkText", "signinFileHeld", "signinMarkBytes"];
+  "signinLabUse", "signinDoorAddressOk", "DOOR_RELAYS", "BUILTIN_RELAY_URL", "signinDoorsSigned", "signinRevokedOk", "signinRevokedNext", "signinRevokedHas", "signinCertEarly", "SIGNIN_SKEW_MS", "signinFileMarkText", "signinFileHeld", "signinMarkBytes", "SIGNIN_FILE_MAX"];
 NAMES.push("SIGNIN_TRACE_ASKED", "signinTraceLine", "signinTraceSaid");
 NAMES.push("signinLanding", "signinLandingHtml", "signinLandingCsp", "SIGNIN_LAND_MS");
 /* The section, evaluated: `swap` is [from, to], put in place of the one line that holds `from`, for a plant; `invSwap` the same in the
@@ -2655,6 +2655,23 @@ CASES.fileOtherPerson = s => {
   return s.signinCertOk(theirs, DESK_KEY) === true && !!s.signinFileRead(swapped).held.cert && take(swapped).cert === null && take(swapped).code === ""
     && !!take(given).cert && take(given).code === theirs.code;
 };
+/* Review 15b, finding 7 (a question, answered with a bound): a signin.json past SIGNIN_FILE_MAX is not read at all and is no sign-in;
+   one of the size the desk writes is read once and seats the desk. */
+CASES.fileMax = (s, swap) => {
+  let text = decl(MAIN, "function signinState(");
+  if (swap && text.split(swap[0]).length === 2) text = text.replace(swap[0], swap[1]);
+  const kept = s.signinFileMarkText(s.signinFileText({ held: heldOf({ doors: [] }) }), signWith(signKey));
+  const run = size => {
+    let reads = 0;
+    const fsStand = { statSync: () => ({ size }), readFileSync: () => { reads++; return kept; } };
+    const st = new Function("fs", "path", "app", "SIGNIN_FILE", "SIGNIN_FILE_MAX", "signinFileRead", "SIGNIN_DESK_PACKED", "branchIdentity", "signinFileHeld",
+      "let signinStore;\n" + text + "\nreturn signinState();")(fsStand, path, { getPath: () => "/ud" }, "signin.json", s.SIGNIN_FILE_MAX, s.signinFileRead, true,
+      () => ({ key: DESK_KEY }), s.signinFileHeld);
+    return { reads, held: !!st.held, cert: !!(st.held && st.held.cert) };
+  };
+  const small = run(kept.length), over = run(s.SIGNIN_FILE_MAX + 1);
+  return s.SIGNIN_FILE_MAX === 256 * 1024 && kept.length < 16 * 1024 && small.reads === 1 && small.cert && over.reads === 0 && !over.held;
+};
 /* Review 15b, finding 6: the code the page shows, and Buy hands the order page, is the held certificate's; with no certificate, the code held. */
 CASES.viewCertCodeWire = (s, swap) => {
   const text = decl(MAIN, "function signinView("), planted = swap && text.split(swap[0]).length === 2 ? text.replace(swap[0], swap[1]) : text;
@@ -3073,6 +3090,7 @@ const LEGS = [
   ["ds25c", "revokedOffline", "offline, or answered with no list, the last list taken judges: the seat under its key stays lapsed"],
   ["dlt1", "fileMark", "review 15b.1: signin.json as the desk writes it carries this desk's mark over the certificate, the code and the list; the list deleted or replaced by an older genuine one, the mark gone or read under another desk key, leaves no seat and no code while the provider and the refresh token stay; the wiring reads with this desk's key and saves with its mark"],
   ["dlt4", "fileOtherPerson", "review 15b.4: a genuine certificate for this desk key under another person and licence, put into a file this desk wrote, holds no seat; the same certificate as the service gave it, written by the desk, stands"],
+  ["dlt7", "fileMax", "review 15b.7: a signin.json past SIGNIN_FILE_MAX (256 KiB) is not read and is no sign-in; one of the size the desk writes is read once and seats it"],
   ["dlt6", "viewCertCode", "review 15b.6: the code the page shows and Buy sends is the held certificate's own; with no certificate, the code held"],
   ["dlt5", "fileDeskKey", "review 15b.5: the file's certificate is judged against this desk's key: another desk's genuine one, or one naming no key, holds no seat even under this desk's own mark, where the file's own read alone keeps it"],
   ["dlt3", "certEndedFlush", "review 15b.3: an ended certificate, up to the instant of its until, reads as the calm lapse and is never written as seat.json; one still running is"],
@@ -3589,6 +3607,7 @@ if (!PLANTS_OFF) {
   await plantWire("dlp1c", ["signinFileMarkText(signinFileText(signinState()), signinSign)", "signinFileText(signinState())"], "fileMark");
   await plant("dlp4", ["marked = !!d && /^[0-9a-f]{64}$/.test(String(deskKey || \"\")) && signinVerified(String(deskKey), signinMarkBytes(h, store.revoked), d.mark); /* plant:file-mark */", "marked = true;"], "fileOtherPerson");
   await plantWire("dlp6", ["  if (signedIn && held.cert && typeof held.cert.code === \"string\") code = held.cert.code; /* plant:view-cert-code */\n", ""], "viewCertCodeWire");
+  await plantWire("dlp7", ["within = fs.statSync(at).size <= SIGNIN_FILE_MAX; /* plant:file-max */", "within = true;"], "fileMax");
   await plant("dlp5", ["mine = !h.cert || signinCertOk(h.cert, String(deskKey || \"\")); /* plant:file-desk-key */", "mine = true;"], "fileDeskKey");
   await plantWire("dlp3", ["  if (Date.now() >= cert.until) return false; /* plant:flush-ended */\n", ""], "certEndedFlush");
   const gated = MAIN.replace("function writeBranch(stem, text) {\n", "function writeBranch(stem, text) {\n  if (!signinView().signedIn) return { ok: false };\n");
