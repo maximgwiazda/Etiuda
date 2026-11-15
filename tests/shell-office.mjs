@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 135;
+const EXPECTED = 138;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -1942,6 +1942,52 @@ try {
       check(!!again && (again.after === unc || again.remote > 0),
         "19c lifting plant:catalog-folder-wall stores and states the page's path: "
         + (again ? "folder " + JSON.stringify(again.after) + ", remote " + again.remote : "plant line absent"));
+    }
+  }
+  /* ---- 20. a folder a moved team now lives in. The page may name only the path this shell's picker
+     returned. Any other string is not read, so a remote share is never opened. ---- */
+  {
+    const remotePath = p => { const s = String(p || ""); return s.length >= 2 && ((s.charAt(0) === "\\" && s.charAt(1) === "\\") || (s.charAt(0) === "/" && s.charAt(1) === "/")); };
+    const teamId = "t-" + "ab".repeat(8);
+    const unc = "\\\\evil.example\\share\\moved";
+    const arm = S => {
+      const calls = [];
+      const note = (p) => { calls.push(String(p)); };
+      S.ctl.readFileSync = (real, p, ...a) => { note(p); if (remotePath(p)) { const e = new Error("stand-in"); e.code = "ENOENT"; throw e; } return real(p, ...a); };
+      S.ctl.statSync = (real, p, ...a) => { note(p); if (remotePath(p)) { const e = new Error("stand-in"); e.code = "ENOENT"; throw e; } return real(p, ...a); };
+      return calls;
+    };
+    const askMoved = async (src, folder, openDialog) => {
+      const S = loadShell({ src: src, openDialog: openDialog });
+      const calls = arm(S);
+      let picked = "";
+      if (openDialog) picked = await S.ask("etiuda:pick-catalog-folder", "Library");
+      const res = await S.ask("etiuda:team-join", "pick-moved-folder", teamId, folder);
+      return { res: res, calls: calls, picked: picked, said: S.said.slice() };
+    };
+    const hostile = await askMoved(undefined, unc);
+    const remoteReads = hostile.calls.filter(remotePath).length;
+    const saidWrong = hostile.said.some(s => String(s).indexOf("That folder holds no files") >= 0);
+    check(hostile.res && hostile.res.ok === false && hostile.res.error === "unpicked" && remoteReads === 0 && !saidWrong,
+      "20a a moved-folder path the page names, with no picker behind it, is not read: answered "
+      + (hostile.res && hostile.res.error) + ", remote calls " + remoteReads);
+    const yard = path.join(LAB, "moved-picked");
+    realFs.mkdirSync(yard, { recursive: true });
+    realFs.writeFileSync(path.join(yard, "etiuda-team.json"), "{}\n", "utf8");
+    const honest = await askMoved(undefined, yard, async () => ({ canceled: false, filePaths: [yard] }));
+    const readTeam = honest.calls.some(p => String(p).indexOf("etiuda-team.json") >= 0 && !remotePath(p));
+    check(honest.picked === yard && honest.res && honest.res.error !== "unpicked" && readTeam,
+      "20b the folder the picker returned is read when the page names that same path: picked " + (honest.picked === yard)
+      + ", answered " + (honest.res && (honest.res.ok ? "taken" : honest.res.error)) + ", read " + readTeam);
+    if (PLANTS_OFF) notRun("20c lifting plant:moved-folder-offered reads the page's path");
+    else {
+      const lines = SRC.split("\n"), at = lines.findIndex(l => l.indexOf("plant:moved-folder-offered") >= 0);
+      let again = null;
+      if (at >= 0) { lines.splice(at, 1); again = await askMoved(lines.join("\n"), unc); }
+      const againRemote = again ? again.calls.filter(remotePath).length : 0;
+      check(!!again && againRemote > 0,
+        "20c lifting plant:moved-folder-offered reads the page's path: "
+        + (again ? "remote " + againRemote + ", answered " + (again.res && again.res.error) : "plant line absent"));
     }
   }
 } catch (e) {

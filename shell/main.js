@@ -7075,7 +7075,9 @@ function setTeamNeedsFolder(teamId, doc, mirrorDir) {
   sendJoin(theWindow);
 }
 
-function pickMovedFolder(teamId, pickedFolder) {
+/* The page may name only the folder this shell's picker returned for it. Anything else is not read. */
+function pickMovedFolder(teamId, pickedFolder, senderId) {
+  if (!offeredFolder(senderId, pickedFolder)) return { ok: false, error: "unpicked" }; /* plant:moved-folder-offered */
   const need = teamNeedsFolder[teamId];
   const pinned = teamPins[teamId];
   const minRev = need ? need.rev : 0;
@@ -9210,7 +9212,7 @@ ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e)
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
   : op === "lapse-seen" ? lapseSeen(file, name) : op === "fork-seen" ? forkDismissed(file) : op === "stranded-seen" ? strandedDismissed(file)
   : op === "forget" ? forgetLead(file) : op === "leave" ? forgetLead(file, true) : op === "read" ? readInviteLooked(file) : op === "invite" ? takeInvite(file, name, check)
-  : op === "pick-moved-folder" ? pickMovedFolder(file, name)
+  : op === "pick-moved-folder" ? pickMovedFolder(file, name, e.sender.id)
   : op === "held" ? heldLinkAnswer() : op === "link" ? takeHeldLink(name) : op === "link-no" ? declineHeldLink() : joinView())); /* plant:link-no */
 
 /* The engine calls no OS API, so the folder picker is the shell's. The CAPTION comes from the
