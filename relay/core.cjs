@@ -152,6 +152,82 @@ const SIG_FIELDS = ["alg", "keyId", "value"];
 const MAY_MAX = 16;
 
 const plain = v => !!v && typeof v === "object" && !Array.isArray(v);
+
+/* THE OLD RELAY'S ROWS (findings 1 to 3 of the fourth Grok review of 3cc09cb5). 77a902d9 took a desk under its raw public half as
+   readily as under its branch id, and stored its rows under whichever its call sent. They are renamed once, on the first wake of a
+   team object that holds a team, so every lookup keeps the one spelling and nothing reads both; the mark row says it is done, and
+   a sweep's wipe takes the mark with the rest. A raw half is 64 lowercase hex, and where the row's own record carries the public half
+   (a dev: or gone: row's pub, a binding's invitation's pub) the two agree; anything else stays where it is, as no row the old relay
+   wrote. Where two rows meet under one branch id: a removal beats an enrolment of the same key, the later of two removals stands, a
+   row already under the branch id keeps its place against a raw one, the newer binding wins as indexBinding keeps it, and two try
+   counts add. A session held by a raw half is dropped: its desk says hello again under its branch id, and no removal can miss it.
+   The lead's own session keeps its id, raw or not. Blob, tomb, held and put rows keep their writer, and the counters and rates
+   keyed by it theirs: the writer is inside the upload's signed bytes. A spent challenge's key (chu:) is left to expire with it.
+   Answers what changed, by family. */
+const MIGRATED = "mig:desk-id";
+function migrateDeskIds(store) {
+  const n = { dev: 0, gone: 0, bk: 0, inv: 0, dd: 0, tf: 0, devDropped: 0, ses: 0 };
+  if (store.get(MIGRATED) !== undefined) return n;
+  const team = store.get("team");
+  if (team === undefined) return n;
+  const leadId = plain(team) && plain(team.lead) ? team.lead.keyId : null;
+  const raw = (id, pub) => is(HEX64, id) && (pub === undefined || pub === id);
+  const pubOf = v => (plain(v) && typeof v.pub === "string" ? v.pub : null);
+  const rank = v => [plain(v) && Number.isSafeInteger(v.ord) ? v.ord : -1, plain(v) && Number.isSafeInteger(v.at) ? v.at : -1];
+  const later = (a, b) => { const x = rank(a), y = rank(b); return x[0] !== y[0] ? x[0] > y[0] : x[1] >= y[1]; };
+  store.atomic(() => {
+    for (const [k, v] of store.list("gone:")) {
+      const half = k.slice(5);
+      if (!pubOf(v) || !raw(half, pubOf(v))) continue;
+      const id = deskIdOf(half), cur = store.get("gone:" + id);
+      store.put("gone:" + id, cur !== undefined && later(cur, v) ? cur : v);
+      store.del(k);
+      n.gone++;
+      if (store.get("dev:" + id) !== undefined) { store.del("dev:" + id); n.devDropped++; }
+    }
+    for (const [k, v] of store.list("dev:")) {
+      const half = k.slice(4);
+      if (!pubOf(v) || !raw(half, pubOf(v))) continue;
+      const id = deskIdOf(half);
+      store.del(k);
+      if (store.get("gone:" + id) !== undefined) { n.devDropped++; continue; }
+      if (store.get("dev:" + id) === undefined) store.put("dev:" + id, v);
+      n.dev++;
+    }
+    for (const [k, v] of store.list("bk:")) {
+      const half = k.slice(3), inv = is(HEX32, v) ? store.get("inv:" + v) : undefined;
+      if (!pubOf(inv) || !raw(half, pubOf(inv))) continue;
+      const id = deskIdOf(half), cur = store.get("bk:" + id), held = is(HEX32, cur) ? store.get("inv:" + cur) : undefined;
+      if (!(plain(held) && (held.spentAt || 0) >= (inv.spentAt || 0))) store.put("bk:" + id, v);
+      store.del(k);
+      n.bk++;
+    }
+    for (const [k, v] of store.list("inv:")) {
+      if (!plain(v) || !raw(v.key, pubOf(v) || undefined)) continue;
+      store.put(k, Object.assign({}, v, { key: deskIdOf(v.key) }));
+      n.inv++;
+    }
+    for (const [k, v] of store.list("dd:")) {
+      if (!plain(v) || !raw(v.key)) continue;
+      store.put(k, Object.assign({}, v, { key: deskIdOf(v.key) }));
+      n.dd++;
+    }
+    for (const [k, v] of store.list("tf:")) {
+      const cut = k.lastIndexOf(":"), half = k.slice(cut + 1);
+      if (!raw(half)) continue;
+      const to = k.slice(0, cut + 1) + deskIdOf(half), cur = store.get(to);
+      store.put(to, (typeof cur === "number" ? cur : 0) + (typeof v === "number" ? v : 0));
+      store.del(k);
+      n.tf++;
+    }
+    for (const [k, s] of store.list("ses:")) {
+      if (!plain(s) || s.key === leadId) continue;
+      if (raw(s.key) || raw(s.bound)) { store.del(k); n.ses++; }
+    }
+    store.put(MIGRATED, 1);
+  });
+  return n;
+}
 const only = (o, names) => Object.keys(o).every(k => names.indexOf(k) > -1);
 const exactly = (o, names) => only(o, names) && names.every(k => Object.prototype.hasOwnProperty.call(o, k));
 const sigShaped = s => plain(s) && exactly(s, SIG_FIELDS) && s.alg === "ed25519" && isId(s.keyId) && is(HEX128, s.value);
@@ -1800,6 +1876,6 @@ module.exports = {
   LEAD_PREFIX, leadBytes, judgeLead,
   DOOR_REFS_MAX, DOOR_CERT_MAX, DOOR_LIVE_MAX, DOOR_PER_PERSON, DOOR_RATE_MAX, DOOR_RATE_MS, DOOR_TRY_SHARE, CERT_SPAN_MS,
   doorBytes, doorHelloBytes, certBytes, certWhy,
-  grantBytes, delegationBytes, revocationBytes, revokedKeysOf, acceptRevocations, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, deskKeyMatches, deskIdOf, leadKeyMatches, parseMeta,
+  grantBytes, delegationBytes, revocationBytes, revokedKeysOf, acceptRevocations, grantWhy, grantOk, judgeCreate, isFresh, keyMatches, deskKeyMatches, deskIdOf, migrateDeskIds, MIGRATED, leadKeyMatches, parseMeta,
   createCore,
 };

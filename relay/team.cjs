@@ -147,6 +147,15 @@ function shut(ws, reason) {
 /* A sweep whose delete of some object failed rings again after this long, for those objects alone. */
 const SWEEP_RETRY_MS = 60 * 60 * 1000;
 
+/* The one log line of a wake that renamed or dropped rows: the counts by family, and nothing that names a key, a desk or a team.
+   Null where nothing changed. */
+function migrationLine(n) {
+  const renamed = n.dev + n.gone + n.bk + n.inv + n.dd + n.tf, dropped = n.devDropped + n.ses;
+  if (renamed + dropped === 0) return null;
+  return "relay one-spelling migration: renamed " + renamed + " (dev " + n.dev + ", gone " + n.gone + ", bk " + n.bk + ", inv " + n.inv
+    + ", dd " + n.dd + ", tf " + n.tf + "); dropped " + dropped + " (dev " + n.devDropped + ", ses " + n.ses + ")";
+}
+
 function teamObject(deps) {
   /* Keys the Worker decided for this request. Empty is a list, so a flag, not the array, says whether it was sent.
      Those keys stay for a later call with no header, while this wake lasts. With none, the call reads deps.revoked,
@@ -173,6 +182,17 @@ function teamObject(deps) {
   }
   const c = core.createCore({ store: deps.store, clock: deps.clock, limits: deps.limits, roots: deps.roots,
     revoked: revokedNow });
+  /* The old relay's raw-keyed rows, renamed once on the first wake that finds a team (core.migrateDeskIds). Nobody can list a
+     deployed relay's storage, so the wake that changed anything says so in one line of counts, with no key or id in it; a wake that
+     changed nothing writes no line. A throw rolls the step back and the next wake tries again. */
+  let migrate = false;
+  migrate = true; /* plant:desk-id-migrate */
+  if (migrate) {
+    try {
+      const line = migrationLine(core.migrateDeskIds(deps.store));
+      if (line) (typeof deps.log === "function" ? deps.log : console.log)(line);
+    } catch { /* left for the next wake */ }
+  }
   const r2 = deps.r2, sockets = deps.sockets, alarm = deps.alarm || null;
   const prefix = apiPrefixOf(Object.prototype.hasOwnProperty.call(deps, "prefix") ? { API_PREFIX: deps.prefix } : undefined);
   const answer = (r, shape) => (r.ok ? reply(200, shape(r)) : refused(r));

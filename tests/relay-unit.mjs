@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 576;
+const EXPECTED = 579;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -1247,10 +1247,17 @@ async function main() {
       "13a a path, a body or a name sent beside an upload's metadata is never kept");
     const strip = s => s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:"'])\/\/.*$/gm, "$1");
     const FORBIDDEN = /\bconsole\b|createDecipheriv|\bopenBlob\b|\bunframe\b|\bdecrypt/;
+    /* The one line the relay writes: the wake that renamed the old relay's raw-keyed rows, its counts alone (r1q holds what it says).
+       That call is taken out of team.cjs by its exact text, once, and it must stand there exactly once, so no second call rides it. */
+    const MIGRATION_LOG = '(typeof deps.log === "function" ? deps.log : console.log)(line)';
     const srcs = ["core.cjs", "team.cjs", "worker.mjs"].map(f => strip(fs.readFileSync(path.join(ROOT, "relay", f), "utf8")));
-    const control = FORBIDDEN.test(strip("const x = 1;\nconsole.log(x);")) && !FORBIDDEN.test(strip("/* console.log */ const y = 2;"));
-    check(srcs.every(s => !FORBIDDEN.test(s)) && control,
-      "13b the relay's sources log nothing and open no blob, by a scan with comments stripped that finds a planted call and not a commented one");
+    const allowedOnce = srcs[1].split(MIGRATION_LOG).length === 2;
+    srcs[1] = srcs[1].replace(MIGRATION_LOG, " ");
+    const control = FORBIDDEN.test(strip("const x = 1;\nconsole.log(x);")) && !FORBIDDEN.test(strip("/* console.log */ const y = 2;"))
+      && FORBIDDEN.test(("a" + MIGRATION_LOG + "b" + MIGRATION_LOG).replace(MIGRATION_LOG, " "));
+    check(srcs.every(s => !FORBIDDEN.test(s)) && allowedOnce && control,
+      "13b the relay's sources log nothing but the migration's one line of counts, and open no blob, by a scan with comments stripped that"
+      + " finds a planted call, a second copy of that line, and not a commented one");
   }
 
   /* ---- 14: sockets ---- */
@@ -5637,6 +5644,82 @@ async function main() {
       const deskLeadLift = await liftCore("plant:lead-desk-refusal", async () => !(await deskLeadScene()).ok);
       check(deskLead.ok && deskLeadLift.turned && deskLeadLift.back, "r1o lifting plant:lead-desk-refusal takes those handovers (r1n red), and the product file is never written: "
         + how(deskLeadLift));
+    }
+
+    /* THE OLD RELAY'S ROWS (findings 1 to 3 of the fourth Grok review of Part A, 3cc09cb5). 77a902d9 stored a desk's rows under
+       whichever spelling its call sent, the raw public half among them. The store here holds what that relay wrote under raw halves,
+       in the shapes of its own lines: an enrolled desk's dev: row (devices 672), a removed desk's gone: row over an invitation the lead
+       registered before the removal (669), a bound desk's binding and the invitation its token hello spent (byToken 988, indexBinding
+       931), a session held by a raw half (issue 1184), a desk enrolled under its branch id whose removal that relay kept under the raw
+       half, and a 64-hex row whose record names another key. Then the object wakes again, as after a deploy. */
+    async function oldRowsScene(opts) {
+      const w = await world(opts);
+      const st = w.R.stores.get(w.rt), now = w.R.clock.now;
+      const x = keyPair(true), y = keyPair(true), z = keyPair(true), q = keyPair(true);
+      const yToken = hex(32), yInv = hex(16), zToken = hex(32), zInv = hex(16), xToken = hex(32), stray = hex(32);
+      const desks = ["k-" + hex(8), "k-" + hex(8), "k-" + hex(8), "k-" + hex(8), "k-" + hex(8)];
+      await invites(w, [{ id: yInv, hash: sha(yToken) }, { id: zInv, hash: sha(zToken) }], []);
+      const ord = (st.get("ord") || 0) + 1;
+      st.put("ord", ord);
+      st.put("dev:" + x.pub, { pub: x.pub, desk: desks[0] });
+      st.put("gone:" + y.pub, { pub: y.pub, desk: desks[1], at: now, ord });
+      st.put("inv:" + zInv, Object.assign({}, st.get("inv:" + zInv), { spent: true, spentAt: now, key: z.pub, pub: z.pub }));
+      st.put("bk:" + z.pub, zInv);
+      st.put("ses:" + sha(xToken), { key: x.pub, inv: null, until: now + C.SESSION_MS });
+      st.put("dev:" + q.keyId, { pub: q.pub, desk: desks[2] });
+      st.put("gone:" + q.pub, { pub: q.pub, desk: desks[3], at: now, ord });
+      st.put("dev:" + stray, { pub: keyPair(true).pub, desk: desks[4] });
+      w.R.restart();
+      const xHello = await helloAs(w, x), zHello = await helloAs(w, z), qHello = await helloAs(w, q);
+      const yDoor = await tokenHello(w, yInv, yToken, null, y);
+      const ySpent = (st.get("inv:" + yInv) || {}).spent === true;
+      const oldSession = await since(w, xToken);
+      const toY = await moveLead(w, y), toX = await moveLead(w, x);
+      const keys = st.dump().map(([k]) => k);
+      const rawLeft = [x, y, z, q].filter(k => keys.some(key => key.indexOf(k.pub) >= 0)).length;
+      const strayKept = st.get("dev:" + stray) !== undefined;
+      const ok = xHello.status === 200 && !!xHello.json.session && zHello.status === 200 && zHello.json.invite === true
+        && refused(qHello, "removed") && refused(yDoor, "removed") && !ySpent && oldSession.status !== 200
+        && refused(toY, "not-enrolled") && refused(toX, "not-enrolled") && rawLeft === 0 && strayKept;
+      const secrets = [w.rt, yToken, yInv, zToken, zInv, xToken, sha(xToken), stray].concat(desks);
+      for (const k of [x, y, z, q]) secrets.push(k.pub, k.keyId);
+      return { ok, w, secrets, detail: JSON.stringify({ enrolledHello: answer(xHello), boundHello: answer(zHello),
+        removedOverEnrolled: answer(qHello), removedToken: answer(yDoor), tokenSpent: ySpent, rawSession: answer(oldSession),
+        toRemoved: answer(toY), toEnrolled: answer(toX), rawRowsLeft: rawLeft, strayKept }) };
+    }
+    const oldRows = await oldRowsScene();
+    check(oldRows.ok, "r1p a store the old relay wrote under raw halves, woken again: a handover to its enrolled or removed desk is refused, its"
+      + " removed desk's token is answered removed and left unspent, its enrolled and bound desks' branch-id hellos pass, a removal beats an"
+      + " enrolment of the same key, its raw session is gone, no row stays under a raw half, and a row whose record names another key"
+      + " stays where it is: " + oldRows.detail);
+    /* The one line the wake writes: once, with the counts alone; nothing on a second wake or where nothing was renamed. */
+    async function migrationLogScene(teamMod) {
+      const lines = [], log = line => lines.push(String(line));
+      const opts = teamMod ? { team: teamMod, log } : { log };
+      const seeded = await oldRowsScene(opts);
+      const first = lines.slice();
+      seeded.w.R.restart();
+      await challenge(seeded.w);
+      const afterSecond = lines.length;
+      const plainLines = [], plainWorld = await world(Object.assign({}, opts, { log: line => plainLines.push(String(line)) }));
+      plainWorld.R.restart();
+      await helloAs(plainWorld, plainWorld.desk);
+      const line = first[0] || "";
+      const leaked = seeded.secrets.filter(sx => line.indexOf(sx) >= 0 || line.indexOf(sx.slice(0, 8)) >= 0).length;
+      const hexRun = /[0-9a-f]{8,}/.test(line);
+      const WANT = "relay one-spelling migration: renamed 5 (dev 1, gone 2, bk 1, inv 1, dd 0, tf 0); dropped 2 (dev 1, ses 1)";
+      return { ok: first.length === 1 && line === WANT && afterSecond === 1 && plainLines.length === 0 && leaked === 0 && !hexRun,
+        line, detail: JSON.stringify({ first: first.length, line, afterSecondWake: afterSecond, nothingToRename: plainLines.length,
+          seededFound: leaked, hexRun }) };
+    }
+    const migLog = await migrationLogScene();
+    check(migLog.ok, "r1q the wake that renames logs one line, the counts by family and none of the seeded keys, ids or tokens (each searched"
+      + " for, whole and by its first 8 characters); a second wake and a store with nothing to rename log nothing: " + migLog.detail);
+    if (PLANTS_OFF) skip("r1r lifting plant:desk-id-migrate leaves the raw rows (r1p red) and logs nothing (r1q red)");
+    else {
+      const migLift = await editTeam(lineLifted("plant:desk-id-migrate"), async T => !(await oldRowsScene({ team: T })).ok && !(await migrationLogScene(T)).ok);
+      check(oldRows.ok && migLog.ok && migLift.turned && migLift.back, "r1r lifting plant:desk-id-migrate leaves the raw rows (r1p red) and logs"
+        + " nothing (r1q red), and the product file is never written: " + how(migLift));
     }
 
     // 933a: move signed by old lead is taken, new key hello opens lead session
