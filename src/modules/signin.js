@@ -706,15 +706,20 @@ function syncNoticeBubble(id, headText, tailText, anchor, primary, onDismiss, ex
 }
 /* "kept": a set-aside that failed with something it could not put back, which is in the folder; the desk is not the account's and
    the question still stands, so it has a notice of its own. */
-function syncChoiceNotice(choice){
+function syncChoiceNotice(choice, view){
   if(choice!=="mine" && choice!=="start" && choice!=="kept") return;
+  /* Sync not on after the answer (turned off here, or the folder not yet allowed): nothing says it syncs or that the account's content
+     is here; Start's notice keeps what was set aside and its button. */
+  const off=!!view && view.shown===true && view.on===false;
+  if(off && choice==="mine") return; /* plant:choice-off */
   const btn=$("#signinBtn");
   if(!btn || !btn.getClientRects().length) return;
   const tpl=choice==="mine" ? t("Syncing now, with what was already on this desk.")
     : choice==="kept" ? t("Starting from your account did not finish, and nothing was lost. What could not be put back is kept on this computer, in Etiuda's \"Set aside\" folder, and is never uploaded. The question about what is on this desk still waits for your answer.")
     : t("This desk now has your account's content. What was here before is kept on this computer, in Etiuda's \"Set aside\" folder, and is never uploaded.");
-  const i=tpl.indexOf(". ");
-  const head=i<0 ? tpl : tpl.slice(0,i+1), tail=i<0 ? "" : " "+tpl.slice(i+2);
+  const i=tpl.indexOf(". "), rest=off && choice==="start" && i>=0 ? tpl.slice(i+2) : tpl;
+  const j=rest.indexOf(". ");
+  const head=j<0 ? rest : rest.slice(0,j+1), tail=j<0 ? "" : " "+rest.slice(j+2);
   const extra=choice!=="mine" ? { label: t("Open this folder"), onClick: () => eOpenSetAside() } : null;
   const d=syncNoticeBubble("eSyncChoiceNote", head, tail, ()=>$("#signinBtn"), true, ()=>{
     const said=document.getElementById("eSyncSaid"); if(said) hangBubble(said, ()=>$("#signinBtn"));
@@ -727,7 +732,7 @@ function syncAnswer(choice){
   try{ eDeskFlush(); }catch(e){} /* plant:answer-flush */
   try{
     return Promise.resolve(h.storeAnswer(String(choice||""))).then(res=>{
-      if (res && res.ok) syncChoiceNotice(res.choice);
+      if (res && res.ok) syncChoiceNotice(res.choice, res.view);
       if (res && !res.ok && res.kept === true) syncChoiceNotice("kept");
       return res && res.view ? syncRead(res.view) : syncNow();
     }, ()=>syncNow());
@@ -803,7 +808,9 @@ function syncSay(s){
   const words=s.say==="on" ? t("Your catalogs, edits and settings now follow you to every computer you sign in on. You can turn this off in Account.")
     : syncUnavailable(s.say, signinV.signedIn, true);
   const i=words.indexOf(". ");
-  syncNoticeBubble("eSyncSaid", i<0 ? words : words.slice(0,i+1), i<0 ? "" : " "+words.slice(i+2), ()=>document.getElementById("eSyncChoiceNote") || $("#signinBtn"), false);
+  /* Where policy holds the switch, the line's last sentence, which says it can be turned off, is not said. */
+  const tail=(i<0 || (s.say==="on" && s.held===true)) ? "" : " "+words.slice(i+2); /* plant:say-held */
+  syncNoticeBubble("eSyncSaid", i<0 ? words : words.slice(0,i+1), tail, ()=>document.getElementById("eSyncChoiceNote") || $("#signinBtn"), false);
   const h=eHost();
   try{ if(h && typeof h.storeSaid==="function") h.storeSaid(); }catch(e){ /* the shell has gone */ } /* plant:sync-said-told */
 }

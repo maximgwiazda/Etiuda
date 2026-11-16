@@ -8,6 +8,8 @@
  *       to the shell once; never again, after more views or after Dismiss
  *   c9b the same while the account panel is open: nothing until the panel closes, then the one bubble
  *   c9c a second computer, and a desk that has said it already: no bubble
+ *   c9o an answer after which sync is not on: no notice of syncing, Start's notice the set-aside alone
+ *   c9h the first sign-in under a policy holding the switch: the first sentence alone
  *   c9d firstSay: "on" only at the first look with sync on that made the store
  *   m1  the Account row's line for each state, the switch only where it acts, held by policy fixed with its lock
  *   m2  Off asks from the switch: Everywhere, This computer, Cancel filled and last; the switch stays On; Escape and Cancel change
@@ -39,7 +41,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 51;
+const EXPECTED = 56;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const STORE = path.join(E.ROOT, "shell", "sync", "store.cjs");
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -76,7 +78,7 @@ async function boot({ lang = "en", theme = "light", page: name = "etiuda.html", 
       storeAnswer: async c => {
         window.__st.answers.push(c);
         if (c === "later") window.__st.view = Object.assign({}, window.__st.view, { askNow: false });
-        else if (c === "mine" || c === "start") window.__st.view = { shown: true, line: "on", on: true, held: false, why: "", since: 0, say: window.__st.sayAfter || "" };
+        else if (c === "mine" || c === "start") window.__st.view = window.__st.afterView || { shown: true, line: "on", on: true, held: false, why: "", since: 0, say: window.__st.sayAfter || "" };
         const res = { ok: true, choice: c, folder: c === "start" ? (window.__st.asideFolder || "C:\\Users\\Ada.User\\Set aside\\2026-11-15 18.10") : "", view: window.__st.view };
         setTimeout(() => { window.__st.tell && window.__st.tell(); }, 10);
         return res;
@@ -248,6 +250,39 @@ async function allowRow(pageName) {
   return bad;
 }
 
+/* c9o: an answer after which sync is not on (turned off here, or the folder never allowed): It is mine says nothing of syncing, and
+   Start's notice keeps only what was set aside and its button, nothing of the account's content being here. */
+async function choiceOff(pageName) {
+  const OFF = { shown: true, line: "off", on: false, held: false, why: "", since: 0, say: "" };
+  const ASK = { shown: true, line: "ask", on: false, held: false, why: "", since: 0, say: "", askNow: true };
+  const page = await boot({ page: pageName, view: ASK });
+  try {
+    await page.evaluate(v => { window.__st.afterView = v; }, OFF);
+    await sleep(350);
+    await page.evaluate(() => { const bs = [...document.querySelectorAll("#eSyncWhose button")]; if (bs[0]) bs[0].click(); });
+    await sleep(250);
+    const mine = await page.evaluate(() => !!document.getElementById("eSyncChoiceNote"));
+    await page.evaluate(a => { window.__st.view = a; window.__st.tell(); }, ASK);
+    await sleep(350);
+    await page.evaluate(() => { const bs = [...document.querySelectorAll("#eSyncWhose button")]; if (bs[1]) bs[1].click(); });
+    await sleep(250);
+    const start = await page.evaluate(() => { const n = document.getElementById("eSyncChoiceNote"), p = n && n.querySelector("p");
+      return n ? { full: p ? p.textContent : "", btns: [...n.querySelectorAll("button")].map(x => x.textContent) } : null; });
+    const want = "What was here before is kept on this computer, in Etiuda's \"Set aside\" folder, and is never uploaded.";
+    if (mine || !start || start.full !== want || JSON.stringify(start.btns) !== JSON.stringify(["Open this folder", "Dismiss"])) return JSON.stringify({ mine, start });
+    return "";
+  } finally { await page.close(); }
+}
+/* c9h: the same first sign-in where policy holds the switch: the line's first sentence alone, nothing said of turning it off. */
+async function firstSigninHeld(pageName) {
+  const page = await boot({ page: pageName, view: Object.assign({}, ON, { held: true }) });
+  try {
+    const one = await tell(page, Object.assign({}, ON, { held: true, say: "on" }));
+    const want = SAID_EN.slice(0, SAID_EN.indexOf(". ") + 1);
+    if (one.shown.length !== 1 || one.text !== want) return "words: " + JSON.stringify(one.text);
+    return "";
+  } finally { await page.close(); }
+}
 /* c9a: the first sign-in. Answers what went wrong, or "" where all held. */
 async function firstSignin(pageName) {
   const page = await boot({ page: pageName, view: ON });
@@ -271,6 +306,10 @@ async function firstSignin(pageName) {
 async function main() {
   browser = await puppeteer.launch({ executablePath: E.browserPath("chrome"), headless: true, args: ["--hide-scrollbars"], protocolTimeout: 120000 });
 
+  const c9o = await choiceOff("etiuda.html");
+  check(!c9o, "c9o an answer after which sync is not on: It is mine says nothing of syncing; Start keeps only what was set aside and its button", c9o || undefined);
+  const c9h = await firstSigninHeld("etiuda.html");
+  check(!c9h, "c9h the first sign-in where policy holds the switch: the copywriter's first sentence alone, nothing of turning it off", c9h || undefined);
   const c9a = await firstSignin("etiuda.html");
   check(!c9a, "c9a the first sign-in that made the store: one bubble from the account button in the copywriter's words, asking nothing, told once, never again", c9a || undefined);
 
@@ -863,7 +902,10 @@ async function main() {
       ["a passing failure over the dated pause", Object.assign({ until: now - 4 * D }, again), "again", { until: now - 4 * D }, "paused"],
       ["no seat over a new store under policy", { seatless: true, anew: true }, "noseat", { anew: true }, "anew"],
       ["a new store under policy over a look running", { anew: true, looking: true }, "anew", { looking: true }, "checking"],
-      ["a new store under policy over a conflict", { anew: true, conflicts: 1 }, "anew", { conflicts: 1 }, "conflict"],
+      ["a conflict over a new store under policy", { anew: true, conflicts: 1 }, "conflict", { anew: true }, "anew"],
+      ["the room full over a new store under policy", { anew: true, full: true }, "full", { anew: true }, "anew"],
+      ["a lapse over a new store under policy", { anew: true, until: now - D }, "lapsed", { anew: true }, "anew"],
+      ["a refused sign-in over a new store under policy", { anew: true, signinRefused: true, look: null }, "signin-refused", { anew: true, looking: true, look: null }, "anew"],
       ["a passing failure over a new store under policy", Object.assign({ anew: true }, again), "again", { anew: true }, "anew"],
       ["no seat over a look running", { seatless: true, looking: true }, "noseat", { looking: true }, "checking"],
       ["a look running over a passing failure", Object.assign({ looking: true }, again), "checking", again, "again"],
@@ -901,9 +943,10 @@ async function main() {
     const before = sha(STORE), text = fs.readFileSync(STORE, "utf8"), lines = text.split("\n"), at = lines.findIndex(l => l.indexOf("/* plant:" + tag + " */") >= 0);
     let red = false, detail = "the plant's anchor is absent";
     if (at >= 0) {
-      if (tag === "row-full") lines[at] = lines[at].replace('o.full === true ? "full" : "on"', '"on"');
+      if (tag === "row-full") lines[at] = lines[at].replace('o.full === true ? "full" : ', '');
       else if (tag === "row-ungiven") lines[at] = lines[at].replace('pol.held === true ? "ungiven-held" : "ungiven"', '"ungiven"');
       else if (tag === "row-no-date") lines[at] = lines[at].replace("Number(o.until) > 0 ? pausedLine({ until: o.until }, o.now, o.signinRefused) : null", "pausedLine({ until: o.until }, o.now, o.signinRefused)");
+      else if (tag === "row-anew") lines[at] = lines[at].replace('o.anew === true && !!look && look.state === "on" ? "anew" : "on"', '"on"');
       else if (tag === "row-conflict") { const moved = lines.splice(at, 1)[0].replace(" && o.full !== true", ""); lines.splice(lines.findIndex(l => l.indexOf("const p = pausedLine(") >= 0), 0, moved); }
       else lines.splice(at, 1);
       const dir = path.join(lab, "store-plant-" + tag);
@@ -916,6 +959,43 @@ async function main() {
   }
 
   /* The plants. */
+  if (PLANTS_OFF) skip("p c9o the answer's view not read by the notice turns c9o red");
+  else {
+    const from = "if (res && res.ok) syncChoiceNotice(res.choice, res.view);";
+    const n = PAGE.split(from).length - 1;
+    let detail = "the plant's anchor is there " + n + " times";
+    if (n === 1) {
+      fs.writeFileSync(path.join(lab, "planted-off.html"), PAGE.split(from).join("if (res && res.ok) syncChoiceNotice(res.choice);"));
+      const r = await choiceOff("planted-off.html");
+      detail = r ? "red: " + r : "still held";
+      check(!c9o && !!r, "p c9o the answer's view not read by the notice turns c9o red", detail);
+    } else check(false, "p c9o the answer's view not read by the notice turns c9o red", detail);
+  }
+  if (PLANTS_OFF) skip("p c9h the policy's case taken out of the said line turns c9h red");
+  else {
+    const from = 'const tail = i < 0 || s.say === "on" && s.held === true ? "" : " " + words.slice(i + 2);';
+    const n = PAGE.split(from).length - 1;
+    let detail = "the plant's anchor is there " + n + " times";
+    if (n === 1) {
+      fs.writeFileSync(path.join(lab, "planted-held.html"), PAGE.split(from).join('const tail = i < 0 ? "" : " " + words.slice(i + 2);'));
+      const r = await firstSigninHeld("planted-held.html");
+      detail = r ? "red: " + r : "still held";
+      check(!c9h && !!r, "p c9h the policy's case taken out of the said line turns c9h red", detail);
+    } else check(false, "p c9h the policy's case taken out of the said line turns c9h red", detail);
+  }
+  if (PLANTS_OFF) skip("p r2 a new store under policy said over a conflict turns r2 red");
+  else {
+    const before = sha(STORE), lines = fs.readFileSync(STORE, "utf8").split("\n"), at = lines.findIndex(l => l.indexOf("/* plant:row-conflict */") >= 0);
+    let red = false;
+    if (at >= 0) {
+      lines.splice(at, 0, '  if (o.anew === true && look && look.state === "on") return Object.assign(base, { line: "anew" });');
+      const dir = path.join(lab, "store-plant-anew-first");
+      fs.mkdirSync(dir);
+      fs.writeFileSync(path.join(dir, "store.cjs"), lines.join("\n"));
+      try { red = orderBad(require(path.join(dir, "store.cjs"))).length > 0; } catch (e) { red = true; }
+    }
+    check(red && sha(STORE) === before, "p r2 a new store under policy said over a conflict turns r2 red", red ? "red" : "still held");
+  }
   const PAGE_PLANT = [") h.storeSaid();", ") void 0;"];
   if (PLANTS_OFF) skip("p c9a the page's word that it showed the bubble taken out turns c9a red");
   else {
@@ -943,7 +1023,7 @@ async function main() {
   }
   if (PLANTS_OFF) skip("p c9g leaving choice notice out turns c9g red");
   else {
-    const NOTE_PLANT = ['if (res && res.ok) syncChoiceNotice(res.choice);', 'void 0;'];
+    const NOTE_PLANT = ['if (res && res.ok) syncChoiceNotice(res.choice, res.view);', 'void 0;'];
     const n = PAGE.split(NOTE_PLANT[0]).length - 1;
     let detail = "the plant's anchor is there " + n + " times";
     if (n === 1) {
