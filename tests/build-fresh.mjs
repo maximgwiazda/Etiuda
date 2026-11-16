@@ -28,7 +28,7 @@
  *
  * THE SUBJECT IS build.mjs's OWN LIST, not one written here, so a fourth output cannot be added
  * there and left outside this gate. */
-import { existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
@@ -88,6 +88,8 @@ const builtLines = s => String(s).split('\n').filter(l => l.includes(BUILT_LINE)
 
 const committed = readAll();
 const tracked = committed.every(Boolean);
+/* A copy without the tracked outputs has no engine/ folder, and tools/build.mjs writes into it without making it. */
+mkdirSync(dirname(OUT_FILE), { recursive: true });
 
 /* 1 to 3: two builds of one source, the record, and while tracked the committed bytes. */
 await build();
