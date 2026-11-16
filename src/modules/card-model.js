@@ -46,8 +46,21 @@ function cardLang(m){
   const want=(CONTENT_LANGS.indexOf(p)>-1) ? p : lang;
   return cardText(m,"body",want) ? want : CONTENT_LANGS[0];
 }
+/* A REWORDED CARD (card-reword.js), kept in this page's memory alone until Approve or Revert, {L, from, text, act} by id:
+   parts() reads it while the card's own text is still `from`, so every reader shows and copies what is on screen. */
+const REWORDED=new Map();
+/* Each rewording numbered as it is kept, so the card pool's signature moves with it (rewordSig) and a kept node is redrawn. */
+let rewordN=0;
+function rewordKeep(id,r){ REWORDED.set(id, Object.assign({}, r, {n:++rewordN})); }
+function rewordSig(id){ const r=REWORDED.get(id); return r ? "rw"+r.n : ""; }
+/* The rewording shown on `m`: kept for the language on screen, and the card's own text still the one it was made from. */
+function rewordShown(m){
+  const r=m && REWORDED.get(m.id), L=r ? cardLang(m) : "";
+  return r && r.L===L && cardText(m,"body",L)===r.from ? r : null;
+}
 function parts(m,l){
-  const raw = cardText(m,"body",l);
+  const rw=m && REWORDED.get(m.id);
+  const raw = rw && rw.L===l && cardText(m,"body",l)===rw.from ? rw.text : cardText(m,"body",l);
   if(!raw) return [];
   if(!m.alt) return [raw];
   return raw.split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean).map(v2PartText);
@@ -168,6 +181,10 @@ function reverseBlockIndex(newI, from, to){
 }
 
 export {
+  REWORDED,
+  rewordKeep,
+  rewordSig,
+  rewordShown,
   findCard,
   baseCard,
   cardText,

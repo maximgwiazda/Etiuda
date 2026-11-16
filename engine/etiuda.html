@@ -4608,9 +4608,18 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
 .e-notice p.e-notice-err{font:12px var(--mono);color:var(--bub-dim);overflow-wrap:anywhere}
 .e-notice .e-notice-hint{margin-right:auto;font-size:12.5px;color:var(--bub-dim)}
 /* A field on the fill: paper, so what is typed reads as the reader's own. */
-.bub .e-name-inp,.bub .e-proxy-inp,.bub .e-reset-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
+.bub .e-name-inp,.bub .e-proxy-inp,.bub .e-reset-inp,.bub .rw-how{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
   border:1px solid transparent;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans)}
-.bub .e-name-inp:focus-visible,.bub .e-proxy-inp:focus-visible,.bub .e-reset-inp:focus-visible{outline:2px solid var(--bub-ink);outline-offset:2px}
+.bub .e-name-inp:focus-visible,.bub .e-proxy-inp:focus-visible,.bub .e-reset-inp:focus-visible,.bub .rw-how:focus-visible{outline:2px solid var(--bub-ink);outline-offset:2px}
+/* REWORD ON A CARD (card-reword.js): the menu's acts on the fill, its line under the field; and the card while a rewording
+   stands, its slabs' own line dashed, the chip over its words and Approve and Revert at its lower right. */
+.rw-bub .rw-bacts{justify-content:flex-start;margin:0 0 8px;padding:0;border:0}
+.rw-bub .rw-bline{margin:8px 0 0;font-size:12.5px}
+.card.rw-on>.txt{border-style:dashed;border-color:var(--accent)}
+:root:not([data-theme=light]) .card.rw-on>.txt::after{content:none}
+.rw-chip{display:flex;align-items:center;gap:8px;margin:0 0 6px;font-size:12px;color:var(--dim)}
+.rw-badge{padding:1px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600}
+.rw-ans{display:flex;justify-content:flex-end;gap:8px;margin:-4px 0 10px}
 .bub .e-proxy-inp+.e-proxy-inp{margin-top:8px}
 .bub .e-proxy-inp:last-of-type{margin-bottom:10px}
 .bub .e-greet{color:var(--bub-ink);margin:8px 0 10px}
@@ -7218,6 +7227,7 @@ What is typed here stays in this browser.`;
   // src/modules/card-model.js
   var card_model_exports = {};
   __export(card_model_exports, {
+    REWORDED: () => REWORDED,
     altLabelAt: () => altLabelAt,
     baseCard: () => baseCard,
     cardCommits: () => cardCommits,
@@ -7231,6 +7241,9 @@ What is typed here stays in this browser.`;
     putOverride: () => putOverride,
     reorderMacroBlocks: () => reorderMacroBlocks,
     reverseBlockIndex: () => reverseBlockIndex,
+    rewordKeep: () => rewordKeep,
+    rewordShown: () => rewordShown,
+    rewordSig: () => rewordSig,
     splitPartsRaw: () => splitPartsRaw,
     stampChanged: () => stampChanged
   });
@@ -7893,6 +7906,20 @@ What is typed here stays in this browser.`;
     "Enter puts it in place of your selection": "Enter wstawia go w miejsce zaznaczenia",
     "Back to the replies": "Wróć do odpowiedzi",
     "Waiting for {ADDRESS}": "Oczekiwanie na {ADDRESS}",
+    "Reword": "Przeredaguj",
+    "Reword this card": "Przeredaguj tę kartę",
+    "Or say how, then press Enter": "Albo opis zmiany, potem Enter",
+    "Sends this card's words to {ADDRESS}. The card itself changes only if you approve the result.": "Wysyła treść tej karty do {ADDRESS}. Sama karta zmieni się tylko po zatwierdzeniu wyniku.",
+    "Reworded: {ACT}": "Przeredagowano: {ACT}",
+    "Reworded as described": "Przeredagowano według opisu",
+    "Not saved.": "Niezapisane.",
+    "Shown until Etiuda is next opened, unless you approve it.": "Widoczne do ponownego uruchomienia Etiudy, chyba że zostanie zatwierdzone.",
+    "Approve": "Zatwierdź",
+    "Keep these words as your own edit of the card": "Zachowaj tę treść jako własną zmianę karty",
+    "Revert": "Przywróć",
+    "Show the card as it was": "Pokaż kartę w pierwotnej postaci",
+    "No answer from {ADDRESS}. The card is as it was.": "Brak odpowiedzi od {ADDRESS}. Karta pozostała bez zmian.",
+    "The reworded text did not keep this card's parts or the names it fills in, so the card stays as it was.": "Przeredagowany tekst nie zachował części karty ani wypełnianych nazw, więc karta pozostaje bez zmian.",
     "No answer from {ADDRESS}. Your words are as you wrote them.": "Brak odpowiedzi od {ADDRESS}. Tekst pozostał bez zmian.",
     "Press": "Naciśnij",
     "{KEY} clears the search and the intents and shows every card.": "{KEY} czyści wyszukiwanie i intencje i pokazuje wszystkie karty.",
@@ -11766,8 +11793,22 @@ What is typed here stays in this browser.`;
     const want = CONTENT_LANGS.indexOf(p) > -1 ? p : lang;
     return cardText(m, "body", want) ? want : CONTENT_LANGS[0];
   }
+  var REWORDED = /* @__PURE__ */ new Map();
+  var rewordN = 0;
+  function rewordKeep(id, r) {
+    REWORDED.set(id, Object.assign({}, r, { n: ++rewordN }));
+  }
+  function rewordSig(id) {
+    const r = REWORDED.get(id);
+    return r ? "rw" + r.n : "";
+  }
+  function rewordShown(m) {
+    const r = m && REWORDED.get(m.id), L = r ? cardLang(m) : "";
+    return r && r.L === L && cardText(m, "body", L) === r.from ? r : null;
+  }
   function parts(m, l) {
-    const raw = cardText(m, "body", l);
+    const rw = m && REWORDED.get(m.id);
+    const raw = rw && rw.L === l && cardText(m, "body", l) === rw.from ? rw.text : cardText(m, "body", l);
     if (!raw) return [];
     if (!m.alt) return [raw];
     return raw.split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean).map(v2PartText);
@@ -17378,7 +17419,7 @@ What is typed here stays in this browser.`;
     return lsGet("eDeckOff") !== "1";
   }
   function deckSlabs(card) {
-    return Array.from(card.querySelectorAll(":scope > .txt[data-v]"));
+    return card.classList.contains("rw-on") ? [] : Array.from(card.querySelectorAll(":scope > .txt[data-v]"));
   }
   function deckPx(n) {
     return Math.round(n * 100) / 100 + "px";
@@ -25456,6 +25497,203 @@ What is typed here stays in this browser.`;
     });
   }
 
+  // src/modules/card-reword.js
+  var card_reword_exports = {};
+  __export(card_reword_exports, {
+    approveReword: () => approveReword,
+    closeRewordMenu: () => closeRewordMenu,
+    openRewordMenu: () => openRewordMenu,
+    revertReword: () => revertReword,
+    rewordAnswersHtml: () => rewordAnswersHtml,
+    rewordButtonHtml: () => rewordButtonHtml,
+    rewordChipHtml: () => rewordChipHtml,
+    rewordHostNow: () => rewordHostNow,
+    rewordKeepsShape: () => rewordKeepsShape
+  });
+  var ICON_REWORD = _svg("ic", '<path d="M3 6h8M3 10h6M3 14h4"/><path d="M15 3l.8 2.2L18 6l-2.2.8L15 9l-.8-2.2L12 6l2.2-.8z"/><path d="M14 12l.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.5z"/>');
+  var RW_ACTS = [["shorter", "Shorter"], ["friendlier", "Friendlier"], ["formal", "More formal"]];
+  var rwHostAt = 0;
+  var rwHostWas = "";
+  function rewordHostNow() {
+    const now = Date.now();
+    if (now - rwHostAt < 1e3) return rwHostWas;
+    rwHostAt = now;
+    const h = eHost();
+    let s = null;
+    try {
+      s = h && typeof h.aiState === "function" && typeof h.reword === "function" ? h.aiState() : null;
+    } catch (e) {
+      s = null;
+    }
+    rwHostWas = s && typeof s.reword === "string" ? s.reword : "";
+    return rwHostWas;
+  }
+  function rewordButtonHtml() {
+    if (!rewordHostNow()) return "";
+    const w = t("Reword");
+    return '<button type="button" data-act="reword" title="' + esc(w) + '" aria-label="' + esc(w) + '" aria-haspopup="dialog" aria-expanded="false">' + ICON_REWORD + "</button>";
+  }
+  function rewordChipHtml(r) {
+    const act = RW_ACTS.filter((a) => a[0] === r.act)[0];
+    const chip = act ? t("Reworded: {ACT}").split("{ACT}").join(t(act[1])) : t("Reworded as described");
+    return '<div class="rw-chip"><span class="rw-badge">' + esc(chip) + '</span><span class="rw-unsaved" title="' + esc(t("Shown until Etiuda is next opened, unless you approve it.")) + '">' + esc(t("Not saved.")) + "</span></div>";
+  }
+  function rewordAnswersHtml() {
+    return '<div class="rw-ans"><button type="button" class="btn" data-rw="approve" title="' + esc(t("Keep these words as your own edit of the card")) + '">' + esc(t("Approve")) + '</button><button type="button" class="btn" data-rw="revert" title="' + esc(t("Show the card as it was")) + '">' + esc(t("Revert")) + "</button></div>";
+  }
+  var RW_MARK_RE = /^\[(step|alt)(:[^\x5d]*)?\]$/;
+  function rewordTokens(s) {
+    return (String(s == null ? "" : s).match(VAR_TOKEN_RE) || []).slice().sort().join("\n");
+  }
+  function rewordKeepsShape(from, to, alt) {
+    if (!String(to || "").trim() || rewordTokens(from) !== rewordTokens(to)) return false;
+    if (!alt) return true;
+    const a = splitPartsRaw(from), b = splitPartsRaw(to);
+    if (a.length !== b.length) return false;
+    const mark = (p) => {
+      const first = (String(p).split("\n")[0] || "").trim();
+      return RW_MARK_RE.test(first) ? first : "";
+    };
+    const rest = (p) => (mark(p) ? String(p).split("\n").slice(1).join("\n") : String(p)).trim();
+    return a.every((p, i) => mark(p) === mark(b[i]) && rest(b[i]).length > 0);
+  }
+  var rwMenu = null;
+  var rwAsk = 0;
+  function rwButtonOf(id) {
+    return [...document.querySelectorAll('#list .card[data-id] .cacts [data-act="reword"]')].filter((b) => b.closest(".card").dataset.id === id)[0] || null;
+  }
+  function closeRewordMenu() {
+    if (!rwMenu) return;
+    const was = rwMenu;
+    rwMenu = null;
+    rwAsk++;
+    try {
+      was.drop();
+    } catch (e) {
+    }
+    removeEventListener("mousedown", was.outside, true);
+    dismissNode(was.el);
+    const b = rwButtonOf(was.id);
+    if (b) b.setAttribute("aria-expanded", "false");
+  }
+  function openRewordMenu(btn, id) {
+    if (rwMenu && rwMenu.id === id) {
+      closeRewordMenu();
+      return;
+    }
+    closeRewordMenu();
+    const host = rewordHostNow(), m = findCard(id);
+    if (!host || !m) return;
+    const el = document.createElement("div");
+    el.className = "bub bub-ask rw-bub";
+    el.id = "eReword";
+    el.setAttribute("role", "dialog");
+    el.setAttribute("aria-labelledby", "eRewordTitle");
+    const how = t("Or say how, then press Enter");
+    el.innerHTML = '<h3 id="eRewordTitle">' + esc(t("Reword this card")) + '</h3><div class="tour-actions rw-bacts">' + RW_ACTS.map((a) => '<button type="button" class="btn" data-rw-act="' + a[0] + '">' + esc(t(a[1])) + "</button>").join("") + '</div><input type="text" class="rw-how" id="eRewordHow" maxlength="200" autocomplete="off" spellcheck="false" placeholder="' + esc(how) + '" aria-label="' + esc(how) + '"><p class="rw-bline" role="status"></p><div class="tour-actions"><button type="button" class="btn primary" id="eRewordNo">' + esc(t("Cancel")) + "</button></div>";
+    cutLeaves();
+    document.body.appendChild(el);
+    const line = el.querySelector(".rw-bline"), field = el.querySelector("#eRewordHow");
+    const say = (s) => {
+      line.textContent = String(s || "").split("{ADDRESS}").join(host);
+    };
+    say(t("Sends this card's words to {ADDRESS}. The card itself changes only if you approve the result."));
+    const drop = hangBubble(el, () => rwButtonOf(id), { prefer: "above", width: 340 });
+    const outside = (e) => {
+      if (!el.contains(e.target) && !(e.target.closest && e.target.closest('[data-act="reword"]'))) closeRewordMenu();
+    };
+    addEventListener("mousedown", outside, true);
+    rwMenu = { el, id, drop, outside };
+    btn.setAttribute("aria-expanded", "true");
+    el.addEventListener("click", (e) => {
+      const b = e.target.closest && e.target.closest("button[data-rw-act]");
+      if (b) rewordPress(id, b.getAttribute("data-rw-act"), "", say);
+    });
+    el.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        closeRewordMenu();
+        try {
+          btn.focus({ preventScroll: true });
+        } catch (_) {
+        }
+      } else if (e.key === "Enter" && e.target === field) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (field.value.trim()) rewordPress(id, "own", field.value, say);
+      }
+    });
+    el.querySelector("#eRewordNo").onclick = () => closeRewordMenu();
+    try {
+      el.querySelector("button[data-rw-act]").focus({ preventScroll: true });
+    } catch (e) {
+    }
+  }
+  function rewordPress(id, act, how, say) {
+    const m = findCard(id), h = eHost(), menu = rwMenu;
+    if (!m || !menu || menu.id !== id || !h || typeof h.reword !== "function") return;
+    const L = cardLang(m), from = cardText(m, "body", L);
+    if (!from) return;
+    const mine = ++rwAsk;
+    menu.el.querySelectorAll("button[data-rw-act]").forEach((b) => b.classList.toggle("tour-sel", b.getAttribute("data-rw-act") === act));
+    say(t("Waiting for {ADDRESS}"));
+    const fail = (r) => say(r && r.why === "late" ? t("The AI service did not answer in time, so the request was given up.") : r && r.why === "busy" ? t("The AI service is busy and asked Etiuda to wait; a later try may go through.") : t("No answer from {ADDRESS}. The card is as it was."));
+    Promise.resolve(h.reword({ act, words: from, how: act === "own" ? String(how || "") : "", to: "" })).then((r) => {
+      if (mine !== rwAsk || rwMenu !== menu) return;
+      menu.el.querySelectorAll("button.tour-sel").forEach((b) => b.classList.remove("tour-sel"));
+      if (!r || r.ok !== true || typeof r.text !== "string") {
+        fail(r);
+        return;
+      }
+      if (!rewordKeepsShape(from, r.text, !!m.alt)) {
+        say(t("The reworded text did not keep this card's parts or the names it fills in, so the card stays as it was."));
+        return;
+      }
+      const now = findCard(id);
+      closeRewordMenu();
+      if (!now || cardText(now, "body", L) !== from) return;
+      rewordKeep(id, { L, from, text: r.text, act });
+      hooks.rebuildCards();
+    }, () => {
+      if (mine === rwAsk && rwMenu === menu) fail(null);
+    });
+  }
+  function approveReword(id) {
+    const r = REWORDED.get(id), m = findCard(id);
+    REWORDED.delete(id);
+    const key = r ? cardFieldKey("body", r.L) : "";
+    if (!r || !m || !key || cardText(m, "body", r.L) !== r.from) {
+      hooks.rebuildCards();
+      return false;
+    }
+    const moved = { [key]: r.text };
+    if (m._custom) {
+      const ix = (pack.custom || []).findIndex((x) => x && x.id === id);
+      if (ix < 0) {
+        hooks.rebuildCards();
+        return false;
+      }
+      const was = Object.assign({}, pack.custom[ix]);
+      stampChanged(Object.assign(pack.custom[ix], moved), was);
+    } else {
+      const base = baseCard(id);
+      if (!base) {
+        hooks.rebuildCards();
+        return false;
+      }
+      putOverride(id, overrideAgainstBase(base, Object.assign({}, m, moved)));
+    }
+    savePack([id]);
+    hooks.rebuildCards();
+    toast("Card saved");
+    return true;
+  }
+  function revertReword(id) {
+    REWORDED.delete(id);
+    hooks.rebuildCards();
+  }
+
   // src/modules/list-pointer.js
   var cardDrag = null;
   var cardSwapLock = 0;
@@ -25832,6 +26070,17 @@ What is typed here stays in this browser.`;
         txtSuppressClick = false;
         return;
       }
+      const rwBtn = e.target.closest(".rw-ans button[data-rw]");
+      if (rwBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const card2 = rwBtn.closest(".card"), id = card2 && card2.dataset.id;
+        if (id) {
+          if (rwBtn.dataset.rw === "approve") approveReword(id);
+          else revertReword(id);
+        }
+        return;
+      }
       const actBtn = e.target.closest(".cacts button");
       if (actBtn) {
         e.preventDefault();
@@ -25843,6 +26092,7 @@ What is typed here stays in this browser.`;
           if (id) flipCardsAround(() => toggleFavourite(id));
         } else if (act === "edit") hooks.openCardEditor(id);
         else if (act === "note") toggleNotePane(actBtn, id);
+        else if (act === "reword") openRewordMenu(actBtn, id);
         else if (act === "hide") flipCardsAround(() => hooks.hideCard(id), card2.classList.contains("is-hidden") ? null : { leave: id });
         return;
       }
@@ -25904,7 +26154,8 @@ What is typed here stays in this browser.`;
   function cardBodyHtml(m, i, ctx) {
     const hit = ctx.hit, catHit = ctx.catHit, fav = ctx.fav, band = ctx.band, other = ctx.other, dragTip = ctx.dragTip;
     let cardH = "";
-    cardH += '<div class="card' + (m._hidden ? " is-hidden" : "") + (hit ? " intent-hit" : "") + (catHit ? " cat-hit" : "") + (cardDrag && cardDrag.moved && cardDrag.key === m.id ? " dragging" : "") + '" data-i="' + i + '" data-id="' + esc(m.id || "") + '" data-rank="' + esc(band) + '"' + (catSlot(m.c) >= 0 ? ' data-ec="' + catSlot(m.c) + '"' : "") + ' title="' + esc(dragTip) + '">';
+    const rw = rewordShown(m);
+    cardH += '<div class="card' + (m._hidden ? " is-hidden" : "") + (rw ? " rw-on" : "") + (hit ? " intent-hit" : "") + (catHit ? " cat-hit" : "") + (cardDrag && cardDrag.moved && cardDrag.key === m.id ? " dragging" : "") + '" data-i="' + i + '" data-id="' + esc(m.id || "") + '" data-rank="' + esc(band) + '"' + (catSlot(m.c) >= 0 ? ' data-ec="' + catSlot(m.c) + '"' : "") + ' title="' + esc(dragTip) + '">';
     cardH += '<div class="chead">';
     cardH += catMarkHtml(m.c) + '<span class="ctitle" data-i18n-skip>' + esc(cardTitle(m)) + "</span>" + (cardCommits(m) ? stampHtml("cstamp") : "");
     const hitBadge = '<span class="cbadge hit" title="' + esc(t("Linked to the selected intent")) + '">' + esc(t("Linked")) + "</span>";
@@ -25919,9 +26170,10 @@ What is typed here stays in this browser.`;
     const favTip = t(fav ? "Remove from Favourites" : "Add to Favourites");
     const hideTip = t(m._hidden ? "Show this card again" : fav ? "Put this card away: it greys out at the foot of this category and loses its star" : "Put this card away: it greys out at the foot of this category");
     const _note = noteFor(m);
-    cardH += '<span class="cacts">' + (_note ? '<button type="button" data-act="note" title="' + esc(t("Internal note")) + '" aria-label="' + esc(t("Internal note")) + '" aria-expanded="false">' + _svg("ic", _NOTE) + "</button>" : "") + '<button type="button" data-act="edit" title="' + esc(t("Edit this card")) + '" aria-label="' + esc(t("Edit this card")) + '">' + ICON_EDIT + '</button><button type="button" class="' + (m._hidden ? "" : "danger") + '" data-act="hide" title="' + esc(hideTip) + '" aria-label="' + esc(hideTip) + '">' + (m._hidden ? ICON_EYE_SHUT : ICON_EYE_OPEN) + '</button><button type="button" class="star-btn' + (fav ? " on" : "") + '" data-act="fav" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
+    cardH += '<span class="cacts">' + rewordButtonHtml() + (_note ? '<button type="button" data-act="note" title="' + esc(t("Internal note")) + '" aria-label="' + esc(t("Internal note")) + '" aria-expanded="false">' + _svg("ic", _NOTE) + "</button>" : "") + '<button type="button" data-act="edit" title="' + esc(t("Edit this card")) + '" aria-label="' + esc(t("Edit this card")) + '">' + ICON_EDIT + '</button><button type="button" class="' + (m._hidden ? "" : "danger") + '" data-act="hide" title="' + esc(hideTip) + '" aria-label="' + esc(hideTip) + '">' + (m._hidden ? ICON_EYE_SHUT : ICON_EYE_OPEN) + '</button><button type="button" class="star-btn' + (fav ? " on" : "") + '" data-act="fav" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
     const _L = cardLang(m);
     const ps = parts(m, _L), cls = _L === CONTENT_LANGS[0] ? "" : " plx", edDiff = editionDiffParts(m, _L, ps);
+    if (rw) cardH += rewordChipHtml(rw);
     if (ps.length) {
       const many = ps.length > 1, word = m.seq ? t("STEP") : _L.toUpperCase();
       cardH += ps.map((p, vi) => {
@@ -25933,6 +26185,7 @@ What is typed here stays in this browser.`;
     } else {
       cardH += '<div class="miss">' + esc(t("No {LANG} version for this card").replace("{LANG}", _L.toUpperCase())) + " - " + esc(t("switch to {LANG} to use it").replace("{LANG}", other.toUpperCase())) + ".</div>";
     }
+    if (rw) cardH += rewordAnswersHtml();
     const sws = lang === "pl" ? m.swpl || m.sw : m.sw || m.swpl;
     if (sws && !railActive()) cardH += swapStripHtml(sws);
     cardH += "</div>";
@@ -25989,7 +26242,7 @@ What is typed here stays in this browser.`;
     cardPool = /* @__PURE__ */ new Map();
   }
   function patchCard(el, it) {
-    el.className = "card" + (it.hidden ? " is-hidden" : "") + (it.hit ? " intent-hit" : "") + (it.catHit ? " cat-hit" : "") + (it.dragging ? " dragging" : "") + deckCarry(el);
+    el.className = "card" + (it.hidden ? " is-hidden" : "") + (it.rw ? " rw-on" : "") + (it.hit ? " intent-hit" : "") + (it.catHit ? " cat-hit" : "") + (it.dragging ? " dragging" : "") + deckCarry(el);
     el.setAttribute("title", it.dragTip);
     el.setAttribute("data-i", it.i);
     el.setAttribute("data-rank", it.band);
@@ -26049,7 +26302,7 @@ What is typed here stays in this browser.`;
     );
     const fresh = parseCardHtml(b.cardH);
     if (!fresh) return;
-    fresh.__sig = ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1) + "|" + editionMarkSig(m.id);
+    fresh.__sig = ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1) + "|" + editionMarkSig(m.id) + "|" + rewordSig(m.id);
     const ord = el.getAttribute("data-ord");
     if (ord != null) fresh.setAttribute("data-ord", ord);
     deckUnobserve(el);
@@ -27778,10 +28031,11 @@ What is typed here stays in this browser.`;
         sepH,
         body,
         id: m.id,
-        sig: ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1) + "|" + editionMarkSig(m.id),
+        sig: ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1) + "|" + editionMarkSig(m.id) + "|" + rewordSig(m.id),
         hit,
         catHit,
         hidden: !!m._hidden,
+        rw: !!rewordShown(m),
         i,
         band,
         dragging: !!(cardDrag && cardDrag.moved && cardDrag.key === m.id),
@@ -43263,7 +43517,7 @@ What is typed here stays in this browser.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, card_flag_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_margin_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, launch_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, deck_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports, edition_marks_exports, screen_tabs_exports, search_meaning_exports, org_model_exports, proxy_ask_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, card_flag_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_margin_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, launch_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, card_reword_exports, deck_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports, edition_marks_exports, screen_tabs_exports, search_meaning_exports, org_model_exports, proxy_ask_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });

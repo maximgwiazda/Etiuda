@@ -4608,9 +4608,18 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
 .e-notice p.e-notice-err{font:12px var(--mono);color:var(--bub-dim);overflow-wrap:anywhere}
 .e-notice .e-notice-hint{margin-right:auto;font-size:12.5px;color:var(--bub-dim)}
 /* A field on the fill: paper, so what is typed reads as the reader's own. */
-.bub .e-name-inp,.bub .e-proxy-inp,.bub .e-reset-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
+.bub .e-name-inp,.bub .e-proxy-inp,.bub .e-reset-inp,.bub .rw-how{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
   border:1px solid transparent;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans)}
-.bub .e-name-inp:focus-visible,.bub .e-proxy-inp:focus-visible,.bub .e-reset-inp:focus-visible{outline:2px solid var(--bub-ink);outline-offset:2px}
+.bub .e-name-inp:focus-visible,.bub .e-proxy-inp:focus-visible,.bub .e-reset-inp:focus-visible,.bub .rw-how:focus-visible{outline:2px solid var(--bub-ink);outline-offset:2px}
+/* REWORD ON A CARD (card-reword.js): the menu's acts on the fill, its line under the field; and the card while a rewording
+   stands, its slabs' own line dashed, the chip over its words and Approve and Revert at its lower right. */
+.rw-bub .rw-bacts{justify-content:flex-start;margin:0 0 8px;padding:0;border:0}
+.rw-bub .rw-bline{margin:8px 0 0;font-size:12.5px}
+.card.rw-on>.txt{border-style:dashed;border-color:var(--accent)}
+:root:not([data-theme=light]) .card.rw-on>.txt::after{content:none}
+.rw-chip{display:flex;align-items:center;gap:8px;margin:0 0 6px;font-size:12px;color:var(--dim)}
+.rw-badge{padding:1px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600}
+.rw-ans{display:flex;justify-content:flex-end;gap:8px;margin:-4px 0 10px}
 .bub .e-proxy-inp+.e-proxy-inp{margin-top:8px}
 .bub .e-proxy-inp:last-of-type{margin-bottom:10px}
 .bub .e-greet{color:var(--bub-ink);margin:8px 0 10px}

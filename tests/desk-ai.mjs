@@ -20,7 +20,7 @@
  * once a minute at most (da20), and the picker's note names the cap the shell sends (da21). The second kind of request, a
  * reword at a press (dw1 to dw7): nothing offered or sent without a configuration or with the person's choice off, exactly
  * the instruction, the model's name and the words sent, the host shown the host called, nothing at an opening, the answer
- * cleaned and bounded, three failures pausing, and a press under stale policy facts waiting. Each guard
+ * cleaned and bounded, three failures pausing, a press under stale policy facts waiting, and nothing of it kept on disk (dw8). Each guard
  * is lifted once, in a copy held in memory, and its leg must then fail. No leg reaches a network: every fetch is a
  * stand-in, and the global fetch throws.
  */
@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "shell");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 89;
+const EXPECTED = 90;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The shell-to-page event that carries each re-order's outcome; the page-to-shell sync request "etiuda:ai-state" is another. */
 const RANKING_CH = "etiuda:ai-ranking";
@@ -1510,6 +1510,29 @@ await block(async () => {
     check(lifted.fetches === 1, "dw7p with plant:reword-config rewritten to the unfreshened reader, the press sends under stale facts and the leg above fails: "
       + JSON.stringify(lifted));
   }
+});
+
+/* dw8: the shell keeps nothing of a reword: after a press from each window, no file in its folder holds the words or the result. */
+await block(async () => {
+  const OUTW = "Quillmarrow reworded words for the folder walk";
+  const fetch = fetchOf(() => ({ status: 200, text: chatSaying(OUTW) }));
+  const ctx = loadMain({ fetch, answer: (op) => op === "open" ? { ai: true, words: {}, look: {} } : null });
+  ctx.T.setConfig(() => CONFIG);
+  const pick = await openOnSelection(ctx, "Zebrafinch words selected in the chat", true);
+  const a = await ctx.handle["etiuda:pick-reword"](pick.from, { act: "shorter", words: "Zebrafinch words selected in the chat" });
+  const b = await ctx.handle["etiuda:desk-reword"](ENGINE, { act: "formal", words: "Zebrafinch words of a card" });
+  const ud = ctx.electron.app.getPath("userData"), found = [];
+  const walk = dir => { for (const n of fs.readdirSync(dir)) { const at = path.join(dir, n), st = fs.statSync(at);
+    if (st.isDirectory()) walk(at); else { const t = fs.readFileSync(at).toString("utf8"); if (/Zebrafinch|Quillmarrow/.test(t)) found.push(n); } } };
+  walk(ud);
+  const clean = found.splice(0);
+  /* The control: the same walk finds the words once a file holds them, so its empty answer is not a blind one. */
+  fs.writeFileSync(path.join(ud, "control.txt"), "Zebrafinch");
+  walk(ud);
+  const seen = found.splice(0);
+  found.push(...clean);
+  check(a.ok && b.ok && found.length === 0 && seen.join() === "control.txt" && fetch.calls.length === 2,
+    "dw8 after a reword from the picker and one from the desk, no file in the shell's folder holds the words sent or the result: " + JSON.stringify({ found, sent: fetch.calls.length }));
 });
 
 check(wallHits === 0, "da0 no leg called the global fetch: " + wallHits);
