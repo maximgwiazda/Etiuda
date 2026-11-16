@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-sync-"));
-const EXPECTED = 77;
+const EXPECTED = 80;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -821,6 +821,31 @@ async function main() {
     return { ok, detail: brief(held) };
   }
 
+  /* R1: a removal made on A meets a new file of the same name made later on B, whose desk never held the file when B took the
+     removal: B's later act stands on both, and the removal is kept as a version (the value null) on both, so each says a conflict, as a
+     removal met by an edit does. Where B held the file when the removal came (moved aside there) and the person made it again, the new
+     file is made over the removal, nothing kept. mergeOnce alone. */
+  async function unseenRemovalScene() {
+    const A = "k-" + "a".repeat(16), B = "k-" + "b".repeat(16), C = "k-" + "c".repeat(16), item = "f:Harbour.ec";
+    const old = "{\"old\":1}", made = "{\"made\":1}", theme = { h: SY.sha("dark"), by: B, t: 50, seen: {} };
+    const rA = { h: null, by: A, t: 200, seen: { [C]: 100 } };
+    const run = (held) => {
+      const local0 = Object.assign({ "k:eTheme": "dark" }, held ? { [item]: old } : {});
+      const ledger0 = Object.assign({ "k:eTheme": theme }, held ? { [item]: { h: SY.sha(old), by: C, t: 100, seen: {} } } : {});
+      const r1 = SY.mergeOnce({ me: B, now: 300, state: { ledger: ledger0, kept: [] }, local: local0, theirs: [{ by: A, items: { [item]: rA } }], fileOf: () => null });
+      const r2 = SY.mergeOnce({ me: B, now: 400, state: r1.state, local: { "k:eTheme": "dark", [item]: made }, theirs: [{ by: A, items: { [item]: rA } }], fileOf: () => null });
+      const eB = r2.state.ledger[item];
+      const r3 = SY.mergeOnce({ me: A, now: 500, state: { ledger: { [item]: rA }, kept: [] }, local: {}, theirs: [{ by: B, items: { [item]: eB } }],
+        fileOf: (by, it, h) => (h === SY.sha(made) ? made : null) });
+      return { took: r1.patch[item] === null, standsB: !!eB && eB.h === SY.sha(made), keptB: r2.copies.filter(c => c.item === item && c.value === null).length,
+        standsA: r3.patch[item] === made, keptA: r3.copies.filter(c => c.item === item && c.value === null && c.by === A).length };
+    };
+    const never = run(false), knew = run(true);
+    const ok = never.took && never.standsB && never.keptB === 1 && never.standsA && never.keptA === 1
+      && knew.took && knew.standsB && knew.keptB === 0 && knew.standsA && knew.keptA === 0;
+    return { ok, detail: brief({ never, knew }) };
+  }
+
   /* O1: a computer alone on its account's store, its sync begun again empty (Start from my account, the store folder set aside and the
      desk's synced keys and catalogs cleared; It is mine, an empty state over the same mirror and the desk as it was): it takes its own
      earlier place back in, so the desk holds the setting, the edit and the catalog the store held, the store's place holds them still,
@@ -950,6 +975,7 @@ async function main() {
   const results = {};
   const LEGS = [
     ["O1", ownPlaceScene, "a computer alone on its account's store, its sync begun again empty (the store folder set aside, or an empty state over the mirror): it takes its own earlier place back in, the desk and the store keep everything, a computer joining after receives it, and its later edits travel"],
+    ["R1", unseenRemovalScene, "a removal met by a new file of the same name made later on a computer whose desk never held it when it took the removal: the new file stands on both and the removal is kept as a version on both, a conflict; where that desk held the file, the new one is made over the removal, nothing kept"],
     ["K15", keptArrivedScene, "a kept version is let go only once the version overtaking it is here: its sync file before its bytes leaves the kept entry and takes nothing, its bytes come and it is taken and the kept let go; the same in a conflict"],
     ["J5", joinEarlyScene, "a second computer joining before the first, which made the store, has sent anything still joins: its setting and untouched sample give way to the first's setting and removal of the sample once they arrive, nothing kept"],
     ["J6", joinSinceScene, "a joining computer's setting changed and sample removed after its account was seated, before its first cycle, are its own: the setting stands on both and the sample stays removed on both, while what it held when seated gives way"],
@@ -1017,6 +1043,8 @@ async function main() {
   const PLANTS = [
     ["own place skipped", "O1", lift("own-taken"), "a fresh state takes nothing from this computer's own earlier place, so its first write empties it in the store"],
     ["own place written over", "O1", swap(" ? syncRead(String(io.read(syncRel(o.me.id)) || \"\"), o.me.id) : null;", " ? null : null;"), "a fresh state never reads its own place, so the store's copy of it is written over"],
+    ["removal never held taken as seen", "R1", lift("unseen-taken"), "a removal taken where the desk held nothing is read as seen, so the new file is made over it and no computer keeps it"],
+    ["new file made over the removal", "R1", swap("was.by === me || unseen.has(item) ? Object.assign", "was.by === me ? Object.assign"), "the new file made over a removal its desk never held, so no computer keeps it"],
     ["kept let go in a conflict", "K15", swap("settled(item, null, top.filter(e => (mine && same(e, mine) ? ownOf(e, item) : valueOf(e, item)) !== undefined)); /* plant:kept-overtaken */", "settled(item, null, top); /* plant:kept-overtaken */"), "a kept version let go in a conflict for one whose bytes have not come"],
     ["kept let go early", "K15", swap("      if (mine && same(win, mine)) {\n        settled(item, win);", "      settled(item, win);\n      if (mine && same(win, mine)) {"), "a kept version let go for one whose bytes have not come, so it is kept nowhere"],
     ["join by the store's files", "J5", swap("(st.join === true || Object.keys(own).length > 0 || (st.join === undefined && ", "((st.join === true || st.join === undefined) && ("), "joining read from another computer's sync file alone, so a computer joining before the first has sent takes itself for the first"],
