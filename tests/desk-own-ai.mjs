@@ -868,7 +868,8 @@ try {
     return { problems, ledeProblems };
   };
   {
-    const { problems } = await rwMarkFollows(page);
+    const { problems, ledeProblems } = await rwMarkFollows(page);
+    check(!ledeProblems.length, "db9ml (a finding, red on the product as it stands) the AI section's lede follows the Rewording switch at once too: " + (ledeProblems.join("; ") || "on, off, on"));
     check(!problems.length, "db9m with the organisation's model on, turning Rewording off takes its sentence from the mark's tip at once, without a reload, and on brings it back: "
       + (problems.join("; ") || "on, off, on"));
   }
@@ -913,7 +914,7 @@ try {
   if (browser) await browser.close();
 }
 
-const EXPECTED = 20;
+const EXPECTED = 21;
 const done = asserted + notRun === EXPECTED;
 if (!done) { failed++; console.log("  FAIL ran " + (asserted + notRun) + " checks (" + asserted + " ran, " + notRun + " not run), expected " + EXPECTED); }
 console.log((failed || !done ? "desk-own-ai: " + failed + " of " + asserted + " failed" : "desk-own-ai: all " + asserted + " passed" + (notRun ? ", " + notRun + " NOT RUN" : "")));
