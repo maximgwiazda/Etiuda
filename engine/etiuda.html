@@ -7329,6 +7329,7 @@ What is typed here stays in this browser.`;
     cutInk: () => cutInk,
     cutRange: () => cutRange,
     focusKey: () => focusKey,
+    focusRingOn: () => focusRingOn,
     focusSame: () => focusSame,
     grabDom: () => grabDom,
     intentEl: () => intentEl,
@@ -7341,7 +7342,8 @@ What is typed here stays in this browser.`;
     pills: () => pills,
     roleSel: () => roleSel,
     sameControl: () => sameControl,
-    seg: () => seg
+    seg: () => seg,
+    wireFocusRing: () => wireFocusRing
   });
   var $ = (s) => document.querySelector(s);
   var list = null;
@@ -7449,6 +7451,35 @@ What is typed here stays in this browser.`;
       if (el && el.getClientRects().length) return originOf(el, last, kind);
     }
     return originOf(null, last);
+  }
+  var focusRingEl = null;
+  var focusRingWired = false;
+  function readFocusRingEl() {
+    if (typeof document === "undefined") return null;
+    const ae = document.activeElement;
+    if (!ae || ae === document.body || ae === document.documentElement) return null;
+    return typeof ae.matches === "function" && ae.matches(":focus-visible") ? ae : null;
+  }
+  function syncFocusRing() {
+    focusRingEl = readFocusRingEl();
+  }
+  function wireFocusRing() {
+    if (focusRingWired || typeof addEventListener !== "function") return;
+    focusRingWired = true;
+    addEventListener("focusin", syncFocusRing, true);
+    addEventListener("focusout", () => {
+      focusRingEl = null;
+    }, true);
+    addEventListener("pointerdown", syncFocusRing, true);
+    addEventListener("keyup", syncFocusRing, true);
+    addEventListener("keydown", (e) => {
+      if (e.key !== " " && e.code !== "Space") syncFocusRing();
+    });
+  }
+  function focusRingOn(el) {
+    if (!el || typeof el.matches !== "function") return false;
+    if (!focusRingWired) return !!el.matches(":focus-visible");
+    return focusRingEl === el && el.isConnected !== false;
   }
   function grabDom() {
     list = $("#list");
@@ -12982,9 +13013,9 @@ What is typed here stays in this browser.`;
       def: { code: "Digit4", key: "4", ctrl: 1, alt: 0, shift: 0, meta: 0 },
       inField: 1
     },
-    /* inField so an empty search box still switches. Space is the lanes' key where no control
-       or typing field has the focus; a button, tab, switch, checkbox, dialog, bubble or menu
-       keep Space for themselves (lanesKeyFree). */
+    /* inField so an empty search box still switches. Space is the lanes' key where no typing
+       field, dialog, bubble, menu or ringed control holds the focus; a control wearing the
+       keyboard's focus ring keeps Space for itself (lanesKeyFree). */
     {
       id: "lanes",
       label: "Cards or the timeline",
@@ -14772,10 +14803,11 @@ What is typed here stays in this browser.`;
     const curScreen = typeof screenOn !== "undefined" ? screenOn : null;
     const screenList = typeof screens !== "undefined" && Array.isArray(screens) ? screens : [];
     const order = typeof getTabOrder === "function" ? getTabOrder() : (tabs || []).map((tb) => tb.id).concat(screenList);
-    const onLabKey = (e, fn) => {
+    const onLabKey = (e, lab, fn) => {
       if (e.target && e.target.tagName === "INPUT") return;
       if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
       if (e.key !== "Enter" && e.key !== " ") return;
+      if (e.key === " " && !focusRingOn(lab)) return;
       e.preventDefault();
       e.stopPropagation();
       if (e.repeat) return;
@@ -14796,7 +14828,7 @@ What is typed here stays in this browser.`;
         lab.setAttribute("aria-selected", on ? "true" : "false");
         lab.tabIndex = 0;
         lab.setAttribute("aria-label", name);
-        lab.onkeydown = (e) => onLabKey(e, () => {
+        lab.onkeydown = (e) => onLabKey(e, lab, () => {
           if (typeof frontScreenTab === "function") frontScreenTab(sid);
         });
         const labViz = document.createElement("span");
@@ -14854,7 +14886,7 @@ What is typed here stays in this browser.`;
         const name = tabLabel(tb);
         lab.tabIndex = 0;
         lab.setAttribute("aria-label", name);
-        lab.onkeydown = (e) => onLabKey(e, () => switchTab(tb.id));
+        lab.onkeydown = (e) => onLabKey(e, lab, () => switchTab(tb.id));
         lab.onfocus = () => scrollTabIntoView(tb.id);
         if (typeof editingTabId !== "undefined" && editingTabId === tb.id) {
           const inp = document.createElement("input");
@@ -16454,7 +16486,7 @@ What is typed here stays in this browser.`;
   function wireFolderLink(el) {
     el.onclick = () => eOpenCatalogFolder();
     el.onkeydown = (e) => {
-      if (e.key === "Enter" || e.key === " ") {
+      if (e.key === "Enter" || e.key === " " && focusRingOn(el)) {
         e.preventDefault();
         e.stopPropagation();
         if (!e.repeat) eOpenCatalogFolder();
@@ -20013,6 +20045,7 @@ What is typed here stays in this browser.`;
     addEventListener("pointerdown", () => {
       lastInputWasKey = false;
     }, true);
+    wireFocusRing();
   }
   function wireModalX() {
     modalCard.addEventListener("click", (e) => {
@@ -29422,6 +29455,7 @@ What is typed here stays in this browser.`;
     if (tlBtn) tlBtn.onkeydown = (e) => {
       if (!tlMenu) return;
       if (!e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.key === " " || e.code === "Space")) {
+        if (!focusRingOn(tlBtn)) return;
         e.preventDefault();
         e.stopPropagation();
         if (e.repeat) return;
@@ -35909,7 +35943,7 @@ What is typed here stays in this browser.`;
       pick();
     };
     chip.addEventListener("keydown", (e) => {
-      if (e.key !== "Enter" && e.key !== " " && e.key !== "ArrowDown") return;
+      if (e.key !== "Enter" && e.key !== "ArrowDown" && (e.key !== " " || !focusRingOn(chip))) return;
       e.preventDefault();
       e.stopPropagation();
       if (!e.repeat) pick();
@@ -36716,7 +36750,7 @@ What is typed here stays in this browser.`;
     el.setAttribute("aria-label", words);
     el.onclick = reopenWaiting;
     el.onkeydown = (e) => {
-      if (e.key !== "Enter" && e.key !== " ") return;
+      if (e.key !== "Enter" && (e.key !== " " || !focusRingOn(el))) return;
       e.preventDefault();
       e.stopPropagation();
       if (!e.repeat) reopenWaiting();
@@ -38271,7 +38305,7 @@ What is typed here stays in this browser.`;
           if (newRow) newRow.focus();
           return;
         }
-        if (e.key === "Enter" || e.key === " ") {
+        if (e.key === "Enter" || e.key === " " && focusRingOn(row2)) {
           e.preventDefault();
           if (!e.repeat) row2.click();
         }
@@ -38320,7 +38354,7 @@ What is typed here stays in this browser.`;
         if (cid) openCardEditor(cid, null, true);
       };
       cardEl.onkeydown = (e) => {
-        if (e.key === "Enter" || e.key === " ") {
+        if (e.key === "Enter" || e.key === " " && focusRingOn(cardEl)) {
           e.preventDefault();
           if (!e.repeat) cardEl.click();
         }
@@ -38649,7 +38683,7 @@ What is typed here stays in this browser.`;
     if (page && page.querySelectorAll) page.querySelectorAll("code.open-folder").forEach((fpath) => {
       fpath.onclick = openFolder;
       fpath.onkeydown = (e) => {
-        if (e.key === "Enter" || e.key === " ") {
+        if (e.key === "Enter" || e.key === " " && focusRingOn(fpath)) {
           e.preventDefault();
           e.stopPropagation();
           if (!e.repeat) openFolder(e);
@@ -38695,7 +38729,7 @@ What is typed here stays in this browser.`;
         mgSortClick(btn.getAttribute("data-sort-col"));
       };
       btn.onkeydown = (e) => {
-        if (e.key === "Enter" || e.key === " ") {
+        if (e.key === "Enter" || e.key === " " && focusRingOn(btn)) {
           e.preventDefault();
           e.stopPropagation();
           if (!e.repeat) mgSortClick(btn.getAttribute("data-sort-col"));
@@ -41253,20 +41287,28 @@ What is typed here stays in this browser.`;
   function lanesPageScroller() {
     return lanesOn ? lanesEl() : null;
   }
-  var LANES_KEEP = ".modal,.bub,[role=dialog],[role=alertdialog],[role=menu],[role=listbox],button,a[href],summary,select,[role=button],[role=menuitem],[role=tab],[role=switch],[role=checkbox],[role=radio]";
+  var LANES_KEEP = ".modal,.bub,[role=dialog],[role=alertdialog],[role=menu],[role=listbox]";
+  var LANES_CONTROL = "button,a[href],summary,select,[role=button],[role=menuitem],[role=tab],[role=switch],[role=checkbox],[role=radio],[role=link],[role=option],[role=combobox]";
   function lanesKeyFree(active, box, body) {
     if (!active || active === body) return true;
     if (box && active === box) return !String(box.value || "");
     if (active.isContentEditable) return false;
     const tag = String(active.tagName || "").toUpperCase();
-    if (tag === "TEXTAREA" || tag === "INPUT" || tag === "SELECT" || tag === "BUTTON" || tag === "SUMMARY" || tag === "A") return false;
+    if (tag === "TEXTAREA") return false;
+    if (tag === "INPUT" && !/^(button|checkbox|radio|range|color|file|submit|reset|image)$/i.test(String(active.type || "text"))) return false;
+    if (typeof active.closest === "function" && active.closest(LANES_KEEP)) return false;
     const role = typeof active.getAttribute === "function" ? String(active.getAttribute("role") || "").toLowerCase() : "";
-    if (/^(button|menuitem|tab|switch|checkbox|radio|link|option|combobox)$/.test(role)) return false;
-    return !(typeof active.closest === "function" && active.closest(LANES_KEEP));
+    const isControl = tag === "INPUT" || tag === "SELECT" || tag === "BUTTON" || tag === "SUMMARY" || tag === "A" || /^(button|menuitem|tab|switch|checkbox|radio|link|option|combobox)$/.test(role) || typeof active.closest === "function" && !!active.closest(LANES_CONTROL);
+    if (isControl) return !focusRingOn(active);
+    return true;
   }
   function lanesKey() {
-    if (!lanesKeyFree(document.activeElement, intentEl, document.body)) return false;
+    const active = document.activeElement;
+    if (!lanesKeyFree(active, intentEl, document.body)) return false;
     toggleLanes();
+    if (lanesOn && active && active !== document.body && active !== intentEl && typeof active.blur === "function") {
+      active.blur();
+    }
     return true;
   }
   function toggleLanes(on) {
@@ -42039,7 +42081,11 @@ What is typed here stays in this browser.`;
       if (inField) return;
       const plain = !e.ctrlKey && !e.altKey && !e.metaKey;
       const onControl = document.activeElement;
-      if (plain && !e.shiftKey && (e.key === "Enter" || e.key === " ") && onControl && typeof onControl.matches === "function" && (onControl.matches("button:not([disabled]),summary,a[href],[role=menuitem]") || onControl.matches("[role=button]:not([aria-disabled='true']),[role=tab]:not([aria-disabled='true'])"))) {
+      if (plain && !e.shiftKey && (e.key === "Enter" || e.key === " ") && onControl && typeof onControl.matches === "function" && (onControl.matches("button:not([disabled]),summary,a[href],[role=menuitem],[role=switch],[role=checkbox]") || onControl.matches("input[type=checkbox],input[type=radio],input[type=button],input[type=submit],input[type=reset]") || onControl.matches("[role=button]:not([aria-disabled='true']),[role=tab]:not([aria-disabled='true'])"))) {
+        if (e.key === " " && !focusRingOn(onControl)) {
+          e.preventDefault();
+          return;
+        }
         if (e.key === " " && !e.defaultPrevented && onControl.matches("[role=button]:not(button):not(input):not(summary):not([aria-disabled='true'])")) {
           e.preventDefault();
           if (!e.repeat && typeof onControl.click === "function") onControl.click();

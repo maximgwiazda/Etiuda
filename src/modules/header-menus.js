@@ -4,7 +4,7 @@ import { openAbout } from "./about.js";
 import { cancelFactsEdit, closeFactsPanel, factsPanelOpen } from "./facts.js";
 import { endPillNavPeek } from "./pill-nav-peek.js";
 import { measureShedNaturals, syncRowShed } from "./shed.js";
-import { $ } from "./dom.js";
+import { $, focusRingOn } from "./dom.js";
 import { cutLeaves, dismissCopy } from "./motion.js";
 import { togglePills, pillsWanted, pillsLocked } from "./pills-box.js";
 import { toggleRail, railWanted, railLocked, syncRailPinBtn } from "./rail-panel.js";
@@ -125,6 +125,7 @@ function wireHeaderMenus(){
   if(tlBtn) tlBtn.onkeydown=e=>{
     if(!tlMenu) return;
     if(!e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.key===" " || e.code==="Space")){
+      if(!focusRingOn(tlBtn)) return;
       e.preventDefault(); e.stopPropagation();
       if(e.repeat) return;
       if(tlMenu.hidden) openTabList(true); else closeTabList(true);

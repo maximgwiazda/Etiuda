@@ -13,7 +13,7 @@ import { activateTourFocus, endTour, moveTourFocus, tourActive, tourHasFocus } f
 import { noteUndoTyping, t, takeStandingUndo, toast, toastRefusal } from "./ui-lang.js";
 import { pageKeyScroll } from "./page-scroll.js";
 import { lanesKeyFree, lanesPageScroller } from "./lanes.js";
-import { $, intentEl } from "./dom.js";
+import { $, focusRingOn, intentEl } from "./dom.js";
 import { closeNotePane } from "./note-pane.js";
 import { eHost } from "./host.js";
 import { closeMoreMenu, closeSettingsMenu } from "./header-menus.js";
@@ -270,8 +270,13 @@ function wireGlobalKeydown(){
     const onControl=document.activeElement;
     if(plain && !e.shiftKey && (e.key==="Enter"||e.key===" ") && onControl
        && typeof onControl.matches==="function"
-       && (onControl.matches("button:not([disabled]),summary,a[href],[role=menuitem]")
+       && (onControl.matches("button:not([disabled]),summary,a[href],[role=menuitem],[role=switch],[role=checkbox]")
+           || onControl.matches("input[type=checkbox],input[type=radio],input[type=button],input[type=submit],input[type=reset]")
            || onControl.matches("[role=button]:not([aria-disabled='true']),[role=tab]:not([aria-disabled='true'])"))){
+      if(e.key===" " && !focusRingOn(onControl)){
+        e.preventDefault();
+        return;
+      }
       if(e.key===" " && !e.defaultPrevented
          && onControl.matches("[role=button]:not(button):not(input):not(summary):not([aria-disabled='true'])")){
         e.preventDefault();

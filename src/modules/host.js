@@ -1,4 +1,4 @@
-import { $ } from "./dom.js";
+import { $, focusRingOn } from "./dom.js";
 import { t, toastRefusal } from "./ui-lang.js";
 import { lsGet, lsSet, nsGet } from "./storage.js";
 import { eCatalog, eCatalogAccepted, eCatalogHanded, storedCatalog } from "./catalog.js";
@@ -69,7 +69,7 @@ function eOpenCatalogFolder(){
 /* A link to that folder answers a click, Enter and Space alike. */
 function wireFolderLink(el){
   el.onclick=()=>eOpenCatalogFolder();
-  el.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); e.stopPropagation(); if(!e.repeat) eOpenCatalogFolder(); } };
+  el.onkeydown=e=>{ if(e.key==="Enter"||(e.key===" "&&focusRingOn(el))){ e.preventDefault(); e.stopPropagation(); if(!e.repeat) eOpenCatalogFolder(); } };
 }
 /* The ring beside the catalogs as text, "" in a browser and "" wherever the host has none. */
 function eCatalogRing(){

@@ -10,7 +10,7 @@ import { scStopCapture } from "./shortcuts-list.js";
 import { offerUndo, t, tc, translateTree } from "./ui-lang.js";
 import { hooks } from "./hooks.js";
 import { esc } from "./esc.js";
-import { modalEl, modalCard, $, focusKey, sameControl, originOf } from "./dom.js";
+import { modalEl, modalCard, $, focusKey, sameControl, originOf, wireFocusRing } from "./dom.js";
 
 function modalOpen(){ return !modalEl.hidden; }
 /* ---- SHARED MODAL BEHAVIOUR ---------------------------------------------------------------
@@ -367,6 +367,7 @@ let lastInputWasKey=false;
 function wireFocusModality(){
   addEventListener("keydown",()=>{ lastInputWasKey=true; },true);
   addEventListener("pointerdown",()=>{ lastInputWasKey=false; },true);
+  wireFocusRing();
 }
 /* Delegated once, so it survives every innerHTML rebuild without being rewired. */
 function wireModalX(){

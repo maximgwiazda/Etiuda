@@ -3194,21 +3194,27 @@ const CARD_B = {
   const card = (id, next) => (next ? { id, c: "orders", en: "Body of " + id, t: "Title " + id, next: next.map(to => ({ to })) }
     : { id, c: "orders", en: "Body of " + id, t: "Title " + id });
   const pax = el({ value: "Anna" }), full = el({ value: "x", tagName: "INPUT" });
-  /* SPACE SWITCHES WHERE NO CONTROL OR TYPING FIELD HAS FOCUS (2026-11-16): focused buttons, tabs,
-     switches and checkboxes keep Space for themselves, while nothing focused or an empty search box
-     switch between the cards and the lanes. */
+  /* SPACE PRESSES ONLY WHAT WEARS THE KEYBOARD FOCUS RING (2026-11-16): ringed buttons,
+     tabs, switches and checkboxes keep Space, while pointer-focused controls (no ring),
+     nothing focused, or an empty search box switch between the cards and the lanes. */
   const inside = sel => el({ tagName: "DIV", closest: q => (q.split(",").indexOf(sel) > -1 ? {} : null) });
-  check("lanes.js", "814ln1 the lanes key is free with nothing focused or the search box empty,"
-    + " and kept by a button, a checkbox, a box holding text, another text field, a text area, an editable block, and anything in a dialog (the quick-facts panel"
-    + " is one by its role alone), a bubble or a menu",
+  const ring = s => s === ":focus-visible";
+  const noRing = () => false;
+  check("lanes.js", "814ln1 the lanes key is free with nothing focused, the search box empty, or an un-ringed button/checkbox/switch,"
+    + " and kept by a ringed button, checkbox or switch, a box holding text, another text field, a text area, an editable block,"
+    + " and anything in a dialog (the quick-facts panel is one by its role alone), a bubble or a menu",
     () => eq([LN.lanesKeyFree(null, box, body), LN.lanesKeyFree(body, box, body), LN.lanesKeyFree(box, box, body),
-      LN.lanesKeyFree(el({ tagName: "BUTTON", closest: () => null }), box, body),
-      LN.lanesKeyFree(el({ tagName: "INPUT", type: "checkbox", closest: () => null }), box, body),
+      LN.lanesKeyFree(el({ tagName: "BUTTON", matches: noRing, closest: () => null }), box, body),
+      LN.lanesKeyFree(el({ tagName: "BUTTON", matches: ring, closest: () => null }), box, body),
+      LN.lanesKeyFree(el({ tagName: "INPUT", type: "checkbox", matches: noRing, closest: () => null }), box, body),
+      LN.lanesKeyFree(el({ tagName: "INPUT", type: "checkbox", matches: ring, closest: () => null }), box, body),
+      LN.lanesKeyFree(el({ tagName: "DIV", getAttribute: k => (k === "role" ? "switch" : null), matches: noRing, closest: () => null }), box, body),
+      LN.lanesKeyFree(el({ tagName: "DIV", getAttribute: k => (k === "role" ? "switch" : null), matches: ring, closest: () => null }), box, body),
       LN.lanesKeyFree(full, full, body), LN.lanesKeyFree(el({ tagName: "INPUT", value: "Anna" }), box, body),
       LN.lanesKeyFree(el({ tagName: "TEXTAREA" }), box, body), LN.lanesKeyFree(el({ tagName: "DIV", isContentEditable: true }), box, body),
       LN.lanesKeyFree(inside(".modal"), box, body), LN.lanesKeyFree(inside("[role=dialog]"), box, body), LN.lanesKeyFree(inside(".bub"), box, body),
       LN.lanesKeyFree(inside("[role=menu]"), box, body)].join(","),
-      "true,true,true,false,false,false,false,false,false,false,false,false,false"));
+      "true,true,true,true,false,true,false,true,false,false,false,false,false,false,false,false,false"));
   check("shortcuts.js", "814ln2 Space is the lanes' row, rebindable and live in a field; the dispatcher asks the lanes first, and Escape sheds them before the dock and the search",
     () => {
       const d = SC.SC_DEFS.find(x => x.id === "lanes"), rs = fs.readFileSync(join(MODDIR, "run-shortcut.js"), "utf8");

@@ -70,9 +70,9 @@ const SC_DEFS=[
     def:{code:"Digit3",key:"3",ctrl:1,alt:0,shift:0,meta:0},inField:1},
   {id:"nextCopy4",label:"Next reply 4",hint:"Copy the fourth of the replies offered after the last one sent",
     def:{code:"Digit4",key:"4",ctrl:1,alt:0,shift:0,meta:0},inField:1},
-  /* inField so an empty search box still switches. Space is the lanes' key where no control
-     or typing field has the focus; a button, tab, switch, checkbox, dialog, bubble or menu
-     keep Space for themselves (lanesKeyFree). */
+  /* inField so an empty search box still switches. Space is the lanes' key where no typing
+     field, dialog, bubble, menu or ringed control holds the focus; a control wearing the
+     keyboard's focus ring keeps Space for itself (lanesKeyFree). */
   {id:"lanes",label:"Cards or the timeline",hint:"Switch between the cards and the timeline while nothing is being typed",
     def:{code:"Space",key:" ",ctrl:0,alt:0,shift:0,meta:0},inField:1},
   {id:"expandPills",label:"Reveal / expand categories",

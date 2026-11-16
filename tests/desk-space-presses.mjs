@@ -17,7 +17,7 @@ const E = require("./engine.js");
 const puppeteer = require("puppeteer-core");
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 37;
+const EXPECTED = 43;
 let fails = 0, checks = 0, skipped = 0;
 
 function check(ok, what, detail) {
@@ -1142,6 +1142,164 @@ async function runSuite(browser, enginePath, opts = {}) {
         { lanesOn, lanesOff }
       );
     }
+
+    // --- G5. Pointer click vs Tab: Space presses only what wears the keyboard focus ring ---
+    // G5a. Native button (#theme)
+    {
+      await page.click("#theme");
+      await sleep(80);
+      const afterClick = await page.evaluate(() => ({
+        th: document.documentElement.getAttribute("data-theme"),
+        id: document.activeElement?.id || "",
+        fv: !!document.activeElement?.matches(":focus-visible")
+      }));
+      await page.keyboard.press("Space");
+      await sleep(100);
+      const ptrSpace = await page.evaluate(() => ({
+        th: document.documentElement.getAttribute("data-theme"),
+        lanes: document.body.classList.contains("e-lanes")
+      }));
+      if (ptrSpace.lanes) { await page.keyboard.press("Space"); await sleep(80); }
+      if (ptrSpace.th !== "light") { await page.click("#theme"); await sleep(80); }
+
+      const beforeTab = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
+      const hitTab = await tabTo(page, "#theme");
+      await page.keyboard.press("Space");
+      await sleep(80);
+      const tabSpace = await page.evaluate(() => ({
+        th: document.documentElement.getAttribute("data-theme"),
+        lanes: document.body.classList.contains("e-lanes")
+      }));
+      if (tabSpace.lanes) { await page.keyboard.press("Space"); await sleep(80); }
+      if (tabSpace.th !== "light") { await page.click("#theme"); await sleep(80); }
+
+      rec(
+        afterClick.id === "theme" && !afterClick.fv && ptrSpace.lanes && ptrSpace.th === afterClick.th &&
+          hitTab && tabSpace.th !== beforeTab && !tabSpace.lanes,
+        "pointer vs tab (native button): #theme clicked+Space switches lanes without pressing; Tab+Space toggles theme",
+        { afterClick, ptrSpace, beforeTab, hitTab, tabSpace }
+      );
+    }
+
+    // G5b. Tab (role="tab" .tab-label on band)
+    {
+      if ((await page.$$eval(".tab:not(.on)", xs => xs.length)) === 0) {
+        await page.click(".tab-add");
+        await sleep(80);
+      }
+      const clickTid = await page.$eval(".tab:not(.on)", el => el.dataset?.tid || "");
+      await page.click(".tab:not(.on) .tab-label");
+      await sleep(80);
+      const afterClick = await page.evaluate(() => ({
+        cls: document.activeElement?.className || "",
+        tid: document.activeElement?.closest(".tab")?.dataset?.tid || "",
+        fv: !!document.activeElement?.matches(":focus-visible")
+      }));
+      await page.keyboard.press("Space");
+      await sleep(100);
+      const ptrSpace = await page.evaluate(() => ({
+        activeTid: document.querySelector(".tab.on")?.dataset?.tid || "",
+        lanes: document.body.classList.contains("e-lanes")
+      }));
+      if (ptrSpace.lanes) { await page.keyboard.press("Space"); await sleep(80); }
+
+      const hitTab = await tabTo(page, ".tab:not(.on) .tab-label");
+      const tabTid = await page.evaluate(() => document.activeElement?.closest(".tab")?.dataset?.tid || "");
+      await page.keyboard.press("Space");
+      await sleep(80);
+      const tabSpace = await page.evaluate(() => ({
+        activeTid: document.querySelector(".tab.on")?.dataset?.tid || "",
+        lanes: document.body.classList.contains("e-lanes")
+      }));
+      if (tabSpace.lanes) { await page.keyboard.press("Space"); await sleep(80); }
+
+      rec(
+        afterClick.tid === clickTid && afterClick.cls.includes("tab-label") && !afterClick.fv &&
+          ptrSpace.lanes && ptrSpace.activeTid === clickTid &&
+          hitTab && tabSpace.activeTid === tabTid && !tabSpace.lanes,
+        "pointer vs tab (tab): .tab-label clicked+Space switches lanes; Tab+Space switches tab",
+        { clickTid, afterClick, ptrSpace, hitTab, tabTid, tabSpace }
+      );
+    }
+
+    // G5c. Switch / toggle (#railPinBtn)
+    {
+      await page.click("#railPinBtn");
+      await sleep(80);
+      const afterClick = await page.evaluate(() => ({
+        pressed: document.getElementById("railPinBtn")?.getAttribute("aria-pressed"),
+        id: document.activeElement?.id || "",
+        fv: !!document.activeElement?.matches(":focus-visible")
+      }));
+      await page.keyboard.press("Space");
+      await sleep(100);
+      const ptrSpace = await page.evaluate(() => ({
+        pressed: document.getElementById("railPinBtn")?.getAttribute("aria-pressed"),
+        lanes: document.body.classList.contains("e-lanes")
+      }));
+      if (ptrSpace.lanes) { await page.keyboard.press("Space"); await sleep(80); }
+
+      const beforeTab = ptrSpace.pressed;
+      const hitTab = await tabTo(page, "#railPinBtn");
+      await page.keyboard.press("Space");
+      await sleep(80);
+      const tabSpace = await page.evaluate(() => ({
+        pressed: document.getElementById("railPinBtn")?.getAttribute("aria-pressed"),
+        lanes: document.body.classList.contains("e-lanes")
+      }));
+      if (tabSpace.lanes) { await page.keyboard.press("Space"); await sleep(80); }
+
+      rec(
+        afterClick.id === "railPinBtn" && !afterClick.fv && ptrSpace.lanes && ptrSpace.pressed === afterClick.pressed &&
+          hitTab && tabSpace.pressed !== beforeTab && !tabSpace.lanes,
+        "pointer vs tab (switch): #railPinBtn clicked+Space switches lanes without toggling; Tab+Space toggles pin",
+        { afterClick, ptrSpace, beforeTab, hitTab, tabSpace }
+      );
+    }
+
+    // G5d. Card's button (.card .cacts button[data-act='edit'])
+    {
+      const cid = await page.$eval(".card .cacts button[data-act='edit']", el => el.closest(".card")?.dataset?.id || "");
+      const sel = `.card[data-id="${cid}"] .cacts button[data-act="edit"]`;
+      await page.evaluate(() => { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); });
+      await page.hover(`.card[data-id="${cid}"]`);
+      await sleep(40);
+      await page.click(sel);
+      await page.waitForSelector("#modal:not([hidden]) #modalCard", { timeout: 3000 });
+      await sleep(80);
+      await page.keyboard.press("Escape");
+      await sleep(80);
+      const afterEsc = await page.evaluate(() => ({
+        modalHidden: !!document.getElementById("modal")?.hidden,
+        act: document.activeElement?.getAttribute?.("data-act") || "",
+        fv: !!document.activeElement?.matches(":focus-visible")
+      }));
+      await page.keyboard.press("Space");
+      await sleep(100);
+      const ptrSpace = await page.evaluate(() => ({
+        modalOpen: !document.getElementById("modal")?.hidden,
+        lanes: document.body.classList.contains("e-lanes")
+      }));
+      if (ptrSpace.modalOpen) { await page.keyboard.press("Escape").catch(() => {}); await sleep(80); }
+      if (ptrSpace.lanes) { await page.keyboard.press("Space"); await sleep(80); }
+
+      const hitTab = await tabTo(page, sel, { maxSteps: 360 });
+      await page.keyboard.press("Space");
+      await sleep(100);
+      const tabSpace = await page.evaluate(() => ({
+        modalOpen: !document.getElementById("modal")?.hidden,
+        lanes: document.body.classList.contains("e-lanes")
+      }));
+      if (tabSpace.modalOpen) { await page.keyboard.press("Escape").catch(() => {}); await sleep(80); }
+      if (tabSpace.lanes) { await page.keyboard.press("Space"); await sleep(80); }
+
+      rec(
+        afterEsc.modalHidden && afterEsc.act === "edit" && !afterEsc.fv &&
+          ptrSpace.lanes && !ptrSpace.modalOpen && hitTab && tabSpace.modalOpen && !tabSpace.lanes,
+        "pointer vs tab (card button): edit button clicked+Escape+Space switches lanes without opening editor; Tab+Space opens editor",
+        { cid, afterEsc, ptrSpace, hitTab, tabSpace }
+      );
+    }
   } finally {
     await page.close().catch(() => {});
   }
@@ -1178,6 +1336,43 @@ async function runSuite(browser, enginePath, opts = {}) {
       "empty desk: #emptyAddCard (role=button link) Space opens editor like Enter",
       { hitE, afterE, hitS, afterS }
     );
+
+    // Pointer click on #emptyAddCard (dismissed with Escape -> focus returns without ring) vs Tab
+    await pageEmpty.click("#emptyAddCard");
+    await pageEmpty.waitForSelector("#modal:not([hidden]) #modalCard", { timeout: 3000 });
+    await sleep(80);
+    await pageEmpty.keyboard.press("Escape");
+    await sleep(80);
+    const afterEsc = await pageEmpty.evaluate(() => ({
+      id: document.activeElement?.id || "",
+      fv: !!document.activeElement?.matches(":focus-visible"),
+      modalHidden: !!document.getElementById("modal")?.hidden
+    }));
+    await pageEmpty.keyboard.press("Space");
+    await sleep(100);
+    const ptrSpace = await pageEmpty.evaluate(() => ({
+      modalOpen: !document.getElementById("modal")?.hidden,
+      lanes: document.body.classList.contains("e-lanes")
+    }));
+    if (ptrSpace.modalOpen) { await pageEmpty.keyboard.press("Escape").catch(() => {}); await sleep(80); }
+    if (ptrSpace.lanes) { await pageEmpty.keyboard.press("Space"); await sleep(80); }
+
+    const hitTab = await tabTo(pageEmpty, "#emptyAddCard");
+    await pageEmpty.keyboard.press("Space");
+    await sleep(100);
+    const tabSpace = await pageEmpty.evaluate(() => ({
+      modalOpen: !document.getElementById("modal")?.hidden,
+      lanes: document.body.classList.contains("e-lanes")
+    }));
+    if (tabSpace.modalOpen) { await pageEmpty.keyboard.press("Escape").catch(() => {}); await sleep(80); }
+    if (tabSpace.lanes) { await pageEmpty.keyboard.press("Space"); await sleep(80); }
+
+    rec(
+      afterEsc.id === "emptyAddCard" && !afterEsc.fv && afterEsc.modalHidden &&
+        ptrSpace.lanes && !ptrSpace.modalOpen && hitTab && tabSpace.modalOpen && !tabSpace.lanes,
+      "pointer vs tab (role=button): #emptyAddCard clicked+Escape+Space switches lanes; Tab+Space opens editor",
+      { afterEsc, ptrSpace, hitTab, tabSpace }
+    );
   } finally {
     await pageEmpty.close().catch(() => {});
     if (pageEmpty.__ownCtx) await pageEmpty.__ownCtx.close().catch(() => {});
@@ -1193,12 +1388,13 @@ try {
   await runSuite(browser, path.join(dirMain, "etiuda.html"));
 
   // Inline plant proof: restore the old lanesKeyFree rule that stole Space from focused buttons/checkboxes.
+  const lanesKeyFreeRe = /function lanesKeyFree\s*\([^)]*\)\s*\{[\s\S]*?\n\s*\}(?=\s*\n\s*function lanesKey)/;
   if (PLANTS_OFF) {
     notRun("plant:lanes-steals-space (ETIUDA_PLANTS=off)");
   } else {
     const rawHtml = fs.readFileSync(E.ENGINE_PATH, "utf8");
     const plantedHtml = rawHtml.replace(
-      /function lanesKeyFree\s*\([^)]*\)\s*\{[\s\S]*?return\s+!\([^;]*\);\s*\}/,
+      lanesKeyFreeRe,
       'function lanesKeyFree(active,box,body){if(!active||active===body)return true;if(box&&active===box)return !String(box.value||"");if(active.isContentEditable)return false;const tag=String(active.tagName||"").toUpperCase();if(tag==="TEXTAREA")return false;if(tag==="INPUT"&&!/^(button|checkbox|radio|range|color|file|submit|reset|image)$/i.test(String(active.type||"text")))return false;return !(typeof active.closest==="function"&&active.closest(".modal,.bub,[role=dialog],[role=alertdialog],[role=menu],[role=listbox]"));}'
     );
     const plantWritten = plantedHtml !== rawHtml;
@@ -1212,6 +1408,30 @@ try {
     check(
       plantWritten && plantFails.length > 0,
       "inline plant proof: restoring lanes Space theft over buttons turns leg red",
+      { plantWritten, failCount: plantFails.length, sampleFails: plantFails.slice(0, 5) }
+    );
+  }
+
+  // Inline plant proof: restore "any focused control keeps Space" (ignoring focus ring) and turn pointer cases red.
+  if (PLANTS_OFF) {
+    notRun("plant:any-focused-control-keeps-space (ETIUDA_PLANTS=off)");
+  } else {
+    const rawHtml = fs.readFileSync(E.ENGINE_PATH, "utf8");
+    const plantedHtml = rawHtml.replace(
+      lanesKeyFreeRe,
+      'function lanesKeyFree(active,box,body){if(!active||active===body)return true;if(box&&active===box)return !String(box.value||"");if(active.isContentEditable)return false;const tag=String(active.tagName||"").toUpperCase();if(tag==="TEXTAREA"||tag==="INPUT"||tag==="SELECT"||tag==="BUTTON"||tag==="SUMMARY"||tag==="A")return false;const role=typeof active.getAttribute==="function"?String(active.getAttribute("role")||"").toLowerCase():"";if(/^(button|menuitem|tab|switch|checkbox|radio|link|option|combobox)$/.test(role))return false;return !(typeof active.closest==="function"&&active.closest(".modal,.bub,[role=dialog],[role=alertdialog],[role=menu],[role=listbox],button,a[href],summary,select,[role=button],[role=menuitem],[role=tab],[role=switch],[role=checkbox],[role=radio]"));}'
+    );
+    const plantWritten = plantedHtml !== rawHtml;
+    const plantPath = path.join(dirPlant, "etiuda-keep-space.html");
+    fs.writeFileSync(plantPath, plantedHtml, "utf8");
+    let plantFails = [];
+    if (plantWritten) {
+      const res = await runSuite(browser, plantPath, { silent: true });
+      plantFails = res.filter(r => !r.ok).map(r => r.label);
+    }
+    check(
+      plantWritten && plantFails.some(l => l.startsWith("pointer vs tab")),
+      "inline plant proof: restoring any-focused-control-keeps-space turns pointer cases red",
       { plantWritten, failCount: plantFails.length, sampleFails: plantFails.slice(0, 5) }
     );
   }

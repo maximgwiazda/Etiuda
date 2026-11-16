@@ -15,7 +15,7 @@ import { syncIntentClearBtns } from "./intent-clear.js";
 import { intentEscapeStep } from "./escape-ladder.js";
 import { syncRoleDrum } from "./role-drum.js";
 import { getHandGender, putHandGender, syncGenderGlyph } from "./gender-drum.js";
-import { pax, intentEl, roleSel, $ } from "./dom.js";
+import { pax, intentEl, roleSel, $, focusRingOn } from "./dom.js";
 import { hangBubble } from "./bubble.js";
 import { lang, intentIdxs, intentText, cats, entrySel, setIntentIdxs, setIntentText, setCats, putEntrySel, setPickRun } from "./app-state.js";
 import { hooks } from "./hooks.js";
@@ -1407,10 +1407,11 @@ function drawTabsCore(){
   const curScreen = typeof screenOn !== "undefined" ? screenOn : null;
   const screenList = typeof screens !== "undefined" && Array.isArray(screens) ? screens : [];
   const order = typeof getTabOrder === "function" ? getTabOrder() : (tabs || []).map(tb => tb.id).concat(screenList);
-  const onLabKey = (e, fn) => {
+  const onLabKey = (e, lab, fn) => {
     if(e.target && e.target.tagName==="INPUT") return;
     if(e.ctrlKey||e.altKey||e.metaKey||e.shiftKey) return;
     if(e.key!=="Enter" && e.key!==" ") return;
+    if(e.key===" " && !focusRingOn(lab)) return;
     e.preventDefault(); e.stopPropagation();
     if(e.repeat) return;
     fn();
@@ -1432,7 +1433,7 @@ function drawTabsCore(){
       lab.setAttribute("aria-selected",on?"true":"false");
       lab.tabIndex=0;
       lab.setAttribute("aria-label",name);
-      lab.onkeydown=e=>onLabKey(e,()=>{ if(typeof frontScreenTab === "function") frontScreenTab(sid); });
+      lab.onkeydown=e=>onLabKey(e,lab,()=>{ if(typeof frontScreenTab === "function") frontScreenTab(sid); });
       const labViz=document.createElement("span");
       labViz.textContent=name;
       lab.appendChild(labViz);
@@ -1485,7 +1486,7 @@ function drawTabsCore(){
       const name=tabLabel(tb);
       lab.tabIndex=0;
       lab.setAttribute("aria-label",name);
-      lab.onkeydown=e=>onLabKey(e,()=>switchTab(tb.id));
+      lab.onkeydown=e=>onLabKey(e,lab,()=>switchTab(tb.id));
       lab.onfocus=()=>scrollTabIntoView(tb.id);
       if (typeof editingTabId !== "undefined" && editingTabId === tb.id) {
         const inp = document.createElement("input");

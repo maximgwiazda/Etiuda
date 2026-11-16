@@ -99,6 +99,34 @@ function originAmong(sels, last){
   }
   return originOf(null, last);
 }
+/* THE ONE SOURCE OF "WEARS THE RING": CSS :focus-visible in src/template.html.
+   Chromium turns :focus-visible on for a pointer-focused element right before dispatching
+   a keydown, so asking matches(":focus-visible") inside Space's keydown would already see
+   true after a mouse click. Sampling matches(":focus-visible") when focus moves, a pointer
+   presses, a key finishes, or a non-Space key runs lets Space read the ring state the eye
+   saw before Space was pressed, so the ring and Space cannot drift apart. */
+let focusRingEl=null, focusRingWired=false;
+function readFocusRingEl(){
+  if(typeof document==="undefined") return null;
+  const ae=document.activeElement;
+  if(!ae || ae===document.body || ae===document.documentElement) return null;
+  return typeof ae.matches==="function" && ae.matches(":focus-visible") ? ae : null;
+}
+function syncFocusRing(){ focusRingEl=readFocusRingEl(); }
+function wireFocusRing(){
+  if(focusRingWired || typeof addEventListener!=="function") return;
+  focusRingWired=true;
+  addEventListener("focusin", syncFocusRing, true);
+  addEventListener("focusout", ()=>{ focusRingEl=null; }, true);
+  addEventListener("pointerdown", syncFocusRing, true);
+  addEventListener("keyup", syncFocusRing, true);
+  addEventListener("keydown", e=>{ if(e.key!==" " && e.code!=="Space") syncFocusRing(); });
+}
+function focusRingOn(el){
+  if(!el || typeof el.matches!=="function") return false;
+  if(!focusRingWired) return !!el.matches(":focus-visible");
+  return focusRingEl===el && el.isConnected!==false;
+}
 function grabDom(){
   list=$("#list"); pax=$("#pax"); intentEl=$("#intent");
   roleSel=$("#roleSel");
@@ -127,5 +155,7 @@ export {
   sameControl,
   originOf,
   originAmong,
+  wireFocusRing,
+  focusRingOn,
   grabDom
 };

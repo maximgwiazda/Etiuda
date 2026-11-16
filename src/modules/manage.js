@@ -27,7 +27,7 @@ import { intentIdAt, intentIdxFromId, intentIsCustom, intentIsOverridden, intent
 import { applyCatsToGlobal, removeCategory } from "./cat-set.js";
 import { esc } from "./esc.js";
 import { syncRoleDrum } from "./role-drum.js";
-import { $, focusKey, focusSame, originOf } from "./dom.js";
+import { $, focusKey, focusRingOn, focusSame, originOf } from "./dom.js";
 import { macroBlockCount, recountMacros, totalMacroCount } from "./card-counts.js";
 import { rebuildCards } from "./rebuild.js";
 import { render } from "./render.js";
@@ -1439,7 +1439,7 @@ function wireRolePage(page){
         if(newRow) newRow.focus();
         return;
       }
-      if(e.key === "Enter" || e.key === " "){
+      if(e.key === "Enter" || (e.key === " " && focusRingOn(row))){
         e.preventDefault();
         if(!e.repeat) row.click();
       }
@@ -1484,7 +1484,7 @@ function wireRolePage(page){
       if(cid) openCardEditor(cid, null, true);
     };
     cardEl.onkeydown = e => {
-      if(e.key === "Enter" || e.key === " "){
+      if(e.key === "Enter" || (e.key === " " && focusRingOn(cardEl))){
         e.preventDefault();
         if(!e.repeat) cardEl.click();
       }
@@ -1848,7 +1848,7 @@ function wireLibrary(page){
   const openFolder=e=>{ e.preventDefault(); e.stopPropagation(); eOpenCatalogFolder(); };
   if(page && page.querySelectorAll) page.querySelectorAll("code.open-folder").forEach(fpath=>{
     fpath.onclick=openFolder;
-    fpath.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); e.stopPropagation(); if(!e.repeat) openFolder(e); } };
+    fpath.onkeydown=e=>{ if(e.key==="Enter"||(e.key===" "&&focusRingOn(fpath))){ e.preventDefault(); e.stopPropagation(); if(!e.repeat) openFolder(e); } };
   });
   /* The picker is the host's and its caption goes out already translated, the shell having no
      t(). Writing the key is the whole act: the shell watches the desk, re-aims its own watch and
@@ -1889,7 +1889,7 @@ function wireLibrary(page){
       mgSortClick(btn.getAttribute("data-sort-col"));
     };
     btn.onkeydown=e=>{
-      if(e.key==="Enter"||e.key===" "){
+      if(e.key==="Enter"||(e.key===" "&&focusRingOn(btn))){
         e.preventDefault(); e.stopPropagation();
         if(!e.repeat) mgSortClick(btn.getAttribute("data-sort-col"));
       }
