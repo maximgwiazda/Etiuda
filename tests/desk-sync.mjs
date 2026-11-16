@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-sync-"));
-const EXPECTED = 67;
+const EXPECTED = 71;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -746,6 +746,59 @@ async function main() {
     return { ok: good(setting) && good(star), detail: brief({ setting, star }) };
   }
 
+  const seat = c => { const s = c.sync(); if (typeof s.seated === "function") s.seated(); };
+  /* J5: a second computer joins while the first, which made the store, has sent nothing yet (offline since its look): the joiner still
+     joins, so its own setting and its untouched sample give way to the first computer's setting and its removal of the sample once those
+     arrive, nothing kept. Each computer's account seated (sync.cjs seated, as main.js storeMine calls it) before its look. */
+  async function joinEarlyScene() {
+    const F = "sample-catalog.ec";
+    const w = worldOf("j5"), a = computer(w, "a");
+    a.desk.files[F] = SAMPLE; a.desk.keys.eTheme = "light";
+    seat(a);
+    a.down.on = true;
+    if ((await a.look()).state !== "on") throw new Error("the store did not come on");
+    w.R.clock.now += MIN;
+    a.desk.keys.eTheme = "dark"; delete a.desk.files[F];
+    a.edit();
+    w.R.clock.now += HOUR;
+    const b = computer(w, "b");
+    b.desk.files[F] = SAMPLE; b.desk.keys.eTheme = "blue";
+    seat(b);
+    const lb = await b.look();
+    await a.look();
+    await settle(b);
+    a.down.on = false;
+    await settle(a, b); await settle(a, b);
+    const held = { a: a.desk.keys.eTheme, b: b.desk.keys.eTheme, sampleA: has(a.desk.files, F), sampleB: has(b.desk.files, F), kept: a.kept.length + b.kept.length, join: b.sync().state().join };
+    const ok = lb.state === "on" && held.a === "dark" && held.b === "dark" && !held.sampleA && !held.sampleB && held.kept === 0;
+    return { ok, detail: brief(held) };
+  }
+  /* J6: a joining computer's changes made after its account was seated and before its first cycle reaches the store are its own writes:
+     a setting changed then stands over the store's on both computers, and the shipped sample it removed then stays removed on both, the
+     first computer's copy kept there, where what it held when seated gives way. */
+  async function joinSinceScene() {
+    const F = "sample-catalog.ec";
+    const w = worldOf("j6"), a = computer(w, "a");
+    a.desk.files[F] = SAMPLE; a.desk.keys.eUiLang = "de"; a.desk.keys.eTheme = "light";
+    seat(a);
+    if ((await a.look()).state !== "on") throw new Error("the store did not come on");
+    await settle(a);
+    w.R.clock.now += HOUR;
+    const b = computer(w, "b");
+    b.desk.files[F] = SAMPLE; b.desk.keys.eUiLang = "en"; b.desk.keys.eTheme = "dark";
+    seat(b);
+    w.R.clock.now += MIN;
+    b.desk.keys.eUiLang = "pl"; delete b.desk.files[F];
+    b.down.on = true;
+    const lb = await b.look();
+    await a.look();
+    b.down.on = false;
+    await settle(a, b); await settle(a, b);
+    const held = { a: a.desk.keys.eUiLang, b: b.desk.keys.eUiLang, themeB: b.desk.keys.eTheme, sampleA: has(a.desk.files, F), sampleB: has(b.desk.files, F) };
+    const ok = lb.state === "on" && held.a === "pl" && held.b === "pl" && held.themeB === "light" && !held.sampleA && !held.sampleB;
+    return { ok, detail: brief(held) };
+  }
+
   /* J3: the store holds no entry for the shipped sample (the first computer had none when it synced); a second computer joins with its
      sample untouched: through every merge after the first, it is never recorded as that computer's write, so the first never gets it,
      and nothing is kept. Edited there, it is the person's own and reaches the first. */
@@ -842,6 +895,8 @@ async function main() {
 
   const results = {};
   const LEGS = [
+    ["J5", joinEarlyScene, "a second computer joining before the first, which made the store, has sent anything still joins: its setting and untouched sample give way to the first's setting and removal of the sample once they arrive, nothing kept"],
+    ["J6", joinSinceScene, "a joining computer's setting changed and sample removed after its account was seated, before its first cycle, are its own: the setting stands on both and the sample stays removed on both, while what it held when seated gives way"],
     ["H1", heldPlaceScene, "a catalog held back once the folder is a team's, and an edit whose layer grew past its cap, keep their bytes in this computer's place: a computer joining after takes both from it alone, nothing kept aside"],
     ["SA", sameValueScene, "the same value written on two computers, each merging the other's first entry before either sends again: every merge after runs on both, the value stands, nothing kept or moved, for a setting and for a card starred"],
     ["B2", bridgeScene, "the page's copy of the desk: a write from a copy behind a tell answers what that tell took, once; one after it nothing; a key cleared whole, or held under a clear of every key, is dropped from a write behind it and kept from one after; a load holds every tell before it"],
@@ -904,19 +959,21 @@ async function main() {
   const swap = (from, to) => text => (text.split(from).length === 2 ? text.split(from).join(to) : null);
   const scenes = Object.fromEntries(LEGS.map(([id, scene]) => [id, scene]));
   const PLANTS = [
+    ["join by the store's files", "J5", swap("(st.join === true || (st.join === undefined && ", "((st.join === true || st.join === undefined) && ("), "joining read from another computer's sync file alone, so a computer joining before the first has sent takes itself for the first"],
+    ["since seated unread", "J6", swap("const held0 = item => !before || ", "const held0 = item => true || "), "every item read as held before joining, so a change made after sign-in gives way"],
+    ["removed since unrecorded", "J6", lift("join-removed"), "a removal made after sign-in, before the first merge, recorded nowhere, so the store's copy comes back"],
     ["held unplaced", "H1", swap("write(io, placeOf(o.me.id, state.ledger, Object.assign(heldPlaced(io, held), r.after))); /* plant:held-placed */", "write(io, r.own); /* plant:held-placed */"), "this computer's place written from what it holds alone, so a held catalog's bytes are removed and a held edit's value dropped"],
     ["same over each other", "SA", swap("let top = all.filter(a => !all.some(b => b !== a && !same(a, b) && over(b, a) && !over(a, b))); /* plant:top-mutual */", "let top = all.filter(a => !all.some(b => b !== a && !same(a, b) && over(b, a))); /* plant:top-mutual */"), "two entries each made over the other both set aside, so the merge finds no version standing and throws"],
     ["stale write whole", "B2", swap("const late = l.filter(x => x.n > at); /* plant:desk-stale */", "const late = []; /* plant:desk-stale */"), "a write from a copy behind a tell taken as the person's, so what the sync took is read as removed"],
     ["whole clear written back", "B2", swap("if (late.some(x => x.pre === null)) { dropped.push(k); continue; } /* plant:desk-whole */", "/* plant:desk-whole */"), "a key cleared whole written back from a copy behind the clear"],
     ["every clear written back", "B2", lift("desk-every"), "a key the page held behind a clear of every key written back under the next account"],
-    ["join older", "J1", swap("const t = joining ? 0 : Math.max(", "const t = Math.max("), "what a joining computer held before is stamped now, so its settings outrank the store's"],
+    ["join older", "J1", swap(" : !held0(item) ? now : joining ? 0 : ", " : !held0(item) ? now : joining ? now : "), "what a joining computer held before is stamped now, so its settings outrank the store's"],
     ["join sample", "J1", lift("join-pristine"), "an untouched sample on a joining computer taken as its own, so the one deleted elsewhere comes back as a conflict"],
     ["bytes by the writer alone", "C2b", swap("for (const id of new Set([by, ...ids, o.me.id])) {", "for (const id of new Set([by])) {"), "a catalog's bytes read only under the computer that wrote it, so once it has left the store they never arrive"],
     ["taken seen by the winner", "S6", swap("seen: maxSeen(unionSeen(...all.filter(e => !same(e, win) && e.by !== win.by)), win.seen) }; /* plant:seen-max */", "seen: Object.assign(unionSeen(...all.filter(e => !same(e, win) && e.by !== win.by)), win.seen) }; /* plant:seen-max */"), "the entry taken carries the winner's own lower seen times over the others', so a later edit here meets one it was made over as a conflict"],
     ["own seen by its own", "S6", swap("{ seen: unionSeen(...top) }); /* plant:seen-max-mine */", "{ seen: Object.assign(unionSeen(...top), mine.seen) }); /* plant:seen-max-mine */"), "this computer's standing entry keeps its own lower seen times over the others', so its next edit meets one it was made over as a conflict"],
     ["untouched recorded later", "J3", lift("untouched-skip"), "the untouched sample skipped only at the joining merge, so the next records it as this computer's write and the other computer gets it"],
     ["untouched removal unrecorded", "J4", lift("untouched-removal"), "the person's removal of an untouched sample recorded nowhere, so the first computer's entry puts it straight back"],
-    ["join reached", "J1", lift("join-reached"), "a computer that has never synced merges before a cycle reached the store, so its first merge cannot know it joins"],
     ["one item added", "C7", swap("return SETTINGS.indexOf(s.slice(2)) >= 0 || LAYER_RE.test(s.slice(2)); /* plant:follows */", "return SETTINGS.indexOf(s.slice(2)) >= 0 || LAYER_RE.test(s.slice(2)) || s === \"k:eTeamKeys\"; /* plant:follows */"), "a team's keys follow"],
     ["later stands", "C8", swap("const stay = top.reduce(", "const stay = mine && top.some(e => same(e, mine)) ? mine : top.reduce("), "each computer keeps its own in place, so where its own was the earlier the newer change is not in use"],
     ["own unkept", "C8", swap(" ? ownOf(e, item) : valueOf(e, item); /* plant:keep-own */", " ? undefined : valueOf(e, item); /* plant:keep-own */"), "a computer's own earlier version not kept aside where the later one replaces it"],

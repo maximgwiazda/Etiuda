@@ -11080,6 +11080,9 @@ function storeMine() {
   storeSyncStop();
   storeAgainStop();
   storeSave();
+  /* What the desk held when this account took it, so a change after it is the person's own (sync.cjs seated). */
+  const sy = storeSyncOf();
+  if (sy) sy.seated(); /* plant:store-seated */
   return true;
 }
 let storeKept;

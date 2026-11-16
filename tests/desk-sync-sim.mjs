@@ -328,7 +328,7 @@ function signIn(w, c, X) {
   c.ever = true;
   if (held(c)) { c.s.ask = X; c.s.last = X; if (c.sync) c.sync.stop(); return; }
   if (c.s.last !== X) c.s.last = X;
-  if (c.s.who !== X) { c.s.who = X; adopt(w, c, X); }
+  if (c.s.who !== X) { c.s.who = X; adopt(w, c, X); if (!c.sync) createSync(w, c); c.sync.seated(); } /* model-plant:store-seated */
   look(w, c);
 }
 function signOut(w, c) {

@@ -203,16 +203,43 @@ function mergeOnce(o) {
   /* A version kept for the person is let go once a later one stands over it, chosen on another computer. */
   const settled = (item, win, tops) => { kept = kept.filter(k => k.item !== item || !(tops || [win]).some(e => over(e, Object.assign({ seen: {} }, k)))); };
   const patch = {}, copies = [];
-  /* A computer that has never synced joining a store the others already hold: what it held before counts as older than anything they
-     wrote, so a setting gives way to the store's; and the shipped sample untouched here (o.pristine) is none of its own at any merge while
-     it stays untouched (state.untouched), so the store's word on it stands. The store's first computer, not joining, records it. */
-  const joining = !Object.keys(ledger).length && (o.theirs || []).some(t => t.by !== me && Object.keys(t.items).length);
+  /* A computer that has never synced joining a store it did not make (state.join, set when it adopted the store: not made here, another
+     computer listed): what it held before counts as older than anything they wrote, so a setting gives way to the store's; and the shipped
+     sample untouched here (o.pristine) is none of its own at any merge while it stays untouched (state.untouched), so the store's word on it
+     stands. What it changed since it adopted the store (state.before, its items' hashes then, and state.beforeHeld what it held back) is
+     its own write, a removal included. The store's first computer, not joining, records what it held then as written when it adopted the
+     store (state.at), so a later write on a computer that joined meanwhile stands over it. A state from before the flag judges by another
+     computer's sync file holding items. */
+  const st = o.state || {}, before = plain(st.before) ? st.before : null, beforeHeld = Array.isArray(st.beforeHeld) ? st.beforeHeld.map(String) : [];
+  const first = !Object.keys(ledger).length;
+  const joining = first && (st.join === true || (st.join === undefined && (o.theirs || []).some(t => t.by !== me && Object.keys(t.items).length))); /* plant:join-flag */
+  const held0 = item => !before || before[item] === (has(local, item) ? sha(local[item]) : undefined) || (!has(before, item) && heldBy(beforeHeld, item)); /* plant:join-since */
   const pristine = Array.isArray(o.pristine) ? o.pristine : [];
   const untouched = ((o.state && Array.isArray(o.state.untouched)) ? o.state.untouched : []).filter(i => typeof i === "string" && !has(ledger, i));
+  /* An untouched sample removed here while no computer held an entry for it (state.gone): its removal is made over the first entry that
+     comes. What a joining computer held back then (state.joinHeld, patterns as held lists them) counts as held before it joined once read. */
+  const gone = (Array.isArray(st.gone) ? st.gone : []).filter(i => typeof i === "string" && !has(ledger, i));
+  const joinHeld = joining ? beforeHeld.filter(p => held.indexOf(p) >= 0) : (Array.isArray(st.joinHeld) ? st.joinHeld.map(String) : []);
   /* This computer's own changes first: an item whose value is not the one its entry names was changed here. */
-  for (const item of new Set(Object.keys(ledger).concat(Object.keys(local), untouched))) {
+  for (const item of new Set(Object.keys(ledger).concat(Object.keys(local), untouched, gone, first && before ? Object.keys(before) : []))) {
     const was = ledger[item], h = has(local, item) ? sha(local[item]) : null;
     if (h === null && heldBy(held, item)) continue; /* plant:held-kept */
+    if (!was && gone.indexOf(item) >= 0) {
+      if (h !== null) { gone.splice(gone.indexOf(item), 1); }
+      else {
+        const there = (o.theirs || []).filter(x => x.by !== me && x.items[item]).map(x => x.items[item]);
+        if (there.length) { gone.splice(gone.indexOf(item), 1); ledger[item] = { h: null, by: me, t: Math.max(now, ...there.map(e => e.t + 1)), seen: unionSeen(...there) }; } /* plant:gone-later */
+        continue;
+      }
+    }
+    const lateHeld = !was && !joining && heldBy(joinHeld, item);
+    /* Held when its account was seated and removed since, at its first merge: the person's removal, made over no other computer's entry,
+       so one standing elsewhere meets it as a conflict and is kept. */
+    if (!was && first && before && h === null && has(before, item)) {
+      const there = (o.theirs || []).filter(x => x.by !== me && x.items[item]).map(x => x.items[item]);
+      ledger[item] = { h: null, by: me, t: Math.max(now, ...there.map(e => e.t + 1)), seen: {} }; /* plant:join-removed */
+      continue;
+    }
     if (!was && untouched.indexOf(item) >= 0) {
       if (h !== null && pristine.indexOf(item) >= 0) continue; /* plant:untouched-skip */
       untouched.splice(untouched.indexOf(item), 1);
@@ -220,12 +247,13 @@ function mergeOnce(o) {
       if (h === null) {
         const there = (o.theirs || []).filter(x => x.by !== me && x.items[item]).map(x => x.items[item]);
         if (there.length) ledger[item] = { h: null, by: me, t: Math.max(now, ...there.map(e => e.t + 1)), seen: unionSeen(...there) }; /* plant:untouched-removal */
+        if (!there.length) gone.push(item);
         continue;
       }
     }
     if (was ? was.h === h : h === null) continue; /* plant:recorded */
-    if (!was && joining && pristine.indexOf(item) >= 0) { untouched.push(item); continue; } /* plant:join-pristine */
-    const t = joining ? 0 : Math.max(now, was ? was.t + 1 : 0); /* plant:join-older */
+    if (!was && (joining || lateHeld) && pristine.indexOf(item) >= 0 && held0(item)) { untouched.push(item); continue; } /* plant:join-pristine */
+    const t = was ? Math.max(now, was.t + 1) : lateHeld ? 0 : !held0(item) ? now : joining ? 0 : before && Number.isSafeInteger(st.at) ? Math.min(now, st.at) : now; /* plant:join-older */
     ledger[item] = { h, by: me, t, seen: was ? (was.by === me ? Object.assign({}, was.seen) : unionSeen(was)) : {} };
   }
   const valueOf = (e, item) => {
@@ -297,7 +325,10 @@ function mergeOnce(o) {
     for (const item of Object.keys(patch)) if (layerOf(item) === key) delete patch[item];
     patch["k:" + key] = layerText(after, key);
   }
-  return { state: { ledger, kept, untouched: untouched.filter(i => !has(ledger, i)) }, patch, copies, own: placeOf(me, ledger, after), after, untouched };
+  const rest = {};
+  if (gone.length) rest.gone = gone.filter(i => !has(ledger, i));
+  if (joinHeld.some(p => held.indexOf(p) >= 0)) rest.joinHeld = joinHeld.filter(p => held.indexOf(p) >= 0);
+  return { state: Object.assign({ ledger, kept, untouched: untouched.filter(i => !has(ledger, i)) }, rest), patch, copies, own: placeOf(me, ledger, after), after, untouched };
 }
 /* This computer's place in the store: its sync file and the catalogs its ledger holds. */
 function placeOf(me, ledger, after) {
@@ -319,7 +350,9 @@ function unapplied(prev, r, failed, local, me) {
   for (const item of Object.keys(local || {})) if (under(item)) after[item] = local[item];
   /* An untouched sample whose store entry could not be put in place is still untouched here. */
   const still = (r.state.untouched || []).concat((r.untouched || []).filter(i => under(i) && !has(ledger, i) && (r.state.untouched || []).indexOf(i) < 0));
-  return { state: { ledger, kept, untouched: still }, patch: r.patch, copies: r.copies, own: placeOf(me, ledger, after), after, untouched: r.untouched };
+  const rest = {};
+  for (const k of ["gone", "joinHeld"]) if (r.state[k]) rest[k] = r.state[k];
+  return { state: Object.assign({ ledger, kept, untouched: still }, rest), patch: r.patch, copies: r.copies, own: placeOf(me, ledger, after), after, untouched: r.untouched };
 }
 
 /* The person chose one version of an item both changed (`value`, null to remove): taken here over every version it was chosen from,
@@ -330,7 +363,7 @@ function resolve(state, me, item, value, now) {
   const seen = unionSeen(...from.map(k => ({ by: k.by, t: k.t, seen: k.seen || {} })));
   delete seen[me];
   ledger[item] = { h: value === null ? null : sha(value), by: me, t: Math.max(Math.floor(now), ...from.map(k => k.by === me ? k.t + 1 : 0)), seen };
-  return { ledger, kept, untouched: (state.untouched || []).filter(i => i !== item) };
+  return Object.assign({}, state, { ledger, kept, untouched: (state.untouched || []).filter(i => i !== item) });
 }
 
 /* ---- THE PAGE'S COPY OF THE DESK: what the sync put on the desk behind the page, by key, until the page next writes that key -----
@@ -436,6 +469,20 @@ function createStoreSync(o) {
     };
     return { list: out, fileOf: fileOf.f };
   }
+  /* What this computer holds now, by item's hash, what it holds back, and the time: what it held before it joined (mergeOnce). */
+  function heldNow() {
+    const local = o.local(), before = {}, held = local && typeof o.held === "function" ? o.held() : [];
+    for (const item of Object.keys(local || {})) before[item] = sha(local[item]);
+    return { before: local ? before : null, beforeHeld: held.slice(), at: Math.floor(o.now()) };
+  }
+  /* An account seated on this computer, which has synced nothing: what the desk holds now is what it held before, and a change after it
+     the person's own under that account. */
+  function seated() {
+    if (Object.keys(state.ledger).length) return false;
+    state = Object.assign({}, state, heldNow()); /* plant:join-seated */
+    o.save(state);
+    return true;
+  }
   /* One merge into the mirror of the store this computer last synced to; nothing where it has synced to none yet. */
   function merge() {
     if (!state.rt || busy) return null;
@@ -449,7 +496,9 @@ function createStoreSync(o) {
       const held = typeof o.held === "function" ? o.held() : [], pristine = typeof o.pristine === "function" ? o.pristine() : [];
       let r = mergeOnce({ me: o.me.id, now: o.now(), state, local, held, pristine, theirs: t.list, fileOf: t.fileOf });
       if (Object.keys(r.patch).length || r.copies.length) r = unapplied(state, r, o.apply(r.patch, r.copies), local, o.me.id); /* plant:unapplied */
+      const was = state;
       state = Object.assign({ rt: state.rt }, r.state);
+      if (!Object.keys(state.ledger).length && was.join !== undefined) Object.assign(state, { join: was.join, before: was.before, beforeHeld: was.beforeHeld, at: was.at });
       o.save(state);
       write(io, placeOf(o.me.id, state.ledger, Object.assign(heldPlaced(io, held), r.after))); /* plant:held-placed */
       return r;
@@ -488,7 +537,14 @@ function createStoreSync(o) {
     if (!look || look.state !== "on" || !look.keys || !look.store) { stop(); return; }
     keysNow = look.keys; certNow = look.store;
     const fresh = state.rt !== look.keys.rt;
-    if (fresh) { state = Object.assign({}, state, { rt: look.keys.rt }); o.save(state); } /* plant:adopt */
+    /* A computer that has synced nothing adopting a store keeps whether it joins one it did not make, and what it held when its account was
+       seated (seated, below), or now where none was kept (mergeOnce). */
+    if (fresh) {
+      const none = !Object.keys(state.ledger).length;
+      const join = none ? Object.assign({ join: look.made !== true && look.keys.devices.some(d => d.id !== o.me.id) }, plain(state.before) ? {} : heldNow()) : {}; /* plant:join-made */
+      state = Object.assign({}, state, { rt: look.keys.rt }, join); /* plant:adopt */
+      o.save(state);
+    }
     /* A computer enrolled since is taken into the channel it has, by the list's new roster, not a new channel over the same mirror. */
     if (ch && at === look.keys.rt) {
       if (look.keys.rev !== revNow) { ch.program.loadTeamFile(storeTeamDoc(look.keys, o.pubOf, o.canonBytes)); revNow = look.keys.rev; }
@@ -543,7 +599,7 @@ function createStoreSync(o) {
     o.save(state);
     return true;
   }
-  return { turn, merge, stop, state: () => state, channel: () => ch, running: () => !!ch, resolve: choose, opened, untake };
+  return { turn, merge, stop, state: () => state, channel: () => ch, running: () => !!ch, resolve: choose, opened, untake, seated };
 }
 
 module.exports = { SYNC_NAME, SYNC_KIND, SETTINGS, LAYER_RE, CATALOG_RE, CATALOG_MAX, follows, isSetting, fileRel, syncRel, localItems, keyItems, createDeskBridge, syncRead, syncText,
