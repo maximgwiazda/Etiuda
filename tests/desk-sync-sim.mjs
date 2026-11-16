@@ -113,7 +113,7 @@ function keyFrom(bytes) {
 /* Stand-ins of the main.js guards the walk replicates, each named after its plant there; a plant here lifts one. */
 const MODEL = { answerMineFresh: true };
 function worldOf(seed) {
-  const w = { seed, now: T0, ver: 0, tok: 0, stores: {}, relays: {}, comps: [], writes: [], allowed: { A1: new Set(), A2: new Set() }, stepNo: -1 };
+  const w = { seed, now: T0, ver: 0, tok: 0, stores: {}, relays: {}, comps: [], writes: [], allowed: { A1: new Set(), A2: new Set() }, stepNo: -1, promised: [] };
   for (let i = 0; i < 3; i++) w.comps.push(computerOf(w, i));
   return w;
 }
@@ -351,6 +351,8 @@ function answer(w, c, choice) {
   if (choice === "later") return;
   /* The page sends every write it owes before it answers (src/modules/signin.js syncAnswer, eDeskFlush). */
   land(w, c); /* model-plant:answer-flush */
+  /* (j) is judged against what the account's store held at the relay as the person answered. */
+  w.promised.push({ X, c: c.i, step: w.stepNo, choice, held: storeHeldNow(w, X) });
   if (choice === "mine" && c.s.who !== X) {
     c.knows = new Map();
     if (MODEL.answerMineFresh) { c.syncFile = { rt: "", ledger: {}, kept: [] }; if (c.sync) c.sync.stop(); c.sync = null; } /* model-plant:answer-mine-fresh */
@@ -517,9 +519,41 @@ function relayTexts(w, st) {
   for (const c of w.comps) for (const [rel, text] of mirrorMap(c, path.join(c.mirrorRoot, st.rt))) out.push([rel, text, "c" + c.i + "'s mirror"]);
   return out;
 }
+/* What an account's store holds at the relay: each item a listed computer's sync.json names with a value, and the hashes named. */
+function storeHeldNow(w, X) {
+  const st = w.stores[X], out = new Map();
+  if (!st) return out;
+  const ids = new Set(st.devices.map(d => d.id));
+  for (const [rel, f] of w.relays[st.rt] || []) {
+    const m = /^desks\/(k-[0-9a-f]{16})\/sync\.json$/.exec(rel);
+    if (!m || f.del || !ids.has(m[1])) continue;
+    let d = null;
+    try { d = JSON.parse(f.text); } catch { continue; }
+    for (const [item, e] of Object.entries((d && d.items) || {})) {
+      if (!e || typeof e.h !== "string") continue;
+      if (!out.has(item)) out.set(item, new Set());
+      out.get(item).add(e.h);
+    }
+  }
+  return out;
+}
 function invariants(w) {
   const fails = [];
   const say = (inv, detail) => fails.push({ inv, detail });
+  /* (j) the store keeps: after a person answers the account question with "It is mine" or "Start from my account", every value the
+     account's store held at the relay as they answered is still held there, or stands on that computer, unless a person of that account
+     wrote that item since. A computer's sync state begun again never empties the account's copy of what this computer once sent
+     (the last Argon read's finding 1: theirs() skipping this computer's own place). Copies set aside on the computer do not count: the
+     store is the account's copy. */
+  for (const p of w.promised) {
+    const X = p.X, c = w.comps[p.c], now = storeHeldNow(w, X), desk = itemsOf(c.desk.keys, c.desk.files);
+    for (const [item, hs] of p.held) for (const h of hs) {
+      if (now.has(item) && now.get(item).has(h)) continue;
+      if (has(desk, item) && sha(desk[item]) === h) continue;
+      if (w.writes.some(x => x.acct === X && x.item === item && x.step > p.step)) continue;
+      say("j", X + ": " + item + " at " + h.slice(0, 8) + " was in the store when c" + p.c + " answered " + p.choice + " at #" + p.step + ", and is now neither in the store nor on c" + p.c);
+    }
+  }
   for (const X of ACCOUNTS) {
     const st = w.stores[X];
     if (!st) continue;
@@ -673,10 +707,10 @@ function shrink(seed, steps, inv, budget) {
   return cur;
 }
 const MAX_STEPS = 40;
-const INVARIANTS = { a: "agreement", b: "nothing lost", c: "accounts apart", d: "the allowlist", e: "bytes reachable", f: "the untouched sample", x: "the walk ran" };
+const INVARIANTS = { a: "agreement", b: "nothing lost", c: "accounts apart", d: "the allowlist", e: "bytes reachable", f: "the untouched sample", j: "the store keeps", x: "the walk ran" };
 const replay = (seed, steps) => "node tests/desk-sync-sim.mjs --seed " + seed + " --steps " + steps.map(s => s.at).join(",");
 
-/* THE FIXED SEEDS: each reproduced a finding on the sync line at c77fc33c, red there, the invariant it broke first named; they run every
+/* THE FIXED SEEDS: each reproduced a finding on the sync line at c77fc33c (221: at bc147559), red there, the invariant it broke first named; they run every
    time, beside the random ones. "Third pass" is the third Argon review of the line; "further" is a fault this walk found. */
 const FIXED = [
   { seed: 1109, inv: "e", what: "third pass 1: a catalog folder held for a team removes this computer's catalog bytes from its place, its sync file still listing them" },
@@ -689,6 +723,7 @@ const FIXED = [
   { seed: 1141, inv: "b", what: "further: a setting changed after sign-in but before the first cycle reaches the store is taken as held before joining and gives way" },
   { seed: 2371, inv: "b", what: "further: the same for the sample removed after sign-in" },
   { seed: 2002, inv: "c", what: "third pass 11 (can follow): a catalog saved signed out after another account was seated is merged into the first account's mirror" },
+  { seed: 221, inv: "j", what: "last read 1: an account alone on a computer comes back after another account and answers Start from my account; its fresh state skips this computer's own place and empties the account's store" },
 ];
 
 async function main() {
