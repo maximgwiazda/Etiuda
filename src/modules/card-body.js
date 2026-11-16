@@ -14,6 +14,7 @@ import { movedCardIds } from "./card-order.js";
 import { railActive } from "./rail-panel.js";
 import { t } from "./ui-lang.js";
 import { entrySel, lang, intentIdxs, editionView } from "./app-state.js";
+import { flagButtonHtml, flagMarkHtml } from "./card-flag-desk.js";
 
 /* The card body, extracted so a language flip can rebuild one card at a time - the
    render map and the flip's idle chunks must write the same bytes (verifyPool checks).
@@ -31,7 +32,8 @@ function cardBodyHtml(m,i,ctx){
     /* data-i18n-skip: a card title is the employer's content, and so is the name on the mark's
        slot. Nothing sweeps the card list today, but the marker travels with the markup. A card
        has exactly one category, so the mark is simply its own - no counting, unlike a rail row. */
-    cardH+=catMarkHtml(m.c)+'<span class="ctitle" data-i18n-skip>'+esc(cardTitle(m))+'</span>'+(cardCommits(m)?stampHtml("cstamp"):"");
+    cardH+=catMarkHtml(m.c)+'<span class="ctitle" data-i18n-skip>'+esc(cardTitle(m))+'</span>'+(cardCommits(m)?stampHtml("cstamp"):"")
+      +flagMarkHtml(String(m.id||""));
     /* Captured rather than appended inline: a kept card has its badges added and removed by
        patchCard(), and they must be the same bytes a rebuild would have written. */
     const hitBadge='<span class="cbadge hit" title="'+esc(t("Linked to the selected intent"))+'">'+esc(t("Linked"))+'</span>';
@@ -60,6 +62,7 @@ function cardBodyHtml(m,i,ctx){
     cardH+='<span class="cacts">'
       +(_note ? '<button type="button" data-act="note" title="'+esc(t("Internal note"))+'" aria-label="'+esc(t("Internal note"))+'" aria-expanded="false">'+_svg("ic",_NOTE)+'</button>' : '')
       +'<button type="button" data-act="edit" title="'+esc(t("Edit this card"))+'" aria-label="'+esc(t("Edit this card"))+'">'+ICON_EDIT+'</button>'
+      +flagButtonHtml(String(m.id||""))
       +'<button type="button" class="'+(m._hidden?"":"danger")+'" data-act="hide" title="'+esc(hideTip)+'" aria-label="'+esc(hideTip)+'">'+(m._hidden?ICON_EYE_SHUT:ICON_EYE_OPEN)+'</button>'
       +'<button type="button" class="star-btn'+(fav?" on":"")+'" data-act="fav" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</button>'
       +'</span></div>';

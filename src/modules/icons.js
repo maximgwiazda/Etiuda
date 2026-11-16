@@ -200,6 +200,8 @@ const CAT_ICON_HINTS=[
 ];
 const ICON_STAR_ON=_svg("ic ic-fill",_STAR);
 const ICON_STAR_OFF=_svg("ic",_STAR);
+/* "This looks wrong": a pole and its pennant, the pennant filled where the flag is lit. */
+const ICON_FLAG=_svg("ic ic-flag",'<path d="M5 17V4"/><path d="M5 4.5h8.5l-1.6 3 1.6 3H5"/>');
 /* Each landmark answers a different question: a category icon says WHERE, the star says
    MINE, this says CONNECTED TO WHAT I SELECTED. A link because "linked" is the product's
    own word (Linked intents; cardLinksIntent) - no new metaphor. Wears .cat-ic, so the
@@ -291,7 +293,7 @@ export {
   ICON_EYE_OPEN, ICON_EYE_SHUT, ICON_ROLE_ALWAYS, _svg, ICON_EDIT, ICON_TRASH, _STAR, _NOTE,
   ICON_ALL, catIconInner, CAT_ICONS, CAT_ICONS_CATALOG, CAT_COLORS_CATALOG, setCatalogCatLooks,
   CAT_LABELS_PL, CAT_LABELS_BY_LANG, setCatalogCatLabels, E_HUE_CYCLE, E_HUE_NAMES, CAT_ICON_MUSIC, CAT_ICON_KEYS,
-  CAT_ICON_HINTS, ICON_STAR_ON, ICON_STAR_OFF, ICON_INTENT_LINK, ICON_PLUS, fillProseIcons,
+  CAT_ICON_HINTS, ICON_STAR_ON, ICON_STAR_OFF, ICON_FLAG, ICON_INTENT_LINK, ICON_PLUS, fillProseIcons,
   ICON_CHEVRON_R, ICON_X, ICON_LOCK, ICON_LOCK_OPEN, ICON_TAB_X, ICON_TAB_ADD,
   ICON_AWAITING, ICON_LINT_WARNING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT, ICON_KEY, ICON_STAMP, ICON_DESK, ICON_LOOK,
 };

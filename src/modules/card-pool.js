@@ -8,6 +8,7 @@ import { displayBandKey } from "./card-order.js";
 import { isFavourite, ePackEpoch } from "./pack.js";
 import { cardFillKey } from "./rail-list.js";
 import { editionMarkSig } from "./edition-marks.js";
+import { flagSig } from "./card-flag-desk.js";
 import { t, uiLang } from "./ui-lang.js";
 import { list, cardTpl } from "./dom.js";
 import { cards, lang, intentIdxs, entrySel } from "./app-state.js";
@@ -34,10 +35,12 @@ function patchCard(el,it){
      would file every badge between the mark and the words it marks. */
   const anchor=head.querySelector(".cstamp")||head.querySelector(".ctitle");
   if(!anchor) return;
+  // The flag's mark follows the title and its stamp, and the badges follow the mark.
+  const after=head.querySelector(":scope>.cflag")||anchor;
   let hitB=head.querySelector(".cbadge.hit"), catB=head.querySelector(".cbadge.cat");
-  if(it.hit && !hitB){ hitB=parseCardHtml(it.body().hitBadge); anchor.insertAdjacentElement("afterend",hitB); }
+  if(it.hit && !hitB){ hitB=parseCardHtml(it.body().hitBadge); after.insertAdjacentElement("afterend",hitB); }
   else if(!it.hit && hitB){ hitB.remove(); hitB=null; }
-  if(it.catHit && !catB){ catB=parseCardHtml(it.body().catBadge); (hitB||anchor).insertAdjacentElement("afterend",catB); }
+  if(it.catHit && !catB){ catB=parseCardHtml(it.body().catBadge); (hitB||after).insertAdjacentElement("afterend",catB); }
   else if(!it.catHit && catB){ catB.remove(); }
 }
 /* A language flip changes every card's bytes but nothing structural, so the tail never
@@ -77,7 +80,7 @@ function rebuildCardInPlace(id,near){
   const fresh=parseCardHtml(b.cardH);
   if(!fresh) return;
   fresh.__sig=ePackEpoch+"|"+renderKey+"|"+cardFillKey(m)
-    +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1)+"|"+editionMarkSig(m.id);
+    +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1)+"|"+editionMarkSig(m.id)+"|"+flagSig(String(m.id||""));
   const ord=el.getAttribute("data-ord");
   if(ord!=null) fresh.setAttribute("data-ord",ord);
   deckUnobserve(el);

@@ -188,6 +188,8 @@ function flagSeen(cardId){
   tell();
   return true;
 }
+/* The cards that have an outcome kept, whatever it is: the desk tells a card the edition took away as seen. */
+function flagEndedIds(){ return Object.keys(readEnds()); }
 /* The header list the desk file writes. Sorted by card id, then by r, so the order names neither
    which flag was made first. */
 function flagFileList(){
@@ -246,6 +248,7 @@ export {
   unflagCard,
   cardFlag,
   flagSeen,
+  flagEndedIds,
   flagFileList,
   flagHolds,
   settleFlags,
