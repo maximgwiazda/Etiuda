@@ -11623,6 +11623,7 @@ function storeForget() {
   const s = storeState();
   if (s.keys || s.leave || storeLeaveHere) { s.keys = ""; s.leave = ""; storeLeaveHere = null; storeSave(); } /* plant:signout-store-keys */
   if (storeState().org === true) { storeState().org = false; storeSave(); }
+  tellStore(); /* the page's sync bubbles close: no row stands signed out */ /* plant:signout-tell-store */
 }
 /* The folder's requests, at OneDrive's App Folder and Drive's appDataFolder alone, through the shell's own network as the sign-in's:
    no redirect, nothing cached, no cookie, the answer read up to STORE_ANSWER_MAX. {status, bytes}; throws where unreached. */

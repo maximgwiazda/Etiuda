@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 201;
+const EXPECTED = 203;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -2343,6 +2343,18 @@ async function refreshLostScene(src) {
   return { ok, detail: brief({ now: now && now.state + "/" + now.why, lost, again, onWhile, revoked }) };
 }
 
+/* (z7) A SIGN OUT TELLS THE PAGE THE STORE'S STATE: the page closes its account question only on a store tell (signin.js syncSay, any line
+   but "ask"), so a sign out with the question open tells it, and the row it then reads is not shown. */
+async function signoutToldScene(src) {
+  const r = await renewScene(src), T = r.shell.T;
+  let told = 0;
+  T.setWindow({ isDestroyed: () => false, webContents: { send: ch => { if (ch === "etiuda:store") told++; } } });
+  T.signinOutNow();
+  const view = T.storeView();
+  const ok = told > 0 && view.shown === false;
+  return { ok, detail: brief({ told, shown: view.shown }) };
+}
+
 /* (z6) A LOOK MORE THAN AN HOUR AFTER THE LAST SIGN-IN RENEWS IT FIRST: the service grants a store only to a desk it saw sign in within
    the hour. A look whose last reached sign-in is two hours old renews it, then is granted and is on; with the provider out (the renewal
    unreached), the refusal is a look tried again within minutes, not a day, and the row says the service was not reached. */
@@ -2566,6 +2578,7 @@ const LEGS = [
   ["z2r", answerStartFloorsScene, "Start from my account takes the floors that refuse an older edition aside with the desk, kept in the set-aside desk.json, so the next account's own edition is not refused; a team lead's floor stays; It is mine keeps them all"],
   ["z5", refreshLostScene, "a look after the refresh token was lost says signing in is refused, not the organisation's refusal, and arms no retry; a revoked certificate, once the store certificate has ended, says the same, not a lapse"],
   ["z14", rowToldScene, "a merge keeping a version tells the page; a renewal that lost its refresh token reads as a refused sign-in; the first of two overlapping looks ending leaves the row saying a look runs"],
+  ["z7", signoutToldScene, "a sign out tells the page the store's state, so an account question left open closes, the row it reads not shown"],
   ["z6", signinHourScene, "a look more than an hour after the last sign-in renews it first and is granted, on; with the renewal unreached the refusal is tried again within minutes, the row not saying refused"],
   ["z11", signedOutScene, "a change on the desk arms the merge, a sign out clears it, and a change made signed out arms none and changes nothing of the sync state"],
   ["z4", tokenAccountScene, "a folder token asked for one account and answered with another seated is not kept for it, and a look whose token is answered after a sign out says nothing and arms no retry"],
@@ -2697,6 +2710,7 @@ const PLANTS = [
   ["z5", swap("  if (!refresh) return { why: \"signin\" }; /* plant:token-no-refresh */", "  if (!refresh) return { why: \"consent\" }; /* plant:token-no-refresh */"), "a look with no refresh token to open says the organisation refused the folder"],
   ["z5", swap(" || signinRevokedHas(held.revoked, held.cert)); /* plant:view-signin-revoked */", "); /* plant:view-signin-revoked */"), "a revoked certificate read as a lapse that resumes by itself"],
   ["z14", swap("finally { storeLooking--; tellStore(); } /* plant:store-look-count */", "finally { storeLooking = 0; tellStore(); } /* plant:store-look-count */"), "the first look ending ends the row's word for both"],
+  ["z7", swap("  tellStore(); /* the page's sync bubbles close: no row stands signed out */ /* plant:signout-tell-store */", "  /* plant:signout-tell-store */"), "a sign out tells the page nothing of the store, so the account question stays open"],
   ["z6", swap("      const fresh = await storeSigninFresh(); /* plant:grant-signin-fresh */", "      const fresh = true; /* plant:grant-signin-fresh */"), "the grant asked with an hour-old sign-in, refused for a day"],
   ["z6", swap("      return got && got.why === \"signin\" && !fresh ? { why: \"unreached\" } : got; /* plant:grant-signin-again */", "      return got; /* plant:grant-signin-again */"), "a refusal the renewal could not mend left for a day, the row saying refused"],
   ["z11", swap("storeSyncStop(); storeSyncCalm(); /* plant:forget-calm */", "storeSyncStop(); /* plant:forget-calm */"), "the merge armed before a sign out runs after it"],
