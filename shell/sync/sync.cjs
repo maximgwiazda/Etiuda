@@ -223,6 +223,9 @@ function mergeOnce(o) {
      comes. What a joining computer held back then (state.joinHeld, patterns as held lists them) counts as held before it joined once read. */
   const gone = (Array.isArray(st.gone) ? st.gone : []).filter(i => typeof i === "string" && !has(ledger, i));
   const joinHeld = joining ? beforeHeld.filter(p => held.indexOf(p) >= 0) : (Array.isArray(st.joinHeld) ? st.joinHeld.map(String) : []);
+  /* Another computer's removal taken here while this desk held nothing of the item (state.unseen): an item made here after it is made
+     beside that removal, not over it, so the two meet as a conflict and the removal is kept as a version, as one met by an edit is. */
+  const unseen = new Set((Array.isArray(st.unseen) ? st.unseen : []).filter(i => typeof i === "string" && has(ledger, i) && ledger[i].h === null && ledger[i].by !== me));
   /* This computer's own changes first: an item whose value is not the one its entry names was changed here. */
   for (const item of new Set(Object.keys(ledger).concat(Object.keys(local), untouched, gone, first && before ? Object.keys(before) : []))) {
     const was = ledger[item], h = has(local, item) ? sha(local[item]) : null;
@@ -257,7 +260,8 @@ function mergeOnce(o) {
     if (was ? was.h === h : h === null) continue; /* plant:recorded */
     if (!was && (joining || lateHeld) && pristine.indexOf(item) >= 0 && held0(item)) { untouched.push(item); continue; } /* plant:join-pristine */
     const t = was ? Math.max(now, was.t + 1) : lateHeld ? 0 : !held0(item) ? now : joining ? 0 : before && Number.isSafeInteger(st.at) ? Math.min(now, st.at) : now; /* plant:join-older */
-    ledger[item] = { h, by: me, t, seen: was ? (was.by === me ? Object.assign({}, was.seen) : unionSeen(was)) : {} };
+    ledger[item] = { h, by: me, t, seen: was ? (was.by === me || unseen.has(item) ? Object.assign({}, was.seen) : unionSeen(was)) : {} }; /* plant:unseen-beside */
+    unseen.delete(item);
   }
   const valueOf = (e, item) => {
     if (e.h === null) return null;
@@ -325,6 +329,8 @@ function mergeOnce(o) {
     }
   }
   for (const c of copies) kept.push({ item: c.item, by: c.by, t: c.t, h: c.h });
+  for (const item of Object.keys(patch)) if (patch[item] === null && !has(local, item)) unseen.add(item); /* plant:unseen-taken */
+  for (const item of [...unseen]) if (!ledger[item] || ledger[item].h !== null || ledger[item].by === me) unseen.delete(item);
   const after = Object.assign({}, local);
   for (const item of Object.keys(patch)) { if (patch[item] === null) delete after[item]; else after[item] = patch[item]; }
   /* A field taken is put in place as its whole layer key, the fields this computer holds and those taken together. */
@@ -335,6 +341,7 @@ function mergeOnce(o) {
   const rest = {};
   if (gone.length) rest.gone = gone.filter(i => !has(ledger, i));
   if (joinHeld.some(p => held.indexOf(p) >= 0)) rest.joinHeld = joinHeld.filter(p => held.indexOf(p) >= 0);
+  if (unseen.size) rest.unseen = [...unseen];
   return { state: Object.assign({ ledger, kept, untouched: untouched.filter(i => !has(ledger, i)) }, rest), patch, copies, own: placeOf(me, ledger, after), after, untouched };
 }
 /* This computer's place in the store: its sync file and the catalogs its ledger holds. */
@@ -359,6 +366,9 @@ function unapplied(prev, r, failed, local, me) {
   const still = (r.state.untouched || []).concat((r.untouched || []).filter(i => under(i) && !has(ledger, i) && (r.state.untouched || []).indexOf(i) < 0));
   const rest = {};
   for (const k of ["gone", "joinHeld"]) if (r.state[k]) rest[k] = r.state[k];
+  /* A removal not put in place is not taken: the item stands here as it stood. */
+  const unseen = (r.state.unseen || []).filter(i => !under(i) || (prev && Array.isArray(prev.unseen) && prev.unseen.indexOf(i) >= 0));
+  if (unseen.length) rest.unseen = unseen;
   return { state: Object.assign({ ledger, kept, untouched: still }, rest), patch: r.patch, copies: r.copies, own: placeOf(me, ledger, after), after, untouched: r.untouched };
 }
 

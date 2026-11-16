@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 199;
+const EXPECTED = 210;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -166,6 +166,8 @@ function worldOf(o) {
       if (method === "GET" && u === FILE) return w.file === null ? json(404, { error: { code: "itemNotFound" } }) : new Response(Buffer.from(w.file), { status: 200 });
       if (method === "PUT" && u.startsWith(FILE)) {
         if (/conflictBehavior=fail$/.test(u) && w.file !== null) return json(409, { error: { code: "nameAlreadyExists" } });
+        /* A write held in flight (putGate), landing once the leg opens it. */
+        if (w.putGate) { const g = w.putGate; w.putGate = null; if (w.onPut) w.onPut(); await g; }
         const was = w.file;
         w.file = body;
         return json(was === null ? 201 : 200, { id: "f" });
@@ -203,8 +205,8 @@ function worldOf(o) {
 /* ---- the shell, evaluated whole: `src` is shell/main.js's text or a planted copy of it ---- */
 /* What the leg reads from main.js, appended to its text; a name main.js lacks comes back undefined, so its leg fails alone. */
 const TAIL_NAMES = ["storeView", "storeRoom", "storeSetNow", "storeAnswerNow", "storeSetAsideDir", "storeSyncFolder", "storeState", "storeTokenTake", "signinRun", "signinRenew", "signinIo", "signinRenewNow", "signinServiceAsk", "storeServiceAt", "storeOnFor", "storeTurn", "branchIdentity", "signinState", "patchDesk", "storeForget", "signinLandingHtml", "signinListen",
-  "signinOutNow", "storeLeaveNow", "storeSyncApply", "storeSyncSoon", "storeSyncLocal", "deskSyncedTell", "storeTokenFor"];
-const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing", "storeConsentFlight", "storeSyncTimer", "storeSyncPristine", "storeAgainTimer"];
+  "signinOutNow", "storeLeaveNow", "storeSyncApply", "storeSyncSoon", "storeSyncLocal", "deskSyncedTell", "storeTokenFor", "catalogRevSlot", "persistDeskEnvelope"];
+const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing", "storeConsentFlight", "storeSyncTimer", "storeSyncPristine", "storeAgainTimer", "catalogRevs", "teamPins", "storeOffAfter"];
 const TAIL = "\n__test.T = {" + TAIL_NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
   + ", setJoin: v => { teamJoin = v; }, setPolicyText: v => { joinPolicyRead = joinPolicyFacts(String(v)); if (typeof joinPolicyReadAt !== \"undefined\") { joinPolicyReadAt = Date.now(); joinPolicyAskedAt = Date.now(); joinPolicyAsking = true; } }, setWindow: v => { theWindow = v; }, get: () => ({" + TAIL_STATE.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "}) };";
 function boot(src, o) {
@@ -1296,6 +1298,33 @@ async function answerStartCatalogScene(src) {
   return { ok, detail: brief({ okAns: ans && ans.ok, onDesk: "eCatalog" in deskAfter, aside: aside.eCatalog === cat, toldGone, leaked }) };
 }
 
+/* (z2r) START FROM MY ACCOUNT TAKES THE FLOORS ASIDE: the revisions this desk was handed under a signing key, which refuse an older edition
+   of the same catalog (belowCatalogRev reads catalogRevSlot alone), go aside with the desk under Start, kept in the set-aside desk.json,
+   so the next account's own edition is not refused; a floor under a team lead's pinned key is the team's and stays; It is mine keeps
+   them all. */
+async function floorsScene(src, choice) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world, UD = r.shell.UD;
+  const own = "a".repeat(64), lead = "b".repeat(64);
+  T.get().teamPins["t-floors"] = { keyId: "lead-key", public: lead };
+  T.get().catalogRevs["a-floor"] = { [own]: 7, [lead]: 4 };
+  T.persistDeskEnvelope();
+  const heldA = T.signinState().held;
+  T.signinOutNow();
+  seatAnother(T, w, heldA);
+  await T.storeTurn();
+  const ans = await T.storeAnswerNow(choice);
+  if (T.get().storeFlight) await T.get().storeFlight;
+  const floorOf = f => { try { const d = JSON.parse(fs.readFileSync(f, "utf8")); return d.catalogRevs && d.catalogRevs["a-floor"] ? d.catalogRevs["a-floor"] : {}; } catch { return null; } };
+  return { ans, ownNow: T.catalogRevSlot("a-floor", own), leadNow: T.catalogRevSlot("a-floor", lead), disk: floorOf(path.join(UD, "desk.json")),
+    aside: ans && ans.folder ? floorOf(path.join(ans.folder, "desk.json")) : null };
+}
+async function answerStartFloorsScene(src) {
+  const st = await floorsScene(src, "start"), mine = await floorsScene(src, "mine");
+  const ok = !!st.ans && st.ans.ok === true && st.ownNow === 0 && st.leadNow === 4 && !!st.disk && st.disk["a".repeat(64)] === undefined && st.disk["b".repeat(64)] === 4
+    && !!st.aside && st.aside["a".repeat(64)] === 7 && !!mine.ans && mine.ans.ok === true && mine.ownNow === 7 && mine.leadNow === 4;
+  return { ok, detail: brief({ start: { ok: st.ans && st.ans.ok, own: st.ownNow, lead: st.leadNow, disk: st.disk, aside: st.aside }, mine: { ok: mine.ans && mine.ans.ok, own: mine.ownNow, lead: mine.leadNow } }) };
+}
+
 /* (x6n) "Not now": nothing changes, the hold stays, askNow becomes false in this run, and a fresh run asks again. */
 async function answerNotNowScene(src) {
   const r = await renewScene(src), T = r.shell.T, w = r.world, UD = r.shell.UD;
@@ -2334,6 +2363,77 @@ async function rowToldScene(src) {
   return { ok, detail: brief({ keptTold, during, asked }) };
 }
 
+/* (z5) A LOST REFRESH TOKEN AND A REVOKED CERTIFICATE READ AS THE SIGN-IN'S: a look that finds no refresh token to open (lost at a
+   renewal, ask) settles as the sign-in's refusal, so the row says signing in is refused, not that the organisation refused the folder, and
+   nothing is tried again by itself; a certificate the service revoked, once the store certificate has ended, says the same, not a lapse. */
+async function refreshLostScene(src) {
+  const r = await renewScene(src), T = r.shell.T;
+  const held = T.signinState().held;
+  held.refresh = ""; held.ask = true; held.said = "";
+  T.storeTokenTake({ provider: "microsoft", token: "expired", until: 1 });
+  await T.storeTurn();
+  if (T.get().storeFlight) await T.get().storeFlight;
+  const now = T.get().storeNow, lost = T.storeView().line, again = !!T.get().storeAgainTimer;
+  const r2 = await renewScene(src), T2 = r2.shell.T, h2 = T2.signinState().held;
+  h2.revoked = { serial: 1, keys: [String(h2.cert && h2.cert.via && h2.cert.via.key ? h2.cert.via.key.pub : "")] };
+  const onWhile = T2.storeView().line;
+  T2.storeState().until = Date.now() - 1000;
+  const revoked = T2.storeView().line;
+  const ok = !!now && now.why !== "consent" && lost === "signin-refused" && !again && onWhile === "on" && revoked === "signin-refused";
+  return { ok, detail: brief({ now: now && now.state + "/" + now.why, lost, again, onWhile, revoked }) };
+}
+
+/* (z7) A SIGN OUT TELLS THE PAGE THE STORE'S STATE: the page closes its account question only on a store tell (signin.js syncSay, any line
+   but "ask"), so a sign out with the question open tells it, and the row it then reads is not shown. */
+async function signoutToldScene(src) {
+  const r = await renewScene(src), T = r.shell.T;
+  let told = 0;
+  T.setWindow({ isDestroyed: () => false, webContents: { send: ch => { if (ch === "etiuda:store") told++; } } });
+  T.signinOutNow();
+  const view = T.storeView();
+  const ok = told > 0 && view.shown === false;
+  return { ok, detail: brief({ told, shown: view.shown }) };
+}
+
+/* (z10) OFF WHILE THE FIRST LOOK IS OUT ACTS ON WHAT THAT LOOK FOUND: a computer holding no store keys at its start starts a look; the
+   person turns sync off before it answers. Everywhere ends the store that look read (store/end posted, the ended mark in the folder); This computer, its
+   enrolment written to the folder while the switch moved, takes this computer off the folder's list once that write lands. The look itself
+   keeps nothing (s5). */
+async function offFirstLookScene(src) {
+  const hold = w => { let open = null; w.grantGate = new Promise(a => { open = a; }); const at = new Promise(a => { w.onGrant = a; }); return { at, open: () => open() }; };
+  const settleOff = async T => { const a = T.get().storeOffAfter; if (a) await a; };
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  T.storeState().keys = "";
+  const g = hold(w), ends0 = endsPosted(w);
+  const flight = T.storeTurn();
+  await g.at;
+  await T.storeSetNow("everywhere");
+  g.open();
+  await flight;
+  await settleOff(T);
+  let mark = false;
+  try { const j = JSON.parse(w.file); mark = !!j && j.format === 1 && typeof j.rt === "string" && !Array.isArray(j.devices); } catch { mark = false; }
+  const everywhere = { ended: endsPosted(w) > ends0, mark, keys: !!T.storeState().keys, line: T.storeView().line };
+  const r2 = await renewScene(src), T2 = r2.shell.T, w2 = r2.world, me = r2.me;
+  T2.storeState().keys = "";
+  const k = JSON.parse(w2.file);
+  k.devices = k.devices.filter(d => d.pub !== me.key);
+  w2.file = JSON.stringify(k);
+  let open2 = null;
+  w2.putGate = new Promise(a => { open2 = a; });
+  const at2 = new Promise(a => { w2.onPut = a; });
+  const flight2 = T2.storeTurn();
+  await at2;
+  await T2.storeSetNow("here");
+  open2();
+  await flight2;
+  await settleOff(T2);
+  const listed = w2.file ? (JSON.parse(w2.file).devices || []).some(d => d.pub === me.key) : null;
+  const here = { listed, keys: !!T2.storeState().keys, line: T2.storeView().line };
+  const ok = everywhere.ended && everywhere.mark && !everywhere.keys && everywhere.line === "off" && here.listed === false && !here.keys && here.line === "off";
+  return { ok, detail: brief({ everywhere, here }) };
+}
+
 /* (z6) A LOOK MORE THAN AN HOUR AFTER THE LAST SIGN-IN RENEWS IT FIRST: the service grants a store only to a desk it saw sign in within
    the hour. A look whose last reached sign-in is two hours old renews it, then is granted and is on; with the provider out (the renewal
    unreached), the refusal is a look tried again within minutes, not a day, and the row says the service was not reached. */
@@ -2554,8 +2654,12 @@ const LEGS = [
   ["x6r", openAfterRestartScene, "after a restart the button's channel opens the desk's single dated folder, or Set aside itself when a second or hand-made dated folder is beside it; all removed it answers gone, and a name of another shape in store.json is ignored"],
   ["x6l", asideLinkScene, "a link under Set aside bearing the name store.json keeps is never opened as the set-aside folder: Open this folder answers gone; a real folder of that name is opened"],
   ["z2c", answerStartCatalogScene, "Start from my account takes the loaded catalog aside with the rest: in the set-aside desk.json, gone from the desk's, the page told, nothing of it in B's store"],
+  ["z2r", answerStartFloorsScene, "Start from my account takes the floors that refuse an older edition aside with the desk, kept in the set-aside desk.json, so the next account's own edition is not refused; a team lead's floor stays; It is mine keeps them all"],
+  ["z5", refreshLostScene, "a look after the refresh token was lost says signing in is refused, not the organisation's refusal, and arms no retry; a revoked certificate, once the store certificate has ended, says the same, not a lapse"],
   ["z14", rowToldScene, "a merge keeping a version tells the page; a renewal that lost its refresh token reads as a refused sign-in; the first of two overlapping looks ending leaves the row saying a look runs"],
   ["n0", noOfferScene, "no store offered by the service: each provider's sign-in asks what it asked before sync, one request, nothing after the seat, no folder scope, no app-folder call, no key file, no grant, no look, no row; with the offer both ask the folder apart; a renewal without the offer ends it"],
+  ["z7", signoutToldScene, "a sign out tells the page the store's state, so an account question left open closes, the row it reads not shown"],
+  ["z10", offFirstLookScene, "Off while the first look is out, this computer holding no keys at its start: Everywhere ends the store that look read, store/end posted and the ended mark in the folder; This computer takes off the folder's list the computer that look enrolled"],
   ["z6", signinHourScene, "a look more than an hour after the last sign-in renews it first and is granted, on; with the renewal unreached the refusal is tried again within minutes, the row not saying refused"],
   ["z11", signedOutScene, "a change on the desk arms the merge, a sign out clears it, and a change made signed out arms none and changes nothing of the sync state"],
   ["z4", tokenAccountScene, "a folder token asked for one account and answered with another seated is not kept for it, and a look whose token is answered after a sign out says nothing and arms no retry"],
@@ -2639,7 +2743,7 @@ const PLANTS = [
   ["rf", swap("if (res && res.status === 403 && plainObj(j) && (j.reason === \"signin\" || j.reason === \"store\")) return { why: j.reason };", "if (false) return { why: j.reason };"), "the service's refusal read as not reached, so the row says it tries again"],
   ["lk", swap("  storeLooking++; tellStore(); /* plant:store-look-told */", "  /* plant:store-look-told */"), "the look's start neither kept nor told, so the row says what it said before"],
   ["lk", swap("looking: storeLooking > 0, ever: s.told === true, /* plant:store-view-looking */", "looking: false, ever: false, /* plant:store-view-looking */"), "the row told neither that a look runs nor that one had sync on before"],
-  ["ps", swap("signinRefused: !!(held && (held.said || held.ask === true)), conflicts:", "signinRefused: false, conflicts:"), "the row not told the sign-in is refused, so an ended certificate reads as a lapse"],
+  ["ps", swap("signinRefused: refused, conflicts:", "signinRefused: false, conflicts:"), "the row not told the sign-in is refused, so an ended certificate reads as a lapse"],
   ["g6h", swap(" || !storePolicyNow().on || !storeOffered()) return \"none\"; /* plant:consent-ungiven */", " || storePolicyNow().held || !storeOffered()) return \"none\"; /* plant:consent-ungiven */"), "the press refused wherever policy holds the switch, so the row's button asks nothing"],
   ["e7", swap("  if (look.state === \"ended\" && pol.held === true && pol.on === true && ours()) { storeAnew = true; tellStore(); look = await L.storeLook(Object.assign({}, io, { fresh: true })); } /* plant:store-anew */\n", ""), "the ended mark followed under a held switch, so sync stops here in silence"],
   ["e7", swap("    anew: storeAnew, /* plant:store-view-anew */\n", ""), "the new store made but the row not told, so it says on"],
@@ -2680,18 +2784,25 @@ const PLANTS = [
   ["x6l", swap("    try { return fs.lstatSync(path.join(root, n)).isDirectory(); } catch { return false; } /* plant:aside-lstat */", "    try { return fs.statSync(path.join(root, n)).isDirectory(); } catch { return false; } /* plant:aside-lstat */"), "the dated folder judged by a stat that follows a link, so a link named like it is opened as it"],
   ["z2c", swap("    if (Object.prototype.hasOwnProperty.call(deskKeys || {}, \"eCatalog\")) clear.eCatalog = null; /* plant:aside-catalog */\n", ""), "the loaded catalog left on the desk for the next account"],
   ["z14", swap("      if (kept !== storeKeptTold) { storeKeptTold = kept; tellStore(); } /* plant:kept-told */", "      /* plant:kept-told */"), "a merge that keeps a version tells the page nothing"],
-  ["z14", swap("    signinRefused: !!(held && (held.said || held.ask === true)), conflicts: storeConflicts(), /* plant:view-signin-ask */", "    signinRefused: !!(held && held.said), conflicts: storeConflicts(), /* plant:view-signin-ask */"), "a lost refresh token read as nothing wrong"],
+  ["z14", swap("(!!held.said || held.ask === true || signinRevokedHas(", "(!!held.said || signinRevokedHas("), "a lost refresh token read as nothing wrong"],
+  ["z2r", swap("if (!leads.has(pub)) { delete catalogRevs[id][pub]; floors = true; } /* plant:aside-floors */", "if (false) { delete catalogRevs[id][pub]; floors = true; } /* plant:aside-floors */"), "the floors kept on the desk, so the next account's own edition is refused"],
+  ["z2r", swap("if (!leads.has(pub)) { delete", "if (true) { delete"), "a team lead's floor taken aside with the account's"],
+  ["z5", swap("  if (!refresh) return { why: \"signin\" }; /* plant:token-no-refresh */", "  if (!refresh) return { why: \"consent\" }; /* plant:token-no-refresh */"), "a look with no refresh token to open says the organisation refused the folder"],
+  ["z5", swap(" || signinRevokedHas(held.revoked, held.cert)); /* plant:view-signin-revoked */", "); /* plant:view-signin-revoked */"), "a revoked certificate read as a lapse that resumes by itself"],
   ["z14", swap("finally { storeLooking--; tellStore(); } /* plant:store-look-count */", "finally { storeLooking = 0; tellStore(); } /* plant:store-look-count */"), "the first look ending ends the row's word for both"],
   ["n0", swap("    const storeOffer = j.storeOffer === true; /* plant:offer-read */", "    const storeOffer = true; /* plant:offer-read */"), "every answer read as an offer"],
   ["n0", swap("    get store() { return storeOn() && storeOffered(); }, /* plant:io-store-offer */", "    get store() { return storeOn(); }, /* plant:io-store-offer */"), "the sign-in's folder step and the renewal's folder scope asked without the offer"],
   ["n0", swap("  if (!storeOffered()) { storeSyncStop(); return null; } /* plant:look-offer */", "  /* plant:look-offer */"), "a look without the offer"],
   ["n0", swap("held && storeOffered() && signinOffered()", "held && signinOffered()"), "the row shown without the offer"],
+  ["z7", swap("  tellStore(); /* the page's sync bubbles close: no row stands signed out */ /* plant:signout-tell-store */", "  /* plant:signout-tell-store */"), "a sign out tells the page nothing of the store, so the account question stays open"],
+  ["z10", swap("  if (out) storeOffAfter =", "  if (false) storeOffAfter ="), "Off acts on nothing while the first look is out, so its store stays live elsewhere and this computer stays listed"],
+  ["z10", swap("&& storeWho(signinState().held) === who) storeOvertaken = {", "&& false) storeOvertaken = {"), "the overtaken look's keys not handed to the switch"],
   ["z6", swap("      const fresh = await storeSigninFresh(); /* plant:grant-signin-fresh */", "      const fresh = true; /* plant:grant-signin-fresh */"), "the grant asked with an hour-old sign-in, refused for a day"],
   ["z6", swap("      return got && got.why === \"signin\" && !fresh ? { why: \"unreached\" } : got; /* plant:grant-signin-again */", "      return got; /* plant:grant-signin-again */"), "a refusal the renewal could not mend left for a day, the row saying refused"],
   ["z11", swap("storeSyncStop(); storeSyncCalm(); /* plant:forget-calm */", "storeSyncStop(); /* plant:forget-calm */"), "the merge armed before a sign out runs after it"],
   ["z11", swap(" && !!storeWho(signinState().held); /* plant:store-seated-merge */", "; /* plant:store-seated-merge */"), "a change made signed out arms the merge into the earlier account's sync state"],
   ["z4", swap("  if (storeWho(signinState().held) !== storeWho(held)) return { why: \"offline\" }; /* plant:token-who */\n", ""), "the token kept for whoever is seated when it comes"],
-  ["z4", swap("  if (token.why) return ours() ? storeSettle({ state: \"unavailable\", why: token.why }) : null; /* plant:token-ours */", "  if (token.why) return storeSettle({ state: \"unavailable\", why: token.why }); /* plant:token-ours */"), "a look whose token failed settles after a sign out, saying unavailable and arming a retry"],
+  ["z4", swap("  if (token.why) return ours() ? storeSettle(", "  if (token.why) return true ? storeSettle("), "a look whose token failed settles after a sign out, saying unavailable and arming a retry"],
   ["z2", swap("    if (storeSyncing && Object.keys(rewind).length) storeSyncing.untake(rewind); /* plant:desk-untake */\n", ""), "what the sync took is not taken again once the page's write from a copy without it lands, so the next merge reads it as this computer's removal"],
   ["z2", swap("    for (const k of w.dropped) delete patch[k];\n", ""), "a key the shell cleared whole is written back by the page's write from a copy that still held it"],
   ["x6a", swap("  return dated.length === 1 && dated[0] === name ? path.join(root, name) : root; /* plant:open-aside-many */", "  return name ? path.join(root, name) : \"\"; /* plant:open-aside-many */"), "the count taken out, so the latest is always opened"],

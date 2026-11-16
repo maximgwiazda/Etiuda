@@ -11630,6 +11630,7 @@ function storeForget() {
   const s = storeState();
   if (s.keys || s.leave || storeLeaveHere) { s.keys = ""; s.leave = ""; storeLeaveHere = null; storeSave(); } /* plant:signout-store-keys */
   if (storeState().org === true) { storeState().org = false; storeSave(); }
+  tellStore(); /* the page's sync bubbles close: no row stands signed out */ /* plant:signout-tell-store */
 }
 /* The folder's requests, at OneDrive's App Folder and Drive's appDataFolder alone, through the shell's own network as the sign-in's:
    no redirect, nothing cached, no cookie, the answer read up to STORE_ANSWER_MAX. {status, bytes}; throws where unreached. */
@@ -11656,7 +11657,9 @@ async function storeTokenFor(p, held) {
   if (a && a.token && a.until > Date.now() + STORE_TOKEN_SLACK_MS) return {};
   if (a && !a.token) return { why: storeUngiven() };
   const folder = signinFolderScope(p.id, ""), refresh = held.refresh ? signinKept(safeStorage, held.refresh) : "";
-  if (!folder || !refresh) return { why: "consent" };
+  if (!folder) return { why: "consent" };
+  /* No refresh token to open (lost at a renewal, ask): only a sign-in brings one, so the look is the sign-in's refusal, never the organisation's. */
+  if (!refresh) return { why: "signin" }; /* plant:token-no-refresh */
   let res = null;
   try { res = await signinRequest((u, init) => deskFetch(u, init), signinKnown(p.id).token, signinRefreshForm(p, refresh, "", folder)); }
   catch { return { why: "offline" }; }
@@ -11907,8 +11910,10 @@ function storeView() {
   /* No store offered: the row is not shown, so nothing is said of sync (storeOffered). */
   const provider = held && storeOffered() && signinOffered().some(p => p.id === held.provider) && (held.cert || synced) ? held.provider : ""; /* plant:row-offer */
   const ask = !!who && s.ask === who && storeHeld();
+  /* Refused at the service, its refresh token lost (ask), or its certificate revoked: in each, only a sign-in mends it. */
+  const refused = !!held && (!!held.said || held.ask === true || signinRevokedHas(held.revoked, held.cert)); /* plant:view-signin-revoked */
   return StoreLib().storeRow({ provider, pol: storePolicyNow(), look: storeNow, until: s.until, now: Date.now(),
-    signinRefused: !!(held && (held.said || held.ask === true)), conflicts: storeConflicts(), /* plant:view-signin-ask */ say: storeSay, owed: !!storeOwedRt(),
+    signinRefused: refused, conflicts: storeConflicts(), /* plant:view-signin-ask */ say: storeSay, owed: !!storeOwedRt(),
     ask, askNow: ask && !storeNotNow.has(who), again: storeAgainTimer ? storeAgainAt : 0, /* plant:store-view-again */
     looking: storeLooking > 0, ever: s.told === true, /* plant:store-view-looking */
     anew: storeAnew, /* plant:store-view-anew */
@@ -11927,6 +11932,7 @@ async function storeSetNow(what) {
   if (storePolicyNow().held) return storeView(); /* plant:store-set-held */
   if (what !== "on" && what !== "here" && what !== "everywhere") return storeView();
   /* A look still out when the switch moves is no longer this desk's (storeLookNow ours), and on starts a look of its own. */
+  const out = storeFlight, at = storeSwitchNo;
   storeSwitchNo++;
   storeSyncCalm();
   const s = storeState();
@@ -11953,8 +11959,24 @@ async function storeSetNow(what) {
   storeSave();
   if (keys) await storeEndEverywhere(keys).catch(() => false);
   if (leaving) await storeLeaveNow(cert); /* plant:store-leave */
+  /* A look out: Off acts again on what that look read, made or enrolled this computer in once it ends (storeOvertaken), since a write of
+     its may land after the leave or the end above read the folder. */
+  if (out) storeOffAfter = out.then(() => storeOffOvertaken(what, at, !!keys, leaving)).catch(() => false); /* plant:off-after-look */
   tellStore();
   return storeView();
+}
+/* A look the switch overtook, {keys, store, at}: the keys it read, wrote or enrolled this computer in, which its own steps no longer keep. */
+let storeOvertaken = null, storeOffAfter = null;
+async function storeOffOvertaken(what, at, ended, left) {
+  const o = storeOvertaken;
+  storeOvertaken = null;
+  if (!o || o.at !== at || storeSwitchNo !== at + 1) return false;
+  if (what === "everywhere") return ended ? false : storeEndEverywhere(o.keys).catch(() => false);
+  const me = branchIdentity(false);
+  if (!me || !o.keys.devices.some(d => d.pub === me.key)) return false;
+  if (left && left.rt === o.keys.rt && o.keys.rev <= left.rev) return false; /* the list Off already left */
+  storeLeaveOwe(o.keys);
+  return storeLeaveNow(o.store);
 }
 ipcMain.on("etiuda:store-state", (e) => { e.returnValue = fromEngine(e) ? storeView() : null; });
 ipcMain.handle("etiuda:store-set", (e, what) => (fromEngine(e) ? storeSetNow(String(what || "")) : null));
@@ -12043,6 +12065,15 @@ function storeSetAside() {
     /* The catalog loaded on the desk goes aside with the rest (in the copy of desk.json above), so the next account does not see it. */
     if (Object.prototype.hasOwnProperty.call(deskKeys || {}, "eCatalog")) clear.eCatalog = null; /* plant:aside-catalog */
     if (Object.keys(clear).length && !patchDesk(JSON.stringify(clear))) throw new Error("desk.json could not be updated"); /* plant:answer-aside-clear */
+    /* The floors that refuse an older edition go aside too (in the copy of desk.json above), so what the last account was handed never
+       refuses the next one's own catalogs; a floor under a team lead's pinned key is the team's and stays. */
+    const leads = new Set(Object.keys(teamPins).map(t => String(teamPins[t] && teamPins[t].public)));
+    let floors = false;
+    for (const id of Object.keys(catalogRevs)) {
+      for (const pub of Object.keys(catalogRevs[id] || {})) if (!leads.has(pub)) { delete catalogRevs[id][pub]; floors = true; } /* plant:aside-floors */
+      if (!Object.keys(catalogRevs[id] || {}).length) delete catalogRevs[id];
+    }
+    if (floors) persistDeskEnvelope();
     deskSyncedTell(clear, null, k => L.follows("k:" + k));
     return { folder: aside, kept: false };
   } catch (e) {
@@ -12249,7 +12280,7 @@ async function storeLookRun(p, held, me, pol) {
   let access = null;
   const folder = L.folderFor(p.id, { ask: storeAsk, token: () => (access && ours() ? access.token : "") });
   const token = folder ? await storeTokenFor(p, held) : {};
-  if (token.why) return ours() ? storeSettle({ state: "unavailable", why: token.why }) : null; /* plant:token-ours */
+  if (token.why) return ours() ? storeSettle(token.why === "signin" ? { state: "paused", why: "signin" } : { state: "unavailable", why: token.why }) : null; /* plant:token-ours */
   access = storeAccess;
   const io = { folder: folder, local: storeLocal, keep: k => { if (ours()) storeKeep(k); },
     grant: async (rt, sPub, extra) => {
@@ -12267,7 +12298,11 @@ async function storeLookRun(p, held, me, pol) {
   /* Turned off everywhere from another computer while policy holds sync on here: a new store is made over the mark from what is on this
      computer, as On does for the person, and the row says so (storeAnew); the ended store is asked nothing. */
   if (look.state === "ended" && pol.held === true && pol.on === true && ours()) { storeAnew = true; tellStore(); look = await L.storeLook(Object.assign({}, io, { fresh: true })); } /* plant:store-anew */
-  if (!ours()) return null;
+  if (!ours()) {
+    /* Overtaken by the switch alone, the account the same: what it found is the switch's to act on (storeOffOvertaken). */
+    if (look && look.keys && storeSwitchNo !== switchAt && storeState().who === who && storeWho(signinState().held) === who) storeOvertaken = { keys: look.keys, store: look.store || null, at: switchAt }; /* plant:look-overtaken */
+    return null;
+  }
   /* A store made here whose grant or making did not finish is named, so the next look still makes it as the one that replaces. */
   const made = (look.state === "paused" || look.state === "unavailable") && look.made === true && look.keys ? look.keys.rt : look.state === "on" ? "" : storeState().made; /* plant:store-made-kept */
   if (made !== storeState().made) { storeState().made = made; storeSave(); }
