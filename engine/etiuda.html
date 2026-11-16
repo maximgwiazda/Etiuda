@@ -43887,6 +43887,10 @@ What is typed here stays in this browser.`;
     if (teamJoinShown()) paintJoin();
   }
   function takeSyncedDesk(keys) {
+    if (keys.indexOf(E_CATALOG_STORE) > -1) {
+      restartDesk();
+      return;
+    }
     const layer = eLayer(), mine = (n) => keys.indexOf(layer + n) > -1;
     const packed = mine("Pack"), ordered = mine("CatOrder"), intents = mine("IntentOrder");
     if (packed) takePack();

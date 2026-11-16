@@ -38,6 +38,7 @@ import { mtRefreshLive } from "./maintenance.js";
 import { tourAfterRestart, maybeStartTour } from "./tour.js";
 import { paintJoin, teamJoinShown } from "./team-join.js";
 import { render } from "./render.js";
+import { E_CATALOG_STORE } from "./catalog.js";
 import { mgRefreshAround } from "./manage.js";
 
 function restartDesk(){
@@ -94,6 +95,8 @@ function restartDesk(){
    in view read again and drawn, the preferences applied, the screen in front drawn again unless a field on it holds the keyboard,
    then once it lets go. An editor open over an entry that changed keeps its typing and says so (dialog.js edSubjectCheck). */
 function takeSyncedDesk(keys){
+  /* The catalog itself taken away behind the page (Start from my account): the desk starts again in place, without it. */
+  if(keys.indexOf(E_CATALOG_STORE)>-1){ restartDesk(); return; } /* plant:synced-catalog-restart */
   const layer=eLayer(), mine=n=>keys.indexOf(layer+n)>-1;
   const packed=mine("Pack"), ordered=mine("CatOrder"), intents=mine("IntentOrder");
   if(packed) takePack();

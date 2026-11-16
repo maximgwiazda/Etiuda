@@ -14,6 +14,7 @@
  *   ds6 Settings in front is drawn again with what arrived; while its name field holds typing it is not, until the field lets go
  *   ds7 the shell: storeSyncApply sends etiuda:desk-synced with the keys it patched, to the window, and only once the desk took them
  *   ds8 the shell keeps a removal another computer made, a version of the value null, as a file of its own
+ *   ds12 the catalog taken away behind the page: the desk starts again in place without it
  *   ds10 each send names, per key, the last tell its copy holds (the shell's half is desk-store-shell z2)
  *   ds11 the page sends the writes it owes, and waits for them, before it answers whose the desk is
  * Plants: the page's take not shown (ds1 and ds2 red); a key the page owes taken over (ds5 red); the tells heard not recorded (ds10 red); the answer before the writes owed (ds11 red); the screen in front not drawn
@@ -40,7 +41,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 18;
+const EXPECTED = 20;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const MAIN = path.join(E.ROOT, "shell", "main.js");
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -154,6 +155,21 @@ async function owedKept(name) {
     await sleep(60);
     const sent = await page.evaluate(() => window.__desk.sends.filter(s => "eTheme" in s).map(s => s.eTheme));
     if (mine === was || after.theme !== mine || after.copy !== mine || sent.indexOf(mine) < 0) return JSON.stringify({ was, mine, after, sent });
+    return "";
+  } finally { await page.close(); }
+}
+
+/* ds12: the catalog itself taken away behind the page (Start from my account): the desk starts again in place without it, the same
+   document, an Undo of an act before it gone as a desk started again leaves it (restart.js), the list drawn again from what remains. */
+async function catalogGone(name) {
+  const page = await boot(name);
+  try {
+    const had = await page.evaluate(() => { const c = document.querySelector("#list .card"); if (c) c.dataset.ds12 = "1"; const u = document.createElement("div"); u.id = "eUndo"; document.body.appendChild(u); return document.querySelectorAll("#list .card").length; });
+    await page.evaluate(() => { window.__desk.hold = false; });
+    await arrive(page, { eCatalog: null });
+    await sleep(150);
+    const after = await page.evaluate(() => ({ undo: !!document.getElementById("eUndo"), same: window.__sameDocument === 1, copy: window.lsGet("eCatalog") }));
+    if (!had || after.undo || !after.same || after.copy !== null) return JSON.stringify({ had, after });
     return "";
   } finally { await page.close(); }
 }
@@ -291,6 +307,9 @@ async function main() {
   const ds5 = await owedKept("etiuda.html");
   check(!ds5, "ds5 a key whose send is unanswered keeps the person's value over the other computer's, and the next send carries it", ds5 || undefined);
 
+  const ds12 = await catalogGone("etiuda.html");
+  check(!ds12, "ds12 the catalog taken away behind the page: the desk starts again in place without it, its list drawn again", ds12 || undefined);
+
   const ds6 = await screenDrawn("etiuda.html");
   check(!ds6, "ds6 Settings in front is drawn again with what arrived, not while its name field holds typing, and once the field lets go", ds6 || undefined);
 
@@ -379,6 +398,8 @@ async function main() {
       check(red && sha(SIGNIN) === before, line, red ? undefined : "still held, or the anchor is absent");
     }
   }
+  await pagePlant("catalog", "    if (keys.indexOf(E_CATALOG_STORE) > -1) {\n      restartDesk();\n      return;\n    }\n", "", catalogGone, r => !!r,
+    "p ds12 the desk not started again when its catalog is taken away turns ds12 red");
   await pagePlant("screen", 'if (screenOn === "settings") repaintScreen();', 'if (screenOn === "settings") void 0;', screenDrawn, r => !!r,
     "p ds6 the screen in front not drawn again turns ds6 red");
   {

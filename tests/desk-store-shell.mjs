@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 193;
+const EXPECTED = 195;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -1269,6 +1269,31 @@ async function answerStartNewAccountScene(src) {
   return { ok, detail: brief({ okAns: ans && ans.ok, newStore: !!bStore, ledgerKeys: Object.keys(ledger), deskKeys: Object.keys(deskAfter) }) };
 }
 
+/* (z2c) START TAKES THE LOADED CATALOG ASIDE TOO: the catalog loaded on A's desk is in the set-aside folder's desk.json, gone from the
+   desk's own, and the page is told it went; nothing of it reaches B's store. */
+async function answerStartCatalogScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world, UD = r.shell.UD;
+  const told = [];
+  T.setWindow({ isDestroyed: () => false, webContents: { send: (ch, text) => { if (ch === "etiuda:desk-synced") told.push(JSON.parse(text)); } } });
+  const cat = JSON.stringify({ kind: "etiuda-catalog", format: 2, id: "a-loaded", cards: [], note: "A_LOADED_ONLY" });
+  T.patchDesk(JSON.stringify({ eCatalog: cat, eTheme: "dark" }));
+  const heldA = T.signinState().held;
+  T.signinOutNow();
+  seatAnother(T, w, heldA);
+  await T.storeTurn();
+  const ans = await T.storeAnswerNow("start");
+  if (T.get().storeFlight) await T.get().storeFlight;
+  const syncB = T.get().storeSyncing;
+  if (syncB) { const c = syncB.channel(); if (c) { c.kick(); await c.idle(); } }
+  const deskAfter = JSON.parse(fs.readFileSync(path.join(UD, "desk.json"), "utf8")).keys || {};
+  let aside = {};
+  try { aside = JSON.parse(fs.readFileSync(path.join(ans.folder, "desk.json"), "utf8")).keys || {}; } catch { aside = {}; }
+  const toldGone = told.some(k => Object.prototype.hasOwnProperty.call(k, "eCatalog") && k.eCatalog === null);
+  const leaked = w.relay.filter(b => b.indexOf("A_LOADED_ONLY") >= 0).length;
+  const ok = !!ans && ans.ok === true && !("eCatalog" in deskAfter) && aside.eCatalog === cat && toldGone && leaked === 0;
+  return { ok, detail: brief({ okAns: ans && ans.ok, onDesk: "eCatalog" in deskAfter, aside: aside.eCatalog === cat, toldGone, leaked }) };
+}
+
 /* (x6n) "Not now": nothing changes, the hold stays, askNow becomes false in this run, and a fresh run asks again. */
 async function answerNotNowScene(src) {
   const r = await renewScene(src), T = r.shell.T, w = r.world, UD = r.shell.UD;
@@ -2490,6 +2515,7 @@ const LEGS = [
   ["x6k", answerStartKeptScene, "a set-aside whose later step fails and whose move back of the catalog, or of the store folder, fails keeps that whole in the set-aside folder, which stays, the log names it, the answer carries it and the button opens it; where every move back succeeds the folder goes"],
   ["x6r", openAfterRestartScene, "after a restart the button's channel opens the desk's single dated folder, or Set aside itself when a second or hand-made dated folder is beside it; all removed it answers gone, and a name of another shape in store.json is ignored"],
   ["x6l", asideLinkScene, "a link under Set aside bearing the name store.json keeps is never opened as the set-aside folder: Open this folder answers gone; a real folder of that name is opened"],
+  ["z2c", answerStartCatalogScene, "Start from my account takes the loaded catalog aside with the rest: in the set-aside desk.json, gone from the desk's, the page told, nothing of it in B's store"],
   ["z14", rowToldScene, "a merge keeping a version tells the page; a renewal that lost its refresh token reads as a refused sign-in; the first of two overlapping looks ending leaves the row saying a look runs"],
   ["z6", signinHourScene, "a look more than an hour after the last sign-in renews it first and is granted, on; with the renewal unreached the refusal is tried again within minutes, the row not saying refused"],
   ["z11", signedOutScene, "a change on the desk arms the merge, a sign out clears it, and a change made signed out arms none and changes nothing of the sync state"],
@@ -2614,6 +2640,7 @@ const PLANTS = [
   ["x6r", swap("    s.aside ? { aside: s.aside } : {}), null, 1)", "    {}), null, 1)"), "the set-aside folder's name not kept in store.json, so a restart forgets it"],
   ["x6r", swap(".test(d.aside) ? d.aside : \"\" }; /* plant:store-aside-name */", ".test(d.aside) || ok && typeof d.aside === \"string\" ? d.aside : \"\" }; /* plant:store-aside-name */"), "any name in store.json read as the set-aside folder's"],
   ["x6l", swap("    try { return fs.lstatSync(path.join(root, n)).isDirectory(); } catch { return false; } /* plant:aside-lstat */", "    try { return fs.statSync(path.join(root, n)).isDirectory(); } catch { return false; } /* plant:aside-lstat */"), "the dated folder judged by a stat that follows a link, so a link named like it is opened as it"],
+  ["z2c", swap("    if (Object.prototype.hasOwnProperty.call(deskKeys || {}, \"eCatalog\")) clear.eCatalog = null; /* plant:aside-catalog */\n", ""), "the loaded catalog left on the desk for the next account"],
   ["z14", swap("      if (kept !== storeKeptTold) { storeKeptTold = kept; tellStore(); } /* plant:kept-told */", "      /* plant:kept-told */"), "a merge that keeps a version tells the page nothing"],
   ["z14", swap("    signinRefused: !!(held && (held.said || held.ask === true)), conflicts: storeConflicts(), /* plant:view-signin-ask */", "    signinRefused: !!(held && held.said), conflicts: storeConflicts(), /* plant:view-signin-ask */"), "a lost refresh token read as nothing wrong"],
   ["z14", swap("finally { storeLooking--; tellStore(); } /* plant:store-look-count */", "finally { storeLooking = 0; tellStore(); } /* plant:store-look-count */"), "the first look ending ends the row's word for both"],

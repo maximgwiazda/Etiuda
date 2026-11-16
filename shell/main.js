@@ -12031,6 +12031,8 @@ function storeSetAside() {
     const clear = {};
     if (deskKeys === undefined) deskKeys = readDesk();
     for (const k of Object.keys(deskKeys || {})) if (L.follows("k:" + k)) clear[k] = null;
+    /* The catalog loaded on the desk goes aside with the rest (in the copy of desk.json above), so the next account does not see it. */
+    if (Object.prototype.hasOwnProperty.call(deskKeys || {}, "eCatalog")) clear.eCatalog = null; /* plant:aside-catalog */
     if (Object.keys(clear).length && !patchDesk(JSON.stringify(clear))) throw new Error("desk.json could not be updated"); /* plant:answer-aside-clear */
     deskSyncedTell(clear, null, k => L.follows("k:" + k));
     return { folder: aside, kept: false };
