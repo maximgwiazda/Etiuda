@@ -451,9 +451,24 @@ function createStoreSync(o) {
       if (Object.keys(r.patch).length || r.copies.length) r = unapplied(state, r, o.apply(r.patch, r.copies), local, o.me.id); /* plant:unapplied */
       state = Object.assign({ rt: state.rt }, r.state);
       o.save(state);
-      write(io, r.own);
+      write(io, placeOf(o.me.id, state.ledger, Object.assign(heldPlaced(io, held), r.after))); /* plant:held-placed */
       return r;
     } finally { busy = false; }
+  }
+  /* An item left out (held) keeps what this computer last placed for it, while its entry still names those bytes: a catalog's file in
+     this place and a key's value in this place's sync file, so the store's copy stays readable to the other computers. */
+  function heldPlaced(io, held) {
+    const out = {};
+    let prev = null;
+    for (const item of Object.keys(state.ledger)) {
+      const e = state.ledger[item];
+      if (!heldBy(held, item) || e.h === null) continue;
+      if (item.startsWith("f:")) { const b = io.read(fileRel(o.me.id, item)), text = b ? b.toString("utf8") : null; if (text !== null && sha(text) === e.h) out[item] = text; continue; }
+      if (prev === null) { const b = io.read(syncRel(o.me.id)); prev = (b && syncRead(b.toString("utf8"), o.me.id)) || { items: {} }; }
+      const was = prev.items[item];
+      if (was && typeof was.v === "string" && was.h === e.h) out[item] = was.v;
+    }
+    return out;
   }
   function write(io, own) {
     for (const rel of Object.keys(own)) {

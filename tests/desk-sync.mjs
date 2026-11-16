@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-sync-"));
-const EXPECTED = 65;
+const EXPECTED = 67;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -150,7 +150,8 @@ function computer(world, label, view) {
       me: { id: me.id, pub: me.pub, privateKey: me.privateKey }, mirrorRoot: dir,
       channel: opts => CH.createChannel(Object.assign(opts, { request: transport(world.R, world.uploads, down), clock: () => world.R.clock.now, watch: false, pollMs: 1e9, say: l => { if (process.env.SYNC_SAY) console.log("   say " + label + ": " + l); } })),
       io: m => CH.diskIO(m), load: () => syncState, save: s => { syncState = JSON.parse(JSON.stringify(s)); },
-      local: () => { heldNow = []; return SY.localItems(desk.keys, desk.files, heldNow); }, held: () => heldNow,
+      /* A desk on a team's folder holds every catalog file back, as the shell's storeSyncLocal does. */
+      local: () => { heldNow = []; if (desk.team) { heldNow.push("f:"); return SY.localItems(desk.keys, {}, heldNow); } return SY.localItems(desk.keys, desk.files, heldNow); }, held: () => heldNow,
       /* The catalog files that are the shipped sample byte for byte, as the shell judges them (shell/main.js isTheSample). */
       pristine: () => Object.keys(desk.files).filter(n => desk.files[n] === SAMPLE).map(n => "f:" + n),
       /* What the desk refuses to take (desk.refuse) is answered as not put in place, as the shell answers a failed write or patch. */
@@ -564,6 +565,30 @@ async function main() {
     return { ok, detail: brief({ shared, bKeepsFile: b.desk.files["Big.ec"] === "{\"v\":1}", bKeepsLayer: !!b.desk.keys[L], keptB: b.kept.length }) };
   }
 
+  /* H1: what a computer holds back keeps its place in the store: a catalog it synced, held once its folder is a team's, and an edit whose
+     layer then grows past its cap, the second computer away throughout. Its place keeps the catalog's bytes and its sync file the edit's
+     value, so a computer that joins after takes both from this place alone, and nothing is kept aside. */
+  async function heldPlaceScene() {
+    const { w, a, b } = await twoOn("h1");
+    const L = "e3f9a1~Pack", F = "Own.ec", text = JSON.stringify({ kind: "etiuda-catalog", format: 2, id: "own", cards: [] });
+    b.down.on = true;
+    a.desk.files[F] = text;
+    a.desk.keys[L] = JSON.stringify({ edits: { c1: "small" } });
+    await settle(a);
+    a.desk.team = true;
+    a.desk.keys[L] = JSON.stringify({ edits: { c1: "small" }, notes: { c2: "y".repeat(8 * 1024 * 1024) } });
+    await settle(a);
+    const blob = fs.existsSync(path.join(a.dir, a.sync().state().rt, SY.fileRel(a.me.id, "f:" + F)));
+    w.R.clock.now += HOUR;
+    const c = computer(w, "c");
+    const lc = await c.look();
+    await a.look();
+    await settle(a, c); await settle(a, c);
+    const onC = c.desk.files[F] === text, editC = !!c.desk.keys[L] && (() => { try { return JSON.parse(c.desk.keys[L]).edits.c1 === "small"; } catch { return false; } })();
+    const ok = lc.state === "on" && blob && onC && editC && a.kept.length + c.kept.length === 0;
+    return { ok, detail: brief({ c: lc.state, blob, onC, editC, kept: [a.kept.length, c.kept.length] }) };
+  }
+
   /* G5p: a field or map key named __proto__ (or constructor) from another computer's sync file: not an item that follows, and put back
      into a layer it touches nothing beyond that layer; the main process's Object.prototype is never written. */
   async function protoScene() {
@@ -817,6 +842,7 @@ async function main() {
 
   const results = {};
   const LEGS = [
+    ["H1", heldPlaceScene, "a catalog held back once the folder is a team's, and an edit whose layer grew past its cap, keep their bytes in this computer's place: a computer joining after takes both from it alone, nothing kept aside"],
     ["SA", sameValueScene, "the same value written on two computers, each merging the other's first entry before either sends again: every merge after runs on both, the value stands, nothing kept or moved, for a setting and for a card starred"],
     ["B2", bridgeScene, "the page's copy of the desk: a write from a copy behind a tell answers what that tell took, once; one after it nothing; a key cleared whole, or held under a clear of every key, is dropped from a write behind it and kept from one after; a load holds every tell before it"],
     ["J3", joinSampleScene, "the shipped sample untouched on a computer joining a store that holds no entry for it is never recorded as that computer's write at any merge, so the other computer never gets it and nothing is kept; edited, it is the person's own and reaches the other"],
@@ -878,6 +904,7 @@ async function main() {
   const swap = (from, to) => text => (text.split(from).length === 2 ? text.split(from).join(to) : null);
   const scenes = Object.fromEntries(LEGS.map(([id, scene]) => [id, scene]));
   const PLANTS = [
+    ["held unplaced", "H1", swap("write(io, placeOf(o.me.id, state.ledger, Object.assign(heldPlaced(io, held), r.after))); /* plant:held-placed */", "write(io, r.own); /* plant:held-placed */"), "this computer's place written from what it holds alone, so a held catalog's bytes are removed and a held edit's value dropped"],
     ["same over each other", "SA", swap("let top = all.filter(a => !all.some(b => b !== a && !same(a, b) && over(b, a) && !over(a, b))); /* plant:top-mutual */", "let top = all.filter(a => !all.some(b => b !== a && !same(a, b) && over(b, a))); /* plant:top-mutual */"), "two entries each made over the other both set aside, so the merge finds no version standing and throws"],
     ["stale write whole", "B2", swap("const late = l.filter(x => x.n > at); /* plant:desk-stale */", "const late = []; /* plant:desk-stale */"), "a write from a copy behind a tell taken as the person's, so what the sync took is read as removed"],
     ["whole clear written back", "B2", swap("if (late.some(x => x.pre === null)) { dropped.push(k); continue; } /* plant:desk-whole */", "/* plant:desk-whole */"), "a key cleared whole written back from a copy behind the clear"],
