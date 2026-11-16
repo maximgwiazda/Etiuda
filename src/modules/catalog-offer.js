@@ -869,7 +869,7 @@ function paintCatWaiting(){
   el.setAttribute("title",words);
   el.setAttribute("aria-label",words);
   el.onclick=reopenWaiting;
-  el.onkeydown=e=>{ if(e.key!=="Enter" && e.key!==" ") return; e.preventDefault(); e.stopPropagation(); reopenWaiting(); };
+  el.onkeydown=e=>{ if(e.key!=="Enter" && e.key!==" ") return; e.preventDefault(); e.stopPropagation(); if(!e.repeat) reopenWaiting(); };
 }
 function reopenWaiting(){
   const w=edWaiting, up=document.getElementById("eCatalogOffer");

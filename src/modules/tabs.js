@@ -1407,6 +1407,14 @@ function drawTabsCore(){
   const curScreen = typeof screenOn !== "undefined" ? screenOn : null;
   const screenList = typeof screens !== "undefined" && Array.isArray(screens) ? screens : [];
   const order = typeof getTabOrder === "function" ? getTabOrder() : (tabs || []).map(tb => tb.id).concat(screenList);
+  const onLabKey = (e, fn) => {
+    if(e.target && e.target.tagName==="INPUT") return;
+    if(e.ctrlKey||e.altKey||e.metaKey||e.shiftKey) return;
+    if(e.key!=="Enter" && e.key!==" ") return;
+    e.preventDefault(); e.stopPropagation();
+    if(e.repeat) return;
+    fn();
+  };
   order.forEach(id => {
     if (screenList.includes(id)) {
       const sid = id;
@@ -1424,12 +1432,7 @@ function drawTabsCore(){
       lab.setAttribute("aria-selected",on?"true":"false");
       lab.tabIndex=0;
       lab.setAttribute("aria-label",name);
-      lab.onkeydown=e=>{
-        if(e.ctrlKey||e.altKey||e.metaKey||e.shiftKey) return;
-        if(e.key!=="Enter") return;
-        e.preventDefault(); e.stopPropagation();
-        if(typeof frontScreenTab === "function") frontScreenTab(sid);
-      };
+      lab.onkeydown=e=>onLabKey(e,()=>{ if(typeof frontScreenTab === "function") frontScreenTab(sid); });
       const labViz=document.createElement("span");
       labViz.textContent=name;
       lab.appendChild(labViz);
@@ -1482,13 +1485,7 @@ function drawTabsCore(){
       const name=tabLabel(tb);
       lab.tabIndex=0;
       lab.setAttribute("aria-label",name);
-      lab.onkeydown=e=>{
-        if(e.ctrlKey||e.altKey||e.metaKey||e.shiftKey) return;
-        if(e.key!=="Enter") return;
-        e.preventDefault();
-        e.stopPropagation();
-        switchTab(tb.id);
-      };
+      lab.onkeydown=e=>onLabKey(e,()=>switchTab(tb.id));
       lab.onfocus=()=>scrollTabIntoView(tb.id);
       if (typeof editingTabId !== "undefined" && editingTabId === tb.id) {
         const inp = document.createElement("input");

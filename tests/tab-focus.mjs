@@ -216,8 +216,8 @@ check("card-body.js", "810tf1 a card's note, edit, hide and star are buttons in 
    collapse, or content-visibility is hidden, on the control or an ancestor: those skip it, so a
    :focus rule beside them never meets it on the way in. A zero box does not skip it. The note is
    that zero box at rest, so a pointer does not see it, and keyboard focus must give the box back.
-   Enter is left for the button, which opens the note; Space still goes to the lanes. */
-check("template.html", "810tf8 on a default desk the note, edit, hide and star stay in the tab walk, keyboard focus shows the note, and Enter opens it",
+   Enter and Space are both left for the button, which opens the note. */
+check("template.html", "810tf8 on a default desk the note, edit, hide and star stay in the tab walk, keyboard focus shows the note, and Enter and Space are left for the button",
   () => {
     const raw = read("src/template.html");
     const sheet = styleBlock(raw);
@@ -263,7 +263,7 @@ check("template.html", "810tf8 on a default desk the note, edit, hide and star s
       spaceRan = ran.slice();
     } finally { globalThis.document.activeElement = saved; }
     return eq([out.length, enter.defaultPrevented, enterRan.join("+"), space.defaultPrevented, spaceRan.join("+")].join("|"),
-      "0|false||true|lanes");
+      "0|false||false|");
   });
 
 check("shortcuts.js", "810tf2 Tab matches no chat-tab chord, Ctrl+Tab runs the next tab, and Ctrl+Shift+Tab runs the previous",
@@ -380,8 +380,7 @@ check("shortcuts-list.js", "810tf5 the shortcuts list shows Ctrl+Tab, Ctrl+Shift
       "Next tab=Ctrl+Tab | Previous tab=Ctrl+Shift+Tab | New tab=Ctrl+T | Poprzednia rozmowa=Ctrl+Shift+Tab | Nowa rozmowa=Ctrl+T");
   });
 
-check("tabs.js", "810tf6 each conversation's name is a tab stop, named as it reads, and Enter switches to it; Space is left alone"
-  + " and passes on, as it is the lanes' key wherever the focus sits (board 883)",
+check("tabs.js", "810tf6 each conversation's name is a tab stop, named as it reads, and Enter and Space switch to it",
   () => {
     const tabsSrc = read("src/modules/tabs.js");
     const labelOf = new Function("t", "tabs", extractDecl(tabsSrc, "function tabLabel(") + "\nreturn tabLabel;");
@@ -429,8 +428,8 @@ check("tabs.js", "810tf6 each conversation's name is a tab stop, named as it rea
     const en = draw("en"), pl = draw("pl");
     ST.lsDel("eUiLang");
     return eq([en, pl, face].join(" ## "),
-      ["0/tab/Marta/Marta/a//false//false || 0/tab/New chat/New chat/b//false//false || 1",
-        "0/tab/Marta/Marta/a//false//false || 0/tab/Nowa rozmowa/Nowa rozmowa/b//false//false || 1",
+      ["0/tab/Marta/Marta/a/a/true//false || 0/tab/New chat/New chat/b/b/true//false || 1",
+        "0/tab/Marta/Marta/a/a/true//false || 0/tab/Nowa rozmowa/Nowa rozmowa/b/b/true//false || 1",
         true].join(" ## "));
   });
 

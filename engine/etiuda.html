@@ -12944,9 +12944,9 @@ What is typed here stays in this browser.`;
       def: { code: "Digit4", key: "4", ctrl: 1, alt: 0, shift: 0, meta: 0 },
       inField: 1
     },
-    /* inField so an empty search box still switches. Space is the lanes' key wherever the focus
-       sits, a button included. A field being typed in, a dialog, a bubble or a menu keep it
-       (lanesKeyFree). */
+    /* inField so an empty search box still switches. Space is the lanes' key where no control
+       or typing field has the focus; a button, tab, switch, checkbox, dialog, bubble or menu
+       keep Space for themselves (lanesKeyFree). */
     {
       id: "lanes",
       label: "Cards or the timeline",
@@ -14734,6 +14734,15 @@ What is typed here stays in this browser.`;
     const curScreen = typeof screenOn !== "undefined" ? screenOn : null;
     const screenList = typeof screens !== "undefined" && Array.isArray(screens) ? screens : [];
     const order = typeof getTabOrder === "function" ? getTabOrder() : (tabs || []).map((tb) => tb.id).concat(screenList);
+    const onLabKey = (e, fn) => {
+      if (e.target && e.target.tagName === "INPUT") return;
+      if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.repeat) return;
+      fn();
+    };
     order.forEach((id) => {
       if (screenList.includes(id)) {
         const sid = id;
@@ -14749,13 +14758,9 @@ What is typed here stays in this browser.`;
         lab.setAttribute("aria-selected", on ? "true" : "false");
         lab.tabIndex = 0;
         lab.setAttribute("aria-label", name);
-        lab.onkeydown = (e) => {
-          if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
-          if (e.key !== "Enter") return;
-          e.preventDefault();
-          e.stopPropagation();
+        lab.onkeydown = (e) => onLabKey(e, () => {
           if (typeof frontScreenTab === "function") frontScreenTab(sid);
-        };
+        });
         const labViz = document.createElement("span");
         labViz.textContent = name;
         lab.appendChild(labViz);
@@ -14811,13 +14816,7 @@ What is typed here stays in this browser.`;
         const name = tabLabel(tb);
         lab.tabIndex = 0;
         lab.setAttribute("aria-label", name);
-        lab.onkeydown = (e) => {
-          if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
-          if (e.key !== "Enter") return;
-          e.preventDefault();
-          e.stopPropagation();
-          switchTab(tb.id);
-        };
+        lab.onkeydown = (e) => onLabKey(e, () => switchTab(tb.id));
         lab.onfocus = () => scrollTabIntoView(tb.id);
         if (typeof editingTabId !== "undefined" && editingTabId === tb.id) {
           const inp = document.createElement("input");
@@ -16419,7 +16418,8 @@ What is typed here stays in this browser.`;
     el.onkeydown = (e) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
-        eOpenCatalogFolder();
+        e.stopPropagation();
+        if (!e.repeat) eOpenCatalogFolder();
       }
     };
   }
@@ -20190,7 +20190,7 @@ What is typed here stays in this browser.`;
     modalCard.addEventListener("keydown", (e) => {
       if (!edRest || !modalCard.classList.contains("ed-bar") || e.key !== "Enter" && e.key !== " ") return;
       e.preventDefault();
-      edToFront(true);
+      if (!e.repeat) edToFront(true);
     });
     modalCard.addEventListener("click", (e) => {
       if (edGone && e.target.closest && e.target.closest(ED_LOCKS)) {
@@ -20489,7 +20489,7 @@ What is typed here stays in this browser.`;
     sh.addEventListener("keydown", (e) => {
       if (rec.shell !== sh || !sh.classList.contains("ed-bar") || e.key !== "Enter" && e.key !== " ") return;
       e.preventDefault();
-      edActivate(rec, true);
+      if (!e.repeat) edActivate(rec, true);
     });
     rec.shell = sh;
     rec.state = st;
@@ -21022,6 +21022,8 @@ What is typed here stays in this browser.`;
       const a = e.target.closest(".fact-link");
       if (!a) return;
       e.preventDefault();
+      e.stopPropagation();
+      if (e.repeat) return;
       copy(a.getAttribute("data-copy") || a.textContent, "Link copied");
     });
   }
@@ -29088,6 +29090,7 @@ What is typed here stays in this browser.`;
       if (!e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.key === " " || e.code === "Space")) {
         e.preventDefault();
         e.stopPropagation();
+        if (e.repeat) return;
         if (tlMenu.hidden) openTabList(true);
         else closeTabList(true);
         return;
@@ -29118,7 +29121,7 @@ What is typed here stays in this browser.`;
       if (!e.shiftKey && (e.key === " " || e.code === "Space") && cur && cur.closest && cur.closest(".tabs-list-rows")) {
         e.preventDefault();
         e.stopPropagation();
-        if (typeof cur.click === "function") cur.click();
+        if (!e.repeat && typeof cur.click === "function") cur.click();
         return;
       }
       if (!items.length) return;
@@ -35575,7 +35578,7 @@ What is typed here stays in this browser.`;
       if (e.key !== "Enter" && e.key !== " " && e.key !== "ArrowDown") return;
       e.preventDefault();
       e.stopPropagation();
-      pick();
+      if (!e.repeat) pick();
     });
     chip.addEventListener("pointerdown", (e) => {
       if (e.button !== 0 || e.pointerType === "touch") return;
@@ -36382,7 +36385,7 @@ What is typed here stays in this browser.`;
       if (e.key !== "Enter" && e.key !== " ") return;
       e.preventDefault();
       e.stopPropagation();
-      reopenWaiting();
+      if (!e.repeat) reopenWaiting();
     };
   }
   function reopenWaiting() {
@@ -37936,7 +37939,7 @@ What is typed here stays in this browser.`;
         }
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          row2.click();
+          if (!e.repeat) row2.click();
         }
       };
       const delBtn = row2.querySelector(".lw-del");
@@ -37985,7 +37988,7 @@ What is typed here stays in this browser.`;
       cardEl.onkeydown = (e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          cardEl.click();
+          if (!e.repeat) cardEl.click();
         }
       };
     });
@@ -38312,7 +38315,11 @@ What is typed here stays in this browser.`;
     if (page && page.querySelectorAll) page.querySelectorAll("code.open-folder").forEach((fpath) => {
       fpath.onclick = openFolder;
       fpath.onkeydown = (e) => {
-        if (e.key === "Enter" || e.key === " ") openFolder(e);
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!e.repeat) openFolder(e);
+        }
       };
     });
     if (page && page.querySelectorAll) page.querySelectorAll("button.ec-where-edit").forEach((btn) => {
@@ -38357,7 +38364,7 @@ What is typed here stays in this browser.`;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           e.stopPropagation();
-          mgSortClick(btn.getAttribute("data-sort-col"));
+          if (!e.repeat) mgSortClick(btn.getAttribute("data-sort-col"));
         }
       };
     });
@@ -40912,14 +40919,15 @@ What is typed here stays in this browser.`;
   function lanesPageScroller() {
     return lanesOn ? lanesEl() : null;
   }
-  var LANES_KEEP = ".modal,.bub,[role=dialog],[role=alertdialog],[role=menu],[role=listbox]";
+  var LANES_KEEP = ".modal,.bub,[role=dialog],[role=alertdialog],[role=menu],[role=listbox],button,a[href],summary,select,[role=button],[role=menuitem],[role=tab],[role=switch],[role=checkbox],[role=radio]";
   function lanesKeyFree(active, box, body) {
     if (!active || active === body) return true;
     if (box && active === box) return !String(box.value || "");
     if (active.isContentEditable) return false;
     const tag = String(active.tagName || "").toUpperCase();
-    if (tag === "TEXTAREA") return false;
-    if (tag === "INPUT" && !/^(button|checkbox|radio|range|color|file|submit|reset|image)$/i.test(String(active.type || "text"))) return false;
+    if (tag === "TEXTAREA" || tag === "INPUT" || tag === "SELECT" || tag === "BUTTON" || tag === "SUMMARY" || tag === "A") return false;
+    const role = typeof active.getAttribute === "function" ? String(active.getAttribute("role") || "").toLowerCase() : "";
+    if (/^(button|menuitem|tab|switch|checkbox|radio|link|option|combobox)$/.test(role)) return false;
     return !(typeof active.closest === "function" && active.closest(LANES_KEEP));
   }
   function lanesKey() {
@@ -41658,6 +41666,13 @@ What is typed here stays in this browser.`;
         if (d.fixed) continue;
         if (!eventMatchesAction(e, d.id)) continue;
         if (inField && !d.inField) continue;
+        if (d.id === "lanes") {
+          if (!lanesKeyFree(document.activeElement, intentEl, document.body)) continue;
+          if (e.repeat) {
+            e.preventDefault();
+            return;
+          }
+        }
         if (hooks.runShortcut(d.id) !== false) {
           e.preventDefault();
           return;
@@ -41690,7 +41705,13 @@ What is typed here stays in this browser.`;
       if (inField) return;
       const plain = !e.ctrlKey && !e.altKey && !e.metaKey;
       const onControl = document.activeElement;
-      if (plain && !e.shiftKey && (e.key === "Enter" || e.key === " ") && onControl && typeof onControl.matches === "function" && onControl.matches("button:not([disabled]),summary,a[href],[role=menuitem]")) return;
+      if (plain && !e.shiftKey && (e.key === "Enter" || e.key === " ") && onControl && typeof onControl.matches === "function" && (onControl.matches("button:not([disabled]),summary,a[href],[role=menuitem]") || onControl.matches("[role=button]:not([aria-disabled='true']),[role=tab]:not([aria-disabled='true'])"))) {
+        if (e.key === " " && !e.defaultPrevented && onControl.matches("[role=button]:not(button):not(input):not(summary):not([aria-disabled='true'])")) {
+          e.preventDefault();
+          if (!e.repeat && typeof onControl.click === "function") onControl.click();
+        }
+        return;
+      }
       if (!isScreen) {
         if (plain && (e.key === "Home" || e.key === "End") && pageKeyScroll(e.key, lanesPageScroller())) {
           e.preventDefault();

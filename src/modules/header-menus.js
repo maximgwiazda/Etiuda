@@ -126,6 +126,7 @@ function wireHeaderMenus(){
     if(!tlMenu) return;
     if(!e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.key===" " || e.code==="Space")){
       e.preventDefault(); e.stopPropagation();
+      if(e.repeat) return;
       if(tlMenu.hidden) openTabList(true); else closeTabList(true);
       return;
     }
@@ -148,7 +149,7 @@ function wireHeaderMenus(){
     const cur=document.activeElement;
     if(!e.shiftKey && (e.key===" " || e.code==="Space") && cur && cur.closest && cur.closest(".tabs-list-rows")){
       e.preventDefault(); e.stopPropagation();
-      if(typeof cur.click==="function") cur.click();
+      if(!e.repeat && typeof cur.click==="function") cur.click();
       return;
     }
     if(!items.length) return;

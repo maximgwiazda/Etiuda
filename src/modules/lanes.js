@@ -36,17 +36,18 @@ const lanesEl=()=>$("#lanes");
 
 function lanesOpen(){ return lanesOn; }
 function lanesPageScroller(){ return lanesOn ? lanesEl() : null; }
-/** Whether the lanes key may switch views: wherever the focus sits, a button or a pill included, except
- *  in a field being typed into, where it types a space, and inside a dialog, a bubble or a menu, which
- *  keep their own keys. The search box switches while it is empty. */
-const LANES_KEEP=".modal,.bub,[role=dialog],[role=alertdialog],[role=menu],[role=listbox]";
+/** Whether the lanes key may switch views: where no control or typing field holds the focus
+ *  (nothing focused, or the search box while empty); any button, tab, link, switch, checkbox,
+ *  field being typed into, dialog, bubble or menu keeps Space for itself. */
+const LANES_KEEP=".modal,.bub,[role=dialog],[role=alertdialog],[role=menu],[role=listbox],button,a[href],summary,select,[role=button],[role=menuitem],[role=tab],[role=switch],[role=checkbox],[role=radio]";
 function lanesKeyFree(active, box, body){
   if(!active || active===body) return true;
   if(box && active===box) return !String(box.value||"");
   if(active.isContentEditable) return false;
   const tag=String(active.tagName||"").toUpperCase();
-  if(tag==="TEXTAREA") return false;
-  if(tag==="INPUT" && !/^(button|checkbox|radio|range|color|file|submit|reset|image)$/i.test(String(active.type||"text"))) return false;
+  if(tag==="TEXTAREA"||tag==="INPUT"||tag==="SELECT"||tag==="BUTTON"||tag==="SUMMARY"||tag==="A") return false;
+  const role=typeof active.getAttribute==="function" ? String(active.getAttribute("role")||"").toLowerCase() : "";
+  if(/^(button|menuitem|tab|switch|checkbox|radio|link|option|combobox)$/.test(role)) return false;
   return !(typeof active.closest==="function" && active.closest(LANES_KEEP));
 }
 // The lanes key: declined while something is being typed, so the press reaches what is focused.

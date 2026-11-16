@@ -255,7 +255,7 @@ function wireDeskPlace(pane,it,hers,done){
   chip.addEventListener("keydown", e=>{
     if(e.key!=="Enter" && e.key!==" " && e.key!=="ArrowDown") return;
     e.preventDefault(); e.stopPropagation();
-    pick();
+    if(!e.repeat) pick();
   });
   chip.addEventListener("pointerdown", e=>{
     if(e.button!==0 || e.pointerType==="touch") return;
