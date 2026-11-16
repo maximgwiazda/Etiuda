@@ -977,7 +977,11 @@ const t0 = Date.now();
      method"), replacing board 452's single frame: the root wears the new theme in the press's first frame
      and each control eases its own colour on its tier. Sampled per frame through a real press with the
      pointer resting on the tile: the tile reaches its resting colour within 250 ms of that frame, and the
-     icon turns. */
+     icon turns. The sampler's 420 ms count from the first frame that wears the new theme, never from its own
+     start: on a loaded machine the press reached the page after a window counted from the start had closed
+     (twice on 2026-11-16, "in null ms ... over 102 frame(s)"), and the leg read its own lateness as the
+     desk's. A press that never lands is still a failure: the sampler gives up after five seconds with no
+     first frame. */
   e = since();
   const tileR = await p.evaluate(() => document.getElementById("theme").getBoundingClientRect().toJSON());
   await p.mouse.move(tileR.x + tileR.width / 2, tileR.y + tileR.height / 2); await sleep(400);
@@ -985,11 +989,14 @@ const t0 = Date.now();
     const t0 = performance.now(), from = document.documentElement.dataset.theme, f = [];
     const motion = localStorage.getItem("eMotionOff") !== "1"
       && !matchMedia("(prefers-reduced-motion:reduce)").matches;
+    let landed = null;
     const read = () => {
-      f.push({ t: performance.now() - t0, theme: document.documentElement.dataset.theme,
+      const now = performance.now() - t0, theme = document.documentElement.dataset.theme;
+      f.push({ t: now, theme: theme,
                bg: getComputedStyle(document.getElementById("theme")).backgroundColor,
                turn: getComputedStyle(document.querySelector("#theme svg")).transform });
-      if (performance.now() - t0 < 420) requestAnimationFrame(read);
+      if (landed === null && theme !== from) landed = now;
+      if (landed === null ? now < 5000 : now - landed < 420) requestAnimationFrame(read);
       else { const last = f[f.length - 1], first = f.filter(x => x.theme !== from)[0] || null;
         const rest = f.filter(x => x.theme !== from && x.bg === last.bg)[0] || null;
         res({ motion, n: f.length, first, last, eased: first && rest ? Math.round(rest.t - first.t) : null }); }
