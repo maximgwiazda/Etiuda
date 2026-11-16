@@ -632,7 +632,7 @@ function syncWhyWords(why, provider){
   if(why==="full") return t("the account's storage is full");
   if(why==="consent") return t("your organisation has not allowed it; its IT department decides");
   if(why==="") return t("this computer cannot keep it locked for this Windows account");
-  return t("the account's provider turned down Etiuda's request; it tries again each day");
+  return t("the account's provider turned down Etiuda's request; it tries again each time Etiuda opens, and about once a day while it stays open");
 }
 /* The row's line, beside the feature's name; "alone", the bubble's, which names it. */
 function syncUnavailable(why, provider, alone){
@@ -650,7 +650,7 @@ function syncPassingWords(why, provider, refused){
   return t("this computer cannot reach our service");
 }
 function syncPassing(s, provider){
-  const frame=s.line==="spent" || s.line==="refused" ? t("Not syncing: {REASON}. Sync tries again within a day, and nothing on this computer is lost.")
+  const frame=s.line==="spent" || s.line==="refused" ? t("Not syncing: {REASON}. Sync tries again each time Etiuda opens, and about once a day while it stays open; nothing on this computer is lost.")
     : s.at ? named(t("Not syncing just now: {REASON}. Sync tries again at {TIME}, and nothing on this computer is lost."),"{TIME}",
       new Date(s.at).toLocaleTimeString(uiLang()==="pl" ? "pl-PL" : "en-GB",{hour:"2-digit", minute:"2-digit"}))
     : t("Not syncing just now: {REASON}. Sync tries again by itself, and nothing on this computer is lost.");

@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-plants-"));
-const EXPECTED = 43;
+const EXPECTED = 45;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -75,7 +75,7 @@ function driveStandIn() {
     if (st.offline) throw new TypeError("fetch failed");
     const json = (status, o) => ({ status, bytes: Buffer.from(JSON.stringify(o)) });
     const err = (status, reason) => json(status, { error: { code: status, errors: [{ reason }] } });
-    if (st.status) return err(st.status, st.reason || "backendError");
+    if (st.status) return st.reason === null ? json(st.status, { error: { code: st.status } }) : st.reason === "" ? err(st.status, "") : err(st.status, st.reason || "backendError");
     if (st.policy === "consent") return err(403, "insufficientPermissions");
     if (st.policy === "domain") return err(403, "domainPolicy");
     const byId = id => st.files.find(f => f.id === id);
@@ -277,6 +277,30 @@ async function main() {
       const l = await a.look();
       out[kind] = l.state + "/" + l.why;
       all = all && l.state === "unavailable" && l.why === "offline";
+    }
+    return { ok: all, detail: brief(out) };
+  }
+  /* C3b: a Drive 403 whose reason is unknown or absent answers refused (never no-drive), while Drive's known 403 reasons keep theirs. */
+  async function driveOther403Scene() {
+    const out = {};
+    let all = true;
+    for (const [label, set, want] of [
+      ["unknown", f => { f.status = 403; f.reason = "forbidden"; }, "refused"],
+      ["no-errors", f => { f.status = 403; f.reason = null; }, "refused"],
+      ["empty-reason", f => { f.status = 403; f.reason = ""; }, "refused"],
+      ["domainPolicy", f => { f.status = 403; f.reason = "domainPolicy"; }, "no-drive"],
+      ["accessNotConfigured", f => { f.status = 403; f.reason = "accessNotConfigured"; }, "no-drive"],
+      ["dailyLimitExceededUnreg", f => { f.status = 403; f.reason = "dailyLimitExceededUnreg"; }, "no-drive"],
+      ["notAccessibleForUser", f => { f.status = 403; f.reason = "notAccessibleForUser"; }, "no-drive"],
+      ["storageQuotaExceeded", f => { f.status = 403; f.reason = "storageQuotaExceeded"; }, "full"],
+      ["insufficientPermissions", f => { f.status = 403; f.reason = "insufficientPermissions"; }, "consent"],
+      ["rateLimitExceeded", f => { f.status = 403; f.reason = "rateLimitExceeded"; }, "offline"],
+    ]) {
+      const w = worldOf("google"), a = computer(w, "a");
+      set(w.f);
+      const l = await a.look();
+      out[label] = l.state + "/" + l.why;
+      all = all && l.state === "unavailable" && l.why === want;
     }
     return { ok: all, detail: brief(out) };
   }
@@ -516,6 +540,7 @@ async function main() {
     ["C2", keysStayScene, "K and S reach the person's folder and each computer's own sealing alone: no body sent to the service or the relay holds either"],
     ["C3", unreachedScene, "the folder unreached (offline, no drive, Drive off by the organisation, consent refused, full), on each provider, answers unavailable with its reason and throws nothing; each reason is said once, offline never"],
     ["T2", transientScene, "the folder throttled or down, Graph 503 or 429 and Drive 503, 429 or a rate-limit 403, answers offline, never a reason told"],
+    ["C3b", driveOther403Scene, "a Drive 403 with an unknown reason or none at all answers refused rather than no-drive, while the known Drive 403 reasons keep theirs"],
     ["M1", madeOutageScene, "a store made while the licence service was out is still granted as a replacement and made at the relay at the next look, its maker naming it"],
     ["C4", deletedScene, "the file deleted while a computer holds K and S is written back, the same store; with none holding them the next sign-in makes a new store and asks the service for it"],
     ["C6", policyScene, "a managed computer with PersonalStore unset does not sync; on or company it does, held; elsewhere sync is on unless the person turned it off"],
@@ -576,6 +601,7 @@ async function main() {
     ["made-named", "M1", swap("let made = !!io.made && keys !== null && keys.rt === io.made; /* plant:made-named */", "let made = false; /* plant:made-named */"), "the store this computer made is forgotten at the next look"],
     ["graph-transient", "T2", lift("graph-transient"), "Graph's 503 and 429 read as a refusal"],
     ["drive-transient", "T2", lift("drive-transient"), "Drive's 503, 429 and rate-limit 403 read as a refusal or no Drive"],
+    ["drive-other-403", "C3b", swap("  return \"refused\"; /* plant:drive-other-403 */", "  if (res.status === 403) return \"no-drive\";\n  return \"refused\"; /* plant:drive-other-403 */"), "any other Drive 403 read as no-drive"],
     ["write-back", "C4", lift("write-back"), "the deleted file is not written back, so a new store is made"],
     ["policy-managed", "C6", lift("policy-managed"), "a managed computer with the policy unset syncs"],
     ["pause-days", "C10", lift("pause-days"), "the paused line shows at the first lapse"],
