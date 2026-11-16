@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 196;
+const EXPECTED = 199;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -1500,6 +1500,7 @@ async function signinFlow(src, mode) {
   const world = worldOf({ refuseFolder: mode.quiet !== true });
   world.folderDelay = mode.folderDelay || 0;
   world.noOffer = mode.noOffer === true;
+  if (Array.isArray(mode.log)) { const real = world.fetch; world.fetch = (u, init) => { mode.log.push({ method: String(init && init.method || "GET"), url: String(u), body: init && init.body != null ? Buffer.from(init.body).toString("utf8") : "" }); return real(u, init); }; }
   const b = browserOf(world, mode);
   const shell = boot(src, { world, lab: labOf(), store: mode.store, policyText: mode.policyText, browser: u => { setTimeout(() => { b.last = b.go(u).catch(() => {}); }, 5); } });
   const { T } = shell;
@@ -1587,6 +1588,65 @@ async function noOfferHandlersScene(src) {
   const kept = fs.existsSync(path.join(dir, "kept.ec")), deskSame = fs.readFileSync(path.join(UD, "desk.json"), "utf8") === deskBefore;
   const ok = !!ans && ans.ok === false && !aside && kept && deskSame && storeSame;
   return { ok, detail: brief({ answer: ans && ans.ok, aside, kept, deskSame, storeSame }) };
+}
+
+/* (n0b) THE CLOSED DESK ASKS WHAT abc58e9f ASKED: with no store offered, each provider's first sign-in and its renewal send, in order,
+   the requests tests/fixtures/closed-desk-requests.json holds, captured once from abc58e9f's shell/main.js by this same harness
+   (closedCapture; the command is in the fixture's "how"). Every authorize query, token form and licence-service body is compared field
+   for field; only CLOSED_NORMAL's random or timed fields are put to their names first; any request to a host or route the fixture lacks
+   is a difference. */
+const CLOSED_NORMAL = ["state", "nonce", "code_challenge", "code_verifier", "code", "refresh_token", "idToken", "desk", "seed", "t", "sig", "redirect_uri:port"];
+const CLOSED_FIXTURE = path.join(ROOT, "tests", "fixtures", "closed-desk-requests.json");
+function closedNormal(req, browser) {
+  const u = new URL(req.url), out = { method: req.method, at: u.origin + u.pathname, from: browser ? "browser" : "shell", fields: {} };
+  let fields = {};
+  if (browser || req.method === "GET") fields = Object.fromEntries(u.searchParams);
+  else if (/^\s*\{/.test(req.body)) { try { fields = JSON.parse(req.body); } catch { fields = { "<body>": req.body }; } }
+  else if (req.body) fields = Object.fromEntries(new URLSearchParams(req.body));
+  for (const k of Object.keys(fields).sort()) {
+    let v = fields[k];
+    if (CLOSED_NORMAL.indexOf(k) >= 0) v = "<" + k + ">";
+    else if (k === "redirect_uri") v = String(v).replace(/:\d+$/, ":<port>");
+    out.fields[k] = typeof v === "string" ? v : JSON.stringify(v);
+  }
+  return out;
+}
+async function closedCapture(src) {
+  const out = [];
+  for (const provider of ["microsoft", "google"]) {
+    const log = [];
+    const r = await signinFlow(src, { provider, noOffer: true, quiet: true, log });
+    const first = r.b.urls.map(u => closedNormal({ method: "GET", url: u }, true)).concat(log.map(x => closedNormal(x, false)));
+    log.length = 0;
+    await r.shell.T.signinRenewNow();
+    const flight = r.shell.T.get().storeFlight;
+    if (flight) await flight;
+    out.push({ provider, phase: "first", requests: first }, { provider, phase: "renewal", requests: log.map(x => closedNormal(x, false)) });
+  }
+  return out;
+}
+async function closedScene(src) {
+  let want = null;
+  try { want = JSON.parse(fs.readFileSync(CLOSED_FIXTURE, "utf8")); } catch { want = null; }
+  if (!want || !Array.isArray(want.runs) || !want.runs.length) return { ok: false, detail: "no fixture at tests/fixtures/closed-desk-requests.json" };
+  const got = await closedCapture(src), diffs = [];
+  for (let i = 0; i < Math.max(got.length, want.runs.length); i++) {
+    const g = got[i], w = want.runs[i];
+    if (!g || !w || g.provider !== w.provider || g.phase !== w.phase) { diffs.push("run " + i + ": " + JSON.stringify([g && g.provider + "/" + g.phase, w && w.provider + "/" + w.phase])); continue; }
+    for (let j = 0; j < Math.max(g.requests.length, w.requests.length); j++) {
+      const a = JSON.stringify(g.requests[j] || null), b = JSON.stringify(w.requests[j] || null);
+      if (a !== b) diffs.push(g.provider + "/" + g.phase + " #" + j + ": got " + a + " want " + b);
+    }
+  }
+  return { ok: diffs.length === 0, detail: brief({ runs: got.length, requests: got.map(x => x.requests.length), diffs: diffs.slice(0, 4) }) };
+}
+/* The capture itself, a command, so the fixture's provenance is the command: node tests/desk-store-shell.mjs --capture-closed <file>,
+   run with this file copied into an export of the commit to capture (the fixture names it). */
+if (process.argv[2] === "--capture-closed") {
+  const runs = await closedCapture(MAIN);
+  fs.writeFileSync(process.argv[3], JSON.stringify({ kind: "etiuda-closed-desk-requests", format: 1, how: process.env.CLOSED_HOW || "", normalised: CLOSED_NORMAL, runs }, null, 1) + "\n");
+  console.log("captured " + runs.map(r => r.provider + "/" + r.phase + " " + r.requests.length).join(", "));
+  process.exit(0);
 }
 
 /* (h) Each folder page in both languages carries its words whole, and the sign-in's own seat page is as it was. */
@@ -2515,6 +2575,7 @@ const LEGS = [
   ["x6k", answerStartKeptScene, "a set-aside whose later step fails and whose move back of the catalog, or of the store folder, fails keeps that whole in the set-aside folder, which stays, the log names it, the answer carries it and the button opens it; where every move back succeeds the folder goes"],
   ["x6r", openAfterRestartScene, "after a restart the button's channel opens the desk's single dated folder, or Set aside itself when a second or hand-made dated folder is beside it; all removed it answers gone, and a name of another shape in store.json is ignored"],
   ["x6l", asideLinkScene, "a link under Set aside bearing the name store.json keeps is never opened as the set-aside folder: Open this folder answers gone; a real folder of that name is opened"],
+  ["n0b", closedScene, "with no store offered, each provider's first sign-in and renewal send what abc58e9f sent, request for request and field for field (tests/fixtures/closed-desk-requests.json), only the random and timed fields normalised, nothing sent anywhere else"],
   ["n1", noOfferHandlersScene, "without the offer the shell refuses the account question's answer and the switch itself: nothing set aside, the catalog and desk.json as they were, store.json unchanged"],
   ["n0", noOfferScene, "no store offered by the service: each provider's sign-in asks what it asked before sync, one request, nothing after the seat, no folder scope, no app-folder call, no key file, no grant, no look, no row; with the offer both ask the folder apart; a renewal without the offer ends it"],
   ["z6", signinHourScene, "a look more than an hour after the last sign-in renews it first and is granted, on; with the renewal unreached the refusal is tried again within minutes, the row not saying refused"],
@@ -2639,6 +2700,8 @@ const PLANTS = [
   ["x6r", swap("    s.aside ? { aside: s.aside } : {}), null, 1)", "    {}), null, 1)"), "the set-aside folder's name not kept in store.json, so a restart forgets it"],
   ["x6r", swap(".test(d.aside) ? d.aside : \"\" }; /* plant:store-aside-name */", ".test(d.aside) || ok && typeof d.aside === \"string\" ? d.aside : \"\" }; /* plant:store-aside-name */"), "any name in store.json read as the set-aside folder's"],
   ["x6l", swap("    try { return fs.lstatSync(path.join(root, n)).isDirectory(); } catch { return false; } /* plant:aside-lstat */", "    try { return fs.statSync(path.join(root, n)).isDirectory(); } catch { return false; } /* plant:aside-lstat */"), "the dated folder judged by a stat that follows a link, so a link named like it is opened as it"],
+  ["n0b", swap("code_challenge_method: \"S256\" }, known.extra));", "code_challenge_method: \"S256\", planted: \"1\" }, known.extra));"), "one parameter more on the sign-in's authorize request"],
+  ["n0b", swap("  const body = { provider: String(provider), idToken: idToken, desk: String(desk) };", "  const body = { provider: String(provider), idToken: idToken, desk: String(desk), planted: true };"), "one field more in signin/desk's body"],
   ["n1", swap("  if (!storeOffered()) return { ok: false, choice: \"\", folder: \"\", view: storeView() }; /* plant:answer-offer */\n", ""), "the answer taken without the offer, so Start sets the desk aside"],
   ["n1", swap("  if (!storeOffered()) return storeView(); /* plant:set-offer */\n", ""), "the switch moved without the offer"],
   ["n0", swap("    const storeOffer = j.storeOffer === true; /* plant:offer-read */", "    const storeOffer = true; /* plant:offer-read */"), "every answer read as an offer"],
