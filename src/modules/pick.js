@@ -224,10 +224,10 @@ function pickWords(){
           rwBefore:t("A press sends only the words above to {ADDRESS}, your organisation's AI service."), rwYou:t("You selected"),
           rwAfter:t("Sent to {ADDRESS}: only the words you selected. Read the result before you send it."),
           rwEnter:t("Enter puts it in place of your selection"), rwBack:t("Back to the replies"),
-          rwWait:t("Waiting for {ADDRESS}"), // placeholder: Claudette
-          rwNone:t("No answer from {ADDRESS}. Your words are as you wrote them."), // placeholder: Claudette
-          rwLate:t("The AI service did not answer in time, so the request was given up."),
-          rwBusy:t("The AI service is busy and asked Etiuda to wait; a later try may go through.")};
+          rwWait:t("Waiting for the service at {ADDRESS}…"),
+          rwNone:t("No result came back from {ADDRESS}. Your words are as you wrote them."),
+          rwLate:t("The service at {ADDRESS} did not answer in time. Your words are as you wrote them."),
+          rwBusy:t("The service at {ADDRESS} is busy; a later try may go through. Your words are as you wrote them.")};
 }
 /* THE TEXT THE DESK'S OWN COPY WOULD MAKE, counted as the desk counts a copy: the fill of the block
    in the card's language, for the chat tab in front. The shell writes it to the clipboard. A reply

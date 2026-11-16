@@ -20,7 +20,7 @@
  *   cr9 Approve and Revert are interface (not selectable); the menu's acts and field take the keyboard
  *   cr11 in the dark theme the reworded slab wears one line (and cr4b: a render that patches the card keeps the rewording)
  *   cr10 the plants, each on a copy of the built page: the names check lifted, the parts check lifted, the filled text sent,
- *       the patched class without the rewording, the dark rule set aside,
+ *       the patched class without the rewording, the dark rule set aside, a placeholder put back,
  *       and the rewording written to storage at once, each turning its leg red
  * ETIUDA_PLANTS=off skips cr10 with NOT RUN lines.
  */
@@ -36,7 +36,7 @@ const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const SHOTS = process.env.CARD_SHOTS || "";
-const EXPECTED = 17;
+const EXPECTED = 19;
 let fails = 0, checks = 0, notRun = 0;
 const check = (ok, what, detail) => {
   checks++;
@@ -57,6 +57,16 @@ function pageFile(text, name) {
 }
 const URL0 = pageFile(ENGINE, "etiuda.html");
 const HOST = "ai.mirabelka.example";
+/* The copywriter's lines, section 3 of her file, character for character, {ADDRESS} filled with HOST. */
+const TAIL = { en: "The card is as it was.", pl: "Karta pozostała bez zmian." };
+const WORDS = {
+  en: { wait: "Waiting for the service at " + HOST + "…", late: "The service at " + HOST + " did not answer in time. " + TAIL.en,
+    busy: "The service at " + HOST + " is busy; a later try may go through. " + TAIL.en, none: "No result came back from " + HOST + ". " + TAIL.en,
+    refused: "The result lost a name this card fills in, or one of its steps, so it is not shown. The card is as it was; another try may keep them." },
+  pl: { wait: "Oczekiwanie na usługę pod adresem " + HOST + "…", late: "Usługa pod adresem " + HOST + " nie odpowiedziała na czas. " + TAIL.pl,
+    busy: "Usługa pod adresem " + HOST + " jest zajęta; późniejsza próba może się udać. " + TAIL.pl,
+    none: "Z adresu " + HOST + " nie nadszedł wynik. " + TAIL.pl,
+    refused: "W wyniku zabrakło nazwy, którą karta wypełnia, albo jednego z jej kroków, więc nie został pokazany. Karta pozostała bez zmian; kolejna próba może je zachować." } };
 const NAME = "Wiktoria Planted";
 const MARK = "Zephyrquill";
 const PLAIN = "c-orders-thank-you-for-a-first-order", PLAIN2 = "c-damaged-a-new-one-on-its-way", STEPS = "c-returns-packing-the-piece";
@@ -282,18 +292,40 @@ try {
     await press(p, "formal", { ok: true, text: body3.replace("{PAX}", NAME) });
     const lost = await p.evaluate(() => (document.querySelector("#eReword .rw-bline") || {}).textContent || "");
     const lostFace = await cardFace(p, PLAIN2);
-    const REFUSED = "The reworded text did not keep this card's parts or the names it fills in, so the card stays as it was.";
+    const REFUSED = WORDS.en.refused;
     check(merged === REFUSED && !mergedFace.on && lost === REFUSED && !lostFace.on,
       "cr7 a result that merged a card's steps, and one that wrote the customer's name in place of {PAX}, are refused and said, the card as it was", { merged, lost });
 
     /* cr8 */
-    await press(p, "shorter", { ok: false, why: "late" });
-    const late = await p.evaluate(() => (document.querySelector("#eReword .rw-bline") || {}).textContent || "");
-    await press(p, "shorter", { ok: false, why: "unreached" });
-    const none2 = await p.evaluate(() => (document.querySelector("#eReword .rw-bline") || {}).textContent || "");
+    const said = async (p2, answer) => { await press(p2, "shorter", answer); return p2.evaluate(() => (document.querySelector("#eReword .rw-bline") || {}).textContent || ""); };
+    const lines = async (p2, id, W) => {
+      await p2.evaluate(() => { window.__answer = () => new Promise(() => {}); });
+      await p2.click('#eReword button[data-rw-act="shorter"]');
+      await sleep(80);
+      const wait = await p2.evaluate(() => (document.querySelector("#eReword .rw-bline") || {}).textContent || "");
+      await p2.keyboard.press("Escape");
+      await sleep(120);
+      await openMenu(p2, id);
+      const late = await said(p2, { ok: false, why: "late" });
+      const busy = await said(p2, { ok: false, why: "busy" });
+      const none2 = await said(p2, { ok: false, why: "unreached" });
+      const answer = await said(p2, { ok: false, why: "answer" });
+      return { wait, late, busy, none2, answer, ok: wait === W.wait && late === W.late && busy === W.busy && none2 === W.none && answer === W.none };
+    };
+    const enL = await lines(p, PLAIN2, WORDS.en);
     const lateFace = await cardFace(p, PLAIN2);
-    check(late === "The AI service did not answer in time, so the request was given up." && none2 === "No answer from " + HOST + ". The card is as it was." && !lateFace.on,
-      "cr8 a failure says which in the menu, and the card stays as it was", { late, none2 });
+    check(enL.ok && !lateFace.on,
+      "cr8 each failure the build tells apart says its own sentence in the menu, as the copywriter wrote it (waiting, late, busy, every other), and the card stays as it was", enL);
+
+    /* cr8b the same, and the refusal, in Polish */
+    const plp = await desk({ lang: "pl" });
+    await openMenu(plp, PLAIN2);
+    const plL = await lines(plp, PLAIN2, WORDS.pl);
+    await press(plp, "formal", { ok: true, text: (await raw(plp, PLAIN2)).replace("{PAX}", NAME) });
+    const plRefused = await plp.evaluate(() => (document.querySelector("#eReword .rw-bline") || {}).textContent || "");
+    check(plL.ok && plRefused === WORDS.pl.refused,
+      "cr8b the same sentences, and the refusal, character for character in Polish under the Polish interface", { plL, plRefused });
+    await plp.close();
 
     /* cr9 */
     await p.focus("#eRewordHow");
@@ -339,13 +371,14 @@ try {
     ["stored", "REWORDED.set(id, Object.assign({}, r, { n: ++rewordN }));", "REWORDED.set(id, Object.assign({}, r, { n: ++rewordN })); lsSet(\"eRewordPlant\", JSON.stringify(r));"],
     ["patched", "(it.rw ? \" rw-on\" : \"\")", "\"\""],
     ["rim", ":root:not([data-theme=light]) .card.rw-on>.txt::after{content:none}", ""],
+    ["words", "No result came back from {ADDRESS}. The card is as it was.", "No answer from {ADDRESS}. The card is as it was."],
   ];
   for (const [name, from, to] of plants) {
     const what = "cr10 " + name + ": the plant on a copy of the built page turns its leg red";
     if (PLANTS_OFF) { skip(what + " (ETIUDA_PLANTS=off)"); continue; }
     const n = ENGINE.split(from).length - 1;
-    if (n !== 1) { check(false, what, { anchorFound: n }); continue; }
-    const p = await desk({ url: pageFile(ENGINE.replace(from, to), "etiuda-" + name + ".html") });
+    if (n !== (name === "words" ? 2 : 1)) { check(false, what, { anchorFound: n }); continue; }
+    const p = await desk({ url: pageFile(ENGINE.split(from).join(to), "etiuda-" + name + ".html") });
     let red = false, said = null;
     if (name === "names") {
       const b = await raw(p, PLAIN2);
@@ -358,6 +391,9 @@ try {
     } else if (name === "filled") {
       await openMenu(p, PLAIN); await press(p, "shorter", { ok: false, why: "late" });
       said = await sent(p); red = said.length === 1 && said[0].words.indexOf(NAME.split(" ")[0]) > -1;
+    } else if (name === "words") {
+      await openMenu(p, PLAIN); await press(p, "shorter", { ok: false, why: "unreached" });
+      said = await p.evaluate(() => (document.querySelector("#eReword .rw-bline") || {}).textContent || ""); red = said !== WORDS.en.none;
     } else if (name === "stored") {
       const b = await raw(p, PLAIN);
       await openMenu(p, PLAIN); await press(p, "shorter", { ok: true, text: rewordOf(b) });

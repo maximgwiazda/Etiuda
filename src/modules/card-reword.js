@@ -118,16 +118,16 @@ function rewordPress(id,act,how,say){
   if(!from) return;
   const mine=++rwAsk;
   menu.el.querySelectorAll("button[data-rw-act]").forEach(b=>b.classList.toggle("tour-sel", b.getAttribute("data-rw-act")===act));
-  say(t("Waiting for {ADDRESS}"));
-  const fail=r=>say(r && r.why==="late" ? t("The AI service did not answer in time, so the request was given up.")
-    : r && r.why==="busy" ? t("The AI service is busy and asked Etiuda to wait; a later try may go through.")
-    : t("No answer from {ADDRESS}. The card is as it was.")); // placeholder: Claudette
+  say(t("Waiting for the service at {ADDRESS}…"));
+  const fail=r=>say(r && r.why==="late" ? t("The service at {ADDRESS} did not answer in time. The card is as it was.")
+    : r && r.why==="busy" ? t("The service at {ADDRESS} is busy; a later try may go through. The card is as it was.")
+    : t("No result came back from {ADDRESS}. The card is as it was."));
   Promise.resolve(h.reword({act:act, words:from, how:act==="own" ? String(how||"") : "", to:""})).then(r=>{
     if(mine!==rwAsk || rwMenu!==menu) return;
     menu.el.querySelectorAll("button.tour-sel").forEach(b=>b.classList.remove("tour-sel"));
     if(!r || r.ok!==true || typeof r.text!=="string"){ fail(r); return; }
     if(!rewordKeepsShape(from, r.text, !!m.alt)){
-      say(t("The reworded text did not keep this card's parts or the names it fills in, so the card stays as it was.")); // placeholder: Claudette
+      say(t("The result lost a name this card fills in, or one of its steps, so it is not shown. The card is as it was; another try may keep them."));
       return;
     }
     const now=findCard(id);

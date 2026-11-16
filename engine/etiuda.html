@@ -7905,7 +7905,7 @@ What is typed here stays in this browser.`;
     "Sent to {ADDRESS}: only the words you selected. Read the result before you send it.": "Do {ADDRESS} trafiły tylko zaznaczone słowa. Wynik należy przeczytać przed wysłaniem.",
     "Enter puts it in place of your selection": "Enter wstawia go w miejsce zaznaczenia",
     "Back to the replies": "Wróć do odpowiedzi",
-    "Waiting for {ADDRESS}": "Oczekiwanie na {ADDRESS}",
+    "Waiting for the service at {ADDRESS}…": "Oczekiwanie na usługę pod adresem {ADDRESS}…",
     "Reword": "Przeredaguj",
     "Reword this card": "Przeredaguj tę kartę",
     "Or say how, then press Enter": "Albo opis zmiany, potem Enter",
@@ -7918,9 +7918,13 @@ What is typed here stays in this browser.`;
     "Keep these words as your own edit of the card": "Zachowaj tę treść jako własną zmianę karty",
     "Revert": "Przywróć",
     "Show the card as it was": "Pokaż kartę w pierwotnej postaci",
-    "No answer from {ADDRESS}. The card is as it was.": "Brak odpowiedzi od {ADDRESS}. Karta pozostała bez zmian.",
-    "The reworded text did not keep this card's parts or the names it fills in, so the card stays as it was.": "Przeredagowany tekst nie zachował części karty ani wypełnianych nazw, więc karta pozostaje bez zmian.",
-    "No answer from {ADDRESS}. Your words are as you wrote them.": "Brak odpowiedzi od {ADDRESS}. Tekst pozostał bez zmian.",
+    "The result lost a name this card fills in, or one of its steps, so it is not shown. The card is as it was; another try may keep them.": "W wyniku zabrakło nazwy, którą karta wypełnia, albo jednego z jej kroków, więc nie został pokazany. Karta pozostała bez zmian; kolejna próba może je zachować.",
+    "The service at {ADDRESS} did not answer in time. Your words are as you wrote them.": "Usługa pod adresem {ADDRESS} nie odpowiedziała na czas. Zaznaczony tekst pozostał bez zmian.",
+    "The service at {ADDRESS} did not answer in time. The card is as it was.": "Usługa pod adresem {ADDRESS} nie odpowiedziała na czas. Karta pozostała bez zmian.",
+    "The service at {ADDRESS} is busy; a later try may go through. Your words are as you wrote them.": "Usługa pod adresem {ADDRESS} jest zajęta; późniejsza próba może się udać. Zaznaczony tekst pozostał bez zmian.",
+    "The service at {ADDRESS} is busy; a later try may go through. The card is as it was.": "Usługa pod adresem {ADDRESS} jest zajęta; późniejsza próba może się udać. Karta pozostała bez zmian.",
+    "No result came back from {ADDRESS}. Your words are as you wrote them.": "Z adresu {ADDRESS} nie nadszedł wynik. Zaznaczony tekst pozostał bez zmian.",
+    "No result came back from {ADDRESS}. The card is as it was.": "Z adresu {ADDRESS} nie nadszedł wynik. Karta pozostała bez zmian.",
     "Press": "Naciśnij",
     "{KEY} clears the search and the intents and shows every card.": "{KEY} czyści wyszukiwanie i intencje i pokazuje wszystkie karty.",
     "Etiuda is ready for its first replies.": "Etiuda czeka na pierwsze odpowiedzi.",
@@ -25637,8 +25641,8 @@ What is typed here stays in this browser.`;
     if (!from) return;
     const mine = ++rwAsk;
     menu.el.querySelectorAll("button[data-rw-act]").forEach((b) => b.classList.toggle("tour-sel", b.getAttribute("data-rw-act") === act));
-    say(t("Waiting for {ADDRESS}"));
-    const fail = (r) => say(r && r.why === "late" ? t("The AI service did not answer in time, so the request was given up.") : r && r.why === "busy" ? t("The AI service is busy and asked Etiuda to wait; a later try may go through.") : t("No answer from {ADDRESS}. The card is as it was."));
+    say(t("Waiting for the service at {ADDRESS}…"));
+    const fail = (r) => say(r && r.why === "late" ? t("The service at {ADDRESS} did not answer in time. The card is as it was.") : r && r.why === "busy" ? t("The service at {ADDRESS} is busy; a later try may go through. The card is as it was.") : t("No result came back from {ADDRESS}. The card is as it was."));
     Promise.resolve(h.reword({ act, words: from, how: act === "own" ? String(how || "") : "", to: "" })).then((r) => {
       if (mine !== rwAsk || rwMenu !== menu) return;
       menu.el.querySelectorAll("button.tour-sel").forEach((b) => b.classList.remove("tour-sel"));
@@ -25647,7 +25651,7 @@ What is typed here stays in this browser.`;
         return;
       }
       if (!rewordKeepsShape(from, r.text, !!m.alt)) {
-        say(t("The reworded text did not keep this card's parts or the names it fills in, so the card stays as it was."));
+        say(t("The result lost a name this card fills in, or one of its steps, so it is not shown. The card is as it was; another try may keep them."));
         return;
       }
       const now = findCard(id);
@@ -43163,12 +43167,10 @@ What is typed here stays in this browser.`;
       rwAfter: t("Sent to {ADDRESS}: only the words you selected. Read the result before you send it."),
       rwEnter: t("Enter puts it in place of your selection"),
       rwBack: t("Back to the replies"),
-      rwWait: t("Waiting for {ADDRESS}"),
-      // placeholder: Claudette
-      rwNone: t("No answer from {ADDRESS}. Your words are as you wrote them."),
-      // placeholder: Claudette
-      rwLate: t("The AI service did not answer in time, so the request was given up."),
-      rwBusy: t("The AI service is busy and asked Etiuda to wait; a later try may go through.")
+      rwWait: t("Waiting for the service at {ADDRESS}…"),
+      rwNone: t("No result came back from {ADDRESS}. Your words are as you wrote them."),
+      rwLate: t("The service at {ADDRESS} did not answer in time. Your words are as you wrote them."),
+      rwBusy: t("The service at {ADDRESS} is busy; a later try may go through. Your words are as you wrote them.")
     };
   }
   function pickBlocks(m, other) {

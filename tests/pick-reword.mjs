@@ -36,7 +36,7 @@ const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const SHOTS = process.env.PICK_SHOTS || "";
-const EXPECTED = 15;
+const EXPECTED = 17;
 let fails = 0, checks = 0, notRun = 0;
 const check = (ok, what, detail) => {
   checks++;
@@ -62,12 +62,20 @@ function pickerDocFile(src, name) {
   return "file:///" + at.replace(/\\/g, "/");
 }
 const HOST = "ai.mirabelka.example";
+/* The copywriter's lines, section 3 of her file, character for character, {ADDRESS} filled with HOST. */
+const TAIL = { en: "Your words are as you wrote them.", pl: "Zaznaczony tekst pozostał bez zmian." };
+const WORDS = {
+  en: { wait: "Waiting for the service at " + HOST + "…", late: "The service at " + HOST + " did not answer in time. " + TAIL.en,
+    busy: "The service at " + HOST + " is busy; a later try may go through. " + TAIL.en, none: "No result came back from " + HOST + ". " + TAIL.en },
+  pl: { wait: "Oczekiwanie na usługę pod adresem " + HOST + "…", late: "Usługa pod adresem " + HOST + " nie odpowiedziała na czas. " + TAIL.pl,
+    busy: "Usługa pod adresem " + HOST + " jest zajęta; późniejsza próba może się udać. " + TAIL.pl,
+    none: "Z adresu " + HOST + " nie nadszedł wynik. " + TAIL.pl } };
 const SEL = "hi sorry for late reply, we check your order tomorow and write you back";
 const OUT = "Hi, sorry for the late reply. We will check your order tomorrow and write back to you.";
 
 let browser = null;
 /* The desk page's own "open" answer, in a language and a theme. */
-async function deskOpen(lang, theme) {
+async function deskOpen(lang, theme, url) {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 860, deviceScaleFactor: 1 });
   await page.evaluateOnNewDocument((lang, theme) => {
@@ -79,7 +87,7 @@ async function deskOpen(lang, theme) {
     window.E_HOST = { hotkeyState: () => ({ accel: "Control+Shift+Space", held: true, taken: false }), onPickAsk: fn => { window.__pick = fn; },
       openPicker() {}, signinState: () => st, signIn: async () => st, signinCheck: async () => st };
   }, lang, theme);
-  await page.goto(deskUrl, { waitUntil: "load", timeout: 60000 });
+  await page.goto(url || deskUrl, { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
   if (await page.$("#ecYes")) await page.click("#ecYes");
   await page.waitForFunction(() => typeof window.__pick === "function" && document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });
@@ -269,16 +277,42 @@ try {
     await sleep(60);
     const late = await face(p);
     await shot(p, "q8-no-answer-light");
+    await p.evaluate(() => { window.__answer = "busy"; });
+    await p.click("#rw .rw-acts button:nth-child(1)");
+    await sleep(60);
+    const busy = await face(p);
     await p.evaluate(() => { window.__answer = "unreached"; });
     await p.click("#rw .rw-acts button:nth-child(1)");
     await sleep(60);
     const lost = await face(p);
-    check(waiting.res && waiting.resLine === String(w.rwWait).split("{ADDRESS}").join(HOST) && waiting.pressed.length === 1 && !waiting.out,
-      "pr6 while the service is asked the act stays pressed and the line says so, the result's place empty", waiting);
-    check(dropped.rows && !dropped.res && !dropped.out && late.resLine === w.rwLate && late.footActs.length === 5 && late.pressed.length === 0
-      && lost.resLine === String(w.rwNone).split("{ADDRESS}").join(HOST),
-      "pr6b Esc drops the answer on its way, which then shows nowhere; a failure says which, the acts there to press again", { dropped, late: late.resLine, lost: lost.resLine });
+    check(waiting.res && waiting.resLine === WORDS.en.wait && waiting.pressed.length === 1 && !waiting.out,
+      "pr6 while the service is asked the act stays pressed and the line says so, as the copywriter wrote it, the result's place empty", waiting);
+    check(dropped.rows && !dropped.res && !dropped.out && late.resLine === WORDS.en.late && busy.resLine === WORDS.en.busy && late.footActs.length === 5 && late.pressed.length === 0
+      && lost.resLine === WORDS.en.none,
+      "pr6b Esc drops the answer on its way, which then shows nowhere; late, busy and every other failure each say their own sentence, the acts there to press again", { dropped, late: late.resLine, busy: busy.resLine, lost: lost.resLine });
     await p.close();
+  }
+
+  /* pr6c the same lines in Polish under the Polish interface */
+  {
+    const p = await win(withRw(Object.assign({}, PL, { lang: "pl" }), { selected: SEL, editable: null }));
+    const seen = {};
+    await p.evaluate(() => { window.__answer = "hang"; });
+    await p.click("#rw .rw-acts button:nth-child(1)");
+    await sleep(40);
+    seen.wait = (await face(p)).resLine;
+    await p.focus("#q");
+    await key(p, "Escape");
+    for (const k of ["late", "busy", "unreached"]) {
+      await p.evaluate(a => { window.__answer = a; }, k);
+      await p.click("#rw .rw-acts button:nth-child(1)");
+      await sleep(60);
+      seen[k] = (await face(p)).resLine;
+    }
+    await shot(p, "q10-no-result-pl-light");
+    await p.close();
+    check(seen.wait === WORDS.pl.wait && seen.late === WORDS.pl.late && seen.busy === WORDS.pl.busy && seen.unreached === WORDS.pl.none,
+      "pr6c waiting, late, busy and every other failure, character for character in Polish", seen);
   }
 
   /* pr7 the translation */
@@ -340,6 +374,19 @@ try {
       await shot(p, name);
       await p.close();
     }
+  }
+
+  /* pr9b the plant: a placeholder put back */
+  if (PLANTS_OFF) skip("pr9b a placeholder put back in the built page (ETIUDA_PLANTS=off)");
+  else {
+    const KEY = "No result came back from {ADDRESS}. Your words are as you wrote them.";
+    const built = fs.readFileSync(path.join(lab, "etiuda.html"), "utf8");
+    const n = built.split(KEY).length - 1;
+    fs.writeFileSync(path.join(lab, "etiuda-planted.html"), built.split(KEY).join("No answer from {ADDRESS}. Your words are as you wrote them."));
+    const o = n > 0 ? await deskOpen("en", "light", "file:///" + path.join(lab, "etiuda-planted.html").split("\\").join("/")) : { words: {} };
+    const w2 = o.words || {};
+    check(n > 0 && String(w2.rwNone || "").split("{ADDRESS}").join(HOST) !== WORDS.en.none,
+      "pr9b with the old placeholder put back in the built page, the failure's line no longer is her sentence and pr6b would be red", { found: n, none: w2.rwNone });
   }
 
   /* pr9 the plant */
