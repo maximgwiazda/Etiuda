@@ -20,7 +20,7 @@ import { animatePillsBox, syncPillsCollapse } from "./pills-box.js";
 import { modalFront, openCover } from "./dialog.js";
 import { hooks } from "./hooks.js";
 import { cssEsc } from "./css-esc.js";
-import { $, intentEl, originOf } from "./dom.js";
+import { $, focusRingOn, intentEl, originOf } from "./dom.js";
 
 /* ---- The lanes: the conversation in front given the whole window. What it sent, the reply it sent last
    whole, and what can follow it, each with the batch after it. The list keeps its place and its scroll
@@ -36,10 +36,12 @@ const lanesEl=()=>$("#lanes");
 
 function lanesOpen(){ return lanesOn; }
 function lanesPageScroller(){ return lanesOn ? lanesEl() : null; }
-/** Whether the lanes key may switch views: wherever the focus sits, a button or a pill included, except
- *  in a field being typed into, where it types a space, and inside a dialog, a bubble or a menu, which
- *  keep their own keys. The search box switches while it is empty. */
+/** Whether the lanes key may switch views: where no typing field, dialog, bubble, menu, or
+ *  control wearing the keyboard's focus ring holds the focus. A control clicked with the
+ *  pointer wears no ring, so Space switches to the lanes; a control reached with the keyboard
+ *  wears the ring and keeps Space for itself. */
 const LANES_KEEP=".modal,.bub,[role=dialog],[role=alertdialog],[role=menu],[role=listbox]";
+const LANES_CONTROL="button,a[href],summary,select,[role=button],[role=menuitem],[role=tab],[role=switch],[role=checkbox],[role=radio],[role=link],[role=option],[role=combobox]";
 function lanesKeyFree(active, box, body){
   if(!active || active===body) return true;
   if(box && active===box) return !String(box.value||"");
@@ -47,12 +49,24 @@ function lanesKeyFree(active, box, body){
   const tag=String(active.tagName||"").toUpperCase();
   if(tag==="TEXTAREA") return false;
   if(tag==="INPUT" && !/^(button|checkbox|radio|range|color|file|submit|reset|image)$/i.test(String(active.type||"text"))) return false;
-  return !(typeof active.closest==="function" && active.closest(LANES_KEEP));
+  if(typeof active.closest==="function" && active.closest(LANES_KEEP)) return false;
+  const role=typeof active.getAttribute==="function" ? String(active.getAttribute("role")||"").toLowerCase() : "";
+  const isControl=tag==="INPUT"||tag==="SELECT"||tag==="BUTTON"||tag==="SUMMARY"||tag==="A"
+    || /^(button|menuitem|tab|switch|checkbox|radio|link|option|combobox)$/.test(role)
+    || (typeof active.closest==="function" && !!active.closest(LANES_CONTROL));
+  if(isControl) return !focusRingOn(active);
+  return true;
 }
 // The lanes key: declined while something is being typed, so the press reaches what is focused.
 function lanesKey(){
-  if(!lanesKeyFree(document.activeElement, intentEl, document.body)) return false;
+  const active=document.activeElement;
+  if(!lanesKeyFree(active, intentEl, document.body)) return false;
   toggleLanes();
+  /* An un-ringed control outside .shell (header band) would otherwise keep focus while Chromium
+     turns :focus-visible on for Space, letting the next Space press it instead of closing lanes. */
+  if(lanesOn && active && active!==document.body && active!==intentEl && typeof active.blur==="function"){
+    active.blur();
+  }
   return true;
 }
 function toggleLanes(on){

@@ -19,7 +19,7 @@ import { lySet } from "./storage.js";
 import { uid } from "./ids.js";
 import { esc } from "./esc.js";
 import { ICON_PLUS } from "./icons.js";
-import { pills } from "./dom.js";
+import { focusRingOn, pills } from "./dom.js";
 import { markCutText } from "./cut-text.js";
 
 /* The desk's name as the agent gave it in Settings, else a colleague's. */
@@ -253,9 +253,9 @@ function wireDeskPlace(pane,it,hers,done){
   chip.onclick=()=>{ if(lkDragged){ lkDragged=false; return; } pick(); };
   // Enter, Space and the down arrow open the list, the keyboard's way to what the drag does.
   chip.addEventListener("keydown", e=>{
-    if(e.key!=="Enter" && e.key!==" " && e.key!=="ArrowDown") return;
+    if(e.key!=="Enter" && e.key!=="ArrowDown" && (e.key!==" " || !focusRingOn(chip))) return;
     e.preventDefault(); e.stopPropagation();
-    pick();
+    if(!e.repeat) pick();
   });
   chip.addEventListener("pointerdown", e=>{
     if(e.button!==0 || e.pointerType==="touch") return;
