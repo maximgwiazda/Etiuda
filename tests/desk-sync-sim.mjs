@@ -198,7 +198,10 @@ function cycle(w, c, partial) {
   for (const rel of [...sent.keys()]) if (!map.has(rel)) { relay.set(rel, { text: null, del: true, ver: ++w.ver }); sent.delete(rel); }
   for (const [rel, f] of relay) {
     const m = /^desks\/(k-[0-9a-f]{16})\//.exec(rel);
-    if (!m || rel.startsWith(mine) || !ch.roster.has(m[1]) || (partial && !rel.endsWith("/sync.json")) || (seen.get(rel) || 0) >= f.ver) continue;
+    if (!m || !ch.roster.has(m[1]) || (partial && !rel.endsWith("/sync.json")) || (seen.get(rel) || 0) >= f.ver) continue;
+    /* This computer's own blob comes back only where the mirror holds no file of that path and this channel state never sent it
+       (shell/relay/channel.cjs ownHeld): a computer whose state was begun again finds its earlier place; an edit waiting stays. */
+    if (rel.startsWith(mine)) { if (!f.del && !map.has(rel) && !sent.has(rel)) { map.set(rel, f.text); sent.set(rel, f.text); } seen.set(rel, f.ver); continue; }
     if (f.del) map.delete(rel); else map.set(rel, f.text);
     seen.set(rel, f.ver);
   }
@@ -378,22 +381,29 @@ function answer(w, c, choice) {
   land(w, c); /* model-plant:answer-flush */
   /* (j) is judged against what the account's store held at the relay as the person answered. */
   w.promised.push({ X, c: c.i, step: w.stepNo, choice, held: storeHeldNow(w, X) });
-  if (choice === "mine" && c.s.who !== X) {
-    /* The desk claimed by another account: what an earlier account wrote here and never sent to its own store is handed to the one
-       claiming it, by that person's answer, and judged no longer as the earlier account's. */
-    const desk = itemsOf(c.desk.keys, c.desk.files), sent = new Map();
+  /* The desk claimed: what another account wrote here (an account that came and went, or one seated while the question waited) and
+     never sent to its own store is handed to the account answering It is mine, by that person's answer, and judged as that account's,
+     made over what that account had written here before it. */
+  const desk = itemsOf(c.desk.keys, c.desk.files);
+  if (choice === "mine") {
+    const sent = new Map();
     for (const wr of w.writes) {
       if (wr.comp !== c.i || !wr.acct || wr.acct === X || wr.claimed) continue;
       if (!sent.has(wr.acct)) sent.set(wr.acct, storeHeldNow(w, wr.acct));
       const inStore = sent.get(wr.acct).get(wr.item), here = has(desk, wr.item) ? desk[wr.item] : null;
-      if (wr.value !== null && here === wr.value && !(inStore && inStore.has(sha(wr.value)))) wr.claimed = true;
+      if (wr.value === null || here !== wr.value) continue;
+      /* On the desk as the person claims it, it stands over what this account wrote here before it, sent to its own store or not. */
+      for (const y of w.writes) if (y.comp === c.i && y.acct === X && y.item === wr.item && y.step < wr.step) wr.over.add(y.id);
+      if (!(inStore && inStore.has(sha(wr.value)))) { wr.claimed = true; wr.claimedBy = X; }
     }
+  }
+  if (choice === "mine" && c.s.who !== X) {
     /* The person sees what the desk holds as they claim it: a later write here is made over those values, as far as they are this
        account's own writes; another account's stay unanswered for, so its copy is still judged. */
     c.knows = new Map();
     for (const [item, value] of Object.entries(desk)) {
       const set = new Set();
-      for (const wr of w.writes) if (wr.item === item && wr.value === value && wr.acct === X) { set.add(wr.id); for (const o of wr.over) set.add(o); }
+      for (const wr of w.writes) if (wr.item === item && wr.value === value && (wr.acct === X || wr.claimedBy === X)) { set.add(wr.id); for (const o of wr.over) set.add(o); }
       if (set.size) c.knows.set(item, set);
     }
     if (MODEL.answerMineFresh) { c.syncFile = { rt: "", ledger: {}, kept: [] }; if (c.sync) c.sync.stop(); c.sync = null; } /* model-plant:answer-mine-fresh */
@@ -588,10 +598,16 @@ function invariants(w) {
      store is the account's copy. */
   for (const p of w.promised) {
     const X = p.X, c = w.comps[p.c], now = storeHeldNow(w, X), desk = itemsOf(c.desk.keys, c.desk.files);
+    const survives = (item, h) => (now.has(item) && now.get(item).has(h)) || (has(desk, item) && sha(desk[item]) === h);
     for (const [item, hs] of p.held) for (const h of hs) {
-      if (now.has(item) && now.get(item).has(h)) continue;
-      if (has(desk, item) && sha(desk[item]) === h) continue;
-      if (w.writes.some(x => x.acct === X && x.item === item && x.step > p.step)) continue;
+      if (survives(item, h)) continue;
+      /* An item the store held under two values keeps the one standing: the other had given way (a setting's, or a version kept on
+         the computer whose write gave way), which (b) judges write by write. (j) asks that the account's copy is not emptied. */
+      if ([...hs].some(o => survives(item, o))) continue;
+      /* The item changed by that account's person: after the answer; claimed with it; or on another computer before it, not yet in
+         the store as they answered. */
+      if (w.writes.some(x => x.item === item && ((x.acct === X && x.step > p.step) || x.claimedBy === X
+        || (x.acct === X && x.comp !== p.c && x.step < p.step && (x.value === null ? hs.size > 0 : !hs.has(sha(x.value))))))) continue;
       say("j", X + ": " + item + " at " + h.slice(0, 8) + " was in the store when c" + p.c + " answered " + p.choice + " at #" + p.step + ", and is now neither in the store nor on c" + p.c);
     }
   }
@@ -756,7 +772,7 @@ const MAX_STEPS = 40;
 const INVARIANTS = { a: "agreement", b: "nothing lost", c: "accounts apart", d: "the allowlist", e: "bytes reachable", f: "the untouched sample", j: "the store keeps", x: "the walk ran" };
 const replay = (seed, steps) => "node tests/desk-sync-sim.mjs --seed " + seed + " --steps " + steps.map(s => s.at).join(",");
 
-/* THE FIXED SEEDS: each reproduced a finding on the sync line at c77fc33c (221: at bc147559), red there, the invariant it broke first named; they run every
+/* THE FIXED SEEDS: each reproduced a finding on the sync line at c77fc33c (1000000: at bc147559), red there, the invariant it broke first named; they run every
    time, beside the random ones. "Third pass" is the third Argon review of the line; "further" is a fault this walk found. */
 const FIXED = [
   { seed: 1109, inv: "e", what: "third pass 1: a catalog folder held for a team removes this computer's catalog bytes from its place, its sync file still listing them" },
@@ -769,7 +785,7 @@ const FIXED = [
   { seed: 1141, inv: "b", what: "further: a setting changed after sign-in but before the first cycle reaches the store is taken as held before joining and gives way" },
   { seed: 2371, inv: "b", what: "further: the same for the sample removed after sign-in" },
   { seed: 2002, inv: "c", what: "third pass 11 (can follow): a catalog saved signed out after another account was seated is merged into the first account's mirror" },
-  { seed: 221, inv: "j", what: "last read 1: an account alone on a computer comes back after another account and answers Start from my account; its fresh state skips this computer's own place and empties the account's store" },
+  { seed: 1000000, inv: "j", what: "last read 1 (an account walk, red at bc147559): an account alone on a computer comes back after another account and answers Start from my account; its fresh state skips this computer's own place and empties the account's store" },
 ];
 
 async function main() {
@@ -817,7 +833,7 @@ async function main() {
   for (let seed = ACCOUNT_FROM; seed < ACCOUNT_FROM + ACCOUNT_SEEDS; seed++) {
     const s = stepsOf(seed, MAX_STEPS), r = runWalk(seed, s);
     acct.n++; acct.steps += s.length;
-    if (!r) continue;
+    if (!r) { greens.push(seed); continue; }
     acct.counts[r.inv] = (acct.counts[r.inv] || 0) + 1;
     if (!acct.first) acct.first = { seed, steps: s, r };
   }
@@ -854,6 +870,7 @@ function plants(green) {
     ["d", "a team's keys follow", swap("return SETTINGS.indexOf(s.slice(2)) >= 0 || LAYER_RE.test(s.slice(2)); /* plant:follows */", "return SETTINGS.indexOf(s.slice(2)) >= 0 || LAYER_RE.test(s.slice(2)) || s === \"k:eTeamKeys\"; /* plant:follows */")],
     ["e", "a computer's place holds no catalog bytes", swap("if (item.startsWith(\"f:\") && has(after, item)) own[fileRel(me, item)] = after[item];", "if (item.startsWith(\"f:\") && has(after, item) && false) own[fileRel(me, item)] = after[item];")],
     ["f", "an untouched sample on a joining computer recorded as its own", lift("join-pristine")],
+    ["j", "a computer whose sync state was begun again does not take its own earlier place in (the last read's finding 1)", swap('const ownDoc = state.ownTake === true ? syncRead(String(io.read(syncRel(o.me.id)) || ""), o.me.id) : null;', "const ownDoc = null;")],
   ];
   const product = fs.readFileSync(SYNC_PATH, "utf8"), digest = sha(product);
   let n = 0;
