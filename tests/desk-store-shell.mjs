@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 160;
+const EXPECTED = 162;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -1944,6 +1944,34 @@ async function openAfterRestartScene(src) {
     many: { got: many.got, paths: many.paths.map(name) }, gone: { got: gone.got, paths: gone.paths.map(name) },
     shaped: { got: shaped.got, paths: shaped.paths.map(name), aside: shaped.aside } }) };
 }
+/* (x6l) A LINK IS NO SET-ASIDE FOLDER: under Set aside an entry with the name store.json keeps, a link (a junction) to a folder elsewhere,
+   as the file system's stand-in answers for it: followed it is a folder, unfollowed a link. Open this folder opens nothing and answers gone;
+   a real folder of that name in its place is opened. Nothing real is linked. */
+async function asideLinkScene(src) {
+  const name = "2026-11-16 10.00";
+  let linked = "";
+  const fsWrap = real => new Proxy(real, {
+    get(target, prop) {
+      if (prop === "statSync") return (f, ...a) => (linked && String(f) === linked ? { isDirectory: () => true, isFile: () => false, isSymbolicLink: () => false } : target.statSync(f, ...a));
+      if (prop === "lstatSync") return (f, ...a) => (linked && String(f) === linked ? { isDirectory: () => false, isFile: () => false, isSymbolicLink: () => true } : target.lstatSync(f, ...a));
+      const v = target[prop];
+      return typeof v === "function" ? v.bind(target) : v;
+    }
+  });
+  const { UD, ipc, openedPaths } = boot(src, { fsWrap, store: { aside: name } });
+  const e = { senderFrame: { parent: null, url: "file:///desk/engine/etiuda.html" } }, open = ipc.handle["etiuda:open-set-aside"];
+  const root = path.join(UD, "Set aside"), at = path.join(root, name);
+  fs.mkdirSync(root, { recursive: true });
+  fs.writeFileSync(at, "");
+  linked = at;
+  const asLink = await open(e), pathsLink = openedPaths.slice();
+  linked = "";
+  fs.rmSync(at);
+  fs.mkdirSync(at);
+  const asFolder = await open(e), pathsFolder = openedPaths.slice();
+  const ok = !!asLink && asLink.ok === false && asLink.why === "gone" && pathsLink.length === 0 && asFolder === true && pathsFolder.length === 1 && pathsFolder[0] === at;
+  return { ok, detail: brief({ asLink, pathsLink: pathsLink.length, asFolder, pathsFolder: pathsFolder.map(p => path.basename(p)) }) };
+}
 /* (x6a) Open this folder when more than one set-aside exists: a kept failure then a success opens Set aside itself (both in the same run
    and after a restart), removing the named folder leaves Set aside opening itself (never the other folder directly), one set-aside opens
    its own dated folder, a hand-made dated folder beside it opens Set aside itself, and nothing there answers gone. */
@@ -2102,6 +2130,7 @@ const LEGS = [
   ["x6p", answerStartBusyRenameScene, "set-aside moves whose first rename fails busy retry via renamePatiently and succeed"],
   ["x6k", answerStartKeptScene, "a set-aside whose later step fails and whose move back of the catalog, or of the store folder, fails keeps that whole in the set-aside folder, which stays, the log names it, the answer carries it and the button opens it; where every move back succeeds the folder goes"],
   ["x6r", openAfterRestartScene, "after a restart the button's channel opens the desk's single dated folder, or Set aside itself when a second or hand-made dated folder is beside it; all removed it answers gone, and a name of another shape in store.json is ignored"],
+  ["x6l", asideLinkScene, "a link under Set aside bearing the name store.json keeps is never opened as the set-aside folder: Open this folder answers gone; a real folder of that name is opened"],
   ["x6a", openManySetAsidesScene, "with two set-asides (a kept failure then a success) or with the named folder removed and another dated folder left or with a hand-made dated folder beside the desk's, Open this folder opens Set aside itself before and after a restart; with one set-aside it opens that folder; with none it answers gone"],
 ];
 const results = {};
@@ -2211,6 +2240,7 @@ const PLANTS = [
   ["x6k", swap("    if (aside && back) { try { fs.rmSync(aside, { recursive: true, force: true }); } catch {} } /* plant:aside-kept */", "    if (aside) { try { fs.rmSync(aside, { recursive: true, force: true }); } catch {} } /* plant:aside-kept */"), "the set-aside folder removed whether or not every move back succeeded"],
   ["x6r", swap("    s.aside ? { aside: s.aside } : {}), null, 1)", "    {}), null, 1)"), "the set-aside folder's name not kept in store.json, so a restart forgets it"],
   ["x6r", swap(".test(d.aside) ? d.aside : \"\" }; /* plant:store-aside-name */", ".test(d.aside) || ok && typeof d.aside === \"string\" ? d.aside : \"\" }; /* plant:store-aside-name */"), "any name in store.json read as the set-aside folder's"],
+  ["x6l", swap("    try { return fs.lstatSync(path.join(root, n)).isDirectory(); } catch { return false; } /* plant:aside-lstat */", "    try { return fs.statSync(path.join(root, n)).isDirectory(); } catch { return false; } /* plant:aside-lstat */"), "the dated folder judged by a stat that follows a link, so a link named like it is opened as it"],
   ["x6a", swap("  return dated.length === 1 && dated[0] === name ? path.join(root, name) : root; /* plant:open-aside-many */", "  return name ? path.join(root, name) : \"\"; /* plant:open-aside-many */"), "the count taken out, so the latest is always opened"],
 ];
 for (const [id, change, what] of PLANTS) {

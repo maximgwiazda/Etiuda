@@ -11446,7 +11446,8 @@ function storeAsideFolder() {
   try { entries = fs.readdirSync(root); } catch { return ""; }
   const dated = entries.filter(n => {
     if (!STORE_ASIDE_RE.test(n)) return false;
-    try { return fs.statSync(path.join(root, n)).isDirectory(); } catch { return false; }
+    /* Unfollowed: a link (a junction) is no folder this desk made, so one named like a dated folder is never opened as it. */
+    try { return fs.lstatSync(path.join(root, n)).isDirectory(); } catch { return false; } /* plant:aside-lstat */
   });
   if (!dated.length) return "";
   const name = storeState().aside;
