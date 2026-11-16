@@ -66,7 +66,7 @@ function titleSides(el,acts,ink,cs){
   for(let n=el.nextElementSibling;n&&n!==acts;n=n.nextElementSibling) end-=n.getBoundingClientRect().width+gap;
   const card=el.closest(".card");
   const folds=matchMedia("(hover:hover)").matches&&!document.body.classList.contains("tour-cacts")
-    &&!(card&&card.classList.contains("is-hidden"));
+    &&!(card&&card.classList.contains("is-hidden"))&&!acts.querySelector('[data-act="flag"][aria-expanded="true"]');
   const receded=end-acts.scrollWidth-gap;
   const b=el.getBoundingClientRect(), boxL=b.left+parseFloat(cs.borderLeftWidth)+parseFloat(cs.paddingLeft);
   return {l:boxL-ink.left>CUT_EPS, r:ink.right-(folds?end:receded)>CUT_EPS, rh:ink.right-receded>CUT_EPS};
