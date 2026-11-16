@@ -865,11 +865,21 @@ try {
     if (backState !== true) problems.push("the stand-in's state did not turn on " + JSON.stringify(backState));
     if (!back.mark.there || back.mark.title.indexOf(REWORD_SAID) < 0 || back.mark.label.indexOf(REWORD_SAID) < 0) problems.push("on again: the mark does not say it " + JSON.stringify([back.mark.there, back.mark.title.slice(-80)]));
     if (back.lede.indexOf(REWORD_SAID) < 0) ledeProblems.push("on again: the lede does not say it " + JSON.stringify(back.lede.slice(-80)));
+    /* The model row's line, on the page that draws every setting, follows the switch the same way. */
+    await pg.evaluate(() => { try { closeScreenTab("settings"); } catch (e) {} });
+    await pg.evaluate(() => openSettings("all")); await sleep(150);
+    const rowSaid = () => pg.evaluate(() => (document.querySelector('[data-row="orgmodel"] .set-label small') || {}).textContent || "");
+    const ROW_SAID = "so, at your press, are the words or the card you ask it to reword";
+    if ((await rowSaid()).indexOf(ROW_SAID) < 0) ledeProblems.push("model row on at the start");
+    await press("off");
+    if ((await rowSaid()).indexOf(ROW_SAID) >= 0) ledeProblems.push("off: the model row's line still says it");
+    await press("on");
+    if ((await rowSaid()).indexOf(ROW_SAID) < 0) ledeProblems.push("on again: the model row's line does not say it");
     return { problems, ledeProblems };
   };
   {
     const { problems, ledeProblems } = await rwMarkFollows(page);
-    check(!ledeProblems.length, "db9ml (a finding, red on the product as it stands) the AI section's lede follows the Rewording switch at once too: " + (ledeProblems.join("; ") || "on, off, on"));
+    check(!ledeProblems.length, "db9ml the AI section's lede and the model row's line follow the Rewording switch at once too: " + (ledeProblems.join("; ") || "on, off, on"));
     check(!problems.length, "db9m with the organisation's model on, turning Rewording off takes its sentence from the mark's tip at once, without a reload, and on brings it back: "
       + (problems.join("; ") || "on, off, on"));
   }
@@ -887,6 +897,22 @@ try {
       await page.waitForFunction(() => typeof openSettings === "function" && !document.querySelector(".e-launch-veil"), { timeout: 30000 });
       const planted = (await rwMarkFollows(page)).problems;
       check(planted.length > 0, "db9mp with the toggle's syncOrgMark() call removed, the mark's tip stays behind the switch and db9m fails: " + JSON.stringify(planted.slice(0, 1)));
+    }
+  }
+
+  /* db9lp the plant: the Rewording toggle without its syncAiWords() call */
+  if (PLANTS_OFF) skipPlant("db9lp the Rewording toggle without its syncAiWords() call (ETIUDA_PLANTS=off)");
+  else {
+    const built = fs.readFileSync(path.join(lab, "etiuda.html"), "utf8"), re = /(rewordSwitchSet\(on\);\s*syncOrgMark\(\);)\s*syncAiWords\(\);/g;
+    const found = (built.match(re) || []).length;
+    if (found !== 1) check(false, "db9lp the toggle's syncAiWords() call found once in engine/etiuda.html", { found });
+    else {
+      const at = path.join(lab, "etiuda-rw-lede-plant.html");
+      fs.writeFileSync(at, built.replace(re, "$1"), "utf8");
+      await page.goto("file:///" + at.split(String.fromCharCode(92)).join("/"), { waitUntil: "load", timeout: 60000 });
+      await page.waitForFunction(() => typeof openSettings === "function" && !document.querySelector(".e-launch-veil"), { timeout: 30000 });
+      const planted = (await rwMarkFollows(page)).ledeProblems;
+      check(planted.length > 0, "db9lp with the toggle's syncAiWords() call removed, the lede stays behind the switch and db9ml fails: " + JSON.stringify(planted.slice(0, 1)));
     }
   }
 
@@ -914,7 +940,7 @@ try {
   if (browser) await browser.close();
 }
 
-const EXPECTED = 21;
+const EXPECTED = 22;
 const done = asserted + notRun === EXPECTED;
 if (!done) { failed++; console.log("  FAIL ran " + (asserted + notRun) + " checks (" + asserted + " ran, " + notRun + " not run), expected " + EXPECTED); }
 console.log((failed || !done ? "desk-own-ai: " + failed + " of " + asserted + " failed" : "desk-own-ai: all " + asserted + " passed" + (notRun ? ", " + notRun + " NOT RUN" : "")));
