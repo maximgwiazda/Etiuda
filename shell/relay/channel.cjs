@@ -937,7 +937,9 @@ function createProgram(opts) {
       /* Once a handover has landed, the lead pinned now takes on a root file of a key earlier in its chain. */
       let handedOn = false;
       handedOn = r.role === "lead" && r.writerKeyId === pin.lead.keyId && isLeadKey(was.writer); /* plant:chain-handed */
-      if (was.path.toLowerCase() !== r.path.toLowerCase() || (was.writer !== r.writerKeyId && !genuineHandover && !handedOn)) return R("outside-place"); /* plant:chain-same */
+      let samePath = was.path.toLowerCase() === r.path.toLowerCase();
+      samePath = pathKey(was.path) === pathKey(r.path); /* plant:chain-path-fold */
+      if (!samePath || (was.writer !== r.writerKeyId && !genuineHandover && !handedOn)) return R("outside-place"); /* plant:chain-same */
     }
     return r;
   }

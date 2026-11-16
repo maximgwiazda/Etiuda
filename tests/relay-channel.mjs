@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 457;
+const EXPECTED = 460;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -12075,6 +12075,81 @@ if (partOn("pF2")) {
     }
   } catch (e) {
     check(false, "harness (the leg f2a): " + (e && e.stack ? e.stack : e));
+  }
+}
+
+/* ---- finding (4): superseded path identity uses pathKey rather than toLowerCase ---- */
+async function sceneF4Sigma(mod) {
+  const k1 = crypto.randomBytes(32), deskKey = keyPair(true);
+  const tm = await freshTeam([deskKey]);
+  const tag = tm.rt.slice(0, 8);
+  const keyFor = e => (e === 1 ? k1 : null);
+  const OLD = "\u0391\u0398\u0397\u039d\u0391\u03a3 2.ec";
+  const NEW = "\u03b1\u03b8\u03b7\u03bd\u03b1\u03c3 2.ec";
+  const lead = opened(mod, "f4s-lead-" + tag, tm, LEAD, "root", { keyFor, sealEpoch: () => 1, connect: null });
+  const desk = opened(mod, "f4s-desk-" + tag, tm, deskKey, "desk:" + deskKey.keyId, { keyFor, sealEpoch: () => 1, connect: null });
+  put(lead.mirror, mod.TEAM_NAME, teamBody(tm, 1, 1, [member(deskKey)]));
+  put(lead.mirror, OLD, "one\n");
+  lead.ch.start(); desk.ch.start();
+  await lead.ch.idle(); await desk.ch.idle();
+  await once(lead); await once(desk);
+  const landedOld = read(desk.mirror, OLD) === "one\n";
+
+  fs.renameSync(path.join(lead.mirror, OLD), path.join(lead.mirror, NEW));
+  put(lead.mirror, NEW, "two\n");
+  await once(lead);
+  const beforeSaid = desk.said.length;
+  await once(desk);
+  const newSaid = desk.said.slice(beforeSaid);
+  const landedNew = read(desk.mirror, NEW) === "two\n" && !newSaid.some(l => l.indexOf(B.REASONS["outside-place"]) >= 0);
+
+  await lead.ch.stop(); await desk.ch.stop();
+  return {
+    ok: landedOld && landedNew,
+    landedOld, landedNew, newSaid, body: read(desk.mirror, NEW),
+  };
+}
+function sceneF4Kelvin(mod) {
+  const k1 = crypto.randomBytes(32), deskKey = keyPair(true);
+  const tm = "t-" + hex(8), rt = hex(16);
+  const pinK = { teamId: tm, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } };
+  const doc = signDoc({ format: 1, kind: "etiuda-team", id: tm, catalogs: ["quay-board"],
+    lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 1,
+    channel: { kind: "relay", rt, url: URLV1 }, ring: RING, roster: [member(deskKey)] }, LEAD);
+  const dir = path.join(LAB, "f4k-" + hex(4));
+  fs.mkdirSync(dir, { recursive: true });
+  const prog = mod.createProgram({ io: mod.diskIO(dir, mod.writeWhole), pin: pinK, save() {}, say() {} });
+  prog.loadTeamFile(doc);
+  const p1 = "desks/" + deskKey.keyId + "/k.ec", p2 = "desks/" + deskKey.keyId + "/\u212a.ec";
+  const b1 = B.seal({ relayTeamId: rt, epoch: 1, teamKey: k1, writer: { keyId: deskKey.keyId, privateKey: deskKey.privateKey },
+    path: p1, body: "one\n", counter: 1, place: "desk:" + deskKey.keyId, kind: "file" });
+  const r1 = prog.acceptBlob({ blob: b1, teamDoc: doc, teamKey: k1 });
+  const b2 = B.seal({ relayTeamId: rt, epoch: 1, teamKey: k1, writer: { keyId: deskKey.keyId, privateKey: deskKey.privateKey },
+    path: p2, body: "two\n", counter: 2, place: "desk:" + deskKey.keyId, kind: "file", supersedes: b1.id });
+  const r2 = prog.acceptBlob({ blob: b2, teamDoc: doc, teamKey: k1 });
+  return {
+    ok: r1.ok === true && r2.ok === false && r2.reason === "outside-place"
+      && prog.readMirror(p1) === "one\n" && prog.readMirror(p2) === null,
+    r1, r2, kBody: prog.readMirror(p1), kelvinBody: prog.readMirror(p2),
+  };
+}
+if (partOn("pF4")) {
+  try {
+    markPart("pF4");
+    const s = await sceneF4Sigma(C);
+    check(s.ok, "f4a renaming a root file from capital sigma before a space or digit to lower case (same pathKey) is accepted on the desk: "
+      + JSON.stringify({ landedOld: s.landedOld, landedNew: s.landedNew, body: s.body, newSaid: s.newSaid }));
+    const k = sceneF4Kelvin(C);
+    check(k.ok, "f4b superseding k.ec with Kelvin sign (\\u212a.ec, distinct pathKey) is refused as outside-place: "
+      + JSON.stringify({ r1: k.r1.ok, r2: k.r2, kBody: k.kBody, kelvinBody: k.kelvinBody }));
+    if (PLANTS_OFF) skip("f4c lifting plant:chain-path-fold turns f4a and f4b red (sigma update refused and Kelvin cross-path supersede accepted)");
+    else {
+      const p = await liftChannel("plant:chain-path-fold", async mod => !(await sceneF4Sigma(mod)).ok && !sceneF4Kelvin(mod).ok);
+      check(p.turned && p.back, "f4c lifting plant:chain-path-fold turns f4a and f4b red (sigma update refused and Kelvin cross-path supersede accepted), and the product file is never written: "
+        + p.detail + ", sha " + (p.back ? "restored" : "differs"));
+    }
+  } catch (e) {
+    check(false, "harness (the leg f4a): " + (e && e.stack ? e.stack : e));
   }
 }
 
