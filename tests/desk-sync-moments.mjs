@@ -177,6 +177,12 @@ const TRUE_LINES = [
   ...[["signin", "a fresh sign-in"], ["store", "the folder's store"], ["relay", "the relay"]].map(([why, by]) => ["refused for " + by, { line: "refused", why },
     "Not syncing: our service turned down this computer's last request. Sync tries again within a day, and nothing on this computer is lost.",
     "Synchronizacja nie działa: nasza usługa odrzuciła ostatnią prośbę tego komputera. Ponowi próbę w ciągu doby, a na tym komputerze nic nie ginie.", "switch"]),
+  ["unavailable on Google, Drive switched off", { line: "unavailable", why: "no-drive" },
+    "Not available on this account: your organisation has switched off Google Drive for it. Everything works on this computer as before.",
+    "Niedostępna na tym koncie: organizacja wyłączyła dla niego Dysk Google. Na tym komputerze wszystko działa jak dotąd.", "none", "google"],
+  ["unavailable on Google, other refusal", { line: "unavailable", why: "refused" },
+    "Not available on this account: the account's provider turned down Etiuda's request; it tries again each day. Everything works on this computer as before.",
+    "Niedostępna na tym koncie: dostawca konta odrzucił prośbę Etiudy; kolejna próba nastąpi następnego dnia. Na tym komputerze wszystko działa jak dotąd.", "none", "google"],
 ];
 /* m4: every row of TRUE_LINES drawn in English (light) and Polish (dark); answers what differed. */
 async function trueLines(pageName) {

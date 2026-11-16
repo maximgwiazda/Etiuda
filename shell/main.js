@@ -11505,12 +11505,12 @@ function armSigninRenew() {
    folder itself. */
 let storeLayer = null;
 function StoreLib() { return storeLayer || (storeLayer = require(path.join(__dirname, "sync", "store.cjs"))); }
-/* store.json beside desk.json, read whole or not at all: {format: 1, keys, said, off?, told?, until?, owed?, leave?, org?, who?, made?, last?, ask?, aside?}. `keys` the store's keys sealed by
+/* store.json beside desk.json, read whole or not at all: {format: 1, keys, said, off?, told?, until?, owed?, leave?, org?, full?, who?, made?, last?, ask?, aside?}. `keys` the store's keys sealed by
    safeStorage as base64, "" where none are kept; `said` the reason the desk last said (sayOnce); `off` the person's own switch, absent where on;
    `told` once this computer has had its first look with sync on (firstSay); `until` the last store certificate's end, for the pause;
    `owed` the relay team id of a store Turn off everywhere ended that the licence service has not yet answered, sealed as `keys`; `leave`
    the keys of the store This computer has not yet left (storeLeaveNow), sealed as `keys`; `org` where the organisation refused the folder
-   (storeUngiven); `aside` the name of the folder the latest Start from my account made under Set aside (storeAsideFolder). */
+   (storeUngiven); `full` where the store's room last refused a write as "team-size" (storeRoom); `aside` the name of the folder the latest Start from my account made under Set aside (storeAsideFolder). */
 const STORE_FILE = "store.json";
 const STORE_ASIDE_RE = /^\d{4}-\d{2}-\d{2} \d{2}\.\d{2}(?: \(\d{1,6}\))?$/;
 function storeFileRead(text) {
@@ -11522,11 +11522,12 @@ function storeFileRead(text) {
     leave: ok && typeof d.leave === "string" ? d.leave.slice(0, 200000) : "", who: ok && typeof d.who === "string" && /^[0-9a-f]{32}$/.test(d.who) ? d.who : "",
     made: ok && typeof d.made === "string" && /^[0-9a-f]{32}$/.test(d.made) ? d.made : "", lost: ok && typeof d.lost === "string" && /^[0-9a-f]{32}:[0-9]{1,9}$/.test(d.lost) ? d.lost : "", last: ok && typeof d.last === "string" && /^[0-9a-f]{32}$/.test(d.last) ? d.last : "",
     ask: ok && typeof d.ask === "string" && /^[0-9a-f]{32}$/.test(d.ask) ? d.ask : "",
+    full: ok && d.full === true,
     aside: ok && typeof d.aside === "string" && STORE_ASIDE_RE.test(d.aside) ? d.aside : "" }; /* plant:store-aside-name */
 }
 function storeFileText(s) {
   return JSON.stringify(Object.assign({ format: 1, keys: s.keys || "", said: s.said || "" }, s.off === true ? { off: true } : {}, s.told === true ? { told: true } : {},
-    s.until > 0 ? { until: s.until } : {}, s.owed ? { owed: s.owed } : {}, s.leave ? { leave: s.leave } : {}, s.org === true ? { org: true } : {}, s.who ? { who: s.who } : {}, s.made ? { made: s.made } : {}, s.lost ? { lost: s.lost } : {}, s.last ? { last: s.last } : {}, s.ask ? { ask: s.ask } : {},
+    s.until > 0 ? { until: s.until } : {}, s.owed ? { owed: s.owed } : {}, s.leave ? { leave: s.leave } : {}, s.org === true ? { org: true } : {}, s.full === true ? { full: true } : {}, s.who ? { who: s.who } : {}, s.made ? { made: s.made } : {}, s.lost ? { lost: s.lost } : {}, s.last ? { last: s.last } : {}, s.ask ? { ask: s.ask } : {},
     s.aside ? { aside: s.aside } : {}), null, 1) + "\n"; /* plant:store-aside-kept */
 }
 /* WHOSE THE STORE'S STATE IS: store.json belongs to the account named by `who`, a hash of its provider and sub; the first account seated
@@ -11563,7 +11564,7 @@ function storeMine() {
   }
   if (s.last !== who) { s.last = who; storeSave(); }
   if (s.who === who) return true; /* plant:store-mine */
-  s.keys = ""; s.leave = ""; s.owed = ""; s.made = ""; s.lost = "";
+  s.keys = ""; s.leave = ""; s.owed = ""; s.made = ""; s.lost = ""; s.full = false;
   s.who = who;
   storeLeaveHere = null; storeOwedHere = ""; storeNow = null; storeSay = ""; storeFresh = false; storeAnew = false;
   if (storeAccess && storeAccess.who !== who) storeAccess = null;
@@ -11629,6 +11630,7 @@ function storeForget() {
   const s = storeState();
   if (s.keys || s.leave || storeLeaveHere) { s.keys = ""; s.leave = ""; storeLeaveHere = null; storeSave(); } /* plant:signout-store-keys */
   if (storeState().org === true) { storeState().org = false; storeSave(); }
+  if (storeState().full === true) { storeState().full = false; storeSave(); }
   tellStore(); /* the page's sync bubbles close: no row stands signed out */ /* plant:signout-tell-store */
 }
 /* The folder's requests, at OneDrive's App Folder and Drive's appDataFolder alone, through the shell's own network as the sign-in's:
@@ -11891,13 +11893,14 @@ async function storeLeaveTry(cert) {
   if (now && now.rt === keys.rt) storeLeaveOwe(null);
   return true;
 }
-/* THE STORE'S ROOM, told by the store's sync channel: each write refused as "team-size" or taken (""), store.cjs roomNext. In memory
-   alone: after a start the first refused write says it again. */
-let storeFullNow = false;
+/* THE STORE'S ROOM, told by the store's sync channel: each write refused as "team-size" or taken (""), store.cjs roomNext. Kept in
+   store.json so a full store stays told across a restart until a write is taken, a sign out or an account change. */
 function storeRoom(reason) {
-  const next = StoreLib().roomNext(storeFullNow, String(reason));
-  if (next === storeFullNow) return;
-  storeFullNow = next;
+  const s = storeState(), was = s.full === true;
+  const next = StoreLib().roomNext(was, String(reason));
+  if (next === was) return;
+  s.full = next;
+  storeSave(); /* plant:store-room-save */
   tellStore();
 }
 /* NO SEAT: the renewal refused for want of a free seat ("full"), or answered with no certificate on a computer that has synced (it
@@ -11916,7 +11919,7 @@ function storeView() {
     ask, askNow: ask && !storeNotNow.has(who), again: storeAgainTimer ? storeAgainAt : 0, /* plant:store-view-again */
     looking: storeLooking > 0, ever: s.told === true, /* plant:store-view-looking */
     anew: storeAnew, /* plant:store-view-anew */
-    seatless: !!held && (!held.cert || held.said === "full"), full: storeFullNow }); /* plant:store-view-room */
+    seatless: !!held && (!held.cert || held.said === "full"), full: s.full === true }); /* plant:store-view-room */
 }
 function tellStore() {
   const win = theWindow;
@@ -12121,8 +12124,8 @@ async function storeAnswerNow(choice) {
   s.who = who; s.last = who; s.ask = ""; /* plant:answer-mine-who */
   s.keys = ""; s.leave = ""; s.owed = ""; s.made = ""; /* plant:answer-mine-keys */
   s.lost = "";
-  s.until = 0; delete s.off; s.said = ""; delete s.told;
-  storeLeaveHere = null; storeOwedHere = ""; storeNow = null; storeSay = ""; storeFresh = false; storeFullNow = false; storeAnew = false;
+  s.until = 0; delete s.off; s.said = ""; delete s.told; s.full = false;
+  storeLeaveHere = null; storeOwedHere = ""; storeNow = null; storeSay = ""; storeFresh = false; storeAnew = false;
   storeNotNow.delete(who);
   if (own) { if (own.off) s.off = true; s.owed = own.owed; storeOwedHere = own.here; }
   if (!storeAccess || storeAccess.who !== who) { storeAccess = null; s.org = false; }

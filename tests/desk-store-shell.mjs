@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 216;
+const EXPECTED = 218;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -162,6 +162,7 @@ function worldOf(o) {
       return json(200, { ok: true });
     }
     if (u.startsWith("https://etiuda.dev/relay/v1/")) {
+      if (w.blobGate && /\/blobs\b/.test(u)) await w.blobGate;
       w.relay.push(body);
       w.relayAt.push(method + " " + u);
       if (w.relayDown) return json(503, { error: "unavailable" });
@@ -2108,6 +2109,102 @@ async function roomWireScene(src) {
   const ok = on === "on" && tried >= 1 && full === "full" && after === "on";
   return { ok, detail: brief({ on, tried, full, after }) };
 }
+/* (grr) A full store survives a restart (store.json), is cleared by a taken write, a sign out or an account change, is never shown to
+   another account, and an unreadable or corrupt store.json at start does not claim full and does not crash. */
+async function roomRestartScene(src) {
+  const r = await renewScene(src, { limits: { teamMax: 64 * 1024 } }), T = r.shell.T, w = r.world, UD = r.shell.UD;
+  const settle = async sy => { if (!sy) return; sy.merge(); const c = sy.channel(); if (c) { c.kick(); await c.idle(); } };
+  await settle(T.get().storeSyncing);
+  T.patchDesk(JSON.stringify({ eAgent: "a".repeat(160 * 1024) }));
+  await settle(T.get().storeSyncing);
+  const firstFull = T.storeView().line;
+
+  let releaseBlob = null;
+  w.blobGate = new Promise(a => { releaseBlob = a; });
+  const r2 = boot(src, { ud: UD, world: w, lab: labOf() });
+  await r2.T.signinRenewNow();
+  if (r2.T.get().storeFlight) await r2.T.get().storeFlight;
+  const afterRestart = r2.T.storeView().line;
+
+  w.blobGate = null;
+  releaseBlob();
+  r2.T.patchDesk(JSON.stringify({ eAgent: "Ada" }));
+  await settle(r2.T.get().storeSyncing);
+  const afterTaken = r2.T.storeView().line;
+  const r3 = boot(src, { ud: UD, world: w, lab: labOf() });
+  await r3.T.signinRenewNow();
+  if (r3.T.get().storeFlight) await r3.T.get().storeFlight;
+  const afterTakenRestart = r3.T.storeView().line;
+
+  r3.T.patchDesk(JSON.stringify({ eAgent: "b".repeat(160 * 1024) }));
+  await settle(r3.T.get().storeSyncing);
+  const fullAgain = r3.T.storeView().line;
+  const heldA = r3.T.signinState().held;
+  r3.T.signinOutNow();
+  const outCleared = (storeJson(UD) || {}).full !== true;
+  r3.T.signinState().held = heldA;
+  await r3.T.storeTurn();
+  const afterSignout = r3.T.storeView().line;
+
+  r3.T.patchDesk(JSON.stringify({ eAgent: "c".repeat(160 * 1024) }));
+  await settle(r3.T.get().storeSyncing);
+  const fullForOther = r3.T.storeView().line;
+  seatAnother(r3.T, w, heldA);
+  await r3.T.storeTurn();
+  const otherHeld = r3.T.storeView().line;
+  await r3.T.storeAnswerNow("mine");
+  if (r3.T.get().storeFlight) await r3.T.get().storeFlight;
+  const afterMine = r3.T.storeView().line;
+  const mineCleared = (storeJson(UD) || {}).full !== true;
+
+  /* Unreadable store.json at start and corrupt store.json at start: neither crashes and neither claims full. */
+  const fsWrap = real => new Proxy(real, {
+    get(target, prop) {
+      if (prop === "readFileSync") return (f, ...a) => {
+        if (/[\\/]store\.json$/.test(String(f))) throw Object.assign(new Error("denied"), { code: "EACCES" });
+        return target.readFileSync(f, ...a);
+      };
+      const v = target[prop];
+      return typeof v === "function" ? v.bind(target) : v;
+    }
+  });
+  const unreadable = boot(src, { world: worldOf(), held: true, lab: labOf(), fsWrap });
+  unreadable.T.branchIdentity(true);
+  await unreadable.T.signinRenewNow();
+  if (unreadable.T.get().storeFlight) await unreadable.T.get().storeFlight;
+  const unreadableLine = unreadable.T.storeView().line;
+
+  const corruptUd = fs.mkdtempSync(path.join(WORK, "ud-corrupt-"));
+  fs.writeFileSync(path.join(corruptUd, "store.json"), "{not-json");
+  const corrupt = boot(src, { ud: corruptUd, world: worldOf(), held: true, lab: labOf() });
+  corrupt.T.branchIdentity(true);
+  await corrupt.T.signinRenewNow();
+  if (corrupt.T.get().storeFlight) await corrupt.T.get().storeFlight;
+  const corruptLine = corrupt.T.storeView().line;
+
+  /* Start from my account also clears full, and mismatched who in store.json never inherits full. */
+  const wStart = worldOf({ limits: { teamMax: 64 * 1024 } });
+  const rStart = boot(src, { world: wStart, held: true, store: { who: "b".repeat(32), last: "b".repeat(32), full: true }, lab: labOf() });
+  rStart.T.branchIdentity(true);
+  await rStart.T.signinRenewNow();
+  const startHeld = rStart.T.storeView().line;
+  await rStart.T.storeAnswerNow("start");
+  if (rStart.T.get().storeFlight) await rStart.T.get().storeFlight;
+  const afterStart = rStart.T.storeView().line;
+
+  const mismatched = boot(src, { world: worldOf(), held: true, store: { full: true }, lab: labOf() });
+  mismatched.T.branchIdentity(true);
+  await mismatched.T.signinRenewNow();
+  if (mismatched.T.get().storeFlight) await mismatched.T.get().storeFlight;
+  const mismatchedLine = mismatched.T.storeView().line;
+
+  const ok = firstFull === "full" && afterRestart === "full" && afterTaken === "on" && afterTakenRestart === "on"
+    && fullAgain === "full" && outCleared && afterSignout === "on"
+    && fullForOther === "full" && otherHeld === "ask" && afterMine === "on" && mineCleared
+    && unreadableLine === "on" && corruptLine === "on"
+    && startHeld === "ask" && afterStart === "on" && mismatchedLine === "on";
+  return { ok, detail: brief({ firstFull, afterRestart, afterTaken, afterTakenRestart, fullAgain, outCleared, afterSignout, fullForOther, otherHeld, afterMine, mineCleared, unreadableLine, corruptLine, startHeld, afterStart, mismatchedLine }) };
+}
 async function openSetAsideScene(src) {
   const r = await renewScene(src), T = r.shell.T, w = r.world, UD = r.shell.UD;
   const e = { senderFrame: { parent: null, url: "file:///desk/engine/etiuda.html" } };
@@ -2704,6 +2801,7 @@ const LEGS = [
   ["gk", conflictOpenedScene, "a conflict's notice ends once the page tells the shell it showed the line, on the engine's own channel alone: the kept version and its copy stay, the mark is kept in sync.json, and a version kept after it is a new notice"],
   ["gs", switchStopScene, "This computer and Everywhere stop the store's sync at once, the relay unreached, not at the next look"],
   ["gr", roomWireScene, "a write the store's relay refuses for its room turns the row full, and the next write it takes turns it on"],
+  ["grr", roomRestartScene, "a full store survives a restart, is cleared by a write taken, a sign out or an account change, is never shown to another account, and an unreadable or corrupt store.json does not claim full or crash"],
   ["jp", pristineScene, "the store's sync names the shipped sample untouched in the person's folder by its bytes, and a copy with one byte changed as the person's own"],
   ["rv", removalVolumeScene, "a catalog another computer removed, the catalog folder on another volume than the profile: copied aside and unlinked; an unlink that fails leaves it where it was, the copy gone, the removal not taken as applied"],
   ["k7", keepFirstScene, "a merge's copy is kept before what it copies is replaced: a copy that cannot be kept leaves the catalog and the layer as they were, answered not applied, a key with no copy put in place; a catalog write failing after its copy is kept leaves the file as it was; both succeeding, the later is in place and the earlier kept"],
@@ -2787,7 +2885,7 @@ const PLANTS = [
     "  if (folder) signinFolderTake(io, folderRes || (signinTransient(folderFirst) ? folderFirst : { status: 0 }), p.id, now()); /* plant:folder-take-renew */\n  signinTrace(io, p.id, \"refresh\", \"ok\", { detail: String(JSON.parse(Buffer.from(folderRes.bytes).toString()).access_token) });\n"), "the token traced past the trace's own hiding"],
   ["e", swap("  if (!(d.relay === undefined || DOOR_RELAYS.installed.concat(DOOR_RELAYS.unpackaged).indexOf(d.relay) >= 0)) return null; /* plant:lab-relay */\n", ""), "a lab may name any relay"],
   ["g", swap("  if (sync) sync.turn(look); /* plant:store-sync-turn */\n", ""), "the look's answer does not turn the sync"],
-  ["d4j", swap("seatless: !!held && (!held.cert || held.said === \"full\"), full: storeFullNow }); /* plant:store-view-room */", "seatless: false, full: false }); /* plant:store-view-room */"), "the row is told neither the room nor the seat"],
+  ["d4j", swap("seatless: !!held && (!held.cert || held.said === \"full\"), full: s.full === true }); /* plant:store-view-room */", "seatless: false, full: false }); /* plant:store-view-room */"), "the row is told neither the room nor the seat"],
   ["d4k", swap("  if (!res || res.status !== 400) return \"owed\"; /* plant:store-end-never */", "  if (true) return \"owed\"; /* plant:store-end-never */"), "a 400 kept owed for ever"],
   ["d4k", swap("  signinTrace({ trace: SIGNIN_TRACE_ASKED ? line => console.error(line) : null }, held ? held.provider : \"\", \"store/end\", \"refused\", signinTraceSaid(res, []));\n", ""), "a 400 ends the retry with no line in the trace"],
   ["d4l", swap("  if (!res || res.status !== 400) return \"owed\"; /* plant:store-end-never */", "  if (!res || res.status >= 500) return \"owed\"; /* plant:store-end-never */"), "a 403 ends the retry as a 400 does"],
@@ -2817,6 +2915,7 @@ const PLANTS = [
   ["gk", swap("kept.filter(k => !k.opened).length : 0 }; } /* plant:store-kept-opened */", "kept.length : 0 }; } /* plant:store-kept-opened */"), "the row counts every version kept, opened or not, so the notice never ends"],
   ["gs", swap("  storeSyncStop(); /* plant:store-set-stop */\n", ""), "the switch leaves the sync running"],
   ["gr", swap("      room: storeRoom, /* plant:store-room */\n", ""), "the store's channel tells the row nothing"],
+  ["grr", swap("  storeSave(); /* plant:store-room-save */\n", ""), "the store's room is not kept in store.json, so a restart forgets it"],
   ["f7", swap("    if (!run.after) signinBusy = null; /* plant:folder-busy */", "    signinBusy = null; /* plant:folder-busy */"), "the sign-in ends before its folder step, so Cancel cannot reach it"],
   ["f7q", swap("{ if (typeof run.loop.cancel === \"function\") run.loop.cancel(); else run.loop.close(); } /* plant:stop-cancel */", "run.loop.close(); /* plant:stop-cancel */"), "Cancel closes nothing once the code is back"],
   ["f8", swap("  if (storeOn() && signinFolderApart(p.id)) run.landMs = SIGNIN_FOLDER_LAND_MS; /* plant:folder-land-ms */", ""), "the plain landing's cap cuts the folder step"],

@@ -78,8 +78,7 @@ function driveWhy(res) {
   if (res.status === 429 || res.status >= 500 || reasons.some(r => r === "rateLimitExceeded" || r === "userRateLimitExceeded" || r === "backendError")) return "offline"; /* plant:drive-transient */
   if (reasons.some(r => r === "insufficientPermissions" || r === "insufficientScopes") || res.status === 401) return "consent";
   if (reasons.some(r => r === "domainPolicy" || r === "accessNotConfigured" || r === "dailyLimitExceededUnreg" || r === "notAccessibleForUser")) return "no-drive";
-  if (res.status === 403) return "no-drive";
-  return "refused";
+  return "refused"; /* plant:drive-other-403 */
 }
 function driveFolder(o) {
   const auth = () => ({ authorization: "Bearer " + o.token() });
