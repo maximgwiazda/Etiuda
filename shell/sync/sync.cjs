@@ -211,7 +211,8 @@ function mergeOnce(o) {
      store (state.at), so a later write on a computer that joined meanwhile stands over it. A state from before the flag judges by another
      computer's sync file holding items. */
   const st = o.state || {}, before = plain(st.before) ? st.before : null, beforeHeld = Array.isArray(st.beforeHeld) ? st.beforeHeld.map(String) : [];
-  const first = !Object.keys(ledger).length;
+  /* The first merge, or one after a first whose desk refused an item (state.unfinished, unapplied): it judges as the first would have. */
+  const first = !Object.keys(ledger).length || st.unfinished === true; /* plant:first-unfinished */
   /* This computer's own place as a fresh state found it (o.own, its sync file; createStoreSync merge): what it wrote there under an earlier
      state is the store's like any computer's, so a fresh state joins it and takes it in. */
   const own = o.own && plain(o.own.items) ? o.own.items : {};
@@ -241,7 +242,7 @@ function mergeOnce(o) {
     const lateHeld = !was && !joining && heldBy(joinHeld, item);
     /* Held when its account was seated and removed since, at its first merge: the person's removal, made over no other computer's entry,
        so one standing elsewhere meets it as a conflict and is kept. */
-    if (!was && first && before && h === null && has(before, item)) {
+    if (!was && first && before && h === null && has(before, item) && untouched.indexOf(item) < 0) { /* an untouched sample is judged below */
       const there = (o.theirs || []).filter(x => x.by !== me && x.items[item]).map(x => x.items[item]);
       ledger[item] = { h: null, by: me, t: Math.max(now, ...there.map(e => e.t + 1)), seen: {} }; /* plant:join-removed */
       continue;
@@ -369,6 +370,12 @@ function unapplied(prev, r, failed, local, me) {
   /* A removal not put in place is not taken: the item stands here as it stood. */
   const unseen = (r.state.unseen || []).filter(i => !under(i) || (prev && Array.isArray(prev.unseen) && prev.unseen.indexOf(i) >= 0));
   if (unseen.length) rest.unseen = unseen;
+  /* A first merge not finished: what it knew of joining stays (mergeOnce returns none of it, the merge being taken as done), so the item
+     the desk refused is judged at the next merge as this one judged it, and not as a write made now. */
+  if (prev && (!Object.keys(prev.ledger || {}).length || prev.unfinished === true)) {
+    rest.unfinished = true;
+    for (const k of ["join", "before", "beforeHeld", "at"]) if (prev[k] !== undefined) rest[k] = prev[k];
+  }
   return { state: Object.assign({ ledger, kept, untouched: still }, rest), patch: r.patch, copies: r.copies, own: placeOf(me, ledger, after), after, untouched: r.untouched };
 }
 
