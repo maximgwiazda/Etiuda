@@ -12844,17 +12844,24 @@ const deskReorder = deskAi.createReorder({ config: deskAiSendConfig, fetch: desk
 /* A REWORD AT A PRESS (shell/desk-ai.cjs createReword), from the picker's foot or a card's Reword, under deskAiSendConfig as
    the order is; where only the policy's facts are stale, the press waits for the look briefly rather than send under them. */
 const REWORD_POLICY_WAIT_MS = 2000;
-/* THE PERSON'S OWN SWITCH FOR REWORDING: on unless the person turned it off for themselves, whatever the organisation's model or
-   machine policy says. Kept in desk-reword.json beside the desk's other settings, on this computer alone and never shared with the
-   organisation; read at each use so a press, an opening and the page's question all see the one answer. It reads nothing of
-   deskAiConfig and is read by nothing that orders results. Off, Reword and "Your own words?" are absent and no reword request is made. */
+/* THE PERSON'S OWN SWITCH FOR REWORDING, fail closed: on only where the desk has never been told otherwise (no file: ENOENT) or the file
+   says on in its own kind and format. Once a person has turned it off, nothing short of their turning it on can make the desk send their
+   words: a file that cannot be read for any other reason (busy, no access, a torn write), is not this desk's own, or says nothing about
+   the choice reads as off, and so does a switch whose write did not land (rewordOffNow). Kept in desk-reword.json beside the desk's other
+   settings, written as they are (a temporary file and a rename, writeReplacing), on this computer alone and never shared with the
+   organisation; read at each use so a press, an opening and the page's question all see the one answer. It reads nothing of deskAiConfig
+   and is read by nothing that orders results. Off, Reword and "Your own words?" are absent and no reword request is made. */
 const DESK_REWORD_FILE = "desk-reword.json";
 const DESK_REWORD_KIND = "etiuda-desk-reword";
+let rewordOffNow = false;
 function rewordWanted() {
+  if (rewordOffNow) return false;
+  let text = "";
+  try { text = fs.readFileSync(deskAiPath(DESK_REWORD_FILE), "utf8"); } catch (e) { return !!e && e.code === "ENOENT"; } /* plant:reword-read-closed */
   try {
-    const doc = JSON.parse(fs.readFileSync(deskAiPath(DESK_REWORD_FILE), "utf8"));
-    return !(doc && typeof doc === "object" && doc.kind === DESK_REWORD_KIND && doc.format === 1 && doc.off === true);
-  } catch { return true; }
+    const doc = JSON.parse(text);
+    return !!doc && typeof doc === "object" && doc.kind === DESK_REWORD_KIND && doc.format === 1 && doc.off === false;
+  } catch { return false; } /* plant:reword-parse-closed */
 }
 async function deskRewordConfig() {
   if (!rewordWanted()) return null; /* plant:reword-switch-send */
@@ -12920,7 +12927,9 @@ ipcMain.handle("etiuda:desk-reword", (e, a) => (fromEngine(e) && rewordWanted() 
 /* The person's own switch, set from Settings: stored as a file of its own; a result already made for the picker's Enter is let go, and a press from a window opened before refuses at its own door. */
 ipcMain.on("etiuda:reword-set", (e, on) => {
   if (!fromEngine(e)) return;
-  try { writeReplacing(deskAiPath(DESK_REWORD_FILE), JSON.stringify({ format: 1, kind: DESK_REWORD_KIND, off: !on }) + "\n"); } catch { return; }
+  const wasOff = rewordOffNow;
+  rewordOffNow = !on;
+  try { writeReplacing(deskAiPath(DESK_REWORD_FILE), JSON.stringify({ format: 1, kind: DESK_REWORD_KIND, off: !on }) + "\n"); } catch { if (on) rewordOffNow = wasOff; }
   if (!on) { pickReworded = ""; pickRewordN++; }
 });
 /* An agent's key, click, wheel or scroll in each window, counted, so an order that comes after one is dropped. */

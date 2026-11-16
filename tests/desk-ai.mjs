@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "shell");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 95;
+const EXPECTED = 99;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The shell-to-page event that carries each re-order's outcome; the page-to-shell sync request "etiuda:ai-state" is another. */
 const RANKING_CH = "etiuda:ai-ranking";
@@ -1541,8 +1541,9 @@ await block(async () => {
 async function rewordSwitchDrive(o) {
   const opts = o || {};
   const fetch = fetchOf(() => ({ status: 200, text: chatSaying("Sorry for the late reply.") }));
-  const ctx = loadMain({ fetch, mainSrc: opts.mainSrc, answer: (op) => op === "open" ? { ai: true, words: {}, look: {} } : null });
+  const ctx = loadMain({ fetch, mainSrc: opts.mainSrc, fs: opts.fs, answer: (op) => op === "open" ? { ai: true, words: {}, look: {} } : null });
   ctx.T.setConfig(() => RW_CONFIG);
+  if (opts.file !== undefined) fs.writeFileSync(path.join(ctx.electron.app.getPath("userData"), "desk-reword.json"), opts.file);
   const set = on => ctx.on["etiuda:reword-set"] ? ctx.on["etiuda:reword-set"](ENGINE, on) : (() => { throw new Error("no etiuda:reword-set channel"); })();
   if (opts.offFirst) set(false);
   const pick = await openOnSelection(ctx, "parcel", true);
@@ -1600,6 +1601,44 @@ await block(async () => {
     }
     const lifted = await rewordSwitchDrive({ offFirst: true, mainSrc: src });
     check(src !== MAIN_SRC && "reword" in lifted.open && lifted.state.reword !== "", "dw9q with the offer and the state not reading the switch, the opening offers the foot and ai-state names a host while it is off and dw9 fails");
+  }
+});
+
+/* dw10: THE SWITCH READS FAIL CLOSED. Once a person has turned rewording off, nothing short of their turning it on can make the desk send
+   their words: a file the desk cannot read for any reason but its never having been written, one that is not its own kind or format, or a
+   write that did not land when they turned it off, all behave as off: the offer absent, both doors refusing, the stand-in service recording
+   nothing. Only a file never written (ENOENT) is on, as the desk is for a person who never touched the switch. */
+const BROKEN = name => err => new Proxy(fs, { get: (t, k) => k === "readFileSync" ? (f, ...a) => { if (/desk-reword\.json$/.test(String(f))) { const e = new Error(err); e.code = err; throw e; } return t.readFileSync(f, ...a); } : t[k] });
+const shut = d => d.rewords.length === 0 && !("reword" in d.open) && d.fromPick && d.fromPick.ok === false && d.fromDesk.ok === false
+  && d.state.reword === "" && d.state.rewordOn === false && d.state.org === true;
+await block(async () => {
+  const OWN = { format: 1, kind: "etiuda-desk-reword" };
+  const files = { corrupt: "{not json", empty: "", "another kind": JSON.stringify(Object.assign({}, OWN, { kind: "other", off: false })),
+    "another format": JSON.stringify(Object.assign({}, OWN, { format: 2, off: false })), "no choice in it": JSON.stringify(OWN), "not an object": "[]" };
+  const shutFiles = [];
+  for (const [name, file] of Object.entries(files)) { const d = await rewordSwitchDrive({ file }); if (!shut(d)) shutFiles.push(name); }
+  check(shutFiles.length === 0,
+    "dw10 a corrupt file, an empty one, one of another kind or format, one with no choice in it and one that is not an object all behave as off: the offer absent, both doors refusing, nothing sent; failing: " + JSON.stringify(shutFiles));
+  const shutReads = [];
+  for (const code of ["EBUSY", "EACCES", "EIO", "EPERM"]) { const d = await rewordSwitchDrive({ file: JSON.stringify(Object.assign({}, OWN, { off: false })), fs: BROKEN()(code) }); if (!shut(d)) shutReads.push(code); }
+  check(shutReads.length === 0,
+    "dw10b a read error other than ENOENT, even over a file that says on, behaves as off (offer absent, both doors refusing, nothing sent); failing: " + JSON.stringify(shutReads));
+  const enoent = await rewordSwitchDrive({ fs: BROKEN()("ENOENT") }), never = await rewordSwitchDrive({});
+  const FAILING_WRITE = new Proxy(fs, { get: (t, k) => k === "writeFileSync" ? (f, ...a) => { if (/desk-reword\.json/.test(String(f))) { const e = new Error("EACCES"); e.code = "EACCES"; throw e; } return t.writeFileSync(f, ...a); } : t[k] });
+  const unwritten = await rewordSwitchDrive({ fs: FAILING_WRITE, offFirst: true });
+  check(enoent.rewords.length === 2 && enoent.open.reword && enoent.state.rewordOn === true && never.rewords.length === 2 && never.state.rewordOn === true && shut(unwritten),
+    "dw10c ENOENT alone reads as on (a file never written, or the stand-in's ENOENT), and a switch turned off whose write did not land is off all the same: "
+    + JSON.stringify({ enoent: enoent.rewords.length, never: never.rewords.length, unwritten: { rewords: unwritten.rewords.length, offered: "reword" in unwritten.open, state: unwritten.state } }));
+  if (PLANTS_OFF) skipPlant("dw10p the old fail-open read put back (ETIUDA_PLANTS=off)");
+  else {
+    let src = MAIN_SRC;
+    for (const k of ["reword-read-closed", "reword-parse-closed"]) {
+      const line = src.split("\n").filter(l => l.indexOf("plant:" + k) >= 0);
+      if (line.length !== 1) throw new Error("plant mark " + k + " found " + line.length + " times");
+      src = src.replace(line[0], line[0].replace(/return [^;]*;(?= *})/, "return true;"));
+    }
+    const a = await rewordSwitchDrive({ file: "{not json", mainSrc: src }), b = await rewordSwitchDrive({ file: JSON.stringify(Object.assign({}, OWN, { off: true })), fs: BROKEN()("EBUSY"), mainSrc: src });
+    check(src !== MAIN_SRC && a.rewords.length > 0 && b.rewords.length > 0, "dw10p with the old fail-open read put back (any error reads as on), a corrupt file and a busy file send and dw10 and dw10b fail: " + JSON.stringify([a.rewords.length, b.rewords.length]));
   }
 });
 
