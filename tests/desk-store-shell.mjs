@@ -116,7 +116,17 @@ function worldOf(o) {
     if (u === "https://oauth2.googleapis.com/token") {
       w.forms.push(body);
       /* Google's answer names the scopes granted: the folder's only where the person left its line ticked. */
-      const c = w.codes[new URLSearchParams(body).get("code")], now = Date.now();
+      const form = new URLSearchParams(body), now = Date.now();
+      /* A refresh, as Google's token endpoint answers one (Using OAuth 2.0 to Access Google APIs, "Refreshing an access token"): 200 with
+         a new access token, its expiry, the scopes the grant holds, token_type Bearer and, the grant holding openid, a new ID token for the
+         same account without a nonce; no new refresh token. The scopes are the sign-in's ("openid"; the folder's too once w.googleFolder). */
+      if (form.get("grant_type") === "refresh_token") {
+        if (w.tokenDown) return json(w.tokenDown, { error: "temporarily_unavailable" });
+        if (form.get("refresh_token") !== "rt-google") return json(400, { error: "invalid_grant" });
+        return json(200, { access_token: w.googleFolder ? w.access : "stand-in-google-token-not-the-folder", expires_in: 3599, scope: w.googleFolder ? "openid " + DRIVE_SCOPE : "openid",
+          token_type: "Bearer", id_token: jwt({ iss: "https://accounts.google.com", aud: G_CLIENT, sub: SUB, exp: Math.floor(now / 1000) + 3600 }) });
+      }
+      const c = w.codes[form.get("code")];
       if (!c) return json(400, { error: "invalid_grant" });
       return json(200, Object.assign({ token_type: "Bearer", id_token: jwt({ iss: "https://accounts.google.com", aud: G_CLIENT, sub: c.sub || SUB, nonce: c.nonce, exp: Math.floor(now / 1000) + 3600 }),
         scope: c.folder ? "openid " + DRIVE_SCOPE : "openid", access_token: c.folder ? c.access || w.access : "stand-in-google-token-not-the-folder", expires_in: 3600 }, c.noRefresh ? {} : { refresh_token: "rt-google" }));
