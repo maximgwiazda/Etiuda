@@ -291,7 +291,7 @@ function createSync(w, c) {
 }
 /* storeSyncSoon: a change on the desk merged a moment later, unless another account's answer is owed. */
 function mergeSoon(w, c) {
-  if (!c.sync || held(c)) return;
+  if (!c.sync || held(c) || !c.seat) return; /* model-plant:store-seated-merge */
   w.now += 10;
   c.sync.merge();
 }

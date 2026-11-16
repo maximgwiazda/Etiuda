@@ -11067,7 +11067,7 @@ function storeMine() {
   if (storeHeld()) {
     if (s.keys || s.leave || s.ask !== who || s.last !== who) { s.keys = ""; s.leave = ""; s.ask = who; s.last = who; storeSave(); } /* plant:store-ask */
     storeLeaveHere = null; storeNow = null; storeSay = ""; storeFresh = false; storeAnew = false;
-    storeSyncStop();
+    storeSyncStop(); storeSyncCalm();
     storeAgainStop();
     return false;
   }
@@ -11077,7 +11077,7 @@ function storeMine() {
   s.who = who;
   storeLeaveHere = null; storeOwedHere = ""; storeNow = null; storeSay = ""; storeFresh = false; storeAnew = false;
   if (storeAccess && storeAccess.who !== who) storeAccess = null;
-  storeSyncStop();
+  storeSyncStop(); storeSyncCalm();
   storeAgainStop();
   storeSave();
   /* What the desk held when this account took it, so a change after it is the person's own (sync.cjs seated). */
@@ -11131,7 +11131,7 @@ function storeUngiven() { return storeState().org === true ? "consent" : "ungive
    for their return. */
 function storeForget() {
   storeAccess = null; storeNow = null; storeSay = ""; storeFresh = false; storeAnew = false;
-  storeSyncStop();
+  storeSyncStop(); storeSyncCalm(); /* plant:forget-calm */
   storeAgainStop(); /* plant:store-again-out */
   const s = storeState();
   if (s.keys || s.leave || storeLeaveHere) { s.keys = ""; s.leave = ""; storeLeaveHere = null; storeSave(); } /* plant:signout-store-keys */
@@ -11422,6 +11422,7 @@ async function storeSetNow(what) {
   if (what !== "on" && what !== "here" && what !== "everywhere") return storeView();
   /* A look still out when the switch moves is no longer this desk's (storeLookNow ours), and on starts a look of its own. */
   storeSwitchNo++;
+  storeSyncCalm();
   const s = storeState();
   if (what === "on") {
     if (storeLeaveKeys()) storeLeaveOwe(null);
@@ -11885,14 +11886,18 @@ function storeSyncFile(name, text) {
     return false;
   }
 }
-/* A change on this desk, merged into its place a moment later, so a burst of writes is one merge. */
+/* A change on this desk, merged into its place a moment later, so a burst of writes is one merge; none while no account is seated or
+   another's answer is owed, asked again when the moment comes (storeSyncCalm clears a waiting one at a sign out and an account's turn). */
+const storeSyncMay = () => !!storeSyncing && !!storeWho(signinState().held); /* plant:store-seated-merge */
 function storeSyncSoon() {
   if (!storeSyncing || storeHeld()) return; /* plant:store-held-merge */
+  if (!storeSyncMay()) return;
   clearTimeout(storeSyncTimer);
-  storeSyncTimer = setTimeout(() => { storeSyncTimer = null; try { storeSyncing.merge(); } catch (e) { console.error("etiuda: the store's sync - " + e.message); } }, STORE_SYNC_MS);
+  storeSyncTimer = setTimeout(() => { storeSyncTimer = null; if (!storeSyncMay()) return; try { storeSyncing.merge(); } catch (e) { console.error("etiuda: the store's sync - " + e.message); } }, STORE_SYNC_MS);
   if (storeSyncTimer.unref) storeSyncTimer.unref();
 }
 function storeSyncStop() { if (storeSyncing) storeSyncing.stop(); }
+function storeSyncCalm() { clearTimeout(storeSyncTimer); storeSyncTimer = null; }
 /* The sync state begun again, empty, for a computer joining a store as new; false where it could not be written, the old state standing. */
 function storeSyncFresh() {
   clearTimeout(storeSyncTimer); storeSyncTimer = null;
