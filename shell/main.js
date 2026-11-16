@@ -10742,8 +10742,9 @@ function signinCertOk(c, deskKey) {
     .concat(c.deskOnly === true ? ["desk-only"] : []).map(String).join("\n"), "utf8"); /* plant:cert-desk-only-bytes */
   return signinVerified(d.key.pub, bytes, c.sig.value); /* plant:cert-sig */
 }
-/* A certificate issued later than now, past the same five minutes the ID token and the relay's door allow (certWhy "future"),
-   stands nowhere yet: no door, no seat, no "held". */
+/* A certificate issued later than now, past the same five minutes the ID token and the relay's door allow (certWhy "future"), stands
+   nowhere on this desk yet: no door asked, offered or knocked, no seat.json, and Account reads it as lapsed. A relay session still
+   carries it (signinSeatCert), and the relay judges it by its own clock. */
 function signinCertEarly(cert, now) {
   return !!cert && Number.isSafeInteger(cert.issued) && cert.issued > now + SIGNIN_SKEW_MS; /* plant:cert-early */
 }
