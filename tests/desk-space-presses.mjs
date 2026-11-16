@@ -17,7 +17,7 @@ const E = require("./engine.js");
 const puppeteer = require("puppeteer-core");
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 43;
+const EXPECTED = 45;
 let fails = 0, checks = 0, skipped = 0;
 
 function check(ok, what, detail) {
@@ -30,6 +30,10 @@ function notRun(what) {
   console.log("  NOT RUN " + what);
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const ringNow = page => page.evaluate(() => {
+  const ae = document.activeElement;
+  return !!(ae && ae !== document.body && ae !== document.documentElement && ae.matches(":focus-visible"));
+});
 const fileUrl = p => "file:///" + p.replace(/\\/g, "/");
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-space-presses-"));
@@ -1153,6 +1157,7 @@ async function runSuite(browser, enginePath, opts = {}) {
         id: document.activeElement?.id || "",
         fv: !!document.activeElement?.matches(":focus-visible")
       }));
+      const fvPtr = await ringNow(page);
       await page.keyboard.press("Space");
       await sleep(100);
       const ptrSpace = await page.evaluate(() => ({
@@ -1164,6 +1169,7 @@ async function runSuite(browser, enginePath, opts = {}) {
 
       const beforeTab = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
       const hitTab = await tabTo(page, "#theme");
+      const fvTab = await ringNow(page);
       await page.keyboard.press("Space");
       await sleep(80);
       const tabSpace = await page.evaluate(() => ({
@@ -1175,9 +1181,10 @@ async function runSuite(browser, enginePath, opts = {}) {
 
       rec(
         afterClick.id === "theme" && !afterClick.fv && ptrSpace.lanes && ptrSpace.th === afterClick.th &&
-          hitTab && tabSpace.th !== beforeTab && !tabSpace.lanes,
-        "pointer vs tab (native button): #theme clicked+Space switches lanes without pressing; Tab+Space toggles theme",
-        { afterClick, ptrSpace, beforeTab, hitTab, tabSpace }
+          hitTab && tabSpace.th !== beforeTab && !tabSpace.lanes &&
+          fvPtr === (ptrSpace.th !== afterClick.th) && fvTab === (tabSpace.th !== beforeTab) && fvTab && !fvPtr,
+        "pointer vs tab (native button): #theme clicked+Space switches lanes without pressing; Tab+Space toggles theme; pressed iff ringed before the key",
+        { afterClick, fvPtr, ptrSpace, beforeTab, hitTab, fvTab, tabSpace }
       );
     }
 
@@ -1195,6 +1202,7 @@ async function runSuite(browser, enginePath, opts = {}) {
         tid: document.activeElement?.closest(".tab")?.dataset?.tid || "",
         fv: !!document.activeElement?.matches(":focus-visible")
       }));
+      const fvPtr = await ringNow(page);
       await page.keyboard.press("Space");
       await sleep(100);
       const ptrSpace = await page.evaluate(() => ({
@@ -1205,6 +1213,7 @@ async function runSuite(browser, enginePath, opts = {}) {
 
       const hitTab = await tabTo(page, ".tab:not(.on) .tab-label");
       const tabTid = await page.evaluate(() => document.activeElement?.closest(".tab")?.dataset?.tid || "");
+      const fvTab = await ringNow(page);
       await page.keyboard.press("Space");
       await sleep(80);
       const tabSpace = await page.evaluate(() => ({
@@ -1216,9 +1225,10 @@ async function runSuite(browser, enginePath, opts = {}) {
       rec(
         afterClick.tid === clickTid && afterClick.cls.includes("tab-label") && !afterClick.fv &&
           ptrSpace.lanes && ptrSpace.activeTid === clickTid &&
-          hitTab && tabSpace.activeTid === tabTid && !tabSpace.lanes,
-        "pointer vs tab (tab): .tab-label clicked+Space switches lanes; Tab+Space switches tab",
-        { clickTid, afterClick, ptrSpace, hitTab, tabTid, tabSpace }
+          hitTab && tabSpace.activeTid === tabTid && !tabSpace.lanes &&
+          fvTab && !fvPtr && fvTab === (tabSpace.activeTid === tabTid),
+        "pointer vs tab (tab): .tab-label clicked+Space switches lanes; Tab+Space switches tab; pressed iff ringed before the key",
+        { clickTid, afterClick, fvPtr, ptrSpace, hitTab, tabTid, fvTab, tabSpace }
       );
     }
 
@@ -1231,6 +1241,7 @@ async function runSuite(browser, enginePath, opts = {}) {
         id: document.activeElement?.id || "",
         fv: !!document.activeElement?.matches(":focus-visible")
       }));
+      const fvPtr = await ringNow(page);
       await page.keyboard.press("Space");
       await sleep(100);
       const ptrSpace = await page.evaluate(() => ({
@@ -1241,6 +1252,7 @@ async function runSuite(browser, enginePath, opts = {}) {
 
       const beforeTab = ptrSpace.pressed;
       const hitTab = await tabTo(page, "#railPinBtn");
+      const fvTab = await ringNow(page);
       await page.keyboard.press("Space");
       await sleep(80);
       const tabSpace = await page.evaluate(() => ({
@@ -1251,9 +1263,10 @@ async function runSuite(browser, enginePath, opts = {}) {
 
       rec(
         afterClick.id === "railPinBtn" && !afterClick.fv && ptrSpace.lanes && ptrSpace.pressed === afterClick.pressed &&
-          hitTab && tabSpace.pressed !== beforeTab && !tabSpace.lanes,
-        "pointer vs tab (switch): #railPinBtn clicked+Space switches lanes without toggling; Tab+Space toggles pin",
-        { afterClick, ptrSpace, beforeTab, hitTab, tabSpace }
+          hitTab && tabSpace.pressed !== beforeTab && !tabSpace.lanes &&
+          fvPtr === (ptrSpace.pressed !== afterClick.pressed) && fvTab === (tabSpace.pressed !== beforeTab) && fvTab && !fvPtr,
+        "pointer vs tab (switch): #railPinBtn clicked+Space switches lanes without toggling; Tab+Space toggles pin; pressed iff ringed before the key",
+        { afterClick, fvPtr, ptrSpace, beforeTab, hitTab, fvTab, tabSpace }
       );
     }
 
@@ -1274,6 +1287,7 @@ async function runSuite(browser, enginePath, opts = {}) {
         act: document.activeElement?.getAttribute?.("data-act") || "",
         fv: !!document.activeElement?.matches(":focus-visible")
       }));
+      const fvPtr = await ringNow(page);
       await page.keyboard.press("Space");
       await sleep(100);
       const ptrSpace = await page.evaluate(() => ({
@@ -1284,6 +1298,7 @@ async function runSuite(browser, enginePath, opts = {}) {
       if (ptrSpace.lanes) { await page.keyboard.press("Space"); await sleep(80); }
 
       const hitTab = await tabTo(page, sel, { maxSteps: 360 });
+      const fvTab = await ringNow(page);
       await page.keyboard.press("Space");
       await sleep(100);
       const tabSpace = await page.evaluate(() => ({
@@ -1295,9 +1310,52 @@ async function runSuite(browser, enginePath, opts = {}) {
 
       rec(
         afterEsc.modalHidden && afterEsc.act === "edit" && !afterEsc.fv &&
-          ptrSpace.lanes && !ptrSpace.modalOpen && hitTab && tabSpace.modalOpen && !tabSpace.lanes,
-        "pointer vs tab (card button): edit button clicked+Escape+Space switches lanes without opening editor; Tab+Space opens editor",
-        { cid, afterEsc, ptrSpace, hitTab, tabSpace }
+          ptrSpace.lanes && !ptrSpace.modalOpen && hitTab && tabSpace.modalOpen && !tabSpace.lanes &&
+          fvPtr === ptrSpace.modalOpen && fvTab === tabSpace.modalOpen && fvTab && !fvPtr,
+        "pointer vs tab (card button): edit button clicked+Escape+Space switches lanes without opening editor; Tab+Space opens editor; pressed iff ringed before the key",
+        { cid, afterEsc, fvPtr, ptrSpace, hitTab, fvTab, tabSpace }
+      );
+    }
+
+    // --- G6. A dialog closed by Escape hands focus back; Space then follows the ring the eye sees ---
+    // The leg reads :focus-visible just before the Space and requires pressed (editor opens) iff ringed,
+    // for a dialog opened by keyboard (Tab, Enter) and by pointer (click).
+    for (const how of ["keyboard", "pointer"]) {
+      const cid = await page.$eval(".card .cacts button[data-act='edit']", el => el.closest(".card")?.dataset?.id || "");
+      const sel = `.card[data-id="${cid}"] .cacts button[data-act="edit"]`;
+      let opened = false;
+      if (how === "keyboard") {
+        const hit = await tabTo(page, sel, { maxSteps: 360 });
+        await page.keyboard.press("Enter");
+        opened = hit && !!(await page.waitForSelector("#modal:not([hidden]) #modalCard", { timeout: 3000 }).catch(() => null));
+      } else {
+        await page.evaluate(() => { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); });
+        await page.hover(`.card[data-id="${cid}"]`);
+        await sleep(40);
+        await page.click(sel);
+        opened = !!(await page.waitForSelector("#modal:not([hidden]) #modalCard", { timeout: 3000 }).catch(() => null));
+      }
+      await sleep(80);
+      await page.keyboard.press("Escape");
+      await sleep(80);
+      const back = await page.evaluate(() => ({
+        modalHidden: !!document.getElementById("modal")?.hidden,
+        act: document.activeElement?.getAttribute?.("data-act") || ""
+      }));
+      const fv = await ringNow(page);
+      await page.keyboard.press("Space");
+      await sleep(100);
+      const after = await page.evaluate(() => ({
+        modalOpen: !document.getElementById("modal")?.hidden,
+        lanes: document.body.classList.contains("e-lanes")
+      }));
+      if (after.modalOpen) { await page.keyboard.press("Escape").catch(() => {}); await sleep(80); }
+      if (after.lanes) { await page.keyboard.press("Space"); await sleep(80); }
+      rec(
+        opened && back.modalHidden && back.act === "edit" &&
+          fv === after.modalOpen && fv === !after.lanes && fv === (how === "keyboard"),
+        "ring agreement (dialog opened by " + how + ", closed by Escape, focus handed back): Space presses iff the control wore the ring, else switches lanes",
+        { how, opened, back, fv, after }
       );
     }
   } finally {
@@ -1348,6 +1406,7 @@ async function runSuite(browser, enginePath, opts = {}) {
       fv: !!document.activeElement?.matches(":focus-visible"),
       modalHidden: !!document.getElementById("modal")?.hidden
     }));
+    const fvPtr = await ringNow(pageEmpty);
     await pageEmpty.keyboard.press("Space");
     await sleep(100);
     const ptrSpace = await pageEmpty.evaluate(() => ({
@@ -1358,6 +1417,7 @@ async function runSuite(browser, enginePath, opts = {}) {
     if (ptrSpace.lanes) { await pageEmpty.keyboard.press("Space"); await sleep(80); }
 
     const hitTab = await tabTo(pageEmpty, "#emptyAddCard");
+    const fvTab = await ringNow(pageEmpty);
     await pageEmpty.keyboard.press("Space");
     await sleep(100);
     const tabSpace = await pageEmpty.evaluate(() => ({
@@ -1369,9 +1429,10 @@ async function runSuite(browser, enginePath, opts = {}) {
 
     rec(
       afterEsc.id === "emptyAddCard" && !afterEsc.fv && afterEsc.modalHidden &&
-        ptrSpace.lanes && !ptrSpace.modalOpen && hitTab && tabSpace.modalOpen && !tabSpace.lanes,
-      "pointer vs tab (role=button): #emptyAddCard clicked+Escape+Space switches lanes; Tab+Space opens editor",
-      { afterEsc, ptrSpace, hitTab, tabSpace }
+        ptrSpace.lanes && !ptrSpace.modalOpen && hitTab && tabSpace.modalOpen && !tabSpace.lanes &&
+        fvPtr === ptrSpace.modalOpen && fvTab === tabSpace.modalOpen && fvTab && !fvPtr,
+      "pointer vs tab (role=button): #emptyAddCard clicked+Escape+Space switches lanes; Tab+Space opens editor; pressed iff ringed before the key",
+      { afterEsc, fvPtr, ptrSpace, hitTab, fvTab, tabSpace }
     );
   } finally {
     await pageEmpty.close().catch(() => {});
