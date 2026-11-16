@@ -1000,7 +1000,7 @@ function createProgram(opts) {
     const want = r.kind === "delete" ? null : sha256(Buffer.from(r.body, "utf8"));
     const sent = base && !base.del ? base.sha : null;
     const edit = have !== want && have !== sent;
-    if (edit) { delete st.applied[key]; sentFrom(r, key); persist(); return { ok: true, path: r.path, stale: true, kept: true }; } /* plant:own-edit */
+    if (edit) { sentFrom(r, key); persist(); return { ok: true, path: r.path, stale: true, kept: true }; } /* plant:own-edit */
     return null;
   }
 
@@ -1015,7 +1015,7 @@ function createProgram(opts) {
   function sentFrom(r, key) {
     const was = has(st.sent, key) ? st.sent[key] : null;
     const rec = { id: r.id, epoch: r.epoch, counter: r.counter, sha: r.kind === "delete" ? null : sha256(Buffer.from(r.body, "utf8")),
-      size: Number.isSafeInteger(r.size) && r.size >= 0 ? r.size : 0, del: r.kind === "delete" };
+      size: Number.isSafeInteger(r.size) && r.size >= 0 ? r.size : 0, del: r.kind === "delete", at: clock() };
     st.sent[key] = rec;
     st.bytes = Math.max(0, st.bytes - (was ? was.size : 0)) + rec.size;
     delete st.refused[key];
@@ -1596,6 +1596,12 @@ function createProgram(opts) {
     const a = has(st.applied, key) ? st.applied[key] : null;
     let echo = !!a && !a.del && clock() - a.at < ECHO_MS;
     if (echo && bytes != null) echo = sha256(toBytes(bytes)) === a.sha;
+    /* Not an echo where this program's own key has had another version of the path SINCE that landing (sent from here, or
+       taken as the last sent while an edit waited): the team then holds that other version, so bytes put back to the
+       landed ones are a change it has not seen. The order is by the two records' own times; a record kept before
+       2026-11-16 has none and answers as before, and so does another writer's later version over an older upload from here. */
+    const s = has(st.sent, key) ? st.sent[key] : null;
+    if (echo && s && !s.del && s.sha !== a.sha && s.at > a.at) echo = false; /* plant:sent-newer */
     if (echo) return { send: false, reason: "echo", said: B.REASONS.echo }; /* plant:out-echo */
     return { send: true };
   }
@@ -1700,7 +1706,7 @@ function createProgram(opts) {
   }
 
   function sentOut(op, blob) {
-    const rec = { id: blob.id, epoch: blob.epoch, counter: blob.counter, sha: op.sha, size: blob.ciphertext.length, del: op.kind === "delete" };
+    const rec = { id: blob.id, epoch: blob.epoch, counter: blob.counter, sha: op.sha, size: blob.ciphertext.length, del: op.kind === "delete", at: clock() };
     const was = lastSent(op);
     const k = pathKey(op.rel);
     if (op.invite) {
@@ -1710,7 +1716,6 @@ function createProgram(opts) {
       st.sent[k] = rec;
       st.bytes = Math.max(0, st.bytes - (was ? was.size : 0)) + rec.size;
       delete st.refused[k];
-      delete st.applied[k]; /* plant:sent-applied */
     }
     waiting.delete(op.invite ? "invite:" + op.invite.id : k);
     if (op.byInvite) {

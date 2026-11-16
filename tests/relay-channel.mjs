@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 464;
+const EXPECTED = 468;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -12067,10 +12067,10 @@ if (partOn("pF2")) {
     check(s.editedOk && s.putBackSent,
       "f2b a file edited, sent, and put back within ECHO_MS to the earlier received bytes is sent to the team rather than withheld as an echo: "
       + s.detail);
-    if (PLANTS_OFF) skip("f2c lifting plant:sent-applied turns f2b red (putting back V1 within ECHO_MS is withheld as an echo)");
+    if (PLANTS_OFF) skip("f2c lifting plant:sent-newer turns f2b red (putting back V1 within ECHO_MS is withheld as an echo)");
     else {
-      const p = await liftChannel("plant:sent-applied", async mod => !(await sceneF2(mod)).putBackSent);
-      check(p.turned && p.back, "f2c lifting plant:sent-applied turns f2b red (putting back V1 within ECHO_MS is withheld as an echo), and the product file is never written: "
+      const p = await liftChannel("plant:sent-newer", async mod => !(await sceneF2(mod)).putBackSent);
+      check(p.turned && p.back, "f2c lifting plant:sent-newer turns f2b red (putting back V1 within ECHO_MS is withheld as an echo), and the product file is never written: "
         + p.detail + ", sha " + (p.back ? "restored" : "differs"));
     }
   } catch (e) {
@@ -12300,7 +12300,7 @@ if (partOn("pF8")) {
 }
 markPart(null);
 console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);
-if (!ONLY.size && asserted + skipped < EXPECTED) {
+if (!ONLY.size && asserted + skipped !== EXPECTED) {
   console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " checks ran");
   releaseOnlyHold();
   process.exit(78);
