@@ -9921,7 +9921,7 @@ function signinFolderScope(id, access) {
 }
 /* Microsoft's folder is never asked beside the sign-in: an organisation that allowed today's scopes alone refuses the whole sign-in for
    one more. It is asked after it, apart (signinFolderAsk). */
-function signinFolderApart(id) { return id === "microsoft"; } /* plant:folder-apart */
+function signinFolderApart(id) { return id === "microsoft" || id === "google"; } /* plant:folder-apart-google */ /* plant:folder-apart */
 /* The tenant of personal Microsoft accounts, as Microsoft's ID token reference names it in `tid`. */
 const SIGNIN_PERSONAL_TENANT = "9188040d-6c67-4c5b-b112-36a304b66dad";
 /* THE TABLE UNDER A MANAGED INSTALLATION'S PINS (managedPolicyFrom's answer `pol`): only the provider it names, none where it is
@@ -10455,7 +10455,7 @@ async function signinRun(io, p, deskKey, now, access) {
   let pending = null;
   const loop = await io.listen(kind => io.page(kind), query => signinOurs(query, pending)); /* plant:loop-takes */
   try {
-    const folder = io.store === true && !signinFolderApart(p.id) ? signinFolderScope(p.id, access) : "";
+    const folder = io.store === true && (io.folderWith === true || !signinFolderApart(p.id)) ? signinFolderScope(p.id, access) : ""; /* folderWith: the switch's own consent sign-in (storeConsentSignin) */
     pending = signinAuthorize(p, loop.port, deskKey, io.rand, access, folder);
     if (io.hint) pending.url = signinHinted(pending.url, io.hint);
     let opened = false;
@@ -10529,7 +10529,7 @@ async function signinRenew(io, p, deskKey, refreshToken, seed, sub, now, access)
 async function signinFolderAsk(io, p, loop, deskKey, got, now) {
   const scope = signinFolderScope(p.id, ""), at = signinKnown(p.id).token;
   if (!scope) return "";
-  if (got.refreshToken) {
+  if (got.refreshToken && p.id !== "google") {
     let res = null;
     try { res = await io.tokenAsk(at, signinRefreshForm(p, got.refreshToken, "", scope)); } catch { res = null; }
     if (res && res.status === 200) { signinFolderTake(io, res, p.id, now()); return ""; } /* plant:folder-quiet */
@@ -10811,10 +10811,13 @@ function signinAnswerBody(res, deskKey, packed) {
   if (!j || typeof j !== "object" || Array.isArray(j)) return { ok: false, reason: "unreached" };
   if (res.status === 200 && j.ok === true && SIGNIN_CODE.test(String(j.code))) {
     const askLead = j.ask === "lead"; /* plant:ask-lead-read */
-    if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === "waiting", askLead }, signinManagedOf(j)); /* plant:wait-read */
+    /* THE STORE OFFERED: the service says it keeps a person's store (store/grant) only by "storeOffer": true beside a sign-in's answer;
+       absent, null or anything else is no offer, and nothing of sync is asked, looked at or said (storeOffered). */
+    const storeOffer = j.storeOffer === true; /* plant:offer-read */
+    if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === "waiting", askLead, storeOffer }, signinManagedOf(j)); /* plant:wait-read */
     if (signinCertOk(j.certificate, deskKey) && j.certificate.code === j.code) {
       const doors = signinDoorsOk(j.doors, packed), signed = signinDoorsSigned(doors, j.doorsSig, j.certificate); /* plant:door-signed-read */
-      return Object.assign({ ok: true, code: String(j.code), cert: j.certificate, doors: signed ? doors : [], doorsSig: signed ? String(j.doorsSig) : "", askLead }, signinManagedOf(j)); /* plant:door-read */
+      return Object.assign({ ok: true, code: String(j.code), cert: j.certificate, doors: signed ? doors : [], doorsSig: signed ? String(j.doorsSig) : "", askLead, storeOffer }, signinManagedOf(j)); /* plant:door-read */
     }
     return { ok: false, reason: "unreached" };
   }
@@ -10872,7 +10875,8 @@ function signinSettle(held, ans, now) {
 }
 function signinSettleSeat(held, ans, now) {
   if (ans.ok) return Object.assign({}, held, { code: ans.code, cert: ans.cert, doors: ans.cert ? (ans.doors || []) : [], doorsSig: ans.cert ? String(ans.doorsSig || "") : "", at: now, checked: now, reached: true,
-    said: ans.waiting === true ? "waiting" : "", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || "" : "" }); /* plant:wait-settle */
+    said: ans.waiting === true ? "waiting" : "", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || "" : "",
+    storeOffer: ans.storeOffer === true }); /* plant:wait-settle */
   if (ans.reason === "unreached") return Object.assign({}, held, { checked: now, reached: false });
   const freed = ans.reason === "signin";
   return Object.assign({}, held, { checked: now, reached: true, said: ans.reason, ask: freed || held.ask === true,
@@ -10950,7 +10954,7 @@ function signinFileRead(text, packed) {
       seed: String(h.seed), code: SIGNIN_CODE.test(String(h.code)) ? String(h.code) : "",
       cert: h.cert && typeof h.cert === "object" && signinCertOk(h.cert, h.cert.desk) ? h.cert : null, /* plant:file-cert */
       at: num(h.at), checked: num(h.checked), reached: h.reached !== false, said: typeof h.said === "string" ? h.said : "", ask: h.ask === true,
-      doors: [], doorsSig: "", revoked: null, managed: h.managed === true, cause: h.cause === "own-licence" || h.cause === "assigned" ? h.cause : "" };
+      doors: [], doorsSig: "", revoked: null, managed: h.managed === true, cause: h.cause === "own-licence" || h.cause === "assigned" ? h.cause : "", storeOffer: h.storeOffer === true };
   /* The list is beside `held`, and the held seat judges by it. */
   out.revoked = signinRevokedOk(d.revoked) ? d.revoked : null; /* plant:revoked-file */
   if (out.held) out.held.revoked = out.revoked;
@@ -11288,7 +11292,7 @@ function signinIo(run) {
     get managed() { const m = signinState().managed; return !!(m && m.managed); },
     get pooled() { const m = signinState().managed; return !!(m && m.nonPersistent); },
     /* Whether sync may be on, read when a sign-in asks it; the folder's access token handed back, kept in memory alone. */
-    get store() { return storeOn(); },
+    get store() { return storeOn() && storeOffered(); }, /* plant:io-store-offer */
     folderToken: t => storeTokenTake(t),
   };
 }
@@ -11344,7 +11348,7 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
   /* The folder's token the run hands is kept only once this sign-in is taken, so a refused account's never stands for the seated one. */
   let folderGot = null;
   const run = { loop: null, provider: p.id, url: "" }, io = Object.assign(signinIo(run), { folderToken: t => { folderGot = t; } });
-  if (io.store === true && signinFolderApart(p.id)) run.landMs = SIGNIN_FOLDER_LAND_MS; /* plant:folder-land-ms */
+  if (storeOn() && signinFolderApart(p.id)) run.landMs = SIGNIN_FOLDER_LAND_MS; /* plant:folder-land-ms */
   signinBusy = run;
   signinSaid = "";
   tellSignin();
@@ -11599,6 +11603,9 @@ function storePolicyNow() {
   return storeOnFor(joinPolicyRead && joinPolicyRead.values, storeState().off);
 }
 function storeOn() { return storePolicyNow().on === true; }
+/* Whether the licence service offers this account a store (signinAnswerBody's storeOffer, kept with the seat): without it sync asks the
+   provider nothing, looks at nothing and says nothing, whatever policy allows. */
+function storeOffered() { const h = signinState().held; return !!h && h.storeOffer === true; }
 /* The folder's access token from the provider's last answer, {provider, token, until, who}, token "" where the folder's scope was refused,
    `who` the account seated when it was taken (storeWho), and only that account's look asks with it;
    and the last look's result, {state, why, store, made, say}. Both in memory alone. */
@@ -11823,7 +11830,7 @@ function storeOwe(rt) {
 }
 async function storeEndAgain() {
   const rt = storeOwedRt();
-  if (!rt) return false;
+  if (!rt || !storeOffered()) return false;
   if ((await storeEndPost(rt)) === "owed") return false;
   if (storeOwedRt() === rt) { storeOwe(""); tellStore(); }
   return true;
@@ -11858,6 +11865,7 @@ function storeLeaveOwe(keys) {
   storeSave();
 }
 function storeLeaveNow(cert) {
+  if (!storeOffered()) return Promise.resolve(false);
   if (storeLeaveFlight) return storeLeaveFlight;
   const flight = storeLeaveTry(cert).catch(() => false).then(r => { if (storeLeaveFlight === flight) storeLeaveFlight = null; return r; });
   storeLeaveFlight = flight;
@@ -11896,7 +11904,8 @@ const storeNotNow = new Set();
 function storeView() {
   storeMine();
   const held = signinState().held, s = storeState(), synced = !!s.keys, who = storeWho(held);
-  const provider = held && signinOffered().some(p => p.id === held.provider) && (held.cert || synced) ? held.provider : "";
+  /* No store offered: the row is not shown, so nothing is said of sync (storeOffered). */
+  const provider = held && storeOffered() && signinOffered().some(p => p.id === held.provider) && (held.cert || synced) ? held.provider : ""; /* plant:row-offer */
   const ask = !!who && s.ask === who && storeHeld();
   return StoreLib().storeRow({ provider, pol: storePolicyNow(), look: storeNow, until: s.until, now: Date.now(),
     signinRefused: !!(held && (held.said || held.ask === true)), conflicts: storeConflicts(), /* plant:view-signin-ask */ say: storeSay, owed: !!storeOwedRt(),
@@ -12139,7 +12148,7 @@ function storeConsentAsk() {
   if (storeConsentFlight || signinBusy) return "busy";
   const held = signinState().held, me = branchIdentity(false);
   const p = held ? signinOffered().find(x => x.id === held.provider) : null;
-  if (!p || !me || !held.cert || !storeNow || storeNow.why !== "ungiven" || !storePolicyNow().on) return "none"; /* plant:consent-ungiven */
+  if (!p || !me || !held.cert || !storeNow || storeNow.why !== "ungiven" || !storePolicyNow().on || !storeOffered()) return "none"; /* plant:consent-ungiven */
   const sub = held.sub ? signinKept(safeStorage, held.sub) : "";
   if (!sub) return "none";
   const ask = p.id === "google" ? storeConsentSignin(p, me, sub) : storeConsentFolder(p, me, held, sub);
@@ -12187,7 +12196,7 @@ async function storeConsentFolder(p, me, held, sub) {
 async function storeConsentSignin(p, me, sub) {
   const st = signinState(), managed = !!(st.managed && st.managed.managed);
   let token = null;
-  const run = { loop: null, provider: p.id, url: "" }, io = Object.assign(signinIo(run), { hint: sub, folderToken: t => { token = t; } });
+  const run = { loop: null, provider: p.id, url: "" }, io = Object.assign(signinIo(run), { hint: sub, folderWith: true, folderToken: t => { token = t; } });
   signinBusy = run;
   tellSignin();
   let landing = "appfail";
@@ -12223,6 +12232,7 @@ async function storeLookNow() {
   const pol = storePolicyNow();
   if (!pol.on) storeSyncStop();
   if (!pol.on) return null; /* plant:store-off */
+  if (!storeOffered()) { storeSyncStop(); return null; } /* plant:look-offer */
   if (!sealsForReal(safeStorage, process.platform)) return storeSettle({ state: "unavailable", why: "" });
   /* The page is told when a look begins and when it ends, so the row says a look runs only while one does. */
   storeLooking++; tellStore(); /* plant:store-look-told */

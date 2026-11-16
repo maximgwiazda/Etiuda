@@ -49,11 +49,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 180;
+const PLANTS = 182;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 156 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 157 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -368,6 +368,18 @@ CASES.managedRead = s => {
   const h1 = s.signinSettle(held, seated, NOW), h2 = s.signinSettle(held, no, NOW), h3 = s.signinSettle(h1, plain, NOW);
   return seated.ok === true && seated.managed === true && seated.cause === "assigned" && plain.ok === true && plain.managed === undefined
     && no.reason === "no-role" && no.managed === true && h1.managed === true && h1.cause === "assigned" && h2.managed === true && h3.managed === false;
+};
+/* The store offered: "storeOffer": true beside a seating answer is the one offer; absent, null, "true", 1 or false is none. A seating answer
+   says it afresh (a renewal without it ends it); one that does not reach leaves it as it was; it is kept in signin.json. */
+CASES.storeOffer = s => {
+  /* The field is the held line's, not yet in the record of the service's answers: handed as stray on purpose. */
+  const a = (o, st) => s.signinAnswer(strayAnswer(o, st), DESK_KEY);
+  const base = { ok: true, certificate: cert(), code: CODE, doors: [] };
+  const yes = a(Object.assign({ storeOffer: true }, base)), none = a(Object.assign({ storeOffer: true }, base, { certificate: null }));
+  const not = [undefined, null, "true", 1, false, {}].map(v => a(Object.assign(v === undefined ? {} : { storeOffer: v }, base)).storeOffer);
+  const held = { provider: "microsoft", refresh: "sealed:rt", sub: "sealed:s", seed: "6".repeat(64), code: CODE, cert: null, at: 1, checked: 1, reached: true, said: "", ask: false };
+  const h1 = s.signinSettle(held, yes, NOW), h2 = s.signinSettle(h1, { ok: false, reason: "unreached" }, NOW), h3 = s.signinSettle(h2, a(base), NOW);
+  return yes.storeOffer === true && none.storeOffer === true && not.every(v => v === false) && h1.storeOffer === true && h2.storeOffer === true && h3.storeOffer === false;
 };
 /* The service's answers read as the interface names them; a certificate for another desk or another code is not taken. */
 CASES.answers = s => {
@@ -3202,6 +3214,7 @@ const LEGS = [
   ["ds2d", "state", "a wrong or missing state is refused before anything else of the answer is read"],
   ["ds2e", "flow", "the whole path at the provider with stand-ins: the token's nonce is made again from this desk's key and the seed, no client secret sent"],
   ["ds2f", "notAllowed", "the organisation's refusal at the provider is its own reason, apart from the person's Cancel and any other refusal"],
+  ["dso", "storeOffer", "the store offered only by storeOffer true beside a seating answer, absent, null and every other value none; said afresh by each seating answer, kept where one does not reach"],
   ["ds3a", "deskBody", "signin/desk's body has the interface's names alone, signed by this desk's key over the service's bytes; the seed on a first sign-in only"],
   ["ds3b", "serviceDoor", "the service's door posts JSON to signin/desk alone, no redirect, nothing cached, no cookie, nothing over 8 KiB"],
   ["ds3c", "answers", "the service's answers read as the interface names them; a certificate for another desk or code is not taken"],
@@ -3647,6 +3660,8 @@ if (!PLANTS_OFF) {
   await plant("dsp6", ["if (!renewal && (typeof c.nonce !== \"string\" || !signinSame(c.nonce, nonce))) return { ok: false, reason: \"signin-unbound\" }; /* plant:token-nonce */", ""], "tokenNonce");
   await plant("dsp7", ["if (!signinOurs(query, pending)) return { ok: false, reason: \"signin-state\" }; /* plant:state */", ""], "state");
   await plant("dsp8", ["return \"signin-notallowed\"; /* plant:not-allowed */", "return \"signin-refused\";"], "notAllowed");
+  await plant("dspo1", ["const storeOffer = j.storeOffer === true; /* plant:offer-read */", "const storeOffer = !!j.storeOffer;"], "storeOffer");
+  await plant("dspo2", ["    storeOffer: ans.storeOffer === true }); /* plant:wait-settle */", "    storeOffer: held.storeOffer === true || ans.storeOffer === true }); /* plant:wait-settle */"], "storeOffer");
   await plant("dsp9", ["const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t })) || \"\"); /* plant:desk-signed */",
     "const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t + 1 })) || \"\");"], "deskBody");
   await plant("dsp10", ["if (seed) body.seed = String(seed); /* plant:seed-first */", "body.seed = String(seed);"], "deskBody");
@@ -3713,8 +3728,8 @@ if (!PLANTS_OFF) {
   await plant("dsp53", ["/^http:\\/\\/127\\.0\\.0\\.1:([0-9]{1,5})", "/^http:\\/\\/[a-z0-9.]+:([0-9]{1,5})"], "labRead");
   await plant("dsp54", ["|| !(d.root === undefined || /^[0-9a-f]{64}$/.test(String(d.root)))) return null; /* plant:lab-shape */", ") return null;"], "labRead");
   await plant("dsp59", ["if (d.keyId !== \"studio-\" + crypto.createHash(\"sha256\").update(Buffer.from(d.lead, \"hex\")).digest(\"hex\").slice(0, 16)) return []; /* plant:door-key-id */", ""], "doorsRead");
-  await plant("dsp60", ["return Object.assign({ ok: true, code: String(j.code), cert: j.certificate, doors: signed ? doors : [], doorsSig: signed ? String(j.doorsSig) : \"\", askLead }, signinManagedOf(j)); /* plant:door-read */",
-    "return Object.assign({ ok: true, code: String(j.code), cert: j.certificate, doors: [], doorsSig: \"\", askLead }, signinManagedOf(j));"], "doorsRead");
+  await plant("dsp60", ["return Object.assign({ ok: true, code: String(j.code), cert: j.certificate, doors: signed ? doors : [], doorsSig: signed ? String(j.doorsSig) : \"\", askLead, storeOffer }, signinManagedOf(j)); /* plant:door-read */",
+    "return Object.assign({ ok: true, code: String(j.code), cert: j.certificate, doors: [], doorsSig: \"\", askLead, storeOffer }, signinManagedOf(j));"], "doorsRead");
   await plant("dsp61", ["doors: ans.cert ? (ans.doors || []) : [],", "doors: ans.doors || [],"], "doorsKept");
   await plantWire("dsp62", ["|| !(held.cert.until > now) || pinnedLead() || teamJoin) return []; /* plant:door-shown */", ") return [];"], "doorJoin");
   await plantWire("dsp63", ["if (!d || !me) return Object.assign({}, joinView(), { refused: \"door\" }); /* plant:door-join-offered */", "if (!me) return joinView();"], "doorJoin");
@@ -3744,10 +3759,10 @@ if (!PLANTS_OFF) {
   await plantWire("dtp5", ["trace: SIGNIN_TRACE_ASKED ? line => console.error(line) : null, /* plant:trace-wired */", "trace: line => console.error(line),"], "traceDefault");
   await plantWire("dtp6", ["if (!io || typeof io.trace !== \"function\") return; /* plant:trace-off */",
     "if (!io || typeof io.trace !== \"function\") { console.error(signinTraceLine(provider, step, shown, said, hide)); return; }"], "traceDefault");
-  await plant("dsp79", ["if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === \"waiting\", askLead }, signinManagedOf(j)); /* plant:wait-read */",
-    "if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], askLead }, signinManagedOf(j));"], "waitRead");
-  await plant("dsp80", ["said: ans.waiting === true ? \"waiting\" : \"\", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || \"\" : \"\" }); /* plant:wait-settle */",
-    "said: \"\", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || \"\" : \"\" });"], "waitRead");
+  await plant("dsp79", ["if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === \"waiting\", askLead, storeOffer }, signinManagedOf(j)); /* plant:wait-read */",
+    "if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], askLead, storeOffer }, signinManagedOf(j));"], "waitRead");
+  await plant("dsp80", ["said: ans.waiting === true ? \"waiting\" : \"\", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || \"\" : \"\",",
+    "said: \"\", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || \"\" : \"\","], "waitRead");
   await plantWire("dsp93", ["  if (Object.keys(teamPins).some(teamPinStands)) return []; /* plant:door-pin-stands */\n", ""], "doorPins");
   await plantWire("dsp94", ["    if (inviteDoor({ lead: { public: d.lead } })) return null; /* plant:door-policy */\n", ""], "doorPolicy");
   await plantWire("dsp95", ["    if (pin && (pin.keyId !== d.keyId || pin.public !== d.lead)) return null; /* plant:door-pinned */\n", ""], "doorPins");

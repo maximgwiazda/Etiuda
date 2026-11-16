@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 195;
+const EXPECTED = 199;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -124,10 +124,12 @@ function worldOf(o) {
     if (u === STAGING + "signin/desk") {
       w.service.push(body);
       w.signinAt = Date.now();
-      if (w.seatRefused === "none") return json(200, { ok: true, code: CODE, certificate: null, doors: [] });
+      /* A service that keeps stores says so beside the seat (storeOffer); w.noOffer is today's service, which never does. */
+      const offer = w.noOffer ? {} : { storeOffer: true };
+      if (w.seatRefused === "none") return json(200, Object.assign({ ok: true, code: CODE, certificate: null, doors: [] }, offer));
       if (w.seatRefused) return json(w.seatRefused === "full" ? 409 : 403, { ok: false, reason: w.seatRefused });
       const b = JSON.parse(body);
-      return json(200, { ok: true, code: CODE, certificate: seatCert(b.desk, Date.now()), doors: [] });
+      return json(200, Object.assign({ ok: true, code: CODE, certificate: seatCert(b.desk, Date.now()), doors: [] }, offer));
     }
     if (u === STAGING + "store/grant") {
       w.service.push(body);
@@ -232,7 +234,7 @@ function boot(src, o) {
   };
   if (opt.store) fs.writeFileSync(path.join(UD, "store.json"), JSON.stringify(Object.assign({ format: 1, keys: "", said: "" }, opt.store)));
   if (opt.held) fs.writeFileSync(path.join(UD, "signin.json"), JSON.stringify({ format: 2, held: { provider: "microsoft", refresh: sealed("rt-held"), sub: sealed(SUB),
-    seed: SEED, code: CODE, cert: null, at: 1, checked: 1, reached: true, said: "", ask: false } }));
+    seed: SEED, code: CODE, cert: null, at: 1, checked: 1, reached: true, said: "", ask: false, storeOffer: opt.noOffer !== true } }));
   const env = { ETIUDA_SIGNIN_LAB: opt.lab ? path.join(WORK, path.basename(UD) + "-lab.json") : undefined, ETIUDA_SIGNIN_TRACE: opt.trace ? "1" : undefined };
   if (opt.lab) fs.writeFileSync(env.ETIUDA_SIGNIN_LAB, JSON.stringify(opt.lab));
   const was = {};
@@ -290,8 +292,8 @@ async function scopesOnScene(src) {
   const policy = { plain: T.storeOnFor(null, false).on, managedUnset: T.storeOnFor({ managed: { type: "dword", value: "1" } }, false).on,
     managedOn: T.storeOnFor({ managed: { type: "dword", value: "1" }, personalstore: { type: "REG_SZ", value: "on" } }, false).on, personOff: T.storeOnFor(null, true).on };
   const ok = scopeOf(m.url) === "openid profile offline_access" && formScope(m.form) === "openid profile offline_access Files.ReadWrite.AppFolder"
-    && scopeOf(gg.url) === "openid https://www.googleapis.com/auth/drive.appdata" && formScope(gg.form) === null && gg.form === todayForm(T, g)
-    && T.signinIo({ loop: null }).store === true && policy.plain === true && policy.managedUnset === false && policy.managedOn === true && policy.personOff === false;
+    && scopeOf(gg.url) === "openid" && formScope(gg.form) === null && gg.form === todayForm(T, g)
+    && T.signinIo({ loop: null }).store === false && policy.plain === true && policy.managedUnset === false && policy.managedOn === true && policy.personOff === false;
   return { ok, detail: brief({ ms: scopeOf(m.url), msRefresh: formScope(m.form), google: scopeOf(gg.url), googleRefresh: formScope(gg.form), ioStore: T.signinIo({ loop: null }).store, policy }) };
 }
 async function scopesOffScene(src) {
@@ -1486,6 +1488,8 @@ let codeN = 0;
 /* The person's browser at Microsoft: `mode.refuse`, where given, is the query Microsoft brings back for a request asking the folder (the
    person declining, or a tenant whose administrator must approve); any other request is answered with a code. Every authorize address
    the browser meets is kept, opened or redirected to. */
+/* Google's authorize address: its folder, too, is asked apart after the seat, in the same window. */
+const G_AUTH = "https://accounts.google.com/o/oauth2/v2/auth";
 function browserOf(world, mode) {
   const b = { urls: [], pages: [], again: [] };
   let finish = null;
@@ -1503,7 +1507,7 @@ function browserOf(world, mode) {
     const q = new URL(url).searchParams, port = new URL(q.get("redirect_uri")).port;
     let r = await loopGet(port, "/?" + answer(q, false) + "&state=" + encodeURIComponent(q.get("state")));
     if (r.status === 303) r = await loopGet(port, r.location);
-    for (let i = 0; i < 3 && r.status === 303 && r.location.indexOf(MS_AUTH + "?") === 0; i++) {
+    for (let i = 0; i < 3 && r.status === 303 && (r.location.indexOf(MS_AUTH + "?") === 0 || r.location.indexOf(G_AUTH + "?") === 0); i++) {
       b.urls.push(r.location);
       const q2 = new URL(r.location).searchParams;
       if (mode.holdFolder) { b.atFolder = true; await mode.holdFolder; }
@@ -1520,6 +1524,7 @@ function browserOf(world, mode) {
 async function signinFlow(src, mode) {
   const world = worldOf({ refuseFolder: mode.quiet !== true });
   world.folderDelay = mode.folderDelay || 0;
+  world.noOffer = mode.noOffer === true;
   const b = browserOf(world, mode);
   const shell = boot(src, { world, lab: labOf(), store: mode.store, policyText: mode.policyText, browser: u => { setTimeout(() => { b.last = b.go(u).catch(() => {}); }, 5); } });
   const { T } = shell;
@@ -1550,6 +1555,38 @@ const SEAT_EN = ["Signed in", "This computer has its seat. Etiuda carries on by 
 const unHtml = h => String(h).replace(/&#39;/g, "'").replace(/&quot;/g, "\"").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 const wordsAre = (html, w) => { const x = unHtml(html); return x.indexOf("<h1>" + w[0] + "</h1>") >= 0 && x.indexOf(">" + w[1] + "<") >= 0 && x.indexOf("<title>" + w[2] + " · Etiuda</title>") >= 0; };
 const folderPage = (page, k) => page.status === 200 && wordsAre(page.body, FOLDER_WORDS.en[k]);
+/* (n0) NO STORE OFFERED, NOTHING ASKED: the licence service answering a sign-in without "storeOffer": true (today's service). Each
+   provider's sign-in asks the provider what it asked before sync (Microsoft "openid profile offline_access", Google "openid"), one browser
+   request and no step after the seat, no folder scope in any refresh, no app-folder call, no key file, no store/grant, no look, and the
+   Account row is not shown. With the offer, both ask the folder apart after the seat in the same window. A renewal whose answer no longer
+   carries the offer ends it: no look, the row not shown. */
+async function noOfferScene(src) {
+  const out = {};
+  for (const provider of ["microsoft", "google"]) for (const offer of [false, true]) {
+    const r = await signinFlow(src, { provider, noOffer: !offer, quiet: true });
+    const T = r.shell.T, w = r.world;
+    const scopes = r.qs.map(q => q.get("scope"));
+    const folderForms = w.forms.filter(x => /Files\.ReadWrite\.AppFolder|drive\.appdata/.test(new URLSearchParams(x).get("scope") || "")).length;
+    const grants = w.service.filter(b => { try { return !!JSON.parse(b).rt; } catch { return false; } }).length;
+    out[provider + (offer ? "+offer" : "")] = { scopes, folderForms, graph: w.graph.length, drive: w.drive.calls.length, file: w.file !== null || w.drive.files.length > 0,
+      grants, look: !!T.get().storeNow, row: T.storeView().shown === true };
+  }
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  const wasOn = !!r.now && r.now.state === "on";
+  w.noOffer = true;
+  await T.signinRenewNow();
+  if (T.get().storeFlight) await T.get().storeFlight;
+  const graphBefore = w.graph.length;
+  const turned = await T.storeTurn();
+  const ended = { wasOn, offerKept: T.signinState().held.storeOffer === true, turned: turned === null || turned === undefined, row: T.storeView().shown === true, graphAfter: w.graph.length - graphBefore };
+  const none = x => x.folderForms === 0 && x.graph === 0 && x.drive === 0 && !x.file && x.grants === 0 && !x.look && !x.row && x.scopes.length === 1;
+  const ok = none(out.microsoft) && out.microsoft.scopes[0] === "openid profile offline_access" && none(out.google) && out.google.scopes[0] === "openid"
+    && out["microsoft+offer"].scopes[0] === "openid profile offline_access" && out["google+offer"].scopes[0] === "openid"
+    && (out["microsoft+offer"].folderForms > 0 || out["microsoft+offer"].scopes.length === 2) && out["google+offer"].scopes[1] === "openid " + DRIVE_SCOPE
+    && ended.wasOn && !ended.offerKept && !ended.row && ended.graphAfter === 0;
+  return { ok, detail: brief({ out, ended }) };
+}
+
 /* (h) Each folder page in both languages carries its words whole, and the sign-in's own seat page is as it was. */
 async function folderPagesScene(src) {
   const { T } = boot(src);
@@ -1846,7 +1883,8 @@ async function googleSwitchScene(src) {
   const on = await pressOn(r, true);
   const q = on.opened.length === 1 ? new URL(on.opened[0]).searchParams : new URLSearchParams();
   const held = r.shell.T.signinState().held, access = r.shell.T.get().storeAccess, now = r.shell.T.get().storeNow;
-  const ok = ungiven && first.get("scope") === "openid " + DRIVE_SCOPE && on.answer === "asked" && on.opened.length === 1
+  const apart = r.qs[1] || new URLSearchParams();
+  const ok = ungiven && first.get("scope") === "openid" && apart.get("scope") === "openid " + DRIVE_SCOPE && on.answer === "asked" && on.opened.length === 1
     && on.opened[0].indexOf("https://accounts.google.com/o/oauth2/v2/auth?") === 0 && q.get("scope") === "openid " + DRIVE_SCOPE && q.get("login_hint") === SUB
     && q.get("prompt") === null && folderPage(on.page, "on") && !!held && !!held.cert && !!access && access.token === r.world.access && !!now && now.why !== "ungiven";
   /* The store opened on Google: the look on, its key file made in Drive's app data folder by the folder's token and naming the store the look
@@ -2517,6 +2555,7 @@ const LEGS = [
   ["x6l", asideLinkScene, "a link under Set aside bearing the name store.json keeps is never opened as the set-aside folder: Open this folder answers gone; a real folder of that name is opened"],
   ["z2c", answerStartCatalogScene, "Start from my account takes the loaded catalog aside with the rest: in the set-aside desk.json, gone from the desk's, the page told, nothing of it in B's store"],
   ["z14", rowToldScene, "a merge keeping a version tells the page; a renewal that lost its refresh token reads as a refused sign-in; the first of two overlapping looks ending leaves the row saying a look runs"],
+  ["n0", noOfferScene, "no store offered by the service: each provider's sign-in asks what it asked before sync, one request, nothing after the seat, no folder scope, no app-folder call, no key file, no grant, no look, no row; with the offer both ask the folder apart; a renewal without the offer ends it"],
   ["z6", signinHourScene, "a look more than an hour after the last sign-in renews it first and is granted, on; with the renewal unreached the refusal is tried again within minutes, the row not saying refused"],
   ["z11", signedOutScene, "a change on the desk arms the merge, a sign out clears it, and a change made signed out arms none and changes nothing of the sync state"],
   ["z4", tokenAccountScene, "a folder token asked for one account and answered with another seated is not kept for it, and a look whose token is answered after a sign out says nothing and arms no retry"],
@@ -2534,9 +2573,9 @@ for (const [id, scene, line] of LEGS) {
 /* ---- the plants: each guard put in another form in a copy of shell/main.js's text, which turns its leg red ---- */
 const swap = (from, to) => text => (text.split(from).length === 2 ? text.split(from).join(to) : null);
 const PLANTS = [
-  ["a1", swap("    const folder = io.store === true && !signinFolderApart(p.id) ? signinFolderScope(p.id, access) : \"\";\n    pending =", "    const folder = \"\";\n    pending ="), "the sign-in asks no folder scope"],
+  ["a1", swap("function signinFolderApart(id) { return id === \"microsoft\" || id === \"google\"; } /* plant:folder-apart-google */", "function signinFolderApart(id) { return id === \"microsoft\"; } /* plant:folder-apart-google */"), "Google's sign-in asks the folder with it again"],
   ["a1", swap("    : known.refreshScope && folder ? known.refreshScope + \" \" + folder : known.refreshScope;", "    : known.refreshScope;"), "the refresh asks no folder scope"],
-  ["a2", swap("    const folder = io.store === true && !signinFolderApart(p.id) ? signinFolderScope(p.id, access) : \"\";\n    pending =", "    const folder = signinFolderScope(p.id, access);\n    pending ="), "the sign-in asks the folder's scope where sync is off"],
+  ["a2", swap("    const folder = io.store === true && (io.folderWith === true || !signinFolderApart(p.id)) ? signinFolderScope(p.id, access) : \"\";", "    const folder = signinFolderScope(p.id, access);"), "the sign-in asks the folder's scope where sync is off"],
   ["a2", swap("  const folder = io.store === true ? signinFolderScope(p.id, access) : \"\";\n  let res = null, folderRes = null;", "  const folder = signinFolderScope(p.id, access);\n  let res = null, folderRes = null;"), "the renewal asks it where sync is off"],
   ["b", swap(" storeTurn(); } /* plant:store-renew */\n", " } /* plant:store-renew */\n"), "the look taken out of the renewal"],
   ["b2", swap("  if (folder && res.status !== 200) {\n    try {", "  if (false) {\n    try {"), "the refused scope is not asked again without it"],
@@ -2557,7 +2596,7 @@ const PLANTS = [
   ["d4f", swap("  if (keys) await storeEndEverywhere(keys).catch(() => false);\n", ""), "Everywhere ends nothing"],
   ["d4f", swap("    if (folder && !tok.why) await folder.write(L.endedText(keys.rt)).catch(() => null); /* plant:store-end-mark */\n", ""), "Everywhere leaves the key in the folder"],
   ["f0", swap("if (io.store === true && signinFolderApart(p.id)) signinFolderAfter(", "if (signinFolderApart(p.id)) signinFolderAfter("), "the folder asked after the sign-in where sync is off"],
-  ["f1", swap("function signinFolderApart(id) { return id === \"microsoft\"; }", "function signinFolderApart(id) { return false; }"), "Microsoft's folder asked with the sign-in"],
+  ["f1", swap("function signinFolderApart(id) { return id === \"microsoft\" || id === \"google\"; } /* plant:folder-apart-google */", "function signinFolderApart(id) { return false; } /* plant:folder-apart-google */"), "Microsoft's folder asked with the sign-in"],
   ["f2", swap("    io.folderToken({ provider: p.id, token: \"\", until: 0, why: org ? \"org\" : \"ungiven\" }); /* plant:folder-refused */\n", ""), "a refusal not kept, so the provider is asked again"],
   ["f3", swap("SIGNIN_WAIT_MS) : null; /* plant:folder-onward */", "SIGNIN_WAIT_MS) && null : null; /* plant:folder-onward */"), "the window never sent on"],
   ["f3", swap("  delete extra.prompt; /* plant:folder-no-prompt */\n", ""), "the second step asks the account choice again"],
@@ -2577,7 +2616,7 @@ const PLANTS = [
   ["gr", swap("      room: storeRoom, /* plant:store-room */\n", ""), "the store's channel tells the row nothing"],
   ["f7", swap("    if (!run.after) signinBusy = null; /* plant:folder-busy */", "    signinBusy = null; /* plant:folder-busy */"), "the sign-in ends before its folder step, so Cancel cannot reach it"],
   ["f7q", swap("{ if (typeof run.loop.cancel === \"function\") run.loop.cancel(); else run.loop.close(); } /* plant:stop-cancel */", "run.loop.close(); /* plant:stop-cancel */"), "Cancel closes nothing once the code is back"],
-  ["f8", swap("  if (io.store === true && signinFolderApart(p.id)) run.landMs = SIGNIN_FOLDER_LAND_MS; /* plant:folder-land-ms */", ""), "the plain landing's cap cuts the folder step"],
+  ["f8", swap("  if (storeOn() && signinFolderApart(p.id)) run.landMs = SIGNIN_FOLDER_LAND_MS; /* plant:folder-land-ms */", ""), "the plain landing's cap cuts the folder step"],
   ["gm", swap("  const made = (look.state === \"paused\" || look.state === \"unavailable\") && look.made === true && look.keys ? look.keys.rt : look.state === \"on\" ? \"\" : storeState().made; /* plant:store-made-kept */", "  const made = \"\"; /* plant:store-made-kept */"), "the store made here is not named, so the next look forgets it"],
   ["t1", swap(" || signinTransient(res)) return; /* plant:folder-transient */", ") return; /* plant:folder-transient */"), "an outage at the token address kept as the folder refused"],
   ["t1", swap("  if (signinTransient(res)) return { why: \"offline\" };", ""), "the look's refresh answered by an outage read as consent never given"],
@@ -2586,7 +2625,6 @@ const PLANTS = [
   ["g1b", swap("{ folderToken: t => { if (same()) storeTokenTake(t); } }); /* plant:consent-held */", "{ folderToken: t => { storeTokenTake(t); } }); /* plant:consent-held */"), "the consent's answer taken for whoever is seated"],
   ["g1b", text => { const x = swap("return signinState().held && storeWho(signinState().held) === storeWho(held) ? storeTurn() : null; }); /* plant:consent-same-look */", "return signinState().held ? storeTurn() : null; }); /* plant:consent-same-look */")(text);
     return x && swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = false; /* plant:store-held */")(x); }, "the look after the consent run for whoever is seated, the hold lifted"],
-  ["fa1", swap("io = Object.assign(signinIo(run), { folderToken: t => { folderGot = t; } });", "io = signinIo(run);"), "the run's folder token kept before the sign-in is taken"],
   ["fa2", text => { const x = swap("storeAccess.who === storeWho(held) ? storeAccess : null; /* plant:access-who */", "true ? storeAccess : null; /* plant:access-who */")(text);
     const y = x && swap("  if (storeAccess && storeAccess.who !== who) storeAccess = null;", "")(x);
     return y && swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = false; /* plant:store-held */")(y); }, "a folder token reused for whoever is seated, the hold lifted"],
@@ -2602,7 +2640,7 @@ const PLANTS = [
   ["lk", swap("  storeLooking++; tellStore(); /* plant:store-look-told */", "  /* plant:store-look-told */"), "the look's start neither kept nor told, so the row says what it said before"],
   ["lk", swap("looking: storeLooking > 0, ever: s.told === true, /* plant:store-view-looking */", "looking: false, ever: false, /* plant:store-view-looking */"), "the row told neither that a look runs nor that one had sync on before"],
   ["ps", swap("signinRefused: !!(held && (held.said || held.ask === true)), conflicts:", "signinRefused: false, conflicts:"), "the row not told the sign-in is refused, so an ended certificate reads as a lapse"],
-  ["g6h", swap(" || !storePolicyNow().on) return \"none\"; /* plant:consent-ungiven */", " || storePolicyNow().held) return \"none\"; /* plant:consent-ungiven */"), "the press refused wherever policy holds the switch, so the row's button asks nothing"],
+  ["g6h", swap(" || !storePolicyNow().on || !storeOffered()) return \"none\"; /* plant:consent-ungiven */", " || storePolicyNow().held || !storeOffered()) return \"none\"; /* plant:consent-ungiven */"), "the press refused wherever policy holds the switch, so the row's button asks nothing"],
   ["e7", swap("  if (look.state === \"ended\" && pol.held === true && pol.on === true && ours()) { storeAnew = true; tellStore(); look = await L.storeLook(Object.assign({}, io, { fresh: true })); } /* plant:store-anew */\n", ""), "the ended mark followed under a held switch, so sync stops here in silence"],
   ["e7", swap("    anew: storeAnew, /* plant:store-view-anew */\n", ""), "the new store made but the row not told, so it says on"],
   ["t12", swap("  else if (s.held && s.held.cert && s.held.reached === false) storeTurn(); /* plant:store-renew-unreached */\n", ""), "a renewal that reached nothing makes no look, so the sync waits unloaded and nothing is tried again"],
@@ -2644,6 +2682,10 @@ const PLANTS = [
   ["z14", swap("      if (kept !== storeKeptTold) { storeKeptTold = kept; tellStore(); } /* plant:kept-told */", "      /* plant:kept-told */"), "a merge that keeps a version tells the page nothing"],
   ["z14", swap("    signinRefused: !!(held && (held.said || held.ask === true)), conflicts: storeConflicts(), /* plant:view-signin-ask */", "    signinRefused: !!(held && held.said), conflicts: storeConflicts(), /* plant:view-signin-ask */"), "a lost refresh token read as nothing wrong"],
   ["z14", swap("finally { storeLooking--; tellStore(); } /* plant:store-look-count */", "finally { storeLooking = 0; tellStore(); } /* plant:store-look-count */"), "the first look ending ends the row's word for both"],
+  ["n0", swap("    const storeOffer = j.storeOffer === true; /* plant:offer-read */", "    const storeOffer = true; /* plant:offer-read */"), "every answer read as an offer"],
+  ["n0", swap("    get store() { return storeOn() && storeOffered(); }, /* plant:io-store-offer */", "    get store() { return storeOn(); }, /* plant:io-store-offer */"), "the sign-in's folder step and the renewal's folder scope asked without the offer"],
+  ["n0", swap("  if (!storeOffered()) { storeSyncStop(); return null; } /* plant:look-offer */", "  /* plant:look-offer */"), "a look without the offer"],
+  ["n0", swap("held && storeOffered() && signinOffered()", "held && signinOffered()"), "the row shown without the offer"],
   ["z6", swap("      const fresh = await storeSigninFresh(); /* plant:grant-signin-fresh */", "      const fresh = true; /* plant:grant-signin-fresh */"), "the grant asked with an hour-old sign-in, refused for a day"],
   ["z6", swap("      return got && got.why === \"signin\" && !fresh ? { why: \"unreached\" } : got; /* plant:grant-signin-again */", "      return got; /* plant:grant-signin-again */"), "a refusal the renewal could not mend left for a day, the row saying refused"],
   ["z11", swap("storeSyncStop(); storeSyncCalm(); /* plant:forget-calm */", "storeSyncStop(); /* plant:forget-calm */"), "the merge armed before a sign out runs after it"],
