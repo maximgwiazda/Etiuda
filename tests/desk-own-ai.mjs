@@ -510,7 +510,7 @@ try {
        both switches off. */
     const TRUE_WHEN_DRAWN = ["The built-in model sends nothing anywhere.", "{HOST} has not answered three times in a row, so the built-in model ranks on this computer",
       "{HOST} usually takes more than 4 seconds to answer", "Until the service, the model and the key are complete",
-      "The organisation's model at {HOST} is set, and with both switches off"];
+      "The organisation's model at {HOST} is set, and with both switches and Rewording off"];
     /* True while the organisation's model ranks too, so they may be drawn then: the suggestion switch's off line (off, nothing
        goes to either model for suggestions), and the connection test's hover (the test sends its fixed prompt alone). */
     /* The person's own switch for rewording says only that, turned off, nothing is sent by Reword or Your own words?; it is drawn only
@@ -587,10 +587,10 @@ try {
     if (!(await flip("aisuggest", "off"))) problems.push("no suggestion switch");
     await sleep(100);
     const searchOnly = await lede();
-    if (!/ranks the search\. The search text is sent there\./.test(searchOnly)) problems.push("suggestions off: " + JSON.stringify(searchOnly));
+    if (!/ranks the search\. The search text is sent there, with up to 12 short pieces of the cards being ranked\./.test(searchOnly)) problems.push("suggestions off: " + JSON.stringify(searchOnly));
     await flip("aisearch", "off"); await sleep(100);
     const neither = await lede();
-    if (!/with both switches off nothing is sent to it/.test(neither)) problems.push("both off: " + JSON.stringify(neither));
+    if (!/with both switches and Rewording off, nothing is sent to it/.test(neither)) problems.push("both off: " + JSON.stringify(neither));
     await closeTab(); await page.evaluate(() => openSettings("all")); await sleep(150);
     const offNote = await note();
     await flip("aisuggest", "on"); await sleep(100);
@@ -599,6 +599,72 @@ try {
     await page.evaluate(() => { localStorage.removeItem("eAiOff"); localStorage.removeItem("eSearchAiOff"); });
     check(!problems.length, "db6 while the organisation's model ranks, the AI section's lede says what is sent by the two switches and follows a switch "
       + "moved on the open page, and the picker's note follows the suggestion switch: " + (problems.join("; ") || "three ledes, two notes"));
+  }
+
+  /* db6r: the statement of what leaves, in the copywriter's words of 2026-11-16 (state/briefs/words-what-leaves-the-computer-2026-11-16.md, section 3),
+     by the two switches and by the person's own Rewording switch, each form on and off, in both languages: the lede, the mark's title and the
+     model row's line. The Rewording sentence follows only where the shell says the switch is on (rewordOn === true) and names the address a
+     reword goes to (rewordAt), the one reading the sending code makes (fail closed): where the shell's state says nothing of it, or says it is
+     off, the "off" forms stand, so the sentence shown never says less than what can be sent. */
+  {
+    const problems = [];
+    const T = {
+      en: {
+        both: "The organisation's model at api.openai.com ranks the search and the suggestions. The search text, the copied message the suggestions are made from, and up to 12 short pieces of the cards being ranked are sent there.",
+        search: "The organisation's model at api.openai.com ranks the search. The search text is sent there, with up to 12 short pieces of the cards being ranked.",
+        suggest: "The organisation's model at api.openai.com ranks the suggestions. The copied message they are made from is sent there, with up to 12 short pieces of the cards being ranked.",
+        R: "At your press, the words or the card you ask it to reword go there too.",
+        noneOff: "The organisation's model at api.openai.com is set, and with both switches and Rewording off, nothing is sent to it.",
+        noneOn: "The organisation's model at api.openai.com is set. With both switches off, only the words or the card you ask it to reword are sent to it, at your press.",
+        rowOff: "The search text, the copied message the suggestions are made from and up to 12 short pieces of the cards being ranked are sent to api.openai.com, and nowhere else.",
+        rowOn: "The search text, the copied message the suggestions are made from and up to 12 short pieces of the cards being ranked are sent to api.openai.com, and nowhere else; so, at your press, are the words or the card you ask it to reword.",
+      },
+      pl: {
+        both: "Model organizacji pod adresem api.openai.com ustala kolejność wyszukiwania i propozycji. Trafia tam tekst wyszukiwania, skopiowana wiadomość, z której powstają propozycje, i najwyżej 12 krótkich fragmentów porządkowanych kart.",
+        search: "Model organizacji pod adresem api.openai.com ustala kolejność wyszukiwania. Trafia tam tekst wyszukiwania, razem z najwyżej 12 krótkimi fragmentami porządkowanych kart.",
+        suggest: "Model organizacji pod adresem api.openai.com ustala kolejność propozycji. Trafia tam skopiowana wiadomość, z której powstają, razem z najwyżej 12 krótkimi fragmentami porządkowanych kart.",
+        R: "Po kliknięciu trafia tam też tekst albo karta do przeredagowania.",
+        noneOff: "Model organizacji pod adresem api.openai.com jest ustawiony, a przy wyłączonych obu przełącznikach i Przeredagowaniu nic do niego nie trafia.",
+        noneOn: "Model organizacji pod adresem api.openai.com jest ustawiony. Przy wyłączonych obu przełącznikach trafia do niego tylko, po kliknięciu, tekst albo karta do przeredagowania.",
+        rowOff: "Tekst wyszukiwania, skopiowana wiadomość, z której powstają propozycje, i najwyżej 12 krótkich fragmentów porządkowanych kart trafiają do api.openai.com i nigdzie indziej.",
+        rowOn: "Tekst wyszukiwania, skopiowana wiadomość, z której powstają propozycje, i najwyżej 12 krótkich fragmentów porządkowanych kart trafiają do api.openai.com i nigdzie indziej; po kliknięciu trafia tam też tekst albo karta do przeredagowania.",
+      },
+    };
+    /* The shell's state as each case has it: rewordOn true or false with an address, true with no address (no organisation's model to send to),
+       a value that is not a boolean, and no word of it at all, which is how a state that cannot be read comes to the page. */
+    const STATES = [["on", { rewordAt: "api.openai.com", rewordOn: true }, true], ["off", { rewordAt: "api.openai.com", rewordOn: false }, false],
+      ["on, no address", { rewordAt: "", rewordOn: true }, false], ["unsaid", {}, false], ["not a boolean", { rewordAt: "api.openai.com", rewordOn: "true" }, false]];
+    await setHost(page, ORG_ON);
+    for (const lang of ["en", "pl"]) {
+      await page.evaluate(l => { localStorage.setItem("eUiLang", l); try { setUiLang(l); } catch (e) {} }, lang);
+      for (const [name, st, rewords] of STATES) {
+        await page.evaluate(s => { window.E_HOST.aiState = () => Object.assign({ model: true }, s); }, st);
+        for (const [suggest, search] of [[1, 1], [0, 1], [1, 0], [0, 0]]) {
+          await page.evaluate((a, b) => { if (a) localStorage.removeItem("eAiOff"); else localStorage.setItem("eAiOff", "1"); if (b) localStorage.removeItem("eSearchAiOff"); else localStorage.setItem("eSearchAiOff", "1"); }, suggest, search);
+          const w = T[lang], base = suggest && search ? w.both : search ? w.search : suggest ? w.suggest : "";
+          const wantLede = base ? base + (rewords ? " " + w.R : "") : rewords ? w.noneOn : w.noneOff;
+          const where = lang + "/rewording " + name + "/suggest " + suggest + " search " + search;
+          await closeTab(); await page.evaluate(() => openSettings("ai")); await sleep(120);
+          const lede = await page.evaluate(() => (document.querySelector("#setBody p.lede") || {}).textContent || "");
+          if (lede !== wantLede) problems.push(where + " lede " + JSON.stringify(lede));
+          await page.evaluate(() => { try { syncOrgMark(); } catch (e) {} });
+          const mark = await markNow(page);
+          if (base) { if (!mark.there || mark.title !== wantLede) problems.push(where + " mark " + JSON.stringify([mark.there, mark.title])); }
+          else if (mark.there) problems.push(where + " mark drawn with both switches off");
+          if (suggest && search) {
+            await closeTab(); await page.evaluate(() => openSettings("data")); await sleep(120);
+            const row = await page.evaluate(() => (document.querySelector('[data-row="orgmodel"]') || {}).textContent || "");
+            if (row.indexOf(rewords ? w.rowOn : w.rowOff) < 0 || (!rewords && row.indexOf(w.rowOn) >= 0)) problems.push(where + " model row " + JSON.stringify(row.slice(0, 260)));
+          }
+        }
+      }
+    }
+    await page.evaluate(() => {
+      localStorage.removeItem("eAiOff"); localStorage.removeItem("eSearchAiOff"); localStorage.setItem("eUiLang", "en"); try { setUiLang("en"); } catch (e) {}
+      window.E_HOST.aiState = () => ({ model: window.__ai.model !== false });
+    });
+    check(!problems.length, "db6r the lede, the mark's title and the model row's line carry the shortlist and the Rewording sentence only while the shell says that switch is on "
+      + "and names an address, and say the off forms where it says off, nothing or no address, in English and Polish: " + (problems.slice(0, 3).join("; ") || "five states, four switch cases, two languages"));
   }
 
   /* db7 (review finding 3): a policy key with neither a provider nor an address says so in Settings and on a refused test, in both languages. */
@@ -796,7 +862,7 @@ try {
   if (browser) await browser.close();
 }
 
-const EXPECTED = 17;
+const EXPECTED = 18;
 const done = asserted + notRun === EXPECTED;
 if (!done) { failed++; console.log("  FAIL ran " + (asserted + notRun) + " checks (" + asserted + " ran, " + notRun + " not run), expected " + EXPECTED); }
 console.log((failed || !done ? "desk-own-ai: " + failed + " of " + asserted + " failed" : "desk-own-ai: all " + asserted + " passed" + (notRun ? ", " + notRun + " NOT RUN" : "")));
