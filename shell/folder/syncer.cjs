@@ -817,8 +817,9 @@ function createFolderProgram(opts) {
   const backSeen = new Map(); // a file of this desk's own folder -> answered listings in a row that showed it taken back
   const backStamp = new Map(); // that file -> { size, mtimeMs } of the share's copy judged a take-back
   let takenNow = new Set(); // this desk's own files whose staged copy this listing judged a take-back
-  const clock = typeof opts.now === "function" ? opts.now : Date.now;
+  const clock = typeof opts.now === "function" ? opts.now : () => Date.now();
   const outboxTrack = { since: null, said: false, clock, logger };
+  let unreadReported = false;
   const knownMtimes = new Map(); // relPath -> { size, mtimeMs }
   const refusedMtimes = new Map(); // relPath -> { size, mtimeMs, at, epoch, key }
   const heldSettled = new Map(); // a held stamp already staged again once it stood long enough
@@ -1041,7 +1042,14 @@ function createFolderProgram(opts) {
           }
         }
         writeOutbox(mirror, st, io);
-      }, () => { if (!stopped && (clearRels.length || updateRels.length)) onOwed(); }, outboxTimers);
+      }, () => {
+        const unreadChanged = !!outboxTrack.said !== unreadReported;
+        if (unreadChanged) unreadReported = !!outboxTrack.said;
+        if (!stopped && (clearRels.length || updateRels.length || unreadChanged)) {
+          if (clearRels.length || updateRels.length) onOwed();
+          if (unreadChanged) onChange({ team, applied: [] });
+        }
+      }, outboxTimers);
     } catch {}
   }
   /* A desk's catalog answer sealed to the lead's box for this team: judged by its place and its envelope alone, never opened. */
@@ -1502,6 +1510,10 @@ function createFolderProgram(opts) {
   function applyScan(scanData) {
     if (!scanData || !scanData.answers) {
       onStatus({ folder, answers: false });
+      if (!!outboxTrack.said !== unreadReported) {
+        unreadReported = !!outboxTrack.said;
+        onChange({ team, applied: [] });
+      }
       return { answers: false, applied: [] };
     }
     onStatus({ folder, answers: true });
@@ -1984,6 +1996,10 @@ function createFolderProgram(opts) {
     try {
       if (!unread.length && !io.exists(path.join(mirror, PRIMED_NAME))) { io.writeFile(path.join(mirror, PRIMED_NAME), ""); primed = true; }
     } catch {}
+    if (!!outboxTrack.said !== unreadReported) {
+      unreadReported = !!outboxTrack.said;
+      faultMoved = true;
+    }
     if (applied.length > 0 || primed || faultMoved) {
       onChange(primed ? { team, applied, primed: true } : { team, applied });
     }
@@ -2067,6 +2083,11 @@ function createFolderProgram(opts) {
     owe,
     owed,
     owing: () => { const st = readOutbox(mirror, io, false, outboxTrack); return st === null || Object.keys(st.owe).some(k => st.owe[k] && st.owe[k].owe); },
+    outboxUnread: () => {
+      let unread = false;
+      unread = !!outboxTrack.said; /* plant:syncer-outbox-unread */
+      return unread;
+    },
     isOwed,
     landed,
     setPin,
@@ -2117,9 +2138,15 @@ class FolderSyncerController {
       onChange: this.onChange,
       onOwed: opts.onOwed,
       onRetryApplied: () => { this.sendHeld(); this.flushCheck(); },
-      own: opts.own
+      own: opts.own,
+      io: opts.io,
+      now: opts.now
     });
     this.own = opts.own;
+  }
+
+  outboxUnread() {
+    return !!(this.program && typeof this.program.outboxUnread === "function" && this.program.outboxUnread());
   }
 
   start() {

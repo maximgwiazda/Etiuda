@@ -381,12 +381,18 @@ function paintCatalogList(){
     const ownEntry=ownOf(heldId);
     const ownReached=!!(ownEntry && ownEntry.reached);
     const holdsEdits=deskBranchHolds();
+    const ownFaults=all.filter(f=>f && f.desk && (me ? f.desk.id===me.id || f.desk.id==="self" : f.desk.id==="self"));
+    let outboxUnread=false;
+    outboxUnread=ownFaults.some(o=>o && o.fault==="outbox-unread"); /* plant:outbox-unread-page */
     /* The team's folder has taken this desk's own writes back three times: they are kept here and sent again, never "with the team". */
     const takenBack=own.some(o=>o && o.fault==="taken-back");
     /* One line for the relay and the folder alike: a folder team's outbox retries every few seconds too (board 945 stage 3 (b)
        slice 2; the copywriter, 2026-11-01 02:08). */
+    const unreadLine=t("Updates from the team are paused on this computer, because Etiuda cannot read its own note of the edits not yet sent to the team. No edit made here is lost, and this usually passes by itself. If it does not, closing other programs or restarting the computer usually clears it.");
     const keptLine=t("Your edits are kept on this computer and go to the team as soon as it can take them. To hand them over now, Export saves them in a catalog file for the team's lead.");
-    const mineLine=takenBack
+    const mineLine=outboxUnread
+      ? ecMineHtml(unreadLine,true,"outbox-unread")
+      : takenBack
       ? ecMineHtml(keptLine,true,"taken-back")
       : (ownEntry || holdsEdits)
       ? ecMineHtml(ownReached
@@ -424,7 +430,7 @@ function paintCatalogList(){
     ecKeyBubClose();
     const rows=tops.reduce((out,x,k)=>out.concat([x.html],under[k]),[]).concat(alone);
     /* With no catalog in use the line has no row to stand under, and the fault is still said. */
-    if(takenBack && !rows.some(r=>r.indexOf("data-ec-fault")>=0)) rows.unshift(mineLine);
+    if((outboxUnread || takenBack) && !rows.some(r=>r.indexOf("data-ec-fault")>=0)) rows.unshift(mineLine);
     box.innerHTML=rows.length?rows.join(""):ecEmptyHtml();
     markCutText(box);
     wireEcKeys(box);
