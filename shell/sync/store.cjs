@@ -247,19 +247,40 @@ async function storeLook(io) {
     /* Swept while every computer was away, or a seat regained after the sweep: a fresh store, once, which this computer's sync fills. */
     if (r && r.ok === false && r.why === "not-enrolled" && !io.gone) return storeLook(Object.assign({}, io, { gone: keys.rt })); /* plant:store-remake */
   }
+  let wrote = false;
   if (!mine(keys)) {
     /* This computer enrols itself with S, the list kept in the folder's file so the next computer signs the whole of it. Written to the
        folder before the relay, as storeLeave does: the relay refuses any revision at or below its own, so it must never hold one the
        folder lacks. */
     const next = Object.assign({}, keys, { devices: keys.devices.concat([{ id: io.me.id, pub: io.me.pub, desk: io.me.desk }]).slice(-DEVICES_MAX), rev: keys.rev + 1 });
     const w = await io.folder.write(keyText(next)); /* plant:enrol-folder-first */
-    if (!w.ok) return { state: "unavailable", why: w.why, keys };
+    if (!w.ok) return { state: "unavailable", why: w.why, keys, made };
     keys = next;
+    wrote = true;
   }
   if (!taken(keys)) {
-    /* A list it holds already (replay-rev) is done, as for storeLeave. */
-    const d = await io.relay.devices(keys, got.store);
-    if (!d.ok && d.why !== "replay-rev") return { state: "paused", why: d.why || "relay", keys };
+    /* A revision the relay already holds (replay-rev) is done where another computer wrote that list to the folder before posting it. Where
+       the folder now holds another list, this computer enrols over it at a revision past both (twice at most). Where it still holds a list
+       this computer wrote (in this look, or one an earlier look's answer named `lost`, io.lost), the list the relay took is one the folder
+       lost, which only its own computer can put back (the relay takes no computer off but by its own word or the list's): the look pauses,
+       never kept as enrolled, until that computer's next look writes the folder over this one. */
+    for (let tries = 0; ; tries++) {
+      const d = await io.relay.devices(keys, got.store);
+      if (d.ok) break;
+      if (d.why !== "replay-rev" || tries >= 2) return { state: "paused", why: d.why || "relay", keys, made }; /* plant:enrol-replay */
+      const again = await io.folder.read();
+      const k = again.ok && again.text !== null ? keyRead(again.text) : null;
+      if (!k || k.rt !== keys.rt) return { state: "paused", why: again.ok ? "relay" : again.why, keys, made };
+      if (keyText(k) === keyText(keys)) {
+        if (wrote || io.lost === keys.rt + ":" + keys.rev) return { state: "paused", why: "relay", keys, made, lost: keys.rt + ":" + keys.rev }; /* plant:enrol-lost */
+        break;
+      }
+      keys = Object.assign({}, k, { devices: k.devices.filter(x => x.pub !== io.me.pub).concat([{ id: io.me.id, pub: io.me.pub, desk: io.me.desk }]).slice(-DEVICES_MAX),
+        rev: Math.max(k.rev, keys.rev) + 1 });
+      const w = await io.folder.write(keyText(keys));
+      if (!w.ok) return { state: "unavailable", why: w.why, keys, made };
+      wrote = true;
+    }
     io.keep(keys);
   }
   return { state: "on", keys, store: got.store, made };

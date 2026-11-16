@@ -880,11 +880,12 @@ async function lookRun(e, c) {
       devices: step("relay devices", async (k, cert) => { const r = await relayOp(e, c, "devices", k, cert); e.trace.push("c" + c.i + " relay devices " + deviceIds(k) + " " + (r.ok ? "ok" : r.why)); return r; }, { ok: false, why: "relay" }),
     },
     me: { id: c.me.id, pub: c.me.pub, desk: c.me.desk }, url: "https://relay.test/relay/v1",
-    rand: n => Buffer.from(Array.from({ length: n }, () => e.r.int(256))), fresh: c.fresh, made: c.made,
+    rand: n => Buffer.from(Array.from({ length: n }, () => e.r.int(256))), fresh: c.fresh, made: c.made, lost: c.lost,
   };
   const look = await ST.storeLook(io);
   if (!ours()) return null;
   c.made = look.state === "paused" && look.made === true && look.keys ? look.keys.rt : look.state === "on" ? "" : c.made;
+  c.lost = look.state === "paused" && typeof look.lost === "string" ? look.lost : look.state === "on" ? "" : c.lost || ""; /* the shell's own rule, store.cjs lost */
   if (look.state === "ended") { c.on = false; c.sealed = null; }
   if (look.state === "on") { c.fresh = false; c.onFor.add(look.keys.rt); }
   c.last = look;
@@ -1011,7 +1012,7 @@ async function plants2(green) {
   const product = fs.readFileSync(STORE_PATH, "utf8"), digest = sha(product);
   const swap = (from, to) => text => (text.split(from).length === 2 ? text.split(from).join(to) : null);
   const PLANTS = [
-    ["g", "a relay that refuses this computer's list for any reason taken as enrolled", swap("if (!d.ok && d.why !== \"replay-rev\") return", "if (false) return")],
+    ["g", "a relay that refuses this computer's list for any reason taken as enrolled", swap("      if (d.ok) break;\n", "      break;\n")],
     ["h", "the look's steps asked whatever the switch did (main.js store-look-steps, in the walk's stand-in)", "model:lookOurs"],
     ["i", "a fresh store never named made", swap("made = keys.rt === fresh.rt; /* plant:made */", "made = false; /* plant:made */")],
   ];

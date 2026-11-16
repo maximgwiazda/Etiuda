@@ -11030,13 +11030,13 @@ function storeFileRead(text) {
   return { keys: ok && typeof d.keys === "string" ? d.keys : "", said: ok && typeof d.said === "string" ? d.said.slice(0, 40) : "", off: ok && d.off === true,
     org: ok && d.org === true, told: ok && d.told === true, until: ok && Number.isSafeInteger(d.until) && d.until > 0 ? d.until : 0, owed: ok && typeof d.owed === "string" ? d.owed.slice(0, 400) : "",
     leave: ok && typeof d.leave === "string" ? d.leave.slice(0, 200000) : "", who: ok && typeof d.who === "string" && /^[0-9a-f]{32}$/.test(d.who) ? d.who : "",
-    made: ok && typeof d.made === "string" && /^[0-9a-f]{32}$/.test(d.made) ? d.made : "", last: ok && typeof d.last === "string" && /^[0-9a-f]{32}$/.test(d.last) ? d.last : "",
+    made: ok && typeof d.made === "string" && /^[0-9a-f]{32}$/.test(d.made) ? d.made : "", lost: ok && typeof d.lost === "string" && /^[0-9a-f]{32}:[0-9]{1,9}$/.test(d.lost) ? d.lost : "", last: ok && typeof d.last === "string" && /^[0-9a-f]{32}$/.test(d.last) ? d.last : "",
     ask: ok && typeof d.ask === "string" && /^[0-9a-f]{32}$/.test(d.ask) ? d.ask : "",
     aside: ok && typeof d.aside === "string" && STORE_ASIDE_RE.test(d.aside) ? d.aside : "" }; /* plant:store-aside-name */
 }
 function storeFileText(s) {
   return JSON.stringify(Object.assign({ format: 1, keys: s.keys || "", said: s.said || "" }, s.off === true ? { off: true } : {}, s.told === true ? { told: true } : {},
-    s.until > 0 ? { until: s.until } : {}, s.owed ? { owed: s.owed } : {}, s.leave ? { leave: s.leave } : {}, s.org === true ? { org: true } : {}, s.who ? { who: s.who } : {}, s.made ? { made: s.made } : {}, s.last ? { last: s.last } : {}, s.ask ? { ask: s.ask } : {},
+    s.until > 0 ? { until: s.until } : {}, s.owed ? { owed: s.owed } : {}, s.leave ? { leave: s.leave } : {}, s.org === true ? { org: true } : {}, s.who ? { who: s.who } : {}, s.made ? { made: s.made } : {}, s.lost ? { lost: s.lost } : {}, s.last ? { last: s.last } : {}, s.ask ? { ask: s.ask } : {},
     s.aside ? { aside: s.aside } : {}), null, 1) + "\n"; /* plant:store-aside-kept */
 }
 /* WHOSE THE STORE'S STATE IS: store.json belongs to the account named by `who`, a hash of its provider and sub; the first account seated
@@ -11073,7 +11073,7 @@ function storeMine() {
   }
   if (s.last !== who) { s.last = who; storeSave(); }
   if (s.who === who) return true; /* plant:store-mine */
-  s.keys = ""; s.leave = ""; s.owed = ""; s.made = "";
+  s.keys = ""; s.leave = ""; s.owed = ""; s.made = ""; s.lost = "";
   s.who = who;
   storeLeaveHere = null; storeOwedHere = ""; storeNow = null; storeSay = ""; storeFresh = false; storeAnew = false;
   if (storeAccess && storeAccess.who !== who) storeAccess = null;
@@ -11579,6 +11579,7 @@ async function storeAnswerNow(choice) {
   const own = choice === "mine" && s.who === who ? { off: s.off === true, owed: s.owed, here: storeOwedHere } : null; /* plant:answer-mine-own */
   s.who = who; s.last = who; s.ask = ""; /* plant:answer-mine-who */
   s.keys = ""; s.leave = ""; s.owed = ""; s.made = ""; /* plant:answer-mine-keys */
+  s.lost = "";
   s.until = 0; delete s.off; s.said = ""; delete s.told;
   storeLeaveHere = null; storeOwedHere = ""; storeNow = null; storeSay = ""; storeFresh = false; storeFullNow = false; storeAnew = false;
   storeNotNow.delete(who);
@@ -11744,7 +11745,7 @@ async function storeLookRun(p, held, me, pol) {
     grant: async (rt, sPub, extra) => (ours() ? storeGrant(me.key, rt, sPub, Object.assign({}, extra, { company: pol.company === true })) : { why: "unreached" }),
     relay: { create: async (k, g) => (ours() ? storeRelayCreate(k, g) : { ok: false, why: "relay" }), renew: async (k, g) => (ours() ? storeRelayRenew(k, g) : { ok: false, why: "relay" }),
       devices: async (keys, cert) => (ours() ? storeRelayDevices(keys, cert, me) : { ok: false, why: "relay" }) }, /* plant:store-look-steps */
-    me: { id: me.id, pub: me.key, desk: me.id }, url: STORE_RELAY, rand: n => crypto.randomBytes(n), fresh: storeFresh, made: storeState().made };
+    me: { id: me.id, pub: me.key, desk: me.id }, url: STORE_RELAY, rand: n => crypto.randomBytes(n), fresh: storeFresh, made: storeState().made, lost: storeState().lost };
   let look = await L.storeLook(io);
   /* Turned off everywhere from another computer while policy holds sync on here: a new store is made over the mark from what is on this
      computer, as On does for the person, and the row says so (storeAnew); the ended store is asked nothing. */
@@ -11753,6 +11754,9 @@ async function storeLookRun(p, held, me, pol) {
   /* A store made here whose grant or making did not finish is named, so the next look still makes it as the one that replaces. */
   const made = look.state === "paused" && look.made === true && look.keys ? look.keys.rt : look.state === "on" ? "" : storeState().made; /* plant:store-made-kept */
   if (made !== storeState().made) { storeState().made = made; storeSave(); }
+  /* A list this computer wrote that the relay refused as a revision it holds, named until a look is on (store.cjs storeLook). */
+  const lost = look.state === "paused" && typeof look.lost === "string" ? look.lost : look.state === "on" ? "" : storeState().lost || "";
+  if (lost !== (storeState().lost || "")) { storeState().lost = lost; storeSave(); }
   return storeSettle(look);
 }
 

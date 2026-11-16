@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-plants-"));
-const EXPECTED = 38;
+const EXPECTED = 41;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -167,7 +167,13 @@ function computer(world, label) {
     const g = await world.service(rt, sPub, ...rest);
     return g.why ? g : { grant: g.grant, store: g.cert(me.pub) };
   }, relay: relayIo(world.R, world.relaySent, me), me, url: "https://relay.test/relay/v1", rand: n => crypto.randomBytes(n), ask: () => said.push("asked"), say: () => said.push("said") });
-  return { label, me, sealed, said, look: more => ST.storeLook(Object.assign(io(), more)) };
+  /* `lost` kept from a paused answer until a look is on, as the shell keeps it. */
+  const self = { label, me, sealed, said, lost: "", look: async more => {
+    const l = await ST.storeLook(Object.assign(io(), { lost: self.lost }, more));
+    self.lost = l.state === "paused" && typeof l.lost === "string" ? l.lost : l.state === "on" ? "" : self.lost;
+    return l;
+  } };
+  return self;
 }
 function worldOf(kind) {
   const R = S.relayEnv({ roots: K.ROOTS });
@@ -393,6 +399,30 @@ async function main() {
   /* W6: a second computer's enrolment failing at one step, the folder's write or the relay's list, by a refusal, by the process ending
      at that step, or (the relay) by an answer lost after it took the list: the next look enrols it and it opens a session, and a third
      computer enrols after it; the failed look never says on. */
+  /* E6: two computers enrol from one read of the folder: the second's list, written over the first's in the folder, is refused at the relay
+     as a revision it holds (replay-rev). The second is never kept as enrolled nor says on where the relay does not hold it, and takes
+     nobody off: it pauses, the first enrols again over the folder at its next look and opens, and the second's next look enrols over that
+     list, says on and opens. */
+  async function enrolRaceScene() {
+    const w = worldOf("microsoft"), a = computer(w, "a"), b = computer(w, "b"), c = computer(w, "c");
+    const la = await a.look();
+    const stale = w.f.text, folder = w.folder();
+    let first = true;
+    const once = { folder: Object.assign({}, folder, { read: async () => { if (first) { first = false; return { ok: true, text: stale }; } return folder.read(); } }) };
+    w.R.clock.now += 1000;
+    const lb = await b.look();
+    w.R.clock.now += 1000;
+    const lc = await c.look(once), keptC = !!c.sealed.keys && c.sealed.keys.devices.some(d => d.pub === c.me.pub);
+    w.R.clock.now += 1000;
+    const lb2 = await b.look();
+    const openB = lb2.state === "on" ? await opens(w.R, lb2.keys.rt, b.me, lb2.store) : "off";
+    w.R.clock.now += 1000;
+    const lc2 = await c.look();
+    const openC = lc2.state === "on" ? await opens(w.R, lc2.keys.rt, c.me, lc2.store) : "off";
+    const file = ST.keyRead(w.f.text);
+    const ok = la.state === "on" && lb.state === "on" && !first && lc.state === "paused" && !keptC && openB === "open" && lc2.state === "on" && openC === "open" && !!file && file.devices.length === 3;
+    return { ok, detail: brief({ c: lc.state + "/" + (lc.why || ""), keptC, b: lb2.state + "/" + (lb2.why || ""), openB, c2: lc2.state + "/" + (lc2.why || ""), openC, listed: file ? file.devices.length : 0 }) };
+  }
   async function enrolFaultScene() {
     const out = {};
     let all = true;
@@ -450,6 +480,7 @@ async function main() {
   const results = {};
   const LEGS = [
     ["R7", againScene, "a look that failed for a passing reason is tried again at growing gaps, seven times in a little over two hours, then not; on, ended or a refusal never"],
+    ["E6", enrolRaceScene, "two computers enrolling from one read of the folder: the second, refused as replay-rev, neither says on nor is kept enrolled nor takes the first off; the first enrols again over the folder at its next look and opens, and the second's next look enrols over it and opens"],
     ["W6", enrolFaultScene, "a second computer's enrolment failing at the folder's write or the relay's list (refused, the process ended there, or the relay's answer lost): the next look enrols it and it opens a session, and a third computer enrols after it"],
     ["G1", grantRefusedScene, "a key file of another store in the folder, refused by the service as another person's, leaves this computer's sealed copy its own; granted, the folder's store is kept"],
     ["L1", leaveScene, "This computer leaves: the folder's list without it written before the relay is asked, posted again when tried again though the folder already leaves it out; a list the relay holds, another store or the ended mark is done, the folder unreached is not"],
@@ -506,7 +537,9 @@ async function main() {
       "the relay asked before the folder, so a folder write that fails leaves the relay a revision ahead"],
     ["owed list taken", "W6", swap("const taken = k => !!local && local.rt === k.rt && local.rev === k.rev && mine(local); /* plant:enrol-taken */", "const taken = k => mine(k); /* plant:enrol-taken */"),
       "a list the folder holds is taken as the relay's, so one the relay never took is not posted again"],
-    ["held list refused", "W6", swap("if (!d.ok && d.why !== \"replay-rev\") return", "if (!d.ok) return"), "a list the relay holds already read as a refusal"],
+    ["held list refused", "W6", swap("if (d.why !== \"replay-rev\" || tries >= 2) return", "if (true) return"), "a list the relay holds already read as a refusal"],
+    ["replay taken as enrolled", "E6", swap("      if (d.ok) break;\n", "      break;\n"), "a list the relay refused as a revision it holds taken as enrolled, so the computer says on and opens nothing"],
+    ["lost list taken", "E6", swap("if (wrote || io.lost === keys.rt + \":\" + keys.rev) return", "if (false) return"), "the folder still holding the list this computer wrote, the relay's refusal taken as enrolled, so it says on and opens nothing"],
     ["seal after grant", "G1", swap("  const sPub = pubOf(keys.s);\n", "  io.keep(keys);\n  const sPub = pubOf(keys.s);\n"), "the folder's keys sealed before the service has granted their store"],
     ["made", "C1", lift("made"), "the first computer makes the file but not the store at the relay"],
     ["made", "C1g", lift("made"), "the same on Drive"],
