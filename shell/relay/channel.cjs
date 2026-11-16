@@ -1015,7 +1015,7 @@ function createProgram(opts) {
   function sentFrom(r, key) {
     const was = has(st.sent, key) ? st.sent[key] : null;
     const rec = { id: r.id, epoch: r.epoch, counter: r.counter, sha: r.kind === "delete" ? null : sha256(Buffer.from(r.body, "utf8")),
-      size: Number.isSafeInteger(r.size) && r.size >= 0 ? r.size : 0, del: r.kind === "delete", at: clock() };
+      size: Number.isSafeInteger(r.size) && r.size >= 0 ? r.size : 0, del: r.kind === "delete" };
     st.sent[key] = rec;
     st.bytes = Math.max(0, st.bytes - (was ? was.size : 0)) + rec.size;
     delete st.refused[key];
@@ -1596,10 +1596,13 @@ function createProgram(opts) {
     const a = has(st.applied, key) ? st.applied[key] : null;
     let echo = !!a && !a.del && clock() - a.at < ECHO_MS;
     if (echo && bytes != null) echo = sha256(toBytes(bytes)) === a.sha;
-    /* Not an echo where this program's own key has had another version of the path SINCE that landing (sent from here, or
-       taken as the last sent while an edit waited): the team then holds that other version, so bytes put back to the
-       landed ones are a change it has not seen. The order is by the two records' own times; a record kept before
-       2026-11-16 has none and answers as before, and so does another writer's later version over an older upload from here. */
+    /* Not an echo where this program has itself SENT another version of the path since that landing: the team then holds
+       that other version, so bytes put back to the landed ones are a change it has not seen. The order is by this
+       program's own clock at the two moments it witnessed, the landing and its own sending (sentOut). An own blob that
+       was merely fetched here (sentFrom) carries no time, since when it arrived says nothing of when it was sent: a
+       fresh install catching up may take another writer's later version first and its own older one after, and must not
+       then send that writer's version back out under its own key. A record without a time answers as before; so does a
+       record kept before 2026-11-16. */
     const s = has(st.sent, key) ? st.sent[key] : null;
     if (echo && s && !s.del && s.sha !== a.sha && s.at > a.at) echo = false; /* plant:sent-newer */
     if (echo) return { send: false, reason: "echo", said: B.REASONS.echo }; /* plant:out-echo */
