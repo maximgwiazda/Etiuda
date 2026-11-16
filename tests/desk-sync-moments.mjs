@@ -39,7 +39,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 28;
+const EXPECTED = 29;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const STORE = path.join(E.ROOT, "shell", "sync", "store.cjs");
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -243,7 +243,7 @@ async function main() {
     };
     const m2bad = [];
     const a = await ask();
-    if (!a.b || !a.at || !a.at.ok || a.title !== "Turn off sync?" || a.text !== "Everywhere also deletes the synced copy; each computer keeps its own."
+    if (!a.b || !a.at || !a.at.ok || a.title !== "Turn off sync?" || a.text !== "Everywhere also deletes the synced copy; each computer keeps its own. A computer signed in on later starts without what is here, unless another computer still syncs it."
       || JSON.stringify(a.buttons) !== JSON.stringify(["Everywhere", "This computer", "Cancel*"]) || a.focus !== "eSyncStay" || a.on !== "On" || a.sets.length) m2bad.push({ asked: a });
     await page.keyboard.press("Escape");
     await sleep(200);
@@ -295,7 +295,7 @@ async function main() {
     await page.evaluate(() => { const b = document.getElementById("eSyncSaid"); if (b) b.remove(); });
     const alone = await tell(page, { shown: true, line: "unavailable", on: true, held: false, why: "no-drive", since: 0, say: "no-drive" });
     await page.close();
-    const want = ["Wyłączyć synchronizację?", "Opcja Wszędzie usuwa też zsynchronizowaną kopię; każdy komputer zachowuje własną.", "Wszędzie", "Ten komputer", "Anuluj"];
+    const want = ["Wyłączyć synchronizację?", "Opcja Wszędzie usuwa też zsynchronizowaną kopię; każdy komputer zachowuje własną. Komputer, na którym logowanie nastąpi później, zacznie bez tego, co jest tutaj, chyba że inny komputer nadal to synchronizuje.", "Wszędzie", "Ten komputer", "Anuluj"];
     const ok = r1 && r1.title === "Synchronizacja między komputerami" && r1.line === "Niedostępna na tym koncie: konto nie ma usługi OneDrive. Na tym komputerze wszystko działa jak dotąd."
       && JSON.stringify(q) === JSON.stringify(want)
       && said.text.replace(/Zamknij$/, "").trim() === "Własne katalogi, zmiany i ustawienia będą teraz dostępne na każdym komputerze, na którym nastąpi zalogowanie. Można to wyłączyć w Koncie."
@@ -807,6 +807,27 @@ async function main() {
       detail = bad.length ? "red: " + JSON.stringify(bad[0]) : "still held";
       check(bad.length > 0, "p c9k leaving the kept answer's notice out turns c9k red", detail);
     } else check(false, "p c9k leaving the kept answer's notice out turns c9k red", detail);
+  }
+  if (PLANTS_OFF) skip("p m2 the turn-off question's third sentence taken out of the page turns m2 red");
+  else {
+    const Q_PLANT = [" A computer signed in on later starts without what is here, unless another computer still syncs it.\"))", "\"))"];
+    const n = PAGE.split(Q_PLANT[0]).length - 1;
+    let detail = "the plant's anchor is there " + n + " times";
+    if (n === 1) {
+      fs.writeFileSync(path.join(lab, "planted-question.html"), PAGE.split(Q_PLANT[0]).join(Q_PLANT[1]));
+      const p = await boot({ page: "planted-question.html", view: ON });
+      let text = "";
+      try {
+        await p.evaluate(() => openSettings("account"));
+        await sleep(150);
+        await p.evaluate(() => document.querySelector('#setBody .set-seg[data-seg="sync"] button[data-val="off"]').click());
+        await sleep(400);
+        text = await p.evaluate(() => { const b = document.getElementById("eSyncAsk"); return b ? b.querySelector("p").textContent : ""; });
+      } finally { await p.close(); }
+      const red = text !== "Everywhere also deletes the synced copy; each computer keeps its own. A computer signed in on later starts without what is here, unless another computer still syncs it.";
+      detail = red ? "red: " + text : "still held";
+      check(red, "p m2 the turn-off question's third sentence taken out of the page turns m2 red", detail);
+    } else check(false, "p m2 the turn-off question's third sentence taken out of the page turns m2 red", detail);
   }
   if (PLANTS_OFF) skip("p c8o the page's word that the conflict line was opened taken out turns c8o red");
   else {
