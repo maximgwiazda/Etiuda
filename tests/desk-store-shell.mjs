@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 210;
+const EXPECTED = 216;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -1554,6 +1554,7 @@ async function signinFlow(src, mode) {
   const world = worldOf({ refuseFolder: mode.quiet !== true });
   world.folderDelay = mode.folderDelay || 0;
   world.noOffer = mode.noOffer === true;
+  if (Array.isArray(mode.log)) { const real = world.fetch; world.fetch = (u, init) => { mode.log.push({ method: String(init && init.method || "GET"), url: String(u), body: init && init.body != null ? Buffer.from(init.body).toString("utf8") : "" }); return real(u, init); }; }
   const b = browserOf(world, mode);
   const shell = boot(src, { world, lab: labOf(), store: mode.store, policyText: mode.policyText, browser: u => { setTimeout(() => { b.last = b.go(u).catch(() => {}); }, 5); } });
   const { T } = shell;
@@ -1614,6 +1615,92 @@ async function noOfferScene(src) {
     && (out["microsoft+offer"].folderForms > 0 || out["microsoft+offer"].scopes.length === 2) && out["google+offer"].scopes[1] === "openid " + DRIVE_SCOPE
     && ended.wasOn && !ended.offerKept && !ended.row && ended.graphAfter === 0;
   return { ok, detail: brief({ out, ended }) };
+}
+
+/* (n1) WITHOUT THE OFFER THE SHELL'S OWN HANDLERS REFUSE: the account question's answer and the switch are refused by the shell itself,
+   whatever the page can reach: Start from my account sets nothing aside (the catalog where it was, no Set aside folder, desk.json as it
+   was), and This computer turns nothing off (store.json unchanged). */
+async function noOfferHandlersScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world, UD = r.shell.UD;
+  const dir = T.storeSyncFolder();
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "kept.ec"), "KEPT\n");
+  T.patchDesk(JSON.stringify({ eTheme: "dark" }));
+  /* The same account, its offer gone: the switch refused by the shell. */
+  T.signinState().held.storeOffer = false;
+  const storeA = fs.readFileSync(path.join(UD, "store.json"), "utf8");
+  await T.storeSetNow("here");
+  const storeSame = fs.readFileSync(path.join(UD, "store.json"), "utf8") === storeA;
+  const heldA = T.signinState().held;
+  T.signinOutNow();
+  seatAnother(T, w, heldA);
+  T.signinState().held.storeOffer = false;
+  await T.storeTurn();
+  const deskBefore = fs.readFileSync(path.join(UD, "desk.json"), "utf8");
+  const ans = await T.storeAnswerNow("start");
+  const aside = fs.existsSync(path.join(UD, "Set aside"));
+  const kept = fs.existsSync(path.join(dir, "kept.ec")), deskSame = fs.readFileSync(path.join(UD, "desk.json"), "utf8") === deskBefore;
+  const ok = !!ans && ans.ok === false && !aside && kept && deskSame && storeSame;
+  return { ok, detail: brief({ answer: ans && ans.ok, aside, kept, deskSame, storeSame }) };
+}
+
+/* (n0b) THE CLOSED DESK ASKS WHAT abc58e9f ASKED: with no store offered, each provider's first sign-in and its renewal send, in order,
+   the requests tests/fixtures/closed-desk-requests.json holds, captured once from abc58e9f's shell/main.js by this same harness
+   (closedCapture; the command is in the fixture's "how"). Every authorize query, token form and licence-service body is compared field
+   for field; only CLOSED_NORMAL's random or timed fields are put to their names first; any request to a host or route the fixture lacks
+   is a difference. */
+const CLOSED_NORMAL = ["state", "nonce", "code_challenge", "code_verifier", "code", "refresh_token", "idToken", "desk", "seed", "t", "sig", "redirect_uri:port"];
+const CLOSED_FIXTURE = path.join(ROOT, "tests", "fixtures", "closed-desk-requests.json");
+function closedNormal(req, browser) {
+  const u = new URL(req.url), out = { method: req.method, at: u.origin + u.pathname, from: browser ? "browser" : "shell", fields: {} };
+  let fields = {};
+  if (browser || req.method === "GET") fields = Object.fromEntries(u.searchParams);
+  else if (/^\s*\{/.test(req.body)) { try { fields = JSON.parse(req.body); } catch { fields = { "<body>": req.body }; } }
+  else if (req.body) fields = Object.fromEntries(new URLSearchParams(req.body));
+  for (const k of Object.keys(fields).sort()) {
+    let v = fields[k];
+    if (CLOSED_NORMAL.indexOf(k) >= 0) v = "<" + k + ">";
+    else if (k === "redirect_uri") v = String(v).replace(/:\d+$/, ":<port>");
+    out.fields[k] = typeof v === "string" ? v : JSON.stringify(v);
+  }
+  return out;
+}
+async function closedCapture(src) {
+  const out = [];
+  for (const provider of ["microsoft", "google"]) {
+    const log = [];
+    const r = await signinFlow(src, { provider, noOffer: true, quiet: true, log });
+    const first = r.b.urls.map(u => closedNormal({ method: "GET", url: u }, true)).concat(log.map(x => closedNormal(x, false)));
+    log.length = 0;
+    await r.shell.T.signinRenewNow();
+    const flight = r.shell.T.get().storeFlight;
+    if (flight) await flight;
+    out.push({ provider, phase: "first", requests: first }, { provider, phase: "renewal", requests: log.map(x => closedNormal(x, false)) });
+  }
+  return out;
+}
+async function closedScene(src) {
+  let want = null;
+  try { want = JSON.parse(fs.readFileSync(CLOSED_FIXTURE, "utf8")); } catch { want = null; }
+  if (!want || !Array.isArray(want.runs) || !want.runs.length) return { ok: false, detail: "no fixture at tests/fixtures/closed-desk-requests.json" };
+  const got = await closedCapture(src), diffs = [];
+  for (let i = 0; i < Math.max(got.length, want.runs.length); i++) {
+    const g = got[i], w = want.runs[i];
+    if (!g || !w || g.provider !== w.provider || g.phase !== w.phase) { diffs.push("run " + i + ": " + JSON.stringify([g && g.provider + "/" + g.phase, w && w.provider + "/" + w.phase])); continue; }
+    for (let j = 0; j < Math.max(g.requests.length, w.requests.length); j++) {
+      const a = JSON.stringify(g.requests[j] || null), b = JSON.stringify(w.requests[j] || null);
+      if (a !== b) diffs.push(g.provider + "/" + g.phase + " #" + j + ": got " + a + " want " + b);
+    }
+  }
+  return { ok: diffs.length === 0, detail: brief({ runs: got.length, requests: got.map(x => x.requests.length), diffs: diffs.slice(0, 4) }) };
+}
+/* The capture itself, a command, so the fixture's provenance is the command: node tests/desk-store-shell.mjs --capture-closed <file>,
+   run with this file copied into an export of the commit to capture (the fixture names it). */
+if (process.argv[2] === "--capture-closed") {
+  const runs = await closedCapture(MAIN);
+  fs.writeFileSync(process.argv[3], JSON.stringify({ kind: "etiuda-closed-desk-requests", format: 1, how: process.env.CLOSED_HOW || "", normalised: CLOSED_NORMAL, runs }, null, 1) + "\n");
+  console.log("captured " + runs.map(r => r.provider + "/" + r.phase + " " + r.requests.length).join(", "));
+  process.exit(0);
 }
 
 /* (h) Each folder page in both languages carries its words whole, and the sign-in's own seat page is as it was. */
@@ -2657,6 +2744,8 @@ const LEGS = [
   ["z2r", answerStartFloorsScene, "Start from my account takes the floors that refuse an older edition aside with the desk, kept in the set-aside desk.json, so the next account's own edition is not refused; a team lead's floor stays; It is mine keeps them all"],
   ["z5", refreshLostScene, "a look after the refresh token was lost says signing in is refused, not the organisation's refusal, and arms no retry; a revoked certificate, once the store certificate has ended, says the same, not a lapse"],
   ["z14", rowToldScene, "a merge keeping a version tells the page; a renewal that lost its refresh token reads as a refused sign-in; the first of two overlapping looks ending leaves the row saying a look runs"],
+  ["n0b", closedScene, "with no store offered, each provider's first sign-in and renewal send what abc58e9f sent, request for request and field for field (tests/fixtures/closed-desk-requests.json), only the random and timed fields normalised, nothing sent anywhere else"],
+  ["n1", noOfferHandlersScene, "without the offer the shell refuses the account question's answer and the switch itself: nothing set aside, the catalog and desk.json as they were, store.json unchanged"],
   ["n0", noOfferScene, "no store offered by the service: each provider's sign-in asks what it asked before sync, one request, nothing after the seat, no folder scope, no app-folder call, no key file, no grant, no look, no row; with the offer both ask the folder apart; a renewal without the offer ends it"],
   ["z7", signoutToldScene, "a sign out tells the page the store's state, so an account question left open closes, the row it reads not shown"],
   ["z10", offFirstLookScene, "Off while the first look is out, this computer holding no keys at its start: Everywhere ends the store that look read, store/end posted and the ended mark in the folder; This computer takes off the folder's list the computer that look enrolled"],
@@ -2790,6 +2879,10 @@ const PLANTS = [
   ["z5", swap("  if (!refresh) return { why: \"signin\" }; /* plant:token-no-refresh */", "  if (!refresh) return { why: \"consent\" }; /* plant:token-no-refresh */"), "a look with no refresh token to open says the organisation refused the folder"],
   ["z5", swap(" || signinRevokedHas(held.revoked, held.cert)); /* plant:view-signin-revoked */", "); /* plant:view-signin-revoked */"), "a revoked certificate read as a lapse that resumes by itself"],
   ["z14", swap("finally { storeLooking--; tellStore(); } /* plant:store-look-count */", "finally { storeLooking = 0; tellStore(); } /* plant:store-look-count */"), "the first look ending ends the row's word for both"],
+  ["n0b", swap("code_challenge_method: \"S256\" }, known.extra));", "code_challenge_method: \"S256\", planted: \"1\" }, known.extra));"), "one parameter more on the sign-in's authorize request"],
+  ["n0b", swap("  const body = { provider: String(provider), idToken: idToken, desk: String(desk) };", "  const body = { provider: String(provider), idToken: idToken, desk: String(desk), planted: true };"), "one field more in signin/desk's body"],
+  ["n1", swap("  if (!storeOffered()) return { ok: false, choice: \"\", folder: \"\", view: storeView() }; /* plant:answer-offer */\n", ""), "the answer taken without the offer, so Start sets the desk aside"],
+  ["n1", swap("  if (!storeOffered()) return storeView(); /* plant:set-offer */\n", ""), "the switch moved without the offer"],
   ["n0", swap("    const storeOffer = j.storeOffer === true; /* plant:offer-read */", "    const storeOffer = true; /* plant:offer-read */"), "every answer read as an offer"],
   ["n0", swap("    get store() { return storeOn() && storeOffered(); }, /* plant:io-store-offer */", "    get store() { return storeOn(); }, /* plant:io-store-offer */"), "the sign-in's folder step and the renewal's folder scope asked without the offer"],
   ["n0", swap("  if (!storeOffered()) { storeSyncStop(); return null; } /* plant:look-offer */", "  /* plant:look-offer */"), "a look without the offer"],
