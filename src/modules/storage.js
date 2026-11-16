@@ -71,13 +71,16 @@ let eDeskDue=false, eDeskSent=0, eDeskHeard=0, eDeskArmed=false;
    a width does not carry the catalog with it. A key is owed from its change until a send carrying
    it is answered true: a refusal is carried by the next send, never settled by another key's. */
 const eDeskOwed=new Set(), eDeskCarried=new Map();   // key -> the latest send carrying it, unanswered
+/* Each send names, per key, the host's tell whose value this copy took (eDeskTake), so the host knows a write from a copy that never
+   held what its sync put there (shell/main.js patchDesk). */
+const eDeskTook=new Map();                           // key -> that tell's number
 function deskPatchSend(all){
-  const n=++eDeskSent, keys=new Set(eDeskOwed), out={};
+  const n=++eDeskSent, keys=new Set(eDeskOwed), out={}, took={};
   if(all) eDeskCarried.forEach((m,k)=>keys.add(k));
   eDeskOwed.clear();
-  keys.forEach(k=>{ eDeskCarried.set(k,n); out[k]=(k in E_DESK.map)?E_DESK.map[k]:null; });
+  keys.forEach(k=>{ eDeskCarried.set(k,n); out[k]=(k in E_DESK.map)?E_DESK.map[k]:null; if(eDeskTook.has(k)) took[k]=eDeskTook.get(k); });
   let p;
-  try{ p=keys.size ? E_DESK.patch(JSON.stringify(out),all) : true; }catch(e){ p=false; }
+  try{ p=keys.size ? E_DESK.patch(JSON.stringify(out),all,JSON.stringify(took)) : true; }catch(e){ p=false; }
   const heard=ok=>keys.forEach(k=>{
     if(eDeskCarried.get(k)!==n) return;           // a later send carries it
     eDeskCarried.delete(k);
@@ -137,8 +140,8 @@ function deskArm(){
   }catch(e){}
 }
 /* WHAT THE HOST PUT ON THE DESK BEHIND THIS PAGE, taken into the page's copy: a key this page still owes keeps the page's value,
-   which its own send carries. Returns the keys taken. */
-function eDeskTake(text){
+   which its own send carries. Returns the keys taken; `n` the tell's number. */
+function eDeskTake(text,n){
   if(!E_DESK || eWiping) return [];
   let o=null;
   try{ o=JSON.parse(text); }catch(e){ return []; }
@@ -147,6 +150,7 @@ function eDeskTake(text){
   Object.keys(o).forEach(k=>{
     const v=o[k];
     if((v!==null && typeof v!=="string") || eDeskOwed.has(k) || eDeskCarried.has(k)) return; /* plant:desk-take-owed */
+    if(Number.isSafeInteger(n) && n>0) eDeskTook.set(k,n); /* plant:desk-took */
     if(v===null ? !(k in E_DESK.map) : E_DESK.map[k]===v) return;
     if(v===null) delete E_DESK.map[k]; else E_DESK.map[k]=v;
     taken.push(k);

@@ -8107,6 +8107,12 @@ function sameDesk(a, b) {
 let deskKeys;                                  // the desk as the last read or write left the file
 let deskWritten = false;                       // whether the live desk.json is this run's write
 const deskGiven = new Map();                   // webContents id -> the map that load was handed
+/* WHAT THE STORE'S SYNC PUT ON THE DESK BEHIND THE PAGE, by key, until the page next writes that key: each tell numbered, and each page
+   write naming per key the tell whose value its copy took (src/modules/storage.js eDeskTook), so a write from a copy that never held
+   a tell's value is known for one (patchDesk). `pre` {item: ledger entry before the take}, or null for a key cleared whole. */
+let deskTellNo = 0;
+const deskTold = new Map();                    // desk key -> [{n, pre}]
+const deskLoadNo = new Map();                  // webContents id -> the last tell its load's desk already held
 /* The bytes, shared by the engine's channel below and by the main process's own one-key write.
    Temp file then rename, which is the one filesystem operation that cannot leave half a desk. */
 function saveDeskFile(keysText) {
@@ -8191,14 +8197,32 @@ function deskText(keys) {
   return "{" + parts.join(",") + "}";
 }
 /* A PATCH NAMES ONLY THE KEYS ONE LOAD CHANGED, a string for a value and null for a key deleted,
-   so it is applied as it stands: no other load's key is in it to be undone. */
-function patchDesk(text) {
+   so it is applied as it stands: no other load's key is in it to be undone. `page` {from, took} for the page's own write. */
+function patchDesk(text, page) {
   let patch;
   try { patch = JSON.parse(text); } catch { return false; }
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) return false;
-  const keys = Object.keys(patch);
+  let keys = Object.keys(patch);
   if (keys.some(k => patch[k] !== null && typeof patch[k] !== "string")) return false;
   if (deskKeys === undefined) deskKeys = readDesk();
+  /* A key the page writes from a copy that never took a tell since: what the sync took is taken again by the next merge (sync.cjs
+     untake), never read as this computer's removal; a key the sync cleared whole stays cleared, and the page is told again. */
+  const rewind = {}, dropped = [];
+  if (page) {
+    let took = {};
+    try { const t = JSON.parse(page.took || "{}"); if (t && typeof t === "object" && !Array.isArray(t)) took = t; } catch { /* none taken */ }
+    for (const k of keys) {
+      const told = deskTold.get(k);
+      if (!told) continue;
+      deskTold.delete(k);
+      const at = Math.max(Number.isSafeInteger(took[k]) ? took[k] : 0, deskLoadNo.get(page.from) || 0);
+      const late = told.filter(t => t.n > at); /* plant:desk-stale */
+      if (late.some(t => t.pre === null)) { dropped.push(k); delete patch[k]; continue; } /* plant:desk-whole */
+      for (const t of late) for (const item of Object.keys(t.pre || {})) if (!Object.prototype.hasOwnProperty.call(rewind, item)) rewind[item] = t.pre[item];
+    }
+    keys = Object.keys(patch);
+    if (dropped.length) setImmediate(() => deskSyncedTell(Object.fromEntries(dropped.map(k => [k, Object.prototype.hasOwnProperty.call(deskKeys, k) ? deskKeys[k] : null]))));
+  }
   const langWas = deskKeys ? deskKeys.eUiLang : undefined;
   /* Ejecting the catalog is the agent leaving the file this launch was opened with, even when
      that key was never stored and the patch then changes nothing. */
@@ -8211,6 +8235,7 @@ function patchDesk(text) {
     saveDeskFile(deskText(merged));
     deskKeys = merged;
     deskWritten = true;
+    if (storeSyncing && Object.keys(rewind).length) storeSyncing.untake(rewind); /* plant:desk-untake */
     catalogFolderChanged();
     applyThemeSource();
     syncHotkey();
@@ -8232,9 +8257,10 @@ function patchDesk(text) {
 ipcMain.on("etiuda:desk", (e) => {
   if (!fromEngine(e)) { e.returnValue = null; return; }
   const id = e.sender.id;
-  if (!deskGiven.has(id)) e.sender.once("destroyed", () => deskGiven.delete(id));
+  if (!deskGiven.has(id)) e.sender.once("destroyed", () => { deskGiven.delete(id); deskLoadNo.delete(id); });
   deskKeys = readDesk();
   deskGiven.set(id, deskKeys);
+  deskLoadNo.set(id, deskTellNo);
   e.returnValue = JSON.stringify(deskKeys);
 });
 ipcMain.on("etiuda:desk-save", (e, text) => {
@@ -8244,11 +8270,11 @@ ipcMain.on("etiuda:desk-save", (e, text) => {
    finds nothing waiting here: whatever the page has not sent yet it sends on pagehide. */
 ipcMain.handle("etiuda:desk-write", (e, text) =>
   fromEngine(e) && typeof text === "string" && writeDesk(text, e.sender.id));
-ipcMain.on("etiuda:desk-patch-save", (e, text) => {
-  e.returnValue = fromEngine(e) && typeof text === "string" && patchDesk(text);
+ipcMain.on("etiuda:desk-patch-save", (e, text, took) => {
+  e.returnValue = fromEngine(e) && typeof text === "string" && patchDesk(text, { from: e.sender.id, took: typeof took === "string" ? took : "" });
 });
-ipcMain.handle("etiuda:desk-patch", (e, text) =>
-  fromEngine(e) && typeof text === "string" && patchDesk(text));
+ipcMain.handle("etiuda:desk-patch", (e, text, took) =>
+  fromEngine(e) && typeof text === "string" && patchDesk(text, { from: e.sender.id, took: typeof took === "string" ? took : "" }));
 /* THE TABS' SESSION LIVES HERE, IN MEMORY, PER WINDOW. Chromium's own sessionStorage is written to the
    profile, where a customer's name and a search would outlast the window; this is never written in plain text.
    At an installer's close alone, and only upon an explicit installer signal (--update-close) when safeStorage
@@ -11817,13 +11843,32 @@ function storeSyncApply(patch, copies) {
     if (item.startsWith("k:")) keys[item.slice(2)] = patch[item];
     else if (storeSyncFile(item.slice(2), patch[item]) === false) failed.push(item);
   }
-  if (Object.keys(keys).length) { if (patchDesk(JSON.stringify(keys))) deskSyncedTell(keys); else failed.push(...Object.keys(keys).map(k => "k:" + k)); } /* plant:apply-desk-failed */
+  if (Object.keys(keys).length) { const pre = storeSyncTaken(keys); if (patchDesk(JSON.stringify(keys))) deskSyncedTell(keys, pre); else failed.push(...Object.keys(keys).map(k => "k:" + k)); } /* plant:apply-desk-failed */
   return failed;
 }
-/* The open page keeps its own copy of the desk, so it is told what was put in place (src/modules/storage.js eDeskTake). */
-function deskSyncedTell(keys) {
+/* For each desk key a merge puts in place, the ledger entry each item it changes had before the take, null for none (deskTold). */
+function storeSyncTaken(keys) {
+  const L = SyncLib(), ledger = storeSyncing ? storeSyncing.state().ledger : {}, out = {};
+  if (deskKeys === undefined) deskKeys = readDesk();
+  for (const k of Object.keys(keys)) {
+    out[k] = {};
+    for (const item of L.keyItems(k, deskKeys[k], keys[k])) out[k][item] = Object.prototype.hasOwnProperty.call(ledger, item) ? ledger[item] : null;
+  }
+  return out;
+}
+/* The open page keeps its own copy of the desk, so it is told what was put in place (src/modules/storage.js eDeskTake), with the tell's
+   number; `pre` as storeSyncTaken answers, a key it lacks cleared whole. */
+function deskSyncedTell(keys, pre) {
+  const n = ++deskTellNo;
+  for (const k of Object.keys(keys)) {
+    const l = deskTold.get(k) || [];
+    l.push({ n, pre: pre && pre[k] ? pre[k] : null });
+    /* Bounded where the page never writes the key: the two earliest meet, the earlier entry of an item standing, a whole clear whole. */
+    if (l.length > 64) l.splice(0, 2, { n: l[1].n, pre: l[0].pre && l[1].pre ? Object.assign({}, l[1].pre, l[0].pre) : null });
+    deskTold.set(k, l);
+  }
   const win = theWindow;
-  if (win && !win.isDestroyed()) try { win.webContents.send("etiuda:desk-synced", JSON.stringify(keys)); } catch { /* the page has gone */ } /* plant:desk-synced-tell */
+  if (win && !win.isDestroyed()) try { win.webContents.send("etiuda:desk-synced", JSON.stringify(keys), n); } catch { /* the page has gone */ } /* plant:desk-synced-tell */
 }
 /* A catalog file from another computer, into the catalog folder; one removed there is moved aside under userData\store\kept,
    never deleted, by storeMoveFile, which copies and unlinks where the catalog folder is on another volume. False where it could not

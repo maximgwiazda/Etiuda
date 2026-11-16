@@ -154,11 +154,11 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   },
   deskSave: (text) => ipcRenderer.sendSync("etiuda:desk-save", text),
   deskWrite: (text) => ipcRenderer.invoke("etiuda:desk-write", text),
-  /* Only the keys this load changed, null for one it deleted; `now` waits for the disk as deskSave does. */
-  deskPatch: (text, now) => (now ? ipcRenderer.sendSync("etiuda:desk-patch-save", text)
-    : ipcRenderer.invoke("etiuda:desk-patch", text)),
-  /* The keys the store's sync put on the desk behind the page, as a patch in text. */
-  onDeskSynced: (fn) => ipcRenderer.on("etiuda:desk-synced", (_e, text) => { try { fn(String(text || "")); } catch { /* the page has gone */ } }),
+  /* Only the keys this load changed, null for one it deleted; `now` waits for the disk as deskSave does; `took` the tells taken, by key. */
+  deskPatch: (text, now, took) => (now ? ipcRenderer.sendSync("etiuda:desk-patch-save", text, typeof took === "string" ? took : "")
+    : ipcRenderer.invoke("etiuda:desk-patch", text, typeof took === "string" ? took : "")),
+  /* The keys the store's sync put on the desk behind the page, as a patch in text, and the tell's number. */
+  onDeskSynced: (fn) => ipcRenderer.on("etiuda:desk-synced", (_e, text, n) => { try { fn(String(text || ""), Number.isSafeInteger(n) ? n : 0); } catch { /* the page has gone */ } }),
   /* Where the desk is, and the files it refused and kept aside, as text like the desk itself. */
   deskFile: host.deskFile,
   /* The home folder, so a path the page shows can be written %USERPROFILE% rather than by name. */

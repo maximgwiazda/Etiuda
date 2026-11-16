@@ -6712,17 +6712,19 @@ What you type stays in this browser only.`;
   var eDeskArmed = false;
   var eDeskOwed = /* @__PURE__ */ new Set();
   var eDeskCarried = /* @__PURE__ */ new Map();
+  var eDeskTook = /* @__PURE__ */ new Map();
   function deskPatchSend(all) {
-    const n = ++eDeskSent, keys = new Set(eDeskOwed), out = {};
+    const n = ++eDeskSent, keys = new Set(eDeskOwed), out = {}, took = {};
     if (all) eDeskCarried.forEach((m, k) => keys.add(k));
     eDeskOwed.clear();
     keys.forEach((k) => {
       eDeskCarried.set(k, n);
       out[k] = k in E_DESK.map ? E_DESK.map[k] : null;
+      if (eDeskTook.has(k)) took[k] = eDeskTook.get(k);
     });
     let p;
     try {
-      p = keys.size ? E_DESK.patch(JSON.stringify(out), all) : true;
+      p = keys.size ? E_DESK.patch(JSON.stringify(out), all, JSON.stringify(took)) : true;
     } catch (e) {
       p = false;
     }
@@ -6797,7 +6799,7 @@ What you type stays in this browser only.`;
     } catch (e) {
     }
   }
-  function eDeskTake(text) {
+  function eDeskTake(text, n) {
     if (!E_DESK || eWiping) return [];
     let o = null;
     try {
@@ -6810,6 +6812,7 @@ What you type stays in this browser only.`;
     Object.keys(o).forEach((k) => {
       const v = o[k];
       if (v !== null && typeof v !== "string" || eDeskOwed.has(k) || eDeskCarried.has(k)) return;
+      if (Number.isSafeInteger(n) && n > 0) eDeskTook.set(k, n);
       if (v === null ? !(k in E_DESK.map) : E_DESK.map[k] === v) return;
       if (v === null) delete E_DESK.map[k];
       else E_DESK.map[k] = v;
@@ -17444,8 +17447,8 @@ What you type stays in this browser only.`;
     document.body.classList.add("e-host");
     if (h.testService === true) testServiceBand(document);
     if (typeof h.onStatsAsk === "function") h.onStatsAsk(answerStats);
-    if (typeof h.onDeskSynced === "function") h.onDeskSynced((text) => {
-      const keys = eDeskTake(text);
+    if (typeof h.onDeskSynced === "function") h.onDeskSynced((text, n) => {
+      const keys = eDeskTake(text, n);
       if (keys.length) {
         try {
           hooks.takeSyncedDesk(keys);

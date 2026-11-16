@@ -69,6 +69,11 @@ function localItems(keys, files, held) {
   }
   return out;
 }
+/* The items of desk key `key` whose values differ between its texts `a` and `b` (null where it stands nowhere): for a layer key its fields. */
+function keyItems(key, a, b) {
+  const x = localItems(typeof a === "string" ? { [key]: a } : {}), y = localItems(typeof b === "string" ? { [key]: b } : {});
+  return [...new Set(Object.keys(x).concat(Object.keys(y)))].filter(i => x[i] !== y[i]);
+}
 /* Whether `item` is one of `held`: an item named, a layer key's every field, or every item of a kind ("f:", the catalog files). */
 const heldBy = (held, item) => held.some(h => item === h || (h.endsWith(":") ? item.startsWith(h) : item.startsWith(h + "#")));
 
@@ -459,6 +464,23 @@ function createStoreSync(o) {
     merge();
     return true;
   }
+  /* What a merge took from another computer and put on the desk, written over since by the page from a copy that never held it: each
+     item's entry stands again as it stood before the take (`pre` {item: entry, or null for none}), so the next merge takes it again
+     rather than reading the page's copy as this computer's removal. An item this computer has written since keeps its own entry. */
+  function untake(pre) {
+    const ledger = Object.assign({}, state.ledger);
+    let any = false;
+    for (const item of Object.keys(plain(pre) ? pre : {})) {
+      const now = ledger[item];
+      if (!now || now.by === o.me.id) continue;
+      if (plain(pre[item])) ledger[item] = pre[item]; else delete ledger[item]; /* plant:untake */
+      any = true;
+    }
+    if (!any) return false;
+    state = Object.assign({}, state, { ledger });
+    o.save(state);
+    return true;
+  }
   /* The person has opened the notice of the versions kept: each kept now is marked so, and only the desk counts it; the copies stay. */
   function opened() {
     if (!state.kept.some(k => !k.opened)) return false;
@@ -466,8 +488,8 @@ function createStoreSync(o) {
     o.save(state);
     return true;
   }
-  return { turn, merge, stop, state: () => state, channel: () => ch, running: () => !!ch, resolve: choose, opened };
+  return { turn, merge, stop, state: () => state, channel: () => ch, running: () => !!ch, resolve: choose, opened, untake };
 }
 
-module.exports = { SYNC_NAME, SYNC_KIND, SETTINGS, LAYER_RE, CATALOG_RE, CATALOG_MAX, follows, isSetting, fileRel, syncRel, localItems, syncRead, syncText,
+module.exports = { SYNC_NAME, SYNC_KIND, SETTINGS, LAYER_RE, CATALOG_RE, CATALOG_MAX, follows, isSetting, fileRel, syncRel, localItems, keyItems, syncRead, syncText,
   fieldsOf, layerText, mergeOnce, unapplied, resolve, createStoreSync, STORE_TEAM, storeTeamDoc, storeChannelOptions, sha };

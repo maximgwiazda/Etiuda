@@ -14,7 +14,8 @@
  *   ds6 Settings in front is drawn again with what arrived; while its name field holds typing it is not, until the field lets go
  *   ds7 the shell: storeSyncApply sends etiuda:desk-synced with the keys it patched, to the window, and only once the desk took them
  *   ds8 the shell keeps a removal another computer made, a version of the value null, as a file of its own
- * Plants: the page's take not shown (ds1 and ds2 red); a key the page owes taken over (ds5 red); the screen in front not drawn
+ *   ds10 each send names, per key, the tell whose value the page took (the shell's half is desk-store-shell z2)
+ * Plants: the page's take not shown (ds1 and ds2 red); a key the page owes taken over (ds5 red); the tell taken not recorded (ds10 red); the screen in front not drawn
  * again (ds6 red); in a copy of shell/main.js, the tell taken out (ds7 red), the product's sha unchanged.
  */
 import fs from "node:fs";
@@ -38,7 +39,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 14;
+const EXPECTED = 16;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const MAIN = path.join(E.ROOT, "shell", "main.js");
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -69,9 +70,10 @@ async function boot(name = "etiuda.html") {
       deskRead: () => JSON.stringify(desk),
       deskSave: t => { desk = JSON.parse(t); put(); return true; },
       deskWrite: t => { desk = JSON.parse(t); put(); return Promise.resolve(true); },
-      deskPatch: (t, now) => {
+      deskPatch: (t, now, took) => {
         const p = patch(t);
         window.__desk.sends.push(p);
+        if (window.__desk.tooks) window.__desk.tooks.push(String(took));
         if (now) return true;
         return window.__desk.hold ? new Promise(() => {}) : Promise.resolve(true);
       },
@@ -185,6 +187,28 @@ async function screenDrawn(name) {
   } finally { await page.close(); }
 }
 
+/* ds10: each send names the tell whose value the page took for a key it sends; a tell arriving while that key is owed is not taken and
+   the send after it still names the earlier one. */
+async function tookSent(name) {
+  const page = await boot(name);
+  try {
+    await page.evaluate(() => { window.__desk.tell(JSON.stringify({ eNoteHover: "0" }), 5); });
+    await page.evaluate(() => { window.__desk.sends.length = 0; window.__desk.tooks = []; window.lsSet("eNoteHover", "1"); });
+    await sleep(60);
+    const first = await page.evaluate(() => window.__desk.tooks.slice());
+    await page.evaluate(() => { window.__desk.hold = true; window.lsSet("eNoteHover", "0"); });
+    await sleep(60);
+    await page.evaluate(() => { window.__desk.tell(JSON.stringify({ eNoteHover: "1" }), 6); });
+    const kept = await page.evaluate(() => window.lsGet("eNoteHover"));
+    await page.evaluate(() => { window.__desk.hold = false; window.__desk.tooks = []; document.dispatchEvent(new Event("visibilitychange")); window.dispatchEvent(new Event("pagehide")); });
+    await sleep(60);
+    const second = await page.evaluate(() => window.__desk.tooks.slice());
+    const named = l => l.length > 0 && l.every(t => { try { return JSON.parse(t).eNoteHover === 5; } catch (e) { return false; } });
+    if (!named(first) || kept !== "0" || !named(second)) return JSON.stringify({ first, kept, second });
+    return "";
+  } finally { await page.close(); }
+}
+
 async function main() {
   browser = await puppeteer.launch({ executablePath: E.browserPath("chrome"), headless: true, args: ["--hide-scrollbars"], protocolTimeout: 120000 });
 
@@ -254,6 +278,9 @@ async function main() {
   const ds6 = await screenDrawn("etiuda.html");
   check(!ds6, "ds6 Settings in front is drawn again with what arrived, not while its name field holds typing, and once the field lets go", ds6 || undefined);
 
+  const ds10 = await tookSent("etiuda.html");
+  check(!ds10, "ds10 each send names the tell whose value the page took for that key, and a tell arriving while the key is owed is not taken", ds10 || undefined);
+
   /* ds7: the shell's half, storeSyncApply and the tell, lifted from shell/main.js into a sandbox. */
   const shellTells = (text) => {
     const slice = name => {
@@ -267,7 +294,7 @@ async function main() {
     const ctx = { sent, patched, written, answers, theWindow: { isDestroyed: () => false, webContents: { send: (ch, v) => sent.push([ch, v]) } }, JSON,
       Object, refuse: false };
     vm.createContext(ctx);
-    vm.runInContext(slice("deskSyncedTell") + "\n" + slice("storeSyncApply") + "\n"
+    vm.runInContext("let deskTellNo = 0; const deskTold = new Map(); function storeSyncTaken() { return {}; }\n" + slice("deskSyncedTell") + "\n" + slice("storeSyncApply") + "\n"
       + "function patchDesk(t){ patched.push(t); return !refuse; }\nfunction storeSyncFile(n){ return n !== 'b.ec'; }\nfunction storeSyncDir(...rest){ return rest.join('/'); }\n"
       + "const fs={ mkdirSync(){} }; function writeReplacing(p, t){ written.push([p, t]); }\n"
       + "const console={ error(l){ written.push(['error', l]); } };\n"
@@ -322,6 +349,8 @@ async function main() {
     "p ds1 ds2 the page's take not shown turns ds1 and ds2 red");
   await pagePlant("owed", '|| eDeskOwed.has(k) || eDeskCarried.has(k)) return;', ") return;", owedKept, r => !!r,
     "p ds5 a key the page owes taken over turns ds5 red");
+  await pagePlant("took", "if (Number.isSafeInteger(n) && n > 0) eDeskTook.set(k, n);", "void n;", tookSent, r => !!r,
+    "p ds10 the tell taken not recorded turns ds10 red");
   await pagePlant("screen", 'if (screenOn === "settings") repaintScreen();', 'if (screenOn === "settings") void 0;', screenDrawn, r => !!r,
     "p ds6 the screen in front not drawn again turns ds6 red");
   {
@@ -329,7 +358,7 @@ async function main() {
     if (PLANTS_OFF) skip(line);
     else {
       const before = sha(MAIN), text = fs.readFileSync(MAIN, "utf8");
-      const from = "if (win && !win.isDestroyed()) try { win.webContents.send(\"etiuda:desk-synced\", JSON.stringify(keys)); }";
+      const from = "if (win && !win.isDestroyed()) try { win.webContents.send(\"etiuda:desk-synced\", JSON.stringify(keys), n); }";
       let red = false, detail = "the plant's anchor is absent";
       if (text.split(from).length === 2) {
         const { sent } = shellTells(text.split(from).join("if (false) try { void keys; }"));

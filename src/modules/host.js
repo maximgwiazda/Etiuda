@@ -488,8 +488,8 @@ function wireHost(){
   if(h.testService===true) testServiceBand(document); /* plant:ts-band */
   if(typeof h.onStatsAsk==="function") h.onStatsAsk(answerStats);
   /* What the store's sync put on the desk, taken and shown without a reload (restart.js takeSyncedDesk). */
-  if(typeof h.onDeskSynced==="function") h.onDeskSynced(text=>{
-    const keys=eDeskTake(text);
+  if(typeof h.onDeskSynced==="function") h.onDeskSynced((text,n)=>{
+    const keys=eDeskTake(text,n);
     if(keys.length){ try{ hooks.takeSyncedDesk(keys); }catch(e){} } /* plant:desk-synced-shown */
   });
   if(h.backdrop) document.body.classList.add("e-backdrop");
