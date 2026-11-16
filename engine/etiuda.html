@@ -17022,6 +17022,7 @@ What is typed here stays in this browser.`;
   }
   var sentOpen = "";
   var answerOpen = null;
+  var fullOpen = "";
   var flagged = null;
   function flagState(id) {
     if (answerOpen && answerOpen.id === id) return { state: "answered", outcome: answerOpen.outcome };
@@ -17165,23 +17166,23 @@ What is typed here stays in this browser.`;
     return seen;
   }
   function showFlagFull(id) {
+    fullOpen = id;
     const b = flagBubble(
       id,
-      '<p id="eFlagT">' + esc(t("This desk has already sent as many flags on this catalog as it can, so this one was not sent.")) + " " + esc(t("Room comes back as the lead answers.")) + "</p>",
+      '<p id="eFlagT">' + esc(t("This desk has already sent as many flags on this catalog as it can, so this one was not sent.")) + " " + esc(t("Room comes back as the lead answers.")) + '</p><div class="tour-actions"><button type="button" class="btn primary" data-flag="done">' + esc(t("Done")) + "</button></div>",
       () => buttonOf(id),
       300,
       () => {
+        if (fullOpen === id) fullOpen = "";
       }
     );
-    b.el.setAttribute("role", "status");
-    b.el.setAttribute("tabindex", "-1");
     try {
-      b.el.focus({ preventScroll: true });
+      b.el.querySelector('[data-flag="done"]').focus({ preventScroll: true });
     } catch (e) {
     }
   }
   function flagPressed(id) {
-    if (closeOpen && (sentOpen === id || answerOpen && answerOpen.id === id)) {
+    if (closeOpen && (sentOpen === id || fullOpen === id || answerOpen && answerOpen.id === id)) {
       closeFlagBubbles(true);
       return;
     }

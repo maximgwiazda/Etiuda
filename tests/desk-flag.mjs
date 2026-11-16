@@ -45,7 +45,7 @@ console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " +
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const STILLS = process.env.DESK_FLAG_STILLS ? path.resolve(process.env.DESK_FLAG_STILLS) : "";
-const EXPECTED = 126;
+const EXPECTED = 139;
 let fails = 0, checks = 0, notRun = 0;
 const check = (ok, what, detail) => {
   checks++;
@@ -506,8 +506,14 @@ async function runOffered(pageUrl, lang, theme) {
     await sleep(250);
     const full = await p.evaluate((b, s, id) => {
       const e = document.querySelector(b), btn = document.querySelector(s);
+      const btns = e ? [...e.querySelectorAll("button")] : [];
+      const done = e ? e.querySelector('.tour-actions [data-flag="done"]') : null;
+      const bg = done ? (getComputedStyle(done).backgroundColor.match(/[\d.]+/g) || []) : [];
+      const filled = bg.length >= 3 && +bg[0] > 240 && +bg[1] > 240 && +bg[2] > 240 && (bg[3] === undefined || +bg[3] > 0.9);
       return { words: e ? e.querySelector("p").textContent.trim() : null, sel: e ? getComputedStyle(e.querySelector("p")).userSelect : null,
-        hang: e ? window.__bubAt(e, btn) : null, flag: cardFlag(id), lit: !!(btn && btn.classList.contains("on")) };
+        hang: e ? window.__bubAt(e, btn) : null, flag: cardFlag(id), lit: !!(btn && btn.classList.contains("on")),
+        btnCount: btns.length, done: done ? done.textContent.trim() : null,
+        primary: !!(done && done.classList.contains("primary")), filled, focused: !!done && document.activeElement === done };
     }, BUB, btnSel(CARD), CARD);
     await still(p, lang + "-" + theme + "-5-full-bubble", [BUB, cardSel(CARD) + " > .chead"]);
     await p.keyboard.press("Escape");
@@ -515,6 +521,53 @@ async function runOffered(pageUrl, lang, theme) {
     const fullGone = !(await bubNow(p));
     check(hundred.n === 100 && full.words === W.full && full.sel === "none" && !!full.hang && full.hang.ok && full.flag === null && !full.lit && fullGone,
       tag + "f9 the 101st press sends nothing, and a bubble from the button says so in the copywriter's words; Esc closes it", { n: hundred.n, full, fullGone });
+    check(full.btnCount === 1 && full.done === W.done && full.primary && full.filled && full.focused,
+      tag + "f9 the full bubble carries one filled Done button in the desk's language, focused", full);
+    const fullDone = [];
+    for (const how of ["click", "Enter"]) {
+      await toCard(p, CARD);
+      await p.click(btnSel(CARD));
+      await sleep(200);
+      const open = !!(await bubNow(p));
+      if (how === "click") {
+        const hasDone = !!(await p.$(BUB + ' [data-flag="done"]'));
+        if (hasDone) await p.click(BUB + ' [data-flag="done"]');
+      } else {
+        await p.keyboard.press("Enter");
+      }
+      await sleep(200);
+      const st = await p.evaluate((s, id) => ({
+        focusOwn: document.activeElement === document.querySelector(s),
+        flag: cardFlag(id), n: flagFileList().length
+      }), btnSel(CARD), CARD);
+      fullDone.push({ how, open, closed: !(await bubNow(p)), ...st });
+    }
+    check(fullDone.every((x) => x.open && x.closed && x.focusOwn && x.flag === null && x.n === 100),
+      tag + "f9 Done (click, Enter) closes the full bubble, returns focus to the card's flag button, and sends nothing", fullDone);
+    const fullClose = [];
+    for (const how of ["outside", "pointer", "Enter"]) {
+      await toCard(p, CARD);
+      await p.click(btnSel(CARD));
+      await sleep(200);
+      const open = !!(await bubNow(p));
+      if (how === "outside") {
+        const pt = await emptyPoint(p);
+        if (pt) await p.mouse.click(pt.x, pt.y);
+      } else if (how === "pointer") {
+        await p.click(btnSel(CARD));
+      } else {
+        await p.evaluate((s) => document.querySelector(s).focus(), btnSel(CARD));
+        await p.keyboard.press("Enter");
+      }
+      await sleep(200);
+      const st = await p.evaluate((s, id) => ({
+        focusOwn: document.activeElement === document.querySelector(s),
+        flag: cardFlag(id), n: flagFileList().length
+      }), btnSel(CARD), CARD);
+      fullClose.push({ how, open, closed: !(await bubNow(p)), ...st });
+    }
+    check(fullClose.every((x) => x.open && x.closed && x.flag === null && x.n === 100 && (x.how === "outside" || x.focusOwn)),
+      tag + "f9 a press elsewhere or on the card's flag button (pointer, Enter) closes the full bubble and sends nothing", fullClose);
     /* "Room comes back as the lead answers": true only while a flag taken back and a flag answered each leave the count. */
     const back = await p.evaluate((ids, id) => {
       unflagCard(ids[0]);
@@ -584,6 +637,7 @@ try {
     skip("plant:flag-own-press the button pressed while its bubble stands acting on the flag turns f3 red (ETIUDA_PLANTS=off)");
     skip("plant:flag-why-silent a refused note with no line under it turns f3 red (ETIUDA_PLANTS=off)");
     skip("plant:flag-full-silent the 101st press with no bubble turns f9 red (ETIUDA_PLANTS=off)");
+    skip("plant:flag-full-done a full bubble with no Done button turns f9 red (ETIUDA_PLANTS=off)");
   } else {
     const u1 = plant("plant-first", /const (\w+) = flagCard\((\w+)\);/, "showFlagSent($2);\n    const $1 = flagCard($2);");
     let red1 = null;
@@ -654,6 +708,21 @@ try {
       } finally { await closePage(p); }
     }
     check(!!u6 && !!red6 && !red6.bubble, "plant:flag-full-silent the 101st press with no bubble turns f9 red", { located: !!u6, red6 });
+    const u7 = plant("plant-full-done",
+      /(Room comes back as the lead answers\."\)\)\s*\+\s*)["']<\/p><div class="tour-actions"><button type="button" class="btn primary" data-flag="done">["']\s*\+\s*esc\(t\("Done"\)\)\s*\+\s*["']<\/button><\/div>["']/,
+      '$1"</p>"');
+    let red7 = null;
+    if (u7) {
+      const p = await boot(u7, { offered: true });
+      try {
+        await p.evaluate((id) => { [...document.querySelectorAll("#list .card[data-id]")].map((c) => c.dataset.id).filter((x) => x !== id).slice(0, 100).forEach((x) => flagCard(x)); }, CARD);
+        await toCard(p, CARD);
+        await p.click(btnSel(CARD));
+        await sleep(250);
+        red7 = await p.evaluate((b) => { const e = document.querySelector(b); return { open: !!e, btns: e ? e.querySelectorAll("button").length : -1 }; }, BUB);
+      } finally { await closePage(p); }
+    }
+    check(!!u7 && !!red7 && red7.open && red7.btns === 0, "plant:flag-full-done a full bubble with no Done button turns f9 red", { located: !!u7, red7 });
     check(!!u4 && !!red4 && !(red4.sent && !red4.bubble), "plant:flag-own-press the button pressed while its bubble stands acting on the flag turns f3 red", { located: !!u4, red4 });
   }
 } catch (e) {
@@ -663,7 +732,7 @@ try {
   try { fs.rmSync(lab, { recursive: true, force: true }); } catch (e) {}
 }
 
-const want = EXPECTED - (PLANTS_OFF ? 6 : 0);
+const want = EXPECTED - (PLANTS_OFF ? 7 : 0);
 console.log("RESULT checks=" + checks + " failed=" + fails + (notRun ? " notRun=" + notRun : ""));
 console.log("#counts checks=" + checks + " skipped=" + notRun + " failed=" + fails + " expected=" + want);
 process.exit(fails || checks !== want ? 1 : 0);

@@ -27,9 +27,9 @@ function flagOfferedNow(){
   return offered;
 }
 function forgetFlagOffered(){ offered=null; }
-/* The card whose "Sent to the lead" stands, and the answer whose bubble stands: that answer's mark is still drawn to hang
-   from, though opening it has already told the desk it was seen. */
-let sentOpen="", answerOpen=null;
+/* The card whose "Sent to the lead" stands, the full-refusal bubble, and the answer whose bubble stands: that answer's
+   mark is still drawn to hang from, though opening it has already told the desk it was seen. */
+let sentOpen="", answerOpen=null, fullOpen="";
 /* The cards with a flag or an outcome, read once per draw: every change to either draws again (card-flag.js, tell; an
    edition's take starts the desk again), so the others need no read of their own. */
 let flagged=null;
@@ -154,19 +154,19 @@ function showFlagAnswer(id){
 /* THE 101ST FLAG IS NOT SENT, and the bubble from the button says so. A flag taken back or answered leaves the count, which
    is what the second sentence promises (tests/desk-flag.mjs holds both). */
 function showFlagFull(id){
+  fullOpen=id;
   const b=flagBubble(id,
     '<p id="eFlagT">'+esc(t("This desk has already sent as many flags on this catalog as it can, so this one was not sent."))
-    +' '+esc(t("Room comes back as the lead answers."))+'</p>',
-    ()=>buttonOf(id), 300, ()=>{});
-  b.el.setAttribute("role","status");
-  b.el.setAttribute("tabindex","-1");
-  try{ b.el.focus({preventScroll:true}); }catch(e){}
+    +' '+esc(t("Room comes back as the lead answers."))+'</p>'
+    +'<div class="tour-actions"><button type="button" class="btn primary" data-flag="done">'+esc(t("Done"))+'</button></div>',
+    ()=>buttonOf(id), 300, ()=>{ if(fullOpen===id) fullOpen=""; });
+  try{ b.el.querySelector('[data-flag="done"]').focus({preventScroll:true}); }catch(e){}
 }
 /* The card's button: a press sends the flag first and then says so; on a lit flag it takes the flag back, or opens the
    answer where one has come. */
 function flagPressed(id){
   /* While its bubble stands, the button closes it and does nothing else: taking the flag back is the bubble's own. */
-  if(closeOpen && (sentOpen===id || (answerOpen && answerOpen.id===id))){ closeFlagBubbles(true); return; }
+  if(closeOpen && (sentOpen===id || fullOpen===id || (answerOpen && answerOpen.id===id))){ closeFlagBubbles(true); return; }
   const f=flagState(id);
   if(f && f.state==="answered"){ showFlagAnswer(id); return; }
   if(f){ closeFlagBubbles(); unflagCard(id); return; }
