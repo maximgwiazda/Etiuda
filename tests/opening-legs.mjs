@@ -24,6 +24,7 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+E.ensureOutputs(); /* the outputs are this source's first (tests/engine.js ensureOutputs) */
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ENGINE_HTML = path.join(ROOT, "engine", "etiuda.html");

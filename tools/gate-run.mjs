@@ -18,6 +18,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
 import { acquire as takeLock, release as freeLock, holderAlive } from "./machine-lock.mjs";
 
 async function loadGatesFor() {
@@ -952,7 +953,8 @@ function appendTextScans(steps, addedFiles, windowGates, root, changed, gf) {
   const scans = gf && gf.SCANS;
   const match = gf && gf.globMatches;
   if (!scans || typeof match !== "function") return;
-  const files = changed.map(normRel);
+  /* A build input stands for the page it builds (gates-for withBuiltOutputs), so a scan of the page runs for its source. */
+  const files = (typeof gf.withBuiltOutputs === "function" ? gf.withBuiltOutputs(root, changed) : changed).map(normRel); /* plant:built-scan */
   for (const leg of Object.keys(scans)) {
     const globs = scans[leg];
     if (!Array.isArray(globs) || !globs.length) continue;
@@ -1636,6 +1638,21 @@ function deferAlone(list) {
   return now.concat(later);
 }
 
+/* THE PAGE IS BUILT ONCE, BEFORE THE GATES AND BEFORE THE TREE IS FINGERPRINTED, when the build's record says its outputs
+   are not this source's (tests/engine.js ensureOutputs, the harness's one place). The gates then inherit the judgement and
+   none of them builds. A tree without the harness's ensureOutputs (Studio's) is left as it stands. */
+function builtBeforeGates() {
+  const lib = path.join(ROOT, "tests", "engine.js");
+  if (!fs.existsSync(path.join(ROOT, "tools", "build.mjs")) || !fs.existsSync(lib)) return null;
+  const E = createRequire(import.meta.url)(lib);
+  if (typeof E.ensureOutputs !== "function") return null;
+  const state = E.ensureOutputs({ quiet: true });
+  if (state.built)
+    console.log("gate-run: the built page was not this source's by the build's record, so it was built once before the gates ("
+      + state.ms + " ms)");
+  return state;
+}
+
 async function main() {
   const asked = process.argv.slice(2);
   if (!asked.length) refuse("no npm script was named", "node tools/gate-run.mjs test split-guard");
@@ -1865,6 +1882,7 @@ async function main() {
     realProfileSnapBefore = takeRealProfileSnapshot();
   }
 
+  if (!asked.includes("--dry-run") && !asked.includes("--list")) builtBeforeGates(); /* plant:gate-run-builds */
   let before = fingerprint();
   let tree = gitTree();
   const COMMIT = git(["rev-parse", "--short", "HEAD"]);

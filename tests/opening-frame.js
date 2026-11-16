@@ -72,6 +72,7 @@ async function launch(theme, quiet) {
   for (const d of ["engine", "userdata", "documents"]) fs.mkdirSync(path.join(APP, d), { recursive: true });
   fs.cpSync(path.join(E.ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
   fs.writeFileSync(path.join(APP, "package.json"), JSON.stringify({ name: "etiuda-opening-frame", version: "0.0.0", main: "shell/main.js" }), "utf8");
+  E.ensureOutputs(); /* the outputs are this source's first (tests/engine.js ensureOutputs) */
   for (const f of ["etiuda.html", "etiuda.csp.json"]) fs.copyFileSync(path.join(E.ROOT, "engine", f), path.join(APP, "engine", f));
   const main = path.join(APP, "shell", "main.js"), src = fs.readFileSync(main, "utf8");
   const hits = src.split(READY_SHOW).length - 1;

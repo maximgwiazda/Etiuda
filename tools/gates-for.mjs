@@ -1678,6 +1678,46 @@ function subjectAllows(gateRel, rel) {
   return rel === gateRel || list.includes(rel);
 }
 
+/* A CHANGE TO WHAT THE PAGE IS BUILT FROM IS A CHANGE TO THE PAGE. The built outputs are made by tools/build.mjs from its
+   INPUTS, and from step c of the plan they leave git, so a merge's diff no longer carries the rebuilt page: a change to src/
+   alone names every reader of the page, as if the page had changed with it. Both lists are read from build.mjs's own text;
+   where that text cannot be read they fall back to src/, the tool and the three outputs, and `how` says so. */
+const BUILT_FALLBACK = { inputs: ["src", "tools/build.mjs"], outputs: ["engine/etiuda.html", "engine/etiuda.csp.json", "engine/bubble.css"] };
+const builtCache = new Map();
+export function builtFrom(root) {
+  const key = path.resolve(root);
+  if (builtCache.has(key)) return builtCache.get(key);
+  let out = null;
+  const file = path.join(root, "tools", "build.mjs");
+  if (fs.existsSync(file)) {
+    const text = fs.readFileSync(file, "utf8");
+    const quoted = s => [...String(s || "").matchAll(/'([^']+)'|"([^"]+)"/g)].map(m => m[1] || m[2]);
+    const inputs = quoted((/export const INPUTS = \[([\s\S]*?)\];/.exec(text) || [])[1]).map(s => s.split("\\").join("/"));
+    const names = ((/export const OUTPUTS = \[([^\]]*)\];/.exec(text) || [])[1] || "").split(",").map(s => s.trim()).filter(Boolean);
+    const outputs = names.map(n => {
+      const m = new RegExp("export const " + n + " = join[(]ROOT, ([^)]*)[)];").exec(text);
+      return m ? quoted(m[1]).join("/") : "";
+    });
+    out = inputs.length && outputs.length && outputs.every(Boolean)
+      ? { how: "read from tools/build.mjs", inputs, outputs }
+      : Object.assign({ how: "fallback: tools/build.mjs's INPUTS or OUTPUTS could not be read" }, BUILT_FALLBACK);
+  }
+  builtCache.set(key, out);
+  return out;
+}
+export function isBuildInput(root, rel) {
+  const b = builtFrom(root);
+  const f = String(rel).split("\\").join("/");
+  return !!b && b.inputs.some(i => f === i || f.startsWith(i.replace(/\/$/, "") + "/"));
+}
+/** files, and the built outputs where one of them is a build input, so a reader of the page is named for its source. */
+export function withBuiltOutputs(root, files) {
+  const list = (files || []).map(f => String(f).split("\\").join("/"));
+  const b = builtFrom(root);
+  if (!b || !list.some(f => isBuildInput(root, f))) return list;
+  return [...new Set(list.concat(b.outputs))];
+}
+
 /* ready is an analyzeTree result for this root. A caller that plans the same tree many times
    passes it; a lab that edits files omits it and is read afresh. */
 export function gatesFor(root, files, ready) {
@@ -1688,8 +1728,10 @@ export function gatesFor(root, files, ready) {
     const chains = [];
     for (const f of files) {
       const rel = path.isAbsolute(f) ? (relOf(root, f) || f) : f.split(path.sep).join("/");
-      if (!covers(g, rel) || !subjectAllows(g.rel, rel)) continue;
-      chains.push({ file: rel, chain: chainFor(g, rel) });
+      if (covers(g, rel) && subjectAllows(g.rel, rel)) { chains.push({ file: rel, chain: chainFor(g, rel) }); continue; }
+      if (!isBuildInput(root, rel)) continue;
+      const out = builtFrom(root).outputs.find(o => covers(g, o) && subjectAllows(g.rel, o)); /* plant:built-chain */
+      if (out) chains.push({ file: rel, chain: [rel].concat(chainFor(g, out) || [out, g.rel]) });
     }
     if (!chains.length) continue;
     rows.push({ gate: g.rel, kind: g.kind, via: g.vias, command: g.command, chains });

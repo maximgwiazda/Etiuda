@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+E.ensureOutputs(); /* the outputs are this source's first (tests/engine.js ensureOutputs) */
 const L = require("./css-layers.js");
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));

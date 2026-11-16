@@ -2206,6 +2206,7 @@ async function parent() {
        and the agent is told in the copywriter's words which release it waits for, on every route a person reaches it by. */
     const NEWER_LINE = "This edition needs Etiuda 99.0.0 or newer, so it is kept but not used yet, and the edition in use stays as it is."
       + " Once a newer Etiuda is installed, the new edition is offered here.";
+    nodeRequire("./engine.js").ensureOutputs(); /* the outputs are this source's first (tests/engine.js ensureOutputs) */
     const withEngine = lab => { fs.mkdirSync(path.join(lab, "engine"), { recursive: true });
       fs.copyFileSync(path.join(ROOT, "engine", "etiuda.html"), path.join(lab, "engine", "etiuda.html")); return lab; };
     const edition = (rev, minEngine) => { const d = payload("2026-10-0" + rev); d.rev = rev; if (minEngine) d.minEngine = minEngine; return sign(d); };

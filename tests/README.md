@@ -19,7 +19,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/motion-tokens.js                      no fixtures, the motion tiers and the quiet switch
     node tests/theme-switch.mjs                      no fixtures, the theme lands at once as Studio's does: no crossfade or transition cut left in the sheet, a press puts data-theme on the root in its own task with no view transition and no waited write, and a second press straight after is taken (952a, 952b)
     node tests/kin-contrast.mjs                      no fixtures, the desk's blue in the four token blocks as drawn (kc1), the ratios it keeps (kc2), the bubbles' fill (kc3) and no retired blue in shell/*.js (kc4)
-    node tests/build-fresh.mjs                       no fixtures, builds once
+    node tests/build-fresh.mjs                       no fixtures, builds in a scratch copy
     node tests/catalog-routes.mjs                     no fixtures, the two catalog routes
     node tests/module-calls.mjs                       no fixtures, the modules CALLED
     node tests/tab-focus.mjs                          no fixtures, Tab walks the main screen, Ctrl+Tab and Ctrl+T move the conversations, the middle button closes one, covers and dialogs keep their own Tab
@@ -193,9 +193,16 @@ question: `build-fresh.mjs` and `tools/split-guard/` own it, and a name reached 
 **The two readings are tied together rather than trusted.** The artefact is
 `head + bundle + monolith + tail`; three of those four are copied in verbatim, so `[2b/5]` of
 `test.js` proves them equal by position in a millisecond. The fourth is the bundle, and only a
-build can speak for it, which is `tests/build-fresh.mjs`: it runs `tools/build.mjs`, compares, and
-puts the bytes back as it found them, so a failing run leaves the tree alone. A hand edit to
-`engine/etiuda.html` is discarded by the next build, and between them these two say so out loud.
+build can speak for it, which is `tests/build-fresh.mjs`: in a scratch copy of the tree it builds
+twice and holds the two byte for byte the same, holds the outputs to the build's record, and while
+they are tracked holds the committed bytes to the build. A hand edit to `engine/etiuda.html` is
+discarded by the next build, and between them these two say so out loud.
+
+**No leg reads a page that is not this source's.** `ensureOutputs()` in `engine.js` asks the build's
+own `outputsCurrent()` and builds when the record says no, once per process and under a lock beside
+the record; `enginePath()`, `E.ENGINE_PATH` and `runFolder()` all pass through it, and a leg that
+names the page by a path of its own calls it first. `tools/gate-run.mjs` builds once before its
+gates, so its legs build nothing. `build-fresh.mjs` proves both with the outputs deleted.
 
 ## The contracts a rename must not touch
 

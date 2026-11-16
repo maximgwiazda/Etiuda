@@ -16,6 +16,7 @@ import puppeteer from "puppeteer-core";
 
 const require = createRequire(import.meta.url);
 const E = require("./engine.js");
+E.ensureOutputs(); /* the outputs are this source's first (tests/engine.js ensureOutputs) */
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ENGINE_URL = "file:///" + path.join(ROOT, "engine", "etiuda.html").replace(/\\/g, "/");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";

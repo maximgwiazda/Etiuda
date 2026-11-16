@@ -14,12 +14,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const TOOL = path.join(ROOT, "tools", "gates-for.mjs");
-const EXPECTED = 33;  /* 23, +2 main's desk-trust ceiling and subject paths (gf24, gf25), +6 relay-channel-split (gf26 to gf31), +1 a fail-closed plan keeps the mapped legs (gf32), +1 and runs no packaging tool (gf33) */
+const EXPECTED = 37;  /* 23, +2 main's desk-trust ceiling and subject paths (gf24, gf25), +6 relay-channel-split (gf26 to gf31), +1 a fail-closed plan keeps the mapped legs (gf32), +1 and runs no packaging tool (gf33), +4 a change to what the page is built from names its readers (gf34 to gf37) */
 
 /* GIT-ENV: git must use the throwaway tree, never a GIT_DIR the caller exported. */
 function gitEnv() {
@@ -496,6 +496,85 @@ try {
     check(closed.failClosed === true && packaging.length === 0 && files.includes("tests/linux-package.mjs"),
       "gf33 a diff that fails closed runs no packaging tool, and keeps the packaging tests: fails closed " + closed.failClosed
       + ", packaging tools " + (packaging.join(", ") || "none") + ", linux-package " + files.includes("tests/linux-package.mjs"));
+  }
+
+  /* A CHANGE TO WHAT THE PAGE IS BUILT FROM NAMES EVERY READER OF THE PAGE (the test architect, 2026-11-16; the plan for the
+     built page leaving git, step a). A lab whose one gate reads engine/etiuda.html and whose stand-in tools/build.mjs builds it
+     from src/: a change to src/ alone names the gate through the page, and an area plan runs the scan keyed on the page. Each
+     half has a plant, and the real tree's lists are read from build.mjs rather than the fallback. */
+  {
+    const real = gfTool.builtFrom(ROOT);
+    check(!!real && real.how === "read from tools/build.mjs" && real.inputs.includes("src") && real.inputs.includes("tools/build.mjs")
+      && real.outputs.join() === "engine/etiuda.html,engine/etiuda.csp.json,engine/bubble.css",
+      "gf34 the build's inputs and outputs are read from tools/build.mjs: " + JSON.stringify(real));
+    const lab3 = fs.mkdtempSync(path.join(os.tmpdir(), "gates-for-built-"));
+    try {
+      const put = (rel, text) => { const at = path.join(lab3, rel); fs.mkdirSync(path.dirname(at), { recursive: true }); fs.writeFileSync(at, text); };
+      const labPkg = { scripts: { test: "node tests/read-page.mjs" } };
+      put("package.json", JSON.stringify(labPkg, null, 2) + "\n");
+      put("src/x.js", "export const x = 1;\n");
+      put("engine/etiuda.html", "page\n");
+      put("tools/build.mjs", [
+        "import { join } from 'node:path';",
+        "const ROOT = '.';",
+        "export const OUT_FILE = join(ROOT, 'engine', 'etiuda.html');",
+        "export const OUTPUTS = [OUT_FILE];",
+        "export const INPUTS = [",
+        "  'src',",
+        "];",
+        "",
+      ].join("\n"));
+      put("tests/read-page.mjs", [
+        "import fs from \"node:fs\";",
+        "import path from \"node:path\";",
+        "import { fileURLToPath } from \"node:url\";",
+        "const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), \"..\");",
+        "process.exit(fs.readFileSync(path.join(ROOT, \"engine\", \"etiuda.html\"), \"utf8\") === \"page\\n\" ? 0 : 1);",
+        "",
+      ].join("\n"));
+      put("tests/build-fresh.mjs", "process.exit(0);\n");
+      for (const f of ["gates-for.mjs", "gate-run.mjs", "machine-lock.mjs"])
+        fs.copyFileSync(path.join(ROOT, "tools", f), path.join(lab3, "tools", f));
+      git(["init", "-q"], lab3);
+      git(["add", "--", "package.json", "src", "engine", "tools", "tests"], lab3);
+      const named = () => {
+        const res = spawnSync(process.execPath, ["tools/gates-for.mjs", "src/x.js"], { cwd: lab3, encoding: "utf8" });
+        let json = null;
+        try { json = JSON.parse((String(res.stdout || "").trim().split(/\r?\n/).pop() || "")); } catch (e) { json = null; }
+        const row = (json && json.gates || []).find(g => g.gate === "tests/read-page.mjs");
+        return { status: res.status, chain: row ? row.chains[0].chain.join(" -> ") : "" };
+      };
+      const got = named();
+      check(got.status === 0 && got.chain === "src/x.js -> engine/etiuda.html -> tests/read-page.mjs",
+        "gf35 a change to src/ alone names the page's reader through the page: " + (got.chain || "not named, exit " + got.status));
+      const gfLab = path.join(lab3, "tools", "gates-for.mjs");
+      const gfText = fs.readFileSync(gfLab, "utf8");
+      const gfPlanted = gfText.split("\n").map(l => l.includes("/* plant:built-chain */") ? "      const out = null;" : l).join("\n");
+      fs.writeFileSync(gfLab, gfPlanted);
+      const lifted = named();
+      fs.writeFileSync(gfLab, gfText);
+      check(gfPlanted !== gfText && lifted.status === 0 && !lifted.chain,
+        "gf36 plant: lifting the chain through the build leaves the reader unnamed, so gf35 would go red: "
+        + (lifted.chain || "not named") + ", exit " + lifted.status);
+      const grLab = path.join(lab3, "tools", "gate-run.mjs");
+      const grText = fs.readFileSync(grLab, "utf8");
+      const planOf = async file => {
+        const mod = await import(pathToFileURL(file).href + "?" + Date.now());
+        const plan = await mod.planAreaRun(lab3, ["src/x.js"], labPkg);
+        return (plan.steps || []).map(s => String(s.file || "").replace(/\\/g, "/"));
+      };
+      const steps = await planOf(grLab);
+      const grPlantedFile = path.join(lab3, "tools", "gate-run-planted.mjs");
+      const grPlanted = grText.split("\n").map(l => l.includes("/* plant:built-scan */") ? "  const files = changed.map(normRel);" : l).join("\n");
+      fs.writeFileSync(grPlantedFile, grPlanted);
+      const plantedSteps = await planOf(grPlantedFile);
+      check(steps.includes("tests/build-fresh.mjs") && steps.includes("tests/read-page.mjs") && grPlanted !== grText
+        && !plantedSteps.includes("tests/build-fresh.mjs"),
+        "gf37 an area plan for a change to src/ alone runs the scan keyed on the page (tests/build-fresh.mjs) and its reader, and"
+        + " lifting plant:built-scan drops the scan: " + JSON.stringify(steps) + " planted " + JSON.stringify(plantedSteps));
+    } finally {
+      try { fs.rmSync(lab3, { recursive: true, force: true }); } catch (e) { /* the built plant's own directory */ }
+    }
   }
 
   check(asserted === EXPECTED - 1, "gf8 every leg ran: " + (asserted + 1) + " of " + EXPECTED);

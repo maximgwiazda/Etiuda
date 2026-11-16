@@ -97,6 +97,7 @@ function buildApp() {
   const dir = path.join(LAB, "app");
   for (const d of ["shell", "engine", "userdata", "catalogs", "documents"]) fs.mkdirSync(path.join(dir, d), { recursive: true });
   E.copyShellApp(dir); /* the release's shell, as tools/release.mjs lists it */
+  E.ensureOutputs(); /* the outputs are this source's first (tests/engine.js ensureOutputs) */
   for (const f of ["etiuda.html", "etiuda.csp.json"]) fs.copyFileSync(path.join(E.ROOT, "engine", f), path.join(dir, "engine", f));
   fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "etiuda-pick-probe", version: "0.0.0", main: "shell/main.js" }), "utf8");
   fs.writeFileSync(path.join(dir, "catalogs", "lamps.ec"), JSON.stringify({ format: 2, kind: "etiuda-catalog", id: "lamp-shop", rev: 1,
