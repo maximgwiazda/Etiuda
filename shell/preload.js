@@ -16,8 +16,10 @@ if (PICKER) {
     copy: (what) => ipcRenderer.invoke("etiuda:pick-copy", String(what || "")),
     takeSuggest: (id, multi) => ipcRenderer.invoke("etiuda:pick-intent", String(id || ""), multi ? 1 : 0).then(v => String(v || "null")),
     rowsOf: (id) => ipcRenderer.invoke("etiuda:pick-rows", String(id || "")).then(v => String(v || "null")),
-    /* A reword of the words in the box, the four strings alone, answered {ok, text} or {ok, why}. */
+    /* A reword of the words in the box, the four strings alone, answered {ok, text} or {ok, why}; and Enter's put of its result. */
     reword: (o) => ipcRenderer.invoke("etiuda:pick-reword", rewordOf(o)),
+    put: () => ipcRenderer.invoke("etiuda:pick-put"),
+    grow: () => ipcRenderer.send("etiuda:pick-grow"),
     close: () => ipcRenderer.send("etiuda:pick-close"),
     ready: (add) => ipcRenderer.send("etiuda:pick-ready", Number(add) || 0),
     tour: (go) => ipcRenderer.send("etiuda:pick-tour", String(go || "")),

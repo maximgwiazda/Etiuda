@@ -11558,6 +11558,8 @@ function syncHotkey() { if (hotkeyReady) holdHotkey(hotkeyWanted()); }
 /* Where the picker opens: below and a little left of the pointer, above it where the work area
    has no room below, and wholly inside that work area. Pure. */
 const PICK_SIZE = { width: 600, height: 424 };
+/* The reworder alone, on words that can be edited: no list to hold, so a smaller window, taller once a result stands. */
+const REWORD_SIZE = { width: 600, height: 264 }, REWORD_TALL = 336;
 function pickerPlace(pt, area, size) {
   const w = Math.min(size.width, area.width), h = Math.min(size.height, area.height);
   let x = pt.x - 40, y = pt.y + 18;
@@ -11596,6 +11598,12 @@ function pickPage() {
   let chosen = "";
   /* Whether the selected words can be edited where they stand: true, false, or null. The window does not show it. */
   let mayEdit = null;
+  /* YOUR OWN WORDS, offered by the shell (o.reword, the host it sends to) only while the organisation's model is set and on.
+     Words that can be edited open the reworder alone ("only"), words that cannot open the replies alone, and where the helper
+     cannot tell, or nothing was selected, it is the foot under the replies ("foot"). A press of an act is the one thing that
+     sends; a later press, or Esc, drops an answer still on its way. */
+  const rwFoot = document.getElementById("rw"), rwOnly = document.getElementById("rwo"), rwRes = document.getElementById("rwr");
+  let reword = null, rwMode = "", rwAt = 0, rwN = 0, rwOn = null, rwWords = "", rwOut = "", rwSaid = "", rwLang = "";
   const blank = () => !q.value.trim() || (!!chosen && q.value === chosen); /* plant:pick-selected-rest */
   /* THE KEYSTROKE FILTERS HERE, on the rows the open handed over. The order is the desk's
      search: the same terms, the same tiers, the same lift. An open without that index still
@@ -11915,6 +11923,91 @@ function pickPage() {
       paint(false);
     });
   }
+  const rwSay = line => String(line || "").split("{ADDRESS}").join(reword ? reword.host : "");
+  /* The acts, the translation naming the conversation's other language where the catalog holds both. */
+  const rwActs = () => {
+    const langs = Array.isArray(words.rwLangs) ? words.rwLangs : [];
+    const to = rwLang === "en" && langs.indexOf("pl") > -1 ? "pl" : rwLang === "pl" && langs.indexOf("en") > -1 ? "en" : "";
+    const acts = [["spelling", words.rwSpelling], ["shorter", words.rwShorter], ["friendlier", words.rwFriendlier], ["formal", words.rwFormal]];
+    if (to) acts.push(["translate", to === "pl" ? words.rwIntoPl : words.rwIntoEn, to]);
+    return acts.filter(a => a[1]);
+  };
+  /* The words an act sends: the selection where the reworder stands alone, else what the box holds at the press. */
+  const rwText = () => (rwMode === "only" ? chosen : String(q.value || ""));
+  function rwPress(i) {
+    const a = rwActs()[i], text = rwText();
+    if (!a || !reword || typeof P.reword !== "function" || !text.trim()) return;
+    const mine = ++rwN;
+    rwAt = i; rwOn = a[0]; rwWords = text; rwOut = ""; rwSaid = rwSay(words.rwWait);
+    paintRw();
+    Promise.resolve(P.reword({ act: a[0], words: text, to: a[2] || "" })).then(r => {
+      if (mine !== rwN) return;
+      if (r && r.ok === true && typeof r.text === "string" && r.text) {
+        rwOut = r.text; rwSaid = rwSay(words.rwAfter);
+        if (rwMode === "only" && typeof P.grow === "function") P.grow();
+      } else {
+        rwOn = null; rwOut = "";
+        rwSaid = rwSay(r && r.why === "late" ? words.rwLate : r && r.why === "busy" ? words.rwBusy : words.rwNone);
+      }
+      paintRw();
+    }, () => { if (mine === rwN) { rwOn = null; rwSaid = rwSay(words.rwNone); paintRw(); } });
+  }
+  /* Back to the replies, nothing changed: the result and any answer on its way are let go. */
+  function rwBack() {
+    rwN++; rwOn = null; rwOut = ""; rwSaid = ""; rwWords = "";
+    paintRw();
+    paint(false);
+  }
+  function rwPut() {
+    if (!rwOut || typeof P.put !== "function") return;
+    rwN++;
+    P.put();
+  }
+  /* Whether the result's place stands where the replies stood: from a press until Esc, a new opening or typing. */
+  const rwShowing = () => rwMode === "only" || (rwMode === "foot" && (rwOn !== null || !!rwSaid));
+  function rwActsInto(host) {
+    const row = host && host.querySelector ? host.querySelector(".rw-acts") : null;
+    if (!row) return;
+    const acts = rwActs(), keyed = rwMode === "only";
+    row.innerHTML = acts.map((a, i) => '<button type="button" data-act="' + i + '"' + ((keyed ? i === rwAt : a[0] === rwOn) ? ' class="on"' : '')
+      + ' aria-pressed="' + (a[0] === rwOn ? "true" : "false") + '">' + (keyed ? '<kbd>Ctrl+' + (i + 1) + '</kbd>' : '') + esc(a[1]) + '</button>').join("");
+  }
+  function paintRw() {
+    const on = !!reword && !!rwMode, showing = on && rwShowing();
+    const top = document.getElementById("top"), sg = document.getElementById("sg");
+    if (rwFoot) rwFoot.hidden = !on || rwMode !== "foot";
+    if (rwOnly) rwOnly.hidden = !on || rwMode !== "only";
+    if (top) top.hidden = rwMode === "only";
+    box.hidden = showing;
+    if (sg) sg.hidden = showing;
+    if (count) count.hidden = showing;
+    if (selNote && rwMode === "only") selNote.hidden = true;
+    const line = (host, text) => { const el = host && host.querySelector ? host.querySelector(".rw-line") : null; if (el) { el.textContent = text; el.hidden = !text; } };
+    const set = (host, sel, text) => { const el = host && host.querySelector ? host.querySelector(sel) : null; if (el) { el.textContent = text; el.hidden = !text; } };
+    if (on && rwMode === "foot") {
+      set(rwFoot, ".rw-h", words.rwHead || "");
+      rwActsInto(rwFoot);
+      line(rwFoot, showing ? "" : rwSay(words.rwBefore));
+    }
+    if (on && rwMode === "only") {
+      set(rwOnly, ".rw-lab", words.rwYou || "");
+      set(rwOnly, ".rw-words", chosen);
+      rwActsInto(rwOnly);
+      line(rwOnly, rwOn === null && !rwSaid ? rwSay(words.rwBefore) : "");
+    }
+    if (rwRes) {
+      const act = rwActs().filter(a => a[0] === rwOn)[0];
+      rwRes.hidden = !showing || (rwMode === "only" && rwOn === null && !rwSaid);
+      set(rwRes, ".rw-lab", rwMode === "foot" ? (words.rwYou || "") : "");
+      set(rwRes, ".rw-words", rwMode === "foot" ? (rwWords || rwText()) : "");
+      set(rwRes, ".rw-act", rwMode === "foot" && act ? act[1] : "");
+      set(rwRes, ".rw-out", rwOut);
+      line(rwRes, rwSaid);
+      const out = rwRes.querySelector ? rwRes.querySelector(".rw-out") : null;
+      if (out) out.classList.toggle("wait", !rwOut && rwOn !== null);
+    }
+    legend();
+  }
   /* Drawn only while suggestions are on and the query is empty, so a quiet clipboard adds no element. */
   function paintStrip() {
     const on = suggest.length > 0 && blank();
@@ -12012,6 +12105,15 @@ function pickPage() {
   /* The keys as they work, under the list: each line holds {KEY} where its key is drawn. */
   const legend = () => {
     if (!keys) return;
+    /* While a reword stands, Enter and Esc say what they do there; "Enter" in the line is drawn as its key. */
+    const kbdEnter = line => esc(line).replace("Enter", '<kbd>Enter</kbd>');
+    if (reword && rwMode && rwShowing()) {
+      const act = rwActs()[rwAt];
+      const enter = rwOut ? kbdEnter(words.rwEnter || "") : rwMode === "only" && act ? '<kbd>Enter</kbd>' + esc(act[1]) : "";
+      const esc2 = rwMode === "only" ? esc(words.keyClose || "").split("{KEY}").join('<kbd>Esc</kbd>') : '<kbd>Esc</kbd>' + esc(words.rwBack || "");
+      keys.innerHTML = [enter, esc2].filter(Boolean).map(h => '<span>' + h + '</span>').join("");
+      return;
+    }
     keys.innerHTML = [["Enter", words.keyCopy], ["Shift+Enter", words.keyOther], ["Esc", words.keyClose]]
       .filter(k => k[1]).map(k => '<span>' + esc(k[1]).split("{KEY}").join('<kbd>' + k[0] + '</kbd>') + '</span>').join("");
   };
@@ -12039,6 +12141,7 @@ function pickPage() {
     return null;
   };
   const paintLang = o => {
+    if (o && o.lang) rwLang = String(o.lang);
     if (!langBtn || !o || !o.lang) return;
     langBtn.hidden = (o.langs | 0) < 2;
     langBtn.textContent = String(o.lang).toUpperCase();
@@ -12076,7 +12179,10 @@ function pickPage() {
     paint(false);
     paintSel();
     lookRows(); /* plant:pick-rows-look */
-    if (fresh && who && !who.hidden) who.focus();
+    rwN++; rwOn = null; rwOut = ""; rwSaid = ""; rwWords = ""; rwAt = 0;
+    paintRw();
+    if (rwMode === "only" && rwOnly) rwOnly.focus();
+    else if (fresh && who && !who.hidden) who.focus();
     else q.focus();
   };
   const onTabKey = (e, tabId) => {
@@ -12116,6 +12222,8 @@ function pickPage() {
     chords = o.chords || {};
     chosen = typeof o.selected === "string" ? o.selected : ""; /* plant:pick-selected-box */
     mayEdit = o.editable === true ? true : o.editable === false ? false : null;
+    reword = o.reword && typeof o.reword.host === "string" && o.reword.host ? { host: o.reword.host } : null;
+    rwMode = !reword ? "" : chosen && mayEdit === true ? "only" : chosen && mayEdit === false ? "" : "foot"; /* plant:pick-reword-mode */
     root.lang = words.lang || "en";
     q.placeholder = words.search || "";
     if (who) who.placeholder = words.whoHint || "";
@@ -12127,6 +12235,7 @@ function pickPage() {
     P.ready(paintTour(o.tour));
   });
   q.addEventListener("input", () => {
+    if (rwOn !== null || rwSaid) { rwN++; rwOn = null; rwOut = ""; rwSaid = ""; paintRw(); }
     if (chosen && q.value !== chosen) { chosen = ""; paintSel(); }
     rowsOf = ""; rowsAsk++;
     paintStrip();
@@ -12161,10 +12270,17 @@ function pickPage() {
     const tabId = matchTab(e);
     if (tabId) { onTabKey(e, tabId); return; }
     const all = list();
+    if (rwMode === "foot" && rwShowing()) {
+      if (e.key === "Escape") { e.preventDefault(); rwBack(); return; }
+      if (e.key === "Enter") { e.preventDefault(); rwPut(); return; }
+      if (e.ctrlKey && /^(Digit|Numpad)[0-9]$/.test(e.code || "")) { e.preventDefault(); return; }
+    }
     if (e.key === "Escape") { e.preventDefault(); P.close(); return; }
     if (e.key === "Tab") {
       e.preventDefault();
+      const first = rwFoot && !rwFoot.hidden && rwFoot.querySelector ? rwFoot.querySelector(".rw-acts button") : null;
       if (who && !who.hidden) who.focus();
+      else if (first) first.focus();
       return;
     }
     const step = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : e.key === "PageDown" ? 8 : e.key === "PageUp" ? -8 : 0;
@@ -12264,6 +12380,43 @@ function pickPage() {
     const li = e.target.closest && e.target.closest("li[data-i]");
     if (li) take(list()[+li.dataset.i], e.shiftKey);
   });
+  [rwFoot, rwOnly].forEach(host => {
+    if (!host || !host.addEventListener) return;
+    host.addEventListener("mousedown", e => { if (e.target.closest && e.target.closest("button")) e.preventDefault(); });
+    host.addEventListener("click", e => {
+      const b = e.target.closest && e.target.closest("button[data-act]");
+      if (b) rwPress(+b.getAttribute("data-act"));
+    });
+  });
+  /* An act's button under the keyboard: Esc and Enter as in the box, Left and Right along the row. */
+  if (rwFoot && rwFoot.addEventListener) rwFoot.addEventListener("keydown", e => {
+    const b = e.target.closest && e.target.closest("button[data-act]");
+    if (!b) return;
+    const all = [...rwFoot.querySelectorAll("button[data-act]")], i = all.indexOf(b);
+    if (e.key === "Escape") { e.preventDefault(); if (rwShowing()) { rwBack(); q.focus(); } else P.close(); return; }
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") { e.preventDefault(); all[(i + (e.key === "ArrowRight" ? 1 : all.length - 1)) % all.length].focus(); return; }
+    if (e.key === "Enter" && rwOut) { e.preventDefault(); rwPut(); }
+  });
+  /* The reworder alone: Enter does the lit act, or puts the result it made; Left and Right move the light; Ctrl and a digit
+     chooses; Esc closes and nothing has changed. */
+  if (rwOnly && rwOnly.addEventListener) rwOnly.addEventListener("keydown", e => {
+    if (rwMode !== "only") return;
+    const acts = rwActs();
+    if (e.key === "Escape") { e.preventDefault(); rwN++; P.close(); return; }
+    if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && acts.length) {
+      e.preventDefault();
+      rwAt = (rwAt + (e.key === "ArrowRight" ? 1 : acts.length - 1)) % acts.length;
+      paintRw();
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (rwOut && acts[rwAt] && acts[rwAt][0] === rwOn) rwPut(); else rwPress(rwAt);
+      return;
+    }
+    const d = /^(Digit|Numpad)([1-9])$/.exec(e.code || "");
+    if (d && e.ctrlKey && !e.altKey && !e.metaKey) { e.preventDefault(); if (+d[2] <= acts.length) rwPress(+d[2] - 1); }
+  });
 }
 const PICK_SCRIPT = "(" + pickPage.toString() + ")();";
 const PICK_HASH = "'sha256-" + crypto.createHash("sha256").update(PICK_SCRIPT, "utf8").digest("base64") + "'";
@@ -12283,7 +12436,7 @@ function pickerDoc() {
     + ':root.glass body{background:color-mix(in srgb,var(--panel-raised) 78%,transparent)}\n'
     + 'body{box-sizing:border-box;padding:8px;display:flex;flex-direction:column;gap:6px;color:var(--ink);'
     + 'font:14px/1.35 var(--sans);cursor:default;user-select:none;-webkit-user-select:none}\n'
-    + 'input,textarea,[contenteditable="true"],[contenteditable=""],.mono,code,pre{user-select:text;-webkit-user-select:text}\n'
+    + 'input,textarea,[contenteditable="true"],[contenteditable=""],.mono,code,pre,.rw-text{user-select:text;-webkit-user-select:text}\n'
     + '#top{flex:0 0 40px;display:flex;gap:6px;min-width:0}\n'
     + '#q{box-sizing:border-box;flex:1 1 auto;min-width:0;padding:0 12px;border:1px solid var(--field-line);'
     + 'border-bottom-color:var(--field-edge);border-radius:var(--radius-sm);background:var(--field);color:var(--ink);'
@@ -12306,6 +12459,24 @@ function pickerDoc() {
     + '#sg button.picked{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}\n'
     + '#sg button.picked.on{background:color-mix(in srgb,var(--accent) 28%,transparent);color:var(--accent)}\n'
     + '#sel{flex:0 0 auto;padding:0 12px;color:var(--dim);font-size:12px}\n#sel[hidden]{display:none}\n'
+    + '#top[hidden],#rows[hidden],#count[hidden],#sg[hidden],#rw[hidden],#rwo[hidden],#rwr[hidden],.rw-h[hidden],.rw-lab[hidden],'
+    + '.rw-words[hidden],.rw-act[hidden],.rw-out[hidden],.rw-line[hidden]{display:none}\n'
+    + '#rwo,#rwr{display:flex;flex-direction:column;gap:6px;min-width:0;padding:6px 10px 0;outline:none}\n'
+    + '#rwo{flex:0 0 auto}\n#rwr{flex:1 1 auto;min-height:0;overflow-y:auto}\n'
+    + '.rw-lab,.rw-act,.rw-line{color:var(--dim);font-size:12px}\n'
+    + '.rw-words{color:var(--ink);font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:4.2em;overflow-y:auto}\n'
+    + '.rw-out{padding:10px 12px;border-radius:var(--radius-sm);background:color-mix(in srgb,var(--accent) 14%,transparent);'
+    + 'color:var(--ink);font-weight:600;white-space:pre-wrap;overflow-wrap:anywhere}\n'
+    + '#rw{flex:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:6px 10px 0;border-top:1px solid var(--line);'
+    + 'color:var(--dim);font-size:12px}\n#rw .rw-line{flex:1 0 100%}\n'
+    + '.rw-acts{display:flex;flex-wrap:wrap;gap:6px}\n'
+    + '.rw-acts button{box-sizing:border-box;display:inline-flex;align-items:center;gap:6px;height:28px;margin:0;padding:0 10px;'
+    + 'border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:var(--field);color:var(--ink);font:600 12.5px var(--sans);'
+    + 'cursor:default;outline:none}\n'
+    + '.rw-acts button:hover{border-color:var(--accent)}\n'
+    + '.rw-acts button.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}\n'
+    + '.rw-acts button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}\n'
+    + '.rw-acts kbd{color:var(--dim)}\n'
     + '#rows{flex:1 1 auto;min-height:0;margin:0;padding:0;list-style:none;overflow-x:hidden;overflow-y:auto;'
     + 'overscroll-behavior:contain;scrollbar-width:thin}\n'
     + '#rows li{display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:var(--radius-sm);'
@@ -12355,7 +12526,12 @@ function pickerDoc() {
     + '<div id="top"><input id="q" type="text" role="combobox" aria-expanded="true" aria-controls="rows" aria-autocomplete="list"'
     + ' autocomplete="off" spellcheck="false"><input id="who" type="text" autocomplete="off" spellcheck="false" hidden>'
     + '<button id="lang" type="button" hidden></button></div>\n<div id="sel" hidden></div>\n'
+    + '<div id="rwo" tabindex="-1" hidden><div class="rw-lab"></div><div class="rw-words rw-text"></div><div class="rw-acts" role="group"></div>'
+    + '<div class="rw-line"></div></div>\n'
+    + '<div id="rwr" role="status" hidden><div class="rw-lab"></div><div class="rw-words rw-text"></div><div class="rw-act"></div>'
+    + '<div class="rw-out rw-text"></div><div class="rw-line"></div></div>\n'
     + '<ul id="rows" role="listbox"></ul>\n'
+    + '<div id="rw" hidden><span class="rw-h"></span><span class="rw-acts" role="group"></span><div class="rw-line"></div></div>\n'
     + '<footer><span id="count" aria-live="polite"></span><span id="keys"></span></footer>\n'
     + '<script>' + PICK_SCRIPT + '</script>\n';
 }
@@ -12697,6 +12873,35 @@ ipcMain.handle("etiuda:pick-reword", (e, a) => {
     return r;
   });
 });
+/* ENTER AFTER A REWORD: the result goes on the clipboard, the picker steps aside, and the helper reads the selection again as at
+   the opening; only where the words selected at this opening are still the ones selected does it press its one key. Otherwise
+   the result waits on the clipboard and the note says so. */
+const REWORD_PUT_WAIT_MS = 150;
+ipcMain.handle("etiuda:pick-put", (e) => {
+  if (!fromPicker(e) || !pickReworded) return false;
+  const text = pickClipText(pickReworded, process.platform), was = pickSelectedNow, target = pickTarget;
+  pickReworded = "";
+  noteOwnText(text);
+  clipboard.writeText(text);
+  hidePicker(true);
+  const lf = s => String(s || "").replace(/\r\n/g, "\n");
+  if (!was || !target) { showPickNote(false); return false; }
+  return new Promise(done => setTimeout(done, REWORD_PUT_WAIT_MS)).then(() => caretSelection()).then(got => {
+    const same = !!(got && got.words) && lf(got.words) === lf(was); /* plant:reword-put-same */
+    if (same) caretPaste(target, showPickNote); else showPickNote(false);
+    return same;
+  });
+});
+/* The reworder alone grows once its result stands, its top kept and its foot inside the work area. */
+ipcMain.on("etiuda:pick-grow", (e) => {
+  if (!fromPicker(e) || !pickWin.isVisible()) return;
+  const b = pickWin.getBounds();
+  if (b.height >= REWORD_TALL) return;
+  let area = null;
+  try { area = screen.getDisplayMatching(b).workArea; } catch { area = null; }
+  const y = area ? Math.max(area.y, Math.min(b.y, area.y + area.height - REWORD_TALL)) : b.y;
+  pickWin.setBounds({ x: b.x, y: y, width: b.width, height: REWORD_TALL });
+});
 /* A card's Reword in the desk's own window: the same door, the same asks. */
 ipcMain.handle("etiuda:desk-reword", (e, a) => (fromEngine(e) ? deskReword.ask(rewordArg(a)) : { ok: false, why: "refused" }));
 /* An agent's key, click, wheel or scroll in each window, counted, so an order that comes after one is dropped. */
@@ -12883,7 +13088,7 @@ function pickWithClip(press, which, text, selected, editable) {
         try {
           const pt = screen.getCursorScreenPoint();
           area = screen.getDisplayNearestPoint(pt).workArea;
-          at = pickerPlace(pt, area, PICK_SIZE);
+          at = pickerPlace(pt, area, open.reword && open.selected && open.editable === true ? REWORD_SIZE : PICK_SIZE);
         } catch (e) { console.error("etiuda: the pointer could not be read, so the picker is centred - " + e.message); }
         if (at) pickWin.setBounds(at);
         else pickWin.center();

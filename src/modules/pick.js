@@ -217,7 +217,17 @@ function pickWords(){
           langTitle:t("Click to switch replies to the next language"),
           keyCopy:t("{KEY} copies, and pastes where it can"), keyOther:other ? t("{KEY} in {LANG}").split("{LANG}").join(other) : "",
           keyClose:t("{KEY} closes"), pasted:t("Pasted"), copied:t("Copied, press Ctrl+V"),
-          selected:t("The words you selected. Type to change them.")};
+          selected:t("The words you selected. Type to change them."),
+          /* Your own words, shown only where the shell offers a reword; {ADDRESS} is the host it names. */
+          rwHead:t("Your own words?"), rwSpelling:t("Fix spelling"), rwShorter:t("Shorter"), rwFriendlier:t("Friendlier"),
+          rwFormal:t("More formal"), rwIntoPl:t("Into Polish"), rwIntoEn:t("Into English"), rwLangs:CONTENT_LANGS.slice(),
+          rwBefore:t("A press sends only the words above to {ADDRESS}, your organisation's AI service."), rwYou:t("You selected"),
+          rwAfter:t("Sent to {ADDRESS}: only the words you selected. Read the result before you send it."),
+          rwEnter:t("Enter puts it in place of your selection"), rwBack:t("Back to the replies"),
+          rwWait:t("Waiting for {ADDRESS}"), // placeholder: Claudette
+          rwNone:t("No answer from {ADDRESS}. Your words are as you wrote them."), // placeholder: Claudette
+          rwLate:t("The AI service did not answer in time, so the request was given up."),
+          rwBusy:t("The AI service is busy and asked Etiuda to wait; a later try may go through.")};
 }
 /* THE TEXT THE DESK'S OWN COPY WOULD MAKE, counted as the desk counts a copy: the fill of the block
    in the card's language, for the chat tab in front. The shell writes it to the clipboard. A reply

@@ -49,6 +49,7 @@ const ALLOWED_LIST = [
   { sel: ".e-notice-err", why: "error detail in a notice bubble for bug/support copying" },
   { sel: ".mt-row .v", why: "diagnostic reading value set in the mono face in Maintenance (Studio kin: readings in mono)" },
   { sel: ".modal-card .modal-note", why: "pinned status note under an editor's title (deliberate existing exception)" },
+  { sel: ".rw-text", why: "the words a reword sends and the result it brings, in the Quick replies window: read closely and copied" },
 ];
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-tsel-"));
@@ -700,6 +701,20 @@ try {
   });
   await sleep(100);
   recordWalk(await auditScreen(pickPage, "Quick replies window", null));
+  /* The same window with "Your own words?" at its foot, after a press: the words and the result are content, the rest interface. */
+  await pickPage.evaluate(() => {
+    window.E_PICK.reword = async () => ({ ok: true, text: "Hi, sorry for the late reply. We will check your order tomorrow." });
+    window.__open(JSON.stringify({ lang: "en", look: { theme: "light", still: true, glass: false }, selected: "hi sorry for late reply",
+      editable: null, reword: { host: "ai.example.test" }, rows: [{ t: "Refund", g: "Orders", i: 0, n: 1, x: "We have started your refund", s: true }],
+      count: "1 reply", words: { rwHead: "Your own words?", rwSpelling: "Fix spelling", rwShorter: "Shorter", rwFriendlier: "Friendlier",
+        rwFormal: "More formal", rwYou: "You selected", rwBefore: "A press sends only the words above to {ADDRESS}, your organisation's AI service.",
+        rwAfter: "Sent to {ADDRESS}: only the words you selected. Read the result before you send it.", rwEnter: "Enter puts it in place of your selection",
+        rwBack: "Back to the replies", rwWait: "Waiting for {ADDRESS}" } }));
+  });
+  await sleep(60);
+  await pickPage.click("#rw .rw-acts button");
+  await sleep(80);
+  recordWalk(await auditScreen(pickPage, "Quick replies window, a reword's result", null));
 
   // Check 4: Placeholder / inner hints vs typed words across all 7 field kinds
   async function checkFieldEmptyAndTyped(p, sel, kindLabel, cleanup) {
