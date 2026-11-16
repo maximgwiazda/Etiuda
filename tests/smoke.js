@@ -3781,7 +3781,7 @@ const t0 = Date.now();
     await q.setViewport({ width: 1500, height: 950 });
     q.on("dialog", d => d.accept());
     q.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
-    if (done) await q.evaluateOnNewDocument(() => { try { localStorage.setItem("eTourDone_v3", "1"); localStorage.setItem("eTourInvite_v3", "1"); } catch (x) {} });
+    if (done) await q.evaluateOnNewDocument(() => { try { localStorage.setItem("eTourDone_v3", "1"); localStorage.setItem("eTourInvite_v3", "1"); localStorage.setItem("eFirstSigninSeen", "1"); } catch (x) {} });
     if (pre) await pre(q);
     await q.goto(huntUrl(dir), { waitUntil: "load", timeout: 90000 });
     await require("./launch-wait.js").waitLaunchGone(q, { who: "tests/smoke.js huntPage" });

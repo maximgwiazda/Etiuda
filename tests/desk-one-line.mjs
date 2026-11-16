@@ -168,6 +168,7 @@ async function bootPage(browser, url, width, height, dpr) {
       const base = [
         ["eTourDone_v3", "1"],
         ["eTourInvite_v3", "1"],
+        ["eFirstSigninSeen", "1"],
         ["eAgent", "Bench Agent"],
         ["eNameAsked", "1"],
         ["eTheme", "dark"],

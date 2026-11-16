@@ -79,6 +79,7 @@ async function bootCatalogTour(browser, pageUrl, { lang = "en", stepId = "cards"
       localStorage.setItem("eNameAsked", "1");
       if (!localStorage.getItem("__fmAccepted")) {
         localStorage.setItem("eTourDone_v3", "1");
+        localStorage.setItem("eFirstSigninSeen", "1");
       } else {
         sessionStorage.setItem("eTourAt", cfg.stepId);
       }
@@ -450,10 +451,13 @@ try {
           localStorage.setItem("eUiLang", l);
           localStorage.setItem("eAgent", "Anna");
           localStorage.setItem("eNameAsked", "1");
-          if (!reloadingForTour) localStorage.setItem("eTourDone_v3", "1");
+          if (!reloadingForTour) {
+            localStorage.setItem("eTourDone_v3", "1");
+            localStorage.setItem("eFirstSigninSeen", "1");
+          }
         } catch (e) {}
         if (!window.E_HOST) {
-          const desk = { eUiLang: l, eAgent: "Anna", eNameAsked: "1", ...(reloadingForTour ? {} : { eTourDone_v3: "1" }) };
+          const desk = { eUiLang: l, eAgent: "Anna", eNameAsked: "1", eFirstSigninSeen: "1", ...(reloadingForTour ? {} : { eTourDone_v3: "1" }) };
           window.E_HOST = {
             platform: "win32",
             openPicker: () => {},
@@ -616,6 +620,7 @@ try {
           localStorage.setItem("eAgent", "Anna");
           localStorage.setItem("eNameAsked", "1");
           localStorage.setItem("eTourDone_v3", "1");
+          localStorage.setItem("eFirstSigninSeen", "1");
         } catch (e) {}
       });
       await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
@@ -805,6 +810,7 @@ try {
         try {
           localStorage.setItem("eUiLang", l);
           localStorage.setItem("eTourDone_v3", "1");
+          localStorage.setItem("eFirstSigninSeen", "1");
           localStorage.setItem("eAgent", "Anna");
           localStorage.setItem("eNameAsked", "1");
         } catch (e) {}
@@ -814,7 +820,7 @@ try {
             value: { writeText: () => Promise.resolve() }
           });
         } catch (e) {}
-        const desk = { eUiLang: l, eTourDone_v3: "1", eAgent: "Anna", eNameAsked: "1" };
+        const desk = { eUiLang: l, eTourDone_v3: "1", eFirstSigninSeen: "1", eAgent: "Anna", eNameAsked: "1" };
         window.E_HOST = {
           platform: "win32",
           openPicker: () => {},

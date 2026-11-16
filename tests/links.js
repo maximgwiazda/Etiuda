@@ -98,7 +98,7 @@ function buildApp() {
   /* The first run's tour and bubbles would sit over the links; a desk that has seen them does not. */
   const UD = path.join(APP, "userdata");
   fs.writeFileSync(path.join(UD, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, app: "harness",
-    saved: new Date().toISOString(), keys: { eTourDone_v3: "1", eTourInvite_v3: "1", eNameAsked: "1", eAgent: "Probe" } }), "utf8");
+    saved: new Date().toISOString(), keys: { eTourDone_v3: "1", eTourInvite_v3: "1", eFirstSigninSeen: "1", eNameAsked: "1", eAgent: "Probe" } }), "utf8");
   E.pinCatalogFolder(UD, path.join(APP, "catalogs"));
   return UD;
 }

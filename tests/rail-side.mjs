@@ -41,7 +41,7 @@ async function boot(width) {
   await page.setViewport({ width, height: 880, deviceScaleFactor: 1 });
   await page.evaluateOnNewDocument(() => {
     try {
-      for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eAgent", "Bench Agent"], ["eNameAsked", "1"], ["eTheme", "light"], ["eRail", "1"], ["eRailLock", "1"]]) localStorage.setItem(k, v);
+      for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eFirstSigninSeen", "1"], ["eAgent", "Bench Agent"], ["eNameAsked", "1"], ["eTheme", "light"], ["eRail", "1"], ["eRailLock", "1"]]) localStorage.setItem(k, v);
     } catch (e) {}
   });
   await page.goto(RUN.url, { waitUntil: "load", timeout: 60000 });

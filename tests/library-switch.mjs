@@ -62,7 +62,7 @@ try {
   await p.setViewport({ width: 1500, height: 950 });
   await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
   await p.evaluateOnNewDocument(() => {
-    try { for (const k of ["eTourDone_v3", "eTourInvite_v3", "eNameAsked"]) localStorage.setItem(k, "1"); } catch (e) {}
+    try { for (const k of ["eTourDone_v3", "eTourInvite_v3", "eFirstSigninSeen", "eNameAsked"]) localStorage.setItem(k, "1"); } catch (e) {}
     window.__ev = [];
     new PerformanceObserver(l => { for (const e of l.getEntries()) window.__ev.push({ n: e.name, d: e.duration }); })
       .observe({ type: "event", durationThreshold: 16, buffered: true });

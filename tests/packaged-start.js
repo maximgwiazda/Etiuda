@@ -149,6 +149,7 @@ async function main() {
     /* tour.js tourStorageKey, so a first run does not cover the search. */
     deskData.keys.eTourDone_v3 = "1";
     deskData.keys.eTourInvite_v3 = "1";
+    deskData.keys.eFirstSigninSeen = "1";
     fs.writeFileSync(deskFile, JSON.stringify(deskData), "utf8");
 
     child = E.shellLaunch("tests/packaged-start.js", exePath,

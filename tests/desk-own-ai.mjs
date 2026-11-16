@@ -342,7 +342,7 @@ async function boot(lang) {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 900, deviceScaleFactor: 1 });
   await page.evaluateOnNewDocument((first, lang) => {
-    try { for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eAgent", "Bench Agent"], ["eNameAsked", "1"], ["eUiLang", lang]]) localStorage.setItem(k, v); } catch (e) {}
+    try { for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eFirstSigninSeen", "1"], ["eAgent", "Bench Agent"], ["eNameAsked", "1"], ["eUiLang", lang]]) localStorage.setItem(k, v); } catch (e) {}
     window.__ai = { settings: first, saves: [], listeners: [] };
     window.E_HOST = {
       platform: "win32", catalogFolder: "", catalogFile: "", catalogIn: "", catalogBuiltIn: false,
