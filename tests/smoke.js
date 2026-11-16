@@ -456,7 +456,8 @@ const t0 = Date.now();
   check(hs.every(h => h === hs[0]) && Math.max.apply(null, tops) - Math.min.apply(null, tops) <= 0.5,
     "the band's tools stand at the language switcher's height: " + JSON.stringify(toolsH));
 
-  /* KEYBOARD FOCUS WEARS THE HOVER LOOK, board 452, and no ring - the browser's own included.
+  /* KEYBOARD FOCUS WEARS THE HOVER LOOK, board 452, AND THE DESK'S ONE RING (2 px solid, the focus ring's
+     rule: tests/desk-focus-ring.mjs), which a button at rest or under the pointer does not wear.
      Three reads of one button: at rest with the pointer away, under the pointer, and focused
      from the keyboard. The keyboard part is a key press before the focus() call, because
      Chromium decides :focus-visible from the last input it saw, and the element is asked
@@ -483,8 +484,9 @@ const t0 = Date.now();
   };
   const look = await focusLook();
   check(look.focus.fv && look.focus.bg === look.hover.bg && look.focus.ink === look.hover.ink
-        && look.hover.bg !== look.rest.bg && /^(none|hidden)/.test(look.focus.out),
-    "a button focused from the keyboard wears its hover look and no ring: " + JSON.stringify(look));
+        && look.hover.bg !== look.rest.bg && look.focus.out === "solid 2px"
+        && /^(none|hidden)/.test(look.rest.out) && /^(none|hidden)/.test(look.hover.out),
+    "a button focused from the keyboard wears its hover look and the desk's ring, and no ring at rest or under the pointer: " + JSON.stringify(look));
 
   /* Every menu action once; the toggles a second time to put things back; the tour separately. */
   e = since();
