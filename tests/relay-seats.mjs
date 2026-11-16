@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-seats-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 93;
+const EXPECTED = 92;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -332,10 +332,17 @@ async function main() {
     return { ok, detail: brief({ duringOpened: during.filter(opened).length + "/" + during.length, firstFixed: said(first),
       othersBeforeRenewing: said(waiting), othersAfterRenewing: said(renewed) }) };
   }
-  /* O7, the order: a grant carrying seats is refused "fields" by the relay on main before this change, so the service may send one
-     only once the relay that reads it is deployed; this relay takes it. Main's core is read from git, and a tree without main says so. */
-  const SEATS_ON_MAIN = "NOT SHOWN: main carries the seats change since engine fold 103 of 2026-11-16; the owner's ruling of 2026-11-16"
-    + " settles what s12 shows, closed in the first fold after it (the test architect)";
+  /* O7, the order: a grant carrying seats is refused "fields" by the relay before the seats change, so the service may send one only
+     once the relay that reads it is deployed; this relay takes it. "The relay before the change" is a fixture: relay/core.cjs of
+     engine abc58e9f, captured once, its sha256 held here. It was read from main's ref until main itself carried the change (engine
+     fold 103, 2026-11-16), and a "before" read from a moving ref stopped being one (the test architect). */
+  const BEFORE = { file: path.join(ROOT, "tests", "fixtures", "relay-core-before-seats.cjs.txt"), from: "abc58e9f",
+    sha256: "a028e4502dae23cd3967d653274351318a5fb55656df588cc8688962c4c7734e" };
+  function coreBefore() {
+    let text; try { text = fs.readFileSync(BEFORE.file, "utf8").replace(/\r\n/g, "\n"); } catch (e) { return null; }
+    return sha(text) === BEFORE.sha256 ? text : null;
+  }
+  /* O1 still reads main's core: it asks that an ordinary team answers as main's does, whatever main holds. */
   function mainCore() {
     for (const ref of ["origin/main", "main"]) {
       const r = spawnSync("git", ["show", ref + ":relay/core.cjs"], { cwd: ROOT, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
@@ -359,22 +366,17 @@ async function main() {
     return require(path.join(dir, "relay", "core.cjs"));
   }
   async function orderScene() {
-    const text = mainCore();
-    if (text === null) return { skip: true, detail: "no main in this tree" };
+    const text = coreBefore();
+    if (text === null) return { ok: false, detail: "the fixture is not the bytes captured from " + BEFORE.from + " (" + path.basename(BEFORE.file) + ")" };
     const old = coreFrom(text), lead = keyPair(false);
-    if (old.GRANT_FIELDS !== undefined && !Array.isArray(old.GRANT_FIELDS)) return { ok: false, detail: "main's core is not readable" };
+    if (!Array.isArray(old.GRANT_FIELDS) && old.GRANT_FIELDS !== undefined) return { ok: false, detail: "the earlier core is not readable" };
     const g = grantAt(lead.pub, T0, { licence: hex(16), live: T0 });
     const plainG = grantAt(lead.pub, T0);
     const before = old.grantWhy(g, lead.pub, T0, K.ROOTS), beforePlain = old.grantWhy(plainG, lead.pub, T0, K.ROOTS);
     const now = C.grantWhy(g, lead.pub, T0, K.ROOTS);
-    const mainHasSeats = /"seats"/.test(text.split("GRANT_FIELDS")[1] || "");
-    /* Main's core stands for "the relay before this change" only while main has no seats. It has carried them since engine fold 103
-       (2026-11-16), so s12a and s12b are skipped, not judged, where the leg itself finds that: nothing is claimed that is not shown.
-       What s12 shows after that is settled by the owner's ruling of 2026-11-16 and closed in the first fold after it, either way
-       (the test architect). */
-    if (mainHasSeats) return { skip: true, mainHasSeats, detail: SEATS_ON_MAIN };
-    return { ok: before === "fields" && beforePlain === null && now === null, mainHasSeats,
-      detail: brief({ mainWithSeats: before, mainWithout: beforePlain, thisRelay: now }) };
+    const beforeNamesSeats = /"seats"/.test(text.split("GRANT_FIELDS")[1] || "");
+    return { ok: !beforeNamesSeats && before === "fields" && beforePlain === null && now === null,
+      detail: brief({ earlierWithSeats: before, earlierWithout: beforePlain, thisRelay: now, earlierNamesSeats: beforeNamesSeats }) };
   }
   /* O8, night decision 6 on an Entra team: what takes access away never waits on a seat. The lead removes a desk whose seat has lapsed,
      and that desk is then told removed; on a read-only team the lead still removes a desk; and a desk whose door request is up takes it
@@ -574,7 +576,7 @@ async function main() {
     await leg("s11 " + name, () => companyBrokenScene(span), "case (2) a company whose own Entra breaks every renewal on one day: nobody is cut three days past every end; once one person proves, the others' run-out certificates are refused until each desk renews, and then open");
     await leg("s13 " + name, () => letGoScene(span), "O8 night decision 6: the lead removes a desk whose seat lapsed and it is then told removed, a lapsed team's lead still removes a desk, and a door request is taken back after its certificate ran out past the evidence");
   }
-  const order = await leg("s12a", orderScene, "O7 the order: a grant carrying seats is refused fields by main's relay before this change and taken by this one, and main's takes the same grant without seats");
+  await leg("s12a", orderScene, "O7 the order: a grant carrying seats is refused fields by the relay before this change (engine abc58e9f's core, a fixture) and taken by this one, and the earlier relay takes the same grant without seats");
   await leg("s14a", shapeScene, "a grant's seats out of shape (live after the issue, negative or fractional, a licence not 32 lowercase hex, an extra or missing field, not an object) is refused shape, and at a create or a renewal bad-grant, before any team keeps it");
   await leg("s15a", keptScene, "a team once gated stays gated: an ordinary team renewed with seats asks for certificates, and a grant without seats, issued earlier, issued later (the removed lead's trial) or the team's first replayed, leaves it gated; an earlier-issued grant of another licence changes nothing; a handover with seats gates a team");
   /* The grant's live never falls while the licence stays: a removed desk cut by one grant's live stays cut when a newer grant names an
@@ -1168,9 +1170,8 @@ async function main() {
     const p = await liftedChannel(tag, scene);
     check(results[id] && results[id].ok === true && p.turned && p.back, line + ": " + p.detail + ", sha " + (p.back ? "unchanged" : "CHANGED"));
   }
-  /* O1 and O7 lean on main's core; their own control is that a seats grant changes their answer on this relay. */
-  if (order && order.mainHasSeats) skip("s12b main's core already names seats, so O7 cannot show the order: " + SEATS_ON_MAIN);
-  else check(true, "s12b main's core does not name seats, so O7 shows the order it claims" + (order && order.skip ? " (main not readable here)" : ""));
+  /* s12b ("main's core does not name seats") is retired with the fixture: its alarm, that the relay and the service might be
+     deployed in the wrong order, is now the landing plan's deploy order and the deploy's own legs. O1 leans on main's core still. */
 }
 
 try { await main(); }
