@@ -803,7 +803,9 @@ function syncSay(s){
   const words=s.say==="on" ? t("Your catalogs, edits and settings now follow you to every computer you sign in on. You can turn this off in Account.")
     : syncUnavailable(s.say, signinV.signedIn, true);
   const i=words.indexOf(". ");
-  syncNoticeBubble("eSyncSaid", i<0 ? words : words.slice(0,i+1), i<0 ? "" : " "+words.slice(i+2), ()=>document.getElementById("eSyncChoiceNote") || $("#signinBtn"), false);
+  /* Where policy holds the switch, the line's last sentence, which says it can be turned off, is not said. */
+  const tail=(i<0 || (s.say==="on" && s.held===true)) ? "" : " "+words.slice(i+2); /* plant:say-held */
+  syncNoticeBubble("eSyncSaid", i<0 ? words : words.slice(0,i+1), tail, ()=>document.getElementById("eSyncChoiceNote") || $("#signinBtn"), false);
   const h=eHost();
   try{ if(h && typeof h.storeSaid==="function") h.storeSaid(); }catch(e){ /* the shell has gone */ } /* plant:sync-said-told */
 }

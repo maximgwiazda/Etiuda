@@ -364,10 +364,9 @@ function storeRow(o) {
   if (look && look.state === "unavailable" && look.why === "ungiven") return Object.assign(base, { line: pol.held === true ? "ungiven-held" : "ungiven", on: false, say: "" }); /* plant:row-ungiven */
   if (look && look.state === "unavailable" && look.why !== "offline") return Object.assign(base, { line: "unavailable", why: String(look.why || "") });
   if (o.seatless === true) return Object.assign(base, { line: "noseat" }); /* plant:row-noseat */
-  /* A new store made here over an ended mark under a policy holding sync on (anew): said while its look runs or is on. */
-  if (o.anew === true && (o.looking === true || (look && look.state === "on"))) return Object.assign(base, { line: "anew" }); /* plant:row-anew */
-  /* A look running: "first" where none has had sync on here yet (ever), else "checking". */
-  if (o.looking === true) return Object.assign(base, { line: o.ever === true ? "checking" : "first" }); /* plant:row-looking */
+  /* A look running: "first" where none has had sync on here yet (ever), else "checking"; "anew" where it makes a new store over an ended
+     mark under a policy holding sync on, said again once that look is on, below a conflict and the room full. */
+  if (o.looking === true) return Object.assign(base, { line: o.anew === true ? "anew" : o.ever === true ? "checking" : "first" }); /* plant:row-looking */
   /* Signing in refused at the service: nothing syncs once no look holds a current certificate, and nothing renews one until it works. */
   if (o.signinRefused === true && !(look && look.state === "on" && Number(o.now) < Number(o.until))) return Object.assign(base, { line: "signin-refused" }); /* plant:row-signin-refused */
   /* A look failed for a passing reason: "again" while a try is set (`at` its time), "spent" once none is, the daily renewal's look left. */
@@ -387,7 +386,7 @@ function storeRow(o) {
   if (!look && o.ever === true) return Object.assign(base, { line: "resuming" }); /* plant:row-resuming */
   if (!look) return Object.assign(base, { line: "unconnected" }); /* plant:row-unconnected */
   if (Number(o.conflicts) > 0 && o.full !== true) return Object.assign(base, { line: "conflict" }); /* plant:row-conflict */
-  return Object.assign(base, { line: o.full === true ? "full" : "on" }); /* plant:row-full */
+  return Object.assign(base, { line: o.full === true ? "full" : o.anew === true && !!look && look.state === "on" ? "anew" : "on" }); /* plant:row-full */ /* plant:row-anew */
 }
 /* The store's room: full once the relay (or the channel's own count) refuses a write as "team-size", the changes staying owed on this
    computer, and no longer once a write is taken (reason ""); any other refusal leaves it as it was. */

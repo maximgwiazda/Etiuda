@@ -8,6 +8,7 @@
  *       to the shell once; never again, after more views or after Dismiss
  *   c9b the same while the account panel is open: nothing until the panel closes, then the one bubble
  *   c9c a second computer, and a desk that has said it already: no bubble
+ *   c9h the first sign-in under a policy holding the switch: the first sentence alone
  *   c9d firstSay: "on" only at the first look with sync on that made the store
  *   m1  the Account row's line for each state, the switch only where it acts, held by policy fixed with its lock
  *   m2  Off asks from the switch: Everywhere, This computer, Cancel filled and last; the switch stays On; Escape and Cancel change
@@ -39,7 +40,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 51;
+const EXPECTED = 54;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const STORE = path.join(E.ROOT, "shell", "sync", "store.cjs");
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -248,6 +249,16 @@ async function allowRow(pageName) {
   return bad;
 }
 
+/* c9h: the same first sign-in where policy holds the switch: the line's first sentence alone, nothing said of turning it off. */
+async function firstSigninHeld(pageName) {
+  const page = await boot({ page: pageName, view: Object.assign({}, ON, { held: true }) });
+  try {
+    const one = await tell(page, Object.assign({}, ON, { held: true, say: "on" }));
+    const want = SAID_EN.slice(0, SAID_EN.indexOf(". ") + 1);
+    if (one.shown.length !== 1 || one.text !== want) return "words: " + JSON.stringify(one.text);
+    return "";
+  } finally { await page.close(); }
+}
 /* c9a: the first sign-in. Answers what went wrong, or "" where all held. */
 async function firstSignin(pageName) {
   const page = await boot({ page: pageName, view: ON });
@@ -271,6 +282,8 @@ async function firstSignin(pageName) {
 async function main() {
   browser = await puppeteer.launch({ executablePath: E.browserPath("chrome"), headless: true, args: ["--hide-scrollbars"], protocolTimeout: 120000 });
 
+  const c9h = await firstSigninHeld("etiuda.html");
+  check(!c9h, "c9h the first sign-in where policy holds the switch: the copywriter's first sentence alone, nothing of turning it off", c9h || undefined);
   const c9a = await firstSignin("etiuda.html");
   check(!c9a, "c9a the first sign-in that made the store: one bubble from the account button in the copywriter's words, asking nothing, told once, never again", c9a || undefined);
 
@@ -863,7 +876,10 @@ async function main() {
       ["a passing failure over the dated pause", Object.assign({ until: now - 4 * D }, again), "again", { until: now - 4 * D }, "paused"],
       ["no seat over a new store under policy", { seatless: true, anew: true }, "noseat", { anew: true }, "anew"],
       ["a new store under policy over a look running", { anew: true, looking: true }, "anew", { looking: true }, "checking"],
-      ["a new store under policy over a conflict", { anew: true, conflicts: 1 }, "anew", { conflicts: 1 }, "conflict"],
+      ["a conflict over a new store under policy", { anew: true, conflicts: 1 }, "conflict", { anew: true }, "anew"],
+      ["the room full over a new store under policy", { anew: true, full: true }, "full", { anew: true }, "anew"],
+      ["a lapse over a new store under policy", { anew: true, until: now - D }, "lapsed", { anew: true }, "anew"],
+      ["a refused sign-in over a new store under policy", { anew: true, signinRefused: true, look: null }, "signin-refused", { anew: true, looking: true, look: null }, "anew"],
       ["a passing failure over a new store under policy", Object.assign({ anew: true }, again), "again", { anew: true }, "anew"],
       ["no seat over a look running", { seatless: true, looking: true }, "noseat", { looking: true }, "checking"],
       ["a look running over a passing failure", Object.assign({ looking: true }, again), "checking", again, "again"],
@@ -901,9 +917,10 @@ async function main() {
     const before = sha(STORE), text = fs.readFileSync(STORE, "utf8"), lines = text.split("\n"), at = lines.findIndex(l => l.indexOf("/* plant:" + tag + " */") >= 0);
     let red = false, detail = "the plant's anchor is absent";
     if (at >= 0) {
-      if (tag === "row-full") lines[at] = lines[at].replace('o.full === true ? "full" : "on"', '"on"');
+      if (tag === "row-full") lines[at] = lines[at].replace('o.full === true ? "full" : ', '');
       else if (tag === "row-ungiven") lines[at] = lines[at].replace('pol.held === true ? "ungiven-held" : "ungiven"', '"ungiven"');
       else if (tag === "row-no-date") lines[at] = lines[at].replace("Number(o.until) > 0 ? pausedLine({ until: o.until }, o.now, o.signinRefused) : null", "pausedLine({ until: o.until }, o.now, o.signinRefused)");
+      else if (tag === "row-anew") lines[at] = lines[at].replace('o.anew === true && !!look && look.state === "on" ? "anew" : "on"', '"on"');
       else if (tag === "row-conflict") { const moved = lines.splice(at, 1)[0].replace(" && o.full !== true", ""); lines.splice(lines.findIndex(l => l.indexOf("const p = pausedLine(") >= 0), 0, moved); }
       else lines.splice(at, 1);
       const dir = path.join(lab, "store-plant-" + tag);
@@ -916,6 +933,31 @@ async function main() {
   }
 
   /* The plants. */
+  if (PLANTS_OFF) skip("p c9h the policy's case taken out of the said line turns c9h red");
+  else {
+    const from = 'const tail = i < 0 || s.say === "on" && s.held === true ? "" : " " + words.slice(i + 2);';
+    const n = PAGE.split(from).length - 1;
+    let detail = "the plant's anchor is there " + n + " times";
+    if (n === 1) {
+      fs.writeFileSync(path.join(lab, "planted-held.html"), PAGE.split(from).join('const tail = i < 0 ? "" : " " + words.slice(i + 2);'));
+      const r = await firstSigninHeld("planted-held.html");
+      detail = r ? "red: " + r : "still held";
+      check(!c9h && !!r, "p c9h the policy's case taken out of the said line turns c9h red", detail);
+    } else check(false, "p c9h the policy's case taken out of the said line turns c9h red", detail);
+  }
+  if (PLANTS_OFF) skip("p r2 a new store under policy said over a conflict turns r2 red");
+  else {
+    const before = sha(STORE), lines = fs.readFileSync(STORE, "utf8").split("\n"), at = lines.findIndex(l => l.indexOf("/* plant:row-conflict */") >= 0);
+    let red = false;
+    if (at >= 0) {
+      lines.splice(at, 0, '  if (o.anew === true && look && look.state === "on") return Object.assign(base, { line: "anew" });');
+      const dir = path.join(lab, "store-plant-anew-first");
+      fs.mkdirSync(dir);
+      fs.writeFileSync(path.join(dir, "store.cjs"), lines.join("\n"));
+      try { red = orderBad(require(path.join(dir, "store.cjs"))).length > 0; } catch (e) { red = true; }
+    }
+    check(red && sha(STORE) === before, "p r2 a new store under policy said over a conflict turns r2 red", red ? "red" : "still held");
+  }
   const PAGE_PLANT = [") h.storeSaid();", ") void 0;"];
   if (PLANTS_OFF) skip("p c9a the page's word that it showed the bubble taken out turns c9a red");
   else {

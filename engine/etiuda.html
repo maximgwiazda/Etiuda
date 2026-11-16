@@ -30177,7 +30177,8 @@ What is typed here stays in this browser.`;
     if (!wantSay) return;
     const words = s.say === "on" ? t("Your catalogs, edits and settings now follow you to every computer you sign in on. You can turn this off in Account.") : syncUnavailable(s.say, signinV.signedIn, true);
     const i = words.indexOf(". ");
-    syncNoticeBubble("eSyncSaid", i < 0 ? words : words.slice(0, i + 1), i < 0 ? "" : " " + words.slice(i + 2), () => document.getElementById("eSyncChoiceNote") || $("#signinBtn"), false);
+    const tail = i < 0 || s.say === "on" && s.held === true ? "" : " " + words.slice(i + 2);
+    syncNoticeBubble("eSyncSaid", i < 0 ? words : words.slice(0, i + 1), tail, () => document.getElementById("eSyncChoiceNote") || $("#signinBtn"), false);
     const h = eHost();
     try {
       if (h && typeof h.storeSaid === "function") h.storeSaid();

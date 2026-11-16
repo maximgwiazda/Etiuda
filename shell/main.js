@@ -11899,9 +11899,9 @@ function storeView() {
   const provider = held && signinOffered().some(p => p.id === held.provider) && (held.cert || synced) ? held.provider : "";
   const ask = !!who && s.ask === who && storeHeld();
   return StoreLib().storeRow({ provider, pol: storePolicyNow(), look: storeNow, until: s.until, now: Date.now(),
-    signinRefused: !!(held && held.said), conflicts: storeConflicts(), say: storeSay, owed: !!storeOwedRt(),
+    signinRefused: !!(held && (held.said || held.ask === true)), conflicts: storeConflicts(), /* plant:view-signin-ask */ say: storeSay, owed: !!storeOwedRt(),
     ask, askNow: ask && !storeNotNow.has(who), again: storeAgainTimer ? storeAgainAt : 0, /* plant:store-view-again */
-    looking: storeLooking, ever: s.told === true, /* plant:store-view-looking */
+    looking: storeLooking > 0, ever: s.told === true, /* plant:store-view-looking */
     anew: storeAnew, /* plant:store-view-anew */
     seatless: !!held && (!held.cert || held.said === "full"), full: storeFullNow }); /* plant:store-view-room */
 }
@@ -12223,12 +12223,12 @@ async function storeLookNow() {
   if (!pol.on) return null; /* plant:store-off */
   if (!sealsForReal(safeStorage, process.platform)) return storeSettle({ state: "unavailable", why: "" });
   /* The page is told when a look begins and when it ends, so the row says a look runs only while one does. */
-  storeLooking = true; tellStore(); /* plant:store-look-told */
-  try { return await storeLookRun(p, held, me, pol); } finally { storeLooking = false; tellStore(); }
+  storeLooking++; tellStore(); /* plant:store-look-told */
+  try { return await storeLookRun(p, held, me, pol); } finally { storeLooking--; tellStore(); } /* plant:store-look-count */
 }
 /* storeAnew: this computer made a new store over another computer's ended mark under a policy holding sync on; the row says so until a
    restart, a sign out, another account seated or the account question answered. In memory alone. */
-let storeLooking = false, storeAnew = false;
+let storeLooking = 0, storeAnew = false; /* storeLooking: how many looks run now, so one ending does not end the row's word for another */
 async function storeLookRun(p, held, me, pol) {
   const L = StoreLib(), who = storeState().who, switchAt = storeSwitchNo;
   /* The look keeps to the account it began under and to the switch as it stood, sync still on: its folder token, the service, the relay
@@ -12274,7 +12274,7 @@ let syncLayer = null;
 function SyncLib() { return syncLayer || (syncLayer = require(path.join(__dirname, "sync", "sync.cjs"))); }
 const STORE_SYNC_FILE = "sync.json", STORE_SYNC_MS = 2000;
 function storeSyncDir(...rest) { return path.join(app.getPath("userData"), "store", ...rest); }
-let storeSyncing = null, storeSyncTimer = null;
+let storeSyncing = null, storeSyncTimer = null, storeKeptTold = -1;
 function storeSyncOf() {
   if (storeSyncing) return storeSyncing;
   const me = branchIdentity(false), priv = deskBranch ? openPrivate(deskBranch.sign.priv) : null;
@@ -12290,6 +12290,9 @@ function storeSyncOf() {
     save: s => {
       try { fs.mkdirSync(storeSyncDir(), { recursive: true }); writeReplacing(storeSyncDir(STORE_SYNC_FILE), JSON.stringify(s)); }
       catch (e) { console.error("etiuda: the store's sync state could not be kept - " + e.message); }
+      /* The row counts the versions kept and not yet shown: told whenever a merge changes that count. */
+      const kept = Array.isArray(s.kept) ? s.kept.filter(k => !k.opened).length : 0;
+      if (kept !== storeKeptTold) { storeKeptTold = kept; tellStore(); } /* plant:kept-told */
     },
     local: storeSyncLocal, held: () => storeSyncHeld, pristine: () => storeSyncPristine, apply: storeSyncApply, pubOf: StoreLib().pubOf, canonBytes: C.signedBytes, now: Date.now,
   });
