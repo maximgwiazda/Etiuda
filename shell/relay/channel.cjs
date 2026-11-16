@@ -937,7 +937,9 @@ function createProgram(opts) {
       /* Once a handover has landed, the lead pinned now takes on a root file of a key earlier in its chain. */
       let handedOn = false;
       handedOn = r.role === "lead" && r.writerKeyId === pin.lead.keyId && isLeadKey(was.writer); /* plant:chain-handed */
-      if (was.path.toLowerCase() !== r.path.toLowerCase() || (was.writer !== r.writerKeyId && !genuineHandover && !handedOn)) return R("outside-place"); /* plant:chain-same */
+      let samePath = was.path.toLowerCase() === r.path.toLowerCase();
+      samePath = pathKey(was.path) === pathKey(r.path); /* plant:chain-path-fold */
+      if (!samePath || (was.writer !== r.writerKeyId && !genuineHandover && !handedOn)) return R("outside-place"); /* plant:chain-same */
     }
     return r;
   }
@@ -1594,6 +1596,15 @@ function createProgram(opts) {
     const a = has(st.applied, key) ? st.applied[key] : null;
     let echo = !!a && !a.del && clock() - a.at < ECHO_MS;
     if (echo && bytes != null) echo = sha256(toBytes(bytes)) === a.sha;
+    /* Not an echo where this program has itself SENT another version of the path since that landing: the team then holds
+       that other version, so bytes put back to the landed ones are a change it has not seen. The order is by this
+       program's own clock at the two moments it witnessed, the landing and its own sending (sentOut). An own blob that
+       was merely fetched here (sentFrom) carries no time, since when it arrived says nothing of when it was sent: a
+       fresh install catching up may take another writer's later version first and its own older one after, and must not
+       then send that writer's version back out under its own key. A record without a time answers as before; so does a
+       record kept before 2026-11-16. */
+    const s = has(st.sent, key) ? st.sent[key] : null;
+    if (echo && s && !s.del && s.sha !== a.sha && s.at > a.at) echo = false; /* plant:sent-newer */
     if (echo) return { send: false, reason: "echo", said: B.REASONS.echo }; /* plant:out-echo */
     return { send: true };
   }
@@ -1698,7 +1709,7 @@ function createProgram(opts) {
   }
 
   function sentOut(op, blob) {
-    const rec = { id: blob.id, epoch: blob.epoch, counter: blob.counter, sha: op.sha, size: blob.ciphertext.length, del: op.kind === "delete" };
+    const rec = { id: blob.id, epoch: blob.epoch, counter: blob.counter, sha: op.sha, size: blob.ciphertext.length, del: op.kind === "delete", at: clock() };
     const was = lastSent(op);
     const k = pathKey(op.rel);
     if (op.invite) {
@@ -1992,6 +2003,7 @@ function createProgram(opts) {
         kept = key === pathKey(TEAM_NAME); /* plant:reconcile-team */
         if (kept) continue;
         const a = has(st.applied, key) ? st.applied[key] : null, s = has(st.sent, key) ? st.sent[key] : null;
+        if (a && !a.del && has(st.gone, a.writer)) continue; /* plant:reconcile-removed */
         const live = [a, s].filter(r => r && !r.del);
         if (!live.length || (s && s.owe === true) || live.some(r => listed.has(r.id))) continue;
         const rel = here.get(key) || null, bytes = rel ? io.read(rel) : null;

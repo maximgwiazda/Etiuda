@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 454;
+const EXPECTED = 468;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -12007,6 +12007,259 @@ if (partOn("p1165")) {
   }
 }
 
+/* ---- finding (2): a file put back to bytes received within ECHO_MS after an edit was sent is not an echo ---- */
+async function sceneF2(mod) {
+  const k1 = crypto.randomBytes(32), deskKey = keyPair(true);
+  const tm = await freshTeam([deskKey]);
+  const tag = tm.rt.slice(0, 8), MIN = 60 * 1000;
+  let now = Date.now();
+  const clock = () => now;
+  const keyFor = e => (e === 1 ? k1 : null);
+  const V1 = "guide V1, received\n", V2 = "guide V2, a local edit\n";
+  const a = opened(mod, "f2-a-" + tag, tm, LEAD, "root", { keyFor, sealEpoch: () => 1, clock, connect: null });
+  const b = opened(mod, "f2-b-" + tag, tm, LEAD, "root", { keyFor, sealEpoch: () => 1, clock, connect: null });
+  const desk = opened(mod, "f2-d-" + tag, tm, deskKey, "desk:" + deskKey.keyId, { keyFor, sealEpoch: () => 1, clock, connect: null });
+  const doc1 = teamBody(tm, 1, 1, [member(deskKey)]);
+  put(a.mirror, C.TEAM_NAME, doc1);
+  put(a.mirror, "guide.ec", V1);
+  a.ch.start(); b.ch.start(); desk.ch.start();
+  await a.ch.idle(); await b.ch.idle(); await desk.ch.idle();
+  await once(a); await once(b); await once(desk);
+  const echoInitial = b.prog.considerOutgoing("guide.ec", Buffer.from(V1));
+  const deskEcho = desk.prog.considerOutgoing("guide.ec", Buffer.from(V1));
+  const putsBefore = putsOf(b);
+
+  /* +10 min: b edits V1 -> V2 and sends V2. */
+  now += 10 * MIN;
+  put(b.mirror, "guide.ec", V2);
+  await once(b);
+  const putsAfterEdit = putsOf(b);
+  await once(b);
+  const putsStillEdit = putsOf(b);
+  await once(a);
+  const aSawV2 = read(a.mirror, "guide.ec") === V2;
+
+  /* +20 min (still inside ECHO_MS): b puts V1 back; must be sent, not withheld as an echo. */
+  now += 10 * MIN;
+  put(b.mirror, "guide.ec", V1);
+  const wordPutBack = b.prog.considerOutgoing("guide.ec", Buffer.from(V1));
+  await once(b);
+  const putsAfterBack = putsOf(b);
+  await once(a);
+  const aSawV1Back = read(a.mirror, "guide.ec") === V1;
+
+  await a.ch.stop(); await b.ch.stop(); await desk.ch.stop();
+  return {
+    echoInitialOk: echoInitial.send === false && echoInitial.reason === "echo" && putsBefore === 0,
+    deskEchoOk: deskEcho.send === false && deskEcho.reason === "echo",
+    editedOk: putsAfterEdit === 1 && putsStillEdit === 1 && aSawV2,
+    putBackSent: wordPutBack.send === true && putsAfterBack === 2 && aSawV1Back,
+    detail: JSON.stringify({ echoInitial, deskEcho, putsAfterEdit, putsStillEdit, putsAfterBack, wordPutBack, aSawV2, aSawV1Back }),
+  };
+}
+if (partOn("pF2")) {
+  try {
+    markPart("pF2");
+    const s = await sceneF2(C);
+    check(s.echoInitialOk && s.deskEchoOk,
+      "f2a a received file not changed since landing still counts as an echo and is not sent: "
+      + s.detail);
+    check(s.editedOk && s.putBackSent,
+      "f2b a file edited, sent, and put back within ECHO_MS to the earlier received bytes is sent to the team rather than withheld as an echo: "
+      + s.detail);
+    if (PLANTS_OFF) skip("f2c lifting plant:sent-newer turns f2b red (putting back V1 within ECHO_MS is withheld as an echo)");
+    else {
+      const p = await liftChannel("plant:sent-newer", async mod => !(await sceneF2(mod)).putBackSent);
+      check(p.turned && p.back, "f2c lifting plant:sent-newer turns f2b red (putting back V1 within ECHO_MS is withheld as an echo), and the product file is never written: "
+        + p.detail + ", sha " + (p.back ? "restored" : "differs"));
+    }
+  } catch (e) {
+    check(false, "harness (the leg f2a): " + (e && e.stack ? e.stack : e));
+  }
+}
+
+/* ---- finding (4): superseded path identity uses pathKey rather than toLowerCase ---- */
+async function sceneF4Sigma(mod) {
+  const k1 = crypto.randomBytes(32), deskKey = keyPair(true);
+  const tm = await freshTeam([deskKey]);
+  const tag = tm.rt.slice(0, 8);
+  const keyFor = e => (e === 1 ? k1 : null);
+  const OLD = "\u0391\u0398\u0397\u039d\u0391\u03a3 2.ec";
+  const NEW = "\u03b1\u03b8\u03b7\u03bd\u03b1\u03c3 2.ec";
+  const lead = opened(mod, "f4s-lead-" + tag, tm, LEAD, "root", { keyFor, sealEpoch: () => 1, connect: null });
+  const desk = opened(mod, "f4s-desk-" + tag, tm, deskKey, "desk:" + deskKey.keyId, { keyFor, sealEpoch: () => 1, connect: null });
+  put(lead.mirror, mod.TEAM_NAME, teamBody(tm, 1, 1, [member(deskKey)]));
+  put(lead.mirror, OLD, "one\n");
+  lead.ch.start(); desk.ch.start();
+  await lead.ch.idle(); await desk.ch.idle();
+  await once(lead); await once(desk);
+  const landedOld = read(desk.mirror, OLD) === "one\n";
+
+  fs.renameSync(path.join(lead.mirror, OLD), path.join(lead.mirror, NEW));
+  put(lead.mirror, NEW, "two\n");
+  await once(lead);
+  const beforeSaid = desk.said.length;
+  await once(desk);
+  const newSaid = desk.said.slice(beforeSaid);
+  const landedNew = read(desk.mirror, NEW) === "two\n" && !newSaid.some(l => l.indexOf(B.REASONS["outside-place"]) >= 0);
+
+  await lead.ch.stop(); await desk.ch.stop();
+  return {
+    ok: landedOld && landedNew,
+    landedOld, landedNew, newSaid, body: read(desk.mirror, NEW),
+  };
+}
+function sceneF4Kelvin(mod) {
+  const k1 = crypto.randomBytes(32), deskKey = keyPair(true);
+  const tm = "t-" + hex(8), rt = hex(16);
+  const pinK = { teamId: tm, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } };
+  const doc = signDoc({ format: 1, kind: "etiuda-team", id: tm, catalogs: ["quay-board"],
+    lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch: 1, rev: 1,
+    channel: { kind: "relay", rt, url: URLV1 }, ring: RING, roster: [member(deskKey)] }, LEAD);
+  const dir = path.join(LAB, "f4k-" + hex(4));
+  fs.mkdirSync(dir, { recursive: true });
+  const prog = mod.createProgram({ io: mod.diskIO(dir, mod.writeWhole), pin: pinK, save() {}, say() {} });
+  prog.loadTeamFile(doc);
+  const p1 = "desks/" + deskKey.keyId + "/k.ec", p2 = "desks/" + deskKey.keyId + "/\u212a.ec";
+  const b1 = B.seal({ relayTeamId: rt, epoch: 1, teamKey: k1, writer: { keyId: deskKey.keyId, privateKey: deskKey.privateKey },
+    path: p1, body: "one\n", counter: 1, place: "desk:" + deskKey.keyId, kind: "file" });
+  const r1 = prog.acceptBlob({ blob: b1, teamDoc: doc, teamKey: k1 });
+  const b2 = B.seal({ relayTeamId: rt, epoch: 1, teamKey: k1, writer: { keyId: deskKey.keyId, privateKey: deskKey.privateKey },
+    path: p2, body: "two\n", counter: 2, place: "desk:" + deskKey.keyId, kind: "file", supersedes: b1.id });
+  const r2 = prog.acceptBlob({ blob: b2, teamDoc: doc, teamKey: k1 });
+  return {
+    ok: r1.ok === true && r2.ok === false && r2.reason === "outside-place"
+      && prog.readMirror(p1) === "one\n" && prog.readMirror(p2) === null,
+    r1, r2, kBody: prog.readMirror(p1), kelvinBody: prog.readMirror(p2),
+  };
+}
+if (partOn("pF4")) {
+  try {
+    markPart("pF4");
+    const s = await sceneF4Sigma(C);
+    check(s.ok, "f4a renaming a root file from capital sigma before a space or digit to lower case (same pathKey) is accepted on the desk: "
+      + JSON.stringify({ landedOld: s.landedOld, landedNew: s.landedNew, body: s.body, newSaid: s.newSaid }));
+    const k = sceneF4Kelvin(C);
+    check(k.ok, "f4b superseding k.ec with Kelvin sign (\\u212a.ec, distinct pathKey) is refused as outside-place: "
+      + JSON.stringify({ r1: k.r1.ok, r2: k.r2, kBody: k.kBody, kelvinBody: k.kelvinBody }));
+    if (PLANTS_OFF) skip("f4c lifting plant:chain-path-fold turns f4a and f4b red (sigma update refused and Kelvin cross-path supersede accepted)");
+    else {
+      const p = await liftChannel("plant:chain-path-fold", async mod => !(await sceneF4Sigma(mod)).ok && !sceneF4Kelvin(mod).ok);
+      check(p.turned && p.back, "f4c lifting plant:chain-path-fold turns f4a and f4b red (sigma update refused and Kelvin cross-path supersede accepted), and the product file is never written: "
+        + p.detail + ", sha " + (p.back ? "restored" : "differs"));
+    }
+  } catch (e) {
+    check(false, "harness (the leg f4a): " + (e && e.stack ? e.stack : e));
+  }
+}
+
+/* ---- finding (8): a relisting never removes what a lead or colleague kept of a removed desk ---- */
+async function sceneF8(mod) {
+  const X = relay9(), { tm, BASE, DAYMS } = X;
+  const DR = { k: keyPair(true), box: boxPair() }, DK = { k: keyPair(true), box: boxPair() };
+  const STATS = "desk statistics kept across removal\n", DK_OLD = "active desk file retracted later\n";
+  const RETIRED = "lead file retracted later\n";
+  const statsRel = "desks/" + DR.k.keyId + "/stats.estat", dkOldRel = "desks/" + DK.k.keyId + "/old.ec";
+  const afterRel = "desks/" + DR.k.keyId + "/after.ec";
+  try {
+    X.clockOn();
+    const made = await X.admin9("POST", "/relay/v1/teams", createBody(tm.rt, X.RS.clock.now));
+    const enrolled = await X.enrol9(1, DR, DK);
+    if (made.status !== 200 || enrolled.status !== 200) throw new Error("the team was not made: " + JSON.stringify([made.json, enrolled.json]));
+    const lead = X.lead9(mod, "f8-lead-" + X.tag);
+    const dr = X.desk9(mod, "f8-rem-" + X.tag, DR);
+    const dk = X.desk9(mod, "f8-keep-" + X.tag, DK);
+    put(lead.mirror, mod.TEAM_NAME, X.doc9(1, [DR, DK]));
+    put(lead.mirror, "lane.ec", ED9[0]);
+    put(lead.mirror, "retired.ec", RETIRED);
+    lead.ch.start();
+    await settle(lead);
+    dr.ch.start(); dk.ch.start();
+    await settle(dr, dk, lead);
+    put(dr.mirror, statsRel, STATS);
+    put(dk.mirror, dkOldRel, DK_OLD);
+    await settle(dr, dk, lead);
+    const before = read(lead.mirror, statsRel) === STATS && read(dk.mirror, statsRel) === STATS
+      && read(lead.mirror, "retired.ec") === RETIRED && read(lead.mirror, dkOldRel) === DK_OLD;
+
+    /* Day 1: lead removes DR (team file rev 2 + /devices drop) and retracts retired.ec; dk retracts dkOldRel. */
+    X.at(BASE + DAYMS);
+    await dr.ch.stop();
+    const doc2Raw = JSON.parse(X.doc9(1, [DK]));
+    doc2Raw.rev = 2;
+    const doc2Obj = signDoc(doc2Raw, LEAD);
+    const doc2 = JSON.stringify(doc2Obj, null, 1) + "\n";
+    put(lead.mirror, mod.TEAM_NAME, doc2);
+    fs.unlinkSync(path.join(lead.mirror, "retired.ec"));
+    fs.unlinkSync(path.join(dk.mirror, ...dkOldRel.split("/")));
+    const dropped = await X.enrol9(2, DK);
+    await settle(lead, dk);
+    await lead.ch.stop();
+    await dk.ch.stop();
+
+    /* Day 32 (> LISTED_KEEP_MS = 29 days, and > REMOVED_KEEP_MS = 7 days): relisting runs on both lead and dk. */
+    X.at(BASE + 32 * DAYMS);
+    const leadFrom = lead.log.length, dkFrom = dk.log.length;
+    lead.ch.start(); dk.ch.start();
+    await settle(lead, dk);
+    const leadWhole = lead.log.slice(leadFrom).filter(c => c === "GET since/0").length;
+    const dkWhole = dk.log.slice(dkFrom).filter(c => c === "GET since/0").length;
+    const keptAfter = {
+      leadStats: read(lead.mirror, statsRel) === STATS,
+      dkStats: read(dk.mirror, statsRel) === STATS,
+      leadLane: read(lead.mirror, "lane.ec") === ED9[0],
+      dkLane: read(dk.mirror, "lane.ec") === ED9[0],
+    };
+    const activeRemoved = {
+      leadRetired: read(lead.mirror, "retired.ec") === null,
+      dkRetired: read(dk.mirror, "retired.ec") === null,
+      leadDkOld: read(lead.mirror, dkOldRel) === null,
+      dkDkOld: read(dk.mirror, dkOldRel) === null,
+    };
+
+    /* A removed writer's new file (even injected/accepted directly) still does not land on lead or dk. */
+    const afterBlob = B.seal({ relayTeamId: tm.rt, epoch: 1, teamKey: X.K9.get(1),
+      writer: { keyId: DR.k.keyId, privateKey: DR.k.privateKey },
+      path: afterRel, body: "new after removal\n", counter: Date.now() + 60 * 60 * 1000,
+      place: "desk:" + DR.k.keyId, kind: "file" });
+    const leadNew = lead.prog.acceptBlob({ blob: afterBlob, teamDoc: doc2Obj, teamKey: X.K9.get(1) });
+    const dkNew = dk.prog.acceptBlob({ blob: afterBlob, teamDoc: doc2Obj, teamKey: X.K9.get(1) });
+    const newRefused = leadNew.ok === false && leadNew.reason === "removed"
+      && dkNew.ok === false && dkNew.reason === "removed"
+      && read(lead.mirror, afterRel) === null && read(dk.mirror, afterRel) === null;
+
+    return {
+      setup: before && dropped.status === 200 && leadWhole >= 1 && dkWhole >= 1,
+      kept: keptAfter.leadStats && keptAfter.dkStats && keptAfter.leadLane && keptAfter.dkLane,
+      activeGone: activeRemoved.leadRetired && activeRemoved.dkRetired && activeRemoved.leadDkOld && activeRemoved.dkDkOld,
+      newRefused,
+      detail: JSON.stringify({ before, dropped: dropped.status, leadWhole, dkWhole, keptAfter, activeRemoved, leadNew, dkNew }),
+    };
+  } finally {
+    await X.done();
+  }
+}
+if (partOn("pF8")) {
+  try {
+    markPart("pF8");
+    const s = await sceneF8(C);
+    check(s.setup && s.kept,
+      "f8a after more than 29 days away, a relisting keeps the files a lead and remaining desk kept of a removed desk: " + s.detail);
+    check(s.setup && s.activeGone,
+      "f8b the same relisting still removes retracted files of the lead and an active rostered desk once their deletions are no longer listed: " + s.detail);
+    check(s.newRefused,
+      "f8c a removed writer's new file still does not land (refused removed): " + s.detail);
+    if (PLANTS_OFF) skip("f8d lifting plant:reconcile-removed turns f8a red (relisting deletes the removed desk's kept file)");
+    else {
+      const p = await liftChannel("plant:reconcile-removed", async mod => !(await sceneF8(mod)).kept);
+      check(p.turned && p.back, "f8d lifting plant:reconcile-removed turns f8a red (relisting deletes the removed desk's kept file), and the product file is never written: "
+        + p.detail + ", sha " + (p.back ? "restored" : "differs"));
+    }
+  } catch (e) {
+    check(false, "harness (the leg f8a): " + (e && e.stack ? e.stack : e));
+  }
+}
+
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */
   if (partOn("p943")) {
   markPart("p943");
@@ -12047,7 +12300,7 @@ if (partOn("p1165")) {
 }
 markPart(null);
 console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + " expected=" + EXPECTED);
-if (!ONLY.size && asserted + skipped < EXPECTED) {
+if (!ONLY.size && asserted + skipped !== EXPECTED) {
   console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " checks ran");
   releaseOnlyHold();
   process.exit(78);
