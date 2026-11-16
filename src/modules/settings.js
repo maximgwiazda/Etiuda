@@ -29,7 +29,8 @@ import { openMaintenance } from "./maintenance.js";
 import { E_VERSION } from "./env.js";
 import { sxIcon } from "./sx-icons.js";
 import { focusKey, focusSame, originOf } from "./dom.js";
-import { orgModel, orgRanks, syncOrgMark } from "./org-model.js";
+import { orgModel, orgRanks, orgSaid, rewordSent, syncOrgMark } from "./org-model.js";
+import { rewordState, rewordSwitchSet } from "./card-reword.js";
 import { SIGNIN_NAMES, signinNow, signinShown, signinParts, signinSay, signinNoSeat, signinTold, signinActsHtml, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow, signinDoorsHtml, signinDoorRefusedNow,
   signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect, signinCopyHtml } from "./signin.js";
 
@@ -82,7 +83,7 @@ function suggestCountLine(){
 function suggestNoteText(){
   const st=orgModel();
   return orgRanks(st) && eAiOn()
-    ? t("When Quick replies opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. While the organisation's model is on, the copied message, at most its first 1,500 characters, is sent to {HOST} as Quick replies opens, so that the model there can suggest the intents; this desk keeps no copy of it. The statistics count only how often suggestions appeared and how many were taken.").split("{HOST}").join(String(st.host||""))
+    ? t("When Quick replies opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. While the organisation's model is on, the copied message, at most its first 1,500 characters, is sent to {HOST} as Quick replies opens, with up to 12 short pieces of the cards being ranked, so that the model there can suggest the intents; this desk keeps no copy of it. The statistics count only how often suggestions appeared and how many were taken.").split("{HOST}").join(String(st.host||""))
     : t("When Quick replies opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as Quick replies opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.");
 }
 function hotkeyRowHtml(){
@@ -468,12 +469,7 @@ function aiWords(st, builtin, organisation){
 function aiLede(){
   const st=orgModel();
   if(!orgRanks(st)) return t("The model built into Etiuda, which works on this computer alone.");
-  const search=eSearchOn(), suggest=eAiOn();
-  const line=search && suggest ? t("The organisation's model at {HOST} ranks the search and the suggestions. The search text and the copied message the suggestions are made from are sent there.")
-    : search ? t("The organisation's model at {HOST} ranks the search. The search text is sent there.")
-    : suggest ? t("The organisation's model at {HOST} ranks the suggestions. The copied message they are made from is sent there.")
-    : t("The organisation's model at {HOST} is set, and with both switches off nothing is sent to it.");
-  return line.split("{HOST}").join(String(st.host||""));
+  return orgSaid(eSearchOn(), eAiOn()).split("{HOST}").join(String(st.host||""));
 }
 /* After either switch moves: the lede and the picker's note on the page already drawn say what is sent now. */
 function syncAiWords(){
@@ -486,26 +482,32 @@ function syncAiWords(){
 }
 /* Drawn wherever a model can rank: the built-in one this desk carries, or the organisation's while it is on and ready. */
 function aiGroups(){
-  const st=orgModel(), w=(a,b)=>aiWords(st,a,b);
+  const st=orgModel(), w=(a,b)=>aiWords(st,a,b), rw=rewordState();
   if(!eAiModel() && !orgRanks(st)) return [];
   return [{rows:[
     row("aisuggest","ai",w(t("Suggest intents with the built-in model"),t("Suggest intents with the organisation's model")),
       w(t("Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words."),
-        t("Sends a copied message to the organisation's model at {HOST} and suggests the intents it is closest to. Off, suggestions come from matching words.")),
+        t("Sends a copied message, with up to 12 short pieces of the cards being ranked, to the organisation's model at {HOST} and suggests the intents it is closest to. Off, suggestions come from matching words.")),
       onoff("aisuggest", eAiOn(),
-        w(t("The model ranks the suggestions; nothing leaves this computer"),t("The organisation's model ranks the suggestions; the copied message is sent to {HOST}.")),
+        w(t("The model ranks the suggestions; nothing leaves this computer"),t("The organisation's model ranks the suggestions; the copied message and up to 12 short pieces of the cards are sent to {HOST}.")),
         t("Suggestions come from matching words, and the model stays unloaded"))),
     row("aisearch","ai",w(t("Search by meaning with the built-in model"),t("Search by meaning with the organisation's model")),
       w(t("From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the model on this computer. Off, it matches words only."),
-        t("From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the organisation's model at {HOST}, to which the search text is sent. Off, it matches words only.")),
+        t("From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the organisation's model at {HOST}, to which the search text is sent with up to 12 short pieces of the cards being ranked. Off, it matches words only.")),
       onoff("aisearch", eSearchOn(),
         aiSearchOnLine(st),
         t("Off, it matches words only.")))
-  ]}];
+  ].concat(rw.at ? [
+    /* The person's own switch for rewording: a row only where the organisation's model is in force, since it would turn nothing on or off
+       elsewhere; its sentence names the address a reword goes to, the shell's one reading of it. */
+    row("aireword","ai",t("Rewording"),
+      t("Reword on cards and Your own words? in Quick replies send the card's words or the selected words to the organisation's model at {ADDRESS}, only when pressed. Turned off, both are gone and nothing is sent; the choice is yours, on this computer.").split("{ADDRESS}").join(rw.at),
+      onoff("aireword", rw.on))
+  ] : [])}];
 }
 function aiSearchOnLine(st){
   return aiWords(st, t("The model ranks the search beside word matches; nothing leaves this computer"),
-    t("The organisation's model ranks the search beside word matches; the search text is sent to {HOST}."));
+    t("The organisation's model ranks the search beside word matches; the search text and up to 12 short pieces of the cards are sent to {HOST}."));
 }
 /* THE MODEL THAT RANKS SEARCH AND SUGGESTIONS, where the host can say: built-in, or the organisation's own service, whose
    fields open under the row. What machine policy set is shown as set and takes no change. The key is never drawn back. */
@@ -515,7 +517,7 @@ function orgModelRows(){
   const m=st.managed||{}, org=st.choice==="organisation", set=t("Set by the organisation");
   const lines=[];
   if(!org) lines.push(t("The built-in model sends nothing anywhere."));
-  else if(orgRanks(st)) lines.push(t("The search text and the copied message the suggestions are made from are sent to {HOST}, and nowhere else.").split("{HOST}").join(String(st.host||"")));
+  else if(orgRanks(st)) lines.push((rewordSent() ? t("The search text, the copied message the suggestions are made from and up to 12 short pieces of the cards being ranked are sent to {HOST}, and nowhere else; so, at your press, are the words or the card you ask it to reword.") : t("The search text, the copied message the suggestions are made from and up to 12 short pieces of the cards being ranked are sent to {HOST}, and nowhere else.")).split("{HOST}").join(String(st.host||"")));
   else if(!st.keyNoService) lines.push(t("Until the service, the model and the key are complete, the built-in model ranks and nothing is sent.")); // placeholder: Claudette
   if(st.keyNoService) lines.push(t("Your organisation has set a key for an AI service without naming the service, so nothing is sent. Its IT department can name it."));
   if(m.choice) lines.push(set, t("Whoever manages Etiuda for the organisation can change this."));
@@ -973,6 +975,12 @@ function wirePage(box){
           syncOrgMark();
           syncAiWords();
           toast(on?aiWords(orgModel(),t("Suggestions from the built-in model"),t("Suggestions from the organisation's model")):t("Suggestions from matching words"));
+        }
+        else if(seg==="aireword"){
+          rewordSwitchSet(on);
+          syncOrgMark();
+          try{ render(); }catch(e){}
+          toast(on?t("On"):t("Off"));
         }
         else if(seg==="aisearch"){
           if(on) lsDel(E_SEARCH_AI_OFF_KEY); else lsSet(E_SEARCH_AI_OFF_KEY,"1");

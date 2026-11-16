@@ -158,6 +158,14 @@ const ALLOWED_IN = [
     within: "Prośba o dołączenie zadziała, gdy bezpieczny magazyn tego komputera będzie mógł przechować własny klucz stanowiska, czego teraz nie może; w systemie macOS zwykle pomaga zezwolenie Etiudzie na dostęp do pęku kluczy, gdy system o to zapyta. Potem wystarczy ponownie nacisnąć Poproś o dołączenie." },
   { fold: "zwykle", since: "2026-10-30",
     within: "Prośba o dołączenie zadziała, gdy bezpieczny magazyn tego komputera będzie mógł przechować własny klucz stanowiska, czego teraz nie może; w systemie Linux zwykle pomaga odblokowanie systemowego magazynu haseł. Potem wystarczy ponownie nacisnąć Poproś o dołączenie." },
+  /* 2026-11-16. The copywriter's refusal of a reworded card says "kolejna próba", "another try", the feminine of "kolejny", not "Kolejną". */
+  { fold: "kolejna", since: "2026-11-16",
+    within: "W wyniku zabrakło nazwy, którą karta wypełnia, albo jednego z jej kroków, więc nie został pokazany. Karta pozostała bez zmian; kolejna próba może je zachować." },
+  /* 2026-11-16. The copywriter's two further card refusals say "kolejna próba", "another try", as the first does. */
+  { fold: "kolejna", since: "2026-11-16",
+    within: "Wynik nadszedł pusty, więc nie został pokazany. Karta pozostała bez zmian; kolejna próba może się udać." },
+  { fold: "kolejna", since: "2026-11-16",
+    within: "Jeden z wariantów karty wrócił bez treści, więc wynik nie został pokazany. Karta pozostała bez zmian; kolejna próba może się udać." },
 ];
 function allowedAt(line, k, at) {
   return ALLOWED_IN.some(a => {

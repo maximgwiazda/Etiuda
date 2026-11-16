@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 158 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 7);
+const EXPECTED = 162 + (process.env.ETIUDA_PLANTS === "off" ? 0 : 8);
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -352,7 +352,8 @@ try {
   const EXPOSE = ["hotkeyRefusal", "pickerPlace", "pickerGrow", "pickClipText", "PICK_SIZE", "HOTKEY_DEFAULT"];
   process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
   const SH = new Function("require", "__dirname", "__filename", "module", "exports", "console",
-    SRC + "\nreturn { " + EXPOSE.map(n => n + ": " + n).join(", ") + " };")(
+    SRC + "\nreturn { " + EXPOSE.map(n => n + ": " + n).join(", ")
+    + ", __rw: { config: f => { deskAiConfig = f; }, result: t => { pickReworded = t; } } };")(
     n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? shellFs : n === "node:child_process" ? cpStub : nodeRequire(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"),
     { exports: {} }, {}, quiet);
@@ -1099,6 +1100,76 @@ try {
     AS.setCards(CARDS.map(c => Object.assign({}, c)));
   }
 
+  /* 7rw1 to 7rw5: ENTER AFTER A REWORD, the second ending. The shell offers the foot only while a configuration is in force and
+     keeps the last result an opening asked for; Enter puts it on the clipboard, the picker steps aside, and the helper reads the
+     selection again as at the opening: the same words still selected, its one key is pressed; otherwise the result waits on the
+     clipboard and the note says so. No model is asked: the configuration and the result go in through the test's own door. */
+  {
+    const notes = () => wins.filter(w => w.opts && w.opts.focusable === false && !w.destroyed);
+    const noteDoc = w => decodeURIComponent(String(w.url || "").replace(/^data:text\/html;charset=utf-8,/, ""));
+    const noteSays = w => (/<\/svg>([^<]*)<\/body>/.exec(noteDoc(w)) || [])[1] || "";
+    const words = pickAnswer("open").words;
+    const RW_SEL = "hi sorry for late reply, we check your order tomorow", RW_OUT = "Hi, sorry for the late reply.\nWe will check it tomorrow.";
+    const putRun = async (atOpen, atPut, result, config) => {
+      SH.__rw.config(() => config === undefined ? { provider: "openai", endpoint: "https://api.openai.com/v1/", model: "m", key: "k", managed: {} } : config);
+      caret.there = true; caret.front = "4242 " + (process.pid + 1); caret.fail = false; caret.sel = atOpen; clipHeld = "";
+      if (pw.visible) { held.get("Control+Shift+Space")(); await until(() => !pw.visible); }
+      const o0 = opened.length;
+      held.get("Control+Shift+Space")();
+      await until(() => opened.length > o0 && pw.visible, 5000);
+      const o = opened[opened.length - 1] || {};
+      if (result) SH.__rw.result(result);
+      caret.sel = atPut;
+      const r0 = caret.runs.length, c0 = clip.length;
+      const got = await pickerPage.E_PICK.put();
+      await tick(30);
+      const nw = notes()[0];
+      return { offered: o.reword || null, got, runs: caret.runs.slice(r0).map(r => r.args.join(" ")), clip: clip.slice(c0), hidden: !pw.visible,
+        note: nw && nw.visible ? noteSays(nw) : "" };
+    };
+    const same = await putRun(RW_SEL, RW_SEL, RW_OUT), moved = await putRun(RW_SEL, "a customer's message", RW_OUT);
+    const fromClip = await putRun(null, RW_SEL, RW_OUT), empty = await putRun(RW_SEL, RW_SEL, ""), off = await putRun(RW_SEL, RW_SEL, "", null);
+    SH.__rw.config(() => null);
+    caret.sel = null;
+    const wantClip = SH.pickClipText(RW_OUT, process.platform);
+    if (WIN) {
+      check(same.offered && same.offered.host === "api.openai.com" && same.got === true && JSON.stringify(same.runs) === JSON.stringify(["selection", "paste 4242"])
+        && JSON.stringify(same.clip) === JSON.stringify([wantClip]) && same.hidden && same.note === words.pasted,
+        "7rw1 the same words still selected: the result goes on the clipboard, the picker steps aside, the selection is read again and the one key"
+        + " pressed, and the note says it was pasted: " + JSON.stringify(same));
+      check(moved.got === false && JSON.stringify(moved.runs) === JSON.stringify(["selection"]) && JSON.stringify(moved.clip) === JSON.stringify([wantClip])
+        && moved.hidden && moved.note === words.copied,
+        "7rw2 another selection by then: nothing is pressed, the result waits on the clipboard, and the note says so in the desk's own words: " + JSON.stringify(moved));
+    } else {
+      check(same.got === false && same.runs.length === 0 && JSON.stringify(same.clip) === JSON.stringify([wantClip]), "7rw1 not Windows: no helper, the result on the clipboard: " + JSON.stringify(same));
+      check(true, "7rw2 not Windows: no selection to read again");
+    }
+    check(fromClip.got === false && fromClip.runs.filter(r => r === "selection" || r.indexOf("paste") === 0).length === 0
+      && fromClip.runs.indexOf("paste 4242") < 0 && JSON.stringify(fromClip.clip) === JSON.stringify([wantClip]) && fromClip.note === words.copied,
+      "7rw3 an opening on the clipboard, nothing selected, reads no selection at Enter and presses nothing: the result waits on the clipboard: " + JSON.stringify(fromClip));
+    check(empty.got === false && empty.clip.length === 0 && empty.runs.filter(r => r !== "which" && r !== "selection").length === 0
+      && off.offered === null && off.got === false && off.clip.length === 0,
+      "7rw4 with no result kept nothing is written or pressed, and without a configuration the foot is not offered: " + JSON.stringify({ empty, off: off.offered }));
+    if (process.env.ETIUDA_PLANTS === "off") console.log("  SKIP  7rw5 plant:reword-put-same (ETIUDA_PLANTS=off)");
+    else {
+      /* The handler alone, sliced from shell/main.js and run on stand-ins, with the same-words test rewritten to always. */
+      const at = SRC.indexOf('ipcMain.handle("etiuda:pick-put", (e) => {'), end = SRC.indexOf("\n});\n", at);
+      const body = at < 0 || end < 0 ? "" : SRC.slice(SRC.indexOf("{", at) + 1, end);
+      const runPut = async src => {
+        const ran = [];
+        const fn = new Function("e", "fromPicker", "pickReworded", "pickClipText", "pickSelectedNow", "pickTarget", "noteOwnText", "clipboard", "hidePicker",
+          "showPickNote", "REWORD_PUT_WAIT_MS", "caretSelection", "caretPaste", src);
+        const got = await fn({}, () => true, RW_OUT, t => t, RW_SEL, "4242", () => {}, { writeText: () => ran.push("write") }, () => ran.push("hide"),
+          p => ran.push("note " + p), 1, () => Promise.resolve({ words: "a customer's message" }), () => ran.push("paste"));
+        return { got, ran };
+      };
+      const lines = body.split("\n").filter(l => l.indexOf("plant:reword-put-same") >= 0);
+      const kept = await runPut(body), planted = await runPut(body.split("\n").map(l => l.indexOf("plant:reword-put-same") >= 0 ? "    const same = true;" : l).join("\n"));
+      check(lines.length === 1 && kept.ran.indexOf("paste") < 0 && planted.ran.indexOf("paste") > -1,
+        "7rw5 with plant:reword-put-same rewritten to always, another selection is pasted over and 7rw2 would be red: " + JSON.stringify({ kept, planted }));
+    }
+  }
+
   cursor = { x: 1900, y: 1000 };
   const edge = SH.pickerPlace(cursor, area, SH.PICK_SIZE), small = SH.pickerPlace({ x: 10, y: 10 }, { x: 0, y: 0, width: 400, height: 300 }, SH.PICK_SIZE);
   check(edge.x + edge.width <= 1920 && edge.y + edge.height <= 1000 - 18 && edge.y >= 0 && small.width === 400 && small.height === 300,
@@ -1486,9 +1557,11 @@ try {
     "5aa the shell reads the clipboard at one place, the picker's open, and a second read is refused: "
     + clipSites.length + " site(s), planted " + plantedSites + ", forbid hits " + plantedReach);
   const writes = shellCode.match(/clipboard\s*\.\s*write\w*\s*\(/g) || [];
-  check(writes.length === 1 && /clipboard\.writeText\(pickClipText\(v\.text,\s*process\.platform\)\)/.test(shellCode)
-    && (shellBare.match(/clipboard\.writeText\(/g) || []).length === 1,
-    "5b the shell writes the clipboard at one place, the desk's own text: " + writes.length + " write site(s)");
+  /* Two places since Enter after a reword: the desk's own copy, and the reword's result the shell itself kept (pickReworded). */
+  const putSite = /const text=pickClipText\(pickReworded,process\.platform\),was=pickSelectedNow,target=pickTarget;pickReworded="";noteOwnText\(text\);clipboard\.writeText\(text\);hidePicker\(true\);/.test(shellCode);
+  check(writes.length === 2 && /clipboard\.writeText\(pickClipText\(v\.text,\s*process\.platform\)\)/.test(shellCode) && putSite
+    && (shellBare.match(/clipboard\.writeText\(/g) || []).length === 2,
+    "5b the shell writes the clipboard at two places, the desk's own text and the reword's result it kept: " + writes.length + " write site(s), the put's " + putSite);
   /* Board 945 stage 3 (b) slice 1: background syncer worker in shell/folder/syncer.cjs and node:worker_threads */
   const MODS = ["electron", "node:child_process", "node:path", "node:fs", "node:os", "node:crypto", "node:zlib",
     "node:worker_threads", "./folder/syncer.cjs",
@@ -1726,11 +1799,13 @@ try {
     check(hits.length === 1 && mutant !== raw && turned,
       "5fq rewriting plant:fact-contradict so a read-only attribute and an editable second opinion agree makes check print read-only there: " + said);
   }
-  /* THE PASTE IS STARTED FROM ONE PLACE: the copy, right after its clipboard write, so no other handler presses a key. */
+  /* THE PASTE IS STARTED FROM TWO PLACES: the copy, right after its clipboard write, and Enter after a reword, so no other handler presses a key. */
   const pasteNames = (shellBare.match(/\bcaretPaste\b/g) || []).length;
   const pasteAfterWrite = /clipboard\.writeText\(pickClipText\(v\.text,process\.platform\)\);caretPaste\(pickTarget,showPickNote\);hidePicker\(true\);/.test(shellCode);
-  check(pasteNames === 2 && pasteAfterWrite,
-    "5g the caret helper's paste is started from one place, the copy, right after its clipboard write and before the picker hides: "
+  /* And Enter after a reword, only once the selection read again is the opening's. */
+  const pasteAfterSame = /const same=!!\(got&&got\.words\)&&lf\(got\.words\)===lf\(was\);if\(same\)caretPaste\(target,showPickNote\);else showPickNote\(false\);/.test(shellCode);
+  check(pasteNames === 3 && pasteAfterWrite && pasteAfterSame,
+    "5g the caret helper's paste is started from two places: the copy, right after its clipboard write and before the picker hides, and Enter after a reword once the selection read again is the opening's: "
     + pasteNames + " mention(s) of caretPaste, " + (pasteAfterWrite ? "after the write" : "NOT after the write"));
 
   /* THE PACKAGE HOLDS EVERY FILE THE SHELL LOADS (Argon's updates review of 2026-11-01, finding 1: the folder mirror's syncer

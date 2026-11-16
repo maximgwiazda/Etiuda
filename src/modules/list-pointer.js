@@ -23,6 +23,7 @@ import { useEditionMark } from "./edition-marks.js";
 import { flagPressed, showFlagAnswer } from "./card-flag-desk.js";
 import { eHost, eHotkey, eHotkeyLabel } from "./host.js";
 import { nsGet, nsSet } from "./storage.js";
+import { openRewordMenu, approveReword, revertReword } from "./card-reword.js";
 
 // ---- card drag-reorder (within same relevance band only) ----------------
 let cardDrag=null, cardSwapLock=0, cardSuppressClick=false;
@@ -408,6 +409,13 @@ function wireListPointer(){
       if(card && card.dataset.id) showFlagAnswer(card.dataset.id);
       return;
     }
+    const rwBtn=e.target.closest(".rw-ans button[data-rw]");
+    if(rwBtn){
+      e.preventDefault(); e.stopPropagation();
+      const card=rwBtn.closest(".card"), id=card && card.dataset.id;
+      if(id){ if(rwBtn.dataset.rw==="approve") approveReword(id); else revertReword(id); }
+      return;
+    }
     const actBtn=e.target.closest(".cacts button");
     if(actBtn){
       e.preventDefault(); e.stopPropagation();
@@ -419,6 +427,7 @@ function wireListPointer(){
       else if(act==="edit") hooks.openCardEditor(id);
       else if(act==="note") toggleNotePane(actBtn, id);
       else if(act==="flag"){ if(id) flagPressed(id); }
+      else if(act==="reword") openRewordMenu(actBtn, id);
       else if(act==="hide") flipCardsAround(()=>hooks.hideCard(id), card.classList.contains("is-hidden") ? null : {leave:id});
       return;
     }

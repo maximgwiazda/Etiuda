@@ -49,6 +49,7 @@ const ALLOWED_LIST = [
   { sel: ".e-notice-err", why: "error detail in a notice bubble for bug/support copying" },
   { sel: ".mt-row .v", why: "diagnostic reading value set in the mono face in Maintenance (Studio kin: readings in mono)" },
   { sel: ".modal-card .modal-note", why: "pinned status note under an editor's title (deliberate existing exception)" },
+  { sel: ".rw-text", why: "the words a reword sends and the result it brings, in the Quick replies window: read closely and copied" },
 ];
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-tsel-"));
@@ -403,7 +404,17 @@ try {
     badAllowed: [...factsRep.badAllowed, ...signRep.badAllowed, ...menuRep.badAllowed, ...ctxRep.badAllowed],
   });
 
-  // 3. Settings
+  // 3. Settings, with the organisation's model in force so the AI section shows the person's own switch for rewording (aireword)
+  await page.evaluate(() => {
+    const free = { choice: false, provider: false, endpoint: false, model: false, key: false };
+    window.__stub = Object.assign({}, window.E_HOST);
+    Object.assign(window.E_HOST, {
+      aiState: () => ({ model: false, org: true, reword: "ai.example.test", rewordAt: "ai.example.test", rewordOn: true }), setAi() {}, setSearchAi() {}, setReword() {},
+      deskAiSettings: () => ({ choice: "organisation", on: true, ready: true, provider: "openai", endpoint: "", at: "", host: "ai.example.test", model: "m-own",
+        keyKept: true, keyAway: false, managed: free, ignored: [], sealable: true, services: [{ id: "openai", endpoint: "https://api.openai.com/v1/" }] }),
+      deskAiSave: async () => ({ ok: true, why: "" }), deskAiTest: async () => ({ ok: true }), onAiRanking() {},
+    });
+  });
   await openMenuItem(page, "settings");
   await page.waitForFunction(() => document.body.classList.contains("screen-on") && !!document.querySelector("#screenHost .sx-nav"), { timeout: 10000 });
   const poSettings = await page.evaluate(() => {
@@ -419,7 +430,10 @@ try {
   check(poSettings.label && poSettings.label.us === "none", "PO example: Settings row label user-select: none", poSettings.label);
   check(poSettings.value && poSettings.value.us === "none", "PO example: Settings row control/value user-select: none", poSettings.value);
   check(poSettings.agentNameUs === "text", "Settings text field (#setAgentName) user-select: text", poSettings.agentNameUs);
+  const rwRow = await page.evaluate(() => { const r = document.querySelector('#screenHost [data-row="aireword"]'); return r ? { label: getComputedStyle(r.querySelector(".set-label")).userSelect, ctl: getComputedStyle(r.querySelector(".set-seg button")).userSelect } : null; });
+  check(rwRow && rwRow.label === "none" && rwRow.ctl === "none", "Settings: the person's own switch for rewording is on the walked page, its label and its buttons user-select: none", rwRow);
   recordWalk(await auditScreen(page, "Settings", ["#screenHost"]));
+  await page.evaluate(() => { for (const k of ["aiState", "setAi", "setSearchAi", "setReword", "deskAiSettings", "deskAiSave", "deskAiTest", "onAiRanking"]) { if (k in window.__stub) window.E_HOST[k] = window.__stub[k]; else delete window.E_HOST[k]; } });
 
   // 5. Maintenance (opened via #sxMaint from Settings; walk all 6 pages)
   await page.click("#sxMaint");
@@ -700,6 +714,20 @@ try {
   });
   await sleep(100);
   recordWalk(await auditScreen(pickPage, "Quick replies window", null));
+  /* The same window with "Your own words?" at its foot, after a press: the words and the result are content, the rest interface. */
+  await pickPage.evaluate(() => {
+    window.E_PICK.reword = async () => ({ ok: true, text: "Hi, sorry for the late reply. We will check your order tomorrow." });
+    window.__open(JSON.stringify({ lang: "en", look: { theme: "light", still: true, glass: false }, selected: "hi sorry for late reply",
+      editable: null, reword: { host: "ai.example.test" }, rows: [{ t: "Refund", g: "Orders", i: 0, n: 1, x: "We have started your refund", s: true }],
+      count: "1 reply", words: { rwHead: "Your own words?", rwSpelling: "Fix spelling", rwShorter: "Shorter", rwFriendlier: "Friendlier",
+        rwFormal: "More formal", rwYou: "You selected", rwBefore: "A press sends only the words above to {ADDRESS}, your organisation's AI service.",
+        rwAfter: "Sent to {ADDRESS}: only the words you selected. Read the result before you send it.", rwEnter: "Enter puts it in place of your selection",
+        rwBack: "Back to the replies", rwWait: "Waiting for {ADDRESS}" } }));
+  });
+  await sleep(60);
+  await pickPage.click("#rw .rw-acts button");
+  await sleep(80);
+  recordWalk(await auditScreen(pickPage, "Quick replies window, a reword's result", null));
 
   // Check 4: Placeholder / inner hints vs typed words across all 7 field kinds
   async function checkFieldEmptyAndTyped(p, sel, kindLabel, cleanup) {

@@ -6,6 +6,7 @@ import { ensureCardOrder, cmpCardDisplay, displayBandKey, favBlockOn, inIntentBa
 import { cardInActiveCats } from "./card-counts.js";
 import { editionMarkSig } from "./edition-marks.js";
 import { flagSig, flagFrame } from "./card-flag-desk.js";
+import { rewordSig, rewordShown } from "./card-model.js";
 import { cardMatchesSearch } from "./card-search.js";
 import { intentAffinityGroups } from "./affinity.js";
 import { cardSearchScore } from "./card-score.js";
@@ -305,8 +306,8 @@ function render(){
     const body=()=>built||(built=cardBodyHtml(m,i,{hit:hit,catHit:catHit,fav:fav,band:band,other:other,dragTip:dragTip}));
     return {sepH:sepH, body:body, id:m.id,
       sig:ePackEpoch+"|"+renderKey+"|"+cardFillKey(m)
-        +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1)+"|"+editionMarkSig(m.id)+"|"+flagSig(String(m.id||"")),
-      hit:hit, catHit:catHit, hidden:!!m._hidden, i:i, band:band,
+        +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1)+"|"+editionMarkSig(m.id)+"|"+flagSig(String(m.id||""))+"|"+rewordSig(m.id),
+      hit:hit, catHit:catHit, hidden:!!m._hidden, rw:!!rewordShown(m), i:i, band:band,
       dragging:!!(cardDrag&&cardDrag.moved&&cardDrag.key===m.id),
       dragTip:dragTip};
   });

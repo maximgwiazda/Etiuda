@@ -12,7 +12,8 @@ const DECK_SLAB_PROPS=["--deck-dy","--deck-sx","--deck-clip","--deck-dim","--dec
    draws them: nothing below measures, deals, holds or fades, and the list's two watchers let go (syncDeck). */
 function deckOn(){ return lsGet("eDeckOff")!=="1"; }
 
-function deckSlabs(card){ return Array.from(card.querySelectorAll(":scope > .txt[data-v]")); }
+/* A reworded card (card-reword.js) is no deck: its replies lie flat, with Approve and Revert under them. */
+function deckSlabs(card){ return card.classList.contains("rw-on") ? [] : Array.from(card.querySelectorAll(":scope > .txt[data-v]")); }
 function deckPx(n){ return Math.round(n*100)/100+"px"; }
 
 /* Where a deck rests, from where its slabs stand dealt: each slab's top and height inside the

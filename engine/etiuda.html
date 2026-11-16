@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Etiuda - an offline, single-file macro bank for live-chat support agents.
+<!-- Etiuda - a single-file macro bank for live-chat support agents.
      Copyright (c) 2026 Maxim Gwiazda · Etiuda Source-Available Licence 1.0 (notice below).
      No version here: E_VERSION is the one source of truth.
      The charset declaration must sit within the first 1024 bytes of the document, so this
@@ -402,7 +402,6 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      deliberately, and the badge, the filled star and the intent panel's gold edge always say
      it too. DARK IS NOT SYNCED to this hue and must not be. */
   --fav:#c69a2a; --fav-soft:rgba(218,180,65,.30);
-  --flag:#d98a1f; --flag-ink:#8a5206;
   --ed:#0e67d8; --ed-soft:rgba(14,103,216,.13);
   --pl:#6b3fa0;; --go:#047857; --go-soft:#d1fae5;
   /* The radius scale: 12 surfaces, 8 controls sitting on them, 6 small targets inside
@@ -519,7 +518,6 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30); --edge:#68707c;
   --accent:#409afc; --accent-fill:#136adc; --accent-soft:#16233a; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
-  --flag:#d98a1f; --flag-ink:#f2b45c;
   --ed:#409afc; --ed-soft:rgba(64,154,252,.16);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
   --bub:#136adc; --bub-shadow:rgba(37,99,235,.30); /* a soft glow in its own colour, weaker than the light theme's (Max 2026-11-15, "ANd I agree with glow in dark mode."; the product designer's value) */
@@ -562,7 +560,6 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30); --edge:#68707c;
   --accent:#409afc; --accent-fill:#136adc; --accent-soft:#16233a; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
-  --flag:#d98a1f; --flag-ink:#f2b45c;
   --ed:#409afc; --ed-soft:rgba(64,154,252,.16);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
   --bub:#136adc; --bub-shadow:rgba(37,99,235,.30); /* a soft glow in its own colour, weaker than the light theme's (Max 2026-11-15, "ANd I agree with glow in dark mode."; the product designer's value) */
@@ -606,7 +603,6 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      deliberately, and the badge, the filled star and the intent panel's gold edge always say
      it too. DARK IS NOT SYNCED to this hue and must not be. */
   --fav:#c69a2a; --fav-soft:rgba(218,180,65,.30);
-  --flag:#d98a1f; --flag-ink:#8a5206;
   --ed:#0e67d8; --ed-soft:rgba(14,103,216,.13);
   --pl:#6b3fa0;; --go:#047857; --go-soft:#d1fae5;
   --bub:#0e67d8; --bub-shadow:rgba(14,103,216,.30);
@@ -2681,10 +2677,11 @@ html.raildrag #intentRailList{margin-top:0}
    would simply lose the pencil, the eye and the star. */
 @media (hover:hover){
   .chead .cacts{opacity:0;transition:opacity var(--m-tone) ease}
-  .card:hover>.chead .cacts,.card:focus-within>.chead .cacts,.card:has([data-act=flag][aria-expanded=true])>.chead .cacts{opacity:1}
-  /* While they wait they take no width, so the title runs the whole row and recedes when they
+  .card:hover>.chead .cacts,.card:focus-within>.chead .cacts,.card:has([data-act=reword][aria-expanded=true])>.chead .cacts{opacity:1}
+  /* While a bubble from a card's button stands (Reword's menu, its waiting line, its refusal) the card keeps its buttons out, with the
+     pointer or the keyboard anywhere, so the bubble points at a visible button; closed, they go back to waiting. While they wait they take no width, so the title runs the whole row and recedes when they
      come. The cut pass reads their width from here (cut-text.js, cut-rh). */
-  body:not(.tour-cacts) .card:not(:hover,:focus-within,.is-hidden):not(:has([data-act=flag][aria-expanded=true]))>.chead .cacts{
+  body:not(.tour-cacts) .card:not(:hover,:focus-within,.is-hidden):not(:has([data-act=reword][aria-expanded=true]))>.chead .cacts{
     width:0;overflow:hidden;margin-left:calc(-1*var(--chead-gap))}
 }
 /* A tour has no pointer, so a step showcasing the star, the eye or the pencil was pointing at
@@ -2888,23 +2885,6 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 .cacts button:focus-visible{box-shadow:inset 0 0 0 1px var(--accent)}
 .cacts button.danger:focus-visible{box-shadow:inset 0 0 0 1px #c44}
 .cacts button.star-btn:focus-visible{box-shadow:inset 0 0 0 1px var(--fav)}
-/* THE FLAG, lit amber while it is with the lead or its answer waits; outranks every resting ground (the product designer's
-   sheet of the flag, point 7). */
-.chead .cacts button.flag-btn.on{color:var(--flag-ink);background:color-mix(in srgb,var(--flag) 20%,var(--panel));box-shadow:inset 0 0 0 1px var(--flag)}
-.chead .cacts button.flag-btn.on .ic-flag path:last-child{fill:var(--flag)}
-.chead .cacts button.flag-btn.on:focus-visible{box-shadow:inset 0 0 0 2px var(--flag)}
-/* The mark beside the card's name: whole however short the row, the name giving way. */
-.chead .cflag{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;box-sizing:border-box;height:22px;margin:0 0 0 calc(10px - var(--chead-gap));
-  padding:0 9px;border:0;border-radius:7px;background:color-mix(in srgb,var(--flag) 16%,var(--bg));color:var(--flag-ink);
-  font:600 12px var(--sans);white-space:nowrap;user-select:none;-webkit-user-select:none;cursor:default}
-.chead .cflag .ic{width:13px;height:13px}
-.chead .cflag.answered{background:color-mix(in srgb,var(--accent) 13%,var(--bg));color:var(--accent)}
-.chead .cflag.answered:hover,.chead .cflag.answered:focus-visible{box-shadow:inset 0 0 0 1px var(--accent);outline:none}
-.e-flag-bub .e-flag-note{display:block;box-sizing:border-box;width:100%;height:34px;margin:2px 0 10px;padding:0 10px;border:0;
-  border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans);outline:none}
-.e-flag-bub .e-flag-note:focus{box-shadow:inset 0 -2px 0 0 var(--accent-fill)}
-.e-flag-bub .e-flag-note[aria-invalid=true]{box-shadow:inset 0 0 0 2px #ffb066}
-.bub-ask.e-flag-bub .e-flag-why{margin:-4px 0 10px;font-size:12.5px;color:var(--bub-ink)}
 .cbadge{font:600 11px var(--sans);letter-spacing:0;padding:1px 7px;border-radius:6px;
   background:var(--accent-soft);color:var(--accent);text-transform:none}
 .cbadge.ed{background-color:var(--bg);background-image:linear-gradient(var(--ed-soft),var(--ed-soft));color:var(--ed)}
@@ -3910,6 +3890,7 @@ body.e-first-signin .stage>.dotfield{content-visibility:hidden}
 .fs-right-in .sgn-acts{margin-top:16px}
 .fs-skip{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
 .fs-skip-line{margin:10px 0 0;font:12.5px/1.45 var(--sans);color:var(--dim)}
+.fs-screen .sgn-p:focus-visible,.fs-screen .btn:focus-visible{box-shadow:0 0 0 2px var(--accent)}
 @media (max-width:780px){
   .fs-grid{grid-template-columns:1fr;grid-template-rows:auto 1fr}
   .fs-left{padding:26px 22px 18px}
@@ -4628,9 +4609,18 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
 .e-notice p.e-notice-err{font:12px var(--mono);color:var(--bub-dim);overflow-wrap:anywhere}
 .e-notice .e-notice-hint{margin-right:auto;font-size:12.5px;color:var(--bub-dim)}
 /* A field on the fill: paper, so what is typed reads as the reader's own. */
-.bub .e-name-inp,.bub .e-proxy-inp,.bub .e-reset-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
+.bub .e-name-inp,.bub .e-proxy-inp,.bub .e-reset-inp,.bub .rw-how{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
   border:1px solid transparent;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans)}
-.bub .e-name-inp:focus-visible,.bub .e-proxy-inp:focus-visible,.bub .e-reset-inp:focus-visible{outline:2px solid var(--bub-ink);outline-offset:2px}
+.bub .e-name-inp:focus-visible,.bub .e-proxy-inp:focus-visible,.bub .e-reset-inp:focus-visible,.bub .rw-how:focus-visible{outline:2px solid var(--bub-ink);outline-offset:2px}
+/* REWORD ON A CARD (card-reword.js): the menu's acts on the fill, its line under the field; and the card while a rewording
+   stands, its slabs' own line dashed, the chip over its words and Approve and Revert at its lower right. */
+.rw-bub .rw-bacts{justify-content:flex-start;margin:0 0 8px;padding:0;border:0}
+.rw-bub .rw-bline{margin:8px 0 0;font-size:12.5px}
+.card.rw-on>.txt{border-style:dashed;border-color:var(--accent)}
+:root:not([data-theme=light]) .card.rw-on>.txt::after{content:none}
+.rw-chip{display:flex;align-items:center;gap:8px;margin:0 0 6px;font-size:12px;color:var(--dim)}
+.rw-badge{padding:1px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600}
+.rw-ans{display:flex;justify-content:flex-end;gap:8px;margin:-4px 0 10px}
 .bub .e-proxy-inp+.e-proxy-inp{margin-top:8px}
 .bub .e-proxy-inp:last-of-type{margin-bottom:10px}
 .bub .e-greet{color:var(--bub-ink);margin:8px 0 10px}
@@ -5408,7 +5398,6 @@ body.e-host .row .win-btn:focus-visible{outline-offset:-2px}
     ICON_EJECT: () => ICON_EJECT,
     ICON_EYE_OPEN: () => ICON_EYE_OPEN,
     ICON_EYE_SHUT: () => ICON_EYE_SHUT,
-    ICON_FLAG: () => ICON_FLAG,
     ICON_INTENT_LINK: () => ICON_INTENT_LINK,
     ICON_KEY: () => ICON_KEY,
     ICON_LINT_WARNING: () => ICON_LINT_WARNING,
@@ -5582,7 +5571,6 @@ body.e-host .row .win-btn:focus-visible{outline-offset:-2px}
   ];
   var ICON_STAR_ON = _svg("ic ic-fill", _STAR);
   var ICON_STAR_OFF = _svg("ic", _STAR);
-  var ICON_FLAG = _svg("ic ic-flag", '<path d="M5 17V4"/><path d="M5 4.5h8.5l-1.6 3 1.6 3H5"/>');
   var ICON_INTENT_LINK = '<svg class="cat-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M8.75 10.63a3.13 3.13 0 0 0 4.71 0.34l1.88 -1.88a3.13 3.13 0 0 0 -4.43 -4.43l-1.08 1.07"/><path d="M11.25 9.37a3.13 3.13 0 0 0 -4.71 -0.34l-1.88 1.88a3.13 3.13 0 0 0 4.43 4.43l1.08 -1.07"/></svg>';
   var ICON_PLUS = _svg("ic", '<path d="M10 5v10M5 10h10"/>');
   var PROSE_ICON_SRC = {
@@ -6695,7 +6683,6 @@ What is typed here stays in this browser.`;
     cardFlag: () => cardFlag,
     flagCard: () => flagCard,
     flagDigest: () => flagDigest,
-    flagEndedIds: () => flagEndedIds,
     flagFileList: () => flagFileList,
     flagHolds: () => flagHolds,
     flagNote: () => flagNote,
@@ -7241,6 +7228,7 @@ What is typed here stays in this browser.`;
   // src/modules/card-model.js
   var card_model_exports = {};
   __export(card_model_exports, {
+    REWORDED: () => REWORDED,
     altLabelAt: () => altLabelAt,
     baseCard: () => baseCard,
     cardCommits: () => cardCommits,
@@ -7254,6 +7242,9 @@ What is typed here stays in this browser.`;
     putOverride: () => putOverride,
     reorderMacroBlocks: () => reorderMacroBlocks,
     reverseBlockIndex: () => reverseBlockIndex,
+    rewordKeep: () => rewordKeep,
+    rewordShown: () => rewordShown,
+    rewordSig: () => rewordSig,
     splitPartsRaw: () => splitPartsRaw,
     stampChanged: () => stampChanged
   });
@@ -7733,7 +7724,7 @@ What is typed here stays in this browser.`;
     let end = row2.getBoundingClientRect().right - parseFloat(rs.borderRightWidth) - parseFloat(rs.paddingRight);
     for (let n = el.nextElementSibling; n && n !== acts; n = n.nextElementSibling) end -= n.getBoundingClientRect().width + gap;
     const card = el.closest(".card");
-    const folds = matchMedia("(hover:hover)").matches && !document.body.classList.contains("tour-cacts") && !(card && card.classList.contains("is-hidden")) && !acts.querySelector('[data-act="flag"][aria-expanded="true"]');
+    const folds = matchMedia("(hover:hover)").matches && !document.body.classList.contains("tour-cacts") && !(card && card.classList.contains("is-hidden"));
     const receded = end - acts.scrollWidth - gap;
     const b = el.getBoundingClientRect(), boxL = b.left + parseFloat(cs.borderLeftWidth) + parseFloat(cs.paddingLeft);
     return { l: boxL - ink.left > CUT_EPS, r: ink.right - (folds ? end : receded) > CUT_EPS, rh: ink.right - receded > CUT_EPS };
@@ -7903,6 +7894,52 @@ What is typed here stays in this browser.`;
     "Create a card in {CAT}": "Utwórz kartę w kategorii {CAT}",
     "A different word may do better.": "Inne słowo może trafić lepiej.",
     "The words you selected. Type to change them.": "Zaznaczone słowa. Można je zmienić, pisząc.",
+    "Your own words?": "Własne słowa?",
+    "Fix spelling": "Popraw pisownię",
+    "Shorter": "Krócej",
+    "Friendlier": "Przyjaźniej",
+    "More formal": "Bardziej oficjalnie",
+    "Into Polish": "Na polski",
+    "Into English": "Na angielski",
+    "A press sends only the words above to {ADDRESS}, your organisation's AI service.": "Kliknięcie wysyła tylko powyższe słowa do {ADDRESS}, usługi AI organizacji.",
+    "You selected": "Zaznaczony tekst",
+    "Sent to {ADDRESS}: only the words you selected. Read the result before you send it.": "Do {ADDRESS} trafiły tylko zaznaczone słowa. Wynik należy przeczytać przed wysłaniem.",
+    "Enter puts it in place of your selection": "Enter wstawia go w miejsce zaznaczenia",
+    "Back to the replies": "Wróć do odpowiedzi",
+    "Waiting for the service at {ADDRESS}…": "Oczekiwanie na usługę pod adresem {ADDRESS}…",
+    "Reword": "Przeredaguj",
+    "Reword this card": "Przeredaguj tę kartę",
+    "Or say how, then press Enter": "Albo opis zmiany, potem Enter",
+    "Sends this card's words to {ADDRESS}. The card itself changes only if you approve the result.": "Wysyła treść tej karty do {ADDRESS}. Sama karta zmieni się tylko po zatwierdzeniu wyniku.",
+    "Reworded: {ACT}": "Przeredagowano: {ACT}",
+    "Reworded as described": "Przeredagowano według opisu",
+    "Not saved.": "Niezapisane.",
+    "Shown until Etiuda is next opened, unless you approve it.": "Widoczne do ponownego uruchomienia Etiudy, chyba że zostanie zatwierdzone.",
+    "Approve": "Zatwierdź",
+    "Keep these words as your own edit of the card": "Zachowaj tę treść jako własną zmianę karty",
+    "Revert": "Przywróć",
+    "Show the card as it was": "Pokaż kartę w pierwotnej postaci",
+    "The result lost a name this card fills in, or one of its steps, so it is not shown. The card is as it was; another try may keep them.": "W wyniku zabrakło nazwy, którą karta wypełnia, albo jednego z jej kroków, więc nie został pokazany. Karta pozostała bez zmian; kolejna próba może je zachować.",
+    "The service at {ADDRESS} did not answer in time. Your words are as you wrote them.": "Usługa pod adresem {ADDRESS} nie odpowiedziała na czas. Zaznaczony tekst pozostał bez zmian.",
+    "The service at {ADDRESS} did not answer in time. The card is as it was.": "Usługa pod adresem {ADDRESS} nie odpowiedziała na czas. Karta pozostała bez zmian.",
+    "The service at {ADDRESS} is busy; a later try may go through. Your words are as you wrote them.": "Usługa pod adresem {ADDRESS} jest zajęta; późniejsza próba może się udać. Zaznaczony tekst pozostał bez zmian.",
+    "The service at {ADDRESS} is busy; a later try may go through. The card is as it was.": "Usługa pod adresem {ADDRESS} jest zajęta; późniejsza próba może się udać. Karta pozostała bez zmian.",
+    "No result came back from {ADDRESS}. Your words are as you wrote them.": "Z adresu {ADDRESS} nie nadszedł wynik. Zaznaczony tekst pozostał bez zmian.",
+    "No result came back from {ADDRESS}. The card is as it was.": "Z adresu {ADDRESS} nie nadszedł wynik. Karta pozostała bez zmian.",
+    "The service at {ADDRESS} failed three times in a row, so Etiuda waits before asking it again; nothing was sent. Your words are as you wrote them.": "Usługa pod adresem {ADDRESS} zawiodła trzy razy z rzędu, więc Etiuda odczeka, zanim znów się do niej zwróci; nic nie zostało wysłane. Zaznaczony tekst pozostał bez zmian.",
+    "The service at {ADDRESS} failed three times in a row, so Etiuda waits before asking it again; nothing was sent. The card is as it was.": "Usługa pod adresem {ADDRESS} zawiodła trzy razy z rzędu, więc Etiuda odczeka, zanim znów się do niej zwróci; nic nie zostało wysłane. Karta pozostała bez zmian.",
+    "These words are over 4000 characters, more than can be sent, so nothing was sent. Your words are as you wrote them.": "Tekst ma ponad 4000 znaków, więcej, niż można wysłać, więc nic nie zostało wysłane. Zaznaczony tekst pozostał bez zmian.",
+    "These words are over 4000 characters, more than can be sent, so nothing was sent. The card is as it was.": "Tekst ma ponad 4000 znaków, więcej, niż można wysłać, więc nic nie zostało wysłane. Karta pozostała bez zmian.",
+    "Rewording is turned off on this computer, so nothing was sent. Your words are as you wrote them.": "Przeredagowanie jest wyłączone na tym komputerze, więc nic nie zostało wysłane. Zaznaczony tekst pozostał bez zmian.",
+    "Rewording is turned off on this computer, so nothing was sent. The card is as it was.": "Przeredagowanie jest wyłączone na tym komputerze, więc nic nie zostało wysłane. Karta pozostała bez zmian.",
+    "The organisation's model is no longer set, so nothing was sent. Your words are as you wrote them.": "Model organizacji nie jest już ustawiony, więc nic nie zostało wysłane. Zaznaczony tekst pozostał bez zmian.",
+    "The organisation's model is no longer set, so nothing was sent. The card is as it was.": "Model organizacji nie jest już ustawiony, więc nic nie zostało wysłane. Karta pozostała bez zmian.",
+    "Rewording is not available just now, so nothing was sent. Your words are as you wrote them.": "Przeredagowanie jest teraz niedostępne, więc nic nie zostało wysłane. Zaznaczony tekst pozostał bez zmian.",
+    "Rewording is not available just now, so nothing was sent. The card is as it was.": "Przeredagowanie jest teraz niedostępne, więc nic nie zostało wysłane. Karta pozostała bez zmian.",
+    "The result came back empty, so it is not shown. The card is as it was; another try may do better.": "Wynik nadszedł pusty, więc nie został pokazany. Karta pozostała bez zmian; kolejna próba może się udać.",
+    "One of this card's alternatives came back with no words, so the result is not shown. The card is as it was; another try may do better.": "Jeden z wariantów karty wrócił bez treści, więc wynik nie został pokazany. Karta pozostała bez zmian; kolejna próba może się udać.",
+    "Rewording": "Przeredagowanie",
+    "Reword on cards and Your own words? in Quick replies send the card's words or the selected words to the organisation's model at {ADDRESS}, only when pressed. Turned off, both are gone and nothing is sent; the choice is yours, on this computer.": "Przycisk Przeredaguj na kartach i Własne słowa? w Szybkich odpowiedziach wysyłają treść karty albo zaznaczony tekst do modelu organizacji pod adresem {ADDRESS}, tylko po kliknięciu. Po wyłączeniu oba znikają i nic nie jest wysyłane; to osobisty wybór na tym komputerze.",
     "Press": "Naciśnij",
     "{KEY} clears the search and the intents and shows every card.": "{KEY} czyści wyszukiwanie i intencje i pokazuje wszystkie karty.",
     "Etiuda is ready for its first replies.": "Etiuda czeka na pierwsze odpowiedzi.",
@@ -8772,20 +8809,6 @@ What is typed here stays in this browser.`;
     "Back": "Wstecz",
     "Next": "Dalej",
     "Done": "Gotowe",
-    "This looks wrong": "Coś się nie zgadza",
-    "Sent to the lead": "Przekazano liderowi zespołu",
-    "The lead will see it in Studio, and the answer comes with the team's next edition. If you know what is wrong, add it here; it is fine not to know.": "Lider zespołu zobaczy to w Studio, a odpowiedź przyjdzie z następnym wydaniem zespołu. Jeśli wiadomo, co się nie zgadza, można to tu dopisać; nie trzeba tego wiedzieć.",
-    "What looks wrong (optional), then Enter": "Co się nie zgadza (nieobowiązkowo), potem Enter",
-    "Take it back": "Wycofaj",
-    "With the lead": "U lidera",
-    "Answered": "Jest odpowiedź",
-    "The lead has answered": "Jest odpowiedź lidera zespołu",
-    "Left as it is.": "Bez zmian.",
-    "The card has been mended.": "Kartę poprawiono.",
-    "The note can be up to 500 characters long.": "Notatka może mieć najwyżej 500 znaków.",
-    "The note holds a character it cannot keep, such as a line break or a tab.": "Notatka zawiera znak, którego nie może zachować, na przykład podział wiersza lub tabulator.",
-    "This desk has already sent as many flags on this catalog as it can, so this one was not sent.": "To stanowisko wysłało już tyle zgłoszeń do tego katalogu, ile może, więc tego nie wysłano.",
-    "Room comes back as the lead answers.": "Miejsce zwalnia się, gdy lider zespołu odpowiada.",
     "Save": "Zapisz",
     "Cancel": "Anuluj",
     "Delete": "Usuń",
@@ -8819,17 +8842,18 @@ What is typed here stays in this browser.`;
     "Off, it matches words only.": "Wyłączone dopasowuje tylko słowa.",
     /* The organisation's model (board 992): the copywriter's words, 2026-11-11, but for the lines marked as placeholders. */
     "Suggest intents with the organisation's model": "Propozycje intencji przy użyciu modelu organizacji",
-    "Sends a copied message to the organisation's model at {HOST} and suggests the intents it is closest to. Off, suggestions come from matching words.": "Wysyła skopiowaną wiadomość do modelu organizacji pod adresem {HOST} i proponuje najbliższe jej intencje. Wyłączone: propozycje wynikają z dopasowania słów.",
-    "The organisation's model ranks the suggestions; the copied message is sent to {HOST}.": "Model organizacji ustala kolejność propozycji; skopiowana wiadomość trafia do {HOST}.",
+    "Sends a copied message, with up to 12 short pieces of the cards being ranked, to the organisation's model at {HOST} and suggests the intents it is closest to. Off, suggestions come from matching words.": "Wysyła skopiowaną wiadomość, razem z najwyżej 12 krótkimi fragmentami porządkowanych kart, do modelu organizacji pod adresem {HOST} i proponuje najbliższe jej intencje. Wyłączone: propozycje wynikają z dopasowania słów.",
+    "The organisation's model ranks the suggestions; the copied message and up to 12 short pieces of the cards are sent to {HOST}.": "Model organizacji ustala kolejność propozycji; skopiowana wiadomość i najwyżej 12 krótkich fragmentów kart trafiają do {HOST}.",
     "Suggestions from the organisation's model": "Propozycje z modelu organizacji",
     "Search by meaning with the organisation's model": "Wyszukiwanie według znaczenia przy użyciu modelu organizacji",
-    "From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the organisation's model at {HOST}, to which the search text is sent. Off, it matches words only.": "Od trzeciej wpisanej litery główne wyszukiwanie pokazuje, po wynikach pasujących do słów, karty i intencje najbliższe znaczeniem, uporządkowane przez model organizacji pod adresem {HOST}, do którego trafia tekst wyszukiwania. Wyłączone dopasowuje tylko słowa.",
-    "The organisation's model ranks the search beside word matches; the search text is sent to {HOST}.": "Model organizacji porządkuje wyniki obok dopasowań słów; tekst wyszukiwania trafia do {HOST}.",
+    "From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the organisation's model at {HOST}, to which the search text is sent with up to 12 short pieces of the cards being ranked. Off, it matches words only.": "Od trzeciej wpisanej litery główne wyszukiwanie pokazuje, po wynikach pasujących do słów, karty i intencje najbliższe znaczeniem, uporządkowane przez model organizacji pod adresem {HOST}, do którego trafia tekst wyszukiwania razem z najwyżej 12 krótkimi fragmentami porządkowanych kart. Wyłączone dopasowuje tylko słowa.",
+    "The organisation's model ranks the search beside word matches; the search text and up to 12 short pieces of the cards are sent to {HOST}.": "Model organizacji porządkuje wyniki obok dopasowań słów; tekst wyszukiwania i najwyżej 12 krótkich fragmentów kart trafiają do {HOST}.",
     "The model that ranks search and suggestions": "Model, który ustala kolejność wyszukiwania i propozycji",
     "Built-in, on this computer": "Wbudowany, na tym komputerze",
     "The organisation's": "Model organizacji",
     "The built-in model sends nothing anywhere.": "Wbudowany model niczego nigdzie nie wysyła.",
-    "The search text and the copied message the suggestions are made from are sent to {HOST}, and nowhere else.": "Tekst wyszukiwania i skopiowana wiadomość, z której powstają propozycje, trafiają do {HOST} i nigdzie indziej.",
+    "The search text, the copied message the suggestions are made from and up to 12 short pieces of the cards being ranked are sent to {HOST}, and nowhere else.": "Tekst wyszukiwania, skopiowana wiadomość, z której powstają propozycje, i najwyżej 12 krótkich fragmentów porządkowanych kart trafiają do {HOST} i nigdzie indziej.",
+    "The search text, the copied message the suggestions are made from and up to 12 short pieces of the cards being ranked are sent to {HOST}, and nowhere else; so, at your press, are the words or the card you ask it to reword.": "Tekst wyszukiwania, skopiowana wiadomość, z której powstają propozycje, i najwyżej 12 krótkich fragmentów porządkowanych kart trafiają do {HOST} i nigdzie indziej; po kliknięciu trafia tam też tekst albo karta do przeredagowania.",
     "Set by the organisation": "Ustawione przez organizację",
     "Whoever manages Etiuda for the organisation can change this.": "Zmienić to może osoba, która zarządza Etiudą w organizacji.",
     "Group Policy names an AI service setting Etiuda cannot use, so it is ignored: {NAME}": "Zasady grupy ustawiają dla usługi AI wartość, której Etiuda nie może użyć, więc zostaje pominięta: {NAME}",
@@ -8863,10 +8887,12 @@ What is typed here stays in this browser.`;
     "The AI service did not answer in time, so the request was given up.": "Usługa AI nie odpowiedziała na czas, więc zapytanie przerwano.",
     "The AI service is busy and asked Etiuda to wait; a later try may go through.": "Usługa AI jest zajęta i poprosiła Etiudę o odczekanie; późniejsza próba może się udać.",
     "organisation's model": "model organizacji",
-    "The organisation's model at {HOST} ranks the search and the suggestions. The search text and the copied message the suggestions are made from are sent there.": "Model organizacji pod adresem {HOST} ustala kolejność wyszukiwania i propozycji. Trafia tam tekst wyszukiwania i skopiowana wiadomość, z której powstają propozycje.",
-    "The organisation's model at {HOST} ranks the search. The search text is sent there.": "Model organizacji pod adresem {HOST} ustala kolejność wyszukiwania. Trafia tam tekst wyszukiwania.",
-    "The organisation's model at {HOST} ranks the suggestions. The copied message they are made from is sent there.": "Model organizacji pod adresem {HOST} ustala kolejność propozycji. Trafia tam skopiowana wiadomość, z której powstają.",
-    "The organisation's model at {HOST} is set, and with both switches off nothing is sent to it.": "Model organizacji pod adresem {HOST} jest ustawiony, a przy obu przełącznikach wyłączonych nic do niego nie trafia.",
+    "The organisation's model at {HOST} ranks the search and the suggestions. The search text, the copied message the suggestions are made from, and up to 12 short pieces of the cards being ranked are sent there.": "Model organizacji pod adresem {HOST} ustala kolejność wyszukiwania i propozycji. Trafia tam tekst wyszukiwania, skopiowana wiadomość, z której powstają propozycje, i najwyżej 12 krótkich fragmentów porządkowanych kart.",
+    "The organisation's model at {HOST} ranks the search. The search text is sent there, with up to 12 short pieces of the cards being ranked.": "Model organizacji pod adresem {HOST} ustala kolejność wyszukiwania. Trafia tam tekst wyszukiwania, razem z najwyżej 12 krótkimi fragmentami porządkowanych kart.",
+    "The organisation's model at {HOST} ranks the suggestions. The copied message they are made from is sent there, with up to 12 short pieces of the cards being ranked.": "Model organizacji pod adresem {HOST} ustala kolejność propozycji. Trafia tam skopiowana wiadomość, z której powstają, razem z najwyżej 12 krótkimi fragmentami porządkowanych kart.",
+    "At your press, the words or the card you ask it to reword go there too.": "Po kliknięciu trafia tam też tekst albo karta do przeredagowania.",
+    "The organisation's model at {HOST} is set, and with both switches and Rewording off, nothing is sent to it.": "Model organizacji pod adresem {HOST} jest ustawiony, a przy wyłączonych obu przełącznikach i Przeredagowaniu nic do niego nie trafia.",
+    "The organisation's model at {HOST} is set. With both switches off, only the words or the card you ask it to reword are sent to it, at your press.": "Model organizacji pod adresem {HOST} jest ustawiony. Przy wyłączonych obu przełącznikach trafia do niego tylko, po kliknięciu, tekst albo karta do przeredagowania.",
     "organisation's model not answering, built-in model ranking": "model organizacji nie odpowiada, kolejność ustala model wbudowany",
     "{HOST} has not answered three times in a row, so the built-in model ranks on this computer, sending nothing, and the desk asks {HOST} again in a minute.": "{HOST} nie odpowiedział trzy razy z rzędu, więc kolejność ustala model wbudowany na tym komputerze, niczego nie wysyłając, a stanowisko zapyta {HOST} ponownie za minutę.",
     "organisation's model not answering, word matches only": "model organizacji nie odpowiada, tylko dopasowanie słów",
@@ -8981,7 +9007,7 @@ What is typed here stays in this browser.`;
     "Suggestions taken: {N}": "Wybrane propozycje: {N}",
     "Openings with suggestions: {N}": "Otwarcia z propozycjami: {N}",
     "When Quick replies opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as Quick replies opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.": "Gdy otwierają się Szybkie odpowiedzi, a w schowku jest wiadomość klienta wyraźnie wskazująca na jakieś intencje, nad listą pojawia się do pięciu z nich. Żadna nie jest wybrana, dopóki się jej nie kliknie. Wiadomość jest odczytywana tylko przy otwarciu Szybkich odpowiedzi i nigdy nie jest zapisywana ani wysyłana; statystyki liczą jedynie, ile razy pojawiły się propozycje i ile z nich wybrano.",
-    "When Quick replies opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. While the organisation's model is on, the copied message, at most its first 1,500 characters, is sent to {HOST} as Quick replies opens, so that the model there can suggest the intents; this desk keeps no copy of it. The statistics count only how often suggestions appeared and how many were taken.": "Gdy otwierają się Szybkie odpowiedzi, a w schowku jest wiadomość klienta wyraźnie wskazująca na jakieś intencje, nad listą pojawia się do pięciu z nich. Żadna nie jest wybrana, dopóki się jej nie kliknie. Gdy włączony jest model organizacji, skopiowana wiadomość, najwyżej 1500 pierwszych znaków, trafia przy otwarciu Szybkich odpowiedzi do {HOST}, aby tamtejszy model mógł zaproponować intencje; to stanowisko nie zachowuje jej kopii. Statystyki liczą jedynie, ile razy pojawiły się propozycje i ile z nich wybrano.",
+    "When Quick replies opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. While the organisation's model is on, the copied message, at most its first 1,500 characters, is sent to {HOST} as Quick replies opens, with up to 12 short pieces of the cards being ranked, so that the model there can suggest the intents; this desk keeps no copy of it. The statistics count only how often suggestions appeared and how many were taken.": "Gdy otwierają się Szybkie odpowiedzi, a w schowku jest wiadomość klienta wyraźnie wskazująca na jakieś intencje, nad listą pojawia się do pięciu z nich. Żadna nie jest wybrana, dopóki się jej nie kliknie. Gdy włączony jest model organizacji, skopiowana wiadomość, najwyżej 1500 pierwszych znaków, trafia przy otwarciu Szybkich odpowiedzi do {HOST}, razem z najwyżej 12 krótkimi fragmentami porządkowanych kart, aby tamtejszy model mógł zaproponować intencje; to stanowisko nie zachowuje jej kopii. Statystyki liczą jedynie, ile razy pojawiły się propozycje i ile z nich wybrano.",
     "Works from any program; Enter copies a reply and pastes it into the window you were in, wherever Windows allows.": "Działa w każdym programie; Enter kopiuje odpowiedź i wkleja ją do poprzedniego okna, jeśli Windows na to pozwala.",
     "Another program uses this combination just now; a different one will do.": "Tej kombinacji używa teraz inny program; wybór innej to rozwiąże.",
     "{KEYS} already belongs to another program; a different combination will do.": "{KEYS} należy już do innego programu; wybór innej kombinacji to rozwiąże.",
@@ -9674,15 +9700,9 @@ What is typed here stays in this browser.`;
       out.push({ ground: main, start: root });
       return out;
     }
-    const fs = closest && closest(".fs-left");
-    if (fs) {
-      out.push({ ground: fs, start: root });
-      return out;
-    }
     if (typeof root.querySelectorAll === "function") {
       root.querySelectorAll(".sx-page").forEach((p) => out.push({ ground: p, start: p }));
       root.querySelectorAll(".stage > .scroller main").forEach((m) => out.push({ ground: m, start: m }));
-      root.querySelectorAll(".fs-left").forEach((f) => out.push({ ground: f, start: f }));
     }
     return out;
   }
@@ -11795,8 +11815,22 @@ What is typed here stays in this browser.`;
     const want = CONTENT_LANGS.indexOf(p) > -1 ? p : lang;
     return cardText(m, "body", want) ? want : CONTENT_LANGS[0];
   }
+  var REWORDED = /* @__PURE__ */ new Map();
+  var rewordN = 0;
+  function rewordKeep(id, r) {
+    REWORDED.set(id, Object.assign({}, r, { n: ++rewordN }));
+  }
+  function rewordSig(id) {
+    const r = REWORDED.get(id);
+    return r ? "rw" + r.n : "";
+  }
+  function rewordShown(m) {
+    const r = m && REWORDED.get(m.id), L = r ? cardLang(m) : "";
+    return r && r.L === L && cardText(m, "body", L) === r.from ? r : null;
+  }
   function parts(m, l) {
-    const raw = cardText(m, "body", l);
+    const rw = m && REWORDED.get(m.id);
+    const raw = rw && rw.L === l && cardText(m, "body", l) === rw.from ? rw.text : cardText(m, "body", l);
     if (!raw) return [];
     if (!m.alt) return [raw];
     return raw.split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean).map(v2PartText);
@@ -17251,9 +17285,6 @@ What is typed here stays in this browser.`;
     tell();
     return true;
   }
-  function flagEndedIds() {
-    return Object.keys(readEnds());
-  }
   function flagFileList() {
     return readFlags().map(copyFlag).sort(byCardThenR);
   }
@@ -17305,247 +17336,6 @@ What is typed here stays in this browser.`;
     return true;
   }
 
-  // src/modules/card-flag-desk.js
-  var card_flag_desk_exports = {};
-  __export(card_flag_desk_exports, {
-    closeFlagBubbles: () => closeFlagBubbles,
-    flagButtonHtml: () => flagButtonHtml,
-    flagFrame: () => flagFrame,
-    flagMarkHtml: () => flagMarkHtml,
-    flagOfferedNow: () => flagOfferedNow,
-    flagPressed: () => flagPressed,
-    flagSig: () => flagSig,
-    forgetFlagOffered: () => forgetFlagOffered,
-    showFlagAnswer: () => showFlagAnswer
-  });
-  var offered = null;
-  var focusWired = false;
-  function flagOfferedNow() {
-    if (offered === null) {
-      offered = !!flagOffered();
-      if (!focusWired && typeof addEventListener === "function") {
-        focusWired = true;
-        addEventListener("focus", () => {
-          const was = offered;
-          offered = null;
-          if (flagOfferedNow() !== was) hooks.render();
-        });
-      }
-    }
-    return offered;
-  }
-  function forgetFlagOffered() {
-    offered = null;
-  }
-  var sentOpen = "";
-  var answerOpen = null;
-  var fullOpen = "";
-  var flagged = null;
-  function flagState(id) {
-    if (answerOpen && answerOpen.id === id) return { state: "answered", outcome: answerOpen.outcome };
-    if (flagged && !flagged.has(id)) return null;
-    const f = cardFlag(id);
-    if (!f || f.state === "answered" && f.outcome === "gone") return null;
-    return f;
-  }
-  function flagSig(id) {
-    const f = flagState(id);
-    return (flagOfferedNow() ? "o" : "") + (f ? f.state + (f.outcome || "") : "") + (sentOpen === id ? "+" : "");
-  }
-  function flagButtonHtml(id) {
-    if (!flagOfferedNow()) return "";
-    const lit = !!flagState(id);
-    const w = esc(t("This looks wrong"));
-    return '<button type="button" class="flag-btn' + (lit ? " on" : "") + '" data-act="flag" title="' + w + '" aria-label="' + w + '" aria-pressed="' + (lit ? "true" : "false") + '" aria-expanded="' + (sentOpen === id ? "true" : "false") + '">' + ICON_FLAG + "</button>";
-  }
-  function flagMarkHtml(id) {
-    const f = flagState(id);
-    if (!f) return "";
-    if (f.state === "sent") return '<span class="cflag">' + ICON_FLAG + esc(t("With the lead")) + "</span>";
-    return '<button type="button" class="cflag answered" data-act="flag-answer" aria-haspopup="dialog">' + ICON_FLAG + esc(t("Answered")) + "</button>";
-  }
-  var cardSel = (id) => '#list .card[data-id="' + cssEsc(id) + '"]';
-  var markOf = (id) => document.querySelector(cardSel(id) + " > .chead .cflag");
-  var buttonOf = (id) => document.querySelector(cardSel(id) + ' > .chead .cacts [data-act="flag"]');
-  var closeOpen = null;
-  function closeFlagBubbles(back) {
-    if (closeOpen) closeOpen(back ? "back" : void 0);
-  }
-  function pressOnOwn(id, target) {
-    const b = buttonOf(id), m = markOf(id);
-    return !!(b && b.contains(target) || m && m.contains(target));
-  }
-  function flagBubble(id, html, origin, width, after) {
-    closeFlagBubbles();
-    const el = document.createElement("div");
-    el.className = "bub bub-ask e-flag-bub";
-    el.setAttribute("role", "dialog");
-    el.setAttribute("data-side", "none");
-    el.setAttribute("aria-labelledby", "eFlagT");
-    el.innerHTML = html;
-    cutLeaves();
-    document.body.appendChild(el);
-    hangBubble(el, origin, { width });
-    const outside = (e) => {
-      if (!el.contains(e.target) && !pressOnOwn(id, e.target)) close(true);
-    };
-    const close = (how) => {
-      if (closeOpen !== close) return;
-      closeOpen = null;
-      const back = how === "back" || !how && el.contains(document.activeElement);
-      document.removeEventListener("pointerdown", outside, true);
-      dismissNode(el);
-      after();
-      hooks.render();
-      const to = back && buttonOf(id);
-      if (to) try {
-        to.focus({ preventScroll: true });
-      } catch (e) {
-      }
-    };
-    closeOpen = close;
-    document.addEventListener("pointerdown", outside, true);
-    el.addEventListener("keydown", (e) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      e.stopPropagation();
-      close();
-    });
-    const done = el.querySelector('[data-flag="done"]');
-    if (done) done.onclick = () => close();
-    return { el, close };
-  }
-  function showFlagSent(id) {
-    const hint = t("What looks wrong (optional), then Enter");
-    const b = flagBubble(
-      id,
-      '<h3 id="eFlagT">' + esc(t("Sent to the lead")) + "</h3><p>" + esc(t("The lead will see it in Studio, and the answer comes with the team's next edition. If you know what is wrong, add it here; it is fine not to know.")) + '</p><input type="text" class="e-flag-note" placeholder="' + esc(hint) + '" aria-label="' + esc(hint) + '" spellcheck="false" autocomplete="off"><p class="e-flag-why" role="alert" hidden></p><div class="tour-actions"><button type="button" class="btn" data-flag="back">' + esc(t("Take it back")) + '</button><button type="button" class="btn primary" data-flag="done">' + esc(t("Done")) + "</button></div>",
-      () => buttonOf(id) || markOf(id),
-      360,
-      () => {
-        if (sentOpen === id) sentOpen = "";
-      }
-    );
-    const note = b.el.querySelector(".e-flag-note"), why = b.el.querySelector(".e-flag-why");
-    note.addEventListener("keydown", (e) => {
-      if (e.key !== "Enter" || e.isComposing) return;
-      e.preventDefault();
-      const got = flagNote(id, note.value);
-      if (got && got.refused) {
-        const line = got.refused === "too-long" ? t("The note can be up to 500 characters long.") : t("The note holds a character it cannot keep, such as a line break or a tab.");
-        note.setAttribute("aria-invalid", "true");
-        why.textContent = line;
-        why.hidden = false;
-        return;
-      }
-      b.close();
-    });
-    note.addEventListener("input", () => {
-      note.removeAttribute("aria-invalid");
-      why.hidden = true;
-      why.textContent = "";
-    });
-    b.el.querySelector('[data-flag="back"]').onclick = () => {
-      unflagCard(id);
-      b.close();
-    };
-    try {
-      note.focus({ preventScroll: true });
-    } catch (e) {
-    }
-  }
-  function showFlagAnswer(id) {
-    if (closeOpen && answerOpen && answerOpen.id === id) {
-      closeFlagBubbles(true);
-      return;
-    }
-    const f = cardFlag(id);
-    if (!f || f.state !== "answered") return;
-    if (f.outcome === "gone") {
-      flagSeen(id);
-      return;
-    }
-    answerOpen = { id, outcome: f.outcome };
-    const b = flagBubble(
-      id,
-      '<h3 id="eFlagT">' + esc(t("The lead has answered")) + "</h3><p>" + esc(f.outcome === "changed" ? t("The card has been mended.") : t("Left as it is.")) + '</p><div class="tour-actions"><button type="button" class="btn primary" data-flag="done">' + esc(t("Done")) + "</button></div>",
-      () => markOf(id),
-      300,
-      () => {
-        if (answerOpen && answerOpen.id === id) answerOpen = null;
-      }
-    );
-    const seen = flagSeen(id);
-    try {
-      b.el.querySelector('[data-flag="done"]').focus({ preventScroll: true });
-    } catch (e) {
-    }
-    return seen;
-  }
-  function showFlagFull(id) {
-    fullOpen = id;
-    const b = flagBubble(
-      id,
-      '<p id="eFlagT">' + esc(t("This desk has already sent as many flags on this catalog as it can, so this one was not sent.")) + " " + esc(t("Room comes back as the lead answers.")) + '</p><div class="tour-actions"><button type="button" class="btn primary" data-flag="done">' + esc(t("Done")) + "</button></div>",
-      () => buttonOf(id),
-      300,
-      () => {
-        if (fullOpen === id) fullOpen = "";
-      }
-    );
-    try {
-      b.el.querySelector('[data-flag="done"]').focus({ preventScroll: true });
-    } catch (e) {
-    }
-  }
-  function flagPressed(id) {
-    if (closeOpen && (sentOpen === id || fullOpen === id || answerOpen && answerOpen.id === id)) {
-      closeFlagBubbles(true);
-      return;
-    }
-    const f = flagState(id);
-    if (f && f.state === "answered") {
-      showFlagAnswer(id);
-      return;
-    }
-    if (f) {
-      closeFlagBubbles();
-      unflagCard(id);
-      return;
-    }
-    sentOpen = id;
-    const got = flagCard(id);
-    if (!got || got.refused) {
-      sentOpen = "";
-      if (got && got.refused === "not-offered") offered = null;
-      hooks.render();
-      if (got && got.refused === "full") showFlagFull(id);
-      return;
-    }
-    showFlagSent(id);
-  }
-  var goneAsked = false;
-  function flagFrame() {
-    let ended = [];
-    try {
-      ended = flagEndedIds();
-      flagged = new Set(flagFileList().map((f) => f.card).concat(ended));
-    } catch (e) {
-      flagged = null;
-    }
-    if (goneAsked) return;
-    const gone = ended.filter((id) => {
-      const f = cardFlag(id);
-      return f && f.outcome === "gone";
-    });
-    if (!gone.length) return;
-    goneAsked = true;
-    setTimeout(() => {
-      goneAsked = false;
-      gone.forEach((id) => flagSeen(id));
-    }, 0);
-  }
-
   // src/modules/card-blocks.js
   var card_blocks_exports = {};
   __export(card_blocks_exports, {
@@ -17555,8 +17345,8 @@ What is typed here stays in this browser.`;
     if (!list || mgReduceMotion()) {
       return reorderMacroBlocks(mid, fromVi, toVi);
     }
-    const cardSel2 = '.card[data-id="' + cssEsc(mid) + '"]';
-    const card = list.querySelector(cardSel2);
+    const cardSel = '.card[data-id="' + cssEsc(mid) + '"]';
+    const card = list.querySelector(cardSel);
     if (!card) {
       return reorderMacroBlocks(mid, fromVi, toVi);
     }
@@ -17566,10 +17356,10 @@ What is typed here stays in this browser.`;
     });
     if (!reorderMacroBlocks(mid, fromVi, toVi)) return false;
     if (dragging) {
-      const el = list.querySelector(cardSel2 + ' .txt[data-v="' + toVi + '"]');
+      const el = list.querySelector(cardSel + ' .txt[data-v="' + toVi + '"]');
       if (el) el.classList.add("dragging");
     }
-    const card2 = list.querySelector(cardSel2);
+    const card2 = list.querySelector(cardSel);
     if (!card2) return true;
     const moved = [];
     card2.querySelectorAll(".txt[data-v]").forEach((p) => {
@@ -17651,7 +17441,7 @@ What is typed here stays in this browser.`;
     return lsGet("eDeckOff") !== "1";
   }
   function deckSlabs(card) {
-    return Array.from(card.querySelectorAll(":scope > .txt[data-v]"));
+    return card.classList.contains("rw-on") ? [] : Array.from(card.querySelectorAll(":scope > .txt[data-v]"));
   }
   function deckPx(n) {
     return Math.round(n * 100) / 100 + "px";
@@ -22063,12 +21853,12 @@ What is typed here stays in this browser.`;
     const t2 = editionText(m, key);
     return (m && +m.alt ? splitPartsRaw(t2) : [t2]).map((s) => s.trim().replace(/\s+/g, " ")).filter(Boolean).join("\n");
   }
-  function editionChanges(held, offered2, layer, textOnly) {
+  function editionChanges(held, offered, layer, textOnly) {
     const lay = layer || {}, ov = lay.overrides || {};
     const gone = new Set(lay.removed || []), stars = new Set(lay.favourites || []);
-    const keys = editionFieldKeys(held, offered2), replies = keys.filter((k) => k.field === "body");
+    const keys = editionFieldKeys(held, offered), replies = keys.filter((k) => k.field === "body");
     const was = new Map((held && held.cards || []).map((m) => [String(m.id), m]));
-    const now = new Map((offered2 && offered2.cards || []).map((m) => [String(m.id), m]));
+    const now = new Map((offered && offered.cards || []).map((m) => [String(m.id), m]));
     const standing = (m, id, b) => {
       if (textOnly) return {};
       if (!cardCommits(m)) return b && cardCommits(b) ? { stamp: "off", commitment: true } : {};
@@ -25729,6 +25519,237 @@ What is typed here stays in this browser.`;
     });
   }
 
+  // src/modules/card-reword.js
+  var card_reword_exports = {};
+  __export(card_reword_exports, {
+    approveReword: () => approveReword,
+    closeRewordMenu: () => closeRewordMenu,
+    openRewordMenu: () => openRewordMenu,
+    revertReword: () => revertReword,
+    rewordAnswersHtml: () => rewordAnswersHtml,
+    rewordButtonHtml: () => rewordButtonHtml,
+    rewordChipHtml: () => rewordChipHtml,
+    rewordHostNow: () => rewordHostNow,
+    rewordKeepsShape: () => rewordKeepsShape,
+    rewordState: () => rewordState,
+    rewordSwitchSet: () => rewordSwitchSet
+  });
+  var ICON_REWORD = _svg("ic", '<path d="M3.5 8h7"/><path d="M3.5 12h13"/><path d="M3.5 16h9"/><path d="M15 2.6c.3 1.9 1 2.6 2.9 2.9-1.9.3-2.6 1-2.9 2.9-.3-1.9-1-2.6-2.9-2.9 1.9-.3 2.6-1 2.9-2.9z"/>');
+  var RW_ACTS = [["shorter", "Shorter"], ["friendlier", "Friendlier"], ["formal", "More formal"]];
+  var rwHostAt = 0;
+  var rwHostWas = "";
+  function rewordHostNow() {
+    const now = Date.now();
+    if (now - rwHostAt < 1e3) return rwHostWas;
+    rwHostAt = now;
+    const h = eHost();
+    let s = null;
+    try {
+      s = h && typeof h.aiState === "function" && typeof h.reword === "function" ? h.aiState() : null;
+    } catch (e) {
+      s = null;
+    }
+    rwHostWas = s && typeof s.reword === "string" ? s.reword : "";
+    return rwHostWas;
+  }
+  function rewordState() {
+    const h = eHost();
+    let s = null;
+    try {
+      s = h && typeof h.aiState === "function" ? h.aiState() : null;
+    } catch (e) {
+      s = null;
+    }
+    return { at: s && typeof s.rewordAt === "string" ? s.rewordAt : "", on: !s || s.rewordOn !== false };
+  }
+  function rewordSwitchSet(on) {
+    const h = eHost();
+    try {
+      if (h && typeof h.setReword === "function") h.setReword(!!on);
+    } catch (e) {
+    }
+    rwHostAt = 0;
+    if (!on) closeRewordMenu();
+  }
+  function rewordButtonHtml() {
+    if (!rewordHostNow()) return "";
+    const w = t("Reword");
+    return '<button type="button" data-act="reword" title="' + esc(w) + '" aria-label="' + esc(w) + '" aria-haspopup="dialog" aria-expanded="false">' + ICON_REWORD + "</button>";
+  }
+  function rewordChipHtml(r) {
+    const act = RW_ACTS.filter((a) => a[0] === r.act)[0];
+    const chip = act ? t("Reworded: {ACT}").split("{ACT}").join(t(act[1])) : t("Reworded as described");
+    return '<div class="rw-chip"><span class="rw-badge">' + esc(chip) + '</span><span class="rw-unsaved" title="' + esc(t("Shown until Etiuda is next opened, unless you approve it.")) + '">' + esc(t("Not saved.")) + "</span></div>";
+  }
+  function rewordAnswersHtml() {
+    return '<div class="rw-ans"><button type="button" class="btn" data-rw="approve" title="' + esc(t("Keep these words as your own edit of the card")) + '">' + esc(t("Approve")) + '</button><button type="button" class="btn" data-rw="revert" title="' + esc(t("Show the card as it was")) + '">' + esc(t("Revert")) + "</button></div>";
+  }
+  var RW_MARK_RE = /^\[(step|alt)(:[^\x5d]*)?\]$/;
+  function rewordTokens(s) {
+    return (String(s == null ? "" : s).match(VAR_TOKEN_RE) || []).slice().sort().join("\n");
+  }
+  function rewordKeepsShape(from, to, alt) {
+    if (!String(to || "").trim() || rewordTokens(from) !== rewordTokens(to)) return false;
+    if (!alt) return true;
+    const a = splitPartsRaw(from), b = splitPartsRaw(to);
+    if (a.length !== b.length) return false;
+    const mark = (p) => {
+      const first = (String(p).split("\n")[0] || "").trim();
+      return RW_MARK_RE.test(first) ? first : "";
+    };
+    const rest = (p) => (mark(p) ? String(p).split("\n").slice(1).join("\n") : String(p)).trim();
+    return a.every((p, i) => mark(p) === mark(b[i]) && rest(b[i]).length > 0);
+  }
+  function rewordPartEmpty(from, to, alt) {
+    if (!alt || rewordTokens(from) !== rewordTokens(to)) return false;
+    const a = splitPartsRaw(from), b = splitPartsRaw(to);
+    if (a.length - b.length) return false;
+    const mark = (p) => {
+      const first = (String(p).split("\n")[0] || "").trim();
+      return RW_MARK_RE.test(first) ? first : "";
+    };
+    const rest = (p) => (mark(p) ? String(p).split("\n").slice(1).join("\n") : String(p)).trim();
+    return a.every((p, i) => mark(p) === mark(b[i])) && b.some((p) => rest(p).length === 0);
+  }
+  var rwMenu = null;
+  var rwAsk = 0;
+  function rwButtonOf(id) {
+    return [...document.querySelectorAll('#list .card[data-id] .cacts [data-act="reword"]')].filter((b) => b.closest(".card").dataset.id === id)[0] || null;
+  }
+  function closeRewordMenu() {
+    if (!rwMenu) return;
+    const was = rwMenu;
+    rwMenu = null;
+    rwAsk++;
+    try {
+      was.drop();
+    } catch (e) {
+    }
+    removeEventListener("mousedown", was.outside, true);
+    dismissNode(was.el);
+    const b = rwButtonOf(was.id);
+    if (b) b.setAttribute("aria-expanded", "false");
+  }
+  function openRewordMenu(btn, id) {
+    if (rwMenu && rwMenu.id === id) {
+      closeRewordMenu();
+      return;
+    }
+    closeRewordMenu();
+    const host = rewordHostNow(), m = findCard(id);
+    if (!host || !m) return;
+    const el = document.createElement("div");
+    el.className = "bub bub-ask rw-bub";
+    el.id = "eReword";
+    el.setAttribute("role", "dialog");
+    el.setAttribute("aria-labelledby", "eRewordTitle");
+    const how = t("Or say how, then press Enter");
+    el.innerHTML = '<h3 id="eRewordTitle">' + esc(t("Reword this card")) + '</h3><div class="tour-actions rw-bacts">' + RW_ACTS.map((a) => '<button type="button" class="btn" data-rw-act="' + a[0] + '">' + esc(t(a[1])) + "</button>").join("") + '</div><input type="text" class="rw-how" id="eRewordHow" maxlength="200" autocomplete="off" spellcheck="false" placeholder="' + esc(how) + '" aria-label="' + esc(how) + '"><p class="rw-bline" role="status"></p><div class="tour-actions"><button type="button" class="btn primary" id="eRewordNo">' + esc(t("Cancel")) + "</button></div>";
+    cutLeaves();
+    document.body.appendChild(el);
+    const line = el.querySelector(".rw-bline"), field = el.querySelector("#eRewordHow");
+    const say = (s) => {
+      line.textContent = String(s || "").split("{ADDRESS}").join(host);
+    };
+    say(t("Sends this card's words to {ADDRESS}. The card itself changes only if you approve the result."));
+    const drop = hangBubble(el, () => rwButtonOf(id), { prefer: "above", width: 340 });
+    const outside = (e) => {
+      if (!el.contains(e.target) && !(e.target.closest && e.target.closest('[data-act="reword"]'))) closeRewordMenu();
+    };
+    addEventListener("mousedown", outside, true);
+    rwMenu = { el, id, drop, outside };
+    btn.setAttribute("aria-expanded", "true");
+    el.addEventListener("click", (e) => {
+      const b = e.target.closest && e.target.closest("button[data-rw-act]");
+      if (b) rewordPress(id, b.getAttribute("data-rw-act"), "", say);
+    });
+    el.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        closeRewordMenu();
+        try {
+          btn.focus({ preventScroll: true });
+        } catch (_) {
+        }
+      } else if (e.key === "Enter" && e.target === field) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (field.value.trim()) rewordPress(id, "own", field.value, say);
+      }
+    });
+    el.querySelector("#eRewordNo").onclick = () => closeRewordMenu();
+    try {
+      el.querySelector("button[data-rw-act]").focus({ preventScroll: true });
+    } catch (e) {
+    }
+  }
+  function rewordPress(id, act, how, say) {
+    const m = findCard(id), h = eHost(), menu = rwMenu;
+    if (!m || !menu || menu.id !== id || !h || typeof h.reword !== "function") return;
+    const L = cardLang(m), from = cardText(m, "body", L);
+    if (!from) return;
+    const mine = ++rwAsk;
+    menu.el.querySelectorAll("button[data-rw-act]").forEach((b) => b.classList.toggle("tour-sel", b.getAttribute("data-rw-act") === act));
+    say(t("Waiting for the service at {ADDRESS}…"));
+    const why = (r) => r && r.why;
+    const fail = (r) => say(why(r) === "late" ? t("The service at {ADDRESS} did not answer in time. The card is as it was.") : why(r) === "busy" ? t("The service at {ADDRESS} is busy; a later try may go through. The card is as it was.") : why(r) === "paused" ? t("The service at {ADDRESS} failed three times in a row, so Etiuda waits before asking it again; nothing was sent. The card is as it was.") : why(r) === "toolong" ? t("These words are over 4000 characters, more than can be sent, so nothing was sent. The card is as it was.") : why(r) === "switch" ? t("Rewording is turned off on this computer, so nothing was sent. The card is as it was.") : why(r) === "model" ? t("The organisation's model is no longer set, so nothing was sent. The card is as it was.") : why(r) === "unavailable" || why(r) === "refused" || why(r) === "off" ? t("Rewording is not available just now, so nothing was sent. The card is as it was.") : t("No result came back from {ADDRESS}. The card is as it was."));
+    Promise.resolve(h.reword({ act, words: from, how: act === "own" ? String(how || "") : "", to: "" })).then((r) => {
+      if (mine !== rwAsk || rwMenu !== menu) return;
+      menu.el.querySelectorAll("button.tour-sel").forEach((b) => b.classList.remove("tour-sel"));
+      if (!r || r.ok !== true || typeof r.text !== "string") {
+        fail(r);
+        return;
+      }
+      if (!rewordKeepsShape(from, r.text, !!m.alt)) {
+        const empty = !String(r.text || "").trim();
+        say(empty ? t("The result came back empty, so it is not shown. The card is as it was; another try may do better.") : rewordPartEmpty(from, r.text, !!m.alt) ? t("One of this card's alternatives came back with no words, so the result is not shown. The card is as it was; another try may do better.") : t("The result lost a name this card fills in, or one of its steps, so it is not shown. The card is as it was; another try may keep them."));
+        return;
+      }
+      const now = findCard(id);
+      closeRewordMenu();
+      if (!now || cardText(now, "body", L) !== from) return;
+      rewordKeep(id, { L, from, text: r.text, act });
+      hooks.rebuildCards();
+    }, () => {
+      if (mine === rwAsk && rwMenu === menu) fail(null);
+    });
+  }
+  function approveReword(id) {
+    const r = REWORDED.get(id), m = findCard(id);
+    REWORDED.delete(id);
+    const key = r ? cardFieldKey("body", r.L) : "";
+    if (!r || !m || !key || cardText(m, "body", r.L) !== r.from) {
+      hooks.rebuildCards();
+      return false;
+    }
+    const moved = { [key]: r.text };
+    if (m._custom) {
+      const ix = (pack.custom || []).findIndex((x) => x && x.id === id);
+      if (ix < 0) {
+        hooks.rebuildCards();
+        return false;
+      }
+      const was = Object.assign({}, pack.custom[ix]);
+      stampChanged(Object.assign(pack.custom[ix], moved), was);
+    } else {
+      const base = baseCard(id);
+      if (!base) {
+        hooks.rebuildCards();
+        return false;
+      }
+      putOverride(id, overrideAgainstBase(base, Object.assign({}, m, moved)));
+    }
+    savePack([id]);
+    hooks.rebuildCards();
+    toast("Card saved");
+    return true;
+  }
+  function revertReword(id) {
+    REWORDED.delete(id);
+    hooks.rebuildCards();
+  }
+
   // src/modules/list-pointer.js
   var cardDrag = null;
   var cardSwapLock = 0;
@@ -26105,12 +26126,15 @@ What is typed here stays in this browser.`;
         txtSuppressClick = false;
         return;
       }
-      const flagMark = e.target.closest('.chead [data-act="flag-answer"]');
-      if (flagMark) {
+      const rwBtn = e.target.closest(".rw-ans button[data-rw]");
+      if (rwBtn) {
         e.preventDefault();
         e.stopPropagation();
-        const card2 = flagMark.closest(".card");
-        if (card2 && card2.dataset.id) showFlagAnswer(card2.dataset.id);
+        const card2 = rwBtn.closest(".card"), id = card2 && card2.dataset.id;
+        if (id) {
+          if (rwBtn.dataset.rw === "approve") approveReword(id);
+          else revertReword(id);
+        }
         return;
       }
       const actBtn = e.target.closest(".cacts button");
@@ -26124,9 +26148,8 @@ What is typed here stays in this browser.`;
           if (id) flipCardsAround(() => toggleFavourite(id));
         } else if (act === "edit") hooks.openCardEditor(id);
         else if (act === "note") toggleNotePane(actBtn, id);
-        else if (act === "flag") {
-          if (id) flagPressed(id);
-        } else if (act === "hide") flipCardsAround(() => hooks.hideCard(id), card2.classList.contains("is-hidden") ? null : { leave: id });
+        else if (act === "reword") openRewordMenu(actBtn, id);
+        else if (act === "hide") flipCardsAround(() => hooks.hideCard(id), card2.classList.contains("is-hidden") ? null : { leave: id });
         return;
       }
       const code = e.target.closest(".swap code");
@@ -26187,9 +26210,10 @@ What is typed here stays in this browser.`;
   function cardBodyHtml(m, i, ctx) {
     const hit = ctx.hit, catHit = ctx.catHit, fav = ctx.fav, band = ctx.band, other = ctx.other, dragTip = ctx.dragTip;
     let cardH = "";
-    cardH += '<div class="card' + (m._hidden ? " is-hidden" : "") + (hit ? " intent-hit" : "") + (catHit ? " cat-hit" : "") + (cardDrag && cardDrag.moved && cardDrag.key === m.id ? " dragging" : "") + '" data-i="' + i + '" data-id="' + esc(m.id || "") + '" data-rank="' + esc(band) + '"' + (catSlot(m.c) >= 0 ? ' data-ec="' + catSlot(m.c) + '"' : "") + ' title="' + esc(dragTip) + '">';
+    const rw = rewordShown(m);
+    cardH += '<div class="card' + (m._hidden ? " is-hidden" : "") + (rw ? " rw-on" : "") + (hit ? " intent-hit" : "") + (catHit ? " cat-hit" : "") + (cardDrag && cardDrag.moved && cardDrag.key === m.id ? " dragging" : "") + '" data-i="' + i + '" data-id="' + esc(m.id || "") + '" data-rank="' + esc(band) + '"' + (catSlot(m.c) >= 0 ? ' data-ec="' + catSlot(m.c) + '"' : "") + ' title="' + esc(dragTip) + '">';
     cardH += '<div class="chead">';
-    cardH += catMarkHtml(m.c) + '<span class="ctitle" data-i18n-skip>' + esc(cardTitle(m)) + "</span>" + (cardCommits(m) ? stampHtml("cstamp") : "") + flagMarkHtml(String(m.id || ""));
+    cardH += catMarkHtml(m.c) + '<span class="ctitle" data-i18n-skip>' + esc(cardTitle(m)) + "</span>" + (cardCommits(m) ? stampHtml("cstamp") : "");
     const hitBadge = '<span class="cbadge hit" title="' + esc(t("Linked to the selected intent")) + '">' + esc(t("Linked")) + "</span>";
     const catBadge = '<span class="cbadge cat" title="' + esc(t("In a supporting category, relevant regardless of the intent")) + '">' + esc(t("Also helps")) + "</span>";
     if (hit) cardH += hitBadge;
@@ -26202,9 +26226,10 @@ What is typed here stays in this browser.`;
     const favTip = t(fav ? "Remove from Favourites" : "Add to Favourites");
     const hideTip = t(m._hidden ? "Show this card again" : fav ? "Put this card away: it greys out at the foot of this category and loses its star" : "Put this card away: it greys out at the foot of this category");
     const _note = noteFor(m);
-    cardH += '<span class="cacts">' + (_note ? '<button type="button" data-act="note" title="' + esc(t("Internal note")) + '" aria-label="' + esc(t("Internal note")) + '" aria-expanded="false">' + _svg("ic", _NOTE) + "</button>" : "") + '<button type="button" data-act="edit" title="' + esc(t("Edit this card")) + '" aria-label="' + esc(t("Edit this card")) + '">' + ICON_EDIT + "</button>" + flagButtonHtml(String(m.id || "")) + '<button type="button" class="' + (m._hidden ? "" : "danger") + '" data-act="hide" title="' + esc(hideTip) + '" aria-label="' + esc(hideTip) + '">' + (m._hidden ? ICON_EYE_SHUT : ICON_EYE_OPEN) + '</button><button type="button" class="star-btn' + (fav ? " on" : "") + '" data-act="fav" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
+    cardH += '<span class="cacts">' + rewordButtonHtml() + (_note ? '<button type="button" data-act="note" title="' + esc(t("Internal note")) + '" aria-label="' + esc(t("Internal note")) + '" aria-expanded="false">' + _svg("ic", _NOTE) + "</button>" : "") + '<button type="button" data-act="edit" title="' + esc(t("Edit this card")) + '" aria-label="' + esc(t("Edit this card")) + '">' + ICON_EDIT + '</button><button type="button" class="' + (m._hidden ? "" : "danger") + '" data-act="hide" title="' + esc(hideTip) + '" aria-label="' + esc(hideTip) + '">' + (m._hidden ? ICON_EYE_SHUT : ICON_EYE_OPEN) + '</button><button type="button" class="star-btn' + (fav ? " on" : "") + '" data-act="fav" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
     const _L = cardLang(m);
     const ps = parts(m, _L), cls = _L === CONTENT_LANGS[0] ? "" : " plx", edDiff = editionDiffParts(m, _L, ps);
+    if (rw) cardH += rewordChipHtml(rw);
     if (ps.length) {
       const many = ps.length > 1, word = m.seq ? t("STEP") : _L.toUpperCase();
       cardH += ps.map((p, vi) => {
@@ -26216,6 +26241,7 @@ What is typed here stays in this browser.`;
     } else {
       cardH += '<div class="miss">' + esc(t("No {LANG} version for this card").replace("{LANG}", _L.toUpperCase())) + " - " + esc(t("switch to {LANG} to use it").replace("{LANG}", other.toUpperCase())) + ".</div>";
     }
+    if (rw) cardH += rewordAnswersHtml();
     const sws = lang === "pl" ? m.swpl || m.sw : m.sw || m.swpl;
     if (sws && !railActive()) cardH += swapStripHtml(sws);
     cardH += "</div>";
@@ -26272,7 +26298,7 @@ What is typed here stays in this browser.`;
     cardPool = /* @__PURE__ */ new Map();
   }
   function patchCard(el, it) {
-    el.className = "card" + (it.hidden ? " is-hidden" : "") + (it.hit ? " intent-hit" : "") + (it.catHit ? " cat-hit" : "") + (it.dragging ? " dragging" : "") + deckCarry(el);
+    el.className = "card" + (it.hidden ? " is-hidden" : "") + (it.rw ? " rw-on" : "") + (it.hit ? " intent-hit" : "") + (it.catHit ? " cat-hit" : "") + (it.dragging ? " dragging" : "") + deckCarry(el);
     el.setAttribute("title", it.dragTip);
     el.setAttribute("data-i", it.i);
     el.setAttribute("data-rank", it.band);
@@ -26280,18 +26306,17 @@ What is typed here stays in this browser.`;
     if (!head) return;
     const anchor = head.querySelector(".cstamp") || head.querySelector(".ctitle");
     if (!anchor) return;
-    const after = head.querySelector(":scope>.cflag") || anchor;
     let hitB = head.querySelector(".cbadge.hit"), catB = head.querySelector(".cbadge.cat");
     if (it.hit && !hitB) {
       hitB = parseCardHtml(it.body().hitBadge);
-      after.insertAdjacentElement("afterend", hitB);
+      anchor.insertAdjacentElement("afterend", hitB);
     } else if (!it.hit && hitB) {
       hitB.remove();
       hitB = null;
     }
     if (it.catHit && !catB) {
       catB = parseCardHtml(it.body().catBadge);
-      (hitB || after).insertAdjacentElement("afterend", catB);
+      (hitB || anchor).insertAdjacentElement("afterend", catB);
     } else if (!it.catHit && catB) {
       catB.remove();
     }
@@ -26333,7 +26358,7 @@ What is typed here stays in this browser.`;
     );
     const fresh = parseCardHtml(b.cardH);
     if (!fresh) return;
-    fresh.__sig = ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1) + "|" + editionMarkSig(m.id) + "|" + flagSig(String(m.id || ""));
+    fresh.__sig = ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1) + "|" + editionMarkSig(m.id) + "|" + rewordSig(m.id);
     const ord = el.getAttribute("data-ord");
     if (ord != null) fresh.setAttribute("data-ord", ord);
     deckUnobserve(el);
@@ -26405,49 +26430,11 @@ What is typed here stays in this browser.`;
     if (window.__verifyPool) verifyPool(items);
     list.replaceChildren(frag);
   }
-  var POST_PAINT_CLASS = /^(?:deck(?:-[a-z]+)?|is-cut|cut-(?:l|r|rh|b))$/;
-  var DECK_STYLE_PROP = /^--deck-[a-z-]+\s*:/;
   function normAttrOrder(el) {
     return el.outerHTML.replace(
       /<([a-zA-Z][\w-]*)((?:\s+[\w:-]+(?:="[^"]*")?)*)(\s*\/?)>/g,
       (m, name, attrs, close) => {
-        const raw = (attrs || "").match(/[\w:-]+(?:="[^"]*")?/g) || [];
-        let hasDeck = false;
-        for (let i = 0; i < raw.length; i++) {
-          if (raw[i].indexOf('class="') === 0 && /\bdeck\b/.test(raw[i])) {
-            hasDeck = true;
-            break;
-          }
-        }
-        const got = [];
-        for (let i = 0; i < raw.length; i++) {
-          const a = raw[i];
-          if (a.indexOf("data-ord") === 0 || a.indexOf("data-erec") === 0) continue;
-          if (a.indexOf('class="') === 0) {
-            const cls = a.slice(7, -1).split(/\s+/).filter((c) => c && !POST_PAINT_CLASS.test(c));
-            if (cls.length) got.push('class="' + cls.join(" ") + '"');
-            continue;
-          }
-          if (a.indexOf('style="') === 0) {
-            let s = a.slice(7, -1).trim();
-            const hasDeckStyle = hasDeck || /(?:^|;)\s*--deck-/.test(s);
-            if (s && hasDeckStyle) {
-              const hasRest = /(?:^|;)\s*--deck-rest-bottom\s*:/.test(s);
-              const rem = s.split(";").map((d) => d.trim()).filter((d) => {
-                if (!d || DECK_STYLE_PROP.test(d)) return false;
-                if ((hasDeck || hasRest) && /^height\s*:/.test(d)) return false;
-                return true;
-              });
-              s = rem.length ? rem.map((d) => d + ";").join(" ") : "";
-            }
-            if (!s) {
-              continue;
-            }
-            got.push('style="' + s + '"');
-            continue;
-          }
-          got.push(a);
-        }
+        const got = ((attrs || "").match(/[\w:-]+(?:="[^"]*")?/g) || []).filter((a) => a.indexOf("data-ord") !== 0);
         return "<" + name + (got.length ? " " + got.sort().join(" ") : "") + close + ">";
       }
     );
@@ -28010,7 +27997,6 @@ What is typed here stays in this browser.`;
     closeNotePane();
     edSubjectSoon();
     cancelLangChunks();
-    flagFrame();
     const terms = cardSearchTerms();
     scheduleSearchRank();
     syncPillCounts();
@@ -28101,10 +28087,11 @@ What is typed here stays in this browser.`;
         sepH,
         body,
         id: m.id,
-        sig: ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1) + "|" + editionMarkSig(m.id) + "|" + flagSig(String(m.id || "")),
+        sig: ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1) + "|" + editionMarkSig(m.id) + "|" + rewordSig(m.id),
         hit,
         catHit,
         hidden: !!m._hidden,
+        rw: !!rewordShown(m),
         i,
         band,
         dragging: !!(cardDrag && cardDrag.moved && cardDrag.key === m.id),
@@ -28183,7 +28170,7 @@ What is typed here stays in this browser.`;
   var STARDUST_URL = "https://stardustcore.com";
   var MAKER = { en: "Made by {STARDUST}.", pl: "Etiuda. Tworzy ją {STARDUST}." };
   var TERMS = { en: "Free for your own affairs; at work, each person has a subscription of their own.", pl: "Do własnych spraw bezpłatnie; w pracy każda osoba ma własną subskrypcję." };
-  var EULA = { en: "Etiuda End-User Licence Agreement\n\nStardust Maxim Gwiazda, NIP 5242711262, Poland. This licence covers Etiuda and Etiuda Studio.\n\nThe licence. Etiuda is licensed to you, not sold: the right to install and use the software on the terms below. This licence governs the program as it is installed from either installer. The Etiuda Source-Available Licence 1.0 governs the published source, and each keeps to its own.\n\nSeats. A licence covers one named person and up to three devices they work on. An organisation holds a licence for each person who uses the software. Etiuda Studio is covered by the licence that includes it, held for each author an organisation names.\n\nPersonal use and work. Etiuda is free for your own affairs. A licence is bought when the software is used for work, whether for an employer, a client, or a business of your own.\n\nTrial. An organisation may use Etiuda in full for fourteen days to see whether it suits the work. After that a licence is bought, or the software is removed.\n\nUpdates. A licence carries the versions released in the twelve months after purchase, and the last of those stays in use without limit of time. Etiuda does not update itself.\n\nPrivacy. An organisation's catalogs, and everything its people and its customers write, can be read by the organisation alone: neither Etiuda nor Etiuda Studio sends them to us or to anyone else in a form that can be read. A team that carries its files through our relay instead of a shared folder sends them sealed on its own computers, and the relay cannot open them. It sees only random identifiers, the public keys of the team's devices, which file replaces which, each file's size rounded up and the time it was sent, and the IP address and time of each connection, and so how often each device writes. From the signed pass that comes with the licence and admits the team to the relay, it learns only the lead's public key, when the pass was issued and when it ends, and whether the licence is paid; the pass holds no name, no email address and no payment details. The files are stored in the European Union and may pass, still sealed, through Cloudflare's network elsewhere. When and why the programs connect to us is set out in the privacy notice on etiuda.dev.\n\nTransfer. A licence stays with the person named on it and may not be sold, rented, lent or sublicensed. When that person leaves, an organisation may name a colleague instead.\n\nWarranty. The software is supplied as it stands, without a promise that it fits a particular purpose or runs without fault. Nothing here narrows the rights a consumer holds by law.\n\nLiability. Our liability is limited to what was paid for the licence in the twelve months before the claim; lost profit, lost time and lost or damaged data are excluded. Liability for death or personal injury caused by our negligence, for fraud, and wherever the law forbids a limit, is unlimited.\n\nTermination. The licence ends whenever you remove the software. We may end it if its terms are broken and not put right within thirty days of our asking, and the software is then removed from every device.\n\nGoverning law. Polish law governs this licence. A consumer may bring a claim before the courts of their own country; other claims go to the courts of the seller's registered seat.\n\nBuilt-in model. When this installer includes the built-in suggestion model, that model is EmbeddingGemma 2, Google DeepMind, Apache 2.0. The conversion to ONNX and the quantisation, made by Maxim Gwiazda on 9 November 2026, modify the original weights. The program does not fetch the model. An install without it suggests from matching words alone.\n\nThe model is published under the Apache Licence 2.0. Its text follows.\n\nApache License\nVersion 2.0, January 2004\nhttp://www.apache.org/licenses/\n\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\n\n1. Definitions.\n\n\"License\" shall mean the terms and conditions for use, reproduction, and distribution as defined by Sections 1 through 9 of this document.\n\n\"Licensor\" shall mean the copyright owner or entity authorized by the copyright owner that is granting the License.\n\n\"Legal Entity\" shall mean the union of the acting entity and all other entities that control, are controlled by, or are under common control with that entity. For the purposes of this definition, \"control\" means (i) the power, direct or indirect, to cause the direction or management of such entity, whether by contract or otherwise, or (ii) ownership of fifty percent (50%) or more of the outstanding shares, or (iii) beneficial ownership of such entity.\n\n\"You\" (or \"Your\") shall mean an individual or Legal Entity exercising permissions granted by this License.\n\n\"Source\" form shall mean the preferred form for making modifications, including but not limited to software source code, documentation source, and configuration files.\n\n\"Object\" form shall mean any form resulting from mechanical transformation or translation of a Source form, including but not limited to compiled object code, generated documentation, and conversions to other media types.\n\n\"Work\" shall mean the work of authorship, whether in Source or Object form, made available under the License, as indicated by a copyright notice that is included in or attached to the work (an example is provided in the Appendix below).\n\n\"Derivative Works\" shall mean any work, whether in Source or Object form, that is based on (or derived from) the Work and for which the editorial revisions, annotations, elaborations, or other modifications represent, as a whole, an original work of authorship. For the purposes of this License, Derivative Works shall not include works that remain separable from, or merely link (or bind by name) to the interfaces of, the Work and Derivative Works thereof.\n\n\"Contribution\" shall mean any work of authorship, including the original version of the Work and any modifications or additions to that Work or Derivative Works thereof, that is intentionally submitted to Licensor for inclusion in the Work by the copyright owner or by an individual or Legal Entity authorized to submit on behalf of the copyright owner. For the purposes of this definition, \"submitted\" means any form of electronic, verbal, or written communication sent to the Licensor or its representatives, including but not limited to communication on electronic mailing lists, source code control systems, and issue tracking systems that are managed by, or on behalf of, the Licensor for the purpose of discussing and improving the Work, but excluding communication that is conspicuously marked or otherwise designated in writing by the copyright owner as \"Not a Contribution.\"\n\n\"Contributor\" shall mean Licensor and any individual or Legal Entity on behalf of whom a Contribution has been received by Licensor and subsequently incorporated within the Work.\n\n2. Grant of Copyright License. Subject to the terms and conditions of this License, each Contributor hereby grants to You a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable copyright license to reproduce, prepare Derivative Works of, publicly display, publicly perform, sublicense, and distribute the Work and such Derivative Works in Source or Object form.\n\n3. Grant of Patent License. Subject to the terms and conditions of this License, each Contributor hereby grants to You a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable (except as stated in this section) patent license to make, have made, use, offer to sell, sell, import, and otherwise transfer the Work, where such license applies only to those patent claims licensable by such Contributor that are necessarily infringed by their Contribution(s) alone or by combination of their Contribution(s) with the Work to which such Contribution(s) was submitted. If You institute patent litigation against any entity (including a cross-claim or counterclaim in a lawsuit) alleging that the Work or a Contribution incorporated within the Work constitutes direct or contributory patent infringement, then any patent licenses granted to You under this License for that Work shall terminate as of the date such litigation is filed.\n\n4. Redistribution. You may reproduce and distribute copies of the Work or Derivative Works thereof in any medium, with or without modifications, and in Source or Object form, provided that You meet the following conditions:\n\n(a) You must give any other recipients of the Work or Derivative Works a copy of this License; and\n\n(b) You must cause any modified files to carry prominent notices stating that You changed the files; and\n\n(c) You must retain, in the Source form of any Derivative Works that You distribute, all copyright, patent, trademark, and attribution notices from the Source form of the Work, excluding those notices that do not pertain to any part of the Derivative Works; and\n\n(d) If the Work includes a \"NOTICE\" text file as part of its distribution, then any Derivative Works that You distribute must include a readable copy of the attribution notices contained within such NOTICE file, excluding those notices that do not pertain to any part of the Derivative Works, in at least one of the following places: within a NOTICE text file distributed as part of the Derivative Works; within the Source form or documentation, if provided along with the Derivative Works; or, within a display generated by the Derivative Works, if and wherever such third-party notices normally appear. The contents of the NOTICE file are for informational purposes only and do not modify the License. You may add Your own attribution notices within Derivative Works that You distribute, alongside or as an addendum to the NOTICE text from the Work, provided that such additional attribution notices cannot be construed as modifying the License.\n\nYou may add Your own copyright statement to Your modifications and may provide additional or different license terms and conditions for use, reproduction, or distribution of Your modifications, or for any such Derivative Works as a whole, provided Your use, reproduction, and distribution of the Work otherwise complies with the conditions stated in this License.\n\n5. Submission of Contributions. Unless You explicitly state otherwise, any Contribution intentionally submitted for inclusion in the Work by You to the Licensor shall be under the terms and conditions of this License, without any additional terms or conditions. Notwithstanding the above, nothing herein shall supersede or modify the terms of any separate license agreement you may have executed with Licensor regarding such Contributions.\n\n6. Trademarks. This License does not grant permission to use the trade names, trademarks, service marks, or product names of the Licensor, except as required for reasonable and customary use in describing the origin of the Work and reproducing the content of the NOTICE file.\n\n7. Disclaimer of Warranty. Unless required by applicable law or agreed to in writing, Licensor provides the Work (and each Contributor provides its Contributions) on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. You are solely responsible for determining the appropriateness of using or redistributing the Work and assume any risks associated with Your exercise of permissions under this License.\n\n8. Limitation of Liability. In no event and under no legal theory, whether in tort (including negligence), contract, or otherwise, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing, shall any Contributor be liable to You for damages, including any direct, indirect, special, incidental, or consequential damages of any character arising as a result of this License or out of the use or inability to use the Work (including but not limited to damages for loss of goodwill, work stoppage, computer failure or malfunction, or any and all other commercial damages or losses), even if such Contributor has been advised of the possibility of such damages.\n\n9. Accepting Warranty or Additional Liability. While redistributing the Work or Derivative Works thereof, You may choose to offer, and charge a fee for, acceptance of support, warranty, indemnity, or other liability obligations and/or rights consistent with this License. However, in accepting such obligations, You may act only on Your own behalf and on Your sole responsibility, not on behalf of any other Contributor, and only if You agree to indemnify, defend, and hold each Contributor harmless for any liability incurred by, or claims asserted against, such Contributor by reason of your accepting any such warranty or additional liability.\n\nEND OF TERMS AND CONDITIONS\n\nEtiuda is a trademark of Maxim Gwiazda.\n", pl: "Umowa licencyjna użytkownika końcowego Etiudy\n\nStardust Maxim Gwiazda, NIP 5242711262, Polska. Licencja obejmuje Etiudę i Etiudę Studio.\n\nLicencja. Etiuda jest licencjonowana, a nie sprzedawana: to prawo do zainstalowania i używania oprogramowania na warunkach poniżej. Ta licencja reguluje program zainstalowany z któregokolwiek z instalatorów. Opublikowany kod źródłowy reguluje Licencja Etiuda Source-Available 1.0, a każdy z tych dokumentów zostaje przy swoim.\n\nStanowiska. Licencja obejmuje jedną wskazaną z imienia i nazwiska osobę oraz do trzech urządzeń, na których ta osoba pracuje. Organizacja ma licencję dla każdej osoby, która korzysta z oprogramowania. Etiuda Studio jest objęta licencją, która ją zawiera, po jednej na każdego autora wskazanego przez organizację.\n\nUżytek własny i praca. Do własnych spraw Etiuda jest bezpłatna. Licencję kupuje się wtedy, gdy oprogramowanie służy pracy: dla pracodawcy, dla klienta albo we własnej firmie.\n\nOkres próbny. Organizacja może korzystać z pełnej Etiudy przez czternaście dni i sprawdzić, czy narzędzie odpowiada jej pracy. Potem kupuje licencję albo usuwa oprogramowanie.\n\nAktualizacje. Licencja obejmuje wersje wydane w ciągu dwunastu miesięcy od zakupu, a ostatnia z nich zostaje do używania bez ograniczenia w czasie. Etiuda nie aktualizuje się sama.\n\nPrywatność. Katalogi organizacji i wszystko, co piszą jej pracownicy i klienci, może przeczytać tylko sama organizacja: ani Etiuda, ani Etiuda Studio nie wysyłają tych treści do nas ani do nikogo innego w postaci, którą dałoby się odczytać. Zespół, który wymienia pliki przez nasz przekaźnik zamiast przez wspólny folder, wysyła je zapieczętowane jeszcze na własnych komputerach, a przekaźnik nie potrafi ich otworzyć. Widzi tylko losowe identyfikatory, klucze publiczne urządzeń zespołu, to, który plik zastępuje który, rozmiar każdego pliku zaokrąglony w górę i czas jego wysłania oraz adres IP i czas każdego połączenia, a z tego także, jak często które urządzenie zapisuje. Z podpisanej przepustki, która wraz z licencją otwiera zespołowi przekaźnik, poznaje tylko klucz publiczny lidera, datę wystawienia przepustki i jej koniec oraz to, czy licencja jest opłacona; nie ma w niej nazwy, adresu e-mail ani danych płatności. Pliki są przechowywane w Unii Europejskiej, a po drodze mogą, nadal zapieczętowane, przejść przez sieć Cloudflare poza nią. Kiedy i po co programy łączą się z nami, opisuje polityka prywatności na etiuda.dev.\n\nPrzeniesienie. Licencja zostaje przy osobie, na którą została wystawiona, i nie podlega sprzedaży, najmowi, użyczeniu ani dalszemu licencjonowaniu. Gdy ta osoba odchodzi, organizacja może wskazać na jej miejsce kogoś innego.\n\nZapewnienia. Oprogramowanie jest udostępniane w takiej postaci, w jakiej jest, bez zapewnienia, że nadaje się do określonego celu albo że działa bez usterek. Nic w tej licencji nie uszczupla praw, które przysługują konsumentowi z mocy prawa.\n\nOdpowiedzialność. Nasza odpowiedzialność ogranicza się do kwoty zapłaconej za licencję w ciągu dwunastu miesięcy przed zgłoszeniem roszczenia; nie obejmuje utraconych korzyści, straconego czasu ani utraty lub uszkodzenia danych. Odpowiedzialność za śmierć lub uszczerbek na zdrowiu wskutek naszego niedbalstwa, za oszustwo oraz wszędzie tam, gdzie prawo nie dopuszcza ograniczenia, pozostaje nieograniczona.\n\nZakończenie. Licencja kończy się, kiedy usuwasz oprogramowanie. Możemy ją zakończyć, jeśli jej warunki zostaną naruszone i naruszenie nie ustanie w ciągu trzydziestu dni od naszego wezwania; wtedy oprogramowanie usuwa się z każdego urządzenia.\n\nPrawo właściwe. Licencję reguluje prawo polskie. Konsument może wnieść sprawę przed sąd swojego kraju; pozostałe sprawy rozpatrują sądy właściwe dla siedziby sprzedawcy.\n\nWbudowany model. Gdy ten instalator zawiera wbudowany model podpowiedzi, jest to EmbeddingGemma 2, Google DeepMind, Apache 2.0. Konwersja do ONNX i kwantyzacja, wykonane przez Maxima Gwiazdę 9 listopada 2026 r., zmieniają oryginalne wagi. Program nie pobiera tego modelu. Instalacja bez niego podpowiada wyłącznie przez dopasowanie słów.\n\nModel jest publikowany na licencji Apache 2.0. Dalej jest jej tekst.\n\nApache License\nVersion 2.0, January 2004\nhttp://www.apache.org/licenses/\n\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\n\n1. Definitions.\n\n\"License\" shall mean the terms and conditions for use, reproduction, and distribution as defined by Sections 1 through 9 of this document.\n\n\"Licensor\" shall mean the copyright owner or entity authorized by the copyright owner that is granting the License.\n\n\"Legal Entity\" shall mean the union of the acting entity and all other entities that control, are controlled by, or are under common control with that entity. For the purposes of this definition, \"control\" means (i) the power, direct or indirect, to cause the direction or management of such entity, whether by contract or otherwise, or (ii) ownership of fifty percent (50%) or more of the outstanding shares, or (iii) beneficial ownership of such entity.\n\n\"You\" (or \"Your\") shall mean an individual or Legal Entity exercising permissions granted by this License.\n\n\"Source\" form shall mean the preferred form for making modifications, including but not limited to software source code, documentation source, and configuration files.\n\n\"Object\" form shall mean any form resulting from mechanical transformation or translation of a Source form, including but not limited to compiled object code, generated documentation, and conversions to other media types.\n\n\"Work\" shall mean the work of authorship, whether in Source or Object form, made available under the License, as indicated by a copyright notice that is included in or attached to the work (an example is provided in the Appendix below).\n\n\"Derivative Works\" shall mean any work, whether in Source or Object form, that is based on (or derived from) the Work and for which the editorial revisions, annotations, elaborations, or other modifications represent, as a whole, an original work of authorship. For the purposes of this License, Derivative Works shall not include works that remain separable from, or merely link (or bind by name) to the interfaces of, the Work and Derivative Works thereof.\n\n\"Contribution\" shall mean any work of authorship, including the original version of the Work and any modifications or additions to that Work or Derivative Works thereof, that is intentionally submitted to Licensor for inclusion in the Work by the copyright owner or by an individual or Legal Entity authorized to submit on behalf of the copyright owner. For the purposes of this definition, \"submitted\" means any form of electronic, verbal, or written communication sent to the Licensor or its representatives, including but not limited to communication on electronic mailing lists, source code control systems, and issue tracking systems that are managed by, or on behalf of, the Licensor for the purpose of discussing and improving the Work, but excluding communication that is conspicuously marked or otherwise designated in writing by the copyright owner as \"Not a Contribution.\"\n\n\"Contributor\" shall mean Licensor and any individual or Legal Entity on behalf of whom a Contribution has been received by Licensor and subsequently incorporated within the Work.\n\n2. Grant of Copyright License. Subject to the terms and conditions of this License, each Contributor hereby grants to You a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable copyright license to reproduce, prepare Derivative Works of, publicly display, publicly perform, sublicense, and distribute the Work and such Derivative Works in Source or Object form.\n\n3. Grant of Patent License. Subject to the terms and conditions of this License, each Contributor hereby grants to You a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable (except as stated in this section) patent license to make, have made, use, offer to sell, sell, import, and otherwise transfer the Work, where such license applies only to those patent claims licensable by such Contributor that are necessarily infringed by their Contribution(s) alone or by combination of their Contribution(s) with the Work to which such Contribution(s) was submitted. If You institute patent litigation against any entity (including a cross-claim or counterclaim in a lawsuit) alleging that the Work or a Contribution incorporated within the Work constitutes direct or contributory patent infringement, then any patent licenses granted to You under this License for that Work shall terminate as of the date such litigation is filed.\n\n4. Redistribution. You may reproduce and distribute copies of the Work or Derivative Works thereof in any medium, with or without modifications, and in Source or Object form, provided that You meet the following conditions:\n\n(a) You must give any other recipients of the Work or Derivative Works a copy of this License; and\n\n(b) You must cause any modified files to carry prominent notices stating that You changed the files; and\n\n(c) You must retain, in the Source form of any Derivative Works that You distribute, all copyright, patent, trademark, and attribution notices from the Source form of the Work, excluding those notices that do not pertain to any part of the Derivative Works; and\n\n(d) If the Work includes a \"NOTICE\" text file as part of its distribution, then any Derivative Works that You distribute must include a readable copy of the attribution notices contained within such NOTICE file, excluding those notices that do not pertain to any part of the Derivative Works, in at least one of the following places: within a NOTICE text file distributed as part of the Derivative Works; within the Source form or documentation, if provided along with the Derivative Works; or, within a display generated by the Derivative Works, if and wherever such third-party notices normally appear. The contents of the NOTICE file are for informational purposes only and do not modify the License. You may add Your own attribution notices within Derivative Works that You distribute, alongside or as an addendum to the NOTICE text from the Work, provided that such additional attribution notices cannot be construed as modifying the License.\n\nYou may add Your own copyright statement to Your modifications and may provide additional or different license terms and conditions for use, reproduction, or distribution of Your modifications, or for any such Derivative Works as a whole, provided Your use, reproduction, and distribution of the Work otherwise complies with the conditions stated in this License.\n\n5. Submission of Contributions. Unless You explicitly state otherwise, any Contribution intentionally submitted for inclusion in the Work by You to the Licensor shall be under the terms and conditions of this License, without any additional terms or conditions. Notwithstanding the above, nothing herein shall supersede or modify the terms of any separate license agreement you may have executed with Licensor regarding such Contributions.\n\n6. Trademarks. This License does not grant permission to use the trade names, trademarks, service marks, or product names of the Licensor, except as required for reasonable and customary use in describing the origin of the Work and reproducing the content of the NOTICE file.\n\n7. Disclaimer of Warranty. Unless required by applicable law or agreed to in writing, Licensor provides the Work (and each Contributor provides its Contributions) on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. You are solely responsible for determining the appropriateness of using or redistributing the Work and assume any risks associated with Your exercise of permissions under this License.\n\n8. Limitation of Liability. In no event and under no legal theory, whether in tort (including negligence), contract, or otherwise, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing, shall any Contributor be liable to You for damages, including any direct, indirect, special, incidental, or consequential damages of any character arising as a result of this License or out of the use or inability to use the Work (including but not limited to damages for loss of goodwill, work stoppage, computer failure or malfunction, or any and all other commercial damages or losses), even if such Contributor has been advised of the possibility of such damages.\n\n9. Accepting Warranty or Additional Liability. While redistributing the Work or Derivative Works thereof, You may choose to offer, and charge a fee for, acceptance of support, warranty, indemnity, or other liability obligations and/or rights consistent with this License. However, in accepting such obligations, You may act only on Your own behalf and on Your sole responsibility, not on behalf of any other Contributor, and only if You agree to indemnify, defend, and hold each Contributor harmless for any liability incurred by, or claims asserted against, such Contributor by reason of your accepting any such warranty or additional liability.\n\nEND OF TERMS AND CONDITIONS\n\nEtiuda jest znakiem towarowym Maxima Gwiazdy.\n" };
+  var EULA = { en: "Etiuda End-User Licence Agreement\n\nStardust Maxim Gwiazda, NIP 5242711262, Poland. This licence covers Etiuda and Etiuda Studio.\n\nThe licence. Etiuda is licensed to you, not sold: the right to install and use the software on the terms below. This licence governs the program as it is installed from either installer. The Etiuda Source-Available Licence 1.0 governs the published source, and each keeps to its own.\n\nSeats. A licence covers one named person and up to three devices they work on. An organisation holds a licence for each person who uses the software. Etiuda Studio is covered by the licence that includes it, held for each author an organisation names.\n\nPersonal use and work. Etiuda is free for your own affairs. A licence is bought when the software is used for work, whether for an employer, a client, or a business of your own.\n\nTrial. An organisation may use Etiuda in full for fourteen days to see whether it suits the work. After that a licence is bought, or the software is removed.\n\nUpdates. A licence carries the versions released in the twelve months after purchase, and the last of those stays in use without limit of time. Etiuda does not update itself.\n\nPrivacy. An organisation's catalogs, and everything its people and its customers write, can be read by the organisation alone: neither Etiuda nor Etiuda Studio sends them, in a form that can be read, to us or to anyone else, except to an AI service the organisation itself sets up in the programs' settings or by machine policy. Etiuda's Settings name what Etiuda sends to that service, and Etiuda sends it nothing while that use is turned off. A team that carries its files through our relay instead of a shared folder sends them sealed on its own computers, and the relay cannot open them. It sees only random identifiers, the public keys of the team's devices, which file replaces which, each file's size rounded up and the time it was sent, and the IP address and time of each connection, and so how often each device writes. From the signed pass that comes with the licence and admits the team to the relay, it learns only the lead's public key, when the pass was issued and when it ends, and whether the licence is paid; the pass holds no name, no email address and no payment details. The files are stored in the European Union and may pass, still sealed, through Cloudflare's network elsewhere. When and why the programs connect to us is set out in the privacy notice on etiuda.dev.\n\nTransfer. A licence stays with the person named on it and may not be sold, rented, lent or sublicensed. When that person leaves, an organisation may name a colleague instead.\n\nWarranty. The software is supplied as it stands, without a promise that it fits a particular purpose or runs without fault. Nothing here narrows the rights a consumer holds by law.\n\nLiability. Our liability is limited to what was paid for the licence in the twelve months before the claim; lost profit, lost time and lost or damaged data are excluded. Liability for death or personal injury caused by our negligence, for fraud, and wherever the law forbids a limit, is unlimited.\n\nTermination. The licence ends whenever you remove the software. We may end it if its terms are broken and not put right within thirty days of our asking, and the software is then removed from every device.\n\nGoverning law. Polish law governs this licence. A consumer may bring a claim before the courts of their own country; other claims go to the courts of the seller's registered seat.\n\nBuilt-in model. When this installer includes the built-in suggestion model, that model is EmbeddingGemma 2, Google DeepMind, Apache 2.0. The conversion to ONNX and the quantisation, made by Maxim Gwiazda on 9 November 2026, modify the original weights. The program does not fetch the model. An install without it suggests from matching words alone.\n\nThe model is published under the Apache Licence 2.0. Its text follows.\n\nApache License\nVersion 2.0, January 2004\nhttp://www.apache.org/licenses/\n\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\n\n1. Definitions.\n\n\"License\" shall mean the terms and conditions for use, reproduction, and distribution as defined by Sections 1 through 9 of this document.\n\n\"Licensor\" shall mean the copyright owner or entity authorized by the copyright owner that is granting the License.\n\n\"Legal Entity\" shall mean the union of the acting entity and all other entities that control, are controlled by, or are under common control with that entity. For the purposes of this definition, \"control\" means (i) the power, direct or indirect, to cause the direction or management of such entity, whether by contract or otherwise, or (ii) ownership of fifty percent (50%) or more of the outstanding shares, or (iii) beneficial ownership of such entity.\n\n\"You\" (or \"Your\") shall mean an individual or Legal Entity exercising permissions granted by this License.\n\n\"Source\" form shall mean the preferred form for making modifications, including but not limited to software source code, documentation source, and configuration files.\n\n\"Object\" form shall mean any form resulting from mechanical transformation or translation of a Source form, including but not limited to compiled object code, generated documentation, and conversions to other media types.\n\n\"Work\" shall mean the work of authorship, whether in Source or Object form, made available under the License, as indicated by a copyright notice that is included in or attached to the work (an example is provided in the Appendix below).\n\n\"Derivative Works\" shall mean any work, whether in Source or Object form, that is based on (or derived from) the Work and for which the editorial revisions, annotations, elaborations, or other modifications represent, as a whole, an original work of authorship. For the purposes of this License, Derivative Works shall not include works that remain separable from, or merely link (or bind by name) to the interfaces of, the Work and Derivative Works thereof.\n\n\"Contribution\" shall mean any work of authorship, including the original version of the Work and any modifications or additions to that Work or Derivative Works thereof, that is intentionally submitted to Licensor for inclusion in the Work by the copyright owner or by an individual or Legal Entity authorized to submit on behalf of the copyright owner. For the purposes of this definition, \"submitted\" means any form of electronic, verbal, or written communication sent to the Licensor or its representatives, including but not limited to communication on electronic mailing lists, source code control systems, and issue tracking systems that are managed by, or on behalf of, the Licensor for the purpose of discussing and improving the Work, but excluding communication that is conspicuously marked or otherwise designated in writing by the copyright owner as \"Not a Contribution.\"\n\n\"Contributor\" shall mean Licensor and any individual or Legal Entity on behalf of whom a Contribution has been received by Licensor and subsequently incorporated within the Work.\n\n2. Grant of Copyright License. Subject to the terms and conditions of this License, each Contributor hereby grants to You a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable copyright license to reproduce, prepare Derivative Works of, publicly display, publicly perform, sublicense, and distribute the Work and such Derivative Works in Source or Object form.\n\n3. Grant of Patent License. Subject to the terms and conditions of this License, each Contributor hereby grants to You a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable (except as stated in this section) patent license to make, have made, use, offer to sell, sell, import, and otherwise transfer the Work, where such license applies only to those patent claims licensable by such Contributor that are necessarily infringed by their Contribution(s) alone or by combination of their Contribution(s) with the Work to which such Contribution(s) was submitted. If You institute patent litigation against any entity (including a cross-claim or counterclaim in a lawsuit) alleging that the Work or a Contribution incorporated within the Work constitutes direct or contributory patent infringement, then any patent licenses granted to You under this License for that Work shall terminate as of the date such litigation is filed.\n\n4. Redistribution. You may reproduce and distribute copies of the Work or Derivative Works thereof in any medium, with or without modifications, and in Source or Object form, provided that You meet the following conditions:\n\n(a) You must give any other recipients of the Work or Derivative Works a copy of this License; and\n\n(b) You must cause any modified files to carry prominent notices stating that You changed the files; and\n\n(c) You must retain, in the Source form of any Derivative Works that You distribute, all copyright, patent, trademark, and attribution notices from the Source form of the Work, excluding those notices that do not pertain to any part of the Derivative Works; and\n\n(d) If the Work includes a \"NOTICE\" text file as part of its distribution, then any Derivative Works that You distribute must include a readable copy of the attribution notices contained within such NOTICE file, excluding those notices that do not pertain to any part of the Derivative Works, in at least one of the following places: within a NOTICE text file distributed as part of the Derivative Works; within the Source form or documentation, if provided along with the Derivative Works; or, within a display generated by the Derivative Works, if and wherever such third-party notices normally appear. The contents of the NOTICE file are for informational purposes only and do not modify the License. You may add Your own attribution notices within Derivative Works that You distribute, alongside or as an addendum to the NOTICE text from the Work, provided that such additional attribution notices cannot be construed as modifying the License.\n\nYou may add Your own copyright statement to Your modifications and may provide additional or different license terms and conditions for use, reproduction, or distribution of Your modifications, or for any such Derivative Works as a whole, provided Your use, reproduction, and distribution of the Work otherwise complies with the conditions stated in this License.\n\n5. Submission of Contributions. Unless You explicitly state otherwise, any Contribution intentionally submitted for inclusion in the Work by You to the Licensor shall be under the terms and conditions of this License, without any additional terms or conditions. Notwithstanding the above, nothing herein shall supersede or modify the terms of any separate license agreement you may have executed with Licensor regarding such Contributions.\n\n6. Trademarks. This License does not grant permission to use the trade names, trademarks, service marks, or product names of the Licensor, except as required for reasonable and customary use in describing the origin of the Work and reproducing the content of the NOTICE file.\n\n7. Disclaimer of Warranty. Unless required by applicable law or agreed to in writing, Licensor provides the Work (and each Contributor provides its Contributions) on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. You are solely responsible for determining the appropriateness of using or redistributing the Work and assume any risks associated with Your exercise of permissions under this License.\n\n8. Limitation of Liability. In no event and under no legal theory, whether in tort (including negligence), contract, or otherwise, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing, shall any Contributor be liable to You for damages, including any direct, indirect, special, incidental, or consequential damages of any character arising as a result of this License or out of the use or inability to use the Work (including but not limited to damages for loss of goodwill, work stoppage, computer failure or malfunction, or any and all other commercial damages or losses), even if such Contributor has been advised of the possibility of such damages.\n\n9. Accepting Warranty or Additional Liability. While redistributing the Work or Derivative Works thereof, You may choose to offer, and charge a fee for, acceptance of support, warranty, indemnity, or other liability obligations and/or rights consistent with this License. However, in accepting such obligations, You may act only on Your own behalf and on Your sole responsibility, not on behalf of any other Contributor, and only if You agree to indemnify, defend, and hold each Contributor harmless for any liability incurred by, or claims asserted against, such Contributor by reason of your accepting any such warranty or additional liability.\n\nEND OF TERMS AND CONDITIONS\n\nEtiuda is a trademark of Maxim Gwiazda.\n", pl: "Umowa licencyjna użytkownika końcowego Etiudy\n\nStardust Maxim Gwiazda, NIP 5242711262, Polska. Licencja obejmuje Etiudę i Etiudę Studio.\n\nLicencja. Etiuda jest licencjonowana, a nie sprzedawana: to prawo do zainstalowania i używania oprogramowania na warunkach poniżej. Ta licencja reguluje program zainstalowany z któregokolwiek z instalatorów. Opublikowany kod źródłowy reguluje Licencja Etiuda Source-Available 1.0, a każdy z tych dokumentów zostaje przy swoim.\n\nStanowiska. Licencja obejmuje jedną wskazaną z imienia i nazwiska osobę oraz do trzech urządzeń, na których ta osoba pracuje. Organizacja ma licencję dla każdej osoby, która korzysta z oprogramowania. Etiuda Studio jest objęta licencją, która ją zawiera, po jednej na każdego autora wskazanego przez organizację.\n\nUżytek własny i praca. Do własnych spraw Etiuda jest bezpłatna. Licencję kupuje się wtedy, gdy oprogramowanie służy pracy: dla pracodawcy, dla klienta albo we własnej firmie.\n\nOkres próbny. Organizacja może korzystać z pełnej Etiudy przez czternaście dni i sprawdzić, czy narzędzie odpowiada jej pracy. Potem kupuje licencję albo usuwa oprogramowanie.\n\nAktualizacje. Licencja obejmuje wersje wydane w ciągu dwunastu miesięcy od zakupu, a ostatnia z nich zostaje do używania bez ograniczenia w czasie. Etiuda nie aktualizuje się sama.\n\nPrywatność. Katalogi organizacji i wszystko, co piszą jej pracownicy i klienci, może przeczytać tylko sama organizacja: ani Etiuda, ani Etiuda Studio nie wysyłają tych treści w postaci, którą dałoby się odczytać, do nas ani do nikogo innego, z wyjątkiem usługi AI, którą organizacja sama ustawi w ustawieniach programów albo w zasadach grupy. Co Etiuda wysyła do tej usługi, wskazują jej Ustawienia, a gdy to użycie jest wyłączone, Etiuda nic do niej nie wysyła. Zespół, który wymienia pliki przez nasz przekaźnik zamiast przez wspólny folder, wysyła je zapieczętowane jeszcze na własnych komputerach, a przekaźnik nie potrafi ich otworzyć. Widzi tylko losowe identyfikatory, klucze publiczne urządzeń zespołu, to, który plik zastępuje który, rozmiar każdego pliku zaokrąglony w górę i czas jego wysłania oraz adres IP i czas każdego połączenia, a z tego także, jak często które urządzenie zapisuje. Z podpisanej przepustki, która wraz z licencją otwiera zespołowi przekaźnik, poznaje tylko klucz publiczny lidera, datę wystawienia przepustki i jej koniec oraz to, czy licencja jest opłacona; nie ma w niej nazwy, adresu e-mail ani danych płatności. Pliki są przechowywane w Unii Europejskiej, a po drodze mogą, nadal zapieczętowane, przejść przez sieć Cloudflare poza nią. Kiedy i po co programy łączą się z nami, opisuje polityka prywatności na etiuda.dev.\n\nPrzeniesienie. Licencja zostaje przy osobie, na którą została wystawiona, i nie podlega sprzedaży, najmowi, użyczeniu ani dalszemu licencjonowaniu. Gdy ta osoba odchodzi, organizacja może wskazać na jej miejsce kogoś innego.\n\nZapewnienia. Oprogramowanie jest udostępniane w takiej postaci, w jakiej jest, bez zapewnienia, że nadaje się do określonego celu albo że działa bez usterek. Nic w tej licencji nie uszczupla praw, które przysługują konsumentowi z mocy prawa.\n\nOdpowiedzialność. Nasza odpowiedzialność ogranicza się do kwoty zapłaconej za licencję w ciągu dwunastu miesięcy przed zgłoszeniem roszczenia; nie obejmuje utraconych korzyści, straconego czasu ani utraty lub uszkodzenia danych. Odpowiedzialność za śmierć lub uszczerbek na zdrowiu wskutek naszego niedbalstwa, za oszustwo oraz wszędzie tam, gdzie prawo nie dopuszcza ograniczenia, pozostaje nieograniczona.\n\nZakończenie. Licencja kończy się, kiedy usuwasz oprogramowanie. Możemy ją zakończyć, jeśli jej warunki zostaną naruszone i naruszenie nie ustanie w ciągu trzydziestu dni od naszego wezwania; wtedy oprogramowanie usuwa się z każdego urządzenia.\n\nPrawo właściwe. Licencję reguluje prawo polskie. Konsument może wnieść sprawę przed sąd swojego kraju; pozostałe sprawy rozpatrują sądy właściwe dla siedziby sprzedawcy.\n\nWbudowany model. Gdy ten instalator zawiera wbudowany model podpowiedzi, jest to EmbeddingGemma 2, Google DeepMind, Apache 2.0. Konwersja do ONNX i kwantyzacja, wykonane przez Maxima Gwiazdę 9 listopada 2026 r., zmieniają oryginalne wagi. Program nie pobiera tego modelu. Instalacja bez niego podpowiada wyłącznie przez dopasowanie słów.\n\nModel jest publikowany na licencji Apache 2.0. Dalej jest jej tekst.\n\nApache License\nVersion 2.0, January 2004\nhttp://www.apache.org/licenses/\n\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\n\n1. Definitions.\n\n\"License\" shall mean the terms and conditions for use, reproduction, and distribution as defined by Sections 1 through 9 of this document.\n\n\"Licensor\" shall mean the copyright owner or entity authorized by the copyright owner that is granting the License.\n\n\"Legal Entity\" shall mean the union of the acting entity and all other entities that control, are controlled by, or are under common control with that entity. For the purposes of this definition, \"control\" means (i) the power, direct or indirect, to cause the direction or management of such entity, whether by contract or otherwise, or (ii) ownership of fifty percent (50%) or more of the outstanding shares, or (iii) beneficial ownership of such entity.\n\n\"You\" (or \"Your\") shall mean an individual or Legal Entity exercising permissions granted by this License.\n\n\"Source\" form shall mean the preferred form for making modifications, including but not limited to software source code, documentation source, and configuration files.\n\n\"Object\" form shall mean any form resulting from mechanical transformation or translation of a Source form, including but not limited to compiled object code, generated documentation, and conversions to other media types.\n\n\"Work\" shall mean the work of authorship, whether in Source or Object form, made available under the License, as indicated by a copyright notice that is included in or attached to the work (an example is provided in the Appendix below).\n\n\"Derivative Works\" shall mean any work, whether in Source or Object form, that is based on (or derived from) the Work and for which the editorial revisions, annotations, elaborations, or other modifications represent, as a whole, an original work of authorship. For the purposes of this License, Derivative Works shall not include works that remain separable from, or merely link (or bind by name) to the interfaces of, the Work and Derivative Works thereof.\n\n\"Contribution\" shall mean any work of authorship, including the original version of the Work and any modifications or additions to that Work or Derivative Works thereof, that is intentionally submitted to Licensor for inclusion in the Work by the copyright owner or by an individual or Legal Entity authorized to submit on behalf of the copyright owner. For the purposes of this definition, \"submitted\" means any form of electronic, verbal, or written communication sent to the Licensor or its representatives, including but not limited to communication on electronic mailing lists, source code control systems, and issue tracking systems that are managed by, or on behalf of, the Licensor for the purpose of discussing and improving the Work, but excluding communication that is conspicuously marked or otherwise designated in writing by the copyright owner as \"Not a Contribution.\"\n\n\"Contributor\" shall mean Licensor and any individual or Legal Entity on behalf of whom a Contribution has been received by Licensor and subsequently incorporated within the Work.\n\n2. Grant of Copyright License. Subject to the terms and conditions of this License, each Contributor hereby grants to You a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable copyright license to reproduce, prepare Derivative Works of, publicly display, publicly perform, sublicense, and distribute the Work and such Derivative Works in Source or Object form.\n\n3. Grant of Patent License. Subject to the terms and conditions of this License, each Contributor hereby grants to You a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable (except as stated in this section) patent license to make, have made, use, offer to sell, sell, import, and otherwise transfer the Work, where such license applies only to those patent claims licensable by such Contributor that are necessarily infringed by their Contribution(s) alone or by combination of their Contribution(s) with the Work to which such Contribution(s) was submitted. If You institute patent litigation against any entity (including a cross-claim or counterclaim in a lawsuit) alleging that the Work or a Contribution incorporated within the Work constitutes direct or contributory patent infringement, then any patent licenses granted to You under this License for that Work shall terminate as of the date such litigation is filed.\n\n4. Redistribution. You may reproduce and distribute copies of the Work or Derivative Works thereof in any medium, with or without modifications, and in Source or Object form, provided that You meet the following conditions:\n\n(a) You must give any other recipients of the Work or Derivative Works a copy of this License; and\n\n(b) You must cause any modified files to carry prominent notices stating that You changed the files; and\n\n(c) You must retain, in the Source form of any Derivative Works that You distribute, all copyright, patent, trademark, and attribution notices from the Source form of the Work, excluding those notices that do not pertain to any part of the Derivative Works; and\n\n(d) If the Work includes a \"NOTICE\" text file as part of its distribution, then any Derivative Works that You distribute must include a readable copy of the attribution notices contained within such NOTICE file, excluding those notices that do not pertain to any part of the Derivative Works, in at least one of the following places: within a NOTICE text file distributed as part of the Derivative Works; within the Source form or documentation, if provided along with the Derivative Works; or, within a display generated by the Derivative Works, if and wherever such third-party notices normally appear. The contents of the NOTICE file are for informational purposes only and do not modify the License. You may add Your own attribution notices within Derivative Works that You distribute, alongside or as an addendum to the NOTICE text from the Work, provided that such additional attribution notices cannot be construed as modifying the License.\n\nYou may add Your own copyright statement to Your modifications and may provide additional or different license terms and conditions for use, reproduction, or distribution of Your modifications, or for any such Derivative Works as a whole, provided Your use, reproduction, and distribution of the Work otherwise complies with the conditions stated in this License.\n\n5. Submission of Contributions. Unless You explicitly state otherwise, any Contribution intentionally submitted for inclusion in the Work by You to the Licensor shall be under the terms and conditions of this License, without any additional terms or conditions. Notwithstanding the above, nothing herein shall supersede or modify the terms of any separate license agreement you may have executed with Licensor regarding such Contributions.\n\n6. Trademarks. This License does not grant permission to use the trade names, trademarks, service marks, or product names of the Licensor, except as required for reasonable and customary use in describing the origin of the Work and reproducing the content of the NOTICE file.\n\n7. Disclaimer of Warranty. Unless required by applicable law or agreed to in writing, Licensor provides the Work (and each Contributor provides its Contributions) on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. You are solely responsible for determining the appropriateness of using or redistributing the Work and assume any risks associated with Your exercise of permissions under this License.\n\n8. Limitation of Liability. In no event and under no legal theory, whether in tort (including negligence), contract, or otherwise, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing, shall any Contributor be liable to You for damages, including any direct, indirect, special, incidental, or consequential damages of any character arising as a result of this License or out of the use or inability to use the Work (including but not limited to damages for loss of goodwill, work stoppage, computer failure or malfunction, or any and all other commercial damages or losses), even if such Contributor has been advised of the possibility of such damages.\n\n9. Accepting Warranty or Additional Liability. While redistributing the Work or Derivative Works thereof, You may choose to offer, and charge a fee for, acceptance of support, warranty, indemnity, or other liability obligations and/or rights consistent with this License. However, in accepting such obligations, You may act only on Your own behalf and on Your sole responsibility, not on behalf of any other Contributor, and only if You agree to indemnify, defend, and hold each Contributor harmless for any liability incurred by, or claims asserted against, such Contributor by reason of your accepting any such warranty or additional liability.\n\nEND OF TERMS AND CONDITIONS\n\nEtiuda jest znakiem towarowym Maxima Gwiazdy.\n" };
   var ABOUT_NEW = [
     { title: "The team's catalog in editions.", body: "When the catalog changes, the desk offers the new edition and shows, card by card, what changed, before anything is loaded." },
     { title: "Signed by the team's lead.", body: "A desk that joins a team keeps its lead's key and checks every later edition against it, and a file changed after signing never goes unnoticed." },
@@ -28553,6 +28540,8 @@ What is typed here stays in this browser.`;
     orgMarkWords: () => orgMarkWords,
     orgModel: () => orgModel,
     orgRanks: () => orgRanks,
+    orgSaid: () => orgSaid,
+    rewordSent: () => rewordSent,
     syncOrgMark: () => syncOrgMark,
     wireOrgModel: () => wireOrgModel
   });
@@ -28574,6 +28563,22 @@ What is typed here stays in this browser.`;
   function orgRanks(st) {
     const s = st === void 0 ? orgModel() : st;
     return !!(s && s.on === true && s.ready === true);
+  }
+  function rewordSent() {
+    const h = eHost();
+    let s = null;
+    try {
+      s = h && typeof h.aiState === "function" ? h.aiState() : null;
+    } catch (e) {
+      s = null;
+    }
+    return !!(s && s.rewordOn === true && typeof s.rewordAt === "string" && s.rewordAt !== "");
+  }
+  function orgSaid(search, suggest) {
+    const line = search && suggest ? t("The organisation's model at {HOST} ranks the search and the suggestions. The search text, the copied message the suggestions are made from, and up to 12 short pieces of the cards being ranked are sent there.") : search ? t("The organisation's model at {HOST} ranks the search. The search text is sent there, with up to 12 short pieces of the cards being ranked.") : suggest ? t("The organisation's model at {HOST} ranks the suggestions. The copied message they are made from is sent there, with up to 12 short pieces of the cards being ranked.") : "";
+    const rewords = rewordSent();
+    if (line) return rewords ? line + " " + t("At your press, the words or the card you ask it to reword go there too.") : line;
+    return rewords ? t("The organisation's model at {HOST} is set. With both switches off, only the words or the card you ask it to reword are sent to it, at your press.") : t("The organisation's model at {HOST} is set, and with both switches and Rewording off, nothing is sent to it.");
   }
   var orgOutcome = { ranking: "organisation", failures: 0, pausedUntil: 0, slow: false };
   var orgPauseT = 0;
@@ -28600,7 +28605,7 @@ What is typed here stays in this browser.`;
       title: at(t("{HOST} usually takes more than 4 seconds to answer, too long to reorder a list already being read, so the word matches' order stands, and the desk still sends one query a minute to {HOST}."))
     };
     const search = eSearchOn(), suggest = eAiOn();
-    const title = search && !suggest ? t("The organisation's model at {HOST} ranks the search. The search text is sent there.") : suggest && !search ? t("The organisation's model at {HOST} ranks the suggestions. The copied message they are made from is sent there.") : t("The organisation's model at {HOST} ranks the search and the suggestions. The search text and the copied message the suggestions are made from are sent there.");
+    const title = orgSaid(search, suggest);
     return { paused: false, label: t("organisation's model"), title: at(title) };
   }
   function syncOrgMark(st) {
@@ -28722,9 +28727,7 @@ What is typed here stays in this browser.`;
   function firstSigninMarkHtml() {
     const svg = typeof document !== "undefined" ? document.querySelector(".brand-tile svg") : null;
     if (!svg) return "";
-    const mask = svg.querySelector("mask"), was = mask ? mask.id : "", own = was + "-first-signin";
-    const html = was ? svg.outerHTML.split('id="' + was + '"').join('id="' + own + '"').split("url(#" + was + ")").join("url(#" + own + ")") : svg.outerHTML;
-    return '<div class="fs-mark" aria-hidden="true">' + html + "</div>";
+    return '<div class="fs-mark" aria-hidden="true">' + svg.outerHTML.replace(/id="depth"/g, 'id="depth-first-signin"').replace(/url\(#depth\)/g, "url(#depth-first-signin)") + "</div>";
   }
   function paintFirstSignin() {
     if (!firstSigninOpen || typeof document === "undefined") return;
@@ -28759,7 +28762,6 @@ What is typed here stays in this browser.`;
         first.focus();
       }
     }
-    hugDottedGround(el);
   }
   function skipFirstSignin() {
     if (!firstSigninPending && !firstSigninOpen) return;
@@ -35500,9 +35502,9 @@ What is typed here stays in this browser.`;
   function editionNoteHtml(note, cls) {
     return '<div class="' + cls + '"><small>' + esc(t("Note for this edition")) + "</small><p>" + esc(note) + "</p></div>";
   }
-  function editionCard(it, held, offered2) {
+  function editionCard(it, held, offered) {
     const find = (c) => (c && c.cards || []).find((m) => String(m.id) === it.id);
-    return find(it.kind === "removed" ? held : offered2) || find(held) || { id: it.id };
+    return find(it.kind === "removed" ? held : offered) || find(held) || { id: it.id };
   }
   function editionPledgeLine(it) {
     if (!it.commitment) return "";
@@ -38955,7 +38957,7 @@ What is typed here stays in this browser.`;
   }
   function suggestNoteText() {
     const st = orgModel();
-    return orgRanks(st) && eAiOn() ? t("When Quick replies opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. While the organisation's model is on, the copied message, at most its first 1,500 characters, is sent to {HOST} as Quick replies opens, so that the model there can suggest the intents; this desk keeps no copy of it. The statistics count only how often suggestions appeared and how many were taken.").split("{HOST}").join(String(st.host || "")) : t("When Quick replies opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as Quick replies opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.");
+    return orgRanks(st) && eAiOn() ? t("When Quick replies opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. While the organisation's model is on, the copied message, at most its first 1,500 characters, is sent to {HOST} as Quick replies opens, with up to 12 short pieces of the cards being ranked, so that the model there can suggest the intents; this desk keeps no copy of it. The statistics count only how often suggestions appeared and how many were taken.").split("{HOST}").join(String(st.host || "")) : t("When Quick replies opens with a customer's message copied, and the message points clearly enough at some intents, up to five of them are suggested above the list. None is chosen until one is clicked. The message is read only as Quick replies opens, and never kept or sent; the statistics count only how often suggestions appeared and how many were taken.");
   }
   function hotkeyRowHtml() {
     if (!hotkeyHost()) return "";
@@ -39429,9 +39431,7 @@ What is typed here stays in this browser.`;
   function aiLede() {
     const st = orgModel();
     if (!orgRanks(st)) return t("The model built into Etiuda, which works on this computer alone.");
-    const search = eSearchOn(), suggest = eAiOn();
-    const line = search && suggest ? t("The organisation's model at {HOST} ranks the search and the suggestions. The search text and the copied message the suggestions are made from are sent there.") : search ? t("The organisation's model at {HOST} ranks the search. The search text is sent there.") : suggest ? t("The organisation's model at {HOST} ranks the suggestions. The copied message they are made from is sent there.") : t("The organisation's model at {HOST} is set, and with both switches off nothing is sent to it.");
-    return line.split("{HOST}").join(String(st.host || ""));
+    return orgSaid(eSearchOn(), eAiOn()).split("{HOST}").join(String(st.host || ""));
   }
   function syncAiWords() {
     const box = settingsHost();
@@ -39442,7 +39442,7 @@ What is typed here stays in this browser.`;
     hugDottedGround(box);
   }
   function aiGroups() {
-    const st = orgModel(), w = (a, b) => aiWords(st, a, b);
+    const st = orgModel(), w = (a, b) => aiWords(st, a, b), rw = rewordState();
     if (!eAiModel() && !orgRanks(st)) return [];
     return [{ rows: [
       row(
@@ -39451,12 +39451,12 @@ What is typed here stays in this browser.`;
         w(t("Suggest intents with the built-in model"), t("Suggest intents with the organisation's model")),
         w(
           t("Reads a copied message on this computer and suggests the intents it is closest to. Off, suggestions come from matching words."),
-          t("Sends a copied message to the organisation's model at {HOST} and suggests the intents it is closest to. Off, suggestions come from matching words.")
+          t("Sends a copied message, with up to 12 short pieces of the cards being ranked, to the organisation's model at {HOST} and suggests the intents it is closest to. Off, suggestions come from matching words.")
         ),
         onoff(
           "aisuggest",
           eAiOn(),
-          w(t("The model ranks the suggestions; nothing leaves this computer"), t("The organisation's model ranks the suggestions; the copied message is sent to {HOST}.")),
+          w(t("The model ranks the suggestions; nothing leaves this computer"), t("The organisation's model ranks the suggestions; the copied message and up to 12 short pieces of the cards are sent to {HOST}.")),
           t("Suggestions come from matching words, and the model stays unloaded")
         )
       ),
@@ -39466,7 +39466,7 @@ What is typed here stays in this browser.`;
         w(t("Search by meaning with the built-in model"), t("Search by meaning with the organisation's model")),
         w(
           t("From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the model on this computer. Off, it matches words only."),
-          t("From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the organisation's model at {HOST}, to which the search text is sent. Off, it matches words only.")
+          t("From the third letter typed, the main search adds the cards and intents closest in meaning after those that match the words, ranked by the organisation's model at {HOST}, to which the search text is sent with up to 12 short pieces of the cards being ranked. Off, it matches words only.")
         ),
         onoff(
           "aisearch",
@@ -39475,13 +39475,23 @@ What is typed here stays in this browser.`;
           t("Off, it matches words only.")
         )
       )
-    ] }];
+    ].concat(rw.at ? [
+      /* The person's own switch for rewording: a row only where the organisation's model is in force, since it would turn nothing on or off
+         elsewhere; its sentence names the address a reword goes to, the shell's one reading of it. */
+      row(
+        "aireword",
+        "ai",
+        t("Rewording"),
+        t("Reword on cards and Your own words? in Quick replies send the card's words or the selected words to the organisation's model at {ADDRESS}, only when pressed. Turned off, both are gone and nothing is sent; the choice is yours, on this computer.").split("{ADDRESS}").join(rw.at),
+        onoff("aireword", rw.on)
+      )
+    ] : []) }];
   }
   function aiSearchOnLine(st) {
     return aiWords(
       st,
       t("The model ranks the search beside word matches; nothing leaves this computer"),
-      t("The organisation's model ranks the search beside word matches; the search text is sent to {HOST}.")
+      t("The organisation's model ranks the search beside word matches; the search text and up to 12 short pieces of the cards are sent to {HOST}.")
     );
   }
   function orgModelRows() {
@@ -39490,7 +39500,7 @@ What is typed here stays in this browser.`;
     const m = st.managed || {}, org = st.choice === "organisation", set = t("Set by the organisation");
     const lines = [];
     if (!org) lines.push(t("The built-in model sends nothing anywhere."));
-    else if (orgRanks(st)) lines.push(t("The search text and the copied message the suggestions are made from are sent to {HOST}, and nowhere else.").split("{HOST}").join(String(st.host || "")));
+    else if (orgRanks(st)) lines.push((rewordSent() ? t("The search text, the copied message the suggestions are made from and up to 12 short pieces of the cards being ranked are sent to {HOST}, and nowhere else; so, at your press, are the words or the card you ask it to reword.") : t("The search text, the copied message the suggestions are made from and up to 12 short pieces of the cards being ranked are sent to {HOST}, and nowhere else.")).split("{HOST}").join(String(st.host || "")));
     else if (!st.keyNoService) lines.push(t("Until the service, the model and the key are complete, the built-in model ranks and nothing is sent."));
     if (st.keyNoService) lines.push(t("Your organisation has set a key for an AI service without naming the service, so nothing is sent. Its IT department can name it."));
     if (m.choice) lines.push(set, t("Whoever manages Etiuda for the organisation can change this."));
@@ -39966,6 +39976,14 @@ What is typed here stays in this browser.`;
             syncOrgMark();
             syncAiWords();
             toast(on ? aiWords(orgModel(), t("Suggestions from the built-in model"), t("Suggestions from the organisation's model")) : t("Suggestions from matching words"));
+          } else if (seg3 === "aireword") {
+            rewordSwitchSet(on);
+            syncOrgMark();
+            try {
+              render();
+            } catch (e) {
+            }
+            toast(on ? t("On") : t("Off"));
           } else if (seg3 === "aisearch") {
             if (on) lsDel(E_SEARCH_AI_OFF_KEY);
             else lsSet(E_SEARCH_AI_OFF_KEY, "1");
@@ -42763,7 +42781,6 @@ What is typed here stays in this browser.`;
     forgetRowNaturals();
     eForgetRecency();
     forgetEditionMarks();
-    forgetFlagOffered();
     forgetLookEdits();
     rearmTrustRecheck();
     putLang(lsGet("eLang") || uiLang());
@@ -43221,7 +43238,32 @@ What is typed here stays in this browser.`;
       keyClose: t("{KEY} closes"),
       pasted: t("Pasted"),
       copied: t("Copied, press Ctrl+V"),
-      selected: t("The words you selected. Type to change them.")
+      selected: t("The words you selected. Type to change them."),
+      /* Your own words, shown only where the shell offers a reword; {ADDRESS} is the host it names. */
+      rwHead: t("Your own words?"),
+      rwSpelling: t("Fix spelling"),
+      rwShorter: t("Shorter"),
+      rwFriendlier: t("Friendlier"),
+      rwFormal: t("More formal"),
+      rwIntoPl: t("Into Polish"),
+      rwIntoEn: t("Into English"),
+      rwLangs: CONTENT_LANGS.slice(),
+      rwBefore: t("A press sends only the words above to {ADDRESS}, your organisation's AI service."),
+      rwYou: t("You selected"),
+      rwAfter: t("Sent to {ADDRESS}: only the words you selected. Read the result before you send it."),
+      rwEnter: t("Enter puts it in place of your selection"),
+      rwBack: t("Back to the replies"),
+      rwWait: t("Waiting for the service at {ADDRESS}…"),
+      rwNone: t("No result came back from {ADDRESS}. Your words are as you wrote them."),
+      rwLate: t("The service at {ADDRESS} did not answer in time. Your words are as you wrote them."),
+      rwBusy: t("The service at {ADDRESS} is busy; a later try may go through. Your words are as you wrote them."),
+      /* Each case where nothing was sent says so, never "No result came back": the service paused, words over 4000 characters, the person's
+         switch off at the press, the organisation's model gone, and a press the desk cannot say more of. */
+      rwPaused: t("The service at {ADDRESS} failed three times in a row, so Etiuda waits before asking it again; nothing was sent. Your words are as you wrote them."),
+      rwTooLong: t("These words are over 4000 characters, more than can be sent, so nothing was sent. Your words are as you wrote them."),
+      rwSwitch: t("Rewording is turned off on this computer, so nothing was sent. Your words are as you wrote them."),
+      rwModel: t("The organisation's model is no longer set, so nothing was sent. Your words are as you wrote them."),
+      rwUnavail: t("Rewording is not available just now, so nothing was sent. Your words are as you wrote them.")
     };
   }
   function pickBlocks(m, other) {
@@ -43570,7 +43612,7 @@ What is typed here stays in this browser.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, card_flag_exports, card_flag_desk_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_margin_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, launch_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, deck_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports, edition_marks_exports, screen_tabs_exports, search_meaning_exports, org_model_exports, proxy_ask_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, card_flag_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_margin_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, launch_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, card_reword_exports, deck_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports, edition_marks_exports, screen_tabs_exports, search_meaning_exports, org_model_exports, proxy_ask_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });

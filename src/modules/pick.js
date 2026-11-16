@@ -217,7 +217,24 @@ function pickWords(){
           langTitle:t("Click to switch replies to the next language"),
           keyCopy:t("{KEY} copies, and pastes where it can"), keyOther:other ? t("{KEY} in {LANG}").split("{LANG}").join(other) : "",
           keyClose:t("{KEY} closes"), pasted:t("Pasted"), copied:t("Copied, press Ctrl+V"),
-          selected:t("The words you selected. Type to change them.")};
+          selected:t("The words you selected. Type to change them."),
+          /* Your own words, shown only where the shell offers a reword; {ADDRESS} is the host it names. */
+          rwHead:t("Your own words?"), rwSpelling:t("Fix spelling"), rwShorter:t("Shorter"), rwFriendlier:t("Friendlier"),
+          rwFormal:t("More formal"), rwIntoPl:t("Into Polish"), rwIntoEn:t("Into English"), rwLangs:CONTENT_LANGS.slice(),
+          rwBefore:t("A press sends only the words above to {ADDRESS}, your organisation's AI service."), rwYou:t("You selected"),
+          rwAfter:t("Sent to {ADDRESS}: only the words you selected. Read the result before you send it."),
+          rwEnter:t("Enter puts it in place of your selection"), rwBack:t("Back to the replies"),
+          rwWait:t("Waiting for the service at {ADDRESS}…"),
+          rwNone:t("No result came back from {ADDRESS}. Your words are as you wrote them."),
+          rwLate:t("The service at {ADDRESS} did not answer in time. Your words are as you wrote them."),
+          rwBusy:t("The service at {ADDRESS} is busy; a later try may go through. Your words are as you wrote them."),
+          /* Each case where nothing was sent says so, never "No result came back": the service paused, words over 4000 characters, the person's
+             switch off at the press, the organisation's model gone, and a press the desk cannot say more of. */
+          rwPaused:t("The service at {ADDRESS} failed three times in a row, so Etiuda waits before asking it again; nothing was sent. Your words are as you wrote them."),
+          rwTooLong:t("These words are over 4000 characters, more than can be sent, so nothing was sent. Your words are as you wrote them."),
+          rwSwitch:t("Rewording is turned off on this computer, so nothing was sent. Your words are as you wrote them."),
+          rwModel:t("The organisation's model is no longer set, so nothing was sent. Your words are as you wrote them."),
+          rwUnavail:t("Rewording is not available just now, so nothing was sent. Your words are as you wrote them.")};
 }
 /* THE TEXT THE DESK'S OWN COPY WOULD MAKE, counted as the desk counts a copy: the fill of the block
    in the card's language, for the chat tab in front. The shell writes it to the clipboard. A reply
