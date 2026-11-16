@@ -1446,6 +1446,8 @@ html.e-still .sgn-run::after{animation:none;transform:translateX(80%)}
 .sgn-code code,.sgn-mono{font:600 14.5px var(--mono);letter-spacing:.04em;color:var(--ink);white-space:nowrap}
 .sgn-code code{flex:1 1 auto;font-size:13px;letter-spacing:.02em}
 .sgn-val{font-size:13.5px;color:var(--ink)}
+.sgn-lock{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--dim)}
+.sgn-lock .ic{width:13px;height:13px}
 .sgn-top{padding:16px 18px;border:1px solid var(--line);border-radius:10px;background:var(--panel);margin:0 0 12px}
 .sgn-top-row{display:flex;gap:14px 20px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .sgn-top.col{display:flex;flex-direction:column;align-items:flex-start;gap:14px}
@@ -4508,6 +4510,8 @@ body.e-first-signin .stage>.dotfield{content-visibility:hidden}
 .bub-ask p{margin:0 0 8px;font-size:13.5px;line-height:1.5;color:var(--bub-dim);text-wrap:pretty}
 .bub-ask b{color:var(--bub-ink);font-weight:600}
 .bub-ask code{font:12px var(--mono);color:var(--bub-ink);overflow-wrap:anywhere}
+.bub-ask.e-sync-whose{width:min(440px,calc(100vw - 24px))}
+.e-sync-said p{overflow-wrap:anywhere}
 .e-offer .ec-what{margin:0 0 8px;font-size:13.5px;color:var(--bub-ink)}
 .e-offer .ec-counts{font:12px var(--mono);color:var(--bub-dim);margin-top:2px}
 .e-offer .ec-ed{font-size:12px;color:var(--bub-dim)}
@@ -6727,10 +6731,12 @@ What is typed here stays in this browser.`;
     eCarryOldKeys: () => eCarryOldKeys,
     eDeskFile: () => eDeskFile,
     eDeskFileShown: () => eDeskFileShown,
+    eDeskFlush: () => eDeskFlush,
     eDeskHome: () => eDeskHome,
     eDeskNewer: () => eDeskNewer,
     eDeskRefused: () => eDeskRefused,
     eDeskRefusedSeen: () => eDeskRefusedSeen,
+    eDeskTake: () => eDeskTake,
     eHomeless: () => eHomeless,
     eLastSaved: () => eLastSaved,
     eLayer: () => eLayer,
@@ -6821,6 +6827,7 @@ What is typed here stays in this browser.`;
     "cardFillKey",
     "keepPoolAcross",
     "restartDesk",
+    "takeSyncedDesk",
     "scheduleDeskBranch"
   ];
   var hooks = /* @__PURE__ */ Object.create(null);
@@ -6892,17 +6899,20 @@ What is typed here stays in this browser.`;
   var eDeskArmed = false;
   var eDeskOwed = /* @__PURE__ */ new Set();
   var eDeskCarried = /* @__PURE__ */ new Map();
+  var eDeskSeen = 0;
+  var eDeskBehind = /* @__PURE__ */ new Map();
   function deskPatchSend(all) {
-    const n = ++eDeskSent, keys = new Set(eDeskOwed), out = {};
+    const n = ++eDeskSent, keys = new Set(eDeskOwed), out = {}, took = {};
     if (all) eDeskCarried.forEach((m, k) => keys.add(k));
     eDeskOwed.clear();
     keys.forEach((k) => {
       eDeskCarried.set(k, n);
       out[k] = k in E_DESK.map ? E_DESK.map[k] : null;
+      took[k] = eDeskBehind.has(k) ? eDeskBehind.get(k) : eDeskSeen;
     });
     let p;
     try {
-      p = keys.size ? E_DESK.patch(JSON.stringify(out), all) : true;
+      p = keys.size ? E_DESK.patch(JSON.stringify(out), all, JSON.stringify(took)) : true;
     } catch (e) {
       p = false;
     }
@@ -6966,6 +6976,9 @@ What is typed here stays in this browser.`;
     const pending = E_DESK.patch ? eDeskOwed.size > 0 || eDeskCarried.size > 0 : eDeskHeard < eDeskSent;
     if (eDeskDue || pending || eUnsaved) deskSave();
   }
+  function eDeskFlush() {
+    if (E_DESK) deskFlush();
+  }
   function deskArm() {
     if (eDeskArmed) return;
     eDeskArmed = true;
@@ -6976,6 +6989,36 @@ What is typed here stays in this browser.`;
       });
     } catch (e) {
     }
+  }
+  function eDeskTake(text, n) {
+    if (!E_DESK || eWiping) return [];
+    let o = null;
+    try {
+      o = JSON.parse(text);
+    } catch (e) {
+      return [];
+    }
+    if (!o || typeof o !== "object" || Array.isArray(o)) return [];
+    const taken = [], told = Number.isSafeInteger(n) && n > 0;
+    if (told) {
+      eDeskOwed.forEach((k) => {
+        if (!eDeskBehind.has(k)) eDeskBehind.set(k, eDeskSeen);
+      });
+      eDeskCarried.forEach((m, k) => {
+        if (!eDeskBehind.has(k)) eDeskBehind.set(k, eDeskSeen);
+      });
+    }
+    Object.keys(o).forEach((k) => {
+      const v = o[k];
+      if (v !== null && typeof v !== "string" || eDeskOwed.has(k) || eDeskCarried.has(k)) return;
+      eDeskBehind.delete(k);
+      if (v === null ? !(k in E_DESK.map) : E_DESK.map[k] === v) return;
+      if (v === null) delete E_DESK.map[k];
+      else E_DESK.map[k] = v;
+      taken.push(k);
+    });
+    if (told) eDeskSeen = n;
+    return taken;
   }
   var eUnsaved = null;
   var eSavedAt = 0;
@@ -9269,6 +9312,7 @@ What is typed here stays in this browser.`;
     "Not a secret. It tells a team's lead which account is yours.": "To nie tajemnica. Po nim lider zespołu rozpoznaje, czyje to konto.",
     "Check now": "Sprawdź teraz",
     "Licence for one person": "Licencja dla jednej osoby",
+    "Licence": "Licencja",
     "The order page opens in the browser with this account's sign-in code filled in; typing another person's code buys the licence for them instead.": "Strona zamówienia otworzy się w przeglądarce z wpisanym kodem logowania tego konta; po wpisaniu kodu innej osoby licencja zostanie kupiona dla niej.",
     "The order page opens in the browser and asks for the sign-in code of the person the licence is for, which Etiuda shows them after their first sign-in.": "Strona zamówienia otworzy się w przeglądarce i poprosi o kod logowania osoby, dla której jest licencja; Etiuda pokazuje go tej osobie po jej pierwszym zalogowaniu.",
     "Buy": "Kup",
@@ -9283,8 +9327,17 @@ What is typed here stays in this browser.`;
     "The new sign-in did not finish.": "Nowe logowanie nie dobiegło końca.",
     "This computer stays signed in with the account it had. {REASON}": "Ten komputer pozostaje zalogowany kontem, którego używał. {REASON}",
     "This account is already in use on three computers.": "To konto działa już na trzech komputerach.",
+    "This account has no Etiuda role in its organisation, so it holds no seat.": "To konto nie ma w swojej organizacji żadnej roli w Etiudzie, więc nie zajmuje miejsca w licencji.",
+    "Its IT department can assign one.": "Może ją przydzielić dział IT organizacji.",
+    "Your organisation holds the Etiuda licence for this account, so there is nothing to buy here.": "Licencję Etiudy dla tego konta ma organizacja, więc nie ma tu czego kupować.",
+    "Your organisation's licence follows the roles its IT department assigns, and this account has none, so it keeps its seat on the licence bought before.": "Licencja organizacji wynika z ról przydzielanych przez jej dział IT, a to konto nie ma żadnej, więc zachowuje miejsce w licencji kupionej wcześniej.",
+    "Your organisation has given this account a role, so it uses the organisation's licence; its seat on the licence bought before is not used meanwhile.": "Organizacja przydzieliła temu kontu rolę, więc korzysta ono z licencji organizacji; jego miejsce w licencji kupionej wcześniej nie jest do tego czasu używane.",
     "Signing out on one of them makes room here, and so does a computer left unused for 30 days; then Try again.": "Wylogowanie na jednym z nich zwalnia tu miejsce, podobnie jak komputer nieużywany przez 30 dni; potem wystarczy spróbować ponownie.",
     "This account's organisation has not allowed Etiuda at its sign-in provider.": "Organizacja tego konta nie dopuściła Etiudy u swojego dostawcy logowania.",
+    "Your organisation no longer gives this account access to Etiuda.": "Organizacja nie przyznaje już temu kontu dostępu do Etiudy.",
+    "This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. The organisation's IT department can give access again.": "To stanowisko zachowuje swój katalog i działa z nim jak dotąd, ale nowe wydania od zespołu już do niego nie trafiają. Dostęp może przywrócić dział IT organizacji.",
+    "This account's sign-in needs renewing.": "Logowanie tego konta wymaga odnowienia.",
+    "This desk keeps its catalog and works with it as before. Signing in again, under Account, brings the team's new editions back.": "To stanowisko zachowuje swój katalog i działa z nim jak dotąd. Po ponownym zalogowaniu się w części Konto nowe wydania od zespołu znów zaczną docierać.",
     "Its IT department can allow it; another account can be used meanwhile.": "Może to zmienić jej dział IT; do tego czasu można użyć innego konta.",
     "No Etiuda licence has a seat for this account.": "Żadna licencja Etiudy nie ma miejsca dla tego konta.",
     "The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.": "Logowanie się powiodło. Miejsce daje okres próbny, zakup albo przyjęcie konta przez lidera zespołu; do tego czasu można użyć innego konta.",
@@ -9294,6 +9347,76 @@ What is typed here stays in this browser.`;
     "The sign-in service cannot be reached just now. Etiuda keeps working with the catalog it has.": "Usługa logowania jest teraz nieosiągalna. Etiuda działa dalej na katalogu, który już ma.",
     "Use another account": "Użyj innego konta",
     "Not signed in": "Bez logowania",
+    /* words: copywriter and product designer, a managed computer (decision 49) */
+    "Your organisation has not given this account access to Etiuda.": "Organizacja nie przyznała temu kontu dostępu do Etiudy.",
+    "Its IT department can: asking them to assign the account is enough.": "Może to zrobić jej dział IT: wystarczy poprosić o przypisanie konta.",
+    "To ask for access: {CONTACT}.": "W sprawie dostępu: {CONTACT}.",
+    "This computer's profile did not keep this desk's key.": "Profil na tym komputerze nie zachował klucza tego stanowiska.",
+    "The organisation's IT department can have the profile keep it.": "Dział IT organizacji może sprawić, że profil będzie go zachowywał.",
+    "Everything else on this desk works as before; only signing in waits.": "Wszystko inne na tym stanowisku działa jak dotąd; czeka tylko logowanie.",
+    "Etiuda keeps working with the catalog it has.": "Etiuda działa dalej na katalogu, który już ma.",
+    "Managed by your organisation.": "Zarządzane przez organizację.",
+    "Your organisation gave this account its seat on this desk. Its IT department decides who uses Etiuda here, and with which account.": "Miejsce w licencji na tym stanowisku przydzieliła temu kontu organizacja. O tym, kto i jakim kontem korzysta tu z Etiudy, decyduje jej dział IT.",
+    "Seat held · checked {WHEN}": "Miejsce zajęte · sprawdzono {WHEN}",
+    "A shared computer: another person may sign in here, with an account of your organisation.": "Wspólny komputer: może się tu zalogować inna osoba, kontem organizacji.",
+    "Set by your organisation": "Ustawione przez organizację",
+    "Sync across computers": "Synchronizacja między komputerami",
+    "Your catalogs, edits and settings on every computer you sign in on.": "Własne katalogi, zmiany i ustawienia na każdym komputerze, na którym nastąpi zalogowanie.",
+    "Only on this computer.": "Tylko na tym komputerze.",
+    "Off everywhere. The synced copy is deleted as soon as this computer reaches our service.": "Wyłączona wszędzie. Zsynchronizowana kopia zostanie usunięta, gdy tylko ten komputer połączy się z naszą usługą.",
+    "Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account.": "Wyłączona. Po włączeniu {PROVIDER} poprosi o zgodę na użycie przez Etiudę jej folderu na tym koncie.",
+    "Changed on two computers: the newer change is in use, and the older one is kept, so nothing is lost.": "Zmieniono na dwóch komputerach: obowiązuje nowsza zmiana, a starsza jest zachowana, więc nic nie zginęło.",
+    "Your catalogs, edits and settings now follow you to every computer you sign in on. You can turn this off in Account.": "Własne katalogi, zmiany i ustawienia będą teraz dostępne na każdym komputerze, na którym nastąpi zalogowanie. Można to wyłączyć w Koncie.",
+    "Not available on this account: {REASON}. Everything works on this computer as before.": "Niedostępna na tym koncie: {REASON}. Na tym komputerze wszystko działa jak dotąd.",
+    "Sync across computers is not available on this account: {REASON}. Everything works on this computer as before.": "Synchronizacja między komputerami jest niedostępna na tym koncie: {REASON}. Na tym komputerze wszystko działa jak dotąd.",
+    "the account's storage is full": "miejsce na koncie jest zapełnione",
+    "the account's provider turned down Etiuda's request; it tries again each day": "dostawca konta odrzucił prośbę Etiudy; kolejna próba nastąpi następnego dnia",
+    "this computer cannot keep it locked for this Windows account": "ten komputer nie może przechowywać jej zamkniętej dla tego konta Windows",
+    "your organisation has not allowed it; its IT department decides": "organizacja jej nie dopuściła; decyduje o tym dział IT organizacji",
+    "the account has no OneDrive": "konto nie ma usługi OneDrive",
+    "your organisation has switched off Google Drive for it": "organizacja wyłączyła dla niego Dysk Google",
+    "Turn off sync?": "Wyłączyć synchronizację?",
+    "Everywhere also deletes the synced copy; each computer keeps its own. A computer signed in on later starts without what is here, unless another computer still syncs it.": "Opcja Wszędzie usuwa też zsynchronizowaną kopię; każdy komputer zachowuje własną. Komputer, na którym logowanie nastąpi później, zacznie bez tego, co jest tutaj, chyba że inny komputer nadal to synchronizuje.",
+    "Everywhere": "Wszędzie",
+    "This computer": "Ten komputer",
+    "Is what is on this desk yours?": "Czy to, co jest na tym stanowisku, należy do tego konta?",
+    "Another account was signed in here before, and its settings, edits and own cards are still on this desk. Nothing syncs until you choose.": "Wcześniej było tu zalogowane inne konto, a jego ustawienia, zmiany i własne karty wciąż są na tym stanowisku. Do czasu wyboru nic nie jest synchronizowane.",
+    "It is mine": "Dołącz do konta",
+    "it joins what your account syncs.": "to, co tu jest, trafi do synchronizacji konta.",
+    "Start from my account": "Zacznij od konta",
+    "this desk takes your account's content; what is here is set aside, not deleted.": "stanowisko przejmie zawartość konta; obecna zostanie odłożona, nie usunięta.",
+    "Waiting for your answer about what is on this desk. Nothing syncs until then.": "Czeka na decyzję w sprawie zawartości tego stanowiska. Do tego czasu nic nie jest synchronizowane.",
+    "Decide…": "Zdecyduj…",
+    "Syncing now, with what was already on this desk.": "Synchronizacja trwa, razem z tym, co już było na tym stanowisku.",
+    'Starting from your account did not finish, and nothing was lost. What could not be put back is kept on this computer, in Etiuda\'s "Set aside" folder, and is never uploaded. The question about what is on this desk still waits for your answer.': "Nie udało się dokończyć rozpoczęcia od konta, ale nic nie zginęło. To, czego nie dało się przywrócić, jest zachowane na tym komputerze, w folderze Etiudy o nazwie Set aside, i nigdy nie jest wysyłane. Pytanie o zawartość tego stanowiska nadal czeka na odpowiedź.",
+    "This desk now has your account's content. What was here before is kept on this computer, in Etiuda's \"Set aside\" folder, and is never uploaded.": "To stanowisko ma teraz zawartość tego konta. Poprzednia zawartość jest zachowana na tym komputerze, w folderze Etiudy o nazwie Set aside, i nigdy nie jest wysyłana.",
+    "That folder is no longer where it was kept, so nothing was opened.": "Tego folderu nie ma już tam, gdzie go zachowano, więc niczego nie otwarto.",
+    "This computer did not open the folder just now. Pressing the button again tries again.": "Ten komputer nie otworzył teraz folderu. Można spróbować ponownie, klikając przycisk jeszcze raz.",
+    "Your organisation has not turned this on.": "Organizacja nie włączyła tej funkcji.",
+    "Paused since {DATE}. It resumes when this computer reaches our service.": "Wstrzymana od {DATE}. Zostanie wznowiona, gdy komputer połączy się z naszą usługą.",
+    "Sync is full, so new changes stay on this computer until something is removed.": "Miejsce na synchronizację jest pełne, więc nowe zmiany zostają na tym komputerze, dopóki czegoś się nie usunie.",
+    // placeholder: Claudette
+    "Waiting for a seat. Sync resumes when this account holds one again, and nothing on this computer is lost.": "Oczekiwanie na miejsce w licencji. Synchronizacja zostanie wznowiona, gdy to konto znów je otrzyma; na tym komputerze nic nie ginie.",
+    "this computer cannot reach the {PROVIDER} account": "ten komputer nie może połączyć się z kontem {PROVIDER}",
+    "this computer cannot reach our service": "ten komputer nie może połączyć się z naszą usługą",
+    "our service is busy": "nasza usługa jest teraz zajęta",
+    "our service turned down this computer's last request": "nasza usługa odrzuciła ostatnią prośbę tego komputera",
+    "Not syncing just now: {REASON}. Sync tries again by itself, and nothing on this computer is lost.": "Synchronizacja chwilowo nie działa: {REASON}. Sama ponowi próbę, a na tym komputerze nic nie ginie.",
+    "Not syncing just now: {REASON}. Sync tries again at {TIME}, and nothing on this computer is lost.": "Synchronizacja chwilowo nie działa: {REASON}. Ponowi próbę o {TIME}, a na tym komputerze nic nie ginie.",
+    "Not syncing: {REASON}. Sync tries again within a day, and nothing on this computer is lost.": "Synchronizacja nie działa: {REASON}. Ponowi próbę w ciągu doby, a na tym komputerze nic nie ginie.",
+    "Not syncing while signing in on this computer is refused. Sync runs once signing in works, and nothing on this computer is lost.": "Synchronizacja nie działa, dopóki logowanie na tym komputerze jest odrzucane. Ruszy, gdy logowanie się powiedzie, a na tym komputerze nic nie ginie.",
+    "Your organisation has turned this on, and {PROVIDER} has not yet let Etiuda use its folder in this account.": "Organizacja włączyła tę funkcję, ale konto {PROVIDER} nie zezwala jeszcze Etiudzie na użycie jej folderu na tym koncie.",
+    "Allow…": "Zezwól…",
+    "Turned off everywhere from another computer. Your organisation keeps sync on for this computer, so a new synced copy starts from what is on it.": "Wyłączona wszędzie z innego komputera. Organizacja utrzymuje synchronizację na tym komputerze, więc nowa zsynchronizowana kopia powstaje z jego zawartości.",
+    "Connecting for the first time.": "Trwa pierwsze łączenie.",
+    "Checking for changes.": "Trwa sprawdzanie zmian.",
+    "Not connected yet. Sync starts once this computer reaches our service.": "Jeszcze bez połączenia. Synchronizacja ruszy, gdy komputer połączy się z naszą usługą.",
+    "Sync starts again in a moment.": "Synchronizacja wznowi się za chwilę.",
+    "Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.": "Synchronizacja chwilowo nie działa. Zostanie wznowiona, gdy komputer połączy się z naszą usługą, a na tym komputerze nic nie ginie.",
+    "Sign-in": "Logowanie",
+    "{PROVIDER} · work accounts of the organisation": "{PROVIDER} · konta służbowe organizacji",
+    "{PROVIDER} · work accounts": "{PROVIDER} · konta służbowe",
+    "{PROVIDER} · accounts the organisation allows": "{PROVIDER} · konta dopuszczone przez organizację",
     /* words: copywriter */
     "Withdrawing the request to join": "Wycofywanie prośby o dołączenie",
     "This computer is signed out. Its place among the account's three computers is freed by itself as soon as the sign-in service can be reached.": "Ten komputer jest wylogowany. Jego miejsce wśród trzech komputerów konta zwolni się samo, gdy tylko usługa logowania będzie osiągalna.",
@@ -9325,6 +9448,11 @@ What is typed here stays in this browser.`;
     // placeholder: Claudette, the eight lines below
     "today, {TIME}": "dziś, {TIME}",
     "No seat is free on the organisation's licence just now.": "W licencji organizacji nie ma teraz wolnego miejsca.",
+    // the copywriter's, the four lines below
+    "The organisation's Etiuda licence seats the people its leads add.": "Licencja Etiudy tej organizacji daje miejsce osobom, które dodają jej liderzy.",
+    "Give the team's lead this code. Once added, this desk takes its seat by itself; nothing more is needed here.": "Wystarczy podać liderowi zespołu ten kod. Po dodaniu to stanowisko samo zajmie miejsce w licencji; tutaj nie trzeba robić nic więcej.",
+    "This account's own trial is running.": "Trwa własny okres próbny tego konta.",
+    "Fourteen days, until {DATE}, on up to three computers. A lead can add this account at any time, without waiting for the trial to end.": "Czternaście dni, do {DATE}, najwyżej na trzech komputerach. Lider może dodać to konto w każdej chwili, bez czekania na koniec okresu próbnego.",
     "The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account's sign-in code among those who have signed in.": "Logowanie się powiodło. Ten komputer sam zajmie miejsce, gdy tylko któreś się zwolni; nikt nie musi nic robić, a lider zespołu widzi kod logowania tego konta wśród osób, które się zalogowały.",
     "This desk's seat is due for renewal.": "Miejsce w licencji dla tego stanowiska czeka na odnowienie.",
     "It renews by itself the next time the sign-in service answers. Everything on this desk works as before.": "Odnowi się samo, gdy usługa logowania znów odpowie. Wszystko na tym stanowisku działa jak dotąd.",
@@ -9942,6 +10070,7 @@ What is typed here stays in this browser.`;
     showDeskNotices: () => showDeskNotices,
     showPackMigrationWarning: () => showPackMigrationWarning,
     syncSaveNotice: () => syncSaveNotice,
+    takePack: () => takePack,
     whoOptions: () => whoOptions
   });
 
@@ -10769,6 +10898,11 @@ What is typed here stays in this browser.`;
       hooks.keepPoolAcross(was, dirtyIds);
     }
     return ok;
+  }
+  function takePack() {
+    flushStats();
+    loadPack();
+    ePackEpoch++;
   }
   var STATS_SAVE_MS = 1500;
   var eStatsT = 0;
@@ -12023,6 +12157,7 @@ What is typed here stays in this browser.`;
     eOnFolderPick: () => eOnFolderPick,
     eOpenCatalogFolder: () => eOpenCatalogFolder,
     eOpenPicker: () => eOpenPicker,
+    eOpenSetAside: () => eOpenSetAside,
     eOpenedRefused: () => eOpenedRefused,
     eOpenedWith: () => eOpenedWith,
     ePickCatalogFile: () => ePickCatalogFile,
@@ -16529,6 +16664,26 @@ What is typed here stays in this browser.`;
       return Promise.resolve(false);
     }
   }
+  function eOpenSetAside() {
+    const h = eHost();
+    if (!h || typeof h.openSetAside !== "function") return Promise.resolve(false);
+    const say = (why) => {
+      if (why === "gone") toastRefusal(t("That folder is no longer where it was kept, so nothing was opened."));
+      else if (why === "could-not-open") toastRefusal(t("This computer did not open the folder just now. Pressing the button again tries again."));
+    };
+    try {
+      return Promise.resolve(h.openSetAside()).then((v) => {
+        if (v === true) return true;
+        if (v && typeof v === "object" && v.ok === false) {
+          say(String(v.why || ""));
+          return false;
+        }
+        return false;
+      }).catch(() => false);
+    } catch (e) {
+      return Promise.resolve(false);
+    }
+  }
   function wireFolderLink(el) {
     el.onclick = () => eOpenCatalogFolder();
     el.onkeydown = (e) => {
@@ -16986,6 +17141,15 @@ What is typed here stays in this browser.`;
     document.body.classList.add("e-host");
     if (h.testService === true) testServiceBand(document);
     if (typeof h.onStatsAsk === "function") h.onStatsAsk(answerStats);
+    if (typeof h.onDeskSynced === "function") h.onDeskSynced((text, n) => {
+      const keys = eDeskTake(text, n);
+      if (keys.length) {
+        try {
+          hooks.takeSyncedDesk(keys);
+        } catch (e) {
+        }
+      }
+    });
     if (h.backdrop) document.body.classList.add("e-backdrop");
     if (h.platform) document.body.classList.add("e-" + String(h.platform).replace(/[^a-z0-9]/gi, ""));
     eSetMaximized(!!h.maximized);
@@ -28977,6 +29141,29 @@ What is typed here stays in this browser.`;
     syncOrgMark();
   }
 
+  // src/modules/catalog-boot.js
+  var catalog_boot_exports = {};
+  __export(catalog_boot_exports, {
+    applyBootCatalog: () => applyBootCatalog,
+    catalogLoaded: () => catalogLoaded
+  });
+  function bootCatalog() {
+    const stored = storedCatalog();
+    if (stored) return stored;
+    const c = eCatalog();
+    return c && eCatalogAccepted(c) ? c : null;
+  }
+  var E_APPLIED = null;
+  function catalogLoaded() {
+    return !!E_APPLIED;
+  }
+  function applyBootCatalog() {
+    eResetCatalog();
+    E_APPLIED = bootCatalog();
+    if (E_APPLIED) eApplyCatalog(E_APPLIED);
+    setLayer(layerNsOf(E_APPLIED));
+  }
+
   // src/modules/signin.js
   var SIGNIN_NAMES = { microsoft: "Microsoft", google: "Google", lab: "Lab" };
   function signinRead(v) {
@@ -28989,6 +29176,11 @@ What is typed here stays in this browser.`;
       code: signedIn && /^[0-9A-Z]{16}$/.test(String(o.code)) ? String(o.code) : "",
       seat: o.seat === "held" || o.seat === "lapsed" || o.seat === "none" ? o.seat : "",
       deskOnly: !!signedIn && o.deskOnly === true,
+      askLead: !!signedIn && o.askLead === true,
+      trialUntil: !!signedIn && Number.isFinite(o.trialUntil) && o.trialUntil > 0 ? o.trialUntil : 0,
+      /* The service said this account's organisation holds its licence (a managed tenant), and why where it also owns one. */
+      licenceManaged: o.licenceManaged === true,
+      cause: o.licenceManaged === true && (o.cause === "own-licence" || o.cause === "assigned") ? o.cause : "",
       at: Number.isFinite(o.at) ? o.at : 0,
       reached: o.reached !== false,
       ask: o.ask === true,
@@ -28999,12 +29191,65 @@ What is typed here stays in this browser.`;
       /* The provider's page of the sign-in that waits, only while one does. */
       link: known(o.busy) && typeof o.link === "string" && (/^https:\/\/\S+$/.test(o.link) || o.busy === "lab" && /^http:\/\/127\.0\.0\.1:[0-9]+\/\S*$/.test(o.link)) ? o.link : "",
       keeps: o.keeps !== false,
+      /* The team's relay refused this desk's seat (a licence that follows Entra): "removed" or "renew". */
+      relaySeat: signedIn && (o.relaySeat === "removed" || o.relaySeat === "renew") ? o.relaySeat : "",
       /* Signed out, with the service not yet told: the desk's place among the account's three is freed at the next contact. */
       outOwed: !signedIn && o.outOwed === true,
       /* The doors the sign-in handed, offered while the desk keeps no team (the door-finding): each by its place, the relay's host
          and the lead's print, so two leads' doors of one team are told apart. */
-      doors: signedIn && Array.isArray(o.doors) ? o.doors.filter((d) => d && Number.isInteger(d.n) && typeof d.host === "string" && d.host.length <= 256 && /^[0-9a-f]{16}$/.test(String(d.print))).slice(0, 16).map((d) => ({ n: d.n, host: d.host, print: String(d.print) })) : []
+      doors: signedIn && Array.isArray(o.doors) ? o.doors.filter((d) => d && Number.isInteger(d.n) && typeof d.host === "string" && d.host.length <= 256 && /^[0-9a-f]{16}$/.test(String(d.print))).slice(0, 16).map((d) => ({ n: d.n, host: d.host, print: String(d.print) })) : [],
+      /* Machine policy (decision 49), only where it sets anything: {on, shared, personal, provider, closed, contact}. */
+      managed: signinManagedRead(o.managed)
     };
+  }
+  function signinManagedRead(m) {
+    if (!m || typeof m !== "object") return null;
+    return {
+      on: m.on === true,
+      shared: m.shared === true,
+      personal: m.personal !== false,
+      provider: m.provider === "microsoft" || m.provider === "google" ? m.provider : "",
+      tenant: m.tenant === true,
+      closed: m.closed === true,
+      contact: typeof m.contact === "string" && m.contact.length <= 200 ? m.contact : "",
+      stranded: m.stranded === true
+    };
+  }
+  function signinManaged(v) {
+    return !!(v && v.managed && v.managed.on);
+  }
+  function signinKeepsAccount(v) {
+    return signinManaged(v) && !v.managed.shared;
+  }
+  function signinCapHolds(v) {
+    return !(v && v.managed && (v.managed.on || v.managed.provider || !v.managed.personal));
+  }
+  function signinRefusedWords(v) {
+    const c = v && v.managed ? v.managed.contact : "";
+    return [
+      t("Your organisation has not given this account access to Etiuda."),
+      (c ? named(t("To ask for access: {CONTACT}."), "{CONTACT}", c) : t("Its IT department can: asking them to assign the account is enough.")) + (catalogLoaded() ? " " + t("Etiuda keeps working with the catalog it has.") : "")
+    ];
+  }
+  function signinNoRoleWords(v) {
+    const c = v && v.managed ? v.managed.contact : "";
+    return [
+      t("This account has no Etiuda role in its organisation, so it holds no seat."),
+      c ? named(t("To ask for access: {CONTACT}."), "{CONTACT}", c) : t("Its IT department can assign one.")
+    ];
+  }
+  function signinStranded(v) {
+    return !!(v && v.managed && v.managed.stranded);
+  }
+  function signinStrandedWords(v) {
+    const c = v && v.managed ? v.managed.contact : "";
+    return [
+      t("This computer's profile did not keep this desk's key."),
+      (c ? named(t("To ask for access: {CONTACT}."), "{CONTACT}", c) : t("The organisation's IT department can have the profile keep it.")) + " " + t("Everything else on this desk works as before; only signing in waits.")
+    ];
+  }
+  function signinRefusedHere(reason, v) {
+    return reason === "signin-tenant" || signinManaged(v) && (reason === "signin-notassigned" || reason === "signin-notallowed");
   }
   var signinV = signinRead(null);
   function signinHost() {
@@ -29165,6 +29410,9 @@ What is typed here stays in this browser.`;
   function signinCodeText(code) {
     return String(code || "").replace(/(.{4})(?=.)/g, "$1 ");
   }
+  function signinDay(at) {
+    return new Date(at).toLocaleDateString(uiLang() === "pl" ? "pl-PL" : "en-GB", { day: "numeric", month: "short" });
+  }
   function signinWhen(at) {
     if (!at) return "";
     const d = new Date(at), now = /* @__PURE__ */ new Date(), lang2 = uiLang() === "pl" ? "pl-PL" : "en-GB";
@@ -29192,19 +29440,32 @@ What is typed here stays in this browser.`;
   }
   function signinSay(reason, v, p) {
     const prov = SIGNIN_NAMES[v.busy || v.signedIn] || "";
+    if (signinRefusedHere(reason, v)) return signinRefusedWords(v);
+    if (reason === "nolicence" && signinManaged(v))
+      return signinNoRoleWords(v);
     switch (reason) {
       case "unreached":
       case "signin-unreached":
       case "signin-timeout":
       case "signin-browser":
         return [t("The sign-in service could not be reached."), t("Nothing changed: this computer is not signed in, and Etiuda works as before.")];
+      /* Where Managed is not set, decision 20 (b)'s words serve an account not assigned as they serve the organisation's refusal. */
+      case "signin-notassigned":
       case "signin-notallowed":
         return [t("This account's organisation has not allowed Etiuda at its sign-in provider."), t("Its IT department can allow it; another account can be used meanwhile.")];
+      case "no-role":
+        return signinNoRoleWords(v);
+      case "seat-removed":
+        return [t("Your organisation no longer gives this account access to Etiuda."), t("This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. The organisation's IT department can give access again.")];
+      case "seat-renew":
+        return [t("This account's sign-in needs renewing."), t("This desk keeps its catalog and works with it as before. Signing in again, under Account, brings the team's new editions back.")];
       case "desks":
         return [t("This account is already in use on three computers."), t("Signing out on one of them makes room here, and so does a computer left unused for 30 days; then Try again.")];
       case "waiting":
       case "full":
         return p && p.team && p.team.lead ? [named(t("{TEAM} has no free seat just now."), "{TEAM}", p.teamName), named(t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and {LEAD}, the team's lead, sees this account's sign-in code among those who have signed in."), "{LEAD}", p.team.lead)] : [t("No seat is free on the organisation's licence just now."), t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account's sign-in code among those who have signed in.")];
+      case "asklead":
+        return [t("The organisation's Etiuda licence seats the people its leads add."), t("Give the team's lead this code. Once added, this desk takes its seat by itself; nothing more is needed here.")];
       case "nolicence":
         return [t("No Etiuda licence has a seat for this account."), t("The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.")];
       case "offline":
@@ -29226,7 +29487,7 @@ What is typed here stays in this browser.`;
   function signinNoSeat(v) {
     return v.refused === "waiting" || v.refused === "full";
   }
-  var SIGNIN_REASON_SAID = ["desks", "signin-notallowed", "unreached", "signin-unreached", "signin-timeout", "signin-browser"];
+  var SIGNIN_REASON_SAID = ["desks", "no-role", "signin-notallowed", "unreached", "signin-unreached", "signin-timeout", "signin-browser", "signin-notassigned", "signin-tenant"];
   function signinTold(v) {
     if (!v || !v.signedIn) return null;
     if (FAIL_FIRST.indexOf(v.said) >= 0) return {
@@ -29236,10 +29497,11 @@ What is typed here stays in this browser.`;
         "{REASON}",
         SIGNIN_REASON_SAID.indexOf(v.said) >= 0 ? signinSay(v.said, v)[0] : ""
       ).trim()],
-      acts: [{ act: "choose", label: v.said === "signin-notallowed" ? t("Use another account") : t("Try again"), solid: true }]
+      acts: [{ act: "choose", label: ANOTHER_FOR.indexOf(v.said) >= 0 && !signinRefusedHere(v.said, v) ? t("Use another account") : t("Try again"), solid: true }]
     };
     const r = v.refused;
     if (!r || r === "signin" || signinNoSeat(v)) return null;
+    if (r === "no-role") return { kind: "renewal", say: signinSay("no-role", v), acts: [] };
     if (r === "desks") return {
       kind: "desks",
       say: [
@@ -29253,7 +29515,9 @@ What is typed here stays in this browser.`;
       t("Signing in again settles it; until then, Etiuda keeps working with the catalog it has.")
     ], acts: [], providers: true };
   }
-  var FAIL_FIRST = ["unreached", "signin-unreached", "signin-timeout", "signin-browser", "signin-notallowed", "desks", "token", "signin", "signin-refused", "signin-token", "signin-unbound", "signin-state", "signin-none", "signin-preview", "signin-keyring"];
+  var FAIL_FIRST = ["unreached", "signin-unreached", "signin-timeout", "signin-browser", "signin-notallowed", "desks", "no-role", "token", "signin", "signin-refused", "signin-token", "signin-unbound", "signin-state", "signin-none", "signin-preview", "signin-keyring"];
+  FAIL_FIRST.push("signin-notassigned", "signin-tenant", "signin-other");
+  var ANOTHER_FOR = ["signin-notallowed", "signin-notassigned"];
   function signinDoor(v) {
     const d = signinDoorOf(v);
     if (d && v.signedIn && signinDoorRefused) {
@@ -29267,6 +29531,7 @@ What is typed here stays in this browser.`;
     if (!signinShown(v)) return null;
     const p = signinParts(v), acct = { act: "account", label: t("Account settings") };
     const ident = { initial: p.initial, name: p.name, sub: p.sub, off: p.off };
+    if (signinStranded(v)) return { moment: "stranded", say: signinStrandedWords(v) };
     if (v.busy) return {
       moment: "waiting",
       heading: t("Finish signing in in the browser"),
@@ -29278,12 +29543,18 @@ What is typed here stays in this browser.`;
     if (!v.signedIn) {
       if (FAIL_FIRST.indexOf(v.said) >= 0) {
         const s = signinSay(v.said, v);
+        if (signinRefusedHere(v.said, v)) return {
+          moment: "managed-refused",
+          ident: { initial: "", name: t("Not signed in"), sub: "", off: false },
+          say: s,
+          acts: [{ act: "choose", label: t("Try again"), solid: true }]
+        };
         return {
           moment: "refused",
           heading: s[0],
           line: s[1],
           /* The preview's press stopped nothing, so its way on is Back to the choice, never Try again. */
-          acts: [v.said === "signin-notallowed" ? { act: "choose", label: t("Use another account"), solid: true } : v.said === "signin-preview" ? { act: "choose", label: t("Back") } : { act: "choose", label: t("Try again"), solid: true }]
+          acts: [ANOTHER_FOR.indexOf(v.said) >= 0 ? { act: "choose", label: t("Use another account"), solid: true } : v.said === "signin-preview" ? { act: "choose", label: t("Back") } : { act: "choose", label: t("Try again"), solid: true }]
         };
       }
       return {
@@ -29291,22 +29562,49 @@ What is typed here stays in this browser.`;
         heading: t("Sign in to Etiuda"),
         line: t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three."),
         providers: v.offered,
-        cap: t("Microsoft: a work, school or personal account. Google: a Workspace or personal account."),
+        cap: signinCapHolds(v) ? t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.") : "",
         privacy: t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account."),
         foot: t("Etiuda for personal use, outside work, needs no sign-in.")
       };
     }
     const told = signinTold(v), toldDoor = () => ({ moment: told.kind, ident, say: told.say, providers: told.providers ? v.offered : void 0, acts: told.acts.concat([acct]) });
     if (told && told.kind === "pressed") return toldDoor();
+    if (v.relaySeat) return {
+      moment: "relayseat",
+      ident,
+      say: signinSay(v.relaySeat === "removed" ? "seat-removed" : "seat-renew", v),
+      /* plant:relay-seat-moment */
+      providers: v.relaySeat === "renew" ? v.offered : void 0,
+      acts: [acct]
+    };
     if (v.ask) return { moment: "ask", ident, say: signinSay("ask", v), providers: v.offered, acts: [acct] };
     if (told) return toldDoor();
     if (signinNoSeat(v)) return { moment: "noseat", ident, say: signinSay(v.refused, v, p), acts: [{ act: "check", label: t("Check now"), solid: true }, acct] };
+    if (v.askLead) return {
+      moment: "asklead",
+      ident,
+      say: signinSay("asklead", v),
+      code: v.code,
+      acts: [{ act: "check", label: t("Check now") }, acct],
+      own: v.seat === "held" && v.trialUntil ? [
+        t("This account's own trial is running."),
+        named(t("Fourteen days, until {DATE}, on up to three computers. A lead can add this account at any time, without waiting for the trial to end."), "{DATE}", signinDay(v.trialUntil))
+      ] : null
+    };
     if (v.seat === "none" || !v.seat) return {
       moment: "nolicence",
       ident,
       say: signinSay("nolicence", v),
-      code: v.code,
+      code: signinManaged(v) ? "" : v.code,
+      /* plant:code-managed */
       acts: [{ act: "check", label: t("Check now"), solid: true }, acct]
+    };
+    if (signinManaged(v) && v.reached && v.seat === "held" && !(!p.team && v.doors.length)) return {
+      moment: "managed",
+      ident,
+      /* plant:door-managed */
+      say: [t("Managed by your organisation."), t("Your organisation gave this account its seat on this desk. Its IT department decides who uses Etiuda here, and with which account.")],
+      foot: named(t("Seat held · checked {WHEN}"), "{WHEN}", signinWhen(v.at))
     };
     if (!p.team && v.seat === "held" && v.doors.length) return {
       moment: "doors",
@@ -29387,6 +29685,7 @@ What is typed here stays in this browser.`;
     if (d.cap) h += '<p class="sgn-cap">' + esc(d.cap) + "</p>";
     if (d.privacy) h += '<p class="sgn-cap">' + esc(d.privacy) + "</p>";
     if (d.acts && d.acts.length) h += signinActsHtml(d.acts);
+    if (d.own) h += '<p class="sgn-say sgn-own"><b>' + esc(d.own[0]) + "</b><span>" + esc(d.own[1]) + "</span></p>";
     if (d.link) h += signinLinkHtml(d.link);
     if (d.foot) h += '<p class="sgn-ft">' + esc(d.foot) + "</p>";
     return h;
@@ -29604,12 +29903,298 @@ What is typed here stays in this browser.`;
       if (b.dataset.signinAct) signinAct(b.dataset.signinAct, b);
     });
   }
+  var SYNC_LINES = ["on", "off", "ending", "ungiven", "ungiven-held", "org-off", "unavailable", "anew", "first", "checking", "unconnected", "resuming", "signin-refused", "again", "spent", "refused", "lapsed", "paused", "conflict", "full", "noseat", "ask"];
+  function syncRead(v) {
+    const o = v && typeof v === "object" ? v : {};
+    if (o.shown !== true || SYNC_LINES.indexOf(o.line) < 0) return { shown: false, line: "", on: false, held: false, why: "", since: 0, say: "", askNow: false, at: 0 };
+    return {
+      shown: true,
+      line: o.line,
+      on: o.on === true,
+      held: o.held === true,
+      why: typeof o.why === "string" ? o.why.slice(0, 40) : "",
+      since: Number.isFinite(o.since) && o.since > 0 ? o.since : 0,
+      say: typeof o.say === "string" ? o.say.slice(0, 40) : "",
+      askNow: o.askNow === true,
+      at: Number.isFinite(o.at) && o.at > 0 ? o.at : 0
+    };
+  }
+  function syncNow() {
+    const h = eHost();
+    if (!h || typeof h.storeState !== "function") return syncRead(null);
+    try {
+      return syncRead(h.storeState());
+    } catch (e) {
+      return syncRead(null);
+    }
+  }
+  function syncWhyWords(why, provider) {
+    if (why === "no-drive") return provider === "google" ? t("your organisation has switched off Google Drive for it") : t("the account has no OneDrive");
+    if (why === "full") return t("the account's storage is full");
+    if (why === "consent") return t("your organisation has not allowed it; its IT department decides");
+    if (why === "") return t("this computer cannot keep it locked for this Windows account");
+    return t("the account's provider turned down Etiuda's request; it tries again each day");
+  }
+  function syncUnavailable(why, provider, alone) {
+    return named(alone ? t("Sync across computers is not available on this account: {REASON}. Everything works on this computer as before.") : t("Not available on this account: {REASON}. Everything works on this computer as before."), "{REASON}", syncWhyWords(why, provider));
+  }
+  function syncDate(at) {
+    return new Date(at).toLocaleDateString(uiLang() === "pl" ? "pl-PL" : "en-GB", { day: "numeric", month: "long" });
+  }
+  function syncPassingWords(why, provider, refused) {
+    if (refused) return t("our service turned down this computer's last request");
+    if (why === "offline") return named(t("this computer cannot reach the {PROVIDER} account"), "{PROVIDER}", SIGNIN_NAMES[provider] || "Microsoft");
+    if (why === "rate") return t("our service is busy");
+    return t("this computer cannot reach our service");
+  }
+  function syncPassing(s, provider) {
+    const frame = s.line === "spent" || s.line === "refused" ? t("Not syncing: {REASON}. Sync tries again within a day, and nothing on this computer is lost.") : s.at ? named(
+      t("Not syncing just now: {REASON}. Sync tries again at {TIME}, and nothing on this computer is lost."),
+      "{TIME}",
+      new Date(s.at).toLocaleTimeString(uiLang() === "pl" ? "pl-PL" : "en-GB", { hour: "2-digit", minute: "2-digit" })
+    ) : t("Not syncing just now: {REASON}. Sync tries again by itself, and nothing on this computer is lost.");
+    return named(frame, "{REASON}", syncPassingWords(s.why, provider, s.line === "refused"));
+  }
+  function syncLine(s, provider) {
+    if (s.line === "org-off") return t("Your organisation has not turned this on.");
+    if (s.line === "off") return t("Only on this computer.");
+    if (s.line === "ending") return t("Off everywhere. The synced copy is deleted as soon as this computer reaches our service.");
+    if (s.line === "ungiven") return named(t("Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account."), "{PROVIDER}", SIGNIN_NAMES[provider] || "Microsoft");
+    if (s.line === "ungiven-held") return named(t("Your organisation has turned this on, and {PROVIDER} has not yet let Etiuda use its folder in this account."), "{PROVIDER}", SIGNIN_NAMES[provider] || "Microsoft");
+    if (s.line === "unavailable") return syncUnavailable(s.why, provider);
+    if (s.line === "anew") return t("Turned off everywhere from another computer. Your organisation keeps sync on for this computer, so a new synced copy starts from what is on it.");
+    if (s.line === "first") return t("Connecting for the first time.");
+    if (s.line === "checking") return t("Checking for changes.");
+    if (s.line === "unconnected") return t("Not connected yet. Sync starts once this computer reaches our service.");
+    if (s.line === "resuming") return t("Sync starts again in a moment.");
+    if (s.line === "signin-refused") return t("Not syncing while signing in on this computer is refused. Sync runs once signing in works, and nothing on this computer is lost.");
+    if (s.line === "again" || s.line === "spent" || s.line === "refused") return syncPassing(s, provider);
+    if (s.line === "lapsed") return t("Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.");
+    if (s.line === "paused") return named(t("Paused since {DATE}. It resumes when this computer reaches our service."), "{DATE}", syncDate(s.since));
+    if (s.line === "conflict") return t("Changed on two computers: the newer change is in use, and the older one is kept, so nothing is lost.");
+    if (s.line === "full") return t("Sync is full, so new changes stay on this computer until something is removed.");
+    if (s.line === "noseat") return t("Waiting for a seat. Sync resumes when this account holds one again, and nothing on this computer is lost.");
+    if (s.line === "ask") return t("Waiting for your answer about what is on this desk. Nothing syncs until then.");
+    return t("Your catalogs, edits and settings on every computer you sign in on.");
+  }
+  var syncWaiting = null;
+  var syncWhoseShut = null;
+  function syncNoticeBubble(id, headText, tailText, anchor, primary, onDismiss, extra) {
+    const prev = document.getElementById(id);
+    if (prev) prev.remove();
+    const d = document.createElement("div");
+    d.id = id;
+    d.className = "bub bub-ask e-sync-said";
+    d.setAttribute("role", "status");
+    const p = document.createElement("p"), b = document.createElement("b");
+    b.textContent = headText;
+    p.appendChild(b);
+    if (tailText) p.appendChild(document.createTextNode(tailText));
+    d.appendChild(p);
+    const row2 = document.createElement("div");
+    row2.className = "tour-actions";
+    if (extra && extra.label) {
+      const o = document.createElement("button");
+      o.type = "button";
+      o.className = "btn";
+      o.textContent = extra.label;
+      o.onclick = extra.onClick;
+      row2.appendChild(o);
+    }
+    const x = document.createElement("button");
+    x.type = "button";
+    x.className = primary ? "btn primary" : "btn";
+    x.textContent = t("Dismiss");
+    x.onclick = () => {
+      d.remove();
+      if (onDismiss) onDismiss();
+    };
+    row2.appendChild(x);
+    d.appendChild(row2);
+    document.body.appendChild(d);
+    hangBubble(d, anchor);
+    return d;
+  }
+  function syncChoiceNotice(choice) {
+    if (choice !== "mine" && choice !== "start" && choice !== "kept") return;
+    const btn = $("#signinBtn");
+    if (!btn || !btn.getClientRects().length) return;
+    const tpl = choice === "mine" ? t("Syncing now, with what was already on this desk.") : choice === "kept" ? t(`Starting from your account did not finish, and nothing was lost. What could not be put back is kept on this computer, in Etiuda's "Set aside" folder, and is never uploaded. The question about what is on this desk still waits for your answer.`) : t(`This desk now has your account's content. What was here before is kept on this computer, in Etiuda's "Set aside" folder, and is never uploaded.`);
+    const i = tpl.indexOf(". ");
+    const head = i < 0 ? tpl : tpl.slice(0, i + 1), tail = i < 0 ? "" : " " + tpl.slice(i + 2);
+    const extra = choice !== "mine" ? { label: t("Open this folder"), onClick: () => eOpenSetAside() } : null;
+    const d = syncNoticeBubble("eSyncChoiceNote", head, tail, () => $("#signinBtn"), true, () => {
+      const said2 = document.getElementById("eSyncSaid");
+      if (said2) hangBubble(said2, () => $("#signinBtn"));
+    }, extra);
+    const said = document.getElementById("eSyncSaid");
+    if (said) hangBubble(said, d);
+  }
+  function syncAnswer(choice) {
+    const h = eHost();
+    if (!h || typeof h.storeAnswer !== "function") return Promise.resolve(syncNow());
+    try {
+      eDeskFlush();
+    } catch (e) {
+    }
+    try {
+      return Promise.resolve(h.storeAnswer(String(choice || ""))).then((res) => {
+        if (res && res.ok) syncChoiceNotice(res.choice);
+        if (res && !res.ok && res.kept === true) syncChoiceNotice("kept");
+        return res && res.view ? syncRead(res.view) : syncNow();
+      }, () => syncNow());
+    } catch (e) {
+      return Promise.resolve(syncNow());
+    }
+  }
+  function askSyncWhose(origin) {
+    if (syncWhoseShut) {
+      syncWhoseShut(false);
+      syncWhoseShut = null;
+    }
+    const target = origin || (() => $("#signinBtn"));
+    const anchor = typeof target === "function" ? target() : target;
+    if (!anchor || !anchor.getClientRects().length) return;
+    const el = document.createElement("div");
+    el.className = "bub bub-ask e-sync-whose";
+    el.id = "eSyncWhose";
+    el.setAttribute("role", "alertdialog");
+    el.setAttribute("aria-labelledby", "eSyncWhoseT");
+    const h3 = document.createElement("h3");
+    h3.id = "eSyncWhoseT";
+    h3.textContent = t("Is what is on this desk yours?");
+    const lead = document.createElement("p");
+    lead.textContent = t("Another account was signed in here before, and its settings, edits and own cards are still on this desk. Nothing syncs until you choose.");
+    const opt = (bold, rest) => {
+      const p = document.createElement("p");
+      p.className = "e-sync-opt";
+      const b = document.createElement("b");
+      b.textContent = t(bold);
+      p.appendChild(b);
+      p.appendChild(document.createTextNode(": " + t(rest)));
+      return p;
+    };
+    const acts = document.createElement("div");
+    acts.className = "tour-actions";
+    const mkBtn = (label2, cls, fn) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = cls;
+      b.textContent = t(label2);
+      b.onclick = fn;
+      acts.appendChild(b);
+      return b;
+    };
+    el.appendChild(h3);
+    el.appendChild(lead);
+    el.appendChild(opt("It is mine", "it joins what your account syncs."));
+    el.appendChild(opt("Start from my account", "this desk takes your account's content; what is here is set aside, not deleted."));
+    const shut = (later) => {
+      removeEventListener("keydown", onEsc, true);
+      if (syncWhoseShut === shut) syncWhoseShut = null;
+      el.remove();
+      if (later) syncAnswer("later");
+    };
+    const onEsc = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        shut(true);
+      }
+    };
+    addEventListener("keydown", onEsc, true);
+    syncWhoseShut = shut;
+    const choose = (what) => {
+      shut(false);
+      syncAnswer(what);
+    };
+    mkBtn("It is mine", "btn", () => choose("mine"));
+    mkBtn("Start from my account", "btn", () => choose("start"));
+    const laterBtn = mkBtn("Not now", "btn primary", () => shut(true));
+    el.appendChild(acts);
+    document.body.appendChild(el);
+    hangBubble(el, target, { width: 440 });
+    try {
+      laterBtn.focus({ preventScroll: true });
+    } catch (_) {
+    }
+  }
+  function syncSay(s) {
+    if (s.line !== "ask" && syncWhoseShut) syncWhoseShut(false);
+    const wantAsk = s.line === "ask" && s.askNow && !document.getElementById("eSyncWhose");
+    const wantSay = !!s.say && !document.getElementById("eSyncSaid");
+    if (!wantAsk && !wantSay) return;
+    const btn = $("#signinBtn"), panel = $("#signinPanel");
+    if (!btn || !btn.getClientRects().length) return;
+    if (panel && !panel.hidden) {
+      if (syncWaiting) return;
+      syncWaiting = new MutationObserver(() => {
+        if (panel.hidden) {
+          syncWaiting.disconnect();
+          syncWaiting = null;
+          syncSay(syncNow());
+        }
+      });
+      syncWaiting.observe(panel, { attributes: true, attributeFilter: ["hidden"] });
+      return;
+    }
+    if (wantAsk) askSyncWhose();
+    if (!wantSay) return;
+    const words = s.say === "on" ? t("Your catalogs, edits and settings now follow you to every computer you sign in on. You can turn this off in Account.") : syncUnavailable(s.say, signinV.signedIn, true);
+    const i = words.indexOf(". ");
+    syncNoticeBubble("eSyncSaid", i < 0 ? words : words.slice(0, i + 1), i < 0 ? "" : " " + words.slice(i + 2), () => document.getElementById("eSyncChoiceNote") || $("#signinBtn"), false);
+    const h = eHost();
+    try {
+      if (h && typeof h.storeSaid === "function") h.storeSaid();
+    } catch (e) {
+    }
+  }
+  function syncOpened() {
+    const h = eHost();
+    try {
+      if (h && typeof h.storeOpened === "function") h.storeOpened();
+    } catch (e) {
+    }
+  }
+  var syncTellers = [];
+  function syncOnChange(fn) {
+    if (typeof fn === "function") syncTellers.push(fn);
+  }
+  function syncChanged() {
+    const s = syncNow();
+    syncSay(s);
+    syncTellers.forEach((fn) => {
+      try {
+        fn(s);
+      } catch (e) {
+      }
+    });
+  }
+  function syncSet(what) {
+    const h = eHost();
+    if (!h || typeof h.storeSet !== "function") return Promise.resolve(syncNow());
+    try {
+      return Promise.resolve(h.storeSet(what)).catch(() => null).then(() => syncNow());
+    } catch (e) {
+      return Promise.resolve(syncNow());
+    }
+  }
+  function syncConsent() {
+    const h = eHost();
+    if (!h || typeof h.storeConsent !== "function") return Promise.resolve("none");
+    try {
+      return Promise.resolve(h.storeConsent()).catch(() => "none");
+    } catch (e) {
+      return Promise.resolve("none");
+    }
+  }
   function wireSignin() {
     const h = signinHost();
     if (!h) return;
     signinNow();
     firstSigninPending = firstSigninDue();
     if (typeof h.onSignin === "function") h.onSignin((v) => signinChanged(v, false));
+    if (typeof h.onStore === "function") h.onStore(() => syncChanged());
     const btn = $("#signinBtn"), panel = $("#signinPanel"), wrap = $("#signinWrap"), fs = $("#firstSignin");
     if (btn) btn.onclick = (e) => {
       e.stopPropagation();
@@ -29634,6 +30219,7 @@ What is typed here stays in this browser.`;
       }
     }, true);
     paintSigninButton();
+    syncSay(syncNow());
   }
 
   // src/modules/header-menus.js
@@ -31475,29 +32061,6 @@ What is typed here stays in this browser.`;
     wireCatalogDrop: () => wireCatalogDrop,
     writeDeskBranch: () => writeDeskBranch
   });
-
-  // src/modules/catalog-boot.js
-  var catalog_boot_exports = {};
-  __export(catalog_boot_exports, {
-    applyBootCatalog: () => applyBootCatalog,
-    catalogLoaded: () => catalogLoaded
-  });
-  function bootCatalog() {
-    const stored = storedCatalog();
-    if (stored) return stored;
-    const c = eCatalog();
-    return c && eCatalogAccepted(c) ? c : null;
-  }
-  var E_APPLIED = null;
-  function catalogLoaded() {
-    return !!E_APPLIED;
-  }
-  function applyBootCatalog() {
-    eResetCatalog();
-    E_APPLIED = bootCatalog();
-    if (E_APPLIED) eApplyCatalog(E_APPLIED);
-    setLayer(layerNsOf(E_APPLIED));
-  }
 
   // src/modules/catalog-merge.js
   var catalog_merge_exports = {};
@@ -39253,6 +39816,7 @@ What is typed here stays in this browser.`;
     applyPrefs: () => applyPrefs,
     hotkeyFromEvent: () => hotkeyFromEvent,
     openSettings: () => openSettings,
+    repaintScreen: () => repaintScreen,
     resetAllSettings: () => resetAllSettings,
     settingsBodyHtml: () => settingsBodyHtml,
     settingsFound: () => settingsFound,
@@ -39462,15 +40026,37 @@ What is typed here stays in this browser.`;
     const h = eHost();
     return h && typeof h.setClosePolicy === "function" && typeof h.setLoginItem === "function" && typeof h.loginItemState === "function" ? h : null;
   }
+  function accountManagedHtml(v) {
+    if (!signinManaged(v)) return "";
+    const held = v.signedIn && v.seat === "held", shared = v.managed.shared;
+    const line = [
+      held ? t("Your organisation gave this account its seat on this desk. Its IT department decides who uses Etiuda here, and with which account.") : "",
+      shared ? t("A shared computer: another person may sign in here, with an account of your organisation.") : ""
+    ].filter(Boolean).join(" ");
+    return '<p class="sgn-say" data-signin-managed><b>' + esc(t("Managed by your organisation.")) + "</b>" + (line ? "<span>" + esc(line) + "</span>" : "") + "</p>";
+  }
+  var ICON_LOCK2 = '<svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M7.26 8.83V6.09A2.74 2.74 0 0 1 12.74 6.09V8.83"/><rect x="4.14" y="8.83" width="11.73" height="7.82" rx="1.17"/></svg>';
+  function signinHeldTo(m) {
+    const line = m.tenant ? t("{PROVIDER} · work accounts of the organisation") : !m.personal ? t("{PROVIDER} · work accounts") : t("{PROVIDER} · accounts the organisation allows");
+    return line.split("{PROVIDER}").join(SIGNIN_NAMES[m.provider]);
+  }
+  function lockedHtml(value) {
+    return '<span class="sgn-val">' + esc(value) + '</span><span class="sgn-lock">' + ICON_LOCK2 + esc(t("Set by your organisation")) + "</span>";
+  }
   function accountCardHtml(v) {
+    if (signinStranded(v)) {
+      const s = signinStrandedWords(v);
+      return '<div class="sgn-top col"><p class="sgn-say" data-signin-stranded><b>' + esc(s[0]) + "</b><span>" + esc(s[1]) + "</span></p></div>";
+    }
     const p = signinParts(v), choosing = signinChoosingNow();
     if (v.signedIn && !choosing) {
-      let h2 = '<div class="sgn-top"><div class="sgn-top-row">' + signinIdentHtml({ initial: p.initial, name: p.name, sub: p.sub, off: p.off }) + '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="another">' + esc(t("Use another account")) + '</button><button type="button" class="btn" data-signin-act="out">' + esc(t("Sign out")) + "</button></span></div>";
+      const keeps = signinKeepsAccount(v);
+      let h2 = '<div class="sgn-top"><div class="sgn-top-row">' + signinIdentHtml({ initial: p.initial, name: p.name, sub: p.sub, off: p.off }) + (keeps ? "" : '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="another">' + esc(t("Use another account")) + '</button><button type="button" class="btn" data-signin-act="out">' + esc(t("Sign out")) + "</button></span>") + "</div>" + accountManagedHtml(v);
       const told = signinTold(v), say = (s) => '<p class="sgn-say"><b>' + esc(s[0]) + "</b><span>" + esc(s[1]) + "</span></p>";
       if (told && told.kind === "pressed") h2 += say(told.say) + signinActsHtml(told.acts);
       if (v.ask) h2 += say(signinSay("ask", v)) + signinProvidersHtml(v.offered, true);
       else if (told && told.kind !== "pressed") h2 += say(told.say) + (told.providers ? signinProvidersHtml(v.offered, true) : "");
-      h2 += '<p class="sgn-ft">' + esc(t("Signing out ends this computer's sign-in and frees its place among the account's three; the seat stays the account's. The team's catalog and personal cards stay on the computer.")) + "</p>";
+      if (!keeps) h2 += '<p class="sgn-ft">' + esc(t("Signing out ends this computer's sign-in and frees its place among the account's three; the seat stays the account's. The team's catalog and personal cards stay on the computer.")) + "</p>";
       return h2 + "</div>";
     }
     let h = '<div class="sgn-top col">';
@@ -39492,8 +40078,9 @@ What is typed here stays in this browser.`;
       name: t("Not signed in"),
       sub: t("Signing in brings your seat, and a team that has admitted you, to this computer. Etiuda for personal use, outside work, needs no sign-in.")
     });
+    h += accountManagedHtml(v);
     if (v.outOwed) h += '<p class="sgn-cap" data-signin-out-owed>' + esc(t("This computer is signed out. Its place among the account's three computers is freed by itself as soon as the sign-in service can be reached.")) + "</p>";
-    h += "<div>" + (v.said === "signin-preview" ? "" : signinPreviewHtml(v)) + signinProvidersHtml(v.offered, true) + '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + '</p><p class="sgn-cap">' + esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account.")) + "</p></div>";
+    h += "<div>" + (v.said === "signin-preview" ? "" : signinPreviewHtml(v)) + signinProvidersHtml(v.offered, true) + (signinCapHolds(v) ? '<p class="sgn-cap">' + esc(t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.")) + "</p>" : "") + '<p class="sgn-cap">' + esc(t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account.")) + "</p></div>";
     if (choosing && v.signedIn) h += '<span class="sgn-acts"><button type="button" class="btn" data-signin-act="keep">' + esc(t("Cancel")) + "</button></span>";
     return h + "</div>";
   }
@@ -39519,22 +40106,28 @@ What is typed here stays in this browser.`;
     const name = row("name", "user", t("Your name"), "", '<input type="text" id="setAgentName" autocomplete="off" spellcheck="false" placeholder="' + esc(t("first name")) + '" value="' + esc(agentName()) + '">');
     const v = signinNow(), groups = [];
     if (signinShown(v)) groups.push({ rows: [], after: accountCardHtml(v) });
-    const rows = [name], buy = buyOffered() && !v.busy;
+    const rows = [name], buy = buyOffered() && !v.busy && !signinManaged(v) && !v.licenceManaged;
+    const held = v.licenceManaged ? row("buy", "forward", t("Licence for one person"), t("Your organisation holds the Etiuda licence for this account, so there is nothing to buy here."), "") : null;
+    const cause = v.cause === "own-licence" ? t("Your organisation's licence follows the roles its IT department assigns, and this account has none, so it keeps its seat on the licence bought before.") : v.cause === "assigned" ? t("Your organisation has given this account a role, so it uses the organisation's licence; its seat on the licence bought before is not used meanwhile.") : "";
     if (v.signedIn && !signinChoosingNow()) {
       const p = signinParts(v), val = (x) => '<span class="sgn-val">' + esc(x) + "</span>", join = (pair) => pair[0] + " " + pair[1];
       const doorSaid = signinDoorRefusedNow() ? signinSay("door", v)[0] : "";
       rows.push(p.team ? row("team", "people", t("Team"), doorSaid || (p.team.lead ? t("Led by {LEAD}").split("{LEAD}").join(p.team.lead) : ""), val(p.teamName)) : v.doors.length && v.seat === "held" ? row("team", "people", t("A team on this licence"), doorSaid || t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."), signinDoorsHtml(v.doors)) : v.deskOnly && v.seat === "held" ? row("team", "people", t("Working without a team"), doorSaid || t("This computer has its seat, and Etiuda works with its own catalog. Nothing else is needed."), "") : row("team", "people", t("No team yet"), doorSaid || t("No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself."), ""));
-      if (v.code) rows.push(row(
+      if (v.managed && v.managed.provider) rows.push(row("signin", "user", t("Sign-in"), "", lockedHtml(signinHeldTo(v.managed))));
+      if (v.code && !signinManaged(v)) rows.push(row(
         "code",
         "code",
         t("Your sign-in code"),
+        /* plant:code-row-managed */
         t("Not a secret. It tells a team's lead which account is yours."),
         '<code class="sgn-mono">' + esc(signinCodeText(v.code)) + "</code>" + signinCopyHtml("copy")
       ));
       if (signinNoSeat(v)) rows.push(row("seat", "check", t("Seat"), join(signinSay(v.refused, v, p)), ""));
       else if (v.seat === "none") rows.push(row("seat", "check", t("Seat"), join(signinSay("nolicence", v)), ""));
       else rows.push(row("seat", "check", t("Seat"), v.seat === "lapsed" ? join(signinSay("lapsed", v)) : t("On up to three computers; this is one of them."), val(t("Held by this account"))));
+      if (cause) rows.push(row("cause", "check", t("Licence"), cause, ""));
       if (buy) rows.push(buyRow(v));
+      else if (held) rows.push(held);
       rows.push(row(
         "checked",
         "clock",
@@ -39543,22 +40136,78 @@ What is typed here stays in this browser.`;
         (v.at ? val(signinWhen(v.at)) : "") + '<button type="button" class="btn" data-signin-act="check">' + esc(t("Check now")) + "</button>"
       ));
     } else if (buy && !v.signedIn) rows.push(buyRow(v));
+    else if (held && !v.signedIn) rows.push(held);
     groups.push({ rows });
+    const s = v.signedIn && !signinChoosingNow() ? syncNow() : null;
+    if (s && s.shown) groups.push({ rows: [syncRow(s, v.signedIn)] });
     return groups;
+  }
+  var syncRowLine = "";
+  function syncRow(s, provider) {
+    syncRowLine = s.line;
+    let sw = s.line === "unavailable" || s.line === "org-off" ? "" : s.line === "ask" ? '<button type="button" class="btn" data-sync-act="decide">' + esc(t("Decide…")) + "</button>" : s.line === "ungiven-held" ? '<button type="button" class="btn" data-e-open="store-on" data-sync-act="allow">' + esc(t("Allow…")) + "</button>" : seg2("sync", [{ v: "off", t: t("Off") }, { v: "on", t: t("On") }], s.on ? "on" : "off", s.held) + (s.held ? '<span class="sgn-lock">' + ICON_LOCK2 + esc(t("Set by your organisation")) + "</span>" : "");
+    if (s.line === "ungiven") sw = sw.replace('<button type="button" data-val="on"', '<button type="button" data-e-open="store-on" data-val="on"');
+    return row("sync", "teams", t("Sync across computers"), syncLine(s, provider), sw);
+  }
+  function askSyncOff() {
+    const was = document.getElementById("eSyncAsk");
+    if (was) was.remove();
+    const el = document.createElement("div");
+    el.className = "bub bub-ask e-sync-ask";
+    el.id = "eSyncAsk";
+    el.setAttribute("role", "alertdialog");
+    el.setAttribute("aria-labelledby", "eSyncAskT");
+    el.innerHTML = '<h3 id="eSyncAskT">' + esc(t("Turn off sync?")) + "</h3><p>" + esc(t("Everywhere also deletes the synced copy; each computer keeps its own. A computer signed in on later starts without what is here, unless another computer still syncs it.")) + '</p><div class="tour-actions"><button type="button" class="btn" id="eSyncAll">' + esc(t("Everywhere")) + '</button><button type="button" class="btn" id="eSyncHere">' + esc(t("This computer")) + '</button><button type="button" class="btn primary" id="eSyncStay">' + esc(t("Cancel")) + "</button></div>";
+    document.body.appendChild(el);
+    hangBubble(el, () => document.querySelector('#setBody .set-seg[data-seg="sync"]'));
+    const shut = () => {
+      el.remove();
+      removeEventListener("keydown", onEsc, true);
+    };
+    const onEsc = (e) => {
+      if (e.key !== "Escape" || !el.isConnected) return;
+      e.preventDefault();
+      e.stopPropagation();
+      shut();
+    };
+    addEventListener("keydown", onEsc, true);
+    const off = (what) => {
+      shut();
+      syncSet(what).then(() => {
+        if (document.getElementById("setBody")) paintSettings();
+      });
+    };
+    el.querySelector("#eSyncAll").onclick = () => off("everywhere");
+    el.querySelector("#eSyncHere").onclick = () => off("here");
+    el.querySelector("#eSyncStay").onclick = shut;
+    try {
+      el.querySelector("#eSyncStay").focus({ preventScroll: true });
+    } catch (_) {
+    }
   }
   var accountHeard = false;
   function wireAccountRows(box) {
     if (!accountHeard) {
       accountHeard = true;
-      signinOnChange(() => {
-        if (document.getElementById("setBody")) paintSettings();
-      });
+      const again = () => {
+        if (document.getElementById("setBody") && !document.getElementById("eSyncAsk") && !document.getElementById("eSyncWhose")) paintSettings();
+      };
+      signinOnChange(again);
+      syncOnChange(again);
     }
     box.querySelectorAll('[data-e-open="signin"]').forEach((b) => {
       b.onclick = () => signinStart(b.getAttribute("data-e-provider"), "account");
     });
     box.querySelectorAll("[data-signin-act]").forEach((b) => {
       b.onclick = () => signinAct(b.getAttribute("data-signin-act"), b);
+    });
+    box.querySelectorAll('[data-sync-act="decide"]').forEach((b) => {
+      b.onclick = () => askSyncWhose(b);
+    });
+    box.querySelectorAll('[data-sync-act="allow"]').forEach((b) => {
+      b.onclick = () => syncConsent().then(() => {
+        if (document.getElementById("setBody")) paintSettings();
+      });
     });
     box.querySelectorAll(".sgn-link-f").forEach((f) => {
       f.onclick = () => signinLinkSelect(f);
@@ -40194,11 +40843,13 @@ What is typed here stays in this browser.`;
   function paintSettings() {
     const host = settingsHost(), box = host && host.querySelector("#setBody");
     if (!box) return;
+    syncRowLine = "";
     box.innerHTML = settingsPageHtml(sxOn, sxQuery);
     paintKeysInline();
     wireHotkeyRow(box);
     wirePage(box);
     translateTree(box);
+    if (syncRowLine === "conflict" && box.querySelector('[data-row="sync"]')) syncOpened();
   }
   function syncDeskLook() {
     const host = settingsHost(), cols = host && host.querySelector(".sx-mini .cols");
@@ -40267,6 +40918,17 @@ What is typed here stays in this browser.`;
       sbox.querySelectorAll("button").forEach((b) => {
         b.onclick = () => {
           const seg3 = sbox.getAttribute("data-seg"), v = b.getAttribute("data-val"), on = v === "on";
+          if (seg3 === "sync") {
+            if (b.classList.contains("on")) return;
+            if (on && syncNow().line === "ungiven") syncConsent().then(() => {
+              if (document.getElementById("setBody")) paintSettings();
+            });
+            else if (on) syncSet("on").then(() => {
+              if (document.getElementById("setBody")) paintSettings();
+            });
+            else askSyncOff();
+            return;
+          }
           if (b.classList.contains("on")) return;
           sbox.querySelectorAll("button").forEach((x) => x.classList.remove("on"));
           b.classList.add("on");
@@ -43107,7 +43769,8 @@ What is typed here stays in this browser.`;
   // src/modules/restart.js
   var restart_exports = {};
   __export(restart_exports, {
-    restartDesk: () => restartDesk
+    restartDesk: () => restartDesk,
+    takeSyncedDesk: () => takeSyncedDesk
   });
   function restartDesk() {
     const wasScreen = screenOn;
@@ -43154,6 +43817,41 @@ What is typed here stays in this browser.`;
     tourAfterRestart();
     maybeStartTour();
     if (teamJoinShown()) paintJoin();
+  }
+  function takeSyncedDesk(keys) {
+    const layer = eLayer(), mine = (n) => keys.indexOf(layer + n) > -1;
+    const packed = mine("Pack"), ordered = mine("CatOrder"), intents = mine("IntentOrder");
+    if (packed) takePack();
+    if (intents) setIntentOrderLoaded(false);
+    if (packed || ordered) loadCatOrder();
+    if (packed || ordered || intents) {
+      rebuildCards();
+      drawPills();
+      drawIntentRail();
+    }
+    if (keys.some((k) => !LAYER_KEYS.some((n) => k === layer + n))) applyPrefs();
+    else render();
+    drawScreenSynced();
+  }
+  var screenSyncedOwed = false;
+  function drawScreenSynced() {
+    const sh = document.getElementById("screenHost"), a = document.activeElement;
+    if (!screenOn || !sh) return;
+    const tag = a ? String(a.tagName || "").toLowerCase() : "";
+    const typing = !!a && sh.contains(a) && (a.isContentEditable || tag === "textarea" || tag === "select" || tag === "input" && !/^(checkbox|radio|range|button|submit|reset|color)$/i.test(a.type || ""));
+    if (typing) {
+      if (!screenSyncedOwed) {
+        screenSyncedOwed = true;
+        sh.addEventListener("focusout", () => {
+          screenSyncedOwed = false;
+          setTimeout(drawScreenSynced, 0);
+        }, { once: true });
+      }
+      return;
+    }
+    if (screenOn === "settings") repaintScreen();
+    else if (screenOn === "library") mgRefreshAround(() => {
+    });
   }
 
   // src/modules/pick.js
@@ -44087,6 +44785,7 @@ What is typed here stays in this browser.`;
       loadCatalogFromFolder,
       offerPickedCatalog: eOfferPickedCatalog,
       restartDesk,
+      takeSyncedDesk,
       runShortcut
     });
     eCarryOldKeys();

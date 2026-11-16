@@ -661,6 +661,9 @@ const under = (el, name) => el.kids.reduce((out, k) => out.concat(k.name === nam
      under the one key both programs read; the registry compares keys without case.
      - The desk, shell/main.js: TeamFolder and LeadKey (joinPolicyFacts), DeskNoUpdateCheck (policyNoUpdate); checked
        below against the shell's own text.
+     - A managed installation (decision 49), read by both programs: Managed, SharedComputer, AllowPersonalAccounts, SigninProvider,
+       SigninTenant and SupportContact (the desk's managedPolicyFrom, Studio's own reader of the same six); NonPersistent and
+       NonPersistentNewDesk, the desk's alone (section 12).
      - Etiuda Studio, from its board 992 and update-check work (Claude α's decisions 10 and 11, 2026-11-11):
        StudioNoUpdateCheck (src/update-note.mjs noUpdateFrom) and AiProvider, AiEndpoint, AiModel, AiKey
        (src/customer-ai.mjs aiPolicyFrom). Studio's old pair (TeamAboveFolder, LeadKeyAbove) left on 2026-10-15, sense pass
@@ -676,6 +679,9 @@ const under = (el, name) => el.kids.reduce((out, k) => out.concat(k.name === nam
     DeskOrganisationModel: { onOff: true },
     AiProvider: { list: ["openai", "anthropic", "google", "azure", "compatible"] },
     AiEndpoint: { text: "2048" }, AiModel: { text: "256" }, AiKey: { text: "1024" },
+    Managed: { onOff: true, desk: true }, SharedComputer: { onOff: true, desk: true }, AllowPersonalAccounts: { onOff: true, desk: true },
+    SigninProvider: { list: ["microsoft", "google"], desk: true }, SigninTenant: { text: "253", desk: true }, SupportContact: { text: "200", desk: true },
+    NonPersistent: { onOff: true, desk: true }, NonPersistentNewDesk: { onOff: true, desk: true },
   };
   let deskText = "";
   try { deskText = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8").toLowerCase(); } catch (e) { problems.push("shell/main.js unread"); }

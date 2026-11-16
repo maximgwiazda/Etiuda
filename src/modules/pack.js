@@ -393,6 +393,9 @@ function savePack(dirtyIds){
   }
   return ok;
 }
+/* The layer as the desk now holds it, read again in place: counts not yet written go first, since loadPack reads them back from
+   their own keys, and every card's pool signature moves. */
+function takePack(){ flushStats(); loadPack(); ePackEpoch++; }
 /* A COUNT CHANGES NO CARD'S MARKUP, and ePackEpoch heads every card's pool signature, so a count
    saved through savePack rebuilt every shown card on the next render. Counts are written here,
    after the act that counted them; a savePack in between carries them. */
@@ -472,6 +475,6 @@ export {
   savePack, saveStats, flushStats, setStatsFlush,
   packSnapshot,
   packUndoFor,
-  BASE_CATS, BASE_M, catalogCardId, rebuildBaseCards, retiredCards, pack, loadPack, resetPack,
+  BASE_CATS, BASE_M, catalogCardId, rebuildBaseCards, retiredCards, pack, loadPack, resetPack, takePack,
   showPackMigrationWarning, syncSaveNotice, showDeskNotices, eNotice, dropNotice, whoOptions, isFavourite, isIntentFavourite,
 };

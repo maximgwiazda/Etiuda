@@ -3,13 +3,16 @@
    signed in by provider, the sign-in code and how the seat stands, and shows nothing where no provider is offered, so a desk
    with no registration configured looks as it did. Settings' Account draws the same view with signinParts. */
 import { $ } from "./dom.js";
-import { eHost, eCatalogFolderPinned } from "./host.js";
+import { eHost, eOpenSetAside, eCatalogFolderPinned } from "./host.js";
 import { esc } from "./esc.js";
 import { t, uiLang, hugDottedGround } from "./ui-lang.js";
 import { agentName } from "./agent.js";
 import { lsGet, lsSet } from "./storage.js";
 import { teamLeads } from "./team-join.js";
 import { hooks } from "./hooks.js";
+import { catalogLoaded } from "./catalog-boot.js";
+import { hangBubble } from "./bubble.js";
+import { eDeskFlush } from "./storage.js";
 
 /* "lab" is offered only by the sign-in lab (shell/main.js signinLabRead), never by a desk installed or packaged. */
 const SIGNIN_NAMES={microsoft:"Microsoft", google:"Google", lab:"Lab"}; // placeholder: Claudette, "Lab"
@@ -24,6 +27,11 @@ function signinRead(v){
     code: signedIn && /^[0-9A-Z]{16}$/.test(String(o.code)) ? String(o.code) : "",
     seat: o.seat==="held" || o.seat==="lapsed" || o.seat==="none" ? o.seat : "",
     deskOnly: !!signedIn && o.deskOnly===true,
+    askLead: !!signedIn && o.askLead===true,
+    trialUntil: !!signedIn && Number.isFinite(o.trialUntil) && o.trialUntil>0 ? o.trialUntil : 0,
+    /* The service said this account's organisation holds its licence (a managed tenant), and why where it also owns one. */
+    licenceManaged: o.licenceManaged===true,
+    cause: o.licenceManaged===true && (o.cause==="own-licence" || o.cause==="assigned") ? o.cause : "",
     at: Number.isFinite(o.at) ? o.at : 0,
     reached: o.reached!==false,
     ask: o.ask===true,
@@ -34,13 +42,56 @@ function signinRead(v){
     /* The provider's page of the sign-in that waits, only while one does. */
     link: known(o.busy) && typeof o.link==="string" && (/^https:\/\/\S+$/.test(o.link) || (o.busy==="lab" && /^http:\/\/127\.0\.0\.1:[0-9]+\/\S*$/.test(o.link))) ? o.link : "",
     keeps: o.keeps!==false,
+    /* The team's relay refused this desk's seat (a licence that follows Entra): "removed" or "renew". */
+    relaySeat: signedIn && (o.relaySeat==="removed" || o.relaySeat==="renew") ? o.relaySeat : "",
     /* Signed out, with the service not yet told: the desk's place among the account's three is freed at the next contact. */
     outOwed: !signedIn && o.outOwed===true,
     /* The doors the sign-in handed, offered while the desk keeps no team (the door-finding): each by its place, the relay's host
        and the lead's print, so two leads' doors of one team are told apart. */
     doors: signedIn && Array.isArray(o.doors) ? o.doors.filter(d=>d && Number.isInteger(d.n) && typeof d.host==="string" && d.host.length<=256
-      && /^[0-9a-f]{16}$/.test(String(d.print))).slice(0,16).map(d=>({n:d.n, host:d.host, print:String(d.print)})) : []
+      && /^[0-9a-f]{16}$/.test(String(d.print))).slice(0,16).map(d=>({n:d.n, host:d.host, print:String(d.print)})) : [],
+    /* Machine policy (decision 49), only where it sets anything: {on, shared, personal, provider, closed, contact}. */
+    managed: signinManagedRead(o.managed)
   };
+}
+function signinManagedRead(m){
+  if(!m || typeof m!=="object") return null;
+  return {on:m.on===true, shared:m.shared===true, personal:m.personal!==false,
+    provider:m.provider==="microsoft" || m.provider==="google" ? m.provider : "", tenant:m.tenant===true, closed:m.closed===true,
+    contact:typeof m.contact==="string" && m.contact.length<=200 ? m.contact : "", stranded:m.stranded===true};
+}
+/* A MANAGED COMPUTER (decision 49): nothing to buy, try or switch, and the account it has kept unless the computer is shared. */
+function signinManaged(v){ return !!(v && v.managed && v.managed.on); }
+function signinKeepsAccount(v){ return signinManaged(v) && !v.managed.shared; } /* plant:keeps-account */
+/* Where a provider is pinned or personal accounts are off, the line naming personal accounts would not hold. */
+function signinCapHolds(v){ return !(v && v.managed && (v.managed.on || v.managed.provider || !v.managed.personal)); } /* plant:cap-holds */
+/* The refusal of an account the organisation has not given access, and whom to ask: the policy's contact as written, or its IT;
+   that the desk works on is said only where it holds a catalog to work with. */
+function signinRefusedWords(v){
+  const c=v && v.managed ? v.managed.contact : "";
+  return [t("Your organisation has not given this account access to Etiuda."),
+    (c ? named(t("To ask for access: {CONTACT}."),"{CONTACT}",c) : t("Its IT department can: asking them to assign the account is enough.")) /* plant:refused-contact */
+      + (catalogLoaded() ? " "+t("Etiuda keeps working with the catalog it has.") : "")]; /* plant:refused-catalog */
+}
+/* An account its organisation gives no Etiuda role (a managed installation, or the service's "no-role"): what to do, and whom to ask
+   where SupportContact names someone, as the refusal above does (the copywriter, 2026-11-14). */
+function signinNoRoleWords(v){
+  const c=v && v.managed ? v.managed.contact : "";
+  return [t("This account has no Etiuda role in its organisation, so it holds no seat."),
+    c ? named(t("To ask for access: {CONTACT}."),"{CONTACT}",c) : t("Its IT department can assign one.")]; /* plant:no-role-contact */
+}
+/* A NON-PERSISTENT DESKTOP whose profile did not keep this desk's key (section 12): what happened and whom to ask, never a fault of
+   the person's, and everything on the desk working as before. */
+function signinStranded(v){ return !!(v && v.managed && v.managed.stranded); } /* plant:np-page */
+function signinStrandedWords(v){
+  const c=v && v.managed ? v.managed.contact : "";
+  return [t("This computer's profile did not keep this desk's key."),
+    (c ? named(t("To ask for access: {CONTACT}."),"{CONTACT}",c) : t("The organisation's IT department can have the profile keep it."))
+      + " " + t("Everything else on this desk works as before; only signing in waits.")];
+}
+/* The reasons that sentence answers: a sign-in outside the pinned tenant always, and the organisation's refusals on a managed computer. */
+function signinRefusedHere(reason, v){
+  return reason==="signin-tenant" || (signinManaged(v) && (reason==="signin-notassigned" || reason==="signin-notallowed")); /* plant:refused-here */
 }
 let signinV=signinRead(null);
 function signinHost(){
@@ -181,6 +232,10 @@ function bootFirstSignin(land){
 }
 /* The code in four groups of four, as it is read aloud; Copy takes it without the spaces. */
 function signinCodeText(code){ return String(code||"").replace(/(.{4})(?=.)/g,"$1 "); }
+/* A day as the panel says one: "27 Nov". */
+function signinDay(at){
+  return new Date(at).toLocaleDateString(uiLang()==="pl" ? "pl-PL" : "en-GB",{day:"numeric", month:"short"});
+}
 function signinWhen(at){
   if(!at) return "";
   const d=new Date(at), now=new Date(), lang=uiLang()==="pl" ? "pl-PL" : "en-GB";
@@ -211,17 +266,30 @@ function signinParts(v){
 /* The two sentences a refusal or a quiet state is told in, [heading, line], by the shell's reason. */
 function signinSay(reason, v, p){
   const prov=SIGNIN_NAMES[v.busy||v.signedIn]||"";
+  if(signinRefusedHere(reason, v)) return signinRefusedWords(v);
+  if(reason==="nolicence" && signinManaged(v)) /* plant:no-role-managed */
+    return signinNoRoleWords(v);
   switch(reason){
     case "unreached": case "signin-unreached": case "signin-timeout": case "signin-browser":
       return [t("The sign-in service could not be reached."), t("Nothing changed: this computer is not signed in, and Etiuda works as before.")];
+    /* Where Managed is not set, decision 20 (b)'s words serve an account not assigned as they serve the organisation's refusal. */
+    case "signin-notassigned":
     case "signin-notallowed":
       return [t("This account's organisation has not allowed Etiuda at its sign-in provider."), t("Its IT department can allow it; another account can be used meanwhile.")];
+    case "no-role":
+      return signinNoRoleWords(v);
+    case "seat-removed":
+      return [t("Your organisation no longer gives this account access to Etiuda."), t("This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. The organisation's IT department can give access again.")];
+    case "seat-renew":
+      return [t("This account's sign-in needs renewing."), t("This desk keeps its catalog and works with it as before. Signing in again, under Account, brings the team's new editions back.")];
     case "desks":
       return [t("This account is already in use on three computers."), t("Signing out on one of them makes room here, and so does a computer left unused for 30 days; then Try again.")];
     case "waiting": case "full": /* plant:wait-say */
       return p && p.team && p.team.lead
         ? [named(t("{TEAM} has no free seat just now."),"{TEAM}",p.teamName), named(t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and {LEAD}, the team's lead, sees this account's sign-in code among those who have signed in."),"{LEAD}",p.team.lead)]
         : [t("No seat is free on the organisation's licence just now."), t("The sign-in worked. This computer takes a seat by itself as soon as one is free; nobody needs to do anything, and the team's lead sees this account's sign-in code among those who have signed in.")];
+    case "asklead":
+      return [t("The organisation's Etiuda licence seats the people its leads add."), t("Give the team's lead this code. Once added, this desk takes its seat by itself; nothing more is needed here.")];
     case "nolicence":
       return [t("No Etiuda licence has a seat for this account."), t("The sign-in worked. A seat comes from a trial, a purchase, or a team's lead admitting the account; another account can be used meanwhile.")];
     case "offline":
@@ -243,23 +311,28 @@ function signinSay(reason, v, p){
 /* No free seat: the service's wait, "waiting", or its refusal, "full"; either way the shell renews quietly until a seat frees. */
 function signinNoSeat(v){ return v.refused==="waiting" || v.refused==="full"; } /* plant:no-seat */
 /* Refusals whose own heading names the reason a sign-in pressed while signed in failed for. */
-const SIGNIN_REASON_SAID=["desks","signin-notallowed","unreached","signin-unreached","signin-timeout","signin-browser"];
+const SIGNIN_REASON_SAID=["desks","no-role","signin-notallowed","unreached","signin-unreached","signin-timeout","signin-browser","signin-notassigned","signin-tenant"];
 /* What a signed-in desk is told over its moment, or null: {kind, say, acts, providers}. "pressed", a sign-in the person pressed while
    signed in that failed, which leaves the desk signed in as it was; else a refusal the shell kept from a renewal or Check now. */
 function signinTold(v){
   if(!v || !v.signedIn) return null;
   if(FAIL_FIRST.indexOf(v.said)>=0) return {kind:"pressed", say:[t("The new sign-in did not finish."), named(t("This computer stays signed in with the account it had. {REASON}"),"{REASON}",
     SIGNIN_REASON_SAID.indexOf(v.said)>=0 ? signinSay(v.said, v)[0] : "").trim()],
-    acts:[{act:"choose", label:v.said==="signin-notallowed" ? t("Use another account") : t("Try again"), solid:true}]}; /* plant:told-pressed */
+    acts:[{act:"choose", label:ANOTHER_FOR.indexOf(v.said)>=0 && !signinRefusedHere(v.said, v) ? t("Use another account") : t("Try again"), solid:true}]}; /* plant:told-pressed */
   const r=v.refused;
   if(!r || r==="signin" || signinNoSeat(v)) return null; /* plant:told-renewal */
+  if(r==="no-role") return {kind:"renewal", say:signinSay("no-role", v), acts:[]}; /* plant:told-no-role */
   if(r==="desks") return {kind:"desks", say:[t("This account is signed in on three computers already."),
     t("A seat holds three computers. Signing out on one of the others frees its place, and this computer checks again by itself.")],
     acts:[{act:"check", label:t("Check now"), solid:true}]};
   return {kind:"renewal", say:[t("The sign-in service did not accept this account's sign-in."),
     t("Signing in again settles it; until then, Etiuda keeps working with the catalog it has.")], acts:[], providers:true};
 }
-const FAIL_FIRST=["unreached","signin-unreached","signin-timeout","signin-browser","signin-notallowed","desks","token","signin","signin-refused","signin-token","signin-unbound","signin-state","signin-none","signin-preview","signin-keyring"];
+const FAIL_FIRST=["unreached","signin-unreached","signin-timeout","signin-browser","signin-notallowed","desks","no-role","token","signin","signin-refused","signin-token","signin-unbound","signin-state","signin-none","signin-preview","signin-keyring"];
+/* Decision 49's own: an account not assigned, a sign-in outside the pinned tenant, and another account on a managed computer. */
+FAIL_FIRST.push("signin-notassigned","signin-tenant","signin-other");
+/* The refusals whose way on is another account, where the computer offers one. */
+const ANOTHER_FOR=["signin-notallowed","signin-notassigned"];
 /* THE DOOR'S CONTENT for the view `v`, whatever form draws it: {moment, ident, heading, line, say, calm, code, providers, cap, privacy, foot,
    acts: [{act, label, solid}]}; null where there is no door. The shell is separate from what it does: signinPanelHtml is the one
    form drawn today (a button in the header with a panel under it), and another form takes the same content. */
@@ -275,6 +348,7 @@ function signinDoorOf(v){
   if(!signinShown(v)) return null;
   const p=signinParts(v), acct={act:"account", label:t("Account settings")};
   const ident={initial:p.initial, name:p.name, sub:p.sub, off:p.off};
+  if(signinStranded(v)) return {moment:"stranded", say:signinStrandedWords(v)};
   if(v.busy) return {moment:"waiting", heading:t("Finish signing in in the browser"),
     line:named(t("The browser has opened {PROVIDER}'s sign-in page. Etiuda waits here and carries on by itself when you come back."),"{PROVIDER}",SIGNIN_NAMES[v.busy]),
     wait:named(t("Waiting for {PROVIDER}…"),"{PROVIDER}",SIGNIN_NAMES[v.busy]),
@@ -282,24 +356,42 @@ function signinDoorOf(v){
   if(!v.signedIn){
     if(FAIL_FIRST.indexOf(v.said)>=0){
       const s=signinSay(v.said, v);
+      /* The account the organisation has not given access, as the product designer drew it: who, the refusal, whom to ask, Try again. */
+      if(signinRefusedHere(v.said, v)) return {moment:"managed-refused", ident:{initial:"", name:t("Not signed in"), sub:"", off:false}, say:s,
+        acts:[{act:"choose", label:t("Try again"), solid:true}]}; /* plant:door-refused-managed */
       return {moment:"refused", heading:s[0], line:s[1],
         /* The preview's press stopped nothing, so its way on is Back to the choice, never Try again. */
-        acts:[v.said==="signin-notallowed" ? {act:"choose", label:t("Use another account"), solid:true}
+        acts:[ANOTHER_FOR.indexOf(v.said)>=0 ? {act:"choose", label:t("Use another account"), solid:true}
           : v.said==="signin-preview" ? {act:"choose", label:t("Back")} : {act:"choose", label:t("Try again"), solid:true}]};
     }
     return {moment:"before", heading:t("Sign in to Etiuda"),
       line:t("Your seat belongs to your account, so it comes with you to any computer you sign in on, up to three."),
-      providers:v.offered, cap:t("Microsoft: a work, school or personal account. Google: a Workspace or personal account."), privacy:t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account."),
+      providers:v.offered, cap:signinCapHolds(v) ? t("Microsoft: a work, school or personal account. Google: a Workspace or personal account.") : "", privacy:t("This desk signs in with a Microsoft or Google account to hold its seat, and has the sign-in checked at etiuda.dev. The team's lead sees no name or address from the account."),
       foot:t("Etiuda for personal use, outside work, needs no sign-in.")};
   }
   const told=signinTold(v), toldDoor=()=>({moment:told.kind, ident, say:told.say, providers:told.providers ? v.offered : undefined, acts:told.acts.concat([acct])});
   if(told && told.kind==="pressed") return toldDoor();
+  /* The relay refused this desk's seat: what that means to the person, never a fault of the team or its lead. */
+  if(v.relaySeat) return {moment:"relayseat", ident, say:signinSay(v.relaySeat==="removed" ? "seat-removed" : "seat-renew", v), /* plant:relay-seat-moment */
+    providers:v.relaySeat==="renew" ? v.offered : undefined, acts:[acct]};
   if(v.ask) return {moment:"ask", ident, say:signinSay("ask", v), providers:v.offered, acts:[acct]};
   if(told) return toldDoor();
   if(signinNoSeat(v)) return {moment:"noseat", ident, say:signinSay(v.refused, v, p), acts:[{act:"check", label:t("Check now"), solid:true}, acct]};
-  /* No certificate: the service found no licence with a seat for this account. The code still shows, since a lead admits by it. */
-  if(v.seat==="none" || !v.seat) return {moment:"nolicence", ident, say:signinSay("nolicence", v), code:v.code,
+  /* ASK YOUR LEAD: the organisation's licence seats the people its
+     leads add, so the code is given to a lead; beside it, never in its place, the person's own trial where it runs, which the service
+     started at the sign-in. */
+  if(v.askLead) return {moment:"asklead", ident, say:signinSay("asklead", v), code:v.code,
+    acts:[{act:"check", label:t("Check now")}, acct],
+    own:v.seat==="held" && v.trialUntil ? [t("This account's own trial is running."),
+      named(t("Fourteen days, until {DATE}, on up to three computers. A lead can add this account at any time, without waiting for the trial to end."),"{DATE}",signinDay(v.trialUntil))] : null};
+  /* No certificate: the service found no licence with a seat for this account. The code still shows, since a lead admits by it, save on
+     a managed computer, where nobody is admitted by code. */
+  if(v.seat==="none" || !v.seat) return {moment:"nolicence", ident, say:signinSay("nolicence", v), code:signinManaged(v) ? "" : v.code, /* plant:code-managed */
     acts:[{act:"check", label:t("Check now"), solid:true}, acct]};
+  /* A managed computer's seat, as the product designer drew it: who decides, and the seat with when it was last checked; no code and no button. */
+  if(signinManaged(v) && v.reached && v.seat==="held" && !(!p.team && v.doors.length)) return {moment:"managed", ident, /* plant:door-managed */
+    say:[t("Managed by your organisation."), t("Your organisation gave this account its seat on this desk. Its IT department decides who uses Etiuda here, and with which account.")],
+    foot:named(t("Seat held · checked {WHEN}"),"{WHEN}",signinWhen(v.at))};
   /* A team on the relay under this licence: one press asks to join it, and its lead's Studio lets a person it knows in. */
   if(!p.team && v.seat==="held" && v.doors.length) return {moment:"doors", ident, heading:t("A team on this licence"),
     line:t("This licence has a team on the relay. If the team's lead has admitted this account before, asking to join lets this computer in once the lead's Studio sees the request; otherwise the lead can send an invitation."),
@@ -384,6 +476,7 @@ function signinPanelHtml(d){
   if(d.cap) h+='<p class="sgn-cap">'+esc(d.cap)+'</p>';
   if(d.privacy) h+='<p class="sgn-cap">'+esc(d.privacy)+'</p>';
   if(d.acts && d.acts.length) h+=signinActsHtml(d.acts);
+  if(d.own) h+='<p class="sgn-say sgn-own"><b>'+esc(d.own[0])+'</b><span>'+esc(d.own[1])+'</span></p>';
   if(d.link) h+=signinLinkHtml(d.link);
   if(d.foot) h+='<p class="sgn-ft">'+esc(d.foot)+'</p>';
   return h;
@@ -515,12 +608,237 @@ function signinClicks(root){
     if(b.dataset.signinAct) signinAct(b.dataset.signinAct, b);
   });
 }
+/* ---- sync across computers: what the shell's storeRow answers (shell/sync/store.cjs), the row's words and the one bubble ---------
+   The page is told a line (SYNC_LINES), the switch, whether policy holds it, the
+   reason, the pause's start and what to say once; never a key, a store or a token. */
+const SYNC_LINES=["on","off","ending","ungiven","ungiven-held","org-off","unavailable","anew","first","checking","unconnected","resuming","signin-refused","again","spent","refused","lapsed","paused","conflict","full","noseat","ask"];
+function syncRead(v){
+  const o=v && typeof v==="object" ? v : {};
+  if(o.shown!==true || SYNC_LINES.indexOf(o.line)<0) return {shown:false, line:"", on:false, held:false, why:"", since:0, say:"", askNow:false, at:0};
+  return {shown:true, line:o.line, on:o.on===true, held:o.held===true, why:typeof o.why==="string" ? o.why.slice(0,40) : "",
+    since:Number.isFinite(o.since) && o.since>0 ? o.since : 0, say:typeof o.say==="string" ? o.say.slice(0,40) : "", askNow:o.askNow===true,
+    at:Number.isFinite(o.at) && o.at>0 ? o.at : 0};
+}
+function syncNow(){
+  const h=eHost();
+  if(!h || typeof h.storeState!=="function") return syncRead(null);
+  try{ return syncRead(h.storeState()); }catch(e){ return syncRead(null); }
+}
+/* The reason a folder could not be reached that the person cannot mend, in the copywriter's words. "no-drive" is OneDrive missing on
+   Microsoft and Drive switched off on Google; "consent" the organisation's refusal; "" a system that seals nothing for real. A folder
+   consent never given is the row's "ungiven"; a reason not named here is read as the provider's refusal, retried at each renewal. */
+function syncWhyWords(why, provider){
+  if(why==="no-drive") return provider==="google" ? t("your organisation has switched off Google Drive for it") : t("the account has no OneDrive");
+  if(why==="full") return t("the account's storage is full");
+  if(why==="consent") return t("your organisation has not allowed it; its IT department decides");
+  if(why==="") return t("this computer cannot keep it locked for this Windows account");
+  return t("the account's provider turned down Etiuda's request; it tries again each day");
+}
+/* The row's line, beside the feature's name; "alone", the bubble's, which names it. */
+function syncUnavailable(why, provider, alone){
+  return named(alone ? t("Sync across computers is not available on this account: {REASON}. Everything works on this computer as before.")
+    : t("Not available on this account: {REASON}. Everything works on this computer as before."),"{REASON}",syncWhyWords(why, provider));
+}
+function syncDate(at){
+  return new Date(at).toLocaleDateString(uiLang()==="pl" ? "pl-PL" : "en-GB",{day:"numeric", month:"long"});
+}
+/* A passing failure's reason, which side was not reached, in words the person can check (the copywriter's section 15). */
+function syncPassingWords(why, provider, refused){
+  if(refused) return t("our service turned down this computer's last request");
+  if(why==="offline") return named(t("this computer cannot reach the {PROVIDER} account"),"{PROVIDER}",SIGNIN_NAMES[provider]||"Microsoft");
+  if(why==="rate") return t("our service is busy");
+  return t("this computer cannot reach our service");
+}
+function syncPassing(s, provider){
+  const frame=s.line==="spent" || s.line==="refused" ? t("Not syncing: {REASON}. Sync tries again within a day, and nothing on this computer is lost.")
+    : s.at ? named(t("Not syncing just now: {REASON}. Sync tries again at {TIME}, and nothing on this computer is lost."),"{TIME}",
+      new Date(s.at).toLocaleTimeString(uiLang()==="pl" ? "pl-PL" : "en-GB",{hour:"2-digit", minute:"2-digit"}))
+    : t("Not syncing just now: {REASON}. Sync tries again by itself, and nothing on this computer is lost.");
+  return named(frame,"{REASON}",syncPassingWords(s.why, provider, s.line==="refused"));
+}
+/* The row's small line for view `s`, the person signed in with `provider`. */
+function syncLine(s, provider){
+  if(s.line==="org-off") return t("Your organisation has not turned this on.");
+  if(s.line==="off") return t("Only on this computer.");
+  if(s.line==="ending") return t("Off everywhere. The synced copy is deleted as soon as this computer reaches our service.");
+  if(s.line==="ungiven") return named(t("Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account."),"{PROVIDER}",SIGNIN_NAMES[provider]||"Microsoft");
+  if(s.line==="ungiven-held") return named(t("Your organisation has turned this on, and {PROVIDER} has not yet let Etiuda use its folder in this account."),"{PROVIDER}",SIGNIN_NAMES[provider]||"Microsoft");
+  if(s.line==="unavailable") return syncUnavailable(s.why, provider);
+  if(s.line==="anew") return t("Turned off everywhere from another computer. Your organisation keeps sync on for this computer, so a new synced copy starts from what is on it.");
+  if(s.line==="first") return t("Connecting for the first time.");
+  if(s.line==="checking") return t("Checking for changes.");
+  if(s.line==="unconnected") return t("Not connected yet. Sync starts once this computer reaches our service.");
+  if(s.line==="resuming") return t("Sync starts again in a moment.");
+  if(s.line==="signin-refused") return t("Not syncing while signing in on this computer is refused. Sync runs once signing in works, and nothing on this computer is lost.");
+  if(s.line==="again" || s.line==="spent" || s.line==="refused") return syncPassing(s, provider);
+  /* A lapse with no reason known. */
+  if(s.line==="lapsed") return t("Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.");
+  if(s.line==="paused") return named(t("Paused since {DATE}. It resumes when this computer reaches our service."),"{DATE}",syncDate(s.since));
+  if(s.line==="conflict") return t("Changed on two computers: the newer change is in use, and the older one is kept, so nothing is lost.");
+  if(s.line==="full") return t("Sync is full, so new changes stay on this computer until something is removed.");
+  if(s.line==="noseat") return t("Waiting for a seat. Sync resumes when this account holds one again, and nothing on this computer is lost.");
+  if(s.line==="ask") return t("Waiting for your answer about what is on this desk. Nothing syncs until then.");
+  return t("Your catalogs, edits and settings on every computer you sign in on.");
+}
+let syncWaiting=null, syncWhoseShut=null;
+function syncNoticeBubble(id, headText, tailText, anchor, primary, onDismiss, extra){
+  const prev=document.getElementById(id); if(prev) prev.remove();
+  const d=document.createElement("div");
+  d.id=id; d.className="bub bub-ask e-sync-said"; d.setAttribute("role","status");
+  const p=document.createElement("p"), b=document.createElement("b");
+  b.textContent=headText; p.appendChild(b);
+  if(tailText) p.appendChild(document.createTextNode(tailText));
+  d.appendChild(p);
+  const row=document.createElement("div"); row.className="tour-actions";
+  if(extra && extra.label){
+    const o=document.createElement("button");
+    o.type="button"; o.className="btn"; o.textContent=extra.label;
+    o.onclick=extra.onClick;
+    row.appendChild(o);
+  }
+  const x=document.createElement("button");
+  x.type="button"; x.className=primary ? "btn primary" : "btn"; x.textContent=t("Dismiss");
+  x.onclick=()=>{ d.remove(); if(onDismiss) onDismiss(); };
+  row.appendChild(x); d.appendChild(row);
+  document.body.appendChild(d);
+  hangBubble(d, anchor);
+  return d;
+}
+/* "kept": a set-aside that failed with something it could not put back, which is in the folder; the desk is not the account's and
+   the question still stands, so it has a notice of its own. */
+function syncChoiceNotice(choice){
+  if(choice!=="mine" && choice!=="start" && choice!=="kept") return;
+  const btn=$("#signinBtn");
+  if(!btn || !btn.getClientRects().length) return;
+  const tpl=choice==="mine" ? t("Syncing now, with what was already on this desk.")
+    : choice==="kept" ? t("Starting from your account did not finish, and nothing was lost. What could not be put back is kept on this computer, in Etiuda's \"Set aside\" folder, and is never uploaded. The question about what is on this desk still waits for your answer.")
+    : t("This desk now has your account's content. What was here before is kept on this computer, in Etiuda's \"Set aside\" folder, and is never uploaded.");
+  const i=tpl.indexOf(". ");
+  const head=i<0 ? tpl : tpl.slice(0,i+1), tail=i<0 ? "" : " "+tpl.slice(i+2);
+  const extra=choice!=="mine" ? { label: t("Open this folder"), onClick: () => eOpenSetAside() } : null;
+  const d=syncNoticeBubble("eSyncChoiceNote", head, tail, ()=>$("#signinBtn"), true, ()=>{
+    const said=document.getElementById("eSyncSaid"); if(said) hangBubble(said, ()=>$("#signinBtn"));
+  }, extra);
+  const said=document.getElementById("eSyncSaid"); if(said) hangBubble(said, d);
+}
+function syncAnswer(choice){
+  const h=eHost();
+  if(!h || typeof h.storeAnswer!=="function") return Promise.resolve(syncNow());
+  try{ eDeskFlush(); }catch(e){} /* plant:answer-flush */
+  try{
+    return Promise.resolve(h.storeAnswer(String(choice||""))).then(res=>{
+      if (res && res.ok) syncChoiceNotice(res.choice);
+      if (res && !res.ok && res.kept === true) syncChoiceNotice("kept");
+      return res && res.view ? syncRead(res.view) : syncNow();
+    }, ()=>syncNow());
+  }catch(e){ return Promise.resolve(syncNow()); }
+}
+/* WHOSE THE DESK IS: asked from the account button automatically while askNow stands, or from Account's Decide button.
+   Escape and Not now answer "later" for this run only; choices close the bubble and hand "mine" or "start" to the shell. */
+function askSyncWhose(origin){
+  if(syncWhoseShut){ syncWhoseShut(false); syncWhoseShut=null; }
+  const target=origin || (()=>$("#signinBtn"));
+  const anchor=typeof target==="function" ? target() : target;
+  if(!anchor || !anchor.getClientRects().length) return;
+  const el=document.createElement("div");
+  el.className="bub bub-ask e-sync-whose";
+  el.id="eSyncWhose";
+  el.setAttribute("role","alertdialog");
+  el.setAttribute("aria-labelledby","eSyncWhoseT");
+  const h3=document.createElement("h3"); h3.id="eSyncWhoseT";
+  h3.textContent=t("Is what is on this desk yours?");
+  const lead=document.createElement("p");
+  lead.textContent=t("Another account was signed in here before, and its settings, edits and own cards are still on this desk. Nothing syncs until you choose.");
+  const opt=(bold, rest)=>{
+    const p=document.createElement("p"); p.className="e-sync-opt";
+    const b=document.createElement("b"); b.textContent=t(bold);
+    p.appendChild(b); p.appendChild(document.createTextNode(": "+t(rest)));
+    return p;
+  };
+  const acts=document.createElement("div"); acts.className="tour-actions";
+  const mkBtn=(label, cls, fn)=>{
+    const b=document.createElement("button"); b.type="button"; b.className=cls;
+    b.textContent=t(label); b.onclick=fn; acts.appendChild(b); return b;
+  };
+  el.appendChild(h3);
+  el.appendChild(lead);
+  el.appendChild(opt("It is mine", "it joins what your account syncs."));
+  el.appendChild(opt("Start from my account", "this desk takes your account's content; what is here is set aside, not deleted."));
+  const shut=(later)=>{
+    removeEventListener("keydown", onEsc, true);
+    if(syncWhoseShut===shut) syncWhoseShut=null;
+    el.remove();
+    if(later) syncAnswer("later");
+  };
+  const onEsc=e=>{ if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); shut(true); } };
+  addEventListener("keydown", onEsc, true);
+  syncWhoseShut=shut;
+  const choose=what=>{ shut(false); syncAnswer(what); };
+  mkBtn("It is mine", "btn", ()=>choose("mine"));
+  mkBtn("Start from my account", "btn", ()=>choose("start"));
+  const laterBtn=mkBtn("Not now", "btn primary", ()=>shut(true));
+  el.appendChild(acts);
+  document.body.appendChild(el);
+  hangBubble(el, target, {width:440});
+  try{ laterBtn.focus({preventScroll:true}); }catch(_){}
+}
+/* SAID ONCE, FROM THE ACCOUNT CONTROL: that sync is on, at the sign-in that made the person's store, or why it is not available. The
+   shell hands it until the page says it was shown (storeSaid), so a second view never says it again; while the account panel is open,
+   it waits for the panel to close, since both hang from the one button. */
+function syncSay(s){
+  if(s.line!=="ask" && syncWhoseShut) syncWhoseShut(false);
+  const wantAsk=s.line==="ask" && s.askNow && !document.getElementById("eSyncWhose");
+  const wantSay=!!s.say && !document.getElementById("eSyncSaid");
+  if(!wantAsk && !wantSay) return;
+  const btn=$("#signinBtn"), panel=$("#signinPanel");
+  if(!btn || !btn.getClientRects().length) return;
+  if(panel && !panel.hidden){
+    if(syncWaiting) return;
+    syncWaiting=new MutationObserver(()=>{ if(panel.hidden){ syncWaiting.disconnect(); syncWaiting=null; syncSay(syncNow()); } });
+    syncWaiting.observe(panel, {attributes:true, attributeFilter:["hidden"]});
+    return;
+  }
+  if(wantAsk) askSyncWhose();
+  if(!wantSay) return;
+  const words=s.say==="on" ? t("Your catalogs, edits and settings now follow you to every computer you sign in on. You can turn this off in Account.")
+    : syncUnavailable(s.say, signinV.signedIn, true);
+  const i=words.indexOf(". ");
+  syncNoticeBubble("eSyncSaid", i<0 ? words : words.slice(0,i+1), i<0 ? "" : " "+words.slice(i+2), ()=>document.getElementById("eSyncChoiceNote") || $("#signinBtn"), false);
+  const h=eHost();
+  try{ if(h && typeof h.storeSaid==="function") h.storeSaid(); }catch(e){ /* the shell has gone */ } /* plant:sync-said-told */
+}
+/* The row's conflict line was painted where the person sees it: the shell stops counting the versions kept so far; they stay kept. */
+function syncOpened(){
+  const h=eHost();
+  try{ if(h && typeof h.storeOpened==="function") h.storeOpened(); }catch(e){ /* the shell has gone */ }
+}
+const syncTellers=[];
+function syncOnChange(fn){ if(typeof fn==="function") syncTellers.push(fn); }
+function syncChanged(){
+  const s=syncNow();
+  syncSay(s);
+  syncTellers.forEach(fn=>{ try{ fn(s); }catch(e){ /* a closed screen */ } });
+}
+/* The switch: "on", or off "here" or "everywhere"; resolves the new view once the shell has acted. */
+function syncSet(what){
+  const h=eHost();
+  if(!h || typeof h.storeSet!=="function") return Promise.resolve(syncNow());
+  try{ return Promise.resolve(h.storeSet(what)).catch(()=>null).then(()=>syncNow()); }catch(e){ return Promise.resolve(syncNow()); }
+}
+/* On where the folder's consent was never given: the shell opens the provider's page for it at once, for the trusted click the
+   preload saw on the switch's On (data-e-open="store-on"). Resolves the shell's answer, or "none". */
+function syncConsent(){
+  const h=eHost();
+  if(!h || typeof h.storeConsent!=="function") return Promise.resolve("none");
+  try{ return Promise.resolve(h.storeConsent()).catch(()=>"none"); }catch(e){ return Promise.resolve("none"); }
+}
 function wireSignin(){
   const h=signinHost();
   if(!h) return;
   signinNow();
   firstSigninPending=firstSigninDue();
   if(typeof h.onSignin==="function") h.onSignin(v=>signinChanged(v, false));
+  if(typeof h.onStore==="function") h.onStore(()=>syncChanged());
   const btn=$("#signinBtn"), panel=$("#signinPanel"), wrap=$("#signinWrap"), fs=$("#firstSignin");
   if(btn) btn.onclick=e=>{ e.stopPropagation(); if(signinOpen) closeSigninPanel(true); else openSigninPanel(); };
   signinClicks(panel);
@@ -536,6 +854,7 @@ function wireSignin(){
     if(e.key==="Escape" && signinOpen && wrap && wrap.contains(document.activeElement)){ e.stopPropagation(); closeSigninPanel(true); }
   }, true);
   paintSigninButton();
+  syncSay(syncNow());
 }
 
 export {
@@ -565,6 +884,11 @@ export {
   signinIdentHtml,
   signinLinkHtml,
   signinLinkSelect,
+  signinManaged,
+  signinStranded,
+  signinStrandedWords,
+  signinKeepsAccount,
+  signinCapHolds,
   signinNow,
   signinOnChange,
   signinPanelHtml,
@@ -579,5 +903,15 @@ export {
   signinStart,
   signinShown,
   signinWhen,
+  syncChanged,
+  syncConsent,
+  syncLine,
+  syncNow,
+  syncOnChange,
+  syncOpened,
+  syncRead,
+  syncSay,
+  syncSet,
+  askSyncWhose,
   wireSignin
 };

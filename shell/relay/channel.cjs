@@ -2026,12 +2026,15 @@ function createProgram(opts) {
    url, headers, body) answering {status, header(name), bytes} and throwing where the relay does not answer; connect(url,
    headers, {message, close}) a socket or null; write(abs, text) the shell's atomic write; say(line); onTeam() after a team
    file lands; onRemoved() once, when the relay refuses this desk as removed and the shell is listening, after which
-   the channel stops asking; clock. */
+   the channel stops asking; seat() this desk's seat certificate or null, seatRenew() a promise that renews it, and
+   onSeat(state), "refused" or "open", for a team whose licence follows Entra (seatHello); room(reason) after each upload, "" where it
+   was taken and the refusal's reason where it was not; clock. */
 function createChannel(opts) {
   const o = opts || {};
   const mirror = path.resolve(o.mirror);
   const clock = typeof o.clock === "function" ? o.clock : Date.now;
   const say = typeof o.say === "function" ? o.say : () => {};
+  const room = typeof o.room === "function" ? r => { try { o.room(r); } catch { /* the caller's own fault */ } } : () => {}; /* plant:room-wrapped */
   const io = o.io || diskIO(mirror, o.write);
   const stateFile = o.stateFile;
   const saveState = s => {
@@ -2049,6 +2052,9 @@ function createChannel(opts) {
   /* How long a join keeps asking after the relay says the team is not there yet, from the first such answer. */
   const ENROL_WAIT_MS = 5 * 60 * 1000;
   let enrolWaitFrom = 0, removedTold = false;
+  /* Whether the relay has asked this desk's sessions for a seat certificate, and what it last answered: learnt from a refusal, so a
+     team whose licence does not follow Entra is never sent one. */
+  let seatAsked = false, seatState = "";
   /* need: not fetched. held: fetched, waiting for the team file. opened: the team key was handed on. none: this relay
      keeps no wrap (a 404), said as nothing. bad: the wrap did not open, said once. */
   let wrapPhase = "need", wrapHeld = null;
@@ -2194,6 +2200,41 @@ function createChannel(opts) {
     return { status: res.status, json, bytes, meta, lapse };
   }
 
+  /* THE SEAT ON A TEAM WHOSE LICENCE FOLLOWS ENTRA: a key's session there carries this desk's certificate. Sent once the relay has
+     refused one without it, on the same challenge, which a refusal leaves unspent; a run-out certificate is renewed first, and so is
+     one the relay refused (a revoked service key, a licence moved), sent again only where the renewal changed it. Answers the relay's
+     last answer, and tells the shell when the refusal starts or ends. */
+  async function seatHello(challenge, who) {
+    const sig = crypto.sign(null, helloBytes(o.rt, challenge, who.keyId), who.privateKey).toString("hex");
+    const send = seat => call("POST", "session", { json: Object.assign({ challenge, key: who.keyId, pub: who.public, sig }, seat ? { seat } : {}) });
+    let sent = seatAsked ? await seatNow(false) : null;
+    let r = await send(sent);
+    const same = (x, y) => !!x && !!y && table(x.sig) && table(y.sig) && x.sig.value === y.sig.value;
+    let tries = 0;
+    tries = 2; /* plant:seat-learn */
+    for (let i = 0; i < tries && refusalOf(r).reason === "seat-lapsed"; i++) {
+      seatAsked = true;
+      let force = false;
+      force = !!sent; /* plant:seat-renew-refused */
+      const next = await seatNow(force);
+      if (!next || same(next, sent)) break;
+      sent = next;
+      r = await send(next);
+    }
+    const state = r.status === 200 ? "open" : refusalOf(r).reason === "seat-lapsed" ? "refused" : seatState;
+    if (state !== seatState && (state === "refused" || seatState === "refused") && typeof o.onSeat === "function") o.onSeat(state); /* plant:seat-told */
+    seatState = state;
+    return r;
+  }
+  async function seatNow(force) {
+    let c = typeof o.seat === "function" ? o.seat() : null;
+    if (c && (force || (Number.isSafeInteger(c.until) && c.until <= clock())) && typeof o.seatRenew === "function") { /* plant:seat-renew-first */
+      try { await o.seatRenew(); } catch { /* the certificate in hand goes */ }
+      c = o.seat();
+    }
+    return table(c) ? c : null;
+  }
+
   /* A session by this program's own key, or, where the relay does not know that key yet, by the invitation's token, which
      the relay spends at its first use. */
   async function openSession() {
@@ -2205,8 +2246,7 @@ function createChannel(opts) {
     const inv = typeof o.invite === "function" ? o.invite() : null;
     const freshInvite = !!(inv && HEX32.test(String(inv.inv)) && prog.tokenSpent(inv.inv) === false);
     if (who && who.privateKey) {
-      const sig = crypto.sign(null, helloBytes(o.rt, ch.json.challenge, who.keyId), who.privateKey).toString("hex");
-      const r = await call("POST", "session", { json: { challenge: ch.json.challenge, key: who.keyId, pub: who.public, sig } });
+      const r = await seatHello(ch.json.challenge, who);
       /* An invitation's session for this key is an earlier invitation's where a fresh one waits unspent and this program
          has used one before: since slice 3 the relay answers a bound key with its invitation's session after the upload too
          (for the lead's answer alone), so taking it would hold the desk there and never spend the fresh token, and the fresh
@@ -2298,8 +2338,7 @@ function createChannel(opts) {
     if (!who || !who.privateKey) return R("not-enrolled");
     const ch = await hello();
     if (ch.status !== 200 || !ch.json || !HEX32.test(String(ch.json.challenge))) return refusalOf(ch);
-    const sig = crypto.sign(null, helloBytes(o.rt, ch.json.challenge, who.keyId), who.privateKey).toString("hex");
-    const r = await call("POST", "session", { json: { challenge: ch.json.challenge, key: who.keyId, pub: who.public, sig } });
+    const r = await seatHello(ch.json.challenge, who);
     if (r.status !== 200 || !r.json || !HEX64.test(String(r.json.session))) return refusalOf(r);
     let device = false;
     device = r.json.invite !== true; /* plant:S3-device */
@@ -2567,8 +2606,8 @@ function createChannel(opts) {
       let u = await upload(op, who, sealing);
       if (u.why && u.why.reason === "superseded" && await lapsed(op)) u = await upload(op, who, sealing); /* plant:unchain */
       if (u.ok && op.byInvite) forgetWrap(); /* plant:S3-wrap-gone */
-      if (u.ok) { floorlessFile = null; floorlessTries = 0; continue; }
-      if (u.lim) { if (u.lim.reason === "rate") { if (sawReplay) scheduleCounterRetry(); return u.lim; } prog.refusedOut(op, u.lim); continue; }
+      if (u.ok) { floorlessFile = null; floorlessTries = 0; room(""); continue; }
+      if (u.lim) { if (u.lim.reason === "rate") { if (sawReplay) scheduleCounterRetry(); return u.lim; } room(u.lim.reason); prog.refusedOut(op, u.lim); continue; }
       if (u.r.status === 0 || u.r.status >= 500 || ["rate", "no-hello", "nonce-stale", "hello-replay"].indexOf(u.why.reason) >= 0) {
         /* The invitation's one upload, and no reply: the relay may already hold it, and a later token-spent is that upload. */
         if (op.byInvite && u.r.status === 0) prog.markReplyLost(op.inviteId, u.blob && u.blob.id);
@@ -2581,6 +2620,7 @@ function createChannel(opts) {
       spentSent = !!(op.byInvite && u.why && u.why.reason === "token-spent" && u.blob && prog.replyLost(op.inviteId)); /* plant:spent-sent */
       if (spentSent) { prog.sentOut(op, u.blob); forgetWrap(); continue; }
       /* true: the relay answered. That refusal waits; it is not kept by content hash. */
+      room(u.why.reason);
       const waits = prog.refusedOut(op, u.why, true);
       if (u.why && u.why.reason === "replay-counter") {
         sawReplay = true; /* plant:counter-retry */

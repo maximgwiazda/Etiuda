@@ -151,6 +151,12 @@ const ALLOWED_IN = [
     within: "Wszystko działa jak zwykle; lider zespołu może ją zastąpić wydaniem opublikowanym na licencji." },
   { fold: "zwykle", since: "2026-10-26",
     within: "Wszystko działa jak zwykle; lider zespołu może je zastąpić wydaniem objętym licencją." },
+  /* 2026-11-14. Sync's reason for a provider's refusal says "kolejna próba", the nominative, not "kolejną". */
+  { fold: "kolejna", since: "2026-11-14",
+    within: "dostawca konta odrzucił prośbę Etiudy; kolejna próba nastąpi następnego dnia" },
+  /* 2026-11-13. A managed computer's shared line (decision 49) says "inna osoba", the nominative, not "inną". */
+  { fold: "inna", since: "2026-11-13",
+    within: "Wspólny komputer: może się tu zalogować inna osoba, kontem organizacji." },
   /* 2026-10-30. The copywriter's three no-identity lines on Ask to join (board 949 W2) say "zwykle pomaga", the other word. */
   { fold: "zwykle", since: "2026-10-30",
     within: "Prośba o dołączenie zadziała, gdy bezpieczny magazyn tego komputera będzie mógł przechować własny klucz stanowiska, czego teraz nie może; w systemie Windows zwykle pomaga zalogowanie się na własne konto, a nie na konto usługi ani profil tymczasowy. Potem wystarczy ponownie nacisnąć Poproś o dołączenie." },

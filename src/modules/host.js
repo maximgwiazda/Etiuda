@@ -1,6 +1,6 @@
 import { $ } from "./dom.js";
 import { t, toastRefusal } from "./ui-lang.js";
-import { lsGet, lsSet, nsGet } from "./storage.js";
+import { lsGet, lsSet, nsGet, eDeskTake } from "./storage.js";
 import { eCatalog, eCatalogAccepted, eCatalogHanded, storedCatalog } from "./catalog.js";
 import { pack, setStatsFlush } from "./pack.js";
 import { statsDoc } from "./desk-stats.js";
@@ -60,6 +60,22 @@ function eOpenCatalogFolder(){
   };
   try{
     return Promise.resolve(h.openCatalogFolder()).then(v=>{
+      if(v===true) return true;
+      if(v && typeof v==="object" && v.ok===false){ say(String(v.why||"")); return false; }
+      return false;
+    }).catch(()=>false);
+  }catch(e){ return Promise.resolve(false); }
+}
+
+function eOpenSetAside(){
+  const h=eHost();
+  if(!h || typeof h.openSetAside!=="function") return Promise.resolve(false);
+  const say=why=>{
+    if(why==="gone") toastRefusal(t("That folder is no longer where it was kept, so nothing was opened."));
+    else if(why==="could-not-open") toastRefusal(t("This computer did not open the folder just now. Pressing the button again tries again."));
+  };
+  try{
+    return Promise.resolve(h.openSetAside()).then(v=>{
       if(v===true) return true;
       if(v && typeof v==="object" && v.ok===false){ say(String(v.why||"")); return false; }
       return false;
@@ -516,6 +532,11 @@ function wireHost(){
   document.body.classList.add("e-host");
   if(h.testService===true) testServiceBand(document); /* plant:ts-band */
   if(typeof h.onStatsAsk==="function") h.onStatsAsk(answerStats);
+  /* What the store's sync put on the desk, taken and shown without a reload (restart.js takeSyncedDesk). */
+  if(typeof h.onDeskSynced==="function") h.onDeskSynced((text,n)=>{
+    const keys=eDeskTake(text,n);
+    if(keys.length){ try{ hooks.takeSyncedDesk(keys); }catch(e){} } /* plant:desk-synced-shown */
+  });
   if(h.backdrop) document.body.classList.add("e-backdrop");
   if(h.platform) document.body.classList.add("e-"+String(h.platform).replace(/[^a-z0-9]/gi,""));
   eSetMaximized(!!h.maximized);
@@ -608,6 +629,7 @@ export {
   eTellSearch,
   eOpenPicker,
   eOpenCatalogFolder,
+  eOpenSetAside,
   wireFolderLink,
   eOpenedWith,
   eOpenedRefused,

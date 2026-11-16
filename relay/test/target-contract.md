@@ -171,6 +171,7 @@ The relay and the program each apply the blob, team and rate limits. An incoming
 | `swept-other-lead` | This team id is kept for its own lead, so a create under another key is not taken. |
 | `revoked` | That grant was signed by a revoked key, so the relay did not take it. |
 | `withdrawn` | That desk has withdrawn its request, so it was not let in. |
+| `seat-lapsed` | This desk's seat needs a current certificate, so the relay did not open a session. |
 
 A swap of id, team, epoch, counter or `supersedes` fails closed as `bad-signature`. A path written onto the blob is not where the file lands. A blob sealed for an epoch the team file does not carry is `epoch`.
 

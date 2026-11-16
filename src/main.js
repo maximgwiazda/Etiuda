@@ -282,6 +282,7 @@ function boot(){
     loadCatalogFromFolder: catalogOffer.loadCatalogFromFolder,
     offerPickedCatalog: catalogOffer.eOfferPickedCatalog,
     restartDesk: restart.restartDesk,
+    takeSyncedDesk: restart.takeSyncedDesk,
     runShortcut: runShortcut.runShortcut,
   });
   // A 1.16.7 desk's keys, copied under this version's names before the first line reads one

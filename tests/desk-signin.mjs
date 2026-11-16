@@ -17,7 +17,8 @@
  * EVERY GUARD IS SHOWN RED (ds-plants): the line carrying its plant tag is put in another form in memory and the same case
  * is read again; nothing on disk is touched. Skipped under ETIUDA_PLANTS=off.
  *
- * THE SIGN-IN PREVIEW (ds12): ETIUDA_SIGNIN_PREVIEW=1 draws the door and Account with both providers while none has a client id.
+ * THE SIGN-IN PREVIEW (ds12): ETIUDA_SIGNIN_PREVIEW=1 draws the door and Account with both providers while none has a client id,
+ * read over the section with the shipped client ids taken out (loadBare); as shipped, with them, it changes nothing.
  * Its press is driven through the shell's own click and sign-in handlers, sliced, with every door out stood in and counted.
  *
  * THE DOOR-FINDING (ds17, board 980; Max, 2026-11-12 18:46 and 18:57): the doors the service hands beside a certificate are kept
@@ -48,11 +49,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 164;
+const PLANTS = 180;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 146 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 156 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -185,6 +186,13 @@ const TENANT = "aaaabbbb-0000-1111-2222-ccccddddeeee";
 const configured = s => ({ microsoft: Object.assign({}, s.SIGNIN_PROVIDERS.microsoft, { clientId: MS_CLIENT }),
   google: Object.assign({}, s.SIGNIN_PROVIDERS.google, { clientId: G_CLIENT }) });
 const MS = { id: "microsoft", clientId: MS_CLIENT }, G = { id: "google", clientId: G_CLIENT };
+/* The providers with no client id, as the section stood before Etiuda's registrations were in it. */
+const bare = s => ({ microsoft: Object.assign({}, s.SIGNIN_PROVIDERS.microsoft, { clientId: "" }),
+  google: Object.assign({}, s.SIGNIN_PROVIDERS.google, { clientId: "" }) });
+/* Etiuda's own registrations as shipped: Microsoft's Application (client) ID, a GUID; Google's Desktop client ID; neither a stand-in. */
+const shippedIds = s => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(s.SIGNIN_PROVIDERS.microsoft.clientId)
+  && /^[0-9]{6,20}-[a-z0-9]{8,64}\.apps\.googleusercontent\.com$/.test(s.SIGNIN_PROVIDERS.google.clientId)
+  && s.SIGNIN_PROVIDERS.microsoft.clientId !== MS_CLIENT && s.SIGNIN_PROVIDERS.google.clientId !== G_CLIENT;
 const signKey = crypto.generateKeyPairSync("ed25519"), otherKey = crypto.generateKeyPairSync("ed25519");
 const rawPub = k => k.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
 const DESK_KEY = rawPub(signKey.publicKey), OTHER_DESK_KEY = rawPub(otherKey.publicKey);
@@ -229,7 +237,7 @@ function delegation(over, signer) {
 const VIA = delegation();
 /* A desk-only licence's certificate carries deskOnly: true, signed as the line "desk-only" after the key id; any other has neither. */
 const certBytesOf = c => Buffer.from("etiuda-seat-certificate\n" + [c.format, c.licence, c.desk, c.person, c.code, c.issued, c.until, c.sig.keyId]
-  .concat(c.deskOnly === true ? ["desk-only"] : []).join("\n"), "utf8");
+  .concat(c.pooled === true ? ["pooled"] : []).concat(c.deskOnly === true ? ["desk-only"] : []).join("\n"), "utf8");
 /* The doors beside a certificate as the service signs them, written here from the interface (Studio's seatDoorsBytes): the line
    "etiuda-seat-doors", the certificate's signature value, the number of doors, then each door's team, rt, url, keyId, lead and box,
    one a line, in the order handed, by the key that signed the certificate. */
@@ -249,12 +257,15 @@ function cert(over, signer) {
 
 /* ---- cases, each a function of the loaded section so a plant reads the same case again ------------------------------ */
 const CASES = {};
-/* As shipped no client id is configured, so nothing is offered; a configured table offers what it configures, in its order. */
+/* As shipped both are configured with Etiuda's own registrations and offered in order, no secret in the tree; a table with no client
+   id offers nothing; a configured table offers what it configures, in its order. */
 CASES.offered = s => {
-  const shipped = s.signinOffered(), conf = s.signinOffered(configured(s));
-  const half = s.signinOffered({ microsoft: Object.assign({}, s.SIGNIN_PROVIDERS.microsoft, { clientId: MS_CLIENT }), google: s.SIGNIN_PROVIDERS.google });
+  const shipped = s.signinOffered(), none = s.signinOffered(bare(s)), conf = s.signinOffered(configured(s));
+  const half = s.signinOffered({ microsoft: Object.assign({}, s.SIGNIN_PROVIDERS.microsoft, { clientId: MS_CLIENT }), google: bare(s).google });
   const odd = s.signinOffered({ elsewhere: { clientId: G_CLIENT }, google: Object.assign({}, s.SIGNIN_PROVIDERS.google, { clientId: "short" }) });
-  return Array.isArray(shipped) && shipped.length === 0 && conf.map(p => p.id + ":" + p.clientId).join() === "microsoft:" + MS_CLIENT + ",google:" + G_CLIENT
+  return shippedIds(s) && shipped.map(p => p.id + ":" + p.clientId + ":" + p.clientSecret).join()
+      === "microsoft:" + s.SIGNIN_PROVIDERS.microsoft.clientId + ":,google:" + s.SIGNIN_PROVIDERS.google.clientId + ":"
+    && Array.isArray(none) && none.length === 0 && conf.map(p => p.id + ":" + p.clientId).join() === "microsoft:" + MS_CLIENT + ",google:" + G_CLIENT
     && half.map(p => p.id).join() === "microsoft" && odd.length === 0;
 };
 /* An invitation naming providers no longer carries a sign-in hint: the team's start is retired. */
@@ -262,7 +273,8 @@ CASES.noHintStart = s => {
   const doc = { team: TEAM, folder: "\\\\server\\share\\team", secret: "0".repeat(32), lead: { keyId: "studio-1", public: "a".repeat(64), name: "Lead" },
     signin: { providers: [{ id: "microsoft", clientId: MS_CLIENT }] } };
   const read = s.inviteRead("etiuda-join:" + b64url(JSON.stringify(doc)), false);
-  return !!read && read.signin === undefined && s.signinOffered().length === 0;
+  return !!read && read.signin === undefined && s.signinOffered().map(p => p.clientId).join() === [s.SIGNIN_PROVIDERS.microsoft.clientId, s.SIGNIN_PROVIDERS.google.clientId].join()
+    && s.signinOffered().every(p => p.clientId !== MS_CLIENT);
 };
 CASES.pkce = s => {
   const r = s.signinAuthorize(G, 51234, DESK_KEY);
@@ -345,6 +357,18 @@ CASES.serviceDoor = async s => {
     && init.method === "POST" && init.redirect === "error" && init.cache === "no-store" && init.credentials === "omit"
     && init.headers["content-type"] === "application/json" && JSON.parse(init.body.toString()).provider === "google";
 };
+/* A managed tenant (a large company's licence that follows the roles its IT assigns): the service's word that it is managed, and why, read
+   from a seated answer and a no-role refusal and kept on the seat, and nothing read from an ordinary answer. */
+CASES.managedRead = s => {
+  const a = (o, st) => s.signinAnswer(answer(o, st), DESK_KEY);
+  const held = { provider: "microsoft", refresh: "sealed:rt", sub: "sealed:s", seed: "6".repeat(64), code: CODE, cert: null, at: 1, checked: 1, reached: true, said: "", ask: false };
+  const seated = a({ ok: true, certificate: cert(), code: CODE, doors: [], managed: true, cause: "assigned" });
+  const plain = a({ ok: true, certificate: cert(), code: CODE, doors: [] });
+  const no = a({ ok: false, reason: "no-role", managed: true }, 403);
+  const h1 = s.signinSettle(held, seated, NOW), h2 = s.signinSettle(held, no, NOW), h3 = s.signinSettle(h1, plain, NOW);
+  return seated.ok === true && seated.managed === true && seated.cause === "assigned" && plain.ok === true && plain.managed === undefined
+    && no.reason === "no-role" && no.managed === true && h1.managed === true && h1.cause === "assigned" && h2.managed === true && h3.managed === false;
+};
 /* The service's answers read as the interface names them; a certificate for another desk or another code is not taken. */
 CASES.answers = s => {
   const a = (o, st) => s.signinAnswer(answer(o, st), DESK_KEY);
@@ -353,6 +377,7 @@ CASES.answers = s => {
   return held.ok === true && held.cert && held.cert.code === CODE && held.code === CODE && none.ok === true && none.cert === null
     && theirs.reason === "unreached" && mixed.reason === "unreached"
     && a({ ok: false, reason: "token" }, 403).reason === "token" && a({ ok: false, reason: "signin" }, 403).reason === "signin"
+    && a({ ok: false, reason: "no-role", managed: true }, 403).reason === "no-role" && a({ ok: false, reason: "access-token", managed: true }, 409).reason === "access-token"
     && a({ ok: false, reason: "full" }, 409).reason === "full" && a({ ok: false, reason: "desks" }, 409).reason === "desks"
     && a({ ok: false, reason: "unavailable" }, 503).reason === "unreached" && a({ ok: false, reason: "slow-down" }, 429).reason === "unreached"
     && s.signinAnswer({ status: 200, bytes: Buffer.from("<html>") }, DESK_KEY).reason === "unreached";
@@ -514,7 +539,13 @@ CASES.renewFail = async s => {
 const WIRE_DECLS = ["const SIGNIN_RENEW_MS =", "const SIGNIN_FIRST_MS =", "async function signinRenewNow(", "function armSigninRenew(", "function signinOutNow(",
   "function signinOutSend(", "function signinOutAgain("];
 const WIRE_STANDS = ["harnessLaunch", "PLACED_ASIDE", "signinState", "signinOffered", "branchIdentity", "signinIo", "net", "signinRenewHeld",
-  "signinSave", "tellSignin", "setTimeout", "pinnedLead", "signinTeamHere", "fs", "path", "sharedFolderForWrite", "SEAT_NAME", "signinView", "signoutAsk", "signinLabHeld", "teamJoin", "cancelJoin", "sendJoin", "theWindow", "unlinkOwn", "stand", "signinRevokedNext"];
+  "signinSave", "tellSignin", "setTimeout", "pinnedLead", "signinTeamHere", "fs", "path", "sharedFolderForWrite", "SEAT_NAME", "signinView", "signoutAsk", "signinLabHeld", "teamJoin", "cancelJoin", "sendJoin", "theWindow", "unlinkOwn", "stand", "signinRevokedNext",
+  "storeTurn", "storeForget", "storeEndAgain", "storeLeaveNow"];
+/* The store's look after a renewal, its forgetting at a sign out, an owed store/end posted again and an owed leave tried again
+   (tests/desk-store-shell.mjs holds them): counted, never run here. */
+const WIRE_DEFAULTS = { storeTurn: st => () => { st.storeTurns = (st.storeTurns || 0) + 1; }, storeForget: () => () => {},
+  storeEndAgain: st => () => { st.storeEnds = (st.storeEnds || 0) + 1; return Promise.resolve(false); },
+  storeLeaveNow: st => () => { st.storeLeaves = (st.storeLeaves || 0) + 1; return Promise.resolve(true); } };
 function loadWire(st, swap) {
   let text = WIRE_DECLS.map(d => { try { return decl(MAIN, d); } catch { return ""; } }).filter(Boolean).join("\n");
   if (swap) {
@@ -525,7 +556,8 @@ function loadWire(st, swap) {
     + "function signinFlush() { stand.flushes++; return true; }\n" + text
     + "\nreturn { signinRenewNow, armSigninRenew, SIGNIN_RENEW_MS, SIGNIN_FIRST_MS, signinOutNow: typeof signinOutNow === \"undefined\" ? undefined : signinOutNow,"
     + " wrote: () => signinWrote, said: () => signinSaid };";
-  return new Function(...WIRE_STANDS, body)(...WIRE_STANDS.map(n => n === "stand" ? st : n === "signinRevokedNext" && !st[n] ? S.signinRevokedNext : st[n]));
+  return new Function(...WIRE_STANDS, body)(...WIRE_STANDS.map(n => n === "stand" ? st : n === "signinRevokedNext" && !st[n] ? S.signinRevokedNext
+    : !st[n] && WIRE_DEFAULTS[n] ? WIRE_DEFAULTS[n](st) : st[n]));
 }
 /* The shell around the renewal: Microsoft configured, this desk's identity, the doors answering `reply()` and `serve()`. Real time. */
 function wireStand(s, reply, serve) {
@@ -584,7 +616,7 @@ CASES.renewWire = async (s, swap) => {
 /* ---- the seat's write, evaluated with stand-ins: the folder, the team, the files ---------------------------------------- */
 const FLUSH_DECLS = ["function signinTeamHere(", "function signinFlush("];
 const FLUSH_STANDS = ["signinState", "branchIdentity", "pinnedLead", "teamJoin", "sharedFolderForWrite", "folderAnswers", "fs", "path", "writeReplacing",
-  "seatFileText", "SEAT_NAME", "console", "signinRevokedHas", "signinCertEarly", "Date"];
+  "seatFileText", "SEAT_NAME", "console", "signinRevokedHas", "signinCertOk", "signinCertEarly", "Date"];
 /* `st`: {held, lead, join, root, files (a Set of paths), writes}; the desk's flush as the wiring has it, its mark kept between calls. */
 function loadFlush(s, st, swap) {
   let text = FLUSH_DECLS.map(d => { try { return decl(MAIN, d); } catch { return ""; } }).filter(Boolean).join("\n");
@@ -595,7 +627,7 @@ function loadFlush(s, st, swap) {
   const vals = { signinState: () => ({ held: st.held }), branchIdentity: () => ({ id: DESK_ID, key: DESK_KEY }), pinnedLead: () => st.lead,
     sharedFolderForWrite: () => st.root, folderAnswers: () => true, path,
     fs: { existsSync: p => st.files.has(p), mkdirSync: () => {} }, writeReplacing: (p, t) => { st.files.add(p); st.writes.push({ p, t }); },
-    seatFileText: s.seatFileText, SEAT_NAME: s.SEAT_NAME, console: { error() {} }, signinRevokedHas: s.signinRevokedHas, signinCertEarly: s.signinCertEarly,
+    seatFileText: s.seatFileText, SEAT_NAME: s.SEAT_NAME, console: { error() {} }, signinRevokedHas: s.signinRevokedHas, signinCertOk: s.signinCertOk, signinCertEarly: s.signinCertEarly,
     Date: { now: () => NOW } };
   return new Function(...FLUSH_STANDS, "let signinWrote = \"\";\n" + text + "\nreturn signinFlush;")(...FLUSH_STANDS.map(n => n === "teamJoin" ? st.join : vals[n]));
 }
@@ -619,6 +651,12 @@ CASES.flushJoin = async (s, swap) => {
     return first === true && again === false && gone === true && moved === true && st.writes.map(w => w.p).join() === [seatAt("/share/a"), seatAt("/share/a"), seatAt("/share/b")].join();
   });
   return asking && relay && none && pinned;
+};
+/* A certificate whose desk is another key (the desk's key made again since it was given) is never written as this desk's seat. */
+CASES.flushOwnKey = async (s, swap) => {
+  const run = held => { const st = { held, lead: { team: TEAM }, join: null, root: "/share/a", files: new Set(), writes: [] }; const r = loadFlush(s, st, swap)(); return { r, n: st.writes.length }; };
+  const other = run(heldOf({ cert: cert({ desk: OTHER_DESK_KEY }) })), own = run(heldOf());
+  return other.r === false && other.n === 0 && own.r === true && own.n === 1;
 };
 /* The flush's callers outside the wiring: a request to join written, and any join taken or finished or folder changed, deferred. */
 CASES.flushCallers = () => {
@@ -1051,6 +1089,24 @@ CASES.signoutAway = async (s, swap) => {
   }
   return every;
 };
+/* A managed tenant's account remembered (signinTake keeps "managed" beside no seat where a sign-in was refused with it): Sign out
+   forgets it, signed in or not, so Buy, which needs no sign-in, is offered again (the test architect's read of decision 49's pass). */
+CASES.signoutManaged = async (s, swap) => {
+  const st = outStand(s);
+  st.store.held = Object.assign(heldOf(), { managed: true });
+  st.store.licenceManaged = true;
+  const w = loadWire(st, swap);
+  w.signinOutNow();
+  await tick(5);
+  const st2 = outStand(s);
+  st2.store.held = null;
+  st2.store.licenceManaged = true;
+  const w2 = loadWire(st2, swap);
+  w2.signinOutNow();
+  await tick(5);
+  return st.store.held === null && !("licenceManaged" in st.store) && st2.store.held === null && !("licenceManaged" in st2.store)
+    && s.signinFileText(st2.store).indexOf("licenceManaged") < 0;
+};
 /* Nothing is sent where no client id is configured, the desk was never signed in, or it has no identity, or on a harness start; the
    sign-in is cleared all the same, except while a sign-in is in the browser, which Sign out leaves alone as before. */
 CASES.signoutNone = async (s, swap) => {
@@ -1097,6 +1153,26 @@ CASES.pageMoments = () => {
     && m({ signedIn: "microsoft", code: CODE, seat: "none" }) === "nolicence" && m({ signedIn: "microsoft", code: CODE, seat: "held" }) === "noteam"
     && m({ signedIn: "microsoft", code: CODE, seat: "held", refused: "full" }) === "noseat" && m({ signedIn: "microsoft", code: CODE, seat: "held", ask: true }) === "ask";
 };
+/* ASK YOUR LEAD (a team is its lead's own; decision 47, held for Max's ruling): the ask, the code, Check now and Account; under the
+   hairline the person's own trial and its end where its certificate is held, and nothing there once it is had; Polish too. */
+CASES.pageAskLead = async () => {
+  if (!P) return false;
+  const storage = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const until = Date.UTC(2026, 10, 27, 12, 0, 0);
+  const running = P.signinDoor(view({ signedIn: "microsoft", code: CODE, seat: "held", deskOnly: true, askLead: true, trialUntil: until }));
+  const had = P.signinDoor(view({ signedIn: "microsoft", code: CODE, seat: "none", askLead: true }));
+  const html = running ? P.signinPanelHtml(running) : "", hadHtml = had ? P.signinPanelHtml(had) : "";
+  storage.lsSet("eUiLang", "pl");
+  let pl = "";
+  try { pl = P.signinPanelHtml(P.signinDoor(view({ signedIn: "microsoft", code: CODE, seat: "held", deskOnly: true, askLead: true, trialUntil: until }))); }
+  finally { storage.lsSet("eUiLang", "en"); }
+  return !!running && running.moment === "asklead" && running.code === CODE && running.acts.map(a => a.act).join() === "check,account"
+    && html.indexOf("Etiuda licence seats the people its leads add.") > 0 && html.indexOf("Give the team") > 0
+    && /<p class="sgn-say sgn-own"><b>This account&#39;s own trial is running\.<\/b><span>Fourteen days, until 27 Nov, on up to three computers\./.test(html)
+    && html.indexOf('sgn-own"') > html.indexOf("data-signin-act") && !!had && had.moment === "asklead" && hadHtml.indexOf("sgn-own") < 0
+    && pl.indexOf("Licencja Etiudy tej organizacji daje miejsce osobom, które dodają jej liderzy.") > 0 && pl.indexOf("Trwa własny okres próbny tego konta.") > 0 && pl.indexOf("do 27 lis") > 0
+    && P.signinDoor(view({ signedIn: "microsoft", code: CODE, seat: "held", deskOnly: true })).moment === "noteam";
+};
 /* Two refusals told apart in their own words: the organisation at its provider, and no licence with a seat at our service. */
 CASES.pageTwoRefusals = () => {
   if (!P) return false;
@@ -1122,6 +1198,12 @@ function loadEnv(v, swap) {
   if (v === null) delete process.env.ETIUDA_SIGNIN_PREVIEW; else process.env.ETIUDA_SIGNIN_PREVIEW = v;
   try { return load(swap && SECTION.split(swap[0]).length === 2 ? swap : null); }
   finally { if (was === undefined) delete process.env.ETIUDA_SIGNIN_PREVIEW; else process.env.ETIUDA_SIGNIN_PREVIEW = was; }
+}
+/* loadEnv over the section with the shipped two's client ids taken out, or null where the section does not hold both once. */
+function loadBare(v, swap) {
+  const keep = SECTION, at = /(\n  (?:microsoft|google): Object\.freeze\(\{ clientId: )"[^"]*"/g;
+  if ((keep.match(at) || []).length !== 2) return null;
+  try { SECTION = keep.replace(at, "$1\"\""); return loadEnv(v, swap); } finally { SECTION = keep; }
 }
 /* An IPC statement of the wiring, from its first line to its closing "});". */
 function ipcSlice(start) {
@@ -1154,30 +1236,30 @@ function pressStand(sec, swap) {
 }
 /* Off by default: absent, "0", "yes" or " 1", nothing is offered and nothing is a preview; "1" alone offers both as a preview. */
 CASES.previewOff = (s, swap) => {
-  const seen = [null, "0", "yes", " 1", "1"].map(v => { const sec = loadEnv(v, swap), w = pressStand(sec, swap).view(); return JSON.stringify([w.offered, w.preview]); });
+  const seen = [null, "0", "yes", " 1", "1"].map(v => { const sec = loadBare(v, swap); if (!sec) return ""; const w = pressStand(sec, swap).view(); return JSON.stringify([w.offered, w.preview]); });
   return seen.slice(0, 4).every(x => x === "[[],false]") && seen[4] === '[["microsoft","google"],true]';
 };
-/* Inert with real ids: the section with Microsoft's client id filled in, the variable set, offers Microsoft alone and no preview, and a
-   press of Google is the ordinary "not offered", nothing reached; the decision alone: asked, and nothing configured. */
+/* Inert with real ids: as shipped, the variable set, both are offered and nothing is a preview; the section with no ids but
+   Microsoft's, the variable set, offers Microsoft alone and no preview, and a press of Google is the ordinary "not offered", nothing
+   reached; the decision alone: asked, and nothing configured. */
 CASES.previewInert = (s, swap) => {
-  const anchor = 'microsoft: Object.freeze({ clientId: "",';
-  if (SECTION.split(anchor).length !== 2) return false;
-  const keep = SECTION;
-  let real = null, withId = null;
-  try {
-    real = loadEnv("1", swap);
-    SECTION = keep.replace(anchor, 'microsoft: Object.freeze({ clientId: "' + MS_CLIENT + '",');
-    withId = loadEnv("1", swap);
-  } finally { SECTION = keep; }
-  const st = pressStand(withId, swap), w = st.view();
+  const real = loadBare("1", swap), shipped = loadEnv("1", swap);
+  if (!real) return false;
+  const keep = SECTION, at = /(\n  microsoft: Object\.freeze\(\{ clientId: )"[^"]*"/, gat = /(\n  google: Object\.freeze\(\{ clientId: )"[^"]*"/;
+  let withId = null;
+  try { SECTION = keep.replace(at, "$1\"" + MS_CLIENT + "\"").replace(gat, "$1\"\""); withId = loadEnv("1", swap); } finally { SECTION = keep; }
+  const st = pressStand(withId, swap), w = st.view(), sw = pressStand(shipped, swap).view();
   return real.signinPreviewing(true, configured(real)) === false && real.signinPreviewing(true) === true && real.signinPreviewing(false) === false
+    && shipped.signinPreviewing() === false && JSON.stringify([sw.offered, sw.preview]) === '[["microsoft","google"],false]'
     && withId.signinPreviewing() === false && JSON.stringify([w.offered, w.preview]) === '[["microsoft"],false]'
     && st.press("google").then(v => !!v && v.said === "signin-none" && st.out === 0);
 };
 /* Nothing reaches out: a trusted press of either provider is answered "signin-preview" before the identity, the browser, the
    loopback, the provider, the service, a write or the network; an untrusted press and an unknown provider are not the preview's. */
 CASES.previewPress = async (s, swap) => {
-  const st = pressStand(loadEnv("1", swap), swap);
+  const sec = loadBare("1", swap);
+  if (!sec) return false;
+  const st = pressStand(sec, swap);
   const untrusted = await st.handle["etiuda:signin"]({}, "microsoft");
   const ms = await st.press("microsoft"), g = await st.press("google"), odd = await st.press("elsewhere");
   return !!untrusted && untrusted.said === "" && !!ms && ms.said === "signin-preview" && ms.busy === "" && ms.preview === true
@@ -1321,7 +1403,7 @@ CASES.secretPacked = s => {
     && Object.keys(r(JSON.stringify({ format: 1, google: spaced }))).length === 0 && Object.keys(r(JSON.stringify({ format: 1, google: short }))).length === 0
     && Object.keys(r(JSON.stringify({ format: 2, google: STAND_IN }))).length === 0 && Object.keys(r(JSON.stringify({ format: 1, microsoft: STAND_IN }))).length === 0
     && Object.keys(r("")).length === 0 && Object.keys(r("not json")).length === 0 && Object.keys(r("[]")).length === 0
-    && s.signinOffered().length === 0 && s.signinOffered(configured(s)).find(p => p.id === "google").clientSecret === "";
+    && s.signinOffered().length === 2 && s.signinOffered().every(p => p.clientSecret === "") && s.signinOffered(configured(s)).find(p => p.id === "google").clientSecret === "";
 };
 /* Never logged, kept or sent elsewhere: a first sign-in and a quiet renewal with the stand-in, every console method captured, find it
    in the token forms (so the search can find it) and nowhere else: not a line printed, not the service's bodies, which keep exactly
@@ -1466,6 +1548,8 @@ function waitStand(sec, swap, storage, branchId) {
     handOut: url => { st.handed.push(url); return Promise.resolve(); },
     signinRequest: out, signinServiceAsk: out, signinSign: out, signinKeep: () => "", signinKept: () => "", signinPageHtml: () => "",
     SIGNIN_TRACE_ASKED: sec.SIGNIN_TRACE_ASKED, SIGNIN_DESK_PACKED: true,
+    /* signinIo's store answer, off, so the press asks today's scopes; its token hand-off never reached. */
+    storeOn: () => false, storeTokenTake: out,
   };
   const names = Object.keys(vals);
   const body = "let signinClick = null, signinBusy = null, signinSaid = \"\", signinOutFlight = null;\n" + text + "\nreturn { view: signinView };";
@@ -1775,8 +1859,9 @@ function labStart(s, facts, swap) {
 }
 /* THE FLOOR: installed, packaged or both, the variable naming a good lab file or a staging one and Google's secret in the
    environment, nothing is read and the providers, what is offered, Google's secret and both doors are byte for byte the shipped
-   ones. Neither, the lab is taken; a staging file fills the shipped two's client ids alone, the environment's secret goes to Google
-   alone, and a file naming another host is refused as a whole, the secret with it. */
+   ones. Neither, the lab is taken and the shipped two hold its client ids alone, none where it names none; a staging file fills the
+   shipped two's client ids alone, the environment's secret goes to Google alone, and a file naming another host is refused as a
+   whole, the secret with it. */
 CASES.labPackaged = async (s0, swap) => {
   /* A plant in the section is put in every section loaded here, one in the wiring in its read. */
   const load = () => loadIn(swap);
@@ -1785,11 +1870,14 @@ CASES.labPackaged = async (s0, swap) => {
     const file = path.join(dir, "lab.json"), far = path.join(dir, "far.json"), staging = path.join(dir, "staging.json");
     fs.writeFileSync(file, labText(4567));
     fs.writeFileSync(far, labText(4567, {}, { token: "http://192.168.1.20:4567/token" }));
+    const half = path.join(dir, "half.json");
     fs.writeFileSync(staging, stagingText());
-    const shipped = load().live(), json = o => JSON.stringify(o);
+    fs.writeFileSync(half, stagingText({ clientIds: { microsoft: MS_CLIENT } }));
+    const first = load(), shipped = first.live(), json = o => JSON.stringify(o), shippedOffered = json(first.signinOffered());
     const asShipped = s => { const l = s.live(); return json(l.providers) === json(shipped.providers) && Object.keys(l.providers).join() === "microsoft,google"
       && Object.isFrozen(l.providers) && l.signin === "https://etiuda.dev/licence/v1/signin/desk" && l.signout === "https://etiuda.dev/licence/v1/signout/desk"
-      && l.on === false && Object.keys(l.packed).length === 0 && s.signinOffered().length === 0 && s.signinKnown("lab") === null
+      && l.on === false && Object.keys(l.packed).length === 0 && shippedIds(s) && json(s.signinOffered()) === shippedOffered
+      && s.signinOffered().length === 2 && s.signinKnown("lab") === null
       && !s.signinPageOk("http://127.0.0.1:4567/authorize?client_id=x"); };
     let inert = true;
     for (const facts of [{ installed: true, packaged: false }, { installed: false, packaged: true }, { installed: true, packaged: true }]) {
@@ -1802,17 +1890,20 @@ CASES.labPackaged = async (s0, swap) => {
     const lab = load(), t = labStart(lab, { installed: false, packaged: false, file: file }, swap), l = lab.live();
     const refused = load(), f = labStart(refused, { installed: false, packaged: false, file: far, secret: STAND_IN }, swap);
     const st = load(), g = labStart(st, { installed: false, packaged: false, file: staging, secret: STAND_IN }, swap), sl = st.live();
+    const hf = load(), h = labStart(hf, { installed: false, packaged: false, file: half }, swap);
     const sans = p => { const o = Object.assign({}, p); delete o.clientId; return json(o); };
     return inert && u.reads.length === 0 && asShipped(unset)
       && t.reads.length === 1 && t.said.length === 0 && l.on === true && Object.keys(l.providers).join() === "microsoft,google,lab"
-      && json(l.providers.microsoft) === json(shipped.providers.microsoft) && json(l.providers.google) === json(shipped.providers.google)
+      && sans(l.providers.microsoft) === sans(shipped.providers.microsoft) && sans(l.providers.google) === sans(shipped.providers.google)
+      && l.providers.microsoft.clientId === "" && l.providers.google.clientId === ""
       && l.signin === "http://127.0.0.1:4567/licence/v1/signin/desk" && l.signout === "http://127.0.0.1:4567/licence/v1/signout/desk"
       && json(lab.signinOffered()) === json([{ id: "lab", clientId: LAB_CLIENT, clientSecret: "" }]) && Object.keys(l.packed).length === 0
       && f.reads.length === 1 && f.said.length === 1 && asShipped(refused)
       && g.reads.length === 1 && g.said.length === 0 && Object.keys(sl.providers).join() === "microsoft,google"
       && sans(sl.providers.microsoft) === sans(shipped.providers.microsoft) && sans(sl.providers.google) === sans(shipped.providers.google)
       && sl.signin === STAGING + "signin/desk" && sl.signout === STAGING + "signout/desk"
-      && json(st.signinOffered()) === json([{ id: "microsoft", clientId: MS_CLIENT, clientSecret: "" }, { id: "google", clientId: G_CLIENT, clientSecret: STAND_IN }]);
+      && json(st.signinOffered()) === json([{ id: "microsoft", clientId: MS_CLIENT, clientSecret: "" }, { id: "google", clientId: G_CLIENT, clientSecret: STAND_IN }])
+      && h.reads.length === 1 && h.said.length === 0 && json(hf.signinOffered()) === json([{ id: "microsoft", clientId: MS_CLIENT, clientSecret: "" }]);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 };
 /* A provider double and a licence service on 127.0.0.1, test values made here: /authorize answers 302 to the desk's loopback, /token
@@ -1924,7 +2015,9 @@ CASES.labOnly = () => {
   const pageNames = fs.readdirSync(path.join(ROOT, "src", "modules")).filter(f => /ETIUDA_SIGNIN_LAB/.test(fs.readFileSync(path.join(ROOT, "src", "modules", f), "utf8")));
   const env = /process\.env\.ETIUDA_SIGNIN_LAB\b|process\.env\[/g;
   return !!block && n(/process\.env\.ETIUDA_SIGNIN_LAB\b/g) === 2 && (block.match(env) || []).length === 2
-    && n(/(?<!let )\bSIGNIN_PROVIDERS = /g) === 1 && n(/(?<!let )\bSIGNIN_SERVICE = /g) === 1 && n(/(?<!let )\bSIGNOUT_SERVICE = /g) === 1
+    /* The one other assignment is machine policy's pin (decision 49, tests/desk-managed.mjs), which narrows the table and never names one. */
+    && n(/(?<!let )\bSIGNIN_PROVIDERS = /g) === 2 && n(/\n  SIGNIN_PROVIDERS = signinPinTable\(SIGNIN_PROVIDERS, managed\); \/\* plant:pin-taken \*\/\n/g) === 1
+    && n(/(?<!let )\bSIGNIN_SERVICE = /g) === 1 && n(/(?<!let )\bSIGNOUT_SERVICE = /g) === 1
     && n(/\bsigninLabUse\(/g) === 3 && /\(testServiceOn = signinLabUse\(signinLabRead\(JSON\.stringify\(fields\)\)\)\)/.test(MAIN) && n(/\bsigninLabOn = true/g) === 1 && /SIGNIN_PROVIDERS = [^\n]*\n  SIGNIN_SERVICE = lab\.signin;\n  SIGNOUT_SERVICE = lab\.signout;/.test(MAIN)
     && !/ipcMain\.(on|handle)\([^\n]*(signinLab|SIGNIN_LAB)/.test(MAIN) &&!/ETIUDA_SIGNIN_LAB/.test(PRELOAD) && pageNames.length === 0;
 };
@@ -2457,12 +2550,12 @@ const DESK_ONLY_EN = ["Working without a team", "This computer has its seat, and
 const DESK_ONLY_PL = ["Praca bez zespołu", "Ten komputer ma swoje miejsce w licencji, a Etiuda działa na własnym katalogu. Nic więcej nie trzeba."];
 const NO_TEAM_LINE = "No team has admitted this account yet. Once a lead admits it by the code below, the catalog arrives by itself.";
 /* The shell's signinView over `held`, the rest stood in. */
-function viewOver(held) {
+function viewOver(held, relaySeat) {
   const text = decl(MAIN, "function signinView(");
   return new Function("signinOffered", "signinState", "signinPreviewing", "SIGNIN_PROVIDERS", "signinLapsed", "signinDoorsShown", "signinPageOk",
-    "sealsForReal", "safeStorage", "process", "let signinBusy = null, signinSaid = \"\";\n" + text + "\nreturn signinView();")(
+    "sealsForReal", "safeStorage", "process", "signinRelaySeat", "let signinBusy = null, signinSaid = \"\";\n" + text + "\nreturn signinView();")(
     () => [{ id: "microsoft" }], () => ({ held }), () => false, {}, (h, now) => !!h && !!h.cert && now >= h.cert.until, () => [], () => false,
-    () => true, {}, { platform: "win32" });
+    () => true, {}, { platform: "win32" }, relaySeat || (() => ""));
 }
 CASES.deskOnlyCert = s => {
   const ok = c => s.signinCertOk(c, DESK_KEY) === true;
@@ -2550,9 +2643,9 @@ const STRANGER_PUB = "ef".repeat(32);
 const OTHER_SERVICE_PUB = OTHER_SERVICE.publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
 /* The shell's view over `held` with the section's own signinLapsed, the rest stood in. */
 const viewWith = (s, held) => new Function("signinOffered", "signinState", "signinPreviewing", "SIGNIN_PROVIDERS", "signinLapsed", "signinDoorsShown",
-  "signinPageOk", "sealsForReal", "safeStorage", "process", "let signinBusy = null, signinSaid = \"\", signinOutFlight = null;\n"
+  "signinPageOk", "sealsForReal", "safeStorage", "process", "signinRelaySeat", "let signinBusy = null, signinSaid = \"\", signinOutFlight = null;\n"
   + decl(MAIN, "function signinView(") + "\nreturn signinView();")(() => [{ id: "microsoft" }], () => ({ held }), () => false, {}, s.signinLapsed,
-  () => [], () => false, () => true, {}, { platform: "win32" });
+  () => [], () => false, () => true, {}, { platform: "win32" }, () => "");
 /* Taken at a first sign-in and at the renewal, from a refusal as well, and kept in signin.json. */
 CASES.revokedTaken = async s => {
   const list = revokedList(1, [STRANGER_PUB]), later = revokedList(2, [STRANGER_PUB, "aa".repeat(32)]);
@@ -2664,9 +2757,10 @@ CASES.fileMax = (s, swap) => {
   const run = size => {
     let reads = 0;
     const fsStand = { statSync: () => ({ size }), readFileSync: () => { reads++; return kept; } };
+    /* signinState also reads machine policy and pins the provider table by it (the sync line's managed half): no policy here. */
     const st = new Function("fs", "path", "app", "SIGNIN_FILE", "SIGNIN_FILE_MAX", "signinFileRead", "SIGNIN_DESK_PACKED", "branchIdentity", "signinFileHeld",
-      "let signinStore;\n" + text + "\nreturn signinState();")(fsStand, path, { getPath: () => "/ud" }, "signin.json", s.SIGNIN_FILE_MAX, s.signinFileRead, true,
-      () => ({ key: DESK_KEY }), s.signinFileHeld);
+      "managedPolicy", "signinPinTable", "let signinStore, SIGNIN_PROVIDERS = {};\n" + text + "\nreturn signinState();")(fsStand, path, { getPath: () => "/ud" }, "signin.json",
+      s.SIGNIN_FILE_MAX, s.signinFileRead, true, () => ({ key: DESK_KEY }), s.signinFileHeld, () => ({ any: false }), table => table);
     return { reads, held: !!st.held, cert: !!(st.held && st.held.cert) };
   };
   const small = run(kept.length), over = run(s.SIGNIN_FILE_MAX + 1);
@@ -2824,6 +2918,20 @@ CASES.landCap = async s => {
   const after = await fetchLoop(loop.port, at);
   return back.status === 303 && page.status === 200 && landIs(page.body, "back", "en") && took >= 100 && took < 3000 && typeof after.status !== "number";
 };
+/* Cancel after the reply, before the desk has landed: the held GET is answered the cancelled page and the loopback closes at once,
+   where close() alone would leave it to the cap. */
+CASES.landCancel = async s => {
+  const loop = await s.signinListen(http, landPage(s), 10000, stateIs("st-9"), 5000);
+  const back = await fetchLoop(loop.port, "/?state=st-9&code=c9");
+  const at = String(back.headers.location || "");
+  const asked = fetchLoop(loop.port, at);
+  await tick(60);
+  if (typeof loop.cancel === "function") loop.cancel();
+  const page = await asked;
+  await tick(30);
+  const after = await fetchLoop(loop.port, "/other");
+  return back.status === 303 && page.status === 200 && landIs(page.body, "cancelled", "en") && typeof after.status !== "number";
+};
 /* A stray before the reply is answered 400 with the earlier tab's page and the wait goes on; after the reply, another GET of "/" and
    any other path are 404 and the landing still serves its path. */
 CASES.landStray = async s => {
@@ -2936,6 +3044,9 @@ function landStand(sec, swap, serve, loopQ) {
     signinRequest: async () => answer({ id_token: jwt(msClaims(nonce, Date.now())), refresh_token: "rt" }), signinServiceAsk: () => { throw new Error("no"); },
     signinSign: () => "", signinKeep: () => "", signinKept: () => "", signinPageHtml: () => "",
     SIGNIN_TRACE_ASKED: false, SIGNIN_DESK_PACKED: true,
+    /* The store off and its look after a seat counted, never run: tests/desk-store-shell.mjs holds them. */
+    storeOn: () => false, storeTokenTake: () => {}, storeTurn: () => { st.storeTurns = (st.storeTurns || 0) + 1; }, storeLeaveNow: () => Promise.resolve(true),
+    storeEndAgain: () => Promise.resolve(false),
   };
   const names = Object.keys(vals);
   const body = "let signinClick = null, signinBusy = null, signinSaid = \"\", signinOutFlight = null;\n" + text + "\nreturn { view: signinView };";
@@ -2978,9 +3089,113 @@ CASES.landAddress = async () => {
   } finally { await d.close(); }
 };
 
+/* ---- THE RELAY'S SEAT (ds49; decision 49, option (b)): on a team whose licence follows Entra the relay refuses a desk whose seat
+   certificate ran out once colleagues prove past it (tests/relay-seats.mjs). The shell keeps the team whose relay refused, renews a
+   run-out certificate before a session at most hourly, and Account says what it means to the person in the copywriter's words. ---- */
+const SEAT_REMOVED_EN = ["Your organisation no longer gives this account access to Etiuda.", "This desk keeps its catalog and works with it as before, but new editions from the team no longer reach it. The organisation's IT department can give access again."];
+const SEAT_RENEW_EN = ["This account's sign-in needs renewing.", "This desk keeps its catalog and works with it as before. Signing in again, under Account, brings the team's new editions back."];
+const SEAT_REMOVED_PL = ["Organizacja nie przyznaje już temu kontu dostępu do Etiudy.", "To stanowisko zachowuje swój katalog i działa z nim jak dotąd, ale nowe wydania od zespołu już do niego nie trafiają. Dostęp może przywrócić dział IT organizacji."];
+const SEAT_RENEW_PL = ["Logowanie tego konta wymaga odnowienia.", "To stanowisko zachowuje swój katalog i działa z nim jak dotąd. Po ponownym zalogowaniu się w części Konto nowe wydania od zespołu znów zaczną docierać."];
+const NO_ROLE_EN = ["This account has no Etiuda role in its organisation, so it holds no seat.", "Its IT department can assign one."];
+/* The service's "no-role" (a token of a licence that follows Entra without an Etiuda role) is read as itself, at a renewal and at a first
+   sign-in; the certificate in hand is kept to its own end and no sign-in is asked. Handed as stray until this tree's copy of the service's
+   record holds it (Studio records it since a9ad7cd3; ds23b then wants its reading). */
+CASES.relaySeatAnswer = s => {
+  const ans = s.signinAnswer(strayAnswer({ ok: false, reason: "no-role" }, 403), DESK_KEY);
+  const held = heldOf({});
+  const settled = s.signinSettle(held, ans, NOW);
+  return ans.ok === false && ans.reason === "no-role" && settled.said === "no-role" && settled.ask === false && !!settled.cert
+    && settled.cert.sig.value === held.cert.sig.value && settled.refresh === held.refresh;
+};
+/* The shell's own declarations of the relay's seat, evaluated with stand-ins; swap is a plant's. */
+function relaySeatWire(swap, stand) {
+  const names = ["function signinRelaySeatTold(", "function signinRelaySeat(", "function signinSeatCert(", "function signinSeatRenew(", "function signinRelaySeatIo("];
+  let text = decl(MAIN, "const SIGNIN_SEAT_RENEW_MS") + "\n" + names.map(n => decl(MAIN, n)).join("\n");
+  if (swap) { if (text.split(swap[0]).length !== 2) throw new Error("plant anchor not in the slice once: " + swap[0]); text = text.replace(swap[0], swap[1]); }
+  const st = stand || {};
+  return new Function("st", "let signinRelaySeatTeam = \"\", signinSeatRenewAt = 0, signinRenewing = null;\n"
+    + "const tellSignin = () => { st.told = (st.told || 0) + 1; }, signinRenewNow = () => { st.renewed = (st.renewed || 0) + 1; return Promise.resolve(\"\"); };\n"
+    + "const signinState = () => ({ held: st.held }), branchIdentity = () => st.me, signinCertOk = (c, k) => !!c && c.desk === k, signinRevokedHas = (l, c) => !!l && l.indexOf(c.sig.value) >= 0;\n"
+    + "const Date = { now: () => st.now };\n"
+    + text + "\nreturn { signinRelaySeatTold, signinRelaySeat, signinSeatCert, signinSeatRenew, signinRelaySeatIo, team: () => signinRelaySeatTeam, pending: p => { signinRenewing = p; } };")(st);
+}
+/* The team whose relay refused is kept and told once; the words follow the last renewal: "removed" where the service found no role,
+   "renew" otherwise; another team's open leaves it, its own open or a channel let go clears it; no sign-in held is no words. */
+CASES.relaySeatWire = (s, swap) => {
+  const st = {}, w = relaySeatWire(swap, st);
+  const io = w.signinRelaySeatIo("t-1");
+  io.onSeat("refused");
+  const told1 = st.told, renew = w.signinRelaySeat(heldOf({})), removed = w.signinRelaySeat(heldOf({ said: "no-role" })), none = w.signinRelaySeat(null);
+  io.onSeat("refused");
+  const told2 = st.told;
+  w.signinRelaySeatIo("t-2").onSeat("open");
+  const kept = w.team();
+  io.onSeat("open");
+  const cleared = w.team() === "" && w.signinRelaySeat(heldOf({})) === "";
+  io.onSeat("refused");
+  w.signinRelaySeatIo(null);
+  return told1 === 1 && renew === "renew" && removed === "removed" && none === "" && told2 === 1 && kept === "t-1" && cleared && w.team() === "" && st.told === 4;
+};
+/* The certificate a session carries is the desk's own and standing, or none; a run-out one is renewed before a session at most once an
+   hour, and a renewal already out is waited on rather than doubled. */
+CASES.seatRenewGap = async (s, swap) => {
+  const c = cert();
+  const st = { now: NOW, me: { key: DESK_KEY }, held: heldOf({ cert: c }) }, w = relaySeatWire(swap, st);
+  const own = w.signinSeatCert() === c;
+  st.me = { key: OTHER_DESK_KEY };
+  const other = w.signinSeatCert() === null;
+  st.me = { key: DESK_KEY };
+  st.held = heldOf({ cert: c, revoked: [c.sig.value] });
+  const revoked = w.signinSeatCert() === null;
+  await w.signinSeatRenew();
+  st.now += 10 * 60 * 1000;
+  await w.signinSeatRenew();
+  const withinHour = st.renewed;
+  st.now += 60 * 60 * 1000;
+  let out = null;
+  w.pending(new Promise(r => { out = r; }));
+  const waiting = w.signinSeatRenew();
+  out();
+  await waiting;
+  const whilePending = st.renewed;
+  w.pending(null);
+  await w.signinSeatRenew();
+  return own && other && revoked && withinHour === 1 && whilePending === 1 && st.renewed === 2;
+};
+/* Account and the door say the relay's refusal as what it is to the person, never a fault of the team or its lead: no longer given
+   access, or the sign-in to renew (with the providers under it); nothing while signed out; the service's no-role at a first sign-in and at
+   a renewal in the copywriter's words; Polish too. */
+CASES.relaySeatPage = async (s, page) => {
+  const pg = page || P;
+  if (!pg) return false;
+  const storage = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  const base = { offered: ["microsoft", "google"], signedIn: "microsoft", code: CODE, seat: "held" };
+  const door = o => pg.signinDoor(pg.signinRead(Object.assign({}, base, o)));
+  const removed = door({ relaySeat: "removed", refused: "no-role" }), renew = door({ relaySeat: "renew", ask: true }), out = door({ signedIn: "", relaySeat: "renew" });
+  const noRoleFirst = door({ signedIn: "", said: "no-role" }), noRoleRenewal = door({ refused: "no-role" });
+  let pl = null;
+  storage.lsSet("eUiLang", "pl");
+  try { pl = [door({ relaySeat: "removed" }).say, door({ relaySeat: "renew" }).say]; } finally { storage.lsSet("eUiLang", "en"); }
+  const blames = JSON.stringify([removed.say, renew.say]).match(/lead|relay|team's fault|lider/gi);
+  return removed.moment === "relayseat" && sayIs(removed.say, SEAT_REMOVED_EN) && !removed.providers
+    && renew.moment === "relayseat" && sayIs(renew.say, SEAT_RENEW_EN) && renew.providers.join() === "microsoft,google"
+    && out.moment === "before" && noRoleFirst.moment === "refused" && noRoleFirst.heading === NO_ROLE_EN[0] && noRoleFirst.line === NO_ROLE_EN[1]
+    && noRoleRenewal.moment === "renewal" && sayIs(noRoleRenewal.say, NO_ROLE_EN) && !!pl && sayIs(pl[0], SEAT_REMOVED_PL) && sayIs(pl[1], SEAT_RENEW_PL) && !blames;
+};
+/* A POOLED DESK'S CERTIFICATE (Claude alpha's ruling of 2026-11-14 01:07; the relay's grace reads the mark): the desk takes it exactly where
+   the relay does, signed or not. */
+CASES.pooledCert = s => {
+  const req = createRequire(import.meta.url), core = req(path.join(ROOT, "relay", "core.cjs"));
+  const day = { until: NOW + 86400000 }, pooled = cert(Object.assign({ pooled: true }, day)), forged = Object.assign(cert(day), { pooled: true });
+  const odd = cert(Object.assign({ pooled: "yes" }, day)), long = cert({ pooled: true, until: NOW + 86400000 + 60000 });
+  const kept = s.signinFileRead(s.signinFileText({ held: heldOf({ cert: pooled, doors: [] }) })).held.cert;
+  const relay = c => core.certWhy(c, DESK_KEY, [c.licence], NOW, [TEST_ROOT]) === null;
+  return s.signinCertOk(pooled, DESK_KEY) === true && !s.signinCertOk(forged, DESK_KEY) && !s.signinCertOk(odd, DESK_KEY)
+    && !!kept && kept.pooled === true && relay(pooled) && !relay(forged) && !relay(odd) && !s.signinCertOk(long, DESK_KEY) && !relay(long);
+};
 const LEGS = [
-  ["ds1a", "offered", "as shipped no client id is configured and nothing is offered; a configured table offers what it configures, in order"],
-  ["ds1b", "noHintStart", "an invitation naming providers carries no sign-in hint: the team's start is retired"],
+  ["ds1a", "offered", "as shipped both are configured with Etiuda's own client ids and offered in order, no secret in the tree; with no client id nothing is offered; a configured table offers what it configures, in order"],
+  ["ds1b", "noHintStart", "an invitation naming providers carries no sign-in hint and fills no client id: the team's start is retired"],
   ["ds2a", "pkce", "the authorize URL carries PKCE (S256 over the verifier), the state, the nonce and a 127.0.0.1 loopback, at the provider's own page"],
   ["ds2b", "nonceBound", "the nonce is the service's SHA-256 of its line, this desk's key and the seed, and is not another desk key's"],
   ["ds2c", "tokenNonce", "a token is taken only for this client and issuer, unexpired, carrying this desk's nonce; another key's nonce or none is unbound"],
@@ -2990,6 +3205,7 @@ const LEGS = [
   ["ds3a", "deskBody", "signin/desk's body has the interface's names alone, signed by this desk's key over the service's bytes; the seed on a first sign-in only"],
   ["ds3b", "serviceDoor", "the service's door posts JSON to signin/desk alone, no redirect, nothing cached, no cookie, nothing over 8 KiB"],
   ["ds3c", "answers", "the service's answers read as the interface names them; a certificate for another desk or code is not taken"],
+  ["ds3g", "managedRead", "a managed tenant: the service's word that it is managed, and why, read from a seat and a no-role refusal and kept; an ordinary answer clears it"],
   ["ds3d", "seatFile", "seat.json is {format: 2, desk, certificate}, the certificate whole and no token"],
   ["ds3e", "settle", "a refusal keeps the last certificate, a freed seat forgets the refresh token, a service away is only marked, none drops it"],
   ["ds3f", "lapse", "the calm lapse: lapsed once the kept certificate's until has passed, never with no certificate"],
@@ -3012,25 +3228,27 @@ const LEGS = [
   ["ds9a", "signoutBody", "signout/desk's body has the interface's three names alone, signed by this desk's key over the service's bytes"],
   ["ds9b", "signoutPost", "Sign out posts exactly one signout/desk, the three names, a fresh t and a signature that verifies, before the sign-in is cleared, and nothing stays owed once it is taken"],
   ["ds9c", "signoutAway", "with the service unreached, throwing or answering 503 or a refusal, Sign out still clears the sign-in, says no refusal, and keeps the place owed, the page told once more"],
+  ["ds9m", "signoutManaged", "Sign out forgets that the account's organisation holds its licence, signed in or not, so Buy is offered again"],
   ["ds9d", "signoutNone", "no signout/desk is sent where no client id is configured or the desk was never signed in; a sign-in in the browser is left alone"],
   ["ds9e", "signoutDoor", "the service's door carries signout/desk at its own address alone, no redirect, nothing cached, no cookie"],
   ["ds10a", "flushJoin", "a desk signed in first writes its seat beside its request to join a folder team, and again where the file went or the folder changed"],
+  ["ds10d", "flushOwnKey", "a certificate given to another desk key is never written as this desk's seat; this key's is"],
   ["ds10b", "flushCallers", "the seat is written when a request to join is written, and after a join taken or finished or a folder changed"],
   ["ds10c", "flushJoinReach", "a folder invitation taken and an admission heeded both reach the folder change, and so the seat's write"],
   ["ds11a", "doorRequest", "a request at the relay's door carries the seat as seat.json has it and the relay's id, and names no invitation"],
   ["ds11b", "doorInvite", "the channel knocks at the door with this desk's standing certificate and the lead's box, and with nothing else"],
   ["ds11c", "doorKept", "the id the relay names is kept and the request written once, with the seat and that id, signed as the desk's own"],
   ["ds11d", "doorChannel", "the desk's relay channel is given the door's invite() ahead of the invitation's, and onDoor"],
-  ["ds12a", "previewOff", "the sign-in preview is off by default: ETIUDA_SIGNIN_PREVIEW absent, \"0\", \"yes\" or \" 1\" offers nothing; \"1\" alone offers both as a preview"],
-  ["ds12b", "previewInert", "the preview changes nothing where a provider has a client id: that one offered, no preview, another provider's press the ordinary not offered"],
-  ["ds12c", "previewPress", "in the preview a trusted press of either provider is answered signin-preview with no identity, browser, loopback, provider, service, write or request"],
+  ["ds12a", "previewOff", "with no client id the sign-in preview is off by default: ETIUDA_SIGNIN_PREVIEW absent, \"0\", \"yes\" or \" 1\" offers nothing; \"1\" alone offers both as a preview"],
+  ["ds12b", "previewInert", "the preview changes nothing where a provider has a client id: as shipped both offered and no preview; Microsoft's alone, that one offered, no preview, Google's press the ordinary not offered"],
+  ["ds12c", "previewPress", "in the preview, with no client id, a trusted press of either provider is answered signin-preview with no identity, browser, loopback, provider, service, write or request"],
   ["ds12d", "previewPage", "the preview's line stands in the door's content and Account's card, the press's line as the heading, none without the preview; Polish too"],
   ["ds12e", "previewCmd", "tools/signin-preview.cmd is outside the packaged files and starts the installed desk, per-user first, with the variable for that start alone"],
   ["ds12f", "previewLook", "the preview's line as the designer placed it: \"Preview only.\" at 600, the rest the caption's; in the panel before the providers, in Account at the card's measure"],
   ["ds12g", "previewBack", "after a press the preview's heading stands alone with one ordinary Back to the door; the providers' row in Account is no header row"],
   ["ds13a", "secretTable", "the tree holds no client secret: every provider's clientSecret is \"\" and a configured table offers none"],
   ["ds13b", "secretSent", "client_secret goes with Google's code exchange and refresh only where a secret is present, and without one every byte is as before"],
-  ["ds13c", "secretPacked", "the package's signin-secret.json gives Google's secret where it is {format: 1, google} of a secret's shape, and nothing else"],
+  ["ds13c", "secretPacked", "the package's signin-secret.json gives Google's secret where it is {format: 1, google} of a secret's shape, and nothing else; without it both shipped providers carry none"],
   ["ds13d", "secretNever", "the stand-in secret is in the token forms and in no printed line, no licence service body (whose names are unchanged), no kept file, no outcome"],
   ["ds13e", "secretWire", "the shell reads the package's file once at start, installed, beside the asar, from no IPC or page, and the variable only inside the sign-in lab's read"],
   ["ds13f", "secretPackage", "the package step writes nothing and says absent without the variable, writes the file and says present with it, never the value; the file is git-ignored and copied only when set"],
@@ -3052,7 +3270,7 @@ const LEGS = [
   ["ds14g", "copiedLabel", "the code's Copy and the link's read Copied for SIGNIN_COPIED_MS after a copy the clipboard took, then Copy, holding the wider width; a refused copy leaves it; Polish too"],
   ["ds15a", "identNoName", "with no name written the identity's bold line is \"Signed in with\" its provider and there is no second line, in the panel's every signed-in moment and in Account; a name written stands over it; Polish too"],
   ["ds15b", "panelOrder", "the panel tells no licence as it tells no team: the fact, its line, then the code's box, under the identity and above the acts"],
-  ["ds16a", "labPackaged", "THE LAB IS INERT PACKAGED: installed, packaged or both, ETIUDA_SIGNIN_LAB naming a lab or a staging file and Google's secret in the environment, nothing is read and the providers, what is offered, the secret and both doors are byte for byte the shipped ones; unpackaged, the lab is taken, a staging file fills the shipped two's client ids alone, the secret goes to Google alone, and a file naming another host is refused whole"],
+  ["ds16a", "labPackaged", "THE LAB IS INERT PACKAGED: installed, packaged or both, ETIUDA_SIGNIN_LAB naming a lab or a staging file and Google's secret in the environment, nothing is read and the providers, what is offered, the secret and both doors are byte for byte the shipped ones; unpackaged, the lab is taken and the shipped two hold its client ids alone, none where it names none, a staging file fills the shipped two's client ids alone, the secret goes to Google alone, and a file naming another host is refused whole"],
   ["ds16b", "labRead", "the lab file is taken whole or not at all: the service http on 127.0.0.1 or https on etiuda.dev; client ids for the shipped two alone; the provider \"lab\" optional, its authorize and token http on 127.0.0.1 alone, its issuer and key set also https on a .localhost name, openid; a root optional, of 64 hex"],
   ["ds16c", "labPath", "pointed at a lab over real HTTP, the real path runs unchanged: the browser's redirect to the loopback, the code exchange with PKCE, the token checks, signin/desk's certificate, a refresh, a sign out; the shipped door and other ports refused"],
   ["ds16d", "labHarness", "a harness start renews and signs out only while the lab is taken, and reads nothing for it while no lab is taken"],
@@ -3082,6 +3300,7 @@ const LEGS = [
   ["ds24a", "landSeat", "the sign-in's own reply is answered 303 to a path of the loopback's own with no code, no state and no query; landed, that path's one GET is the seat's page in the copywriter's words under a policy that fetches, frames and runs nothing, and the loopback closes"],
   ["ds24b", "landHeld", "the clean path asked before the desk knows is held unanswered, and land() answers it with that outcome"],
   ["ds24c", "landCap", "nothing landed within the cap: the held GET is answered the neutral page and the loopback closes"],
+  ["ds24k", "landCancel", "Cancel after the reply and before the landing answers the held GET the cancelled page and closes the loopback at once"],
   ["ds24d", "landStray", "a stray state is answered 400 with the earlier tab's page and the wait goes on; after the reply, another GET of / and any other path or query are 404 and the landing still serves"],
   ["ds24e", "landOnce", "a second GET of the clean path is refused at once, and the first still gets its page"],
   ["ds24f", "landKinds", "each end tells its landing: cancelled (access_denied, AADSTS65004), the organisation (consent_required, AADSTS65001, 90094), could not be finished for any other end the desk knows (the provider's refusal, a code it no longer takes, the service refusing or away); a seat, no seat yet (no certificate, waiting, full)"],
@@ -3113,6 +3332,12 @@ const LEGS = [
   ["ds22h", "labRoot", "unpackaged, a lab file's root is honoured beside the shipped one; installed, packaged or both a certificate under it is refused, the file never read; no lab, or one naming no root, honours the shipped root alone; a stranger's root never"],
   ["ds22e", "doorsSigned", "a door is taken only under the service's signature by the certificate's key, over those doors in that order under that certificate; an older service's answer without one holds the seat, offers no door and says nothing; a stranger's door added, a door changed, another key's or another certificate's signature is no door"],
   ["ds22f", "doorsFile", "signin.json keeps doors only with their signature under the certificate it holds: doors edited, the signature gone (an older build's file) or no certificate is no door, and the certificate stays"],
+  ["ds26a", "pageAskLead", "a desk its organisation's licence does not seat, the switch seating only people added, is told to give its lead the code, with Check now and Account, and under a hairline its own trial and its end, nothing there once the trial is had; Polish too (decision 47, held for Max's ruling)"],
+  ["ds49a", "relaySeatAnswer", "the service's no-role is read as itself at a renewal: the certificate kept to its own end, no sign-in asked"],
+  ["ds49b", "relaySeatWire", "the team whose relay refused this desk's seat is kept and told once, said removed where the service found no role and renew otherwise, cleared by its own open or the channel let go"],
+  ["ds49c", "seatRenewGap", "a relay session carries the desk's own standing certificate or none, and a run-out one is renewed first at most once an hour, a renewal already out waited on"],
+  ["ds49d", "relaySeatPage", "Account says the relay's refusal as what it is to the person, in the copywriter's English and Polish: no longer given access, or the sign-in to renew with the providers under it; nothing signed out; no-role at a first sign-in and a renewal"],
+  ["ds50a", "pooledCert", "a pooled desk's certificate (pooled: true, signed as the line \"pooled\") is a seat on the desk, kept by signin.json, and the relay's certWhy takes it alike; the mark outside the signature, or of another value, is no certificate, nor is one running past a day"],
   ["ds22g", "doorsShownSigned", "doors held without the signature are offered nowhere and a press on one joins nothing; signed ones are offered"],
 ];
 for (let [id, name, line] of LEGS) {
@@ -3305,8 +3530,10 @@ function outsideNames(main) {
 const outside = outsideNames(MAIN);
 /* And to write the seat after a request to join and a folder change (ds10b), and to knock at a relay team's door with the
    certificate and write the request there (ds11d), and for Buy to carry the sign-in code to the order page (tests/desk-buy.mjs), none
-   of which gates anything. */
-const expectOutside = ["signinListen", "armSigninRenew", "signinFlush", "signinFlush", "signinDoorInvite", "signinDoorKept", "signinView"];
+   of which gates anything; and to hand a team's relay its seat on a licence that follows Entra, which the relay judges and nothing
+   on the desk waits on (tests/relay-seats.mjs d1a to d3a). */
+const expectOutside = ["signinListen", "armSigninRenew", "signinFlush", "signinFlush", "signinDoorInvite", "signinDoorKept", "signinView",
+  "signinRelaySeatIo", "signinRelaySeatIo"];
 check(outside.slice().sort().join() === expectOutside.slice().sort().join(),
   "ds5a nothing local is gated: outside its section the shell names the sign-in only to require its loopback, to arm the renewal and to write the seat after a join: " + outside.join(" "));
 const modules = fs.readdirSync(path.join(ROOT, "src", "modules")).filter(n => n.endsWith(".js"));
@@ -3345,8 +3572,20 @@ const DESK_READS = {
   "signin": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === false && r.reason === "signin" && h.refresh === "" && h.ask === true; },
   "desks": r => r.ok === false && r.reason === "desks",
   "token": r => r.ok === false && r.reason === "token",
+  "access-token": r => r.ok === false && r.reason === "access-token" && r.managed === true,
+  "no-role": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === false && r.reason === "no-role" && r.managed === true && h.said === "no-role" && h.refresh === "sealed:rt" && h.managed === true; },
+  "managed-seated": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.managed === true && r.cause === "" && h.managed === true && h.cert === r.cert; },
+  "managed-waiting": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.waiting === true && r.managed === true && h.said === "waiting" && h.managed === true; },
+  "managed-none": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.managed === true && h.cert === null && h.managed === true; },
+  "managed-own-waiting": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.waiting === true && r.managed === true && r.cause === "own-licence" && h.said === "waiting" && h.cause === "own-licence"; },
+  "managed-own": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.managed === true && r.cause === "own-licence" && h.cause === "own-licence"; },
+  "managed-assigned": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.managed === true && r.cause === "assigned" && h.cause === "assigned"; },
   "malformed": unreached, "stale": unreached, "signature": unreached, "replayed": unreached, "slow-down": unreached, "unavailable": unreached,
   "signed-out": (r, c) => r === true,
+  /* A team is its lead's own (decision 47): the ask beside the person's own trial's certificate, and beside none once it is had. */
+  "ask-lead-trial": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && !!r.cert && r.cert.deskOnly === true && r.askLead === true
+    && r.code === c.body.code && h.askLead === true && h.said === ""; },
+  "ask-lead": (r, c, s) => { const h = s.signinSettle(HELD_BEFORE(), r, NOW); return r.ok === true && r.cert === null && r.askLead === true && h.askLead === true && h.said === ""; },
 };
 const recordedAnswer = c => ({ status: c.status, bytes: Buffer.from(JSON.stringify(c.body)) });
 const caseNames = ANSWER_CASES.map(c => c.case);
@@ -3411,12 +3650,13 @@ if (!PLANTS_OFF) {
   await plant("dsp9", ["const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t })) || \"\"); /* plant:desk-signed */",
     "const sig = String(sign(signinDeskBytes({ provider: provider, tokenHash: signinTokenHash(idToken), desk: desk, t: t + 1 })) || \"\");"], "deskBody");
   await plant("dsp10", ["if (seed) body.seed = String(seed); /* plant:seed-first */", "body.seed = String(seed);"], "deskBody");
-  await plant("dsp11", ["if (String(url) !== SIGNIN_SERVICE && String(url) !== SIGNOUT_SERVICE) throw new Error(\"the licence service's door takes signin/desk and signout/desk only\"); /* plant:service-host */", ""], "serviceDoor");
-  await plant("dsp27", ["if (String(url) !== SIGNIN_SERVICE && String(url) !== SIGNOUT_SERVICE) throw new Error(\"the licence service's door takes signin/desk and signout/desk only\"); /* plant:service-host */", ""], "signoutDoor");
+  await plant("dsp11", ["if ([SIGNIN_SERVICE, SIGNOUT_SERVICE, storeServiceAt(\"store/grant\"), storeServiceAt(\"store/end\")].indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes signin/desk, signout/desk, store/grant and store/end only\"); /* plant:service-host */", ""], "serviceDoor");
+  await plant("dsp27", ["if ([SIGNIN_SERVICE, SIGNOUT_SERVICE, storeServiceAt(\"store/grant\"), storeServiceAt(\"store/end\")].indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes signin/desk, signout/desk, store/grant and store/end only\"); /* plant:service-host */", ""], "signoutDoor");
   await plant("dsp28", ["const SIGNOUT_DESK_LINE = \"etiuda-licence-signout-desk\"; /* plant:signout-line */", "const SIGNOUT_DESK_LINE = \"etiuda-licence-signin-desk\";"], "signoutBody");
   await plant("dsp12", ["&& String(c.desk) === String(deskKey) && /^[0-9a-f]{64}$/.test(String(c.person)) && SIGNIN_CODE.test(String(c.code)) /* plant:cert-desk */",
     "&& /^[0-9a-f]{64}$/.test(String(c.person)) && SIGNIN_CODE.test(String(c.code))"], "answers");
-  await plant("dsp13", ["    refresh: freed ? \"\" : held.refresh }); /* plant:settle-freed */", "    refresh: held.refresh });"], "settle");
+  await plant("dsp13", ["    refresh: freed ? \"\" : held.refresh }, ans.managed === true ? { managed: true, cause: ans.cause || \"\" } : {}); /* plant:settle-freed */",
+    "    refresh: held.refresh }, ans.managed === true ? { managed: true, cause: ans.cause || \"\" } : {});"], "settle");
   await plant("dsp15", ["return !!held && !!held.cert && now >= held.cert.until; /* plant:lapse-until */", "return !!held && !!held.cert && now >= held.cert.until + 86400000;"], "lapse");
   await plant("dsp16", ["if (!Object.keys(SIGNIN_PROVIDERS).some(id => SIGNIN_PROVIDERS[id].token === u)) throw new Error(\"a token is asked only at a provider's own token address\"); /* plant:door-host */", ""], "door");
   await plant("dsp17", ["body: form, redirect: \"error\", cache: \"no-store\", credentials: \"omit\", signal: ctl ? ctl.signal : undefined }); /* plant:door-redirect */",
@@ -3436,6 +3676,7 @@ if (!PLANTS_OFF) {
   await plantWire("dsp25", ["const SIGNIN_RENEW_MS = 24 * 60 * 60 * 1000; /* plant:renew-daily */", "const SIGNIN_RENEW_MS = 55 * 60 * 1000;"], "renewDaily");
   await plantWire("dsp26", ["if (!p || !me) return \"\"; /* plant:renew-offered */", "if (!me) return \"\";"], "renewWire");
   await plantWire("dsp29", ["const send = () => signoutAsk(signinIo({ loop: null }), key, Date.now); /* plant:signout-post */", "const send = () => Promise.resolve(false);"], "signoutPost");
+  await plantWire("dsp156", ["  delete s.licenceManaged; /* plant:signout-managed */\n", ""], "signoutManaged");
   await plantWire("dsp30", ["&& signinOffered().length) { /* plant:signout-offered */", ") {"], "signoutNone");
   await plantWire("dsp31", ["return !!teamJoin && !(teamJoin.invite && teamJoin.invite.relay); /* plant:flush-asking */", "return false;"], "flushJoin");
   await plantWire("dsp32", ["if (signinWrote === mark && fs.existsSync(file)) return false; /* plant:flush-mark */", "if (signinWrote === cert.sig.value) return false;"], "flushJoin");
@@ -3465,12 +3706,15 @@ if (!PLANTS_OFF) {
   await plant("dsp55", ["(?:[a-z0-9-]+\\.)*etiuda\\.dev(?:\\/[A-Za-z0-9._~-]+)*\\/$/.test(u)); /* plant:lab-service */", "[a-z0-9.-]+(?:\\/[A-Za-z0-9._~-]+)*\\/$/.test(u)); /* plant:lab-service */"], "labRead"); /* anchored on its own line: Buy's ORDER_PAGE_SHAPE holds the same host pattern */
   await plant("dsp56", ["|| Object.keys(ids).some(id => (id !== \"microsoft\" && id !== \"google\") || typeof ids[id] !== \"string\" || !SIGNIN_CLIENT.test(ids[id]))) return null; /* plant:lab-ids */",
     ") return null;"], "labRead");
-  await plantWire("dsp57", ["t[id] = lab.clientIds[id] ? Object.freeze(", "t[id] = false ? Object.freeze("], "labPackaged");
+  await plantWire("dsp57", ["{ clientId: lab.clientIds[id] || \"\" })); /* plant:lab-fill */", "{ clientId: \"\" })); /* plant:lab-fill */"], "labPackaged");
+  await plantWire("dsp165", ["Object.freeze(Object.assign({}, SIGNIN_PROVIDERS[id], { clientId: lab.clientIds[id] || \"\" })); /* plant:lab-fill */",
+    "lab.clientIds[id] ? Object.freeze(Object.assign({}, SIGNIN_PROVIDERS[id], { clientId: lab.clientIds[id] })) : SIGNIN_PROVIDERS[id]; /* plant:lab-fill */"], "labPackaged");
   await plantWire("dsp58", ["  else if (process.env.ETIUDA_GOOGLE_CLIENT_SECRET) signinPacked", "  else if (false) signinPacked"], "labPackaged");
   await plant("dsp53", ["/^http:\\/\\/127\\.0\\.0\\.1:([0-9]{1,5})", "/^http:\\/\\/[a-z0-9.]+:([0-9]{1,5})"], "labRead");
   await plant("dsp54", ["|| !(d.root === undefined || /^[0-9a-f]{64}$/.test(String(d.root)))) return null; /* plant:lab-shape */", ") return null;"], "labRead");
   await plant("dsp59", ["if (d.keyId !== \"studio-\" + crypto.createHash(\"sha256\").update(Buffer.from(d.lead, \"hex\")).digest(\"hex\").slice(0, 16)) return []; /* plant:door-key-id */", ""], "doorsRead");
-  await plant("dsp60", ["return { ok: true, code: String(j.code), cert: j.certificate, doors: signed ? doors : [], doorsSig: signed ? String(j.doorsSig) : \"\" }; /* plant:door-read */", "return { ok: true, code: String(j.code), cert: j.certificate, doors: [], doorsSig: \"\" };"], "doorsRead");
+  await plant("dsp60", ["return Object.assign({ ok: true, code: String(j.code), cert: j.certificate, doors: signed ? doors : [], doorsSig: signed ? String(j.doorsSig) : \"\", askLead }, signinManagedOf(j)); /* plant:door-read */",
+    "return Object.assign({ ok: true, code: String(j.code), cert: j.certificate, doors: [], doorsSig: \"\", askLead }, signinManagedOf(j));"], "doorsRead");
   await plant("dsp61", ["doors: ans.cert ? (ans.doors || []) : [],", "doors: ans.doors || [],"], "doorsKept");
   await plantWire("dsp62", ["|| !(held.cert.until > now) || pinnedLead() || teamJoin) return []; /* plant:door-shown */", ") return [];"], "doorJoin");
   await plantWire("dsp63", ["if (!d || !me) return Object.assign({}, joinView(), { refused: \"door\" }); /* plant:door-join-offered */", "if (!me) return joinView();"], "doorJoin");
@@ -3500,9 +3744,10 @@ if (!PLANTS_OFF) {
   await plantWire("dtp5", ["trace: SIGNIN_TRACE_ASKED ? line => console.error(line) : null, /* plant:trace-wired */", "trace: line => console.error(line),"], "traceDefault");
   await plantWire("dtp6", ["if (!io || typeof io.trace !== \"function\") return; /* plant:trace-off */",
     "if (!io || typeof io.trace !== \"function\") { console.error(signinTraceLine(provider, step, shown, said, hide)); return; }"], "traceDefault");
-  await plant("dsp79", ["if (j.certificate === null) return { ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === \"waiting\" }; /* plant:wait-read */",
-    "if (j.certificate === null) return { ok: true, code: String(j.code), cert: null, doors: [] };"], "waitRead");
-  await plant("dsp80", ["said: ans.waiting === true ? \"waiting\" : \"\", ask: false }); /* plant:wait-settle */", "said: \"\", ask: false });"], "waitRead");
+  await plant("dsp79", ["if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], waiting: j.reason === \"waiting\", askLead }, signinManagedOf(j)); /* plant:wait-read */",
+    "if (j.certificate === null) return Object.assign({ ok: true, code: String(j.code), cert: null, doors: [], askLead }, signinManagedOf(j));"], "waitRead");
+  await plant("dsp80", ["said: ans.waiting === true ? \"waiting\" : \"\", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || \"\" : \"\" }); /* plant:wait-settle */",
+    "said: \"\", ask: false, askLead: ans.askLead === true, managed: ans.managed === true, cause: ans.managed === true ? ans.cause || \"\" : \"\" });"], "waitRead");
   await plantWire("dsp93", ["  if (Object.keys(teamPins).some(teamPinStands)) return []; /* plant:door-pin-stands */\n", ""], "doorPins");
   await plantWire("dsp94", ["    if (inviteDoor({ lead: { public: d.lead } })) return null; /* plant:door-policy */\n", ""], "doorPolicy");
   await plantWire("dsp95", ["    if (pin && (pin.keyId !== d.keyId || pin.public !== d.lead)) return null; /* plant:door-pinned */\n", ""], "doorPins");
@@ -3569,6 +3814,7 @@ if (!PLANTS_OFF) {
   await plant("dsp120", ["res.writeHead(303, Object.assign({ location: clean, \"content-length\": 0 }, SIGNIN_LOOP_HEADERS)); /* plant:land-redirect */",
     "res.writeHead(303, Object.assign({ location: clean + \"?\" + query, \"content-length\": 0 }, SIGNIN_LOOP_HEADERS));"], "landSeat");
   await plant("dsp121", ["if (clean && !served && req.method === \"GET\" && u === clean) { /* plant:land-once */", "if (clean && req.method === \"GET\" && u === clean) {"], "landOnce");
+  await plant("dsp167", ["cancel: () => { /* plant:loop-cancel */", "cancel: () => { return; /* plant:loop-cancel */"], "landCancel");
   await plant("dsp122", ["timer = setTimeout(() => { if (!landed) landed = \"back\"; if (held)", "timer = setTimeout(() => { if (held)"], "landCap");
   await plant("dsp123", ["return why === \"signin-notallowed\" ? \"org\" : \"appfail\"; /* plant:land-org */", "return \"appfail\";"], "landKinds");
   await plant("dsp124", ["if (ans.ok === true) return ans.cert ? \"seat\" : \"noseat\"; /* plant:land-seat */", "if (ans.ok === true) return \"seat\";"], "landKinds");
@@ -3591,10 +3837,26 @@ if (!PLANTS_OFF) {
   await plant("dsp146", ["if (!!held && !!held.cert && signinRevokedHas(held.revoked, held.cert)) return true; /* plant:lapse-revoked */", ""], "revokedLapse");
   await plantWire("dsp147", ["  if (signinRevokedHas(held.revoked, held.cert)) return []; /* plant:revoked-offer */\n", ""], "revokedLapse");
   await plantWire("dsp148", ["  if (signinRevokedHas(held.revoked, cert)) return false; /* plant:revoked-flush */\n", ""], "revokedLapse");
+  await plantWire("dsp166", ["  if (!signinCertOk(cert, me.key)) return false; /* plant:flush-own-key */", "  /* plant:flush-own-key */"], "flushOwnKey");
   await plantWire("dsp149", ["  if (signinRevokedHas(held.revoked, cert)) return null; /* plant:revoked-knock */\n", ""], "revokedLapse");
   await plantWire("dsp150", ["  if (held && signinRevokedHas(held.revoked, held.cert)) return false; /* plant:revoked-request */\n", ""], "revokedLapse");
   await plantWire("dsp152", ["  base.revoked = s.revoked || null; /* plant:revoked-survives */\n", ""], "revokedSurvives");
+  await plant("dsp155", ["  return { managed: true, cause: j.cause === \"own-licence\" || j.cause === \"assigned\" ? j.cause : \"\" }; /* plant:managed-read */", "  return {};"], "managedRead");
+  await plant("dsp153", ["const said = { 403: [\"token\", \"signin\", \"no-role\"], 409: [\"full\", \"desks\", \"access-token\"] }[res.status];",
+    "const said = { 403: [\"token\", \"signin\"], 409: [\"full\", \"desks\", \"access-token\"] }[res.status];"], "answers");
+  await plant("dsp154", ["const said = { 403: [\"token\", \"signin\", \"no-role\"], 409: [\"full\", \"desks\", \"access-token\"] }[res.status];",
+    "const said = { 403: [\"token\", \"signin\", \"no-role\"], 409: [\"full\", \"desks\"] }[res.status];"], "answers");
   await plant("dsp151", ["return !!list && Array.isArray(list.keys) && !!cert && !!cert.via && !!cert.via.key && list.keys.indexOf(String(cert.via.key.pub)) >= 0; /* plant:revoked-has */", "return false;"], "revokedLapse");
+  await plant("dsp159", ["    .concat(c.pooled === true ? [\"pooled\"] : []) /* plant:cert-pooled-line */\n", ""], "pooledCert");
+  await plant("dsp160", ["      .concat(c.pooled === true ? [\"pooled\"] : []) /* plant:cert-pooled-field */\n", ""], "pooledCert");
+  await plant("dsp166", ["    && (c.pooled !== true || c.until - c.issued <= SIGNIN_POOLED_SPAN_MS) /* plant:cert-pooled-span */\n", ""], "pooledCert");
+  await plant("dsp161", ["const said = { 403: [\"token\", \"signin\", \"no-role\"], 409: [\"full\", \"desks\", \"access-token\"] }[res.status]; /* plant:no-role-read */",
+    "const said = { 403: [\"token\", \"signin\"], 409: [\"full\", \"desks\", \"access-token\"] }[res.status];"], "relaySeatAnswer");
+  await plantWire("dsp162", ["  if (was !== signinRelaySeatTeam) tellSignin(); /* plant:relay-seat-told */\n", ""], "relaySeatWire");
+  await plantWire("dsp163", ["return held.said === \"no-role\" ? \"removed\" : \"renew\"; /* plant:relay-seat-removed */", "return \"renew\";"], "relaySeatWire");
+  await plantWire("dsp164", ["if (signinSeatRenewAt && now >= signinSeatRenewAt && now - signinSeatRenewAt < SIGNIN_SEAT_RENEW_MS) return Promise.resolve(); /* plant:seat-renew-gap */", ""], "seatRenewGap");
+  await plantPage("dsp157", ["  if(v.relaySeat) return {moment:\"relayseat\",", "  if(false) return {moment:\"relayseat\","], "relaySeatPage");
+  await plantPage("dsp158", ["  if(r===\"no-role\") return {kind:\"renewal\", say:signinSay(\"no-role\", v), acts:[]}; /* plant:told-no-role */", ""], "relaySeatPage");
   /* Review 15b, finding 2: the early certificate's helper and each judge that asks it. */
   await plant("dlp2a", ["return !!cert && Number.isSafeInteger(cert.issued) && cert.issued > now + SIGNIN_SKEW_MS; /* plant:cert-early */", "return false;"], "certEarly");
   await plant("dlp2b", ["if (!!held && !!held.cert && signinCertEarly(held.cert, now)) return true; /* plant:lapse-early */", ""], "certEarly");

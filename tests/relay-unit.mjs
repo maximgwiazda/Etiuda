@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 /* Where the plants make their copies of relay files (see "the plants" in main): outside the repository, so no product file is ever written. */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "relay-unit-plants-"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 598;
+const EXPECTED = 622;
 
 /* The sha256 of every file under relay/ and shell/relay/, by path: the plants edit copies, so the run ends with these as it began. */
 function productShas() {
@@ -1841,7 +1841,7 @@ async function main() {
       w.R.clock.now = 120 * DAY;
       const rang = await w.R.ring(w.rt);
       const st = w.R.stores.get(w.rt);
-      const marked = !!st && st.dump().length === 1 && st.get("swept") === w.lead.pub && st.get("team") === undefined;
+      const marked = !!st && st.dump().length === 2 && st.get("swept") === w.lead.pub && Number.isSafeInteger(st.get("sweptAt")) && st.get("team") === undefined;
       const whileSwept = await put(w, a.s, deletionOf(w, a.who, a.place, a.ask.id, 2));
       const again = await create(w, w.lead, w.R.clock.now);
       const after = await put(w, a.s, deletionOf(w, a.who, a.place, a.ask.id, 3));
@@ -3859,13 +3859,14 @@ async function main() {
       at(w, 91 * DAY);
       const rang = await w.R.ring(w.rt);
       const goneStore = w.R.stores.get(w.rt);
-      const gone = { rang, bucket: inBucket(w).length, store: goneStore.dump().length, mark: goneStore.get("swept") === w.lead.pub, alarm: w.R.alarms.has(w.rt), hello: await helloKeys(w),
+      const gone = { rang, bucket: inBucket(w).length, store: goneStore.dump().length, mark: goneStore.get("swept") === w.lead.pub,
+        alarm: w.R.alarms.get(w.rt) === w.R.clock.now + C.SWEPT_KEEP_MS, hello: await helloKeys(w),
         socket: closedBy(sock) };
       return {
         a: sameJ(working, wantRoutes(told(w.until, true, "working"), true)),
         b: sameJ(reading, wantRoutes(ro, false)),
         c: w.armedAtCreate === w.until + READ && sameJ(late, ["challenge,until", ro, true])
-          && sameJ(gone, { rang: true, bucket: 0, store: 1, mark: true, alarm: false, hello: "not-enrolled", socket: [4400, true] }),
+          && sameJ(gone, { rang: true, bucket: 0, store: 2, mark: true, alarm: true, hello: "not-enrolled", socket: [4400, true] }),
         detail: JSON.stringify({ working, reading, late, gone, armed: w.armedAtCreate === w.until + READ }),
       };
     }
@@ -3928,8 +3929,8 @@ async function main() {
       at(v, TRIAL - 1);
       const early = [await v.R.ring(v.rt), await helloKeys(v), inBucket(v).length > 0];
       at(v, TRIAL);
-      const late = [await v.R.ring(v.rt), inBucket(v).length, v.R.stores.get(v.rt).dump().length, v.R.alarms.has(v.rt), await helloKeys(v)];
-      const g2 = r0 && sameJ(early, [false, "challenge,until", true]) && sameJ(late, [true, 0, 1, false, "not-enrolled"]);
+      const late = [await v.R.ring(v.rt), inBucket(v).length, v.R.stores.get(v.rt).dump().length, v.R.alarms.get(v.rt) === v.R.clock.now + C.SWEPT_KEEP_MS, await helloKeys(v)];
+      const g2 = r0 && sameJ(early, [false, "challenge,until", true]) && sameJ(late, [true, 0, 2, true, "not-enrolled"]);
       return { e, f, g: g2, detail: JSON.stringify({ out, renewal: [rn.r.status, ds.status, up], early, late }) };
     }
 
@@ -3993,8 +3994,9 @@ async function main() {
       const r2 = await v.R.ring(v.rt);
       const marked = v.R.stores.get(v.rt).get("swept") === v.lead.pub;
       const afterSweep = v.R.stores.get(v.rt);
-      const missed = r1 && left.length === 1 && sameJ(keys, ["orphan:" + left[0], "swept"]) && marked && retry && r2 && inBucket(v).length === 0
-        && afterSweep.dump().length === 1 && afterSweep.get("swept") === v.lead.pub && !v.R.alarms.has(v.rt);
+      const missed = r1 && left.length === 1 && sameJ(keys, ["orphan:" + left[0], "swept", "sweptAt"]) && marked && retry && r2 && inBucket(v).length === 0
+        && afterSweep.dump().length === 2 && afterSweep.get("swept") === v.lead.pub && v.R.alarms.get(v.rt) === afterSweep.get("sweptAt") + C.SWEPT_KEEP_MS
+        && afterSweep.get("sweptAt") === v.R.clock.now - HOUR;
       return { a, b: missed, detail: JSON.stringify({ lost: !!lostObj, rowed, every, rang, left: inBucket(w).length, r1, kept: keys.length, retry, r2 }) };
     }
 
@@ -4007,7 +4009,7 @@ async function main() {
       const body = K.createBody(w.rt, w.lead, w.R.clock.now, bytes => signHex(w.lead, bytes));
       const made = await call(w.R, "POST", "/relay/v1/teams", { json: body });
       const team = st.get("team");
-      return { ok: hello === "not-enrolled" && sameJ(emptied, [1, 0]) && made.status === 200 && !!team && team.epoch === 0 && team.until === body.grant.until
+      return { ok: hello === "not-enrolled" && sameJ(emptied, [2, 0]) && made.status === 200 && !!team && team.epoch === 0 && team.until === body.grant.until
         && st.list("dev:").length === 0 && st.list("blob:").length === 0, detail: JSON.stringify({ hello, emptied, made: made.status }) };
     }
 
@@ -4036,10 +4038,10 @@ async function main() {
       const out = { armed: (await ctx.storage.getAlarm()) === w.until + READ, before: tables(), objects: [...env.BLOBS.objects.keys()].length > 0 };
       clk.now = w.until + 91 * DAY;
       await team.alarm();
-      Object.assign(out, { after: tables(), keys: keys(), left: [...env.BLOBS.objects.keys()].length, alarm: await ctx.storage.getAlarm() });
+      Object.assign(out, { after: tables(), keys: keys(), left: [...env.BLOBS.objects.keys()].length, alarm: (await ctx.storage.getAlarm()) === clk.now + C.SWEPT_KEEP_MS });
       return out;
     }
-    const WANT_SQL = { armed: true, before: ["kv"], objects: true, after: ["kv"], keys: ["swept"], left: 0, alarm: null };
+    const WANT_SQL = { armed: true, before: ["kv"], objects: true, after: ["kv"], keys: ["swept", "sweptAt"], left: 0, alarm: true };
 
     /* Each state's edges, in milliseconds. A core that has no lapseOf does not hold them. */
     const edgesHold = () => {
@@ -4075,7 +4077,7 @@ async function main() {
       out.rang = await w.R.ring(w.rt);
       out.gone = [inBucket(w).length, w.R.stores.get(w.rt).dump().length];
       const ok = sameJ(out, { renewal: [200, want("working")], row: [w.until + 5 * DAY, false, w.until], alarm: w.until + READ, at29: [200, "working", 200],
-        at31: [200, "read-only", "team-lapsed"], at89: [200, "read-only"], rang: true, gone: [0, 1] });
+        at31: [200, "read-only", "team-lapsed"], at89: [200, "read-only"], rang: true, gone: [0, 2] });
       return { ok, detail: JSON.stringify(out) };
     }
 
@@ -4272,7 +4274,7 @@ async function main() {
     check(paid.b === true, "977b at the end and 31 days it is read-only: hello, sessions told read-only, since, fetch, socket and states are answered, and an upload,"
       + " devices, invites and a token hello are refused team-lapsed, the token left unspent");
     check(paid.c === true, "977c the create set its alarm to the end and 90 days; at 89 days it is still read-only, and the alarm a socket brought forward rings without sweeping; at 91 days it rings,"
-      + " deletes every object of the team, keeps the lead's public key and nothing else, clears the alarm and closes its sockets, and hello is answered not-enrolled");
+      + " deletes every object of the team, keeps the lead's public key and nothing else, sets its alarm SWEPT_KEEP_MS on for that mark alone and closes its sockets, and hello is answered not-enrolled");
     const restored = await held(() => restoreScene());
     check(restored.ok === true, "977d a renewal while read-only, a later grant for the team's lead, is answered with the team working under the new until, and an upload,"
       + " devices, invites and a token hello are then taken, the alarm moved to the new end and 90 days: " + (restored.detail || restored.failed));
@@ -4283,7 +4285,7 @@ async function main() {
     check(trial.f === true, "977f a paid grant presented to that trial's team 10 days after its until restores it: the renewal and the next session say working under"
       + " the new until, and an upload is taken");
     check(trial.g === true, "977g another trial's team, its alarm rung at the until, still answers hello a millisecond before the until and 30 days and is swept at that"
-      + " instant: no object, the lead's public key alone, no alarm, hello not-enrolled");
+      + " instant: no object, the lead's public key alone, its alarm SWEPT_KEEP_MS on, hello not-enrolled");
     const renewal = await held(() => renewScene(W));
     check(renewal.zero === true && renewal.other === true && renewal.earlier === true && renewal.never === true,
       "977h a renewal with no grant, a grant that is not one, one that has ended, one a stray key signed or a licence is refused bad-grant by the Worker with no"
@@ -4296,7 +4298,7 @@ async function main() {
     check(recorded.a === true, "977j an object the bucket wrote for a request that died with its object before its commit has a put row from before its put, every"
       + " object of the team is named by a row, and the sweep deletes the lost one with the rest: " + (recorded.detail || recorded.failed));
     check(recorded.b === true, "977k a sweep whose delete of one object fails keeps that object's orphan row and the lead's public key, rings again an hour on, and then leaves no object,"
-      + " the lead's public key alone and no alarm");
+      + " the lead's public key alone and its alarm SWEPT_KEEP_MS on");
     const lazy = await held(() => lazyScene());
     check(lazy.ok === true, "977l a team gone by the clock whose alarm has not rung is swept by the next request, which hello answers not-enrolled, and its lead then"
       + " makes it afresh with no desk and no blob: " + (lazy.detail || lazy.failed));
@@ -4304,7 +4306,7 @@ async function main() {
     check(armed === true, "977m a team with no alarm, as one made before the alarm, has it set to its end and 90 days at its next session");
     const sql = await held(() => sqlScene());
     check(sameJ(sql, WANT_SQL), "977n RelayTeam over real SQLite: the create sets the object's alarm to the end and 90 days, and the alarm past it leaves the kv table holding the lead's public key alone, no"
-      + " object and no alarm: " + JSON.stringify(sql));
+      + " object and the alarm SWEPT_KEEP_MS on: " + JSON.stringify(sql));
     const edges = edgesHold();
     const paidTrial = await held(() => paidThenTrialScene());
     const withdraw = await held(() => withdrawScene());
@@ -4516,7 +4518,7 @@ async function main() {
     const markOnly = (st, pub) => {
       if (!st) return false;
       const dump = st.dump();
-      return dump.length === 1 && dump[0][0] === "swept" && dump[0][1] === JSON.stringify(pub) && st.get("swept") === pub && st.get("team") === undefined;
+      return dump.length === 2 && dump[0][0] === "swept" && dump[0][1] === JSON.stringify(pub) && dump[1][0] === "sweptAt" && st.get("swept") === pub && st.get("team") === undefined;
     };
     async function sweptOf() {
       const R = relayEnv();
@@ -4583,7 +4585,7 @@ async function main() {
       const row = await sweptOf();
       const dDump = row.st ? row.st.dump() : [];
       const ok = row.made.status === 200 && row.rang === true && markOnly(row.st, row.lead.pub) && row.R.bucket.objects.size === 0
-        && dDump.length === 1 && typeof row.st.get("swept") === "string";
+        && dDump.length === 2 && typeof row.st.get("swept") === "string" && row.st.get("sweptAt") === row.R.clock.now;
       const line = "980d after a sweep the mark is the lead's public key and nothing else: rang " + row.rang + ", dump "
         + JSON.stringify(dDump.map(([k, v]) => [k, v])) + ", bucket " + row.R.bucket.objects.size;
       return { ok, line };
@@ -4903,8 +4905,78 @@ async function main() {
         return { ok: false, line: say + (e && e.stack ? e.stack : e) };
       } finally { C.revokedKeysOf = realKeys; }
     }
+    async function sceneWakeKept(T) {
+      const X = require(path.join(ROOT, "relay", "test", "do-ctx.cjs"));
+      const teamMod = T || require(PRODUCT.team);
+      const CORE_SRC = path.join(ROOT, "relay", "core.cjs");
+      const realKeys = C.revokedKeysOf;
+      C.revokedKeysOf = text => realKeys(text, K.ROOTS);
+      const say = "982q a hibernated socket's message is judged by the kept revocation list the object last heard, not the shorter text in env.REVOKED: ";
+      try {
+        return await X.withWorkersGlobals(async () => {
+          const env = { BLOBS: S.memoryBucket(), NOW: () => Date.now() }, teams = new Map();
+          const revokedStore = S.memoryStore();
+          function raise(ctx) {
+            const cores = [...new Set([C, require(CORE_SRC)])], reals = cores.map(c => c.createCore);
+            cores.forEach((c, i) => { c.createCore = deps => reals[i](Object.assign({}, deps, { roots: K.ROOTS })); });
+            try { return new teamMod.RelayTeam(ctx, env); }
+            finally { cores.forEach((c, i) => { c.createCore = reals[i]; }); }
+          }
+          function hold(name) {
+            if (!teams.has(name)) teams.set(name, { ctx: X.doCtx(), team: null });
+            return teams.get(name);
+          }
+          const scoped = {
+            idFromName(name) { return { name: String(name) }; },
+            get(id) {
+              return {
+                fetch(request) {
+                  const held = hold(id.name);
+                  if (!held.team) held.team = raise(held.ctx);
+                  return Promise.resolve(held.team.fetch(request));
+                },
+                alarm() { const held = hold(id.name); return Promise.resolve(held.team ? held.team.alarm() : undefined); },
+                webSocketMessage(ws, message) { const held = hold(id.name); return Promise.resolve(held.team ? held.team.webSocketMessage(ws, message) : undefined); },
+                webSocketClose(ws) { const held = hold(id.name); return Promise.resolve(held.team ? held.team.webSocketClose(ws) : undefined); },
+                acceptRevocations(text) { return Promise.resolve().then(() => C.acceptRevocations(text, K.ROOTS, revokedStore)); },
+              };
+            },
+            acceptRevocations(text) { return C.acceptRevocations(text, K.ROOTS, revokedStore); },
+          };
+          env.TEAMS = { jurisdiction(j) { return j === "eu" ? scoped : null; } };
+          const R = { env, clock: { now: Date.now() } };
+          const rt = hex(16), lead = keyPair(false), now = R.clock.now;
+          const made = await call(R, "POST", "/relay/v1/teams", { json: createBody(rt, lead, now, { grant: K.delegatedGrantFor(lead.pub, now) }) });
+          const w = { R, rt, lead };
+          const ses = made.status === 200 ? await helloAs(w, lead) : { status: 0, json: null };
+          const token = ses.json && ses.json.session;
+          const held = teams.get(rt);
+          const opened = token && held ? await held.team.fetch(new Request("https://relay.test/relay/v1/t/" + rt + "/socket",
+            { headers: { authorization: "Bearer " + token, upgrade: "websocket" } })) : null;
+          const server = held && held.ctx.accepted[0];
+          /* The service key revoked, a request through the Worker carries the kept list to this object; then a later text drops the key,
+             which the kept list refuses (fewer), so env.REVOKED alone no longer names it. The object hibernates and the socket pings. */
+          env.REVOKED = revText([K.DELEGATE.pub], undefined, 1);
+          const cut = token ? await call(R, "GET", "/relay/v1/t/" + rt + "/since/0", { token }) : { status: 0, json: null };
+          env.REVOKED = revText([], undefined, 2);
+          const woken = held ? raise(held.ctx) : null;
+          if (server && woken) woken.webSocketMessage(server, JSON.stringify({ type: "ping" }));
+          const closed = server && server.closed;
+          const ok = made.status === 200 && !!token && opened && opened.status === 101 && cut.status === 403 && !!closed
+            && closed.code === 4400 && closed.reason === REVOKED_SAID && server.sent.length === 0;
+          const line = say + "made " + made.status + ", session " + (token ? "yes" : ses.status) + ", open " + (opened && opened.status)
+            + ", read after the revocation " + (cut.json && cut.json.error || cut.status) + ", closed " + (closed ? closed.code + " " + closed.reason : "open")
+            + ", sent " + (server ? server.sent.length : "none");
+          return { ok, line };
+        });
+      } catch (e) {
+        return { ok: false, line: say + (e && e.stack ? e.stack : e) };
+      } finally { C.revokedKeysOf = realKeys; }
+    }
     const wake = await sceneWake();
     check(wake.ok, wake.line);
+    const wakeKept = await sceneWakeKept();
+    check(wakeKept.ok, wakeKept.line);
 
     await broken(a.ok, run => swapCore("swept !== lead.pub", "true", () => run(sceneA)),
       "980i", "swapping the swept lead's key for true refuses that lead too, which turns 980a red");
@@ -4949,6 +5021,12 @@ async function main() {
       "return undefined; /* plant:revoked-wake */",
       T => run(() => sceneWake(T))),
       "982p", "lifting plant:revoked-wake leaves a hibernated socket open on a revoked key, which turns 982o red");
+    if (PLANTS_OFF) skip("982r forgetting the kept list a request carried, which turns 982q red");
+    else await broken(wakeKept.ok, run => swapTeam(
+      "kept = keptStored(); /* plant:kept-stored */",
+      "kept = null; /* plant:kept-stored */",
+      T => run(() => sceneWakeKept(T))),
+      "982r", "forgetting the kept list a request carried leaves a hibernated socket open on a key only that list names, which turns 982q red");
   }
 
   /* ---- 983: the list object is asked through fetch, the only call a plain-class stub allows ---- */
@@ -5599,11 +5677,12 @@ async function main() {
       R.clock.now = T0L;
       return R;
     }
+    /* A lead object whose list went empty holds no row: its list is empty. */
     function leadList(R, lead) {
       const st = R.stores.get("lead:" + lead.keyId);
       if (!st) return null;
       const row = st.get("lead");
-      return row && Array.isArray(row.rts) ? row.rts.slice() : null;
+      return row && Array.isArray(row.rts) ? row.rts.slice() : row === undefined ? [] : null;
     }
     async function fill(R, lead, n, now, opts) {
       const rts = [];
@@ -7489,6 +7568,247 @@ async function main() {
       + (missing.length ? ", missing " + missing.join(" ") : "")
       + (extra.length ? ", extra " + extra.join(" ") : "")
       + (listedOk.length ? ", listed-but-ok " + listedOk.join(" ") : ""));
+  }
+
+  /* ---- 1013: what the relay keeps of a person has an end (section 13 of the licence design; decision 50). A desk taken off is
+     forgotten thirty days on, unless an invitation from before its removal is still open; a swept team's mark goes a year on; a
+     lead's list goes with its last team, or thirty days after its last change once no team it names still holds. The spans here
+     are written out, not read from the modules, so a module that shortens one is caught. ---- */
+  {
+    const H = 60 * MIN, KEEP30 = 30 * DAY, YEAR = 365 * DAY, TEAM13 = require(PRODUCT.team);
+    const tail13 = r => (r && r.status === 200 ? 200 : r && r.json && r.json.error ? r.json.error : r ? r.status : null);
+    const sameJ = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const envOf = T => (T ? { team: T } : undefined);
+    async function goneScene(T, o) {
+      const w = await world(envOf(T)), opts = o || {}, t0 = w.R.clock.now;
+      const inv = { id: hex(16), token: hex(32) };
+      if (opts.open) await invites(w, [{ id: inv.id, hash: sha(inv.token) }], []);
+      const off = await devices(w, w.devs.slice(0, 1));
+      const st = w.R.stores.get(w.rt), row = st.get("gone:" + w.other.keyId);
+      const out = { off: off.status, fields: row ? Object.keys(row).sort().join() : "", armed: w.R.alarms.get(w.rt) === t0 + KEEP30 };
+      w.R.clock.now = t0 + KEEP30 - H;
+      out.early = [await w.R.ring(w.rt), !!st.get("gone:" + w.other.keyId)];
+      w.R.clock.now = t0 + KEEP30 + H;
+      out.late = [await w.R.ring(w.rt), !!st.get("gone:" + w.other.keyId)];
+      if (opts.open) {
+        out.token = tail13(await tokenHello(w, inv.id, inv.token, null, w.other));
+        await invites(w, [], [inv.id], { t: w.R.clock.now });
+        w.R.clock.now += DAY + H;
+        out.dropped = [await w.R.ring(w.rt), !!st.get("gone:" + w.other.keyId)];
+      }
+      out.hello = tail13(await helloAs(w, w.other));
+      out.kept = tail13(await since(w, await sessionOf(w, w.desk)));
+      return out;
+    }
+    const goneOk = g => !!g && g.off === 200 && g.fields === "at,desk,ord,pub" && g.armed && sameJ(g.early, [false, true]) && sameJ(g.late, [true, false])
+      && g.hello === "not-enrolled" && g.kept === 200;
+    const openOk = g => !!g && g.off === 200 && sameJ(g.late, [true, true]) && g.token === "removed" && sameJ(g.dropped, [true, false]);
+    const r1 = await goneScene(), r1b = await goneScene(null, { open: true });
+    check(goneOk(r1) && C.GONE_KEEP_MS === KEEP30,
+      "1013a a desk taken off keeps at the relay its key, its desk id, the instant and the order alone, no name or label; the team's alarm is"
+      + " brought to thirty days on, and the row stands an hour before and is gone an hour after, the desk then a stranger and the kept desk"
+      + " still reading: " + JSON.stringify(r1));
+    check(openOk(r1b),
+      "1013b while an invitation registered before the removal is still open, the row stays and still refuses that desk the invitation; once"
+      + " the invitation is withdrawn the row goes at the next day's alarm: " + JSON.stringify(r1b));
+
+    async function sweptScene(T) {
+      const R = relayEnv(envOf(T)), rt = hex(16), lead = keyPair(false), t0 = R.clock.now, until = t0 + DAY;
+      const made = await call(R, "POST", "/relay/v1/teams", { json: createBody(rt, lead, t0, { grantOpts: { fields: { paid: false, until } } }) });
+      R.clock.now = until + 30 * DAY;
+      const swept = R.clock.now, rang = await R.ring(rt), st = R.stores.get(rt);
+      const out = { made: made.status, rang, mark: st.get("swept") === lead.pub, armed: R.alarms.get(rt) === swept + YEAR };
+      /* An alarm ringing early, a retry or a stale one, leaves the mark and sets the alarm to its end again. */
+      R.alarms.set(rt, R.clock.now);
+      out.stale = [await R.ring(rt), st.get("swept") === lead.pub, R.alarms.get(rt) === swept + YEAR];
+      R.clock.now = swept + YEAR - H;
+      const other = keyPair(false);
+      out.early = [await R.ring(rt), st.get("swept") === lead.pub, tail13(await call(R, "POST", "/relay/v1/teams", { json: createBody(rt, other, R.clock.now) }))];
+      R.clock.now = swept + YEAR + H;
+      out.late = [await R.ring(rt), st.dump().length, R.alarms.has(rt)];
+      out.taken = tail13(await call(R, "POST", "/relay/v1/teams", { json: createBody(rt, other, R.clock.now) }));
+      return out;
+    }
+    const sweptOk = s => !!s && s.made === 200 && s.rang === true && s.mark && s.armed && sameJ(s.stale, [true, true, true]) && sameJ(s.early, [false, true, "swept-other-lead"])
+      && sameJ(s.late, [true, 0, false]) && s.taken === 200;
+    const r2 = await sweptScene();
+    check(sweptOk(r2) && C.SWEPT_KEEP_MS === YEAR,
+      "1013c a swept team's mark, its lead's public key, keeps the id from another key for a year less an hour, its alarm set to that year and an"
+      + " alarm ringing early leaving it,"
+      + " and is gone an hour after it, nothing left and no alarm, the id then free: " + JSON.stringify(r2));
+
+    async function leadScene(T) {
+      const R = relayEnv(envOf(T)), lead = keyPair(false), t0 = R.clock.now, name = "lead:" + lead.keyId;
+      const one = hex(16), until = t0 + DAY;
+      await call(R, "POST", "/relay/v1/teams", { json: createBody(one, lead, t0, { grantOpts: { fields: { paid: false, until } } }) });
+      const listed = (R.stores.get(name).get("lead") || {}).rts;
+      R.clock.now = until + 30 * DAY;
+      await R.ring(one);
+      const out = { listed: sameJ(listed, [one]), emptied: R.stores.get(name).get("lead") === undefined && !R.alarms.has(name) };
+      /* A release that never came: the team's row taken away under the list, which still names it. */
+      const t1 = R.clock.now, missed = hex(16), live = hex(16), lead2 = keyPair(false), name2 = "lead:" + lead2.keyId;
+      await call(R, "POST", "/relay/v1/teams", { json: createBody(missed, lead2, t1) });
+      R.stores.get(missed).del("team");
+      out.armed = R.alarms.get(name2) === t1 + KEEP30;
+      R.clock.now = t1 + KEEP30 - H;
+      out.early = [await R.ring(name2), sameJ((R.stores.get(name2).get("lead") || {}).rts, [missed])];
+      R.clock.now = t1 + KEEP30 + H;
+      out.late = [await R.ring(name2), R.stores.get(name2).get("lead") === undefined];
+      /* A list naming a team that still holds stays, asked again thirty days on. */
+      const t2 = R.clock.now;
+      await call(R, "POST", "/relay/v1/teams", { json: createBody(live, lead2, t2, { grantOpts: { fields: { until: t2 + 40 * DAY } } }) });
+      R.clock.now = t2 + KEEP30 + H;
+      out.kept = [await R.ring(name2), sameJ((R.stores.get(name2).get("lead") || {}).rts, [live]), R.alarms.get(name2) === R.clock.now + KEEP30];
+      return out;
+    }
+    const leadOk = l => !!l && l.listed && l.emptied && l.armed && sameJ(l.early, [false, true]) && sameJ(l.late, [true, true]) && sameJ(l.kept, [true, true, true]);
+    const r3 = await leadScene();
+    check(leadOk(r3) && TEAM13.LEAD_KEEP_MS === KEEP30,
+      "1013d a lead's list goes, with its alarm, at the release that empties it; one a missed release left stands thirty days less an hour"
+      + " after its last change and is gone an hour after, no team it names holding; one naming a team that holds stays, asked again thirty"
+      + " days on: " + JSON.stringify(r3));
+
+    /* A lead's alarm asking its teams while a reserve writes the list (finding 5's race, in the alarm that reaps): the list the alarm
+       keeps is what stands after its asks, less the ids it found dead, so a reserve taken while it asked stays counted. */
+    async function alarmRaceScene(T) {
+      const M = T || TEAM13;
+      const store = S.memoryStore(), lead = keyPair(false), listed = [hex(16), hex(16), hex(16)], dead = listed[0], fresh = hex(16);
+      store.put("lead", { rts: listed.slice(), leadKey: lead.keyId });
+      const set = { at: null };
+      const alarm = { async set(t) { set.at = t; }, async get() { return set.at; }, async clear() { set.at = null; } };
+      const ns = { idFromName: n => n, get: id => ({ fetch: async () => {
+        await new Promise(r => setTimeout(r, 2));
+        return new Response(JSON.stringify({ held: id !== dead }), { status: 200 });
+      } }) };
+      const obj = M.teamObject({ store, clock: () => 1800000000000, teams: () => ns, sockets: S.socketHub(), r2: S.memoryBucket(), revoked: () => [], alarm });
+      const ring = obj.alarm();
+      const took = await obj.fetch(M.leadRequest({ op: "reserve", rt: fresh, lead: lead.keyId }));
+      await ring;
+      const after = (store.get("lead") || {}).rts || [];
+      return { took: took.status, kept: after.indexOf(fresh) >= 0, reaped: after.indexOf(dead) < 0, length: after.length };
+    }
+    const alarmRaceOk = a => !!a && a.took === 200 && a.kept && a.reaped && a.length === 3;
+    const race = await alarmRaceScene();
+    check(alarmRaceOk(race), "1013p a reserve taken while the lead's alarm asks its teams stays on the list the alarm keeps, and the dead id the"
+      + " alarm found still goes: " + JSON.stringify(race));
+
+    /* Finding 4 of the fifth Grok review, in the alarm: a listed team the alarm asked dead, reserved again while it asked and holding
+       by the write, stays on the list. */
+    async function alarmReaffirmScene(T) {
+      const M = T || TEAM13;
+      const store = S.memoryStore(), lead = keyPair(false), listed = [hex(16), hex(16), hex(16)], back = listed[0], live = { back: false };
+      store.put("lead", { rts: listed.slice(), leadKey: lead.keyId });
+      const set = { at: null };
+      const alarm = { async set(t) { set.at = t; }, async get() { return set.at; }, async clear() { set.at = null; } };
+      const ns = { idFromName: n => n, get: id => ({ fetch: async () => {
+        const held = id !== back || live.back;
+        await new Promise(r => setTimeout(r, 2));
+        return new Response(JSON.stringify({ held }), { status: 200 });
+      } }) };
+      const obj = M.teamObject({ store, clock: () => 1800000000000, teams: () => ns, sockets: S.socketHub(), r2: S.memoryBucket(), revoked: () => [], alarm });
+      const ring = obj.alarm();
+      await new Promise(r => setTimeout(r, 4));
+      const again = await obj.fetch(M.leadRequest({ op: "reserve", rt: back, lead: lead.keyId }));
+      live.back = true;
+      await ring;
+      const after = (store.get("lead") || {}).rts || [];
+      return { again: again.status, kept: after.indexOf(back) >= 0, length: after.length };
+    }
+    const alarmReaffirmOk = a => !!a && a.again === 200 && a.kept && a.length === 3;
+    /* The earlier window in the alarm: a repeat reserve returns before the alarm's asks begin, its create not yet run, so the alarm
+       finds the id dead; an id reaffirmed in this wake stays on the list the alarm keeps. */
+    async function alarmEarlyScene(T) {
+      const M = T || TEAM13;
+      const store = S.memoryStore(), lead = keyPair(false), listed = [hex(16), hex(16), hex(16)], back = listed[0], live = { back: false };
+      store.put("lead", { rts: listed.slice(), leadKey: lead.keyId });
+      const set = { at: null };
+      const alarm = { async set(t) { set.at = t; }, async get() { return set.at; }, async clear() { set.at = null; } };
+      const ns = { idFromName: n => n, get: id => ({ fetch: async () => {
+        const held = id !== back || live.back;
+        await new Promise(r => setTimeout(r, 1));
+        return new Response(JSON.stringify({ held }), { status: 200 });
+      } }) };
+      const obj = M.teamObject({ store, clock: () => 1800000000000, teams: () => ns, sockets: S.socketHub(), r2: S.memoryBucket(), revoked: () => [], alarm });
+      const again = await obj.fetch(M.leadRequest({ op: "reserve", rt: back, lead: lead.keyId }));
+      await obj.alarm();
+      live.back = true;
+      const after = (store.get("lead") || {}).rts || [];
+      return { again: again.status, kept: after.indexOf(back) >= 0, length: after.length };
+    }
+    const alarmEarlyOk = a => !!a && a.again === 200 && a.kept && a.length === 3;
+    const alarmEarly = await alarmEarlyScene();
+    check(alarmEarlyOk(alarmEarly), "1013t a repeat reserve that returned before the lead's alarm asked keeps its id on the list the alarm"
+      + " keeps, though the alarm finds it dead (its create not yet run): " + JSON.stringify(alarmEarly));
+    const alarmBack = await alarmReaffirmScene();
+    check(alarmReaffirmOk(alarmBack), "1013r a listed team the lead's alarm asked dead, reserved again while it asked and holding by the write,"
+      + " stays on the list the alarm keeps: " + JSON.stringify(alarmBack));
+
+    /* Each guard planted out in a copy turns its leg red; the product files are never written. */
+    const teamCopy = async (edit, fn) => {
+      const digest = sha(fs.readFileSync(PRODUCT.team));
+      let turned = false, detail = "plant line absent";
+      try {
+        const edited = edit(fs.readFileSync(PRODUCT.team, "utf8"));
+        if (edited !== null) {
+          const dir = copyOf({ "relay/team.cjs": edited, "relay/core.cjs": forwardTo(PRODUCT.core), "shell/relay/blob.cjs": forwardTo(PRODUCT.blob) });
+          turned = await fn(require(path.join(dir, "relay", "team.cjs")));
+          detail = turned ? "the check lifted" : "the check still held";
+        }
+      } catch (e) { detail = e && e.stack ? e.stack : String(e); }
+      return { turned, back: sha(fs.readFileSync(PRODUCT.team)) === digest, detail };
+    };
+    const safe = async f => { try { return await f(); } catch (e) { return null; } };
+    const said = p => p.detail + ", sha " + (p.back ? "restored" : "differs");
+    const CORE_13 = [
+      ["1013e", liftCore("plant:gone-keep", async () => !goneOk(await safe(() => goneScene()))), "lifting plant:gone-keep keeps a desk taken off for ever", "1013a"],
+      ["1013f", swapCore("const GONE_KEEP_MS = KEEP_MS;", "const GONE_KEEP_MS = KEEP_MS - 2 * 24 * 60 * 60 * 1000;", async () => !goneOk(await safe(() => goneScene()))),
+        "forgetting a desk taken off two days early", "1013a"],
+      ["1013g", liftCore("plant:gone-open-invite", async () => !openOk(await safe(() => goneScene(null, { open: true })))),
+        "lifting plant:gone-open-invite forgets the desk while an invitation from before its removal is open", "1013b"],
+    ];
+    for (const [id, pending, say, leg] of CORE_13) {
+      const p = await pending;
+      check(p.turned && p.back, id + " " + say + ", which turns " + leg + " red, and the product file is never written: " + said(p));
+    }
+    const TEAM_13 = [
+      ["1013h", lineLifted("plant:gone-forget"), async T => !goneOk(await safe(() => goneScene(T))), "lifting plant:gone-forget leaves a desk taken off at its alarm", "1013a"],
+      ["1013i", lineLifted("plant:arm-gone"), async T => !goneOk(await safe(() => goneScene(T))), "lifting plant:arm-gone sets no alarm for a desk taken off", "1013a"],
+      ["1013j", lineLifted("plant:swept-forget"), async T => !sweptOk(await safe(() => sweptScene(T))), "lifting plant:swept-forget keeps a swept mark for ever", "1013c"],
+      ["1013k", swapped("markEnd !== null ? alarm.set(markEnd)", "markEnd !== null ? alarm.clear()"), async T => !sweptOk(await safe(() => sweptScene(T))),
+        "a sweep that clears its alarm leaves the mark with no end", "1013c"],
+      ["1013l", swapped("Number.isSafeInteger(at) ? at + core.SWEPT_KEEP_MS : null", "Number.isSafeInteger(at) ? at + core.SWEPT_KEEP_MS - 2 * 24 * 60 * 60 * 1000 : null"),
+        async T => !sweptOk(await safe(() => sweptScene(T))), "a mark forgotten two days early lets another key take the id within the year", "1013c"],
+      ["1013o", swapped("if (markEnd !== null && deps.clock() >= markEnd)", "if (markEnd !== null)"), async T => !sweptOk(await safe(() => sweptScene(T))),
+        "an alarm ringing before the mark's end takes the mark", "1013c"],
+      ["1013m", lineLifted("plant:lead-empty"), async T => !leadOk(await safe(() => leadScene(T))), "lifting plant:lead-empty keeps an emptied list", "1013d"],
+      ["1013n", lineLifted("plant:lead-alarm-reap"), async T => !leadOk(await safe(() => leadScene(T))), "lifting plant:lead-alarm-reap keeps a list its alarm found dead", "1013d"],
+      ["1013q", lineLifted("plant:lead-alarm-reread"), async T => !alarmRaceOk(await safe(() => alarmRaceScene(T))),
+        "lifting plant:lead-alarm-reread loses a reserve taken while the alarm asked", "1013p"],
+      ["1013s", lineLifted("plant:lead-reaffirm"), async T => !alarmReaffirmOk(await safe(() => alarmReaffirmScene(T))),
+        "lifting plant:lead-reaffirm drops a team the alarm asked dead and that was reserved again", "1013r"],
+      ["1013u", lineLifted("plant:lead-reaffirm"), async T => !alarmEarlyOk(await safe(() => alarmEarlyScene(T))),
+        "lifting plant:lead-reaffirm drops a team reaffirmed before the alarm asked", "1013t"],
+    ];
+    for (const [id, edit, turns, say, leg] of TEAM_13) {
+      const p = await teamCopy(edit, turns);
+      check(p.turned && p.back, id + " in a copy of relay/team.cjs, " + say + ", which turns " + leg + " red, and the product file is never written: " + said(p));
+    }
+
+    /* THE WIRE IS UNCHANGED (section 13: the relay's half changes no message format): every route, method, refusal and its status and
+       words, and every signed byte form, read from the product files, digest to what they were before this half was built (engine
+       origin/main 3bf859bd). A change to any is a change of the wire, a two-tree item, and moves this digest in its own commit. */
+    const teamText = fs.readFileSync(PRODUCT.team, "utf8"), coreText = fs.readFileSync(PRODUCT.core, "utf8");
+    const between = (text, from, to) => { const a = text.indexOf(from), b = a < 0 ? -1 : text.indexOf(to, a); return a < 0 || b < 0 ? "ABSENT " + from : text.slice(a, b + to.length); };
+    const forms = [...coreText.matchAll(/^function \w*Bytes\([\s\S]*?^}$/gm)].map(m => m[0]).concat(coreText.split("\n").filter(l => /^const \w*Bytes = /.test(l))).join("\n");
+    const wire = [between(teamText, "const STATUS = {", "};"), between(teamText, "const CLOSE = {", "};"), between(teamText, "const ROUTE_TAIL = ", ";"),
+      between(teamText, "const METHODS = {", "};"), JSON.stringify(B.REASONS), forms].join("\n");
+    /* Where this half met the relay seats (integration, Held for decision 49), the digest is the relay seats branch's wire: its seats grant
+       and its status; this half changes neither. A person's store moved it: the notice route, and the store grant, store certificate,
+       notice and store computer list byte forms. */
+    const WIRE_SHA = "33466c59c88cb5af5d7676b68a2c75ca873df6e9da1d534c6b321a3bec30dced";
+    check(sha(wire) === WIRE_SHA && forms.length > 200,
+      "1013w the relay's wire is as it was: its routes, methods, refusals and their words, socket closes and signed byte forms digest to "
+      + WIRE_SHA.slice(0, 12) + ": " + sha(wire).slice(0, 12));
   }
 
   /* ---- 969: no plant wrote a product file (the test architect's condition H1, board 935) ---- */

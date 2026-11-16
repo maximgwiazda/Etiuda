@@ -71,13 +71,17 @@ let eDeskDue=false, eDeskSent=0, eDeskHeard=0, eDeskArmed=false;
    a width does not carry the catalog with it. A key is owed from its change until a send carrying
    it is answered true: a refusal is carried by the next send, never settled by another key's. */
 const eDeskOwed=new Set(), eDeskCarried=new Map();   // key -> the latest send carrying it, unanswered
+/* Each send names, per key, the last of the host's tells this copy holds (eDeskTake): the latest heard, or for a key owed when a tell
+   came, the one before, so the host knows a write from a copy that never held what its sync put there (shell/main.js patchDesk). */
+let eDeskSeen=0;
+const eDeskBehind=new Map();                         // key -> the tell its copy holds, while behind
 function deskPatchSend(all){
-  const n=++eDeskSent, keys=new Set(eDeskOwed), out={};
+  const n=++eDeskSent, keys=new Set(eDeskOwed), out={}, took={};
   if(all) eDeskCarried.forEach((m,k)=>keys.add(k));
   eDeskOwed.clear();
-  keys.forEach(k=>{ eDeskCarried.set(k,n); out[k]=(k in E_DESK.map)?E_DESK.map[k]:null; });
+  keys.forEach(k=>{ eDeskCarried.set(k,n); out[k]=(k in E_DESK.map)?E_DESK.map[k]:null; took[k]=eDeskBehind.has(k)?eDeskBehind.get(k):eDeskSeen; });
   let p;
-  try{ p=keys.size ? E_DESK.patch(JSON.stringify(out),all) : true; }catch(e){ p=false; }
+  try{ p=keys.size ? E_DESK.patch(JSON.stringify(out),all,JSON.stringify(took)) : true; }catch(e){ p=false; }
   const heard=ok=>keys.forEach(k=>{
     if(eDeskCarried.get(k)!==n) return;           // a later send carries it
     eDeskCarried.delete(k);
@@ -128,6 +132,8 @@ function deskFlush(){
   const pending=E_DESK.patch ? (eDeskOwed.size>0 || eDeskCarried.size>0) : eDeskHeard<eDeskSent;
   if(eDeskDue || pending || eUnsaved) deskSave();
 }
+/* Every write this copy owes, on the disk before the caller goes on: an answer that sets the desk aside sets aside what it holds. */
+function eDeskFlush(){ if(E_DESK) deskFlush(); }
 function deskArm(){
   if(eDeskArmed) return;
   eDeskArmed=true;
@@ -135,6 +141,26 @@ function deskArm(){
     window.addEventListener("pagehide",deskFlush);
     document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden") deskFlush(); });
   }catch(e){}
+}
+/* WHAT THE HOST PUT ON THE DESK BEHIND THIS PAGE, taken into the page's copy: a key this page still owes keeps the page's value,
+   which its own send carries. Returns the keys taken; `n` the tell's number. */
+function eDeskTake(text,n){
+  if(!E_DESK || eWiping) return [];
+  let o=null;
+  try{ o=JSON.parse(text); }catch(e){ return []; }
+  if(!o || typeof o!=="object" || Array.isArray(o)) return [];
+  const taken=[], told=Number.isSafeInteger(n) && n>0;
+  if(told){ eDeskOwed.forEach(k=>{ if(!eDeskBehind.has(k)) eDeskBehind.set(k,eDeskSeen); }); eDeskCarried.forEach((m,k)=>{ if(!eDeskBehind.has(k)) eDeskBehind.set(k,eDeskSeen); }); } /* plant:desk-behind */
+  Object.keys(o).forEach(k=>{
+    const v=o[k];
+    if((v!==null && typeof v!=="string") || eDeskOwed.has(k) || eDeskCarried.has(k)) return; /* plant:desk-take-owed */
+    eDeskBehind.delete(k);
+    if(v===null ? !(k in E_DESK.map) : E_DESK.map[k]===v) return;
+    if(v===null) delete E_DESK.map[k]; else E_DESK.map[k]=v;
+    taken.push(k);
+  });
+  if(told) eDeskSeen=n;
+  return taken;
 }
 /* WHETHER WHAT THE PERSON DID IS ON THE DISK. A desk sending its whole map settles every earlier
    failure with one good write; a browser, and a desk sending patches, write key by key, so each
@@ -348,6 +374,8 @@ export {
   eLayers,
   eCarryOldKeys,
   eSaveTrouble,
+  eDeskTake,
+  eDeskFlush,
   eLastSaved,
   eDeskFile,
   eDeskFileShown,

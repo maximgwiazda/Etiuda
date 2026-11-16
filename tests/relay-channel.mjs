@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 452;
+const EXPECTED = 454;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -1279,7 +1279,7 @@ if (partOn("p946")) {
       const files = x.files || { [FREL]: "{\"inUse\":\"an honest edit\"}\n" };
       for (const rel of Object.keys(files)) put(mirror, rel, files[rel]);
       const who = x.who || DESK, place = x.place || "desk:" + DESK.keyId;
-      const make = () => C.createChannel({ rt: FRT, url: URLV1, mirror, stateFile, watch: false, pollMs: 1e9, pin: () => FPIN,
+      const make = () => (x.chan || C).createChannel({ rt: FRT, url: URLV1, mirror, stateFile, watch: false, pollMs: 1e9, pin: () => FPIN, room: x.room,
         me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place }),
         keyFor: e => (e === 1 ? KF : null), sealEpoch: () => 1, request, connect: () => null, say: l => said.push(l),
         inviteKeys: x.inviteKeys ? () => x.inviteKeys : undefined });
@@ -1357,6 +1357,30 @@ if (partOn("p946")) {
     check(halted.every(h => h.ok),
       "946d a lasting refusal about the sender or the epoch costs one upload a cycle however many files are owed, and each goes once it lifts:"
       + " PUTs a cycle with five owed, " + halted.map(h => h.reason + " " + h.per.join(",") + ", then " + h.sentNow + " of 5 sent").join("; "));
+
+    /* A room hook that throws, the caller's fault, costs no file: the flush goes on to every file owed, as the channel treats its
+       other hooks. Its plant, the hook called bare in a copy of the channel, leaves the files after the first unsent. */
+    const roomThrows = async chan => {
+      const r = await cycles(chan ? "f4-room-bare" : "f4-room-throws", [TAKEN], { cycles: 1, files: FIVE, chan,
+        room: () => { throw new Error("a caller's hook that throws"); } }).catch(e => ({ error: e && e.message }));
+      return r.error ? r : { puts: r.puts, sent: Object.keys(FIVE).filter(rel => r.st.sent[rel]).length };
+    };
+    const rooms = await roomThrows(null);
+    check(rooms.puts === 5 && rooms.sent === 5, "946f a room hook that throws aborts nothing: one flush sends all five owed files: " + JSON.stringify(rooms));
+    if (PLANTS_OFF) skip("946F the room hook called bare in a copy of the channel leaves files unsent");
+    else {
+      const text = fs.readFileSync(path.join(ROOT, "shell", "relay", "channel.cjs"), "utf8");
+      const from = "const room = typeof o.room === \"function\" ? r => { try { o.room(r); } catch { /* the caller's own fault */ } } : () => {}; /* plant:room-wrapped */";
+      let bare = { error: "the plant's anchor is absent" };
+      if (text.split(from).length === 2) {
+        const dir = path.join(LAB, "room-plant");
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, "channel.cjs"), text.split(from).join("const room = typeof o.room === \"function\" ? o.room : () => {};"));
+        fs.copyFileSync(path.join(ROOT, "shell", "relay", "blob.cjs"), path.join(dir, "blob.cjs"));
+        bare = await roomThrows(nodeRequire(path.join(dir, "channel.cjs")));
+      }
+      check(!!bare.error || (bare.sent < 5), "946F the room hook called bare in a copy of the channel leaves files unsent: " + JSON.stringify(bare));
+    }
 
     /* A lead's copy of the team file for an invitation, refused for a reason that can never lift, never stops the lead's own
        team file of the same bytes: the root upload waits once (a refusal that lifts), the copy is refused as outside its place
@@ -5513,7 +5537,8 @@ if (deskOn()) try {
         const goneNotice = notice();
         const sweptDump = RL.stores.get(paid.rt).dump();
         const sweptStore = sweptDump.length;
-        const sweptOnly = sweptStore === 1 && sweptDump[0][0] === "swept";
+        /* The mark and the instant it dates from (relay/core.cjs wipe), and nothing else of the team. */
+        const sweptOnly = sweptStore === 2 && sweptDump[0][0] === "swept" && sweptDump[1][0] === "sweptAt";
         at(BASE + 121 * DAYMS);
         await pumpL(paid);
         await feed(paid);
@@ -10384,8 +10409,8 @@ async function scene990(mod) {
       if (!s) return { ok: false, rows: "none" };
       const d = s.dump();
       let pub = null;
-      try { pub = d.length === 1 ? JSON.parse(d[0][1]) : null; } catch { pub = null; }
-      return { ok: d.length === 1 && d[0][0] === "swept" && pub === LEAD.pub, rows: d.map(e => e[0]).join(",") || "empty" };
+      try { pub = d.length === 2 && d[1][0] === "sweptAt" ? JSON.parse(d[0][1]) : null; } catch { pub = null; }
+      return { ok: d.length === 2 && d[0][0] === "swept" && pub === LEAD.pub, rows: d.map(e => e[0]).join(",") || "empty" };
     };
     const sweptNow = markOnly();
     const swept = sweptNow.ok;
@@ -10523,11 +10548,11 @@ async function scene992(mod, o) {
     const working = read(desk.mirror, "lane.ec") === ED9[0];
     X.at(BASE + 121 * DAYMS);
     await settle(lead, desk);
-    /* A swept store keeps the lead's public key alone. An empty store is a team never made. */
+    /* A swept store keeps the lead's public key and the instant it dates from alone. An empty store is a team never made. */
     const sweptRows = X.store9() ? X.store9().dump() : [];
     let sweptPub = null;
-    try { sweptPub = sweptRows.length === 1 ? JSON.parse(sweptRows[0][1]) : null; } catch { sweptPub = null; }
-    const swept = sweptRows.length === 1 && sweptRows[0][0] === "swept" && sweptPub === LEAD.pub;
+    try { sweptPub = sweptRows.length === 2 && sweptRows[1][0] === "sweptAt" ? JSON.parse(sweptRows[0][1]) : null; } catch { sweptPub = null; }
+    const swept = sweptRows.length === 2 && sweptRows[0][0] === "swept" && sweptPub === LEAD.pub;
     await desk.ch.stop();
     const kept = JSON.parse(fs.readFileSync(stateAt, "utf8"));
     if (x.noLapse) delete kept.lapse;
