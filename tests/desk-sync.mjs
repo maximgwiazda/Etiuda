@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-sync-"));
-const EXPECTED = 74;
+const EXPECTED = 77;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -176,6 +176,9 @@ function computer(world, label, view) {
     cycle: async () => { const c = sync.channel(); if (!c) return; c.kick(); await c.idle(); },
     sync: () => sync,
     stopAll: () => sync.stop(),
+    /* The desk's sync begun again empty, as the shell's answers leave it: Start from my account moves the store folder aside, mirror
+       and all (aside), It is mine writes an empty state over the same mirror. */
+    fresh: aside => { sync.stop(); syncState = null; if (aside) fs.renameSync(dir, dir + "-aside-" + Date.now()); make(); },
   };
   return self;
 }
@@ -818,6 +821,38 @@ async function main() {
     return { ok, detail: brief(held) };
   }
 
+  /* O1: a computer alone on its account's store, its sync begun again empty (Start from my account, the store folder set aside and the
+     desk's synced keys and catalogs cleared; It is mine, an empty state over the same mirror and the desk as it was): it takes its own
+     earlier place back in, so the desk holds the setting, the edit and the catalog the store held, the store's place holds them still,
+     and a computer joining after receives them. Its later edits stand and travel as before. */
+  async function ownPlaceScene() {
+    const out = {};
+    for (const how of ["start", "mine"]) {
+      const w = worldOf("o1" + how), a = computer(w, "a");
+      const L = "e3f9a1~Pack", F = "Own.ec", text = JSON.stringify({ kind: "etiuda-catalog", format: 2, id: "own", cards: [] });
+      a.desk.keys.eTheme = "dark"; a.desk.keys[L] = JSON.stringify({ edits: { c1: "mine" } }); a.desk.files[F] = text;
+      if ((await a.look()).state !== "on") throw new Error("the store did not come on");
+      await settle(a);
+      w.R.clock.now += HOUR;
+      if (how === "start") { a.desk.keys = {}; a.desk.files = {}; }
+      a.fresh(how === "start");
+      await a.look();
+      await settle(a); await settle(a);
+      const back = a.desk.keys.eTheme === "dark" && !!a.desk.keys[L] && JSON.parse(a.desk.keys[L]).edits.c1 === "mine" && a.desk.files[F] === text;
+      w.R.clock.now += MIN;
+      a.desk.keys.eUiLang = "pl";
+      await settle(a);
+      w.R.clock.now += HOUR;
+      const b = computer(w, "b");
+      await b.look(); await a.look();
+      await settle(a, b); await settle(a, b);
+      const joined = b.desk.keys.eTheme === "dark" && !!b.desk.keys[L] && JSON.parse(b.desk.keys[L]).edits.c1 === "mine" && b.desk.files[F] === text && b.desk.keys.eUiLang === "pl";
+      out[how] = { back, joined, kept: a.kept.length + b.kept.length, pending: a.sync().state().ownTake === true };
+    }
+    const ok = Object.values(out).every(x => x.back && x.joined && x.kept === 0 && !x.pending);
+    return { ok, detail: brief(out) };
+  }
+
   /* J3: the store holds no entry for the shipped sample (the first computer had none when it synced); a second computer joins with its
      sample untouched: through every merge after the first, it is never recorded as that computer's write, so the first never gets it,
      and nothing is kept. Edited there, it is the person's own and reaches the first. */
@@ -914,6 +949,7 @@ async function main() {
 
   const results = {};
   const LEGS = [
+    ["O1", ownPlaceScene, "a computer alone on its account's store, its sync begun again empty (the store folder set aside, or an empty state over the mirror): it takes its own earlier place back in, the desk and the store keep everything, a computer joining after receives it, and its later edits travel"],
     ["K15", keptArrivedScene, "a kept version is let go only once the version overtaking it is here: its sync file before its bytes leaves the kept entry and takes nothing, its bytes come and it is taken and the kept let go; the same in a conflict"],
     ["J5", joinEarlyScene, "a second computer joining before the first, which made the store, has sent anything still joins: its setting and untouched sample give way to the first's setting and removal of the sample once they arrive, nothing kept"],
     ["J6", joinSinceScene, "a joining computer's setting changed and sample removed after its account was seated, before its first cycle, are its own: the setting stands on both and the sample stays removed on both, while what it held when seated gives way"],
@@ -979,12 +1015,14 @@ async function main() {
   const swap = (from, to) => text => (text.split(from).length === 2 ? text.split(from).join(to) : null);
   const scenes = Object.fromEntries(LEGS.map(([id, scene]) => [id, scene]));
   const PLANTS = [
+    ["own place skipped", "O1", lift("own-taken"), "a fresh state takes nothing from this computer's own earlier place, so its first write empties it in the store"],
+    ["own place written over", "O1", swap(" ? syncRead(String(io.read(syncRel(o.me.id)) || \"\"), o.me.id) : null;", " ? null : null;"), "a fresh state never reads its own place, so the store's copy of it is written over"],
     ["kept let go in a conflict", "K15", swap("settled(item, null, top.filter(e => (mine && same(e, mine) ? ownOf(e, item) : valueOf(e, item)) !== undefined)); /* plant:kept-overtaken */", "settled(item, null, top); /* plant:kept-overtaken */"), "a kept version let go in a conflict for one whose bytes have not come"],
     ["kept let go early", "K15", swap("      if (mine && same(win, mine)) {\n        settled(item, win);", "      settled(item, win);\n      if (mine && same(win, mine)) {"), "a kept version let go for one whose bytes have not come, so it is kept nowhere"],
-    ["join by the store's files", "J5", swap("(st.join === true || (st.join === undefined && ", "((st.join === true || st.join === undefined) && ("), "joining read from another computer's sync file alone, so a computer joining before the first has sent takes itself for the first"],
+    ["join by the store's files", "J5", swap("(st.join === true || Object.keys(own).length > 0 || (st.join === undefined && ", "((st.join === true || st.join === undefined) && ("), "joining read from another computer's sync file alone, so a computer joining before the first has sent takes itself for the first"],
     ["since seated unread", "J6", swap("const held0 = item => !before || ", "const held0 = item => true || "), "every item read as held before joining, so a change made after sign-in gives way"],
     ["removed since unrecorded", "J6", lift("join-removed"), "a removal made after sign-in, before the first merge, recorded nowhere, so the store's copy comes back"],
-    ["held unplaced", "H1", swap("write(io, placeOf(o.me.id, state.ledger, Object.assign(heldPlaced(io, held), r.after))); /* plant:held-placed */", "write(io, r.own); /* plant:held-placed */"), "this computer's place written from what it holds alone, so a held catalog's bytes are removed and a held edit's value dropped"],
+    ["held unplaced", "H1", swap("const place = placeOf(o.me.id, state.ledger, Object.assign(heldPlaced(io, held), r.after)); /* plant:held-placed */", "const place = r.own; /* plant:held-placed */"), "this computer's place written from what it holds alone, so a held catalog's bytes are removed and a held edit's value dropped"],
     ["same over each other", "SA", swap("let top = all.filter(a => !all.some(b => b !== a && !same(a, b) && over(b, a) && !over(a, b))); /* plant:top-mutual */", "let top = all.filter(a => !all.some(b => b !== a && !same(a, b) && over(b, a))); /* plant:top-mutual */"), "two entries each made over the other both set aside, so the merge finds no version standing and throws"],
     ["stale write whole", "B2", swap("const late = l.filter(x => x.n > at); /* plant:desk-stale */", "const late = []; /* plant:desk-stale */"), "a write from a copy behind a tell taken as the person's, so what the sync took is read as removed"],
     ["whole clear written back", "B2", swap("if (late.some(x => x.pre === null)) { dropped.push(k); continue; } /* plant:desk-whole */", "/* plant:desk-whole */"), "a key cleared whole written back from a copy behind the clear"],

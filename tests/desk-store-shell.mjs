@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 186;
+const EXPECTED = 189;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -123,6 +123,7 @@ function worldOf(o) {
     }
     if (u === STAGING + "signin/desk") {
       w.service.push(body);
+      w.signinAt = Date.now();
       if (w.seatRefused === "none") return json(200, { ok: true, code: CODE, certificate: null, doors: [] });
       if (w.seatRefused) return json(w.seatRefused === "full" ? 409 : 403, { ok: false, reason: w.seatRefused });
       const b = JSON.parse(body);
@@ -133,6 +134,8 @@ function worldOf(o) {
       if (w.grantGate) { const g = w.grantGate; w.grantGate = null; if (w.onGrant) w.onGrant(); await g; }
       if (w.grantDown) return json(503, { ok: false, reason: "unavailable" });
       if (w.grantRefuse) return json(403, { ok: false, reason: w.grantRefuse });
+      /* The service's own rule where a leg asks for it: a grant only to a desk that signed in within the hour. */
+      if (w.signinHour && !(Date.now() - (w.signinAt || 0) < 60 * 60 * 1000)) return json(403, { ok: false, reason: "signin" });
       const b = JSON.parse(body), lines = ["etiuda-licence-store-grant", b.desk, b.rt, b.lead, b.t].concat(b.company ? ["company"] : [], b.replace ? ["replace"] : []);
       if (!verifyWith(b.desk, Buffer.from(lines.join("\n"), "utf8"), b.sig)) return json(400, { ok: false, reason: "signature" });
       R.clock.now = Date.now();
@@ -2228,6 +2231,28 @@ async function openManySetAsidesScene(src) {
     withHandMade: withHandMade.paths.map(name), emptyDir: emptyDir.got, noRoot: noRoot.got }) };
 }
 
+/* (z6) A LOOK MORE THAN AN HOUR AFTER THE LAST SIGN-IN RENEWS IT FIRST: the service grants a store only to a desk it saw sign in within
+   the hour. A look whose last reached sign-in is two hours old renews it, then is granted and is on; with the provider out (the renewal
+   unreached), the refusal is a look tried again within minutes, not a day, and the row says the service was not reached. */
+async function signinHourScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  w.signinHour = true;
+  const age = () => { w.signinAt = Date.now() - 2 * 60 * 60 * 1000; T.signinState().held.at = w.signinAt; };
+  age();
+  const before = w.service.length;
+  await T.storeTurn();
+  if (T.get().storeFlight) await T.get().storeFlight;
+  const renewed = w.service.slice(before).some(b => { try { return !!JSON.parse(b).idToken; } catch { return false; } }), first = T.get().storeNow;
+  age();
+  w.tokenDown = 503;
+  await T.storeTurn();
+  if (T.get().storeFlight) await T.get().storeFlight;
+  const second = T.get().storeNow, again = !!T.get().storeAgainTimer, line = T.storeView().line;
+  w.tokenDown = 0;
+  const ok = renewed && !!first && first.state === "on" && !!second && second.why === "unreached" && again && line !== "refused";
+  return { ok, detail: brief({ renewed, first: first && first.state + "/" + (first.why || ""), second: second && second.state + "/" + (second.why || ""), again, line }) };
+}
+
 /* (z11) NO MERGE WHILE NO ACCOUNT IS SEATED: a change on the desk arms the merge a moment later; a sign out clears it, and a change made
    signed out arms none, so nothing made signed out enters the earlier account's sync state or mirror. */
 async function signedOutScene(src) {
@@ -2425,6 +2450,7 @@ const LEGS = [
   ["x6k", answerStartKeptScene, "a set-aside whose later step fails and whose move back of the catalog, or of the store folder, fails keeps that whole in the set-aside folder, which stays, the log names it, the answer carries it and the button opens it; where every move back succeeds the folder goes"],
   ["x6r", openAfterRestartScene, "after a restart the button's channel opens the desk's single dated folder, or Set aside itself when a second or hand-made dated folder is beside it; all removed it answers gone, and a name of another shape in store.json is ignored"],
   ["x6l", asideLinkScene, "a link under Set aside bearing the name store.json keeps is never opened as the set-aside folder: Open this folder answers gone; a real folder of that name is opened"],
+  ["z6", signinHourScene, "a look more than an hour after the last sign-in renews it first and is granted, on; with the renewal unreached the refusal is tried again within minutes, the row not saying refused"],
   ["z11", signedOutScene, "a change on the desk arms the merge, a sign out clears it, and a change made signed out arms none and changes nothing of the sync state"],
   ["z4", tokenAccountScene, "a folder token asked for one account and answered with another seated is not kept for it, and a look whose token is answered after a sign out says nothing and arms no retry"],
   ["z2", takenFieldScene, "an edit another computer made, taken into a layer behind a page that owed a write of it, stands on both computers with the page's own change once that write lands, nothing kept; a field the person then removes here, the tell taken, is removed there; a key the shell cleared whole stays cleared under such a write, and the page told again takes it"],
@@ -2547,6 +2573,8 @@ const PLANTS = [
   ["x6r", swap("    s.aside ? { aside: s.aside } : {}), null, 1)", "    {}), null, 1)"), "the set-aside folder's name not kept in store.json, so a restart forgets it"],
   ["x6r", swap(".test(d.aside) ? d.aside : \"\" }; /* plant:store-aside-name */", ".test(d.aside) || ok && typeof d.aside === \"string\" ? d.aside : \"\" }; /* plant:store-aside-name */"), "any name in store.json read as the set-aside folder's"],
   ["x6l", swap("    try { return fs.lstatSync(path.join(root, n)).isDirectory(); } catch { return false; } /* plant:aside-lstat */", "    try { return fs.statSync(path.join(root, n)).isDirectory(); } catch { return false; } /* plant:aside-lstat */"), "the dated folder judged by a stat that follows a link, so a link named like it is opened as it"],
+  ["z6", swap("      const fresh = await storeSigninFresh(); /* plant:grant-signin-fresh */", "      const fresh = true; /* plant:grant-signin-fresh */"), "the grant asked with an hour-old sign-in, refused for a day"],
+  ["z6", swap("      return got && got.why === \"signin\" && !fresh ? { why: \"unreached\" } : got; /* plant:grant-signin-again */", "      return got; /* plant:grant-signin-again */"), "a refusal the renewal could not mend left for a day, the row saying refused"],
   ["z11", swap("storeSyncStop(); storeSyncCalm(); /* plant:forget-calm */", "storeSyncStop(); /* plant:forget-calm */"), "the merge armed before a sign out runs after it"],
   ["z11", swap(" && !!storeWho(signinState().held); /* plant:store-seated-merge */", "; /* plant:store-seated-merge */"), "a change made signed out arms the merge into the earlier account's sync state"],
   ["z4", swap("  if (storeWho(signinState().held) !== storeWho(held)) return { why: \"offline\" }; /* plant:token-who */\n", ""), "the token kept for whoever is seated when it comes"],

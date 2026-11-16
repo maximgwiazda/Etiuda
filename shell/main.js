@@ -11456,7 +11456,7 @@ ipcMain.handle("etiuda:signin-check", async (e) => {
 /* The quiet renewal, for a desk holding a sign-in for a provider still offered: a new certificate kept and written, or the
    last kept and the calm words, or ask: true where no refresh token or sub can be opened. Never from the harness's own window
    or any harness start, so no leg reaches a provider, save while the sign-in lab is taken (signinLabHeld). */
-async function signinRenewNow() {
+async function signinRenewNow(o) {
   if (harnessLaunch() && !signinLabHeld()) return ""; /* plant:renew-now-harness */
   signinFlush();
   const s = signinState(), held = s.held;
@@ -11477,6 +11477,7 @@ async function signinRenewNow() {
   signinSave();
   signinFlush();
   tellSignin();
+  if (o && o.look === false) return r.said; /* a look's own renewal (storeSigninFresh) starts no look */
   if (r.said === "renewed") { storeLeaveNow(null); storeTurn(); } /* plant:store-renew */
   /* Neither the provider nor the service reached, a certificate standing: the look runs as after a renewal, so the sync is loaded and a
      look that fails for the same reason is tried again (storeAgainAfter). */
@@ -11694,6 +11695,16 @@ function storeGrantAnswer(res, deskKey) {
     && plainObj(j.store) && j.store.kind === "etiuda-store-certificate" && j.store.desk === String(deskKey)) return { grant: j.grant, store: j.store };
   if (res && res.status === 403 && plainObj(j) && (j.reason === "signin" || j.reason === "store")) return { why: j.reason };
   return { why: "unreached" };
+}
+/* The licence service grants a store only to a desk it saw sign in within the hour (store/grant, reason "signin"): a look whose last
+   sign-in reached is older renews it first, quietly, starting no look of its own. A renewal under way is waited for instead. */
+const STORE_SIGNIN_FRESH_MS = 50 * 60 * 1000;
+async function storeSigninFresh() {
+  const h = signinState().held;
+  if (!h || !h.cert || Date.now() - (Number(h.at) || 0) < STORE_SIGNIN_FRESH_MS) return true;
+  try { if (signinRenewing) await signinRenewing; else await signinRenewNow({ look: false }); } catch { /* the grant says what follows */ }
+  const now = signinState().held;
+  return !!now && Date.now() - (Number(now.at) || 0) < STORE_SIGNIN_FRESH_MS;
 }
 async function storeGrant(deskKey, rt, lead, extra) {
   const body = storeGrantBody(deskKey, rt, lead, Date.now(), signinSign, !!extra && extra.company === true, !!extra && extra.replace === true);
@@ -12229,7 +12240,14 @@ async function storeLookRun(p, held, me, pol) {
   if (token.why) return ours() ? storeSettle({ state: "unavailable", why: token.why }) : null; /* plant:token-ours */
   access = storeAccess;
   const io = { folder: folder, local: storeLocal, keep: k => { if (ours()) storeKeep(k); },
-    grant: async (rt, sPub, extra) => (ours() ? storeGrant(me.key, rt, sPub, Object.assign({}, extra, { company: pol.company === true })) : { why: "unreached" }),
+    grant: async (rt, sPub, extra) => {
+      if (!ours()) return { why: "unreached" };
+      const fresh = await storeSigninFresh(); /* plant:grant-signin-fresh */
+      if (!ours()) return { why: "unreached" };
+      const got = await storeGrant(me.key, rt, sPub, Object.assign({}, extra, { company: pol.company === true }));
+      /* Refused for want of a sign-in the renewal could not bring: tried again as a look the service did not answer, not left a day. */
+      return got && got.why === "signin" && !fresh ? { why: "unreached" } : got; /* plant:grant-signin-again */
+    },
     relay: { create: async (k, g) => (ours() ? storeRelayCreate(k, g) : { ok: false, why: "relay" }), renew: async (k, g) => (ours() ? storeRelayRenew(k, g) : { ok: false, why: "relay" }),
       devices: async (keys, cert) => (ours() ? storeRelayDevices(keys, cert, me) : { ok: false, why: "relay" }) }, /* plant:store-look-steps */
     me: { id: me.id, pub: me.key, desk: me.id }, url: STORE_RELAY, rand: n => crypto.randomBytes(n), fresh: storeFresh, made: storeState().made, lost: storeState().lost };

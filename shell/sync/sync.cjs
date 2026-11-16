@@ -212,7 +212,10 @@ function mergeOnce(o) {
      computer's sync file holding items. */
   const st = o.state || {}, before = plain(st.before) ? st.before : null, beforeHeld = Array.isArray(st.beforeHeld) ? st.beforeHeld.map(String) : [];
   const first = !Object.keys(ledger).length;
-  const joining = first && (st.join === true || (st.join === undefined && (o.theirs || []).some(t => t.by !== me && Object.keys(t.items).length))); /* plant:join-flag */
+  /* This computer's own place as a fresh state found it (o.own, its sync file; createStoreSync merge): what it wrote there under an earlier
+     state is the store's like any computer's, so a fresh state joins it and takes it in. */
+  const own = o.own && plain(o.own.items) ? o.own.items : {};
+  const joining = first && (st.join === true || Object.keys(own).length > 0 || (st.join === undefined && (o.theirs || []).some(t => t.by !== me && Object.keys(t.items).length))); /* plant:join-flag */
   const held0 = item => !before || before[item] === (has(local, item) ? sha(local[item]) : undefined) || (!has(before, item) && heldBy(beforeHeld, item)); /* plant:join-since */
   const pristine = Array.isArray(o.pristine) ? o.pristine : [];
   const untouched = ((o.state && Array.isArray(o.state.untouched)) ? o.state.untouched : []).filter(i => typeof i === "string" && !has(ledger, i));
@@ -264,7 +267,7 @@ function mergeOnce(o) {
   };
   /* This computer's own entry's value, from what it holds now (its ledger keeps no value). */
   const ownOf = (e, item) => (e.h === null ? null : has(local, item) && sha(local[item]) === e.h ? local[item] : undefined);
-  const items = new Set(Object.keys(ledger));
+  const items = new Set(Object.keys(ledger).concat(Object.keys(own)));
   for (const t of o.theirs || []) for (const item of Object.keys(t.items)) items.add(item);
   for (const item of items) {
     if (!follows(item) || heldBy(held, item)) continue;
@@ -275,6 +278,8 @@ function mergeOnce(o) {
       if (!e || t.by === me || (mine && same(e, mine)) || others.some(x => same(x, e))) continue;
       others.push(e);
     }
+    const ownE = own[item];
+    if (ownE && !(mine && same(ownE, mine)) && !others.some(x => same(x, ownE))) others.push(ownE); /* plant:own-taken */
     if (!others.length) continue;
     const all = (mine ? [mine] : []).concat(others);
     /* Two entries each made over the other (the same value written on two computers, each merging the other's) both stand. */
@@ -496,13 +501,30 @@ function createStoreSync(o) {
     try {
       const io = o.io(mirrorOf(state.rt)), t = theirs(io, state.rt);
       const held = typeof o.held === "function" ? o.held() : [], pristine = typeof o.pristine === "function" ? o.pristine() : [];
-      let r = mergeOnce({ me: o.me.id, now: o.now(), state, local, held, pristine, theirs: t.list, fileOf: t.fileOf });
+      /* A fresh state (state.ownTake, set where it adopted a store with nothing synced) reads its own place, written under an earlier state. */
+      const ownDoc = state.ownTake === true ? syncRead(String(io.read(syncRel(o.me.id)) || ""), o.me.id) : null;
+      let r = mergeOnce({ me: o.me.id, now: o.now(), state, local, held, pristine, theirs: t.list, fileOf: t.fileOf, own: ownDoc });
       if (Object.keys(r.patch).length || r.copies.length) r = unapplied(state, r, o.apply(r.patch, r.copies), local, o.me.id); /* plant:unapplied */
       const was = state;
       state = Object.assign({ rt: state.rt }, r.state);
       if (!Object.keys(state.ledger).length && was.join !== undefined) Object.assign(state, { join: was.join, before: was.before, beforeHeld: was.beforeHeld, at: was.at });
+      /* What the own place holds that this state has not yet taken in (bytes not come, held, not put in place) stays in the place, written
+         again as it stood, until it is taken or overtaken; then the place is this state's alone. */
+      const pending = ownDoc ? Object.keys(ownDoc.items).filter(i => { const e = ownDoc.items[i], l = state.ledger[i]; return !(l && (same(l, e) || over(l, e))); }) : [];
+      if (pending.length) state.ownTake = true;
       o.save(state);
-      write(io, placeOf(o.me.id, state.ledger, Object.assign(heldPlaced(io, held), r.after))); /* plant:held-placed */
+      const place = placeOf(o.me.id, state.ledger, Object.assign(heldPlaced(io, held), r.after)); /* plant:held-placed */
+      if (pending.length) {
+        const doc = JSON.parse(place[syncRel(o.me.id)]);
+        for (const i of pending) {
+          const e = ownDoc.items[i];
+          doc.items[i] = Object.assign({ h: e.h, by: e.by, t: e.t, seen: e.seen }, typeof e.v === "string" ? { v: e.v } : {});
+          const b = i.startsWith("f:") ? io.read(fileRel(o.me.id, i)) : null;
+          if (b) place[fileRel(o.me.id, i)] = b.toString("utf8");
+        }
+        place[syncRel(o.me.id)] = JSON.stringify(doc); /* plant:own-kept */
+      }
+      write(io, place);
       return r;
     } finally { busy = false; }
   }
@@ -543,7 +565,7 @@ function createStoreSync(o) {
        seated (seated, below), or now where none was kept (mergeOnce). */
     if (fresh) {
       const none = !Object.keys(state.ledger).length;
-      const join = none ? Object.assign({ join: look.made !== true && look.keys.devices.some(d => d.id !== o.me.id) }, plain(state.before) ? {} : heldNow()) : {}; /* plant:join-made */
+      const join = none ? Object.assign({ join: look.made !== true && look.keys.devices.some(d => d.id !== o.me.id), ownTake: true }, plain(state.before) ? {} : heldNow()) : {}; /* plant:join-made */
       state = Object.assign({}, state, { rt: look.keys.rt }, join); /* plant:adopt */
       o.save(state);
     }
