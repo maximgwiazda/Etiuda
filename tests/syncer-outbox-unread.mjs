@@ -21,7 +21,7 @@ const SELF = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(SELF), "..");
 const nodeRequire = createRequire(import.meta.url);
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 25;
+const EXPECTED = 33;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -454,6 +454,214 @@ async function writeProtectScene(mod, name) {
   return { threwEio, keptRelA, bothKept };
 }
 
+async function transientCanPassScene(mod, checks, name) {
+  const { share, mirror } = makeDirs(name);
+  const held = editionText(2), newer = editionText(3);
+  const relA = "other.ec", relB = "added.ec";
+  fs.writeFileSync(path.join(mirror, CATALOG), held, "utf8");
+  fs.writeFileSync(path.join(mirror, relA), editionText(1), "utf8");
+  fs.writeFileSync(path.join(mirror, relB), editionText(2), "utf8");
+  mod.noteOwed(mirror, relA);
+  const codes = ["EAGAIN", "EMFILE", "ENFILE", "EPERM", "EACCES", "EBUSY"];
+  const logs = [];
+  const state = { refuse: () => { if (state.code) throw busy(state.code); } };
+  const prog = mod.createFolderProgram({
+    team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks, io: outboxIo(state), logger: m => logs.push(m)
+  });
+  let heldAll = true, stagedAll = true, notForgottenAll = true;
+  try {
+    const item = stageCopy(mirror, CATALOG, newer);
+    const listing = [[CATALOG, { size: item.size, mtimeMs: item.mtimeMs }]];
+    for (const c of codes) {
+      state.code = c;
+      const r = prog.applyScan({ answers: true, listing, staged: c === codes[0] ? [item] : [] });
+      if (fs.readFileSync(path.join(mirror, CATALOG), "utf8") !== held || r.applied.indexOf(CATALOG) >= 0) heldAll = false;
+      if (!fs.existsSync(item.tmpPath)) stagedAll = false;
+      if (prog.held().forget.indexOf(CATALOG) >= 0) notForgottenAll = false;
+    }
+    const noLogsDuring = logs.length === 0;
+    state.code = "";
+    const rAfter = prog.applyScan({ answers: true, listing, staged: [] });
+    const landedAfter = fs.readFileSync(path.join(mirror, CATALOG), "utf8") === newer && rAfter.applied.indexOf(CATALOG) >= 0;
+
+    let calls = 0;
+    const noteIo = outboxIo({
+      refuse: () => {
+        calls++;
+        if (calls === 1) throw busy("EAGAIN");
+        if (calls === 2) throw busy("EMFILE");
+      }
+    });
+    let threwSync = false;
+    try { mod.noteOwed(mirror, relB, noteIo); } catch { threwSync = true; }
+    const end = Date.now() + 1500;
+    while (Date.now() < end && !mod.owedAt(mirror, relB)) await sleep(30);
+    const bothKept = !threwSync && mod.owedAt(mirror, relA) && mod.owedAt(mirror, relB);
+    return { heldAll, stagedAll, notForgottenAll, noLogsDuring, landedAfter, bothKept };
+  } finally { prog.stop(); }
+}
+
+function unreadableBoundScene(mod, checks, name) {
+  const { share, mirror } = makeDirs(name);
+  const rev2 = editionText(2), rev3 = editionText(3), rev4 = editionText(4);
+  fs.writeFileSync(path.join(mirror, CATALOG), rev2, "utf8");
+  fs.writeFileSync(path.join(mirror, ".outbox.json"), emptyOutbox, "utf8");
+  let clockNow = 1_000_000;
+  const logs = [];
+  const state = { refuse: "EBUSY" };
+  const prog = mod.createFolderProgram({
+    team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks,
+    io: outboxIo(state), logger: m => logs.push(m), now: () => clockNow
+  });
+  try {
+    const item1 = stageCopy(mirror, CATALOG, rev3);
+    const listing1 = [[CATALOG, { size: item1.size, mtimeMs: item1.mtimeMs }]];
+    prog.applyScan({ answers: true, listing: listing1, staged: [item1] });
+    clockNow += 3 * 60 * 1000;
+    prog.applyScan({ answers: true, listing: listing1, staged: [] });
+    const silentBefore = logs.length === 0;
+    clockNow += 1000;
+    prog.applyScan({ answers: true, listing: listing1, staged: [] });
+    const heldPast = fs.readFileSync(path.join(mirror, CATALOG), "utf8") === rev2;
+    const stagedPast = fs.existsSync(item1.tmpPath);
+    const saidOnce = logs.length === 1;
+    clockNow += 3000;
+    prog.applyScan({ answers: true, listing: listing1, staged: [] });
+    const notRepeated = logs.length === 1;
+
+    state.refuse = false;
+    clockNow += 3000;
+    prog.applyScan({ answers: true, listing: listing1, staged: [] });
+    const landedAfter = fs.readFileSync(path.join(mirror, CATALOG), "utf8") === rev3 && !fs.existsSync(item1.tmpPath);
+
+    state.refuse = "EIO";
+    clockNow += 3000;
+    const item2 = stageCopy(mirror, CATALOG, rev4);
+    const listing2 = [[CATALOG, { size: item2.size, mtimeMs: item2.mtimeMs }]];
+    prog.applyScan({ answers: true, listing: listing2, staged: [item2] });
+    const clearedOnGoodRead = logs.length === 1;
+    clockNow += 3 * 60 * 1000 + 1000;
+    prog.applyScan({ answers: true, listing: listing2, staged: [] });
+    const heldSecond = fs.readFileSync(path.join(mirror, CATALOG), "utf8") === rev3;
+    const saidAgainAfterClear = logs.length === 2;
+    clockNow += 3000;
+    prog.applyScan({ answers: true, listing: listing2, staged: [] });
+    const notRepeated2 = logs.length === 2;
+    return {
+      silentBefore, heldPast, stagedPast, saidOnce, notRepeated,
+      landedAfter, clearedOnGoodRead, heldSecond, saidAgainAfterClear, notRepeated2
+    };
+  } finally { prog.stop(); }
+}
+
+function damagedOutboxScene(mod, checks, name) {
+  const { share, mirror } = makeDirs(name);
+  const { mirror: mirror2 } = makeDirs(name + "-note");
+  const rev2 = editionText(2), rev3 = editionText(3), rev4 = editionText(4);
+  fs.writeFileSync(path.join(mirror, CATALOG), rev2, "utf8");
+  let clockNow = Date.now();
+  const d = new Date(clockNow), p = n => String(n).padStart(2, "0");
+  const day = d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+  const logs = [];
+  const prog = mod.createFolderProgram({
+    team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks,
+    io: outboxIo({}), logger: m => logs.push(m), now: () => clockNow
+  });
+  const outboxClean = dir => {
+    const pOut = path.join(dir, ".outbox.json");
+    if (!fs.existsSync(pOut)) return true;
+    try { const d = JSON.parse(fs.readFileSync(pOut, "utf8")); return d && d.kind === "etiuda-folder-outbox" && d.v === 1 && Object.keys(d.owe || {}).length === 0; }
+    catch { return false; }
+  };
+  try {
+    const bad1 = "{not-json";
+    fs.writeFileSync(path.join(mirror, ".outbox.json"), bad1, "utf8");
+    const item1 = stageCopy(mirror, CATALOG, rev3);
+    prog.applyScan({ answers: true, listing: [[CATALOG, { size: item1.size, mtimeMs: item1.mtimeMs }]], staged: [item1] });
+    const aside1 = path.join(mirror, ".outbox.json." + day + ".aside");
+    const aside1Ok = fs.existsSync(aside1) && fs.readFileSync(aside1, "utf8") === bad1 && outboxClean(mirror);
+    const log1Ok = logs.length === 1 && /what this computer still owed the folder may need sending again/i.test(logs[0]);
+    const landed1 = fs.readFileSync(path.join(mirror, CATALOG), "utf8") === rev3;
+
+    const bad2 = JSON.stringify({ kind: "wrong-kind", v: 1, owe: {} });
+    fs.writeFileSync(path.join(mirror, ".outbox.json"), bad2, "utf8");
+    clockNow += 60_000;
+    const item2 = stageCopy(mirror, CATALOG, rev4);
+    prog.applyScan({ answers: true, listing: [[CATALOG, { size: item2.size, mtimeMs: item2.mtimeMs }]], staged: [item2] });
+    const aside2 = path.join(mirror, ".outbox.json." + day + ".2.aside");
+    const aside2Ok = fs.existsSync(aside2) && fs.readFileSync(aside2, "utf8") === bad2 && outboxClean(mirror);
+    const aside1Kept = fs.existsSync(aside1) && fs.readFileSync(aside1, "utf8") === bad1;
+    const log2Ok = logs.length === 2 && /what this computer still owed the folder may need sending again/i.test(logs[1]);
+    const landed2 = fs.readFileSync(path.join(mirror, CATALOG), "utf8") === rev4;
+
+    const bad3 = JSON.stringify({ kind: "etiuda-folder-outbox", v: 2, owe: {} });
+    fs.writeFileSync(path.join(mirror, ".outbox.json"), bad3, "utf8");
+    clockNow += 60_000;
+    const item3 = stageCopy(mirror, CATALOG, editionText(5));
+    prog.applyScan({ answers: true, listing: [[CATALOG, { size: item3.size, mtimeMs: item3.mtimeMs }]], staged: [item3] });
+    const aside3 = path.join(mirror, ".outbox.json." + day + ".3.aside");
+    const aside3FormatOk = fs.existsSync(aside3) && fs.readFileSync(aside3, "utf8") === bad3 && outboxClean(mirror);
+    const log3Ok = logs.length === 3 && /what this computer still owed the folder may need sending again/i.test(logs[2]);
+    const landed3 = fs.readFileSync(path.join(mirror, CATALOG), "utf8") === editionText(5);
+
+    const bad4 = "{damaged-note";
+    fs.writeFileSync(path.join(mirror2, CATALOG), rev2, "utf8");
+    fs.writeFileSync(path.join(mirror2, ".outbox.json"), bad4, "utf8");
+    let noteNoEio = true;
+    try { mod.noteOwed(mirror2, CATALOG); } catch { noteNoEio = false; }
+    const noteOwedOk = mod.owedAt(mirror2, CATALOG);
+    const dNow = new Date();
+    const today = dNow.getFullYear() + "-" + p(dNow.getMonth() + 1) + "-" + p(dNow.getDate());
+    const aside4 = path.join(mirror2, ".outbox.json." + today + ".aside");
+    const aside4Ok = fs.existsSync(aside4) && fs.readFileSync(aside4, "utf8") === bad4;
+    return { aside1Ok, log1Ok, landed1, aside2Ok, aside1Kept, log2Ok, landed2, aside3FormatOk, log3Ok, landed3, noteNoEio, noteOwedOk, aside4Ok };
+  } finally { prog.stop(); }
+}
+
+function damagedRenameBusyScene(mod, checks, name) {
+  const { share, mirror } = makeDirs(name);
+  const rev2 = editionText(2), rev3 = editionText(3);
+  fs.writeFileSync(path.join(mirror, CATALOG), rev2, "utf8");
+  const badBusy = "corrupt-while-busy";
+  fs.writeFileSync(path.join(mirror, ".outbox.json"), badBusy, "utf8");
+  const logs = [];
+  let blockRename = true;
+  const state = {
+    rename: (a, b) => {
+      if (blockRename && path.basename(String(a)) === ".outbox.json") throw busy("EBUSY");
+      fs.renameSync(a, b);
+    }
+  };
+  const clockNow = Date.now();
+  const d = new Date(clockNow), p = n => String(n).padStart(2, "0");
+  const day = d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+  const prog = mod.createFolderProgram({
+    team: TEAM, folder: share, mirror, pin: LEAD, keys: { 1: K1 }, checks,
+    io: outboxIo(state), logger: m => logs.push(m), now: () => clockNow
+  });
+  try {
+    const item = stageCopy(mirror, CATALOG, rev3);
+    const listing = [[CATALOG, { size: item.size, mtimeMs: item.mtimeMs }]];
+    prog.applyScan({ answers: true, listing, staged: [item] });
+    const heldDuring = fs.readFileSync(path.join(mirror, CATALOG), "utf8") === rev2;
+    const stagedKept = fs.existsSync(item.tmpPath);
+    const stillAtOutbox = fs.existsSync(path.join(mirror, ".outbox.json")) && fs.readFileSync(path.join(mirror, ".outbox.json"), "utf8") === badBusy;
+    const noAsideDuring = !fs.readdirSync(mirror).some(n => n.startsWith(".outbox.json.") && n.endsWith(".aside"));
+    const noLogDuring = logs.length === 0;
+
+    blockRename = false;
+    prog.applyScan({ answers: true, listing, staged: [] });
+    const aside = path.join(mirror, ".outbox.json." + day + ".aside");
+    const movedAfter = fs.existsSync(aside) && fs.existsSync(path.join(mirror, ".outbox.json"))
+      ? JSON.parse(fs.readFileSync(path.join(mirror, ".outbox.json"), "utf8")).kind === "etiuda-folder-outbox"
+      : fs.existsSync(aside);
+    const asideBytesOk = movedAfter && fs.readFileSync(aside, "utf8") === badBusy;
+    const logAfterOk = logs.length === 1 && /what this computer still owed the folder may need sending again/i.test(logs[0]);
+    const landedAfter = fs.readFileSync(path.join(mirror, CATALOG), "utf8") === rev3;
+    return { heldDuring, stagedKept, stillAtOutbox, noAsideDuring, noLogDuring, movedAfter, asideBytesOk, logAfterOk, landedAfter };
+  } finally { prog.stop(); }
+}
+
 function plantScratch(tag) {
   const dir = fs.mkdtempSync(path.join(LAB, "plant-" + tag + "-"));
   const src = path.join(ROOT, "shell", "folder");
@@ -543,6 +751,26 @@ async function main() {
   check(wrRes.threwEio && wrRes.keptRelA && wrRes.bothKept,
     "u7 writeOutboxRetrying refuses to overwrite an unreadable outbox and retries busy reads without losing records: " + JSON.stringify(wrRes));
 
+  const trRes = await transientCanPassScene(syncer, checks, "transient-can-pass");
+  check(trRes.heldAll && trRes.stagedAll && trRes.notForgottenAll && trRes.noLogsDuring && trRes.landedAfter && trRes.bothKept,
+    "u10a transient can-pass refusals decide nothing meanwhile and lose nothing after: " + JSON.stringify(trRes));
+
+  const ubRes = unreadableBoundScene(syncer, checks, "unreadable-bound");
+  check(ubRes.silentBefore && ubRes.heldPast && ubRes.stagedPast && ubRes.saidOnce && ubRes.notRepeated
+    && ubRes.landedAfter && ubRes.clearedOnGoodRead && ubRes.heldSecond && ubRes.saidAgainAfterClear && ubRes.notRepeated2,
+    "u11a outbox unreadable past bound logs once, still holds, and clears on a good read: " + JSON.stringify(ubRes));
+
+  const dmRes = damagedOutboxScene(syncer, checks, "damaged-outbox");
+  check(dmRes.aside1Ok && dmRes.log1Ok && dmRes.landed1 && dmRes.aside2Ok && dmRes.aside1Kept
+    && dmRes.log2Ok && dmRes.landed2 && dmRes.aside3FormatOk && dmRes.log3Ok && dmRes.landed3
+    && dmRes.noteNoEio && dmRes.noteOwedOk && dmRes.aside4Ok,
+    "u12a damaged outbox moves aside under a dated name keeping bytes without overwriting, logs once, reads empty, and noteOwed clears EIO: " + JSON.stringify(dmRes));
+
+  const dbRes = damagedRenameBusyScene(syncer, checks, "damaged-rename-busy");
+  check(dbRes.heldDuring && dbRes.stagedKept && dbRes.stillAtOutbox && dbRes.noAsideDuring && dbRes.noLogDuring
+    && dbRes.movedAfter && dbRes.asideBytesOk && dbRes.logAfterOk && dbRes.landedAfter,
+    "u12b damaged outbox whose move aside is refused stays undecided until move succeeds: " + JSON.stringify(dbRes));
+
   {
     const { share, mirror } = makeDirs("enoent-control");
     const heldTeam = teamText(1), newTeam = teamText(2);
@@ -581,6 +809,14 @@ async function main() {
       mod => { const r = ownStaysScene(mod, checks, "p-own"); return r.owedWhileRefused === 0 && r.backWhileRefused === 0 && r.owedAfterOneClear === 0; }],
     ["outbox-write-unread", "u9h lifting plant:outbox-write-unread overwrites an unreadable outbox with an empty one",
       async mod => { const r = await writeProtectScene(mod, "p-wr"); return r.threwEio && r.keptRelA; }],
+    ["outbox-can-pass", "u10p lifting plant:outbox-can-pass fails to retry EMFILE/EAGAIN in outboxBusyRetrying",
+      async mod => { const r = await transientCanPassScene(mod, checks, "p-tr"); return r.bothKept; }],
+    ["outbox-unread-bound", "u11p lifting plant:outbox-unread-bound stays silent when outbox is unreadable past the bound",
+      mod => { const r = unreadableBoundScene(mod, checks, "p-ub"); return r.saidOnce; }],
+    ["outbox-unread-clear", "u11q lifting plant:outbox-unread-clear fails to clear unreadable state after a good read",
+      mod => { const r = unreadableBoundScene(mod, checks, "p-uc"); return r.saidAgainAfterClear; }],
+    ["outbox-damaged-aside", "u12p lifting plant:outbox-damaged-aside leaves a damaged outbox undecided instead of moving it aside",
+      mod => { const r = damagedOutboxScene(mod, checks, "p-dm"); return r.aside1Ok && r.landed1; }],
   ];
   for (const [tag, line, runCheck] of plants) {
     if (PLANTS_OFF) { skip(line); continue; }
