@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 156;
+const EXPECTED = 158;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -543,6 +543,35 @@ async function againScene(src) {
   const ok = first === "paused/unreached" && gaps.join() === "1,2,4,8,16,32,64" && spent && again === 1 && back === "on" && !backLeft && refused === "paused/store" && !refusedLeft
     && beforeOff === 60000 && !offLeft && beforeOut === 60000 && !outLeft && beforeQuit && !quitLeft;
   return { ok, detail: brief({ first, gaps, spent, again, back, backLeft, refused, refusedLeft, beforeOff, offLeft, beforeOut, outLeft, beforeQuit, quitLeft }) };
+}
+
+/* (t12) A START OFFLINE: a desk that synced, its sync state holding a kept version, starts again with its certificate standing and the
+   token address out, so the start's renewal reaches nothing. The sync is loaded (the row says conflict, not on with nothing kept) and the
+   look is tried again by itself; once the address answers, the next try turns the store on and the sync runs, with no renewal or restart. */
+async function offlineStartScene(src) {
+  const live = new Map();
+  const timers = { set: (fn, ms, ...a) => { const h = setTimeout(fn, ms, ...a); live.set(h, { fn, ms }); return h; }, clear: h => { live.delete(h); clearTimeout(h); } };
+  const r = await renewScene(src), w = r.world, UD = r.shell.UD, first = r.shell.T.get().storeSyncing;
+  if (first && first.channel()) await first.channel().idle();
+  if (first) first.stop();
+  const file = path.join(UD, "store", "sync.json");
+  let st = null;
+  try { st = JSON.parse(fs.readFileSync(file, "utf8")); } catch { st = null; }
+  if (st) { st.kept.push({ item: "k:eTheme", by: "k-" + "0".repeat(16), t: 1, h: "0".repeat(64) }); fs.writeFileSync(file, JSON.stringify(st)); }
+  w.tokenDown = 503;
+  const s = boot(src, { ud: UD, world: w, lab: labOf(), timers }), T = s.T;
+  const said = await T.signinRenewNow();
+  if (T.get().storeFlight) await T.get().storeFlight;
+  const h = T.get().storeAgainTimer, e = h && live.get(h);
+  const away = { said, loaded: !!T.get().storeSyncing, line: T.storeView().line, look: T.get().storeNow ? T.get().storeNow.state + "/" + T.get().storeNow.why : null, again: e ? e.ms / 60000 : 0 };
+  w.tokenDown = 0;
+  if (e) { timers.clear(h); e.fn(); if (T.get().storeFlight) await T.get().storeFlight; }
+  const sync = T.get().storeSyncing;
+  const back = { look: T.get().storeNow ? T.get().storeNow.state : null, syncing: !!sync && sync.running() };
+  if (sync) sync.stop();
+  for (const k of [...live.keys()]) timers.clear(k);
+  const ok = !!st && away.said !== "renewed" && away.loaded && away.line === "conflict" && away.look === "unavailable/offline" && away.again === 1 && back.look === "on" && back.syncing;
+  return { ok, detail: brief({ away, back }) };
 }
 
 /* (d4f) The page's view and the switch: the first look that made the store says "on" once; This computer forgets the keys and ends
@@ -2011,6 +2040,7 @@ const LEGS = [
   ["rv", removalVolumeScene, "a catalog another computer removed, the catalog folder on another volume than the profile: copied aside and unlinked; an unlink that fails leaves it where it was, the copy gone, the removal not taken as applied"],
   ["k7", keepFirstScene, "a merge's copy is kept before what it copies is replaced: a copy that cannot be kept leaves the catalog and the layer as they were, answered not applied, a key with no copy put in place; a catalog write failing after its copy is kept leaves the file as it was; both succeeding, the later is in place and the earlier kept"],
   ["t7", againScene, "a look the licence service did not answer is tried again by itself at 1, 2, 4, 8, 16, 32 and 64 minutes, then no more, until a look from outside; back, it is on and nothing waits; a refusal is not tried again, and the switch turned off, a sign out and a quit leave no timer"],
+  ["t12", offlineStartScene, "a desk starting with its certificate standing and neither the provider nor the service reached loads its sync, so the row counts what is kept, and the look is tried again by itself; the address back, the next try turns the store on and the sync runs"],
   ["gt", teamFolderScene, "joined to a folder team, the store's sync takes no team catalog into the person's store, reads the person's own catalog as removed nowhere, and writes nothing from the store into the team's mirror"],
   ["g1b", consentBusyScene, "while the switch's request for the folder waits on the browser the desk is busy to the page, and an answer after another account took the seat is neither taken for it nor looked with"],
   ["g2r", keepRefreshScene, "the switch's Google consent sign-in answered with no refresh token keeps the refresh token already sealed for the same account"],
@@ -2119,6 +2149,7 @@ const PLANTS = [
   ["t7", swap("  storeAgainAfter(look); /* plant:store-again */\n", ""), "no look is tried again by itself"],
   ["t7", swap("  storeAgainStop(); /* plant:store-again-out */\n", ""), "a sign out leaves the timer running"],
   ["t7", swap("  storeAgainStop(); /* plant:store-again-quit */\n", ""), "a quit leaves the timer running"],
+  ["t12", swap("  else if (s.held && s.held.cert && s.held.reached === false) storeTurn(); /* plant:store-renew-unreached */\n", ""), "a renewal that reached nothing makes no look, so the sync waits unloaded and nothing is tried again"],
   ["gt", swap("if (sayJoinPolicy().folder || relayHere() || folderTeamHere() || Object.keys(teamNeedsFolder).length) return \"\"; /* plant:sync-team-folder */", "if (false) return \"\"; /* plant:sync-team-folder */"), "the store's sync lists and writes the team's mirror as the person's folder"],
   ["w1", swap("  if (s.keys || s.leave || storeLeaveHere) {", "  if (false) {"), "a sign-out leaves the store's keys in store.json"],
   ["w1d", text => { const x = swap("  if (s.who === who) return true; /* plant:store-mine */", "  if (true) { s.who = who; return true; } /* plant:store-mine */")(text);

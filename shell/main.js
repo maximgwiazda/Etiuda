@@ -10975,6 +10975,9 @@ async function signinRenewNow() {
   signinFlush();
   tellSignin();
   if (r.said === "renewed") { storeLeaveNow(null); storeTurn(); } /* plant:store-renew */
+  /* Neither the provider nor the service reached, a certificate standing: the look runs as after a renewal, so the sync is loaded and a
+     look that fails for the same reason is tried again (storeAgainAfter). */
+  else if (s.held && s.held.cert && s.held.reached === false) storeTurn(); /* plant:store-renew-unreached */
   return r.said;
 }
 function armSigninRenew() {
