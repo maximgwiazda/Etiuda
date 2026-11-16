@@ -1452,7 +1452,7 @@ UI_STRINGS.pl={
   "the account has no OneDrive":"konto nie ma usługi OneDrive",
   "your organisation has switched off Google Drive for it":"organizacja wyłączyła dla niego Dysk Google",
   "Turn off sync?":"Wyłączyć synchronizację?",
-  "Everywhere also deletes the synced copy; each computer keeps its own.":"Opcja Wszędzie usuwa też zsynchronizowaną kopię; każdy komputer zachowuje własną.",
+  "Everywhere also deletes the synced copy; each computer keeps its own. A computer signed in on later starts without what is here, unless another computer still syncs it.":"Opcja Wszędzie usuwa też zsynchronizowaną kopię; każdy komputer zachowuje własną. Komputer, na którym logowanie nastąpi później, zacznie bez tego, co jest tutaj, chyba że inny komputer nadal to synchronizuje.",
   "Everywhere":"Wszędzie",
   "This computer":"Ten komputer",
   "Is what is on this desk yours?":"Czy to, co jest na tym stanowisku, należy do tego konta?",

@@ -395,7 +395,7 @@ function askSyncOff(){
   el.setAttribute("role","alertdialog");
   el.setAttribute("aria-labelledby","eSyncAskT");
   el.innerHTML='<h3 id="eSyncAskT">'+esc(t("Turn off sync?"))+'</h3>'
-    +'<p>'+esc(t("Everywhere also deletes the synced copy; each computer keeps its own."))+'</p>'
+    +'<p>'+esc(t("Everywhere also deletes the synced copy; each computer keeps its own. A computer signed in on later starts without what is here, unless another computer still syncs it."))+'</p>'
     +'<div class="tour-actions"><button type="button" class="btn" id="eSyncAll">'+esc(t("Everywhere"))+'</button>'
     +'<button type="button" class="btn" id="eSyncHere">'+esc(t("This computer"))+'</button>'
     +'<button type="button" class="btn primary" id="eSyncStay">'+esc(t("Cancel"))+'</button></div>';

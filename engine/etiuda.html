@@ -9083,7 +9083,7 @@ What you type stays in this browser only.`;
     "the account has no OneDrive": "konto nie ma usługi OneDrive",
     "your organisation has switched off Google Drive for it": "organizacja wyłączyła dla niego Dysk Google",
     "Turn off sync?": "Wyłączyć synchronizację?",
-    "Everywhere also deletes the synced copy; each computer keeps its own.": "Opcja Wszędzie usuwa też zsynchronizowaną kopię; każdy komputer zachowuje własną.",
+    "Everywhere also deletes the synced copy; each computer keeps its own. A computer signed in on later starts without what is here, unless another computer still syncs it.": "Opcja Wszędzie usuwa też zsynchronizowaną kopię; każdy komputer zachowuje własną. Komputer, na którym logowanie nastąpi później, zacznie bez tego, co jest tutaj, chyba że inny komputer nadal to synchronizuje.",
     "Everywhere": "Wszędzie",
     "This computer": "Ten komputer",
     "Is what is on this desk yours?": "Czy to, co jest na tym stanowisku, należy do tego konta?",
@@ -37897,7 +37897,7 @@ What you type stays in this browser only.`;
     el.id = "eSyncAsk";
     el.setAttribute("role", "alertdialog");
     el.setAttribute("aria-labelledby", "eSyncAskT");
-    el.innerHTML = '<h3 id="eSyncAskT">' + esc(t("Turn off sync?")) + "</h3><p>" + esc(t("Everywhere also deletes the synced copy; each computer keeps its own.")) + '</p><div class="tour-actions"><button type="button" class="btn" id="eSyncAll">' + esc(t("Everywhere")) + '</button><button type="button" class="btn" id="eSyncHere">' + esc(t("This computer")) + '</button><button type="button" class="btn primary" id="eSyncStay">' + esc(t("Cancel")) + "</button></div>";
+    el.innerHTML = '<h3 id="eSyncAskT">' + esc(t("Turn off sync?")) + "</h3><p>" + esc(t("Everywhere also deletes the synced copy; each computer keeps its own. A computer signed in on later starts without what is here, unless another computer still syncs it.")) + '</p><div class="tour-actions"><button type="button" class="btn" id="eSyncAll">' + esc(t("Everywhere")) + '</button><button type="button" class="btn" id="eSyncHere">' + esc(t("This computer")) + '</button><button type="button" class="btn primary" id="eSyncStay">' + esc(t("Cancel")) + "</button></div>";
     document.body.appendChild(el);
     hangBubble(el, () => document.querySelector('#setBody .set-seg[data-seg="sync"]'));
     const shut = () => {
