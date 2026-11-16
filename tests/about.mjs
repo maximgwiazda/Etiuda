@@ -20,6 +20,7 @@ import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 /* The floor: every check below runs, or the file says it did not complete. */
@@ -89,6 +90,7 @@ const dayOf = (iso, lang) => {
 };
 
 /* ---- the program, loaded ------------------------------------------------------------------- */
+createRequire(import.meta.url)("./engine.js").ensureOutputs(); /* the outputs are this source's first (tests/engine.js ensureOutputs) */
 const HTML = fs.readFileSync(path.join(ROOT, "engine", "etiuda.html"), "utf8");
 const scripts = [];
 { const re = /<script(?![^>]*\ssrc=)([^>]*)>([\s\S]*?)<\/script>/gi; let m;

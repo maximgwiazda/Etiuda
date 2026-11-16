@@ -66,6 +66,7 @@ function buildApp() {
   E.copyShellApp(APP); /* the release's shell, as tools/release.mjs lists it */
   fs.writeFileSync(path.join(APP, "package.json"),
     JSON.stringify({ name: "etiuda-dot-field-probe", version: "0.0.0", main: "shell/main.js" }), "utf8");
+  E.ensureOutputs(); /* the outputs are this source's first (tests/engine.js ensureOutputs) */
   for (const f of ["etiuda.html", "etiuda.csp.json"])
     fs.copyFileSync(path.join(E.ROOT, "engine", f), path.join(APP, "engine", f));
   const UD = path.join(APP, "userdata");

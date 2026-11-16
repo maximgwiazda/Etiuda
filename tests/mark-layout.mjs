@@ -49,6 +49,7 @@ import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const EXPECTED = 15;
@@ -329,6 +330,7 @@ check(beforeInk === "rgb(15, 23, 42)" && force.draws.length === 1 && forceInk ==
 /* THE STANDING MARK IS THE APP ICON'S FIGURE WITH ITS DEPTH (board 441): one mask, id depth, once in the page; the
    figure's one path filled with currentColor through it; the tile 25 px, the svg spanning it, the viewBox framing the
    icon's 256 box at 88 per cent, centred. */
+createRequire(import.meta.url)("./engine.js").ensureOutputs(); /* the outputs are this source's first (tests/engine.js ensureOutputs) */
 const built = fs.readFileSync(path.join(ROOT, "engine", "etiuda.html"), "utf8");
 const depthIds = s => (s.match(/\bid="depth"/g) || []).length;
 const tilePaths = tileSvg.match(/<path\b[^>]*>/g) || [];

@@ -23,8 +23,10 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { pathToFileURL, fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+createRequire(import.meta.url)("./engine.js").ensureOutputs(); /* the outputs are this source's first (tests/engine.js ensureOutputs) */
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const PLANTS = 20;

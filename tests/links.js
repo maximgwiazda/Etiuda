@@ -93,6 +93,7 @@ function buildApp() {
   fs.writeFileSync(path.join(APP, "shell", "preload.js"), pre, "utf8");
   fs.writeFileSync(path.join(APP, "package.json"),
     JSON.stringify({ name: "etiuda-links-probe", version: "0.0.0", main: "shell/main.js" }), "utf8");
+  E.ensureOutputs(); /* the outputs are this source's first (tests/engine.js ensureOutputs) */
   for (const f of ["etiuda.html", "etiuda.csp.json"])
     fs.copyFileSync(path.join(E.ROOT, "engine", f), path.join(APP, "engine", f));
   /* The first run's tour and bubbles would sit over the links; a desk that has seen them does not. */

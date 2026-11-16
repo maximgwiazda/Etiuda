@@ -134,6 +134,7 @@ function buildApp(opts) {
     JSON.stringify({ name: "etiuda-csp-probe", version: "0.0.0", main: "shell/main.js" }), "utf8");
   /* The pin travels with the artefact, as it does into the asar: without it the shell serves
      script-src 'none' and nothing here would boot. Then the artefact is tampered with. */
+  E.ensureOutputs(); /* the outputs are this source's first (tests/engine.js ensureOutputs) */
   const pin = JSON.parse(fs.readFileSync(path.join(E.ROOT, "engine", "etiuda.csp.json"), "utf8"));
   const html = fs.readFileSync(path.join(E.ROOT, "engine", "etiuda.html"), "utf8");
   const bg = bootGuardHash(html);
