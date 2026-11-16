@@ -17,7 +17,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { acquire as takeLock, release as freeLock, holderAlive } from "./machine-lock.mjs";
 
 async function loadGatesFor() {
@@ -374,7 +374,8 @@ export function appendChainLine(record, chainsPath = CHAINS_PATH) {
     holds: (record.reds || []).some(r => r.class !== "warn"),
     staleTakenOver: record.staleTakenOver || false,
     /* Which gates ate the run: one entry per gate run, in order, each with its wall-clock and its verdict. */
-    gates: (record.gates || []).map(g => ({ gate: g.gate, wallMs: g.wallMs, exit: g.exit })),
+    gates: (record.gates || []).map(g => (g.reads ? { gate: g.gate, wallMs: g.wallMs, exit: g.exit, reads: g.reads }
+      : { gate: g.gate, wallMs: g.wallMs, exit: g.exit })),
     /* The window gates this run's diff reached and left out: a merge that needs an argued window run, counted by the week review. */
     walled: record.walled || [],
   };
@@ -386,6 +387,9 @@ export function appendChainLine(record, chainsPath = CHAINS_PATH) {
   if (Array.isArray(record.carried) && record.carried.length) line.carried = record.carried;
   /* An area run's mark of what its floor, hygiene and argument gates read from outside the tree (outsideMark). */
   if (record.gate === "area" && typeof record.outside === "string") line.outside = record.outside;
+  /* An area run's gates whose last run listed nothing under tests/ (tools/listed-preload.mjs): its own, and those it carried
+     from a base that said so. */
+  if (record.gate === "area" && Array.isArray(record.quiet)) line.quiet = record.quiet;
   /* Every run records which files ran, so an area run can check coverage (the test architect's criterion, 2026-11-08). */
   if (Array.isArray(record.ran)) line.ran = record.ran;
   else if (record.inherits) line.ran = [];
@@ -716,20 +720,30 @@ export function planAreaResume(root, steps, tree, chainsPath = CHAINS_PATH, outs
   outsideSame = same && typeof base.outside === "string" && base.outside === outsideNow; /* plant:same-outside-carries */
   const runsOf = new Map();
   for (const st of steps) runsOf.set(stepFile(st), (runsOf.get(stepFile(st)) || 0) + 1);
+  /* WHAT THE BASE SAW EACH GATE LIST (tools/listed-preload.mjs): a gate whose last run listed nothing under tests/, the root or
+     the index, in every node process it started and with no program it could not see into, is not reading tests/ as data, however
+     its code or the helpers it imports list folders elsewhere (src/, a scratch copy, the profile's sentinel). After a change under
+     tests/ alone it carries like any plain green gate, unless its file or an import changed or a changed file is named in it
+     (reaching, above). A gate with no record, or one that listed tests/, runs again. */
+  const quiet = new Set(Array.isArray(base.quiet) ? base.quiet : []);
+  for (const g of base.gates) if (g && g.reads === "tests") quiet.delete(g.gate);
+  for (const g of base.gates) if (g && g.reads === "none") quiet.add(g.gate);
   for (const st of steps) {
     const file = stepFile(st), name = gateName(st.file);
     const plain = !(st.args || []).length && !(st.env && Object.keys(st.env).length);
     /* THE SAME TREE (nothing changed since the stopped run, a load flake): a gate that lists a folder has nothing new to list, so it
        carries like any other (result-line ar9; Claude alpha's question of 2026-11-15). The floor, the hygiene legs and a gate with an
        argument carry too where the outside is unchanged (above); the gate that ended the run still runs, as it is not green. */
-    let moved = reaching.has(file) || walking.has(file);
+    let lists = walking.has(file);
+    if (quiet.has(name)) lists = false; /* plant:quiet-lister-carries */
+    let moved = reaching.has(file) || lists;
     if (same) moved = false; /* plant:same-tree-carries */
     const special = isFloorStep(st) || isHygiene(file) || !plain;
     const may = special ? outsideSame && runsOf.get(file) === 1 && !(st.env && Object.keys(st.env).length) : true;
     if (may && green.has(name) && !moved) carried.push(name);
     else run.push(st);
   }
-  return { base, changed, steps: run, carried };
+  return { base, changed, steps: run, carried, quiet: carried.filter(n => quiet.has(n)) };
 }
 
 function showFile(root, base, file) {
@@ -1544,12 +1558,37 @@ export function stopTree(pid) {
   else { try { process.kill(-pid, "SIGKILL"); } catch { try { process.kill(pid, "SIGKILL"); } catch { /* gone */ } } }
 }
 
+/* WHAT EACH AREA GATE LISTED (the test architect, 2026-11-16, Claude alpha's question of the same night: fold 98's area resumed
+   twice after a tests-only mend and reran 121 of 146 gates, because every gate whose code or imports list a folder counted as
+   reading tests/ as data, tests/engine.js's listing of src/modules and of the profile's sentinel included). An area gate runs
+   with tools/listed-preload.mjs in NODE_OPTIONS; the gate's record says "none" where every node process it started listed
+   nothing a change under tests/ could alter, "tests" where one did, and nothing where the preload did not report.
+   ETIUDA_LISTED=off runs an area without the preload, and its gates then carry no record. */
+let recordListed = false;
+const LISTED_PRELOAD = path.join(ROOT, "tools", "listed-preload.mjs");
+function listedEnv(scratch) {
+  if (!recordListed || !scratch || !fs.existsSync(LISTED_PRELOAD)) return { env: {}, file: null };
+  const file = scratch + ".listed";
+  const flag = "--import " + pathToFileURL(LISTED_PRELOAD).href;
+  const had = String(process.env.NODE_OPTIONS || "").trim();
+  return { env: { ETIUDA_LISTED_OUT: file, ETIUDA_LISTED_ROOT: ROOT, NODE_OPTIONS: had ? had + " " + flag : flag }, file };
+}
+function listedRead(file) {
+  if (!file) return undefined;
+  let text = "";
+  try { text = fs.readFileSync(file, "utf8"); } catch { return undefined; }
+  try { fs.unlinkSync(file); } catch { /* left beside the scratch base */ }
+  if (!/^loaded /m.test(text)) return undefined;
+  return /^tests /m.test(text) ? "tests" : "none";
+}
+
 function runStep(step, customEnv = {}) {
   return new Promise(resolve => {
     const t0 = Date.now();
     const scratch = stepScratch();
     const own = scratch ? { TEMP: scratch, TMP: scratch, TMPDIR: scratch } : {};
-    const env = Object.assign(inheritedEnv(step), own, customEnv, step.env || {});
+    const listed = listedEnv(scratch);
+    const env = Object.assign(inheritedEnv(step), own, listed.env, customEnv, step.env || {});
     const child = spawn(process.execPath, [step.file].concat(step.args),
       /* Off Windows its own process group, so the wall stops it with its children (stopTree). */
       { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
@@ -1566,7 +1605,7 @@ function runStep(step, customEnv = {}) {
         out += "\n" + said + "\n";
         process.stdout.write(said + "\n");
       }
-      resolve({ exit: overWall ? STEP_WALL_EXIT : code === null ? -1 : code, wallMs: Date.now() - t0, out, overWall });
+      resolve({ exit: overWall ? STEP_WALL_EXIT : code === null ? -1 : code, wallMs: Date.now() - t0, out, overWall, reads: listedRead(listed.file) });
     });
   });
 }
@@ -1847,12 +1886,14 @@ async function main() {
       steps = plan.steps;
     } else console.log("gate-run release: the full profile: " + plan.reason);
   }
-  let carried = [];
+  let carried = [], carriedQuiet = [];
+  recordListed = mode === "area" && process.env.ETIUDA_LISTED !== "off";
   if (mode === "area" && process.env.ETIUDA_AREA_RESUME !== "off") {
     const plan = planAreaResume(ROOT, steps, tree);
     if (plan.base && plan.carried.length) {
       inherits = plan.base.gitTree;
       carried = plan.carried;
+      carriedQuiet = plan.quiet || [];
       console.log("gate-run area: only files under tests/ changed since the area run of " + plan.base.head + " (" + plan.changed.length
         + " file(s)): " + plan.steps.length + " of " + steps.length + " gate(s) run, " + carried.length + " carried from git tree "
         + inherits + ": " + carried.join(", "));
@@ -1958,7 +1999,7 @@ async function main() {
         line.fileBlob = gitBlobHash(step.filePath);
       }
       if (line.exit !== 0) line.failLines = failLinesOf(res.out);
-    gatesList.push({ gate: line.gate, wallMs: line.wallMs, exit: line.exit });
+    gatesList.push({ gate: line.gate, wallMs: line.wallMs, exit: line.exit, reads: res.reads });
       redsList.push({
         gate: gateName(step.file),
         cmd: step.cmd,
@@ -2029,7 +2070,7 @@ async function main() {
       line.fileBlob = gitBlobHash(step.filePath);
     }
     if (line.exit !== 0) line.failLines = failLinesOf(res.out);
-    gatesList.push({ gate: line.gate, wallMs: line.wallMs, exit: line.exit });
+    gatesList.push({ gate: line.gate, wallMs: line.wallMs, exit: line.exit, reads: res.reads });
 
     const file = path.join(RUNS, line.gate + "-" + stamp(now) + ".json");
     fs.writeFileSync(file, JSON.stringify(line) + "\n", "utf8");
@@ -2130,6 +2171,7 @@ async function main() {
     repo,
     plan: areaPlan,
     outside: gateLabel === "area" ? outsideMark() : undefined,
+    quiet: gateLabel === "area" ? gatesList.filter(g => g.reads === "none").map(g => g.gate).concat(carriedQuiet) : undefined,
   }, CHAINS_PATH);
 
   /* Whole-run summary for a release or nightly profile run (state/briefs/reform-2026-10-27/test-regimen.md rule 4, decisions 2026-11-05 11:43). */
