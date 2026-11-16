@@ -1,7 +1,7 @@
 {
  "kind": "etiuda-closed-desk-requests",
  "format": 1,
- "how": "node tests/desk-store-shell.mjs --capture-closed tests/fixtures/closed-desk-requests.json, run 2026-11-16 by the lead engineer with the engine's tests/desk-store-shell.mjs at the gate's tip copied into a git archive export of abc58e9f (Fold 102: the built page with Space's ring rule on fold 101), its shell/main.js the one captured",
+ "how": "node tests/desk-store-shell.mjs --capture-closed tests/fixtures/closed-desk-requests.json, run 2026-11-16 15:45 (office time) by the lead engineer with the engine's tests/desk-store-shell.mjs at the gate's tip (its stand-in token address answering a Google refresh as Google's does) copied into a git archive export of abc58e9f (Fold 102: the built page with Space's ring rule on fold 101), its shell/main.js the one captured",
  "normalised": [
   "state",
   "nonce",
@@ -154,6 +154,18 @@
       "client_id": "000011112222-stand.apps.googleusercontent.com",
       "grant_type": "refresh_token",
       "refresh_token": "<refresh_token>"
+     }
+    },
+    {
+     "method": "POST",
+     "at": "https://etiuda.dev/licence-staging/v1/signin/desk",
+     "from": "shell",
+     "fields": {
+      "desk": "<desk>",
+      "idToken": "<idToken>",
+      "provider": "google",
+      "sig": "<sig>",
+      "t": "<t>"
      }
     }
    ]
