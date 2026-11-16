@@ -567,6 +567,9 @@ function syncAiWords(){
   const lede=sxOn==="ai" && !sxQuery ? box.querySelector("p.lede") : null, note=box.querySelector("#setSuggestNote");
   if(lede) lede.textContent=aiLede();
   if(note) note.textContent=suggestNoteText();
+  /* The model row's line says what is sent, with or without the Rewording sentence, so it follows the same switches. */
+  const st=orgModel(), rowLine=orgRanks(st) ? box.querySelector('[data-row="orgmodel"] .set-label small') : null;
+  if(rowLine) rowLine.textContent=orgModelSentLine(st);
   hugDottedGround(box);
 }
 /* Drawn wherever a model can rank: the built-in one this desk carries, or the organisation's while it is on and ready. */
@@ -600,13 +603,16 @@ function aiSearchOnLine(st){
 }
 /* THE MODEL THAT RANKS SEARCH AND SUGGESTIONS, where the host can say: built-in, or the organisation's own service, whose
    fields open under the row. What machine policy set is shown as set and takes no change. The key is never drawn back. */
+function orgModelSentLine(st){
+  return (rewordSent() ? t("The search text, the copied message the suggestions are made from and up to 12 short pieces of the cards being ranked are sent to {HOST}, and nowhere else; so, at your press, are the words or the card you ask it to reword.") : t("The search text, the copied message the suggestions are made from and up to 12 short pieces of the cards being ranked are sent to {HOST}, and nowhere else.")).split("{HOST}").join(String(st.host||""));
+}
 function orgModelRows(){
   const st=orgModel();
   if(!st) return [];
   const m=st.managed||{}, org=st.choice==="organisation", set=t("Set by the organisation");
   const lines=[];
   if(!org) lines.push(t("The built-in model sends nothing anywhere."));
-  else if(orgRanks(st)) lines.push((rewordSent() ? t("The search text, the copied message the suggestions are made from and up to 12 short pieces of the cards being ranked are sent to {HOST}, and nowhere else; so, at your press, are the words or the card you ask it to reword.") : t("The search text, the copied message the suggestions are made from and up to 12 short pieces of the cards being ranked are sent to {HOST}, and nowhere else.")).split("{HOST}").join(String(st.host||"")));
+  else if(orgRanks(st)) lines.push(orgModelSentLine(st));
   else if(!st.keyNoService) lines.push(t("Until the service, the model and the key are complete, the built-in model ranks and nothing is sent.")); // placeholder: Claudette
   if(st.keyNoService) lines.push(t("Your organisation has set a key for an AI service without naming the service, so nothing is sent. Its IT department can name it."));
   if(m.choice) lines.push(set, t("Whoever manages Etiuda for the organisation can change this."));
@@ -1079,6 +1085,7 @@ function wirePage(box){
         else if(seg==="aireword"){
           rewordSwitchSet(on);
           syncOrgMark();
+          syncAiWords();
           try{ render(); }catch(e){}
           toast(on?t("On"):t("Off"));
         }
