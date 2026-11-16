@@ -58,7 +58,7 @@ async function openDesk(browser, url, width, height) {
   await page.setViewport({ width, height, deviceScaleFactor: 1 });
   await page.evaluateOnNewDocument(() => {
     try {
-      for (const k of ["eTourDone_v3", "eTourInvite_v3", "eNameAsked"]) localStorage.setItem(k, "1");
+      for (const k of ["eTourDone_v3", "eTourInvite_v3", "eNameAsked", "eFirstSigninSeen"]) localStorage.setItem(k, "1");
     } catch (_) {}
   });
   await page.goto(url, { waitUntil: "load", timeout: 60000 });

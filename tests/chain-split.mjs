@@ -61,7 +61,7 @@ export const NIGHTLY_ONLY = [
 
 /* Scripts that seed eTourDone_v3 as "1" without naming eFirstSigninSeen, each with its reason. */
 export const FIRST_SIGNIN_SEED_EXCEPTIONS = {
-  "tests/desk-dots-hug.mjs": "excluded from the first-signin seeding pass because another run is editing it",
+  "tests/desk-focus-ring.mjs": "its one seeded boot is the first-opening sign-in screen's own, which must find the key unset",
   "tests/test.js": "synthetic localStorage fixture for clearLocalMemory(), not a booted desk",
 };
 

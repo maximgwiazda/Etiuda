@@ -87,7 +87,7 @@ async function boot(browser, pageUrl, theme, lang, withCatalog, vp) {
   await p.evaluateOnNewDocument((th, lg) => {
     try {
       localStorage.clear();
-      for (const k of ["eTourDone_v3", "eTourInvite_v3", "eNameAsked"]) localStorage.setItem(k, "1");
+      for (const k of ["eTourDone_v3", "eTourInvite_v3", "eNameAsked", "eFirstSigninSeen"]) localStorage.setItem(k, "1");
       localStorage.setItem("eTheme", th);
       localStorage.setItem("eUiLang", lg);
       localStorage.setItem("eAgent", "Bench Agent");

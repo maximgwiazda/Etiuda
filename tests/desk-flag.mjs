@@ -104,7 +104,7 @@ async function boot(pageUrl, { lang = "en", theme = "light", offered = true } = 
   await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
   await p.evaluateOnNewDocument((lang, theme, offered) => {
     try {
-      for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eAgent", "Bench Agent"], ["eNameAsked", "1"],
+      for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eAgent", "Bench Agent"], ["eNameAsked", "1"], ["eFirstSigninSeen", "1"],
         ["eTheme", theme], ["eUiLang", lang], ["eStill", "1"], ["eMotionOff", "1"]]) localStorage.setItem(k, v);
     } catch (e) {}
     /* The shell's half, stood in: a desk with a key, a file it may write, and whether a flag made now would reach a lead. */
