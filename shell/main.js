@@ -11381,7 +11381,7 @@ function storeView() {
   const ask = !!who && s.ask === who && storeHeld();
   return StoreLib().storeRow({ provider, pol: storePolicyNow(), look: storeNow, until: s.until, now: Date.now(),
     signinRefused: !!(held && held.said), conflicts: storeConflicts(), say: storeSay, owed: !!storeOwedRt(),
-    ask, askNow: ask && !storeNotNow.has(who),
+    ask, askNow: ask && !storeNotNow.has(who), again: storeAgainTimer ? storeAgainAt : 0, /* plant:store-view-again */
     seatless: !!held && (!held.cert || held.said === "full"), full: storeFullNow }); /* plant:store-view-room */
 }
 function tellStore() {
@@ -11578,14 +11578,15 @@ function storeTurn() {
 }
 /* THE LOOK TRIED AGAIN by itself after one that failed for a passing reason, at store.cjs lookAgainIn's gaps: one timer, replaced at each
    look's answer, and stopped at a sign out, the switch turned off, another account seated or answered, and a quit. */
-let storeAgainTimer = null, storeAgainTries = 0;
-function storeAgainStop() { clearTimeout(storeAgainTimer); storeAgainTimer = null; storeAgainTries = 0; }
+let storeAgainTimer = null, storeAgainTries = 0, storeAgainAt = 0;
+function storeAgainStop() { clearTimeout(storeAgainTimer); storeAgainTimer = null; storeAgainTries = 0; storeAgainAt = 0; }
 function storeAgainAfter(look) {
-  clearTimeout(storeAgainTimer); storeAgainTimer = null;
+  clearTimeout(storeAgainTimer); storeAgainTimer = null; storeAgainAt = 0;
   const ms = StoreLib().lookAgainIn(look, storeAgainTries);
   if (!ms) { storeAgainTries = 0; return; } /* plant:store-again-after */
   storeAgainTries++;
-  storeAgainTimer = setTimeout(() => { storeAgainTimer = null; if (!quitting) storeTurn(); }, ms);
+  storeAgainAt = Date.now() + ms; /* plant:store-again-at */
+  storeAgainTimer = setTimeout(() => { storeAgainTimer = null; storeAgainAt = 0; if (!quitting) storeTurn(); }, ms);
   if (storeAgainTimer.unref) storeAgainTimer.unref();
 }
 /* Microsoft's folder asked after a seated sign-in (signinFolderAsk), the desk already signed in: the press's landing waits for it, then the

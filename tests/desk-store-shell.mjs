@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 162;
+const EXPECTED = 165;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -545,8 +545,33 @@ async function againScene(src) {
   return { ok, detail: brief({ first, gaps, spent, again, back, backLeft, refused, refusedLeft, beforeOff, offLeft, beforeOut, outLeft, beforeQuit, quitLeft }) };
 }
 
+/* (t7v) WHAT THE ROW IS TOLD OF A PASSING FAILURE: "again" with the try's own time while one is set, the reason which side was not reached
+   (the licence service "unreached", the account's folder "offline"); "spent" once the tries are spent, no time; and nothing of a key, a
+   token, a store's id or an address in the view. */
+async function againViewScene(src) {
+  const live = new Map();
+  const timers = { set: (fn, ms, ...a) => { const h = setTimeout(fn, ms, ...a); live.set(h, { fn, ms, at: Date.now() + ms }); return h; }, clear: h => { live.delete(h); clearTimeout(h); } };
+  const r = await renewScene(src, { grantDown: true, boot: { timers } }), T = r.shell.T, w = r.world;
+  const due = () => { const h = T.get().storeAgainTimer, e = h && live.get(h); return e ? e.at : 0; };
+  const fire = async () => { const h = T.get().storeAgainTimer, e = h && live.get(h); if (!e) return false; timers.clear(h); e.fn(); const f = T.get().storeFlight; if (f) await f; return true; };
+  const v1 = T.storeView(), at1 = due();
+  for (let i = 0; i < 9 && T.get().storeAgainTimer; i++) await fire();
+  const spent = T.storeView();
+  w.grantDown = false;
+  if (T.get().storeAccess) T.get().storeAccess.until = 0;
+  w.tokenDown = 503;
+  await T.storeTurn();
+  const off = T.storeView(), atOff = due();
+  for (const h of [...live.keys()]) timers.clear(h);
+  const rt = w.file ? JSON.parse(w.file).rt : "", text = JSON.stringify([v1, spent, off]);
+  const leaks = [w.access, rt, "etiuda.dev", "graph.microsoft"].filter(x => x && text.indexOf(x) >= 0).length;
+  const ok = v1.line === "again" && v1.why === "unreached" && at1 > 0 && v1.at === at1 && spent.line === "spent" && spent.why === "unreached" && !spent.at
+    && off.line === "again" && off.why === "offline" && off.at === atOff && atOff > 0 && leaks === 0;
+  return { ok, detail: brief({ first: v1.line + "/" + v1.why, atIsTheTry: at1 > 0 && v1.at === at1, spent: spent.line + "/" + spent.why + (spent.at ? "/at" : ""), offline: off.line + "/" + off.why, offAt: off.at === atOff, leaks }) };
+}
+
 /* (t12) A START OFFLINE: a desk that synced, its sync state holding a kept version, starts again with its certificate standing and the
-   token address out, so the start's renewal reaches nothing. The sync is loaded (the row says conflict, not on with nothing kept) and the
+   token address out, so the start's renewal reaches nothing. The sync is loaded (its kept version counted, the row saying the passing failure over it) and the
    look is tried again by itself; once the address answers, the next try turns the store on and the sync runs, with no renewal or restart. */
 async function offlineStartScene(src) {
   const live = new Map();
@@ -563,14 +588,14 @@ async function offlineStartScene(src) {
   const said = await T.signinRenewNow();
   if (T.get().storeFlight) await T.get().storeFlight;
   const h = T.get().storeAgainTimer, e = h && live.get(h);
-  const away = { said, loaded: !!T.get().storeSyncing, line: T.storeView().line, look: T.get().storeNow ? T.get().storeNow.state + "/" + T.get().storeNow.why : null, again: e ? e.ms / 60000 : 0 };
+  const away = { said, loaded: !!T.get().storeSyncing && T.get().storeSyncing.state().kept.length === 1, line: T.storeView().line, look: T.get().storeNow ? T.get().storeNow.state + "/" + T.get().storeNow.why : null, again: e ? e.ms / 60000 : 0 };
   w.tokenDown = 0;
   if (e) { timers.clear(h); e.fn(); if (T.get().storeFlight) await T.get().storeFlight; }
   const sync = T.get().storeSyncing;
   const back = { look: T.get().storeNow ? T.get().storeNow.state : null, syncing: !!sync && sync.running() };
   if (sync) sync.stop();
   for (const k of [...live.keys()]) timers.clear(k);
-  const ok = !!st && away.said !== "renewed" && away.loaded && away.line === "conflict" && away.look === "unavailable/offline" && away.again === 1 && back.look === "on" && back.syncing;
+  const ok = !!st && away.said !== "renewed" && away.loaded && away.line === "again" && away.look === "unavailable/offline" && away.again === 1 && back.look === "on" && back.syncing;
   return { ok, detail: brief({ away, back }) };
 }
 
@@ -2095,7 +2120,8 @@ const LEGS = [
   ["rv", removalVolumeScene, "a catalog another computer removed, the catalog folder on another volume than the profile: copied aside and unlinked; an unlink that fails leaves it where it was, the copy gone, the removal not taken as applied"],
   ["k7", keepFirstScene, "a merge's copy is kept before what it copies is replaced: a copy that cannot be kept leaves the catalog and the layer as they were, answered not applied, a key with no copy put in place; a catalog write failing after its copy is kept leaves the file as it was; both succeeding, the later is in place and the earlier kept"],
   ["t7", againScene, "a look the licence service did not answer is tried again by itself at 1, 2, 4, 8, 16, 32 and 64 minutes, then no more, until a look from outside; back, it is on and nothing waits; a refusal is not tried again, and the switch turned off, a sign out and a quit leave no timer"],
-  ["t12", offlineStartScene, "a desk starting with its certificate standing and neither the provider nor the service reached loads its sync, so the row counts what is kept, and the look is tried again by itself; the address back, the next try turns the store on and the sync runs"],
+  ["t7v", againViewScene, "the row is told a passing failure as again, with the reason and the try's own time, while a try is set, and as spent once the tries are spent; nothing of a key, a token, a store or an address"],
+  ["t12", offlineStartScene, "a desk starting with its certificate standing and neither the provider nor the service reached loads its sync with what it keeps, the row saying the folder is not reached and the look tried again by itself, which it is; the address back, the next try turns the store on and the sync runs"],
   ["gt", teamFolderScene, "joined to a folder team, the store's sync takes no team catalog into the person's store, reads the person's own catalog as removed nowhere, and writes nothing from the store into the team's mirror"],
   ["g1b", consentBusyScene, "while the switch's request for the folder waits on the browser the desk is busy to the page, and an answer after another account took the seat is neither taken for it nor looked with"],
   ["g2r", keepRefreshScene, "the switch's Google consent sign-in answered with no refresh token keeps the refresh token already sealed for the same account"],
@@ -2206,6 +2232,8 @@ const PLANTS = [
   ["t7", swap("  storeAgainAfter(look); /* plant:store-again */\n", ""), "no look is tried again by itself"],
   ["t7", swap("  storeAgainStop(); /* plant:store-again-out */\n", ""), "a sign out leaves the timer running"],
   ["t7", swap("  storeAgainStop(); /* plant:store-again-quit */\n", ""), "a quit leaves the timer running"],
+  ["t7v", swap("again: storeAgainTimer ? storeAgainAt : 0, /* plant:store-view-again */", "again: 0, /* plant:store-view-again */"), "the row is told no try is set, so it says spent while one is"],
+  ["t7v", swap("  storeAgainAt = Date.now() + ms; /* plant:store-again-at */", "  storeAgainAt = Date.now(); /* plant:store-again-at */"), "the try's time told as now, not when it comes"],
   ["t12", swap("  else if (s.held && s.held.cert && s.held.reached === false) storeTurn(); /* plant:store-renew-unreached */\n", ""), "a renewal that reached nothing makes no look, so the sync waits unloaded and nothing is tried again"],
   ["gt", swap("if (sayJoinPolicy().folder || relayHere() || folderTeamHere() || Object.keys(teamNeedsFolder).length) return \"\"; /* plant:sync-team-folder */", "if (false) return \"\"; /* plant:sync-team-folder */"), "the store's sync lists and writes the team's mirror as the person's folder"],
   ["w1", swap("  if (s.keys || s.leave || storeLeaveHere) {", "  if (false) {"), "a sign-out leaves the store's keys in store.json"],

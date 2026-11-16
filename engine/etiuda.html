@@ -9104,6 +9104,12 @@ What you type stays in this browser only.`;
     "Sync is full, so new changes stay on this computer until something is removed.": "Miejsce na synchronizację jest pełne, więc nowe zmiany zostają na tym komputerze, dopóki czegoś się nie usunie.",
     // placeholder: Claudette
     "Waiting for a seat. Sync resumes when this account holds one again, and nothing on this computer is lost.": "Oczekiwanie na miejsce w licencji. Synchronizacja zostanie wznowiona, gdy to konto znów je otrzyma; na tym komputerze nic nie ginie.",
+    "this computer cannot reach the {PROVIDER} account": "ten komputer nie może połączyć się z kontem {PROVIDER}",
+    "this computer cannot reach our service": "ten komputer nie może połączyć się z naszą usługą",
+    "our service is busy": "nasza usługa jest teraz zajęta",
+    "Not syncing just now: {REASON}. Sync tries again by itself, and nothing on this computer is lost.": "Synchronizacja chwilowo nie działa: {REASON}. Sama ponowi próbę, a na tym komputerze nic nie ginie.",
+    "Not syncing just now: {REASON}. Sync tries again at {TIME}, and nothing on this computer is lost.": "Synchronizacja chwilowo nie działa: {REASON}. Ponowi próbę o {TIME}, a na tym komputerze nic nie ginie.",
+    "Not syncing: {REASON}. Sync tries again within a day, and nothing on this computer is lost.": "Synchronizacja nie działa: {REASON}. Ponowi próbę w ciągu doby, a na tym komputerze nic nie ginie.",
     "Sign-in": "Logowanie",
     "{PROVIDER} · work accounts of the organisation": "{PROVIDER} · konta służbowe organizacji",
     "{PROVIDER} · work accounts": "{PROVIDER} · konta służbowe",
@@ -28207,10 +28213,10 @@ What you type stays in this browser only.`;
       if (b.dataset.signinAct) signinAct(b.dataset.signinAct, b);
     });
   }
-  var SYNC_LINES = ["on", "off", "ending", "ungiven", "org-off", "unavailable", "paused", "conflict", "full", "noseat", "ask"];
+  var SYNC_LINES = ["on", "off", "ending", "ungiven", "org-off", "unavailable", "again", "spent", "paused", "conflict", "full", "noseat", "ask"];
   function syncRead(v) {
     const o = v && typeof v === "object" ? v : {};
-    if (o.shown !== true || SYNC_LINES.indexOf(o.line) < 0) return { shown: false, line: "", on: false, held: false, why: "", since: 0, say: "", askNow: false };
+    if (o.shown !== true || SYNC_LINES.indexOf(o.line) < 0) return { shown: false, line: "", on: false, held: false, why: "", since: 0, say: "", askNow: false, at: 0 };
     return {
       shown: true,
       line: o.line,
@@ -28219,7 +28225,8 @@ What you type stays in this browser only.`;
       why: typeof o.why === "string" ? o.why.slice(0, 40) : "",
       since: Number.isFinite(o.since) && o.since > 0 ? o.since : 0,
       say: typeof o.say === "string" ? o.say.slice(0, 40) : "",
-      askNow: o.askNow === true
+      askNow: o.askNow === true,
+      at: Number.isFinite(o.at) && o.at > 0 ? o.at : 0
     };
   }
   function syncNow() {
@@ -28244,12 +28251,26 @@ What you type stays in this browser only.`;
   function syncDate(at) {
     return new Date(at).toLocaleDateString(uiLang() === "pl" ? "pl-PL" : "en-GB", { day: "numeric", month: "long" });
   }
+  function syncPassingWords(why, provider) {
+    if (why === "offline") return named(t("this computer cannot reach the {PROVIDER} account"), "{PROVIDER}", SIGNIN_NAMES[provider] || "Microsoft");
+    if (why === "rate") return t("our service is busy");
+    return t("this computer cannot reach our service");
+  }
+  function syncPassing(s, provider) {
+    const frame = s.line === "spent" ? t("Not syncing: {REASON}. Sync tries again within a day, and nothing on this computer is lost.") : s.at ? named(
+      t("Not syncing just now: {REASON}. Sync tries again at {TIME}, and nothing on this computer is lost."),
+      "{TIME}",
+      new Date(s.at).toLocaleTimeString(uiLang() === "pl" ? "pl-PL" : "en-GB", { hour: "2-digit", minute: "2-digit" })
+    ) : t("Not syncing just now: {REASON}. Sync tries again by itself, and nothing on this computer is lost.");
+    return named(frame, "{REASON}", syncPassingWords(s.why, provider));
+  }
   function syncLine(s, provider) {
     if (s.line === "org-off") return t("Your organisation has not turned this on.");
     if (s.line === "off") return t("Only on this computer.");
     if (s.line === "ending") return t("Off everywhere. The synced copy is deleted as soon as this computer reaches our service.");
     if (s.line === "ungiven") return named(t("Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account."), "{PROVIDER}", SIGNIN_NAMES[provider] || "Microsoft");
     if (s.line === "unavailable") return syncUnavailable(s.why, provider);
+    if (s.line === "again" || s.line === "spent") return syncPassing(s, provider);
     if (s.line === "paused") return named(t("Paused since {DATE}. It resumes when this computer reaches our service."), "{DATE}", syncDate(s.since));
     if (s.line === "conflict") return t("Changed on two computers: the newer change is in use, and the older one is kept, so nothing is lost.");
     if (s.line === "full") return t("Sync is full, so new changes stay on this computer until something is removed.");

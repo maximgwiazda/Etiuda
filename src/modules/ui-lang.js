@@ -1473,6 +1473,12 @@ UI_STRINGS.pl={
   "Sync is full, so new changes stay on this computer until something is removed.":"Miejsce na synchronizację jest pełne, więc nowe zmiany zostają na tym komputerze, dopóki czegoś się nie usunie.",
   // placeholder: Claudette
   "Waiting for a seat. Sync resumes when this account holds one again, and nothing on this computer is lost.":"Oczekiwanie na miejsce w licencji. Synchronizacja zostanie wznowiona, gdy to konto znów je otrzyma; na tym komputerze nic nie ginie.",
+  "this computer cannot reach the {PROVIDER} account":"ten komputer nie może połączyć się z kontem {PROVIDER}",
+  "this computer cannot reach our service":"ten komputer nie może połączyć się z naszą usługą",
+  "our service is busy":"nasza usługa jest teraz zajęta",
+  "Not syncing just now: {REASON}. Sync tries again by itself, and nothing on this computer is lost.":"Synchronizacja chwilowo nie działa: {REASON}. Sama ponowi próbę, a na tym komputerze nic nie ginie.",
+  "Not syncing just now: {REASON}. Sync tries again at {TIME}, and nothing on this computer is lost.":"Synchronizacja chwilowo nie działa: {REASON}. Ponowi próbę o {TIME}, a na tym komputerze nic nie ginie.",
+  "Not syncing: {REASON}. Sync tries again within a day, and nothing on this computer is lost.":"Synchronizacja nie działa: {REASON}. Ponowi próbę w ciągu doby, a na tym komputerze nic nie ginie.",
   "Sign-in":"Logowanie",
   "{PROVIDER} · work accounts of the organisation":"{PROVIDER} · konta służbowe organizacji",
   "{PROVIDER} · work accounts":"{PROVIDER} · konta służbowe",

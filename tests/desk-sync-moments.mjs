@@ -39,7 +39,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 28;
+const EXPECTED = 32;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const STORE = path.join(E.ROOT, "shell", "sync", "store.cjs");
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -131,6 +131,57 @@ async function tell(page, view, tells = 1) {
   });
 }
 
+/* The Account row as drawn: its title, small line, and the control beside it. */
+const rowOf = page => page.evaluate(() => {
+  const r = document.querySelector('#setBody [data-row="sync"]');
+  if (!r) return null;
+  const btns = [...r.querySelectorAll(".set-seg button")], acts = [...r.querySelectorAll("button:not(.set-seg button)")];
+  return { title: (r.querySelector(".set-label") || {}).firstChild ? r.querySelector(".set-label").firstChild.textContent : "", line: (r.querySelector("small") || {}).textContent || "",
+    ctl: !btns.length ? (acts.length ? "button:" + acts.map(b => b.textContent).join("|") : "none") : btns.every(b => b.disabled) && r.querySelector(".sgn-lock") ? "fixed" : btns.some(b => b.disabled) ? "half" : "switch",
+    on: (r.querySelector(".set-seg button.on") || {}).textContent || "" };
+});
+/* The row's lines where sync is not running: [what, view, English, Polish, control, provider]; {TIME} is read from the page's own clock. */
+const AT = Date.UTC(2026, 10, 16, 13, 7, 41);
+const TRUE_LINES = [
+  ["a try set, the folder not reached", { line: "again", why: "offline", at: AT }, "Not syncing just now: this computer cannot reach the Microsoft account. Sync tries again at {TIME}, and nothing on this computer is lost.",
+    "Synchronizacja chwilowo nie działa: ten komputer nie może połączyć się z kontem Microsoft. Ponowi próbę o {TIME}, a na tym komputerze nic nie ginie.", "switch"],
+  ["a try set, the folder not reached, on Google", { line: "again", why: "offline", at: AT }, "Not syncing just now: this computer cannot reach the Google account. Sync tries again at {TIME}, and nothing on this computer is lost.",
+    "Synchronizacja chwilowo nie działa: ten komputer nie może połączyć się z kontem Google. Ponowi próbę o {TIME}, a na tym komputerze nic nie ginie.", "switch", "google"],
+  ["a try set, the service not reached", { line: "again", why: "unreached", at: AT }, "Not syncing just now: this computer cannot reach our service. Sync tries again at {TIME}, and nothing on this computer is lost.",
+    "Synchronizacja chwilowo nie działa: ten komputer nie może połączyć się z naszą usługą. Ponowi próbę o {TIME}, a na tym komputerze nic nie ginie.", "switch"],
+  ["a try set, the relay not reached", { line: "again", why: "relay", at: AT }, "Not syncing just now: this computer cannot reach our service. Sync tries again at {TIME}, and nothing on this computer is lost.",
+    "Synchronizacja chwilowo nie działa: ten komputer nie może połączyć się z naszą usługą. Ponowi próbę o {TIME}, a na tym komputerze nic nie ginie.", "switch"],
+  ["a try set, the service busy", { line: "again", why: "rate", at: AT }, "Not syncing just now: our service is busy. Sync tries again at {TIME}, and nothing on this computer is lost.",
+    "Synchronizacja chwilowo nie działa: nasza usługa jest teraz zajęta. Ponowi próbę o {TIME}, a na tym komputerze nic nie ginie.", "switch"],
+  ["a try set, its time not told", { line: "again", why: "unreached" }, "Not syncing just now: this computer cannot reach our service. Sync tries again by itself, and nothing on this computer is lost.",
+    "Synchronizacja chwilowo nie działa: ten komputer nie może połączyć się z naszą usługą. Sama ponowi próbę, a na tym komputerze nic nie ginie.", "switch"],
+  ["the tries spent, the folder not reached", { line: "spent", why: "offline" }, "Not syncing: this computer cannot reach the Microsoft account. Sync tries again within a day, and nothing on this computer is lost.",
+    "Synchronizacja nie działa: ten komputer nie może połączyć się z kontem Microsoft. Ponowi próbę w ciągu doby, a na tym komputerze nic nie ginie.", "switch"],
+  ["the tries spent, the service busy", { line: "spent", why: "rate" }, "Not syncing: our service is busy. Sync tries again within a day, and nothing on this computer is lost.",
+    "Synchronizacja nie działa: nasza usługa jest teraz zajęta. Ponowi próbę w ciągu doby, a na tym komputerze nic nie ginie.", "switch"],
+];
+/* m4: every row of TRUE_LINES drawn in English (light) and Polish (dark); answers what differed. */
+async function trueLines(pageName) {
+  const bad = [];
+  for (const [lang, theme] of [["en", "light"], ["pl", "dark"]]) {
+    const page = await boot({ page: pageName, lang, theme, view: ON });
+    try {
+      for (const [name, part, en, pl, ctl, provider] of TRUE_LINES) {
+        const view = Object.assign({}, ON, part);
+        const time = await page.evaluate((v, p, lang) => {
+          window.__sgn.signedIn = p; window.__st.view = v; openSettings("account");
+          return v.at ? new Date(v.at).toLocaleTimeString(lang === "pl" ? "pl-PL" : "en-GB", { hour: "2-digit", minute: "2-digit" }) : "";
+        }, view, provider || "microsoft", lang);
+        await sleep(120);
+        const r = await rowOf(page), want = (lang === "pl" ? pl : en).split("{TIME}").join(time);
+        const title = lang === "pl" ? "Synchronizacja między komputerami" : "Sync across computers";
+        if (!r || r.title !== title || r.line !== want || r.ctl !== ctl) bad.push({ lang, name, got: r && { line: r.line, ctl: r.ctl }, want });
+      }
+    } finally { await page.close(); }
+  }
+  return bad;
+}
+
 /* c9a: the first sign-in. Answers what went wrong, or "" where all held. */
 async function firstSignin(pageName) {
   const page = await boot({ page: pageName, view: ON });
@@ -204,14 +255,6 @@ async function main() {
     ["no seat", { ...ON, line: "noseat" }, "Waiting for a seat. Sync resumes when this account holds one again, and nothing on this computer is lost.", "switch"],
     ["held on", { ...ON, held: true }, "Your catalogs, edits and settings on every computer you sign in on.", "fixed"],
   ];
-  const rowOf = page => page.evaluate(() => {
-    const r = document.querySelector('#setBody [data-row="sync"]');
-    if (!r) return null;
-    const btns = [...r.querySelectorAll(".set-seg button")];
-    return { title: (r.querySelector(".set-label") || {}).firstChild ? r.querySelector(".set-label").firstChild.textContent : "", line: (r.querySelector("small") || {}).textContent || "",
-      ctl: !btns.length ? "none" : btns.every(b => b.disabled) && r.querySelector(".sgn-lock") ? "fixed" : btns.some(b => b.disabled) ? "half" : "switch",
-      on: (r.querySelector(".set-seg button.on") || {}).textContent || "" };
-  });
   {
     const page = await boot({ view: ON });
     const bad = [];
@@ -302,6 +345,11 @@ async function main() {
       && alone.text.replace(/Zamknij$/, "").trim() === "Synchronizacja między komputerami jest niedostępna na tym koncie: konto nie ma usługi OneDrive. Na tym komputerze wszystko działa jak dotąd.";
     check(ok, "m3 the row, the question and both bubbles (said once, and not available standing alone) in the copywriter's Polish", ok ? undefined : { r1, q, said: said.text, alone: alone.text });
   }
+
+  /* m4: the row's true lines where sync is not running, each in the copywriter's words in English and Polish, {TIME} the page's own clock
+     reading of the try's time; with the switch, or what stands in its place. */
+  const m4 = await trueLines("etiuda.html");
+  check(!m4.length, "m4 the row's lines where sync is not running, in the copywriter's English and Polish, the switch or its stand-in beside each", m4.length ? m4 : undefined);
 
   /* c9e: account-change question bubble (#eSyncWhose), EN light & PL dark, 440px, hung from #signinBtn, waits while #signinPanel open. */
   const ASK_NOW = { shown: true, line: "ask", on: false, held: false, why: "", since: 0, say: "", askNow: true };
@@ -686,7 +734,10 @@ async function main() {
       [row({ pol: { on: false, held: false } }).line === "off", "turned off"],
       [row({ pol: { on: false, held: true } }).line === "org-off", "policy off"],
       [row({ pol: { on: false, held: false }, owed: true }).line === "ending" && row({ pol: { on: false, held: true }, owed: true }).line === "org-off", "off everywhere, the end owed"],
-      [row({ look: { state: "unavailable", why: "offline" } }).line === "on", "offline says nothing"],
+      [(r => r.line === "spent" && r.why === "offline" && !r.at && r.on === true)(row({ look: { state: "unavailable", why: "offline" } })), "the folder not reached, no try set: spent, its reason"],
+      [(r => r.line === "again" && r.why === "offline" && r.at === now + 60e3)(row({ look: { state: "unavailable", why: "offline" }, again: now + 60e3 })), "the folder not reached, a try set: again, its reason and time"],
+      [["unreached", "relay", "rate"].every(why => (r => r.line === "again" && r.why === why && r.at === now + 120e3)(row({ look: { state: "paused", why }, again: now + 120e3 }))
+        && row({ look: { state: "paused", why } }).line === "spent"), "the service or the relay not reached, or busy: again while a try is set, else spent"],
       [row({ look: { state: "unavailable", why: "no-drive" } }).why === "no-drive", "no drive"],
       [row({ look: { state: "unavailable", why: "consent" } }).line === "unavailable", "the organisation's refusal: not available"],
       [(r => r.line === "ungiven" && r.on === false && r.say === "")(row({ look: { state: "unavailable", why: "ungiven" }, say: "ungiven" })), "the folder's consent never given: off with its switch, nothing said"],
@@ -710,9 +761,30 @@ async function main() {
     const bad = rowBad(ST);
     check(!bad.length, "r1 storeRow's line for each state, and the store's room", bad.length ? bad : undefined);
   }
+  /* r2: the order the lines are said in, each pair as [what, the state with both, the line said, the same without the first, the line then
+     said]; the copywriter's rule among them, that while sync is stopped the stopped line is said over a conflict or the room full. */
+  const orderBad = ST => {
+    const now = Date.UTC(2026, 10, 20), D = 24 * 3600 * 1000;
+    const row = o => ST.storeRow(Object.assign({ provider: "microsoft", pol: { on: true, held: false }, look: { state: "on" }, until: now + D, now, signinRefused: false, conflicts: 0, say: "" }, o));
+    const offline = { look: { state: "unavailable", why: "offline" } }, again = Object.assign({ again: now + 60e3 }, offline);
+    const pairs = [
+      ["the person's off over a passing failure", Object.assign({ pol: { on: false, held: false } }, again), "off", again, "again"],
+      ["no seat over a passing failure", Object.assign({ seatless: true }, again), "noseat", again, "again"],
+      ["a passing failure over a conflict", Object.assign({ conflicts: 2 }, again), "again", { conflicts: 2 }, "conflict"],
+      ["a passing failure over the room full", Object.assign({ full: true }, again), "again", { full: true }, "full"],
+      ["spent over a conflict", Object.assign({ conflicts: 2 }, offline), "spent", { conflicts: 2 }, "conflict"],
+      ["spent over the room full", Object.assign({ full: true }, offline), "spent", { full: true }, "full"],
+      ["a passing failure over the dated pause", Object.assign({ until: now - 4 * D }, again), "again", { until: now - 4 * D }, "paused"],
+    ];
+    return pairs.filter(([, both, top, rest, next]) => row(both).line !== top || row(rest).line !== next).map(([what, both, , rest]) => what + ": " + row(both).line + " then " + row(rest).line);
+  };
+  {
+    const bad = orderBad(ST);
+    check(!bad.length, "r2 the lines' order, the stopped line said over a conflict and the room full", bad.length ? bad : undefined);
+  }
   /* The row's lines, each lifted or moved in a copy of store.cjs, turn r1 red; the product file is never written. */
   for (const [tag, what] of [["row-ask", "the hold's question read as off"], ["row-noseat", "no seat read as on"], ["row-full", "the room full read as on"],
-    ["row-conflict", "the conflict said first, over a pause and the room full"]]) {
+    ["row-conflict", "the conflict said first, over a pause and the room full"], ["row-passing", "a passing failure read as on"]]) {
     const line = "p r1 " + tag + " lifted in a copy of store.cjs turns r1 red (" + what + "), and the product file is never written";
     if (PLANTS_OFF) { skip(line); continue; }
     const before = sha(STORE), text = fs.readFileSync(STORE, "utf8"), lines = text.split("\n"), at = lines.findIndex(l => l.indexOf("/* plant:" + tag + " */") >= 0);
@@ -820,6 +892,20 @@ async function main() {
       check(!r.ok, "p c8o the page's word that the conflict line was opened taken out turns c8o red", detail);
     } else check(false, "p c8o the page's word that the conflict line was opened taken out turns c8o red", detail);
   }
+  /* A page plant on the row's true lines: `from` once in the built page, put in another form, turns m4 red. */
+  const truePlant = async (tag, from, to, what) => {
+    const line = "p m4 " + tag + " in a copy of the built page turns m4 red (" + what + ")";
+    if (PLANTS_OFF) { skip(line); return; }
+    const n = PAGE.split(from).length - 1;
+    let detail = "the plant's anchor is there " + n + " times";
+    if (n === 1) {
+      fs.writeFileSync(path.join(lab, "planted-" + tag + ".html"), PAGE.split(from).join(to));
+      const bad = await trueLines("planted-" + tag + ".html");
+      detail = bad.length ? "red: " + JSON.stringify(bad[0]) : "still held";
+      check(!m4.length && bad.length > 0, line, detail);
+    } else check(false, line, detail);
+  };
+  await truePlant("passing", 'if (s.line === "again" || s.line === "spent") return syncPassing(s, provider);', "", "a passing failure said as sync on");
   if (PLANTS_OFF) skip("p c9d firstSay saying at a look that did not make the store turns c9d red");
   else {
     const before = sha(STORE), text = fs.readFileSync(STORE, "utf8"), from = 'say: look.made === true ? "on" : "", told: true }; /* plant:first-say */';
