@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 454;
+const EXPECTED = 457;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -12004,6 +12004,77 @@ if (partOn("p1165")) {
     }
   } catch (e) {
     check(false, "harness (the leg 1165a): " + (e && e.stack ? e.stack : e));
+  }
+}
+
+/* ---- finding (2): a file put back to bytes received within ECHO_MS after an edit was sent is not an echo ---- */
+async function sceneF2(mod) {
+  const k1 = crypto.randomBytes(32), deskKey = keyPair(true);
+  const tm = await freshTeam([deskKey]);
+  const tag = tm.rt.slice(0, 8), MIN = 60 * 1000;
+  let now = Date.now();
+  const clock = () => now;
+  const keyFor = e => (e === 1 ? k1 : null);
+  const V1 = "guide V1, received\n", V2 = "guide V2, a local edit\n";
+  const a = opened(mod, "f2-a-" + tag, tm, LEAD, "root", { keyFor, sealEpoch: () => 1, clock, connect: null });
+  const b = opened(mod, "f2-b-" + tag, tm, LEAD, "root", { keyFor, sealEpoch: () => 1, clock, connect: null });
+  const desk = opened(mod, "f2-d-" + tag, tm, deskKey, "desk:" + deskKey.keyId, { keyFor, sealEpoch: () => 1, clock, connect: null });
+  const doc1 = teamBody(tm, 1, 1, [member(deskKey)]);
+  put(a.mirror, C.TEAM_NAME, doc1);
+  put(a.mirror, "guide.ec", V1);
+  a.ch.start(); b.ch.start(); desk.ch.start();
+  await a.ch.idle(); await b.ch.idle(); await desk.ch.idle();
+  await once(a); await once(b); await once(desk);
+  const echoInitial = b.prog.considerOutgoing("guide.ec", Buffer.from(V1));
+  const deskEcho = desk.prog.considerOutgoing("guide.ec", Buffer.from(V1));
+  const putsBefore = putsOf(b);
+
+  /* +10 min: b edits V1 -> V2 and sends V2. */
+  now += 10 * MIN;
+  put(b.mirror, "guide.ec", V2);
+  await once(b);
+  const putsAfterEdit = putsOf(b);
+  await once(b);
+  const putsStillEdit = putsOf(b);
+  await once(a);
+  const aSawV2 = read(a.mirror, "guide.ec") === V2;
+
+  /* +20 min (still inside ECHO_MS): b puts V1 back; must be sent, not withheld as an echo. */
+  now += 10 * MIN;
+  put(b.mirror, "guide.ec", V1);
+  const wordPutBack = b.prog.considerOutgoing("guide.ec", Buffer.from(V1));
+  await once(b);
+  const putsAfterBack = putsOf(b);
+  await once(a);
+  const aSawV1Back = read(a.mirror, "guide.ec") === V1;
+
+  await a.ch.stop(); await b.ch.stop(); await desk.ch.stop();
+  return {
+    echoInitialOk: echoInitial.send === false && echoInitial.reason === "echo" && putsBefore === 0,
+    deskEchoOk: deskEcho.send === false && deskEcho.reason === "echo",
+    editedOk: putsAfterEdit === 1 && putsStillEdit === 1 && aSawV2,
+    putBackSent: wordPutBack.send === true && putsAfterBack === 2 && aSawV1Back,
+    detail: JSON.stringify({ echoInitial, deskEcho, putsAfterEdit, putsStillEdit, putsAfterBack, wordPutBack, aSawV2, aSawV1Back }),
+  };
+}
+if (partOn("pF2")) {
+  try {
+    markPart("pF2");
+    const s = await sceneF2(C);
+    check(s.echoInitialOk && s.deskEchoOk,
+      "f2a a received file not changed since landing still counts as an echo and is not sent: "
+      + s.detail);
+    check(s.editedOk && s.putBackSent,
+      "f2b a file edited, sent, and put back within ECHO_MS to the earlier received bytes is sent to the team rather than withheld as an echo: "
+      + s.detail);
+    if (PLANTS_OFF) skip("f2c lifting plant:sent-applied turns f2b red (putting back V1 within ECHO_MS is withheld as an echo)");
+    else {
+      const p = await liftChannel("plant:sent-applied", async mod => !(await sceneF2(mod)).putBackSent);
+      check(p.turned && p.back, "f2c lifting plant:sent-applied turns f2b red (putting back V1 within ECHO_MS is withheld as an echo), and the product file is never written: "
+        + p.detail + ", sha " + (p.back ? "restored" : "differs"));
+    }
+  } catch (e) {
+    check(false, "harness (the leg f2a): " + (e && e.stack ? e.stack : e));
   }
 }
 

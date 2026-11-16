@@ -998,7 +998,7 @@ function createProgram(opts) {
     const want = r.kind === "delete" ? null : sha256(Buffer.from(r.body, "utf8"));
     const sent = base && !base.del ? base.sha : null;
     const edit = have !== want && have !== sent;
-    if (edit) { sentFrom(r, key); persist(); return { ok: true, path: r.path, stale: true, kept: true }; } /* plant:own-edit */
+    if (edit) { delete st.applied[key]; sentFrom(r, key); persist(); return { ok: true, path: r.path, stale: true, kept: true }; } /* plant:own-edit */
     return null;
   }
 
@@ -1708,6 +1708,7 @@ function createProgram(opts) {
       st.sent[k] = rec;
       st.bytes = Math.max(0, st.bytes - (was ? was.size : 0)) + rec.size;
       delete st.refused[k];
+      delete st.applied[k]; /* plant:sent-applied */
     }
     waiting.delete(op.invite ? "invite:" + op.invite.id : k);
     if (op.byInvite) {
