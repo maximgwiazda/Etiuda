@@ -11925,6 +11925,7 @@ let storeSwitchNo = 0;
 async function storeSetNow(what) {
   if (!storeMine()) return storeView();
   if (storePolicyNow().held) return storeView(); /* plant:store-set-held */
+  if (!storeOffered()) return storeView(); /* plant:set-offer */
   if (what !== "on" && what !== "here" && what !== "everywhere") return storeView();
   /* A look still out when the switch moves is no longer this desk's (storeLookNow ours), and on starts a look of its own. */
   storeSwitchNo++;
@@ -12063,6 +12064,7 @@ async function storeAnswerNow(choice) {
   storeMine();
   const s = storeState(), held = signinState().held, who = storeWho(held);
   if (!who || !storeHeld()) return { ok: false, choice: "", folder: "", view: storeView() };
+  if (!storeOffered()) return { ok: false, choice: "", folder: "", view: storeView() }; /* plant:answer-offer */
   if (choice === "later") {
     storeNotNow.add(who); /* plant:answer-notnow */
     tellStore();

@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 193;
+const EXPECTED = 196;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -1562,6 +1562,33 @@ async function noOfferScene(src) {
   return { ok, detail: brief({ out, ended }) };
 }
 
+/* (n1) WITHOUT THE OFFER THE SHELL'S OWN HANDLERS REFUSE: the account question's answer and the switch are refused by the shell itself,
+   whatever the page can reach: Start from my account sets nothing aside (the catalog where it was, no Set aside folder, desk.json as it
+   was), and This computer turns nothing off (store.json unchanged). */
+async function noOfferHandlersScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world, UD = r.shell.UD;
+  const dir = T.storeSyncFolder();
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "kept.ec"), "KEPT\n");
+  T.patchDesk(JSON.stringify({ eTheme: "dark" }));
+  /* The same account, its offer gone: the switch refused by the shell. */
+  T.signinState().held.storeOffer = false;
+  const storeA = fs.readFileSync(path.join(UD, "store.json"), "utf8");
+  await T.storeSetNow("here");
+  const storeSame = fs.readFileSync(path.join(UD, "store.json"), "utf8") === storeA;
+  const heldA = T.signinState().held;
+  T.signinOutNow();
+  seatAnother(T, w, heldA);
+  T.signinState().held.storeOffer = false;
+  await T.storeTurn();
+  const deskBefore = fs.readFileSync(path.join(UD, "desk.json"), "utf8");
+  const ans = await T.storeAnswerNow("start");
+  const aside = fs.existsSync(path.join(UD, "Set aside"));
+  const kept = fs.existsSync(path.join(dir, "kept.ec")), deskSame = fs.readFileSync(path.join(UD, "desk.json"), "utf8") === deskBefore;
+  const ok = !!ans && ans.ok === false && !aside && kept && deskSame && storeSame;
+  return { ok, detail: brief({ answer: ans && ans.ok, aside, kept, deskSame, storeSame }) };
+}
+
 /* (h) Each folder page in both languages carries its words whole, and the sign-in's own seat page is as it was. */
 async function folderPagesScene(src) {
   const { T } = boot(src);
@@ -2488,6 +2515,7 @@ const LEGS = [
   ["x6k", answerStartKeptScene, "a set-aside whose later step fails and whose move back of the catalog, or of the store folder, fails keeps that whole in the set-aside folder, which stays, the log names it, the answer carries it and the button opens it; where every move back succeeds the folder goes"],
   ["x6r", openAfterRestartScene, "after a restart the button's channel opens the desk's single dated folder, or Set aside itself when a second or hand-made dated folder is beside it; all removed it answers gone, and a name of another shape in store.json is ignored"],
   ["x6l", asideLinkScene, "a link under Set aside bearing the name store.json keeps is never opened as the set-aside folder: Open this folder answers gone; a real folder of that name is opened"],
+  ["n1", noOfferHandlersScene, "without the offer the shell refuses the account question's answer and the switch itself: nothing set aside, the catalog and desk.json as they were, store.json unchanged"],
   ["n0", noOfferScene, "no store offered by the service: each provider's sign-in asks what it asked before sync, one request, nothing after the seat, no folder scope, no app-folder call, no key file, no grant, no look, no row; with the offer both ask the folder apart; a renewal without the offer ends it"],
   ["z6", signinHourScene, "a look more than an hour after the last sign-in renews it first and is granted, on; with the renewal unreached the refusal is tried again within minutes, the row not saying refused"],
   ["z11", signedOutScene, "a change on the desk arms the merge, a sign out clears it, and a change made signed out arms none and changes nothing of the sync state"],
@@ -2611,6 +2639,8 @@ const PLANTS = [
   ["x6r", swap("    s.aside ? { aside: s.aside } : {}), null, 1)", "    {}), null, 1)"), "the set-aside folder's name not kept in store.json, so a restart forgets it"],
   ["x6r", swap(".test(d.aside) ? d.aside : \"\" }; /* plant:store-aside-name */", ".test(d.aside) || ok && typeof d.aside === \"string\" ? d.aside : \"\" }; /* plant:store-aside-name */"), "any name in store.json read as the set-aside folder's"],
   ["x6l", swap("    try { return fs.lstatSync(path.join(root, n)).isDirectory(); } catch { return false; } /* plant:aside-lstat */", "    try { return fs.statSync(path.join(root, n)).isDirectory(); } catch { return false; } /* plant:aside-lstat */"), "the dated folder judged by a stat that follows a link, so a link named like it is opened as it"],
+  ["n1", swap("  if (!storeOffered()) return { ok: false, choice: \"\", folder: \"\", view: storeView() }; /* plant:answer-offer */\n", ""), "the answer taken without the offer, so Start sets the desk aside"],
+  ["n1", swap("  if (!storeOffered()) return storeView(); /* plant:set-offer */\n", ""), "the switch moved without the offer"],
   ["n0", swap("    const storeOffer = j.storeOffer === true; /* plant:offer-read */", "    const storeOffer = true; /* plant:offer-read */"), "every answer read as an offer"],
   ["n0", swap("    get store() { return storeOn() && storeOffered(); }, /* plant:io-store-offer */", "    get store() { return storeOn(); }, /* plant:io-store-offer */"), "the sign-in's folder step and the renewal's folder scope asked without the offer"],
   ["n0", swap("  if (!storeOffered()) { storeSyncStop(); return null; } /* plant:look-offer */", "  /* plant:look-offer */"), "a look without the offer"],
