@@ -6,14 +6,16 @@
  * shrunk and printed with its seed.
  *     node tests/desk-sync-sim.mjs                  the fixed seeds, then 300 seeds from 1
  *     node tests/desk-sync-sim.mjs --seeds 2000      more seeds; --from <n> starts elsewhere
- *     node tests/desk-sync-sim.mjs --seed 17         one walk, every step printed; --steps 0,3,9 replays a shrunk one
+ *     node tests/desk-sync-sim.mjs --seed 17         one walk, every step printed; --steps 0,3,9 replays a shrunk one, --shrink shrinks it
+ *     node tests/desk-sync-sim.mjs --hunt 3000       every failing seed of 3000, one line each
+ * Layer 2, enrolment (below), runs after it: --enrol-seed <n> prints one interleaving, --enrol-seeds <n> runs more, --layer 1 or 2 one alone.
  * Node builtins only, no window; nothing is written outside one scratch folder it makes and removes. */
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
@@ -35,7 +37,7 @@ function skip(line) { skipped++; console.log("  NOT RUN  " + line); }
 
 const SYNC_PATH = path.join(ROOT, "shell", "sync", "sync.cjs");
 const REF = require(SYNC_PATH);
-const ST = require(path.join(ROOT, "shell", "sync", "store.cjs"));
+let ST = require(path.join(ROOT, "shell", "sync", "store.cjs"));
 /* The module the walk runs; REF stays the product's own, so a plant never judges itself. */
 let SY = REF;
 
@@ -646,8 +648,9 @@ const FIXED = [
   { seed: 2002, inv: "c", what: "third pass 11 (can follow): a catalog saved signed out after another account was seated is merged into the first account's mirror" },
 ];
 
-function main() {
+async function main() {
   const t0 = Date.now();
+  if (Object.keys(ARGS).some(a => a.startsWith("enrol-")) || ARGS.layer === "2") { await layer2(); return; }
   if (ARGS.seed !== undefined) {
     const seed = Number(ARGS.seed), all = stepsOf(seed, MAX_STEPS);
     const keep = ARGS.steps ? new Set(String(ARGS.steps).split(",").map(Number)) : null;
@@ -695,6 +698,8 @@ function main() {
       + short.map(describe).join(", ") + ": " + (again ? again.detail : f.r.detail) + "; replay: " + replay(f.seed, short));
   }
   plants(greens);
+  console.log("  layer 1 wall-clock " + (Date.now() - t0) + " ms");
+  if (ARGS.layer !== "1") await layer2();
   console.log("  wall-clock " + (Date.now() - t0) + " ms");
 }
 
@@ -742,9 +747,289 @@ function plants(green) {
   }
 }
 
-try { main(); }
+/* ======== LAYER 2, ENROLMENT: shell/sync/store.cjs storeLook on two or three computers at once, over one folder stand-in, the licence
+   service standing in, and the relay itself in memory (relay/worker.mjs on relay/test/stand-ins.cjs, as tests/desk-store.mjs runs it).
+   Every request a look makes waits at a gate, and a seeded scheduler lets one through at a time, so the looks interleave at every
+   await. The look is run as storeLookRun runs it (shell/main.js): each step asked only while the look's account and switch stand
+   (ours), and `made` kept by its rule. Seeded faults: a folder request unreached, the switch moved during a look. After the racing
+   looks, each computer still on looks once more alone, as its next renewal would; then three invariants:
+   (g) believed enrolled: a look that says on finds its computer enrolled at the relay as it answers, and after the calm looks every
+       computer on is enrolled at the relay and listed in the folder's key file;
+   (h) the switch: no look writes keys, keeps keys or asks the service or relay after the switch moved under it;
+   (i) made kept: a computer whose fresh key file stands in the folder keeps it as made until a look of its own finds it on. ---- */
+let RC = null, RS = null, RK = null, RW = null;
+async function relayLoad() {
+  RC = require(path.join(ROOT, "relay", "core.cjs"));
+  RS = require(path.join(ROOT, "relay", "test", "stand-ins.cjs"));
+  RK = require(path.join(ROOT, "relay", "test", "grant-kit.cjs"));
+  const WORKER = await import(pathToFileURL(path.join(ROOT, "relay", "worker.mjs")).href);
+  RW = WORKER.routeWith(RK.ROOTS, env => env.NOW());
+}
+const CODE = "ABCDEFGHJKMNPQRS", DAY = 24 * 3600e3;
+const INVARIANTS2 = { g: "believed enrolled", h: "the switch", i: "made kept", x: "the looks ran" };
+const signWith = (privateKey, bytes) => crypto.sign(null, bytes, privateKey).toString("hex");
+const sKey = seed => crypto.createPrivateKey({ key: Buffer.concat([PKCS8, Buffer.from(seed, "hex")]), format: "der", type: "pkcs8" });
+const via = at => RK.delegationFor(at, { fields: { may: ["licence", "relay-grant"] } });
+const MODEL2 = { lookOurs: true };
+async function relayCall(R, method, p, json) {
+  const body = json === undefined ? undefined : JSON.stringify(json);
+  const res = await RW.fetch(new Request("https://relay.test/relay/v1" + p, { method, headers: { "content-type": "application/json" }, body, duplex: "half" }), R.env);
+  return { status: res.status, json: await res.json().catch(() => null) };
+}
+/* The relay's answer as storeRelayPost reads it: ok, or its error, "relay" where it says none. */
+const relayAnswer = r => (r.status === 200 ? { ok: true } : { ok: false, why: r.json && typeof r.json.error === "string" ? r.json.error.slice(0, 40) : "relay" });
+async function relayOp(e, c, what, keys, arg) {
+  const R = e.R, t = R.clock.now;
+  if (what === "create") {
+    const sPub = ST.pubOf(keys.s);
+    return relayAnswer(await relayCall(R, "POST", "/teams", { rt: keys.rt, lead: { keyId: sPub, pub: sPub }, t, grant: arg, sig: signWith(sKey(keys.s), RC.create2Bytes(keys.rt, sPub, t, arg)) }));
+  }
+  if (what === "renew") return relayAnswer(await relayCall(R, "POST", "/t/" + keys.rt + "/grant", { grant: arg }));
+  const list = keys.devices.map(d => ({ id: d.id, pub: d.pub, desk: d.desk }));
+  return relayAnswer(await relayCall(R, "POST", "/t/" + keys.rt + "/devices", { keys: list, rev: keys.rev, t, sig: signWith(sKey(keys.s), RC.devicesBytes(keys.rt, keys.rev, t, list)),
+    seat: arg, by: { pub: c.me.pub, sig: signWith(c.me.privateKey, RC.storeDevicesBytes(keys.rt, keys.rev, t, list)) } }));
+}
+/* The licence service, as tests/desk-sync.mjs stands it in: a grant that says it replaces ends the person's other stores. */
+async function grantOp(e, c, rt, sPub, extra) {
+  const now = e.R.clock.now;
+  if (extra && extra.replace === true) for (const old of [...e.svcKept].filter(x => x !== rt)) {
+    const n = { kind: "etiuda-service-notice", format: 1, what: "store-end", rt: old, code: CODE, issued: now, via: via(now), sig: { alg: "ed25519", keyId: RK.DELEGATE.id, value: "" } };
+    n.sig.value = signWith(RK.DELEGATE.privateKey, RC.noticeBytes(n));
+    await relayCall(e.R, "POST", "/t/" + old + "/notice", { notice: n });
+    e.svcKept.delete(old);
+  }
+  e.svcKept.add(rt);
+  const g = { kind: "etiuda-store-grant", format: 1, lead: sPub, code: CODE, issued: now, until: now + 30 * DAY, paid: true, via: via(now), sig: { alg: "ed25519", keyId: RK.DELEGATE.id, value: "" } };
+  g.sig.value = signWith(RK.DELEGATE.privateKey, RC.grantBytes(g));
+  const cert = { kind: "etiuda-store-certificate", format: 1, desk: c.me.pub, code: CODE, issued: now, until: now + DAY, via: RK.delegationFor(now, { fields: { may: ["licence"] } }),
+    sig: { alg: "Ed25519", keyId: RK.DELEGATE.id, value: "" } };
+  cert.sig.value = signWith(RK.DELEGATE.privateKey, RC.storeCertBytes(cert));
+  return { grant: g, store: cert };
+}
+/* OneDrive's App Folder, as tests/desk-store.mjs stands it in: no token is no answer, a create over a file is refused. */
+function folderAsk(e, c, method, url, headers, body, late) {
+  const json = (status, o) => ({ status, bytes: Buffer.from(JSON.stringify(o)) });
+  if (e.faulty && e.r.chance(e.faultP)) { e.trace.push("c" + c.i + " folder " + method + " unreached"); throw new TypeError("fetch failed"); }
+  if (!/^Bearer \S+$/.test(String(headers && headers.authorization))) return json(401, { error: { code: "InvalidAuthenticationToken" } });
+  if (method === "GET" && url === ST.GRAPH) return json(200, { id: "approot" });
+  const file = ST.GRAPH + ":/" + ST.KEY_FILE + ":/content";
+  if (method === "GET" && url === file) { e.trace.push("c" + c.i + " folder read " + folderSays(e.folder.text)); return e.folder.text === null ? json(404, { error: { code: "itemNotFound" } }) : { status: 200, bytes: Buffer.from(e.folder.text) }; }
+  if (method === "PUT" && url.startsWith(file)) {
+    if (/conflictBehavior=fail$/.test(url) && e.folder.text !== null) { e.trace.push("c" + c.i + " folder create refused"); return json(409, { error: { code: "nameAlreadyExists" } }); }
+    const was = e.folder.text, text = Buffer.from(body).toString("utf8"), k = ST.keyRead(text);
+    e.folder.text = text;
+    e.trace.push("c" + c.i + " folder write " + folderSays(text));
+    if (k && !e.seenRts.has(k.rt)) e.madeBy.set(k.rt, c.i);
+    if (k) e.seenRts.add(k.rt);
+    if (late) e.effects.push("c" + c.i + " wrote the key file after the switch moved");
+    return json(was === null ? 201 : 200, { id: "f" });
+  }
+  return json(400, { error: { code: "invalidRequest" } });
+}
+function folderSays(text) {
+  if (text === null) return "none";
+  if (ST.endedRead(text)) return "ended";
+  const k = ST.keyRead(text);
+  return k ? k.rt.slice(0, 6) + " rev " + k.rev + " [" + k.devices.map(d => d.id.slice(2, 6)).join(",") + "]" : "unreadable";
+}
+const gated = (e, c, label, fn) => new Promise((res, rej) => e.pending.push({ c, label, fn, res, rej }));
+const deviceIds = keys => "[" + keys.devices.map(d => d.id.slice(2, 6)).join(",") + "] rev " + keys.rev;
+/* One look as storeLookRun runs it; null where the switch moved under it, as it answers. */
+async function lookRun(e, c) {
+  const at = c.switchNo, ours = () => c.switchNo === at && c.on, moved = () => c.switchNo !== at;
+  const step = (label, fn, refused) => async (...a) => {
+    if (MODEL2.lookOurs && !ours()) return refused; /* model-plant:store-look-steps */
+    const late = moved();
+    const r = await gated(e, c, label, () => fn(...a));
+    if (late) e.effects.push("c" + c.i + " " + label + " after the switch moved");
+    return r;
+  };
+  const io = {
+    folder: ST.folderFor("microsoft", { ask: (m, u, h, b) => { const late = moved(); return gated(e, c, "folder " + m, () => folderAsk(e, c, m, u, h, b, late)); },
+      token: () => (!MODEL2.lookOurs || ours() ? "access-" + c.i : "") }),
+    local: () => clone(c.sealed),
+    keep: k => { if (MODEL2.lookOurs && !ours()) return; if (moved()) e.effects.push("c" + c.i + " kept keys after the switch moved"); c.sealed = clone(k); },
+    grant: step("grant", async (rt, sPub, extra) => { const g = await grantOp(e, c, rt, sPub, extra); e.trace.push("c" + c.i + " grant " + rt.slice(0, 6) + (extra && extra.replace ? " replacing" : "")); return g; }, { why: "unreached" }),
+    relay: {
+      create: step("relay create", async (k, g) => { const r = await relayOp(e, c, "create", k, g); e.trace.push("c" + c.i + " relay create " + k.rt.slice(0, 6) + " " + (r.ok ? "ok" : r.why)); return r; }, { ok: false, why: "relay" }),
+      renew: step("relay renew", async (k, g) => { const r = await relayOp(e, c, "renew", k, g); e.trace.push("c" + c.i + " relay renew " + k.rt.slice(0, 6) + " " + (r.ok ? "ok" : r.why)); return r; }, { ok: false, why: "relay" }),
+      devices: step("relay devices", async (k, cert) => { const r = await relayOp(e, c, "devices", k, cert); e.trace.push("c" + c.i + " relay devices " + deviceIds(k) + " " + (r.ok ? "ok" : r.why)); return r; }, { ok: false, why: "relay" }),
+    },
+    me: { id: c.me.id, pub: c.me.pub, desk: c.me.desk }, url: "https://relay.test/relay/v1",
+    rand: n => Buffer.from(Array.from({ length: n }, () => e.r.int(256))), fresh: c.fresh, made: c.made,
+  };
+  const look = await ST.storeLook(io);
+  if (!ours()) return null;
+  c.made = look.state === "paused" && look.made === true && look.keys ? look.keys.rt : look.state === "on" ? "" : c.made;
+  if (look.state === "ended") { c.on = false; c.sealed = null; }
+  if (look.state === "on") { c.fresh = false; c.onFor.add(look.keys.rt); }
+  c.last = look;
+  return look;
+}
+function afterLook(e, c, look) {
+  e.trace.push("c" + c.i + " look " + (look ? look.state + (look.why ? " " + look.why : "") + (look.keys ? " " + look.keys.rt.slice(0, 6) : "") : "dropped, the switch moved") + (c.made ? ", made " + c.made.slice(0, 6) : ""));
+  if (!look) return;
+  if (look.state === "on") {
+    const row = e.R.stores.get(look.keys.rt);
+    if (!row || !row.get("dev:" + c.me.id)) e.fails.push({ inv: "g", detail: "c" + c.i + "'s look says on for " + look.keys.rt.slice(0, 6) + " and the relay does not hold it enrolled" });
+  }
+  const k = e.folder.text ? ST.keyRead(e.folder.text) : null;
+  for (const [rt, by] of e.madeBy) if (by === c.i && k && k.rt === rt && !c.onFor.has(rt) && c.made !== rt)
+    e.fails.push({ inv: "i", detail: "c" + c.i + " made " + rt.slice(0, 6) + ", which stands in the folder, and its look answered " + look.state + (look.why ? " " + look.why : "") + " keeping made as " + JSON.stringify(c.made.slice(0, 6)) });
+}
+async function race(e, cs) {
+  let live = cs.length, idle = 0;
+  const runs = cs.map(c => lookRun(e, c).then(look => afterLook(e, c, look), err => { e.fails.push({ inv: "x", detail: "c" + c.i + "'s look threw " + (err && err.stack ? err.stack.split("\n").slice(0, 3).join(" | ") : err) }); })
+    .finally(() => { live--; }));
+  while (live > 0) {
+    await new Promise(r => setImmediate(r));
+    if (!e.pending.length) { if (++idle > 200) { e.fails.push({ inv: "x", detail: "a look waits on nothing" }); break; } continue; }
+    idle = 0;
+    e.ops++;
+    if (e.switchOp === e.ops && e.comps[e.switchWho].on) { e.comps[e.switchWho].switchNo++; e.comps[e.switchWho].on = false; e.trace.push("c" + e.switchWho + " switch moved"); }
+    const op = e.pending.splice(e.faulty ? e.r.int(e.pending.length) : 0, 1)[0];
+    e.R.clock.now += 1000;
+    try { op.res(await op.fn()); } catch (err) { op.rej(err); }
+  }
+  await Promise.all(runs);
+}
+async function enrolWalk(seed) {
+  const r = rngOf((seed * 2654435761) >>> 0);
+  const R = RS.relayEnv({ roots: RK.ROOTS });
+  R.clock.now = T0;
+  const e = { seed, r, R, folder: { text: null }, pending: [], effects: [], fails: [], trace: [], madeBy: new Map(), seenRts: new Set(), svcKept: new Set(),
+    faulty: false, faultP: 0, ops: 0, switchOp: -1, switchWho: 0, comps: [] };
+  const n = 2 + r.int(2);
+  for (let i = 0; i < n; i++) e.comps.push({ i, me: keyFrom(Buffer.from(sha("enrol " + seed + " " + i), "hex")), sealed: null, made: "", switchNo: 0, on: true, fresh: false, onFor: new Set(), last: null });
+  e.scenario = r.pick(["first", "join", "ended", "gone"]);
+  e.trace.push("scenario " + e.scenario + ", " + n + " computers");
+  if (e.scenario === "join" || e.scenario === "ended") {
+    await race(e, [e.comps[0]]);
+    if (e.scenario === "ended" && n > 2) await race(e, [e.comps[1]]);
+    if (e.scenario === "ended") {
+      const k = ST.keyRead(e.folder.text);
+      e.folder.text = ST.endedText(k.rt);
+      for (const c of e.comps) c.fresh = r.chance(0.5);
+      e.trace.push("turned off everywhere; fresh here: " + (e.comps.filter(c => c.fresh).map(c => "c" + c.i).join(",") || "none"));
+    }
+  }
+  if (e.scenario === "gone") {
+    const k = ST.freshKeys(nb => Buffer.from(Array.from({ length: nb }, () => r.int(256))), "https://relay.test/relay/v1");
+    k.devices = e.comps.slice(0, 2).map(c => ({ id: c.me.id, pub: c.me.pub, desk: c.me.desk }));
+    k.rev = 2;
+    e.folder.text = ST.keyText(k);
+    e.seenRts.add(k.rt);
+    for (const c of e.comps.slice(0, 2)) c.sealed = clone(k);
+    e.trace.push("a store the relay swept: " + folderSays(e.folder.text));
+  }
+  e.faulty = true;
+  e.faultP = [0, 0.1, 0.25][r.int(3)];
+  e.switchOp = r.chance(0.3) ? 1 + r.int(14) : -1;
+  e.switchWho = r.int(n);
+  await race(e, e.comps.filter(c => c.on));
+  if (e.effects.length) e.fails.push({ inv: "h", detail: e.effects[0] });
+  e.faulty = false;
+  for (const c of e.comps) if (c.on) await race(e, [c]);
+  const k = e.folder.text ? ST.keyRead(e.folder.text) : null;
+  for (const c of e.comps) {
+    if (!c.on || !c.last || c.last.state !== "on") continue;
+    const rt = c.last.keys.rt, row = R.stores.get(rt);
+    if (!row || !row.get("dev:" + c.me.id)) e.fails.push({ inv: "g", detail: "after the calm looks c" + c.i + " says on for " + rt.slice(0, 6) + " and the relay does not hold it enrolled" });
+    if (!k || k.rt !== rt || !k.devices.some(d => d.pub === c.me.pub)) e.fails.push({ inv: "g", detail: "after the calm looks c" + c.i + " says on for " + rt.slice(0, 6) + " and the folder's key file does not list it (" + folderSays(e.folder.text) + ")" });
+  }
+  return e;
+}
+/* THE FIXED ENROLMENT SEEDS, as FIXED above. */
+const FIXED2 = [
+  { seed: 50, inv: "g", what: "third pass 6: two computers enrol from one folder read; the later's list is refused as replay-rev, taken as enrolled, and it says on" },
+  { seed: 22, inv: "i", what: "third pass 8: a store the relay swept is made afresh, the key file's read-back fails, and made is lost" },
+  { seed: 16, inv: "i", what: "third pass 8: the same over an ended mark, sync turned on here" },
+];
+async function layer2() {
+  const t0 = Date.now();
+  await relayLoad();
+  if (ARGS["enrol-seed"] !== undefined) {
+    const e = await enrolWalk(Number(ARGS["enrol-seed"]));
+    for (const l of e.trace) console.log("    " + l);
+    check(!e.fails.length, "enrolment seed " + e.seed + " holds every invariant" + (e.fails.length ? ": (" + e.fails[0].inv + ") " + INVARIANTS2[e.fails[0].inv] + ": " + e.fails[0].detail : ""));
+    return;
+  }
+  if (ARGS["enrol-hunt"] !== undefined) {
+    for (let seed = 1; seed <= Number(ARGS["enrol-hunt"]); seed++) {
+      const e = await enrolWalk(seed);
+      if (e.fails.length) console.log("  enrolment seed " + seed + " " + e.scenario + " (" + e.fails[0].inv + "): " + e.fails[0].detail.slice(0, 200));
+    }
+    return;
+  }
+  for (const f of FIXED2) {
+    const e = await enrolWalk(f.seed), x = e.fails[0];
+    check(!x, "fixed enrolment seed " + f.seed + " (" + f.what + ") holds every invariant" + (x ? ": (" + x.inv + ")" + (x.inv === f.inv ? " as recorded" : ", not (" + f.inv + ") as recorded") + ": " + x.detail : ""));
+  }
+  const count = Number(ARGS["enrol-seeds"] || 200), firsts = {}, counts = {}, greens = [];
+  for (let seed = 1; seed <= count; seed++) {
+    const e = await enrolWalk(seed);
+    if (!e.fails.length) { greens.push(seed); continue; }
+    for (const inv of new Set(e.fails.map(f => f.inv))) { counts[inv] = (counts[inv] || 0) + 1; if (!firsts[inv]) firsts[inv] = e; }
+  }
+  console.log("  " + count + " enrolment seeds in " + (Date.now() - t0) + " ms");
+  for (const inv of Object.keys(INVARIANTS2)) {
+    const e = firsts[inv];
+    if (!e) { check(true, "(" + inv + ") " + INVARIANTS2[inv] + " holds on every enrolment seed"); continue; }
+    check(false, "(" + inv + ") " + INVARIANTS2[inv] + " broken on " + counts[inv] + " enrolment seed(s); the first, seed " + e.seed + ": " + e.fails.find(f => f.inv === inv).detail
+      + "; its order: " + e.trace.join("; ") + "; replay: node tests/desk-sync-sim.mjs --enrol-seed " + e.seed);
+  }
+  await plants2(greens);
+}
+/* For each enrolment invariant, one fault in a copy of shell/sync/store.cjs (or in the walk's stand-in of storeLookRun's ours() steps,
+   which live in main.js) turns it red on a seed that holds every invariant unplanted. */
+async function plants2(green) {
+  const STORE_PATH = path.join(ROOT, "shell", "sync", "store.cjs");
+  const product = fs.readFileSync(STORE_PATH, "utf8"), digest = sha(product);
+  const swap = (from, to) => text => (text.split(from).length === 2 ? text.split(from).join(to) : null);
+  const PLANTS = [
+    ["g", "a relay that refuses this computer's list for any reason taken as enrolled", swap("if (!d.ok && d.why !== \"replay-rev\") return", "if (false) return")],
+    ["h", "the look's steps asked whatever the switch did (main.js store-look-steps, in the walk's stand-in)", "model:lookOurs"],
+    ["i", "a fresh store never named made", swap("made = keys.rt === fresh.rt; /* plant:made */", "made = false; /* plant:made */")],
+  ];
+  let n = 0;
+  const kept = ST;
+  for (const [inv, what, change] of PLANTS) {
+    const line = "plant (" + inv + ") " + INVARIANTS2[inv] + ": " + what + ", turns it red on an enrolment seed that holds every invariant unplanted, and the product file is never written";
+    if (PLANTS_OFF) { skip(line); continue; }
+    let bit = false, detail = "no seed of " + green.length + " that hold every invariant unplanted turned it red";
+    try {
+      if (typeof change === "string") MODEL2[change.slice(6)] = false;
+      else {
+        const next = change(product);
+        if (next === null) throw new Error("the plant line is absent");
+        const dir = path.join(WORK, "plant2-" + (++n));
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, "store.cjs"), next);
+        ST = require(path.join(dir, "store.cjs"));
+      }
+      for (const seed of green) {
+        const e = await enrolWalk(seed), x = e.fails.find(f => f.inv === inv);
+        if (!x) continue;
+        bit = true;
+        detail = "seed " + seed + " holds every invariant unplanted and breaks it planted: " + x.detail;
+        break;
+      }
+    } catch (err) { detail = err && err.message ? err.message : String(err); }
+    finally { ST = kept; MODEL2.lookOurs = true; }
+    check(bit && sha(fs.readFileSync(STORE_PATH, "utf8")) === digest, line + ": " + detail);
+  }
+}
+
+try { await main(); }
 catch (e) { check(false, "harness: " + (e && e.stack ? e.stack : e)); }
 try { fs.rmSync(WORK, { recursive: true, force: true }); } catch { /* a temp folder */ }
-console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed);
+/* The whole run's checks: each fixed seed, each invariant over the random seeds, and each plant, of both layers. */
+const EXPECTED = FIXED.length + Object.keys(INVARIANTS).length + 6 + FIXED2.length + Object.keys(INVARIANTS2).length + 3;
+const whole = !Object.keys(ARGS).some(a => ["seed", "hunt", "layer", "enrol-seed", "enrol-hunt"].indexOf(a) >= 0);
+console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + (whole ? " expected=" + EXPECTED : ""));
+if (whole && asserted + skipped < EXPECTED) {
+  console.log("SUITE DID NOT COMPLETE: " + (asserted + skipped) + " of " + EXPECTED + " checks ran");
+  process.exit(78);
+}
 console.log(failed ? "  RESULT: FAIL " + failed + " of " + asserted : "  RESULT: ok " + asserted + " check(s)");
 process.exit(Math.min(failed, 63));
