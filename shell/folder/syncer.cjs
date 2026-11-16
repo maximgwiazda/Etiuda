@@ -248,28 +248,101 @@ const normRel = (rel) => String(rel || "").replace(/\\/g, "/");
 const OUTBOX_NAME = ".outbox.json";
 const OUTBOX_KIND = "etiuda-folder-outbox";
 const PRIMED_NAME = ".primed";
-/* Null where the outbox exists or cannot be read (any failure other than ENOENT): a caller must not take that for
-   "nothing owed", nor write an empty outbox over it. Off the main thread, a busy read tries again briefly as renameBusy does. */
-function readOutbox(mirror, io, rethrowBusy) {
+const OUTBOX_CAN_PASS = ["EPERM", "EACCES", "EBUSY", "EMFILE", "ENFILE", "EAGAIN"];
+const OUTBOX_UNREAD_BOUND_MS = 3 * 60 * 1000;
+function asideOutboxPath(file, io, nowMs) {
+  const d = new Date(Number.isFinite(nowMs) ? nowMs : Date.now());
+  const p = n => String(n).padStart(2, "0");
+  const day = d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+  const existsFn = io && typeof io.exists === "function" ? q => io.exists(q) : q => fs.existsSync(q);
+  for (let i = 1; ; i++) {
+    const candidate = file + "." + day + (i === 1 ? "" : "." + i) + ".aside";
+    let taken = false;
+    try { taken = existsFn(candidate); } catch { taken = false; }
+    if (!taken) return candidate;
+  }
+}
+function clearOutboxUnread(track) {
+  if (!track) return;
+  track.since = null;
+  track.said = false; /* plant:outbox-unread-clear */
+}
+function noteOutboxUnread(track, file, code) {
+  if (!track) return;
+  const now = track.clock();
+  if (track.since === null) track.since = now;
+  let sayUnread = false;
+  if (!track.said && now - track.since > OUTBOX_UNREAD_BOUND_MS) sayUnread = true; /* plant:outbox-unread-bound */
+  if (sayUnread) {
+    track.said = true;
+    track.logger("etiuda: " + file + " could not be read (" + code + ") for over " + (OUTBOX_UNREAD_BOUND_MS / 60000)
+      + " minutes, so updates from the team's folder wait until it can be read");
+  }
+}
+/* Null where the outbox exists or cannot be read (any OS failure other than ENOENT): a caller must not take that for
+   "nothing owed", nor write an empty outbox over it. Off the main thread, a transient refusal tries again briefly as
+   renameBusy does. A file that reads and is not an outbox is moved aside under a dated name beside it, logged once,
+   and read as empty. */
+function readOutbox(mirror, io, rethrowBusy, track) {
   const file = path.join(mirror, OUTBOX_NAME);
   const tries = isMainThread ? 1 : 20;
   for (let i = 1; ; i++) {
+    let raw;
     try {
-      const doc = JSON.parse(io.readFile(file, "utf8"));
-      if (doc && doc.kind === OUTBOX_KIND && doc.owe && typeof doc.owe === "object") {
-        return { owe: doc.owe, floors: doc.floors && typeof doc.floors === "object" ? doc.floors : {},
-          back: doc.back && typeof doc.back === "object" ? doc.back : {} };
-      }
-      return null;
+      raw = io.readFile(file, "utf8");
     } catch (e) {
-      if (e && e.code === "ENOENT") return { owe: {}, floors: {}, back: {} };
-      if (!isMainThread && i < tries && e && RENAME_BUSY.indexOf(e.code) >= 0) {
+      if (e && e.code === "ENOENT") {
+        clearOutboxUnread(track);
+        return { owe: {}, floors: {}, back: {} };
+      }
+      const code = (e && e.code) || "EIO";
+      const canPass = OUTBOX_CAN_PASS.indexOf(code) >= 0;
+      if (!isMainThread && i < tries && canPass) {
         pause(RENAME_WAIT_MS);
         continue;
       }
-      if (rethrowBusy && e && RENAME_BUSY.indexOf(e.code) >= 0) throw e; /* plant:outbox-read-retry */
+      if (rethrowBusy && canPass) throw e; /* plant:outbox-read-retry */
+      noteOutboxUnread(track, file, code);
       return null;
     }
+    let doc = null;
+    try { doc = JSON.parse(typeof raw === "string" ? raw : String(raw)); } catch { doc = null; }
+    const valid = !!doc && typeof doc === "object" && !Array.isArray(doc)
+      && doc.kind === OUTBOX_KIND && (doc.v === undefined || doc.v === 1)
+      && !!doc.owe && typeof doc.owe === "object" && !Array.isArray(doc.owe);
+    if (valid) {
+      clearOutboxUnread(track);
+      return {
+        owe: doc.owe,
+        floors: doc.floors && typeof doc.floors === "object" && !Array.isArray(doc.floors) ? doc.floors : {},
+        back: doc.back && typeof doc.back === "object" && !Array.isArray(doc.back) ? doc.back : {}
+      };
+    }
+    if (!isMainThread) return null;
+    let setAside = false;
+    setAside = true; /* plant:outbox-damaged-aside */
+    if (!setAside) return null;
+    const nowMs = track ? track.clock() : Date.now();
+    const aside = asideOutboxPath(file, io, nowMs);
+    const renameFn = io && typeof io.rename === "function" ? (a, b) => io.rename(a, b) : (a, b) => fs.renameSync(a, b);
+    try {
+      renameFn(file, aside);
+    } catch (e) {
+      if (e && e.code === "ENOENT") {
+        clearOutboxUnread(track);
+        return { owe: {}, floors: {}, back: {} };
+      }
+      const code = (e && e.code) || "EIO";
+      const canPass = OUTBOX_CAN_PASS.indexOf(code) >= 0;
+      if (rethrowBusy && canPass) throw e;
+      noteOutboxUnread(track, file, code);
+      return null;
+    }
+    clearOutboxUnread(track);
+    const log = track ? track.logger : console.log;
+    log("etiuda: " + file + " was not a valid outbox and was moved aside to " + path.basename(aside)
+      + "; what this computer still owed the folder may need sending again");
+    return { owe: {}, floors: {}, back: {} };
   }
 }
 function writeOutbox(mirror, st, io) {
@@ -284,12 +357,14 @@ function writeOutbox(mirror, st, io) {
 /* Runs fn; on the main thread a busy code is tried again, 20 tries RENAME_WAIT_MS apart, off it the code is thrown.
    keepGoing is a new owe: past 20 it is said once and still tried, so the record is not dropped while the rename refuses. */
 function outboxBusyRetrying(fn, onDone, timerSet, keepGoing) {
+  let busyCodes = RENAME_BUSY;
+  busyCodes = OUTBOX_CAN_PASS; /* plant:outbox-can-pass */
   try {
     fn();
     if (onDone) onDone();
     return true;
   } catch (e) {
-    if (!isMainThread || !e || RENAME_BUSY.indexOf(e.code) < 0) throw e;
+    if (!isMainThread || !e || busyCodes.indexOf(e.code) < 0) throw e;
   }
   let tries = 1;
   let timer = null;
@@ -300,7 +375,7 @@ function outboxBusyRetrying(fn, onDone, timerSet, keepGoing) {
       fn();
       if (onDone) onDone();
     } catch (e) {
-      if (e && RENAME_BUSY.indexOf(e.code) >= 0) {
+      if (e && busyCodes.indexOf(e.code) >= 0) {
         let keep = tries < 20;
         if (keepGoing) keep = true; /* plant:outbox-busy-keep */
         if (keepGoing && tries === 20) console.log("etiuda: an owed write could not be recorded yet (" + e.code + "), and it is tried again");
@@ -317,10 +392,10 @@ function outboxBusyRetrying(fn, onDone, timerSet, keepGoing) {
   if (timerSet) timerSet.add(timer);
   return false;
 }
-function writeOutboxRetrying(mirror, mutate, io, onDone, timerSet, keepGoing) {
+function writeOutboxRetrying(mirror, mutate, io, onDone, timerSet, keepGoing, track) {
   io = io || defaultIO;
   return outboxBusyRetrying(() => {
-    let st = readOutbox(mirror, io, true);
+    let st = readOutbox(mirror, io, true, track);
     if (!st) throw Object.assign(new Error("outbox unreadable"), { code: "EIO" }); /* plant:outbox-write-unread */
     st = st || { owe: {}, floors: {}, back: {} };
     mutate(st);
@@ -333,22 +408,22 @@ function owedRecord(mirror, rel, io) {
   return bytes == null ? { owe: true, sha: null, del: true } : { owe: true, sha: sha256hex(bytes), del: false };
 }
 /* A write or a removal this desk made at `rel` in the mirror, owed to the share. False for a path Etiuda does not keep. */
-function noteOwed(mirror, rel, io) {
+function noteOwed(mirror, rel, io, track) {
   io = io || defaultIO;
   const norm = normRel(rel);
   if (!isAllowedPath(norm)) return false;
-  writeOutboxRetrying(mirror, st => { st.owe[norm] = owedRecord(mirror, norm, io); }, io, null, null, true);
+  writeOutboxRetrying(mirror, st => { st.owe[norm] = owedRecord(mirror, norm, io); }, io, null, null, true, track);
   return true;
 }
-function owedList(mirror, io) {
-  const st = readOutbox(mirror, io || defaultIO);
+function owedList(mirror, io, track) {
+  const st = readOutbox(mirror, io || defaultIO, false, track);
   if (!st) return [];
   return Object.keys(st.owe).filter(k => st.owe[k] && st.owe[k].owe)
     .map(k => ({ rel: k, sha: st.owe[k].sha || null, del: !!st.owe[k].del, readOnly: st.owe[k].readOnly || "" }));
 }
 /* True where owed, false where not owed (or ENOENT), null where the outbox could not be read. */
-function outboxOwedState(mirror, rel, io) {
-  const st = readOutbox(mirror, io || defaultIO);
+function outboxOwedState(mirror, rel, io, track) {
+  const st = readOutbox(mirror, io || defaultIO, false, track);
   if (!st) return null;
   const rec = st.owe[normRel(rel)];
   return !!(rec && rec.owe);
@@ -743,6 +818,7 @@ function createFolderProgram(opts) {
   const backStamp = new Map(); // that file -> { size, mtimeMs } of the share's copy judged a take-back
   let takenNow = new Set(); // this desk's own files whose staged copy this listing judged a take-back
   const clock = typeof opts.now === "function" ? opts.now : Date.now;
+  const outboxTrack = { since: null, said: false, clock, logger };
   const knownMtimes = new Map(); // relPath -> { size, mtimeMs }
   const refusedMtimes = new Map(); // relPath -> { size, mtimeMs, at, epoch, key }
   const heldSettled = new Map(); // a held stamp already staged again once it stood long enough
@@ -771,7 +847,7 @@ function createFolderProgram(opts) {
         for (const k of Object.keys(updates)) {
           if (!Number.isSafeInteger(st.floors[k]) || updates[k] > st.floors[k]) st.floors[k] = updates[k];
         }
-      }, io, null, outboxTimers);
+      }, io, null, outboxTimers, false, outboxTrack);
     } catch {}
   }
 
@@ -893,10 +969,10 @@ function createFolderProgram(opts) {
   /* ---- the outbox and the floors, read afresh at each use: the main thread may note a debt with noteOwed between scans */
   const saidWait = new Map(); // relPath -> the code last said for it
   const unreadSaid = new Set(); // the unlisted subtrees already said, said again only after one listed
-  function owe(rel) { return noteOwed(mirror, rel, io); }
-  function owed() { return owedList(mirror, io); }
-  function isOwed(rel) { return owedAt(mirror, rel, io); }
-  function owedState(rel) { return outboxOwedState(mirror, rel, io); }
+  function owe(rel) { return noteOwed(mirror, rel, io, outboxTrack); }
+  function owed() { return owedList(mirror, io, outboxTrack); }
+  function isOwed(rel) { return owedState(rel) === true; }
+  function owedState(rel) { return outboxOwedState(mirror, rel, io, outboxTrack); }
   function holdUnjudged(item) {
     if (!item || !item.relPath) return;
     const prev = renameWait.get(item.relPath);
@@ -917,7 +993,7 @@ function createFolderProgram(opts) {
     const updateRels = [];
     try {
       outboxBusyRetrying(() => {
-        const st = readOutbox(mirror, io, true);
+        const st = readOutbox(mirror, io, true, outboxTrack);
         if (!st) return;
         if (!decided) {
           for (const r of results) {
@@ -1017,7 +1093,7 @@ function createFolderProgram(opts) {
   function floorHolds(item, cat, box) {
     const k = floorKeyOf(item.relPath, cat);
     if (!k) return true;
-    const raw = floorsDirty || (box !== undefined ? (box || { floors: {} }) : readOutbox(mirror, io));
+    const raw = floorsDirty || (box !== undefined ? (box || { floors: {} }) : readOutbox(mirror, io, false, outboxTrack));
     if (!raw) { holdUnjudged(item); return false; }
     const st = raw;
     let floor = Number.isSafeInteger(st.floors[k.key]) ? st.floors[k.key] : null;
@@ -1088,7 +1164,7 @@ function createFolderProgram(opts) {
   /* Step 4 for an own file. True where its fault came or went, so the Library is told. */
   function ownStays(rel, listed, stamp) {
     const key = normRel(rel);
-    const box = readOutbox(mirror, io);
+    const box = readOutbox(mirror, io, false, outboxTrack);
     let unreadHold = false;
     if (!box) unreadHold = true; /* plant:own-stays-owe-unread */
     if (unreadHold) return false;
@@ -1104,18 +1180,18 @@ function createFolderProgram(opts) {
     backSeen.delete(key);
     const was = box && box.back[key], n = (was && Number.isSafeInteger(was.n) ? was.n : 0) + 1;
     try {
-      writeOutboxRetrying(mirror, s => { s.owe[key] = owedRecord(mirror, key, io); s.back[key] = { n, at: clock() }; }, io, null, outboxTimers);
+      writeOutboxRetrying(mirror, s => { s.owe[key] = owedRecord(mirror, key, io); s.back[key] = { n, at: clock() }; }, io, null, outboxTimers, false, outboxTrack);
     } catch { return false; }
     logger("etiuda: " + key + " was taken back by the team's folder " + folder + " (" + n + (n === 1 ? " time" : " times")
       + "), so the copy on this computer is sent again");
     return n === TAKEN_BACK_FAULT;
   }
   function forgetBack(key, box) {
-    const st = box !== undefined ? box : readOutbox(mirror, io);
+    const st = box !== undefined ? box : readOutbox(mirror, io, false, outboxTrack);
     if (!st) return false;
     const was = st.back[key];
     if (!was || clock() - (+was.at || 0) < TAKEN_BACK_QUIET_MS) return false;
-    try { writeOutboxRetrying(mirror, s => { delete s.back[key]; }, io, null, outboxTimers); } catch { return false; }
+    try { writeOutboxRetrying(mirror, s => { delete s.back[key]; }, io, null, outboxTimers, false, outboxTrack); } catch { return false; }
     backStamp.delete(key);
     return +was.n >= TAKEN_BACK_FAULT;
   }
@@ -1271,7 +1347,7 @@ function createFolderProgram(opts) {
         stillPending.push(item);
         continue;
       }
-      const box = readOutbox(mirror, io);
+      const box = readOutbox(mirror, io, false, outboxTrack);
       let unreadHold = false;
       if (!box) unreadHold = true; /* plant:pending-owe-unread */
       if (unreadHold) {
@@ -1608,7 +1684,7 @@ function createFolderProgram(opts) {
       const relPath = item.relPath;
       if (relPath === "etiuda-team.json" || isTeamConflict(relPath)) continue;
       const tmpPath = item.tmpPath;
-      const box = readOutbox(mirror, io);
+      const box = readOutbox(mirror, io, false, outboxTrack);
       let unreadHold = false;
       if (!box) unreadHold = true; /* plant:outbox-unread-keep */
       if (unreadHold) {
@@ -1990,7 +2066,7 @@ function createFolderProgram(opts) {
     applyScan,
     owe,
     owed,
-    owing: () => { const st = readOutbox(mirror, io); return st === null || Object.keys(st.owe).some(k => st.owe[k] && st.owe[k].owe); },
+    owing: () => { const st = readOutbox(mirror, io, false, outboxTrack); return st === null || Object.keys(st.owe).some(k => st.owe[k] && st.owe[k].owe); },
     isOwed,
     landed,
     setPin,
