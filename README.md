@@ -1,6 +1,6 @@
 # Etiuda
 
-A live-chat macro bank for the desktop, and nothing you put into it leaves your machine.
+A live-chat macro bank for the desktop. What you put into it stays on your machine, except what you choose to send to your own organisation's AI service, and a team's shared files, which travel sealed.
 Named for the etude: the short study you practise until it plays itself.
 
 ## Where things stand
