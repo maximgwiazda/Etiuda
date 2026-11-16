@@ -11545,11 +11545,14 @@ async function storeAnswerNow(choice) {
     clearTimeout(storeSyncTimer); storeSyncTimer = null;
     storeSyncStop(); storeSyncing = null; /* plant:answer-aside-syncing */
   }
+  /* Mine by the account whose state it is (another account came and went): its own switch and owed end stand. */
+  const own = choice === "mine" && s.who === who ? { off: s.off === true, owed: s.owed, here: storeOwedHere } : null; /* plant:answer-mine-own */
   s.who = who; s.last = who; s.ask = ""; /* plant:answer-mine-who */
   s.keys = ""; s.leave = ""; s.owed = ""; s.made = ""; /* plant:answer-mine-keys */
   s.until = 0; delete s.off; s.said = ""; delete s.told;
   storeLeaveHere = null; storeOwedHere = ""; storeNow = null; storeSay = ""; storeFresh = false; storeFullNow = false;
   storeNotNow.delete(who);
+  if (own) { if (own.off) s.off = true; s.owed = own.owed; storeOwedHere = own.here; }
   if (!storeAccess || storeAccess.who !== who) { storeAccess = null; s.org = false; }
   storeSyncStop();
   storeSave();

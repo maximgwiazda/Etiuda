@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 154;
+const EXPECTED = 156;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -925,6 +925,39 @@ async function answerMineJoinsScene(src) {
   const st = syncB ? syncB.state() : { ledger: {}, kept: ["no sync"] }, view = T.storeView();
   const ok = aRemoved && !!ans && ans.ok === true && onB && here && st.kept.length === 0 && view.line === "on";
   return { ok, detail: brief({ aRemoved, ans: ans && ans.ok, keptOnB: onB, reachedHere: here, kept: st.kept.length, line: view.line, entry: st.ledger["f:notes.ec"] ? (st.ledger["f:notes.ec"].h ? "B's" : "removed") : "none" }) };
+}
+
+/* (x6b) The account whose state it is answers "It is mine" after another came, said Not now and went: A turned sync off everywhere
+   with the store/end unanswered, signed out; B, seated, answered Not now and signed out; A back answers mine. A's switch stays off and
+   its store/end stays owed: the row says ending, nothing is looked at, and the next renewal posts the store/end. */
+async function answerMineOwnScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  if (typeof T.storeAnswerNow !== "function") return { ok: false, detail: "no storeAnswerNow" };
+  const rt = w.file ? JSON.parse(w.file).rt : "";
+  w.endDown = true;
+  await T.storeSetNow("everywhere");
+  const before = { off: T.storeState().off === true, owed: !!T.storeState().owed, line: T.storeView().line };
+  const heldA = T.signinState().held, mark = w.file;
+  T.signinOutNow();
+  seatAnother(T, w, heldA);
+  await T.storeTurn();
+  await T.storeAnswerNow("later");
+  T.signinOutNow();
+  T.signinState().held = heldA;
+  w.file = mark;
+  await T.storeTurn();
+  const asked = T.storeView().line;
+  const relayAt = w.relay.length;
+  const ans = await T.storeAnswerNow("mine");
+  if (T.get().storeFlight) await T.get().storeFlight;
+  const after = { off: T.storeState().off === true, owed: !!T.storeState().owed, line: T.storeView().line, look: T.get().storeNow ? T.get().storeNow.state : null, relayCalls: w.relay.length - relayAt };
+  w.endDown = false;
+  await T.signinRenewNow();
+  await new Promise(a => setTimeout(a, 40));
+  const ended = w.ended === rt;
+  const ok = before.off && before.owed && before.line === "ending" && asked === "ask" && !!ans && ans.ok === true
+    && after.off && after.owed && after.line === "ending" && !after.look && after.relayCalls === 0 && ended;
+  return { ok, detail: brief({ before, asked, ans: ans && ans.ok, after, ended }) };
 }
 
 /* (x6s) "Start from my account": sets aside desk.json, store.json, userData\store, and own .ec files byte for byte (team folders untouched),
@@ -2002,6 +2035,7 @@ const LEGS = [
   ["x3", backScene, "A turned sync off here, signed out; B came and went; A back finds its own switch as it left it, and, not the account last seated, is held as B was: no look, the sync stopped, the desk's sync state as A left it"],
   ["x6m", answerMineScene, "It is mine lifts the hold, sets who = last = this account, clears ask, merges the desk into this account's store, asks once, and holds the earlier account coming back"],
   ["x6j", answerMineJoinsScene, "It is mine from a different account joins its store as a computer that has never synced: a catalog the earlier account removed here stays on the new account's other computer and reaches this desk, and the earlier account's kept versions are gone from the row"],
+  ["x6b", answerMineOwnScene, "the account whose state it is answers It is mine after another account said Not now: its switch stays off and its store/end owed, the row says ending, nothing is looked at, and the next renewal posts the store/end"],
   ["x6s", answerStartScene, "Start from my account sets aside desk.json, store.json, userData/store and own .ec files byte for byte (team folders untouched), clears synced desk keys, uploads none of it, loads this account's own store, and puts a second set-aside beside the first"],
   ["x6sn", answerStartNewAccountScene, "Start from my account for an account with no store yet sets A's content aside and makes B's store empty with nothing of A's uploaded"],
   ["x6n", answerNotNowScene, "Not now leaves store.json and the hold unchanged, suppresses auto-ask in this run, and asks again on a new run"],
@@ -2105,6 +2139,7 @@ const PLANTS = [
   ["d", swap(".indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes", ".indexOf(String(url)) < -1) throw new Error(\"the licence service's door takes"), "the door takes any route"],
   ["x6m", swap("  s.who = who; s.last = who; s.ask = \"\"; /* plant:answer-mine-who */", "  s.last = who; /* plant:answer-mine-who */"), "It is mine leaves ask and who unchanged, so the hold stays"],
   ["x6j", swap("  if (choice === \"mine\" && s.who !== who && !storeSyncFresh()) return { ok: false, choice: \"mine\", folder: \"\", view: storeView() }; /* plant:answer-mine-fresh */\n", ""), "It is mine carries the earlier account's ledger and kept list into the new account's store"],
+  ["x6b", swap("? { off: s.off === true, owed: s.owed, here: storeOwedHere } : null; /* plant:answer-mine-own */", "? null : null; /* plant:answer-mine-own */"), "It is mine by the account whose state it is turns its switch on and drops its owed store/end"],
   ["x6s", swap("  if (Object.keys(clear).length && !patchDesk(JSON.stringify(clear))) throw new Error(\"desk.json could not be updated\"); /* plant:answer-aside-clear */", "  /* plant:answer-aside-clear */"), "Start from my account does not clear synced desk keys before the new store syncs"],
   ["x6sn", swap("  storeSyncStop(); storeSyncing = null; /* plant:answer-aside-syncing */", "  storeSyncStop(); /* plant:answer-aside-syncing */"), "Start from my account keeps the old sync instance in memory"],
   ["x6n", swap("  storeNotNow.add(who); /* plant:answer-notnow */", "  /* plant:answer-notnow */"), "Not now does not remember the dismissal for this run"],
