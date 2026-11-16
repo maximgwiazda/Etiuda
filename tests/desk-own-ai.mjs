@@ -838,6 +838,57 @@ try {
       + "off tells the shell and takes Reword from every card, on brings it back, and the ordering's two switches stay as they were: " + (problems.join("; ") || "absent, on, off, on, Polish"));
   }
 
+  /* db9m (the test architect's note on db6r): the Rewording toggle calls syncOrgMark(), so the header mark's tip follows the switch at once.
+     The stand-in's aiState flips between two reads (wireRw's reads the switch afresh), the person turns Rewording off and on in Settings, and
+     this check never calls syncOrgMark itself and never reloads: the mark's tip and the AI section's lede carry the Rewording sentence only
+     while the switch is on. */
+  const REWORD_SAID = "At your press, the words or the card you ask it to reword go there too.";
+  const rwMarkFollows = async (pg) => {
+    const problems = [], ledeProblems = [];
+    await pg.evaluate(() => { localStorage.setItem("eUiLang", "en"); try { setUiLang("en"); } catch (e) {} localStorage.removeItem("eAiOff"); localStorage.removeItem("eSearchAiOff"); });
+    await wireRw(pg, "api.openai.com");
+    await setHost(pg, ORG_ON);
+    await ranked(pg);
+    await pg.evaluate(() => { try { closeScreenTab("settings"); } catch (e) {} });
+    await pg.evaluate(() => openSettings("ai")); await sleep(150);
+    const read = async () => ({ mark: await markNow(pg), lede: await pg.evaluate(() => (document.querySelector("#setBody p.lede") || {}).textContent || "") });
+    const press = async val => { await pg.evaluate(v => { const b = document.querySelector('#setBody [data-row="aireword"] .set-seg button[data-val="' + v + '"]'); if (b) b.click(); }, val); await sleep(150); };
+    const start = await read();
+    if (!start.mark.there || start.mark.title.indexOf(REWORD_SAID) < 0) problems.push("on at the start: the mark " + JSON.stringify([start.mark.there, start.mark.title.slice(-80)]));
+    await press("off");
+    const off = await read(), offState = await pg.evaluate(() => window.__rw.on);
+    if (offState !== false) problems.push("the stand-in's state did not turn off " + JSON.stringify(offState));
+    if (!off.mark.there || off.mark.title.indexOf(REWORD_SAID) >= 0 || off.mark.label.indexOf(REWORD_SAID) >= 0) problems.push("off: the mark still says it " + JSON.stringify([off.mark.there, off.mark.title.slice(-80)]));
+    if (off.lede.indexOf(REWORD_SAID) >= 0) ledeProblems.push("off: the lede still says it " + JSON.stringify(off.lede.slice(-80)));
+    await press("on");
+    const back = await read(), backState = await pg.evaluate(() => window.__rw.on);
+    if (backState !== true) problems.push("the stand-in's state did not turn on " + JSON.stringify(backState));
+    if (!back.mark.there || back.mark.title.indexOf(REWORD_SAID) < 0 || back.mark.label.indexOf(REWORD_SAID) < 0) problems.push("on again: the mark does not say it " + JSON.stringify([back.mark.there, back.mark.title.slice(-80)]));
+    if (back.lede.indexOf(REWORD_SAID) < 0) ledeProblems.push("on again: the lede does not say it " + JSON.stringify(back.lede.slice(-80)));
+    return { problems, ledeProblems };
+  };
+  {
+    const { problems } = await rwMarkFollows(page);
+    check(!problems.length, "db9m with the organisation's model on, turning Rewording off takes its sentence from the mark's tip at once, without a reload, and on brings it back: "
+      + (problems.join("; ") || "on, off, on"));
+  }
+
+  /* db9mp the plant: the Rewording toggle without its syncOrgMark() call */
+  if (PLANTS_OFF) skipPlant("db9mp the Rewording toggle without its syncOrgMark() call (ETIUDA_PLANTS=off)");
+  else {
+    const built = fs.readFileSync(path.join(lab, "etiuda.html"), "utf8"), re = /rewordSwitchSet\(on\);(\s*)syncOrgMark\(\);/g;
+    const found = (built.match(re) || []).length;
+    if (found !== 1) check(false, "db9mp the toggle's syncOrgMark() call found once in engine/etiuda.html", { found });
+    else {
+      const at = path.join(lab, "etiuda-rw-mark-plant.html");
+      fs.writeFileSync(at, built.replace(re, "rewordSwitchSet(on);"), "utf8");
+      await page.goto("file:///" + at.split(String.fromCharCode(92)).join("/"), { waitUntil: "load", timeout: 60000 });
+      await page.waitForFunction(() => typeof openSettings === "function" && !document.querySelector(".e-launch-veil"), { timeout: 30000 });
+      const planted = (await rwMarkFollows(page)).problems;
+      check(planted.length > 0, "db9mp with the toggle's syncOrgMark() call removed, the mark's tip stays behind the switch and db9m fails: " + JSON.stringify(planted.slice(0, 1)));
+    }
+  }
+
   /* db9p the plant: the row drawn whether or not the organisation's model is in force */
   if (PLANTS_OFF) skipPlant("db9p the switch's row drawn without the organisation's model (ETIUDA_PLANTS=off)");
   else {
@@ -862,7 +913,7 @@ try {
   if (browser) await browser.close();
 }
 
-const EXPECTED = 18;
+const EXPECTED = 20;
 const done = asserted + notRun === EXPECTED;
 if (!done) { failed++; console.log("  FAIL ran " + (asserted + notRun) + " checks (" + asserted + " ran, " + notRun + " not run), expected " + EXPECTED); }
 console.log((failed || !done ? "desk-own-ai: " + failed + " of " + asserted + " failed" : "desk-own-ai: all " + asserted + " passed" + (notRun ? ", " + notRun + " NOT RUN" : "")));
