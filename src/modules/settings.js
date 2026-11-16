@@ -33,7 +33,7 @@ import { orgModel, orgRanks, orgSaid, rewordSent, syncOrgMark } from "./org-mode
 import { rewordState, rewordSwitchSet } from "./card-reword.js";
 import { SIGNIN_NAMES, signinNow, signinShown, signinParts, signinSay, signinNoSeat, signinTold, signinActsHtml, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow, signinDoorsHtml, signinDoorRefusedNow,
   signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect, signinCopyHtml, signinManaged, signinKeepsAccount,
-  signinCapHolds, signinStranded, signinStrandedWords, syncNow, syncLine, syncSet, syncOnChange, syncOpened, syncConsent, askSyncWhose } from "./signin.js";
+  signinCapHolds, signinStranded, signinStrandedWords, signinWaiting, signinWaitingWords, syncNow, syncLine, syncSet, syncOnChange, syncOpened, syncConsent, askSyncWhose } from "./signin.js";
 import { hangBubble } from "./bubble.js";
 
 /* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name,
@@ -201,7 +201,7 @@ function teamRowHtml(l,status,bar){
     +notes.filter(Boolean).map(n=>typeof n==="object"?'<small title="'+esc(n.tip)+'">'+esc(n.text)+'</small>':'<small>'+esc(n)+'</small>').join("")+'</div><div class="set-ctl">'
     +'<span class="e-lead-key">'+keySignHtml("studio",l.print)+'</span>'
     +(l.needsFolder?'<button type="button" class="btn" data-team-pick-folder="'+esc(l.team)+'">'+esc(t("Open a folder"))+'</button>':'') /* plant:needs-folder-button */
-    +(l.policy?'':'<button type="button" class="btn danger" data-leave-team="'+esc(l.team)+'">'+esc(t("Leave this team"))+'</button>')
+    +(l.policy||l.waiting?'':'<button type="button" class="btn danger" data-leave-team="'+esc(l.team)+'">'+esc(t("Leave this team"))+'</button>')
     +'</div></div>';
 }
 /* Leave this team is one click, the person's own. The pin, the sealed keys and the bar stay until the
@@ -267,7 +267,7 @@ function closeHost(){
    after it are Settings' own, so search finds them by their labels. With no provider offered and nobody signed in, the name alone. */
 /* A MANAGED COMPUTER'S LINE (decision 49): who decides, the seat it gave where one is held, and on a shared computer that another may sign in. */
 function accountManagedHtml(v){
-  if(!signinManaged(v)) return "";
+  if(!signinManaged(v) || signinWaiting(v)) return "";
   const held=v.signedIn && v.seat==="held", shared=v.managed.shared;
   const line=[held ? t("Your organisation gave this account its seat on this desk. Its IT department decides who uses Etiuda here, and with which account.") : "",
     shared ? t("A shared computer: another person may sign in here, with an account of your organisation.") : ""].filter(Boolean).join(" ");
@@ -287,6 +287,8 @@ function lockedHtml(value){
 function accountCardHtml(v){
   /* The desk's key not kept by a non-persistent profile (section 12): the card says so and offers nothing that would make a new desk. */
   if(signinStranded(v)){ const s=signinStrandedWords(v); return '<div class="sgn-top col"><p class="sgn-say" data-signin-stranded><b>'+esc(s[0])+'</b><span>'+esc(s[1])+'</span></p></div>'; }
+  /* Machine policy has not answered: the card says the desk waits for it, and offers nothing to sign in with. */
+  if(signinWaiting(v)){ const s=signinWaitingWords(); return '<div class="sgn-top col"><p class="sgn-say" data-signin-waiting><b>'+esc(s[0])+'</b><span>'+esc(s[1])+'</span></p></div>'; } /* plant:card-waiting */
   const p=signinParts(v), choosing=signinChoosingNow();
   if(v.signedIn && !choosing){
     const keeps=signinKeepsAccount(v);
@@ -672,6 +674,7 @@ function orgTestLine(r){
     : why==="model" ? t("No model is named for the AI service, so nothing was sent. The model is named from the Menu, under Settings, then Data and defaults.")
     : why==="key" ? t("No key is kept for this address, so nothing was sent.") // placeholder: Claudette
     : why==="keyNoService" ? t("Not sent: the organisation set a key without naming its service.")
+    : why==="waiting" ? t("Not sent: Etiuda could not read yet what the organisation's IT set for this computer.") // placeholder: the copywriter
     : why==="keyAway" ? t("The organisation's Group Policy sets the AI service's key, and that key goes only to the address the policy sets or to the service's own, never to an address typed here, so nothing was sent.")
     : why==="late" ? t("The AI service did not answer in time, so the request was given up.")
     : why==="busy" ? t("The AI service is busy and asked Etiuda to wait; a later try may go through.")

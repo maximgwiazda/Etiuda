@@ -4325,38 +4325,8 @@ function policyWords(facts, lang) {
     noUpdate: facts.noUpdate === true, unread: facts.unread === true, held: facts.held === true };
 }
 function joinPolicyFrom(text, lang) { return policyWords(joinPolicyFacts(text), lang); }
-/* THE LAST GOOD READ, beside desk.json, so a read that fails holds it rather than none, across a restart too. Plain, as the
-   key itself is readable by every account of this computer, and without AiKey, the one secret among the values, which then
-   waits for a good read. Null where there is none or it is not this shape. It sits in userData, which the person can write:
-   a person who can also make the read fail could put pins of their own in it, but such a person could already make the read
-   fail and drop every pin, so holding the last good read widens nothing (Claude α, 2026-11-15: no seal, which would not stop
-   that person and would add a way for an honest desk to fail). */
-const POLICY_GOOD_FILE = "policy-last-good.json";
-function policyGoodLoad() {
-  try {
-    const doc = JSON.parse(fs.readFileSync(path.join(app.getPath("userData"), POLICY_GOOD_FILE), "utf8"));
-    if (!doc || doc.kind !== "etiuda-policy-last-good" || doc.format !== 1 || typeof doc.folder !== "string" || typeof doc.lead !== "string") return null;
-    if ((doc.folder && !policyFolderOk(doc.folder)) || (doc.lead && !policyLeadOk(doc.lead))) return null;
-    const values = Object.create(null);
-    const given = doc.values && typeof doc.values === "object" && !Array.isArray(doc.values) ? doc.values : {};
-    Object.keys(given).forEach(k => { const v = given[k]; if (k !== "aikey" && v && typeof v.type === "string" && typeof v.value === "string") values[k] = { type: v.type, value: v.value }; });
-    const bad = Array.isArray(doc.bad) ? doc.bad.filter(b => b === "folder" || b === "lead" || b === "beside") : [];
-    return { folder: doc.folder, lead: doc.lead, bad: bad, noUpdate: doc.noUpdate === true, values: values, unread: false };
-  } catch { return null; }
-}
-function policyGoodSave(facts) {
-  try {
-    const values = {};
-    Object.keys(facts.values || {}).forEach(k => { if (k !== "aikey") values[k] = facts.values[k]; });
-    const text = JSON.stringify({ format: 1, kind: "etiuda-policy-last-good", folder: facts.folder, lead: facts.lead, bad: facts.bad,
-      noUpdate: facts.noUpdate === true, values: values });
-    const file = path.join(app.getPath("userData"), POLICY_GOOD_FILE);
-    let was = "";
-    try { was = fs.readFileSync(file, "utf8"); } catch { /* none kept yet */ }
-    if (was === text) return;
-    writeReplacing(file, text);
-  } catch { /* the next good read keeps it */ }
-}
+/* NO COPY OF A READ IS KEPT ON DISK: the person can write userData, and nothing a user can write is ever read as IT's word. A
+   policy-last-good.json an earlier build left there is not read (Claude α, 2026-11-16, reversing the kept copy of 2026-11-15). */
 /* A read that failed is asked again at the first ask once this has passed, so one failure does not stand for the run. */
 const POLICY_REREAD_MS = 60 * 60 * 1000;
 /* How often a running desk looks at the key again, so a policy turned off, or an AiKey removed, stops the next send within about
@@ -4364,7 +4334,12 @@ const POLICY_REREAD_MS = 60 * 60 * 1000;
    lands, and a send waits for facts no older than the look and its grace (policyFresh). */
 const POLICY_LOOK_MS = 60 * 1000;
 const POLICY_LOOK_GRACE_MS = 15 * 1000;
-let joinPolicyRead = null, joinPolicyReadAt = 0, joinPolicyGood = null, joinPolicyAskedAt = 0, joinPolicyAsking = false;
+/* While no read in this run has answered, the key is looked at again unasked: after this, then twice as long each time up to
+   POLICY_LOOK_MS, one look at a time, each under reg's own five-second timeout (policyAgainArm). */
+const POLICY_AGAIN_FIRST_MS = 5 * 1000;
+/* joinPolicyGood is this run's last good read, in memory alone; joinPolicyHeard, where set, is told when the facts in force change. */
+let joinPolicyRead = null, joinPolicyReadAt = 0, joinPolicyGood = null, joinPolicyAskedAt = 0, joinPolicyAsking = false,
+  joinPolicyAgain = null, joinPolicyAgainMs = 0, joinPolicyHeard = null;
 /* The scratch file reg exports the key into, and its folder; both go whatever happens, and nothing of them is logged. */
 function policyScratch() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-policy-"));
@@ -4381,26 +4356,48 @@ function policyExported(at) {
   return bytes.length % 2 === 0 && bytes[0] === 0xff && bytes[1] === 0xfe ? { text: bytes.subarray(2).toString("utf16le"), unread: false }
     : { text: "", unread: true };
 }
-/* A read's facts made the ones in force: a good read is kept as the last good read, and a read that failed holds it. */
+/* A read's facts made the ones in force: a good read is kept as this run's last good read, and a read that failed holds it. */
 function policyTake(text, unread) {
   const read = joinPolicyFacts(text, unread);
-  if (!read.unread) { joinPolicyGood = read; policyGoodSave(read); }
+  if (!read.unread) joinPolicyGood = read;
   else {
-    /* A read that failed holds the last good read, every pin and switch it set, said as unread; with none, it is none. */
-    const good = joinPolicyGood || (joinPolicyGood = policyGoodLoad());
+    /* A read that failed holds this run's last good read, every pin and switch it set, said as unread; with none, policy waits. */
+    const good = joinPolicyGood;
     if (good) { read.folder = good.folder; read.lead = good.lead; read.bad = good.bad; read.noUpdate = good.noUpdate; read.values = good.values; read.held = true; } /* plant:policy-hold-good */
   }
+  const was = joinPolicyRead;
   joinPolicyRead = read;
   joinPolicyReadAt = Date.now();
   joinPolicyAskedAt = joinPolicyReadAt;
+  policyAgainArm();
+  if (was && policyStamp(was) !== policyStamp(read) && typeof joinPolicyHeard === "function") joinPolicyHeard();
 }
-/* The minute's look, without waiting: one at a time, its facts taken when reg answers, judged as the first read judges them. */
+/* What of a read the running desk acts on, as one string: whether it waits, and its pins, switches and values. */
+function policyStamp(r) {
+  return JSON.stringify([r.unread === true && r.held !== true, r.folder, r.lead, r.noUpdate === true, r.values || null]);
+}
+/* The unasked look while no read in this run has answered, and none once one has. */
+function policyAgainArm() {
+  const r = joinPolicyRead;
+  if (process.platform !== "win32" || !r || r.unread !== true || r.held === true) {
+    if (joinPolicyAgain) clearTimeout(joinPolicyAgain);
+    joinPolicyAgain = null;
+    joinPolicyAgainMs = 0;
+    return;
+  }
+  if (joinPolicyAgain) return;
+  joinPolicyAgainMs = joinPolicyAgainMs ? Math.min(joinPolicyAgainMs * 2, POLICY_LOOK_MS) : POLICY_AGAIN_FIRST_MS; /* plant:policy-again */
+  joinPolicyAgain = setTimeout(() => { joinPolicyAgain = null; policyLookLater(); }, joinPolicyAgainMs);
+  if (joinPolicyAgain.unref) joinPolicyAgain.unref();
+}
+/* The minute's look, without waiting: one at a time, its facts taken when reg answers, judged as the first read judges them.
+   A scratch folder that cannot be made, or a look that cannot start, is a read that failed. */
 function policyLookLater() {
   if (joinPolicyAsking || process.platform !== "win32") return;
   joinPolicyAsking = true;
   joinPolicyAskedAt = Date.now();
   let at = null;
-  try { at = policyScratch(); } catch { joinPolicyAsking = false; return; }
+  try { at = policyScratch(); } catch { joinPolicyAsking = false; try { policyTake("", true); } catch { /* the facts in force stand */ } return; }
   try {
     execFile(REG_TOOL, ["export", POLICY_KEY, at.file, "/y"], regOpts(execFile, { windowsHide: true, timeout: 5000 }), err => {
       let got = { text: "", unread: !(err && (err.code === 1 || err.status === 1)) };
@@ -4408,7 +4405,7 @@ function policyLookLater() {
       finally { policyScratchGone(at); joinPolicyAsking = false; }
       try { policyTake(got.text, got.unread); } catch { /* the facts in force stand */ }
     });
-  } catch { policyScratchGone(at); joinPolicyAsking = false; }
+  } catch { policyScratchGone(at); joinPolicyAsking = false; try { policyTake("", true); } catch { /* the facts in force stand */ } }
 }
 /* Whether the facts in force are recent enough for a send: read within the look and its grace, or no policy to look at. */
 function policyFresh() {
@@ -4418,8 +4415,8 @@ function policyFresh() {
    (POLICY_REREAD_MS), both waiting, since that ask needs the answer; between them, looked at again a minute after the last
    read, without waiting (POLICY_LOOK_MS). The one program started is reg.exe at its fixed path, exporting
    this one key to a scratch file, which holds the registry's own UTF-16 where reg's printing would be in the
-   console's code page. A failure, and any system but Windows, is no policy; reg's own exit 1 is a key that is not there,
-   and any other failure is a read that failed, kept as unread. */
+   console's code page. Any system but Windows is no policy; reg's own exit 1 is a key that is not there, and any other
+   failure is a read that failed, kept as unread, never as no policy (policyWaits). */
 function readJoinPolicy(lang) {
   if (joinPolicyRead === null || (joinPolicyRead.unread && Date.now() - joinPolicyReadAt >= POLICY_REREAD_MS)) { /* plant:policy-reread */
     let text = "", unread = false;
@@ -4444,6 +4441,14 @@ function updateLookOff() {
 }
 function updateLookUnsure() {
   try { const p = readJoinPolicy("en"); return p.unread === true && p.held !== true; } catch { return true; }
+}
+/* WHETHER MACHINE POLICY HAS NOT ANSWERED: on Windows, a read that failed with no good read before it in this run. Whatever
+   policy could forbid waits while this holds, and nothing else does; a computer whose key is not there has its answer. */
+function policyWaits() {
+  if (process.platform !== "win32") return false;
+  let p = null;
+  try { p = readJoinPolicy("en"); } catch { return true; }
+  return p.unread === true && p.held !== true; /* plant:policy-waits */
 }
 /* A MANAGED INSTALLATION (decision 49): Managed, SharedComputer, AllowPersonalAccounts, SigninProvider, SigninTenant and
    SupportContact, from policyValues' reading, machine policy alone. A pin that cannot be read closes the sign-in rather than
@@ -4501,9 +4506,14 @@ function managedPolicyFrom(values) {
 /* A NON-PERSISTENT DESKTOP (decision 49, section 12): where machine policy sets NonPersistent and not NonPersistentNewDesk, a desk
    whose own key will not open is reported, never silently replaced by a new desk. Pure. */
 function managedStrands(pol) { return !!pol && pol.nonPersistent === true && pol.nonPersistentNewDesk !== true; } /* plant:np-strands */
-/* The machine's answer, once a run, as the team values are read. */
+/* Everything the six and NonPersistent could forbid, while policy has not answered: no provider, no other account, no sign out,
+   nothing to buy, no personal account, the desk's own key never replaced; `waiting` says why, so nothing says the computer is managed. */
+const MANAGED_WAITING = Object.freeze({ any: true, managed: true, shared: false, personal: false, provider: "", tenant: "", closed: true, contact: "",
+  nonPersistent: true, nonPersistentNewDesk: false, waiting: true });
+/* The machine's answer as the team values are read. */
 function managedPolicy() {
-  try { readJoinPolicy("en"); } catch { /* no policy is read as none */ }
+  try { readJoinPolicy("en"); } catch { /* policyWaits says what a read that throws is */ }
+  if (policyWaits()) return Object.assign({}, MANAGED_WAITING); /* plant:mp-waits */
   return managedPolicyFrom(joinPolicyRead && joinPolicyRead.values);
 }
 /* THE DESK'S OPTIONAL CUSTOMER MODEL (board 992). Off by default; on, the organisation's own service ranks the search and the
@@ -4664,6 +4674,7 @@ function deskAiNow() {
  *  Null on a harness launch too, as the note look is, so no test start sends a query to a service configured on this desk. */
 function deskAiConfig() {
   if (harnessLaunch()) return null;
+  if (policyWaits()) return null; /* plant:ai-waits */
   let now = null;
   try { now = deskAiNow(); } catch { return null; }
   const j = now.joined;
@@ -4729,6 +4740,8 @@ function deskAiTest() {
   try { now = deskAiNow(); } catch { return Promise.resolve({ ok: false, why: "none", host: "", model: "" }); }
   const j = now.joined, a = deskAiAnswer(j, !!now.key, [], false);
   const said = why => Promise.resolve({ ok: false, why: why, host: a.host, model: j.model });
+  /* The address and key policy might set are not known yet, so nothing is sent to the ones written here. */
+  if (policyWaits()) return said("waiting"); /* plant:ai-test-waits */
   if (j.keyNoService) return said("keyNoService");
   if (!deskAiService(j.provider)) return said("provider");
   if (!j.endpoint) return said("endpoint");
@@ -4902,6 +4915,8 @@ function folderForkSeen(docs, team, leads) {
    keeps this desk's key for its epoch. What it learns is in teamPins and teamKeys, and in the desk envelope. */
 function heedTeam() {
   if (deskKeys === undefined) deskKeys = readDesk();
+  /* Nothing is pinned, barred or unbarred while machine policy has not answered; the file is heeded once it does. */
+  if (policyWaits()) return; /* plant:heed-waits */
   const root = catalogFolder();
   if (!folderAnswers(root)) return;
   const file = path.join(root, TEAM_NAME);
@@ -6436,10 +6451,12 @@ function relayKept(r) {
     && (r.box === undefined || /^[0-9a-f]{64}$/.test(String(r.box)));
 }
 /* Whether this desk takes invitations: "" where it does, else the refusal every invitation gets, at read and at yes.
+   "waiting" while machine policy has not answered (policyWaits).
    "policy" while machine policy names a team folder or a lead, unless an invitation matches the policy.
    A named lead must match, and a named folder must match. LeadKey-only needs the lead alone; folder-only
    stays shut, since nothing names who may invite. A UNC path and a mapped drive read as different folders. */
 function inviteDoor(parsed) {
+  if (policyWaits()) return "waiting"; /* plant:invite-waits */
   const named = sayJoinPolicy();
   if (!named.folder && !named.lead) return "";
   if (!named.lead) return "policy";
@@ -7100,6 +7117,8 @@ function leadsView() {
       lead: shown.lead || "", folder: shown.folder || "",
       removed: (admitted && !!me && !!roster && roster.desks.indexOf(me) < 0) || relayRemoved,
       policy: policyHoldsTeam(t, named) };
+    /* No Leave is offered while machine policy has not answered, since it could hold this team. */
+    if (named && named.unread === true && named.held !== true) row.waiting = true;
     if (relayHost) row.relay = relayHost; /* plant:settings-relay-row */
     if (relayRemoved) row.relayRemoved = true;
     const head = headShown(t);
@@ -7157,7 +7176,7 @@ function forgetLead(team, left) {
   if (deskKeys === undefined) deskKeys = readDesk();
   if (!SEALED_TEAM_RE.test(team) || !teamPins[team]) return joinView();
   /* Settings offers no Leave where policy holds the team; one sent anyway changes nothing. "It does not match" still forgets. */
-  if (left === true && policyHoldsTeam(team, readJoinPolicy("en"))) return joinView();
+  if (left === true && (policyWaits() || policyHoldsTeam(team, readJoinPolicy("en")))) return joinView(); /* plant:leave-waits */
   const ch = teamChannel[team];
   if (ch && ch.kind === "relay") setRelayTeamAside(ch.rt); /* plant:leave-aside */
   /* The note this desk left in a folder team's mirror goes too, owed to that share, so a later return does not send it. */
@@ -11101,12 +11120,18 @@ if (!INSTALLED && !app.isPackaged && process.env.ETIUDA_SIGNIN_LAB) { /* plant:l
 function signinLabHeld() {
   return signinLabOn && !!signinState().held; /* plant:lab-held */
 }
-/* The state, read once. Its first read also pins the providers to machine policy, before the file is judged by them and before any
-   view, press or renewal, each of which reads the state first; `managed` rides beside it, unwritten, for every caller. */
+/* The state, read from signin.json at the first ask and again whenever machine policy answers otherwise, so no answer stands for
+   the run: each read pins the providers to the policy in force, from the shipped table, before the file is judged by them and
+   before any view, press or renewal, each of which reads the state first. While policy has not answered the file is judged by the
+   shipped table, so a sign-in held is kept for the answer to judge. A sign-in, renewal or sign out in flight finishes first.
+   `managed` rides beside it, unwritten, for every caller. */
+let signinTableBase, signinPinStamp = "";
 function signinState() {
-  if (signinStore !== undefined) return signinStore;
-  const managed = managedPolicy();
-  SIGNIN_PROVIDERS = signinPinTable(SIGNIN_PROVIDERS, managed); /* plant:pin-taken */
+  const managed = managedPolicy(), stamp = JSON.stringify(managed);
+  if (signinStore !== undefined && (stamp === signinPinStamp || signinBusy || signinRenewing || signinOutFlight)) return signinStore; /* plant:signin-follows */
+  if (signinTableBase === undefined) signinTableBase = SIGNIN_PROVIDERS;
+  const pinned = signinPinTable(signinTableBase, managed);
+  SIGNIN_PROVIDERS = managed.waiting === true ? signinTableBase : pinned; /* plant:signin-file-unpinned */
   let text = "";
   try {
     const at = path.join(app.getPath("userData"), SIGNIN_FILE);
@@ -11117,6 +11142,8 @@ function signinState() {
   signinStore = signinFileRead(text, SIGNIN_DESK_PACKED); /* plant:door-file-packed */
   const me = branchIdentity(false);
   signinStore = signinFileHeld(signinStore, text, me ? me.key : ""); /* plant:file-held */
+  SIGNIN_PROVIDERS = pinned; /* plant:pin-taken */
+  signinPinStamp = stamp;
   signinStore.managed = managed;
   return signinStore;
 }
@@ -11288,12 +11315,25 @@ function signinView() {
   const m = st.managed;
   if (m && m.any) view.managed = { on: m.managed, shared: m.shared, personal: m.personal, provider: m.provider, tenant: !!m.tenant, closed: m.closed, contact: m.contact, /* plant:view-managed */
     stranded: deskStranded };
+  /* Policy has not answered: the page says the desk waits for it, and never that the computer is managed. */
+  if (m && m.waiting === true) view.managed.waiting = true; /* plant:view-waiting */
   return view;
 }
 function tellSignin() {
   const win = theWindow;
   if (win && !win.isDestroyed()) win.webContents.send("etiuda:signin", signinView());
 }
+/* MACHINE POLICY ANSWERED OTHERWISE (policyTake): the running desk follows at once, the sign-in, the join and the catalog told
+   again under the facts now in force, and the relay looked at. */
+function policyHeard() {
+  const win = theWindow;
+  if (!win || win.isDestroyed()) return;
+  tellSignin();
+  sendJoin(win);
+  if (catalogFolder() !== watchedFolder) catalogFolderChanged(); else armFolder(win);
+  relaySoon();
+}
+joinPolicyHeard = () => setImmediate(policyHeard);
 /* The landing page in the shell's language. */
 function signinPageHtml(kind) {
   const pl = (() => { try { return shellWords().lang === "pl"; } catch { return false; } })();
@@ -11623,7 +11663,9 @@ function storeOnFor(values, personOff) {
   return StoreLib().storePolicy(managedPolicyFrom(values).managed === true, personalStoreFrom(values), personOff === true); /* plant:store-policy */
 }
 function storePolicyNow() {
-  try { readJoinPolicy("en"); } catch { /* no policy is read as none */ }
+  try { readJoinPolicy("en"); } catch { /* policyWaits says what a read that throws is */ }
+  /* While policy has not answered, sync is held off as Managed holds it, since policy could. */
+  if (policyWaits()) return StoreLib().storePolicy(true, undefined, storeState().off); /* plant:store-waits */
   return storeOnFor(joinPolicyRead && joinPolicyRead.values, storeState().off);
 }
 function storeOn() { return storePolicyNow().on === true; }

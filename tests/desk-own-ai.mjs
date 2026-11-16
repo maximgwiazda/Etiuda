@@ -116,12 +116,12 @@ function shell(policyText, opts) {
   const body = POLICY.concat(DESK_AI).filter(m => !OPTIONAL.includes(m) || SRC.indexOf(m) > -1).map(m => sliceDecl(SRC, m)).join("\n");
   const policyRead = { values: null };
   const params = ["path", "app", "fs", "safeStorage", "Buffer", "branchSealable", "writeReplacing", "readJoinPolicy", "joinPolicyRead",
-    "deskAiProbe", "process", "harnessLaunch", "deskAi"];
+    "deskAiProbe", "process", "harnessLaunch", "deskAi", "policyWaits"];
   const S = new Function(...params, body + "\nreturn { " + NAMES.join(", ")
     + ", deskAiForget: typeof deskAiForget === 'function' ? deskAiForget : () => {} };")(
     path, { getPath: () => dir }, fs, SEAL, Buffer, () => o.sealable !== false, (f, text) => fs.writeFileSync(f, text, "utf8"),
     () => ({}), policyRead, (config, prompt) => { asked.push({ config: config, prompt: prompt }); return Promise.resolve({ ok: true }); },
-    { env: {} }, () => o.harness === true, o.deskAi || DESK_AI_MODULE);
+    { env: {} }, () => o.harness === true, o.deskAi || DESK_AI_MODULE, () => false);
   policyRead.values = policyText ? S.policyValues(policyText) : null;
   return Object.assign(S, { dir: dir, asked: asked, file: n => path.join(dir, n) });
 }
