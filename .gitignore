@@ -82,6 +82,8 @@ catalogs/
 # The build's note of the inputs it hashed and the day it stamped. Gitignored on purpose:
 # every build rewrites it, and the page, the pin and the bubble stay tracked.
 /engine/etiuda.build.json
+# The harness's lock while it checks or makes that build (tests/engine.js ensureOutputs), so no leg reads a half-written page.
+/engine/etiuda.build.lock
 
 # --- Scratch --------------------------------------------------------------------------------
 # Probes, previews, screenshots, timings. Real work, none of it the product.

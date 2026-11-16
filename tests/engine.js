@@ -1039,7 +1039,91 @@ function keepAside(files, toDir) {
   return rows;
 }
 
+/* THE BUILT PAGE IS THIS SOURCE'S BEFORE ANY LEG READS IT. tools/build.mjs's own outputsCurrent() judges it by the build's
+   record (never by file times), and build() makes it when the answer is no, once per process. The check and the build run
+   under one lock per tree, beside the record and gitignored with it (os.tmpdir() is per gate under gate-run), and every
+   reader passes through here first, so no leg reads a page another process is still writing. A tree without tools/build.mjs
+   (a toy tree a self-test assembles by hand) is read as it stands. */
+const BUILD_TOOL = path.join(ROOT, "tools", "build.mjs");
+const OUTPUT_PATHS = [ENGINE_PATH, path.join(ROOT, "engine", "etiuda.csp.json"), path.join(ROOT, "engine", "bubble.css")];
+const BUILD_RECORD = path.join(ROOT, "engine", "etiuda.build.json");
+const BUILD_LOCK = path.join(ROOT, "engine", "etiuda.build.lock");
+const BUILD_LOCK_STALE_MS = 120000;
+/* A TRAP: a process whose parent judged this tree's record passes its children the judgement, so a gate run or a leg's
+   children do not each start a node to ask again. It names the tree and the record's bytes, so a rebuilt record or another
+   tree asks afresh; a source edited mid-run without a build is not seen, and gate-run's tree check is what catches that. */
+const JUDGED_VAR = "ETIUDA_OUTPUTS_JUDGED";
+const ENSURE_CHILD = "const b = await import(process.env.ETIUDA_ENSURE_BUILD);"
+  + "if (b.outputsCurrent()) process.stdout.write('current\\n');"
+  + "else { const r = await b.build(); process.stdout.write('built ' + r.ms + '\\n'); }";
+let outputsState = null;
+
+function napMs(ms) { try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch (e) { /* no wait: spin */ } }
+
+/* True when taken. A holder that has died, or that has held it longer than any build takes, is stale and is replaced. */
+function takeBuildLock(waitMs) {
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    try {
+      const fd = fs.openSync(BUILD_LOCK, "wx");
+      fs.writeSync(fd, JSON.stringify({ pid: process.pid, at: Date.now() }));
+      fs.closeSync(fd);
+      return true;
+    } catch (e) { if (!e || e.code !== "EEXIST") throw e; }
+    let held = null, age = 0;
+    try { held = JSON.parse(fs.readFileSync(BUILD_LOCK, "utf8")); } catch (e) { held = null; }
+    try { age = Date.now() - fs.statSync(BUILD_LOCK).mtimeMs; } catch (e) { continue; }
+    const stale = held ? (!pidAlive(held.pid) || Date.now() - held.at > BUILD_LOCK_STALE_MS) : age > BUILD_LOCK_STALE_MS;
+    if (stale) { try { fs.unlinkSync(BUILD_LOCK); } catch (e) { /* another waiter replaced it first */ } continue; }
+    if (Date.now() > deadline) return false;
+    napMs(100);
+  }
+}
+function dropBuildLock() {
+  try { if (JSON.parse(fs.readFileSync(BUILD_LOCK, "utf8")).pid === process.pid) fs.unlinkSync(BUILD_LOCK); }
+  catch (e) { /* already gone */ }
+}
+function judgedToken() {
+  try {
+    if (!OUTPUT_PATHS.every(p => fs.existsSync(p))) return "";
+    const key = process.platform === "win32" ? ROOT.toLowerCase() : ROOT;
+    return crypto.createHash("sha256").update(key + "\0").update(fs.readFileSync(BUILD_RECORD)).digest("hex").slice(0, 32);
+  } catch (e) { return ""; }
+}
+
+/** { built, ms, how }: whether this process built the outputs. Refuses, exit 78, when the build cannot be made. `quiet`
+ *  leaves the line about a build to the caller. */
+function ensureOutputs(opts) {
+  if (outputsState) return outputsState;
+  if (!fs.existsSync(BUILD_TOOL)) return (outputsState = { built: false, ms: 0, how: "no build tool in this tree" });
+  const t0 = Date.now();
+  const token = judgedToken();
+  if (token && process.env[JUDGED_VAR] === token) return (outputsState = { built: false, ms: 0, how: "judged by the parent" });
+  if (!takeBuildLock(60000))
+    refuse("the build lock " + BUILD_LOCK + " was held for a minute by another process", "nothing was read; run again");
+  let r;
+  try {
+    /* The argument stands in for a script path: build.mjs and the probe it imports compare import.meta.url with argv[1]. */
+    r = spawnSync(process.execPath, ["--input-type=module", "-e", ENSURE_CHILD, "ensure-outputs"], {
+      cwd: ROOT, encoding: "utf8", windowsHide: true, maxBuffer: 1 << 24,
+      env: Object.assign({}, process.env, { ETIUDA_ENSURE_BUILD: require("url").pathToFileURL(BUILD_TOOL).href }),
+    });
+  } finally { dropBuildLock(); }
+  const said = String((r && r.stdout) || "").trim();
+  if (!r || r.status !== 0 || !/^(current|built \d+)$/.test(said))
+    refuse("the built page is not this source's and could not be built", /* plant:ensure-refuses */
+           String((r && (r.stderr || r.error)) || "no answer").replace(/\s+/g, " ").trim().slice(0, 300),
+           "run `node tools/build.mjs` and read its error");
+  const built = said !== "current";
+  if (built && !(opts && opts.quiet))
+    process.stderr.write("tests/engine.js: the built page was not this source's by its record; built once ("
+      + (Date.now() - t0) + " ms)\n");
+  process.env[JUDGED_VAR] = judgedToken();
+  return (outputsState = { built, ms: Date.now() - t0, how: built ? "built" : "current by the record" });
+}
+
 function enginePath() {
+  ensureOutputs(); /* plant:ensure */
   if (!fs.existsSync(ENGINE_PATH))
     refuse("the engine is not at engine/etiuda.html",
            "looked for " + ENGINE_PATH,
@@ -1747,4 +1831,9 @@ module.exports = { shellAppFiles, copyShellApp, envWithoutWindowWord, NO_VERDICT
                    NOT_PROVED_OFF_WINDOWS, offWindowsNotice,
                    suiteVerdict,
                    refuse, sha256, enginePath, engineSource, fixturesDir, fixtures, runFolder, browserPath, inside,
-                   sourceFiles, readSrc, templateParts, sourceDoc, spliceTie, removeLab };
+                   sourceFiles, readSrc, templateParts, sourceDoc, spliceTie, removeLab,
+                   ensureOutputs, OUTPUT_PATHS, BUILD_LOCK, JUDGED_VAR };
+/* A TRAP: reading E.ENGINE_PATH makes the outputs current first (ensureOutputs), because some forty legs copy or read the page
+   by this name, and a leg that named it reads it. The getter is the one place they all pass through; the name stays in the
+   literal above, because tools/gates-for.mjs reads the exports' strings from it. */
+Object.defineProperty(module.exports, "ENGINE_PATH", { enumerable: true, get() { ensureOutputs(); return ENGINE_PATH; } });
