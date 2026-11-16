@@ -67,7 +67,7 @@ async function boot(browser, theme) {
   await p.setViewport({ width: 1400, height: 900 });
   await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
   await p.evaluateOnNewDocument((theme) => {
-    try { for (const k of ["eTourDone_v3", "eTourInvite_v3", "eNameAsked"]) localStorage.setItem(k, "1"); localStorage.setItem("eTheme", theme); } catch (e) {}
+    try { for (const k of ["eTourDone_v3", "eTourInvite_v3", "eFirstSigninSeen", "eNameAsked"]) localStorage.setItem(k, "1"); localStorage.setItem("eTheme", theme); } catch (e) {}
   }, theme);
   await p.goto(url, { waitUntil: "load", timeout: 60000 });
   await p.waitForFunction(() => !!document.getElementById("ecYes") || document.querySelectorAll("#list .card").length > 0, { timeout: 30000 });

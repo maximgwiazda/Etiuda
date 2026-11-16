@@ -78,7 +78,7 @@ async function launch(theme, quiet) {
   if (hits !== 1) throw new Error("the ready-to-show line matched " + hits + " times in shell/main.js, expected 1");
   fs.writeFileSync(main, src.split(READY_SHOW).join(PROBE), "utf8");
   const UD = path.join(APP, "userdata");
-  const keys = { eTourDone_v3: "1", eTourInvite_v3: "1", eNameAsked: "1", eAgent: "Probe", eTheme: theme };
+  const keys = { eTourDone_v3: "1", eTourInvite_v3: "1", eFirstSigninSeen: "1", eNameAsked: "1", eAgent: "Probe", eTheme: theme };
   if (quiet) keys.eMotionOff = "1";
   fs.writeFileSync(path.join(UD, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, app: "harness",
     saved: new Date().toISOString(), keys: keys }), "utf8");

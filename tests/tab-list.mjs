@@ -70,6 +70,7 @@ async function openDesk(browser, { width = 1280, height = 800, theme = "light", 
       localStorage.setItem("eUiLang", l);
       localStorage.setItem("eTourDone_v3", "1");
       localStorage.setItem("eTourInvite_v3", "1");
+      localStorage.setItem("eFirstSigninSeen", "1");
       if (seeded.length) {
         sessionStorage.setItem("eSessionTabs", JSON.stringify({
           tabs: seeded,

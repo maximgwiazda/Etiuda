@@ -66,6 +66,7 @@ async function boot(viewport = { width: 1280, height: 900 }, more = [], pageUrl 
       for (const [k, v] of [
         ["eTourDone_v3", "1"],
         ["eTourInvite_v3", "1"],
+        ["eFirstSigninSeen", "1"],
         ["eAgent", "Bench Agent"],
         ["eNameAsked", "1"],
         ["eTheme", "light"],
@@ -560,7 +561,7 @@ try {
   const s12bad = [];
   const sp = await browser.newPage();
   await sp.evaluateOnNewDocument(() => {
-    try { for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eNameAsked", "1"], ["eTheme", "dark"], ["eUiLang", "pl"]]) localStorage.setItem(k, v); } catch (e) {}
+    try { for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eFirstSigninSeen", "1"], ["eNameAsked", "1"], ["eTheme", "dark"], ["eUiLang", "pl"]]) localStorage.setItem(k, v); } catch (e) {}
     window.E_HOST = { signinState: () => window.sgnView || { offered: [] }, signIn: async () => window.sgnView };
   });
   await sp.setViewport({ width: 560, height: 900, deviceScaleFactor: 1 });

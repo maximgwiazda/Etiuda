@@ -436,6 +436,7 @@ try {
     OFFER.wireHostCatalogWatch();
     localStorage.setItem("eTourDone_v3", "1");
     localStorage.setItem("eTourInvite_v3", "1");
+    localStorage.setItem("eFirstSigninSeen", "1");
     keep(c2);
     const row = (rev, name, sha) => [{ name, mtime: 5, id: "quay-board", rev, sha, builtIn: false, desk: null }];
     if (listingFn) listingFn(row(1, "low.ec", "sha256:low"));

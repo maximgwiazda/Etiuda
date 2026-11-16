@@ -197,7 +197,7 @@ async function page() {
   await q.goto(url, { waitUntil: "load", timeout: 60000 });
   await require("./launch-wait.js").waitLaunchGone(q, { who: "tests/swap.mjs page" });
   await q.evaluate(() => {
-    localStorage.setItem("eTourDone_v3", "1"); localStorage.setItem("eTourInvite_v3", "1");
+    localStorage.setItem("eTourDone_v3", "1"); localStorage.setItem("eTourInvite_v3", "1"); localStorage.setItem("eFirstSigninSeen", "1");
     localStorage.setItem("eAgent", "Invented Agent"); localStorage.setItem("eNameAsked", "1");
   });
   await fresh(q, false);

@@ -388,7 +388,7 @@ function newUserData(name, seed, realDocuments) {
   }
   return dir;
 }
-const TOUR_SEEN = { eTourDone_v3: "1", eTourInvite_v3: "1" };
+const TOUR_SEEN = { eTourDone_v3: "1", eTourInvite_v3: "1", eFirstSigninSeen: "1" };
 function catFolder(name) { return path.join(LAB, "cat-" + name); }
 /* The boot offer is a bubble whose Escape is its own, answered only with the keyboard inside it;
    Escape closes it without recording a refusal. */

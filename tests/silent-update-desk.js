@@ -60,7 +60,7 @@ async function main() {
 
   // Mark the first-run tour done so it does not hold back the catalog offer or typing
   const deskDoc = JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
-  Object.assign(deskDoc.keys, { eTourDone_v3: "1", eTourInvite_v3: "1" });
+  Object.assign(deskDoc.keys, { eTourDone_v3: "1", eTourInvite_v3: "1", eFirstSigninSeen: "1" });
   fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(deskDoc), "utf8");
 
   // Give the leg a catalog as the tree's other window legs do
