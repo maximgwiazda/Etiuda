@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 216;
+const EXPECTED = 218;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -942,6 +942,45 @@ async function heldScene(src, out) {
     syncState: storeTree(UD) === tree ? "as it was" : "changed", desk: deskText(UD) === desk ? "as it was" : "changed", whose: kept.who === whoA ? "A" : "not A" };
   const ok = !!a && a.kind === "etiuda-store-key" && !n && got.relayCalls === 0 && !got.bFolder && !got.syncing && !timer && got.syncState === "as it was" && got.desk === "as it was" && got.whose === "A";
   return { ok, detail: brief(got) };
+}
+/* (x1u) "USE ANOTHER ACCOUNT" TO ONE THE SERVICE GIVES NO SEAT (review 2026-11-16, finding 11, the test architect's reproduction): A
+   synced on two computers of one store; on the first, B signs in through the shell's own handler and the service answers ok with no
+   certificate. Nothing reads the sync row; only the channels' own cycles run, as their poll does. The first computer's sync is stopped
+   and A's keys gone from store.json, as a sign out leaves them, and nothing crosses either way. */
+async function switchUnseatedScene(src) {
+  const ws = globalThis.WebSocket;
+  globalThis.WebSocket = undefined; /* the channels poll, so their own cycles are driven here and no socket is opened */
+  try {
+    const r = await signinFlow(src, { quiet: true }), T = r.shell.T, w = r.world;
+    const s1 = T.get().storeSyncing;
+    if (s1 && s1.channel()) await s1.channel().idle();
+    const two = boot(src, { world: w, held: true, lab: labOf() }), T2 = two.T;
+    T2.branchIdentity(true);
+    await T2.signinRenewNow();
+    if (T2.get().storeFlight) await T2.get().storeFlight;
+    await T.storeTurn();
+    const s2 = T2.get().storeSyncing, d1 = T.storeSyncFolder(), d2 = T2.storeSyncFolder();
+    fs.mkdirSync(d1, { recursive: true });
+    fs.mkdirSync(d2, { recursive: true });
+    const poll = async (sync, n) => { for (let i = 0; i < n; i++) { const c = sync && sync.channel(); if (c) { c.kick(); await c.idle(); } } };
+    const has = (dir, name, text) => { try { return fs.readFileSync(path.join(dir, name), "utf8") === text; } catch { return false; } };
+    fs.writeFileSync(path.join(d1, "before.ec"), "{\"c\":1}");
+    await poll(s1, 2); await poll(s2, 2);
+    const control = has(d2, "before.ec", "{\"c\":1}");
+    w.seatRefused = "none";
+    r.mode.sub = "sub-of-another-person";
+    await pressAgain(r, "microsoft");
+    const held = T.signinState().held, kept = storeJson(r.shell.UD) || {}, running = !!s1 && s1.running();
+    fs.writeFileSync(path.join(d1, "up.ec"), "{\"c\":2}");
+    await poll(s1, 2); await poll(s2, 2);
+    fs.writeFileSync(path.join(d2, "down.ec"), "{\"c\":3}");
+    await poll(s2, 2); await poll(s1, 2);
+    const got = { control, b: !!held && !held.cert && held.sub === sealedOf("sub-of-another-person"), running, keys: !!kept.keys, up: has(d2, "up.ec", "{\"c\":2}"), down: has(d1, "down.ec", "{\"c\":3}") };
+    if (s2) s2.stop();
+    if (s1) s1.stop();
+    const ok = !!s1 && !!s2 && got.control && got.b && !got.running && !got.keys && !got.up && !got.down;
+    return { ok, detail: brief(got) };
+  } finally { globalThis.WebSocket = ws; }
 }
 /* (x4) What the desk needs to ask once is kept, and nothing goes: with B seated, store.json names A's account as the state's, B's as last
    seated and as owing the answer; B's sign-out deletes nothing of the store's state, its mirror or desk.json; A back, A owes the answer. */
@@ -2733,6 +2772,7 @@ const LEGS = [
   ["s5", switchMidLookScene, "the switch turned off while a look is out: once answered the look keeps no key, calls the relay no more, leaves the folder's list without this desk, starts no sync and the row says Off; turned off and on again, On starts a look of its own, which turns the store on"],
   ["x1", s => heldScene(s, true), "A synced and signed out; B seated on the same profile: nothing is looked at, uploaded or merged for B (no relay call, no store in B's folder, the sync stopped, no merge set going), and the desk's sync state, mirror and desk.json stay as they were, the store state A's"],
   ["x1d", s => heldScene(s, false), "the same where B signs in straight over A"],
+  ["x1u", switchUnseatedScene, "review 11: A synced on two computers; on one, B signs in through the shell's own handler and the service gives B no seat: with nothing reading the sync row and only the channels' own cycles running, that computer's sync is stopped and A's keys gone from store.json, and nothing crosses either way"],
   ["x4", recordScene, "with B seated over A's content store.json names A's account as the state's and B's as last seated and owing the answer, what a later build needs to ask once; B's sign-out deletes nothing of the store's state, mirror or desk.json; A back, A owes the answer in turn"],
   ["x5", returnScene, "A synced; B seated edits the desk and signs out; A back is not the account last seated, so it is held too: no look, no relay call, no merge, B's edit still on the desk and in no store, the sync state as B left it"],
   ["x2", sameBackScene, "the ordinary case: the same account signed out and back finds its store on, the same store, its sync running, nothing asked"],
@@ -2862,6 +2902,7 @@ const PLANTS = [
   ["x4", swap("    if (s.keys || s.leave || s.ask !== who || s.last !== who) { s.keys = \"\"; s.leave = \"\"; s.ask = who; s.last = who; storeSave(); } /* plant:store-ask */", "    if (s.keys || s.leave) { s.keys = \"\"; s.leave = \"\"; storeSave(); } /* plant:store-ask */"), "the account owing the answer, and the one last seated, are not kept"],
   ["x5", swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = !!s.who && s.who !== who; /* plant:store-held */"), "the hold keyed on whose the state is, so A's return merges B's edit"],
   ["x1d", swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = false; /* plant:store-held */"), "another account seated straight over takes the store as its own"],
+  ["x1u", swap("    if (got.ok && st.held && !signinHeldIs(st.held, p.id, got.sub)) { signinLeave(st, me); signinSave(); tellSignin(); } /* plant:switch-leaves */\n", ""), "the sign-in as another account leaves the account it replaces as it was"],
   ["x3", swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = false; /* plant:store-held */"), "B's seat takes the state, so B's turn leaves its store in the desk's sync state before A is back"],
   ["w4", swap("  const ours = () => storeState().who === who && storeWho(signinState().held) === who && storeSwitchNo === switchAt && storeOn(); /* plant:store-look-ours */", "  const ours = () => true; /* plant:store-look-ours */"), "a look ends under whoever is seated"],
   ["d", swap(".indexOf(String(url)) < 0) throw new Error(\"the licence service's door takes", ".indexOf(String(url)) < -1) throw new Error(\"the licence service's door takes"), "the door takes any route"],

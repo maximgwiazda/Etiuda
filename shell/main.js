@@ -11328,7 +11328,7 @@ function signinTake(provider, got, ans, now, access) {
   if (ans.managed === true || ans.ok) { const was = !!s.licenceManaged; if (ans.managed === true) s.licenceManaged = true; else delete s.licenceManaged; if (was !== !!s.licenceManaged && !ans.ok) signinSave(); }
   if (!ans.ok && ans.reason !== "full") return false; /* plant:take-refused */
   /* An answer naming no refresh token (a second authorization of the same account) keeps the one sealed, as a renewal does. */
-  const was = s.held, sameAccount = () => !!was && was.provider === provider && !!was.sub && signinSame(signinKept(safeStorage, was.sub), String(got.sub));
+  const was = s.held, sameAccount = () => signinHeldIs(was, provider, got.sub);
   const base = { provider: provider, refresh: signinKeep(safeStorage, process.platform, got.refreshToken) || (sameAccount() ? was.refresh || "" : ""), /* plant:take-keeps-refresh */
     sub: signinKeep(safeStorage, process.platform, got.sub), seed: got.seed, code: "", cert: null, at: 0, checked: now, reached: true, said: "", ask: false, doors: [] };
   base.revoked = s.revoked || null; /* plant:revoked-survives */
@@ -11338,6 +11338,10 @@ function signinTake(provider, got, ans, now, access) {
   delete s.out; /* this sign-in holds the desk's place again, so a sign out still owed is no longer wanted */
   signinSave();
   return true;
+}
+/* Whether `held` is the account the provider named, `provider` and `sub`: false where its sub can no longer be opened. */
+function signinHeldIs(held, provider, sub) {
+  return !!held && held.provider === provider && !!held.sub && signinSame(signinKept(safeStorage, held.sub), String(sub));
 }
 /* A MANAGED COMPUTER THAT IS NOT SHARED KEEPS ITS ACCOUNT (decision 49): true where state `st` holds a sign-in whose account can be
    opened and `sub` is another's. A sub that can no longer be opened lets the sign-in through, so a lost keyring never locks the desk. */
@@ -11381,6 +11385,10 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
     const access = managed || (st.held && st.held.provider === p.id) ? signinAccessFor(p, managed, st.held) : "";
     let got = await signinRun(io, p, me.key, Date.now, access || undefined);
     if (got.ok && managed && signinOtherHeld(st, got.sub)) got = { ok: false, reason: "signin-other" }; /* plant:managed-same */
+    /* Another account than the one held: the desk leaves that one as Sign out does, whatever this one's answer. */
+    if (got.ok && st.held && !signinHeldIs(st.held, p.id, got.sub)) { signinLeave(st, me); signinSave(); tellSignin(); } /* plant:switch-leaves */
+    /* signout/desk frees this desk key's place whoever held it, so one still out is taken before this sign-in's signin/desk. */
+    if (got.ok && signinOutFlight) await signinOutFlight; /* plant:out-before-signin */
     if (got.ok) {
       let ans = await signinSeat(io, p.id, me.key, got.idToken, got.seed, Date.now, got.accessToken);
       let took = !!access;
@@ -11422,11 +11430,19 @@ ipcMain.handle("etiuda:signin-stop", (e) => {
 /* Sign out: this computer forgets the account, its tokens, code and certificate, takes its seat.json out of the team's folder and
    lets go of a request made at a team's door, which its certificate no longer stands for; the team and its catalog stay. Its place at
    the licence service is freed by one signed signout/desk, sent after any renewal still out, so the service takes it last; one not
-   taken is owed (`out`), said on the page and asked again at the renewal's next turn. The person's seat on the licence is untouched. */
+   taken is owed (`out`), said on the page and asked again at the renewal's next turn. The person's seat on the licence is untouched.
+   signinLeave is that work for the account state `s` holds, Sign out's and a sign-in as another account's alike. */
 function signinOutNow() {
   if (signinBusy) return signinView();
   const s = signinState(), me = branchIdentity(false);
   if (s.managed && s.managed.managed && !s.managed.shared) return signinView(); /* plant:out-managed */
+  signinLeave(s, me);
+  signinSaid = "";
+  signinSave();
+  tellSignin();
+  return signinView();
+}
+function signinLeave(s, me) {
   if (s.held && me && (!harnessLaunch() || signinLabHeld()) && net && typeof net.fetch === "function"
     && signinOffered().length) { /* plant:signout-offered */
     s.out = me.key;
@@ -11441,10 +11457,6 @@ function signinOutNow() {
   /* Signed out, the account's organisation no longer stands in for this desk: Buy, which needs no sign-in, is offered again. */
   delete s.licenceManaged; /* plant:signout-managed */
   signinWrote = "";
-  signinSaid = "";
-  signinSave();
-  tellSignin();
-  return signinView();
 }
 /* One signout/desk for `key`, at once or after the renewal still out, and the owed mark taken off once the service has it. Resolves
    whether it did; never rejects. */
