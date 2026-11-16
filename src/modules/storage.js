@@ -46,9 +46,10 @@ function probeStore(get){
    window.E_HOST is absent in a browser, E_DESK is null there, and every line below then behaves
    exactly as it did. Text across the bridge, never an object: see the preload's catalog. */
 function eHostDesk(){
+  let h=null;
+  try{ h=(typeof window!=="undefined") ? window.E_HOST : null; }catch(e){ return null; }
+  if(!h || typeof h.deskRead!=="function" || typeof h.deskSave!=="function") return null;
   try{
-    const h=(typeof window!=="undefined") ? window.E_HOST : null;
-    if(!h || typeof h.deskRead!=="function" || typeof h.deskSave!=="function") return null;
     // The template's head script has read the file for the first paint; its copy is taken once.
     const first=window.eDeskAtBoot;
     delete window.eDeskAtBoot;
@@ -60,7 +61,11 @@ function eHostDesk(){
     }
     return {map:map,save:h.deskSave,write:(typeof h.deskWrite==="function")?h.deskWrite:null,
             patch:(typeof h.deskPatch==="function")?h.deskPatch:null,host:h};
-  }catch(e){ return null; }              // a host that answers badly is a host that is not there
+  }catch(e){
+    /* A host whose desk could not be read: this session writes nothing anywhere, said as unsaved (noteSave), and never falls back to the
+       browser's storage, which neither desk.json nor the sync would ever see. */
+    return {map:Object.create(null),save:h.deskSave,write:null,patch:null,host:h,unread:true}; /* plant:desk-unread */
+  }
 }
 const E_DESK=eHostDesk();
 /* ONE SEND PER TASK, AND NONE THAT WAITS ON THE DISK: the last send of a burst carries the rest.
@@ -94,6 +99,7 @@ function deskPatchSend(all){
 }
 function deskSave(){
   eDeskDue=false;
+  if(E_DESK.unread) return false;
   if(E_DESK.patch) return deskPatchSend(true);
   const n=++eDeskSent;
   let ok;
@@ -129,6 +135,7 @@ function deskSoon(){
 /* A send main has not answered counts as pending: it is sent again rather than trusted to the pipe.
    So does one it answered false, since the desk is still not on the disk. */
 function deskFlush(){
+  if(E_DESK && E_DESK.unread) return;
   const pending=E_DESK.patch ? (eDeskOwed.size>0 || eDeskCarried.size>0) : eDeskHeard<eDeskSent;
   if(eDeskDue || pending || eUnsaved) deskSave();
 }
@@ -254,6 +261,7 @@ function eResetClear(){
    storeCatalog's read-back into a formality. Any other desk write answers true once queued. */
 function lsSet(k,v,own){
   if(eWiping) return false;
+  if(E_DESK && E_DESK.unread){ noteSave(false,k); return false; }
   if(E_DESK){
     const s=String(v), had=(k in E_DESK.map), was=E_DESK.map[k];
     if(!own && was===s && !eUnsaved) return true;
@@ -272,6 +280,7 @@ function lsSet(k,v,own){
   return ok;
 }
 function lsDel(k){
+  if(E_DESK && E_DESK.unread){ noteSave(false,k); return; }
   if(E_DESK){ if((k in E_DESK.map) || eUnsaved){ delete E_DESK.map[k]; eDeskOwed.add(k); deskSoon(); } return; }
   if(!E_LS_OK){ delete E_MEM[k]; return; }
   try{ localStorage.removeItem(k); noteSave(true,k); }catch(e){}

@@ -14,6 +14,7 @@
  *   ds6 Settings in front is drawn again with what arrived; while its name field holds typing it is not, until the field lets go
  *   ds7 the shell: storeSyncApply sends etiuda:desk-synced with the keys it patched, to the window, and only once the desk took them
  *   ds8 the shell keeps a removal another computer made, a version of the value null, as a file of its own
+ *   ds13 a desk the host could not read: the page writes nothing anywhere and says so
  *   ds12 the catalog taken away behind the page: the desk starts again in place without it
  *   ds10 each send names, per key, the last tell its copy holds (the shell's half is desk-store-shell z2)
  *   ds11 the page sends the writes it owes, and waits for them, before it answers whose the desk is
@@ -41,7 +42,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 20;
+const EXPECTED = 22;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const MAIN = path.join(E.ROOT, "shell", "main.js");
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -170,6 +171,32 @@ async function catalogGone(name) {
     await sleep(150);
     const after = await page.evaluate(() => ({ undo: !!document.getElementById("eUndo"), same: window.__sameDocument === 1, copy: window.lsGet("eCatalog") }));
     if (!had || after.undo || !after.same || after.copy !== null) return JSON.stringify({ had, after });
+    return "";
+  } finally { await page.close(); }
+}
+
+/* ds13: a host whose desk could not be read (deskRead throws): the page writes nothing, neither to the host nor to the browser's own
+   storage, and says the session is not being saved. */
+async function deskUnread(name) {
+  const page = await browser.newPage();
+  try {
+    await page.evaluateOnNewDocument(() => {
+      window.__unread = { sends: 0 };
+      window.E_HOST = {
+        deskRead: () => { throw new Error("the desk file could not be read"); },
+        deskSave: () => { window.__unread.sends++; return true; },
+        deskWrite: () => { window.__unread.sends++; return Promise.resolve(true); },
+        deskPatch: () => { window.__unread.sends++; return Promise.resolve(true); },
+        onDeskSynced: () => {},
+      };
+    });
+    await page.goto(urlOf(name), { waitUntil: "load", timeout: 60000 });
+    await sleep(1500);
+    const r = await page.evaluate(() => {
+      const set = window.lsSet("eTheme", "dark");
+      return { set, kept: Object.keys(localStorage).filter(k => /^e(?:[A-Z]|[0-9a-z]+~)/.test(k)), sends: window.__unread.sends, trouble: !!window.eSaveTrouble() };
+    });
+    if (r.set !== false || r.kept.length || r.sends || !r.trouble) return JSON.stringify(r);
     return "";
   } finally { await page.close(); }
 }
@@ -310,6 +337,9 @@ async function main() {
   const ds12 = await catalogGone("etiuda.html");
   check(!ds12, "ds12 the catalog taken away behind the page: the desk starts again in place without it, its list drawn again", ds12 || undefined);
 
+  const ds13 = await deskUnread("etiuda.html");
+  check(!ds13, "ds13 a desk the host could not read: nothing written to the host or the browser's storage, the session said unsaved", ds13 || undefined);
+
   const ds6 = await screenDrawn("etiuda.html");
   check(!ds6, "ds6 Settings in front is drawn again with what arrived, not while its name field holds typing, and once the field lets go", ds6 || undefined);
 
@@ -400,6 +430,8 @@ async function main() {
   }
   await pagePlant("catalog", "    if (keys.indexOf(E_CATALOG_STORE) > -1) {\n      restartDesk();\n      return;\n    }\n", "", catalogGone, r => !!r,
     "p ds12 the desk not started again when its catalog is taken away turns ds12 red");
+  await pagePlant("unread", "      return { map: /* @__PURE__ */ Object.create(null), save: h.deskSave, write: null, patch: null, host: h, unread: true };", "      return null;", deskUnread, r => !!r,
+    "p ds13 a desk not read taken as no host turns ds13 red");
   await pagePlant("screen", 'if (screenOn === "settings") repaintScreen();', 'if (screenOn === "settings") void 0;', screenDrawn, r => !!r,
     "p ds6 the screen in front not drawn again turns ds6 red");
   {
