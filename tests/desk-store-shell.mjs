@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 195;
+const EXPECTED = 198;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -2296,6 +2296,26 @@ async function rowToldScene(src) {
   return { ok, detail: brief({ keptTold, during, asked }) };
 }
 
+/* (z5) A LOST REFRESH TOKEN AND A REVOKED CERTIFICATE READ AS THE SIGN-IN'S: a look that finds no refresh token to open (lost at a
+   renewal, ask) settles as the sign-in's refusal, so the row says signing in is refused, not that the organisation refused the folder, and
+   nothing is tried again by itself; a certificate the service revoked, once the store certificate has ended, says the same, not a lapse. */
+async function refreshLostScene(src) {
+  const r = await renewScene(src), T = r.shell.T;
+  const held = T.signinState().held;
+  held.refresh = ""; held.ask = true; held.said = "";
+  T.storeTokenTake({ provider: "microsoft", token: "expired", until: 1 });
+  await T.storeTurn();
+  if (T.get().storeFlight) await T.get().storeFlight;
+  const now = T.get().storeNow, lost = T.storeView().line, again = !!T.get().storeAgainTimer;
+  const r2 = await renewScene(src), T2 = r2.shell.T, h2 = T2.signinState().held;
+  h2.revoked = { serial: 1, keys: [String(h2.cert && h2.cert.via && h2.cert.via.key ? h2.cert.via.key.pub : "")] };
+  const onWhile = T2.storeView().line;
+  T2.storeState().until = Date.now() - 1000;
+  const revoked = T2.storeView().line;
+  const ok = !!now && now.why !== "consent" && lost === "signin-refused" && !again && onWhile === "on" && revoked === "signin-refused";
+  return { ok, detail: brief({ now: now && now.state + "/" + now.why, lost, again, onWhile, revoked }) };
+}
+
 /* (z6) A LOOK MORE THAN AN HOUR AFTER THE LAST SIGN-IN RENEWS IT FIRST: the service grants a store only to a desk it saw sign in within
    the hour. A look whose last reached sign-in is two hours old renews it, then is granted and is on; with the provider out (the renewal
    unreached), the refusal is a look tried again within minutes, not a day, and the row says the service was not reached. */
@@ -2516,6 +2536,7 @@ const LEGS = [
   ["x6r", openAfterRestartScene, "after a restart the button's channel opens the desk's single dated folder, or Set aside itself when a second or hand-made dated folder is beside it; all removed it answers gone, and a name of another shape in store.json is ignored"],
   ["x6l", asideLinkScene, "a link under Set aside bearing the name store.json keeps is never opened as the set-aside folder: Open this folder answers gone; a real folder of that name is opened"],
   ["z2c", answerStartCatalogScene, "Start from my account takes the loaded catalog aside with the rest: in the set-aside desk.json, gone from the desk's, the page told, nothing of it in B's store"],
+  ["z5", refreshLostScene, "a look after the refresh token was lost says signing in is refused, not the organisation's refusal, and arms no retry; a revoked certificate, once the store certificate has ended, says the same, not a lapse"],
   ["z14", rowToldScene, "a merge keeping a version tells the page; a renewal that lost its refresh token reads as a refused sign-in; the first of two overlapping looks ending leaves the row saying a look runs"],
   ["z6", signinHourScene, "a look more than an hour after the last sign-in renews it first and is granted, on; with the renewal unreached the refusal is tried again within minutes, the row not saying refused"],
   ["z11", signedOutScene, "a change on the desk arms the merge, a sign out clears it, and a change made signed out arms none and changes nothing of the sync state"],
@@ -2601,7 +2622,7 @@ const PLANTS = [
   ["rf", swap("if (res && res.status === 403 && plainObj(j) && (j.reason === \"signin\" || j.reason === \"store\")) return { why: j.reason };", "if (false) return { why: j.reason };"), "the service's refusal read as not reached, so the row says it tries again"],
   ["lk", swap("  storeLooking++; tellStore(); /* plant:store-look-told */", "  /* plant:store-look-told */"), "the look's start neither kept nor told, so the row says what it said before"],
   ["lk", swap("looking: storeLooking > 0, ever: s.told === true, /* plant:store-view-looking */", "looking: false, ever: false, /* plant:store-view-looking */"), "the row told neither that a look runs nor that one had sync on before"],
-  ["ps", swap("signinRefused: !!(held && (held.said || held.ask === true)), conflicts:", "signinRefused: false, conflicts:"), "the row not told the sign-in is refused, so an ended certificate reads as a lapse"],
+  ["ps", swap("signinRefused: refused, conflicts:", "signinRefused: false, conflicts:"), "the row not told the sign-in is refused, so an ended certificate reads as a lapse"],
   ["g6h", swap(" || !storePolicyNow().on) return \"none\"; /* plant:consent-ungiven */", " || storePolicyNow().held) return \"none\"; /* plant:consent-ungiven */"), "the press refused wherever policy holds the switch, so the row's button asks nothing"],
   ["e7", swap("  if (look.state === \"ended\" && pol.held === true && pol.on === true && ours()) { storeAnew = true; tellStore(); look = await L.storeLook(Object.assign({}, io, { fresh: true })); } /* plant:store-anew */\n", ""), "the ended mark followed under a held switch, so sync stops here in silence"],
   ["e7", swap("    anew: storeAnew, /* plant:store-view-anew */\n", ""), "the new store made but the row not told, so it says on"],
@@ -2642,14 +2663,16 @@ const PLANTS = [
   ["x6l", swap("    try { return fs.lstatSync(path.join(root, n)).isDirectory(); } catch { return false; } /* plant:aside-lstat */", "    try { return fs.statSync(path.join(root, n)).isDirectory(); } catch { return false; } /* plant:aside-lstat */"), "the dated folder judged by a stat that follows a link, so a link named like it is opened as it"],
   ["z2c", swap("    if (Object.prototype.hasOwnProperty.call(deskKeys || {}, \"eCatalog\")) clear.eCatalog = null; /* plant:aside-catalog */\n", ""), "the loaded catalog left on the desk for the next account"],
   ["z14", swap("      if (kept !== storeKeptTold) { storeKeptTold = kept; tellStore(); } /* plant:kept-told */", "      /* plant:kept-told */"), "a merge that keeps a version tells the page nothing"],
-  ["z14", swap("    signinRefused: !!(held && (held.said || held.ask === true)), conflicts: storeConflicts(), /* plant:view-signin-ask */", "    signinRefused: !!(held && held.said), conflicts: storeConflicts(), /* plant:view-signin-ask */"), "a lost refresh token read as nothing wrong"],
+  ["z14", swap("(!!held.said || held.ask === true || signinRevokedHas(", "(!!held.said || signinRevokedHas("), "a lost refresh token read as nothing wrong"],
+  ["z5", swap("  if (!refresh) return { why: \"signin\" }; /* plant:token-no-refresh */", "  if (!refresh) return { why: \"consent\" }; /* plant:token-no-refresh */"), "a look with no refresh token to open says the organisation refused the folder"],
+  ["z5", swap(" || signinRevokedHas(held.revoked, held.cert)); /* plant:view-signin-revoked */", "); /* plant:view-signin-revoked */"), "a revoked certificate read as a lapse that resumes by itself"],
   ["z14", swap("finally { storeLooking--; tellStore(); } /* plant:store-look-count */", "finally { storeLooking = 0; tellStore(); } /* plant:store-look-count */"), "the first look ending ends the row's word for both"],
   ["z6", swap("      const fresh = await storeSigninFresh(); /* plant:grant-signin-fresh */", "      const fresh = true; /* plant:grant-signin-fresh */"), "the grant asked with an hour-old sign-in, refused for a day"],
   ["z6", swap("      return got && got.why === \"signin\" && !fresh ? { why: \"unreached\" } : got; /* plant:grant-signin-again */", "      return got; /* plant:grant-signin-again */"), "a refusal the renewal could not mend left for a day, the row saying refused"],
   ["z11", swap("storeSyncStop(); storeSyncCalm(); /* plant:forget-calm */", "storeSyncStop(); /* plant:forget-calm */"), "the merge armed before a sign out runs after it"],
   ["z11", swap(" && !!storeWho(signinState().held); /* plant:store-seated-merge */", "; /* plant:store-seated-merge */"), "a change made signed out arms the merge into the earlier account's sync state"],
   ["z4", swap("  if (storeWho(signinState().held) !== storeWho(held)) return { why: \"offline\" }; /* plant:token-who */\n", ""), "the token kept for whoever is seated when it comes"],
-  ["z4", swap("  if (token.why) return ours() ? storeSettle({ state: \"unavailable\", why: token.why }) : null; /* plant:token-ours */", "  if (token.why) return storeSettle({ state: \"unavailable\", why: token.why }); /* plant:token-ours */"), "a look whose token failed settles after a sign out, saying unavailable and arming a retry"],
+  ["z4", swap("  if (token.why) return ours() ? storeSettle(", "  if (token.why) return true ? storeSettle("), "a look whose token failed settles after a sign out, saying unavailable and arming a retry"],
   ["z2", swap("    if (storeSyncing && Object.keys(rewind).length) storeSyncing.untake(rewind); /* plant:desk-untake */\n", ""), "what the sync took is not taken again once the page's write from a copy without it lands, so the next merge reads it as this computer's removal"],
   ["z2", swap("    for (const k of w.dropped) delete patch[k];\n", ""), "a key the shell cleared whole is written back by the page's write from a copy that still held it"],
   ["x6a", swap("  return dated.length === 1 && dated[0] === name ? path.join(root, name) : root; /* plant:open-aside-many */", "  return name ? path.join(root, name) : \"\"; /* plant:open-aside-many */"), "the count taken out, so the latest is always opened"],

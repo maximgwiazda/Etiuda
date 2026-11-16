@@ -11649,7 +11649,9 @@ async function storeTokenFor(p, held) {
   if (a && a.token && a.until > Date.now() + STORE_TOKEN_SLACK_MS) return {};
   if (a && !a.token) return { why: storeUngiven() };
   const folder = signinFolderScope(p.id, ""), refresh = held.refresh ? signinKept(safeStorage, held.refresh) : "";
-  if (!folder || !refresh) return { why: "consent" };
+  if (!folder) return { why: "consent" };
+  /* No refresh token to open (lost at a renewal, ask): only a sign-in brings one, so the look is the sign-in's refusal, never the organisation's. */
+  if (!refresh) return { why: "signin" }; /* plant:token-no-refresh */
   let res = null;
   try { res = await signinRequest((u, init) => deskFetch(u, init), signinKnown(p.id).token, signinRefreshForm(p, refresh, "", folder)); }
   catch { return { why: "offline" }; }
@@ -11898,8 +11900,10 @@ function storeView() {
   const held = signinState().held, s = storeState(), synced = !!s.keys, who = storeWho(held);
   const provider = held && signinOffered().some(p => p.id === held.provider) && (held.cert || synced) ? held.provider : "";
   const ask = !!who && s.ask === who && storeHeld();
+  /* Refused at the service, its refresh token lost (ask), or its certificate revoked: in each, only a sign-in mends it. */
+  const refused = !!held && (!!held.said || held.ask === true || signinRevokedHas(held.revoked, held.cert)); /* plant:view-signin-revoked */
   return StoreLib().storeRow({ provider, pol: storePolicyNow(), look: storeNow, until: s.until, now: Date.now(),
-    signinRefused: !!(held && (held.said || held.ask === true)), conflicts: storeConflicts(), /* plant:view-signin-ask */ say: storeSay, owed: !!storeOwedRt(),
+    signinRefused: refused, conflicts: storeConflicts(), /* plant:view-signin-ask */ say: storeSay, owed: !!storeOwedRt(),
     ask, askNow: ask && !storeNotNow.has(who), again: storeAgainTimer ? storeAgainAt : 0, /* plant:store-view-again */
     looking: storeLooking > 0, ever: s.told === true, /* plant:store-view-looking */
     anew: storeAnew, /* plant:store-view-anew */
@@ -12239,7 +12243,7 @@ async function storeLookRun(p, held, me, pol) {
   let access = null;
   const folder = L.folderFor(p.id, { ask: storeAsk, token: () => (access && ours() ? access.token : "") });
   const token = folder ? await storeTokenFor(p, held) : {};
-  if (token.why) return ours() ? storeSettle({ state: "unavailable", why: token.why }) : null; /* plant:token-ours */
+  if (token.why) return ours() ? storeSettle(token.why === "signin" ? { state: "paused", why: "signin" } : { state: "unavailable", why: token.why }) : null; /* plant:token-ours */
   access = storeAccess;
   const io = { folder: folder, local: storeLocal, keep: k => { if (ours()) storeKeep(k); },
     grant: async (rt, sPub, extra) => {
