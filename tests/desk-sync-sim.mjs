@@ -1254,7 +1254,7 @@ try { await main(); }
 catch (e) { check(false, "harness: " + (e && e.stack ? e.stack : e)); }
 try { fs.rmSync(WORK, { recursive: true, force: true }); } catch { /* a temp folder */ }
 /* The whole run's checks: each fixed seed, each invariant over the random seeds, and each plant, of both layers. */
-const EXPECTED = FIXED.length + Object.keys(INVARIANTS).length + 6 + FIXED2.length + Object.keys(INVARIANTS2).length + 3;
+const EXPECTED = FIXED.length + Object.keys(INVARIANTS).length + 1 + 7 + FIXED2.length + Object.keys(INVARIANTS2).length + 3;
 const whole = !Object.keys(ARGS).some(a => ["seed", "hunt", "layer", "enrol-seed", "enrol-hunt"].indexOf(a) >= 0);
 console.log("#counts checks=" + asserted + " skipped=" + skipped + " failed=" + failed + (whole ? " expected=" + EXPECTED : ""));
 if (whole && asserted + skipped < EXPECTED) {
