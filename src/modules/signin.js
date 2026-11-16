@@ -549,16 +549,17 @@ function syncNoticeBubble(id, headText, tailText, anchor, primary, onDismiss, ex
   hangBubble(d, anchor);
   return d;
 }
-/* "kept": a set-aside that failed with something it could not put back, which is in the folder; the desk is not the account's, so
-   only the second sentence is true. */
+/* "kept": a set-aside that failed with something it could not put back, which is in the folder; the desk is not the account's and
+   the question still stands, so it has a notice of its own. */
 function syncChoiceNotice(choice){
   if(choice!=="mine" && choice!=="start" && choice!=="kept") return;
   const btn=$("#signinBtn");
   if(!btn || !btn.getClientRects().length) return;
   const tpl=choice==="mine" ? t("Syncing now, with what was already on this desk.")
+    : choice==="kept" ? t("Starting from your account did not finish, and nothing was lost. What could not be put back is kept on this computer, in Etiuda's \"Set aside\" folder, and is never uploaded. The question about what is on this desk still waits for your answer.")
     : t("This desk now has your account's content. What was here before is kept on this computer, in Etiuda's \"Set aside\" folder, and is never uploaded.");
   const i=tpl.indexOf(". ");
-  const head=choice==="kept" ? (i<0 ? tpl : tpl.slice(i+2)) : i<0 ? tpl : tpl.slice(0,i+1), tail=choice==="kept" || i<0 ? "" : " "+tpl.slice(i+2);
+  const head=i<0 ? tpl : tpl.slice(0,i+1), tail=i<0 ? "" : " "+tpl.slice(i+2);
   const extra=choice!=="mine" ? { label: t("Open this folder"), onClick: () => eOpenSetAside() } : null;
   const d=syncNoticeBubble("eSyncChoiceNote", head, tail, ()=>$("#signinBtn"), true, ()=>{
     const said=document.getElementById("eSyncSaid"); if(said) hangBubble(said, ()=>$("#signinBtn"));

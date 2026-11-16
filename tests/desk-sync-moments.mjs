@@ -15,7 +15,7 @@
  *       given it is the shell's storeConsent, from an On marked for the trusted click, with no bubble before the provider's page
  *   m3  the row and the question in Polish
  *   r1  storeRow's line for each state
- *   c9k a Start from my account that failed with something kept in the set-aside folder: the notice's second sentence, its button
+ *   c9k a Start from my account that failed with something kept in the set-aside folder: its own notice, its button
  * Plants: the page's word to the shell that it showed the bubble taken out (c9a red: said again after Dismiss); firstSay saying at a
  * look that did not make the store (c9d red).
  */
@@ -612,12 +612,14 @@ async function main() {
     check(!bad.length, "c9j Open this folder refusal lines distinguish gone and could-not-open in EN and PL without the team's-folder text", bad.length ? bad : undefined);
   }
 
-  /* c9k: a Start from my account that failed with something kept in the set-aside folder: the notice's second sentence alone, its
+  /* c9k: a Start from my account that failed with something kept in the set-aside folder: the notice of its own (three sentences), its
      Open this folder button calling openSetAside with no arguments, no path in the text (EN light & PL dark). */
   const checkKeptNotice = async pageName => {
     const want = {
-      en: { text: "What was here before is kept on this computer, in Etiuda's \"Set aside\" folder, and is never uploaded.", btns: ["Open this folder", "Dismiss"] },
-      pl: { text: "Poprzednia zawartość jest zachowana na tym komputerze, w folderze Etiudy o nazwie Set aside, i nigdy nie jest wysyłana.", btns: ["Otwórz ten folder", "Zamknij"] },
+      en: { lead: "Starting from your account did not finish, and nothing was lost.",
+        text: "Starting from your account did not finish, and nothing was lost. What could not be put back is kept on this computer, in Etiuda's \"Set aside\" folder, and is never uploaded. The question about what is on this desk still waits for your answer.", btns: ["Open this folder", "Dismiss"] },
+      pl: { lead: "Nie udało się dokończyć rozpoczęcia od konta, ale nic nie zginęło.",
+        text: "Nie udało się dokończyć rozpoczęcia od konta, ale nic nie zginęło. To, czego nie dało się przywrócić, jest zachowane na tym komputerze, w folderze Etiudy o nazwie Set aside, i nigdy nie jest wysyłane. Pytanie o zawartość tego stanowiska nadal czeka na odpowiedź.", btns: ["Otwórz ten folder", "Zamknij"] },
     };
     const folder = "C:\\Users\\Ada.User\\Set aside\\2026-11-15 18.10";
     const bad = [];
@@ -641,7 +643,7 @@ async function main() {
         await p.evaluate(() => { const b = document.querySelector("#eSyncChoiceNote button:not(.primary)"); if (b) b.click(); });
         await sleep(150);
         const calls = await p.evaluate(() => window.__st.openAsideCalls);
-        if (!got || !got.at || !got.at.ok || got.lead !== want[lang].text || got.full !== want[lang].text || got.full.includes(folder)
+        if (!got || !got.at || !got.at.ok || got.lead !== want[lang].lead || got.full !== want[lang].text || got.full.includes(folder)
           || JSON.stringify(got.btns) !== JSON.stringify(want[lang].btns) || JSON.stringify(got.answers) !== JSON.stringify(["start"])
           || !Array.isArray(calls) || calls.length !== 1 || calls[0].length !== 0) bad.push({ lang, got, calls });
       } finally { await p.close(); }
@@ -650,7 +652,7 @@ async function main() {
   };
   {
     const bad = await checkKeptNotice("etiuda.html");
-    check(!bad.length, "c9k a Start from my account that failed with something kept in the set-aside folder says the notice's second sentence alone, with Open this folder (EN & PL, no path in text)", bad.length ? bad : undefined);
+    check(!bad.length, "c9k a Start from my account that failed with something kept in the set-aside folder says its own notice (not finished, nothing lost, where it is, the question still waits), with Open this folder (EN & PL, no path in text)", bad.length ? bad : undefined);
   }
 
   /* r1: storeRow, and roomNext. */
