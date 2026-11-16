@@ -953,7 +953,8 @@ function appendTextScans(steps, addedFiles, windowGates, root, changed, gf) {
   const scans = gf && gf.SCANS;
   const match = gf && gf.globMatches;
   if (!scans || typeof match !== "function") return;
-  const files = changed.map(normRel);
+  /* A build input stands for the page it builds (gates-for withBuiltOutputs), so a scan of the page runs for its source. */
+  const files = (typeof gf.withBuiltOutputs === "function" ? gf.withBuiltOutputs(root, changed) : changed).map(normRel); /* plant:built-scan */
   for (const leg of Object.keys(scans)) {
     const globs = scans[leg];
     if (!Array.isArray(globs) || !globs.length) continue;
