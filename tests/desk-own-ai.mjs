@@ -704,6 +704,22 @@ try {
     window.E_HOST.setReword = on => { window.__rw.calls.push(!!on); window.__rw.on = !!on; };
     window.E_HOST.reword = async () => ({ ok: false, why: "answer" });
   }, at);
+  /* SETTINGS_SHOTS=<folder> also writes a still of the row, on and off (light), beside the row above it, for the designer's eye. */
+  const rwShot = async (pg, name) => {
+    if (!process.env.SETTINGS_SHOTS) return;
+    fs.mkdirSync(process.env.SETTINGS_SHOTS, { recursive: true });
+    const was = await pg.evaluate(() => { const w = document.documentElement.getAttribute("data-theme"); document.documentElement.setAttribute("data-theme", "light"); return w; });
+    await sleep(250);
+    const box = await pg.evaluate(() => {
+      const a = document.querySelector('#setBody [data-row="aisearch"]'), b = document.querySelector('#setBody [data-row="aireword"]');
+      if (!a || !b) return null;
+      b.scrollIntoView({ block: "center", behavior: "instant" });
+      const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(), left = Math.min(ra.left, rb.left), right = Math.max(ra.right, rb.right);
+      return { x: Math.max(0, left - 16), y: Math.max(0, ra.top - 12), width: right - left + 32, height: rb.bottom - ra.top + 24 };
+    });
+    if (box) await pg.screenshot({ path: path.join(process.env.SETTINGS_SHOTS, name + ".png"), clip: box });
+    await pg.evaluate(w => { if (w === null) document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", w); }, was);
+  };
   const rwRow = (pg) => pg.evaluate(() => {
     const r = document.querySelector('#setBody [data-row="aireword"]');
     if (!r) return null;
@@ -723,6 +739,8 @@ try {
     const en = await rwRow(page);
     /* The button as the card's own drawing asks for it (card-reword.js rewordButtonHtml); this page has no catalog of its own to count cards in. */
     const cards = () => page.evaluate(() => ({ cards: 1, buttons: typeof rewordButtonHtml === "function" && rewordButtonHtml().indexOf('data-act="reword"') > -1 ? 1 : 0 }));
+    await sleep(200);
+    await rwShot(page, "s-rewording-on-light");
     const before = await cards();
     if (!en) problems.push("no row where the organisation's model is set");
     else {
@@ -731,6 +749,7 @@ try {
     }
     await page.evaluate(() => { const b = document.querySelector('#setBody [data-row="aireword"] .set-seg button[data-val="off"]'); if (b) b.click(); });
     await sleep(250);
+    await rwShot(page, "s-rewording-off-light");
     const off = await rwRow(page), asOff = await page.evaluate(() => ({ calls: window.__rw.calls.slice(), ordering: [localStorage.getItem("eAiOff"), localStorage.getItem("eSearchAiOff")], seg: ["aisuggest", "aisearch"].map(k => (document.querySelector('#setBody [data-row="' + k + '"] .set-seg button.on') || {}).dataset?.val || "") }));
     await closeTab(); await sleep(250);
     const hidden = await cards();
