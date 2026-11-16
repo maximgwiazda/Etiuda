@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 180;
+const EXPECTED = 183;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -198,7 +198,7 @@ function worldOf(o) {
 /* ---- the shell, evaluated whole: `src` is shell/main.js's text or a planted copy of it ---- */
 /* What the leg reads from main.js, appended to its text; a name main.js lacks comes back undefined, so its leg fails alone. */
 const TAIL_NAMES = ["storeView", "storeRoom", "storeSetNow", "storeAnswerNow", "storeSetAsideDir", "storeSyncFolder", "storeState", "storeTokenTake", "signinRun", "signinRenew", "signinIo", "signinRenewNow", "signinServiceAsk", "storeServiceAt", "storeOnFor", "storeTurn", "branchIdentity", "signinState", "patchDesk", "storeForget", "signinLandingHtml", "signinListen",
-  "signinOutNow", "storeLeaveNow", "storeSyncApply", "storeSyncSoon", "storeSyncLocal", "deskSyncedTell"];
+  "signinOutNow", "storeLeaveNow", "storeSyncApply", "storeSyncSoon", "storeSyncLocal", "deskSyncedTell", "storeTokenFor"];
 const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing", "storeConsentFlight", "storeSyncTimer", "storeSyncPristine", "storeAgainTimer"];
 const TAIL = "\n__test.T = {" + TAIL_NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
   + ", setJoin: v => { teamJoin = v; }, setPolicyText: v => { joinPolicyRead = joinPolicyFacts(String(v)); }, setWindow: v => { theWindow = v; }, get: () => ({" + TAIL_STATE.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "}) };";
@@ -2228,6 +2228,33 @@ async function openManySetAsidesScene(src) {
     withHandMade: withHandMade.paths.map(name), emptyDir: emptyDir.got, noRoot: noRoot.got }) };
 }
 
+/* (z4) A FOLDER TOKEN IS KEPT ONLY FOR THE ACCOUNT IT WAS ASKED FOR: one asked for account A, another account seated while the refresh
+   is out, is not kept, and the folder is not opened with it for the account seated; and a look whose token is answered after a sign out
+   says nothing and arms no retry. */
+async function tokenAccountScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  const p = providersOf(T)[0], heldA = T.signinState().held, fileA = w.file;
+  T.storeForget();
+  w.folderDelay = 200;
+  const asked = T.storeTokenFor(p, heldA);
+  await new Promise(a => setTimeout(a, 40));
+  seatAnother(T, w, heldA);
+  const got = await asked;
+  const access = T.get().storeAccess, bound = !!access && access.token === w.access;
+  T.storeForget();
+  seatAnother(T, w, heldA, SUB);
+  w.file = fileA;
+  const look = T.storeTurn();
+  await new Promise(a => setTimeout(a, 40));
+  T.signinOutNow();
+  await look;
+  if (T.get().storeFlight) await T.get().storeFlight.catch(() => null);
+  const after = T.get(), quiet = after.storeNow === null && !after.storeAgainTimer;
+  w.folderDelay = 0;
+  const ok = !!got.why && !bound && quiet;
+  return { ok, detail: brief({ got, bound, accessWho: access ? "kept" : "none", storeNow: after.storeNow && after.storeNow.state, again: !!after.storeAgainTimer }) };
+}
+
 /* (z2) A FIELD TAKEN BEHIND THE PAGE IS NOT THE PERSON'S REMOVAL: two computers of one person on one store (two shells on one world).
    B adds an edit to one card of a layer; A's page, owing a write of that layer (a star) when A's merge takes B's edit, ignores the tell
    and its whole-key write lands after it. B's edit stands on both and A's star too, nothing kept. Then A's page takes the tell, and the
@@ -2377,6 +2404,7 @@ const LEGS = [
   ["x6k", answerStartKeptScene, "a set-aside whose later step fails and whose move back of the catalog, or of the store folder, fails keeps that whole in the set-aside folder, which stays, the log names it, the answer carries it and the button opens it; where every move back succeeds the folder goes"],
   ["x6r", openAfterRestartScene, "after a restart the button's channel opens the desk's single dated folder, or Set aside itself when a second or hand-made dated folder is beside it; all removed it answers gone, and a name of another shape in store.json is ignored"],
   ["x6l", asideLinkScene, "a link under Set aside bearing the name store.json keeps is never opened as the set-aside folder: Open this folder answers gone; a real folder of that name is opened"],
+  ["z4", tokenAccountScene, "a folder token asked for one account and answered with another seated is not kept for it, and a look whose token is answered after a sign out says nothing and arms no retry"],
   ["z2", takenFieldScene, "an edit another computer made, taken into a layer behind a page that owed a write of it, stands on both computers with the page's own change once that write lands, nothing kept; a field the person then removes here, the tell taken, is removed there; a key the shell cleared whole stays cleared under such a write, and the page told again takes it"],
   ["x6a", openManySetAsidesScene, "with two set-asides (a kept failure then a success) or with the named folder removed and another dated folder left or with a hand-made dated folder beside the desk's, Open this folder opens Set aside itself before and after a restart; with one set-aside it opens that folder; with none it answers gone"],
 ];
@@ -2497,6 +2525,8 @@ const PLANTS = [
   ["x6r", swap("    s.aside ? { aside: s.aside } : {}), null, 1)", "    {}), null, 1)"), "the set-aside folder's name not kept in store.json, so a restart forgets it"],
   ["x6r", swap(".test(d.aside) ? d.aside : \"\" }; /* plant:store-aside-name */", ".test(d.aside) || ok && typeof d.aside === \"string\" ? d.aside : \"\" }; /* plant:store-aside-name */"), "any name in store.json read as the set-aside folder's"],
   ["x6l", swap("    try { return fs.lstatSync(path.join(root, n)).isDirectory(); } catch { return false; } /* plant:aside-lstat */", "    try { return fs.statSync(path.join(root, n)).isDirectory(); } catch { return false; } /* plant:aside-lstat */"), "the dated folder judged by a stat that follows a link, so a link named like it is opened as it"],
+  ["z4", swap("  if (storeWho(signinState().held) !== storeWho(held)) return { why: \"offline\" }; /* plant:token-who */\n", ""), "the token kept for whoever is seated when it comes"],
+  ["z4", swap("  if (token.why) return ours() ? storeSettle({ state: \"unavailable\", why: token.why }) : null; /* plant:token-ours */", "  if (token.why) return storeSettle({ state: \"unavailable\", why: token.why }); /* plant:token-ours */"), "a look whose token failed settles after a sign out, saying unavailable and arming a retry"],
   ["z2", swap("    if (storeSyncing && Object.keys(rewind).length) storeSyncing.untake(rewind); /* plant:desk-untake */\n", ""), "what the sync took is not taken again once the page's write from a copy without it lands, so the next merge reads it as this computer's removal"],
   ["z2", swap("    for (const k of w.dropped) delete patch[k];\n", ""), "a key the shell cleared whole is written back by the page's write from a copy that still held it"],
   ["x6a", swap("  return dated.length === 1 && dated[0] === name ? path.join(root, name) : root; /* plant:open-aside-many */", "  return name ? path.join(root, name) : \"\"; /* plant:open-aside-many */"), "the count taken out, so the latest is always opened"],

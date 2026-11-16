@@ -11167,6 +11167,8 @@ async function storeTokenFor(p, held) {
   try { res = await signinRequest((u, init) => deskFetch(u, init), signinKnown(p.id).token, signinRefreshForm(p, refresh, "", folder)); }
   catch { return { why: "offline" }; }
   if (signinTransient(res)) return { why: "offline" };
+  /* A token asked for one account is never kept for another seated, or none, by the time it comes. */
+  if (storeWho(signinState().held) !== storeWho(held)) return { why: "offline" }; /* plant:token-who */
   signinFolderTake({ folderToken: storeTokenTake }, res, p.id, Date.now());
   return storeAccess && storeAccess.provider === p.id && storeAccess.token ? {} : { why: storeUngiven() };
 }
@@ -11335,7 +11337,7 @@ async function storeEndEverywhere(keys) {
   const end = await storeEndPost(keys.rt), ended = end === "done";
   if (end === "owed") storeOwe(keys.rt); /* plant:store-end-owed */
   if (p) {
-    const L = StoreLib(), folder = L.folderFor(p.id, { ask: storeAsk, token: () => (storeAccess ? storeAccess.token : "") });
+    const L = StoreLib(), folder = L.folderFor(p.id, { ask: storeAsk, token: () => (storeAccess && storeAccess.who === storeWho(held) ? storeAccess.token : "") });
     const tok = folder ? await storeTokenFor(p, held).catch(() => ({ why: "offline" })) : { why: "no-drive" };
     if (folder && !tok.why) await folder.write(L.endedText(keys.rt)).catch(() => null); /* plant:store-end-mark */
   }
@@ -11371,7 +11373,7 @@ async function storeLeaveTry(cert) {
   const held = signinState().held, me = branchIdentity(false);
   const p = held ? signinOffered().find(x => x.id === held.provider) : null;
   if (!p || !me) return false;
-  const L = StoreLib(), folder = L.folderFor(p.id, { ask: storeAsk, token: () => (storeAccess ? storeAccess.token : "") });
+  const L = StoreLib(), folder = L.folderFor(p.id, { ask: storeAsk, token: () => (storeAccess && storeAccess.who === storeWho(held) ? storeAccess.token : "") });
   const tok = folder ? await storeTokenFor(p, held) : { why: "no-drive" };
   if (tok.why) return false;
   const current = cert && Number.isSafeInteger(cert.until) && cert.until > Date.now() ? cert : null;
@@ -11736,7 +11738,7 @@ async function storeLookRun(p, held, me, pol) {
   let access = null;
   const folder = L.folderFor(p.id, { ask: storeAsk, token: () => (access && ours() ? access.token : "") });
   const token = folder ? await storeTokenFor(p, held) : {};
-  if (token.why) return storeSettle({ state: "unavailable", why: token.why });
+  if (token.why) return ours() ? storeSettle({ state: "unavailable", why: token.why }) : null; /* plant:token-ours */
   access = storeAccess;
   const io = { folder: folder, local: storeLocal, keep: k => { if (ours()) storeKeep(k); },
     grant: async (rt, sPub, extra) => (ours() ? storeGrant(me.key, rt, sPub, Object.assign({}, extra, { company: pol.company === true })) : { why: "unreached" }),
