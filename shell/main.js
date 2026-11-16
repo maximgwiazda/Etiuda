@@ -11461,7 +11461,8 @@ function signinLeave(s, me) {
 /* One signout/desk for `key`, at once or after the renewal still out, and the owed mark taken off once the service has it. Resolves
    whether it did; never rejects. */
 function signinOutSend(key) {
-  const send = () => signoutAsk(signinIo({ loop: null }), key, Date.now); /* plant:signout-post */
+  /* Sent when its turn comes only while still owed: a sign-in that took the desk's place meanwhile no longer wants it. */
+  const send = () => (signinState().out === key ? signoutAsk(signinIo({ loop: null }), key, Date.now) : Promise.resolve(false)); /* plant:signout-post */
   const flight = (signinRenewing ? signinRenewing.then(send, send) : send()).then(ok => { /* plant:signout-after-renew */
     if (signinOutFlight === flight) signinOutFlight = null;
     const st = signinState();

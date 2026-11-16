@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 183;
+const PLANTS = 185;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 159 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 161 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2497,6 +2497,46 @@ CASES.switchLeaves = async (s, swap) => {
   if (seen.length) console.log("    switch: " + seen.join(" | "));
   return every && kept;
 };
+/* (8) Sign out while the quiet renewal is out, then a sign-in at once (the test architect's reproduction): the sign out, queued behind
+   the renewal, is answered before the new sign-in's signin/desk is sent, so the service never frees the place the sign-in just took;
+   nothing stays owed and the desk is signed in. */
+CASES.outThenSignin = async (s, swap) => {
+  let release = null;
+  const st = switchStand(s), w = loadSwitch(st, swap);
+  st.renewGate = new Promise(r => { release = r; });
+  st.sub = "s-1";
+  st.answer = B_ANSWERS().cert;
+  const renewing = w.signinRenewNow();
+  await tick(5);
+  w.signinOutNow();
+  const press = w.press();
+  await tick(5);
+  release();
+  await press;
+  await renewing;
+  await tick(10);
+  const o = st.order, out = o.indexOf("signout/desk none answered"), seat = o.indexOf("signin/desk s-1");
+  return out >= 0 && seat > out && o.filter(x => x === "signout/desk none").length === 1 && !!st.store.held && st.store.held.sub === "sealed:s-1"
+    && st.store.out === undefined;
+};
+/* (8) A sign out queued behind a renewal is sent, when its turn comes, only while it is still owed: one a sign-in took the place from
+   meanwhile is not sent. */
+CASES.outStillOwed = async (s, swap) => {
+  const run = async (taken) => {
+    let release = null;
+    const st = switchStand(s), w = loadSwitch(st, swap);
+    st.store.held = null;
+    st.store.out = DESK_KEY;
+    w.setRenewing(new Promise(r => { release = r; }));
+    const flight = w.signinOutSend(DESK_KEY);
+    if (taken) delete st.store.out;
+    release();
+    await flight;
+    await tick(5);
+    return st.order.filter(x => /^signout\/desk/.test(x)).length;
+  };
+  return (await run(false)) === 2 && (await run(true)) === 0;
+};
 /* Sign out and the switch share one leaving (signinLeave): Sign out is its guards, that call, and its words; the press calls it once,
    for another account only, before the service is asked. A step added to Sign out outside signinLeave turns this red. */
 CASES.switchShared = () => {
@@ -3440,6 +3480,8 @@ const LEGS = [
   ["ds50a", "pooledCert", "a pooled desk's certificate (pooled: true, signed as the line \"pooled\") is a seat on the desk, kept by signin.json, and the relay's certWhy takes it alike; the mark outside the signature, or of another value, is no certificate, nor is one running past a day"],
   ["ds22g", "doorsShownSigned", "doors held without the signature are offered nowhere and a press on one joins nothing; signed ones are offered"],
   ["ds51a", "switchLeaves", "review 11: a sign-in as another account does for the account left all Sign out does, by the same count (its signout/desk, before the new signin/desk; its seat.json; its door's join; the store forgotten; its organisation's licence forgotten), whatever the new account's answer: a certificate, none, full, a refusal, the service unreached; a sign-in as the same account leaves nothing"],
+  ["ds51c", "outThenSignin", "review 8: Sign out during a renewal and a sign-in at once: the sign out is answered before the new signin/desk is sent, nothing stays owed, the desk signed in"],
+  ["ds51d", "outStillOwed", "review 8: a sign out queued behind a renewal is sent only while still owed; one whose place a sign-in took meanwhile is not sent"],
   ["ds51b", "switchShared", "review 11: Sign out and the switch share one leaving, signinLeave: Sign out is its guards, that call and its words, and the press calls it once, for another account, before the service is asked"],
 ];
 for (let [id, name, line] of LEGS) {
@@ -3783,7 +3825,9 @@ if (!PLANTS_OFF) {
   await plantWire("dsp24", ["  if (harnessLaunch() && !signinLabHeld()) return \"\"; /* plant:renew-now-harness */\n", ""], "renewHarness");
   await plantWire("dsp25", ["const SIGNIN_RENEW_MS = 24 * 60 * 60 * 1000; /* plant:renew-daily */", "const SIGNIN_RENEW_MS = 55 * 60 * 1000;"], "renewDaily");
   await plantWire("dsp26", ["if (!p || !me) return \"\"; /* plant:renew-offered */", "if (!me) return \"\";"], "renewWire");
-  await plantWire("dsp29", ["const send = () => signoutAsk(signinIo({ loop: null }), key, Date.now); /* plant:signout-post */", "const send = () => Promise.resolve(false);"], "signoutPost");
+  await plantWire("dsp29", ["const send = () => (signinState().out === key ? signoutAsk(signinIo({ loop: null }), key, Date.now) : Promise.resolve(false)); /* plant:signout-post */", "const send = () => Promise.resolve(false);"], "signoutPost");
+  await plantWire("dsp202", ["const send = () => (signinState().out === key ? signoutAsk(", "const send = () => (true ? signoutAsk("], "outStillOwed");
+  await plantWire("dsp203", ["    if (got.ok && signinOutFlight) await signinOutFlight; /* plant:out-before-signin */", "    /* plant:out-before-signin */"], "outThenSignin");
   await plantWire("dsp156", ["  delete s.licenceManaged; /* plant:signout-managed */\n", ""], "signoutManaged");
   await plantWire("dsp30", ["&& signinOffered().length) { /* plant:signout-offered */", ") {"], "signoutNone");
   await plantWire("dsp31", ["return !!teamJoin && !(teamJoin.invite && teamJoin.invite.relay); /* plant:flush-asking */", "return false;"], "flushJoin");
