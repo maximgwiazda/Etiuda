@@ -11434,6 +11434,8 @@ ipcMain.handle("etiuda:open-set-aside", (e, ...args) => {
   return storeOpenSetAside();
 });
 ipcMain.on("etiuda:store-said", (e) => { e.returnValue = null; if (fromEngine(e)) storeSay = ""; });
+/* The page showed the row's conflict line: the versions kept so far are no longer counted, and stay where they are. */
+ipcMain.on("etiuda:store-opened", (e) => { e.returnValue = null; if (fromEngine(e) && storeSyncing) storeSyncing.opened(); });
 
 /* The folder "Open this folder" opens: the dated folder store.json names when it exists and is the only folder of that shape under
    Set aside; Set aside itself whenever any folder of that shape is there (two or more, or one other than the named one); "" where
@@ -11844,8 +11846,8 @@ function storeSyncFresh() {
   try { fs.mkdirSync(storeSyncDir(), { recursive: true }); writeReplacing(storeSyncDir(STORE_SYNC_FILE), JSON.stringify({ rt: "", ledger: {}, kept: [] })); return true; }
   catch (e) { console.error("etiuda: the store's sync state could not be begun again - " + e.message); return false; }
 }
-/* What the Account row reads: how many versions another computer made wait here for the person's choice. */
-function storeSyncView() { return { kept: storeSyncing ? storeSyncing.state().kept.length : 0 }; }
+/* What the Account row reads: how many versions are kept here whose notice the person has not opened (etiuda:store-opened). */
+function storeSyncView() { return { kept: storeSyncing ? storeSyncing.state().kept.filter(k => !k.opened).length : 0 }; } /* plant:store-kept-opened */
 
 /* An IPC message is answered only for the engine's own top frame. Nothing else can reach these
    channels today, since navigation is refused and no other frame is created; this is the line

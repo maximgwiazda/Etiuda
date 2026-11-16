@@ -39,7 +39,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 26;
+const EXPECTED = 28;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const STORE = path.join(E.ROOT, "shell", "sync", "store.cjs");
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -71,6 +71,7 @@ async function boot({ lang = "en", theme = "light", page: name = "etiuda.html", 
       onSignin: fn => { window.__sgnTell = fn; },
       storeState: () => window.__st.view,
       storeSaid: () => { window.__st.said++; window.__st.view = Object.assign({}, window.__st.view, { say: "" }); },
+      storeOpened: () => { window.__st.opened = (window.__st.opened || 0) + 1; },
       storeSet: async w => { window.__st.sets.push(w); return null; },
       storeAnswer: async c => {
         window.__st.answers.push(c);
@@ -655,6 +656,25 @@ async function main() {
     check(!bad.length, "c9k a Start from my account that failed with something kept in the set-aside folder says its own notice (not finished, nothing lost, where it is, the question still waits), with Open this folder (EN & PL, no path in text)", bad.length ? bad : undefined);
   }
 
+  /* c8o: the conflict's notice ends once opened. Account painted with the row on tells the shell nothing; painted with the conflict line, the
+     line shown, it tells the shell once that the notice was opened, by its no-argument call. */
+  const checkOpened = async name => {
+    const p = await boot({ page: name, view: ON });
+    try {
+      await p.evaluate(() => openSettings("account"));
+      await sleep(120);
+      const quiet = await p.evaluate(() => window.__st.opened || 0);
+      await p.evaluate(() => { window.__st.view = { shown: true, line: "conflict", on: true, held: false, why: "", since: 0, say: "" }; openSettings("account"); });
+      await sleep(120);
+      const r = await rowOf(p), told = await p.evaluate(() => window.__st.opened || 0);
+      return { quiet, line: r && r.line, told, ok: quiet === 0 && !!r && r.line === "Changed on two computers: the newer change is in use, and the older one is kept, so nothing is lost." && told === 1 };
+    } finally { await p.close(); }
+  };
+  {
+    const r = await checkOpened("etiuda.html");
+    check(r.ok, "c8o Account painted with the conflict line, the line shown, tells the shell once that the notice was opened; painted with the row on, nothing", r.ok ? undefined : r);
+  }
+
   /* r1: storeRow, and roomNext. */
   const rowBad = ST => {
     const now = Date.UTC(2026, 10, 20), D = 24 * 3600 * 1000;
@@ -787,6 +807,18 @@ async function main() {
       detail = bad.length ? "red: " + JSON.stringify(bad[0]) : "still held";
       check(bad.length > 0, "p c9k leaving the kept answer's notice out turns c9k red", detail);
     } else check(false, "p c9k leaving the kept answer's notice out turns c9k red", detail);
+  }
+  if (PLANTS_OFF) skip("p c8o the page's word that the conflict line was opened taken out turns c8o red");
+  else {
+    const OPENED_PLANT = ["box.querySelector('[data-row=\"sync\"]')) syncOpened();", "box.querySelector('[data-row=\"sync\"]')) void 0;"];
+    const n = PAGE.split(OPENED_PLANT[0]).length - 1;
+    let detail = "the plant's anchor is there " + n + " times";
+    if (n === 1) {
+      fs.writeFileSync(path.join(lab, "planted-opened.html"), PAGE.split(OPENED_PLANT[0]).join(OPENED_PLANT[1]));
+      const r = await checkOpened("planted-opened.html");
+      detail = !r.ok ? "red: " + JSON.stringify(r) : "still held";
+      check(!r.ok, "p c8o the page's word that the conflict line was opened taken out turns c8o red", detail);
+    } else check(false, "p c8o the page's word that the conflict line was opened taken out turns c8o red", detail);
   }
   if (PLANTS_OFF) skip("p c9d firstSay saying at a look that did not make the store turns c9d red");
   else {

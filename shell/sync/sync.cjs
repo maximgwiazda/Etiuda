@@ -8,8 +8,8 @@
    live elsewhere (desk.json's envelope, signin.json, the relay's mirrors) and are never read here.
 
    THE MERGE, per item: a setting by the later write; an edit or a catalog file by the later write where only one computer changed it
-   since it last took the other's, and where both changed it, the later write in place on every computer and each earlier version
-   kept aside on each, so nothing is lost. Each entry names who wrote it, when, and the other computers' entries it was made over
+   since it last took the other's, and where both changed it, the later write in place on every computer and the earlier version kept
+   aside on the computer whose write gave way, so nothing is lost. Each entry names who wrote it, when, and the other computers' entries it was made over
    (`seen`), so "changed since it last took the other's" is read from the entries alone. */
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -252,8 +252,8 @@ function mergeOnce(o) {
       patch[item] = v;
       continue;
     }
-    /* Both changed it: the later write stands on every computer, and each earlier version is kept aside, this computer's own among them.
-       Nothing is lost, and the entry here claims none of them, so the other computer keeps the earlier too. */
+    /* Both changed it: the later write stands on every computer, and each earlier version this computer holds is kept aside here, its
+       own among them. Only the computer whose write gave way is sure to keep it: the other may never read it, its place moved on. */
     const stay = top.reduce((a, b) => (b.t > a.t || (b.t === a.t && b.by > a.by) ? b : a)); /* plant:later-stands */
     if (!mine || !same(stay, mine)) {
       const v = valueOf(stay, item);
@@ -446,7 +446,14 @@ function createStoreSync(o) {
     merge();
     return true;
   }
-  return { turn, merge, stop, state: () => state, channel: () => ch, running: () => !!ch, resolve: choose };
+  /* The person has opened the notice of the versions kept: each kept now is marked so, and only the desk counts it; the copies stay. */
+  function opened() {
+    if (!state.kept.some(k => !k.opened)) return false;
+    state = Object.assign({}, state, { kept: state.kept.map(k => (k.opened ? k : Object.assign({}, k, { opened: true }))) });
+    o.save(state);
+    return true;
+  }
+  return { turn, merge, stop, state: () => state, channel: () => ch, running: () => !!ch, resolve: choose, opened };
 }
 
 module.exports = { SYNC_NAME, SYNC_KIND, SETTINGS, LAYER_RE, CATALOG_RE, CATALOG_MAX, follows, isSetting, fileRel, syncRel, localItems, syncRead, syncText,

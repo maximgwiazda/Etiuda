@@ -28425,6 +28425,13 @@ What you type stays in this browser only.`;
     } catch (e) {
     }
   }
+  function syncOpened() {
+    const h = eHost();
+    try {
+      if (h && typeof h.storeOpened === "function") h.storeOpened();
+    } catch (e) {
+    }
+  }
   var syncTellers = [];
   function syncOnChange(fn) {
     if (typeof fn === "function") syncTellers.push(fn);
@@ -37839,7 +37846,9 @@ What you type stays in this browser only.`;
     if (s && s.shown) groups.push({ rows: [syncRow(s, v.signedIn)] });
     return groups;
   }
+  var syncRowLine = "";
   function syncRow(s, provider) {
+    syncRowLine = s.line;
     let sw = s.line === "unavailable" || s.line === "org-off" ? "" : s.line === "ask" ? '<button type="button" class="btn" data-sync-act="decide">' + esc(t("Decide…")) + "</button>" : seg2("sync", [{ v: "off", t: t("Off") }, { v: "on", t: t("On") }], s.on ? "on" : "off", s.held) + (s.held ? '<span class="sgn-lock">' + ICON_LOCK2 + esc(t("Set by your organisation")) + "</span>" : "");
     if (s.line === "ungiven") sw = sw.replace('<button type="button" data-val="on"', '<button type="button" data-e-open="store-on" data-val="on"');
     return row("sync", "teams", t("Sync across computers"), syncLine(s, provider), sw);
@@ -38521,11 +38530,13 @@ What you type stays in this browser only.`;
   function paintSettings() {
     const host = settingsHost(), box = host && host.querySelector("#setBody");
     if (!box) return;
+    syncRowLine = "";
     box.innerHTML = settingsPageHtml(sxOn, sxQuery);
     paintKeysInline();
     wireHotkeyRow(box);
     wirePage(box);
     translateTree(box);
+    if (syncRowLine === "conflict" && box.querySelector('[data-row="sync"]')) syncOpened();
   }
   function syncDeskLook() {
     const host = settingsHost(), cols = host && host.querySelector(".sx-mini .cols");

@@ -651,6 +651,11 @@ function syncSay(s){
   const h=eHost();
   try{ if(h && typeof h.storeSaid==="function") h.storeSaid(); }catch(e){ /* the shell has gone */ } /* plant:sync-said-told */
 }
+/* The row's conflict line was painted where the person sees it: the shell stops counting the versions kept so far; they stay kept. */
+function syncOpened(){
+  const h=eHost();
+  try{ if(h && typeof h.storeOpened==="function") h.storeOpened(); }catch(e){ /* the shell has gone */ }
+}
 const syncTellers=[];
 function syncOnChange(fn){ if(typeof fn==="function") syncTellers.push(fn); }
 function syncChanged(){
@@ -728,6 +733,7 @@ export {
   syncLine,
   syncNow,
   syncOnChange,
+  syncOpened,
   syncRead,
   syncSay,
   syncSet,

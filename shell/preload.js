@@ -299,6 +299,7 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   storeAnswer: (choice) => ipcRenderer.invoke("etiuda:store-answer", String(choice || "")),
   openSetAside: () => ipcRenderer.invoke("etiuda:open-set-aside"),
   storeSaid: () => ipcRenderer.sendSync("etiuda:store-said"),
+  storeOpened: () => ipcRenderer.sendSync("etiuda:store-opened"),
   onStore: (fn) => ipcRenderer.on("etiuda:store", () => { try { fn(); } catch { /* the page has gone */ } }),
   onSignin: (fn) => ipcRenderer.on("etiuda:signin", (_e, v) => { try { fn(v && typeof v === "object" ? v : {}); } catch { /* the page has gone */ } }),
   /* A proxy's question for a user name and password, as {id, host, port, again}, and the page's answer to it by id;

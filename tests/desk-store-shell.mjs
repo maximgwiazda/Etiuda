@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 158;
+const EXPECTED = 160;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -1695,6 +1695,32 @@ async function conflictsScene(src) {
   const ok = on === "on" && !!kept && two.line === "conflict" && none === "on";
   return { ok, detail: brief({ on, kept: kept ? "the sync's list" : "no sync", withOne: two.line, emptied: none }) };
 }
+/* (gk) A conflict's notice ends once opened: a version kept reads conflict; the page telling the shell it showed that line (the
+   no-argument store-opened channel) ends the notice, the kept entry and its copy where they were and the mark kept in sync.json; a version
+   kept after it is a new notice. Nothing reaches the sync's choose. */
+async function conflictOpenedScene(src) {
+  const r = await renewScene(src), T = r.shell.T, sync = T.get().storeSyncing, UD = r.shell.UD;
+  const told = r.shell.ipc.on["etiuda:store-opened"], e = { senderFrame: { parent: null, url: "file:///desk/engine/etiuda.html" } };
+  if (typeof told !== "function" || !sync) return { ok: false, detail: brief({ channel: typeof told, sync: !!sync }) };
+  const keptDir = path.join(UD, "store", "kept");
+  fs.mkdirSync(keptDir, { recursive: true });
+  fs.writeFileSync(path.join(keptDir, "copy.txt"), "{\"value\":\"the earlier\"}");
+  const entry = k => ({ item: "k:e3f9a1~Pack#edits/c1", by: "k-" + "0".repeat(16), t: k, h: "0".repeat(64) });
+  sync.state().kept.push(entry(1));
+  const first = T.storeView().line;
+  const other = { returnValue: "unset", senderFrame: { parent: null, url: "https://elsewhere.test/" } };
+  told(other);
+  const stranger = T.storeView().line;
+  told(e);
+  const after = T.storeView().line;
+  let disk = null;
+  try { disk = JSON.parse(fs.readFileSync(path.join(UD, "store", "sync.json"), "utf8")); } catch { disk = null; }
+  const stays = sync.state().kept.length === 1 && fs.readFileSync(path.join(keptDir, "copy.txt"), "utf8") === "{\"value\":\"the earlier\"}";
+  sync.state().kept.push(entry(2));
+  const again = T.storeView().line;
+  const ok = first === "conflict" && stranger === "conflict" && after === "on" && stays && !!disk && disk.kept.length === 1 && disk.kept[0].opened === true && again === "conflict";
+  return { ok, detail: brief({ first, stranger, after, stays, marked: !!disk && !!disk.kept[0] && disk.kept[0].opened === true, again }) };
+}
 async function switchStopScene(src) {
   const got = {};
   for (const what of ["here", "everywhere"]) {
@@ -2034,6 +2060,7 @@ const LEGS = [
   ["d", doorScene, "the licence service's door takes signin/desk, signout/desk, store/grant and store/end of its own host, and refuses every other route"],
   ["g", syncScene, "the look that is on starts the store's sync: a desk key that follows reaches the relay sealed, one that does not stays out, and a sign out stops it"],
   ["gc", conflictsScene, "the versions the sync keeps for the person's choice are the row's conflict count: one kept reads conflict, none reads on"],
+  ["gk", conflictOpenedScene, "a conflict's notice ends once the page tells the shell it showed the line, on the engine's own channel alone: the kept version and its copy stay, the mark is kept in sync.json, and a version kept after it is a new notice"],
   ["gs", switchStopScene, "This computer and Everywhere stop the store's sync at once, the relay unreached, not at the next look"],
   ["gr", roomWireScene, "a write the store's relay refuses for its room turns the row full, and the next write it takes turns it on"],
   ["jp", pristineScene, "the store's sync names the shipped sample untouched in the person's folder by its bytes, and a copy with one byte changed as the person's own"],
@@ -2126,6 +2153,7 @@ const PLANTS = [
   ["f3", swap("    loop.land(folder || kind || \"back\"); /* plant:folder-land */", "    loop.land(kind || \"back\"); /* plant:folder-land */"), "the second step lands the sign-in's page, not the folder's"],
   ["h", swap("Nothing changed. It can be turned on in Account at any time. This tab can be closed.", "Nothing changed. It can be turned on in Account at any time. You can close this tab."), "a folder page closing in other words than the sign-in's"],
   ["gc", swap("function storeConflicts() { return storeSyncView().kept; } /* plant:store-conflicts */", "function storeConflicts() { return 0; } /* plant:store-conflicts */"), "the row counts no conflict"],
+  ["gk", swap("kept.filter(k => !k.opened).length : 0 }; } /* plant:store-kept-opened */", "kept.length : 0 }; } /* plant:store-kept-opened */"), "the row counts every version kept, opened or not, so the notice never ends"],
   ["gs", swap("  storeSyncStop(); /* plant:store-set-stop */\n", ""), "the switch leaves the sync running"],
   ["gr", swap("      room: storeRoom, /* plant:store-room */\n", ""), "the store's channel tells the row nothing"],
   ["f7", swap("    if (!run.after) signinBusy = null; /* plant:folder-busy */", "    signinBusy = null; /* plant:folder-busy */"), "the sign-in ends before its folder step, so Cancel cannot reach it"],

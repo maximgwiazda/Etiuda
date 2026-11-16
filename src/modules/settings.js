@@ -32,7 +32,7 @@ import { focusKey, focusSame, originOf } from "./dom.js";
 import { orgModel, orgRanks, syncOrgMark } from "./org-model.js";
 import { SIGNIN_NAMES, signinNow, signinShown, signinParts, signinSay, signinNoSeat, signinTold, signinActsHtml, signinWhen, signinProvidersHtml, signinIdentHtml, signinCodeText, signinChoosingNow, signinDoorsHtml, signinDoorRefusedNow,
   signinAct, signinStart, signinOnChange, signinPreviewHtml, signinLinkHtml, signinLinkSelect, signinCopyHtml, signinManaged, signinKeepsAccount,
-  signinCapHolds, signinStranded, signinStrandedWords, syncNow, syncLine, syncSet, syncOnChange, syncConsent, askSyncWhose } from "./signin.js";
+  signinCapHolds, signinStranded, signinStrandedWords, syncNow, syncLine, syncSet, syncOnChange, syncOpened, syncConsent, askSyncWhose } from "./signin.js";
 import { hangBubble } from "./bubble.js";
 
 /* THE SETTINGS SCREEN, a screen tab. Opening it shows every section on one page, under its name,
@@ -371,7 +371,9 @@ function accountGroups(){
 }
 /* SYNC ACROSS COMPUTERS, a card of its own: the line says how it stands, and the switch is drawn only where it can act; one policy
    holds is drawn fixed, with the lock. */
+let syncRowLine="";
 function syncRow(s, provider){
+  syncRowLine=s.line;
   let sw=s.line==="unavailable" || s.line==="org-off" ? ""
     : s.line==="ask" ? '<button type="button" class="btn" data-sync-act="decide">'+esc(t("Decide\u2026"))+'</button>'
     : seg("sync",[{v:"off",t:t("Off")},{v:"on",t:t("On")}], s.on?"on":"off", s.held)
@@ -935,11 +937,14 @@ function sxRefocus(host,fk,inPage){
 function paintSettings(){
   const host=settingsHost(), box=host && host.querySelector("#setBody");
   if(!box) return;
+  syncRowLine="";
   box.innerHTML=settingsPageHtml(sxOn,sxQuery);
   paintKeysInline();
   wireHotkeyRow(box);
   wirePage(box);
   translateTree(box);
+  /* The conflict's notice ends once its line has been on the page (signin.js syncOpened). */
+  if (syncRowLine === "conflict" && box.querySelector('[data-row="sync"]')) syncOpened();
 }
 function syncDeskLook(){
   const host=settingsHost(), cols=host && host.querySelector(".sx-mini .cols");
