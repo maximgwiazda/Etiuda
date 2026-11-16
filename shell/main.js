@@ -4354,7 +4354,7 @@ function policyWords(facts, lang) {
 }
 function joinPolicyFrom(text, lang) { return policyWords(joinPolicyFacts(text), lang); }
 /* NO COPY OF A READ IS KEPT ON DISK: the person can write userData, and nothing a user can write is ever read as IT's word. A
-   policy-last-good.json an earlier build left there is not read (Claude α, 2026-11-16, reversing the kept copy of 2026-11-15). */
+   policy-last-good.json an earlier build left there is not read. */
 /* A read that failed is asked again at the first ask once this has passed, so one failure does not stand for the run. */
 const POLICY_REREAD_MS = 60 * 60 * 1000;
 /* How often a running desk looks at the key again, so a policy turned off, or an AiKey removed, stops the next send within about
