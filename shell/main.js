@@ -11382,7 +11382,8 @@ ipcMain.handle("etiuda:signin", async (e, provider) => {
   tellSignin();
   let landing = "appfail";
   try {
-    const access = managed || (st.held && st.held.provider === p.id) ? signinAccessFor(p, managed, st.held) : "";
+    /* What is asked is the account signed in to's, which nothing knows yet: machine policy's path or today's, never the held account's. */
+    const access = signinAccessFor(p, managed, null); /* plant:access-not-held */
     let got = await signinRun(io, p, me.key, Date.now, access || undefined);
     if (got.ok && managed && signinOtherHeld(st, got.sub)) got = { ok: false, reason: "signin-other" }; /* plant:managed-same */
     /* Another account than the one held: the desk leaves that one as Sign out does, whatever this one's answer. */

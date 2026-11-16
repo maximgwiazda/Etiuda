@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 185;
+const PLANTS = 186;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 161 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 162 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1533,7 +1533,7 @@ function waitStand(sec, swap, storage, branchId) {
   const vals = {
     ipcMain: { on: (ch, fn) => { st.on[ch] = fn; }, handle: (ch, fn) => { st.handle[ch] = fn; } }, fromEngine: () => true, LINK_CLICK_MS: 2000,
     signinState: () => st.state || ({ held: null }), signinLapsed: sec.signinLapsed, signinOffered: () => [MS], signinPreviewing: () => false,
-    signinKnown: sec.signinKnown, SIGNIN_PROVIDERS: sec.SIGNIN_PROVIDERS, branchIdentity: branchId || (() => ({ id: DESK_ID, key: DESK_KEY })), net: { fetch: out },
+    signinKnown: sec.signinKnown, signinAccessFor: sec.signinAccessFor, SIGNIN_PROVIDERS: sec.SIGNIN_PROVIDERS, branchIdentity: branchId || (() => ({ id: DESK_ID, key: DESK_KEY })), net: { fetch: out },
     signinRun: sec.signinRun, signinLanding: sec.signinLanding, signinSeat: out, signinTake: out, signinFlush: out, signinSave: out,
     tellSignin: () => { st.told.push(st.view()); }, signinPageOk: sec.signinPageOk, sealsForReal: sec.sealsForReal,
     safeStorage: storage === undefined ? { isEncryptionAvailable: () => true } : storage, http: {}, SIGNIN_WAIT_MS: sec.SIGNIN_WAIT_MS,
@@ -2537,6 +2537,24 @@ CASES.outStillOwed = async (s, swap) => {
   };
   return (await run(false)) === 2 && (await run(true)) === 0;
 };
+/* (1) An unmanaged desk signed in with an account on the service's access path (held.access, Microsoft's registration and the
+   service's id filled in): a new sign-in asks the provider today's scopes, as for any account, and the new account is handed no access
+   flag where the service seated it on its ID token alone; a managed computer still asks the service's scope (the control). */
+const SERVICE_TABLE = ['extra: Object.freeze({ response_mode: "query", prompt: "select_account" }), service: "" }),',
+  'extra: Object.freeze({ response_mode: "query", prompt: "select_account" }), service: "11111111-2222-4333-8444-555555555555" }),'];
+CASES.accessNotHeld = async (s, swap) => {
+  const sec = load(SERVICE_TABLE);
+  const run = async managed => {
+    const st = switchStand(s, { held: { access: true }, managed: managed ? { managed: true, shared: true } : null, accessFor: sec.signinAccessFor });
+    st.answer = B_ANSWERS().cert;
+    await loadSwitch(st, swap).press();
+    await tick(5);
+    return { asked: st.runAccess[0], access: !!st.store.held && st.store.held.access === true, sub: st.store.held && st.store.held.sub };
+  };
+  const plain = await run(false), managed = await run(true), scope = sec.signinAccessFor(MS, true, null);
+  return /^api:\/\/.+\/Licence\.Use$/.test(scope) && plain.asked === undefined && plain.access === false && plain.sub === "sealed:s-2"
+    && managed.asked === scope && managed.access === true;
+};
 /* Sign out and the switch share one leaving (signinLeave): Sign out is its guards, that call, and its words; the press calls it once,
    for another account only, before the service is asked. A step added to Sign out outside signinLeave turns this red. */
 CASES.switchShared = () => {
@@ -3173,7 +3191,7 @@ function landStand(sec, swap, serve, loopQ) {
   const vals = {
     ipcMain: { on: (ch, fn) => { st.on[ch] = fn; }, handle: (ch, fn) => { st.handle[ch] = fn; } }, fromEngine: () => true, LINK_CLICK_MS: 2000,
     signinState: () => ({ held: null }), signinLapsed: sec.signinLapsed, signinOffered: () => [MS], signinPreviewing: () => false,
-    signinKnown: sec.signinKnown, SIGNIN_PROVIDERS: sec.SIGNIN_PROVIDERS, branchIdentity: () => ({ id: DESK_ID, key: DESK_KEY }), net: { fetch: () => { throw new Error("no"); } },
+    signinKnown: sec.signinKnown, signinAccessFor: sec.signinAccessFor, SIGNIN_PROVIDERS: sec.SIGNIN_PROVIDERS, branchIdentity: () => ({ id: DESK_ID, key: DESK_KEY }), net: { fetch: () => { throw new Error("no"); } },
     signinRun: sec.signinRun, signinLanding: sec.signinLanding, signinTake: () => true, signinFlush: () => true, signinSave: () => {},
     signinSeat: async () => { if (serve instanceof Error) throw serve; return serve; },
     tellSignin: () => { st.told.push(1); }, signinPageOk: sec.signinPageOk, sealsForReal: () => true,
@@ -3482,6 +3500,7 @@ const LEGS = [
   ["ds51a", "switchLeaves", "review 11: a sign-in as another account does for the account left all Sign out does, by the same count (its signout/desk, before the new signin/desk; its seat.json; its door's join; the store forgotten; its organisation's licence forgotten), whatever the new account's answer: a certificate, none, full, a refusal, the service unreached; a sign-in as the same account leaves nothing"],
   ["ds51c", "outThenSignin", "review 8: Sign out during a renewal and a sign-in at once: the sign out is answered before the new signin/desk is sent, nothing stays owed, the desk signed in"],
   ["ds51d", "outStillOwed", "review 8: a sign out queued behind a renewal is sent only while still owed; one whose place a sign-in took meanwhile is not sent"],
+  ["ds51e", "accessNotHeld", "review 1: on an unmanaged desk held by an account on the service's access path, a new sign-in asks the provider today's scopes and hands the new account no access flag; a managed computer asks the service's scope"],
   ["ds51b", "switchShared", "review 11: Sign out and the switch share one leaving, signinLeave: Sign out is its guards, that call and its words, and the press calls it once, for another account, before the service is asked"],
 ];
 for (let [id, name, line] of LEGS) {
@@ -3913,6 +3932,7 @@ if (!PLANTS_OFF) {
   await plantWire("dsp99f", ["  return signinOutSend(s.out); /* plant:out-again */", "  return Promise.resolve(false);"], "signoutOwed");
   await plantWire("dsp200", ["    if (got.ok && st.held && !signinHeldIs(st.held, p.id, got.sub)) { signinLeave(st, me); signinSave(); tellSignin(); } /* plant:switch-leaves */\n", ""], "switchLeaves");
   await plantWire("dsp201", ["    if (got.ok && signinOutFlight) await signinOutFlight; /* plant:out-before-signin */\n", ""], "switchLeaves");
+  await plantWire("dsp204", ["    const access = signinAccessFor(p, managed, null); /* plant:access-not-held */", "    const access = managed || (st.held && st.held.provider === p.id) ? signinAccessFor(p, managed, st.held) : \"\";"], "accessNotHeld");
   await plantWire("dsp99g", ["{ cancelJoin(); sendJoin(theWindow); } /* plant:signout-door */", "{ }"], "signoutDoorJoin");
   await plantWire("dsp99h", ["    outOwed: !signedIn && !!signinState().out && !signinOutFlight, /* plant:out-owed-view */", "    outOwed: false,"], "outOwedView");
   /* The seat's signature (ds22): each check of the chain, and the file's reading of it. */
