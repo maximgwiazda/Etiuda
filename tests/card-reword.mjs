@@ -69,7 +69,7 @@ const WORDS = {
     model: "The organisation's model is no longer set, so nothing was sent. " + TAIL.en,
     unavail: "Rewording is not available just now, so nothing was sent. " + TAIL.en,
     empty: "The result came back empty, so it is not shown. The card is as it was; another try may do better.",
-    nowords: "One of this card's steps came back with no words, so the result is not shown. The card is as it was; another try may keep them." },
+    nowords: "One of this card's alternatives came back with no words, so the result is not shown. The card is as it was; another try may do better." },
   pl: { wait: "Oczekiwanie na usługę pod adresem " + HOST + "…", late: "Usługa pod adresem " + HOST + " nie odpowiedziała na czas. " + TAIL.pl,
     busy: "Usługa pod adresem " + HOST + " jest zajęta; późniejsza próba może się udać. " + TAIL.pl,
     none: "Z adresu " + HOST + " nie nadszedł wynik. " + TAIL.pl,
@@ -80,7 +80,7 @@ const WORDS = {
     model: "Model organizacji nie jest już ustawiony, więc nic nie zostało wysłane. " + TAIL.pl,
     unavail: "Przeredagowanie jest teraz niedostępne, więc nic nie zostało wysłane. " + TAIL.pl,
     empty: "Wynik nadszedł pusty, więc nie został pokazany. Karta pozostała bez zmian; kolejna próba może się udać.",
-    nowords: "Jeden z kroków karty wrócił bez treści, więc wynik nie został pokazany. Karta pozostała bez zmian; kolejna próba może je zachować." } };
+    nowords: "Jeden z wariantów karty wrócił bez treści, więc wynik nie został pokazany. Karta pozostała bez zmian; kolejna próba może się udać." } };
 const NAME = "Wiktoria Planted";
 const MARK = "Zephyrquill";
 const PLAIN = "c-orders-thank-you-for-a-first-order", PLAIN2 = "c-damaged-a-new-one-on-its-way", STEPS = "c-returns-packing-the-piece", ALTS = "c-availability-when-it-will-arrive";

@@ -161,7 +161,7 @@ function rewordPress(id,act,how,say){
     if(!rewordKeepsShape(from, r.text, !!m.alt)){
       const empty=!String(r.text||"").trim();
       say(empty ? t("The result came back empty, so it is not shown. The card is as it was; another try may do better.")
-        : rewordPartEmpty(from, r.text, !!m.alt) ? t("One of this card's steps came back with no words, so the result is not shown. The card is as it was; another try may keep them.")
+        : rewordPartEmpty(from, r.text, !!m.alt) ? t("One of this card's alternatives came back with no words, so the result is not shown. The card is as it was; another try may do better.")
         : t("The result lost a name this card fills in, or one of its steps, so it is not shown. The card is as it was; another try may keep them."));
       return;
     }

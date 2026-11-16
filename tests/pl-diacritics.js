@@ -165,7 +165,7 @@ const ALLOWED_IN = [
   { fold: "kolejna", since: "2026-11-16",
     within: "Wynik nadszedł pusty, więc nie został pokazany. Karta pozostała bez zmian; kolejna próba może się udać." },
   { fold: "kolejna", since: "2026-11-16",
-    within: "Jeden z kroków karty wrócił bez treści, więc wynik nie został pokazany. Karta pozostała bez zmian; kolejna próba może je zachować." },
+    within: "Jeden z wariantów karty wrócił bez treści, więc wynik nie został pokazany. Karta pozostała bez zmian; kolejna próba może się udać." },
 ];
 function allowedAt(line, k, at) {
   return ALLOWED_IN.some(a => {

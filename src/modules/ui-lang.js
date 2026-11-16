@@ -160,7 +160,7 @@ UI_STRINGS.pl={
   "Rewording is not available just now, so nothing was sent. Your words are as you wrote them.":"Przeredagowanie jest teraz niedostępne, więc nic nie zostało wysłane. Zaznaczony tekst pozostał bez zmian.",
   "Rewording is not available just now, so nothing was sent. The card is as it was.":"Przeredagowanie jest teraz niedostępne, więc nic nie zostało wysłane. Karta pozostała bez zmian.",
   "The result came back empty, so it is not shown. The card is as it was; another try may do better.":"Wynik nadszedł pusty, więc nie został pokazany. Karta pozostała bez zmian; kolejna próba może się udać.",
-  "One of this card's steps came back with no words, so the result is not shown. The card is as it was; another try may keep them.":"Jeden z kroków karty wrócił bez treści, więc wynik nie został pokazany. Karta pozostała bez zmian; kolejna próba może je zachować.",
+  "One of this card's alternatives came back with no words, so the result is not shown. The card is as it was; another try may do better.":"Jeden z wariantów karty wrócił bez treści, więc wynik nie został pokazany. Karta pozostała bez zmian; kolejna próba może się udać.",
   "Rewording":"Przeredagowanie",
   "Reword on cards and Your own words? in Quick replies send the card's words or the selected words to the organisation's model at {ADDRESS}, only when pressed. Turned off, both are gone and nothing is sent; the choice is yours, on this computer.":"Przycisk Przeredaguj na kartach i Własne słowa? w Szybkich odpowiedziach wysyłają treść karty albo zaznaczony tekst do modelu organizacji pod adresem {ADDRESS}, tylko po kliknięciu. Po wyłączeniu oba znikają i nic nie jest wysyłane; to osobisty wybór na tym komputerze.",
   "Press":"Naciśnij",
