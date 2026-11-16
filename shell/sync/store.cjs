@@ -320,11 +320,13 @@ function pausedLine(cert, now, signinRefused) {
    `o`: provider (the signed-in one, "" for none), pol (storePolicy's answer), look (the last look's {state, why} or null), until (the
    last store certificate's end), now, signinRefused, conflicts (cards kept in two versions), say (what waits to be said once), owed
    (a Turn off everywhere the licence service has not answered yet), seatless (the account's seat refused at its last renewal), full
-   (the store's room at the relay refused a write, roomNext), again (when the look is tried again by itself, 0 where no try is set).
+   (the store's room at the relay refused a write, roomNext), again (when the look is tried again by itself, 0 where no try is set),
+   looking (a look runs now), ever (a look has found sync on on this computer before).
    Answers {shown, line, on, held, why, since, say, at}: line "org-off" where policy keeps sync off, "off" where the person turned it off,
    "ungiven" where the folder's consent was never given (off, the switch the person's own way to ask for it), "unavailable" where
-   the folder could not be reached for a reason the person cannot mend (never offline), "noseat", "again" and "spent" (a passing
-   failure, `why` its reason), "refused" (`why` "signin", "store" or "relay"), "paused" after PAUSE_SAY_MS, "full", "conflict" (a version kept aside), else "on", the first that holds
+   the folder could not be reached for a reason the person cannot mend (never offline), "noseat", "first" and "checking" (a look
+   running), "again" and "spent" (a passing failure, `why` its reason), "refused" (`why` "signin", "store" or "relay"), "paused" after
+   PAUSE_SAY_MS, "unconnected" (no look yet in this run), "full", "conflict" (a version kept aside), else "on", the first that holds
    in that order. Nothing of a key, a store or a token. Pure. */
 function storeRow(o) {
   if (o.provider !== "microsoft" && o.provider !== "google") return { shown: false };
@@ -337,6 +339,8 @@ function storeRow(o) {
   if (look && look.state === "unavailable" && look.why === "ungiven") return Object.assign(base, { line: "ungiven", on: false, say: "" }); /* plant:row-ungiven */
   if (look && look.state === "unavailable" && look.why !== "offline") return Object.assign(base, { line: "unavailable", why: String(look.why || "") });
   if (o.seatless === true) return Object.assign(base, { line: "noseat" }); /* plant:row-noseat */
+  /* A look running: "first" where none has had sync on here yet (ever), else "checking". */
+  if (o.looking === true) return Object.assign(base, { line: o.ever === true ? "checking" : "first" }); /* plant:row-looking */
   /* A look failed for a passing reason: "again" while a try is set (`at` its time), "spent" once none is, the daily renewal's look left. */
   const passing = !!look && (look.state === "unavailable" || look.state === "paused") && PASSING.indexOf(String(look.why)) >= 0;
   if (passing) return Object.assign(base, Number(o.again) > 0 ? { line: "again", why: String(look.why), at: Number(o.again) } : { line: "spent", why: String(look.why) }); /* plant:row-passing */
@@ -344,8 +348,11 @@ function storeRow(o) {
      renewal, Check now, a sign-in or the switch, never by the short tries. */
   if (look && look.state === "paused") return Object.assign(base, { line: "refused", why: look.why === "signin" || look.why === "store" ? look.why : "relay" }); /* plant:row-refused */
   /* A pause and the room full say changes are not reaching the store, so each is said over a conflict, which says nothing is lost. */
-  const p = pausedLine({ until: o.until }, o.now, o.signinRefused);
+  /* An end of 0 is no certificate, never a date. */
+  const p = Number(o.until) > 0 ? pausedLine({ until: o.until }, o.now, o.signinRefused) : null; /* plant:row-no-date */
   if (p) return Object.assign(base, { line: "paused", since: p.since });
+  /* No look yet in this run: nothing syncs until the first, which the start's renewal makes. */
+  if (!look) return Object.assign(base, { line: "unconnected" }); /* plant:row-unconnected */
   if (Number(o.conflicts) > 0 && o.full !== true) return Object.assign(base, { line: "conflict" }); /* plant:row-conflict */
   return Object.assign(base, { line: o.full === true ? "full" : "on" }); /* plant:row-full */
 }

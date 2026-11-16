@@ -481,7 +481,7 @@ function signinClicks(root){
 /* ---- sync across computers: what the shell's storeRow answers (shell/sync/store.cjs), the row's words and the one bubble ---------
    The page is told a line (SYNC_LINES), the switch, whether policy holds it, the
    reason, the pause's start and what to say once; never a key, a store or a token. */
-const SYNC_LINES=["on","off","ending","ungiven","org-off","unavailable","again","spent","refused","paused","conflict","full","noseat","ask"];
+const SYNC_LINES=["on","off","ending","ungiven","org-off","unavailable","first","checking","unconnected","again","spent","refused","paused","conflict","full","noseat","ask"];
 function syncRead(v){
   const o=v && typeof v==="object" ? v : {};
   if(o.shown!==true || SYNC_LINES.indexOf(o.line)<0) return {shown:false, line:"", on:false, held:false, why:"", since:0, say:"", askNow:false, at:0};
@@ -532,6 +532,9 @@ function syncLine(s, provider){
   if(s.line==="ending") return t("Off everywhere. The synced copy is deleted as soon as this computer reaches our service.");
   if(s.line==="ungiven") return named(t("Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account."),"{PROVIDER}",SIGNIN_NAMES[provider]||"Microsoft");
   if(s.line==="unavailable") return syncUnavailable(s.why, provider);
+  if(s.line==="first") return t("Connecting for the first time.");
+  if(s.line==="checking") return t("Checking for changes.");
+  if(s.line==="unconnected") return t("Not connected yet. Sync starts once this computer reaches our service.");
   if(s.line==="again" || s.line==="spent") return syncPassing(s, provider);
   /* A refusal the next daily look may pass, said in the copywriter's words for a pause with no reason known. */
   if(s.line==="refused") return t("Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.");

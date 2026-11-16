@@ -9110,6 +9110,9 @@ What you type stays in this browser only.`;
     "Not syncing just now: {REASON}. Sync tries again by itself, and nothing on this computer is lost.": "Synchronizacja chwilowo nie działa: {REASON}. Sama ponowi próbę, a na tym komputerze nic nie ginie.",
     "Not syncing just now: {REASON}. Sync tries again at {TIME}, and nothing on this computer is lost.": "Synchronizacja chwilowo nie działa: {REASON}. Ponowi próbę o {TIME}, a na tym komputerze nic nie ginie.",
     "Not syncing: {REASON}. Sync tries again within a day, and nothing on this computer is lost.": "Synchronizacja nie działa: {REASON}. Ponowi próbę w ciągu doby, a na tym komputerze nic nie ginie.",
+    "Connecting for the first time.": "Trwa pierwsze łączenie.",
+    "Checking for changes.": "Trwa sprawdzanie zmian.",
+    "Not connected yet. Sync starts once this computer reaches our service.": "Jeszcze bez połączenia. Synchronizacja ruszy, gdy komputer połączy się z naszą usługą.",
     "Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.": "Synchronizacja chwilowo nie działa. Zostanie wznowiona, gdy komputer połączy się z naszą usługą, a na tym komputerze nic nie ginie.",
     "Sign-in": "Logowanie",
     "{PROVIDER} · work accounts of the organisation": "{PROVIDER} · konta służbowe organizacji",
@@ -28214,7 +28217,7 @@ What you type stays in this browser only.`;
       if (b.dataset.signinAct) signinAct(b.dataset.signinAct, b);
     });
   }
-  var SYNC_LINES = ["on", "off", "ending", "ungiven", "org-off", "unavailable", "again", "spent", "refused", "paused", "conflict", "full", "noseat", "ask"];
+  var SYNC_LINES = ["on", "off", "ending", "ungiven", "org-off", "unavailable", "first", "checking", "unconnected", "again", "spent", "refused", "paused", "conflict", "full", "noseat", "ask"];
   function syncRead(v) {
     const o = v && typeof v === "object" ? v : {};
     if (o.shown !== true || SYNC_LINES.indexOf(o.line) < 0) return { shown: false, line: "", on: false, held: false, why: "", since: 0, say: "", askNow: false, at: 0 };
@@ -28271,6 +28274,9 @@ What you type stays in this browser only.`;
     if (s.line === "ending") return t("Off everywhere. The synced copy is deleted as soon as this computer reaches our service.");
     if (s.line === "ungiven") return named(t("Off. Turning it on asks {PROVIDER} to let Etiuda use its folder in this account."), "{PROVIDER}", SIGNIN_NAMES[provider] || "Microsoft");
     if (s.line === "unavailable") return syncUnavailable(s.why, provider);
+    if (s.line === "first") return t("Connecting for the first time.");
+    if (s.line === "checking") return t("Checking for changes.");
+    if (s.line === "unconnected") return t("Not connected yet. Sync starts once this computer reaches our service.");
     if (s.line === "again" || s.line === "spent") return syncPassing(s, provider);
     if (s.line === "refused") return t("Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.");
     if (s.line === "paused") return named(t("Paused since {DATE}. It resumes when this computer reaches our service."), "{DATE}", syncDate(s.since));

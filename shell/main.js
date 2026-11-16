@@ -11382,6 +11382,7 @@ function storeView() {
   return StoreLib().storeRow({ provider, pol: storePolicyNow(), look: storeNow, until: s.until, now: Date.now(),
     signinRefused: !!(held && held.said), conflicts: storeConflicts(), say: storeSay, owed: !!storeOwedRt(),
     ask, askNow: ask && !storeNotNow.has(who), again: storeAgainTimer ? storeAgainAt : 0, /* plant:store-view-again */
+    looking: storeLooking, ever: s.told === true, /* plant:store-view-looking */
     seatless: !!held && (!held.cert || held.said === "full"), full: storeFullNow }); /* plant:store-view-room */
 }
 function tellStore() {
@@ -11699,6 +11700,12 @@ async function storeLookNow() {
   if (!pol.on) storeSyncStop();
   if (!pol.on) return null; /* plant:store-off */
   if (!sealsForReal(safeStorage, process.platform)) return storeSettle({ state: "unavailable", why: "" });
+  /* The page is told when a look begins and when it ends, so the row says a look runs only while one does. */
+  storeLooking = true; tellStore(); /* plant:store-look-told */
+  try { return await storeLookRun(p, held, me, pol); } finally { storeLooking = false; tellStore(); }
+}
+let storeLooking = false;
+async function storeLookRun(p, held, me, pol) {
   const L = StoreLib(), who = storeState().who, switchAt = storeSwitchNo;
   /* The look keeps to the account it began under and to the switch as it stood, sync still on: its folder token, the service, the relay
      and its keeping, whoever is seated or whatever was switched by the time each step comes. */
