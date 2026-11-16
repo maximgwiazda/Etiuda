@@ -1099,6 +1099,8 @@ function ensureOutputs(opts) {
   const t0 = Date.now();
   const token = judgedToken();
   if (token && process.env[JUDGED_VAR] === token) return (outputsState = { built: false, ms: 0, how: "judged by the parent" });
+  /* A clone without the tracked outputs has no engine/ folder at all, and tools/build.mjs writes into it without making it. */
+  fs.mkdirSync(path.dirname(BUILD_LOCK), { recursive: true });
   if (!takeBuildLock(60000))
     refuse("the build lock " + BUILD_LOCK + " was held for a minute by another process", "nothing was read; run again");
   let r;
