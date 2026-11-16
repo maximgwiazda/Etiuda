@@ -118,6 +118,7 @@ async function launch(plan) {
     maximize: noop,
     focus: noop,
     loadFile: noop,
+    loadURL: noop,
     close: noop,
     on: noop,
     once: noop,

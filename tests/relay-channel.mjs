@@ -3793,6 +3793,9 @@ if (deskOn()) try {
             isVisible() { return false; },
             show() {}, showInactive() {}, focus() {}, close() {}, destroy() {}, maximize() {},
             loadFile() {},
+            /* The shell under test is loaded from a lab that holds no built page, so since build on demand it loads its
+               own "not built yet" document through loadURL; this window records what the page is sent, not what it shows. */
+            loadURL() {},
             setTitle() {},
             once() { return win; },
             on() { return win; },

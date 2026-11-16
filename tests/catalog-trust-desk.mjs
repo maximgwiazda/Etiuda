@@ -258,7 +258,7 @@ async function launch(plan) {
   const pageWin = {
     isDestroyed: () => false, isMaximized: () => false, isMinimized: () => false,
     setBounds: noop, getBounds: () => ({ x: 0, y: 0, width: 1024, height: 720 }),
-    show: noop, showInactive: noop, maximize: noop, focus: noop, loadFile: noop, close: noop,
+    show: noop, showInactive: noop, maximize: noop, focus: noop, loadFile: noop, loadURL: noop, close: noop,
     on: (t, fn) => { (bwListeners[t] = bwListeners[t] || []).push(fn); },
     once: (t, fn) => { (bwListeners[t] = bwListeners[t] || []).push(fn); },
     webContents: {
