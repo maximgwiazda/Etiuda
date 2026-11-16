@@ -10895,6 +10895,7 @@ function signinLapsed(held, now) {
    sign-in takes it again. Whatever the answer, the list it carried replaces the kept one only where it is later (signinRevokedNext). */
 function signinSettle(held, ans, now) {
   const settled = signinSettleSeat(held, ans, now);
+  if (settled.cert) settled.seated = true; /* plant:seated-settle */
   return Object.assign(settled, { revoked: signinRevokedNext(held && held.revoked, ans.revoked) }); /* plant:revoked-settle */
 }
 function signinSettleSeat(held, ans, now) {
@@ -10983,6 +10984,7 @@ function signinFileRead(text, packed) {
   out.revoked = signinRevokedOk(d.revoked) ? d.revoked : null; /* plant:revoked-file */
   if (out.held) out.held.revoked = out.revoked;
   if (out.held && h.access === true) out.held.access = true; /* the service's answer "access-token", remembered (section 11.11) */
+  if (out.held && (h.seated === true || out.held.cert)) out.held.seated = true; /* plant:seated-file */
   if (out.held && out.held.cert) {
     const doors = signinDoorsOk(h.doors, packed), sig = typeof h.doorsSig === "string" ? h.doorsSig : "";
     if (signinDoorsSigned(doors, sig, out.held.cert)) Object.assign(out.held, { doors: doors, doorsSig: sig }); /* plant:file-doors-signed */
@@ -11288,6 +11290,7 @@ function signinView() {
   const m = st.managed;
   if (m && m.any) view.managed = { on: m.managed, shared: m.shared, personal: m.personal, provider: m.provider, tenant: !!m.tenant, closed: m.closed, contact: m.contact, /* plant:view-managed */
     stranded: deskStranded };
+  if (view.managed) view.managed.keeps = signinAccountKept(st); /* plant:view-keeps */
   return view;
 }
 function tellSignin() {
@@ -11333,6 +11336,7 @@ function signinTake(provider, got, ans, now, access) {
     sub: signinKeep(safeStorage, process.platform, got.sub), seed: got.seed, code: "", cert: null, at: 0, checked: now, reached: true, said: "", ask: false, doors: [] };
   base.revoked = s.revoked || null; /* plant:revoked-survives */
   if (access === true) base.access = true;
+  if (was && was.seated === true && sameAccount()) base.seated = true; /* plant:seated-same */
   s.held = signinSettle(base, ans, now);
   s.revoked = s.held.revoked;
   delete s.out; /* this sign-in holds the desk's place again, so a sign out still owed is no longer wanted */
@@ -11343,11 +11347,17 @@ function signinTake(provider, got, ans, now, access) {
 function signinHeldIs(held, provider, sub) {
   return !!held && held.provider === provider && !!held.sub && signinSame(signinKept(safeStorage, held.sub), String(sub));
 }
-/* A MANAGED COMPUTER THAT IS NOT SHARED KEEPS ITS ACCOUNT (decision 49): true where state `st` holds a sign-in whose account can be
-   opened and `sub` is another's. A sub that can no longer be opened lets the sign-in through, so a lost keyring never locks the desk. */
-function signinOtherHeld(st, sub) {
+/* Whether the computer keeps the account state `st` holds: managed, not shared, and that account has held a seat here (`seated`, kept
+   in signin.json from its first certificate on, a lapse or a lost seat included). One that never held one may be replaced or signed out. */
+function signinAccountKept(st) {
   const m = st && st.managed;
-  if (!m || !m.managed || m.shared || !st.held || !st.held.sub) return false; /* plant:other-held */
+  return !!m && !!m.managed && !m.shared && !!st.held && st.held.seated === true; /* plant:kept-seated */
+}
+/* A MANAGED COMPUTER THAT IS NOT SHARED KEEPS ITS ACCOUNT (decision 49): true where state `st` holds a sign-in the computer keeps
+   (signinAccountKept) whose account can be opened and `sub` is another's. A sub that can no longer be opened lets the sign-in through,
+   so a lost keyring never locks the desk. */
+function signinOtherHeld(st, sub) {
+  if (!signinAccountKept(st) || !st.held.sub) return false; /* plant:other-held */
   const was = signinKept(safeStorage, st.held.sub);
   return !!was && !signinSame(was, String(sub)); /* plant:other-same */
 }
@@ -11436,7 +11446,7 @@ ipcMain.handle("etiuda:signin-stop", (e) => {
 function signinOutNow() {
   if (signinBusy) return signinView();
   const s = signinState(), me = branchIdentity(false);
-  if (s.managed && s.managed.managed && !s.managed.shared) return signinView(); /* plant:out-managed */
+  if (signinAccountKept(s)) return signinView(); /* plant:out-managed */
   signinLeave(s, me);
   signinSaid = "";
   signinSave();

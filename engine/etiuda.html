@@ -29263,14 +29263,15 @@ What is typed here stays in this browser.`;
       tenant: m.tenant === true,
       closed: m.closed === true,
       contact: typeof m.contact === "string" && m.contact.length <= 200 ? m.contact : "",
-      stranded: m.stranded === true
+      stranded: m.stranded === true,
+      keeps: m.keeps !== false
     };
   }
   function signinManaged(v) {
     return !!(v && v.managed && v.managed.on);
   }
   function signinKeepsAccount(v) {
-    return signinManaged(v) && !v.managed.shared;
+    return signinManaged(v) && !v.managed.shared && v.managed.keeps;
   }
   function signinCapHolds(v) {
     return !(v && v.managed && (v.managed.on || v.managed.provider || !v.managed.personal));

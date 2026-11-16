@@ -58,11 +58,12 @@ function signinManagedRead(m){
   if(!m || typeof m!=="object") return null;
   return {on:m.on===true, shared:m.shared===true, personal:m.personal!==false,
     provider:m.provider==="microsoft" || m.provider==="google" ? m.provider : "", tenant:m.tenant===true, closed:m.closed===true,
-    contact:typeof m.contact==="string" && m.contact.length<=200 ? m.contact : "", stranded:m.stranded===true};
+    contact:typeof m.contact==="string" && m.contact.length<=200 ? m.contact : "", stranded:m.stranded===true, keeps:m.keeps!==false};
 }
-/* A MANAGED COMPUTER (decision 49): nothing to buy, try or switch, and the account it has kept unless the computer is shared. */
+/* A MANAGED COMPUTER (decision 49): nothing to buy, try or switch, and the account it has kept unless the computer is shared or the shell
+   says it keeps none (an account that never held a seat here). */
 function signinManaged(v){ return !!(v && v.managed && v.managed.on); }
-function signinKeepsAccount(v){ return signinManaged(v) && !v.managed.shared; } /* plant:keeps-account */
+function signinKeepsAccount(v){ return signinManaged(v) && !v.managed.shared && v.managed.keeps; } /* plant:keeps-account */
 /* Where a provider is pinned or personal accounts are off, the line naming personal accounts would not hold. */
 function signinCapHolds(v){ return !(v && v.managed && (v.managed.on || v.managed.provider || !v.managed.personal)); } /* plant:cap-holds */
 /* The refusal of an account the organisation has not given access, and whom to ask: the policy's contact as written, or its IT;

@@ -48,11 +48,11 @@ const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"
 const PRELOAD = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
 const PAGE = (() => { try { return fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8"); } catch { return ""; } })();
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const PLANTS = 186;
+const PLANTS = 188;
 /* The floor: every check below runs, or the file says it did not complete. */
 /* The trace and the declined consent (dt): their legs and plants, counted apart. */
 const TRACE_CHECKS = 6, TRACE_PLANTS = 6;
-const EXPECTED = 162 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
+const EXPECTED = 163 + TRACE_CHECKS + (PLANTS_OFF ? 0 : PLANTS + 1 + TRACE_PLANTS); /* +1: dspA, the lost-anchor control */
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -542,7 +542,7 @@ CASES.renewFail = async s => {
 
 /* ---- the renewal's wiring, evaluated with stand-ins for the shell around it --------------------------------------------- */
 const WIRE_DECLS = ["const SIGNIN_RENEW_MS =", "const SIGNIN_FIRST_MS =", "async function signinRenewNow(", "function armSigninRenew(", "function signinOutNow(",
-  "function signinOutSend(", "function signinOutAgain(", "function signinLeave("];
+  "function signinOutSend(", "function signinOutAgain(", "function signinLeave(", "function signinAccountKept("];
 const WIRE_STANDS = ["harnessLaunch", "PLACED_ASIDE", "signinState", "signinOffered", "branchIdentity", "signinIo", "net", "signinRenewHeld",
   "signinSave", "tellSignin", "setTimeout", "pinnedLead", "signinTeamHere", "fs", "path", "sharedFolderForWrite", "SEAT_NAME", "signinView", "signoutAsk", "signinLabHeld", "teamJoin", "cancelJoin", "sendJoin", "theWindow", "unlinkOwn", "stand", "signinRevokedNext",
   "storeTurn", "storeForget", "storeEndAgain", "storeLeaveNow"];
@@ -2555,6 +2555,23 @@ CASES.accessNotHeld = async (s, swap) => {
   return /^api:\/\/.+\/Licence\.Use$/.test(scope) && plain.asked === undefined && plain.access === false && plain.sub === "sealed:s-2"
     && managed.asked === scope && managed.access === true;
 };
+/* (2) Whether this account has held a seat here is kept (`seated`): set by its first certificate, kept through an answer of none, through
+   signin.json and a restart; a file an older build wrote with a certificate reads as seated; an account never given one is not. */
+CASES.seatedKept = async (s, swap) => {
+  /* On a managed, unshared computer, the account held signed in first, before Managed was set or after, with no seat ever: another
+     account's sign-in replaces it and Sign out signs it out; one that held a seat (none now) is kept from both. */
+  const M = { managed: true, shared: false, any: true };
+  const press = async held => { const st = switchStand(s, { held, managed: M }); st.answer = B_ANSWERS().cert; await loadSwitch(st, swap).press(); await tick(5); return st.store.held ? st.store.held.sub : null; };
+  const out = async held => { const st = switchStand(s, { held, managed: M }); loadSwitch(st, swap).signinOutNow(); await tick(5); return st.store.held ? st.store.held.sub : null; };
+  const desk = [await press({ cert: null }), await press({ cert: null, seated: true }), await out({ cert: null }), await out({ cert: null, seated: true })].join();
+  if (desk !== "sealed:s-2,sealed:s-1,,sealed:s-1") return false;
+  const once = s.signinSettle(heldOf({ cert: null }), { ok: true, code: CODE, cert: cert(), doors: [] }, NOW);
+  const lost = s.signinSettle(once, { ok: true, code: CODE, cert: null }, NOW);
+  const back = s.signinFileRead(s.signinFileText({ held: lost })).held, never = s.signinFileRead(s.signinFileText({ held: heldOf({ cert: null }) })).held;
+  const older = s.signinFileRead(s.signinFileText({ held: Object.assign(heldOf(), { seated: undefined }) })).held;
+  return once.seated === true && lost.seated === true && lost.cert === null && !!back && back.seated === true && !!never && never.seated !== true
+    && !!older && older.seated === true && s.signinSettle(heldOf({ cert: null }), { ok: true, code: CODE, cert: null }, NOW).seated !== true;
+};
 /* Sign out and the switch share one leaving (signinLeave): Sign out is its guards, that call, and its words; the press calls it once,
    for another account only, before the service is asked. A step added to Sign out outside signinLeave turns this red. */
 CASES.switchShared = () => {
@@ -3501,6 +3518,7 @@ const LEGS = [
   ["ds51c", "outThenSignin", "review 8: Sign out during a renewal and a sign-in at once: the sign out is answered before the new signin/desk is sent, nothing stays owed, the desk signed in"],
   ["ds51d", "outStillOwed", "review 8: a sign out queued behind a renewal is sent only while still owed; one whose place a sign-in took meanwhile is not sent"],
   ["ds51e", "accessNotHeld", "review 1: on an unmanaged desk held by an account on the service's access path, a new sign-in asks the provider today's scopes and hands the new account no access flag; a managed computer asks the service's scope"],
+  ["ds51f", "seatedKept", "review 2: that an account has held a seat here is kept from its first certificate, through an answer of none, signin.json and a restart; an account never given one is not, and on a managed, unshared computer it is replaced by another account's sign-in and signed out of, where one that held a seat is kept from both"],
   ["ds51b", "switchShared", "review 11: Sign out and the switch share one leaving, signinLeave: Sign out is its guards, that call and its words, and the press calls it once, for another account, before the service is asked"],
 ];
 for (let [id, name, line] of LEGS) {
@@ -3933,6 +3951,8 @@ if (!PLANTS_OFF) {
   await plantWire("dsp200", ["    if (got.ok && st.held && !signinHeldIs(st.held, p.id, got.sub)) { signinLeave(st, me); signinSave(); tellSignin(); } /* plant:switch-leaves */\n", ""], "switchLeaves");
   await plantWire("dsp201", ["    if (got.ok && signinOutFlight) await signinOutFlight; /* plant:out-before-signin */\n", ""], "switchLeaves");
   await plantWire("dsp204", ["    const access = signinAccessFor(p, managed, null); /* plant:access-not-held */", "    const access = managed || (st.held && st.held.provider === p.id) ? signinAccessFor(p, managed, st.held) : \"\";"], "accessNotHeld");
+  await plant("dsp205", ["  if (settled.cert) settled.seated = true; /* plant:seated-settle */", "  /* plant:seated-settle */"], "seatedKept");
+  await plant("dsp206", ["  if (out.held && (h.seated === true || out.held.cert)) out.held.seated = true; /* plant:seated-file */", "  if (out.held && out.held.cert) out.held.seated = true; /* plant:seated-file */"], "seatedKept");
   await plantWire("dsp99g", ["{ cancelJoin(); sendJoin(theWindow); } /* plant:signout-door */", "{ }"], "signoutDoorJoin");
   await plantWire("dsp99h", ["    outOwed: !signedIn && !!signinState().out && !signinOutFlight, /* plant:out-owed-view */", "    outOwed: false,"], "outOwedView");
   /* The seat's signature (ds22): each check of the chain, and the file's reading of it. */

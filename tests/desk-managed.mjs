@@ -28,7 +28,7 @@ const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const SIGNIN = fs.readFileSync(path.join(ROOT, "src", "modules", "signin.js"), "utf8");
 const SETTINGS = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const CHECKS = 25, PLANTS = 33;
+const CHECKS = 27, PLANTS = 35;
 const EXPECTED = CHECKS + (PLANTS_OFF ? 0 : PLANTS);
 
 let asserted = 0, failed = 0;
@@ -57,11 +57,11 @@ try {
     fnOf("function signinPinOk("), lineOf("let signinPacked ="), fnOf("function signinOffered("), lineOf("const SIGNIN_NONCE_LINE ="),
     fnOf("function signinNonce("), lineOf("function signinB64url("), fnOf("function signinSame("), fnOf("function signinAuthorize("),
     fnOf("function signinPageOk("), fnOf("function signinRefusedWhy("), fnOf("function signinClaims("), fnOf("function signinIssuerOk("),
-    fnOf("function signinTokens("), fnOf("function signinLanding("), lineOf("const SIGNIN_LOST ="), fnOf("function signinOtherHeld("),
+    fnOf("function signinTokens("), fnOf("function signinLanding("), lineOf("const SIGNIN_LOST ="), fnOf("function signinAccountKept("), fnOf("function signinOtherHeld("),
     lineOf("function buyManaged(")].join("\n");
 } catch (e) { sliced = e.message; }
 const NAMES = ["managedPolicyFrom", "policyValues", "signinPinTable", "signinPinOk", "signinOffered", "signinAuthorize", "signinPageOk",
-  "signinRefusedWhy", "signinTokens", "signinLanding", "signinOtherHeld", "SIGNIN_LOST", "buyManaged"];
+  "signinRefusedWhy", "signinTokens", "signinLanding", "signinOtherHeld", "signinAccountKept", "SIGNIN_LOST", "buyManaged"];
 /* The slice evaluated, `swap` [from, to] put in place of the one line holding `from`; `kept` stands for signinKept. */
 function shellOf(swap) {
   let text = SHELL;
@@ -187,13 +187,23 @@ CASES.reasons = s => {
     && L("signin-notallowed", true) === "appfail" && L("signin-tenant") === "appfail" && L("signin-cancelled", true) === "cancelled";
   return why && land;
 };
-/* mm-s7: a managed computer that is not shared keeps its account: another sub refused, the same taken, a sub that cannot be opened lets
-   it through; shared or unmanaged, nothing is held. */
+/* mm-s7: a managed computer that is not shared keeps its account, one that has held a seat here: another sub refused, the same taken, a
+   sub that cannot be opened lets it through; shared or unmanaged, nothing is held. */
 CASES.keeps = s => {
-  const st = m => ({ managed: m, held: { sub: "sealed:s-1" } });
+  const st = m => ({ managed: m, held: { sub: "sealed:s-1", seated: true } });
   const M = pol(s, { Managed: 1 }), SH = pol(s, { Managed: 1, SharedComputer: 1 });
-  return s.signinOtherHeld(st(M), "s-2") === true && s.signinOtherHeld(st(M), "s-1") === false && s.signinOtherHeld({ managed: M, held: { sub: "" } }, "s-2") === false && s.signinOtherHeld({ managed: M, held: { sub: "unopened" } }, "s-2") === false
-    && s.signinOtherHeld(st(SH), "s-2") === false && s.signinOtherHeld({ held: { sub: "sealed:s-1" } }, "s-2") === false;
+  return s.signinOtherHeld(st(M), "s-2") === true && s.signinOtherHeld(st(M), "s-1") === false && s.signinOtherHeld({ managed: M, held: { sub: "", seated: true } }, "s-2") === false && s.signinOtherHeld({ managed: M, held: { sub: "unopened", seated: true } }, "s-2") === false
+    && s.signinOtherHeld(st(SH), "s-2") === false && s.signinOtherHeld({ held: { sub: "sealed:s-1", seated: true } }, "s-2") === false;
+};
+/* mm-s9 (review 2026-11-16, finding 2): the computer keeps an account only once it has held a seat here. One signed in first and given
+   none, before Managed was set or after, may be replaced and signed out of; one that held a seat and lost it (none now, or lapsed) is
+   still kept; shared or unmanaged, none is. */
+CASES.keptSeated = s => {
+  const M = pol(s, { Managed: 1 }), SH = pol(s, { Managed: 1, SharedComputer: 1 });
+  const never = { managed: M, held: { sub: "sealed:s-1", cert: null } }, lost = { managed: M, held: { sub: "sealed:s-1", cert: null, seated: true } };
+  return s.signinAccountKept(never) === false && s.signinOtherHeld(never, "s-2") === false && s.signinAccountKept(lost) === true
+    && s.signinOtherHeld(lost, "s-2") === true && s.signinAccountKept({ managed: SH, held: lost.held }) === false
+    && s.signinAccountKept({ managed: null, held: lost.held }) === false && s.signinAccountKept({ managed: M, held: null }) === false;
 };
 /* mm-s8: Buy: a view under Managed names none, unmanaged and a pin alone do. */
 CASES.buy = s => s.buyManaged({ managed: { on: true } }) === true && s.buyManaged({ managed: { on: false, provider: "microsoft" } }) === false
@@ -205,7 +215,8 @@ function wiringHolds(src) {
   return at("  const managed = managedPolicy();\n  SIGNIN_PROVIDERS = signinPinTable(SIGNIN_PROVIDERS, managed); /* plant:pin-taken */")
     && at("  signinStore.managed = managed;\n")
     && at("if (m && m.any) view.managed = {")
-    && at("  if (s.managed && s.managed.managed && !s.managed.shared) return signinView(); /* plant:out-managed */")
+    && at("  if (signinAccountKept(s)) return signinView(); /* plant:out-managed */")
+    && at("  if (view.managed) view.managed.keeps = signinAccountKept(st); /* plant:view-keeps */")
     && at("    if (got.ok && managed && signinOtherHeld(st, got.sub)) got = { ok: false, reason: \"signin-other\" }; /* plant:managed-same */")
     && at("  if (buyManaged(v) || (v && v.licenceManaged)) return \"\"; /* plant:buy-managed */")
     && at("{ offer: !!buyAddress() }");
@@ -324,6 +335,14 @@ CASES.managedSeat = async (s, set, pg) => {
   const polish = words(pl.door).indexOf("Zarządzane przez organizację.") >= 0 && words(pl.acct).indexOf("Ustawione przez organizację") >= 0;
   return panel && acct && shared && polish;
 };
+/* mm-p8 (finding 2): the shell saying the computer keeps no account (keeps: false), Account offers another account and Sign out on a
+   managed, unshared computer; saying nothing or keeps: true, neither, as before. */
+CASES.keepsNone = async (s, set, pg) => {
+  const has = d => d.acct.indexOf("data-signin-act=\"another\"") >= 0 && d.acct.indexOf("data-signin-act=\"out\"") >= 0;
+  const none = await drawn(withM(PROFILES.noseat, Object.assign({}, M_ON, { keeps: false })), "en", set, pg);
+  const kept = await drawn(withM(PROFILES.noseat, Object.assign({}, M_ON, { keeps: true })), "en", set, pg), silent = await drawn(withM(PROFILES.noseat, M_ON), "en", set, pg);
+  return has(none) && !has(kept) && !has(silent);
+};
 /* mm-p3: no seat on a managed computer: the no-role words, no trial, purchase or other account, and no code. */
 CASES.noRole = async (s, set, pg) => {
   const d = await drawn(withM(PROFILES.noseat, M_ON), "en", set, pg), w = words(d.acct + d.door);
@@ -397,12 +416,14 @@ const LIST = [
   ["mm-s5", "unpinned", "unpinned, a personal account and a token with no hosted domain are taken as before"],
   ["mm-s6", "reasons", "AADSTS50105 is signin-notassigned whatever the error; the landing offers another account only off a managed computer"],
   ["mm-s7", "keeps", "a managed, unshared computer refuses another account's sign-in and lets the same through"],
+  ["mm-s9", "keptSeated", "review 2026-11-16 finding 2: a managed, unshared computer keeps an account only once it has held a seat here, a lost seat included; one given none may be replaced and signed out of"],
   ["mm-s8", "buy", "Buy names no address under Managed, and does with a pin alone"],
   ["mm-p1", "pageUnset", "unset, Account and the panel are byte for byte the same with no policy and with all six off, English and Polish"],
   ["mm1", "m1", "M1: managed and not assigned, Account and the panel say the refusal and whom to ask, and nothing to buy, try or switch"],
   ["mm2", "m2", "M2: managed against unmanaged, the reachable acts differ only by account acts"],
   ["mm3", "m3", "M3: with AllowPersonalAccounts unset no act leads to a personal account or a trial; set, a personal sign-in is offered and no trial"],
   ["mm-p2", "managedSeat", "a managed seat: who decides and when it was checked, the sign-in locked to its provider, no other account or sign out unless shared"],
+  ["mm-p8", "keepsNone", "finding 2: where the shell says the computer keeps no account, Account offers another account and Sign out; otherwise neither, as before"],
   ["mm-p3", "noRole", "no seat on a managed computer: the no-role words, nothing to try, buy or switch, no code"],
   ["mm-p4", "unmanagedRefused", "unmanaged, an account not assigned is told as the organisation's refusal, another account offered"],
   ["mm-p5", "catalogBothWays", "that the desk works on with its catalog is said only where it holds one, English and Polish, with or without SupportContact"],
@@ -456,9 +477,12 @@ if (!PLANTS_OFF && S) {
   await plantShell("mmp16", ["if (!signinPinOk(signinKnown(p.id).pin, c)) return { ok: false, reason: \"signin-tenant\" }; /* plant:token-pin */", ""], "tenant");
   await plantShell("mmp17", ["if (/\\bAADSTS50105\\b/.test(String(said || \"\"))) return \"signin-notassigned\"; /* plant:not-assigned */", ""], "reasons");
   await plantShell("mmp18", ["if (managed === true) return \"appfail\"; /* plant:land-managed */", ""], "reasons");
-  await plantShell("mmp19", ["if (!m || !m.managed || m.shared || !st.held || !st.held.sub) return false; /* plant:other-held */", "if (!m || !st.held || !st.held.sub) return false;"], "keeps");
+  await plantShell("mmp19", ["if (!signinAccountKept(st) || !st.held.sub) return false; /* plant:other-held */", "if (!st.held || !st.held.sub) return false;"], "keeps");
+  await plantShell("mmp34", ["return !!m && !!m.managed && !m.shared && !!st.held && st.held.seated === true", "return !!m && !!m.managed && !m.shared && !!st.held"], "keptSeated");
+  await plantPage("mmp35", ["    const keeps=signinKeepsAccount(v);", "    const keeps=signinManaged(v) && !v.managed.shared;"], "keepsNone", "settings");
+
   await plantShell("mmp20", ["return !!was && !signinSame(was, String(sub)); /* plant:other-same */", "return !signinSame(was, String(sub));"], "keeps");
-  plantText("mmp21", ["  if (s.managed && s.managed.managed && !s.managed.shared) return signinView(); /* plant:out-managed */", ""], wiringHolds);
+  plantText("mmp21", ["  if (signinAccountKept(s)) return signinView(); /* plant:out-managed */", ""], wiringHolds);
   await plantPage("mmp22", ["  const rows=[name], buy=buyOffered() && !v.busy && !signinManaged(v) /* plant:buy-page-managed */", "  const rows=[name], buy=buyOffered() && !v.busy"], "m1", "settings");
   await plantPage("mmp23", ["    rows.push(row(\"checked\",\"clock\",", "    if(!signinManaged(v)) rows.push(row(\"checked\",\"clock\","], "m2", "settings");
   await plantPage("mmp24", ["function signinCapHolds(v){ return !(v && v.managed && (v.managed.on || v.managed.provider || !v.managed.personal)); } /* plant:cap-holds */",
