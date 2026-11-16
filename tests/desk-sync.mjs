@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-sync-"));
-const EXPECTED = 71;
+const EXPECTED = 74;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -799,6 +799,25 @@ async function main() {
     return { ok, detail: brief(held) };
   }
 
+  /* K15: a version kept here (A's earlier catalog) is let go only once the version overtaking it is here: A's later write whose sync file
+     came before its bytes leaves the kept entry standing and takes nothing; once the bytes come, it is taken and the kept one let go. The
+     same where both changed it again, the overtaking side's bytes missing. mergeOnce alone. */
+  async function keptArrivedScene() {
+    const A = "k-" + "a".repeat(16), B = "k-" + "b".repeat(16), item = "f:Cat.ec";
+    const v1 = "{\"v\":1}", v2 = "{\"v\":2}", v3 = "{\"v\":3}", v4 = "{\"v\":4}";
+    const k1 = { item, by: A, t: 100, h: SY.sha(v1) }, mineE = { h: SY.sha(v2), by: B, t: 200, seen: {} };
+    const run = (theirsE, local, files) => SY.mergeOnce({ me: B, now: 500, state: { ledger: { [item]: mineE }, kept: [k1] }, local, theirs: [{ by: A, items: { [item]: theirsE } }],
+      fileOf: (by, it, h) => (files[h] || null) });
+    const over = { h: SY.sha(v3), by: A, t: 300, seen: { [B]: 200 } };
+    const early = run(over, { [item]: v2 }, {}), late = run(over, { [item]: v2 }, { [SY.sha(v3)]: v3 });
+    const both = { h: SY.sha(v3), by: A, t: 300, seen: {} };
+    const mine2 = { [item]: v4 };
+    const r2 = SY.mergeOnce({ me: B, now: 500, state: { ledger: { [item]: { h: SY.sha(v4), by: B, t: 400, seen: {} } }, kept: [k1] }, local: mine2, theirs: [{ by: A, items: { [item]: both } }], fileOf: () => null });
+    const held = { earlyKept: early.state.kept.length, earlyPatch: Object.keys(early.patch).length, lateKept: late.state.kept.length, latePatch: late.patch[item] === v3, conflictKept: r2.state.kept.some(k => k.by === A && k.t === 100) };
+    const ok = held.earlyKept === 1 && held.earlyPatch === 0 && held.lateKept === 0 && held.latePatch && held.conflictKept;
+    return { ok, detail: brief(held) };
+  }
+
   /* J3: the store holds no entry for the shipped sample (the first computer had none when it synced); a second computer joins with its
      sample untouched: through every merge after the first, it is never recorded as that computer's write, so the first never gets it,
      and nothing is kept. Edited there, it is the person's own and reaches the first. */
@@ -895,6 +914,7 @@ async function main() {
 
   const results = {};
   const LEGS = [
+    ["K15", keptArrivedScene, "a kept version is let go only once the version overtaking it is here: its sync file before its bytes leaves the kept entry and takes nothing, its bytes come and it is taken and the kept let go; the same in a conflict"],
     ["J5", joinEarlyScene, "a second computer joining before the first, which made the store, has sent anything still joins: its setting and untouched sample give way to the first's setting and removal of the sample once they arrive, nothing kept"],
     ["J6", joinSinceScene, "a joining computer's setting changed and sample removed after its account was seated, before its first cycle, are its own: the setting stands on both and the sample stays removed on both, while what it held when seated gives way"],
     ["H1", heldPlaceScene, "a catalog held back once the folder is a team's, and an edit whose layer grew past its cap, keep their bytes in this computer's place: a computer joining after takes both from it alone, nothing kept aside"],
@@ -959,6 +979,8 @@ async function main() {
   const swap = (from, to) => text => (text.split(from).length === 2 ? text.split(from).join(to) : null);
   const scenes = Object.fromEntries(LEGS.map(([id, scene]) => [id, scene]));
   const PLANTS = [
+    ["kept let go in a conflict", "K15", swap("settled(item, null, top.filter(e => (mine && same(e, mine) ? ownOf(e, item) : valueOf(e, item)) !== undefined)); /* plant:kept-overtaken */", "settled(item, null, top); /* plant:kept-overtaken */"), "a kept version let go in a conflict for one whose bytes have not come"],
+    ["kept let go early", "K15", swap("      if (mine && same(win, mine)) {\n        settled(item, win);", "      settled(item, win);\n      if (mine && same(win, mine)) {"), "a kept version let go for one whose bytes have not come, so it is kept nowhere"],
     ["join by the store's files", "J5", swap("(st.join === true || (st.join === undefined && ", "((st.join === true || st.join === undefined) && ("), "joining read from another computer's sync file alone, so a computer joining before the first has sent takes itself for the first"],
     ["since seated unread", "J6", swap("const held0 = item => !before || ", "const held0 = item => true || "), "every item read as held before joining, so a change made after sign-in gives way"],
     ["removed since unrecorded", "J6", lift("join-removed"), "a removal made after sign-in, before the first merge, recorded nowhere, so the store's copy comes back"],

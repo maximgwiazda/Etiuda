@@ -286,13 +286,14 @@ function mergeOnce(o) {
     if (values.size === 1) {
       /* One version stands, or the same bytes from two: taken, with every entry it stands over. */
       const win = mine && top.some(e => same(e, mine)) ? mine : top.reduce((a, b) => (b.t > a.t ? b : a));
-      settled(item, win);
       if (mine && same(win, mine)) {
+        settled(item, win);
         if (top.length > 1) ledger[item] = Object.assign({}, mine, { seen: unionSeen(...top) }); /* plant:seen-max-mine */
         continue;
       }
       const v = valueOf(win, item);
-      if (v === undefined) continue; /* its bytes have not arrived yet: the next merge takes it */
+      if (v === undefined) continue; /* its bytes have not arrived yet: the next merge takes it, and lets go what it overtakes */
+      settled(item, win); /* plant:settled-arrived */
       ledger[item] = { h: win.h, by: win.by, t: win.t, seen: maxSeen(unionSeen(...all.filter(e => !same(e, win) && e.by !== win.by)), win.seen) }; /* plant:seen-max */
       patch[item] = v;
       continue;
@@ -308,7 +309,8 @@ function mergeOnce(o) {
     }
     /* A version kept before is let go once its own writer has overtaken it (or this computer took it), so a conflict renewed round after
        round keeps the latest of each side, not every round. */
-    settled(item, null, top); /* plant:kept-overtaken */
+    /* Only by a version whose bytes are here, so a kept one is never let go for one the next merge may still not have. */
+    settled(item, null, top.filter(e => (mine && same(e, mine) ? ownOf(e, item) : valueOf(e, item)) !== undefined)); /* plant:kept-overtaken */
     /* A removal is a version too, kept with the value null, so the conflict waits on both computers and not only where it was undone. */
     for (const e of top) {
       if (same(e, stay) || kept.some(k => k.item === item && k.by === e.by && k.t === e.t)) continue; /* plant:keep-both */
