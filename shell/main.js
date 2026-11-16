@@ -11765,18 +11765,26 @@ function storeSyncLocal() {
 /* The merge's patch and copies put in place; answers the items that could not be, so the sync takes none of them as taken (sync.cjs
    unapplied). */
 function storeSyncApply(patch, copies) {
-  const keys = {}, failed = [];
-  for (const item of Object.keys(patch)) {
-    if (item.startsWith("k:")) keys[item.slice(2)] = patch[item];
-    else if (storeSyncFile(item.slice(2), patch[item]) === false) failed.push(item);
-  }
-  if (Object.keys(keys).length) { if (patchDesk(JSON.stringify(keys))) deskSyncedTell(keys); else failed.push(...Object.keys(keys).map(k => "k:" + k)); } /* plant:apply-desk-failed */
+  const keys = {}, failed = [], blocked = new Set();
+  /* Every copy is kept before anything replaces what it copies: an item whose copy could not be kept is not put in place, a layer
+     field's whole key with it, so the version it would replace stays where it was. */
   for (const c of copies) {
     try {
       fs.mkdirSync(storeSyncDir("kept"), { recursive: true });
       writeReplacing(storeSyncDir("kept", c.by + "-" + c.t + "-" + (c.h ? c.h.slice(0, 16) : "removed") + ".txt"), JSON.stringify({ item: c.item, by: c.by, t: c.t, value: c.value }));
-    } catch (e) { failed.push(c.item); console.error("etiuda: a version another computer made could not be kept - " + e.message); }
+    } catch (e) {
+      const at = c.item.indexOf("#");
+      blocked.add(c.item.startsWith("k:") && at > 0 ? c.item.slice(0, at) : c.item);
+      console.error("etiuda: a version another computer made could not be kept - " + e.message);
+    }
   }
+  failed.push(...blocked);
+  for (const item of Object.keys(patch)) {
+    if (blocked.has(item)) continue; /* plant:keep-first */
+    if (item.startsWith("k:")) keys[item.slice(2)] = patch[item];
+    else if (storeSyncFile(item.slice(2), patch[item]) === false) failed.push(item);
+  }
+  if (Object.keys(keys).length) { if (patchDesk(JSON.stringify(keys))) deskSyncedTell(keys); else failed.push(...Object.keys(keys).map(k => "k:" + k)); } /* plant:apply-desk-failed */
   return failed;
 }
 /* The open page keeps its own copy of the desk, so it is told what was put in place (src/modules/storage.js eDeskTake). */

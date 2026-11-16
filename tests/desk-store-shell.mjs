@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 147;
+const EXPECTED = 149;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -454,6 +454,52 @@ async function removalVolumeScene(src) {
   const kept = keptNow(), moved = kept.length === 1 && /Harbour\.ec$/.test(kept[0]) && fs.readFileSync(path.join(keptDir, kept[0])).equals(bytes);
   const ok = Array.isArray(half) && half.join() === "f:Harbour.ec" && stayed && keptHalf.length === 0 && Array.isArray(done) && done.length === 0 && !fs.existsSync(at) && moved;
   return { ok, detail: brief({ half, stayed, keptHalf, done, gone: !fs.existsSync(at), kept }) };
+}
+
+/* (k7) KEPT BEFORE IT IS REPLACED: a merge's patch over a catalog and a layer field, each with the version it replaces to keep. Where
+   the copy cannot be kept, neither is put in place (the layer's whole key with it) and both are answered as not applied, while a key
+   with no copy is; where the copy is kept and the catalog's write then fails, the file stays as it was and the copy is under kept; once
+   both succeed the later is in place and the earlier kept. Every refusal is the file system's stand-in's; nothing real is held open. */
+async function keepFirstScene(src) {
+  let failKept = false, failCat = false;
+  const busy = () => Object.assign(new Error("busy"), { code: "EBUSY" });
+  const fsWrap = real => new Proxy(real, {
+    get(target, prop) {
+      if (prop === "writeFileSync") return (f, ...a) => {
+        const s = String(f);
+        if (failKept && /[\\/]store[\\/]kept[\\/]/.test(s)) throw busy();
+        if (failCat && /[\\/]Etiuda[\\/]Notes\.ec\./.test(s)) throw busy();
+        return target.writeFileSync(f, ...a);
+      };
+      const v = target[prop];
+      return typeof v === "function" ? v.bind(target) : v;
+    }
+  });
+  const { T, UD } = boot(src, { fsWrap });
+  const dir = T.storeSyncFolder(), at = path.join(dir, "Notes.ec"), keptDir = path.join(UD, "store", "kept");
+  const sha = s => crypto.createHash("sha256").update(s).digest("hex");
+  const VA = "{\"v\":\"a\"}", VB = "{\"v\":\"b\"}", PA = JSON.stringify({ edits: { c1: "a" } }), PB = JSON.stringify({ edits: { c1: "b" } });
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(at, VA);
+  T.patchDesk(JSON.stringify({ ePack: PA, eTheme: "light" }));
+  const by = "k-" + "1".repeat(16);
+  const copies = [{ item: "f:Notes.ec", by, t: 100, h: sha(VA), value: VA }, { item: "k:ePack#edits/c1", by, t: 100, h: sha("\"a\""), value: "\"a\"" }];
+  const patch = () => ({ "f:Notes.ec": VB, "k:ePack": PB, "k:eTheme": "dark" });
+  const keysNow = () => { try { return JSON.parse(deskText(UD)).keys || {}; } catch { return {}; } };
+  const keptNow = () => (fs.existsSync(keptDir) ? fs.readdirSync(keptDir).map(n => { try { return JSON.parse(fs.readFileSync(path.join(keptDir, n), "utf8")).value; } catch { return "?"; } }).sort() : []);
+  failKept = true;
+  const one = T.storeSyncApply(patch(), copies);
+  const s1 = { failed: (one || []).slice().sort(), file: fs.readFileSync(at, "utf8") === VA ? "a" : "b", pack: keysNow().ePack === PA ? "a" : "b", theme: keysNow().eTheme, kept: keptNow().length };
+  failKept = false; failCat = true;
+  const two = T.storeSyncApply(patch(), copies);
+  const s2 = { failed: (two || []).slice().sort(), file: fs.readFileSync(at, "utf8") === VA ? "a" : "b", kept: keptNow() };
+  failCat = false;
+  const three = T.storeSyncApply(patch(), copies);
+  const s3 = { failed: three || [], file: fs.readFileSync(at, "utf8") === VB ? "b" : "a", pack: keysNow().ePack === PB ? "b" : "a", kept: keptNow() };
+  const ok = s1.failed.join() === "f:Notes.ec,k:ePack" && s1.file === "a" && s1.pack === "a" && s1.theme === "dark" && s1.kept === 0
+    && s2.failed.join() === "f:Notes.ec" && s2.file === "a" && s2.kept.indexOf(VA) >= 0
+    && Array.isArray(three) && three.length === 0 && s3.file === "b" && s3.pack === "b" && s3.kept.indexOf(VA) >= 0 && s3.kept.indexOf("\"a\"") >= 0;
+  return { ok, detail: brief({ s1, s2, s3 }) };
 }
 
 /* (t7) THE LOOK TRIED AGAIN: a look the licence service did not answer is tried again by itself, through main.js's own timers (each
@@ -1846,6 +1892,7 @@ const LEGS = [
   ["gr", roomWireScene, "a write the store's relay refuses for its room turns the row full, and the next write it takes turns it on"],
   ["jp", pristineScene, "the store's sync names the shipped sample untouched in the person's folder by its bytes, and a copy with one byte changed as the person's own"],
   ["rv", removalVolumeScene, "a catalog another computer removed, the catalog folder on another volume than the profile: copied aside and unlinked; an unlink that fails leaves it where it was, the copy gone, the removal not taken as applied"],
+  ["k7", keepFirstScene, "a merge's copy is kept before what it copies is replaced: a copy that cannot be kept leaves the catalog and the layer as they were, answered not applied, a key with no copy put in place; a catalog write failing after its copy is kept leaves the file as it was; both succeeding, the later is in place and the earlier kept"],
   ["t7", againScene, "a look the licence service did not answer is tried again by itself at 1, 2, 4, 8, 16, 32 and 64 minutes, then no more, until a look from outside; back, it is on and nothing waits; a refusal is not tried again, and the switch turned off, a sign out and a quit leave no timer"],
   ["gt", teamFolderScene, "joined to a folder team, the store's sync takes no team catalog into the person's store, reads the person's own catalog as removed nowhere, and writes nothing from the store into the team's mirror"],
   ["g1b", consentBusyScene, "while the switch's request for the folder waits on the browser the desk is busy to the page, and an answer after another account took the seat is neither taken for it nor looked with"],
@@ -1948,6 +1995,7 @@ const PLANTS = [
     return y && swap("  held = !!last && (last !== who || s.ask === who); /* plant:store-held */", "  held = false; /* plant:store-held */")(y); }, "a folder token reused for whoever is seated, the hold lifted"],
   ["jp", swap(" if (isTheSample(f)) pristine.push(\"f:\" + n); } /* plant:sync-pristine */", " } /* plant:sync-pristine */"), "the untouched sample not named, so a joining computer brings back a sample deleted elsewhere"],
   ["rv", swap("      storeMoveFile(at, storeSyncDir(\"kept\", Date.now() + \"-\" + name)); /* plant:sync-remove-volume */", "      renamePatiently(at, storeSyncDir(\"kept\", Date.now() + \"-\" + name)); /* plant:sync-remove-volume */"), "a removal moved by rename alone, so a catalog folder on another volume never takes one"],
+  ["k7", swap("    if (blocked.has(item)) continue; /* plant:keep-first */\n", ""), "the patch put in place whether or not its copy was kept, so a failed keep loses the version it replaced"],
   ["t7", swap("  storeAgainAfter(look); /* plant:store-again */\n", ""), "no look is tried again by itself"],
   ["t7", swap("  storeAgainStop(); /* plant:store-again-out */\n", ""), "a sign out leaves the timer running"],
   ["t7", swap("  storeAgainStop(); /* plant:store-again-quit */\n", ""), "a quit leaves the timer running"],
