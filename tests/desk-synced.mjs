@@ -62,7 +62,7 @@ async function boot(name = "etiuda.html") {
     const K = "__deskStand";
     let desk = null;
     try { desk = JSON.parse(localStorage.getItem(K) || "null"); } catch (e) {}
-    if (!desk) desk = { eTourDone_v3: "1", eTourInvite_v3: "1", eAgent: "Bench Agent", eNameAsked: "1", eTheme: "light", eUiLang: "en",
+    if (!desk) desk = { eTourDone_v3: "1", eTourInvite_v3: "1", eFirstSigninSeen: "1", eAgent: "Bench Agent", eNameAsked: "1", eTheme: "light", eUiLang: "en",
       eStill: "1", eRail: "1" };
     const put = () => { try { localStorage.setItem(K, JSON.stringify(desk)); } catch (e) {} };
     const patch = t => { const p = JSON.parse(t); Object.keys(p).forEach(k => { if (p[k] === null) delete desk[k]; else desk[k] = p[k]; }); put(); return p; };

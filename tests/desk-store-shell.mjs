@@ -201,7 +201,7 @@ const TAIL_NAMES = ["storeView", "storeRoom", "storeSetNow", "storeAnswerNow", "
   "signinOutNow", "storeLeaveNow", "storeSyncApply", "storeSyncSoon", "storeSyncLocal", "deskSyncedTell", "storeTokenFor"];
 const TAIL_STATE = ["storeNow", "storeAccess", "storeFlight", "storeLeaveFlight", "SIGNIN_SERVICE", "SIGNOUT_SERVICE", "STORE_RELAY", "SIGNIN_PROVIDERS", "storeSyncing", "storeConsentFlight", "storeSyncTimer", "storeSyncPristine", "storeAgainTimer"];
 const TAIL = "\n__test.T = {" + TAIL_NAMES.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ")
-  + ", setJoin: v => { teamJoin = v; }, setPolicyText: v => { joinPolicyRead = joinPolicyFacts(String(v)); }, setWindow: v => { theWindow = v; }, get: () => ({" + TAIL_STATE.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "}) };";
+  + ", setJoin: v => { teamJoin = v; }, setPolicyText: v => { joinPolicyRead = joinPolicyFacts(String(v)); if (typeof joinPolicyReadAt !== \"undefined\") { joinPolicyReadAt = Date.now(); joinPolicyAskedAt = Date.now(); joinPolicyAsking = true; } }, setWindow: v => { theWindow = v; }, get: () => ({" + TAIL_STATE.map(n => n + ": typeof " + n + " === \"undefined\" ? undefined : " + n).join(", ") + "}) };";
 function boot(src, o) {
   const opt = o || {};
   const UD = opt.ud || fs.mkdtempSync(path.join(WORK, "ud-"));

@@ -60,7 +60,7 @@ async function boot({ lang = "en", theme = "light", page: name = "etiuda.html", 
   await page.setViewport({ width, height, deviceScaleFactor: 1 });
   await page.evaluateOnNewDocument((lang, theme, view) => {
     try {
-      for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eAgent", "Bench Agent"], ["eNameAsked", "1"],
+      for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eFirstSigninSeen", "1"], ["eAgent", "Bench Agent"], ["eNameAsked", "1"],
         ["eTheme", theme], ["eUiLang", lang], ["eStill", "1"], ["eRail", "1"]]) localStorage.setItem(k, v);
     } catch (e) {}
     /* The shell's store as the page sees it: the view, what was said, the switch's presses. */

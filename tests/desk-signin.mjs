@@ -2757,9 +2757,10 @@ CASES.fileMax = (s, swap) => {
   const run = size => {
     let reads = 0;
     const fsStand = { statSync: () => ({ size }), readFileSync: () => { reads++; return kept; } };
+    /* signinState also reads machine policy and pins the provider table by it (the sync line's managed half): no policy here. */
     const st = new Function("fs", "path", "app", "SIGNIN_FILE", "SIGNIN_FILE_MAX", "signinFileRead", "SIGNIN_DESK_PACKED", "branchIdentity", "signinFileHeld",
-      "let signinStore;\n" + text + "\nreturn signinState();")(fsStand, path, { getPath: () => "/ud" }, "signin.json", s.SIGNIN_FILE_MAX, s.signinFileRead, true,
-      () => ({ key: DESK_KEY }), s.signinFileHeld);
+      "managedPolicy", "signinPinTable", "let signinStore, SIGNIN_PROVIDERS = {};\n" + text + "\nreturn signinState();")(fsStand, path, { getPath: () => "/ud" }, "signin.json",
+      s.SIGNIN_FILE_MAX, s.signinFileRead, true, () => ({ key: DESK_KEY }), s.signinFileHeld, () => ({ any: false }), table => table);
     return { reads, held: !!st.held, cert: !!(st.held && st.held.cert) };
   };
   const small = run(kept.length), over = run(s.SIGNIN_FILE_MAX + 1);
