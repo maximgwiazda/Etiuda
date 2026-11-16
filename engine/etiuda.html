@@ -9107,6 +9107,7 @@ What you type stays in this browser only.`;
     "this computer cannot reach the {PROVIDER} account": "ten komputer nie może połączyć się z kontem {PROVIDER}",
     "this computer cannot reach our service": "ten komputer nie może połączyć się z naszą usługą",
     "our service is busy": "nasza usługa jest teraz zajęta",
+    "our service turned down this computer's last request": "nasza usługa odrzuciła ostatnią prośbę tego komputera",
     "Not syncing just now: {REASON}. Sync tries again by itself, and nothing on this computer is lost.": "Synchronizacja chwilowo nie działa: {REASON}. Sama ponowi próbę, a na tym komputerze nic nie ginie.",
     "Not syncing just now: {REASON}. Sync tries again at {TIME}, and nothing on this computer is lost.": "Synchronizacja chwilowo nie działa: {REASON}. Ponowi próbę o {TIME}, a na tym komputerze nic nie ginie.",
     "Not syncing: {REASON}. Sync tries again within a day, and nothing on this computer is lost.": "Synchronizacja nie działa: {REASON}. Ponowi próbę w ciągu doby, a na tym komputerze nic nie ginie.",
@@ -28259,18 +28260,19 @@ What you type stays in this browser only.`;
   function syncDate(at) {
     return new Date(at).toLocaleDateString(uiLang() === "pl" ? "pl-PL" : "en-GB", { day: "numeric", month: "long" });
   }
-  function syncPassingWords(why, provider) {
+  function syncPassingWords(why, provider, refused) {
+    if (refused) return t("our service turned down this computer's last request");
     if (why === "offline") return named(t("this computer cannot reach the {PROVIDER} account"), "{PROVIDER}", SIGNIN_NAMES[provider] || "Microsoft");
     if (why === "rate") return t("our service is busy");
     return t("this computer cannot reach our service");
   }
   function syncPassing(s, provider) {
-    const frame = s.line === "spent" ? t("Not syncing: {REASON}. Sync tries again within a day, and nothing on this computer is lost.") : s.at ? named(
+    const frame = s.line === "spent" || s.line === "refused" ? t("Not syncing: {REASON}. Sync tries again within a day, and nothing on this computer is lost.") : s.at ? named(
       t("Not syncing just now: {REASON}. Sync tries again at {TIME}, and nothing on this computer is lost."),
       "{TIME}",
       new Date(s.at).toLocaleTimeString(uiLang() === "pl" ? "pl-PL" : "en-GB", { hour: "2-digit", minute: "2-digit" })
     ) : t("Not syncing just now: {REASON}. Sync tries again by itself, and nothing on this computer is lost.");
-    return named(frame, "{REASON}", syncPassingWords(s.why, provider));
+    return named(frame, "{REASON}", syncPassingWords(s.why, provider, s.line === "refused"));
   }
   function syncLine(s, provider) {
     if (s.line === "org-off") return t("Your organisation has not turned this on.");
@@ -28284,8 +28286,8 @@ What you type stays in this browser only.`;
     if (s.line === "checking") return t("Checking for changes.");
     if (s.line === "unconnected") return t("Not connected yet. Sync starts once this computer reaches our service.");
     if (s.line === "signin-refused") return t("Not syncing while signing in on this computer is refused. Sync resumes once signing in works, and nothing on this computer is lost.");
-    if (s.line === "again" || s.line === "spent") return syncPassing(s, provider);
-    if (s.line === "refused" || s.line === "lapsed") return t("Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.");
+    if (s.line === "again" || s.line === "spent" || s.line === "refused") return syncPassing(s, provider);
+    if (s.line === "lapsed") return t("Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.");
     if (s.line === "paused") return named(t("Paused since {DATE}. It resumes when this computer reaches our service."), "{DATE}", syncDate(s.since));
     if (s.line === "conflict") return t("Changed on two computers: the newer change is in use, and the older one is kept, so nothing is lost.");
     if (s.line === "full") return t("Sync is full, so new changes stay on this computer until something is removed.");

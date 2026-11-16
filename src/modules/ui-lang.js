@@ -1476,6 +1476,7 @@ UI_STRINGS.pl={
   "this computer cannot reach the {PROVIDER} account":"ten komputer nie może połączyć się z kontem {PROVIDER}",
   "this computer cannot reach our service":"ten komputer nie może połączyć się z naszą usługą",
   "our service is busy":"nasza usługa jest teraz zajęta",
+  "our service turned down this computer's last request":"nasza usługa odrzuciła ostatnią prośbę tego komputera",
   "Not syncing just now: {REASON}. Sync tries again by itself, and nothing on this computer is lost.":"Synchronizacja chwilowo nie działa: {REASON}. Sama ponowi próbę, a na tym komputerze nic nie ginie.",
   "Not syncing just now: {REASON}. Sync tries again at {TIME}, and nothing on this computer is lost.":"Synchronizacja chwilowo nie działa: {REASON}. Ponowi próbę o {TIME}, a na tym komputerze nic nie ginie.",
   "Not syncing: {REASON}. Sync tries again within a day, and nothing on this computer is lost.":"Synchronizacja nie działa: {REASON}. Ponowi próbę w ciągu doby, a na tym komputerze nic nie ginie.",

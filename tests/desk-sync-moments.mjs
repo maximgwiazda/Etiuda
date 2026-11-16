@@ -39,7 +39,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 47;
+const EXPECTED = 49;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const STORE = path.join(E.ROOT, "shell", "sync", "store.cjs");
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -172,8 +172,8 @@ const TRUE_LINES = [
   ["no look yet in this run", { line: "unconnected" }, "Not connected yet. Sync starts once this computer reaches our service.",
     "Jeszcze bez połączenia. Synchronizacja ruszy, gdy komputer połączy się z naszą usługą.", "switch"],
   ...[["signin", "a fresh sign-in"], ["store", "the folder's store"], ["relay", "the relay"]].map(([why, by]) => ["refused for " + by, { line: "refused", why },
-    "Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.",
-    "Synchronizacja chwilowo nie działa. Zostanie wznowiona, gdy komputer połączy się z naszą usługą, a na tym komputerze nic nie ginie.", "switch"]),
+    "Not syncing: our service turned down this computer's last request. Sync tries again within a day, and nothing on this computer is lost.",
+    "Synchronizacja nie działa: nasza usługa odrzuciła ostatnią prośbę tego komputera. Ponowi próbę w ciągu doby, a na tym komputerze nic nie ginie.", "switch"]),
 ];
 /* m4: every row of TRUE_LINES drawn in English (light) and Polish (dark); answers what differed. */
 async function trueLines(pageName) {
@@ -1052,8 +1052,10 @@ async function main() {
   await truePlant("anew", 'if (s.line === "anew") return t(', 'if (false) return t(', "a new store under policy said as sync on");
   await truePlant("signin-refused", 'if (s.line === "signin-refused") return t(', 'if (false) return t(', "a refused sign-in said as sync on");
   await truePlant("first", 'if (s.line === "first") return t(', 'if (false) return t(', "the first look said as sync on");
-  await truePlant("refused", 'if (s.line === "refused" || s.line === "lapsed") return t(', 'if (false) return t(', "a refusal and a lapse said as sync on");
-  await truePlant("passing", 'if (s.line === "again" || s.line === "spent") return syncPassing(s, provider);', "", "a passing failure said as sync on");
+  await truePlant("refused", 'if (s.line === "again" || s.line === "spent" || s.line === "refused") return', 'if (s.line === "again" || s.line === "spent") return', "a refusal said as sync on");
+  await truePlant("refused-clause", 'if (refused) return t(', 'if (false) return t(', "a refusal's clause lost, its line saying a passing failure's reason");
+  await truePlant("lapsed", 'if (s.line === "lapsed") return t(', 'if (false) return t(', "a lapse said as sync on");
+  await truePlant("passing", 'if (s.line === "again" || s.line === "spent" || s.line === "refused") return', 'if (s.line === "refused") return', "a passing failure said as sync on");
   if (PLANTS_OFF) skip("p c9d firstSay saying at a look that did not make the store turns c9d red");
   else {
     const before = sha(STORE), text = fs.readFileSync(STORE, "utf8"), from = 'say: look.made === true ? "on" : "", told: true }; /* plant:first-say */';
