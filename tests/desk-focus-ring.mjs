@@ -17,7 +17,7 @@ const E = require("./engine.js");
 const puppeteer = require("puppeteer-core");
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 13;
+const EXPECTED = 18;
 let fails = 0, checks = 0, skipped = 0;
 
 function check(ok, what, detail) {
@@ -267,6 +267,7 @@ async function inspectActive(page, surfaceName) {
       outlineWidth,
       outlineOffset,
       ringColor: cs.outlineColor,
+      boxShadow: cs.boxShadow,
       groundColor: cssColor(ground),
       ratio: Number(ratio.toFixed(2)),
       onTab: el.classList.contains("tab") || el.classList.contains("tab-label"),
@@ -614,12 +615,154 @@ async function runThemeSuite(browser, enginePath, theme, opts = {}) {
   return { failures: allFailures, surfaceSummary };
 }
 
+async function openFirstSigninDesk(browser, url, theme) {
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 860, deviceScaleFactor: 1 });
+  await page.emulateMediaFeatures([
+    { name: "prefers-reduced-motion", value: "reduce" },
+    { name: "prefers-color-scheme", value: theme }
+  ]);
+  await page.evaluateOnNewDocument(th => {
+    try {
+      localStorage.clear();
+      localStorage.setItem("eTheme", th);
+      localStorage.setItem("eTourDone", "1");
+      localStorage.setItem("eTourDone_v3", "1");
+      localStorage.setItem("eTourInvite_v3", "1");
+      localStorage.setItem("eNameAsked", "1");
+      localStorage.setItem("eStill", "1");
+    } catch (_) {}
+    const st = { offered: ["microsoft", "google"], signedIn: "", seat: "none", reached: true };
+    window.E_HOST = {
+      shown: true,
+      lang: "en",
+      signinState: () => st,
+      signIn: async () => null,
+      signinCheck: async () => st,
+      teamLeads: () => []
+    };
+  }, theme);
+  await page.goto(url, { waitUntil: "load" });
+  await page.waitForFunction(() => {
+    const f = document.getElementById("firstSignin");
+    return !!f && !f.hidden && document.body.classList.contains("e-first-signin")
+      && !!f.querySelector(".sgn-p") && !document.querySelector(".e-launch-veil");
+  }, { timeout: 10000 });
+  await page.evaluate(th => {
+    document.documentElement.setAttribute("data-theme", th);
+  }, theme);
+  await sleep(60);
+  return page;
+}
+
+async function runFirstSigninFocusSuite(browser, enginePath, theme, opts = {}) {
+  const url = fileUrl(enginePath);
+  const page = await openFirstSigninDesk(browser, url, theme);
+  const failures = [];
+  let walked = [];
+  const pointerChecks = [];
+
+  try {
+    const expectedCount = await collectSurfaceFocusables(page, "#firstSignin");
+    const walk = await walkSurfaceWithTabs(page, theme + ":first-signin", "#firstSignin", { focusFirstInside: true, maxSteps: 20 });
+    walked = walk.results;
+    for (const r of walked) {
+      if (!r.ok || r.boxShadow !== "none") {
+        failures.push(Object.assign({}, r, { doubleRing: r.boxShadow && r.boxShadow !== "none" }));
+      }
+    }
+
+    if (!opts.silent) {
+      check(
+        expectedCount === 3 && walked.length === expectedCount && failures.length === 0,
+        theme + ": first-signin keyboard walk reaches all controls and each draws one 2 px >= 3:1 outline with no double ring",
+        {
+          expectedCount,
+          walked: walked.length,
+          failures: failures.map(f => ({
+            sel: f.sel,
+            outlineStyle: f.outlineStyle,
+            outlineWidth: f.outlineWidth,
+            boxShadow: f.boxShadow,
+            ratio: f.ratio
+          }))
+        }
+      );
+
+      const rhBox = await page.$eval("#firstSignin .fs-rh", el => {
+        const r = el.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      });
+      await page.mouse.click(rhBox.x, rhBox.y);
+      await sleep(40);
+
+      for (const sel of ["#firstSignin .sgn-p.microsoft", "#firstSignin .sgn-p.google"]) {
+        const box = await page.$eval(sel, el => {
+          const r = el.getBoundingClientRect();
+          return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        });
+        await page.mouse.click(box.x, box.y);
+        await sleep(40);
+        pointerChecks.push(await page.evaluate(s => {
+          const ae = document.activeElement;
+          const cs = ae ? getComputedStyle(ae) : null;
+          return {
+            sel: s,
+            matched: !!(ae && ae.matches(s)),
+            focusVisible: !!(ae && ae.matches(":focus-visible")),
+            outlineStyle: cs ? cs.outlineStyle : null,
+            outlineWidth: cs ? cs.outlineWidth : null,
+            boxShadow: cs ? cs.boxShadow : null
+          };
+        }, sel));
+      }
+
+      const skipBox = await page.$eval("#firstSigninSkip", el => {
+        const r = el.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      });
+      await page.mouse.move(skipBox.x, skipBox.y);
+      await page.mouse.down();
+      await sleep(30);
+      pointerChecks.push(await page.evaluate(() => {
+        const ae = document.activeElement;
+        const cs = ae ? getComputedStyle(ae) : null;
+        return {
+          sel: "#firstSigninSkip",
+          matched: !!(ae && ae.id === "firstSigninSkip"),
+          focusVisible: !!(ae && ae.matches(":focus-visible")),
+          outlineStyle: cs ? cs.outlineStyle : null,
+          outlineWidth: cs ? cs.outlineWidth : null,
+          boxShadow: cs ? cs.boxShadow : null
+        };
+      }));
+      await page.mouse.up();
+
+      const pointerOk = pointerChecks.every(p =>
+        p.matched && !p.focusVisible &&
+        (p.outlineStyle === "none" || p.outlineWidth === "0px") &&
+        p.boxShadow === "none"
+      );
+      check(
+        pointerOk,
+        theme + ": first-signin pointer clicks draw no outline or box-shadow ring",
+        pointerChecks
+      );
+    }
+  } finally {
+    await page.close().catch(() => {});
+  }
+
+  return { failures, walked, pointerChecks };
+}
+
 let browser = null;
 try {
   browser = await launch();
 
   for (const theme of ["light", "dark"]) {
     await runThemeSuite(browser, path.join(dirMain, "etiuda.html"), theme);
+    await runFirstSigninFocusSuite(browser, path.join(dirMain, "etiuda.html"), theme);
   }
 
   // Inline plant proof: strip general *:focus-visible rule from a scratch copy and confirm leg goes red.
@@ -643,6 +786,30 @@ try {
       plantRemoved && plantRed,
       "inline plant proof: removing general *:focus-visible rule turns leg red",
       { plantRemoved, plantRed, firstFail }
+    );
+  }
+
+  // Inline plant proof: put .fs-screen's own double-ring rule back in a scratch copy and confirm leg goes red.
+  if (PLANTS_OFF) {
+    notRun("plant:first-signin-double-ring (ETIUDA_PLANTS=off)");
+  } else {
+    const rawHtml = fs.readFileSync(E.ENGINE_PATH, "utf8");
+    const ringRule = ".fs-screen .sgn-p:focus-visible,.fs-screen .btn:focus-visible{box-shadow:0 0 0 2px var(--accent)}";
+    const plantedHtml = rawHtml.replace("</style>", ringRule + "\n</style>");
+    const plantAdded = plantedHtml !== rawHtml;
+    const plantPath = path.join(dirPlant, "etiuda-fs-ring.html");
+    fs.writeFileSync(plantPath, plantedHtml, "utf8");
+    let plantRed = false;
+    let firstFail = null;
+    if (plantAdded) {
+      const res = await runFirstSigninFocusSuite(browser, plantPath, "light", { silent: true });
+      plantRed = res.failures.length > 0;
+      firstFail = res.failures[0] ? res.failures[0].sel : null;
+    }
+    check(
+      plantAdded && plantRed,
+      "inline plant proof: restoring .fs-screen double-ring rule turns leg red",
+      { plantAdded, plantRed, firstFail }
     );
   }
 } finally {
