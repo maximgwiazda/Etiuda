@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHELL = path.join(ROOT, "shell");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 99;
+const EXPECTED = 101;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 /* The shell-to-page event that carries each re-order's outcome; the page-to-shell sync request "etiuda:ai-state" is another. */
 const RANKING_CH = "etiuda:ai-ranking";
@@ -1372,7 +1372,7 @@ await block(async () => {
   for (const arg of [{ act: "translate", to: "de", words: "x" }, { act: "own", how: "", words: "x" }, { act: "own", how: "y".repeat(AI.HOW_CHARS + 1), words: "x" },
     { act: "rewrite", words: "x" }, { act: "shorter", words: "   " }, { act: "shorter", words: "z".repeat(AI.REWORD_CHARS + 1) }]) {
     const one = await rewordDrive({ arg });
-    refused.push(one.rewords.length === 0 && one.fromDesk.why === "refused");
+    refused.push(one.rewords.length === 0 && one.fromDesk.why === (arg.words.length > AI.REWORD_CHARS ? "toolong" : "refused"));
   }
   check(acts.every(Boolean) && refused.every(Boolean),
     "dw2b each act's instruction, the translation by language and the agent's own instruction on one line are sent as written here, and an unknown "
@@ -1502,7 +1502,7 @@ await block(async () => {
     return { why: r.why || "", ms: Date.now() - t0, fetches: fetch.calls.length };
   }
   const r = await stale();
-  check(r.fetches === 0 && r.why === "off" && r.ms >= 1900,
+  check(r.fetches === 0 && r.why === "unavailable" && r.ms >= 1900,
     "dw7 a press under machine policy's stale facts waits for the look, about two seconds, and sends nothing while it is out: " + JSON.stringify(r));
   if (PLANTS_OFF) skipPlant("dw7p the press sent under stale facts (ETIUDA_PLANTS=off)");
   else {
@@ -1557,12 +1557,12 @@ async function rewordSwitchDrive(o) {
 await block(async () => {
   const off = await rewordSwitchDrive({ offFirst: true });
   check(off.rewords.length === 0 && !("reword" in off.open) && off.fromPick && off.fromPick.ok === false && off.fromDesk.ok === false
-    && off.state && off.state.reword === "" && off.state.rewordOn === false && off.state.rewordAt === "api.openai.com" && off.state.org === true,
+    && off.fromPick.why === "switch" && off.fromDesk.why === "switch" && off.state && off.state.reword === "" && off.state.rewordOn === false && off.state.rewordAt === "api.openai.com" && off.state.org === true,
     "dw9 with the person's switch off, the opening offers no reword, both presses are refused, ai-state names no host to send to though the organisation's model stays in force, and no request is made: "
     + JSON.stringify({ rewords: off.rewords.length, offered: "reword" in off.open, pick: off.fromPick, desk: off.fromDesk, state: off.state }));
   /* The canary: the switch turned off AFTER an opening that offered the foot, so a press from that open window, or the desk, still reaches the door. */
   const late = await rewordSwitchDrive({ offAfter: true });
-  check(late.open.reword && late.fromPick && late.fromPick.ok === false && late.fromDesk.ok === false && late.rewords.length === 0,
+  check(late.open.reword && late.fromPick && late.fromPick.ok === false && late.fromDesk.ok === false && late.fromPick.why === "switch" && late.fromDesk.why === "switch" && late.rewords.length === 0,
     "dw9b the switch turned off after an opening that offered the foot: a press from that window and one from the desk are refused at the shell and the stand-in service records no request: "
     + JSON.stringify({ offered: late.open.reword, pick: late.fromPick, desk: late.fromDesk, rewords: late.rewords.length }));
   /* On again, the file as the person's own desk setting, and the other switches untouched. */
@@ -1604,12 +1604,47 @@ await block(async () => {
   }
 });
 
+/* dw11: EVERY CASE WHERE NOTHING WAS SENT SAYS WHICH (the page shows a sentence for each, and "nothing was sent" is said only of these, each tied
+   to a canary that records no request): the person's switch off ("switch"), the organisation's model no longer set at the press ("model"), a choice
+   the desk cannot read, which is not the person's own off ("unavailable"), the service paused after three failures ("paused"), and words over the cap
+   ("toolong"); every other refusal of what could not be built stays "refused". The stand-in service records no reword in any of them. */
+await block(async () => {
+  const gone = await (async () => {
+    const fetch = fetchOf(() => ({ status: 200, text: chatSaying("Sorry.") }));
+    const ctx = loadMain({ fetch, answer: (op) => op === "open" ? { ai: true, words: {}, look: {} } : null });
+    let config = RW_CONFIG;
+    ctx.T.setConfig(() => config);
+    const pick = await openOnSelection(ctx, "parcel", true);
+    config = null;
+    const fromPick = await ctx.handle["etiuda:pick-reword"](pick.from, RW_ARG), fromDesk = await ctx.handle["etiuda:desk-reword"](ENGINE, RW_ARG);
+    return { offered: !!pick.open.reword, fromPick, fromDesk, sent: fetch.calls.filter(isReword).length };
+  })();
+  const broken = await rewordSwitchDrive({ file: "{not json" });
+  const long = await rewordDrive({ arg: Object.assign({}, RW_ARG, { how: "", to: "", words: "z".repeat(AI.REWORD_CHARS + 1) }) });
+  const empty = await rewordDrive({ arg: Object.assign({}, RW_ARG, { how: "", to: "", words: "   " }) });
+  check(gone.offered && gone.fromPick.why === "model" && gone.fromDesk.why === "model" && gone.sent === 0
+    && broken.fromPick.why === "unavailable" && broken.fromDesk.why === "unavailable" && broken.rewords.length === 0
+    && AI.REWORD_CHARS === 4000 && long.fromDesk.why === "toolong" && long.fromPick.why === "toolong" && long.rewords.length === 0
+    && empty.fromDesk.why === "refused" && empty.rewords.length === 0,
+    "dw11 the model gone at the press says 'model', an unreadable choice 'unavailable', words over the 4000 cap 'toolong' and no words 'refused', and the stand-in service records nothing in any of them: "
+    + JSON.stringify({ gone: [gone.fromPick.why, gone.fromDesk.why, gone.sent], broken: [broken.fromPick.why, broken.fromDesk.why], long: [long.fromPick.why, long.fromDesk.why], empty: empty.fromDesk.why }));
+  if (PLANTS_OFF) skipPlant("dw11p every refusal called 'refused' again (ETIUDA_PLANTS=off)");
+  else {
+    const line = AI_SRC.split("\n").filter(l => l.indexOf("plant:reword-toolong") >= 0);
+    if (line.length !== 1) throw new Error("plant mark reword-toolong found " + line.length + " times");
+    const lifted = await rewordDrive({ aiSrc: AI_SRC.replace(line[0], line[0].replace(/return \{ ok: false, why: "toolong" \};/, 'return { ok: false, why: "refused" };')),
+      arg: Object.assign({}, RW_ARG, { how: "", to: "", words: "z".repeat(AI.REWORD_CHARS + 1) }) });
+    check(lifted.fromDesk.why === "refused", "dw11p with the over-long refusal called 'refused' again, a long text says the generic line's cause and dw11 fails: " + lifted.fromDesk.why);
+  }
+});
+
 /* dw10: THE SWITCH READS FAIL CLOSED. Once a person has turned rewording off, nothing short of their turning it on can make the desk send
    their words: a file the desk cannot read for any reason but its never having been written, one that is not its own kind or format, or a
    write that did not land when they turned it off, all behave as off: the offer absent, both doors refusing, the stand-in service recording
    nothing. Only a file never written (ENOENT) is on, as the desk is for a person who never touched the switch. */
 const BROKEN = name => err => new Proxy(fs, { get: (t, k) => k === "readFileSync" ? (f, ...a) => { if (/desk-reword\.json$/.test(String(f))) { const e = new Error(err); e.code = err; throw e; } return t.readFileSync(f, ...a); } : t[k] });
 const shut = d => d.rewords.length === 0 && !("reword" in d.open) && d.fromPick && d.fromPick.ok === false && d.fromDesk.ok === false
+  && ["switch", "unavailable"].indexOf(d.fromPick.why) > -1 && d.fromPick.why === d.fromDesk.why
   && d.state.reword === "" && d.state.rewordOn === false && d.state.org === true;
 await block(async () => {
   const OWN = { format: 1, kind: "etiuda-desk-reword" };
@@ -1635,7 +1670,7 @@ await block(async () => {
     for (const k of ["reword-read-closed", "reword-parse-closed"]) {
       const line = src.split("\n").filter(l => l.indexOf("plant:" + k) >= 0);
       if (line.length !== 1) throw new Error("plant mark " + k + " found " + line.length + " times");
-      src = src.replace(line[0], line[0].replace(/return [^;]*;(?= *})/, "return true;"));
+      src = src.replace(line[0], line[0].replace(/return [^;]*;(?= *})/, 'return "on";'));
     }
     const a = await rewordSwitchDrive({ file: "{not json", mainSrc: src }), b = await rewordSwitchDrive({ file: JSON.stringify(Object.assign({}, OWN, { off: true })), fs: BROKEN()("EBUSY"), mainSrc: src });
     check(src !== MAIN_SRC && a.rewords.length > 0 && b.rewords.length > 0, "dw10p with the old fail-open read put back (any error reads as on), a corrupt file and a busy file send and dw10 and dw10b fail: " + JSON.stringify([a.rewords.length, b.rewords.length]));

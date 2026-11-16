@@ -295,7 +295,7 @@ function rewordAnswer(provider, status, bytes) {
   return rewordClean(replyText(provider, status, bytes), REWORD_ANSWER_CHARS);
 }
 /** The reword asks: `ask(a)` sends one request where `config()` (which may answer a promise) gives a configuration, and answers
- *  {ok: true, text} or {ok: false, why}, why "off", "paused", "refused", "late", "busy", "answer" or "unreached". Three failures
+ *  {ok: true, text} or {ok: false, why}, why "off", "paused", "toolong" (words over REWORD_CHARS), "refused", "late", "busy", "answer" or "unreached". Three failures
  *  in a row pause the asks for PAUSE_MS, as the order's do. */
 function createReword(opts) {
   const o = opts || {};
@@ -308,6 +308,8 @@ function createReword(opts) {
       try { cfg = o.config ? (await o.config()) || null : null; } catch { cfg = null; }
       if (!cfg) return { ok: false, why: "off" };
       if (pausedUntil > now()) return { ok: false, why: "paused" };
+      const whole = rewordClean(a && a.words, Infinity);
+      if (whole !== null && rewordClean(a && a.words, REWORD_CHARS) === null) return { ok: false, why: "toolong" }; /* plant:reword-toolong */
       const req = rewordRequestFor(cfg, a);
       if (!req) return { ok: false, why: "refused" };
       let res = null;

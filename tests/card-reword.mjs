@@ -36,7 +36,7 @@ const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const SHOTS = process.env.CARD_SHOTS || "";
-const EXPECTED = 23;
+const EXPECTED = 24;
 let fails = 0, checks = 0, notRun = 0;
 const check = (ok, what, detail) => {
   checks++;
@@ -62,14 +62,28 @@ const TAIL = { en: "The card is as it was.", pl: "Karta pozostała bez zmian." }
 const WORDS = {
   en: { wait: "Waiting for the service at " + HOST + "…", late: "The service at " + HOST + " did not answer in time. " + TAIL.en,
     busy: "The service at " + HOST + " is busy; a later try may go through. " + TAIL.en, none: "No result came back from " + HOST + ". " + TAIL.en,
-    refused: "The result lost a name this card fills in, or one of its steps, so it is not shown. The card is as it was; another try may keep them." },
+    refused: "The result lost a name this card fills in, or one of its steps, so it is not shown. The card is as it was; another try may keep them.",
+    paused: "The service at " + HOST + " failed three times in a row, so Etiuda waits before asking it again; nothing was sent. " + TAIL.en,
+    toolong: "These words are over 4000 characters, more than can be sent, so nothing was sent. " + TAIL.en,
+    switch: "Rewording is turned off on this computer, so nothing was sent. " + TAIL.en,
+    model: "The organisation's model is no longer set, so nothing was sent. " + TAIL.en,
+    unavail: "Rewording is not available just now, so nothing was sent. " + TAIL.en,
+    empty: "The result came back empty, so it is not shown. The card is as it was; another try may do better.",
+    nowords: "One of this card's steps came back with no words, so the result is not shown. The card is as it was; another try may keep them." },
   pl: { wait: "Oczekiwanie na usługę pod adresem " + HOST + "…", late: "Usługa pod adresem " + HOST + " nie odpowiedziała na czas. " + TAIL.pl,
     busy: "Usługa pod adresem " + HOST + " jest zajęta; późniejsza próba może się udać. " + TAIL.pl,
     none: "Z adresu " + HOST + " nie nadszedł wynik. " + TAIL.pl,
-    refused: "W wyniku zabrakło nazwy, którą karta wypełnia, albo jednego z jej kroków, więc nie został pokazany. Karta pozostała bez zmian; kolejna próba może je zachować." } };
+    refused: "W wyniku zabrakło nazwy, którą karta wypełnia, albo jednego z jej kroków, więc nie został pokazany. Karta pozostała bez zmian; kolejna próba może je zachować.",
+    paused: "Usługa pod adresem " + HOST + " zawiodła trzy razy z rzędu, więc Etiuda odczeka, zanim znów się do niej zwróci; nic nie zostało wysłane. " + TAIL.pl,
+    toolong: "Tekst ma ponad 4000 znaków, więcej, niż można wysłać, więc nic nie zostało wysłane. " + TAIL.pl,
+    switch: "Przeredagowanie jest wyłączone na tym komputerze, więc nic nie zostało wysłane. " + TAIL.pl,
+    model: "Model organizacji nie jest już ustawiony, więc nic nie zostało wysłane. " + TAIL.pl,
+    unavail: "Przeredagowanie jest teraz niedostępne, więc nic nie zostało wysłane. " + TAIL.pl,
+    empty: "Wynik nadszedł pusty, więc nie został pokazany. Karta pozostała bez zmian; kolejna próba może się udać.",
+    nowords: "Jeden z kroków karty wrócił bez treści, więc wynik nie został pokazany. Karta pozostała bez zmian; kolejna próba może je zachować." } };
 const NAME = "Wiktoria Planted";
 const MARK = "Zephyrquill";
-const PLAIN = "c-orders-thank-you-for-a-first-order", PLAIN2 = "c-damaged-a-new-one-on-its-way", STEPS = "c-returns-packing-the-piece";
+const PLAIN = "c-orders-thank-you-for-a-first-order", PLAIN2 = "c-damaged-a-new-one-on-its-way", STEPS = "c-returns-packing-the-piece", ALTS = "c-availability-when-it-will-arrive";
 
 let browser = null;
 /* The desk under a stand-in host. `host` is the service aiState names, "" for none. */
@@ -135,6 +149,21 @@ async function press(p, act, answer) {
   await sleep(120);
 }
 const raw = (p, id, L) => p.evaluate((id, L) => window.cardText(window.findCard(id), "body", L || "en"), id, L);
+/* A result the shape check refuses, and what the menu then says: the line under the menu's acts, then the menu closed again. */
+async function shapeSays(p2, id, text) {
+  if (await p2.$("#eReword")) { await p2.keyboard.press("Escape"); await sleep(200); }
+  await openMenu(p2, id);
+  await press(p2, "shorter", { ok: true, text });
+  const t = await p2.evaluate(() => (document.querySelector("#eReword .rw-bline") || {}).textContent || "");
+  await p2.keyboard.press("Escape");
+  await sleep(150);
+  return t;
+}
+/* The alternatives card's own result but for its first part, which comes back as its mark line alone. */
+async function noWordsOf(p2) {
+  const body = await raw(p2, ALTS);
+  return body.split("\n\n").map((x, i) => i === 0 ? x.split("\n")[0] : x).join("\n\n");
+}
 const sent = p => p.evaluate(() => window.__calls.filter(c => c.indexOf("reword ") === 0).map(c => JSON.parse(c.slice(7))));
 const cardFace = (p, id) => p.evaluate(sel => {
   const c = document.querySelector(sel);
@@ -357,6 +386,12 @@ try {
     check(merged === REFUSED && !mergedFace.on && lost === REFUSED && !lostFace.on,
       "cr7 a result that merged a card's steps, and one that wrote the customer's name in place of {PAX}, are refused and said, the card as it was", { merged, lost });
 
+    /* cr7b the two refusals her table gave a sentence of their own, in English */
+    const enShape = { empty: await shapeSays(p, PLAIN2, "   "), nowords: await shapeSays(p, ALTS, await noWordsOf(p)) };
+    check(enShape.empty === WORDS.en.empty && enShape.nowords === WORDS.en.nowords,
+      "cr7b an empty result and a step that came back with no words are each refused with a sentence of their own, character for character", enShape);
+    await openMenu(p, PLAIN2);
+
     /* cr8 */
     const said = async (p2, answer) => { await press(p2, "shorter", answer); return p2.evaluate(() => (document.querySelector("#eReword .rw-bline") || {}).textContent || ""); };
     const lines = async (p2, id, W) => {
@@ -371,7 +406,12 @@ try {
       const busy = await said(p2, { ok: false, why: "busy" });
       const none2 = await said(p2, { ok: false, why: "unreached" });
       const answer = await said(p2, { ok: false, why: "answer" });
-      return { wait, late, busy, none2, answer, ok: wait === W.wait && late === W.late && busy === W.busy && none2 === W.none && answer === W.none };
+      const nothing = {};
+      for (const k of ["paused", "toolong", "switch", "model", "unavailable", "refused", "off"]) nothing[k] = await said(p2, { ok: false, why: k });
+      return { wait, late, busy, none2, answer, nothing, ok: wait === W.wait && late === W.late && busy === W.busy && none2 === W.none && answer === W.none
+        && nothing.paused === W.paused && nothing.toolong === W.toolong && nothing.switch === W.switch && nothing.model === W.model
+        && nothing.unavailable === W.unavail && nothing.refused === W.unavail && nothing.off === W.unavail
+        && Object.values(nothing).every(x => x.indexOf("No result came back") < 0 && x.indexOf("Z adresu") < 0) };
     };
     const enL = await lines(p, PLAIN2, WORDS.en);
     const lateFace = await cardFace(p, PLAIN2);
@@ -384,8 +424,9 @@ try {
     const plL = await lines(plp, PLAIN2, WORDS.pl);
     await press(plp, "formal", { ok: true, text: (await raw(plp, PLAIN2)).replace("{PAX}", NAME) });
     const plRefused = await plp.evaluate(() => (document.querySelector("#eReword .rw-bline") || {}).textContent || "");
-    check(plL.ok && plRefused === WORDS.pl.refused,
-      "cr8b the same sentences, and the refusal, character for character in Polish under the Polish interface", { plL, plRefused });
+    const plShape = { empty: await shapeSays(plp, PLAIN2, "   "), nowords: await shapeSays(plp, ALTS, await noWordsOf(plp)) };
+    check(plL.ok && plRefused === WORDS.pl.refused && plShape.empty === WORDS.pl.empty && plShape.nowords === WORDS.pl.nowords,
+      "cr8b the same sentences, the refusal and the two more (an empty result, a step with no words), character for character in Polish under the Polish interface", { plL, plRefused, plShape });
     await plp.close();
 
     /* cr9 */

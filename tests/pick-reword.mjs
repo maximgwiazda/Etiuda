@@ -36,7 +36,7 @@ const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const SHOTS = process.env.PICK_SHOTS || "";
-const EXPECTED = 17;
+const EXPECTED = 19;
 let fails = 0, checks = 0, notRun = 0;
 const check = (ok, what, detail) => {
   checks++;
@@ -66,10 +66,20 @@ const HOST = "ai.mirabelka.example";
 const TAIL = { en: "Your words are as you wrote them.", pl: "Zaznaczony tekst pozostał bez zmian." };
 const WORDS = {
   en: { wait: "Waiting for the service at " + HOST + "…", late: "The service at " + HOST + " did not answer in time. " + TAIL.en,
-    busy: "The service at " + HOST + " is busy; a later try may go through. " + TAIL.en, none: "No result came back from " + HOST + ". " + TAIL.en },
+    busy: "The service at " + HOST + " is busy; a later try may go through. " + TAIL.en, none: "No result came back from " + HOST + ". " + TAIL.en,
+    paused: "The service at " + HOST + " failed three times in a row, so Etiuda waits before asking it again; nothing was sent. " + TAIL.en,
+    toolong: "These words are over 4000 characters, more than can be sent, so nothing was sent. " + TAIL.en,
+    switch: "Rewording is turned off on this computer, so nothing was sent. " + TAIL.en,
+    model: "The organisation's model is no longer set, so nothing was sent. " + TAIL.en,
+    unavail: "Rewording is not available just now, so nothing was sent. " + TAIL.en },
   pl: { wait: "Oczekiwanie na usługę pod adresem " + HOST + "…", late: "Usługa pod adresem " + HOST + " nie odpowiedziała na czas. " + TAIL.pl,
     busy: "Usługa pod adresem " + HOST + " jest zajęta; późniejsza próba może się udać. " + TAIL.pl,
-    none: "Z adresu " + HOST + " nie nadszedł wynik. " + TAIL.pl } };
+    none: "Z adresu " + HOST + " nie nadszedł wynik. " + TAIL.pl,
+    paused: "Usługa pod adresem " + HOST + " zawiodła trzy razy z rzędu, więc Etiuda odczeka, zanim znów się do niej zwróci; nic nie zostało wysłane. " + TAIL.pl,
+    toolong: "Tekst ma ponad 4000 znaków, więcej, niż można wysłać, więc nic nie zostało wysłane. " + TAIL.pl,
+    switch: "Przeredagowanie jest wyłączone na tym komputerze, więc nic nie zostało wysłane. " + TAIL.pl,
+    model: "Model organizacji nie jest już ustawiony, więc nic nie zostało wysłane. " + TAIL.pl,
+    unavail: "Przeredagowanie jest teraz niedostępne, więc nic nie zostało wysłane. " + TAIL.pl } };
 const SEL = "hi sorry for late reply, we check your order tomorow and write you back";
 const OUT = "Hi, sorry for the late reply. We will check your order tomorrow and write back to you.";
 
@@ -315,6 +325,28 @@ try {
       "pr6c waiting, late, busy and every other failure, character for character in Polish", seen);
   }
 
+  /* pr6d the cases where nothing was sent each say so in a sentence of their own, never "No result came back", in both languages */
+  {
+    const seen = {};
+    for (const [lang, desk] of [["en", EN], ["pl", Object.assign({}, PL, { lang: "pl" })]]) {
+      const p = await win(withRw(desk, { selected: SEL, editable: null }));
+      const got = {};
+      for (const k of ["paused", "toolong", "switch", "model", "unavailable", "refused", "off"]) {
+        await p.evaluate(a => { window.__answer = a; }, k);
+        await p.click("#rw .rw-acts button:nth-child(1)");
+        await sleep(60);
+        got[k] = (await face(p)).resLine;
+      }
+      await shot(p, "q11-nothing-sent-" + lang + "-light");
+      await p.close();
+      seen[lang] = got;
+    }
+    const W = { en: WORDS.en, pl: WORDS.pl };
+    const ok = lang => { const g = seen[lang], w = W[lang]; return g.paused === w.paused && g.toolong === w.toolong && g.switch === w.switch && g.model === w.model
+      && g.unavailable === w.unavail && g.refused === w.unavail && g.off === w.unavail && Object.values(g).every(x => x.indexOf("No result came back") < 0 && x.indexOf("Z adresu") < 0); };
+    check(ok("en") && ok("pl"), "pr6d the service paused, words over 4000, the switch off, the model gone and a press the desk cannot tell the two for each say their own sentence, 'nothing was sent', character for character in both languages", seen);
+  }
+
   /* pr7 the translation */
   {
     const p = await win(withRw(EN, { selected: SEL, editable: null }));
@@ -387,6 +419,18 @@ try {
     const w2 = o.words || {};
     check(n > 0 && String(w2.rwNone || "").split("{ADDRESS}").join(HOST) !== WORDS.en.none,
       "pr9b with the old placeholder put back in the built page, the failure's line no longer is her sentence and pr6b would be red", { found: n, none: w2.rwNone });
+  }
+
+  /* pr9c the plant: a nothing-sent line put back as the generic one */
+  if (PLANTS_OFF) skip("pr9c a nothing-sent line put back as 'No result came back' in the built page (ETIUDA_PLANTS=off)");
+  else {
+    const KEY = "Rewording is turned off on this computer, so nothing was sent. Your words are as you wrote them.";
+    const built = fs.readFileSync(path.join(lab, "etiuda.html"), "utf8");
+    const n = built.split(KEY).length - 1;
+    fs.writeFileSync(path.join(lab, "etiuda-planted2.html"), built.split(KEY).join("No result came back from {ADDRESS}. Your words are as you wrote them."));
+    const o = n > 0 ? await deskOpen("en", "light", "file:///" + path.join(lab, "etiuda-planted2.html").split("\\").join("/")) : { words: {} };
+    check(n > 0 && String((o.words || {}).rwSwitch || "").split("{ADDRESS}").join(HOST) !== WORDS.en.switch,
+      "pr9c with the switch-off line put back as the generic one in the built page, it no longer is her sentence and pr6d would be red", { found: n });
   }
 
   /* pr9 the plant */

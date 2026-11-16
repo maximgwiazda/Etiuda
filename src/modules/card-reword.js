@@ -74,6 +74,15 @@ function rewordKeepsShape(from,to,alt){
   const rest=p=>(mark(p) ? String(p).split("\n").slice(1).join("\n") : String(p)).trim();
   return a.every((p,i)=>mark(p)===mark(b[i]) && rest(b[i]).length>0);
 }
+/* Whether a refused result kept every name and every part and mark, but left one part with no words after its mark line. */
+function rewordPartEmpty(from,to,alt){
+  if(!alt || rewordTokens(from)!==rewordTokens(to)) return false;
+  const a=splitPartsRaw(from), b=splitPartsRaw(to);
+  if(a.length-b.length) return false;
+  const mark=p=>{ const first=(String(p).split("\n")[0]||"").trim(); return RW_MARK_RE.test(first) ? first : ""; };
+  const rest=p=>(mark(p) ? String(p).split("\n").slice(1).join("\n") : String(p)).trim();
+  return a.every((p,i)=>mark(p)===mark(b[i])) && b.some(p=>rest(p).length===0);
+}
 let rwMenu=null, rwAsk=0;
 function rwButtonOf(id){
   return [...document.querySelectorAll('#list .card[data-id] .cacts [data-act="reword"]')].filter(b=>b.closest(".card").dataset.id===id)[0]||null;
@@ -134,15 +143,26 @@ function rewordPress(id,act,how,say){
   const mine=++rwAsk;
   menu.el.querySelectorAll("button[data-rw-act]").forEach(b=>b.classList.toggle("tour-sel", b.getAttribute("data-rw-act")===act));
   say(t("Waiting for the service at {ADDRESS}…"));
-  const fail=r=>say(r && r.why==="late" ? t("The service at {ADDRESS} did not answer in time. The card is as it was.")
-    : r && r.why==="busy" ? t("The service at {ADDRESS} is busy; a later try may go through. The card is as it was.")
+  /* Each case where nothing was sent says so (the service paused, words over 4000 characters, the person's switch off at the press, the
+     organisation's model gone, a press the desk cannot say more of); "No result came back" stays for a request that went and brought nothing. */
+  const why=r=>r && r.why;
+  const fail=r=>say(why(r)==="late" ? t("The service at {ADDRESS} did not answer in time. The card is as it was.")
+    : why(r)==="busy" ? t("The service at {ADDRESS} is busy; a later try may go through. The card is as it was.")
+    : why(r)==="paused" ? t("The service at {ADDRESS} failed three times in a row, so Etiuda waits before asking it again; nothing was sent. The card is as it was.")
+    : why(r)==="toolong" ? t("These words are over 4000 characters, more than can be sent, so nothing was sent. The card is as it was.")
+    : why(r)==="switch" ? t("Rewording is turned off on this computer, so nothing was sent. The card is as it was.")
+    : why(r)==="model" ? t("The organisation's model is no longer set, so nothing was sent. The card is as it was.")
+    : why(r)==="unavailable" || why(r)==="refused" || why(r)==="off" ? t("Rewording is not available just now, so nothing was sent. The card is as it was.")
     : t("No result came back from {ADDRESS}. The card is as it was."));
   Promise.resolve(h.reword({act:act, words:from, how:act==="own" ? String(how||"") : "", to:""})).then(r=>{
     if(mine!==rwAsk || rwMenu!==menu) return;
     menu.el.querySelectorAll("button.tour-sel").forEach(b=>b.classList.remove("tour-sel"));
     if(!r || r.ok!==true || typeof r.text!=="string"){ fail(r); return; }
     if(!rewordKeepsShape(from, r.text, !!m.alt)){
-      say(t("The result lost a name this card fills in, or one of its steps, so it is not shown. The card is as it was; another try may keep them."));
+      const empty=!String(r.text||"").trim();
+      say(empty ? t("The result came back empty, so it is not shown. The card is as it was; another try may do better.")
+        : rewordPartEmpty(from, r.text, !!m.alt) ? t("One of this card's steps came back with no words, so the result is not shown. The card is as it was; another try may keep them.")
+        : t("The result lost a name this card fills in, or one of its steps, so it is not shown. The card is as it was; another try may keep them."));
       return;
     }
     const now=findCard(id);

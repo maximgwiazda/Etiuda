@@ -161,6 +161,11 @@ const ALLOWED_IN = [
   /* 2026-11-16. The copywriter's refusal of a reworded card says "kolejna próba", "another try", the feminine of "kolejny", not "Kolejną". */
   { fold: "kolejna", since: "2026-11-16",
     within: "W wyniku zabrakło nazwy, którą karta wypełnia, albo jednego z jej kroków, więc nie został pokazany. Karta pozostała bez zmian; kolejna próba może je zachować." },
+  /* 2026-11-16. The copywriter's two further card refusals say "kolejna próba", "another try", as the first does. */
+  { fold: "kolejna", since: "2026-11-16",
+    within: "Wynik nadszedł pusty, więc nie został pokazany. Karta pozostała bez zmian; kolejna próba może się udać." },
+  { fold: "kolejna", since: "2026-11-16",
+    within: "Jeden z kroków karty wrócił bez treści, więc wynik nie został pokazany. Karta pozostała bez zmian; kolejna próba może je zachować." },
 ];
 function allowedAt(line, k, at) {
   return ALLOWED_IN.some(a => {

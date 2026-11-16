@@ -11947,7 +11947,9 @@ function pickPage() {
         if (rwMode === "only" && typeof P.grow === "function") P.grow();
       } else {
         rwOn = null; rwOut = "";
-        rwSaid = rwSay(r && r.why === "late" ? words.rwLate : r && r.why === "busy" ? words.rwBusy : words.rwNone);
+        const why = r && r.why;
+        rwSaid = rwSay(why === "late" ? words.rwLate : why === "busy" ? words.rwBusy : why === "paused" ? words.rwPaused : why === "toolong" ? words.rwTooLong
+          : why === "switch" ? words.rwSwitch : why === "model" ? words.rwModel : why === "unavailable" || why === "refused" || why === "off" ? words.rwUnavail : words.rwNone);
       }
       paintRw();
     }, () => { if (mine === rwN) { rwOn = null; rwSaid = rwSay(words.rwNone); paintRw(); } });
@@ -12854,15 +12856,22 @@ const REWORD_POLICY_WAIT_MS = 2000;
 const DESK_REWORD_FILE = "desk-reword.json";
 const DESK_REWORD_KIND = "etiuda-desk-reword";
 let rewordOffNow = false;
-function rewordWanted() {
-  if (rewordOffNow) return false;
+/* "on", "off" (the person turned it off: a file of the desk's own kind that says so, or a write that did not land) or "unreadable"
+   (everything else but a file never written), which behaves as off and is said as "not available", never as the person's choice. */
+function rewordSwitch() {
+  if (rewordOffNow) return "off";
   let text = "";
-  try { text = fs.readFileSync(deskAiPath(DESK_REWORD_FILE), "utf8"); } catch (e) { return !!e && e.code === "ENOENT"; } /* plant:reword-read-closed */
+  try { text = fs.readFileSync(deskAiPath(DESK_REWORD_FILE), "utf8"); } catch (e) { return e && e.code === "ENOENT" ? "on" : "unreadable"; } /* plant:reword-read-closed */
   try {
     const doc = JSON.parse(text);
-    return !!doc && typeof doc === "object" && doc.kind === DESK_REWORD_KIND && doc.format === 1 && doc.off === false;
-  } catch { return false; } /* plant:reword-parse-closed */
+    if (!doc || typeof doc !== "object" || doc.kind !== DESK_REWORD_KIND || doc.format !== 1) return "unreadable";
+    return doc.off === false ? "on" : doc.off === true ? "off" : "unreadable";
+  } catch { return "unreadable"; } /* plant:reword-parse-closed */
 }
+function rewordWanted() { return rewordSwitch() === "on"; }
+/* Why a press is refused at a door, as the page says it: the person's switch ("switch"), a choice the desk cannot read ("unavailable"),
+   or "" where the switch is on. */
+function rewordSwitchWhy() { const w = rewordSwitch(); return w === "on" ? "" : w === "off" ? "switch" : "unavailable"; }
 async function deskRewordConfig() {
   if (!rewordWanted()) return null; /* plant:reword-switch-send */
   const end = Date.now() + REWORD_POLICY_WAIT_MS;
@@ -12878,6 +12887,12 @@ function rewordArg(a) {
   const o = a && typeof a === "object" ? a : {}, s = k => (typeof o[k] === "string" ? o[k] : "");
   return { act: s("act"), words: s("words"), how: s("how"), to: s("to") };
 }
+/* The door's own "off" (no configuration to send under at the press) is said as the switch if the choice moved meanwhile; as the model gone
+   where no configuration is in force; and as "unavailable" where one is but machine policy's facts are stale, which the person did not do. */
+function rewordShown(r) {
+  if (!r || r.ok !== false || r.why !== "off") return r;
+  return { ok: false, why: rewordSwitchWhy() || (deskAiConfig() ? "unavailable" : "model") };
+}
 /* The host the screen names, read from the address the request goes to, so the two cannot differ. */
 function rewordHost(c) {
   try { return c ? new URL(deskAi.endpointFor(c)).host : ""; } catch { return ""; }
@@ -12886,9 +12901,10 @@ function rewordHost(c) {
    result asked in it are kept here for Enter's put, numbered so an answer overtaken by a later press is not the one put. */
 let pickRewordOn = false, pickSelectedNow = "", pickReworded = "", pickRewordN = 0;
 ipcMain.handle("etiuda:pick-reword", (e, a) => {
-  if (!fromPicker(e) || !pickRewordOn || !rewordWanted()) return { ok: false, why: "off" }; /* plant:reword-switch-door-pick */
+  if (!fromPicker(e)) return { ok: false, why: "off" };
+  if (!pickRewordOn || !rewordWanted()) return { ok: false, why: rewordSwitchWhy() || "unavailable" }; /* plant:reword-switch-door-pick */
   const n = ++pickRewordN;
-  return deskReword.ask(rewordArg(a)).then(r => {
+  return deskReword.ask(rewordArg(a)).then(rewordShown).then(r => {
     if (n === pickRewordN) pickReworded = r && r.ok ? r.text : "";
     return r;
   });
@@ -12923,7 +12939,7 @@ ipcMain.on("etiuda:pick-grow", (e) => {
   pickWin.setBounds({ x: b.x, y: y, width: b.width, height: REWORD_TALL });
 });
 /* A card's Reword in the desk's own window: the same door, the same asks. */
-ipcMain.handle("etiuda:desk-reword", (e, a) => (fromEngine(e) && rewordWanted() ? deskReword.ask(rewordArg(a)) : { ok: false, why: fromEngine(e) ? "off" : "refused" })); /* plant:reword-switch-door-desk */
+ipcMain.handle("etiuda:desk-reword", (e, a) => (fromEngine(e) && rewordWanted() ? deskReword.ask(rewordArg(a)).then(rewordShown) : { ok: false, why: fromEngine(e) ? rewordSwitchWhy() : "refused" })); /* plant:reword-switch-door-desk */
 /* The person's own switch, set from Settings: stored as a file of its own; a result already made for the picker's Enter is let go, and a press from a window opened before refuses at its own door. */
 ipcMain.on("etiuda:reword-set", (e, on) => {
   if (!fromEngine(e)) return;
