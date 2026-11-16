@@ -21,6 +21,9 @@
  *   f6  an answer arriving with an edition while the page is open changes the mark with no reload and PAX left as typed
  *   f7  nothing of this in the top bar
  *   f8  the keyboard: Tab from edit reaches the button, Enter sends and opens, Esc closes and gives the focus back
+ *   f9  the 101st press: nothing sent, and a bubble from the button in the copywriter's words; the line under a refused note
+ *       for each case; and the facts both rest on, held here so the words cannot outlive them: a line break and a tab are
+ *       refused as control, and a flag taken back or answered leaves the count of a hundred
  * Inline plant proofs in scratch copies of the page: the bubble shown before the flag is sent turns f2 red, a greyed button
  * drawn where no flag can be made turns f1 red, an answer whose mark stays after it was opened turns f5 red, and the button pressed
  * while its bubble stands acting on the flag turns f3 red; each is
@@ -42,7 +45,7 @@ console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " +
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const STILLS = process.env.DESK_FLAG_STILLS ? path.resolve(process.env.DESK_FLAG_STILLS) : "";
-const EXPECTED = 108;
+const EXPECTED = 126;
 let fails = 0, checks = 0, notRun = 0;
 const check = (ok, what, detail) => {
   checks++;
@@ -59,11 +62,15 @@ const WORDS = {
   en: { button: "This looks wrong", title: "Sent to the lead",
     line: "The lead will see it in Studio, and the answer comes with the team's next edition. If you know what is wrong, add it here; it is fine not to know.",
     hint: "What looks wrong (optional), then Enter", back: "Take it back", done: "Done", sent: "With the lead", answered: "Answered",
-    answerTitle: "The lead has answered", kept: "Left as it is.", changed: "The card has been mended." },
+    answerTitle: "The lead has answered", kept: "Left as it is.", changed: "The card has been mended.",
+    tooLong: "The note can be up to 500 characters long.", control: "The note holds a character it cannot keep, such as a line break or a tab.",
+    full: "This desk has already sent as many flags on this catalog as it can, so this one was not sent. Room comes back as the lead answers." },
   pl: { button: "Coś się nie zgadza", title: "Przekazano liderowi zespołu",
     line: "Lider zespołu zobaczy to w Studio, a odpowiedź przyjdzie z następnym wydaniem zespołu. Jeśli wiadomo, co się nie zgadza, można to tu dopisać; nie trzeba tego wiedzieć.",
     hint: "Co się nie zgadza (nieobowiązkowo), potem Enter", back: "Wycofaj", done: "Gotowe", sent: "U lidera", answered: "Jest odpowiedź",
-    answerTitle: "Jest odpowiedź lidera zespołu", kept: "Bez zmian.", changed: "Kartę poprawiono." },
+    answerTitle: "Jest odpowiedź lidera zespołu", kept: "Bez zmian.", changed: "Kartę poprawiono.",
+    tooLong: "Notatka może mieć najwyżej 500 znaków.", control: "Notatka zawiera znak, którego nie może zachować, na przykład podział wiersza lub tabulator.",
+    full: "To stanowisko wysłało już tyle zgłoszeń do tego katalogu, ile może, więc tego nie wysłano. Miejsce zwalnia się, gdy lider zespołu odpowiada." },
 };
 const CARD = "c-opening-the-order-in-hand";
 const LONG = "c-opening-a-familiar-name";
@@ -316,9 +323,17 @@ async function runOffered(pageUrl, lang, theme) {
       await p.keyboard.press("Enter");
       await sleep(150);
       const now = await bubNow(p), fl = await flagOf(p, CARD);
-      refused.push({ open: !!now, kept: !!now && now.value === v, note: fl && fl.note });
+      const why = await p.evaluate((b) => { const e = document.querySelector(b + " .e-flag-why"); return e && !e.hidden && e.getClientRects().length ? { t: e.textContent.trim(), sel: getComputedStyle(e).userSelect } : null; }, BUB);
+      refused.push({ open: !!now, kept: !!now && now.value === v, note: fl && fl.note, why });
+      if (v === typed) await still(p, lang + "-" + theme + "-1b-note-too-long", [BUB, cardSel(CARD) + " > .chead"]);
+      else await still(p, lang + "-" + theme + "-1c-note-control", [BUB, cardSel(CARD) + " > .chead"]);
     }
     check(refused.every((r) => r.open && r.kept && r.note === ""), tag + "f3 a note refused (too long, a control character) keeps the bubble and the typed text", refused);
+    check(!!refused[0].why && refused[0].why.t === W.tooLong && !!refused[1].why && refused[1].why.t === W.control
+      && refused.every((r) => r.why && r.why.sel === "none"), tag + "f3 under a refused note, the copywriter's line for its case, unselectable", refused.map((r) => r.why));
+    /* The control line names a line break and a tab: true only while the refusal covers both. */
+    const ctlFact = await p.evaluate((id) => [10, 9, 13].map((c) => { const r = flagNote(id, "a" + String.fromCharCode(c) + "b"); return [c, r && r.refused]; }), CARD);
+    check(ctlFact.every((x) => x[1] === "control"), tag + "f3 a line break, a tab and a carriage return are each refused as control (the line's example holds)", ctlFact);
     await p.keyboard.press("Escape");
     await sleep(150);
 
@@ -479,6 +494,48 @@ async function runOffered(pageUrl, lang, theme) {
     check(kb1 === "flag" && kb2.bubble && kb2.flag && kb2.flag.state === "sent" && !kb3.bubble && kb3.focus === "flag",
       tag + "f8 Tab from edit reaches the button, Enter sends and opens, Esc closes and gives the focus back", { kb1, kb2, kb3 });
 
+    /* f9 the 101st press: a hundred other cards flagged, the card's own press is not sent and the bubble says so. */
+    await clear(p, CARD);
+    const hundred = await p.evaluate((id) => {
+      const ids = [...document.querySelectorAll("#list .card[data-id]")].map((c) => c.dataset.id).filter((x) => x !== id).slice(0, 100);
+      ids.forEach((x) => flagCard(x));
+      return { ids, n: flagFileList().length };
+    }, CARD);
+    await toCard(p, CARD);
+    await p.click(btnSel(CARD));
+    await sleep(250);
+    const full = await p.evaluate((b, s, id) => {
+      const e = document.querySelector(b), btn = document.querySelector(s);
+      return { words: e ? e.querySelector("p").textContent.trim() : null, sel: e ? getComputedStyle(e.querySelector("p")).userSelect : null,
+        hang: e ? window.__bubAt(e, btn) : null, flag: cardFlag(id), lit: !!(btn && btn.classList.contains("on")) };
+    }, BUB, btnSel(CARD), CARD);
+    await still(p, lang + "-" + theme + "-5-full-bubble", [BUB, cardSel(CARD) + " > .chead"]);
+    await p.keyboard.press("Escape");
+    await sleep(150);
+    const fullGone = !(await bubNow(p));
+    check(hundred.n === 100 && full.words === W.full && full.sel === "none" && !!full.hang && full.hang.ok && full.flag === null && !full.lit && fullGone,
+      tag + "f9 the 101st press sends nothing, and a bubble from the button says so in the copywriter's words; Esc closes it", { n: hundred.n, full, fullGone });
+    /* "Room comes back as the lead answers": true only while a flag taken back and a flag answered each leave the count. */
+    const back = await p.evaluate((ids, id) => {
+      unflagCard(ids[0]);
+      const r = flagCard(id); const ok = !!(r && r.card === id);
+      unflagCard(id); flagCard(ids[0]);
+      return { freed: ok, n: flagFileList().length };
+    }, hundred.ids, CARD);
+    const answerSrc = 'const r=(flagFileList().find(x=>x.card==="' + hundred.ids[1] + '")||{}).r; doc.answered=[{f:flagDigest(r),o:"kept"}];';
+    await takeEdition(p, CATALOG, answerSrc);
+    await sleep(300);
+    const ans = await p.evaluate((ids, id) => {
+      const before = flagFileList().length;
+      const r = flagCard(id); const ok = !!(r && r.card === id);
+      unflagCard(id);
+      ids.forEach((x) => { unflagCard(x); flagSeen(x); });
+      return { before, freed: ok, after: flagFileList().length };
+    }, hundred.ids, CARD);
+    await sleep(200);
+    check(back.freed && back.n === 100 && ans.before === 99 && ans.freed && ans.after === 0,
+      tag + "f9 a flag taken back and a flag answered each free a place among the hundred (the second sentence holds)", { back, ans });
+
     /* f5 gone, last: the card leaves the catalog. */
     await takeEdition(p, CATALOG, EDIT_GONE);
     await sleep(400);
@@ -525,6 +582,8 @@ try {
     skip("plant:flag-greyed a greyed button drawn where no flag can be made turns f1 red (ETIUDA_PLANTS=off)");
     skip("plant:flag-mark-stays an answer's mark that stays after it was opened turns f5 red (ETIUDA_PLANTS=off)");
     skip("plant:flag-own-press the button pressed while its bubble stands acting on the flag turns f3 red (ETIUDA_PLANTS=off)");
+    skip("plant:flag-why-silent a refused note with no line under it turns f3 red (ETIUDA_PLANTS=off)");
+    skip("plant:flag-full-silent the 101st press with no bubble turns f9 red (ETIUDA_PLANTS=off)");
   } else {
     const u1 = plant("plant-first", /const (\w+) = flagCard\((\w+)\);/, "showFlagSent($2);\n    const $1 = flagCard($2);");
     let red1 = null;
@@ -569,6 +628,32 @@ try {
         red4 = { bubble: !!(await bubNow(p)), sent: !!(fl && fl.state === "sent") };
       } finally { await closePage(p); }
     }
+    const u5 = plant("plant-why", /why\.textContent = line;/, 'why.textContent = "";');
+    let red5 = null;
+    if (u5) {
+      const p = await boot(u5, { offered: true });
+      try {
+        await clickFlag(p, CARD);
+        await p.evaluate((b) => { const i = document.querySelector(b + " input"); i.focus(); i.value = "x".repeat(501); i.dispatchEvent(new Event("input", { bubbles: true })); }, BUB);
+        await p.keyboard.press("Enter");
+        await sleep(150);
+        red5 = await p.evaluate((b) => { const e = document.querySelector(b + " .e-flag-why"); return e ? e.textContent.trim() : null; }, BUB);
+      } finally { await closePage(p); }
+    }
+    check(!!u5 && red5 !== null && red5 !== WORDS.en.tooLong, "plant:flag-why-silent a refused note with no line under it turns f3 red", { located: !!u5, red5 });
+    const u6 = plant("plant-full", /if \(got && got\.refused === "full"\) showFlagFull\(id\);/, "");
+    let red6 = null;
+    if (u6) {
+      const p = await boot(u6, { offered: true });
+      try {
+        await p.evaluate((id) => { [...document.querySelectorAll("#list .card[data-id]")].map((c) => c.dataset.id).filter((x) => x !== id).slice(0, 100).forEach((x) => flagCard(x)); }, CARD);
+        await toCard(p, CARD);
+        await p.click(btnSel(CARD));
+        await sleep(250);
+        red6 = { bubble: !!(await bubNow(p)) };
+      } finally { await closePage(p); }
+    }
+    check(!!u6 && !!red6 && !red6.bubble, "plant:flag-full-silent the 101st press with no bubble turns f9 red", { located: !!u6, red6 });
     check(!!u4 && !!red4 && !(red4.sent && !red4.bubble), "plant:flag-own-press the button pressed while its bubble stands acting on the flag turns f3 red", { located: !!u4, red4 });
   }
 } catch (e) {
@@ -578,7 +663,7 @@ try {
   try { fs.rmSync(lab, { recursive: true, force: true }); } catch (e) {}
 }
 
-const want = EXPECTED - (PLANTS_OFF ? 4 : 0);
+const want = EXPECTED - (PLANTS_OFF ? 6 : 0);
 console.log("RESULT checks=" + checks + " failed=" + fails + (notRun ? " notRun=" + notRun : ""));
 console.log("#counts checks=" + checks + " skipped=" + notRun + " failed=" + fails + " expected=" + want);
 process.exit(fails || checks !== want ? 1 : 0);

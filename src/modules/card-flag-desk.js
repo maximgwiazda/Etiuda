@@ -101,7 +101,8 @@ function flagBubble(id, html, origin, width, after){
     if(e.key!=="Escape") return;
     e.preventDefault(); e.stopPropagation(); close();
   });
-  el.querySelector('[data-flag="done"]').onclick=()=>close();
+  const done=el.querySelector('[data-flag="done"]');
+  if(done) done.onclick=()=>close();
   return {el:el, close:close};
 }
 function showFlagSent(id){
@@ -110,19 +111,27 @@ function showFlagSent(id){
     '<h3 id="eFlagT">'+esc(t("Sent to the lead"))+'</h3>'
     +'<p>'+esc(t("The lead will see it in Studio, and the answer comes with the team's next edition. If you know what is wrong, add it here; it is fine not to know."))+'</p>'
     +'<input type="text" class="e-flag-note" placeholder="'+esc(hint)+'" aria-label="'+esc(hint)+'" spellcheck="false" autocomplete="off">'
+    +'<p class="e-flag-why" role="alert" hidden></p>'
     +'<div class="tour-actions"><button type="button" class="btn" data-flag="back">'+esc(t("Take it back"))+'</button>'
     +'<button type="button" class="btn primary" data-flag="done">'+esc(t("Done"))+'</button></div>',
     ()=>buttonOf(id)||markOf(id), 360, ()=>{ if(sentOpen===id) sentOpen=""; });
-  const note=b.el.querySelector(".e-flag-note");
-  /* A note the flag refuses keeps the bubble and every typed character. */
+  const note=b.el.querySelector(".e-flag-note"), why=b.el.querySelector(".e-flag-why");
+  /* A note the flag refuses keeps the bubble and every typed character, and the line under it says why. */
   note.addEventListener("keydown",e=>{
     if(e.key!=="Enter" || e.isComposing) return;
     e.preventDefault();
     const got=flagNote(id, note.value);
-    if(got && got.refused){ note.setAttribute("aria-invalid","true"); return; }
+    if(got && got.refused){
+      const line=got.refused==="too-long" ? t("The note can be up to 500 characters long.")
+        : t("The note holds a character it cannot keep, such as a line break or a tab.");
+      note.setAttribute("aria-invalid","true");
+      why.textContent=line;
+      why.hidden=false;
+      return;
+    }
     b.close();
   });
-  note.addEventListener("input",()=>note.removeAttribute("aria-invalid"));
+  note.addEventListener("input",()=>{ note.removeAttribute("aria-invalid"); why.hidden=true; why.textContent=""; });
   b.el.querySelector('[data-flag="back"]').onclick=()=>{ unflagCard(id); b.close(); };
   try{ note.focus({preventScroll:true}); }catch(e){}
 }
@@ -142,6 +151,17 @@ function showFlagAnswer(id){
   try{ b.el.querySelector('[data-flag="done"]').focus({preventScroll:true}); }catch(e){}
   return seen;
 }
+/* THE 101ST FLAG IS NOT SENT, and the bubble from the button says so. A flag taken back or answered leaves the count, which
+   is what the second sentence promises (tests/desk-flag.mjs holds both). */
+function showFlagFull(id){
+  const b=flagBubble(id,
+    '<p id="eFlagT">'+esc(t("This desk has already sent as many flags on this catalog as it can, so this one was not sent."))
+    +' '+esc(t("Room comes back as the lead answers."))+'</p>',
+    ()=>buttonOf(id), 300, ()=>{});
+  b.el.setAttribute("role","status");
+  b.el.setAttribute("tabindex","-1");
+  try{ b.el.focus({preventScroll:true}); }catch(e){}
+}
 /* The card's button: a press sends the flag first and then says so; on a lit flag it takes the flag back, or opens the
    answer where one has come. */
 function flagPressed(id){
@@ -156,6 +176,7 @@ function flagPressed(id){
     sentOpen="";
     if(got && got.refused==="not-offered") offered=null;
     hooks.render();
+    if(got && got.refused==="full") showFlagFull(id);
     return;
   }
   showFlagSent(id);
