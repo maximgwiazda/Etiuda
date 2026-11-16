@@ -1487,6 +1487,7 @@ UI_STRINGS.pl={
   "Connecting for the first time.":"Trwa pierwsze łączenie.",
   "Checking for changes.":"Trwa sprawdzanie zmian.",
   "Not connected yet. Sync starts once this computer reaches our service.":"Jeszcze bez połączenia. Synchronizacja ruszy, gdy komputer połączy się z naszą usługą.",
+  "Sync starts again shortly after Etiuda opens.":"Synchronizacja wznowi się chwilę po uruchomieniu Etiudy.",
   "Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.":"Synchronizacja chwilowo nie działa. Zostanie wznowiona, gdy komputer połączy się z naszą usługą, a na tym komputerze nic nie ginie.",
   "Sign-in":"Logowanie",
   "{PROVIDER} · work accounts of the organisation":"{PROVIDER} · konta służbowe organizacji",

@@ -481,7 +481,7 @@ function signinClicks(root){
 /* ---- sync across computers: what the shell's storeRow answers (shell/sync/store.cjs), the row's words and the one bubble ---------
    The page is told a line (SYNC_LINES), the switch, whether policy holds it, the
    reason, the pause's start and what to say once; never a key, a store or a token. */
-const SYNC_LINES=["on","off","ending","ungiven","ungiven-held","org-off","unavailable","anew","first","checking","unconnected","signin-refused","again","spent","refused","lapsed","paused","conflict","full","noseat","ask"];
+const SYNC_LINES=["on","off","ending","ungiven","ungiven-held","org-off","unavailable","anew","first","checking","unconnected","resuming","signin-refused","again","spent","refused","lapsed","paused","conflict","full","noseat","ask"];
 function syncRead(v){
   const o=v && typeof v==="object" ? v : {};
   if(o.shown!==true || SYNC_LINES.indexOf(o.line)<0) return {shown:false, line:"", on:false, held:false, why:"", since:0, say:"", askNow:false, at:0};
@@ -538,6 +538,7 @@ function syncLine(s, provider){
   if(s.line==="first") return t("Connecting for the first time.");
   if(s.line==="checking") return t("Checking for changes.");
   if(s.line==="unconnected") return t("Not connected yet. Sync starts once this computer reaches our service.");
+  if(s.line==="resuming") return t("Sync starts again shortly after Etiuda opens.");
   if(s.line==="signin-refused") return t("Not syncing while signing in on this computer is refused. Sync resumes once signing in works, and nothing on this computer is lost.");
   if(s.line==="again" || s.line==="spent" || s.line==="refused") return syncPassing(s, provider);
   /* A lapse with no reason known. */

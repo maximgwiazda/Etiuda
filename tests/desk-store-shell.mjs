@@ -598,7 +598,7 @@ async function refusedViewScene(src) {
 
 /* (lk) A LOOK RUNNING IS TOLD: the page is told when a look begins and when it ends; while one runs the row says "first" on a computer
    where no look has had sync on yet and "checking" after; and a start whose renewal has not yet come, nothing looked at in this run,
-   says "unconnected", not on. Each look is held at the licence service (grantGate) while the row is read. */
+   says "resuming" where the desk had sync on before and "unconnected" where it never did, not on. Each look is held at the licence service (grantGate) while the row is read. */
 async function lookingScene(src) {
   const world = worldOf(), sent = [];
   const gate = () => { let release = null, reached = null; const at = new Promise(a => { reached = a; }); world.grantGate = new Promise(a => { release = a; }); world.onGrant = () => reached(); return { at, release: () => release() }; };
@@ -626,7 +626,7 @@ async function lookingScene(src) {
   const restarted = boot(src, { ud: shell.UD, world, lab: labNow }).T.storeView().line;
   /* And one whose look has never found sync on (store.json holding no certificate's end): no date. */
   const never = boot(src, { ud: shell.UD, world, lab: labNow, store: {} }).T.storeView();
-  const ok = mid1 === "first" && t1 > t0 && after1 === "on" && t2 > t1 && mid2 === "checking" && after2 === "on" && restarted === "unconnected" && never.line === "unconnected" && !never.since;
+  const ok = mid1 === "first" && t1 > t0 && after1 === "on" && t2 > t1 && mid2 === "checking" && after2 === "on" && restarted === "resuming" && never.line === "unconnected" && !never.since;
   return { ok, detail: brief({ mid1, toldAtStart: t1 - t0, after1, toldAtEnd: t2 - t1, mid2, after2, restarted, never: never.line + (never.since ? "/" + never.since : "") }) };
 }
 
