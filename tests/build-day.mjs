@@ -36,8 +36,8 @@ const OVERLAY = [
   'tools/ablate.mjs',
   '.github/workflows/verify.yml',
 ];
-const BASE_EXPECTED = 38;
-const EXPECTED = BASE_EXPECTED + (PLANTS ? 1 : 0);
+const BASE_EXPECTED = 40;
+const EXPECTED = BASE_EXPECTED + (PLANTS ? 2 : 0);
 
 let failed = 0;
 let asserted = 0;
@@ -47,6 +47,7 @@ let scratch = '';
 let shallow = '';
 let norepo = '';
 let clockFile = '';
+const bareDirs = [];
 
 function oneLine(s) {
   return String(s || '').replace(/[\u0000-\u001f]+/g, ' ').slice(0, 240);
@@ -153,7 +154,7 @@ function dropJunction(dir) {
 function cleanup() {
   const modules = path.join(ROOT, 'node_modules');
   const before = fs.existsSync(modules);
-  const dirs = [scratch, shallow, norepo].filter(Boolean);
+  const dirs = [scratch, shallow, norepo, ...bareDirs].filter(Boolean);
   let blocked = false;
   for (const dir of dirs) {
     try { dropJunction(dir); }
@@ -167,7 +168,7 @@ function cleanup() {
     if (removed.status !== 0) note('worktree remove: ' + oneLine(removed.stderr || removed.stdout));
   }
   if (!blocked) {
-    for (const dir of [shallow, norepo, scratch, parent]) {
+    for (const dir of [shallow, norepo, ...bareDirs, scratch, parent]) {
       try {
         if (dir && fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
       } catch (e) {
@@ -428,6 +429,62 @@ function plantCase() {
   }
 }
 
+/* A tree that has every build input and no engine/ folder (a fresh clone, once the built files are not committed): the build
+   makes the folder and writes what it writes when the folder exists, byte for byte; a refused build writes nothing and leaves
+   no folder. The comparison is the norepo tree above, built with the same handed day from the same inputs. */
+function noFolderCase() {
+  note('no engine folder');
+  const copyInputs = dir => {
+    bareDirs.push(dir);
+    fs.mkdirSync(path.join(dir, 'shell'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'tools', 'bundler-probe'), { recursive: true });
+    copyDir(path.join(norepo, 'src'), path.join(dir, 'src'));
+    fs.copyFileSync(path.join(norepo, 'tools', 'build.mjs'), path.join(dir, 'tools', 'build.mjs'));
+    fs.copyFileSync(path.join(norepo, 'tools', 'bundler-probe', 'build.mjs'), path.join(dir, 'tools', 'bundler-probe', 'build.mjs'));
+    for (const f of ['license_en.txt', 'license_pl.txt']) fs.copyFileSync(path.join(norepo, 'shell', f), path.join(dir, 'shell', f));
+    linkModules(dir);
+  };
+  const fourFiles = dir => [...OUTPUT_RELS, 'engine/etiuda.build.json'].map(rel => {
+    const p = path.join(dir, rel);
+    return fs.existsSync(p) ? sha256(fs.readFileSync(p)) : 'absent';
+  }).join(',');
+  const day = { ETIUDA_BUILD_DAY: '2001-02-03' };
+  const withFolder = runBuild(norepo, day);
+  const bare = path.join(parent, 'nofolder');
+  fs.mkdirSync(bare, { recursive: true });
+  copyInputs(bare);
+  const hadFolder = fs.existsSync(path.join(bare, 'engine'));
+  const made = runBuild(bare, day);
+  check('with no engine folder the build makes it and writes the three files and its record, the bytes it writes when the folder exists',
+    !hadFolder && withFolder.status === 0 && made.status === 0 && !fourFiles(bare).includes('absent') && fourFiles(bare) === fourFiles(norepo),
+    'hadFolder=' + hadFolder + ' status=' + made.status + ' ' + oneLine(made.stderr));
+  const refusedDir = path.join(parent, 'nofolder-refused');
+  fs.mkdirSync(refusedDir, { recursive: true });
+  copyInputs(refusedDir);
+  const refused = runBuild(refusedDir, { ETIUDA_BUILD_DAY: '15/11/2026' });
+  check('a refused build in a tree with no engine folder writes nothing and leaves no folder',
+    refused.status !== 0 && !fs.existsSync(path.join(refusedDir, 'engine')), 'status=' + refused.status + ' ' + oneLine(refused.stderr));
+  if (!PLANTS) {
+    console.log('NOT RUN plant:build-folder (ETIUDA_PLANTS=off)');
+    return;
+  }
+  const planted = path.join(parent, 'nofolder-plant');
+  fs.mkdirSync(planted, { recursive: true });
+  copyInputs(planted);
+  const file = path.join(planted, 'tools', 'build.mjs');
+  const src = fs.readFileSync(file, 'utf8');
+  const marker = '/* plant:build-folder */';
+  if (!src.includes(marker)) {
+    check('lifting the folder-making line leaves the bare tree unbuilt', false, 'marker absent');
+    return;
+  }
+  fs.writeFileSync(file, src.split("\n").filter(line => !line.includes(marker)).join("\n"));
+  const lifted = runBuild(planted, day);
+  check('lifting the folder-making line leaves the bare tree unbuilt',
+    lifted.status !== 0 && !fs.existsSync(path.join(planted, 'engine', 'etiuda.html')),
+    'status=' + lifted.status + ' ' + oneLine(lifted.stderr));
+}
+
 const RECORD_REL = 'engine/etiuda.build.json';
 
 async function recordCases() {
@@ -561,6 +618,7 @@ async function leg() {
   shallowCase(cs);
   noRepoCase();
   plantCase();
+  noFolderCase();
   await recordCases();
   complete = asserted === EXPECTED;
 }

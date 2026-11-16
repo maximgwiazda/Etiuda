@@ -9,7 +9,7 @@
 //
 // The build options are `bundler-probe`'s, unchanged, so the conditions spec 9 binds are proved
 // by that probe rather than restated here.
-import { existsSync, lstatSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
@@ -282,6 +282,9 @@ export async function build() {
   const html = htmlAt(day);
   if (builtStamp(html) !== day) throw new Error('the build day ' + day + ' cannot be read back out of the artifact');
   const inputs = inputDigest();
+  // The folder is made here, after every refusal above and before the first write, so a refused build leaves
+  // nothing behind and a tree without engine/ (a fresh clone, the built files not being committed) still builds.
+  mkdirSync(dirname(OUT_FILE), { recursive: true }); /* plant:build-folder */
   writeFileSync(OUT_FILE, html, 'utf8');
   const hashes = scriptHashes(html);
   if (hashes.length !== 2)
