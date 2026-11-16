@@ -62,7 +62,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 460;
+const EXPECTED = 464;
 
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 let asserted = 0, failed = 0, skipped = 0;
@@ -12150,6 +12150,113 @@ if (partOn("pF4")) {
     }
   } catch (e) {
     check(false, "harness (the leg f4a): " + (e && e.stack ? e.stack : e));
+  }
+}
+
+/* ---- finding (8): a relisting never removes what a lead or colleague kept of a removed desk ---- */
+async function sceneF8(mod) {
+  const X = relay9(), { tm, BASE, DAYMS } = X;
+  const DR = { k: keyPair(true), box: boxPair() }, DK = { k: keyPair(true), box: boxPair() };
+  const STATS = "desk statistics kept across removal\n", DK_OLD = "active desk file retracted later\n";
+  const RETIRED = "lead file retracted later\n";
+  const statsRel = "desks/" + DR.k.keyId + "/stats.estat", dkOldRel = "desks/" + DK.k.keyId + "/old.ec";
+  const afterRel = "desks/" + DR.k.keyId + "/after.ec";
+  try {
+    X.clockOn();
+    const made = await X.admin9("POST", "/relay/v1/teams", createBody(tm.rt, X.RS.clock.now));
+    const enrolled = await X.enrol9(1, DR, DK);
+    if (made.status !== 200 || enrolled.status !== 200) throw new Error("the team was not made: " + JSON.stringify([made.json, enrolled.json]));
+    const lead = X.lead9(mod, "f8-lead-" + X.tag);
+    const dr = X.desk9(mod, "f8-rem-" + X.tag, DR);
+    const dk = X.desk9(mod, "f8-keep-" + X.tag, DK);
+    put(lead.mirror, mod.TEAM_NAME, X.doc9(1, [DR, DK]));
+    put(lead.mirror, "lane.ec", ED9[0]);
+    put(lead.mirror, "retired.ec", RETIRED);
+    lead.ch.start();
+    await settle(lead);
+    dr.ch.start(); dk.ch.start();
+    await settle(dr, dk, lead);
+    put(dr.mirror, statsRel, STATS);
+    put(dk.mirror, dkOldRel, DK_OLD);
+    await settle(dr, dk, lead);
+    const before = read(lead.mirror, statsRel) === STATS && read(dk.mirror, statsRel) === STATS
+      && read(lead.mirror, "retired.ec") === RETIRED && read(lead.mirror, dkOldRel) === DK_OLD;
+
+    /* Day 1: lead removes DR (team file rev 2 + /devices drop) and retracts retired.ec; dk retracts dkOldRel. */
+    X.at(BASE + DAYMS);
+    await dr.ch.stop();
+    const doc2Raw = JSON.parse(X.doc9(1, [DK]));
+    doc2Raw.rev = 2;
+    const doc2Obj = signDoc(doc2Raw, LEAD);
+    const doc2 = JSON.stringify(doc2Obj, null, 1) + "\n";
+    put(lead.mirror, mod.TEAM_NAME, doc2);
+    fs.unlinkSync(path.join(lead.mirror, "retired.ec"));
+    fs.unlinkSync(path.join(dk.mirror, ...dkOldRel.split("/")));
+    const dropped = await X.enrol9(2, DK);
+    await settle(lead, dk);
+    await lead.ch.stop();
+    await dk.ch.stop();
+
+    /* Day 32 (> LISTED_KEEP_MS = 29 days, and > REMOVED_KEEP_MS = 7 days): relisting runs on both lead and dk. */
+    X.at(BASE + 32 * DAYMS);
+    const leadFrom = lead.log.length, dkFrom = dk.log.length;
+    lead.ch.start(); dk.ch.start();
+    await settle(lead, dk);
+    const leadWhole = lead.log.slice(leadFrom).filter(c => c === "GET since/0").length;
+    const dkWhole = dk.log.slice(dkFrom).filter(c => c === "GET since/0").length;
+    const keptAfter = {
+      leadStats: read(lead.mirror, statsRel) === STATS,
+      dkStats: read(dk.mirror, statsRel) === STATS,
+      leadLane: read(lead.mirror, "lane.ec") === ED9[0],
+      dkLane: read(dk.mirror, "lane.ec") === ED9[0],
+    };
+    const activeRemoved = {
+      leadRetired: read(lead.mirror, "retired.ec") === null,
+      dkRetired: read(dk.mirror, "retired.ec") === null,
+      leadDkOld: read(lead.mirror, dkOldRel) === null,
+      dkDkOld: read(dk.mirror, dkOldRel) === null,
+    };
+
+    /* A removed writer's new file (even injected/accepted directly) still does not land on lead or dk. */
+    const afterBlob = B.seal({ relayTeamId: tm.rt, epoch: 1, teamKey: X.K9.get(1),
+      writer: { keyId: DR.k.keyId, privateKey: DR.k.privateKey },
+      path: afterRel, body: "new after removal\n", counter: Date.now() + 60 * 60 * 1000,
+      place: "desk:" + DR.k.keyId, kind: "file" });
+    const leadNew = lead.prog.acceptBlob({ blob: afterBlob, teamDoc: doc2Obj, teamKey: X.K9.get(1) });
+    const dkNew = dk.prog.acceptBlob({ blob: afterBlob, teamDoc: doc2Obj, teamKey: X.K9.get(1) });
+    const newRefused = leadNew.ok === false && leadNew.reason === "removed"
+      && dkNew.ok === false && dkNew.reason === "removed"
+      && read(lead.mirror, afterRel) === null && read(dk.mirror, afterRel) === null;
+
+    return {
+      setup: before && dropped.status === 200 && leadWhole >= 1 && dkWhole >= 1,
+      kept: keptAfter.leadStats && keptAfter.dkStats && keptAfter.leadLane && keptAfter.dkLane,
+      activeGone: activeRemoved.leadRetired && activeRemoved.dkRetired && activeRemoved.leadDkOld && activeRemoved.dkDkOld,
+      newRefused,
+      detail: JSON.stringify({ before, dropped: dropped.status, leadWhole, dkWhole, keptAfter, activeRemoved, leadNew, dkNew }),
+    };
+  } finally {
+    await X.done();
+  }
+}
+if (partOn("pF8")) {
+  try {
+    markPart("pF8");
+    const s = await sceneF8(C);
+    check(s.setup && s.kept,
+      "f8a after more than 29 days away, a relisting keeps the files a lead and remaining desk kept of a removed desk: " + s.detail);
+    check(s.setup && s.activeGone,
+      "f8b the same relisting still removes retracted files of the lead and an active rostered desk once their deletions are no longer listed: " + s.detail);
+    check(s.newRefused,
+      "f8c a removed writer's new file still does not land (refused removed): " + s.detail);
+    if (PLANTS_OFF) skip("f8d lifting plant:reconcile-removed turns f8a red (relisting deletes the removed desk's kept file)");
+    else {
+      const p = await liftChannel("plant:reconcile-removed", async mod => !(await sceneF8(mod)).kept);
+      check(p.turned && p.back, "f8d lifting plant:reconcile-removed turns f8a red (relisting deletes the removed desk's kept file), and the product file is never written: "
+        + p.detail + ", sha " + (p.back ? "restored" : "differs"));
+    }
+  } catch (e) {
+    check(false, "harness (the leg f8a): " + (e && e.stack ? e.stack : e));
   }
 }
 

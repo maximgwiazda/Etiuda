@@ -1995,6 +1995,7 @@ function createProgram(opts) {
         kept = key === pathKey(TEAM_NAME); /* plant:reconcile-team */
         if (kept) continue;
         const a = has(st.applied, key) ? st.applied[key] : null, s = has(st.sent, key) ? st.sent[key] : null;
+        if (a && !a.del && has(st.gone, a.writer)) continue; /* plant:reconcile-removed */
         const live = [a, s].filter(r => r && !r.del);
         if (!live.length || (s && s.owe === true) || live.some(r => listed.has(r.id))) continue;
         const rel = here.get(key) || null, bytes = rel ? io.read(rel) : null;
