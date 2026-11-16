@@ -106,12 +106,50 @@ async function boot(browser, pageUrl, theme, lang, withCatalog, vp) {
   return p;
 }
 
+async function bootFirstSignin(browser, pageUrl, theme, lang, vp) {
+  const p = await browser.newPage();
+  p.on("dialog", (d) => { d.dismiss().catch(() => {}); });
+  await p.setViewport(vp || { width: 1280, height: 800 });
+  await p.emulateMediaFeatures([
+    { name: "prefers-reduced-motion", value: "reduce" },
+    { name: "prefers-color-scheme", value: theme }
+  ]);
+  await p.evaluateOnNewDocument((th, lg) => {
+    try {
+      localStorage.clear();
+      for (const k of ["eTourDone_v3", "eTourInvite_v3", "eNameAsked", "eStill"]) localStorage.setItem(k, "1");
+      localStorage.setItem("eTheme", th);
+      localStorage.setItem("eUiLang", lg);
+      localStorage.setItem("eAgent", "Bench Agent");
+    } catch (e) {}
+    const st = { offered: ["microsoft", "google"], signedIn: "", seat: "none", reached: true };
+    window.E_HOST = {
+      shown: true,
+      lang: lg,
+      signinState: () => st,
+      signIn: async () => null,
+      signinCheck: async () => st,
+      teamLeads: () => []
+    };
+  }, theme, lang);
+  await p.goto(pageUrl, { waitUntil: "load", timeout: 60000 });
+  await p.waitForFunction(() => {
+    const f = document.getElementById("firstSignin");
+    return !!f && !f.hidden && document.body.classList.contains("e-first-signin")
+      && f.textContent.trim().length > 0 && !document.querySelector(".e-launch-veil");
+  }, { timeout: 30000 });
+  await sleep(250);
+  return p;
+}
+
 /* Browser-side evaluator implementing ground scan (adapted from DG.scan) and line-hug geometry check. */
 async function auditGround(p, screenLabel) {
   return p.evaluate((label) => {
+    const fs = document.getElementById("firstSignin");
+    const fsOpen = fs && !fs.hidden && document.body.classList.contains("e-first-signin");
     const sh = document.getElementById("screenHost");
-    const screenOpen = sh && !sh.hidden && document.body.classList.contains("screen-on");
-    const root = screenOpen ? sh.querySelector(".sx-page") : document.querySelector(".stage > .scroller main");
+    const screenOpen = !fsOpen && sh && !sh.hidden && document.body.classList.contains("screen-on");
+    const root = fsOpen ? fs.querySelector(".fs-left") : (screenOpen ? sh.querySelector(".sx-page") : document.querySelector(".stage > .scroller main"));
     if (!root) return { label, missingRoot: true, misses: [], wide: [], counts: { misses: 0, wide: 0 } };
 
     const alpha = (c) => {
@@ -235,7 +273,7 @@ async function auditGround(p, screenLabel) {
       if (vis(el)) candidatePatches.push(el);
     });
     /* Also check bare block/table ground patches (like old display:table / block background:var(--bg) rules) on root. */
-    const groundContainer = screenOpen ? (sh.querySelector(".sx") || root) : document.body;
+    const groundContainer = fsOpen ? fs : (screenOpen ? (sh.querySelector(".sx") || root) : document.body);
     const groundBg = getComputedStyle(groundContainer).backgroundColor;
     root.querySelectorAll("*").forEach((el) => {
       if (el.classList.contains("e-dot-hug") || el.classList.contains("list-sep") || el.classList.contains("lw-name")) return;
@@ -582,6 +620,22 @@ try {
         EXPECTED += 1;
         check(res.counts.misses === 0 && res.counts.wide === 0,
           "no miss & no wide ground on " + res.label, res.counts.misses || res.counts.wide ? { misses: res.misses.slice(0, 4), wide: res.wide.slice(0, 4) } : undefined);
+      }
+      await closePage(p);
+    }
+
+    /* 1b. Standing first-opening sign-in screen in both languages and both window widths (560w < 780 px) */
+    for (const lang of ["en", "pl"]) {
+      const p = await bootFirstSignin(browser, urlEmpty, theme, lang, { width: 1280, height: 800 });
+      for (const [vpLabel, vp] of [["1280w", { width: 1280, height: 800 }], ["560w", { width: 560, height: 850 }]]) {
+        await p.setViewport(vp);
+        await sleep(150);
+        const res = await auditGround(p, "first-signin [" + theme + "," + lang + "," + vpLabel + "]");
+        record(res);
+        EXPECTED += 1;
+        check(res.counts.misses === 0 && res.counts.wide === 0,
+          "no miss & no wide ground on " + res.label + " (misses=" + res.counts.misses + ", wide=" + res.counts.wide + ")",
+          res.counts.misses || res.counts.wide ? { misses: res.misses.slice(0, 4), wide: res.wide.slice(0, 4) } : undefined);
       }
       await closePage(p);
     }
@@ -1147,6 +1201,23 @@ try {
         });
         console.log("#plant-cards " + JSON.stringify(entered));
         check(!!entered && entered.cardIn > 0, "plant-enter-cards: deleting the card skip lets the walk enter the cards", entered);
+        await closePage(pp);
+      }
+    }
+    EXPECTED += 1;
+    if (PLANTS_OFF) {
+      skip("plant-first-signin-dots: taking out the screen's cleared ground causes misses (ETIUDA_PLANTS=off)");
+    } else {
+      const re = /(function paintFirstSignin\s*\(\)\s*\{(?:(?!\n\s*function\s)[\s\S])*?)hugDottedGround\([^)]*\)\s*;/;
+      if (!re.test(rawHtml)) {
+        check(false, "plant-first-signin-dots: could not locate first-signin hugDottedGround call");
+      } else {
+        const planted = rawHtml.replace(re, "$10;");
+        const plantUrl = writeDeskFiles(path.join(lab, "plant-fs-dots"), planted, false);
+        const pp = await bootFirstSignin(browser, plantUrl, "light", "en", { width: 560, height: 850 });
+        const plantRes = await auditGround(pp, "plant-first-signin");
+        check(plantRes.counts.misses > 0 || plantRes.counts.wide > 0,
+          "plant-first-signin-dots: taking out the screen's cleared ground causes misses", plantRes.counts);
         await closePage(pp);
       }
     }
