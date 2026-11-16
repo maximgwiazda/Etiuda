@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-sync-"));
-const EXPECTED = 59;
+const EXPECTED = 63;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -758,8 +758,32 @@ async function main() {
     return { ok, detail: brief({ held, none }) };
   }
 
+  /* B2: the page's copy of the desk (createDeskBridge). A write naming a tell before the one that took items behind it answers those items'
+     entries before the take, and the next write nothing; a write naming that tell answers nothing; a key cleared whole is dropped from a write
+     behind it; a key the page may hold but the desk lacks, under a clear of every key that follows, is dropped from a write behind it, and
+     kept from a write after it; a load holds every tell before it. */
+  async function bridgeScene() {
+    const b = SY.createDeskBridge(), X = { h: "a".repeat(64), by: "k-" + "1".repeat(16), t: 5, seen: {} };
+    const n1 = b.tell({ ePack: "{}" }, { ePack: { "k:ePack#overrides/c1": X, "k:ePack#overrides/c2": null } });
+    const behind = b.write(1, ["ePack"], { ePack: n1 - 1 }), again = b.write(1, ["ePack"], { ePack: n1 - 1 });
+    const n2 = b.tell({ ePack: "{}" }, { ePack: { "k:ePack#overrides/c1": X } });
+    const taken = b.write(1, ["ePack"], { ePack: n2 });
+    const n3 = b.tell({ ePack: null });
+    const whole = b.write(1, ["ePack", "eTheme"], { ePack: n3 - 1, eTheme: n3 - 1 });
+    const n4 = b.tell({}, null, k => k === "eLinksAside");
+    const every = b.write(1, ["eLinksAside"], { eLinksAside: n4 - 1 }), after = b.write(1, ["eLinksAside"], { eLinksAside: n4 });
+    b.tell({ eTheme: "dark" }, { eTheme: { "k:eTheme": X } });
+    b.load(2);
+    const loaded = b.write(2, ["eTheme"], {});
+    const ok = JSON.stringify(behind.rewind) === JSON.stringify({ "k:ePack#overrides/c1": X, "k:ePack#overrides/c2": null }) && !behind.dropped.length
+      && !Object.keys(again.rewind).length && !Object.keys(taken.rewind).length && whole.dropped.join() === "ePack" && every.dropped.join() === "eLinksAside"
+      && !after.dropped.length && !Object.keys(loaded.rewind).length;
+    return { ok, detail: brief({ behind, again, taken, whole, every, after, loaded }) };
+  }
+
   const results = {};
   const LEGS = [
+    ["B2", bridgeScene, "the page's copy of the desk: a write from a copy behind a tell answers what that tell took, once; one after it nothing; a key cleared whole, or held under a clear of every key, is dropped from a write behind it and kept from one after; a load holds every tell before it"],
     ["J3", joinSampleScene, "the shipped sample untouched on a computer joining a store that holds no entry for it is never recorded as that computer's write at any merge, so the other computer never gets it and nothing is kept; edited, it is the person's own and reaches the other"],
     ["J4", joinRemoveScene, "a joining computer removing the sample it joined with untouched: where the first computer holds an entry the removal travels over it, the first computer's copy goes and the sample does not return, nothing kept; where none does, nothing is sent and nothing returns"],
     ["S6", seenScene, "where one version stands over two computers' writes, each computer's seen time is the latest over every entry merged, so a later edit here is made over both: no copy kept and no conflict, with another's entry taken or this computer's own standing"],
@@ -819,6 +843,9 @@ async function main() {
   const swap = (from, to) => text => (text.split(from).length === 2 ? text.split(from).join(to) : null);
   const scenes = Object.fromEntries(LEGS.map(([id, scene]) => [id, scene]));
   const PLANTS = [
+    ["stale write whole", "B2", swap("const late = l.filter(x => x.n > at); /* plant:desk-stale */", "const late = []; /* plant:desk-stale */"), "a write from a copy behind a tell taken as the person's, so what the sync took is read as removed"],
+    ["whole clear written back", "B2", swap("if (late.some(x => x.pre === null)) { dropped.push(k); continue; } /* plant:desk-whole */", "/* plant:desk-whole */"), "a key cleared whole written back from a copy behind the clear"],
+    ["every clear written back", "B2", lift("desk-every"), "a key the page held behind a clear of every key written back under the next account"],
     ["join older", "J1", swap("const t = joining ? 0 : Math.max(", "const t = Math.max("), "what a joining computer held before is stamped now, so its settings outrank the store's"],
     ["join sample", "J1", lift("join-pristine"), "an untouched sample on a joining computer taken as its own, so the one deleted elsewhere comes back as a conflict"],
     ["bytes by the writer alone", "C2b", swap("for (const id of new Set([by, ...ids, o.me.id])) {", "for (const id of new Set([by])) {"), "a catalog's bytes read only under the computer that wrote it, so once it has left the store they never arrive"],

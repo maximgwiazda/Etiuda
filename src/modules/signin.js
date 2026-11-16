@@ -11,6 +11,7 @@ import { teamLeads } from "./team-join.js";
 import { hooks } from "./hooks.js";
 import { catalogLoaded } from "./catalog-boot.js";
 import { hangBubble } from "./bubble.js";
+import { eDeskFlush } from "./storage.js";
 
 /* "lab" is offered only by the sign-in lab (shell/main.js signinLabRead), never by a desk installed or packaged. */
 const SIGNIN_NAMES={microsoft:"Microsoft", google:"Google", lab:"Lab"}; // placeholder: Claudette, "Lab"
@@ -592,6 +593,7 @@ function syncChoiceNotice(choice){
 function syncAnswer(choice){
   const h=eHost();
   if(!h || typeof h.storeAnswer!=="function") return Promise.resolve(syncNow());
+  try{ eDeskFlush(); }catch(e){} /* plant:answer-flush */
   try{
     return Promise.resolve(h.storeAnswer(String(choice||""))).then(res=>{
       if (res && res.ok) syncChoiceNotice(res.choice);

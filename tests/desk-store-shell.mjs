@@ -2498,7 +2498,7 @@ const PLANTS = [
   ["x6r", swap(".test(d.aside) ? d.aside : \"\" }; /* plant:store-aside-name */", ".test(d.aside) || ok && typeof d.aside === \"string\" ? d.aside : \"\" }; /* plant:store-aside-name */"), "any name in store.json read as the set-aside folder's"],
   ["x6l", swap("    try { return fs.lstatSync(path.join(root, n)).isDirectory(); } catch { return false; } /* plant:aside-lstat */", "    try { return fs.statSync(path.join(root, n)).isDirectory(); } catch { return false; } /* plant:aside-lstat */"), "the dated folder judged by a stat that follows a link, so a link named like it is opened as it"],
   ["z2", swap("    if (storeSyncing && Object.keys(rewind).length) storeSyncing.untake(rewind); /* plant:desk-untake */\n", ""), "what the sync took is not taken again once the page's write from a copy without it lands, so the next merge reads it as this computer's removal"],
-  ["z2", swap("      if (late.some(t => t.pre === null)) { dropped.push(k); delete patch[k]; continue; } /* plant:desk-whole */", ""), "a key the shell cleared whole is written back by the page's write from a copy that still held it"],
+  ["z2", swap("    for (const k of w.dropped) delete patch[k];\n", ""), "a key the shell cleared whole is written back by the page's write from a copy that still held it"],
   ["x6a", swap("  return dated.length === 1 && dated[0] === name ? path.join(root, name) : root; /* plant:open-aside-many */", "  return name ? path.join(root, name) : \"\"; /* plant:open-aside-many */"), "the count taken out, so the latest is always opened"],
 ];
 for (const [id, change, what] of PLANTS) {

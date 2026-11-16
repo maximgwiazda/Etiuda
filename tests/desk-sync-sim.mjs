@@ -122,7 +122,7 @@ function computerOf(w, i) {
   const keys = Object.assign({ eTheme: "d" + i + "theme", eUiLang: "d" + i + "lang" }, STATIC_KEYS);
   return {
     i, me, desk: { keys, files: { [SAMPLE_NAME]: SAMPLE, "relay-mirror.json": JSON.stringify({ team: SECRETS.team }) }, big: new Set(), team: false },
-    page: { map: Object.assign({}, keys), owed: new Set() }, kept: [], aside: [], online: true, seat: "", ever: false, s: { who: "", last: "", ask: "" },
+    page: { map: Object.assign({}, keys), owed: new Set(), seen: 0, behind: new Map() }, bridge: null, kept: [], aside: [], online: true, seat: "", ever: false, s: { who: "", last: "", ask: "" },
     syncFile: null, sync: null, mirrors: new Map(), sent: new Map(), seen: new Map(), heldNow: [], pristineNow: [], failApply: false, keepFail: false,
     knows: new Map(), unattributed: [], mirrorRoot: path.join(WORK, "c" + i),
   };
@@ -225,7 +225,12 @@ function syncApply(w, c, patch, copies) {
   }
   if (Object.keys(keys).length) {
     if (writeFails) failed.push(...Object.keys(keys).map(k => "k:" + k));
-    else { patchDesk(c, keys); deskSyncedTell(c, keys); }
+    else {
+      const ledger = c.sync ? c.sync.state().ledger : {}, pre = {};
+      for (const k of Object.keys(keys)) { pre[k] = {}; for (const item of SY.keyItems(k, c.desk.keys[k], keys[k])) pre[k][item] = has(ledger, item) ? ledger[item] : null; }
+      patchDesk(c, keys);
+      deskSyncedTell(c, keys, pre);
+    }
   }
   learn(w, c, before);
   return failed;
@@ -241,12 +246,29 @@ function syncFile(c, name, text, fails) {
   return true;
 }
 function patchDesk(c, keys) { for (const k of Object.keys(keys)) { if (keys[k] === null) delete c.desk.keys[k]; else c.desk.keys[k] = keys[k]; } }
-/* The page's eDeskTake: a key the page still owes keeps the page's value, which its own send carries. */
-function deskSyncedTell(c, keys) {
+/* deskSyncedTell, numbered by the product's desk bridge (sync.cjs createDeskBridge), and the page's eDeskTake: a key the page still owes
+   keeps the page's value, which its own send carries, and stays behind at the tell before (storage.js eDeskBehind). */
+const bridgeOf = c => c.bridge || (c.bridge = SY.createDeskBridge());
+function deskSyncedTell(c, keys, pre, every) {
+  const n = bridgeOf(c).tell(keys, pre, every);
+  for (const k of c.page.owed) if (!c.page.behind.has(k)) c.page.behind.set(k, c.page.seen);
   for (const k of Object.keys(keys)) {
     if (c.page.owed.has(k)) continue;
     if (keys[k] === null) delete c.page.map[k]; else c.page.map[k] = keys[k];
+    c.page.behind.delete(k);
   }
+  c.page.seen = n;
+}
+/* The page's write, as patchDesk takes it from the page: the bridge judges it by the tells taken, what the sync took behind a copy that
+   never held it is taken again (untake), a key cleared whole stays so and the page is told again. */
+function pageWrite(w, c, keys) {
+  const took = {};
+  for (const k of Object.keys(keys)) took[k] = c.page.behind.has(k) ? c.page.behind.get(k) : c.page.seen;
+  const r = bridgeOf(c).write(c.i, Object.keys(keys), took);
+  for (const k of r.dropped) delete keys[k];
+  patchDesk(c, keys);
+  if (c.sync && Object.keys(r.rewind).length) c.sync.untake(r.rewind);
+  if (r.dropped.length) deskSyncedTell(c, Object.fromEntries(r.dropped.map(k => [k, has(c.desk.keys, k) ? c.desk.keys[k] : null])));
 }
 /* The page's owed sends, landing: each key whole, as patchDesk takes it, then the merge a moment later (storeSyncSoon). */
 function land(w, c) {
@@ -254,7 +276,7 @@ function land(w, c) {
   const keys = {};
   for (const k of c.page.owed) keys[k] = has(c.page.map, k) ? c.page.map[k] : null;
   c.page.owed.clear();
-  patchDesk(c, keys);
+  pageWrite(w, c, keys);
   mergeSoon(w, c);
 }
 function createSync(w, c) {
@@ -318,6 +340,8 @@ function answer(w, c, choice) {
   if (!c.seat || !held(c)) return;
   const X = c.seat;
   if (choice === "later") return;
+  /* The page sends every write it owes before it answers (src/modules/signin.js syncAnswer, eDeskFlush). */
+  land(w, c); /* model-plant:answer-flush */
   if (choice === "mine" && c.s.who !== X) {
     c.knows = new Map();
     if (MODEL.answerMineFresh) { c.syncFile = { rt: "", ledger: {}, kept: [] }; if (c.sync) c.sync.stop(); c.sync = null; } /* model-plant:answer-mine-fresh */
@@ -328,7 +352,7 @@ function answer(w, c, choice) {
     const clear = {};
     for (const k of Object.keys(c.desk.keys)) if (REF.follows("k:" + k)) clear[k] = null;
     patchDesk(c, clear);
-    deskSyncedTell(c, clear);
+    deskSyncedTell(c, clear, null, k => SY.follows("k:" + k));
     c.syncFile = null; c.mirrors.clear(); c.sent.clear(); c.seen.clear(); c.knows = new Map();
     if (c.sync) c.sync.stop();
     c.sync = null;
@@ -364,7 +388,7 @@ function write(w, c, item, value) {
 function setPage(w, c, key, v, owed) {
   if (v === null) delete c.page.map[key]; else c.page.map[key] = v;
   if (owed || c.page.owed.has(key)) c.page.owed.add(key);
-  else { if (v === null) delete c.desk.keys[key]; else c.desk.keys[key] = v; mergeSoon(w, c); }
+  else { pageWrite(w, c, { [key]: v }); mergeSoon(w, c); }
 }
 function editField(w, c, op, m, owed) {
   let p = {};

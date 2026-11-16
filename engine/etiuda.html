@@ -6546,6 +6546,7 @@ What you type stays in this browser only.`;
     eCarryOldKeys: () => eCarryOldKeys,
     eDeskFile: () => eDeskFile,
     eDeskFileShown: () => eDeskFileShown,
+    eDeskFlush: () => eDeskFlush,
     eDeskHome: () => eDeskHome,
     eDeskNewer: () => eDeskNewer,
     eDeskRefused: () => eDeskRefused,
@@ -6712,7 +6713,8 @@ What you type stays in this browser only.`;
   var eDeskArmed = false;
   var eDeskOwed = /* @__PURE__ */ new Set();
   var eDeskCarried = /* @__PURE__ */ new Map();
-  var eDeskTook = /* @__PURE__ */ new Map();
+  var eDeskSeen = 0;
+  var eDeskBehind = /* @__PURE__ */ new Map();
   function deskPatchSend(all) {
     const n = ++eDeskSent, keys = new Set(eDeskOwed), out = {}, took = {};
     if (all) eDeskCarried.forEach((m, k) => keys.add(k));
@@ -6720,7 +6722,7 @@ What you type stays in this browser only.`;
     keys.forEach((k) => {
       eDeskCarried.set(k, n);
       out[k] = k in E_DESK.map ? E_DESK.map[k] : null;
-      if (eDeskTook.has(k)) took[k] = eDeskTook.get(k);
+      took[k] = eDeskBehind.has(k) ? eDeskBehind.get(k) : eDeskSeen;
     });
     let p;
     try {
@@ -6788,6 +6790,9 @@ What you type stays in this browser only.`;
     const pending = E_DESK.patch ? eDeskOwed.size > 0 || eDeskCarried.size > 0 : eDeskHeard < eDeskSent;
     if (eDeskDue || pending || eUnsaved) deskSave();
   }
+  function eDeskFlush() {
+    if (E_DESK) deskFlush();
+  }
   function deskArm() {
     if (eDeskArmed) return;
     eDeskArmed = true;
@@ -6808,16 +6813,25 @@ What you type stays in this browser only.`;
       return [];
     }
     if (!o || typeof o !== "object" || Array.isArray(o)) return [];
-    const taken = [];
+    const taken = [], told = Number.isSafeInteger(n) && n > 0;
+    if (told) {
+      eDeskOwed.forEach((k) => {
+        if (!eDeskBehind.has(k)) eDeskBehind.set(k, eDeskSeen);
+      });
+      eDeskCarried.forEach((m, k) => {
+        if (!eDeskBehind.has(k)) eDeskBehind.set(k, eDeskSeen);
+      });
+    }
     Object.keys(o).forEach((k) => {
       const v = o[k];
       if (v !== null && typeof v !== "string" || eDeskOwed.has(k) || eDeskCarried.has(k)) return;
-      if (Number.isSafeInteger(n) && n > 0) eDeskTook.set(k, n);
+      eDeskBehind.delete(k);
       if (v === null ? !(k in E_DESK.map) : E_DESK.map[k] === v) return;
       if (v === null) delete E_DESK.map[k];
       else E_DESK.map[k] = v;
       taken.push(k);
     });
+    if (told) eDeskSeen = n;
     return taken;
   }
   var eUnsaved = null;
@@ -28352,6 +28366,10 @@ What you type stays in this browser only.`;
   function syncAnswer(choice) {
     const h = eHost();
     if (!h || typeof h.storeAnswer !== "function") return Promise.resolve(syncNow());
+    try {
+      eDeskFlush();
+    } catch (e) {
+    }
     try {
       return Promise.resolve(h.storeAnswer(String(choice || ""))).then((res) => {
         if (res && res.ok) syncChoiceNotice(res.choice);

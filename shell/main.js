@@ -8107,12 +8107,9 @@ function sameDesk(a, b) {
 let deskKeys;                                  // the desk as the last read or write left the file
 let deskWritten = false;                       // whether the live desk.json is this run's write
 const deskGiven = new Map();                   // webContents id -> the map that load was handed
-/* WHAT THE STORE'S SYNC PUT ON THE DESK BEHIND THE PAGE, by key, until the page next writes that key: each tell numbered, and each page
-   write naming per key the tell whose value its copy took (src/modules/storage.js eDeskTook), so a write from a copy that never held
-   a tell's value is known for one (patchDesk). `pre` {item: ledger entry before the take}, or null for a key cleared whole. */
-let deskTellNo = 0;
-const deskTold = new Map();                    // desk key -> [{n, pre}]
-const deskLoadNo = new Map();                  // webContents id -> the last tell its load's desk already held
+/* What the store's sync put on the desk behind the page, until the page writes it again (shell/sync/sync.cjs createDeskBridge). */
+let deskBridgeNow = null;
+const deskBridge = () => deskBridgeNow || (deskBridgeNow = SyncLib().createDeskBridge());
 /* The bytes, shared by the engine's channel below and by the main process's own one-key write.
    Temp file then rename, which is the one filesystem operation that cannot leave half a desk. */
 function saveDeskFile(keysText) {
@@ -8207,21 +8204,15 @@ function patchDesk(text, page) {
   if (deskKeys === undefined) deskKeys = readDesk();
   /* A key the page writes from a copy that never took a tell since: what the sync took is taken again by the next merge (sync.cjs
      untake), never read as this computer's removal; a key the sync cleared whole stays cleared, and the page is told again. */
-  const rewind = {}, dropped = [];
+  let rewind = {};
   if (page) {
     let took = {};
-    try { const t = JSON.parse(page.took || "{}"); if (t && typeof t === "object" && !Array.isArray(t)) took = t; } catch { /* none taken */ }
-    for (const k of keys) {
-      const told = deskTold.get(k);
-      if (!told) continue;
-      deskTold.delete(k);
-      const at = Math.max(Number.isSafeInteger(took[k]) ? took[k] : 0, deskLoadNo.get(page.from) || 0);
-      const late = told.filter(t => t.n > at); /* plant:desk-stale */
-      if (late.some(t => t.pre === null)) { dropped.push(k); delete patch[k]; continue; } /* plant:desk-whole */
-      for (const t of late) for (const item of Object.keys(t.pre || {})) if (!Object.prototype.hasOwnProperty.call(rewind, item)) rewind[item] = t.pre[item];
-    }
+    try { took = JSON.parse(page.took || "{}"); } catch { /* none taken */ }
+    const w = deskBridge().write(page.from, keys, took);
+    rewind = w.rewind;
+    for (const k of w.dropped) delete patch[k];
     keys = Object.keys(patch);
-    if (dropped.length) setImmediate(() => deskSyncedTell(Object.fromEntries(dropped.map(k => [k, Object.prototype.hasOwnProperty.call(deskKeys, k) ? deskKeys[k] : null]))));
+    if (w.dropped.length) setImmediate(() => deskSyncedTell(Object.fromEntries(w.dropped.map(k => [k, Object.prototype.hasOwnProperty.call(deskKeys, k) ? deskKeys[k] : null]))));
   }
   const langWas = deskKeys ? deskKeys.eUiLang : undefined;
   /* Ejecting the catalog is the agent leaving the file this launch was opened with, even when
@@ -8257,10 +8248,10 @@ function patchDesk(text, page) {
 ipcMain.on("etiuda:desk", (e) => {
   if (!fromEngine(e)) { e.returnValue = null; return; }
   const id = e.sender.id;
-  if (!deskGiven.has(id)) e.sender.once("destroyed", () => { deskGiven.delete(id); deskLoadNo.delete(id); });
+  if (!deskGiven.has(id)) e.sender.once("destroyed", () => { deskGiven.delete(id); deskBridge().forget(id); });
   deskKeys = readDesk();
   deskGiven.set(id, deskKeys);
-  deskLoadNo.set(id, deskTellNo);
+  deskBridge().load(id);
   e.returnValue = JSON.stringify(deskKeys);
 });
 ipcMain.on("etiuda:desk-save", (e, text) => {
@@ -11538,7 +11529,7 @@ function storeSetAside() {
     if (deskKeys === undefined) deskKeys = readDesk();
     for (const k of Object.keys(deskKeys || {})) if (L.follows("k:" + k)) clear[k] = null;
     if (Object.keys(clear).length && !patchDesk(JSON.stringify(clear))) throw new Error("desk.json could not be updated"); /* plant:answer-aside-clear */
-    if (Object.keys(clear).length) deskSyncedTell(clear);
+    deskSyncedTell(clear, null, k => L.follows("k:" + k));
     return { folder: aside, kept: false };
   } catch (e) {
     let back = true;
@@ -11846,7 +11837,7 @@ function storeSyncApply(patch, copies) {
   if (Object.keys(keys).length) { const pre = storeSyncTaken(keys); if (patchDesk(JSON.stringify(keys))) deskSyncedTell(keys, pre); else failed.push(...Object.keys(keys).map(k => "k:" + k)); } /* plant:apply-desk-failed */
   return failed;
 }
-/* For each desk key a merge puts in place, the ledger entry each item it changes had before the take, null for none (deskTold). */
+/* For each desk key a merge puts in place, the ledger entry each item it changes had before the take, null for none (deskBridge). */
 function storeSyncTaken(keys) {
   const L = SyncLib(), ledger = storeSyncing ? storeSyncing.state().ledger : {}, out = {};
   if (deskKeys === undefined) deskKeys = readDesk();
@@ -11857,16 +11848,9 @@ function storeSyncTaken(keys) {
   return out;
 }
 /* The open page keeps its own copy of the desk, so it is told what was put in place (src/modules/storage.js eDeskTake), with the tell's
-   number; `pre` as storeSyncTaken answers, a key it lacks cleared whole. */
-function deskSyncedTell(keys, pre) {
-  const n = ++deskTellNo;
-  for (const k of Object.keys(keys)) {
-    const l = deskTold.get(k) || [];
-    l.push({ n, pre: pre && pre[k] ? pre[k] : null });
-    /* Bounded where the page never writes the key: the two earliest meet, the earlier entry of an item standing, a whole clear whole. */
-    if (l.length > 64) l.splice(0, 2, { n: l[1].n, pre: l[0].pre && l[1].pre ? Object.assign({}, l[1].pre, l[0].pre) : null });
-    deskTold.set(k, l);
-  }
+   number; `pre` as storeSyncTaken answers, a key it lacks cleared whole, `every` a test of keys cleared whole the page may hold. */
+function deskSyncedTell(keys, pre, every) {
+  const n = deskBridge().tell(keys, pre, every);
   const win = theWindow;
   if (win && !win.isDestroyed()) try { win.webContents.send("etiuda:desk-synced", JSON.stringify(keys), n); } catch { /* the page has gone */ } /* plant:desk-synced-tell */
 }

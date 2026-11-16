@@ -332,6 +332,45 @@ function resolve(state, me, item, value, now) {
   return { ledger, kept, untouched: (state.untouched || []).filter(i => i !== item) };
 }
 
+/* ---- THE PAGE'S COPY OF THE DESK: what the sync put on the desk behind the page, by key, until the page next writes that key -----
+   Each tell is numbered, and each page write names per key the tell whose value its copy took (src/modules/storage.js eDeskTook), so
+   a write from a copy that never held a tell's value is known for one. tell's `pre` {key: {item: the ledger entry before the take}},
+   a key it lacks cleared whole, and `every` a test of keys cleared whole by it, held or not; write answers {rewind: those entries again
+   (createStoreSync untake), dropped: the keys cleared whole}. */
+function createDeskBridge() {
+  let no = 0, whole = null;
+  const told = new Map(), loads = new Map();
+  function tell(keys, pre, every) {
+    const n = ++no;
+    if (typeof every === "function") whole = { n, every };
+    for (const k of Object.keys(keys)) {
+      const l = told.get(k) || [];
+      l.push({ n, pre: pre && plain(pre[k]) ? pre[k] : null });
+      /* Bounded where the page never writes the key: the two earliest meet, the earlier entry of an item standing, a whole clear whole. */
+      if (l.length > 64) l.splice(0, 2, { n: l[1].n, pre: l[0].pre && l[1].pre ? Object.assign({}, l[1].pre, l[0].pre) : null });
+      told.set(k, l);
+    }
+    return n;
+  }
+  /* A load is handed the desk as it stands, every tell so far in it. */
+  const load = from => { loads.set(from, no); };
+  const forget = from => { loads.delete(from); };
+  function write(from, keys, took) {
+    const rewind = {}, dropped = [], t = plain(took) ? took : {};
+    for (const k of keys) {
+      const l = told.get(k) || [], at = Math.max(Number.isSafeInteger(t[k]) ? t[k] : 0, loads.get(from) || 0);
+      if (whole && whole.n > at && whole.every(k)) { told.delete(k); dropped.push(k); continue; } /* plant:desk-every */
+      if (!l.length) continue;
+      told.delete(k);
+      const late = l.filter(x => x.n > at); /* plant:desk-stale */
+      if (late.some(x => x.pre === null)) { dropped.push(k); continue; } /* plant:desk-whole */
+      for (const x of late) for (const item of Object.keys(x.pre || {})) if (!has(rewind, item)) rewind[item] = x.pre[item];
+    }
+    return { rewind, dropped };
+  }
+  return { tell, load, forget, write };
+}
+
 /* ---- the store at its relay, through the relay channel -------------------------------------------------------------------
    A store has no team file at the relay: S opens no session there (relay/core.cjs byKey). Each computer holds S, so it signs for
    itself the roster the channel judges blobs against: the computers the folder's file lists, at the list's revision, epoch 1, K
@@ -491,5 +530,5 @@ function createStoreSync(o) {
   return { turn, merge, stop, state: () => state, channel: () => ch, running: () => !!ch, resolve: choose, opened, untake };
 }
 
-module.exports = { SYNC_NAME, SYNC_KIND, SETTINGS, LAYER_RE, CATALOG_RE, CATALOG_MAX, follows, isSetting, fileRel, syncRel, localItems, keyItems, syncRead, syncText,
+module.exports = { SYNC_NAME, SYNC_KIND, SETTINGS, LAYER_RE, CATALOG_RE, CATALOG_MAX, follows, isSetting, fileRel, syncRel, localItems, keyItems, createDeskBridge, syncRead, syncText,
   fieldsOf, layerText, mergeOnce, unapplied, resolve, createStoreSync, STORE_TEAM, storeTeamDoc, storeChannelOptions, sha };

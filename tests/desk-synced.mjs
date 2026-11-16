@@ -14,8 +14,9 @@
  *   ds6 Settings in front is drawn again with what arrived; while its name field holds typing it is not, until the field lets go
  *   ds7 the shell: storeSyncApply sends etiuda:desk-synced with the keys it patched, to the window, and only once the desk took them
  *   ds8 the shell keeps a removal another computer made, a version of the value null, as a file of its own
- *   ds10 each send names, per key, the tell whose value the page took (the shell's half is desk-store-shell z2)
- * Plants: the page's take not shown (ds1 and ds2 red); a key the page owes taken over (ds5 red); the tell taken not recorded (ds10 red); the screen in front not drawn
+ *   ds10 each send names, per key, the last tell its copy holds (the shell's half is desk-store-shell z2)
+ *   ds11 the page sends the writes it owes, and waits for them, before it answers whose the desk is
+ * Plants: the page's take not shown (ds1 and ds2 red); a key the page owes taken over (ds5 red); the tells heard not recorded (ds10 red); the answer before the writes owed (ds11 red); the screen in front not drawn
  * again (ds6 red); in a copy of shell/main.js, the tell taken out (ds7 red), the product's sha unchanged.
  */
 import fs from "node:fs";
@@ -39,7 +40,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 16;
+const EXPECTED = 18;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const MAIN = path.join(E.ROOT, "shell", "main.js");
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -187,8 +188,8 @@ async function screenDrawn(name) {
   } finally { await page.close(); }
 }
 
-/* ds10: each send names the tell whose value the page took for a key it sends; a tell arriving while that key is owed is not taken and
-   the send after it still names the earlier one. */
+/* ds10: each send names the last tell the page heard; a tell arriving while that key is owed is not taken and the send after it names
+   the one before. */
 async function tookSent(name) {
   const page = await boot(name);
   try {
@@ -207,6 +208,21 @@ async function tookSent(name) {
     if (!named(first) || kept !== "0" || !named(second)) return JSON.stringify({ first, kept, second });
     return "";
   } finally { await page.close(); }
+}
+
+/* ds11: the page sends every write it owes, waiting for the disk (storage.js eDeskFlush), before it answers whose the desk is, so an answer
+   that sets the desk aside sets those writes aside too: signin.js syncAnswer lifted into a sandbox over stand-ins. */
+const SIGNIN = path.join(E.ROOT, "src", "modules", "signin.js");
+function flushedFirst(text) {
+  const at = text.indexOf("function syncAnswer(");
+  if (at < 0) return "no syncAnswer";
+  let i = text.indexOf("{", at), depth = 0;
+  for (; i < text.length; i++) { if (text[i] === "{") depth++; else if (text[i] === "}" && --depth === 0) break; }
+  const order = [], ctx = { order, Promise, String };
+  vm.createContext(ctx);
+  vm.runInContext(text.slice(at, i + 1) + "\nfunction eDeskFlush(){ order.push('flushed'); }\nfunction eHost(){ return { storeAnswer: c => { order.push('answer ' + c); return null; } }; }\n"
+    + "function syncNow(){ return null; } function syncChoiceNotice(){} function syncRead(){ return null; }\nsyncAnswer('start');", ctx);
+  return order.join() === "flushed,answer start" ? "" : JSON.stringify(order);
 }
 
 async function main() {
@@ -279,7 +295,10 @@ async function main() {
   check(!ds6, "ds6 Settings in front is drawn again with what arrived, not while its name field holds typing, and once the field lets go", ds6 || undefined);
 
   const ds10 = await tookSent("etiuda.html");
-  check(!ds10, "ds10 each send names the tell whose value the page took for that key, and a tell arriving while the key is owed is not taken", ds10 || undefined);
+  check(!ds10, "ds10 each send names the last tell the page heard for that key, and one arriving while the key is owed is not taken nor named", ds10 || undefined);
+
+  const ds11 = flushedFirst(fs.readFileSync(SIGNIN, "utf8"));
+  check(!ds11, "ds11 a write the page owes is sent and waited for before the page answers whose the desk is", ds11 || undefined);
 
   /* ds7: the shell's half, storeSyncApply and the tell, lifted from shell/main.js into a sandbox. */
   const shellTells = (text) => {
@@ -294,7 +313,7 @@ async function main() {
     const ctx = { sent, patched, written, answers, theWindow: { isDestroyed: () => false, webContents: { send: (ch, v) => sent.push([ch, v]) } }, JSON,
       Object, refuse: false };
     vm.createContext(ctx);
-    vm.runInContext("let deskTellNo = 0; const deskTold = new Map(); function storeSyncTaken() { return {}; }\n" + slice("deskSyncedTell") + "\n" + slice("storeSyncApply") + "\n"
+    vm.runInContext("function deskBridge() { return { tell: () => 1 }; } function storeSyncTaken() { return {}; }\n" + slice("deskSyncedTell") + "\n" + slice("storeSyncApply") + "\n"
       + "function patchDesk(t){ patched.push(t); return !refuse; }\nfunction storeSyncFile(n){ return n !== 'b.ec'; }\nfunction storeSyncDir(...rest){ return rest.join('/'); }\n"
       + "const fs={ mkdirSync(){} }; function writeReplacing(p, t){ written.push([p, t]); }\n"
       + "const console={ error(l){ written.push(['error', l]); } };\n"
@@ -349,8 +368,17 @@ async function main() {
     "p ds1 ds2 the page's take not shown turns ds1 and ds2 red");
   await pagePlant("owed", '|| eDeskOwed.has(k) || eDeskCarried.has(k)) return;', ") return;", owedKept, r => !!r,
     "p ds5 a key the page owes taken over turns ds5 red");
-  await pagePlant("took", "if (Number.isSafeInteger(n) && n > 0) eDeskTook.set(k, n);", "void n;", tookSent, r => !!r,
-    "p ds10 the tell taken not recorded turns ds10 red");
+  await pagePlant("behind", "if (told) eDeskSeen = n;", "void n;", tookSent, r => !!r,
+    "p ds10 the tells heard not recorded turns ds10 red");
+  {
+    const line = "p ds11 the flush taken out of a copy of src/modules/signin.js turns ds11 red, and the product file is never written";
+    if (PLANTS_OFF) skip(line);
+    else {
+      const before = sha(SIGNIN), text = fs.readFileSync(SIGNIN, "utf8"), from = "  try{ eDeskFlush(); }catch(e){} /* plant:answer-flush */\n";
+      const red = text.split(from).length === 2 && !!flushedFirst(text.split(from).join(""));
+      check(red && sha(SIGNIN) === before, line, red ? undefined : "still held, or the anchor is absent");
+    }
+  }
   await pagePlant("screen", 'if (screenOn === "settings") repaintScreen();', 'if (screenOn === "settings") void 0;', screenDrawn, r => !!r,
     "p ds6 the screen in front not drawn again turns ds6 red");
   {
