@@ -60,7 +60,7 @@ async function boot({ lang = "en", theme = "light", viewport = { width: 1280, he
   await page.setViewport({ ...viewport, deviceScaleFactor: 1 });
   await page.evaluateOnNewDocument((lang, theme) => {
     try {
-      for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eAgent", "Bench Agent"], ["eNameAsked", "1"],
+      for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eFirstSigninSeen", "1"], ["eAgent", "Bench Agent"], ["eNameAsked", "1"],
         ["eTheme", theme], ["eUiLang", lang], ["eStill", "1"], ["eRail", "1"]]) localStorage.setItem(k, v);
     } catch (e) {}
   }, lang, theme);
@@ -421,7 +421,7 @@ async function runQuickReplies(lang, theme) {
   await desk.setViewport({ width: 1280, height: 860, deviceScaleFactor: 1 });
   await desk.evaluateOnNewDocument((lang, theme) => {
     try {
-      for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eAgent", "Bench Agent"], ["eNameAsked", "1"],
+      for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eFirstSigninSeen", "1"], ["eAgent", "Bench Agent"], ["eNameAsked", "1"],
         ["eTheme", theme], ["eUiLang", lang], ["eStill", "1"], ["eRail", "1"]]) localStorage.setItem(k, v);
       sessionStorage.setItem("eTourAt", "picker");
     } catch (e) {}

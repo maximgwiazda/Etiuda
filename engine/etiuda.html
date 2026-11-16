@@ -402,6 +402,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      deliberately, and the badge, the filled star and the intent panel's gold edge always say
      it too. DARK IS NOT SYNCED to this hue and must not be. */
   --fav:#c69a2a; --fav-soft:rgba(218,180,65,.30);
+  --flag:#d98a1f; --flag-ink:#8a5206;
   --ed:#0e67d8; --ed-soft:rgba(14,103,216,.13);
   --pl:#6b3fa0;; --go:#047857; --go-soft:#d1fae5;
   /* The radius scale: 12 surfaces, 8 controls sitting on them, 6 small targets inside
@@ -518,6 +519,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30); --edge:#68707c;
   --accent:#409afc; --accent-fill:#136adc; --accent-soft:#16233a; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
+  --flag:#d98a1f; --flag-ink:#f2b45c;
   --ed:#409afc; --ed-soft:rgba(64,154,252,.16);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
   --bub:#136adc; --bub-shadow:rgba(37,99,235,.30); /* a soft glow in its own colour, weaker than the light theme's (Max 2026-11-15, "ANd I agree with glow in dark mode."; the product designer's value) */
@@ -560,6 +562,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30); --edge:#68707c;
   --accent:#409afc; --accent-fill:#136adc; --accent-soft:#16233a; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
+  --flag:#d98a1f; --flag-ink:#f2b45c;
   --ed:#409afc; --ed-soft:rgba(64,154,252,.16);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
   --bub:#136adc; --bub-shadow:rgba(37,99,235,.30); /* a soft glow in its own colour, weaker than the light theme's (Max 2026-11-15, "ANd I agree with glow in dark mode."; the product designer's value) */
@@ -603,6 +606,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      deliberately, and the badge, the filled star and the intent panel's gold edge always say
      it too. DARK IS NOT SYNCED to this hue and must not be. */
   --fav:#c69a2a; --fav-soft:rgba(218,180,65,.30);
+  --flag:#d98a1f; --flag-ink:#8a5206;
   --ed:#0e67d8; --ed-soft:rgba(14,103,216,.13);
   --pl:#6b3fa0;; --go:#047857; --go-soft:#d1fae5;
   --bub:#0e67d8; --bub-shadow:rgba(14,103,216,.30);
@@ -2677,10 +2681,10 @@ html.raildrag #intentRailList{margin-top:0}
    would simply lose the pencil, the eye and the star. */
 @media (hover:hover){
   .chead .cacts{opacity:0;transition:opacity var(--m-tone) ease}
-  .card:hover>.chead .cacts,.card:focus-within>.chead .cacts{opacity:1}
+  .card:hover>.chead .cacts,.card:focus-within>.chead .cacts,.card:has([data-act=flag][aria-expanded=true])>.chead .cacts{opacity:1}
   /* While they wait they take no width, so the title runs the whole row and recedes when they
      come. The cut pass reads their width from here (cut-text.js, cut-rh). */
-  body:not(.tour-cacts) .card:not(:hover,:focus-within,.is-hidden)>.chead .cacts{
+  body:not(.tour-cacts) .card:not(:hover,:focus-within,.is-hidden):not(:has([data-act=flag][aria-expanded=true]))>.chead .cacts{
     width:0;overflow:hidden;margin-left:calc(-1*var(--chead-gap))}
 }
 /* A tour has no pointer, so a step showcasing the star, the eye or the pencil was pointing at
@@ -2884,6 +2888,23 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 .cacts button:focus-visible{box-shadow:inset 0 0 0 1px var(--accent)}
 .cacts button.danger:focus-visible{box-shadow:inset 0 0 0 1px #c44}
 .cacts button.star-btn:focus-visible{box-shadow:inset 0 0 0 1px var(--fav)}
+/* THE FLAG, lit amber while it is with the lead or its answer waits; outranks every resting ground (the product designer's
+   sheet of the flag, point 7). */
+.chead .cacts button.flag-btn.on{color:var(--flag-ink);background:color-mix(in srgb,var(--flag) 20%,var(--panel));box-shadow:inset 0 0 0 1px var(--flag)}
+.chead .cacts button.flag-btn.on .ic-flag path:last-child{fill:var(--flag)}
+.chead .cacts button.flag-btn.on:focus-visible{box-shadow:inset 0 0 0 2px var(--flag)}
+/* The mark beside the card's name: whole however short the row, the name giving way. */
+.chead .cflag{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;box-sizing:border-box;height:22px;margin:0 0 0 calc(10px - var(--chead-gap));
+  padding:0 9px;border:0;border-radius:7px;background:color-mix(in srgb,var(--flag) 16%,var(--bg));color:var(--flag-ink);
+  font:600 12px var(--sans);white-space:nowrap;user-select:none;-webkit-user-select:none;cursor:default}
+.chead .cflag .ic{width:13px;height:13px}
+.chead .cflag.answered{background:color-mix(in srgb,var(--accent) 13%,var(--bg));color:var(--accent)}
+.chead .cflag.answered:hover,.chead .cflag.answered:focus-visible{box-shadow:inset 0 0 0 1px var(--accent);outline:none}
+.e-flag-bub .e-flag-note{display:block;box-sizing:border-box;width:100%;height:34px;margin:2px 0 10px;padding:0 10px;border:0;
+  border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans);outline:none}
+.e-flag-bub .e-flag-note:focus{box-shadow:inset 0 -2px 0 0 var(--accent-fill)}
+.e-flag-bub .e-flag-note[aria-invalid=true]{box-shadow:inset 0 0 0 2px #ffb066}
+.bub-ask.e-flag-bub .e-flag-why{margin:-4px 0 10px;font-size:12.5px;color:var(--bub-ink)}
 .cbadge{font:600 11px var(--sans);letter-spacing:0;padding:1px 7px;border-radius:6px;
   background:var(--accent-soft);color:var(--accent);text-transform:none}
 .cbadge.ed{background-color:var(--bg);background-image:linear-gradient(var(--ed-soft),var(--ed-soft));color:var(--ed)}
@@ -5387,6 +5408,7 @@ body.e-host .row .win-btn:focus-visible{outline-offset:-2px}
     ICON_EJECT: () => ICON_EJECT,
     ICON_EYE_OPEN: () => ICON_EYE_OPEN,
     ICON_EYE_SHUT: () => ICON_EYE_SHUT,
+    ICON_FLAG: () => ICON_FLAG,
     ICON_INTENT_LINK: () => ICON_INTENT_LINK,
     ICON_KEY: () => ICON_KEY,
     ICON_LINT_WARNING: () => ICON_LINT_WARNING,
@@ -5560,6 +5582,7 @@ body.e-host .row .win-btn:focus-visible{outline-offset:-2px}
   ];
   var ICON_STAR_ON = _svg("ic ic-fill", _STAR);
   var ICON_STAR_OFF = _svg("ic", _STAR);
+  var ICON_FLAG = _svg("ic ic-flag", '<path d="M5 17V4"/><path d="M5 4.5h8.5l-1.6 3 1.6 3H5"/>');
   var ICON_INTENT_LINK = '<svg class="cat-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M8.75 10.63a3.13 3.13 0 0 0 4.71 0.34l1.88 -1.88a3.13 3.13 0 0 0 -4.43 -4.43l-1.08 1.07"/><path d="M11.25 9.37a3.13 3.13 0 0 0 -4.71 -0.34l-1.88 1.88a3.13 3.13 0 0 0 4.43 4.43l1.08 -1.07"/></svg>';
   var ICON_PLUS = _svg("ic", '<path d="M10 5v10M5 10h10"/>');
   var PROSE_ICON_SRC = {
@@ -6672,6 +6695,7 @@ What is typed here stays in this browser.`;
     cardFlag: () => cardFlag,
     flagCard: () => flagCard,
     flagDigest: () => flagDigest,
+    flagEndedIds: () => flagEndedIds,
     flagFileList: () => flagFileList,
     flagHolds: () => flagHolds,
     flagNote: () => flagNote,
@@ -7709,7 +7733,7 @@ What is typed here stays in this browser.`;
     let end = row2.getBoundingClientRect().right - parseFloat(rs.borderRightWidth) - parseFloat(rs.paddingRight);
     for (let n = el.nextElementSibling; n && n !== acts; n = n.nextElementSibling) end -= n.getBoundingClientRect().width + gap;
     const card = el.closest(".card");
-    const folds = matchMedia("(hover:hover)").matches && !document.body.classList.contains("tour-cacts") && !(card && card.classList.contains("is-hidden"));
+    const folds = matchMedia("(hover:hover)").matches && !document.body.classList.contains("tour-cacts") && !(card && card.classList.contains("is-hidden")) && !acts.querySelector('[data-act="flag"][aria-expanded="true"]');
     const receded = end - acts.scrollWidth - gap;
     const b = el.getBoundingClientRect(), boxL = b.left + parseFloat(cs.borderLeftWidth) + parseFloat(cs.paddingLeft);
     return { l: boxL - ink.left > CUT_EPS, r: ink.right - (folds ? end : receded) > CUT_EPS, rh: ink.right - receded > CUT_EPS };
@@ -8748,6 +8772,20 @@ What is typed here stays in this browser.`;
     "Back": "Wstecz",
     "Next": "Dalej",
     "Done": "Gotowe",
+    "This looks wrong": "Coś się nie zgadza",
+    "Sent to the lead": "Przekazano liderowi zespołu",
+    "The lead will see it in Studio, and the answer comes with the team's next edition. If you know what is wrong, add it here; it is fine not to know.": "Lider zespołu zobaczy to w Studio, a odpowiedź przyjdzie z następnym wydaniem zespołu. Jeśli wiadomo, co się nie zgadza, można to tu dopisać; nie trzeba tego wiedzieć.",
+    "What looks wrong (optional), then Enter": "Co się nie zgadza (nieobowiązkowo), potem Enter",
+    "Take it back": "Wycofaj",
+    "With the lead": "U lidera",
+    "Answered": "Jest odpowiedź",
+    "The lead has answered": "Jest odpowiedź lidera zespołu",
+    "Left as it is.": "Bez zmian.",
+    "The card has been mended.": "Kartę poprawiono.",
+    "The note can be up to 500 characters long.": "Notatka może mieć najwyżej 500 znaków.",
+    "The note holds a character it cannot keep, such as a line break or a tab.": "Notatka zawiera znak, którego nie może zachować, na przykład podział wiersza lub tabulator.",
+    "This desk has already sent as many flags on this catalog as it can, so this one was not sent.": "To stanowisko wysłało już tyle zgłoszeń do tego katalogu, ile może, więc tego nie wysłano.",
+    "Room comes back as the lead answers.": "Miejsce zwalnia się, gdy lider zespołu odpowiada.",
     "Save": "Zapisz",
     "Cancel": "Anuluj",
     "Delete": "Usuń",
@@ -17213,6 +17251,9 @@ What is typed here stays in this browser.`;
     tell();
     return true;
   }
+  function flagEndedIds() {
+    return Object.keys(readEnds());
+  }
   function flagFileList() {
     return readFlags().map(copyFlag).sort(byCardThenR);
   }
@@ -17264,6 +17305,247 @@ What is typed here stays in this browser.`;
     return true;
   }
 
+  // src/modules/card-flag-desk.js
+  var card_flag_desk_exports = {};
+  __export(card_flag_desk_exports, {
+    closeFlagBubbles: () => closeFlagBubbles,
+    flagButtonHtml: () => flagButtonHtml,
+    flagFrame: () => flagFrame,
+    flagMarkHtml: () => flagMarkHtml,
+    flagOfferedNow: () => flagOfferedNow,
+    flagPressed: () => flagPressed,
+    flagSig: () => flagSig,
+    forgetFlagOffered: () => forgetFlagOffered,
+    showFlagAnswer: () => showFlagAnswer
+  });
+  var offered = null;
+  var focusWired = false;
+  function flagOfferedNow() {
+    if (offered === null) {
+      offered = !!flagOffered();
+      if (!focusWired && typeof addEventListener === "function") {
+        focusWired = true;
+        addEventListener("focus", () => {
+          const was = offered;
+          offered = null;
+          if (flagOfferedNow() !== was) hooks.render();
+        });
+      }
+    }
+    return offered;
+  }
+  function forgetFlagOffered() {
+    offered = null;
+  }
+  var sentOpen = "";
+  var answerOpen = null;
+  var fullOpen = "";
+  var flagged = null;
+  function flagState(id) {
+    if (answerOpen && answerOpen.id === id) return { state: "answered", outcome: answerOpen.outcome };
+    if (flagged && !flagged.has(id)) return null;
+    const f = cardFlag(id);
+    if (!f || f.state === "answered" && f.outcome === "gone") return null;
+    return f;
+  }
+  function flagSig(id) {
+    const f = flagState(id);
+    return (flagOfferedNow() ? "o" : "") + (f ? f.state + (f.outcome || "") : "") + (sentOpen === id ? "+" : "");
+  }
+  function flagButtonHtml(id) {
+    if (!flagOfferedNow()) return "";
+    const lit = !!flagState(id);
+    const w = esc(t("This looks wrong"));
+    return '<button type="button" class="flag-btn' + (lit ? " on" : "") + '" data-act="flag" title="' + w + '" aria-label="' + w + '" aria-pressed="' + (lit ? "true" : "false") + '" aria-expanded="' + (sentOpen === id ? "true" : "false") + '">' + ICON_FLAG + "</button>";
+  }
+  function flagMarkHtml(id) {
+    const f = flagState(id);
+    if (!f) return "";
+    if (f.state === "sent") return '<span class="cflag">' + ICON_FLAG + esc(t("With the lead")) + "</span>";
+    return '<button type="button" class="cflag answered" data-act="flag-answer" aria-haspopup="dialog">' + ICON_FLAG + esc(t("Answered")) + "</button>";
+  }
+  var cardSel = (id) => '#list .card[data-id="' + cssEsc(id) + '"]';
+  var markOf = (id) => document.querySelector(cardSel(id) + " > .chead .cflag");
+  var buttonOf = (id) => document.querySelector(cardSel(id) + ' > .chead .cacts [data-act="flag"]');
+  var closeOpen = null;
+  function closeFlagBubbles(back) {
+    if (closeOpen) closeOpen(back ? "back" : void 0);
+  }
+  function pressOnOwn(id, target) {
+    const b = buttonOf(id), m = markOf(id);
+    return !!(b && b.contains(target) || m && m.contains(target));
+  }
+  function flagBubble(id, html, origin, width, after) {
+    closeFlagBubbles();
+    const el = document.createElement("div");
+    el.className = "bub bub-ask e-flag-bub";
+    el.setAttribute("role", "dialog");
+    el.setAttribute("data-side", "none");
+    el.setAttribute("aria-labelledby", "eFlagT");
+    el.innerHTML = html;
+    cutLeaves();
+    document.body.appendChild(el);
+    hangBubble(el, origin, { width });
+    const outside = (e) => {
+      if (!el.contains(e.target) && !pressOnOwn(id, e.target)) close(true);
+    };
+    const close = (how) => {
+      if (closeOpen !== close) return;
+      closeOpen = null;
+      const back = how === "back" || !how && el.contains(document.activeElement);
+      document.removeEventListener("pointerdown", outside, true);
+      dismissNode(el);
+      after();
+      hooks.render();
+      const to = back && buttonOf(id);
+      if (to) try {
+        to.focus({ preventScroll: true });
+      } catch (e) {
+      }
+    };
+    closeOpen = close;
+    document.addEventListener("pointerdown", outside, true);
+    el.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      close();
+    });
+    const done = el.querySelector('[data-flag="done"]');
+    if (done) done.onclick = () => close();
+    return { el, close };
+  }
+  function showFlagSent(id) {
+    const hint = t("What looks wrong (optional), then Enter");
+    const b = flagBubble(
+      id,
+      '<h3 id="eFlagT">' + esc(t("Sent to the lead")) + "</h3><p>" + esc(t("The lead will see it in Studio, and the answer comes with the team's next edition. If you know what is wrong, add it here; it is fine not to know.")) + '</p><input type="text" class="e-flag-note" placeholder="' + esc(hint) + '" aria-label="' + esc(hint) + '" spellcheck="false" autocomplete="off"><p class="e-flag-why" role="alert" hidden></p><div class="tour-actions"><button type="button" class="btn" data-flag="back">' + esc(t("Take it back")) + '</button><button type="button" class="btn primary" data-flag="done">' + esc(t("Done")) + "</button></div>",
+      () => buttonOf(id) || markOf(id),
+      360,
+      () => {
+        if (sentOpen === id) sentOpen = "";
+      }
+    );
+    const note = b.el.querySelector(".e-flag-note"), why = b.el.querySelector(".e-flag-why");
+    note.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" || e.isComposing) return;
+      e.preventDefault();
+      const got = flagNote(id, note.value);
+      if (got && got.refused) {
+        const line = got.refused === "too-long" ? t("The note can be up to 500 characters long.") : t("The note holds a character it cannot keep, such as a line break or a tab.");
+        note.setAttribute("aria-invalid", "true");
+        why.textContent = line;
+        why.hidden = false;
+        return;
+      }
+      b.close();
+    });
+    note.addEventListener("input", () => {
+      note.removeAttribute("aria-invalid");
+      why.hidden = true;
+      why.textContent = "";
+    });
+    b.el.querySelector('[data-flag="back"]').onclick = () => {
+      unflagCard(id);
+      b.close();
+    };
+    try {
+      note.focus({ preventScroll: true });
+    } catch (e) {
+    }
+  }
+  function showFlagAnswer(id) {
+    if (closeOpen && answerOpen && answerOpen.id === id) {
+      closeFlagBubbles(true);
+      return;
+    }
+    const f = cardFlag(id);
+    if (!f || f.state !== "answered") return;
+    if (f.outcome === "gone") {
+      flagSeen(id);
+      return;
+    }
+    answerOpen = { id, outcome: f.outcome };
+    const b = flagBubble(
+      id,
+      '<h3 id="eFlagT">' + esc(t("The lead has answered")) + "</h3><p>" + esc(f.outcome === "changed" ? t("The card has been mended.") : t("Left as it is.")) + '</p><div class="tour-actions"><button type="button" class="btn primary" data-flag="done">' + esc(t("Done")) + "</button></div>",
+      () => markOf(id),
+      300,
+      () => {
+        if (answerOpen && answerOpen.id === id) answerOpen = null;
+      }
+    );
+    const seen = flagSeen(id);
+    try {
+      b.el.querySelector('[data-flag="done"]').focus({ preventScroll: true });
+    } catch (e) {
+    }
+    return seen;
+  }
+  function showFlagFull(id) {
+    fullOpen = id;
+    const b = flagBubble(
+      id,
+      '<p id="eFlagT">' + esc(t("This desk has already sent as many flags on this catalog as it can, so this one was not sent.")) + " " + esc(t("Room comes back as the lead answers.")) + '</p><div class="tour-actions"><button type="button" class="btn primary" data-flag="done">' + esc(t("Done")) + "</button></div>",
+      () => buttonOf(id),
+      300,
+      () => {
+        if (fullOpen === id) fullOpen = "";
+      }
+    );
+    try {
+      b.el.querySelector('[data-flag="done"]').focus({ preventScroll: true });
+    } catch (e) {
+    }
+  }
+  function flagPressed(id) {
+    if (closeOpen && (sentOpen === id || fullOpen === id || answerOpen && answerOpen.id === id)) {
+      closeFlagBubbles(true);
+      return;
+    }
+    const f = flagState(id);
+    if (f && f.state === "answered") {
+      showFlagAnswer(id);
+      return;
+    }
+    if (f) {
+      closeFlagBubbles();
+      unflagCard(id);
+      return;
+    }
+    sentOpen = id;
+    const got = flagCard(id);
+    if (!got || got.refused) {
+      sentOpen = "";
+      if (got && got.refused === "not-offered") offered = null;
+      hooks.render();
+      if (got && got.refused === "full") showFlagFull(id);
+      return;
+    }
+    showFlagSent(id);
+  }
+  var goneAsked = false;
+  function flagFrame() {
+    let ended = [];
+    try {
+      ended = flagEndedIds();
+      flagged = new Set(flagFileList().map((f) => f.card).concat(ended));
+    } catch (e) {
+      flagged = null;
+    }
+    if (goneAsked) return;
+    const gone = ended.filter((id) => {
+      const f = cardFlag(id);
+      return f && f.outcome === "gone";
+    });
+    if (!gone.length) return;
+    goneAsked = true;
+    setTimeout(() => {
+      goneAsked = false;
+      gone.forEach((id) => flagSeen(id));
+    }, 0);
+  }
+
   // src/modules/card-blocks.js
   var card_blocks_exports = {};
   __export(card_blocks_exports, {
@@ -17273,8 +17555,8 @@ What is typed here stays in this browser.`;
     if (!list || mgReduceMotion()) {
       return reorderMacroBlocks(mid, fromVi, toVi);
     }
-    const cardSel = '.card[data-id="' + cssEsc(mid) + '"]';
-    const card = list.querySelector(cardSel);
+    const cardSel2 = '.card[data-id="' + cssEsc(mid) + '"]';
+    const card = list.querySelector(cardSel2);
     if (!card) {
       return reorderMacroBlocks(mid, fromVi, toVi);
     }
@@ -17284,10 +17566,10 @@ What is typed here stays in this browser.`;
     });
     if (!reorderMacroBlocks(mid, fromVi, toVi)) return false;
     if (dragging) {
-      const el = list.querySelector(cardSel + ' .txt[data-v="' + toVi + '"]');
+      const el = list.querySelector(cardSel2 + ' .txt[data-v="' + toVi + '"]');
       if (el) el.classList.add("dragging");
     }
-    const card2 = list.querySelector(cardSel);
+    const card2 = list.querySelector(cardSel2);
     if (!card2) return true;
     const moved = [];
     card2.querySelectorAll(".txt[data-v]").forEach((p) => {
@@ -21783,12 +22065,12 @@ What is typed here stays in this browser.`;
     const t2 = editionText(m, key);
     return (m && +m.alt ? splitPartsRaw(t2) : [t2]).map((s) => s.trim().replace(/\s+/g, " ")).filter(Boolean).join("\n");
   }
-  function editionChanges(held, offered, layer, textOnly) {
+  function editionChanges(held, offered2, layer, textOnly) {
     const lay = layer || {}, ov = lay.overrides || {};
     const gone = new Set(lay.removed || []), stars = new Set(lay.favourites || []);
-    const keys = editionFieldKeys(held, offered), replies = keys.filter((k) => k.field === "body");
+    const keys = editionFieldKeys(held, offered2), replies = keys.filter((k) => k.field === "body");
     const was = new Map((held && held.cards || []).map((m) => [String(m.id), m]));
-    const now = new Map((offered && offered.cards || []).map((m) => [String(m.id), m]));
+    const now = new Map((offered2 && offered2.cards || []).map((m) => [String(m.id), m]));
     const standing = (m, id, b) => {
       if (textOnly) return {};
       if (!cardCommits(m)) return b && cardCommits(b) ? { stamp: "off", commitment: true } : {};
@@ -25825,6 +26107,14 @@ What is typed here stays in this browser.`;
         txtSuppressClick = false;
         return;
       }
+      const flagMark = e.target.closest('.chead [data-act="flag-answer"]');
+      if (flagMark) {
+        e.preventDefault();
+        e.stopPropagation();
+        const card2 = flagMark.closest(".card");
+        if (card2 && card2.dataset.id) showFlagAnswer(card2.dataset.id);
+        return;
+      }
       const actBtn = e.target.closest(".cacts button");
       if (actBtn) {
         e.preventDefault();
@@ -25836,7 +26126,9 @@ What is typed here stays in this browser.`;
           if (id) flipCardsAround(() => toggleFavourite(id));
         } else if (act === "edit") hooks.openCardEditor(id);
         else if (act === "note") toggleNotePane(actBtn, id);
-        else if (act === "hide") flipCardsAround(() => hooks.hideCard(id), card2.classList.contains("is-hidden") ? null : { leave: id });
+        else if (act === "flag") {
+          if (id) flagPressed(id);
+        } else if (act === "hide") flipCardsAround(() => hooks.hideCard(id), card2.classList.contains("is-hidden") ? null : { leave: id });
         return;
       }
       const code = e.target.closest(".swap code");
@@ -25899,7 +26191,7 @@ What is typed here stays in this browser.`;
     let cardH = "";
     cardH += '<div class="card' + (m._hidden ? " is-hidden" : "") + (hit ? " intent-hit" : "") + (catHit ? " cat-hit" : "") + (cardDrag && cardDrag.moved && cardDrag.key === m.id ? " dragging" : "") + '" data-i="' + i + '" data-id="' + esc(m.id || "") + '" data-rank="' + esc(band) + '"' + (catSlot(m.c) >= 0 ? ' data-ec="' + catSlot(m.c) + '"' : "") + ' title="' + esc(dragTip) + '">';
     cardH += '<div class="chead">';
-    cardH += catMarkHtml(m.c) + '<span class="ctitle" data-i18n-skip>' + esc(cardTitle(m)) + "</span>" + (cardCommits(m) ? stampHtml("cstamp") : "");
+    cardH += catMarkHtml(m.c) + '<span class="ctitle" data-i18n-skip>' + esc(cardTitle(m)) + "</span>" + (cardCommits(m) ? stampHtml("cstamp") : "") + flagMarkHtml(String(m.id || ""));
     const hitBadge = '<span class="cbadge hit" title="' + esc(t("Linked to the selected intent")) + '">' + esc(t("Linked")) + "</span>";
     const catBadge = '<span class="cbadge cat" title="' + esc(t("In a supporting category, relevant regardless of the intent")) + '">' + esc(t("Also helps")) + "</span>";
     if (hit) cardH += hitBadge;
@@ -25912,7 +26204,7 @@ What is typed here stays in this browser.`;
     const favTip = t(fav ? "Remove from Favourites" : "Add to Favourites");
     const hideTip = t(m._hidden ? "Show this card again" : fav ? "Put this card away: it greys out at the foot of this category and loses its star" : "Put this card away: it greys out at the foot of this category");
     const _note = noteFor(m);
-    cardH += '<span class="cacts">' + (_note ? '<button type="button" data-act="note" title="' + esc(t("Internal note")) + '" aria-label="' + esc(t("Internal note")) + '" aria-expanded="false">' + _svg("ic", _NOTE) + "</button>" : "") + '<button type="button" data-act="edit" title="' + esc(t("Edit this card")) + '" aria-label="' + esc(t("Edit this card")) + '">' + ICON_EDIT + '</button><button type="button" class="' + (m._hidden ? "" : "danger") + '" data-act="hide" title="' + esc(hideTip) + '" aria-label="' + esc(hideTip) + '">' + (m._hidden ? ICON_EYE_SHUT : ICON_EYE_OPEN) + '</button><button type="button" class="star-btn' + (fav ? " on" : "") + '" data-act="fav" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
+    cardH += '<span class="cacts">' + (_note ? '<button type="button" data-act="note" title="' + esc(t("Internal note")) + '" aria-label="' + esc(t("Internal note")) + '" aria-expanded="false">' + _svg("ic", _NOTE) + "</button>" : "") + '<button type="button" data-act="edit" title="' + esc(t("Edit this card")) + '" aria-label="' + esc(t("Edit this card")) + '">' + ICON_EDIT + "</button>" + flagButtonHtml(String(m.id || "")) + '<button type="button" class="' + (m._hidden ? "" : "danger") + '" data-act="hide" title="' + esc(hideTip) + '" aria-label="' + esc(hideTip) + '">' + (m._hidden ? ICON_EYE_SHUT : ICON_EYE_OPEN) + '</button><button type="button" class="star-btn' + (fav ? " on" : "") + '" data-act="fav" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
     const _L = cardLang(m);
     const ps = parts(m, _L), cls = _L === CONTENT_LANGS[0] ? "" : " plx", edDiff = editionDiffParts(m, _L, ps);
     if (ps.length) {
@@ -25990,17 +26282,18 @@ What is typed here stays in this browser.`;
     if (!head) return;
     const anchor = head.querySelector(".cstamp") || head.querySelector(".ctitle");
     if (!anchor) return;
+    const after = head.querySelector(":scope>.cflag") || anchor;
     let hitB = head.querySelector(".cbadge.hit"), catB = head.querySelector(".cbadge.cat");
     if (it.hit && !hitB) {
       hitB = parseCardHtml(it.body().hitBadge);
-      anchor.insertAdjacentElement("afterend", hitB);
+      after.insertAdjacentElement("afterend", hitB);
     } else if (!it.hit && hitB) {
       hitB.remove();
       hitB = null;
     }
     if (it.catHit && !catB) {
       catB = parseCardHtml(it.body().catBadge);
-      (hitB || anchor).insertAdjacentElement("afterend", catB);
+      (hitB || after).insertAdjacentElement("afterend", catB);
     } else if (!it.catHit && catB) {
       catB.remove();
     }
@@ -26042,7 +26335,7 @@ What is typed here stays in this browser.`;
     );
     const fresh = parseCardHtml(b.cardH);
     if (!fresh) return;
-    fresh.__sig = ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1) + "|" + editionMarkSig(m.id);
+    fresh.__sig = ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1) + "|" + editionMarkSig(m.id) + "|" + flagSig(String(m.id || ""));
     const ord = el.getAttribute("data-ord");
     if (ord != null) fresh.setAttribute("data-ord", ord);
     deckUnobserve(el);
@@ -26114,11 +26407,49 @@ What is typed here stays in this browser.`;
     if (window.__verifyPool) verifyPool(items);
     list.replaceChildren(frag);
   }
+  var POST_PAINT_CLASS = /^(?:deck(?:-[a-z]+)?|is-cut|cut-(?:l|r|rh|b))$/;
+  var DECK_STYLE_PROP = /^--deck-[a-z-]+\s*:/;
   function normAttrOrder(el) {
     return el.outerHTML.replace(
       /<([a-zA-Z][\w-]*)((?:\s+[\w:-]+(?:="[^"]*")?)*)(\s*\/?)>/g,
       (m, name, attrs, close) => {
-        const got = ((attrs || "").match(/[\w:-]+(?:="[^"]*")?/g) || []).filter((a) => a.indexOf("data-ord") !== 0);
+        const raw = (attrs || "").match(/[\w:-]+(?:="[^"]*")?/g) || [];
+        let hasDeck = false;
+        for (let i = 0; i < raw.length; i++) {
+          if (raw[i].indexOf('class="') === 0 && /\bdeck\b/.test(raw[i])) {
+            hasDeck = true;
+            break;
+          }
+        }
+        const got = [];
+        for (let i = 0; i < raw.length; i++) {
+          const a = raw[i];
+          if (a.indexOf("data-ord") === 0 || a.indexOf("data-erec") === 0) continue;
+          if (a.indexOf('class="') === 0) {
+            const cls = a.slice(7, -1).split(/\s+/).filter((c) => c && !POST_PAINT_CLASS.test(c));
+            if (cls.length) got.push('class="' + cls.join(" ") + '"');
+            continue;
+          }
+          if (a.indexOf('style="') === 0) {
+            let s = a.slice(7, -1).trim();
+            const hasDeckStyle = hasDeck || /(?:^|;)\s*--deck-/.test(s);
+            if (s && hasDeckStyle) {
+              const hasRest = /(?:^|;)\s*--deck-rest-bottom\s*:/.test(s);
+              const rem = s.split(";").map((d) => d.trim()).filter((d) => {
+                if (!d || DECK_STYLE_PROP.test(d)) return false;
+                if ((hasDeck || hasRest) && /^height\s*:/.test(d)) return false;
+                return true;
+              });
+              s = rem.length ? rem.map((d) => d + ";").join(" ") : "";
+            }
+            if (!s) {
+              continue;
+            }
+            got.push('style="' + s + '"');
+            continue;
+          }
+          got.push(a);
+        }
         return "<" + name + (got.length ? " " + got.sort().join(" ") : "") + close + ">";
       }
     );
@@ -27681,6 +28012,7 @@ What is typed here stays in this browser.`;
     closeNotePane();
     edSubjectSoon();
     cancelLangChunks();
+    flagFrame();
     const terms = cardSearchTerms();
     scheduleSearchRank();
     syncPillCounts();
@@ -27771,7 +28103,7 @@ What is typed here stays in this browser.`;
         sepH,
         body,
         id: m.id,
-        sig: ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1) + "|" + editionMarkSig(m.id),
+        sig: ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1) + "|" + editionMarkSig(m.id) + "|" + flagSig(String(m.id || "")),
         hit,
         catHit,
         hidden: !!m._hidden,
@@ -28392,7 +28724,9 @@ What is typed here stays in this browser.`;
   function firstSigninMarkHtml() {
     const svg = typeof document !== "undefined" ? document.querySelector(".brand-tile svg") : null;
     if (!svg) return "";
-    return '<div class="fs-mark" aria-hidden="true">' + svg.outerHTML.replace(/id="depth"/g, 'id="depth-first-signin"').replace(/url\(#depth\)/g, "url(#depth-first-signin)") + "</div>";
+    const mask = svg.querySelector("mask"), was = mask ? mask.id : "", own = was + "-first-signin";
+    const html = was ? svg.outerHTML.split('id="' + was + '"').join('id="' + own + '"').split("url(#" + was + ")").join("url(#" + own + ")") : svg.outerHTML;
+    return '<div class="fs-mark" aria-hidden="true">' + html + "</div>";
   }
   function paintFirstSignin() {
     if (!firstSigninOpen || typeof document === "undefined") return;
@@ -35169,9 +35503,9 @@ What is typed here stays in this browser.`;
   function editionNoteHtml(note, cls) {
     return '<div class="' + cls + '"><small>' + esc(t("Note for this edition")) + "</small><p>" + esc(note) + "</p></div>";
   }
-  function editionCard(it, held, offered) {
+  function editionCard(it, held, offered2) {
     const find = (c) => (c && c.cards || []).find((m) => String(m.id) === it.id);
-    return find(it.kind === "removed" ? held : offered) || find(held) || { id: it.id };
+    return find(it.kind === "removed" ? held : offered2) || find(held) || { id: it.id };
   }
   function editionPledgeLine(it) {
     if (!it.commitment) return "";
@@ -42450,6 +42784,7 @@ What is typed here stays in this browser.`;
     forgetRowNaturals();
     eForgetRecency();
     forgetEditionMarks();
+    forgetFlagOffered();
     forgetLookEdits();
     rearmTrustRecheck();
     putLang(lsGet("eLang") || uiLang());
@@ -43256,7 +43591,7 @@ What is typed here stays in this browser.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, card_flag_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_margin_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, launch_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, deck_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports, edition_marks_exports, screen_tabs_exports, search_meaning_exports, org_model_exports, proxy_ask_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, card_flag_exports, card_flag_desk_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_margin_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, launch_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, deck_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports, edition_marks_exports, screen_tabs_exports, search_meaning_exports, org_model_exports, proxy_ask_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });

@@ -116,7 +116,7 @@ try {
     await r.setViewport({ width: 1600, height: 1000, deviceScaleFactor: 1 });
     await r.evaluateOnNewDocument(t => {
       try {
-        localStorage.setItem("eTourDone_v3", "1"); localStorage.setItem("eTourInvite_v3", "1");
+        localStorage.setItem("eTourDone_v3", "1"); localStorage.setItem("eTourInvite_v3", "1"); localStorage.setItem("eFirstSigninSeen", "1");
         localStorage.setItem("eAgent", "Invented Agent"); localStorage.setItem("eNameAsked", "1"); localStorage.setItem("eTheme", t);
       } catch (x) {}
     }, th);
@@ -145,7 +145,7 @@ try {
   q.on("pageerror", x => errs.push(String(x.message || x)));
   await q.evaluateOnNewDocument(() => {
     try {
-      localStorage.setItem("eTourDone_v3", "1"); localStorage.setItem("eTourInvite_v3", "1");
+      localStorage.setItem("eTourDone_v3", "1"); localStorage.setItem("eTourInvite_v3", "1"); localStorage.setItem("eFirstSigninSeen", "1");
       localStorage.setItem("eAgent", "Invented Agent"); localStorage.setItem("eNameAsked", "1");
     } catch (x) {}
     window.__fades = 0; window.__cut = 0;

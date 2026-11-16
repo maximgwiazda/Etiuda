@@ -57,6 +57,7 @@ try {
     try {
       localStorage.setItem("eTourDone_v3", "1");
       localStorage.setItem("eTourInvite_v3", "1");
+      localStorage.setItem("eFirstSigninSeen", "1");
       localStorage.setItem("eAgent", "Bench Agent");
       localStorage.setItem("eNameAsked", "1");
       localStorage.setItem("eTheme", "dark");

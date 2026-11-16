@@ -53,7 +53,7 @@ async function boot(browser, pageUrl, theme) {
   await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
   await p.evaluateOnNewDocument((th) => {
     try {
-      for (const k of ["eTourDone_v3", "eTourInvite_v3", "eNameAsked"]) localStorage.setItem(k, "1");
+      for (const k of ["eTourDone_v3", "eTourInvite_v3", "eFirstSigninSeen", "eNameAsked"]) localStorage.setItem(k, "1");
       localStorage.setItem("eTheme", th);
       localStorage.setItem("eAgent", "Bench Agent");
     } catch (e) {}

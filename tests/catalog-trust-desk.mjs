@@ -755,7 +755,7 @@ async function parent() {
     /* Motion off, so a reload and a dismissal happen at once; the tour marked as done, so the boot's
        offer is not waiting behind it (0a says whether it is). */
     fs.writeFileSync(path.join(lab, "userdata", "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
-      keys: { eCatalogFolder: path.join(lab, "catalogs"), eUiLang: "en", eMotionOff: "1", eTourDone_v3: "1", eTourInvite_v3: "1" } }), "utf8");
+      keys: { eCatalogFolder: path.join(lab, "catalogs"), eUiLang: "en", eMotionOff: "1", eTourDone_v3: "1", eTourInvite_v3: "1", eFirstSigninSeen: "1" } }), "utf8");
     /* Oldest first: a file's age is its place in the folder's newest-first order. */
     let t = Date.now() / 1000 - 3600;
     files.forEach(([name, doc]) => { const f = path.join(lab, name); fs.writeFileSync(f, typeof doc === "string" ? doc : JSON.stringify(doc), "utf8"); fs.utimesSync(f, t, t); t += 60; });

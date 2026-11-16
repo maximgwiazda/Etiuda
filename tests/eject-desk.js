@@ -50,7 +50,7 @@ async function main() {
   fs.mkdirSync(docs, { recursive: true });
   E.pinCatalogFolder(ud, docs);
   const deskDoc = JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
-  Object.assign(deskDoc.keys, { eTourDone_v3: "1", eTourInvite_v3: "1" });
+  Object.assign(deskDoc.keys, { eTourDone_v3: "1", eTourInvite_v3: "1", eFirstSigninSeen: "1" });
   fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(deskDoc), "utf8");
 
   const FIX = E.fixturesDir() ? E.fixtures("catalogEc", "sampleEc") : E.fixtures("sampleEc");

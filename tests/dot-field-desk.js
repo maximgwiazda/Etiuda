@@ -70,7 +70,7 @@ function buildApp() {
     fs.copyFileSync(path.join(E.ROOT, "engine", f), path.join(APP, "engine", f));
   const UD = path.join(APP, "userdata");
   fs.writeFileSync(path.join(UD, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1, app: "harness",
-    saved: new Date().toISOString(), keys: { eTourDone_v3: "1", eTourInvite_v3: "1", eNameAsked: "1", eAgent: "Probe" } }), "utf8");
+    saved: new Date().toISOString(), keys: { eTourDone_v3: "1", eTourInvite_v3: "1", eFirstSigninSeen: "1", eNameAsked: "1", eAgent: "Probe" } }), "utf8");
   E.pinCatalogFolder(UD, path.join(APP, "catalogs"));
   fs.copyFileSync(E.fixtures("sampleEc").sampleEc, path.join(UD, "etiuda-catalog.ec"));
   return UD;

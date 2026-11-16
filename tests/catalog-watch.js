@@ -88,7 +88,7 @@ const CATFOLDER = E.pinCatalogFolder(UD, path.join(APP, "catalogs"));
    is about the offer. */
 {
   const deskDoc = JSON.parse(fs.readFileSync(path.join(UD, "desk.json"), "utf8"));
-  Object.assign(deskDoc.keys, { eTourDone_v3: "1", eTourInvite_v3: "1" });
+  Object.assign(deskDoc.keys, { eTourDone_v3: "1", eTourInvite_v3: "1", eFirstSigninSeen: "1" });
   fs.writeFileSync(path.join(UD, "desk.json"), JSON.stringify(deskDoc), "utf8");
 }
 const CATALOG = path.join(CATFOLDER, "etiuda-catalog.ec");

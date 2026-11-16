@@ -85,7 +85,11 @@ function firstSigninOpenNow(){ return !!firstSigninOpen; }
 function firstSigninMarkHtml(){
   const svg=typeof document!=="undefined" ? document.querySelector(".brand-tile svg") : null;
   if(!svg) return "";
-  return '<div class="fs-mark" aria-hidden="true">'+svg.outerHTML.replace(/id="depth"/g,'id="depth-first-signin"').replace(/url\(#depth\)/g,"url(#depth-first-signin)")+'</div>';
+  /* The header's mark under a mask id of its own. The header's id is read from its mask and never written here, so the
+     page holds that id once (tests/mark-layout.mjs counts it), and a second mark can never answer for the first's mask. */
+  const mask=svg.querySelector("mask"), was=mask ? mask.id : "", own=was+"-first-signin";
+  const html=was ? svg.outerHTML.split('id="'+was+'"').join('id="'+own+'"').split("url(#"+was+")").join("url(#"+own+")") : svg.outerHTML;
+  return '<div class="fs-mark" aria-hidden="true">'+html+'</div>';
 }
 function paintFirstSignin(){
   if(!firstSigninOpen || typeof document==="undefined") return;
