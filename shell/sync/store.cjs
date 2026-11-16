@@ -324,7 +324,7 @@ function pausedLine(cert, now, signinRefused) {
    Answers {shown, line, on, held, why, since, say, at}: line "org-off" where policy keeps sync off, "off" where the person turned it off,
    "ungiven" where the folder's consent was never given (off, the switch the person's own way to ask for it), "unavailable" where
    the folder could not be reached for a reason the person cannot mend (never offline), "noseat", "again" and "spent" (a passing
-   failure, `why` its reason), "paused" after PAUSE_SAY_MS, "full", "conflict" (a version kept aside), else "on", the first that holds
+   failure, `why` its reason), "refused" (`why` "signin", "store" or "relay"), "paused" after PAUSE_SAY_MS, "full", "conflict" (a version kept aside), else "on", the first that holds
    in that order. Nothing of a key, a store or a token. Pure. */
 function storeRow(o) {
   if (o.provider !== "microsoft" && o.provider !== "google") return { shown: false };
@@ -340,6 +340,9 @@ function storeRow(o) {
   /* A look failed for a passing reason: "again" while a try is set (`at` its time), "spent" once none is, the daily renewal's look left. */
   const passing = !!look && (look.state === "unavailable" || look.state === "paused") && PASSING.indexOf(String(look.why)) >= 0;
   if (passing) return Object.assign(base, Number(o.again) > 0 ? { line: "again", why: String(look.why), at: Number(o.again) } : { line: "spent", why: String(look.why) }); /* plant:row-passing */
+  /* Refused by the licence service ("signin", "store") or the relay (its own reason, told only as "relay"): looked at again by the daily
+     renewal, Check now, a sign-in or the switch, never by the short tries. */
+  if (look && look.state === "paused") return Object.assign(base, { line: "refused", why: look.why === "signin" || look.why === "store" ? look.why : "relay" }); /* plant:row-refused */
   /* A pause and the room full say changes are not reaching the store, so each is said over a conflict, which says nothing is lost. */
   const p = pausedLine({ until: o.until }, o.now, o.signinRefused);
   if (p) return Object.assign(base, { line: "paused", since: p.since });

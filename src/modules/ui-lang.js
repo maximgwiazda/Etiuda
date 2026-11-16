@@ -1479,6 +1479,7 @@ UI_STRINGS.pl={
   "Not syncing just now: {REASON}. Sync tries again by itself, and nothing on this computer is lost.":"Synchronizacja chwilowo nie działa: {REASON}. Sama ponowi próbę, a na tym komputerze nic nie ginie.",
   "Not syncing just now: {REASON}. Sync tries again at {TIME}, and nothing on this computer is lost.":"Synchronizacja chwilowo nie działa: {REASON}. Ponowi próbę o {TIME}, a na tym komputerze nic nie ginie.",
   "Not syncing: {REASON}. Sync tries again within a day, and nothing on this computer is lost.":"Synchronizacja nie działa: {REASON}. Ponowi próbę w ciągu doby, a na tym komputerze nic nie ginie.",
+  "Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.":"Synchronizacja chwilowo nie działa. Zostanie wznowiona, gdy komputer połączy się z naszą usługą, a na tym komputerze nic nie ginie.",
   "Sign-in":"Logowanie",
   "{PROVIDER} · work accounts of the organisation":"{PROVIDER} · konta służbowe organizacji",
   "{PROVIDER} · work accounts":"{PROVIDER} · konta służbowe",

@@ -39,7 +39,7 @@ const check = (ok, what, detail) => {
 };
 const skip = what => { skipped++; console.log("  SKIP " + what); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 32;
+const EXPECTED = 34;
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const STORE = path.join(E.ROOT, "shell", "sync", "store.cjs");
 const sha = f => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
@@ -159,6 +159,9 @@ const TRUE_LINES = [
     "Synchronizacja nie działa: ten komputer nie może połączyć się z kontem Microsoft. Ponowi próbę w ciągu doby, a na tym komputerze nic nie ginie.", "switch"],
   ["the tries spent, the service busy", { line: "spent", why: "rate" }, "Not syncing: our service is busy. Sync tries again within a day, and nothing on this computer is lost.",
     "Synchronizacja nie działa: nasza usługa jest teraz zajęta. Ponowi próbę w ciągu doby, a na tym komputerze nic nie ginie.", "switch"],
+  ...[["signin", "a fresh sign-in"], ["store", "the folder's store"], ["relay", "the relay"]].map(([why, by]) => ["refused for " + by, { line: "refused", why },
+    "Not syncing just now. Sync resumes when this computer reaches our service, and nothing on this computer is lost.",
+    "Synchronizacja chwilowo nie działa. Zostanie wznowiona, gdy komputer połączy się z naszą usługą, a na tym komputerze nic nie ginie.", "switch"]),
 ];
 /* m4: every row of TRUE_LINES drawn in English (light) and Polish (dark); answers what differed. */
 async function trueLines(pageName) {
@@ -738,6 +741,8 @@ async function main() {
       [(r => r.line === "again" && r.why === "offline" && r.at === now + 60e3)(row({ look: { state: "unavailable", why: "offline" }, again: now + 60e3 })), "the folder not reached, a try set: again, its reason and time"],
       [["unreached", "relay", "rate"].every(why => (r => r.line === "again" && r.why === why && r.at === now + 120e3)(row({ look: { state: "paused", why }, again: now + 120e3 }))
         && row({ look: { state: "paused", why } }).line === "spent"), "the service or the relay not reached, or busy: again while a try is set, else spent"],
+      [[["signin", "signin"], ["store", "store"], ["seat-lapsed", "relay"], ["bad-signature", "relay"], ["unavailable", "relay"]].every(([why, told]) => (r => r.line === "refused" && r.why === told && !r.at && r.on === true)(row({ look: { state: "paused", why }, again: 0 }))),
+        "refused by the service or the relay: refused, the relay's own reason told only as relay"],
       [row({ look: { state: "unavailable", why: "no-drive" } }).why === "no-drive", "no drive"],
       [row({ look: { state: "unavailable", why: "consent" } }).line === "unavailable", "the organisation's refusal: not available"],
       [(r => r.line === "ungiven" && r.on === false && r.say === "")(row({ look: { state: "unavailable", why: "ungiven" }, say: "ungiven" })), "the folder's consent never given: off with its switch, nothing said"],
@@ -775,6 +780,10 @@ async function main() {
       ["spent over a conflict", Object.assign({ conflicts: 2 }, offline), "spent", { conflicts: 2 }, "conflict"],
       ["spent over the room full", Object.assign({ full: true }, offline), "spent", { full: true }, "full"],
       ["a passing failure over the dated pause", Object.assign({ until: now - 4 * D }, again), "again", { until: now - 4 * D }, "paused"],
+      ["no seat over a refusal", { seatless: true, look: { state: "paused", why: "store" } }, "noseat", { look: { state: "paused", why: "store" } }, "refused"],
+      ["a refusal over a conflict", { conflicts: 1, look: { state: "paused", why: "signin" } }, "refused", { conflicts: 1 }, "conflict"],
+      ["a refusal over the room full", { full: true, look: { state: "paused", why: "seat-lapsed" } }, "refused", { full: true }, "full"],
+      ["a refusal over the dated pause", { until: now - 4 * D, look: { state: "paused", why: "store" } }, "refused", { until: now - 4 * D }, "paused"],
     ];
     return pairs.filter(([, both, top, rest, next]) => row(both).line !== top || row(rest).line !== next).map(([what, both, , rest]) => what + ": " + row(both).line + " then " + row(rest).line);
   };
@@ -784,7 +793,7 @@ async function main() {
   }
   /* The row's lines, each lifted or moved in a copy of store.cjs, turn r1 red; the product file is never written. */
   for (const [tag, what] of [["row-ask", "the hold's question read as off"], ["row-noseat", "no seat read as on"], ["row-full", "the room full read as on"],
-    ["row-conflict", "the conflict said first, over a pause and the room full"], ["row-passing", "a passing failure read as on"]]) {
+    ["row-conflict", "the conflict said first, over a pause and the room full"], ["row-passing", "a passing failure read as on"], ["row-refused", "a refusal read as on"]]) {
     const line = "p r1 " + tag + " lifted in a copy of store.cjs turns r1 red (" + what + "), and the product file is never written";
     if (PLANTS_OFF) { skip(line); continue; }
     const before = sha(STORE), text = fs.readFileSync(STORE, "utf8"), lines = text.split("\n"), at = lines.findIndex(l => l.indexOf("/* plant:" + tag + " */") >= 0);
@@ -905,6 +914,7 @@ async function main() {
       check(!m4.length && bad.length > 0, line, detail);
     } else check(false, line, detail);
   };
+  await truePlant("refused", 'if (s.line === "refused") return t(', 'if (false) return t(', "a refusal said as sync on");
   await truePlant("passing", 'if (s.line === "again" || s.line === "spent") return syncPassing(s, provider);', "", "a passing failure said as sync on");
   if (PLANTS_OFF) skip("p c9d firstSay saying at a look that did not make the store turns c9d red");
   else {

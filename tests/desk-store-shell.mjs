@@ -23,7 +23,7 @@ const nodeRequire = createRequire(import.meta.url);
 nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), { policy: null });
 const MAIN = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
-const EXPECTED = 165;
+const EXPECTED = 167;
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), "desk-store-shell-"));
 
 let asserted = 0, failed = 0, skipped = 0;
@@ -568,6 +568,30 @@ async function againViewScene(src) {
   const ok = v1.line === "again" && v1.why === "unreached" && at1 > 0 && v1.at === at1 && spent.line === "spent" && spent.why === "unreached" && !spent.at
     && off.line === "again" && off.why === "offline" && off.at === atOff && atOff > 0 && leaks === 0;
   return { ok, detail: brief({ first: v1.line + "/" + v1.why, atIsTheTry: at1 > 0 && v1.at === at1, spent: spent.line + "/" + spent.why + (spent.at ? "/at" : ""), offline: off.line + "/" + off.why, offAt: off.at === atOff, leaks }) };
+}
+
+/* (rf) A REFUSAL IS TOLD AS ONE: the licence service refusing the store's grant for another person's store or for want of a fresh sign-in,
+   and the relay refusing the store's making, each reads "refused" with its reason ("store", "signin", and the relay's told only as
+   "relay"), and no short try is set. */
+async function refusedViewScene(src) {
+  const r = await renewScene(src), T = r.shell.T, w = r.world;
+  w.grantRefuse = "store";
+  await T.storeTurn();
+  const store = T.storeView(), storeTry = !!T.get().storeAgainTimer;
+  w.grantRefuse = "signin";
+  await T.storeTurn();
+  const signin = T.storeView(), signinTry = !!T.get().storeAgainTimer;
+  w.grantRefuse = "";
+  /* A store made afresh here, so the relay is asked to make it. */
+  T.storeState().keys = "";
+  w.file = null;
+  w.relayDown = true;
+  await T.storeTurn();
+  const relay = T.storeView(), relayTry = !!T.get().storeAgainTimer, look = T.get().storeNow;
+  w.relayDown = false;
+  const ok = store.line === "refused" && store.why === "store" && signin.line === "refused" && signin.why === "signin" && relay.line === "refused" && relay.why === "relay"
+    && !!look && look.state === "paused" && look.why !== "relay" && !storeTry && !signinTry && !relayTry;
+  return { ok, detail: brief({ store: store.line + "/" + store.why, signin: signin.line + "/" + signin.why, relay: relay.line + "/" + relay.why, relaySaid: look && look.why, tries: [storeTry, signinTry, relayTry] }) };
 }
 
 /* (t12) A START OFFLINE: a desk that synced, its sync state holding a kept version, starts again with its certificate standing and the
@@ -2121,6 +2145,7 @@ const LEGS = [
   ["k7", keepFirstScene, "a merge's copy is kept before what it copies is replaced: a copy that cannot be kept leaves the catalog and the layer as they were, answered not applied, a key with no copy put in place; a catalog write failing after its copy is kept leaves the file as it was; both succeeding, the later is in place and the earlier kept"],
   ["t7", againScene, "a look the licence service did not answer is tried again by itself at 1, 2, 4, 8, 16, 32 and 64 minutes, then no more, until a look from outside; back, it is on and nothing waits; a refusal is not tried again, and the switch turned off, a sign out and a quit leave no timer"],
   ["t7v", againViewScene, "the row is told a passing failure as again, with the reason and the try's own time, while a try is set, and as spent once the tries are spent; nothing of a key, a token, a store or an address"],
+  ["rf", refusedViewScene, "a refusal by the licence service (another's store, a fresh sign-in wanted) or by the relay is told as refused with its reason, the relay's only as relay, and no short try is set"],
   ["t12", offlineStartScene, "a desk starting with its certificate standing and neither the provider nor the service reached loads its sync with what it keeps, the row saying the folder is not reached and the look tried again by itself, which it is; the address back, the next try turns the store on and the sync runs"],
   ["gt", teamFolderScene, "joined to a folder team, the store's sync takes no team catalog into the person's store, reads the person's own catalog as removed nowhere, and writes nothing from the store into the team's mirror"],
   ["g1b", consentBusyScene, "while the switch's request for the folder waits on the browser the desk is busy to the page, and an answer after another account took the seat is neither taken for it nor looked with"],
@@ -2234,6 +2259,7 @@ const PLANTS = [
   ["t7", swap("  storeAgainStop(); /* plant:store-again-quit */\n", ""), "a quit leaves the timer running"],
   ["t7v", swap("again: storeAgainTimer ? storeAgainAt : 0, /* plant:store-view-again */", "again: 0, /* plant:store-view-again */"), "the row is told no try is set, so it says spent while one is"],
   ["t7v", swap("  storeAgainAt = Date.now() + ms; /* plant:store-again-at */", "  storeAgainAt = Date.now(); /* plant:store-again-at */"), "the try's time told as now, not when it comes"],
+  ["rf", swap("if (res && res.status === 403 && plainObj(j) && (j.reason === \"signin\" || j.reason === \"store\")) return { why: j.reason };", "if (false) return { why: j.reason };"), "the service's refusal read as not reached, so the row says it tries again"],
   ["t12", swap("  else if (s.held && s.held.cert && s.held.reached === false) storeTurn(); /* plant:store-renew-unreached */\n", ""), "a renewal that reached nothing makes no look, so the sync waits unloaded and nothing is tried again"],
   ["gt", swap("if (sayJoinPolicy().folder || relayHere() || folderTeamHere() || Object.keys(teamNeedsFolder).length) return \"\"; /* plant:sync-team-folder */", "if (false) return \"\"; /* plant:sync-team-folder */"), "the store's sync lists and writes the team's mirror as the person's folder"],
   ["w1", swap("  if (s.keys || s.leave || storeLeaveHere) {", "  if (false) {"), "a sign-out leaves the store's keys in store.json"],
