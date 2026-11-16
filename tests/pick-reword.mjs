@@ -91,7 +91,7 @@ async function deskOpen(lang, theme, url) {
   await page.evaluateOnNewDocument((lang, theme) => {
     try {
       for (const [k, v] of [["eTourDone_v3", "1"], ["eTourInvite_v3", "1"], ["eAgent", "Bench Agent"], ["eNameAsked", "1"],
-        ["eTheme", theme], ["eUiLang", lang], ["eStill", "1"], ["eRail", "1"]]) localStorage.setItem(k, v);
+        ["eTheme", theme], ["eUiLang", lang], ["eStill", "1"], ["eRail", "1"], ["eFirstSigninSeen", "1"]]) localStorage.setItem(k, v);
     } catch (e) {}
     const st = { offered: [], signedIn: "", seat: "none", reached: true };
     window.E_HOST = { hotkeyState: () => ({ accel: "Control+Shift+Space", held: true, taken: false }), onPickAsk: fn => { window.__pick = fn; },
