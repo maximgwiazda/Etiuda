@@ -159,12 +159,44 @@ function paintList(spellNote,items){
 }
 /* setAttribute APPENDS on a kept node where the builder interleaves, so serialisation order
    differs while the attribute set does not. CSS and dataset are order-blind; compare sorted. */
+const POST_PAINT_CLASS=/^(?:deck(?:-[a-z]+)?|is-cut|cut-(?:l|r|rh|b))$/;
+const DECK_STYLE_PROP=/^--deck-[a-z-]+\s*:/;
 function normAttrOrder(el){
   return el.outerHTML.replace(/<([a-zA-Z][\w-]*)((?:\s+[\w:-]+(?:="[^"]*")?)*)(\s*\/?)>/g,
     (m,name,attrs,close)=>{
-      /* data-ord is stamped by the column dealer AFTER paint, so a kept node carries it and a
-         fresh parse does not. It is not part of what the builder wrote. */
-      const got=((attrs||"").match(/[\w:-]+(?:="[^"]*")?/g)||[]).filter(a=>a.indexOf("data-ord")!==0);
+      const raw=(attrs||"").match(/[\w:-]+(?:="[^"]*")?/g)||[];
+      let hasDeck=false;
+      for(let i=0;i<raw.length;i++){
+        if(raw[i].indexOf('class="')===0 && /\bdeck\b/.test(raw[i])){ hasDeck=true; break; }
+      }
+      const got=[];
+      for(let i=0;i<raw.length;i++){
+        const a=raw[i];
+        /* data-ord (columns.js) and data-erec (recency.js) are stamped AFTER paint. */
+        if(a.indexOf("data-ord")===0 || a.indexOf("data-erec")===0) continue;
+        if(a.indexOf('class="')===0){
+          const cls=a.slice(7,-1).split(/\s+/).filter(c=>c && !POST_PAINT_CLASS.test(c));
+          if(cls.length) got.push('class="'+cls.join(" ")+'"');
+          continue;
+        }
+        if(a.indexOf('style="')===0){
+          let s=a.slice(7,-1).trim();
+          const hasDeckStyle=hasDeck || /(?:^|;)\s*--deck-/.test(s);
+          if(s && hasDeckStyle){
+            const hasRest=/(?:^|;)\s*--deck-rest-bottom\s*:/.test(s);
+            const rem=s.split(";").map(d=>d.trim()).filter(d=>{
+              if(!d || DECK_STYLE_PROP.test(d)) return false;
+              if((hasDeck || hasRest) && /^height\s*:/.test(d)) return false;
+              return true;
+            });
+            s=rem.length ? rem.map(d=>d+";").join(" ") : "";
+          }
+          if(!s){ /* plant:pool-norm-empty-style */ continue; }
+          got.push('style="'+s+'"');
+          continue;
+        }
+        got.push(a);
+      }
       return "<"+name+(got.length?" "+got.sort().join(" "):"")+close+">";
     });
 }
