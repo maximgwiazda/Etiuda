@@ -12665,6 +12665,40 @@ function deskAiSendConfig() {
   return c && !policyFresh() ? null : c; /* plant:send-policy-fresh */
 }
 const deskReorder = deskAi.createReorder({ config: deskAiSendConfig, fetch: deskAiFetch, onState: deskAiState });
+/* A REWORD AT A PRESS (shell/desk-ai.cjs createReword), from the picker's foot or a card's Reword, under deskAiSendConfig as
+   the order is; where only the policy's facts are stale, the press waits for the look briefly rather than send under them. */
+const REWORD_POLICY_WAIT_MS = 2000;
+async function deskRewordConfig() {
+  const end = Date.now() + REWORD_POLICY_WAIT_MS;
+  for (;;) {
+    const c = deskAiSendConfig(); /* plant:reword-config */
+    if (c || !deskAiConfig() || Date.now() >= end) return c;
+    await new Promise(done => setTimeout(done, 100));
+  }
+}
+const deskReword = deskAi.createReword({ config: deskRewordConfig, fetch: deskAiFetch });
+/* The four strings a reword reads, and nothing else of what the page sent. */
+function rewordArg(a) {
+  const o = a && typeof a === "object" ? a : {}, s = k => (typeof o[k] === "string" ? o[k] : "");
+  return { act: s("act"), words: s("words"), how: s("how"), to: s("to") };
+}
+/* The host the screen names, read from the address the request goes to, so the two cannot differ. */
+function rewordHost(c) {
+  try { return c ? new URL(deskAi.endpointFor(c)).host : ""; } catch { return ""; }
+}
+/* The picker's foot, offered at an opening only while a configuration is in force; the opening's selection and the last
+   result asked in it are kept here for Enter's put, numbered so an answer overtaken by a later press is not the one put. */
+let pickRewordOn = false, pickSelectedNow = "", pickReworded = "", pickRewordN = 0;
+ipcMain.handle("etiuda:pick-reword", (e, a) => {
+  if (!fromPicker(e) || !pickRewordOn) return { ok: false, why: "off" };
+  const n = ++pickRewordN;
+  return deskReword.ask(rewordArg(a)).then(r => {
+    if (n === pickRewordN) pickReworded = r && r.ok ? r.text : "";
+    return r;
+  });
+});
+/* A card's Reword in the desk's own window: the same door, the same asks. */
+ipcMain.handle("etiuda:desk-reword", (e, a) => (fromEngine(e) ? deskReword.ask(rewordArg(a)) : { ok: false, why: "refused" }));
 /* An agent's key, click, wheel or scroll in each window, counted, so an order that comes after one is dropped. */
 let deskTouches = 0, pickTouches = 0;
 function countTouches(wc, bump) {
@@ -12818,6 +12852,10 @@ function pickWithClip(press, which, text, selected, editable) {
     delete open.profiles;
     if (shown) open.selected = shown;
     open.editable = editable === true ? true : editable === false ? false : null;
+    /* The foot is offered, and named with the host it sends to, only while a configuration is in force; absent otherwise. */
+    const rewordCfg = deskAiConfig();
+    pickRewordOn = !!rewordCfg; pickSelectedNow = shown; pickReworded = ""; pickRewordN++;
+    if (rewordCfg) open.reword = { host: rewordHost(rewordCfg) }; /* plant:reword-offer */
     clip = "";
     const aiOn = open.ai !== false;
     delete open.ai;
@@ -12942,7 +12980,8 @@ ipcMain.handle("etiuda:pick-copy", (e, what) => {
 /* The embedded model's switch as Settings shows it: whether this desk carries the model, whether the organisation's model is
    in force (org), and the person turning it off or on. A sync request from the page; the outcomes go back on etiuda:ai-ranking. */
 ipcMain.on("etiuda:ai-state", (e) => {
-  e.returnValue = fromEngine(e) ? { model: !!(embedSuggest && embedSuggest.installed()), org: !!deskAiConfig() } : null;
+  const c = fromEngine(e) ? deskAiConfig() : null;
+  e.returnValue = fromEngine(e) ? { model: !!(embedSuggest && embedSuggest.installed()), org: !!c, reword: rewordHost(c) } : null;
 });
 ipcMain.on("etiuda:ai-set", (e, on) => {
   if (!fromEngine(e) || !embedSuggest) return;
