@@ -36,7 +36,7 @@ const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
 const PLANTS_OFF = process.env.ETIUDA_PLANTS === "off";
 const SHOTS = process.env.CARD_SHOTS || "";
-const EXPECTED = 20;
+const EXPECTED = 21;
 let fails = 0, checks = 0, notRun = 0;
 const check = (ok, what, detail) => {
   checks++;
@@ -120,7 +120,7 @@ async function desk(o) {
 }
 const cardSel = id => '#list .card[data-id="' + id + '"]';
 async function openMenu(p, id) {
-  await p.evaluate(sel => { const c = document.querySelector(sel); c.scrollIntoView({ block: "center" }); }, cardSel(id));
+  await p.evaluate(sel => { const c = document.querySelector(sel); c.scrollIntoView({ block: "center", behavior: "instant" }); }, cardSel(id));
   await sleep(80);
   await p.hover(cardSel(id) + " .chead");
   /* The caption's controls wait for the pointer or the keyboard (template.html); a focus inside the card brings them, as Tab does. */
@@ -176,6 +176,12 @@ async function shot(p, name) {
 async function shotCard(p, id, name, withMenu) {
   if (!SHOTS) return;
   fs.mkdirSync(SHOTS, { recursive: true });
+  /* A card below the fold is clipped outside the viewport and shoots blank (c0 did), so it is brought into view first. */
+  /* Twice: the cards above are drawn as they come into reach and move the one wanted, so the first scroll lands short. */
+  for (let i = 0; i < 3; i++) {
+    await p.evaluate(sel => { document.querySelector(sel).scrollIntoView({ block: "center", behavior: "instant" }); }, cardSel(id));
+    await sleep(200);
+  }
   const box = await p.evaluate((sel, m) => { const r = document.querySelector(sel).getBoundingClientRect(), b = m && document.getElementById("eReword");
     const top = Math.min(r.top, b ? b.getBoundingClientRect().top : r.top) - 16, bottom = Math.max(r.bottom, b ? b.getBoundingClientRect().bottom : r.bottom) + 16;
     return { x: Math.max(0, r.left - 24), y: Math.max(0, top), width: Math.min(innerWidth, r.width + 48), height: bottom - Math.max(0, top) }; }, cardSel(id), !!withMenu);
@@ -241,6 +247,9 @@ try {
     await p.click(cardSel(PLAIN) + " > .txt");
     await sleep(80);
     const clip = await p.evaluate(() => window.__clip.slice());
+    /* A click on a block washes it green for a moment (pops.js), a fixed overlay left where the block was; the stand-in waits it out,
+       so the Approve below is not shot with that wash still fading over the card's old place. */
+    const washLeft = await p.evaluate(async () => { const t0 = performance.now(); while (document.querySelector(".e-copy-wash") && performance.now() - t0 < 3000) await new Promise(r => setTimeout(r, 20)); return Math.round(performance.now() - t0); });
     check(f.on && f.chip === "Reworded: Shorter" && f.unsaved === "Not saved." && f.tip === "Shown until Etiuda is next opened, unless you approve it." && f.dashed
       && f.text.indexOf(MARK) > -1 && f.text.indexOf(NAME.split(" ")[0]) > -1 && f.text.indexOf("{PAX}") < 0 && f.buttons.join() === "Approve,Revert"
       && f.right !== null && f.right <= 4 && f.below && f.leftHalf && menuGone && clip.length === 1 && clip[0].indexOf(MARK) > -1 && clip[0].indexOf(NAME.split(" ")[0]) > -1,
@@ -258,6 +267,7 @@ try {
     const otherCalls = await p.evaluate(MARK => window.__calls.filter(c => c.indexOf(MARK) > -1 && c.indexOf("noteOwnText ") !== 0), MARK);
     await p.click(cardSel(PLAIN) + ' .rw-ans button[data-rw="approve"]');
     await sleep(200);
+    const washAfterApprove = await p.evaluate(() => document.querySelectorAll(".e-copy-wash").length), clipAfterApprove = await p.evaluate(() => window.__clip.length);
     const after = await cardFace(p, PLAIN), kept = await stores(p, ["noteOwnText"]), ov = await overrideOf(p, PLAIN);
     await shotCard(p, PLAIN, "c3-approved-light");
     /* The editor's own save of the same field on another card, for the shape of what it stores. */
@@ -268,11 +278,14 @@ try {
     await p.click("#meSave");
     await sleep(300);
     const ov2 = await overrideOf(p, PLAIN2);
+    const washAfterEditor = await p.evaluate(() => document.querySelectorAll(".e-copy-wash").length);
     const keys = o => Object.keys(o || {}).sort().join(",");
     check(held.indexOf(MARK) < 0 && otherCalls.length === 0 && !after.on && after.mod && after.text.indexOf(MARK) > -1 && kept.indexOf(MARK) > -1
       && ov && ov.en === rewordOf(body) && ov2 && keys(ov).split(",").every(k => ("," + keys(ov2) + ",").indexOf("," + k + ",") > -1) && ov2.en === edited,
       "cr5 before Approve the words are in no store the page writes; after it they are the person's edit with the \"mod\" mark, stored as the editor stores an edit of that field (an override against the catalog, dated), no field the editor would not: "
       + keys(ov) + " beside the editor's " + keys(ov2), { beforeHasIt: held.indexOf(MARK) > -1, otherCalls, after, ov, ov2 });
+    check(washAfterApprove === 0 && washAfterEditor === 0 && clipAfterApprove === clip.length && washLeft < 3000,
+      "cr5b Approve shows no green wash and copies nothing, as the editor's own save shows none: the second green box in c3 was the wash of the stand-in's earlier click on the card, still fading", { washAfterApprove, washAfterEditor, clipAfterApprove, clipBefore: clip.length, washLeftMs: washLeft });
     await p.keyboard.press("Escape");
     await sleep(200);
 
